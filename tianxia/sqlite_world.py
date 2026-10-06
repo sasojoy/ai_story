@@ -634,7 +634,7 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 def _season_firsts_lines(conn: Connection, season: int) -> list[str]:
     """這一季的首創，寫成江湖史（跨季保留，武學與成長設計 3.10）：合成首創、首悟意境、練成絕學。
     武學照現在顯示的名字（練成絕學改過名的寫新名）；沒有的那一類不寫。
-    人名寫登記當下記下的「寫給別人看的名號」（匿名行走的人是「某位少俠」，最終審查 Important 2）：
+    人名寫登記當下記下的「寫給別人看的名號」（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）：
     功法、意境的 creator_shown，武學的 master_shown；舊資料沒記的照資料表裡的名號。
     （舊季的煉製配方也在 recipes 表裡，照樣列在「合成首創」，不用分。）
     合到舊的會讓好幾個配方指向同一門（設計 12.2）：一門只列一次，寫首創的那一列。"""

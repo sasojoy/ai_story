@@ -16,6 +16,8 @@ DAY = 86400
 
 
 def display_name(state: GameState) -> str:
+    """地方傳聞裡的單獨事件寫的名字：選了「匿名行走」的人是「某位少俠」（傳聞分層第七節）。只有那裡看匿名——天下大事、
+    陣營軍情、江湖史、排行榜一律寫名號（state.player.name），不要拿這個去寫那些（企劃者 2026-10-06）。"""
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
@@ -228,8 +230,7 @@ def add_rumor(
     layer: RumorLayer = "world", named: bool = True, faction: str | None = None,
 ) -> None:
     """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
-    第 1 期只先把資料記對；誰看得到哪一層，是傳聞分層的規則實作（線上架構第 2 期之後）。
-    faction：陣營軍情只給這個陣營的人看（Game.rumors_text 照它過濾，計畫 T6）。"""
+    誰聽得到哪一則照 audible（地方傳聞看這裡記下的大區）；faction：陣營軍情只給這個陣營的人。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
     region = None
@@ -241,11 +242,67 @@ def add_rumor(
     )
 
 
+class Ears(NamedTuple):
+    """一個人此刻聽得到什麼（傳聞分層設計第二、三節）：audible 照它判斷一則傳聞。大區要算多邊形，所以先算好一次（ears_of），
+    整份傳聞清單共用。之後的計畫往這裡加欄位，不另寫一條規則：見聞紀錄（1b：聽過的地方傳聞，離開大區後還翻得到）、
+    刺探帶回的敵情（1c）。"""
+
+    faction: str | None  # 自己的陣營；散人是 None
+    name: str  # 名號（個人線索只給這個名號）
+    layered: bool  # 第一季的規則開著：地方傳聞照大區與傳聞板過濾。關著（beta）只看陣營與名號，跟以前一模一樣
+    regions: frozenset[str]  # 此刻人在哪些大區（here_regions）
+    since: float  # 傳聞板上最舊的那一刻（世界秒）：比它早的地方傳聞已經撤下了
+
+
+def recent_seconds(days: float, content: Content, world: WorldState) -> float:
+    """「最近幾天」換成世界秒：第一季照季曆天（跟著 weekend 設定縮，PM 2026-10-06 的時間單位裁定），
+    beta（開關關著、或這一季開季時沒開）照世界天，跟以前一樣。"""
+    return days * DAY / calendar.cal_scale(content, world) if season_one(content, world) else days * DAY
+
+
+def here_regions(state: GameState, content: Content) -> frozenset[str]:
+    """此刻人在哪些大區（傳聞分層 3.1「人在那個大區」）：人在某一站，是那一站的大區；在路上，是這段路兩頭的大區——
+    兩頭不同區時兩區都算（跟沿途打聽同一個算法），所以一路走過去，經過的大區都聽得到。地圖沒有大區時是空的。"""
+    from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
+
+    spot = atlas.road_spot(state, content)
+    places = (state.player.location,) if spot is None else (spot.behind, spot.ahead)
+    return frozenset(region.id for loc_id in places if (region := atlas.region_of(content, loc_id)) is not None)
+
+
+def ears_of(state: GameState, content: Content) -> Ears:
+    """這個人此刻的 Ears。地方傳聞板留最近 Config.rumor_board_days 天（季曆天）。"""
+    p, w = state.player, state.world
+    if not season_one(content, w):
+        return Ears(faction=p.faction, name=p.name, layered=False, regions=frozenset(), since=0.0)
+    since = w.time - recent_seconds(content.config.rumor_board_days, content, w)
+    return Ears(faction=p.faction, name=p.name, layered=True, regions=here_regions(state, content), since=since)
+
+
+def audible(rumor: Rumor, ears: Ears) -> bool:
+    """這個人聽不聽得到這則傳聞（傳聞分層設計第二、三節）。見聞頁、沿途打聽、輿圖的 ✦ 與地點詳情、龍頭人物的近況、
+    「你不在的時候」都照這一條，不要在別處另寫一份：
+    - 陣營軍情只給那個陣營的人（散人沒有）、個人線索只給那個名號、天下大事人人都聽得到；
+    - 地方傳聞（第一季的規則開著時）只給此刻人在那個大區的人，而且只留傳聞板上最近幾天的；沒有大區的（地圖沒有大區、發生地不明）
+      人人都聽得到，但一樣只留板上的。
+    - 陣營軍情一定要寫是哪個陣營、個人線索一定要寫是誰（layer 與欄位對不上時 fail closed：沒有人聽得到）。
+    開關關著（beta）時只看陣營與名號，跟以前的 can_hear 一模一樣。"""
+    if rumor.faction not in (None, ears.faction) or rumor.character not in (None, ears.name):
+        return False
+    # fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會因為少寫一個欄位就人人聽見）
+    if (rumor.layer == "faction" and rumor.faction is None) or (rumor.layer == "personal" and rumor.character is None):
+        return False
+    if not ears.layered or rumor.layer != "local":
+        return True
+    # 地方傳聞：只留板上最近幾天的；沒有大區的（地圖沒有大區、或發生地不明）沒有大區可比，人人聽得到，但一樣撤板
+    return rumor.time >= ears.since and (rumor.region is None or rumor.region in ears.regions)
+
+
 def can_hear(rumor: Rumor, state: GameState) -> bool:
-    """這個人聽不聽得到這則傳聞：陣營軍情只給那個陣營、個人線索只給那個人（傳聞分層設計第二節）。
-    見聞頁、沿途打聽、輿圖的地點詳情都照這一個規則（T6 審查 C1：軍令寫成陣營軍情之後，任何列傳聞的地方都要過它）。"""
+    """只看陣營與名號那一半（beta 的規則）：等於不分大區、不看傳聞板的 audible。引擎裡列傳聞的地方都改走 audible＋ears_of
+    （大區與傳聞板要 content 才算得出來）；這個留給手上沒有 content 的呼叫端。"""
     p = state.player
-    return rumor.faction in (None, p.faction) and rumor.character in (None, p.name)
+    return audible(rumor, Ears(faction=p.faction, name=p.name, layered=False, regions=frozenset(), since=0.0))
 
 
 def add_chronicle(state: GameState, text: str) -> None:
@@ -739,9 +796,9 @@ def apply_effect(
         from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
 
         msgs += foreshadow.grant(state, content, effect.clue_items, effect.fs_counters)
-    name = display_name(state)
+    name = state.player.name  # 江湖史與玉璽碎片（天下大事）一律寫名號；只有下面的地方傳聞看匿名（傳聞分層設計第七節）
     if effect.rumor:
-        text = effect.rumor.format(name=name)
+        text = effect.rumor.format(name=display_name(state))
         add_rumor(  # 玩家觸發的傳聞記在當時所在地：地方傳聞的單獨事件，觸發者可以選匿名（傳聞分層設計第七節）
             state, text, state.player.location, content=content, layer="local", named=not state.player.anonymous,
         )

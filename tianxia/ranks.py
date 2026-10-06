@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from . import calendar, figures
 from .models import Content, PromotionDef
-from .rules import add_rumor, display_name, season_one
+from .rules import add_rumor, season_one
 from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
@@ -125,7 +125,7 @@ def promote(state: GameState, content: Content, rank: int) -> list[str]:
     if promo is not None and promo.closing:
         msgs.append(promo.closing)
     day = calendar.point(w.time, content, w).cal_day
-    w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(display_name(state))
+    w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(p.name)  # 陣營軍情一律具名（傳聞分層第七節）
     return msgs
 
 

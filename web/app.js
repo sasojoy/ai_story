@@ -1300,6 +1300,12 @@
   }
 
   // ── 見聞 ──
+  // 第一季的傳聞分四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一張卡。
+  // 標題是伺服器給的字（這裡跳脫），內容是伺服器轉好、跳脫過的 HTML；開關關著時沒有 rumor_layers，照舊畫一整張 rumors
+  function rumorLayersHtml(layers) {
+    return layers.map((l) => `<div class="card rumor-layer" data-layer="${esc(l.id)}"><h3>${esc(l.title)}</h3>${l.body}</div>`).join("");
+  }
+
   function pageNews() {
     const seg = `<div class="seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
@@ -1311,7 +1317,7 @@
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
       else body = `<div class="list">${r.list.map((x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`).join("")}</div>`;
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
-    else if (S.news === "rumors") body = `<div class="card">${m.rumors}</div>`;
+    else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
@@ -1322,12 +1328,13 @@
     const s = S.main.status;
     const a = S.admin;
     const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+    // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3><button class="btn small ghost" data-act="sheet-close">關閉</button></div>
-        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（江湖傳聞中不顯示名號）</label>
+        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
         </div>
@@ -2023,8 +2030,9 @@
     }
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
-      const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
-      if (fields.some((k) => old[k] !== S.main[k])) redrawPage(true);
+      const fields = { trends: ["trends"], rumors: ["rumors", "rumor_layers"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
+      // rumor_layers 是陣列（每次輪詢都是新的物件）：比內容不比參照，沒變就不重畫
+      if (fields.some((k) => JSON.stringify(old[k]) !== JSON.stringify(S.main[k]))) redrawPage(true);
       return;
     }
     if (tab === "practice" || tab === "craft") {

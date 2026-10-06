@@ -83,8 +83,8 @@ class Effect(_Strict):
     learn_skills: list[str] = Field(default_factory=list)
     trend: dict[str, int] = Field(default_factory=dict)
     world_flags_add: list[str] = Field(default_factory=list)
-    rumor: str = ""  # {name} 會換成玩家名號（匿名時為「某位少俠」）
-    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}
+    rumor: str = ""  # 地方傳聞；{name} 會換成玩家名號（匿名時為「某位少俠」）
+    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}，但一律寫名號（江湖史不能匿名，傳聞分層設計第七節）
     join_sect: str | None = None
     leave_sect: bool = False
     next_event: str | None = None
@@ -742,6 +742,13 @@ class Config(_Strict):
     # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
     road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
+    # 傳聞分層（傳聞分層設計第三、八節；第一季的規則開著時才用，計畫 2026-10-06 傳聞分層一）
+    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（atlas.news_days）
+    rumor_board_days: float = Field(default=3, gt=0)
+    away_hours: float = Field(default=1, gt=0)  # 「你不在的時候」：離線超過幾個「現實」小時，再上線先看一份摘要（PM 2026-10-06）
+    # 那一份摘要最多幾行（含放不下時最後那一行「另有 N 則」；天下大事、陣營軍情的要點、所在大區，照這個順序）。
+    # 8：第一屏放得下（最終審查 I1：週末一晚離開 15～17 行幾乎都是過期的軍令）
+    away_max: int = Field(default=8, ge=1)
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
     road_sight_recent: int = Field(default=5, ge=0)  # 路上見聞：最近看過的幾則先排除，池子不夠才重複

@@ -21,6 +21,7 @@ from . import (
     push, ranks, roster, rounds, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
@@ -35,8 +36,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audience_bar, can_hear, can_meet, change_trend, check_result_line, current_day,
-    display_name, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
+    ears_of, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -344,6 +345,7 @@ class Game:
         （見 world_state.py::catch_up_season）。也會順便偵測共用賽季是不是已經被別人推到
         下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
         self.now = now
+        away_from = self.state.last_real  # 上次同步的現實時間，下面就換成 now（「你不在的時候」看它，見 _deliver_away）
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
@@ -365,7 +367,26 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
+        self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + summons)
+
+    def _deliver_away(self, away_from: float | None) -> None:
+        """「你不在的時候」（傳聞分層設計第八節）：上次同步到這一次隔了 Config.away_hours 個「現實」小時以上（PM 2026-10-06：
+        這一項看現實時間；網頁開著時每 10 秒同步一次，所以這就是沒開著畫面的時間），江湖紀錄最前面放一則摘要——這段期間
+        聽得到的天下大事、陣營軍情的要點、所在大區的地方傳聞（rumor_view.away_lines，最多 away_max 則）。時刻表大事照舊由
+        _deliver_big_events 補成「江湖大事」那一則，摘要不寫第二次。什麼都沒有就不寫。
+        只在第一季的規則開著時；伺服器假人不寫（沒有人看，畫面上也不會出現）；剛建好的角色（還沒同步過）不寫。
+        不管寫不寫，都記下這一刻的賽季時間（GameState.last_world），下一次從這裡往後算。"""
+        s, c = self.state, self.content
+        since, s.last_world = s.last_world, s.world.time
+        if away_from is None or s.player.bot is not None or not season_one(c, s.world):
+            return
+        if self.now - away_from < c.config.away_hours * HOUR:
+            return
+        lines, total = rumor_view.away_lines(s, c, since, self.stamp)
+        if lines:
+            tag = rumor_view.AWAY_TAG.format(n=total)
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=journal.AWAY, tag=tag, lines=lines))
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -1346,9 +1367,10 @@ class Game:
         return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
 
     def _order_credit(self, **kw) -> list[str]:
-        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
+        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
+        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。"""
         s, c = self.state, self.content
-        msgs = orders.credit(s, c, s.player.faction, s.player.name, shown=display_name(s), **kw)
+        msgs = orders.credit(s, c, s.player.faction, s.player.name, **kw)
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
@@ -2773,12 +2795,12 @@ class Game:
 
     def _road_ask(self) -> list[str]:
         """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
-        仍算做過。別的陣營的軍情、寫給別人的個人線索聽不到。"""
+        仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
+        （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
         s, c = self.state, self.content
-        p = s.player
-        regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
+        ears, regions = ears_of(s, c), here_regions(s, c)  # 在路上時 here_regions 就是這段路兩頭的大區（beta 的 ears.regions 是空的）
         heard = [
-            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
+            r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
@@ -3963,7 +3985,7 @@ class Game:
         """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
         各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。
         時刻表那一列：結算過的是公告全文；跳過的寫「這一季沒有發生」；季提前收束、還沒輪到的寫「季已落幕，沒有發生」。
-        改寫的人寫公告上的名字（匿名的是「某位少俠」，timetable.shown），不寫真名。"""
+        改寫的人寫公告上的名字（timetable.shown：一律名號；只有這一版之前匿名鎖定的，照記下的「某位少俠」寫）。"""
         s, c = self.state, self.content
         w = s.world
         if not w.ended or not season_one(c, w):
@@ -4061,10 +4083,18 @@ class Game:
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
 
     def rumors_text(self, limit: int = 30) -> str:
-        """見聞頁的傳聞：陣營軍情只給那個陣營、個人線索只給那個人（跟沿途打聽同一個規則，見 _road_ask；計畫 T6）。
-        開關關著時沒有這兩種傳聞，畫面一樣。"""
-        heard = [r for r in self.state.world.rumors if can_hear(r, self.state)]
+        """見聞頁的傳聞（一條清單，main_view 的 rumors）：只列聽得到的（rules.audible——陣營軍情只給那個陣營、個人線索只給
+        那個人；第一季的地方傳聞只給此刻人在那個大區的人、只留傳聞板上最近幾天的）。開關關著時跟以前一樣。"""
+        ears = ears_of(self.state, self.content)
+        heard = [r for r in self.state.world.rumors if audible(r, ears)]
         return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+
+    def rumor_layers(self) -> list[dict[str, str]] | None:
+        """見聞頁的傳聞分四層（天下大事、陣營軍情、所在大區、個人線索；rumor_view.layers），每層 {id, title, body}，body 是
+        Markdown。只在第一季的規則開著時分：開關關著（或這一季開季時沒開）是 None，頁面照舊畫 rumors_text 那一條清單。"""
+        if not season_one(self.content, self.state.world):
+            return None
+        return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""

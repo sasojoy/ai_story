@@ -16,7 +16,7 @@ import random
 from . import insights, library, naming, team
 from .martial_arts import next_quality
 from .models import Content
-from .rules import add_chronicle, display_name
+from .rules import add_chronicle
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -125,9 +125,9 @@ def cultivate(
 
 def _mastered(state: GameState, world: WorldStateStore, art_id: str) -> list[str]:
     """練成絕學的那一刻：全服第一個的人拿到取名的權利（claim_master 是原子的，同時練成的兩個人只有先登記的算數）。
-    登記的是名號（身分：取名權照它認），寫給別人看的名號照登記當下的匿名規矩一起記下（匿名行走的人是「某位少俠」），
-    後到的人看到的是那一個。"""
-    if world.claim_master(art_id, state.player.name, shown=display_name(state)):
+    登記的是名號，後到的人看到的、換季的江湖史寫的也是名號（傳聞分層第七節：江湖史一律具名；這一版之前匿名記下的
+    master_shown 照舊）。"""
+    if world.claim_master(art_id, state.player.name):
         state.player.naming = art_id
         return ["你是江湖上第一個把這門武學練成絕學的人——到「修練」頁替它取一個正式的名字吧。"]
     art = world.get_skill(art_id)
@@ -153,5 +153,5 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
     if name != old.name and not world.rename_skill(art_id, name):
         return [f"【{name}】已經有人用了，換一個吧。"]
     state.player.naming = None
-    add_chronicle(state, f"{display_name(state)}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史是公開的：照匿名的規矩
+    add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]
