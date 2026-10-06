@@ -571,6 +571,8 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "slot_cards": [
             {"kind": k, "card": md(game.skill_detail(k)), "learned": learned[k], "level": level[k],
              "maxed": level[k] >= team.MAX_LEVEL,
+             # 序章裡這一欄現在不能練的原因（Game.practice_refusal）；平常是 None。練成鈕灰掉、寫它
+             "blocked": game.practice_refusal(k),
              # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
              "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS

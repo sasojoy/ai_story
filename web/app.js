@@ -957,7 +957,8 @@
     const wornCard = (c) => { const a = x.owned_arts.find((r) => r.worn && r.kind === c.kind); return a ? a.card : c.card; };
     // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能練成（C5）
     const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false, price: null };
-    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
+    // 序章裡沒叫你練功的步驟，鈕灰掉、寫師父的話（blocked 是伺服器照 Game.practice 同一個判斷給的）
+    const train = cur.blocked ? esc(cur.blocked) : !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 第一個練成絕學的人：替它取正式的名字（武學與成長設計 3.6）。名字是玩家打的，伺服器會驗；表單的字跳脫

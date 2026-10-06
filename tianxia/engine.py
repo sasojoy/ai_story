@@ -33,7 +33,7 @@ from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location, RoadKind,
-    Squad, Threshold, TimetableEvent, TravelMode, WorldEvent,
+    Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -162,13 +162,18 @@ class Game:
     @classmethod
     def new(
         cls, content: Content, name: str, rng: random.Random | None = None, world: WorldStateStore | None = None,
-        prologue: bool = False,
+        prologue: bool = False, graduated: bool = False,
     ) -> Game:
         """prologue：走序章（新手引導計畫一）。只有網頁上建立角色（server.create_character）傳 True；假人、整季機器人、
-        腳本與測試不傳，直接站在起點、序章算走過（沒有序章的內容兩種都一樣）。"""
+        腳本與測試不傳，直接站在起點、序章算走過（沒有序章的內容兩種都一樣）。
+        graduated：假人與整季機器人傳 True（bot_runner、bot.play_season）：不進草廬，但離開起點時的樣子要跟走完草廬的真人一樣
+        （等級、一門師門功夫、盤纏、一點內傷：不然新人頭一個鐘頭就看得出誰是假人）——內容有序章才有作用，做法是把序章用真的
+        行動走一遍（_graduate）。內容沒有序章（正式內容現在就是）什麼都不做，連亂數都不多用一次。"""
         game = cls(content, new_game_state(content, name), rng, world)
         if prologue:
             prologue_rules.begin(game.state, content)
+        elif graduated and prologue_rules.has(content):
+            game._graduate()
         else:
             # 第二季起建的角色，__init__ 的換季重來已經把新角色放進序章（體力也換成序章的）：這裡拉回起點、滿體力
             prologue_rules.finish(game.state, content, game.world, purse=False)
@@ -183,6 +188,80 @@ class Game:
         if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
             game._write(content.scenario.name, [content.scenario.intro], tag="賽季開始", guide=tutorial_intro(content))
         return game
+
+    GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
+
+    def _graduate(self) -> None:
+        """假人與整季機器人的序章（Game.new(graduated=True)）：把草廬前面的步驟用真的行動走一遍（遇險、拜師、探索悟意境、
+        合成、換上練到第三成、修練、打坐、雪恥、配點、熔雜學），最後一步「出師」跟略過一樣交給 prologue.finish(purse=True)
+        （站到起點、盤纏、體力補滿）。每一步做什麼照那一步的完成條件（TutorialStep.done_when）與寫好的欄位走，選項與屬性
+        用 self.rng 挑（四門師門功夫、擋或喊，種子決定）；等級、功夫的品質與成數、內傷、銀兩都是真的打出來、練出來的，所以
+        永遠跟真人走完草廬一模一樣，不是另外抄一份清單。
+        走不下去就放棄：某一步連試 GRADUATE_TRIES 次沒前進（內容改版讓這一步照著走不通、賽季還在籌備中什麼都不能做），
+        直接 finish，等於一個略過序章的人；假人不會卡在草廬。
+        不叫模型（師門配方有寫好的名字、雪恥的結果是寫好的，用不到；self.client 先收起來，結束還回去）；也不碰共用賽季
+        的時鐘（序章裡的行動只推玩家自己的進度）。走序章留下的江湖紀錄、戰報、對話框都清掉，假人看起來跟沒走序章時一樣乾淨。"""
+        t, s, p = self.content.tutorial, self.state, self.state.player
+        prologue_rules.begin(s, self.content)
+        client, self.client = self.client, None
+        try:
+            tries, last = 0, p.tutorial_step
+            while prologue_rules.active(s, self.content) and p.tutorial_step < t.prologue_steps - 1:  # 出師那一步由 finish 給
+                tries = tries + 1 if p.tutorial_step == last else 1
+                last = p.tutorial_step
+                if tries > self.GRADUATE_TRIES or not self._graduate_pass(t.steps[p.tutorial_step]):
+                    break
+        finally:
+            self.client = client
+        prologue_rules.finish(s, self.content, self.world, purse=True)
+        s.journal, s.log, s.battles, s.battle_card = [], [], [], None
+        p.guide_done, p.guide_outro = [], False
+
+    def _graduate_pass(self, step: TutorialStep) -> bool:
+        """序章裡照這一步的完成條件做一個行動；這一步沒有可以做的（不認得的條件）回 False。"""
+        s, c, p = self.state, self.content, self.state.player
+        goal = step.done_when
+        if s.pending_event is not None:  # 事件擋著：挑一個走得到這一步旗標的選項（四景之類的，哪一個看種子）
+            event = c.events[s.pending_event]
+            needed = set(goal.condition.flags_all)
+            options = [o for o in self.options(odds=False) if o.enabled and o.id.removeprefix("choice:").isdigit()]
+            good = [
+                o for o in options if needed <= prologue_rules.choice_flags(c, event.id, int(o.id.removeprefix("choice:")))
+            ] or options
+            if not good:
+                return False
+            self.choose(self.rng.choice(good).id)
+            return True
+        fused = prologue_rules.fused_arts(s, c, self.world)
+        if goal.action == "view_tab":
+            tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
+            self.view_tab(tab)
+        elif step.explore_event is not None:
+            self.choose("act:explore")
+        elif goal.fused:
+            if not p.insights or step.fuse_base is None:
+                return False
+            self.forge(step.fuse_base, [self.rng.choice(p.insights)])
+        elif goal.fused_level and fused:
+            art = fused[0]
+            if art.id not in (p.member.wugong_id, p.member.neigong_id):
+                self.switch_art(art.id)
+            else:
+                self.practice(art.kind)
+        elif goal.fused_quality and fused:
+            self.cultivate(fused[0].id)
+        elif goal.action in ("rest", "train", "explore"):
+            self.choose(f"act:{goal.action}")
+        elif goal.action == "allocate":
+            open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < c.config.stat_cap]
+            if not open_stats:
+                return False
+            self.allocate_stat(self.rng.choice(open_stats))
+        elif goal.action == "melt" and step.melt_only:
+            self.melt_art(step.melt_only)
+        else:
+            return False
+        return True
 
     def _reconcile_season(self) -> None:
         """把 self.state.world 對齊到目前的共用賽季（設計文件「真正共享賽季」討論，取代
@@ -686,7 +765,8 @@ class Game:
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
         pick = self._train_pick(loc)
-        if pick is not None and not self._drills_with(pick) and self.is_big(pick):
+        if (pick is not None and not self._drills_with(pick) and self.is_big(pick)
+                and prologue_rules.fight_tier(self.state, self.content) is None):  # 寫好的那一場不等模型
             option.wait = BIG_FIGHT_WAIT
         return option
 
@@ -836,6 +916,8 @@ class Game:
         squad = self._fight_squad(option_id)
         if squad is None or not self.is_big(squad):
             return None
+        if prologue_rules.fight_tier(self.state, self.content) is not None:
+            return None  # 序章雪恥那一場勝負是寫好的：不叫模型判讀、不排佇列（斷眉難度再高、標了頭目也一樣）
         option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
         if option is None or not option.enabled:
             return None
@@ -2382,8 +2464,9 @@ class Game:
         squad = c.squads[squad_id]
         if self._drills_with(squad):
             return self._drill(squad)
-        judged = None if wild else self._judged(squad)
-        result = self._fight_with(squad, judged, tier=prologue_rules.fight_tier(s, c))  # 序章雪恥那一場：結果照寫好的
+        scripted = prologue_rules.fight_tier(s, c)  # 序章雪恥那一場：結果照寫好的，不吃模型的判讀
+        judged = None if wild or scripted is not None else self._judged(squad)
+        result = self._fight_with(squad, judged, tier=scripted)
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
         self._narrate(record, result, judged)
         msgs: list[str] = []
@@ -3279,6 +3362,11 @@ class Game:
         if library.held_count(self.state) < held:
             self._menxia_entry(msgs[0], xinde)
         return msgs
+
+    def practice_refusal(self, kind: str) -> str | None:
+        """練成這一欄現在做不做得了（序章只准練新得的那一門，prologue.practice_problem）：不能時回寫給玩家看的原因，
+        修練頁的練成鈕灰掉、寫它；跟 practice 的拒絕同一個判斷。序章外是 None（心得夠不夠、練滿了沒由網頁照 slot_cards 自己看）。"""
+        return prologue_rules.practice_problem(self.state, self.content, self.world, kind)
 
     def practice(self, kind: str) -> list[str]:
         """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""

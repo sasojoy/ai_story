@@ -633,6 +633,47 @@ def test_the_revenge_button_promises_no_odds(fresh):
     assert any(word in label for word in words)
 
 
+def test_the_practice_buttons_follow_the_script(fresh):
+    """review-t4-5 M6：練成鈕亮不亮跟動作的拒絕走同一個判斷（slot_cards 的 blocked）：沒叫你練功的步驟兩顆都灰、寫原因。"""
+    import server
+
+    def blocked():
+        return {c["kind"]: c["blocked"] for c in server.menxia_view(fresh)["slot_cards"]}
+
+    _to_step(fresh, 1)
+    assert all(v and "師父" in v for v in blocked().values())  # 看修練頁那一步：還不能練
+    _to_step(fresh, 4)  # 練成那一步，但還沒換上新得的那一門
+    assert blocked()["武學"] and "換上" in blocked()["武學"]
+    fresh.switch_art(_fused(fresh))
+    assert blocked()["武學"] is None  # 換上之後：武學那顆亮
+    assert blocked()["內功"]  # 內功還是基本功：不能練
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    assert all(c["blocked"] is None for c in server.menxia_view(outside)["slot_cards"])
+
+
+def test_a_scripted_fight_never_waits_for_the_model(fresh, monkeypatch):
+    """review-t4-5 M7：斷眉若寫成頭目、或難度到大場面的門檻，平常按下去要等模型判讀；雪恥那一場勝負是寫好的，不叫模型、不排佇列，
+    連手上有一張備好的判讀也不拿來用（_judged 不被問）。"""
+    duanmei = fresh.content.squads["duanmei"]
+    duanmei.boss, duanmei.difficulty = True, 150
+    _to_step(fresh, 7)
+    assert fresh.is_big(duanmei)  # 平常是大場面
+    option = next(o for o in fresh.options() if o.id == "act:train")
+    assert option.wait == "" and fresh.fight_request("act:train") is None
+
+    def consulted(self, squad):
+        raise AssertionError("寫好的那一場不看判讀")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Game, "_judged", consulted)
+        fresh.choose("act:train")
+    assert fresh.state.battles[0].tier == "險勝"  # 照寫好的
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    outside.state.player.location = "lake"
+    fresh.content.locations["lake"].enemies = ["duanmei"]
+    assert outside.fight_request("act:train") is not None  # 序章外同一個對手照舊要等判讀
+
+
 def test_the_scripted_tier_comes_before_the_life_guard(prologue_content, world, monkeypatch):
     """team.fight 的 tier：護命（no_loss）會把落敗改判僵持、並標 guarded；寫好的結果在它之前，所以不被它動、也不標 guarded。"""
     from conftest import FixedRandom
@@ -691,6 +732,15 @@ def test_prologue_refuses_off_script_moves(fresh):
     assert "basic_fist" in fresh.state.player.arts  # 只准熔雜學
     fresh.melt_art("junk")
     assert "junk" not in fresh.state.player.arts and fresh.state.player.tutorial_step == 10
+
+
+def test_nothing_melts_before_the_melt_step(fresh):
+    """蠻牛拳在第 9 步（配點）就已經在功法庫裡了：熔了它第 10 步（熔雜學）就永遠做不成。熔煉只准在熔的那一步、只准熔它。"""
+    _to_step(fresh, 8)
+    assert "junk" in fresh.state.player.arts and prologue.melt_only(fresh.state, fresh.content) == ""
+    assert "師父" in fresh.melt_art("junk")[0]
+    assert "junk" in fresh.state.player.arts and fresh.state.player.tutorial_step == 8
+    _to_step(fresh, 10)  # 照常走完還是走得通
 
 
 def test_the_forge_does_not_ask_the_model_for_a_move_the_hut_refuses(fresh):
@@ -777,3 +827,173 @@ def test_the_quest_card_has_no_blank_master_before_he_is_met(fresh):
     fresh.state.pending_event = ambush
     _walk(fresh, "choice:0", "choice:0")  # 遇到師父了
     assert "（師父）去看修練頁。" in fresh.quest_text()
+
+
+# ── 假人與腳本：序章之後的樣子要跟真人一樣（Game.new(graduated=True)，M8）────────────
+
+def _look(game):
+    """別人一眼看得到的樣子：等級、功法欄與功法庫裡每一門的（品質, 第幾成）、銀兩、位置、有沒有內傷。名字不比（四門師門功夫看種子）。"""
+    from tianxia import library, team
+
+    s = game.state
+    p, m = s.player, s.player.member
+
+    def art(art_id, level):
+        return None if art_id is None else (team.player_art(s, game.content, game.world, art_id).quality, level)
+
+    return {
+        "level": m.level, "wugong": art(m.wugong_id, m.wugong_level), "neigong": art(m.neigong_id, m.neigong_level),
+        "library": sorted((team.player_art(s, game.content, game.world, a).quality, library.level_of(s, a)) for a in p.arts),
+        "silver": p.stats["silver"], "location": p.location, "stamina": p.stamina, "step": p.tutorial_step,
+        "hurt": m.injury > 0,
+    }
+
+
+def _walked(prologue_content, world):
+    """真人走完草廬、出了師（抵達潁川）。"""
+    human = Game.new(prologue_content, "真人", rng=random.Random(0), world=world, prologue=True)
+    _to_step(human, 10)
+    human.choose("move:town")
+    human.advance(human.state.player.journey.arrive_at[-1] - human.state.world.time)
+    return human
+
+
+def test_a_graduated_bot_looks_like_a_human_who_walked_the_hut(prologue_content, world):
+    """假人不走序章，但離開起點時的樣子要跟走完草廬的真人一樣：不然新人頭一個鐘頭就看得出誰是假人（等級 2、一門中品
+    第三成的師門功夫、剩一點內傷、多了盤纏）。做法是把序章用真的行動走一遍（Game._graduate），不是手抄一份清單。"""
+    human = _walked(prologue_content, world)
+    bot = Game.new(prologue_content, "假人", rng=random.Random(1), world=world, graduated=True)
+    assert _look(bot) == _look(human)
+    assert _look(bot)["level"] == 2 and _look(bot)["hurt"] and _look(bot)["location"] == "town"
+    s, p = bot.state, bot.state.player
+    assert s.pending_event is None and not prologue.active(s, prologue_content)
+    assert p.tutorial_step == prologue_content.tutorial.prologue_steps and p.stamina == prologue_content.config.stamina_max
+    fused = prologue.fused_arts(s, prologue_content, world)
+    assert [a.name for a in fused] and fused[0].preset and fused[0].name in {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"}
+    assert fused[0].quality == "中品" and fused[0].creator is None  # 師門功夫，沒有首創者
+    assert "junk" not in p.arts  # 雜學熔掉了，跟真人一樣
+    assert len(s.journal) <= 1 and s.battles == []  # 序章走過的痕跡不留在假人的紀錄裡（回到跟沒走序章的假人一樣乾淨）
+
+
+def test_graduating_picks_one_of_the_four_presets_by_seed(prologue_content, world):
+    names = {}
+    for seed in range(24):
+        game = Game.new(prologue_content, f"假人{seed}", rng=random.Random(seed), world=world, graduated=True)
+        names[seed] = prologue.fused_arts(game.state, prologue_content, world)[0].name
+    assert set(names.values()) == {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"}  # 四種都有人
+    again = Game.new(prologue_content, "假人3", rng=random.Random(3), world=world, graduated=True)
+    assert prologue.fused_arts(again.state, prologue_content, world)[0].name == names[3]  # 同一顆種子同一門
+
+
+def test_graduating_does_not_ask_the_model_and_leaves_no_season_footprint(prologue_content, world, monkeypatch):
+    """走序章的過程不叫模型（師門配方不等取名、遇敵是寫好的）；也不把共用賽季的時鐘往前推。"""
+    from tianxia.ollama_client import OllamaClient
+
+    asked = []  # 數呼叫、不丟例外：呼叫端多半接得住例外、悄悄走退路，丟了反而看不出來
+
+    def ask(self, *args, **kwargs):
+        asked.append(args)
+        raise RuntimeError("連不上")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", ask)
+    monkeypatch.setattr(OllamaClient, "chat_structured", ask)
+    before = world.get_season().time
+    bot = Game.new(prologue_content, "假人", rng=random.Random(2), world=world, graduated=True)
+    assert asked == [] and world.get_season().time == before
+    assert bot.client is not None  # 走完序章把客戶端還回去（伺服器假人之後由 bot_runner 自己設成 None）
+
+
+def test_graduating_does_not_ask_the_model_even_for_a_recipe_nobody_wrote(prologue_content, world, monkeypatch):
+    """師門配方被拿掉（內容改版）時，首次出現的配方平常要在這裡叫模型取名：走序章的假人不叫（走退路字表），一次也不叫。"""
+    from tianxia.ollama_client import OllamaClient
+
+    asked = []
+
+    def ask(self, *args, **kwargs):
+        asked.append(args)
+        raise RuntimeError("連不上")
+
+    monkeypatch.setattr(OllamaClient, "chat_text", ask)
+    monkeypatch.setattr(OllamaClient, "chat_structured", ask)
+    prologue_content.preset_recipes.clear()
+    bot = Game.new(prologue_content, "假人", rng=random.Random(2), world=world, graduated=True)
+    assert asked == [] and prologue.fused_arts(bot.state, prologue_content, world)  # 合成了、沒有問模型
+    assert bot.state.player.location == "town"
+
+
+def test_graduating_only_takes_choices_that_lead_to_the_step_flag(prologue_content, world):
+    """遇險那一則多一個「逃」（走不到拜師）：假人不挑它，不然這一步永遠完成不了、整個序章只剩略過的樣子。"""
+    from tianxia.models import Choice, Effect
+
+    prologue_content.events["p_ambush"].choices.append(Choice(text="逃", effect=Effect(text="你逃了。", flags_add=["序章:逃"])))
+    for seed in range(16):
+        bot = Game.new(prologue_content, f"假人{seed}", rng=random.Random(seed), world=world, graduated=True)
+        assert "序章:拜師" in bot.state.player.flags and "序章:逃" not in bot.state.player.flags, seed
+        assert bot.state.player.member.level == 2, seed  # 整個序章走完：雪恥打過、升了級
+
+
+def test_a_graduated_bot_in_season_two_is_the_same_as_in_season_one(prologue_content, world):
+    one = Game.new(prologue_content, "假人甲", rng=random.Random(4), world=world, graduated=True)
+    next_season(prologue_content, world)
+    two = Game.new(prologue_content, "假人乙", rng=random.Random(4), world=world, graduated=True)
+    assert two.state.player.season_number == 2 and _look(two) == _look(one)
+
+
+def test_graduating_a_script_that_cannot_be_followed_falls_back_to_the_purse(prologue_content, world):
+    """內容改版讓某一步照著走不通（這裡把修練那一步的「一定升品」拿掉，師父那一步沒叫你修練、修練被擋）：假人不能卡在
+    草廬，走不下去就像略過一樣直接出師、拿盤纏。"""
+    prologue_content.tutorial.steps[5].sure_cultivate = False
+    bot = Game.new(prologue_content, "假人", rng=random.Random(1), world=world, graduated=True)
+    p = bot.state.player
+    assert p.location == "town" and p.tutorial_step == prologue_content.tutorial.prologue_steps
+    assert not prologue.active(bot.state, prologue_content) and bot.state.pending_event is None
+    assert p.stamina == prologue_content.config.stamina_max
+    fused = prologue.fused_arts(bot.state, prologue_content, world)[0]
+    assert fused.quality != "中品" and p.member.level == 1  # 真的卡在第 6 步：後面的雪恥、配點都沒走到
+    assert p.stats["silver"] == prologue_content.config.start_stats["silver"] + 30  # 盤纏照拿
+
+
+def test_graduating_changes_nothing_on_content_without_a_prologue(content, world, monkeypatch):
+    """沒有序章的內容（正式內容現在就是）：graduated=True 什麼都不做，連亂數都不多用一次。"""
+    def boom(self):
+        raise AssertionError("沒有序章的內容不該走序章")
+
+    monkeypatch.setattr(Game, "_graduate", boom, raising=False)
+    plain_rng, graduated_rng = random.Random(7), random.Random(7)
+    plain = Game.new(content, "甲", rng=plain_rng, world=world)
+    graduated = Game.new(content, "甲", rng=graduated_rng, world=world, graduated=True)
+    assert graduated.state.model_dump() == plain.state.model_dump()
+    assert graduated_rng.getstate() == plain_rng.getstate()
+
+
+def test_the_season_bot_leaves_the_start_like_a_human_on_content_with_a_prologue(prologue_content, world, tmp_path):
+    """bot.play_season 的整季機器人也一樣；而且賽季還在籌備中（沒有 auto_open）它自己先開季再走序章，不然什麼都做不了。"""
+    from tianxia import bot
+    from tianxia.sqlite_world import open_world
+
+    human = _walked(prologue_content, world)
+    prologue_content.config.auto_open_first_season = False
+    game = bot.play_season(prologue_content, 1, max_steps=0, world=open_world(tmp_path / "w.db"))
+    assert _look(game) == _look(human) and _look(game)["level"] == 2
+    assert game.state.player.location == "town" and prologue.fused_arts(game.state, prologue_content, game.world)[0].preset
+
+
+def test_the_season_bot_plays_the_same_game_on_content_without_a_prologue(content, tmp_path, monkeypatch):
+    """bot.play_season 現在也傳 graduated=True：沒有序章時，同一顆種子玩出來的整季要跟不傳一模一樣。"""
+    from tianxia import bot
+    from tianxia.sqlite_world import open_world
+
+    def boom(self):
+        raise AssertionError("沒有序章的內容不該走序章")
+
+    original = Game.new.__func__
+
+    def without(cls, *args, **kwargs):
+        kwargs.pop("graduated", None)
+        return original(cls, *args, **kwargs)
+
+    new = bot.play_season(content, 1, max_steps=300, world=open_world(tmp_path / "a.db"))
+    monkeypatch.setattr(Game, "new", classmethod(without))
+    monkeypatch.setattr(Game, "_graduate", boom, raising=False)
+    old = bot.play_season(content, 1, max_steps=300, world=open_world(tmp_path / "b.db"))
+    assert new.state.model_dump_json() == old.state.model_dump_json()

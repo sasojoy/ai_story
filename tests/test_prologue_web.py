@@ -16,6 +16,7 @@ import pytest
 from test_prologue import _to_step
 
 import server
+from tianxia import prologue
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parent.parent
@@ -445,6 +446,17 @@ def test_the_practice_page_points_at_the_buttons_of_the_step(hut):
     m, x = pages_at(hut, 5)  # 修練那一步：合成出來的那一門換上了，它的列發光
     page = run(m, "return H.pagePractice();", menxia=x)
     assert 'data-glow="cultivate"' in page
+
+
+def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
+    m, x = pages_at(hut, 1)  # 看修練頁那一步：沒叫你練功
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert re.search(r'data-op="practice" data-glow="practice" disabled>師父這一步沒叫你練功。', page)
+    m, x = pages_at(hut, 4)
+    hut.switch_art(prologue.fused_arts(hut.state, hut.content, hut.world)[0].id)
+    x = server.menxia_view(hut)
+    page = run(server.main_view(hut), "return H.pagePractice();", menxia=x)  # 換上了：武學那一欄練得下去
+    assert re.search(r'data-op="practice" data-glow="practice" >練成武學（心得', page)
 
 
 def test_only_the_art_the_master_names_glows_to_be_melted(hut):

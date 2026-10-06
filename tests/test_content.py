@@ -1768,6 +1768,52 @@ def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
     assert "models.ALLOW_FIXED" in str(caught.value) and "ALLOW_FAMILIES" in str(caught.value)  # 內容作者知道去哪補
 
 
+def test_every_sight_in_the_hut_has_a_preset_recipe(prologue_root):
+    """review-t4-5 M4：草廬悟得到的每個意境，合成那一步的底都要有師門配方；少了的那個新人的合成就要等模型。"""
+    def drop_fire(recipes):
+        recipes[:] = [r for r in recipes if r["insight"] != "huo"]
+
+    edit_json(prologue_root / "preset_recipes.json", drop_fire)
+    with pytest.raises(ContentError, match=r"\['huo'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+
+def test_a_recipe_on_the_wrong_base_does_not_cover_the_sight(prologue_root):
+    """配方有、但底不是合成那一步指定的那一門：那個景還是沒有配方。"""
+    def wrong_base(recipes):
+        next(r for r in recipes if r["insight"] == "shui")["base"] = "basic_breath"
+
+    edit_json(prologue_root / "preset_recipes.json", wrong_base)
+    with pytest.raises(ContentError, match=r"\['shui'\].*basic_fist.*師門配方"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_chains_on_is_checked_too(prologue_root):
+    """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
+    def chain(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["effect"]["next_event"] = "p_more"
+        events.append({"id": "p_more", "title": "再看", "text": "再看一眼。", "actions": [], "choices": [
+            {"text": "好", "effect": {"text": "嗯。", "insights": ["xuesha"]}}]})
+
+    edit_json(prologue_root / "events" / "prologue.json", chain)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
+def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
+    """檢定失敗才給的意境（fail_effect）也是新人會拿到的：沒有配方的話那個新人的合成一樣要等模型。"""
+    def gamble(events):
+        sight = next(e for e in events if e["id"] == "p_insight")
+        sight["choices"][0]["check"] = {"stat": "str", "difficulty": 5}
+        sight["choices"][0]["fail_effect"] = {"text": "摔了一跤。", "insights": ["xuesha"]}
+
+    edit_json(prologue_root / "events" / "prologue.json", gamble)
+    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
+        load_content(prologue_root)
+
+
 def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
     """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))

@@ -79,6 +79,29 @@ def test_fill_adds_one_bot_per_faction_per_interval_up_to_the_minimum(runner, co
     assert sorted(s.player.bot.faction for s in _bots()) == ["guan", "guan", "huang", "huang"]
 
 
+def test_a_new_bot_leaves_the_start_like_a_human_who_walked_the_hut(prologue_content, clock, monkeypatch):
+    """內容有序章時，bot_runner 新建的假人離開起點的樣子跟走完草廬的真人一樣（Game.new(graduated=True)）：
+    等級 2、一門中品第三成的師門功夫、一點內傷、多了盤纏；站在起點、不在草廬、序章算走過。"""
+    from tianxia import library, prologue, team
+
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
+    _install(prologue_content)
+    prologue_content.config.bots_min_per_faction = 1
+    world = open_world()
+    world.seed_first_season(prologue_content)
+    runner = BotRunner(prologue_content, world, open_characters(), random.Random(1), clock=lambda: clock[0])
+    assert runner.tick().added == 2
+    for state in _bots():
+        p = state.player
+        assert p.bot is not None and p.location == "town" and state.pending_event is None
+        assert p.tutorial_step == prologue_content.tutorial.prologue_steps and not prologue.active(state, prologue_content)
+        assert p.member.level == 2 and p.member.injury > 0
+        fused = prologue.fused_arts(state, prologue_content, world)
+        assert len(fused) == 1 and fused[0].preset and fused[0].quality == "中品" and library.level_of(state, fused[0].id) == 3
+        assert team.player_art(state, prologue_content, world, p.member.wugong_id).id == fused[0].id  # 換上身了
+        assert p.stats["silver"] > prologue_content.config.start_stats["silver"]  # 盤纏
+
+
 def test_players_who_already_joined_count_toward_the_minimum(runner, world, content, monkeypatch):
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
     content.config.bots_min_per_faction = 1

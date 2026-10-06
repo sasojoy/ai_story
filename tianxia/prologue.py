@@ -92,6 +92,22 @@ def finish(state: GameState, content: Content, world: WorldStateStore, *, purse:
     return msgs
 
 
+def choice_flags(content: Content, event_id: str, index: int) -> set[str]:
+    """選了事件的第 index 個選項之後，（接下去的事件任選）有機會留下哪些旗標。假人走序章（Game._graduate）用它挑
+    「走得到這一步完成條件」的選項，不靠寫死的選項編號：內容怎麼改，走法跟著改。"""
+    found: set[str] = set()
+    seen: set[str] = set()
+    todo = [content.events[event_id].choices[index].effect]
+    while todo:
+        effect = todo.pop()
+        found.update(effect.flags_add)
+        nxt = effect.next_event
+        if nxt is not None and nxt in content.events and nxt not in seen:
+            seen.add(nxt)
+            todo += [ch.effect for ch in content.events[nxt].choices]
+    return found
+
+
 def migrated_step(player: PlayerState, content: Content) -> int:
     """舊存檔（onboarding 比 ONBOARDING_VERSION 小）的引導步數換成新的：一律當作走過序章（設計 7.2），
     舊的第一季兩步（舊的第 6、7 步）接在序章後面、走到哪裡就接著那裡。沒有序章的內容照舊。"""

@@ -1508,6 +1508,26 @@ def validate(c: Content) -> None:
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
             need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
+    # 草廬的四景悟得到的每個意境，都要有一筆師門配方接上合成那一步的底：沒有的話那個新人的合成要等模型取名、或拿到退路的名字
+    # （「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    sights: set[str] = set()
+    todo = [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
+    seen_events: set[str] = set()
+    while todo:
+        event_id = todo.pop()
+        if event_id in seen_events or event_id not in c.events:
+            continue
+        seen_events.add(event_id)
+        for choice in c.events[event_id].choices:
+            for effect in (choice.effect, choice.fail_effect):
+                sights.update(effect.insights)
+                if effect.next_event:
+                    todo.append(effect.next_event)
+    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
+    for step in t.steps[: t.prologue_steps]:
+        if step.fuse_base:
+            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
+            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
     recipe_keys, recipe_names = set(), set()
     for recipe in c.preset_recipes:
         where = f"師門配方 {recipe.base}+{recipe.insight}"
