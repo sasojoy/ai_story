@@ -1,3 +1,4 @@
+import contextlib
 import random
 import re
 import time
@@ -41,20 +42,14 @@ def test_new_game(game):
     assert "測試開始。" in game.state.log
 
 
-def test_a_new_character_starts_with_the_starter_arts(content, world):
+@pytest.mark.parametrize("new_season", [False, True], ids=["new-character", "new-season"])
+def test_a_new_character_starts_with_the_starter_arts(content, world, new_season):
+    """新角色從那兩門第一成開始；每季重來的角色也一樣（_reset_player_for_new_season 走同一個 new_game_state）。"""
     content.config.starter_skills = ["basic_breath", "basic_fist"]
     game = Game.new(content, "新人", rng=random.Random(0), world=world)
-    member = game.state.player.member
-    assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
-    assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
-
-
-def test_a_new_season_character_starts_with_the_starter_arts_again(content, world):
-    """每季重來的角色也從那兩門第一成開始（_reset_player_for_new_season 走同一個 new_game_state）。"""
-    content.config.starter_skills = ["basic_breath", "basic_fist"]
-    game = Game.new(content, "新人", rng=random.Random(0), world=world)
-    game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 7
-    game._reset_player_for_new_season(game.state.player.season_number + 1)
+    if new_season:
+        game.state.player.member.wugong_id, game.state.player.member.wugong_level = "fist", 7
+        game._reset_player_for_new_season(game.state.player.season_number + 1)
     member = game.state.player.member
     assert (member.neigong_id, member.neigong_level) == ("basic_breath", 1)
     assert (member.wugong_id, member.wugong_level) == ("basic_fist", 1)
@@ -1996,19 +1991,26 @@ def test_a_backfill_only_touches_the_players_own_fighter(game):
     assert after["旁人"].scores == {}  # 別人的份量只有他自己的 Game 算得出來
 
 
-def test_the_world_ticker_never_backfills_anyones_scores(content, game):
-    """排程的 Game 玩家是空白的，補誰的份量都會補錯：場上有人沒有快照，它照樣推回合、逾時代選，一個份量也不算。"""
+def _ticked_by_the_world_alone(content, game, strip_scores=False):
+    """沈浪在集結時站官軍、存檔之後就沒人在線：排程的 Game（沒有玩家）把集結與第一回合的逾時推完，而且不准它算份量。
+    strip_scores：先把沈浪的份量快照拿掉。回傳之後的戰局。"""
     definition = _install_three_move_battle(content)
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
         game.choose("battle:join:guan")
-    _strip_scores(game)
+    if strip_scores:
+        _strip_scores(game)
     open_characters().save(game.state)
     ticker = Game.for_world(content, game.world, rng=random.Random(3))
     with mock.patch.object(Game, "_battle_scores", side_effect=AssertionError("排程不該算份量")):
         ticker.world_tick(1000.0 + 601)
         ticker.world_tick(1000.0 + 601 + 121)
-    battle = game.world.get_battle()
+    return game.world.get_battle()
+
+
+def test_the_world_ticker_never_backfills_anyones_scores(content, game):
+    """排程的 Game 玩家是空白的，補誰的份量都會補錯：場上有人沒有快照，它照樣推回合、逾時代選，一個份量也不算。"""
+    battle = _ticked_by_the_world_alone(content, game, strip_scores=True)
     assert battle.round_number == 1 and battle.participants["沈浪"].scores == {}  # 還是空的：份量 0，照常結算
 
 
@@ -2023,16 +2025,7 @@ def test_a_fighter_with_no_snapshot_sees_the_move_but_not_a_misleading_zero(game
 
 def test_the_world_ticker_plays_the_three_moves_with_nobody_online(content, game):
     """排程沒有玩家：逾時代出自己那邊的固守，三招照結算（黃巾沒人 → 官軍推滿 10），而且不替誰算份量。"""
-    definition = _install_three_move_battle(content)
-    game.world.start_battle(definition, now=1000.0)
-    with at(game, 1000.0):
-        game.choose("battle:join:guan")
-    open_characters().save(game.state)
-    ticker = Game.for_world(content, game.world, rng=random.Random(3))
-    with mock.patch.object(Game, "_battle_scores", side_effect=AssertionError("排程不該算份量")):
-        ticker.world_tick(1000.0 + 601)
-        ticker.world_tick(1000.0 + 601 + 121)
-    battle = game.world.get_battle()
+    battle = _ticked_by_the_world_alone(content, game)
     assert battle.round_number == 1 and battle.trend == 60
     assert battle.participants["沈浪"].last_result == "固守（剋制 ×1.0）"
     assert battle.round.pending_actions == {} and battle.last_mix["guan"]["固守"] == 1.0
@@ -2123,13 +2116,16 @@ def test_the_join_option_only_shows_at_the_factions_own_places(content, game):
 
 
 def test_with_factions_the_muster_only_offers_your_own_side(content, game):
+    """集結時只列自己陣營那一邊；硬送對方那一邊被擋回，而且什麼都不寫（江湖紀錄沒有多一則）。"""
     _install_factions(content)
     definition = _install_battle_def(content)
     game.state.player.faction = "huang"
     game.world.start_battle(definition, now=1000.0)
+    before = len(game.state.journal)
     with at(game, 1000.0):
         assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:join:huang"]
         assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
+        assert len(game.state.journal) == before
         assert "選擇陣營" in game.scene_text()
 
 
@@ -2391,8 +2387,14 @@ def _ended_with_push(game, definition, push, unfinished=False):
     return battle
 
 
-def test_the_warlord_push_lands_on_the_season(game):
+@pytest.mark.parametrize("timetable_showdown", [False, True], ids=["beta", "timetable-showdown"])
+def test_the_warlord_push_lands_on_the_season(content, game, timetable_showdown):
+    """豪強那一份推到這一季的大勢上（自己手上那一份也跟著）。第一季的時刻表決戰走 _settle_showdown、不套保底的大勢變化，
+    豪強那一份要另外推：時刻表找不到那一格時 _settle_showdown 只換標題。"""
     definition = _as_warlord(game)
+    if timetable_showdown:
+        definition.timetable_event, definition.defender = "no_such_event", "guan"
+        _season_one_on(content, game)
     trend = definition.third.trend
     before = world_trend_value(game.world.get_season(), game.content, trend)
     game._apply_battle_outcome(_ended_with_push(game, definition, 3))
@@ -2426,18 +2428,6 @@ def test_a_battle_without_a_third_side_or_without_a_push_leaves_the_warlord_tren
     definition.third = None
     game._apply_battle_outcome(_ended_with_push(game, definition, 3))  # 沒有第三方的決戰，third_push 本來就沒有意義
     assert world_trend_value(game.world.get_season(), game.content, trend) == before
-
-
-def test_a_timetable_showdown_also_pushes_the_warlords(content, game):
-    """第一季的時刻表決戰走 _settle_showdown、不套保底的大勢變化，豪強那一份要另外推。"""
-    definition = _as_warlord(game)
-    definition.timetable_event, definition.defender = "no_such_event", "guan"  # 時刻表找不到那一格：_settle_showdown 只換標題
-    _season_one_on(content, game)
-    trend = definition.third.trend
-    before = world_trend_value(game.world.get_season(), game.content, trend)
-    game._apply_battle_outcome(_ended_with_push(game, definition, 3))
-    assert game.world.get_season().trends[trend] == min(100, before + 3)
-    assert game.state.world.trends[trend] == min(100, before + 3)
 
 
 def test_the_warlord_push_shows_in_every_fighters_report(game):
@@ -2663,7 +2653,8 @@ def test_muster_auto_closes_once_the_deadline_passes(content, game):
     assert status is not None and status[0].phase == "active"
 
 
-def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(content, game):
+def _a_round_against_a_bot(content, game, narration=None):
+    """沈浪站官軍、一個機器人站黃巾；集結一過，沈浪送出固守。narration 給了就把回合敘事換成這一句。回傳之後的戰局。"""
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
@@ -2671,11 +2662,15 @@ def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(conte
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
-    after_muster = definition.muster_seconds + 1
-    with at(game, after_muster):
+    narrate = mock.patch.object(battle_instance, "narrate_round", return_value=narration) if narration else contextlib.nullcontext()
+    with at(game, definition.muster_seconds + 1), narrate:
         game._battle_status()  # 推進一次，確保集結已關閉、進入 active
         game.choose("battle:act:guan_hold")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
-    battle = game.world.get_battle()
+    return game.world.get_battle()
+
+
+def test_submitting_an_action_and_a_bot_auto_fills_then_the_round_resolves(content, game):
+    battle = _a_round_against_a_bot(content, game)
     assert battle.trend != 50  # 已經結算過，trend 被推動了
     assert battle.round.pending_actions == {}  # 回合已經重置
 
@@ -2846,17 +2841,6 @@ def test_changing_sides_in_the_muster_writes_its_own_entry(content, game):
         game.choose("battle:join:huang")
     assert len(game.state.journal) == before + 1
     assert game.state.journal[0].title == "測試決戰・改選黃巾"
-
-
-def test_a_refused_join_writes_nothing(content, game):
-    _install_factions(content)
-    definition = _install_battle_def(content)
-    game.state.player.faction = "huang"
-    game.world.start_battle(definition, now=1000.0)
-    before = len(game.state.journal)
-    with at(game, 1000.0):
-        assert game.choose("battle:join:guan") == ["（此刻無法這麼做。）"]
-    assert len(game.state.journal) == before
 
 
 def test_joining_late_writes_one_journal_entry_with_the_line_it_returns(content, game):
@@ -3303,26 +3287,19 @@ def test_a_fighter_walking_inside_the_region_can_still_change_sides_during_the_m
     assert participant.faction == "huang" and not participant.away
 
 
-def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(content, game):
+@pytest.mark.parametrize("region, away", [("north", True), (None, False)], ids=["a-battle-in-the-north", "a-battle-with-no-region"])
+def test_a_fighter_walking_out_of_the_region_is_away_from_the_start_of_the_trip(content, game, region, away):
+    """小鎮—湖邊在北區，終點寶洞在南區：這一趟還沒走到的站有一個在區外，一出發就算離開。不限地點的決戰（region 是 None）
+    沒有大區，就沒有「離開」。"""
     definition = _install_battle_def(content)
-    definition.region = "north"
-    _south_cave(content, game)
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0):
-        game.choose("battle:join:guan")
-    game.travel("cave", "walk")  # 小鎮—湖邊在北區，終點寶洞在南區：這一趟還沒走到的站有一個在區外
-    assert game.world.get_battle().participants["沈浪"].away
-
-
-def test_a_battle_with_no_region_cannot_be_left(content, game):
-    definition = _install_battle_def(content)  # 不限地點
+    definition.region = region
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
     game.travel("cave", "walk")
     assert game.state.player.journey is not None
-    assert not game.world.get_battle().participants["沈浪"].away  # 沒有大區就沒有「離開」
+    assert game.world.get_battle().participants["沈浪"].away is away
 
 
 def test_joining_a_battle_stands_you_up(content, game):
@@ -3409,13 +3386,19 @@ def test_halting_inside_the_region_brings_an_away_fighter_back(content, game):
         assert "你離開了" not in game.scene_text()
 
 
-def test_a_fallen_fighter_who_left_the_region_is_not_promised_a_return_to_action(content, game):
+def _joined_a_battle_in_the_north(content, game):
+    """測試北區的一場決戰，沈浪在集結時站官軍；南區另有寶洞（_south_cave）可去。回傳那一場的定義。"""
     definition = _install_battle_def(content)
     definition.region = "north"
     _south_cave(content, game)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
+    return definition
+
+
+def test_a_fallen_fighter_who_left_the_region_is_not_promised_a_return_to_action(content, game):
+    definition = _joined_a_battle_in_the_north(content, game)
     with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         game.travel("cave", "dash")  # 離開北區
@@ -3426,12 +3409,7 @@ def test_a_fallen_fighter_who_left_the_region_is_not_promised_a_return_to_action
 
 
 def test_rally_region_sends_a_fighter_who_left_the_region_back_unless_they_have_fallen(content, game):
-    definition = _install_battle_def(content)
-    definition.region = "north"
-    _south_cave(content, game)
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0):
-        game.choose("battle:join:guan")
+    definition = _joined_a_battle_in_the_north(content, game)
     with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
         assert game.rally_region() is None  # 人在戰場上
@@ -3893,25 +3871,18 @@ def test_a_post_fight_event_that_asks_for_a_win_follows_a_win(game):
     assert game.state.pending_event == "chain_a"
 
 
-def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_loss(game):
+@pytest.mark.parametrize("dodged, tier", [(False, "落敗"), (True, "僵持")], ids=["loss", "draw"])
+def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_loss(game, dodged, tier):
+    """打不贏的翻江龍：落敗之後不接只給贏家的戰後事件；落敗被身法閃成僵持也不接。"""
     _after_a_win_only(game)
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    if dodged:
+        game.content.config.dodge_per_point = 1.0
+        game.state.player.stats["agi"] = 6  # 落敗被身法閃成僵持
     walk_to(game, "lake")
     game.rng = FixedRandom(0.0)
     game.choose("act:train")
-    assert game.state.battles[0].tier == "落敗"
-    assert game.state.pending_event is None
-
-
-def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_draw(game):
-    _after_a_win_only(game)
-    game.content.locations["lake"].enemies = ["boss"]
-    game.content.config.dodge_per_point = 1.0
-    game.state.player.stats["agi"] = 6  # 落敗被身法閃成僵持
-    walk_to(game, "lake")
-    game.rng = FixedRandom(0.0)
-    game.choose("act:train")
-    assert game.state.battles[0].tier == "僵持"
+    assert game.state.battles[0].tier == tier
     assert game.state.pending_event is None
 
 
@@ -5504,18 +5475,7 @@ def test_the_chronicle_lists_earlier_seasons_after_this_one(content, game):
 
 
 def test_the_round_narration_is_kept_with_the_round(content, game):
-    definition = _install_battle_def(content)
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0):
-        game.choose("battle:join:guan")
-        game.world.mutate_battle(
-            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
-        )
-    after_muster = definition.muster_seconds + 1
-    with at(game, after_muster), mock.patch.object(battle_instance, "narrate_round", return_value="一場惡戰。"):
-        game._battle_status()
-        game.choose("battle:act:guan_hold")
-    battle = game.world.get_battle()
+    battle = _a_round_against_a_bot(content, game, narration="一場惡戰。")
     assert [r.narration for r in game.world.battle_rounds(battle.record_id)] == ["一場惡戰。"]
 
 
@@ -5879,57 +5839,33 @@ def test_the_brush_off_says_how_far_short_you_are(content, game):
     assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]
 
 
-def test_the_hint_names_the_faction_way_up_when_one_more_step_would_close_the_gap(content, game):
+@pytest.mark.parametrize(("season_one", "promotions", "rank", "fame", "discount", "hint"), [
+    # 投靠了官軍、還沒晉升：門檻 30，升一階抵 5；官軍有第 2 階可升。差 5：剛好一階補得上
+    pytest.param(True, [2], 0, 25, None, "（名望還差 5，或在官軍再升一階）", id="one-step-closes-a-gap-of-5"),
+    pytest.param(True, [2], 0, 26, None, "（名望還差 4，或在官軍再升一階）", id="one-step-closes-a-gap-of-4"),
+    pytest.param(True, [], 0, 26, None, "（名望還差 4）", id="no-next-promotion-written"),  # 官軍的晉升表上沒有第 2 階
+    # 已經升過第 2 階，下一階（3）沒寫；門檻 30 - 5 = 25，差 3
+    pytest.param(True, [2], 2, 22, None, "（名望還差 3）", id="past-the-last-written-promotion"),
+    pytest.param(True, [2], 0, 12, None, "（名望還差 18）", id="one-step-cannot-close-the-gap"),  # 差 18，一階只抵 5
+    pytest.param(True, [2], 0, 12, 18, "（名望還差 18，或在官軍再升一階）", id="a-big-enough-step-can"),  # 抵得夠大就補得上
+    # 規則沒開（beta 那一季）沒有晉升這回事，「再升一階」不能寫：其他條件都成立也一樣
+    pytest.param(False, [2], 0, 26, None, "（名望還差 4）", id="season-one-rules-off"),
+])
+def test_the_hint_names_the_faction_way_up_when_one_more_step_would_close_the_gap(
+    content, game, season_one, promotions, rank, fame, discount, hint,
+):
     cid = _stand_by_one_figure(content, game)
     _guan_figure(content, cid)
-    _season_one_on(content, game)
-    _promotion(content, "guan", 2)  # 官軍有第 2 階可升
+    if season_one:
+        _season_one_on(content, game)
+    for promoted_to in promotions:
+        _promotion(content, "guan", promoted_to)
+    if discount is not None:
+        content.config.audience_rank_discount = discount
     p = game.state.player
-    p.faction, p.rank = "guan", 0  # 投靠了、還沒晉升：門檻 30，升一階抵 5
-    p.stats["fame"] = 25  # 差 5：剛好一階補得上
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 5，或在官軍再升一階）"]
-    p.stats["fame"] = 26
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4，或在官軍再升一階）"]
-
-
-def test_the_hint_is_left_out_when_no_next_promotion_is_written(content, game):
-    cid = _stand_by_one_figure(content, game)
-    _guan_figure(content, cid)
-    _season_one_on(content, game)
-    p = game.state.player
-    p.faction, p.rank = "guan", 0
-    p.stats["fame"] = 26
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4）"]  # 官軍的晉升表上沒有第 2 階
-    _promotion(content, "guan", 2)
-    p.rank = 2  # 已經升過第 2 階，下一階（3）沒寫
-    p.stats["fame"] = 22  # 門檻 30 - 5 = 25，差 3
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 3）"]
-
-
-def test_the_hint_is_left_out_when_one_more_step_cannot_close_the_gap(content, game):
-    cid = _stand_by_one_figure(content, game)
-    _guan_figure(content, cid)
-    _season_one_on(content, game)
-    _promotion(content, "guan", 2)
-    p = game.state.player
-    p.faction, p.rank = "guan", 0
-    p.stats["fame"] = 12  # 差 18，一階只抵 5
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18）"]
-    content.config.audience_rank_discount = 18  # 抵得夠大的話就補得上
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 18，或在官軍再升一階）"]
-
-
-def test_the_hint_is_left_out_while_the_season_one_rules_are_off(content, game):
-    """規則沒開（beta 那一季）沒有晉升這回事，「再升一階」不能寫：其他條件都成立也一樣。"""
-    cid = _stand_by_one_figure(content, game)
-    _guan_figure(content, cid)
-    _promotion(content, "guan", 2)
-    p = game.state.player
-    p.faction, p.rank = "guan", 0
-    p.stats["fame"] = 26
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4）"]
-    _season_one_on(content, game)
-    assert game.choose(f"call:{cid}") == ["閒雜人等退下。（名望還差 4，或在官軍再升一階）"]
+    p.faction, p.rank = "guan", rank
+    p.stats["fame"] = fame
+    assert game.choose(f"call:{cid}") == [f"閒雜人等退下。{hint}"]
 
 
 def test_enough_fame_turns_the_audience_button_into_a_real_audience(content, game):
@@ -6329,12 +6265,18 @@ def test_the_big_event_settled_at_the_opening_reaches_everyone_too(content, worl
     assert "剛剛　第 1 週・週一 00:00" in zi.latest_entry_html()
 
 
-def test_skipped_big_events_are_not_delivered(content, world):
+def _past_a_skipped_qinjie(content, world):
+    """第一季、張曼成已經退場，時間推過第 7 週開頭：秦頡那件記成跳過。回傳那個 Game。"""
     install_season_one(content)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
     game.state.world.figures["zhangmancheng"] = FigureState(status="retired")
     game.advance(calendar.week_start(7, content) + calendar.cal_hour_seconds(content))
     assert game.state.world.timeline["qinjie"].key == "skip"
+    return game
+
+
+def test_skipped_big_events_are_not_delivered(content, world):
+    game = _past_a_skipped_qinjie(content, world)
     lines = [line for e in _big_event_entries(game) for line in e.lines]
     assert not any("秦頡" in line for line in lines) and "qinjie" not in game.state.player.events_seen
 
@@ -6371,11 +6313,7 @@ def test_big_events_start_over_with_the_new_season(content, world):
 
 def test_skipped_events_stay_off_the_bulletin(content, world):
     """張曼成已經退場：第 7 週秦頡那件記成跳過，本週大事只有同一週的盧植圍廣宗。"""
-    install_season_one(content)
-    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
-    game.state.world.figures["zhangmancheng"] = FigureState(status="retired")
-    game.advance(calendar.week_start(7, content) + calendar.cal_hour_seconds(content))
-    assert game.state.world.timeline["qinjie"].key == "skip"
+    game = _past_a_skipped_qinjie(content, world)
     assert [b.split("**")[1] for b in game.bulletin()] == ["盧植圍廣宗"]
 
 

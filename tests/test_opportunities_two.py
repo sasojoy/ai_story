@@ -16,7 +16,7 @@ from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, o
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
-from tianxia.state import BotProfile, FigureState, PlayerState, Plot, WorldState
+from tianxia.state import BotProfile, PlayerState, Plot, WorldState
 
 
 @pytest.fixture

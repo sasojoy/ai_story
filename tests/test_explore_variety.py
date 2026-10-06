@@ -14,7 +14,6 @@ from tianxia.models import Condition
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 EXPLORE_FILES = sorted((CONTENT_DIR / "events").glob("explore_*.json"))
-STAT_KEYS = {"silver", "good", "evil", "fame", "str", "agi", "con", "wis", "xinde"}
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +57,7 @@ def test_every_location_offers_checks_on_at_least_three_different_stats(content)
 
 @pytest.mark.parametrize("path", EXPLORE_FILES, ids=[p.stem for p in EXPLORE_FILES])
 def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
+    """每個選項結果的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（explore-<檔名>）。"""
     events = json.loads(path.read_text(encoding="utf-8"))
     assert events
     rumors = 0
@@ -73,20 +73,7 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
                 assert "fail_effect" in c, e["id"]
             if "combat" in c:
                 assert c["combat"] in content.locations[e["locations"][0]].enemies, e["id"]
-            for key in ("effect", "fail_effect"):
-                eff = c.get(key, {})
-                stats = eff.get("stats", {})
-                assert set(stats) <= STAT_KEYS, e["id"]
-                assert -40 <= stats.get("silver", 0) <= 40 and stats.get("xinde", 0) <= 15, e["id"]
-                assert all(-3 <= stats.get(k, 0) <= 3 for k in ("fame", "good", "evil")), e["id"]
-                assert all(stats.get(k, 0) <= 1 for k in ("str", "agi", "con", "wis")), e["id"]
-                assert set(eff.get("trend", {})) <= {"front"}, e["id"]
-                assert all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
-                assert sum(eff.get("materials", {}).values()) <= 1, e["id"]
-                assert all(content.materials[m].tier <= 2 for m in eff.get("materials", {})), e["id"]
-                for banned in ("flags_add", "world_flags_add", "next_event", "recruit", "join_sect", "learn_skills"):
-                    assert not eff.get(banned), (e["id"], banned)
-                rumors += bool(eff.get("rumor"))
+            rumors += sum(bool(c.get(key, {}).get("rumor")) for key in ("effect", "fail_effect"))
     assert rumors <= 2
 
 

@@ -626,14 +626,6 @@ def test_an_empty_roster_says_the_geju_is_not_moving(on):
     assert f"現況：{EMPTY_ROSTER_NOTE}。" in text and "割據漸長" not in text
 
 
-def test_one_player_on_the_roster_makes_the_note_say_the_geju_grows_again(on):
-    game = _game(on)
-    _join(game)
-    _set_fronts(game.state, 40, 50, 90)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
-    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
-
-
 def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
     """回落不乘人數係數：名冊空著、沒有戰線在亂局，割據照樣一天落一點，說明寫漸消。"""
     game = _game(on)
@@ -643,12 +635,14 @@ def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
 
 
 def test_the_roster_follows_the_store_when_the_note_is_drawn(on):
-    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變。"""
+    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變：
+    名冊上一個人就說割據漸長，見聞→大勢的那一句也是。"""
     game = _game(on)
     _set_fronts(game.state, 40, 50, 90)
     assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
     _join(game)
     assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
 
 
 @pytest.mark.parametrize("players", [None, 0, 1, 15, 40])

@@ -533,17 +533,14 @@ def test_nobody_on_a_fixed_move_on_either_side_pushes_nothing(three):
     assert battle.trend == 50 and battle.last_mix == {"guan": {}, "huang": {}}
 
 
-def test_a_side_that_is_all_down_gets_pushed_ten(three):
+@pytest.mark.parametrize("out", [
+    pytest.param(lambda battle: setattr(battle.participants["乙"], "eliminated", True), id="all-down"),
+    pytest.param(lambda battle: bi.set_away(battle, "乙", True), id="all-out-of-the-region"),
+])
+def test_a_side_that_is_all_down_gets_pushed_ten(three, out):
+    """那一邊的人全倒下、或全離開了大區：這一回合照樣結算，往對方推滿 10。"""
     battle = _two_fighters(three)
-    battle.participants["乙"].eliminated = True
-    bi.submit_action(battle, "甲", "guan_hold")
-    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
-    assert battle.trend == 60
-
-
-def test_a_side_that_is_all_out_of_the_region_gets_pushed_ten(three):
-    battle = _two_fighters(three)
-    bi.set_away(battle, "乙", True)
+    out(battle)
     bi.submit_action(battle, "甲", "guan_hold")
     bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
     assert battle.trend == 60

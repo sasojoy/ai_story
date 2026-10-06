@@ -6,7 +6,6 @@ auto_open_first_season 開出來的季照當下的 Config 蓋章（world_state.s
 from __future__ import annotations
 
 import random
-import re
 from pathlib import Path
 from unittest import mock
 

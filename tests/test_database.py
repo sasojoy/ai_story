@@ -222,11 +222,13 @@ def test_a_transaction_commits_on_success_and_rolls_back_on_error(tmp_path):
     assert _count(db, "seasons") == 1
 
 
-def test_a_nested_transaction_joins_the_outer_one(tmp_path):
+@pytest.mark.parametrize("inner", ["transaction", "savepoint"])
+def test_a_nested_transaction_joins_the_outer_one(tmp_path, inner):
+    """裡面那一層（巢狀的交易，或成功的 savepoint）寫的東西，外層出錯就一起撤回。"""
     db = open_database(tmp_path / "t.db")
     with pytest.raises(ZeroDivisionError):
         with db.transaction():
-            with db.transaction() as conn:
+            with getattr(db, inner)() as conn:
                 conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
             1 / 0  # 外層出錯：裡面那一筆寫入也一起撤回
     assert _count(db, "seasons") == 0
@@ -245,16 +247,6 @@ def test_a_savepoint_rolls_back_only_what_was_written_inside_it(tmp_path):
         conn.execute("INSERT INTO seasons (number, data) VALUES (3, '{}')")
     with db.snapshot() as conn:
         assert [row["number"] for row in conn.execute("SELECT number FROM seasons ORDER BY number")] == [1, 3]
-
-
-def test_a_savepoint_that_succeeds_joins_the_outer_transaction(tmp_path):
-    db = open_database(tmp_path / "t.db")
-    with pytest.raises(ZeroDivisionError):
-        with db.transaction():
-            with db.savepoint() as conn:
-                conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
-            1 / 0  # 外層出錯：成功的 savepoint 也一起撤回
-    assert _count(db, "seasons") == 0
 
 
 def test_savepoints_nest(tmp_path):

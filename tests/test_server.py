@@ -4886,65 +4886,36 @@ class _ScriptedQueue:
         return job()
 
 
-@pytest.mark.parametrize("site", SITES)
-def test_a_duplicate_request_is_refused_where_the_fallback_would_let_the_second_tab_pick_the_result(site, monkeypatch):
-    """審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——評分 40 是一個結果（灌水的寫法本來
-    該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都擋下來：不擲骰、不登記、不打、
-    什麼都不收，回一句短話，眼前的事還在原地。對話也是（FB-077，PM 2026-10-06）：以前第二件拿 cancelled 先進鎖，把「無心多談，你只好
-    先行告辭」寫進紀錄、求見的選單也收掉，第一件的回話後來照樣套不上；現在被擋下來、什麼都不動，第一件照常套用。潤色照舊不插句子。"""
-    queue = _ScriptedQueue("run", "busy") if site == "narrate" else _ScriptedQueue("busy")
-    monkeypatch.setattr(server, "QUEUE", queue)
-    game, run, seen = _ready(site, monkeypatch)
-    stamina = game.state.player.stamina
-    if site == "dialogue":
-        with pytest.raises(server.GameError, match=server.BUSY_DIALOGUE):
-            run()
-        assert _asked(seen, "dialogue") == []
-        stored = open_characters().load("測試")
-        assert stored.player.pending_companion is None and stored.player.stamina == stamina
-        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
-    elif site == "fight":
-        with pytest.raises(server.GameError, match="還在對峙，稍等。"):
-            run()
-        assert _asked(seen, "fight") == []
-        stored = open_characters().load("測試")
-        assert stored.battles == [] and stored.pending_event == "kou_boss" and stored.player.stamina == stamina
-    elif site == "forge":
-        with pytest.raises(server.GameError, match="上一爐還沒出爐。"):
-            run()
-        assert _asked(seen, "forge") == [] and open_world().lookup_recipe(FIST_FENG) is None
-        assert open_characters().load("沈青衫").player.stats["xinde"] == 100
-    elif site == "score":
-        with pytest.raises(server.GameError, match="上一句還在掂量，稍等。"):
-            run()
-        assert _asked(seen, "score") == [] and _asked(seen, "rate") == []  # 沒評分、也沒擲骰
-        stored = open_characters().load("測試")
-        assert stored.pending_event is not None and not any(e.title.endswith("隨口應對") for e in stored.journal)
-    else:
-        run()  # 評分照常、擲骰照常；潤色那一件被擋下來：不插句子
-        assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}] and _asked(seen, "narrate") == []
-        assert GAMBLE_NARRATION not in game.state.journal[0].lines
-    assert queue.calls == (2 if site == "narrate" else 1)
+REFUSED_AS_DUPLICATE = {  # 重複的那一件：各呼叫點自己的一句（潤色沒有，不插句子就是了）
+    "dialogue": server.BUSY_DIALOGUE, "fight": "還在對峙，稍等。", "forge": "上一爐還沒出爐。", "score": "上一句還在掂量，稍等。",
+}
 
 
 @pytest.mark.parametrize("site", SITES)
-def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site, monkeypatch):
-    """PM 2026-10-06：排超過 llm_queue_wait_seconds 秒還沒輪到的那一件，跟重複的那一件一樣處理——不給退路（評分 40、首次取名用
-    退路字表）。沒被服務到的人拿一個結果沒有道理（灌水的寫法本來該得 0 分，退路字表的名字整季登記），再試一次就好。評分、開爐、
-    大場面、對話：不擲骰、不登記、不打、不開口、什麼都不收，回一句短話，眼前的事還在原地（對話是 FB-077 之後：跟重複的那一件
-    一樣被擋下來，不再取消那一輪）；潤色不插句子（沒給 busy 訊息的呼叫點，跟重複的那一件一樣）。"""
-    queue = _ScriptedQueue("run", "timeout") if site == "narrate" else _ScriptedQueue("timeout")
+@pytest.mark.parametrize("why", ["duplicate", "queue-timeout"])
+def test_a_request_the_queue_refuses_gets_no_fallback(why, site, monkeypatch):
+    """重複的那一件（why=duplicate）。審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——
+    評分 40 是一個結果（灌水的寫法本來該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都
+    擋下來：不擲骰、不登記、不打、什麼都不收，回一句短話，眼前的事還在原地。對話也是（FB-077，PM 2026-10-06）：以前第二件拿
+    cancelled 先進鎖，把「無心多談，你只好先行告辭」寫進紀錄、求見的選單也收掉，第一件的回話後來照樣套不上；現在被擋下來、什麼都
+    不動，第一件照常套用。潤色照舊不插句子。
+
+    排太久的那一件（why=queue-timeout）。PM 2026-10-06：排超過 llm_queue_wait_seconds 秒還沒輪到的那一件，跟重複的那一件一樣
+    處理——不給退路。沒被服務到的人拿一個結果沒有道理，再試一次就好；每個呼叫點回同一句 BUSY_QUEUE_TIMEOUT（對話是 FB-077 之後：
+    跟重複的那一件一樣被擋下來，不再取消那一輪）；潤色不插句子（沒給 busy 訊息的呼叫點，跟重複的那一件一樣）。"""
+    answer = "busy" if why == "duplicate" else "timeout"
+    queue = _ScriptedQueue("run", answer) if site == "narrate" else _ScriptedQueue(answer)
     monkeypatch.setattr(server, "QUEUE", queue)
     game, run, seen = _ready(site, monkeypatch)
     stamina = game.state.player.stamina
-    refusal = server.BUSY_QUEUE_TIMEOUT
+    refusal = REFUSED_AS_DUPLICATE.get(site) if why == "duplicate" else server.BUSY_QUEUE_TIMEOUT
     if site == "dialogue":
         with pytest.raises(server.GameError, match=refusal):
             run()
         assert _asked(seen, "dialogue") == []
         stored = open_characters().load("測試")
         assert stored.player.pending_companion is None and stored.player.stamina == stamina
-        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
+        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
     elif site == "fight":
         with pytest.raises(server.GameError, match=refusal):
             run()
@@ -4963,7 +4934,7 @@ def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site,
         stored = open_characters().load("測試")
         assert stored.pending_event is not None and not any(e.title.endswith("隨口應對") for e in stored.journal)
     else:
-        run()  # 評分照常、擲骰照常；潤色那一件排太久：不插句子
+        run()  # 評分照常、擲骰照常；潤色那一件被擋下來（或排太久）：不插句子
         assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}] and _asked(seen, "narrate") == []
         assert GAMBLE_NARRATION not in game.state.journal[0].lines
     assert queue.calls == (2 if site == "narrate" else 1)

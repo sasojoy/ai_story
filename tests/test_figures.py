@@ -11,7 +11,7 @@ import re
 from unittest import mock
 
 from conftest import FixedRandom, real_content
-from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, rules, team, timetable, world
+from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates

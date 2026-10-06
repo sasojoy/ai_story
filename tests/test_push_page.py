@@ -11,8 +11,6 @@
 - 等模型的 watchQueue 照樣每 2 秒問佇列，推送的通知不會在等的時候多打 /api/main。"""
 from __future__ import annotations
 
-import re
-
 import pytest
 
 import webharness

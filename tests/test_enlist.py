@@ -121,12 +121,18 @@ def test_enlistment_waits_behind_the_tutorial(enlisting):
     assert game.state.player.enlist_step == 1  # 進度照記
 
 
-def test_the_recruiters_check_mark_waits_for_its_own_box(enlisting):
-    """F11：引導那一步還在框上時，入伍段的進度照記，可是「✔ 引導完成」不能掛在說書人的框上（那一步根本沒做完）。"""
-    game = _game(enlisting, at="changshe")
+def _joined_mid_tutorial(content):
+    """引導還沒走完（tutorial_step 是 1，說書人那一步還在框上）就在長社投靠了官軍。"""
+    game = _game(content, at="changshe")
     game.state.player.tutorial_step = 1
     game.choose("faction:guan")
     game.choose("faction:confirm")
+    return game
+
+
+def test_the_recruiters_check_mark_waits_for_its_own_box(enlisting):
+    """F11：引導那一步還在框上時，入伍段的進度照記，可是「✔ 引導完成」不能掛在說書人的框上（那一步根本沒做完）。"""
+    game = _joined_mid_tutorial(enlisting)
     game.view_orders()
     assert game.state.player.enlist_step == 1
     assert game.guide_box()["done"] == []  # 說書人的框上沒有別人的 ✔
@@ -422,10 +428,7 @@ def test_the_recruiters_words_go_into_the_journal_once_each(enlisting):
 def test_a_recruiter_met_behind_the_tutorial_is_still_met_at_the_join(enlisting):
     """引導還沒走完就投靠：引薦人迎你進營是投靠那一刻的事，江湖紀錄記在那一刻；框上等說書人那一步走完才輪到他。
     框上沒有的 ✔ 也不會因此記進去。"""
-    game = _game(enlisting, at="changshe")
-    game.state.player.tutorial_step = 1
-    game.choose("faction:guan")
-    game.choose("faction:confirm")
+    game = _joined_mid_tutorial(enlisting)
     assert _told(game) == ["【老石】老石迎你進營。", "【老石】看這三條線。"]
     game.view_orders()
     assert _told(game)[2:] == ["【老石】挑一道軍令。"]  # 進度照記，這一步的話也在它成為眼前這一步的那一刻記下

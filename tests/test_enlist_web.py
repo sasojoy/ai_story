@@ -211,13 +211,16 @@ def test_a_redraw_keeps_the_running_timer_and_follows_the_new_card():
     assert got == {"live": 1, "target": "new card", "early": 0, "calls": 1}
 
 
-def test_a_redraw_where_the_card_is_off_screen_cancels_the_timer():
-    got = run_js("""
+@pytest.mark.parametrize("redraw", [
+    pytest.param("H.watchOrders(); env.live()[0].show(0);", id="the-new-card-is-off-screen"),  # 重畫之後新的卡片不在畫面上
+    pytest.param("S.sheet = true; H.watchOrders();", id="the-settings-sheet-opens"),  # 抽屜一開整頁重畫
+])
+def test_a_redraw_where_the_card_is_off_screen_cancels_the_timer(redraw):
+    got = run_js(f"""
       H.watchOrders();
       env.live()[0].show(1);
       await tick(1000);
-      H.watchOrders();
-      env.live()[0].show(0);                 // 重畫之後新的卡片不在畫面上
+      {redraw}
       await tick(5000);
       return env.calls.length;
     """)
@@ -293,19 +296,6 @@ def test_the_fixed_bars_do_not_count_as_screen():
       return { margin, sheet, bare: env.live()[0].opts.rootMargin };
     """)
     assert got == {"margin": "-110px 0px -56px 0px", "sheet": 0, "bare": "0px 0px 0px 0px"}
-
-
-def test_opening_the_settings_sheet_mid_countdown_cancels_the_wait():
-    got = run_js("""
-      H.watchOrders();
-      env.live()[0].show(1);
-      await tick(1000);
-      S.sheet = true;
-      H.watchOrders();                                    // 抽屜一開整頁重畫
-      await tick(5000);
-      return env.calls.length;
-    """)
-    assert got == 0
 
 
 def test_a_late_callback_from_a_replaced_observer_is_ignored():

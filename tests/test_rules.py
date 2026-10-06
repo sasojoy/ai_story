@@ -458,20 +458,18 @@ def test_joining_the_figures_faction_without_a_promotion_takes_nothing_off(state
         assert audience_bar(state, content, cid) == 20
 
 
-def test_rank_in_another_faction_does_not_count(state, content):
+@pytest.mark.parametrize(("faction", "figure_side"), [
+    pytest.param("huang", "guan", id="rank-in-another-faction"),
+    pytest.param(None, None, id="a-loner-and-no-figure-entry"),  # 散人的階級不抵（沒有陣營）；這個人物也不在大勢人物表上
+    pytest.param(None, "guan", id="a-loner-before-a-figure"),
+])
+def test_rank_in_another_faction_does_not_count(state, content, faction, figure_side):
+    """只有投靠那位大勢人物的陣營、晉升過的階級才抵門檻：別的陣營的階級、散人的階級都不抵，只算名望。"""
     cid = "mate"
     content.characters[cid].audience_fame = 20
-    _figure_for(content, cid, "guan")
-    state.player.faction, state.player.rank = "huang", 3
-    assert audience_bar(state, content, cid) == 20
-
-
-def test_a_loner_and_a_figure_without_a_faction_entry_only_count_fame(state, content):
-    cid = "mate"
-    content.characters[cid].audience_fame = 20
-    state.player.rank = 3  # 散人的階級不抵（沒有陣營）
-    assert audience_bar(state, content, cid) == 20  # 這個人物也不在大勢人物表上
-    _figure_for(content, cid, "guan")
+    if figure_side is not None:
+        _figure_for(content, cid, figure_side)
+    state.player.faction, state.player.rank = faction, 3
     assert audience_bar(state, content, cid) == 20
 
 
