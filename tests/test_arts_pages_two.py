@@ -608,6 +608,13 @@ def test_the_library_filter_lists_only_what_it_says_in_the_servers_order(chosen,
 
 
 @needs_node
+def test_a_filter_with_nothing_in_it_says_so_instead_of_leaving_a_hole():
+    rows = [_art("w1", "武學", "甲拳", worn=True)] + [_art(f"w{i + 2}", "武學", f"武{i}") for i in range(9)]  # 九門武學、沒有內功
+    html = _practice(rows, "H.setLibFilter('內功');")
+    assert "這一類沒有功法。" in html and _library_names(html) == []
+
+
+@needs_node
 def test_the_library_chips_show_up_only_when_the_library_is_long_and_count_each_kind():
     html = _practice(_library_of_ten(), "H.setLibFilter('內功');")
     chips = re.findall(r'<button class="(on)?" data-act="lib-filter" data-filter="([^"]+)">(\S+) (\d+)</button>', html)
