@@ -651,6 +651,32 @@ def test_the_practice_buttons_follow_the_script(fresh):
     assert all(c["blocked"] is None for c in server.menxia_view(outside)["slot_cards"])
 
 
+def test_the_hut_refuses_seclusion(fresh):
+    """T6 review M4：閉關在草廬裡不是師父教的，也會把心得賺過劇本備好的帳（20 → 170）。擋下、不寫紀錄，跟別的拒絕一樣。"""
+    _to_step(fresh, 3)
+    p = fresh.state.player
+    xinde, entries = p.stats["xinde"], len(fresh.state.journal)
+    assert fresh.seclusion_refusal() and "師父" in fresh.seclusion_refusal()
+    msgs = fresh.seclude(8)
+    assert msgs == [fresh.seclusion_refusal()]
+    assert p.busy_until is None and p.stats["xinde"] == xinde and len(fresh.state.journal) == entries
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    assert outside.seclusion_refusal() is None
+    outside.seclude(1)
+    assert outside.state.player.busy_until is not None  # 序章外照舊閉得了
+
+
+def test_the_hut_greys_the_insight_melt_with_the_same_reason_the_action_gives(fresh):
+    """T6 review M7：化成心得在草廬裡永遠被擋；按鈕要跟動作的拒絕同一個判斷，灰掉、寫原因，不是亮著按了才說。"""
+    _to_step(fresh, 3)
+    rows = fresh.insight_rows()
+    assert rows and all(row["blocked"] and "師父" in row["blocked"] for row in rows)
+    assert fresh.melt_insight(rows[0]["id"]) == [rows[0]["blocked"]]
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0))
+    outside.state.player.insights.append("feng")
+    assert [row["blocked"] for row in outside.insight_rows()] == [None]
+
+
 def test_a_scripted_fight_never_waits_for_the_model(fresh, monkeypatch):
     """review-t4-5 M7：斷眉若寫成頭目、或難度到大場面的門檻，平常按下去要等模型判讀；雪恥那一場勝負是寫好的，不叫模型、不排佇列，
     連手上有一張備好的判讀也不拿來用（_judged 不被問）。"""

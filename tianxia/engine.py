@@ -3385,8 +3385,15 @@ class Game:
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
         )
 
+    def seclusion_refusal(self) -> str | None:
+        """閉關現在做不做得了（序章裡不閉關，prologue.seclude_problem）：修練頁的閉關鈕灰掉、寫它，跟 seclude 的拒絕同一個判斷。"""
+        return prologue_rules.seclude_problem(self.state, self.content)
+
     def seclude(self, hours: int) -> list[str]:
         p = self.state.player
+        refusal = self.seclusion_refusal()
+        if refusal is not None:
+            return self._log([refusal])  # 跟練成、熔煉的序章拒絕一樣：只回一句話，不寫紀錄
         if not self._idle():
             msgs = ["你現在無法閉關。"]
             self._write("閉關", msgs)
@@ -3544,8 +3551,9 @@ class Game:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
         if self._preparing():
             return self._log(["（賽季籌備中，等待管理者開季。）"])
-        if prologue_rules.active(self.state, self.content):
-            return self._log(["師父沒叫你熔意境。"])  # 序章的意境是合成要用的，熔了後面就走不下去
+        refusal = prologue_rules.melt_insight_problem(self.state, self.content)  # 序章的意境是合成要用的，熔了後面就走不下去
+        if refusal is not None:
+            return self._log([refusal])
         xinde, held = self._xinde(), library.held_count(self.state)
         msgs = self._log(library.melt_insight(self.state, self.content, self.world, insight_id))
         if library.held_count(self.state) < held:

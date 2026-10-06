@@ -302,6 +302,23 @@ def test_the_idle_bar_is_drawn_for_the_prologue_menus_too(hut, prologue, options
     assert run(m, "return H.idleMenu(m);") is expected
 
 
+@pytest.mark.parametrize("option, label, enabled", [
+    ("season:preparing", "賽季籌備中，等待管理者開季", False),
+    ("season:resting", "休季中，等待管理者開啟下一季", False),
+    ("season:paused", "賽季暫停中", False),
+    ("act:break", "提前出關", True),
+])
+def test_a_notice_in_the_hut_is_a_visible_button_not_a_fold(hut, option, label, enabled):
+    """籌備中、休季、暫停、閉關中：草廬裡的新人選單上只有這一顆。它不是行動列的格子，不能掉進「此地還能做」的摺疊裡
+    （沒有選項、也看不到原因），要跟序章外一樣畫成一顆看得見的按鈕。"""
+    m = main_at(hut, 2)
+    m["options"] = [{"id": option, "label": label, "enabled": enabled}]
+    out = run(m, "return { idle: H.idleMenu(m), page: H.pageJianghu() };")
+    assert out["idle"] is False
+    assert label in out["page"] and "此地還能做" not in out["page"] and "act-bar" not in out["page"]
+    assert ("disabled" in out["page"]) is (not enabled)
+
+
 # ── 發光與閃一閃 ────────────────────────────────────
 
 def test_the_glowing_buttons_are_the_ones_the_step_names(hut):
@@ -457,6 +474,21 @@ def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
     x = server.menxia_view(hut)
     page = run(server.main_view(hut), "return H.pagePractice();", menxia=x)  # 換上了：武學那一欄練得下去
     assert re.search(r'data-op="practice" data-glow="practice" >練成武學（心得', page)
+
+
+def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):
+    """T6 review M4、M7：草廬裡不閉關、不熔意境。按鈕灰掉、寫師父的原因（跟練成鈕同一個做法），不是亮著按了才被擋。"""
+    m, x = pages_at(hut, 3)
+    assert x["seclude_blocked"] and x["insights"][0]["blocked"]
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert re.search(r'<button class="btn small" type="submit" disabled>開始閉關</button>', page) and x["seclude_blocked"] in page
+    assert re.search(r'data-act="melt-insight"[^>]*disabled', page) and x["insights"][0]["blocked"] in page
+    out = Game.new(hut.content, "路人", rng=random.Random(0), world=hut.world)
+    out.state.player.insights.append("feng")
+    x = server.menxia_view(out)
+    page = run(server.main_view(out), "return H.pagePractice();", menxia=x)
+    assert x["seclude_blocked"] is None and 'type="submit" disabled' not in page
+    assert not re.search(r'data-act="melt-insight"[^>]*disabled', page)
 
 
 def test_only_the_art_the_master_names_glows_to_be_melted(hut):

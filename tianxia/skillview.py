@@ -184,12 +184,13 @@ def _legend_choice(state: GameState, content: Content, target: str, failures: in
 def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """悟得的意境，照悟得的先後。"""
     rows = []
+    blocked = prologue.melt_insight_problem(state, content)  # 序章裡不熔意境（跟 Game.melt_insight 的拒絕同一個判斷）；平常是 None
     for insight_id in state.player.insights:
         insight = insights.resolve(insight_id, content, world)
         if insight is not None:
             rows.append({
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
-                "note": insight.note, "melt": content.config.melt_insight_xinde,
+                "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
             })
     return rows
 

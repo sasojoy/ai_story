@@ -827,6 +827,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         ],
         "forge_line": md(game.forge_line(None, [])),
         # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
+        "seclude_blocked": game.seclusion_refusal(),  # 序章裡不閉關：閉關鈕灰掉、寫這句；平常是 None
         "holdings": game.holdings(),
         "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
         "insights": game.insight_rows(),

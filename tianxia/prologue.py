@@ -228,6 +228,16 @@ def cultivate_problem(state: GameState, content: Content) -> str | None:
     return "師父這一步沒叫你修練。"
 
 
+def seclude_problem(state: GameState, content: Content) -> str | None:
+    """序章裡不閉關：閉關是師父沒教的一條路，而且一次就能把心得賺過劇本備好的帳（20 → 170）。待 joy 潤。"""
+    return "師父沒叫你閉關。" if active(state, content) else None
+
+
+def melt_insight_problem(state: GameState, content: Content) -> str | None:
+    """序章裡不熔意境：序章的意境是合成要用的，熔了後面就走不下去。待 joy 潤。"""
+    return "師父沒叫你熔意境。" if active(state, content) else None
+
+
 def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
     """身上與功法庫裡合成出來的武學（自己那一份，品質照自己修到的），照擁有的順序。"""
     from . import library, team  # team、library 都 import 很多東西，放在函式裡避免循環
