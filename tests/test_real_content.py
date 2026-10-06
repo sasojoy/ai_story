@@ -615,20 +615,36 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 # ── 完整跑一季（機器人）──────────────────────────────────
 
 
-@pytest.mark.parametrize("seed", [1, 2, 3])
-def test_bot_plays_a_full_season(content, seed, tmp_path):
+@pytest.fixture(scope="module")
+def season_of(content, tmp_path_factory):
+    """機器人照種子玩完的一季，同一個種子在這個模組裡只跑一次（測試整併第 3 區）：種子 1 那一季以前跑兩次，
+    「整季 [1]」與「學會悟、合、修」各一次，兩次一模一樣（play_season 對同一份內容、同一個種子是決定性的，也不改內容）；
+    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。"""
     from tianxia.sqlite_world import open_world
 
-    game = play_season(content, seed, world=open_world(tmp_path / f"world-{seed}.db"))
+    games, worlds = {}, []
+
+    def season(seed):
+        if seed not in games:
+            worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
+            games[seed] = play_season(content, seed, world=worlds[-1])
+        return games[seed]
+
+    yield season
+    for world in worlds:
+        world.db.close()
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_bot_plays_a_full_season(season_of, seed):
+    game = season_of(seed)
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 3
 
 
-def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
-    from tianxia.sqlite_world import open_world
-
-    game = play_season(content, 1, world=open_world(tmp_path / "arts.db"))
+def test_the_bot_learns_insights_fuses_and_cultivates(season_of):
+    game = season_of(1)
     p = game.state.player
     assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
     assert game.world.recipe_keys(), "整季都沒合成過"
