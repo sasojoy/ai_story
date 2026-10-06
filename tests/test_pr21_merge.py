@@ -120,11 +120,20 @@ def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_me
 
 
 def test_the_hut_rows_carry_the_server_glow_lists_and_the_forge_page_the_pick_cues(real, world):
-    """序章的指路由伺服器說：功法庫每一列的 glow、煉製頁的 pick:art／pick:insight 都還在（卷軸卡照它畫，不自己猜）。"""
+    """序章的指路由伺服器說（卷軸卡照它畫，不自己猜）：第 4 步（合成）煉製頁要放進爐子的底（基礎拳腳）帶 pick:art、剛悟到的意境帶
+    pick:insight，別的武學都不帶；合成做完（第 5 步）兩個提示都沒有了。（review-ap3 M2：以前這條只看 glow 這個鍵在不在。）"""
     game = _hut_up_to_the_fusion(real, world)
+    assert game.state.player.tutorial_step == 3
     rows = skillview.art_rows(game.state, real, game.world)
-    assert rows and all("glow" in row for row in rows)
+    assert [r["id"] for r in rows if "pick:art" in r["glow"]] == ["jichu_quanjiao"]  # 底：基礎拳腳；內功基礎吐納不點名
+    assert all(r["glow"] == [] for r in rows if r["id"] != "jichu_quanjiao")  # 這一步別的武學不亮（沒有修練、熔煉可按）
     assert all("forge_odds" not in row for row in rows)  # 序章那一爐照劇本、沒有機率條
+    ins = game.insight_rows()
+    assert ins and all(r["glow"] == ["pick:insight"] for r in ins)  # 剛悟到的意境
+    game.forge("jichu_quanjiao", [game.state.player.insights[0]], proposed=(None, ""))  # 放進爐裡、開爐：這一步做完
+    assert game.state.player.tutorial_step == 4
+    assert not any("pick:art" in r["glow"] for r in skillview.art_rows(game.state, real, game.world))
+    assert not any("glow" in r and r["glow"] for r in game.insight_rows())  # 兩個提示都沒有了
 
 
 # ── W6：擲到中品、上品的合成武學，比較照擲到的威力 ──────────────
@@ -140,13 +149,17 @@ def named(name):
     return client
 
 
-def _forged(state, content, world, quality):
+def _forged_with_messages(state, content, world, quality):
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 100
     state.player.member.wugong_id = "basic_fist"
-    art, _ = fusion.fuse(state, content, world, named("旋風腿"), "basic_fist", "feng", rng=_rolling(quality))
+    art, msgs = fusion.fuse(state, content, world, named("旋風腿"), "basic_fist", "feng", rng=_rolling(quality))
     assert art is not None and state.player.art_quality.get(art.id, art.quality) == quality
-    return art
+    return art, msgs
+
+
+def _forged(state, content, world, quality):
+    return _forged_with_messages(state, content, world, quality)[0]
 
 
 @pytest.mark.parametrize("quality", ["中品", "上品"])
@@ -162,6 +175,24 @@ def test_w6_the_comparison_uses_the_rolled_quality_of_the_new_art(state, content
     (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
     assert row["quality"] == quality and row["compare"] == line and f"【旋風腿】{quality}・" in row["card"]
     assert line in row["card"].split("\n")
+
+
+@pytest.mark.parametrize("quality", ["下品", "中品", "上品"])
+def test_w6_the_forge_result_itself_compares_with_the_rolled_quality(state, content, world, quality):
+    """review-ap3 M3：合成的結果訊息（不只功法庫的卡）裡那一句比較，也用擲到的那一份品質的威力：訊息是 fusion.fuse 回的，
+    比較排在「收進功法庫」之後、指路那句之前；它對的前提是 library.store_art 先把擲到的品質記下來、才輪到比較（順序換了，
+    上品會被拿登記的下品去比、只差 +0.3）。"""
+    art, msgs = _forged_with_messages(state, content, world, quality)
+    mine = team.player_art(state, content, world, art.id)
+    worn = team.player_art(state, content, world, "basic_fist")
+    assert mine.quality == quality
+    diff = power_at(mine, 1) - power_at(worn, 1)
+    line = f"比身上的【粗淺拳腳】：威力 {diff:+.1f}（第一成）".replace("-", "−")
+    compare = [m for m in msgs if m.startswith("比身上的【粗淺拳腳】")]
+    assert len(compare) == 1 and compare[0].startswith(line), (msgs, line)
+    assert msgs.index(compare[0]) == len(msgs) - 2 and msgs[-1] == library.SWITCH_HINT  # 指路那句還是最後一句
+    if quality != "下品":  # 擲到的品質真的算進去了：不是拿登記的下品那一份比
+        assert diff > power_at(art, 1) - power_at(worn, 1)
 
 
 # ── W8：擲到的品質走自己的下一步，不走下品→中品的階梯 ────────────
