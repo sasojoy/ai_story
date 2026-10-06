@@ -844,6 +844,22 @@ def _disc_overlaps(game, content, svg: str, texts: list[tuple[str, Box, str | No
     ]
 
 
+def test_every_join_point_has_a_name_on_the_map_from_the_first_screen(content):
+    """FB-091：師父的話與引薦人都叫人去某個投靠點，輿圖上卻沒有它的名字——黃巾別部營寨（離潁川最近的黃巾投靠點）沒標 important，
+    出了視野就只是一個沒名字的點。投靠點＝每個陣營的 join_at，加上每個屬於陣營的門派的所在地（拜入門派也算投靠），從內容算出來、不寫死 id。
+    新角色站在起點、視野之內的已經看得到名字（長社離潁川兩站），視野之外的一定要標 important（才有名字）。"""
+    from tianxia import atlas
+
+    joins = {loc for f in content.scenario.factions for loc in f.join_at}
+    joins |= {content.sects[s].location for f in content.scenario.factions for s in f.sects}
+    assert len(joins) >= 9
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    views = atlas.views(game.state, content)
+    nameless = sorted(loc for loc in joins if not content.locations[loc].important and views[loc] == "dot")
+    assert nameless == []
+    assert content.locations["huangjin_camp"].important  # 離潁川最近的黃巾投靠點，在起點的視野之外
+
+
 def test_a_new_player_at_the_first_fight_sees_the_camp_next_door(content):
     """新手引導叫玩家去潁川郊野歷練：打開敵情時「最險」那行不能蓋住隔壁黃巾別部營寨的圓盤（蓋住的那一半點下去會選錯地點）。"""
     game = Game.new(content, "測試俠客", rng=random.Random(0))
