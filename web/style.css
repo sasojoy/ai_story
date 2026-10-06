@@ -452,35 +452,89 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
 
 /* ── 修練 ── */
-/* 功法庫：點一門展開它的功法卡，卡底下才有「改練這一門」（QA L4）。改練鈕在 .list 裡，要蓋掉 .list button 的列樣式 */
-.list button.art.on::after { content: "▾"; }
-.list .art-body { padding: 10px 14px 12px; border-bottom: 1px solid var(--line); background: var(--card-2); overflow-wrap: anywhere; }
-.list .art-body:last-child { border-bottom: 0; }
-.list .art-body > :first-child { margin-top: 0; }
-.list .art-body .btn { border: 1px solid var(--accent); margin-top: 10px; }
-.list .art-body .btn::after { content: none; }
-/* 開啟的武學那一排按鈕（修練／改練這一門／熔煉）：不折行。375px 手機一排可用 375-32-2-28-16 = 297px，
-   原本三顆等寬各 99px、扣掉邊框 2 與內距 28 只剩 69px，「改練這一門」（5 字 × 15px = 75px）放不下而折成兩行。
-   改成照字寬分配（width: auto、flex: 1 1 auto）、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排還有 108px 餘裕。
-   只管這一排（.art-actions），不動全站的 .btn */
-.art-body .art-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
-/* 「練成武學（心得 1）」與「療傷」那一排（FB-070）：不折行。375px 手機卡片裡一排可用 375-32-2-28 = 313px，原本兩顆等寬各 152px、
-   扣掉邊框 2 與內距 28 只剩 122px，「練成武學（心得 1）」（約 132px，粗體再寬一點）放不下而折成「練成武學（心得」／「1）」。
-   跟上面那一排同一個做法：照字寬分配、橫向內距縮到 8px，兩顆自然寬約 151＋48 = 199px，一排還有一百多 px 餘裕。
-   只管這一排（.practice-actions），不動全站的 .btn */
-.practice-actions > .btn { width: auto; flex: 1 1 auto; white-space: nowrap; padding: 10px 8px; }
-/* 「服下破境丹」勾選框：預設不勾，整列都是觸控目標（至少 44px 高）；放在修練鈕那一排上面，不擠進按鈕列 */
-.art-body .art-result { margin: 10px 0 0; font-size: 13px; } /* 修練的結果（W7）：寫在按鈕的底下，按的那顆鈕旁邊就看得到 */
-.art-body .art-result p { margin: 0 0 4px; }
-.art-body .art-result p:last-child { margin-bottom: 0; }
-.art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; cursor: pointer; }
-.art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }
-/* 修練頁的意境：一列一個，左邊名字、屬性與模型寫的一句話，右邊「化成心得」 */
-.insights { display: grid; gap: 8px; margin-bottom: 12px; }
-.insight { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; }
+/* 卷軸卡（企劃者 2026-10-06「先用捲軸卡」）：一門一張卡，左邊一條品質色、左上一方品質印。品質色是 --q（q1～q4 四階） */
+:root { --q-1: #8a7f70; --q-2: #3f7a62; --q-3: #b7862b; --q-4: #a8322a; }
+@media (prefers-color-scheme: dark) { :root { --q-1: #a39684; --q-2: #5fae8c; --q-3: #d6a548; --q-4: #d2574a; } }
+.q1 { --q: var(--q-1); } .q2 { --q: var(--q-2); } .q3 { --q: var(--q-3); } .q4 { --q: var(--q-4); }
+.qseal { display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 6px; border: 1.5px solid var(--q);
+  color: var(--q); font: 800 14px/1 var(--serif); background: color-mix(in srgb, var(--q) 10%, var(--card)); }
+.qseal.big { width: 40px; height: 40px; font-size: 21px; border-width: 2px; }
+.naming { display: block; border: 1.5px dashed var(--gold); border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; background: color-mix(in srgb, var(--gold) 6%, var(--card)); }
+.naming small { color: var(--gold); font-weight: 700; font-size: 11px; }
+.naming p { margin: 4px 0 8px; font-size: 14px; }
+.naming .input { flex: 1 1 auto; min-width: 0; }
+.naming .btn { flex: none; }
+/* 療傷、閉關兩格：閉關那一格是表單，底下一個時數選單 */
+.tune { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.tune .btn, .acts .btn { flex-direction: column; gap: 0; min-height: 50px; padding: 6px 8px; }
+.tune .btn small, .acts .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
+.seclude { display: grid; gap: 4px; }
+.seclude .btn { min-height: 44px; }
+.seclude .input { min-height: 34px; padding: 2px 8px; font-size: 14px; }
+.acard { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--q, var(--line)); border-radius: 16px;
+  padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
+.acard.empty { color: var(--ink-2); }
+.acard .hd { display: flex; gap: 10px; align-items: center; }
+.acard .hd > div { min-width: 0; }
+.acard .hd h3 { margin: 0; font: 700 18px/1.3 var(--serif); }
+.acard .hd .sub { font-size: 12px; color: var(--ink-2); }
+.acard .hd .worn { margin-left: auto; flex: none; font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; }
+.ten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin: 10px 0 4px; }
+.ten i { height: 7px; border-radius: 2px; background: var(--card-2); }
+.ten i.on { background: var(--q, var(--ink-2)); }
+.ten.mini { display: inline-grid; width: 120px; margin: 0 4px; vertical-align: middle; gap: 2px; }
+.ten.mini i, .lib .art-body .ten.mini i { height: 6px; background: var(--line); }
+.ten.mini i.on, .lib .art-body .ten.mini i.on { background: var(--q, var(--ink-2)); }
+.lvline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.lvline b { color: var(--ink); font-size: 14px; flex: none; }
+.lvline span { text-align: right; }
+/* 功法庫那張卡的比較句（W6、FB-088）：跟身上同一種那門比，寫在兩顆大鈕上面，改練之前看得到 */
+.art-body .cmp { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.acard .legend, .art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 6px; font-size: 14px; color: var(--gold); cursor: pointer; }
+.acard .legend input, .art-body .legend input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--accent); }
+.odds { display: flex; align-items: center; gap: 3px; font-size: 11px; margin-top: 8px; }
+.odds span { color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
+.odds b { font-weight: 600; text-align: center; padding: 3px 0; border-radius: 4px; color: #fff; background: var(--q); white-space: nowrap; min-width: 46px; flex-basis: 0; }
+.more { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+.more .linkish { color: var(--ink-2); min-height: 40px; padding: 6px 8px; }
+.more .linkish:disabled { opacity: 0.45; cursor: default; }
+.art-card { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--card-2); font-size: 13px; }
+.art-card > :first-child { margin-top: 0; } .art-card > :last-child { margin-bottom: 0; }
+/* 功法庫：一門一列（品質印＋名字），點開攤成卡的內容。不放在 .list 裡（.list button 的列樣式會蓋到卡裡的鈕） */
+.lib { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--card); margin-bottom: 12px; }
+.lib button.libr { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; border: 0; border-bottom: 1px solid var(--line);
+  background: none; color: var(--ink); padding: 10px 14px; cursor: pointer; min-height: 52px; font: inherit; }
+.lib button.libr:last-child { border-bottom: 0; }
+.lib button.libr::after { content: "›"; margin-left: auto; color: var(--ink-2); }
+.lib button.libr.on { background: var(--accent-soft); }
+.lib button.libr.on::after { content: "▾"; }
+.lib button.libr > .txt { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.lib button.libr b { font-size: 15px; }
+.lib button.libr small { color: var(--ink-2); font-size: 12px; }
+.lib .art-body { padding: 4px 14px 10px; border-bottom: 1px solid var(--line); background: var(--card-2); overflow-wrap: anywhere; }
+.lib .art-body:last-child { border-bottom: 0; }
+.lib .art-body .ten i { background: var(--card); }
+.lib .art-body .ten i.on { background: var(--q, var(--ink-2)); }
+.lib .art-body .art-card { background: var(--card); }
+/* 武學多時（上限 50 門）：篩選一排，橫向可滑 */
+.lib-filter { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 0 8px; padding-bottom: 2px; }
+.lib-filter button { flex: none; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.lib-filter button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.lib-more { margin: -4px 0 12px; }
+/* 意境：一顆一顆的籤，點一下底下攤開說明 */
+.ins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ins button { min-height: 38px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: var(--card); color: var(--ink); cursor: pointer; }
+.ins button small { color: var(--ink-2); font-size: 12px; margin-left: 2px; }
+.ins button.on { border-color: var(--accent); background: var(--accent-soft); }
+/* 點開的那一個意境：左邊名字與模型寫的一句話，右邊「化成心得」 */
+.insight { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; margin-bottom: 12px; }
+/* 修練的結果（W7）：寫在卡上那排鈕的底下，按的那顆鈕旁邊就看得到 */
+.acard .art-result, .art-body .art-result { margin: 8px 0 0; font-size: 13px; }
+.art-result p { margin: 0 0 4px; }
+.art-result p:last-child { margin-bottom: 0; }
 .insight > div { min-width: 0; overflow-wrap: anywhere; }
 .insight b { font-weight: 600; font-size: 14px; }
-.insight small { margin-left: 6px; color: var(--ink-2); font-size: 12px; }
 .insight p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
 .insight .btn { flex: none; }
 

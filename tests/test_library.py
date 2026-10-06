@@ -267,6 +267,26 @@ def test_melting_pays_the_bonus_of_the_grade_you_raised_the_art_to_and_nothing_f
     assert f"心得 +{floor + bonus['中品']}" in msgs
 
 
+def test_the_grades_a_fusion_rolled_pay_no_bonus_when_melted(state, content, world):
+    """企劃者 2026-10-06：合成擲到的品質算「登記時就有」——合到上品馬上熔掉，不能領上品的加給（不然合、熔就是心得迴圈）；
+    擲到中品、再修練到上品，熔的時候只領中品到上品那一段。"""
+    bonus, floor = content.config.melt_quality_bonus, content.config.melt_min_refund
+    _fused(world, "旋風腿")
+    state.player.stats["xinde"] = 0
+    state.player.member.wugong_id = "basic_fist"  # 欄位有人：合出來的收進功法庫，才熔得掉
+    library.store_art(state, world.get_skill("旋風腿"), "上品")
+    assert state.player.arts == ["旋風腿"] and state.player.art_rolled["旋風腿"] == "上品"
+    library.melt_art(state, content, world, "旋風腿")
+    assert state.player.stats["xinde"] == floor  # 沒有品質加給
+    assert "旋風腿" not in state.player.art_rolled
+
+    state.player.stats["xinde"] = 0
+    state.player.arts = ["旋風腿"]
+    state.player.art_quality["旋風腿"], state.player.art_rolled["旋風腿"] = "上品", "中品"  # 擲到中品，自己修練到上品
+    library.melt_art(state, content, world, "旋風腿")
+    assert state.player.stats["xinde"] == floor + bonus["上品"] - bonus["中品"]
+
+
 def test_a_content_art_handed_out_at_its_top_grade_pays_no_bonus_when_melted(state, content, world):
     """本命武學（情誼送的絕學）、劇情教的絕學：登記就是絕學，沒修練過，熔了只退練成花的八成，沒有品質加給。"""
     state.player.arts = ["fist"]

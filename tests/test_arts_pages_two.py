@@ -48,9 +48,11 @@ const S = { stage: "game", tab: "practice", kind: "武學", artOpen: null, legen
 const parts = [
   ...["KINDS", "QUALITY_RANK", "esc", "pro", "attrNoteHtml"].map((n) => { try { return konst(n); } catch (e) { return ""; } }),
   ...input.consts.map(konst),
+  // 卷軸卡的零件（品質印、十成格、療傷鈕、庫的篩選……）：「// ── 修練 ──」到 pagePractice 之間整段照抄（跟 test_arts_pages.py 同一個切法）
+  src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   ...input.fns.map(fn),
   input.stubs || "",
-  "return { " + [...input.fns, ...input.consts].join(", ") + " };",
+  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "healButton"].join(", ") + " };",  // 後三個在上面那一段裡
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.store = store;
@@ -522,7 +524,10 @@ def test_the_same_order_reaches_the_page_data(real):
     assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
 
 
-PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'  # attrNoteHtml 不在這裡：有的話（arts-polish-1 之後）driver 自己會抓真的
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
+CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts"]
+CRAFT_CONSTS = ["ART_FILTERS", "filterKey"]
 
 
 def _menxia(**over):
@@ -530,62 +535,132 @@ def _menxia(**over):
         "slot_cards": [{"kind": k, "card": f"<p>{k}卡</p>", "learned": True, "level": 1, "maxed": False, "blocked": None, "price": 1} for k in ("武學", "內功")],
         "owned_arts": [], "insights": [], "roster": [{"label": "本人", "key": "player"}], "person": None, "person_card": None,
         "on_team": False, "rules": "<p>規則。</p>", "holdings": {"count": 0, "cap": 50}, "player_card": "<p>本人</p>", "naming": None,
-        "heal": {"label": "療傷（要 18 兩）", "ok": True, "why": None},
+        "heal_cost": 18, "heal": {"label": "療傷（要 18 兩）", "ok": True, "why": None},
     }
     return {**base, **over}
 
 
-def _art(art_id, kind, name, quality="下品", level=1, worn=False):
-    return {
+def _art(art_id, kind, name, quality="下品", level=1, worn=False, **over):
+    row = {
         "id": art_id, "kind": kind, "name": name, "quality": quality, "attribute": "快", "level": level, "worn": worn, "insight": None,
         "card": f"<p>{name}卡</p>", "cultivate": {"ok": False, "note": "沒有融過意境", "legend": None},
-        "melt": {"ok": not worn, "note": "退回心得 3"}, "relearn": None,
+        "melt": {"ok": not worn, "note": "退回心得 3", "confirm": f"把【{name}】熔成心得？退回心得 3。熔掉就沒了。"}, "relearn": None, "compare": "",
     }
+    row.update(over)
+    return row
 
 
 def _insight(insight_id, name):
     return {"id": insight_id, "name": name, "attribute": "快", "lean": "無", "note": "", "melt": 10}
 
 
-LIBRARY = [
-    _art("w1", "武學", "甲拳", "絕學", 4, worn=True), _art("n1", "內功", "乙功", "上品", 3, worn=True),
-    _art("w2", "武學", "丙腿", "中品", 2), _art("n2", "內功", "丁訣", "下品", 5), _art("w3", "武學", "戊掌", "下品", 1),
-]
+def _library_of_ten():
+    """身上兩門（武學甲拳、內功乙功）加功法庫十門：六門武學（武0 可修練）、四門內功（內0 可修練）；順序是伺服器排好的。"""
+    rows = [_art("w1", "武學", "甲拳", "絕學", 4, worn=True), _art("n1", "內功", "乙功", "上品", 3, worn=True)]
+    rows += [_art(f"w{i + 2}", "武學", f"武{i}", level=6 - i, cultivate={"ok": i == 0, "note": "10% 晉為上品・體力 10", "legend": None}) for i in range(6)]
+    rows += [_art(f"n{i + 2}", "內功", f"內{i}", level=4 - i, cultivate={"ok": i == 0, "note": "10% 晉為上品・體力 10", "legend": None}) for i in range(4)]
+    return rows
+
+
 INSIGHTS = [_insight("feng", "風"), _insight("huo", "火")]
-FILTER_FNS = ["pagePractice", "pageCraft", "forgeBody", "forgeReady", "healButton", "artFilter", "setArtFilter", "filterChips", "showArts", "showInsights"]
-FILTER_CONSTS = ["ART_FILTERS", "filterKey"]
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
 
 
-def _page(which, filter_for=None, **S):
-    """which：pagePractice 或 pageCraft；filter_for：先把這一頁的篩選設成它。回傳（html, 看得到的功法名, 看得到的意境名）。"""
-    script = (
-        (f"H.setArtFilter({json.dumps(which)}, {json.dumps(filter_for)});" if filter_for else "")
-        + f"const html = H.{'pagePractice' if which == 'practice' else 'pageCraft'}(); return html;"
-    )
+def _practice(rows, script_before="", insights=None, **extra):
+    """畫修練頁（卷軸卡）：script_before 是畫之前要在頁面上做的事（例：選篩選）。"""
     return run(
-        script, S={"menxia": _menxia(owned_arts=LIBRARY, insights=INSIGHTS), "main": {"status": {"injury": 0}}, **S},
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+        f"{script_before} return H.pagePractice();",
+        S={"menxia": _menxia(owned_arts=rows, insights=INSIGHTS if insights is None else insights, **extra), "main": {"status": {"injury": 0}}},
+        fns=["pagePractice"], stubs=PRACTICE_STUBS,
     )
 
 
-def _shown_names(html, which):
-    if which == "practice":
-        arts = re.findall(r'<button class="art [^"]*" data-act="art"[^>]*>(?:◆ )?(?:武學|內功)　(\S+?)（', html)
-        insights = re.findall(r'<div class="insight"><div><b>「(.+?)」</b>', html)
-    else:
-        arts = re.findall(r'data-act="pick" data-type="art" data-id="[^"]*"[^>]*>\s*<b>(.+?)</b>', html)
-        insights = re.findall(r'data-act="pick" data-type="ins" data-id="[^"]*"[^>]*>\s*<b>(.+?)</b>', html)
+def _craft(filter_for=None, **S):
+    return run(
+        (f"H.setArtFilter('craft', {json.dumps(filter_for)});" if filter_for else "") + " return H.pageCraft();",
+        S={"menxia": _menxia(owned_arts=_library_of_ten(), insights=INSIGHTS), "main": {"status": {"injury": 0}}, **S},
+        fns=CRAFT_FNS, consts=CRAFT_CONSTS, stubs=CRAFT_STUBS,
+    )
+
+
+def _library_names(html):
+    return re.findall(r'<button class="art libr[^"]*"[^>]*><span class="qseal[^"]*">.</span><span class="txt"><b>(.+?)</b>', html)
+
+
+def _craft_names(html):
+    arts = re.findall(r'data-act="pick" data-type="art"[^>]*>\s*<b>(.+?)</b>', html)
+    insights = re.findall(r'data-act="pick" data-type="ins"[^>]*>\s*<b>(.+?)</b>', html)
     return arts, insights
 
 
+# ── 修練頁（卷軸卡）的功法庫篩選：joy 的四顆（全部／武學／內功／可修練）為底，加上記在這個瀏覽器（FB-085）──
+
+
 @needs_node
-def test_each_filter_shows_only_its_kind_on_the_practice_page():
-    everything = (["甲拳", "乙功", "丙腿", "丁訣", "戊掌"], ["風", "火"])
-    assert _shown_names(_page("practice"), "practice") == everything  # 預設全部：照伺服器排好的順序，一個不少
-    assert _shown_names(_page("practice", "內功"), "practice") == (["乙功", "丁訣"], [])
-    assert _shown_names(_page("practice", "武學"), "practice") == (["甲拳", "丙腿", "戊掌"], [])
-    assert _shown_names(_page("practice", "意境"), "practice") == ([], ["風", "火"])
+@pytest.mark.parametrize("chosen, expected", [
+    (None, ["武0", "武1", "武2", "武3", "武4", "武5", "內0", "內1", "內2", "內3"]),  # 預設全部：伺服器排好的順序，一個不少
+    ("武學", ["武0", "武1", "武2", "武3", "武4", "武5"]),
+    ("內功", ["內0", "內1", "內2", "內3"]),
+    ("ready", ["武0", "內0"]),  # 可修練：修練鈕按得下去的
+])
+def test_the_library_filter_lists_only_what_it_says_in_the_servers_order(chosen, expected):
+    before = f"H.setLibFilter({json.dumps(chosen)});" if chosen else ""
+    assert _library_names(_practice(_library_of_ten(), before)) == expected
+
+
+@needs_node
+def test_the_library_chips_show_up_only_when_the_library_is_long_and_count_each_kind():
+    html = _practice(_library_of_ten(), "H.setLibFilter('內功');")
+    chips = re.findall(r'<button class="(on)?" data-act="lib-filter" data-filter="([^"]+)">(\S+) (\d+)</button>', html)
+    assert [(f, label, n) for _, f, label, n in chips] == [("all", "全部", "10"), ("武學", "武學", "6"), ("內功", "內功", "4"), ("ready", "可修練", "2")]
+    assert [f for on, f, _, _ in chips if on] == ["內功"]  # 現在選的那一顆亮著
+    short = _practice(_library_of_ten()[:7])  # 功法庫不到九門：不畫篩選
+    assert "lib-filter" not in short and len(_library_names(short)) == 5
+
+
+@needs_node
+def test_the_library_filter_is_remembered_in_the_browser_and_survives_a_reload():
+    out = run(
+        "H.setLibFilter('內功'); delete H.S.libFilter; H.S.libFilter = null;"  # 重新整理：記憶體裡的沒了，從 localStorage 讀回來
+        "return [H.libFilter(), H.store];",
+        S={"menxia": _menxia()},
+        fns=["pagePractice"], stubs=PRACTICE_STUBS,
+    )
+    assert out == ["內功", {"tx-arts-filter-practice": "內功"}]
+
+
+@needs_node
+@pytest.mark.parametrize("stored", ["亂寫的", "意境", "全部"])
+def test_a_broken_or_old_stored_value_falls_back_to_all(stored):
+    """舊版的記法（全部／內功／武學／意境）裡，現在認不得的（全部、意境）也一律回到全部。"""
+    out = run(
+        f"H.store['tx-arts-filter-practice'] = {json.dumps(stored)}; H.S.libFilter = null; return H.libFilter();",
+        S={"menxia": _menxia()}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+    )
+    assert out == "all"
+
+
+@needs_node
+def test_a_browser_without_storage_still_filters_for_this_page_view():
+    """localStorage 取不到（私密視窗、封鎖網站資料）會丟例外：讀不到當沒選過、存不了就只在這一頁有效。"""
+    out = run(
+        "globalThis.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };"
+        "H.S.libFilter = null; const first = H.libFilter(); H.setLibFilter('武學'); return [first, H.libFilter()];",
+        S={"menxia": _menxia()}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+    )
+    assert out == ["all", "武學"]
+
+
+@needs_node
+def test_a_filter_the_page_does_not_know_is_ignored_and_a_new_filter_restarts_the_listing():
+    out = run(
+        "H.setLibFilter('武學'); H.S.libAll = true; H.setLibFilter('亂寫'); const kept = [H.libFilter(), H.S.libAll];"
+        "H.setLibFilter('內功'); return [kept, H.S.libAll];",
+        S={"menxia": _menxia()}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+    )
+    assert out == [["武學", True], False]
+
+
+# ── 煉製頁挑東西那一排的篩選（四顆：全部／內功／武學／意境）──
 
 
 @needs_node
@@ -593,86 +668,123 @@ def test_the_craft_page_filter_narrows_the_arts_but_never_hides_the_insights():
     """煉製頁是拿「一門武學＋一個意境」合成的地方：記著的「內功」「武學」篩選把意境整排藏起來、又沒有任何提示，會讓人以為意境不見了
     （review-ap2 的小毛病）。最簡單的做法是煉製頁的意境清單不理會這個篩選；「意境」那一顆則是只看意境、把武學藏起來。"""
     both = ["風", "火"]
-    assert _shown_names(_page("craft"), "craft") == (["甲拳", "乙功", "丙腿", "丁訣", "戊掌"], both)
-    assert _shown_names(_page("craft", "內功"), "craft") == (["乙功", "丁訣"], both)
-    assert _shown_names(_page("craft", "武學"), "craft") == (["甲拳", "丙腿", "戊掌"], both)
-    assert _shown_names(_page("craft", "意境"), "craft") == ([], both)
-
-
-def test_the_practice_poll_redraws_when_the_heal_button_changes():
-    """療傷鈕的字寫價錢（內傷與銀兩決定）：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
-    銀兩或內傷變了鈕上的價錢會一直是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
-    shown = {
-        page: re.findall(r'"([a-z_]+)"', fields)
-        for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
-    }
-    assert "heal" in shown["practice"] and "heal" not in shown["craft"]
+    every = ["甲拳", "乙功", "武0", "武1", "武2", "武3", "武4", "武5", "內0", "內1", "內2", "內3"]
+    assert _craft_names(_craft()) == (every, both)
+    assert _craft_names(_craft("內功")) == (["乙功", "內0", "內1", "內2", "內3"], both)
+    assert _craft_names(_craft("武學")) == (["甲拳", "武0", "武1", "武2", "武3", "武4", "武5"], both)
+    assert _craft_names(_craft("意境")) == ([], both)
 
 
 @needs_node
-@pytest.mark.parametrize("which", ["practice", "craft"])
-def test_the_four_chips_sit_in_one_row_and_mark_the_current_one(which):
-    html = _page(which, "武學")
+def test_the_craft_chips_sit_in_one_row_and_mark_the_current_one():
+    html = _craft("武學")
     group = re.search(r'<span class="fchips"[^>]*>(.*?)</span>', html, re.S).group(1)
     chips = re.findall(r'<button[^>]*data-filter="([^"]+)"[^>]*aria-pressed="(true|false)"', group)
     assert chips == [("全部", "false"), ("內功", "false"), ("武學", "true"), ("意境", "false")]
-    assert html.count('class="fchips"') == 1 and f'data-page="{which}"' in group
+    assert html.count('class="fchips"') == 1 and 'data-page="craft"' in group
 
 
 @needs_node
 def test_the_craft_page_filter_sits_in_the_label_row_so_the_first_screen_does_not_grow():
     """煉製頁的第一屏：篩選鈕併進「功法」那一行標籤（跟以前的「武學」標籤同一行），不另外多一行。"""
-    html = _page("craft")
+    html = _craft()
     label = re.search(r'<div class="label[^"]*">(.*?)</div>', html[html.index('id="forge"'):], re.S).group(0)
     assert "fchips" in label and "data-filter" in label
 
 
 @needs_node
-def test_a_filter_with_nothing_in_it_says_so_instead_of_leaving_a_hole():
+def test_the_craft_choice_is_remembered_in_the_browser_too():
     out = run(
-        "H.setArtFilter('practice', '內功'); return H.pagePractice();",
-        S={"menxia": _menxia(owned_arts=[_art("w1", "武學", "甲拳", "下品", 1, worn=True)]), "main": {"status": {"injury": 0}}},
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
+        "H.setArtFilter('craft', '意境'); delete H.S.artFilter; return [H.artFilter('craft'), H.store];",
+        fns=CRAFT_FNS, consts=CRAFT_CONSTS, stubs=CRAFT_STUBS,
     )
-    assert "沒有符合的功法" in out
+    assert out == ["意境", {"tx-arts-filter-craft": "意境"}]
+
+
+def test_the_practice_poll_redraws_when_the_heal_button_changes():
+    """療傷鈕能不能按、寫什麼，看內傷與銀兩：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
+    銀兩夠不夠變了鈕還是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    shown = {
+        page: re.findall(r'"([a-z_]+)"', fields)
+        for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
+    }
+    assert "heal" in shown["practice"] and "heal_cost" in shown["practice"] and "heal" not in shown["craft"]
+
+
+# ── 卷軸卡上的療傷鈕：joy 的兩行（內傷與價錢）為底，加上伺服器說的「按不下去」──
+
+
+def _heal_button(x, injury, **kw):
+    html = run(
+        f"S.menxia = {json.dumps(x)}; S.main.status.injury = {injury}; return H.pagePractice();",
+        S={"main": {"status": {"injury": injury}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+    )
+    return re.search(r'<button class="btn" data-act="mx" data-op="heal"[^>]*>.*?</button>', html, re.S).group(0)
 
 
 @needs_node
-def test_the_choice_is_remembered_per_page_in_local_storage():
-    out = run(
-        "H.setArtFilter('practice', '內功'); H.setArtFilter('craft', '意境');"
-        "delete H.S.artFilter;"  # 重新整理：記憶體裡的沒了，從 localStorage 讀回來
-        "return [H.artFilter('practice'), H.artFilter('craft'), H.store];",
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
-    )
-    assert out[:2] == ["內功", "意境"] and out[2] == {"tx-arts-filter-practice": "內功", "tx-arts-filter-craft": "意境"}
+def test_the_heal_button_says_the_wound_and_the_price_and_is_greyed_out_when_it_cannot_be_pressed():
+    ok = _heal_button(_menxia(heal_cost=12), 23)
+    assert ">療傷<small>內傷 23・銀 12</small>" in ok and "disabled" not in ok
+    none = _heal_button(_menxia(heal_cost=0, heal={"label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。"}), 0)
+    assert ">療傷<small>沒有內傷</small>" in none and "disabled" in none
+    poor = _heal_button(_menxia(heal_cost=12, heal={"label": "療傷（要 12 兩）", "ok": False, "why": "銀兩不足：療傷需要 12 兩。"}), 23)
+    assert "內傷 23・銀 12 不夠" in poor and "disabled" in poor and 'title="銀兩不足：療傷需要 12 兩。"' in poor
 
 
 @needs_node
-def test_a_broken_or_foreign_stored_value_falls_back_to_all():
-    out = run(
-        "H.store['tx-arts-filter-practice'] = '亂寫的'; return [H.artFilter('practice'), H.artFilter('craft')];",
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
-    )
-    assert out == ["全部", "全部"]
+def test_an_old_server_without_the_heal_field_still_gets_the_wound_based_button():
+    old = _menxia(heal_cost=12)
+    del old["heal"]
+    assert "disabled" not in _heal_button(old, 23) and "disabled" in _heal_button(old, 0)
+
+
+# ── 卷軸卡裡 W6、序章指路、閉關與意境的拒絕 ──
 
 
 @needs_node
-def test_a_browser_without_storage_still_filters_for_this_page_view():
-    """localStorage 取不到（私密視窗、封鎖網站資料）會丟例外：讀不到當沒選過、存不了就只在這一頁有效，畫面照樣畫。"""
-    out = run(
-        "globalThis.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };"
-        "const first = H.artFilter('practice'); H.setArtFilter('practice', '武學'); return [first, H.artFilter('practice')];",
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS,
-    )
-    assert out == ["全部", "武學"]
+def test_w6_the_library_card_writes_the_comparison_above_its_buttons_but_the_worn_card_does_not():
+    cmp = "比身上的【甲拳】：威力 +2.0（第一成）、多了〔化勁〕；換上後跟內功同屬，整體 +20%"
+    rows = [_art("w1", "武學", "甲拳", worn=True), _art("w2", "武學", "乙拳", compare=cmp)]
+    html = _practice(rows, "S.artOpen = 'w2';")
+    body = html.split('<div class="art-body')[1]
+    assert f'<p class="cmp">{cmp}</p>' in body and body.index('class="cmp"') < body.index('class="acts"')  # 鈕的上面，改練之前看得到
+    assert 'class="cmp"' not in html.split('<div class="art-body')[0]  # 身上那張卡（沒有 compare）不寫
+    opened = _practice(rows, "S.artOpen = 'w2'; S.artInfo = 'w2';")
+    assert 'class="cmp"' not in opened  # 點開詳情時功法卡裡有，這裡不重複
 
 
 @needs_node
-def test_a_filter_name_the_page_does_not_know_is_ignored():
-    out = run("H.setArtFilter('practice', '亂寫'); return H.artFilter('practice');", fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=CRAFT_STUBS)
-    assert out == "全部"
+def test_the_glow_lists_the_server_sends_decide_every_hook_on_the_cards():
+    """序章的指路（T7 走查 W-A）：卡裡改練、修練、熔煉三顆鈕、收著的那一列，發不發光都看伺服器送的 glow，網頁不猜。
+    m2：熔煉鈕上的 data-glow="melt" 在序章裡要在；序章外（沒有 glow 這個鍵）一個都不畫。"""
+    rows = [_art("w1", "武學", "甲拳", worn=True, glow=["cultivate"]),
+            _art("w2", "武學", "乙拳", glow=["switch", "melt"]), _art("w3", "武學", "丙拳", glow=["cultivate"])]
+    html = _practice(rows, "S.artOpen = 'w2';")
+    body = html.split('<div class="art-body')[1].split("</div></div>")[0]
+    assert re.search(r'<button class="linkish" data-act="melt" data-glow="melt" data-id="w2"', body)  # m2
+    assert re.search(r'data-act="switch" data-glow="switch" data-id="w2"', body)
+    assert re.search(r'data-act="cultivate" data-id="w2"', body) and 'data-act="cultivate" data-glow' not in body  # 這一門的修練不在名單上
+    worn = html.split('<div class="art-body')[0]
+    assert re.search(r'data-act="cultivate" data-glow="cultivate" data-id="w1"', worn)  # 身上那張卡讀它自己那一列的 glow
+    assert re.search(r'<button class="art libr "[^>]*data-id="w3" data-glow="cultivate">', html)  # 收著的那一列只亮名單上的
+    outside = _practice([_art("w1", "武學", "甲拳", worn=True), _art("w2", "武學", "乙拳")], "S.artOpen = 'w2';")
+    assert 'data-glow="melt"' not in outside and 'data-glow="switch"' not in outside and 'data-glow="cultivate"' not in outside
+
+
+@needs_node
+def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reason():
+    html = _practice([_art("w1", "武學", "甲拳", worn=True)], "S.insOpen = 'feng';",
+                     seclude_blocked="草廬裡不能閉關。", insights=[{**_insight("feng", "風"), "blocked": "師父沒叫你熔意境。"}])
+    assert re.search(r'<button class="btn" type="submit" disabled>閉關', html) and "草廬裡不能閉關。" in html
+    assert re.search(r'data-act="melt-insight"[^>]*disabled>化成心得 10</button><small class="muted">師父沒叫你熔意境。</small>', html)
+
+
+@needs_node
+def test_the_library_keeps_its_title_and_the_chips_sit_under_it():
+    html = _practice(_library_of_ten())
+    assert re.search(r'<div class="label">功法庫 <small class="muted">武學與意境 0/50</small></div>\s*<div class="lib-filter">', html)
 
 
 MELT_STUBS = (
@@ -715,29 +827,6 @@ def test_the_melt_buttons_go_through_the_pages_own_layer():
     src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert 'case "melt": askMelt(el); break;' in src and 'case "melt-insight": askMeltInsight(el); break;' in src
     assert 'case "art-filter":' in src
-
-
-@needs_node
-def test_the_heal_button_draws_what_the_server_says_in_one_short_line():
-    out = run(
-        "return [H.healButton({label:'療傷（要 18 兩）',ok:true,why:null}, true), H.healButton({label:'療傷（要 18 兩）',ok:false,why:'銀兩不足：療傷需要 18 兩。'}, true),"
-        " H.healButton({label:'療傷（沒有內傷）',ok:false,why:'氣血無恙，不用療傷。'}, false), H.healButton(undefined, true), H.healButton(undefined, false)];",
-        fns=["healButton"],
-    )
-    assert out[0] == '<button class="btn" data-act="mx" data-op="heal" >療傷（要 18 兩）</button>'
-    assert out[1].startswith('<button class="btn" data-act="mx" data-op="heal" disabled title="銀兩不足：療傷需要 18 兩。"') and ">療傷（要 18 兩）<" in out[1]
-    assert "disabled" in out[2] and ">療傷（沒有內傷）<" in out[2]
-    assert out[3] == '<button class="btn" data-act="mx" data-op="heal" >療傷</button>' and "disabled" in out[4]  # 舊版伺服器沒給：照舊
-
-
-@needs_node
-def test_the_practice_page_puts_the_heal_price_on_the_button_next_to_the_practice_button():
-    html = run(
-        "return H.pagePractice();", S={"menxia": _menxia(), "main": {"status": {"injury": 35}}},
-        fns=FILTER_FNS, consts=FILTER_CONSTS, stubs=PRACTICE_STUBS,
-    )
-    row = re.search(r'<div class="row practice-actions">(.*?)</div>', html, re.S).group(1)
-    assert row.count("<button") == 2 and "療傷（要 18 兩）" in row and "練成武學（心得 1）" in row
 
 
 @needs_node

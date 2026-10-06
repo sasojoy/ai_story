@@ -1,6 +1,6 @@
 import pytest
 
-from tianxia import fusion, library, rules, skillview, team, traits
+from tianxia import fusion, insights, library, rules, skillview, team, traits
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import new_game_state
 
@@ -396,19 +396,23 @@ def test_forge_line_shows_a_fuse(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**合成**" in line and "【粗淺拳腳】＋「風」→ 一門新武學" in line and "屬快" in line
-    assert "從下品起修" in line and "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    # 第一成的下品底、基本意境：比普通搭配差一些，原因照分數大小寫兩個
+    assert "品質看造化：下品 61%、中品 25%、上品 14%（火候還淺、底子尚淺）" in line
+    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
 
 
-@pytest.mark.parametrize("quality", ["下品", "中品", "上品", "絕學"])
-def test_forge_line_says_the_new_art_starts_at_the_lowest_quality_whatever_the_base_is(state, content, world, quality):
-    """企劃者 2026-10-05：合出來的武學一律從下品起修，底是絕學也一樣；說明不能再寫「品質跟底一樣」。"""
+def test_forge_line_writes_this_pairings_odds_and_a_better_base_shows(state, content, world):
+    """企劃者 2026-10-06：每一爐照搭配算自己的機率，說明寫這一爐的三個機率；底越好上品越容易，說明不寫「品質跟底一樣」。"""
     state.player.member.wugong_id = "basic_fist"
-    state.player.art_quality["basic_fist"] = quality
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 100
-    line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    assert "從下品起修" in line and "屬快" in line and "一樣是" not in line
-    assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
+    lines = {}
+    for quality in ("下品", "中品", "上品", "絕學"):
+        state.player.art_quality["basic_fist"] = quality
+        lines[quality] = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+        assert "屬快" in lines[quality] and "一樣是" not in lines[quality] and "⚠" not in lines[quality]
+    assert "上品 14%" in lines["下品"] and "上品 20%" in lines["中品"] and "上品 23%" in lines["上品"] and "上品 27%" in lines["絕學"]
+    assert "底子厚實" in lines["絕學"]
 
 
 def test_forge_line_shows_a_merge(state, content, world):
@@ -841,7 +845,7 @@ def test_forge_line_shows_a_blend(state, content, world):
     shape = fusion.blend_shape(
         team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
     )
-    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修）" in line
+    assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，品質看造化：下品 " in line
     assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
     assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")
 
@@ -1068,3 +1072,27 @@ def test_a_card_without_a_compare_line_is_exactly_as_before():
     assert skillview.art_card(art, 3, compare_line="") == skillview.art_card(art, 3)
     with_line = skillview.art_card(art, 3, compare_line="比身上的【甲】：威力 +1.0（第一成）").split("\n")
     assert with_line[-2] == "比身上的【甲】：威力 +1.0（第一成）" and with_line[-1] == "以柔勁纏住兵刃，借力卸力。"  # 說明句還是最後一行
+
+
+def test_art_rows_carry_the_best_forge_odds_for_the_scroll_card(state, content, world):
+    """卷軸卡的合成機率條（PR #21）：每一門拿手上上品機率最高的意境算，跟開爐實際擲的同一套（fusion.fuse_odds）。
+    粗淺拳腳屬實：風（快）不相干、浩然（陽）有正邪、來歷加分；沒有意境就不給。"""
+    state.player.member.wugong_id = "basic_fist"
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row and "forge_with" not in row
+    state.player.insights = ["feng", "haoran"]  # 浩然有正邪，來歷加分
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    base = team.player_art(state, content, world, "basic_fist")
+    odds = fusion.fuse_odds(state, content, "basic_fist", base, insights.resolve("haoran", content, world)).odds
+    assert row["forge_with"] == "浩然"
+    assert row["forge_odds"] == [{"quality": q, "pct": round(odds[q])} for q in ("下品", "中品", "上品")]
+    assert sum(item["pct"] for item in row["forge_odds"]) == 100
+
+
+def test_art_rows_skip_an_insight_whose_result_you_already_have(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["haoran"]
+    state.player.stats["xinde"] = 100
+    fusion.fuse(state, content, world, None, "basic_fist", "haoran")
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row

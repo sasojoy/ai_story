@@ -1024,6 +1024,18 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    odds = c.config.fuse_quality_odds  # 合成擲品質：只擲得到下品～上品（絕學要修練），權重不能是負的、也不能全是 0
+    need(
+        set(odds) <= {"下品", "中品", "上品"} and all(w >= 0 for w in odds.values()) and sum(odds.values()) > 0,
+        "config.fuse_quality_odds 只能寫下品、中品、上品，權重不能是負的、也不能全是 0",
+    )
+    fq = c.config.fuse_quality  # 照搭配推機率：上品、下品的範圍要排得下中品（兩頭都推到底時中品也不會是負的）
+    need(
+        0 <= fq.up_range[0] <= fq.up_range[1] and 0 <= fq.low_range[0] <= fq.low_range[1]
+        and fq.up_range[1] + fq.low_range[0] <= 100 and fq.up_range[0] + fq.low_range[1] <= 100
+        and all(len(pair) == 2 for pair in fq.lines.values()),
+        "config.fuse_quality 的上品、下品範圍排不下中品（或說明那一句不是「加分、扣分」兩種寫法）",
+    )
     for kind in c.config.practice_bonus:  # 熟練加成看的是本人的名聲（善名、惡名、名望……），不是戰鬥屬性
         need(kind in STATS and kind not in ("str", "agi", "con", "wis", "lore"), f"config.practice_bonus 的 {kind} 不是名聲類的屬性")
 
