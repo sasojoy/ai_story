@@ -1807,6 +1807,90 @@ def test_the_engine_resolves_a_round_with_the_configured_tuning_even_against_a_b
     assert me.last_result.startswith("固守（剋制 ×") and after.participants["機"].neili < 300.0  # 剋制幾倍看假人出了哪一招
 
 
+def test_battle_buttons_show_the_move_and_the_score(game):
+    """按鈕寫「選項名（招・你 N 分）」：份量乘上這一場的氣血狀態（設計 3.4）。"""
+    battle, definition = _open_three_move_battle(game)
+    labels = [o.label for o in game._battle_options(battle, definition)]
+    me = battle.participants[game.state.player.name]
+    expected = round(me.scores["固守"] * battle_instance.condition(me))
+    assert any(f"（固守・{expected} 分）" in label for label in labels)
+    assert labels == [  # 自己這邊的三招，照內容寫的順序；對面的招不會出現
+        f"guan{move}（{move}・{round(me.scores[move] * battle_instance.condition(me))} 分）"
+        for move in ("強攻", "固守", "奇襲")
+    ]
+
+
+def test_a_wounded_fighters_button_shows_the_smaller_score(game):
+    """氣血少了，按鈕上寫的分數跟著降（乘氣血狀態），玩家看得到自己現在有多少份量。"""
+    battle, definition = _open_three_move_battle(game)
+    name = game.state.player.name
+    full = [o.label for o in game._battle_options(battle, definition)]
+    battle.participants[name].neili = battle.participants[name].neili_cap / 2
+    wounded = [o.label for o in game._battle_options(battle, definition)]
+    score = lambda label: int(label.split("・")[-1].split(" ")[0])  # noqa: E731
+    assert all(score(w) < score(f) for w, f in zip(wounded, full))
+
+
+def test_a_gamble_option_is_not_a_button_and_an_old_option_keeps_its_plain_label(content, game):
+    """放手一搏走輸入框、不是按鈕；還沒有 move 的舊選項照舊只寫選項名（過渡）。"""
+    from tianxia.models import BattleOption
+
+    definition = _install_battle_def(content)  # 舊的穩守／猛攻：沒有 move
+    game.world.start_battle(definition, now=1000.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, game.state.player.name, "guan", neili_cap=100.0))
+    definition.acts[0].options.append(BattleOption(text="放手一搏", tag="reckless", free_text=True))
+    with at(game, 1000.0 + definition.muster_seconds + 1):
+        game._battle_status()
+        labels = [o.label for o in game._battle_options(*game._battle_status(tick=False))]
+    assert labels == ["穩紮穩打", "全力進攻"]
+
+
+def test_the_scene_says_what_the_other_side_did_last_round(game):
+    battle, definition = _open_three_move_battle(game)
+    battle.last_mix = {"guan": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}, "huang": {"強攻": 0.2, "固守": 0.5, "奇襲": 0.3}}
+    battle.participants[game.state.player.name].last_result = "固守（剋制 ×1.3）"
+    text = game._battle_scene_text(battle, definition)
+    enemy = "黃巾" if battle.participants[game.state.player.name].faction == "guan" else "官軍"
+    assert "對面上一回合" in text and "你上一回合：固守（剋制 ×1.3）" in text and enemy in text
+    assert f"對面上一回合（{enemy}）：強攻 20%・固守 50%・奇襲 30%" in text  # 對面的比例，不是自己這邊的
+
+
+def test_the_scene_has_no_last_round_lines_before_anything_was_resolved(game):
+    battle, definition = _open_three_move_battle(game)
+    text = game._battle_scene_text(battle, definition)
+    assert "對面上一回合" not in text and "你上一回合" not in text
+
+
+def test_the_scene_does_not_say_what_the_other_side_did_when_nobody_on_it_played_a_move(game):
+    """對面上一回合沒人出固定招（比例是空的）：不寫那一行；自己的結果照寫。"""
+    battle, definition = _open_three_move_battle(game)
+    battle.last_mix = {"guan": {"強攻": 0.0, "固守": 1.0, "奇襲": 0.0}, "huang": {}}
+    battle.participants[game.state.player.name].last_result = "固守（剋制 ×1.0）"
+    text = game._battle_scene_text(battle, definition)
+    assert "對面上一回合" not in text and "你上一回合：固守（剋制 ×1.0）" in text
+
+
+def test_the_scene_reads_the_act_text_of_whoever_leads(game):
+    battle, definition = _open_three_move_battle(game)
+    definition.acts[0].text_by_lead = {"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"}
+    for trend, expected in ((60, "官軍佔了上風。"), (40, "黃巾佔了上風。"), (50, "兩軍對陣。")):
+        battle.trend = trend
+        assert expected in game._battle_scene_text(battle, definition)
+
+
+def test_a_round_played_through_the_engine_shows_up_on_the_next_scene(game):
+    """走一整圈：出招、結算、再看畫面——對面上一回合與自己的結果都出現（沒有人手動塞 last_mix）。"""
+    battle, definition = _open_three_move_battle(game)
+    game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
+        b, definition, "機", 300.0, random.Random(0), faction="huang", is_bot=True,
+    ))
+    game.choose("battle:act:guan_hold")
+    battle = game.world.get_battle()
+    assert battle.round_number == 1
+    text = game._battle_scene_text(battle, definition)
+    assert "對面上一回合（黃巾）：" in text and "你上一回合：固守（剋制 ×" in text
+
+
 def test_the_world_ticker_plays_the_three_moves_with_nobody_online(content, game):
     """排程沒有玩家：逾時代出自己那邊的固守，三招照結算（黃巾沒人 → 官軍推滿 10），而且不替誰算份量。"""
     definition = _install_three_move_battle(content)

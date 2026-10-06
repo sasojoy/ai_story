@@ -29,8 +29,8 @@ from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location, RoadKind,
-    Squad, Threshold, TimetableEvent, TravelMode, WorldEvent,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
+    RoadKind, Squad, Threshold, TimetableEvent, TravelMode, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -2129,8 +2129,16 @@ class Game:
         act = battle_instance.current_act(battle, definition)
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
-        lines = [header, f"【{act.title}】{count}{act.text}"] + battle.narrative_log[-5:]
+        lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
+        if p is not None:
+            enemy = next((f for f in definition.factions if f.id != p.faction), None)
+            seen = battle.last_mix.get(enemy.id) if enemy is not None else None
+            if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
+                parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
+                lines.append(f"對面上一回合（{enemy.name}）：{parts}")
+            if p.last_result:
+                lines.append(f"你上一回合：{p.last_result}")
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
         elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」
@@ -2156,10 +2164,15 @@ class Game:
             return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
         if name in battle.round.pending_actions:
             return [Option(id="battle:waiting", label="（已選擇，等待其他人……）", enabled=False)]
-        return [
-            Option(id=f"battle:act:{o.tag}", label=o.text)
-            for o in battle_instance.options_for(battle, definition, name) if not o.free_text
-        ]
+        out = []
+        for o in battle_instance.options_for(battle, definition, name):
+            if o.free_text:
+                continue
+            label = o.text
+            if o.move is not None:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
+                label = f"{o.text}（{o.move}・{round(p.scores.get(o.move, 0.0) * battle_instance.condition(p))} 分）"
+            out.append(Option(id=f"battle:act:{o.tag}", label=label))
+        return out
 
     def event_free_text_prompt(self) -> str | None:
         """眼前的事件可以隨口應對時回傳提示語（選單上那一顆的標籤），否則 None；server.py 用它決定輸入框。"""

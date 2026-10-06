@@ -216,6 +216,15 @@ def current_act(instance: BattleInstance, definition: BattleDef) -> BattleAct:
     return definition.acts[instance.act_index]
 
 
+def act_text(instance: BattleInstance, definition: BattleDef) -> str:
+    """這一幕的文字（戰鬥系統 3.2）：照誰佔上風換版本——戰局高於 50 用第一方佔上風的那一版、低於 50 用第二方的，
+    剛好 50 或那一方沒寫就用 text。只看公開的戰局，不看伏筆鎖定（4.3）。"""
+    act = current_act(instance, definition)
+    first, second = definition.factions[0].id, definition.factions[1].id
+    leader = first if instance.trend > CENTER else second if instance.trend < CENTER else None
+    return act.text_by_lead.get(leader, act.text) if leader else act.text
+
+
 def total_rounds(definition: BattleDef) -> int:
     """整場打幾回合（戰鬥系統設計 3.2）：每幕 rounds_per_act 回合 × 幕數；黃巾決戰是 3 × 3 ＝ 9。"""
     return definition.rounds_per_act * len(definition.acts)
@@ -444,7 +453,7 @@ def resolve_round(
         if next_act > instance.act_index:
             instance.act_index = next_act
             act = current_act(instance, definition)
-            msgs.append(f"【{act.title}】{act.text}")
+            msgs.append(f"【{act.title}】{act_text(instance, definition)}")
     instance.rounds.append(BattleRoundRecord(
         act_index=act_index, round_number=instance.round_number, resolved_real=now,
         actions=dict(instance.round.pending_actions), custom_texts=dict(instance.round.custom_texts),

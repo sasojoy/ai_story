@@ -680,6 +680,33 @@ def test_last_result_is_cleared_for_anyone_who_did_not_play_a_fixed_move(three):
     assert battle.participants["乙"].last_result == "固守（剋制 ×1.0）"
 
 
+def test_the_act_text_follows_who_leads(three):
+    """Review Focus 5：只看公開的戰局；50 或沒寫那一版就用原本的 text。"""
+    three.acts[0].text_by_lead = {"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"}
+    battle = bi.start_muster(three, now=0)
+    for trend, text in ((60, "官軍佔了上風。"), (40, "黃巾佔了上風。"), (50, "兩軍對陣。")):
+        battle.trend = trend
+        assert bi.act_text(battle, three) == text
+    three.acts[0].text_by_lead = {"guan": "官軍佔了上風。"}
+    battle.trend = 30
+    assert bi.act_text(battle, three) == "兩軍對陣。"
+
+
+def test_changing_acts_reads_out_the_version_of_whoever_leads(three):
+    """換幕那一句也照誰佔上風：這一回合先推完戰局、再換幕，所以讀的是推完之後的那一版。"""
+    two = three.model_copy(deep=True)
+    two.rounds_per_act = 1
+    second = two.acts[0].model_copy(deep=True, update={
+        "id": "a2", "title": "鏖戰", "text": "犬牙交錯。", "text_by_lead": {"guan": "官軍壓過來了。", "huang": "黃巾壓過來了。"},
+    })
+    two.acts.append(second)
+    battle = _two_fighters(two)
+    battle.participants["乙"].eliminated = True  # 黃巾沒人 → 官軍推 +10 → 60
+    bi.submit_action(battle, "甲", "guan_hold")
+    msgs = bi.resolve_round(battle, two, random.Random(0), now=1, tuning=BattleTuning())
+    assert "【鏖戰】官軍壓過來了。" in msgs
+
+
 def test_timed_out_actions_hold_the_line(three):
     """逾時沒出手：代出自己那一邊的固守（計畫二改成照方針與 AI）。"""
     battle = bi.start_muster(three, now=0)
