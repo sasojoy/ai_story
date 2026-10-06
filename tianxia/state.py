@@ -156,6 +156,8 @@ class PlayerState(BaseModel):
     guide_skipped: bool = False  # 按過「略過新手引導」：之後（含換季、第一季多出的步驟）都不畫對話框；步驟照樣記著
     guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
+    enlist_step: int | None = None  # 入伍段（新手引導計畫二）：None＝還沒開始；等於步數＝走完
+    enlist_end: bool = False  # 入伍段剛走完、引薦人的結尾還沒按「知道了」
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的

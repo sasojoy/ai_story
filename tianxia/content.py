@@ -1554,6 +1554,18 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+    enlist = c.tutorial.enlist  # 入伍段（新手引導計畫二）：引薦人要對得上劇本的陣營、每位每一步都有收起來那一行
+    if enlist is not None:
+        for step in enlist.steps:
+            where = f"入伍段 {step.id}"
+            known(where, step.done_when.locations, c.locations, "地點")
+            check_condition(where, step.done_when.condition)
+        for faction_id, who in enlist.recruiters.items():
+            need(faction_id in faction_ids, f"入伍段：引薦人 {who.name} 的陣營 {faction_id} 不是劇本的陣營")
+            need(
+                len(who.lines) == len(enlist.steps),
+                f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
+            )
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial

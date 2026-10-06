@@ -1,9 +1,9 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from . import library, prologue, ranks
+from . import enlist, library, prologue, ranks
 from .martial_arts import QUALITIES
-from .models import Content, TutorialStep
+from .models import Content, TutorialGoal, TutorialStep
 from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from .state import GameState
 from .world import current_act, current_storyline, season_endings, storyline_off
@@ -33,7 +33,9 @@ def speaker_of(content: Content, step: TutorialStep) -> str:
 
 def speakers(content: Content) -> set[str]:
     """引導裡會出現的說話的人（框上的名字）：Game._note_guide 照它把「下一步的話」跟「✔ 與獎勵」分開。"""
-    return {content.tutorial.speaker} | {s.speaker for s in content.tutorial.steps if s.speaker}
+    names = {content.tutorial.speaker} | {s.speaker for s in content.tutorial.steps if s.speaker}
+    e = content.tutorial.enlist  # 入伍段的引薦人（新手引導計畫二）
+    return names | {who.name for who in e.recruiters.values()} if e is not None else names
 
 
 def tutorial_intro(content: Content) -> list[str]:
@@ -46,7 +48,11 @@ def tutorial_intro(content: Content) -> list[str]:
 def _step_done(
     state: GameState, content: Content, world: WorldStateStore, step: TutorialStep, action: str,
 ) -> bool:
-    goal = step.done_when
+    return goal_met(state, content, world, step.done_when, action)
+
+
+def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: TutorialGoal, action: str) -> bool:
+    """這個行動讓一項完成條件成立了嗎（每一項都要符合）：引導的步驟與入伍段的步驟（enlist.note）共用。"""
     if goal.action and goal.action != action:
         return False
     if goal.locations and state.player.location not in goal.locations:
@@ -79,15 +85,18 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
         msgs += apply_effect(step.reward, state, content, world)
         if step.give_art is not None:
             msgs += prologue.give_art(state, content, world, step.give_art)
-    if not msgs:
-        return []
-    if tutorial_active(state, content):
-        nxt = todo[state.player.tutorial_step]
-        if nxt.text:
-            msgs.append(f"【{speaker_of(content, nxt)}】{prologue.fill(nxt.text, state, content, world)}")
-    elif t.outro:
-        msgs.append(f"【{t.speaker}】{t.outro}")
-    return msgs
+    if msgs:  # 引導這一次有完成的步驟
+        if tutorial_active(state, content):
+            nxt = todo[state.player.tutorial_step]
+            if nxt.text:
+                msgs.append(f"【{speaker_of(content, nxt)}】{prologue.fill(nxt.text, state, content, world)}")
+        elif t.outro:
+            msgs.append(f"【{t.speaker}】{t.outro}")
+            state.player.guide_outro = True  # 這一次走完最後一步才等「知道了」（以前在 Game._note_guide 設，那邊現在只管 guide_done）
+    # 入伍段（新手引導計畫二）：不管引導走完沒有，進度都照記；框上等引導走完（連結語也按掉）才輪到它（見 Game.guide_box）。
+    # 它的「✔ 引導完成」只在它的框是框上那一個的時候才回傳：不然說書人那一步根本沒做完，框上卻掛著「✔ 完成」（F11）
+    extra = enlist.note(state, content, world, action)
+    return msgs + (extra if not tutorial_active(state, content) and not state.player.guide_outro else [])
 
 
 def _idle(state: GameState) -> bool:
@@ -119,6 +128,9 @@ def next_hint(state: GameState, content: Content, world: WorldStateStore | None 
         if not step.text:
             return ""
         return f"（{speaker_of(content, step)}）{step_text(state, content, world)}"
+    who = enlist.recruiter(state, content)
+    if who is not None and enlist.active(state, content):  # 入伍段進行中：引薦人這一步交代的事（收起來那一行，不帶名字）
+        return f"（{who.name}）{pending_line(state, content) or who.lines[state.player.enlist_step]}"  # 有事件待處理時跟框一樣（F12）
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hints.append("體力將滿，別讓它浪費。")

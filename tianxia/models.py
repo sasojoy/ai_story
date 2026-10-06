@@ -624,6 +624,7 @@ class TutorialGoal(_Strict):
     action: Literal[
         "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
         "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt",
+        "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
     ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
@@ -704,10 +705,34 @@ class PresetRecipe(_Strict):
     note: str = ""
 
 
+class Recruiter(_Strict):
+    """入伍段（新手引導計畫二，設計第四節）一個陣營的引薦人：框上的名字與他說的話。"""
+
+    name: str  # 老石、青禾、季伯平
+    intro: str  # 入營（r1）：投靠的當下，排在第一步的話前面
+    briefing: str  # 看戰局（r2）
+    order_hint: str  # 第一道軍令（r3）還沒做時，框裡那一句
+    done: str  # 第一道軍令做完，引薦人的結尾（按「知道了」收起）
+    lines: list[str] = Field(default_factory=list)  # 每一步收起後那一行，照 Enlist.steps 的順序；不帶名字（框上的名字另外寫）
+    rejoin: str = ""  # 第二季起再投靠時打的招呼（新手引導計畫三用）
+
+
+class EnlistStep(_Strict):
+    id: str
+    done_when: TutorialGoal
+
+
+class Enlist(_Strict):
+    steps: list[EnlistStep] = Field(default_factory=list)
+    recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
+    drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+
+
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
     outro: str = ""
+    enlist: Enlist | None = None  # 入伍段（新手引導計畫二）；第一季才開始
     # ── 序章（新手引導計畫一）：location 是 None 就沒有序章，下面三個都不看 ──
     location: str | None = None  # 草廬（Location.prologue_only）
     prologue_steps: int = 0  # 前幾步是序章（都在草廬）；走完就出師

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
+    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
     push, ranks, roster, rounds, skillview, team, timetable, traits,
 )
@@ -1040,6 +1040,7 @@ class Game:
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
+        faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
@@ -1074,6 +1075,7 @@ class Game:
                 msgs = self._foreshadow(arg)
             else:
                 msgs = self._choose(int(arg))
+            self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
@@ -1118,6 +1120,7 @@ class Game:
         if llm_rate is None:
             llm_rate = event_llm.assess_event_success_rate(self._quick_client(), event, request.text)
         self.state.battle_card = None
+        faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
         try:
             s.pending_event = None
@@ -1128,6 +1131,7 @@ class Game:
             self._outcome(tag, line)
             effect = choice.effect if success else choice.fail_effect
             msgs += self._apply(effect)
+            self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
@@ -1217,15 +1221,23 @@ class Game:
         journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
 
     def _note_guide(self, notes: list[str]) -> None:
-        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框；走完最後一步、
-        有結語時對話框改顯示結語，等按「知道了」（引導重做設計 8.1）。"""
+        """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框。走完最後一步、
+        有結語時對話框改顯示結語、等按「知道了」（引導重做設計 8.1）：那個旗標（guide_outro）由 note_action 在這一次真的走完最後一步時設——
+        入伍段（新手引導計畫二）也會讓 notes 不是空的，不能再一有 notes 就把已經按掉的結語叫回來。"""
         if not notes:
             return
         heads = tuple(f"【{name}】" for name in guide_speakers(self.content))  # 每一步可以是不同的人說（新手引導計畫一）
+        self.state.player.guide_done = [n for n in notes if not n.startswith(heads)]
+
+    def _begin_enlistment(self, faction_before: str | None) -> None:
+        """這一下才投靠的人開始入伍段（新手引導計畫二，設計 4.1）：動作之前還沒有陣營、現在有了（投靠，或拜入陣營名下的門派）。
+        已經有陣營的人不開始——換版當下就投靠了的舊存檔不走入伍段（設計 7.2）、叛投也不重來（preflight F1，所以也不需要存檔遷移）。
+        框換成引薦人：剛投靠這一下不算完成任何一步（Review Focus 1）——框上若還是說書人的步驟或結語，它們的「✔」照舊留著。"""
+        if faction_before is not None or not enlist.begin_if_joined(self.state, self.content):
+            return
         p = self.state.player
-        p.guide_done = [n for n in notes if not n.startswith(heads)]
-        if not tutorial_active(self.state, self.content) and self.content.tutorial.outro:
-            p.guide_outro = True
+        if not tutorial_active(self.state, self.content) and not p.guide_outro:
+            p.guide_done = []
 
     def _guide(self, notes: list[str]) -> list[str]:
         """新手引導的訊息不接進這次行動的訊息（「剛剛」只放行動的結果，引導重做設計 8.1.3）：記進這一則江湖紀錄的 guide、
@@ -1275,12 +1287,17 @@ class Game:
                 "speaker": t.speaker, "key": "outro", "scene": "", "text": t.outro, "line": "", "done": list(p.guide_done), "end": True,
                 "pending": False,
             }
-        return None
+        return enlist.box(s, c)  # 引導與結語都過去了：入伍段（新手引導計畫二）。順序固定是 步驟 → 結語 → 入伍段，「知道了」只收框上那一個
 
     def guide_ack(self) -> list[str]:
-        """結語按「知道了」：對話框不再出現。"""
-        self.state.player.guide_outro = False
-        self.state.player.guide_done = []
+        """結語（或入伍段的結尾）按「知道了」：對話框不再出現。只收框上看得到的那一個：結語還沒按、入伍段已經走完時，按下去是結語，
+        入伍段的結尾留到下一個框（guide_box 的順序是步驟 → 結語 → 入伍段，F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。"""
+        p = self.state.player
+        if p.guide_outro:
+            p.guide_outro = False
+        elif not tutorial_active(self.state, self.content):
+            p.enlist_end = False
+        p.guide_done = []
         return []
 
     # ── 行動 ──────────────────────────────────────────────
@@ -3763,8 +3780,8 @@ class Game:
 
     def skip_tutorial(self) -> list[str]:
         steps = len(tutorial_steps(self.state, self.content))
-        if self.state.player.tutorial_step >= steps:
-            return []
+        if self.state.player.tutorial_step >= steps and not enlist.active(self.state, self.content):
+            return []  # 引導走完了、入伍段也沒在進行（還沒投靠、或早就走完）：沒有什麼好略過的
         # 在序章裡略過：站到起點、拿出師的盤纏（設計 7.3）；序章外略過照舊
         purse = prologue_rules.finish(
             self.state, self.content, self.world, purse=prologue_rules.active(self.state, self.content),
@@ -3772,8 +3789,14 @@ class Game:
         self.state.player.tutorial_step = steps
         self.state.player.guide_done, self.state.player.guide_outro = [], False  # 略過後對話框不再出現（8.1.4）
         self.state.player.guide_skipped = True
+        enlist.skip(self.state, self.content)  # 入伍段也略過（設計 7.3），之後投靠不開始
         self._write("新手引導", purse, tag="已略過")
         return self._log(["（已略過新手引導。）"] + purse)
+
+    def view_orders(self) -> list[str]:
+        """軍令卡出現在畫面上（網頁在入伍段第一步、卡片真的進了畫面才送，F5）：看入伍段這一步有沒有完成；不寫紀錄、不換「剛剛」。"""
+        self._guide(note_action(self.state, self.content, self.world, "view_orders"))
+        return []
 
     def view_map(self) -> list[str]:
         self.state.player.flags.add("看過地圖")

@@ -4184,6 +4184,14 @@ def test_guide_ack_closes_the_outro(client):
     assert client.get("/api/main").json()["guide"] is None
 
 
+def test_view_orders_is_accepted_and_leaves_a_new_players_box_alone(client):
+    """入伍段第一步的「軍令卡出現在畫面上」（新手引導計畫二）：網頁送 /api/do/view_orders。還沒投靠的人送了什麼也不會發生，框照舊。"""
+    main = _player(client)["main"]
+    posted = client.post("/api/do/view_orders", json={})
+    assert posted.status_code == 200
+    assert posted.json()["main"]["guide"] == main["guide"] == client.get("/api/main").json()["guide"]
+
+
 def test_timetable_finale_row_shows_the_ending_title(client, monkeypatch):
     """FB-051：收季之後，時刻表季末那一列寫結局的標題（豪強坐大），不是結局 id。"""
     game = _season_one_admin(client, monkeypatch)
