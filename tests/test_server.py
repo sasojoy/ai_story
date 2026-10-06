@@ -3882,3 +3882,137 @@ def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
     name = open_world().lookup_recipe(FIST_FENG).name
     assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
     assert server.forge(game, "jichu_quanjiao", ["huo"]) is not None  # 一般的名字照常
+
+
+# ── 一次輪詢只拿一次行動鎖（壓測發現 /api/main 拿兩次：一次 act、一次 look，PM 2026-10-06）──────────────
+
+
+def _two_step_poll(game):
+    """舊的 /api/main：一次無事的 act、再一次 look(main_view)，各拿一次行動鎖。拿來當參考答案。"""
+    server.act(game, lambda g: None)
+    return server.look(game, server.main_view)
+
+
+def test_a_poll_takes_the_action_lock_once(client, lock_events):
+    _player(client)
+    lock_events.clear()
+    assert client.get("/api/main").status_code == 200
+    assert lock_events == ["enter", "exit"]  # 以前是 enter、exit、enter、exit
+
+
+def test_the_page_load_takes_the_action_lock_once_too(client, lock_events):
+    """/api/me（開頁、登入、取名之後的第一畫面）也是一次無事的 act 加一次 look(main_view)：同一個形狀、同一個修法。"""
+    _player(client)
+    lock_events.clear()
+    assert client.get("/api/me").json()["stage"] == "game"
+    assert lock_events == ["enter", "exit"]
+
+
+POLL_T0 = 1_800_000_000.0
+POLL_SCENES = ["idle", "event", "muster", "showdown", "resting"]
+
+
+def _poll_scene(client, monkeypatch, scene):
+    """某個狀態下的新角色，時間釘在 POLL_T0（server.time.time 換成固定值，兩次布置得到一模一樣的狀態）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.rng = random.Random(7)
+    if scene == "event":
+        game.state.pending_event = next(iter(server.CONTENT.events))
+        open_characters().save(game.state)
+    elif scene in ("muster", "showdown"):
+        game.state.player.faction = "guan"
+        open_characters().save(game.state)
+        definition = server.CONTENT.battles["huangjin_showdown"]
+        open_world().start_battle(definition, now=POLL_T0 - (definition.muster_seconds + 1 if scene == "showdown" else 0))
+        open_world().mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0))
+    elif scene == "resting":
+        monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
+        server.act(game, lambda g: g.admin_end_season(POLL_T0))
+
+
+def _everything_after(poll):
+    """跑一次輪詢，回傳畫面資料與它留在資料庫裡的東西（角色存檔、這一季、決戰），各轉成排好序的 JSON 字串好比對。"""
+    import json
+
+    body = poll()
+    world = open_world()
+    return {
+        "view": json.dumps(body, sort_keys=True, ensure_ascii=False),
+        "character": open_characters().load("沈青衫").model_dump_json(),
+        "season": world.get_season().model_dump_json(),
+        "battle": None if world.get_battle() is None else world.get_battle().model_dump_json(),
+    }
+
+
+@pytest.mark.parametrize("scene", POLL_SCENES)
+def test_one_lock_poll_answers_and_leaves_exactly_what_the_two_step_poll_did(scene, tmp_path, monkeypatch):
+    """同一個狀態、同一個現在：新的（一把鎖）與舊的（act 加 look）回同一份畫面，也留下同一份存檔、季與決戰——
+    補算時間、決戰推進、大事補送都照舊。兩次各用自己的資料庫、各自布置（時間與亂數都釘住）。"""
+    from tianxia import database
+
+    answers = {}
+    admins = list(server.CONTENT.config.admins)
+    for label in ("two_step", "one_lock"):
+        monkeypatch.setattr(server.CONTENT.config, "admins", admins)  # 休季那一幕把玩家設成管理者，名號就成了保留的：第二輪要還原
+        monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / f"{label}.db")
+        for store in (server.SESSIONS, server.GAMES):
+            store.clear()
+        client = TestClient(server.app)
+        with mock.patch("server.time.time", return_value=POLL_T0):
+            _poll_scene(client, monkeypatch, scene)
+        game = server.game_for("沈青衫")
+        with mock.patch("server.time.time", return_value=POLL_T0 + 3 * 3600):  # 離線三小時：同步有東西可補
+            if label == "two_step":
+                answers[label] = _everything_after(lambda: _two_step_poll(game))
+            else:
+                answers[label] = _everything_after(lambda: client.get("/api/main").json())
+        database.close_all()
+    assert answers["one_lock"] == answers["two_step"]
+
+
+def test_a_view_that_breaks_still_leaves_the_catch_up_saved(client, monkeypatch):
+    """舊的兩步：補算與存檔那一把鎖已經放了，畫面才壞掉，補算的結果留著。一把鎖之後也要一樣：畫面壞了不能把補算一起撤回。"""
+    _player(client)
+    before = open_characters().load("沈青衫").last_real
+    monkeypatch.setattr(server, "main_view", lambda g: 1 / 0)
+    with mock.patch("server.time.time", return_value=before + 5000):
+        with pytest.raises(ZeroDivisionError):
+            client.get("/api/main")
+    assert open_characters().load("沈青衫").last_real == before + 5000
+
+
+def test_a_poll_for_an_account_without_a_character_is_still_refused(client):
+    client.post("/api/register", json={"login": "no_char", "password": "secret-pw", "again": "secret-pw"})
+    assert client.get("/api/main").status_code == 409
+
+
+# ── 畫面建構時，季的階段只讀一次（壓測：每次建選單都把整份全服狀態讀一遍）───────────────
+
+
+def test_building_the_main_view_reads_the_season_phase_once(game, monkeypatch):
+    reads = []
+    real = type(game.world).season_phase
+    monkeypatch.setattr(type(game.world), "season_phase", lambda self: reads.append(1) or real(self))
+    server.look(game, server.main_view)
+    assert len(reads) == 1  # 以前狀態列、選單、「剛剛」、說書人對話框各讀一次，共四次
+
+
+def test_the_season_phase_is_read_again_on_the_next_screen(tmp_path, monkeypatch):
+    """記住的只在這一次建構裡：別人（管理者的另一個分頁、另一個程式）在兩次畫面之間開了季，下一次畫面就看到。"""
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
+    fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
+    assert fresh.world.season_phase() == "preparing"
+    assert [o["id"] for o in server.look(fresh, server.main_view)["options"]] == ["season:preparing"]
+    assert open_world(tmp_path / "world.db").open_season(server.CONTENT, 0.0)  # 另一個執行緒、程式開的季
+    assert "season:preparing" not in [o["id"] for o in server.look(fresh, server.main_view)["options"]]
+
+
+def test_an_action_that_changes_the_phase_is_seen_by_the_view_of_the_same_poll(tmp_path, monkeypatch):
+    """act_look 的動作與畫面在同一把鎖裡：動作開了季，同一次的畫面就是開了季的樣子（記住階段只從畫面開始）。"""
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
+    fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
+    msgs, view = server.act_look(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}), server.main_view)
+    assert msgs and "season:preparing" not in [o["id"] for o in view["options"]]
+    assert fresh.world.season_phase() == "running"

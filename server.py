@@ -241,6 +241,31 @@ def look(game: Game, view):
         return view(game)
 
 
+def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
+    """act 加 look 在同一把行動鎖裡做完：同步時間 → 動作 → 存檔 → 畫面。回傳 (動作的訊息, 畫面)。
+    以前輪詢是 act(無事) 再 look(main_view)，各拿一次鎖、各重讀一次角色，每個在線的人每 10 秒就拿兩次（壓測 2026-10-06）。
+    跟兩步的結果一樣：存檔在畫面之前，所以畫面建構時才做的事（決戰追趕、收場補的紀錄）跟 look 一樣不存、下一次同步再補；
+    動作丟例外時整筆撤回、不看畫面（act 的規矩）。畫面丟例外時，同步與存檔照舊留著（兩步時 act 那一把鎖早就放了）：
+    先記下例外、讓鎖正常放掉（COMMIT），再丟出去。"""
+    failure: Exception | None = None
+    with _locked(game):
+        game.sync(time.time())
+        msgs = action(game)
+        open_characters().save(game.state)
+        try:
+            shown = view(game)
+        except Exception as exc:  # 見上：先讓鎖放掉，再原樣丟出去
+            failure = exc
+    if failure is not None:
+        raise failure
+    return msgs, shown
+
+
+def poll_main(game: Game) -> dict:
+    """計時器（/api/main）與開頁、登入之後的第一畫面（_entry）：同步時間、存檔、回江湖畫面，一把鎖做完。"""
+    return act_look(game, lambda g: None, main_view)[1]
+
+
 # 排程用的那一份沒有玩家的 Game（Game.for_world）。只有排程執行緒（start_scheduler，只從 main() 開、只開一條）用它，
 # 請求的處理從不呼叫 world_step；在 world_step 裡、第一次用到時才建，建不起來就跟這一下的其他錯誤一樣由排程迴圈印出來、下一下再建
 WORLD_GAME: Game | None = None
@@ -489,6 +514,11 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
+    with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
+        return _main_view_body(game)
+
+
+def _main_view_body(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
@@ -819,9 +849,7 @@ def _entry(account_key: str) -> dict:
         return {"stage": "login"}
     if account.character is None:
         return {"stage": "create"}
-    game = game_for(account.character)
-    act(game, lambda g: None)
-    return {"stage": "game", "main": look(game, main_view), "kinds": KINDS}
+    return {"stage": "game", "main": poll_main(game_for(account.character)), "kinds": KINDS}
 
 
 def content_version(content: bytes) -> str:
@@ -906,10 +934,8 @@ def api_logout(request: Request, response: Response):
 
 @app.get("/api/main")
 def api_main(request: Request):
-    """計時器：同步時間、存檔、回江湖畫面（氣血、體力等數字才會跟著走）。"""
-    game = _game(request)
-    act(game, lambda g: None)
-    return look(game, main_view)
+    """計時器：同步時間、存檔、回江湖畫面（氣血、體力等數字才會跟著走）。一把鎖做完（見 act_look）。"""
+    return poll_main(_game(request))
 
 
 # 江湖畫面上的動作：回傳 {main, message}。引擎的訊息本來就會寫進江湖紀錄，這裡的 message

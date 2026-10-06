@@ -6,6 +6,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import math
 import random
@@ -113,6 +114,7 @@ class Game:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
+        self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
@@ -425,7 +427,7 @@ class Game:
         """平常的選單（沒有要親身參與、已經開打的決戰時；集結時接在加入的按鈕後面）：籌備或休季、事件、對話、
         投靠確認、求見名單、閉關、在路上、打坐，都不是就是在地點上能做的事。"""
         s, c = self.state, self.content
-        if self.world.season_phase() == "preparing":
+        if self._preparing():
             return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
         if s.world.ended:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
@@ -2942,9 +2944,31 @@ class Game:
 
     # ── 閉關、練功、療傷、設定 ────────────────────────────
 
+    @contextlib.contextmanager
+    def phase_memo(self):
+        """一次畫面建構（server.main_view）的範圍：這一段裡「賽季籌備中嗎」只向共用狀態讀一次。season_phase() 要把整份
+        全服狀態（含進行中的決戰）讀出來，而狀態列、選單、「剛剛」、說書人的對話框建一次畫面各問一次；輪詢（每個在線的人
+        每 10 秒一次）人一多就吃掉行動鎖的時間（壓測 2026-10-06）。
+        記住的只活在這個範圍裡，出了範圍（含畫面建到一半丟例外）就丟掉，所以下一個動作、下一次畫面都讀最新的：
+        籌備中只會被管理者開季、換季改掉，那兩個是動作，不會發生在一次畫面建構的中間。範圍可以巢狀，用最外層那一份。
+        只有 _preparing 讀這份記住的；動作要的階段（running、resting）照舊直接問共用狀態。"""
+        outermost = self._preparing_memo is None
+        if outermost:
+            self._preparing_memo = []  # 空的＝範圍開了、還沒讀過
+        try:
+            yield
+        finally:
+            if outermost:
+                self._preparing_memo = None
+
     def _preparing(self) -> bool:
-        """賽季籌備中（管理者還沒開季）：玩家什麼都不能做。"""
-        return self.world.season_phase() == "preparing"
+        """賽季籌備中（管理者還沒開季）：玩家什麼都不能做。在 phase_memo 的範圍裡只讀一次。"""
+        memo = self._preparing_memo
+        if memo is None:
+            return self.world.season_phase() == "preparing"
+        if not memo:
+            memo.append(self.world.season_phase() == "preparing")
+        return memo[0]
 
     def _idle(self) -> bool:
         s = self.state

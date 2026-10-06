@@ -6349,3 +6349,50 @@ def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(co
     ticker.world_tick(t)
     ticker.world_tick(t + definition.round_seconds + 1.0)
     assert "changshe_fire" in world.get_season().timeline
+
+
+# ── 一次畫面建構裡，「籌備中嗎」只讀一次共用狀態 ──────────────────────────
+
+
+def _count_phase_reads(game):
+    reads = []
+    real = game.world.season_phase
+    game.world.season_phase = lambda: reads.append(1) or real()
+    return reads
+
+
+def test_preparing_is_read_once_inside_a_phase_memo_and_every_time_outside(game):
+    reads = _count_phase_reads(game)
+    for _ in range(3):
+        assert game._preparing() is False
+    assert len(reads) == 3  # 沒有範圍：每次都讀（動作裡要的是最新的）
+    reads.clear()
+    with game.phase_memo():
+        for _ in range(3):
+            game._preparing()
+        with game.phase_memo():  # 巢狀：還是外層那一份，不重讀
+            game._preparing()
+    assert len(reads) == 1
+    game._preparing()
+    assert len(reads) == 2  # 範圍結束，記住的丟掉
+
+
+def test_a_phase_memo_ends_when_the_build_breaks(game):
+    reads = _count_phase_reads(game)
+    with pytest.raises(RuntimeError):
+        with game.phase_memo():
+            game._preparing()
+            raise RuntimeError("畫面建到一半壞了")
+    reads.clear()
+    game._preparing()
+    game._preparing()
+    assert len(reads) == 2  # 範圍沒有留到下一個動作
+
+
+def test_everyday_options_use_the_memoed_preparing(game):
+    """選單（_everyday_options）走同一個 _preparing：在範圍裡建一次選單只讀一次。"""
+    reads = _count_phase_reads(game)
+    with game.phase_memo():
+        game.options()
+        game.options()
+    assert len(reads) == 1
