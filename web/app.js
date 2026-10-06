@@ -212,7 +212,7 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
-    if (!(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
+    if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
     if (main.card && S.main && S.main.card_id !== main.card_id) {
@@ -940,7 +940,7 @@
       const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
       return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
     };
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => o.id === SENSE_DRAW && S.sensing ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>${optLabelHtml(o)}
@@ -1096,7 +1096,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
-        ${insOpen ? `<div class="insight">${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<div><b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
+        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}">化成心得 ${insOpen.melt}</button></div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
@@ -1730,7 +1730,6 @@
         <div class="sense-note" id="sense-note">${esc(S.senseNote || (ready ? "" : "手指離開畫布，就算畫完。"))}</div>
         <div class="sense-acts">
           <button class="btn small" data-act="sense-clear" ${ready ? "" : "disabled"}>清掉重畫</button>
-          <button class="btn small" data-act="sense-let">不畫了，順其自然</button>
           <button class="btn primary small" data-act="sense-send" ${ready ? "" : "disabled"}>就是這個形</button>
         </div>
       </div>`;
@@ -2054,7 +2053,6 @@
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
-        case "sense-let": closeSense(); await choose(el, "sense:let"); break;
         case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;

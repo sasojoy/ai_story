@@ -5123,7 +5123,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     """靜態檢查：server.py 裡只有鎖外的四個函式（對話備料、大場面備料、開爐備料、隨口應對）呼叫 model_call；請求的鎖內段落（act、look、
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
-    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event"}
+    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw"}
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
@@ -5364,7 +5364,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
     forge = _js_function(js, "async function forge(")
     assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
-    assert js.count("watchQueue(") == 4  # 定義一個、使用三個（對話與大場面是同一個選項流程）
+    assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
+    assert js.count("watchQueue(") == 5  # 定義一個、使用四個（對話與大場面是同一個選項流程；有所感畫完送出另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 
@@ -5748,7 +5749,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
-    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel"}
+    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense"}
 
 
 def test_current_fingerprint_follows_the_public_world():
