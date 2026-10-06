@@ -1760,6 +1760,65 @@ def _install_battle_def(content):
     return definition
 
 
+def test_battle_scores_read_the_players_two_arts(game):
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"  # 屬實、屬柔
+    scores = game._battle_scores()
+    power = game._battle_power()
+    assert scores == battle_instance.move_scores(game.content.config.battle, power, "實", "柔")
+    assert scores["強攻"] > scores["奇襲"]  # 實擅長強攻、不擅長奇襲；柔擅長固守、不擅長強攻
+    assert scores["固守"] > scores["奇襲"]
+
+
+def test_battle_scores_without_any_art_use_only_the_strength(game):
+    p = game.state.player
+    p.member.wugong_id = p.member.neigong_id = None
+    scores = game._battle_scores()
+    assert scores == battle_instance.move_scores(game.content.config.battle, game._battle_power(), None, None)
+    assert len(set(scores.values())) == 1  # 沒有武學也沒有內功：沒有擅長不擅長，三招一樣重
+
+
+def test_joining_in_the_muster_snapshots_the_players_scores(content, game):
+    definition = _install_battle_def(content)
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    joined = dict(game.world.get_battle().participants[p.name].scores)
+    assert joined == game._battle_scores() and all(v > 0 for v in joined.values())
+    # 快照：加入之後換武學，這一場的份量不變
+    p.member.wugong_id = None
+    assert game._battle_scores() != joined
+    assert game.world.get_battle().participants[p.name].scores == joined
+
+
+def test_joining_late_snapshots_the_players_scores(content, game):
+    definition = _install_battle_def(content)
+    p = game.state.player
+    p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"
+    game.world.start_battle(definition, now=0.0)
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()  # 集結關閉，已經開打
+        game.choose("battle:join_late")
+    assert game.world.get_battle().participants[p.name].scores == game._battle_scores()
+
+
+def test_the_world_ticker_never_snapshots_anyones_scores(content, game):
+    """排程那個 Game 的玩家是空白的（Game.for_world）：它推回合、逾時代選，但絕不替任何人算份量。"""
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)
+    ticker = Game.for_world(content, game.world, rng=random.Random(3))
+    with mock.patch.object(Game, "_battle_scores", side_effect=AssertionError("排程不該算份量")):
+        ticker.world_tick(1000.0 + 601)
+        ticker.world_tick(1000.0 + 601 + 121)
+    (_, done), = game.world.ended_battles()
+    assert not done.unfinished
+
+
 def _install_factions(content):
     from tianxia.models import FactionDef
 

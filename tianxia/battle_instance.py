@@ -23,7 +23,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from . import zh
-from .models import BattleAct, BattleActionEffect, BattleDef, BattleOption, BattleOutcome
+from .models import MOVES, BattleAct, BattleActionEffect, BattleDef, BattleOption, BattleOutcome, BattleTuning
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -49,6 +49,8 @@ class BattleParticipant(BaseModel):
     power: float = 0.0  # 加入時快照的武學威力（給 mitigated_by_power 用，見 resolve_round）——
     # 戰局結算只看共用戰鬥狀態本身，不會、也不能回頭去讀別的玩家自己存檔裡的角色資料，
     # 所以威力要在加入當下、由那個玩家自己的 Game 執行個體算好存進來。
+    scores: dict[str, float] = Field(default_factory=dict)  # 加入時快照的每招份量（move_scores，還沒乘氣血狀態）；
+    # 舊資料沒有＝每招 0（戰鬥系統 3.4）
     eliminated: bool = False
     away: bool = False  # 離開了決戰的大區（人在區外，或這一趟路正要走出大區）：這回合不出手，回到大區才再出手（地圖擴充設計第六節）。
     # 由那個玩家自己的 Game 在出發、抵達時寫進來（見 Game._sync_battle_presence）；戰局結算不會、也不能去讀別人的存檔
@@ -127,14 +129,32 @@ def start_from_front(front_value: int) -> int:
     return int(CENTER + (CENTER - front_value) / 2 + 0.5)
 
 
+def move_scores(tuning: BattleTuning, power: float, outer: str | None, inner: str | None) -> dict[str, float]:
+    """這個人每一招的份量（還沒乘氣血狀態，戰鬥系統 3.4）：實力 × 適性 ÷ 100。
+    實力 ＝ min(100, 40 ＋ 0.4 × min(威力, 150))；適性 ＝ 75 ± 武學（招式）屬性 15 ± 內功屬性 10，夾在 50～100。
+    outer／inner 是武學與內功的屬性（沒學是 None，不加減）。加入戰局時由那個玩家自己的 Game 算好快照進來。"""
+    strength = min(100.0, tuning.power_base + tuning.power_per * min(max(power, 0.0), tuning.power_cap))
+    scores = {}
+    for move in MOVES:
+        fit = tuning.affinity_base
+        for attribute, step in ((outer, tuning.affinity_outer), (inner, tuning.affinity_inner)):
+            good, bad = tuning.affinity.get(attribute, (None, None)) if attribute else (None, None)
+            fit += step if move == good else -step if move == bad else 0.0
+        scores[move] = round(strength * max(50.0, min(100.0, fit)) / 100, 1)
+    return scores
+
+
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
+    scores: dict[str, float] | None = None,
 ) -> None:
-    """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。"""
+    """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
+    scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
+        scores=dict(scores or {}),
     )
 
 
@@ -155,16 +175,17 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
 
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
-    power: float = 0.0, is_bot: bool = False, faction: str | None = None,
+    power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家）就站自己那邊，
-    否則塞進人數較少的一方，維持陣營平衡。"""
+    否則塞進人數較少的一方，維持陣營平衡。scores 同 join_faction。"""
     faction_ids = [f.id for f in definition.factions]
     if faction not in faction_ids:
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in faction_ids}
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
+        scores=dict(scores or {}),
     )
 
 

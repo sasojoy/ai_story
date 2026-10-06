@@ -6,7 +6,7 @@ import pytest
 from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
-    BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
+    MOVES, BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
 )
 
 
@@ -153,6 +153,73 @@ def test_auto_assign_latecomer_ignores_a_faction_not_in_the_battle(definition):
     bi.join_faction(instance, "甲", "guan", neili_cap=100.0)
     bi.auto_assign_latecomer(instance, definition, "乙", neili_cap=100.0, rng=random.Random(0), faction="haoqiang")
     assert instance.participants["乙"].faction == "huang"  # 指定的陣營不在這場戰鬥裡，退回平衡塞人
+
+
+# ── 每招的份量（決戰改版 1 Task 2，戰鬥系統 3.4）─────────────────────────────
+
+
+def test_move_scores_follow_the_designs_examples():
+    """戰鬥系統 3.4：剛招式＋剛內功 → 強攻 100、固守 75、奇襲 50；剛＋柔 → 80／85／60（實力 100 時）。"""
+    t = BattleTuning()
+    assert bi.move_scores(t, 150, "剛", "剛") == {"強攻": 100, "固守": 75, "奇襲": 50}
+    assert bi.move_scores(t, 150, "剛", "柔") == {"強攻": 80, "固守": 85, "奇襲": 60}
+
+
+def test_strength_runs_from_forty_to_a_hundred():
+    t = BattleTuning()
+    assert bi.move_scores(t, 0, None, None) == {"強攻": 30, "固守": 30, "奇襲": 30}  # 實力 40 × 適性 75%
+    assert bi.move_scores(t, 400, None, None)["強攻"] == 75  # 威力封頂 150 → 實力 100
+    assert bi.move_scores(t, -20, None, None) == bi.move_scores(t, 0, None, None)  # 負的威力不會把實力壓到 40 以下
+
+
+def test_affinity_is_clamped_between_fifty_and_a_hundred():
+    """適性夾在 50～100：擅長加到頂不會超過 100，兩邊都不擅長也不會低於 50。"""
+    t = BattleTuning(affinity_base=95.0, affinity_outer=30.0, affinity_inner=30.0)
+    scores = bi.move_scores(t, 150, "剛", "剛")  # 強攻 95+60 → 夾到 100；奇襲 95−60 → 夾到 50
+    assert (scores["強攻"], scores["奇襲"]) == (100, 50)
+
+
+def test_move_scores_name_all_three_moves_whatever_the_attributes():
+    t = BattleTuning()
+    assert set(bi.move_scores(t, 80, "不存在的屬性", None)) == set(MOVES)  # 認不得的屬性當作沒學，不加不減
+    assert bi.move_scores(t, 80, "不存在的屬性", None) == bi.move_scores(t, 80, None, None)
+
+
+def test_join_snapshots_the_scores(definition):
+    battle = bi.start_muster(definition, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=300, power=50, scores={"強攻": 60, "固守": 45, "奇襲": 30})
+    assert battle.participants["甲"].scores == {"強攻": 60, "固守": 45, "奇襲": 30}
+
+
+def test_a_latecomer_snapshots_the_scores_too(definition):
+    battle = bi.start_muster(definition, now=0)
+    bi.auto_assign_latecomer(
+        battle, definition, "乙", neili_cap=300, rng=random.Random(0), power=50,
+        scores={"強攻": 20, "固守": 40, "奇襲": 60},
+    )
+    assert battle.participants["乙"].scores == {"強攻": 20, "固守": 40, "奇襲": 60}
+
+
+def test_a_snapshot_is_a_copy_so_later_changes_to_the_callers_dict_do_not_leak_in(definition):
+    battle = bi.start_muster(definition, now=0)
+    mine = {"強攻": 60.0, "固守": 45.0, "奇襲": 30.0}
+    bi.join_faction(battle, "甲", "guan", neili_cap=300, scores=mine)
+    mine["強攻"] = 0.0
+    assert battle.participants["甲"].scores["強攻"] == 60.0
+
+
+def test_joining_without_scores_leaves_them_empty(definition):
+    battle = bi.start_muster(definition, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=300)
+    bi.auto_assign_latecomer(battle, definition, "乙", neili_cap=300, rng=random.Random(0))
+    assert battle.participants["甲"].scores == {} and battle.participants["乙"].scores == {}
+
+
+def test_a_participant_saved_before_scores_still_loads(definition):
+    """戰鬥存成 JSON：上線前就加入的人沒有 scores 這一欄，讀進來是空的（每招份量 0），不當機。"""
+    old = bi.BattleParticipant(name="甲", faction="guan", neili=100.0, neili_cap=100.0).model_dump()
+    old.pop("scores")
+    assert bi.BattleParticipant.model_validate(old).scores == {}
 
 
 # ── 回合鎖步 ─────────────────────────────────────────────

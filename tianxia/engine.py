@@ -1694,6 +1694,17 @@ class Game:
             self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
         )
 
+    def _battle_scores(self) -> dict[str, float]:
+        """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性。
+        只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，不能在 world_tick 裡呼叫）。"""
+        p = self.state.player
+        outer = team.player_art(self.state, self.content, self.world, p.member.wugong_id)
+        inner = team.player_art(self.state, self.content, self.world, p.member.neigong_id)
+        return battle_instance.move_scores(
+            self.content.config.battle, self._battle_power(),
+            outer.attribute if outer else None, inner.attribute if inner else None,
+        )
+
     def _battle_neili_cap(self) -> float:
         _, cap = team.member_neili(
             self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
@@ -2218,8 +2229,11 @@ class Game:
             if self.content.scenario.factions and rest != self.state.player.faction:
                 return ["（你只能站在自己陣營這一邊。）"]
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
+            scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             self.world.mutate_battle(
-                lambda b: battle_instance.join_faction(b, name, rest, self._battle_neili_cap(), self._battle_power())
+                lambda b: battle_instance.join_faction(
+                    b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores,
+                )
             )
             msgs = stood + ["你加入了這場戰局。"]
             side = next((f.name for f in definition.factions if f.id == rest), rest)
@@ -2228,9 +2242,11 @@ class Game:
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
+            scores = self._battle_scores()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
+                    scores=scores,
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
