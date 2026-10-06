@@ -145,6 +145,20 @@ def test_the_recruiters_box_is_never_clamped_and_the_first_step_is_paged_by_para
     assert got["pendingShut"] is True
 
 
+def test_the_ending_box_is_one_unpaged_card_with_its_acknowledge_button_in_the_head(on):
+    """結尾那一段（老石的「做得乾淨……」一整段，沒有段落）不分頁，因為「知道了」在框的頭、不在文字底下：375×812、真內容、真的做完一道軍令
+    （「剛剛」是戰鬥卡片 173–427、場景 439–576）時，框 588–847、「知道了」597–635，離分頁列（756）還有一百多 px，行動列在分頁列底下（859–973），
+    按掉「知道了」就回來。量出來的數字；改版面時要重量。這裡釘結構：整段一頁、沒有「下一段」、「知道了」排在文字前面。"""
+    boxes = _real_boxes(on)
+    assert boxes["end"]["full"] is True and "paged" not in boxes["end"]
+    got = run_guide_js("""
+      const html = H.guideHtml(boxes.end, false);
+      return { html, ack: html.indexOf("guide-ack"), text: html.indexOf("guide-text"), next: html.includes("guide-next"), clamp: html.includes("clamp") };
+    """, boxes)
+    assert 0 < got["ack"] < got["text"] and not got["next"] and not got["clamp"]
+    assert "你剛剛那一下，也算在裡頭。" in got["html"]
+
+
 def run_js(script, no_observer=False):
     if NODE is None:
         pytest.skip("沒有 node")
