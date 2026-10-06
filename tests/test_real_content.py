@@ -361,6 +361,69 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
     assert _win_rate(content, "fanjianglong", wugong_id) <= 0.05
 
 
+# ── 戰後事件的文字假設打贏了：「倒地的對手」只在遊歷打贏之後接（跟 FB-001 同一類）──────────
+
+
+def _after_a_fight(content, tier):
+    """剛打完一場遊歷（結果是 tier）的新角色：站在有敵人的地方，戰鬥卡片指著那一場。"""
+    from tianxia.state import BattleRecord, Fighter
+
+    game = Game.new(content, "遊歷人")
+    game.state.player.location = next(loc.id for loc in content.locations.values() if loc.enemies)
+    game.state.battles.insert(0, BattleRecord(
+        id=1, time=0.0, location="某地", kind="train", opponent="流寇散兵", ours=[Fighter(name="遊歷人", level=1)],
+        tier=tier, our_power=40.0, difficulty=8.0,
+    ))
+    game.state.battle_card = 1
+    return game
+
+
+def _after_fight_events(content, tier):
+    from tianxia.events import event_candidates
+
+    game = _after_a_fight(content, tier)
+    return {e.id for e in event_candidates(game.state, content, "train")}
+
+
+@pytest.mark.parametrize("tier", ["大勝", "險勝"])
+def test_the_fallen_foe_can_follow_a_win(content, tier):
+    assert "train_fallen_foe" in _after_fight_events(content, tier)
+
+
+@pytest.mark.parametrize("tier", ["僵持", "落敗"])
+def test_the_fallen_foe_never_follows_a_draw_or_a_loss(content, tier):
+    after = _after_fight_events(content, tier)
+    assert "train_fallen_foe" not in after
+    assert "train_campfire" in after  # 結果不挑的戰後事件照舊接得到
+
+
+def test_the_fallen_foe_needs_a_fight_in_this_very_action(content):
+    """上一次行動打贏了、這一次沒打（戰鬥卡片已經清掉）：紀錄還在，也抽不到它。"""
+    from tianxia.events import event_candidates
+
+    game = _after_a_fight(content, "大勝")
+    game.state.battle_card = None
+    assert "train_fallen_foe" not in {e.id for e in event_candidates(game.state, content, "train")}
+
+
+def test_playing_the_real_fight_the_fallen_foe_only_ever_comes_after_a_win(content, monkeypatch):
+    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。"""
+    monkeypatch.setattr(content.config, "train_event_chance", 1.0)
+    place = next(loc.id for loc in content.locations.values() if loc.enemies == ["dipi"])
+    tiers: dict[str, int] = {}
+    fired_after: set[str] = set()
+    for seed in range(120):
+        game = Game.new(content, f"遊歷{seed}", rng=random.Random(seed))
+        game.state.player.location = place
+        game.choose("act:train")
+        tier = game.state.battles[0].tier
+        tiers[tier] = tiers.get(tier, 0) + 1
+        if game.state.pending_event == "train_fallen_foe":
+            fired_after.add(tier)
+    assert set(tiers) & {"僵持", "落敗"} and set(tiers) & {"大勝", "險勝"}  # 輸贏都打出來過，下面才不是空轉
+    assert fired_after and fired_after <= {"大勝", "險勝"}, (fired_after, tiers)
+
+
 # ── 事件檢定的難度帶（企劃者 2026-10-05「成功率毫無道理可言」）────────
 # 開局五項屬性都是 5，`rules.check_chance` 是 50% ＋ 每點差 10%（不動，按鈕上顯示的成算就是它）。
 # 所以難度帶跟著地點的危險度走：危險度 1 的地方（城鎮、官道、河畔）新角色有五到七成，

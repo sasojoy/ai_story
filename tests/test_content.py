@@ -1697,3 +1697,34 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
 
     assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
+
+
+# ── 戰後事件的條件 fight_tiers（這次行動打的那一場的結果）────────────────
+
+
+def test_validate_accepts_fight_tiers_on_a_train_event(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "險勝"])  # 夾具裡唯一掛在遊歷上的事件
+    validate(content)
+    content.events["chain_a"].condition = Condition(any_of=[Condition(fight_tiers=["落敗"])])  # any_of 裡面也一樣
+    validate(content)
+
+
+def test_validate_rejects_an_unknown_fight_tier(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "大捷"])
+    with pytest.raises(ContentError, match="事件 chain_a：未知的戰鬥結果 大捷"):
+        validate(content)
+
+
+def test_validate_rejects_fight_tiers_where_no_fight_has_just_ended(content):
+    """只有遊歷打完才會接事件：別的行動抽的事件、選項與結局的條件寫了它，永遠不成立。"""
+    content.events["drunk"].condition = Condition(fight_tiers=["大勝"])  # 探索抽的
+    with pytest.raises(ContentError, match="事件 drunk：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].condition = Condition()
+    content.events["drunk"].choices[0].condition = Condition(fight_tiers=["大勝"])  # 選項的條件也不行
+    with pytest.raises(ContentError, match="事件 drunk 選項0：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].choices[0].condition = Condition()
+    content.scenario.endings[0].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="fight_tiers 只能寫在遊歷"):
+        validate(content)

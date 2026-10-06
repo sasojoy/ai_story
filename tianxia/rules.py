@@ -102,6 +102,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
+    if cond.fight_tiers:
+        # 這次行動打的那一場：battle_card 每次行動開頭清掉、打完才指向那筆紀錄，所以上一次行動留下的紀錄不算
+        fought = next((r for r in state.battles if r.id == state.battle_card), None)
+        if fought is None or fought.tier not in cond.fight_tiers:
+            return False
     if cond.night is not None or cond.week_min is not None or cond.week_max is not None:
         if content is None or not calendar.season_one_on(w, content):
             return False
