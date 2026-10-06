@@ -125,6 +125,19 @@ def test_quota_scales_with_server_cap(on):
     assert orders.quota(on, siege) == 12  # 整季模擬的 30 人
 
 
+def test_the_defend_quota_base_is_nine_hundred_on_both_sides(on):
+    """守城（官軍、黃巾兩邊）的額度基數是 900（content/orders.json）：滿編 3000 人就是 900、整季模擬的 30 人是 9、
+    週末設定的 2 人照最少 4。整併時的突變抽查發現這個數字沒有測試釘住（攻城的 1200 見上一條）。"""
+    for side in ("guan", "huang"):
+        defend = next(t for t in on.orders.templates if t.kind == "defend" and t.side == side)
+        on.config.server_max_players = 2
+        assert orders.quota(on, defend) == 4
+        on.config.server_max_players = 3000
+        assert orders.quota(on, defend) == 900
+        on.config.server_max_players = 30
+        assert orders.quota(on, defend) == 9
+
+
 def test_issue_week_one_by_the_rules(on):
     """開季數字（潁川 40、南陽 35、冀州 55），第 1 週週一：南陽的下一件大事（第 3 週張曼成）剛好在兩週內。"""
     game = _game(on)
