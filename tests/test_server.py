@@ -4625,8 +4625,10 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
 
 
 def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
-    """在 node 裡真的跑 watchQueue（假的 fetch 與計時器）：問不到、佇列關著（null）、正在跑（0）都不改按鈕的字；前面有人才寫
-    「（前面還有 N 件）」，而且接在原本的字後面、不會一層一層疊上去；收掉之後不再問。"""
+    """在 node 裡真的跑 watchQueue（假的 fetch 與計時器）：問不到、佇列關著（null）、正在跑（0）都不多寫字；前面有人才寫
+    「（前面還有 N 件）」，而且接在原本的字後面、不會一層一層疊上去。寫過之後前面沒人了（輪到自己了：0，或評分與潤色之間：null）
+    要還原成原本的字（審查 I-1），不然舊的「前面還有 N 件」會一路留在按鈕上，直到自己那一件做完；問不到（斷線）不動。
+    收掉之後不再問，收掉那一刻才回來的回應也不寫（審查 M-4：已經在路上的那一趟 fetch 不能把字寫到還原好的按鈕上）。"""
     import json
     import shutil
     import subprocess
@@ -4639,7 +4641,10 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
     script = f"""
     {watch}
     const el = {{ textContent: "思量中……" }};
-    const answers = [{{ ahead: null }}, "boom", {{ ahead: 0 }}, {{ ahead: 3 }}, {{ ahead: 1 }}];
+    const answers = [
+      {{ ahead: null }}, "boom", {{ ahead: 0 }}, {{ ahead: 3 }}, {{ ahead: 1 }}, {{ ahead: 0 }}, {{ ahead: 2 }}, {{ ahead: null }},
+      {{ ahead: 2 }},  // 最後這一趟：收掉的那一刻才回來，不能寫
+    ];
     const seen = [];
     const urls = [];
     let stop = null;
@@ -4648,7 +4653,7 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
       seen.push(el.textContent);
       urls.push([url, opts && opts.credentials]);
       const next = answers[seen.length - 1];
-      if (seen.length === answers.length + 1) stop();
+      if (seen.length === answers.length) stop();
       if (next === "boom") throw new Error("斷線");
       return {{ json: async () => next }};
     }};
@@ -4664,11 +4669,71 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
     assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
     out = json.loads(done.stdout.decode("utf-8"))
     assert out["urls"] == ["/api/queue", "same-origin"]
+    base = "思量中……"
     assert out["seen"] == [
-        "思量中……", "思量中……", "思量中……", "思量中……",  # null、斷線、0 都不改字
-        "思量中……（前面還有 3 件）", "思量中……（前面還有 1 件）",  # 3、1：每次都從原本的字接，不疊
+        base, base, base, base,  # 每一趟問之前的字：null、斷線、0 都不多寫
+        f"{base}（前面還有 3 件）", f"{base}（前面還有 1 件）",  # 3、1：每次都從原本的字接，不疊
+        base,  # 3、1 之後問到 0：還原
+        f"{base}（前面還有 2 件）",
+        base,  # 2 之後問到 null：還原
     ]
+    assert out["final"] == base  # 收掉那一趟回 2，也沒寫
     assert out["more"] == 0  # 收掉之後沒有再問
+
+
+def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
+    """審查 M-2：開爐被擋下來（另一個分頁的上一爐還沒出爐，伺服器回 400）之後，煉製頁上方不能還寫著「爐火正旺。……請稍候」：
+    重畫之前 S.message 要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。
+    在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("沒有裝 node")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    parts = [
+        re.search(r"(?m)^  const esc = .*;$", js).group(0),
+        re.search(r"(?ms)^  const failText = .*?\);$", js).group(0),
+        _js_function(js, "function watchQueue(") + "\n  }",
+        _js_function(js, "async function busy(") + "\n  }",
+        _js_function(js, "async function forge(") + "\n  }",
+    ]
+    script = "\n".join(parts) + """
+    globalThis.setTimeout = () => 0;  // watchQueue 的計時器不真的跑
+    let S, seen, button, bar, api;
+    const document = { getElementById: (id) => (id === "forge" ? button : bar), querySelector: () => null };
+    const window = { scrollTo() {} };
+    const forgeBody = () => ({});
+    const renderPage = () => seen.push(S.message);
+    const renderTop = () => {};
+    const setMain = () => {};
+    const run = async (answer) => {
+      S = { busy: false, message: "", offline: false, forgeSel: [{ type: "art", id: "a" }, { type: "ins", id: "i" }], forgeLine: "舊說明", menxia: null };
+      seen = [];
+      button = { disabled: false, textContent: "開爐", classList: { add() {} } };
+      bar = { textContent: "" };
+      api = answer;
+      await forge();
+      return { renderedWith: seen, message: S.message, waiting: bar.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy };
+    };
+    (async () => {
+      const refused = await run(async () => { throw new Error("上一爐還沒出爐。"); });
+      const done = await run(async () => ({ menxia: { x: 1 }, message: "<p>煉成了。</p>", main: {} }));
+      const offline = await run(async () => { S.offline = true; throw new Error("fetch failed"); });
+      console.log(JSON.stringify({ refused, done, offline }));
+    })();
+    """
+    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    out = json.loads(done.stdout.decode("utf-8"))
+    refused = out["refused"]
+    assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
+    assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句
+    assert refused["sel"] == 2 and refused["line"] == "舊說明" and refused["busy"] is False  # 爐裡的東西留著、可以再按
+    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 0 and out["done"]["line"] == ""
+    assert "爐火正旺" not in out["offline"]["message"]  # 別的錯（例如斷線）也不再停在「爐火正旺」
 
 
 def test_app_js_parses():

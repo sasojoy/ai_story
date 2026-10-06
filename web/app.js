@@ -1360,7 +1360,9 @@
         if (!alive) break;
         try {
           const r = await fetch("/api/queue", { credentials: "same-origin" }).then((x) => x.json());
-          if (alive && el && typeof r.ahead === "number" && r.ahead > 0) el.textContent = `${base}（前面還有 ${r.ahead} 件）`;
+          // 前面有人才寫；寫過之後前面沒人了（輪到自己：0；評分與潤色之間、還沒排進去：null）就還原成原本的字，
+          // 不然舊的「前面還有 N 件」會一路留到自己那一件做完。伺服器有回答（有 ahead 這個鍵）才動；問不到、回的不是答案就不動
+          if (alive && el && r && "ahead" in r) el.textContent = typeof r.ahead === "number" && r.ahead > 0 ? `${base}（前面還有 ${r.ahead} 件）` : base;
         } catch (e) { /* 問不到就算了，按鈕照原本的字 */ }
       }
     })();
@@ -1507,6 +1509,10 @@
         S.forgeLine = "";
         setMain(r.main);
         renderTop();
+      } catch (e) {
+        // 被擋下來（另一個分頁的上一爐還沒出爐：400）或連不上：等的時候寫的「爐火正旺……請稍候」不能留著，換成這一句，
+        // 爐裡放的東西不動；api() 已經用提示泡泡講過一次，頁面上方再留一份（跟閉關那一段同一個做法）
+        S.message = esc(failText(e));
       } finally { stop(); }
     });
     renderPage();
