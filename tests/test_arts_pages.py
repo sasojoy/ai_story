@@ -241,7 +241,7 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
     html = page("pagePractice", menxia())
     fold = re.search(r"<details class=\"attr-note\"( open)?><summary>([^<]*)</summary>(.*?)</details>", html, re.S)
     assert fold and fold.group(1) is None  # 收著：第一屏只多一行字
-    assert fold.group(2) == "屬性有什麼用" and "ATTRNOTE" in fold.group(3)
+    assert fold.group(2) == "武學屬性有什麼用" and "ATTRNOTE" in fold.group(3)  # FB-089：標題冠上「武學」，別跟升級配點的屬性混
     assert html.index("RULESLINE") < html.index("attr-note") < html.index("身上的功法")  # 規則那一行底下、第一張卡片之前
 
 

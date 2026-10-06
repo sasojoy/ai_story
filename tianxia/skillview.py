@@ -38,6 +38,7 @@ def rules_line(content: Content) -> str:
     return "身上一門內功、一門武學：花心得練成，用意境修練衝品質；武學也能在「煉製」融意境衍生新武學，或兩門武學合成一門新的。"
 
 
+ARTS_ATTRIBUTES = "剛柔快慢陰陽虛實"  # 武學的八個屬性，寫給玩家看的順序（FB-089）；跟升級配點的五項（臂力身法根骨悟性博聞）是兩回事
 ATTRIBUTE_ORDER = "陰陽剛柔快慢虛實"  # 相剋的一對怎麼排字（設計 6.1 的順序）：「陰陽」「剛柔」，不寫成「陽陰」
 
 
@@ -53,9 +54,11 @@ def attribute_line(content: Content) -> str:
         if pair not in pairs:
             pairs.append(pair)
     penalty = _pct(-cfg.pairing_penalty).replace("-", "−")  # 減號用 −，跟加號並排好讀
+    # FB-089：「屬性」有兩個意思（升級配的五項、武學的剛柔快慢陰陽虛實），這一句講的是後者，開頭先把名字寫全；
+    # 八個字的順序是企劃者定的「剛柔快慢陰陽虛實」（ARTS_ATTRIBUTES，測試擋它跟 martial_arts.ATTRIBUTES 是同一組字）
     return (
-        f"內功與武學同屬性，威力 {_pct(cfg.pairing_bonus)}；兩門相剋（{'、'.join(pairs)}）威力 {penalty}；"
-        f"武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
+        f"武學的屬性（{ARTS_ATTRIBUTES}）：內功與武學同屬，威力 {_pct(cfg.pairing_bonus)}；"
+        f"兩門相剋（{'、'.join(pairs)}）威力 {penalty}；武學克住對手的屬性，威力 ×{encounter.COUNTER_BONUS:g}。"
     )
 
 

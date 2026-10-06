@@ -968,9 +968,9 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
-  // 屬性有什麼用（W2）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
+  // 武學屬性有什麼用（W2、FB-089：標題冠上「武學」，跟升級配點的「屬性」分開）：修練、煉製兩頁各摺一行，收著只多一行小字。說明的字是伺服器照程式的規則寫的（skillview.attribute_line），
   // 這裡只放進去；標題那四個字待 joy 潤。伺服器沒給（舊版）就不畫。
-  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
+  const attrNoteHtml = (x) => (x.attribute_note ? `<details class="attr-note"><summary>武學屬性有什麼用</summary><p>${esc(x.attribute_note)}</p></details>` : "");
 
   // 療傷鈕（FB-082）：字（寫價錢）與按不按得下去都是伺服器給的（沒有內傷、銀兩不夠時灰掉、字裡寫為什麼）；
   // 鈕上只有一行——跟「練成」鈕並排，375px 寬放不下整句，整句的原因放在 title 與 aria-label。伺服器沒給（舊版）就照舊

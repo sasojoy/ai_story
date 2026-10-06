@@ -14,9 +14,23 @@ def test_rules_line():
 def test_the_attribute_note_says_what_the_code_does(content):
     """W2：屬性的說明一句話——同屬性、相剋、克對手三條，數字與哪幾對相剋都讀自程式（team.pairing 的設定、
     martial_arts.ATTRIBUTE_COUNTERS、encounter.COUNTER_BONUS），不另外寫死一份。句子待 joy 潤。"""
-    assert skillview.attribute_line(content) == (
-        "內功與武學同屬性，威力 +20%；兩門相剋（陰陽、剛柔、快慢、虛實）威力 −20%；武學克住對手的屬性，威力 ×1.3。"
+    assert skillview.attribute_line(content) == (  # FB-089：開頭先說清楚這是武學的屬性（剛柔快慢陰陽虛實），不是升級配點的那五項
+        "武學的屬性（剛柔快慢陰陽虛實）：內功與武學同屬，威力 +20%；兩門相剋（陰陽、剛柔、快慢、虛實）威力 −20%；"
+        "武學克住對手的屬性，威力 ×1.3。"
     )
+
+
+def test_the_word_attribute_names_the_arts_side_only_where_it_is_qualified(content):
+    """FB-089：「屬性」有兩個意思——升級配的五項（臂力身法根骨悟性博聞）與武學的剛柔快慢陰陽虛實。武學這一邊的說明都冠上
+    「武學的屬性（…）」，配點那一邊維持「屬性」；「屬X」那種卡片上的短標籤不動。"""
+    note = skillview.attribute_line(content)
+    assert note.startswith("武學的屬性（剛柔快慢陰陽虛實）：")
+    from tianxia import martial_arts
+
+    assert sorted(skillview.ARTS_ATTRIBUTES) == sorted(martial_arts.ATTRIBUTES)  # 八個字一個不少（只是寫給玩家看的順序不同）
+    assert "同屬性" not in note and "臂力" not in note  # 沒有資格詞的「同屬性」換成「同屬」；說明裡不夾配點那五項
+    names = [name for name, _ in skillview.stat_uses(content)]
+    assert names == ["臂力", "身法", "根骨", "悟性", "博聞"]  # 配點那一邊照舊（狀態列「點名號展開的屬性」）
 
 
 def test_the_attribute_note_follows_the_numbers_it_reads(content, monkeypatch):
@@ -27,7 +41,7 @@ def test_the_attribute_note_follows_the_numbers_it_reads(content, monkeypatch):
     monkeypatch.setattr(martial_arts, "ATTRIBUTE_COUNTERS", {"剛": "柔", "柔": "剛"})
     note = skillview.attribute_line(content)
     assert "威力 +35%" in note and "威力 −10%" in note and "威力 ×1.5" in note
-    assert "（剛柔）" in note and "陰陽" not in note  # 相剋的一對照表列，每一對只寫一次
+    assert "兩門相剋（剛柔）威力" in note and "陰陽、" not in note  # 相剋的一對照表列，每一對只寫一次（開頭那八個字是屬性的名單）
 
 
 def test_member_card_before_learning_anything(state, content, world):
