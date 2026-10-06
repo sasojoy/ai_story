@@ -1,6 +1,6 @@
 import pytest
 
-from tianxia import fusion, library, rules, skillview, team, traits
+from tianxia import fusion, insights, library, rules, skillview, team, traits
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import new_game_state
 
@@ -498,3 +498,27 @@ def test_the_furnace_does_not_peek_at_a_recipe_for_things_you_do_not_hold(state,
     state.player.member.wugong_id = "basic_fist"  # 沒有風這個意境
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert line.startswith("⚠") and "會合出" not in line and "功效" not in line
+
+
+def test_art_rows_carry_the_best_forge_odds_for_the_scroll_card(state, content, world):
+    """卷軸卡的合成機率條（PR #21）：每一門拿手上上品機率最高的意境算，跟開爐實際擲的同一套（fusion.fuse_odds）。
+    粗淺拳腳屬實：風（快）不相干、浩然（陽）有正邪、來歷加分；沒有意境就不給。"""
+    state.player.member.wugong_id = "basic_fist"
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row and "forge_with" not in row
+    state.player.insights = ["feng", "haoran"]  # 浩然有正邪，來歷加分
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    base = team.player_art(state, content, world, "basic_fist")
+    odds = fusion.fuse_odds(state, content, "basic_fist", base, insights.resolve("haoran", content, world)).odds
+    assert row["forge_with"] == "浩然"
+    assert row["forge_odds"] == [{"quality": q, "pct": round(odds[q])} for q in ("下品", "中品", "上品")]
+    assert sum(item["pct"] for item in row["forge_odds"]) == 100
+
+
+def test_art_rows_skip_an_insight_whose_result_you_already_have(state, content, world):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.insights = ["haoran"]
+    state.player.stats["xinde"] = 100
+    fusion.fuse(state, content, world, None, "basic_fist", "haoran")
+    row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
+    assert "forge_odds" not in row
