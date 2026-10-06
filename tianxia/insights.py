@@ -71,6 +71,15 @@ def explore_pool(loc: Location, content: Content) -> list[str]:
     return [i for i in loc.insights if i in by_exploring] or by_exploring
 
 
+def explore_gives(loc: Location, content: Content) -> list[str]:
+    """探索在這裡真的悟得到的意境（W3）：輿圖詳情欄的「這裡能悟」與探索自己（Game._explore_can）共用這一個判斷，所以那一行
+    永遠不會說探索給不出的東西。這類地點探索時「悟意境」那一支的比例是 0（Config.explore_mix 照地點類型挑，跟探索同一個
+    explore_mix_of），那就什麼也悟不到；否則就是 explore_pool。"""
+    if content.config.explore_mix_of(loc.tags).weights.get("insight", 0) <= 0:
+        return []
+    return explore_pool(loc, content)
+
+
 def roll_explore(loc: Location, content: Content, rng: random.Random) -> str | None:
     pool = explore_pool(loc, content)
     return rng.choice(pool) if pool else None

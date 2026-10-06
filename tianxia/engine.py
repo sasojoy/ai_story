@@ -1453,7 +1453,7 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            return bool(insights.explore_pool(loc, self.content))
+            return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
         return bool(event_candidates(self.state, self.content, "explore", "common"))
@@ -3758,6 +3758,7 @@ class Game:
         return skillview.art_card(
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
             trait_line=traits.card_line(self.content, art),
+            compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
         )
 
     def member_card(self, key: str) -> str:
@@ -3765,6 +3766,10 @@ class Game:
 
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
+
+    def attribute_note(self) -> str:
+        """修練頁與煉製頁摺起來的「屬性有什麼用」那一句（W2）。"""
+        return skillview.attribute_line(self.content)
 
     def bag_text(self) -> str:
         return skillview.bag_text(self.state, self.content)

@@ -10,7 +10,7 @@ import math
 import random
 
 from . import calendar, encounter, rounds, traits
-from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, with_quality
+from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
@@ -246,6 +246,54 @@ def switch_art(state: GameState, content: Content, world: WorldStateStore, art_i
     setattr(member, level_slot, level)
     msgs.append(f"你改練【{art.name}】（{art.quality}・屬{art.attribute}），目前第{level}成。")
     return msgs
+
+
+# 新武學跟身上那門比的那一句（W6；待 joy 潤）：「比身上的【甲】：威力 −0.3（第一成）、多了〔先手〕、少了〔厚〕」
+COMPARE_HEAD = "比身上的【{worn}】：{power}（第一成）"
+COMPARE_POWER = "威力 {diff}"
+COMPARE_SAME_POWER = "威力相同"
+COMPARE_MORE = "多了{names}"
+COMPARE_LESS = "少了{names}"
+
+
+def _trait_names(content: Content, art: MartialArt) -> list[str]:
+    """這門武學帶的功效的名字（一般功效照屬性的清單、去掉重複的層數，再加特別功效），內容沒有那個功效就略過。
+    只看「有沒有」：層數不同不算不同（功法卡的「功效」那一行才寫數字）。"""
+    names = []
+    for attribute in dict.fromkeys(traits.traits_of(art)):
+        trait = next((t for t in content.traits.general if t.attribute == attribute), None)
+        if trait is not None:
+            names.append(trait.name)
+    sp = traits.special(content, art.special)
+    if sp is not None:
+        names.append(sp.name)
+    return names
+
+
+def compare_with_worn(state: GameState, content: Content, world: WorldStateStore, art: MartialArt) -> str:
+    """新武學（功法庫裡的一門）跟身上同一種（武學對武學、內功對內功）那一門比的一句話（W6）；只顯示、不動任何數字。
+    沒有東西可比（那一欄空著、這門就是身上那門、找不到資料）是空字串。
+
+    比的是**第一成對第一成**，不是現在這一成：合成出來的從第一成起，身上那門常常已經練到更高，拿現在的威力比，
+    新的永遠像退步；同在第一成比，看到的才是兩門功夫本身的差別（品質、微調）。數字是 martial_arts.power_at 照
+    玩家自己那一份的品質（player_art）算的，跟功法卡寫的威力同一個來源。功效只列有沒有：新的多出來的、少掉的。"""
+    member = state.player.member
+    worn_id = member.neigong_id if art.kind == "內功" else member.wugong_id
+    if worn_id is None or worn_id == art.id:
+        return ""
+    worn, mine = player_art(state, content, world, worn_id), player_art(state, content, world, art.id)
+    if worn is None or mine is None:
+        return ""
+    diff = power_at(mine, 1) - power_at(worn, 1)
+    power = COMPARE_SAME_POWER if round(diff, 1) == 0 else COMPARE_POWER.format(diff=f"{diff:+.1f}".replace("-", "−"))
+    parts = [COMPARE_HEAD.format(worn=worn.name, power=power)]
+    have, had = _trait_names(content, mine), _trait_names(content, worn)
+    more, less = [n for n in have if n not in had], [n for n in had if n not in have]
+    if more:
+        parts.append(COMPARE_MORE.format(names="".join(f"〔{n}〕" for n in more)))
+    if less:
+        parts.append(COMPARE_LESS.format(names="".join(f"〔{n}〕" for n in less)))
+    return "、".join(parts)
 
 
 def practice_price(content: Content, level: int) -> int:

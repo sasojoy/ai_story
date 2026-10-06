@@ -160,8 +160,10 @@ def test_melting_a_starter_art_ends_the_result_with_where_to_learn_it_again(real
     game.state.player.arts = ["lishi_chui"]
     game.switch_art("lishi_chui")
     msgs = game.melt_art("jichu_quanjiao")
-    assert msgs[:2] == ["你把【基礎拳腳】熔成了心得。", "心得 +0"]
-    assert msgs[2] == "熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學基礎拳腳」。"
+    assert msgs == [  # W9：退 0 心得的熔煉直說只空出一格（單獨一句，沒有「心得 +0」）；FB-081 的指路接在最後
+        "你把【基礎拳腳】熔掉了，空出一格。",
+        "熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學基礎拳腳」。",
+    ]
     assert game.state.journal[0].tag == msgs[0]  # 江湖紀錄的標題照舊是第一句
     refused = game.melt_art("jichu_quanjiao")  # 已經熔掉了：只回一句拒絕，不接那句
     assert refused == ["你的功法庫裡沒有這一門。"]
@@ -632,12 +634,15 @@ MELT_STUBS = (
 @needs_node
 def test_melting_asks_with_the_pages_own_layer_and_only_then_melts():
     out = run(
-        "const el = { dataset: { id: 'a1', name: '基礎拳腳', relearn: '熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。' } };"
+        "const el = { dataset: { id: 'a1', name: '基礎拳腳', confirm: '把【基礎拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。' } };"
         "H.askMelt(el); const asked = H.calls.map((c) => ({ ask: c.ask, yes: c.yes })); const before = H.calls.filter((c) => c.mx).length;"
         "await H.calls[0].go(); return { asked, before, after: H.calls.filter((c) => c.mx) };",
         fns=["askMelt", "askMeltInsight"], consts=["meltAskText"], stubs=MELT_STUBS,
     )
-    assert out["asked"] == [{"ask": "把【基礎拳腳】熔成心得？熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。", "yes": "熔掉"}]
+    assert out["asked"] == [{
+        "ask": "把【基礎拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。",
+        "yes": "熔掉",
+    }]  # 問句整句是伺服器寫好的（data-confirm），網頁照放
     assert out["before"] == 0 and out["after"] == [{"mx": "melt", "body": {"art": "a1"}}]  # 按「熔掉」之前什麼都沒送
 
 
@@ -686,10 +691,9 @@ def test_the_practice_page_puts_the_heal_price_on_the_button_next_to_the_practic
 
 
 @needs_node
-def test_the_melt_question_names_where_a_starter_art_can_be_learned_again():
+def test_the_melt_question_is_the_servers_sentence_and_an_old_server_gets_the_old_question():
     out = run(
-        "return [H.meltAskText('基礎拳腳', '熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。'), H.meltAskText('旋風腿', null)];",
+        "return [H.meltAskText({ dataset: { name: '旋風腿', confirm: 'SERVER' } }), H.meltAskText({ dataset: { name: '旋風腿', confirm: '' } })];",
         consts=["meltAskText"],
     )
-    assert out[0] == "把【基礎拳腳】熔成心得？熔了還能免費重學：到任何城鎮，在江湖頁「此地還能做」找「學基礎拳腳」。"
-    assert out[1] == "把【旋風腿】熔成心得？熔掉就沒了。"
+    assert out == ["SERVER", "把【旋風腿】熔成心得？熔掉就沒了。"]

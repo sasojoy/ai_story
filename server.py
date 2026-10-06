@@ -827,6 +827,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     return {
         "xinde": game.state.player.stats.get("xinde", 0),
         "rules": md(game.menxia_rules()),
+        "attribute_note": game.attribute_note(),  # 純文字，網頁自己跳脫；兩頁各摺一行（W2）
         "player_card": md(game.member_card("player")),
         "roster": [{"label": label, "key": key} for label, key in lines],
         "person": person,
