@@ -25,8 +25,8 @@ from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile, Lock, Rumor, TimelineResult
-from tianxia.world_state import season_length_days
+from tianxia.state import BotProfile, FigureState, Lock, Rumor, TimelineResult, WorldState
+from tianxia.world_state import SharedWorldState, season_length_days
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 
@@ -5468,6 +5468,132 @@ def test_pausing_and_resuming_the_season_clock_change_the_fingerprint():
     assert world.resume_clock(server.CONTENT, 5000.0) is not None
     resumed = server.current_fingerprint()
     assert resumed != paused and resumed == before
+
+
+# 推送指紋的欄位分類（最終審查 m5）：全服共用的世界狀態（SharedWorldState、它的賽季 WorldState、進行中的決戰 BattleInstance）
+# 每一個欄位，不是「算進指紋」（底下的改法真的讓指紋變，下面的測試會試）、就是「不算」（寫一句為什麼）。以後誰加了新欄位，
+# 兩邊都沒有就紅——到時候要決定：它改了，全服每個人的畫面看得出來嗎？看得出來就要算進去（不然開著的分頁最久 60 秒才知道），
+# 看不出來（或不能讓人看出來）就寫進「不算」。暫停（paused_at）就是這樣漏過一次。
+_SEASON = "season"  # 容器欄位：它自己不算，裡面的欄位各自分類（WorldState 的欄位在 "WorldState" 那一組）
+FINGERPRINTED = {
+    "SharedWorldState": {
+        "season_number": lambda st: setattr(st, "season_number", st.season_number + 1),
+        "season_opened": lambda st: setattr(st, "season_opened", False),  # 籌備中：階段變了
+        "paused_at": lambda st: setattr(st, "paused_at", 1000.0),
+        "season": _SEASON,
+        "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
+    },
+    "WorldState": {
+        "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
+        "revealed": lambda st: st.season.revealed.add("h"),  # 隱藏的那一條浮現了
+        "rumors": lambda st: st.season.rumors.append(Rumor(time=0.0, text="天下大事", layer="world")),
+        "chronicle": lambda st: st.season.chronicle.append(Rumor(time=0.0, text="江湖史一筆")),
+        "ended": lambda st: setattr(st.season, "ended", True),  # 休季：階段變了
+        "ending_title": lambda st: setattr(st.season, "ending_title", "天下大亂"),
+        "storyline": lambda st: setattr(st.season, "storyline", "另一條主線"),
+        "act": lambda st: setattr(st.season, "act", st.season.act + 1),
+        "timeline": lambda st: st.season.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0)),
+        "showdowns_opened": lambda st: st.season.showdowns_opened.__setitem__("changshe_fire", "changshe_fire"),
+        "figures": lambda st: st.season.figures.__setitem__("lu_zhi", FigureState(prestige=70)),
+    },
+    "BattleInstance": {
+        "battle_id": lambda st: setattr(st.active_battle, "battle_id", "wancheng"),
+        "phase": lambda st: setattr(st.active_battle, "phase", "active"),
+        "round_number": lambda st: setattr(st.active_battle, "round_number", 1),
+        "trend": lambda st: setattr(st.active_battle, "trend", 55),
+    },
+}
+NOT_IN_THE_FINGERPRINT = {
+    "SharedWorldState": {
+        "companion_tag_counts": "跟人物對話才用的記數，不在共用的畫面上",
+        "companion_drift_note": "同伴的性情句，只在跟他對話時用",
+        "companion_drift_synthesized_at": "性情語意化的記數，不在畫面上",
+        "companions": "同伴被招走、升級只影響門下頁與招募鈕，那是各人自己的畫面（自己的動作走 self 通知），別人下次輪詢才補也不礙事",
+        "event_flavor": "事件的潤色句，一次寫好之後不變，跟著事件的公告出現",
+        "jade_seal_fragments": "玉璽碎片的歸屬，只在持有者的畫面",
+        "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
+        "tianji": "換季才加一，同時 season_number 也變了",
+    },
+    "WorldState": {
+        "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
+        "flags": "世界旗標只是條件，不直接畫在共用畫面上（推送計畫 F4）",
+        "flag_times": "旗標第一次成立的時間，同上",
+        "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
+        "sim_accum": "不滿一小時的時間累積器",
+        "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
+        "ending_id": "同上",
+        "final_trends": "同上（結算卡的資料）",
+        "final_rankings": "同上（結算卡的資料）",
+        "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
+        "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
+        "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
+        "season_one": "開季時蓋的章，開季之後不變",
+        "length_days": "同上",
+        "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
+        "lock_losers": "同上",
+        "third_party": "同上",
+        "third_party_shown": "同上",
+        "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
+        "event_bonus": "時刻表結果帶來的修正，同上",
+        "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
+        "hooked_week": "週初掛鉤的內部記號",
+        "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
+        "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
+        "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
+        "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
+        "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+    },
+    "BattleInstance": {
+        "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
+        "participants": "加入的人數、誰出手了，畫面上哪裡都看不到，還跟著假人的節奏變（推送計畫 F2）",
+        "act_index": "換幕只在 round_number 加一的那一下發生",
+        "round": "這一回合誰出手了、寫了什麼，同 participants",
+        "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
+        "outcome_title": "收場時跟 phase 一起寫入",
+        "outcome_text": "同上",
+        "outcome_world_flags": "同上",
+        "outcome_trend_delta": "同上",
+        "end_time": "同上",
+        "unfinished_text": "同上",
+        "unfinished": "同上",
+        "record_id": "資料庫裡的流水號，不是畫面",
+        "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
+    },
+}
+WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
+
+
+def test_every_shared_world_field_is_classified_for_the_push_fingerprint():
+    """新欄位兩邊都沒寫就紅：逼加欄位的人當場決定它算不算進推送的指紋。"""
+    for name, model in WORLD_MODELS.items():
+        counted, ignored = set(FINGERPRINTED[name]), set(NOT_IN_THE_FINGERPRINT[name])
+        assert not counted & ignored, f"{name} 同時在兩邊：{sorted(counted & ignored)}"
+        assert set(model.model_fields) == counted | ignored, (
+            f"{name} 的欄位沒分類或寫錯了：沒分類 {sorted(set(model.model_fields) - counted - ignored)}，"
+            f"不存在 {sorted((counted | ignored) - set(model.model_fields))}——見 FINGERPRINTED／NOT_IN_THE_FINGERPRINT 上面的說明"
+        )
+        assert all(reason.strip() for reason in NOT_IN_THE_FINGERPRINT[name].values()), name
+
+
+@pytest.mark.parametrize(
+    ("name", "field"),
+    [(name, field) for name, fields in FINGERPRINTED.items() for field, change in fields.items() if change != _SEASON],
+)
+def test_every_field_counted_in_the_push_fingerprint_really_changes_it(name, field):
+    """上面說「算進指紋」的欄位，真的改了就讓 server.current_fingerprint() 變（不是只寫在清單上）。每個欄位自己一個資料庫。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+
+    def setup(st):
+        st.season.trends, st.season.revealed = {"t": 10, "h": 5}, {"t"}  # 一條浮現的、一條隱藏的
+        st.active_battle = battle_instance.BattleInstance(battle_id="changshe_fire")
+
+    world.mutate(setup)
+    before = server.current_fingerprint()
+    world.mutate(FINGERPRINTED[name][field])
+    assert server.current_fingerprint() != before, f"{name}.{field} 改了，指紋沒變"
 
 
 def _three_read_fingerprint() -> str:
