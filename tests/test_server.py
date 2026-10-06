@@ -1597,18 +1597,24 @@ def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
     assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]
 
 
-def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
-    """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
-    原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
-    改成照字寬分配（flex: 1 1 auto、width: auto）、不折行、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排有 108px 的餘裕。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+def test_the_scroll_card_buttons_sit_two_to_a_row_at_phone_width():
+    """卷軸卡（2026-10-06）：卡上兩顆大鈕（練成／改練、修練）各佔一半，字寫兩行（上面動作、下面價錢或機率），
+    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts）與療傷、閉關那兩格（.tune），不動全站的 .btn。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    assert 'class="row art-actions"' in js[js.index("const artRow"):js.index("const insightRow")]
-    rule = re.search(r"\.art-body \.art-actions > \.btn \{([^}]*)\}", css)
-    assert rule is not None, "要有只管開啟的武學那一排按鈕的 class，不動全站的 .btn"
-    body = rule.group(1)
-    assert "white-space: nowrap" in body and "width: auto" in body and "flex: 1 1 auto" in body
-    assert re.search(r"padding:\s*10px 8px", body)
+    acts = re.search(r"\.acts \{([^}]*)\}", css)
+    assert acts is not None and "grid-template-columns: 1fr 1fr" in acts.group(1)
+    two_lines = re.search(r"\.tune \.btn, \.acts \.btn \{([^}]*)\}", css)
+    assert two_lines is not None and "flex-direction: column" in two_lines.group(1)
+
+
+def test_the_heal_button_says_what_it_costs(client):
+    """療傷鈕上寫內傷與價錢：價錢由伺服器照 team.heal_cost 算好送來，網頁不自己算。"""
+    _player(client)
+    assert client.get("/api/menxia").json()["heal_cost"] == 0
+    game = server.game_for("沈青衫")
+    game.state.player.member.injury = 23.0
+    open_characters().save(game.state)
+    assert client.get("/api/menxia").json()["heal_cost"] == 12  # 每 2 點內傷 1 兩，無條件進位
 
 
 def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
