@@ -13,7 +13,7 @@ from . import calendar, front_lines, materials, team
 from . import rounds as rounds_mod  # state 也有一個 Fighter（戰報的陣容），這裡用別名免得混淆
 from .encounter import EncounterResult, describe_result
 from .models import Content, Squad
-from .state import BattleRecord, Fighter, GameState
+from .state import BattleRecord, Fighter, GameState, LevelUps
 from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
@@ -63,6 +63,7 @@ def new_record(
         our_power=result.our_power,
         difficulty=result.difficulty,
         notes=[DODGE_NOTE] if result.dodged else [],
+        guarded=result.guarded,  # 護命的那一句演出由 Game._play_rounds 補進 notes 最前面（跟閃避的那一句同一個位置）
     )
 
 
@@ -168,18 +169,67 @@ def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Ra
     return out
 
 
+TRAIT_LEAD = "〔"  # 功效的演出句一律以它開頭（〔功效名〕）：網頁認功效句靠它（app.js 的 TRAIT_LEAD，收著的卡片先藏起來）；回合句型不會以它開頭
+# 只在氣血真的低時才挑的句子（Task 4 審查 M3）：功效名 → 句子裡的暗號。S1 的三句厚裡有一句寫「氣血見底」，氣血不低的人不能被寫成見底
+LOW_HP_MARKS = {"厚": "氣血見底"}
+
+
+def trait_line(
+    content: Content, name: str, who: str, art: str, foe: str, rng: random.Random, low_hp: bool = True,
+) -> str:
+    """一句功效的演出（S1 寫的，content/trait_lines.json）：前面標〔功效名〕，{who}{art}{foe} 換成本人、帶這個功效的那一門、對手。
+    句子由呼叫端給的 rng 挑（引擎用名號＋戰報流水號當種子，不碰 Game.rng）；內容沒有這個功效的句子（舊內容）就用一句通用的。
+    low_hp 是這一場開打前氣血是不是真的低：不低時，帶 LOW_HP_MARKS 暗號的句子（厚的「氣血見底」）不挑；挑完沒句子了
+    （內容只寫了那一句）就用通用的。預設 True＝每一句都能挑。
+    載入時 content.check_traits 已經確定每一句的佔位都是乾淨的 {who}、{art}、{foe}，所以這裡 format 不會丟例外。"""
+    pool = content.trait_lines.get(name) or []
+    mark = LOW_HP_MARKS.get(name)
+    if mark and not low_hp:
+        pool = [text for text in pool if mark not in text]
+    text = rng.choice(pool or ["{who}的【{art}】起了作用。"])
+    return f"{TRAIT_LEAD}{name}〕" + text.format(who=who, art=art, foe=foe)
+
+
 def _rounds_block(record: BattleRecord) -> list[str]:
-    """戰報的「過程」：一回合一行（Markdown 清單）。大場面有模型寫的那一版（narration，武學與成長設計 8.3）就寫它、一段話，
-    取代範本句子的回合。決戰與舊戰報沒有。"""
-    if record.narration:
-        return [f"**過程**\n{record.narration}"]
-    if not record.rounds:
+    """戰報的「過程」：功效開打前的句子、一回合一行（Markdown 清單）、功效受傷與結果出來的句子（武學與成長設計 13.6）。
+    大場面有模型寫的那一版（narration，8.3）就寫它、一段話（功效的句子各佔一行、在那段話的前與後），取代範本句子的回合。
+    決戰與舊戰報沒有回合也沒有功效的句子。"""
+    body = [record.narration] if record.narration else list(record.rounds)
+    lines = [*record.trait_before, *body, *record.trait_after]
+    if not lines:
         return []
-    return ["**過程**\n" + "\n".join(f"- {line}" for line in record.rounds)]
+    if record.narration:
+        return ["**過程**\n" + "\n".join(lines)]
+    return ["**過程**\n" + "\n".join(f"- {line}" for line in lines)]
 
 
-def _story_part(record: BattleRecord) -> str:
-    story = story_text(record)
+def levelup_line(ups: LevelUps, points: int | None = None) -> str:
+    """卡片上升級的那一行（FB-074）：把一次打完的升級收成一行。本人寫最後升到的等級加上還沒配的點數（沒有點就不寫括號），
+    同伴照升到的等級分組、同一級的名字併在一起、組照第一次出現的順序；本人與同伴用「・」接起來。例如
+    「升到第 11 級（可配 3 點）・關羽、張飛、劉備升到第 4 級」「關羽升到第 4 級、張飛升到第 3 級」。
+    points 是畫的這一刻狀態列上的點數；不給就用升級那一刻存下的（ups.points）。"""
+    parts = []
+    if ups.you is not None:
+        left = ups.points if points is None else points
+        parts.append(f"升到第 {ups.you} 級" + (f"（可配 {left} 點）" if left > 0 else ""))
+    by_level: dict[int, list[str]] = {}
+    for name, level in ups.mates:
+        by_level.setdefault(level, []).append(name)
+    if by_level:
+        parts.append("、".join(f"{'、'.join(names)}升到第 {level} 級" for level, names in by_level.items()))
+    return "・".join(parts)
+
+
+def _story_part(record: BattleRecord, points: int | None = None, *, compact: bool = False) -> str:
+    """「結果」那一句。compact（場景裡的戰鬥卡片）時，有人升級的那幾句（record.levelups.lines）換成一行簡短的
+    （levelup_line）；其他的敘事照舊。戰報頁（不 compact）照 notes 原文，完整的句子都在。"""
+    ups = record.levelups if compact else None
+    if ups is None:
+        story = story_text(record)
+    else:
+        told = set(ups.lines)
+        kept = [n for n in record.notes if n not in told and not n.startswith("【江湖傳聞】")]
+        story = "　".join([*kept, levelup_line(ups, points)])
     return f"**結果**　{story}" if story else ""
 
 
@@ -201,21 +251,23 @@ def _gains_block(record: BattleRecord) -> list[str]:
     return [gains] if gains else []
 
 
-def _outcome_block(record: BattleRecord) -> list[str]:
-    """卡片的最後一段：結果與得失併成同一段，「**結果**　敘事　**得失**　數值」（手機上少一段的間距）；沒有敘事就只有得失。"""
-    outcome = "　".join(part for part in (_story_part(record), _gains_part(record, "得失")) if part)
+def _outcome_block(record: BattleRecord, points: int | None = None) -> list[str]:
+    """卡片的最後一段：結果與得失併成同一段，「**結果**　敘事　**得失**　數值」（手機上少一段的間距）；沒有敘事就只有得失。
+    升級收成一行（_story_part 的 compact，FB-074）。"""
+    outcome = "　".join(part for part in (_story_part(record, points, compact=True), _gains_part(record, "得失")) if part)
     return [outcome] if outcome else []
 
 
-def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text) -> str:
+def card_text(record: BattleRecord, when: Callable[[float], str] = clock_text, points: int | None = None) -> str:
     """場景裡的戰鬥卡片（Markdown）：標題、時間與類型、結果、（過程）、（劇情結果）與得失併成一段。when 是時間的寫法（見 list_label）。
     過程整段都在；「剛剛」那張卡片只露第一回合、點了才攤開，是網頁的事（web/app.js 的 roundsFold）。
     戰報頁（detail_text）的結果與獲得與損失照舊各一段，只有場景裡這張卡片併成一段。
-    標題、時間與類型、結果三行同一塊（單換行：標題是 h3，底下兩行是同一個 <p>）——手機上只佔一塊的間距，不是三塊。"""
+    標題、時間與類型、結果三行同一塊（單換行：標題是 h3，底下兩行是同一個 <p>）——手機上只佔一塊的間距，不是三塊。
+    升級的幾句在卡片上收成一行（levelup_line，FB-074）；points 是現在還沒配的屬性點，畫那一行用（不給就用升級那一刻的）。"""
     return "\n\n".join([
         "\n".join([_title(record), _when(record, when), _result_line(record)]),
         *_rounds_block(record),
-        *_outcome_block(record),
+        *_outcome_block(record, points),
     ])
 
 

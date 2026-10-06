@@ -31,8 +31,10 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import threading
 import time
+import traceback
 import unicodedata
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -51,6 +53,7 @@ from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
+from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
@@ -190,25 +193,35 @@ def _pause_model() -> None:
 
 
 @contextlib.contextmanager
+def _model_guard(game: Game):
+    """已經拿到行動鎖之後：這一次拿鎖的鎖內模型額度重新開始；全服斷路器開著時一開始就用完；這一次拿鎖裡（動作出錯也算）
+    有鎖內的模型呼叫失敗，就打開斷路器（見 MODEL_BREAKER_SECONDS）。玩家請求（_locked）與排程（world_step）共用這一套。
+    一定寫成 `with game.world.action_lock(), _model_guard(game)`：沒拿著鎖就用它直接丟 RuntimeError（審查 M1），
+    順序寫反不會悄悄在鎖外歸零額度。用 RuntimeError 不用 assert：python -O 也照樣擋。"""
+    if not game.world.db.writing():
+        raise RuntimeError("_model_guard 要在拿到行動鎖之後用：with game.world.action_lock(), _model_guard(game)")
+    game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
+    paused = _model_paused()
+    if paused:
+        game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
+    try:
+        yield
+    finally:
+        if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
+            _pause_model()
+
+
+@contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
-    鎖內的模型呼叫歸全服的斷路器管（見 MODEL_BREAKER_SECONDS）：開著時這一次拿鎖一開始額度就用完；這一次拿鎖
-    （動作出錯也算）有鎖內的模型呼叫失敗，就打開它。"""
-    with game.world.action_lock():
-        game.reset_model_budget()  # 新的一次拿鎖：鎖內的模型呼叫重新有額度（一次拿鎖期間只容忍一次失敗，見 Game._quick_client）
-        paused = _model_paused()
-        if paused:
-            game._model_budget.gave_up = True  # 斷路器開著：額度一開始就用完（直接碰 Game 的私有欄位，PM 同意只在這裡這樣做）
+    鎖內的模型額度與斷路器見 _model_guard。"""
+    with game.world.action_lock(), _model_guard(game):
         _reload(game)
         game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        try:
-            yield
-        finally:
-            if not paused and game._model_budget.gave_up:  # 這一次拿鎖裡鎖內的模型呼叫失敗了（私有欄位，同上）
-                _pause_model()
+        yield
 
 
 def act(game: Game, action) -> list[str] | None:
@@ -226,6 +239,119 @@ def look(game: Game, view):
     """只讀的畫面（點名冊、切圖層、看戰報）：拿鎖、重讀角色，但不同步、不存檔。"""
     with _locked(game):
         return view(game)
+
+
+# 排程用的那一份沒有玩家的 Game（Game.for_world）。只有排程執行緒（start_scheduler，只從 main() 開、只開一條）用它，
+# 請求的處理從不呼叫 world_step；在 world_step 裡、第一次用到時才建，建不起來就跟這一下的其他錯誤一樣由排程迴圈印出來、下一下再建
+WORLD_GAME: Game | None = None
+
+
+def world_step(clock: Callable[[], float] = time.time) -> list[str]:
+    """伺服器排程的一下（線上架構設計第四節）：拿行動鎖（跟玩家請求同一把、等到拿到為止），推全服的事到現在
+    （Game.world_tick）。鎖內的模型呼叫照玩家請求那一套額度與斷路器（_model_guard）。
+    現在時間在拿到鎖之後才讀（clock()，跟 act() 一樣）：等鎖等得再久，這一下開的集結、回合的期限也不會因此變短。
+    clock 是牆上的時鐘（time.time）：共用賽季的 season_last_real 與決戰的期限存的都是它，不能用 monotonic。
+    出錯時交易整筆撤回、鎖放掉，記憶體裡那份做到一半的空殼也丟掉（下一下從資料庫重建，跟 _reload 同一個道理），
+    例外丟給呼叫端（排程迴圈印出來、下一輪照跑）。回傳的訊息不要逐下印出來：裡面可能有參戰者的名號。"""
+    global WORLD_GAME
+    if WORLD_GAME is None:
+        WORLD_GAME = Game.for_world(CONTENT, open_world())
+    game = WORLD_GAME
+    try:
+        with game.world.action_lock(), _model_guard(game):
+            return game.world_tick(clock())
+    except BaseException:
+        WORLD_GAME = None
+        raise
+
+
+SCHEDULER_STOP = threading.Event()  # 讓排程執行緒停下來（測試用；伺服器關掉時執行緒是 daemon，跟著結束）
+SCHEDULER_THREAD: threading.Thread | None = None  # 正在跑的那一條排程執行緒（一個伺服器只開一條，見 start_scheduler）
+_SCHEDULER_LOCK = threading.Lock()
+SCHEDULER_REPEAT_SUMMARY_SECONDS = 600  # 同一個錯一直重複時，每幾秒印一行累計的次數（第一次照樣整段印，見 _StepFailures）
+
+
+class _StepFailures:
+    """排程那一下出錯的紀錄。只寫例外的類別（stdout 一行）與呼叫堆疊（stderr，程式碼的位置與那幾行原始碼），
+    例外訊息一概不寫：常夾著名號（伺服器視窗不該看得出誰在打、誰是假人），跟 bot_runner.log_failure 同一個規矩（最終審查 I1）。
+    同一個錯（同一個類別、在同一行丟出來）一直重複時，第一次整段印，之後只數次數：換了別的錯、或距離上一次印滿
+    SCHEDULER_REPEAT_SUMMARY_SECONDS 秒，才印一行「又出錯 N 次」（最終審查 M2：每 10 秒一下，不收斂的話一天八千多段）。
+    寫紀錄本身出錯（主控台的編碼寫不出某個字、主控台不見了）一律吞掉：記錄不能讓排程停下來。
+    clock 只給節流用（預設 time.monotonic），跟世界時間無關。"""
+
+    def __init__(self, clock: Callable[[], float]):
+        self.clock = clock
+        self.key: tuple[str, str | None, int | None] | None = None  # 上一個整段印過的錯：（類別, 檔案, 行號）
+        self.repeats = 0  # 它之後又出了幾次、還沒交代
+        self.since = 0.0  # 上一次印（整段或摘要）的時刻
+
+    def failed(self, exc: BaseException) -> None:
+        with contextlib.suppress(Exception):
+            frames = traceback.extract_tb(exc.__traceback__)
+            top = frames[-1] if frames else None
+            key = (type(exc).__name__, top.filename if top else None, top.lineno if top else None)
+            if key == self.key:
+                self.repeats += 1
+                return
+            self._summary()  # 換了別的錯：上一個錯還沒交代的次數先交代
+            self.key, self.since = key, self.clock()
+            print(f"排程這一下出錯：{type(exc).__name__}", flush=True)
+            sys.stderr.write("".join(traceback.format_tb(exc.__traceback__)))
+            sys.stderr.flush()
+
+    def tick(self) -> None:
+        """每一下之後都叫（成功也叫）：同一個錯攢了次數、距離上一次印滿 SCHEDULER_REPEAT_SUMMARY_SECONDS 秒就印一行摘要。"""
+        with contextlib.suppress(Exception):
+            if self.repeats and self.clock() - self.since >= SCHEDULER_REPEAT_SUMMARY_SECONDS:
+                self._summary()
+
+    def _summary(self) -> None:
+        if self.key is None or not self.repeats:
+            return
+        count, self.repeats, self.since = self.repeats, 0, self.clock()
+        print(f"排程這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
+
+
+def run_scheduler(
+    interval: float, stop: threading.Event, step=None, clock: Callable[[], float] = time.time,
+    log_clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """排程迴圈：每 interval 秒叫一次 step(clock)（預設是 world_step，它拿到行動鎖之後才讀 clock），直到 stop 被設起來。
+    一下出錯就記下來（_StepFailures：只寫例外的類別與呼叫堆疊，同一個錯重複時只數次數），下一輪照跑：排程不能因為一次
+    例外、也不能因為寫紀錄出錯就停掉，不然世界又變成等人點擊才動。
+    每一下回傳的訊息不印：裡面可能有參戰者的名號，伺服器視窗不該看得出誰在打、誰是假人。
+    step 預設寫成 None 再取 world_step：測試用 monkeypatch 換掉 server.world_step 時，執行緒拿到的是換過的那一個。
+    log_clock 只給出錯紀錄的節流用；世界的時間一律是 clock（牆上時鐘）。"""
+    step = step or world_step
+    failures = _StepFailures(log_clock)
+    while not stop.wait(interval):
+        try:
+            step(clock)
+        except Exception as e:  # noqa: BLE001  任何錯都不能讓排程死掉
+            failures.failed(e)
+        failures.tick()
+
+
+def scheduler_line(interval: float) -> str:
+    if interval <= 0:
+        return "排程：關（世界時間等有人連線才推）"
+    return f"排程：每 {interval:g} 秒推一次全服的事（世界時間、時刻表、決戰逾時、季末）"
+
+
+def start_scheduler(interval: float) -> threading.Thread | None:
+    """開關打開（interval > 0）時開排程執行緒（daemon：伺服器關掉時跟著結束）；關著回 None。
+    只有 main() 呼叫它（import 時不開），一個伺服器只開一條：已經有一條在跑就丟 RuntimeError（WORLD_GAME 只給一條執行緒用）。"""
+    global SCHEDULER_THREAD
+    if interval <= 0:
+        return None
+    with _SCHEDULER_LOCK:
+        if SCHEDULER_THREAD is not None and SCHEDULER_THREAD.is_alive():
+            raise RuntimeError("排程執行緒已經在跑了：一個伺服器只開一條")
+        SCHEDULER_THREAD = threading.Thread(
+            target=run_scheduler, args=(interval, SCHEDULER_STOP), daemon=True, name="world-scheduler",
+        )
+        SCHEDULER_THREAD.start()
+        return SCHEDULER_THREAD
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
@@ -384,11 +510,11 @@ def main_view(game: Game) -> dict:
         "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
-        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是公告卡（休季是結算卡）上已經有全文的大事，
+        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是本週大事（江湖頁那排小標「大事」點開的面板；休季是結算卡）上已經有全文的大事，
         # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
         "now": game.battle_extra_html() if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
-        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁最上面的公告卡：這一週的大事；開關關著是空的
+        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
@@ -1056,6 +1182,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
+    interval = CONTENT.config.world_tick_seconds
+    print(scheduler_line(interval), flush=True)
+    start_scheduler(interval)
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")

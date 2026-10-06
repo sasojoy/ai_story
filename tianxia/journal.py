@@ -295,7 +295,14 @@ _NEW_THING = re.compile(
 
 
 def _line_class(line: str) -> str:
-    return "tx-line tx-new" if _NEW_THING.search(line) else "tx-line"
+    """一行的 class：「拿到新東西」的掃光（tx-new）；伏筆聽來的那一句再加 tx-hearsay（FB-074）——它常有兩三行高，網頁把戰鬥卡片
+    底下的那一句收成一行、點了看全文，認的是這個標記（引擎自己的 FRAGMENT_PREFIX），網頁不去讀句子的字。"""
+    classes = ["tx-line"]
+    if _NEW_THING.search(line):
+        classes.append("tx-new")
+    if line.startswith(FRAGMENT_PREFIX):
+        classes.append("tx-hearsay")
+    return " ".join(classes)
 
 
 def _lines(lines: list[str]) -> str:

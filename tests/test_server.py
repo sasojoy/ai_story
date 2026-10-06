@@ -1,8 +1,12 @@
+import ast
 import contextlib
 import hashlib
+import io
 import random
 import re
 import sqlite3
+import sys
+import threading
 import time
 from unittest import mock
 
@@ -35,6 +39,18 @@ def season_already_open(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
 
 
+def _stop_scheduler() -> None:
+    """排程執行緒也是 server 的模組狀態：測試留下來的那一條先停掉、等它真的結束，再把停止的旗子放下，
+    免得它在後面測試的暫存資料庫上推世界。"""
+    thread = server.SCHEDULER_THREAD
+    if thread is not None:
+        server.SCHEDULER_STOP.set()
+        thread.join(5.0)
+        assert not thread.is_alive()
+    server.SCHEDULER_THREAD = None
+    server.SCHEDULER_STOP.clear()
+
+
 @pytest.fixture(autouse=True)
 def _no_landing(monkeypatch):
     """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
@@ -43,12 +59,17 @@ def _no_landing(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_server_memory():
-    """登入紀錄、登入狀態、角色快取都只放在伺服器記憶體裡：每個測試從空的開始。"""
+    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
+    不然上一個測試的暫存資料庫會被沿用。"""
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
     yield
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +113,7 @@ def _fixed(event_id: str, week: int, day: float = 0):
 
 
 def test_main_view_bulletin_this_week(monkeypatch):
-    """江湖頁最上面的公告卡：這一週已經發生的大事（Markdown 轉成 HTML），最多 3 則、新的在前。"""
+    """江湖頁那排小標「大事」點開的本週大事：這一週已經發生的大事（Markdown 轉成 HTML），最多 3 則、新的在前。"""
     content = server.CONTENT
     monkeypatch.setattr(content.config, "season_one", True)
     monkeypatch.setattr(content.config, "season_days", 2.5)
@@ -109,7 +130,7 @@ def test_main_view_bulletin_this_week(monkeypatch):
 
 
 def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
-    """FB-046：時刻表大事補進江湖紀錄那一則，全文公告卡上已經有了，江湖頁的「剛剛」（now）不再寫一次，
+    """FB-046：時刻表大事補進江湖紀錄那一則，全文本週大事上已經有了，江湖頁的「剛剛」（now）不再寫一次，
     改放再前面那一則（這裡是開場那一則）；江湖紀錄頁（latest＋journal＋older）照舊從最新一則列起。"""
     content = server.CONTENT
     monkeypatch.setattr(content.config, "season_one", True)
@@ -130,7 +151,7 @@ def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
 
 
 def test_season_one_off_changes_nothing(game, monkeypatch):
-    """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、公告卡是空的。"""
+    """開關關著（現在的試玩伺服器）：推進一週，時刻表不跑、狀態列沒有季曆、本週大事是空的。"""
     monkeypatch.setattr(server.CONTENT, "timetable", season_one_events())
     assert server.CONTENT.config.season_one is False
     game.advance(7 * 86400)
@@ -1063,7 +1084,8 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
     assert "roundsFold(card, id)" in _js_function(js, "function fightCard(")
     assert "roundsFold" not in _js_function(js, "function pageNews(")  # 戰報頁整段列出
     assert 'case "rounds-more"' in js and "S.roundsOpen = open ? S.main.card_id : null" in js
-    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(:first-child\) \{([^}]*)\}", css)
+    # 收著時只露第一個「不是功效句」的 li（功效句藏起來，Task 4 審查 I-1）：沒有功效句的卡片就是第一個 li，跟以前一樣
+    hidden = re.search(r"\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\) ~ li:not\(\.trait\) \{([^}]*)\}", css)
     assert hidden is not None and "display: none" in hidden.group(1)
     assert re.search(r"\.battle-card ul\.rounds > li:nth-child\(2\) \{ animation-delay: [\d.]+s; \}", css)
 
@@ -1094,8 +1116,13 @@ def _app_functions_in_node(js: str, script: str) -> str:
     node = shutil.which("node")
     if node is None:
         pytest.skip("沒有裝 node")
-    consts = [re.search(rf"(?m)^  const {name} = .*;$", js).group(0) for name in ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink")]
-    funcs = [_js_function(js, f"function {name}(") + "\n  }" for name in ("roundsFold", "withReportLink", "fightCard", "compactRound")]
+    names = ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink", "TRAIT_LEAD")
+    consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
+    funcs = [
+        _js_function(js, f"function {name}(") + "\n  }"
+        for name in ("roundsFold", "withReportLink", "fightCard", "compactRound", "foldTraitItems", "foldTraitText")
+        if f"function {name}(" in js
+    ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
     done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
                           capture_output=True, timeout=60)
@@ -1335,6 +1362,206 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
         assert (mark in html) == bool(record.narration), (text, html)
         # 結果與得失併成同一段（卡片上少一段的間距），沒被吞進任何區塊
         assert "<p><strong>結果</strong>　波才抱拳認輸。　<strong>得失</strong>　" in html, (text, html)
+
+
+def test_a_trait_line_can_lead_the_folded_process_and_the_page_still_recognizes_it():
+    """計畫六 Task 4（N1）：功效開打前的句子排在回合前面，收著的「過程」露出的第一行因此是〔先手〕之類的句子、不是「第1回合」。
+    網頁認的 ROUNDS_MARK／TALE_MARK 照舊對得上（過程那一段的開頭沒變），第一個 <li> 就是功效的句子；
+    大場面的一段話則是功效的句子與模型的話在同一個 <p> 裡、各佔一行（<br />）。"""
+    from tianxia import battlelog
+    from tianxia.state import BattleRecord, Fighter
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    rounds_mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    tale_mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
+    base = dict(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10, rounds=["第1回合　甲，你氣血 -5；乙，對手氣勢 -34。", "第2回合　丙。"],
+        trait_before=["〔先手〕沈浪搶得先機，【穿林腿】出手在前。"], trait_after=["〔乘勝〕沈浪越打越順，這一仗收穫格外多。"],
+    )
+    html = server.md(battlelog.card_text(BattleRecord(**base)))
+    assert rounds_mark in html
+    after_mark = html[html.index(rounds_mark) + len(rounds_mark):]
+    assert after_mark.startswith("\n<li>〔先手〕沈浪搶得先機，【穿林腿】出手在前。</li>\n<li>第1回合") and "<li>〔乘勝〕" in after_mark
+    tale = server.md(battlelog.card_text(BattleRecord(**base, narration="波才刀勢沉猛，你左支右絀。")))
+    assert tale_mark in tale and "<ul" not in tale
+    assert tale[tale.index(tale_mark):].startswith(tale_mark + "〔先手〕沈浪搶得先機，【穿林腿】出手在前。<br />\n波才刀勢沉猛，你左支右絀。<br />\n〔乘勝〕")
+
+
+def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
+    """收著的第一行是功效的句子時，fitFirstRound 量到太高也不會把它縮成數字行：compactRound 只認「第N回合」開頭的句子，
+    〔功效名〕開頭的一律回 null、整句照常顯示（寧可多佔一行也不藏字）。S1 的 45 句，每一句配上一個人名與一群人都試過；
+    S1 的句子本來就不寫數字（content.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    lines = []
+    for name, pool in server.CONTENT.trait_lines.items():  # 伺服器載的是正式內容
+        for text in pool:
+            for foe in ("波才", "黃巾散兵"):
+                lines.append(f"〔{name}〕" + text.format(who="沈浪", art="基礎拳腳", foe=foe))
+    assert len(lines) == 90
+    script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
+    assert json.loads(_app_functions_in_node(js, script)) == [None] * len(lines)
+
+
+# 收著的「剛剛」卡片（Task 4 審查 I-1）：功效的演出句只在展開與戰報頁才看得到，收著時照舊由第一回合帶頭。
+# 網頁沒有 DOM 測試框架：app.js 的標記在 node 裡真的跑（roundsFold／fightCard 認得〔開頭的句子、標成 trait），
+# 「收著時看得到什麼」由下面這段小程式照 style.css 的兩條規則算（規則本身由靜態測試釘死，兩邊對得上才算數）。
+FOLD_VIEW_SCRIPT = r"""
+const cards = __CARDS__;
+const strip = (s) => s.replace(/<[^>]+>/g, "").trim();
+// 鏡像 style.css：.rounds:not(.open) > li.trait 藏起來、其他的 li 只露第一個；.rounds-tale:not(.open) .trait 藏起來
+function view(html, open) {
+  const list = /<ul class="rounds( open)?">([\s\S]*?)<\/ul>/.exec(html);
+  if (list) {
+    const items = list[2].match(/<li[^>]*>[\s\S]*?<\/li>/g) || [];
+    const shown = [];
+    for (const li of items) {
+      const isTrait = /^<li class="trait">/.test(li);
+      if (list[1] || open) { shown.push(strip(li)); continue; }
+      if (isTrait || shown.length) continue;
+      shown.push(strip(li));
+    }
+    return shown;
+  }
+  const tale = /<p class="rounds-tale( open)?">([\s\S]*?)<\/p>/.exec(html);
+  if (tale) {
+    const text = (tale[1] || open) ? tale[2] : tale[2].replace(/<span class="trait">[\s\S]*?<\/span>/g, "");
+    return text.split("<br />").map(strip).filter(Boolean);
+  }
+  return null;
+}
+const out = {};
+for (const [name, card] of Object.entries(cards)) {
+  S.roundsOpen = null; const shut = fightCard(card, 7);
+  S.roundsOpen = 7; const open = fightCard(card, 7);
+  out[name] = { shut: view(shut, false), open: view(open, true), shutHtml: shut, first: null };
+  const lead = out[name].shut && out[name].shut[0];
+  out[name].compact = lead ? compactRound(lead) : null;
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def _fold_view(cards: dict[str, str]) -> dict:
+    import json
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    return json.loads(_app_functions_in_node(js, FOLD_VIEW_SCRIPT.replace("__CARDS__", json.dumps(cards, ensure_ascii=False))))
+
+
+def _trait_card_record(**extra):
+    from tianxia.state import BattleRecord, Fighter
+
+    base = dict(
+        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
+        our_power=50, difficulty=10,
+        rounds=["第1回合　甲以【穿林腿】身形一晃，搶到側面出手，對手氣勢 -34；水寇掄起兵刃猛砸過來，你氣血 -12。", "第2回合　乙。", "第3回合　丙。"],
+        trait_before=["〔先手〕沈浪搶得先機，【穿林腿】出手在前。", "〔險〕沈浪兵行險著，【穿林腿】專走險路。"],
+        trait_after=["〔化勁〕沈浪以【基礎吐納】卸去來勢，傷得輕了。"],
+    )
+    return BattleRecord(**(base | extra))
+
+
+def test_the_folded_fight_card_leads_with_round_one_and_hides_the_trait_lines():
+    """兩句開打前的功效、三個回合、一句之後的功效：收著時看得到的只有第一回合（太長時就是 fitFirstRound 縮成的數字行），
+    沒有任何〔開頭的句子；展開之後全部照今天的順序列出（前面的功效句、回合、後面的功效句）。大場面的一段話也一樣：
+    收著只剩模型的話（兩行的截斷看到的是它），展開才有功效的句子在前與後。"""
+    from tianxia import battlelog
+
+    cards = {
+        "list": server.md(battlelog.card_text(_trait_card_record())),
+        "tale": server.md(battlelog.card_text(_trait_card_record(narration="波才刀勢沉猛，你左支右絀，硬是撐過了這一輪。"))),
+    }
+    seen = _fold_view(cards)
+    folded, opened = seen["list"]["shut"], seen["list"]["open"]
+    assert len(folded) == 1 and folded[0].startswith("第1回合") and not any("〔" in line for line in folded)
+    assert [line[:4] for line in opened] == ["〔先手〕", "〔險〕沈", "第1回合", "第2回合", "第3回合", "〔化勁〕"]
+    assert seen["list"]["compact"] == "第1回合　對手氣勢 -34，你氣血 -12……"  # 太高時 fitFirstRound 換成的數字行：第一回合的數字一個沒少
+    assert 'ul class="rounds"' in seen["list"]["shutHtml"] and seen["list"]["shutHtml"].count('<li class="trait">') == 3
+    tale_shut, tale_open = seen["tale"]["shut"], seen["tale"]["open"]
+    assert tale_shut == ["波才刀勢沉猛，你左支右絀，硬是撐過了這一輪。"]
+    assert len(tale_open) == 4 and tale_open[0].startswith("〔先手〕") and tale_open[-1].startswith("〔化勁〕")
+    assert tale_open[2] == tale_shut[0]  # 展開時模型的話夾在兩句之間，順序跟引擎寫的一樣
+
+
+def test_the_fold_marks_nothing_when_a_card_has_no_trait_lines_or_only_trait_lines():
+    """沒有功效句的卡片（舊戰報、沒有武學的人）一個字都沒變：沒有 trait 標記；全部都是功效句（沒有回合）的卡片不藏，
+    免得收著的「過程」是空的；大場面模型的話剛好以〔開頭、又沒有別的行時也一樣不藏。"""
+    from tianxia import battlelog
+
+    plain = _trait_card_record(trait_before=[], trait_after=[])
+    only = _trait_card_record(rounds=[], trait_before=["〔先手〕甲"], trait_after=["〔乘勝〕乙"])
+    odd = _trait_card_record(narration="〔這是模型寫的話〕你左支右絀。", trait_before=[], trait_after=[])
+    seen = _fold_view({name: server.md(battlelog.card_text(rec)) for name, rec in (("plain", plain), ("only", only), ("odd", odd))})
+    assert 'class="trait"' not in seen["plain"]["shutHtml"] and len(seen["plain"]["shut"]) == 1
+    assert 'class="trait"' not in seen["only"]["shutHtml"] and len(seen["only"]["shut"]) == 1  # 沒有回合：第一句功效句照舊領頭
+    assert 'class="trait"' not in seen["odd"]["shutHtml"] and seen["odd"]["shut"] == ["〔這是模型寫的話〕你左支右絀。"]
+
+
+def test_the_trait_lead_mark_is_the_one_the_engine_writes():
+    """網頁認功效句靠〔這個開頭（TRAIT_LEAD）：引擎的 battlelog.trait_line 一律以它開頭、回合句型一律不是。"""
+    from tianxia import battlelog
+
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    lead = re.search(r'const TRAIT_LEAD = "([^"]*)";', js).group(1)
+    assert lead == battlelog.TRAIT_LEAD == "〔"
+    for name, pool in server.CONTENT.trait_lines.items():
+        for index in range(len(pool)):
+            rng = random.Random(0)
+            rng.choice = lambda items, index=index: items[index]  # noqa: B023  逐句挑
+            assert battlelog.trait_line(server.CONTENT, name, "沈浪", "穿林腿", "山賊", rng).startswith(lead)
+    assert not any(line.startswith(lead) for line in _trait_card_record().rounds)
+
+
+def test_the_folded_fight_card_css_hides_the_trait_lines_and_keeps_one_round():
+    """靜態釘住上面那段小程式鏡像的規則：收著時 li.trait 藏起來、其他的 li 只留第一個（前面已有非功效的 li 就藏）；
+    大場面那一段話收著時藏 .trait 的 span；fitFirstRound 量的是第一個非功效的 li（不是 firstElementChild）；
+    展開、戰報頁不受影響（規則都掛在 :not(.open) 與 .battle-card 底下，戰報頁沒有這張卡片）。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    hide_trait = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li\.trait \{([^}]*)\}", css)
+    one_round = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\) ~ li:not\(\.trait\) \{([^}]*)\}", css)
+    tale = re.search(r"(?m)^\.battle-card p\.rounds-tale:not\(\.open\) \.trait \{([^}]*)\}", css)
+    assert all(rule is not None and "display: none" in rule.group(1) for rule in (hide_trait, one_round, tale))
+    assert ":not(:first-child)" not in css[css.index("ul.rounds:not(.open)"):css.index("/* 收著的第一回合最多兩行")]
+    fit = _js_function(js, "function fitFirstRound(")
+    assert 'querySelector(":scope > li:not(.trait)")' in fit and "firstElementChild" not in fit
+
+
+def test_the_visible_round_of_a_folded_card_does_not_wait_for_the_hidden_trait_lines():
+    """最終審查 M2：延遲是照 nth-child 算的，藏起來的功效句佔著位置，收著時唯一看得到的第一回合（第 2～4 個）要白等 0.25～0.75 秒才浮現
+    （以前是 0 秒）。收著時（:not(.open)）每一個「不是功效句」的 li 延遲都是 0（看得到的只有第一個）；展開之後照位置遞增。
+    要蓋過 nth-child 那幾條，選擇器的權重要比它們高：這裡照 CSS 的規則算給你看。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    folded = re.search(r"(?m)^(\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\)) \{([^}]*)\}", css)
+    assert folded is not None and re.search(r"animation-delay: 0s;?", folded.group(2))
+
+    def specificity(selector: str) -> tuple[int, int]:
+        classes = len(re.findall(r"\.[\w-]+", selector)) + len(re.findall(r":(?!not)[\w-]+", selector))  # :not(.x) 算裡面的 .x
+        elements = len(re.findall(r"(?<![.:#\w-])[a-z]+\b", selector))
+        return classes, elements
+
+    staggers = re.findall(r"(?m)^(\.battle-card ul\.rounds > li:nth-child\([^)]*\)) \{ animation-delay", css)
+    assert staggers and all(specificity(folded.group(1)) > specificity(selector) for selector in staggers)
+    assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]  # 減少動態照舊整站關掉
+
+
+def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
+    """Task 4 審查 M4：功效的句子加進去之後過程可以有十幾行（3＋5＋8），延遲只寫到第 5 個的話，第 6 個以後會比第 2～5 個先浮現。
+    現在每一個位置都有延遲，而且一路不減；減少動態（prefers-reduced-motion）整站關動畫的規則照舊。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    delays = {1: 0.0}
+    for number, seconds in re.findall(r"\.battle-card ul\.rounds > li:nth-child\((\d+)\) \{ animation-delay: ([\d.]+)s; \}", css):
+        delays[int(number)] = float(seconds)
+    catch_all = re.search(r"\.battle-card ul\.rounds > li:nth-child\(n\+(\d+)\) \{ animation-delay: ([\d.]+)s; \}", css)
+    assert catch_all is not None and max(delays) == int(catch_all.group(1)) - 1  # 最後一個明寫的位置接著 n+K 的收尾規則
+    assert sorted(delays) == list(range(1, max(delays) + 1)) and max(delays) >= 12  # 沒有跳號、至少涵蓋常見的十二行
+    ordered = [delays[number] for number in sorted(delays)]
+    assert ordered == sorted(ordered) and len(set(ordered)) == len(ordered)  # 嚴格遞增：後面的一定晚浮現
+    assert float(catch_all.group(2)) >= ordered[-1]
+    assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]
 
 
 def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
@@ -1805,6 +2032,342 @@ def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(mo
     assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
 
 
+# ── 伺服器自己的排程：排程的一下（world_step）跟玩家請求同一把鎖、同一套鎖內模型守衛 ──────────────
+
+
+def test_world_step_pushes_the_season_under_the_action_lock(monkeypatch):
+    """排程的一下：拿行動鎖、推全服的事；鎖內的模型額度照玩家請求那一套（斷路器開著時這一下也不叫模型）。"""
+    held = []
+    real_lock = SqliteWorldStore.action_lock
+
+    def spy_lock(self, timeout=None):
+        held.append(timeout)
+        return real_lock(self, timeout)
+
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy_lock)
+    server.world_step(lambda: 1000.0)
+    before = open_world().get_season().time
+    server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+    assert held and all(t is None for t in held)  # 跟玩家請求一樣等到拿到為止
+
+
+def test_world_step_reads_the_clock_inside_the_action_lock():
+    """排程那一下的現在時間在拿到行動鎖之後才讀（跟 act() 一樣）：等鎖等了多久，這一下開的集結、回合的期限都不會因此變短。"""
+    seen = []
+
+    def clock():
+        seen.append(database.open_database().writing())
+        return 1000.0
+
+    server.world_step(clock)
+    assert seen == [True]
+
+
+def test_world_step_respects_the_model_breaker(monkeypatch, breaker_clock):
+    """斷路器開著時，排程那一下的鎖內模型額度一開始就用完（跟 _locked 同一套 _model_guard）。"""
+    seen = []
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: seen.append(self._model_budget.gave_up) or [])
+    server._pause_model()
+    server.world_step(lambda: 1000.0)
+    assert seen == [True]
+
+
+def test_the_model_guard_refuses_to_run_without_the_action_lock(game):
+    """_model_guard 假設已經拿到行動鎖（審查 M1）：沒拿鎖就用它直接丟 RuntimeError，不會悄悄在鎖外歸零額度、查斷路器。
+    所以把順序寫反（with _model_guard(g), action_lock()）的呼叫端一進來就會壞。"""
+    with pytest.raises(RuntimeError, match="行動鎖"), server._model_guard(game):
+        pass
+    with game.world.action_lock(), server._model_guard(game):
+        pass
+
+
+def test_every_lock_hold_resets_the_model_budget_while_holding_the_lock(game, monkeypatch):
+    """玩家請求（act、look）與排程（world_step）都是先拿到行動鎖、才歸零鎖內的模型額度。"""
+    seen = []
+    real = Game.reset_model_budget
+    monkeypatch.setattr(Game, "reset_model_budget", lambda self: seen.append(self.world.db.writing()) or real(self))
+    server.act(game, lambda g: None)
+    server.look(game, lambda g: None)
+    server.world_step(lambda: 1000.0)
+    assert seen == [True, True, True]
+
+
+def test_a_failed_in_lock_call_in_a_world_step_trips_the_breaker_for_everyone(game, monkeypatch, breaker_clock, capsys):
+    """排程那一下鎖內的模型呼叫失敗：跟玩家請求一樣打開全服的斷路器、印同一行，下一個玩家的拿鎖一開始額度就用完。"""
+    sent = _model_down(monkeypatch)
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: _ask_the_model_in_the_lock(self) or [])
+    server.world_step(lambda: 1000.0)
+    assert len(sent) == 1
+    assert server.look(game, lambda g: (g._model_budget.gave_up, g._quick_client())) == (True, None)
+    assert len(sent) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        f"鎖內的模型呼叫失敗或逾時：接下來 {server.MODEL_BREAKER_SECONDS} 秒全服鎖內不叫模型，改用固定文字。",
+    ]
+
+
+def _lock_is_free() -> bool:
+    """另一個執行緒拿得到行動鎖嗎（拿不到就是有人沒放）。"""
+    got = []
+
+    def grab():
+        with contextlib.suppress(TimeoutError), open_world().action_lock(timeout=2.0):
+            got.append(True)
+
+    thread = threading.Thread(target=grab)
+    thread.start()
+    thread.join(5.0)
+    return got == [True]
+
+
+def test_a_failed_world_step_rolls_back_and_releases_the_lock(monkeypatch):
+    """排程那一下出錯：這一下推的整筆撤回、鎖放掉、例外丟給呼叫端；記憶體裡那份做到一半的空殼也不留，下一下從資料庫重建、
+    照常推（Review Focus 2 的伺服器這一半）。"""
+    server.world_step(lambda: 1000.0)  # 第一下只記下時鐘
+    before = open_world().get_season().time
+    real_tick = Game.world_tick
+
+    def tick_then_fail(self, now):
+        real_tick(self, now)
+        raise RuntimeError("這一下壞了")
+
+    monkeypatch.setattr(Game, "world_tick", tick_then_fail)
+    with pytest.raises(RuntimeError, match="這一下壞了"):
+        server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before)  # 推過的那一段撤回了
+    assert _lock_is_free()
+    assert server.WORLD_GAME is None
+    monkeypatch.setattr(Game, "world_tick", real_tick)
+    server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+
+
+def test_a_world_step_that_cannot_build_its_game_raises_and_tries_again_next_time(monkeypatch):
+    """建那一份沒有玩家的 Game 就失敗（例如資料庫一時打不開）：例外丟給呼叫端（排程迴圈印出來），下一下重新建。"""
+    real = Game.for_world
+    calls = []
+
+    def flaky(content, world, rng=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("資料庫打不開")
+        return real(content, world, rng)
+
+    monkeypatch.setattr(Game, "for_world", staticmethod(flaky))
+    with pytest.raises(OSError):
+        server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is None
+    server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is not None and len(calls) == 2
+
+
+# ── 排程執行緒與開關（Config.world_tick_seconds，預設 0＝關）──────────────
+
+
+def _boom(exc: BaseException) -> None:
+    """在同一行丟出 exc：排程的出錯紀錄認「同一個錯」看的是類別與丟出來的那一行。"""
+    raise exc
+
+
+def test_scheduler_keeps_running_after_a_failed_step(capsys):
+    """排程那一下出錯：印一行（stdout，只寫例外的類別）加呼叫堆疊（stderr），下一輪照跑；執行緒不會死（Review Focus 2）。
+    例外訊息不寫（常夾著名號，跟 bot_runner.log_failure 一樣，最終審查 I1）；每一下回傳的訊息也不印。"""
+    stop = threading.Event()
+    calls = []
+    broken = RuntimeError("第一下壞了")  # 訊息不寫在丟出來那一行：呼叫堆疊會照實印出那一行原始碼
+
+    def step(clock):
+        calls.append(clock())
+        if len(calls) == 1:
+            _boom(broken)
+        if len(calls) == 3:
+            stop.set()
+        return ["沈浪加入了官軍。"]
+
+    server.run_scheduler(0.001, stop, step=step, clock=lambda: 42.0)
+    assert calls == [42.0, 42.0, 42.0]
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["排程這一下出錯：RuntimeError"]
+    assert "in step" in captured.err and "in _boom" in captured.err  # 呼叫堆疊：程式碼的位置
+    assert "第一下壞了" not in captured.out + captured.err
+    assert "沈浪" not in captured.out + captured.err
+
+
+def _strict_cp950_console(monkeypatch) -> tuple[io.BytesIO, io.BytesIO]:
+    """主控台是 cp950、寫不出的字直接丟例外（errors="strict"）：stdout 導到檔案、環境又不是 UTF-8 時就是這樣
+    （最終審查 I1 重現的情形）。回傳 stdout、stderr 底下的位元組。"""
+    out, err = io.BytesIO(), io.BytesIO()
+    for name, raw in (("stdout", out), ("stderr", err)):
+        monkeypatch.setattr(sys, name, io.TextIOWrapper(raw, encoding="cp950", errors="strict", write_through=True))
+    return out, err
+
+
+def test_a_failed_step_logs_no_names_and_survives_a_console_that_cannot_write_them(monkeypatch):
+    """I1：一下丟出夾著名號的例外（簡體字，cp950 寫不出來）、下一下又丟一個夾著名號的：排程執行緒照樣跑完每一下，
+    主控台只看到例外的類別與程式碼的位置，看不到名號也看不到訊息。以前 print 在 except 裡丟 UnicodeEncodeError，
+    執行緒就這樣死了，世界又變成等人點擊才動。"""
+    out, err = _strict_cp950_console(monkeypatch)
+    stop = threading.Event()
+    secrets_in_messages = [KeyError("孙坚"), RuntimeError("沈浪的存檔讀不進來")]  # 名號不能出現在丟出來那一行的原始碼上
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(secrets_in_messages):
+            _boom(secrets_in_messages[len(calls) - 1])
+        stop.set()
+        return []
+
+    thread = threading.Thread(target=server.run_scheduler, args=(0.001, stop), kwargs={"step": step})
+    thread.start()
+    thread.join(5.0)
+    assert not thread.is_alive() and len(calls) == 3  # 每一下都跑到了：排程沒有死在寫紀錄上
+    text = out.getvalue().decode("cp950") + err.getvalue().decode("cp950")
+    assert "排程這一下出錯：KeyError" in text and "排程這一下出錯：RuntimeError" in text
+    assert "in _boom" in text
+    assert "沈浪" not in text and "存檔讀不進來" not in text
+
+
+def test_a_console_that_breaks_never_stops_the_scheduler(monkeypatch):
+    """寫紀錄本身出錯（主控台不見了、寫不進去）一律吞掉：記錄不能讓排程停下來。"""
+
+    class Gone(io.StringIO):
+        def write(self, text):
+            raise OSError("主控台不見了")
+
+    monkeypatch.setattr(sys, "stdout", Gone())
+    monkeypatch.setattr(sys, "stderr", Gone())
+    stop = threading.Event()
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= 2:
+            _boom(RuntimeError("壞了"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step)
+    assert len(calls) == 3
+
+
+def test_a_failure_that_repeats_every_tick_is_counted_not_flooded(capsys):
+    """同一個錯（同一個類別、在同一行丟出來）一直重複：第一次整段印，之後只數次數，換了別的錯時先印一行「又出錯 N 次」
+    再整段印新的那個，不會每一下都印一整段（最終審查 M2：每 10 秒一下，一天八千多段）。"""
+    stop = threading.Event()
+    kinds = [KeyError] * 4 + [ValueError] * 2
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(kinds):
+            _boom(kinds[len(calls) - 1]("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: 0.0)
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 3 次：KeyError（同一個地方，細節同上）",
+        "排程這一下出錯：ValueError",
+    ]
+    assert captured.err.count("in _boom") == 2  # 整段的呼叫堆疊只印兩次：每個錯第一次
+
+
+def test_a_repeating_failure_still_reports_its_count_every_few_minutes(capsys):
+    """一直是同一個錯：滿 SCHEDULER_REPEAT_SUMMARY_SECONDS 秒印一行累計的次數（log 的節流時鐘跟世界時間無關）。"""
+    stop = threading.Event()
+    now = [0.0]
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) == 3:
+            now[0] = float(server.SCHEDULER_REPEAT_SUMMARY_SECONDS)
+        if len(calls) <= 4:
+            _boom(KeyError("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: now[0])
+    assert capsys.readouterr().out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 2 次：KeyError（同一個地方，細節同上）",
+    ]
+
+
+def test_scheduler_off_starts_nothing():
+    """開關關著（0）：不開執行緒，啟動時印一行說排程關著（Review Focus 5）。"""
+    assert server.start_scheduler(0) is None
+    assert server.SCHEDULER_THREAD is None
+    assert "排程：關" in server.scheduler_line(0)
+    assert "每 10 秒" in server.scheduler_line(10)
+
+
+def test_scheduler_on_runs_steps_in_the_background(monkeypatch):
+    done = threading.Event()
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    thread = server.start_scheduler(0.01)
+    try:
+        assert thread is not None and thread.daemon
+        assert done.wait(2.0)
+    finally:
+        server.SCHEDULER_STOP.set()
+        if thread is not None:
+            thread.join(2.0)
+            assert not thread.is_alive()
+        server.SCHEDULER_STOP.clear()
+
+
+def test_a_second_scheduler_is_refused(monkeypatch):
+    """一個伺服器只開一條排程執行緒（WORLD_GAME 只給一條執行緒用）：已經有一條在跑，再開就拒絕。"""
+    monkeypatch.setattr(server, "world_step", lambda clock: [])
+    first = server.start_scheduler(0.01)
+    with pytest.raises(RuntimeError, match="排程"):
+        server.start_scheduler(0.01)
+    assert server.SCHEDULER_THREAD is first and first.is_alive()
+
+
+def _users_in_server(name: str) -> set[str | None]:
+    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。"""
+    found: set[str | None] = set()
+
+    def visit(node: ast.AST, owner: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Name) and child.id == name:
+                found.add(owner)
+            visit(child, owner)
+
+    visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    return found
+
+
+def test_only_main_starts_the_scheduler_and_only_the_scheduler_runs_world_steps():
+    """排程只有一條：只從 main() 開（import 時不開）；請求的處理從不呼叫 world_step，只有排程迴圈用它。"""
+    assert _users_in_server("start_scheduler") == {"main"}
+    assert _users_in_server("world_step") == {"run_scheduler"}
+
+
+def test_main_starts_the_scheduler_only_when_switched_on(capsys, monkeypatch):
+    """啟動時在設定那一行後面印排程開了沒有；關著（預設）不開執行緒，開著就開一條、每隔幾秒推一下。"""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    server.main([])
+    assert "排程：關（世界時間等有人連線才推）" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is None
+    done = threading.Event()
+    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0.01)
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    server.main([])
+    assert "排程：每 0.01 秒推一次全服的事" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is not None and done.wait(2.0)
+
+
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
     """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一門（照常付心得），
     乙的模型取的名字不登記，全服只有一筆。"""
@@ -2137,7 +2700,8 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     card = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == "鐵柳纏勁")["card"]
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
-    assert card.rstrip().endswith("來源：自創（沈浪 所創）</p>")
+    # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
+    assert card.rstrip().endswith("來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
@@ -3337,7 +3901,7 @@ def test_main_view_sends_the_season_result_only_when_season_one_rests(game, monk
 
 def test_resting_season_one_writes_the_ending_once(game, monkeypatch):
     """FB-046：休季時結局那句只在結算卡上：「剛剛」不再是季末那則公告（放再前面那一則）、場景寫所在的地方、
-    公告卡不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
+    本週大事不畫（這一季的大事結算卡上都有）。江湖紀錄頁照舊列得到季末那則。"""
     monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
     _season_one_now(game, monkeypatch)
     player = Game.new(server.CONTENT, "路人", world=game.world)
