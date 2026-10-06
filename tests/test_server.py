@@ -5549,6 +5549,7 @@ NOT_IN_THE_FINGERPRINT = {
         "act_index": "換幕只在 round_number 加一的那一下發生",
         "round": "這一回合誰出手了、寫了什麼，同 participants",
         "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
+        "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
         "outcome_title": "收場時跟 phase 一起寫入",
         "outcome_text": "同上",
         "outcome_world_flags": "同上",
