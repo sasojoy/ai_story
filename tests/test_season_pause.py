@@ -258,3 +258,17 @@ def test_the_scheduler_tick_does_not_move_a_paused_season(store, content):
     ticker.world_tick(far + 10)
     assert store.get_season().time == stopped + 10 * content.config.time_scale
     assert not store.get_season().ended
+
+
+def test_a_season_that_opens_or_turns_over_starts_unpaused(content):
+    """N6：暫停不會漏進下一季（也不會漏進剛開的季）——開季、開下一季都把它清掉，就算存檔裡殘著一個舊的暫停。"""
+    content.config.auto_open_first_season = False
+    store = open_world()
+    store.seed_first_season(content)
+    store.mutate(lambda s: setattr(s, "paused_at", 123.0))  # 手改資料庫留下的殘值
+    assert store.open_season(content, 1000.0)
+    assert store.paused_at() is None
+    store.mutate_season(lambda s: setattr(s, "ended", True))
+    store.mutate(lambda s: setattr(s, "paused_at", 456.0))
+    assert store.next_season(content, 2000.0)
+    assert store.paused_at() is None and store.season_phase() == "running"

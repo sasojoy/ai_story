@@ -427,6 +427,7 @@ class SqliteWorldStore:
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
             result["ok"] = True
 
         self.mutate(_apply)
@@ -446,6 +447,7 @@ class SqliteWorldStore:
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
