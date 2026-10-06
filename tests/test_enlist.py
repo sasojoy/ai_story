@@ -249,3 +249,100 @@ def test_view_orders_is_a_main_action_that_the_season_pause_allows():
     import server
 
     assert "view_orders" in server.MAIN_ACTIONS and "view_orders" in server.PAUSE_OK_ACTIONS
+
+
+# ── Task 2：舊存檔、換季、主線與目標 ─────────────────────────────────
+# preflight F1／F2：不改 ONBOARDING_VERSION、不加存檔遷移、不動 prologue.migrated_step。入伍段只在「這一下才投靠」的動作上開始
+# （engine.Game._begin_enlistment），所以換版當下已經投靠的舊存檔（enlist_step 是 None）永遠不會被拖進來。
+
+
+def test_old_saves_with_a_faction_skip_enlistment(enlisting, world):
+    from tianxia.engine import Game
+
+    game = _game(enlisting, faction="guan", world=world)
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    assert game.state.player.enlist_step is None  # 計畫二上線前存的：沒有這個欄位
+    again = Game(enlisting, game.state, world=world)
+    assert again.state.player.enlist_step is None and again.guide_box() is None
+    again.choose("act:rest")  # 之後做任何行動，也不會因為「有陣營、入伍段還沒開始」就被拖進入伍段
+    assert again.state.player.enlist_step is None and again.guide_box() is None
+    again.view_orders()
+    assert again.state.player.enlist_step is None and not enlist.active(again.state, enlisting)
+
+
+def test_old_saves_without_a_faction_enlist_later(enlisting, world):
+    from tianxia.engine import Game
+
+    game = _game(enlisting, at="changshe", world=world)
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    again = Game(enlisting, game.state, world=world)
+    assert again.state.player.enlist_step is None and again.guide_box() is None
+    again.choose("faction:guan")
+    again.choose("faction:confirm")  # 還沒投靠的：第一次投靠時照常走入伍段（設計 7.2）
+    assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
+
+
+def test_defecting_does_not_restart_enlistment(enlisting):
+    """叛投：已經有陣營了，不重來；入伍段走完的人叛投之後仍是走完。"""
+    game = _joined(enlisting)
+    game.state.player.enlist_step, game.state.player.enlist_end = 2, False
+    game.state.player.faction = "huang"  # 叛投之後（defection 本身不碰引導）
+    assert not enlist.begin_if_joined(game.state, enlisting) and enlist.done(game.state, enlisting)
+
+
+def test_finished_enlistment_survives_a_season(enlisting):
+    game = _joined(enlisting)
+    game.state.player.enlist_step = 2
+    game._reset_player_for_new_season(2)
+    assert game.state.player.enlist_step == 2
+    game.state.player.location = "changshe"
+    game.choose("faction:guan")
+    game.choose("faction:confirm")  # 第二季再投靠：不重走（設計 7.1）
+    assert game.state.player.faction == "guan"
+    assert game.state.player.enlist_step == 2 and game.guide_box() is None
+
+
+def test_unfinished_enlistment_restarts_next_season(enlisting):
+    game = _joined(enlisting)
+    game._reset_player_for_new_season(2)
+    assert game.state.player.enlist_step is None
+    game.state.player.location = "changshe"
+    game.choose("faction:guan")
+    game.choose("faction:confirm")  # 沒走完就換季：下一季投靠時從頭走
+    assert game.state.player.faction == "guan"
+    assert game.state.player.enlist_step == 0 and game.guide_box()["speaker"] == "老石"
+
+
+def test_a_skipped_guide_stays_skipped_for_enlistment_next_season(enlisting):
+    game = _game(enlisting, at="changshe")
+    game.skip_tutorial()
+    game._reset_player_for_new_season(2)
+    assert enlist.done(game.state, enlisting) and game.state.player.guide_skipped
+    game.state.player.location = "changshe"
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert game.state.player.faction == "guan" and game.guide_box() is None
+
+
+def test_drifters_see_where_to_join(enlisting):
+    game = _game(enlisting)
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    assert "想投靠的話……" in game.quest_text()
+    game = _joined(enlisting)
+    assert "想投靠的話……" not in game.quest_text()
+
+
+def test_the_where_to_join_line_waits_for_the_tutorial_and_season_one(enlisting):
+    """主線與目標那一行（設計 4.1、6.3）：出師之後才有、寫在「下一步」前面；還在引導裡不寫；開關關著（beta 季）也不寫；
+    drifter_line 是空的就不寫。"""
+    game = _game(enlisting)
+    assert "想投靠的話……" not in game.quest_text()  # 引導還沒走完
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    game.state.player.stamina = enlisting.config.stamina_max  # 讓「下一步」有一句（體力將滿）
+    text = game.quest_text()
+    assert "**投靠**：想投靠的話……" in text and text.index("**投靠**") < text.index("**下一步**")
+    enlisting.tutorial.enlist.drifter_line = ""
+    assert "**投靠**" not in game.quest_text()
+    enlisting.tutorial.enlist.drifter_line = "想投靠的話……"
+    enlisting.config.season_one = False
+    assert "**投靠**" not in game.quest_text()

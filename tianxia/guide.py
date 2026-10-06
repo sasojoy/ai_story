@@ -160,6 +160,10 @@ def quest_text(state: GameState, content: Content, world: WorldStateStore | None
     summons = ranks.summons_line(state, content)  # 還沒去的召見（計畫 T5）：照此刻出面的人寫
     if summons:
         parts.append(f"**召見**：{summons}")
+    e = content.tutorial.enlist
+    if (e is not None and e.drifter_line and state.player.faction is None and season_one(content, w)
+            and not tutorial_active(state, content)):  # 出師後到投靠前，靜靜留一行：三邊各在哪裡收人（設計 4.1、6.3；不催）
+        parts.append(f"**投靠**：{e.drifter_line}")
     hint = next_hint(state, content, world)
     if hint:
         parts.append(f"**下一步**：{hint}")

@@ -298,7 +298,7 @@ class Game:
         （Config.affinity_carry_ratio、無條件捨去，80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
         新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
-        打不過的路（FB-034）。
+        打不過的路（FB-034）。入伍段（新手引導計畫二）同理：走完（或略過）的人帶到下一季、再投靠不重走；沒走完的下一季投靠時從頭走。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -316,7 +316,9 @@ class Game:
             else:
                 # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬
                 fresh.player.tutorial_step = self.content.tutorial.prologue_steps
-        ratio = self.content.config.affinity_carry_ratio
+        if enlist.done(old, self.content):
+            fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
+        ratio =self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
         # 上一季的交情另外留著（這一季的關係從頭寫），好感度只剩一成時提示才不會說「親如兄弟」（正式版辛）；
         # 這一季沒聊過的人物留著更早的那一句
