@@ -701,3 +701,39 @@ def test_the_first_special_art_rumor_does_not_pin_the_forger_on_the_map(on):
     assert "甲" in rumor.text  # 世界層的傳聞具名
     assert atlas.news_places(jia.state, on) == set() and atlas.news_places(yi.state, on) == set()  # 沒有任何地點被標
     assert rumor.text in yi.rumors_text()  # 但每個人都聽得到這一句
+
+
+# ── Task 7：匿名只留在地方傳聞（二）：陣營軍情與排行榜 ──────────────────
+
+
+def test_an_anonymous_player_is_named_in_the_order_top_three(on):
+    """陣營軍情一律具名（傳聞分層第七節）：匿名行走的人替軍令出力，達成時「出力最多」照樣寫名號。"""
+    game = _game(on, "甲", "guan", at="changshe")
+    game.state.player.anonymous = True
+    week = orders.week_of(game.state, on)
+    game.state.world.orders.append(Order(
+        id=f"{week}:guan:siege:yingru", template="siege", faction="guan", week=week, front="yingru", quota=1, text="（測試）",
+    ))
+    msgs = game._order_credit(kind="win", front="yingru", squad_faction="huang")
+    done = [r.text for r in game.state.world.rumors if r.layer == "faction" and r.text.startswith(orders.DONE)]
+    assert len(done) == 1 and done[0].endswith("出力最多：甲。") and any(m.endswith("出力最多：甲。") for m in msgs)
+
+
+def test_an_anonymous_player_is_named_in_the_promotion_summary(on):
+    """晉升彙整（陣營軍情）一律具名：ranks.promote 記名號、flush_news 發出去的那一則寫名號——這同時修掉了
+    匿名的人升官會被寫成「某位少俠」的舊毛病（陣營軍情不能匿名）。"""
+    game = _game(on, "甲", "guan", at="changshe")
+    game.state.player.anonymous = True
+    ranks.promote(game.state, on, 2)
+    assert list(game.state.world.promoted_today.values()) == [["甲"]]
+    ranks.flush_news(game.state, on, None)
+    news = [r.text for r in game.state.world.rumors if r.layer == "faction"]
+    assert news == ["今日升為屯長的有：甲。"]
+    assert all("某位少俠" not in text for text in news)
+
+
+def test_the_settings_say_where_walking_anonymously_applies():
+    """設定頁的匿名開關寫清楚只在地方傳聞裡有用（網頁沒有測試框架，讀 app.js）。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert "匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）" in js
+    assert "江湖傳聞中不顯示名號" not in js

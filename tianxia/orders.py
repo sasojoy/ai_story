@@ -376,7 +376,8 @@ def credit(
 ) -> list[str]:
     """一次個人行動替這週的軍令記功（軍令文件第二節）：每道符合、還沒達成的加 weight 次（這一版只有第 1 階的行動，都是 1）。
     貢獻不在這裡記——那次行動本身的推動已經經過 Game.push_trend 記過；護糧沒有推動，由引擎另記。
-    shown 是軍情列名用的名字（匿名時「某位少俠」），不給就用名號。散人、開關關著回空。"""
+    shown 是軍情列名用的名字，不給就用名號——引擎一律不給（陣營軍情一律具名，傳聞分層第七節）；這一版之前記下的
+    「某位少俠」照舊。散人、開關關著回空。"""
     msgs: list[str] = []
     for o in current(state, content, faction):
         if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order):

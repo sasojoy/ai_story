@@ -265,7 +265,7 @@ class Order(BaseModel):
     quota: int
     text: str
     progress: dict[str, int] = Field(default_factory=dict)  # 名號 → 做了幾次
-    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（匿名時是「某位少俠」）
+    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（現在一律是名號；這一版之前匿名的記成「某位少俠」）
     done: bool = False
     done_time: float | None = None
     applied: int = 0
@@ -285,7 +285,7 @@ class WorldState(BaseModel):
     ending_title: str = ""
     ending_text: str = ""
     ending_id: str = ""  # 收季時的結局 id（Ending.id）；舊存檔是空的
-    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號或「某位少俠」, 貢獻）
+    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號, 貢獻；排行榜不能匿名）
     final_trends: dict[str, int] = Field(default_factory=dict)
     final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
