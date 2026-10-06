@@ -211,7 +211,10 @@
     }
     const key = JSON.stringify(main);
     const changed = key !== S.mainKey;
+    // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
+    const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
     S.main = main;
+    if (wasStats && !(main.prologue && main.prologue.glow.includes("stats"))) S.showMore = false;
     S.mainKey = key;
     lastPoll = Date.now(); // 剛拿到一份新的畫面（輪詢的、動作回來的都走這裡）：連著推送時，下一次慢速輪詢從這一刻起算
     return changed;
@@ -884,11 +887,14 @@
   // 但框上還有「✔ 引導完成」與獎勵（done）要讓玩家看到時不收：「剛剛」卡片依設計不放引導，收成一行那一列就沒地方看了
   // （新角色的第一次探索常常做完第一步又留下事件）；那時照舊展開。FB-076 量的那一場（遊歷打完接事件）done 是空的
   function guideHtml(g, onRoad) {
+    // 分頁記的是（哪一步, 第幾頁）：框換成別一步、或整個框不在了，就清掉。不然換季回草廬重走一遍，走到那一步又直接開在舊的那一頁（T7 審查 N3）
+    if (S.guidePage && (!g || S.guidePage.key !== guideKey(g))) S.guidePage = null;
     const quiet = !!(g && g.pending && !g.done.length); // 事件待處理的那一句、而且沒有要看的完成列：預設收成一行
     if (!onRoad && !quiet) S.guideRoad = null; // 沒有框、也不是這兩種預設收著的時候要清（FB-055）
     if (!g) return "";
     if (!g.end && (guideShut() === guideKey(g) || ((onRoad || quiet) && S.guideRoad !== g.text))) {
-      // 收起來那一行：序章的步驟自己寫了短的一行（g.line，例：「師父：回『江湖』按『探索』」）就用它，不然是這一句話；
+      // 收起來那一行：序章的步驟自己寫了短的一行（g.line，例：「回『江湖』按『探索』」，說話的人由這裡寫在前面、line 不重複）就用它，
+      // 不然是這一句話；
       // 記著收起的是步驟的 key（guideKey，FB-076），換到下一步自己展開
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.line || g.text)}</button>`;
     }
@@ -969,7 +975,8 @@
     // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
     if (!m.on_road) S.sceneOpen = false;
     // 序章：師父在說話（框顯示著）、眼前又沒有事件時，草廬那張地點描寫卡不畫——它是靜態的，而師父的整段話要用這塊地方（T7 審查 I1）
-    const masterTalks = !!pro() && !!m.guide && !m.options.some((o) => o.id.startsWith("choice:"));
+    // 出師那一段路（在路上）不算：第一條路的說明卡要留著（T7 審查 N2）
+    const masterTalks = !!pro() && !!m.guide && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:"));
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
@@ -2407,9 +2414,13 @@
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
+  let cueTimer = 0;
   window.addEventListener("resize", () => {
     if (S.stage === "game" && S.tab === "map") applyMapView();
     if (S.stage === "game" && S.tab === "jianghu") fitFirstRound(); // 寬度變了，第一回合佔幾行也跟著變
+    // 序章裡師父框上的「在下面 ↓」只在畫面重畫時算；視窗大小變了（轉向、拉視窗）目標離第一屏多遠也跟著變，去抖後重算、不重畫（T7 走查 W-F）
+    clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => { if (S.stage === "game") guideCue(); }, 150);
   });
   // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
   const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };

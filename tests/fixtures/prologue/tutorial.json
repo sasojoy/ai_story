@@ -6,7 +6,7 @@
   "leave_text": "草廬已經看不見了。",
   "steps": [
     {"id": "p1", "text": "", "done_when": {"action": "choice", "condition": {"flags_all": ["序章:拜師"]}}},
-    {"id": "p2", "text": "去看修練頁。", "line": "師父：看修練頁", "done_when": {"action": "view_tab", "condition": {"flags_all": ["看過:practice"]}},
+    {"id": "p2", "text": "去看修練頁。", "line": "看修練頁", "done_when": {"action": "view_tab", "condition": {"flags_all": ["看過:practice"]}},
      "reveal": ["xinde", "tab:jianghu", "tab:practice"], "glow": ["tab:practice"]},
     {"id": "p3", "text": "去探索。", "done_when": {"action": "choice", "condition": {"flags_all": ["序章:悟"]}},
      "reveal": ["stamina", "act:explore"], "glow": ["act:explore"], "allow": ["act:explore"], "explore_event": "p_insight"},

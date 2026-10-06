@@ -30,7 +30,7 @@ let src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 
 const end = src.lastIndexOf("\n})();");
 if (end < 0) throw new Error("app.js 的最後不是 })();");
 src = src.slice(0, end) + `
-  globalThis.__H = { S, pro, shown, prologueKey, topHtml, tabsHtml, idleMenu, actionBar, guideHtml, nextGuidePage, guideCue, scrollToGuideTarget, pageJianghu, pagePractice,
+  globalThis.__H = { S, pro, shown, prologueKey, topHtml, tabsHtml, idleMenu, actionBar, guideHtml, nextGuidePage, guideCue, scrollToGuideTarget, setMain, pageJianghu, pagePractice,
     pageCraft, peekBlock, sheetHtml, applyGlow, renderTop, render, goTab };
 ` + src.slice(end);
 
@@ -67,6 +67,7 @@ const matchOne = (e, sel) => {
   return e.glow.includes(m[1]) && !(m[2] && e.disabled);
 };
 const qs = {}; // 測試可以放假元素：document.querySelector(選擇器) 回 qs[選擇器]
+const listeners = {}; // window.addEventListener 登記的處理函式（照事件名）：測試可以觸發 resize
 const document = {
   getElementById: (id) => (["app", "toast", "page", "top", "peek"].includes(id) ? mk(id) : null),
   querySelector: (sel) => qs[sel] || null,
@@ -76,7 +77,7 @@ const document = {
   createElement: () => ({ innerHTML: "", content: { querySelector: () => null } }),
 };
 const ctx = {
-  document, window: { addEventListener() {}, scrollTo() {}, innerWidth: 375 }, fetch: fetchStub,
+  document, window: { addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, scrollTo() {}, innerWidth: 375, innerHeight: 812 }, fetch: fetchStub,
   localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); }, removeItem: (k) => { store.delete(k); } },
   setInterval() {}, setTimeout, clearTimeout, performance, console, confirm: () => true, navigator: {}, CSS: { escape: (x) => x },
   requestAnimationFrame: () => 0, Element: class {},
@@ -90,7 +91,7 @@ H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-Promise.resolve(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs })).then((out) => {
+Promise.resolve(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners })).then((out) => {
   process.stdout.write(JSON.stringify(out === undefined ? null : out));
 });
 """
@@ -424,10 +425,10 @@ def test_the_box_shows_the_scene_before_the_words(hut):
 
 def test_a_shut_box_shows_the_short_line_and_remembers_the_step(hut):
     """收起記的是步驟的 key（FB-076：網頁的 guideKey），不是那一句話；收起來那一行用 line。"""
-    g = main_at(hut, 1)["guide"]  # line："師父：看修練頁"
-    assert g["line"] == "師父：看修練頁"
+    g = main_at(hut, 1)["guide"]  # line："看修練頁"（說話的人網頁自己寫在前面，line 不再帶「師父：」）
+    assert g["line"] == "看修練頁"
     html = run({"guide": g}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["key"]})
-    assert "師父</b>：師父：看修練頁" in html  # 收起來那一行用 line
+    assert "師父</b>：看修練頁" in html and "師父：師父" not in html  # 收起來那一行用 line
     longer = run({"guide": {**g, "line": ""}}, "return H.guideHtml(m.guide, false);", stored={"tx-guide-shut": g["key"]})
     assert f"師父</b>：{g['text']}" in longer  # 沒寫 line 就是原本的話
     assert "guide-scene" not in run({"guide": {**g, "scene": ""}}, "return H.guideHtml(m.guide, false);")
@@ -560,6 +561,28 @@ def test_the_cue_points_at_a_target_below_the_fold_and_only_then(hut):
     assert outside["below"] == 0  # 序章外沒有這個提示
 
 
+def test_the_cue_is_worked_out_again_when_the_viewport_changes(hut):
+    """T7 走查 W-F：「在下面 ↓」只在畫面重畫時算；轉向或拉視窗之後它不見了、目標還在 1269，要等下一次重畫才回來。resize 時重算（去抖，
+    一連串的 resize 只算一次），不重畫。序章外沒有目標就什麼都不做。"""
+    m = main_at(hut, 4)
+    script = """return (async () => {
+      const inserted = [];
+      T.qs[".card.guide .guide-head"] = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push(html) }, querySelector: () => null };
+      T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
+      T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top: 1269 }) };
+      const fire = () => (T.listeners.resize || []).forEach((fn) => fn());
+      fire(); fire(); fire();
+      const early = inserted.length;                        // 去抖：馬上還沒算
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return { early, after: inserted.length, render: T.els.app.innerHTML };
+    })();"""
+    out = run(m, script)
+    assert out["early"] == 0 and out["after"] == 1  # 三下 resize 只算一次
+    assert out["render"] == ""  # 沒有重畫（#app 沒被寫）
+    outside = run({**m, "prologue": None}, script)
+    assert outside["after"] == 0
+
+
 def test_the_cue_takes_the_page_to_the_target(hut):
     m = main_at(hut, 4)
     out = run(m, """
@@ -569,6 +592,40 @@ def test_the_cue_takes_the_page_to_the_target(hut):
       delete T.qs["#page .glow"]; H.scrollToGuideTarget();  // 目標不在了：什麼都不做
       return calls;""")
     assert len(out) == 1 and out[0]["block"] == "center"
+
+
+def test_the_paging_state_does_not_survive_a_walk_through_other_steps(hut):
+    """T7 審查 N3：換季回草廬重走一遍（不重新載入頁面）：停在第 11 步第 3 頁的記錄，在框換成別一步、或框不在的那一刻就清掉，
+    再走到第 11 步是第 1 頁。"""
+    m = main_at(hut, 4)
+    farewell = {**m["guide"], "key": "p11_farewell", "text": PAGED, "paged": True}
+    other = {**m["guide"], "key": "p3_insight"}
+    out = run({**m, "guide": farewell}, """
+      H.nextGuidePage(m.guide); H.nextGuidePage(m.guide);
+      const last = H.guideHtml(m.guide, false);
+      H.guideHtml(%s, false);               // 重走：別的步驟
+      const again = H.guideHtml(m.guide, false);
+      H.nextGuidePage(m.guide);
+      H.guideHtml(null, false);             // 框不在了（例如事件擋著）
+      return [last, again, H.guideHtml(m.guide, false), H.S.guidePage];""" % json.dumps(other))
+    last, again, third, state = out
+    assert "最後一段" in last and "第一段，先說天下三邊。" in again and "第二段" not in again and "第一段，先說" in third and state is None
+
+
+def test_the_stats_panel_closes_when_the_stats_step_completes(hut):
+    """T7 走查 W-D：步驟 9 點開的屬性面板留到步驟 11，「前往」被擠到分頁列底下（776）。配了點、步驟換掉的那一刻收起來；
+    步驟還沒換（輪詢）、序章外都不動。"""
+    before = main_at(hut, 8)
+    assert "stats" in before["prologue"]["glow"]
+    hut.allocate_stat("str")
+    after = server.main_view(hut)
+    assert "stats" not in after["prologue"]["glow"]
+    script = "H.S.showMore = true; H.setMain(%s); return H.S.showMore;"
+    assert run(before, script % json.dumps(after)) is False
+    assert run(before, script % json.dumps(before)) is True  # 同一步的輪詢：不動
+    outside = {**before, "prologue": None}
+    assert run(outside, script % json.dumps({**after, "prologue": None})) is True  # 序章外：不動
+    assert run(before, script % json.dumps({**after, "prologue": None})) is False  # 序章走完、這一步結束的那一刻也收
 
 
 def test_step_five_points_at_a_row_under_the_arts_library_title(hut):
@@ -583,6 +640,17 @@ def test_the_click_handlers_for_the_two_new_box_buttons_are_wired():
     source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert 'case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;' in source
     assert 'case "guide-below": scrollToGuideTarget(); break;' in source
+
+
+def test_the_road_out_of_the_hut_keeps_the_road_explainer(hut):
+    """T7 審查 N2：草廬的地點描寫卡在師父說話時不畫，但出師那一段路（第一條路）上那張「路上可以折返……」的說明要留著。"""
+    m = main_at(hut, 10)
+    hut.choose("move:town")
+    road = server.main_view(hut)
+    assert road["on_road"] and road["guide"] and road["prologue"]
+    page = run(road, "return H.pageJianghu();")
+    assert 'class="card scene road' in page
+    assert 'class="card scene"' not in run(m, "return H.pageJianghu();") and "card scene" not in run(m, "return H.pageJianghu();")  # 路前（在草廬）照舊不畫
 
 
 def test_the_four_sights_screen_has_no_now_card_and_its_choices_fit(hut):

@@ -150,6 +150,7 @@ def _scale_marks(obj, scale: float) -> None:
 
 
 MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（rules.fill_marks）
+STEP_PLACEHOLDER = re.compile(r"\{([^{}]*)\}")  # 序章步驟文字裡要換掉的字（{武學}、{意境}、{心得}）
 LORE = "lore"  # 博聞（team.LORE）：只靠升級的點數增加，任何獎勵都不能給、不能扣（validate 的 no_lore）
 FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項（博聞不在內：一律不能給）
 
@@ -1589,6 +1590,10 @@ def validate(c: Content) -> None:
                    or step.give_art or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         need(not step.paged or "\n\n" in step.text, f"{where}：paged 的話要有兩段以上（照空一行切頁）")
+        # 要換掉的字只認這幾個（打錯了會原樣出現在畫面上）：話、旁白、收起來那一行是 {武學}；結果那一句（after）是 {意境}、{武學}、{心得}
+        for field, allowed in (("text", {"武學"}), ("scene", {"武學"}), ("line", {"武學"}), ("after", {"意境", "武學", "心得"})):
+            unknown = sorted({w for w in STEP_PLACEHOLDER.findall(getattr(step, field))} - allowed)
+            need(not unknown, f"{where}：{field} 裡有不認得的要換掉的字 {unknown}（只認 {sorted(allowed)}）")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
         bad = [k for k in step.glow if k not in GLOW_KEYS]

@@ -257,7 +257,7 @@ def test_the_real_hut_cards_say_each_thing_once_and_the_reward_comes_with_the_wa
     game.choose("move:yingchuan")
     game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
     arrival = game.state.journal[0]
-    assert "銀兩 +30" in arrival.changes and "體力回滿" in arrival.lines and entries
+    assert "銀兩 +30" in arrival.changes and "體力回滿" in arrival.lines
     assert arrival.lines.index(content.tutorial.leave_text) < arrival.lines.index("體力回滿")
     assert game.state.player.stamina == content.config.stamina_max and game.state.player.guide_done == []
 

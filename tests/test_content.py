@@ -2135,6 +2135,28 @@ def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
         load_content(prologue_root)
 
 
+@pytest.mark.parametrize("field, text, match", [
+    ("after", "你融了{意竟}，練出了【{武學}】。", "意竟"),  # 打錯的字：會原樣出現在畫面上
+    ("after", "你把蠻牛拳熔了，換回 {點數} 點心得。", "點數"),
+    ("text", "把【{武器}】換上。", "武器"),  # 步驟的話只認 {武學}
+    ("line", "先把【{武器}】改練上身", "武器"),
+    ("scene", "{意境}之景。", "意境"),  # 旁白沒有意境可換
+])
+def test_the_placeholders_in_a_step_are_known_ones(prologue_root, field, text, match):
+    """T7 審查 N6：步驟的話、旁白、收起來那一行只認 {武學}，結果那一句（after）認 {意境}、{武學}、{心得}；打錯的字載入時就報，
+    不會當成字面的花括號出現在玩家畫面上。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update({field: text}))
+    with pytest.raises(ContentError, match=match):
+        load_content(prologue_root)
+
+
+def test_the_known_placeholders_load(prologue_root):
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update(
+        {"after": "你把拳腳融進{意境}之意境，練出了【{武學}】，退回 {心得} 點。", "line": "把【{武學}】放進爐裡", "scene": "{武學}的故事。"},
+    ))
+    assert "{心得}" in load_content(prologue_root).tutorial.steps[3].after
+
+
 def test_a_paged_step_needs_paragraphs_and_a_place_in_the_prologue(prologue_root):
     """T7 審查 I1（分頁）：師父的話分頁照段落（\\n\\n）切，只有一段的步驟分不了頁；分頁是序章才有的欄位。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][3].update(paged=True))  # 「去合成。」只有一段

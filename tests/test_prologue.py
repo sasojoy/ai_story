@@ -255,7 +255,7 @@ def test_first_step_has_no_box_and_choosing_moves_on(fresh):
     assert fresh.guide_box() is None  # 序章的事件端出來時，畫面就是那則事件
     _walk(fresh, "choice:0")  # 拜師
     box = fresh.guide_box()
-    assert box["speaker"] == "師父" and box["text"] == "去看修練頁。" and box["line"] == "師父：看修練頁"
+    assert box["speaker"] == "師父" and box["text"] == "去看修練頁。" and box["line"] == "看修練頁"
     assert box["scene"] == "" and box["done"] == [] and box["end"] is False
     assert fresh.prologue_view() == {
         "reveal": ["tab:jianghu", "tab:practice", "xinde"], "glow": ["tab:practice"], "skip": False,
@@ -796,10 +796,14 @@ def test_the_hut_steps_show_no_done_chip(fresh):
     assert all("✔ 引導完成" not in line for entry in fresh.state.journal for line in entry.guide)
 
 
-def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_root, world):
+def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_root, tmp_path):
     """T7 審查 M4：出師的盤纏（銀兩 +30、體力補滿）寫在抵達潁川那一則「剛剛」裡，beta 與第一季一樣；不留在對話框的 done 裡
-    （beta 的框抵達後就沒了，第一季的框是下一步的話，那一列會寫成別的意思）；體力那一項寫「體力回滿」，不是「體力 +150」。"""
+    （beta 的框抵達後就沒了，第一季的框是下一步的話，那一列會寫成別的意思）；體力那一項寫「體力回滿」，不是「體力 +150」。
+    第一季要在開季那一刻就開著才蓋得到章（rules.season_one），所以兩種季各用自己的資料庫、先設好開關再建角色（T7 審查 N4）。"""
     import json
+
+    from tianxia import guide
+    from tianxia.sqlite_world import open_world
 
     path = prologue_root / "tutorial.json"
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -809,7 +813,9 @@ def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_roo
     for label, on in (("beta", False), ("season one", True)):
         content = load_content(prologue_root)
         content.config.season_one = on
+        world = open_world(tmp_path / f"{on}.db")
         game = Game.new(content, f"沈浪{label}", rng=random.Random(0), world=world, prologue=True)
+        assert (guide.steps(game.state, content)[-1].id == "t7") is on, label  # 第一季真的開著：t7 在步驟裡
         _to_step(game, 10)
         game.state.player.stamina = 12.0
         game.choose("move:town")
