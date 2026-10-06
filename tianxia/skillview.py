@@ -7,7 +7,7 @@ from __future__ import annotations
 from . import cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
-from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
+from .martial_arts import MAX_LEVEL, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -92,6 +92,13 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
 
 
+def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) -> str:
+    """合成前寫這一爐算出來的品質機率與一句原因、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
+    if prologue.fuse_base(state, content) is not None:
+        return "從下品起修"
+    return f"品質看造化：{fusion.quality_odds_text(odds)}"
+
+
 # 爐裡只放了一樣東西時，煉製頁的說明那一行（W4）；句子待 joy 潤
 FORGE_ONE_ART = "再放一個意境，或另一門武學。"
 FORGE_ONE_INSIGHT = "再放一門武學，或另一個意境。"
@@ -117,8 +124,9 @@ def forge_line(
         if a is None or b is None:
             return "（選了不存在的東西。）"
         shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b)
         head = (
-            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，從下品起修），"
+            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
@@ -130,9 +138,10 @@ def forge_line(
         insight = insights.resolve(insight_ids[0], content, world)
         if base is None or insight is None:
             return "（選了不存在的東西。）"
+        odds = fusion.fuse_odds(state, content, art_id, base, insight)
         head = (
             f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
-            f"（屬{insight.attribute}，從下品起修），"
+            f"（屬{insight.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(state, content, world, fusion.fuse_key(art_id, insight_ids[0]))
@@ -182,6 +191,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
         value = melt_value(state, content, world, art_id) if stuck is None else 0
+        forge = _best_forge(state, content, world, art_id, art)
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
@@ -196,8 +206,32 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 # 熔煉鈕按下去的確認框問什麼（W9）：退 0 心得時照實說只空出一格；熔不掉的沒有確認框
                 "confirm": melt_confirm(content, art.name, art_id, value) if stuck is None else "",
             },
-        })
+        } | ({} if forge is None else {
+            # 卷軸卡的合成機率條：拿手上的意境裡上品機率最高的那一個算（forge_with 是它的名字）；序章、沒有意境不給
+            "forge_odds": [{"quality": q, "pct": round(w)} for q, w in forge[1].odds.items()],
+            "forge_with": forge[0].name,
+        }))
     return rows
+
+
+def _best_forge(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt,
+) -> tuple[Insight, fusion.QualityOdds] | None:
+    """這一門配手上哪一個意境合成最好：上品機率最高（同分看下品少），機率照 fusion.fuse_odds（跟開爐實際擲的同一套）。
+    合出來的那一門你已經有了的組合不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
+    if prologue.fuse_base(state, content) is not None:
+        return None
+    owned, best = set(owned_arts(state)), None
+    for insight_id in state.player.insights:
+        insight = insights.resolve(insight_id, content, world)
+        known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id))
+        if insight is None or (known is not None and known.id in owned):
+            continue
+        odds = fusion.fuse_odds(state, content, art_id, art, insight)
+        rank = (odds.odds["上品"], -odds.odds["下品"])
+        if best is None or rank > best[0]:
+            best = (rank, insight, odds)
+    return None if best is None else (best[1], best[2])
 
 
 def _legend_choice(state: GameState, content: Content, target: str, failures: int) -> dict | None:

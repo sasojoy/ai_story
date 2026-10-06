@@ -343,13 +343,24 @@ def test_the_bot_names_the_art_it_mastered_with_a_fallback_name(content, world):
     assert world.get_skill(art_id).name != art_id  # 全服的這門改了名
 
 
+def test_forging_outside_the_prologue_rolls_with_the_game_rng(content, world):
+    """Game.forge 用遊戲自己的亂數擲合成出來那一門的品質（Config.fuse_quality_odds）。"""
+    game = armed(content, world)
+    game.rng.choices = lambda population, weights: ["中品"]
+    out = game.forge("basic_fist", ["feng"])
+    art = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    assert game.state.player.art_quality[art] == game.state.player.art_rolled[art] == "中品"
+    assert any("（中品・屬" in line for line in out)
+
+
 def test_the_bot_keeps_its_stamina_for_the_road_below_the_reserve(content, world):
     game = armed(content, world)
     game.state.player.stamina = bot.CULTIVATE_RESERVE - 1
     bot.forge_and_cultivate(game, random.Random(0))
     # 合成也花體力了（設計 12.1）：這一輪合了一爐，但體力沒到修練的保留量，沒有修練
     assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1 - content.config.fuse_stamina
-    assert not game.state.player.art_mastery and not game.state.player.art_quality
+    p = game.state.player  # 合成擲到的品質會記在 art_quality（同時記在 art_rolled）；沒修練就只有那一份
+    assert not p.art_mastery and p.art_quality == p.art_rolled
 
 
 def ready_to_climb(content, world, quality):
