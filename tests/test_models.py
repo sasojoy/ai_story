@@ -2,9 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from tianxia.models import (
-    BEATS, EXPLORE_BRANCHES, MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Choice, Config,
-    Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
+    BEATS, EXPLORE_BRANCHES, MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
+    Choice, Config, Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
 )
+
+# 戰鬥系統設計 3.4 的對應表（擅長, 不擅長）：預設值要跟它一個字一個字對得上
+SPEC_AFFINITY = {
+    "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"), "柔": ("固守", "強攻"),
+    "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"), "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+}
 
 
 def test_event_requires_at_least_one_choice():
@@ -183,6 +189,43 @@ def test_every_affinity_names_two_different_moves():
     """每個屬性擅長一招、不擅長另一招，不會同一招又擅長又不擅長。"""
     for attribute, (good, bad) in Config().battle.affinity.items():
         assert good in MOVES and bad in MOVES and good != bad, attribute
+
+
+def test_the_default_affinity_table_is_the_designs_row_by_row():
+    """八個屬性一列一列對設計 3.4 的表（不只剛與快：陽、陰、慢、虛一個也不能被改反）。"""
+    assert Config().battle.affinity == SPEC_AFFINITY
+
+
+@pytest.mark.parametrize("override", [
+    {"damage": {"強攻": 70.0}},  # 少寫兩招：結算時 tuning.damage[move] 會 KeyError
+    {"damage": {"強攻": 60.0, "固守": 15.0}},
+    {"damage": {"強攻": 60.0, "固守": 15.0, "奇襲": 35.0, "亂招": 5.0}},  # 多一招
+    {"damage": {"強攻": 60.0, "固守": 0.0, "奇襲": 35.0}},  # 零與負的損耗
+    {"damage": {"強攻": 60.0, "固守": 15.0, "奇襲": -35.0}},
+    {"affinity": {"剛": ("強攻", "強攻")}},  # 擅長與不擅長同一招
+    {"affinity": {"剛": ("強攻", "亂招")}},
+    {"power_base": 0}, {"power_base": -1}, {"power_per": 0}, {"power_per": -0.4}, {"power_cap": 0}, {"power_cap": -150},
+    {"affinity_base": 0}, {"affinity_outer": -15}, {"affinity_inner": -10}, {"push_max": 0}, {"push_max": -5},
+    {"counter": -0.5}, {"counter": 3.0}, {"strong_mitigation_cap": -0.1}, {"strong_mitigation_cap": 1.5},
+])
+def test_a_tuning_that_would_break_the_resolution_is_rejected_when_it_loads(override):
+    """企劃者測完要調數字：寫壞的值在載入設定時就被擋下，不是等第一場決戰的第一回合才在行動鎖裡丟 KeyError、把整場卡住。"""
+    with pytest.raises(ValidationError):
+        BattleTuning(**override)
+    with pytest.raises(ValidationError):
+        Config(battle=override)  # 從 config.json 的 "battle" 讀進來走的是這一條
+
+
+@pytest.mark.parametrize("override", [
+    {"damage": {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}},
+    {"affinity": {"剛": ("固守", "奇襲")}},  # 沒列的屬性＝不加不減（move_scores 認不得的屬性當作沒學）
+    {"counter": 0.0}, {"counter": 1.0}, {"affinity_outer": 0.0}, {"affinity_inner": 0.0}, {"strong_mitigation_cap": 0.0},
+    {"push_max": 20},
+])
+def test_a_sensible_tuning_override_is_accepted(override):
+    tuning = Config(battle=override).battle
+    for name, value in override.items():
+        assert getattr(tuning, name) == value
 
 
 def test_a_fixed_option_may_name_its_move_and_a_gamble_does_not():

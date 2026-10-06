@@ -534,6 +534,18 @@ def test_lead_texts_must_name_a_side_of_the_battle(content):
         validate(content)
 
 
+def test_a_bad_battle_tuning_in_config_json_stops_the_load(tmp_path):
+    """測完在 config.json 的 battle 裡改數字寫壞了：伺服器開機（載入內容）就停下，不是等到決戰結算。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"damage": {"強攻": 70}}))
+    with pytest.raises(ValidationError, match="damage"):
+        load_content(root)
+    root = copy_fixture(tmp_path / "ok")
+    edit_json(root / "config.json", lambda d: d.update(battle={"push_max": 8, "damage": {"強攻": 70, "固守": 10, "奇襲": 40}}))
+    tuning = load_content(root).config.battle
+    assert tuning.push_max == 8 and tuning.damage == {"強攻": 70.0, "固守": 10.0, "奇襲": 40.0}
+
+
 def test_lead_texts_naming_both_sides_validate(content):
     content.battles["t1"] = battle = _battle({})
     battle.acts[0].text_by_lead.update({"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"})

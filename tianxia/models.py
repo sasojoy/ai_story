@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
 from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -742,6 +742,30 @@ class BattleTuning(_Strict):
     push_max: float = 10.0  # 一回合最多推多少
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+
+    @model_validator(mode="after")
+    def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:
+        """企劃者測完要調數字：寫壞的值在載入設定時就擋下（伺服器開不起來、改的人馬上看到），不是等第一場決戰的第一回合
+        才在行動鎖裡丟 KeyError、把整場卡住。三招的損耗要寫齊、每個屬性的擅長與不擅長是兩招不同的招、威力與推力的數字要大於 0；
+        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。"""
+        if set(self.damage) != set(MOVES):
+            raise ValueError(f"damage 三招（{'、'.join(MOVES)}）都要寫，現在是 {'、'.join(self.damage) or '空的'}")
+        for move, amount in self.damage.items():
+            if amount <= 0:
+                raise ValueError(f"damage 的 {move} 要大於 0（現在是 {amount}）")
+        for attribute, (good, bad) in self.affinity.items():
+            if good == bad:
+                raise ValueError(f"affinity 的 {attribute}：擅長與不擅長不能是同一招（{good}）")
+        for name in ("power_base", "power_per", "power_cap", "affinity_base", "push_max"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        for name in ("affinity_outer", "affinity_inner"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} 不能是負的（現在是 {getattr(self, name)}）")
+        for name in ("counter", "strong_mitigation_cap"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} 要在 0～1 之間（現在是 {getattr(self, name)}）")
+        return self
 
 
 class Config(_Strict):

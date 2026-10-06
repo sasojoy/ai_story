@@ -214,6 +214,26 @@ def test_strength_runs_from_forty_to_a_hundred():
     assert bi.move_scores(t, -20, None, None) == bi.move_scores(t, 0, None, None)  # 負的威力不會把實力壓到 40 以下
 
 
+def test_strength_never_passes_a_hundred_even_with_a_generous_tuning():
+    """實力封頂 100：把基準調到 80，威力 150 本來是 80 ＋ 60 ＝ 140，仍然算 100（強攻 75 ＝ 100 × 適性 75%）。"""
+    t = BattleTuning(power_base=80)
+    assert bi.move_scores(t, 150, None, None) == {"強攻": 75, "固守": 75, "奇襲": 75}
+    assert bi.move_scores(t, 0, None, None) == {"強攻": 60, "固守": 60, "奇襲": 60}  # 80 × 75%：沒封頂的地方照算
+
+
+@pytest.mark.parametrize("attribute, good, bad", [
+    ("剛", "強攻", "奇襲"), ("實", "強攻", "奇襲"), ("陽", "強攻", "固守"), ("柔", "固守", "強攻"),
+    ("陰", "固守", "強攻"), ("慢", "固守", "奇襲"), ("快", "奇襲", "固守"), ("虛", "奇襲", "強攻"),
+])
+def test_each_attribute_favours_one_move_and_hurts_another(attribute, good, bad):
+    """設計 3.4 的表：武學屬性 ±15、內功屬性 ±10，另一招不動（威力 150 → 實力 100，適性就是份量）。"""
+    third = next(m for m in MOVES if m not in (good, bad))
+    outer = bi.move_scores(BattleTuning(), 150, attribute, None)
+    assert (outer[good], outer[third], outer[bad]) == (90, 75, 60)
+    inner = bi.move_scores(BattleTuning(), 150, None, attribute)
+    assert (inner[good], inner[third], inner[bad]) == (85, 75, 65)
+
+
 def test_affinity_is_clamped_between_fifty_and_a_hundred():
     """適性夾在 50～100：擅長加到頂不會超過 100，兩邊都不擅長也不會低於 50。"""
     t = BattleTuning(affinity_base=95.0, affinity_outer=30.0, affinity_inner=30.0)
