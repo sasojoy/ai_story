@@ -2626,7 +2626,7 @@ def _fighter(content, game, name, faction):
 
 def _fight_to_the_end(game, definition, now):
     """沈浪每回合自己出手，其他還在場上的人逾時由系統代選，一路打到收場；回傳收場那一刻的時間。"""
-    while True:
+    for _ in range(100):  # 選項不對時不會有人收場：失敗，不要永遠轉下去
         with at(game, now):
             game.options()  # 推進：集結關閉，或上一回合逾時、代選、結算
             battle = game.world.get_battle()
@@ -2635,6 +2635,7 @@ def _fight_to_the_end(game, definition, now):
             if game.state.player.name not in battle.round.pending_actions:
                 game.choose("battle:act:guan_hold")
         now = game.world.get_battle().round.opened_real + definition.round_seconds
+    raise AssertionError("打了 100 回合還沒收場")
 
 
 def _showdown_entries(game):
@@ -6117,10 +6118,13 @@ def _play_showdown(game, tag: str) -> None:
     with at(game, game.now):
         game.choose(f"battle:join:{game.state.player.faction}")
     now = game.world.get_battle().muster_deadline_real
-    while game.world.get_battle().phase != "ended":
+    for _ in range(100):  # 出的招不在選單上時 choose 會悄悄拒絕：以前這裡就永遠轉下去，現在是失敗
+        if game.world.get_battle().phase == "ended":
+            return
         with at(game, now):
             game.choose(f"battle:act:{tag}")
         now += 1
+    raise AssertionError(f"打了 100 回合還沒收場：{tag} 大概不是這一邊的選項")
 
 
 def test_showdown_result_feeds_timetable(content, world):
