@@ -742,3 +742,38 @@ def test_the_forge_step_takes_only_the_masters_base_and_one_insight(fresh):
     assert "師父" in fresh.forge("basic_fist", ["feng", "shan"])[0]
     _to_step(fresh, 6)
     assert "師父" in fresh.forge("basic_fist", ["feng"])[0]  # 合成那一步過了：不再准開爐
+
+
+# ── 重看序章、任務欄的下一步（計畫一 Task 6）──────────────────
+
+def test_prologue_recap_reads_the_whole_prologue(prologue_content, content, world):
+    game = Game.new(prologue_content, "沈浪", world=world)
+    text = game.prologue_recap()
+    assert text.index("城外") < text.index("草廬") < text.index("去看修練頁。") < text.index("草廬已經看不見了。")
+    assert text.index("斷眉來了。") < text.index("跟他打。")  # 旁白排在話的前面
+    assert "{武學}" not in text and "把【新武學】換上，練到第三成。" in text
+    assert Game.new(content, "路人", world=world).prologue_recap() == ""  # 測試內容沒有序章
+
+
+def test_the_recap_does_not_depend_on_where_you_are(fresh):
+    before = fresh.prologue_recap()
+    _to_step(fresh, 4)
+    assert fresh.prologue_recap() == before  # 只讀內容：走到哪一步、合成了什麼都不變
+
+
+def test_the_quest_card_fills_in_the_fused_art(fresh):
+    """任務欄「下一步」的話跟對話框一樣：{武學} 換成合成出來的那一門，不寫出字面的佔位。"""
+    _to_step(fresh, 4)
+    name = prologue.fused_arts(fresh.state, fresh.content, fresh.world)[0].name
+    quest = fresh.quest_text()
+    assert f"把【{name}】換上，練到第三成。" in quest and "{武學}" not in quest
+
+
+def test_the_quest_card_has_no_blank_master_before_he_is_met(fresh):
+    """序章第一步師父還沒出場：任務欄不寫「（師父）」。事件還沒了結時也不寫（那時師父還沒說過話）。"""
+    assert "（師父）" not in fresh.quest_text()
+    ambush, fresh.state.pending_event = fresh.state.pending_event, None  # 沒有事件擋著的樣子
+    assert "（師父）" not in fresh.quest_text() and "**下一步**" not in fresh.quest_text()
+    fresh.state.pending_event = ambush
+    _walk(fresh, "choice:0", "choice:0")  # 遇到師父了
+    assert "（師父）去看修練頁。" in fresh.quest_text()

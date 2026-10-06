@@ -4059,6 +4059,18 @@ def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, p
     assert Game.new(prologue_content, "假人").state.player.location == "town"
 
 
+def test_the_prologue_recap_is_served_as_html_and_empty_without_a_prologue(client, monkeypatch, prologue_content):
+    """設定頁的「重看序章」：GET /api/prologue 回 {text: html}；沒有序章的內容是空字串（網頁就不畫那顆鈕）。"""
+    _player(client, "shen_02", "無序章")
+    assert client.get("/api/prologue").json() == {"text": ""}  # 正式內容還沒有序章
+    monkeypatch.setattr(server, "CONTENT", prologue_content)
+    _player(client, "shen_03", "沈青衫")
+    text = client.get("/api/prologue").json()["text"]
+    assert "<strong>城外</strong>" in text and "草廬已經看不見了。" in text and "{武學}" not in text
+    assert text.index("城外") < text.index("去看修練頁。")
+    assert client.get("/api/prologue").status_code == 200
+
+
 def test_guide_ack_closes_the_outro(client):
     _player(client)
     game = server.game_for("沈青衫")

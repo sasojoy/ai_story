@@ -3503,8 +3503,31 @@ class Game:
         """序章的畫面要亮什麼、發光什麼（prologue.view）；不在序章是 None。"""
         return prologue_rules.view(self.state, self.content)
 
+    def prologue_recap(self) -> str:
+        """設定頁的「重看序章」（設計 7.1）：序章的事件與師父的話照順序排成一頁，只能讀。沒有序章是空字串。
+        只看內容、不看這個角色走到哪一步（{武學} 寫成「新武學」，每個人合出來的不一樣的話不寫死）。"""
+        t = self.content.tutorial
+        if t.location is None:
+            return ""
+        events = self.content.events
+        parts: list[str] = []
+        event_id = t.start_event
+        seen: set[str] = set()
+        while event_id is not None and event_id in events and event_id not in seen:  # 開場那一則一路接下去（遇險、拜師）
+            seen.add(event_id)
+            event = events[event_id]
+            parts.append(f"**{event.title}**\n\n{event.text}")
+            event_id = next((ch.effect.next_event for ch in event.choices if ch.effect.next_event), None)
+        for step in t.steps[: t.prologue_steps]:
+            text = "\n\n".join(x for x in (step.scene, step.text) if x)
+            if text:
+                parts.append(text.replace("{武學}", "新武學"))
+        if t.leave_text:
+            parts.append(t.leave_text)
+        return "\n\n---\n\n".join(parts)
+
     def quest_text(self) -> str:
-        return quest_text(self.state, self.content)
+        return quest_text(self.state, self.content, self.world)
 
     # ── 大地圖 ────────────────────────────────────────────
 

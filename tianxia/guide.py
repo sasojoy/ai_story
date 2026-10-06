@@ -104,24 +104,28 @@ def pending_line(state: GameState, content: Content) -> str | None:
     return f"先把眼前的「{title}」了結" if title is not None else None
 
 
-def step_text(state: GameState, content: Content) -> str:
-    """引導目前這一步要說的話：眼前有事件待處理時是 pending_line，不然是這一步本身的話。呼叫端先確認引導還沒做完。"""
-    return pending_line(state, content) or steps(state, content)[state.player.tutorial_step].text
+def step_text(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
+    """引導目前這一步要說的話：眼前有事件待處理時是 pending_line，不然是這一步本身的話。呼叫端先確認引導還沒做完。
+    給了 world，序章的話裡的 {武學} 換成合成出來的那一門（prologue.fill）；沒給就照原樣。"""
+    text = pending_line(state, content) or steps(state, content)[state.player.tutorial_step].text
+    return text if world is None else prologue.fill(text, state, content, world)
 
 
-def next_hint(state: GameState, content: Content) -> str:
+def next_hint(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
     """引導還沒做完就是引導的下一步（有事件待處理時見 pending_line）；否則是這一幕主線的目標（第一季不觸發的主線沒有，計畫 T8），
-    體力將滿時加一句提醒。兩者都沒有時是空字串。"""
+    體力將滿時加一句提醒。兩者都沒有時是空字串。序章第一步沒有話（還沒遇到師父）：不寫「（師父）」，也沒有下一步可寫。"""
     if tutorial_active(state, content):
-        speaker = speaker_of(content, steps(state, content)[state.player.tutorial_step])
-        return f"（{speaker}）{step_text(state, content)}"
+        step = steps(state, content)[state.player.tutorial_step]
+        if not step.text:
+            return ""
+        return f"（{speaker_of(content, step)}）{step_text(state, content, world)}"
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hints.append("體力將滿，別讓它浪費。")
     return "　".join(hints)
 
 
-def quest_text(state: GameState, content: Content) -> str:
+def quest_text(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
     w = state.world
     if w.ended:
         return f"### 賽季落幕：{w.ending_title}\n\n{w.ending_text}"
@@ -144,7 +148,7 @@ def quest_text(state: GameState, content: Content) -> str:
     summons = ranks.summons_line(state, content)  # 還沒去的召見（計畫 T5）：照此刻出面的人寫
     if summons:
         parts.append(f"**召見**：{summons}")
-    hint = next_hint(state, content)
+    hint = next_hint(state, content, world)
     if hint:
         parts.append(f"**下一步**：{hint}")
     return "\n\n".join(parts)  # 全部都被跳過時是空字串：網頁不畫「主線與目標」那一塊

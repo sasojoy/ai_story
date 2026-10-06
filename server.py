@@ -1041,6 +1041,13 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
     }
 
 
+@app.get("/api/prologue")
+def api_prologue(request: Request):
+    """設定頁的「重看序章」：序章的事件與師父的話排成一頁（Markdown 轉成 HTML）；沒有序章的內容是空字串，網頁就不畫那顆鈕。"""
+    game = _game(request)
+    return look(game, lambda g: {"text": md(g.prologue_recap())})
+
+
 @app.post("/api/forge_line")
 def api_forge_line(request: Request, body: dict = Body(default={})):
     """煉製頁選了東西就更新說明（不算行動、不存檔）。"""

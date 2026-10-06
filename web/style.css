@@ -707,3 +707,17 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   text-overflow: ellipsis; border: 1px dashed color-mix(in srgb, var(--gold) 60%, var(--line)); border-radius: 10px;
   background: var(--card); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
 .guide-line b { color: var(--gold); }
+
+/* 序章（新手引導計畫一）：要按的鈕發光；新亮起來的元件閃一閃。減少動態時只留靜態的金邊 */
+.glow { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation: tx-glow 1.6s ease-in-out infinite; }
+.lit { animation: tx-lit 0.9s ease-out 1; }
+@keyframes tx-glow { 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 4px 0 color-mix(in srgb, var(--gold) 20%, transparent); } }
+@keyframes tx-lit { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.guide-scene { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); font-style: italic; }
+.skip-prologue { display: block; margin: 8px auto 0; font-size: 13px; color: var(--ink-2); }
+.top[hidden] { display: none; }
+.who.static { cursor: default; }
+.who.static .more-ico { display: none; } /* 序章裡屬性還沒亮：名號不是按鈕，不畫展開的小箭頭 */
+.recap { margin-top: 10px; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow-y: auto; }
+.recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+@media (prefers-reduced-motion: reduce) { .glow, .lit { animation: none; } }
