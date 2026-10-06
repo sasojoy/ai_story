@@ -155,6 +155,35 @@ def test_an_art_you_forged_or_were_given_has_no_relearn_note(content, world, sta
     assert [r["relearn"] for r in skillview.art_rows(state, content, world)] == [None, None]
 
 
+def test_the_melt_question_is_one_sentence_built_on_the_server_for_the_three_kinds_of_art(content, world, state):
+    """熔煉的確認框（W9＋FB-081 合成一句，controller 裁決）：退 0 心得的直說只空出一格、沒有括號；開局送的基礎武學再接去哪裡重學，
+    「免費重學」只說一次；有心得的寫退多少。"""
+    content.config.starter_skills = ["basic_breath", "basic_fist"]
+    state.player.member.wugong_id = "lake_kick"  # 欄位有人佔著，下面幾門才在功法庫裡
+    _library(world, state, [("旋風腿", "下品", 5, "武學")])
+    state.player.arts += ["basic_fist", "fist"]
+    state.player.art_levels.update({"basic_fist": 1, "fist": 1})
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    starter = rows["basic_fist"]["melt"]["confirm"]  # 零心得的基礎武學
+    assert starter == (
+        "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學粗淺拳腳」。"
+    )
+    assert starter.count("免費重學") == 1 and "（" not in starter  # 只說一次、沒有括號
+    assert rows["fist"]["melt"]["confirm"] == "把【長拳】熔掉？這門熔了沒有心得，只空出一格。"  # 零心得、沒有重學的地方（內容給的絕學）
+    valued = rows["旋風腿"]["melt"]
+    assert valued["note"] == "退回心得 8" and valued["confirm"] == "把【旋風腿】熔成心得？退回心得 8。熔掉就沒了。"  # 有心得：寫退多少
+    assert rows["lake_kick"]["melt"]["confirm"] == ""  # 身上正在練的不能熔：沒有問句
+
+
+def test_a_zero_value_art_taught_for_a_fee_names_the_fee_in_the_same_sentence(content, world, state):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]  # 第一成：退 0；各地教、要學費
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "lake_kick"]
+    assert row["melt"]["confirm"] == (
+        "把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。熔了想拿回來，到湖邊再學一次（學費 10 兩），在江湖頁「此地還能做」找「學湖邊腿法」。"
+    )
+
+
 def test_melting_a_starter_art_ends_the_result_with_where_to_learn_it_again(real):
     game = _real_game(real)
     game.state.player.arts = ["lishi_chui"]

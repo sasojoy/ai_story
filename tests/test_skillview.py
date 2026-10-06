@@ -516,8 +516,11 @@ def test_art_rows_carry_the_melt_confirm_the_button_asks(state, content, world):
     state.player.arts = ["basic_fist", "旋風腿"]
     _whirlwind(world)
     rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
-    assert rows["basic_fist"]["melt"]["confirm"] == "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格（基礎武學在城鎮可以免費重學）。"
-    assert rows["旋風腿"]["melt"]["confirm"] == "把【旋風腿】熔成心得？熔掉就沒了。"  # 合成的有基本值，不是 0
+    assert rows["basic_fist"]["melt"]["confirm"] == (  # arts-polish-2：W9 的直話＋去哪裡重學（只說一次）
+        "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學粗淺拳腳」。"
+    )
+    refund = rows["旋風腿"]["melt"]["note"].removeprefix("退回心得 ")
+    assert rows["旋風腿"]["melt"]["confirm"] == f"把【旋風腿】熔成心得？退回心得 {refund}。熔掉就沒了。"  # 合成的有基本值，不是 0
     assert rows["旋風腿"]["melt"]["note"].startswith("退回心得 ")
     assert rows["lake_kick"]["melt"]["confirm"] == ""  # 身上正在練的不能熔：沒有確認框要問
 

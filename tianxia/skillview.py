@@ -239,9 +239,11 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
         value = melt_value(state, content, world, art_id) if stuck is None else 0
+        worn = art_id in (member.neigong_id, member.wugong_id)
+        relearn = None if worn else relearn_note(state, content, art_id)  # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
-            "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
+            "level": level, "worn": worn, "insight": insight_name,
             "card": art_card(
                 art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art),
                 team.compare_with_worn(state, content, world, art),  # 身上那門自己是空字串（W6）
@@ -250,11 +252,10 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else melt_note(value),
-                # 熔煉鈕按下去的確認框問什麼（W9）：退 0 心得時照實說只空出一格；熔不掉的沒有確認框
-                "confirm": melt_confirm(content, art.name, art_id, value) if stuck is None else "",
+                # 熔煉鈕按下去的確認框問什麼：整句在這裡寫好（W9 的直話＋FB-081 的去哪裡重學，見 library.melt_confirm）；熔不掉的沒有
+                "confirm": melt_confirm(art.name, value, relearn) if stuck is None else "",
             },
-            # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫；合成的、內容直接給的絕學沒有重學的地方，也是 None
-            "relearn": None if art_id in (member.neigong_id, member.wugong_id) else relearn_note(state, content, art_id),
+            "relearn": relearn,  # 合成的、內容直接給的絕學沒有重學的地方，是 None
         })
     # 功法庫多了要找得到（FB-085）：身上的在前，再照品質（絕學＞上品＞中品＞下品，自己那一份）、成多的先、最後比名字；
     # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣

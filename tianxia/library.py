@@ -196,13 +196,14 @@ def melt_note(value: int) -> str:
     return f"退回心得 {value}" if value > 0 else MELT_NO_XINDE
 
 
-def melt_confirm(content: Content, name: str, art_id: str, value: int) -> str:
-    """熔煉鈕按下去的確認框。退 0 心得時照實說（W9，待 joy 潤）；開局送的基礎武學在城鎮免費重學（_taught_here），
-    所以只有它們才多這一句——別的武學不免費，不能這樣寫。"""
+def melt_confirm(name: str, value: int, relearn: str | None = None) -> str:
+    """熔煉鈕按下去的確認框，整句只在這裡寫（W9 與 FB-081 合成一句，待 joy 潤）：有心得的寫退多少；退 0 心得的直說只空出一格
+    （熔掉仍空出一格，所以照樣准熔，不騙人說退了什麼）。relearn 是 skillview.relearn_note 給的「熔了去哪裡再學」那一句
+    （開局送的基礎武學在城鎮免費重學、各地教的回教它的地方；合成的與內容直接給的沒有），有就接在後面，所以「免費重學」只說一次；
+    有心得又沒有重學的地方才說「熔掉就沒了」。"""
     if value > 0:
-        return f"把【{name}】熔成心得？熔掉就沒了。"
-    again = "（基礎武學在城鎮可以免費重學）" if art_id in content.config.starter_skills else ""
-    return f"把【{name}】熔掉？這門熔了沒有心得，只空出一格{again}。"
+        return f"把【{name}】熔成心得？退回心得 {value}。{relearn or '熔掉就沒了。'}"
+    return f"把【{name}】熔掉？這門熔了沒有心得，只空出一格。{relearn or ''}"
 
 
 def melt_art(
