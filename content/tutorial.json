@@ -34,7 +34,7 @@
       "line": "到「煉製」把基礎拳腳融進意境",
       "done_when": {"fused": true},
       "reveal": ["tab:craft"],
-      "glow": ["tab:craft", "forge"],
+      "glow": ["tab:craft", "pick:art", "pick:insight", "forge"],
       "fuse_base": "jichu_quanjiao",
       "after": "你把基礎拳腳融進{意境}之意境，練出了一門新武學——【{武學}】。"
     },
@@ -43,14 +43,14 @@
       "text": "這是為師這一脈傳下來的路數，你算是接上了。\n\n剛長出來的功夫嫩得很，只有第一成火候。先到功法庫把它「改練」上身，再拿心得去「練成」，練到第三成再說。心得管學：從第幾成往上練一成，就花幾點，越往上越貴。",
       "line": "先把【{武學}】改練上身，再練到第三成",
       "done_when": {"fused_level": 3},
-      "glow": ["switch", "practice"]
+      "glow": ["tab:practice", "switch", "practice"]
     },
     {
       "id": "p6_refine",
       "text": "成數是火候，品質是底子。你這門是下品，想讓它往上走，就得一遍一遍「修練」。這回不花心得，花體力。修不成也不白修，下一回機會就大一點。",
       "line": "到「修練」修練【{武學}】，衝一衝品質",
       "done_when": {"fused_quality": "中品"},
-      "glow": ["cultivate"],
+      "glow": ["tab:practice", "cultivate"],
       "sure_cultivate": true,
       "after": "這一遍修練，你忽然摸到了門道——【{武學}】從下品升到了中品！"
     },
@@ -91,7 +91,7 @@
       "text": "斷眉掉的這本是什麼？「蠻牛拳」……喲，他還真練了幾年，譜上記得密密麻麻。這種東西留著佔地方，人能記住的功夫有限，武學跟意境加起來最多五十樣。用不上的就「熔」了，當初練它花的心得，能拿回八成。",
       "line": "到功法庫把【蠻牛拳】熔了",
       "done_when": {"action": "melt"},
-      "glow": ["melt"],
+      "glow": ["tab:practice", "melt"],
       "melt_only": "manniu_quan",
       "after": "你把蠻牛拳熔了，換回 {心得} 點心得。"
     },

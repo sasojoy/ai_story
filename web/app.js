@@ -1029,16 +1029,18 @@
     // 勾了機率那一行換成伺服器算好的句子（legend.note），不另外問伺服器
     const artRow = (a) => {
       const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
-      // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）——發光的只有「這一列真的按得下去」的那幾個
-      const todo = [!a.worn ? "switch" : "", a.cultivate.ok ? "cultivate" : "", a.melt.ok ? "melt" : ""].filter(Boolean).join(" ");
+      // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
+      // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、換上之後沒有一列，修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
+      const has = (key) => (a.glow || []).includes(key);
+      const todo = ["switch", "cultivate", "melt"].filter(has).join(" ");
       return `
         <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && S.artOpen !== a.id ? ` data-glow="${todo}"` : ""}>${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
         ${S.artOpen === a.id ? `<div class="art-body">${a.card}
           ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
           <div class="row art-actions">
-            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
-            ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
+            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
+            ${a.worn ? "" : `<button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門</button>`}
+            <button class="btn" data-act="melt"${has("melt") ? ' data-glow="melt"' : ""} data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
           ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
@@ -1135,11 +1137,11 @@
       ${attrNoteHtml(x)}
       <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
-        <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
+        <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art"${(a.glow || []).includes("pick:art") && !inPot(a.id) ? ' data-glow="pick:art"' : ""} data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
           <b>${esc(a.name)}</b><small>${esc(a.quality)}・屬${esc(a.attribute)}</small></button>`).join("")}</div>
       <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
       ${x.insights.length ? `<div class="chips">${x.insights.map((i) => `
-        <button class="chip r2" data-act="pick" data-type="ins" data-id="${esc(i.id)}">
+        <button class="chip r2" data-act="pick" data-type="ins"${(i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : ""} data-id="${esc(i.id)}">
           <b>${esc(i.name)}</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("")}</div>`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>

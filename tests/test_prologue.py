@@ -302,7 +302,7 @@ def test_the_reveal_accumulates_over_the_steps(fresh):
     fresh.state.player.tutorial_step = 3  # 第 4 步：去合成（reveal 只寫了 tab:craft）
     view = fresh.prologue_view()
     assert view["reveal"] == ["act:explore", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde"]
-    assert view["glow"] == ["tab:craft", "forge"]
+    assert view["glow"] == ["tab:craft", "pick:art", "pick:insight", "forge"]
     fresh.state.player.tutorial_step = 6  # 第 7 步：打坐（reveal 只寫了 act:rest）
     assert prologue.view(fresh.state, fresh.content)["reveal"] == [
         "act:explore", "act:rest", "stamina", "tab:craft", "tab:jianghu", "tab:practice", "xinde",
@@ -728,6 +728,61 @@ def test_the_guide_box_says_when_a_step_is_paged(fresh, prologue_content):
     assert box["paged"] is True and box["text"].count("\n\n") == 1
     fresh.view_tab("practice")
     assert "paged" not in fresh.guide_box()
+
+
+def test_only_the_art_the_master_names_is_the_switch_target(fresh):
+    """步驟 5 的改練（W-A）：伺服器說哪一列是師父點名的那一門——換上之前只有合成出來的那一列要發光，換上之後沒有一列發光
+    （不然被換下來的基礎拳腳會變成新的改練目標，邀人換回去）。不加新的拒絕：這只管發光。序章外的列沒有 glow 這個鍵。"""
+    _to_step(fresh, 4)
+    named = _fused(fresh)
+    rows = {row["id"]: row for row in fresh.art_rows()}
+    assert [art_id for art_id, row in rows.items() if "switch" in row["glow"]] == [named]
+    fresh.switch_art(named)
+    assert fresh.state.player.tutorial_step == 4  # 還在第 5 步：換上不算完成
+    assert all("switch" not in row["glow"] for row in fresh.art_rows())
+    assert any(row["id"] == "basic_fist" for row in fresh.art_rows())  # 被換下來的在功法庫裡
+    assert fresh.switch_art("basic_fist") and fresh.state.player.member.wugong_id == "basic_fist"  # 沒有新的拒絕：想換回去還是換得了
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    assert all("glow" not in row for row in outside.art_rows())
+
+
+def test_the_server_names_which_row_each_other_glow_belongs_to(fresh):
+    """修練的那一列（步驟 6）與熔煉的那一列（步驟 10）也由伺服器說：只有按得下去的那一門有那個鍵。"""
+    _to_step(fresh, 5)
+    named = _fused(fresh)
+    assert [r["id"] for r in fresh.art_rows() if "cultivate" in r["glow"]] == [named]
+    _to_step(fresh, 9)
+    assert [r["id"] for r in fresh.art_rows() if "melt" in r["glow"]] == ["junk"]
+    assert all("switch" not in r["glow"] for r in fresh.art_rows())  # 步驟 10 不叫人改練
+
+
+def test_the_forge_pick_lists_name_what_to_put_in_the_furnace(fresh):
+    """步驟 4（煉製頁）：師父點名的底（基礎拳腳）與剛悟到的意境，在挑選清單裡由伺服器標出來（pick:art、pick:insight），
+    網頁照它讓兩樣發光、直到放進爐子；別的武學、別的步驟都沒有。"""
+    _to_step(fresh, 3)
+    rows = fresh.art_rows()
+    assert [r["id"] for r in rows if "pick:art" in r["glow"]] == ["basic_fist"]
+    assert [i["id"] for i in fresh.insight_rows() if "pick:insight" in i["glow"]] == fresh.state.player.insights
+    _to_step(fresh, 4)
+    assert not any("pick:art" in r["glow"] for r in fresh.art_rows())
+    assert not any("pick:insight" in i["glow"] for i in fresh.insight_rows())
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    outside.state.player.insights.append("feng")
+    assert all("glow" not in i for i in outside.insight_rows())
+
+
+def test_the_preview_says_a_preset_recipe_is_the_masters_way(fresh):
+    """W-E：師門配方的預覽不寫「沒人合過」（結果會說這是師門傳下來的路數）；別的配方照舊。"""
+    _to_step(fresh, 3)
+    line = fresh.forge_line("basic_fist", ["feng"])
+    assert "師門傳下來" in line and "沒人合過" not in line
+    outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
+    outside.state.player.insights.append("feng")
+    assert "沒人合過" in outside.forge_line("basic_breath", ["feng"]) and "師門" not in outside.forge_line("basic_breath", ["feng"])
+    fresh.forge("basic_fist", ["feng"])  # 做出來之後別人看到的是「會合出【穿林腿】」
+    other = Game.new(fresh.content, "老手", rng=random.Random(0), world=fresh.world)
+    other.state.player.insights.append("feng")
+    assert "會合出【穿林腿】" in other.forge_line("basic_fist", ["feng"])
 
 
 def test_the_hut_steps_show_no_done_chip(fresh):

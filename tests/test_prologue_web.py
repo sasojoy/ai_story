@@ -610,6 +610,55 @@ def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):
     assert not re.search(r'data-act="melt-insight"[^>]*disabled', page)
 
 
+def _row_glows(page):
+    """修練頁收著的每一列武學帶的 data-glow（沒有就是空字串）：{id: 鍵}。"""
+    return {art_id: glow.strip(' "') for art_id, glow in re.findall(r'data-act="art" data-id="(\w+)"(?: data-glow="([^"]*)")?', page)}
+
+
+def test_only_the_art_the_master_names_glows_to_be_switched_to(hut):
+    """T7 走查 W-A：改練的發光由伺服器說是哪一列（art_rows 的 glow）：換上之前只有合成出來的那一列，換上之後沒有一列；
+    點開基礎拳腳那一列，裡面的「改練這一門」也不發光。"""
+    m, x = pages_at(hut, 4)
+    named = prologue.fused_arts(hut.state, hut.content, hut.world)[0].id
+    page = run(m, "return H.pagePractice();", menxia=x)
+    glows = _row_glows(page)
+    assert "switch" in glows[named] and all("switch" not in v for k, v in glows.items() if k != named)
+    opened = run(m, "return H.pagePractice();", menxia=x, S={"artOpen": named})
+    assert re.search(r'data-act="switch" data-glow="switch" data-id="%s"' % named, opened)
+    hut.switch_art(named)
+    x = server.menxia_view(hut)
+    m = server.main_view(hut)
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert all("switch" not in v for v in _row_glows(page).values())  # 基礎拳腳在功法庫裡，不發光
+    opened = run(m, "return H.pagePractice();", menxia=x, S={"artOpen": "basic_fist"})
+    assert 'data-act="switch"' in opened and not re.search(r'data-act="switch" data-glow', opened)
+
+
+def test_the_craft_page_lights_the_two_things_to_put_in_the_furnace(hut):
+    """T7 走查 W-B：煉製頁步驟 4，開爐灰著不會發光，要放進爐子的基礎拳腳與剛悟到的意境在挑選清單裡（第一屏之外）：兩樣發光，
+    放進爐子的那一樣就不再發光；兩樣都放好之後開爐發光（既有）。別的武學不發光。"""
+    m, x = pages_at(hut, 3)
+    assert m["prologue"]["glow"] == ["tab:craft", "pick:art", "pick:insight", "forge"]
+    page = run(m, "return H.pageCraft();", menxia=x)
+    arts = re.findall(r'data-act="pick" data-type="art"( data-glow="[^"]*")? data-id="(\w+)"', page)
+    assert {i: g.strip() for g, i in arts} == {"basic_breath": "", "basic_fist": 'data-glow="pick:art"'}
+    assert re.search(r'data-act="pick" data-type="ins" data-glow="pick:insight" data-id=', page)
+    placed = run(m, "H.S.forgeSel = [{ type: 'art', id: 'basic_fist' }]; return H.pageCraft();", menxia=x)
+    assert 'data-glow="pick:art"' not in placed and 'data-glow="pick:insight"' in placed  # 武學放進去了，意境還在清單裡
+    both = run(m, "H.S.forgeSel = [{ type: 'art', id: 'basic_fist' }, { type: 'ins', id: m.guide && 'feng' }]; return H.pageCraft();",
+               menxia={**x, "insights": [{**i, "id": "feng"} for i in x["insights"]]})
+    assert 'data-glow="pick:' not in both and re.search(r'id="forge" data-act="forge" data-glow="forge"\s*>', both)  # 兩樣都放好：開爐亮了
+
+
+def test_the_cue_shows_on_the_craft_page_for_the_pick_lists(hut):
+    """W-B：挑選清單在第一屏之外，師父的框上有「在下面 ↓」（#page .glow 找得到第一個發光的東西）。這裡只驗它找得到的是挑選清單的那一顆。"""
+    m, x = pages_at(hut, 3)
+    out = run(m, "return H.pageCraft();", menxia=x)
+    tags = re.findall(r"<button[^>]*data-glow=[^>]*>", out)  # 發光只加在按得下去的（applyGlow 的 :not([disabled])）
+    live = [re.search(r'data-glow="([^"]*)"', tag).group(1) for tag in tags if " disabled" not in tag]
+    assert tags and live[0] == "pick:art" and "forge" not in live  # 開爐灰著（不發光），頁面由上往下第一個會發光的是底（基礎拳腳）
+
+
 def test_only_the_art_the_master_names_glows_to_be_melted(hut):
     m, x = pages_at(hut, 9)  # 熔雜學那一步
     rows = dict(re.findall(r'data-act="art" data-id="(\w+)"( data-glow="[^"]*")?', run(m, "return H.pagePractice();", menxia=x)))

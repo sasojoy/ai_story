@@ -2110,6 +2110,7 @@ def test_every_glow_key_the_page_draws_is_one_the_content_may_name():
     source = (Path(models.__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
     literal = set(re.findall(r'data-glow="([a-z:_]+)"', source))
     assert literal and literal <= models.GLOW_KEYS, sorted(literal - models.GLOW_KEYS)
+    assert {"pick:art", "pick:insight", "switch", "cultivate", "melt"} <= literal  # 煉製頁挑選清單與修練頁各列的鍵（伺服器說哪一列）也認得到
 
 
 def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):

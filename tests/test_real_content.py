@@ -214,6 +214,30 @@ def test_the_real_steps_say_what_10_3_says_about_the_craft_tab_and_the_pages(con
         assert set(re.findall(r"\{([^}]+)\}", step.after)) <= {"意境", "武學", "心得"}, step.id
 
 
+def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to_the_target(content, world):
+    """T7 走查 W-B：目標在修練頁的步驟（5、6、10）在江湖頁、煉製頁時也有東西發光（修練分頁），裡面照舊指到那一列的鍵；
+    步驟 4 的煉製頁，開爐灰著，要放進爐子的底與意境在挑選清單裡發光（伺服器標、網頁照亮，見 Game.art_rows）。
+    真內容的修練頁與煉製頁：伺服器標的鍵跟步驟的 glow 對得上。"""
+    steps = {step.id: step for step in content.tutorial.steps}
+    for step_id in ("p5_level", "p6_refine", "p10_melt"):
+        assert steps[step_id].glow[0] == "tab:practice", step_id
+    assert {"pick:art", "pick:insight", "forge"} <= set(steps["p4_fuse"].glow)
+    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
+    game.world.open_season(content, now=0.0)
+    for option in ("choice:0", "choice:0"):
+        game.choose(option)
+    game.view_tab("practice")
+    game.choose("act:explore")
+    game.choose("choice:1")  # 山
+    assert [r["id"] for r in game.art_rows() if "pick:art" in r["glow"]] == ["jichu_quanjiao"]
+    assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan"]
+    game.forge("jichu_quanjiao", ["shan"], proposed=(None, ""))
+    named = next(r["id"] for r in game.art_rows() if "switch" in r["glow"])
+    assert named != "jichu_quanjiao"  # 坐山拳
+    game.switch_art(named)
+    assert all("switch" not in r["glow"] for r in game.art_rows())  # 基礎拳腳換下來了，不發光
+
+
 def test_the_real_hut_cards_say_each_thing_once_and_the_reward_comes_with_the_walk(content, world):
     """T7 審查 M1、M3、M4：合成、修練、熔煉的結果用 10.3 的句子（不再接一句重複的師門傳下來），四景只留事件文字那一句，
     沒有「✔ 完成」；出師的盤纏寫在抵達潁川那一則（銀兩 +30、體力回滿）。"""
