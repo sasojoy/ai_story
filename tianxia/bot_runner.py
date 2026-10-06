@@ -148,7 +148,10 @@ class BotRunner:
         return battle.muster_deadline_real, {f.id for f in definition.factions}, out
 
     def _fill(self, now: float, report: TickReport) -> None:
-        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
+        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。
+        tick 開頭看過暫停了，但等這把行動鎖的時候管理者的暫停可能先寫進去：拿到鎖之後再看一次，暫停中不補人。"""
+        if self.world.read().paused_at is not None:  # 欄位，不是方法（world.paused_at() 才是方法）
+            return
         cfg = self.content.config
         season = self.world.get_season_number()
         bots = self.characters.all(bots_only=True)

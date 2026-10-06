@@ -77,9 +77,12 @@ def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path,
     monkeypatch.setattr(sim, "HUMAN_HOURS", range(24))
     content.config.time_scale = 400.0
     resumed, real = [], sim.resume_season_clock  # 「繼續」走 world.resume_season_clock（三步的順序只寫在那一個地方）
-    monkeypatch.setattr(sim, "resume_season_clock", lambda *a, **k: resumed.append(a) or real(*a, **k))
+    # 跟正式的一樣在行動鎖裡做（伺服器的 act、主機端腳本都是）：記下呼叫的當下有沒有拿著寫入權
+    monkeypatch.setattr(
+        sim, "resume_season_clock", lambda world, *a, **k: resumed.append(world.db.writing()) or real(world, *a, **k),
+    )
     result = sim.run_season(content, tmp_path, seed=0, tick=60.0, pause=(0.05, 0.1))
-    assert len(resumed) == 1
+    assert resumed == [True]
     assert result["pause"]["at_day"] is not None
     assert result["pause"]["season_moved"] == 0.0 and result["pause"]["bot_moves"] == 0
     assert result["ended"] and isinstance(result["late_joiners"], int)

@@ -5,9 +5,12 @@ import random
 import pytest
 
 from conftest import at, install_season_one, install_showdowns
-from test_engine import _install_battle_def, _settle_without_fighters, _showdown_game, _to_showdown
+from test_engine import (
+    _install_battle_def, _install_battle_def_with_free_text, _join_and_open, _settle_without_fighters, _showdown_game,
+    _to_showdown,
+)
 from tianxia import calendar, database
-from tianxia.engine import Game
+from tianxia.engine import PAUSED_TEXT, Game
 from tianxia.models import BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome
 from tianxia.sqlite_world import open_world
 from tianxia.state import TimelineResult
@@ -623,3 +626,81 @@ def test_the_admin_resume_goes_through_the_one_resume_helper(content, world, mon
     monkeypatch.setattr("tianxia.engine.resume_season_clock", lambda *a, **k: calls.append(a) or real(*a, **k))
     game.admin_resume_clock(resumed)
     assert len(calls) == 1
+
+
+# ── B12：跳過的長度照整個曆時往下取整（企劃者已定），繼續的那一行照實說 ───────────────────
+
+
+@pytest.mark.parametrize("cal_hours", [0.35, 0.99, 1.01, 2.8, 100.8])
+def test_admin_resume_counts_only_the_part_under_one_calendar_hour(content, world, cal_hours):
+    """B12（已定）：停的長度照整個曆時往下取整才跳過，不足一個曆時的零頭算進賽季——所以停得比一個曆時（週末那季現實
+    約 107 秒）短的話，繼續之後季的時間照常多走了那一段，什麼都沒扣。這是照規則走的，不是 bug；釘在這裡，免得有人
+    把它「修」成退步。繼續那一行也照這個說：沒扣就說不另外扣，扣了就說扣多少。"""
+    game = _showdown_game(content, world)
+    content.config.admins = ["沈浪"]
+    scale = content.config.time_scale
+    game.sync(5000.0)
+    grid = calendar.cal_hour_seconds(content, world.get_season()) / scale
+    paused = 5000.0 + 7.3 * grid
+    game.sync(paused)
+    before = world.get_season().time
+    game.admin_pause_clock(paused)
+    resumed = paused + cal_hours * grid
+    line = game.admin_resume_clock(resumed)[0]
+    counted = (cal_hours - int(cal_hours)) * grid  # 整個曆時跳過，剩下的零頭照算
+    assert world.get_season().time - before == pytest.approx(counted * scale, abs=1e-6)
+    game.sync(resumed)
+    assert world.get_season().time - before == pytest.approx(counted * scale, abs=1e-6)
+    game.sync(resumed + 10)
+    assert world.get_season().time - before == pytest.approx((counted + 10) * scale, abs=1e-6)
+    if cal_hours < 1:
+        assert "不另外扣" in line and "不算進賽季" not in line
+    else:
+        assert "不算進賽季" in line and "零頭" in line and "不另外扣" not in line
+
+
+def _exact_season_one_store(content):
+    """第一季、季長 2.625 天、time_scale 1：一個曆時剛好 112.5 個現實秒（二進位小數，算起來沒有浮點誤差）。"""
+    install_season_one(content)
+    content.config.season_days, content.config.time_scale = 2.625, 1.0
+    install_showdowns(content)
+    store = open_world()
+    store.seed_first_season(content)
+    store.catch_up_season(content, 0.0, random.Random(0))
+    return store
+
+
+@pytest.mark.parametrize(
+    ("grids", "has", "lacks"),
+    [
+        (0.5, ["不到一個季曆鐘頭", "1 分 52 秒", "不另外扣"], ["不算進賽季，", "零頭"]),  # 56.25 秒：什麼都沒扣；一個曆時 112.5 秒
+        (2.5, ["其中 3 分 45 秒不算進賽季", "季末往後延一樣長", "零頭（56 秒）照算進賽季"], ["不另外扣"]),  # 扣兩個曆時，零頭半個
+        (3.0, ["這一段不算進賽季，季末往後延一樣長"], ["零頭", "不另外扣"]),  # 剛好整數個曆時：全扣
+    ],
+)
+def test_the_resume_line_says_how_much_of_the_pause_was_skipped(content, grids, has, lacks):
+    store = _exact_season_one_store(content)
+    assert store.pause_clock(1000.0)
+    text = resume_season_clock(store, content, 1000.0 + grids * 112.5, random.Random(0), "停了 {minutes} 分鐘：{skip}")[0]
+    assert all(part in text for part in has), text
+    assert not any(part in text for part in lacks), text
+
+
+def test_the_resume_line_in_the_beta_season_skips_the_whole_pause(store, content):
+    """開關關著（beta 那一季）：停的長度一秒不差地跳過，那一行就是整段都不算。"""
+    assert store.pause_clock(1000.0)
+    text = resume_season_clock(store, content, 1000.0 + 50, random.Random(0), "停了 {minutes} 分鐘：{skip}")[0]
+    assert text == "停了 0 分鐘：這一段不算進賽季，季末往後延一樣長"
+
+
+def test_a_paused_battle_custom_action_is_refused_by_the_engine_itself(content, game):
+    """自訂行動不走 choose()：引擎自己擋（伺服器雖然先擋了，引擎被別的呼叫端直接叫到時也不能把這一回合結算掉）。"""
+    definition = _install_battle_def_with_free_text(content)
+    after_muster = _join_and_open(content, game, definition)
+    with at(game, after_muster):
+        assert game.world.pause_clock(after_muster)
+        msgs = game.submit_battle_custom_action("直取波才首級")
+    assert msgs == [f"（{PAUSED_TEXT}。）"]
+    battle = game.world.get_battle()
+    assert "沈浪" not in battle.round.pending_actions and battle.round_number == 0  # 機器人補位的那一份本來就在
+    assert not any("直取波才首級" in line for line in battle.narrative_log)

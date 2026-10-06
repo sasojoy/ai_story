@@ -4161,3 +4161,19 @@ def test_world_step_does_not_move_a_paused_season():
     assert world.resume_clock(server.CONTENT, far) == far - 1600.0
     server.world_step(lambda: far + 10)
     assert world.get_season().time == pytest.approx(stopped + 10 * scale)
+
+
+def test_a_paused_season_never_asks_the_model(client, monkeypatch):
+    """暫停中，鎖外三段（對話、大場面、開爐、隨口應對）在第一段就擋，送模型的單子連問都不問引擎要
+    （只看回的 400 分不出第一段有沒有擋：第三段進鎖後會回同一句，白叫一次模型）。"""
+    _player(client)
+    assert server.game_for("沈青衫").world.pause_clock(time.time())
+    asked = []
+    for name in ("dialogue_request", "fight_request", "forge_request", "free_text_request"):
+        monkeypatch.setattr(Game, name, lambda self, *a, _name=name, **k: asked.append(_name))
+    for path, body in (
+        ("/api/choose", {"id": "act:socialize"}), ("/api/choose", {"id": "act:train"}),
+        ("/api/menxia/forge", {"art": "x", "insights": ["y"]}), ("/api/answer", {"text": "上前勸架"}),
+    ):
+        assert client.post(path, json=body).status_code == 400, path
+    assert asked == []

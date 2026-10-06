@@ -28,6 +28,24 @@ from tianxia.world import resume_season_clock  # noqa: E402
 PHASES = {"preparing": "籌備中", "running": "進行中", "resting": "休季"}
 
 
+def _profile_mismatch(season, content: Content) -> str | None:
+    """這次讀的設定跟這一季開季時蓋的章（WorldState.season_one、length_days，world_state.stamp_season）對不上，回一句拒絕的話；
+    對得上回 None。繼續要照季曆算跳過多少、排好的決戰往前挪多少：設定錯了（例如伺服器開的是 weekend，這個視窗沒設
+    TIANXIA_PROFILE）就整個照錯的規則算，而且繼續撤不回來，所以不算、不動，時鐘還停著。
+    遊戲裡按「▶ 繼續」不會有這個問題（用的是伺服器自己那一份設定）。"""
+    if season.season_one != content.config.season_one or (
+        season.length_days is not None and season.length_days != content.config.season_days
+    ):
+        stamped = f"第一季規則{'開' if season.season_one else '關'}、季長 {season.length_days} 天"
+        loaded = f"第一季規則{'開' if content.config.season_one else '關'}、季長 {content.config.season_days} 天"
+        # 待 S1／joy 潤
+        return (
+            f"這一季開季時的設定（{stamped}）跟這次讀的（{loaded}）不同，不繼續，時鐘還停著。"
+            "用跟伺服器同一份設定（--profile 或 TIANXIA_PROFILE）再跑一次。"
+        )
+    return None
+
+
 def main(argv: list[str] | None = None, clock: Callable[[], float] = time.time, content: Content | None = None) -> int:
     """content 給了就用它（測試）；沒給時 resume 照 --profile（預設讀 TIANXIA_PROFILE）讀 content/。"""
     parser = argparse.ArgumentParser(description="讓賽季時鐘暫停或繼續（停機維護用）")
@@ -57,11 +75,14 @@ def main(argv: list[str] | None = None, clock: Callable[[], float] = time.time, 
             print("賽季時鐘停了：季的時間不走、決戰不推，玩家暫時不能行動。伺服器開回來之後跑：season_clock.py resume")  # 待 S1／joy 潤
             return 0
         if args.action == "resume":
+            if at is not None and (mismatch := _profile_mismatch(world.get_season(), content)):
+                print(mismatch)  # 時鐘還停著：什麼都沒動，換對設定再跑一次
+                return 1
             # 跟管理者按「繼續」同一條路（Game.admin_resume_clock）：繼續、補算、開集結三步都在 resume_season_clock，
             # 回傳繼續的那一行、補算的訊息、集結號角（原本的時間落在暫停裡的決戰這一刻開集結），照順序印出來
             lines = resume_season_clock(
                 world, content, now, random.Random(),
-                "賽季時鐘接著走了（停了 {minutes} 分鐘）；季末往後延一樣長，排好的決戰照原本的時間開。",  # 待 S1／joy 潤
+                "賽季時鐘接著走了（停了 {minutes} 分鐘）：{skip}；排好的決戰照原本的時間開。",  # 待 S1／joy 潤
             )
             if lines is None:
                 print("賽季時鐘沒有暫停。")  # 待 S1／joy 潤

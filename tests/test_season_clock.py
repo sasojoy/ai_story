@@ -107,3 +107,47 @@ def test_the_host_resume_goes_through_the_one_resume_helper(tmp_path, content, c
     monkeypatch.setattr(season_clock, "resume_season_clock", lambda *a, **k: calls.append(a) or real(*a, **k))
     assert season_clock.main(["resume", "--db", str(path)], clock=lambda: paused + 7200, content=content) == 0
     assert len(calls) == 1
+
+
+def test_resume_with_a_profile_that_does_not_match_the_season_is_refused(tmp_path, content, capsys):
+    """I-1：伺服器開著第一季設定（weekend），主機端那一個視窗沒設 TIANXIA_PROFILE、也沒給 --profile，讀到的是預設設定
+    （第一季規則關著）：季曆與排好的決戰會照錯的規則算（長社晚開三個鐘頭、還印「照原本的時間開」），而繼續撤不回來。
+    所以對不上這一季開季時蓋的章（第一季規則開／關、季長）就拒絕，時鐘還停著；設定對得上才繼續。"""
+    path, paused = _paused_before_changshe(tmp_path, content, caught_up=True)
+    capsys.readouterr()
+    resumed = paused + 3 * 3600
+    for field, wrong in (("season_one", False), ("season_days", 14.0)):
+        right = getattr(content.config, field)
+        setattr(content.config, field, wrong)
+        assert season_clock.main(["resume", "--db", str(path)], clock=lambda: resumed, content=content) == 1
+        out = capsys.readouterr().out
+        assert "跟伺服器同一份設定" in out and "接著走了" not in out
+        assert open_world(path).paused_at() == paused and open_world(path).get_battle() is None  # 還停著、什麼都沒動
+        setattr(content.config, field, right)
+    assert season_clock.main(["resume", "--db", str(path)], clock=lambda: resumed, content=content) == 0
+    assert open_world(path).paused_at() is None and "接著走了" in capsys.readouterr().out
+
+
+def test_resuming_an_unpaused_clock_does_not_need_the_matching_profile(tmp_path, content, capsys):
+    """沒有暫停就沒有什麼要算：照舊說「沒有暫停」，不拿設定不對來嚇人。"""
+    path, _ = _paused_before_changshe(tmp_path, content, caught_up=True)
+    season_clock.main(["resume", "--db", str(path)], clock=lambda: 1.0e9, content=content)
+    capsys.readouterr()
+    content.config.season_one = False
+    assert season_clock.main(["resume", "--db", str(path)], clock=lambda: 1.0e9 + 10, content=content) == 0
+    assert "沒有暫停" in capsys.readouterr().out
+
+
+def test_the_host_resume_line_says_whether_the_pause_was_taken_off_the_season(tmp_path, content, capsys):
+    """停不到一個季曆鐘頭的話，什麼都沒扣（B12：跳過的長度照整個曆時往下取整）——那一行不能再說「不算進賽季」；
+    停得夠久就說扣了多少。"""
+    path, paused = _paused_before_changshe(tmp_path, content, caught_up=True)
+    capsys.readouterr()
+    assert season_clock.main(["resume", "--db", str(path)], clock=lambda: paused + 30, content=content) == 0
+    short = capsys.readouterr().out
+    assert "不另外扣" in short and "不算進賽季" not in short
+    season_clock.main(["pause", "--db", str(path)], clock=lambda: paused + 100)
+    capsys.readouterr()
+    assert season_clock.main(["resume", "--db", str(path)], clock=lambda: paused + 100 + 3 * 3600, content=content) == 0
+    long = capsys.readouterr().out
+    assert "不算進賽季" in long and "不另外扣" not in long

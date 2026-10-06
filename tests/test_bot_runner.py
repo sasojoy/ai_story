@@ -476,3 +476,15 @@ def test_bots_sit_out_a_paused_season(runner, world, clock, content, monkeypatch
     assert world.get_season().time == season_time
     world.resume_clock(content, clock[0])
     assert runner.tick().added == 2
+
+
+def test_a_pause_that_commits_while_the_bot_waited_for_the_fill_lock_adds_no_bots(runner, world, clock, content):
+    """tick 一開頭看到的是沒暫停，之後等補人的行動鎖等到管理者的暫停先寫進去：拿到鎖之後 _fill 自己再看一次，
+    不補人（不然暫停中還會多出兩位假人）。直接呼叫 _fill 就是「拿到鎖之後」那一刻。"""
+    world.pause_clock(clock[0])
+    report = bot_runner.TickReport()
+    runner._fill(clock[0], report)
+    assert report.added == 0 and _bots() == []
+    world.resume_clock(content, clock[0])
+    runner._fill(clock[0], report)
+    assert report.added == 2  # 繼續之後照常補

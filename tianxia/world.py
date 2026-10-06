@@ -620,6 +620,40 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     return msgs
 
 
+# 繼續時那一行怎麼說「這一段」（填進 resume_line 的 {skip}）：跳過的長度第一季照整個曆時往下取整（pause_skip，B12），
+# 停得比一個曆時短就什麼都沒扣，不能再說「不算進賽季」。待 S1／joy 潤
+RESUME_SKIP_ALL = "這一段不算進賽季，季末往後延一樣長"
+RESUME_SKIP_PART = "其中 {skipped}不算進賽季，季末往後延一樣長；不足一個季曆鐘頭的零頭（{rest}）照算進賽季"
+RESUME_SKIP_NONE = "停不到一個季曆鐘頭（現實約 {grid}），不另外扣：這一段照算進賽季，季末不另外往後延"
+
+
+def _span_text(seconds: float) -> str:
+    """現實秒數寫成給人看的長度：56 秒、3 分 45 秒、1 小時 12 分。"""
+    total = int(round(seconds))
+    if total < 60:
+        return f"{total} 秒"
+    if total < 3600:
+        minutes, rest = divmod(total, 60)
+        return f"{minutes} 分" + (f" {rest} 秒" if rest else "")
+    hours, rest = divmod(total, 3600)
+    return f"{hours} 小時" + (f" {rest // 60} 分" if rest // 60 else "")
+
+
+def resume_skip_text(season: WorldState, content: Content, span: float) -> str:
+    """停了 span 個現實秒，繼續時賽季到底扣了多少，照實說（RESUME_SKIP_*）：全扣（beta 那一季、或剛好整數個曆時）、
+    扣了整個曆時的部分零頭照算、什麼都沒扣（不足一個曆時）。"""
+    if not calendar.season_one_on(season, content):
+        return RESUME_SKIP_ALL
+    grid = calendar.cal_hour_seconds(content, season) / content.config.time_scale
+    skipped = pause_skip(season, content, span)
+    rest = span - skipped
+    if skipped <= 0:
+        return RESUME_SKIP_NONE.format(grid=_span_text(grid))
+    if rest < 1:  # 差不到一秒的零頭是浮點誤差
+        return RESUME_SKIP_ALL
+    return RESUME_SKIP_PART.format(skipped=_span_text(skipped), rest=_span_text(rest))
+
+
 def resume_season_clock(
     world: WorldStateStore, content: Content, now: float, rng: random.Random, resume_line: str,
 ) -> list[str] | None:
@@ -629,13 +663,15 @@ def resume_season_clock(
     2. catch_up_season：暫停前還沒補算的那一段（主機端直接暫停、或沒開排程時停在補算之前）裡面的一般大事先結算，不然排在這一刻的
        決戰會在它前面的大事還沒結算時就開成（時刻表的先後不能亂）；補算有推進時，排隊的決戰就在它的結尾開集結；
     3. start_pending_battle：補算沒有推進時（繼續的那一刻剛好落在曆時交界上、沒有零頭）由它開那一場。
-    回傳 [resume_line（{minutes} 換成停了幾分鐘）] ＋ 補算的訊息 ＋ 開集結的訊息：集結號角那一行可能出在 2 或 3，
-    兩邊都要接上，少一邊那一句就丟了。賽季時鐘沒有暫停回 None。呼叫端要拿著行動鎖（一筆交易做完），now 是現實時間。"""
+    回傳 [resume_line（{minutes} 換成停了幾分鐘、{skip} 換成這一段實際扣了多少，見 resume_skip_text）] ＋ 補算的訊息 ＋
+    開集結的訊息：集結號角那一行可能出在 2 或 3，兩邊都要接上，少一邊那一句就丟了。賽季時鐘沒有暫停回 None。
+    呼叫端要拿著行動鎖（一筆交易做完：管理者的按鈕在 server.act 裡、主機端腳本與模擬自己拿），now 是現實時間。"""
     span = world.resume_clock(content, now)
     if span is None:
         return None
+    line = resume_line.format(minutes=int(span // 60), skip=resume_skip_text(world.get_season(), content, span))
     caught = list(world.catch_up_season(content, now, rng))
-    return [resume_line.format(minutes=int(span // 60))] + caught + start_pending_battle(world, content, now)
+    return [line] + caught + start_pending_battle(world, content, now)
 
 
 def _start_threshold_battle(world: WorldStateStore, content: Content, now: float) -> list[str]:

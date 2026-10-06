@@ -63,7 +63,8 @@ def _pause_step(world, content, now: float, pause: tuple[float, float], frozen: 
         log["at_day"] = frozen[0] / 86400
     elif frozen and now >= end and world.paused_at() is not None:
         log["season_moved"] = world.get_season().time - frozen[0]
-        resume_season_clock(world, content, now, random.Random(0), "停了 {minutes} 分鐘")
+        with world.action_lock():  # 跟正式的一樣一筆交易做完（resume_season_clock 要在行動鎖裡呼叫）
+            resume_season_clock(world, content, now, random.Random(0), "停了 {minutes} 分鐘")
 
 
 def run_season(content, workdir: Path, seed: int, tick: float, pause: tuple[float, float] | None = None) -> dict:
