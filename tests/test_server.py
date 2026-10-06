@@ -1,8 +1,12 @@
+import ast
 import contextlib
 import hashlib
+import io
 import random
 import re
 import sqlite3
+import sys
+import threading
 import time
 from unittest import mock
 
@@ -35,6 +39,18 @@ def season_already_open(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
 
 
+def _stop_scheduler() -> None:
+    """排程執行緒也是 server 的模組狀態：測試留下來的那一條先停掉、等它真的結束，再把停止的旗子放下，
+    免得它在後面測試的暫存資料庫上推世界。"""
+    thread = server.SCHEDULER_THREAD
+    if thread is not None:
+        server.SCHEDULER_STOP.set()
+        thread.join(5.0)
+        assert not thread.is_alive()
+    server.SCHEDULER_THREAD = None
+    server.SCHEDULER_STOP.clear()
+
+
 @pytest.fixture(autouse=True)
 def _no_landing(monkeypatch):
     """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
@@ -43,12 +59,17 @@ def _no_landing(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_server_memory():
-    """登入紀錄、登入狀態、角色快取都只放在伺服器記憶體裡：每個測試從空的開始。"""
+    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
+    不然上一個測試的暫存資料庫會被沿用。"""
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
     yield
+    _stop_scheduler()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
+    server.WORLD_GAME = None
 
 
 @pytest.fixture(autouse=True)
@@ -1803,6 +1824,342 @@ def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(mo
         server.forge(game, "jichu_quanjiao", ["feng"])
     assert asked == []
     assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+
+
+# ── 伺服器自己的排程：排程的一下（world_step）跟玩家請求同一把鎖、同一套鎖內模型守衛 ──────────────
+
+
+def test_world_step_pushes_the_season_under_the_action_lock(monkeypatch):
+    """排程的一下：拿行動鎖、推全服的事；鎖內的模型額度照玩家請求那一套（斷路器開著時這一下也不叫模型）。"""
+    held = []
+    real_lock = SqliteWorldStore.action_lock
+
+    def spy_lock(self, timeout=None):
+        held.append(timeout)
+        return real_lock(self, timeout)
+
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy_lock)
+    server.world_step(lambda: 1000.0)
+    before = open_world().get_season().time
+    server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+    assert held and all(t is None for t in held)  # 跟玩家請求一樣等到拿到為止
+
+
+def test_world_step_reads_the_clock_inside_the_action_lock():
+    """排程那一下的現在時間在拿到行動鎖之後才讀（跟 act() 一樣）：等鎖等了多久，這一下開的集結、回合的期限都不會因此變短。"""
+    seen = []
+
+    def clock():
+        seen.append(database.open_database().writing())
+        return 1000.0
+
+    server.world_step(clock)
+    assert seen == [True]
+
+
+def test_world_step_respects_the_model_breaker(monkeypatch, breaker_clock):
+    """斷路器開著時，排程那一下的鎖內模型額度一開始就用完（跟 _locked 同一套 _model_guard）。"""
+    seen = []
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: seen.append(self._model_budget.gave_up) or [])
+    server._pause_model()
+    server.world_step(lambda: 1000.0)
+    assert seen == [True]
+
+
+def test_the_model_guard_refuses_to_run_without_the_action_lock(game):
+    """_model_guard 假設已經拿到行動鎖（審查 M1）：沒拿鎖就用它直接丟 RuntimeError，不會悄悄在鎖外歸零額度、查斷路器。
+    所以把順序寫反（with _model_guard(g), action_lock()）的呼叫端一進來就會壞。"""
+    with pytest.raises(RuntimeError, match="行動鎖"), server._model_guard(game):
+        pass
+    with game.world.action_lock(), server._model_guard(game):
+        pass
+
+
+def test_every_lock_hold_resets_the_model_budget_while_holding_the_lock(game, monkeypatch):
+    """玩家請求（act、look）與排程（world_step）都是先拿到行動鎖、才歸零鎖內的模型額度。"""
+    seen = []
+    real = Game.reset_model_budget
+    monkeypatch.setattr(Game, "reset_model_budget", lambda self: seen.append(self.world.db.writing()) or real(self))
+    server.act(game, lambda g: None)
+    server.look(game, lambda g: None)
+    server.world_step(lambda: 1000.0)
+    assert seen == [True, True, True]
+
+
+def test_a_failed_in_lock_call_in_a_world_step_trips_the_breaker_for_everyone(game, monkeypatch, breaker_clock, capsys):
+    """排程那一下鎖內的模型呼叫失敗：跟玩家請求一樣打開全服的斷路器、印同一行，下一個玩家的拿鎖一開始額度就用完。"""
+    sent = _model_down(monkeypatch)
+    monkeypatch.setattr(Game, "world_tick", lambda self, now: _ask_the_model_in_the_lock(self) or [])
+    server.world_step(lambda: 1000.0)
+    assert len(sent) == 1
+    assert server.look(game, lambda g: (g._model_budget.gave_up, g._quick_client())) == (True, None)
+    assert len(sent) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        f"鎖內的模型呼叫失敗或逾時：接下來 {server.MODEL_BREAKER_SECONDS} 秒全服鎖內不叫模型，改用固定文字。",
+    ]
+
+
+def _lock_is_free() -> bool:
+    """另一個執行緒拿得到行動鎖嗎（拿不到就是有人沒放）。"""
+    got = []
+
+    def grab():
+        with contextlib.suppress(TimeoutError), open_world().action_lock(timeout=2.0):
+            got.append(True)
+
+    thread = threading.Thread(target=grab)
+    thread.start()
+    thread.join(5.0)
+    return got == [True]
+
+
+def test_a_failed_world_step_rolls_back_and_releases_the_lock(monkeypatch):
+    """排程那一下出錯：這一下推的整筆撤回、鎖放掉、例外丟給呼叫端；記憶體裡那份做到一半的空殼也不留，下一下從資料庫重建、
+    照常推（Review Focus 2 的伺服器這一半）。"""
+    server.world_step(lambda: 1000.0)  # 第一下只記下時鐘
+    before = open_world().get_season().time
+    real_tick = Game.world_tick
+
+    def tick_then_fail(self, now):
+        real_tick(self, now)
+        raise RuntimeError("這一下壞了")
+
+    monkeypatch.setattr(Game, "world_tick", tick_then_fail)
+    with pytest.raises(RuntimeError, match="這一下壞了"):
+        server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before)  # 推過的那一段撤回了
+    assert _lock_is_free()
+    assert server.WORLD_GAME is None
+    monkeypatch.setattr(Game, "world_tick", real_tick)
+    server.world_step(lambda: 1300.0)
+    assert open_world().get_season().time == pytest.approx(before + 300 * server.CONTENT.config.time_scale)
+
+
+def test_a_world_step_that_cannot_build_its_game_raises_and_tries_again_next_time(monkeypatch):
+    """建那一份沒有玩家的 Game 就失敗（例如資料庫一時打不開）：例外丟給呼叫端（排程迴圈印出來），下一下重新建。"""
+    real = Game.for_world
+    calls = []
+
+    def flaky(content, world, rng=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("資料庫打不開")
+        return real(content, world, rng)
+
+    monkeypatch.setattr(Game, "for_world", staticmethod(flaky))
+    with pytest.raises(OSError):
+        server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is None
+    server.world_step(lambda: 1000.0)
+    assert server.WORLD_GAME is not None and len(calls) == 2
+
+
+# ── 排程執行緒與開關（Config.world_tick_seconds，預設 0＝關）──────────────
+
+
+def _boom(exc: BaseException) -> None:
+    """在同一行丟出 exc：排程的出錯紀錄認「同一個錯」看的是類別與丟出來的那一行。"""
+    raise exc
+
+
+def test_scheduler_keeps_running_after_a_failed_step(capsys):
+    """排程那一下出錯：印一行（stdout，只寫例外的類別）加呼叫堆疊（stderr），下一輪照跑；執行緒不會死（Review Focus 2）。
+    例外訊息不寫（常夾著名號，跟 bot_runner.log_failure 一樣，最終審查 I1）；每一下回傳的訊息也不印。"""
+    stop = threading.Event()
+    calls = []
+    broken = RuntimeError("第一下壞了")  # 訊息不寫在丟出來那一行：呼叫堆疊會照實印出那一行原始碼
+
+    def step(clock):
+        calls.append(clock())
+        if len(calls) == 1:
+            _boom(broken)
+        if len(calls) == 3:
+            stop.set()
+        return ["沈浪加入了官軍。"]
+
+    server.run_scheduler(0.001, stop, step=step, clock=lambda: 42.0)
+    assert calls == [42.0, 42.0, 42.0]
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["排程這一下出錯：RuntimeError"]
+    assert "in step" in captured.err and "in _boom" in captured.err  # 呼叫堆疊：程式碼的位置
+    assert "第一下壞了" not in captured.out + captured.err
+    assert "沈浪" not in captured.out + captured.err
+
+
+def _strict_cp950_console(monkeypatch) -> tuple[io.BytesIO, io.BytesIO]:
+    """主控台是 cp950、寫不出的字直接丟例外（errors="strict"）：stdout 導到檔案、環境又不是 UTF-8 時就是這樣
+    （最終審查 I1 重現的情形）。回傳 stdout、stderr 底下的位元組。"""
+    out, err = io.BytesIO(), io.BytesIO()
+    for name, raw in (("stdout", out), ("stderr", err)):
+        monkeypatch.setattr(sys, name, io.TextIOWrapper(raw, encoding="cp950", errors="strict", write_through=True))
+    return out, err
+
+
+def test_a_failed_step_logs_no_names_and_survives_a_console_that_cannot_write_them(monkeypatch):
+    """I1：一下丟出夾著名號的例外（簡體字，cp950 寫不出來）、下一下又丟一個夾著名號的：排程執行緒照樣跑完每一下，
+    主控台只看到例外的類別與程式碼的位置，看不到名號也看不到訊息。以前 print 在 except 裡丟 UnicodeEncodeError，
+    執行緒就這樣死了，世界又變成等人點擊才動。"""
+    out, err = _strict_cp950_console(monkeypatch)
+    stop = threading.Event()
+    secrets_in_messages = [KeyError("孙坚"), RuntimeError("沈浪的存檔讀不進來")]  # 名號不能出現在丟出來那一行的原始碼上
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(secrets_in_messages):
+            _boom(secrets_in_messages[len(calls) - 1])
+        stop.set()
+        return []
+
+    thread = threading.Thread(target=server.run_scheduler, args=(0.001, stop), kwargs={"step": step})
+    thread.start()
+    thread.join(5.0)
+    assert not thread.is_alive() and len(calls) == 3  # 每一下都跑到了：排程沒有死在寫紀錄上
+    text = out.getvalue().decode("cp950") + err.getvalue().decode("cp950")
+    assert "排程這一下出錯：KeyError" in text and "排程這一下出錯：RuntimeError" in text
+    assert "in _boom" in text
+    assert "沈浪" not in text and "存檔讀不進來" not in text
+
+
+def test_a_console_that_breaks_never_stops_the_scheduler(monkeypatch):
+    """寫紀錄本身出錯（主控台不見了、寫不進去）一律吞掉：記錄不能讓排程停下來。"""
+
+    class Gone(io.StringIO):
+        def write(self, text):
+            raise OSError("主控台不見了")
+
+    monkeypatch.setattr(sys, "stdout", Gone())
+    monkeypatch.setattr(sys, "stderr", Gone())
+    stop = threading.Event()
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= 2:
+            _boom(RuntimeError("壞了"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step)
+    assert len(calls) == 3
+
+
+def test_a_failure_that_repeats_every_tick_is_counted_not_flooded(capsys):
+    """同一個錯（同一個類別、在同一行丟出來）一直重複：第一次整段印，之後只數次數，換了別的錯時先印一行「又出錯 N 次」
+    再整段印新的那個，不會每一下都印一整段（最終審查 M2：每 10 秒一下，一天八千多段）。"""
+    stop = threading.Event()
+    kinds = [KeyError] * 4 + [ValueError] * 2
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) <= len(kinds):
+            _boom(kinds[len(calls) - 1]("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: 0.0)
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 3 次：KeyError（同一個地方，細節同上）",
+        "排程這一下出錯：ValueError",
+    ]
+    assert captured.err.count("in _boom") == 2  # 整段的呼叫堆疊只印兩次：每個錯第一次
+
+
+def test_a_repeating_failure_still_reports_its_count_every_few_minutes(capsys):
+    """一直是同一個錯：滿 SCHEDULER_REPEAT_SUMMARY_SECONDS 秒印一行累計的次數（log 的節流時鐘跟世界時間無關）。"""
+    stop = threading.Event()
+    now = [0.0]
+    calls = []
+
+    def step(clock):
+        calls.append(1)
+        if len(calls) == 3:
+            now[0] = float(server.SCHEDULER_REPEAT_SUMMARY_SECONDS)
+        if len(calls) <= 4:
+            _boom(KeyError("某某"))
+        stop.set()
+        return []
+
+    server.run_scheduler(0.001, stop, step=step, log_clock=lambda: now[0])
+    assert capsys.readouterr().out.splitlines() == [
+        "排程這一下出錯：KeyError",
+        "排程這一下又出錯 2 次：KeyError（同一個地方，細節同上）",
+    ]
+
+
+def test_scheduler_off_starts_nothing():
+    """開關關著（0）：不開執行緒，啟動時印一行說排程關著（Review Focus 5）。"""
+    assert server.start_scheduler(0) is None
+    assert server.SCHEDULER_THREAD is None
+    assert "排程：關" in server.scheduler_line(0)
+    assert "每 10 秒" in server.scheduler_line(10)
+
+
+def test_scheduler_on_runs_steps_in_the_background(monkeypatch):
+    done = threading.Event()
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    thread = server.start_scheduler(0.01)
+    try:
+        assert thread is not None and thread.daemon
+        assert done.wait(2.0)
+    finally:
+        server.SCHEDULER_STOP.set()
+        if thread is not None:
+            thread.join(2.0)
+            assert not thread.is_alive()
+        server.SCHEDULER_STOP.clear()
+
+
+def test_a_second_scheduler_is_refused(monkeypatch):
+    """一個伺服器只開一條排程執行緒（WORLD_GAME 只給一條執行緒用）：已經有一條在跑，再開就拒絕。"""
+    monkeypatch.setattr(server, "world_step", lambda clock: [])
+    first = server.start_scheduler(0.01)
+    with pytest.raises(RuntimeError, match="排程"):
+        server.start_scheduler(0.01)
+    assert server.SCHEDULER_THREAD is first and first.is_alive()
+
+
+def _users_in_server(name: str) -> set[str | None]:
+    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。"""
+    found: set[str | None] = set()
+
+    def visit(node: ast.AST, owner: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Name) and child.id == name:
+                found.add(owner)
+            visit(child, owner)
+
+    visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    return found
+
+
+def test_only_main_starts_the_scheduler_and_only_the_scheduler_runs_world_steps():
+    """排程只有一條：只從 main() 開（import 時不開）；請求的處理從不呼叫 world_step，只有排程迴圈用它。"""
+    assert _users_in_server("start_scheduler") == {"main"}
+    assert _users_in_server("world_step") == {"run_scheduler"}
+
+
+def test_main_starts_the_scheduler_only_when_switched_on(capsys, monkeypatch):
+    """啟動時在設定那一行後面印排程開了沒有；關著（預設）不開執行緒，開著就開一條、每隔幾秒推一下。"""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    server.main([])
+    assert "排程：關（世界時間等有人連線才推）" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is None
+    done = threading.Event()
+    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0.01)
+    monkeypatch.setattr(server, "world_step", lambda clock: done.set() or [])
+    server.main([])
+    assert "排程：每 0.01 秒推一次全服的事" in capsys.readouterr().out
+    assert server.SCHEDULER_THREAD is not None and done.wait(2.0)
 
 
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():

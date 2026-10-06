@@ -739,6 +739,18 @@ class Config(_Strict):
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
     time_scale: float = 1.0
+    # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
+    # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
+    world_tick_seconds: float = Field(default=0, ge=0)
+
+    @field_validator("world_tick_seconds")
+    @classmethod
+    def _tick_off_or_at_least_a_second(cls, seconds: float) -> float:
+        """0 是關；開著至少 1 秒：每一下是一筆寫入交易（含 fsync），0.1 秒就是每秒十筆（最終審查 M5）。"""
+        if 0 < seconds < 1:
+            raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
+        return seconds
+
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
