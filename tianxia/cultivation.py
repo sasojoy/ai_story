@@ -187,5 +187,7 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
     if name != old.name and not world.rename_skill(art_id, name):
         return [f"【{name}】已經有人用了，換一個吧。"]
     state.player.naming = None
+    if art_id not in state.player.renames_told:  # 自己定的名：定名那一句已經說了，下次同步不必再通知自己（FB-083）
+        state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]

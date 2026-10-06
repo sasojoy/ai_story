@@ -57,15 +57,15 @@ def test_the_card_line_lists_the_traits_with_this_arts_numbers(content):
     art = _art("裂石拳", attribute="剛", traits_=["剛", "快", "剛"], special="lianhuan").model_copy(update={"quality": "中品"})
     line = traits.card_line(content, art)
     assert line.startswith("功效：")
-    assert "〔破甲〕對手強度當作低 12%" in line  # 2 層 ×1.5 ×4%
-    assert "〔先手〕大勝的門檻低 6%" in line and "〔連環〕每場擲兩次運氣" in line
+    assert "〔破甲〕對手的強度等於低了 12%，更容易贏" in line  # 2 層 ×1.5 ×4%
+    assert "〔先手〕比較容易打出大勝（大勝要贏的幅度少對手強度的 6%）" in line and "〔連環〕每場打鬥碰兩次運氣" in line
 
 
 def test_the_point_specials_print_points_not_percentages(content):
     """悟招（心得）與輕身（體力）的數字是點數，其他功效是比例。"""
-    assert "〔悟招〕打贏多拿 5 心得" in traits.card_line(content, _art("悟拳", special="wuzhao"))
-    assert "〔輕身〕遊歷少花 2 體力" in traits.card_line(content, _art("輕功", special="qingshen"))
-    assert "〔回春〕不論勝負，打完回氣血上限的 3%" in traits.card_line(content, _art("春功", special="huichun"))
+    assert "〔悟招〕打贏多得 5 點心得" in traits.card_line(content, _art("悟拳", special="wuzhao"))
+    assert "〔輕身〕遊歷少花 2 點體力" in traits.card_line(content, _art("輕功", special="qingshen"))
+    assert "〔回春〕不論輸贏，打完都回復氣血上限的 3%" in traits.card_line(content, _art("春功", special="huichun"))
 
 
 def test_the_card_line_is_empty_when_the_content_has_no_traits(content):

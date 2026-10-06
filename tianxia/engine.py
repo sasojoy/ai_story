@@ -32,7 +32,7 @@ from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
-from .martial_arts import QUALITIES
+from .martial_arts import QUALITIES, is_renamed
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
     RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
@@ -86,6 +86,15 @@ class TollFacts:
     wounded: bool = False  # 開打前氣血就低於上限（厚才有用：它把氣血係數的下限拉高，滿血時沒有東西可拉；內傷讓「滿血」的上蓋低於上限，也算）
     low_hp: bool = False  # 開打前氣血低到「見底」（剩 LOW_HP_RATIO 以下，含）：厚那句「氣血見底」才挑得到
     healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）；劇情戰不回血
+    # 下面三個是功效演出句後面括號裡的數字（FB-084）：跟戰報上的「氣血 -N」「氣血 +N」「內傷 +N」是同一批算的
+    saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
+    spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
+    gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
+
+
+def _points(lines: list[str]) -> int:
+    """heal_fraction 回的「氣血 +N」那一行的 N：功效演出句的括號（FB-084）寫的跟戰報上那一行是同一個數，不另外算一份。"""
+    return next((int(m.removeprefix("氣血 +")) for m in lines if m.startswith("氣血 +")), 0)
 
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
@@ -399,6 +408,7 @@ class Game:
         owned = set(library.owned_arts(s))
         p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
+        p.art_rolled = {k: v for k, v in p.art_rolled.items() if k in owned and v in QUALITIES}
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -490,6 +500,7 @@ class Game:
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -2225,6 +2236,39 @@ class Game:
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
         journal.add_entry(self.state, entry)
 
+    def _deliver_renames(self) -> None:
+        """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
+        「你手上的【舊名】已由{名號}定名為【新名】。」——絕學定名改的是全服的顯示名字，別人手上那一門也跟著改，不通知的話
+        玩家只會看到武學莫名其妙換了名字。一次補到好幾門就合成一則（比照 _deliver_big_events）。
+
+        做法同 _deliver_battle_results：資料庫（全服登記的武學）才是真實來源，改名那一下不去動別人的角色，每個人自己的 Game
+        同步時自己補。誰通知過記在自己的 PlayerState.renames_told（武學 id），所以一個人一次改名只通知一次：自己定的名、
+        拿到的時候就已經是定過名的（library.store_art）一開始就記成通知過。舊名就是登記時的 id（絕學定名只改顯示的名字，id 不動）。
+        名號照登記時記下的那一個（MartialArt.master_shown，沒有就照 masters 表的名號），不另外去查；全服第一個練成的人寫的
+        一律是他的名號，匿名行走的人在登記當下記成「某位少俠」，照寫。內容手寫的武學（本命、基礎）不會被改名，也就不會在這裡出現。"""
+        p = self.state.player
+        held = [a for a in library.owned_arts(self.state) if a not in p.renames_told and a not in self.content.skills]
+        if not held:
+            return
+        renamed = self.world.renamed_skill_ids()  # 一次查完這一季改過名的；沒有就不必一門一門去查
+        lines = []
+        for art_id in held:
+            art = self.world.get_skill(art_id) if art_id in renamed else None
+            if art is None or not is_renamed(art):
+                continue
+            p.renames_told.append(art_id)
+            namer = art.master_shown or self.world.master_of(art_id)
+            if namer is None or self.world.master_of(art_id) == p.name:  # 自己定的名（舊存檔沒記到）：定名那一句已經說過了
+                continue
+            lines.append(f"你手上的【{art.id}】已由{namer}定名為【{art.name}】。")
+        if len(lines) == 1:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=lines[0])
+        elif lines:
+            entry = JournalEntry(time=self.state.world.time, title=journal.RENAMED, tag=f"共 {len(lines)} 則", lines=lines)
+        else:
+            return
+        journal.add_entry(self.state, entry)
+
     def _deliver_battle_results(self) -> None:
         """收場的全服決戰補送到自己手上（FB-027）：自己的名號在參戰名單上（含下線的、中途倒下的；觀戰的不在名單上）、
         還沒補過的，每一場寫一則江湖紀錄、加一筆戰報。
@@ -2765,23 +2809,28 @@ class Game:
         事實（TollFacts）是 _play_rounds 寫功效的演出句用的：開打前氣血是不是低於上限（厚），哪幾個回血的功效真的回了血
         （沒回到 1 點、沒有「氣血 +N」那一行就不算）。"""
         before, cap = self._player_hp_and_cap()
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild)  # 扣之前量：化勁、不動這一場改了多少
         toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         lo = traits.loadout(self.state, self.content, self.world)
         healed: list[str] = []
+        gained: list[tuple[str, int]] = []
         if tier in team.WIN_TIERS and traits.has(lo, "win_heal"):  # 吸取（13.2）
             heal = team.heal_fraction(self.state, self.content, self.world, traits.amount(self.content, lo, "win_heal"))
             toll += heal
             if heal:
                 healed.append("win_heal")
+                gained.append(("win_heal", _points(heal)))
         heal_after = lo.specials.get("heal_after")  # 回春（13.4）：不論勝負
         if heal_after is not None:
             heal = team.heal_fraction(self.state, self.content, self.world, heal_after.amount)
             toll += heal
             if heal:
                 healed.append("heal_after")
+                gained.append(("heal_after", _points(heal)))
         return toll, hp_lost, TollFacts(
             wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
+            saved=saved, spared=spared, gained=tuple(gained),
         )
 
     def _play_rounds(
@@ -2825,29 +2874,37 @@ class Game:
         另外寫進 notes。"""
         names = {t.hook: t.name for t in self.content.traits.general}
 
-        def say(name: str, low_hp: bool = True) -> str:
-            return self._trait_say(lo, name, squad, rng, low_hp=low_hp)
+        def say(name: str, low_hp: bool = True, note: str = "") -> str:
+            """演出句；note 是這一場改了多少（FB-084，「（少扣了 12 點氣血）」），沒有數字可寫的功效不給。"""
+            return self._trait_say(lo, name, squad, rng, low_hp=low_hp) + note
 
+        gained = dict(facts.gained)
         won = record.tier in team.WIN_TIERS
         before = [say(names[h]) for h in ("big_win", "luck_narrow", "difficulty_cut", "luck_widen") if lo.layers.get(h)]
         before += [say(lo.specials[h].name) for h in ("double_luck", "power_from_difficulty") if h in lo.specials]
         after: list[str] = []
         if hp_lost and lo.layers.get("toll_cut"):
-            after.append(say(names["toll_cut"]))
+            after.append(say(names["toll_cut"], note=f"（少扣了 {facts.saved} 點氣血）" if facts.saved > 0 else ""))
         if lo.layers.get("condition_floor") and facts.wounded:
             after.append(say(names["condition_floor"], low_hp=facts.low_hp))
         if hp_lost and "no_injury" in lo.specials:
-            after.append(say(lo.specials["no_injury"].name))
+            after.append(say(lo.specials["no_injury"].name, note=f"（免了 {facts.spared} 點內傷）" if facts.spared > 0 else ""))
         if won and lo.layers.get("win_reward") and (squad.exp or squad.reward_xinde):  # 乘勝：對手有東西可以多給
-            after.append(say(names["win_reward"]))
+            more = traits.amount(self.content, lo, "win_reward")  # 跟 _battle_rewards 同一個乘法、同一個四捨五入
+            extra = [
+                f"{round(base * (1 + more)) - base} 點{what}" for base, what in ((squad.reward_xinde, "心得"), (squad.exp, "經驗"))
+                if round(base * (1 + more)) > base
+            ]
+            after.append(say(names["win_reward"], note=f"（多得 {'、'.join(extra)}）" if extra else ""))
         if "win_heal" in facts.healed:  # 吸取：真的回了血
-            after.append(say(names["win_heal"]))
+            after.append(say(names["win_heal"], note=f"（回了 {gained['win_heal']} 點氣血）" if gained.get("win_heal") else ""))
         if won and "win_xinde" in lo.specials:  # 悟招
-            after.append(say(lo.specials["win_xinde"].name))
+            after.append(say(lo.specials["win_xinde"].name, note=f"（多得 {int(lo.specials['win_xinde'].amount)} 點心得）"))
         if "heal_after" in facts.healed:  # 回春
-            after.append(say(lo.specials["heal_after"].name))
+            after.append(say(lo.specials["heal_after"].name, note=f"（回了 {gained['heal_after']} 點氣血）" if gained.get("heal_after") else ""))
         if record.kind == "train" and "train_stamina" in lo.specials:  # 輕身：只在遊歷
-            after.append(say(lo.specials["train_stamina"].name))
+            saved = self.content.config.action_cost["train"] - self._action_costs()["train"]  # 按鈕上寫的與真的扣的少了多少
+            after.append(say(lo.specials["train_stamina"].name, note=f"（少花了 {saved} 點體力）" if saved > 0 else ""))
         return before, after
 
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
@@ -3508,14 +3565,16 @@ class Game:
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        # 新武學自己那一份的品質照機率擲（Config.fuse_quality_odds）；序章那一爐照劇本固定下品，不擲
+        rng = None if prologue_rules.fuse_base(self.state, self.content) is not None else self.rng
         if art_id and other_art and not insight_ids:
             art, msgs = fusion.blend(
-                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
         elif art_id and not other_art and len(insight_ids) == 1:
             art, msgs = fusion.fuse(
-                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed,
+                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed, rng=rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
             if art is not None:  # 草廬這一步寫了結果那一句（設計 10.3「合成之後」）就用它，後面接武學自己的說明（T7 審查 M1）
@@ -3595,7 +3654,9 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
-        self._menxia_entry(msgs[-1] if msgs else "改練", xinde)
+        # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
+        tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
+        self._menxia_entry(tag, xinde)
         return msgs
 
     def melt_art(self, art_id: str) -> list[str]:
@@ -3606,14 +3667,15 @@ class Game:
         xinde, held = self._xinde(), library.held_count(self.state)
         only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
         msgs = library.melt_art(self.state, self.content, self.world, art_id, only=only)
-        if library.held_count(self.state) < held:  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
-            line = prologue_rules.after_line(self.state, self.content, 心得=self._xinde() - xinde)
+        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            line = prologue_rules.after_line(self.state, self.content, 心得=self._xinde() - xinde)  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
             if line is not None:
                 msgs[0] = line
-        msgs = self._log(msgs)
-        if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            relearn = skillview.relearn_note(self.state, self.content, art_id)  # 基礎武學熔了還能重學：結果最後一句指路（FB-081）
+            msgs = self._log(msgs + [relearn] if relearn else msgs)
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
-        return msgs
+            return msgs
+        return self._log(msgs)
 
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
@@ -3794,6 +3856,10 @@ class Game:
 
     def insight_rows(self) -> list[dict]:
         return skillview.insight_rows(self.state, self.content, self.world)
+
+    def heal_button(self) -> dict:
+        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
+        return skillview.heal_button(self.state, self.content)
 
     def naming_row(self) -> dict | None:
         """等著自己取正式名字的那一門（第一個練成絕學）；沒有是 None。"""

@@ -41,9 +41,12 @@ globalThis.document = { getElementById: () => null, querySelector: () => null, q
 const S = { stage: "game", tab: "practice", kind: "武學", artOpen: null, legendTick: {}, forgeSel: [], forgeLine: "", busy: false,
   message: "", person: null, main: { status: { injury: 0 } }, ...input.S };
 const parts = [
-  ...["KINDS", "QUALITY_RANK", "esc", "pro", "attrNoteHtml"].map(konst),
+  ...["KINDS", "QUALITY_RANK", "esc", "pro", "attrNoteHtml", "ART_FILTERS", "filterKey"].map(konst),
   ...input.consts.map(konst),
-  ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", ...input.fns].map(fn),
+  // 卷軸卡的零件（品質印、機率條、十成格、療傷鈕、庫的篩選……）：「// ── 修練 ──」到 pagePractice 之間整段照抄
+  src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
+  // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
+  ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips", ...input.fns].map(fn),
   `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "";`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
@@ -147,10 +150,10 @@ def test_the_result_goes_into_that_arts_card_and_the_top_message_stays_too():
     out = press("cultivate", {"art": "lake_kick"})
     assert out["note"] == {"id": "lake_kick", "html": "<p>RESULT</p>"} and out["message"] == "<p>RESULT</p>"
     html = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "lake_kick", "html": "<p>RESULT</p>"})
-    body = html.split('<div class="art-body">')[1]
-    assert body.index("art-actions") < body.index('class="msg art-result"><p>RESULT</p>')  # 鈕的底下：結果就在按的那顆旁邊
+    body = html.split('<div class="art-body')[1]
+    assert body.index('class="acts"') < body.index('class="msg art-result"><p>RESULT</p>')  # 鈕的底下：結果就在按的那顆旁邊
     other = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "basic_fist", "html": "<p>RESULT</p>"})
-    assert "art-result" not in other  # 別門的結果不寫在這一門裡
+    assert "art-result" not in other.split('<div class="art-body')[1]  # 別門（身上那張卡）的結果不寫在這一門裡
 
 
 P6 = {"key": "p6_refine", "text": "師父：到「修練」修練【鎮風手】，衝一衝品質"}
@@ -216,9 +219,9 @@ def test_the_forge_wait_text_does_not_promise_a_minute():
 def test_the_melt_button_carries_the_servers_confirm_question_escaped():
     rows = [art(), art("lake_kick", "湖邊腿法", worn=False, melt={"ok": True, "note": "沒有心得，只空出一格", "confirm": "把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。"})]
     html = page("pagePractice", menxia(owned_arts=rows), artOpen="lake_kick")
-    button = re.search(r'<button[^>]*data-act="melt"[^>]*>', html).group(0)
+    button = re.search(r'<button[^>]*data-act="melt"[^>]*data-id="lake_kick"[^>]*>', html).group(0)
     assert 'data-confirm="把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。"' in button
-    assert "熔煉：沒有心得，只空出一格" in html
+    assert "熔煉（只空出一格）" in html  # 卷軸卡上熔煉是一個小字鈕，退 0 心得照實寫只空出一格
     evil = art("lake_kick", "湖邊腿法", worn=False, melt={"ok": True, "note": "x", "confirm": '"><script>'})
     assert "<script>" not in page("pagePractice", menxia(owned_arts=[evil]), artOpen="lake_kick")
 
@@ -240,14 +243,14 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
     html = page("pagePractice", menxia())
     fold = re.search(r"<details class=\"attr-note\"( open)?><summary>([^<]*)</summary>(.*?)</details>", html, re.S)
     assert fold and fold.group(1) is None  # 收著：第一屏只多一行字
-    assert fold.group(2) == "屬性有什麼用" and "ATTRNOTE" in fold.group(3)
-    assert html.index("RULESLINE") < html.index("attr-note") < html.index("身上的功法")  # 規則那一行底下、第一張卡片之前
+    assert fold.group(2) == "武學屬性有什麼用" and "ATTRNOTE" in fold.group(3)  # FB-089：標題冠上「武學」，別跟升級配點的屬性混
+    assert html.index('id="seclude"') < html.index("attr-note") < html.index("身上的兩門")  # 療傷閉關那一排底下、第一張卷軸卡之前
 
 
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():
     html = page("pageCraft", menxia(), tab="craft")
     assert html.count('<details class="attr-note">') == 1 and "ATTRNOTE" in html
-    assert html.index("FORGELINE") < html.index('id="forge"') < html.index("attr-note") < html.index("<div class=\"label\">武學")
+    assert html.index("FORGELINE") < html.index('id="forge"') < html.index("attr-note") < html.index("<div class=\"label\">功法")  # 挑東西的標題併了篩選鈕（arts-polish-2 FB-085），摺疊還是在它前面
 
 
 def test_the_attribute_note_is_escaped_and_a_missing_one_draws_nothing():

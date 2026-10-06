@@ -129,6 +129,8 @@ class PlayerState(BaseModel):
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
+    # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
+    art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
@@ -178,6 +180,9 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
+    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
+    renames_told: list[str] = Field(default_factory=list)
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）

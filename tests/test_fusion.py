@@ -69,6 +69,134 @@ def test_a_fused_art_always_starts_at_the_lowest_quality_whatever_the_base_is(re
     assert "（下品・屬" in msgs[0] and "中品" not in msgs[0]
 
 
+class Fixed:
+    """rng.choices 永遠挑 pick 那一個（擲品質用）。"""
+
+    def __init__(self, pick):
+        self.pick, self.weights = pick, None
+
+    def choices(self, population, weights):
+        self.weights = dict(zip(population, weights))
+        return [self.pick]
+
+
+@pytest.mark.parametrize("quality", ["下品", "中品", "上品"])
+def test_a_fused_art_rolls_its_own_quality(ready, content, world, quality):
+    """企劃者 2026-10-06：合出來的武學自己那一份的品質照這一爐的機率擲；全服登記的照舊是下品，
+    結果句寫擲到的品質，修練從擲到的那一品接著往上。"""
+    rng = Fixed(quality)
+    art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng", rng=rng)
+    base, insight = team.player_art(ready, content, world, "basic_fist"), insights.resolve("feng", content, world)
+    assert rng.weights == fusion.fuse_odds(ready, content, "basic_fist", base, insight).odds  # 照這一爐的搭配擲
+    assert world.get_skill(art.id).quality == "下品"
+    assert team.art_quality(ready, art) == quality
+    assert f"（{quality}・屬" in msgs[0]
+    if quality == "下品":
+        assert art.id not in ready.player.art_quality and art.id not in ready.player.art_rolled
+    else:
+        assert ready.player.art_quality[art.id] == ready.player.art_rolled[art.id] == quality
+
+
+def test_a_blended_art_rolls_its_own_quality_too(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    art, msgs = fusion.blend(ready, content, world, named("湖風拳"), "basic_fist", "lake_kick", rng=Fixed("上品"))
+    assert team.art_quality(ready, art) == "上品" and "（上品・屬" in msgs[0]
+
+
+def test_following_a_known_recipe_rolls_for_your_own_copy(ready, content, world):
+    """照著別人合過的配方合（或合到舊的），拿到的是你還沒有的一門：一樣擲自己那一份。"""
+    fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng", rng=Fixed("下品"))
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", rng=Fixed("中品"))
+    assert team.art_quality(ready, art) == "中品" and "（中品・屬" in msgs[0]
+
+
+def _fuse_odds(state, content, world, art_id, insight_id):
+    return fusion.fuse_odds(
+        state, content, art_id, team.player_art(state, content, world, art_id), insights.resolve(insight_id, content, world),
+    )
+
+
+def test_an_ordinary_pairing_gets_the_configured_average(content):
+    """沒有任何因素加減分的一爐就是 Config.fuse_quality_odds（普通搭配的平均）。"""
+    odds = fusion._points(content, [])
+    assert odds.odds == {"下品": 50, "中品": 30, "上品": 20} and odds.reasons == ()
+
+
+def test_odds_always_add_up_to_100_and_never_rule_anything_out(content):
+    """企劃者 2026-10-06：不要有必出或必不出的組合——再好、再爛的搭配，上品與下品都夾在範圍裡。"""
+    best = fusion._points(content, [("quality", 999)]).odds
+    worst = fusion._points(content, [("quality", -999)]).odds
+    assert best == {"下品": 15, "中品": 40, "上品": 45}
+    assert worst == {"下品": 80, "中品": 15, "上品": 5}
+    for odds in (best, worst):
+        assert sum(odds.values()) == 100 and all(w > 0 for w in odds.values())
+
+
+def test_a_better_base_gives_better_odds(ready, content, world):
+    """回應企劃者「中品的底合出下品，那我幹嘛合成」：底的品質越好，上品越容易、下品越少。"""
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.art_quality["basic_fist"] = "上品"
+    good = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    assert good["上品"] > plain["上品"] and good["下品"] < plain["下品"]
+
+
+def test_a_well_practised_base_gives_better_odds(ready, content, world):
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.member.wugong_level = 10
+    assert _fuse_odds(ready, content, world, "basic_fist", "feng").odds["上品"] > plain["上品"]
+
+
+def test_matching_attributes_help_and_countering_ones_hurt(ready, content, world):
+    """底屬快：融「風」（快）相投、融「山」（慢）相剋、融「火」（剛）不相干。"""
+    ready.player.member.wugong_id = "lake_kick"
+    ready.player.insights = ["feng", "huo", "shan"]
+    same, plain, counter = (_fuse_odds(ready, content, world, "lake_kick", i) for i in ("feng", "huo", "shan"))
+    assert same.odds["上品"] > plain.odds["上品"] > counter.odds["上品"]
+    assert "兩股氣息相投" in same.reasons and "兩股氣息相衝" in counter.reasons
+
+
+def test_an_uncommon_insight_helps(ready, content, world):
+    """意境的來歷：內容寫好的基本意境不加分；善名惡名悟來的、合併出來的加分，自己首悟的再加。"""
+    feng = insights.resolve("feng", content, world)
+    haoran = insights.resolve("haoran", content, world)
+    merged = Insight(id="颶火", name="颶火", attribute="剛", parents=["feng", "huo"], creator="乙")
+    mine = merged.model_copy(update={"creator": ready.player.name})
+    points = [fusion.insight_points(ready, content, i) for i in (feng, haoran, merged, mine)]
+    assert points == sorted(points) and points[0] == 0 and len(set(points)) == 4
+
+
+def test_a_sharper_mind_gives_better_odds(ready, content, world):
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.stats["wis"] = 15
+    assert _fuse_odds(ready, content, world, "basic_fist", "feng").odds["上品"] > plain["上品"]
+
+
+def test_blend_odds_look_at_both_arts(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    a, b = (team.player_art(ready, content, world, x) for x in ("basic_fist", "lake_kick"))
+    plain = fusion.blend_odds(ready, content, "basic_fist", a, "lake_kick", b).odds
+    ready.player.art_quality["lake_kick"] = "上品"
+    b = team.player_art(ready, content, world, "lake_kick")
+    assert fusion.blend_odds(ready, content, "basic_fist", a, "lake_kick", b).odds["上品"] > plain["上品"]
+
+
+def test_a_known_recipe_rolls_with_your_own_pairing(ready, content, world):
+    """照別人合過的配方合：機率照你自己這一爐的組成（你的底、你的悟性），不是照首創者的。"""
+    fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng", rng=Fixed("下品"))
+    ready.player.art_quality["basic_fist"] = "上品"
+    ready.player.stats["wis"] = 12
+    rng = Fixed("中品")
+    fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", rng=rng)
+    assert rng.weights == _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    assert rng.weights["上品"] > 20
+
+
+def test_quality_odds_text_writes_the_odds_and_why(content):
+    assert fusion.quality_odds_text(fusion.QualityOdds({"下品": 50, "中品": 30, "上品": 20})) == "下品 50%、中品 30%、上品 20%"
+    odds = fusion._points(content, [("attribute", 8), ("quality", 12), ("wis", 1)])
+    assert fusion.quality_odds_text(odds) == "下品 29%、中品 41%、上品 30%（底子厚實、兩股氣息相投）"  # 分數小的不寫，最多兩個
+
+
 def test_fusing_on_a_peerless_base_gives_a_lowest_quality_copy_with_the_lowest_power(ready, content, world):
     """設計 3.4 的舊寫法會讓絕學的底合出絕學的複本，馬上熔掉就賺 40 心得（金錢迴圈）。"""
     ready.player.art_quality["basic_fist"] = "絕學"
@@ -756,10 +884,72 @@ def test_landing_on_an_art_you_already_have_is_free_and_remembered(ready, conten
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+    assert art is None and msgs == [  # FB-078：這一組是新摸清的練法，回話要講出來（不再只說「你已經有了」）
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【湖邊腿法】＋「風」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == made.id  # 配方照樣記下來
     assert "你已經有了" in fusion.fuse_problem(ready, content, world, "lake_kick", "feng")  # 下一次按之前就知道
+
+
+def test_a_new_combination_landing_on_your_own_art_registers_the_recipe_for_everyone(ready, content, world):
+    """FB-078（企劃者裁決）：不同組合可以產出同一門，這組新組合合到你自己已經有的那門是對的——配方照樣登記（「這組→那門」），
+    之後別人合同一組直接查表拿到那門，不再擲合到舊的、不叫模型；沒有人因為這一組多得到首創，也沒有人被收兩次錢。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)  # 唯一的候選是你的旋風腿：一定合到它
+    key = fusion.fuse_key("lake_kick", "feng")
+    assert world.lookup_recipe(key) is None
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art is None and "多摸清了一條練法" in msgs[0]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)  # 這一爐沒收錢
+    assert world.lookup_recipe(key).id == made.id  # 登記了：「湖邊腿法＋風 → 旋風腿」
+    assert world.get_skill(made.id).creator == "沈浪" and [a.id for a in world.fused_arts()] == [made.id]  # 首創照舊、沒多登記一門
+
+    other = other_player(content)
+    other.player.arts.append("lake_kick")
+    other_xinde, other_stamina = other.player.stats["xinde"], other.player.stamina
+    with mock.patch.object(landing, "lands", side_effect=AssertionError("配方已經登記：不該再擲合到舊的")):
+        got, msgs = fusion.fuse(other, content, world, must_not_ask(), "lake_kick", "feng")
+    assert got.id == made.id and made.id in other.player.arts  # 直接查表拿到那門
+    assert other.player.stats["xinde"] == other_xinde - content.config.fuse_xinde  # 乙照常付一次
+    assert other.player.stamina == other_stamina - content.config.fuse_stamina
+    assert "第一次" not in msgs[0] and "這一門由沈浪首創" in msgs[0]  # 首創還是甲的：這一組沒有讓誰多得首創
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)  # 甲沒有被追加收費
+    assert fusion.fuse_problem(other, content, world, "lake_kick", "feng").startswith("這一爐合出來還是【旋風腿】，你已經有了")
+
+
+def test_the_reply_for_a_new_recipe_is_only_for_the_press_that_found_it(ready, content, world):
+    """「多摸清了一條練法」只在這一爐真的把配方登記到你已經有的那門時說；第二次按同一組，按之前的檢查就攔下，說的還是「你已經有了」。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    first, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert first is None and "多摸清了一條練法" in msgs[0]
+    again, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert again is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+
+
+def test_the_old_reply_stays_when_someone_else_registered_the_recipe_while_you_waited(ready, content, world):
+    """C 段重驗時配方已經被別人登記、指到你有的那門：那一組不是你這一爐摸清的，說法照舊（link_recipe 回的 landed 是 False）。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    real_lookup = world.lookup_recipe
+    key = fusion.fuse_key("lake_kick", "feng")
+    calls = []
+
+    def lookup(k):  # 第一次查（fuse_problem、fuse 開頭）看不到，之後就有人登記好了
+        calls.append(k)
+        if k == key and len(calls) <= 2:
+            return None
+        return real_lookup(k)
+
+    world.link_recipe(key, made.id, "乙")  # 別人先登記了
+    with mock.patch.object(world, "lookup_recipe", side_effect=lookup):
+        art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
 
 
 def test_landing_twice_charges_once(ready, content, world):
@@ -784,7 +974,9 @@ def test_landing_on_the_base_itself_is_free_and_stays_that_way(ready, content, w
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+    assert art is None and msgs == [
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【旋風腿】＋「風」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     key = fusion.fuse_key("旋風腿", "feng")
     assert world.lookup_recipe(key).id == made.id
@@ -977,10 +1169,17 @@ def test_landing_on_an_insight_you_already_hold_is_free(ready, content, world):
     landing_on(content)
     xinde, stamina, held = ready.player.stats["xinde"], ready.player.stamina, list(ready.player.insights)
     result, msgs = fusion.merge(ready, content, world, must_not_ask(), "狂風", "huo")  # 快＋剛＝陽，唯一的候選是你的燎原
-    assert result is None and msgs == ["這兩個合起來還是「燎原」，你已經悟得了。"]
+    assert result is None and msgs == [  # FB-078：這一組是新摸清的悟法，回話要講出來
+        "這一爐的路數，竟又歸到「燎原」——你多摸清了一條悟法（「狂風」＋「火」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina, ready.player.insights) == (xinde, stamina, held)
     assert world.lookup_insight_recipe(fusion.merge_key("狂風", "huo")).id == "燎原"
-    assert "你已經悟得了" in fusion.merge_problem(ready, content, world, "狂風", "huo")
+    assert "你已經悟得了" in fusion.merge_problem(ready, content, world, "狂風", "huo")  # 下一次按之前就知道，說法照舊
+    other = other_player(content, ("feng", "huo"))  # 別人合同一組：直接查表拿到燎原，不擲合到舊的
+    other.player.insights = ["狂風", "huo"]
+    with mock.patch.object(landing, "lands", side_effect=AssertionError("配方已經登記：不該再擲合到舊的")):
+        got, _ = fusion.merge(other, content, world, must_not_ask(), "狂風", "huo")
+    assert got.id == "燎原" and "燎原" in other.player.insights
 
 
 def test_landing_follows_the_registered_id_after_the_art_was_renamed(ready, content, world):
@@ -1125,9 +1324,12 @@ def test_a_blend_can_land_on_one_of_its_own_arts(ready, content, world):
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.blend(ready, content, world, must_not_ask(), fast.id, "lake_kick")
-    assert art is None and msgs == ["這兩門合出來還是【旋風腿】，你已經有了——換一門吧。"]
+    assert art is None and msgs == [  # FB-078：兩門照 id 排（跟成功那句、功法卡同一個先後）
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【湖邊腿法】＋【旋風腿】）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     assert world.lookup_recipe(fusion.blend_key(fast.id, "lake_kick")).id == fast.id
+    assert "你已經有了" in fusion.blend_problem(ready, content, world, fast.id, "lake_kick")  # 下一次按之前就知道
 
 
 def test_forge_request_for_a_blend(ready, content, world):

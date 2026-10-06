@@ -168,6 +168,40 @@ class PracticeBonus(_Strict):
     line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
 
 
+class FuseQuality(_Strict):
+    """合成品質的機率怎麼跟著這一爐的搭配走（企劃者 2026-10-06：「每個武學搭配不同的意境或是其他的東西都應該要有
+    不同的機率吧，這是一整套系統，不要套死固數值」）。fusion.quality_odds 把這一爐的組成加成一個「造化分」，
+    從 Config.fuse_quality_odds（普通搭配的平均）往上或往下推：上品每分 +up_per_point、下品每分 −low_per_point，
+    中品是剩下的。上品夾在 up_range、下品夾在 low_range，所以沒有必出、也沒有必不出的組合。"""
+
+    up_per_point: float = Field(default=0.5, ge=0)
+    low_per_point: float = Field(default=1.0, ge=0)
+    up_range: tuple[float, float] = (5, 45)  # 上品最少、最多幾 %
+    low_range: tuple[float, float] = (15, 80)  # 下品最少、最多幾 %
+    # 底（武學＋武學時是兩門的平均）自己那一份的品質：好的底比較容易合出好品質（回應企劃者「中品的底合出下品，那我幹嘛合成」）
+    base_quality: dict[str, float] = Field(
+        default_factory=lambda: {"下品": -5, "中品": 5, "上品": 12, "絕學": 20},
+    )
+    level_center: int = 5  # 底練到第幾成算「普通」
+    level_point: float = Field(default=1.5, ge=0)  # 比 level_center 每多（少）一成加（扣）幾分
+    # 意境的來歷：內容寫好的基本意境 0；善名惡名悟來的（有正邪）；合併出來的；自己首悟的再加 own
+    insight_lean: float = 4
+    insight_merged: float = 6
+    insight_own: float = 4
+    same_attribute: float = 8  # 底與意境（或兩門武學）同屬性
+    counter_attribute: float = -10  # 相剋的一對
+    wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（跟修練同一套 stat_factor）
+    shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # 說明那一句的寫法：因素 → [加分時, 扣分時]（語氣照企劃者「不要那麼直白」，不寫成攻略）
+    lines: dict[str, list[str]] = Field(default_factory=lambda: {
+        "quality": ["底子厚實", "底子尚淺"],
+        "level": ["火候已足", "火候還淺"],
+        "insight": ["意境來歷不凡", ""],
+        "attribute": ["兩股氣息相投", "兩股氣息相衝"],
+        "wis": ["你心思靈透", "你心思還不夠靈透"],
+    })
+
+
 class FrontLines(_Strict):
     """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
     「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
@@ -1122,6 +1156,12 @@ class Config(_Strict):
     merge_stamina: int = 5
     # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
     fuse_stamina: int = Field(default=5, ge=0)
+    # 合成出新武學（武學＋意境、武學＋武學）時，每個人自己那一份的品質機率，「普通搭配」的平均（企劃者 2026-10-06：
+    # 「不要直接顯示合成出來確定的品級，用機率，下品50%，中品30%，上品20%」）；權重，不必加起來是 100。
+    # 序章那一爐照劇本固定下品。擲到的品質算「登記時就有」，熔的時候不給加給（library.melt_value）
+    fuse_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    # 上面那組是「普通搭配」的平均；每一爐照它的組成往上或往下推（企劃者 2026-10-06，fusion.quality_odds）
+    fuse_quality: FuseQuality = Field(default_factory=FuseQuality)
     # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
     land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
     land_chance_cap: float = Field(default=0.9, ge=0, le=1)

@@ -1059,7 +1059,9 @@ def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art()
     assert "insights.length === 1" in ready and "insights.length === 2" in ready  # 武學＋意境、意境＋意境照舊
     pick = _js_function(js, "function pick(")
     assert "已經放滿了" in pick and "p.id === id" in pick  # 放滿了不再收；同一門不放兩次
-    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" in js
+    # 「一門配一個意境，或兩門一起放」那句小字讓位給篩選鈕（FB-085：煉製頁第一屏不能多一行）；兩門一起放的說法在爐子下面那一行（forge_line）
+    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" not in js
+    assert "放兩門武學，合出一門新的" in Game.new(server.CONTENT, "測試").forge_line(None, [])
     assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
     assert "合併要花體力、體力隨時間回" not in js and "合成與合併都要花體力" in js  # 三種合成都花體力（設計 12.1）
     assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學
@@ -1620,18 +1622,24 @@ def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
     assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]
 
 
-def test_the_three_art_buttons_stay_on_one_line_at_phone_width():
-    """修練／改練這一門／熔煉在 375px 手機寬度：頁邊 16、清單邊框 1、卡內邊 14（兩側）、三顆之間兩個 8px 的縫，一排可用 375-32-2-28-16=297px。
-    原本三顆等寬各 99px，扣掉邊框 2 與內距 28，「改練這一門」（5 字 × 15px = 75px）只剩 69px 放不下而折行。
-    改成照字寬分配（flex: 1 1 auto、width: auto）、不折行、橫向內距縮到 8px：三顆自然寬 48＋93＋48 = 189px，一排有 108px 的餘裕。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+def test_the_scroll_card_buttons_sit_two_to_a_row_at_phone_width():
+    """卷軸卡（2026-10-06）：卡上兩顆大鈕（練成／改練、修練）各佔一半，字寫兩行（上面動作、下面價錢或機率），
+    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts）與療傷、閉關那兩格（.tune），不動全站的 .btn。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    assert 'class="row art-actions"' in js[js.index("const artRow"):js.index("const insightRow")]
-    rule = re.search(r"\.art-body \.art-actions > \.btn \{([^}]*)\}", css)
-    assert rule is not None, "要有只管開啟的武學那一排按鈕的 class，不動全站的 .btn"
-    body = rule.group(1)
-    assert "white-space: nowrap" in body and "width: auto" in body and "flex: 1 1 auto" in body
-    assert re.search(r"padding:\s*10px 8px", body)
+    acts = re.search(r"\.acts \{([^}]*)\}", css)
+    assert acts is not None and "grid-template-columns: 1fr 1fr" in acts.group(1)
+    two_lines = re.search(r"\.tune \.btn, \.acts \.btn \{([^}]*)\}", css)
+    assert two_lines is not None and "flex-direction: column" in two_lines.group(1)
+
+
+def test_the_heal_button_says_what_it_costs(client):
+    """療傷鈕上寫內傷與價錢：價錢由伺服器照 team.heal_cost 算好送來，網頁不自己算。"""
+    _player(client)
+    assert client.get("/api/menxia").json()["heal_cost"] == 0
+    game = server.game_for("沈青衫")
+    game.state.player.member.injury = 23.0
+    open_characters().save(game.state)
+    assert client.get("/api/menxia").json()["heal_cost"] == 12  # 每 2 點內傷 1 兩，無條件進位
 
 
 def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
@@ -1742,7 +1750,7 @@ def test_forge_line_previews_a_blend(client):
     _a_player_with_insights(client)
     before = open_characters().load("沈青衫").player
     out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "從下品起修" in out["line"]
+    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "品質看造化" in out["line"]
     saved = open_characters().load("沈青衫").player
     assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
     assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
@@ -2766,8 +2774,9 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
     # W6：功法庫裡的功法再多一行跟身上同一種那門的比較，沒有說明句時它是最後一行（本人身上那門自己的卡沒有）
-    assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血<br />\n比身上的【基礎拳腳】：威力 " in card
-    assert card.rstrip().endswith("（第一成）、多了〔化勁〕、少了〔厚〕</p>")
+    assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕每場打完損失的氣血減少 20%<br />\n比身上的【基礎拳腳】：威力 " in card
+    # FB-088：這門柔的功法換上身，會跟身上的內功（基礎吐納，也是柔）同屬，比較那一句最後多一段搭配
+    assert card.rstrip().endswith("（第一成）、多了〔化勁〕、少了〔厚〕；換上後跟內功同屬，整體 +20%</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):

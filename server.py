@@ -834,6 +834,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
         "bag": md(game.bag_text()),
+        "heal": game.heal_button(),  # 修練頁的療傷鈕：按不按得下去、不能按的原因（FB-082）；鈕上的字寫內傷與下面的 heal_cost
         # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
         "clue_items": [
             {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
@@ -849,6 +850,8 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
              "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
+        # 療傷要多少銀兩（修練頁的療傷鈕上寫）：照內傷計價，沒有內傷是 0
+        "heal_cost": team.heal_cost(game.content, member),
         "forge_line": md(game.forge_line(None, [])),
         # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
         "seclude_blocked": game.seclusion_refusal(),  # 序章裡不閉關：閉關鈕灰掉、寫這句；平常是 None

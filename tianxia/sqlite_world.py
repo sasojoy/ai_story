@@ -215,6 +215,11 @@ class SqliteWorldStore:
             )
             return True
 
+    def renamed_skill_ids(self) -> set[str]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT skill_name FROM skill_aliases WHERE season = ?", (self._season_number(conn),)).fetchall()
+        return {row["skill_name"] for row in rows}
+
     def get_insight(self, name: str) -> Insight | None:
         with self.db.snapshot() as conn:
             row = conn.execute(

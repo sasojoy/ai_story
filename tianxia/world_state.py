@@ -189,6 +189,10 @@ class WorldStateStore(Protocol):
         只換顯示的名字；new_name 已經被任何功法、改過的名字或意境用掉時不改、回 False（原子判斷）。"""
         ...
 
+    def renamed_skill_ids(self) -> set[str]:
+        """這一季被改過名字的功法 id（絕學定名，FB-083）。一次查完：同步時拿來判斷手上的武學有沒有被改過，不必一門一門查。"""
+        ...
+
     def get_insight(self, name: str) -> Insight | None:
         """這一季合併出來的意境；基本意境不在這裡（在 content.insights）。"""
         ...
