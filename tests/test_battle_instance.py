@@ -1514,6 +1514,24 @@ def test_a_lopsided_battle_gives_less(with_third):
     assert battle.third_gain == pytest.approx(50.0)  # 膠著 0.5
 
 
+@pytest.mark.parametrize("side, name, trend", [("guan", "甲", 60), ("huang", "乙", 40)])
+def test_the_warlords_still_gain_when_only_one_army_acts(with_third, side, name, trend):
+    """只有一邊有人出手（另一邊全離開大區或全放手一搏）時，豪強照樣有收穫：沒人對打時一邊推滿 10（戰局 60 或 40），
+    膠著 0.8，收穫 100 × 0.8。要求兩邊都有人才給收穫是另一種規則（Review Focus 3 只說兩邊都沒人才是 0）。"""
+    battle = _three_way(with_third, [(name, side, "強攻"), ("丙", "hao", bi.THIRD_GRAB)])
+    assert battle.trend == trend
+    assert battle.third_gain == pytest.approx(80.0)
+
+
+def test_the_stalemate_is_read_from_the_trend_after_the_round(with_third):
+    """膠著照這一回合結算完的戰局算，不是結算前的那一格：官軍強攻對黃巾固守會動戰局（不再停在 50），收穫就小於膠著 1 的 100。
+    其他收穫的測試兩軍出一樣的招、推力是 0，戰局前後都是 50，分不出這兩種算法。"""
+    battle = _three_way(with_third, [("甲", "guan", "強攻"), ("乙", "huang", "固守"), ("丙", "hao", bi.THIRD_GRAB)])
+    assert battle.trend != 50  # 這一回合真的把戰局推動了
+    assert battle.third_gain == pytest.approx(100.0 * bi.stalemate(battle.trend))
+    assert battle.third_gain < 100.0
+
+
 def test_no_armies_no_gain(with_third):
     """Review Focus 3：這一回合兩軍沒有人出手，就沒有亂可趁。"""
     battle = _three_way(with_third, [("丙", "hao", bi.THIRD_GRAB)])
@@ -1542,13 +1560,35 @@ def test_a_battle_that_gave_the_warlords_nothing_says_nothing_about_them(with_th
     assert bi.settle_third(battle, three, BattleTuning()) == [] and battle.third_push == 0  # 沒有第三方的決戰不推
 
 
-def test_the_push_rounds_half_up_and_is_capped_at_ten(with_third):
-    """Review Focus 2。÷100 後四捨五入（0.5 進位，不是銀行家進位）；一場最多 third_cap。"""
+def test_the_push_is_capped_at_ten(with_third):
+    """Review Focus 2（計畫寫的測試名）：收穫再多，割據也只推 10。"""
+    battle = bi.start_muster(with_third, now=0)
+    battle.third_gain = 5000.0
+    bi.settle_third(battle, with_third, BattleTuning())
+    assert battle.third_push == 10
+
+
+def test_the_push_rounds_half_up(with_third):
+    """÷100 後四捨五入（0.5 進位，不是銀行家進位）；一場最多 third_cap。"""
     battle = bi.start_muster(with_third, now=0)
     for gain, push in ((49.9, 0), (50.0, 1), (150.0, 2), (250.0, 3), (1049.0, 10), (5000.0, 10)):
         battle.third_gain = gain
         bi.settle_third(battle, with_third, BattleTuning())
         assert battle.third_push == push, gain
+
+
+def test_the_ending_round_pushes_by_the_configured_cap(with_third):
+    """resolve_round 收場的那一支也吃 Config.battle 的 third_cap（不是預設的 10）：之前累積 250、這回合再 100 → 4，
+    上限寫 2 就只推 2。（end_without_fighters 那一支的 tuning 在 test_engine 看。）"""
+    battle = bi.start_muster(with_third, now=0)
+    for name, side, _ in ARMIES + [("丙", "hao", bi.THIRD_GRAB)]:
+        bi.join_faction(battle, name, side, neili_cap=1000, scores={m: 100.0 for m in MOVES})
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    battle.round_number, battle.third_gain = 8, 250.0
+    for name, side, what in ARMIES + [("丙", "hao", bi.THIRD_GRAB)]:
+        bi.submit_action(battle, name, what if what == bi.THIRD_GRAB else f"{side}_{CODES[what]}")
+    bi.resolve_round(battle, with_third, random.Random(0), now=1, tuning=BattleTuning(third_cap=2))
+    assert battle.phase == "ended" and battle.third_push == 2
 
 
 def test_only_the_third_party_left_ends_the_battle(with_third):
@@ -1604,9 +1644,41 @@ def test_a_timed_out_warlord_keeps_its_strength_and_is_not_counted_as_acting(wit
     assert battle.third_gain == pytest.approx(50.0)
 
 
-def test_what_the_warlords_picked_stays_out_of_what_everyone_is_told(with_third):
-    """兩軍與場景不該知道豪強選了搶地盤還是保存實力：那一句只寫進回合紀錄（battle_rounds 只寫不讀回，玩家看不到），
-    resolve_round 回傳給大家看的訊息（會進場景的記錄與給模型的判定）裡沒有。"""
+SETTLE_LINE = "兩軍相持之際，地方上有人趁亂坐大。"
+
+
+def _told_to_everyone(msgs, warlords):
+    """這一回合發給大家的訊息，拿掉豪強自己的倒下句與收場那一句：這兩句本來就公開（審查 N4，倒下句跟兩軍的人倒下是同一個寫法，
+    收場句只在割據真的動了時出現、不寫數字）；其他一個字都不該因為場上有豪強而不同。"""
+    return [m for m in msgs if m != SETTLE_LINE and not any(m.startswith(f"{name}氣血耗盡") for name in warlords)]
+
+
+@pytest.mark.parametrize("warlords, before, neili", [
+    ([("丙", "hao", bi.THIRD_GRAB)], 0, None),
+    ([("丙", "hao", bi.THIRD_KEEP)], 0, None),
+    ([("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP), ("戊", "hao", bi.THIRD_GRAB)], 0, None),
+    ([("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP)], 0, {"丙": 30}),  # 一位豪強這回合倒下
+    ([("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP)], 8, None),  # 打完最後一回合：收場
+])
+def test_the_warlords_change_nothing_anyone_is_told(with_third, three, warlords, before, neili):
+    """兩軍與場景不該知道豪強選了什麼，也不該知道有幾個豪強、收穫多少：同一回合加不加豪強，resolve_round 回傳給大家看的訊息
+    （會進場景的記錄與給模型的判定）、場景的記錄、戰局與出招比例都一樣，除了豪強自己的倒下句與收場句。
+    不比對招名字串：換個說法的洩漏（例如「地方上有 2 人蠢蠢欲動」）也會讓這裡失敗。"""
+    armies = [("甲", "guan", "強攻"), ("乙", "huang", "固守")]
+    plain, plain_msgs = _three_way(three, armies, before=before, with_msgs=True)
+    mixed, mixed_msgs = _three_way(with_third, armies + warlords, before=before, neili=neili, with_msgs=True)
+    assert _told_to_everyone(mixed_msgs, [name for name, _, _ in warlords]) == plain_msgs
+    assert mixed.narrative_log == plain.narrative_log
+    assert (mixed.trend, mixed.last_mix, mixed.phase) == (plain.trend, plain.last_mix, plain.phase)
+    # 例外只有那兩句：收場時說了收場句、倒下時說了倒下句，其餘一樣
+    if before:
+        assert mixed_msgs[-1] == SETTLE_LINE and mixed.third_push >= 1
+    if neili:
+        assert "丙氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。" in mixed_msgs
+
+
+def test_what_the_warlords_picked_only_reaches_the_round_record(with_third):
+    """豪強選了搶地盤還是保存實力只寫進回合紀錄（battle_rounds 只寫不讀回，玩家看不到）。"""
     battle, msgs = _three_way(with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP)], with_msgs=True)
     assert not any("趁亂搶地盤" in m or "保存實力" in m for m in msgs)
     assert "趁亂搶地盤 1 人、保存實力 1 人。" in battle.rounds[-1].messages

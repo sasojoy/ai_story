@@ -9,8 +9,8 @@ from conftest import FIXTURE
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
-    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef, SpecialTrait,
-    ThirdParty, Threshold, Trend,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning, Condition, Config, FactionDef,
+    SpecialTrait, ThirdParty, Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -624,6 +624,17 @@ def test_a_third_party_must_be_another_scenario_faction_and_push_a_real_trend(co
         validate(content)
 
 
+def test_a_third_party_cannot_be_one_of_the_two_armies(content):
+    """劇本有這三個陣營，所以「要是劇本的陣營」那一條過得了，只剩「不是交戰的兩軍」擋得住（上面那個測試的第一個斷言是劇本沒有
+    陣營時跑的，會被前一條先擋掉，看不出這一條有沒有在）。"""
+    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
+    content.battles["t1"] = battle = _battle({})
+    for army in ("guan", "huang"):
+        battle.third = ThirdParty(faction=army, trend=content.scenario.trends[0].id)
+        with pytest.raises(ContentError, match=f"第三方 {army} 要是劇本的陣營，而且不是交戰的兩軍"):
+            validate(content)
+
+
 def test_a_third_party_that_is_a_scenario_faction_pushing_a_real_trend_is_valid(content):
     content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
     content.battles["t1"] = battle = _battle({})
@@ -641,6 +652,30 @@ def test_a_third_party_cannot_push_a_derived_trend(content):
     battle.third = ThirdParty(faction="hao", trend="total")
     with pytest.raises(ContentError, match="第三方 不能推衍生線 total"):
         validate(content)
+
+
+@pytest.mark.parametrize("field, bad", [
+    ("third_grab_damage", 0), ("third_grab_damage", -35), ("third_keep_damage", 0), ("third_keep_damage", -1),
+    ("third_keep_share", -0.1), ("third_keep_share", 1.5), ("third_cap", -1),
+])
+def test_a_bad_third_party_number_in_the_battle_tuning_is_refused(field, bad):
+    """決戰改版 5：第三方的四個數字寫壞了（扣血寫成 0 或負的、保存實力的折數超出 0～1、上限是負的）在載入設定時就擋下，
+    不是讓豪強變成扣不了血、收穫倒扣、或把割據往下推。"""
+    with pytest.raises(ValidationError, match=field):
+        BattleTuning(**{field: bad})
+
+
+def test_the_third_party_numbers_may_sit_on_their_edges():
+    """折數 0（保存實力不算收穫）與 1（跟搶地盤一樣）、上限 0（豪強不推割據）都是合法的調法。"""
+    BattleTuning(third_keep_share=0.0, third_cap=0)
+    BattleTuning(third_keep_share=1.0, third_cap=100)
+
+
+def test_a_bad_third_party_number_in_config_json_stops_the_load(tmp_path):
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(battle={"third_keep_share": 2}))
+    with pytest.raises(ValidationError, match="third_keep_share"):
+        load_content(root)
 
 
 def test_a_bad_battle_tuning_in_config_json_stops_the_load(tmp_path):

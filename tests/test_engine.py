@@ -2315,38 +2315,60 @@ def test_the_third_party_never_shows_up_as_the_armies_foe_in_the_reports(content
     assert game.state.journal[0].tag == "你站在官軍" and warlord.state.journal[0].tag == "你站在地方豪強"
 
 
-def test_the_armies_never_hear_what_the_warlords_picked(content, game):
-    """豪強這一回合選了搶地盤還是保存實力，官軍與黃巾不該知道：那一句不進場景的記錄、不進結算後的回覆、不進給模型的判定
-    （模型寫的敘事會進場景），只留在回合紀錄裡。"""
+def _two_showdown_rounds(content, db_path, warlords):
+    """官軍（沈浪）與黃巾（乙）打兩回合，場上另有 warlords 位豪強（兩位時一位搶地盤、一位保存實力，第二回合對調）。每個人都用
+    自己的一份 Game（client 一律是 None：不叫模型；第 1 回合另外裝一個假的 client 來收 prompt），每回合沈浪最後一個出招，
+    所以回合結算那一刻的回覆是他看到的。回傳他看到的一切：兩回合的回覆、第 1 回合給模型的 prompt、共用的場景記錄、他的場景，
+    與回合紀錄。"""
+    world = open_world(db_path)
     definition = _three_round_showdown(content)
-    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)
+    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)  # 兩邊都掛第三方，只差場上有沒有豪強
     definition.rounds_per_act = 6  # 打兩回合不收場
-    game.state.player.faction = "guan"
-    warlord = _fighter(content, game, "丙", "haoqiang")
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0), at(warlord, 0.0):
-        game.choose("battle:join:guan")
-        warlord.choose("battle:join:haoqiang")
+    me = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    me.state.player.faction = "guan"
+    foe = _fighter(content, me, "乙", "huang")
+    crowd = [_fighter(content, me, name, "haoqiang") for name in ("丙", "丁", "戊")[:warlords]]
+    fighters = [(me, "guan"), (foe, "huang")] + [(g, "haoqiang") for g in crowd]
+    for g, _ in fighters:
+        g.client = None
+    world.start_battle(definition, now=0.0)
+    for g, side in fighters:
+        with at(g, 0.0):
+            g.choose(f"battle:join:{side}")
     start = definition.muster_seconds + 1
-    told = []  # 兩個回合裡，官軍看得到的所有字
+    replies, prompts = [], []
     client = mock.Mock()
     client.chat_text.return_value = "戰場上煙塵四起。"
-    with mock.patch.object(Game, "_quick_client", return_value=client), at(game, start), at(warlord, start):  # 第 1 回合：有模型
-        told += game.choose("battle:act:guan_hold")
-        told += warlord.choose("battle:act:third_grab")
-    assert game.world.get_battle().round_number == 1
-    prompts = [call.args[0][1]["content"] for call in client.chat_text.call_args_list]
-    assert any("（戰局 " in p for p in prompts)  # 抓到的真的是決戰回合的判定
-    assert not any("趁亂搶地盤" in p or "保存實力" in p for p in prompts)
-    with at(game, start + 1), at(warlord, start + 1):  # 第 2 回合：沒有模型，潤色退回系統訊息本身
-        told += game.choose("battle:act:guan_hold")
-        told += warlord.choose("battle:act:third_keep")
-    battle = game.world.get_battle()
+    for i in range(2):  # 第 1 回合有（假的）模型，第 2 回合沒有：潤色退回系統訊息本身
+        with mock.patch.object(Game, "_quick_client", return_value=client if i == 0 else None):
+            with at(foe, start + i):
+                foe.choose("battle:act:huang_hold")
+            for n, g in enumerate(crowd):
+                with at(g, start + i):
+                    g.choose("battle:act:third_grab" if (n + i) % 2 == 0 else "battle:act:third_keep")
+            with at(me, start + i):
+                replies.append(me.choose("battle:act:guan_hold"))
+        if i == 0:
+            prompts = [call.args[0][1]["content"] for call in client.chat_text.call_args_list]
+    battle = world.get_battle()
     assert battle.round_number == 2 and battle.phase == "active"
-    told += battle.narrative_log + [game._battle_scene_text(battle, definition)]
-    assert not any("趁亂搶地盤" in line or "保存實力" in line for line in told)
-    records = game.world.battle_rounds(battle.record_id)  # 回合紀錄（戰報底稿）才留著
-    assert [r.messages[-1] for r in records] == ["趁亂搶地盤 1 人、保存實力 0 人。", "趁亂搶地盤 0 人、保存實力 1 人。"]
+    return {
+        "replies": replies, "prompts": prompts, "narrative_log": list(battle.narrative_log),
+        "scene": me._battle_scene_text(battle, definition), "records": world.battle_rounds(battle.record_id),
+    }
+
+
+def test_the_armies_never_hear_anything_about_the_warlords(content, tmp_path):
+    """豪強選了什麼、有幾個，官軍與黃巾都不該知道：同樣的兩回合，場上有沒有豪強，官軍的人看到的回覆、場景的記錄、給模型的
+    判定（模型寫的敘事會進場景）與他的場景都一個字不差。只比整份是否相同、不挑招名字串，所以換個說法的洩漏
+    （人數、收穫、「地方上有人蠢蠢欲動」）也會讓這裡失敗。豪強的紀錄只留在回合紀錄（戰報底稿）裡。"""
+    alone = _two_showdown_rounds(content, tmp_path / "alone.db", 0)
+    crowded = _two_showdown_rounds(content, tmp_path / "crowded.db", 2)
+    assert any("（戰局 " in p for p in crowded["prompts"])  # 抓到的真的是決戰回合的判定
+    for what in ("replies", "prompts", "narrative_log", "scene"):
+        assert crowded[what] == alone[what], what
+    assert [r.messages[-1] for r in crowded["records"]] == ["趁亂搶地盤 1 人、保存實力 1 人。"] * 2  # 回合紀錄才留著
+    assert not any("趁亂搶地盤" in m for r in alone["records"] for m in r.messages)
 
 
 def test_only_warlords_left_in_the_field_end_the_battle_with_the_configured_cap(content, game):

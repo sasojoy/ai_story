@@ -761,7 +761,8 @@ class BattleTuning(_Strict):
     def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:
         """企劃者測完要調數字：寫壞的值在載入設定時就擋下（伺服器開不起來、改的人馬上看到），不是等第一場決戰的第一回合
         才在行動鎖裡丟 KeyError、把整場卡住。三招的損耗要寫齊、每個屬性的擅長與不擅長是兩招不同的招、威力與推力的數字要大於 0；
-        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。"""
+        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。
+        第三方（決戰改版 5）：兩種扣血大於 0，保存實力的折數在 0～1，一場的上限不能是負的（0 是豪強不推）。"""
         if set(self.damage) != set(MOVES):
             raise ValueError(f"damage 三招（{'、'.join(MOVES)}）都要寫，現在是 {'、'.join(self.damage) or '空的'}")
         for move, amount in self.damage.items():
@@ -776,9 +777,14 @@ class BattleTuning(_Strict):
         for name in ("affinity_outer", "affinity_inner"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 不能是負的（現在是 {getattr(self, name)}）")
-        for name in ("counter", "strong_mitigation_cap"):
+        for name in ("counter", "strong_mitigation_cap", "third_keep_share"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} 要在 0～1 之間（現在是 {getattr(self, name)}）")
+        for name in ("third_grab_damage", "third_keep_damage"):  # 第三方的扣血：寫成 0 或負的，豪強就扣不了血、永遠倒不下
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
+            raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
         return self
 
 

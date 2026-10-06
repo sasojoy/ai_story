@@ -2173,7 +2173,7 @@ class Game:
             me = battle.participants.get(self.state.player.name)
             if me is not None:
                 side = self._sides(definition).get(me.faction, me.faction)
-                leaving ="；走出這一區就不算在場" if definition.region is not None else ""
+                leaving = "；走出這一區就不算在場" if definition.region is not None else ""
                 return f"{header}\n\n你已加入【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
