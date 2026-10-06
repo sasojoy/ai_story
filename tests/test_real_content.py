@@ -317,6 +317,15 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     assert "mentor_hut" not in atlas.visible_locations(game.state, content)
 
 
+def test_no_hut_step_promises_odds_the_hut_never_shows(content):
+    """FB-090：斷眉那一場是寫死的險勝（p8，force_tier），草廬的「遊歷」鈕只寫「體力 10」、沒有勝算，所以師父不能說「括號裡寫著勝算」。
+    草廬任何一步的字（話、旁白、收起來那一行）都不提勝算。"""
+    hut = content.tutorial.steps[:content.tutorial.prologue_steps]
+    assert [s.id for s in hut if "勝算" in f"{s.text}{s.scene}{s.line}"] == []
+    p8 = next(s for s in hut if s.id == "p8_revenge")
+    assert p8.force_tier is not None and "徒兒，選單上多了一個「遊歷」。這一仗，為師看好你。" in p8.text
+
+
 def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_every_join_place(content):
     """入伍段（新手引導計畫二，設計 10.4、10.6）：三位引薦人都在、每位的收起來那一行有兩行（不帶名字）、營地武學與陣營的投靠地點
     跟內容對得上、「主線與目標」散人那一行列了劇本每個陣營每一個投靠地點的名字；舊的軍令兩步（t7、t8）沒有了，hut 之後沒有引導步驟。"""
