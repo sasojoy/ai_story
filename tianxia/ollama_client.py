@@ -229,6 +229,10 @@ class OllamaClient:
             return False
         return True
 
+    def _model_missing(self) -> RuntimeError:
+        """Ollama 回 404（模型沒裝）時丟的錯：第一趟、HTTPError、重問那一趟都是這一句。"""
+        return RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+
     def _build_payload(
         self, messages: list[dict[str, str]], temperature: float, num_predict: int = 1024,
         json_schema: dict[str, Any] | None = None,
@@ -278,7 +282,7 @@ class OllamaClient:
         try:
             res = requests.post(url, json=payload, timeout=self.timeout)
             if res.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             res.raise_for_status()
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
@@ -286,7 +290,7 @@ class OllamaClient:
             return response_model.model_validate(data)
         except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             if not self.retry:  # 行動鎖內的複本：不重問，鎖最多被這一趟佔住 timeout 秒；例外照原樣丟給呼叫端走退路
                 raise
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 re-prompt 重試...")
@@ -297,7 +301,7 @@ class OllamaClient:
             retry_payload = self._build_payload(retry_messages, temperature, num_predict=num_predict, json_schema=schema)
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             res.raise_for_status()
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
