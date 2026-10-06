@@ -15,7 +15,7 @@ import pytest
 from tianxia import bot, bot_policy, calendar, figures, opportunities, push, rules, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
-from tianxia.models import OppDef
+from tianxia.models import Condition, OppDef
 from tianxia.state import BotProfile, PlayerState, TimelineResult
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
@@ -584,8 +584,9 @@ def test_dawn_rite_completes_on_a_pass(on):
     assert "張寶在祭壇上看了你一眼" in msgs[0] and msgs[-1] == "（機緣「黎明祭天」完成。）"
 
 
-def test_dawn_rite_only_at_the_hour_of_mao(on):
-    game = _game(on, faction="huang", at="xiaquyang")
+def test_dawn_rite_only_at_the_hour_of_mao(full):
+    """整季夠長的季（14 天）卯時就是 05:00～06:59；週末設定的黎明依壓縮放寬到辰時、巳時，見後面「時段窗口」那一節。"""
+    game = _game(full, faction="huang", at="xiaquyang")
     for hour, open_ in ((4, False), (5, True), (6, True), (7, False)):  # 卯時 05:00～06:59
         _at_hour(game, hour)
         assert (_try(game, "huang_dawn") is not None) == open_, hour
@@ -729,6 +730,218 @@ def test_clues_stay_quiet_when_the_switch_is_off(real):
     before = game.state.player.stamina
     game.state.player.stamina -= 5
     assert game._hear_after_stamina(before) == [] and game.state.player.opp_clues == []
+
+
+# ── 時段窗口跟著季的壓縮放寬（企劃者 2026-10-06「照比例調整」）─────────────────────────────────
+# 夜裡、黎明、戰後的地都是看季曆的窗口。季壓得越緊，一個窗口占的現實分鐘越少（週末設定一個黎明只有 3.6 分鐘，
+# 錯過了要等一個曆日、現實 42.9 分鐘）。Config.opp_window_min_minutes＝每個窗口至少開幾個現實分鐘，
+# 不夠的才放寬；整季夠長的季曆時一個字不變。只有機緣的窗口放寬：calendar.is_night（伏筆與事件條件）不動。
+
+
+@pytest.fixture
+def full(real):
+    """整季夠長（預設 14 天、cal_scale 6）：機緣文件寫的曆時原樣。"""
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 14, 2
+    return real
+
+
+def _windows(content, days, minutes=None):
+    content.config.season_one, content.config.season_days, content.config.server_max_players = True, days, 2
+    if minutes is not None:
+        content.config.opp_window_min_minutes = minutes
+    world = _game(content).state.world
+    return opportunities.windows(content, world), world
+
+
+def _real_minutes(content, world, hours):
+    return hours * calendar.HOUR / calendar.cal_scale(content, world) / 60
+
+
+def _open_hours(game, opp_id):
+    """一整天 0～23 點裡，這個機緣的「試」選項在的那幾個整點。"""
+    hours = []
+    for hour in range(24):
+        _at_hour(game, hour)
+        if _try(game, opp_id) is not None:
+            hours.append(hour)
+    return hours
+
+
+@pytest.mark.parametrize("days", [84, 14])
+def test_a_full_length_season_keeps_todays_window_hours(real, days):
+    win, w = _windows(real, days)
+    assert (win.night_from, win.night_hours, win.dawn_from, win.dawn_hours) == (23, 6, 5, 2)  # 子時到寅時、卯時
+    assert win.showdown_seconds == pytest.approx(real.config.opp_showdown_days * calendar.DAY / calendar.cal_scale(real, w))
+
+
+def test_a_season_whose_windows_already_last_the_target_is_not_widened(real):
+    win, w = _windows(real, 7)  # cal_scale 12：卯時剛好 10 個現實分鐘
+    assert _real_minutes(real, w, 2) == pytest.approx(10)
+    assert (win.night_from, win.night_hours, win.dawn_from, win.dawn_hours) == (23, 6, 5, 2)
+
+
+def test_a_zero_target_widens_nothing(real):
+    win, _ = _windows(real, 2.5, minutes=0)
+    assert (win.night_from, win.night_hours, win.dawn_from, win.dawn_hours) == (23, 6, 5, 2)
+
+
+def test_weekend_windows_last_the_target_in_real_minutes(real):
+    win, w = _windows(real, 2.5)
+    target = real.config.opp_window_min_minutes
+    assert calendar.cal_scale(real, w) == pytest.approx(33.6) and target == 10  # 週末設定：一個曆日現實 42.9 分鐘
+    assert _real_minutes(real, w, win.night_hours) >= target
+    assert _real_minutes(real, w, win.dawn_hours) >= target
+    assert win.showdown_seconds / 60 >= target
+    assert win.dawn_hours == 6  # 2 個曆時只有 3.6 分鐘，放寬到 6 個曆時（10.7 分鐘）
+    assert win.night_hours == 6  # 本來就有 10.7 分鐘，不動
+
+
+def test_the_weekend_dawn_widens_forward_into_chen_not_back_into_the_night(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    assert _open_hours(game, "huang_dawn") == [5, 6, 7, 8, 9, 10]  # 卯時起往後長到辰時、巳時，04:59 以前是夜裡不碰
+
+
+def test_the_weekend_night_still_runs_from_zi_to_yin(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    assert _open_hours(game, "guan_courier") == [0, 1, 2, 3, 4, 23]
+
+
+def test_full_length_hours_are_pinned_as_before(full):
+    courier = _game(full, faction="guan", at="hilltop_wilds")
+    assert _open_hours(courier, "guan_courier") == [0, 1, 2, 3, 4, 23]
+    rite = _game(full, faction="huang", at="xiaquyang")
+    assert _open_hours(rite, "huang_dawn") == [5, 6]  # 卯時 05:00～06:59
+
+
+@pytest.mark.parametrize("days", [84, 14, 7, 5, 2.5, 1, 0.5])
+@pytest.mark.parametrize("minutes", [0, 10, 15, 20, 45])
+def test_night_and_dawn_never_overlap(real, days, minutes):
+    win, _ = _windows(real, days, minutes)
+    night = {(win.night_from + i) % 24 for i in range(win.night_hours)}
+    dawn = {(win.dawn_from + i) % 24 for i in range(win.dawn_hours)}
+    assert not night & dawn
+    assert win.dawn_from == calendar.NIGHT_UNTIL  # 黎明接在夜裡結束的那一刻，往後長
+    assert (win.night_from + win.night_hours) % 24 == calendar.NIGHT_UNTIL  # 夜裡在同一刻結束，往前長
+    assert {23, 0, 1, 2, 3, 4} <= night and {5, 6} <= dawn  # 只放寬、不縮
+
+
+def test_a_very_short_season_caps_each_window_at_half_a_day(real):
+    win, _ = _windows(real, 0.5, minutes=45)
+    assert (win.night_hours, win.dawn_hours) == (12, 12) and win.night_from == 17  # 17:00～04:59、05:00～16:59 剛好接滿一天
+
+
+def test_a_wider_night_grows_back_into_the_evening_never_into_the_dawn(on):
+    on.config.opp_window_min_minutes = 15  # 15 分鐘＝8.4 個曆時，進位成 9
+    courier = _game(on, faction="guan", at="hilltop_wilds")
+    assert _open_hours(courier, "guan_courier") == [0, 1, 2, 3, 4, 20, 21, 22, 23]  # 20:00 起，05:00 還是黎明的
+    rite = _game(on, faction="huang", at="xiaquyang")
+    assert _open_hours(rite, "huang_dawn") == [5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+
+def test_night_retry_across_midnight_on_the_weekend(on):
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 23)
+    with _always(False):
+        assert game.choose("opp:try:guan_courier")[0].startswith("黑影一閃")
+    _at_hour(game, 4, day=1)  # 午夜過了，還是同一夜
+    assert not _try(game, "guan_courier").enabled and "這一回已經試過" in _try(game, "guan_courier").label
+    _at_hour(game, 23, day=1)  # 下一夜
+    assert _try(game, "guan_courier").enabled
+
+
+def test_night_retry_with_a_widened_night_still_waits_for_the_next_night(on):
+    on.config.opp_window_min_minutes = 20  # 夜裡拉成 17:00～04:59
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 18)
+    with _always(False):
+        game.choose("opp:try:guan_courier")
+    _at_hour(game, 2, day=1)  # 過了午夜，同一夜
+    assert not _try(game, "guan_courier").enabled
+    _at_hour(game, 12, day=1)  # 白天：選項不在
+    assert _try(game, "guan_courier") is None
+    _at_hour(game, 17, day=1)  # 下一夜一開始就能再試
+    assert _try(game, "guan_courier").enabled
+    _at_hour(game, 4, day=2)
+    assert _try(game, "guan_courier").enabled  # day=1 的 17:00 起的那一夜還沒試過，凌晨也算它
+
+
+def test_dawn_retry_stays_inside_the_widened_dawn(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    _at_hour(game, 5)
+    with _always(False):
+        game.choose("opp:try:huang_dawn")
+    _at_hour(game, 10)
+    assert not _try(game, "huang_dawn").enabled  # 同一個黎明（現在拉到 10:59）不能再試
+    _at_hour(game, 11)
+    assert _try(game, "huang_dawn") is None
+    _at_hour(game, 5, day=1)
+    assert _try(game, "huang_dawn").enabled
+
+
+def test_dawn_host_fallback_holds_in_the_widened_hours(on):
+    game = _game(on, faction="huang", at="xiaquyang")
+    w = game.state.world
+    w.figures["zhangbao"] = figures.state_of(game.state, on, "zhangbao").model_copy(update={"status": "retired"})
+    _at_hour(game, 8)  # 辰時：放寬出來的那幾個曆時
+    assert "opp:try:huang_dawn" not in _ids(game)  # 下曲陽沒人主持
+    game.state.player.location = "guangzong"
+    assert next(o for o in game.options(odds=False) if o.id == "opp:try:huang_dawn").label.startswith("替張梁捧旗")
+
+
+def test_aftermath_lasts_at_least_the_target_minutes(on):
+    on.config.opp_window_min_minutes = 90  # 比一個曆日（現實 42.9 分鐘）還長
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    start = w.time
+    w.time = start + 80 * 60
+    assert "opp:try:hao_aftermath" in _ids(game)
+    w.time = start + 100 * 60
+    assert "opp:try:hao_aftermath" not in _ids(game)
+
+
+def test_aftermath_keeps_one_calendar_day_when_that_is_already_enough(on):
+    game = _game(on, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    start = w.time
+    w.time = start + 40 * 60  # 一個曆日現實 42.9 分鐘，比目標 10 分鐘長，維持
+    assert "opp:try:hao_aftermath" in _ids(game)
+    w.time = start + 45 * 60
+    assert "opp:try:hao_aftermath" not in _ids(game)
+
+
+def test_full_length_aftermath_is_one_calendar_day(full):
+    game = _game(full, faction="haoqiang", at="yingchuan_wilds")
+    w = game.state.world
+    w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
+    start = w.time
+    w.time = start + 3.9 * 3600  # cal_scale 6：一個曆日現實 4 小時
+    assert "opp:try:hao_aftermath" in _ids(game)
+    w.time = start + 4.1 * 3600
+    assert "opp:try:hao_aftermath" not in _ids(game)
+
+
+def test_only_the_opportunity_windows_widen_the_calendar_night_does_not(on):
+    on.config.opp_window_min_minutes = 20  # 機緣的夜裡拉成 17:00 起
+    game = _game(on, faction="guan", at="hilltop_wilds")
+    _at_hour(game, 18)
+    assert _try(game, "guan_courier") is not None  # 機緣的夜裡
+    assert not calendar.is_night(game.state.world.time, on, game.state.world)  # 季曆的夜裡（伏筆、事件條件）還是 23:00 起
+    assert not rules.check_condition(Condition(night=True), game.state, on)
+    _at_hour(game, 23)
+    assert rules.check_condition(Condition(night=True), game.state, on)
+
+
+def test_the_target_minutes_cannot_be_negative():
+    from pydantic import ValidationError
+
+    from tianxia.models import Config
+
+    assert Config(opp_window_min_minutes=0).opp_window_min_minutes == 0  # 0＝不放寬
+    assert Config().opp_window_min_minutes == 10  # 預設：每個窗口至少現實 10 分鐘
+    with pytest.raises(ValidationError):
+        Config(opp_window_min_minutes=-1)
 
 
 # ── Task 5：假人與整季機器人 ─────────────────────────────────

@@ -5,17 +5,64 @@
 只有第一季的規則開著才有（rules.season_one）。拼圖、推理、集體密謀在計畫乙二。"""
 from __future__ import annotations
 
+import math
 import random
+from typing import NamedTuple
 
 from . import calendar, figures, foreshadow, ranks, timetable
 from .journal import fragment_line
 from .models import Content, OppDef, Rank2Action
 from .rules import GEJU, change_trend, front_of, roll_check, season_one
-from .state import GameState, PlayerState
+from .state import GameState, PlayerState, WorldState
 
 DONE = "（機緣「{name}」完成。）"
 NOT_NOW = "（此刻無法這麼做。）"
-DAWN_HOURS = (5, 6)  # 卯時：季曆 05:00～06:59（機緣文件 3.1 B）
+# 天時地利型的窗口：機緣文件寫的曆時是底（整季夠長的季就是這些），windows() 才依季的壓縮放寬
+DAWN_FROM = calendar.NIGHT_UNTIL  # 黎明從夜裡結束的那一刻起；放寬時夜裡往前長、黎明往後長，兩個窗口以這一刻為界背對背
+DAWN_BASE_HOURS = 2  # 卯時：季曆 05:00～06:59（機緣文件 3.1 B）
+NIGHT_BASE_HOURS = (calendar.NIGHT_UNTIL - calendar.NIGHT_FROM) % 24  # 子時到寅時 23:00～04:59＝6 個曆時
+WINDOW_CAP_HOURS = 12  # 夜裡、黎明各最長半天，兩個窗口加起來剛好一整天：再怎麼壓縮也不會重疊
+EPS_HOURS = 1e-9  # 換算曆時的浮點誤差：剛好整點的（例如 7 天的季卯時剛好 10 現實分鐘）不要進位成多一個曆時
+
+
+class Windows(NamedTuple):
+    """這一季天時地利型機緣的三個窗口（windows()）。夜裡從 night_from 點整起、跨午夜到 NIGHT_UNTIL 前一刻；
+    黎明從 dawn_from（＝NIGHT_UNTIL）點整起 dawn_hours 個曆時；戰後的地是決戰結算之後 showdown_seconds 個世界秒內。"""
+
+    night_from: int
+    night_hours: int
+    dawn_from: int
+    dawn_hours: int
+    showdown_seconds: float
+
+
+def windows(content: Content, season: WorldState | None = None) -> Windows:
+    """機緣的時段窗口，依這一季的壓縮放寬（企劃者 2026-10-06「照比例調整」）。
+
+    問題：窗口的曆時是寫死的，季壓得越緊（cal_scale 越大），同樣的曆時占的現實時間越短——週末設定
+    cal_scale 33.6，一個曆時現實 1.8 分鐘，卯時兩個曆時只有 3.6 分鐘，錯過了要等一個曆日（現實 42.9 分鐘）。
+
+    算法：每個窗口至少要開 Config.opp_window_min_minutes 個現實分鐘（預設 10），換成曆時就是
+    需要＝分鐘數 × 60 × cal_scale ÷ 3600；窗口的曆時＝max(原本的曆時, ceil(需要))。
+    所以放寬的曆時數跟 cal_scale 成正比（壓縮越緊、放得越寬，現實時間維持在目標），而原本就夠長的窗口
+    係數是 1、一個字不動：整季 14 天（cal_scale 6）卯時現實 20 分鐘、夜裡 60 分鐘，不放寬，曆時跟機緣文件一樣；
+    正式版整季更長，也不動。戰後的地不是整點的窗口，直接取 max(opp_showdown_days 個曆日, 目標分鐘) 的世界秒。
+
+    不重疊：黎明從夜裡結束的那一刻（05:00）往後長（週末設定卯時長到辰時、巳時），夜裡從同一刻往前長到傍晚，
+    絕不長進黎明；兩個各最多 WINDOW_CAP_HOURS（半天），壓縮到極端時也只是剛好接滿一天。
+    夜裡結束的 05:00 不動，失敗後「下一個夜裡再來」的回數鍵（_window_key）因此不變。
+    只管機緣：calendar.is_night（伏筆最後一步、事件的夜裡條件）永遠是 23:00～04:59。"""
+    cfg = content.config
+    scale = calendar.cal_scale(content, season)
+    need = cfg.opp_window_min_minutes * calendar.MINUTE * scale / calendar.HOUR  # 目標現實分鐘 → 曆時
+    wanted = math.ceil(need - EPS_HOURS)
+    night = min(WINDOW_CAP_HOURS, max(NIGHT_BASE_HOURS, wanted))
+    dawn = min(WINDOW_CAP_HOURS, max(DAWN_BASE_HOURS, wanted))
+    span = max(cfg.opp_showdown_days * calendar.DAY / scale, cfg.opp_window_min_minutes * calendar.MINUTE)
+    return Windows(
+        night_from=(calendar.NIGHT_UNTIL - night) % 24, night_hours=night,
+        dawn_from=DAWN_FROM, dawn_hours=dawn, showdown_seconds=span,
+    )
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -169,15 +216,19 @@ def _deliver_here(state: GameState, content: Content, o: OppDef, loc_id: str) ->
 
 
 def _window_key(state: GameState, content: Content, when: str) -> int | None:
-    """這一刻屬於哪一回（同一回失敗了不能再試）：夜裡是那一夜開始的曆日（00:00～04:59 算前一天的夜），
-    黎明是當天；不在時段裡回 None。決戰之後沒有回數（時限內可以一直試），回 0。"""
-    at = calendar.point(state.world.time, content, state.world)
+    """這一刻屬於哪一回（同一回失敗了不能再試）：夜裡是那一夜開始的曆日（跨過午夜到 NIGHT_UNTIL 前算前一天的夜），
+    黎明是當天；不在時段裡回 None。窗口是依這一季放寬過的（windows）：夜裡的起點最早 17:00、一定在 NIGHT_UNTIL 之後，
+    黎明從 NIGHT_UNTIL 起、最晚到 16:59，所以回數照樣是「那一夜開始的曆日」與「當天」。
+    決戰之後沒有回數（時限內可以一直試），回 0。"""
+    w = state.world
+    at = calendar.point(w.time, content, w)
+    win = windows(content, w)
     if when == "night":
-        if not calendar.is_night(state.world.time, content, state.world):
-            return None
-        return at.cal_day if at.hour >= calendar.NIGHT_FROM else at.cal_day - 1
+        if at.hour >= win.night_from:
+            return at.cal_day
+        return at.cal_day - 1 if at.hour < calendar.NIGHT_UNTIL else None
     if when == "dawn":
-        return at.cal_day if at.hour in DAWN_HOURS else None
+        return at.cal_day if win.dawn_from <= at.hour < win.dawn_from + win.dawn_hours else None
     return 0
 
 
@@ -190,13 +241,13 @@ def _host_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> st
 
 
 def _showdown_here(state: GameState, content: Content, loc_id: str) -> bool:
-    """戰後的地：有一場全服決戰在 opp_showdown_days 個曆日內結算，這裡在那件大事的戰線上、帶野外一類的標籤。
-    記成跳過（沒有打過）的、沒有戰線的決戰不算。"""
+    """戰後的地：有一場全服決戰在 opp_showdown_days 個曆日內（現實不到 opp_window_min_minutes 分鐘的話放寬到那麼久，
+    windows）結算，這裡在那件大事的戰線上、帶野外一類的標籤。記成跳過（沒有打過）的、沒有戰線的決戰不算。"""
     loc = content.locations[loc_id]
     if not set(loc.tags) & set(content.config.opp_wild_tags):
         return False
     w = state.world
-    span = content.config.opp_showdown_days * calendar.DAY / calendar.cal_scale(content, w)
+    span = windows(content, w).showdown_seconds
     for e in content.timetable:
         done = w.timeline.get(e.id)
         if e.kind == "showdown" and e.front is not None and done is not None and done.key != timetable.SKIPPED \
