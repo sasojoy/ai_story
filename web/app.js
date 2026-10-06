@@ -786,10 +786,13 @@
   // 換成下一個事件的句子就又收著，了結之後清掉）；只有這一句，新的一步照舊展開
   function shutGuide(g) { setGuideShut(guideKey(g)); S.guideRoad = null; }
   function openGuide(g) { setGuideShut(null); S.guideRoad = g && g.text; }
+  // 但框上還有「✔ 引導完成」與獎勵（done）要讓玩家看到時不收：「剛剛」卡片依設計不放引導，收成一行那一列就沒地方看了
+  // （新角色的第一次探索常常做完第一步又留下事件）；那時照舊展開。FB-076 量的那一場（遊歷打完接事件）done 是空的
   function guideHtml(g, onRoad) {
-    if (!onRoad && !(g && g.pending)) S.guideRoad = null; // 沒有框、也不是這兩種預設收著的時候要清（FB-055）
+    const quiet = !!(g && g.pending && !g.done.length); // 事件待處理的那一句、而且沒有要看的完成列：預設收成一行
+    if (!onRoad && !quiet) S.guideRoad = null; // 沒有框、也不是這兩種預設收著的時候要清（FB-055）
     if (!g) return "";
-    if (!g.end && (guideShut() === guideKey(g) || ((onRoad || g.pending) && S.guideRoad !== g.text))) {
+    if (!g.end && (guideShut() === guideKey(g) || ((onRoad || quiet) && S.guideRoad !== g.text))) {
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")

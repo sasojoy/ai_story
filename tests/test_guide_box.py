@@ -194,7 +194,7 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // guideKey 是網頁拿來認「這一步」的函式；沒有它（舊版）就退回認句子，好讓舊版在這裡是斷言失敗、不是找不到函式
 // openGuide、shutGuide 是「展開」「收起」兩顆鈕做的事（點擊的 switch 只是呼叫它們）；沒有它們（舊版）就是 null
 const H = new Function("S", "esc", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc);
-const box = (key, text, end = false, pending = false) => ({ speaker: "說書人", key, text, done: [], end, pending });
+const box = (key, text, end = false, pending = false, done = []) => ({ speaker: "說書人", key, text, done, end, pending });
 const shown = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : html ? "?" : ""; };
 const out = new Function("H", "S", "box", "shown", input.script)(H, S, box, shown);
 process.stdout.write(JSON.stringify(out === undefined ? null : out));
@@ -247,6 +247,26 @@ def test_the_pending_event_sentence_starts_collapsed_even_if_the_player_never_co
       };
     """)
     assert got == {"plain": "card", "pending": "line", "nextPending": "line", "newStep": "card", "outro": "card", "remembered": None}
+
+
+def test_a_pending_sentence_with_something_to_acknowledge_opens_as_before():
+    """審查 I1：新角色的第一次探索常常做完 t1_explore 又留下一個事件（量到 200 個新角色裡 163 個）：框上有「✔ 引導完成」與獎勵
+    （done）。收成一行的話那一列就看不到了（「剛剛」卡片依設計不放引導），所以 done 不是空的時候這一句照舊展開；
+    done 是空的（FB-076 量的那一場：遊歷打完接事件）才預設收著。玩家按過「收起」的照舊收著。"""
+    got = run_js("""
+      const done = ["✔ 引導完成", "銀兩 +10"];
+      const withDone = box("s2", "先把眼前的「酒樓鬥毆」了結", false, true, done);
+      const html = H.guideHtml(withDone, false);
+      const out = {
+        open: shown(withDone),
+        showsDone: html.includes("✔ 完成") && html.includes("銀兩 +10"),
+        emptyDone: shown(box("s2", "先把眼前的「酒樓鬥毆」了結", false, true, [])),
+      };
+      H.shutGuide(withDone);                       // 玩家自己收起：照舊收著，不管有沒有 done
+      out.afterShut = shown(withDone);
+      return out;
+    """)
+    assert got == {"open": "card", "showsDone": True, "emptyDone": "line", "afterShut": "line"}
 
 
 def test_a_player_can_expand_the_pending_sentence_and_it_stays_open_for_that_sentence_only():
