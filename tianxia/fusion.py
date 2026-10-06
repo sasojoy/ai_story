@@ -380,6 +380,8 @@ def fuse(
         if art is None:
             return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
     if art.id in library.owned_arts(state):  # 合到的、先被別人登記的，剛好是你已經有的：不收錢、不重複收
+        if landed:  # 這一爐才把這一組登記到那一門：新摸清一條練法（FB-078）；不是這一爐登記的（別人先到）照舊說「已經有了」
+            return None, [_new_road(f"【{art.name}】", "練法", f"【{base.name}】＋「{insight.name}」")]
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     cfg = content.config
     # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
@@ -388,6 +390,12 @@ def fuse(
     )
     msgs += _special_rumor(state, content, art, first)
     return art, msgs + library.store_art(state, art)
+
+
+def _new_road(result: str, road: str, ingredients: str) -> str:
+    """這一爐把一組新的配方登記到你已經有的那一個（合到舊的、剛好是自己的）：同一個結果可以有好幾條路，不收心得、體力，
+    但你多摸清了一條——之後誰合這一組都直接查表拿到它（FB-078，企劃者裁決）。result 連括號一起給（武學【】、意境「」）。待 joy 潤。"""
+    return f"這一爐的路數，竟又歸到{result}——你多摸清了一條{road}（{ingredients}）。不收心得、體力。"
 
 
 def _fuse_line(
@@ -470,6 +478,8 @@ def merge(
         if result is None:
             return None, ["兩股意念始終融不到一塊（名字都被用掉了，再試一次）。"]
     if result.id in state.player.insights:  # 合到的、先被別人登記的，剛好是你已經悟得的：不收錢、不重複
+        if landed:  # 同 fuse：這一爐才登記的新配方（FB-078）
+            return None, [_new_road(f"「{result.name}」", "悟法", f"「{ia.name}」＋「{ib.name}」")]
         return None, [f"這兩個合起來還是「{result.name}」，你已經悟得了。"]
     state.player.insights.append(result.id)
     verb = "化成的竟是已有的" if landed else "化成"
@@ -557,11 +567,13 @@ def blend(
                     break
         if art is None:
             return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
+    lead, follow = (art_a, art_b) if a <= b else (art_b, art_a)  # 照 id 排，跟 parents、功法卡的「由【甲】與【乙】衍生」同一個先後（FB-073）
     if art.id in library.owned_arts(state):  # 合到的、先被別人登記的，剛好是你已經有的：不收錢、不重複收
+        if landed:  # 同 fuse：這一爐才登記的新配方（FB-078）
+            return None, [_new_road(f"【{art.name}】", "練法", f"【{lead.name}】＋【{follow.name}】")]
         return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
     cfg = content.config
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
-    lead, follow = (art_a, art_b) if a <= b else (art_b, art_a)  # 照 id 排，跟 parents、功法卡的「由【甲】與【乙】衍生」同一個先後（FB-073）
     head = (
         f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"
         f"（{art.quality}・屬{art.attribute}）！"

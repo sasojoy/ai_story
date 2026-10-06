@@ -698,10 +698,72 @@ def test_landing_on_an_art_you_already_have_is_free_and_remembered(ready, conten
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+    assert art is None and msgs == [  # FB-078：這一組是新摸清的練法，回話要講出來（不再只說「你已經有了」）
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【湖邊腿法】＋「風」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     assert world.lookup_recipe(fusion.fuse_key("lake_kick", "feng")).id == made.id  # 配方照樣記下來
     assert "你已經有了" in fusion.fuse_problem(ready, content, world, "lake_kick", "feng")  # 下一次按之前就知道
+
+
+def test_a_new_combination_landing_on_your_own_art_registers_the_recipe_for_everyone(ready, content, world):
+    """FB-078（企劃者裁決）：不同組合可以產出同一門，這組新組合合到你自己已經有的那門是對的——配方照樣登記（「這組→那門」），
+    之後別人合同一組直接查表拿到那門，不再擲合到舊的、不叫模型；沒有人因為這一組多得到首創，也沒有人被收兩次錢。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)  # 唯一的候選是你的旋風腿：一定合到它
+    key = fusion.fuse_key("lake_kick", "feng")
+    assert world.lookup_recipe(key) is None
+    xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art is None and "多摸清了一條練法" in msgs[0]
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)  # 這一爐沒收錢
+    assert world.lookup_recipe(key).id == made.id  # 登記了：「湖邊腿法＋風 → 旋風腿」
+    assert world.get_skill(made.id).creator == "沈浪" and [a.id for a in world.fused_arts()] == [made.id]  # 首創照舊、沒多登記一門
+
+    other = other_player(content)
+    other.player.arts.append("lake_kick")
+    other_xinde, other_stamina = other.player.stats["xinde"], other.player.stamina
+    with mock.patch.object(landing, "lands", side_effect=AssertionError("配方已經登記：不該再擲合到舊的")):
+        got, msgs = fusion.fuse(other, content, world, must_not_ask(), "lake_kick", "feng")
+    assert got.id == made.id and made.id in other.player.arts  # 直接查表拿到那門
+    assert other.player.stats["xinde"] == other_xinde - content.config.fuse_xinde  # 乙照常付一次
+    assert other.player.stamina == other_stamina - content.config.fuse_stamina
+    assert "第一次" not in msgs[0] and "這一門由沈浪首創" in msgs[0]  # 首創還是甲的：這一組沒有讓誰多得首創
+    assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)  # 甲沒有被追加收費
+    assert fusion.fuse_problem(other, content, world, "lake_kick", "feng").startswith("這一爐合出來還是【旋風腿】，你已經有了")
+
+
+def test_the_reply_for_a_new_recipe_is_only_for_the_press_that_found_it(ready, content, world):
+    """「多摸清了一條練法」只在這一爐真的把配方登記到你已經有的那門時說；第二次按同一組，按之前的檢查就攔下，說的還是「你已經有了」。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    first, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert first is None and "多摸清了一條練法" in msgs[0]
+    again, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert again is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+
+
+def test_the_old_reply_stays_when_someone_else_registered_the_recipe_while_you_waited(ready, content, world):
+    """C 段重驗時配方已經被別人登記、指到你有的那門：那一組不是你這一爐摸清的，說法照舊（link_recipe 回的 landed 是 False）。"""
+    made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.arts.append("lake_kick")
+    landing_on(content)
+    real_lookup = world.lookup_recipe
+    key = fusion.fuse_key("lake_kick", "feng")
+    calls = []
+
+    def lookup(k):  # 第一次查（fuse_problem、fuse 開頭）看不到，之後就有人登記好了
+        calls.append(k)
+        if k == key and len(calls) <= 2:
+            return None
+        return real_lookup(k)
+
+    world.link_recipe(key, made.id, "乙")  # 別人先登記了
+    with mock.patch.object(world, "lookup_recipe", side_effect=lookup):
+        art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng")
+    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
 
 
 def test_landing_twice_charges_once(ready, content, world):
@@ -726,7 +788,9 @@ def test_landing_on_the_base_itself_is_free_and_stays_that_way(ready, content, w
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "feng")
-    assert art is None and msgs == ["這一爐合出來還是【旋風腿】，你已經有了——換一組試試吧。"]
+    assert art is None and msgs == [
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【旋風腿】＋「風」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     key = fusion.fuse_key("旋風腿", "feng")
     assert world.lookup_recipe(key).id == made.id
@@ -919,10 +983,17 @@ def test_landing_on_an_insight_you_already_hold_is_free(ready, content, world):
     landing_on(content)
     xinde, stamina, held = ready.player.stats["xinde"], ready.player.stamina, list(ready.player.insights)
     result, msgs = fusion.merge(ready, content, world, must_not_ask(), "狂風", "huo")  # 快＋剛＝陽，唯一的候選是你的燎原
-    assert result is None and msgs == ["這兩個合起來還是「燎原」，你已經悟得了。"]
+    assert result is None and msgs == [  # FB-078：這一組是新摸清的悟法，回話要講出來
+        "這一爐的路數，竟又歸到「燎原」——你多摸清了一條悟法（「狂風」＋「火」）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina, ready.player.insights) == (xinde, stamina, held)
     assert world.lookup_insight_recipe(fusion.merge_key("狂風", "huo")).id == "燎原"
-    assert "你已經悟得了" in fusion.merge_problem(ready, content, world, "狂風", "huo")
+    assert "你已經悟得了" in fusion.merge_problem(ready, content, world, "狂風", "huo")  # 下一次按之前就知道，說法照舊
+    other = other_player(content, ("feng", "huo"))  # 別人合同一組：直接查表拿到燎原，不擲合到舊的
+    other.player.insights = ["狂風", "huo"]
+    with mock.patch.object(landing, "lands", side_effect=AssertionError("配方已經登記：不該再擲合到舊的")):
+        got, _ = fusion.merge(other, content, world, must_not_ask(), "狂風", "huo")
+    assert got.id == "燎原" and "燎原" in other.player.insights
 
 
 def test_landing_follows_the_registered_id_after_the_art_was_renamed(ready, content, world):
@@ -1067,9 +1138,12 @@ def test_a_blend_can_land_on_one_of_its_own_arts(ready, content, world):
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
     art, msgs = fusion.blend(ready, content, world, must_not_ask(), fast.id, "lake_kick")
-    assert art is None and msgs == ["這兩門合出來還是【旋風腿】，你已經有了——換一門吧。"]
+    assert art is None and msgs == [  # FB-078：兩門照 id 排（跟成功那句、功法卡同一個先後）
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【湖邊腿法】＋【旋風腿】）。不收心得、體力。",
+    ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
     assert world.lookup_recipe(fusion.blend_key(fast.id, "lake_kick")).id == fast.id
+    assert "你已經有了" in fusion.blend_problem(ready, content, world, fast.id, "lake_kick")  # 下一次按之前就知道
 
 
 def test_forge_request_for_a_blend(ready, content, world):
