@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import ranks
+from . import opportunities, ranks
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name, season_one
 from .state import GameState, PlayerState
@@ -90,7 +90,7 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
 
 def clear_progress(p: PlayerState) -> None:
     """叛投時清掉舊陣營的個人進度（第一季設計 5.1；晉升奇遇文件第一節：取消還沒去的召見；軍備物資 4.5：donations 歸零）。
-    之後的計畫把自己的陣營進度加在這裡（乙：機緣；丙：靠山；丁：第四階資格），叛投就不會漏清。
+    之後的計畫把自己的陣營進度加在這裡（乙一：機緣已加；丙：靠山；丁：第四階資格），叛投就不會漏清。
     這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（例如活躍名單）寫在 defect() 裡，
     跟 active_pushers 的清理放在一起。"""
     p.rank = 0
@@ -100,6 +100,7 @@ def clear_progress(p: PlayerState) -> None:
     p.contrib_weeks = {}
     p.donations = {}
     p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】
+    opportunities.clear(p)  # 機緣的完成、計數、物品、線索全部作廢（機緣文件第一節；正式版乙一）
 
 
 def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:

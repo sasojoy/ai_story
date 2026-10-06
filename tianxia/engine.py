@@ -15,8 +15,8 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, orders, push, ranks,
-    roster, rounds, skillview, team, timetable,
+    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
+    push, ranks, roster, rounds, skillview, team, timetable,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -442,6 +442,7 @@ class Game:
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
+            opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
@@ -534,6 +535,8 @@ class Game:
         for target in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
             opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
+        opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
+        opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return opts
@@ -880,6 +883,8 @@ class Game:
                 msgs = self._road(arg)
             elif kind == "learn":
                 msgs = library.learn(self.state, self.content, arg)
+            elif kind == "opp":
+                msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
             else:
@@ -995,14 +1000,18 @@ class Game:
             if what == "back":
                 return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
             return ROAD_TASKS[what][0]
+        if kind == "opp":
+            return opportunities.title(s, c, arg)
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
+        action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
+            "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1081,6 +1090,8 @@ class Game:
             return self._rest()
         if what == "duty":
             return self._duty()
+        if what == "rank2":
+            return self._rank2()
         if what == "convoy":
             return self._take_convoy()
         if what == "call":
@@ -1126,12 +1137,17 @@ class Game:
     def _hear_after_stamina(self, before: float) -> list[str]:
         """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
         體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
-        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。"""
+        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。
+        伏筆先抽、天時地利型機緣的線索（正式版乙一）後抽：伏筆的擲骰順序不變。"""
         s, c = self.state, self.content
-        if s.player.stamina >= before or not foreshadow.active(s, c):
+        if s.player.stamina >= before:
             return []
         region = atlas.region_of(c, s.player.location)
-        return foreshadow.hear_after_action(s, c, region.id if region is not None else None, self.rng, self.world)
+        region_id = region.id if region is not None else None
+        msgs = foreshadow.hear_after_action(s, c, region_id, self.rng, self.world) if foreshadow.active(s, c) else []
+        if opportunities.active(s, c):  # 天時地利型機緣的線索（正式版乙一）
+            msgs += opportunities.hear_clues(s, c, region_id, self.rng)
+        return msgs
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """求見選單上的選擇：「返回」收起選單；選了一位人物就跟他開口對話，跟交友碰上人物時一模一樣——
@@ -1275,6 +1291,34 @@ class Game:
                 opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
         return opts
 
+    def _rank2_options(self, loc: Location) -> list[Option]:
+        """第 2 階行動（設計 5.5；正式版乙一）：第 2 階以上、在有戰線的地方；今天做滿了就變灰、寫明。"""
+        s, c = self.state, self.content
+        action = opportunities.rank2_action(s, c)
+        if action is None or front_of(c, loc.id) is None:
+            return []
+        if opportunities.rank2_left(s, c) <= 0:
+            return [Option(id="act:rank2", enabled=False, label=f"{action.name}（今天已經做滿 {c.config.rank2_daily} 次）")]
+        return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina)]
+
+    def _rank2(self) -> list[str]:
+        """做一次第 2 階行動：扣體力、記今天一次；過檢定才成功——成功往己方推所在戰線 rank2_push 點（push_trend），
+        再替累積型的機緣記一次。軍令的記功是計畫戊的事。"""
+        s, c = self.state, self.content
+        p = s.player
+        action = opportunities.rank2_action(s, c)
+        loc = c.locations[p.location]
+        front = front_of(c, loc.id)
+        p.stamina -= c.config.rank2_stamina
+        opportunities.count_rank2(s, c)
+        if not roll_check(action.check, s, c, self.world, self.rng):
+            return [action.fail.replace("{地點}", loc.name)]
+        msgs = [action.ok.replace("{地點}", loc.name)]
+        goal = self._goals().get(front)
+        if goal:
+            msgs += self.push_trend(front, goal * c.config.rank2_push, source="rank2")
+        return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
+
     def _order_credit(self, **kw) -> list[str]:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。"""
         s, c = self.state, self.content
@@ -1300,6 +1344,7 @@ class Game:
             msgs += self.push_trend(front, goals[front], source="duty")
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
+        msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
         return msgs + self._order_credit(kind="duty", front=front)
 
     def _take_convoy(self) -> list[str]:
@@ -1519,6 +1564,9 @@ class Game:
         if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
             chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
             heard = foreshadow.hear_talk(self.state, self.content, companion_id, chain_id, int(index), self.world)
+            return heard or ["（此刻無法這麼做。）"]
+        if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
+            heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
         try:
             msgs = companion_agent.continue_dialogue(
