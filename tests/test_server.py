@@ -17,7 +17,9 @@ import llm_queue
 import server
 import server_push
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, skillview, sqlite_world, team
+from tianxia import (
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
+)
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -3827,6 +3829,15 @@ def test_the_map_arranges_travel_while_on_the_road(client):
     out = client.post("/api/travel", json={"place": start}).json()
     assert out["arrived"] is True
     assert game.state.player.journey is None and game.state.player.location == start
+
+
+def test_the_map_detail_says_which_insights_a_scouted_place_teaches(client):
+    """W3：輿圖點一個摸清的地點，詳情欄多一行「這裡能悟：…」，名字就是探索那裡悟得到的。"""
+    _player(client)
+    start = server.game_for("沈青衫").state.player.location
+    detail = client.get(f"/api/map?place={start}").json()["detail"]
+    names = "、".join(server.CONTENT.insights[i].name for i in insights.explore_gives(server.CONTENT.locations[start], server.CONTENT))
+    assert f"這裡能悟：{names}" in detail
 
 
 def test_on_the_road_the_page_offers_the_road_tasks(client):

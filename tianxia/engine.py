@@ -1443,7 +1443,7 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            return bool(insights.explore_pool(loc, self.content))
+            return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
         return bool(event_candidates(self.state, self.content, "explore", "common"))

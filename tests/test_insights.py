@@ -33,6 +33,25 @@ def test_the_explore_pool_follows_the_location(content):
     assert sorted(insights.explore_pool(content.locations["lake"], content)) == ["feng", "huo", "shan", "shui"]
 
 
+def test_explore_gives_is_the_pool_unless_the_insight_branch_is_off_there(content):
+    """W3：探索在這裡真的悟得到什麼——輿圖詳情欄的「這裡能悟」與探索自己（Game._explore_can）共用這一個判斷。
+    這類地點探索時「悟意境」那一支的比例是 0，就什麼也悟不到，不能照池子寫。"""
+    from tianxia.models import ExploreMix
+
+    lake = content.locations["lake"]
+    assert sorted(insights.explore_gives(lake, content)) == ["feng", "shui"] == sorted(insights.explore_pool(lake, content))
+    content.config.explore_mix = [ExploreMix(kind="wild", tags=[], weights={"insight": 0, "event": 1})]
+    assert insights.explore_gives(lake, content) == [] and insights.explore_pool(lake, content)  # 池子還在，只是這一支關著
+    lake.tags = ["湖畔"]  # 比例照地點類型挑（跟探索同一個 explore_mix_of）：只關湖畔這一類，別處照舊
+    content.config.explore_mix = [
+        ExploreMix(kind="lake", tags=["湖畔"], weights={"insight": 0, "wild": 1}),
+        ExploreMix(kind="wild", tags=[], weights={"insight": 1}),
+    ]
+    town = content.locations["town"]
+    assert insights.explore_gives(lake, content) == []
+    assert sorted(insights.explore_gives(town, content)) == sorted(insights.explore_pool(town, content)) != []
+
+
 def test_fame_insights_are_never_in_the_explore_pool(content):
     content.locations["lake"].insights = ["haoran", "xuesha"]  # 載入檢查會擋，這裡只看規則本身
     pool = insights.explore_pool(content.locations["lake"], content)
