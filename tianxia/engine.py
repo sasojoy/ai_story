@@ -360,10 +360,14 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        settled = opportunities.settle(self.state, self.content)  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
+        if settled:
+            self._write("密謀", settled)
+            self._save_season()  # 逾期的密謀在這裡改成作罷，那是共用賽季的一份
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
-        return self._log(msgs + arrived + summons)
+        return self._log(msgs + arrived + settled + summons)
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -911,6 +915,7 @@ class Game:
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
+            msgs += opportunities.settle(self.state, self.content)  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -2341,6 +2346,7 @@ class Game:
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
+                extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes

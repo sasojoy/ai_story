@@ -731,6 +731,8 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
     factions = {f.id for f in c.scenario.factions}
     regions = {r.id for r in c.map.regions}
+    trend_ids = {t.id for t in c.scenario.trends}
+    derived_ids = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（開關開著時由戰線合成的黃巾聲勢）
     for o in c.opportunities:
         where = f"機緣 {o.id}"
         need(o.faction in factions, f"{where}：沒有陣營 {o.faction}")
@@ -792,7 +794,8 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             need(bool(d.askers), f"{where}：至少要有一位指認的人")
             known(where, [h.figure for h in d.askers], c.figures, "人物")
             known(where, [h.at for h in d.askers], c.locations, "地點")
-            known(where, list(d.trend), front_ids, "戰線")
+            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線或割據都行；衍生線不能直接推）
+            need(not set(d.trend) & derived_ids, f"{where}：trend 不能推衍生線（要推就推它的來源線）")
             texts += [d.label, d.right, d.wrong] + [s.name for s in d.suspects] + [t.text for t in d.traits]
         if o.plot is not None:
             pl = o.plot

@@ -199,7 +199,9 @@ class PlayerState(BaseModel):
     opp_items: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 拿到、還沒交的東西（名字）
     opp_fronts: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 那件東西要送去哪條戰線
     opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id
-    opp_tried: dict[str, int] = Field(default_factory=dict)  # 天時地利型：失敗那一回的時段鍵；同一回不能再試
+    # 失敗過、同一回（或同一曆日）不能再試的記號。鍵：天時地利型與推理型的指認是機緣 id（值是時段鍵／曆日）；拼圖的一樣東西是
+    # 「機緣 id:東西 key」；密謀的一處是「plot:密謀 id:處的 key」（值都是曆日）
+    opp_tried: dict[str, int] = Field(default_factory=dict)
     rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
     # ── 機緣・乙二（拼圖、推理與集體密謀）；同樣每季重來、叛投時 opportunities.clear 清掉（opp_settled 例外，見 clear）──
     opp_pieces: dict[str, list[str]] = Field(default_factory=dict)  # 拼圖型：機緣 id → 已經拿到的東西的 key
@@ -235,13 +237,20 @@ class TimelineResult(BaseModel):
 
 
 class Plot(BaseModel):
-    """一場集體密謀（機緣文件 1.1；正式版乙二）：全服共用，參與者各自回來時才結算（opportunities.settle）。"""
+    """一場集體密謀（機緣文件 1.1；正式版乙二）：全服共用，參與者各自回來時才結算（opportunities.settle）。
+    一場密謀只有自己陣營的人看得到、做得了；一季結束整個賽季跟著換新，所以只增不減到季末（一人一次牽頭一場、
+    每場最多 plot_days 個曆日，量不大）。"""
 
+    # 這一季的密謀編號。選項 id（opp:join:<id>、opp:part:<id>）會原樣送到前端，所以不能是全服連號——連號的空缺會洩漏別的
+    # 陣營發起過幾場、大約什麼時候（審查 I-1）。改由陣營、機緣、發起人與發起時刻（遊戲時間）的雜湊決定（opportunities.plot_id），
+    # 一季之內不重複；從編號看不出別的陣營的任何事。opp_settled 也存這個編號
     id: int
     opp: str  # 機緣 id
     faction: str
     leader: str  # 發起人的名號
-    shown: str  # 發起人的顯示名（匿名是「某位少俠」）
+    # 寫在陣營軍情與響應選項上的名字：陣營內一律具名（企劃者 2026-10-06：只有地方傳聞匿名，同叛投與軍令的軍情），所以就是
+    # 名號、不是顯示名（匿名的「某位少俠」會讓兩個匿名發起人的軍情與選項一模一樣，審查 I-2）
+    shown: str
     members: list[str] = Field(default_factory=list)
     parts: dict[str, str] = Field(default_factory=dict)  # 那一處的 key → 誰做的
     deadline: float  # 世界秒

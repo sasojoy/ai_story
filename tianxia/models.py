@@ -1556,7 +1556,7 @@ class OppDeduce(_Strict):
     right: str  # （{人物}）
     wrong: str  # （{人物}、{嫌疑人}）
     wrong_affinity: int = -10
-    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的線（例：{"jizhou": 1}）
+    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或割據；衍生線不行）（例：{"jizhou": 1}）
 
 
 class OppPart(_Strict):

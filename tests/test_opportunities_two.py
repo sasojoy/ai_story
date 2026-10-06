@@ -12,8 +12,9 @@ from unittest import mock
 
 import pytest
 
-from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules
+from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules, team
 from tianxia.content import ContentError, load_content, validate
+from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.state import BotProfile, FigureState, PlayerState, Plot, WorldState
 
@@ -189,7 +190,10 @@ def test_new_season_resets_the_new_fields(on):
     # 計畫沒寫、這裡多擋的：寫壞了在載入當下就報，不要到玩的時候才發現
     (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "front", "nowhere"), "戰線 nowhere"),
     (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[0], "front", "nowhere"), "戰線 nowhere"),
-    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"nowhere": 1}), "戰線 nowhere"),
+    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"nowhere": 1}), "大勢線 nowhere"),
+    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"huangjin": 1}), "trend 不能推衍生線"),
+    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces[0].lines.pop("*"), "的 lines 要有"),
+    (lambda c: setattr(c.orders.petition["guan"], "label", "请命"), "petition.guan：文字只能用繁體中文"),
     (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[1], "key", "yingru"), "東西 key 重複"),
     (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[1], "key", "yingru"), "各處的 key 重複"),
     (lambda c: _opp(c, "guan_three_plans").puzzle.pieces.clear(), "至少要有一樣東西"),
@@ -204,6 +208,12 @@ def test_validate_catches_broken_new_content(real, break_it, message):
     break_it(real)
     with pytest.raises(ContentError, match=message):
         validate(real)
+
+
+def test_a_deduction_may_push_any_real_trend_line(real):
+    """審查 m-3：推的是大勢線（戰線、割據），不只戰線；真實內容的 jizhou 照舊過。"""
+    _opp(real, "huang_mole").deduce.trend = {"geju": 1}
+    validate(real)
 
 
 def test_an_opportunity_must_write_only_its_own_block(real):
@@ -389,9 +399,11 @@ def test_a_failed_check_piece_waits_for_the_next_day(on):
     assert p.stamina == before - 10  # 失敗也花體力
     option = _option(game, "opp:piece:hao_land_people_name:people")
     assert not option.enabled and "今天已經試過" in option.label
-    with _always(True):  # 當天直接按也不行（選單的 enabled 之外，act 自己也擋）
+    with _always(True):  # 當天直接按也不行：choose 先看選單，所以這裡直接叫 act，驗 act 自己的那道檢查（審查 m-1）
         assert game.choose("opp:piece:hao_land_people_name:people") == ["（此刻無法這麼做。）"]
-    assert p.opp_pieces == {}
+        assert opportunities.act(game.state, on, game.world, "piece:hao_land_people_name:people", random.Random(0)) \
+            == ["（此刻無法這麼做。）"]
+    assert p.opp_pieces == {} and p.stamina == before - 10  # 沒有再花體力
     _at_day(game, 4)
     assert _option(game, "opp:piece:hao_land_people_name:people").enabled
 
@@ -592,3 +604,433 @@ def test_a_finished_deduction_tells_no_more_clues(on):
     rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
     assert not any(h.split("：", 1)[1] in {t.text for t in _mole(on).deduce.traits}
                    for r in ("jizhou", "luoyang") for h in opportunities.hear_clues(game.state, on, r, rng))
+
+
+# ── Task 4：集體密謀（請命、響應、各處、結算）─────────────────────────────────
+
+
+def _win():
+    return mock.patch.object(team, "fight", return_value=EncounterResult(tier="大勝", margin=50, our_power=100, difficulty=15))
+
+
+def _huang(on):
+    return next(f for f in on.scenario.factions if f.id == "huang")
+
+
+def test_petition_needs_rank_three_and_an_own_figure(on):
+    game = _game(on, faction="guan", at="changshe", rank=2)
+    assert "opp:plot:guan_three_roads" not in _ids(game)
+    game.state.player.rank = 3
+    option = _option(game, "opp:plot:guan_three_roads")
+    assert option.label == "請命：接下密謀「三路並進」"
+    game.state.player.location = "yingchuan"  # 沒有官軍人物
+    assert "opp:plot:guan_three_roads" not in _ids(game)
+
+
+def test_haoqiang_petition_at_a_patron_character(on):
+    game = _game(on, faction="haoqiang", at="qiao_county")
+    assert _option(game, "opp:plot:hao_alliance").label == "聽家主吩咐：接下密謀「聯保」"
+
+
+def test_starting_a_plot_posts_faction_intel(on):
+    game = _game(on, faction="guan", at="changshe")
+    before = len(game.state.world.rumors)
+    game.choose("opp:plot:guan_three_roads")
+    plot = game.state.world.plots[-1]
+    assert (plot.opp, plot.leader, plot.members, plot.status) == ("guan_three_roads", "甲", ["甲"], "open")
+    note = game.state.world.rumors[before]
+    assert (note.layer, note.faction) == ("faction", "guan")
+    assert note.text == "甲 發起三路並進，還缺潁川汝南、南陽、冀州。"
+    assert "opp:plot:guan_three_roads" not in _ids(game)  # 同時只能牽頭一場
+
+
+def test_three_roads_done_by_wins_on_each_front(on):
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("opp:plot:guan_three_roads")
+    s = game.state
+    assert opportunities.on_win(s, on, "yingru", "guan") == []  # 自己陣營的隊伍（操練）不算
+    for front in ("yingru", "nanyang", "jizhou"):
+        assert opportunities.on_win(s, on, front, "huang")
+    assert s.world.plots[-1].status == "done"
+    assert opportunities.settle(s, on)[-1] == "（機緣「三路並進」完成。）"  # 第 3 階的發起人：機緣完成
+
+
+def test_a_train_win_reaches_the_plot(on):
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("opp:plot:guan_three_roads")
+    game.state.player.location = "yingchuan_wilds"
+    with _win():
+        msgs = game._squad_encounter("huang_grain_convoy")  # noqa: SLF001  黃巾的隊伍；只驗遊歷打贏有接到密謀
+    assert "（密謀「三路並進」：潁川汝南這一路，成了。）" in msgs
+
+
+def test_join_and_check_parts(on):
+    game = _game(on, faction="huang", at="guangzong")
+    game.choose("opp:plot:huang_jiazi")
+    plot_id = game.state.world.plots[-1].id
+    other = _game(on, name="乙", faction="huang", at="wan_city", rank=1)
+    other.state.world = game.state.world  # 同一季（測試裡直接共用同一份）
+    assert _option(other, f"opp:join:{plot_id}").label.startswith("響應甲的密謀「甲子」")
+    other.choose(f"opp:join:{plot_id}")
+    with _always(True):
+        msgs = other.choose(f"opp:part:{plot_id}")
+    assert "在宛城的牆上用白土寫下兩個大字" in msgs[0]
+    assert game.state.world.plots[-1].parts == {"wan_city": "乙"}
+
+
+def test_one_person_cannot_do_every_part_when_two_are_needed(on):
+    on.config.server_max_players = 500  # 0.6 那一檔：人數 3 換成 2，一個人最多做 2 處
+    game = _game(on, faction="haoqiang", at="qiao_county")  # 曹操在譙縣：在這裡聽家主吩咐
+    game.state.player.stamina = 100
+    game.choose("opp:plot:hao_alliance")
+    plot_id = game.state.world.plots[-1].id
+    with _always(True):
+        game.state.player.location = "cao_manor"
+        game.choose(f"opp:part:{plot_id}")
+        game.state.player.location = "haozu_fort"
+        game.choose(f"opp:part:{plot_id}")
+        game.state.player.location = "zhuo_militia_hall"
+        option = _option(game, f"opp:part:{plot_id}")
+    assert not option.enabled and "要等別人" in option.label  # 三處要 2 人，一人最多做 2 處
+
+
+def test_offline_member_settles_once(on):
+    leader = _game(on, faction="guan", at="changshe")
+    leader.choose("opp:plot:guan_three_roads")
+    plot = leader.state.world.plots[-1]
+    helper = _game(on, name="乙", faction="guan", rank=1)
+    helper.state.world = leader.state.world
+    plot.members.append("乙")
+    plot.status = "done"  # 在乙不在線的時候完成
+    msgs = opportunities.settle(helper.state, on)
+    assert msgs[0] == "三路並進成了，你那一路也記了一功。" and helper.state.player.contrib == on.config.plot_contrib
+    assert opportunities.settle(helper.state, on) == []  # 只結算一次
+
+
+def test_plot_expires(on):
+    game = _game(on, faction="guan", at="changshe")
+    game.choose("opp:plot:guan_three_roads")
+    plot = game.state.world.plots[-1]
+    w = game.state.world
+    w.time = plot.deadline + 1
+    assert opportunities.settle(game.state, on) == ["三路並進沒能在時限內湊齊，這一回作罷。"]
+    assert plot.status == "failed"
+    other = _game(on, name="乙", faction="guan", rank=1)
+    other.state.world = w
+    assert f"opp:join:{plot.id}" not in _ids(other)
+
+
+# 計畫沒寫、這裡多測的
+
+def _lead(content, opp="guan_three_roads", faction="guan", at="changshe", name="甲", anonymous=False):
+    game = _game(content, name, faction=faction, at=at)
+    game.state.player.anonymous = anonymous
+    game.choose(f"opp:plot:{opp}")
+    return game, game.state.world.plots[-1]
+
+
+def _helper(content, leader, name="乙", faction="guan", rank=1, at=None):
+    helper = _game(content, name, faction=faction, at=at, rank=rank)
+    helper.state.world = leader.state.world  # 同一季（測試裡直接共用同一份）
+    return helper
+
+
+def test_a_defector_gets_nothing_from_the_plot_he_joined(on):
+    """企劃者 2026-10-06 裁決：結算只付還在 plot.faction 的成員；叛投的人什麼都沒有，他的貢獻也不算進成功。"""
+    on.config.server_max_players = 500  # 人數 3 換成 2：一個人最多做 2 處
+    leader, plot = _lead(on)
+    helper = _helper(on, leader, rank=3)
+    helper.choose(f"opp:join:{plot.id}")
+    assert opportunities.on_win(helper.state, on, "yingru", "huang") and plot.parts == {"yingru": "乙"}
+    defection.defect(helper.state, on, _huang(on))
+    assert plot.members == ["甲"] and plot.parts == {}  # 他做的那一路不再算
+    for front in ("nanyang", "jizhou", "yingru"):
+        opportunities.on_win(leader.state, on, front, "huang")
+    assert plot.status == "open" and plot.parts == {"nanyang": "甲", "jizhou": "甲"}  # 甲做滿 2 處不能包辦，潁川要等別人
+    assert opportunities.settle(helper.state, on) == []
+    assert (helper.state.player.contrib, helper.state.player.opp_done) == (0, [])
+    third = _helper(on, leader, name="丙", rank=1)
+    third.choose(f"opp:join:{plot.id}")
+    assert opportunities.on_win(third.state, on, "yingru", "huang")
+    assert plot.status == "done"  # 換別人補上才算
+
+
+def test_a_member_who_defects_after_it_is_done_is_still_not_paid(on):
+    leader, plot = _lead(on)
+    helper = _helper(on, leader, rank=3)
+    helper.choose(f"opp:join:{plot.id}")
+    plot.status = "done"  # 在乙不在線的時候完成，他還沒結算就叛投了
+    defection.defect(helper.state, on, _huang(on))
+    assert opportunities.settle(helper.state, on) == []
+    p = helper.state.player
+    assert (p.contrib, p.opp_done) == (0, []) and plot.id in p.opp_settled  # 記成結算過，不會之後又補一次
+    assert opportunities.settle(helper.state, on) == []
+
+
+def test_a_leader_who_defects_may_lead_in_the_new_faction(on):
+    leader, plot = _lead(on)
+    defection.defect(leader.state, on, _huang(on))
+    assert leader.state.player.name not in plot.members
+    leader.state.player.location, leader.state.player.rank = "guangzong", 3
+    assert "opp:plot:huang_jiazi" in _ids(leader)  # 舊陣營那一場不再算他牽頭的
+
+
+def test_the_news_and_the_join_label_name_an_anonymous_leader(on):
+    """陣營軍情一律寫真名、不匿名（企劃者 2026-10-06：只有地方傳聞匿名）。"""
+    game = _game(on, faction="guan", at="changshe")
+    game.state.player.anonymous = True
+    before = len(game.state.world.rumors)
+    game.choose("opp:plot:guan_three_roads")
+    note = game.state.world.rumors[before]
+    assert note.named and note.text.startswith("甲 發起") and "某位少俠" not in note.text and note.layer == "faction"
+    assert note.location is None and note.region is None  # 陣營軍情不帶地點（同叛投與軍令）
+    helper = _helper(on, game)
+    label = next(o for o in helper.options(odds=False) if o.id.startswith("opp:join:")).label
+    assert label.startswith("響應甲的密謀") and "某位少俠" not in label
+
+
+def test_another_faction_never_sees_the_plot(on):
+    leader, plot = _lead(on)
+    note = leader.state.world.rumors[-1]
+    spy = _helper(on, leader, name="乙", faction="huang", rank=3, at="guangzong")
+    assert not rules.can_hear(note, spy.state) and rules.can_hear(note, leader.state)
+    assert not any(i.startswith(("opp:join:", "opp:part:")) for i in _ids(spy))
+    assert opportunities.act(spy.state, on, spy.world, f"join:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
+    assert plot.members == ["甲"]
+
+
+def test_joining_twice_or_late_is_refused(on):
+    leader, plot = _lead(on)
+    helper = _helper(on, leader)
+    helper.choose(f"opp:join:{plot.id}")
+    assert f"opp:join:{plot.id}" not in _ids(helper) and plot.members == ["甲", "乙"]  # 響應過就不再列
+    assert opportunities.act(helper.state, on, helper.world, f"join:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
+    assert plot.members == ["甲", "乙"]
+    late = _helper(on, leader, name="丙")
+    leader.state.world.time = plot.deadline + 1
+    assert opportunities.act(late.state, on, late.world, f"join:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
+
+
+def test_a_dead_plot_takes_no_more_parts_or_wins(on):
+    leader, plot = _lead(on)
+    leader.state.world.time = plot.deadline + 1
+    assert opportunities.on_win(leader.state, on, "yingru", "huang") == [] and plot.parts == {}
+    jiazi, jplot = _lead(on, "huang_jiazi", "huang", "guangzong", name="丁")
+    jiazi.state.world.time = jplot.deadline + 1
+    jiazi.state.player.stamina = 100
+    with _always(True):
+        assert jiazi.choose(f"opp:part:{jplot.id}")[0] == "（此刻無法這麼做。）"
+    assert jplot.parts == {}
+
+
+def test_only_enemy_wins_on_the_right_front_count(on):
+    leader, plot = _lead(on)
+    assert opportunities.on_win(leader.state, on, None, "huang") == []  # 沒有戰線
+    assert opportunities.on_win(leader.state, on, "yingru", None) == []  # 沒有陣營的對手（盜匪）
+    assert opportunities.on_win(leader.state, on, "yingru", "huang") == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]
+    assert opportunities.on_win(leader.state, on, "yingru", "huang") == []  # 同一路不重複記
+    assert plot.parts == {"yingru": "甲"}
+    stranger = _game(on, "乙", faction="guan", rank=3)  # 沒響應過的人，打贏也不算
+    stranger.state.world = leader.state.world
+    assert opportunities.on_win(stranger.state, on, "nanyang", "huang") == []
+
+
+def test_wins_do_not_count_for_a_check_plot(on):
+    leader, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    assert opportunities.on_win(leader.state, on, "yingru", "guan") == [] and plot.parts == {}
+
+
+def test_a_failed_part_check_blocks_that_part_for_the_day(on):
+    on.config.plot_days = 5  # 要活過好幾個曆日，才看得出隔天又能試
+    leader, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    helper = _helper(on, leader, faction="huang", at="wan_city")
+    helper.choose(f"opp:join:{plot.id}")
+    w = leader.state.world
+    w.time = 3 * calendar.DAY / calendar.cal_scale(on, w)
+    before = helper.state.player.stamina
+    with _always(False):
+        assert helper.choose(f"opp:part:{plot.id}")[0].startswith("巡兵的腳步聲近了，你在宛城只寫了一筆")
+    assert helper.state.player.stamina == before - 10 and plot.parts == {}
+    option = _option(helper, f"opp:part:{plot.id}")
+    assert not option.enabled and "今天已經試過" in option.label
+    with _always(True):
+        assert helper.choose(f"opp:part:{plot.id}") == ["（此刻無法這麼做。）"]  # 當天直接按也不行
+    w.time += calendar.DAY / calendar.cal_scale(on, w)
+    assert _option(helper, f"opp:part:{plot.id}").enabled
+
+
+def test_only_a_member_with_stamina_can_work_a_part(on):
+    leader, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    outsider = _helper(on, leader, faction="huang", at="wan_city")  # 沒響應
+    assert not any(i.startswith("opp:part:") for i in _ids(outsider))
+    with _always(True):
+        assert outsider.choose(f"opp:part:{plot.id}") == ["（此刻無法這麼做。）"]
+    outsider.choose(f"opp:join:{plot.id}")
+    outsider.state.player.stamina = 9
+    assert not _option(outsider, f"opp:part:{plot.id}").enabled
+
+
+def test_the_same_part_is_not_offered_once_someone_did_it(on):
+    leader, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    leader.state.player.stamina = 100
+    with _always(True):
+        leader.choose(f"opp:part:{plot.id}")  # 廣宗
+    assert plot.parts == {"guangzong": "甲"}
+    assert not any(i.startswith("opp:part:") for i in _ids(leader))  # 廣宗那一處有人做了
+
+
+def test_one_person_does_it_all_at_weekend_size(on):
+    """週末設定（人數上限 2）：密謀人數 3 換成 1，一個人跑完全部；做完那一步就結算。"""
+    game, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    p = game.state.player
+    p.stamina = 100
+    with _always(True):
+        for place in ("guangzong", "wan_city", "luoyang_palace"):
+            p.location = place
+            msgs = game.choose(f"opp:part:{plot.id}")
+    assert plot.status == "done"
+    assert msgs[-1] == "（機緣「甲子」完成。）" and "各地的牆上同時冒出「甲子」兩個字" in "".join(msgs)  # choose 的最後結算
+    assert p.opp_done == ["huang_jiazi"] and plot.id in p.opp_settled
+
+
+def test_the_leader_can_lead_again_after_it_failed(on):
+    game, plot = _lead(on)
+    game.state.world.time = plot.deadline + 1
+    assert "三路並進沒能在時限內湊齊，這一回作罷。" in game.choose("act:rest")  # 下一步行動收到作罷的那一句
+    game.choose("act:stand")
+    assert plot.status == "failed" and "opp:plot:guan_three_roads" in _ids(game)
+
+
+def test_settlement_is_delivered_on_the_next_choose_and_sync(on):
+    leader, plot = _lead(on)
+    helper = _helper(on, leader, rank=1)
+    helper.choose(f"opp:join:{plot.id}")
+    plot.status = "done"
+    msgs = helper.choose("act:rest")
+    assert "三路並進成了，你那一路也記了一功。" in msgs and helper.state.player.contrib == on.config.plot_contrib
+    helper.choose("act:stand")
+    assert "三路並進成了，你那一路也記了一功。" not in helper.choose("act:rest")  # 只一次
+
+
+def test_sync_settles_a_plot_that_ended_while_offline(on):
+    leader, plot = _lead(on)
+
+    def finish(season):
+        season.plots[-1].members.append("乙")
+        season.plots[-1].status = "done"
+
+    leader.world.mutate_season(finish)  # 乙不在線的時候，別人把它做完了
+    helper = _game(on, name="乙", faction="guan", rank=1)  # 之後才連線：從資料庫讀到收場的那一場
+    msgs = helper.sync(10.0)
+    assert "三路並進成了，你那一路也記了一功。" in msgs and helper.state.player.contrib == on.config.plot_contrib
+    assert any(e.title == "密謀" for e in helper.state.journal)  # 寫進江湖紀錄
+    assert "三路並進成了，你那一路也記了一功。" not in helper.sync(20.0)
+
+
+def test_plot_actions_are_titled(on):
+    game = _game(on, faction="huang", at="guangzong")
+    game.choose("opp:plot:huang_jiazi")
+    assert game.state.journal[0].title == "機緣・甲子"
+    plot = game.state.world.plots[-1]
+    helper = _helper(on, game, faction="huang", at="wan_city")
+    helper.choose(f"opp:join:{plot.id}")
+    assert helper.state.journal[0].title == "密謀・甲子"
+    with _always(True):
+        helper.choose(f"opp:part:{plot.id}")
+    assert helper.state.journal[0].title == "密謀・甲子"
+
+
+def test_bots_skip_every_plot_option(on):
+    game = _game(on, faction="huang", at="guangzong")
+    petition = _option(game, "opp:plot:huang_jiazi")
+    accuse = next(o for o in game.options(odds=False) if o.id.startswith("opp:accuse:"))
+    game.choose("opp:plot:huang_jiazi")
+    plot = game.state.world.plots[-1]
+    helper = _helper(on, game, faction="huang", at="wan_city")
+    join = _option(helper, f"opp:join:{plot.id}")
+    helper.choose(f"opp:join:{plot.id}")
+    part = _option(helper, f"opp:part:{plot.id}")
+    for owner, option in ((game, petition), (game, accuse), (helper, join), (helper, part)):
+        assert option is not None
+        assert bot.pick(owner, [option], random.Random(0)) is None
+        assert bot_policy.score(owner, option, _profile("huang")) is None
+
+
+def test_the_defection_prompt_says_the_plot_you_joined_is_lost(on):
+    leader, plot = _lead(on)
+    helper = _helper(on, leader, rank=1)
+    counts = "目前官軍 1 人、黃巾軍 0 人、地方豪強 0 人"
+    assert "密謀" not in defection.prompt(helper.state, on, _huang(on), counts)  # 沒響應過就不提
+    helper.choose(f"opp:join:{plot.id}")
+    assert "響應的密謀作廢" in defection.prompt(helper.state, on, _huang(on), counts)
+    plot.status = "failed"  # 已經作罷的沒什麼好失去
+    assert "密謀" not in defection.prompt(helper.state, on, _huang(on), counts)
+
+
+# 審查（review-t1-2）併進來的
+
+def test_plot_ids_reveal_nothing_across_factions(on):
+    """I-1：選項 id 會送到前端，密謀編號不能是全服連號（空缺會洩漏別的陣營發起過幾場、大約什麼時候）。"""
+    _, a = _lead(on, name="甲")
+    _, h1 = _lead(on, "huang_jiazi", "huang", "guangzong", name="乙")
+    _, h2 = _lead(on, "huang_jiazi", "huang", "guangzong", name="丙")
+    _, b = _lead(on, name="丁")
+    ids = [a.id, h1.id, h2.id, b.id]
+    assert len(set(ids)) == 4
+    assert not set(ids) & {1, 2, 3, 4} and sorted(ids) != list(range(min(ids), min(ids) + 4))  # 不是連號
+    # 每一個編號只由自己這一場（陣營、機緣、發起人、發起時刻）決定：別的陣營發起過幾場，都改不了它
+    assert b.id == opportunities.plot_id("guan", "guan_three_roads", "丁", 0.0)
+    assert a.id == opportunities.plot_id("guan", "guan_three_roads", "甲", 0.0)
+    assert h1.id == opportunities.plot_id("huang", "huang_jiazi", "乙", 0.0)
+
+
+def test_a_colliding_plot_id_is_bumped(on):
+    with mock.patch.object(opportunities, "plot_id", return_value=12345):
+        _, a = _lead(on, name="甲")
+        _, b = _lead(on, name="丁")
+    assert a.id == 12345 and b.id != 12345  # 一季之內編號不重複
+
+
+def test_the_join_option_carries_the_opaque_id(on):
+    leader, plot = _lead(on)
+    helper = _helper(on, leader)
+    join = next(o for o in helper.options(odds=False) if o.id.startswith("opp:join:"))
+    assert join.id == f"opp:join:{plot.id}" and plot.id > 4  # 不是從 1 起的連號
+
+
+def test_two_anonymous_leaders_get_distinct_named_buttons_and_news(on):
+    """I-2：陣營軍情與響應的選項一律寫真名、不帶地點；兩個匿名的發起人不會變成一模一樣的兩顆按鈕。"""
+    a, _ = _lead(on, name="甲", anonymous=True)
+    b, _ = _lead(on, name="丁", anonymous=True)
+    helper = _game(on, "乙", faction="guan", rank=1)  # 之後才連線：從資料庫讀到兩場
+    labels = [o.label for o in helper.options(odds=False) if o.id.startswith("opp:join:")]
+    assert len(labels) == 2 and len(set(labels)) == 2 and not any("某位少俠" in text for text in labels)
+    news = [r for r in helper.state.world.rumors if r.layer == "faction"]
+    assert {r.text.split(" ")[0] for r in news} == {"甲", "丁"} and all(r.location is None and r.named for r in news)
+
+
+def test_a_wrong_faction_member_never_fills_the_old_plot(on):
+    """裁決補強：就算名單沒清乾淨，換了陣營的人打贏也不會記進舊陣營的密謀（_my_plots 看陣營）。"""
+    leader, plot = _lead(on)
+    helper = _helper(on, leader, rank=3)
+    helper.choose(f"opp:join:{plot.id}")
+    helper.state.player.faction = "huang"  # 換了陣營卻沒走 leave_plots
+    assert opportunities.on_win(helper.state, on, "yingru", "guan") == [] and plot.parts == {}
+
+
+def test_leading_is_counted_per_faction(on):
+    leader, plot = _lead(on)
+    p = leader.state.player
+    p.faction, p.location = "huang", "guangzong"  # 還在舊密謀的名單上，但已經是黃巾
+    assert "opp:plot:huang_jiazi" in _ids(leader)
+
+
+def test_plot_steps_hide_when_the_rules_are_off(on):
+    """季中開關被關掉（這一季的章是關）：選單上沒有響應、做一處，act 也不給，打贏不記。"""
+    leader, plot = _lead(on)
+    helper = _helper(on, leader)
+    helper.state.world.season_one = False  # 同一份賽季，leader 也看得到
+    assert not any(i.startswith("opp:") for i in _ids(helper))
+    for what in ("join", "part"):
+        assert opportunities.act(helper.state, on, helper.world, f"{what}:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
+    assert opportunities.on_win(leader.state, on, "yingru", "huang") == [] and plot.parts == {} and plot.members == ["甲"]

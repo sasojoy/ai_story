@@ -8,13 +8,15 @@
 決定嫌疑人、聽特徵、最後指認）、集體密謀型（發起、響應、各處、結算）。第 4 階的新句子是初稿，待 joy 潤。"""
 from __future__ import annotations
 
+import hashlib
+import math
 import random
 
-from . import calendar, figures, foreshadow, ranks, timetable
+from . import calendar, figures, foreshadow, push, ranks, timetable
 from .journal import fragment_line
 from .models import Content, OppDef, OppPiece, Rank2Action
-from .rules import GEJU, change_trend, front_of, roll_check, season_one
-from .state import GameState, PlayerState
+from .rules import GEJU, add_rumor, change_trend, front_of, roll_check, season_one
+from .state import GameState, PlayerState, Plot
 
 DONE = "（機緣「{name}」完成。）"
 NOT_NOW = "（此刻無法這麼做。）"
@@ -350,6 +352,239 @@ def _asker_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> s
     return None
 
 
+# ── 集體密謀型（機緣文件 1.1）─────────────────────────────────
+# 陣營軍情、響應的選項一律寫真名（企劃者 2026-10-06：只有地方傳聞匿名）；每一場只有自己陣營的人看得到、做得了。
+
+
+def _petition_here(state: GameState, content: Content, loc_id: str) -> str | None:
+    """在這裡請命得了嗎：第 3 階以上，這裡有己方人物（官軍、黃巾是在場的己方大勢人物；豪強是 petition.characters 裡
+    talk_at 在這裡的人）。回傳畫面上的動作名（請命、請示渠帥、聽家主吩咐），不行是 None。"""
+    p = state.player
+    petition = content.orders.petition.get(p.faction or "")
+    if petition is None or ranks.rank_of(state) < 3:
+        return None
+    if petition.characters:
+        here = any(content.characters[cid].talk_at == loc_id for cid in petition.characters)
+    else:
+        here = any(content.figures[fid].faction == p.faction for fid in figures.present_at(state, content, loc_id))
+    return petition.label if here else None
+
+
+def _plot_def(content: Content, plot: Plot) -> OppDef | None:
+    """這場密謀的機緣；內容改版把它拿掉了（存檔的季裡還留著）就是 None，各處當成沒這場密謀。"""
+    return next((o for o in content.opportunities if o.id == plot.opp and o.kind == "plot"), None)
+
+
+def _live(state: GameState, plot: Plot) -> bool:
+    return plot.status == "open" and state.world.time <= plot.deadline
+
+
+def _need_parts(o: OppDef) -> int:
+    return o.plot.need_parts or len(o.plot.parts)
+
+
+def _headcount(content: Content, o: OppDef) -> int:
+    return min(foreshadow.need(content, o.plot.headcount), _need_parts(o))
+
+
+def _missing(content: Content, o: OppDef, plot: Plot) -> str:
+    """陣營軍情「還缺……」：每一處都要的寫處名；湊幾處就好的（甲子）寫「N 處」。"""
+    left = [x for x in o.plot.parts if x.key not in plot.parts]
+    if o.plot.need_parts is None:
+        return "、".join(x.name for x in left)
+    return f"{_need_parts(o) - len(plot.parts)} 處"
+
+
+def _cap_per_person(content: Content, o: OppDef) -> int:
+    """一個人最多做幾處：要的處數 ÷ 換算後的人數、無條件進位，所以出力的人數真的湊得到那麼多（週末設定人數 1，一個人全做）。"""
+    return math.ceil(_need_parts(o) / _headcount(content, o))
+
+
+def _done_by(plot: Plot, name: str) -> int:
+    return sum(1 for who in plot.parts.values() if who == name)
+
+
+def _mark(state: GameState, content: Content, o: OppDef, plot: Plot, key: str) -> None:
+    """記下這一處；湊齊處數、出力的人數也夠了，就完成（status done）。"""
+    plot.parts[key] = state.player.name
+    if len(plot.parts) >= _need_parts(o) and len(set(plot.parts.values())) >= _headcount(content, o):
+        plot.status = "done"
+
+
+def _my_plots(state: GameState) -> list[Plot]:
+    """自己還在做的密謀：響應過、還開著、而且是自己現在這個陣營的（換了陣營的人打贏不能替舊陣營的密謀記一處）。"""
+    p = state.player
+    return [x for x in state.world.plots if p.name in x.members and x.faction == p.faction and _live(state, x)]
+
+
+PLOT_ID_SPACE = 10**8
+
+
+def plot_id(faction: str, opp_id: str, leader: str, time: float) -> int:
+    """密謀的編號：選項 id 會送到前端，所以不用全服連號（連號的空缺會洩漏別的陣營發起過幾場、大約什麼時候）；
+    由這一場自己的陣營、機緣、發起人與發起時刻（遊戲時間，引擎不讀電腦時鐘）的雜湊決定，不看別的密謀。"""
+    digest = hashlib.sha256(f"{faction}|{opp_id}|{leader}|{time:.3f}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") % PLOT_ID_SPACE
+
+
+def _part_here(state: GameState, content: Content, o: OppDef, plot: Plot, loc_id: str):
+    """check 類：這個地點是哪一處（還沒人做的）；不是就 None。"""
+    return next((x for x in o.plot.parts if x.at == loc_id and x.key not in plot.parts), None)
+
+
+def on_win(state: GameState, content: Content, front: str | None, squad_faction: str | None) -> list[str]:
+    """遊歷打贏一場（Game._squad_encounter）：win 類的密謀，這條戰線那一處還沒人做、對手是敵方（不是自己陣營、
+    也不是沒有陣營的）時記上。一個人的上限照 _cap_per_person。"""
+    p = state.player
+    if not active(state, content) or front is None or squad_faction is None or squad_faction == p.faction:
+        return []
+    msgs = []
+    for plot in _my_plots(state):
+        o = _plot_def(content, plot)
+        if o is None or o.plot.how != "win" or _done_by(plot, p.name) >= _cap_per_person(content, o):
+            continue
+        part = next((x for x in o.plot.parts if x.front == front and x.key not in plot.parts), None)
+        if part is not None:
+            _mark(state, content, o, plot, part.key)
+            msgs.append(f"（密謀「{o.name}」：{part.name}這一路，成了。）")
+    return msgs
+
+
+def settle(state: GameState, content: Content) -> list[str]:
+    """自己參與過、已經收場（完成或過了期限）、還沒結算的密謀，各結算一次（Game.choose、Game.sync 的最後呼叫）：
+    完成的——第 3 階以上、這種機緣還沒完成的人算機緣完成（done_text），其他人記 plot_contrib 點貢獻（helper_text）；
+    期限到了還沒完成的改成 failed，收到 fail_text。只付還在 plot.faction 的人（企劃者 2026-10-06 裁決）：叛投之後，
+    舊陣營的密謀只記成結算過、不給東西（叛投時開著的密謀已經先退出了，見 leave_plots）。"""
+    if not active(state, content):
+        return []
+    p = state.player
+    msgs: list[str] = []
+    for plot in state.world.plots:
+        if p.name not in plot.members or plot.id in p.opp_settled:
+            continue
+        if plot.status == "open" and state.world.time > plot.deadline:
+            plot.status = "failed"
+        if plot.status == "open":
+            continue
+        p.opp_settled.append(plot.id)
+        o = _plot_def(content, plot)
+        if o is None or plot.faction != p.faction:
+            continue
+        if plot.status == "failed":
+            msgs.append(o.plot.fail_text)
+        elif o in open_ones(state, content):
+            msgs += [o.plot.done_text] + _complete(state, o)
+        else:
+            msgs.append(o.plot.helper_text)
+            push.add_contribution(p, calendar.point(state.world.time, content, state.world).week, content.config.plot_contrib)
+    return msgs
+
+
+def in_plot(state: GameState) -> bool:
+    """響應或牽頭過、還沒收場也沒領的密謀：還開著（沒過期）的，或已經完成但自己還沒結算的。叛投的確認畫面讀它。"""
+    p = state.player
+    return any(
+        p.name in x.members and x.id not in p.opp_settled and x.faction == p.faction and (_live(state, x) or x.status == "done")
+        for x in state.world.plots
+    )
+
+
+def leave_plots(state: GameState) -> None:
+    """叛投時（defection.defect）：還開著的密謀全部退出，自己做的那幾處也不再算（裁決：他的貢獻不算進成功），
+    之後別人補上。已經完成或作罷的不動（成功的時候他是舊陣營的人）；那些由 settle 不付他。"""
+    name = state.player.name
+    for plot in state.world.plots:
+        if plot.status == "open" and name in plot.members:
+            plot.members.remove(name)
+            plot.parts = {key: who for key, who in plot.parts.items() if who != name}
+
+
+def _plot_step(state: GameState, content: Content, world, what: str, plot_id: str, rng: random.Random) -> list[str]:
+    """響應（join）或在這裡做一處（part）：密謀是自己陣營的、還開著才行。"""
+    p = state.player
+    plot = next((x for x in state.world.plots if str(x.id) == plot_id), None)
+    o = _plot_def(content, plot) if plot is not None else None
+    if not active(state, content) or o is None or plot.faction != p.faction or not _live(state, plot):
+        return [NOT_NOW]
+    if what == "join":
+        if p.name in plot.members:
+            return [NOT_NOW]
+        plot.members.append(p.name)
+        return [f"你響應了{plot.shown}的密謀「{o.name}」。還缺：{_missing(content, o, plot)}。"]
+    loc_id = p.location
+    part = _part_here(state, content, o, plot, loc_id) if o.plot.how == "check" else None
+    key = f"plot:{plot.id}:{part.key}" if part is not None else ""
+    if part is None or p.name not in plot.members or p.opp_tried.get(key) == _today(state, content) \
+            or _done_by(plot, p.name) >= _cap_per_person(content, o) or p.stamina < o.plot.stamina:
+        return [NOT_NOW]
+    p.stamina -= o.plot.stamina
+    place = content.locations[loc_id].name
+    if not roll_check(o.plot.check, state, content, world, rng):
+        p.opp_tried[key] = _today(state, content)
+        return [o.plot.part_fail.replace("{地點}", place)]
+    _mark(state, content, o, plot, part.key)
+    return [o.plot.part_ok.replace("{地點}", place)]
+
+
+def _plot_options(state: GameState, content: Content, loc_id: str) -> list:
+    """響應（還沒響應的、自己陣營還開著的密謀）與在這裡做一處（響應過的 check 類，這個地點是還沒人做的一處）。"""
+    from .engine import Option  # noqa: PLC0415
+
+    opts = []
+    p = state.player
+    if not active(state, content):
+        return opts
+    for plot in state.world.plots:
+        o = _plot_def(content, plot)
+        if o is None or plot.faction != p.faction or not _live(state, plot):
+            continue
+        if p.name not in plot.members:
+            opts.append(Option(id=f"opp:join:{plot.id}",
+                               label=f"響應{plot.shown}的密謀「{o.name}」（還缺{_missing(content, o, plot)}）"))
+            continue
+        if o.plot.how != "check":
+            continue
+        part = _part_here(state, content, o, plot, loc_id)
+        if part is None:
+            continue
+        label = o.plot.part_label.replace("{地點}", content.locations[loc_id].name)
+        tried = p.opp_tried.get(f"plot:{plot.id}:{part.key}") == _today(state, content)
+        if _done_by(plot, p.name) >= _cap_per_person(content, o):
+            opts.append(Option(id=f"opp:part:{plot.id}", enabled=False,
+                               label=f"{label}（你已經做了 {_done_by(plot, p.name)} 處，要等別人）"))
+        elif tried:
+            opts.append(Option(id=f"opp:part:{plot.id}", enabled=False, label=f"{label}（今天已經試過，換人或改天再來）"))
+        else:
+            opts.append(Option(id=f"opp:part:{plot.id}", label=f"{label}（體力 {o.plot.stamina}）",
+                               enabled=p.stamina >= o.plot.stamina))
+    return opts
+
+
+def _leading(state: GameState) -> bool:
+    """正牽頭一場還開著的（叛投走了的不算：他已經不在名單上）。"""
+    p = state.player
+    return any(x.leader == p.name and x.faction == p.faction and p.name in x.members and _live(state, x)
+               for x in state.world.plots)
+
+
+def _start_plot(state: GameState, content: Content, o: OppDef, loc_id: str) -> list[str]:
+    """請命發起：第 3 階以上、在有己方人物的地方、同時只牽頭一場。陣營軍情具名發一則（機緣文件 1.1）。"""
+    p = state.player
+    if _petition_here(state, content, loc_id) is None or _leading(state):
+        return [NOT_NOW]
+    w = state.world
+    span = content.config.plot_days * calendar.DAY / calendar.cal_scale(content, w)
+    pid = plot_id(p.faction, o.id, p.name, w.time)
+    taken = {x.id for x in w.plots}
+    while pid in taken:  # 雜湊撞上同一季的另一場（幾乎不會）：往後找一個空的
+        pid = (pid + 1) % PLOT_ID_SPACE
+    plot = Plot(id=pid, opp=o.id, faction=p.faction, leader=p.name, shown=p.name, members=[p.name], deadline=w.time + span)
+    w.plots.append(plot)
+    text = o.plot.start_text.replace("{name}", plot.shown).replace("{缺}", _missing(content, o, plot))
+    add_rumor(state, text, layer="faction", faction=p.faction)  # 陣營軍情：只給這個陣營、寫真名、不帶地點（同叛投、軍令）
+    return [f"你接下了密謀「{o.name}」，限 {content.config.plot_days:g} 天內辦成。"]
+
+
 def _deliver_label(o: OppDef) -> str:
     return o.accumulate.label if o.kind == "accumulate" else o.timing.deliver_label
 
@@ -404,7 +639,11 @@ def place_options(state: GameState, content: Content, loc_id: str) -> list:
                     label = o.deduce.label.replace("{人物}", name).replace("{嫌疑人}", s.name)
                     opts.append(Option(id=f"opp:accuse:{o.id}:{s.id}", enabled=not tried,
                                        label=f"{label}（今天已經指認過，改天再來）" if tried else label))
-    return opts
+        if o.kind == "plot":
+            petition = _petition_here(state, content, loc_id)
+            if petition is not None and not _leading(state):
+                opts.append(Option(id=f"opp:plot:{o.id}", label=f"{petition}：接下密謀「{o.name}」"))
+    return opts + _plot_options(state, content, loc_id)
 
 
 def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -> list[str]:
@@ -428,10 +667,14 @@ def act(state: GameState, content: Content, world, arg: str, rng: random.Random)
     一樣東西、present:<id> 把湊齊的拼圖交出去。選項不在了回「此刻無法」。"""
     what, _, rest = arg.partition(":")
     opp_id, _, key = rest.partition(":")
+    if what in ("join", "part"):  # 這兩種的 rest 是密謀的 id，不是機緣的 id
+        return _plot_step(state, content, world, what, rest, rng)
     o = next((x for x in open_ones(state, content) if x.id == opp_id), None)
     loc_id = state.player.location
     if o is None:
         return [NOT_NOW]
+    if what == "plot" and o.kind == "plot":
+        return _start_plot(state, content, o, loc_id)
     if what == "deliver":
         who = _deliver_here(state, content, o, loc_id)
         if who is None:
@@ -505,7 +748,12 @@ def act(state: GameState, content: Content, world, arg: str, rng: random.Random)
 
 
 def title(state: GameState, content: Content, arg: str) -> str:
-    """江湖紀錄的標題：「機緣・{名稱}」。arg 是 deliver:<id>、try:<id>、piece:<id>:<key> 或 present:<id>。"""
-    opp_id = arg.partition(":")[2].partition(":")[0]
-    o = next((x for x in content.opportunities if x.id == opp_id), None)
+    """江湖紀錄的標題：機緣的寫「機緣・{名稱}」（arg 是 deliver:<id>、try:<id>、piece:<id>:<key>、present:<id>、
+    accuse:<id>:<嫌疑人>、plot:<id>），響應與做一處寫「密謀・{名稱}」（arg 是 join:<密謀 id>、part:<密謀 id>）。"""
+    what, _, rest = arg.partition(":")
+    if what in ("join", "part"):
+        plot = next((x for x in state.world.plots if str(x.id) == rest), None)
+        o = _plot_def(content, plot) if plot is not None else None
+        return f"密謀・{o.name}" if o is not None else "密謀"
+    o = next((x for x in content.opportunities if x.id == rest.partition(":")[0]), None)
     return f"機緣・{o.name}" if o is not None else "機緣"
