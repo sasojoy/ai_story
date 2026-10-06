@@ -11,37 +11,23 @@
 - 等模型的 watchQueue 照樣每 2 秒問佇列，推送的通知不會在等的時候多打 /api/main。"""
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
 
-ROOT = Path(__file__).parent.parent
-APP = ROOT / "web" / "app.js"
-NODE = shutil.which("node")
+import webharness
+
+APP = webharness.APP
 
 BEGIN = "  // ── 伺服器推送（線上架構設計 5.3）──"
 END = "  // ── 伺服器推送（完）──"
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
-const fn = (header) => {
-  const a = src.indexOf(`\n  ${header}`);
-  if (a < 0) throw new Error(`app.js 裡找不到 ${header}`);
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
 const a = src.indexOf(input.begin), b = src.indexOf(input.end);
 if (a < 0 || b < 0 || b < a) throw new Error("app.js 裡找不到「伺服器推送」那一段");
 const parts = [
   src.match(/^  const POLL_MS = .*;$/m)[0],
   src.slice(a, b),
   src.match(/^  let pollInFlight = .*;$/m)[0],
-  fn("function setMain("), fn("async function busy("), fn("async function poll("), fn("function watchQueue("),
+  slice("function setMain("), slice("async function busy("), slice("async function poll("), slice("function watchQueue("),
 ].join("\n");
 
 // ── 假的時鐘與計時器：advance(毫秒) 照時間先後把到期的計時器一個一個跑（含 setInterval），每一步之間讓 await 的東西跑完 ──
@@ -112,9 +98,7 @@ const env = {
 };
 const names = Object.keys(env);
 const run = new Function(...names, "ctx", `return (async () => {\n${parts}\n${input.script}\n})();`);
-run(...names.map((n) => env[n]), { advance, every, later, calls, at, FakeES, live, listeners, intervals, scheduled, rand, delays, START, timers })
-  .then((out) => process.stdout.write(JSON.stringify(out === undefined ? null : out)))
-  .catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
+finish(run(...names.map((n) => env[n]), { advance, every, later, calls, at, FakeES, live, listeners, intervals, scheduled, rand, delays, START, timers }));
 """
 
 
@@ -124,15 +108,9 @@ def js() -> str:
 
 def page(script: str):
     """在 node 裡跑 script（async 函式本體，看得到推送那一段的所有東西，加上 ctx 裡的 advance、calls、at、FakeES……）；回傳它 return 的東西。"""
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", DRIVER],
-        input=json.dumps({"app": str(APP), "begin": BEGIN, "end": END, "script": "const { advance, every, later, calls, at, FakeES, live, listeners, intervals, scheduled, rand, delays, START, timers } = ctx;\n" + script}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"begin": BEGIN, "end": END, "script": "const { advance, every, later, calls, at, FakeES, live, listeners, intervals, scheduled, rand, delays, START, timers } = ctx;\n" + script})
 
 
 # 每個場景開頭：頁面剛進遊戲（S.main 有了，setMain 記下這一刻是最近一次拿到畫面），照 main.push 決定連不連

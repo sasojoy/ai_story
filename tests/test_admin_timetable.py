@@ -1,6 +1,6 @@
 """第一季濃縮版 T10：管理者的時刻表與救場（計畫 2026-10-05-T10-管理者工具）。
 
-用真實內容（content/）、週末設定（季長 2.5 天，一個曆時約 107 世界秒）。每個測試自己載一份，開關在測試裡才打開；
+用真實內容（content/）、週末設定（季長 2.5 天，一個曆時約 107 世界秒）。每個測試拿自己的一份（conftest.real_content 的複本），開關在測試裡才打開；
 auto_open_first_season 開出來的季照當下的 Config 蓋章。現實時間由測試給（game.now），time_scale 是 1。"""
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import calendar, rules, timetable
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -25,7 +26,7 @@ NOW = 1000.0
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）；「管」是管理者。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.geju_chaos_per_day = 0.0  # 跳過好幾週時割據不會先衝到 85、提早收季（決定性勝利，T9）

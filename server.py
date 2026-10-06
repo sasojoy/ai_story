@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
-import copy
 import hashlib
 import os
 import re
@@ -60,7 +59,8 @@ from starlette.concurrency import run_in_threadpool
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, rules, server_bots, team, timetable,
+    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules, server_bots, team,
+    timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
@@ -545,13 +545,21 @@ def within_budget(client, left: float):
     （naming.MIN_POST_SECONDS）回 None＝不叫了；沒有 client（None）還是 None。原本那個 client 不動（同一個角色別的請求可能正在用它）。"""
     if client is None:
         return None
-    own = getattr(client, "timeout", None)
-    per_post = min(float(own) if isinstance(own, (int, float)) else left, left / naming.POSTS_PER_CALL)
-    if per_post < naming.MIN_POST_SECONDS:
-        return None
-    capped = copy.copy(client)
-    capped.timeout = per_post
-    return capped
+    per_post = naming.per_post_seconds(client, left)
+    return None if per_post is None else ollama_client.capped(client, per_post)
+
+
+def _open_request(game: Game, open_it: Callable[[], object]) -> tuple[float, object]:
+    """三段式的 A 段（鎖內、很快）：記下開始的時刻（B 段的預算要扣掉等鎖與 A 段的時間）、拿鎖、同步時間、暫停中就擋
+    （模型一次都不叫）、open_it() 開單、存檔（不然 C 段進鎖重讀就把同步的結果丟了）。回傳（開始的時刻, open_it 的結果）。
+    對話、大場面、開爐取名、悟意境取名、隨口應對五條路都走它。"""
+    started = _monotonic()
+    with _locked(game):
+        game.sync(time.time())
+        _refuse_while_paused(game)  # 暫停中在 A 段就擋：模型一次都不叫
+        request = open_it()
+        open_characters().save(game.state)
+    return started, request
 
 
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
@@ -567,12 +575,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
         重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
-    started = _monotonic()
-    with _locked(game):
-        game.sync(time.time())
-        _refuse_while_paused(game)  # 暫停中在 A 段就擋：模型一次都不叫
-        request = game.dialogue_request(option_id)
-        open_characters().save(game.state)
+    started, request = _open_request(game, lambda: game.dialogue_request(option_id))
     if request is None:
         return None
     cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
@@ -615,13 +618,11 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
       C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
         回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
-    started = _monotonic()
-    with _locked(game):
-        game.sync(time.time())
-        _refuse_while_paused(game)
+    def open_fight():  # 不是大場面就在同一次拿鎖裡直接做完
         request = game.fight_request(option_id)
-        done = game.choose(option_id) if request is None else None
-        open_characters().save(game.state)
+        return request, (game.choose(option_id) if request is None else None)
+
+    started, (request, done) = _open_request(game, open_fight)
     if request is None:
         return done
     config = game.content.config
@@ -669,12 +670,7 @@ def prepare_forge(
     （預算 Config.bot_naming_budget_seconds，一次一件、至少隔 bot_naming_gap_seconds），C 是 bot_policy.apply_job 再進鎖交給
     Game.forge(proposed=...)；絕學定名也是同一條路（Game.mastery_request、Game.name_mastered）。
     other_art 有、insight_ids 空的是武學＋武學。"""
-    started = _monotonic()
-    with _locked(game):
-        game.sync(time.time())
-        _refuse_while_paused(game)
-        request = game.forge_request(art_id, insight_ids, other_art=other_art)
-        open_characters().save(game.state)
+    started, request = _open_request(game, lambda: game.forge_request(art_id, insight_ids, other_art=other_art))
     if request is None:
         return NO_NAME
     total = game.content.config.naming_budget_seconds
@@ -708,13 +704,8 @@ def sense_draw(game: Game, points, png: str = "") -> list[str] | None:
         預算是 Config.sense_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間；落回基本意境的不叫；
       C（鎖內、很快）Game.sense_draw 重驗還是同一次感悟、同一筆讀出同一個屬性才套用，名字再過一次過濾，取不到走退路字表。
     PNG 只轉交給模型，不存（存的是規則取樣過的點位，畫縮圖用）。"""
-    started = _monotonic()
     image = png if isinstance(png, str) and len(png) <= SENSE_PNG_MAX else ""
-    with _locked(game):
-        game.sync(time.time())
-        _refuse_while_paused(game)
-        request = game.sense_request(points, image)
-        open_characters().save(game.state)
+    started, request = _open_request(game, lambda: game.sense_request(points, image))
     if isinstance(request, str):
         raise GameError(request)
     proposed = NO_NAME
@@ -744,12 +735,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
         （Game.add_gamble_narration）。潤色跟評分共用同一份 free_text_budget_seconds（控制者 2026-10-06）：從 A 段算起，
         扣掉評分、等鎖與排隊花掉的，剩下的給潤色（同一個 within_budget）；不夠一趟就不叫、不插句子，跟模型叫不動時一樣。
         整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。"""
-    started = _monotonic()
-    with _locked(game):
-        game.sync(time.time())
-        _refuse_while_paused(game)
-        request = game.free_text_request(text)
-        open_characters().save(game.state)
+    started, request = _open_request(game, lambda: game.free_text_request(text))
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
     event = CONTENT.events[request.event_id]

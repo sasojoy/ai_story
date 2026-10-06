@@ -16,7 +16,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent, fusion, roster, team
+from conftest import real_content
+from tianxia import companion_agent, fusion, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -586,11 +587,9 @@ def test_lu_bei_faction_all_gather_at_zhuo_county(content):
 
 
 def test_nobody_is_recruitable_anywhere(content):
-    from tianxia.sqlite_world import open_world
-
-    world = open_world()  # 預設的資料庫是測試用的暫存檔，裡面什麼都還沒有：.read() 回傳空狀態
-    for loc_id in content.locations:
-        assert roster.recruitable_here(content, world, loc_id) == [], loc_id
+    """正式內容沒有哪個地點可以招募人：沒有人物標成 kind=recruitable 又寫了招募地點。"""
+    recruitable = {cid: ch.recruit_at for cid, ch in content.characters.items() if ch.kind == "recruitable"}
+    assert [cid for cid, at in recruitable.items() if at in content.locations] == []
 
 
 def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(content):
@@ -614,20 +613,36 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 # ── 完整跑一季（機器人）──────────────────────────────────
 
 
-@pytest.mark.parametrize("seed", [1, 2, 3])
-def test_bot_plays_a_full_season(content, seed, tmp_path):
+@pytest.fixture(scope="module")
+def season_of(content, tmp_path_factory):
+    """機器人照種子玩完的一季，同一個種子在這個模組裡只跑一次（測試整併第 3 區）：種子 1 那一季以前跑兩次，
+    「整季 [1]」與「學會悟、合、修」各一次，兩次一模一樣（play_season 對同一份內容、同一個種子是決定性的，也不改內容）；
+    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。"""
     from tianxia.sqlite_world import open_world
 
-    game = play_season(content, seed, world=open_world(tmp_path / f"world-{seed}.db"))
+    games, worlds = {}, []
+
+    def season(seed):
+        if seed not in games:
+            worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
+            games[seed] = play_season(content, seed, world=worlds[-1])
+        return games[seed]
+
+    yield season
+    for world in worlds:
+        world.db.close()
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_bot_plays_a_full_season(season_of, seed):
+    game = season_of(seed)
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 3
 
 
-def test_the_bot_learns_insights_fuses_and_cultivates(content, tmp_path):
-    from tianxia.sqlite_world import open_world
-
-    game = play_season(content, 1, world=open_world(tmp_path / "arts.db"))
+def test_the_bot_learns_insights_fuses_and_cultivates(season_of):
+    game = season_of(1)
     p = game.state.player
     assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
     assert game.world.recipe_keys(), "整季都沒合成過"
@@ -1583,7 +1598,7 @@ def _real_s1():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = real_content("weekend")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     return c, state

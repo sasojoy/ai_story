@@ -1,32 +1,30 @@
 """第一季濃縮版 T1：三條戰線、黃巾聲勢（衍生）、豪強割據，以及第一季的規則沒開（開關關著，或這一季開季時沒蓋「開」的章）時一切照舊。
 
-規則與引擎的測試大多用真實內容（content/）：要驗的就是那三條戰線、起始值與地點歸屬。每個測試自己載一份
-（約 0.06 秒），開關在測試裡才打開，不會漏到別的測試。"""
+規則與引擎的測試大多用真實內容（content/）：要驗的就是那三條戰線、起始值與地點歸屬。每個測試拿自己的一份
+（conftest.real_content 的複本），開關在測試裡才打開，不會漏到別的測試。"""
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, real_content
 from tianxia import atlas, battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Condition, Config, Effect
 from tianxia.state import BotProfile, WorldState
 from tianxia.world_state import fresh_season
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
 FRONTS = ["yingru", "nanyang", "jizhou"]
 
 
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，大勢的變化才寫得死
     return c
@@ -628,14 +626,6 @@ def test_an_empty_roster_says_the_geju_is_not_moving(on):
     assert f"現況：{EMPTY_ROSTER_NOTE}。" in text and "割據漸長" not in text
 
 
-def test_one_player_on_the_roster_makes_the_note_say_the_geju_grows_again(on):
-    game = _game(on)
-    _join(game)
-    _set_fronts(game.state, 40, 50, 90)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
-    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
-
-
 def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
     """回落不乘人數係數：名冊空著、沒有戰線在亂局，割據照樣一天落一點，說明寫漸消。"""
     game = _game(on)
@@ -645,12 +635,14 @@ def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
 
 
 def test_the_roster_follows_the_store_when_the_note_is_drawn(on):
-    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變。"""
+    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變：
+    名冊上一個人就說割據漸長，見聞→大勢的那一句也是。"""
     game = _game(on)
     _set_fronts(game.state, 40, 50, 90)
     assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
     _join(game)
     assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
 
 
 @pytest.mark.parametrize("players", [None, 0, 1, 15, 40])

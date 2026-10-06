@@ -1,14 +1,82 @@
 import contextlib
+import hashlib
 import json
+import os
+import pickle
 import random
 import shutil
 from pathlib import Path
 
 import pytest
 
+from tianxia import content as content_mod
 from tianxia.content import load_content
+from tianxia.models import Content
 
 FIXTURE = Path(__file__).parent / "fixtures" / "content"
+REAL_CONTENT = Path(__file__).parent.parent / "content"
+
+# 平行跑（pytest-xdist 的 -n）時，worker 由 execnet 開：它把 site-packages 的路徑寫進 worker 的標準輸入，這台機器上那個
+# 路徑有中文，worker 卻照 Windows 的字碼頁（cp950）讀，沒設 PYTHONIOENCODING 的 shell 一開 -n 就在啟動時 INTERNALERROR
+# （EOFError）。worker 繼承這個行程的環境變數，這個檔又在開 worker 之前載入，所以在這裡補上；已經設了的照舊。
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+
+# ── 內容快取 ──────────────────────────────────────────────────────────
+# 載入一份內容要 parse＋validate（正式內容約 0.1 秒、測試內容約 0.01 秒），以前用到它的測試每個各載一次。現在每份內容
+# 在一個工作階段只完整載入、驗證一次（母本），每個測試拿母本的 pickle 複本：測試怎麼改自己那一份都碰不到母本，也漏不到
+# 別的測試。正式內容（real_content）、測試內容（fixture content）、序章內容（prologue_content）都走這裡。
+# 直接測載入的測試（設定覆寫檔、test_real_content_loads、改了內容再 validate 的）照舊直接呼叫 load_content。
+
+_MASTERS: dict[tuple, tuple[Content, bytes]] = {}  # 快取的鍵 → （母本, 母本的 pickle 位元組；複本都從這份位元組做）
+
+
+def _dump(content: Content) -> bytes:
+    """母本的 pickle 位元組：發複本與工作階段結束時的檢查用同一個寫法。"""
+    return pickle.dumps(content, pickle.HIGHEST_PROTOCOL)
+
+
+def _content_key(root, profile) -> tuple:
+    """快取的鍵：哪個資料夾、哪份設定覆寫檔，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
+    這台機器的 `.local/admins.txt`（路徑與內容）與環境變數 `TIANXIA_ADMINS`。動了這兩樣的測試拿到的是另一份母本。
+    ADMINS_FILE 在呼叫的當下讀，所以 monkeypatch 換掉它也算數。"""
+    admins_file = Path(content_mod.ADMINS_FILE)
+    local = admins_file.read_text(encoding="utf-8") if admins_file.exists() else None
+    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS")
+
+
+def cached_content(root, profile=None) -> Content:
+    """root 的內容（profile 是設定覆寫檔）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
+    （第一次也是複本，母本誰都拿不到）。兩件事要知道：
+    - 母本是在第一個要它的測試當下建的，那個測試當時的環境（monkeypatch 過的東西）會跟著進母本、再進之後每一份複本。
+      所以 patch 了載入或驗證路徑（load_content、validate 會碰到的東西）的測試不要用這裡，自己直接 load_content。
+    - 鍵不看資料夾裡的檔：root 在一個工作階段裡不能改（正式內容、測試內容、序章母本資料夾都不改）。要改檔再載入的測試
+      用自己的一份資料夾（prologue_root、copy_fixture）直接 load_content。"""
+    key = _content_key(root, profile)
+    if key not in _MASTERS:
+        master = load_content(root, profile)
+        _MASTERS[key] = (master, _dump(master))
+    return pickle.loads(_MASTERS[key][1])
+
+
+def real_content(profile=None) -> Content:
+    """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "weekend"）。"""
+    return cached_content(REAL_CONTENT, profile)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def content_masters_stay_unchanged():
+    """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。
+    cached_content 從不交出母本，所以這一條守的是 cached_content 本身（例如有人改成直接回母本），不是在查測試之間的複本：
+    複本之間本來就不共用任何東西。"""
+    yield
+    changed = []
+    for key, (master, blob) in _MASTERS.items():
+        if _dump(master) != blob:
+            first = pickle.loads(blob)
+            fields = [name for name in Content.model_fields if getattr(master, name) != getattr(first, name)]
+            changed.append(f"{key[0]}（設定 {key[1]}）的 {fields or '某處'}")
+    assert not changed, f"內容快取的母本被改過：{'；'.join(changed)}"
 
 
 class FixedRandom(random.Random):
@@ -61,19 +129,43 @@ def isolated_database(tmp_path, monkeypatch):
 
 @pytest.fixture
 def content():
-    return load_content(FIXTURE)
+    """測試內容（tests/fixtures/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。"""
+    return cached_content(FIXTURE)
 
 
 PROLOGUE = Path(__file__).parent / "fixtures" / "prologue"
 
 
-@pytest.fixture
-def prologue_root(tmp_path):
-    """有序章的測試內容（新手引導計畫一）放在哪個資料夾：測試內容加上草廬（hut，只連 town）、斷眉（duanmei）、
-    一門雜學（junk）、三則序章事件、四筆師門配方與十一步的序章；開局送 basic_breath、basic_fist，升級門檻照正式的 10，
-    開局心得 20（測試內容沒寫 start_stats 時心得是 0，合成與修練都付不起）。
-    要改內容再載入的測試（驗證）用這個；只要載入好的內容用 prologue_content。"""
-    root = tmp_path / "prologue_content"
+def _folder_digest(root: Path) -> dict[str, str]:
+    """資料夾裡每個檔（相對路徑 → 內容的 sha256）。"""
+    return {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*")) if path.is_file()
+    }
+
+
+_PROLOGUE_DIGEST: dict[Path, dict[str, str]] = {}  # 序章母本資料夾 → 剛做好時每個檔的 sha256
+
+
+def _prologue_master_unchanged(root: Path, when: str) -> None:
+    """序章母本資料夾跟剛做好時一模一樣；不一樣就寫出是哪幾個檔（改了、多了、少了）與發現的時間點。"""
+    before, now = _PROLOGUE_DIGEST[root], _folder_digest(root)
+    if now == before:
+        return
+    diff = ([f"改了 {p}" for p in sorted(before.keys() & now.keys()) if before[p] != now[p]]
+            + [f"多了 {p}" for p in sorted(now.keys() - before.keys())]
+            + [f"少了 {p}" for p in sorted(before.keys() - now.keys())])
+    pytest.fail(f"序章內容的母本資料夾被改過（{when}）：{'、'.join(diff)}（{root}）", pytrace=False)
+
+
+@pytest.fixture(scope="session")
+def _prologue_master(tmp_path_factory):
+    """有序章的測試內容（新手引導計畫一）的母本資料夾，每個工作階段只做一份：測試內容加上草廬（hut，只連 town）、
+    斷眉（duanmei）、一門雜學（junk）、三則序章事件、四筆師門配方與十一步的序章；開局送 basic_breath、basic_fist，
+    升級門檻照正式的 10，開局心得 20（測試內容沒寫 start_stats 時心得是 0，合成與修練都付不起）。
+    測試不直接用它：要改內容再載入的測試（驗證）用 prologue_root（自己的一份複本），只要載入好的內容用 prologue_content。
+    prologue_root 每次複製前後、以及工作階段結束時，都檢查這個資料夾裡每個檔都沒被改過。"""
+    root = tmp_path_factory.mktemp("prologue") / "prologue_content"
     shutil.copytree(FIXTURE, root)
     for name in ("tutorial.json", "preset_recipes.json", "insight_scenes.json"):
         shutil.copy(PROLOGUE / name, root / name)
@@ -104,12 +196,27 @@ def prologue_root(tmp_path):
         starter_skills=["basic_breath", "basic_fist"], level_exp=10,
         start_stats={"str": 5, "agi": 5, "con": 5, "wis": 5, "lore": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 20},
     ))
-    return root
+    _PROLOGUE_DIGEST[root] = _folder_digest(root)
+    yield root
+    _prologue_master_unchanged(root, "工作階段結束時")
 
 
 @pytest.fixture
-def prologue_content(prologue_root):
-    return load_content(prologue_root)
+def prologue_root(tmp_path, _prologue_master):
+    """有序章的測試內容（見 _prologue_master）放在哪個資料夾：這個測試自己的一份複本，要改內容再載入的測試（驗證）用這個；
+    只要載入好的內容用 prologue_content。複製之前先確認母本沒被改過（改了就是之前哪個測試動的），這個測試做完再確認一次
+    （改了就是這個測試動的）：一份 20 個檔的雜湊約 2 毫秒。"""
+    _prologue_master_unchanged(_prologue_master, "這個測試開始之前")
+    root = tmp_path / "prologue_content"
+    shutil.copytree(_prologue_master, root)
+    yield root
+    _prologue_master_unchanged(_prologue_master, "這個測試做完之後")
+
+
+@pytest.fixture
+def prologue_content(_prologue_master):
+    """有序章的測試內容（見 _prologue_master）載入好的一份：這個測試自己的一份（cached_content 的複本）。"""
+    return cached_content(_prologue_master)
 
 
 @pytest.fixture
@@ -132,6 +239,28 @@ def game(content):
 
     content.config.train_event_chance = 0.0
     return Game.new(content, "沈浪", rng=random.Random(0))
+
+
+# ── 真實內容的 real、on（test_orders、test_enlist、test_enlist_web 共用這一份）────────────
+# 其他檔有自己的 real／on（設定各不相同），在那些檔裡蓋過這兩個：pytest 用離測試最近的定義。
+
+
+@pytest.fixture
+def real():
+    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    return c
+
+
+@pytest.fixture
+def on(real):
+    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。"""
+    real.config.season_one = True
+    real.config.season_days = 2.5
+    real.config.server_max_players = 2
+    return real
 
 
 def next_season(content, world, *players):

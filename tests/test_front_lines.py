@@ -14,7 +14,7 @@ from unittest import mock
 import pytest
 
 import server
-from conftest import FIXTURE, FixedRandom
+from conftest import FIXTURE, FixedRandom, real_content
 from tianxia import battle_instance, battlelog, figures, front_lines, journal, rules, team, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -27,7 +27,7 @@ BAND_KEYS = ["1", "2-3", "4+"]
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

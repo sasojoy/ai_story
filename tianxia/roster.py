@@ -12,7 +12,7 @@ import random
 from . import calendar, rules, team
 from .models import Content
 from .state import GameState
-from .world_state import CompanionProgress, WorldStateStore
+from .world_state import WorldStateStore
 
 
 def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
@@ -21,14 +21,6 @@ def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
 
 def owned_companions(world: WorldStateStore, player_name: str) -> list[str]:
     return [cid for cid, p in world.read().companions.items() if p.owner == player_name]
-
-
-def recruitable_here(content: Content, world: WorldStateStore, location: str) -> list[str]:
-    """在這個地點可以嘗試招募的人：內容標了 kind=recruitable、目前自由之身。"""
-    return [
-        cid for cid, ch in content.characters.items()
-        if ch.kind == "recruitable" and ch.recruit_at == location and owned_by(world, cid) is None
-    ]
 
 
 def recruit_chance(content: Content, state: GameState, companion_id: str) -> float:

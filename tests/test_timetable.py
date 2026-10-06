@@ -2,13 +2,14 @@
 
 用 tests/fixtures/content 加上幾條測試用的戰線與一份縮小的時刻表（照結算文件的寫法），不靠真實內容。"""
 import random
-from pathlib import Path
 
 import pytest
 
-from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, LUZHI_LOCKED, LUZHI_LOSER, FixedRandom, install_season_one
+from conftest import (
+    CHANGSHE_LOCKED, CHANGSHE_LOSER, LUZHI_LOCKED, LUZHI_LOSER, FixedRandom, install_season_one, real_content,
+)
 from tianxia import calendar, figures, timetable
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.models import FigureChange, TimetableEvent, TimetableOutcome
 from tianxia.state import FigureState, GameState, Lock, PlayerState
 from tianxia.world import advance_world_state
@@ -500,13 +501,11 @@ def test_calendar_follows_the_season_stamp_not_the_profile(s1):
 #
 # 要人物表（戰線、陣營、接位鏈），所以用真實內容、開關打開；文字與效果在測試裡自己寫，不靠 timetable.json 的句子。
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-
 
 @pytest.fixture
 def real_on():
     """真實內容（人物表照濃縮版內容表 1.1），第一季開關打開。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.season_one = True
     return c
 

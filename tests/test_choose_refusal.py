@@ -5,25 +5,11 @@
 「對方沉吟中…」「兩人對峙……」並標 busy，失敗之後沒有人把它還原，拒絕的提示三秒後消失，格子還寫著對方在回話。"""
 from __future__ import annotations
 
-import json
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
 
-NODE = shutil.which("node")
-APP = Path(__file__).parent.parent / "web" / "app.js"
+import webharness
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
-const slice = (head) => {
-  const a = src.indexOf(`\n  ${head}`);
-  if (a < 0) throw new Error(`app.js 裡找不到 ${head}`);
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
 // 假的元素：class 與一個放文字的最後一個子元素；inOptions 表示它在選單（.options）裡，不然就是行動列的格子
 const cell = (cls, inOptions, label) => {
   const classes = new Set(cls.split(" "));
@@ -57,28 +43,23 @@ const fns = new Function(
 )(S, document, renderPage,
   async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: "" }; },
   () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw");  // applyMain 也是整頁重畫
-(async () => {
+finish((async () => {
   const mk = (cls, inOptions, label) => { const el = cell(cls, inOptions, label); el.orig = label; els.push(el); return el; };
   const target = mk(input.cls, input.inOptions, "名字");
   mk("btn", true, "別的選項"); // 同一排的其他按鈕：choose 會先把它們都 disabled
   await fns.choose(target, input.id);
-  process.stdout.write(JSON.stringify({
+  return {
     renders, applied: calls.applied, busy: target.classList.contains("busy"), label: target.label(),
     others: els.slice(1).map((el) => el.disabled),
-  }));
-})();
+  };
+})());
 """
 
 
 def run(**kw):
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", DRIVER], input=json.dumps({"app": str(APP), "options": [], "refuse": True, **kw}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"options": [], "refuse": True, **kw})
 
 
 @pytest.mark.parametrize(
