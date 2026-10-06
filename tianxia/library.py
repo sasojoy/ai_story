@@ -150,9 +150,13 @@ def melt_refund(content: Content, level: int, quality: str, registered: str = "�
     return max(minimum, int(spent * cfg.melt_refund_ratio)) + bonus
 
 
-def melt_problem(state: GameState, art_id: str, name: str | None = None) -> str | None:
+def melt_problem(state: GameState, art_id: str, name: str | None = None, only: str | None = None) -> str | None:
     """熔不掉的原因；None＝可以熔。熔煉鈕亮不亮（skillview.art_rows）與 melt_art 的拒絕走同一個判斷，
-    兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。"""
+    兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。
+    only：序章（新手引導計畫一）只准熔師父說的那一門，空字串是這一步一門都不准熔；None＝不限。
+    由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。"""
+    if only is not None and art_id != only:
+        return "師父沒叫你熔這一門。"
     p = state.player
     if art_id in (p.member.neigong_id, p.member.wugong_id):
         return "身上正在練的不能熔，先改練別的。"
@@ -179,10 +183,12 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     )
 
 
-def melt_art(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> list[str]:
+def melt_art(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, only: str | None = None,
+) -> list[str]:
     p = state.player
     art = team.player_art(state, content, world, art_id)
-    problem = melt_problem(state, art_id, art.name if art else art_id)
+    problem = melt_problem(state, art_id, art.name if art else art_id, only=only)
     if problem is not None:
         return [problem]
     refund = melt_value(state, content, world, art_id)

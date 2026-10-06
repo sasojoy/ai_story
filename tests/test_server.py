@@ -4102,9 +4102,39 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
     main = _player(client)["main"]
     tutorial = server.CONTENT.tutorial
-    assert main["guide"] == {"speaker": tutorial.speaker, "text": tutorial.steps[0].text, "done": [], "end": False}
+    assert main["guide"] == {
+        "speaker": tutorial.speaker, "scene": "", "text": tutorial.steps[0].text, "line": "", "done": [], "end": False,
+    }
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
+
+
+def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, prologue_content):
+    """網頁上建的角色走序章（create_character 傳 prologue=True）；假人與腳本用的 Game.new 不傳，站在起點。"""
+    monkeypatch.setattr(server, "CONTENT", prologue_content)
+    main = _player(client)["main"]
+    player = server.game_for("沈青衫").state.player
+    assert player.location == "hut" and player.tutorial_step == 0
+    assert main["prologue"] == {"reveal": [], "glow": [], "skip": True}
+    assert main["guide"] is None  # 遇險的事件還在眼前，還沒遇到師父
+    assert Game.new(prologue_content, "假人").state.player.location == "town"
+
+
+def test_the_prologue_recap_is_empty_without_a_prologue(client):
+    """設定頁的「重看序章」：沒有序章的內容是空字串（網頁就不畫那顆鈕）。正式內容還沒有序章。"""
+    _player(client, "shen_02", "無序章")
+    assert client.get("/api/prologue").json() == {"text": ""}
+
+
+def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_content):
+    """設定頁的「重看序章」：GET /api/prologue 回 {text: html}。跟上面分成兩個測試：同一個資料庫裡全服的賽季只認先開季的那份
+    內容的主線，進了角色畫面（現在一進去就輪詢）換一份內容再開，找不到那一份的主線。"""
+    monkeypatch.setattr(server, "CONTENT", prologue_content)
+    _player(client, "shen_03", "沈青衫")
+    text = client.get("/api/prologue").json()["text"]
+    assert "<strong>城外</strong>" in text and "草廬已經看不見了。" in text and "{武學}" not in text
+    assert text.index("城外") < text.index("去看修練頁。")
+    assert client.get("/api/prologue").status_code == 200
 
 
 def test_guide_ack_closes_the_outro(client):

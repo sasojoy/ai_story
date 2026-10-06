@@ -17,18 +17,19 @@ from typing import get_args
 
 from pydantic import BaseModel, ValidationError
 
+from . import encounter
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, MOVES, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config, Content,
-    CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef, OrdersContent,
-    PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad, TimetableEvent, TraitBook,
-    Tutorial,
+    FRONT_KEY, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
+    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
+    OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
+    TimetableEvent, TraitBook, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTES, QUALITIES
-from .naming import name_problem
+from .naming import PRESET_CLASH, name_problem
 from .zh import to_traditional
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
@@ -92,6 +93,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "opportunities.json").exists() else [],
         followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
         if (root / "followers.json").exists() else {},
+        preset_recipes=[_build(PresetRecipe, raw) for raw in _read(root / "preset_recipes.json")]
+        if (root / "preset_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         events=events,
         map=MapLayout(**_read(root / "map.json")),
@@ -1551,6 +1554,80 @@ def validate(c: Content) -> None:
         known(where, step.done_when.locations, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
+
+    # ── 序章（新手引導計畫一）──
+    t = c.tutorial
+    huts = [loc.id for loc in c.locations.values() if loc.prologue_only]
+    if t.location is None:
+        need(not huts, f"地點 {huts} 標了 prologue_only，但 tutorial.json 沒有序章（location）")
+        need(t.prologue_steps == 0, "tutorial.json：沒有序章（location）時 prologue_steps 要是 0")
+    else:
+        need(huts == [t.location], f"tutorial.json：序章的地點 {t.location} 要是唯一一個 prologue_only 的地點（現在是 {huts}）")
+        hut = c.locations.get(t.location)
+        need(
+            hut is not None and [getattr(x, "to", x) for x in hut.connections] == [c.scenario.start_location],
+            f"序章的地點 {t.location} 只能連到起點 {c.scenario.start_location}",
+        )
+        base = sum(1 for step in t.steps if not step.season_one)
+        need(1 <= t.prologue_steps <= base, f"tutorial.json：prologue_steps 要在 1～{base}（不分季的步數）之間")
+        need(t.start_event in c.events, f"tutorial.json：start_event {t.start_event} 不存在")
+        if 1 <= t.prologue_steps <= len(t.steps):  # 序章最後一步（出師）要放得出草廬：allow 有 move:（prologue.can_travel 看的就是它）
+            last = t.steps[t.prologue_steps - 1]
+            need(
+                any(entry.startswith("move:") for entry in last.allow),
+                f"新手引導 {last.id}：序章最後一步的 allow 要有 move:（不然走不出草廬）",
+            )
+    for i, step in enumerate(t.steps):
+        where = f"新手引導 {step.id}"
+        special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
+                   or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
+                   or step.give_art)
+        need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
+        bad = [k for k in step.reveal if k not in REVEAL_KEYS]
+        need(not bad, f"{where}：reveal 不認得 {bad}")
+        unknown = [entry for entry in step.allow if not allow_known(entry)]
+        need(
+            not unknown,
+            f"{where}：allow 不是選單上的行動 {unknown}（閒著的選單做得出來的 id 列在 models.ALLOW_FIXED／ALLOW_FAMILIES；"
+            "引擎新加的行動要先補進那裡）",
+        )
+        need(step.explore_event is None or step.explore_event in c.events, f"{where}：explore_event {step.explore_event} 不存在")
+        known(where, step.enemies, c.squads, "對手")
+        need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
+        for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
+            need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
+    # 草廬的四景悟得到的每個意境，都要有一筆師門配方接上合成那一步的底：沒有的話那個新人的合成要等模型取名、或拿到退路的名字
+    # （「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    sights: set[str] = set()
+    todo = [s.explore_event for s in t.steps[: t.prologue_steps] if s.explore_event]
+    seen_events: set[str] = set()
+    while todo:
+        event_id = todo.pop()
+        if event_id in seen_events or event_id not in c.events:
+            continue
+        seen_events.add(event_id)
+        for choice in c.events[event_id].choices:
+            for effect in (choice.effect, choice.fail_effect):
+                sights.update(effect.insights)
+                if effect.next_event:
+                    todo.append(effect.next_event)
+    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
+    for step in t.steps[: t.prologue_steps]:
+        if step.fuse_base:
+            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
+            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
+    recipe_keys, recipe_names = set(), set()
+    for recipe in c.preset_recipes:
+        where = f"師門配方 {recipe.base}+{recipe.insight}"
+        need(recipe.base in c.skills, f"{where}：底 {recipe.base} 不存在")
+        recipe_insight = c.insights.get(recipe.insight)
+        need(recipe_insight is not None and recipe_insight.grant is None, f"{where}：意境 {recipe.insight} 要是探索悟得到的基本意境")
+        need((recipe.base, recipe.insight) not in recipe_keys, f"{where}：同一個底與意境寫了兩次")
+        need(recipe.name not in recipe_names, f"師門配方的名字 {recipe.name} 重複")
+        problem = name_problem(recipe.name, c)
+        need(problem in (None, PRESET_CLASH), f"{where}：名字 {recipe.name} 過不了命名過濾（{problem}）")
+        recipe_keys.add((recipe.base, recipe.insight))
+        recipe_names.add(recipe.name)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
     for insight in c.insights.values():

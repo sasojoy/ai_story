@@ -303,6 +303,9 @@ class Location(_Strict):
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
     insights: list[str] = Field(default_factory=list)  # 探索「悟意境」那一支悟得到的意境 id（武學與成長設計附錄 C）
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
+    # 序章（新手引導計畫一）的草廬：只有站在這裡的人看得到、到得了（atlas.is_unlocked）；序章走完離開後誰都回不去。
+    # 一份內容最多一個，而且就是 Tutorial.location（content.validate）
+    prologue_only: bool = False
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -616,24 +619,100 @@ class Milestone(_Strict):
 class TutorialGoal(_Strict):
     """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
-    action: Literal["explore", "socialize", "move", "view_map", "recruit", "practice", "order"] | None = None  # order：替軍令記到一次（計畫 T6）
+    # order：替軍令記到一次（計畫 T6）。choice～melt：序章（新手引導計畫一）那幾步要的動作：選了事件的選項、打開修練／煉製頁、
+    # 修練、打坐、遊歷、配點、熔煉
+    action: Literal[
+        "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
+        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt",
+    ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
+    # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
+    fused: bool = False
+    fused_level: int = 0
+    fused_quality: Quality | None = None
+
+
+# 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
+REVEAL_KEYS = frozenset({
+    "all",  # 全部亮齊（出師那一步）
+    "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
+    "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
+    "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
+})
+
+
+# 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
+# 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
+# allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。兩道檢查，都不是萬全的：
+#   tests/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
+#   tests/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
+#   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
+ALLOW_FIXED = frozenset({
+    "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
+    "act:rank2",  # 第 2 階守勢行動（正式版乙一）
+})
+# opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
+ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+
+
+def allow_known(entry: str) -> bool:
+    """TutorialStep.allow 的一筆是不是選單上真的有的行動（content.validate 擋拼錯的：拼錯的前綴整步會把選單清空）。"""
+    return entry in ALLOW_FIXED or any(entry.startswith(family) for family in ALLOW_FAMILIES)
+
+
+class GiveArt(_Strict):
+    """序章完成某一步時給的一門內容武學與成數（雪恥之後掉出來的雜學：第五成，熔了才退得回心得）。"""
+
+    id: str
+    level: int = Field(default=1, ge=1, le=10)
 
 
 class TutorialStep(_Strict):
     id: str
-    text: str
+    text: str  # 對話框裡說的話；空字串＝這一步沒有對話框（序章第一步：還沒遇到師父）
     done_when: TutorialGoal
     reward: Effect = Field(default_factory=Effect)
     season_one: bool = False  # 只在第一季濃縮版才有的步驟（開關開著、這一季也蓋了章，計畫 T6）；一律排在最後（content.validate）
+    speaker: str | None = None  # 框上寫的人；None＝Tutorial.speaker
+    # ── 序章（新手引導計畫一，設計第三、六節）：只寫在前 Tutorial.prologue_steps 步（content.validate）──
+    scene: str = ""  # 旁白，對話框裡排在話的前面
+    line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
+    reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
+    glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
+    allow: list[str] = Field(default_factory=list)  # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）
+    explore_event: str | None = None  # 在草廬探索時一定端出這則事件（四景四選一）
+    enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
+    force_tier: str | None = None  # 這一步的遊歷結果照寫好的（雪恥：險勝）
+    sure_cultivate: bool = False  # 這一步的修練一定升品
+    instant_rest: str = ""  # 非空：這一步的打坐一坐就回滿，說這一句
+    fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
+    melt_only: str | None = None  # 這一步只准熔這一門
+    give_art: GiveArt | None = None  # 完成這一步時給的武學
+
+
+class PresetRecipe(_Strict):
+    """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
+    第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
+
+    base: str  # 內容武學 id
+    insight: str  # 基本意境 id
+    name: str
+    note: str = ""
 
 
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
     outro: str = ""
+    # ── 序章（新手引導計畫一）：location 是 None 就沒有序章，下面三個都不看 ──
+    location: str | None = None  # 草廬（Location.prologue_only）
+    prologue_steps: int = 0  # 前幾步是序章（都在草廬）；走完就出師
+    start_event: str | None = None  # 新角色一進來就端出的事件（遇險）
+    leave_text: str = ""  # 走完序章、抵達起點時接在抵達那一則（「剛剛」）的一句
 
 
 class FactionDef(_Strict):
@@ -1782,6 +1861,7 @@ class Content(_Strict):
     promotions: list[PromotionDef] = Field(default_factory=list)  # 晉升（content/promotions.json，計畫 T5）
     opportunities: list[OppDef] = Field(default_factory=list)  # 機緣（content/opportunities.json，正式版乙一）
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
+    preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

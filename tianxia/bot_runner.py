@@ -243,7 +243,8 @@ class BotRunner:
             # 名號不能撞到任何一個角色，包括讀不出來（損毀、舊格式）的存檔——不然新假人會把它蓋掉
             taken = self.characters.names() | server_bots.reserved_names(self.content)
             name = server_bots.make_name(self.rng, taken)
-            game = Game.new(self.content, name, rng=self.rng, world=self.world)
+            # graduated：內容有序章時，新假人離開起點的樣子跟走完草廬的真人一樣（Game._graduate）；沒有序章什麼都不變
+            game = Game.new(self.content, name, rng=self.rng, world=self.world, graduated=True)
             game.state.player.bot = BotProfile(
                 personality=server_bots.pick_personality(self.rng), seed=self.rng.randrange(2**31),
             )

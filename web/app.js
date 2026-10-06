@@ -90,6 +90,9 @@
     unseen: false,
     offline: false,
     moveMode: "walk",
+    prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
+    recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
+    recapOpen: false,
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -99,6 +102,13 @@
   // ── 工具 ──
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (a, b) => (b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0);
+
+  // 序章（新手引導計畫一）：伺服器送 m.prologue = {reveal, glow, skip}；不在序章是 null，畫面照平常畫。
+  // shown(key)：這個元件亮了沒（reveal 有它、或 "all" 全亮）。glow 列的鈕加 .glow，新亮起來的加 .lit（見 applyGlow）。
+  // prologueKey：亮起來的東西變了沒——變了就整頁重畫（分頁列、狀態列只在整頁重畫時才換，見 renderTop）
+  const pro = () => (S.main && S.main.prologue) || null;
+  const shown = (key) => { const p = pro(); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
+  const prologueKey = () => { const p = pro(); return p ? p.reveal.join(",") : ""; };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
@@ -219,26 +229,46 @@
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
+    if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
+    S.prologueKey = prologueKey();
+    const top = topHtml();
     $app.innerHTML = `
       <div class="shell">
-        <header class="top" id="top">${topHtml()}</header>
+        <header class="top" id="top"${top ? "" : " hidden"}>${top}</header>
         <main class="page" id="page"></main>
       </div>
-      <nav class="tabs"><div class="tabs-inner">${TABS.map((t) => `
-        <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}">
-          <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
-        </button>`).join("")}</div></nav>
+      ${tabsHtml()}
       ${S.sheet ? sheetHtml() : ""}`;
     renderPage();
   }
 
+  // 底部分頁列：序章裡只畫亮起來的分頁（格數跟著變，不是固定五格），一個都沒有就整列不畫。data-glow 給序章指路（applyGlow）
+  function tabsHtml() {
+    const list = TABS.filter((t) => shown(`tab:${t.id}`));
+    if (!list.length) return "";
+    return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length}, 1fr)">${list.map((t) => `
+        <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="tab:${t.id}">
+          <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
+        </button>`).join("")}</div></nav>`;
+  }
+
   function renderTop() {
+    if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
-    if (el) el.innerHTML = topHtml();
+    if (!el) return;
+    const html = topHtml();
+    el.innerHTML = html;
+    el.hidden = !html;
+    applyGlow();
   }
 
   function topHtml() {
     const s = S.main.status;
+    // 序章（新手引導計畫一）：狀態列的五樣（體力、氣血、銀兩、心得、點名號展開的屬性）一樣都還沒亮，整條不畫（#top 跟著 hidden）；
+    // 有一樣亮了，名號那一行照畫，底下各個數字各看自己的鍵。序章裡所在只寫地名：日期、下一件、心得提示都是真實世界的事
+    if (!["stamina", "hp", "silver", "xinde", "stats"].some(shown)) return "";
+    const inPro = !!pro();
+    if (!shown("stats")) S.showMore = false; // 屬性沒亮就點不開（序章重來、換季時也不會停在展開的樣子）
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
     // 名號、所在底下的小字行（下一件、閉關、路程）：排在整列底下、整個寬度都能用，不跟右上角的設定鈕擠一邊。
     // 兩種時間的寫法固定（FB-062）：下一件是「季曆時刻（現實倒數）」，路程只寫現實倒數。這兩行比原本長，擠在一邊會折成四行，
@@ -248,34 +278,40 @@
       s.busy_hours != null ? `🧘 閉關中，現實約 ${s.busy_hours} 小時後出關` : "",
       s.journey != null ? `🐎 ${esc(s.journey)}` : "",
     ].filter(Boolean).map((t) => `<div class="where sub">${t}</div>`).join("");
+    const where = inPro ? `📍 ${esc(s.location)}` : `📍 ${esc(s.location)}　${s.calendar
+      ? esc(s.calendar.text)
+      : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}`;
+    const vitals = [
+      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>` : "",
+      shown("hp") ? `<div class="bar hp" title="氣血" data-glow="hp"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
+        // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
+        // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
+        ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}</span>${s.injury >= 1
+        ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>` : "",
+      shown("silver") ? `<div class="num" data-glow="silver"><em>銀</em>${s.silver}</div>` : "",
+      shown("xinde") ? `<div class="num" data-glow="xinde"><em>心得</em>${s.xinde}</div>` : "",
+    ].join("");
+    // 點名號展開屬性：序章裡「屬性」那一步才點得開（data-glow="stats" 指路）；沒亮就不是按鈕
+    const who = shown("stats")
+      ? `<div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}" data-glow="stats">`
+      : '<div class="who static">';
     return `
       <div class="top-row">
-        <div class="who" data-act="toggle-more" role="button" tabindex="0" aria-expanded="${S.showMore}">
+        ${who}
           ${whoNameHtml(s)}
-          <div class="where">📍 ${esc(s.location)}　${s.calendar
-            ? esc(s.calendar.text)
-            : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}</div>
+          <div class="where">${where}</div>
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
-      ${subs}
-      <div class="vitals">
-        <div class="bar stam" title="體力"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>
-        <div class="bar hp" title="氣血"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
-          // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
-          // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
-          ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span>氣血 ${s.hp}/${s.hp_max}</span>${s.injury >= 1
-          ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>
-        <div class="num"><em>銀</em>${s.silver}</div>
-        <div class="num"><em>心得</em>${s.xinde}</div>
-      </div>
+      ${inPro ? "" : subs}
+      ${vitals ? `<div class="vitals">${vitals}</div>` : ""}
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
-        ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
+        ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${team ? `<br>${team}` : ""}
-        ${s.stances ? stancesHtml(s.stances, s.stance_notes) : ""}
+        ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
-      ${hintHtml(s)}`;
+      ${inPro ? "" : hintHtml(s)}`;
   }
 
   // 狀態列的名號那一塊（FB-071）。收起來是一行：名號、頭銜（小字，放不下加「…」）、可配 N 點、▾——「可配」放在會省略的 <span>
@@ -314,6 +350,26 @@
     const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
     page.innerHTML = fn();
     afterPage();
+    applyGlow();
+  }
+
+  // 序章的發光與閃一閃（新手引導計畫一）：m.prologue.glow 列的鍵，對到的鈕加 .glow（按得下去的才加，灰的不發光）；這一步新亮起來的
+  // 元件（reveal 比上一次畫的多出來的）加 .lit 閃一下，一秒內重畫也還在。data-glow 寫的是鍵，可以寫好幾個（空白隔開，例：收著的
+  // 武學列「改練 修練 熔煉」）。不在序章什麼都不加。每次畫完頁面、狀態列都呼叫，前一次的先清掉
+  let litBefore = null, litKeys = [], litTimer = 0;
+  function applyGlow() {
+    document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
+    const p = pro();
+    if (!p) { litBefore = null; litKeys = []; return; }
+    const fresh = litBefore ? p.reveal.filter((k) => !litBefore.includes(k)) : [];
+    litBefore = p.reveal.slice();
+    if (fresh.length) {
+      litKeys = fresh;
+      clearTimeout(litTimer);
+      litTimer = setTimeout(() => { litKeys = []; }, 1000);
+    }
+    p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+    litKeys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]`).forEach((el) => el.classList.add("lit")));
   }
 
   // 戰鬥卡片底下伏筆聽來的那一句（FB-074）：常有兩三行高、多撐 46～66px，新角色前七場遊歷有三場看到。
@@ -555,8 +611,9 @@
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「打坐」就是平常閒著的時候：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
-  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest");
-  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" ${attrs}>
+  // 序章裡閒著時選單只留這一步要的（打坐常常不在）：沒有事件的選項、不在路上，也當閒著的行動列來畫，沒亮的格子不畫（F12）
+  const idleMenu = (m) => m.options.some((o) => o.id === "act:rest") || (!!m.prologue && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:")));
+  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
 
@@ -567,10 +624,13 @@
     // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
+    // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
+    // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
     const cells = ACT_CELLS.map((d) => {
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
+      if (o) used.add(o.id);
+      if (!shown(`act:${d.key}`)) return "";
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
-      used.add(o.id);
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
@@ -587,9 +647,11 @@
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
     const open = S.wheelSel === "move";
-    cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
-      moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
-    const moveCard = !open ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
+    if (shown("act:move")) {
+      cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
+        moves.length ? `data-act="wheel" data-key="move" aria-expanded="${open}"` : "disabled", (open ? " on" : "") + (moves.length ? "" : " off")));
+    }
+    const moveCard = !open || !shown("act:move") ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
@@ -597,7 +659,8 @@
     const extras = m.options.filter((o) => !used.has(o.id));
     const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
-    return `<div class="act-bar" role="group" aria-label="行動">${cells.join("")}</div>${moveCard}${here}`;
+    const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
+    return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
   }
 
   // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
@@ -637,8 +700,8 @@
   // 點哪一個，它的內容就在這一排正下面攤開；同一時間只開一個，再點一次收起，點別的就換過去。內容跟以前摺疊卡裡的一樣
   // （態勢：三條、收季規則、怎麼算的；大事：本週的公告，標題與內文都在面板裡；主線：主線與目標）。
   // 每個小標都可以沒有：沒有態勢（開關關著，或休季由結算卡取代）、沒有大事、主線是空的就不畫那一個，三個都沒有整排不畫。
-  // 計畫 guide-1（還沒併進來）之後會在序章把大事與主線一個一個藏起來（shown("board")／shown("quest")）：
-  // peekParts 回傳的清單裡把那一塊換成 null 就行，peekHtml 會略過 null，其他不用動。
+  // 序章（新手引導計畫一）把三塊一個一個藏起來（shown("stances")／shown("board")／shown("quest")，態勢跟大事一起亮）：
+  // peekParts 回傳的清單裡把那一塊換成 null，peekHtml 會略過 null，三塊都藏著整排不畫。
   // 展開哪一個記在 S.peekOpen（{ id, week }，帶著週次：換週就收回；輪詢重畫整頁也不會把開著的關掉）。
   // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、季、週次、則數），另存一份在 localStorage
   // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。週次每一季都從 1 起，
@@ -705,7 +768,7 @@
     return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest } : null;
   }
 
-  const peekParts = (m) => [stancePeek(m), boardPeek(m, peekWeek(m)), questPeek(m)];
+  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null];
 
   function peekHtml(parts, week) {
     const list = parts.filter(Boolean);
@@ -785,7 +848,9 @@
     if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
     if (!g) return "";
     if (!g.end && (guideShut() === g.text || (onRoad && S.guideRoad !== g.text))) {
-      return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
+      // 收起來那一行：序章的步驟自己寫了短的一行（g.line，例：「師父：回『江湖』按『探索』」）就用它，不然是這一句話；
+      // 記著收起的仍是 g.text（guideShut），換了下一句自己展開
+      return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.line || g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
       ? '<span class="ok">✔ 完成</span>' : `<span class="reward">${esc(d)}</span>`).join("")}</div>` : "";
@@ -793,7 +858,8 @@
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
     const full = S.guideFull === g.text;
-    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
+    const scene = g.scene ? `<p class="guide-scene">${esc(g.scene)}</p>` : ""; // 序章的旁白（「斷眉來了……」）排在話的前面
+    return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}${scene}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(g.text)}</p></section>`;
   }
 
   function pageJianghu() {
@@ -862,17 +928,20 @@
     const scene = m.on_road
       ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
       : `<section class="card scene">${m.scene}</section>`;
-    const tail = `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
-      <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>`;
+    // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
+    const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
+      <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
     // 態勢｜大事｜主線 收成一排小標（正式版辛）：排在最上面、「剛剛」之前，不管是哪一種選單；在路上才排到選項底下（FB-055）。
     // 三張摺疊卡疊起來有 170px，打完一仗整排行動就被擠出第一屏；一排只有 44px。公告的展開、已看過都是小標自己記（見 peekHtml）
     const week = peekWeek(m);
     const peek = peekBlock(m);
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
-    const fronts = m.fronts ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
+    const fronts = m.fronts && shown("fronts") ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
-    const orderCard = m.orders || m.convoy ? ordersHtml(m.orders || [], week, m.convoy) : "";
+    const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], week, m.convoy) : "";
+    // 序章第一步（還沒遇到師父）：選項底下一行「略過序章」，不想走序章的人直接站到起點（設計 7.3）
+    const skip = pro() && pro().skip ? '<button class="linkish skip-prologue" data-act="do" data-op="skip_tutorial">略過序章</button>' : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
@@ -880,8 +949,11 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${skip}${orderCard}${fronts}${tail}`;
   }
+
+  // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
+  const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
   // ── 修練 ──
   function pagePractice() {
@@ -894,7 +966,8 @@
     const wornCard = (c) => { const a = x.owned_arts.find((r) => r.worn && r.kind === c.kind); return a ? a.card : c.card; };
     // 目前這一門有沒有功法、練滿了沒（伺服器照 team.MAX_LEVEL 說）：沒有或練滿就不能練成（C5）
     const cur = x.slot_cards.find((c) => c.kind === S.kind) || { learned: false, level: 0, maxed: false, price: null };
-    const train = !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
+    // 序章裡沒叫你練功的步驟，鈕灰掉、寫師父的話（blocked 是伺服器照 Game.practice 同一個判斷給的）
+    const train = cur.blocked ? esc(cur.blocked) : !cur.learned ? `還沒有${esc(S.kind)}` : cur.maxed ? "已練到第十成" : "";
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 第一個練成絕學的人：替它取正式的名字（武學與成長設計 3.6）。名字是玩家打的，伺服器會驗；表單的字跳脫
@@ -906,14 +979,16 @@
     // 勾了機率那一行換成伺服器算好的句子（legend.note），不另外問伺服器
     const artRow = (a) => {
       const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
+      // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）——發光的只有「這一列真的按得下去」的那幾個
+      const todo = [!a.worn ? "switch" : "", a.cultivate.ok ? "cultivate" : "", a.melt.ok ? "melt" : ""].filter(Boolean).join(" ");
       return `
-        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}">${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
+        <button class="art ${S.artOpen === a.id ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && S.artOpen !== a.id ? ` data-glow="${todo}"` : ""}>${a.worn ? "◆ " : ""}${esc(a.kind)}　${esc(a.name)}（${esc(a.quality)}・屬${esc(a.attribute)}）第${a.level}成${a.insight ? `・意境「${esc(a.insight)}」` : ""}</button>
         ${S.artOpen === a.id ? `<div class="art-body">${a.card}
           ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
           <div class="row art-actions">
-            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
-            ${a.worn ? "" : `<button class="btn" data-act="switch" data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
+            <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
+            ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
+            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
     };
@@ -922,12 +997,13 @@
         <div class="insight"><div><b>「${esc(i.name)}」</b><small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small>${i.note ? `<p>${esc(i.note)}</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(i.id)}" data-name="${esc(i.name)}">化成心得 ${i.melt}</button></div>`;
     return `
+      ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       <div class="card">
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
         <div class="row practice-actions">
-          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
+          <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
           <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
@@ -999,10 +1075,11 @@
     const ready = forgeReady();
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」
     return `
+      ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
-      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" ${ready ? "" : "disabled"}>開爐</button></div>
+      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
       <div class="label">武學 <small class="muted">一門配一個意境，或兩門一起放</small></div>
       <div class="chips">${x.owned_arts.map((a) => `
         <button class="chip r${QUALITY_RANK[a.quality] || 1} ${inPot(a.id) ? "used" : ""}" data-act="pick" data-type="art" data-id="${esc(a.id)}" ${inPot(a.id) ? "disabled" : ""}>
@@ -1341,7 +1418,9 @@
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
+          ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
         </div>
+        ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
           <label class="field"><span>新密碼</span><input class="input" type="password" name="new" autocomplete="new-password"></label>
@@ -1475,6 +1554,13 @@
     if (S.tab === "map") renderPage();
   }
 
+  // 設定頁的「重看序章」：序章的文字是內容、不會變，同一次載入只問一次。沒有序章的內容回空字串，就不畫那顆鈕
+  async function loadRecap() {
+    if (S.recap !== undefined) return;
+    try { S.recap = (await api("/api/prologue")).text || ""; } catch (e) { return; } // 問不到：下次打開設定再問
+    if (S.sheet) render();
+  }
+
   async function loadReports(id) {
     S.reports = await api(`/api/reports${id != null ? `?id=${id}` : ""}`);
     if (S.tab === "news") renderPage();
@@ -1490,6 +1576,12 @@
     render();
     window.scrollTo(0, 0);
     try {
+      if ((tab === "practice" || tab === "craft") && pro()) {
+        // 序章裡打開修練、煉製頁本身就是一步（跟打開輿圖一樣先當一個動作送給伺服器）
+        const r = await api("/api/do/view_tab", { tab });
+        setMain(r.main);
+        renderTop();
+      }
       if (tab === "practice" || tab === "craft") await loadMenxia();
       if (tab === "map") {
         // 打開輿圖本身可能完成新手引導的一步，所以先當一個動作做
@@ -1748,9 +1840,11 @@
         case "sheet":
           S.sheet = true;
           render();
+          loadRecap(); // 有序章的內容才有「重看序章」鈕；同一次載入只問一次
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
-        case "sheet-close": S.sheet = false; render(); break;
+        case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
+        case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": setGuideShut(S.main.guide && S.main.guide.text); S.guideRoad = null; renderPage(); break;
         case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;

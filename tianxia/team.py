@@ -267,9 +267,10 @@ def can_practise(state: GameState, content: Content, kind: str) -> bool:
 
 
 def practice(
-    state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random,
+    state: GameState, content: Content, world: WorldStateStore, kind: str, rng: random.Random, safe: bool = False,
 ) -> list[str]:
-    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。"""
+    """練成：身上這一門加深一成，花心得（設計 4.2），累積受傷風險（設計文件六.2）。
+    safe：序章裡的練功不受傷（新手引導計畫一），連受傷那一次亂數也不擲；序章外的亂數序列一個都沒動。"""
     cfg, member = content.config, state.player.member
     slot = "neigong_id" if kind == "內功" else "wugong_id"
     level_slot = slot.replace("_id", "_level")
@@ -291,7 +292,7 @@ def practice(
     state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
-    if rng.random() < cfg.practice_injury_chance:
+    if not safe and rng.random() < cfg.practice_injury_chance:
         now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER))
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
@@ -603,9 +604,11 @@ def _apply_toll(
 
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
-    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True,
+    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
+    tier 給了（序章雪恥那一場，新手引導計畫一）結果就照寫好的：數字照舊算、功效照舊折進去，判定出來之後只把結果換掉；
+    換在護命與閃避之前，所以那兩樣都不動它（也就不會標 guarded）。
     shift 是大場面判讀的優勢換算成的判定差距平移（encounter.advantage_shift，武學與成長設計 8.3，照沒有功效的運氣範圍算）；
     平常是 0。本人的功效改了運氣範圍時，resolve_encounter 會把它等比例縮放，同一個優勢推的百分點不變（Task 3 審查 I1）。
     結果定了（優勢平移也算進去）之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
@@ -617,6 +620,8 @@ def fight(
     result = encounter.resolve_encounter(
         power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo),
     )
+    if tier is not None:
+        return result.model_copy(update={"tier": tier})
     if not dodge:
         return result
     if result.tier == encounter.FALLBACK_TIER and "no_loss" in lo.specials:  # 護命（13.4）：落敗改判僵持，蓋過閃避、也就不擲閃避

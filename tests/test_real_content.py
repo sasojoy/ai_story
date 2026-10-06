@@ -1573,3 +1573,25 @@ def test_real_showdowns_start_from_the_opening_fronts():
         e.id: showdown_start(state, c, showdown_battle(state, c, e)) for e in c.timetable if e.kind == "showdown"
     }
     assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
+
+
+@pytest.mark.parametrize("season_one", [False, True])
+def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
+    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「打坐」；
+    決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。"""
+    from tianxia.models import allow_known
+    from tianxia.sqlite_world import open_world
+
+    real = content.model_copy(deep=True)
+    real.config.season_one = season_one
+    seen: set[str] = set()
+
+    def observe(game):
+        ids = [o.id for o in game.options(odds=False, tick=False)]
+        if "act:rest" in ids:
+            seen.update(oid for oid in ids if not oid.startswith("battle:"))
+
+    play_season(real, 2, max_steps=700, observe=observe, world=open_world(tmp_path / f"idle-{season_one}.db"))
+    assert {"act:explore", "act:rest"} <= seen and any(oid.startswith("move:") for oid in seen)
+    stray = {oid for oid in seen if not allow_known(oid)}
+    assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"

@@ -83,6 +83,9 @@ class Summons(BaseModel):
     since: float = 0.0
 
 
+ONBOARDING_VERSION = 2  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）。比它小的是舊存檔，讀檔時當作走過序章（設計 7.2）
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -152,6 +155,7 @@ class PlayerState(BaseModel):
     guide_done: list[str] = Field(default_factory=list)  # 最近一次行動完成引導的那幾行（✔ 與獎勵），對話框顯示；下一次行動清掉
     guide_skipped: bool = False  # 按過「略過新手引導」：之後（含換季、第一季多出的步驟）都不畫對話框；步驟照樣記著
     guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
+    onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
@@ -452,6 +456,8 @@ def new_game_state(content: Content, name: str) -> GameState:
         stats=dict(cfg.start_stats),
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
+        # 有序章的內容才蓋新引導的章（新手引導計畫一）：沒有序章時步數還是舊編號，先蓋章會讓序章上線後的舊存檔跳過換算
+        onboarding=ONBOARDING_VERSION if content.tutorial.location is not None else 0,
         member=Member(),
         joined_at=None,  # 第一次同步補算完賽季才蓋（Game._stamp_join）
     )

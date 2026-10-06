@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from . import insights, landing, library, naming, team, traits
 from .martial_arts import Insight, MartialArt, generate_from_name, shown_creator
-from .models import Content
+from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_rumor
 from .state import GameState
@@ -259,6 +259,8 @@ def forge_request(
         key = fuse_key(art_id, insight_id)
         if world.lookup_recipe(key) is not None:
             return None
+        if preset_for(content, art_id, insight_id) is not None:
+            return None  # 師門配方：名字寫好了，不用模型（fuse 也不擲合到舊的）
         base = team.player_art(state, content, world, art_id)
         insight = insights.resolve(insight_id, content, world)
         tianji, _ = recipe_seed(world, key)
@@ -310,6 +312,12 @@ def _candidates(content: Content, world: WorldStateStore, key: str, kind: str, t
             yield fallback
 
 
+def preset_for(content: Content, art_id: str, insight_id: str) -> PresetRecipe | None:
+    """師門配方（content/preset_recipes.json，新手引導計畫一）：這個底融這個意境的名字與說明由內容寫好，不叫模型、也不走退路字表，
+    也不擲「合到舊的」——師門傳下來的是同一門，新人不該拿到陌生人合出來的武學。"""
+    return next((r for r in content.preset_recipes if r.base == art_id and r.insight == insight_id), None)
+
+
 def _fuse_what(base: MartialArt, insight: Insight) -> str:
     return f"一門{base.kind}【{base.name}】（屬{base.attribute}）融入意境「{insight.name}」（屬{insight.attribute}）。"
 
@@ -328,24 +336,33 @@ def fuse(
     base = team.player_art(state, content, world, art_id)
     insight = insights.resolve(insight_id, content, world)
     key = fuse_key(art_id, insight_id)
+    preset = preset_for(content, art_id, insight_id)  # 師門配方：這一季誰先合、後合都是它，所以先算好（_fuse_line 也要看）
     art, first, landed = world.lookup_recipe(key), False, False
     if art is None:
         tianji, _ = recipe_seed(world, key)
         candidates = landing.art_candidates(world, base.kind, insight.attribute, insight.lean)
-        if landing.lands(content, key, tianji, len(candidates)):
+        if preset is None and landing.lands(content, key, tianji, len(candidates)):
             name = _picked(client, proposed, _pick_messages(_fuse_what(base, insight), candidates), candidates)
             art, landed = world.link_recipe(key, landing.choose(candidates, key, tianji, name).id, state.player.name)
         else:
-            # 功效（13.3、13.4）：長新武學才定——一般功效照來路、特別功效照配方擲；取名之前就算好，提示才寫得出來
+            # 功效（13.3、13.4）：長新武學才定——一般功效照來路、特別功效照配方擲；取名之前就算好，提示才寫得出來。
+            # 師門配方也有一般功效，但沒有特別功效（從隱蔽的草廬裡傳不出「江湖上傳開了」）
             new_traits = traits.inherit_fuse(base, insight.attribute)
-            special_id, trait_note = _special_and_note(content, new_traits, key, tianji)
-            name, note = _named(client, content, world, _fuse_messages(base, insight, note=trait_note), proposed)
+            if preset is not None:
+                special_id, name, note = None, preset.name, preset.note
+                if world.is_character_name(preset.name):  # 有人的名號就是這個名字（FB-069）：這一季改走退路字表，不寫那句說明
+                    name, note = None, ""
+            else:
+                special_id, trait_note = _special_and_note(content, new_traits, key, tianji)
+                name, note = _named(client, content, world, _fuse_messages(base, insight, note=trait_note), proposed)
             for candidate_name in _candidates(content, world, key, base.kind, tianji, name):
                 candidate = generate_from_name(
                     candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
                 )
                 candidate = candidate.model_copy(update={
-                    "origin": "fused", "creator": state.player.name, "creator_shown": state.player.name,
+                    # 師門配方沒有首創者（誰先合出來都一樣）：不記名號、標 preset，卡片寫師門、江湖史不列
+                    "origin": "fused", "creator": None if preset else state.player.name,
+                    "creator_shown": None if preset else state.player.name, "preset": preset is not None,
                     "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
                     "insight": insight.id, "base": art_id, "lean": insight.lean,
                     "traits": new_traits, "special": special_id,
@@ -359,14 +376,20 @@ def fuse(
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     cfg = content.config
     # 新武學一律從登記的品質（下品）起修，不看底現在是什麼品質：store_art 不帶 quality，就不會記一筆個人品質
-    msgs = [_fuse_line(base, insight, art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
+    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None)] + _charge(
+        state, cfg.fuse_xinde, cfg.fuse_stamina,
+    )
     msgs += _special_rumor(state, content, art, first)
     return art, msgs + library.store_art(state, art)
 
 
-def _fuse_line(base: MartialArt, insight: Insight, art: MartialArt, first: bool, landed: bool = False) -> str:
+def _fuse_line(
+    base: MartialArt, insight: Insight, art: MartialArt, first: bool, landed: bool = False, preset: bool = False,
+) -> str:
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
     head = f"你以【{base.name}】融入「{insight.name}」，{verb}{art.kind}【{art.name}】（{art.quality}・屬{art.attribute}）！"
+    if preset:  # 師門配方：每個新人合的都是師門傳下來的同一門，不寫成「由先到的那個新人首創」
+        return head + (f"\n{art.note}" if art.note else "") + "\n這是師門傳下來的路數。"
     return head + _arrival(art, first, landed)
 
 

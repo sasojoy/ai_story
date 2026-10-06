@@ -54,8 +54,9 @@ globalThis.document = {
 };
 const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false, peekOpen: null, boardSeen: null, main: input.m, ...input.S };
 const parts = [
-  ...["esc", "pct", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek", "peekSeason", "peekParts",
-    "peekBlock"].map(konst),
+  // pro、shown：序章（新手引導計畫一）把小標一塊一塊藏起來要看的；這裡的 m 沒有 prologue，所以全亮
+  ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
+    "peekSeason", "peekParts", "peekBlock"].map(konst),
   ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "stancePeek", "boardPeek", "questPeek",
     "peekHtml", "peekTap", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
