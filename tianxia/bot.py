@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import cultivation, fusion, library, naming, team, traits
+from . import cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
 from . import prologue as prologue_rules
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -24,6 +24,8 @@ SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 FORESHADOW_OPTIONS = ("fs:", "talk:clue:", "opp:", "talk:opp:")  # 伏筆的最後一步、對話的片段與機緣（正式版乙一）：機器人不做
 
 FORGE_TRIES = 4  # 武學＋意境、武學＋武學、意境＋意境各試幾組（被擋下就換一組）
+SENSE_RIGHT = 0.6  # 有所感時挑到選得對的做法的機會（其餘從全部做法裡隨便挑，可能也挑對）：看得懂場景的玩家大多挑得對
+SENSE_DRAW = 0.8  # 進了感悟狀態之後真的畫一筆（其餘順其自然，落回做法那個基本意境）
 MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做合併
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
 BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
@@ -152,8 +154,10 @@ def melt_the_weakest(game: Game) -> None:
         game.melt_art(min(spare)[1])
         return
     needed = {
-        art.insight for art in (team.resolve_art(a, content, world) for a in library.owned_arts(state))
-        if art is not None and art.insight
+        used.id for used in (
+            insights.for_cultivation(state, content, world, art)
+            for art in (team.resolve_art(a, content, world) for a in library.owned_arts(state)) if art is not None
+        ) if used is not None
     }
     loose = [i for i in state.player.insights if i not in needed]
     if loose:
@@ -182,6 +186,37 @@ def switch_to_the_strongest(game: Game) -> None:
             game.switch_art(art_id)
 
 
+def sense_pick(game: Game, rng: random.Random) -> str | None:
+    """有所感的時候挑什麼（整季機器人與伺服器假人共用，悟意境設計 0.4）：還沒選做法就挑一個（SENSE_RIGHT 的機會挑選得對的），
+    進了感悟狀態就畫（sensing.DRAW，呼叫端要接著 sense_draw）或順其自然。不在有所感是 None。"""
+    got = sensing.current(game.state, game.content)
+    if got is None:
+        return None
+    s, scene, loc = got
+    if s.stage == "draw":
+        return sensing.DRAW if rng.random() < SENSE_DRAW else sensing.LET_GO
+    pool = insights.pool_attributes(loc, game.content)
+    right = [i for i, j in enumerate(s.order) if scene.prologue or scene.methods[j].attribute in pool]
+    if right and rng.random() < SENSE_RIGHT:
+        return f"{sensing.PREFIX}{rng.choice(right)}"
+    return f"{sensing.PREFIX}{rng.randrange(len(s.order))}"
+
+
+def sense_stroke(game: Game, rng: random.Random, same: bool = False) -> list[list[float]]:
+    """機器人不會畫：照它想要的屬性挑一筆現成的（glyph.SAMPLES）。same＝畫跟做法一樣的屬性（一定落回基本意境、不用取名）。"""
+    s = game.state.player.sensing
+    attribute = s.method if same and s is not None and s.method in glyph.SAMPLES else rng.choice(sorted(glyph.SAMPLES))
+    return glyph.SAMPLES[attribute]
+
+
+def sense_draw(game: Game, rng: random.Random) -> list[str]:
+    """整季機器人畫一筆：A 段開單、C 段直接交回（沒給名字：Game.sense_draw 在鎖內用短逾時問一次，取不到走退路字表）。"""
+    req = game.sense_request(sense_stroke(game, rng))
+    if isinstance(req, str):
+        return game.choose(sensing.LET_GO)
+    return game.sense_draw(req)
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
@@ -195,6 +230,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     而折返在路上永遠按得下去，不排除的話「在路上沒事可做就推進時間」這個訊號會失效。
     名望不夠的求見（call:<人物>）同理：求見一直都在、按下去只是被打發（武學與成長設計 9.1），機器人不白按。"""
     s = game.state
+    if s.player.sensing is not None and any(o.id.startswith(sensing.PREFIX) for o in options):
+        return sense_pick(game, rng)  # 有所感的卡擋著：先了結它（畫的那一步回 sensing.DRAW，play_season 接著 sense_draw）
     battle = game.world.get_battle()
     if battle is not None and s.player.name not in battle.participants:
         for option in options:  # 集結時選單照常有別的事可做（FB-009）；還沒參戰就先加入，跟以前選單只剩加入時一樣
@@ -244,7 +281,10 @@ def play_season(
         options = [o for o in game.options(odds=False) if o.enabled]
         choice = pick(game, options, rng) if options else None
         if choice is not None:
-            game.choose(choice)
+            if choice == sensing.DRAW:
+                sense_draw(game, rng)
+            else:
+                game.choose(choice)
             if step % SPEND_XINDE_EVERY == 0:
                 allocate_points(game, rng)
                 spend_xinde(game, rng)

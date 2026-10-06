@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import battle_instance, bot_policy, naming, server_bots
+from . import battle_instance, bot_policy, insight_llm, naming, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -149,7 +149,9 @@ class BotRunner:
         self.characters.save(game.state)
         return True
 
-    def _name_and_apply(self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob, report: TickReport) -> None:
+    def _name_and_apply(
+        self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob | bot_policy.SenseJob, report: TickReport,
+    ) -> None:
         """假人取名的 B、C 段：首創配方（企劃者 2026-10-05）與絕學定名（2026-10-06）都請模型取，不然名字是字表的樣子、
         或江湖史同一個名字出現兩次，看得出是假人。B 在行動鎖外請模型取名或挑一個（這個迴圈一個一個來，所以同時只有一件）；
         C 再拿鎖、重讀角色、交給 bot_policy.apply_job 重驗再套用。拿不到鎖就放掉這一件（名字丟掉：首創的話之後誰先合到誰取名，
@@ -159,9 +161,17 @@ class BotRunner:
         絕學定名照常進 C 段，用字表另組一個跟原名不同的（見 bot_policy.apply_job）。"""
         cfg = self.content.config
         self.last_naming = self.clock()
-        proposed = naming.generate(
-            self.client, self.content, job.request, budget=cfg.bot_naming_budget_seconds, person=self.world.is_character_name,
-        )
+        if isinstance(job, bot_policy.SenseJob):  # 有所感：只看文字特徵（假人的筆畫是現成的那幾筆，不送圖）
+            got = insight_llm.name(
+                self.client, self.content, job.request.facts, budget=cfg.bot_naming_budget_seconds,
+                person=self.world.is_character_name,
+            )
+            proposed = (got[0], got[1])
+        else:
+            proposed = naming.generate(
+                self.client, self.content, job.request, budget=cfg.bot_naming_budget_seconds,
+                person=self.world.is_character_name,
+            )
         report.named += 1
         if isinstance(job, bot_policy.ForgeJob) and proposed[0] is None and not job.request.choices:
             return

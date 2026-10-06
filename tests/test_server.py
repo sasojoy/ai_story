@@ -5123,7 +5123,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     """靜態檢查：server.py 裡只有鎖外的四個函式（對話備料、大場面備料、開爐備料、隨口應對）呼叫 model_call；請求的鎖內段落（act、look、
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
-    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event"}
+    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw"}
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
@@ -5364,7 +5364,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
     forge = _js_function(js, "async function forge(")
     assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
-    assert js.count("watchQueue(") == 4  # 定義一個、使用三個（對話與大場面是同一個選項流程）
+    assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
+    assert js.count("watchQueue(") == 5  # 定義一個、使用四個（對話與大場面是同一個選項流程；有所感畫完送出另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 
@@ -5748,7 +5749,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
-    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel"}
+    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense"}
 
 
 def test_current_fingerprint_follows_the_public_world():
@@ -6215,3 +6216,89 @@ def test_a_paused_season_never_asks_the_model(client, monkeypatch):
     ):
         assert client.post(path, json=body).status_code == 400, path
     assert asked == []
+
+
+# ── 有所感的畫布（悟意境設計 0.2、0.2a）────────────────────
+
+def _into_draw(game):
+    """把這個角色放進感悟狀態（選對做法、擲中了）：站到一個探索悟得到意境的地點，開一張有所感的卡。"""
+    import random as _random
+
+    from tianxia import insights, sensing
+
+    def setup(g):
+        loc = next(l for l in g.content.locations.values() if insights.explore_gives(l, g.content) and not l.prologue_only)
+        g.state.player.location = loc.id
+        scene = sensing.pick_scene(loc, g.content, _random.Random(0))
+        sensing.start(g.state, g.content, scene, _random.Random(0))
+        pool = insights.pool_attributes(loc, g.content)
+        g.state.player.sensing.stage = "draw"
+        g.state.player.sensing.method = next(m.attribute for m in scene.methods if m.attribute in pool)
+
+    server.act(game, setup)
+
+
+def _new_shape(game):
+    """一筆會悟出自己新意境（要取名）的現成筆畫；這一處每一筆都落回基本意境時是 None。"""
+    from tianxia import glyph
+
+    for points in glyph.SAMPLES.values():
+        req = game.sense_request(points)
+        if not isinstance(req, str) and req.needs_name:
+            return points
+    return None
+
+
+def test_drawing_a_new_shape_asks_the_model_outside_the_lock_with_the_picture(client):
+    _player(client)
+    game = next(iter(server.GAMES.values()))
+    _into_draw(game)
+    main = client.get("/api/main").json()
+    assert [o["id"] for o in main["options"]] == ["sense:draw", "sense:let"]
+    points = _new_shape(game)
+    assert points is not None
+    seen = {}
+
+    def fake_name(client_, content, facts, image="", budget=None, person=None):
+        seen["image"], seen["locked"] = image, game.world.db.writing()
+        return "湖心月", "一圈一圈的圓轉。", "看圖"
+
+    with mock.patch.object(server.insight_llm, "name", fake_name):
+        r = client.post("/api/sense", json={"points": points, "png": "AAAA"})
+    assert r.status_code == 200
+    assert seen == {"image": "AAAA", "locked": False}
+    assert not any(o["id"].startswith("sense:") for o in r.json()["main"]["options"])
+    own = game.state.player.own_insights
+    assert [i.name for i in own.values()] == ["湖心月"] and list(own.values())[0].glyph
+    assert game.state.journal[0].title.startswith("有所感・")
+
+
+def test_a_stroke_that_cannot_be_read_is_refused_and_keeps_the_state(client):
+    _player(client)
+    game = next(iter(server.GAMES.values()))
+    _into_draw(game)
+    r = client.post("/api/sense", json={"points": [[1, 1, 0]], "png": ""})
+    assert r.status_code == 400 and "點了一下" in r.json()["error"]
+    assert game.state.player.sensing is not None and game.state.player.sensing.stage == "draw"
+
+
+def test_sending_a_stroke_without_sensing_is_refused(client):
+    _player(client)
+    from tianxia import glyph
+
+    assert client.post("/api/sense", json={"points": glyph.SAMPLES["剛"]}).status_code == 400
+
+
+def test_the_canvas_line_reads_the_stroke_without_touching_the_game(client):
+    _player(client)
+    from tianxia import glyph
+
+    assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json()["note"].startswith("一筆畫成")
+    assert client.post("/api/sense_read", json={"points": "x"}).json()["problem"]
+
+
+def test_the_canvas_warms_the_model(client):
+    _player(client)
+    with mock.patch.object(server.insight_llm, "warm", return_value=True) as warm:
+        assert client.post("/api/sense_warm").json() == {"ok": True}
+    warm.assert_called_once()

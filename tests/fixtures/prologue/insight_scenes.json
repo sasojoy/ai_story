@@ -1,0 +1,29 @@
+[
+  {
+    "id": "hut_four",
+    "title": "四景",
+    "prologue": true,
+    "flags_add": [
+      "序章:悟"
+    ],
+    "text": "師父指著屋外：松林、石崖、溪水、爐火，挑一處去看。",
+    "methods": [
+      {
+        "attribute": "快",
+        "text": "去松林聽風"
+      },
+      {
+        "attribute": "慢",
+        "text": "去石崖坐著"
+      },
+      {
+        "attribute": "柔",
+        "text": "去溪邊看水"
+      },
+      {
+        "attribute": "剛",
+        "text": "去爐邊看火"
+      }
+    ]
+  }
+]

@@ -52,11 +52,11 @@ const redraw = () => { // 重畫：全部元素換成新的（沒有 busy、字�
 };
 const renderPage = () => { renders += 1; redraw(); };
 const fns = new Function(
-  "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION",
+  "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION", "SENSE_DRAW",
   `let lastAction = 0;${slice("async function busy(")}${slice("async function choose(")}\nreturn { choose };`,
 )(S, document, renderPage,
   async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: "" }; },
-  () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free");  // applyMain 也是整頁重畫
+  () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw");  // applyMain 也是整頁重畫
 (async () => {
   const mk = (cls, inOptions, label) => { const el = cell(cls, inOptions, label); el.orig = label; els.push(el); return el; };
   const target = mk(input.cls, input.inOptions, "名字");

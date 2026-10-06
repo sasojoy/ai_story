@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
-    push, ranks, roster, rounds, skillview, team, timetable, traits,
+    push, ranks, roster, rounds, sensing, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -39,7 +39,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
+    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
     ears_of, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -243,11 +243,17 @@ class Game:
                 return False
             self.choose(self.rng.choice(good).id)
             return True
+        if p.sensing is not None:  # 草廬的有所感：做法都選得對；不畫，順其自然落回那個基本意境（假人不叫模型）
+            if p.sensing.stage == "choose":
+                self.choose(f"{sensing.PREFIX}{self.rng.randrange(len(sensing.current(s, c)[1].methods))}")
+            else:
+                self.choose(sensing.LET_GO)
+            return True
         fused = prologue_rules.fused_arts(s, c, self.world)
         if goal.action == "view_tab":
             tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
             self.view_tab(tab)
-        elif step.explore_event is not None:
+        elif step.explore_event is not None or step.explore_scene is not None:
             self.choose("act:explore")
         elif goal.fused:
             if not p.insights or step.fuse_base is None:
@@ -344,6 +350,7 @@ class Game:
             p.stats.setdefault(key, c.config.start_stats.get(key, team.BASE_STAT))
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
+        sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
@@ -390,7 +397,8 @@ class Game:
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         # 武學與成長（設計第三、四節）：意境去重、去掉找不到的；品質、熟練度只留還擁有的武學；
         # 等著取名的那一門要真的是自己第一個練成的（換季、熔掉、內容改版後都可能對不上）
-        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world) is not None]
+        p.insights = [i for i in dict.fromkeys(p.insights) if insights.resolve(i, c, self.world, s) is not None]
+        p.own_insights = {k: v for k, v in p.own_insights.items() if k in p.insights}  # 熔掉的私有意境本體跟著拿掉
         owned = set(library.owned_arts(s))
         p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
@@ -620,6 +628,10 @@ class Game:
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
             return opts
+        if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
+            menu = sensing.menu(s, c)
+            if menu:
+                return [Option(id=option_id, label=label) for option_id, label in menu]
         if s.player.pending_companion:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
@@ -1048,6 +1060,8 @@ class Game:
             return self._log(self._battle_choose(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
+        if option_id == sensing.DRAW:
+            return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
         prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
         self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
@@ -1073,6 +1087,8 @@ class Game:
                 msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
             elif kind == "fs":
                 msgs = self._foreshadow(arg)
+            elif kind == "sense":
+                msgs = self._sense(arg)
             else:
                 msgs = self._choose(int(arg))
             msgs += self._hear_after_stamina(stamina)
@@ -1155,6 +1171,67 @@ class Game:
         lines.insert(0 if said is None else said + 1, narration)
         journal_entries[0] = entry.model_copy(update={"lines": lines})
 
+    # ── 有所感（悟意境設計第零節）────────────────────────────────
+
+    def _sense(self, arg: str) -> list[str]:
+        """有所感選單上的選擇：做法（數字）或「順其自然」（不畫了，落回做法那個基本意境）。「畫下來」在 choose 開頭就回了。"""
+        s, c = self.state, self.content
+        if arg == "let":
+            req = sensing.request(s, c, self.world, None)
+            return [req] if isinstance(req, str) else self._sense_apply(req, None)
+        got = sensing.current(s, c)
+        prologue = got is not None and got[1].prologue
+        rng = prologue_rules.SureRandom() if prologue else self.rng  # 序章草廬：必中（悟意境設計第七節）
+        return sensing.choose(s, c, int(arg), rng) if arg.isdecimal() else ["（此刻無法這麼做。）"]
+
+    def sense_request(self, points: list | None, png: str = "") -> sensing.SenseRequest | str:
+        """畫完那一筆的 A 段（server.py 在行動鎖內、很快地呼叫）：還在感悟狀態才開單；讀不出那一筆回一句話（字串）。
+        只讀、不改狀態。單子的 needs_name 是 True 才要在鎖外叫模型看圖取名（insight_llm.name）。"""
+        if self._preparing():
+            return "（賽季籌備中，等待管理者開季。）"
+        return sensing.request(self.state, self.content, self.world, points, png)
+
+    def sense_draw(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None = None) -> list[str]:
+        """畫完那一筆的 C 段（鎖內）：重驗還是同一次感悟、同一筆讀出同一個屬性才套用（sensing.finish）。proposed 是鎖外取好的
+        （名字, 說明）；沒給（整季機器人、腳本、測試）而且要取名，就在這裡用 _quick_client 只看文字特徵問一次，取不到走退路字表。
+        悟成才寫江湖紀錄（標題「有所感・場景」，附上畫的那一筆）；對不上只回一句話。"""
+        s, c = self.state, self.content
+        got = sensing.current(s, c)
+        if got is None or got[0].stage != "draw" or got[0].serial != req.serial:
+            return self._log([sensing.STALE])
+        self.state.battle_card = None
+        self.state.player.guide_done = []
+        self._draft = Draft(f"有所感・{got[1].title}")
+        self._draft.glyph = list(req.points)
+        try:
+            msgs = self._sense_apply(req, proposed)
+            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+        finally:
+            self._draft = None
+        self._save_season()
+        return self._log(msgs)
+
+    def _sense_apply(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None) -> list[str]:
+        """畫完（或順其自然）之後真的悟：sensing.finish 改狀態；悟成就在這一處留一筆痕跡（一人一天只算一次）、序章那一段加旗標、
+        記新手引導；悟到自己的新意境而且名字是模型取的，記全服的首悟紀錄（0.2b 第 5 點：第一個在這裡這樣悟到的人）。
+        名字走退路字表的不記：伺服器假人不叫模型，記了就會露出「首悟者的名字都是字表風格」（同 2026-10-05 合成首創的決定）。"""
+        s, c = self.state, self.content
+        got = sensing.current(s, c)
+        scene = got[1] if got is not None else None
+        client = self._quick_client() if proposed is None else None
+        msgs, own, by_model = sensing.finish(s, c, self.world, req, proposed, client)
+        if msgs == [sensing.STALE]:
+            return msgs
+        add_marks({sensing.mark_key(req.location): 1}, s)
+        if scene is not None and scene.flags_add:
+            s.player.flags.update(scene.flags_add)
+        if own is not None and by_model and self.world.claim_insight_first(
+            sensing.first_key(req), own.name, s.player.name, c.locations[req.location].name, s.world.time,
+        ):
+            msgs.append(f"江湖上還沒有人在{c.locations[req.location].name}這樣悟過——你是第一個。")
+        msgs += self._guide(note_action(s, c, self.world, "sense"))
+        return msgs
+
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
         if kind == "faction":
@@ -1179,6 +1256,9 @@ class Game:
             return f"交談・{character.name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
+        if kind == "sense":
+            scene = c.insight_scenes.get(s.player.sensing.scene) if s.player.sensing else None
+            return f"有所感・{scene.title}" if scene else "有所感"
         if kind == "learn":
             return f"學藝・{c.skills[arg].name}"
         if kind == "fs":
@@ -1424,6 +1504,9 @@ class Game:
         sight = prologue_rules.explore_event(s, c)
         if sight is not None:  # 序章第 3 步：草廬四景四選一（新手引導設計 3.2），不抽奇遇、不分三支
             return self._present(c.events[sight], "explore")
+        scene = prologue_rules.explore_scene(s, c)
+        if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
+            return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         mix = c.config.explore_mix_of(loc.tags).weights
@@ -1434,7 +1517,9 @@ class Game:
         wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
         branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
         if branch == "insight":
-            found = insights.roll_explore(loc, c, self.rng)
+            if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
+                return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
+            found = insights.roll_explore(loc, c, self.rng)  # 沒有場景的內容（測試內容）照舊直接悟
             return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
@@ -1444,6 +1529,8 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
+            if sensing.missed_today(self.state, loc):
+                return False  # 今天在這裡選錯過做法：這裡今天悟不出什麼（Q2）
             return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
@@ -3395,6 +3482,7 @@ class Game:
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
+            and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
         )
 
     def seclude(self, hours: int) -> list[str]:
@@ -4227,6 +4315,9 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
+        sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
+        if sense_card:
+            return sense_card
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])

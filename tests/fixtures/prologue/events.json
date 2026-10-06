@@ -1,15 +1,4 @@
 [
-  {"id": "p_ambush", "title": "城外", "text": "亂民來了。", "actions": [], "choices": [
-    {"text": "擋", "effect": {"text": "你擋了。", "flags_add": ["序章:擋", "序章:遇險"], "next_event": "p_apprentice"}},
-    {"text": "喊", "effect": {"text": "你喊了。", "flags_add": ["序章:喊", "序章:遇險"], "next_event": "p_apprentice"}}
-  ]},
-  {"id": "p_apprentice", "title": "草廬", "text": "想學嗎？", "actions": [], "choices": [
-    {"text": "拜師", "effect": {"text": "好徒兒。", "flags_add": ["序章:拜師"]}}
-  ]},
-  {"id": "p_insight", "title": "四景", "text": "挑一處。", "actions": [], "choices": [
-    {"text": "松林", "effect": {"text": "風。", "insights": ["feng"], "flags_add": ["序章:悟"]}},
-    {"text": "石崖", "effect": {"text": "山。", "insights": ["shan"], "flags_add": ["序章:悟"]}},
-    {"text": "溪水", "effect": {"text": "水。", "insights": ["shui"], "flags_add": ["序章:悟"]}},
-    {"text": "爐火", "effect": {"text": "火。", "insights": ["huo"], "flags_add": ["序章:悟"]}}
-  ]}
+  {"id": "p_ambush", "title": "城外", "text": "亂民來了。", "actions": [], "choices": [{"text": "擋", "effect": {"text": "你擋了。", "flags_add": ["序章:擋", "序章:遇險"], "next_event": "p_apprentice"}}, {"text": "喊", "effect": {"text": "你喊了。", "flags_add": ["序章:喊", "序章:遇險"], "next_event": "p_apprentice"}}]},
+  {"id": "p_apprentice", "title": "草廬", "text": "想學嗎？", "actions": [], "choices": [{"text": "拜師", "effect": {"text": "好徒兒。", "flags_add": ["序章:拜師"]}}]}
 ]
