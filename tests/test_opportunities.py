@@ -933,6 +933,43 @@ def test_only_the_opportunity_windows_widen_the_calendar_night_does_not(on):
     assert rules.check_condition(Condition(night=True), game.state, on)
 
 
+def test_only_the_timing_kind_has_a_calendar_window(real):
+    """乙二的拼圖、推理、集體密謀沒有夜裡／黎明／戰後的窗口；它們只有「當天不能再試」（曆日）與密謀的期限（plot_days）。"""
+    assert {o.kind for o in real.opportunities if o.timing is not None} == {"timing"}
+    assert {o.kind for o in real.opportunities} >= {"puzzle", "deduce", "plot"}
+
+
+def _plot_span(game, content):
+    """牽頭一場密謀：回傳發起那一刻到期限的世界秒。"""
+    w = game.state.world
+    before = w.time
+    game.choose("opp:plot:guan_three_roads")
+    return w.plots[-1].deadline - before
+
+
+def test_the_plot_deadline_keeps_its_calendar_day_when_that_is_already_enough(on):
+    game = _game(on, faction="guan", at="changshe", rank=3)
+    assert _plot_span(game, on) == pytest.approx(calendar.DAY / 33.6)  # 一個曆日現實 42.9 分鐘，比目標 10 分鐘長，維持
+    assert opportunities.windows(on, game.state.world).plot_seconds == pytest.approx(calendar.DAY / 33.6)
+
+
+def test_the_full_length_plot_deadline_is_one_calendar_day(full):
+    game = _game(full, faction="guan", at="changshe", rank=3)
+    assert _plot_span(game, full) == pytest.approx(calendar.DAY / 6)  # 整季 14 天：現實 4 小時，不動
+
+
+def test_the_plot_deadline_gets_the_same_real_time_floor(on):
+    on.config.opp_window_min_minutes = 90  # 比一個曆日（現實 42.9 分鐘）還長
+    game = _game(on, faction="guan", at="changshe", rank=3)
+    assert _plot_span(game, on) == pytest.approx(90 * 60)
+
+
+def test_a_zero_target_leaves_the_plot_deadline_at_plot_days(on):
+    on.config.opp_window_min_minutes = 0  # 0＝不放寬
+    game = _game(on, faction="guan", at="changshe", rank=3)
+    assert _plot_span(game, on) == pytest.approx(calendar.DAY / 33.6)
+
+
 def test_the_target_minutes_cannot_be_negative():
     from pydantic import ValidationError
 

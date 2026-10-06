@@ -31,14 +31,16 @@ EPS_HOURS = 1e-9  # 換算曆時的浮點誤差：剛好整點的（例如 7 天
 
 
 class Windows(NamedTuple):
-    """這一季天時地利型機緣的三個窗口（windows()）。夜裡從 night_from 點整起、跨午夜到 NIGHT_UNTIL 前一刻；
-    黎明從 dawn_from（＝NIGHT_UNTIL）點整起 dawn_hours 個曆時；戰後的地是決戰結算之後 showdown_seconds 個世界秒內。"""
+    """這一季機緣的時間窗口（windows()）。夜裡從 night_from 點整起、跨午夜到 NIGHT_UNTIL 前一刻；
+    黎明從 dawn_from（＝NIGHT_UNTIL）點整起 dawn_hours 個曆時；戰後的地是決戰結算之後 showdown_seconds 個世界秒內；
+    集體密謀（乙二）發起之後 plot_seconds 個世界秒內要湊齊。"""
 
     night_from: int
     night_hours: int
     dawn_from: int
     dawn_hours: int
     showdown_seconds: float
+    plot_seconds: float
 
 
 def windows(content: Content, season: WorldState | None = None) -> Windows:
@@ -51,7 +53,9 @@ def windows(content: Content, season: WorldState | None = None) -> Windows:
     需要＝分鐘數 × 60 × cal_scale ÷ 3600；窗口的曆時＝max(原本的曆時, ceil(需要))。
     所以放寬的曆時數跟 cal_scale 成正比（壓縮越緊、放得越寬，現實時間維持在目標），而原本就夠長的窗口
     係數是 1、一個字不動：整季 14 天（cal_scale 6）卯時現實 20 分鐘、夜裡 60 分鐘，不放寬，曆時跟機緣文件一樣；
-    正式版整季更長，也不動。戰後的地不是整點的窗口，直接取 max(opp_showdown_days 個曆日, 目標分鐘) 的世界秒。
+    正式版整季更長，也不動。戰後的地不是整點的窗口，直接取 max(opp_showdown_days 個曆日, 目標分鐘) 的世界秒；
+    集體密謀的期限（乙二）一樣取 max(plot_days 個曆日, 目標分鐘)。乙二的拼圖、推理沒有窗口，只有「失敗了當天不能再試」
+    （以曆日算，不是窗口，這裡不動）。
 
     不重疊：黎明從夜裡結束的那一刻（05:00）往後長（週末設定卯時長到辰時、巳時），夜裡從同一刻往前長到傍晚，
     絕不長進黎明；兩個各最多 WINDOW_CAP_HOURS（半天），壓縮到極端時也只是剛好接滿一天。
@@ -63,10 +67,12 @@ def windows(content: Content, season: WorldState | None = None) -> Windows:
     wanted = math.ceil(need - EPS_HOURS)
     night = min(WINDOW_CAP_HOURS, max(NIGHT_BASE_HOURS, wanted))
     dawn = min(WINDOW_CAP_HOURS, max(DAWN_BASE_HOURS, wanted))
-    span = max(cfg.opp_showdown_days * calendar.DAY / scale, cfg.opp_window_min_minutes * calendar.MINUTE)
+    floor = cfg.opp_window_min_minutes * calendar.MINUTE
     return Windows(
         night_from=(calendar.NIGHT_UNTIL - night) % 24, night_hours=night,
-        dawn_from=DAWN_FROM, dawn_hours=dawn, showdown_seconds=span,
+        dawn_from=DAWN_FROM, dawn_hours=dawn,
+        showdown_seconds=max(cfg.opp_showdown_days * calendar.DAY / scale, floor),
+        plot_seconds=max(cfg.plot_days * calendar.DAY / scale, floor),
     )
 
 
@@ -630,7 +636,7 @@ def _start_plot(state: GameState, content: Content, o: OppDef, loc_id: str) -> l
     if _petition_here(state, content, loc_id) is None or _leading(state):
         return [NOT_NOW]
     w = state.world
-    span = content.config.plot_days * calendar.DAY / calendar.cal_scale(content, w)
+    span = windows(content, w).plot_seconds
     pid = plot_id(p.faction, o.id, p.name, w.time)
     taken = {x.id for x in w.plots}
     while pid in taken:  # 雜湊撞上同一季的另一場（幾乎不會）：往後找一個空的
