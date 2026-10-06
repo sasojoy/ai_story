@@ -346,3 +346,101 @@ def test_a_dodged_loss_says_so_on_the_battle_card(state, content, world):
     assert record.tier == "僵持" and record.notes == [battlelog.DODGE_NOTE]
     plain = result.model_copy(update={"dodged": False})
     assert battlelog.new_record(state, content, world, content.squads["thug"], plain, "train").notes == []
+
+
+# ── 武學的功效的演出句（武學與成長設計 13.6；計畫六 Task 4）──────────────
+
+
+def test_a_trait_line_fills_the_three_placeholders(content):
+    line = battlelog.trait_line(content, "先手", "沈浪", "穿林腿", "黃巾散兵", random.Random(0))
+    assert line.startswith("〔先手〕") and "沈浪" in line and "{" not in line
+
+
+def test_every_real_trait_line_fills_in_for_a_person_or_a_crowd(content):
+    """S1 的 45 句：{foe} 可能是一個人（波才），也可能是一群人（黃巾散兵）；{who}、{art} 都換得出來、不留括號。"""
+    for name, lines in content.trait_lines.items():
+        for index in range(len(lines)):
+            rng = random.Random(0)
+            rng.choice = lambda pool, index=index: pool[index]  # noqa: B023  逐句挑
+            for foe in ("波才", "黃巾散兵"):
+                line = battlelog.trait_line(content, name, "沈浪", "穿林腿", foe, rng)
+                assert line.startswith(f"〔{name}〕") and "{" not in line and "}" not in line and "None" not in line
+
+
+def test_a_trait_line_picks_by_the_given_rng_and_falls_back_when_the_content_has_no_lines(content):
+    a = [battlelog.trait_line(content, "先手", "沈浪", "穿林腿", "山賊", random.Random(seed)) for seed in range(30)]
+    assert len(set(a)) > 1  # 三句裡不是永遠同一句
+    assert battlelog.trait_line(content, "先手", "沈浪", "穿林腿", "山賊", random.Random(7)) == battlelog.trait_line(
+        content, "先手", "沈浪", "穿林腿", "山賊", random.Random(7),
+    )  # 同一個種子同一句
+    content.trait_lines.clear()
+    assert battlelog.trait_line(content, "先手", "沈浪", "穿林腿", "山賊", random.Random(0)) == "〔先手〕沈浪的【穿林腿】起了作用。"
+
+
+def test_the_bottom_line_of_thick_is_only_for_a_player_at_the_bottom(content):
+    """Task 4 審查 M3：厚有一句「氣血見底」（暗號在 LOW_HP_MARKS）：氣血不低（low_hp=False）時挑不到它，低時三句都挑得到。"""
+    content.trait_lines["厚"] = ["帶傷，{who}撐著。", "氣血見底，{who}硬撐。"]
+    pick = lambda low, seed: battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", random.Random(seed), low_hp=low)  # noqa: E731
+    assert {pick(False, seed) for seed in range(40)} == {"〔厚〕帶傷，沈浪撐著。"}
+    assert {pick(True, seed) for seed in range(40)} == {"〔厚〕帶傷，沈浪撐著。", "〔厚〕氣血見底，沈浪硬撐。"}
+    assert battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", random.Random(1)) in {pick(True, seed) for seed in range(40)}  # 預設是低
+
+
+def test_a_trait_without_a_bottom_line_ignores_the_flag_and_a_lone_bottom_line_falls_back(content):
+    rng = lambda seed: random.Random(seed)  # noqa: E731
+    assert {battlelog.trait_line(content, "先手", "沈浪", "拳", "山賊", rng(s), low_hp=False) for s in range(40)} == {
+        battlelog.trait_line(content, "先手", "沈浪", "拳", "山賊", rng(s)) for s in range(40)
+    }  # 先手沒有見底那一句：旗標不影響
+    content.trait_lines["厚"] = ["氣血見底，{who}硬撐。"]
+    assert battlelog.trait_line(content, "厚", "沈浪", "拳", "山賊", rng(0), low_hp=False) == "〔厚〕沈浪的【拳】起了作用。"
+
+
+def test_trait_lines_wrap_the_rounds_in_the_report():
+    record = BattleRecord(id=1, time=0, location="郊野", kind="train", opponent="山賊", tier="險勝",
+                          our_power=50, difficulty=40, ours=[], rounds=["第1回合　……"],
+                          trait_before=["〔先手〕甲"], trait_after=["〔乘勝〕乙"])
+    block = battlelog._rounds_block(record)[0]
+    assert block.index("〔先手〕") < block.index("第1回合") < block.index("〔乘勝〕")
+    assert block == "**過程**\n- 〔先手〕甲\n- 第1回合　……\n- 〔乘勝〕乙"
+
+
+def test_trait_lines_wrap_the_models_story_of_a_big_fight_too():
+    """大場面模型寫的那一段（一段話）也一樣：功效的句子在前與後，各佔一行，整段仍是「過程」那一塊。"""
+    rec = record(rounds=["第1回合　……"], narration="波才刀勢沉猛，你左支右絀。", trait_before=["〔險〕甲"], trait_after=["〔護命〕乙"])
+    assert battlelog._rounds_block(rec) == ["**過程**\n〔險〕甲\n波才刀勢沉猛，你左支右絀。\n〔護命〕乙"]
+
+
+def test_a_record_without_trait_lines_renders_exactly_as_before():
+    rec = record(rounds=["第1回合　甲。", "第2回合　乙。"], notes=["你贏了。"])
+    assert rec.trait_before == [] and rec.trait_after == [] and rec.guarded is False
+    assert battlelog._rounds_block(rec) == ["**過程**\n- 第1回合　甲。\n- 第2回合　乙。"]
+    assert battlelog._rounds_block(record(rounds=[])) == []
+
+
+def test_trait_lines_alone_still_make_a_process_block():
+    """沒有回合（舊戰報補了功效句、或決戰）卻有功效的句子時，句子照樣放進「過程」。"""
+    assert battlelog._rounds_block(record(rounds=[], trait_after=["〔乘勝〕乙"])) == ["**過程**\n- 〔乘勝〕乙"]
+
+
+def test_the_card_and_the_report_both_show_the_trait_lines():
+    rec = record(rounds=["第1回合　甲。"], trait_before=["〔先手〕甲"], trait_after=["〔乘勝〕乙"], notes=["你贏了。"])
+    for text in (battlelog.card_text(rec), battlelog.detail_text(rec)):
+        assert text.index("對手難度") < text.index("〔先手〕") < text.index("第1回合") < text.index("〔乘勝〕") < text.index("**結果**")
+
+
+def test_an_old_record_without_the_trait_fields_loads():
+    old = record().model_dump()
+    for key in ("guarded", "trait_before", "trait_after"):
+        old.pop(key)
+    loaded = BattleRecord.model_validate(old)
+    assert loaded.guarded is False and loaded.trait_before == [] and loaded.trait_after == []
+
+
+def test_new_record_remembers_a_guarded_draw(state, content, world):
+    from tianxia.encounter import EncounterResult
+
+    result = EncounterResult(tier="僵持", margin=-50.0, our_power=1.0, difficulty=60.0, guarded=True)
+    record = battlelog.new_record(state, content, world, content.squads["thug"], result, "train")
+    assert record.guarded is True and record.tier == "僵持"
+    plain = result.model_copy(update={"guarded": False})
+    assert battlelog.new_record(state, content, world, content.squads["thug"], plain, "train").guarded is False

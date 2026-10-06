@@ -49,6 +49,8 @@ class MartialArt(BaseModel):
     base: str | None = None  # 合成的底（功法 id）
     parents: list[str] = Field(default_factory=list)  # 武學＋武學：兩門來源的 id（排序過，武學與成長設計 12.3）；其他是空的
     lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
+    traits: list[str] = Field(default_factory=list)  # 一般功效：屬性的清單，第一個是自己的、後面是傳下來的（13.3）；空的＝只有自己屬性
+    special: str | None = None  # 特別功效的 id（13.4）；不傳給後代
 
 
 class Insight(BaseModel):
@@ -142,15 +144,19 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
     )
 
 
-def content_art(skill_id: str, name: str, kind: str, attribute: str, quality: str) -> MartialArt:
+def content_art(
+    skill_id: str, name: str, kind: str, attribute: str, quality: str, special: str | None = None,
+) -> MartialArt:
     """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
     其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
-    威力照品質的區間、不加微調。"""
+    威力照品質的區間、不加微調。special 是內容指給它的獨特特別功效（13.5，SkillDef.special），沒寫就沒有；
+    一般功效不用寫，內容的武學只有自己屬性那一個（13.3，MartialArt.traits 留空）。"""
     if quality != "下品":
-        return historical_art(skill_id, name, kind, attribute, quality)
+        return historical_art(skill_id, name, kind, attribute, quality).model_copy(update={"special": special})
     return MartialArt(
         id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
         base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",
+        special=special,
     )
 
 

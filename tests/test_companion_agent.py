@@ -355,3 +355,26 @@ def test_consolidation_only_reads_this_seasons_dialogue(content, state, world):
     sent = client.chat_structured.call_args.args[0][1]["content"]
     assert "這一季的話" in sent and "上一季的話" not in sent
     assert p.relationship_notes["mate"] == "這一季的交情"
+
+
+def test_memory_consolidation_stores_a_cleaned_note(content, state):
+    """FB-075 延伸：記憶整理的那句關係現況會餵回之後的對話，位元組碼與簡體字不能一路帶下去。"""
+    p = state.player
+    p.turns_since_consolidation["mate"] = companion_agent.MEMORY_CONSOLIDATION_INTERVAL
+    p.dialogue_history["mate"] = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "他點了點頭。"}]
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.MemoryConsolidation(
+        relationship_summary="他对你<0xE5><0xB7><0x8D>然敬重", new_milestones=["初次見面"])
+    companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")
+    assert p.relationship_notes["mate"] == "他對你巍然敬重"
+
+
+def test_drift_synthesis_stores_a_cleaned_note(content, world):
+    """FB-075 延伸：全服的性情漂移也餵回模型，同樣先清掉位元組碼、轉成繁體。"""
+    ch = content.characters["mate"]
+    for _ in range(companion_agent.DRIFT_SYNTHESIS_INTERVAL):
+        world.record_companion_tag("mate", "雪中送炭")
+    client = mock.Mock()
+    client.chat_structured.return_value = DriftSynthesis(drift_note="他待人越来越<0xE5><0xB7><0x8D>然大方。")
+    companion_agent._maybe_synthesize_drift(client, ch, "mate", world)
+    assert world.get_companion_drift_note("mate") == "他待人越來越巍然大方。"

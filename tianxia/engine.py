@@ -11,13 +11,14 @@ import hashlib
 import math
 import random
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
-    push, ranks, roster, rounds, skillview, team, timetable,
+    push, ranks, roster, rounds, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from .events import (
@@ -72,6 +73,16 @@ class Option(BaseModel):
     wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
 
 
+@dataclass(frozen=True)
+class TollFacts:
+    """寫功效演出句要知道的氣血的事（_take_toll 與劇情戰量好、_play_rounds 讀；武學與成長設計 13.6：只在功效真的改到結果時才演）。"""
+
+    wounded: bool = False  # 開打前氣血就低於上限（厚才有用：它把氣血係數的下限拉高，滿血時沒有東西可拉；內傷讓「滿血」的上蓋低於上限，也算）
+    low_hp: bool = False  # 開打前氣血低到「見底」（剩 LOW_HP_RATIO 以下，含）：厚那句「氣血見底」才挑得到
+    healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）；劇情戰不回血
+
+
+LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
@@ -480,7 +491,7 @@ class Game:
         if s.player.resting_since is not None:
             return [self._stand_option()]
         loc = c.locations[s.player.location]
-        cost = c.config.action_cost
+        cost = self._action_costs()
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if self._train_squad_ids(loc):
             # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
@@ -834,7 +845,8 @@ class Game:
 
     def _fight_with(self, squad: Squad, judged: fight_llm.Judgment | None, **kw) -> encounter.EncounterResult:
         """打一場單次判定（kw 照傳給 team.fight，挑戰本人的 difficulty）：有判讀就把優勢換成判定差距的平移
-        （encounter.advantage_shift，照這一場真的用的難度算）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
+        （encounter.advantage_shift，照這一場真的用的難度、沒有功效的運氣範圍算；本人的功效改了運氣範圍時，單次判定裡會把它
+        等比例縮放，推的百分點不變）；沒有是 0。優勢在這裡再夾一次 ±big_fight_swing 個百分點：
         fight_llm.judge 夾過了，但判讀不一定都經過它（之後的模型佇列也會交判讀進來），模型不能直接決定勝負（Task 2 審查修正 4）。"""
         shift = 0.0
         if judged is not None:
@@ -1082,8 +1094,16 @@ class Game:
 
     # ── 行動 ──────────────────────────────────────────────
 
+    def _action_costs(self) -> dict[str, int]:
+        """各行動花的體力：照 Config.action_cost，身上帶【輕身】時遊歷（含挑戰本人）少花一點（武學與成長設計 13.4）。
+        按鈕上寫的與真的扣的都讀這一個。"""
+        costs = dict(self.content.config.action_cost)
+        light = traits.loadout(self.state, self.content, self.world).specials.get("train_stamina")
+        if light is not None:
+            costs["train"] = max(0, costs["train"] - int(light.amount))
+        return costs
+
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        cost = self.content.config.action_cost
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
         if what == "stand":
@@ -1108,7 +1128,7 @@ class Game:
         promotion = ranks.summons_event(self.state, self.content)
         if what == "summons":
             return self._present(self.content.events[promotion])
-        self.state.player.stamina -= cost[what]
+        self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
         if promotion is not None and what in ("explore", "socialize"):  # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）
             return self._present(self.content.events[promotion])
         if what == "explore":
@@ -2329,10 +2349,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost = self._take_toll(result.tier, wild=wild)
+        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild)
         record.changes += toll
         msgs += toll
-        self._play_rounds(record, squad, result.tier, hp_lost)
+        self._play_rounds(record, squad, result.tier, hp_lost, facts)
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
@@ -2376,35 +2396,113 @@ class Game:
         record.silver = -loss
         return [f"銀兩 -{loss}"] if loss else []
 
-    def _player_hp(self) -> float:
-        """本人此刻的氣血（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
+    def _player_hp_and_cap(self) -> tuple[float, float]:
+        """本人此刻的氣血與上限（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
         return team.member_neili(
             self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
-        )[0]
+        )
 
-    def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int]:
-        """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血）。掉的量緊貼著扣氣血的
-        前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
-        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。"""
-        before = self._player_hp()
+    def _player_hp(self) -> float:
+        return self._player_hp_and_cap()[0]
+
+    def _hp_facts(self, healed: tuple[str, ...] = ()) -> TollFacts:
+        """此刻的氣血在寫功效演出句看來是什麼樣子（開打前量；劇情戰不扣氣血，開打前就是整場的樣子）。"""
+        now, cap = self._player_hp_and_cap()
+        return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
+
+    def _take_toll(self, tier: str, *, wild: bool = False) -> tuple[list[str], int, TollFacts]:
+        """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
+        扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
+        「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
+        扣完之後本人身上的吸取（打贏）與回春（不論勝負）才回氣血（武學與成長設計 13.2、13.4）：回的那一行「氣血 +N」接在
+        訊息後面、一起寫進戰報；掉的量在回血之前量，回合裡寫的「你氣血 -N」照舊加得起來。劇情戰不走這裡（不扣氣血，也就不回）。
+        事實（TollFacts）是 _play_rounds 寫功效的演出句用的：開打前氣血是不是低於上限（厚），哪幾個回血的功效真的回了血
+        （沒回到 1 點、沒有「氣血 +N」那一行就不算）。"""
+        before, cap = self._player_hp_and_cap()
         toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
-        return toll, round(before - self._player_hp())
+        hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
+        lo = traits.loadout(self.state, self.content, self.world)
+        healed: list[str] = []
+        if tier in team.WIN_TIERS and traits.has(lo, "win_heal"):  # 吸取（13.2）
+            heal = team.heal_fraction(self.state, self.content, self.world, traits.amount(self.content, lo, "win_heal"))
+            toll += heal
+            if heal:
+                healed.append("win_heal")
+        heal_after = lo.specials.get("heal_after")  # 回春（13.4）：不論勝負
+        if heal_after is not None:
+            heal = team.heal_fraction(self.state, self.content, self.world, heal_after.amount)
+            toll += heal
+            if heal:
+                healed.append("heal_after")
+        return toll, hp_lost, TollFacts(
+            wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
+        )
 
-    def _play_rounds(self, record, squad: Squad, tier: str, hp_lost: int | None) -> None:
+    def _play_rounds(
+        self, record, squad: Squad, tier: str, hp_lost: int | None, facts: TollFacts | None = None,
+    ) -> None:
         """照結果演出回合寫進戰報（武學與成長設計 8.2）。hp_lost 是這一場本人真的扣掉的氣血（_take_toll），回合裡寫的
         「你氣血 -N」加起來剛好等於它；None 是這一場本來就不扣氣血（劇情戰），對手的出手不寫數字（計畫三 G5）。
         亂數是自己一份、用「名號｜戰報流水號」當種子（計畫三 G3）：不碰 Game.rng，接下來的擲骰不會位移，
         同一筆戰報每次演出來都一樣。
         輸了（含僵持）卻一滴氣血都沒掉（本來就見底，內傷照樣累積）時，跟劇情戰一樣不寫打中沒有：每一下都寫「被你閃開了」，
-        讀起來是對方沒碰到你、你卻輸了、損失裡還有內傷（最後審查 Minor 2）；贏了沒掉血（打得漂亮）寫閃開是通的，不動。"""
+        讀起來是對方沒碰到你、你卻輸了、損失裡還有內傷（最後審查 Minor 2）；贏了沒掉血（打得漂亮）寫閃開是通的，不動。
+        帶【先手】的人回合裡一定先出手、不看身法（13.2）；功效的演出句寫進 trait_before／trait_after（13.6，_trait_lines），
+        護命的那一句寫進 notes 最前面（跟閃避的那一句同一個位置）。facts 是 _take_toll 量好的（劇情戰不給，氣血的功效就不演）。"""
         s, c, p = self.state, self.content, self.state.player
         if hp_lost == 0 and tier not in team.WIN_TIERS:
             hp_lost = None
         rng = random.Random(f"{p.name}|{record.id}")
+        lo = traits.loadout(s, c, self.world)
         foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
-        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        our_agility = math.inf if traits.has(lo, "big_win") else float(p.stats.get("agi", team.BASE_STAT))  # 先手
         played = rounds.play(tier, team.fighters(s, c, self.world), foe, our_agility, hp_lost, rng)
         record.rounds = battlelog.round_lines(c, played, rng)
+        record.trait_before, record.trait_after = self._trait_lines(lo, record, squad, hp_lost, facts or TollFacts(), rng)
+        if record.guarded and (guard := lo.specials.get("no_loss")) is not None:  # 護命（13.4）：結果那一段，不在過程裡
+            record.notes.insert(0, self._trait_say(lo, guard.name, squad, rng))
+
+    def _trait_say(self, lo: traits.Loadout, name: str, squad: Squad, rng: random.Random, low_hp: bool = True) -> str:
+        """一句功效的演出：本人、帶這個功效的那一門（lo.source，層數最多的）、對手的名字填進 S1 的句子。"""
+        return battlelog.trait_line(
+            self.content, name, self.state.player.name, lo.source.get(name, ""), squad.name, rng, low_hp=low_hp,
+        )
+
+    def _trait_lines(
+        self, lo: traits.Loadout, record, squad: Squad, hp_lost: int | None, facts: TollFacts, rng: random.Random,
+    ) -> tuple[list[str], list[str]]:
+        """（開打前, 之後）的功效演出句。只在功效真的改到結果時才演（13.6）：開打前的四個一般功效與連環、借力一帶就算
+        （它們改的是判定本身）；化勁、不動要這一場真的掉了氣血；厚要開打前氣血低於上限（它拉高的氣血係數下限這一場真的起了作用，
+        見底、一滴氣血都沒得扣、或是不扣氣血的劇情戰也算；「氣血見底」那一句只在氣血剩三成以下才挑，Task 4 審查 M3）；
+        乘勝要打贏、而且對手隊伍有東西可以多給（看 squad.exp、squad.reward_xinde：劇情戰先演回合、後發獎勵，戰報上的欄位這時還是 0，
+        Task 4 審查 M2），悟招要打贏；吸取、回春要真的回了血（有「氣血 +N」，F10）；輕身只在遊歷。護命的那一句在 _play_rounds
+        另外寫進 notes。"""
+        names = {t.hook: t.name for t in self.content.traits.general}
+
+        def say(name: str, low_hp: bool = True) -> str:
+            return self._trait_say(lo, name, squad, rng, low_hp=low_hp)
+
+        won = record.tier in team.WIN_TIERS
+        before = [say(names[h]) for h in ("big_win", "luck_narrow", "difficulty_cut", "luck_widen") if lo.layers.get(h)]
+        before += [say(lo.specials[h].name) for h in ("double_luck", "power_from_difficulty") if h in lo.specials]
+        after: list[str] = []
+        if hp_lost and lo.layers.get("toll_cut"):
+            after.append(say(names["toll_cut"]))
+        if lo.layers.get("condition_floor") and facts.wounded:
+            after.append(say(names["condition_floor"], low_hp=facts.low_hp))
+        if hp_lost and "no_injury" in lo.specials:
+            after.append(say(lo.specials["no_injury"].name))
+        if won and lo.layers.get("win_reward") and (squad.exp or squad.reward_xinde):  # 乘勝：對手有東西可以多給
+            after.append(say(names["win_reward"]))
+        if "win_heal" in facts.healed:  # 吸取：真的回了血
+            after.append(say(names["win_heal"]))
+        if won and "win_xinde" in lo.specials:  # 悟招
+            after.append(say(lo.specials["win_xinde"].name))
+        if "heal_after" in facts.healed:  # 回春
+            after.append(say(lo.specials["heal_after"].name))
+        if record.kind == "train" and "train_stamina" in lo.specials:  # 輕身：只在遊歷
+            after.append(say(lo.specials["train_stamina"].name))
+        return before, after
 
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
 
@@ -2427,7 +2525,7 @@ class Game:
         p = s.player
         if p.faction is None or not season_one(c, s.world):
             return []
-        cost = c.config.action_cost["train"]
+        cost = self._action_costs()["train"]
         opts = []
         for fid in figures.present_at(s, c, p.location):
             fig = c.figures[fid]
@@ -2457,7 +2555,7 @@ class Game:
         s, c = self.state, self.content
         fig = c.figures[fid]
         squad = figures.squad_of(s, c, fid)
-        s.player.stamina -= c.config.action_cost["train"]
+        s.player.stamina -= self._action_costs()["train"]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty)
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
@@ -2472,10 +2570,10 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost = self._take_toll(result.tier)
+        toll, hp_lost, facts = self._take_toll(result.tier)
         record.changes += toll
         msgs += toll
-        self._play_rounds(record, squad, result.tier, hp_lost)  # squad 是照聲威的那一份：對手的身法跟著難度走
+        self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs.insert(0, self._file_battle(record))
         return msgs
 
@@ -2597,17 +2695,22 @@ class Game:
             p.stats["silver"] += squad.reward_silver
             record.silver = squad.reward_silver
             msgs.append(f"銀兩 +{squad.reward_silver}")
-        if squad.reward_xinde:
-            p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
-            record.xinde = squad.reward_xinde
-            msgs.append(f"心得 +{squad.reward_xinde}")
+        lo = traits.loadout(self.state, self.content, self.world)
+        more = 1 + traits.amount(self.content, lo, "win_reward")  # 乘勝（13.2）：心得與經驗一起多拿
+        insight = lo.specials.get("win_xinde")  # 悟招（13.4）：再多固定的心得
+        xinde = round(squad.reward_xinde * more) + (int(insight.amount) if insight is not None else 0)
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+            msgs.append(f"心得 +{xinde}")
         for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
             line = materials.grant(self.state, self.content, material_id, count)
             if line:
                 record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                 msgs.append(line)
-        record.exp = squad.exp
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
+        exp = round(squad.exp * more)  # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘
+        record.exp = exp
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         return msgs + levels
 
@@ -2923,7 +3026,7 @@ class Game:
         # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
         # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
         # 劇情戰不扣氣血：對手的出手不寫數字（計畫三 G5）
-        self._play_rounds(record, squad, result.tier, None)
+        self._play_rounds(record, squad, result.tier, None, self._hp_facts())  # 氣血照開打時的樣子：厚拉高的下限這一場也起了作用
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else choice.fail_effect
@@ -3052,6 +3155,7 @@ class Game:
             return self._log(["放一門武學和一個意境、或放兩門武學（合成），或放兩個意境（合併）。"])
         out = self._log(msgs)
         if tag is not None:
+            self._save_season()  # 第一次合出帶特別功效的武學會記一則傳聞（fusion._special_rumor，13.4）；傳聞在共用賽季裡，要存回去
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
             out += self._menxia_entry(  # 結果那一句（第一則訊息）也寫進這一則的敘事，拿到新東西的那一行才配得到 journal._NEW_THING（FB-073）
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
@@ -3247,7 +3351,10 @@ class Game:
         art = None if level is None else team.player_art(self.state, self.content, self.world, art_id)
         if art is None:
             return "（找不到這門功法。）"
-        return skillview.art_card(art, level, parent_names=skillview.parent_names(art, self.content, self.world))
+        return skillview.art_card(
+            art, level, parent_names=skillview.parent_names(art, self.content, self.world),
+            trait_line=traits.card_line(self.content, art),
+        )
 
     def member_card(self, key: str) -> str:
         return skillview.member_card(self.state, self.content, self.world, key)

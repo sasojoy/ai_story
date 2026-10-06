@@ -364,6 +364,11 @@ class BattleRecord(BaseModel):
     # 大場面模型寫的過程（武學與成長設計 8.3）：照結果挑佔上風或落下風那一版；有就取代範本句子的回合（rounds 照樣算好）。
     # 叫 narration 不叫 story：battlelog 的 story_text／_story_block 已經是「結果」那一段（計畫三 G11）
     narration: str = ""
+    guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；那一句演出寫在 notes 裡（跟 DODGE_NOTE 一樣，結果那一段）
+    # 功效的演出句（13.6，content/trait_lines.json）：一句一行、前面標〔功效名〕，只在功效真的改到結果時才有（engine.Game._trait_lines）。
+    # 放在「過程」裡回合（或大場面模型那一段）的前與後
+    trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
+    trait_after: list[str] = Field(default_factory=list)  # 受傷、結果出來、戰鬥外：化勁、厚、不動、乘勝、吸取、悟招、回春、輕身
     levelups: LevelUps | None = None  # 這一場有人升級才有（FB-074）；舊戰報沒有，卡片照 notes 原文
 
 

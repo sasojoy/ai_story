@@ -1,0 +1,21 @@
+{
+  "general": [
+    {"attribute": "快", "name": "先手", "hook": "big_win", "per_layer": 0.04, "cap": 0.2, "desc": "大勝的門檻低 {value}，回合裡一定先出手"},
+    {"attribute": "慢", "name": "穩", "hook": "luck_narrow", "per_layer": 0.15, "cap": 0.6, "desc": "運氣的起伏小 {value}"},
+    {"attribute": "剛", "name": "破甲", "hook": "difficulty_cut", "per_layer": 0.04, "cap": 0.2, "desc": "對手強度當作低 {value}"},
+    {"attribute": "柔", "name": "化勁", "hook": "toll_cut", "per_layer": 0.1, "cap": 0.5, "desc": "一場少扣 {value} 氣血"},
+    {"attribute": "陽", "name": "乘勝", "hook": "win_reward", "per_layer": 0.1, "cap": 0.5, "desc": "打贏多拿 {value} 心得與經驗"},
+    {"attribute": "陰", "name": "吸取", "hook": "win_heal", "per_layer": 0.02, "cap": 0.1, "desc": "打贏回氣血上限的 {value}"},
+    {"attribute": "虛", "name": "險", "hook": "luck_widen", "per_layer": 0.15, "cap": 0.6, "desc": "運氣的起伏大 {value}，以小搏大"},
+    {"attribute": "實", "name": "厚", "hook": "condition_floor", "per_layer": 0.05, "cap": 0.25, "desc": "帶傷時出手的下限高 {value}"}
+  ],
+  "special": [
+    {"id": "lianhuan", "name": "連環", "hook": "double_luck", "amount": 1, "desc": "每場擲兩次運氣，取好的那一次"},
+    {"id": "budong", "name": "不動", "hook": "no_injury", "amount": 1, "desc": "扣的氣血全算輕傷，不受內傷"},
+    {"id": "huming", "name": "護命", "hook": "no_loss", "amount": 1, "desc": "落敗改判成僵持"},
+    {"id": "wuzhao", "name": "悟招", "hook": "win_xinde", "amount": 5, "desc": "打贏多拿 {value} 心得"},
+    {"id": "jieli", "name": "借力", "hook": "power_from_difficulty", "amount": 0.05, "desc": "威力加上對手強度的 {value}"},
+    {"id": "huichun", "name": "回春", "hook": "heal_after", "amount": 0.03, "desc": "不論勝負，打完回氣血上限的 {value}"},
+    {"id": "qingshen", "name": "輕身", "hook": "train_stamina", "amount": 2, "desc": "遊歷少花 {value} 體力"}
+  ]
+}

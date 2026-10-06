@@ -10,9 +10,9 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 
-from . import cultivation, fusion, library, naming, team
+from . import cultivation, fusion, library, naming, team, traits
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .martial_arts import next_quality
+from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .world_state import WorldStateStore
 
@@ -25,6 +25,7 @@ MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做�
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
 BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
+TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
 def wants_heal(game: Game) -> bool:
@@ -132,8 +133,17 @@ def _melt_the_weakest(game: Game) -> None:
         game.melt_insight(loose[0])
 
 
+def _worth(content: Content, art: MartialArt) -> float:
+    """機器人眼中這門武學的價值：第十成威力，加上功效（設計 13.7：不看功效就量不出功效的價值）。每一層一般功效（乘過這一份的
+    品質倍數，跟遊戲裡算層數同一份 traits.multiplier）、每個特別功效，各加 TRAIT_WEIGHT 的威力。內容沒有功效就只看威力。"""
+    if not content.traits.general:
+        return art.top_power
+    layers = len(traits.traits_of(art)) * traits.multiplier(content, art.quality) + (1 if art.special else 0)
+    return art.top_power * (1 + TRAIT_WEIGHT * layers)
+
+
 def _switch_to_the_strongest(game: Game) -> None:
-    """功法庫裡有比身上這門強的（同一種、照自己修練到的品質算第十成威力）就改練上去。"""
+    """功法庫裡有比身上這門值錢的（同一種、照自己修練到的品質算第十成威力，再加上功效，設計 13.7）就改練上去。"""
     state, content, world = game.state, game.content, game.world
     for art_id in list(state.player.arts):
         art = team.player_art(state, content, world, art_id)
@@ -141,7 +151,7 @@ def _switch_to_the_strongest(game: Game) -> None:
             continue
         slot = "neigong_id" if art.kind == "內功" else "wugong_id"
         current = team.player_art(state, content, world, getattr(state.player.member, slot))
-        if current is None or art.top_power > current.top_power:
+        if current is None or _worth(content, art) > _worth(content, current):
             game.switch_art(art_id)
 
 

@@ -16,6 +16,13 @@ MartialKind = Literal["內功", "武學"]
 Attribute = Literal["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"]  # 見 tianxia/martial_arts.py
 Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial_arts.py 的 QUALITIES
 Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
+TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
+    "big_win", "luck_narrow", "difficulty_cut", "toll_cut", "win_reward", "win_heal", "luck_widen", "condition_floor",
+)
+SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用）。
+    # 這 7 個掛點現在都被初版的 7 個特別功效佔了，所以新的特別功效要嘛換掉掛同一點的那一個、要嘛加新的掛點（要寫程式）
+    "double_luck", "no_injury", "no_loss", "win_xinde", "power_from_difficulty", "heal_after", "train_stamina",
+)
 
 
 class _Strict(BaseModel):
@@ -346,6 +353,35 @@ class SkillDef(_Strict):
     desc: str = ""
     quality: Quality = "絕學"
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
+    special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
+
+
+class GeneralTrait(_Strict):
+    """一般功效（content/traits.json，13.2）：一個屬性一個。每層 per_layer、疊加到 cap 為止；desc 的 {value} 換成數字。"""
+
+    attribute: Attribute
+    name: str
+    hook: Literal[TRAIT_HOOKS]
+    per_layer: float = Field(ge=0)
+    cap: float = Field(ge=0)
+    desc: str
+
+
+class SpecialTrait(_Strict):
+    """特別功效（13.4、13.5）：不分品質、強度固定（amount）。pool 是 false 的只屬於一門內容武學（名將本命絕學），
+    合成擲不到。"""
+
+    id: str
+    name: str
+    hook: Literal[SPECIAL_HOOKS]
+    amount: float = Field(ge=0)
+    pool: bool = True
+    desc: str
+
+
+class TraitBook(_Strict):
+    general: list[GeneralTrait] = Field(default_factory=list)
+    special: list[SpecialTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -909,6 +945,11 @@ class Config(_Strict):
     pairing_penalty: float = 0.2  # 內功與武學是相剋的一對，整個人威力 −幾成（再大也只到 encounter.BOOST_FLOOR）
     resonance_per_point: float = 0.005  # 正派武學每一點善名（邪派每一點惡名）+幾成（設計 7.4：名聲 ÷ 2 %）
     resonance_cap: float = 0.2  # 共鳴最多 +幾成
+    # ── 武學的功效（武學與成長設計第十三節；【預設】，校準只改內容與這兩項）──
+    trait_quality_multiplier: dict[str, float] = Field(  # 功效的強度跟著品質（13.1）
+        default_factory=lambda: {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
+    )
+    special_trait_chance: float = Field(default=0.05, ge=0, le=1)  # 新武學帶特別功效的機會（13.4）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
@@ -1491,6 +1532,8 @@ class Content(_Strict):
     events: dict[str, Event]
     skills: dict[str, SkillDef]
     insights: dict[str, InsightDef] = Field(default_factory=dict)  # 意境（content/insights.json，武學與成長設計附錄 A）
+    traits: TraitBook = Field(default_factory=TraitBook)  # 功效（content/traits.json，13.2、13.4）；沒有這個檔就是沒有功效
+    trait_lines: dict[str, list[str]] = Field(default_factory=dict)  # 功效的演出句（content/trait_lines.json，S1）：功效名 → 句子
     materials: dict[str, Material]
     craft_names: CraftNames
     combat_lines: CombatLines  # 回合演出的句型（content/combat_lines.json，武學與成長設計 8.2）
