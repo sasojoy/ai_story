@@ -5550,6 +5550,8 @@ NOT_IN_THE_FINGERPRINT = {
         "round": "這一回合誰出手了、寫了什麼，同 participants",
         "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
         "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
+        "third_gain": "豪強整場的收穫累計（兩軍不能從畫面看出豪強做了什麼），只在 resolve_round 裡加，那一下 round_number 也變了",
+        "third_push": "豪強收場時算好的割據推動，只在收場那一下（settle_third）跟 phase 一起寫入",
         "outcome_title": "收場時跟 phase 一起寫入",
         "outcome_text": "同上",
         "outcome_world_flags": "同上",
@@ -5595,6 +5597,21 @@ def test_every_field_counted_in_the_push_fingerprint_really_changes_it(name, fie
     before = server.current_fingerprint()
     world.mutate(FINGERPRINTED[name][field])
     assert server.current_fingerprint() != before, f"{name}.{field} 改了，指紋沒變"
+
+
+def test_the_fingerprint_ignores_what_the_warlords_gained():
+    """決戰改版 5：豪強的收穫與割據推動不算進指紋（兩軍不能從「又被叫醒了」看出豪強做了什麼）：它們只在回合結算、收場那一下才變，
+    那一下 round_number、phase 本來就讓指紋變了；單獨改它們，指紋不動。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+    world.start_battle(server.CONTENT.battles["changshe_fire"], now=1000.0)
+    before = server.current_fingerprint()
+    world.mutate_battle(lambda b: (setattr(b, "third_gain", 250.0), setattr(b, "third_push", 3)))
+    assert server.current_fingerprint() == before
+    world.mutate_battle(lambda b: setattr(b, "round_number", b.round_number + 1))  # 回合結算：大家都看得到
+    assert server.current_fingerprint() != before
 
 
 def _three_read_fingerprint() -> str:
