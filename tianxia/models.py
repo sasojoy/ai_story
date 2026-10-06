@@ -448,6 +448,9 @@ class SenseMethod(_Strict):
 
     attribute: SenseAttribute
     text: str  # 選項上那一行（例：「順著水流走一段，看它怎麼繞開石頭」）
+    # 選項上接在那一行後面的提醒（例：序章的爐火「（火性剛烈，跟你吐納的柔不太合）」，FB-092）：只在選的那張卡上看得到，不織進選了之後
+    # 的敘述（「你……。」）、也不交給模型當做法——那些句子讀起來是你做了什麼，不是替你挑做法的人在提醒你
+    note: str = ""
 
 
 class InsightScene(_Strict):
