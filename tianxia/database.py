@@ -193,11 +193,12 @@ class _ThreadState:
     """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
     這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
 
-    __slots__ = ("conn", "depth", "reading", "rewriting", "__weakref__")
+    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "__weakref__")
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
         self.depth = 0  # 寫入交易的巢狀深度，0 表示不在寫入交易裡
+        self.savepoints = 0  # 現在開著的 savepoint 數（見 Database.savepoint），拿來給每一個取不同的名字
         self.reading = False  # 是不是在 snapshot() 的最外層
         self.rewriting = False  # 是不是在 rewriting() 的區段裡（整份讀出、改、整份寫回）
 
@@ -263,6 +264,32 @@ class Database:
         except BaseException:
             self._rollback(conn)  # COMMIT 失敗時交易還開著：不撤掉，這條連線就永遠握著寫入權
             raise
+
+    @contextlib.contextmanager
+    def savepoint(self) -> Iterator[sqlite3.Connection]:
+        """寫入交易裡的一段「可以單獨撤回」的區間（SQLite 的 SAVEPOINT）。transaction() 巢狀只是合進外層、深度加一，
+        裡面出錯時外層要不要撤回由外層決定；要「裡面這一段的寫入撤回、外層照常 COMMIT」就用這個：裡面丟例外，
+        只把這一段做的寫入撤回，例外照舊丟出去。裡面順利結束就併進外層，外層撤回時一起撤回。可以巢狀。
+        只能在寫入交易裡用（不在交易裡、或在 snapshot 裡就丟 RuntimeError）。
+        SQLite 已經把整筆交易撤掉了（磁碟滿、I/O 錯誤）時沒有 savepoint 可撤，什麼都不做、不蓋掉本來的錯。"""
+        state = self._thread()
+        if not state.depth:
+            raise RuntimeError("savepoint 只能在寫入交易裡用：先開 transaction()")
+        conn = state.conn
+        state.savepoints += 1
+        name = f"sp{state.savepoints}"
+        conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield conn
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute(f"ROLLBACK TO {name}")
+                conn.execute(f"RELEASE {name}")
+            raise
+        else:
+            conn.execute(f"RELEASE {name}")
+        finally:
+            state.savepoints -= 1
 
     @contextlib.contextmanager
     def rewriting(self) -> Iterator[None]:

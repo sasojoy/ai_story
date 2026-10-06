@@ -14,8 +14,8 @@
 記憶體另外有整個程序的尖峰（Windows 才有）。每個動作是從「現在選單上能按的選項」裡隨機挑一個，角色都很年輕
 （平均每個角色只做了幾個到十幾個動作、江湖紀錄與存檔都還小），所以數字是新角色的下限；玩了好幾個小時的角色存檔會更大、讀寫更久。
 
---polls-per-action N：每個動作之後穿插 N 個「畫面請求」（/api/main 做的事：一次無事的 act 加一次 look(main_view)，
-各拿一次行動鎖），握鎖時間另外記在 poll_locked。預設 0＝只量動作。真的封測時每個在線的人每 10 秒就打一次 /api/main，
+--polls-per-action N：每個動作之後穿插 N 個「畫面請求」（/api/main 做的事：server.poll_main，同步、存檔與 main_view
+在一把行動鎖裡做完；2026-10-06 之前是 act 加 look 各拿一次），握鎖時間另外記在 poll_locked。預設 0＝只量動作。真的封測時每個在線的人每 10 秒就打一次 /api/main，
 所以這一項才是行動鎖上量最大的負擔。
 
 執行：.venv/Scripts/python.exe scripts/load_engine.py --characters 3000 --actions 20000 --end-season --out <檔>
@@ -119,10 +119,10 @@ def one_action(server, game, rng: random.Random) -> float:
 
 
 def one_poll(server, game) -> float:
-    """/api/main 做的事：一次無事的 act（同步、存檔）加一次 look(main_view)，各拿一次行動鎖；回傳兩次握鎖的秒數合計。"""
+    """/api/main 做的事（server.poll_main）：同步、存檔與 main_view 在同一把行動鎖裡做完；回傳握鎖的秒數。
+    （2026-10-06 之前是 act 加 look 各拿一次鎖，這個函式回的是兩次合計；舊的數字跟現在的不能直接比。）"""
     with lock_timer(game.world.db) as held:
-        server.act(game, lambda g: None)
-        server.look(game, server.main_view)
+        server.poll_main(game)
     return sum(held)
 
 
@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     print(load_common.summarize("握鎖時間", report["locked"], errors))
     print(load_common.summarize("每個動作（含排隊）", report["total"], errors))
     if report["poll_locked"]:
-        print(load_common.summarize("畫面請求握鎖時間（兩次行動鎖合計）", report["poll_locked"], 0))
+        print(load_common.summarize("畫面請求握鎖時間（一把行動鎖）", report["poll_locked"], 0))
     memory = "" if report["peak_mb"] is None else f"；Python 記憶體尖峰 {report['peak_mb']:.1f} MB（tracemalloc）"
     ws = "" if report["peak_ws_mb"] is None else f"；整個程序記憶體尖峰 {report['peak_ws_mb']:.0f} MB"
     mixed = "（連同穿插的畫面請求一起算時間，不是只做動作的上限）" if report["polls_per_action"] else ""

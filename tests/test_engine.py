@@ -15,7 +15,7 @@ from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
-from tianxia.models import Effect, FigureDef, Location, PromotionDef, ThirdParty
+from tianxia.models import Condition, Effect, FigureDef, Location, PromotionDef, ThirdParty
 from tianxia.models import ExploreMix
 from tianxia.rules import world_trend_value
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
@@ -3874,6 +3874,64 @@ def test_a_post_battle_event_can_follow_the_fight(game):
     assert game.state.pending_event == "chain_a"  # 再接上戰後的事件
 
 
+def _after_a_win_only(game):
+    """fixture 裡唯一掛在遊歷上的事件（chain_a）改成只在打贏之後接，湖邊遊歷後必接事件。"""
+    game.content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "險勝"])
+    game.content.config.train_event_chance = 1.0
+
+
+def test_a_post_fight_event_that_asks_for_a_win_follows_a_win(game):
+    _after_a_win_only(game)
+    rules.learn_skill(game.state, game.content, "fist")  # 壓倒性的威力，穩贏
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.3)
+    game.choose("act:train")
+    assert game.state.battles[0].tier in ("大勝", "險勝")
+    assert game.state.pending_event == "chain_a"
+
+
+def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_loss(game):
+    _after_a_win_only(game)
+    game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    assert game.state.battles[0].tier == "落敗"
+    assert game.state.pending_event is None
+
+
+def test_a_post_fight_event_that_asks_for_a_win_never_follows_a_draw(game):
+    _after_a_win_only(game)
+    game.content.locations["lake"].enemies = ["boss"]
+    game.content.config.dodge_per_point = 1.0
+    game.state.player.stats["agi"] = 6  # 落敗被身法閃成僵持
+    walk_to(game, "lake")
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    assert game.state.battles[0].tier == "僵持"
+    assert game.state.pending_event is None
+
+
+def test_a_post_fight_event_follows_a_fight_only_when_it_was_won(content):
+    """亂數固定、戰後事件一定接（train_event_chance＝1）：不管這一場打成什麼結果，只有打贏才接那則事件。
+    對手難度 45 打出險勝與僵持、100 打出僵持與落敗（固定種子，量過），所以贏與沒贏的結果都碰得到。"""
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "險勝"])
+    content.config.train_event_chance = 1.0
+    content.locations["lake"].enemies = ["thug"]
+    seen: set[str] = set()
+    for difficulty in (45, 100):
+        content.squads["thug"].difficulty = difficulty
+        for seed in range(20):
+            game = Game.new(content, "沈浪", rng=random.Random(seed))
+            rules.learn_skill(game.state, content, "fist")
+            walk_to(game, "lake")
+            game.choose("act:train")
+            tier = game.state.battles[0].tier
+            seen.add(tier)
+            assert (game.state.pending_event == "chain_a") == (tier in ("大勝", "險勝")), (difficulty, seed, tier)
+    assert seen >= {"險勝", "僵持", "落敗"}  # 贏、平手、輸都真的打出來過，上面的斷言才不是空轉（結果的分佈跟著戰鬥數字走，多出大勝也行）
+
+
 # ── 回合演出（武學與成長設計 8.2、計畫三 Task 1）──────────────────────
 
 
@@ -7522,3 +7580,49 @@ def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(co
     ticker.world_tick(t + definition.round_seconds + 1.0)
     assert "changshe_fire" in world.get_season().timeline
 
+
+# ── 一次畫面建構裡，「籌備中嗎」只讀一次共用狀態 ──────────────────────────
+
+
+def _count_phase_reads(game):
+    reads = []
+    real = game.world.season_phase
+    game.world.season_phase = lambda: reads.append(1) or real()
+    return reads
+
+
+def test_preparing_is_read_once_inside_a_phase_memo_and_every_time_outside(game):
+    reads = _count_phase_reads(game)
+    for _ in range(3):
+        assert game._preparing() is False
+    assert len(reads) == 3  # 沒有範圍：每次都讀（動作裡要的是最新的）
+    reads.clear()
+    with game.phase_memo():
+        for _ in range(3):
+            game._preparing()
+        with game.phase_memo():  # 巢狀：還是外層那一份，不重讀
+            game._preparing()
+    assert len(reads) == 1
+    game._preparing()
+    assert len(reads) == 2  # 範圍結束，記住的丟掉
+
+
+def test_a_phase_memo_ends_when_the_build_breaks(game):
+    reads = _count_phase_reads(game)
+    with pytest.raises(RuntimeError):
+        with game.phase_memo():
+            game._preparing()
+            raise RuntimeError("畫面建到一半壞了")
+    reads.clear()
+    game._preparing()
+    game._preparing()
+    assert len(reads) == 2  # 範圍沒有留到下一個動作
+
+
+def test_everyday_options_use_the_memoed_preparing(game):
+    """選單（_everyday_options）走同一個 _preparing：在範圍裡建一次選單只讀一次。"""
+    reads = _count_phase_reads(game)
+    with game.phase_memo():
+        game.options()
+        game.options()
+    assert len(reads) == 1

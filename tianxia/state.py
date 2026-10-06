@@ -154,6 +154,11 @@ class PlayerState(BaseModel):
     guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
+    # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
+    # 賽季時間（世界秒）。新角色與換季重來的角色先是 None，第一次同步補算完賽季之後才蓋上（Game._stamp_join）——建角的那一刻
+    # 賽季可能已經好幾個鐘頭沒人補算，那時就蓋會把福利白白吃掉一段。舊存檔沒有這一欄讀成 0.0：從季初算，跟以前一樣。
+    # 只有第一季的規則開著才讀（roster.since_join）
+    joined_at: float | None = 0.0
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
@@ -236,7 +241,7 @@ class Lock(BaseModel):
     side: str  # 陣營 id
     name: str  # 名號（真名：時間軸的 locked_by、losers 與 T9 的稱號用它）
     time: float
-    shown: str | None = None  # 公告與江湖史寫的名字：鎖定時匿名就是「某位少俠」；None＝寫名號（舊資料也是 None）
+    shown: str | None = None  # 公告與江湖史寫的名字：None＝寫名號（現在一律不記）；這一版之前匿名鎖定的是「某位少俠」，照舊
 
 
 class FigureState(BaseModel):
@@ -265,7 +270,7 @@ class Order(BaseModel):
     quota: int
     text: str
     progress: dict[str, int] = Field(default_factory=dict)  # 名號 → 做了幾次
-    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（匿名時是「某位少俠」）
+    shown: dict[str, str] = Field(default_factory=dict)  # 名號 → 軍情寫的名字（現在一律是名號；這一版之前匿名的記成「某位少俠」）
     done: bool = False
     done_time: float | None = None
     applied: int = 0
@@ -285,7 +290,7 @@ class WorldState(BaseModel):
     ending_title: str = ""
     ending_text: str = ""
     ending_id: str = ""  # 收季時的結局 id（Ending.id）；舊存檔是空的
-    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號或「某位少俠」, 貢獻）
+    # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號, 貢獻；排行榜不能匿名）
     final_trends: dict[str, int] = Field(default_factory=dict)
     final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
@@ -305,7 +310,7 @@ class WorldState(BaseModel):
     locks: dict[str, Lock] = Field(default_factory=dict)  # 大事 id → 第一個做完關鍵伏筆的人
     lock_losers: dict[str, list[Lock]] = Field(default_factory=dict)  # 大事 id → 之後才做完的人
     third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號（真名）
-    # 大事 id → {名號: 公告寫的名字}：做完時匿名的豪強（「某位少俠」）；沒記的照名號寫（舊資料是空的）
+    # 大事 id → {名號: 公告寫的名字}：這一版之前做完時匿名的豪強（「某位少俠」）；現在不再記，沒記的照名號寫
     third_party_shown: dict[str, dict[str, str]] = Field(default_factory=dict)
     event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
@@ -316,7 +321,7 @@ class WorldState(BaseModel):
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
     orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
-    # 升第 2 階的每日彙整（計畫 T5）：「陣營:曆日」→ 顯示名；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
+    # 升第 2 階的每日彙整（計畫 T5）：「曆日:陣營:階」→ 名號（陣營軍情一律具名）；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
     promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
@@ -398,6 +403,9 @@ class GameState(BaseModel):
     log: list[str] = Field(default_factory=list)  # 原始訊息，每次行動之間夾一個 journal.LOG_BREAK
     journal: list[JournalEntry] = Field(default_factory=list)  # 江湖紀錄，最新的在前，最多 journal.MAX_ENTRIES 則
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
+    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（Game._deliver_away）。None＝還沒記過（舊存檔、
+    # 換季重來的角色），那一次從這一季開頭算
+    last_world: float | None = None
 
 
 def new_game_state(content: Content, name: str) -> GameState:
@@ -417,6 +425,7 @@ def new_game_state(content: Content, name: str) -> GameState:
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
         member=Member(),
+        joined_at=None,  # 第一次同步補算完賽季才蓋（Game._stamp_join）
     )
     for skill_id in cfg.starter_skills:  # 開局送的基礎內功、基礎武學（武學與成長設計 3.3）
         slot = "neigong_id" if content.skills[skill_id].kind == "內功" else "wugong_id"

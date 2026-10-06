@@ -15,6 +15,15 @@
   用完走退路字表，請求在 trycloudflare 切斷之前結束。
 - 大場面（挑戰大勢人物本人、打頭目）的判讀也在行動鎖外（`prepare_fight`），預算是 `Config.big_fight_budget_seconds`；
   一般的仗不問模型，備料與動作在同一次拿鎖裡做完。
+- 對話生成與隨口應對的評分、潤色也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`；評分與潤色共用
+  後面那一份），跟開爐、大場面一樣從備料那一段開始算、扣掉等鎖與排隊的時間。
+- 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
+  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久拿退路；同一個人同時只有一件，
+  第二件被擋下來——評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子），
+  關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
+- 伺服器推送（`server_push.py`，開關 `Config.push_events`，預設關）：開著時 `/api/events` 是 SSE，每個動作做完（五個動作的端點，
+  鎖放掉之後）通知這個角色的其他分頁，背景的看守發現公開的世界變了通知所有分頁；只送「哪一種變了」，頁面收到再抓 `/api/main`。
+  輪詢與開頁絕不通知。關著 `/api/events` 是 404，頁面照舊每 10 秒輪詢。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -25,6 +34,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import copy
 import hashlib
 import os
 import re
@@ -41,16 +51,19 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
+from starlette.concurrency import run_in_threadpool
 
+import server_push
+from llm_queue import Busy, LlmQueue
 from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -224,12 +237,22 @@ def _locked(game: Game):
         yield
 
 
-def act(game: Game, action) -> list[str] | None:
+def _refuse_while_paused(game: Game) -> None:
+    """管理者暫停了賽季時鐘（線上架構 8.3「維護模式：擋住所有動作」）：玩家的動作一律回這一句。畫面照常可看——計時器的同步、
+    看名冊、輿圖、戰報都不經過這裡。呼叫端要拿著行動鎖、已經同步過；丟出去時整筆交易撤回。"""
+    if game.world.paused_at() is not None:
+        raise GameError(f"{PAUSED_TEXT}。")
+
+
+def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
     """同步時間 → 執行動作 → 存檔。開一筆寫入交易（假人程式寫同一個資料庫），計時器、按鈕與假人就一個一個來。
     進鎖先從資料庫重讀角色（見 _reload）：動作丟例外時整筆撤回，下一個動作不會把失敗的改動存回去。
-    回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。"""
+    回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。
+    賽季時鐘暫停中，只有 paused_ok 的照做（計時器的同步、管理者的動作、畫面上的設定），其他回「賽季暫停中」（_refuse_while_paused）。"""
     with _locked(game):
         game.sync(time.time())
+        if not paused_ok:
+            _refuse_while_paused(game)
         msgs = action(game)
         open_characters().save(game.state)
         return msgs
@@ -239,6 +262,36 @@ def look(game: Game, view):
     """只讀的畫面（點名冊、切圖層、看戰報）：拿鎖、重讀角色，但不同步、不存檔。"""
     with _locked(game):
         return view(game)
+
+
+def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
+    """act 加 look 在同一把行動鎖裡做完：同步時間 → 動作 → 存檔 → 畫面。回傳 (動作的訊息, 畫面)。
+    以前輪詢是 act(無事) 再 look(main_view)，各拿一次鎖、各重讀一次角色，每個在線的人每 10 秒就拿兩次（壓測 2026-10-06）。
+    跟兩步的結果一樣：存檔在畫面之前，所以畫面建構時才做的事（決戰追趕、收場補的紀錄）跟 look 一樣不存、下一次同步再補；
+    動作丟例外時整筆撤回、不看畫面（act 的規矩）。
+    畫面丟例外時，同步與存檔照舊留著（兩步時 act 那一把鎖早就放了），畫面自己寫的撤回（兩步時 look 那一把鎖整筆撤回）：
+    畫面建構不是唯讀，options() 會把全服決戰追趕到現在（標成收場、套結果）。所以畫面包在 savepoint 裡，丟例外時只撤回
+    這一段的寫入；例外先記下、讓鎖正常放掉（COMMIT 同步與存檔），再原樣丟出去。不撤回的話，決戰已經標成收場而結果沒套上，
+    下一次輪詢看到「早就收場了」就不再套，那場決戰的結果整個服永遠丟了。"""
+    failure: Exception | None = None
+    with _locked(game):
+        game.sync(time.time())
+        msgs = action(game)
+        open_characters().save(game.state)
+        try:
+            with game.world.db.savepoint():
+                shown = view(game)
+        except Exception as exc:  # 見上：畫面自己的寫入已經撤回，先讓鎖放掉，再丟出去
+            failure = exc
+    if failure is not None:
+        raise failure
+    return msgs, shown
+
+
+def poll_main(game: Game) -> dict:
+    """計時器（/api/main）與開頁、登入之後的第一畫面（_entry）：同步時間、存檔、回江湖畫面，一把鎖做完。
+    賽季時鐘暫停中也照常做：動作只是同步（暫停中補算不推時鐘），不擋；畫面上選單只剩一顆灰的「賽季暫停中」。"""
+    return act_look(game, lambda g: None, main_view)[1]
 
 
 # 排程用的那一份沒有玩家的 Game（Game.for_world）。只有排程執行緒（start_scheduler，只從 main() 開、只開一條）用它，
@@ -277,10 +330,12 @@ class _StepFailures:
     同一個錯（同一個類別、在同一行丟出來）一直重複時，第一次整段印，之後只數次數：換了別的錯、或距離上一次印滿
     SCHEDULER_REPEAT_SUMMARY_SECONDS 秒，才印一行「又出錯 N 次」（最終審查 M2：每 10 秒一下，不收斂的話一天八千多段）。
     寫紀錄本身出錯（主控台的編碼寫不出某個字、主控台不見了）一律吞掉：記錄不能讓排程停下來。
-    clock 只給節流用（預設 time.monotonic），跟世界時間無關。"""
+    clock 只給節流用（預設 time.monotonic），跟世界時間無關。
+    label 是印出來的那一行裡說的是誰（預設「排程」）；推送的看守（start_push）也用這一套，寫成「推送的看守」，規矩一樣。"""
 
-    def __init__(self, clock: Callable[[], float]):
+    def __init__(self, clock: Callable[[], float], label: str = "排程"):
         self.clock = clock
+        self.label = label
         self.key: tuple[str, str | None, int | None] | None = None  # 上一個整段印過的錯：（類別, 檔案, 行號）
         self.repeats = 0  # 它之後又出了幾次、還沒交代
         self.since = 0.0  # 上一次印（整段或摘要）的時刻
@@ -295,7 +350,7 @@ class _StepFailures:
                 return
             self._summary()  # 換了別的錯：上一個錯還沒交代的次數先交代
             self.key, self.since = key, self.clock()
-            print(f"排程這一下出錯：{type(exc).__name__}", flush=True)
+            print(f"{self.label}這一下出錯：{type(exc).__name__}", flush=True)
             sys.stderr.write("".join(traceback.format_tb(exc.__traceback__)))
             sys.stderr.flush()
 
@@ -309,7 +364,7 @@ class _StepFailures:
         if self.key is None or not self.repeats:
             return
         count, self.repeats, self.since = self.repeats, 0, self.clock()
-        print(f"排程這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
+        print(f"{self.label}這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
 
 
 def run_scheduler(
@@ -354,21 +409,158 @@ def start_scheduler(interval: float) -> threading.Thread | None:
         return SCHEDULER_THREAD
 
 
+# ── 伺服器推送（線上架構設計 5.3；server_push.py）──
+# 開關是 Config.push_events（預設關）：關著 HUB 是 None、/api/events 是 404、頁面照舊每 10 秒輪詢；main() 照設定建（start_push）。
+HUB: server_push.PushHub | None = None
+PUSH_STOP = threading.Event()  # 讓推送的看守停下來（測試用；伺服器關掉時看守是 daemon，跟著結束）
+PUSH_THREAD: threading.Thread | None = None  # 正在跑的那一條看守執行緒（測試要等它真的結束）
+HEARTBEAT_SECONDS = 15.0  # 這麼久沒有通知就送一個 ping，代理（Cloudflare 閒置約 100 秒）才不會切掉連線，頁面也才看得出連線還活著
+
+
+def current_fingerprint() -> str:
+    """看守用：現在大家都看得到的世界的指紋（server_push.world_fingerprint；唯讀的快照，不拿行動鎖，所以看守不跟玩家搶鎖）。
+    全服狀態、天下大事傳聞的最大流水號、江湖史的則數在同一個快照裡讀（fingerprint_parts）：分開讀的話，中間有人寫就會讀到
+    一半舊一半新的指紋、白白廣播兩次；傳聞與江湖史也不讀回每一列，讓資料庫數，所以隨著一季的列數長大也不會變慢。"""
+    shared, rumor_id, chronicle_count = open_world().fingerprint_parts()
+    return server_push.world_fingerprint(
+        shared.season_number, shared.season_phase(), shared.season, shared.active_battle,
+        rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None,
+    )
+
+
+def push_line(config) -> str:
+    if not config.push_events:
+        return "推送：關（分頁每 10 秒輪詢）"
+    return f"推送：開（SSE；世界每 {config.push_watch_seconds:g} 秒看一次，兩次通知至少隔 {config.push_world_min_seconds:g} 秒）"
+
+
+def start_push(config) -> server_push.PushHub | None:
+    """開關打開（push_events）時建 HUB、開看守執行緒（daemon：伺服器關掉時跟著結束）；關著什麼都不做、回 None（HUB 一直是 None）。
+    只有 main() 呼叫它（import 時不開）。看守出錯照排程的規矩只記例外的類別、同一個錯只數次數（_StepFailures；
+    例外的訊息常夾著名號，伺服器視窗不該看得出誰是假人，預檢 F5）。"""
+    global HUB, PUSH_THREAD
+    if not config.push_events:
+        return None
+    failures = _StepFailures(time.monotonic, "推送的看守")
+    HUB = server_push.PushHub()
+    PUSH_THREAD = threading.Thread(
+        target=server_push.watch_world,
+        args=(HUB, current_fingerprint, PUSH_STOP, config.push_watch_seconds, config.push_world_min_seconds),
+        kwargs={"on_error": failures.failed, "on_round": failures.tick},
+        daemon=True, name="push-watch",
+    )
+    PUSH_THREAD.start()
+    return HUB
+
+
+def _tell_tabs(game: Game) -> None:
+    """動作做完、行動鎖已經放掉：叫這個角色開著的分頁刷新（推送開著時；其他分頁會去抓 /api/main，這一個分頁通常正忙著、
+    會略過）。只有動作的端點叫它（api_choose、api_answer、api_do、api_menxia_do、api_travel），而且在動作成功之後：
+    動作丟例外時交易整筆撤回、什麼都沒變，不通知。
+    絕不能放進 act／look／act_look／poll_main／_entry：輪詢與開頁也走那些，通知一寫在輪詢的路上，同一個角色兩個看得到的
+    分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……，預檢 B1）。
+    一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。"""
+    if HUB is not None:
+        HUB.notify(game.state.player.name.casefold())
+
+
+# ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
+# 五件事：對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色，都是三段式的 B 段，一律走 model_call。
+# 開關是 Config.llm_queue_slots（預設 0＝關）：關著 QUEUE 是 None，model_call 就是直接叫；main() 照設定建佇列。
+QUEUE: LlmQueue | None = None
+
+
+def make_queue(config) -> LlmQueue | None:
+    return LlmQueue(config.llm_queue_slots, config.llm_queue_bot_cap) if config.llm_queue_slots > 0 else None
+
+
+def queue_line(config) -> str:
+    if config.llm_queue_slots <= 0:
+        return "模型佇列：關（鎖外的模型呼叫照舊直接叫）"
+    return (
+        f"模型佇列：同時 {config.llm_queue_slots} 件，假人最多 {config.llm_queue_bot_cap} 件，"
+        f"排超過 {config.llm_queue_wait_seconds:g} 秒就用退路"
+    )
+
+
+# 同一個玩家已經有一件在等模型（另一個分頁、另一台裝置），這一件被擋下來時回的話（佇列開著才會；審查 M2）。
+# 退路是一個結果：隨口應對的評分退路是 40（灌水的寫法本來該得 0）、首次開爐的退路是退路字表的名字（整季登記），
+# 第二個分頁不能拿來挑結果，所以評分、開爐、大場面一律擋下來、什麼都不套用。三句都是草稿，待 joy 潤。
+BUSY_FREE_TEXT = "上一句還在掂量，稍等。"  # 待 joy 潤
+BUSY_FORGE = "上一爐還沒出爐。"  # 待 joy 潤
+BUSY_FIGHT = "還在對峙，稍等。"  # 待 joy 潤
+
+
+def model_call(game: Game, job, *, fallback, left: float | None = None, busy: str | None = None):
+    """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限、一人一件、排太久拿 fallback，
+    見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
+    在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
+    鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。
+    left 是呼叫端那一件的總預算還剩幾秒（有總預算的四種呼叫都給）：排隊最久只等 min(llm_queue_wait_seconds, left)，
+    一個請求不會排過自己的總預算（審查 M1）；剩下 0 秒就是 0：位子正好空著照常進場（job 自己發現預算用完、不叫模型），
+    要排的話馬上拿退路。沒給（None）就只受 llm_queue_wait_seconds 管。
+    同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，
+    呼叫端不能繼續往下走；沒給就拿 fallback（對話：取消那一輪、潤色：不插句子，本來就無害）。佇列關著沒有這回事，照舊直接叫。"""
+    if game.world.db.writing():
+        raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
+    queue = QUEUE
+    if queue is None:
+        return job()
+    p = game.state.player
+    wait = game.content.config.llm_queue_wait_seconds
+    if left is not None:
+        wait = max(0.0, min(wait, left))
+    try:
+        return queue.run(p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=wait)
+    except Busy:
+        if busy is None:
+            return fallback
+        raise GameError(busy) from None
+
+
+def within_budget(client, left: float):
+    """鎖外一趟模型呼叫要用的 client：原本那個的複本，逾時設成 min(原本的逾時, 剩下的秒數 ÷ 2)。chat_structured 一次最多送兩趟
+    （第一趟加重問），所以整段不會超過剩下的秒數（chat_text 只送一趟，對它這是寬鬆的一半）；跟 naming.propose、
+    fight_llm.judge 同一套分法。對話、隨口應對的評分與潤色都用它。剩下的不夠一趟
+    （naming.MIN_POST_SECONDS）回 None＝不叫了；沒有 client（None）還是 None。原本那個 client 不動（同一個角色別的請求可能正在用它）。"""
+    if client is None:
+        return None
+    own = getattr(client, "timeout", None)
+    per_post = min(float(own) if isinstance(own, (int, float)) else left, left / naming.POSTS_PER_CALL)
+    if per_post < naming.MIN_POST_SECONDS:
+        return None
+    capped = copy.copy(client)
+    capped.timeout = per_post
+    return capped
+
+
 def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
     """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
       A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
         已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）呼叫模型，失敗時單子裡的 turn 是 None；
+      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢、排太久時單子裡的 turn 是 None；預算是
+        Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)  # 暫停中在 A 段就擋：模型一次都不叫
         request = game.dialogue_request(option_id)
         open_characters().save(game.state)
     if request is None:
         return None
-    return companion_agent.prepare_turn(game.client, request)
+    cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
+    total = game.content.config.dialogue_budget_seconds
+
+    def generate():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
+        return companion_agent.prepare_turn(client, request)
+
+    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started))
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -392,22 +584,30 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
       A（鎖內、很快）同步時間，問引擎這個選項是不是大場面（Game.fight_request）。**不是**（一般的仗、自己陣營的操練、
         按不下去、這個角色不叫模型）就在同一次拿鎖裡直接做完、存檔，回傳那個動作的訊息（list）——遊歷與事件選項天天在按，
         一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
-      B（鎖外、很慢）fight_llm.judge：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，引擎不讀時鐘，
-        所以時間在這裡量；回傳 PreparedFight（備料的單子加判讀），叫不動、太慢時判讀是 None——單子照樣帶著，等判讀的時候
-        這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+      B（鎖外、很慢）fight_llm.judge（model_call：佇列開著要排隊）：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）
+        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；回傳 PreparedFight（備料的單子加判讀），叫不動、
+        太慢、排太久時判讀是 None——單子照樣帶著，等判讀的時候這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
       C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
         回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
-    started = time.monotonic()
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.fight_request(option_id)
         done = game.choose(option_id) if request is None else None
         open_characters().save(game.state)
     if request is None:
         return done
-    budget = max(0.0, game.content.config.big_fight_budget_seconds - (time.monotonic() - started))
-    judgment = fight_llm.judge(game.client, request, game.content.config.big_fight_swing, budget)
+    config = game.content.config
+
+    def ask():
+        budget = max(0.0, config.big_fight_budget_seconds - (_monotonic() - started))
+        return fight_llm.judge(game.client, request, config.big_fight_swing, budget)
+
+    judgment = model_call(
+        game, ask, fallback=None, left=config.big_fight_budget_seconds - (_monotonic() - started), busy=BUSY_FIGHT,
+    )
     return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
@@ -435,28 +635,37 @@ def prepare_forge(
     也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）naming.generate：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）花掉的時間，
-        引擎不讀時鐘，所以時間在這裡量；用完就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
+      B（鎖外、很慢）naming.generate（model_call：佇列開著要排隊）：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）
+        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；用完、排太久就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式之後要合成，照樣能不經過 HTTP
     走這三段（Game.forge_request 在 action_lock 裡、naming.generate 在鎖外、Game.forge(proposed=...) 再進鎖）。
     other_art 有、insight_ids 空的是武學＋武學。"""
-    started = time.monotonic()
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.forge_request(art_id, insight_ids, other_art=other_art)
         open_characters().save(game.state)
     if request is None:
         return NO_NAME
-    budget = max(0.0, game.content.config.naming_budget_seconds - (time.monotonic() - started))
-    # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
-    return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
+        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
-    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。"""
+    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。
+    模型佇列開著時，同一個人已經有一件在等模型（另一個分頁、另一台裝置），第二件在 B 段被擋下來：丟 GameError「上一爐還沒出爐。」
+    （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
+    字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = prepare_forge(game, art_id, insight_ids, other_art)
     return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
 
@@ -464,23 +673,46 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str
 def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
-      B（鎖外、很慢）請模型評這個做法的成功率，失敗一律 40；
+      B（鎖外、很慢）請模型評這個做法的成功率（model_call：佇列開著要排隊），失敗、太慢、排太久一律 40；預算是
+        Config.free_text_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間（見 within_budget）；
       C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
-      D、E 擲骰之後在鎖外請模型潤色一兩句，再進鎖插回那一則江湖紀錄（Game.add_gamble_narration）。"""
+      D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
+        （Game.add_gamble_narration）。潤色跟評分共用同一份 free_text_budget_seconds（控制者 2026-10-06）：從 A 段算起，
+        扣掉評分、等鎖與排隊花掉的，剩下的給潤色（同一個 within_budget）；不夠一趟就不叫、不插句子，跟模型叫不動時一樣。
+        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。"""
+    started = _monotonic()
     with _locked(game):
         game.sync(time.time())
+        _refuse_while_paused(game)
         request = game.free_text_request(text)
         open_characters().save(game.state)
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
     event = CONTENT.events[request.event_id]
-    rate = event_llm.assess_event_success_rate(game.client, event, request.text)
+    total = game.content.config.free_text_budget_seconds
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
+        return event_llm.assess_event_success_rate(client, event, request.text)
+
+    rate = model_call(
+        game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
+        busy=BUSY_FREE_TEXT,
+    )
     msgs = act(game, lambda g: g.answer_event(request, rate))
     outcome = game.last_gamble
-    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗就只留結果文字
-        narration = event_llm.narrate_event_gamble(game.client, event, outcome.text, outcome.success, outcome.effect_text)
+    if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
+        def narrate():
+            client = within_budget(game.client, total - (_monotonic() - started))  # 評分剩下來的預算，不是重新算一份
+            if client is None and game.client is not None:
+                return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子
+            return event_llm.narrate_event_gamble(client, event, outcome.text, outcome.success, outcome.effect_text)
+
+        narration = model_call(game, narrate, fallback=None, left=total - (_monotonic() - started))
         if narration:
-            act(game, lambda g: g.add_gamble_narration(outcome, narration))
+            act(game, lambda g: g.add_gamble_narration(outcome, narration), paused_ok=True)  # 擲骰已經做完了，只是插回一兩句
     return msgs
 
 
@@ -489,6 +721,11 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
+    with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
+        return _main_view_body(game)
+
+
+def _main_view_body(game: Game) -> dict:
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
@@ -519,13 +756,21 @@ def main_view(game: Game) -> dict:
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
+        "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
+        # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
+        # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
+        "push": HUB is not None,
+        "push_spread": game.content.config.push_world_min_seconds,
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
     if orders:
         view["orders"] = orders
+    layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
+    if layers is not None:
+        view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
@@ -619,7 +864,7 @@ def reports_view(game: Game, record_id: int | None) -> dict:
 
 
 def admin_choices(game: Game) -> dict:
-    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
+    """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）與模型佇列的總數。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
     內容的順序，第一季不觸發的 beta 決戰與門檻不列；已經發生過的大事按下去會被引擎拒絕）；
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     world = game.state.world
@@ -631,6 +876,8 @@ def admin_choices(game: Game) -> dict:
         **timetable_choices(game),
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
+        # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
+        "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
 
 
@@ -806,6 +1053,14 @@ def _game(request: Request) -> Game:
     return game_for(account.character)
 
 
+def _character_name(request: Request) -> str:
+    """這個登入的帳號的角色名號（沒登入 401、還沒有角色 409）；只查帳號，不開 Game、不拿行動鎖。"""
+    account = account_store().get(_account(request))
+    if account is None or account.character is None:
+        raise HTTPException(409, "這個帳號還沒有角色。")
+    return account.character
+
+
 def _start_session(response: Response, account_key: str) -> None:
     token = secrets.token_urlsafe(32)
     SESSIONS[token] = account_key
@@ -819,9 +1074,7 @@ def _entry(account_key: str) -> dict:
         return {"stage": "login"}
     if account.character is None:
         return {"stage": "create"}
-    game = game_for(account.character)
-    act(game, lambda g: None)
-    return {"stage": "game", "main": look(game, main_view), "kinds": KINDS}
+    return {"stage": "game", "main": poll_main(game_for(account.character)), "kinds": KINDS}  # 暫停中照樣進得來、看得到
 
 
 def content_version(content: bytes) -> str:
@@ -906,10 +1159,9 @@ def api_logout(request: Request, response: Response):
 
 @app.get("/api/main")
 def api_main(request: Request):
-    """計時器：同步時間、存檔、回江湖畫面（氣血、體力等數字才會跟著走）。"""
-    game = _game(request)
-    act(game, lambda g: None)
-    return look(game, main_view)
+    """計時器：同步時間、存檔、回江湖畫面（氣血、體力等數字才會跟著走）。一把鎖做完（見 act_look）。
+    賽季時鐘暫停中畫面照常更新（停了幾分鐘、繼續了沒）：輪詢的動作只是同步，不經過 _refuse_while_paused。"""
+    return poll_main(_game(request))
 
 
 # 江湖畫面上的動作：回傳 {main, message}。引擎的訊息本來就會寫進江湖紀錄，這裡的 message
@@ -923,10 +1175,15 @@ MAIN_ACTIONS = {
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
 }
+# 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、略過引導、打開輿圖（頁面靠它載入輿圖）、對話框的「知道了」
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "skip_tutorial", "view_map", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
+    # 公告停機時賽季時鐘暫停（線上架構第四節、8.3）；主機端另有 scripts/season_clock.py
+    "pause_clock": lambda g, b: g.admin_pause_clock(time.time()),
+    "resume_clock": lambda g, b: g.admin_resume_clock(time.time()),
     "fast_forward": lambda g, b: g.advance(_int(b.get("hours"), 1) * 3600),
     "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
     "fire": lambda g, b: g.admin_fire(str(b.get("id", ""))),
@@ -946,6 +1203,7 @@ def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
     option_id = str(body.get("id", ""))
     msgs = choose(game, option_id)
+    _tell_tabs(game)
     out = {"main": look(game, main_view)}
     if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES):
         # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
@@ -959,6 +1217,7 @@ def api_choose(request: Request, body: dict = Body(...)):
 def api_answer(request: Request, body: dict = Body(...)):
     game = _game(request)
     answer_event(game, str(body.get("text", "")))
+    _tell_tabs(game)
     return {"main": look(game, main_view)}
 
 
@@ -968,11 +1227,12 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     if op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
-        msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body))
+        msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
     elif op in MAIN_ACTIONS:
-        msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body))
+        msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
         raise HTTPException(404)
+    _tell_tabs(game)
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
@@ -1031,6 +1291,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
     msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
+    _tell_tabs(game)
     return {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
@@ -1074,6 +1335,8 @@ def api_travel(request: Request, body: dict = Body(...)):
         return g.travel(target, mode)
 
     act(game, go)
+    if not refused:  # 走不成的什麼都沒變（同步而已），其他分頁不必刷新
+        _tell_tabs(game)
     out = {"main": look(game, main_view), "arrived": not refused}
     if refused:
         out["reason"] = refused[0]
@@ -1085,6 +1348,30 @@ def api_travel(request: Request, body: dict = Body(...)):
 def api_password(request: Request, body: dict = Body(...)):
     key = _account(request)
     return {"message": change_password(key, body.get("old", ""), body.get("new", ""), body.get("again", ""))}
+
+
+@app.get("/api/queue")
+def api_queue(request: Request):
+    """等模型的時候前端每 2 秒問一次：這個角色那一件前面還有幾件（正在跑的也算一件；佇列關著、或沒有在排：null）。
+    只給一個數字：真人排在假人前面，所以前面的只有正在跑的與先排的真人，看不出有沒有假人。不拿行動鎖。"""
+    game = _game(request)
+    return {"ahead": None if QUEUE is None else QUEUE.position(game.state.player.name.casefold())}
+
+
+@app.get("/api/events")
+async def api_events(request: Request):
+    """伺服器推送（SSE）：這個角色的分頁收「自己的東西變了（self）」與「世界變了（world）」兩種通知，收到再去抓 /api/main；
+    連線上沒事時每 HEARTBEAT_SECONDS 秒一個 ping。開關關著是 404（連登入都不問），前端照舊輪詢。
+    查帳號是同步的資料庫讀取，放在執行緒池裡做，不卡事件迴圈（這個函式是 async：串流要跑在事件迴圈上）。"""
+    hub = HUB
+    if hub is None:
+        raise HTTPException(404)
+    name = await run_in_threadpool(_character_name, request)
+    return StreamingResponse(
+        server_push.sse_stream(hub, name.casefold(), HEARTBEAT_SECONDS),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # 代理不能把串流攢著不送
+    )
 
 
 @app.get("/api/admin")
@@ -1166,6 +1453,7 @@ def start_tunnel(port: int) -> threading.Thread | None:
 def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
+    global QUEUE
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--share", action="store_true", help="用 cloudflared 開一個臨時的公開網址")
@@ -1179,12 +1467,21 @@ def main(argv: list[str] | None = None) -> None:
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
+    QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
+    print(queue_line(CONTENT.config), flush=True)
     interval = CONTENT.config.world_tick_seconds
     print(scheduler_line(interval), flush=True)
     start_scheduler(interval)
+    print(push_line(CONTENT.config), flush=True)
+    start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
-    uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")
+    # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住
+    # （log_level 是 warning，連「等連線關閉」那行都看不到）。3 秒後取消它們，sse_stream 的 finally 會退訂（預檢 F7）
+    uvicorn.run(
+        app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning",
+        timeout_graceful_shutdown=3,
+    )
 
 
 if __name__ == "__main__":

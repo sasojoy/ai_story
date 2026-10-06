@@ -72,6 +72,12 @@ class SharedWorldState(BaseModel):
     season_number: int = 1
     season_last_real: float | None = None
     season_opened: bool = False  # 這一季管理者開季了沒；False＝籌備中（見 season_phase）
+    # 賽季時鐘暫停（線上架構設計第四節、8.3「公告停機時賽季時鐘暫停，季末跟著往後延」）：按「暫停」的現實時間；None＝沒有暫停。
+    # 暫停中補算（catch_up_season）不推季的時間、對時點也不動；引擎（Game）不推決戰、選單只剩一顆灰的、不能快轉，
+    # 管理者的動作只留「繼續」；伺服器擋住不走選單的動作（server._refuse_while_paused）、假人程式不出手；
+    # 按「繼續」時對時點往後挪停的長度（resume_clock），進行中的決戰期限與排好的決戰也跟著挪，
+    # 所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
+    paused_at: float | None = None
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
@@ -214,7 +220,7 @@ class WorldStateStore(Protocol):
 
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
         """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
-        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），
+        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（引擎現在不給，一律寫名號；這一版之前匿名行走的人記成「某位少俠」），
         同一筆交易寫進那門武學的 master_shown（後到的人那一句、換季的江湖史照它寫）。"""
         ...
 
@@ -292,7 +298,27 @@ class WorldStateStore(Protocol):
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
         """被動的現實時間追趕：把共用賽季依「距離上次有人追趕過了多久現實時間」往前推進，世界的時間
-        永遠只走一份。時鐘只會往前：拿比上次對過的還早的時間來追趕，不推進、也不把時鐘撥回去。"""
+        永遠只走一份。時鐘只會往前：拿比上次對過的還早的時間來追趕，不推進、也不把時鐘撥回去。
+        賽季時鐘暫停中（paused_at）什麼都不做：不推進、對時點也不動（繼續時才一起往後挪，見 resume_clock）。"""
+        ...
+
+    # ── 賽季時鐘暫停（線上架構設計第四節、8.3）──
+    def paused_at(self) -> float | None:
+        """賽季時鐘從哪個現實時間起暫停；沒有暫停是 None。只讀一個欄位、很快：引擎每次排選單、推決戰都會問。"""
+        ...
+
+    def pause_clock(self, now: float) -> bool:
+        """暫停賽季時鐘：只在進行中、還沒暫停時有效（記下 now、回 True）；籌備、休季、已經停著都什麼都不做、回 False。"""
+        ...
+
+    def resume_clock(self, content: Content, now: float) -> float | None:
+        """讓賽季時鐘繼續走，回傳停了幾個現實秒；沒有暫停回 None。停的這一段不算進賽季：對時點（season_last_real）往後挪
+        world.pause_skip 那麼多（第一季照整個曆時往下取整，其他照停的長度）——暫停前還沒補算的那一小段照算，季末與一般的大事
+        跟著往後延。還沒收場的決戰，集結截止或這一回合開放的時間往後挪停的長度（battle_instance.shift_deadlines），
+        剩下的時間跟暫停前一樣。排好、還沒開的決戰照原本的現實時間開（企劃者 2026-10-06 定 B3，world.keep_showdowns_on_time）；
+        原本的時間落在暫停裡的記進 showdowns_waiting（B11）。
+        繼續之後緊接著還要補算、開集結（不補算的話，決戰會在它前面的一般大事還沒結算時就開成）：呼叫端不要自己接這幾步，
+        一律走 world.resume_season_clock。"""
         ...
 
     # ── 投靠名冊 ──
@@ -304,6 +330,11 @@ class WorldStateStore(Protocol):
 
     def faction_counts(self) -> dict[str, int]:
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""
+        ...
+
+    def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
+        """（全服狀態，這一季最大的天下大事傳聞流水號，這一季江湖史的則數），同一個唯讀快照裡讀的；賽季裡的傳聞與江湖史
+        不讀回每一列。推送的看守用（server.current_fingerprint）。"""
         ...
 
     # ── 全服即時多人戰鬥 ──

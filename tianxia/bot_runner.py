@@ -63,7 +63,7 @@ class BotRunner:
 
     def tick(self) -> TickReport:
         report = TickReport()
-        if self.world.season_phase() != "running":
+        if self.world.season_phase() != "running" or self.world.paused_at() is not None:  # 籌備、休季、暫停中都不出手
             return report
         now = self.clock()
         try:
@@ -104,7 +104,7 @@ class BotRunner:
         自己補算時間時走到季末，存下補算的結果，但不在休季時做事。"""
         state = self.characters.load(name)
         shared = self.world.read()
-        if state is None or shared.season_phase() != "running":
+        if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
             return False
         profile = state.player.bot
         if profile is None or not server_bots.active(profile, shared.season_number):
@@ -148,7 +148,10 @@ class BotRunner:
         return battle.muster_deadline_real, set(battle_instance.sides(definition)), out  # 兩軍加第三方：豪強的假人也擲趕來參戰
 
     def _fill(self, now: float, report: TickReport) -> None:
-        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""
+        """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。
+        tick 開頭看過暫停了，但等這把行動鎖的時候管理者的暫停可能先寫進去：拿到鎖之後再看一次，暫停中不補人。"""
+        if self.world.read().paused_at is not None:  # 欄位，不是方法（world.paused_at() 才是方法）
+            return
         cfg = self.content.config
         season = self.world.get_season_number()
         bots = self.characters.all(bots_only=True)
