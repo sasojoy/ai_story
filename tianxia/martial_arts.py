@@ -39,7 +39,7 @@ class MartialArt(BaseModel):
     # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
     creator: str | None = None  # 合成首創者的名號（身分，誰是首創者照它認）；舊的自創、煉製功法照舊；內容武學為 None
-    # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
+    # 首創者寫給別人看的名號：名號（江湖史一律具名，傳聞分層第七節）；這一版之前匿名行走的人記的是「某位少俠」，照舊；
     # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
     creator_shown: str | None = None
     # 全服第一個把它練成絕學的人寫給別人看的名號（world.claim_master 登記時一起寫進來）；身分記在 masters 表

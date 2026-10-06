@@ -224,7 +224,8 @@ def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None
 
 
 def shown(lock: Lock) -> str:
-    """公告與江湖史上寫的名字：鎖定時匿名的人是「某位少俠」（Lock.shown）；舊資料沒有 shown 就寫名號。"""
+    """公告與江湖史上寫的名字：名號。只有這一版之前匿名鎖定、記了 Lock.shown（「某位少俠」）的照記下的寫（不回溯揭名）；
+    之後的鎖定不記 shown（傳聞分層第七節：天下大事與江湖史一律具名）。"""
     return lock.shown or lock.name
 
 

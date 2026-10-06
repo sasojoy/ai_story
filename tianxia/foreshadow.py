@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line, display_name
+from .rules import can_meet, check_chance, check_result_line
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -616,13 +616,14 @@ def _succeed(
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:
     """整條完成：記做完、記貢獻（先完成、搶輸、同陣營後到都照記）；官軍、黃巾寫鎖定（已經有人就進搶輸的名單），
-    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。"""
+    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。
+    公告與江湖史一律寫名號（傳聞分層第七節：改寫歷史的事，留名本身就是獎勵），所以不再記 Lock.shown、third_party_shown；
+    這一版之前匿名記下的照舊（timetable.shown 讀得到）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
     push.add_contribution(p, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
-    shown = display_name(state) if p.anonymous else None  # 匿名的人在公告與江湖史上是「某位少俠」；真名照記（T9 的稱號）
     if c.side in LOCK_SIDES:
-        lock = Lock(side=c.side, name=p.name, time=now, shown=shown)
+        lock = Lock(side=c.side, name=p.name, time=now)
         if c.event not in w.locks:
             w.locks[c.event] = lock
         else:
@@ -631,8 +632,6 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
         names = w.third_party.setdefault(c.event, [])
         if p.name not in names:
             names.append(p.name)
-            if shown is not None:
-                w.third_party_shown.setdefault(c.event, {})[p.name] = shown
 
 
 # ── 官銀 ─────────────────────────────────────────────────

@@ -16,6 +16,8 @@ DAY = 86400
 
 
 def display_name(state: GameState) -> str:
+    """地方傳聞裡的單獨事件寫的名字：選了「匿名行走」的人是「某位少俠」（傳聞分層第七節）。只有那裡看匿名——天下大事、
+    陣營軍情、江湖史、排行榜一律寫名號（state.player.name），不要拿這個去寫那些（企劃者 2026-10-06）。"""
     return "某位少俠" if state.player.anonymous else state.player.name
 
 
@@ -789,9 +791,9 @@ def apply_effect(
         from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
 
         msgs += foreshadow.grant(state, content, effect.clue_items, effect.fs_counters)
-    name = display_name(state)
+    name = state.player.name  # 江湖史與玉璽碎片（天下大事）一律寫名號；只有下面的地方傳聞看匿名（傳聞分層設計第七節）
     if effect.rumor:
-        text = effect.rumor.format(name=name)
+        text = effect.rumor.format(name=display_name(state))
         add_rumor(  # 玩家觸發的傳聞記在當時所在地：地方傳聞的單獨事件，觸發者可以選匿名（傳聞分層設計第七節）
             state, text, state.player.location, content=content, layer="local", named=not state.player.anonymous,
         )

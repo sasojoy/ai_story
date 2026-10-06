@@ -236,7 +236,7 @@ class Lock(BaseModel):
     side: str  # 陣營 id
     name: str  # 名號（真名：時間軸的 locked_by、losers 與 T9 的稱號用它）
     time: float
-    shown: str | None = None  # 公告與江湖史寫的名字：鎖定時匿名就是「某位少俠」；None＝寫名號（舊資料也是 None）
+    shown: str | None = None  # 公告與江湖史寫的名字：None＝寫名號（現在一律不記）；這一版之前匿名鎖定的是「某位少俠」，照舊
 
 
 class FigureState(BaseModel):
@@ -305,7 +305,7 @@ class WorldState(BaseModel):
     locks: dict[str, Lock] = Field(default_factory=dict)  # 大事 id → 第一個做完關鍵伏筆的人
     lock_losers: dict[str, list[Lock]] = Field(default_factory=dict)  # 大事 id → 之後才做完的人
     third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號（真名）
-    # 大事 id → {名號: 公告寫的名字}：做完時匿名的豪強（「某位少俠」）；沒記的照名號寫（舊資料是空的）
+    # 大事 id → {名號: 公告寫的名字}：這一版之前做完時匿名的豪強（「某位少俠」）；現在不再記，沒記的照名號寫
     third_party_shown: dict[str, dict[str, str]] = Field(default_factory=dict)
     event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）

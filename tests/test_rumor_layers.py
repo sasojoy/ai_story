@@ -656,3 +656,48 @@ def test_the_map_legend_follows_the_board_length(on):
     on.config.rumor_board_days = 5
     assert "最近 5 天的大事與傳聞" in mapview.legend_data(game.state, on, "story")["layer"]
     assert mapview.legend_data(game.state, on, "routes")["layer"] == mapview.LEGEND_LAYERS["routes"]
+
+
+# ── Task 6：匿名只留在地方傳聞（一）：天下大事、時刻表的公告、江湖史 ─────────────
+
+
+def test_an_anonymous_event_rumor_stays_anonymous_but_the_chronicle_names_you(state, content, world):
+    """傳聞分層第七節（企劃者 2026-10-06）：事件的傳聞是地方傳聞的單獨事件，匿名的人寫「某位少俠」、記成不具名；
+    同一則效果寫的江湖史與玉璽碎片（天下大事）一律寫名號。用測試夾具的內容（state、content、world 是 conftest 的）。"""
+    content.scenario.jade_seal_flag = "shard_taken"
+    state.player.anonymous = True
+    msgs = rules.apply_effect(
+        Effect(rumor="{name}在此留名。", chronicle="{name}取得玉璽碎片。", world_flags_add=["shard_taken"]),
+        state, content, world,
+    )
+    rumor = state.world.rumors[-1]
+    assert (rumor.layer, rumor.named, rumor.text) == ("local", False, "某位少俠在此留名。")
+    assert state.world.chronicle[-1].text == "沈浪取得玉璽碎片。"
+    assert world.get_jade_seal_fragments()[0].text == "沈浪取得玉璽碎片。"
+    assert any(m.startswith("🏺 【天下大事】沈浪尋得傳國玉璽") for m in msgs)
+
+
+def test_names_recorded_anonymously_before_stay_anonymous():
+    """不回溯（待確認 A14）：這一份之前匿名記下的名字（鎖定、首創）照記下的寫，不把當初選了匿名的人翻出來；
+    之後新記的不再寫 shown，讀的地方照舊退回名號。"""
+    assert timetable.shown(Lock(side="guan", name="甲", time=0.0, shown="某位少俠")) == "某位少俠"
+    assert timetable.shown(Lock(side="guan", name="甲", time=0.0)) == "甲"
+    old = Insight(id="燎原", name="燎原", attribute="陽", creator="乙", creator_shown="某位少俠")
+    assert shown_creator(old) == "某位少俠"
+
+
+def test_the_first_special_art_rumor_does_not_pin_the_forger_on_the_map(on):
+    """F4：天下大事帶著發生地，輿圖的 ✦ 與詳情欄會把它標給每個陣營；鑄出特別功效武學的人此刻在哪裡，不該跟著傳出去。"""
+    from types import SimpleNamespace
+
+    from tianxia import fusion
+
+    jia, yi = _game(on, "甲", "guan", at="changshe"), _game(on, "乙", "huang", at="yingchuan")
+    yi.state.world = jia.state.world  # 同一季：乙看得到甲這邊記下的傳聞
+    art = SimpleNamespace(name="旋風腿", special=on.traits.special[0].id)
+    assert fusion._special_rumor(jia.state, on, art, first=True)  # 傳出一句
+    rumor = jia.state.world.rumors[-1]
+    assert rumor.layer == "world" and rumor.named is True and rumor.location is None
+    assert "甲" in rumor.text  # 世界層的傳聞具名
+    assert atlas.news_places(jia.state, on) == set() and atlas.news_places(yi.state, on) == set()  # 沒有任何地點被標
+    assert rumor.text in yi.rumors_text()  # 但每個人都聽得到這一句

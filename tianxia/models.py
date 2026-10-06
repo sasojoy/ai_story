@@ -80,8 +80,8 @@ class Effect(_Strict):
     learn_skills: list[str] = Field(default_factory=list)
     trend: dict[str, int] = Field(default_factory=dict)
     world_flags_add: list[str] = Field(default_factory=list)
-    rumor: str = ""  # {name} 會換成玩家名號（匿名時為「某位少俠」）
-    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}
+    rumor: str = ""  # 地方傳聞；{name} 會換成玩家名號（匿名時為「某位少俠」）
+    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}，但一律寫名號（江湖史不能匿名，傳聞分層設計第七節）
     join_sect: str | None = None
     leave_sect: bool = False
     next_event: str | None = None
