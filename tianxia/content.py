@@ -1577,6 +1577,11 @@ def validate(c: Content) -> None:
                 any(entry.startswith("move:") for entry in last.allow),
                 f"新手引導 {last.id}：序章最後一步的 allow 要有 move:（不然走不出草廬）",
             )
+            # 略過序章的人體力補滿（prologue.finish）；走出草廬的人只有這一步的獎勵補得到，補不滿兩種人離開時的體力就不一樣
+            need(
+                last.reward.stamina >= c.config.stamina_max,
+                f"新手引導 {last.id}：出師的獎勵要把體力補滿（reward.stamina 至少 stamina_max {c.config.stamina_max}），跟略過序章一樣",
+            )
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
         special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies

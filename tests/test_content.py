@@ -2133,6 +2133,14 @@ def test_the_last_prologue_step_must_let_the_player_walk_out(prologue_root):
         load_content(prologue_root)
 
 
+def test_the_farewell_reward_must_fill_the_stamina(prologue_root):
+    """略過序章的人體力補滿（prologue.finish）；走出草廬的人只有出師那一步的獎勵能補。獎勵給不滿，兩種人離開時的體力就不一樣
+    （一個看得出走過序章沒有）。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][10]["reward"].update(stamina=100))
+    with pytest.raises(ContentError, match="體力補滿"):
+        load_content(prologue_root)
+
+
 def test_new_characters_get_the_current_onboarding_version(content, prologue_content):
     from tianxia.state import ONBOARDING_VERSION, PlayerState, new_game_state
 

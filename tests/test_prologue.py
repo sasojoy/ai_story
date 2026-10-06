@@ -651,6 +651,24 @@ def test_the_practice_buttons_follow_the_script(fresh):
     assert all(c["blocked"] is None for c in server.menxia_view(outside)["slot_cards"])
 
 
+def test_the_first_screen_is_the_ambush_not_the_season_intro(fresh, prologue_content, world):
+    """T6 review M8：「剛剛」那張卡在序章第一屏放的是賽季開場那一則，疊在遇險的上面，第一屏就不只有遇險與選項了。
+    草廬裡不放它；選了之後的結果照常放。那一則還在江湖紀錄裡，序章走完之後它就是紀錄裡的一則。"""
+    import server
+
+    assert fresh.state.journal and fresh.state.journal[0].tag == "賽季開始"  # 紀錄裡還在
+    assert fresh.now_entry_html() == "" and server.main_view(fresh)["now"] == ""
+    _walk(fresh, "choice:0")
+    assert "你擋了。" in fresh.now_entry_html()  # 選了之後的結果照常放
+    next_season(prologue_content, world, fresh)  # 換季重回草廬：換季重來寫的那一則開場也不放
+    assert fresh.state.player.location == "hut" and fresh.now_entry_html() == ""
+
+
+def test_the_season_intro_is_still_the_card_for_everyone_outside_the_hut(prologue_content, world):
+    bot = Game.new(prologue_content, "路人", rng=random.Random(0), world=world)
+    assert "賽季開始" in bot.now_entry_html()
+
+
 def test_the_hut_refuses_seclusion(fresh):
     """T6 review M4：閉關在草廬裡不是師父教的，也會把心得賺過劇本備好的帳（20 → 170）。擋下、不寫紀錄，跟別的拒絕一樣。"""
     _to_step(fresh, 3)
@@ -727,6 +745,24 @@ def test_the_hut_gives_no_road_sight_and_the_farewell_line_comes_once(fresh):
     assert "\n".join(msgs).count("草廬已經看不見了。") == 1
     assert not prologue.active(fresh.state, fresh.content)
     assert all(not o.id.startswith("move:hut") for o in fresh.options())
+
+
+@pytest.mark.parametrize("mode", ["walk", "hurry", "dash"])
+def test_leaving_the_hut_fills_the_stamina_whatever_the_way(fresh, mode):
+    """出師那一步的獎勵是人走出草廬時唯一能補體力的地方（略過的人由 finish 補）：不管怎麼走、走之前剩多少，抵達潁川都是滿的，
+    跟略過序章的人一樣。"""
+    _to_step(fresh, 10)
+    fresh.state.player.stamina = 40.0  # 趕路、疾行要花體力：夠付、又離滿很遠
+    fresh.set_move_mode(mode)
+    fresh.choose("move:town" if mode == "walk" else f"move:town:{mode}")
+    assert fresh.state.player.stamina < fresh.content.config.stamina_max or fresh.state.player.journey is None
+    if fresh.state.player.journey is not None:
+        fresh.advance(fresh.state.player.journey.arrive_at[-1] - fresh.state.world.time)
+    p = fresh.state.player
+    assert p.location == "town" and p.stamina == fresh.content.config.stamina_max
+    skipper = Game.new(fresh.content, "略過", rng=random.Random(0), world=fresh.world, prologue=True)
+    skipper.skip_tutorial()
+    assert skipper.state.player.stamina == p.stamina
 
 
 def test_the_farewell_line_is_only_for_leaving_the_hut(prologue_content):

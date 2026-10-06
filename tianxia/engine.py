@@ -89,6 +89,7 @@ class TollFacts:
 
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
+SEASON_START_TAG = "賽季開始"  # 開場那一則江湖紀錄的標籤（Game.new 與換季重來都寫它）；草廬裡的「剛剛」不放這一則（now_entry_html）
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -197,7 +198,7 @@ class Game:
             + tutorial_intro(content)
         )
         if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
-            game._write(content.scenario.name, [content.scenario.intro], tag="賽季開始", guide=tutorial_intro(content))
+            game._write(content.scenario.name, [content.scenario.intro], tag=SEASON_START_TAG, guide=tutorial_intro(content))
         return game
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
@@ -332,7 +333,7 @@ class Game:
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
         self.state.player.visited.add(self.state.player.location)
         self._write(
-            self.content.scenario.name, [self.content.scenario.intro], tag="賽季開始", guide=tutorial_intro(self.content),
+            self.content.scenario.name, [self.content.scenario.intro], tag=SEASON_START_TAG, guide=tutorial_intro(self.content),
         )
 
     def _drop_stale_references(self) -> None:
@@ -4539,7 +4540,8 @@ class Game:
                 line in shown or line.partition("　")[2] in shown for line in story
             )
 
-        fresh = [e for e in self.state.journal if not repeated(e)]
+        hut = prologue_rules.active(self.state, self.content)  # 草廬裡不放賽季開場那一則：序章第一屏只有遇險的畫面與選項（T6 審查 M8）
+        fresh = [e for e in self.state.journal if not repeated(e) and not (hut and e.tag == SEASON_START_TAG)]
         entry = next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 

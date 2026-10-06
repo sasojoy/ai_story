@@ -155,6 +155,8 @@ def _picked(
 def _arrival(art: MartialArt, first: bool, landed: bool) -> str:
     """新武學那一則訊息的後半：模型寫的說明（有的話），再接首創、照著合、或合到舊的那一句。"""
     tail = f"\n{art.note}" if art.note else ""
+    if art.preset:  # 師門功夫沒有首創者：老手的另一個配方合到它，也寫師門傳下來的（不是「不知名的前人」）
+        return tail + "\n這是師門傳下來的路數。"
     if first:
         return tail + "\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。"
     by = shown_creator(art) or "不知名的前人"
