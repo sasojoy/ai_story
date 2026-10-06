@@ -18,8 +18,9 @@
 - 對話生成與隨口應對的評分、潤色也有總預算（`Config.dialogue_budget_seconds`、`free_text_budget_seconds`；評分與潤色共用
   後面那一份），跟開爐、大場面一樣從備料那一段開始算、扣掉等鎖與排隊的時間。
 - 鎖外的五個模型呼叫（對話生成、大場面判讀、開爐取名、隨口應對的評分與潤色）一律走 `model_call`：開關
-  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久拿退路；同一個人同時只有一件，
-  第二件被擋下來——評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子），
+  `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久被擋下來；同一個人同時只有一件，
+  第二件被擋下來——評分、開爐、大場面、對話回一句話、什麼都不套用（對話是 FB-077），潤色不插句子；排超過等候的時間還沒輪到的那一件也一樣，
+  不給退路，PM 2026-10-06），
   關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
 - 伺服器推送（`server_push.py`，開關 `Config.push_events`，預設關）：開著時 `/api/events` 是 SSE，每個動作做完（五個動作的端點，
   鎖放掉之後）通知這個角色的其他分頁，背景的看守發現公開的世界變了通知所有分頁；只送「哪一種變了」，頁面收到再抓 `/api/main`。
@@ -57,7 +58,7 @@ from markdown_it import MarkdownIt
 from starlette.concurrency import run_in_threadpool
 
 import server_push
-from llm_queue import Busy, LlmQueue
+from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import PROFILE_ENV, load_content, profile_line
@@ -480,7 +481,7 @@ def queue_line(config) -> str:
         return "模型佇列：關（鎖外的模型呼叫照舊直接叫）"
     return (
         f"模型佇列：同時 {config.llm_queue_slots} 件，假人最多 {config.llm_queue_bot_cap} 件，"
-        f"排超過 {config.llm_queue_wait_seconds:g} 秒就用退路"
+        f"排超過 {config.llm_queue_wait_seconds:g} 秒就擋下來（請玩家再試一次）"
     )
 
 
@@ -490,18 +491,29 @@ def queue_line(config) -> str:
 BUSY_FREE_TEXT = "上一句還在掂量，稍等。"  # 待 joy 潤
 BUSY_FORGE = "上一爐還沒出爐。"  # 待 joy 潤
 BUSY_FIGHT = "還在對峙，稍等。"  # 待 joy 潤
+BUSY_DIALOGUE = "對方還沒答話，稍等。"  # 待 joy 潤（FB-077：同一個帳號另一條連線已經在等這個人的回話）
+# 排超過 llm_queue_wait_seconds 秒還沒輪到的那一件（PM 2026-10-06）：跟重複的那一件一樣處理——退路是一個結果，沒被服務到的人沒道理
+# 拿一個結果（評分 40、首次開爐用退路字表），所以給了上面那四句之一的呼叫點（評分、開爐、大場面、對話）也擋下來、什麼都不套用，
+# 玩家再試一次就好；只是不能寫「上一件還在……」（排太久不是因為他自己有上一件），四個呼叫點共用這一句。草稿，待 joy 潤。
+# 沒給 busy 句子的呼叫點（潤色：不插句子）排太久照舊拿 fallback，跟重複的那一件一樣。
+# 對話（FB-077）：同一個帳號兩條連線同時按同一個人，第二件以前拿 cancelled（取消那一輪）先進鎖，把「無心多談，你只好先行告辭」
+# 寫進紀錄、求見的選單也收掉，第一件的回話後來套不上；現在跟開爐、隨口應對、大場面一樣被擋下來、什麼都不動。
+# 模型自己失敗（輪到了、叫了、答壞或逾時或連不上）不是這個：那是 job 裡的事，照舊走 job 自己的退路。
+BUSY_QUEUE_TIMEOUT = "這會兒人多，沒輪到你，稍後再試一次。"  # 待 joy 潤
 
 
 def model_call(game: Game, job, *, fallback, left: float | None = None, busy: str | None = None):
-    """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限、一人一件、排太久拿 fallback，
+    """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限〔滿了拿 fallback〕、一人一件、排太久被擋下來，
     見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
     在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
     鎖內的小呼叫走 Game._quick_client、不進佇列。佇列只認名號；是不是假人只決定排序與上限，不改任何玩家看得到的字。
     left 是呼叫端那一件的總預算還剩幾秒（有總預算的四種呼叫都給）：排隊最久只等 min(llm_queue_wait_seconds, left)，
     一個請求不會排過自己的總預算（審查 M1）；剩下 0 秒就是 0：位子正好空著照常進場（job 自己發現預算用完、不叫模型），
-    要排的話馬上拿退路。沒給（None）就只受 llm_queue_wait_seconds 管。
-    同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，
-    呼叫端不能繼續往下走；沒給就拿 fallback（對話：取消那一輪、潤色：不插句子，本來就無害）。佇列關著沒有這回事，照舊直接叫。"""
+    要排的話馬上被擋下來（QueueTimeout，見下）。沒給（None）就只受 llm_queue_wait_seconds 管。
+    同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2），或排超過等候的時間還沒輪到（佇列丟 QueueTimeout，PM 2026-10-06，
+    跟 Busy 一樣處理）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，呼叫端不能繼續往下走——重複的那一件丟 busy
+    那句，排太久丟 BUSY_QUEUE_TIMEOUT；沒給 busy 就拿 fallback（潤色：不插句子，本來就無害）。
+    佇列關著沒有這回事，照舊直接叫。假人滿了（bot_cap）是佇列直接給 fallback，不丟任何東西。"""
     if game.world.db.writing():
         raise RuntimeError("model_call 要在行動鎖外用：鎖內的小呼叫走 Game._quick_client，不排隊")
     queue = QUEUE
@@ -513,6 +525,10 @@ def model_call(game: Game, job, *, fallback, left: float | None = None, busy: st
         wait = max(0.0, min(wait, left))
     try:
         return queue.run(p.name.casefold(), job, fallback=fallback, bot=p.bot is not None, wait=wait)
+    except QueueTimeout:  # 排超過等候的時間還沒輪到（PM 2026-10-06）：跟重複的那一件一樣是拒絕，只是換一句話——不是上一件還在
+        if busy is None:
+            return fallback
+        raise GameError(BUSY_QUEUE_TIMEOUT) from None
     except Busy:
         if busy is None:
             return fallback
@@ -540,8 +556,12 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
       A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
         已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢、排太久時單子裡的 turn 是 None；預算是
+      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢時單子裡的 turn 是 None；預算是
         Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
+        佇列開著、同一個帳號的另一條連線已經在等這個人的回話（FB-077），或排超過等候的時間還沒輪到：跟開爐、隨口應對、大場面一樣
+        被擋下來——丟 GameError（BUSY_DIALOGUE、BUSY_QUEUE_TIMEOUT）、不走 C 段、什麼都不動（不寫紀錄、求見的選單還開著、不扣體力），
+        另一條連線的那一件照常套用。以前這種情況拿 cancelled 先進鎖，當成「生成不出對話」寫一行告辭、把選單收掉，之後那一件的回話
+        重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
     這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
     started = _monotonic()
@@ -561,7 +581,7 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
             return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
         return companion_agent.prepare_turn(client, request)
 
-    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started))
+    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started), busy=BUSY_DIALOGUE)
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -587,7 +607,8 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
         一般的仗不能每一下都多搶一次行動鎖（計畫三 G14）。是大場面就拿到單子、存檔（不然 C 段進鎖重讀就把同步的結果丟了）；
       B（鎖外、很慢）fight_llm.judge（model_call：佇列開著要排隊）：預算是 Config.big_fight_budget_seconds 扣掉 A 段（含等鎖）
         與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；回傳 PreparedFight（備料的單子加判讀），叫不動、
-        太慢、排太久時判讀是 None——單子照樣帶著，等判讀的時候這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+        太慢時判讀是 None——單子照樣帶著，等判讀的時候這個選項沒了（人被另一個分頁帶走），C 段才說得出是哪一仗沒打成；
+        排太久沒輪到、或同一個人已經有一件（model_call 的 busy），不走 C 段：丟 GameError、這一仗不打（BUSY_QUEUE_TIMEOUT、BUSY_FIGHT）；
       C 由呼叫端交給 Game.choose(fight=...)，引擎進鎖後重驗再套用（判讀是 None 也照樣打，優勢 0；選項已經不在就不打，
         回一句 FIGHT_LEFT／FIGHT_CHANGED，見 api_choose）。
     鎖內任何一步都不叫模型；鎖外這一段不歸鎖內的模型上限與斷路器管（跟對話、開爐取名一樣）。"""
@@ -637,7 +658,8 @@ def prepare_forge(
       A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
         不然 C 段進鎖重讀就把它丟了；
       B（鎖外、很慢）naming.generate（model_call：佇列開著要排隊）：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）
-        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；用完、排太久就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
+        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；用完（輪到了、預算已經沒了）就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
+        排太久沒輪到被擋下來（BUSY_QUEUE_TIMEOUT，PM 2026-10-06），跟同一個人的第二件一樣丟 GameError、不走 C 段；
       C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式（bot_runner._name_and_apply）不經過 HTTP，
     照樣走這三段：A 是 Game.forge_request(named_outside=True) 在 action_lock 裡，B 是它自己的 client 在鎖外叫 naming.generate
@@ -676,7 +698,8 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str
 def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
-      B（鎖外、很慢）請模型評這個做法的成功率（model_call：佇列開著要排隊），失敗、太慢、排太久一律 40；預算是
+      B（鎖外、很慢）請模型評這個做法的成功率（model_call：佇列開著要排隊），模型失敗、太慢一律 40；排太久沒輪到被擋下來
+        （BUSY_QUEUE_TIMEOUT，PM 2026-10-06，跟同一個人的第二件一樣）：丟 GameError、不擲骰、不套用任何東西，不是 40；預算是
         Config.free_text_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間（見 within_budget）；
       C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
       D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
@@ -752,7 +775,7 @@ def _main_view_body(game: Game) -> dict:
         "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
         # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是本週大事（江湖頁那排小標「大事」點開的面板；休季是結算卡）上已經有全文的大事，
         # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
-        "now": game.battle_extra_html() if card is not None else game.now_entry_html(),
+        "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),

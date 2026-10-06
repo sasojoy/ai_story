@@ -1,4 +1,4 @@
-"""LLM 佇列（線上架構設計 5.2）：真人先、假人有上限、一人一件、排太久拿退路、看得到前面幾件。"""
+"""LLM 佇列（線上架構設計 5.2）：真人先、假人有上限（滿了拿退路）、一人一件（第二件丟 Busy）、排太久丟 QueueTimeout（也是拒絕）、看得到前面幾件。"""
 import threading
 import time
 
@@ -84,14 +84,42 @@ def test_bot_cap_full_means_fallback():
     holder.join(2)
 
 
-def test_waiting_too_long_gives_the_fallback_without_calling():
-    """排超過 wait 秒：拿退路、不叫模型，位置讓出來（Review Focus 2）。"""
+def test_waiting_too_long_is_refused_without_calling_and_gives_no_fallback():
+    """排超過 wait 秒：不叫模型，位置讓出來（Review Focus 2）；PM 2026-10-06 起不再給退路，丟 QueueTimeout，跟重複的那一件
+    （Busy）一樣是拒絕——退路（評分 40、首次取名用退路字表）是一個結果，排太久的人沒被服務到、沒道理拿一個結果，再試一次就好。"""
     queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
     started, release, holder, _ = _hold(queue, "甲")
     assert started.wait(2)
     called = []
-    assert queue.run("乙", lambda: called.append(1), fallback="退路", wait=0.05) == "退路"
-    assert called == [] and queue.position("乙") is None
+    with pytest.raises(llm_queue.QueueTimeout):
+        queue.run("乙", lambda: called.append(1), fallback="退路", wait=0.05)
+    assert called == [] and queue.position("乙") is None and queue.snapshot() == {"running": 1, "waiting": 0}
+    release.set()
+    holder.join(2)
+    assert queue.run("乙", lambda: "再來一件", fallback="退路") == "再來一件"  # 票讓出來了，乙的下一件照常排得進去
+
+
+def test_a_timeout_is_a_refusal_like_busy_but_a_duplicate_is_not_a_timeout():
+    """QueueTimeout 是 Busy 的一種（呼叫端把兩種都當拒絕）；反過來重複的那一件丟的是 Busy 本身，不是 QueueTimeout
+    （呼叫端要分得出「上一件還在跑」與「排太久」）。"""
+    assert issubclass(llm_queue.QueueTimeout, llm_queue.Busy)
+    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
+    started, release, holder, _ = _hold(queue, "甲")
+    assert started.wait(2)
+    with pytest.raises(llm_queue.Busy) as duplicate:
+        queue.run("甲", lambda: None, fallback="退路")
+    assert type(duplicate.value) is llm_queue.Busy
+    release.set()
+    holder.join(2)
+
+
+def test_a_bot_that_waits_too_long_is_refused_like_a_human():
+    """假人排太久也是同一條路（佇列只管輪到誰，不改玩家看得到的字；假人與真人在這裡看不出差別）。"""
+    queue = llm_queue.LlmQueue(slots=1, bot_cap=2)
+    started, release, holder, _ = _hold(queue, "甲")
+    assert started.wait(2)
+    with pytest.raises(llm_queue.QueueTimeout):
+        queue.run("假人乙", lambda: None, fallback="退路", bot=True, wait=0.05)
     release.set()
     holder.join(2)
 
