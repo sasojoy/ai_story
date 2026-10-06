@@ -17,6 +17,7 @@ from tianxia.engine import Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import Effect, FigureDef, Location, PromotionDef, ThirdParty
 from tianxia.models import ExploreMix
+from tianxia.rules import world_trend_value
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
 from tianxia.world_state import season_length_days
@@ -2358,6 +2359,116 @@ def test_only_warlords_left_in_the_field_end_the_battle_with_the_configured_cap(
     ended, msgs = game._run_battle_tick(definition)
     assert ended.phase == "ended" and ended.third_push == 4
     assert "兩軍相持之際，地方上有人趁亂坐大。" in msgs
+
+
+def _ended_with_push(game, definition, push, unfinished=False):
+    """收場的一場決戰（沒有真的打）：third_push 是收場時算好的豪強推動。"""
+    battle = battle_instance.start_muster(definition, now=0.0)
+    battle.phase, battle.third_push, battle.unfinished = "ended", push, unfinished
+    battle.outcome_title, battle.outcome_text = "收場", "戰罷。"
+    return battle
+
+
+def test_the_warlord_push_lands_on_the_season(game):
+    definition = _as_warlord(game)
+    trend = definition.third.trend
+    before = world_trend_value(game.world.get_season(), game.content, trend)
+    game._apply_battle_outcome(_ended_with_push(game, definition, 3))
+    assert game.world.get_season().trends[trend] == min(100, before + 3)
+    assert game.state.world.trends[trend] == min(100, before + 3)  # 自己手上那一份也跟著（收尾的存檔不會蓋掉）
+
+
+def test_the_warlord_push_stops_at_one_hundred(game):
+    definition = _as_warlord(game)
+    trend = definition.third.trend
+    game.world.mutate_season(lambda season: season.trends.__setitem__(trend, 97))
+    game.state.world = game.world.get_season()
+    game._apply_battle_outcome(_ended_with_push(game, definition, 10))
+    assert game.world.get_season().trends[trend] == 100 and game.state.world.trends[trend] == 100
+
+
+def test_an_unfinished_battle_pushes_no_warlords(game):
+    """Review Focus 5：季終沒打完收起來的決戰不推割據。"""
+    definition = _as_warlord(game)
+    trend = definition.third.trend
+    before = world_trend_value(game.world.get_season(), game.content, trend)
+    game._apply_battle_outcome(_ended_with_push(game, definition, 3, unfinished=True))
+    assert world_trend_value(game.world.get_season(), game.content, trend) == before
+
+
+def test_a_battle_without_a_third_side_or_without_a_push_leaves_the_warlord_trend_alone(game):
+    definition = _as_warlord(game)
+    trend = definition.third.trend
+    before = world_trend_value(game.world.get_season(), game.content, trend)
+    game._apply_battle_outcome(_ended_with_push(game, definition, 0))  # 豪強這一場沒有收穫
+    definition.third = None
+    game._apply_battle_outcome(_ended_with_push(game, definition, 3))  # 沒有第三方的決戰，third_push 本來就沒有意義
+    assert world_trend_value(game.world.get_season(), game.content, trend) == before
+
+
+def test_a_timetable_showdown_also_pushes_the_warlords(content, game):
+    """第一季的時刻表決戰走 _settle_showdown、不套保底的大勢變化，豪強那一份要另外推。"""
+    definition = _as_warlord(game)
+    definition.timetable_event, definition.defender = "no_such_event", "guan"  # 時刻表找不到那一格：_settle_showdown 只換標題
+    _season_one_on(content, game)
+    trend = definition.third.trend
+    before = world_trend_value(game.world.get_season(), game.content, trend)
+    game._apply_battle_outcome(_ended_with_push(game, definition, 3))
+    assert game.world.get_season().trends[trend] == min(100, before + 3)
+    assert game.state.world.trends[trend] == min(100, before + 3)
+
+
+def test_the_warlord_push_shows_in_every_fighters_report(game):
+    """戰報的大勢變化列出割據的增減（第一季開關關著時是帶正負號的數字）；兩軍與豪強的人都看得到這一場讓割據動了。"""
+    definition = _as_warlord(game)
+    me = battle_instance.BattleParticipant(name=game.state.player.name, faction="haoqiang", neili=100.0, neili_cap=100.0)
+    game._file_showdown(_ended_with_push(game, definition, 3), me, None)
+    assert game.state.journal[0].changes == ["寇亂 +3"] and game.state.battles[0].changes == ["寇亂 +3"]
+    foe = battle_instance.BattleParticipant(name=game.state.player.name, faction="guan", neili=100.0, neili_cap=100.0)
+    game._file_showdown(_ended_with_push(game, definition, 3), foe, None)
+    assert game.state.journal[0].changes == ["寇亂 +3"]
+
+
+def test_a_battle_with_no_push_adds_nothing_to_the_report(game):
+    definition = _as_warlord(game)
+    me = battle_instance.BattleParticipant(name=game.state.player.name, faction="haoqiang", neili=100.0, neili_cap=100.0)
+    game._file_showdown(_ended_with_push(game, definition, 0), me, None)
+    assert game.state.journal[0].changes == []
+
+
+def test_a_real_timetable_showdown_with_a_warlord_pushes_geju_and_says_so_in_words(content, world):
+    """第一季整條路：長社火攻照時刻表開、官軍與一位豪強參戰打滿三回合，收場時割據照豪強的收穫推上去，兩邊的戰報都不寫數字
+    （FB-064：機器可讀的標籤，畫出來才換成一句話）。"""
+    game = _showdown_game(content, world)
+    definition = content.battles["changshe_fire"]
+    definition.third = ThirdParty(faction="haoqiang", trend="geju")
+    _to_showdown(game, "changshe_fire")
+    warlord = _fighter(content, game, "丙", "haoqiang")
+    before = world_trend_value(world.get_season(), content, "geju")
+    now = game.now
+    with at(game, now), at(warlord, now):
+        game.choose("battle:join:guan")
+        warlord.choose("battle:join:haoqiang")
+    world.mutate_battle(lambda b: b.participants["丙"].scores.update({"奇襲": 300.0, "固守": 300.0}))  # 收穫夠大，不會四捨五入成 0
+    now = world.get_battle().muster_deadline_real
+    for _ in range(100):
+        if world.get_battle().phase == "ended":
+            break
+        with at(game, now), at(warlord, now):
+            game.choose("battle:act:guan_hold")
+            warlord.choose("battle:act:third_grab")
+        now += 1
+    else:
+        raise AssertionError("打了 100 回合還沒收場")
+    (_, ended), = world.ended_battles()
+    push = ended.third_push
+    assert push >= 1
+    assert world.get_season().trends["geju"] == min(100, before + push)
+    for fighter in (game, warlord):
+        fighter.sync(now + 10)
+        report = next(e for e in fighter.state.journal if e.battle_id is not None)
+        assert front_lines.mark("geju", push) in report.changes
+        assert not any(str(push) in c and "割據" in c for c in report.changes)  # 不寫「豪強割據 +N」
 
 
 def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):

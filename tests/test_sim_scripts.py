@@ -68,3 +68,16 @@ def test_the_companion_measure_script_removes_its_temp_folder(tmp_path):
     env = {**os.environ, "TEMP": str(tmp_path), "TMP": str(tmp_path), "TMPDIR": str(tmp_path)}
     subprocess.run([sys.executable, "-c", code], check=True, env=env, cwd=ROOT)
     assert list(tmp_path.glob("measure_companions_*")) == []
+
+
+def test_the_third_party_measure_script_plays_a_whole_battle_and_stays_within_the_cap():
+    """決戰改版 5：量測腳本只量不改；一場打完回傳的是割據推動（0 到 third_cap），同一個種子結果一樣，沒有豪強就是 0。
+    小人數跑一場就好（整個量測要幾秒）。"""
+    measure = _load("measure_third_party")
+    content = measure.load_content(ROOT / "content")
+    definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
+    tuning = content.config.battle
+    pushes = [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
+    assert all(isinstance(p, int) and 0 <= p <= tuning.third_cap for p in pushes)
+    assert pushes == [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
+    assert measure.run(definition, tuning, 6, 6, 0, 0) == 0

@@ -232,8 +232,9 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
 
 def _battle_score(game: Game, arg: str) -> float | None:
     """集結或晚到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照自己每招的份量（乘這一場的氣血狀態）打分數，
-    扣血相對剩下的氣血越重扣分越多（決戰改版一；豪強的兩招在計畫五）。沒有招的選項一律 0。
-    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守分數最高。"""
+    扣血相對剩下的氣血越重扣分越多（決戰改版一）；豪強的兩招同理（決戰改版五）：趁亂搶地盤用奇襲的份量、扣 35，保存實力用
+    固守的份量的一半、扣 10，所以血多時搶地盤、血少了保存實力。沒有招的選項一律 0。
+    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守（豪強是保存實力）分數最高。"""
     kind, _, tag = arg.partition(":")
     if kind in ("join", "join_late"):
         return JOIN_BATTLE_SCORE
@@ -244,11 +245,19 @@ def _battle_score(game: Game, arg: str) -> float | None:
     me = battle.participants.get(game.state.player.name)
     if me is None:
         return 0.0
-    option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
-    if option is None or option.move is None:
-        return 0.0
     tuning = game.content.config.battle
-    return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / max(me.neili, 1.0)
+    hp = max(me.neili, 1.0)
+    if tag in (battle_instance.THIRD_GRAB, battle_instance.THIRD_KEEP):  # 豪強的兩招：只有站第三方的人才有（官軍黃巾的選單上沒有）
+        if not battle_instance.is_third(definition, me):
+            return 0.0
+        grab = tag == battle_instance.THIRD_GRAB
+        move = "奇襲" if grab else "固守"
+        gain = me.scores.get(move, 0.0) * battle_instance.condition(me) * (1.0 if grab else tuning.third_keep_share)
+        return gain / 100 - (tuning.third_grab_damage if grab else tuning.third_keep_damage) / hp
+    option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
+    if option is None or option.move is None:  # 放手一搏等沒有招的：假人不選（free_text 本來就排除）
+        return 0.0
+    return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / hp
 
 
 def _faction(game: Game, faction_id: str) -> FactionDef:

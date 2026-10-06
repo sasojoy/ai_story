@@ -1859,6 +1859,10 @@ class Game:
         if battle.unfinished:
             return
         definition = self.content.battles.get(battle.battle_id)
+        if definition is not None and definition.third is not None and battle.third_push:
+            # 第三方（地方豪強）收場的割據推動：一般收場與時刻表收場都推（時刻表那一支不套保底的大勢變化，所以要在分支之前）
+            self.world.mutate_season(lambda season: self._apply_third_push(season, battle, definition))
+            self._apply_third_push(self.state.world, battle, definition)
         if definition is not None and definition.timetable_event is not None and season_one(self.content, self.state.world):
             self._settle_showdown(battle, definition)
         else:
@@ -1873,6 +1877,14 @@ class Game:
                 self._apply_outcome_trends_and_flags(self.state.world, battle)
             self._deliver_battle_results()
         self._open_waiting_showdown()
+
+    def _apply_third_push(self, season: WorldState, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
+        """第三方收場推的大勢線（戰鬥系統第六節）：一般收場與時刻表收場都推；資料庫那份與記憶體那份共用這一段。
+        battle.third_push 是收場時 battle_instance.settle_third 算好的（最多 Config.battle.third_cap）；季終沒打完收起來的決戰
+        不會走到這裡（_apply_battle_outcome 一開頭就擋掉）。"""
+        trend_id = definition.third.trend
+        season.trends[trend_id] = max(0, min(100, world_trend_value(season, self.content, trend_id) + battle.third_push))
+        recompute_trends(season, self.content)
 
     def _settle_showdown(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
         """時刻表決戰收場（計畫 T8）：照 battle_instance.decide_result 判誰贏、大勝或險勝——這一刻才讀
@@ -2019,6 +2031,8 @@ class Game:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         trends = {t.id: t.name for t in c.scenario.trends}
         moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
+        if definition is not None and definition.third is not None and battle.third_push:  # 割據的增減也列進每個參戰者的戰報
+            moved = {**moved, definition.third.trend: moved.get(definition.third.trend, 0) + battle.third_push}
         # 第一季規則開著時，戰線與豪強割據的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
         # 底下、照看的人的陣營上色，戰報不收（「大勢」那一行不寫，跟遊歷的戰鬥卡片一樣）；上一季的寫進敘事，就直接是那一句話
         # （敘事沒有顏色）。其他的線、開關關著時照舊是帶正負號的數字。

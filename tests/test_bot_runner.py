@@ -11,7 +11,7 @@ from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.models import (
     BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    FactionDef,
+    FactionDef, ThirdParty,
 )
 from tianxia.database import Database
 from tianxia.sqlite_world import open_world
@@ -427,6 +427,31 @@ def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
     assert runner.tick().online == 1  # 出局的那一位不再上線，沒出局的還在
     world.mutate_battle(lambda b: setattr(b, "phase", "ended"))
     assert runner.tick().online == 0  # 戰鬥結束，大家都回到自己的作息
+
+
+def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_do(
+    runner, world, content, clock, monkeypatch,
+):
+    """決戰改版 5（假人的對等）：能站的每一方都算（兩軍加第三方），豪強的假人也擲「趕來參戰」；
+    沒有第三方的決戰照舊只有兩軍的假人趕來。看不出誰是假人：兩邊的假人行為要一樣。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
+    monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看誰算在線
+    content.scenario.factions.append(FactionDef(id="haoqiang", name="地方豪強", join_at=["town"]))
+    content.config.bots_min_per_faction = 1
+    content.config.bot_tick_seconds = 1000
+    assert runner.tick().online == 0
+    characters = open_characters()
+    for state in characters.all(bots_only=True):  # 三個陣營各一位假人，都已投靠
+        state.player.faction = state.player.bot.faction
+        characters.save(state)
+    assert sorted(s.player.faction for s in _bots()) == ["guan", "haoqiang", "huang"]
+    world.start_battle(content.battles["t1"], clock[0])
+    assert runner.tick().online == 2  # 這一場只有兩軍：豪強的假人不趕來
+    world.clear_battle()
+    content.battles["t1"].third = ThirdParty(faction="haoqiang", trend="kou")
+    world.start_battle(content.battles["t1"], clock[0])
+    assert runner.tick().online == 3  # 有第三方：豪強的假人也趕來
 
 
 def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):

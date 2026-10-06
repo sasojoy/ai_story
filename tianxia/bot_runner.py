@@ -17,7 +17,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import bot_policy, server_bots
+from . import battle_instance, bot_policy, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -136,7 +136,7 @@ class BotRunner:
         )
 
     def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 交戰陣營, 已經出局的參戰者名號）；
+        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 能站的陣營＝兩軍加第三方, 已經出局的參戰者名號）；
         沒有或已經結束回傳 None。"""
         battle = self.world.get_battle()
         if battle is None or battle.phase == "ended":
@@ -145,7 +145,7 @@ class BotRunner:
         if definition is None:
             return None
         out = {p.name for p in battle.participants.values() if p.eliminated}
-        return battle.muster_deadline_real, {f.id for f in definition.factions}, out
+        return battle.muster_deadline_real, set(battle_instance.sides(definition)), out  # 兩軍加第三方：豪強的假人也擲趕來參戰
 
     def _fill(self, now: float, report: TickReport) -> None:
         """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。"""

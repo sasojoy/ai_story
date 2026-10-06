@@ -1,7 +1,7 @@
 import random
 
 from conftest import walk_to
-from test_engine import _open_three_move_battle
+from test_engine import _open_three_move_battle, _warlord_in_battle
 from tianxia import battle_instance, bot, bot_policy
 from tianxia.engine import Option
 from tianxia.models import (
@@ -157,6 +157,44 @@ def test_a_bot_scores_its_best_move_highest(game):
     faction = game.world.get_battle().participants[name].faction
     scores = {m: bot_policy._battle_score(game, f"act:{faction}_{c}") for m, c in CODES.items()}
     assert max(scores, key=scores.get) == "奇襲"
+
+
+def test_a_warlord_bot_grabs_when_healthy_and_keeps_when_hurt(game):
+    """決戰改版 5：豪強的兩招也照份量與扣血打分數——血多就搶地盤，血少就保存實力。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))  # 不看開局武學的屬性
+    assert bot_policy._battle_score(game, "act:third_grab") > bot_policy._battle_score(game, "act:third_keep")
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", 40.0))
+    assert bot_policy._battle_score(game, "act:third_keep") > bot_policy._battle_score(game, "act:third_grab")
+
+
+def test_a_warlord_bots_scores_follow_the_tuning_numbers(game):
+    """份量在扣血之前算、保存實力只算一半：搶地盤 100×1.0÷100 − 35÷氣血，保存實力 100×0.5÷100 − 10÷氣血。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({m: 100.0 for m in MOVES}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 0.35)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 0.1)) < 1e-9
+
+
+def test_a_warlord_bot_takes_a_turn_in_the_battle_and_picks_one_of_its_two_moves(content, game):
+    content.config.bot_strength = 1.0
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: b.participants[name].scores.update({m: 100.0 for m in MOVES}))
+    bot_policy.take_turn(game, _profile("haoqiang"), random.Random(0))
+    after = game.world.get_battle()  # 場上只有它一個人：出完招這一回合就結算了
+    assert after.round_number == 1 and after.participants[name].last_result == "趁亂搶地盤"  # 滿血：搶地盤
+
+
+def test_an_army_bot_never_scores_the_warlords_moves(game):
+    """兩招只在豪強自己的選單上；官軍的人拿到那個 tag（不會發生）也不打分數。"""
+    battle, definition = _open_three_move_battle(game)
+    assert bot_policy._battle_score(game, f"act:{battle_instance.THIRD_GRAB}") == 0.0
 
 
 def test_a_bot_that_is_nearly_down_prefers_the_cheaper_move(game):
