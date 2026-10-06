@@ -12,10 +12,10 @@ from unittest import mock
 
 import pytest
 
-from tianxia import defection, foreshadow, opportunities, rules
+from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
-from tianxia.state import PlayerState, Plot, WorldState
+from tianxia.state import BotProfile, FigureState, PlayerState, Plot, WorldState
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -210,3 +210,250 @@ def test_an_opportunity_must_write_only_its_own_block(real):
     _opp(real, "huang_jiazi").puzzle = _opp(real, "guan_three_plans").puzzle  # plot 卻多寫了 puzzle
     with pytest.raises(ContentError, match="huang_jiazi：只能寫 plot 那一塊"):
         validate(real)
+
+
+# ── Task 2：拼圖型（平亂三策、地人名）─────────────────────────────────
+
+
+def _talk_to(game, character, affinity):
+    p = game.state.player
+    p.pending_companion, p.affinities = character, {character: affinity}
+
+
+def _at_day(game, day, hour=12):
+    w = game.state.world
+    w.time = (day * 24 + hour) * calendar.HOUR / calendar.cal_scale(game.content, w)
+
+
+def _option(game, option_id):
+    return next((o for o in game.options(odds=False) if o.id == option_id), None)
+
+
+def test_ask_a_general_for_his_plan(on):
+    game = _game(on, faction="guan", at="changshe")
+    _talk_to(game, "huangfusong", 5)
+    assert "talk:opp:guan_three_plans:yingru" not in _ids(game)  # 30 換算成 6
+    _talk_to(game, "huangfusong", 6)
+    assert _option(game, "talk:opp:guan_three_plans:yingru").label == "平亂"
+    msgs = game.choose("talk:opp:guan_three_plans:yingru")
+    assert msgs == ["皇甫嵩說：「賊依草，可火；賊依城，可困。」"]
+    assert game.state.player.opp_pieces == {"guan_three_plans": ["yingru"]}
+    assert "talk:opp:guan_three_plans:yingru" not in _ids(game)  # 拿過就不再問
+
+
+def test_plan_comes_from_whoever_holds_the_front(on):
+    game = _game(on, faction="guan", at="changshe")
+    w = game.state.world
+    hfs = figures.state_of(game.state, on, "huangfusong")
+    w.figures["huangfusong"] = hfs.model_copy(update={"front": "jizhou", "location": "luzhi_camp"})  # 重挫轉冀州
+    _talk_to(game, "huangfusong", 99)
+    assert not any(i.startswith("talk:opp:guan_three_plans") for i in _ids(game))  # 他不再是潁川那一策的人
+    _talk_to(game, "zhujun", 6)
+    assert game.choose("talk:opp:guan_three_plans:yingru") == ["朱儁說：「賊眾烏合，先分其勢，再各個擊破。」"]
+
+
+def test_present_three_plans_at_the_grand_generals_office(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    game.state.player.opp_pieces = {"guan_three_plans": ["yingru", "jizhou"]}
+    assert "opp:present:guan_three_plans" not in _ids(game)  # 還缺一策
+    game.state.player.opp_pieces["guan_three_plans"].append("nanyang")
+    option = _option(game, "opp:present:guan_three_plans")
+    assert option.label == "把三策呈給何進"
+    msgs = game.choose("opp:present:guan_three_plans")
+    assert msgs[0].startswith("何進把三策翻來覆去看了幾遍") and msgs[-1] == "（機緣「平亂三策」完成。）"
+
+
+def test_land_deed_costs_silver(on):
+    game = _game(on, faction="haoqiang", at="haozu_fort")
+    game.state.player.stats["silver"] = 30
+    option = _option(game, "opp:piece:hao_land_people_name:land")
+    assert not option.enabled  # 銀兩不夠
+    game.state.player.stats["silver"] = 60
+    msgs = game.choose("opp:piece:hao_land_people_name:land")
+    assert msgs[0].startswith("塢堡主收了銀子") and game.state.player.stats["silver"] == 10
+    assert game.state.player.opp_pieces == {"hao_land_people_name": ["land"]}
+
+
+def test_register_needs_a_check(on):
+    game = _game(on, faction="haoqiang", at="zhuo_militia_hall")
+    _at_day(game, 3)
+    with _always(False):
+        assert game.choose("opp:piece:hao_land_people_name:people")[0].startswith("名冊太亂")
+    _at_day(game, 4)  # 計畫的測試在同一天接著重試，可是失敗的那一處當天不能再試（改天再來）：換一天再按
+    with _always(True):
+        game.choose("opp:piece:hao_land_people_name:people")
+    assert game.state.player.opp_pieces == {"hao_land_people_name": ["people"]}
+
+
+def test_patron_receives_the_three(on):
+    game = _game(on, faction="haoqiang", at="qiao_county")
+    p = game.state.player
+    p.opp_pieces, p.patron = {"hao_land_people_name": ["land", "people", "name"]}, "cao"
+    option = _option(game, "opp:present:hao_land_people_name")
+    assert option.label == "把地契、戶籍與鄉望交給曹操"
+    p.location = "dajiangjun_fu"  # 袁紹那裡：靠山是曹，不收
+    assert "opp:present:hao_land_people_name" not in _ids(game)
+
+
+def test_any_patron_before_one_is_chosen(on):
+    game = _game(on, faction="haoqiang", at="loushang_village")
+    game.state.player.opp_pieces = {"hao_land_people_name": ["land", "people", "name"]}
+    msgs = game.choose("opp:present:hao_land_people_name")
+    assert msgs[0].startswith("劉備握著你的手") and msgs[-1] == "（機緣「地、人、名」完成。）"
+
+
+# ── Task 2 補的：計畫沒寫、這裡多測的（試過一天一次、湊齊後收掉、長史代收、假人不碰、標題）──
+
+
+def _profile(faction="guan"):
+    return BotProfile(personality="普通", seed=1, faction=faction, season_number=1)
+
+
+def test_only_the_holder_of_a_front_gives_its_plan(on):
+    game = _game(on, faction="guan", at="changshe")
+    _talk_to(game, "zhujun", 99)  # 朱儁在潁川，但潁川那一策問的是皇甫嵩（他還在那條戰線上）
+    assert not any(i.startswith("talk:opp:guan_three_plans") for i in _ids(game))
+    _talk_to(game, "huangfusong", 99)  # 冀州問盧植、南陽問孫堅：皇甫嵩只有潁川那一策
+    assert [i for i in _ids(game) if i.startswith("talk:opp:guan_three_plans")] == ["talk:opp:guan_three_plans:yingru"]
+
+
+def test_nobody_to_ask_when_the_front_has_no_commander(on):
+    game = _game(on, faction="guan", at="changshe")
+    for fid in ("huangfusong", "zhujun"):  # 潁川的官軍將領都下獄了
+        game.state.world.figures[fid] = figures.state_of(game.state, on, fid).model_copy(update={"status": "jailed"})
+    _talk_to(game, "zhujun", 99)
+    assert not any(i.startswith("talk:opp:guan_three_plans:yingru") for i in _ids(game))
+
+
+def test_taking_a_plan_is_free_and_leaves_the_talk_open(on):
+    game = _game(on, faction="guan", at="changshe")
+    _talk_to(game, "huangfusong", 6)
+    p, rumors = game.state.player, len(game.state.world.rumors)
+    before = p.stamina
+    assert game.dialogue_request("talk:opp:guan_three_plans:yingru") is None  # 不叫模型（server.prepare_dialogue 靠它判斷）
+    game.choose("talk:opp:guan_three_plans:yingru")
+    assert p.stamina == before and p.pending_companion == "huangfusong"  # 不扣體力、對話還開著
+    assert len(game.state.world.rumors) == rumors  # 拼圖不發任何傳聞
+    assert game.choose("talk:opp:guan_three_plans:yingru") == ["（此刻無法這麼做。）"]  # 拿過了，選項不在了
+
+
+def test_a_stand_in_receives_the_plans_when_he_jin_is_away(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    game.state.world.figures["hejin"] = figures.state_of(game.state, on, "hejin").model_copy(update={"status": "jailed"})
+    game.state.player.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
+    assert _option(game, "opp:present:guan_three_plans").label == "把三策呈給大將軍府的長史"
+    assert game.choose("opp:present:guan_three_plans")[0].startswith("大將軍府的長史把三策翻來覆去看了幾遍")
+
+
+def test_the_plans_go_to_the_office_only(on):
+    game = _game(on, faction="guan", at="changshe")
+    game.state.player.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
+    assert "opp:present:guan_three_plans" not in _ids(game)
+
+
+def test_pieces_are_cleared_once_it_is_done(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    p = game.state.player
+    p.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
+    game.choose("opp:present:guan_three_plans")
+    assert p.opp_pieces == {} and p.opp_done == ["guan_three_plans"]
+    assert "opp:present:guan_three_plans" not in _ids(game)  # 每種只完成一次
+
+
+def test_pieces_are_offered_only_at_their_own_place(on):
+    game = _game(on, faction="haoqiang", at="cao_manor")
+    ids = _ids(game)
+    assert "opp:piece:hao_land_people_name:name" in ids
+    assert "opp:piece:hao_land_people_name:land" not in ids and "opp:piece:hao_land_people_name:people" not in ids
+
+
+def test_a_held_piece_is_not_bought_twice(on):
+    game = _game(on, faction="haoqiang", at="haozu_fort")
+    p = game.state.player
+    p.stats["silver"] = 100
+    game.choose("opp:piece:hao_land_people_name:land")
+    assert "opp:piece:hao_land_people_name:land" not in _ids(game) and p.stats["silver"] == 50
+    stale = opportunities.act(game.state, on, game.world, "piece:hao_land_people_name:land", random.Random(0))
+    assert stale == ["（此刻無法這麼做。）"] and p.stats["silver"] == 50  # 過時的按鍵不會再扣一次
+
+
+def test_a_failed_check_piece_waits_for_the_next_day(on):
+    game = _game(on, faction="haoqiang", at="zhuo_militia_hall")
+    p = game.state.player
+    _at_day(game, 3)
+    before = p.stamina
+    option = _option(game, "opp:piece:hao_land_people_name:people")
+    assert option.enabled and option.label == "抄錄結社的鄉勇名冊（體力 10）"
+    with _always(False):
+        game.choose("opp:piece:hao_land_people_name:people")
+    assert p.stamina == before - 10  # 失敗也花體力
+    option = _option(game, "opp:piece:hao_land_people_name:people")
+    assert not option.enabled and "今天已經試過" in option.label
+    with _always(True):  # 當天直接按也不行（選單的 enabled 之外，act 自己也擋）
+        assert game.choose("opp:piece:hao_land_people_name:people") == ["（此刻無法這麼做。）"]
+    assert p.opp_pieces == {}
+    _at_day(game, 4)
+    assert _option(game, "opp:piece:hao_land_people_name:people").enabled
+
+
+def test_a_check_piece_needs_the_stamina(on):
+    game = _game(on, faction="haoqiang", at="cao_manor")
+    game.state.player.stamina = 9
+    assert not _option(game, "opp:piece:hao_land_people_name:name").enabled
+
+
+def test_nothing_with_the_switch_off(real):
+    off = _game(real, faction="haoqiang", at="haozu_fort")  # 開關關著：一個選項都沒有
+    assert not any(i.startswith("opp:") for i in _ids(off))
+    asker = _game(real, faction="guan", at="changshe")
+    _talk_to(asker, "huangfusong", 99)
+    assert not any(i.startswith("talk:opp:") for i in _ids(asker))
+
+
+def test_nothing_without_the_rank_or_the_faction(on):
+    young = _game(on, faction="haoqiang", at="haozu_fort", rank=2)  # 第 4 階的要先是第 3 階
+    assert "opp:piece:hao_land_people_name:land" not in _ids(young)
+    other = _game(on, faction="guan", at="haozu_fort")  # 別的陣營看不到
+    assert not any(i.startswith("opp:piece:") for i in _ids(other))
+
+
+def test_a_piece_action_is_titled_with_the_opportunity(on):
+    game = _game(on, faction="haoqiang", at="haozu_fort")
+    game.state.player.stats["silver"] = 100
+    game.choose("opp:piece:hao_land_people_name:land")
+    assert game.state.journal[0].title == "機緣・地、人、名"  # 紀錄最新的放最前面
+    game.state.player.opp_pieces = {"hao_land_people_name": ["land", "people", "name"]}
+    game.state.player.location = "loushang_village"
+    game.choose("opp:present:hao_land_people_name")
+    assert game.state.journal[0].title == "機緣・地、人、名" and len(game.state.journal) >= 3
+
+
+def test_bots_skip_the_puzzle_options(on):
+    game = _game(on, faction="haoqiang", at="haozu_fort")
+    game.state.player.stats["silver"] = 100
+    piece = _option(game, "opp:piece:hao_land_people_name:land")
+    assert bot.pick(game, [piece], random.Random(0)) is None
+    assert bot_policy.score(game, piece, _profile("haoqiang")) is None
+    game.state.player.opp_pieces = {"hao_land_people_name": ["land", "people", "name"]}
+    game.state.player.location = "loushang_village"
+    present = _option(game, "opp:present:hao_land_people_name")
+    assert bot.pick(game, [present], random.Random(0)) is None
+    assert bot_policy.score(game, present, _profile("haoqiang")) is None
+    asker = _game(on, faction="guan", at="changshe")
+    _talk_to(asker, "huangfusong", 6)
+    ask = _option(asker, "talk:opp:guan_three_plans:yingru")
+    assert bot.pick(asker, [ask], random.Random(0)) is None
+    assert bot_policy.score(asker, ask, _profile("guan")) is None
+
+
+def test_server_bots_never_take_a_puzzle_turn(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    p = game.state.player
+    chosen = []
+    real_choose = game.choose
+    with mock.patch.object(game, "choose", side_effect=lambda option_id, *a, **k: chosen.append(option_id) or real_choose(option_id, *a, **k)):
+        for seed in range(40):
+            p.stamina, p.location, p.pending_companion = 100, "dajiangjun_fu", None
+            p.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
+            bot_policy.take_turn(game, _profile(), random.Random(seed))
+    assert chosen and not any(i.startswith(("opp:", "talk:opp:")) for i in chosen)

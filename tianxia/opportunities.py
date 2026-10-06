@@ -2,14 +2,17 @@
 
 這一份管：誰做得了（自己陣營；第 4 階要已經是第 3 階）、情誼型的對話話題、累積型的計數與交付、天時地利型的
 時段與檢定、線索。完成只寫一句個人敘事，不發任何傳聞。需求量照伏筆的分檔換算（foreshadow.need）。
-只有第一季的規則開著才有（rules.season_one）。拼圖、推理、集體密謀在計畫乙二。"""
+只有第一季的規則開著才有（rules.season_one）。
+
+乙二加三種第 4 階的：拼圖型（問將領拿一策、或在地點付錢／過檢定拿一樣東西，湊齊交給人）、推理型（由本季天機
+決定嫌疑人、聽特徵、最後指認）、集體密謀型（發起、響應、各處、結算）。第 4 階的新句子是初稿，待 joy 潤。"""
 from __future__ import annotations
 
 import random
 
 from . import calendar, figures, foreshadow, ranks, timetable
 from .journal import fragment_line
-from .models import Content, OppDef, Rank2Action
+from .models import Content, OppDef, OppPiece, Rank2Action
 from .rules import GEJU, change_trend, front_of, roll_check, season_one
 from .state import GameState, PlayerState
 
@@ -55,6 +58,7 @@ def _complete(state: GameState, opp: OppDef) -> list[str]:
     p.opp_counts.pop(opp.id, None)
     p.opp_items.pop(opp.id, None)
     p.opp_fronts.pop(opp.id, None)
+    p.opp_pieces.pop(opp.id, None)
     return [DONE.format(name=opp.name)]
 
 
@@ -70,18 +74,88 @@ def _topics(state: GameState, content: Content, companion_id: str) -> list[OppDe
 
 
 def talk_options(state: GameState, content: Content, companion_id: str) -> list:
-    """對話選單上的話題 talk:opp:<id>（標籤是話題）：自己陣營的情誼型、情誼夠、還沒完成、在跟的就是這位才有。"""
+    """對話選單上的話題（標籤是話題）：自己陣營的、還沒完成、在跟的就是這位才有。
+    情誼型 talk:opp:<機緣>（情誼夠）；拼圖型 talk:opp:<機緣>:<東西 key>（此刻要問的正是這位、情誼夠、還沒拿）。"""
     from .engine import Option  # noqa: PLC0415  延後 import：engine → opportunities
 
-    return [Option(id=f"talk:opp:{o.id}", label=o.bond.topic) for o in _topics(state, content, companion_id)]
+    opts = [Option(id=f"talk:opp:{o.id}", label=o.bond.topic) for o in _topics(state, content, companion_id)]
+    opts += [Option(id=f"talk:opp:{o.id}:{piece.key}", label=piece.topic)
+             for o, piece in _ask_pieces(state, content, companion_id)]
+    return opts
 
 
-def hear_topic(state: GameState, content: Content, companion_id: str, opp_id: str) -> list[str]:
-    """按了話題：回他說的話（不經模型、不扣體力、不算對話輪數），完成這一種機緣。選項不在了就回空串列。"""
-    for o in _topics(state, content, companion_id):
-        if o.id == opp_id:
-            return [o.bond.text] + _complete(state, o)
+def hear_topic(state: GameState, content: Content, companion_id: str, arg: str) -> list[str]:
+    """按了話題（arg 是「機緣」或「機緣:東西」）：情誼型說完就完成；拼圖型拿到那一樣東西（照說話的人挑那一句，
+    不完成機緣，湊齊了去交）。不經模型、不扣體力、不算對話輪數。選項不在了就回空串列。"""
+    opp_id, _, key = arg.partition(":")
+    if not key:
+        for o in _topics(state, content, companion_id):
+            if o.id == opp_id:
+                return [o.bond.text] + _complete(state, o)
+        return []
+    fid = figures.of_character(content, companion_id)
+    for o, piece in _ask_pieces(state, content, companion_id):
+        if o.id == opp_id and piece.key == key:
+            _give_piece(state, o, key)
+            return [piece.lines.get(fid, piece.lines.get("*", ""))]
     return []
+
+
+# ── 拼圖型 ─────────────────────────────────
+
+
+def _speaker_of(state: GameState, content: Content, o: OppDef, piece: OppPiece) -> str | None:
+    """這一樣東西此刻要問誰（大勢人物 id）：原本那位在那條戰線上就是他，不在（重創、重挫、退場、下獄）就是那時
+    己方的主將；都沒有是 None。"""
+    if figures.on_front(state, piece.figure, piece.front) and figures.state_of(state, content, piece.figure).status == "active":
+        return piece.figure
+    return figures.commander(state, content, piece.front, o.faction)
+
+
+def _has_piece(state: GameState, o: OppDef, key: str) -> bool:
+    return key in state.player.opp_pieces.get(o.id, [])
+
+
+def _give_piece(state: GameState, o: OppDef, key: str) -> None:
+    state.player.opp_pieces.setdefault(o.id, []).append(key)
+
+
+def _ask_pieces(state: GameState, content: Content, companion_id: str) -> list[tuple[OppDef, OppPiece]]:
+    """對話時問得到的東西：拼圖型、how 是 ask、還沒拿、此刻要問的正是這位（對話人物 → 大勢人物 id）、情誼夠。"""
+    fid = figures.of_character(content, companion_id)
+    out = []
+    for o in open_ones(state, content):
+        if o.kind != "puzzle":
+            continue
+        for piece in o.puzzle.pieces:
+            if piece.how != "ask" or _has_piece(state, o, piece.key):
+                continue
+            if fid is not None and _speaker_of(state, content, o, piece) == fid \
+                    and state.player.affinities.get(companion_id, 0) >= foreshadow.need(content, piece.affinity):
+                out.append((o, piece))
+    return out
+
+
+def _present_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
+    """湊齊了、此刻在交得了的地方：回傳 {人物}；交不了是 None。官軍：固定地點，figure 在場寫他、不在寫 stand_in。
+    豪強：照靠山（還沒定的話三位任一位），在那位的地點。"""
+    pr = o.puzzle.present
+    if not all(_has_piece(state, o, piece.key) for piece in o.puzzle.pieces):
+        return None
+    if pr.at is not None:
+        if loc_id != pr.at:
+            return None
+        return figures.name_of(content, pr.figure) if pr.figure in figures.present_at(state, content, loc_id) else pr.stand_in
+    for patron in _patrons_of(state, o):
+        if patron.at == loc_id:
+            return content.characters[patron.character].name
+    return None
+
+
+def _patrons_of(state: GameState, o: OppDef) -> list:
+    """會收這份東西的靠山：玩家選定了的那一位；還沒選（計畫丙升第 3 階時才寫入）就是三位任一位。"""
+    patrons = o.puzzle.present.patrons
+    return [patrons[state.player.patron]] if state.player.patron in patrons else list(patrons.values())
 
 
 # ── 第 2 階行動（設計 5.5）─────────────────────────────────
@@ -258,7 +332,8 @@ def _deliver_done(o: OppDef) -> str:
 
 
 def place_options(state: GameState, content: Content, loc_id: str) -> list:
-    """閒著的選單上，這個地點做得了的機緣：交東西（opp:deliver:<id>）、天時地利型此刻能做的（opp:try:<id>）。"""
+    """閒著的選單上，這個地點做得了的機緣：交東西（opp:deliver:<id>）、天時地利型此刻能做的（opp:try:<id>）；
+    拼圖型在這裡拿得到的東西（opp:piece:<id>:<key>，付錢或過檢定）與湊齊後交的（opp:present:<id>）。"""
     from .engine import Option  # noqa: PLC0415
 
     opts = []
@@ -277,6 +352,22 @@ def place_options(state: GameState, content: Content, loc_id: str) -> list:
                                        enabled=state.player.stamina >= cost))
                 else:
                     opts.append(Option(id=f"opp:try:{o.id}", enabled=False, label=f"{label}（這一回已經試過，下一回再來）"))
+        if o.kind == "puzzle":
+            for piece in o.puzzle.pieces:
+                if piece.how == "ask" or piece.at != loc_id or _has_piece(state, o, piece.key):
+                    continue
+                if piece.how == "silver":
+                    enabled = state.player.stats.get("silver", 0) >= piece.silver
+                    opts.append(Option(id=f"opp:piece:{o.id}:{piece.key}", label=piece.label, enabled=enabled))
+                else:
+                    tried = state.player.opp_tried.get(f"{o.id}:{piece.key}") == _today(state, content)
+                    opts.append(Option(
+                        id=f"opp:piece:{o.id}:{piece.key}", enabled=not tried and state.player.stamina >= piece.stamina,
+                        label=f"{piece.label}（今天已經試過，改天再來）" if tried else f"{piece.label}（體力 {piece.stamina}）",
+                    ))
+            who = _present_here(state, content, o, loc_id)
+            if who is not None:
+                opts.append(Option(id=f"opp:present:{o.id}", label=o.puzzle.present.label.replace("{人物}", who)))
     return opts
 
 
@@ -297,8 +388,10 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
 
 
 def act(state: GameState, content: Content, world, arg: str, rng: random.Random) -> list[str]:
-    """閒著的選單上按了機緣的選項（opp:<arg>）：deliver:<id> 交東西、try:<id> 試天時地利型。選項不在了回「此刻無法」。"""
-    what, _, opp_id = arg.partition(":")
+    """閒著的選單上按了機緣的選項（opp:<arg>）：deliver:<id> 交東西、try:<id> 試天時地利型、piece:<id>:<key> 拿拼圖的
+    一樣東西、present:<id> 把湊齊的拼圖交出去。選項不在了回「此刻無法」。"""
+    what, _, rest = arg.partition(":")
+    opp_id, _, key = rest.partition(":")
     o = next((x for x in open_ones(state, content) if x.id == opp_id), None)
     loc_id = state.player.location
     if o is None:
@@ -326,11 +419,40 @@ def act(state: GameState, content: Content, world, arg: str, rng: random.Random)
             state.player.opp_fronts[o.id] = t.deliver_front
             return msgs
         return msgs + _complete(state, o)
+    if what == "piece" and o.kind == "puzzle":
+        piece = next((x for x in o.puzzle.pieces if x.key == key), None)
+        if piece is None or piece.how == "ask" or piece.at != loc_id or _has_piece(state, o, key):
+            return [NOT_NOW]
+        p = state.player
+        if piece.how == "silver":
+            if p.stats.get("silver", 0) < piece.silver:
+                return [NOT_NOW]
+            p.stats["silver"] -= piece.silver
+            _give_piece(state, o, key)
+            return [piece.ok, f"銀兩 -{piece.silver}"]
+        if p.opp_tried.get(f"{o.id}:{key}") == _today(state, content) or p.stamina < piece.stamina:
+            return [NOT_NOW]
+        p.stamina -= piece.stamina
+        if not roll_check(piece.check, state, content, world, rng):
+            p.opp_tried[f"{o.id}:{key}"] = _today(state, content)
+            return [piece.fail]
+        _give_piece(state, o, key)
+        return [piece.ok]
+    if what == "present" and o.kind == "puzzle":
+        who = _present_here(state, content, o, loc_id)
+        if who is None:
+            return [NOT_NOW]
+        pr = o.puzzle.present
+        if pr.at is not None:
+            text = pr.done.replace("{人物}", who)
+        else:
+            text = next(x.done for x in _patrons_of(state, o) if x.at == loc_id)
+        return [text] + _complete(state, o)
     return [NOT_NOW]
 
 
 def title(state: GameState, content: Content, arg: str) -> str:
-    """江湖紀錄的標題：「機緣・{名稱}」。"""
-    opp_id = arg.partition(":")[2]
+    """江湖紀錄的標題：「機緣・{名稱}」。arg 是 deliver:<id>、try:<id>、piece:<id>:<key> 或 present:<id>。"""
+    opp_id = arg.partition(":")[2].partition(":")[0]
     o = next((x for x in content.opportunities if x.id == opp_id), None)
     return f"機緣・{o.name}" if o is not None else "機緣"
