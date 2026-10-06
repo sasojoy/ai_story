@@ -39,6 +39,14 @@ def _game(content, name="甲", faction=None, at=None, rank=0):
     return game
 
 
+def _without_rank3(real):
+    """拿掉真的官軍第 3 階與它兩段的事件（Task 3 之後才有，Task 1 時什麼都沒拿掉）：測試要自己寫一筆官軍第 3 階，
+    不然同一階寫了兩筆、而且那兩則事件寫了 promote／followers 卻沒有晉升認它們，會多出跟測試無關的錯誤。"""
+    real.promotions = [p for p in real.promotions if not (p.faction == "guan" and p.rank == 3)]
+    for gone in ("promo_guan_3_palace", "promo_guan_3_hejin"):
+        real.events.pop(gone, None)
+
+
 # ── Task 1：資料模型與內容檢查 ─────────────────────────────
 
 
@@ -86,6 +94,7 @@ def test_effect_patron_is_one_of_three():
 
 
 def test_rank_three_needs_legs(real):
+    _without_rank3(real)
     real.promotions.append(PromotionDef(faction="guan", rank=3, closing="x"))
     with pytest.raises(ContentError, match="legs"):
         validate(real)
@@ -110,9 +119,7 @@ def _two_leg(real, location="luoyang_palace", first_cast=None):
     """兩段的第 3 階：location 空著、地點寫在各段；各段的事件都算晉升奇遇（升階、給部下的那一段過得了檢查）。
     借用官軍第 2 階的兩則事件（同一個陣營，部下的陣營對得上）。真的官軍第 3 階（Task 3 以後有）先拿掉，
     連同它兩段事件（寫了 promote／followers，沒有晉升定義認它們就過不了檢查）一起。"""
-    real.promotions = [p for p in real.promotions if not (p.faction == "guan" and p.rank == 3)]
-    for gone in ("promo_guan_3_palace", "promo_guan_3_hejin"):  # Task 3 之後才有，Task 1 時 pop 不到
-        real.events.pop(gone, None)
+    _without_rank3(real)
     first = first_cast or PromotionCast(event="promo_guan_2", figure="luzhi", at="luzhi_camp", summons_text="到{據點}。")
     promo = PromotionDef(faction="guan", rank=3, closing="（結尾）", legs=[
         PromotionLeg(casts=[first]),
@@ -145,6 +152,7 @@ def test_a_leg_location_may_be_the_nearest_base(real):
 
 
 def test_a_leg_location_must_exist(real):
+    _without_rank3(real)
     real.promotions.append(PromotionDef(faction="guan", rank=3, closing="（結尾）", legs=[
         PromotionLeg(location="nowhere", casts=[PromotionCast(event="promo_guan_2", summons_text="到{據點}。")]),
     ]))
@@ -182,6 +190,7 @@ def test_a_cast_before_a_timetable_event_is_valid(real):
 
 def test_a_cast_must_know_where_it_plays(real):
     """沒有人物、沒有 at、段也沒寫 location：不知道在哪裡演。"""
+    _without_rank3(real)
     real.promotions.append(PromotionDef(faction="guan", rank=3, closing="（結尾）", legs=[
         PromotionLeg(casts=[PromotionCast(event="promo_guan_2", summons_text="到{據點}。")]),
     ]))
