@@ -1509,6 +1509,24 @@ def test_the_folded_fight_card_css_hides_the_trait_lines_and_keeps_one_round():
     assert 'querySelector(":scope > li:not(.trait)")' in fit and "firstElementChild" not in fit
 
 
+def test_the_visible_round_of_a_folded_card_does_not_wait_for_the_hidden_trait_lines():
+    """最終審查 M2：延遲是照 nth-child 算的，藏起來的功效句佔著位置，收著時唯一看得到的第一回合（第 2～4 個）要白等 0.25～0.75 秒才浮現
+    （以前是 0 秒）。收著時（:not(.open)）每一個「不是功效句」的 li 延遲都是 0（看得到的只有第一個）；展開之後照位置遞增。
+    要蓋過 nth-child 那幾條，選擇器的權重要比它們高：這裡照 CSS 的規則算給你看。"""
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    folded = re.search(r"(?m)^(\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\)) \{([^}]*)\}", css)
+    assert folded is not None and re.search(r"animation-delay: 0s;?", folded.group(2))
+
+    def specificity(selector: str) -> tuple[int, int]:
+        classes = len(re.findall(r"\.[\w-]+", selector)) + len(re.findall(r":(?!not)[\w-]+", selector))  # :not(.x) 算裡面的 .x
+        elements = len(re.findall(r"(?<![.:#\w-])[a-z]+\b", selector))
+        return classes, elements
+
+    staggers = re.findall(r"(?m)^(\.battle-card ul\.rounds > li:nth-child\([^)]*\)) \{ animation-delay", css)
+    assert staggers and all(specificity(folded.group(1)) > specificity(selector) for selector in staggers)
+    assert "animation: none !important" in css[css.index("@media (prefers-reduced-motion: reduce)"):]  # 減少動態照舊整站關掉
+
+
 def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
     """Task 4 審查 M4：功效的句子加進去之後過程可以有十幾行（3＋5＋8），延遲只寫到第 5 個的話，第 6 個以後會比第 2～5 個先浮現。
     現在每一個位置都有延遲，而且一路不減；減少動態（prefers-reduced-motion）整站關動畫的規則照舊。"""

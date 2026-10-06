@@ -167,7 +167,9 @@ def _double_luck_shift(base: float, win_line: float, half: float, push: float) -
         return min(linear, need - half)
     if wanted >= 1.0:
         return max(linear, need + half)
-    return need - (2 * math.sqrt(1 - wanted) * half - half)
+    # need 夾在運氣範圍裡：贏的那一線遠在範圍之外（威力 10 打難度 220、或穩贏的另一頭）時，從範圍的邊緣算起——不然平移會把差距
+    # 整個搬到想要的機會那裡（187 對單次的 19.8），落敗一口氣變成不落敗（最終審查 I-1）。範圍裡面這一夾沒有作用，誤差在 1e-15 以內
+    return max(-half, min(half, need)) - (2 * math.sqrt(1 - wanted) * half - half)
 
 
 def resolve_encounter(

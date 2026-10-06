@@ -1,3 +1,4 @@
+import math
 import random
 
 import pytest
@@ -424,7 +425,41 @@ def test_the_models_push_is_exact_under_double_luck_too_including_the_tails(labe
     assert base == pytest.approx(target, abs=0.01), label  # 起點真的是想測的那個贏面
     for advantage in (15, -15, 7, -7):
         pushed = _double_win_rate(power, 100, encounter.advantage_shift(100, advantage), mods)
-        assert pushed == pytest.approx(min(1.0, max(0.0, base + advantage / 100)), abs=0.003), (label, advantage, base, pushed)
+        if target == 0.0:
+            # 贏的那一線在運氣範圍之外（最終審查 I-1）：優勢最多推到那一線上，跟單次運氣一樣「推不動就推不動」：
+            # 往上推最多推出 advantage 那麼多（到不了就少一點），往下推還是 0；不會為了湊滿 15 個百分點把差距整個搬過去
+            expected_max = max(0.0, advantage / 100)
+            assert 0.0 <= pushed <= expected_max + 0.003, (label, advantage, pushed)
+        else:
+            assert pushed == pytest.approx(min(1.0, max(0.0, base + advantage / 100)), abs=0.003), (label, advantage, base, pushed)
+
+
+def test_a_hopeless_fight_under_double_luck_moves_no_more_than_a_single_roll_does():
+    """最終審查 I-1：贏的那一線遠在運氣範圍之外（威力 10 打難度 220）時，連環不能因為「要推出 15 個百分點的贏面」就把差距整個搬到
+    187（單次運氣推的是 19.8）：落敗一直落敗，只有那 15% 運氣範圍的平移。"""
+    advantage_shift = encounter.advantage_shift(220, 15)
+    single = resolve_encounter(10, 220, _Luck(0), shift=advantage_shift, mods=Mods()).margin - resolve_encounter(
+        10, 220, _Luck(0), mods=Mods(),
+    ).margin
+    double_mods = Mods(double_luck=True)
+    double = resolve_encounter(10, 220, _Luck(0, 0), shift=advantage_shift, mods=double_mods).margin - resolve_encounter(
+        10, 220, _Luck(0, 0), mods=double_mods,
+    ).margin
+    assert single == pytest.approx(advantage_shift)
+    assert 0 < double <= single  # 跟其他功效同一個量級（約 10～20），不是 187
+    # 整個運氣範圍掃過去：落敗還是落敗（沒有一格被推成僵持或贏）
+    half = encounter.luck_half(220)
+    for m in range(0, 400):
+        luck = -half + 2 * half * (m + 0.5) / 400
+        result = resolve_encounter(10, 220, _Luck(luck, luck), shift=advantage_shift, mods=double_mods)
+        assert result.tier == "落敗", (m, result)
+    # 對稱的另一頭：穩贏的仗往下推（威力 400 打難度 100，−15）也從運氣範圍的邊緣算起：贏面從 100% 掉到 85%，兩次取好的要的平移是
+    # 2·√0.15·半幅（≈ 23.2），比單次的 9 多是機率空間的斜率（兩次取好的在 100% 附近很平），不是被威力與難度的差拉到幾百
+    low = encounter.advantage_shift(100, -15)
+    moved = resolve_encounter(400, 100, _Luck(0, 0), shift=low, mods=double_mods).margin - resolve_encounter(
+        400, 100, _Luck(0, 0), mods=double_mods,
+    ).margin
+    assert moved == pytest.approx(-2 * math.sqrt(0.15) * encounter.luck_half(100))
 
 
 def test_the_double_luck_push_without_a_push_changes_nothing():
