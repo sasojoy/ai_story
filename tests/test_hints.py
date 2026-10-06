@@ -560,6 +560,44 @@ def test_a_place_that_teaches_a_basic_art_triggers_basic_art(game):
     assert _key(game) == "h_basic_art"
 
 
+def test_basic_art_only_counts_a_lesson_the_player_can_actually_learn(game):
+    """「這裡能學新的底」：這裡教、可是現在學不了的（名望不夠、學費不夠、持有滿了）不算——不然師父說「能學」，按下去卻是一句「學不了」。
+    學得了的那一刻才說。"""
+    from tianxia.models import LearnRule
+
+    _with(game.content, "h_basic_art")
+    game.skip_tutorial()
+    p = game.state.player
+    p.location = "lake"
+    lesson = game.content.skills["lake_kick"]
+    lesson.learn = LearnRule(at="lake", silver=10, fame=5)  # 名望 5 以上才肯教
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
+    p.stats["fame"] = 5
+    game._check_hints()
+    assert _key(game) == "h_basic_art"
+
+
+def test_basic_art_waits_while_the_library_is_full_or_the_purse_is_short(game, monkeypatch):
+    from tianxia import library
+
+    _with(game.content, "h_basic_art")
+    game.skip_tutorial()
+    p = game.state.player
+    p.location = "lake"
+    p.stats["silver"] = 3  # 學費 10 兩
+    game._check_hints()
+    assert game.guide_box() is None
+    p.stats["silver"] = 50
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s))  # 滿了（這時師父說的是「快滿了」，不是「能學」）
+    game._check_hints()
+    assert "h_basic_art" not in _queued(game)
+    monkeypatch.undo()
+    game.state.player.hint_queue = []  # 滿了那一條按掉
+    game._check_hints()
+    assert _key(game) == "h_basic_art"
+
+
 def test_a_recruitable_character_here_triggers_recruit(game):
     _with(game.content, "h_recruit")
     game.skip_tutorial()
@@ -605,9 +643,42 @@ def test_a_nearly_full_library_triggers_cap(game, monkeypatch):
     game.skip_tutorial()
     game._check_hints()
     assert game.guide_box() is None
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 6)  # 還差六個：44／50，還早
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
     monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 5)  # 還差五個：45／50
     game._check_hints()
     assert _key(game) == "h_cap"
+
+
+def test_a_full_library_still_triggers_cap(game, monkeypatch):
+    """滿了（或博聞被扣下來超過上限）更該說：條件是「差不到五個」，不是剛好五個。"""
+    from tianxia import library
+
+    game.skip_tutorial()
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) - 2)
+    game._check_hints()
+    assert _key(game) == "h_cap"
+
+
+def test_a_drifter_who_heard_a_hint_does_not_hear_it_again_after_joining(game):
+    """設計 5.2：散人聽過伏筆的提示（師父講的散人版）之後才投靠，引薦人不再講同一條。"""
+    game.skip_tutorial()
+    game.state.player.fragments = {"chain": [0]}
+    game._check_hints()
+    assert game.guide_box()["text"] == "這是線索（散人）。"
+    game.guide_ack()
+    game.state.player.faction = "guan"
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
+
+
+def test_a_saved_note_without_by_loads_as_the_mentors():
+    old = PlayerState.model_validate({
+        **PlayerState(name="甲", location="town", stats={}, stamina=0).model_dump(),
+        "hint_queue": [{"id": "h_merge", "speaker": MENTOR, "text": "話。", "shown": True}],
+    })
+    assert old.hint_queue[0].by == ""  # 沒有 by 的舊存檔：當作師父說的，叛投時不丟
 
 
 def test_a_heard_fragment_triggers_foreshadow(game):
@@ -742,8 +813,9 @@ def test_figure_needs_the_season_one_rules(real):
 # ── 排隊的規矩 ─────────────────────────────────────────
 
 
-def test_one_state_hint_per_check_and_the_next_waits_for_its_turn(game, monkeypatch):
-    """N2：一次行動碰到兩個狀態條件，這一次排一條；下一次行動條件還成立才排另一條（開局一排「知道了」是引導重做要拿掉的）。"""
+def test_one_state_hint_at_a_time_the_next_waits_until_the_first_is_read(game, monkeypatch):
+    """N2：同時碰到兩個狀態條件，先排一條；框上（或排著）那一條按了「知道了」之後，條件還成立才排下一條。
+    不管是一次行動、一次同步還是兩者連著來（見下面 sync 接 choose 那一條）：同一時間最多一條狀態提示在框上或排著。"""
     from tianxia import library
 
     game.skip_tutorial()
@@ -752,10 +824,29 @@ def test_one_state_hint_per_check_and_the_next_waits_for_its_turn(game, monkeypa
     monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
     game._check_hints()
     assert _queued(game) == ["h_merge"]  # 兩個條件都成立，這一次只排一條
-    game._check_hints()  # 下一次行動
-    assert _queued(game) == ["h_merge", "h_cap"]
+    game._check_hints()  # 下一次行動或同步：第一條還沒按「知道了」，不排
+    game._check_hints()
+    assert _queued(game) == ["h_merge"]
     game.guide_ack()
+    game._check_hints()
+    assert _queued(game) == ["h_cap"]  # 讀過了，條件還成立：輪到下一條
     assert _key(game) == "h_cap"
+
+
+def test_a_request_never_queues_two_state_hints(game):
+    """伺服器每個動作都是先 sync 再做動作（server.act）：兩個狀態條件同時成立時，這一個請求只排出一條，不是 sync 排一條、動作再排一條。"""
+    _with(game.content, "h_injury")
+    game.skip_tutorial()
+    p = game.state.player
+    p.insights = ["feng", "huo"]
+    p.member.injury = 5
+    game.sync(1000.0)
+    assert _queued(game) == ["h_merge"]
+    game.choose("act:rest")
+    assert _queued(game) == ["h_merge"]  # 動作做完的那次檢查也不再排
+    game.guide_ack()
+    game.sync(1010.0)
+    assert _queued(game) == ["h_injury"]  # 讀過之後的下一次，輪到第二條
 
 
 def test_the_second_hint_is_dropped_if_its_condition_no_longer_holds(game, monkeypatch):
@@ -765,9 +856,10 @@ def test_the_second_hint_is_dropped_if_its_condition_no_longer_holds(game, monke
     game.state.player.insights = ["feng", "huo"]
     monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
     game._check_hints()
+    game.guide_ack()
     monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 30)  # 熔掉了幾樣
     game._check_hints()
-    assert _queued(game) == ["h_merge"]
+    assert _queued(game) == []
 
 
 def test_a_hint_that_cannot_be_said_does_not_use_up_the_turn(game):
@@ -785,29 +877,27 @@ def test_a_hint_that_cannot_be_said_does_not_use_up_the_turn(game):
 
 
 def test_event_hints_are_not_paced(game, hints_content):
+    """事件型的（被打發、玉璽碎片的秘密揭開、開季那一句、再投靠的招呼）當場排：不吃限速，也不被排著的狀態提示擋住。"""
     _with(hints_content, "h_snubbed")
     game.skip_tutorial()
     game.state.player.insights = ["feng", "huo"]
     game._check_hints()
     game._brush_off("sage")
-    assert _queued(game) == ["h_merge", "h_snubbed"]  # 事件型的當場排，不吃每次一條的限速
-
-
-def test_polling_does_not_pile_hints_up_behind_an_unread_one(game, monkeypatch):
-    """同步每 10 秒問一次：框上（或排著）還有一條沒按「知道了」時不再排新的狀態提示，不然一個閒著不動的人回來是一長串。
-    按過「知道了」之後，下一次同步再排下一條。"""
-    from tianxia import library
-
-    game.skip_tutorial()
-    game.state.player.insights = ["feng", "huo"]
-    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
-    game._check_hints(poll=True)
-    game._check_hints(poll=True)
-    game._check_hints(poll=True)
-    assert _queued(game) == ["h_merge"]
+    assert _queued(game) == ["h_merge", "h_snubbed"]  # 當場排
     game.guide_ack()
-    game._check_hints(poll=True)
-    assert _queued(game) == ["h_cap"]
+    game.guide_ack()
+    game._brush_off("sage")  # 說過的不重說
+    assert _queued(game) == []
+
+
+def test_a_queued_event_hint_does_not_hold_back_a_state_hint(game, hints_content):
+    """限速只管狀態提示彼此之間（同一時間最多一條在框上或排著）：排著的事件型提示不算。"""
+    _with(hints_content, "h_snubbed")
+    game.skip_tutorial()
+    game._brush_off("sage")
+    game.state.player.insights = ["feng", "huo"]
+    game._check_hints()
+    assert _queued(game) == ["h_snubbed", "h_merge"]
 
 
 def test_sync_notices_what_changed_without_an_action(game):
@@ -877,7 +967,19 @@ def test_once_every_hint_has_been_said_nothing_is_worked_out(game, monkeypatch):
 
     monkeypatch.setattr(game, "_hint_triggers", boom)
     game._check_hints()
-    game._check_hints(poll=True)
+
+
+def test_event_only_hints_do_not_keep_the_early_return_from_applying(game, monkeypatch, hints_content):
+    """h_snubbed、h_mandate 不看狀態（事件發生時自己叫）：還沒說過也不該讓每次行動與同步都去算條件。"""
+    _with(hints_content, "h_snubbed", "h_mandate")
+    game.skip_tutorial()
+    game.state.player.hints_seen |= {h.id for h in game.content.hints.hints} - {"h_snubbed", "h_mandate"}
+
+    def boom(*args, **kwargs):
+        raise AssertionError("該說的狀態提示都說過了，不該算條件")
+
+    monkeypatch.setattr(game, "_hint_triggers", boom)
+    game._check_hints()
 
 
 def test_only_the_hints_the_book_has_are_worked_out(game, monkeypatch):
@@ -924,6 +1026,38 @@ def test_a_page_action_notices_it_too(game):
     game.heal()
     assert _key(game) == "h_refine_fail"
     assert f"【{MENTOR}】h_refine_fail 的話" in _journal_guides(game)
+
+
+def test_every_page_action_looks_for_hints(game, monkeypatch):
+    """修練頁、煉製頁的每一種動作做完都經過 _menxia_entry、看一遍提示（療傷、練成、改練、熔武學、熔意境、合成、修練）：
+    一個一個做、每做成一個，檢查就多叫一次。"""
+    from tianxia import cultivation
+
+    game.skip_tutorial()
+    p = game.state.player
+    p.stats.update(xinde=500)
+    p.stamina = float(game.content.config.stamina_max)
+    p.member.neigong_id, p.member.wugong_id = "breath", "fist"
+    p.arts = ["sword", "step"]
+    p.insights = ["feng", "huo", "shui"]
+    calls = []
+    real = game._check_hints
+    monkeypatch.setattr(game, "_check_hints", lambda *args, **kwargs: (calls.append(1), real(*args, **kwargs))[1])
+    monkeypatch.setattr(cultivation, "cultivate_problem", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cultivation, "cultivate", lambda *args, **kwargs: ["【失敗】修練沒有成。"])
+    actions = {
+        "heal": lambda: game.heal(),
+        "practice": lambda: game.practice("武學"),
+        "switch_art": lambda: game.switch_art("sword"),
+        "melt_art": lambda: game.melt_art("step"),
+        "melt_insight": lambda: game.melt_insight("shui"),
+        "forge": lambda: game.forge("sword", ["feng"]),
+        "cultivate": lambda: game.cultivate("sword"),
+    }
+    for name, act in actions.items():
+        before = len(calls)
+        act()
+        assert len(calls) == before + 1, name
 
 
 # ── M-1：「知道了」與略過之前先上框 ──────────────────────────

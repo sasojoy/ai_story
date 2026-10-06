@@ -86,6 +86,59 @@ def test_got_it_on_the_practice_page_clears_the_box(game):
     assert GUIDE_CARD not in out["after"]
 
 
+POLL = """return (async () => {
+  H.S.tab = TAB; H.renderPage();
+  const page = T.els.page;
+  const drawn = () => page.innerHTML.includes('class="card guide"');
+  const first = drawn();
+  // 一次輪詢：拿到有提示的新畫面（setMain 之後 refreshPage，跟 poll() 一樣）；上一次畫的頁面清掉，看重畫了沒有
+  const was = H.S.main;
+  H.setMain(H.S.next);
+  await H.refreshPage(was);
+  const arrived = drawn();
+  // 再一次輪詢，畫面沒有變：不重畫（輪詢每十秒一次，不能每次都整頁重畫）
+  page.innerHTML = "";
+  const again = H.S.main;
+  H.setMain(JSON.parse(JSON.stringify(H.S.main)));
+  await H.refreshPage(again);
+  const untouched = page.innerHTML === "";
+  return { first, arrived, untouched, calls: T.calls.map((c) => c[0]) };
+})();"""
+
+
+@pytest.mark.parametrize("tab", ["practice", "craft"])
+def test_a_hint_that_arrives_with_a_poll_is_drawn_on_the_practice_and_craft_pages(game, tab):
+    """輪詢（同步）才排進來的提示（大事揭曉、決戰集結、抵達……）也要畫：伺服器在輪詢裡就把它記成說過、寫進江湖紀錄了，
+    頁面卻只在修練、煉製的資料變了才重畫，框就不出現，直到下一次動作或切分頁（Task 2 審查 I-1）。沒變的輪詢不重畫。"""
+    before, x = views(game)
+    game._hint("h_merge")
+    after = server.main_view(game)
+    assert before["guide"] is None and after["guide"]["hint"] is True
+    out = run(before, POLL.replace("TAB", repr(tab)), menxia=x, S={"next": after}, responses={"/api/menxia": x})
+    assert out["first"] is False  # 一開始沒有提示
+    assert out["arrived"] is True  # 輪詢帶來提示：頁面重畫、框出現
+    assert out["untouched"] is True  # 同一份畫面再輪詢一次：不重畫
+    assert out["calls"] == ["/api/menxia", "/api/menxia"]
+
+
+def test_a_poll_that_takes_the_hint_away_redraws_too(game):
+    """另一個分頁按了「知道了」之後，這一頁的輪詢拿到沒有提示的畫面：框要收掉。"""
+    game._hint("h_merge")
+    with_hint, x = views(game)
+    game.guide_ack()
+    gone = server.main_view(game)
+    script = """return (async () => {
+      H.S.tab = "practice"; H.renderPage();
+      const had = T.els.page.innerHTML.includes('class="card guide"');
+      const was = H.S.main;
+      H.setMain(H.S.next);
+      await H.refreshPage(was);
+      return { had, has: T.els.page.innerHTML.includes('class="card guide"') };
+    })();"""
+    out = run(with_hint, script, menxia=x, S={"next": gone}, responses={"/api/menxia": x})
+    assert out == {"had": True, "has": False}
+
+
 def test_a_second_hint_takes_the_place_of_the_first_on_the_craft_page(game):
     game._hint("h_merge")
     game._hint("h_lose")

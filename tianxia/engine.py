@@ -541,7 +541,7 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
-        self._check_hints(poll=True)  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
+        self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons)
 
@@ -1493,7 +1493,8 @@ class Game:
             on.append("h_lose")
         if want("h_injury") and p.member.injury > 0:
             on.append("h_injury")
-        if want("h_basic_art") and library.lessons_here(s, c):
+        # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
+        if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
             on.append("h_basic_art")
         if want("h_recruit") and self._recruit_target() is not None:
             on.append("h_recruit")
@@ -1523,26 +1524,30 @@ class Game:
             on.append("h_figure")
         return on
 
-    def _queue_triggered_hints(self, poll: bool) -> None:
-        """成立的狀態提示排一條進佇列（N2：一次最多排一條，其餘等下一次行動或同步，條件還成立才排；開局一排「知道了」是引導重做要拿掉的）。
-        排不進去的（散人碰到沒有散人版的陣營提示）不算這一次的名額，接著看後面的。poll＝同步時叫的：佇列裡還有沒按「知道了」的就不再排，
-        不然同步每十秒問一次，人閒著不動也會排成一長串。不看的時候：假人、關了提示、籌備中與休季（框不畫，排進去就算說過會白白丟掉，F7）、序章。"""
+    def _queue_triggered_hints(self) -> None:
+        """成立的狀態提示排一條進佇列（N2，控制者裁示）：同一時間最多一條狀態提示在框上或排著——佇列裡還有一條沒按「知道了」的狀態提示時，
+        不管是行動還是同步都不再排新的（伺服器每個動作都是先 sync 再做動作，兩次檢查各排一條就變成連著兩個框；人閒著不動、
+        同步每十秒問一次也不會排成一長串）；按過「知道了」之後的下一次檢查，條件還成立才排下一條（開局一排「知道了」是引導重做
+        要拿掉的）。事件型的（h_snubbed、h_mandate、開季那一句、再投靠的招呼）當場排，不吃這個限速，也不算在裡面。
+        排不進去的（散人碰到沒有散人版的陣營提示）不算名額，接著看後面的。不看的時候：假人、關了提示、籌備中與休季（框不畫，
+        排進去就算說過會白白丟掉，F7）、序章。"""
         s, c, p = self.state, self.content, self.state.player
-        if p.bot or p.hints_off or (poll and p.hint_queue):
+        if p.bot or p.hints_off or any(n.id in hint_rules.STATE for n in p.hint_queue):
             return
-        waiting = {h.id for h in c.hints.hints} - p.hints_seen - {n.id for n in p.hint_queue}
+        # 只算書裡有的狀態提示（事件型的不看狀態，留在 waiting 裡也沒東西可算，只會讓下面的提早返回永遠用不上），還沒說過、也還沒排著的（N10）
+        waiting = {h.id for h in c.hints.hints if h.id in hint_rules.STATE} - p.hints_seen
         if not waiting or self._preparing() or s.world.ended or prologue_rules.active(s, c):
-            return  # 條都說過、排著了（或書裡沒有）：不算條件（N10）
+            return
         for hint_id in self._hint_triggers(waiting):
             queued = len(p.hint_queue)
             hint_rules.queue(s, c, [hint_id])
             if len(p.hint_queue) > queued:
                 return
 
-    def _check_hints(self, poll: bool = False) -> None:
+    def _check_hints(self) -> None:
         """每次行動、修練頁與配點的動作、出發、同步做完之後看一遍（新手引導計畫三）：該說的排進佇列，輪到的上框（_surface_hint）。
         呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
-        self._queue_triggered_hints(poll)
+        self._queue_triggered_hints()
         self._surface_hint()
 
     def set_hints_off(self, value: bool) -> None:

@@ -364,11 +364,16 @@
     return `<div class="more-stats"><button class="hint road-hint${S.hintOpen ? "" : " clamp"}" data-act="hint-more" aria-expanded="${S.hintOpen}">${esc(s.hint)}</button></div>`;
   }
 
+  // 目前對話框的樣子（整個框的內容；沒有框是 "null"）：修練、煉製頁只在 menxia 的欄位變了才重畫，輪詢才排進來的提示
+  // （大事揭曉、決戰集結、抵達……伺服器在同步時就記成說過了）會畫不出來——頁面畫的框跟現在的框不同就重畫（新手引導計畫三，T2 審查 I-1）
+  const guideSig = () => JSON.stringify((S.main && S.main.guide) || null);
+
   function renderPage() {
     const page = document.getElementById("page");
     if (!page) return;
     const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
     page.innerHTML = fn();
+    S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
     applyGlow();
   }
@@ -2598,7 +2603,8 @@
       if (!S.forgeSel.length) S.forgeLine = ""; // 爐是空的：用伺服器剛給的那一行（心得是新的）
       const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
       const changed = trimmed || shown(x) !== shown(was)
-        || (tab === "practice" && old.status.injury !== S.main.status.injury); // 療傷鈕看的是內傷
+        || (tab === "practice" && old.status.injury !== S.main.status.injury) // 療傷鈕看的是內傷
+        || S.guideDrawn !== guideSig(); // 對話框換了（輪詢帶來新的提示、提示在別處被收掉）：兩頁最上面畫著它
       if (!changed) {
         // 合成與合併都要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
         if (tab === "craft" && S.forgeSel.length && old.status.stamina !== S.main.status.stamina) updateForgeLine();

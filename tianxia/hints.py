@@ -20,6 +20,12 @@ KNOWN = frozenset({
 })
 
 
+# 不看狀態、由事件發生時自己叫 Game._hint 的兩條（被名將打發、玉璽碎片的秘密揭開）；其餘都是狀態提示（Game._hint_triggers 看角色此刻的狀態）。
+# 排隊的限速只管狀態提示：同一時間最多一條在框上或排著（Game._queue_triggered_hints）；事件型的當場排，不吃限速
+EVENT_ONLY = frozenset({"h_snubbed", "h_mandate"})
+STATE = KNOWN - EVENT_ONLY
+
+
 def defined(content: Content, hint_id: str) -> bool:
     """內容的提示表裡有這一條。每季都要說的句子（開季那一句、再投靠的招呼）不在表裡，所以不記進 hints_seen。"""
     return any(x.id == hint_id for x in content.hints.hints)
