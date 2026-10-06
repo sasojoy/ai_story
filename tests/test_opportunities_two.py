@@ -1034,3 +1034,64 @@ def test_plot_steps_hide_when_the_rules_are_off(on):
     for what in ("join", "part"):
         assert opportunities.act(helper.state, on, helper.world, f"{what}:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
     assert opportunities.on_win(leader.state, on, "yingru", "huang") == [] and plot.parts == {} and plot.members == ["甲"]
+
+
+# 休季之後不再結算（結局與跨季計畫的預檢：收季那一刻的貢獻榜與結算畫面已經存好，之後不能再有東西記進這一季）
+
+def _done_plot_with_two_offline_members(on):
+    """甲牽頭、乙（第 1 階）與丙（第 3 階）響應，在他們都不在線的時候被人做完；回傳資料庫裡的那一場。"""
+    leader, plot = _lead(on)
+
+    def finish(season):
+        season.plots[-1].members += ["乙", "丙"]
+        season.plots[-1].status = "done"
+
+    leader.world.mutate_season(finish)
+    return leader
+
+
+def _late_pair(on):
+    return _game(on, name="乙", faction="guan", rank=1), _game(on, name="丙", faction="guan", rank=3)
+
+
+def test_a_participant_who_syncs_only_after_the_season_ended_gets_nothing(on):
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    leader = _done_plot_with_two_offline_members(on)
+    admin.admin_end_season(now=200.0)
+    low, high = _late_pair(on)
+    assert low.state.world.ended
+    for member in (low, high):
+        msgs = member.sync(300.0)
+        p = member.state.player
+        assert "三路並進成了，你那一路也記了一功。" not in msgs and "三路的捷報同時送進營中，你的名字跟著報了上去。" not in msgs
+        assert (p.contrib, p.contrib_weeks, p.opp_done, p.opp_settled) == (0, {}, [], [])
+        assert opportunities.settle(member.state, on) == []  # 直接叫也一樣
+        assert not any(e.title == "密謀" for e in member.state.journal)
+    assert leader.world.get_season().plots[-1].status == "done"  # 收季之後不改那一場（讀資料庫裡的那一份）
+
+
+def test_the_same_plot_synced_before_the_season_ends_is_paid_as_today(on):
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    _done_plot_with_two_offline_members(on)
+    low, high = _late_pair(on)
+    assert "三路並進成了，你那一路也記了一功。" in low.sync(10.0)
+    assert "三路的捷報同時送進營中，你的名字跟著報了上去。" in high.sync(10.0)
+    assert low.state.player.contrib == on.config.plot_contrib and low.state.player.opp_done == []
+    assert high.state.player.opp_done == ["guan_three_roads"] and len(high.state.player.opp_settled) == 1
+    admin.admin_end_season(now=200.0)  # 收季之後再同步，不會再算一次
+    assert "三路並進成了，你那一路也記了一功。" not in low.sync(300.0)
+    assert low.state.player.contrib == on.config.plot_contrib
+
+
+def test_nothing_about_plots_works_once_the_season_ended(on):
+    leader, plot = _lead(on, "huang_jiazi", "huang", "guangzong")
+    helper = _helper(on, leader, faction="huang", at="wan_city")
+    leader.state.world.ended = True  # 收季（同一份賽季，測試裡直接共用）
+    assert not any(i.startswith("opp:") for i in _ids(helper))
+    for what in ("join", "part"):
+        assert opportunities.act(helper.state, on, helper.world, f"{what}:{plot.id}", random.Random(0)) == ["（此刻無法這麼做。）"]
+    assert opportunities.act(leader.state, on, leader.world, "plot:huang_jiazi", random.Random(0)) == ["（此刻無法這麼做。）"]
+    assert opportunities.on_win(leader.state, on, "yingru", "guan") == []
+    assert opportunities.settle(leader.state, on) == []

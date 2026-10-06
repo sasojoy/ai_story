@@ -376,7 +376,8 @@ def _plot_def(content: Content, plot: Plot) -> OppDef | None:
 
 
 def _live(state: GameState, plot: Plot) -> bool:
-    return plot.status == "open" and state.world.time <= plot.deadline
+    """還在進行：開著、沒過期、而且這一季還沒落幕（休季什麼都不能再加）。"""
+    return plot.status == "open" and state.world.time <= plot.deadline and not state.world.ended
 
 
 def _need_parts(o: OppDef) -> int:
@@ -454,8 +455,10 @@ def settle(state: GameState, content: Content) -> list[str]:
     """自己參與過、已經收場（完成或過了期限）、還沒結算的密謀，各結算一次（Game.choose、Game.sync 的最後呼叫）：
     完成的——第 3 階以上、這種機緣還沒完成的人算機緣完成（done_text），其他人記 plot_contrib 點貢獻（helper_text）；
     期限到了還沒完成的改成 failed，收到 fail_text。只付還在 plot.faction 的人（企劃者 2026-10-06 裁決）：叛投之後，
-    舊陣營的密謀只記成結算過、不給東西（叛投時開著的密謀已經先退出了，見 leave_plots）。"""
-    if not active(state, content):
+    舊陣營的密謀只記成結算過、不給東西（叛投時開著的密謀已經先退出了，見 leave_plots）。
+    這一季落幕（休季）之後不結算：收季那一刻的貢獻榜與結算畫面已經存好（world.end_season），之後不能再有貢獻、
+    機緣或階級記進這一季（同 ranks.check_summons）；這一季的密謀跟著賽季整個換新，所以也不用補。"""
+    if not active(state, content) or state.world.ended:
         return []
     p = state.player
     msgs: list[str] = []
@@ -665,6 +668,8 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
 def act(state: GameState, content: Content, world, arg: str, rng: random.Random) -> list[str]:
     """閒著的選單上按了機緣的選項（opp:<arg>）：deliver:<id> 交東西、try:<id> 試天時地利型、piece:<id>:<key> 拿拼圖的
     一樣東西、present:<id> 把湊齊的拼圖交出去。選項不在了回「此刻無法」。"""
+    if state.world.ended:  # 休季：選單只剩「休季中」，走不到這裡；萬一直接叫也什麼都不做（不完成機緣、不記進收季之後）
+        return [NOT_NOW]
     what, _, rest = arg.partition(":")
     opp_id, _, key = rest.partition(":")
     if what in ("join", "part"):  # 這兩種的 rest 是密謀的 id，不是機緣的 id
