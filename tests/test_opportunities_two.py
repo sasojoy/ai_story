@@ -701,10 +701,45 @@ def test_offline_member_settles_once(on):
     helper = _game(on, name="乙", faction="guan", rank=1)
     helper.state.world = leader.state.world
     plot.members.append("乙")
+    plot.parts["nanyang"] = "乙"  # 乙辦成了南陽那一路
     plot.status = "done"  # 在乙不在線的時候完成
     msgs = opportunities.settle(helper.state, on)
     assert msgs[0] == "三路並進成了，你那一路也記了一功。" and helper.state.player.contrib == on.config.plot_contrib
     assert opportunities.settle(helper.state, on) == []  # 只結算一次
+
+
+def test_a_member_who_did_nothing_gets_nothing(on):
+    """至少辦成一處才拿獎勵（企劃者 2026-10-06）：只按了響應的人、沒出力的第 3 階發起人都一樣。"""
+    leader = _game(on, faction="guan", at="changshe")
+    leader.choose("opp:plot:guan_three_roads")
+    plot = leader.state.world.plots[-1]
+    idle = _game(on, name="乙", faction="guan", rank=1)
+    idle.state.world = leader.state.world
+    plot.members.append("乙")
+    plot.parts = {"yingru": "丙", "nanyang": "丙", "jizhou": "丁"}
+    plot.status = "done"
+    assert opportunities.settle(idle.state, on) == ["三路並進成了，可惜這一回你沒辦成哪一處，沒有你的份。"]
+    assert idle.state.player.contrib == 0
+    assert opportunities.settle(leader.state, on) == ["三路並進成了，可惜這一回你沒辦成哪一處，沒有你的份。"]
+    assert "guan_three_roads" not in leader.state.player.opp_done
+    assert opportunities.settle(idle.state, on) == [] and opportunities.settle(leader.state, on) == []  # 只結算一次
+
+
+def test_one_win_counts_for_one_plot(on):
+    """打贏一場只算進一場密謀（企劃者 2026-10-06）：同時參加兩場三路並進，潁川汝南打贏一場只記進先發起的那一場。
+    （密謀編號是雜湊、不是連號，所以「先」看發起的先後，不看編號大小。）"""
+    first = _game(on, faction="guan", at="changshe")
+    first.choose("opp:plot:guan_three_roads")
+    second = _game(on, name="乙", faction="guan", at="changshe", rank=3)
+    second.state.world = first.state.world
+    second.choose("opp:plot:guan_three_roads")
+    one, two = first.state.world.plots[-2:]
+    two.members.append("甲")
+    msgs = opportunities.on_win(first.state, on, "yingru", "huang")
+    assert msgs == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]
+    assert (one.parts, two.parts) == ({"yingru": "甲"}, {})
+    assert opportunities.on_win(first.state, on, "yingru", "huang") == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]  # 先發起的那一場這一路滿了，才輪到下一場
+    assert (one.parts, two.parts) == ({"yingru": "甲"}, {"yingru": "甲"})
 
 
 def test_plot_expires(on):
@@ -759,6 +794,7 @@ def test_a_member_who_defects_after_it_is_done_is_still_not_paid(on):
     leader, plot = _lead(on)
     helper = _helper(on, leader, rank=3)
     helper.choose(f"opp:join:{plot.id}")
+    plot.parts["nanyang"] = "乙"  # 他辦成過一處（不然沒出力的本來就什麼都沒有，測不出叛投的差別）
     plot.status = "done"  # 在乙不在線的時候完成，他還沒結算就叛投了
     defection.defect(helper.state, on, _huang(on))
     assert opportunities.settle(helper.state, on) == []
@@ -905,6 +941,7 @@ def test_settlement_is_delivered_on_the_next_choose_and_sync(on):
     leader, plot = _lead(on)
     helper = _helper(on, leader, rank=1)
     helper.choose(f"opp:join:{plot.id}")
+    plot.parts["nanyang"] = "乙"  # 至少辦成一處才拿獎勵
     plot.status = "done"
     msgs = helper.choose("act:rest")
     assert "三路並進成了，你那一路也記了一功。" in msgs and helper.state.player.contrib == on.config.plot_contrib
@@ -917,6 +954,7 @@ def test_sync_settles_a_plot_that_ended_while_offline(on):
 
     def finish(season):
         season.plots[-1].members.append("乙")
+        season.plots[-1].parts["nanyang"] = "乙"
         season.plots[-1].status = "done"
 
     leader.world.mutate_season(finish)  # 乙不在線的時候，別人把它做完了
@@ -1044,6 +1082,7 @@ def _done_plot_with_two_offline_members(on):
 
     def finish(season):
         season.plots[-1].members += ["乙", "丙"]
+        season.plots[-1].parts.update({"yingru": "乙", "nanyang": "丙", "jizhou": "甲"})  # 三個人各辦成一處
         season.plots[-1].status = "done"
 
     leader.world.mutate_season(finish)

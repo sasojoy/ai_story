@@ -20,6 +20,7 @@ from .state import GameState, PlayerState, Plot
 
 DONE = "（機緣「{name}」完成。）"
 NOT_NOW = "（此刻無法這麼做。）"
+PLOT_IDLE = "{name}成了，可惜這一回你沒辦成哪一處，沒有你的份。"  # 只響應、沒出力的人（企劃者 2026-10-06）；新寫，待 joy 潤
 DAWN_HOURS = (5, 6)  # 卯時：季曆 05:00～06:59（機緣文件 3.1 B）
 
 
@@ -435,11 +436,11 @@ def _part_here(state: GameState, content: Content, o: OppDef, plot: Plot, loc_id
 
 def on_win(state: GameState, content: Content, front: str | None, squad_faction: str | None) -> list[str]:
     """遊歷打贏一場（Game._squad_encounter）：win 類的密謀，這條戰線那一處還沒人做、對手是敵方（不是自己陣營、
-    也不是沒有陣營的）時記上。一個人的上限照 _cap_per_person。"""
+    也不是沒有陣營的）時記上。一個人的上限照 _cap_per_person。打贏一場只算進一場密謀（企劃者 2026-10-06）：記進
+    第一場還缺這一路的就停。「第一場」看發起的先後（world.plots 的順序），不看編號大小——編號是雜湊（見 plot_id）。"""
     p = state.player
     if not active(state, content) or front is None or squad_faction is None or squad_faction == p.faction:
         return []
-    msgs = []
     for plot in _my_plots(state):
         o = _plot_def(content, plot)
         if o is None or o.plot.how != "win" or _done_by(plot, p.name) >= _cap_per_person(content, o):
@@ -447,13 +448,14 @@ def on_win(state: GameState, content: Content, front: str | None, squad_faction:
         part = next((x for x in o.plot.parts if x.front == front and x.key not in plot.parts), None)
         if part is not None:
             _mark(state, content, o, plot, part.key)
-            msgs.append(f"（密謀「{o.name}」：{part.name}這一路，成了。）")
-    return msgs
+            return [f"（密謀「{o.name}」：{part.name}這一路，成了。）"]
+    return []
 
 
 def settle(state: GameState, content: Content) -> list[str]:
     """自己參與過、已經收場（完成或過了期限）、還沒結算的密謀，各結算一次（Game.choose、Game.sync 的最後呼叫）：
-    完成的——第 3 階以上、這種機緣還沒完成的人算機緣完成（done_text），其他人記 plot_contrib 點貢獻（helper_text）；
+    完成的——至少辦成一處的人才拿獎勵（企劃者 2026-10-06）：第 3 階以上、這種機緣還沒完成的人算機緣完成（done_text），
+    其他人記 plot_contrib 點貢獻（helper_text）；一處都沒辦成的（只按了響應，發起人也一樣）只收到 PLOT_IDLE、什麼都不拿；
     期限到了還沒完成的改成 failed，收到 fail_text。只付還在 plot.faction 的人（企劃者 2026-10-06 裁決）：叛投之後，
     舊陣營的密謀只記成結算過、不給東西（叛投時開著的密謀已經先退出了，見 leave_plots）。
     這一季落幕（休季）之後不結算：收季那一刻的貢獻榜與結算畫面已經存好（world.end_season），之後不能再有貢獻、
@@ -475,6 +477,8 @@ def settle(state: GameState, content: Content) -> list[str]:
             continue
         if plot.status == "failed":
             msgs.append(o.plot.fail_text)
+        elif p.name not in plot.parts.values():  # 一處都沒辦成：什麼都不拿（只按了響應，發起人也一樣）
+            msgs.append(PLOT_IDLE.format(name=o.name))
         elif o in open_ones(state, content):
             msgs += [o.plot.done_text] + _complete(state, o)
         else:
