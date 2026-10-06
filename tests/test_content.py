@@ -1715,6 +1715,16 @@ def test_validate_rejects_an_unknown_fight_tier(content):
         validate(content)
 
 
+@pytest.mark.parametrize("actions", [["explore", "train"], ["train", "socialize"], []])
+def test_validate_rejects_fight_tiers_on_an_event_that_is_not_only_a_train_event(content, actions):
+    """遊歷以外的行動抽到它時沒有剛打完的那一場（探索三選一是互斥的支線、交友沒有戰鬥；只靠串接來的更沒有），
+    寫了只會在那些行動上悄悄永遠不成立：actions 要剛好是 ["train"]。"""
+    content.events["chain_a"].actions = actions
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="事件 chain_a：fight_tiers 只能寫在遊歷"):
+        validate(content)
+
+
 def test_validate_rejects_fight_tiers_where_no_fight_has_just_ended(content):
     """只有遊歷打完才會接事件：別的行動抽的事件、選項與結局的條件寫了它，永遠不成立。"""
     content.events["drunk"].condition = Condition(fight_tiers=["大勝"])  # 探索抽的

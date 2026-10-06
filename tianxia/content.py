@@ -992,11 +992,12 @@ def validate(c: Content) -> None:
             marks_read.setdefault(key, where)
 
     def check_condition(where: str, cond: Condition, after_fight: bool = False) -> None:
-        """after_fight：這個條件掛在遊歷會抽的事件上（打完才抽），fight_tiers 只有這裡有意義；別處寫了永遠不成立。"""
+        """after_fight：這個條件掛在只有遊歷會抽的事件上（actions 剛好是 ["train"]，打完才抽），fight_tiers 只有這裡有意義：
+        別的行動抽到它時沒有「剛打完的那一場」（探索三選一是互斥的支線、交友沒有戰鬥、只靠串接來的更沒有），寫了永遠不成立。"""
         known(where, cond.fight_tiers, FIGHT_TIERS, "戰鬥結果")
         need(
             after_fight or not cond.fight_tiers,
-            f"{where}：fight_tiers 只能寫在遊歷（actions 有 train）會抽的事件的條件上，別處沒有「剛打完的那一場」，永遠不成立",
+            f"{where}：fight_tiers 只能寫在遊歷會抽的事件（actions 剛好是 [\"train\"]）的條件上，別處沒有「剛打完的那一場」，永遠不成立",
         )
         for key in [*cond.marks_min, *cond.marks_max]:
             check_mark_key(where, key)
@@ -1181,7 +1182,7 @@ def validate(c: Content) -> None:
     for ev in c.events.values():
         where = f"事件 {ev.id}"
         known(where, ev.locations, c.locations, "地點")
-        check_condition(where, ev.condition, after_fight="train" in ev.actions)
+        check_condition(where, ev.condition, after_fight=ev.actions == ["train"])
         need(
             any(ch.condition == Condition() for ch in ev.choices),
             f"{where}：至少要有一個沒有條件的選項，否則玩家可能卡住",

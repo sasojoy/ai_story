@@ -63,7 +63,7 @@ class Condition(_Strict):
     week_max: int | None = None
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
-    # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在遊歷會抽的事件的條件上
+    # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
     fight_tiers: list[str] = Field(default_factory=list)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
