@@ -34,8 +34,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_hear, can_meet, change_trend, check_result_line,
-    current_day, display_name, ears_of, fill_marks, free_text_rate,
+    GEJU, HUANGJIN, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
+    display_name, ears_of, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -2771,12 +2771,14 @@ class Game:
 
     def _road_ask(self) -> list[str]:
         """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
-        仍算做過。別的陣營的軍情、寫給別人的個人線索聽不到。"""
+        仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
+        （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
         s, c = self.state, self.content
         p = s.player
+        ears = ears_of(s, c)
         regions = {region.id for loc_id in self._road_ends() if (region := atlas.region_of(c, loc_id)) is not None}
         heard = [
-            r for r in s.world.rumors if r.region in regions and can_hear(r, s)
+            r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
         ][-c.config.road_rumor_pool:]
         if not heard:
             return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]

@@ -254,11 +254,13 @@ def recent_seconds(days: float, content: Content, world: WorldState) -> float:
 
 
 def here_regions(state: GameState, content: Content) -> frozenset[str]:
-    """此刻人在哪些大區（傳聞分層 3.1「人在那個大區」）：人在某一站，是那一站的大區。地圖沒有大區時是空的。"""
+    """此刻人在哪些大區（傳聞分層 3.1「人在那個大區」）：人在某一站，是那一站的大區；在路上，是這段路兩頭的大區——
+    兩頭不同區時兩區都算（跟沿途打聽同一個算法），所以一路走過去，經過的大區都聽得到。地圖沒有大區時是空的。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
-    region = atlas.region_of(content, state.player.location)
-    return frozenset() if region is None else frozenset({region.id})
+    spot = atlas.road_spot(state, content)
+    places = (state.player.location,) if spot is None else (spot.behind, spot.ahead)
+    return frozenset(region.id for loc_id in places if (region := atlas.region_of(content, loc_id)) is not None)
 
 
 def ears_of(state: GameState, content: Content) -> Ears:

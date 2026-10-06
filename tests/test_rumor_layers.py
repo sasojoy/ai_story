@@ -154,3 +154,61 @@ def test_can_hear_still_answers_the_faction_and_name_half(on):
     game = _game(on, "甲", "huang", at="yingchuan")
     assert rules.can_hear(_rumor(game, "宛城一帶有人鬧事。", "wan_city"), game.state)
     assert not rules.can_hear(_rumor(game, "官軍的事。", layer="faction", faction="guan"), game.state)
+
+
+# ── Task 2：在路上 ─────────────────────────────────────────
+
+
+def _on_the_road(game, dest="luoyang_road"):
+    """從潁川（潁川汝南）往洛陽官道（洛陽）出發，停在半路上（還沒抵達）。"""
+    game.choose(f"move:{dest}")
+    assert game.state.player.journey is not None
+    return game
+
+
+def test_on_the_road_both_ends_of_the_leg_count(on):
+    game = _on_the_road(_game(on, at="yingchuan"))
+    assert rules.here_regions(game.state, on) == {"yingru", "luoyang"}
+    behind = _rumor(game, "長社一帶有人鬧事。", "changshe")
+    ahead = _rumor(game, "洛陽宮裡出了事。", "luoyang_palace")
+    elsewhere = _rumor(game, "宛城一帶有人鬧事。", "wan_city")
+    assert _hears(game, behind) and _hears(game, ahead) and not _hears(game, elsewhere)
+
+
+def test_arriving_leaves_the_old_region_behind(on):
+    game = _on_the_road(_game(on, at="yingchuan"))
+    behind = _rumor(game, "長社一帶有人鬧事。", "changshe")
+    journey = game.state.player.journey
+    game.advance(journey.arrive_at[-1] - game.state.world.time)
+    assert game.state.player.journey is None and game.state.player.location == "luoyang_road"
+    assert rules.here_regions(game.state, on) == {"luoyang"}
+    assert not _hears(game, behind)  # 見聞紀錄（離開大區後還翻得到）是傳聞分層第二份計畫的事
+
+
+def test_asking_along_the_road_only_picks_from_the_board(on):
+    game = _game(on, at="yingchuan")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    _rumor(game, "四天前長社的事。", "changshe", time=7 * day - 1)
+    _rumor(game, "四天前的天下大事。", "changshe", layer="world", time=7 * day - 1)
+    _rumor(game, "昨天長社的事。", "changshe", time=9 * day)
+    msgs = _on_the_road(game).choose("road:ask")
+    assert any("聽說：昨天長社的事。" in m for m in msgs)
+    assert not any("四天前" in m for m in msgs)
+
+
+def test_asking_along_the_road_finds_nothing_when_the_board_is_bare(on):
+    game = _game(on, at="yingchuan")
+    day = _day(game)
+    game.state.world.time = 10 * day
+    _rumor(game, "四天前長社的事。", "changshe", time=day)
+    msgs = _on_the_road(game).choose("road:ask")
+    assert any("這一帶最近沒什麼新鮮事" in m for m in msgs)
+
+
+def test_asking_along_the_road_with_the_switch_off_still_hears_old_news(real):
+    game = _game(real, at="yingchuan")
+    game.state.world.time = 10 * 86400
+    _rumor(game, "很久以前長社的事。", "changshe", time=0.0)
+    msgs = _on_the_road(game).choose("road:ask")
+    assert any("聽說：很久以前長社的事。" in m for m in msgs)
