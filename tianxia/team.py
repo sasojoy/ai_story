@@ -596,6 +596,32 @@ def take_encounter_toll(
     return msgs
 
 
+def toll_saved(
+    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
+) -> tuple[int, int]:
+    """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
+    各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。只讀、不動狀態：在 take_encounter_toll 之前呼叫，
+    量的是還沒扣的那一刻；用本人的複本照 _apply_toll 同一套算，四捨五入跟「氣血 -N」「內傷 +N」的寫法一樣，
+    所以「少扣了 N」加上畫面上的「氣血 -M」剛好是沒有化勁時的 N+M。沒有這兩個功效、或這個結果不扣氣血，是 (0, 0)。"""
+    cfg = content.config
+    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
+    lo = traits.loadout(state, content, world)
+    cut, still = traits.amount(content, lo, "toll_cut"), "no_injury" in lo.specials
+    if fraction <= 0 or (cut <= 0 and not still):
+        return 0, 0
+    agi, con = state.player.stats.get("agi", BASE_STAT), con_of(state, content, world, PLAYER)
+
+    def toll(cut_: float, injury: float) -> tuple[float, float]:
+        return _apply_toll(
+            content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury,
+        )
+
+    real_lost, real_hurt = toll(cut, 0.0 if still else 1.0)
+    saved = round(toll(0.0, 0.0 if still else 1.0)[0]) - round(real_lost) if cut > 0 else 0
+    spared = round(toll(cut, 1.0)[1]) - round(real_hurt) if still else 0
+    return max(0, saved), max(0, spared)
+
+
 def _apply_toll(
     content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT, injury: float = 1.0,
 ) -> tuple[float, float]:

@@ -2720,7 +2720,7 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "None" not in card
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
-    assert card.rstrip().endswith("來源：自創（沈浪 所創）<br />\n功效：〔化勁〕一場少扣 20% 氣血</p>")
+    assert card.rstrip().endswith("來源：自創（沈浪 所創）<br />\n功效：〔化勁〕每場打完損失的氣血減少 20%</p>")
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):

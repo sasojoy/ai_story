@@ -62,7 +62,7 @@ def test_detail_of_a_historical_skill(state, content, world):
         "第1成 ●○○○○○○○○○，威力 50.0（下一成：57.8）\n"
         "第一成 50.0　第十成 120.0\n"
         "來源：本命武學\n"
-        "功效：〔破甲〕對手強度當作低 12%"
+        "功效：〔破甲〕對手的強度等於低了 12%，更容易贏"
     )
 
 
@@ -826,17 +826,17 @@ def test_the_worn_slot_cards_carry_the_traits_too(state, content, world):
     """F9：身上那一欄的功法卡（detail，網頁的 slot_cards）也有功效那一行，跟修練頁的清單（art_rows）一樣。"""
     state.player.member.wugong_id = "basic_fist"
     text = skillview.detail(state, content, world, "武學")
-    assert "\n功效：〔厚〕帶傷時出手的下限高 5%" in text  # 基礎武學下品：一層、×1
+    assert "\n功效：〔厚〕受傷時威力掉得少：氣血越低，比平常多保住最多 5% 的威力（滿血時沒差）" in text  # 基礎武學下品：一層、×1
 
 
 def test_the_card_in_the_practice_list_follows_the_players_own_quality(state, content, world):
     """數字跟品質一起變：同一門武學修練到上品，功效的數字乘 2。"""
     state.player.member.wugong_id = "basic_fist"
     (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
-    assert "功效：〔厚〕帶傷時出手的下限高 5%" in row["card"]
+    assert "功效：〔厚〕受傷時威力掉得少：氣血越低，比平常多保住最多 5% 的威力" in row["card"]
     state.player.art_quality["basic_fist"] = "上品"
     (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
-    assert "功效：〔厚〕帶傷時出手的下限高 10%" in row["card"]
+    assert "功效：〔厚〕受傷時威力掉得少：氣血越低，比平常多保住最多 10% 的威力" in row["card"]
 
 
 def test_the_card_of_a_fused_art_lists_every_trait_and_the_special(state, content, world):
@@ -846,7 +846,7 @@ def test_the_card_of_a_fused_art_lists_every_trait_and_the_special(state, conten
     world.claim_skill_name(art)
     state.player.arts = [art.id]
     (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
-    assert "〔破甲〕對手強度當作低 " in row["card"] and "〔先手〕" in row["card"] and "〔悟招〕打贏多拿 5 心得" in row["card"]
+    assert "〔破甲〕對手的強度等於低了 " in row["card"] and "〔先手〕" in row["card"] and "〔悟招〕打贏多得 5 點心得" in row["card"]
 
 
 def test_the_furnace_shows_what_a_known_recipe_gives(state, content, world):

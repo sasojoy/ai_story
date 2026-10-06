@@ -86,6 +86,15 @@ class TollFacts:
     wounded: bool = False  # 開打前氣血就低於上限（厚才有用：它把氣血係數的下限拉高，滿血時沒有東西可拉；內傷讓「滿血」的上蓋低於上限，也算）
     low_hp: bool = False  # 開打前氣血低到「見底」（剩 LOW_HP_RATIO 以下，含）：厚那句「氣血見底」才挑得到
     healed: tuple[str, ...] = ()  # 真的回了血（有一行「氣血 +N」）的功效掛點：win_heal（吸取）、heal_after（回春）；劇情戰不回血
+    # 下面三個是功效演出句後面括號裡的數字（FB-084）：跟戰報上的「氣血 -N」「氣血 +N」「內傷 +N」是同一批算的
+    saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
+    spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
+    gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
+
+
+def _points(lines: list[str]) -> int:
+    """heal_fraction 回的「氣血 +N」那一行的 N：功效演出句的括號（FB-084）寫的跟戰報上那一行是同一個數，不另外算一份。"""
+    return next((int(m.removeprefix("氣血 +")) for m in lines if m.startswith("氣血 +")), 0)
 
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
@@ -2717,23 +2726,28 @@ class Game:
         事實（TollFacts）是 _play_rounds 寫功效的演出句用的：開打前氣血是不是低於上限（厚），哪幾個回血的功效真的回了血
         （沒回到 1 點、沒有「氣血 +N」那一行就不算）。"""
         before, cap = self._player_hp_and_cap()
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild)  # 扣之前量：化勁、不動這一場改了多少
         toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         lo = traits.loadout(self.state, self.content, self.world)
         healed: list[str] = []
+        gained: list[tuple[str, int]] = []
         if tier in team.WIN_TIERS and traits.has(lo, "win_heal"):  # 吸取（13.2）
             heal = team.heal_fraction(self.state, self.content, self.world, traits.amount(self.content, lo, "win_heal"))
             toll += heal
             if heal:
                 healed.append("win_heal")
+                gained.append(("win_heal", _points(heal)))
         heal_after = lo.specials.get("heal_after")  # 回春（13.4）：不論勝負
         if heal_after is not None:
             heal = team.heal_fraction(self.state, self.content, self.world, heal_after.amount)
             toll += heal
             if heal:
                 healed.append("heal_after")
+                gained.append(("heal_after", _points(heal)))
         return toll, hp_lost, TollFacts(
             wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
+            saved=saved, spared=spared, gained=tuple(gained),
         )
 
     def _play_rounds(
@@ -2777,29 +2791,37 @@ class Game:
         另外寫進 notes。"""
         names = {t.hook: t.name for t in self.content.traits.general}
 
-        def say(name: str, low_hp: bool = True) -> str:
-            return self._trait_say(lo, name, squad, rng, low_hp=low_hp)
+        def say(name: str, low_hp: bool = True, note: str = "") -> str:
+            """演出句；note 是這一場改了多少（FB-084，「（少扣了 12 點氣血）」），沒有數字可寫的功效不給。"""
+            return self._trait_say(lo, name, squad, rng, low_hp=low_hp) + note
 
+        gained = dict(facts.gained)
         won = record.tier in team.WIN_TIERS
         before = [say(names[h]) for h in ("big_win", "luck_narrow", "difficulty_cut", "luck_widen") if lo.layers.get(h)]
         before += [say(lo.specials[h].name) for h in ("double_luck", "power_from_difficulty") if h in lo.specials]
         after: list[str] = []
         if hp_lost and lo.layers.get("toll_cut"):
-            after.append(say(names["toll_cut"]))
+            after.append(say(names["toll_cut"], note=f"（少扣了 {facts.saved} 點氣血）" if facts.saved > 0 else ""))
         if lo.layers.get("condition_floor") and facts.wounded:
             after.append(say(names["condition_floor"], low_hp=facts.low_hp))
         if hp_lost and "no_injury" in lo.specials:
-            after.append(say(lo.specials["no_injury"].name))
+            after.append(say(lo.specials["no_injury"].name, note=f"（免了 {facts.spared} 點內傷）" if facts.spared > 0 else ""))
         if won and lo.layers.get("win_reward") and (squad.exp or squad.reward_xinde):  # 乘勝：對手有東西可以多給
-            after.append(say(names["win_reward"]))
+            more = traits.amount(self.content, lo, "win_reward")  # 跟 _battle_rewards 同一個乘法、同一個四捨五入
+            extra = [
+                f"{round(base * (1 + more)) - base} 點{what}" for base, what in ((squad.reward_xinde, "心得"), (squad.exp, "經驗"))
+                if round(base * (1 + more)) > base
+            ]
+            after.append(say(names["win_reward"], note=f"（多得 {'、'.join(extra)}）" if extra else ""))
         if "win_heal" in facts.healed:  # 吸取：真的回了血
-            after.append(say(names["win_heal"]))
+            after.append(say(names["win_heal"], note=f"（回了 {gained['win_heal']} 點氣血）" if gained.get("win_heal") else ""))
         if won and "win_xinde" in lo.specials:  # 悟招
-            after.append(say(lo.specials["win_xinde"].name))
+            after.append(say(lo.specials["win_xinde"].name, note=f"（多得 {int(lo.specials['win_xinde'].amount)} 點心得）"))
         if "heal_after" in facts.healed:  # 回春
-            after.append(say(lo.specials["heal_after"].name))
+            after.append(say(lo.specials["heal_after"].name, note=f"（回了 {gained['heal_after']} 點氣血）" if gained.get("heal_after") else ""))
         if record.kind == "train" and "train_stamina" in lo.specials:  # 輕身：只在遊歷
-            after.append(say(lo.specials["train_stamina"].name))
+            saved = self.content.config.action_cost["train"] - self._action_costs()["train"]  # 按鈕上寫的與真的扣的少了多少
+            after.append(say(lo.specials["train_stamina"].name, note=f"（少花了 {saved} 點體力）" if saved > 0 else ""))
         return before, after
 
     # ── 挑戰大勢人物本人（計畫 T4、軍令文件 4.5）─────────────
