@@ -738,6 +738,7 @@ class Config(_Strict):
     action_cost: dict[str, int] = Field(
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
+    drill_reward_share: float = Field(default=0.3, ge=0, le=1)  # 跟自己人操練只給對手獎勵的幾成（戰鬥系統第八節：沒風險就拿得少）
     time_scale: float = 1.0
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）

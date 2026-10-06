@@ -2290,23 +2290,26 @@ class Game:
 
     def _drill(self, squad: Squad) -> list[str]:
         """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
-        給經驗與心得；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
+        給經驗與心得，但只給對手的三成（Config.drill_reward_share，戰鬥系統第八節）；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
         msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
         self._outcome("操練", msgs[0])
+        share = c.config.drill_reward_share
+        xinde = int(squad.reward_xinde * share + 0.5)  # 四捨五入（round 是銀行家進位）
+        exp = int(squad.exp * share + 0.5)
         xinde_line = None
-        if squad.reward_xinde:
-            p.stats["xinde"] = p.stats.get("xinde", 0) + squad.reward_xinde
-            xinde_line = f"心得 +{squad.reward_xinde}"
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            xinde_line = f"心得 +{xinde}"
             msgs.append(xinde_line)
             if self._draft is not None:
                 self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
-        msgs += team.add_team_exp(s, c, self.world, squad.exp)  # 本人與帶著的同伴都拿（FB-002）
-        if self._draft is not None and squad.exp > 0:
-            self._draft.changes.append(f"經驗 +{squad.exp}（每人）")
+        msgs += team.add_team_exp(s, c, self.world, exp)  # 本人與帶著的同伴都拿（FB-002）
+        if self._draft is not None and exp > 0:
+            self._draft.changes.append(f"經驗 +{exp}（每人）")
         for trend_id, delta in self.train_trend_push(loc.id).items():
             msgs += self.push_trend(trend_id, delta, source="drill")
         return msgs
