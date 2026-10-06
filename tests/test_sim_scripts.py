@@ -103,7 +103,9 @@ def test_the_server_bot_simulation_can_ask_a_real_model(monkeypatch):
     """--real-model 傳給 run_season（預設是假的取名：只數次數、不連模型）。"""
     sim = _load("sim_server_bots")
     seen = []
-    monkeypatch.setattr(sim, "run_season", lambda content, workdir, seed, tick, real_model=False: seen.append(real_model) or {})
+    monkeypatch.setattr(
+        sim, "run_season", lambda content, workdir, seed, tick, real_model=False, pause=None: seen.append(real_model) or {},
+    )
     for flags in ([], ["--real-model"]):
         monkeypatch.setattr(sys, "argv", ["sim_server_bots.py", "--seasons", "1", *flags])
         sim.main()

@@ -449,22 +449,22 @@ def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_d
     沒有第三方的決戰照舊只有兩軍的假人趕來。看不出誰是假人：兩邊的假人行為要一樣。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
     monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
-    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng: None)  # 只看誰算在線
+    monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng, slot=None: None)  # 只看誰算在線
     content.scenario.factions.append(FactionDef(id="haoqiang", name="地方豪強", join_at=["town"]))
     content.config.bots_min_per_faction = 1
     content.config.bot_tick_seconds = 1000
-    assert runner.tick().online == 0
+    assert _tick_cleanly(runner).online == 0
     characters = open_characters()
     for state in characters.all(bots_only=True):  # 三個陣營各一位假人，都已投靠
         state.player.faction = state.player.bot.faction
         characters.save(state)
     assert sorted(s.player.faction for s in _bots()) == ["guan", "haoqiang", "huang"]
     world.start_battle(content.battles["t1"], clock[0])
-    assert runner.tick().online == 2  # 這一場只有兩軍：豪強的假人不趕來
+    assert _tick_cleanly(runner).online == 2  # 這一場只有兩軍：豪強的假人不趕來
     world.clear_battle()
     content.battles["t1"].third = ThirdParty(faction="haoqiang", trend="kou")
     world.start_battle(content.battles["t1"], clock[0])
-    assert runner.tick().online == 3  # 有第三方：豪強的假人也趕來
+    assert _tick_cleanly(runner).online == 3  # 有第三方：豪強的假人也趕來
 
 
 def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):
