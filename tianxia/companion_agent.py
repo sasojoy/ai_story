@@ -333,7 +333,8 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
     if result is None:
         return []
     p.turns_since_consolidation[companion_id] = 0
-    p.relationship_notes[companion_id] = result.relationship_summary.strip() or p.relationship_notes.get(companion_id, "")
+    # 這句會餵回之後的對話：跟玩家看得到的模型文字一樣先清位元組碼、轉繁體（FB-075）
+    p.relationship_notes[companion_id] = zh.to_traditional(result.relationship_summary.strip()) or p.relationship_notes.get(companion_id, "")
     return [f"📖 【記憶梳理】{character.name} 這段時光的點滴，已在心底沉澱。"]
 
 
@@ -369,8 +370,9 @@ def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef
             result = client.chat_structured(messages, DriftSynthesis, temperature=0.6, required_fields=["drift_note"])
         except Exception:
             continue
-        if result.drift_note.strip():
-            world.record_drift_synthesis(companion_id, result.drift_note.strip())
+        note = zh.to_traditional(result.drift_note.strip())  # 全服共用、餵回模型：同樣先清乾淨（FB-075）
+        if note:
+            world.record_drift_synthesis(companion_id, note)
             return
 
 
