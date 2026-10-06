@@ -1455,7 +1455,11 @@ class Game:
                 "pending": False,
             }
         # 引導與結語都過去了：入伍段（新手引導計畫二），再來是碰到才說（計畫三）。順序固定是 步驟 → 結語 → 入伍段 → 提示，「知道了」只收框上那一個
-        return enlist.box(s, c) or self._hint_box()
+        return enlist.box(s, c, self._enabled_ids) or self._hint_box()
+
+    def _enabled_ids(self) -> set[str]:
+        """選單上此刻按得下去的鈕的 id（入伍段第一道軍令那一步的框只點名按得下去的行動，見 enlist.how_here）。不算勝算、不推進戰鬥。"""
+        return {o.id for o in self.options(odds=False, tick=False) if o.enabled}
 
     def _hint_box(self) -> dict | None:
         """碰到才說的框：排著的第一條。眼前有事件或有所感還沒了結時不出（F3）：提示的框是 end 的、網頁不會收成一行，擺在事件的選項上面會把最後
