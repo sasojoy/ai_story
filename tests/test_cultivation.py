@@ -44,8 +44,33 @@ def kicker(state, world):
 
 
 def test_chance_climbs_with_each_failure_to_a_sure_thing_for_the_lower_two_steps(content):
-    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 8)] == [20, 30, 100]
+    # W8（企劃者 2026-10-06）：下品→中品 40% 起、每失敗一次 +20%、第三次必成；中品→上品照舊 10% 起、+6%、第 16 次必成
+    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 2, 3, 8)] == [40, 60, 100, 100, 100]
     assert [cultivation.chance(content, "上品", n) for n in (0, 1, 15)] == [10, 16, 100]
+
+
+def test_the_first_step_is_forty_then_sixty_then_certain_and_the_other_steps_did_not_move(content):
+    """W8：數字在 Config（cultivate_odds 與 cultivate_sure_by），不是程式裡的特例；其他兩階一個數字都沒動。"""
+    assert content.config.cultivate_odds["中品"] == (40, 20) and content.config.cultivate_sure_by == {"中品": 3}
+    assert content.config.cultivate_odds["上品"] == (10, 6) and content.config.cultivate_odds["絕學"] == (4, 3)
+    assert [cultivation.chance(content, "上品", n) for n in range(0, 17)] == [min(100, 10 + 6 * n) for n in range(0, 17)]
+    assert [cultivation.chance(content, "絕學", n) for n in range(0, 20)] == [min(50, 4 + 3 * n) for n in range(0, 20)]  # 絕學沒有保底
+    content.config.cultivate_sure_by = {"中品": 2}  # 第幾次必成寫在設定裡：改成 2，第二次就必成
+    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 2)] == [40, 100, 100]
+    content.config.cultivate_sure_by = {}  # 不寫就沒有保底：照 40、60、80……爬，加到 100 才必成
+    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 2, 3, 4)] == [40, 60, 80, 100, 100]
+
+
+def test_the_real_content_carries_the_new_first_step_numbers():
+    """正式內容（content/config.json）寫的跟程式的預設一樣：之後改一邊忘了另一邊，這裡會抓到。"""
+    from pathlib import Path
+
+    from tianxia.content import load_content
+    from tianxia.models import Config
+
+    cfg = load_content(Path(__file__).parent.parent / "content").config
+    assert cfg.cultivate_odds == Config().cultivate_odds == {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
+    assert cfg.cultivate_sure_by == Config().cultivate_sure_by == {"中品": 3}
 
 
 def test_the_climb_to_a_peerless_art_stops_at_half_and_a_pill_adds_on_top_of_the_cap(content):
@@ -58,8 +83,10 @@ def test_the_climb_to_a_peerless_art_stops_at_half_and_a_pill_adds_on_top_of_the
 
 
 def test_insight_raises_the_odds_but_never_past_certain(content):
-    assert cultivation.chance(content, "中品", 0, wis=15) == 26
-    assert cultivation.chance(content, "中品", 8, wis=15) == 100
+    """悟性照舊乘在前兩次（第三次的保底蓋過它，下面那一條）。"""
+    assert cultivation.chance(content, "中品", 0, wis=15) == 52  # 40 × 1.3
+    assert cultivation.chance(content, "中品", 1, wis=15) == 78  # 60 × 1.3
+    assert cultivation.chance(content, "中品", 2, wis=15) == 100 and cultivation.chance(content, "中品", 8, wis=15) == 100
 
 
 def test_insight_stays_under_the_peerless_cap_and_the_pill_sits_on_top(content):
@@ -70,22 +97,32 @@ def test_insight_stays_under_the_peerless_cap_and_the_pill_sits_on_top(content):
 
 
 def test_low_insight_lowers_the_odds_but_a_sure_try_stays_sure(content):
-    assert cultivation.chance(content, "中品", 0, wis=3) == 19  # 20 × 0.94 = 18.8
+    assert cultivation.chance(content, "中品", 0, wis=3) == 38  # 40 × 0.94 = 37.6
+    assert cultivation.chance(content, "中品", 1, wis=3) == 56  # 60 × 0.94 = 56.4
+    assert cultivation.chance(content, "中品", 2, wis=3) == 100  # 第三次的保底蓋過悟性：沒有保底的話是 80 × 0.94 = 75
     assert cultivation.chance(content, "中品", 8, wis=3) == 100  # 寫明的那一次照樣必成
     assert cultivation.chance(content, "上品", 15, wis=1) == 100
 
 
+def test_the_third_first_step_try_is_sure_whatever_the_pill_or_a_cap(content):
+    """保底蓋過悟性，也不被階的上限壓住；破境丹只在衝絕學時有（boost_for），不影響這一階。"""
+    content.config.cultivate_cap = {"中品": 30, "絕學": 50}
+    assert [cultivation.chance(content, "中品", n) for n in (0, 1, 2)] == [30, 30, 100]  # 前兩次照舊受上限，第三次必成
+    assert cultivation.chance(content, "中品", 2, 15, wis=1) == 100
+
+
 def test_the_roll_and_the_next_chance_follow_the_players_insight(kicker, content, world):
-    """擲的與寫的是同一個數字（odds_for）：悟性 15 時 25 點的骰子過得了 26% 的關，失敗時寫的下一次也乘上悟性。"""
+    """擲的與寫的是同一個數字（odds_for）：悟性 15 時 45 點的骰子過得了 52% 的關（悟性 5 的 40% 過不了），失敗時寫的下一次也乘上悟性。"""
     kicker.player.stats["wis"] = 15
-    assert cultivation.odds_for(kicker, content, "中品", 0) == 26
-    assert "晉為中品" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.25))[0]
+    assert cultivation.odds_for(kicker, content, "中品", 0) == 52
+    assert "晉為中品" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.45))[0]
     kicker.player.art_quality["旋風腿"] = "下品"
     kicker.player.art_mastery.pop("旋風腿", None)
     kicker.player.stats["wis"] = 5
-    assert "還差一點火候" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.25))[0]  # 25 ≥ 20
+    assert "還差一點火候" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.45))[0]  # 45 ≥ 40
+    kicker.player.art_mastery["旋風腿"] = 0
     kicker.player.stats["wis"] = 15
-    assert "下一次約 52%" in cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]  # 熟練度 2：(20 + 2 × 10) × 1.3
+    assert "下一次約 78%" in cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]  # 熟練度 1：60 × 1.3
 
 
 def test_a_target_with_no_cap_entry_climbs_to_a_hundred_as_before(content):
@@ -102,7 +139,7 @@ def test_a_success_raises_only_this_players_quality(kicker, content, world):
 
 def test_a_failure_adds_mastery_and_the_next_try_is_likelier(kicker, content, world):
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
-    assert kicker.player.art_mastery["旋風腿"] == 1 and "30%" in msgs[0]
+    assert kicker.player.art_mastery["旋風腿"] == 1 and "下一次約 60% 的機會晉為中品" in msgs[0]  # W8：40% 失敗之後是 60%
     cultivation.cultivate(kicker, content, world, "旋風腿", WIN)
     assert "旋風腿" not in kicker.player.art_mastery  # 升品之後歸零
 
@@ -113,28 +150,47 @@ def test_the_level_does_not_change_on_a_quality_rise(kicker, content, world):
     assert kicker.player.art_levels["旋風腿"] == 7
 
 
-@pytest.mark.parametrize(("start", "target", "tries"), [
-    ("下品", "中品", 9), ("中品", "上品", 16),
-])
-def test_losing_every_roll_still_ends_in_a_sure_success_after_the_stated_number_of_tries(
-    kicker, content, world, start, target, tries,
-):
-    """設計 3.5 的保底（下品→中品、中品→上品；上品→絕學沒有保底，見下一個測試）：骰子永遠擲輸（0.999），
+def test_losing_every_roll_still_ends_in_a_sure_success_after_the_stated_number_of_tries(kicker, content, world):
+    """設計 3.5 的保底（中品→上品；上品→絕學沒有保底，見下一個測試）：骰子永遠擲輸（0.999），
     熟練度一次加一、顯示的下一次機率每次加一個級距，加到 100% 的那一次必成。
-    釘在 cultivate() 上：熟練度要累加（不是每次都 1）、擲骰要用累積後的機率（不是永遠第一次的機率）。"""
-    first, step = content.config.cultivate_odds[target]
+    釘在 cultivate() 上：熟練度要累加（不是每次都 1）、擲骰要用累積後的機率（不是永遠第一次的機率）。
+    （下品→中品 W8 起第三次必成，另有一個測試。）"""
+    first, step = content.config.cultivate_odds["上品"]
+    tries = 16
     p = kicker.player
-    p.art_quality["旋風腿"], p.stamina = start, 10 * tries
+    p.art_quality["旋風腿"], p.stamina = "中品", 10 * tries
     shown = []
     for failure in range(1, tries):  # 前 tries - 1 次都輸
         msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
         assert "還差一點火候" in msgs[0] and p.art_mastery["旋風腿"] == failure
-        assert p.art_quality["旋風腿"] == start
-        shown.append(int(re.search(r"下一次約 (\d+)%", msgs[0]).group(1)))
+        assert p.art_quality["旋風腿"] == "中品"
+        said = re.search(r"下一次約 (\d+)%", msgs[0])
+        shown.append(int(said.group(1)) if said else 100)  # 加到 100% 的那一句說「一定」，不說「約 100%」
     assert shown == [min(100, first + step * n) for n in range(1, tries)] and shown[-1] == 100
+    assert "下一次一定晉為上品" in msgs[0] and "約 100%" not in msgs[0]
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)  # 同一個輸的骰子：這一次機率已經是 100%
-    assert f"從{start}晉為{target}" in msgs[0]
-    assert p.art_quality["旋風腿"] == target and "旋風腿" not in p.art_mastery and p.stamina == 0
+    assert "從中品晉為上品" in msgs[0]
+    assert p.art_quality["旋風腿"] == "上品" and "旋風腿" not in p.art_mastery and p.stamina == 0
+
+
+def test_losing_the_first_two_first_step_rolls_makes_the_third_a_sure_thing(kicker, content, world):
+    """W8（企劃者 2026-10-06）：下品→中品 40% 起、每失敗一次 +20%、最多第三次必成。擲輸的骰子：第一次 40%（輸，說下一次 60%）、
+    第二次 60%（輸，說下一次一定）、第三次同一個輸的骰子也晉品。"""
+    p = kicker.player
+    p.stamina = 30
+    first = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert "還差一點火候" in first[0] and "下一次約 60% 的機會晉為中品" in first[0] and p.art_mastery["旋風腿"] == 1
+    second = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert "還差一點火候" in second[0] and "下一次一定晉為中品" in second[0] and "%" not in second[0] and p.art_mastery["旋風腿"] == 2
+    third = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)
+    assert "從下品晉為中品" in third[0] and p.art_quality["旋風腿"] == "中品" and "旋風腿" not in p.art_mastery and p.stamina == 0
+
+
+def test_the_first_try_wins_under_forty_and_loses_at_forty(kicker, content, world):
+    p = kicker.player
+    assert "晉為中品" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.39))[0]  # 39 < 40
+    p.art_quality["旋風腿"], p.art_mastery["旋風腿"] = "下品", 0
+    assert "還差一點火候" in cultivation.cultivate(kicker, content, world, "旋風腿", Fixed(0.40))[0]  # 40 不小於 40
 
 
 def test_losing_every_roll_never_promotes_a_peerless_art_and_the_shown_chance_stops_at_half(kicker, content, world):
@@ -260,12 +316,12 @@ def test_a_save_from_before_the_pill_loads_with_none(state):
     assert PlayerState.model_validate(data).legend_items == 0 and state.player.legend_items == 0
 
 
-def test_the_stated_chances_for_the_first_step_climb_thirty_to_a_hundred(kicker, content, world):
-    shown = [
-        int(re.search(r"下一次約 (\d+)%", cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]).group(1))
-        for _ in range(8)
-    ]
-    assert shown == [30, 40, 50, 60, 70, 80, 90, 100] and kicker.player.art_mastery["旋風腿"] == 8
+def test_the_stated_chances_for_the_first_step_climb_sixty_then_a_sure_thing(kicker, content, world):
+    """W8：舊的是 30、40……100 一路爬八次；現在失敗一次之後寫 60%，兩次之後寫「一定」（第三次必成）。"""
+    first = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]
+    second = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE)[0]
+    assert int(re.search(r"下一次約 (\d+)%", first).group(1)) == 60 and kicker.player.art_mastery["旋風腿"] == 2
+    assert "下一次一定晉為中品" in second and not re.search(r"下一次約", second)
 
 
 def test_a_worn_art_can_be_cultivated_too(state, content, world):
