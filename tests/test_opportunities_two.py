@@ -1134,3 +1134,24 @@ def test_nothing_about_plots_works_once_the_season_ended(on):
     assert opportunities.act(leader.state, on, leader.world, "plot:huang_jiazi", random.Random(0)) == ["（此刻無法這麼做。）"]
     assert opportunities.on_win(leader.state, on, "yingru", "guan") == []
     assert opportunities.settle(leader.state, on) == []
+
+
+# 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：暫停中沒有任何密謀結算或進展
+
+def test_no_plot_settles_while_the_season_clock_is_paused(on):
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    _done_plot_with_two_offline_members(on)
+    low, high = _late_pair(on)
+    admin.admin_pause_clock(100.0)
+    assert admin.world.paused_at() is not None
+    for member in (low, high):
+        assert member.sync(200.0) == []  # 計時器的同步照常走，但暫停中不結算
+        assert member.choose("act:rest") == ["（此刻無法這麼做。）"]  # 選單只剩一顆灰的，動作也進不去
+        p = member.state.player
+        assert (p.contrib, p.opp_done, p.opp_settled) == (0, [], [])
+        assert not any(e.title == "密謀" for e in member.state.journal)
+    admin.admin_resume_clock(300.0)  # 繼續之後第一次同步才結算，照常
+    assert "三路並進成了，你那一路也記了一功。" in low.sync(310.0)
+    assert "三路的捷報同時送進營中，你的名字跟著報了上去。" in high.sync(310.0)
+    assert low.state.player.contrib == on.config.plot_contrib and high.state.player.opp_done == ["guan_three_roads"]
