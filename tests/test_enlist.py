@@ -3,6 +3,7 @@ import pytest
 
 from tests.test_orders import _game, _order, _win, on, real  # noqa: F401（fixture）
 from tianxia import enlist, guide
+from tianxia.state import ONBOARDING_VERSION
 from tianxia.content import ContentError, validate
 from tianxia.models import Enlist, EnlistStep, Recruiter, TutorialGoal
 
@@ -509,16 +510,19 @@ def test_view_orders_is_a_main_action_that_the_season_pause_allows():
 
 
 # ── Task 2：舊存檔、換季、主線與目標 ─────────────────────────────────
-# preflight F1／F2：不改 ONBOARDING_VERSION、不加存檔遷移、不動 prologue.migrated_step。入伍段只在「這一下才投靠」的動作上開始
-# （engine.Game._begin_enlistment），所以換版當下已經投靠的舊存檔（enlist_step 是 None）永遠不會被拖進來。
+# preflight F1：入伍段只在「這一下才投靠」的動作上開始（engine.Game._begin_enlistment），所以已經有陣營的人不會被「有陣營、入伍段還沒開始」
+# 拖進來。換版當下就已經投靠的老手（設計 7.2「已經投靠的：不走入伍段」）另外在讀檔時蓋成「走完」（enlist.mark_veteran，認的是
+# PlayerState.onboarding 的版本章：ONBOARDING_VERSION 升到 3＝有入伍段，比 3 小的是入伍段上線之前存的），要在換季清掉陣營之前蓋。
 
 
-def test_old_saves_with_a_faction_skip_enlistment(enlisting, world):
+def test_a_joined_character_of_this_version_is_not_pulled_in_by_having_a_faction(enlisting, world):
+    """換版之後才有陣營、入伍段卻沒開始的人（例如 beta 季投靠的）：讀檔、做任何行動都不會因為「有陣營、入伍段還沒開始」就被拖進入伍段
+    （F1：只在「這一下才投靠」的動作上開始）。也不會被當成老手蓋成走完：他還沒走過，下一季投靠時照常走（見下面的測試）。"""
     from tianxia.engine import Game
 
     game = _game(enlisting, faction="guan", world=world)
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
-    assert game.state.player.enlist_step is None  # 計畫二上線前存的：沒有這個欄位
+    assert game.state.player.enlist_step is None and game.state.player.onboarding == ONBOARDING_VERSION
     again = Game(enlisting, game.state, world=world)
     assert again.state.player.enlist_step is None and again.guide_box() is None
     again.choose("act:rest")  # 之後做任何行動，也不會因為「有陣營、入伍段還沒開始」就被拖進入伍段
@@ -572,11 +576,127 @@ def test_old_saves_without_a_faction_enlist_later(enlisting, world):
 
     game = _game(enlisting, at="changshe", world=world)
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
+    game.state.player.onboarding = 2  # 入伍段上線之前存的
     again = Game(enlisting, game.state, world=world)
     assert again.state.player.enlist_step is None and again.guide_box() is None
+    assert again.state.player.onboarding == ONBOARDING_VERSION  # 讀檔蓋了新的章，沒投靠的人沒有東西好蓋
     again.choose("faction:guan")
     again.choose("faction:confirm")  # 還沒投靠的：第一次投靠時照常走入伍段（設計 7.2）
     assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
+
+
+def _veteran(content, world, name="老手", **fields):
+    """入伍段上線之前就投靠了官軍的角色：版本章是 2（序章那一版）、有陣營、入伍段沒有記。回傳 (遊戲, 存檔狀態)。"""
+    game = _game(content, name, faction="guan", at="changshe", world=world)
+    p = game.state.player
+    p.tutorial_step, p.onboarding = len(guide.steps(game.state, content)), 2
+    for key, value in fields.items():
+        setattr(p, key, value)
+    return game, game.state
+
+
+def test_a_character_who_joined_before_enlistment_existed_is_marked_enlisted_when_loaded(enlisting, world):
+    """設計 7.2「已經投靠的：不走入伍段」：換版當下就有陣營的角色，讀檔那一刻蓋成走完——沒有框、沒有紀錄裡的話。"""
+    from tianxia.engine import Game
+
+    _, state = _veteran(enlisting, world)
+    journal_before = [list(entry.guide) for entry in state.journal]
+    again = Game(enlisting, state, world=world)
+    p = again.state.player
+    assert p.enlist_step == len(enlisting.tutorial.enlist.steps) and not p.enlist_end and enlist.done(again.state, enlisting)
+    assert again.guide_box() is None and [list(entry.guide) for entry in again.state.journal] == journal_before
+    assert p.onboarding == ONBOARDING_VERSION
+
+
+def test_a_veteran_loaded_mid_season_is_not_walked_through_it_when_he_rejoins_next_season(enlisting, world):
+    from tianxia.engine import Game
+
+    _, state = _veteran(enlisting, world)
+    game = Game(enlisting, state, world=world)  # 這一季讀檔：蓋章
+    game._reset_player_for_new_season(2)  # 換季：陣營清掉
+    assert game.state.player.faction is None and enlist.done(game.state, enlisting)
+    game.state.player.location = "changshe"
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert game.guide_box() is None and not any(line.startswith("【老石】") for e in game.state.journal for line in e.guide)
+
+
+def test_a_veteran_first_loaded_after_the_season_already_changed_is_not_walked_through_it(enlisting, world):
+    """換季的那一刻他沒在線，下次讀檔時陣營在同一次讀檔裡被換季清掉：蓋章要在換季之前（_drop_stale_references 一開頭），不然那時
+    他已經認不出是老手了。走真的換季（管理者收季、開下一季）、真的讀檔。"""
+    import random
+
+    from tianxia.characters import open_characters
+    from tianxia.engine import Game
+
+    enlisting.config.auto_open_first_season, enlisting.config.admins = True, ["管"]
+    chars = open_characters()
+    admin = Game.new(enlisting, "管", rng=random.Random(1), world=world)
+    _, state = _veteran(enlisting, world)
+    for saved in (admin.state, state):
+        chars.save(saved)
+    admin.admin_end_season(now=100.0)
+    admin.admin_next_season(now=200.0)
+    loaded = Game(enlisting, chars.load("老手"), rng=random.Random(2), world=world)
+    loaded.sync(300.0)
+    assert loaded.state.player.season_number == 2 and loaded.state.player.faction is None  # 陣營被換季清掉了
+    assert enlist.done(loaded.state, enlisting)
+    loaded.state.player.location = "changshe"
+    loaded.choose("faction:guan")
+    loaded.choose("faction:confirm")
+    assert loaded.guide_box() is None and enlist.done(loaded.state, enlisting)
+
+
+def test_the_veteran_marking_leaves_everyone_else_alone(enlisting, world):
+    """只認入伍段上線之前就投靠的人。沒投靠的老存檔（上面）照常走；走到一半的留著步數；略過的還是略過；換版之後才有陣營、
+    入伍段沒開始的人（beta 季投靠）不是老手；內容沒有入伍段的話什麼都不蓋。"""
+    from tianxia.engine import Game
+
+    _, state = _veteran(enlisting, world, "半途", enlist_step=1)
+    assert Game(enlisting, state, world=world).state.player.enlist_step == 1  # 走到一半：留著
+    _, state = _veteran(enlisting, world, "略過", guide_skipped=True, enlist_step=0)  # 在還沒有入伍段的內容上略過的樣子（skip 存 0）
+    again = Game(enlisting, state, world=world)
+    assert again.state.player.guide_skipped and again.state.player.enlist_step == 0 and not enlist.active(again.state, enlisting)
+    _, state = _veteran(enlisting, world, "新人")
+    state.player.onboarding = ONBOARDING_VERSION  # 換版之後建的角色，在 beta 季投靠：入伍段沒開始
+    again = Game(enlisting, state, world=world)
+    assert again.state.player.enlist_step is None
+    again._reset_player_for_new_season(2)  # 下一季（第一季）投靠時才走
+    again.state.player.location = "changshe"
+    again.choose("faction:guan")
+    again.choose("faction:confirm")
+    assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
+    saved, enlisting.tutorial.enlist = enlisting.tutorial.enlist, None
+    _, state = _veteran(enlisting, world, "無段")
+    assert Game(enlisting, state, world=world).state.player.enlist_step is None  # 內容沒有入伍段：沒有東西好蓋
+    enlisting.tutorial.enlist = saved
+
+
+def test_a_fresh_character_walks_the_enlistment_and_is_never_marked_as_a_veteran(enlisting, world):
+    """換版之後建的角色版本章就是新的：投靠時照常走；之後讀檔、換季（沒走完的重來）都不會被蓋成老手。"""
+    from tianxia.engine import Game
+
+    game = _joined(enlisting)
+    assert game.state.player.onboarding == ONBOARDING_VERSION and game.state.player.enlist_step == 0
+    assert game.guide_box()["speaker"] == "老石"
+    again = Game(enlisting, game.state, world=game.world)
+    assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
+    again._reset_player_for_new_season(2)
+    assert again.state.player.enlist_step is None  # 沒走完就換季：下一季投靠從頭走
+
+
+def test_raising_the_version_does_not_convert_the_step_numbers_again(enlisting, world):
+    """版本章升到 3（有入伍段）之後，章是 2 的角色（序章那一版，步數已經是新編號）不能再被換算一次：prologue.migrated_step 認的是
+    「序章那一版」（PROLOGUE_ONBOARDING，2），不是現在的版本。比 2 小的（舊的八步）照舊換算。"""
+    from tianxia import prologue
+
+    game, _ = _veteran(enlisting, world)
+    p = game.state.player
+    p.tutorial_step = 8
+    assert prologue.PROLOGUE_ONBOARDING == 2 and ONBOARDING_VERSION == 3
+    assert prologue.migrated_step(p, enlisting) == 8  # 章 2：已經是新編號
+    p.onboarding = 1
+    assert prologue.migrated_step(p, enlisting) == enlisting.tutorial.prologue_steps + (8 - prologue.OLD_BASE_STEPS)
 
 
 def test_defecting_does_not_restart_enlistment(enlisting):

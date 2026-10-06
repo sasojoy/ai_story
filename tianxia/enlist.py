@@ -50,6 +50,23 @@ def begin_if_joined(state: GameState, content: Content) -> bool:
     return True
 
 
+ONBOARDING = 3  # 入伍段上線的版本章（state.ONBOARDING_VERSION 升到 3 的那一版）；比它小的存檔是入伍段上線之前存的
+
+
+def mark_veteran(state: GameState, content: Content) -> bool:
+    """換版當下已經投靠的角色不走入伍段（設計 7.2）：讀檔時把「入伍段上線之前就有陣營」的人蓋成走完（enlist_step ＝步數），
+    沒有框、也不寫任何話。認的是 PlayerState.onboarding 的版本章（比 ONBOARDING 小＝入伍段上線之前存的）：換版之後建的角色、
+    章一開始就是新的，在 beta 季投靠、入伍段沒開始的人也不會被當成老手（他還沒走過，下一季投靠時照常走）。
+    沒投靠的老存檔、走到一半的（enlist_step 不是 None）、略過的都不動；內容沒有入伍段什麼都不蓋。
+    要在換季之前叫（Game._drop_stale_references 一開頭）：換季會把陣營清掉，之後就認不出他是老手；蓋了走完的 enlist_step 換季會帶過去
+    （_reset_player_for_new_season），下一季再投靠不重走。回傳有沒有蓋。"""
+    p = state.player
+    if not _steps(content) or p.faction is None or p.enlist_step is not None or p.onboarding >= ONBOARDING:
+        return False
+    p.enlist_step = len(_steps(content))
+    return True
+
+
 def skip(state: GameState, content: Content) -> None:
     """略過新手引導（設計 7.3）：入伍段也算走完，不畫框、之後投靠也不開始。"""
     state.player.enlist_step = len(_steps(content))

@@ -340,6 +340,8 @@ class Game:
 
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
+        # 入伍段上線之前就投靠了的老手蓋成走完（設計 7.2）：要在換季之前，換季會把陣營清掉、之後就認不出他是老手
+        enlist.mark_veteran(self.state, self.content)
         self._reconcile_season()
         s, c = self.state, self.content
         p = s.player

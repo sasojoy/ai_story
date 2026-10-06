@@ -83,7 +83,8 @@ class Summons(BaseModel):
     since: float = 0.0
 
 
-ONBOARDING_VERSION = 2  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）。比它小的是舊存檔，讀檔時當作走過序章（設計 7.2）
+ONBOARDING_VERSION = 3  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
+# 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
 
 class PlayerState(BaseModel):

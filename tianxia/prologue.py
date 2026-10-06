@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from .martial_arts import MartialArt
 from .models import Content, GiveArt, TutorialStep
 from .rules import apply_effect
-from .state import ONBOARDING_VERSION, GameState, PlayerState
+from .state import GameState, PlayerState
 from .world_state import WorldStateStore
 
 if TYPE_CHECKING:  # Option 定義在 engine.py，engine 又 import 這個模組：只給型別標註用，執行時不 import（避免循環）
@@ -108,11 +108,15 @@ def choice_flags(content: Content, event_id: str, index: int) -> set[str]:
     return found
 
 
+PROLOGUE_ONBOARDING = 2  # 序章那一版的版本章：章比它小的存檔，引導步數還是舊的編號（舊八步），要換算成新的（migrated_step）；
+# 不跟著 state.ONBOARDING_VERSION 走——那個後來升到 3（有入伍段），章是 2 的存檔步數已經是新編號，不能再換算一次
+
+
 def migrated_step(player: PlayerState, content: Content) -> int:
-    """舊存檔（onboarding 比 ONBOARDING_VERSION 小）的引導步數換成新的：一律當作走過序章（設計 7.2），
+    """舊存檔（onboarding 比 PROLOGUE_ONBOARDING 小）的引導步數換成新的：一律當作走過序章（設計 7.2），
     舊的第一季兩步（舊的第 6、7 步）接在序章後面、走到哪裡就接著那裡。沒有序章的內容照舊。"""
     n = content.tutorial.prologue_steps
-    if player.onboarding >= ONBOARDING_VERSION or n == 0:
+    if player.onboarding >= PROLOGUE_ONBOARDING or n == 0:
         return player.tutorial_step
     return n + max(0, player.tutorial_step - OLD_BASE_STEPS)
 
