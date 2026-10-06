@@ -1763,8 +1763,15 @@ def test_the_hut_connects_only_to_the_start(prologue_root):
 def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
     """allow 是前綴比對：拼錯的前綴會把那一步的選單清空，卡死新人。talk: 開頭的是對話選單的，閒著的選單沒有。"""
     edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["allow"].append(entry))
-    with pytest.raises(ContentError, match="allow 不是選單上的行動"):
+    with pytest.raises(ContentError, match="allow 不是選單上的行動") as caught:
         load_content(prologue_root)
+    assert "models.ALLOW_FIXED" in str(caught.value) and "ALLOW_FAMILIES" in str(caught.value)  # 內容作者知道去哪補
+
+
+def test_prologue_reveal_takes_the_chip_row_keys(prologue_root):
+    """江湖頁最上面那一排小標有三塊：態勢、大事（board）、主線（quest）；每一塊各有自己的 reveal 鍵。"""
+    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][2]["reveal"].extend(["board", "quest", "stances"]))
+    assert {"board", "quest", "stances"} <= set(load_content(prologue_root).tutorial.steps[2].reveal)
 
 
 def test_prologue_allow_takes_every_kind_of_menu_id(prologue_root):

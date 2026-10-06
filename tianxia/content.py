@@ -1498,7 +1498,11 @@ def validate(c: Content) -> None:
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
         unknown = [entry for entry in step.allow if not allow_known(entry)]
-        need(not unknown, f"{where}：allow 不是選單上的行動 {unknown}")
+        need(
+            not unknown,
+            f"{where}：allow 不是選單上的行動 {unknown}（閒著的選單做得出來的 id 列在 models.ALLOW_FIXED／ALLOW_FAMILIES；"
+            "引擎新加的行動要先補進那裡）",
+        )
         need(step.explore_event is None or step.explore_event in c.events, f"{where}：explore_event {step.explore_event} 不存在")
         known(where, step.enemies, c.squads, "對手")
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")

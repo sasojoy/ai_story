@@ -46,20 +46,22 @@ def test_hut_is_invisible_to_everyone_outside(fresh, prologue_content):
 
 
 def test_the_allow_lists_only_name_ids_the_code_really_makes():
-    """models.ALLOW_FIXED／ALLOW_FAMILIES 是照 engine.py、foreshadow.py 做得出來的閒著選單 id 列的：每一筆都要真的出現在原始碼的
-    字串裡（不憑空多寫）。反過來有沒有漏列，由 test_real_content 整季隨機玩、對照每一個閒著的選單。"""
+    """models.ALLOW_FIXED／ALLOW_FAMILIES 是照做得出閒著選單 id 的原始碼（engine.py、foreshadow.py、opportunities.py）列的：
+    固定的每一筆要真的是原始碼裡的字串，家族每一個要真的是某個字串的開頭（不憑空多寫）。反過來有沒有漏列，這裡查不到：
+    由 test_real_content 整季隨機玩、對照每一個閒著的選單（只看得到那一季玩到的 id）。"""
     import ast
     from pathlib import Path
 
     from tianxia import models
 
     package, found = Path(models.__file__).parent, set()
-    for name in ("engine.py", "foreshadow.py"):
+    for name in ("engine.py", "foreshadow.py", "opportunities.py"):
         for node in ast.walk(ast.parse((package / name).read_text(encoding="utf-8"))):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 found.add(node.value)  # f"call:{id}" 的 "call:" 也是一個字串常數
-    assert models.ALLOW_FIXED <= found
-    assert set(models.ALLOW_FAMILIES) <= found
+    assert models.ALLOW_FIXED <= found, sorted(models.ALLOW_FIXED - found)
+    unmade = [family for family in models.ALLOW_FAMILIES if not any(text.startswith(family) for text in found)]
+    assert not unmade, unmade
 
 
 def test_the_hut_does_not_change_the_terrain(prologue_content, content):
@@ -179,6 +181,21 @@ def test_a_human_past_the_prologue_is_never_sent_back_to_the_hut(prologue_root, 
     assert p.location == "town" and past.state.pending_event is None
     assert p.tutorial_step == 11 and p.stamina == content.config.stamina_max
     assert half.state.player.location == "hut" and half.state.player.tutorial_step == 0
+
+
+def test_a_bot_mid_prologue_is_never_sent_to_the_hut(prologue_content, world):
+    """換季重來的 `and not old.player.bot`：做成假人、序章又沒走完的角色（腳本做的、或之後哪條路忘了 prologue=False）換季也不進草廬——
+    進了草廬，閒著的選單只剩那一步的行動，假人就不動了；而且假人的畫面不能跟真人不一樣。"""
+    from tianxia.state import BotProfile
+
+    bot = Game.new(prologue_content, "假人甲", rng=random.Random(0), world=world, prologue=True)
+    bot.state.player.bot = BotProfile(personality="普通", seed=1)
+    assert prologue.active(bot.state, prologue_content)  # 現在確實在草廬、序章第一步
+    next_season(prologue_content, world, bot)
+    p = bot.state.player
+    assert p.location == "town" and bot.state.pending_event is None
+    assert p.tutorial_step == prologue_content.tutorial.prologue_steps and p.stamina == prologue_content.config.stamina_max
+    assert not prologue.active(bot.state, prologue_content)
 
 
 def test_finished_prologue_survives_a_season(prologue_content, world):

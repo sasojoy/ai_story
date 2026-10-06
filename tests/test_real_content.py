@@ -1482,4 +1482,5 @@ def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_pa
 
     play_season(real, 2, max_steps=700, observe=observe, world=open_world(tmp_path / f"idle-{season_one}.db"))
     assert {"act:explore", "act:rest"} <= seen and any(oid.startswith("move:") for oid in seen)
-    assert {oid for oid in seen if not allow_known(oid)} == set()
+    stray = {oid for oid in seen if not allow_known(oid)}
+    assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"
