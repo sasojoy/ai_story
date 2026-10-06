@@ -63,7 +63,7 @@
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
     hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
-    guideRoad: null, // 在路上時說書人的框展開著的那一句（內容本身）；路上預設收成一行，下了路就清掉（FB-055）
+    guideRoad: null, // 在路上、或眼前有事件待處理（pending 的那一句）時說書人的框展開著的那一句（內容本身）；這兩種預設收成一行，離開就清掉（FB-055、FB-076）
     busy: false,
     menxia: null,
     message: "",
@@ -773,7 +773,7 @@
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
   // 做完一步先列「✔ 完成」與獎勵，再接下一步的話。可以收起成一行；記的是收起的那一句，換了下一句就自己展開。
   // 結語有「知道了」，按了就不再出現。在路上預設收成一行（FB-055）：框、走法與路上的五個選項擠不進第一屏，折返被分頁列蓋住；
-  // 路上展開的記在 S.guideRoad（記的是那一句，下了路就清掉），輪詢重畫不會把它收回去
+  // 路上展開的記在 S.guideRoad（記的是那一句，下了路就清掉），輪詢重畫不會把它收回去（事件待處理的那一句也一樣，見 openGuide）
   const GUIDE_KEY = "tx-guide-shut";
   function guideShut() { try { return localStorage.getItem(GUIDE_KEY); } catch (e) { return null; } }
   function setGuideShut(text) { try { if (text) localStorage.setItem(GUIDE_KEY, text); else localStorage.removeItem(GUIDE_KEY); } catch (e) { /* 存不了就只在這一頁有效 */ } }
@@ -781,10 +781,15 @@
   // 每遇到新事件就換一句；記句子的話，收起的框每個新事件都會自己又展開，事件的最後一個選項就被擠出第一屏。
   // 換到下一步（新的 key）才照舊展開。舊版伺服器沒有 key 時退回認句子
   function guideKey(g) { return g && (g.key || g.text); }
+  // 「先把眼前的「…」了結」那一句（伺服器標 pending）預設收成一行，玩家沒按過「收起」也一樣（FB-076，控制者裁示）：它只是重複底下
+  // 事件卡片已經寫的話，展開時事件的最後一個選項被擠到分頁列底下。跟在路上一樣，點開的記在 S.guideRoad（記的是那一句，
+  // 換成下一個事件的句子就又收著，了結之後清掉）；只有這一句，新的一步照舊展開
+  function shutGuide(g) { setGuideShut(guideKey(g)); S.guideRoad = null; }
+  function openGuide(g) { setGuideShut(null); S.guideRoad = g && g.text; }
   function guideHtml(g, onRoad) {
-    if (!onRoad) S.guideRoad = null; // 沒有框的時候也要清（FB-055）
+    if (!onRoad && !(g && g.pending)) S.guideRoad = null; // 沒有框、也不是這兩種預設收著的時候要清（FB-055）
     if (!g) return "";
-    if (!g.end && (guideShut() === guideKey(g) || (onRoad && S.guideRoad !== g.text))) {
+    if (!g.end && (guideShut() === guideKey(g) || ((onRoad || g.pending) && S.guideRoad !== g.text))) {
       return `<button class="guide-line" data-act="guide-open" aria-label="展開${esc(g.speaker)}的話"><b>${esc(g.speaker)}</b>：${esc(g.text)}</button>`;
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
@@ -1744,8 +1749,8 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; render(); break;
-        case "guide-shut": setGuideShut(guideKey(S.main.guide)); S.guideRoad = null; renderPage(); break;
-        case "guide-open": setGuideShut(null); S.guideRoad = S.main.guide && S.main.guide.text; renderPage(); break;
+        case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
+        case "guide-open": openGuide(S.main.guide); renderPage(); break;
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播

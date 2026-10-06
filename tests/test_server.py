@@ -4103,7 +4103,8 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     tutorial = server.CONTENT.tutorial
     assert main["guide"] == {
         "speaker": tutorial.speaker, "key": tutorial.steps[0].id, "text": tutorial.steps[0].text, "done": [], "end": False,
-    }  # key 是這一步的 id：網頁記收起記它（FB-076）
+        "pending": False,
+    }  # key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
 
@@ -4133,6 +4134,7 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     assert "你聽到一件事" not in main["now"] and "tx-hearsay" not in main["now"]
     assert "你聽到一件事" in main["latest"]  # 江湖紀錄頁最上面照舊
     assert main["guide"]["key"] == first_step.id and main["guide"]["text"].startswith("先把眼前的「")
+    assert main["guide"]["pending"] is True  # 網頁認這個旗標、預設把這一句收成一行（說書人的框不擠掉事件的選項）
     assert "升到第 2 級！" in "\n".join(stored.journal[0].lines)  # 紀錄那一則裡升級的句子還在
     assert heard in stored.journal[0].lines
     report = client.get(f"/api/reports?id={main['card_id']}").json()["detail"]

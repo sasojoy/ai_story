@@ -25,7 +25,7 @@ from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不�
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
-from .guide import base_step_count, note_action, quest_text, step_text, tutorial_active, tutorial_intro
+from .guide import base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
@@ -1094,7 +1094,9 @@ class Game:
         其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人是 Tutorial.speaker。
         還有事件待處理時，這一步的話換成「先把眼前的「事件名」了結」（每一步都一樣，步驟本身不動；結語照舊）。
         key 認的是「哪一步」（TutorialStep.id，結語是 "outro"），不看那一句話：網頁記玩家收起的那一步記的是它（FB-076）——
-        事件的句子每遇到新事件就換一句，記句子的話收起的框每個新事件都會自己又展開。"""
+        事件的句子每遇到新事件就換一句，記句子的話收起的框每個新事件都會自己又展開。
+        pending 標這一句是不是「先把眼前的「…」了結」：它只是重複底下事件卡片已經寫的話，展開時事件的最後一個選項被擠出第一屏，
+        所以網頁預設把這一句收成一行（玩家沒按過「收起」也一樣；只有這一句，新的一步照舊展開，玩家仍可點開，FB-076）。結語永遠是 False。"""
         s, c, p = self.state, self.content, self.state.player
         t = c.tutorial
         todo = tutorial_steps(s, c)
@@ -1106,9 +1108,10 @@ class Game:
             # 眼前有事件還沒了結時是 guide.pending_line，不推這一步；了結後原樣回來（FB-063；「下一步」也用同一句）
             return {
                 "speaker": t.speaker, "key": todo[p.tutorial_step].id, "text": step_text(s, c), "done": list(p.guide_done), "end": False,
+                "pending": pending_line(s, c) is not None,
             }
         if p.guide_outro and t.outro:
-            return {"speaker": t.speaker, "key": "outro", "text": t.outro, "done": list(p.guide_done), "end": True}
+            return {"speaker": t.speaker, "key": "outro", "text": t.outro, "done": list(p.guide_done), "end": True, "pending": False}
         return None
 
     def guide_ack(self) -> list[str]:
