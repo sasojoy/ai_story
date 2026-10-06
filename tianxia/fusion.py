@@ -31,7 +31,7 @@ from . import insights, landing, library, naming, team, traits
 from .martial_arts import Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content
 from .ollama_client import OllamaClient
-from .rules import add_rumor, display_name
+from .rules import add_rumor
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -171,13 +171,14 @@ def _special_and_note(content: Content, new_traits: list[str], key: str, tianji:
 
 def _special_rumor(state: GameState, content: Content, art: MartialArt, first: bool) -> list[str]:
     """第一次合出帶特別功效的武學：江湖上傳一句（13.4，不寫配方），也回給玩家看。後來照著合的人不再傳。
-    這是世界層的傳聞：具名（named=True），寫真正的名號、不照匿名行走改成「某位少俠」（企劃者定：只有地方傳聞才有不具名這回事）。
-    首創者那一門武學自己的 creator_shown 照舊（匿名的人合出來的，功法卡上還是「某位少俠」），這裡不動它。"""
+    這是世界層的傳聞：具名（named=True），寫真正的名號、不照匿名行走改成「某位少俠」（企劃者定：只有地方傳聞才有不具名這回事），
+    首創者那一門武學自己的 creator_shown 也一律寫名號（傳聞分層第七節）。
+    不帶地點：天下大事沒有發生地，輿圖的 ✦ 與地點詳情才不會把鑄功法的人此刻的位置標給每個陣營（傳聞分層一，F4）。"""
     special = traits.special(content, art.special) if first else None
     if special is None:
         return []
     line = f"江湖上傳開了：{state.player.name}合出一門帶〔{special.name}〕的【{art.name}】。"
-    add_rumor(state, line, state.player.location, content=content, named=True)
+    add_rumor(state, line, None, content=content, named=True)
     return [line]
 
 
@@ -344,7 +345,7 @@ def fuse(
                     candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
                 )
                 candidate = candidate.model_copy(update={
-                    "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
+                    "origin": "fused", "creator": state.player.name, "creator_shown": state.player.name,
                     "note": note if candidate_name == name else "",  # 說明是模型替它那個名字寫的；換成退路名字就不帶
                     "insight": insight.id, "base": art_id, "lean": insight.lean,
                     "traits": new_traits, "special": special_id,
@@ -430,7 +431,7 @@ def merge(
             for candidate_name in _candidates(content, world, key, "意境", tianji, name):
                 candidate = Insight(
                     id=candidate_name, name=candidate_name, attribute=attribute, lean=lean,
-                    creator=state.player.name, creator_shown=display_name(state),
+                    creator=state.player.name, creator_shown=state.player.name,
                     note=note if candidate_name == name else "", parents=sorted([a, b]),
                 )
                 result, first = world.claim_insight_recipe(key, candidate)
@@ -516,7 +517,7 @@ def blend(
                     candidate_name, shape.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=shape.attribute,
                 )
                 candidate = candidate.model_copy(update={
-                    "origin": "fused", "creator": state.player.name, "creator_shown": display_name(state),
+                    "origin": "fused", "creator": state.player.name, "creator_shown": state.player.name,
                     "note": note if candidate_name == name else "",
                     "insight": shape.insight, "base": None, "parents": sorted([a, b]), "lean": shape.lean,
                     "traits": new_traits, "special": special_id,

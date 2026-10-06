@@ -220,7 +220,7 @@ class WorldStateStore(Protocol):
 
     def claim_master(self, skill_name: str, player: str, shown: str | None = None) -> bool:
         """這門武學這一季第一個修到絕學的人：還沒有人就記成 player、回 True；已經有人回 False（原子判斷）。
-        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（匿名行走的人是「某位少俠」），
+        player 是名號（身分：取名權照它認）；shown 是寫給別人看的名號（引擎現在不給，一律寫名號；這一版之前匿名行走的人記成「某位少俠」），
         同一筆交易寫進那門武學的 master_shown（後到的人那一句、換季的江湖史照它寫）。"""
         ...
 
@@ -330,6 +330,11 @@ class WorldStateStore(Protocol):
 
     def faction_counts(self) -> dict[str, int]:
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""
+        ...
+
+    def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
+        """（全服狀態，這一季最大的天下大事傳聞流水號，這一季江湖史的則數），同一個唯讀快照裡讀的；賽季裡的傳聞與江湖史
+        不讀回每一列。推送的看守用（server.current_fingerprint）。"""
         ...
 
     # ── 全服即時多人戰鬥 ──
