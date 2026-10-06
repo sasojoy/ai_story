@@ -3715,6 +3715,10 @@ class Game:
     def insight_rows(self) -> list[dict]:
         return skillview.insight_rows(self.state, self.content, self.world)
 
+    def heal_button(self) -> dict:
+        """修練頁療傷鈕的字與按不按得下去（FB-082，見 skillview.heal_button）。"""
+        return skillview.heal_button(self.state, self.content)
+
     def naming_row(self) -> dict | None:
         """等著自己取正式名字的那一門（第一個練成絕學）；沒有是 None。"""
         art_id = self.state.player.naming

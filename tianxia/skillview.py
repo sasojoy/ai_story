@@ -71,6 +71,17 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
 
 
+def _known_insight_recipe(state: GameState, world: WorldStateStore, key: str) -> str:
+    """意境＋意境的配方有沒有人合過（跟 _known_recipe 同一套說法，FB-082）：已知的寫「會合出「X」（屬…）」，沒人合過的寫「沒人合過」；
+    合出來的那一個你已經悟得了就不寫（下面的 ⚠ 本來就會說「你已經悟得了」）。只在兩個都是你悟得的時候才會呼叫。（待 joy 潤）"""
+    known = world.lookup_insight_recipe(key)
+    if known is None:
+        return "\n沒人合過。"
+    if known.id in state.player.insights:
+        return ""
+    return f"\n會合出「{known.name}」（屬{known.attribute}）。"
+
+
 def forge_line(
     state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
     other_art: str | None = None,
@@ -117,10 +128,12 @@ def forge_line(
         a, b = (insights.resolve(i, content, world) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
+        attribute, _ = fusion.merge_shape(world, a, b)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
         head = (  # 三種合成都花體力（設計 12.1）：不夠的話下面的 ⚠ 會說
-            f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境，"
+            f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境（屬{attribute}），"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _known_insight_recipe(state, world, fusion.merge_key(*insight_ids))
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     else:
         return (
@@ -128,6 +141,20 @@ def forge_line(
             f"或放兩個意境，合出新的意境。{count}。"
         )
     return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def heal_button(state: GameState, content: Content) -> dict:
+    """修練頁「療傷」鈕要的資料（FB-082）：label 寫價錢（按鈕只有一行、手機上跟「練成」鈕並排，所以字要短），ok 是按不按得下去，
+    why 是按不下去的原因（跟 team.heal 回的是同一句）。價錢照 team.heal_cost，每 2 點內傷 1 兩——真的收的就是這個數。
+    內傷不到 1 點狀態列不寫（int），鈕也不亮。"""
+    member = state.player.member
+    if int(member.injury) < 1:
+        return {"label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。"}
+    cost = team.heal_cost(content, member)
+    problem = team.heal_problem(state, content, member)
+    if problem is not None:
+        return {"label": f"療傷（要 {cost} 兩）", "ok": False, "why": problem}
+    return {"label": f"療傷（銀兩 {cost}）", "ok": True, "why": None}
 
 
 def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:

@@ -955,6 +955,14 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
+  // 療傷鈕（FB-082）：字（寫價錢）與按不按得下去都是伺服器給的（沒有內傷、銀兩不夠時灰掉、字裡寫為什麼）；
+  // 鈕上只有一行——跟「練成」鈕並排，375px 寬放不下整句，整句的原因放在 title 與 aria-label。伺服器沒給（舊版）就照舊
+  function healButton(h, injured) {
+    if (!h) return `<button class="btn" data-act="mx" data-op="heal" ${injured ? "" : "disabled"}>療傷</button>`;
+    const why = h.why ? ` title="${esc(h.why)}" aria-label="${esc(`${h.label}：${h.why}`)}"` : "";
+    return `<button class="btn" data-act="mx" data-op="heal" ${h.ok ? "" : "disabled"}${why}>${esc(h.label)}</button>`;
+  }
+
   // 熔煉的問句（FB-081）：基礎武學熔了還能重學，伺服器給了怎麼重學的那一句（relearn）就接在問句後面；
   // 沒有的（合成的、內容直接給的）才說「熔掉就沒了」
   const meltAskText = (name, relearn) => `把【${name}】熔成心得？${relearn || "熔掉就沒了。"}`;
@@ -1008,7 +1016,7 @@
         <div class="seg">${KINDS.map((k) => `<button class="${S.kind === k ? "on" : ""}" data-act="kind" data-kind="${k}">${k}</button>`).join("")}</div>
         <div class="row practice-actions">
           <button class="btn ${train ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" ${train ? "disabled" : ""}>${train || `練成${esc(S.kind)}（心得 ${cur.price}）`}</button>
-          <button class="btn" data-act="mx" data-op="heal" ${s.injury >= 1 ? "" : "disabled"}>療傷</button>
+          ${healButton(x.heal, s.injury >= 1)}
         </div>
         <p class="muted">${x.rules.replace(/<\/?p>/g, "")}</p>
       </div>

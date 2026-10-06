@@ -340,13 +340,22 @@ def heal_cost(content: Content, member) -> int:
     return math.ceil(injury / max(1.0, content.config.heal_neili_per_silver))
 
 
-def heal(state: GameState, content: Content, member) -> list[str]:
+def heal_problem(state: GameState, content: Content, member) -> str | None:
+    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。"""
     cost = heal_cost(content, member)
     if cost <= 0:
-        return ["氣血無恙，不用療傷。"]
+        return "氣血無恙，不用療傷。"
+    if state.player.stats.get("silver", 0) < cost:
+        return f"銀兩不足：療傷需要 {cost} 兩。"
+    return None
+
+
+def heal(state: GameState, content: Content, member) -> list[str]:
+    problem = heal_problem(state, content, member)
+    if problem is not None:
+        return [problem]
+    cost = heal_cost(content, member)
     p = state.player
-    if p.stats.get("silver", 0) < cost:
-        return [f"銀兩不足：療傷需要 {cost} 兩。"]
     p.stats["silver"] -= cost
     healed = member.injury
     member.injury = 0.0

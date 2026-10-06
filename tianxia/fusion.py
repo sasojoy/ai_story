@@ -84,6 +84,13 @@ def blend_shape(a: MartialArt, b: MartialArt, seed: str) -> Shape:
     return Shape(kind, attribute, insights.merged_lean(first, second), keeper.insight or other.insight)
 
 
+def merge_shape(world: WorldStateStore, a: Insight, b: Insight) -> tuple[str, str]:
+    """意境＋意境本來會得到的（屬性, 正邪）：配方種子（天機＋配方鍵）加上兩個來源決定，跟參數順序無關（設計 12.6）。
+    merge 照它登記，煉製頁的預覽（skillview.forge_line）照它寫——兩邊同一個函式，預覽不會跟結果各說各話（FB-082）。"""
+    seed = recipe_seed(world, merge_key(a.id, b.id))[1]
+    return insights.merged_attribute(a, b, seed), insights.merged_lean(a, b)
+
+
 def _full_line(state: GameState, content: Content) -> str:
     cap = library.cap_of(state, content)
     return f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。"
@@ -440,8 +447,8 @@ def merge(
         return None, [problem]
     ia, ib = insights.resolve(a, content, world), insights.resolve(b, content, world)
     key = merge_key(a, b)
-    tianji, seed = recipe_seed(world, key)
-    attribute, lean = insights.merged_attribute(ia, ib, seed), insights.merged_lean(ia, ib)
+    tianji = recipe_seed(world, key)[0]
+    attribute, lean = merge_shape(world, ia, ib)
     result, first, landed = world.lookup_insight_recipe(key), False, False
     if result is None:
         candidates = landing.insight_candidates(world, attribute, lean)

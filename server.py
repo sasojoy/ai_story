@@ -810,6 +810,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
         "bag": md(game.bag_text()),
+        "heal": game.heal_button(),  # 修練頁的療傷鈕：字（寫價錢）、按不按得下去、不能按的原因（FB-082）
         # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
         "clue_items": [
             {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)

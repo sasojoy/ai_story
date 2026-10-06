@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import library, skillview
+from tianxia import fusion, library, skillview
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -165,6 +165,149 @@ def test_melting_a_starter_art_ends_the_result_with_where_to_learn_it_again(real
     assert game.state.journal[0].tag == msgs[0]  # 江湖紀錄的標題照舊是第一句
     refused = game.melt_art("jichu_quanjiao")  # 已經熔掉了：只回一句拒絕，不接那句
     assert refused == ["你的功法庫裡沒有這一門。"]
+
+
+# ── FB-082：意境＋意境的預覽要跟另外兩種一樣；療傷鈕寫價錢 ──────────────
+
+
+def _named(name):
+    from unittest import mock
+
+    from tianxia import naming
+
+    client = mock.Mock()
+    client.chat_structured.return_value = naming.NameReply(name=name, description="一句話說明。")
+    return client
+
+
+def _merger(content, name, ids):
+    from tianxia.state import new_game_state
+
+    state = new_game_state(content, name)
+    state.player.insights = list(dict.fromkeys(ids))
+    state.player.stats["xinde"] = 100
+    return state
+
+
+def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, world):
+    """六個基本意境兩兩合併（含自己合自己）：預覽寫的屬性跟 fusion.merge 真的給的一樣——同一個函式算的，不是另寫一份。"""
+    import itertools
+
+    ids = list(content.insights)
+    for n, (a, b) in enumerate(itertools.combinations_with_replacement(ids, 2)):
+        state = _merger(content, f"甲{n}", [a, b])
+        line = skillview.forge_line(state, content, world, None, [a, b])
+        shown = re.search(r"→ 一個新的意境（屬(.)），", line)
+        assert shown, line
+        made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
+        assert made is not None and made.attribute == shown.group(1), (a, b, line)
+
+
+def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(content, world):
+    first = _merger(content, "甲", ["feng", "huo"])
+    assert skillview.forge_line(first, content, world, None, ["feng", "huo"]).endswith("\n沒人合過。")
+    made, _ = fusion.merge(first, content, world, _named("燎原"), "feng", "huo")
+    again = skillview.forge_line(first, content, world, None, ["feng", "huo"])
+    assert "沒人合過" not in again and "會合出" not in again  # 你自己已經悟得了：下面的 ⚠ 本來就說「你已經悟得了」
+    assert "⚠ 這兩個合起來還是「燎原」" in again
+    other = _merger(content, "乙", ["feng", "huo"])
+    line = skillview.forge_line(other, content, world, None, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
+    assert f"\n會合出「燎原」（屬{made.attribute}）。" in line and "沒人合過" not in line
+
+
+def test_the_merge_preview_matches_the_other_two_kinds_in_shape(content, world, state):
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
+    state.player.insights = ["feng", "huo"]
+    state.player.stats["xinde"] = 100
+    fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
+    blend = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
+    merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
+    for line in (fuse, blend, merge):
+        assert re.search(r"（屬.[，）]", line) and line.endswith("\n沒人合過。"), line  # 屬性、花費、沒人合過，三種都有
+
+
+def test_the_merge_preview_still_refuses_what_you_do_not_hold(content, world, state):
+    state.player.insights = ["feng"]
+    line = skillview.forge_line(state, content, world, None, ["feng", "shui"])
+    assert line.startswith("⚠") and "屬" not in line and "→" not in line
+
+
+def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(content, state):
+    from tianxia import team
+
+    member, p = state.player.member, state.player
+    assert skillview.heal_button(state, content) == {
+        "label": "療傷（沒有內傷）", "ok": False, "why": "氣血無恙，不用療傷。",
+    }
+    member.injury, p.stats["silver"] = 35.0, 100
+    assert skillview.heal_button(state, content) == {"label": "療傷（銀兩 18）", "ok": True, "why": None}  # 每 2 點內傷 1 兩，進位
+    team.heal(state, content, member)
+    assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 按鈕寫的價錢就是真的收的價錢
+
+
+def test_heal_button_is_greyed_out_with_the_reason_when_the_silver_is_short(content, state):
+    state.player.member.injury, state.player.stats["silver"] = 35.0, 5
+    assert skillview.heal_button(state, content) == {"label": "療傷（要 18 兩）", "ok": False, "why": "銀兩不足：療傷需要 18 兩。"}
+    from tianxia import team
+
+    assert team.heal(state, content, state.player.member) == ["銀兩不足：療傷需要 18 兩。"]  # 按下去（舊版畫面）回的是同一句
+
+
+def test_heal_button_does_not_offer_to_heal_a_wound_the_status_bar_does_not_show(content, state):
+    """狀態列的內傷是 int()：不到 1 點不寫；按鈕也不亮（以前就是這樣，改成伺服器給的之後不能變）。"""
+    state.player.member.injury, state.player.stats["silver"] = 0.6, 100
+    assert not skillview.heal_button(state, content)["ok"]
+
+
+def test_the_menxia_view_carries_the_heal_button(real):
+    import server
+
+    game = _real_game(real)
+    assert server.menxia_view(game)["heal"]["label"] == "療傷（沒有內傷）"
+    game.state.player.member.injury, game.state.player.stats["silver"] = 20.0, 50
+    assert server.menxia_view(game)["heal"] == {"label": "療傷（銀兩 10）", "ok": True, "why": None}
+    game.state.player.stats["silver"] = 4
+    view = server.menxia_view(game)["heal"]
+    assert view["label"] == "療傷（要 10 兩）" and not view["ok"] and "銀兩不足" in view["why"]
+    game.heal()  # 錢不夠：不收、不寫紀錄，內傷還在
+    assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 4
+
+
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", attrNoteHtml = () => "";'
+
+
+def _menxia(**over):
+    base = {
+        "slot_cards": [{"kind": k, "card": f"<p>{k}卡</p>", "learned": True, "level": 1, "maxed": False, "blocked": None, "price": 1} for k in ("武學", "內功")],
+        "owned_arts": [], "insights": [], "roster": [{"label": "本人", "key": "player"}], "person": None, "person_card": None,
+        "on_team": False, "rules": "<p>規則。</p>", "holdings": {"count": 0, "cap": 50}, "player_card": "<p>本人</p>", "naming": None,
+        "heal": {"label": "療傷（銀兩 18）", "ok": True, "why": None},
+    }
+    return {**base, **over}
+
+
+@needs_node
+def test_the_heal_button_draws_what_the_server_says_in_one_short_line():
+    out = run(
+        "return [H.healButton({label:'療傷（銀兩 18）',ok:true,why:null}, true), H.healButton({label:'療傷（要 18 兩）',ok:false,why:'銀兩不足：療傷需要 18 兩。'}, true),"
+        " H.healButton({label:'療傷（沒有內傷）',ok:false,why:'氣血無恙，不用療傷。'}, false), H.healButton(undefined, true), H.healButton(undefined, false)];",
+        fns=["healButton"],
+    )
+    assert out[0] == '<button class="btn" data-act="mx" data-op="heal" >療傷（銀兩 18）</button>'
+    assert out[1].startswith('<button class="btn" data-act="mx" data-op="heal" disabled title="銀兩不足：療傷需要 18 兩。"') and ">療傷（要 18 兩）<" in out[1]
+    assert "disabled" in out[2] and ">療傷（沒有內傷）<" in out[2]
+    assert out[3] == '<button class="btn" data-act="mx" data-op="heal" >療傷</button>' and "disabled" in out[4]  # 舊版伺服器沒給：照舊
+
+
+@needs_node
+def test_the_practice_page_puts_the_heal_price_on_the_button_next_to_the_practice_button():
+    html = run(
+        "return H.pagePractice();", S={"menxia": _menxia(), "main": {"status": {"injury": 35}}},
+        fns=["pagePractice", "healButton"], stubs=PRACTICE_STUBS,
+    )
+    row = re.search(r'<div class="row practice-actions">(.*?)</div>', html, re.S).group(1)
+    assert row.count("<button") == 2 and "療傷（銀兩 18）" in row and "練成武學（心得 1）" in row
 
 
 @needs_node
