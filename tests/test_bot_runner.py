@@ -798,6 +798,53 @@ def test_a_bot_retired_by_a_new_season_while_waiting_for_a_name_is_left_alone(
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "feng")) is None
 
 
+def test_a_pause_that_starts_while_the_bot_waited_for_a_name_registers_no_recipe(
+    runner, world, content, clock, monkeypatch,
+):
+    """賽季時鐘暫停（第 13 列）：取名的時候管理者按了暫停，C 段不能開爐、不能登記配方（暫停中全服不動）。
+    名字丟掉、不收費；繼續之後照常再取一次。tick 與 _take_turn 的暫停判斷管不到 C 段：它是另外拿一次鎖。"""
+    runner.client = object()
+    _armed_bots(runner, content, clock, monkeypatch)
+    calls = []
+
+    def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
+        calls.append(request.kind)
+        if len(calls) == 1:
+            assert world.pause_clock(clock[0])  # 取名的時候，管理者按了暫停
+        return ("凌風拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    report = runner.tick()
+    assert report.named == 1 and report.failed == 0
+    key = fusion.fuse_key("basic_fist", "feng")
+    assert world.paused_at() is not None and world.lookup_recipe(key) is None
+    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
+    assert library.owned_arts(bot_state) == ["basic_fist"] and bot_state.player.stats["xinde"] == 100
+    world.resume_clock(content, clock[0])
+    clock[0] += content.config.bot_naming_gap_seconds
+    assert _tick_cleanly(runner).named == 1
+    assert world.lookup_recipe(key).name == "凌風拳"  # 繼續之後照常取名、登記
+
+
+def test_a_pause_that_starts_while_the_bot_waited_to_name_a_mastered_art_names_nothing(
+    runner, world, content, clock, monkeypatch,
+):
+    victim = _master_ready(runner, content, world, clock, monkeypatch)
+    pending = open_characters().load(victim).player.naming
+
+    def generate(client, content_, request, budget=None, person=None):
+        _check_b_call(world, content_, budget, person)
+        assert world.pause_clock(clock[0])
+        return ("破雲拳", "一句話。")
+
+    monkeypatch.setattr(naming, "generate", generate)
+    report = runner.tick()
+    assert report.named == 1 and report.failed == 0
+    assert open_characters().load(victim).player.naming == pending  # 還等著定名
+    assert not any("為之定名" in r.text for r in world.get_season().chronicle)
+
+
 def test_a_failure_while_naming_is_counted_and_leaves_no_name_behind(
     runner, world, content, clock, monkeypatch, capsys, caplog,
 ):

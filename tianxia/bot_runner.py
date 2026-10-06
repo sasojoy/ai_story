@@ -169,9 +169,8 @@ class BotRunner:
             with self.world.action_lock(timeout=LOCK_WAIT):
                 state = self.characters.load(name)
                 shared = self.world.read()
-                # TODO(season-pause): skip while paused（賽季「加入日與停機暫停」計畫還沒併進來，所以這裡還沒有 paused_at；
-                # 後併進來的那份在這一行與 tick／_take_turn 的同一個判斷加上暫停中不做事）
-                if state is None or shared.season_phase() != "running":
+                # 暫停中不做事（跟 tick、_take_turn 一樣；取名的時候管理者可能按了暫停）：名字丟掉，繼續之後再取
+                if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
                     return
                 profile = state.player.bot
                 if profile is None or not server_bots.active(profile, shared.season_number):
