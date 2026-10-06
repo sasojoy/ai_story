@@ -82,11 +82,12 @@ class Fixed:
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "上品"])
 def test_a_fused_art_rolls_its_own_quality(ready, content, world, quality):
-    """企劃者 2026-10-06：合出來的武學自己那一份的品質照機率擲（下品 50、中品 30、上品 20）；全服登記的照舊是下品，
+    """企劃者 2026-10-06：合出來的武學自己那一份的品質照這一爐的機率擲；全服登記的照舊是下品，
     結果句寫擲到的品質，修練從擲到的那一品接著往上。"""
     rng = Fixed(quality)
     art, msgs = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng", rng=rng)
-    assert rng.weights == {"下品": 50, "中品": 30, "上品": 20}
+    base, insight = team.player_art(ready, content, world, "basic_fist"), insights.resolve("feng", content, world)
+    assert rng.weights == fusion.fuse_odds(ready, content, "basic_fist", base, insight).odds  # 照這一爐的搭配擲
     assert world.get_skill(art.id).quality == "下品"
     assert team.art_quality(ready, art) == quality
     assert f"（{quality}・屬" in msgs[0]
@@ -109,10 +110,91 @@ def test_following_a_known_recipe_rolls_for_your_own_copy(ready, content, world)
     assert team.art_quality(ready, art) == "中品" and "（中品・屬" in msgs[0]
 
 
-def test_quality_odds_text_writes_the_odds_not_a_grade(content):
-    assert fusion.quality_odds_text(content) == "下品 50%、中品 30%、上品 20%"
-    content.config.fuse_quality_odds = {"下品": 1, "中品": 1}
-    assert fusion.quality_odds_text(content) == "下品 50%、中品 50%"
+def _fuse_odds(state, content, world, art_id, insight_id):
+    return fusion.fuse_odds(
+        state, content, art_id, team.player_art(state, content, world, art_id), insights.resolve(insight_id, content, world),
+    )
+
+
+def test_an_ordinary_pairing_gets_the_configured_average(content):
+    """沒有任何因素加減分的一爐就是 Config.fuse_quality_odds（普通搭配的平均）。"""
+    odds = fusion._points(content, [])
+    assert odds.odds == {"下品": 50, "中品": 30, "上品": 20} and odds.reasons == ()
+
+
+def test_odds_always_add_up_to_100_and_never_rule_anything_out(content):
+    """企劃者 2026-10-06：不要有必出或必不出的組合——再好、再爛的搭配，上品與下品都夾在範圍裡。"""
+    best = fusion._points(content, [("quality", 999)]).odds
+    worst = fusion._points(content, [("quality", -999)]).odds
+    assert best == {"下品": 15, "中品": 40, "上品": 45}
+    assert worst == {"下品": 80, "中品": 15, "上品": 5}
+    for odds in (best, worst):
+        assert sum(odds.values()) == 100 and all(w > 0 for w in odds.values())
+
+
+def test_a_better_base_gives_better_odds(ready, content, world):
+    """回應企劃者「中品的底合出下品，那我幹嘛合成」：底的品質越好，上品越容易、下品越少。"""
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.art_quality["basic_fist"] = "上品"
+    good = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    assert good["上品"] > plain["上品"] and good["下品"] < plain["下品"]
+
+
+def test_a_well_practised_base_gives_better_odds(ready, content, world):
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.member.wugong_level = 10
+    assert _fuse_odds(ready, content, world, "basic_fist", "feng").odds["上品"] > plain["上品"]
+
+
+def test_matching_attributes_help_and_countering_ones_hurt(ready, content, world):
+    """底屬快：融「風」（快）相投、融「山」（慢）相剋、融「火」（剛）不相干。"""
+    ready.player.member.wugong_id = "lake_kick"
+    ready.player.insights = ["feng", "huo", "shan"]
+    same, plain, counter = (_fuse_odds(ready, content, world, "lake_kick", i) for i in ("feng", "huo", "shan"))
+    assert same.odds["上品"] > plain.odds["上品"] > counter.odds["上品"]
+    assert "兩股氣息相投" in same.reasons and "兩股氣息相衝" in counter.reasons
+
+
+def test_an_uncommon_insight_helps(ready, content, world):
+    """意境的來歷：內容寫好的基本意境不加分；善名惡名悟來的、合併出來的加分，自己首悟的再加。"""
+    feng = insights.resolve("feng", content, world)
+    haoran = insights.resolve("haoran", content, world)
+    merged = Insight(id="颶火", name="颶火", attribute="剛", parents=["feng", "huo"], creator="乙")
+    mine = merged.model_copy(update={"creator": ready.player.name})
+    points = [fusion.insight_points(ready, content, i) for i in (feng, haoran, merged, mine)]
+    assert points == sorted(points) and points[0] == 0 and len(set(points)) == 4
+
+
+def test_a_sharper_mind_gives_better_odds(ready, content, world):
+    plain = _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    ready.player.stats["wis"] = 15
+    assert _fuse_odds(ready, content, world, "basic_fist", "feng").odds["上品"] > plain["上品"]
+
+
+def test_blend_odds_look_at_both_arts(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    a, b = (team.player_art(ready, content, world, x) for x in ("basic_fist", "lake_kick"))
+    plain = fusion.blend_odds(ready, content, "basic_fist", a, "lake_kick", b).odds
+    ready.player.art_quality["lake_kick"] = "上品"
+    b = team.player_art(ready, content, world, "lake_kick")
+    assert fusion.blend_odds(ready, content, "basic_fist", a, "lake_kick", b).odds["上品"] > plain["上品"]
+
+
+def test_a_known_recipe_rolls_with_your_own_pairing(ready, content, world):
+    """照別人合過的配方合：機率照你自己這一爐的組成（你的底、你的悟性），不是照首創者的。"""
+    fusion.fuse(other_player(content), content, world, named("旋風腿"), "basic_fist", "feng", rng=Fixed("下品"))
+    ready.player.art_quality["basic_fist"] = "上品"
+    ready.player.stats["wis"] = 12
+    rng = Fixed("中品")
+    fusion.fuse(ready, content, world, must_not_ask(), "basic_fist", "feng", rng=rng)
+    assert rng.weights == _fuse_odds(ready, content, world, "basic_fist", "feng").odds
+    assert rng.weights["上品"] > 20
+
+
+def test_quality_odds_text_writes_the_odds_and_why(content):
+    assert fusion.quality_odds_text(fusion.QualityOdds({"下品": 50, "中品": 30, "上品": 20})) == "下品 50%、中品 30%、上品 20%"
+    odds = fusion._points(content, [("attribute", 8), ("quality", 12), ("wis", 1)])
+    assert fusion.quality_odds_text(odds) == "下品 29%、中品 41%、上品 30%（底子厚實、兩股氣息相投）"  # 分數小的不寫，最多兩個
 
 
 def test_fusing_on_a_peerless_base_gives_a_lowest_quality_copy_with_the_lowest_power(ready, content, world):

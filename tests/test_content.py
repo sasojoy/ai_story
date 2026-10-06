@@ -102,6 +102,15 @@ def test_bad_fuse_quality_odds_rejected(tmp_path, odds):
         load_content(root)
 
 
+@pytest.mark.parametrize("rule", [{"up_range": [5, 60], "low_range": [50, 80]}, {"lines": {"quality": ["底子厚實"]}}])
+def test_bad_fuse_quality_rule_rejected(tmp_path, rule):
+    """上品、下品的範圍排不下中品，或說明那一句少了扣分時的寫法：載入時就擋。"""
+    root = copy_fixture(tmp_path)
+    edit_json(root / "config.json", lambda d: d.update(fuse_quality=rule))
+    with pytest.raises(ContentError, match="fuse_quality"):
+        load_content(root)
+
+
 def test_last_ending_must_be_unconditional(tmp_path):
     root = copy_fixture(tmp_path)
     edit_json(root / "scenario.json", lambda d: d["endings"].pop())

@@ -71,11 +71,11 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
     return f"\n會合出【{known.name}】。{traits.card_line(content, known)}"
 
 
-def _quality_note(state: GameState, content: Content) -> str:
-    """合成前寫品質的機率、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
+def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) -> str:
+    """合成前寫這一爐算出來的品質機率與一句原因、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
     if prologue.fuse_base(state, content) is not None:
         return "從下品起修"
-    return f"品質看造化：{fusion.quality_odds_text(content)}"
+    return f"品質看造化：{fusion.quality_odds_text(odds)}"
 
 
 def forge_line(
@@ -98,8 +98,9 @@ def forge_line(
         if a is None or b is None:
             return "（選了不存在的東西。）"
         shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b)
         head = (
-            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content)}），"
+            f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
@@ -111,9 +112,10 @@ def forge_line(
         insight = insights.resolve(insight_ids[0], content, world)
         if base is None or insight is None:
             return "（選了不存在的東西。）"
+        odds = fusion.fuse_odds(state, content, art_id, base, insight)
         head = (
             f"**合成**　【{base.name}】＋「{insight.name}」→ 一門新{base.kind}"
-            f"（屬{insight.attribute}，{_quality_note(state, content)}），"
+            f"（屬{insight.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _known_recipe(state, content, world, fusion.fuse_key(art_id, insight_ids[0]))
