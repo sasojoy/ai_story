@@ -393,7 +393,9 @@
     guideCue();
   }
 
-  // 要按的東西在第一屏之外（修練頁的改練那一列在 y≈1300）時，師父的框上多一個小小的「在下面 ↓」，點了捲到那裡（T7 審查 M7）。
+  // 要按的東西沒有整個露在第一屏裡（修練頁的改練那一列在 y≈1300，或只露出幾 px 被分頁列蓋住）時，師父的框上多一個小小的
+  // 「在下面 ↓」，點了捲到那裡（T7 審查 M7）。整個看得到＝它的底邊在分頁列的頂邊或以上（以前看頂邊離分頁列 8px 以上就算看得到：
+  // 步驟 4 煉製頁的挑選清單在 747～813、分頁列 756，只露 9px，玩家看不到、也沒有提示）。
   // 只看頁面裡（#page）第一個發光的東西：分頁列與狀態列的鈕永遠在畫面上。只在序章；每次畫完頁面重算（applyGlow 呼叫），
   // 視窗大小變了（轉向、拉視窗）也重算（resize 的去抖，見檔案最後那個 resize 監聽，T7 走查 W-F）；捲動不重算
   function guideCue() {
@@ -405,7 +407,7 @@
     if (!target) return;
     const bar = document.querySelector(".tabs");
     const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
-    if (target.getBoundingClientRect().top < limit - 8) return; // 要按的東西已經在第一屏裡
+    if (target.getBoundingClientRect().bottom <= limit) return; // 要按的東西整個都在第一屏裡
     head.firstElementChild.insertAdjacentHTML("afterend", '<button class="linkish guide-below" data-act="guide-below">在下面 ↓</button>');
   }
   function scrollToGuideTarget() {

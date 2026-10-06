@@ -555,10 +555,14 @@ def test_the_cue_points_at_a_target_below_the_fold_and_only_then(hut):
       const head = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push([pos, html]) }, querySelector: () => null };
       T.qs[".card.guide .guide-head"] = head;
       T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
-      const at = (top) => { T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top }) }; inserted.length = 0; H.guideCue(); return inserted.length; };
-      return { below: at(1300), onScreen: at(400), justUnderTheBar: at(760), none: (delete T.qs["#page .glow"], inserted.length = 0, H.guideCue(), inserted.length), html: (at(1300), inserted[0]) };"""
+      const at = (top, bottom = top + 60) => { T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top, bottom }) }; inserted.length = 0; H.guideCue(); return inserted.length; };
+      return { below: at(1300), onScreen: at(400), justUnderTheBar: at(760), peeking: at(747, 813), fits: at(700, 750), touching: at(696, 756),
+               none: (delete T.qs["#page .glow"], inserted.length = 0, H.guideCue(), inserted.length), html: (at(1300), inserted[0]) };"""
     out = run(m, script)
     assert out["below"] == 1 and out["onScreen"] == 0 and out["justUnderTheBar"] == 1 and out["none"] == 0
+    # 提示的規則是「要按的東西整個看得到」才不需要：底邊在分頁列頂邊（756）或以上。步驟 4（joy 的版本，話是一整段）基礎拳腳那顆挑選清單
+    # 在 747～813：只露出 9px，玩家看不到，要有「在下面 ↓」；700～750 整個在分頁列上面、696～756 剛好貼著，不用。
+    assert out["peeking"] == 1 and out["fits"] == 0 and out["touching"] == 0
     assert out["html"][0] == "afterend" and 'data-act="guide-below"' in out["html"][1] and "在下面 ↓" in out["html"][1]
     outside = run({**m, "prologue": None}, script)
     assert outside["below"] == 0  # 序章外沒有這個提示
@@ -572,7 +576,7 @@ def test_the_cue_is_worked_out_again_when_the_viewport_changes(hut):
       const inserted = [];
       T.qs[".card.guide .guide-head"] = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push(html) }, querySelector: () => null };
       T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
-      T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top: 1269 }) };
+      T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top: 1269, bottom: 1329 }) };
       const fire = () => (T.listeners.resize || []).forEach((fn) => fn());
       fire(); fire(); fire();
       const early = inserted.length;                        // 去抖：馬上還沒算
