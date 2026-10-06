@@ -11,7 +11,6 @@ from unittest import mock
 
 import pytest
 
-from conftest import real_content
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -22,23 +21,7 @@ from tianxia.state import Convoy, Order, PlayerState, WorldState
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 
-@pytest.fixture
-def real():
-    """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
-    return c
-
-
-@pytest.fixture
-def on(real):
-    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。"""
-    real.config.season_one = True
-    real.config.season_days = 2.5
-    real.config.server_max_players = 2
-    return real
-
+# fixture real、on（真實內容，開關關著／照週末設定打開）在 tests/conftest.py：test_enlist、test_enlist_web 也用同一份
 
 BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 

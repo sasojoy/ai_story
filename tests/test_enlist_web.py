@@ -8,18 +8,8 @@ from __future__ import annotations
 import pytest
 
 import webharness
-from conftest import real_content
 
-
-@pytest.fixture
-def on():
-    """真實內容、第一季開著（照 tests/test_orders.py 的 real＋on：開關、季長 2.5 天、人數上限 2）。"""
-    c = real_content()
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
-    c.config.season_one, c.config.season_days, c.config.server_max_players = True, 2.5, 2
-    return c
-
+# fixture on（真實內容、第一季開著）在 tests/conftest.py，跟 test_orders、test_enlist 同一份
 
 DRIVER = r"""
 const a = src.indexOf("\n  const ORDERS_SEEN_MS");
