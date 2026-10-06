@@ -457,3 +457,138 @@ def test_server_bots_never_take_a_puzzle_turn(on):
             p.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
             bot_policy.take_turn(game, _profile(), random.Random(seed))
     assert chosen and not any(i.startswith(("opp:", "talk:opp:")) for i in chosen)
+
+
+# ── Task 3：推理型（營中的內鬼）─────────────────────────────────
+
+
+def _mole(on):
+    return next(o for o in on.opportunities if o.id == "huang_mole")
+
+
+def test_culprit_follows_the_seasons_tianji(on):
+    o = _mole(on)
+    picks = {opportunities.culprit(on, o, t) for t in range(30)}
+    assert picks == {"clerk", "priest", "strongman"}  # 換季會換人
+    assert opportunities.culprit(on, o, 5) == foreshadow.tianji_answer(5, "mole")
+
+
+def test_trait_fragments_only_tell_the_culprits_traits(on):
+    game = _game(on, faction="huang")
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
+    who = opportunities.culprit(on, _mole(on), 0)
+    traits = next(s for s in _mole(on).deduce.suspects if s.id == who).traits
+    heard = []
+    for region in ("jizhou", "luoyang", "jizhou", "luoyang", "jizhou"):
+        heard += opportunities.hear_clues(game.state, on, region, rng, world=None)
+    texts = {t.text: t.key for t in _mole(on).deduce.traits}
+    told = {texts[line.split("：", 1)[1]] for line in heard if line.split("：", 1)[1] in texts}
+    assert told and told <= set(traits)
+
+
+def test_accuse_right_and_wrong(on):
+    game = _game(on, faction="huang", at="guangzong")
+    who = opportunities.culprit(on, _mole(on), game.world.read().tianji)
+    wrong = next(s.id for s in _mole(on).deduce.suspects if s.id != who)
+    game.state.player.affinities = {"zhangliang": 20}
+    msgs = game.choose(f"opp:accuse:huang_mole:{wrong}")
+    assert "是清白的" in msgs[0] and game.state.player.affinities["zhangliang"] == 10
+    assert not next(o for o in game.options(odds=False) if o.id == f"opp:accuse:huang_mole:{who}").enabled  # 當天不能再指
+    w = game.state.world
+    w.time += calendar.DAY / calendar.cal_scale(on, w)
+    before = rules.trend_value(game.state, on, "jizhou")
+    msgs = game.choose(f"opp:accuse:huang_mole:{who}")
+    assert msgs[-1] == "（機緣「營中的內鬼」完成。）" and rules.trend_value(game.state, on, "jizhou") == before + 1
+
+
+def test_accuse_needs_an_asker_present(on):
+    game = _game(on, faction="huang", at="guangzong")
+    w = game.state.world
+    for fid in ("zhangliang", "zhangjiao"):
+        w.figures[fid] = figures.state_of(game.state, on, fid).model_copy(update={"status": "retired"})
+    assert not any(i.startswith("opp:accuse:") for i in _ids(game))  # 廣宗沒人問
+    game.state.player.location = "xiaquyang"
+    assert next(o for o in game.options(odds=False) if o.id.startswith("opp:accuse:")).label.startswith("向張寶指認")
+
+
+# 計畫沒寫、這裡多測的
+
+def test_accusing_names_all_three_suspects(on):
+    game = _game(on, faction="huang", at="guangzong")
+    labels = {o.id: o.label for o in game.options(odds=False) if o.id.startswith("opp:accuse:")}
+    assert labels == {
+        "opp:accuse:huang_mole:clerk": "向張梁指認：管糧冊的帳房",
+        "opp:accuse:huang_mole:priest": "向張梁指認：送藥的道士",
+        "opp:accuse:huang_mole:strongman": "向張梁指認：新來的力士",
+    }
+    assert all("opp:accuse:" not in i for i in _ids(_game(on, faction="huang", at="changshe")))  # 別的地方沒有
+
+
+def test_a_wrong_accusation_never_drops_affinity_below_zero(on):
+    game = _game(on, faction="huang", at="guangzong")
+    who = opportunities.culprit(on, _mole(on), game.world.read().tianji)
+    wrong = next(s.id for s in _mole(on).deduce.suspects if s.id != who)
+    game.state.player.affinities = {"zhangliang": 4}
+    game.choose(f"opp:accuse:huang_mole:{wrong}")
+    assert game.state.player.affinities["zhangliang"] == 0
+
+
+def test_a_failed_accusation_waits_for_tomorrow_even_by_a_direct_press(on):
+    game = _game(on, faction="huang", at="guangzong")
+    who = opportunities.culprit(on, _mole(on), game.world.read().tianji)
+    wrong = next(s.id for s in _mole(on).deduce.suspects if s.id != who)
+    game.choose(f"opp:accuse:huang_mole:{wrong}")
+    assert game.choose(f"opp:accuse:huang_mole:{who}") == ["（此刻無法這麼做。）"]  # 當天直接按也不行
+    assert game.state.player.opp_done == []
+
+
+def test_the_right_name_ends_the_accusing(on):
+    game = _game(on, faction="huang", at="guangzong")
+    who = opportunities.culprit(on, _mole(on), game.world.read().tianji)
+    msgs = game.choose(f"opp:accuse:huang_mole:{who}")
+    assert msgs[0].startswith("張梁沉著臉聽完") and msgs[-1] == "（機緣「營中的內鬼」完成。）"
+    assert not any(i.startswith("opp:accuse:") for i in _ids(game))  # 每種只完成一次
+    assert game.state.player.opp_done == ["huang_mole"]
+
+
+def test_trait_fragments_are_known_not_tickets(on):
+    """片段是知識不是門票（伏筆文件 2.2）：一則都沒聽到也能指認，猜對就算。"""
+    game = _game(on, faction="huang", at="guangzong")
+    who = opportunities.culprit(on, _mole(on), game.world.read().tianji)
+    assert game.state.player.opp_clues == []
+    assert game.choose(f"opp:accuse:huang_mole:{who}")[-1] == "（機緣「營中的內鬼」完成。）"
+
+
+def test_each_trait_fragment_is_heard_once_and_only_in_its_region(on):
+    game = _game(on, faction="huang")
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[-1])
+    heard = [opportunities.hear_clues(game.state, on, "luoyang", rng) for _ in range(4)]
+    assert len([h for h in heard if h]) == 1  # 洛陽只有一則特徵講到內鬼（寫工整或請人代寫、兩種只有一種是他的）
+    assert all(k.startswith("huang_mole:") for k in game.state.player.opp_clues)
+    assert opportunities.hear_clues(game.state, on, None, rng) == []  # 不在任何大區什麼都聽不到
+
+
+def test_the_engine_hands_the_world_to_the_clues(on):
+    game = _game(on, faction="huang", at="guangzong")
+    before = game.state.player.stamina
+    game.state.player.stamina -= 5  # 花了體力的行動之後才抽
+    with mock.patch.object(opportunities, "hear_clues", return_value=[]) as hear:
+        game._hear_after_stamina(before)
+    assert hear.call_args.kwargs["world"] is game.world  # 內鬼是本季天機決定的，片段要讀同一個天機
+
+
+def test_accusing_needs_rank_three_and_the_right_faction(on):
+    young = _game(on, faction="huang", at="guangzong", rank=2)
+    assert not any(i.startswith("opp:accuse:") for i in _ids(young))
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
+    assert opportunities.hear_clues(young.state, on, "luoyang", rng) == []  # 第 4 階的特徵片段也要先是第 3 階
+    other = _game(on, faction="guan", at="guangzong")
+    assert not any(i.startswith("opp:accuse:") for i in _ids(other))
+
+
+def test_a_finished_deduction_tells_no_more_clues(on):
+    game = _game(on, faction="huang")
+    game.state.player.opp_done = ["huang_mole"]
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
+    assert not any(h.split("：", 1)[1] in {t.text for t in _mole(on).deduce.traits}
+                   for r in ("jizhou", "luoyang") for h in opportunities.hear_clues(game.state, on, r, rng))

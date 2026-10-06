@@ -1170,7 +1170,7 @@ class Game:
         region_id = region.id if region is not None else None
         msgs = foreshadow.hear_after_action(s, c, region_id, self.rng, self.world) if foreshadow.active(s, c) else []
         if opportunities.active(s, c):  # 天時地利型機緣的線索（正式版乙一）
-            msgs += opportunities.hear_clues(s, c, region_id, self.rng)
+            msgs += opportunities.hear_clues(s, c, region_id, self.rng, world=self.world)  # 內鬼的特徵要讀本季天機
         return msgs
 
     def _call(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:

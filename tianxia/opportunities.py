@@ -306,21 +306,48 @@ def _timing_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> 
     return (t.when == "after_showdown" or state.player.opp_tried.get(o.id) != key), who
 
 
-def hear_clues(state: GameState, content: Content, region: str | None, rng: random.Random) -> list[str]:
-    """花體力的行動之後（Game._hear_after_stamina）：天時地利型的線索，在它的大區（沒寫就哪裡都行）以伏筆片段的機率
-    聽到一則（foreshadow.fragment_chance），每種只聽一次。寫進江湖紀錄（「你聽到一件事：…」），不發傳聞。"""
+def hear_clues(state: GameState, content: Content, region: str | None, rng: random.Random, world=None) -> list[str]:
+    """花體力的行動之後（Game._hear_after_stamina）：天時地利型的線索，加上推理型「本季內鬼的特徵」片段（只透露那個
+    人的特徵，在各自的大區），在它的大區（沒寫就哪裡都行）以伏筆片段的機率聽到一則（foreshadow.fragment_chance），
+    每則只聽一次。world 是讀本季天機用的（None 時天機當 0，同伏筆）。寫進江湖紀錄（「你聽到一件事：…」），不發傳聞。"""
     if region is None:
         return []
-    pool = [
-        o for o in open_ones(state, content)
-        if o.kind == "timing" and o.id not in state.player.opp_clues
-        and (not o.timing.clue_regions or region in o.timing.clue_regions)
-    ]
+    pool: list[tuple[str, str]] = []  # （記在 opp_clues 的鍵、那一句）
+    for o in open_ones(state, content):
+        if o.kind == "timing" and o.id not in state.player.opp_clues \
+                and (not o.timing.clue_regions or region in o.timing.clue_regions):
+            pool.append((o.id, o.timing.clue))
+        if o.kind == "deduce":
+            traits = next(s.traits for s in o.deduce.suspects if s.id == culprit(content, o, _world_tianji(world)))
+            for t in o.deduce.traits:
+                key = f"{o.id}:{t.key}"
+                if t.key in traits and t.region == region and key not in state.player.opp_clues:
+                    pool.append((key, t.text))
     if not pool or rng.random() >= foreshadow.fragment_chance(content):
         return []
-    o = rng.choice(pool)
-    state.player.opp_clues.append(o.id)
-    return [fragment_line(o.timing.clue)]
+    key, text = rng.choice(pool)
+    state.player.opp_clues.append(key)
+    return [fragment_line(text)]
+
+
+# ── 推理型 ─────────────────────────────────
+
+
+def culprit(content: Content, o: OppDef, world_tianji: int) -> str:
+    """本季的內鬼（嫌疑人 id）：天機決定（伏筆文件 2.9），換季（天機 +1）就可能換人。"""
+    return foreshadow.tianji_answer(world_tianji, o.deduce.tianji)
+
+
+def _world_tianji(world) -> int:
+    return world.read().tianji if world is not None else 0
+
+
+def _asker_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
+    """指認時誰問：照順序第一位在場的人（張梁 → 張寶 → 張角），你要在他的地點。回傳人物 id 或 None。"""
+    for h in o.deduce.askers:
+        if h.figure in figures.present_at(state, content, h.at):
+            return h.figure if h.at == loc_id else None
+    return None
 
 
 def _deliver_label(o: OppDef) -> str:
@@ -368,6 +395,15 @@ def place_options(state: GameState, content: Content, loc_id: str) -> list:
             who = _present_here(state, content, o, loc_id)
             if who is not None:
                 opts.append(Option(id=f"opp:present:{o.id}", label=o.puzzle.present.label.replace("{人物}", who)))
+        if o.kind == "deduce":
+            asker = _asker_here(state, content, o, loc_id)
+            if asker is not None:
+                tried = state.player.opp_tried.get(o.id) == _today(state, content)
+                name = figures.name_of(content, asker)
+                for s in o.deduce.suspects:
+                    label = o.deduce.label.replace("{人物}", name).replace("{嫌疑人}", s.name)
+                    opts.append(Option(id=f"opp:accuse:{o.id}:{s.id}", enabled=not tried,
+                                       label=f"{label}（今天已經指認過，改天再來）" if tried else label))
     return opts
 
 
@@ -448,6 +484,23 @@ def act(state: GameState, content: Content, world, arg: str, rng: random.Random)
         else:
             text = next(x.done for x in _patrons_of(state, o) if x.at == loc_id)
         return [text] + _complete(state, o)
+    if what == "accuse" and o.kind == "deduce":
+        asker = _asker_here(state, content, o, loc_id)
+        suspect = next((s for s in o.deduce.suspects if s.id == key), None)
+        if asker is None or suspect is None or state.player.opp_tried.get(o.id) == _today(state, content):
+            return [NOT_NOW]
+        name = figures.name_of(content, asker)
+        if key != culprit(content, o, _world_tianji(world)):
+            p = state.player
+            p.opp_tried[o.id] = _today(state, content)
+            character = content.figures[asker].character
+            if character is not None:
+                p.affinities[character] = max(0, p.affinities.get(character, 0) + o.deduce.wrong_affinity)
+            return [o.deduce.wrong.replace("{人物}", name).replace("{嫌疑人}", suspect.name)]
+        msgs = [o.deduce.right.replace("{人物}", name)]
+        for trend_id, amount in o.deduce.trend.items():
+            msgs += change_trend(state, content, trend_id, amount)
+        return msgs + _complete(state, o)
     return [NOT_NOW]
 
 
