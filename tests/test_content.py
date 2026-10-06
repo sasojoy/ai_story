@@ -526,6 +526,20 @@ def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
         load_content(root)
 
 
+def test_lead_texts_must_name_a_side_of_the_battle(content):
+    """決戰改版 1：幕文字照誰佔上風換版本（戰鬥系統 3.2），鍵是這場的陣營 id，寫錯陣營在載入時就報。"""
+    content.battles["t1"] = battle = _battle({})
+    battle.acts[0].text_by_lead["nobody"] = "某一方佔了上風。"
+    with pytest.raises(ContentError, match="text_by_lead"):
+        validate(content)
+
+
+def test_lead_texts_naming_both_sides_validate(content):
+    content.battles["t1"] = battle = _battle({})
+    battle.acts[0].text_by_lead.update({"guan": "官軍佔了上風。", "huang": "黃巾佔了上風。"})
+    validate(content)
+
+
 def _two_act_battle() -> dict:
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
     battle["acts"].append(json.loads(json.dumps(battle["acts"][0])))

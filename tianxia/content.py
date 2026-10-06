@@ -1420,6 +1420,8 @@ def validate(c: Content) -> None:
         # 至少 1 由模型的 ge=1 擋（戰鬥系統設計 3.2）
         for act in battle.acts:
             aw = f"{where} {act.id}"
+            for key in act.text_by_lead:  # 幕文字照誰佔上風換版本（戰鬥系統 3.2）：鍵要是這場的陣營
+                need(key in battle_sides, f"{aw}：text_by_lead 的鍵 {key} 不是這場的陣營")
             for option in act.options:
                 if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
                     known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")

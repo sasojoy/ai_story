@@ -718,6 +718,31 @@ def _default_explore_mix() -> list[ExploreMix]:
 # 不是「現在載入的設定」：週末設定的 2.5 天只管有蓋章的新季。
 DEFAULT_SEASON_DAYS = 14
 
+MOVES = ("強攻", "固守", "奇襲")  # 全服決戰的三招（戰鬥系統設計 3.4）
+BEATS = {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}  # 鍵剋值：固守剋強攻、強攻剋奇襲、奇襲剋固守
+Move = Literal["強攻", "固守", "奇襲"]
+
+
+class BattleTuning(_Strict):
+    """全服決戰的三招與推力（戰鬥系統設計 3.4）。全部【預設】：企劃者 2026-10-06「照預設做、測完再調」。
+    放在 Config 前面：Config.battle 的預設工廠要在 Config 類別建起來時就找得到它。"""
+
+    power_base: float = 40.0  # 實力 ＝ power_base ＋ power_per × min(威力, power_cap)，最多 100
+    power_per: float = 0.4
+    power_cap: float = 150.0
+    affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
+    affinity_outer: float = 15.0
+    affinity_inner: float = 10.0
+    affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: {  # 屬性 →（擅長, 不擅長）
+        "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"),
+        "柔": ("固守", "強攻"), "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"),
+        "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+    })
+    counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
+    push_max: float = 10.0  # 一回合最多推多少
+    damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
+    strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+
 
 class Config(_Strict):
     stamina_max: int = 150
@@ -971,6 +996,8 @@ class Config(_Strict):
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
     bot_tick_seconds: float = 20  # 假人程式多久巡一輪（現實秒數）
     bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
+    # ── 全服決戰的三招與推力（戰鬥系統設計 3.4；全部【預設】）──
+    battle: BattleTuning = Field(default_factory=BattleTuning)
 
     @field_validator("explore_mix")
     @classmethod
@@ -1014,6 +1041,7 @@ class BattleOption(_Strict):
     faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
     free_text: bool = False  # True 時這個「選項」不是按鈕，是一個最多 20 字的自訂行動輸入框
     # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
+    move: Move | None = None  # 固定招是三招的哪一招（戰鬥系統設計 3.4）；放手一搏（free_text）不填
 
 
 class BattleAct(_Strict):
@@ -1025,6 +1053,7 @@ class BattleAct(_Strict):
     text: str
     goal: str
     options: list[BattleOption] = Field(min_length=1)
+    text_by_lead: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 那一邊佔上風時的幕文字（3.2）；戰局剛好 50 或沒寫用 text
 
 
 class BattleOutcome(_Strict):
@@ -1078,7 +1107,8 @@ class BattleDef(_Strict):
     # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
     decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離中線 50 到這麼多（|trend − 50| ≥ 這個值，battle_instance.CENTER）
     # 就當回合收場、不再換幕（壓倒性提前收場：40 時是 90／10；看中線、不看這一場的起點，戰鬥系統 5.3）
-    action_tags: dict[str, BattleActionEffect]
+    action_tags: dict[str, BattleActionEffect] = Field(default_factory=dict)  # 舊的固定招查表（穩守／猛攻）；三招之後
+    # 固定招看 BattleOption.move，這張表只剩放手一搏找不到成功率時的退路，可以是空的
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配

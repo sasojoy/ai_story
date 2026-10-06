@@ -2,7 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from tianxia.models import (
-    EXPLORE_BRANCHES, Choice, Config, Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
+    BEATS, EXPLORE_BRANCHES, MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Choice, Config,
+    Connection, Event, InsightDef, InsightGrant, LearnRule, Location, SkillDef,
 )
 
 
@@ -157,3 +158,54 @@ def test_an_insight_may_be_earned_by_name():
 
 def test_a_location_starts_with_no_insights():
     assert Location(id="a", name="A", description="d", connections=[], x=0, y=0).insights == []
+
+
+# ── 全服決戰的三招與推力（決戰改版 1，戰鬥系統設計 3.4）──────────────────
+
+
+def test_battle_tuning_defaults_are_the_designs():
+    """戰鬥系統設計 3.4【預設】。"""
+    t = Config().battle
+    assert (t.power_base, t.power_per, t.power_cap) == (40.0, 0.4, 150.0)
+    assert (t.affinity_base, t.affinity_outer, t.affinity_inner) == (75.0, 15.0, 10.0)
+    assert (t.counter, t.push_max) == (0.5, 10.0)
+    assert t.damage == {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0} and t.strong_mitigation_cap == 0.6
+    assert t.affinity["剛"] == ("強攻", "奇襲") and t.affinity["快"] == ("奇襲", "固守")
+    assert set(t.affinity) == {"剛", "實", "陽", "柔", "陰", "慢", "快", "虛"}
+
+
+def test_each_move_beats_exactly_one_other():
+    assert BEATS == {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}
+    assert sorted(BEATS) == sorted(MOVES) == sorted(BEATS.values())
+
+
+def test_every_affinity_names_two_different_moves():
+    """每個屬性擅長一招、不擅長另一招，不會同一招又擅長又不擅長。"""
+    for attribute, (good, bad) in Config().battle.affinity.items():
+        assert good in MOVES and bad in MOVES and good != bad, attribute
+
+
+def test_a_fixed_option_may_name_its_move_and_a_gamble_does_not():
+    assert BattleOption(text="強攻", tag="x", move="強攻").move == "強攻"
+    assert BattleOption(text="放手一搏", tag="x", free_text=True).move is None
+    with pytest.raises(ValidationError):
+        BattleOption(text="亂招", tag="x", move="亂來")
+
+
+def test_an_act_has_no_lead_texts_unless_it_writes_them():
+    act = BattleAct(id="a", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])
+    assert act.text_by_lead == {}
+    # 兩幕的字典各自一份，改一幕不會動到另一幕
+    other = BattleAct(id="b", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])
+    act.text_by_lead["guan"] = "官軍佔上風。"
+    assert other.text_by_lead == {}
+
+
+def test_a_battle_may_leave_its_action_tags_out():
+    """三招之後固定招看 BattleOption.move；action_tags 只剩放手一搏找不到成功率時的退路，可以省略。"""
+    battle = BattleDef(
+        id="t", name="測試", factions=[BattleFaction(id="a", name="甲"), BattleFaction(id="b", name="乙")],
+        acts=[BattleAct(id="a1", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])],
+        outcomes=[BattleOutcome(faction="a", title="甲勝", text="甲勝。")],
+    )
+    assert battle.action_tags == {}
