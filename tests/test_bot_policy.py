@@ -181,6 +181,34 @@ def test_a_warlord_bots_scores_follow_the_tuning_numbers(game):
     assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 0.1)) < 1e-9
 
 
+def test_a_warlord_bot_scores_each_move_with_its_own_share_and_its_hurt_condition(game):
+    """搶地盤用奇襲的份量、保存實力用固守的份量（一半），都乘氣血狀態：奇襲 90、固守 30、氣血剩一半（狀態 0.75）。
+    份量全一樣、滿血的測試分不出份量拿錯招或沒乘狀態。"""
+    _warlord_in_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"強攻": 10.0, "固守": 30.0, "奇襲": 90.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 50.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (90 * 0.75 / 100 - 35 / 50)) < 1e-9  # 0.675 − 0.7
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (30 * 0.75 * 0.5 / 100 - 10 / 50)) < 1e-9  # 0.1125 − 0.2
+
+
+def test_a_warlord_bots_grab_cost_is_its_own_tuning_number_not_the_raids(game):
+    """搶地盤的扣血是 third_grab_damage、保存實力是 third_keep_damage，不是奇襲與固守的損耗（預設值剛好相同，所以改成不一樣來測）。"""
+    _warlord_in_battle(game)
+    tuning = game.content.config.battle
+    tuning.third_grab_damage, tuning.third_keep_damage = 50.0, 20.0
+    assert tuning.damage["奇襲"] == 35.0 and tuning.damage["固守"] == 15.0
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: (
+        b.participants[name].scores.update({"奇襲": 100.0, "固守": 100.0}),
+        setattr(b.participants[name], "neili_cap", 100.0), setattr(b.participants[name], "neili", 100.0),
+    ))
+    assert abs(bot_policy._battle_score(game, "act:third_grab") - (1.0 - 50 / 100)) < 1e-9
+    assert abs(bot_policy._battle_score(game, "act:third_keep") - (0.5 - 20 / 100)) < 1e-9
+
+
 def test_a_warlord_bot_takes_a_turn_in_the_battle_and_picks_one_of_its_two_moves(content, game):
     content.config.bot_strength = 1.0
     _warlord_in_battle(game)

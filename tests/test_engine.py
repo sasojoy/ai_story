@@ -2491,6 +2491,9 @@ def test_a_real_timetable_showdown_with_a_warlord_pushes_geju_and_says_so_in_wor
         report = next(e for e in fighter.state.journal if e.battle_id is not None)
         assert front_lines.mark("geju", push) in report.changes
         assert not any(str(push) in c and "割據" in c for c in report.changes)  # 不寫「豪強割據 +N」
+        record = fighter.state.battles[0]  # 戰報頁：第一季不收割據的標籤、也不寫數字（FB-064）；這個夾具沒宣告戰線，潁川汝南照舊是數字
+        assert record.id == report.battle_id and "潁川汝南 -15" in record.changes
+        assert not any("割據" in c for c in record.changes) and not any("割據" in note for note in record.notes)
 
 
 def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):

@@ -1461,7 +1461,7 @@ def test_stalemate_is_one_at_the_centre_and_zero_at_the_ends():
     assert bi.stalemate(50) == 1.0 and bi.stalemate(75) == 0.5 and bi.stalemate(0) == 0.0 and bi.stalemate(100) == 0.0
 
 
-def _three_way(definition, people, trend=50, neili=None, before=0, with_msgs=False):
+def _three_way(definition, people, trend=50, neili=None, before=0, with_msgs=False, tuning=None):
     """people：[(名號, 陣營, 出什麼)]，出什麼是三招之一、THIRD_GRAB 或 THIRD_KEEP。每個人每招的份量都是 100。
     before：結算前已經打了幾回合。結算一回合，回傳這一場（with_msgs 時另外回傳 resolve_round 給大家看的那幾句）。"""
     battle = bi.start_muster(definition, now=0)
@@ -1473,7 +1473,7 @@ def _three_way(definition, people, trend=50, neili=None, before=0, with_msgs=Fal
         battle.participants[name].neili = value
     for name, side, what in people:
         bi.submit_action(battle, name, what if what in (bi.THIRD_GRAB, bi.THIRD_KEEP) else f"{side}_{CODES[what]}")
-    msgs = bi.resolve_round(battle, definition, random.Random(0), now=1, tuning=BattleTuning())
+    msgs = bi.resolve_round(battle, definition, random.Random(0), now=1, tuning=tuning or BattleTuning())
     return (battle, msgs) if with_msgs else battle
 
 
@@ -1495,6 +1495,19 @@ def test_grabbing_uses_the_raid_share_and_costs_thirty_five(with_third):
     assert battle.participants["丙"].last_result == "趁亂搶地盤"
     assert battle.participants["丙"].acted_rounds == 1  # 數一次：主迴圈要跳過第三方，不然豪強被數兩次
     assert any("趁亂搶地盤 1 人" in m for m in battle.rounds[-1].messages)
+
+
+def test_the_warlords_costs_are_their_own_tuning_numbers_not_the_raids_and_the_holds(with_third):
+    """搶地盤扣 third_grab_damage、保存實力扣 third_keep_damage：預設的 35 剛好等於奇襲的損耗，所以改成不一樣來測；
+    保存實力的份量折數也讀 third_keep_share。"""
+    tuning = BattleTuning(third_grab_damage=50.0, third_keep_damage=20.0, third_keep_share=0.25)
+    assert tuning.damage["奇襲"] == 35.0 and tuning.damage["固守"] == 15.0
+    battle = _three_way(
+        with_third, ARMIES + [("丙", "hao", bi.THIRD_GRAB), ("丁", "hao", bi.THIRD_KEEP)], tuning=tuning,
+    )
+    assert battle.participants["丙"].neili == 1000 - 50
+    assert battle.participants["丁"].neili == 1000 - 20
+    assert battle.third_gain == pytest.approx((100.0 + 25.0) / math.sqrt(2))  # 搶 100、保存實力 100×0.25
 
 
 def test_keeping_strength_counts_half_and_costs_ten(with_third):
