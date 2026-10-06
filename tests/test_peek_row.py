@@ -7,34 +7,18 @@ from __future__ import annotations
 import json
 import random
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
+import webharness
 from conftest import real_content
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parent.parent
-NODE = shutil.which("node")
-pytestmark = pytest.mark.skipif(NODE is None, reason="沒有 node，前端畫面測試略過")
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 的 checkout 是 CRLF
-// IIFE 裡兩格縮排的函式：從標頭到下一個兩格縮排的收尾；一行寫完的 const 照名字抓
-const fn = (name) => {
-  const a = src.indexOf(`\n  function ${name}(`);
-  if (a < 0) throw new Error(`app.js 裡找不到 function ${name}`);
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
-const konst = (name) => {
-  const m = src.match(new RegExp(`^  const ${name} = .*;$`, "m"));
-  if (!m) throw new Error(`app.js 裡找不到 const ${name}`);
-  return m[0];
-};
 const dom = { peek: null };
 const store = new Map();
 if (input.storage === "throw") { // 存不了瀏覽器的儲存空間（隱私模式、被封鎖）：讀寫都丟例外，畫面也要照樣畫出來
@@ -68,20 +52,13 @@ const parts = [
 ];
 const H = new Function("S", parts.join("\n"))(S);
 H.S = S; H.dom = dom; H.store = store;
-const out = new Function("H", "m", input.script)(H, input.m);
-process.stdout.write(JSON.stringify(out === undefined ? null : out));
+finish(new Function("H", "m", input.script)(H, input.m));
 """
 
 
 def run(m, script="return H.peekBlock(m);", *, S=None, storage="memory", stored=None):
-    """在 node 裡跑 app.js 的小標與 pageJianghu：m 是 /api/main 回的那份（S.main），script 是函式本體（可用 H 與 m）。"""
-    done = subprocess.run(
-        [NODE, "-e", DRIVER],
-        input=json.dumps({"app": str(ROOT / "web" / "app.js"), "m": m, "script": script, "S": S or {}, "storage": storage, "stored": stored or {}}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    """在 node 裡跑 app.js 的小標與 pageJianghu（tests/webharness.py）：m 是 /api/main 回的那份（S.main），script 是函式本體（可用 H 與 m）。"""
+    return webharness.run(DRIVER, {"m": m, "script": script, "S": S or {}, "storage": storage, "stored": stored or {}})
 
 
 @pytest.fixture

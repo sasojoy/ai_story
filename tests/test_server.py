@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 import llm_queue
 import server
 import server_push
+import webharness
 from conftest import at, season_one_events
 from tianxia import (
     atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
@@ -1166,12 +1167,9 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
 
 def _app_functions_in_node(js: str, script: str) -> str:
     """把 app.js 裡幾個不碰畫面的函式（戰鬥卡片的折疊、看完整戰報、數字行）拿出來在 node 裡跑，回傳 script 印出的東西；
-    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。"""
-    import shutil
-    import subprocess
-
-    node = shutil.which("node")
-    if node is None:
+    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。
+    node 由 tests/webharness.py 跑。"""
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     names = ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink", "TRAIT_LEAD")
     consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
@@ -1181,10 +1179,9 @@ def _app_functions_in_node(js: str, script: str) -> str:
         if f"function {name}(" in js
     ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
-    done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
-                          capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    return done.stdout.decode("utf-8")
+    done = webharness.node(prelude + "\n".join(consts + funcs) + "\n" + script)
+    assert done.returncode == 0, done.stderr
+    return done.stdout
 
 
 def test_the_report_link_sits_in_the_process_head_row_of_the_fight_card():
@@ -5444,11 +5441,8 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
     要還原成原本的字（審查 I-1），不然舊的「前面還有 N 件」會一路留在按鈕上，直到自己那一件做完；問不到（斷線）不動。
     收掉之後不再問，收掉那一刻才回來的回應也不寫（審查 M-4：已經在路上的那一趟 fetch 不能把字寫到還原好的按鈕上）。"""
     import json
-    import shutil
-    import subprocess
 
-    node = shutil.which("node")
-    if node is None:
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     watch = _js_function(js, "function watchQueue(") + "\n  }"
@@ -5479,9 +5473,9 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
       console.log(JSON.stringify({{ seen, final: el.textContent, urls: urls[0], more: seen.length - calls }}));
     }})();
     """
-    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    out = json.loads(done.stdout.decode("utf-8"))
+    done = webharness.node(script)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
     assert out["urls"] == ["/api/queue", "same-origin"]
     base = "思量中……"
     assert out["seen"] == [
@@ -5500,11 +5494,8 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     重畫之前 S.message 要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。
     在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
     import json
-    import shutil
-    import subprocess
 
-    node = shutil.which("node")
-    if node is None:
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     parts = [
@@ -5540,9 +5531,9 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
       console.log(JSON.stringify({ refused, done, offline }));
     })();
     """
-    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    out = json.loads(done.stdout.decode("utf-8"))
+    done = webharness.node(script)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
     refused = out["refused"]
     assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
     assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句
