@@ -1015,6 +1015,11 @@ class Config(_Strict):
     rank2_push: int = Field(default=3, ge=0)  # 成功往己方推所在戰線幾點（走 Game.push_trend：緩衝、上限、貢獻）
     opp_showdown_days: float = Field(default=1.0, gt=0)  # 「戰後的地」：決戰結算之後幾個曆日內
     opp_wild_tags: list[str] = Field(default_factory=lambda: ["野外", "河畔", "山林", "渡口", "官道"])  # 「戰後的地」算野外的地點標籤
+    # 機緣的時間窗口（天時地利型的夜裡、黎明、戰後的地，與乙二集體密謀的期限 plot_days）每個至少開幾個「現實」分鐘（企劃者 2026-10-06「照比例調整」）。
+    # 季壓得越緊，同樣的曆時占的現實時間越短（週末設定 cal_scale 33.6：一個黎明只有 3.6 分鐘），所以窗口不夠長的才放寬，
+    # 放寬後的窗口＝這個分鐘數 × cal_scale 個曆分，也就是跟壓縮成正比；本來就夠長的（整季 14 天：黎明現實 20 分鐘）一個字不動。
+    # 0＝不放寬。只管機緣的窗口，calendar.is_night（伏筆、事件條件）不受影響。算法見 opportunities.windows
+    opp_window_min_minutes: float = Field(default=10, ge=0)
     # ── 集體密謀（正式版乙二；【預設】，企劃者 2026-10-06 同意）──
     plot_days: float = Field(default=1.0, gt=0)  # 發起之後幾個曆日內要湊齊，過了作罷（預設 1 曆日＝24 曆時）
     plot_contrib: int = Field(default=30, ge=0)  # 密謀成了，沒有第 3 階資格（或這種機緣已經完成）的參與者記幾點貢獻
