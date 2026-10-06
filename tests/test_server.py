@@ -4120,10 +4120,15 @@ def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, p
     assert Game.new(prologue_content, "假人").state.player.location == "town"
 
 
-def test_the_prologue_recap_is_served_as_html_and_empty_without_a_prologue(client, monkeypatch, prologue_content):
-    """設定頁的「重看序章」：GET /api/prologue 回 {text: html}；沒有序章的內容是空字串（網頁就不畫那顆鈕）。"""
+def test_the_prologue_recap_is_empty_without_a_prologue(client):
+    """設定頁的「重看序章」：沒有序章的內容是空字串（網頁就不畫那顆鈕）。正式內容還沒有序章。"""
     _player(client, "shen_02", "無序章")
-    assert client.get("/api/prologue").json() == {"text": ""}  # 正式內容還沒有序章
+    assert client.get("/api/prologue").json() == {"text": ""}
+
+
+def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_content):
+    """設定頁的「重看序章」：GET /api/prologue 回 {text: html}。跟上面分成兩個測試：同一個資料庫裡全服的賽季只認先開季的那份
+    內容的主線，進了角色畫面（現在一進去就輪詢）換一份內容再開，找不到那一份的主線。"""
     monkeypatch.setattr(server, "CONTENT", prologue_content)
     _player(client, "shen_03", "沈青衫")
     text = client.get("/api/prologue").json()["text"]
