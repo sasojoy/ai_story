@@ -22,7 +22,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from .battle_instance import BattleInstance, BattleRoundRecord, start_muster
+from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
@@ -441,6 +441,7 @@ class SqliteWorldStore:
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
             result["ok"] = True
 
         self.mutate(_apply)
@@ -460,6 +461,7 @@ class SqliteWorldStore:
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
@@ -468,12 +470,15 @@ class SqliteWorldStore:
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
         """整段在同一筆交易裡：對時鐘與推進賽季一起成功或一起撤回。實際「推進 N 秒會發生什麼事」在
-        world.py::advance_season（world.py 會 import 這個模組的介面，只能在函式裡 import 它）。"""
+        world.py::advance_season（world.py 會 import 這個模組的介面，只能在函式裡 import 它）。
+        賽季時鐘暫停中（paused_at）什麼都不做：不推進、對時點也不動（繼續時一起往後挪，見 resume_clock）。"""
         from . import world as world_module
 
         result = {"elapsed": 0.0}
 
         def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is not None:  # 賽季時鐘暫停中：不推、對時點也不動（繼續時一起往後挪，見 resume_clock）
+                return
             last = state.season_last_real
             state.season_last_real = now if last is None else max(last, now)
             if last is None or state.season_phase() != "running":
@@ -485,6 +490,47 @@ class SqliteWorldStore:
             if result["elapsed"] <= 0:
                 return []
             return world_module.advance_season(self, content, result["elapsed"], rng, now)
+
+    # ── 賽季時鐘暫停 ──────────────────────────────────────
+
+    def paused_at(self) -> float | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.paused_at') AS at FROM world WHERE id = 1").fetchone()
+        return None if row is None or row["at"] is None else float(row["at"])
+
+    def pause_clock(self, now: float) -> bool:
+        result = {"ok": False}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is not None or state.season_phase() != "running":
+                return
+            state.paused_at = now
+            result["ok"] = True
+
+        self.mutate(_apply)
+        return result["ok"]
+
+    def resume_clock(self, content: Content, now: float) -> float | None:
+        from . import world as world_module  # world → world_state：在函式裡 import，同 catch_up_season
+
+        result: dict[str, float | None] = {"span": None}
+
+        def _apply(state: SharedWorldState) -> None:
+            if state.paused_at is None:
+                return
+            span = max(0.0, now - state.paused_at)
+            state.paused_at = None
+            if state.season_last_real is not None:
+                skipped = world_module.pause_skip(state.season, content, span)
+                state.season_last_real += skipped
+                season_now = state.season.time + max(0.0, now - state.season_last_real) * content.config.time_scale
+                world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
+            if state.active_battle is not None:
+                shift_deadlines(state.active_battle, span)
+            result["span"] = span
+
+        self.mutate(_apply)
+        return result["span"]
 
     # ── 投靠名冊 ──────────────────────────────────────────
 

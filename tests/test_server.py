@@ -25,7 +25,8 @@ from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile, Lock, Rumor, TimelineResult
+from tianxia.state import BotProfile, FigureState, Lock, Rumor, TimelineResult, WorldState
+from tianxia.world_state import SharedWorldState, season_length_days
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 
@@ -5705,11 +5706,177 @@ def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
     assert server.current_fingerprint() != with_battle
 
 
+def test_pausing_and_resuming_the_season_clock_change_the_fingerprint():
+    """暫停賽季時鐘，全服每個人的選單都變成一顆灰的；繼續又變回來：這是大家都看得到的變化，開著的分頁要被叫醒（不然停機前
+    最久要等慢速輪詢 60 秒，繼續之後每個人還對著一顆灰的按鈕等一分鐘）。算的是「有沒有暫停」，不是停了幾分鐘：
+    暫停中畫面上的分鐘數每分鐘都在變，不能因此每分鐘叫醒一次全服。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+    before = server.current_fingerprint()
+    assert world.pause_clock(1000.0)
+    paused = server.current_fingerprint()
+    assert paused != before
+    world.mutate(lambda st: setattr(st, "paused_at", 99999.0))  # 停了更久：分鐘數變了，畫面上「停著」這件事沒變
+    assert server.current_fingerprint() == paused
+    assert world.resume_clock(server.CONTENT, 5000.0) is not None
+    resumed = server.current_fingerprint()
+    assert resumed != paused and resumed == before
+
+
+# 推送指紋的欄位分類（最終審查 m5）：全服共用的世界狀態（SharedWorldState、它的賽季 WorldState、進行中的決戰 BattleInstance）
+# 每一個欄位，不是「算進指紋」（底下的改法真的讓指紋變，下面的測試會試）、就是「不算」（寫一句為什麼）。以後誰加了新欄位，
+# 兩邊都沒有就紅——到時候要決定：它改了，全服每個人的畫面看得出來嗎？看得出來就要算進去（不然開著的分頁最久 60 秒才知道），
+# 看不出來（或不能讓人看出來）就寫進「不算」。暫停（paused_at）就是這樣漏過一次。
+_SEASON = "season"  # 容器欄位：它自己不算，裡面的欄位各自分類（WorldState 的欄位在 "WorldState" 那一組）
+FINGERPRINTED = {
+    "SharedWorldState": {
+        "season_number": lambda st: setattr(st, "season_number", st.season_number + 1),
+        "season_opened": lambda st: setattr(st, "season_opened", False),  # 籌備中：階段變了
+        "paused_at": lambda st: setattr(st, "paused_at", 1000.0),
+        "season": _SEASON,
+        "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
+    },
+    "WorldState": {
+        "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
+        "revealed": lambda st: st.season.revealed.add("h"),  # 隱藏的那一條浮現了
+        "rumors": lambda st: st.season.rumors.append(Rumor(time=0.0, text="天下大事", layer="world")),
+        "chronicle": lambda st: st.season.chronicle.append(Rumor(time=0.0, text="江湖史一筆")),
+        "ended": lambda st: setattr(st.season, "ended", True),  # 休季：階段變了
+        "ending_title": lambda st: setattr(st.season, "ending_title", "天下大亂"),
+        "storyline": lambda st: setattr(st.season, "storyline", "另一條主線"),
+        "act": lambda st: setattr(st.season, "act", st.season.act + 1),
+        "timeline": lambda st: st.season.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0)),
+        "showdowns_opened": lambda st: st.season.showdowns_opened.__setitem__("changshe_fire", "changshe_fire"),
+        "figures": lambda st: st.season.figures.__setitem__("lu_zhi", FigureState(prestige=70)),
+    },
+    "BattleInstance": {
+        "battle_id": lambda st: setattr(st.active_battle, "battle_id", "wancheng"),
+        "phase": lambda st: setattr(st.active_battle, "phase", "active"),
+        "round_number": lambda st: setattr(st.active_battle, "round_number", 1),
+        "trend": lambda st: setattr(st.active_battle, "trend", 55),
+    },
+}
+NOT_IN_THE_FINGERPRINT = {
+    "SharedWorldState": {
+        "companion_tag_counts": "跟人物對話才用的記數，不在共用的畫面上",
+        "companion_drift_note": "同伴的性情句，只在跟他對話時用",
+        "companion_drift_synthesized_at": "性情語意化的記數，不在畫面上",
+        "companions": "同伴被招走、升級只影響門下頁與招募鈕，那是各人自己的畫面（自己的動作走 self 通知），別人下次輪詢才補也不礙事",
+        "event_flavor": "事件的潤色句，一次寫好之後不變，跟著事件的公告出現",
+        "jade_seal_fragments": "玉璽碎片的歸屬，只在持有者的畫面",
+        "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
+        "tianji": "換季才加一，同時 season_number 也變了",
+    },
+    "WorldState": {
+        "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
+        "flags": "世界旗標只是條件，不直接畫在共用畫面上（推送計畫 F4）",
+        "flag_times": "旗標第一次成立的時間，同上",
+        "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
+        "sim_accum": "不滿一小時的時間累積器",
+        "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
+        "ending_id": "同上",
+        "final_trends": "同上（結算卡的資料）",
+        "final_rankings": "同上（結算卡的資料）",
+        "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
+        "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
+        "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
+        "season_one": "開季時蓋的章，開季之後不變",
+        "length_days": "同上",
+        "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
+        "lock_losers": "同上",
+        "third_party": "同上",
+        "third_party_shown": "同上",
+        "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
+        "event_bonus": "時刻表結果帶來的修正，同上",
+        "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
+        "hooked_week": "週初掛鉤的內部記號",
+        "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
+        "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
+        "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
+        "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
+        "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+    },
+    "BattleInstance": {
+        "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
+        "participants": "加入的人數、誰出手了，畫面上哪裡都看不到，還跟著假人的節奏變（推送計畫 F2）",
+        "act_index": "換幕只在 round_number 加一的那一下發生",
+        "round": "這一回合誰出手了、寫了什麼，同 participants",
+        "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
+        "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
+        "third_gain": "豪強整場的收穫累計（兩軍不能從畫面看出豪強做了什麼），只在 resolve_round 裡加，那一下 round_number 也變了",
+        "third_push": "豪強收場時算好的割據推動，只在收場那一下（settle_third）跟 phase 一起寫入",
+        "outcome_title": "收場時跟 phase 一起寫入",
+        "outcome_text": "同上",
+        "outcome_world_flags": "同上",
+        "outcome_trend_delta": "同上",
+        "end_time": "同上",
+        "unfinished_text": "同上",
+        "unfinished": "同上",
+        "record_id": "資料庫裡的流水號，不是畫面",
+        "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
+    },
+}
+WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
+
+
+def test_every_shared_world_field_is_classified_for_the_push_fingerprint():
+    """新欄位兩邊都沒寫就紅：逼加欄位的人當場決定它算不算進推送的指紋。"""
+    for name, model in WORLD_MODELS.items():
+        counted, ignored = set(FINGERPRINTED[name]), set(NOT_IN_THE_FINGERPRINT[name])
+        assert not counted & ignored, f"{name} 同時在兩邊：{sorted(counted & ignored)}"
+        assert set(model.model_fields) == counted | ignored, (
+            f"{name} 的欄位沒分類或寫錯了：沒分類 {sorted(set(model.model_fields) - counted - ignored)}，"
+            f"不存在 {sorted((counted | ignored) - set(model.model_fields))}——見 FINGERPRINTED／NOT_IN_THE_FINGERPRINT 上面的說明"
+        )
+        assert all(reason.strip() for reason in NOT_IN_THE_FINGERPRINT[name].values()), name
+
+
+@pytest.mark.parametrize(
+    ("name", "field"),
+    [(name, field) for name, fields in FINGERPRINTED.items() for field, change in fields.items() if change != _SEASON],
+)
+def test_every_field_counted_in_the_push_fingerprint_really_changes_it(name, field):
+    """上面說「算進指紋」的欄位，真的改了就讓 server.current_fingerprint() 變（不是只寫在清單上）。每個欄位自己一個資料庫。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+
+    def setup(st):
+        st.season.trends, st.season.revealed = {"t": 10, "h": 5}, {"t"}  # 一條浮現的、一條隱藏的
+        st.active_battle = battle_instance.BattleInstance(battle_id="changshe_fire")
+
+    world.mutate(setup)
+    before = server.current_fingerprint()
+    world.mutate(FINGERPRINTED[name][field])
+    assert server.current_fingerprint() != before, f"{name}.{field} 改了，指紋沒變"
+
+
+def test_the_fingerprint_ignores_what_the_warlords_gained():
+    """決戰改版 5：豪強的收穫與割據推動不算進指紋（兩軍不能從「又被叫醒了」看出豪強做了什麼）：它們只在回合結算、收場那一下才變，
+    那一下 round_number、phase 本來就讓指紋變了；單獨改它們，指紋不動。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+    world.start_battle(server.CONTENT.battles["changshe_fire"], now=1000.0)
+    before = server.current_fingerprint()
+    world.mutate_battle(lambda b: (setattr(b, "third_gain", 250.0), setattr(b, "third_push", 3)))
+    assert server.current_fingerprint() == before
+    world.mutate_battle(lambda b: setattr(b, "round_number", b.round_number + 1))  # 回合結算：大家都看得到
+    assert server.current_fingerprint() != before
+
+
 def _three_read_fingerprint() -> str:
     """推送看守原本的讀法：三次各自的快照，還把這一季每一則傳聞與江湖史讀回來數。新的讀法（一次快照加 MAX／COUNT）要跟它一樣。"""
     world = open_world()
     shared = world.read()
-    return server_push.world_fingerprint(shared.season_number, shared.season_phase(), world.get_season(), world.get_battle())
+    return server_push.world_fingerprint(
+        shared.season_number, shared.season_phase(), world.get_season(), world.get_battle(),
+        paused=shared.paused_at is not None,
+    )
 
 
 def test_the_one_snapshot_fingerprint_is_the_old_three_read_one_on_every_state():
@@ -5883,3 +6050,99 @@ def test_the_push_watcher_logs_only_the_kind_of_error(capsys, monkeypatch):
 def test_start_push_does_nothing_when_switched_off():
     assert server.start_push(server.CONTENT.config) is None
     assert server.HUB is None and server.PUSH_THREAD is None
+
+
+# ── 賽季時鐘暫停（賽季計畫 Task 4）────────────────────────────
+
+
+def test_a_paused_season_refuses_actions_but_keeps_the_pages(client):
+    """暫停中（線上架構 8.3「擋住所有動作」）：每一種動作都回同一句（走鎖外三段的也在第一段就擋）；計時器、修練頁、輿圖、
+    戰報照常看得到，打開輿圖照做（頁面靠它載入輿圖）。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    assert game.world.pause_clock(time.time())
+    main = client.get("/api/main").json()
+    assert main["paused"] == 0 and [o["id"] for o in main["options"]] == ["season:paused"]
+    refused = {"error": f"{server.PAUSED_TEXT}。"}
+    for path, body in (
+        ("/api/choose", {"id": "act:explore"}), ("/api/choose", {"id": "act:train"}),
+        ("/api/choose", {"id": "act:socialize"}), ("/api/travel", {"place": "x", "mode": "walk"}),
+        ("/api/menxia/practice", {"kind": "武學"}), ("/api/menxia/forge", {"art": "x", "insights": ["y"]}),
+        ("/api/answer", {"text": "上前勸架"}), ("/api/do/seclude", {"hours": 8}), ("/api/do/battle_text", {"text": "放火"}),
+    ):
+        out = client.post(path, json=body)
+        assert (out.status_code, out.json()) == (400, refused), path
+    for path in ("/api/menxia", "/api/map", "/api/reports"):
+        assert client.get(path).status_code == 200
+    assert client.post("/api/do/view_map", json={}).status_code == 200
+
+
+def test_the_admin_pauses_and_resumes_from_the_settings_page(client, monkeypatch):
+    _admin(client, monkeypatch)
+    game = server.game_for("掌門")
+    out = client.post("/api/do/pause_clock", json={}).json()
+    assert "賽季時鐘停了" in out["message"] and out["main"]["paused"] == 0
+    assert game.world.paused_at() is not None
+    assert "暫停中" in client.post("/api/do/fast_forward", json={"hours": 1}).json()["message"]
+    out = client.post("/api/do/resume_clock", json={}).json()
+    assert "賽季時鐘接著走了" in out["message"] and out["main"]["paused"] is None
+    assert game.world.paused_at() is None
+
+
+def test_players_cannot_pause_the_season(client):
+    _player(client)
+    for op in ("pause_clock", "resume_clock"):
+        out = client.post(f"/api/do/{op}", json={})
+        assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}
+
+
+def test_the_pause_buttons_call_what_the_server_has():
+    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    for op in ("pause_clock", "resume_clock"):
+        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.ADMIN_ACTIONS
+    assert "S.main.paused" in js
+    assert "paused" in server.main_view(Game.new(server.CONTENT, "測試"))
+
+
+def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off():
+    """「▶ 繼續」的確認問句照 world.resume_skip_text 說：整個季曆鐘頭才扣，停不到一個季曆鐘頭的話什麼都不扣、季末不動
+    （B12）——不能一律說「不算進賽季、季末往後延一樣長」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    line = next(row for row in js.splitlines() if row.strip().startswith("resume_clock: ["))
+    assert "整個季曆鐘頭" in line and "不到一個季曆鐘頭" in line and "季末不動" in line
+    assert "停的這一段不算進賽季，季末往後延一樣長" not in line
+
+
+def test_world_step_does_not_move_a_paused_season():
+    """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
+    打到一半的決戰那一路見 tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
+    world = open_world()
+    scale = server.CONTENT.config.time_scale
+    server.world_step(lambda: 1000.0)  # 記下時鐘
+    server.world_step(lambda: 1600.0)
+    stopped = world.get_season().time
+    assert stopped == pytest.approx(600 * scale)
+    assert world.pause_clock(1600.0)
+    far = 1600.0 + 3 * season_length_days(world.get_season(), server.CONTENT) * 86400 / scale  # 過了三個季長
+    server.world_step(lambda: far)
+    assert (world.get_season().time, world.get_season().ended, world.season_phase()) == (stopped, False, "running")
+    assert world.resume_clock(server.CONTENT, far) == far - 1600.0
+    server.world_step(lambda: far + 10)
+    assert world.get_season().time == pytest.approx(stopped + 10 * scale)
+
+
+def test_a_paused_season_never_asks_the_model(client, monkeypatch):
+    """暫停中，鎖外三段（對話、大場面、開爐、隨口應對）在第一段就擋，送模型的單子連問都不問引擎要
+    （只看回的 400 分不出第一段有沒有擋：第三段進鎖後會回同一句，白叫一次模型）。"""
+    _player(client)
+    assert server.game_for("沈青衫").world.pause_clock(time.time())
+    asked = []
+    for name in ("dialogue_request", "fight_request", "forge_request", "free_text_request"):
+        monkeypatch.setattr(Game, name, lambda self, *a, _name=name, **k: asked.append(_name))
+    for path, body in (
+        ("/api/choose", {"id": "act:socialize"}), ("/api/choose", {"id": "act:train"}),
+        ("/api/menxia/forge", {"art": "x", "insights": ["y"]}), ("/api/answer", {"text": "上前勸架"}),
+    ):
+        assert client.post(path, json=body).status_code == 400, path
+    assert asked == []

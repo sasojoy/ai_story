@@ -109,14 +109,13 @@ def test_catch_up_season_advances_the_shared_clock_by_elapsed_real_time(store, c
 
 
 def _battle_definition():
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+    options = [BattleOption(text=f"{s}{m}", tag=f"{s}_{codes[m]}", faction=s, move=m) for s in ("a", "b") for m in MOVES]
     return BattleDef(
         id="b1", name="測試戰", factions=[BattleFaction(id="a", name="甲方"), BattleFaction(id="b", name="乙方")],
-        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=[BattleOption(text="進攻", tag="go")])],
-        action_tags={"go": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=options)],
         outcomes=[BattleOutcome(faction="a", title="甲方勝", text="甲方贏了。")],
     )
 

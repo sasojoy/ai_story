@@ -154,6 +154,11 @@ class PlayerState(BaseModel):
     guide_outro: bool = False  # 引導剛走完、結語還沒按「知道了」（對話框顯示結語）；略過的、早就做完的是 False
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
+    # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
+    # 賽季時間（世界秒）。新角色與換季重來的角色先是 None，第一次同步補算完賽季之後才蓋上（Game._stamp_join）——建角的那一刻
+    # 賽季可能已經好幾個鐘頭沒人補算，那時就蓋會把福利白白吃掉一段。舊存檔沒有這一欄讀成 0.0：從季初算，跟以前一樣。
+    # 只有第一季的規則開著才讀（roster.since_join）
+    joined_at: float | None = 0.0
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
@@ -420,6 +425,7 @@ def new_game_state(content: Content, name: str) -> GameState:
         stamina=float(cfg.stamina_max),
         tutorial_step=0,
         member=Member(),
+        joined_at=None,  # 第一次同步補算完賽季才蓋（Game._stamp_join）
     )
     for skill_id in cfg.starter_skills:  # 開局送的基礎內功、基礎武學（武學與成長設計 3.3）
         slot = "neigong_id" if content.skills[skill_id].kind == "內功" else "wugong_id"

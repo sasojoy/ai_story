@@ -1402,26 +1402,26 @@ SHOWDOWN_TABLE = {  # 計畫 T8 的表：大區、守方、時刻表大事、版
     "wancheng_yi": ("nanyang", "guan", "wancheng", "乙", "nanyang"),
     "guangzong": ("jizhou", "huang", "guangzong", None, "jizhou"),
 }
-SHOWDOWN_ACTS = {  # 附錄 A 的三幕標題與每幕官軍、黃巾的穩守／猛攻
+SHOWDOWN_ACTS = {  # 決戰改版一的三招表：每幕標題，與官軍、黃巾各自的強攻／固守／奇襲（設計 session 的草稿，待 joy 潤）
     "changshe_fire": [
-        ("長社被圍", "固守城頭", "開門突擊黃巾前營", "圍住四門，斷絕城中糧道", "架起雲梯，強攻城牆"),
-        ("夜風將起", "按兵不動，靜待時機", "縋城而下，襲擾敵營", "收攏營寨，嚴加戒備", "趁夜摸上城頭"),
-        ("決勝長社", "守住城門，穩住陣腳", "全軍出城，衝擊敵陣", "穩住營盤，步步進逼", "全軍壓上，奪下城門"),
+        ("長社被圍", "開門突擊黃巾前營", "固守城頭", "縋城而下，夜探敵營虛實", "架起雲梯，強攻城牆", "圍住四門，斷絕城中糧道", "挖掘地道，潛向城根"),
+        ("夜風將起", "點齊兵馬，出城衝營", "按兵不動，靜待時機", "縋城而下，襲擾敵營", "趁夜猛攻城門", "收攏營寨，嚴加戒備", "趁夜摸上城頭"),
+        ("決勝長社", "全軍出城，衝擊敵陣", "守住城門，穩住陣腳", "分兵出側門，抄敵後路", "全軍壓上，奪下城門", "穩住營盤，步步進逼", "繞到城北，偷開小門"),
     ],
     "wancheng_jia": [
-        ("兵臨宛城", "深溝高壘，困住宛城", "推上雲梯，強攻城牆", "閉門死守，輪番上城", "開門出擊，燒毀土山"),
-        ("四面攻城", "輪番佯攻，耗盡守軍", "集中一面，蟻附登城", "添兵守垛，滾木擂石", "夜縋出城，焚燒雲梯"),
-        ("城破與否", "圍死四門，不放一人", "全軍登城，畢其功於一役", "死守最後一道城門", "傾城而出，殺散圍軍"),
+        ("兵臨宛城", "推上雲梯，強攻城牆", "深溝高壘，困住宛城", "趁夜挖掘地道", "開門出擊，衝散攻城兵", "閉門死守，輪番上城", "縋城夜出，燒毀土山"),
+        ("四面攻城", "集中一面，蟻附登城", "輪番佯攻，耗盡守軍", "聲東擊西，暗襲另一面城牆", "開城反衝，殺退攻城兵", "添兵守垛，滾木擂石", "夜縋出城，焚燒雲梯"),
+        ("城破與否", "全軍登城，畢其功於一役", "圍死四門，不放一人", "挑選精兵，夜攀城角", "傾城而出，殺散圍軍", "死守最後一道城門", "分兵出城，偷襲官軍後營"),
     ],
     "wancheng_yi": [
-        ("連營圍城", "閉城固守，清點糧草", "開門突擊，衝亂連營", "圍住四門，斷絕糧道", "趁城中未穩，架梯強攻"),
-        ("圍城日久", "節省糧草，輪番守城", "派死士夜出，燒敵糧車", "加固連營，圍而不攻", "四面同時攻城"),
-        ("城門開不開", "死守城門，寸步不讓", "傾城出戰，解圍在此一舉", "穩住連營，步步進逼", "全軍蟻附，奪下城頭"),
+        ("連營圍城", "開門突擊，衝亂連營", "閉城固守，清點糧草", "派小隊出城，燒敵營柵", "趁城中未穩，架梯強攻", "圍住四門，斷絕糧道", "扮作逃難百姓，混近城門"),
+        ("圍城日久", "整頓兵馬，出城衝營", "節省糧草，輪番守城", "派死士夜出，燒敵糧車", "四面同時攻城", "加固連營，圍而不攻", "夜派輕兵，繞到城後放火"),
+        ("城門開不開", "傾城出戰，解圍在此一舉", "死守城門，寸步不讓", "分兵出側門，抄敵後營", "全軍蟻附，奪下城頭", "穩住連營，步步進逼", "趁夜攀城，打開城門"),
     ],
     "guangzong": [
-        ("廣宗城下", "築圍挖塹，步步緊逼", "架起雲梯，強攻城牆", "閉門堅守，以逸待勞", "開門出擊，衝散圍塹"),
-        ("堅城難下", "閉營休兵，佯示退意", "晝夜不停，輪番攻城", "輪班上城，保存氣力", "趁官軍疲憊，夜襲大營"),
-        ("雞鳴", "穩住陣線，堵死各門", "雞鳴而發，全軍撲城", "死守內城，寸土不讓", "死士出城，直撲中軍"),
+        ("廣宗城下", "架起雲梯，強攻城牆", "築圍挖塹，步步緊逼", "夜遣輕兵，探城中虛實", "開門出擊，衝散圍塹", "閉門堅守，以逸待勞", "縋城夜出，燒毀官軍器械"),
+        ("堅城難下", "晝夜不停，輪番攻城", "閉營休兵，佯示退意", "佯退設伏，誘敵出城", "開門追擊，掩殺官軍", "輪班上城，保存氣力", "趁官軍疲憊，夜襲大營"),
+        ("雞鳴", "雞鳴而發，全軍撲城", "穩住陣線，堵死各門", "挑選死士，夜攀城角", "傾城而出，決一死戰", "死守內城，寸土不讓", "死士出城，直撲中軍"),
     ],
 }
 
@@ -1438,15 +1438,16 @@ def test_real_battles_three_showdowns(content):
         assert [(f.id, f.name) for f in b.factions] == [("guan", "官軍"), ("huang", "黃巾軍")]
         assert (b.trend_start, b.rounds_per_act, b.decisive_margin) == (50, 3, 40)
         assert (b.muster_seconds, b.round_seconds) == (beta.muster_seconds, beta.round_seconds)
-        assert b.action_tags == beta.action_tags and b.free_text_gamble == beta.free_text_gamble
+        assert not b.action_tags and b.free_text_gamble == beta.free_text_gamble  # 固定招走三招，沒有查表
         assert len(b.outcomes) == 1 and b.outcomes[0].trend_min is None and b.outcomes[0].trend_max is None
         assert not b.outcomes[0].trend_delta and not b.outcomes[0].world_flags_add  # 效果走時刻表，不重複套
         acts = []
         for act in b.acts:
             fixed = {(o.faction, o.tag): o.text for o in act.options if not o.free_text}
-            acts.append((act.title, fixed["guan", "guan_safe"], fixed["guan", "guan_aggressive"],
-                         fixed["huang", "huang_safe"], fixed["huang", "huang_aggressive"]))
+            acts.append((act.title, *(fixed[side, f"{side}_{code}"]
+                                      for side in ("guan", "huang") for code in ("strong", "hold", "raid"))))
             assert sorted(o.tag for o in act.options if o.free_text) == ["guan_reckless", "huang_reckless"]
+            assert set(act.text_by_lead) == {"guan", "huang"}  # 每幕兩個佔上風的版本（句子是草稿，待 joy 潤，不釘死）
         assert acts == SHOWDOWN_ACTS[bid]
     events = {e.id: e for e in content.timetable}
     for bid, b in showdowns.items():  # 每一件時刻表決戰、每一個版本都正好有一筆
@@ -1455,6 +1456,53 @@ def test_real_battles_three_showdowns(content):
     assert sorted((b.timetable_event, b.version or "") for b in showdowns.values()) == sorted([
         ("changshe_fire", ""), ("guangzong", ""), ("wancheng", "甲"), ("wancheng", "乙"),
     ])
+
+
+ALL_BATTLES = ["huangjin_showdown", "changshe_fire", "wancheng_jia", "wancheng_yi", "guangzong"]
+CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+
+
+def test_every_real_battle_is_three_moves_per_side_in_every_act(content):
+    """決戰改版一：五場（黃巾決戰保留，預設的季打的是它）每一幕每一邊都是強攻、固守、奇襲各一個，加一個放手一搏；
+    沒有舊的查表、每幕有兩個佔上風的版本。選項名的字數也守住（網頁按鈕 375px 上一行放得下：十三字內）。"""
+    assert set(ALL_BATTLES) <= set(content.battles)
+    for bid in ALL_BATTLES:
+        battle = content.battles[bid]
+        assert not battle.action_tags and battle.free_text_gamble is not None, bid
+        for act in battle.acts:
+            where = f"{bid} {act.id}"
+            for side in ("guan", "huang"):
+                mine = [o for o in act.options if o.faction == side]
+                fixed = [o for o in mine if not o.free_text]
+                assert [(o.move, o.tag) for o in fixed] == [(m, f"{side}_{c}") for m, c in CODES.items()], where
+                assert [o.tag for o in mine if o.free_text] == [f"{side}_reckless"] and mine[-1].free_text, where
+                assert all(0 < len(o.text) <= 13 for o in fixed), (where, [o.text for o in fixed])
+            assert set(act.text_by_lead) == {"guan", "huang"}, where
+            assert len({act.text, *act.text_by_lead.values()}) == 3 and all(act.text_by_lead.values()), where
+
+
+def test_server_bots_play_the_real_showdowns_by_move_not_at_random(tmp_path):
+    """決戰改版一 Task 5 之前，真實內容的選項沒有 move，假人對每個選項都是 0 分、等於亂出；換成三招之後照自己每招的份量挑。"""
+    from tianxia import battle_instance as bi
+    from tianxia import bot_policy
+    from tianxia.engine import Option
+    from tianxia.models import MOVES
+    from tianxia.state import BotProfile
+
+    c = load_content(CONTENT_DIR)
+    c.config.bot_strength = 1.0
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    assert set(MOVES) == set(CODES)
+    for bid in ALL_BATTLES:
+        game = _beta_season(c, tmp_path, f"bots_{bid}")  # 每一場一個自己的世界：同時只能有一場決戰
+        game.world.start_battle(c.battles[bid], now=0.0)
+        name = game.state.player.name
+        game.world.mutate_battle(lambda b: bi.join_faction(b, name, "guan", 400.0, scores={"強攻": 30.0, "固守": 30.0, "奇襲": 90.0}))
+        scores = {m: bot_policy._battle_score(game, f"act:guan_{code}") for m, code in CODES.items()}
+        assert max(scores, key=scores.get) == "奇襲" and len(set(scores.values())) == 3, (bid, scores)
+        options = [Option(id=f"battle:act:guan_{code}", label=m) for m, code in CODES.items()]
+        picks = {bot_policy.pick(game, options, profile, random.Random(seed)) for seed in range(20)}
+        assert picks == {"battle:act:guan_raid"}, bid  # 強度全開：每次都出份量最高的那一招
 
 
 @pytest.mark.parametrize(("battle_id", "winner"), [

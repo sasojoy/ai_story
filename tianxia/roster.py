@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from . import rules, team
+from . import calendar, rules, team
 from .models import Content
 from .state import GameState
 from .world_state import CompanionProgress, WorldStateStore
@@ -100,15 +100,44 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
     return [f"【{ch.name}】加入了你的隊伍！"] + team.add_to_team(state, char_id)
 
 
-# ── 新立門戶福緣 ─────────────────────────────────────────
+# ── 新手福利與新立門戶福緣（第一季設計第十四節：從自己加入的那天起算）────────
+
+
+def since_join(state: GameState, content: Content) -> float | None:
+    """第一季（rules.season_one）：自己加入這一季以來過了多少季曆秒。世界裡的天數看季曆（PM 2026-10-06），所以跟著
+    週末設定縮：2.5 天的季，季曆 3 天是現實約 2 小時。joined_at 還沒蓋（新角色第一次同步之前）算剛加入。
+    不是第一季回 None：新手福利照舊從季初起算、用世界的天數，beta 一點都不變。"""
+    w = state.world
+    if not rules.season_one(content, w):
+        return None
+    joined = state.player.joined_at
+    elapsed = 0.0 if joined is None else max(0.0, w.time - joined)
+    return elapsed * calendar.cal_scale(content, w)
+
+
+def newbie(state: GameState, content: Content) -> bool:
+    """新手福利還在：前 newbie_days 天氣血回復加倍。"""
+    since = since_join(state, content)
+    elapsed = state.world.time if since is None else since
+    return elapsed <= content.config.newbie_days * rules.DAY
 
 
 def fortune_due(state: GameState, content: Content) -> bool:
-    return not state.player.fortune and rules.current_day(state) >= content.config.fortune_day_min
+    """新立門戶福緣：第 fortune_day_min 天起交友必定先觸發（第 1 天是加入那一刻起的頭 24 個鐘頭；beta 是季的第幾天）。"""
+    if state.player.fortune:
+        return False
+    since = since_join(state, content)
+    day = rules.current_day(state) if since is None else int(since // rules.DAY) + 1
+    return day >= content.config.fortune_day_min
 
 
 def fortune_overdue(state: GameState, content: Content) -> bool:
-    return not state.player.fortune and state.world.time >= content.config.fortune_day_max * rules.DAY
+    """第 fortune_day_max 天結束還沒發生，就直接送上門。"""
+    if state.player.fortune:
+        return False
+    since = since_join(state, content)
+    elapsed = state.world.time if since is None else since
+    return elapsed >= content.config.fortune_day_max * rules.DAY
 
 
 # ── 門下頁的文字 ──────────────────────────────────────────

@@ -11,10 +11,13 @@ import copy
 import json
 import logging
 import re
-from typing import Any, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Type, TypeVar
 
 import requests
 from pydantic import BaseModel, ValidationError
+
+if TYPE_CHECKING:
+    from .models import Config
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -124,7 +127,7 @@ class ModelGaveUp(RuntimeError):
 
 class ModelBudget:
     """行動鎖內的模型「額度」：一次拿鎖的期間，只要有一次模型呼叫逾時或失敗，gave_up 就設起來，之後鎖內的模型呼叫一律不送
-    （引擎不讀時鐘，靠這面旗子就夠）。由 Game 持有，server._locked 每次拿到鎖先歸零（Game.reset_model_budget）。"""
+    （引擎不讀時鐘，靠這面旗子就夠）。由 Game 持有，server._locked 與 bot_runner._bot_game 每次拿到鎖先歸零（Game.reset_model_budget）。"""
 
     def __init__(self) -> None:
         self.gave_up = False
@@ -194,6 +197,15 @@ class OllamaClient:
         # chat_structured 失敗（逾時、格式不對）時要不要再問一趟：預設要；行動鎖內用的複本設成 False（見 quick_client），
         # 一次呼叫最多只送一趟，失敗就丟出那一次的例外讓呼叫端走退路
         self.retry = True
+
+    @classmethod
+    def from_config(cls, cfg: Config) -> OllamaClient:
+        """照設定建一個 client（Game 與伺服器假人程式共用同一套參數）。"""
+        return cls(
+            base_url=cfg.ollama_url, model=cfg.ollama_model, timeout=cfg.ollama_timeout, think=cfg.ollama_think,
+            keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
+            presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
+        )
 
     def check_health(self) -> bool:
         try:
