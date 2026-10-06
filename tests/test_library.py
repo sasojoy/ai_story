@@ -207,6 +207,32 @@ def test_an_art_waiting_to_be_named_cannot_be_melted(state, content, world):
     assert "熔成了心得" in library.melt_art(state, content, world, "旋風腿")[0]
 
 
+def test_melting_an_art_that_pays_nothing_says_it_only_frees_a_slot(state, content, world):
+    """W9：第一成的內容武學熔了退 0 心得，但仍然空出一格（所以照樣准熔）——結果不能寫「熔成了心得。心得 +0」。句子待 joy 潤。"""
+    state.player.arts = ["lake_kick"]
+    assert library.melt_value(state, content, world, "lake_kick") == 0
+    assert library.melt_art(state, content, world, "lake_kick") == ["你把【湖邊腿法】熔掉了，空出一格。"]
+    assert state.player.arts == [] and state.player.stats.get("xinde", 0) == 0
+
+
+def test_melting_an_art_that_pays_still_says_how_much(state, content, world):
+    state.player.arts, state.player.art_levels["lake_kick"] = ["lake_kick"], 5
+    msgs = library.melt_art(state, content, world, "lake_kick")
+    assert msgs == ["你把【湖邊腿法】熔成了心得。", "心得 +8"]
+
+
+def test_the_melt_confirm_and_note_are_honest_about_a_zero_refund(content):
+    """W9：確認框、卡片上那一行，退 0 心得時都直說「沒有心得，只空出一格」；開局送的基礎武學再補一句城鎮免費重學
+    （只有開局送的才真的免費重學，見 library._taught_here，所以別的武學不寫這句）。"""
+    content.config.starter_skills = ["basic_fist"]
+    assert library.melt_note(0) == "沒有心得，只空出一格" and library.melt_note(8) == "退回心得 8"
+    assert library.melt_confirm(content, "基礎拳腳", "basic_fist", 0) == (
+        "把【基礎拳腳】熔掉？這門熔了沒有心得，只空出一格（基礎武學在城鎮可以免費重學）。"
+    )
+    assert library.melt_confirm(content, "湖邊腿法", "lake_kick", 0) == "把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。"
+    assert library.melt_confirm(content, "旋風腿", "旋風腿", 4) == "把【旋風腿】熔成心得？熔掉就沒了。"  # 有心得的照舊
+
+
 def test_melting_something_you_do_not_have_changes_nothing(state, content, world):
     state.player.stats["xinde"] = 0
     assert "沒有" in library.melt_art(state, content, world, "旋風腿")[0]

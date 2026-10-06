@@ -505,8 +505,21 @@ def test_art_rows_list_worn_arts_first_with_what_can_be_done(state, content, wor
     rows = skillview.art_rows(state, content, world)
     assert [r["id"] for r in rows] == ["basic_fist", "lake_kick"]
     assert rows[0]["worn"] and not rows[0]["melt"]["ok"]
-    assert rows[1]["melt"]["ok"] and "退回心得" in rows[1]["melt"]["note"]
+    assert rows[1]["melt"]["ok"] and rows[1]["melt"]["note"] == "沒有心得，只空出一格"  # 第一成的湖邊腿法熔了退 0（W9）
     assert not rows[0]["cultivate"]["ok"] and "沒有融過意境" in rows[0]["cultivate"]["note"]
+
+
+def test_art_rows_carry_the_melt_confirm_the_button_asks(state, content, world):
+    """W9：確認框問什麼由伺服器寫好（library.melt_confirm）放在每一列的 melt.confirm，網頁照放。"""
+    content.config.starter_skills = ["basic_fist"]
+    state.player.member.wugong_id = "lake_kick"
+    state.player.arts = ["basic_fist", "旋風腿"]
+    _whirlwind(world)
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    assert rows["basic_fist"]["melt"]["confirm"] == "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格（基礎武學在城鎮可以免費重學）。"
+    assert rows["旋風腿"]["melt"]["confirm"] == "把【旋風腿】熔成心得？熔掉就沒了。"  # 合成的有基本值，不是 0
+    assert rows["旋風腿"]["melt"]["note"].startswith("退回心得 ")
+    assert rows["lake_kick"]["melt"]["confirm"] == ""  # 身上正在練的不能熔：沒有確認框要問
 
 
 def _refund_the_row_promises(state, content, world, art_id):

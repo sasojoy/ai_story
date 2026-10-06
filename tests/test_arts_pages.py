@@ -161,6 +161,19 @@ def test_switching_and_melting_still_scroll_to_the_top_and_clear_the_card_note()
         assert out["note"] is None, op
 
 
+# ── W9：熔煉的確認框問什麼，由伺服器寫好、放在按鈕上 ─────────────────────────
+
+
+def test_the_melt_button_carries_the_servers_confirm_question_escaped():
+    rows = [art(), art("lake_kick", "湖邊腿法", worn=False, melt={"ok": True, "note": "沒有心得，只空出一格", "confirm": "把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。"})]
+    html = page("pagePractice", menxia(owned_arts=rows), artOpen="lake_kick")
+    button = re.search(r'<button[^>]*data-act="melt"[^>]*>', html).group(0)
+    assert 'data-confirm="把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。"' in button
+    assert "熔煉：沒有心得，只空出一格" in html
+    evil = art("lake_kick", "湖邊腿法", worn=False, melt={"ok": True, "note": "x", "confirm": '"><script>'})
+    assert "<script>" not in page("pagePractice", menxia(owned_arts=[evil]), artOpen="lake_kick")
+
+
 # ── W5：修練頁的武學清單叫「功法庫」 ───────────────────────────────────
 
 

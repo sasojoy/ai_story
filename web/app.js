@@ -1005,7 +1005,7 @@
           <div class="row art-actions">
             <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
             ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
+            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
           ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
@@ -1951,7 +1951,8 @@
           break;
         }
         case "melt":
-          if (confirm(`把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
+          // 確認框問什麼由伺服器寫好（melt.confirm：退 0 心得時照實說只空出一格）；沒給（舊版伺服器）就問老問題
+          if (confirm(el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
           break;
         case "melt-insight":
           if (confirm(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`)) await mx("melt_insight", { insight: el.dataset.id });

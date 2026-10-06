@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from . import cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
+from .library import cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
@@ -181,6 +181,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
+        value = melt_value(state, content, world, art_id) if stuck is None else 0
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
@@ -188,7 +189,9 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
-                "note": stuck if stuck is not None else f"退回心得 {melt_value(state, content, world, art_id)}",
+                "note": stuck if stuck is not None else melt_note(value),
+                # 熔煉鈕按下去的確認框問什麼（W9）：退 0 心得時照實說只空出一格；熔不掉的沒有確認框
+                "confirm": melt_confirm(content, art.name, art_id, value) if stuck is None else "",
             },
         })
     return rows

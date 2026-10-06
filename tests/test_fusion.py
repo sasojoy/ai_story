@@ -330,7 +330,7 @@ def test_fb068_fuse_then_melt_through_the_game_nets_minus_one_and_the_page_promi
     (new,) = p.arts
     assert p.stats["xinde"] == 95
     (row,) = [r for r in game.art_rows() if r["id"] == new]
-    assert row["melt"] == {"ok": True, "note": "退回心得 4"}
+    assert row["melt"]["ok"] and row["melt"]["note"] == "退回心得 4"
     msgs = game.melt_art(new)
     assert p.stats["xinde"] == 99 and msgs[-1] == "心得 +4"
     assert "心得 +4" in game.state.journal[0].changes
