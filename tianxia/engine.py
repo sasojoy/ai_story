@@ -1775,13 +1775,14 @@ class Game:
         的 act 分支（玩家自己送出行動，可能剛好湊滿全員）共用的同一份邏輯，確保兩條
         路徑的推進規則完全一致——只是呼叫的時間點跟是否先 submit_action 不同。"""
         now = self.now
+        tuning = self.content.config.battle  # 三招的數字（排程的 Game 與玩家的 Game 讀同一份內容，所以結算一致）
         if battle.phase == "muster" and now >= battle.muster_deadline_real:
             battle_instance.close_muster(battle, definition, self.rng, now)
         if battle.phase != "active":
             return []
         for p in list(battle.participants.values()):
             if p.is_bot and not p.eliminated and not p.away and p.name not in battle.round.pending_actions:
-                tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng)
+                tag = battle_instance.bot_choose_action(battle, definition, p.name, self.rng, tuning=tuning)
                 if tag:
                     battle_instance.submit_action(battle, p.name, tag)
         ended = battle_instance.end_without_fighters(battle, definition, now)  # 沒人能打、回合逾時：用保底結果收場
@@ -1789,10 +1790,10 @@ class Game:
             battle.end_time = self.state.world.time  # 收場時的賽季時間：參戰者的戰報用（FB-027）
             return ended
         if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
-            battle_instance.fill_timed_out_actions(battle, definition)
+            battle_instance.fill_timed_out_actions(battle, definition, tuning=tuning)
         if not battle_instance.round_is_complete(battle):
             return []
-        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now)
+        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
         narration = battle_instance.narrate_round(self._quick_client(), definition, battle, msgs)

@@ -1760,6 +1760,70 @@ def _install_battle_def(content):
     return definition
 
 
+def _install_three_move_battle(content):
+    """三招的決戰（戰鬥系統 3.4）：一幕三回合，兩邊各有強攻、固守、奇襲，沒有 action_tags。"""
+    from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
+
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+    definition = BattleDef(
+        id="t3", name="三招決戰",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[BattleAct(
+            id="a1", title="對陣", text="兩軍對陣。", goal="推動戰局",
+            options=[BattleOption(text=f"{s}{m}", tag=f"{s}_{codes[m]}", faction=s, move=m)
+                     for s in ("guan", "huang") for m in MOVES],
+        )],
+        outcomes=[BattleOutcome(faction="guan", title="收場", text="戰罷。")],
+        muster_seconds=600, round_seconds=120, rounds_per_act=3,
+    )
+    content.battles[definition.id] = definition
+    return definition
+
+
+def _open_three_move_battle(game):
+    """開一場三招的仗、本人加入官軍、集結時間撥到過去，進到開打。"""
+    definition = _install_three_move_battle(game.content)
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    game._battle_choose("join:guan")
+    game.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
+    game._run_battle_tick(definition)
+    return game.world.get_battle(), definition
+
+
+def test_the_engine_resolves_a_round_with_the_configured_tuning_even_against_a_bot_without_scores(content, game):
+    """Config.battle 一路傳進結算（push_max 改成 4：推力不是寫死的 10）；對面是沒有快照的假人，份量 0、不當機。"""
+    content.config.battle.push_max = 4.0
+    battle, definition = _open_three_move_battle(game)
+    game.world.mutate_battle(lambda b: battle_instance.auto_assign_latecomer(
+        b, definition, "機", 300.0, random.Random(0), faction="huang", is_bot=True,
+    ))
+    assert game.world.get_battle().participants["機"].scores == {}
+    game.choose("battle:act:guan_hold")  # 本人出完，假人在同一次推進裡跟著出，回合湊齊、結算
+    after = game.world.get_battle()
+    assert after.round_number == 1 and after.trend == 54  # 假人份量 0：官軍推滿 push_max
+    me = after.participants[game.state.player.name]
+    assert me.last_result.startswith("固守（剋制 ×") and after.participants["機"].neili < 300.0  # 剋制幾倍看假人出了哪一招
+
+
+def test_the_world_ticker_plays_the_three_moves_with_nobody_online(content, game):
+    """排程沒有玩家：逾時代出自己那邊的固守，三招照結算（黃巾沒人 → 官軍推滿 10），而且不替誰算份量。"""
+    definition = _install_three_move_battle(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        game.choose("battle:join:guan")
+    open_characters().save(game.state)
+    ticker = Game.for_world(content, game.world, rng=random.Random(3))
+    with mock.patch.object(Game, "_battle_scores", side_effect=AssertionError("排程不該算份量")):
+        ticker.world_tick(1000.0 + 601)
+        ticker.world_tick(1000.0 + 601 + 121)
+    battle = game.world.get_battle()
+    assert battle.round_number == 1 and battle.trend == 60
+    assert battle.participants["沈浪"].last_result == "固守（剋制 ×1.0）"
+    assert battle.round.pending_actions == {} and battle.last_mix["guan"]["固守"] == 1.0
+
+
 def test_battle_scores_read_the_players_two_arts(game):
     p = game.state.player
     p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"  # 屬實、屬柔

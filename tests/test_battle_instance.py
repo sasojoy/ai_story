@@ -1,4 +1,5 @@
 import random
+from math import isclose
 from unittest import mock
 
 import pytest
@@ -7,6 +8,7 @@ from conftest import FixedRandom
 from tianxia import battle_instance as bi
 from tianxia.models import (
     MOVES, BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
+    FreeTextGamble,
 )
 
 
@@ -100,6 +102,46 @@ def showdown() -> BattleDef:
             BattleOutcome(faction="guan", title="兩軍膠著", text="不分勝負。"),
         ],
     )
+
+
+CODES = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+
+
+@pytest.fixture
+def three() -> BattleDef:
+    """三招的決戰（戰鬥系統 3.4）：一幕九回合，兩邊各三招，沒有放手一搏、沒有 action_tags。"""
+    options = [
+        BattleOption(text=f"{side}{move}", tag=f"{side}_{CODES[move]}", faction=side, move=move)
+        for side in ("guan", "huang") for move in MOVES
+    ]
+    return BattleDef(
+        id="three", name="三招之戰",
+        factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾")],
+        acts=[BattleAct(id="a1", title="對陣", text="兩軍對陣。", goal="推動戰局", options=options)],
+        rounds_per_act=9, decisive_margin=40,
+        outcomes=[BattleOutcome(faction="guan", title="收場", text="戰罷。")],
+    )
+
+
+def _fight(definition, picks, scores=100.0, power=0.0):
+    """picks：[(名號, 陣營, 招), ...]；每個人每招的份量都是 scores、滿血，結算一回合。"""
+    battle = bi.start_muster(definition, now=0)
+    for name, side, _ in picks:
+        bi.join_faction(battle, name, side, neili_cap=1000, power=power, scores={m: scores for m in MOVES})
+    bi.close_muster(battle, definition, random.Random(0), now=0)
+    for name, side, move in picks:
+        bi.submit_action(battle, name, f"{side}_{CODES[move]}")
+    bi.resolve_round(battle, definition, random.Random(0), now=1, tuning=BattleTuning())
+    return battle
+
+
+def _two_fighters(definition, scores=50.0):
+    """甲（官軍）與乙（黃巾）各帶三招份量 scores、滿血，已經開打、還沒人出手。"""
+    battle = bi.start_muster(definition, now=0)
+    for name, side in (("甲", "guan"), ("乙", "huang")):
+        bi.join_faction(battle, name, side, neili_cap=300, scores={m: scores for m in MOVES})
+    bi.close_muster(battle, definition, random.Random(0), now=0)
+    return battle
 
 
 # ── 集結期 ───────────────────────────────────────────────
@@ -444,6 +486,239 @@ def test_resolve_round_without_a_gamble_config_falls_back_to_the_tag_lookup(defi
     bi.resolve_round(instance, definition, FixedRandom(0.0))
     assert instance.trend == 50 + 10 + 1  # reckless 固定 trend_delta=10，加上 乙 safe 的 +1
     assert instance.participants["甲"].eliminated  # neili_damage=200 遠超過上限，夾到 0 出局
+
+
+# ── 三招的結算：剋制、√人數、推力（決戰改版 1 Task 3，戰鬥系統 3.4）──────────────
+
+
+def test_counter_coefficient_spans_half_to_one_and_a_half():
+    """Review Focus 4：對面六成強攻、其餘固守，你出固守 ×1.3；對面全強攻 ×1.5、全奇襲 ×0.5（設計 3.4 的例子）。"""
+    t = BattleTuning()
+    assert isclose(bi.counter_coefficient(t, "固守", {"強攻": 0.6, "固守": 0.4}), 1.3)
+    assert bi.counter_coefficient(t, "固守", {"強攻": 1.0}) == 1.5
+    assert bi.counter_coefficient(t, "固守", {"奇襲": 1.0}) == 0.5
+
+
+def test_every_move_is_beaten_by_exactly_one_other_in_the_coefficient():
+    """三招繞一圈：每一招對「被它剋的」×1.5、對「剋它的」×0.5，對自己人（同招）×1。"""
+    t = BattleTuning()
+    for move, beaten in (("固守", "強攻"), ("強攻", "奇襲"), ("奇襲", "固守")):
+        assert bi.counter_coefficient(t, move, {beaten: 1.0}) == 1.5
+        assert bi.counter_coefficient(t, beaten, {move: 1.0}) == 0.5
+        assert bi.counter_coefficient(t, move, {move: 1.0}) == 1.0
+    assert bi.counter_coefficient(t, "強攻", {}) == 1.0  # 對面沒人出固定招
+
+
+def test_numbers_help_but_with_diminishing_returns(three):
+    """Review Focus 1：官軍 1000 人、黃巾 250 人，全出強攻、份量相同：一回合推 3.3，四捨五入 3（設計 3.4）。"""
+    picks = [(f"官{i}", "guan", "強攻") for i in range(1000)] + [(f"黃{i}", "huang", "強攻") for i in range(250)]
+    assert _fight(three, picks).trend == 53
+
+
+def test_reading_the_enemy_lets_the_few_beat_the_many(three):
+    """100 人固守對 200 人強攻：固守 ×1.5、強攻 ×0.5，少的一邊推 3.6，四捨五入 4。"""
+    picks = [(f"官{i}", "guan", "固守") for i in range(100)] + [(f"黃{i}", "huang", "強攻") for i in range(200)]
+    battle = _fight(three, picks)
+    assert battle.trend == 54
+    assert battle.participants["官0"].last_result == "固守（剋制 ×1.5）"
+    assert battle.last_mix == {"guan": {"強攻": 0.0, "固守": 1.0, "奇襲": 0.0}, "huang": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}}
+
+
+def test_a_side_with_nobody_on_a_fixed_move_gets_pushed_ten(three):
+    """Review Focus 2：一邊沒人出固定招，另一邊推滿 10，不除以零。"""
+    assert _fight(three, [("甲", "guan", "奇襲")]).trend == 60
+    assert _fight(three, [("乙", "huang", "奇襲")]).trend == 40
+
+
+def test_nobody_on_a_fixed_move_on_either_side_pushes_nothing(three):
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=300, scores={m: 50.0 for m in MOVES})
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    battle.participants["甲"].away = True  # 沒有任何人出手
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 and battle.last_mix == {"guan": {}, "huang": {}}
+
+
+def test_a_side_that_is_all_down_gets_pushed_ten(three):
+    battle = _two_fighters(three)
+    battle.participants["乙"].eliminated = True
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 60
+
+
+def test_a_side_that_is_all_out_of_the_region_gets_pushed_ten(three):
+    battle = _two_fighters(three)
+    bi.set_away(battle, "乙", True)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 60
+
+
+def test_a_side_that_is_all_gambling_gets_pushed_ten_and_the_gamble_still_counts(three):
+    """放手一搏的人不算進三招的比例、也不算進人數：黃巾只有一個人而且在賭，官軍推滿 10；賭輸再加 10（舊的賭局公式照舊）。"""
+    gamble = three.model_copy(deep=True)
+    gamble.acts[0].options.append(BattleOption(text="放手一搏", tag="huang_reckless", faction="huang", free_text=True))
+    gamble.free_text_gamble = FreeTextGamble()
+    battle = _two_fighters(gamble)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_reckless", text="夜襲", success_rate=0)  # 一定失敗
+    msgs = bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 70  # 三招推 +10，黃巾賭輸 −(−10)＝ +10，合起來再夾 0～100
+    assert battle.last_mix["huang"] == {} and "乙這一搏失敗了，付出了慘痛代價。" in msgs
+
+
+def test_a_participant_without_scores_counts_as_zero(three):
+    """Review Focus 3：上線前就加入、沒有 scores 的人：份量 0，照常扣血，不當機。"""
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "舊人", "guan", neili_cap=300)
+    bi.join_faction(battle, "新人", "huang", neili_cap=300, scores={m: 80.0 for m in MOVES})
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    bi.submit_action(battle, "舊人", "guan_hold")
+    bi.submit_action(battle, "新人", "huang_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 40 and battle.participants["舊人"].neili == 285
+
+
+def test_everyone_without_scores_pushes_nothing_but_still_takes_damage(three):
+    """兩邊都沒有快照（舊資料整場）：份量全 0、推力 0／0 不除以零，戰局不動，照常扣血。"""
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=300)
+    bi.join_faction(battle, "乙", "huang", neili_cap=300)
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    bi.submit_action(battle, "甲", "guan_strong")
+    bi.submit_action(battle, "乙", "huang_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 50
+    assert battle.participants["甲"].neili == 300 - 90 and battle.participants["乙"].neili == 300 - 7.5
+
+
+def test_a_latecomer_without_a_snapshot_counts_as_zero_too(three):
+    """晚到的假人若不是走 Game 加入的（沒有快照）：同一條規則，份量 0。"""
+    battle = _two_fighters(three)
+    bi.auto_assign_latecomer(battle, three, "丙", neili_cap=300, rng=random.Random(0), faction="guan", is_bot=True)
+    for name, side in (("甲", "guan"), ("乙", "huang"), ("丙", "guan")):
+        bi.submit_action(battle, name, f"{side}_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    # 官軍：甲 50 ＋ 丙 0，÷ √2；黃巾：乙 50 ÷ √1，所以黃巾稍強、戰局往黃巾倒
+    assert battle.trend == 50 + round(10 * (50 / 2 ** 0.5 - 50) / (50 / 2 ** 0.5 + 50))
+
+
+def test_being_countered_costs_more_blood(three):
+    """強攻撞上全固守：係數 0.5，扣 60 ×（2 − 0.5）＝ 90（威力 0、沒有抵銷）。"""
+    battle = _fight(three, [("甲", "guan", "強攻"), ("乙", "huang", "固守")])
+    assert battle.participants["甲"].neili == 1000 - 90 and battle.participants["乙"].neili == 1000 - 15 * 0.5
+
+
+def test_power_softens_only_the_strong_attack_and_at_most_sixty_percent(three):
+    """強攻的損耗，自己的武學威力最多抵銷六成（威力 120 → 六成）；威力 40 → 兩成；固守、奇襲不抵銷。"""
+    neili = lambda move, power: _fight(three, [("甲", "guan", move)], power=power).participants["甲"].neili  # noqa: E731
+    assert neili("強攻", 120) == pytest.approx(1000 - 60 * 0.4)
+    assert neili("強攻", 400) == pytest.approx(1000 - 60 * 0.4)  # 威力再高也只抵銷六成
+    assert neili("強攻", 40) == pytest.approx(1000 - 60 * 0.8)
+    assert neili("奇襲", 120) == 1000 - 35
+    assert neili("固守", 120) == 1000 - 15
+
+
+def test_a_wounded_fighters_share_is_smaller(three):
+    """份量乘氣血狀態（0.5＋0.5×剩的÷上限）：半血的人只剩八成五的份量，推力跟著降（戰鬥系統 3.4）。"""
+    battle = _two_fighters(three, scores=100.0)
+    battle.participants["甲"].neili = 150  # 半血 → 0.75
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 + round(10 * (75 - 100) / (75 + 100))  # 甲 75、乙 100 → −1.43 → −1
+
+
+def test_tuning_is_honoured(three):
+    """一回合最多推多少看 Config.battle.push_max，不是寫死的 10。"""
+    battle = _two_fighters(three)
+    battle.participants["乙"].eliminated = True
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning(push_max=4.0))
+    assert battle.trend == 54
+
+
+def test_the_round_message_starts_with_the_mix_and_the_push(three):
+    """強攻撞上固守：官軍 ×0.5 → 25、黃巾 ×1.5 → 75，推力 10 × (25 − 75) ÷ 100 ＝ −5。"""
+    battle = _two_fighters(three)
+    bi.submit_action(battle, "甲", "guan_strong")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert msgs[0] == "官軍：強攻 100%・固守 0%・奇襲 0%；黃巾：強攻 0%・固守 100%・奇襲 0%（戰局 -5）"
+    assert battle.trend == 45 and battle.rounds[-1].messages == msgs
+
+
+def test_condition_follows_the_blood_left():
+    p = bi.BattleParticipant(name="甲", faction="guan", neili=300.0, neili_cap=300.0)
+    assert bi.condition(p) == 1.0
+    p.neili = 150.0
+    assert bi.condition(p) == 0.75
+    p.neili = 0.0
+    assert bi.condition(p) == 0.5
+
+
+def test_last_result_is_cleared_for_anyone_who_did_not_play_a_fixed_move(three):
+    """上一回合出過招的人，這一回合放手一搏、離開大區或倒下了：畫面不能還寫著上一回合的「你上一回合：…」。"""
+    gamble = three.model_copy(deep=True)
+    gamble.acts[0].options.append(BattleOption(text="放手一搏", tag="guan_reckless", faction="guan", free_text=True))
+    gamble.free_text_gamble = FreeTextGamble()
+    battle = bi.start_muster(gamble, now=0)
+    for name, side in (("甲", "guan"), ("乙", "huang"), ("丙", "guan"), ("丁", "guan")):
+        bi.join_faction(battle, name, side, neili_cap=300, scores={m: 50.0 for m in MOVES})
+    bi.close_muster(battle, gamble, random.Random(0), now=0)
+    for name, side in (("甲", "guan"), ("乙", "huang"), ("丙", "guan"), ("丁", "guan")):
+        bi.submit_action(battle, name, f"{side}_hold")
+    bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
+    assert all(battle.participants[n].last_result == "固守（剋制 ×1.0）" for n in "甲乙丙丁")
+    bi.submit_action(battle, "甲", "guan_reckless", text="夜襲", success_rate=50)  # 放手一搏
+    bi.submit_action(battle, "乙", "huang_hold")  # 照常出固定招
+    bi.set_away(battle, "丙", True)  # 走出大區
+    battle.participants["丁"].eliminated = True  # 倒下
+    bi.resolve_round(battle, gamble, random.Random(0), now=2, tuning=BattleTuning())
+    assert [battle.participants[n].last_result for n in "甲丙丁"] == ["", "", ""]
+    assert battle.participants["乙"].last_result == "固守（剋制 ×1.0）"
+
+
+def test_timed_out_actions_hold_the_line(three):
+    """逾時沒出手：代出自己那一邊的固守（計畫二改成照方針與 AI）。"""
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "甲", "guan", neili_cap=300, scores={m: 50.0 for m in MOVES})
+    bi.join_faction(battle, "乙", "huang", neili_cap=300, scores={m: 50.0 for m in MOVES})
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    bi.fill_timed_out_actions(battle, three, tuning=BattleTuning())
+    assert battle.round.pending_actions == {"甲": "guan_hold", "乙": "huang_hold"}
+    assert battle.round.auto_picked == ["甲", "乙"]
+
+
+def test_timed_out_fill_with_no_fixed_option_and_no_fallback_table_skips_that_person(three):
+    """沒有 action_tags 退路表、這一幕也沒有他能選的固定選項：跳過他，不當機（驗過的內容不會走到這裡）。"""
+    lonely = three.model_copy(deep=True)
+    lonely.acts[0].options = [o for o in lonely.acts[0].options if o.faction == "guan"]
+    battle = _two_fighters(lonely)
+    bi.fill_timed_out_actions(battle, lonely, tuning=BattleTuning())
+    assert battle.round.pending_actions == {"甲": "guan_hold"}
+
+
+def test_the_bot_mostly_plays_its_best_move(three):
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "機", "guan", neili_cap=300, scores={"強攻": 90.0, "固守": 60.0, "奇襲": 40.0}, is_bot=True)
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    rng = random.Random(1)
+    picks = [bi.bot_choose_action(battle, three, "機", rng, tuning=BattleTuning()) for _ in range(200)]
+    assert picks.count("guan_strong") > 120 and set(picks) <= {"guan_strong", "guan_hold", "guan_raid"}
+
+
+def test_a_bot_without_a_snapshot_falls_back_to_holding_the_line(three):
+    """沒有快照（份量全 0）的假人：最好的招看不出來，同分取損耗最低的固守——不是列在最前面的那一招，也不會當機。"""
+    battle = bi.start_muster(three, now=0)
+    bi.join_faction(battle, "機", "guan", neili_cap=300, is_bot=True)
+    bi.close_muster(battle, three, random.Random(0), now=0)
+    picks = [bi.bot_choose_action(battle, three, "機", random.Random(seed), tuning=BattleTuning()) for seed in range(200)]
+    assert picks.count("guan_hold") > 120 and set(picks) <= {"guan_strong", "guan_hold", "guan_raid"}
+    assert bi.bot_choose_action(battle, three, "機", random.Random(5)) == bi.bot_choose_action(  # 同一顆亂數種子，同一個選擇
+        battle, three, "機", random.Random(5), tuning=BattleTuning(),
+    )
 
 
 # ── assess_action_success_rate：LLM 評機率 ─────────────────────────

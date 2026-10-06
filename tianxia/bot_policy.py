@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 
-from . import atlas, orders, rules, server_bots
+from . import atlas, battle_instance, orders, rules, server_bots
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, FactionDef
@@ -231,8 +231,9 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
 
 
 def _battle_score(game: Game, arg: str) -> float | None:
-    """集結或遲到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照戰法對自己這邊的推力打分數，
-    同推力時氣血損耗少的優先。"""
+    """集結或晚到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照自己每招的份量（乘這一場的氣血狀態）打分數，
+    扣血相對剩下的氣血越重扣分越多（決戰改版一；豪強的兩招在計畫五）。沒有招的選項一律 0。
+    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守分數最高。"""
     kind, _, tag = arg.partition(":")
     if kind in ("join", "join_late"):
         return JOIN_BATTLE_SCORE
@@ -240,12 +241,14 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return None
     battle = game.world.get_battle()
     definition = game.content.battles[battle.battle_id]
-    effect = definition.action_tags.get(tag)
-    if effect is None:
-        return 0.0
     me = battle.participants.get(game.state.player.name)
-    direction = 1 if me is not None and me.faction == definition.factions[0].id else -1
-    return direction * effect.trend_delta - effect.neili_damage / 100
+    if me is None:
+        return 0.0
+    option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
+    if option is None or option.move is None:
+        return 0.0
+    tuning = game.content.config.battle
+    return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / max(me.neili, 1.0)
 
 
 def _faction(game: Game, faction_id: str) -> FactionDef:
