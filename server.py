@@ -21,6 +21,9 @@
   `Config.llm_queue_slots`（預設 0＝關）打開時先排隊（`llm_queue.py`：真人先、假人有上限、排太久拿退路；同一個人同時只有一件，
   第二件被擋下來——評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子），
   關著就直接叫。鎖內的小呼叫（`Game._quick_client`）與排程不進佇列。
+- 伺服器推送（`server_push.py`，開關 `Config.push_events`，預設關）：開著時 `/api/events` 是 SSE，每個動作做完（五個動作的端點，
+  鎖放掉之後）通知這個角色的其他分頁，背景的看守發現公開的世界變了通知所有分頁；只送「哪一種變了」，頁面收到再抓 `/api/main`。
+  輪詢與開頁絕不通知。關著 `/api/events` 是 404，頁面照舊每 10 秒輪詢。
 
 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦）。要讓外面的手機連進來，
 加 `--share`：會用 cloudflared 開一個臨時的公開網址（要先裝 cloudflared，見 CLAUDE.md）；
@@ -48,10 +51,12 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
+from starlette.concurrency import run_in_threadpool
 
+import server_push
 from llm_queue import Busy, LlmQueue
 from tianxia import companion_agent, event_llm, fight_llm, foreshadow, naming, rules, server_bots, team, timetable
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -314,10 +319,12 @@ class _StepFailures:
     同一個錯（同一個類別、在同一行丟出來）一直重複時，第一次整段印，之後只數次數：換了別的錯、或距離上一次印滿
     SCHEDULER_REPEAT_SUMMARY_SECONDS 秒，才印一行「又出錯 N 次」（最終審查 M2：每 10 秒一下，不收斂的話一天八千多段）。
     寫紀錄本身出錯（主控台的編碼寫不出某個字、主控台不見了）一律吞掉：記錄不能讓排程停下來。
-    clock 只給節流用（預設 time.monotonic），跟世界時間無關。"""
+    clock 只給節流用（預設 time.monotonic），跟世界時間無關。
+    label 是印出來的那一行裡說的是誰（預設「排程」）；推送的看守（start_push）也用這一套，寫成「推送的看守」，規矩一樣。"""
 
-    def __init__(self, clock: Callable[[], float]):
+    def __init__(self, clock: Callable[[], float], label: str = "排程"):
         self.clock = clock
+        self.label = label
         self.key: tuple[str, str | None, int | None] | None = None  # 上一個整段印過的錯：（類別, 檔案, 行號）
         self.repeats = 0  # 它之後又出了幾次、還沒交代
         self.since = 0.0  # 上一次印（整段或摘要）的時刻
@@ -332,7 +339,7 @@ class _StepFailures:
                 return
             self._summary()  # 換了別的錯：上一個錯還沒交代的次數先交代
             self.key, self.since = key, self.clock()
-            print(f"排程這一下出錯：{type(exc).__name__}", flush=True)
+            print(f"{self.label}這一下出錯：{type(exc).__name__}", flush=True)
             sys.stderr.write("".join(traceback.format_tb(exc.__traceback__)))
             sys.stderr.flush()
 
@@ -346,7 +353,7 @@ class _StepFailures:
         if self.key is None or not self.repeats:
             return
         count, self.repeats, self.since = self.repeats, 0, self.clock()
-        print(f"排程這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
+        print(f"{self.label}這一下又出錯 {count} 次：{self.key[0]}（同一個地方，細節同上）", flush=True)
 
 
 def run_scheduler(
@@ -389,6 +396,57 @@ def start_scheduler(interval: float) -> threading.Thread | None:
         )
         SCHEDULER_THREAD.start()
         return SCHEDULER_THREAD
+
+
+# ── 伺服器推送（線上架構設計 5.3；server_push.py）──
+# 開關是 Config.push_events（預設關）：關著 HUB 是 None、/api/events 是 404、頁面照舊每 10 秒輪詢；main() 照設定建（start_push）。
+HUB: server_push.PushHub | None = None
+PUSH_STOP = threading.Event()  # 讓推送的看守停下來（測試用；伺服器關掉時看守是 daemon，跟著結束）
+PUSH_THREAD: threading.Thread | None = None  # 正在跑的那一條看守執行緒（測試要等它真的結束）
+HEARTBEAT_SECONDS = 15.0  # 這麼久沒有通知就送一個 ping，代理（Cloudflare 閒置約 100 秒）才不會切掉連線，頁面也才看得出連線還活著
+
+
+def current_fingerprint() -> str:
+    """看守用：現在大家都看得到的世界的指紋（server_push.world_fingerprint；唯讀的快照，不拿行動鎖，所以看守不跟玩家搶鎖）。"""
+    world = open_world()
+    shared = world.read()
+    return server_push.world_fingerprint(shared.season_number, shared.season_phase(), world.get_season(), world.get_battle())
+
+
+def push_line(config) -> str:
+    if not config.push_events:
+        return "推送：關（分頁每 10 秒輪詢）"
+    return f"推送：開（SSE；世界每 {config.push_watch_seconds:g} 秒看一次，兩次通知至少隔 {config.push_world_min_seconds:g} 秒）"
+
+
+def start_push(config) -> server_push.PushHub | None:
+    """開關打開（push_events）時建 HUB、開看守執行緒（daemon：伺服器關掉時跟著結束）；關著什麼都不做、回 None（HUB 一直是 None）。
+    只有 main() 呼叫它（import 時不開）。看守出錯照排程的規矩只記例外的類別、同一個錯只數次數（_StepFailures；
+    例外的訊息常夾著名號，伺服器視窗不該看得出誰是假人，預檢 F5）。"""
+    global HUB, PUSH_THREAD
+    if not config.push_events:
+        return None
+    failures = _StepFailures(time.monotonic, "推送的看守")
+    HUB = server_push.PushHub()
+    PUSH_THREAD = threading.Thread(
+        target=server_push.watch_world,
+        args=(HUB, current_fingerprint, PUSH_STOP, config.push_watch_seconds, config.push_world_min_seconds),
+        kwargs={"on_error": failures.failed, "on_round": failures.tick},
+        daemon=True, name="push-watch",
+    )
+    PUSH_THREAD.start()
+    return HUB
+
+
+def _tell_tabs(game: Game) -> None:
+    """動作做完、行動鎖已經放掉：叫這個角色開著的分頁刷新（推送開著時；其他分頁會去抓 /api/main，這一個分頁通常正忙著、
+    會略過）。只有動作的端點叫它（api_choose、api_answer、api_do、api_menxia_do、api_travel），而且在動作成功之後：
+    動作丟例外時交易整筆撤回、什麼都沒變，不通知。
+    絕不能放進 act／look／act_look／poll_main／_entry：輪詢與開頁也走那些，通知一寫在輪詢的路上，同一個角色兩個看得到的
+    分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……，預檢 B1）。
+    一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。"""
+    if HUB is not None:
+        HUB.notify(game.state.player.name.casefold())
 
 
 # ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
@@ -680,6 +738,10 @@ def _main_view_body(game: Game) -> dict:
         "chronicle": md(game.chronicle_text()),
         "admin": game.is_admin(),
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
+        # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
+        # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
+        "push": HUB is not None,
+        "push_spread": game.content.config.push_world_min_seconds,
     }
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
@@ -968,6 +1030,14 @@ def _game(request: Request) -> Game:
     return game_for(account.character)
 
 
+def _character_name(request: Request) -> str:
+    """這個登入的帳號的角色名號（沒登入 401、還沒有角色 409）；只查帳號，不開 Game、不拿行動鎖。"""
+    account = account_store().get(_account(request))
+    if account is None or account.character is None:
+        raise HTTPException(409, "這個帳號還沒有角色。")
+    return account.character
+
+
 def _start_session(response: Response, account_key: str) -> None:
     token = secrets.token_urlsafe(32)
     SESSIONS[token] = account_key
@@ -1104,6 +1174,7 @@ def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
     option_id = str(body.get("id", ""))
     msgs = choose(game, option_id)
+    _tell_tabs(game)
     out = {"main": look(game, main_view)}
     if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES):
         # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
@@ -1117,6 +1188,7 @@ def api_choose(request: Request, body: dict = Body(...)):
 def api_answer(request: Request, body: dict = Body(...)):
     game = _game(request)
     answer_event(game, str(body.get("text", "")))
+    _tell_tabs(game)
     return {"main": look(game, main_view)}
 
 
@@ -1131,6 +1203,7 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body))
     else:
         raise HTTPException(404)
+    _tell_tabs(game)
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
@@ -1189,6 +1262,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
     msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
+    _tell_tabs(game)
     return {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
@@ -1232,6 +1306,8 @@ def api_travel(request: Request, body: dict = Body(...)):
         return g.travel(target, mode)
 
     act(game, go)
+    if not refused:  # 走不成的什麼都沒變（同步而已），其他分頁不必刷新
+        _tell_tabs(game)
     out = {"main": look(game, main_view), "arrived": not refused}
     if refused:
         out["reason"] = refused[0]
@@ -1251,6 +1327,22 @@ def api_queue(request: Request):
     只給一個數字：真人排在假人前面，所以前面的只有正在跑的與先排的真人，看不出有沒有假人。不拿行動鎖。"""
     game = _game(request)
     return {"ahead": None if QUEUE is None else QUEUE.position(game.state.player.name.casefold())}
+
+
+@app.get("/api/events")
+async def api_events(request: Request):
+    """伺服器推送（SSE）：這個角色的分頁收「自己的東西變了（self）」與「世界變了（world）」兩種通知，收到再去抓 /api/main；
+    連線上沒事時每 HEARTBEAT_SECONDS 秒一個 ping。開關關著是 404（連登入都不問），前端照舊輪詢。
+    查帳號是同步的資料庫讀取，放在執行緒池裡做，不卡事件迴圈（這個函式是 async：串流要跑在事件迴圈上）。"""
+    hub = HUB
+    if hub is None:
+        raise HTTPException(404)
+    name = await run_in_threadpool(_character_name, request)
+    return StreamingResponse(
+        server_push.sse_stream(hub, name.casefold(), HEARTBEAT_SECONDS),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # 代理不能把串流攢著不送
+    )
 
 
 @app.get("/api/admin")
@@ -1351,9 +1443,16 @@ def main(argv: list[str] | None = None) -> None:
     interval = CONTENT.config.world_tick_seconds
     print(scheduler_line(interval), flush=True)
     start_scheduler(interval)
+    print(push_line(CONTENT.config), flush=True)
+    start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
-    uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning")
+    # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住
+    # （log_level 是 warning，連「等連線關閉」那行都看不到）。3 秒後取消它們，sse_stream 的 finally 會退訂（預檢 F7）
+    uvicorn.run(
+        app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning",
+        timeout_graceful_shutdown=3,
+    )
 
 
 if __name__ == "__main__":

@@ -1195,6 +1195,27 @@ def test_every_model_call_outside_the_lock_has_a_total_budget():
         Config(free_text_budget_seconds=-1)
 
 
+# ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
+
+
+def test_push_is_off_by_default():
+    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is False, path.stem
+
+
+def test_push_timings_must_make_sense():
+    """看守每 0 秒看一次是空轉；兩次「世界變了」的間隔不能是負的（0＝不壓）。"""
+    with pytest.raises(ValidationError, match="greater than 0"):
+        Config(push_watch_seconds=0)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(push_world_min_seconds=-1)
+    assert Config(push_world_min_seconds=0).push_world_min_seconds == 0
+
+
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
 
 

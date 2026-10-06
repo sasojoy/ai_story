@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 import llm_queue
 import server
+import server_push
 from conftest import at, season_one_events
 from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, team
 from tianxia.accounts import NAME_TAKEN
@@ -24,7 +25,7 @@ from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile
+from tianxia.state import BotProfile, Rumor
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 
@@ -52,6 +53,18 @@ def _stop_scheduler() -> None:
     server.SCHEDULER_STOP.clear()
 
 
+def _stop_push() -> None:
+    """推送也是 server 的模組狀態（HUB 與看守執行緒）：每個測試從關著開始，留下來的看守先停掉、等它真的結束。"""
+    thread = server.PUSH_THREAD
+    if thread is not None:
+        server.PUSH_STOP.set()
+        thread.join(5.0)
+        assert not thread.is_alive()
+    server.PUSH_THREAD = None
+    server.PUSH_STOP.clear()
+    server.HUB = None
+
+
 @pytest.fixture(autouse=True)
 def _no_landing(monkeypatch):
     """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
@@ -63,12 +76,14 @@ def fresh_server_memory():
     """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
     不然上一個測試的暫存資料庫會被沿用。"""
     _stop_scheduler()
+    _stop_push()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
     server.QUEUE = None  # 模型佇列也是模組狀態：每個測試從關著開始（Config.llm_queue_slots 預設 0）
     yield
     _stop_scheduler()
+    _stop_push()
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
@@ -5153,3 +5168,329 @@ def test_app_js_parses():
         pytest.skip("沒有裝 node")
     done = subprocess.run([node, "--check", str(server.WEB / "app.js")], capture_output=True, timeout=60)
     assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+
+
+# ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
+# 開關是 Config.push_events（預設關）：關著 server.HUB 是 None，/api/events 是 404，頁面照舊每 10 秒輪詢；
+# 開著，每個動作做完通知這個角色開著的其他分頁，背景的看守發現公開的世界變了就通知所有分頁，頁面收到再去抓 /api/main。
+
+ME = "沈青衫".casefold()
+
+
+class _OneShot(server_push.PushHub):
+    """一訂閱就送一則再收尾，TestClient 才拿得到整份回應（不會結束的串流 TestClient 等不完）。"""
+
+    def subscribe(self, name, loop, queue):
+        super().subscribe(name, loop, queue)
+        self.notify(name)
+        self.close()
+
+
+@pytest.fixture
+def told(monkeypatch):
+    """推送開著、但不真的送：記下每一次 notify（名號, 哪一種）。"""
+    hub = server_push.PushHub()
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(hub, "notify", lambda name, kind="self": calls.append((name, kind)) or 0)
+    monkeypatch.setattr(server, "HUB", hub)
+    return calls
+
+
+def _get_events(client):
+    """GET /api/events；回應不會結束（串流）就讓測試失敗而不是卡住整個測試：TestClient 要等整份回應收完才回來。"""
+    got: list = []
+    thread = threading.Thread(target=lambda: got.append(client.get("/api/events")), daemon=True)
+    thread.start()
+    thread.join(5.0)
+    assert got, "/api/events 沒有結束：開關關著的時候不該開串流"
+    return got[0]
+
+
+def test_events_off_by_default(client):
+    """開關關著：沒有 /api/events，main 也說沒有推送（Review Focus 5）。"""
+    main = _player(client)["main"]
+    assert main["push"] is False
+    assert _get_events(client).status_code == 404
+    assert _get_events(TestClient(server.app)).status_code == 404  # 沒登入也是 404：關著就是沒有這個東西
+
+
+def test_events_stream_for_the_logged_in_character(client, monkeypatch):
+    monkeypatch.setattr(server, "HUB", _OneShot())
+    seen = []
+    real = server_push.sse_stream
+    monkeypatch.setattr(
+        server_push, "sse_stream",
+        lambda hub, name, heartbeat=15.0: (seen.append((name, heartbeat)), real(hub, name, heartbeat))[1],
+    )
+    main = _player(client)["main"]
+    assert main["push"] is True
+    r = client.get("/api/events")
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert r.headers["cache-control"] == "no-cache" and r.headers["x-accel-buffering"] == "no"  # 代理不能把串流攢著
+    assert "event: self" in r.text
+    assert seen == [(ME, server.HEARTBEAT_SECONDS)]
+    assert 0 < server.HEARTBEAT_SECONDS < 60  # Cloudflare 閒置約 100 秒就切線：心跳要比它勤
+
+
+def test_events_need_a_login(monkeypatch):
+    monkeypatch.setattr(server, "HUB", server_push.PushHub())
+    assert TestClient(server.app).get("/api/events").status_code == 401
+
+
+def test_events_need_a_character(client, monkeypatch):
+    monkeypatch.setattr(server, "HUB", server_push.PushHub())
+    client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    assert client.get("/api/events").status_code == 409  # 還沒取名號：跟別的需要角色的端點一樣
+
+
+def test_the_main_view_says_whether_push_is_on_and_how_long_to_spread_the_refresh(game, monkeypatch):
+    """前端照 push 決定開不開 /api/events；push_spread 是世界通知之後各分頁重抓畫面要攤開的秒數（預檢 F3：
+    不攤開的話，每次世界變了就是全服同一兩秒各建一次畫面，在同一把行動鎖上排隊）。"""
+    view = server.look(game, server.main_view)
+    assert view["push"] is False and view["push_spread"] == server.CONTENT.config.push_world_min_seconds == 10
+    monkeypatch.setattr(server, "HUB", server_push.PushHub())
+    monkeypatch.setattr(server.CONTENT.config, "push_world_min_seconds", 7)
+    view = server.look(game, server.main_view)
+    assert view["push"] is True and view["push_spread"] == 7
+
+
+def test_polling_and_entering_never_notify(client, told):
+    """預檢 B1：輪詢（/api/main）、開頁（/api/me）、登入、註冊、建角色都會同步並存檔，但都不通知。通知一旦寫在輪詢的路上，
+    同一個角色的兩個看得到的分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……）。"""
+    _player(client)
+    assert client.get("/api/main").status_code == 200
+    assert client.get("/api/me").json()["stage"] == "game"
+    tab_b = TestClient(server.app)
+    assert tab_b.post("/api/login", json={"login": "shen_01", "password": "secret-pw"}).json()["stage"] == "game"
+    assert tab_b.get("/api/main").status_code == 200
+    assert told == []
+
+
+def test_the_lock_helpers_never_notify(game, told):
+    """通知不在 act、look、act_look、poll_main 裡（它們是輪詢與每個動作共用的底層）；只有動作的端點在鎖放掉之後通知。"""
+    server.act(game, lambda g: None)
+    server.look(game, server.main_view)
+    server.act_look(game, lambda g: None, server.main_view)
+    server.poll_main(game)
+    assert told == []
+
+
+def test_an_action_notifies_that_characters_other_tabs(client, told):
+    _player(client)
+    told.clear()  # 建角色走過 _entry，那一段不通知，這裡只看接下來這個動作
+    client.post("/api/choose", json={"id": "act:rest"})
+    assert told == [(ME, "self")]
+
+
+def test_a_fight_notifies_even_though_it_never_goes_through_act(client, told, monkeypatch):
+    """預檢 F1：一般的仗（遊歷、事件選項）在 prepare_fight 的 A 段同一次拿鎖裡就做完、存檔，不經過 act()。
+    通知在端點、不在 act，所以天天在按的遊歷與事件選項也會通知；而這一步確實沒走 act。"""
+    _player(client)
+    game = server.game_for("沈青衫")
+    server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))
+    assert "act:train" in [o["id"] for o in client.get("/api/main").json()["options"]]
+    through_act = []
+    real_act = server.act
+    monkeypatch.setattr(server, "act", lambda *args: through_act.append(1) or real_act(*args))
+    told.clear()
+    out = client.post("/api/choose", json={"id": "act:train"}).json()
+    assert open_characters().load("沈青衫").battles  # 真的打了一仗
+    assert out["main"]["card"] is not None
+    assert through_act == [] and told == [(ME, "self")]
+
+
+def test_choosing_an_event_option_notifies(client, told):
+    _player(client)
+    game = server.game_for("沈青衫")
+    pending = server.CONTENT.events[next(iter(server.CONTENT.events))]
+    server.act(game, lambda g: setattr(g.state, "pending_event", pending.id))
+    told.clear()
+    assert client.post("/api/choose", json={"id": "choice:0"}).status_code == 200
+    assert told == [(ME, "self")]
+
+
+def test_the_other_action_endpoints_notify_once_each(client, told, monkeypatch):
+    """/api/do、/api/menxia/*、/api/travel、/api/answer 做完也各通知一次（鎖已經放掉）。"""
+    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
+    _player(client)
+    game = server.game_for("沈青衫")
+    nearby = next(o["id"][5:] for o in client.get("/api/main").json()["options"] if o["id"].startswith("move:"))
+    for path, body in (("/api/do/anonymous", {"value": True}), ("/api/menxia/heal", {})):
+        told.clear()
+        assert client.post(path, json=body).status_code == 200, path
+        assert told == [(ME, "self")], path
+    from tianxia.models import FreeTextChoice
+
+    event = next(iter(server.CONTENT.events.values()))
+    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str"))
+    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
+    told.clear()
+    with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
+        assert client.post("/api/answer", json={"text": "大喊官兵來了"}).status_code == 200
+    assert told == [(ME, "self")]  # 評分、擲骰、潤色分好幾次進鎖，但一個請求只通知一次
+    server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 事件沒選完的話，輿圖那顆按鈕是灰的
+    told.clear()
+    assert client.post("/api/travel", json={"place": nearby}).json()["arrived"] is True
+    assert told == [(ME, "self")]
+
+
+def test_a_travel_that_was_refused_does_not_notify(client, told):
+    """按舊按鈕、走不成：什麼都沒變，其他分頁不必刷新。"""
+    _player(client)
+    told.clear()
+    here = server.game_for("沈青衫").state.player.location
+    assert client.post("/api/travel", json={"place": here}).json()["arrived"] is False
+    assert told == []
+
+
+def test_an_action_that_failed_or_only_reads_does_not_notify(client, told):
+    """動作丟例外時交易整筆撤回、什麼都沒變：不通知。唯讀的端點更不通知。"""
+    _player(client)
+    told.clear()
+    assert client.post("/api/do/open_season", json={}).status_code == 400  # 不是管理者
+    assert client.post("/api/do/nonsense", json={}).status_code == 404
+    assert client.post("/api/menxia/join", json={"person": "nobody"}).status_code == 400  # 在鎖裡才丟，整筆撤回
+    assert client.post("/api/answer", json={"text": "  "}).status_code == 400
+    for path in ("/api/main", "/api/menxia", "/api/map", "/api/reports", "/api/queue", "/api/admin", "/api/me"):
+        client.get(path)
+    client.post("/api/forge_line", json={})
+    assert told == []
+
+
+def test_a_notice_reaches_a_tab_of_the_same_character_end_to_end(client, monkeypatch):
+    """不換掉 notify：真的 PushHub，另一個分頁（另一個事件迴圈）訂閱了，這個分頁做的動作要送到它那裡。"""
+    import asyncio
+
+    hub = server_push.PushHub()
+    monkeypatch.setattr(server, "HUB", hub)
+    _player(client)
+    other_tab = asyncio.new_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    hub.subscribe(ME, other_tab, queue)
+    try:
+        client.get("/api/main")
+        client.post("/api/choose", json={"id": "act:rest"})
+        assert other_tab.run_until_complete(asyncio.wait_for(queue.get(), 2)) == "self"
+        assert queue.empty()  # 輪詢沒有再叫它；只有那一個動作
+    finally:
+        hub.unsubscribe(ME, other_tab, queue)
+        other_tab.close()
+
+
+def _function_users(attribute: str) -> set[str | None]:
+    """server.py 裡呼叫 .attribute(...) 的地方各在哪個函式裡（模組層級是 None）。"""
+    found: set[str | None] = set()
+
+    def visit(node: ast.AST, owner: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Attribute) and child.attr == attribute:
+                found.add(owner)
+            visit(child, owner)
+
+    visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    return found
+
+
+def test_only_the_action_endpoints_tell_other_tabs():
+    """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
+    poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
+    assert _function_users("notify") == {"_tell_tabs"}
+    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel"}
+
+
+def test_current_fingerprint_follows_the_public_world():
+    before = server.current_fingerprint()
+    open_world().mutate_season(lambda s: s.chronicle.append(Rumor(time=0.0, text="江湖史一筆")))
+    assert server.current_fingerprint() != before
+
+
+def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
+    """預檢 F4：世界時間與 season_last_real 每一次同步、每一下排程都在動，不能算進指紋，不然每個分頁每幾秒就被叫醒；
+    決戰裡誰加入、這一回合出手了幾個（預檢 F2）畫面上看不到，也不算。"""
+    open_world().mutate(lambda st: None)
+    before = server.current_fingerprint()
+    open_world().mutate(lambda st: (setattr(st, "season_last_real", 9e9), setattr(st.season, "time", st.season.time + 3600)))
+    assert server.current_fingerprint() == before
+    _a_showdown_fighter(client)
+    with_battle = server.current_fingerprint()
+    assert with_battle != before  # 決戰開了：大家都看得到
+    client.post("/api/choose", json={"id": "battle:join:guan"})  # 又一個人加入：看不到
+    open_world().mutate_battle(lambda b: b.round.pending_actions.__setitem__("沈青衫", "safe"))
+    assert server.current_fingerprint() == with_battle
+    open_world().mutate_battle(lambda b: setattr(b, "trend", b.trend + 1))  # 戰局動了：看得到
+    assert server.current_fingerprint() != with_battle
+
+
+def test_push_line_says_whether_push_is_on():
+    config = server.CONTENT.config
+    assert server.push_line(config) == "推送：關（分頁每 10 秒輪詢）"
+    on = config.model_copy(update={"push_events": True})
+    assert server.push_line(on) == "推送：開（SSE；世界每 5 秒看一次，兩次通知至少隔 10 秒）"
+
+
+def _uvicorn_runs(monkeypatch) -> list[dict]:
+    import uvicorn
+
+    runs: list[dict] = []
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: runs.append(kwargs))
+    return runs
+
+
+def test_main_starts_the_push_watcher_only_when_switched_on(capsys, monkeypatch):
+    """啟動時印一行推送開了沒有；關著（預設）不建 HUB、不開執行緒，開著就建 HUB、開一條看守，每隔幾秒看一次世界。"""
+    runs = _uvicorn_runs(monkeypatch)
+    server.main([])
+    assert "推送：關（分頁每 10 秒輪詢）" in capsys.readouterr().out
+    assert server.HUB is None and server.PUSH_THREAD is None
+    looked = threading.Event()
+    monkeypatch.setattr(server.CONTENT.config, "push_events", True)
+    monkeypatch.setattr(server.CONTENT.config, "push_watch_seconds", 0.01)
+    monkeypatch.setattr(server, "current_fingerprint", lambda: looked.set() or "x")
+    server.main([])
+    assert "推送：開（SSE；" in capsys.readouterr().out
+    assert isinstance(server.HUB, server_push.PushHub) and server.PUSH_THREAD is not None and server.PUSH_THREAD.daemon
+    assert looked.wait(2.0)
+    assert len(runs) == 2
+
+
+def test_the_server_gives_open_streams_three_seconds_to_close_on_shutdown(monkeypatch):
+    """預檢 F7：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，一個 Ctrl+C 就卡住。
+    timeout_graceful_shutdown 到了就取消它們（sse_stream 的 finally 會退訂）。"""
+    runs = _uvicorn_runs(monkeypatch)
+    server.main([])
+    assert runs[0]["timeout_graceful_shutdown"] == 3
+
+
+def test_only_main_starts_the_push_watcher():
+    assert _users_in_server("start_push") == {"main"}
+
+
+def test_the_push_watcher_logs_only_the_kind_of_error(capsys, monkeypatch):
+    """預檢 F5：看守讀不到世界時只寫例外的類別（跟排程同一個規矩：例外的訊息常夾著名號，伺服器視窗不該看得出誰是假人），
+    同一個錯一直重複也只印一行。"""
+    rounds = []
+    secret = KeyError("某某人的名號")  # 在變數裡：呼叫堆疊印的是程式碼那一行，不是例外的訊息，源碼裡不能寫出名號
+
+    def unreadable():
+        rounds.append(1)
+        _boom(secret)
+
+    monkeypatch.setattr(server.CONTENT.config, "push_events", True)
+    monkeypatch.setattr(server.CONTENT.config, "push_watch_seconds", 0.01)
+    monkeypatch.setattr(server, "current_fingerprint", unreadable)
+    server.start_push(server.CONTENT.config)
+    deadline = time.time() + 5
+    while len(rounds) < 6 and time.time() < deadline:
+        time.sleep(0.01)
+    assert len(rounds) >= 6
+    shown = capsys.readouterr()
+    assert shown.out.splitlines() == ["推送的看守這一下出錯：KeyError"]  # 第六輪了，同一個錯還是只印一行
+    assert "某某人的名號" not in shown.out + shown.err
+
+
+def test_start_push_does_nothing_when_switched_off():
+    assert server.start_push(server.CONTENT.config) is None
+    assert server.HUB is None and server.PUSH_THREAD is None

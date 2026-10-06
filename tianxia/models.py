@@ -805,6 +805,13 @@ class Config(_Strict):
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
 
+    # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
+    # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
+    # 世界指紋」，兩次「世界變了」的通知至少隔 push_world_min_seconds 秒（也是各分頁收到之後重抓畫面要攤開的秒數）
+    push_events: bool = False
+    push_watch_seconds: float = Field(default=5, gt=0)
+    push_world_min_seconds: float = Field(default=10, ge=0)
+
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
