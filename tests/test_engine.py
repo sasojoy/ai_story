@@ -6893,3 +6893,50 @@ def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(co
     ticker.world_tick(t + definition.round_seconds + 1.0)
     assert "changshe_fire" in world.get_season().timeline
 
+
+# ── 伺服器假人替合成與定名開單（假人的 Game 沒有 client，假人程式在鎖外自己叫模型）──────────
+
+
+def test_a_forge_request_for_a_caller_who_names_outside(game):
+    """伺服器假人的 Game 沒有 client，但假人程式在鎖外自己叫模型：named_outside 時照樣開單。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    game.client = None
+    assert game.forge_request("basic_fist", ["feng"]) is None
+    request = game.forge_request("basic_fist", ["feng"], named_outside=True)
+    assert request is not None and request.kind == "fuse"
+
+
+def test_a_forge_request_while_the_season_is_preparing_stays_none_even_if_naming_outside(game):
+    """賽季籌備中什麼都不能做：named_outside 只換掉「沒有 client」那一條，籌備中照舊不開單。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    game.client = None
+    with mock.patch.object(game.world, "season_phase", return_value="preparing"):
+        assert game.forge_request("basic_fist", ["feng"], named_outside=True) is None
+
+
+def test_a_mastery_request_asks_for_a_new_name(game):
+    """練成絕學、輪到自己定名：開一張請模型另取新名字的單（伺服器假人用；真人自己填）。沒有等著定名的是 None。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    assert game.mastery_request() is None
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    request = game.mastery_request()
+    assert request.kind == "master" and request.key == f"定名|{p.naming}" and request.name_kind == "武學"
+    assert "凌風拳" in request.messages[-1]["content"] and "不一樣" in request.messages[-1]["content"]
+
+
+def test_a_mastery_request_is_only_a_read_and_waits_for_the_season(game):
+    """開單只讀（A 段在鎖內、很快）；賽季籌備中不開。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    p.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    before = game.state.model_dump()
+    assert game.mastery_request() is not None
+    assert game.state.model_dump() == before
+    with mock.patch.object(game.world, "season_phase", return_value="preparing"):
+        assert game.mastery_request() is None
+

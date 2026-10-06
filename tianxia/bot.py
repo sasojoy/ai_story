@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable
+from typing import NamedTuple
 
 from . import cultivation, fusion, library, naming, team, traits
 from .engine import FREE_TEXT_OPTION, Game, Option
@@ -65,6 +66,45 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
             game.practice(kind)
 
 
+class ForgePlan(NamedTuple):
+    """挑好的一爐（還沒開）：武學＋意境是 (武學, (意境,), None)、武學＋武學是 (第一門, (), 第二門)、意境＋意境是 (None, (甲, 乙), None)。"""
+
+    art_id: str | None
+    insight_ids: tuple[str, ...]
+    other_art: str | None
+
+
+def pick_forge(
+    game: Game, rng: random.Random, merge_share: float = MERGE_SHARE, blend_share: float = BLEND_SHARE,
+) -> ForgePlan | None:
+    """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、或什麼都合不了就是 None。只挑、不開爐，什麼都不改。
+    亂數的擲法跟原本寫在 forge_and_cultivate 裡的一模一樣（見那邊的說明），整季機器人的結果不變。
+    兩個份額是引數（伺服器假人的武學＋武學份額比較低）；預設值是定義這個函式當下的常數。"""
+    state, content, world = game.state, game.content, game.world
+    p = state.player
+    arts = library.owned_arts(state)
+    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
+    if not (can_fuse or can_blend) or p.stamina < FORGE_RESERVE:
+        return None
+    if len(p.insights) >= 2 and rng.random() < merge_share:
+        for _ in range(FORGE_TRIES):
+            a, b = rng.choice(p.insights), rng.choice(p.insights)
+            if fusion.merge_problem(state, content, world, a, b) is None:
+                return ForgePlan(None, (a, b), None)
+        return None
+    if can_blend and (not can_fuse or rng.random() < blend_share):
+        for _ in range(FORGE_TRIES):
+            a, b = rng.sample(arts, 2)
+            if fusion.blend_problem(state, content, world, a, b) is None:
+                return ForgePlan(a, (), b)
+        return None
+    for _ in range(FORGE_TRIES):
+        art_id, insight_id = rng.choice(arts), rng.choice(p.insights)
+        if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
+            return ForgePlan(art_id, (insight_id,), None)
+    return None
+
+
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     """機器人的武學：等著定名的先定名；滿了先熔最弱的；體力有餘就合成（武學＋意境為主，偶爾合併、偶爾武學＋武學）；
     改練更強的；體力再有餘就修練一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
@@ -77,37 +117,19 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     if p.naming is not None:
         game.name_mastered(naming.fallback_name(content, f"定名|{p.naming}", "武學", salt=rng.randint(0, 99)))
     if library.full(state, content):
-        _melt_the_weakest(game)
-    arts = library.owned_arts(state)
-    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
-    if (can_fuse or can_blend) and p.stamina >= FORGE_RESERVE:
-        if len(p.insights) >= 2 and rng.random() < MERGE_SHARE:
-            for _ in range(FORGE_TRIES):
-                a, b = rng.choice(p.insights), rng.choice(p.insights)
-                if fusion.merge_problem(state, content, world, a, b) is None:
-                    game.forge(None, [a, b])
-                    break
-        elif can_blend and (not can_fuse or rng.random() < BLEND_SHARE):
-            for _ in range(FORGE_TRIES):
-                a, b = rng.sample(arts, 2)
-                if fusion.blend_problem(state, content, world, a, b) is None:
-                    game.forge(a, [], other_art=b)
-                    break
-        else:
-            for _ in range(FORGE_TRIES):
-                art_id, insight_id = rng.choice(arts), rng.choice(p.insights)
-                if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
-                    game.forge(art_id, [insight_id])
-                    break
-    _switch_to_the_strongest(game)
+        melt_the_weakest(game)
+    plan = pick_forge(game, rng)
+    if plan is not None:
+        game.forge(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
+    switch_to_the_strongest(game)
     if p.stamina >= CULTIVATE_RESERVE:
         for art_id in library.owned_arts(state):
             if cultivation.cultivate_problem(state, content, world, art_id) is None:
-                game.cultivate(art_id, use_legend=_goes_for_a_peerless_art_with_a_pill(game, art_id))
+                game.cultivate(art_id, use_legend=takes_the_pill(game, art_id))
                 break
 
 
-def _goes_for_a_peerless_art_with_a_pill(game: Game, art_id: str) -> bool:
+def takes_the_pill(game: Game, art_id: str) -> bool:
     """這一次衝的是絕學、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服）。
     只在這一步傳 use_legend：別的步驟用不上丹，傳了只會多一句「這一回沒服」。要不要算丹由 cultivation.boost_for 決定。"""
     state, content, world = game.state, game.content, game.world
@@ -116,7 +138,7 @@ def _goes_for_a_peerless_art_with_a_pill(game: Game, art_id: str) -> bool:
     return target is not None and cultivation.boost_for(state, content, target, use_legend=True) > 0
 
 
-def _melt_the_weakest(game: Game) -> None:
+def melt_the_weakest(game: Game) -> None:
     """滿了：熔掉功法庫裡第十成威力最低的一門；庫是空的就化掉一個沒有武學靠它修練的意境。"""
     state, content, world = game.state, game.content, game.world
     spare = [(team.player_art(state, content, world, a), a) for a in state.player.arts]
@@ -142,7 +164,7 @@ def _worth(content: Content, art: MartialArt) -> float:
     return art.top_power * (1 + TRAIT_WEIGHT * layers)
 
 
-def _switch_to_the_strongest(game: Game) -> None:
+def switch_to_the_strongest(game: Game) -> None:
     """功法庫裡有比身上這門值錢的（同一種、照自己修練到的品質算第十成威力，再加上功效，設計 13.7）就改練上去。"""
     state, content, world = game.state, game.content, game.world
     for art_id in list(state.player.arts):

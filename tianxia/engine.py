@@ -118,11 +118,7 @@ class Game:
         self.rng = rng or random.Random()
         self.world = world or open_world()
         cfg = content.config
-        self.client = OllamaClient(
-            base_url=cfg.ollama_url, model=cfg.ollama_model, timeout=cfg.ollama_timeout, think=cfg.ollama_think,
-            keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
-            presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
-        )  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
+        self.client = OllamaClient.from_config(cfg)  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
@@ -3088,15 +3084,16 @@ class Game:
         return [msg]
 
     def forge_request(
-        self, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
+        self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
     ) -> naming.NamingRequest | None:
         """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge）：這一爐要不要模型？
         要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
         forge(..., proposed=...)（C 段）。單子有兩種：沒人合過、長新的 → 取名（choices 是空的）；合到舊的、候選兩個以上
         → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個角色不叫模型
         （client 是 None，伺服器假人）、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且只有一個候選。
-        只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。"""
-        if self.client is None or self._preparing():
+        只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。
+        named_outside：呼叫端會在鎖外自己叫模型（伺服器假人程式，它的 Game 沒有 client），照樣開單。"""
+        if (self.client is None and not named_outside) or self._preparing():
             return None
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
@@ -3162,6 +3159,12 @@ class Game:
         tag = next((m for m in msgs if m.startswith("【")), msgs[0])
         self._menxia_entry(tag, xinde, extra=extra or None)
         return msgs
+
+    def mastery_request(self) -> naming.NamingRequest | None:
+        """定名的 A 段（伺服器假人程式在行動鎖內呼叫，見 cultivation.master_request）：只讀。賽季籌備中是 None。"""
+        if self._preparing():
+            return None
+        return cultivation.master_request(self.state, self.content, self.world)
 
     def name_mastered(self, name: str) -> list[str]:
         """替第一個練成絕學的武學取正式名字；定成了才寫江湖紀錄，江湖史寫進共用賽季所以要存回

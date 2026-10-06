@@ -1,4 +1,7 @@
 import random
+from unittest import mock
+
+import pytest
 
 from tianxia import bot, fusion, library
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
@@ -87,9 +90,9 @@ class Fixed(random.Random):
         return self.value
 
 
-def armed(content, world, **stats):
-    """一個有一門武學、一個意境、心得與體力都夠的機器人。"""
-    game = Game.new(content, "機器人", rng=random.Random(0), world=world)
+def armed(content, world, name="機器人", **stats):
+    """一個有一門武學、一個意境、心得與體力都夠的機器人（name 是名號；其餘的關鍵字是要改的數值）。"""
+    game = Game.new(content, name, rng=random.Random(0), world=world)
     p = game.state.player
     p.member.wugong_id = "basic_fist"
     p.insights = ["feng"]
@@ -118,7 +121,7 @@ def _wear_and_switch(game, plain, rich, quality="下品"):
     p.member.wugong_id, p.arts = plain.id, [rich.id]
     for art_id in (plain.id, rich.id):
         p.art_quality[art_id] = quality
-    bot._switch_to_the_strongest(game)
+    bot.switch_to_the_strongest(game)
     return p.member.wugong_id
 
 
@@ -160,7 +163,7 @@ def test_the_bot_stays_put_on_equal_worth_and_without_traits_in_the_content(cont
     game2 = armed(content, world)
     p = game2.state.player
     p.member.wugong_id, p.arts = plain.id, [twin.id]
-    bot._switch_to_the_strongest(game2)
+    bot.switch_to_the_strongest(game2)
     assert p.member.wugong_id == plain.id
 
 
@@ -177,7 +180,7 @@ def test_the_bot_weighs_the_traits_of_the_inner_art_too(content, world):
     p.member.neigong_id, p.arts = plain.id, [rich.id]
     for art_id in (plain.id, rich.id):
         p.art_quality[art_id] = "下品"
-    bot._switch_to_the_strongest(game)
+    bot.switch_to_the_strongest(game)
     assert p.member.neigong_id == rich.id and p.member.wugong_id == "basic_fist"
 
 
@@ -378,6 +381,122 @@ def test_the_bot_keeps_its_pill_for_the_peerless_step(content, world):
         assert game.state.player.legend_items == 1
         assert game.state.player.stamina < 150  # 真的修練了
         assert not any("沒服" in line for line in game.state.log)
+
+
+def test_pick_forge_only_reads(content, world):
+    """挑合成的那一段拆出來給伺服器假人共用：只挑、不開爐，什麼都不改。"""
+    game = armed(content, world)
+    before = game.state.model_dump()
+    plan = bot.pick_forge(game, random.Random(0))
+    assert plan == bot.ForgePlan("basic_fist", ("feng",), None)
+    assert game.state.model_dump() == before
+
+
+def test_pick_forge_respects_the_reserve(content, world):
+    game = armed(content, world)
+    game.state.player.stamina = bot.FORGE_RESERVE - 1
+    assert bot.pick_forge(game, random.Random(0)) is None
+
+
+def test_pick_forge_with_nothing_to_forge_rolls_nothing(content, world):
+    """一門武學、沒有意境：什麼都合不了，一次亂數都不擲（整季機器人的亂數用法不能多一擲）。"""
+    game = armed(content, world)
+    game.state.player.insights = []
+    rng = random.Random(3)
+    state = rng.getstate()
+    assert bot.pick_forge(game, rng) is None
+    assert rng.getstate() == state
+
+
+def test_pick_forge_takes_the_shares_as_arguments(content, world):
+    """伺服器假人給自己的份額（武學＋武學少一點）：份額是引數，不是寫死的常數。"""
+    game = armed(content, world)
+    game.state.player.insights = ["feng", "huo"]
+    merge = bot.pick_forge(game, Fixed(0.5), merge_share=0.6)  # 0.5 < 0.6：改做合併（意境＋意境，沒有武學）
+    assert merge.art_id is None and merge.other_art is None and len(merge.insight_ids) == 2
+    fuse = bot.pick_forge(game, Fixed(0.5), merge_share=0.4)  # 0.5 ≥ 0.4：不合併，只有一門武學所以做武學＋意境
+    assert fuse.art_id == "basic_fist" and len(fuse.insight_ids) == 1 and fuse.other_art is None
+    game.state.player.member.neigong_id = "basic_breath"
+    plan = bot.pick_forge(game, Fixed(0.5), merge_share=0.4, blend_share=0.6)
+    assert plan is not None and plan.other_art is not None and plan.insight_ids == ()
+
+
+# 拆出 pick_forge 之前、forge_and_cultivate 裡那一大段挑法實際擲出來的結果（在拆之前的程式上跑出來的）：
+# (情境, 種子) → (開的那一爐, 挑完之後下一個亂數)。亂數的擲法、順序一個字都不能變——整季機器人的種子要重現同樣的一季
+_HANDS = {  # 手上有什麼：(有沒有第二門〔內功 basic_breath，第一門是武學 basic_fist〕, 意境)
+    "一門一意境": (False, ["feng"]), "一門兩意境": (False, ["feng", "huo"]), "兩門沒意境": (True, []),
+    "兩門一意境": (True, ["feng"]), "兩門兩意境": (True, ["feng", "huo"]),
+}
+_ONE, _ONE_TWO, _TWO_NONE, _TWO_ONE, _TWO_TWO = _HANDS
+_FIST_FENG = ("basic_fist", ("feng",), None)
+_FIST_HUO = ("basic_fist", ("huo",), None)
+_BREATH_FENG = ("basic_breath", ("feng",), None)
+_BREATH_HUO = ("basic_breath", ("huo",), None)
+_MERGE = (None, ("feng", "huo"), None)
+_FIST_BREATH = ("basic_fist", (), "basic_breath")
+_BREATH_FIST = ("basic_breath", (), "basic_fist")
+FORGE_PICKS = [
+    (_ONE, 0, _FIST_FENG, 0.04048437818077755), (_ONE, 1, _FIST_FENG, 0.2550690257394217),
+    (_ONE, 3, _FIST_FENG, 0.36995516654807925), (_ONE, 5, _FIST_FENG, 0.7951935655656966),
+    (_ONE_TWO, 0, _FIST_FENG, 0.25891675029296335), (_ONE_TWO, 1, _MERGE, 0.11791870367106105),
+    (_ONE_TWO, 2, _FIST_FENG, 0.08487199515892163), (_ONE_TWO, 3, _MERGE, 0.9159448117309811),
+    (_ONE_TWO, 4, _MERGE, 0.4788783949238976), (_ONE_TWO, 5, _FIST_FENG, 0.8403481205226678),
+    (_ONE_TWO, 6, _FIST_HUO, 0.7622168307127168), (_ONE_TWO, 7, _FIST_HUO, 0.6509344730398537),
+    (_TWO_NONE, 0, _FIST_BREATH, 0.04048437818077755), (_TWO_NONE, 1, _BREATH_FIST, 0.2550690257394217),
+    (_TWO_NONE, 5, _FIST_BREATH, 0.7951935655656966), (_TWO_NONE, 6, _BREATH_FIST, 0.7622168307127168),
+    (_TWO_ONE, 0, _FIST_FENG, 0.25891675029296335), (_TWO_ONE, 1, _BREATH_FIST, 0.11791870367106105),
+    (_TWO_ONE, 2, _BREATH_FENG, 0.08487199515892163), (_TWO_ONE, 3, _BREATH_FIST, 0.9159448117309811),
+    (_TWO_ONE, 5, _FIST_FENG, 0.8403481205226678), (_TWO_ONE, 7, _BREATH_FENG, 0.6509344730398537),
+    (_TWO_TWO, 0, _FIST_FENG, 0.25891675029296335), (_TWO_TWO, 1, _MERGE, 0.11791870367106105),
+    (_TWO_TWO, 2, _BREATH_FENG, 0.08487199515892163), (_TWO_TWO, 4, _MERGE, 0.4788783949238976),
+    (_TWO_TWO, 5, _BREATH_HUO, 0.7759585674357169), (_TWO_TWO, 6, _FIST_HUO, 0.036822743717221273),
+    (_TWO_TWO, 7, _BREATH_FIST, 0.8212742919913083),
+]
+
+
+@pytest.mark.parametrize(
+    "hands,seed,expected,next_random", FORGE_PICKS, ids=[f"{hands}-種子{seed}" for hands, seed, *_ in FORGE_PICKS],
+)
+def test_pick_forge_rolls_the_same_numbers_the_inline_pick_did(content, world, hands, seed, expected, next_random):
+    """Review Focus 5：拆出來之後亂數的擲法與順序跟原本寫在 forge_and_cultivate 裡的一模一樣（五種手上有什麼 × 種子）。"""
+    two_arts, insights = _HANDS[hands]
+    game = armed(content, world)
+    if two_arts:
+        game.state.player.member.neigong_id = "basic_breath"
+    game.state.player.insights = list(insights)
+    rng = random.Random(seed)
+    plan = bot.pick_forge(game, rng)
+    assert (plan.art_id, plan.insight_ids, plan.other_art) == expected
+    assert rng.random() == next_random
+
+
+def test_forge_and_cultivate_forges_what_pick_forge_picked(content, world):
+    """forge_and_cultivate 裡挑完就開：同一顆種子，開的那一爐就是 pick_forge 挑的那一爐。"""
+    game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
+    game.state.player.insights = ["feng", "huo"]
+    for seed in range(8):
+        plan = bot.pick_forge(game, random.Random(seed))
+        with mock.patch.object(Game, "forge", return_value=[]) as forge:
+            bot.forge_and_cultivate(game, random.Random(seed))
+        forge.assert_called_once_with(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
+
+
+def test_melt_the_weakest_is_public_for_the_server_bots(content, world):
+    """滿了熔最弱的：伺服器假人的 tend_arts 也用（庫裡威力最低的那一門）。"""
+    game = armed(content, world)
+    plain, rich = _two_arts(world)  # 30 與 29（第十成威力）
+    game.state.player.arts = [plain.id, rich.id]
+    bot.melt_the_weakest(game)
+    assert game.state.player.arts == [plain.id]
+
+
+def test_takes_the_pill_is_public_for_the_server_bots(content, world):
+    """衝絕學、手上有破境丹才服：伺服器假人的 tend_arts 也用。"""
+    game, art_id = ready_to_climb(content, world, "上品")
+    assert bot.takes_the_pill(game, art_id)
+    game, art_id = ready_to_climb(content, world, "中品")
+    assert not bot.takes_the_pill(game, art_id)
 
 
 def test_pick_accepts_whoever_the_event_wants_to_recruit(game):

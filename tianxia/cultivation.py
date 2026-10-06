@@ -135,6 +135,26 @@ def _mastered(state: GameState, world: WorldStateStore, art_id: str) -> list[str
     return [f"這門武學已由{first}率先練成絕學。"]
 
 
+def master_request(state: GameState, content: Content, world: WorldStateStore) -> naming.NamingRequest | None:
+    """定名的 A 段（鎖內、只讀）：輪到自己替練成絕學的武學取正式名字時，開一張請模型另取新名字的單（伺服器假人用，
+    企劃者 2026-10-06：沿用原名的話江湖史同一個名字出現兩次，看得出是假人；真人自己填名字，不走這裡）。
+    沒有等著定名的、或找不到那一門，是 None。"""
+    art_id = state.player.naming
+    art = team.resolve_art(art_id, content, world) if art_id is not None else None
+    if art is None:
+        return None
+    note = f"——{art.note}" if art.note else ""
+    messages = [
+        {"role": "system", "content": naming.SYSTEM_PROMPT},
+        {"role": "user", "content": (
+            f"一門{art.kind}【{art.name}】（屬{art.attribute}）{note}\n"
+            f"有人把它練成了絕學，要替它取一個正式的新名字：跟原名【{art.name}】不一樣，聽得出是同一門功夫練到了極致。\n\n"
+            f"{naming.FORMAT_RULES}"
+        )},
+    ]
+    return naming.NamingRequest("master", f"定名|{art_id}", art.kind, messages)
+
+
 def name_mastered(state: GameState, content: Content, world: WorldStateStore, name: str) -> list[str]:
     """第一個練成絕學的人替全服取正式名字；全服的這門一起改名，江湖史記上一筆。
     不合格（過不了命名過濾、被用掉）時什麼都不動，取名的權利還在，可以換個名字再來。"""

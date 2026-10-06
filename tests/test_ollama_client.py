@@ -26,6 +26,24 @@ def test_think_keep_alive_and_penalties_are_configurable():
     assert payload["options"]["frequency_penalty"] == 0.0
 
 
+def test_a_client_from_the_config_matches_the_games(content, game):
+    """Game 與假人程式用同一套參數建 client（OllamaClient.from_config）。"""
+    made = OllamaClient.from_config(content.config)
+    for field in (
+        "base_url", "model", "timeout", "think", "keep_alive", "repeat_penalty", "presence_penalty", "frequency_penalty",
+    ):
+        assert getattr(made, field) == getattr(game.client, field)
+
+
+def test_a_client_from_the_config_follows_the_config(content):
+    cfg = content.config
+    cfg.ollama_model, cfg.ollama_think, cfg.ollama_keep_alive = "gemma4:26b", False, "12h"
+    cfg.ollama_repeat_penalty, cfg.ollama_presence_penalty, cfg.ollama_frequency_penalty = 1.0, 0.0, 0.1
+    payload = OllamaClient.from_config(cfg)._build_payload([{"role": "user", "content": "hi"}], 0.8)
+    assert payload["model"] == "gemma4:26b" and payload["think"] is False and payload["keep_alive"] == "12h"
+    assert payload["options"]["repeat_penalty"] == 1.0 and payload["options"]["frequency_penalty"] == 0.1
+
+
 def test_the_game_builds_its_client_from_the_config(content):
     cfg = content.config
     cfg.ollama_model = "gemma4:26b"
