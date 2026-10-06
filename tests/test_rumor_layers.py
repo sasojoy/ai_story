@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from tianxia import atlas, foreshadow, journal, mapview, orders, ranks, rules, timetable
+from tianxia import atlas, foreshadow, journal, mapview, orders, ranks, rules, rumor_view, timetable
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
@@ -293,3 +293,106 @@ def test_the_star_window_is_the_board_length_so_a_local_star_never_outlives_its_
     game.state.player.visited.add("luzhi_camp")
     odds = lambda squad: "穩勝"  # noqa: E731
     assert f"最近 {days} 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "luzhi_camp", odds)
+
+
+# ── Task 4：見聞頁分四層 ───────────────────────────────────
+
+
+def _layers(game) -> dict[str, dict[str, str]]:
+    return {layer["id"]: layer for layer in game.rumor_layers()}
+
+
+def test_the_news_page_splits_rumors_into_four_layers(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world")
+    _rumor(game, "本週軍令：守長社。", layer="faction", faction="guan")
+    _rumor(game, "本週軍令：圍長社。", layer="faction", faction="huang")
+    _rumor(game, "長社一帶有人鬧事。", "changshe")
+    _rumor(game, "宛城一帶有人鬧事。", "wan_city")
+    game.state.world.rumors.append(Rumor(time=0.0, text="只說給甲聽的。", layer="personal", character="甲"))
+    assert [layer["id"] for layer in game.rumor_layers()] == ["world", "faction", "local", "personal"]
+    layers = _layers(game)
+    assert [layers[k]["title"] for k in layers] == ["天下大事", "陣營軍情", "潁川汝南的傳聞（最近 3 天）", "個人線索"]
+    assert "鉅鹿出了大事。" in layers["world"]["body"]
+    assert "守長社" in layers["faction"]["body"] and "圍長社" not in layers["faction"]["body"]
+    assert "長社一帶" in layers["local"]["body"] and "宛城一帶" not in layers["local"]["body"]
+    assert "只說給甲聽的。" in layers["personal"]["body"]
+    assert "第 1 週・週一 00:00　鉅鹿出了大事。" in layers["world"]["body"]  # 時間照季曆寫，跟以前那一條清單一樣
+
+
+def test_each_layer_says_so_when_it_is_empty(on):
+    layers = _layers(_game(on, "甲", "guan"))
+    assert layers["world"]["body"] == rumor_view.WORLD_EMPTY
+    assert layers["faction"]["body"] == rumor_view.FACTION_EMPTY
+    assert layers["local"]["body"] == rumor_view.LOCAL_EMPTY
+    assert layers["personal"]["body"] == rumor_view.PERSONAL_EMPTY
+
+
+def test_a_loner_gets_a_note_instead_of_faction_news(on):
+    game = _game(on, "丙")
+    _rumor(game, "本週軍令：守長社。", layer="faction", faction="guan")
+    assert _layers(game)["faction"]["body"] == rumor_view.FACTION_LONER
+
+
+def test_on_the_road_the_local_layer_names_both_regions(on):
+    game = _on_the_road(_game(on, at="yingchuan"))
+    _rumor(game, "洛陽宮裡出了事。", "luoyang_palace")
+    local = _layers(game)["local"]
+    assert local["title"] == "洛陽、潁川汝南的傳聞（最近 3 天）" and "洛陽宮裡出了事。" in local["body"]  # 照地圖的大區順序
+
+
+def test_heard_clues_are_personal_and_only_yours(on):
+    jia, yi = _game(on, "甲", "guan"), _game(on, "乙", "guan")
+    chain = next(c for c in on.foreshadows.chains if c.side == "guan" and c.fragments)
+    jia.state.player.fragments[chain.id] = [0]
+    clues = foreshadow.heard_texts(jia.state, on, jia.world)
+    assert len(clues) == 1 and clues[0] in _layers(jia)["personal"]["body"]
+    assert _layers(yi)["personal"]["body"] == rumor_view.PERSONAL_EMPTY  # 片段是一個人一個人聽的
+
+
+def test_with_the_switch_off_there_are_no_layers(real):
+    game = _game(real)
+    assert game.rumor_layers() is None
+    assert foreshadow.heard_texts(game.state, real, game.world) == []
+
+
+@pytest.fixture
+def server_season_one(monkeypatch):
+    """server.CONTENT 是正式內容：照週末設定打開第一季、季已經開打（同 tests/test_server.py 的 season_already_open）。"""
+    config = server.CONTENT.config
+    monkeypatch.setattr(config, "auto_open_first_season", True)
+    monkeypatch.setattr(config, "season_one", True)
+    monkeypatch.setattr(config, "season_days", 2.5)
+    return server.CONTENT
+
+
+def test_the_main_view_sends_the_layers_and_keeps_the_old_list(server_season_one):
+    game = Game.new(server_season_one, "測試")
+    _rumor(game, "長社一帶有人鬧事。", "changshe")
+    view = server.main_view(game)
+    assert [layer["id"] for layer in view["rumor_layers"]] == ["world", "faction", "local", "personal"]
+    local = view["rumor_layers"][2]
+    assert local["title"] == "潁川汝南的傳聞（最近 3 天）" and "<p>" in local["body"] and "長社一帶有人鬧事。" in local["body"]
+    assert "長社一帶有人鬧事。" in view["rumors"]  # 舊的一條清單照送（別的地方不會壞）
+
+
+def test_the_main_view_has_no_layers_with_the_switch_off(monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
+    view = server.main_view(Game.new(server.CONTENT, "測試"))
+    assert "rumor_layers" not in view and "rumors" in view
+
+
+def _js_function(js: str, header: str) -> str:
+    """app.js 裡 IIFE 內的一個函式本體（同 tests/test_server.py 的 _js_function）。"""
+    start = js.index(header)
+    return js[start:js.index("\n  }\n", start)]
+
+
+def test_the_page_draws_the_layers_when_the_server_sends_them():
+    """網頁沒有測試框架：擋住「伺服器送了四層、網頁卻還畫一整張」與「每次輪詢都重畫」。"""
+    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    assert "m.rumor_layers ? rumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
+    layers = _js_function(js, "function rumorLayersHtml(")
+    assert "esc(l.title)" in layers and "${l.body}" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
+    refresh = _js_function(js, "async function refreshPage(")
+    assert 'rumors: ["rumors", "rumor_layers"]' in refresh and "JSON.stringify(old[k])" in refresh

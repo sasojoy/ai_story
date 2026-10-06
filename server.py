@@ -526,6 +526,9 @@ def main_view(game: Game) -> dict:
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
     if orders:
         view["orders"] = orders
+    layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
+    if layers is not None:
+        view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy

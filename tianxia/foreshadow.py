@@ -265,6 +265,18 @@ def hear_from_event(state: GameState, content: Content, event_id: str, world: Wo
     return lines
 
 
+def heard_texts(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+    """聽過的線索片段（見聞頁的「個人線索」，傳聞分層設計第六節）：照鏈與片段的順序，文字照片段的寫法填好天機與出面的人
+    （偷聽到的不再加「聽說誰說過」）。只有自己看得到；伏筆沒在跑（開關關著、沒有鏈）時是空的。"""
+    if not active(state, content):
+        return []
+    heard = state.player.fragments
+    return [
+        _fragment_text(state, content, c, c.fragments[i], world)
+        for c in content.foreshadows.chains for i in sorted(heard.get(c.id, [])) if 0 <= i < len(c.fragments)
+    ]
+
+
 def _speaker(state: GameState, f: FsFragment) -> str | None:
     """對話片段由誰說：主角色退場、重創或下獄時改由 stand_in（沒寫就沒人說）；人物還沒種過當成在場。"""
     figure = state.world.figures.get(f.character) if f.character else None

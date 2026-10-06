@@ -20,6 +20,7 @@ from . import (
     push, ranks, roster, rounds, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
+from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
     choice_label, event_candidates, has_events_here, pick_event, visible_choices,
 )
@@ -4044,6 +4045,13 @@ class Game:
         ears = ears_of(self.state, self.content)
         heard = [r for r in self.state.world.rumors if audible(r, ears)]
         return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+
+    def rumor_layers(self) -> list[dict[str, str]] | None:
+        """見聞頁的傳聞分四層（天下大事、陣營軍情、所在大區、個人線索；rumor_view.layers），每層 {id, title, body}，body 是
+        Markdown。只在第一季的規則開著時分：開關關著（或這一季開季時沒開）是 None，頁面照舊畫 rumors_text 那一條清單。"""
+        if not season_one(self.content, self.state.world):
+            return None
+        return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
         """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""

@@ -1295,6 +1295,12 @@
   }
 
   // ── 見聞 ──
+  // 第一季的傳聞分四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一張卡。
+  // 標題是伺服器給的字（這裡跳脫），內容是伺服器轉好、跳脫過的 HTML；開關關著時沒有 rumor_layers，照舊畫一整張 rumors
+  function rumorLayersHtml(layers) {
+    return layers.map((l) => `<div class="card rumor-layer" data-layer="${esc(l.id)}"><h3>${esc(l.title)}</h3>${l.body}</div>`).join("");
+  }
+
   function pageNews() {
     const seg = `<div class="seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
@@ -1306,7 +1312,7 @@
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
       else body = `<div class="list">${r.list.map((x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`).join("")}</div>`;
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
-    else if (S.news === "rumors") body = `<div class="card">${m.rumors}</div>`;
+    else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
@@ -1983,8 +1989,9 @@
     }
     if (tab === "news") {
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
-      const fields = { trends: ["trends"], rumors: ["rumors"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
-      if (fields.some((k) => old[k] !== S.main[k])) redrawPage(true);
+      const fields = { trends: ["trends"], rumors: ["rumors", "rumor_layers"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
+      // rumor_layers 是陣列（每次輪詢都是新的物件）：比內容不比參照，沒變就不重畫
+      if (fields.some((k) => JSON.stringify(old[k]) !== JSON.stringify(S.main[k]))) redrawPage(true);
       return;
     }
     if (tab === "practice" || tab === "craft") {
