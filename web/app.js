@@ -955,6 +955,10 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫
   const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
 
+  // 熔煉的問句（FB-081）：基礎武學熔了還能重學，伺服器給了怎麼重學的那一句（relearn）就接在問句後面；
+  // 沒有的（合成的、內容直接給的）才說「熔掉就沒了」
+  const meltAskText = (name, relearn) => `把【${name}】熔成心得？${relearn || "熔掉就沒了。"}`;
+
   // ── 修練 ──
   function pagePractice() {
     const x = S.menxia;
@@ -988,7 +992,7 @@
           <div class="row art-actions">
             <button class="btn ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate" data-glow="cultivate" data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>修練</button>
             ${a.worn ? "" : `<button class="btn" data-act="switch" data-glow="switch" data-id="${esc(a.id)}">改練這一門</button>`}
-            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
+            <button class="btn" data-act="melt" data-glow="melt" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-relearn="${esc(a.relearn || "")}" ${a.melt.ok ? "" : "disabled"}>熔煉</button>
           </div>
           <p class="muted">修練：<span class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</span>　熔煉：${esc(a.melt.note)}</p></div>` : ""}`;
     };
@@ -1913,7 +1917,7 @@
           break;
         }
         case "melt":
-          if (confirm(`把【${el.dataset.name}】熔成心得？熔掉就沒了。`)) await mx("melt", { art: el.dataset.id });
+          if (confirm(meltAskText(el.dataset.name, el.dataset.relearn))) await mx("melt", { art: el.dataset.id });
           break;
         case "melt-insight":
           if (confirm(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`)) await mx("melt_insight", { insight: el.dataset.id });

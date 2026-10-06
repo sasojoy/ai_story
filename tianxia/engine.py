@@ -3535,10 +3535,13 @@ class Game:
             return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, held = self._xinde(), library.held_count(self.state)
         only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
-        msgs = self._log(library.melt_art(self.state, self.content, self.world, art_id, only=only))
+        msgs = library.melt_art(self.state, self.content, self.world, art_id, only=only)
         if library.held_count(self.state) < held:  # 看有沒有真的少一門，不看心得：下品第一成的武學熔了只退 0 點
+            relearn = skillview.relearn_note(self.state, self.content, art_id)  # 基礎武學熔了還能重學：結果最後一句指路（FB-081）
+            msgs = self._log(msgs + [relearn] if relearn else msgs)
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
-        return msgs
+            return msgs
+        return self._log(msgs)
 
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""

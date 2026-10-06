@@ -4,9 +4,9 @@
 """
 from __future__ import annotations
 
-from . import cultivation, fusion, insights, materials, prologue, team, traits
+from . import atlas, cultivation, fusion, insights, materials, prologue, team, traits
 # 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
-from .library import cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
+from .library import TOWN_TAG, cap_of, held_count, level_of, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
 from .state import PLAYER, GameState
@@ -130,6 +130,36 @@ def forge_line(
     return head if problem is None else f"{head}\n⚠ {problem}"
 
 
+def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:
+    """（離玩家最近的城鎮名字, 玩家人就在城鎮裡）：路程照 atlas.routes（只走摸清的路）；一座都走不到時名字是 None。"""
+    towns = {loc_id for loc_id, loc in content.locations.items() if TOWN_TAG in loc.tags}
+    here = state.player.location
+    if here in towns:
+        return content.locations[here].name, True
+    reachable = [(route.minutes, loc_id) for loc_id, route in atlas.routes(state, content).items() if loc_id in towns]
+    return (content.locations[min(reachable)[1]].name if reachable else None), False
+
+
+def relearn_note(state: GameState, content: Content, art_id: str) -> str | None:
+    """熔掉這一門之後怎麼拿回來（FB-081）：開局送的基礎武學在任何城鎮免費重學（library._taught_here）、各地教的基礎武學
+    回教它的那個地方、花原價學；合成出來的與內容直接給的絕學沒有重學的地方，是 None。寫給玩家看的一句話——
+    連「江湖頁『此地還能做』」都寫上：「學…」的選項不在行動列、收在那個摺疊裡（待 joy 潤）。"""
+    skill = content.skills.get(art_id)
+    if skill is None:
+        return None
+    find = f"在江湖頁「此地還能做」找「學{skill.name}」。"
+    if art_id in content.config.starter_skills:
+        name, here = _nearest_town(state, content)
+        if here:
+            return f"熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學{skill.name}」。"
+        near = f"（離你最近的是{name}）" if name else ""
+        return f"熔了還能免費重學：到任何城鎮{near}，{find}"
+    if skill.learn is not None:
+        fee = f"學費 {skill.learn.silver} 兩" if skill.learn.silver else "免費"
+        return f"熔了想拿回來，到{content.locations[skill.learn.at].name}再學一次（{fee}），{find}"
+    return None
+
+
 def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """修練與煉製兩頁的武學清單：身上的在前，再來功法庫。每門一列：品質（自己那一份）、第幾成、融的意境、
     修練與熔煉按不按得下去與為什麼。只讀狀態，不改東西。"""
@@ -161,6 +191,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else f"退回心得 {melt_value(state, content, world, art_id)}",
             },
+            # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫；合成的、內容直接給的絕學沒有重學的地方，也是 None
+            "relearn": None if art_id in (member.neigong_id, member.wugong_id) else relearn_note(state, content, art_id),
         })
     return rows
 
