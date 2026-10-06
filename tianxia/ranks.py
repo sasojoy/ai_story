@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 from . import calendar, figures
-from .models import Content, PromotionDef
+from .models import Content, PromotionCast, PromotionDef
 from .rules import add_rumor, season_one
 from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
+HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
 
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {
@@ -31,12 +32,20 @@ def title(content: Content, state: GameState) -> str | None:
     titles = TITLES.get(state.player.faction or "")
     if not titles:
         return None
+    if state.player.qualified:  # 第 4 階資格（候缺）：上任是計畫丁的事。「X（Y候缺）」的寫法是新寫的初稿，待 joy 潤
+        return f"{titles[3]}（{titles[4]}候缺）"
     return titles[min(rank_of(state), len(titles) - 1)] or None
 
 
 def promotion_for(content: Content, faction: str | None, rank: int) -> PromotionDef | None:
-    """那個陣營升到第 rank 階的晉升定義（promotions.json）；這一版只寫了第 2 階，其他是 None。"""
+    """那個陣營升到第 rank 階的晉升定義（promotions.json，第 2 到 4 階）；沒寫的階是 None。"""
     return next((p for p in content.promotions if p.faction == faction and p.rank == rank), None)
+
+
+def threshold(content: Content, rank: int) -> int:
+    """升到第 rank 階要的本季貢獻（第 2 階 rank2_contrib，第 3、4 階另外還要完成過那一階的一種機緣）。"""
+    cfg = content.config
+    return {2: cfg.rank2_contrib, 3: cfg.rank3_contrib, 4: cfg.rank4_contrib}[rank]
 
 
 def summons_place(state: GameState, content: Content, promo: PromotionDef) -> str:
@@ -70,37 +79,152 @@ def _summons_text(content: Content, promo: PromotionDef, handoff: bool, location
     return text.replace("{據點}", content.locations[location].name)
 
 
+def _cast_ok(state: GameState, content: Content, cast: PromotionCast, prev: str | None) -> bool:
+    """這個版本此刻成立嗎：上一段演的是它的 after、它的 before_event 那件大事還沒結算、flags_none 的旗標都不在；
+    寫了 figure 的，那位人物要在場（active、有所在），寫了 at 的還要正好在那裡。"""
+    w = state.world
+    if cast.after is not None and cast.after != prev:
+        return False
+    if cast.before_event is not None and cast.before_event in w.timeline:
+        return False
+    if any(flag in w.flags for flag in cast.flags_none):
+        return False
+    if cast.figure is not None:
+        now = figures.state_of(state, content, cast.figure)
+        if now.status != "active" or not now.location:
+            return False
+        if cast.at is not None and now.location != cast.at:
+            return False
+    return True
+
+
+def current_cast(
+    state: GameState, content: Content, promo: PromotionDef, leg: int, prev: str | None,
+) -> tuple[PromotionCast, str] | None:
+    """這一段此刻該演的版本與地點：照順序第一個成立的（晉升奇遇文件第一節）。地點：cast.at；沒寫 at 但有 figure 是
+    那位此刻的所在；都沒寫是這一段的 location（nearest_base 照 T5 挑最近的投靠點）。沒有成立的、沒有這一段是 None。"""
+    if leg >= len(promo.legs):
+        return None
+    part = promo.legs[leg]
+    for cast in part.casts:
+        if not _cast_ok(state, content, cast, prev):
+            continue
+        if cast.at is not None:
+            return cast, cast.at
+        if cast.figure is not None:
+            return cast, figures.state_of(state, content, cast.figure).location
+        place = part.location
+        if place == NEAREST_BASE:
+            place = summons_place(state, content, promo.model_copy(update={"location": NEAREST_BASE}))
+        return cast, place
+    return None
+
+
+def _leg_text(content: Content, cast: PromotionCast, location: str) -> str:
+    return cast.summons_text.replace("{據點}", content.locations[location].name)
+
+
+def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[str]:
+    """手上的多段召見照當下重挑一次版本：換了版本或地點就改寫召見（召見自動改由接手的人發、地點跟著人走）；
+    沒有成立的版本時照舊等著。只有玩家讀到的那一句話變了才回傳新的那一句：只換了演的事件、人與地點與話都沒變（何進的索賄
+    在盧植下獄之前、之後各一版）時悄悄換，不把同一句話又寫進紀錄一次（開發預審 N4）。"""
+    s = state.player.summons
+    found = current_cast(state, content, promo, s.leg, s.prev)
+    if found is None:
+        return []
+    cast, location = found
+    if (cast.event, location) == (s.event, s.location):
+        return []
+    told = _told_line(content, promo, s)
+    s.event, s.location, s.figure = cast.event, location, cast.figure
+    line = _leg_text(content, cast, location)
+    return [line] if line != told else []
+
+
+def _told_line(content: Content, promo: PromotionDef, s: Summons) -> str | None:
+    """上一次告訴玩家的召見那一句（這一段原本挑中的版本、原本的地點）；這一段還沒挑到版本（等著）的是 None。"""
+    if s.event is None or not s.location or s.leg >= len(promo.legs):
+        return None
+    old = next((cast for cast in promo.legs[s.leg].casts if cast.event == s.event), None)
+    return _leg_text(content, old, s.location) if old is not None else None
+
+
 def check_summons(state: GameState, content: Content) -> list[str]:
-    """該不該發召見（每次行動、同步的最後檢查，所以貢獻從哪裡來都接得到）：第一季、有陣營、這一季還沒落幕、手上沒有召見、
-    下一階有定義、本季貢獻夠了（第 2 階 rank2_contrib）→ 記下召見，回傳召見那一句。同一階只發一次（召見沒有期限，
-    演完晉升才清掉）。"""
+    """該不該發召見（每次行動、同步的最後檢查，所以貢獻從哪裡來都接得到）：第一季、有陣營、這一季還沒落幕、還沒拿到第 4 階
+    資格。手上有多段召見的，照當下重挑版本（_refresh）。沒有召見時看下一階：本季貢獻到 threshold；第 3、4 階還要完成過那一階
+    的一種機緣——貢獻到了、機緣還沒有，那一階說一次 HINT。第 3、4 階挑得到版本才發（沒有人能出面就先不發）。
+    同一階只發一次（召見沒有期限，演完晉升才清掉）。"""
     p, w = state.player, state.world
-    if not season_one(content, w) or p.faction is None or p.summons is not None or w.ended:
+    if not season_one(content, w) or p.faction is None or w.ended or p.qualified:
         return []
-    promo = promotion_for(content, p.faction, rank_of(state) + 1)
-    if promo is None or promo.rank != 2 or p.contrib < content.config.rank2_contrib:
+    if p.summons is not None:
+        promo = _pending(state, content)
+        return _refresh(state, content, promo) if promo is not None and promo.legs else []
+    rank = rank_of(state) + 1
+    promo = promotion_for(content, p.faction, rank)
+    if promo is None or p.contrib < threshold(content, rank):
         return []
-    location = summons_place(state, content, promo)
-    fid, handoff = presenter(state, content, promo, location)
-    p.summons = Summons(rank=promo.rank, figure=fid, location=location, since=w.time)
-    return [_summons_text(content, promo, handoff, location)]
+    from . import opportunities  # noqa: PLC0415  opportunities → ranks：在函式裡 import，避免循環
+
+    if rank >= 3 and not opportunities.done_for_rank(state, content, rank):
+        if rank in p.rank_hinted:
+            return []
+        p.rank_hinted.append(rank)
+        return [HINT]
+    if not promo.legs:  # 第 2 階：照 T5
+        location = summons_place(state, content, promo)
+        fid, handoff = presenter(state, content, promo, location)
+        p.summons = Summons(rank=promo.rank, figure=fid, location=location, since=w.time)
+        return [_summons_text(content, promo, handoff, location)]
+    found = current_cast(state, content, promo, 0, None)
+    if found is None:
+        return []
+    cast, location = found
+    p.summons = Summons(rank=rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
+    return [_leg_text(content, cast, location)]
+
+
+def next_leg(state: GameState, content: Content, from_event: str) -> list[str]:
+    """這一段演完（選項效果的 summons_next）：召見往下一段，挑版本、改寫地點，回傳下一段的召見那一句。
+    下一段此刻沒有成立的版本時，召見留在這一段之後等著（地點空著，之後 check_summons 會補上）。"""
+    s = state.player.summons
+    promo = _pending(state, content)
+    if s is None or promo is None or not promo.legs:
+        return []
+    s.leg, s.prev, s.event, s.location = s.leg + 1, from_event, None, ""
+    found = current_cast(state, content, promo, s.leg, s.prev)
+    if found is None:
+        return []
+    cast, location = found
+    s.event, s.location, s.figure = cast.event, location, cast.figure
+    return [_leg_text(content, cast, location)]
 
 
 def summons_line(state: GameState, content: Content) -> str | None:
-    """還沒去的召見那一句，照此刻出面的人重寫（召見發出後人物才不在的，自動改由接手的人發；主線與目標列它）。"""
+    """還沒去的召見那一句，照此刻出面的人重寫（召見發出後人物才不在的，自動改由接手的人發；主線與目標列它）。
+    多段（第 3、4 階）照此刻成立的版本寫；此刻沒有成立的版本時是 None。"""
     p = state.player
     promo = _pending(state, content)
     if promo is None:
         return None
+    if promo.legs:
+        found = current_cast(state, content, promo, p.summons.leg, p.summons.prev)
+        return _leg_text(content, found[0], found[1]) if found is not None else None
     _, handoff = presenter(state, content, promo, p.summons.location)
     return _summons_text(content, promo, handoff, p.summons.location)
 
 
 def summons_event(state: GameState, content: Content) -> str | None:
-    """人在召見的地點時該演的晉升奇遇（主版或接手版，照此刻出面的人）；不在那裡、沒有召見、開關關著是 None。"""
+    """人在召見的地點時該演的晉升奇遇（主版或接手版，照此刻出面的人）；不在那裡、沒有召見、開關關著是 None。
+    多段（第 3、4 階）照此刻成立的版本，人要在那個版本的地點。"""
     p = state.player
     promo = _pending(state, content)
-    if promo is None or p.location != p.summons.location:
+    if promo is None:
+        return None
+    if promo.legs:
+        found = current_cast(state, content, promo, p.summons.leg, p.summons.prev)
+        return found[0].event if found is not None and found[1] == p.location else None
+    if p.location != p.summons.location:
         return None
     _, handoff = presenter(state, content, promo, p.location)
     return promo.event_handoff if handoff and promo.event_handoff else promo.event_main
@@ -114,18 +238,40 @@ def _pending(state: GameState, content: Content) -> PromotionDef | None:
 
 
 def promote(state: GameState, content: Content, rank: int) -> list[str]:
-    """晉升奇遇選項的 promote（rules.apply_effect 呼叫）：升到 rank、清掉召見，接「你升為X。」與結尾那一句；
-    記進當天的彙整（第 2 階每天一則陣營軍情，flush_news）。開關關著、散人什麼都不做。"""
+    """晉升奇遇選項的 promote（rules.apply_effect 呼叫）：清掉召見；第 2、3 階升到 rank，第 4 階是資格（qualified，rank 停在 3，
+    候缺）。接「你升為X。」（第 4 階「你取得X的資格，候缺。」）、結尾那一句、豪強第 4 階看靠山的那一句。
+    第 2 階記進當天的彙整（flush_news）；第 3 階與第 4 階資格當下發一則具名的陣營軍情（傳聞分層 4.1）。
+    陣營軍情一律寫本名（傳聞分層第七節）：匿名的人也一樣，不用 display_name。開關關著、散人什麼都不做。
+    「你取得X的資格，候缺。」與兩則陣營軍情「{名號}升為X。」「{名號}取得X的資格，候缺。」是新寫的初稿，待 joy 潤。"""
     p, w = state.player, state.world
     if not season_one(content, w) or p.faction is None:
         return []
-    p.rank, p.summons = rank, None
-    msgs = [f"你升為{TITLES[p.faction][rank]}。"] if p.faction in TITLES else []
+    p.summons = None
+    titles = TITLES.get(p.faction)
+    name = titles[rank] if titles else ""
+    if rank >= 4:
+        p.qualified = True
+        p.rank = max(p.rank, 3)
+        msgs = [f"你取得{name}的資格，候缺。"] if titles else []  # 新寫，待 joy 潤
+    else:
+        p.rank = rank
+        msgs = [f"你升為{name}。"] if titles else []
     promo = promotion_for(content, p.faction, rank)
     if promo is not None and promo.closing:
         msgs.append(promo.closing)
-    day = calendar.point(w.time, content, w).cal_day
-    w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(p.name)  # 陣營軍情一律具名（傳聞分層第七節）
+    line = promo.patron_lines.get(p.patron or "") if promo is not None else None
+    if line is not None:  # 豪強升第 4 階：看靠山多一句（晉升奇遇文件 4.3）
+        from .models import Effect  # noqa: PLC0415
+        from .rules import apply_effect  # noqa: PLC0415
+
+        # 這個效果只有 text 與 affinity：apply_effect 照這兩樣走的那幾行不碰 world，所以傳 None（promote 的簽名沒有 world）
+        msgs += apply_effect(Effect(text=line.text, affinity=line.affinity), state, content, None)
+    if rank == 2:
+        day = calendar.point(w.time, content, w).cal_day
+        w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(p.name)  # 陣營軍情一律具名（傳聞分層第七節）
+    elif titles:
+        text = f"{p.name}取得{name}的資格，候缺。" if rank >= 4 else f"{p.name}升為{name}。"  # 新寫，待 joy 潤；寫本名
+        add_rumor(state, text, content=content, layer="faction", faction=p.faction)
     return msgs
 
 

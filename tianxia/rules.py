@@ -754,6 +754,18 @@ def apply_effect(
         p.affinities[character_id] = max(0, min(100, before + delta))
         if p.affinities[character_id] != before:
             msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
+    if effect.patron is not None:  # 豪強的靠山（晉升奇遇 4.2；正式版丙一）
+        p.patron = effect.patron
+    if effect.event_mods:  # 一般伏筆（伏筆文件 4.4）：那件大事還沒結算才算；不寫字（暗中的）
+        from . import timetable  # noqa: PLC0415  timetable → rules：在函式裡 import，避免循環
+
+        for mod in effect.event_mods:
+            if mod.event not in state.world.timeline:
+                timetable.add_mod(state, content, mod.event, mod.side, mod.amount)
+    if effect.summons_next is not None:  # 晉升奇遇演完一段：召見往下一段（正式版丙一）；放在 promote 前面，下一段的召見那一句先出
+        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+
+        msgs += ranks.next_leg(state, content, effect.summons_next)
     if effect.promote is not None or effect.followers:  # 晉升奇遇（計畫 T5）：開關關著時 ranks 什麼都不做
         from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
 

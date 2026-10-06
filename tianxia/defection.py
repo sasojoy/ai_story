@@ -88,11 +88,12 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
 
 def clear_progress(p: PlayerState) -> None:
     """叛投時清掉舊陣營的個人進度（第一季設計 5.1；晉升奇遇文件第一節：取消還沒去的召見；軍備物資 4.5：donations 歸零）。
-    之後的計畫把自己的陣營進度加在這裡（乙一：機緣已加；丙：靠山；丁：第四階資格），叛投就不會漏清。
+    之後的計畫把自己的陣營進度加在這裡（乙一：機緣已加；乙二：靠山隨機緣清；丙一：第 4 階資格與說過的「只缺一個機會」已加），叛投就不會漏清。
     這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（例如活躍名單）寫在 defect() 裡，
     跟 active_pushers 的清理放在一起。"""
     p.rank = 0
     p.summons = None
+    p.qualified, p.rank_hinted = False, []  # 第 4 階資格（候缺）與說過的「只缺一個機會」（正式版丙一）
     p.followers = []
     p.contrib = 0
     p.contrib_weeks = {}
