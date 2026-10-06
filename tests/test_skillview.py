@@ -959,3 +959,89 @@ def test_the_furnace_does_not_peek_at_a_recipe_for_things_you_do_not_hold(state,
     state.player.member.wugong_id = "basic_fist"  # 沒有風這個意境
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert line.startswith("⚠") and "會合出" not in line and "功效" not in line
+
+
+# ── W6：新武學跟身上同一種的那一門比 ─────────────────────────────────
+# 比的是「第一成對第一成」：新合出來的從第一成起，身上那門可能已經練到第七成，拿現在的威力比，新的永遠像退步；
+# 同在第一成比的才是兩門功夫本身的差別（品質、微調）與功效。數字一律是 martial_arts.power_at 照自己那一份的品質算的。
+
+
+def _registered(world, name, attribute, kind="武學", **over):
+    """一門下品、指定屬性的全服登記功法。"""
+    art = generate_from_name(name, kind, name, weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0}, attribute=attribute)
+    art = art.model_copy(update=over)
+    assert world.claim_skill_name(art)
+    return art
+
+
+def _signed(number: float) -> str:
+    return f"{number:+.1f}".replace("-", "−")
+
+
+def test_the_compare_line_sets_the_new_art_against_the_worn_one_at_the_first_level(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    worn = team.player_art(state, content, world, "basic_fist")
+    diff = power_at(art, 1) - power_at(worn, 1)
+    assert round(diff, 1) != 0  # 微調讓兩門不一樣強；下面「一樣強」另外測
+    assert team.compare_with_worn(state, content, world, art) == (
+        f"比身上的【粗淺拳腳】：威力 {_signed(diff)}（第一成）、多了〔先手〕、少了〔厚〕"
+    )
+
+
+def test_the_compare_line_only_names_what_differs(state, content, world):
+    """功效只列「有沒有」：新的多出來的、少掉的；兩邊一樣的不寫。威力一樣就說一樣，不寫 +0.0。"""
+    state.player.member.wugong_id = "basic_fist"
+    twin = _registered(world, "拳腳二式", "實", base_power=8.0, top_power=24.0)
+    worn = team.player_art(state, content, world, "basic_fist")
+    assert (power_at(twin, 1), power_at(worn, 1)) == (8.0, 8.0)
+    assert team.compare_with_worn(state, content, world, twin) == "比身上的【粗淺拳腳】：威力相同（第一成）"
+    stacked = _registered(world, "拳腳三式", "快", base_power=8.0, top_power=24.0, traits=["快", "實"])
+    assert team.compare_with_worn(state, content, world, stacked) == "比身上的【粗淺拳腳】：威力相同（第一成）、多了〔先手〕"
+    plain = _registered(world, "拳腳四式", "柔", base_power=8.0, top_power=24.0, traits=["柔", "實"], special="lianhuan")
+    assert team.compare_with_worn(state, content, world, plain) == (
+        "比身上的【粗淺拳腳】：威力相同（第一成）、多了〔化勁〕〔連環〕"
+    )
+
+
+def test_the_compare_line_uses_the_players_own_quality_for_both_arts(state, content, world):
+    """數字照自己那一份的品質算（跟功法卡寫的威力同一個來源）：身上那門修練到中品，它的第一成威力就是中品的那一檔。"""
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    state.player.art_quality["basic_fist"] = "中品"
+    worn = team.player_art(state, content, world, "basic_fist")
+    assert worn.quality == "中品" and power_at(worn, 1) > 8
+    expected = _signed(power_at(art, 1) - power_at(worn, 1))
+    assert f"威力 {expected}（第一成）" in team.compare_with_worn(state, content, world, art)
+
+
+def test_the_compare_line_matches_the_kind_of_slot_and_is_silent_without_one(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    inner = _registered(world, "回風吐納", "快", kind="內功")
+    state.player.arts = [art.id, inner.id]
+    assert team.compare_with_worn(state, content, world, art) == ""  # 武學欄空著：新的直接上身，沒有東西可比
+    state.player.member.neigong_id = "basic_breath"
+    assert team.compare_with_worn(state, content, world, art) == ""  # 內功欄有東西、武學欄還是空的：武學不跟內功比
+    assert team.compare_with_worn(state, content, world, inner).startswith("比身上的【粗淺吐納】：威力 ")
+    state.player.member.wugong_id = "basic_fist"
+    assert team.compare_with_worn(state, content, world, art).startswith("比身上的【粗淺拳腳】：威力 ")
+    assert team.compare_with_worn(state, content, world, team.player_art(state, content, world, "basic_fist")) == ""  # 身上的那門自己
+
+
+def test_the_practice_page_cards_compare_library_arts_with_the_worn_one_but_not_the_worn_one(state, content, world):
+    art = _registered(world, "旋風腿", "快")
+    state.player.member.wugong_id, state.player.arts = "basic_fist", [art.id]
+    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    note = team.compare_with_worn(state, content, world, art)
+    assert note and note in rows[art.id]["card"].split("\n")
+    assert "比身上的" not in rows["basic_fist"]["card"]  # 身上那門自己的卡不比
+    lines = rows[art.id]["card"].split("\n")
+    assert lines.index(note) > next(i for i, line in enumerate(lines) if line.startswith("功效："))  # 功效那一行之後
+    assert skillview.detail(state, content, world, "武學").count("比身上的") == 0
+
+
+def test_a_card_without_a_compare_line_is_exactly_as_before():
+    art = _crafted("以柔勁纏住兵刃，借力卸力。")
+    assert skillview.art_card(art, 3, compare_line="") == skillview.art_card(art, 3)
+    with_line = skillview.art_card(art, 3, compare_line="比身上的【甲】：威力 +1.0（第一成）").split("\n")
+    assert with_line[-2] == "比身上的【甲】：威力 +1.0（第一成）" and with_line[-1] == "以柔勁纏住兵刃，借力卸力。"  # 說明句還是最後一行

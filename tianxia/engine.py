@@ -3699,6 +3699,7 @@ class Game:
         return skillview.art_card(
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
             trait_line=traits.card_line(self.content, art),
+            compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
         )
 
     def member_card(self, key: str) -> str:

@@ -185,7 +185,10 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         rows.append({
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": art_id in (member.neigong_id, member.wugong_id), "insight": insight_name,
-            "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art)),
+            "card": art_card(
+                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art),
+                team.compare_with_worn(state, content, world, art),  # 身上那門自己是空字串（W6）
+            ),
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
                 "ok": stuck is None,
@@ -378,7 +381,7 @@ POWER_MAXED = "（已達第十成）"
 
 def art_card(
     art: MartialArt, level: int, insight_name: str | None = None, parent_names: list[str] | None = None,
-    trait_line: str = "",
+    trait_line: str = "", compare_line: str = "",
 ) -> str:
     """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力
     （連同下一成與第十成的威力，W1 併成一行）、來源與融的意境，最後是模型寫的那句說明。
@@ -390,6 +393,8 @@ def art_card(
     parent_names 是武學＋武學的兩門來源的名字（設計 12.3），有兩個才寫「由【甲】與【乙】衍生」。
     trait_line 是功效那一行（traits.card_line，設計 13.6：這一門自己的功效，數字照這一份的品質算），有字時接在來源那一行之後；
     三處呼叫端（art_rows、detail、Game.art_detail）都要給，不給（內容沒有功效、舊的呼叫）就沒有這一行。
+    compare_line 是跟身上同一種那門比的一句（W6，team.compare_with_worn）：只有功法庫裡的功法才給，身上那門自己的卡不比；
+    有字時接在功效那一行之後、說明句之前。
     說明句只有真的有字時才有那一行：退路字表取名的功法、自創與本命武學都沒有說明，
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
@@ -415,6 +420,8 @@ def art_card(
     ]
     if trait_line:
         lines.append(trait_line)
+    if compare_line:
+        lines.append(compare_line)
     note = art.note.strip()
     if note:
         lines.append(note)
