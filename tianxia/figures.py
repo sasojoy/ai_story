@@ -141,7 +141,7 @@ def push_goal(state: GameState, content: Content, fid: str) -> int:
     now = state_of(state, content, fid)
     if now.status != "active" or now.front is None or fig.push <= 0 or fig.actions_per_day <= 0:
         return 0
-    faction = content.scenario.faction(fig.faction)
+    faction = content.scenario.find_faction(fig.faction)
     return faction.goals.get(now.front, 0) if faction is not None else 0
 
 

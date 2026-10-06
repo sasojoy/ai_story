@@ -3115,7 +3115,7 @@ class Game:
 
     def _goals(self) -> dict[str, int]:
         """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
-        faction = self.content.scenario.faction(self.state.player.faction)
+        faction = self.content.scenario.find_faction(self.state.player.faction)
         return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
@@ -3181,7 +3181,7 @@ class Game:
                 msgs = change_trend(s, c, trend_id, whole)
 
         if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
-            faction = c.scenario.faction(p.faction)
+            faction = c.scenario.find_faction(p.faction)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
