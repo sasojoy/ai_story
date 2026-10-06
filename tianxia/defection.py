@@ -98,6 +98,8 @@ def clear_progress(p: PlayerState) -> None:
     p.contrib_weeks = {}
     p.donations = {}
     p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】
+    # 舊陣營的引薦人排著還沒說的提示作廢（新手引導計畫三，N7）：換了邊之後由新的引薦人說；師父的（by 是空的）不動
+    p.hint_queue = [n for n in p.hint_queue if p.faction is None or n.by != p.faction]
     opportunities.clear(p)  # 機緣的完成、計數、物品、線索全部作廢（機緣文件第一節；正式版乙一）
 
 

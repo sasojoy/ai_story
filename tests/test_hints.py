@@ -1,4 +1,4 @@
-"""碰到才說（新手引導計畫三，Task 1）：提示的內容、排隊、對話框、知道了、不再提示、換季。
+"""碰到才說（新手引導計畫三，Task 1、2）：提示的內容、排隊、對話框、知道了、不再提示、換季；什麼時候說（觸發條件）。
 
 用 hints_content（測試內容加上 tests/fixtures/hints/hints.json 五條；說書人三步、結語「去闖吧。」；劇本有一個陣營 guan＝官軍）。
 說過（hints_seen）與記進江湖紀錄都算在「提示上了框」的那一刻，不是排進佇列的那一刻（控制者裁示 N1、N12）。"""
@@ -10,11 +10,12 @@ from pathlib import Path
 
 import pytest
 from conftest import next_season
-from tianxia import guide
+from tests.test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
+from tianxia import defection, guide
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
-from tianxia.models import Enlist, EnlistStep, ExploreMix, HintDef, Hints, Recruiter, TutorialGoal
-from tianxia.state import BotProfile, HintNote, PlayerState
+from tianxia.models import Effect, Enlist, EnlistStep, ExploreMix, FreeTextChoice, HintDef, Hints, Recruiter, TutorialGoal
+from tianxia.state import BattleRecord, BotProfile, Fighter, HintNote, PlayerState, Summons
 
 MENTOR = "想起師父說過"
 
@@ -326,9 +327,17 @@ def test_hints_off_does_not_touch_the_tutorial(game):
 # ── 換季 ──────────────────────────────────────────────
 
 
+def _finished(content, world, name="沈浪"):
+    """走完引導的角色（不是略過）：只有走完的人，下一季開季時師父才送行（控制者裁示：略過的人沒有要人帶，不送）。
+    測試內容沒有序章，「走完」就是說書人那三步做完（tutorial_step 等於步數）。"""
+    game = Game.new(content, name, rng=random.Random(0), world=world)
+    game.state.player.tutorial_step = len(guide.steps(game.state, game.content))
+    assert not game.state.player.guide_skipped
+    return game
+
+
 def test_season_change_keeps_seen_and_sends_you_off(hints_content, world):
-    game = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
-    game.skip_tutorial()
+    game = _finished(hints_content, world)
     game._hint("h_merge")
     game.guide_ack()
     game._hint("h_lose")  # 上了框、還沒按「知道了」
@@ -343,8 +352,7 @@ def test_season_change_keeps_seen_and_sends_you_off(hints_content, world):
 
 
 def test_the_send_off_is_shown_and_written_down(hints_content, world):
-    game = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
-    game.skip_tutorial()
+    game = _finished(hints_content, world)
     next_season(hints_content, world, game)
     box = game.guide_box()
     assert (box["speaker"], box["text"], box["key"], box["end"]) == (MENTOR, "又是一年。", "s_return", True)
@@ -354,8 +362,7 @@ def test_the_send_off_is_shown_and_written_down(hints_content, world):
 
 
 def test_the_send_off_comes_every_season_not_once(hints_content, world):
-    game = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
-    game.skip_tutorial()
+    game = _finished(hints_content, world)
     next_season(hints_content, world, game)
     game.guide_ack()
     admin = Game.new(hints_content, "管理者", rng=random.Random(1), world=world)
@@ -373,22 +380,36 @@ def test_no_send_off_before_the_guide_is_done(hints_content, world):
     assert game.state.player.hint_queue == []
 
 
+def test_no_send_off_for_someone_who_skipped_the_guide(hints_content, world):
+    """控制者裁示：略過新手引導的人沒有要誰帶，師父不送他下山（他們照樣有碰到才說，換季也帶著說過的）。"""
+    game = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
+    game.skip_tutorial()
+    game._hint("h_merge")
+    game.guide_ack()
+    next_season(hints_content, world, game)
+    p = game.state.player
+    assert p.guide_skipped and p.hint_queue == [] and p.hints_seen == {"h_merge"}
+    assert game.guide_box() is None
+
+
 def test_no_send_off_when_hints_are_off_or_for_bots(hints_content, world):
-    off = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
-    off.skip_tutorial()
+    """這兩個負向測試要真的守住條件：造的是「走完」的角色，除了開關與假人身分之外跟會被送行的一模一樣。"""
+    off = _finished(hints_content, world)
     off.set_hints_off(True)
-    bot = Game.new(hints_content, "假人", rng=random.Random(0), world=world)
-    bot.skip_tutorial()
+    bot = _finished(hints_content, world, "假人")
     bot.state.player.bot = BotProfile(personality="普通", seed=1)
-    next_season(hints_content, world, off, bot)
+    ok = _finished(hints_content, world, "對照")
+    next_season(hints_content, world, off, bot, ok)
+    assert [n.id for n in ok.state.player.hint_queue] == ["s_return"]  # 對照組：同樣走完、沒關、不是假人，收到
     assert off.state.player.hint_queue == [] and off.state.player.hints_off  # 開關帶到下一季
     assert bot.state.player.hint_queue == []
 
 
 def test_no_send_off_when_the_book_has_none(hints_root, world):
     content = _reload(hints_root, lambda d: d.update(season_return=""))
-    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
-    game.skip_tutorial()
+    game = _finished(content, world)
+    game._hint("h_merge")  # 排著還沒按「知道了」的，換季不帶：書裡沒有送行的話，新的一季佇列就是空的
+    assert [n.id for n in game.state.player.hint_queue] == ["h_merge"]
     next_season(content, world, game)
     assert game.state.player.hint_queue == []
 
@@ -435,3 +456,540 @@ def test_hint_note_and_hint_def_shapes():
     hint = HintDef(id="h_foreshadow", by="recruiter")
     assert hint.texts == {} and hint.drifter == "" and hint.text == ""
     assert Hints().hints == [] and Hints().season_return == ""
+    assert note.by == "" and HintNote(id="h_x", speaker="老石", text="話。", by="guan").by == "guan"
+
+
+# ── Task 2：什麼時候說（觸發條件，設計 5.2 的十八條）────────────────────────────
+# 觸發看的是角色「此刻的狀態」（第一次由 hints_seen 管）；排隊的規矩（控制者裁示 N2）：一次檢查最多排一條狀態提示，
+# 事件型的（h_snubbed、s_rejoin、s_return、h_mandate）當場排。
+
+
+def _with(content, *ids):
+    """hints_content 只有五條：這些測試多用到的條，直接補一條師父說的。"""
+    for hint_id in ids:
+        content.hints.hints.append(HintDef(id=hint_id, by="mentor", text=f"{hint_id} 的話"))
+
+
+def _key(game):
+    box = game.guide_box()
+    return None if box is None else box["key"]
+
+
+def _queued(game):
+    return [n.id for n in game.state.player.hint_queue]
+
+
+def _lost_fight(kind="train", tier="落敗"):
+    return BattleRecord(
+        id=1, time=0.0, location="小鎮", kind=kind, opponent="山賊", ours=[Fighter(name="沈浪", level=1)], tier=tier,
+        our_power=1.0, difficulty=9.0,
+    )
+
+
+def test_second_insight_triggers_merge(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng"]
+    game._check_hints()
+    assert game.guide_box() is None
+    game.state.player.insights = ["feng", "huo"]
+    game._check_hints()
+    assert _key(game) == "h_merge"
+
+
+def test_clash_when_inner_and_outer_arts_counter_each_other(game):
+    _with(game.content, "h_clash")
+    game.skip_tutorial()
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = "calm", "fist"  # 虛／剛：不相剋
+    game._check_hints()
+    assert game.guide_box() is None
+    member.wugong_id = "basic_fist"  # 虛／實：相剋
+    game._check_hints()
+    assert _key(game) == "h_clash"
+
+
+def test_clash_needs_both_arts(game):
+    _with(game.content, "h_clash")
+    game.skip_tutorial()
+    member = game.state.player.member
+    member.neigong_id, member.wugong_id = None, "basic_fist"
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
+
+
+def test_a_failed_refinement_triggers_refine_fail(game):
+    _with(game.content, "h_refine_fail")
+    game.skip_tutorial()
+    game.state.player.art_mastery = {"basic_fist": 0}  # 成功就歸零
+    game._check_hints()
+    assert game.guide_box() is None
+    game.state.player.art_mastery = {"basic_fist": 2}
+    game._check_hints()
+    assert _key(game) == "h_refine_fail"
+
+
+def test_a_lost_fight_triggers_lose_but_a_win_or_a_lost_showdown_does_not(game):
+    game.skip_tutorial()
+    for record in (_lost_fight(tier="大勝"), _lost_fight(kind="showdown")):
+        game.state.battles = [record]
+        game._check_hints()
+        assert game.guide_box() is None
+    for kind in ("train", "wild", "event"):
+        game.state.battles = [_lost_fight(kind=kind)]
+        game.state.player.hints_seen.discard("h_lose")
+        game._check_hints()
+        assert _key(game) == "h_lose", kind
+        game.guide_ack()
+
+
+def test_an_injury_triggers_injury(game):
+    _with(game.content, "h_injury")
+    game.skip_tutorial()
+    game.state.player.member.injury = 10
+    game._check_hints()
+    assert _key(game) == "h_injury"
+
+
+def test_a_place_that_teaches_a_basic_art_triggers_basic_art(game):
+    _with(game.content, "h_basic_art")
+    game.skip_tutorial()
+    game._check_hints()  # 小鎮不教
+    assert game.guide_box() is None
+    game.state.player.location = "lake"  # 湖邊教湖邊腿法
+    game._check_hints()
+    assert _key(game) == "h_basic_art"
+
+
+def test_a_recruitable_character_here_triggers_recruit(game):
+    _with(game.content, "h_recruit")
+    game.skip_tutorial()
+    game._check_hints()  # 小鎮有三位可招募的人
+    assert _key(game) == "h_recruit"
+
+
+def test_a_free_text_event_triggers_the_hint_once_the_event_is_settled(game):
+    """事件還擺在眼前時提示排著等（F3）：了結之後才上框。"""
+    _with(game.content, "h_free_text")
+    game.skip_tutorial()
+    game.content.events["drunk"].free_text = FreeTextChoice(
+        prompt="自己想辦法……", stat="str", by="self", effect=Effect(text="成了。"), fail_effect=Effect(text="敗了。"),
+    )
+    game.state.pending_event = "drunk"
+    game._check_hints()
+    assert _queued(game) == ["h_free_text"] and game.guide_box() is None
+    game.state.pending_event = None
+    assert _key(game) == "h_free_text"
+
+
+def test_an_event_without_free_text_does_not_trigger_it(game):
+    _with(game.content, "h_free_text")
+    game.skip_tutorial()
+    game.state.pending_event = "drunk"
+    game._check_hints()
+    assert _queued(game) == []
+
+
+def test_a_road_sight_triggers_road(game):
+    _with(game.content, "h_road")
+    game.skip_tutorial()
+    game._check_hints()
+    assert game.guide_box() is None
+    game.state.player.recent_sights = ["a_sight"]
+    game._check_hints()
+    assert _key(game) == "h_road"
+
+
+def test_a_nearly_full_library_triggers_cap(game, monkeypatch):
+    from tianxia import library
+
+    game.skip_tutorial()
+    game._check_hints()
+    assert game.guide_box() is None
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 5)  # 還差五個：45／50
+    game._check_hints()
+    assert _key(game) == "h_cap"
+
+
+def test_a_heard_fragment_triggers_foreshadow(game):
+    game.skip_tutorial()
+    game.state.player.fragments = {"chain": []}  # 鏈在、沒聽過片段
+    game._check_hints()
+    assert game.guide_box() is None
+    game.state.player.fragments = {"chain": [0]}
+    game._check_hints()
+    assert game.guide_box()["text"] == "這是線索（散人）。"
+
+
+def test_a_delivered_big_event_triggers_event_reveal(game):
+    _with(game.content, "h_event_reveal")
+    game.skip_tutorial()
+    game.state.player.events_seen = ["changshe_fire"]
+    game._check_hints()
+    assert _key(game) == "h_event_reveal"
+
+
+def test_a_summons_triggers_promotion_for_a_faction_member_only(game):
+    game.skip_tutorial()
+    game.state.player.summons = Summons(rank=2, location="town")
+    game._check_hints()  # 散人沒有散人版：不說、也不記成說過
+    assert game.guide_box() is None and "h_promotion" not in game.state.player.hints_seen
+    game.state.player.faction = "guan"
+    game._check_hints()
+    assert game.guide_box()["text"] == "上頭點你的名了。"
+
+
+def test_a_brush_off_triggers_snubbed(game, hints_content):
+    _with(hints_content, "h_snubbed")
+    game.skip_tutorial()
+    lines = game._brush_off("sage")  # 打發不看名望夠不夠，直接回那一句（測試內容的人物沒寫打發話，用通用的那一句）
+    assert lines and "名望還差" in lines[0]
+    assert _key(game) == "h_snubbed"
+    assert f"【{MENTOR}】h_snubbed 的話" in _journal_guides(game)
+
+
+def _muster(game, region=None):
+    """開一場在集結的全服決戰（官軍對黃巾），可以限定在某個大區。"""
+    from test_engine import _install_battle_def
+
+    definition = _install_battle_def(game.content)
+    definition.region = region
+    game.world.start_battle(definition, now=1000.0)
+    return definition
+
+
+def test_a_drifter_at_a_muster_triggers_spectator(game):
+    _with(game.content, "h_spectator", "h_showdown")
+    game.skip_tutorial()
+    game._check_hints()
+    assert game.guide_box() is None  # 還沒有決戰
+    _muster(game)
+    game._check_hints()
+    assert _key(game) == "h_spectator" and _queued(game) == ["h_spectator"]  # 散人在一旁看，沒有開戰說明
+
+
+def test_spectator_only_fires_where_the_battle_is(game):
+    """N3：決戰在別的大區，散人雖然「觀戰」中、人卻不在戰場上，不說。"""
+    _with(game.content, "h_spectator")
+    game.skip_tutorial()
+    definition = _muster(game, region="south")  # 小鎮在北區
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
+    definition.region = "north"  # 決戰換到小鎮所在的大區：人在現場了
+    game._check_hints()
+    assert _key(game) == "h_spectator"
+
+
+def test_a_member_at_a_muster_triggers_showdown_and_a_drifter_does_not(game):
+    _with(game.content, "h_showdown", "h_spectator")
+    game.skip_tutorial()
+    game.state.player.faction = "guan"
+    _muster(game)
+    game._check_hints()
+    assert _queued(game) == ["h_showdown"]
+    assert game.guide_box()["text"] == "h_showdown 的話"
+
+
+def test_a_member_away_from_the_muster_does_not_get_the_showdown_hint(game):
+    _with(game.content, "h_showdown")
+    game.skip_tutorial()
+    game.state.player.faction = "guan"
+    _muster(game, region="south")  # 在別的大區：趕不上這場，不是「遇上」
+    game._check_hints()
+    assert game.guide_box() is None
+
+
+def test_showdown_waits_for_the_muster(game):
+    """決戰已經開打（不在集結）時不說：這一條是教怎麼選邊、怎麼出招的，集結才是入場的時候。"""
+    _with(game.content, "h_showdown")
+    game.skip_tutorial()
+    game.state.player.faction = "guan"
+    _muster(game)
+    game.world.mutate_battle(lambda b: setattr(b, "phase", "active"))
+    game._check_hints()
+    assert game.guide_box() is None
+
+
+# ── h_figure：只有大勢人物（F1），用真內容、第一季的規則 ──────────────────────
+
+def _figure_game(content, at):
+    content.hints.hints.append(HintDef(id="h_figure", by="mentor", text="那位是大人物。"))
+    game = _real_game(content, at=at)
+    game.state.player.tutorial_step = len(guide.steps(game.state, content))  # 引導走完（真內容的序章與引導不擋在前面）
+    return game
+
+
+def test_a_great_figure_in_the_room_triggers_figure(on):
+    game = _figure_game(on, "changshe")  # 皇甫嵩、朱儁在長社
+    game._check_hints()
+    assert _key(game) == "h_figure"
+
+
+@pytest.mark.parametrize("place", ["runan_market", "qiao_county", "zhuo_county"])
+def test_a_character_who_is_not_a_great_figure_does_not_trigger_figure(on, place):
+    """陶謙、曹操、劉備三兄弟是可以交友的人物（_figures_here 會列出來），但不是人物表上的大勢人物（F1）。"""
+    game = _figure_game(on, place)
+    assert game._figures_here()  # 這裡確實有「人物」
+    game._check_hints()
+    assert game.guide_box() is None and _queued(game) == []
+
+
+def test_figure_needs_the_season_one_rules(real):
+    game = _figure_game(real, "changshe")  # 開關關著（beta 的那一季）：沒有大勢人物
+    game._check_hints()
+    assert game.guide_box() is None
+
+
+# ── 排隊的規矩 ─────────────────────────────────────────
+
+
+def test_one_state_hint_per_check_and_the_next_waits_for_its_turn(game, monkeypatch):
+    """N2：一次行動碰到兩個狀態條件，這一次排一條；下一次行動條件還成立才排另一條（開局一排「知道了」是引導重做要拿掉的）。"""
+    from tianxia import library
+
+    game.skip_tutorial()
+    p = game.state.player
+    p.insights = ["feng", "huo"]
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
+    game._check_hints()
+    assert _queued(game) == ["h_merge"]  # 兩個條件都成立，這一次只排一條
+    game._check_hints()  # 下一次行動
+    assert _queued(game) == ["h_merge", "h_cap"]
+    game.guide_ack()
+    assert _key(game) == "h_cap"
+
+
+def test_the_second_hint_is_dropped_if_its_condition_no_longer_holds(game, monkeypatch):
+    from tianxia import library
+
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
+    game._check_hints()
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 30)  # 熔掉了幾樣
+    game._check_hints()
+    assert _queued(game) == ["h_merge"]
+
+
+def test_a_hint_that_cannot_be_said_does_not_use_up_the_turn(game):
+    """排不進去的（散人碰到沒有散人版的）不算「這一次排過了」：同一次檢查裡接著看後面的。"""
+    game.skip_tutorial()
+    p = game.state.player
+    p.summons = Summons(rank=2, location="town")  # h_promotion：散人沒有散人版
+    p.insights = ["feng", "huo"]
+    p.fragments = {"chain": [0]}
+    game._check_hints()
+    assert _queued(game) == ["h_merge"]
+    game.guide_ack()
+    game._check_hints()
+    assert _queued(game) == ["h_foreshadow"]  # h_promotion 一直排不進去，不擋住後面的
+
+
+def test_event_hints_are_not_paced(game, hints_content):
+    _with(hints_content, "h_snubbed")
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game._check_hints()
+    game._brush_off("sage")
+    assert _queued(game) == ["h_merge", "h_snubbed"]  # 事件型的當場排，不吃每次一條的限速
+
+
+def test_polling_does_not_pile_hints_up_behind_an_unread_one(game, monkeypatch):
+    """同步每 10 秒問一次：框上（或排著）還有一條沒按「知道了」時不再排新的狀態提示，不然一個閒著不動的人回來是一長串。
+    按過「知道了」之後，下一次同步再排下一條。"""
+    from tianxia import library
+
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    monkeypatch.setattr(library, "cap_of", lambda s, c: library.held_count(s) + 3)
+    game._check_hints(poll=True)
+    game._check_hints(poll=True)
+    game._check_hints(poll=True)
+    assert _queued(game) == ["h_merge"]
+    game.guide_ack()
+    game._check_hints(poll=True)
+    assert _queued(game) == ["h_cap"]
+
+
+def test_sync_notices_what_changed_without_an_action(game):
+    """大事揭曉、決戰開打、抵達都是同步時發生的：不靠行動，下一次同步就看到。"""
+    _with(game.content, "h_event_reveal")
+    game.skip_tutorial()
+    game.state.player.events_seen = ["changshe_fire"]
+    game.sync(1000.0)
+    assert _key(game) == "h_event_reveal"
+    assert f"【{MENTOR}】h_event_reveal 的話" in _journal_guides(game)
+
+
+# ── 什麼時候不看 ───────────────────────────────────────
+
+
+def test_no_hints_inside_the_prologue(prologue_content, world):
+    prologue_content.hints = Hints(hints=[HintDef(id="h_merge", by="mentor", text="合。")])
+    g = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
+    g.state.player.insights = ["feng", "huo"]
+    g._check_hints()
+    assert g.state.player.hint_queue == [] and "h_merge" not in g.state.player.hints_seen
+    g._hint("h_merge")  # 事件型的也一樣：序章本身在教
+    assert g.state.player.hint_queue == [] and "h_merge" not in g.state.player.hints_seen
+
+
+def test_nothing_is_queued_before_the_season_opens_or_after_it_ends(hints_content, world):
+    """F7：籌備中與休季框都不畫；排進去就算「說過」會讓它們白白丟掉，所以這兩段不排。"""
+    hints_content.config.auto_open_first_season = False
+    waiting = Game.new(hints_content, "沈浪", rng=random.Random(0), world=world)
+    waiting.skip_tutorial()
+    waiting.state.player.insights = ["feng", "huo"]
+    assert waiting._preparing()
+    waiting._check_hints()
+    assert waiting.state.player.hint_queue == []
+
+
+def test_nothing_is_queued_after_the_season_has_ended(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game.state.world.ended = True
+    game._check_hints()
+    assert game.state.player.hint_queue == []
+    game.state.world.ended = False
+    game._check_hints()
+    assert _queued(game) == ["h_merge"]  # 休季之前沒排進去的，下一季條件還成立就排
+
+
+def test_bots_and_hints_off_check_nothing(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game.state.player.bot = BotProfile(personality="普通", seed=1)
+    game._check_hints()
+    assert game.state.player.hint_queue == []
+    game.state.player.bot = None
+    game.set_hints_off(True)
+    game._check_hints()
+    assert game.state.player.hint_queue == []
+
+
+def test_once_every_hint_has_been_said_nothing_is_worked_out(game, monkeypatch):
+    """N10：每條都說過了就不再算條件（每次行動與每次同步都會叫一遍）。"""
+    game.skip_tutorial()
+    game.state.player.hints_seen |= {h.id for h in game.content.hints.hints}
+
+    def boom(*args, **kwargs):
+        raise AssertionError("不該算條件")
+
+    monkeypatch.setattr(game, "_hint_triggers", boom)
+    game._check_hints()
+    game._check_hints(poll=True)
+
+
+def test_only_the_hints_the_book_has_are_worked_out(game, monkeypatch):
+    """書裡沒有的條不算它的條件（真內容一條一條補進來之前，決戰的資料庫讀取也不必每次都做）。"""
+
+    def boom(*args, **kwargs):
+        raise AssertionError("不該讀決戰")
+
+    monkeypatch.setattr(game, "_battle_status", boom)
+    game.skip_tutorial()
+    game._check_hints()
+
+
+# ── 行動做完就看一遍（每個地方都插在記進江湖紀錄之前，說的話記在那一則）────────────────
+
+def test_choose_notices_what_the_action_made_true(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game.choose("act:rest")
+    assert _key(game) == "h_merge"
+    assert f"【{MENTOR}】意境可以合。" in game.state.journal[0].guide  # 記在這一次行動那一則
+
+
+def test_travel_notices_it_too(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game.travel("lake")
+    assert _key(game) == "h_merge" and f"【{MENTOR}】意境可以合。" in game.state.journal[0].guide
+
+
+def test_allocating_a_point_notices_it_too(game):
+    game.skip_tutorial()
+    game.state.player.insights = ["feng", "huo"]
+    game.state.player.stat_points = 1
+    game.allocate_stat("str")
+    assert _key(game) == "h_merge"
+
+
+def test_a_page_action_notices_it_too(game):
+    """修練頁、煉製頁的動作（療傷、練成、修練、熔煉、合成、改練都經過 _menxia_entry）：修練失敗就是在這裡留下熟練度的。"""
+    _with(game.content, "h_refine_fail")
+    game.skip_tutorial()
+    game.state.player.art_mastery = {"basic_fist": 1}
+    game.heal()
+    assert _key(game) == "h_refine_fail"
+    assert f"【{MENTOR}】h_refine_fail 的話" in _journal_guides(game)
+
+
+# ── M-1：「知道了」與略過之前先上框 ──────────────────────────
+
+
+def test_skipping_the_guide_brings_up_a_waiting_hint_and_notes_it(game):
+    game._hint("h_merge")  # 說書人還在框上，排著
+    assert "h_merge" not in game.state.player.hints_seen
+    game.skip_tutorial()  # 框換成這一條：同一下上框、記說過、記進江湖紀錄（不必等同步）
+    assert _key(game) == "h_merge" and "h_merge" in game.state.player.hints_seen
+    assert f"【{MENTOR}】意境可以合。" in _journal_guides(game)
+
+
+def test_ack_never_pops_a_hint_that_was_not_shown_yet(game):
+    """框上的提示是別的狀態改變（引導走完）讓它輪到的、還沒有任何呼叫把它記成說過：按「知道了」先記再收，不會憑空吞掉一條。"""
+    game._hint("h_merge")
+    game.state.player.tutorial_step = len(guide.steps(game.state, game.content))  # 說書人退場，沒有經過 sync 與行動
+    assert "h_merge" not in game.state.player.hints_seen
+    game.guide_ack()
+    p = game.state.player
+    assert p.hint_queue == [] and "h_merge" in p.hints_seen
+    assert f"【{MENTOR}】意境可以合。" in _journal_guides(game)
+
+
+# ── I-1：網頁在修練、煉製頁也畫提示，靠伺服器標的 hint ──────────────────────────
+
+
+def test_a_hint_box_says_it_is_a_hint(game):
+    p = game.state.player
+    p.tutorial_step = len(guide.steps(game.state, game.content))
+    game._hint("h_merge")
+    assert game.guide_box()["hint"] is True
+    game.guide_ack()
+    p.guide_outro = True
+    box = game.guide_box()
+    assert box["key"] == "outro" and not box.get("hint")  # 結語不是提示：網頁只在江湖頁畫
+
+
+def test_a_tutorial_step_is_not_a_hint(game):
+    assert not game.guide_box().get("hint")
+
+
+# ── N7：叛投時，舊陣營那邊排著的提示作廢 ──────────────────────────
+
+
+def test_a_hint_note_remembers_whose_voice_it_is(game):
+    from tianxia import hints
+
+    game.skip_tutorial()
+    p = game.state.player
+    assert hints.note_for(game.state, game.content, "h_merge").by == ""  # 師父
+    assert hints.note_for(game.state, game.content, "h_foreshadow").by == ""  # 散人聽到的，也是師父講的
+    p.faction = "guan"
+    assert hints.note_for(game.state, game.content, "h_foreshadow").by == "guan"  # 自己那一邊的引薦人
+
+
+def test_defecting_drops_the_old_sides_queued_hints_and_keeps_the_mentors(game):
+    p = game.state.player
+    p.faction = "guan"
+    p.hint_queue = [
+        HintNote(id="h_promotion", speaker="老石", text="上頭點你的名了。", by="guan"),
+        HintNote(id="h_merge", speaker=MENTOR, text="意境可以合。"),
+        HintNote(id="h_x", speaker="青禾", text="另一邊的話。", by="huang"),
+    ]
+    defection.clear_progress(p)
+    assert [n.id for n in p.hint_queue] == ["h_merge", "h_x"]  # 舊陣營（guan）的作廢，師父的與別人的不動
+    p.faction = None  # 散人沒有舊陣營：什麼都不丟
+    defection.clear_progress(p)
+    assert [n.id for n in p.hint_queue] == ["h_merge", "h_x"]

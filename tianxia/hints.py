@@ -38,7 +38,7 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
         e = content.tutorial.enlist
         who = e.recruiters.get(faction) if e is not None else None
         name = who.name if who is not None else next((f.name for f in content.scenario.factions if f.id == faction), faction)
-        return HintNote(id=hint_id, speaker=name, text=hint.texts[faction])
+        return HintNote(id=hint_id, speaker=name, text=hint.texts[faction], by=faction)
     if faction is None and hint.drifter:
         return HintNote(id=hint_id, speaker=h.head, text=hint.drifter)
     return None

@@ -86,12 +86,14 @@ class Summons(BaseModel):
 
 class HintNote(BaseModel):
     """排著要在對話框說的一條提示（新手引導計畫三）：排進去的當下就照那時的陣營決定誰說、說什麼。
-    shown：已經上過框（記進 hints_seen 與江湖紀錄了）；提示算「說過」是上框的那一刻、不是排進佇列的那一刻（Game._surface_hint）。"""
+    shown：已經上過框（記進 hints_seen 與江湖紀錄了）；提示算「說過」是上框的那一刻、不是排進佇列的那一刻（Game._surface_hint）。
+    by：這一條是哪一邊的引薦人說的（陣營 id）；師父說的（含散人聽到的那一版）是空字串。叛投時舊陣營那一邊排著的作廢（defection.clear_progress）。"""
 
     id: str
     speaker: str
     text: str
     shown: bool = False
+    by: str = ""
 
 
 ONBOARDING_VERSION = 3  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；

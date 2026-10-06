@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
+    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, martial_arts, materials, naming, opportunities, orders,
     push, ranks, roster, rounds, sensing, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
@@ -331,7 +331,7 @@ class Game:
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
         新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
         打不過的路（FB-034）。入伍段（新手引導計畫二）同理：走完（或略過）的人帶到下一季、再投靠不重走；沒走完的下一季投靠時從頭走。
-        碰到才說（計畫三）：說過的（hints_seen）與「不再提示」帶到下一季，排著還沒上框的不帶；引導走完的回鍋玩家開季多一句師父送行。
+        碰到才說（計畫三）：說過的（hints_seen）與「不再提示」帶到下一季，排著還沒上框的不帶；引導走完（不是略過）的回鍋玩家開季多一句師父送行。
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
@@ -353,11 +353,11 @@ class Game:
         if enlist.done(old, self.content):
             fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
         # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
-        # 引導走完（或略過）的回鍋玩家，開季時師父送你下山一句（設計 7.1）；假人、關了提示的、內容沒寫的不送
+        # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
         fresh.player.hints_seen = set(old.player.hints_seen)
         fresh.player.hints_off = old.player.hints_off
         book = self.content.hints
-        if carried and not old.player.bot and not old.player.hints_off and book.season_return:
+        if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
             fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
@@ -541,7 +541,7 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
-        self._surface_hint()  # 籌備中、休季之後第一次同步、換季後的開季那一句：排著的提示上框（新手引導計畫三；只改 guide，不另起一則）
+        self._check_hints(poll=True)  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons)
 
@@ -1144,7 +1144,7 @@ class Game:
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
-            self._surface_hint()  # 事件了結、引導或入伍段走完的這一下，排著的提示上框；記在這一則的 guide（新手引導計畫三）
+            self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
             self._draft = None
@@ -1192,7 +1192,7 @@ class Game:
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
-            self._surface_hint()  # 隨口應對了結了事件：排著的提示上框（新手引導計畫三）
+            self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
@@ -1433,14 +1433,15 @@ class Game:
 
     def _hint_box(self) -> dict | None:
         """碰到才說的框：排著的第一條。眼前有事件還沒了結時不出（F3）：提示的框是 end 的、網頁不會收成一行，擺在事件的選項上面會把最後
-        一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）。"""
+        一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）；
+        hint：這是碰到才說的框（結語、入伍段的框沒有這個鍵）——網頁認它，在修練頁、煉製頁也畫（在那兩頁做的事觸發的提示不必切回江湖頁才看到）。"""
         p = self.state.player
         if not p.hint_queue or self.state.pending_event is not None:
             return None
         note = p.hint_queue[0]
         return {
             "speaker": note.speaker, "key": note.id, "scene": "", "text": note.text, "line": "", "done": [], "end": True,
-            "pending": False, "full": True,
+            "pending": False, "full": True, "hint": True,
         }
 
     def _hint_up(self) -> HintNote | None:
@@ -1468,6 +1469,82 @@ class Game:
             hint_rules.queue(self.state, self.content, [hint_id])
             self._surface_hint()
 
+    def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
+        """此刻成立的碰到才說（設計 5.2）：看的都是角色現在的狀態（修練失敗留下熟練度、戰報裡有一場落敗、路上見聞真的發生過……），
+        「第一次」由 hints_seen 管。順序照設計的表：師父的在前、引薦人的在後。h_snubbed（被名將打發）與 h_mandate（玉璽碎片的秘密
+        揭開）不看狀態，是事件發生時自己叫 _hint，不在這裡。only 給了就只算裡面的條：_check_hints 只算書裡有、還沒說過、也還沒排著的，
+        其餘每次行動與每次同步都是白算一遍（決戰要讀資料庫、大勢人物要算此刻的所在）。"""
+        s, c, p = self.state, self.content, self.state.player
+
+        def want(hint_id: str) -> bool:
+            return only is None or hint_id in only
+
+        on: list[str] = []
+        if want("h_merge") and len(p.insights) >= 2:
+            on.append("h_merge")
+        if want("h_clash"):
+            wugong = team.player_art(s, c, self.world, p.member.wugong_id) if p.member.wugong_id else None
+            neigong = team.player_art(s, c, self.world, p.member.neigong_id) if p.member.neigong_id else None
+            if wugong and neigong and martial_arts.counters(wugong.attribute, neigong.attribute):  # 相剋是一對一對的，兩個方向都一樣
+                on.append("h_clash")
+        if want("h_refine_fail") and any(v > 0 for v in p.art_mastery.values()):  # 修練失敗才會累積熟練度，成功就歸零
+            on.append("h_refine_fail")
+        if want("h_lose") and any(r.tier == "落敗" for r in s.battles if r.kind in ("train", "wild", "event")):
+            on.append("h_lose")
+        if want("h_injury") and p.member.injury > 0:
+            on.append("h_injury")
+        if want("h_basic_art") and library.lessons_here(s, c):
+            on.append("h_basic_art")
+        if want("h_recruit") and self._recruit_target() is not None:
+            on.append("h_recruit")
+        if want("h_free_text") and s.pending_event:
+            event = c.events.get(s.pending_event)
+            if event is not None and event.free_text is not None:
+                on.append("h_free_text")
+        if want("h_road") and p.recent_sights:  # 路上見聞真的發生過才會記
+            on.append("h_road")
+        if want("h_cap") and library.held_count(s) >= library.cap_of(s, c) - 5:
+            on.append("h_cap")
+        status = self._battle_status(tick=False) if want("h_spectator") or want("h_showdown") else None
+        watching = status is not None and self._watching_battle(*status)
+        # 散人只在決戰所在的大區才說（N3）：_watching_battle 對散人在集結時永遠是 True，人在別處不算「遇上」
+        if want("h_spectator") and status is not None and p.faction is None and watching and self._at_battle(status[1]):
+            on.append("h_spectator")
+        if want("h_foreshadow") and any(p.fragments.values()):
+            on.append("h_foreshadow")
+        if want("h_event_reveal") and p.events_seen:
+            on.append("h_event_reveal")
+        if want("h_promotion") and p.summons is not None:
+            on.append("h_promotion")
+        if want("h_showdown") and status is not None and p.faction is not None and status[0].phase == "muster" and not watching:
+            on.append("h_showdown")
+        # 大勢人物本人（人物表上的人，第一季的規則開著才有）：不是「這裡有可以交友的人物」（_figures_here 連陶謙、曹操、劉備也列，F1）
+        if want("h_figure") and season_one(c, s.world) and figures.present_at(s, c, p.location):
+            on.append("h_figure")
+        return on
+
+    def _queue_triggered_hints(self, poll: bool) -> None:
+        """成立的狀態提示排一條進佇列（N2：一次最多排一條，其餘等下一次行動或同步，條件還成立才排；開局一排「知道了」是引導重做要拿掉的）。
+        排不進去的（散人碰到沒有散人版的陣營提示）不算這一次的名額，接著看後面的。poll＝同步時叫的：佇列裡還有沒按「知道了」的就不再排，
+        不然同步每十秒問一次，人閒著不動也會排成一長串。不看的時候：假人、關了提示、籌備中與休季（框不畫，排進去就算說過會白白丟掉，F7）、序章。"""
+        s, c, p = self.state, self.content, self.state.player
+        if p.bot or p.hints_off or (poll and p.hint_queue):
+            return
+        waiting = {h.id for h in c.hints.hints} - p.hints_seen - {n.id for n in p.hint_queue}
+        if not waiting or self._preparing() or s.world.ended or prologue_rules.active(s, c):
+            return  # 條都說過、排著了（或書裡沒有）：不算條件（N10）
+        for hint_id in self._hint_triggers(waiting):
+            queued = len(p.hint_queue)
+            hint_rules.queue(s, c, [hint_id])
+            if len(p.hint_queue) > queued:
+                return
+
+    def _check_hints(self, poll: bool = False) -> None:
+        """每次行動、修練頁與配點的動作、出發、同步做完之後看一遍（新手引導計畫三）：該說的排進佇列，輪到的上框（_surface_hint）。
+        呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
+        self._queue_triggered_hints(poll)
+        self._surface_hint()
+
     def set_hints_off(self, value: bool) -> None:
         """設定頁的「不再提示」：打開時排著的清掉（沒上過框的不算說過，關掉再打開還聽得到）；對話框的引導與入伍段不受影響。"""
         self.state.player.hints_off = bool(value)
@@ -1476,8 +1553,11 @@ class Game:
 
     def guide_ack(self) -> list[str]:
         """對話框的「知道了」：只收框上看得到的那一個（順序見 guide_box）——提示就是排著的第一條（接著下一條上框）；結語還沒按、入伍段
-        已經走完時，按下去是結語，入伍段的結尾留到下一個框（F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。"""
+        已經走完時，按下去是結語，入伍段的結尾留到下一個框（F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。
+        收之前先讓框上的提示上框（_surface_hint）：框是別的狀態改變（引導走完、事件了結）讓它輪到的、還沒有任何呼叫把它記成說過時，
+        不能憑空吞掉一條（記說過、記進江湖紀錄都要在它被收掉之前）。"""
         p = self.state.player
+        self._surface_hint()
         if self._hint_up() is not None:
             p.hint_queue.pop(0)
         elif p.guide_outro:
@@ -1885,6 +1965,7 @@ class Game:
         後面只在「第一季的規則開著（才有晉升）、真的有下一階可升、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
         不叫模型、不花體力、不加情誼。"""
         s, c = self.state, self.content
+        self._hint("h_snubbed")  # 第一次被名將打發（新手引導計畫三）：不看狀態，打發的當下排；在行動裡，說的話記在這一則
         ch = c.characters[companion_id]
         line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
         short = self._fame_gap(companion_id)
@@ -3555,6 +3636,7 @@ class Game:
             msgs = self._depart(route, mode)
             msgs += self._hear_after_stamina(stamina)
             msgs += ranks.check_summons(s, c)  # 疾行送到糧車也記貢獻（計畫 T5）
+            self._check_hints()  # 出發之後看一遍（疾行立刻到：抵達的地方教基礎武學、站著大勢人物，新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:
             self._draft = None
@@ -3900,6 +3982,7 @@ class Game:
         )
         left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
         self._guide(note_action(self.state, self.content, self.world, "allocate"))  # 序章第 9 步（新手引導計畫一）
+        self._check_hints()  # 博聞加了持有上限會變（h_cap 的條件）：配成了之後看一遍（新手引導計畫三）
         return self._log([f"{name} +1{left}"])
 
     def _xinde(self) -> int:
@@ -3927,6 +4010,7 @@ class Game:
             time=self.state.world.time, title=title, tag=tag, lines=list(lines or []), changes=changes, guide=notes,
         )
         journal.add_entry(self.state, entry, merge=True)
+        self._check_hints()  # 修練頁、煉製頁的動作做完看一遍（新手引導計畫三）：修練失敗留下熟練度、合成、熔煉改變持有，說的話接在這一則的 guide
         return []
 
     # ── 門下與隊伍 ────────────────────────────────────────
@@ -4058,6 +4142,7 @@ class Game:
         self.state.player.guide_skipped = True
         enlist.skip(self.state, self.content)  # 入伍段也略過（設計 7.3），之後投靠不開始
         self._write("新手引導", purse, tag="已略過")
+        self._surface_hint()  # 略過讓框換成排在引導後面的提示：同一下上框（記說過、記進江湖紀錄），不等下一次同步
         return self._log(["（已略過新手引導。）"] + purse)
 
     def view_orders(self) -> list[str]:
