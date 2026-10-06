@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_insight_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到這份 clone 的 saves/tianxia.db
 
-from tianxia import bot, database, insight_llm, insights, naming, sensing  # noqa: E402
+from tianxia import bot, database, insight_llm, insights, library, naming, sensing  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -102,6 +102,8 @@ def measure(seed: int, profile: str | None, old: bool) -> Counter:
     n["季末手上意境"] = len(p.insights)
     n["季末私有意境"] = sum(insights.is_own(i) for i in p.insights)
     n["私有意境（含熔掉的）"] = p.own_serial
+    n["季末持有（武學＋意境）"] = library.held_count(game.state)
+    n["季末上限"] = library.cap_of(game.state, content)
     return n
 
 
@@ -112,7 +114,8 @@ def main() -> None:
     parser.add_argument("--old", action="store_true", help="拿掉有所感的場景，量舊的做法當對照")
     args = parser.parse_args()
     keys = ["有所感", "選錯", "沒擲中", "擲中", "畫了", "順其自然", "落回基本意境", "自己的意境", "悟到新的基本意境",
-            "重複化成心得", "取名・感悟", "取名・合成", "私有意境（含熔掉的）", "季末手上意境", "季末私有意境"]
+            "重複化成心得", "取名・感悟", "取名・合成", "私有意境（含熔掉的）", "季末手上意境", "季末私有意境",
+            "季末持有（武學＋意境）", "季末上限"]
     rows = []
     print(f"設定：{args.profile or '預設'}{'（舊做法對照）' if args.old else ''}")
     for seed in args.seeds:
