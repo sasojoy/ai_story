@@ -128,8 +128,8 @@ def test_lock_hold_does_not_count_time_spent_waiting_for_the_write_lock(tmp_path
     assert len(held) == 1 and held[0] < 0.15
 
 
-def test_poll_takes_two_locks_and_reports_both(tmp_path):
-    """/api/main ＝ 一次無事的 act ＋ 一次 look，各拿一次行動鎖；回報的是兩次握鎖加起來的秒數。"""
+def test_poll_takes_one_lock_and_reports_it(tmp_path):
+    """/api/main ＝ server.poll_main：同步、存檔與畫面在同一把行動鎖裡做完（以前是 act 加 look 各拿一次）；回報的是這一把鎖握了多久。"""
     import time  # noqa: PLC0415
     from types import SimpleNamespace  # noqa: PLC0415
 
@@ -138,19 +138,15 @@ def test_poll_takes_two_locks_and_reports_both(tmp_path):
     db = open_database(tmp_path / "poll.db")
     calls = []
 
-    def locked_for_a_while(name):
+    def poll_main(game):
         with db.transaction():
-            calls.append(name)
+            calls.append("poll")
             time.sleep(0.1)
+        return {}
 
-    server = SimpleNamespace(
-        act=lambda game, action: (locked_for_a_while("act"), action(game)),
-        look=lambda game, view: (locked_for_a_while("look"), view(game)),
-        main_view=lambda game: {},
-    )
-    held = load_engine.one_poll(server, SimpleNamespace(world=SimpleNamespace(db=db)))
-    assert calls == ["act", "look"]
-    assert held >= 0.19  # 兩次各 0.1 秒都算進去（只算一次的話是 0.1）
+    held = load_engine.one_poll(SimpleNamespace(poll_main=poll_main), SimpleNamespace(world=SimpleNamespace(db=db)))
+    assert calls == ["poll"]
+    assert 0.09 <= held < 0.19  # 一把鎖 0.1 秒（兩把的話會是 0.2）
 
 
 def test_process_memory_peak_reads_a_sane_number():
@@ -261,7 +257,7 @@ def test_the_printed_summary_says_what_its_numbers_include(tmp_path, capsys):
 
 
 def test_poll_requests_between_actions_are_measured_separately(tmp_path):
-    """--polls-per-action：每個動作之間穿插畫面請求（/api/main：一次無事的 act 加一次 look），握鎖時間另外記。"""
+    """--polls-per-action：每個動作之間穿插畫面請求（/api/main：server.poll_main，一把行動鎖），握鎖時間另外記。"""
     report = load_engine.run(characters=3, actions=6, seed=1, workdir=tmp_path, end_season=False, polls_per_action=2)
     assert len(report["locked"]) == 6 and len(report["poll_locked"]) == 12 and len(report["poll_total"]) == 12
     plain = load_engine.run(characters=3, actions=6, seed=1, workdir=tmp_path / "again", end_season=False)

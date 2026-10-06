@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
 from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -62,6 +62,9 @@ class Condition(_Strict):
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
+    # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
+    # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
+    fight_tiers: list[str] = Field(default_factory=list)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -80,8 +83,8 @@ class Effect(_Strict):
     learn_skills: list[str] = Field(default_factory=list)
     trend: dict[str, int] = Field(default_factory=dict)
     world_flags_add: list[str] = Field(default_factory=list)
-    rumor: str = ""  # {name} 會換成玩家名號（匿名時為「某位少俠」）
-    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}
+    rumor: str = ""  # 地方傳聞；{name} 會換成玩家名號（匿名時為「某位少俠」）
+    chronicle: str = ""  # 寫入江湖史，同樣支援 {name}，但一律寫名號（江湖史不能匿名，傳聞分層設計第七節）
     join_sect: str | None = None
     leave_sect: bool = False
     next_event: str | None = None
@@ -797,6 +800,75 @@ def _default_explore_mix() -> list[ExploreMix]:
 # 不是「現在載入的設定」：週末設定的 2.5 天只管有蓋章的新季。
 DEFAULT_SEASON_DAYS = 14
 
+MOVES = ("強攻", "固守", "奇襲")  # 全服決戰的三招（戰鬥系統設計 3.4）
+BEATS = {"固守": "強攻", "強攻": "奇襲", "奇襲": "固守"}  # 鍵剋值：固守剋強攻、強攻剋奇襲、奇襲剋固守
+Move = Literal["強攻", "固守", "奇襲"]
+DEFAULT_AFFINITY: dict[str, tuple[Move, Move]] = {  # 屬性 →（擅長, 不擅長），戰鬥系統設計 3.4【預設】
+    "剛": ("強攻", "奇襲"), "實": ("強攻", "奇襲"), "陽": ("強攻", "固守"),
+    "柔": ("固守", "強攻"), "陰": ("固守", "強攻"), "慢": ("固守", "奇襲"),
+    "快": ("奇襲", "固守"), "虛": ("奇襲", "強攻"),
+}
+
+
+class BattleTuning(_Strict):
+    """全服決戰的三招與推力（戰鬥系統設計 3.4）。全部【預設】：企劃者 2026-10-06「照預設做、測完再調」。
+    放在 Config 前面：Config.battle 的預設工廠要在 Config 類別建起來時就找得到它。"""
+
+    power_base: float = 40.0  # 實力 ＝ power_base ＋ power_per × min(威力, power_cap)，最多 100
+    power_per: float = 0.4
+    power_cap: float = 150.0
+    affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
+    affinity_outer: float = 15.0
+    affinity_inner: float = 10.0
+    affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: dict(DEFAULT_AFFINITY))  # 屬性 →（擅長, 不擅長）
+    counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
+    push_max: float = 10.0  # 一回合最多推多少
+    damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
+    strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
+    third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
+    third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
+    third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
+    third_cap: int = 10  # 一場最多推第三方的大勢線幾點
+
+    @field_validator("affinity", mode="before")
+    @classmethod
+    def _merge_with_the_default_table(cls, given: Any) -> Any:
+        """config.json 的 battle.affinity 只寫幾個屬性時，沒寫的屬性照預設表：不會整張表被換掉、其他屬性悄悄變成沒有
+        擅長也沒有不擅長（那樣「要當哪種兵」的取捨就不見了，也沒有任何錯誤提醒）。認不得的屬性名由 content.validate 擋。"""
+        if not isinstance(given, dict):
+            return given
+        return {**DEFAULT_AFFINITY, **given}
+
+    @model_validator(mode="after")
+    def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:
+        """企劃者測完要調數字：寫壞的值在載入設定時就擋下（伺服器開不起來、改的人馬上看到），不是等第一場決戰的第一回合
+        才在行動鎖裡丟 KeyError、把整場卡住。三招的損耗要寫齊、每個屬性的擅長與不擅長是兩招不同的招、威力與推力的數字要大於 0；
+        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。
+        第三方（決戰改版 5）：兩種扣血大於 0，保存實力的折數在 0～1，一場的上限不能是負的（0 是豪強不推）。"""
+        if set(self.damage) != set(MOVES):
+            raise ValueError(f"damage 三招（{'、'.join(MOVES)}）都要寫，現在是 {'、'.join(self.damage) or '空的'}")
+        for move, amount in self.damage.items():
+            if amount <= 0:
+                raise ValueError(f"damage 的 {move} 要大於 0（現在是 {amount}）")
+        for attribute, (good, bad) in self.affinity.items():
+            if good == bad:
+                raise ValueError(f"affinity 的 {attribute}：擅長與不擅長不能是同一招（{good}）")
+        for name in ("power_base", "power_per", "power_cap", "affinity_base", "push_max"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        for name in ("affinity_outer", "affinity_inner"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} 不能是負的（現在是 {getattr(self, name)}）")
+        for name in ("counter", "strong_mitigation_cap", "third_keep_share"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} 要在 0～1 之間（現在是 {getattr(self, name)}）")
+        for name in ("third_grab_damage", "third_keep_damage"):  # 第三方的扣血：寫成 0 或負的，豪強就扣不了血、永遠倒不下
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
+        if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
+            raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
+        return self
+
 
 class Config(_Strict):
     stamina_max: int = 150
@@ -818,6 +890,13 @@ class Config(_Strict):
     # 路上小事（路上設計第四節）：收入要明顯低於在站上做事，不然一直趕路會變成最賺的玩法
     road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
+    # 傳聞分層（傳聞分層設計第三、八節；第一季的規則開著時才用，計畫 2026-10-06 傳聞分層一）
+    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（atlas.news_days）
+    rumor_board_days: float = Field(default=3, gt=0)
+    away_hours: float = Field(default=1, gt=0)  # 「你不在的時候」：離線超過幾個「現實」小時，再上線先看一份摘要（PM 2026-10-06）
+    # 那一份摘要最多幾行（含放不下時最後那一行「另有 N 則」；天下大事、陣營軍情的要點、所在大區，照這個順序）。
+    # 8：第一屏放得下（最終審查 I1：週末一晚離開 15～17 行幾乎都是過期的軍令）
+    away_max: int = Field(default=8, ge=1)
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
     road_sight_recent: int = Field(default=5, ge=0)  # 路上見聞：最近看過的幾則先排除，池子不夠才重複
@@ -843,6 +922,20 @@ class Config(_Strict):
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     big_fight_budget_seconds: int = Field(default=60, ge=0)
+    # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
+    # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
+    # 時間，剩下的一半當那一趟模型呼叫的逾時（chat_structured 一次最多送兩趟）；用完就走原本的退路（對話取消、評分 40、潤色不插句子）。
+    # 以前這幾件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
+    dialogue_budget_seconds: int = Field(default=60, ge=0)
+    free_text_budget_seconds: int = Field(default=60, ge=0)
+    # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，
+    # 0＝不建佇列（預設；照舊直接叫）；假人在排加在跑最多 llm_queue_bot_cap 件；排超過 llm_queue_wait_seconds 秒就拿退路、
+    # 不叫模型（每個人同時最多一件，第二件被擋下來、不拿退路：評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子）。
+    # 排隊等掉的時間算在上面四份總預算裡，而且排隊最久只等「那一件預算還剩的秒數」（server.model_call）。上限 120 秒：請求在
+    # trycloudflare 約 100 秒就被切斷；太大的數字還會讓 Condition.wait 丟 OverflowError（threading.TIMEOUT_MAX）
+    llm_queue_slots: int = Field(default=0, ge=0)
+    llm_queue_bot_cap: int = Field(default=1, ge=0)
+    llm_queue_wait_seconds: float = Field(default=20, ge=0, le=120)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
@@ -866,6 +959,13 @@ class Config(_Strict):
         if 0 < seconds < 1:
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
+
+    # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
+    # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
+    # 世界指紋」，兩次「世界變了」的通知至少隔 push_world_min_seconds 秒（也是各分頁收到之後重抓畫面要攤開的秒數）
+    push_events: bool = False
+    push_watch_seconds: float = Field(default=5, gt=0)
+    push_world_min_seconds: float = Field(default=10, ge=0)
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
@@ -942,7 +1042,7 @@ class Config(_Strict):
     neili_base: float = 300
     neili_per_level: float = 20
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
-    newbie_days: float = 3  # 每季前幾天氣血回復加倍
+    newbie_days: float = 3  # 每季前幾天氣血回復加倍（第一季：從自己加入那一刻起的季曆天，見 roster.since_join；beta 那一季：季的第幾天）
     seclusion_xinde_per_hour: int = 15
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──
@@ -1033,6 +1133,7 @@ class Config(_Strict):
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得
+    # 新立門戶福緣的兩個天數：第一季是從自己加入那一刻起算的季曆天（roster.since_join），beta 那一季是季的第幾天
     fortune_day_min: int = 2  # 新立門戶福緣：第幾天起交友必定先觸發
     fortune_day_max: int = 7  # 新立門戶福緣：第幾天結束還沒發生就直接送上門
     # ── 賽季生命週期（第一季設計第十四節）──
@@ -1050,6 +1151,11 @@ class Config(_Strict):
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
     bot_tick_seconds: float = 20  # 假人程式多久巡一輪（現實秒數）
     bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
+    bot_naming: bool = True  # 假人首創的配方與絕學定名也請模型取名（企劃者 2026-10-05、10-06）；關掉時假人不開要取名的爐、也不定名
+    bot_naming_gap_seconds: float = 120  # 假人兩次請模型取名至少隔幾秒（現實時間；PM 10/5：一次一件，不搶真人的顯卡）
+    bot_naming_budget_seconds: float = 30  # 假人一次取名最多花幾秒；取不到：首創的那一爐不開（不用字表名字搶首創），絕學定名改用字表另組
+    # ── 全服決戰的三招與推力（戰鬥系統設計 3.4；全部【預設】）──
+    battle: BattleTuning = Field(default_factory=BattleTuning)
 
     @field_validator("explore_mix")
     @classmethod
@@ -1076,9 +1182,8 @@ class BattleFaction(_Strict):
 
 
 class BattleActionEffect(_Strict):
-    """一個行動分類（tag）選了之後的確定性效果——跟全專案一貫的原則一樣（好感度 tag
-    查表、同伴反應強度覆寫），戰局推動跟氣血損耗都是這裡查表決定，LLM 只管潤色敘事，
-    不負責算任何數字。"""
+    """舊的行動分類（tag）查表的一列：決戰改版一之後固定招走三招（Config.battle），結算不再讀它；
+    留著只是讓還帶 action_tags 的舊內容檔照樣讀得進來（內容裡寫 {}）。"""
 
     trend_delta: int = 0  # 推動戰局 trend 的量（正負方向看 BattleDef 怎麼定義雙方）
     neili_damage: float = 0  # 這個行動的基礎氣血損耗
@@ -1087,12 +1192,13 @@ class BattleActionEffect(_Strict):
 
 class BattleOption(_Strict):
     text: str  # free_text=True 時這是提示語（顯示在輸入框旁），不是按鈕文字
-    tag: str  # 對照 BattleDef.action_tags 的 key——即使是 free_text，機制效果還是查這張表，
-    # 不會因為玩家打了什麼字而改變數值（跟全專案一貫原則一樣：不信任 LLM 自己算數字）；
-    # 玩家自己打的字只會被餵給 LLM 當敘事潤色的素材（見 battle_instance.py::resolve_round）。
-    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選
+    tag: str  # 這個選項在這一幕、這一邊的名字：出招、逾時代選、假人打分數都用它找選項（內容檢查要求同一邊同一幕不重複）。
+    # 玩家自己打的字不會改變任何數值（不信任 LLM 自己算數字），只會被餵給 LLM 當敘事潤色的素材
+    # （見 battle_instance.py::resolve_round）；放手一搏的推動與損耗走 FreeTextGamble 的公式。
+    faction: str | None = None  # 限定某一方才能選；None＝雙方都能選（固定的三招一定要寫自己這一邊）
     free_text: bool = False  # True 時這個「選項」不是按鈕，是一個最多 20 字的自訂行動輸入框
     # （設計討論：「魯莽」這類選項本來就該是玩家自己想出的招，不是從固定清單挑一個）
+    move: Move | None = None  # 固定招是三招的哪一招（戰鬥系統設計 3.4）；放手一搏（free_text）不填
 
 
 class BattleAct(_Strict):
@@ -1104,6 +1210,7 @@ class BattleAct(_Strict):
     text: str
     goal: str
     options: list[BattleOption] = Field(min_length=1)
+    text_by_lead: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 那一邊佔上風時的幕文字（3.2）；戰局剛好 50 或沒寫用 text
 
 
 class BattleOutcome(_Strict):
@@ -1134,16 +1241,25 @@ class FreeTextGamble(_Strict):
     failure_neili_per_risk: float = 3.0  # 失敗時，風險每 1 點再加多少氣血損耗
 
 
+class ThirdParty(_Strict):
+    """決戰的第三方（戰鬥系統第六節）：自成一方，不推這一場的戰局，只推自己那條大勢線；兩軍打得越膠著，收穫越多。
+    第一季是地方豪強推豪強割據。兩招的名字可以改，份量與扣血看 BattleTuning 的 third_*。"""
+
+    faction: str  # 劇本的陣營 id，不能是這一場交戰的兩軍之一
+    trend: str  # 收場時推的大勢線（不能是衍生線）
+    grab: str = "趁亂搶地盤"  # 用奇襲的份量；名字出自戰鬥系統第六節（待 joy 潤）
+    keep: str = "保存實力"  # 用固守的份量，收穫算一半；名字出自戰鬥系統第六節（待 joy 潤）
+
+
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
-    選項，查表推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、或戰局一面倒時，看戰局
-    數值判定最終勝負。不是自由發展的 LLM 劇情，
+    選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
+    或戰局一面倒時，看戰局數值判定最終勝負。不是自由發展的 LLM 劇情，
     是固定骨架裡的有限變因（設計討論：「有一個基本框架，玩家可以根據自身影響一些要素，
     但是大框架還是會進行下去」）。
 
     factions 的第一個是戰局 trend 的正向方（trend 越高對他們越有利，越低對第二個陣營
-    越有利）——固定選項靠 action_tags 自己決定方向；free_text 的賭局型行動（見
-    FreeTextGamble）沒有個別的 tag 效果可以決定方向，統一照這個順序推算。"""
+    越有利）——三招的推力與 free_text 的賭局型行動（見 FreeTextGamble）都照這個順序決定方向。"""
 
     id: str
     name: str
@@ -1157,7 +1273,8 @@ class BattleDef(_Strict):
     # 整場 rounds_per_act × 幕數 回合，最後一回合結算完看戰局定結果
     decisive_margin: int = Field(default=40, ge=1)  # 戰局偏離中線 50 到這麼多（|trend − 50| ≥ 這個值，battle_instance.CENTER）
     # 就當回合收場、不再換幕（壓倒性提前收場：40 時是 90／10；看中線、不看這一場的起點，戰鬥系統 5.3）
-    action_tags: dict[str, BattleActionEffect]
+    action_tags: dict[str, BattleActionEffect] = Field(default_factory=dict)  # 已退役的舊固定招查表（穩守／猛攻）：
+    # 三招之後固定招看 BattleOption.move 與 Config.battle，結算不再讀這張表；內容寫 {}，留著只是讓舊的內容檔讀得進來
     free_text_gamble: FreeTextGamble | None = None  # 有 free_text 選項時必填
     outcomes: list[BattleOutcome] = Field(min_length=1)  # 時刻表決戰只留一筆保底：實際的結果與效果走時刻表
     muster_seconds: float = 600  # 集結期：開放選陣營的時間，逾時系統自動分配
@@ -1168,6 +1285,7 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
+    third: ThirdParty | None = None  # 第三方（戰鬥系統第六節）；沒有就是只有兩軍
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節

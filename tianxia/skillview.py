@@ -334,7 +334,7 @@ def art_card(
     第一成／第十成的威力、來源與融的意境，最後是模型寫的那句說明。
 
     來源（FB-017、武學與成長設計 3.4）：合成（origin == "fused"）寫「合成（某某 首創）」，某某是第一個合出這個配方的人
-    寫給別人看的名號（shown_creator：登記當下匿名行走的寫「某位少俠」）；
+    寫給別人看的名號（shown_creator：名號；這一版之前匿名行走的人記下的是「某位少俠」，照舊）；
     基礎武學（"basic"）寫「基礎武學」；舊資料的煉製（"crafted"）寫「煉製（某某 首創）」、取名自創（"created"）寫
     「自創（某某 所創）」；其他是本命武學。insight_name 是這門武學融的意境的名字（沒融過就不給、不寫）。
     parent_names 是武學＋武學的兩門來源的名字（設計 12.3），有兩個才寫「由【甲】與【乙】衍生」。
@@ -344,7 +344,7 @@ def art_card(
     這時整行省略——不留空行、不出現 None（QA 寫進 FB-006 的驗收）。
     """
     nxt = "已達第十成" if level >= MAX_LEVEL else f"{power_at(art, level + 1):.1f}"
-    creator = shown_creator(art)  # 寫給別人看的名號：匿名行走的首創者是「某位少俠」（最終審查 Important 2）
+    creator = shown_creator(art)  # 寫給別人看的名號：名號（首創一律具名，傳聞分層第七節）；這一版之前匿名記下的「某位少俠」照舊
     if art.preset:  # 師門配方（新手引導）：沒有首創者
         source = "師門傳下來的功夫"
     elif art.origin == "fused":

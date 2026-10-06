@@ -39,7 +39,7 @@ class MartialArt(BaseModel):
     # 舊資料還有 "created"（玩家取名自創）與 "crafted"（舊的素材煉製，已經沒有了）
     origin: str = "created"
     creator: str | None = None  # 合成首創者的名號（身分，誰是首創者照它認）；舊的自創、煉製功法照舊；內容武學為 None
-    # 首創者寫給別人看的名號：登記當下照匿名行走的規矩定（rules.display_name，匿名是「某位少俠」）；
+    # 首創者寫給別人看的名號：名號（江湖史一律具名，傳聞分層第七節）；這一版之前匿名行走的人記的是「某位少俠」，照舊；
     # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
     creator_shown: str | None = None
     # 師門配方（content/preset_recipes.json，新手引導）的功夫：寫好的、傳下來的，沒有首創者——功法卡寫「師門傳下來的功夫」，
@@ -65,13 +65,13 @@ class Insight(BaseModel):
     attribute: str  # ATTRIBUTES 其中之一
     lean: str = "無"  # 正、邪、無（設計 7.3）
     creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
-    creator_shown: str | None = None  # 首悟者寫給別人看的名號（登記當下照匿名的規矩定，見 MartialArt.creator_shown）
+    creator_shown: str | None = None  # 首悟者寫給別人看的名號：名號（見 MartialArt.creator_shown；這一版之前匿名記下的「某位少俠」照舊）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
 
 
 def shown_creator(thing: MartialArt | Insight) -> str | None:
-    """首創者寫給別人看的名號：登記當下定的那一個（匿名行走的人是「某位少俠」）；舊資料沒記，照名號。"""
+    """首創者寫給別人看的名號：登記當下記下的那一個（現在一律是名號；這一版之前匿名行走的人記成「某位少俠」，照舊）；舊資料沒記，照名號。"""
     return thing.creator_shown or thing.creator
 
 

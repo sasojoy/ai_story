@@ -55,7 +55,8 @@ globalThis.document = {
 const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false, peekOpen: null, boardSeen: null, main: input.m, ...input.S };
 const parts = [
   // pro、shown：序章（新手引導計畫一）把小標一塊一塊藏起來要看的；這裡的 m 沒有 prologue，所以全亮
-  ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "PEEK_SEEN_KEY", "peekWeek", "peekSeason", "peekParts", "peekBlock"].map(konst),
+  ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
+    "peekSeason", "peekParts", "peekBlock"].map(konst),
   ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "stancePeek", "boardPeek", "questPeek",
     "peekHtml", "peekTap", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
@@ -406,6 +407,19 @@ def test_the_row_tops_the_page_for_every_menu_but_the_road(on, name):
     pos = _positions(html, 'class="actbar"' if name == "idle" else 'class="options"')
     assert html.count('id="peek"') == 1
     assert 0 <= pos["peek"] < pos["now"] < pos["scene"] and pos["peek"] < pos["menu"], (name, pos)
+
+
+def test_the_battle_menu_puts_each_moves_score_on_the_right_of_its_button(on):
+    """決戰三招（決戰改版一 Task 4）：真的 pageJianghu 畫出來，三顆出招按鈕各有名字與右邊的小字，一顆一行。"""
+    m = view(_status(on), options=[])
+    m["options"] = [
+        {"id": "battle:act:guan_strong", "label": "架起雲梯，強攻城牆（強攻・82 分）", "enabled": True},
+        {"id": "battle:act:guan_hold", "label": "築圍挖塹，步步緊逼（固守・100 分）", "enabled": True},
+        {"id": "battle:act:guan_raid", "label": "夜遣輕兵，探城中虛實（奇襲・41 分）", "enabled": True},
+    ]
+    html = run(m, "return H.pageJianghu();")
+    assert html.count('<span class="b-name">') == 3 and html.count('<span class="b-move">') == 3
+    assert '<span class="b-move">固守・100 分</span>' in html and "（強攻・82 分）" not in html
 
 
 @pytest.mark.parametrize("options, marker", [

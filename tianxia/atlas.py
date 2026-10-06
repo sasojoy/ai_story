@@ -14,14 +14,17 @@ from dataclasses import dataclass
 from . import figures, orders, prologue
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
-from .rules import can_hear, is_revealed, pending_event_title, resolve_trend, resolve_trends, season_one, trend_value
+from .rules import (
+    audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
+    trend_value,
+)
 from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
 
-DAY = 86400
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
-NEWS_DAYS = 3  # 劇情層的 ✦：最近幾天的大事與傳聞
+NEWS_DAYS = 3  # Config.rumor_board_days 的預設，只給 mapview.LEGEND_LAYERS 那一份預設說明用；✦、詳情欄、圖例真正用的是 news_days(content)
+NEWS_FAR = "這一帶離得遠，沒聽到什麼消息"  # 詳情欄：不在耳聞所及的大區，不替玩家斷言「沒有消息」（待 joy 潤）
 LEADER_NEWS = 2  # 詳情欄每位龍頭人物最多列幾則最近提到他的傳聞
 LEADER_WHO = "江湖上的龍頭人物，會自己行動，左右江湖大勢"
 LEADER_QUIET = "眼下沒有動靜"
@@ -229,10 +232,11 @@ def _figure_activity(state: GameState, content: Content, name: str) -> str:
     return text
 
 
-def leader_news(state: GameState, name: str) -> list[Rumor]:
-    """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。別陣營的軍情、寫給別人的
-    個人線索聽不到（rules.can_hear）。"""
-    return [r for r in reversed(state.world.rumors) if name in r.text and can_hear(r, state)][:LEADER_NEWS]
+def leader_news(state: GameState, content: Content, name: str) -> list[Rumor]:
+    """最近提到這位龍頭人物的傳聞（不分地點、不限天數），最新的在前，最多 LEADER_NEWS 則。只列聽得到的（rules.audible：
+    別陣營的軍情、寫給別人的個人線索聽不到；第一季別的大區的地方傳聞、撤下傳聞板的也聽不到）。"""
+    ears = ears_of(state, content)
+    return [r for r in reversed(state.world.rumors) if name in r.text and audible(r, ears)][:LEADER_NEWS]
 
 
 def leader_text(state: GameState, content: Content, name: str) -> str:
@@ -243,7 +247,7 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     if fid is not None:  # 第一季：聲威寫出來，挑戰本人之前看得到好不好打
         lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）。")
     lines.append(f"- 現在：{leader_activity(state, content, name)}。")
-    news = leader_news(state, name)
+    news = leader_news(state, content, name)
     if news:
         lines += ["- 最近：", *(f"  - {stamp_text(r.time, content, state.world)}　{r.text}" for r in news)]
     return "\n".join(lines)
@@ -315,13 +319,36 @@ def goal_places(state: GameState, content: Content) -> list[str]:
     return [] if storyline_off(state, content) else list(current_act(state, content).places)
 
 
-def recent_news(state: GameState, loc_id: str) -> list[Rumor]:
-    """這個地點最近 NEWS_DAYS 天的江湖大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
-    now = state.world.time
-    return [
-        r for r in reversed(state.world.rumors)
-        if r.location == loc_id and now - r.time <= NEWS_DAYS * DAY and can_hear(r, state)
-    ]
+def news_days(content: Content) -> float:
+    """劇情層 ✦ 與詳情欄的「最近幾天」：跟大區的傳聞板同一個旋鈕（Config.rumor_board_days；第一季是季曆天），
+    所以本區地方傳聞的 ✦ 不會比那則傳聞在板上活得久，天下大事的 ✦ 也跟著同一個長度收。"""
+    return content.config.rumor_board_days
+
+
+def _heard_news(state: GameState, content: Content) -> list[Rumor]:
+    """最近 news_days 天（第一季是季曆天）、有發生地、而且聽得到的大事與傳聞（rules.audible），最新的在前：劇情層的 ✦
+    與詳情欄都看這一份（傳聞分層設計第九節「只標你聽得到的」）。"""
+    since = state.world.time - recent_seconds(news_days(content), content, state.world)
+    ears = ears_of(state, content)
+    return [r for r in reversed(state.world.rumors) if r.location is not None and r.time >= since and audible(r, ears)]
+
+
+def news_places(state: GameState, content: Content) -> set[str]:
+    """劇情層要標 ✦ 的地點（整張圖只算一次，不必每個地點各掃一遍傳聞）。不檢查視野：呼叫端只標摸清的地點。"""
+    return {r.location for r in _heard_news(state, content)}
+
+
+def recent_news(state: GameState, content: Content, loc_id: str) -> list[Rumor]:
+    """這個地點最近 news_days 天、聽得到的大事與傳聞，最新的在前。不檢查視野：呼叫端要先用 is_known 把關。"""
+    return [r for r in _heard_news(state, content) if r.location == loc_id]
+
+
+def _in_earshot(state: GameState, content: Content, loc_id: str) -> bool:
+    """這個地點的消息你聽不聽得到：第一季照此刻人在哪些大區（rules.here_regions，在路上是兩頭）；beta、地圖沒有大區都算聽得到。
+    詳情欄靠它分辨「這一帶真的沒事」與「那一區離得遠、聽不到」。"""
+    ears = ears_of(state, content)
+    region = region_of(content, loc_id)
+    return not ears.layered or region is None or region.id in here_regions(state, content)
 
 
 # ── 敵情 ──────────────────────────────────────────────
@@ -658,11 +685,13 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if not storyline_off(state, content):  # 第一季不觸發的 beta 主線：玩家看不到它，這一行也不寫（審查 M-3）
         act = current_act(state, content)
         story.append(f"★ 這一幕主線的目標：{act.goal}" if loc_id in act.places else "不是這一幕主線的目標")
-    news = recent_news(state, loc_id)
+    news = recent_news(state, content, loc_id)
     if news:
-        story.append(f"✦ 最近 {NEWS_DAYS} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
+        story.append(f"✦ 最近 {news_days(content):g} 天的大事與傳聞：\n" + "\n".join(f"- {stamp_text(r.time, content, state.world)}　{r.text}" for r in news))
+    elif _in_earshot(state, content, loc_id):
+        story.append(f"最近 {news_days(content):g} 天沒有大事或傳聞")
     else:
-        story.append(f"最近 {NEWS_DAYS} 天沒有大事或傳聞")
+        story.append(NEWS_FAR)
     parts.append("**劇情**　" + "\n\n".join(story))
 
     route = way_to(state, content, loc_id)  # 在路上時是改道的走法

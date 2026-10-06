@@ -278,22 +278,15 @@ def install_season_one(content):
 
 def install_showdowns(content, region: str = "north"):
     """第一季內容（install_season_one）加上時刻表決戰的 BattleDef（計畫 T8）：長社（守方官軍、潁川）、宛城甲（守方黃巾）、
-    宛城乙（守方官軍、南陽）。都在 region 這個大區打（fixture 的小鎮在北區），一幕三回合；兩邊各有穩守（推 2）、
-    猛攻（推 6）；保底結果只有一筆（實際結果走時刻表）。回傳 {id: BattleDef}。"""
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    宛城乙（守方官軍、南陽）。都在 region 這個大區打（fixture 的小鎮在北區），一幕三回合；兩邊各有強攻、固守、奇襲
+    （<陣營>_strong／_hold／_raid，決戰改版一）；保底結果只有一筆（實際結果走時刻表）。回傳 {id: BattleDef}。"""
+    from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
     options = [
-        BattleOption(text="穩守", tag="guan_safe", faction="guan"), BattleOption(text="猛攻", tag="guan_aggressive", faction="guan"),
-        BattleOption(text="死守", tag="huang_safe", faction="huang"), BattleOption(text="衝殺", tag="huang_aggressive", faction="huang"),
+        BattleOption(text=f"{side}{move}", tag=f"{side}_{codes[move]}", faction=side, move=move)
+        for side in ("guan", "huang") for move in MOVES
     ]
-    tags = {
-        "guan_safe": BattleActionEffect(trend_delta=2, neili_damage=5),
-        "guan_aggressive": BattleActionEffect(trend_delta=6, neili_damage=20),
-        "huang_safe": BattleActionEffect(trend_delta=-2, neili_damage=5),
-        "huang_aggressive": BattleActionEffect(trend_delta=-6, neili_damage=20),
-    }
     made = {}
     for bid, name, event, version, defender, front in (
         ("changshe_fire", "長社火攻", "changshe_fire", None, "guan", "yingru"),
@@ -304,7 +297,7 @@ def install_showdowns(content, region: str = "north"):
             id=bid, name=name, region=region, timetable_event=event, version=version, defender=defender, front=front,
             factions=[BattleFaction(id="guan", name="官軍"), BattleFaction(id="huang", name="黃巾軍")],
             acts=[BattleAct(id=f"{bid}_1", title="兩軍對陣", text="兩軍列陣。", goal="分出勝負", options=list(options))],
-            action_tags=tags, outcomes=[BattleOutcome(faction=defender, title=f"{name}戰罷", text="廝殺停了下來。")],
+            outcomes=[BattleOutcome(faction=defender, title=f"{name}戰罷", text="廝殺停了下來。")],
             muster_seconds=600, round_seconds=120,
         )
     return made

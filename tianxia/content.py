@@ -19,10 +19,11 @@ from pydantic import BaseModel, ValidationError
 
 from . import encounter
 from .companion_agent import DIALOGUE_TAGS
+from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
+    FRONT_KEY, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
     Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
     OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
@@ -31,6 +32,7 @@ from .martial_arts import ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
 from .zh import to_traditional
 
+FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
@@ -992,7 +994,14 @@ def validate(c: Content) -> None:
             check_mark_key(where, key)
             marks_read.setdefault(key, where)
 
-    def check_condition(where: str, cond: Condition) -> None:
+    def check_condition(where: str, cond: Condition, after_fight: bool = False) -> None:
+        """after_fight：這個條件掛在只有遊歷會抽的事件上（actions 剛好是 ["train"]，打完才抽），fight_tiers 只有這裡有意義：
+        別的行動抽到它時沒有「剛打完的那一場」（探索三選一是互斥的支線、交友沒有戰鬥、只靠串接來的更沒有），寫了永遠不成立。"""
+        known(where, cond.fight_tiers, FIGHT_TIERS, "戰鬥結果")
+        need(
+            after_fight or not cond.fight_tiers,
+            f"{where}：fight_tiers 只能寫在遊歷會抽的事件（actions 剛好是 [\"train\"]）的條件上，別處沒有「剛打完的那一場」，永遠不成立",
+        )
         for key in [*cond.marks_min, *cond.marks_max]:
             check_mark_key(where, key)
             marks_read.setdefault(key, where)
@@ -1013,7 +1022,7 @@ def validate(c: Content) -> None:
         for week in (cond.week_min, cond.week_max):
             need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
         for sub in cond.any_of:
-            check_condition(where, sub)
+            check_condition(where, sub, after_fight)
 
     def no_lore(where: str, eff: Effect) -> None:
         """博聞只靠升級的點數增加（設計 6.3；PM 2026-10-05）：任何效果的 stats 都不能有 lore，給、扣、寫 0 都不行。
@@ -1176,7 +1185,7 @@ def validate(c: Content) -> None:
     for ev in c.events.values():
         where = f"事件 {ev.id}"
         known(where, ev.locations, c.locations, "地點")
-        check_condition(where, ev.condition)
+        check_condition(where, ev.condition, after_fight=ev.actions == ["train"])
         need(
             any(ch.condition == Condition() for ch in ev.choices),
             f"{where}：至少要有一個沒有條件的選項，否則玩家可能卡住",
@@ -1405,12 +1414,21 @@ def validate(c: Content) -> None:
         need(key not in showdown_battles, f"時刻表決戰 {key[0]}{version}有兩筆戰鬥：{showdown_battles.get(key)}、{battle.id}")
         showdown_battles.setdefault(key, battle.id)
 
+    for attribute in c.config.battle.affinity:  # 三招的適性對應表（Config.battle）：打錯字的屬性名永遠用不到，載入時就報
+        need(attribute in ATTRIBUTES, f"config.battle.affinity：未知的屬性 {attribute}（武學的屬性是 {'、'.join(ATTRIBUTES)}）")
     for battle in c.battles.values():
         where = f"戰鬥 {battle.id}"
         battle_sides = [f.id for f in battle.factions]  # 不能叫 faction_ids：那是劇本陣營的名單，後面的條件檢查還要用
         need(len(set(battle_sides)) == len(battle_sides), f"{where}：陣營 id 重複")
         if scenario_faction_ids:
             known(where, battle_sides, scenario_faction_ids, "陣營")
+        if battle.third is not None:  # 第三方（決戰改版 5）：自成一方，推自己的大勢線；不能是衍生線（推了會被重算蓋回去）
+            need(
+                battle.third.faction in scenario_faction_ids and battle.third.faction not in battle_sides,
+                f"{where}：第三方 {battle.third.faction} 要是劇本的陣營，而且不是交戰的兩軍",
+            )
+            need(battle.third.trend in trend_ids, f"{where}：第三方推的大勢線 {battle.third.trend} 不存在")
+            not_derived(where, [battle.third.trend], "第三方 ")
         if battle.region is not None:
             known(where, [battle.region], region_ids, "大區")
         need(
@@ -1423,11 +1441,20 @@ def validate(c: Content) -> None:
         # 至少 1 由模型的 ge=1 擋（戰鬥系統設計 3.2）
         for act in battle.acts:
             aw = f"{where} {act.id}"
+            for key in act.text_by_lead:  # 幕文字照誰佔上風換版本（戰鬥系統 3.2）：鍵要是這場的陣營
+                need(key in battle_sides, f"{aw}：text_by_lead 的鍵 {key} 不是這場的陣營")
             for option in act.options:
-                if not option.free_text:  # free_text 選項不查表，機制走 FreeTextGamble 擲骰，不需要 action_tags 裡有對應的 tag
-                    known(f"{aw} 選項「{option.text}」", [option.tag], battle.action_tags, "行動分類")
+                if not option.free_text:  # 固定選項走三招（戰鬥系統 3.4）：要寫 move 與自己這一邊；放手一搏（free_text）不填 move
+                    need(option.move is not None and option.faction in battle_sides,
+                         f"{aw} 選項「{option.text}」：固定選項要寫 move 與陣營")
                 if option.faction is not None:
                     known(f"{aw} 選項「{option.text}」", [option.faction], battle_sides, "陣營")
+            for side in battle_sides:  # 每一幕、每一邊剛好強攻、固守、奇襲各一個固定選項（沒寫 move 的已經在上面報了）
+                moves = [o.move for o in act.options if not o.free_text and o.faction == side]
+                need(sorted(map(str, moves)) == sorted(MOVES), f"{aw}：{side} 要剛好有三招（強攻、固守、奇襲）各一個固定選項")
+                tags = [o.tag for o in act.options if o.faction == side]
+                dup = next((t for t in tags if tags.count(t) > 1), None)
+                need(dup is None, f"{aw}：{side} 的選項 tag {dup} 重複（tag 是這一邊在這一幕的選項名，不能同名）")
         need(
             battle.free_text_gamble is not None or not any(o.free_text for a in battle.acts for o in a.options),
             f"{where}：有 free_text 選項，必須設定 free_text_gamble",

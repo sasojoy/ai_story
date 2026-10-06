@@ -8,7 +8,8 @@
 合到舊的（設計 12.2）時，B 段不取新名字而是 pick：請模型從清單裡挑一個已知的名字；挑不到（連不上、回了清單外的）就是
 (None, "")，C 段改由規則挑（landing.choose）。
 這個模組不讀時鐘（引擎不讀時鐘）：B 段的總時間用 budget（秒）管——每一次呼叫給模型的 timeout 照給出去的扣，
-給出去的加起來不超過 budget；預算由呼叫端（server.py）算好傳進來。"""
+給出去的加起來不超過 budget；預算由呼叫端算好傳進來（server.py：Config.naming_budget_seconds 扣掉 A 段；
+假人程式 bot_runner：Config.bot_naming_budget_seconds，也走這三段，A、C 在鎖內，B 在鎖外用它自己的 client）。"""
 from __future__ import annotations
 
 import copy
@@ -113,7 +114,8 @@ def _ask(
     # 行動鎖內的複本（retry 是 False，Game._quick_client）只試一次：鎖內任何一步模型呼叫最多佔住鎖 in_lock_model_timeout 秒，
     # 取壞了就直接走退路。鎖外最多 NAME_ATTEMPTS 次、每次最多兩趟，但要看預算分得完分不完：每一次先扣掉
     # min(timeout, 剩下的 ÷ 2) 的兩趟——伺服器現在的數字（naming_budget_seconds 60、ollama_timeout 120）第一次就分到
-    # 30 秒兩趟、把 60 秒用光，所以實際上只問一次，取壞或挑到清單外的名字就直接走退路、不重問；
+    # 30 秒兩趟、把 60 秒用光，所以實際上只問一次，取壞或挑到清單外的名字就直接走退路、不重問（假人程式的
+    # bot_naming_budget_seconds 30 是第一次分到 15 秒兩趟，一樣只問一次；它拿不到名字時首創的爐不開，不走退路）；
     # 只有預算比 timeout 的兩倍多（或 client 的 timeout 很短）、或沒給預算（整季機器人、腳本、測試）時才會真的重問
     attempts = 1 if getattr(client, "retry", True) is False else NAME_ATTEMPTS
     for _ in range(attempts):
@@ -142,9 +144,11 @@ def propose(
     person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
     """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
-    client 是 None（伺服器假人，bot_runner 會把 game.client 設成 None）時不叫模型。
+    client 是 None（鎖內的 Game 沒有 client：伺服器假人的 Game，bot_runner 把 game.client 設成 None）時不叫模型；
+    假人程式在鎖外替首創配方與絕學定名取名時，給的是它自己的 client。
 
-    budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來；沒給就照 client 自己的
+    budget（秒）：整段取名最多花多久（server.py 從 Config.naming_budget_seconds 算好傳進來，假人程式給
+    Config.bot_naming_budget_seconds；沒給就照 client 自己的
     timeout，整季機器人、腳本、測試直接呼叫時是這樣）。不讀時鐘，照給出去的 timeout 扣：每一次呼叫拿 client 的複本、
     timeout 設成 min(client.timeout, 剩下的 ÷ POSTS_PER_CALL)，連重問那一趟都用完也不超過剩下的；
     分不到 MIN_POST_SECONDS 就不叫了。原本那個 client 不動（同一個角色的別的請求可能正在用它）。
@@ -181,7 +185,7 @@ def generate(
 ) -> tuple[str | None, str]:
     """B 段（鎖外、很慢）：拿 A 段開的單子請模型取名（或從清單挑一個，request.choices 不是空的時），回傳（名字, 說明）；
     取不到是 (None, "")。只拿單子、模型與內容（過濾要用），不碰任何遊戲狀態、不拿行動鎖——可以單獨呼叫，也可以整段換成模型佇列。
-    person 是角色名號的查詢（server 給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
+    person 是角色名號的查詢（server 與假人程式都給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
     if request.choices:
         return pick(client, request.messages, request.choices, budget=budget)
     return propose(client, content, request.messages, budget=budget, person=person)

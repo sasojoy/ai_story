@@ -109,14 +109,13 @@ def test_catch_up_season_advances_the_shared_clock_by_elapsed_real_time(store, c
 
 
 def _battle_definition():
-    from tianxia.models import (
-        BattleAct, BattleActionEffect, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    )
+    from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome
 
+    codes = {"強攻": "strong", "固守": "hold", "奇襲": "raid"}
+    options = [BattleOption(text=f"{s}{m}", tag=f"{s}_{codes[m]}", faction=s, move=m) for s in ("a", "b") for m in MOVES]
     return BattleDef(
         id="b1", name="測試戰", factions=[BattleFaction(id="a", name="甲方"), BattleFaction(id="b", name="乙方")],
-        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=[BattleOption(text="進攻", tag="go")])],
-        action_tags={"go": BattleActionEffect(trend_delta=1, neili_damage=5)},
+        acts=[BattleAct(id="a1", title="開戰", text="開戰了。", goal="打贏", options=options)],
         outcomes=[BattleOutcome(faction="a", title="甲方勝", text="甲方贏了。")],
     )
 
@@ -539,6 +538,68 @@ def test_reading_the_world_does_not_load_the_rumors(store, content):
     store.mutate_season(lambda season: season.rumors.append(Rumor(time=0, text="甲")))
     assert store.read().season.rumors == []  # 只有 get_season 讀回來（給畫面看）
     assert [r.text for r in store.get_season().rumors] == ["甲"]
+
+
+def test_fingerprint_parts_count_in_the_database_in_one_snapshot(store, content):
+    """推送看守（server.current_fingerprint）每 5 秒讀一次：一次唯讀快照拿到全服狀態、這一季最大的天下大事傳聞編號與江湖史則數。
+    傳聞與江湖史讓資料庫數（MAX、COUNT），不建每一列；只算天下大事（world）層與這一季的。"""
+    content.config.auto_open_first_season = True
+    shared, rumor_id, chronicle_count = store.fingerprint_parts()  # 還沒有任何東西的資料庫
+    assert (shared.season_number, rumor_id, chronicle_count) == (1, 0, 0)
+    store.seed_first_season(content)
+
+    def add(season):
+        season.rumors.extend([
+            Rumor(time=1, text="天下一", layer="world"),
+            Rumor(time=1, text="軍情", layer="faction", faction="guan"),
+            Rumor(time=1, text="天下二", layer="world"),
+            Rumor(time=1, text="地方", layer="local", region="yingchuan"),
+            Rumor(time=1, text="只有你", layer="personal", character="甲"),
+        ])
+        season.chronicle.extend([Rumor(time=1, text="史一"), Rumor(time=2, text="史二")])
+
+    store.mutate_season(add)
+    ids = {r.text: r.id for r in store.get_season().rumors}
+    shared, rumor_id, chronicle_count = store.fingerprint_parts()
+    assert rumor_id == ids["天下二"] and rumor_id < ids["地方"] < ids["只有你"]  # 最後兩則不是天下大事：不算
+    assert chronicle_count == 2
+    assert shared.season.rumors == [] and shared.season.chronicle == []  # 沒有把每一列讀回來
+    assert shared.season_number == 1 and shared.season_phase() == "running"
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    shared, rumor_id, chronicle_count = store.fingerprint_parts()
+    assert shared.season_number == 2 and rumor_id == 0  # 上一季的天下大事不算這一季的
+    assert chronicle_count == len(store.get_season().chronicle)
+
+
+def test_fingerprint_parts_come_from_one_moment(store, content):
+    """一次快照：讀完全服狀態的那一刻，另一條連線寫進一則天下大事與一則江湖史，數出來的還是寫之前的（三件事屬於同一個時刻）。"""
+    store.seed_first_season(content)
+    reader, armed = threading.current_thread(), [True]
+    real_load = SqliteWorldStore._load
+
+    def write():
+        def change(season):
+            season.rumors.append(Rumor(time=5, text="讀到一半才寫的", layer="world"))
+            season.chronicle.append(Rumor(time=5, text="讀到一半才寫的江湖史"))
+
+        store.mutate_season(change)  # 另一個執行緒＝另一條連線
+
+    def hooked(self, conn, logs=False):
+        out = real_load(self, conn, logs)
+        if threading.current_thread() is reader and armed[0]:
+            armed[0] = False
+            writer = threading.Thread(target=write)
+            writer.start()
+            writer.join(10)
+        return out
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(SqliteWorldStore, "_load", hooked)
+        _, rumor_id, chronicle_count = store.fingerprint_parts()
+    assert (rumor_id, chronicle_count) == (0, 0)  # 寫是在第一次讀完的時候進去的，這一次快照看不到
+    _, rumor_id, chronicle_count = store.fingerprint_parts()
+    assert rumor_id > 0 and chronicle_count == 1  # 寫確實進去了
 
 
 def test_last_seasons_chronicle_survives_the_next_season(store, content):
