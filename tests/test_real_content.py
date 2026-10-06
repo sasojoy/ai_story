@@ -160,6 +160,22 @@ def test_every_way_through_the_real_hut_reaches_yingchuan_with_a_preset_art(cont
     assert game.state.player.location == "yingchuan" and game.state.player.tutorial_step == content.tutorial.prologue_steps
 
 
+@pytest.mark.parametrize("old_step, new_step", [(0, 11), (3, 11), (6, 11), (7, 12)])
+def test_a_save_from_before_the_prologue_is_never_sent_to_the_real_hut(content, world, old_step, new_step):
+    """換版當下已經有的角色（舊引導八步：t1～t6、第一季的 t7、t8）：讀檔後不管走到哪一步都站在原地、不進草廬；步數換算成新的
+    （不分季的舊六步當作走過序章，t7、t8 接在序章後面）。"""
+    from tianxia.state import ONBOARDING_VERSION
+
+    game = Game.new(content, "老手", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.onboarding, p.tutorial_step = 0, old_step  # 換版之前存的樣子：沒有版本章、步數是舊的編號
+    here = p.location
+    again = Game(content, game.state, world=world)
+    q = again.state.player
+    assert (q.tutorial_step, q.onboarding, q.location) == (new_step, ONBOARDING_VERSION, here)
+    assert again.state.pending_event is None and not q.guide_skipped
+
+
 def test_the_real_prologue_text_has_no_placeholder_left_over(content):
     """{武學} 只許出現在「收起」那一行（Game.guide_box 換成合成出來的那一門）與步驟的話裡；事件與四景沒有要換的字。"""
     for event_id in ("prologue_ambush", "prologue_apprentice_dang", "prologue_apprentice_bian", "prologue_apprentice_han", "prologue_insight"):
