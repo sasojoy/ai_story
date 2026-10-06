@@ -212,3 +212,65 @@ def test_asking_along_the_road_with_the_switch_off_still_hears_old_news(real):
     _rumor(game, "很久以前長社的事。", "changshe", time=0.0)
     msgs = _on_the_road(game).choose("road:ask")
     assert any("聽說：很久以前長社的事。" in m for m in msgs)
+
+
+# ── Task 3：輿圖的 ✦、詳情欄、龍頭人物的近況 ─────────────────
+
+
+def _story_marks(game) -> dict[str, str]:
+    """劇情層每個地點名字前的記號（假裝每一處都摸清了，只看 ✦ 標不標）。"""
+    views = {loc_id: "visible" for loc_id in game.content.locations}
+    prefixes, _, _ = mapview._layer_marks(game.state, game.content, "story", views, None)
+    return prefixes
+
+
+def test_the_map_marks_only_places_you_can_hear(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    _rumor(game, "長社一帶有人鬧事。", "changshe")  # 潁川汝南：人就在這一區
+    _rumor(game, "宛城一帶有人鬧事。", "wan_city")  # 南陽：別的大區
+    _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world")  # 天下大事：人人聽得到
+    _rumor(game, "黃巾在盧植營外佈了暗哨。", "luzhi_camp", layer="faction", faction="huang")  # 敵方的軍情
+    assert atlas.news_places(game.state, on) == {"changshe", "julu_altar"}
+    marks = _story_marks(game)
+    assert "✦" in marks.get("changshe", "") and "✦" in marks.get("julu_altar", "")
+    assert "✦" not in marks.get("wan_city", "") and "✦" not in marks.get("luzhi_camp", "")
+
+
+def test_the_star_clears_after_three_calendar_days(on):
+    """週末那一季只有 2.5 個世界天：以前看世界天的「3 天」整季都不會過，✦ 永遠不消；現在看季曆天（約 2.1 個現實小時）。"""
+    game = _game(on, at="yingchuan")
+    day = _day(game)
+    _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world", time=0.0)
+    game.state.world.time = 3 * day - 1
+    assert atlas.news_places(game.state, on) == {"julu_altar"}
+    game.state.world.time = 3 * day + 1
+    assert atlas.news_places(game.state, on) == set()
+    assert "最近 3 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", lambda squad: "穩勝")
+
+
+def test_the_detail_panel_lists_only_what_you_can_hear(on):
+    game = _game(on, at="yingchuan")
+    game.state.player.visited |= {"changshe", "wan_city"}  # 去過：兩處都摸清了
+    _rumor(game, "長社一帶有人鬧事。", "changshe")
+    _rumor(game, "宛城一帶有人鬧事。", "wan_city")
+    odds = lambda squad: "穩勝"  # noqa: E731
+    assert "長社一帶有人鬧事。" in atlas.detail_text(game.state, on, "changshe", odds)
+    there = atlas.detail_text(game.state, on, "wan_city", odds)
+    assert "宛城一帶" not in there and "最近 3 天沒有大事或傳聞" in there
+    assert [r.text for r in atlas.recent_news(game.state, on, "changshe")] == ["長社一帶有人鬧事。"]
+
+
+def test_a_leaders_recent_news_skips_what_you_cannot_hear(on):
+    game = _game(on, at="yingchuan")
+    _rumor(game, "張曼成在宛城點兵。", "wan_city")
+    _rumor(game, "有人在長社說起張曼成。", "changshe")
+    assert [r.text for r in atlas.leader_news(game.state, on, "張曼成")] == ["有人在長社說起張曼成。"]
+
+
+def test_with_the_switch_off_the_map_marks_like_before(real):
+    """beta 那一季：別的大區的地方傳聞照標，「3 天」是世界天。"""
+    game = _game(real, at="yingchuan")
+    _rumor(game, "宛城一帶有人鬧事。", "wan_city", time=0.0)
+    game.state.world.time = 2 * 86400
+    assert atlas.news_places(game.state, real) == {"wan_city"}
+    assert "✦" in _story_marks(game).get("wan_city", "")

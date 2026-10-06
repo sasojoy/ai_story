@@ -248,8 +248,9 @@ def _layer_marks(
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
     elif layer == "story":
         goals = atlas.goal_places(state, content)
+        news = atlas.news_places(state, content)  # 聽得到的才標（傳聞分層設計第九節）
         for loc_id in known:
-            marks = ("★" if loc_id in goals else "") + ("✦" if atlas.recent_news(state, loc_id) else "")
+            marks = ("★" if loc_id in goals else "") + ("✦" if loc_id in news else "")
             if marks:
                 prefixes[loc_id] = f"{marks} "
     elif layer == "routes":
