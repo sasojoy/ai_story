@@ -2081,6 +2081,21 @@ def test_a_prologue_scene_whose_method_the_hut_cannot_give_is_refused(prologue_r
         load_content(prologue_root)
 
 
+@pytest.mark.parametrize("field, label", [("title", "標題"), ("text", "場景"), ("method", "做法")])
+def test_a_blank_line_in_an_insight_scene_is_refused(prologue_root, field, label):
+    """有所感的場景：標題、場景、每個做法都不能是空白的句子（content._check_line 的第一條；整併最終審查 area 8 M5 要釘住，
+    以前只有心裡話與戰況變化的空白有測試）。"""
+    def blank(scenes):
+        if field == "method":
+            scenes[0]["methods"][0]["text"] = "  "
+        else:
+            scenes[0][field] = "  "
+
+    edit_json(prologue_root / "insight_scenes.json", blank)
+    with pytest.raises(ContentError, match=f"有所感 hut_four的{label}：有空白的句子"):
+        load_content(prologue_root)
+
+
 def test_a_sight_that_chains_on_is_checked_too(prologue_root):
     """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
     _sights_as_event(prologue_root)

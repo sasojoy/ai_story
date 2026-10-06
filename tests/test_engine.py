@@ -1220,6 +1220,11 @@ def test_nothing_personal_can_be_done_while_preparing(content, world):
     assert game.forge(None, ["feng", "feng"]) == waiting
     assert game.state.player.insights == ["feng"] and game.state.player.stats["xinde"] == 500
     assert game.switch_art("驚雷掌") == waiting
+    game.state.player.arts = ["basic_fist"]  # 庫裡一門、身上沒在練：開了季就熔得掉（整併最終審查 area 8 M5 要釘住這兩個）
+    assert game.melt_art("basic_fist") == waiting
+    assert game.melt_insight("feng") == waiting
+    assert game.state.player.arts == ["basic_fist"] and game.state.player.insights == ["feng"]
+    assert game.state.player.stats["xinde"] == 500
 
 
 def test_players_cannot_start_the_next_season_themselves(game):
