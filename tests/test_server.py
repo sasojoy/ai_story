@@ -74,6 +74,29 @@ def _no_landing(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "land_chance_per_candidate", 0.0)
 
 
+@pytest.fixture
+def real_hut():
+    """要用真的序章（網頁上建的角色從草廬開始）的測試要這個：見 web_characters_start_in_town。"""
+
+
+@pytest.fixture(autouse=True)
+def web_characters_start_in_town(request, monkeypatch):
+    """正式內容有序章之後，網頁上建的新角色從草廬開始（server.create_character 傳 prologue=True）。這個檔案的測試測的是伺服器的各個動作，
+    要的是站在潁川、序章已經過去的角色（序章之前的樣子）：所以這裡把 prologue 旗子拿掉。序章自己的測試用 real_hut（正式內容的草廬）
+    或 prologue_content（測試內容的草廬）要回真的序章。"""
+    if "real_hut" in request.fixturenames or "prologue_content" in request.fixturenames:
+        return
+    real = Game.new.__func__
+
+    def new(cls, content, name, rng=None, world=None, prologue=False, graduated=False):
+        return real(cls, content, name, rng, world, prologue=False, graduated=graduated)
+
+    monkeypatch.setattr(Game, "new", classmethod(new))
+    # 師門配方（基礎拳腳＋風／山／水／火）是寫好的名字、不叫模型；這裡的開爐測試測的是模型取名的三段式，所以拿掉
+    # （配方本身在 test_fusion.py 與 test_prologue*.py 測）
+    monkeypatch.setattr(server.CONTENT, "preset_recipes", [])
+
+
 @pytest.fixture(autouse=True)
 def fresh_server_memory():
     """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
@@ -4131,14 +4154,21 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
 # ── 引導小改版（新手引導重做設計第八節）─────────────────────────
 
 
-def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
-    """全新角色的 /api/main 帶著對話框：說書人與第一步的話（不用點開任何東西）；略過新手引導後就沒有了。"""
+def test_main_view_sends_the_guide_box_and_skipping_hides_it(client, real_hut):
+    """正式內容的全新角色從草廬開始：遇險那一則還在眼前時沒有對話框；拜了師，/api/main 帶著師父第二步的話（不用點開任何東西）；
+    略過新手引導後就沒有了。"""
     main = _player(client)["main"]
     tutorial = server.CONTENT.tutorial
-    assert main["guide"] == {
-        "speaker": tutorial.speaker, "key": tutorial.steps[0].id, "scene": "", "text": tutorial.steps[0].text, "line": "",
-        "done": [], "end": False, "pending": False,
-    }  # key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
+    assert main["guide"] is None and main["prologue"] == {"reveal": [], "glow": [], "skip": True}
+    game = server.game_for("沈青衫")
+    game.choose("choice:0")  # 遇險
+    game.choose("choice:0")  # 拜師
+    open_characters().save(game.state)
+    guide = client.get("/api/main").json()["guide"]
+    assert guide == {
+        "speaker": tutorial.speaker, "key": tutorial.steps[1].id, "scene": "", "text": tutorial.steps[1].text,
+        "line": tutorial.steps[1].line, "done": [], "end": False, "pending": False,
+    }  # 序章的步驟做完不寫「✔ 引導完成」（設計 3.1），done 是空的；key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
 
@@ -4151,10 +4181,13 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     from tianxia import journal
 
     monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
+    # 草廬的序章走完之後，beta 沒有引導的步驟了（只有第一季才多出軍令兩步）：要有一個序章之外、有話要說的步驟，
+    # 就把第一個軍令步驟當成不分季的（對話框在草廬裡遇到事件時整個不畫，見 Game.guide_box；這個測試量的是草廬之外的收起規則）
+    first_step = server.CONTENT.tutorial.steps[server.CONTENT.tutorial.prologue_steps]
+    monkeypatch.setattr(first_step, "season_one", False)
     _player(client)
     game = server.game_for("沈青衫")
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))
-    first_step = server.CONTENT.tutorial.steps[0]
     assert client.get("/api/main").json()["guide"]["key"] == first_step.id
     game.rng = FixedRandom(0.99)
     assert client.post("/api/choose", json={"id": "act:train"}).status_code == 200
@@ -4189,10 +4222,19 @@ def test_a_character_created_on_the_web_starts_in_the_hut(client, monkeypatch, p
     assert Game.new(prologue_content, "假人").state.player.location == "town"
 
 
-def test_the_prologue_recap_is_empty_without_a_prologue(client):
-    """設定頁的「重看序章」：沒有序章的內容是空字串（網頁就不畫那顆鈕）。正式內容還沒有序章。"""
+def test_the_prologue_recap_is_empty_without_a_prologue(client, monkeypatch, content):
+    """設定頁的「重看序章」：沒有序章的內容（測試夾具）是空字串，網頁就不畫那顆鈕。"""
+    monkeypatch.setattr(server, "CONTENT", content)
     _player(client, "shen_02", "無序章")
     assert client.get("/api/prologue").json() == {"text": ""}
+
+
+def test_the_real_prologue_recap_reads_the_whole_prologue(client, real_hut):
+    """正式內容的序章回顧：遇險、拜師、師父十一步的話照順序排成一頁，沒有沒換掉的佔位字。"""
+    _player(client, "shen_04", "沈青衫")
+    text = client.get("/api/prologue").json()["text"]
+    assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「修練」") < text.index("這是盤纏")
+    assert "{武學}" not in text and "山腰上的草廬不見了" in text
 
 
 def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_content):
@@ -4206,7 +4248,9 @@ def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_cont
     assert client.get("/api/prologue").status_code == 200
 
 
-def test_guide_ack_closes_the_outro(client):
+def test_guide_ack_closes_the_outro(client, monkeypatch):
+    """結語的機制還在（之後引導有結語時用）：正式內容現在不寫結語（outro 是空的），這裡給一句。"""
+    monkeypatch.setattr(server.CONTENT.tutorial, "outro", "老夫能說的都說了。")
     _player(client)
     game = server.game_for("沈青衫")
     game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)

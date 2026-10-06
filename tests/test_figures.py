@@ -546,6 +546,7 @@ def _player(content, store, name: str, faction: str | None, at: str, *, now: flo
     game = Game.new(content, name, rng=random.Random(0), world=store)
     p = game.state.player
     p.faction, p.location = faction, at
+    p.tutorial_step = len(content.tutorial.steps)  # 引導走完：序章之後第一季的兩步（投靠給 10 兩）不是這個檔案要量的
     p.visited.add(at)
     game.now = now
     return game

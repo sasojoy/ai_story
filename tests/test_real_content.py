@@ -71,7 +71,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len(c.locations) <= 40
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 40  # 草廬（序章專用）另外算
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
@@ -105,11 +105,215 @@ def test_the_road_sights_are_the_thirty_written_for_season_one(content):
     assert content.config.road_sight_chance == 0.3  # 三成：正式內容用預設值
 
 
-def test_the_tutorial_explains_travel_and_sitting_down(content):
+def test_the_mentor_explains_travel_and_sitting_down(content):
+    """步行、趕路、疾行與打坐現在由師父講：出師那一步（第 11 步）講走法與體力，打坐那一步（第 7 步）講打坐。"""
     texts = {step.id: step.text for step in content.tutorial.steps}
-    assert all(word in texts["t2_map"] for word in ("步行", "趕路", "疾行", "體力"))
-    assert "打坐" in texts["t3_outskirts"]
-    assert all(word in texts["t3_outskirts"] for word in ("邊走邊想", "沿途打聽", "折返"))  # 路上不是乾等（路上設計）
+    assert all(word in texts["p11_farewell"] for word in ("步行", "趕路", "疾行", "體力"))
+    assert "打坐" in texts["p7_rest"]
+
+
+def _walk_the_hut(content, world, ambush="choice:0", sight="choice:0", luck=None):
+    """真人照著序章走：遇險、拜師、看修練頁、探索悟意境、合成、換上並練到第三成、修練、打坐、雪恥、配點、熔雜學（剛走完前十步、
+    還站在草廬）。回傳（遊戲，合成出來的那一門）。"""
+    from tianxia import prologue
+    from tianxia.engine import Game
+
+    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
+    game.world.open_season(game.content, now=0.0)
+    for option in (ambush, "choice:0"):  # 遇險（三選一）、拜師
+        game.choose(option)
+    game.view_tab("practice")
+    game.choose("act:explore")
+    game.choose(sight)  # 四景四選一
+    insight = game.state.player.insights[0]
+    game.forge("jichu_quanjiao", [insight], proposed=(None, ""))
+    art = prologue.fused_arts(game.state, content, game.world)[0]
+    game.switch_art(art.id)
+    game.practice("武學")
+    game.practice("武學")
+    game.cultivate(art.id)
+    game.choose("act:rest")
+    if luck is not None:  # 戰場運氣固定成最好（0.99）或最壞（0.0）：雪恥那一場照樣要是險勝（設計 3.2「必定險勝」）
+        from conftest import FixedRandom
+
+        game.rng = FixedRandom(luck)
+    game.choose("act:train")
+    game.allocate_stat("str")
+    game.melt_art("manniu_quan")
+    return game, art
+
+
+@pytest.mark.parametrize("ambush, first_words", [
+    ("choice:0", "拿身子去擋柴刀"), ("choice:1", "抄根扁擔就敢往上衝"), ("choice:2", "喊一嗓子『官兵來了』"),
+])
+@pytest.mark.parametrize("sight, art_name", [
+    ("choice:0", "穿林腿"), ("choice:1", "坐山拳"), ("choice:2", "回瀾手"), ("choice:3", "烈爐拳"),
+])
+def test_every_way_through_the_real_hut_reaches_yingchuan_with_a_preset_art(content, world, ambush, first_words, sight, art_name):
+    """遇險的三個選項各接到自己的拜師那一則（師父醒來的第一句照選項換）、四景各悟一個意境、各合出自己的師門功夫；十二條路都走得到潁川。"""
+    from tianxia.engine import Game
+
+    peek = Game.new(content, "偷看", rng=random.Random(0), world=world, prologue=True)
+    peek.world.open_season(content, now=0.0)
+    peek.choose(ambush)
+    assert first_words in peek.scene_text()  # 拜師那一則開頭的評語照剛才選的那一個
+    game, art = _walk_the_hut(content, world, ambush, sight)
+    assert (art.name, art.preset, art.creator) == (art_name, True, None)
+    game.choose("move:yingchuan")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    assert game.state.player.location == "yingchuan" and game.state.player.tutorial_step == content.tutorial.prologue_steps
+
+
+@pytest.mark.parametrize("old_step, new_step", [(0, 11), (3, 11), (6, 11), (7, 12)])
+def test_a_save_from_before_the_prologue_is_never_sent_to_the_real_hut(content, world, old_step, new_step):
+    """換版當下已經有的角色（舊引導八步：t1～t6、第一季的 t7、t8）：讀檔後不管走到哪一步都站在原地、不進草廬；步數換算成新的
+    （不分季的舊六步當作走過序章，t7、t8 接在序章後面）。"""
+    from tianxia.state import ONBOARDING_VERSION
+
+    game = Game.new(content, "老手", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.onboarding, p.tutorial_step = 0, old_step  # 換版之前存的樣子：沒有版本章、步數是舊的編號
+    here = p.location
+    again = Game(content, game.state, world=world)
+    q = again.state.player
+    assert (q.tutorial_step, q.onboarding, q.location) == (new_step, ONBOARDING_VERSION, here)
+    assert again.state.pending_event is None and not q.guide_skipped
+
+
+@pytest.mark.parametrize("luck", [0.0, 0.5, 0.99])
+def test_the_revenge_fight_is_always_a_narrow_win_and_the_fight_is_the_levelling_one(content, world, luck):
+    """T7 審查 M6（設計 3.2「必定險勝（四回合）；經驗剛好升到第 2 級」）：不管戰場運氣最好還是最壞，真內容的雪恥那一場都是險勝、
+    四回合、升到第 2 級。拿掉 force_tier 的話，這個種子剛好贏，本來沒有測試看得出來。"""
+    game, _ = _walk_the_hut(content, world, luck=luck)
+    record = game.state.battles[0]
+    assert (record.kind, record.tier) == ("train", "險勝") and record.opponent == "斷眉"
+    assert len(record.rounds) == 4 and record.levelups is not None and record.levelups.you == 2
+    assert game.state.player.member.level == 2
+
+
+def test_every_real_hut_step_has_a_collapsed_line_without_the_speakers_name(content):
+    """收起來那一行網頁自己在前面寫「師父：」（guideHtml）；content 的 line 再寫一次會變成「師父：師父：…」。"""
+    speaker = content.tutorial.speaker
+    lines = [(step.id, step.line) for step in content.tutorial.steps[: content.tutorial.prologue_steps] if step.line]
+    assert len(lines) == 10 and all(not line.startswith(speaker) for _, line in lines), lines
+
+
+def test_the_real_steps_say_what_10_3_says_about_the_craft_tab_and_the_pages(content):
+    """S1 的用語（2026-10-06）：分頁叫「煉製」，師父的話跟著；p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事；
+    p4、p6、p10 各有 10.3 的「…之後（場景）」。"""
+    steps = {step.id: step for step in content.tutorial.steps}
+    assert "到『煉製』那裡試試，花你 5 點心得。" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert steps["p4_fuse"].line == "到「煉製」把基礎拳腳融進意境"
+    assert "功法庫" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
+    p11 = steps["p11_farewell"]
+    pages = p11.text.split("\n\n")
+    assert p11.paged and len(pages) == 3 and "輿圖" in pages[-1] and "天命裂了一道縫" in pages[1]
+    assert {sid for sid, step in steps.items() if step.paged} == {"p11_farewell"}
+    assert {sid for sid, step in steps.items() if step.after} == {"p4_fuse", "p6_refine", "p10_melt"}
+    for step in steps.values():
+        assert set(re.findall(r"\{([^}]+)\}", step.after)) <= {"意境", "武學", "心得"}, step.id
+
+
+def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to_the_target(content, world):
+    """T7 走查 W-B：目標在修練頁的步驟（5、6、10）在江湖頁、煉製頁時也有東西發光（修練分頁），裡面照舊指到那一列的鍵；
+    步驟 4 的煉製頁，開爐灰著，要放進爐子的底與意境在挑選清單裡發光（伺服器標、網頁照亮，見 Game.art_rows）。
+    真內容的修練頁與煉製頁：伺服器標的鍵跟步驟的 glow 對得上。"""
+    steps = {step.id: step for step in content.tutorial.steps}
+    for step_id in ("p5_level", "p6_refine", "p10_melt"):
+        assert steps[step_id].glow[0] == "tab:practice", step_id
+    assert {"pick:art", "pick:insight", "forge"} <= set(steps["p4_fuse"].glow)
+    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
+    game.world.open_season(content, now=0.0)
+    for option in ("choice:0", "choice:0"):
+        game.choose(option)
+    game.view_tab("practice")
+    game.choose("act:explore")
+    game.choose("choice:1")  # 山
+    assert [r["id"] for r in game.art_rows() if "pick:art" in r["glow"]] == ["jichu_quanjiao"]
+    assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan"]
+    game.forge("jichu_quanjiao", ["shan"], proposed=(None, ""))
+    named = next(r["id"] for r in game.art_rows() if "switch" in r["glow"])
+    assert named != "jichu_quanjiao"  # 坐山拳
+    game.switch_art(named)
+    assert all("switch" not in r["glow"] for r in game.art_rows())  # 基礎拳腳換下來了，不發光
+
+
+# 一步做完的時候玩家在哪一頁，下一步要按的東西在哪一頁（T7 走查 W-G：步驟 7 一開始在修練頁，打坐在江湖頁，江湖分頁卻沒發光）。
+# 「做完在」：看修練頁那一步（p2）做完是玩家剛打開修練頁；探索（p3）、打坐（p7）、遊歷（p8）、配點（p9）在江湖頁（配點的面板在
+# 狀態列，哪一頁都看得到）；合成（p4）在煉製頁；練成、修練、熔煉（p5、p6、p10）在修練頁。「目標在」：分頁列與狀態列的東西哪一頁都在（any）。
+COMPLETES_ON = {
+    "p1_ambush": "jianghu", "p2_apprentice": "practice", "p3_insight": "jianghu", "p4_fuse": "craft", "p5_level": "practice",
+    "p6_refine": "practice", "p7_rest": "jianghu", "p8_revenge": "jianghu", "p9_stat": "any", "p10_melt": "practice",
+}
+TARGET_ON = {
+    "p2_apprentice": ("any",), "p3_insight": ("jianghu",), "p4_fuse": ("craft",), "p5_level": ("practice",), "p6_refine": ("practice",),
+    "p7_rest": ("jianghu",), "p8_revenge": ("jianghu",), "p9_stat": ("any",), "p10_melt": ("practice",),
+    "p11_farewell": ("jianghu", "map"),  # 移動在江湖頁，也可以直接去輿圖（師父的話說的是打開輿圖）
+}
+
+
+def test_every_step_that_starts_on_another_page_glows_the_tab_that_leads_to_its_target(content):
+    """T7 走查 W-G：一步開始時玩家停在上一步做完的那一頁；要按的東西在別頁，分頁列上通往那一頁的分頁就要發光，不然那一頁什麼都不亮。
+    照玩家遇到的順序一步一步查（p1 到 p11）：做完在 X、下一步的目標在 Y，X 不是 Y 就要有 tab:Y。"""
+    steps = [s for s in content.tutorial.steps[: content.tutorial.prologue_steps]]
+    assert [s.id for s in steps[:-1]] == list(COMPLETES_ON)  # 表跟內容的步驟一一對得上，改了步驟這裡要跟著改
+    for previous, step in zip(steps, steps[1:]):
+        start, targets = COMPLETES_ON[previous.id], TARGET_ON[step.id]
+        if start in targets or "any" in targets:
+            continue
+        assert any(f"tab:{page}" in step.glow for page in targets), (step.id, start, targets, step.glow)
+    assert "tab:jianghu" in {s.id: s for s in steps}["p7_rest"].glow and "tab:jianghu" in {s.id: s for s in steps}["p3_insight"].glow
+
+
+def test_the_real_hut_cards_say_each_thing_once_and_the_reward_comes_with_the_walk(content, world):
+    """T7 審查 M1、M3、M4：合成、修練、熔煉的結果用 10.3 的句子（不再接一句重複的師門傳下來），四景只留事件文字那一句，
+    沒有「✔ 完成」；出師的盤纏寫在抵達潁川那一則（銀兩 +30、體力回滿）。"""
+    from tianxia import journal
+
+    game, art = _walk_the_hut(content, world, sight="choice:3")
+    entries = {e.title: e for e in game.state.journal}
+    body = "\n".join(line for e in game.state.journal for line in e.lines + [e.tag])
+    assert "你把基礎拳腳融進火之意境，練出了一門新武學——【烈爐拳】。" in body and "師門傳下來" not in body
+    assert "你盯著爐火看了不知多久，心裡忽然一動——你悟到了「火之意境」。" in body and "你悟得了「" not in body
+    assert "這一遍修練，你忽然摸到了門道——【烈爐拳】從下品升到了中品！" in body
+    assert "你把蠻牛拳熔了，換回 8 點心得。" in body
+    assert all("✔" not in line for e in game.state.journal for line in e.guide)
+    for line in ("你把基礎拳腳融進火之意境，練出了一門新武學——【烈爐拳】。", "這一遍修練，你忽然摸到了門道——【烈爐拳】從下品升到了中品！"):
+        assert journal._line_class(line) == "tx-line tx-new"
+    game.state.player.stamina = 20.0
+    game.choose("move:yingchuan")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    arrival = game.state.journal[0]
+    assert "銀兩 +30" in arrival.changes and "體力回滿" in arrival.lines
+    assert arrival.lines.index(content.tutorial.leave_text) < arrival.lines.index("體力回滿")
+    assert game.state.player.stamina == content.config.stamina_max and game.state.player.guide_done == []
+
+
+def test_the_real_prologue_text_has_no_placeholder_left_over(content):
+    """{武學} 只許出現在「收起」那一行（Game.guide_box 換成合成出來的那一門）與步驟的話裡；事件與四景沒有要換的字。"""
+    for event_id in ("prologue_ambush", "prologue_apprentice_dang", "prologue_apprentice_bian", "prologue_apprentice_han", "prologue_insight"):
+        event = content.events[event_id]
+        texts = [event.title, event.text] + [x for ch in event.choices for x in (ch.text, ch.effect.text)]
+        assert not any("{" in text for text in texts), event_id
+    steps = {step.id: step for step in content.tutorial.steps}
+    assert "{武學}" in steps["p5_level"].line and "{武學}" in steps["p6_refine"].line
+    assert not any("{" in step.text for step in content.tutorial.steps)
+    assert content.tutorial.outro == ""  # 第一季兩步走完不再有說書人的結語
+
+
+def test_the_real_prologue_walks_to_yingchuan(content, world):
+    from tianxia import atlas
+
+    game, art = _walk_the_hut(content, world)
+    assert art.name == "穿林腿" and art.preset
+    assert game.state.player.stats["xinde"] == content.config.start_stats["xinde"]  # 心得的帳：20 → −5 → −3 → +8 → 20
+    silver = game.state.player.stats["silver"]
+    game.choose("move:yingchuan")
+    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
+    p = game.state.player
+    assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
+    assert p.stats["silver"] == silver + 30 and p.stamina == content.config.stamina_max
+    assert "mentor_hut" not in atlas.visible_locations(game.state, content)
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):
@@ -257,20 +461,27 @@ def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
     assert game.state.player.stats["xinde"] == content.config.start_stats["xinde"]
 
 
-def test_the_practice_step_waits_for_a_real_practice_not_for_having_an_art(content):
-    """審查裁示 F1：開局就有兩門基礎武學，t4 若看「有沒有武學」一開始就成立，教不到練成；要看「練功」這個動作。"""
-    from tianxia import guide
+def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content, world):
+    """審查裁示 F1（現在是師父的第 5 步）：合成出來的那一門一到手就有了，這一步若只看「有沒有」一開始就成立、教不到練成；
+    要它真的練到第三成：先換上、練一次還不算，練到第三成才算。"""
+    from tianxia import prologue
 
-    game = Game.new(content, "測試俠客", rng=random.Random(0))
-    todo = guide.steps(game.state, content)
-    index = [step.id for step in todo].index("t4_practice")
-    assert todo[index].done_when.action == "practice" and not todo[index].done_when.has_wugong
-    game.state.player.tutorial_step = index
-    game.view_map()
-    assert game.state.player.tutorial_step == index  # 帶著功夫、看過地圖，還不算
+    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
+    game.world.open_season(content, now=0.0)
+    for option in ("choice:0", "choice:0"):
+        game.choose(option)
+    game.view_tab("practice")
+    game.choose("act:explore")
+    game.choose("choice:0")
+    game.forge("jichu_quanjiao", ["feng"], proposed=(None, ""))
+    index = [step.id for step in content.tutorial.steps].index("p5_level")
+    assert game.state.player.tutorial_step == index and content.tutorial.steps[index].done_when.fused_level == 3
+    art = prologue.fused_arts(game.state, content, world)[0]
+    game.switch_art(art.id)
     game.practice("武學")
-    assert game.state.player.tutorial_step == index + 1
-    assert "✔ 引導完成" in game.state.player.guide_done
+    assert game.state.player.tutorial_step == index  # 帶著、換上、練到第二成，還不算
+    game.practice("武學")
+    assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
 
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
@@ -570,7 +781,8 @@ def test_current_place_marks_stay_clear_of_names_from_any_location(content, laye
             if owner is not None:
                 disc_overlaps += sum(
                     _touches_circle(box, other.x, other.y, disc)
-                    for other in content.locations.values() if other.id not in (loc.id, owner)
+                    for other in content.locations.values()
+                    if other.id not in (loc.id, owner) and not other.prologue_only  # 草廬的圓盤只有站在那裡的人看得到，別處不畫
                 )
     assert disc_overlaps <= DISC_OVERLAPS[layer]
 

@@ -343,9 +343,14 @@ def report(label: str, logs: list[FunLog], content) -> float:
     for lg in logs:
         totals.update(lg.novelty)
         hollow.update(lg.hollow)
+    # 序章（草廬、遇險與拜師與四景的事件、斷眉）只有走序章的真人碰得到，機器人不走：不算進「總共有幾個可以看」
+    from tianxia import prologue
+
+    hut_events = prologue._prologue_events(content)
+    hut_squads = {squad for step in content.tutorial.steps for squad in step.enemies}
     coverage = {
-        "事件": len(content.events), "意境": len(content.insights),
-        "地點": len(content.locations), "對手": len(content.squads),
+        "事件": len(content.events) - len(hut_events), "意境": len(content.insights),
+        "地點": sum(1 for loc in content.locations.values() if not loc.prologue_only), "對手": len(content.squads) - len(hut_squads),
     }
     print("  首見（平均）：", end="")
     for kind in NOVELTY_POINTS:
