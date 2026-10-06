@@ -400,6 +400,20 @@ class SqliteWorldStore:
     def get_season_number(self) -> int:
         return self.read().season_number
 
+    def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
+        """推送的看守（server.current_fingerprint）每幾秒讀一次用：同一個唯讀快照裡讀出（全服狀態，這一季最大的天下大事傳聞
+        流水號，這一季江湖史的則數）。全服狀態照 read()（含目前的決戰，賽季裡的傳聞與江湖史是空的）；傳聞與江湖史不讀回
+        每一列，讓資料庫數（MAX、COUNT）：一季的列數隨人數長大，整份讀回來五萬列要 244 毫秒（審查 m2）。
+        一個快照＝三樣是同一個時刻的：分開讀的話，中間有人寫（決戰收場、套結果）就會讀到一半舊一半新的狀態。"""
+        with self.db.snapshot() as conn:
+            state = self._load(conn)
+            number = state.season_number
+            rumor = conn.execute(
+                "SELECT MAX(id) FROM rumors WHERE season = ? AND layer = 'world'", (number,),
+            ).fetchone()[0]
+            chronicle = conn.execute("SELECT COUNT(*) FROM chronicle WHERE season = ?", (number,)).fetchone()[0]
+        return state, rumor or 0, chronicle
+
     def mutate_season(self, fn: Callable[[WorldState], None]) -> WorldState:
         return self.mutate(lambda state: fn(state.season)).season
 

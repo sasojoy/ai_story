@@ -74,9 +74,17 @@ def _deliver(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, item) -> boo
         return False
 
 
-def world_fingerprint(season_number: int, phase: str, season, battle) -> str:
+def world_fingerprint(
+    season_number: int, phase: str, season, battle, *, rumor_id: int | None = None, chronicle_count: int | None = None,
+) -> str:
     """大家都看得到的世界部分的指紋。時間本身不算（時鐘一直在走，靠慢速輪詢更新）。
-    決戰只看階段、第幾回合與戰局（每個人的畫面都不一樣的那幾樣）；加入的人數、這一回合出手了幾個畫面上哪裡都看不到，不算。"""
+    決戰只看階段、第幾回合與戰局（每個人的畫面都不一樣的那幾樣）；加入的人數、這一回合出手了幾個畫面上哪裡都看不到，不算。
+    rumor_id（最大的天下大事傳聞流水號）與 chronicle_count（江湖史則數）不給就從 season.rumors、season.chronicle 算；
+    伺服器的看守給資料庫數好的（SqliteWorldStore.fingerprint_parts），不必把每一則讀回來。兩種給法算出同一個指紋。"""
+    if rumor_id is None:
+        rumor_id = max((r.id or 0 for r in season.rumors if r.layer == "world"), default=0)
+    if chronicle_count is None:
+        chronicle_count = len(season.chronicle)
     public = {
         "season": season_number,
         "phase": phase,
@@ -86,8 +94,8 @@ def world_fingerprint(season_number: int, phase: str, season, battle) -> str:
         "timeline": sorted(season.timeline),
         "opened": sorted(season.showdowns_opened),
         "figures": {k: v.model_dump() for k, v in sorted(season.figures.items())},
-        "rumor": max((r.id or 0 for r in season.rumors if r.layer == "world"), default=0),
-        "chronicle": len(season.chronicle),
+        "rumor": rumor_id,
+        "chronicle": chronicle_count,
         "battle": None if battle is None else [battle.battle_id, battle.phase, battle.round_number, battle.trend],
     }
     blob = json.dumps(public, sort_keys=True, ensure_ascii=False, default=str)

@@ -407,10 +407,14 @@ HEARTBEAT_SECONDS = 15.0  # 這麼久沒有通知就送一個 ping，代理（Cl
 
 
 def current_fingerprint() -> str:
-    """看守用：現在大家都看得到的世界的指紋（server_push.world_fingerprint；唯讀的快照，不拿行動鎖，所以看守不跟玩家搶鎖）。"""
-    world = open_world()
-    shared = world.read()
-    return server_push.world_fingerprint(shared.season_number, shared.season_phase(), world.get_season(), world.get_battle())
+    """看守用：現在大家都看得到的世界的指紋（server_push.world_fingerprint；唯讀的快照，不拿行動鎖，所以看守不跟玩家搶鎖）。
+    全服狀態、天下大事傳聞的最大流水號、江湖史的則數在同一個快照裡讀（fingerprint_parts）：分開讀的話，中間有人寫就會讀到
+    一半舊一半新的指紋、白白廣播兩次；傳聞與江湖史也不讀回每一列，讓資料庫數，所以隨著一季的列數長大也不會變慢。"""
+    shared, rumor_id, chronicle_count = open_world().fingerprint_parts()
+    return server_push.world_fingerprint(
+        shared.season_number, shared.season_phase(), shared.season, shared.active_battle,
+        rumor_id=rumor_id, chronicle_count=chronicle_count,
+    )
 
 
 def push_line(config) -> str:

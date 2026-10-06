@@ -17,7 +17,7 @@ import llm_queue
 import server
 import server_push
 from conftest import at, season_one_events
-from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, team
+from tianxia import atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, naming, sqlite_world, team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -25,7 +25,7 @@ from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt, generate_from_name
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile, Rumor
+from tianxia.state import BotProfile, Lock, Rumor, TimelineResult
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
 
@@ -5202,7 +5202,7 @@ def _get_events(client):
     thread = threading.Thread(target=lambda: got.append(client.get("/api/events")), daemon=True)
     thread.start()
     thread.join(5.0)
-    assert got, "/api/events 沒有結束：開關關著的時候不該開串流"
+    assert got, "/api/events 沒有結束：不該開串流的時候（開關關著、沒登入、還沒有角色）開了串流，或是沒有用 server.HUB"
     return got[0]
 
 
@@ -5224,7 +5224,7 @@ def test_events_stream_for_the_logged_in_character(client, monkeypatch):
     )
     main = _player(client)["main"]
     assert main["push"] is True
-    r = client.get("/api/events")
+    r = _get_events(client)
     assert r.headers["content-type"].startswith("text/event-stream")
     assert r.headers["cache-control"] == "no-cache" and r.headers["x-accel-buffering"] == "no"  # 代理不能把串流攢著
     assert "event: self" in r.text
@@ -5233,14 +5233,15 @@ def test_events_stream_for_the_logged_in_character(client, monkeypatch):
 
 
 def test_events_need_a_login(monkeypatch):
+    """真的 PushHub：萬一帳號檢查被挪到串流開始之後，回應就永遠不結束，所以走 _get_events（5 秒沒結束就判失敗，不是卡住整個測試）。"""
     monkeypatch.setattr(server, "HUB", server_push.PushHub())
-    assert TestClient(server.app).get("/api/events").status_code == 401
+    assert _get_events(TestClient(server.app)).status_code == 401
 
 
 def test_events_need_a_character(client, monkeypatch):
     monkeypatch.setattr(server, "HUB", server_push.PushHub())
     client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
-    assert client.get("/api/events").status_code == 409  # 還沒取名號：跟別的需要角色的端點一樣
+    assert _get_events(client).status_code == 409  # 還沒取名號：跟別的需要角色的端點一樣
 
 
 def test_the_main_view_says_whether_push_is_on_and_how_long_to_spread_the_refresh(game, monkeypatch):
@@ -5280,6 +5281,31 @@ def test_an_action_notifies_that_characters_other_tabs(client, told):
     told.clear()  # 建角色走過 _entry，那一段不通知，這裡只看接下來這個動作
     client.post("/api/choose", json={"id": "act:rest"})
     assert told == [(ME, "self")]
+
+
+class _NamesSeen(_OneShot):
+    """記下串流是用什麼名字訂閱的（然後跟 _OneShot 一樣送一則就收尾）。"""
+
+    def __init__(self):
+        super().__init__()
+        self.names: list[str] = []
+
+    def subscribe(self, name, loop, queue):
+        self.names.append(name)
+        super().subscribe(name, loop, queue)
+
+
+def test_a_name_with_capitals_is_subscribed_and_notified_under_the_same_lowercase_key(client, told, monkeypatch):
+    """m4：名號不分大小寫（casefold），訂閱（/api/events）與通知（_tell_tabs）兩邊要用同一個鍵。其中一邊少了 casefold，
+    名號有大寫英文字母的角色（例如管理者）就收不到自己其他分頁的通知；中文名號不受 casefold 影響，所以要用英文字母混著大小寫的名號測。"""
+    _player(client, login="libai_01", name="LiBai")
+    told.clear()
+    client.post("/api/choose", json={"id": "act:rest"})
+    assert told == [("libai", "self")]
+    seen = _NamesSeen()
+    monkeypatch.setattr(server, "HUB", seen)
+    assert _get_events(client).status_code == 200
+    assert seen.names == ["libai"]
 
 
 def test_a_fight_notifies_even_though_it_never_goes_through_act(client, told, monkeypatch):
@@ -5422,6 +5448,114 @@ def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
     assert server.current_fingerprint() == with_battle
     open_world().mutate_battle(lambda b: setattr(b, "trend", b.trend + 1))  # 戰局動了：看得到
     assert server.current_fingerprint() != with_battle
+
+
+def _three_read_fingerprint() -> str:
+    """推送看守原本的讀法：三次各自的快照，還把這一季每一則傳聞與江湖史讀回來數。新的讀法（一次快照加 MAX／COUNT）要跟它一樣。"""
+    world = open_world()
+    shared = world.read()
+    return server_push.world_fingerprint(shared.season_number, shared.season_phase(), world.get_season(), world.get_battle())
+
+
+def test_the_one_snapshot_fingerprint_is_the_old_three_read_one_on_every_state():
+    """m2：同樣的東西算進去、同樣的東西不算（F2 的決戰、F4 的排除項），在一連串不同的狀態裡每一步都跟舊的算法一樣，
+    該變的變、不該變的不變。"""
+    world = open_world()
+    content = server.CONTENT
+    revealed = []
+
+    def trend_up(season):
+        key = revealed[0]
+        season.trends[key] += 1
+
+    def nudge_trend():
+        world.mutate_season(trend_up)
+
+    def pick_revealed():
+        revealed.append(next(iter(world.get_season().revealed)))
+
+    def rumors(*items):
+        return lambda: world.mutate_season(lambda s: s.rumors.extend(items))
+
+    steps = [  # (這一步, 指紋會不會變)
+        (lambda: world.seed_first_season(content), True),
+        (pick_revealed, False),
+        (rumors(Rumor(time=1.0, text="天下大事", layer="world")), True),
+        (rumors(Rumor(time=1.0, text="軍情", layer="faction", faction="guan"),
+                Rumor(time=1.0, text="地方", layer="local", region="yingchuan"),
+                Rumor(time=1.0, text="只有你", layer="personal", character="甲")), False),
+        (rumors(Rumor(time=3.0, text="又一則天下大事", layer="world")), True),
+        (lambda: world.mutate_season(lambda s: s.chronicle.append(Rumor(time=2.0, text="江湖史一筆"))), True),
+        (nudge_trend, True),
+        (lambda: world.mutate_season(lambda s: s.locks.__setitem__("changshe_fire", Lock(side="guan", name="甲", time=1.0))), False),
+        (lambda: world.start_battle(content.battles["huangjin_showdown"], now=0.0), True),
+        (lambda: world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0)), False),
+        (lambda: world.mutate_battle(lambda b: setattr(b, "trend", b.trend + 3)), True),
+        (lambda: world.mutate_season(lambda s: s.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0))), True),
+        (lambda: world.mutate_season(lambda s: setattr(s, "ended", True)), True),
+        (lambda: world.next_season(content, now=1.0), True),
+    ]
+    assert server.current_fingerprint() == _three_read_fingerprint()  # 還沒有賽季的空資料庫
+    for number, (step, changes) in enumerate(steps):
+        before = server.current_fingerprint()
+        step()
+        now = server.current_fingerprint()
+        assert now == _three_read_fingerprint(), number
+        assert (now != before) is changes, number
+
+
+def test_the_fingerprint_is_read_once_without_loading_the_rumor_and_chronicle_rows(monkeypatch):
+    """m2：每 5 秒讀一次，一季的傳聞與江湖史會長大（五萬列時整份讀回來要 244 毫秒），所以讓資料庫數（MAX 與 COUNT），一個列都不建。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    world.mutate_season(lambda s: (
+        s.rumors.extend(Rumor(time=float(i), text="天下", layer="world") for i in range(150)),
+        s.chronicle.extend(Rumor(time=float(i), text="史") for i in range(40)),
+    ))
+    built, loads = [], []
+    monkeypatch.setattr(sqlite_world, "_rumor", lambda row: built.append(1))
+    monkeypatch.setattr(sqlite_world, "_chronicle_entry", lambda row: built.append(1))
+    real_load = SqliteWorldStore._load
+    monkeypatch.setattr(SqliteWorldStore, "_load", lambda self, conn, logs=False: loads.append(logs) or real_load(self, conn, logs))
+    server.current_fingerprint()
+    assert built == [] and loads == [False]  # 整份全服狀態讀一次、不帶傳聞與江湖史
+
+
+def test_the_fingerprint_cannot_be_torn_by_a_write_between_its_reads(monkeypatch):
+    """m2：三次各自的快照時，讀的中間有人寫（例如決戰收場、套結果），看守會讀到一半舊一半新、不屬於任何一個時刻的指紋，
+    廣播一次、下一輪又廣播一次（每個分頁白白多建一次畫面）。一次快照讀的是同一個時刻：這裡在第一次讀完的那一刻，
+    另一個執行緒（另一條連線）寫進一則天下大事、一則江湖史、改了大勢，這一次指紋要還是寫之前的；寫之後再讀才看得到。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    key = next(iter(world.get_season().revealed))
+    before = server.current_fingerprint()
+    reader, armed, reads = threading.current_thread(), [True], []
+    real_load = SqliteWorldStore._load
+
+    def write():
+        def change(season):
+            season.rumors.append(Rumor(time=5.0, text="讀到一半才寫的天下大事", layer="world"))
+            season.chronicle.append(Rumor(time=5.0, text="讀到一半才寫的江湖史"))
+            season.trends[key] += 1
+
+        open_world().mutate_season(change)
+
+    def hooked(self, conn, logs=False):
+        out = real_load(self, conn, logs)
+        if threading.current_thread() is reader and armed[0]:
+            reads.append(logs)
+            armed[0] = False
+            writer = threading.Thread(target=write)
+            writer.start()
+            writer.join(10)
+            assert not writer.is_alive()
+        return out
+
+    monkeypatch.setattr(SqliteWorldStore, "_load", hooked)
+    during = server.current_fingerprint()
+    assert reads == [False]  # 寫是在第一次讀完的時候發生的
+    assert during == before
+    assert server.current_fingerprint() != before  # 寫確實進去了：下一次讀（新的快照）才看得到
 
 
 def test_push_line_says_whether_push_is_on():

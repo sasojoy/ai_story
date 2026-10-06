@@ -152,6 +152,20 @@ def test_fingerprint_sees_public_changes():
     assert _fp(_season(), BattleInstance(battle_id="changshe_fire")) != base
 
 
+def test_fingerprint_takes_the_rumor_and_chronicle_counts_instead_of_the_rows():
+    """看守不把每一則傳聞與江湖史讀回來（m2）：資料庫算好最大的天下大事傳聞編號與江湖史則數，直接給；給了的跟從資料列算出來的是同一個指紋。"""
+    s = _season()
+    s.rumors.append(Rumor(time=1.0, text="天下大事", id=9, layer="world"))
+    s.rumors.append(Rumor(time=1.0, text="地方", id=12, layer="local", region="yingchuan"))
+    s.chronicle.append(Rumor(time=1.0, text="江湖史一筆", id=3))
+    from_rows = _fp(s)
+    bare = _season()  # 一列都沒有，只給數字
+    assert server_push.world_fingerprint(2, "running", bare, None, rumor_id=9, chronicle_count=1) == from_rows
+    assert server_push.world_fingerprint(2, "running", bare, None, rumor_id=10, chronicle_count=1) != from_rows
+    assert server_push.world_fingerprint(2, "running", bare, None, rumor_id=9, chronicle_count=2) != from_rows
+    assert server_push.world_fingerprint(2, "running", bare, None, rumor_id=0, chronicle_count=0) == _fp(_season())
+
+
 def test_fingerprint_sees_the_other_public_parts_of_the_world():
     base = _fp(_season())
     s = _season()
