@@ -986,6 +986,27 @@ def test_extra_html():
     assert journal.extra_html([], []) == ""
 
 
+def test_a_heard_fragment_line_is_marked_so_the_card_can_fold_it_to_one_line():
+    """FB-074：「你聽到一件事：聽說皇甫嵩說過：…」常有兩三行高，卡片收成一行、點了看全文。標記由伺服器畫（class tx-hearsay，
+    認的是引擎自己的 FRAGMENT_PREFIX），網頁不必去讀句子的字；其他的行不帶這個標記，「拿到新東西」的掃光照舊。"""
+    heard = journal.fragment_line("聽說皇甫嵩說過：「兵有奇變，不在眾寡。」")
+    for html in (journal.extra_html([heard, "✔ 引導完成"], []), journal.card_html(entry(lines=[heard, "✔ 引導完成"]))):
+        classes = re.findall(r'<div class="([^"]*)">([^<]*)</div>', html)
+        marked = [text for cls, text in classes if "tx-hearsay" in cls]
+        assert marked == [escape(heard)] and html.count("tx-hearsay") == 1
+        assert next(cls for cls, text in classes if text == escape(heard)) == "tx-line tx-new tx-hearsay"
+        assert next(cls for cls, text in classes if "引導完成" in text) == "tx-line"
+    assert "tx-hearsay" not in journal.extra_html(["傳言說：你聽到一件事：不是開頭就不算"], [])  # 只認開頭的標記，不是句子裡出現這幾個字
+
+
+def test_the_fight_card_extra_carries_the_hearsay_marker(game):
+    fight = _level_up_fight(game)
+    heard = journal.fragment_line("聽說皇甫嵩說過：「兵有奇變，不在眾寡。」")
+    game.state.journal[0].lines.append(heard)  # 打完仗順便聽到一件事
+    extra = game.battle_extra_html()
+    assert game.battle_card_id() == fight and 'class="tx-line tx-new tx-hearsay">' + escape(heard) in extra
+
+
 def test_rows_html_one_line_per_entry_with_the_story_folded_inside():
     html = journal.rows_html([entry(), entry(title="拔出兵器迎戰", tag="擊退狼群（3 回合）", time=-1.0, lines=[])])
     assert html.count('class="tx-row"') == 2

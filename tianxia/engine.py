@@ -37,7 +37,8 @@ from .rules import (
     display_name, fill_marks, free_text_rate,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
-    season_one, season_one_off, stance_sum_note, stances, trend_name, trend_shown, trend_value, world_trend_value,
+    season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
+    world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Journey, Rumor, WorldState, new_game_state
@@ -49,7 +50,7 @@ from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
-BULLETIN_MAX = 3  # 江湖頁最上面的公告卡最多放這一週的幾則大事（計畫 T2）
+BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
@@ -176,9 +177,9 @@ class Game:
     def _reset_player_for_new_season(self, season_number: int) -> None:
         """新一季：玩家整個 GameState 重新開始（角色、江湖紀錄、戰報都是上一季的事了），
         只保留現實時間同步點（last_real，不然下次 sync 會把一整季沒上線的時間都當成
-        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——跟同伴的關係現況/對話歷史
-        （整份保留）；好感度則只帶一成（Config.affinity_carry_ratio、無條件捨去，
-        80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
+        流逝掉）跟幾項明確認定「跟賽季無關、是我自己的」的東西——跟同伴的對話歷史（整份保留，但記下這一季從第幾則
+        開始，模型只看這一季的）；關係現況搬到 past_notes 當「上一季的交情」，這一季的從頭寫；好感度則只帶一成
+        （Config.affinity_carry_ratio、無條件捨去，80→8、5→0：第一季設計第十四節，下一季最多從 10 起步，交情要重新經營）。
         新手引導：做完或略過的人照舊不再出現；還沒做完的人跟著新角色從起始步重來——
         新角色只剩開局那兩門第一成的基礎武學，接著上一季做到一半的下一步（例如出城遊歷）會把他推進
         打不過的路（FB-034）。
@@ -193,8 +194,11 @@ class Game:
             fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
         ratio = self.content.config.affinity_carry_ratio
         fresh.player.affinities = {key: int(value * ratio) for key, value in old.player.affinities.items()}
-        fresh.player.relationship_notes = old.player.relationship_notes
+        # 上一季的交情另外留著（這一季的關係從頭寫），好感度只剩一成時提示才不會說「親如兄弟」（正式版辛）；
+        # 這一季沒聊過的人物留著更早的那一句
+        fresh.player.past_notes = {**old.player.past_notes, **old.player.relationship_notes}
         fresh.player.dialogue_history = old.player.dialogue_history
+        fresh.player.history_start = {cid: len(h) for cid, h in old.player.dialogue_history.items()}
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
@@ -2601,8 +2605,8 @@ class Game:
                 record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                 msgs.append(line)
         record.exp = squad.exp
-        levels = team.add_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
-        record.notes += levels
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, squad.exp)  # 每人都拿（FB-002）
+        record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         return msgs + levels
 
     def _file_battle(self, record) -> str:
@@ -3253,7 +3257,8 @@ class Game:
 
     def battle_card(self) -> str | None:
         record = battlelog.find(self.state, self.state.battle_card)
-        return battlelog.card_text(record, self.stamp) if record else None
+        # 升級那一行的「可配 N 點」照現在的點數寫（配了就少），跟狀態列同一個數（FB-074）
+        return battlelog.card_text(record, self.stamp, points=self.state.player.stat_points) if record else None
 
     def battle_card_id(self) -> int | None:
         record = battlelog.find(self.state, self.state.battle_card)
@@ -3707,6 +3712,7 @@ class Game:
             "anonymous": p.anonymous,
             "level": p.member.level,
             "location": c.locations[p.location].name,
+            "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
             "day": int(w.time // DAY) + 1,
             "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
             "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
@@ -3742,6 +3748,7 @@ class Game:
             data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
             data["stances"] = stances(s, c)
             data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c, self._roster_players())}
+            data["stance_rule"] = stance_rule_note(s, c)  # 態勢卡底下的收季規則（正式版辛）
         return data
 
     def _calendar_status(self) -> dict:
@@ -3765,13 +3772,13 @@ class Game:
         }
 
     def bulletin(self) -> list[str]:
-        """江湖頁最上面的公告卡（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
+        """江湖頁那排小標「大事」點開的本週大事（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
         江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的；
         休季時也是空的：結算卡已經列著這一季的每一件大事與結局（FB-046）。"""
         return [f"**{title}**\n\n{text}" for title, text in self._bulletin_events()]
 
     def _bulletin_events(self) -> list[tuple[str, str]]:
-        """公告卡上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
+        """本週大事面板上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
         w, c = self.state.world, self.content
         if not calendar.season_one_on(w, c) or w.ended:
             return []
@@ -3782,7 +3789,7 @@ class Game:
         return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
 
     def _news_on_cards(self) -> set[str]:
-        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事的公告卡，休季時是結算卡（結局與這一季的每一件大事）。"""
+        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事（那排小標「大事」點開的面板），休季時是結算卡（結局與這一季的每一件大事）。"""
         w = self.state.world
         if w.ended and season_one(self.content, w):
             shown = {r.text for r in w.timeline.values()} | {w.ending_text}
