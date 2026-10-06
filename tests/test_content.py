@@ -1153,6 +1153,69 @@ def test_world_tick_seconds_is_off_or_at_least_a_second():
         Config(world_tick_seconds=0.5)
 
 
+# ── LLM 佇列與鎖外模型呼叫的時間預算（線上架構第 2 期計畫）──────────────
+
+
+def test_llm_queue_is_off_by_default():
+    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.llm_queue_slots == 0, path.stem
+
+
+@pytest.mark.parametrize("field", ["llm_queue_slots", "llm_queue_bot_cap", "llm_queue_wait_seconds"])
+def test_llm_queue_settings_cannot_be_negative(field):
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(**{field: -1})
+
+
+def test_the_queue_wait_has_an_upper_bound():
+    """審查 M5：排隊最久等多久要有上限。請求在 trycloudflare 約 100 秒就被切斷，排 120 秒以上沒有意義；太大的數字（超過
+    threading.TIMEOUT_MAX，約 430 萬秒）還會讓每一次要排的呼叫在 Condition.wait 丟 OverflowError。"""
+    assert Config(llm_queue_wait_seconds=120).llm_queue_wait_seconds == 120
+    assert Config(llm_queue_wait_seconds=0).llm_queue_wait_seconds == 0
+    for too_long in (120.5, 5_000_000):
+        with pytest.raises(ValidationError, match="less than or equal to 120"):
+            Config(llm_queue_wait_seconds=too_long)
+
+
+def test_every_model_call_outside_the_lock_has_a_total_budget():
+    """鎖外四種模型呼叫（開爐取名、大場面判讀、對話生成、隨口應對評分）各有一份總預算，預設都是 60 秒：試玩走 trycloudflare，
+    一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段等行動鎖與排模型佇列的餘裕。"""
+    config = load_content(CONTENT_DIR).config
+    assert (
+        config.naming_budget_seconds, config.big_fight_budget_seconds,
+        config.dialogue_budget_seconds, config.free_text_budget_seconds,
+    ) == (60, 60, 60, 60)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(dialogue_budget_seconds=-1)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(free_text_budget_seconds=-1)
+
+
+# ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
+
+
+def test_push_is_off_by_default():
+    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與玩家用的設定
+    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    config = load_content(CONTENT_DIR).config
+    assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is False, path.stem
+
+
+def test_push_timings_must_make_sense():
+    """看守每 0 秒看一次是空轉；兩次「世界變了」的間隔不能是負的（0＝不壓）。"""
+    with pytest.raises(ValidationError, match="greater than 0"):
+        Config(push_watch_seconds=0)
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Config(push_world_min_seconds=-1)
+    assert Config(push_world_min_seconds=0).push_world_min_seconds == 0
+
+
 # ── 時刻表（content/timetable.json，計畫 T2）──────────────────────────
 
 
@@ -1697,6 +1760,47 @@ def test_the_free_text_and_bot_reward_lists_leave_lore_out():
 
     assert "lore" not in content.FREE_TEXT_REWARDS and "lore" not in bot_policy.REWARD_STATS
     assert {"str", "agi", "con", "wis"} <= set(content.FREE_TEXT_REWARDS)  # 另外四項不動
+
+
+# ── 戰後事件的條件 fight_tiers（這次行動打的那一場的結果）────────────────
+
+
+def test_validate_accepts_fight_tiers_on_a_train_event(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "險勝"])  # 夾具裡唯一掛在遊歷上的事件
+    validate(content)
+    content.events["chain_a"].condition = Condition(any_of=[Condition(fight_tiers=["落敗"])])  # any_of 裡面也一樣
+    validate(content)
+
+
+def test_validate_rejects_an_unknown_fight_tier(content):
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝", "大捷"])
+    with pytest.raises(ContentError, match="事件 chain_a：未知的戰鬥結果 大捷"):
+        validate(content)
+
+
+@pytest.mark.parametrize("actions", [["explore", "train"], ["train", "socialize"], []])
+def test_validate_rejects_fight_tiers_on_an_event_that_is_not_only_a_train_event(content, actions):
+    """遊歷以外的行動抽到它時沒有剛打完的那一場（探索三選一是互斥的支線、交友沒有戰鬥；只靠串接來的更沒有），
+    寫了只會在那些行動上悄悄永遠不成立：actions 要剛好是 ["train"]。"""
+    content.events["chain_a"].actions = actions
+    content.events["chain_a"].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="事件 chain_a：fight_tiers 只能寫在遊歷"):
+        validate(content)
+
+
+def test_validate_rejects_fight_tiers_where_no_fight_has_just_ended(content):
+    """只有遊歷打完才會接事件：別的行動抽的事件、選項與結局的條件寫了它，永遠不成立。"""
+    content.events["drunk"].condition = Condition(fight_tiers=["大勝"])  # 探索抽的
+    with pytest.raises(ContentError, match="事件 drunk：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].condition = Condition()
+    content.events["drunk"].choices[0].condition = Condition(fight_tiers=["大勝"])  # 選項的條件也不行
+    with pytest.raises(ContentError, match="事件 drunk 選項0：fight_tiers 只能寫在遊歷"):
+        validate(content)
+    content.events["drunk"].choices[0].condition = Condition()
+    content.scenario.endings[0].condition = Condition(fight_tiers=["大勝"])
+    with pytest.raises(ContentError, match="fight_tiers 只能寫在遊歷"):
+        validate(content)
 
 
 # ── traits.json、trait_lines.json：武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 1）──

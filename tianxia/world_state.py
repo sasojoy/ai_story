@@ -306,6 +306,11 @@ class WorldStateStore(Protocol):
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""
         ...
 
+    def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
+        """（全服狀態，這一季最大的天下大事傳聞流水號，這一季江湖史的則數），同一個唯讀快照裡讀的；賽季裡的傳聞與江湖史
+        不讀回每一列。推送的看守用（server.current_fingerprint）。"""
+        ...
+
     # ── 全服即時多人戰鬥 ──
     def get_battle(self) -> BattleInstance | None: ...
 

@@ -62,6 +62,9 @@ class Condition(_Strict):
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
+    # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
+    # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
+    fight_tiers: list[str] = Field(default_factory=list)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -764,6 +767,20 @@ class Config(_Strict):
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     big_fight_budget_seconds: int = Field(default=60, ge=0)
+    # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
+    # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
+    # 時間，剩下的一半當那一趟模型呼叫的逾時（chat_structured 一次最多送兩趟）；用完就走原本的退路（對話取消、評分 40、潤色不插句子）。
+    # 以前這幾件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
+    dialogue_budget_seconds: int = Field(default=60, ge=0)
+    free_text_budget_seconds: int = Field(default=60, ge=0)
+    # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，
+    # 0＝不建佇列（預設；照舊直接叫）；假人在排加在跑最多 llm_queue_bot_cap 件；排超過 llm_queue_wait_seconds 秒就拿退路、
+    # 不叫模型（每個人同時最多一件，第二件被擋下來、不拿退路：評分、開爐、大場面回一句話、什麼都不套用，對話取消、潤色不插句子）。
+    # 排隊等掉的時間算在上面四份總預算裡，而且排隊最久只等「那一件預算還剩的秒數」（server.model_call）。上限 120 秒：請求在
+    # trycloudflare 約 100 秒就被切斷；太大的數字還會讓 Condition.wait 丟 OverflowError（threading.TIMEOUT_MAX）
+    llm_queue_slots: int = Field(default=0, ge=0)
+    llm_queue_bot_cap: int = Field(default=1, ge=0)
+    llm_queue_wait_seconds: float = Field(default=20, ge=0, le=120)
     # 2026-10-03 實測（gemma4:26b）：有思考模式的模型要關掉思考，不然每輪多等好幾秒；None 表示不送這個欄位
     ollama_think: bool | None = None
     ollama_keep_alive: str = "30m"  # 模型閒置多久後卸載；大模型重新載入要十幾秒
@@ -787,6 +804,13 @@ class Config(_Strict):
         if 0 < seconds < 1:
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
+
+    # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
+    # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
+    # 世界指紋」，兩次「世界變了」的通知至少隔 push_world_min_seconds 秒（也是各分頁收到之後重抓畫面要攤開的秒數）
+    push_events: bool = False
+    push_watch_seconds: float = Field(default=5, gt=0)
+    push_world_min_seconds: float = Field(default=10, ge=0)
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。

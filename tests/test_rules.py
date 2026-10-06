@@ -49,6 +49,47 @@ def test_condition_members_none(state):
     assert not check_condition(Condition(members_none=["hero", "mate"]), state)
 
 
+def _fought(state, tier, card=True):
+    """state 剛打完一場（tier 是結果），card＝這次行動的戰鬥卡片（state.battle_card）指著它。"""
+    from tianxia.state import BattleRecord, Fighter
+
+    state.battles.insert(0, BattleRecord(
+        id=7, time=0.0, location="湖邊", kind="train", opponent="水寇小隊", ours=[Fighter(name="沈浪", level=1)],
+        tier=tier, our_power=40.0, difficulty=5.0,
+    ))
+    state.battle_card = 7 if card else None
+
+
+def test_condition_fight_tiers_reads_the_fight_this_action_just_ended(state):
+    """戰後事件的條件：這次行動打的那一場（戰鬥卡片指著的那筆），結果在清單裡才成立。"""
+    wins = Condition(fight_tiers=["大勝", "險勝"])
+    _fought(state, "險勝")
+    assert check_condition(wins, state)
+    assert not check_condition(Condition(fight_tiers=["僵持", "落敗"]), state)
+    _fought(state, "落敗")
+    assert not check_condition(wins, state)
+    _fought(state, "僵持")
+    assert not check_condition(wins, state)
+
+
+def test_condition_fight_tiers_is_false_when_this_action_fought_nothing(state):
+    """上一次行動打贏了、這一次沒打：卡片已經清掉，舊的紀錄不算。沒打過架、卡片指著不存在的紀錄也不成立。"""
+    wins = Condition(fight_tiers=["大勝", "險勝"])
+    assert not check_condition(wins, state)
+    _fought(state, "大勝", card=False)  # 紀錄還在，但這次行動沒打
+    assert not check_condition(wins, state)
+    state.battle_card = 99
+    assert not check_condition(wins, state)
+
+
+def test_condition_fight_tiers_is_anded_with_the_rest_and_works_in_any_of(state):
+    _fought(state, "大勝")
+    assert check_condition(Condition(fight_tiers=["大勝"], min_stats={"str": 5}), state)
+    assert not check_condition(Condition(fight_tiers=["大勝"], min_stats={"str": 99}), state)
+    assert check_condition(Condition(any_of=[Condition(fight_tiers=["落敗"]), Condition(fight_tiers=["大勝"])]), state)
+    assert not check_condition(Condition(any_of=[Condition(fight_tiers=["落敗"])]), state)
+
+
 def test_check_chance_scales_and_clamps(state, content, world):
     assert check_chance(Check(stat="str", difficulty=5, by="self"), state, content, world) == 0.5
     assert check_chance(Check(stat="str", difficulty=7, by="self"), state, content, world) == pytest.approx(0.3)
