@@ -24,7 +24,7 @@
       "line": "回「江湖」按「探索」，挑一處景致去悟",
       "done_when": {"action": "choice", "condition": {"flags_all": ["序章:悟"]}},
       "reveal": ["stamina", "act:explore"],
-      "glow": ["act:explore"],
+      "glow": ["tab:jianghu", "act:explore"],
       "allow": ["act:explore"],
       "explore_event": "prologue_insight"
     },
@@ -60,7 +60,7 @@
       "line": "體力見底了，按「打坐」歇一歇",
       "done_when": {"action": "rest"},
       "reveal": ["act:rest"],
-      "glow": ["act:rest"],
+      "glow": ["tab:jianghu", "act:rest"],
       "allow": ["act:rest"],
       "instant_rest": "你盤腿坐下，照吐納的法子慢慢呼吸。再睜開眼時，渾身又有了力氣。"
     },

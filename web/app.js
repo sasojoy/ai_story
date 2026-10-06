@@ -378,7 +378,8 @@
   }
 
   // 要按的東西在第一屏之外（修練頁的改練那一列在 y≈1300）時，師父的框上多一個小小的「在下面 ↓」，點了捲到那裡（T7 審查 M7）。
-  // 只看頁面裡（#page）第一個發光的東西：分頁列與狀態列的鈕永遠在畫面上。只在序章；每次畫完頁面重算，捲動不重算
+  // 只看頁面裡（#page）第一個發光的東西：分頁列與狀態列的鈕永遠在畫面上。只在序章；每次畫完頁面重算（applyGlow 呼叫），
+  // 視窗大小變了（轉向、拉視窗）也重算（resize 的去抖，見檔案最後那個 resize 監聽，T7 走查 W-F）；捲動不重算
   function guideCue() {
     const head = document.querySelector(".card.guide .guide-head");
     if (!head) return;

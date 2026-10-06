@@ -801,6 +801,7 @@ def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_roo
     （beta 的框抵達後就沒了，第一季的框是下一步的話，那一列會寫成別的意思）；體力那一項寫「體力回滿」，不是「體力 +150」。
     第一季要在開季那一刻就開著才蓋得到章（rules.season_one），所以兩種季各用自己的資料庫、先設好開關再建角色（T7 審查 N4）。"""
     import json
+    import re
 
     from tianxia import guide
     from tianxia.sqlite_world import open_world
@@ -825,8 +826,13 @@ def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_roo
         assert entry.lines.index("草廬已經看不見了。") < entry.lines.index("體力回滿"), label  # 先是景，再是盤纏
         assert "體力 +150" not in "".join(entry.changes + entry.lines + game.state.player.guide_done), label
         assert game.state.player.guide_done == [], label
-        seasons[label] = (entry.changes, entry.lines)
-    assert seasons["beta"][1] == seasons["season one"][1]  # 兩種季寫得一樣
+        # 玩家看到的整張卡（文字與數值變化的小標）：拿掉「剛剛　時間」那一行（第一季寫季曆、beta 寫第幾天，本來就不同）之後兩種季一字不差
+        card = re.sub(r'<div class="tx-when">.*?</div>', "", game.now_entry_html())
+        assert "草廬已經看不見了。" in card and "體力回滿" in card and "銀兩 +30" in card and "體力 +150" not in card, label
+        assert "tx-up" in card, label  # 銀兩 +30 是綠色的增加小標
+        seasons[label] = (entry.title, entry.tag, entry.lines, entry.changes, card)
+        assert entry.guide == [f"【師父】{'去投靠。' if on else '去闖吧。'}"], label  # 引導那幾行（下一步的話）本來就不同，不在卡上，也不含盤纏
+    assert seasons["beta"] == seasons["season one"]  # 兩種季寫得一樣：標題、結果標記、敘事、數值變化、整張卡
 
 
 def test_a_late_step_outside_the_hut_still_shows_its_chip_and_reward(prologue_root, world):

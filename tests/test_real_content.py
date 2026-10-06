@@ -238,6 +238,33 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
     assert all("switch" not in r["glow"] for r in game.art_rows())  # 基礎拳腳換下來了，不發光
 
 
+# 一步做完的時候玩家在哪一頁，下一步要按的東西在哪一頁（T7 走查 W-G：步驟 7 一開始在修練頁，打坐在江湖頁，江湖分頁卻沒發光）。
+# 「做完在」：看修練頁那一步（p2）做完是玩家剛打開修練頁；探索（p3）、打坐（p7）、遊歷（p8）、配點（p9）在江湖頁（配點的面板在
+# 狀態列，哪一頁都看得到）；合成（p4）在煉製頁；練成、修練、熔煉（p5、p6、p10）在修練頁。「目標在」：分頁列與狀態列的東西哪一頁都在（any）。
+COMPLETES_ON = {
+    "p1_ambush": "jianghu", "p2_apprentice": "practice", "p3_insight": "jianghu", "p4_fuse": "craft", "p5_level": "practice",
+    "p6_refine": "practice", "p7_rest": "jianghu", "p8_revenge": "jianghu", "p9_stat": "any", "p10_melt": "practice",
+}
+TARGET_ON = {
+    "p2_apprentice": ("any",), "p3_insight": ("jianghu",), "p4_fuse": ("craft",), "p5_level": ("practice",), "p6_refine": ("practice",),
+    "p7_rest": ("jianghu",), "p8_revenge": ("jianghu",), "p9_stat": ("any",), "p10_melt": ("practice",),
+    "p11_farewell": ("jianghu", "map"),  # 移動在江湖頁，也可以直接去輿圖（師父的話說的是打開輿圖）
+}
+
+
+def test_every_step_that_starts_on_another_page_glows_the_tab_that_leads_to_its_target(content):
+    """T7 走查 W-G：一步開始時玩家停在上一步做完的那一頁；要按的東西在別頁，分頁列上通往那一頁的分頁就要發光，不然那一頁什麼都不亮。
+    照玩家遇到的順序一步一步查（p1 到 p11）：做完在 X、下一步的目標在 Y，X 不是 Y 就要有 tab:Y。"""
+    steps = [s for s in content.tutorial.steps[: content.tutorial.prologue_steps]]
+    assert [s.id for s in steps[:-1]] == list(COMPLETES_ON)  # 表跟內容的步驟一一對得上，改了步驟這裡要跟著改
+    for previous, step in zip(steps, steps[1:]):
+        start, targets = COMPLETES_ON[previous.id], TARGET_ON[step.id]
+        if start in targets or "any" in targets:
+            continue
+        assert any(f"tab:{page}" in step.glow for page in targets), (step.id, start, targets, step.glow)
+    assert "tab:jianghu" in {s.id: s for s in steps}["p7_rest"].glow and "tab:jianghu" in {s.id: s for s in steps}["p3_insight"].glow
+
+
 def test_the_real_hut_cards_say_each_thing_once_and_the_reward_comes_with_the_walk(content, world):
     """T7 審查 M1、M3、M4：合成、修練、熔煉的結果用 10.3 的句子（不再接一句重複的師門傳下來），四景只留事件文字那一句，
     沒有「✔ 完成」；出師的盤纏寫在抵達潁川那一則（銀兩 +30、體力回滿）。"""

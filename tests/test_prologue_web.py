@@ -324,8 +324,8 @@ def test_a_notice_in_the_hut_is_a_visible_button_not_a_fold(hut, option, label, 
 # ── 發光與閃一閃 ────────────────────────────────────
 
 def test_the_glowing_buttons_are_the_ones_the_step_names(hut):
-    m = main_at(hut, 2)  # 探索那一步：glow ["act:explore"]
-    assert m["prologue"]["glow"] == ["act:explore"]
+    m = main_at(hut, 2)  # 探索那一步：glow ["tab:jianghu", "act:explore"]（剛看完修練頁，江湖分頁也發光）
+    assert m["prologue"]["glow"] == ["tab:jianghu", "act:explore"]
     out = run(m, """
       const explore = T.el(["act:explore"]), other = T.el(["act:rest"]), off = T.el(["act:explore"], true), both = T.el(["switch", "melt"]);
       H.applyGlow();
@@ -718,8 +718,11 @@ def test_the_craft_page_lights_the_two_things_to_put_in_the_furnace(hut):
     assert 'data-glow="pick:' not in both and re.search(r'id="forge" data-act="forge" data-glow="forge"\s*>', both)  # 兩樣都放好：開爐亮了
 
 
-def test_the_cue_shows_on_the_craft_page_for_the_pick_lists(hut):
-    """W-B：挑選清單在第一屏之外，師父的框上有「在下面 ↓」（#page .glow 找得到第一個發光的東西）。這裡只驗它找得到的是挑選清單的那一顆。"""
+def test_the_first_glowing_thing_on_the_craft_page_is_the_base_art_chip(hut):
+    """W-B：師父框上的「在下面 ↓」看的是頁面裡第一個會發光的東西（#page .glow，applyGlow 只加在按得下去的）。這個測試只釘「煉製頁
+    步驟 4 的標記裡，由上往下第一個按得下去又帶發光鍵的是底（基礎拳腳）的那一顆挑選清單，開爐灰著不算」；它不跑 guideCue——
+    node 的假 DOM 沒有版面，算位置、有沒有「在下面 ↓」的部分由上面 test_the_cue_points_at_a_target_below_the_fold_and_only_then
+    （假的 getBoundingClientRect）釘，真的版面上它出現在 771 的那一顆是無頭 Chrome 量過的（Task 7 第二輪報告）。"""
     m, x = pages_at(hut, 3)
     out = run(m, "return H.pageCraft();", menxia=x)
     tags = re.findall(r"<button[^>]*data-glow=[^>]*>", out)  # 發光只加在按得下去的（applyGlow 的 :not([disabled])）
