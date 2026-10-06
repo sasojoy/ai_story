@@ -86,6 +86,31 @@ def test_an_unknown_account_and_a_wrong_password_read_the_same(store):
     assert str(wrong.value) == str(unknown.value) == "帳號或密碼不對。"
 
 
+def test_an_unknown_account_still_pays_one_full_hash_like_a_wrong_password(store, monkeypatch):
+    """帳號不存在也照樣用正式參數算一次雜湊（鹽是一份固定的假鹽）：不然「帳號不存在」比「密碼錯」快，量回話的時間就分得出
+    帳號在不在（CLAUDE.md：帳號不存在與密碼錯回同一句話）。密碼錯的那一次也正好是一次。"""
+    import hashlib
+
+    from tianxia import accounts
+
+    calls = []
+    real = hashlib.scrypt
+
+    def spy(password, **kwargs):
+        calls.append(kwargs)
+        return real(password, **kwargs)
+
+    monkeypatch.setattr(accounts.hashlib, "scrypt", spy)
+    with pytest.raises(AccountError):
+        store.authenticate("nobody", "secret-pw")
+    assert calls == [{"salt": accounts._DUMMY_SALT, "n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}]
+    store.register("alpha", "secret-pw")
+    calls.clear()
+    with pytest.raises(AccountError):
+        store.authenticate("alpha", "nope-nope")
+    assert len(calls) == 1 and {k: v for k, v in calls[0].items() if k != "salt"} == {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
+
+
 def test_five_failures_in_ten_minutes_lock_the_login(store, clock):
     store.register("alpha", "secret-pw")
     for _ in range(5):
