@@ -49,6 +49,17 @@ def report(state: GameState, content: Content) -> list[str]:
     return [f"你補上了{title}的缺，到下週一為止。"]
 
 
+def leave(state: GameState, faction: str) -> None:
+    """叛投時（defection.defect）：從舊陣營的帳與這一週的名單拿掉自己，兩處都拿，不留幽靈席次——名單上留著名字，這個缺就一直被他佔著；
+    帳上留著名字，週一的排名還會把一個已經不在這個陣營的人排進去。空出來的席次，下一個有資格而且還沒在任的人下次同步或行動就補上（report），
+    等於補缺；週一再照上週的帳重排。只動共用賽季，不動個人（qualified 由 defection.clear_progress 清）。"""
+    w, name = state.world, state.player.name
+    w.seat_ledger.get(faction, {}).pop(name, None)
+    held = w.seats.get(faction, [])
+    if name in held:
+        held.remove(name)
+
+
 def rotate(state: GameState, content: Content, week: int) -> list[str]:
     """週一 00:00 的掛鉤（world.WEEK_HOOKS，排在軍令發令之前）：每個陣營照上一週（week − 1）帳上的貢獻排名，前 N 名上任；
     同分照帳上的先後（先拿到資格的優先）。每個週一都發一則陣營軍情「本週在任的校尉：甲、乙。」，名單沒變的那一週也發

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import opportunities, ranks
+from . import opportunities, ranks, seats
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name, season_one
 from .state import GameState, PlayerState
@@ -118,6 +118,7 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
         p.flags.add(f"叛出:{sect.id}")
         p.sect = None
         msgs.append(f"你也就此離開了{sect.name}。")
+    seats.leave(state, old.id)  # 第四階席次的帳與這一週的名單：在任的人讓出缺、候缺的人不再排進去（正式版丁）
     clear_progress(p)
     opportunities.leave_plots(state)  # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
     p.faction, p.defected = target.id, True

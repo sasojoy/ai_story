@@ -510,7 +510,15 @@ def test_the_defection_prompt_names_the_seat_title(on):
     game = _qualified(on, "甲")
     seats.report(game.state, on)
     text = defection.prompt(game.state, on, on.scenario.faction("huang"), "")
-    assert "身份歸零（你現在是校尉）" in text
+    assert "身份歸零（你現在是校尉）" in text  # 讓出席次這個代價就寫在頭銜裡，沒有另寫一句
+
+
+def test_the_defection_prompt_for_a_waiting_candidate_names_the_candidacy(on):
+    from tianxia import defection
+
+    game = _qualified(on, "甲")
+    text = defection.prompt(game.state, on, on.scenario.faction("huang"), "")
+    assert "身份歸零（你現在是軍司馬（校尉候缺））" in text
 
 
 def test_the_status_line_shows_the_seat_title(on):
@@ -663,3 +671,172 @@ def test_a_pause_holds_the_monday_rotation_and_the_resume_rotates_once(on):
     game.sync(resume_at + week_two + 30)
     assert _notes(store.get_season()).count("本週在任的校尉：乙、丙。") == 1
     assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"  # 甲被擠下來了：回到候缺
+
+
+# ── Task 3：叛投讓出席次 ──────────────────────────────────
+
+
+def _huang(content):
+    return next(f for f in content.scenario.factions if f.id == "huang")
+
+
+def _defect_through_the_menu(game, now):
+    """照伺服器的做法：先同步（讀最新的共用賽季），再走叛投的兩步（站在黃巾的投靠點）。"""
+    game.state.player.location = "huangjin_camp"
+    game.sync(now)
+    game.choose("defect:huang")
+    return game.choose("defect:confirm")
+
+
+def test_defection_frees_the_seat(on):
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    holder.state.player.location = "huangjin_camp"
+    defection.defect(holder.state, on, _huang(on))
+    assert "甲" not in w.seat_ledger.get("guan", {}) and "甲" not in w.seats.get("guan", [])
+    nxt = _qualified(on, "乙", world=w)
+    assert seats.report(nxt.state, on) == ["你補上了校尉的缺，到下週一為止。"]
+
+
+def test_leave_takes_only_the_one_name_out_of_the_one_faction(on):
+    w = WorldState(season_one=True)
+    a, b = _qualified(on, "甲", world=w), _qualified(on, "乙", world=w)
+    other = _qualified(on, "丙", faction="huang", world=w)
+    for g in (a, b, other):
+        seats.report(g.state, on)
+    w.seat_ledger["huang"]["甲"] = {1: 1}  # 別的陣營的帳上剛好也有同名的人（不該發生；叛投走過的人在舊陣營已經被拿掉）：只拿叫到的那個陣營
+    w.seats["huang"].append("甲")
+    seats.leave(a.state, "guan")
+    assert w.seats == {"guan": ["乙"], "huang": ["丙", "甲"]}
+    assert list(w.seat_ledger["guan"]) == ["乙"] and list(w.seat_ledger["huang"]) == ["丙", "甲"]
+    seats.leave(other.state, "guan")  # 不是他的陣營：什麼都不動
+    assert w.seats == {"guan": ["乙"], "huang": ["丙", "甲"]}
+
+
+def test_leave_keeps_the_order_of_the_others(on):
+    w = WorldState(season_one=True)
+    games = [_qualified(on, name, world=w) for name in ("甲", "乙", "丙", "丁")]
+    for g in games:
+        seats.report(g.state, on)
+    seats.leave(games[1].state, "guan")
+    assert list(w.seat_ledger["guan"]) == ["甲", "丙", "丁"]  # 同分時先拿到資格的優先：剩下的人先後不變
+    assert w.seats["guan"] == ["甲"]  # 乙讓出的缺還空著（甲、乙原本坐滿兩席）
+
+
+def test_leave_with_nothing_on_the_books_is_harmless(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    seats.leave(game.state, "guan")  # 沒有帳也沒有名單
+    seats.leave(game.state, "huang")
+    assert w.seat_ledger == {} and w.seats == {}  # 也不留下空的陣營項目
+
+
+def test_a_waiting_candidate_who_defects_leaves_the_ledger_too(on):
+    """還沒補上缺、在帳上候缺的人叛投：帳上也拿掉，不然週一的排名會把一個已經不在這個陣營的人排進去。"""
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    waiting = _qualified(on, "丙", weeks={1: 99}, world=w)
+    seats.report(waiting.state, on)
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙", "丙"] and w.seats["guan"] == ["甲", "乙"]
+    defection.defect(waiting.state, on, _huang(on))
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙"] and w.seats["guan"] == ["甲", "乙"]
+
+
+def test_a_defector_does_not_come_back_on_monday(on):
+    """沒有幽靈席次：上一週貢獻最多的人叛投走了，週一的排名讀不到他，名單與軍情裡都沒有他。"""
+    from tianxia import defection
+
+    w = _season({"甲": 90, "乙": 40, "丙": 30})
+    holder = _qualified(on, "甲", weeks={1: 90}, world=w)
+    w.seats["guan"] = ["甲", "乙"]
+    defection.defect(holder.state, on, _huang(on))
+    before = len(w.rumors)
+    seats.rotate(holder.state, on, 2)
+    assert w.seats["guan"] == ["乙", "丙"]
+    assert _notes(w, before) == ["本週在任的校尉：乙、丙。"]
+
+
+def test_the_defector_holds_no_seat_in_the_new_faction(on):
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    defection.defect(holder.state, on, _huang(on))
+    assert holder.state.player.faction == "huang" and not holder.state.player.qualified
+    assert not seats.seated(holder.state) and ranks.rank_of(holder.state) == 1
+    assert ranks.title(on, holder.state) == "信眾"
+    assert seats.report(holder.state, on) == [] and w.seats.get("huang", []) == []  # 新陣營要重新晉升
+
+
+def test_seated_reads_the_current_faction_only(on):
+    """名單照陣營分開：就算新陣營的名單上剛好有同名的人（別的人），在任看的是自己現在的陣營。"""
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    holder.state.player.faction, holder.state.player.qualified = "huang", False
+    assert not seats.seated(holder.state)  # 甲還留在官軍的名單上（沒呼叫 leave）：不算黃巾的席次
+
+
+def test_a_seated_holder_who_defects_through_the_menu_leaves_no_ghost(on):
+    """走真正的選單：叛投確定那一下，共用賽季裡席次與帳都沒有他；同一個動作結尾的抄帳也沒有把他寫回去。"""
+    holder = _qualified(on, "甲", weeks={1: 9})
+    holder.sync(1000.0)
+    assert holder.world.get_season().seats["guan"] == ["甲"]
+    msgs = _defect_through_the_menu(holder, 1010.0)
+    assert "你叛出官軍，投了黃巾軍。" in msgs
+    season = holder.world.get_season()
+    assert season.seats["guan"] == [] and "甲" not in season.seat_ledger["guan"]
+    assert holder.state.player.faction == "huang" and ranks.title(on, holder.state) == "信眾"
+    holder.sync(1020.0)  # 之後的輪詢也不會把他寫回去
+    season = holder.world.get_season()
+    assert season.seats["guan"] == [] and "甲" not in season.seat_ledger["guan"]
+
+
+def test_the_next_waiting_member_fills_the_freed_seat_on_the_next_poll(on):
+    """甲讓出席次；候缺的丙下一次輪詢（只同步、只存角色）就補上，存得住、不補第二次。"""
+    from tianxia.characters import open_characters
+
+    holder = _qualified(on, "甲", weeks={1: 9})
+    second = _qualified(on, "乙", weeks={1: 5})
+    waiting = _qualified(on, "丙", weeks={1: 3})
+    for game, now in ((holder, 1000.0), (second, 1001.0), (waiting, 1002.0)):
+        game.sync(now)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["甲", "乙"] and list(season.seat_ledger["guan"]) == ["甲", "乙", "丙"]
+    assert ranks.title(on, waiting.state) == "軍司馬（校尉候缺）"
+    _defect_through_the_menu(holder, 1010.0)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["乙"] and list(season.seat_ledger["guan"]) == ["乙", "丙"]
+    msgs = waiting.sync(1020.0)
+    assert "你補上了校尉的缺，到下週一為止。" in msgs and ranks.title(on, waiting.state) == "校尉"
+    open_characters().save(waiting.state)
+    again = Game(on, open_characters().load("丙"), random.Random(0))
+    again.client = None
+    assert again.state.world.seats["guan"] == ["乙", "丙"]
+    assert "你補上了校尉的缺，到下週一為止。" not in again.sync(1030.0)
+    assert sum(r.text == "丙補上了校尉的缺。" for r in again.world.get_season().rumors) == 1
+
+
+def test_a_pause_holds_the_refill_of_a_freed_seat_until_the_resume(on):
+    holder = _qualified(on, "甲", weeks={1: 9})
+    waiting = _qualified(on, "乙", weeks={1: 5})
+    third = _qualified(on, "丙", weeks={1: 3})
+    for game, now in ((holder, 1000.0), (waiting, 1001.0), (third, 1002.0)):
+        game.sync(now)
+    assert holder.world.get_season().seats["guan"] == ["甲", "乙"]
+    _defect_through_the_menu(holder, 1010.0)
+    assert holder.world.get_season().seats["guan"] == ["乙"]
+    _pause(third, 1011.0)
+    assert "你補上了校尉的缺，到下週一為止。" not in third.sync(1100.0)
+    assert holder.world.get_season().seats["guan"] == ["乙"]  # 暫停中：空著的缺不補
+    _resume(third, 1200.0)
+    assert "你補上了校尉的缺，到下週一為止。" in third.sync(1210.0)
+    assert holder.world.get_season().seats["guan"] == ["乙", "丙"]
+    assert "你補上了校尉的缺，到下週一為止。" not in third.sync(1220.0)  # 只補一次
