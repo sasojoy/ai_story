@@ -137,9 +137,23 @@ def test_the_glowing_step_opens_the_fold_once_and_the_glow_stays_on_the_button(g
     out = run(glowing, _script("""
       H.renderPage();
       const html = T.els.page.innerHTML;
-      return { open: fold(), glowButton: /data-id="act:duty" data-glow="act:duty"/.test(html), auto: Object.keys(H.S.hereAuto) };"""))
-    assert out["open"] is True and out["glowButton"] is True  # 開頭自動打開、發光的鈕還在（data-glow 照舊）
+      return { open: fold(), glowButton: /data-id="act:duty" >/.test(html), auto: Object.keys(H.S.hereAuto) };"""))
+    assert out["open"] is True and out["glowButton"] is True  # 開頭自動打開、發光的鈕還在（applyGlow 照 guide.glow 的 id 找它）
     assert len(out["auto"]) == 1  # 記下「這一步、這一處」打開過了
+
+
+def test_any_glowing_button_in_the_fold_opens_it_once_and_one_on_the_action_bar_does_not(glowing):
+    """joy 的 guide.glow 不只守勢行動：接糧車、挑戰那位人物收在「此地還能做」裡也一樣——開頭打開一次、之後照玩家的。發光的是行動列上的
+    遊歷（攻城、截糧）時摺疊裡沒有要露出來的東西，不打開。"""
+    convoy = {"id": "act:convoy", "label": "接下糧車（交出 4 份糧草）", "enabled": True, "wait": "", "confirm": ""}
+    cart = {**glowing, "guide": {**glowing["guide"], "glow": ["act:convoy"]}, "options": glowing["options"] + [convoy]}
+    out = run(cart, _script("""
+      const begin = redraw();
+      toggle(false);
+      return { begin, after: [redraw(), redraw()], auto: Object.keys(H.S.hereAuto).length };"""))
+    assert out == {"begin": True, "after": [False, False], "auto": 1}
+    train = {**glowing, "guide": {**glowing["guide"], "glow": ["act:train"]}}
+    assert run(train, _script("return { open: redraw(), auto: Object.keys(H.S.hereAuto).length };")) == {"open": False, "auto": 0}
 
 
 def test_a_fold_the_player_closed_at_the_glowing_step_stays_closed_on_the_next_redraws(glowing):
@@ -225,7 +239,7 @@ def test_logging_in_again_starts_the_fold_over(glowing):
 # 只在摺疊收著時才回摺疊（跟真的 DOM 一樣）；"#page .glow" 像真的 querySelector 一樣回第一個有 .glow 的元素，位置照 rects。
 FAKE_FOLD = """
 const state = { open: false };
-const summary = T.el([]), duty = T.el(["act:duty"]);
+const summary = T.el([]), duty = T.button("act:duty");
 const box = { querySelector: (sel) => (sel === ":scope > summary" ? summary : null) };
 duty.closest = (sel) => (sel === "details:not([open])" && !state.open ? box : null);
 const rects = new Map([[summary, { top: 740, bottom: 802 }], [duty, { top: 0, bottom: 0 }]]); // 收著的鈕量不到位置：全是 0
@@ -296,7 +310,7 @@ def test_a_closed_fold_whose_summary_is_on_the_first_screen_gets_no_cue(glowing)
 def test_a_glow_outside_any_fold_is_unchanged(glowing):
     """摺疊以外的鈕（closest 找不到收著的摺疊）：光照舊在鈕上。"""
     out = run(glowing, _script("""
-      const e = T.el(["act:duty"]);
+      const e = T.button("act:duty");
       H.applyGlow();
       return [...e.classes];"""))
     assert out == ["glow"]

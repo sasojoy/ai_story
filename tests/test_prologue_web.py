@@ -45,19 +45,23 @@ const mk = (id) => (els[id] = els[id] || {
   querySelector: () => null, querySelectorAll: () => [], setAttribute() {}, append() {}, insertAdjacentHTML() {},
 });
 ["app", "toast", "page", "top", "peek"].forEach(mk); // render() 只寫 #app 的 innerHTML；#top 要讀得到 hidden
-// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, classes: Set }。只認 applyGlow 會問的三種選擇器
+// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, id, classes: Set }。只認 applyGlow 會問的四種選擇器
 const fake = { list: [] };
 // closedFold：這顆鈕收在關著的摺疊裡時的假摺疊 { querySelector: () => 標題列的假元素 }；applyGlow 問 closest("details:not([open])") 才給（FB-087 審查 M3）
-const el = (glow, disabled = false, closedFold = null) => {
-  const e = { glow, disabled, classes: new Set() };
+// id：選單鈕的 data-id（入伍段「出一次力」那一步，伺服器在框上帶的 guide.glow 是選項 id，applyGlow 照 #page [data-id="…"] 找，FB-093）
+const el = (glow, disabled = false, closedFold = null, id = null) => {
+  const e = { glow, disabled, id, classes: new Set() };
   e.closest = (sel) => (sel === "details:not([open])" ? closedFold : null);
   e.classList = { add: (...c) => c.forEach((x) => e.classes.add(x)), remove: (...c) => c.forEach((x) => e.classes.delete(x)), contains: (c) => e.classes.has(c) };
   fake.list.push(e);
   return e;
 };
+const button = (id, disabled = false) => el([], disabled, null, id); // 一顆選單鈕（沒有 data-glow，只有 data-id）
 const matchOne = (e, sel) => {
   if (sel === ".glow") return e.classes.has("glow");
   if (sel === ".lit") return e.classes.has("lit");
+  const byId = sel.match(/^#page \[data-id="(.*)"\](:not\(\[disabled\]\))?$/);
+  if (byId) return e.id === byId[1] && !(byId[2] && e.disabled);
   const m = sel.match(/^\[data-glow~="(.*)"\](:not\(\[disabled\]\))?$/);
   if (!m) throw new Error("假 DOM 不認得的選擇器：" + sel);
   return e.glow.includes(m[1]) && !(m[2] && e.disabled);
@@ -91,7 +95,7 @@ H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
 // ctx 與 Element：測試可以換掉 fetch／setTimeout（讓請求被擋下來），也可以做出 instanceof Element 的假事件目標（toggle 事件，見 tests/test_fb087_here_fold.py）
-finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners, docListeners, bodyHtml, ctx, Element: ctx.Element }));
+finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, button, calls, qs, listeners, docListeners, bodyHtml, ctx, Element: ctx.Element }));
 """
 
 

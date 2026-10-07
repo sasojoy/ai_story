@@ -769,8 +769,7 @@ REVEAL_KEYS = frozenset({
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
-# act:duty 是入伍段第一道軍令那一步發光的鈕：自己陣營的守勢行動（EnlistStep.glow，在「此地還能做」裡，FB-093）
-GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight", "act:duty"})
+GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight"})
 
 
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
@@ -861,9 +860,6 @@ class Recruiter(_Strict):
 class EnlistStep(_Strict):
     id: str
     done_when: TutorialGoal
-    # 這一步框在畫面上時，要發光的鈕（GLOW_KEYS，跟序章的 glow 同一套）：第一道軍令那一步發光「act:duty」，也就是自己陣營的守勢行動
-    # （巡哨、傳道、保境安民）；網頁只加在畫面上真的有、按得下去的那顆（FB-093）
-    glow: list[str] = Field(default_factory=list)
 
 
 class Enlist(_Strict):

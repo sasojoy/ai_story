@@ -149,16 +149,13 @@ def box(state: GameState, content: Content) -> dict | None:
     p = state.player
     if active(state, content):
         i = p.enlist_step
-        step = _steps(content)[i]
         blocked = pending_line(state, content)
         paragraphs = _texts(who, i)
         box = {
-            "speaker": who.name, "key": step.id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
+            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
             "done": list(p.guide_done), "end": False, "pending": blocked is not None, "full": True,
         }
-        if step.glow:  # 這一步要按的鈕發光（FB-093）；網頁只亮畫面上真的有、按得下去的那顆
-            box["glow"] = list(step.glow)
         if len(paragraphs) > 1 and blocked is None:
             box["paged"] = True
         return box

@@ -12,7 +12,7 @@ from tests.test_orders import _game, _order
 
 import server
 import webharness
-from tianxia import figures, guide, models, orders
+from tianxia import guide
 from tianxia.rules import front_of
 
 
@@ -21,8 +21,10 @@ def _step(content, step_id):
 
 
 # ── FB-093：入伍第 2 步沒說軍令怎麼出力 ─────────────────────────────────
-# 軍令卡每一道都寫一行「做法」（打擊那道本來就有）；入伍第 2 步的框多一句，指出「你腳下這裡做得了的」；每位引薦人的結語不再
-# 把五種軍令怎麼做整段背一遍；第 2 步發光的是自己陣營的守勢行動（巡哨、傳道、保境安民）。
+# joy 的版本（2026-10-07 併進 main，PM 裁示 joy 的為準）：每一道沒達成的軍令卡寫怎麼做（atlas.order_how）；第 2 步的 order_hint 點名
+# 守勢行動；伺服器在框上帶能完成這一步的選項 id（guide.glow，enlist.glow），網頁讓它們發光、「此地還能做」打開。
+# 這裡留下的是 joy 的測試沒蓋到的：每一種軍令卡、黃巾的守勢行動名字；我們的結語（不再整段背五種軍令）；網頁上我們加在 joy 的發光上的
+# 三樣——收著的摺疊改由標題列發光、「在下面 ↓」、摺疊在那一步開頭只自動打開一次（tests/test_fb087_here_fold.py）。
 
 DUTY = {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
 JOIN_AT = {"guan": "changshe", "huang": "huangjin_camp", "haoqiang": "zhuo_militia_hall"}
@@ -308,20 +310,23 @@ def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
 
 
 def _enlist_main(on, faction="guan"):
+    """第 2 步的 /api/main：這週只有一道守城軍令（清掉開季的軍令，伺服器帶的 guide.glow 才只有守勢行動那一顆，見 enlist.glow）。"""
     game = _enlisted(on, faction)
+    game.state.world.orders = []
     _order(game, "defend", faction, front=front_of(on, JOIN_AT[faction]))
     return server.main_view(game)
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_fb093_the_glow_lands_on_the_defence_button_in_the_page(on):
-    """網頁：框上帶 glow（act:duty）時，「此地還能做」摺疊打開、巡哨那顆帶著 data-glow，applyGlow 給它加 glow；沒有 glow 的框一個也不加。"""
+    """網頁：框上帶 glow（伺服器照 joy 的 enlist.glow 給的選項 id）時，「此地還能做」摺疊打開、applyGlow 給巡哨那顆（data-id）加 glow；
+    沒有 glow 的框一個也不加。"""
     m = _enlist_main(on)
     assert m["guide"]["glow"] == ["act:duty"] and any(o["id"] == "act:duty" for o in m["options"])
     html = run(m, "return H.actionBar(m);")
     assert re.search(r'<details class="fold here" open>', html)  # 收著的話按鈕看不到，發光就沒有意義：發光的這一步先打開
-    assert re.search(r'data-act="choose" data-id="act:duty" data-glow="act:duty"', html)
-    script = "const e = T.el(['act:duty']); const other = T.el(['act:rest']); H.applyGlow(); return [[...e.classes], [...other.classes]];"
+    assert re.search(r'data-act="choose" data-id="act:duty" >', html) and "data-glow=\"act:duty\"" not in html  # 認 id，不另寫 data-glow
+    script = "const e = T.button('act:duty'); const other = T.button('act:rest'); H.applyGlow(); return [[...e.classes], [...other.classes]];"
     assert run(m, script) == [["glow"], []]
     quiet = {**m, "guide": {k: v for k, v in m["guide"].items() if k != "glow"}}
     assert run(quiet, script) == [[], []]  # 沒有 glow 的框：什麼都不亮（跟序章之外一向一樣）
@@ -337,7 +342,7 @@ _CUE = """
   const at = (top, bottom, via = "cue") => {
     T.qs["#page .glow"] = { getBoundingClientRect: () => ({ top, bottom }) };
     inserted.length = 0;
-    if (via === "cue") H.guideCue(); else { T.el(["act:duty"]); H.applyGlow(); }
+    if (via === "cue") H.guideCue(); else { T.button("act:duty"); H.applyGlow(); }
     return inserted.length;
   };
   %s"""
@@ -382,25 +387,6 @@ def test_fbw1_the_cue_for_an_enlistment_box_is_worked_out_again_on_resize(on):
       return inserted.length;
     })();"""
     assert run(m, script) == 1
-
-
-def test_fb093_the_step_glows_the_sides_defence_button(on):
-    from tianxia.content import ContentError, validate
-
-    assert "act:duty" in models.GLOW_KEYS
-    for faction in ("guan", "huang", "haoqiang"):
-        box = _enlisted(on, faction).guide_box()
-        assert box["glow"] == ["act:duty"], faction
-    game = _game(on, at="changshe")
-    game.state.player.tutorial_step = len(guide.steps(game.state, on))
-    game.set_hints_off(True)
-    game.choose("faction:guan")
-    game.choose("faction:confirm")
-    assert "glow" not in game.guide_box()  # 第一步（看軍令卡）沒有東西要按
-    bad = on.model_copy(deep=True)
-    bad.tutorial.enlist.steps[1].glow = ["act:nonsense"]
-    with pytest.raises(ContentError, match="act:nonsense"):
-        validate(bad)
 
 
 # ── 審查之後的最後一輪（review-fb.md、fb-fix-brief.md）──────────────────────────────────────────────

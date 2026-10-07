@@ -397,15 +397,13 @@
   }
   function applyGlow() {
     document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
-    // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮
-    guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+    // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
+    // 光給摺疊的標題列（glowTarget）
+    guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
     const p = pro();
     if (!p) {
       litBefore = null;
       litKeys = [];
-      // 序章之外，對話框也可以叫某顆鈕發光（入伍段第一道軍令那一步，FB-093）：框上帶的 glow，畫面上有的、按得下去的才加；不閃、沒有「在下面」
-      const keys = (S.main && S.main.guide && S.main.guide.glow) || [];
-      keys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
       guideCue(); // 發光的鈕在「此地還能做」摺疊裡、整個落在分頁列底下時，框上也要有「在下面 ↓」（FB-W1）
       return;
     }
@@ -432,8 +430,7 @@
     if (!head) return;
     const old = head.querySelector(".guide-below");
     if (old) old.remove();
-    const glows = !!(S.main && S.main.guide && (S.main.guide.glow || []).length);
-    const target = (pro() || glows) && document.querySelector("#page .glow");
+    const target = (pro() || guideGlow().length) && document.querySelector("#page .glow");
     if (!target) return;
     const bar = document.querySelector(".tabs");
     const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
@@ -788,12 +785,12 @@
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
-    // 入伍段第一道軍令那一步（伺服器在框上帶 glow，FB-093）要按的守勢行動（巡哨、傳道、保境安民）就在這裡面：那一步開頭摺疊先打開一次、
-    // 那顆發光（data-glow 寫成字面，test_content 掃它對照 models.GLOW_KEYS）；其他時候收著。開合記在 S.here（hereFold），重畫照它補回
+    // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
+    // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
     const extras = m.options.filter((o) => !used.has(o.id));
-    const glowDuty = !!(m.guide && (m.guide.glow || []).includes("act:duty")) && extras.some((o) => o.id === "act:duty");
-    const here = extras.length ? `<details class="fold here"${hereFold(m, glowDuty) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
-        <button class="btn" data-act="choose" data-id="${esc(o.id)}"${o.id === "act:duty" ? ' data-glow="act:duty"' : ""} ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
+    const hotHere = extras.some((o) => guideGlow().includes(o.id));
+    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
   }
@@ -802,12 +799,12 @@
   // 不記的話就收起來——玩家要再點開才看得到剛按的那一顆。所以開合記在 S.here（跟軍令卡記 S.ordersShut 同一個做法）：玩家點開、收起時 toggle
   // 事件記下（檔案最後的 toggle 監聽），重畫照它補回；補畫出來的那一下 toggle 記下的還是同一個值，不會繞圈。
   // 記的是這一處（S.here.at 對上目前的地點）：換了地方就沒有記，從收著開始，不然開過一次，每個城鎮都攤著一排按鈕；回到原處、中間沒在別處開關過，還是原樣。
-  // 發光的那一步（guide-3b 審查 Minor 11）：發光的鈕在摺疊裡，收著就看不到，所以那一步在這一處**開頭**自動打開一次（hereAuto 記打開過了，
-  // 同一步換一處、或換下一步各算一次）；打開之後就是玩家的——收起來的不再每次重畫都被打開
-  function hereFold(m, glowDuty) {
+  // 發光的那一步（guide-3b 審查 Minor 11）：hot＝摺疊裡有框上 guide.glow 點名的鈕。收著就看不到，所以那一步在這一處**開頭**自動打開一次
+  // （hereAuto 記打開過了，同一步換一處、或換下一步各算一次）；打開之後就是玩家的——收起來的不再每次重畫都被打開
+  function hereFold(m, hot) {
     const at = (m.status && m.status.location) || "";
     const auto = `${guideKey(m.guide) || ""}@${at}`;
-    if (glowDuty && !S.hereAuto[auto]) {
+    if (hot && !S.hereAuto[auto]) {
       S.hereAuto[auto] = true;
       S.here = { at, open: true };
     }
