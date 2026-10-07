@@ -1,8 +1,8 @@
 """FB-093～095（QA 走 joy 版序章與入伍段，main 8d4d470，2026-10-06）。
 
 joy 在 GitHub 上也做了 FB-092～095（PR #30、#31），併進 main 之後 PM 裁示 joy 的為準（chain-on-main，2026-10-07）：我們的重複做法
-拿掉了（FB-092 整段都是 joy 的，這裡沒有測試）。留下的是我們加在 joy 的做法上、她沒有的東西（結語、一週保底、網頁的「在下面 ↓」），
-以及跑在 joy 的程式上、她的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）；網頁的部分（web/app.js 的
+拿掉了（FB-092 整段都是 joy 的，這裡沒有測試）。留下的是我們加在 joy 的做法上、joy 沒有的東西（結語、一週保底、網頁的「在下面 ↓」），
+以及跑在 joy 的程式上、joy 的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）；網頁的部分（web/app.js 的
 applyGlow、guideCue、choose 的 ask）照 tests/test_prologue_web.py 的做法放進 node 跑（scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
 新寫的句子都在待 joy 潤的清單上（見 fb-report.md）：這裡的測試只認事實（講了什麼、對不對得上規則），不鎖死字句。"""
 from __future__ import annotations
@@ -185,7 +185,7 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
 
 # ── FB-095：剛出師的新角色去黃巾別部營寨遊歷，挨了三場打 ───────────────────────────
 # joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（engine.TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
-# 多一句別去營寨惹事（她的測試：tests/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下她的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
+# 多一句別去營寨惹事（joy 的測試：tests/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下 joy 的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
 # 選單（機器人）不問也不擲骰、伺服器照常打、網頁上問與取消（同一個 Option.confirm、同一個 ask()，PM 裁示用到同一件東西的測試留著）。
 
 
