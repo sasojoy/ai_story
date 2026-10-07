@@ -107,8 +107,10 @@
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
     recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
     recapOpen: false,
-    howto: undefined, // 設定抽屜「玩法說明」的那一頁（伺服器寫好的 HTML）：undefined＝還沒問到；按了才問（loadHowto）
+    howto: undefined, // 設定抽屜「玩法說明」上一次要到的那一頁（伺服器寫好的 HTML）：undefined＝還沒要到；每次攤開都再問（loadHowto）
     howtoOpen: false,
+    howtoFailed: false, // 最近一次要玩法說明沒要到：卡上寫一句、給「再試一次」
+    howtoSeq: 0, // 玩法說明的第幾次請求：晚回來的舊請求（後面又問了一次、或已經登出）不蓋掉新的
     ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
     ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
     ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
@@ -210,6 +212,7 @@
 
   function enter(data) {
     resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
+    forgetHowto(); // 玩法說明也是（登入失效之後重新登入，沒經過登出那顆鈕）
     S.here = null; // 「此地還能做」摺疊的開合與自動打開過的記錄也重來（FB-087）
     S.hereAuto = {};
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
@@ -1794,7 +1797,9 @@
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
           <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
         </div>
-        ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
+        ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howtoFailed
+          ? '<p class="muted">說明沒拿到，連不上伺服器。</p><button class="btn small" data-act="howto-retry">再試一次</button>'
+          : S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
@@ -1964,11 +1969,30 @@
   }
 
   // 設定頁的「重看序章」：序章的文字是內容、不會變，同一次載入只問一次。沒有序章的內容回空字串，就不畫那顆鈕
-  // 設定抽屜的「玩法說明」（explain-1）：伺服器照設定寫好的一頁（/api/howto，已經是跳脫過的 HTML），按了才問、同一次載入只問一次；
-  // 問不到（連不上）就留著 undefined，下次按再問
+  // 設定抽屜的「玩法說明」（explain-1）：伺服器照設定與這一季寫好的一頁（/api/howto，已經是跳脫過的 HTML）。每次攤開都再問一次
+  // （一個 GET、按了才問；換季、第一季的開關換了說明跟著對，審查 M5），問的時候卡上先放著上一次要到的那一頁。要不到（連不上、
+  // 伺服器出錯）就記 howtoFailed，卡上寫一句、給「再試一次」。晚回來的舊請求（後面又問了一次、已經登出）不算：回傳 false
   async function loadHowto() {
-    if (S.howto) return;
-    try { S.howto = (await api("/api/howto")).text || ""; } catch (e) { S.howto = undefined; }
+    const seq = ++S.howtoSeq;
+    S.howtoFailed = false;
+    let text = null;
+    try { text = (await api("/api/howto")).text || ""; } catch (e) { text = null; }
+    if (seq !== S.howtoSeq) return false;
+    if (text === null) S.howtoFailed = true;
+    else S.howto = text;
+    return true;
+  }
+  // 登出、換帳號：上一個人的那一頁與開合都不留，還在路上的請求也不算
+  function forgetHowto() {
+    S.howto = undefined;
+    S.howtoOpen = false;
+    S.howtoFailed = false;
+    S.howtoSeq += 1;
+  }
+  // 問一次玩法說明：先畫出「正在翻書……」（或上一次那一頁），回來了（而且抽屜與這張卡還開著）再畫；抽屜停在原地
+  async function refreshHowto() {
+    renderKeepingSheet();
+    if (await loadHowto() && S.sheet && S.howtoOpen) renderKeepingSheet();
   }
 
   async function loadRecap() {
@@ -2433,14 +2457,12 @@
           }
           break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
-        case "howto": // 玩法說明：攤開／收起；還沒問過就問一次，回來再畫（抽屜停在原地，見 renderKeepingSheet）
+        case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
-          renderKeepingSheet();
-          if (S.howtoOpen && !S.howto) {
-            await loadHowto();
-            renderKeepingSheet();
-          }
+          if (S.howtoOpen) await refreshHowto();
+          else renderKeepingSheet();
           break;
+        case "howto-retry": S.howtoFailed = false; await refreshHowto(); break; // 要不到時卡上的「再試一次」
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
@@ -2499,7 +2521,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;

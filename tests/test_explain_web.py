@@ -160,9 +160,98 @@ OPEN_HOWTO = """return (async () => {
   const opened = html, kept = sheet.scrollTop;
   await tap("howto");  // 收起
   const closed = html;
-  await tap("howto");  // 再打開：不再問伺服器
+  await tap("howto");  // 再打開：再問一次伺服器（換季、第一季的開關換了都跟著對，審查 M5）
   return { drawer, opened, kept, closed, again: html, calls: T.calls.map((c) => c[0]).filter((u) => u.startsWith("/api/howto")) };
 })();"""
+
+# 玩法說明的請求由測試控制（審查 M5）：T.ctx.fetch 換成假的，/api/howto 的每一次都記下來、由測試決定什麼時候回、回什麼（或連不上）
+HOWTO_HARNESS = """
+  let sheet = { scrollTop: 0 };
+  Object.defineProperty(T.qs, ".sheet", { get: () => sheet, configurable: true, enumerable: true });
+  let html = "";
+  Object.defineProperty(T.els.app, "innerHTML", { get: () => html, set(v) { html = v; sheet = { scrollTop: 0 }; }, configurable: true });
+  const pending = [];  // 每一次 /api/howto：{ ok(text), fail() }
+  const base = T.ctx.fetch;
+  T.ctx.fetch = (url, opts) => {
+    if (!url.startsWith("/api/howto")) return base(url, opts);
+    return new Promise((resolve, reject) => pending.push({
+      ok: (text) => resolve({ ok: true, status: 200, json: () => Promise.resolve({ text }) }),
+      fail: () => reject(new TypeError("Failed to fetch")),
+    }));
+  };
+  const tap = (act) => {
+    const el = { dataset: { act }, classList: { contains: () => false } };
+    return T.docListeners.click[0]({ target: { closest: () => el } });
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+  H.S.sheet = true;
+  H.render();
+"""
+
+
+def test_the_howto_page_is_fetched_again_on_each_open_showing_the_last_one_meanwhile():
+    """每次攤開都再問一次（換季、第一季的開關換了，說明跟著對；一個 GET，按了才問）：問的時候先放著上一次的那一頁，回來了換新的。"""
+    out = run(_main(), "return (async () => {" + HOWTO_HARNESS + """
+      const first = tap("howto"); await settle();
+      const loading = html;
+      pending[0].ok("<p>第一版</p>"); await first;
+      const shown = html;
+      await tap("howto");  // 收起
+      const second = tap("howto"); await settle();
+      const meanwhile = html;
+      pending[1].ok("<p>第二版</p>"); await second;
+      return { loading, shown, meanwhile, after: html, asked: pending.length };
+    })();""")
+    assert "正在翻書……" in out["loading"]
+    assert "<p>第一版</p>" in out["shown"]
+    assert "<p>第一版</p>" in out["meanwhile"] and "正在翻書" not in out["meanwhile"]
+    assert "<p>第二版</p>" in out["after"] and "第一版" not in out["after"] and out["asked"] == 2
+
+
+def test_a_failed_howto_request_offers_a_retry():
+    """要不到（連不上）：卡上寫一句、給「再試一次」，不是一直停在「正在翻書……」；再試一次要到了就照常畫。"""
+    out = run(_main(), "return (async () => {" + HOWTO_HARNESS + """
+      const first = tap("howto"); await settle();
+      pending[0].fail(); await first;
+      const failed = html;
+      const retry = tap("howto-retry"); await settle();
+      const retrying = html;
+      pending[1].ok("<p>說明</p>"); await retry;
+      return { failed, retrying, after: html, open: H.S.howtoOpen };
+    })();""")
+    card = re.search(r'<div class="howto card" id="howto">(.*?)</div>', out["failed"], re.S).group(1)
+    assert "正在翻書" not in card and "說明沒拿到" in card and 'data-act="howto-retry"' in card
+    assert "正在翻書……" in out["retrying"]
+    assert "<p>說明</p>" in out["after"] and "howto-retry" not in out["after"] and out["open"] is True
+
+
+def test_an_older_howto_answer_does_not_overwrite_a_newer_one():
+    """先按的那一次比後按的晚回來：照後按的那一次（換季前後各問一次，不能被舊的蓋回去）。"""
+    out = run(_main(), "return (async () => {" + HOWTO_HARNESS + """
+      const first = tap("howto"); await settle();
+      await tap("howto");  // 還沒回來就收起
+      const second = tap("howto"); await settle();
+      pending[1].ok("<p>新</p>"); await second;
+      pending[0].ok("<p>舊</p>"); await first;
+      return { html, cached: H.S.howto };
+    })();""")
+    assert out["cached"] == "<p>新</p>" and "<p>新</p>" in out["html"] and "<p>舊</p>" not in out["html"]
+
+
+def test_logout_forgets_the_howto_page():
+    """登出就清掉（換帳號、換角色不帶著上一個人的那一頁、也不停在攤開的樣子）；登出前還沒回來的那一次也不算。"""
+    out = run(_main(), "return (async () => {" + HOWTO_HARNESS + """
+      const first = tap("howto"); await settle();
+      pending[0].ok("<p>上一個人的</p>"); await first;
+      const before = H.S.howto;
+      const late = tap("howto"); await settle();  // 收起
+      const again = tap("howto"); await settle();  // 再打開：又問了一次，還沒回來
+      await tap("logout");
+      pending[1].ok("<p>登出後才回來</p>"); await again; await late;
+      return { before, after: H.S.howto === undefined ? null : H.S.howto, open: H.S.howtoOpen, failed: !!H.S.howtoFailed };
+    })();""", responses={"/api/logout": {}})
+    assert out["before"] == "<p>上一個人的</p>"
+    assert out == {"before": "<p>上一個人的</p>", "after": None, "open": False, "failed": False}
 
 
 def _skipped(prologue_content, world):
@@ -182,7 +271,7 @@ def test_the_howto_page_is_reachable_with_the_prologue_skipped(prologue_content,
     assert f'<div class="howto card" id="howto">{HOWTO}</div>' in out["opened"] and 'aria-expanded="true"' in out["opened"]
     assert out["kept"] == 120  # 抽屜停在原地（renderKeepingSheet），沒有被丟回頂上
     assert 'class="howto card"' not in out["closed"] and HOWTO in out["again"]
-    assert out["calls"] == ["/api/howto"]  # 同一次載入只問一次
+    assert out["calls"] == ["/api/howto", "/api/howto"]  # 每次攤開問一次（審查 M5）；收起不問
 
 
 def test_the_howto_button_sits_at_the_top_of_the_drawer_for_everyone():
