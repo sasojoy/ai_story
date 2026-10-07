@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, martial_arts, materials, naming, opportunities, orders,
-    push, ranks, roster, rounds, seats, sensing, skillview, team, timetable, traits,
+    push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
@@ -104,6 +104,15 @@ def _points(lines: list[str]) -> int:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
+
+
+def _rank_action_id(arg: str) -> str | None:
+    """選項 act:rank:<id> 去掉 act: 之後的那一段（_act、_action_title 收到的 arg）：是第 3、4 階的行動就回行動 id，不是回 None。
+    前綴只在 RANK_ACTION_PREFIX 寫一次。"""
+    head = RANK_ACTION_PREFIX.partition(":")[2]
+    return arg.removeprefix(head) if arg.startswith(head) else None
+
+
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -791,6 +800,7 @@ class Game:
             opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
+        opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
@@ -1353,6 +1363,10 @@ class Game:
             return opportunities.title(s, c, arg)
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
+        rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
+        if rank_action is not None:
+            name = next((a.name for a in c.orders.rank_actions if a.id == rank_action), "行動")
+            return f"{name}・{c.locations[s.player.location].name}"
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
@@ -1650,6 +1664,9 @@ class Game:
             return self._duty()
         if what == "rank2":
             return self._rank2()
+        action_id = _rank_action_id(what)  # 第 3、4 階的行動（正式版戊一）
+        if action_id is not None:
+            return self._rank_action(action_id)
         if what == "convoy":
             return self._take_convoy()
         if what == "call":
@@ -1894,6 +1911,42 @@ class Game:
         if goal:
             msgs += self.push_trend(front, goal * c.config.rank2_push, source="rank2")
         return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
+
+    def _rank_action_options(self, loc: Location) -> list[Option]:
+        """第 3、4 階的行動（正式版戊一）：做得了（陣營、階；第 4 階是這一週在任）、這裡做得了（戰線、標籤、亂局）才出現，
+        不是按了才說不行；這週做滿就灰掉、寫明。"""
+        s, c = self.state, self.content
+        opts: list[Option] = []
+        for action in rank_actions.mine(s, c):
+            if not rank_actions.where_ok(s, c, action, loc.id):
+                continue
+            option_id = f"{RANK_ACTION_PREFIX}{action.id}"
+            if rank_actions.left(s, c, action) <= 0:
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
+            else:
+                opts.append(self._cost_option(option_id, action.name, action.stamina))
+        return opts
+
+    def _rank_action(self, action_id: str) -> list[str]:
+        """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（黃巾推所在戰線往己方，
+        豪強推割據，都乘自己陣營的目標），再替軍令記功（第 3 階 5 次、第 4 階 10 次；收哪幾種由計畫戊二定，現在沒有軍令收，記不到）。
+        choose 已經驗過選項在選單上，所以 mine 裡一定找得到。"""
+        s, c = self.state, self.content
+        p = s.player
+        action = next(a for a in rank_actions.mine(s, c) if a.id == action_id)
+        loc = c.locations[p.location]
+        front = front_of(c, loc.id)
+        p.stamina -= action.stamina
+        rank_actions.count(s, c, action)
+        if action.check is not None and not roll_check(action.check, s, c, self.world, self.rng):
+            return [action.fail.replace("{地點}", loc.name)]
+        msgs = [action.ok.replace("{地點}", loc.name)]
+        goals = self._goals()
+        if goals.get(GEJU):
+            msgs += self.push_trend(GEJU, goals[GEJU] * action.push, source="rank")
+        elif goals.get(front):
+            msgs += self.push_trend(front, goals[front] * action.push, source="rank")
+        return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
 
     def _order_credit(self, **kw) -> list[str]:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
