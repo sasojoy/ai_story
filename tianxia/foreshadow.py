@@ -228,6 +228,39 @@ def grant_fragment(
     return [fragment_line(_fragment_text(state, content, c, c.fragments[index], world))]
 
 
+# 管理者的「給他一個伏筆片段」（管理者觸發鈕第 2 組，2026-10-07）：給的時候走上面的 grant_fragment（效果給片段的同一條），
+# 這兩個只給管理者看——下拉選單的那一行與拒絕的原因。都不碰鎖定（誰鎖了、有沒有人鎖），文字裡的天機插槽也不填。
+SOURCE_WORDS = {"action": "行動", "event": "事件", "talk": "對話"}
+
+
+def grant_label(content: Content, c: FsChain, index: int) -> str:
+    """管理者下拉選單上的那一行：「長社火攻・2／4（事件）：「這時節的大風，都是半夜從{風向}邊…」」——原文照內容檔，插槽不填。"""
+    f = c.fragments[index]
+    event = _event(content, c.event)
+    text = f.text if len(f.text) <= 24 else f.text[:24] + "…"
+    return f"{event.title if event else c.event}・{index + 1}／{len(c.fragments)}（{SOURCE_WORDS.get(f.source, f.source)}）：{text}"
+
+
+def grant_refusal(state: GameState, content: Content, c: FsChain, index: int) -> str | None:
+    """管理者給這個人這一則片段會被拒絕的原因；給得了是 None。跟 grant_fragment 的檢查同一套（capable、聽過沒有），只是說出為什麼。"""
+    p = state.player
+    if p.faction != c.side:
+        who = "是散人" if p.faction is None else f"是{content.scenario.faction(p.faction).name}的人"
+        return f"（這條伏筆是{content.scenario.faction(c.side).name}的，{p.name}{who}。）"
+    if _heard(state, c.id, index):
+        return f"（{p.name}已經聽過這一則了。）"
+    event = _event(content, c.event)
+    if c.event in state.world.timeline:
+        return f"（{event.title if event else c.event}已經發生了，這條伏筆用不上了。）"
+    if c.invalid_if.figure_out is not None and figures.is_out(state, c.invalid_if.figure_out):
+        return f"（{figures.name_of(content, c.invalid_if.figure_out)}已經不在了，這條伏筆用不上了。）"
+    if c.id in p.fs_done:
+        return f"（{p.name}已經走完這條伏筆的最後一步。）"
+    if not active(state, content) or not capable(state, content, c):
+        return "（這一則片段現在給不了。）"
+    return None
+
+
 # ── 片段 ─────────────────────────────────────────────────
 
 

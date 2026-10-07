@@ -99,6 +99,8 @@
     showMore: false,
     sheet: false,
     admin: null,
+    adPlayerName: "", // 管理者區「玩家個人劇情」查的名號與查到的那份（/api/admin/player）；登出清掉
+    adPlayer: null,
     unseen: false,
     offline: false,
     moveMode: "walk",
@@ -1780,6 +1782,10 @@
               ${a.showdowns && a.showdowns.length ? `
                 <p class="muted">三場大戲（照時刻表開集結；開過就算這一場開過了，排定的時間到了不會再開）</p>
                 ${a.showdowns.map((s) => `<div class="row ad-row"><span class="ad-tag">${esc(s.label)}</span>${s.note ? `<span class="muted ad-note">${esc(s.note)}</span>` : ""}<button class="btn small" data-act="admin" data-op="start_showdown" data-id="${esc(s.id)}"${s.enabled ? "" : " disabled"}>立刻開這一場</button></div>`).join("")}` : ""}
+              ${a.season_one ? `
+                <p class="muted">玩家個人劇情（填名號查一次，再挑要給他的；效果跟自然發生一樣）</p>
+                <form id="ad-player-form"><div class="row"><input class="input" name="name" placeholder="名號" aria-label="玩家名號" value="${esc(S.adPlayerName || "")}"><button class="btn small" type="submit">查</button></div><p class="form-msg" role="alert">${esc((S.adPlayer && S.adPlayer.refusal) || "")}</p></form>
+                ${S.adPlayer && !S.adPlayer.refusal ? adminPlayerHtml(S.adPlayer) : ""}` : ""}
               ${a.timetable.length ? timetableHtml(a) : ""}
               <p class="muted">救場</p>
               <div class="row ad-row"><span class="ad-tag">戰況</span><select class="input" id="ad-front" aria-label="定戰況的線">${opts(a.trends)}</select><input class="input" id="ad-value" type="number" value="50" min="0" max="100" aria-label="戰況" style="max-width:76px"><button class="btn small" data-act="admin" data-op="set_trend">定戰況</button></div>
@@ -1790,6 +1796,21 @@
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
           </section>` : ""}
       </div>`;
+  }
+
+  // 管理者區「玩家個人劇情」查到的那個人（/api/admin/player，Game.admin_player_choices）：他是誰、召見（發不了的灰掉、寫為什麼）、
+  // 能給他的機緣與伏筆片段（沒有就寫一句）。按了照舊先問一次，送的是查到的那個名號（不是欄位裡後來改過的字）
+  function adminPlayerHtml(p) {
+    const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+    return `
+      <p class="muted">${esc(p.line)}</p>
+      <div class="row ad-row"><span class="ad-tag">召見</span><span class="muted ad-note">${esc(p.summons.note)}</span><button class="btn small" data-act="admin" data-op="summon"${p.summons.ok ? "" : " disabled"}>立刻替他發召見</button></div>
+      <div class="row ad-row"><span class="ad-tag">機緣</span>${p.opportunities.length
+        ? `<select class="input" id="ad-opp" aria-label="給他的機緣">${opts(p.opportunities)}</select><button class="btn small" data-act="admin" data-op="give_opportunity">給他</button>`
+        : '<span class="muted ad-note">沒有能給他的機緣</span>'}</div>
+      <div class="row ad-row"><span class="ad-tag">伏筆</span>${p.fragments.length
+        ? `<select class="input" id="ad-frag" aria-label="給他的伏筆片段">${opts(p.fragments)}</select><button class="btn small" data-act="admin" data-op="give_fragment">給他</button>`
+        : '<span class="muted ad-note">沒有能給他的伏筆片段</span>'}</div>`;
   }
 
   // 設定頁的「時刻表」（計畫 T10）：十二件照順序、標狀態；三場決戰與季末還沒結算的有日期時間欄位與「排定」
@@ -1860,6 +1881,9 @@
       issue_orders: ["立刻發本週軍令：照週一的做法重挑這一週的軍令、換掉現有的（已經做的進度不算了，已經達成的效果留著），各陣營發一則軍情；下週一照常發令，確定？", "確定重發"],
       rotate_seats: ["立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情；下週一照常再排，確定？", "確定輪替"],
       start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
+      summon: [`立刻替 ${body.name} 發召見（${(S.adPlayer && S.adPlayer.summons && S.adPlayer.summons.note) || "下一階"}；不看貢獻與機緣的門檻，其餘照自然發召見的做法），確定？`, "確定發召見"],
+      give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了，確定？`, "確定給他"],
+      give_fragment: [`給 ${body.name} 伏筆片段「${picked("ad-frag")}」：跟自然聽到一樣，記進他的個人線索，確定？`, "確定給他"],
     }[op] || ["確定要這麼做？", "確定"];
   }
 
@@ -2347,7 +2371,11 @@
           S.sheet = true;
           render();
           loadRecap(); // 有序章的內容才有「重看序章」鈕；同一次載入只問一次
-          if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
+          if (S.main.admin) { // 每次打開都重抓：時刻表與可以定的結果會變；查過的玩家也重查（給過的機緣、片段就不再列）
+            S.admin = await api("/api/admin");
+            if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
+            render();
+          }
           break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
@@ -2386,6 +2414,11 @@
             body.id = el.dataset.id;
             body.title = ((S.admin && S.admin.showdowns) || []).find((s) => s.id === body.id)?.label || body.id;
           }
+          if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
+            body.name = (S.adPlayer && S.adPlayer.name) || "";
+            if (op === "give_opportunity") body.id = document.getElementById("ad-opp").value;
+            if (op === "give_fragment") body.id = document.getElementById("ad-frag").value;
+          }
           const [text, yes] = adminAsk(op, body);
           ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
           break;
@@ -2399,7 +2432,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
@@ -2596,6 +2629,13 @@
             toast(text); // S.main 不動，換過去的那一頁交給下一輪輪詢照它自己的方式補上
           }
         });
+      } else if (form.id === "ad-player-form") {
+        // 管理者查一個玩家（玩家個人劇情）：查到了畫他的召見、機緣、伏筆三列；查不到的原因寫在表單那一行。抽屜不關
+        const name = (data.name || "").trim();
+        S.adPlayerName = name;
+        if (!name) { S.adPlayer = null; formMsg(form, "先填名號。"); return; }
+        S.adPlayer = await api("/api/admin/player", { name });
+        render();
       } else if (form.id === "pw-form") {
         // 改密碼、重設密碼一律回 200，訊息就是結果（失敗時寫原因）；成功才清空欄位，失敗留著讓人改
         const r = await api("/api/password", data);

@@ -63,7 +63,16 @@ def _player(client, login="shen_01", name="沈青衫"):
 
 NEW_OPS = (
     ("issue_orders", {}), ("rotate_seats", {}), ("start_showdown", {"id": "changshe_fire"}),
+    ("summon", {"name": "沈青衫"}), ("give_opportunity", {"name": "沈青衫", "id": "guan_courier"}),
+    ("give_fragment", {"name": "沈青衫", "id": "fs_changshe_guan:0"}),
 )
+
+
+def _enlisted(name="沈青衫"):
+    """存檔裡的這個玩家改成官軍的人（管理者照名號從存檔裡找他）。"""
+    state = open_characters().load(name)
+    state.player.faction = "guan"
+    open_characters().save(state)
 
 
 # ── 路由 ─────────────────────────────────────────────
@@ -72,10 +81,34 @@ NEW_OPS = (
 def test_players_are_refused_at_the_route(client):
     game = _player(client)
     before = game.world.get_season().model_dump()
+    _enlisted()
+    saved = open_characters().load("沈青衫").model_dump()
     for op, body in NEW_OPS:
         out = client.post(f"/api/do/{op}", json=body)
         assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}, op
     assert game.world.get_season().model_dump() == before
+    assert open_characters().load("沈青衫").model_dump() == saved  # 自己的存檔也沒被動到
+    assert client.post("/api/admin/player", json={"name": "沈青衫"}).status_code == 403
+
+
+def test_a_players_own_story_through_the_routes(client):
+    """管理者查一個玩家、替他發召見、給機緣、給伏筆片段：每一下都在行動鎖裡讀他的存檔、做完存回去；他下次打開畫面就看得到。"""
+    player = TestClient(server.app)
+    _player(player)
+    _enlisted()
+    _admin(client)
+    view = client.post("/api/admin/player", json={"name": " 沈青衫 "}).json()
+    assert view["name"] == "沈青衫" and view["summons"]["ok"] and view["opportunities"] and view["fragments"]
+    assert client.post("/api/admin/player", json={"name": "沒這人"}).json() == {"refusal": "（江湖上沒有「沒這人」這個人。）"}
+    assert "已替沈青衫發第 2 階的召見" in client.post("/api/do/summon", json={"name": "沈青衫"}).json()["message"]
+    assert "荒丘的信使" in client.post("/api/do/give_opportunity", json={"name": "沈青衫", "id": "guan_courier"}).json()["message"]
+    assert "第 1 則片段" in client.post("/api/do/give_fragment", json={"name": "沈青衫", "id": "fs_changshe_guan:0"}).json()["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.summons is not None and saved.opp_clues == ["guan_courier"] and saved.fragments == {"fs_changshe_guan": [0]}
+    main = player.get("/api/main").json()
+    journal = "".join(main.get(key) or "" for key in ("latest", "journal", "older"))
+    assert "召見" in journal and "機緣・荒丘的信使" in journal and "聽聞" in journal
+    assert server.game_for("沈青衫").state.player.summons is not None  # 他那一份 Game 進鎖時重讀了存檔
 
 
 def test_weekly_ops_reach_the_engine(client):
@@ -166,3 +199,65 @@ def test_a_showdown_button_asks_by_name_then_posts_its_id(client):
     assert "立刻開「廣宗決戰」" in out["asked"][0]
     [post] = [c for c in out["calls"] if c[0].startswith("/api/do/")]
     assert post[0] == "/api/do/start_showdown" and post[1]["id"] == "guangzong"
+
+
+LOOKUP = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };  // 假瀏覽器沒有 FormData：表單的欄位直接給
+  const note = { textContent: "", classList: { toggle() {} } };
+  const form = { id: "ad-player-form", data: { name: " 沈青衫 " }, querySelector: (sel) => (sel === ".form-msg" ? note : null) };
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const drawn = H.sheetHtml();
+  const selects = {
+    "ad-opp": { value: "guan_courier", selectedIndex: 0, options: [{ text: "官軍・第 3 階・荒丘的信使（天時地利型）" }] },
+    "ad-frag": { value: "fs_changshe_guan:0", selectedIndex: 0, options: [{ text: "長社火攻・1／4（行動）" }] },
+  };
+  const byId = T.ctx.document.getElementById;
+  T.ctx.document.getElementById = (id) => selects[id] || byId(id);
+  const target = (dataset) => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } });
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => target(dataset) } });
+  const asked = [];
+  for (const op of ["summon", "give_opportunity", "give_fragment"]) {
+    await click({ act: "admin", op });
+    asked.push(T.bodyHtml[T.bodyHtml.length - 1]);
+    await click({ act: "ask-yes" });
+  }
+  return { drawn, asked, name: H.S.adPlayerName, calls: T.calls.map((c) => [c[0], c[1]]) };
+})();"""
+
+
+@needs_node
+def test_the_player_lookup_draws_his_tools_and_each_button_posts_his_name(client):
+    player = TestClient(server.app)
+    _player(player)
+    _enlisted()
+    _, main, admin = _views(client)
+    view = client.post("/api/admin/player", json={"name": "沈青衫"}).json()
+    sheet = run(main, "return H.sheetHtml();", S={"admin": admin})
+    assert 'id="ad-player-form"' in sheet and "玩家個人劇情" in sheet and "立刻替他發召見" not in sheet  # 還沒查：只有欄位
+    out = run(main, LOOKUP, S={"admin": admin, "sheet": True},
+              responses={"/api/admin/player": view, "/api/do/": {"main": main, "message": "好了"}})
+    assert out["calls"][0] == ["/api/admin/player", {"name": "沈青衫"}] and out["name"] == "沈青衫"
+    for text in ('data-op="summon">立刻替他發召見', 'id="ad-opp"', 'value="guan_courier"', 'id="ad-frag"',
+                 'value="fs_changshe_guan:0"', "會發第 2 階的召見", view["line"]):
+        assert text in out["drawn"], text
+    assert "立刻替 沈青衫 發召見" in out["asked"][0] and "荒丘的信使" in out["asked"][1] and "長社火攻" in out["asked"][2]
+    posts = [c for c in out["calls"] if c[0].startswith("/api/do/")]
+    assert posts == [
+        ["/api/do/summon", {"hours": 1, "name": "沈青衫"}],
+        ["/api/do/give_opportunity", {"hours": 1, "name": "沈青衫", "id": "guan_courier"}],
+        ["/api/do/give_fragment", {"hours": 1, "name": "沈青衫", "id": "fs_changshe_guan:0"}],
+    ]
+
+
+@needs_node
+def test_a_lookup_that_finds_nobody_says_so_in_the_form(client):
+    _, main, admin = _views(client)
+    refusal = client.post("/api/admin/player", json={"name": "沒這人"}).json()
+    sheet = run(main, "return H.sheetHtml();", S={"admin": admin, "adPlayer": refusal, "adPlayerName": "沒這人"})
+    assert "（江湖上沒有「沒這人」這個人。）" in sheet and "立刻替他發召見" not in sheet and 'value="沒這人"' in sheet
+    disabled = run(main, "return H.sheetHtml();", S={"admin": admin, "adPlayerName": "管", "adPlayer": {
+        "name": "管", "line": "管：散人，在潁川", "summons": {"ok": False, "note": "（管是散人，沒有陣營可以召見他。）"},
+        "opportunities": [], "fragments": []}})
+    assert 'data-op="summon" disabled>立刻替他發召見' in disabled and "（管是散人，沒有陣營可以召見他。）" in disabled
+    assert "沒有能給他的機緣" in disabled and "沒有能給他的伏筆片段" in disabled
