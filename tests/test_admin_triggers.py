@@ -348,6 +348,18 @@ def test_summon_refused_with_the_switch_off(real):
     assert open_characters().load("乙").player.summons is None
 
 
+def test_the_target_is_caught_up_before_the_admin_acts(on):
+    """跟伺服器替每個人做動作一樣（重讀 → 同步 → 動作 → 存檔）：先把他補算到此刻（體力照他自己的步調回、對時點換成此刻），再發召見、存回去。"""
+    admin = _game(on)
+    target = _member(on, "乙", save=False)
+    target.state.player.stamina = 0.0
+    target.state.last_real = NOW - 600
+    open_characters().save(target.state)
+    admin.admin_summon("乙")
+    saved = open_characters().load("乙")
+    assert saved.last_real == NOW and saved.player.stamina > 0 and saved.player.summons is not None
+
+
 def test_the_name_is_matched_like_the_saves_and_the_admin_can_target_himself(on):
     """名號照角色存檔的比法（不分大小寫、不管前後空白）；填自己的名號就是自己這一份（伺服器動作結束時存的就是它）。"""
     admin = _game(on)
@@ -394,6 +406,7 @@ def test_accumulate_reaches_the_milestone_exactly_as_counting_up(on):
     saved = _saved(admin, "乙")
     p, q = saved.player, natural.state.player
     assert (p.opp_counts, p.opp_items, p.opp_fronts) == (q.opp_counts, q.opp_items, q.opp_fronts)
+    assert p.opp_fronts == {"guan_deserter": "yingru"}  # 長社在潁川汝南：降卒要送去那條戰線的官軍主將
     assert _said(_entry(saved, "機緣・降卒的消息")) == said[-1:]
     assert admin.admin_give_opportunity("乙", "guan_deserter") == ["（乙已經拿到知道運糧小道的降卒了，送去就完成。）"]
 
