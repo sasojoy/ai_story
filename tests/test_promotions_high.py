@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FixedRandom, real_content
-from tianxia import bot_policy, defection, enlist, figures, ranks, rules, timetable
+from tianxia import atlas, bot_policy, defection, enlist, figures, ranks, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
@@ -1522,3 +1522,216 @@ def test_a_last_leg_choice_must_promote(real):
     real.events["promo_guan_3_palace"].choices[0].effect = Effect(text="x")
     with pytest.raises(ContentError, match="promo_guan_3_palace：.*promote"):
         validate(real)
+
+
+# ── 企劃者裁決 E2（2026-10-07）：召見的地點與路上的站都摸清 ─────────────
+# 發召見、往下一段（next_leg）、換人（_refresh 換了地點）的當下，把從所在地到召見地點最短的那條路（所有已開放的地點，
+# 同 summons_place）上沒去過的站記成摸清（PlayerState.surveyed）：看得見、還沒去過的站也記（人走開就看不見了）。
+# 不另寫一句話（同送別時的留意地形）。
+
+
+def _fresh(content, faction, join):
+    """剛投靠的新角色站在陣營的投靠點（只去過起點與投靠點，跳過序章的人也一樣），體力是滿的。"""
+    game = _game(content, faction=faction)
+    p = game.state.player
+    p.location = join
+    p.visited.add(join)
+    p.stamina = content.config.stamina_max
+    return game
+
+
+def _place(game, fid, location):
+    """這位大勢人物此刻在場、在 location。"""
+    w = game.state.world
+    w.figures[fid] = figures.state_of(game.state, game.content, fid).model_copy(
+        update={"status": "active", "location": location})
+
+
+def _make_current(game, leg, cast, where=None, prev=None):
+    """讓這一段的 cast 成為第一個成立的版本：排在它前面的版本都不成立（接的不是上一段演的 prev 就本來不成立；人不同就讓那位退場；
+    同一個人就結算它的 before_event 或立它 flags_none 的旗標），它自己的人物在它演的地方（at，或 where：沒寫 at 的營中授印
+    照人物此刻的所在）。"""
+    for other in leg.casts:
+        if other is cast:
+            break
+        if other.after is not None and other.after != prev:
+            continue
+        if other.figure is not None and other.figure != cast.figure:
+            _retire(game, other.figure)
+        elif other.before_event is not None:
+            _settle(game, other.before_event)
+        else:
+            assert other.flags_none, f"不知道怎麼讓 {other.event} 不成立"
+            rules.add_world_flags(game.state, other.flags_none)
+    if cast.figure is not None and (cast.at or where):
+        _place(game, cast.figure, cast.at or where)
+
+
+def _issue(game, rank):
+    """本季貢獻到了第 rank 階、做過那一階的機緣：check_summons 發召見。"""
+    p = game.state.player
+    p.rank = 0 if rank == 2 else rank - 1
+    p.contrib = ranks.threshold(game.content, rank)
+    p.opp_done = [o.id for o in game.content.opportunities if o.faction == p.faction and o.rank == rank]
+    return ranks.check_summons(game.state, game.content)
+
+
+def _can_get_there(game, where):
+    """召見那一段的地點到得了：疾行安排得了前往（/api/travel 問的就是 travel_refusal）；就在這裡的話，奇遇此刻就演得了。"""
+    p = game.state.player
+    dest = p.summons.location
+    if dest == p.location:  # 第 2 階的召見不記事件（主版或接手版照此刻出面的人）：演得了就好
+        event = ranks.summons_event(game.state, game.content)
+        assert event is not None and event == (p.summons.event or event), where
+    else:
+        assert game.travel_refusal(dest, "dash") is None, f"{where}：疾行到不了 {game.content.locations[dest].name}"
+
+
+def _camp_places(content, fid):
+    """營中授印（沒寫 at，人在哪就在哪演）可能演在哪裡：人物開季的所在，加上時刻表把這兩位調去的長社、盧植營、宛城。"""
+    return sorted({content.figures[fid].location, "changshe", "luzhi_camp", "wan_city"})
+
+
+def _summons_cases(content, faction):
+    """這個陣營每一階、每一段、每一個版本（營中授印另外每一個可能的地點）的召見：(階, [(段, 版本, 地點)…])。
+    第 2 階沒有段，是 (2, [])；第二段只配 after 寫的那個第一段版本。"""
+    cases = []
+    for promo in sorted((x for x in content.promotions if x.faction == faction), key=lambda x: x.rank):
+        if not promo.legs:
+            cases.append((promo.rank, []))
+            continue
+        firsts = [[(promo.legs[0], cast, where)] for cast in promo.legs[0].casts
+                  for where in ([None] if cast.at or not cast.figure else _camp_places(content, cast.figure))]
+        if len(promo.legs) == 1:
+            cases += [(promo.rank, chain) for chain in firsts]
+            continue
+        for chain in firsts:
+            for cast in promo.legs[1].casts:
+                if cast.after is None or cast.after == chain[0][1].event:
+                    cases.append((promo.rank, [*chain, (promo.legs[1], cast, None)]))
+    return cases
+
+
+@pytest.mark.parametrize("faction, join", [
+    (f.id, join) for f in real_content().scenario.factions for join in f.join_at
+])
+def test_every_summons_place_can_be_reached_by_dash(on, faction, join):
+    """promotions.json 的每一階、每一段、每一個版本：剛在投靠點投靠的新角色，召見一發出來（或往下一段）就安排得了疾行過去，
+    或人就在那裡、奇遇演得了。第二段從第一段的地點出發（人是演完第一段才往下一段的）。"""
+    cases = _summons_cases(on, faction)
+    mine = [x for x in on.promotions if x.faction == faction]
+    assert {rank for rank, _ in cases} == {x.rank for x in mine}  # 每一階、每一段的每一個版本都走到了
+    assert {cast.event for _, chain in cases for _, cast, _ in chain} == {
+        cast.event for x in mine for leg in x.legs for cast in leg.casts}
+    for rank, chain in cases:
+        game = _fresh(on, faction, join)
+        p = game.state.player
+        if not chain:  # 第 2 階
+            assert _issue(game, rank), (faction, join, rank)
+            _can_get_there(game, f"{faction} 第 2 階 從 {join}")
+            continue
+        leg, cast, where = chain[0]
+        _make_current(game, leg, cast, where)
+        assert _issue(game, rank), (faction, join, rank, cast.event)
+        assert (p.summons.event, p.summons.figure) == (cast.event, cast.figure)
+        _can_get_there(game, f"{faction} 第 {rank} 階 {cast.event}@{where or cast.at} 從 {join}")
+        if len(chain) == 2:
+            leg1, cast1, _ = chain[1]
+            p.location = p.summons.location  # 到了第一段的地點、演完
+            p.visited.add(p.location)
+            _make_current(game, leg1, cast1, prev=cast.event)
+            assert ranks.next_leg(game.state, on, cast.event)
+            assert p.summons.event == cast1.event
+            _can_get_there(game, f"{faction} 第 {rank} 階 {cast.event} → {cast1.event} 從 {join}")
+
+
+def _route_stops(game, dest):
+    return set(atlas.shortest_routes(game.state, game.content)[dest].path)
+
+
+def test_issuing_a_summons_surveys_the_stops_on_the_way(on):
+    """南陽黃巾營投靠的黃巾，第 3 階召見到下曲陽（張寶）：原本疾行安排不了（路上的站都沒摸清），發召見之後到得了，
+    路上每一站不是去過就是摸清。"""
+    game = _fresh(on, "huang", "nanyang_huangjin_camp")
+    p = game.state.player
+    assert game.travel_refusal("xiaquyang", "dash") == "無法安排前往這裡"
+    stops = _route_stops(game, "xiaquyang")
+    assert _issue(game, 3) == ["張寶召你到下曲陽。"]
+    assert p.summons.location == "xiaquyang"
+    assert stops <= p.visited | p.surveyed and "xiaquyang" in p.surveyed
+    assert p.surveyed.isdisjoint(p.visited - stops) and p.surveyed == stops - p.visited  # 只記這一條路上的站
+    assert game.travel_refusal("xiaquyang", "dash") is None
+
+
+def test_the_next_leg_surveys_its_way(on):
+    """黃巾第 3 階第一段在下曲陽演完，第二段要帶著符去南陽黃巾營：往下一段的當下就摸清那一條路。"""
+    game = _fresh(on, "huang", "huangjin_camp")
+    p = game.state.player
+    _issue(game, 3)
+    p.location = "xiaquyang"
+    p.visited.add("xiaquyang")
+    stops = _route_stops(game, "nanyang_huangjin_camp")
+    assert not stops <= p.visited | p.surveyed  # 還沒摸清
+    assert ranks.next_leg(game.state, on, "promo_huang_3_talisman") == ["帶著符去南陽黃巾營。"]
+    assert stops <= p.visited | p.surveyed
+    assert game.travel_refusal("nanyang_huangjin_camp", "dash") is None
+
+
+def test_rank_two_is_surveyed_too(on):
+    """第 2 階的召見也一樣（企劃者「發召見」說的是每一種召見）：宛城投靠的官軍召到長社、鉅鹿道壇投靠的黃巾召到黃巾別部營寨。"""
+    for faction, join, dest in (("guan", "wan_city", "changshe"), ("huang", "julu_altar", "huangjin_camp")):
+        game = _fresh(on, faction, join)
+        assert game.travel_refusal(dest, "dash") == "無法安排前往這裡"
+        assert _issue(game, 2)
+        assert game.state.player.summons.location == dest
+        assert game.travel_refusal(dest, "dash") is None
+
+
+def test_a_presenter_who_moves_takes_the_survey_with_him(on):
+    """營中授印跟著人走：皇甫嵩從長社調到宛城，召見改寫到宛城（話變了，照說），那一條路也摸清。"""
+    game = _fresh(on, "guan", "changshe")
+    p = game.state.player
+    _retire(game, "hejin")
+    assert _issue(game, 4) == ["皇甫嵩召你到長社營中授印。"]
+    _place(game, "huangfusong", "dajiangjun_fu")  # 很遠的地方：從長社看不見、沒去過
+    stops = _route_stops(game, "dajiangjun_fu")
+    assert not stops <= p.visited | p.surveyed
+    assert ranks.check_summons(game.state, on) == ["皇甫嵩召你到大將軍府營中授印。"]
+    assert stops <= p.visited | p.surveyed
+    assert game.travel_refusal("dajiangjun_fu", "dash") is None
+
+
+def test_a_silent_swap_that_moves_the_place_still_surveys(on):
+    """換了地點、話卻沒變（召見那一句不寫{據點}）時悄悄換、不再說一次，可是路照樣摸清：地點變了就摸清，跟說不說無關。"""
+    camp = next(c for c in next(x for x in on.promotions if x.faction == "guan" and x.rank == 4).legs[0].casts
+                if c.figure == "huangfusong")
+    camp.summons_text = "皇甫嵩召你到營中授印。"
+    game = _fresh(on, "guan", "changshe")
+    p = game.state.player
+    _retire(game, "hejin")
+    assert _issue(game, 4) == ["皇甫嵩召你到營中授印。"]
+    _place(game, "huangfusong", "dajiangjun_fu")
+    assert ranks.check_summons(game.state, on) == []  # 話沒變：不說
+    assert p.summons.location == "dajiangjun_fu"
+    assert game.travel_refusal("dajiangjun_fu", "dash") is None
+
+
+def test_stops_you_can_see_now_are_surveyed_too(on):
+    """路上此刻看得見、還沒去過的站也要記：人走開之後就看不見了，路會斷在那裡。發召見之後走回起點（一路都是去過的站），
+    召見的地點照樣疾行到得了。"""
+    game = _fresh(on, "huang", "nanyang_huangjin_camp")
+    p = game.state.player
+    seen = atlas.visible_locations(game.state, on)
+    stops = _route_stops(game, "xiaquyang")
+    _issue(game, 3)
+    assert (stops & seen) - p.visited and (stops & seen) - p.visited <= p.surveyed  # 看得見的站也記成摸清
+    start = on.scenario.start_location
+    back = atlas.shortest_routes(game.state, on)[start].path
+    p.visited |= set(back)  # 一路走回起點
+    p.location = start
+    assert game.travel_refusal("xiaquyang", "dash") is None
+
+
+def test_the_far_summons_places_are_marked_important(on):
+    """樓桑里（豪強第 4 階）與下曲陽（黃巾第 3、4 階）在地圖上沒摸清時也畫出名字（Location.important）。"""
+    assert on.locations["loushang_village"].important and on.locations["xiaquyang"].important

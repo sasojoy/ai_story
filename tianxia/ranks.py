@@ -81,6 +81,19 @@ def summons_place(state: GameState, content: Content, promo: PromotionDef) -> st
     return min(reachable, key=lambda loc: 0.0 if loc == here else routes[loc].minutes)
 
 
+def scout(state: GameState, content: Content, location: str) -> None:
+    """把到召見地點的路摸清（企劃者裁決 E2）：從所在地到 location 路程最短的那一條（所有已開放的地點，同 summons_place），
+    路上沒去過的站（含終點）記進 PlayerState.surveyed。此刻看得見的站也記：召見是之後才從別處動身的，人走開就看不見了。
+    去過的站本來就記得，玩家之後走過的路也都是去過的，所以從哪裡動身都接得上這一條。發召見、往下一段、換人換了地點時呼叫；
+    不另說話（同送別時的留意地形）。到不了（沒有路）或就在這裡時什麼都不做。"""
+    from . import atlas  # noqa: PLC0415  atlas → world → ranks：在函式裡 import，避免循環
+
+    route = atlas.shortest_routes(state, content).get(location)
+    if route is not None:
+        p = state.player
+        p.surveyed |= set(route.path) - p.visited
+
+
 def presenter(state: GameState, content: Content, promo: PromotionDef, location: str) -> tuple[str | None, bool]:
     """出面的人與要不要演接手版（晉升文件第一節「人物不在」）：主版人物此刻在召見地點（在場）就是他；不在就換接手的人，
     演接手版——接手的人也不在仍演接手版（內容只寫了兩版）。沒有出面人物的（豪強的中山馬商）是 (None, False)。"""
@@ -155,6 +168,8 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
         return []
     cast, location = found
     told = _told_line(content, promo, s)
+    if location != s.location:  # 換了地點（人走了、換了人，或往下一段時還沒有版本、現在補上）：說不說都摸清（裁決 E2）
+        scout(state, content, location)
     s.event, s.location, s.figure = cast.event, location, cast.figure
     line = _leg_text(content, cast, location)
     return [line] if line != told else []
@@ -204,12 +219,14 @@ def check_summons(state: GameState, content: Content) -> list[str]:
         location = summons_place(state, content, promo)
         fid, handoff = presenter(state, content, promo, location)
         p.summons = Summons(rank=promo.rank, figure=fid, location=location, since=w.time)
+        scout(state, content, location)  # 裁決 E2：每一種召見都摸清（第 2 階也是，企劃者說的是「發召見」）
         return [_summons_text(content, promo, handoff, location)]
     found = current_cast(state, content, promo, 0, None)
     if found is None:
         return []
     cast, location = found
     p.summons = Summons(rank=rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
+    scout(state, content, location)
     return [_leg_text(content, cast, location)]
 
 
@@ -226,6 +243,7 @@ def next_leg(state: GameState, content: Content, from_event: str) -> list[str]:
         return []
     cast, location = found
     s.event, s.location, s.figure = cast.event, location, cast.figure
+    scout(state, content, location)  # 裁決 E2
     return [_leg_text(content, cast, location)]
 
 
