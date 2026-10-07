@@ -65,6 +65,7 @@ class BattleParticipant(BaseModel):
     # 參戰者自己的戰報要寫的（FB-027，見 Game._deliver_battle_results）；舊資料沒有這兩欄就是預設值
     acted_rounds: int = 0  # 自己送出行動、而且結算了的回合數：玩家按的、假人自己選的都算，逾時被系統代選的不算（見 resolve_round）
     fell_round: int | None = None  # 在整場的第幾回合倒下；沒倒下是 None
+    attribute: str = ""  # 加入時身上武學的屬性（隊伍多樣性，一門打不遍）；只有第一季開著時才快照，空的不算一路
 
 
 class BattleRound(BaseModel):
@@ -193,7 +194,7 @@ def move_scores(tuning: BattleTuning, power: float, outer: str | None, inner: st
 
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
-    scores: dict[str, float] | None = None,
+    scores: dict[str, float] | None = None, attribute: str = "",
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。"""
@@ -201,7 +202,7 @@ def join_faction(
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
-        scores=dict(scores or {}),
+        scores=dict(scores or {}), attribute=attribute,
     )
 
 
@@ -224,6 +225,7 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
+    attribute: str = "",
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores 同 join_faction。"""
@@ -233,7 +235,7 @@ def auto_assign_latecomer(
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
-        scores=dict(scores or {}),
+        scores=dict(scores or {}), attribute=attribute,
     )
 
 
@@ -409,6 +411,15 @@ def settle_third(instance: BattleInstance, definition: BattleDef, tuning: Battle
     return ["兩軍相持之際，地方上有人趁亂坐大。"] if instance.third_push > 0 else []
 
 
+def diversity(instance: BattleInstance, moves: dict[str, str], side: str, tuning: BattleTuning) -> float:
+    """這一回合這一邊出固定招的人，身上武學有幾路不同的屬性（一門打不遍）：每多一路，力量多乘 diversity_per，最多 diversity_cap。
+    屬性是加入時的快照（BattleParticipant.attribute），空的（第一季沒開、舊資料）不算一路，所以開關關著時一律是 1。"""
+    roads = {
+        p.attribute for name in moves if (p := instance.participants.get(name)) is not None and p.faction == side and p.attribute
+    }
+    return 1 + min(tuning.diversity_cap, tuning.diversity_per * max(0, len(roads) - 1))
+
+
 def resolve_round(
     instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0,
     tuning: BattleTuning | None = None,
@@ -500,8 +511,8 @@ def resolve_round(
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
     push = 0.0
     if counts[first] or counts[second]:
-        mine = force[first] / math.sqrt(counts[first]) if counts[first] else 0.0
-        theirs = force[second] / math.sqrt(counts[second]) if counts[second] else 0.0
+        mine = force[first] / math.sqrt(counts[first]) * diversity(instance, moves, first, tuning) if counts[first] else 0.0
+        theirs = force[second] / math.sqrt(counts[second]) * diversity(instance, moves, second, tuning) if counts[second] else 0.0
         if not counts[second]:
             push = tuning.push_max
         elif not counts[first]:

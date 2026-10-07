@@ -6,7 +6,11 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 from tianxia.content import load_content
+
+pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
 ROOT = Path(__file__).parent.parent
 _spec = importlib.util.spec_from_file_location("sim_season_one", ROOT / "scripts" / "sim_season_one.py")

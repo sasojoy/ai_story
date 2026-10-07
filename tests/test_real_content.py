@@ -175,7 +175,8 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     assert art.name == "穿林腿" and art.preset
     assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
     assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
-    assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"]  # 心得的帳：20 → −5 → −3 → +8 → 20
+    # 心得的帳：20 → 合成 −5 → 練到第三成 −6 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
+    assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"] + 5
     assert "mentor_hut" not in atlas.visible_locations(game.state, content)
     assert any(content.tutorial.leave_text in line for e in game.state.journal for line in e.lines)
 
@@ -633,6 +634,7 @@ def season_of(content, tmp_path_factory):
         world.db.close()
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_bot_plays_a_full_season(season_of, seed):
     game = season_of(seed)
@@ -641,6 +643,7 @@ def test_bot_plays_a_full_season(season_of, seed):
     assert len(game.state.player.seen_events) >= 3
 
 
+@pytest.mark.slow
 def test_the_bot_learns_insights_fuses_and_cultivates(season_of):
     game = season_of(1)
     p = game.state.player
@@ -685,19 +688,19 @@ def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content
     assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
-    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 1 點，照引導去練一次練得起；
-    心得見底時，訊息直接說差多少，新手才知道要去賺。"""
+    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 2 點（每成 2N，企劃者 2026-10-07 方案 A），
+    照引導去練一次練得起；心得見底時，訊息直接說差多少，新手才知道要去賺。"""
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     member = game.state.player.member
     start = game.state.player.stats["xinde"]
     assert start >= team.practice_price(content, 1)
     msgs = game.practice("武學")
-    assert member.wugong_level == 2 and "心得 -1" in msgs
-    assert game.state.player.stats["xinde"] == start - 1
+    assert member.wugong_level == 2 and "心得 -2" in msgs
+    assert game.state.player.stats["xinde"] == start - 2
     game.state.player.stats["xinde"] = 0
     msgs = game.practice("武學")
     assert member.wugong_level == 2
-    assert "要 2 點心得，你只有 0 點" in msgs[0] and "還差 2 點" in msgs[0]
+    assert "要 4 點心得，你只有 0 點" in msgs[0] and "還差 4 點" in msgs[0]
 
 
 def test_event_taught_arts_still_reach_a_character_whose_slots_are_full(content):
@@ -957,6 +960,7 @@ def test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start(content
 DISC_OVERLAPS = {"situation": 0, "enemies": 1, "story": 0, "routes": 1}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("layer", list(DISC_OVERLAPS))
 def test_current_place_marks_stay_clear_of_names_from_any_location(content, layer):
     """所在地的紅旗、紅圈與選定的圓圈上面不會有字（名字、小字、山名）；別的地點的圓盤也盡量不被名字壓到。"""
@@ -1705,6 +1709,7 @@ def test_qinjie_no_longer_names_the_heir():
         assert "趙弘" not in o.text + o.chronicle and "推趙弘為帥" not in o.text
 
 
+@pytest.mark.slow
 def test_every_person_slot_resolves_whoever_is_left():
     """真實時刻表每一格（季末除外）都結算得了：人物都在時寫名字；人物全都不在時寫泛稱、@人物 的效果略過、不丟例外。
     兩種情形都沒有沒填的欄位留在公告、傳聞與江湖史裡。"""
@@ -2003,6 +2008,7 @@ def test_real_showdowns_start_from_the_opening_fronts():
     assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("season_one", [False, True])
 def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
     """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「打坐」；

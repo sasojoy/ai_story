@@ -173,7 +173,10 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
                 return msgs  # 這一爐在等名字：改練與修練等開完爐再說
     bot.switch_to_the_strongest(game)
     if p.stamina >= bot.CULTIVATE_RESERVE:
-        ready = [a for a in library.owned_arts(state) if cultivation.cultivate_problem(state, content, world, a) is None]
+        ready = [
+            a for a in bot.worn_first(game)
+            if cultivation.cultivate_problem(state, content, world, a, use_legend=bot.takes_the_pill(game, a)) is None
+        ]
         if ready and rng.random() < CULTIVATE_CHANCE:
             msgs += game.cultivate(ready[0], use_legend=bot.takes_the_pill(game, ready[0]))
     return msgs

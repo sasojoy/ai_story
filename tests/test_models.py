@@ -115,10 +115,18 @@ def test_a_connection_is_its_destination_id_with_a_road_kind():
 
 def test_growth_config_defaults_follow_the_design():
     cfg = Config()
-    assert (cfg.fuse_xinde, cfg.merge_xinde, cfg.cultivate_stamina, cfg.practice_xinde_per_level) == (5, 5, 10, 1)
+    # 練成每成 2N（企劃者 2026-10-07 方案 A，從 1 改成 2）
+    assert (cfg.fuse_xinde, cfg.merge_xinde, cfg.cultivate_stamina, cfg.practice_xinde_per_level) == (5, 5, 10, 2)
     assert cfg.merge_stamina == 5  # 企劃者 2026-10-05：合併要花體力，合成不花；FB-067 從 10（跟修練一次一樣）降到 5
-    # 企劃者 2026-10-06（W8）：下品→中品放寬成 40% 起、每失敗一次 +20%、第三次必成；中品→上品、上品→絕學照舊
-    assert cfg.cultivate_odds == {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
+    # 企劃者 2026-10-06（W8）：下品→中品放寬成 40% 起、每失敗一次 +20%、第三次必成；
+    # 2026-10-07 方案 B：中品→上品 6%、+3 再乘搭配；上品→絕學在方案 C 開著時不擲骰
+    assert cfg.cultivate_odds == {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
+    assert cfg.cultivate_min_level == {"中品": 4, "上品": 7, "絕學": 10}
+    fit = cfg.cultivate_fit
+    assert (fit.level_base, fit.level_step, fit.substitute, fit.home_ground) == (0.5, 0.05, 0.7, 1.5)
+    rule = cfg.breakthrough
+    assert (rule.heat, rule.chance, rule.par_ratio, rule.min_ratio, rule.max_chance) == (8, 25, 0.5, 0.3, 60)
+    assert (rule.showdown_rounds, rule.showdown_ratio) == (3, 1.0)
     assert cfg.cultivate_sure_by == {"中品": 3}  # 只有中品寫明第幾次必成；上品靠加到 100%，絕學沒有保底
     assert cfg.melt_refund_ratio == 0.8
     assert cfg.melt_quality_bonus == {"下品": 0, "中品": 5, "上品": 15, "絕學": 40}

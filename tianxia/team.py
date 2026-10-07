@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter, rounds, traits
+from . import calendar, encounter, rounds, styles, traits
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -733,7 +733,7 @@ def fight(
     dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
     arts = team_arts(state, content, world)
-    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
+    power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     lo = traits.loadout(state, content, world)
     result = encounter.resolve_encounter(
         power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo),
@@ -777,8 +777,25 @@ def estimate(
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
     arts = team_arts(state, content, world)
-    power = encounter.team_power(*_with_attribute(_fighters(state, content, world), arts, squad.attribute))
+    power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     return odds_word(power, squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+
+
+def _styled_fighters(
+    state: GameState, content: Content, world: WorldStateStore, arts: dict[str, MartialArt], squad: Squad,
+) -> tuple[list, list[float], list[encounter.Boost]]:
+    """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性。
+    fight 與 estimate 都走這裡，勝算才跟打起來一樣。"""
+    members, conditions, boosts = _fighters(state, content, world)
+    style = styles.style_of(state, content, world, squad)
+    attributes = [arts[m.wugong_id].attribute if m.wugong_id in arts else None for m in members]
+    return members, conditions, styles.styled(boosts, attributes, content, style)
+
+
+def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:
+    """本人身上那一門武學的屬性（戰報的路數那一句、決戰的隊伍多樣性看它）；沒有武學是 None。"""
+    art = player_art(state, content, world, state.player.member.wugong_id)
+    return art.attribute if art is not None else None
 
 
 def _with_attribute(

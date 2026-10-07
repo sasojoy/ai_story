@@ -1,3 +1,8 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# 平常的 pytest 不跑標了 slow 的（整季模擬、量表腳本）；合併前的整套用 pytest -m "slow or not slow"（見 CLAUDE.md「指令」）
+addopts = "-m 'not slow'"
+markers = [
+    "slow: 整季模擬、真實內容跑整季、量表與模擬腳本；平常不跑，合併前的整套才跑（pytest -m \"slow or not slow\"）",
+]
