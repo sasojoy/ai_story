@@ -181,7 +181,7 @@ def test_continue_dialogue_applies_a_given_turn_without_a_client(content, state,
     state.player.pending_companion = "mate"
     state.player.last_offered_dialogue["mate"] = [["誇他兩句", "告辭"], ["雪中送炭", "尋常寒暄"]]
     msgs = companion_agent.continue_dialogue(None, state, content, world, "mate", 0, Random(0), turn=FAKE_TURN)
-    assert msgs == ["他點了點頭。", "（好感度 +8）"]  # 好感度照玩家選的選項（上一輪的 tag）查表
+    assert msgs == ["他點了點頭。", "（情誼 +8）"]  # 情誼（程式裡叫好感度）照玩家選的選項（上一輪的 tag）查表
     assert state.player.affinities["mate"] == 8
     assert state.player.dialogue_history["mate"][0] == {"role": "user", "content": "誇他兩句"}
     assert world.read().companion_tag_counts["mate"] == {"雪中送炭": 1}

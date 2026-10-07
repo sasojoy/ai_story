@@ -1567,8 +1567,9 @@ class Game:
         一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）；
         hint：這是碰到才說的框（結語、入伍段的框沒有這個鍵）——網頁認它，在修練頁、煉製頁也畫（在那兩頁做的事觸發的提示不必切回江湖頁才看到）。"""
         p = self.state.player
-        # 有所感（悟意境設計第零節）的卡也一樣：選做法、畫一筆都佔著畫面，跟事件待處理同一種等法
-        if not p.hint_queue or self.state.pending_event is not None or p.sensing is not None:
+        # 有所感（悟意境設計第零節）的卡也一樣：選做法、畫一筆都佔著畫面，跟事件待處理同一種等法。跟人物談話也是（explain-1）：
+        # 對話的幾個選項跟事件的選項一樣佔著畫面，第一次談話說的 h_bond 擺在上面會把「告辭」擠出第一屏；告辭之後上框
+        if not p.hint_queue or self.state.pending_event is not None or p.sensing is not None or p.pending_companion is not None:
             return None
         note = p.hint_queue[0]
         return {
@@ -1762,6 +1763,13 @@ class Game:
             return self._explore()
         if what == "train":
             return self._train()
+        msgs = self._socialize(prepared)
+        self._hint("h_bond")  # 第一次交友：情誼有什麼用（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）
+        return msgs
+
+    def _socialize(self, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        """交友（act:socialize，體力呼叫端已經扣了）：福緣到了先發福緣；這裡至多一位人物、見得到就開口對話；不然抽一則
+        這裡的交友事件，沒有就是打發話。"""
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -1819,13 +1827,15 @@ class Game:
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
         """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
         try:
-            return companion_agent.start_dialogue(
+            msgs = companion_agent.start_dialogue(
                 self._quick_client(), self.state, self.content, self.world, companion_id, self.rng,
                 turn=self._prepared_turn(prepared),
             )
         except companion_agent.DialogueUnavailable:
             self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
             return self._dialogue_unavailable(companion_id)
+        self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（_hint_box）
+        return msgs
 
     def _explore(self) -> list[str]:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
@@ -2275,7 +2285,17 @@ class Game:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
-        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
+        # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
+        bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
+        return (
+            f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
+            + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
+        )
+
+    def affinity_text(self, companion_id: str) -> str:
+        """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
+        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""
+        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -5195,7 +5215,8 @@ class Game:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
-            return f"**{character.name}**\n\n{last}"
+            # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）
+            return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{last}"
         if s.player.pending_faction:
             faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"

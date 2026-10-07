@@ -72,6 +72,23 @@ def test_no_notes_without_server_notes():
     assert 'class="act-notes"' not in run(m, "return H.pageJianghu();")
 
 
+def test_the_conversation_view_shows_the_bond(content):
+    """談話畫面（場景卡）名字旁寫著情誼：伺服器把引擎的 Markdown 轉成 HTML，網頁照放（explain-1 第二項）。"""
+    from unittest import mock
+
+    from test_engine import FAKE_TURN
+
+    from tianxia import companion_agent
+
+    content.characters["mate"].deep_interaction = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.state.player.affinities["mate"] = 12
+    with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
+        game.choose("act:socialize")
+    page = run(_main(game), "return H.pageJianghu();")
+    assert re.search(r'<section class="card scene"><p><strong>韓鐵</strong>（情誼 12）</p>', page)
+
+
 def test_notes_are_escaped():
     m = _main()
     m["action_notes"] = {"act:explore": "<b>x</b>"}

@@ -80,7 +80,9 @@ def test_a_bad_hint_book_is_refused_at_load(hints_root, change, message):
 def test_every_known_hint_id_is_one_of_the_eighteen():
     from tianxia import hints
 
-    assert len(hints.KNOWN) == 18 and {"h_snubbed", "h_mandate", "h_merge", "h_figure"} <= hints.KNOWN
+    # 設計 5.2 的十八條，加上 explain-1 的 h_bond（第一次交友或談話：情誼有什麼用；事件型，不看狀態）
+    assert len(hints.KNOWN) == 19 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond"} <= hints.KNOWN
+    assert hints.EVENT_ONLY == {"h_snubbed", "h_mandate", "h_bond"}
 
 
 # ── 排隊與對話框 ───────────────────────────────────────

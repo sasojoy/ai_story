@@ -246,6 +246,9 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     fid = _figure_id(content, name) if season_one(content, state.world) else None
     if fid is not None:  # 第一季：聲威寫出來，挑戰本人之前看得到好不好打
         lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）。")
+        cid = content.figures[fid].character
+        if cid is not None:  # 談得上話的人物：你跟他的情誼（explain-1；沒有對話人物的彭脫、韓忠沒有情誼）
+            lines.append(f"- 你跟他的情誼 {state.player.affinities.get(cid, 0)}（談得投機會漲，0～100）。")
     lines.append(f"- 現在：{leader_activity(state, content, name)}。")
     news = leader_news(state, content, name)
     if news:
