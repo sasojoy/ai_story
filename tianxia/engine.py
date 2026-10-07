@@ -11,15 +11,15 @@ import functools
 import hashlib
 import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, martial_arts, materials, naming, opportunities, orders,
-    push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, styles, team, timetable, traits,
+    figures, flavor, foreshadow, front_lines, fusion, howto, insights, journal, library, martial_arts, materials, naming, opportunities,
+    orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, styles, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
@@ -73,6 +73,12 @@ ROAD_TASKS: dict[str, tuple[str, str]] = {
     "gather": ("路邊採集", "找過了"),
 }
 ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
+
+
+def drill_share(amount: int, share: float) -> int:
+    """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
+    操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個。"""
+    return int(amount * share + 0.5)
 
 
 class Option(BaseModel):
@@ -936,6 +942,53 @@ class Game:
         # 見 _train）：這個標籤的用途是警告玩家，寧可低估也不要給出過度樂觀的承諾。
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
+
+    def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
+        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
+        探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（_train_line），交友照會不會直接開口談話
+        （_socialize_figure）與這裡有沒有交友事件。只給 option_ids 裡有的。序章裡是空的：探索、遊歷照那一步寫好的走（草廬四景、
+        斷眉），師父自己會說。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return {}
+        ids = set(option_ids)
+        loc = c.locations[s.player.location]
+        notes: dict[str, str] = {}
+        if "act:explore" in ids:
+            legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
+            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend)
+        if "act:train" in ids:
+            notes["act:train"] = self._train_line(loc)
+        if "act:socialize" in ids:
+            figure = self._socialize_figure()
+            notes["act:socialize"] = howto.social_line(
+                None if figure is None else c.characters[figure].name, has_events_here(c, loc, "socialize"), self._audience_hall(),
+            )
+        if "act:call" in ids:
+            notes["act:call"] = howto.CALL_LINE
+        if not s.player.picking_audience:  # 只有一位人物時選單上直接列的「求見某某」（行動列交友那一格放它）
+            for option_id in ids:
+                cid = option_id.removeprefix("call:")
+                if option_id.startswith("call:") and cid in c.characters:
+                    notes[option_id] = howto.call_line(c.characters[cid].name, self._can_meet(cid))
+        return notes
+
+    def _train_line(self, loc: Location) -> str:
+        """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
+        （Game._drill：對手的 drill_reward_share、不給銀兩素材），打贏或操練推不推大勢（train_trend_push）。"""
+        c = self.content
+        squads = [c.squads[sid] for sid in self._train_squad_ids(loc)]
+        foes = [squad for squad in squads if not self._drills_with(squad)]
+        own = [squad for squad in squads if self._drills_with(squad)]
+        share = c.config.drill_reward_share
+        gains = [word for word, on in (
+            ("銀兩", any(q.reward_silver for q in foes)), ("心得", any(q.reward_xinde for q in foes)), ("經驗", any(q.exp for q in foes)),
+        ) if on]
+        drill_gains = [word for word, on in (
+            ("心得", any(drill_share(q.reward_xinde, share) for q in own)), ("經驗", any(drill_share(q.exp, share) for q in own)),
+        ) if on]
+        drops = any(materials.may_drop(q, c) for q in foes)
+        return howto.train_line(bool(foes), gains, drops, bool(self.train_trend_push(loc.id)), drill_gains, bool(own))
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -1811,13 +1864,10 @@ class Game:
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
-        mix = c.config.explore_mix_of(loc.tags).weights
-        branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
-        if not branches:
+        weighted = self._explore_weights(loc)
+        if not weighted:
             return ["你四處走走，一無所獲。"]
-        # 悟性：落在「悟意境」那一支的比重 ×（1＋3%×（悟性−5））；另外兩支不動（武學與成長設計 6.1）
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
-        branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
+        branch = self.rng.choices([b for b, _ in weighted], weights=[w for _, w in weighted])[0]
         if branch == "insight":
             if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
                 return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
@@ -1827,6 +1877,18 @@ class Game:
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
         return self._present(pick_event(s, c, "explore", self.rng, "common"), "explore")
+
+    def _explore_weights(self, loc: Location) -> list[tuple[ExploreBranch, float]]:
+        """探索三選一此刻在這裡的候選與比重（探索三選一設計第三節）：照地點類型（Config.explore_mix），比例是 0 的與做不了的
+        （_explore_can）拿掉；悟意境那一支的比重 ×（1＋3%×（悟性−5）），另外兩支不動（武學與成長設計 6.1）。
+        探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
+        s, c = self.state, self.content
+        mix = c.config.explore_mix_of(loc.tags).weights
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        return [
+            (b, mix[b] * (wis if b == "insight" else 1))
+            for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)
+        ]
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
@@ -3205,8 +3267,8 @@ class Game:
         msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
         self._outcome("操練", msgs[0])
         share = c.config.drill_reward_share
-        xinde = int(squad.reward_xinde * share + 0.5)  # 四捨五入（round 是銀行家進位）
-        exp = int(squad.exp * share + 0.5)
+        xinde = drill_share(squad.reward_xinde, share)
+        exp = drill_share(squad.exp, share)
         xinde_line = None
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
