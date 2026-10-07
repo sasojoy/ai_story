@@ -2,7 +2,8 @@
 
 joy 在 GitHub 上也做了 FB-092～095（PR #30、#31），併進 main 之後 PM 裁示 joy 的為準（chain-on-main，2026-10-07）：我們的重複做法
 拿掉了（FB-092 整段都是 joy 的，這裡沒有測試）。留下的是我們加在 joy 的做法上、她沒有的東西（結語、一週保底、網頁的「在下面 ↓」），
-以及跑在 joy 的程式上、她的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）。
+以及跑在 joy 的程式上、她的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）；網頁的部分（web/app.js 的
+applyGlow、guideCue、choose 的 ask）照 tests/test_prologue_web.py 的做法放進 node 跑（scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
 新寫的句子都在待 joy 潤的清單上（見 fb-report.md）：這裡的測試只認事實（講了什麼、對不對得上規則），不鎖死字句。"""
 from __future__ import annotations
 
