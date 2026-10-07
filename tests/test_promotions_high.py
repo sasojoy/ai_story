@@ -12,7 +12,7 @@ from conftest import FixedRandom, real_content
 from tianxia import bot_policy, defection, enlist, figures, ranks, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
-from tianxia.models import Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
+from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
 from tianxia.state import PlayerState, Summons, TimelineResult
 
 
@@ -142,8 +142,14 @@ def test_summons_next_must_name_its_own_event(real):
 def _two_leg(real, location="luoyang_palace", first_cast=None):
     """兩段的第 3 階：location 空著、地點寫在各段；各段的事件都算晉升奇遇（升階、給部下的那一段過得了檢查）。
     借用官軍第 2 階的兩則事件（同一個陣營，部下的陣營對得上）。真的官軍第 3 階（Task 3 以後有）先拿掉，
-    連同它兩段事件（寫了 promote／followers，沒有晉升定義認它們就過不了檢查）一起。"""
+    連同它兩段事件（寫了 promote／followers，沒有晉升定義認它們就過不了檢查）一起。
+    借來的兩則事件原本寫 promote 2；放進第 3 階的各段，promote 要寫 3（載入時檢查），所以這裡改成 3。"""
     _without_rank3(real)
+    for event_id in ("promo_guan_2", "promo_guan_2_handoff"):
+        for choice in real.events[event_id].choices:
+            for effect in (choice.effect, choice.fail_effect):
+                if effect.promote is not None:
+                    effect.promote = 3
     first = first_cast or PromotionCast(event="promo_guan_2", figure="luzhi", at="luzhi_camp", summons_text="到{據點}。")
     promo = PromotionDef(faction="guan", rank=3, closing="（結尾）", legs=[
         PromotionLeg(casts=[first]),
@@ -435,18 +441,33 @@ def test_an_anonymous_member_is_named_on_promotion(on):
     assert texts == ["甲升為軍司馬。", "甲取得校尉的資格，候缺。"]
 
 
-def test_brush_off_stops_offering_a_rank_once_qualified(on):
-    """被打發時「或在官軍再升一階」只給還升得上去的人：拿到第 4 階資格（候缺）的人沒有下一階可升。"""
-    on.promotions = [p for p in on.promotions if not (p.faction == "guan" and p.rank == 4)]
-    on.promotions.append(PromotionDef(faction="guan", rank=4, closing="（結尾）", legs=[
-        PromotionLeg(casts=[PromotionCast(event="promo_guan_2", at="dajiangjun_fu", summons_text="到{據點}。")]),
-    ]))  # 測試用的第 4 階（Task 3 才有真的）
-    game = _game(on, faction="guan", rank=3)
+def test_brush_off_offers_a_rank_up_only_where_the_rank_goes_up(on):
+    """被打發時「或在官軍再升一階」只給真的會升階的人：升第 3 階是升階（求見門檻跟著降），第 4 階只是資格（候缺），
+    rank 停在 3、門檻不降，所以第 2 階的人有這句，第 3 階的人（含已取得資格的）沒有。"""
+    game = _game(on, faction="guan", rank=2)
     p = game.state.player
     p.stats["fame"] = rules.audience_bar(game.state, on, "luzhi") - 1
     assert "再升一階" in game._brush_off("luzhi")[0]  # noqa: SLF001
+    p.rank = 3  # 升了第 3 階之後，下一階（第 4 階）只是資格
+    p.stats["fame"] = rules.audience_bar(game.state, on, "luzhi") - 1
+    assert "再升一階" not in game._brush_off("luzhi")[0]  # noqa: SLF001
     p.qualified = True
     assert "再升一階" not in game._brush_off("luzhi")[0]  # noqa: SLF001
+
+
+def test_a_rank_three_member_is_not_promised_a_rank_up(on):
+    """真的第 4 階（官軍：何進授印）有定義，rank_of + 1 找得到它；可是它不升階、求見門檻不降：被打發的話只寫還差多少，不許諾。
+    取得資格之後門檻也一樣不降（audience_bar 不看資格）。"""
+    assert any(x.faction == "guan" and x.rank == 4 for x in on.promotions)
+    game = _game(on, faction="guan", rank=3)
+    p = game.state.player
+    bar = rules.audience_bar(game.state, on, "luzhi")
+    p.stats["fame"] = bar - 1
+    line = game._brush_off("luzhi")[0]  # noqa: SLF001
+    assert "名望還差 1" in line and "再升" not in line
+    p.qualified = True
+    assert rules.audience_bar(game.state, on, "luzhi") == bar  # 資格不降門檻：上面不許諾，這裡也沒有騙人
+    assert "再升" not in game._brush_off("luzhi")[0]  # noqa: SLF001
 
 
 def test_summons_next_effect_moves_the_leg(on):
@@ -1388,3 +1409,115 @@ def test_the_two_leg_walk_through_the_menu(on):
     assert (p.rank, p.summons, p.followers, game.state.pending_event) == (3, None, ["follower_guan_spear"], None)
     assert any(r.text == "甲升為軍司馬。" and r.faction == "guan" for r in game.state.world.rumors)
     assert ranks.check_summons(game.state, on) == [] and "act:summons" not in usable(game)
+
+
+# ── 最終審查後的修正（I1 不許諾、m1 開著的那一幕、m3 載入檢查）─────────
+
+
+def test_an_open_scene_is_not_swapped_under_the_player(on):
+    """最終審查 m1：盧植的那一幕已經開著（事件待處理），這時盧植下獄、董卓接手：召見與主線與目標都不換——畫面上演的還是盧植
+    交奏表。選了之後照演的那一則走到下一段；下一次檢查才照新的時局挑。"""
+    game = _game(on, faction="guan", at="luzhi_camp")
+    p = game.state.player
+    _hear_only_the_promotion_hint(game)
+    _ready(game, rank=2, contrib=900)
+    game.sync(game.now + 1)
+    assert p.summons.event == "promo_guan_3_memorial"
+    game.choose("act:summons")
+    assert game.state.pending_event == "promo_guan_3_memorial"
+
+    _retire(game, "luzhi", "jailed")
+    game.state.world.figures["dongzhuo"] = figures.state_of(game.state, on, "dongzhuo").model_copy(
+        update={"front": "jizhou", "location": "luzhi_camp"})
+    game.world.save_season(game.state.world)
+    before = len(game.state.journal)
+    game.sync(game.now + 1)
+    assert not [e for e in game.state.journal[: len(game.state.journal) - before] if e.title == "召見"]
+    assert (p.summons.event, p.summons.figure) == ("promo_guan_3_memorial", "luzhi")
+    assert "**召見**：盧植派人來找你：到盧植營見他。" in game.quest_text()  # 主線與目標也還是盧植
+
+    msgs = game.choose("choice:0")  # 演完這一幕：照演的那一則走到下一段
+    assert "把盧植的奏表送到洛陽宮城。" in msgs
+    assert (p.summons.leg, p.summons.prev, p.summons.event) == (1, "promo_guan_3_memorial", "promo_guan_3_palace")
+
+
+def test_an_open_scene_counts_for_any_version_of_the_leg(on):
+    """開著的那一幕是這一段任何一個版本的事件都算（盧植版、董卓版），不是下一段的事件，也不是沒有待處理的事件。"""
+    game = _game(on, faction="guan", at="luzhi_camp")
+    _ready(game, rank=2, contrib=900)
+    ranks.check_summons(game.state, on)
+    promo = ranks.promotion_for(on, "guan", 3)
+    assert ranks._scene_open(game.state, promo) is False  # noqa: SLF001
+    for event_id in ("promo_guan_3_memorial", "promo_guan_3_gift"):
+        game.state.pending_event = event_id
+        assert ranks._scene_open(game.state, promo) is True  # noqa: SLF001
+    game.state.pending_event = "promo_guan_3_palace"  # 下一段的事件
+    assert ranks._scene_open(game.state, promo) is False  # noqa: SLF001
+
+
+def test_the_swap_is_announced_once_no_scene_is_open(on):
+    """對照：沒有開著的那一幕時，盧植下獄、董卓接手照舊換、照舊說（見 test_jailed_luzhi_hands_the_first_leg_to_dongzhuo）。"""
+    game = _game(on, faction="guan", at="luzhi_camp")
+    p = game.state.player
+    _hear_only_the_promotion_hint(game)
+    _ready(game, rank=2, contrib=900)
+    game.sync(game.now + 1)
+    _retire(game, "luzhi", "jailed")
+    game.state.world.figures["dongzhuo"] = figures.state_of(game.state, on, "dongzhuo").model_copy(
+        update={"front": "jizhou", "location": "luzhi_camp"})
+    game.world.save_season(game.state.world)
+    game.sync(game.now + 1)
+    assert p.summons.event == "promo_guan_3_gift"
+    assert (game.state.journal[0].title, game.state.journal[0].lines) == ("召見", ["董卓派人來找你：到盧植營見他。"])
+
+
+def test_a_leg_event_promotes_to_its_own_rank(real):
+    """最終審查 m3(a)：第 4 階的奇遇選項 promote 寫成 3，每按一次「應召」就再升一次第 3 階、多一則軍情與一名部下：載入時擋下。"""
+    real.events["promo_guan_4"].choices[0].effect.promote = 3
+    with pytest.raises(ContentError, match="promo_guan_4：promote 要寫 4"):
+        validate(real)
+
+
+def test_a_failed_check_promotes_to_its_own_rank_too(real):
+    real.events["promo_hao_4"].choices[2].fail_effect.promote = 3
+    with pytest.raises(ContentError, match="promo_hao_4：promote 要寫 4"):
+        validate(real)
+
+
+@pytest.mark.parametrize("value", [0, 1, 5, 9])
+def test_promote_stays_within_the_ranks_that_exist(real, value):
+    """最終審查 m3(c)：promote 只能是 2～4（有頭銜的階）；大了會在 ranks.promote 查頭銜表時 IndexError。"""
+    real.events["promo_guan_4"].choices[0].effect.promote = value
+    with pytest.raises(ContentError, match="promote 要在 2～4 之間"):
+        validate(real)
+
+
+def test_a_first_leg_choice_must_move_the_summons_on_or_end_it(real):
+    """最終審查 m3(b)：非最後一段的奇遇，選項沒寫 summons_next 也沒晉升，召見留在原地、「應召」（不花體力）又能重演同一幕，
+    獎勵白拿（審查實測銀兩 50 → 140）：載入時擋下。"""
+    real.events["promo_guan_3_memorial"].choices[0].effect = Effect(text="x", stats={"silver": 30})
+    with pytest.raises(ContentError, match="promo_guan_3_memorial：.*summons_next（往下一段）或 promote"):
+        validate(real)
+
+
+def test_a_first_leg_check_must_move_on_in_both_outcomes(real):
+    choice = real.events["promo_guan_3_memorial"].choices[0]
+    choice.check = Check(stat="str", difficulty=4)  # 檢定輸的那一邊沒寫 summons_next：輸了就重演
+    with pytest.raises(ContentError, match="promo_guan_3_memorial：.*summons_next（往下一段）或 promote"):
+        validate(real)
+    choice.fail_effect = Effect(summons_next="promo_guan_3_memorial")
+    validate(real)  # 兩邊都往前走：不丟錯
+
+
+def test_a_first_leg_choice_may_end_the_summons_instead(real):
+    """選項直接晉升（結束召見）也算：召見不會留在原地。"""
+    real.events["promo_guan_3_memorial"].choices[0].effect = Effect(
+        text="x", promote=3, followers=["follower_guan_spear"])
+    validate(real)
+
+
+def test_a_last_leg_choice_must_promote(real):
+    """對稱地，最後一段的選項沒晉升，召見也留在原地、可以重演。"""
+    real.events["promo_guan_3_palace"].choices[0].effect = Effect(text="x")
+    with pytest.raises(ContentError, match="promo_guan_3_palace：.*promote"):
+        validate(real)

@@ -759,11 +759,16 @@ def check_promotions(c: Content, need, known) -> None:
     promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。
     第 2 階寫 location／event_main／summons_text，第 3、4 階寫 legs（正式版丙一）：每段有版本、版本的人物與地點存在、
     before_event 在時刻表；各段的版本事件都算晉升奇遇。選項效果的 summons_next（只有最後一段以前的奇遇、寫自己的 id）、
-    patron（只有晉升奇遇）、event_mods（只有擲骰的時刻表大事）在這裡查。"""
+    patron（只有晉升奇遇）、event_mods（只有擲骰的時刻表大事）在這裡查。
+    奇遇的選項要跟它在 legs 裡的位置對得上（最終審查 m3）：promote 只能是 2～4、而且等於那一則所屬的那一階；
+    非最後一段的每個選項（檢定、戰鬥的輸贏兩邊也一樣）要往下一段（summons_next）或結束召見（promote），最後一段的每個選項要
+    promote——不然召見留在原地，「應召」（不花體力）又能重演同一幕、獎勵白拿。"""
     factions = {f.id for f in c.scenario.factions}
     seen: set[tuple[str, int]] = set()
     promo_events: dict[str, str] = {}
     unfinished: set[str] = set()  # 第 3、4 階奇遇的各段裡，不是最後一段的版本事件：只有它們的選項可以寫 summons_next
+    last_events: set[str] = set()  # 最後一段的版本事件：每個選項都要晉升
+    leg_ranks: dict[str, set[int]] = {}  # 各段的版本事件 → 它在哪幾階的 legs 裡（promote 要等於那一階）
     for promo in c.promotions:
         where = f"promotions.json 的 {promo.faction}／第 {promo.rank} 階"
         need(promo.faction in factions, f"{where}：陣營不在劇本裡")
@@ -791,8 +796,11 @@ def check_promotions(c: Content, need, known) -> None:
             for cast in leg.casts:
                 known(where, [cast.event], c.events, "事件")
                 promo_events[cast.event] = promo.faction  # 各段的奇遇都算晉升奇遇：最後一段的選項才寫 promote、followers，下面那條檢查要認得它
+                leg_ranks.setdefault(cast.event, set()).add(promo.rank)
                 if i < len(promo.legs) - 1:
                     unfinished.add(cast.event)
+                else:
+                    last_events.add(cast.event)
                 known(where, [cast.figure] if cast.figure else [], c.figures, "人物")
                 known(where, [cast.at] if cast.at else [], c.locations, "地點")
                 need(cast.figure is not None or cast.at is not None or leg.location is not None,
@@ -821,8 +829,23 @@ def check_promotions(c: Content, need, known) -> None:
     # 第 3、4 階的三種新效果（正式版丙一）：選項的 effect 與 fail_effect 都查
     for event in c.events.values():
         for choice in event.choices:
+            where = f"事件 {event.id}"
+            # 這個選項會走到的效果：檢定、戰鬥有輸贏兩邊；沒有的話 fail_effect 不會被用到
+            sides = (choice.effect, choice.fail_effect) if choice.check is not None or choice.combat else (choice.effect,)
+            if event.id in unfinished:
+                need(all(e.summons_next is not None or e.promote is not None for e in sides),
+                     f"{where}：非最後一段的選項每一邊（檢定、戰鬥的輸贏也一樣）都要寫 summons_next（往下一段）或 promote（結束召見），"
+                     "不然召見留在原地，「應召」又能重演同一幕")
+            if event.id in last_events:
+                need(all(e.promote is not None for e in sides),
+                     f"{where}：最後一段的選項每一邊（檢定、戰鬥的輸贏也一樣）都要寫 promote，不然召見留在原地，「應召」又能重演同一幕")
             for effect in (choice.effect, choice.fail_effect):
-                where = f"事件 {event.id}"
+                if effect.promote is not None:
+                    need(2 <= effect.promote <= 4, f"{where}：promote 要在 2～4 之間（第 2 到 4 階），寫了 {effect.promote}")
+                    ranks_here = leg_ranks.get(event.id)
+                    need(not ranks_here or effect.promote in ranks_here,
+                         f"{where}：promote 要寫 {'、'.join(str(r) for r in sorted(ranks_here or ()))}"
+                         f"（這一則在那一階的 legs 裡），寫了 {effect.promote}")
                 if effect.summons_next is not None:
                     if effect.summons_next != event.id:
                         need(False, f"{where}：summons_next 要寫這一則自己的 id")

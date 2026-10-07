@@ -11,6 +11,8 @@ from .state import GameState, Summons
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
 HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
 
+HIGHEST_RANK = 3  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺），上任是計畫丁的事，求見門檻不看資格
+
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {
     "guan": ["", "鄉勇", "屯長", "軍司馬", "校尉"],
@@ -40,6 +42,15 @@ def title(content: Content, state: GameState) -> str | None:
 def promotion_for(content: Content, faction: str | None, rank: int) -> PromotionDef | None:
     """那個陣營升到第 rank 階的晉升定義（promotions.json，第 2 到 4 階）；沒寫的階是 None。"""
     return next((p for p in content.promotions if p.faction == faction and p.rank == rank), None)
+
+
+def next_rank_up(state: GameState, content: Content) -> int | None:
+    """下一次晉升真的會升階（PlayerState.rank 加一）的那一階；沒有的是 None：下一階沒有定義、或下一階只是資格（第 4 階，
+    rank 停在 3、求見門檻不降）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
+    rank = rank_of(state) + 1
+    if rank > HIGHEST_RANK or promotion_for(content, state.player.faction, rank) is None:
+        return None
+    return rank
 
 
 def threshold(content: Content, rank: int) -> int:
@@ -128,8 +139,11 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
     """手上的多段召見照當下重挑一次版本：換了版本或地點就改寫召見（召見自動改由接手的人發、地點跟著人走）；
     沒有成立的版本時照舊等著。只有玩家讀到的那一句話變了才回傳新的那一句：只換了演的事件、人與地點與話都沒變（何進的索賄
     在盧植下獄之前、之後各一版）時悄悄換，不把同一句話又寫進紀錄一次（開發預審 N4）；事件與地點都沒換、只換了出面的人
-    （營中授印的兩個版本，皇甫嵩退場、朱儁接手）話就變了，照樣說。"""
+    （營中授印的兩個版本，皇甫嵩退場、朱儁接手）話就變了，照樣說。
+    這一段的奇遇已經開著（事件待處理）時不換：畫面上演的還是原來那一幕，演完照演的那一則走到下一段（最終審查 m1）。"""
     s = state.player.summons
+    if _scene_open(state, promo):
+        return []
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
         return []
@@ -138,6 +152,14 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
     s.event, s.location, s.figure = cast.event, location, cast.figure
     line = _leg_text(content, cast, location)
     return [line] if line != told else []
+
+
+def _scene_open(state: GameState, promo: PromotionDef) -> bool:
+    """手上這一段的奇遇正開在畫面上（待處理的事件是這一段任一個版本的事件）。"""
+    s = state.player.summons
+    if state.pending_event is None or s.leg >= len(promo.legs):
+        return False
+    return any(cast.event == state.pending_event for cast in promo.legs[s.leg].casts)
 
 
 def _told_line(content: Content, promo: PromotionDef, s: Summons) -> str | None:
@@ -203,12 +225,14 @@ def next_leg(state: GameState, content: Content, from_event: str) -> list[str]:
 
 def summons_line(state: GameState, content: Content) -> str | None:
     """還沒去的召見那一句，照此刻出面的人重寫（召見發出後人物才不在的，自動改由接手的人發；主線與目標列它）。
-    多段（第 3、4 階）照此刻成立的版本寫；此刻沒有成立的版本時是 None。"""
+    多段（第 3、4 階）照此刻成立的版本寫（這一段的奇遇已經開著時照開著的那一幕寫，同 _refresh）；此刻沒有成立的版本時是 None。"""
     p = state.player
     promo = _pending(state, content)
     if promo is None:
         return None
     if promo.legs:
+        if _scene_open(state, promo):
+            return _told_line(content, promo, p.summons)
         found = current_cast(state, content, promo, p.summons.leg, p.summons.prev)
         return _leg_text(content, found[0], found[1]) if found is not None else None
     _, handoff = presenter(state, content, promo, p.summons.location)
@@ -250,9 +274,9 @@ def promote(state: GameState, content: Content, rank: int) -> list[str]:
     p.summons = None
     titles = TITLES.get(p.faction)
     name = titles[rank] if titles else ""
-    if rank >= 4:
+    if rank > HIGHEST_RANK:
         p.qualified = True
-        p.rank = max(p.rank, 3)
+        p.rank = max(p.rank, HIGHEST_RANK)
         msgs = [f"你取得{name}的資格，候缺。"] if titles else []  # 新寫，待 joy 潤
     else:
         p.rank = rank
@@ -271,7 +295,7 @@ def promote(state: GameState, content: Content, rank: int) -> list[str]:
         day = calendar.point(w.time, content, w).cal_day
         w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(p.name)  # 陣營軍情一律具名（傳聞分層第七節）
     elif titles:
-        text = f"{p.name}取得{name}的資格，候缺。" if rank >= 4 else f"{p.name}升為{name}。"  # 新寫，待 joy 潤；寫本名
+        text = f"{p.name}取得{name}的資格，候缺。" if rank > HIGHEST_RANK else f"{p.name}升為{name}。"  # 新寫，待 joy 潤；寫本名
         add_rumor(state, text, content=content, layer="faction", faction=p.faction)
     return msgs
 
