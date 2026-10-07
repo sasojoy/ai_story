@@ -2084,10 +2084,11 @@
   }
 
   async function choose(btn, id, sure = false) {
-    // 按下去之前要先問一次的選項（伺服器寫在 confirm，FB-095：必敗的遊歷）：問過、按了「照打」才送
+    // 按下去之前要先問一次的選項（伺服器寫在 confirm，FB-095：必敗的遊歷）：問過、按了「照打」才送。問的當下輪詢可能重畫了頁面，
+    // btn 已經不在頁面上：照 id 重找畫面上那一顆，「處理中」才標得到、擋下來時才還原得了（整合審查 M1）
     const ask0 = ((S.main && S.main.options) || []).find((o) => o.id === id);
     if (!sure && ask0 && ask0.confirm) {
-      ask(ask0.confirm, "照打", () => choose(btn, id, true));
+      ask(ask0.confirm, "照打", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
       return;
     }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送

@@ -268,6 +268,34 @@ def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
     assert out["seen"][0]["asked"] is False and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 不必敗的：不問、直接打
 
 
+_REDRAWN_ASK = """return (async () => {
+  const mk = () => { const classes = new Set(); return { classes, dataset: { act: "choose", id: "act:train" },
+    classList: { add: (...c) => c.forEach((x) => classes.add(x)), remove: (...c) => c.forEach((x) => classes.delete(x)), contains: (c) => classes.has(c) } }; };
+  const click = (target) => T.docListeners.click[0]({ target: { closest: () => target } });
+  const old = mk(), live = mk();
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  await click(old); // 必敗的遊歷：跳出確認框
+  T.qs['[data-act="choose"][data-id="act:train"]'] = live; // 確認框開著時輪詢重畫了頁面：畫面上的遊歷是新的那一顆，old 已經不在頁面上
+  T.ctx.fetch = (url, opts) => { T.calls.push([url, JSON.parse(opts.body)]); return new Promise(() => {}); }; // 伺服器還沒回（大場面在判讀）
+  click({ dataset: { act: "ask-yes" }, classList: { contains: () => false, add() {}, remove() {} } }); // 「照打」
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return { old: [...old.classes], live: [...live.classes], calls: T.calls.map((c) => [c[0], c[1]]) };
+})();"""
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page(on):
+    """確認框開著時輪詢重畫了頁面，按「照打」之後「處理中」標在畫面上那一顆遊歷（照 id 重找），不是已經不在頁面上的舊鈕：不然等大場面判讀時
+    看不到按鈕在等，伺服器擋下來時也找不到 .busy、灰掉的選項要等下一次輪詢才還原（整合審查 M1）。"""
+    game = _game(on, at="huangjin_camp")
+    game.state.player.member.wugong_id = None
+    m = server.main_view(game)
+    assert next(o for o in m["options"] if o["id"] == "act:train")["confirm"]
+    out = run(m, _REDRAWN_ASK)
+    assert out["calls"] == [["/api/choose", {"id": "act:train"}]]
+    assert out["live"] == ["busy"] and out["old"] == []
+
+
 def _enlist_main(on, faction="guan"):
     """第 2 步的 /api/main：這週只有一道守城軍令（清掉開季的軍令，伺服器帶的 guide.glow 才只有守勢行動那一顆，見 enlist.glow）。"""
     game = _enlisted(on, faction)
