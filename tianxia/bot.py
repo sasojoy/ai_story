@@ -49,10 +49,12 @@ PILL_BELOW = 10  # 回體丹（內測贈送）：體力掉到連一次探索、�
 
 
 def take_pill(game: Game) -> None:
-    """體力見底、手上有回體丹就服一顆（只走 Game.take_stamina_pill，跟真人按體力條上的「丹」一樣）。整季機器人與伺服器假人共用。"""
+    """體力見底、手上有回體丹就服一顆（只走 Game.take_stamina_pill，跟真人按體力條上的「丹」一樣）。整季機器人與伺服器假人共用。
+    pill_only=True：測試期間 Config.beta_free_refill 打開時，真人按同一顆鈕是免費補滿；機器人與假人不吃那個，照舊只吃丹
+    （沒有丹就不補），整季模擬與平衡量表不因為測試期間的免費補滿而變。開關關著時 pill_only 沒有作用。"""
     p = game.state.player
     if p.stamina_pills > 0 and p.stamina < PILL_BELOW:
-        game.take_stamina_pill()
+        game.take_stamina_pill(pill_only=True)
 
 
 def allocate_points(game: Game, rng: random.Random) -> None:

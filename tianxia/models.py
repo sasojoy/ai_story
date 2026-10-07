@@ -1377,6 +1377,13 @@ class Config(_Strict):
     # 舊角色不補送，換季不再送（剩下的跟著帶到下一季）
     beta_gift: bool = True
     beta_gift_stamina_pills: int = Field(default=20, ge=0)
+    # 測試期間一鍵補滿體力（企劃者 2026-10-07，緊急）：「體力在這個遊戲是很重要的資源，現在的回復以及消耗完全不成正比，探索偶爾
+    # 還順便扣一堆體力，新人玩家體驗不到樂趣。另外現在還在測試版，請直接讓玩家能直接補滿體力。」打開時，狀態列體力條上 joy 的
+    # 「丹」鈕（同一個入口 Game.take_stamina_pill、同一條路由 pill）變成「補滿」：按一下直接補到 stamina_max，不花丹、不花銀兩、
+    # 不限次數；關著時回體丹一個字不變。只在測試期間開（content/profiles/weekend.json），content/config.json 不寫；測試期過了就關掉。
+    # 伺服器假人與整季機器人不吃這個，照舊吃丹（bot.take_pill 傳 pill_only=True），平衡量表不受影響
+    beta_free_refill: bool = False
+    beta_free_refill_label: str = "補滿"  # 開關打開時狀態列那顆鈕上的字（取代「丹 N」）；新寫，待 joy 潤
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
     # FB-068（企劃者 2026-10-05）：熔掉全服登記的武學（合成出來的）時，「練成花的八成」那一份至少退這麼多——合成也花了東西。

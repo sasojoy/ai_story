@@ -1265,6 +1265,7 @@ def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_pat
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players"}
+BETA_TEST_KEYS = {"beta_free_refill"}  # 測試期間才開的開關（企劃者 2026-10-07 一鍵補滿體力，tests/test_stamina_refill.py）：週末設定多開它，測試期過了就拿掉
 
 
 def test_weekend_profile_overrides_three_settings():
@@ -1272,7 +1273,8 @@ def test_weekend_profile_overrides_three_settings():
     weekend = load_content(CONTENT_DIR, profile="weekend").config
     assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 2)
     assert (base.season_one, base.season_days, base.server_max_players) == (False, 14, 30)  # 不給 profile 時照 config.json
-    assert weekend.model_dump(exclude=WEEKEND_KEYS) == base.model_dump(exclude=WEEKEND_KEYS)  # 其他設定一個都不動
+    assert (weekend.beta_free_refill, base.beta_free_refill) == (True, False)
+    assert weekend.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS) == base.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS)  # 其他設定一個都不動
 
 
 def test_profile_with_unknown_key_fails_to_load(tmp_path):

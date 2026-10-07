@@ -387,10 +387,13 @@ def bag_text(state: GameState, content: Content) -> str:
         if items or pills > 0:
             lines += ["", "**丹藥**"]
         cfg = content.config
-        lines.append(
-            f"- {cfg.stamina_pill_name} ×{stamina_pills}　{cfg.stamina_pill_note}"
+        how = (
             f"每顆回 {cfg.stamina_pill_restore} 點，在狀態列體力條旁邊按「服丹」。"
+            if not cfg.beta_free_refill else
+            # 測試期間一鍵補滿（Config.beta_free_refill）：那顆鈕改叫補滿、直接補到滿、不花丹；丹先留著（新寫，待 joy 潤）
+            f"每顆回 {cfg.stamina_pill_restore} 點；測試期間狀態列體力條旁的「{cfg.beta_free_refill_label}」免費、不花丹，丹先留著。"
         )
+        lines.append(f"- {cfg.stamina_pill_name} ×{stamina_pills}　{cfg.stamina_pill_note}{how}")
     return "\n".join(lines)
 
 

@@ -132,6 +132,11 @@ FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+# 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
+REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
+REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
+REFILL_FULL = "體力是滿的，用不著補。"  # 體力本來就是滿的：跟丹的「這時候服丹是糟蹋」一樣，只回一句話、不寫紀錄
+REFILL_HUT = "草廬裡先照師父說的做，體力等出了草廬再補。"  # 序章裡不能補（序章的體力是照步驟算好的），跟丹的「出了草廬再吃」同一個道理
 
 
 def _not_while_preparing(action: Callable) -> Callable:
@@ -4134,11 +4139,15 @@ class Game:
         return msgs
 
     @_not_while_preparing
-    def take_stamina_pill(self) -> list[str]:
+    def take_stamina_pill(self, *, pill_only: bool = False) -> list[str]:
         """服一顆回體丹（企劃者 2026-10-07）：體力回 stamina_pill_restore，夾在上限。沒有丹、體力是滿的、還在草廬序章裡
         （序章的體力是照步驟算好的：探索、合成、修練剛好用完，接著才教打坐，prologue.start_stamina）都只回一句話、不收丹。
-        吃了才寫江湖紀錄（數值變化寫體力與丹）。打坐中也能吃：只是多回一截，打坐照舊。"""
+        吃了才寫江湖紀錄（數值變化寫體力與丹）。打坐中也能吃：只是多回一截，打坐照舊。
+        測試期間 Config.beta_free_refill 打開時，同一個入口改成免費補滿（_refill_stamina），不收丹。pill_only 是給假人與
+        整季機器人的：他們照舊只吃丹（bot.take_pill），不吃這份測試期間的免費補滿；開關關著時 pill_only 沒有作用。"""
         p, cfg = self.state.player, self.content.config
+        if cfg.beta_free_refill and not pill_only:
+            return self._refill_stamina()
         name = cfg.stamina_pill_name
         if p.stamina_pills <= 0:
             return self._log([f"你身上沒有{name}了。"])
@@ -4155,6 +4164,24 @@ class Game:
             changes=[f"體力 +{round(p.stamina - before)}", f"{name} -1"],
         ))
         return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"])
+
+    def _refill_stamina(self) -> list[str]:
+        """測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07；take_stamina_pill 在開關打開時走這裡）：
+        補到 stamina_max（狀態列顯示的那個上限），不收丹、不收銀兩、不限次數。規矩跟丹一模一樣：還在草廬序章裡、體力已經是滿的
+        都只回一句話（不寫紀錄、不動東西）；籌備中由 take_stamina_pill 的 _not_while_preparing 擋；其餘不看——打坐中、閉關中、
+        在路上都照補、不動那個狀態（丹也不看 resting_since、busy_until、journey）。打坐中補滿：下一次同步看到體力滿了才收功起身
+        （_advance_player_local），跟丹把體力吃到頂一樣。補成了寫一則江湖紀錄（數值變化只寫體力，沒有丹的那一項）。"""
+        p, cfg = self.state.player, self.content.config
+        if prologue_rules.active(self.state, self.content):
+            return self._log([REFILL_HUT])
+        if p.stamina >= cfg.stamina_max:
+            return self._log([REFILL_FULL])
+        gained = f"體力 +{round(cfg.stamina_max - p.stamina)}"
+        p.stamina = float(cfg.stamina_max)
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=REFILL_TITLE, lines=[REFILL_LINE], changes=[gained],
+        ))
+        return self._log([REFILL_LINE, gained])
 
     @_not_while_preparing
     def allocate_stat(self, stat: str) -> list[str]:
@@ -4856,9 +4883,12 @@ class Game:
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
             # 回體丹（企劃者 2026-10-07）：有丹、而且不在草廬序章裡才給，網頁照它在體力條旁畫「服丹」鈕（體力滿了鈕是灰的）
-            "pills": None if p.stamina_pills <= 0 or prologue_rules.active(s, c) else {
+            # 測試期間一鍵補滿（Config.beta_free_refill）打開時：沒有丹也給（鈕照樣畫），多一個鍵 refill＝鈕上的字，網頁見它就寫
+            # 「補滿」不寫「丹 N」；關著時這個鍵不存在，整份跟 joy 的一個字不差
+            "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or prologue_rules.active(s, c) else {
                 "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
                 "full": p.stamina >= c.config.stamina_max,
+                **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill else {}),
             },
             "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
             "hp_max": round(cap),
