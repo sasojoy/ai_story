@@ -1740,7 +1740,7 @@
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
-        <div class="top-row"><h3 style="flex:1">設定</h3><button class="btn small ghost" data-act="sheet-close">關閉</button></div>
+        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
@@ -1758,7 +1758,7 @@
         <div class="label">帳號</div>
         <button class="btn ghost" data-act="logout">登出</button>
         ${S.main.admin ? `
-          <section class="admin-zone stack" aria-label="管理者工具">
+          <section class="admin-zone stack" id="admin-zone" aria-label="管理者工具">
             <h4>管理者工具（只有你看得到）</h4>
             ${a && a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
@@ -2350,6 +2350,7 @@
           if (S.main.admin) { S.admin = await api("/api/admin"); render(); } // 每次打開都重抓：時刻表與可以定的結果會變
           break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
+        case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
         case "guide-open": openGuide(S.main.guide); renderPage(); break;
@@ -2522,6 +2523,18 @@
       hearToggle(ev.target);
     }
   });
+
+  // 設定抽屜在電腦上只有中間 640px 寬、自己捲：滑鼠在兩旁的暗處（.sheet-bg）滾輪時，頁面不動、改捲抽屜。不然指標不在抽屜上就
+  // 捲不到抽屜下半的管理者工具（企劃者 2026-10-07「管理者按鈕電腦版看不到，但手機版可以看到」；手機上抽屜滿版，怎麼滑都捲得到）。
+  // 點暗處照舊關掉抽屜（click 的 sheet-close），這裡只管滾輪。deltaMode 1 是以「行」為單位（Firefox），2 是以「頁」
+  document.addEventListener("wheel", (ev) => {
+    if (!(ev.target instanceof Element) || !ev.target.closest(".sheet-bg")) return;
+    const sheet = document.querySelector(".sheet");
+    if (!sheet) return;
+    ev.preventDefault();
+    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? sheet.clientHeight || 600 : 1;
+    sheet.scrollBy(0, ev.deltaY * unit);
+  }, { passive: false });
 
   document.addEventListener("submit", async (ev) => {
     ev.preventDefault();
