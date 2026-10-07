@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FixedRandom, real_content
-from tianxia import atlas, bot_policy, defection, enlist, figures, ranks, rules, timetable
+from tianxia import atlas, bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
@@ -446,7 +446,7 @@ def test_an_anonymous_member_is_named_on_promotion(on):
 
 def test_brush_off_offers_a_rank_up_only_where_the_rank_goes_up(on):
     """被打發時「或在官軍再升一階」只給真的會升階的人：升第 3 階是升階（求見門檻跟著降），第 4 階只是資格（候缺），
-    rank 停在 3、門檻不降，所以第 2 階的人有這句，第 3 階的人（含已取得資格的）沒有。"""
+    rank 停在 3、候缺時門檻不降（在任才降，裁決 E4），所以第 2 階的人有這句，第 3 階的人（含已取得資格的）沒有。"""
     game = _game(on, faction="guan", rank=2)
     p = game.state.player
     p.stats["fame"] = rules.audience_bar(game.state, on, "luzhi") - 1
@@ -459,8 +459,8 @@ def test_brush_off_offers_a_rank_up_only_where_the_rank_goes_up(on):
 
 
 def test_a_rank_three_member_is_not_promised_a_rank_up(on):
-    """真的第 4 階（官軍：何進授印）有定義，rank_of + 1 找得到它；可是它不升階、求見門檻不降：被打發的話只寫還差多少，不許諾。
-    取得資格之後門檻也一樣不降（audience_bar 不看資格）。"""
+    """真的第 4 階（官軍：何進授印）有定義，rank_of + 1 找得到它；可是它不升階、候缺時求見門檻不降：被打發的話只寫還差多少，不許諾。
+    取得資格之後門檻也一樣不降（audience_bar 讀 rank_of：候缺是 3，在任才是 4，裁決 E4）。"""
     assert any(x.faction == "guan" and x.rank == 4 for x in on.promotions)
     game = _game(on, faction="guan", rank=3)
     p = game.state.player
@@ -469,7 +469,7 @@ def test_a_rank_three_member_is_not_promised_a_rank_up(on):
     line = game._brush_off("luzhi")[0]  # noqa: SLF001
     assert "名望還差 1" in line and "再升" not in line
     p.qualified = True
-    assert rules.audience_bar(game.state, on, "luzhi") == bar  # 資格不降門檻：上面不許諾，這裡也沒有騙人
+    assert rules.audience_bar(game.state, on, "luzhi") == bar  # 候缺不降門檻：上面不許諾，這裡也沒有騙人
     assert "再升" not in game._brush_off("luzhi")[0]  # noqa: SLF001
 
 
@@ -1886,3 +1886,66 @@ def test_old_saves_without_the_stall_marker_load():
     assert p.summons_stall == ""
     again = PlayerState.model_validate_json(p.model_copy(update={"summons_stall": "guan:3:0"}).model_dump_json())
     assert again.summons_stall == "guan:3:0"
+
+
+# ── 企劃者裁決 E4（2026-10-07）：只有在任的第 4 階算第 4 階（求見門檻）─────────────
+# rules.audience_bar 讀 ranks.rank_of：在任的是 4、有資格沒在任（候缺）的是 3。何進（名望 30、每階抵 5）：第 3 階與候缺都是 20，
+# 在任是 15。被打發時「或在官軍再升一階」只許諾真的會降門檻的晉升：候缺的下一步是席次（每週照貢獻輪替，不是被召去的晉升），
+# 不許諾；在任的已經到頂，也不許諾。
+
+
+def _hejin_bar(game):
+    return rules.audience_bar(game.state, game.content, "hejin")
+
+
+def _qualified_guan(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=3)
+    game.state.player.qualified = True
+    return game
+
+
+def test_only_a_seated_member_counts_as_rank_four_for_the_bar(on):
+    game = _qualified_guan(on)
+    p = game.state.player
+    assert ranks.rank_of(game.state) == 3 and _hejin_bar(game) == 20  # 候缺：算第 3 階
+    p.stats["fame"] = 15
+    assert not rules.can_meet(game.state, on, "hejin")
+    game.state.world.seats = {"guan": ["甲"]}  # 這一週在任
+    assert ranks.rank_of(game.state) == 4 and _hejin_bar(game) == 15
+    assert rules.can_meet(game.state, on, "hejin")
+    assert p.rank == 3  # 存檔的階不動
+
+
+def test_losing_the_seat_on_monday_raises_the_bar_again(on):
+    game = _qualified_guan(on)
+    w = game.state.world
+    w.seats = {"guan": ["甲"]}
+    assert _hejin_bar(game) == 15
+    w.seat_ledger = {"guan": {"乙": {1: 50}, "甲": {1: 5}}}  # 上一週乙做得比較多；這個伺服器每個陣營 1 席
+    w.time = calendar.week_start(2, on, w)
+    seats.rotate(game.state, on, 2)
+    assert w.seats == {"guan": ["乙"]} and _hejin_bar(game) == 20
+
+
+def test_a_qualified_member_waiting_for_a_seat_is_not_promised_a_rank_up(on):
+    """候缺的人差 3 點名望（在任的話門檻會降 5、補得上）：照規則不許諾，因為下一步是席次、不是被召去的晉升。"""
+    game = _qualified_guan(on)
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    line = game._brush_off("hejin")[0]  # noqa: SLF001
+    assert "名望還差 3" in line and "再升" not in line
+
+
+def test_a_seated_member_is_not_promised_a_rank_up(on):
+    game = _qualified_guan(on)
+    game.state.world.seats = {"guan": ["甲"]}
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    line = game._brush_off("hejin")[0]  # noqa: SLF001
+    assert "名望還差 3" in line and "再升" not in line
+
+
+def test_rank_two_is_still_promised_the_rank_up(on):
+    """另一邊：第 2 階的人差 3 點，升第 3 階門檻降 5、補得上：照舊許諾。"""
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=2)
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    assert _hejin_bar(game) == 25
+    assert "或在官軍再升一階" in game._brush_off("hejin")[0]  # noqa: SLF001

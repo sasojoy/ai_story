@@ -512,7 +512,7 @@ def test_a_drifter_is_rank_zero_whatever_the_list_says(on):
 
 
 def test_the_stored_rank_stays_three_for_a_seated_member(on):
-    """存檔的階（PlayerState.rank）不隨席次動：求見門檻（audience_bar）還讀它；第 4 階只是 rank_of 看的此刻，
+    """存檔的階（PlayerState.rank）不隨席次動；第 4 階只是 rank_of 看的此刻（求見門檻也讀 rank_of，在任才多抵一階，裁決 E4），
     next_rank_up 讀 rank_of ＋ 1，超過 HIGHEST_RANK 就是 None。"""
     game = _qualified(on, "甲")
     seats.report(game.state, on)

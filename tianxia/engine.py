@@ -2114,6 +2114,8 @@ class Game:
     def _brush_off(self, companion_id: str) -> list[str]:
         """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
         後面只在「第一季的規則開著（才有晉升）、真的有下一階可升（會升階的：第 4 階只是資格，不算）、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
+        企劃者裁決 E4：門檻照 rank_of，在任的第 4 階才多抵一階；候缺的人下一步是席次（每週照貢獻輪替，不是被召去的晉升），
+        照規則不許諾——next_rank_up 在第 3 階以上本來就是 None，這裡不用另外判斷。
         不叫模型、不花體力、不加情誼。"""
         s, c = self.state, self.content
         self._hint("h_snubbed")  # 第一次被名將打發（新手引導計畫三）：不看狀態，打發的當下排；在行動裡，說的話記在這一則
@@ -2127,7 +2129,7 @@ class Game:
             season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
             and figure is not None and p.faction == figure.faction
             and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
-            and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、門檻不降），不許諾
+            and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、在任才降門檻），不許諾
         ):
             faction = c.scenario.faction_name(figure.faction, figure.faction)
             hint += f"，或在{faction}再升一階"

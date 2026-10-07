@@ -20,7 +20,7 @@ NO_PRESENTER: dict[str, str] = {
 }
 
 SEAT_RANK = seats.SEAT_RANK  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）；階號只在 seats 寫一次
-HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次，求見門檻不看資格也不看席次
+HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次；求見門檻照 rank_of，只有在任的算第 4 階（裁決 E4）
 
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {
@@ -60,7 +60,7 @@ def promotion_for(content: Content, faction: str | None, rank: int) -> Promotion
 
 def next_rank_up(state: GameState, content: Content) -> int | None:
     """下一次晉升真的會升階（PlayerState.rank 加一）的那一階；沒有的是 None：下一階沒有定義、或下一階只是資格（第 4 階，
-    rank 停在 3、求見門檻不降）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
+    rank 停在 3；門檻要等在任才降，席次是每週照貢獻輪替、不是被召去的晉升，裁決 E4）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
     rank = rank_of(state) + 1
     if rank > HIGHEST_RANK or promotion_for(content, state.player.faction, rank) is None:
         return None
