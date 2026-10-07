@@ -2,7 +2,7 @@
 不佔 tutorial_step：記在 PlayerState.enlist_step（None＝還沒開始）。只在第一季開始（beta 季沒有軍令）。"""
 from __future__ import annotations
 
-from . import orders
+from . import calendar, orders
 from .models import Content, Recruiter
 from .rules import front_of, season_one
 from .state import GameState
@@ -48,6 +48,7 @@ def begin_if_joined(state: GameState, content: Content) -> bool:
     if recruiter(state, content) is None:
         return False
     p.enlist_step = 0
+    p.enlist_since = state.world.time
     return True
 
 
@@ -107,10 +108,29 @@ def note(state: GameState, content: Content, world: WorldStateStore, action: str
     todo = _steps(content)
     while active(state, content) and goal_met(state, content, world, todo[state.player.enlist_step].done_when, action):
         state.player.enlist_step += 1
+        state.player.enlist_since = state.world.time  # 新的這一步從這一刻開始算（最後一步一週做不完就收，expire）
         msgs.append(TICK)
     if msgs and done(state, content):
         state.player.enlist_end = True
     return msgs + (told(state, content) if msgs else [])
+
+
+def expire(state: GameState, content: Content) -> list[str]:
+    """最後一步（第一道軍令）從開始算起一週（季曆）還沒做完，引薦人照樣說結語、入伍段關起來（FB-094）：不然這一週做不到的人
+    （豪強一開始只有打不贏的打擊軍令）框會一直掛在那裡。看世界時間（Game.sync 傳進來的現在），引擎不讀電腦時鐘；暫停中世界時間
+    不走，所以不會被暫停吃掉。只動最後一步：看軍令卡那一步由網頁自己送。這一版之前存的角色沒有 enlist_since：這一次才從現在算起。
+    回傳引薦人的結語（江湖紀錄的那一行，跟 note 走完時一樣）；沒收就是空的。"""
+    p = state.player
+    if not active(state, content) or p.enlist_step != len(_steps(content)) - 1:
+        return []
+    if p.enlist_since is None:
+        p.enlist_since = state.world.time
+        return []
+    if state.world.time - p.enlist_since < calendar.WEEK / calendar.cal_scale(content, state.world):
+        return []
+    p.enlist_step = len(_steps(content))
+    p.enlist_end = True
+    return told(state, content)
 
 
 def box(state: GameState, content: Content) -> dict | None:

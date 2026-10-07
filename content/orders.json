@@ -127,6 +127,18 @@
               "ok": "你在{地點}的村口畫符化水，一個發熱的孩子喝下之後睡安穩了，他娘跪下來給你磕頭。",
               "fail": "你在{地點}畫了符、化了水，那家人道了謝，眼神裡卻還是將信將疑。"}
   },
+  "rank_actions": [
+    {"id": "incite", "faction": "huang", "rank": 3, "name": "在一地煽動起事", "stamina": 20, "weekly": 3,
+     "tags": ["城鎮"], "check": {"stat": "wis", "difficulty": 7}, "push": 5,
+     "ok": "你在{地點}的市集上振臂一呼：「蒼天已死，黃天當立！」幾十個鄉民扯下頭巾，換上了黃的。",
+     "fail": "你在{地點}喊了半天，圍觀的人一鬨而散，怕官府來抓。"},
+    {"id": "fortify", "faction": "haoqiang", "rank": 3, "name": "修築塢堡", "stamina": 20, "weekly": 3,
+     "chaos_only": true, "push": 5,
+     "ok": "你帶著部曲在{地點}挖溝築牆，一座塢堡的雛形立了起來，附近的鄉民扛著家當往裡搬。"},
+    {"id": "seize", "faction": "haoqiang", "rank": 4, "name": "趁亂占據郡縣", "stamina": 30, "weekly": 1,
+     "tags": ["城鎮"], "chaos_only": true, "push": 10,
+     "ok": "趁著官軍與黃巾殺得難分難解，你帶人進了{地點}的縣衙，把官印收進了自己的匣子。"}
+  ],
   "commander_fallback": {"guan": "營中", "huang": "渠帥", "haoqiang": "家主"},
   "callers": [
     {"figure": "zhangjiao", "text": "大賢良師有令"},

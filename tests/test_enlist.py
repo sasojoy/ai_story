@@ -6,7 +6,7 @@ from tests.test_orders import _game, _order, _win
 from tianxia import enlist, guide
 from tianxia.state import ONBOARDING_VERSION
 from tianxia.content import ContentError, validate
-from tianxia.models import Enlist, EnlistStep, Recruiter, TutorialGoal
+from tianxia.models import Enlist, EnlistStep, Hints, Recruiter, TutorialGoal
 
 
 @pytest.fixture
@@ -27,6 +27,7 @@ def enlisting(on):
         recruiters=people, drifter_line="想投靠的話……",
     )
     on.tutorial.steps = [s for s in on.tutorial.steps if not s.season_one]  # 舊的 t7、t8 由入伍段取代
+    on.hints = Hints()  # 入伍段的測試只看引薦人的框：真內容的提示表（碰到才說，新手引導計畫三）會在長社先排一條散人聽的大勢人物提示、佔住框
     return on
 
 
@@ -622,7 +623,10 @@ def test_a_veteran_loaded_mid_season_is_not_walked_through_it_when_he_rejoins_ne
     game.state.player.location = "changshe"
     game.choose("faction:guan")
     game.choose("faction:confirm")
-    assert game.guide_box() is None and not any(line.startswith("【老石】") for e in game.state.journal for line in e.guide)
+    # 不重走入伍段，只有再投靠的招呼（新手引導計畫三）：老石的話只有那一句，沒有入營、看戰局那幾段
+    assert game.guide_box()["key"] == "s_rejoin" and not enlist.active(game.state, enlisting)
+    told = [line for e in game.state.journal for line in e.guide if line.startswith("【老石】")]
+    assert told == ["【老石】又是你。"]
 
 
 def test_a_veteran_first_loaded_after_the_season_already_changed_is_not_walked_through_it(enlisting, world):
@@ -648,7 +652,7 @@ def test_a_veteran_first_loaded_after_the_season_already_changed_is_not_walked_t
     loaded.state.player.location = "changshe"
     loaded.choose("faction:guan")
     loaded.choose("faction:confirm")
-    assert loaded.guide_box() is None and enlist.done(loaded.state, enlisting)
+    assert loaded.guide_box()["key"] == "s_rejoin" and enlist.done(loaded.state, enlisting)  # 不重走，只打招呼（新手引導計畫三）
 
 
 def test_the_veteran_marking_leaves_everyone_else_alone(enlisting, world):
@@ -740,9 +744,9 @@ def test_finished_enlistment_survives_a_season(enlisting):
     assert game.state.player.enlist_step == 2
     game.state.player.location = "changshe"
     game.choose("faction:guan")
-    game.choose("faction:confirm")  # 第二季再投靠：不重走（設計 7.1）
+    game.choose("faction:confirm")  # 第二季再投靠：不重走（設計 7.1），引薦人只打個招呼（新手引導計畫三）
     assert game.state.player.faction == "guan"
-    assert game.state.player.enlist_step == 2 and game.guide_box() is None
+    assert game.state.player.enlist_step == 2 and game.guide_box()["key"] == "s_rejoin"
 
 
 def test_unfinished_enlistment_restarts_next_season(enlisting):

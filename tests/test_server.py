@@ -4297,6 +4297,39 @@ def test_guide_ack_closes_the_outro(client, monkeypatch):
     assert client.get("/api/main").json()["guide"] is None
 
 
+def test_a_hint_goes_out_in_the_guide_box_and_guide_ack_closes_it(client, monkeypatch):
+    """碰到才說（新手引導計畫三）：排著的提示就是 /api/main 的 guide（end 的框、key 是那一條的 id），按「知道了」收掉。
+    正式內容還沒有提示表：這裡給一條。"""
+    from tianxia.models import HintDef, Hints
+
+    monkeypatch.setattr(server.CONTENT, "hints", Hints(hints=[HintDef(id="h_merge", by="mentor", text="意境可以合。")]))
+    _player(client)
+    game = server.game_for("沈青衫")
+    game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
+    game._hint("h_merge")
+    open_characters().save(game.state)
+    box = client.get("/api/main").json()["guide"]
+    assert (box["speaker"], box["text"], box["key"], box["end"]) == ("想起師父說過", "意境可以合。", "h_merge", True)
+    client.post("/api/do/guide_ack", json={})
+    assert client.get("/api/main").json()["guide"] is None
+    assert open_characters().load("沈青衫").player.hints_seen == {"h_merge"}
+
+
+def test_hints_off_toggles_from_the_settings_even_while_the_clock_is_paused(client):
+    """設定頁的「不再提示」（新手引導計畫三，F8）：狀態帶 hints_off；賽季時鐘暫停中也照做（跟匿名一樣是畫面設定），不然勾了被擋下、
+    勾選框卻已經打勾。"""
+    _player(client)
+    assert "hints_off" in server.MAIN_ACTIONS and "hints_off" in server.PAUSE_OK_ACTIONS
+    assert client.get("/api/main").json()["status"]["hints_off"] is False
+    out = client.post("/api/do/hints_off", json={"value": True}).json()
+    assert out["main"]["status"]["hints_off"] is True
+    assert open_characters().load("沈青衫").player.hints_off is True
+    assert server.game_for("沈青衫").world.pause_clock(time.time())
+    out = client.post("/api/do/hints_off", json={"value": False})
+    assert out.status_code == 200 and out.json()["main"]["status"]["hints_off"] is False
+    assert open_characters().load("沈青衫").player.hints_off is False
+
+
 def test_view_orders_is_accepted_and_leaves_a_new_players_box_alone(client):
     """入伍段第一步的「軍令卡出現在畫面上」（新手引導計畫二）：網頁送 /api/do/view_orders。還沒投靠的人送了什麼也不會發生，框照舊。"""
     main = _player(client)["main"]
@@ -5915,6 +5948,8 @@ NOT_IN_THE_FINGERPRINT = {
         "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
         "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
+        "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
+        "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",

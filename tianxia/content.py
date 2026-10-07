@@ -19,13 +19,14 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from . import encounter
+from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
-    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, InsightDef, Location, OppDef,
+    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
@@ -102,6 +103,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
     )
     content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
@@ -744,17 +746,26 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
 def check_promotions(c: Content, need, known) -> None:
     """晉升（content/promotions.json、followers.json，計畫 T5）：陣營在劇本裡、每陣營每階一筆；人物在人物表；地點存在
     （或 nearest_base）；奇遇存在；有接手的人就要有接手版的奇遇與召見；部下的陣營存在、武學在 skills.json；
-    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。"""
+    promote／followers 只寫在晉升奇遇的選項上，給的部下是那個陣營的。
+    第 2 階寫 location／event_main／summons_text，第 3、4 階寫 legs（正式版丙一）：每段有版本、版本的人物與地點存在、
+    before_event 在時刻表；各段的版本事件都算晉升奇遇。選項效果的 summons_next（只有最後一段以前的奇遇、寫自己的 id）、
+    patron（只有晉升奇遇）、event_mods（只有擲骰的時刻表大事）在這裡查。
+    奇遇的選項要跟它在 legs 裡的位置對得上（最終審查 m3）：promote 只能是 2～4、而且等於那一則所屬的那一階；
+    非最後一段的每個選項（檢定、戰鬥的輸贏兩邊也一樣）要往下一段（summons_next）或結束召見（promote），最後一段的每個選項要
+    promote——不然召見留在原地，「應召」（不花體力）又能重演同一幕、獎勵白拿。"""
     factions = {f.id for f in c.scenario.factions}
     seen: set[tuple[str, int]] = set()
     promo_events: dict[str, str] = {}
+    unfinished: set[str] = set()  # 第 3、4 階奇遇的各段裡，不是最後一段的版本事件：只有它們的選項可以寫 summons_next
+    last_events: set[str] = set()  # 最後一段的版本事件：每個選項都要晉升
+    leg_ranks: dict[str, set[int]] = {}  # 各段的版本事件 → 它在哪幾階的 legs 裡（promote 要等於那一階）
     for promo in c.promotions:
         where = f"promotions.json 的 {promo.faction}／第 {promo.rank} 階"
         need(promo.faction in factions, f"{where}：陣營不在劇本裡")
         need((promo.faction, promo.rank) not in seen, f"{where}：同一個陣營的同一階寫了兩筆")
         seen.add((promo.faction, promo.rank))
         known(where, [x for x in (promo.figure, promo.successor) if x is not None], c.figures, "人物")
-        if promo.location != "nearest_base":
+        if promo.location and promo.location != "nearest_base":  # 第 3、4 階的 location 空著（地點寫在各段），空的不查
             known(where, [promo.location], c.locations, "地點")
         need(
             (promo.successor is None) == (promo.event_handoff is None) == (promo.summons_handoff is None),
@@ -763,20 +774,85 @@ def check_promotions(c: Content, need, known) -> None:
         for event_id in filter(None, (promo.event_main, promo.event_handoff)):
             known(where, [event_id], c.events, "事件")
             promo_events[event_id] = promo.faction
+        if promo.rank == 2:
+            need(bool(promo.location and promo.event_main and promo.summons_text),
+                 f"{where}：第 2 階要寫 location、event_main、summons_text")
+        else:
+            need(bool(promo.legs), f"{where}：第 {promo.rank} 階要寫 legs")
+        for i, leg in enumerate(promo.legs):
+            need(bool(leg.casts), f"{where}：第 {i + 1} 段沒有版本")
+            if leg.location and leg.location != "nearest_base":  # 段的地點有寫才查
+                known(where, [leg.location], c.locations, "地點")
+            for cast in leg.casts:
+                known(where, [cast.event], c.events, "事件")
+                promo_events[cast.event] = promo.faction  # 各段的奇遇都算晉升奇遇：最後一段的選項才寫 promote、followers，下面那條檢查要認得它
+                leg_ranks.setdefault(cast.event, set()).add(promo.rank)
+                if i < len(promo.legs) - 1:
+                    unfinished.add(cast.event)
+                else:
+                    last_events.add(cast.event)
+                known(where, [cast.figure] if cast.figure else [], c.figures, "人物")
+                known(where, [cast.at] if cast.at else [], c.locations, "地點")
+                need(cast.figure is not None or cast.at is not None or leg.location is not None,
+                     f"{where}：第 {i + 1} 段的 {cast.event} 不知道在哪裡演")
+                need(cast.before_event is None or any(e.id == cast.before_event for e in c.timetable),
+                     f"{where}：before_event {cast.before_event} 不在時刻表")
+        for line in promo.patron_lines.values():
+            known(where, list(line.affinity), c.characters, "人物")
+    rolled = {e.id for e in c.timetable if e.roll_side is not None}  # event_mods 只對擲骰的大事有意義（timetable.add_mod）
+    timetable_ids = {e.id for e in c.timetable}
     for fid, follower in c.followers.items():
         where = f"followers.json 的 {fid}"
         need(follower.faction in factions, f"{where}：陣營不在劇本裡")
         known(where, [follower.wugong], c.skills, "武學")
     for event in c.events.values():
         for choice in event.choices:
-            if choice.effect.promote is None and not choice.effect.followers:
-                continue
+            for effect in (choice.effect, choice.fail_effect):  # 檢定輸的那一邊也一樣（promo_hao_4 的摔角是第一則在 fail_effect 晉升的）
+                if effect.promote is None and not effect.followers:
+                    continue
+                where = f"事件 {event.id}"
+                need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
+                known(where, effect.followers, c.followers, "部下")
+                side = promo_events.get(event.id)
+                need(all(c.followers[f].faction == side for f in effect.followers if f in c.followers),
+                     f"{where}：給的部下要是 {side} 的")
+    # 第 3、4 階的三種新效果（正式版丙一）：選項的 effect 與 fail_effect 都查
+    for event in c.events.values():
+        for choice in event.choices:
             where = f"事件 {event.id}"
-            need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
-            known(where, choice.effect.followers, c.followers, "部下")
-            side = promo_events.get(event.id)
-            need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
-                 f"{where}：給的部下要是 {side} 的")
+            # 這個選項會走到的效果：檢定、戰鬥有輸贏兩邊；沒有的話 fail_effect 不會被用到
+            sides = (choice.effect, choice.fail_effect) if choice.check is not None or choice.combat else (choice.effect,)
+            if event.id in unfinished:
+                need(all(e.summons_next is not None or e.promote is not None for e in sides),
+                     f"{where}：非最後一段的選項每一邊（檢定、戰鬥的輸贏也一樣）都要寫 summons_next（往下一段）或 promote（結束召見），"
+                     "不然召見留在原地，「應召」又能重演同一幕")
+            if event.id in last_events:
+                need(all(e.promote is not None for e in sides),
+                     f"{where}：最後一段的選項每一邊（檢定、戰鬥的輸贏也一樣）都要寫 promote，不然召見留在原地，「應召」又能重演同一幕")
+            for effect in (choice.effect, choice.fail_effect):
+                if effect.donate_grain or effect.runic:
+                    # 捐糧（記貢獻）與符文殘片自己不看陣營：只准寫在晉升奇遇（召見只發給自己陣營的人），或事件／選項的條件寫了
+                    # factions 的地方，沒投靠的人、別的陣營的人才領不到（丙二審查）
+                    reachable = event.id in promo_events or bool(event.condition.factions) or bool(choice.condition.factions)
+                    need(reachable, f"{where}：donate_grain／runic 只能寫在晉升奇遇，或條件寫了 factions 的事件、選項"
+                                    "（不然散人與別的陣營的人也領得到貢獻與殘片）")
+                if effect.promote is not None:
+                    need(2 <= effect.promote <= 4, f"{where}：promote 要在 2～4 之間（第 2 到 4 階），寫了 {effect.promote}")
+                    ranks_here = leg_ranks.get(event.id)
+                    need(not ranks_here or effect.promote in ranks_here,
+                         f"{where}：promote 要寫 {'、'.join(str(r) for r in sorted(ranks_here or ()))}"
+                         f"（這一則在那一階的 legs 裡），寫了 {effect.promote}")
+                if effect.summons_next is not None:
+                    if effect.summons_next != event.id:
+                        need(False, f"{where}：summons_next 要寫這一則自己的 id")
+                    else:
+                        need(event.id in unfinished, f"{where}：summons_next 只能寫在晉升奇遇的最後一段以前（最後一段演完就是晉升）")
+                if effect.patron is not None:
+                    need(event.id in promo_events, f"{where}：patron 只能寫在晉升奇遇（promotions.json 的事件）")
+                for mod in effect.event_mods:
+                    need(mod.event in timetable_ids, f"{where}：event_mods 的 {mod.event} 不在時刻表")
+                    need(mod.event not in timetable_ids or mod.event in rolled,
+                         f"{where}：event_mods 的 {mod.event} 不是擲骰的大事（固定、決戰、季末沒有成功率可改）")
 
 
 def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
@@ -877,6 +953,22 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
         need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
         for text in (action.name, action.ok, action.fail):
             need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
+    # 第 3、4 階的行動（正式版戊一）：id 不重複、陣營存在、標籤是某個地點真的帶的（拼錯的那個行動哪裡都不會出現）、檢定的屬性認得、
+    # 有檢定就要寫沒過的那一句。標籤不看地點在不在戰線上：validate 遇到壞掉的大區多邊形還會繼續跑，atlas.region_of 會丟 ValueError
+    rank_action_ids = [a.id for a in c.orders.rank_actions]
+    need(len(set(rank_action_ids)) == len(rank_action_ids), "orders.json rank_actions：id 重複")
+    place_tags = {t for loc in c.locations.values() for t in loc.tags}
+    for a in c.orders.rank_actions:
+        where = f"orders.json rank_actions.{a.id}"
+        need(a.faction in factions, f"{where}：沒有陣營 {a.faction}")
+        need(bool(a.id) and ":" not in a.id, f"{where}：id 不能是空的、也不能有冒號（選項是 act:rank:<id>，軍令記功的 kind 也是它）")
+        need(set(a.tags) <= place_tags, f"{where}：tags 裡有的標籤，沒有任何地點帶：{sorted(set(a.tags) - place_tags)}")
+        need("{地點}" in a.ok, f"{where}：ok 要寫 {{地點}}（成功的那一句要說在哪裡）")
+        if a.check is not None:
+            known(where, [a.check.stat], STATS, "屬性")
+        need(a.check is None or bool(a.fail.strip()), f"{where}：有檢定就要寫 fail（沒過的那一句）")
+        for text in (a.name, a.ok, a.fail):
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
     for faction_id, petition in c.orders.petition.items():
         need(faction_id in factions, f"orders.json petition：沒有陣營 {faction_id}")
         known(f"orders.json petition.{faction_id}", petition.characters, c.characters, "人物")
@@ -1170,6 +1262,14 @@ def validate(c: Content) -> None:
             if insight_id in c.insights and c.insights[insight_id].grant is not None:
                 need(False, f"{where}：{c.insights[insight_id].name}只能靠名聲悟得，事件不能給")
         known(where, eff.affinity, c.characters, "人物")
+        # 黃巾的第 3、4 階奇遇（正式版丙二）：捐糧的據點存在、份量大於 0（0 份換算出 0、不拿糧也記一筆貢獻）；給的片段存在
+        known(where, list(eff.donate_grain), c.locations, "地點")
+        need(all(n > 0 for n in eff.donate_grain.values()), f"{where}：donate_grain 的份量要大於 0")
+        for ref in eff.fs_fragments:
+            chain_id, _, index = ref.rpartition(":")
+            found = next((ch for ch in c.foreshadows.chains if ch.id == chain_id), None)
+            need(found is not None and index.isdecimal() and int(index) < len(found.fragments),
+                 f"{where}：fs_fragments 的 {ref} 不存在（要寫「鏈 id:片段序號」，序號從 0 起）")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
         not_derived(where, eff.trend)
@@ -1187,7 +1287,7 @@ def validate(c: Content) -> None:
 
     def check_free_text(where: str, ev: Event) -> None:
         """隨口應對（§8.1）：賣的是好玩不是划算，獎勵不能比同一則事件裡最好的檢定選項高；
-        也不能串到下一則事件、結識人物、拜師或改旗標（那些都要靠手寫的選項）。"""
+        也不能串到下一則事件、結識人物、拜師、改旗標或晉升（那些都要靠手寫的選項）。"""
         ft, fw = ev.free_text, f"{where} 隨口應對"
         check_effect(fw, ft.effect)
         check_effect(fw, ft.fail_effect)
@@ -1213,6 +1313,11 @@ def validate(c: Content) -> None:
                 name for name, used in (
                     ("next_event", eff.next_event), ("recruit", eff.recruit), ("join_sect", eff.join_sect),
                     ("flags_add", eff.flags_add), ("world_flags_add", eff.world_flags_add),
+                    # 晉升奇遇的效果（只能寫在手寫的晉升選項上）：summons_next、event_mods、patron 是正式版丙一的
+                    ("promote", eff.promote), ("followers", eff.followers), ("summons_next", eff.summons_next),
+                    ("event_mods", eff.event_mods), ("patron", eff.patron),
+                    # 黃巾奇遇的捐糧、給片段、記殘片（正式版丙二）：同樣只准寫在手寫的選項上，不是隨口一句話換得到的
+                    ("donate_grain", eff.donate_grain), ("fs_fragments", eff.fs_fragments), ("runic", eff.runic),
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
@@ -1633,6 +1738,25 @@ def validate(c: Content) -> None:
                 len(who.lines) == len(enlist.steps),
                 f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
             )
+
+    # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
+    # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
+    need(bool(c.hints.head.strip()), "hints.json：head 不能是空的（師父那幾條框上寫的字）")
+    hint_ids: set[str] = set()
+    for hint in c.hints.hints:
+        where = f"hints.json：{hint.id}"
+        need(hint.id not in hint_ids, f"{where} 重複")
+        hint_ids.add(hint.id)
+        need(hint.id in hint_rules.KNOWN, f"{where} 不認得（只認設計 5.2 的十八條，見 hints.KNOWN）")
+        if hint.by == "mentor":
+            need(bool(hint.text.strip()), f"{where}：師父的提示要有 text")
+            need(not hint.texts and not hint.drifter, f"{where}：師父的提示不寫 texts、drifter（那是引薦人的提示才有的）")
+        else:
+            need(bool(hint.texts), f"{where}：引薦人的提示要有 texts（陣營 id → 那一位說的話）")
+            need(not hint.text, f"{where}：引薦人的提示不寫 text（寫在 texts 裡，散人版寫 drifter）")
+        for faction_id, line in hint.texts.items():
+            need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
+            need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial

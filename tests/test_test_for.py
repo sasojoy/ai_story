@@ -4,6 +4,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("test_for", ROOT / "scripts" / "test_for.py")
 test_for = importlib.util.module_from_spec(_spec)
@@ -22,6 +24,15 @@ def test_a_module_picks_the_tests_that_import_it():
 
 def test_content_picks_the_real_content_season():
     assert {"test_content.py", "test_real_content.py"} <= _names(["content/skills.json"])
+
+
+@pytest.mark.slow  # 挑三次（每次讀過所有測試檔），超過一秒
+def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
+    """第一季正式版丙一、丙二、戊一的測試檔用真實內容釘住晉升奇遇與第 3、4 階行動：改那幾個內容檔時要挑到它們（整合審查 M2）。"""
+    promotions = {"test_promotions_high.py", "test_promotions_huang.py"}
+    assert promotions <= _names(["content/promotions.json"])
+    assert promotions <= _names(["content/events/promotion.json"])
+    assert "test_rank_actions.py" in _names(["content/orders.json"])
 
 
 def test_shared_test_setup_runs_everything():

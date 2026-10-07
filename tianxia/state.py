@@ -76,12 +76,29 @@ class Convoy(BaseModel):
 
 class Summons(BaseModel):
     """收到的召見（計畫 T5、晉升文件第一節）：沒有期限；到了 location、演完那一階的奇遇才晉升。
-    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。"""
+    figure 是發召見那一刻出面的人（江湖紀錄寫他）；到了現場照當下再挑一次（ranks.presenter）。
+    第 3、4 階（正式版丙一）的奇遇有好幾段：leg 是這一段排第幾（0 起）、prev 是上一段演完的那一則事件、event 是這一段
+    此刻要演的事件（版本照當下的時局挑，每次 check_summons 重挑）；第 2 階三個都用預設。"""
 
     rank: int
     figure: str | None = None
     location: str
     since: float = 0.0
+    leg: int = 0
+    prev: str | None = None
+    event: str | None = None
+
+
+class HintNote(BaseModel):
+    """排著要在對話框說的一條提示（新手引導計畫三）：排進去的當下就照那時的陣營決定誰說、說什麼。
+    shown：已經上過框（記進 hints_seen 與江湖紀錄了）；提示算「說過」是上框的那一刻、不是排進佇列的那一刻（Game._surface_hint）。
+    by：這一條是哪一邊的引薦人說的（陣營 id）；師父說的（含散人聽到的那一版）是空字串。叛投時舊陣營那一邊排著的作廢（defection.clear_progress）。"""
+
+    id: str
+    speaker: str
+    text: str
+    shown: bool = False
+    by: str = ""
 
 
 ONBOARDING_VERSION = 3  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
@@ -182,6 +199,13 @@ class PlayerState(BaseModel):
     onboarding: int = 0  # 這個角色的引導是照哪一版記的（ONBOARDING_VERSION）；舊存檔沒有這個欄位＝0
     enlist_step: int | None = None  # 入伍段（新手引導計畫二）：None＝還沒開始；等於步數＝走完
     enlist_end: bool = False  # 入伍段剛走完、引薦人的結尾還沒按「知道了」
+    # 入伍段目前這一步是從世界時間（秒，季裡的時鐘，不是電腦時鐘）的哪一刻開始的（FB-094）：最後一步（第一道軍令）一週（季曆）
+    # 還沒做完，引薦人照樣說結語、入伍段關起來（enlist.expire）。這一版之前存的角色沒有，None＝下一次檢查才從那一刻算起
+    enlist_since: float | None = None
+    # ── 碰到才說（新手引導計畫三）──
+    hints_seen: set[str] = Field(default_factory=set)  # 說過（上過框）的提示 id；換季保留，整個遊戲每一條只說一次
+    hint_queue: list[HintNote] = Field(default_factory=list)  # 排著還沒按「知道了」的提示，對話框一次一條；換季不帶
+    hints_off: bool = False  # 設定頁的「不再提示」（跟略過新手引導分開，設計 7.3）；換季保留
     visited: set[str] = Field(default_factory=set)  # 去過的地點
     fortune: bool = False  # 本季的新立門戶福緣已經發生（或已經改送賀禮）
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
@@ -217,6 +241,9 @@ class PlayerState(BaseModel):
     rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
+    runic_pieces: int = 0  # 符文殘片（伏筆文件第七節；基準量，黃巾第 4 階的密令給的；玉璽大勢任務讀它）；角色每季重來
+    qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、沒在任時頭銜寫「…（…候缺）」；上任與席次見 seats.py（正式版丁）
+    rank_hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次；跟新手引導的 hints_seen 無關）
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。
     # 看現實時間、不看賽季時鐘（管理者快轉不會讓他提早見你）；角色每季重來，跟著清空 ──
@@ -241,6 +268,7 @@ class PlayerState(BaseModel):
     # 「機緣 id:東西 key」；密謀的一處是「plot:密謀 id:處的 key」（值都是曆日）
     opp_tried: dict[str, int] = Field(default_factory=dict)
     rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
+    rank_action_weeks: dict[str, int] = Field(default_factory=dict)  # 「季曆週:行動 id」→ 這一週做了幾次第 3、4 階行動；只留這一週（正式版戊一）
     # ── 機緣・乙二（拼圖、推理與集體密謀）；同樣每季重來、叛投時 opportunities.clear 清掉（opp_settled 例外，見 clear）──
     opp_pieces: dict[str, list[str]] = Field(default_factory=dict)  # 拼圖型：機緣 id → 已經拿到的東西的 key
     patron: str | None = None  # 靠山（晉升奇遇 4.2）：yuan、cao、self；計畫丙升第 3 階時寫入，叛投清掉
@@ -398,6 +426,10 @@ class WorldState(BaseModel):
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
+    # ── 第四階席次（第一季設計 5.4；正式版丁）。週一的掛鉤讀不到別人的存檔，所以有資格的人每次行動、同步時把自己每週的貢獻抄一份到
+    # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──
+    seat_ledger: dict[str, dict[str, dict[int, int]]] = Field(default_factory=dict)  # 陣營 id → 名號 → {季曆週：那一週的貢獻}
+    seats: dict[str, list[str]] = Field(default_factory=dict)  # 陣營 id → 這一週在任的名號
 
 
 class Fighter(BaseModel):

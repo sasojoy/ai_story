@@ -34,5 +34,210 @@
     "summons_text": "中山的馬商張世平、蘇雙到了{據點}，指名要見你。",
     "summons_handoff": null,
     "closing": "馬商替你招來的兩個人到了：一個門客、一個部曲。"
+  },
+  {
+    "faction": "guan",
+    "rank": 3,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_guan_3_memorial",
+            "figure": "luzhi",
+            "at": "luzhi_camp",
+            "summons_text": "盧植派人來找你：到{據點}見他。"
+          },
+          {
+            "event": "promo_guan_3_gift",
+            "figure": "dongzhuo",
+            "at": "luzhi_camp",
+            "summons_text": "董卓派人來找你：到{據點}見他。"
+          }
+        ]
+      },
+      {
+        "casts": [
+          {
+            "event": "promo_guan_3_palace",
+            "at": "luoyang_palace",
+            "after": "promo_guan_3_memorial",
+            "summons_text": "把盧植的奏表送到{據點}。"
+          },
+          {
+            "event": "promo_guan_3_hejin",
+            "at": "dajiangjun_fu",
+            "after": "promo_guan_3_gift",
+            "summons_text": "把董卓的厚禮送進{據點}。"
+          }
+        ]
+      }
+    ],
+    "closing": "又撥了一個鄉勇到你帳下：「軍司馬，往後聽你調遣。」"
+  },
+  {
+    "faction": "guan",
+    "rank": 4,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_guan_4",
+            "figure": "hejin",
+            "at": "dajiangjun_fu",
+            "before_event": "luzhi_jailed",
+            "summons_text": "何進召你到{據點}。"
+          },
+          {
+            "event": "promo_guan_4_late",
+            "figure": "hejin",
+            "at": "dajiangjun_fu",
+            "summons_text": "何進召你到{據點}。"
+          },
+          {
+            "event": "promo_guan_4_camp",
+            "figure": "huangfusong",
+            "summons_text": "皇甫嵩召你到{據點}營中授印。"
+          },
+          {
+            "event": "promo_guan_4_camp",
+            "figure": "zhujun",
+            "summons_text": "朱儁召你到{據點}營中授印。"
+          }
+        ]
+      }
+    ],
+    "closing": "又一個鄉勇撥到你帳下。校尉的缺一空出來，你就領兵。"
+  },
+  {
+    "faction": "haoqiang",
+    "rank": 3,
+    "legs": [
+      {
+        "location": "runan",
+        "casts": [
+          {
+            "event": "promo_hao_3",
+            "summons_text": "汝南城裡有兩撥人捎話給你，約你到{據點}的酒樓一敘。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個門客收拾了行囊，跟到你身邊：「往後替您跑腿。」"
+  },
+  {
+    "faction": "haoqiang",
+    "rank": 4,
+    "legs": [
+      {
+        "location": "loushang_village",
+        "casts": [
+          {
+            "event": "promo_hao_4",
+            "summons_text": "劉備捎信給你，約在{據點}村口的大桑樹下見。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個家養部曲扛著刀跟了上來：「一方之主，往後這條命是您的。」",
+    "patron_lines": {
+      "yuan": {
+        "text": "關羽冷冷道：「四世三公的門客？」",
+        "affinity": {
+          "guanyu": -3
+        }
+      },
+      "cao": {
+        "text": "劉備頓了一下：「曹孟德的人……也好。」"
+      },
+      "self": {
+        "text": "劉備笑了：「都是白手起家。」",
+        "affinity": {
+          "liubei": 5
+        }
+      }
+    }
+  },
+  {
+    "faction": "huang",
+    "rank": 3,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_huang_3_talisman",
+            "figure": "zhangbao",
+            "at": "xiaquyang",
+            "summons_text": "張寶召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_3_talisman_zl",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "張梁召你到{據點}。"
+          }
+        ]
+      },
+      {
+        "casts": [
+          {
+            "event": "promo_huang_3_zmc",
+            "figure": "zhangmancheng",
+            "at": "nanyang_huangjin_camp",
+            "summons_text": "帶著符去{據點}。"
+          },
+          {
+            "event": "promo_huang_3_zh",
+            "figure": "zhaohong",
+            "at": "nanyang_huangjin_camp",
+            "summons_text": "帶著符去{據點}。"
+          },
+          {
+            "event": "promo_huang_3_zl",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "南陽那邊沒有人接應了，改去{據點}支援張梁。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個信眾提著包袱跟了上來：「小方渠帥，往後聽你的。」"
+  },
+  {
+    "faction": "huang",
+    "rank": 4,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_huang_4",
+            "figure": "zhangjiao",
+            "at": "guangzong",
+            "flags_none": [
+              "runic_revealed"
+            ],
+            "summons_text": "張角召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_revealed",
+            "figure": "zhangjiao",
+            "at": "guangzong",
+            "summons_text": "張角召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_heir",
+            "figure": "zhangbao",
+            "at": "xiaquyang",
+            "summons_text": "張寶召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_heir",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "張梁召你到{據點}。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個太平力士被帶到你身後：「渠帥，往後聽你的。」"
   }
 ]

@@ -5,7 +5,7 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, figures, flavor, leaderboard, orders, ranks, timetable
+from . import battle_instance, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -19,9 +19,12 @@ HOUR = 3600
 DAY = 86400
 EPS_CAL_HOURS = 1e-9  # 找下一個曆時交界時的浮點誤差（以曆時為單位）：剛好停在交界上的時間不能被算成上一個曆時
 
-# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。T6 的軍令掛這裡
+# 週初的掛鉤：季曆每跨進新的一週（週一 00:00）各跑一次，照週次、在那一刻的大事之前。第四階席次的輪替（seats.rotate）
+# 排第一個、T6 的軍令（orders.issue）排第二個。現在的軍令還沒有讀在任的人；之後的軍令（計畫庚：第四階定主攻戰線）要讀，
+# 所以席次先排，別把順序換掉
 # （跑的時候 hooked_week 已經是剛跨進的那一週）。
 WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
+    lambda state, content, rng: seats.rotate(state, content, state.world.hooked_week),  # 第四階輪替（正式版丁）：排在發令之前
     lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
 ]
 

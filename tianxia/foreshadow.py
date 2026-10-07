@@ -214,6 +214,20 @@ def _fragment_text(state: GameState, content: Content, c: FsChain, fragment: FsF
     return fill(state, content, c, text, world)
 
 
+def grant_fragment(
+    state: GameState, content: Content, chain_id: str, index: int, world: WorldStateStore | None = None,
+) -> list[str]:
+    """效果直接給一則片段（晉升奇遇 3.3「您該多歇著」；正式版丙二）：伏筆在跑、這個人做得了那條鏈、片段序號存在、還沒聽過才給。
+    寫進江湖紀錄那一句（「你聽到一件事：…」），不發傳聞。"""
+    c = chain(content, chain_id)
+    if c is None or not 0 <= index < len(c.fragments):
+        return []
+    if not active(state, content) or not capable(state, content, c) or _heard(state, chain_id, index):
+        return []
+    _mark_heard(state, chain_id, index)
+    return [fragment_line(_fragment_text(state, content, c, c.fragments[index], world))]
+
+
 # ── 片段 ─────────────────────────────────────────────────
 
 
@@ -545,8 +559,9 @@ def _take_items(state: GameState, content: Content, item_ids, amounts: dict[str,
     return lines
 
 
-def _spend_grain(state: GameState, content: Content, amount: int) -> list[str]:
-    """交出糧草（materials.take_grain，從低階的慢屬性素材開始用），回傳用掉的素材（「粗糧 -2」）。"""
+def spend_grain(state: GameState, content: Content, amount: int) -> list[str]:
+    """交出糧草（materials.take_grain，從低階的慢屬性素材開始用），回傳用掉的素材（「粗糧 -2」）；amount ≤ 0 或糧不夠
+    什麼都不動、回 []（交出去了就一定有至少一行）。伏筆的交東西（_hand_over 等）與效果的捐糧（rules.apply_effect）共用。"""
     before = dict(state.player.materials)
     if amount <= 0 or not materials.take_grain(state, content, amount):
         return []
@@ -573,7 +588,7 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
             lost += [k for r in _all_requires(req) for k in r.clue_items]
     lines += _take_items(state, content, list(dict.fromkeys(lost)))
     if wrong.lose_grain:  # 沒收這一趟的糧草；手上不夠就有多少收多少（不會因為不夠就一份都不收）
-        lines += _spend_grain(state, content, min(_trip_grain(content, trip), materials.grain_of(state, content)))
+        lines += spend_grain(state, content, min(_trip_grain(content, trip), materials.grain_of(state, content)))
     for cid, delta in wrong.affinity.items():
         before = p.affinities.get(cid, 0)
         p.affinities[cid] = max(0, min(100, before + delta))
@@ -587,7 +602,7 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
 def _hand_over(state: GameState, content: Content, plan: Plan) -> list[str]:
     """照 _plan 算好的交出物品與糧草（換算後的量）。回傳「葦束 -1」「粗糧 -2」這種變化量。"""
     items, grain = plan
-    return _take_items(state, content, list(items), items) + _spend_grain(state, content, grain)
+    return _take_items(state, content, list(items), items) + spend_grain(state, content, grain)
 
 
 def _succeed(

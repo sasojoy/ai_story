@@ -26,7 +26,7 @@ const vm = require("vm");
 // 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
   "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "peekBlock", "sheetHtml", "applyGlow",
-  "renderTop", "render", "goTab"]);
+  "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];
@@ -45,28 +45,37 @@ const mk = (id) => (els[id] = els[id] || {
   querySelector: () => null, querySelectorAll: () => [], setAttribute() {}, append() {}, insertAdjacentHTML() {},
 });
 ["app", "toast", "page", "top", "peek"].forEach(mk); // render() 只寫 #app 的 innerHTML；#top 要讀得到 hidden
-// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, classes: Set }。只認 applyGlow 會問的三種選擇器
+// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, id, classes: Set }。只認 applyGlow 會問的四種選擇器
 const fake = { list: [] };
-const el = (glow, disabled = false) => {
-  const e = { glow, disabled, classes: new Set() };
+// closedFold：這顆鈕收在關著的摺疊裡時的假摺疊 { querySelector: () => 標題列的假元素 }；applyGlow 問 closest("details:not([open])") 才給（FB-087 審查 M3）
+// id：選單鈕的 data-id（入伍段「出一次力」那一步，伺服器在框上帶的 guide.glow 是選項 id，applyGlow 照 #page [data-id="…"] 找，FB-093）
+const el = (glow, disabled = false, closedFold = null, id = null) => {
+  const e = { glow, disabled, id, classes: new Set() };
+  e.closest = (sel) => (sel === "details:not([open])" ? closedFold : null);
   e.classList = { add: (...c) => c.forEach((x) => e.classes.add(x)), remove: (...c) => c.forEach((x) => e.classes.delete(x)), contains: (c) => e.classes.has(c) };
   fake.list.push(e);
   return e;
 };
+const button = (id, disabled = false) => el([], disabled, null, id); // 一顆選單鈕（沒有 data-glow，只有 data-id）
 const matchOne = (e, sel) => {
   if (sel === ".glow") return e.classes.has("glow");
   if (sel === ".lit") return e.classes.has("lit");
+  const byId = sel.match(/^#page \[data-id="(.*)"\](:not\(\[disabled\]\))?$/);
+  if (byId) return e.id === byId[1] && !(byId[2] && e.disabled);
   const m = sel.match(/^\[data-glow~="(.*)"\](:not\(\[disabled\]\))?$/);
   if (!m) throw new Error("假 DOM 不認得的選擇器：" + sel);
   return e.glow.includes(m[1]) && !(m[2] && e.disabled);
 };
 const qs = {}; // 測試可以放假元素：document.querySelector(選擇器) 回 qs[選擇器]
 const listeners = {}; // window.addEventListener 登記的處理函式（照事件名）：測試可以觸發 resize
+const docListeners = {}; // document.addEventListener 登記的處理函式（照事件名）：測試可以送一次 click（見 tests/test_hints_web.py）
+const bodyHtml = []; // document.body.insertAdjacentHTML 收到的東西（ask() 的確認框、見 tests/test_fb092_095.py）
 const document = {
+  body: { insertAdjacentHTML: (pos, html) => { bodyHtml.push(html); } },
   getElementById: (id) => (["app", "toast", "page", "top", "peek"].includes(id) ? mk(id) : null),
   querySelector: (sel) => qs[sel] || null,
   querySelectorAll: (sel) => fake.list.filter((e) => sel.split(", ").some((one) => matchOne(e, one))),
-  addEventListener() {}, activeElement: null, hidden: false,
+  addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); }, activeElement: null, hidden: false,
   // splitChips 把「剛剛」丟進 <template> 拆出數值變化那一排：假的 template 原樣吐回去、沒有那一排
   createElement: () => ({ innerHTML: "", content: { querySelector: () => null } }),
 };
@@ -85,7 +94,8 @@ H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners }));
+// ctx 與 Element：測試可以換掉 fetch／setTimeout（讓請求被擋下來），也可以做出 instanceof Element 的假事件目標（toggle 事件，見 tests/test_fb087_here_fold.py）
+finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, button, calls, qs, listeners, docListeners, bodyHtml, ctx, Element: ctx.Element }));
 """
 
 

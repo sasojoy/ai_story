@@ -1,0 +1,11 @@
+{
+  "head": "想起師父說過",
+  "season_return": "又是一年。",
+  "hints": [
+    {"id": "h_merge", "by": "mentor", "text": "意境可以合。"},
+    {"id": "h_cap", "by": "mentor", "text": "快滿了。"},
+    {"id": "h_lose", "by": "mentor", "text": "打不過就回去練。"},
+    {"id": "h_foreshadow", "by": "recruiter", "texts": {"guan": "這是線索（官軍）。"}, "drifter": "這是線索（散人）。"},
+    {"id": "h_promotion", "by": "recruiter", "texts": {"guan": "上頭點你的名了。"}}
+  ]
+}
