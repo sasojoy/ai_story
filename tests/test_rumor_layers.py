@@ -495,13 +495,41 @@ def test_a_clue_whose_opportunity_left_the_content_is_skipped_not_a_crash(on):
     assert len(_personal(game)) == 1  # 只剩對得上的那一則
 
 
-def test_after_defecting_the_old_factions_clues_are_gone_with_the_rest_of_their_progress(on):
-    """叛投時機緣的線索跟其餘進度一起作廢（opportunities.clear，機緣文件第一節）：個人線索讀的就是 opp_clues，所以一起沒了。"""
+def test_after_defecting_the_old_factions_clues_stay_like_fragments(on):
+    """叛投時機緣的其餘進度作廢，聽過的線索留著（企劃者裁決 E5.2，同伏筆片段與符文殘片）：個人線索照舊列著。"""
     game = _game(on, "甲", "guan", at="yingchuan")
-    _hear(game, "yingru")
-    assert len(_personal(game)) == 1
+    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    assert _personal(game) == [clue]
     defection.clear_progress(game.state.player)
-    assert _personal(game) == []
+    assert _personal(game) == [clue]
+
+
+def test_after_defecting_through_the_menu_the_old_clues_stay_and_the_old_opportunities_are_closed(on):
+    """走選單叛投（defect:<陣營> → defect:confirm）：舊陣營聽過的線索照舊列在個人線索；舊陣營的機緣一個都做不了
+    （每一個地點的選單都沒有，荒丘的夜裡也不能埋伏信使）；新陣營的線索照聽、接在後面。"""
+    game = _game(on, "甲", "guan", at="hilltop_wilds")
+    p = game.state.player
+    old_clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)  # 荒丘的信使（官軍）
+    assert p.opp_clues == ["guan_courier"]
+    w = game.state.world
+    w.time = 23 * calendar.HOUR / calendar.cal_scale(on, w)  # 夜裡：官軍可以埋伏信使
+    assert "opp:try:guan_courier" in [o.id for o in game.options(odds=False)]
+    p.location = "huangjin_camp"
+    game.choose("defect:huang")
+    game.choose("defect:confirm")
+    assert p.faction == "huang"
+    assert _personal(game) == [old_clue]
+    old = {o.id for o in on.opportunities if o.faction == "guan"}
+    assert {o.faction for o in opportunities.open_ones(game.state, on)} == {"huang"}
+    for loc_id in on.locations:
+        ids = [o.id for o in opportunities.place_options(game.state, on, loc_id)]
+        assert not [i for i in ids if any(i.endswith(f":{oid}") or f":{oid}:" in i for oid in old)], loc_id
+    p.location = "hilltop_wilds"
+    assert "opp:try:guan_courier" not in [o.id for o in game.options(odds=False)]
+    stamina = p.stamina
+    assert game.choose("opp:try:guan_courier") == ["（此刻無法這麼做。）"] and p.stamina == stamina
+    new_clue = _hear(game, "jizhou").removeprefix(journal.FRAGMENT_PREFIX)  # 黎明祭天（黃巾）
+    assert _personal(game) == [old_clue, new_clue]
 
 
 def test_with_the_switch_off_there_are_no_layers(real):

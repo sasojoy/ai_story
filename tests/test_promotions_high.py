@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FixedRandom, real_content
-from tianxia import bot_policy, defection, enlist, figures, ranks, rules, timetable
+from tianxia import atlas, bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
@@ -391,7 +391,9 @@ def test_no_summons_while_nobody_can_present(on):
     game = _game(on, faction="guan")
     _ready(game)
     _retire(game, "luzhi", "jailed")  # 董卓還在孟津渡、不在盧植營
-    assert ranks.check_summons(game.state, on) == [] and game.state.player.summons is None
+    # 先不發召見；沒有人能引見那一句說一次（企劃者裁決 E3，原本一句話都沒有）
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]] and game.state.player.summons is None
+    assert ranks.check_summons(game.state, on) == []
 
 
 def test_second_leg_follows_the_first(on):
@@ -444,7 +446,7 @@ def test_an_anonymous_member_is_named_on_promotion(on):
 
 def test_brush_off_offers_a_rank_up_only_where_the_rank_goes_up(on):
     """被打發時「或在官軍再升一階」只給真的會升階的人：升第 3 階是升階（求見門檻跟著降），第 4 階只是資格（候缺），
-    rank 停在 3、門檻不降，所以第 2 階的人有這句，第 3 階的人（含已取得資格的）沒有。"""
+    rank 停在 3、候缺時門檻不降（在任才降，裁決 E4），所以第 2 階的人有這句，第 3 階的人（含已取得資格的）沒有。"""
     game = _game(on, faction="guan", rank=2)
     p = game.state.player
     p.stats["fame"] = rules.audience_bar(game.state, on, "luzhi") - 1
@@ -457,8 +459,8 @@ def test_brush_off_offers_a_rank_up_only_where_the_rank_goes_up(on):
 
 
 def test_a_rank_three_member_is_not_promised_a_rank_up(on):
-    """真的第 4 階（官軍：何進授印）有定義，rank_of + 1 找得到它；可是它不升階、求見門檻不降：被打發的話只寫還差多少，不許諾。
-    取得資格之後門檻也一樣不降（audience_bar 不看資格）。"""
+    """真的第 4 階（官軍：何進授印）有定義，rank_of + 1 找得到它；可是它不升階、候缺時求見門檻不降：被打發的話只寫還差多少，不許諾。
+    取得資格之後門檻也一樣不降（audience_bar 讀 rank_of：候缺是 3，在任才是 4，裁決 E4）。"""
     assert any(x.faction == "guan" and x.rank == 4 for x in on.promotions)
     game = _game(on, faction="guan", rank=3)
     p = game.state.player
@@ -467,7 +469,7 @@ def test_a_rank_three_member_is_not_promised_a_rank_up(on):
     line = game._brush_off("luzhi")[0]  # noqa: SLF001
     assert "名望還差 1" in line and "再升" not in line
     p.qualified = True
-    assert rules.audience_bar(game.state, on, "luzhi") == bar  # 資格不降門檻：上面不許諾，這裡也沒有騙人
+    assert rules.audience_bar(game.state, on, "luzhi") == bar  # 候缺不降門檻：上面不許諾，這裡也沒有騙人
     assert "再升" not in game._brush_off("luzhi")[0]  # noqa: SLF001
 
 
@@ -684,12 +686,12 @@ def test_a_leg_without_a_place_uses_its_own_location_or_the_nearest_base(on):
 
 def test_the_second_leg_waits_when_no_version_holds_yet(on):
     """NN4：下一段此刻沒有成立的版本時召見留在這一段之後等著（地點空著）：沒有召見那一句、沒有「應召」，假人不往哪裡走；
-    版本之後成立了，下一次檢查補上地點、說那一句。"""
+    版本之後成立了，下一次檢查補上地點、說那一句。等著的當下說一次沒有人能引見（企劃者裁決 E3），之後的檢查不再說。"""
     _test_rank3(on)
     game = _game(on, faction="guan", at="luoyang_palace")
     _ready(game)
     ranks.check_summons(game.state, on)
-    assert ranks.next_leg(game.state, on, "別的事件") == []  # 沒有哪個版本的 after 是它
+    assert ranks.next_leg(game.state, on, "別的事件") == [ranks.NO_PRESENTER["guan"]]  # 沒有哪個版本的 after 是它
     s = game.state.player.summons
     assert (s.leg, s.prev, s.event, s.location) == (1, "別的事件", None, "")
     assert ranks.summons_line(game.state, on) is None and ranks.summons_event(game.state, on) is None
@@ -1212,11 +1214,11 @@ def test_the_camp_version_passes_to_zhujun_when_huangfusong_is_out_too(on):
 
 
 def test_nobody_to_present_rank_four_means_no_summons(on):
-    """N6：何進、皇甫嵩、朱儁都不在場：先不發（不發一張找不到人的召見），之後有人回來才發。"""
+    """N6：何進、皇甫嵩、朱儁都不在場：先不發（不發一張找不到人的召見），之後有人回來才發。沒有人能引見那一句說一次（裁決 E3）。"""
     game = _game(on, faction="guan", at="changshe")
     for fid in ("hejin", "huangfusong", "zhujun"):
         _retire(game, fid, "retired")
-    assert _summon_to(game, 4, "guan") == [] and game.state.player.summons is None
+    assert _summon_to(game, 4, "guan") == [ranks.NO_PRESENTER["guan"]] and game.state.player.summons is None
     game.state.world.figures["zhujun"] = figures.state_of(game.state, on, "zhujun").model_copy(update={"status": "active"})
     assert ranks.check_summons(game.state, on) == ["朱儁召你到長社營中授印。"]
 
@@ -1522,3 +1524,471 @@ def test_a_last_leg_choice_must_promote(real):
     real.events["promo_guan_3_palace"].choices[0].effect = Effect(text="x")
     with pytest.raises(ContentError, match="promo_guan_3_palace：.*promote"):
         validate(real)
+
+
+# ── 企劃者裁決 E2（2026-10-07）：召見的地點與路上的站都摸清 ─────────────
+# 發召見、往下一段（next_leg）、換人（_refresh 換了地點）的當下，把從所在地到召見地點最短的那條路（所有已開放的地點，
+# 同 summons_place）上沒去過的站記成摸清（PlayerState.surveyed）：看得見、還沒去過的站也記（人走開就看不見了）。
+# 不另寫一句話（同送別時的留意地形）。
+
+
+def _fresh(content, faction, join):
+    """剛投靠的新角色站在陣營的投靠點（只去過起點與投靠點，跳過序章的人也一樣），體力是滿的。"""
+    game = _game(content, faction=faction)
+    p = game.state.player
+    p.location = join
+    p.visited.add(join)
+    p.stamina = content.config.stamina_max
+    return game
+
+
+def _place(game, fid, location):
+    """這位大勢人物此刻在場、在 location。"""
+    w = game.state.world
+    w.figures[fid] = figures.state_of(game.state, game.content, fid).model_copy(
+        update={"status": "active", "location": location})
+
+
+def _make_current(game, leg, cast, where=None, prev=None):
+    """讓這一段的 cast 成為第一個成立的版本：排在它前面的版本都不成立（接的不是上一段演的 prev 就本來不成立；人不同就讓那位退場；
+    同一個人就結算它的 before_event 或立它 flags_none 的旗標），它自己的人物在它演的地方（at，或 where：沒寫 at 的營中授印
+    照人物此刻的所在）。"""
+    for other in leg.casts:
+        if other is cast:
+            break
+        if other.after is not None and other.after != prev:
+            continue
+        if other.figure is not None and other.figure != cast.figure:
+            _retire(game, other.figure)
+        elif other.before_event is not None:
+            _settle(game, other.before_event)
+        else:
+            assert other.flags_none, f"不知道怎麼讓 {other.event} 不成立"
+            rules.add_world_flags(game.state, other.flags_none)
+    if cast.figure is not None and (cast.at or where):
+        _place(game, cast.figure, cast.at or where)
+
+
+def _issue(game, rank):
+    """本季貢獻到了第 rank 階、做過那一階的機緣：check_summons 發召見。"""
+    p = game.state.player
+    p.rank = 0 if rank == 2 else rank - 1
+    p.contrib = ranks.threshold(game.content, rank)
+    p.opp_done = [o.id for o in game.content.opportunities if o.faction == p.faction and o.rank == rank]
+    return ranks.check_summons(game.state, game.content)
+
+
+def _can_get_there(game, where):
+    """召見那一段的地點到得了：疾行安排得了前往（/api/travel 問的就是 travel_refusal）；就在這裡的話，奇遇此刻就演得了。"""
+    p = game.state.player
+    dest = p.summons.location
+    if dest == p.location:  # 第 2 階的召見不記事件（主版或接手版照此刻出面的人）：演得了就好
+        event = ranks.summons_event(game.state, game.content)
+        assert event is not None and event == (p.summons.event or event), where
+    else:
+        assert game.travel_refusal(dest, "dash") is None, f"{where}：疾行到不了 {game.content.locations[dest].name}"
+
+
+def _camp_places(content, fid):
+    """營中授印（沒寫 at，人在哪就在哪演）可能演在哪裡：人物開季的所在，加上時刻表把這兩位調去的長社、盧植營、宛城。"""
+    return sorted({content.figures[fid].location, "changshe", "luzhi_camp", "wan_city"})
+
+
+def _summons_cases(content, faction):
+    """這個陣營每一階、每一段、每一個版本（營中授印另外每一個可能的地點）的召見：(階, [(段, 版本, 地點)…])。
+    第 2 階沒有段，是 (2, [])；第二段只配 after 寫的那個第一段版本。"""
+    cases = []
+    for promo in sorted((x for x in content.promotions if x.faction == faction), key=lambda x: x.rank):
+        if not promo.legs:
+            cases.append((promo.rank, []))
+            continue
+        firsts = [[(promo.legs[0], cast, where)] for cast in promo.legs[0].casts
+                  for where in ([None] if cast.at or not cast.figure else _camp_places(content, cast.figure))]
+        if len(promo.legs) == 1:
+            cases += [(promo.rank, chain) for chain in firsts]
+            continue
+        for chain in firsts:
+            for cast in promo.legs[1].casts:
+                if cast.after is None or cast.after == chain[0][1].event:
+                    cases.append((promo.rank, [*chain, (promo.legs[1], cast, None)]))
+    return cases
+
+
+@pytest.mark.parametrize("faction, join", [
+    (f.id, join) for f in real_content().scenario.factions for join in f.join_at
+])
+def test_every_summons_place_can_be_reached_by_dash(on, faction, join):
+    """promotions.json 的每一階、每一段、每一個版本：剛在投靠點投靠的新角色，召見一發出來（或往下一段）就安排得了疾行過去，
+    或人就在那裡、奇遇演得了。第二段從第一段的地點出發（人是演完第一段才往下一段的）。"""
+    cases = _summons_cases(on, faction)
+    mine = [x for x in on.promotions if x.faction == faction]
+    assert {rank for rank, _ in cases} == {x.rank for x in mine}  # 每一階、每一段的每一個版本都走到了
+    assert {cast.event for _, chain in cases for _, cast, _ in chain} == {
+        cast.event for x in mine for leg in x.legs for cast in leg.casts}
+    for rank, chain in cases:
+        game = _fresh(on, faction, join)
+        p = game.state.player
+        if not chain:  # 第 2 階
+            assert _issue(game, rank), (faction, join, rank)
+            _can_get_there(game, f"{faction} 第 2 階 從 {join}")
+            continue
+        leg, cast, where = chain[0]
+        _make_current(game, leg, cast, where)
+        assert _issue(game, rank), (faction, join, rank, cast.event)
+        assert (p.summons.event, p.summons.figure) == (cast.event, cast.figure)
+        _can_get_there(game, f"{faction} 第 {rank} 階 {cast.event}@{where or cast.at} 從 {join}")
+        if len(chain) == 2:
+            leg1, cast1, _ = chain[1]
+            p.location = p.summons.location  # 到了第一段的地點、演完
+            p.visited.add(p.location)
+            _make_current(game, leg1, cast1, prev=cast.event)
+            assert ranks.next_leg(game.state, on, cast.event)
+            assert p.summons.event == cast1.event
+            _can_get_there(game, f"{faction} 第 {rank} 階 {cast.event} → {cast1.event} 從 {join}")
+
+
+def _route_stops(game, dest):
+    return set(atlas.shortest_routes(game.state, game.content)[dest].path)
+
+
+def test_issuing_a_summons_surveys_the_stops_on_the_way(on):
+    """南陽黃巾營投靠的黃巾，第 3 階召見到下曲陽（張寶）：原本疾行安排不了（路上的站都沒摸清），發召見之後到得了，
+    路上每一站不是去過就是摸清。"""
+    game = _fresh(on, "huang", "nanyang_huangjin_camp")
+    p = game.state.player
+    assert game.travel_refusal("xiaquyang", "dash") == "無法安排前往這裡"
+    stops = _route_stops(game, "xiaquyang")
+    assert _issue(game, 3) == ["張寶召你到下曲陽。"]
+    assert p.summons.location == "xiaquyang"
+    assert stops <= p.visited | p.surveyed and "xiaquyang" in p.surveyed
+    assert p.surveyed.isdisjoint(p.visited - stops) and p.surveyed == stops - p.visited  # 只記這一條路上的站
+    assert game.travel_refusal("xiaquyang", "dash") is None
+
+
+def test_the_next_leg_surveys_its_way(on):
+    """黃巾第 3 階第一段在下曲陽演完，第二段要帶著符去南陽黃巾營：往下一段的當下就摸清那一條路。"""
+    game = _fresh(on, "huang", "huangjin_camp")
+    p = game.state.player
+    _issue(game, 3)
+    p.location = "xiaquyang"
+    p.visited.add("xiaquyang")
+    stops = _route_stops(game, "nanyang_huangjin_camp")
+    assert not stops <= p.visited | p.surveyed  # 還沒摸清
+    assert ranks.next_leg(game.state, on, "promo_huang_3_talisman") == ["帶著符去南陽黃巾營。"]
+    assert stops <= p.visited | p.surveyed
+    assert game.travel_refusal("nanyang_huangjin_camp", "dash") is None
+
+
+def test_rank_two_is_surveyed_too(on):
+    """第 2 階的召見也一樣（企劃者「發召見」說的是每一種召見）：宛城投靠的官軍召到長社、鉅鹿道壇投靠的黃巾召到黃巾別部營寨。"""
+    for faction, join, dest in (("guan", "wan_city", "changshe"), ("huang", "julu_altar", "huangjin_camp")):
+        game = _fresh(on, faction, join)
+        assert game.travel_refusal(dest, "dash") == "無法安排前往這裡"
+        assert _issue(game, 2)
+        assert game.state.player.summons.location == dest
+        assert game.travel_refusal(dest, "dash") is None
+
+
+def test_a_presenter_who_moves_takes_the_survey_with_him(on):
+    """營中授印跟著人走：皇甫嵩從長社調到宛城，召見改寫到宛城（話變了，照說），那一條路也摸清。"""
+    game = _fresh(on, "guan", "changshe")
+    p = game.state.player
+    _retire(game, "hejin")
+    assert _issue(game, 4) == ["皇甫嵩召你到長社營中授印。"]
+    _place(game, "huangfusong", "dajiangjun_fu")  # 很遠的地方：從長社看不見、沒去過
+    stops = _route_stops(game, "dajiangjun_fu")
+    assert not stops <= p.visited | p.surveyed
+    assert ranks.check_summons(game.state, on) == ["皇甫嵩召你到大將軍府營中授印。"]
+    assert stops <= p.visited | p.surveyed
+    assert game.travel_refusal("dajiangjun_fu", "dash") is None
+
+
+def test_a_silent_swap_that_moves_the_place_still_surveys(on):
+    """換了地點、話卻沒變（召見那一句不寫{據點}）時悄悄換、不再說一次，可是路照樣摸清：地點變了就摸清，跟說不說無關。"""
+    camp = next(c for c in next(x for x in on.promotions if x.faction == "guan" and x.rank == 4).legs[0].casts
+                if c.figure == "huangfusong")
+    camp.summons_text = "皇甫嵩召你到營中授印。"
+    game = _fresh(on, "guan", "changshe")
+    p = game.state.player
+    _retire(game, "hejin")
+    assert _issue(game, 4) == ["皇甫嵩召你到營中授印。"]
+    _place(game, "huangfusong", "dajiangjun_fu")
+    assert ranks.check_summons(game.state, on) == []  # 話沒變：不說
+    assert p.summons.location == "dajiangjun_fu"
+    assert game.travel_refusal("dajiangjun_fu", "dash") is None
+
+
+def test_stops_you_can_see_now_are_surveyed_too(on):
+    """路上此刻看得見、還沒去過的站也要記：人走開之後就看不見了，路會斷在那裡。發召見之後走回起點（一路都是去過的站），
+    召見的地點照樣疾行到得了。"""
+    game = _fresh(on, "huang", "nanyang_huangjin_camp")
+    p = game.state.player
+    seen = atlas.visible_locations(game.state, on)
+    stops = _route_stops(game, "xiaquyang")
+    _issue(game, 3)
+    assert (stops & seen) - p.visited and (stops & seen) - p.visited <= p.surveyed  # 看得見的站也記成摸清
+    start = on.scenario.start_location
+    back = atlas.shortest_routes(game.state, on)[start].path
+    p.visited |= set(back)  # 一路走回起點
+    p.location = start
+    assert game.travel_refusal("xiaquyang", "dash") is None
+
+
+def test_the_far_summons_places_are_marked_important(on):
+    """樓桑里（豪強第 4 階）與下曲陽（黃巾第 3、4 階）在地圖上沒摸清時也畫出名字（Location.important）。"""
+    assert on.locations["loushang_village"].important and on.locations["xiaquyang"].important
+
+
+# ── 企劃者裁決 E3（2026-10-07）：沒有人能引見時說一句 ─────────────────────
+# 三個地方會卡住、原本一句話都沒有：發不出召見（check_summons；第 4 階就是「席次沒有人能主持」）、手上的召見那一段的版本都不成立了
+# （_refresh；企劃者說的「召見撤回」）、第一段演完第二段沒有人能接（next_leg）。卡住時說一次（每個陣營一句，待 joy 潤），
+# 解開之後又卡住才再說；記號存在角色存檔（PlayerState.summons_stall），不升 SCHEMA_VERSION。只說給自己聽，不發傳聞。
+
+
+def _stall_rank3_guan(game):
+    """官軍第 3 階第一段沒有人能出面：盧植下獄，董卓還在孟津渡（不在盧植營）。"""
+    _retire(game, "luzhi", "jailed")
+
+
+def test_nobody_to_present_says_so_once(on):
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    rumors = len(game.state.world.rumors)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.check_summons(game.state, on) == []  # 每次行動、同步都問一次：只說第一次
+    assert game.state.player.summons is None
+    assert len(game.state.world.rumors) == rumors  # 自己的事，不發傳聞（陣營軍情、地方傳聞都沒有）
+
+
+def test_the_line_goes_into_the_journal_once_through_sync(on):
+    """同步時的召見那一則（江湖紀錄「召見」）：卡住的那一句也走這裡，第二次同步不再寫。"""
+    game = _game(on, faction="guan", at="changshe")
+    _hear_only_the_promotion_hint(game)
+    _stall_rank3_guan(game)
+    game.world.save_season(game.state.world)  # sync 讀的是全服狀態裡的那一份，人物的改動要先存進去
+    _ready(game)
+    game.sync(game.now + 1)
+    game.sync(game.now + 2)
+    said = [e for e in game.state.journal if ranks.NO_PRESENTER["guan"] in e.lines]
+    assert len(said) == 1 and said[0].title == "召見"
+
+
+def test_it_is_said_again_after_the_stall_clears_and_comes_back(on):
+    """卡住 → 說一次；董卓到了盧植營、召見發出來（解開）；董卓也走了、手上那份召見沒有人出面（又卡住）→ 再說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    _place(game, "dongzhuo", "luzhi_camp")
+    assert ranks.check_summons(game.state, on) == ["董卓派人來找你：到盧植營見他。"]
+    assert game.state.player.summons_stall == ""
+    _retire(game, "dongzhuo")
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.check_summons(game.state, on) == []
+    assert game.state.player.summons is not None  # 召見還在手上：人回來了就照常演
+
+
+def test_a_held_rank_four_summons_whose_presenters_all_left_says_so(on):
+    """手上第 4 階的召見（何進），何進、皇甫嵩、朱儁都不在了：召見那一句、要演的事件都空了，說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    _ready(game, rank=3, contrib=10**6)
+    assert ranks.check_summons(game.state, on) == ["何進召你到大將軍府。"]
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.summons_line(game.state, on) is None and p.summons is not None
+    assert ranks.check_summons(game.state, on) == []
+
+
+def test_a_held_summons_that_comes_back_and_stalls_again_says_it_again(on):
+    """手上的召見卡住（說一次）→ 朱儁回來、照常改寫召見（解開）→ 朱儁又走了（又卡住）→ 再說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game, rank=3, contrib=10**6)
+    ranks.check_summons(game.state, on)
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    _place(game, "zhujun", "changshe")
+    assert ranks.check_summons(game.state, on) == ["朱儁召你到長社營中授印。"]
+    _retire(game, "zhujun")
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+
+
+def test_rank_four_with_nobody_to_preside_says_so(on):
+    """第 4 階（席次）沒有人能主持：發不出第 4 階的召見，同一個地方說。"""
+    game = _game(on, faction="guan", at="changshe")
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    _ready(game, rank=3, contrib=10**6)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert game.state.player.summons is None
+
+
+def test_next_leg_with_nobody_says_so_in_the_choice_result(on):
+    """黃巾第 3 階：張寶在下曲陽給了符，可是南陽的張曼成、趙弘與廣宗的張梁都不在了。選項的結果就接那一句，之後的檢查不再說。"""
+    game = _game(on, faction="huang", at="xiaquyang")
+    _hear_only_the_promotion_hint(game)
+    _ready(game)
+    assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
+    for fid in ("zhangmancheng", "zhaohong", "zhangliang"):
+        _retire(game, fid)
+    game.choose("act:summons")
+    assert game.state.pending_event == "promo_huang_3_talisman"
+    msgs = game.choose("choice:0")
+    assert ranks.NO_PRESENTER["huang"] in msgs
+    assert msgs.index("你把符貼身收好。") < msgs.index(ranks.NO_PRESENTER["huang"])
+    assert ranks.check_summons(game.state, on) == []
+    assert game.state.player.summons.leg == 1
+
+
+def test_each_faction_has_its_own_line(on):
+    """官軍、黃巾照真實內容；豪強現在的內容不會卡住（第 3、4 階都沒有出面的人物），在內容的複本裡給它一位退場的人物才走得到。"""
+    assert set(ranks.NO_PRESENTER) == {f.id for f in on.scenario.factions}
+    assert len(set(ranks.NO_PRESENTER.values())) == 3
+    huang = _game(on, faction="huang", at="huangjin_camp")
+    _ready(huang)
+    _retire(huang, "zhangbao")
+    _retire(huang, "zhangliang")
+    assert ranks.check_summons(huang.state, on) == [ranks.NO_PRESENTER["huang"]]
+    cast = next(x for x in on.promotions if x.faction == "haoqiang" and x.rank == 3).legs[0].casts[0]
+    cast.figure = "hejin"  # 內容的複本：豪強第 3 階由一位人物出面（真實內容沒有）
+    hao = _game(on, faction="haoqiang", at="cao_manor")
+    _ready(hao)
+    _retire(hao, "hejin")
+    assert ranks.check_summons(hao.state, on) == [ranks.NO_PRESENTER["haoqiang"]]
+
+
+def test_with_current_content_haoqiang_never_stalls(on):
+    """真實內容：人物全部退場，豪強第 3、4 階照樣發得出召見（沒有出面的人物），所以豪強那一句現在走不到（列在 joy 的清單上）。"""
+    for rank in (3, 4):
+        game = _game(on, faction="haoqiang", at="cao_manor")
+        for fid in on.figures:
+            _retire(game, fid)
+        _ready(game, rank=rank - 1, contrib=10**6)
+        assert ranks.check_summons(game.state, on) != [ranks.NO_PRESENTER["haoqiang"]]
+        assert game.state.player.summons is not None
+
+
+def test_defecting_clears_the_stall_marker(on):
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    ranks.check_summons(game.state, on)
+    assert game.state.player.summons_stall
+    defection.clear_progress(game.state.player)
+    assert game.state.player.summons_stall == ""
+
+
+def test_old_saves_without_the_stall_marker_load():
+    p = PlayerState.model_validate({"name": "甲", "location": "x", "stats": {}, "stamina": 0})
+    assert p.summons_stall == ""
+    again = PlayerState.model_validate_json(p.model_copy(update={"summons_stall": "guan:3:0"}).model_dump_json())
+    assert again.summons_stall == "guan:3:0"
+
+
+# ── 企劃者裁決 E4（2026-10-07）：只有在任的第 4 階算第 4 階（求見門檻）─────────────
+# rules.audience_bar 讀 ranks.rank_of：在任的是 4、有資格沒在任（候缺）的是 3。何進（名望 30、每階抵 5）：第 3 階與候缺都是 20，
+# 在任是 15。被打發時「或在官軍再升一階」只許諾真的會降門檻的晉升：候缺的下一步是席次（每週照貢獻輪替，不是被召去的晉升），
+# 不許諾；在任的已經到頂，也不許諾。
+
+
+def _hejin_bar(game):
+    return rules.audience_bar(game.state, game.content, "hejin")
+
+
+def _qualified_guan(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=3)
+    game.state.player.qualified = True
+    return game
+
+
+def test_only_a_seated_member_counts_as_rank_four_for_the_bar(on):
+    game = _qualified_guan(on)
+    p = game.state.player
+    assert ranks.rank_of(game.state) == 3 and _hejin_bar(game) == 20  # 候缺：算第 3 階
+    p.stats["fame"] = 15
+    assert not rules.can_meet(game.state, on, "hejin")
+    game.state.world.seats = {"guan": ["甲"]}  # 這一週在任
+    assert ranks.rank_of(game.state) == 4 and _hejin_bar(game) == 15
+    assert rules.can_meet(game.state, on, "hejin")
+    assert p.rank == 3  # 存檔的階不動
+
+
+def test_losing_the_seat_on_monday_raises_the_bar_again(on):
+    game = _qualified_guan(on)
+    w = game.state.world
+    w.seats = {"guan": ["甲"]}
+    assert _hejin_bar(game) == 15
+    w.seat_ledger = {"guan": {"乙": {1: 50}, "甲": {1: 5}}}  # 上一週乙做得比較多；這個伺服器每個陣營 1 席
+    w.time = calendar.week_start(2, on, w)
+    seats.rotate(game.state, on, 2)
+    assert w.seats == {"guan": ["乙"]} and _hejin_bar(game) == 20
+
+
+def test_a_qualified_member_waiting_for_a_seat_is_not_promised_a_rank_up(on):
+    """候缺的人差 3 點名望（在任的話門檻會降 5、補得上）：照規則不許諾，因為下一步是席次、不是被召去的晉升。"""
+    game = _qualified_guan(on)
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    line = game._brush_off("hejin")[0]  # noqa: SLF001
+    assert "名望還差 3" in line and "再升" not in line
+
+
+def test_a_seated_member_is_not_promised_a_rank_up(on):
+    game = _qualified_guan(on)
+    game.state.world.seats = {"guan": ["甲"]}
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    line = game._brush_off("hejin")[0]  # noqa: SLF001
+    assert "名望還差 3" in line and "再升" not in line
+
+
+def test_rank_two_is_still_promised_the_rank_up(on):
+    """另一邊：第 2 階的人差 3 點，升第 3 階門檻降 5、補得上：照舊許諾。"""
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=2)
+    game.state.player.stats["fame"] = _hejin_bar(game) - 3
+    assert _hejin_bar(game) == 25
+    assert "或在官軍再升一階" in game._brush_off("hejin")[0]  # noqa: SLF001
+
+
+# ── 企劃者裁決 E5.1（2026-10-07）：「給他。」銀兩不夠 50 時不出現 ─────────────────
+# 三則授印（何進一前一後、營中授印）的「給他。」花 50 兩；原本銀兩不夠也按得下去（apply_effect 把銀兩夾在 0，少付了照樣有效果）。
+# 只加條件（min_stats），選項的字是 joy 的、不動。另外兩個選項沒有條件，畫面上至少還有兩個。
+
+GIVE = "「給他。」"
+SEAL_EVENTS = ("promo_guan_4", "promo_guan_4_late", "promo_guan_4_camp")
+
+
+def _seal_scene(on, event_id, silver):
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=3)
+    game.state.player.stats["silver"] = silver
+    game.state.pending_event = event_id
+    return game
+
+
+def _labels(game):
+    return [o.label for o in game.options(odds=False)]
+
+
+@pytest.mark.parametrize("event_id", SEAL_EVENTS)
+def test_the_give_option_needs_fifty_silver(on, event_id):
+    poor = _seal_scene(on, event_id, 49)
+    assert not any(label.startswith(GIVE) for label in _labels(poor))
+    assert {"choice:1", "choice:2"} <= {o.id for o in poor.options(odds=False)}  # 另外兩個選項的 id 不變
+    assert poor.choose("choice:0") == ["（此刻無法這麼做。）"]  # 舊的選單硬按：被拒絕，什麼都沒扣
+    p = poor.state.player
+    assert (p.stats["silver"], p.qualified, poor.state.pending_event) == (49, False, event_id)
+    rich = _seal_scene(on, event_id, 50)
+    assert any(label.startswith(GIVE) for label in _labels(rich))
+    rich.choose("choice:0")
+    assert (rich.state.player.stats["silver"], rich.state.player.qualified) == (0, True)
+
+
+def test_every_give_option_is_gated_by_its_own_price(on):
+    """三則都照實際的價錢擋（50 兩，effect.stats.silver）；拿掉其中一則的條件、或條件跟價錢對不上，這裡就紅。"""
+    gives = [(e.id, ch) for e in on.events.values() if e.id in SEAL_EVENTS for ch in e.choices if ch.text == GIVE]
+    assert sorted(eid for eid, _ in gives) == sorted(SEAL_EVENTS)
+    for eid, ch in gives:
+        price = -ch.effect.stats["silver"]
+        assert price == 50, eid
+        assert ch.condition is not None and ch.condition.min_stats == {"silver": price}, eid

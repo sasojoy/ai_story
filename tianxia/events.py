@@ -5,7 +5,7 @@ import random
 from typing import Literal
 
 from . import foreshadow
-from .models import Choice, Content, Event, FreeTextChoice, Location
+from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
 from .state import GameState
 from .world_state import WorldStateStore
@@ -122,10 +122,17 @@ def choice_label(choice: Choice, state: GameState, content: Content, world: Worl
     每一個事件檢定都是本人。心裡話出自 content/check_voice.json（joy 寫的四檔，{who} 換成「你」），檔位照擲骰用的
     同一個差值挑（rules.check_outlook）。吃到熟練加成時數值寫成「身法 5＋2」，熟練那一句（rules.practice_line）
     去掉句號、用逗號接在心裡話前面，同一個括號：「（身法 5＋2：這種事你幹得多了，這點身手難不倒你。）」。
-    沒有檢定的選項照原文。後面再接體力的代價（stamina_note）。"""
+    沒有檢定的選項照原文。後面再接體力的代價（stamina_note）。括號裡那一段是 check_note。"""
     check = choice.check
     if not check:
         return choice.text + stamina_note(choice, content)
+    return f"{choice.text}（{check_note(check, state, content, world)}）{stamina_note(choice, content)}"
+
+
+def check_note(check: Check, state: GameState, content: Content, world: WorldStateStore) -> str:
+    """檢定寫給玩家看的那一段「{屬性名} {數值}：{心裡話}」（不含括號）：吃到熟練加成時數值寫「身法 5＋2」、熟練那一句接在
+    心裡話前面。事件選項（choice_label）與有檢定的行動（第 2 階行動、第 3 階煽動起事，企劃者裁決 E5.3：
+    「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」）都用這一個，只有這一份寫法。只是檢定那一段：體力的代價各自另寫。"""
     outlook = check_outlook(check, state, content, world)
     stat = content.config.stat_names.get(check.stat, check.stat)
     value = f"{round(outlook.stat_value, 1):g}" + (f"＋{outlook.bonus}" if outlook.bonus else "")
@@ -133,19 +140,20 @@ def choice_label(choice: Choice, state: GameState, content: Content, world: Worl
     practiced = practice_line(check, state, content, world)
     if practiced:
         line = f"{practiced.rstrip('。')}，{line}"
-    return f"{choice.text}（{stat} {value}：{line}）{stamina_note(choice, content)}"
+    return f"{stat} {value}：{line}"
 
 
 def stamina_note(choice: Choice, content: Content) -> str:
     """選項會扣的體力寫在選項上（體力平衡提案第〇節，企劃者 2026-10-07：不再暗扣）：選了（或成功）就扣的寫「（體力 -10）」；
     檢定失敗才另扣的寫「（失手多耗體力 8）」，數字是 fail_stamina 縮過、比成功那一邊多扣的部分；兩樣都有用逗號接在同一個括號。
-    動手的選項（choice.combat）的輸贏是仗，不在這裡寫。"""
+    動手的選項（choice.combat，劇情戰）打輸另扣的一樣減半、一樣只寫多出來的那一份，寫「輸了多耗體力 N」（企劃者裁決 E6，
+    新寫，待 joy 潤）；勝算照舊寫在對手那個括號裡（Game._choice_label）。"""
     paid = -choice.effect.stamina if choice.effect.stamina < 0 else 0
     parts = [f"體力 -{paid}"] if paid else []
-    if choice.check and not choice.combat:
+    if choice.check or choice.combat:
         extra = -fail_stamina(choice.fail_effect.stamina, content) - paid
         if extra > 0:
-            parts.append(f"失手多耗體力 {extra}")
+            parts.append(f"{'輸了' if choice.combat else '失手'}多耗體力 {extra}")
     return f"（{'，'.join(parts)}）" if parts else ""
 
 

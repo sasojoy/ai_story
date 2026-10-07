@@ -10,9 +10,17 @@ from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
 HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
+# 晉升卡住、沒有人能出面時說的那一句（企劃者裁決 E3，每個陣營一句；新寫，待 joy 潤）。三個地方用它：發不出召見（第 4 階就是
+# 席次沒有人能主持）、手上那一段的召見沒有版本成立了、第一段演完下一段沒有人接（見 _stalled）。豪強現在的內容走不到（第 3、4 階
+# 都沒有出面的人物），留給之後的內容。只說給自己聽，不發傳聞。
+NO_PRESENTER: dict[str, str] = {
+    "guan": "營中現在沒人能替你引見，等局勢變了再說。",
+    "huang": "幾位將軍眼下都不在，沒人能替你引見，等局勢變了再說。",
+    "haoqiang": "各家眼下都顧不上你，沒人能替你牽線，等局勢變了再說。",
+}
 
 SEAT_RANK = seats.SEAT_RANK  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）；階號只在 seats 寫一次
-HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次，求見門檻不看資格也不看席次
+HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次；求見門檻照 rank_of，只有在任的算第 4 階（裁決 E4）
 
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {
@@ -52,7 +60,7 @@ def promotion_for(content: Content, faction: str | None, rank: int) -> Promotion
 
 def next_rank_up(state: GameState, content: Content) -> int | None:
     """下一次晉升真的會升階（PlayerState.rank 加一）的那一階；沒有的是 None：下一階沒有定義、或下一階只是資格（第 4 階，
-    rank 停在 3、求見門檻不降）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
+    rank 停在 3；門檻要等在任才降，席次是每週照貢獻輪替、不是被召去的晉升，裁決 E4）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
     rank = rank_of(state) + 1
     if rank > HIGHEST_RANK or promotion_for(content, state.player.faction, rank) is None:
         return None
@@ -79,6 +87,19 @@ def summons_place(state: GameState, content: Content, promo: PromotionDef) -> st
     if not reachable:
         return bases[0]
     return min(reachable, key=lambda loc: 0.0 if loc == here else routes[loc].minutes)
+
+
+def scout(state: GameState, content: Content, location: str) -> None:
+    """把到召見地點的路摸清（企劃者裁決 E2）：從所在地到 location 路程最短的那一條（所有已開放的地點，同 summons_place），
+    路上沒去過的站（含終點）記進 PlayerState.surveyed。此刻看得見的站也記：召見是之後才從別處動身的，人走開就看不見了。
+    去過的站本來就記得，玩家之後走過的路也都是去過的，所以從哪裡動身都接得上這一條。發召見、往下一段、換人換了地點時呼叫；
+    不另說話（同送別時的留意地形）。到不了（沒有路）或就在這裡時什麼都不做。"""
+    from . import atlas  # noqa: PLC0415  atlas → world → ranks：在函式裡 import，避免循環
+
+    route = atlas.shortest_routes(state, content).get(location)
+    if route is not None:
+        p = state.player
+        p.surveyed |= set(route.path) - p.visited
 
 
 def presenter(state: GameState, content: Content, promo: PromotionDef, location: str) -> tuple[str | None, bool]:
@@ -152,12 +173,26 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
         return []
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
-        return []
+        return _stalled(state, s.rank, s.leg)  # 這一段沒有人能出面了（裁決 E3 的「召見撤回」）：召見留著，說一次
+    state.player.summons_stall = ""
     cast, location = found
     told = _told_line(content, promo, s)
+    if location != s.location:  # 換了地點（人走了、換了人，或往下一段時還沒有版本、現在補上）：說不說都摸清（裁決 E2）
+        scout(state, content, location)
     s.event, s.location, s.figure = cast.event, location, cast.figure
     line = _leg_text(content, cast, location)
     return [line] if line != told else []
+
+
+def _stalled(state: GameState, rank: int, leg: int) -> list[str]:
+    """晉升卡在第 rank 階第 leg 段、沒有人能出面：第一次回 NO_PRESENTER 那一句（陣營的口吻），之後同一個地方卡著就不再說；
+    找到版本時（三個呼叫的地方各自）把記號清掉，所以解開之後又卡住會再說一次（企劃者裁決 E3）。"""
+    p = state.player
+    key = f"{p.faction}:{rank}:{leg}"
+    if p.summons_stall == key:
+        return []
+    p.summons_stall = key
+    return [NO_PRESENTER.get(p.faction or "", NO_PRESENTER["guan"])]
 
 
 def _scene_open(state: GameState, promo: PromotionDef) -> bool:
@@ -204,12 +239,15 @@ def check_summons(state: GameState, content: Content) -> list[str]:
         location = summons_place(state, content, promo)
         fid, handoff = presenter(state, content, promo, location)
         p.summons = Summons(rank=promo.rank, figure=fid, location=location, since=w.time)
+        scout(state, content, location)  # 裁決 E2：每一種召見都摸清（第 2 階也是，企劃者說的是「發召見」）
         return [_summons_text(content, promo, handoff, location)]
     found = current_cast(state, content, promo, 0, None)
     if found is None:
-        return []
+        return _stalled(state, rank, 0)  # 沒有人能出面（第 4 階就是席次沒有人能主持，裁決 E3）：先不發，說一次
+    p.summons_stall = ""
     cast, location = found
     p.summons = Summons(rank=rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
+    scout(state, content, location)
     return [_leg_text(content, cast, location)]
 
 
@@ -223,9 +261,11 @@ def next_leg(state: GameState, content: Content, from_event: str) -> list[str]:
     s.leg, s.prev, s.event, s.location = s.leg + 1, from_event, None, ""
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
-        return []
+        return _stalled(state, s.rank, s.leg)  # 下一段沒有人接（裁決 E3）：說在這個選項的結果裡，之後的檢查不再說
+    state.player.summons_stall = ""
     cast, location = found
     s.event, s.location, s.figure = cast.event, location, cast.figure
+    scout(state, content, location)  # 裁決 E2
     return [_leg_text(content, cast, location)]
 
 

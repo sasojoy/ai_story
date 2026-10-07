@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import bot, bot_policy, calendar, figures, opportunities, push, rules, timetable
+from tianxia import bot, bot_policy, calendar, events, figures, opportunities, push, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, OppDef
@@ -182,11 +182,13 @@ def test_completion_publishes_nothing(on):
     assert len(game.state.world.rumors) == before  # 機緣不發任何傳聞
 
 
-def test_clear_drops_all_progress():
+def test_clear_drops_all_progress_but_keeps_the_clues():
+    """叛投清掉機緣的進度；聽過的線索留著（企劃者裁決 E5.2，同伏筆片段與符文殘片：是「知道的事」，不是陣營給的身份）。"""
     p = PlayerState(name="甲", location="x", stats={}, stamina=0, opp_done=["a"], opp_counts={"b": 1},
                     opp_items={"c": "信"}, opp_fronts={"c": "yingru"}, opp_clues=["d"], opp_tried={"e": 3})
     opportunities.clear(p)
-    assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried) == ([], {}, {}, {}, [], {})
+    assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_tried) == ([], {}, {}, {}, {})
+    assert p.opp_clues == ["d"]
 
 
 def test_switch_off_no_opportunities(real):
@@ -246,19 +248,26 @@ class _Roll(random.Random):
         return self.value
 
 
+def _rank2_check(game):
+    """第 2 階行動括號裡體力後面那一段：事件選項的寫法（events.check_note）。心裡話是 joy 的字，不在這裡寫死。"""
+    action = opportunities.rank2_action(game.state, game.content)
+    return events.check_note(action.check, game.state, game.content, game.world)
+
+
 def test_rank2_action_needs_rank_two_and_a_front(on):
     game = _game(on, faction="guan", at="changshe", rank=1)
     assert "act:rank2" not in _ids(game)
     game.state.player.rank = 2
     option = next(o for o in game.options(odds=False) if o.id == "act:rank2")
-    assert option.label == "招降黃巾散兵（體力 15）"
+    assert option.label == f"招降黃巾散兵（體力 15・{_rank2_check(game)}）"  # 檢定照事件選項的寫法（企劃者裁決 E5.3）
     game.state.player.location = "luoyang_palace"  # 洛陽沒有戰線
     assert "act:rank2" not in _ids(game)
 
 
 def test_rank2_action_is_each_factions_own(on):
     huang = _game(on, faction="huang", at="julu_altar", rank=2)
-    assert next(o for o in huang.options(odds=False) if o.id == "act:rank2").label == "施符水收人心（體力 15）"
+    label = next(o for o in huang.options(odds=False) if o.id == "act:rank2").label
+    assert label == f"施符水收人心（體力 15・{_rank2_check(huang)}）"
     assert "act:rank2" not in _ids(_game(on, faction="haoqiang", at="cao_manor", rank=2))  # 豪強這一版沒有第 2 階行動
     assert "act:rank2" not in _ids(_game(on, at="changshe", rank=2))  # 散人沒有
 

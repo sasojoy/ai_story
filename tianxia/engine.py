@@ -26,7 +26,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
-    choice_label, event_candidates, free_text_note, has_events_here, pick_event, visible_choices,
+    choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
 )
 from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import speaker_of as guide_speaker_of
@@ -933,10 +933,11 @@ class Game:
         return f"{who}・{self.odds(hardest.id)}"
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
-        """動手的選項寫對手與勝算；有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
+        """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
+        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
-            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
+            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
         return choice_label(choice, self.state, self.content, self.world)
 
     def odds(self, squad_id: str) -> str:
@@ -1911,7 +1912,9 @@ class Game:
             return []
         if opportunities.rank2_left(s, c) <= 0:
             return [Option(id="act:rank2", enabled=False, label=f"{action.name}（今天已經做滿 {c.config.rank2_daily} 次）")]
-        return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina)]
+        # 檢定照事件選項的寫法接在體力後面（企劃者裁決 E5.3：「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」，標籤的樣子待 joy 潤）
+        note = event_rules.check_note(action.check, s, c, self.world)
+        return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina, note=note)]
 
     def _rank2(self) -> list[str]:
         """做一次第 2 階行動：扣體力、記今天一次；過檢定才成功——成功往己方推所在戰線 rank2_push 點（push_trend），
@@ -1933,18 +1936,42 @@ class Game:
 
     def _rank_action_options(self, loc: Location) -> list[Option]:
         """第 3、4 階的行動（正式版戊一）：做得了（陣營、階；第 4 階是這一週在任）、這裡做得了（戰線、標籤、亂局）才出現，
-        不是按了才說不行；這週做滿就灰掉、寫明。"""
+        不是按了才說不行；這週做滿就灰掉、寫明。這個行動推的那條線今天已經推滿（每人每曆日上限，按下去只會推 +0）也灰掉、
+        寫明（企劃者裁決 E1）；一次只寫一個原因，這週做滿先寫。還推得動一點的照常按、照常付。choose 照這份選單重驗，
+        所以推滿之前拿到的舊選單按下去也一樣被拒絕、不扣體力、不記次數。"""
         s, c = self.state, self.content
         opts: list[Option] = []
+        line = self._rank_action_line(loc.id)
         for action in rank_actions.mine(s, c):
             if not rank_actions.where_ok(s, c, action, loc.id):
                 continue
             option_id = f"{RANK_ACTION_PREFIX}{action.id}"
             if rank_actions.left(s, c, action) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
-            else:
-                opts.append(self._cost_option(option_id, action.name, action.stamina))
+            elif line is not None and self._push_room(line) <= 0:
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
+            else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面（裁決 E5.3，同 _rank2_options）
+                note = event_rules.check_note(action.check, s, c, self.world) if action.check is not None else ""
+                opts.append(self._cost_option(option_id, action.name, action.stamina, note=note))
         return opts
+
+    def _rank_action_line(self, loc_id: str) -> str | None:
+        """第 3、4 階行動在這裡推哪一條線：自己陣營有割據的目標就推割據（豪強的修築塢堡、占據郡縣），否則推所在的戰線
+        （黃巾的煽動起事）；都沒有目標是 None（不推）。選單看推滿了沒、_rank_action 真的推，都照這一個判斷。"""
+        goals = self._goals()
+        if goals.get(GEJU):
+            return GEJU
+        front = front_of(self.content, loc_id)
+        return front if front is not None and goals.get(front) else None
+
+    def _push_room(self, trend_id: str) -> float:
+        """自己今天在這條線上還推得動多少（每人每曆日上限，緩衝後的量）：跟 push_trend 走 push.py 的同一個算法（push.room）。
+        第一季的規則沒開時 push_trend 不設上限，這裡也是無限。"""
+        s, c = self.state, self.content
+        if not calendar.season_one_on(s.world, c):
+            return math.inf
+        day = calendar.point(s.world.time, c, s.world).cal_day
+        return push.room(s.player.pushed, day, trend_id, c.config.daily_push_cap)
 
     def _rank_action(self, action_id: str) -> list[str]:
         """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（黃巾推所在戰線往己方，
@@ -1960,11 +1987,9 @@ class Game:
         if action.check is not None and not roll_check(action.check, s, c, self.world, self.rng):
             return [action.fail.replace("{地點}", loc.name)]
         msgs = [action.ok.replace("{地點}", loc.name)]
-        goals = self._goals()
-        if goals.get(GEJU):
-            msgs += self.push_trend(GEJU, goals[GEJU] * action.push, source="rank")
-        elif goals.get(front):
-            msgs += self.push_trend(front, goals[front] * action.push, source="rank")
+        line = self._rank_action_line(loc.id)
+        if line is not None:
+            msgs += self.push_trend(line, self._goals()[line] * action.push, source="rank")
         return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
 
     def _order_credit(self, **kw) -> list[str]:
@@ -2093,6 +2118,8 @@ class Game:
     def _brush_off(self, companion_id: str) -> list[str]:
         """門檻不夠時被打發（武學與成長設計 9.1）：他自己口吻的一句（內容沒寫就用通用的），附上還差多少。
         後面只在「第一季的規則開著（才有晉升）、真的有下一階可升（會升階的：第 4 階只是資格，不算）、而且升一階抵掉的點數補得上差距」時才提在他那個陣營再升一階。
+        企劃者裁決 E4：門檻照 rank_of，在任的第 4 階才多抵一階；候缺的人下一步是席次（每週照貢獻輪替，不是被召去的晉升），
+        照規則不許諾——next_rank_up 在第 3 階以上本來就是 None，這裡不用另外判斷。
         不叫模型、不花體力、不加情誼。"""
         s, c = self.state, self.content
         self._hint("h_snubbed")  # 第一次被名將打發（新手引導計畫三）：不看狀態，打發的當下排；在行動裡，說的話記在這一則
@@ -2106,7 +2133,7 @@ class Game:
             season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
             and figure is not None and p.faction == figure.faction
             and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
-            and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、門檻不降），不許諾
+            and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、在任才降門檻），不許諾
         ):
             faction = c.scenario.faction_name(figure.faction, figure.faction)
             hint += f"，或在{faction}再升一階"
@@ -3473,8 +3500,8 @@ class Game:
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         key = f"{at.cal_day}:{trend_id}"
         pushed = push.buffered(abs(delta), push.active_count(s, p.faction, now, window))
-        used = p.pushed.get(key, 0.0)
-        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)
+        used = push.used_today(p.pushed, at.cal_day, trend_id)
+        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
         p.pushed = push.recent_days(p.pushed, at.cal_day)
         p.pushed[key] = used + moved
 
@@ -3857,7 +3884,7 @@ class Game:
         self._play_rounds(record, squad, result.tier, None, self._hp_facts())  # 氣血照開打時的樣子：厚拉高的下限這一場也起了作用
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
-        effect = choice.effect if won else choice.fail_effect
+        effect = choice.effect if won else failed(choice.fail_effect, c)  # 打輸另扣的體力減半，同檢定失敗（企劃者裁決 E6）
         story = apply_effect(effect, s, c, self.world, push=self.push_trend)
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes

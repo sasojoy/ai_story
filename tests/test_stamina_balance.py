@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from conftest import install_season_one, real_content
+from conftest import FixedRandom, install_season_one, real_content, walk_to
 from tianxia import calendar, rules
 from tianxia.engine import Game
 from tianxia.events import choice_label, free_text_note, stamina_note
@@ -98,3 +98,79 @@ def test_leaving_the_hut_fills_the_bigger_bar():
     c = real_content()
     last = c.tutorial.steps[c.tutorial.prologue_steps - 1]
     assert last.reward.stamina >= c.config.stamina_max == 250
+
+
+# ── 企劃者裁決 E6（2026-10-07）：劇情戰打輸另扣的體力減半、寫在開打的選項上 ─────────────────
+# 「劇情戰打輸另外扣的體力，要減半，或者是改其他的懲罰。」減半走檢定失敗同一個函式（rules.failed → fail_stamina，
+# event_fail_stamina_scale、四捨五入）；選項上照 stamina_note 的寫法寫「（輸了多耗體力 N）」（新寫，待 joy 潤），
+# N 是縮過、比打贏那一邊多扣的部分（同「失手多耗體力」）。「改成別的懲罰」是內容的事，列在 joy 的清單上。
+
+
+def _story_fight(game, win=0, lose=-15, squad="boss"):
+    """測試內容的「挑戰」（湖邊交友遇上翻江龍，應戰是劇情戰）：打贏、打輸各扣多少體力照參數；squad 換成 thug 就打得贏。"""
+    game.content.config.event_fail_stamina_scale = 0.5
+    choice = game.content.events["duel"].choices[0]
+    choice.combat = squad
+    choice.effect = choice.effect.model_copy(update={"stamina": win})
+    choice.fail_effect = choice.fail_effect.model_copy(update={"stamina": lose})
+    walk_to(game, "lake")
+    game.choose("act:socialize")
+    assert game.state.pending_event == "duel"
+    game.state.player.stamina = 100.0
+    return choice
+
+
+def _fight_label(game, odds):
+    return next(o.label for o in game.options(odds=odds) if o.id == "choice:0")
+
+
+def test_a_lost_story_fight_takes_half(game):
+    _story_fight(game, lose=-15)
+    game.choose("choice:0")  # 應戰翻江龍：必敗
+    record = game.state.battles[0]
+    assert record.tier == "落敗"
+    assert game.state.player.stamina == 100 - 8  # 15 減半、四捨五入是 8
+    assert "體力 -8" in record.changes
+
+
+def test_the_number_on_the_option_is_what_a_loss_takes(game):
+    _story_fight(game, lose=-15)
+    assert _fight_label(game, odds=True).endswith("）（輸了多耗體力 8）")  # 對手與勝算那一個括號之後
+    assert _fight_label(game, odds=False) == "應戰（輸了多耗體力 8）"
+    game.choose("choice:0")
+    assert 100 - game.state.player.stamina == 8
+
+
+def test_a_won_story_fight_is_unaffected(game):
+    """打贏照打贏那一邊扣（選了就扣的不減半）；選項上兩樣都寫：贏了也扣的寫「體力 -N」，輸了多扣的只寫多出來的那一份。"""
+    rules.learn_skill(game.state, game.content, "fist")
+    _story_fight(game, win=-5, lose=-15, squad="thug")
+    assert _fight_label(game, odds=False) == "應戰（體力 -5，輸了多耗體力 3）"
+    game.rng = FixedRandom(1.0)  # 最佳運氣：穩穩打贏
+    game.choose("choice:0")
+    assert game.state.battles[0].tier in ("大勝", "險勝")
+    assert game.state.player.stamina == 100 - 5
+
+
+def test_a_story_fight_that_costs_no_stamina_shows_no_note(game):
+    _story_fight(game, lose=0)
+    assert _fight_label(game, odds=False) == "應戰"
+    assert "多耗" not in _fight_label(game, odds=True) and not _fight_label(game, odds=True).endswith("）（")
+    game.choose("choice:0")
+    assert game.state.player.stamina == 100
+
+
+def test_the_story_fight_note_reads_like_the_check_note(content):
+    content.config.event_fail_stamina_scale = 0.5
+    fight = Choice(text="拔刀", combat="boss", fail_effect=Effect(stamina=-15))
+    assert stamina_note(fight, content) == "（輸了多耗體力 8）"
+    assert stamina_note(fight.model_copy(update={"fail_effect": Effect(stamina=-10)}), content) == "（輸了多耗體力 5）"
+
+
+def test_real_story_fights_show_the_halved_loss(on):
+    """真實內容（減半 0.5）：狼群那一戰打輸另扣 15，選項上寫 8。"""
+    game = Game.new(on, "甲", rng=random.Random(0))
+    game.state.pending_event = "wolves"
+    choice = on.events["wolves"].choices[0]
+    assert choice.combat and choice.fail_effect.stamina == -15
+    assert next(o.label for o in game.options(odds=True) if o.id == "choice:0").endswith("（輸了多耗體力 8）")

@@ -23,15 +23,17 @@ def display_name(state: GameState) -> str:
 
 def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
-    每**升一階**（晉升過幾次）抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
+    此刻的階（ranks.rank_of）每比第 1 階高一階抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
     以及不在大勢人物表上的人物只看名望。最低 0。
-    存檔裡的階：0＝投靠了還沒晉升過（ranks.rank_of 算第 1 階），第一次晉升後是 2，所以晉升過幾次＝max(階, 1) - 1。
-    這裡自己算、不呼叫 ranks.rank_of：ranks 會 import rules，反過來 import 就循環了。"""
+    第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
+    rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
+    from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+
     bar = content.characters[companion_id].audience_fame
     figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
     if figure is not None and p.faction is not None and p.faction == figure.faction:
-        bar -= (max(p.rank, 1) - 1) * content.config.audience_rank_discount
+        bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
     return max(0, bar)
 
 
@@ -231,7 +233,7 @@ def fail_stamina(amount: int, content: Content) -> int:
 
 
 def failed(effect: Effect, content: Content) -> Effect:
-    """檢定失敗、隨口應對失敗要套的 fail_effect：扣的體力照 fail_stamina 縮過。劇情戰落敗不走這裡。"""
+    """檢定失敗、隨口應對失敗、劇情戰落敗（企劃者裁決 E6，2026-10-07）要套的 fail_effect：扣的體力照 fail_stamina 縮過。"""
     stamina = fail_stamina(effect.stamina, content)
     return effect if stamina == effect.stamina else effect.model_copy(update={"stamina": stamina})
 

@@ -391,6 +391,11 @@
     "choices": [
       {
         "text": "「給他。」",
+        "condition": {
+          "min_stats": {
+            "silver": 50
+          }
+        },
         "effect": {
           "text": "小黃門把錢收進袖裡，笑得更開了。",
           "stats": {
@@ -456,6 +461,11 @@
     "choices": [
       {
         "text": "「給他。」",
+        "condition": {
+          "min_stats": {
+            "silver": 50
+          }
+        },
         "effect": {
           "text": "小黃門把錢收進袖裡，笑得更開了。",
           "stats": {
@@ -500,6 +510,11 @@
     "choices": [
       {
         "text": "「給他。」",
+        "condition": {
+          "min_stats": {
+            "silver": 50
+          }
+        },
         "effect": {
           "text": "監軍把錢收進袖裡。",
           "stats": {
