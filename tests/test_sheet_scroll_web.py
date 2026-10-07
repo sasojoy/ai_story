@@ -44,7 +44,7 @@ WHEEL = """return (async () => {
   const afterBackdrop = sheet.top;
   const elsewhere = roll(over(".page"), 300);  // 不在暗處：交給瀏覽器自己捲，不動抽屜
   const lines = roll(over(".sheet-bg"), 3, 1);  // 以「行」為單位的滾輪（Firefox）：換成像素
-  return { backdrop, afterBackdrop, elsewhere, lines, top: sheet.top };
+  return { backdrop, afterBackdrop, elsewhere, lines, top: sheet.top, open: H.S.sheet };
 })();"""
 
 
@@ -53,6 +53,7 @@ def test_a_wheel_over_the_backdrop_scrolls_the_open_sheet():
     assert out["backdrop"] is True and out["afterBackdrop"] == 120  # 擋下頁面自己的捲動、改捲抽屜
     assert out["elsewhere"] is False
     assert out["lines"] is True and out["top"] == 120 + 3 * 16
+    assert out["open"] is True  # 滾輪只捲、不關抽屜（關抽屜是點暗處）
 
 
 def test_a_wheel_with_no_sheet_open_does_nothing():
