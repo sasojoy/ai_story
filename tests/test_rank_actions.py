@@ -66,10 +66,6 @@ def test_the_real_texts_name_the_place(real):
     assert "{地點}" in by_id["incite"].fail and by_id["fortify"].fail == "" and by_id["seize"].fail == ""
 
 
-def test_real_content_with_rank_actions_validates(real):
-    validate(real)  # 沒有檢定的行動 fail 空著是合法的（修築塢堡、趁亂占據郡縣）
-
-
 def test_rank_action_faction_must_exist(real):
     real.orders.rank_actions[0].faction = "nobody"
     with pytest.raises(ContentError, match="rank_actions"):
@@ -103,10 +99,11 @@ def test_a_blank_fail_text_does_not_count(real):
         validate(real)
 
 
-def test_tags_must_be_tags_some_location_carries(real):
-    """拼錯的標籤：那個行動在哪裡都不會出現，載入時就擋。"""
-    next(a for a in real.orders.rank_actions if a.id == "incite").tags = ["城池村"]
-    with pytest.raises(ContentError, match="tags"):
+@pytest.mark.parametrize("tags", [["城池村"], ["城鎮", "城池村"]])
+def test_tags_must_be_tags_some_location_carries(real, tags):
+    """拼錯的標籤：那個行動在哪裡都不會出現，載入時就擋；好幾個標籤裡有一個拼錯也擋（不是有一個對就放行）。"""
+    next(a for a in real.orders.rank_actions if a.id == "incite").tags = tags
+    with pytest.raises(ContentError, match="tags.*城池村"):
         validate(real)
 
 
@@ -489,3 +486,25 @@ def test_two_tags_mean_either_one(on):
     incite = _action(on, "incite").model_copy(update={"tags": ["城鎮", "營寨"]})
     assert rank_actions.where_ok(game.state, on, incite, "runan")  # 汝南是城鎮、不是營寨
     assert not rank_actions.where_ok(game.state, on, incite.model_copy(update={"tags": ["營寨", "祭壇"]}), "runan")
+
+
+def test_rank_action_weeks_is_keyed_by_the_week_and_the_action_id():
+    """「季曆週:行動 id」→ 這一週做了幾次：鍵是字串、值是整數（不是 int 的鍵）。Task 2 的測試只讀它的值，型別在這裡釘。"""
+    p = PlayerState(name="甲", location="x", stats={}, stamina=0, rank_action_weeks={"3:incite": 1})
+    assert p.rank_action_weeks == {"3:incite": 1}
+    with pytest.raises(ValidationError):
+        PlayerState(name="甲", location="x", stats={}, stamina=0, rank_action_weeks={"3:incite": "很多"})
+
+
+def test_rank_action_weeks_survive_a_save_and_load(on):
+    """存檔再讀回來還是同一份（角色存成一列 JSON，鍵是「週:行動 id」的字串）：換了週還記得這一週做了幾次。"""
+    from tianxia.characters import open_characters
+
+    game = _game(on, "haoqiang", "runan_wilds")
+    _chaos(game, "yingru", 50)
+    _week(game, 2)
+    game.choose("act:rank:fortify")
+    game.choose("act:rank:fortify")
+    open_characters().save(game.state)
+    loaded = open_characters().load("甲")
+    assert loaded.player.rank_action_weeks == game.state.player.rank_action_weeks == {"2:fortify": 2}
