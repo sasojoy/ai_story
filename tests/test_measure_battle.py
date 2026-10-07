@@ -10,7 +10,11 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from tianxia.content import load_content
+
+pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
 ROOT = Path(__file__).parent.parent
 
