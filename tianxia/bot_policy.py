@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, sensing, server_bots, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .models import Content, Effect, FactionDef, SkillDef
+from .models import Content, Effect, SkillDef
 from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
@@ -430,7 +430,7 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
         return "faction:confirm" if p.pending_faction == faction_id else "faction:cancel"
     if f"faction:{faction_id}" in ids:
         return f"faction:{faction_id}"
-    hop = next_hop(game, _faction(game, faction_id).join_at)
+    hop = next_hop(game, game.content.scenario.faction(faction_id).join_at)
     return f"move:{hop}" if hop is not None and f"move:{hop}" in ids else None
 
 
@@ -464,15 +464,11 @@ def _battle_score(game: Game, arg: str) -> float | None:
     return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / hp
 
 
-def _faction(game: Game, faction_id: str) -> FactionDef:
-    return next(f for f in game.content.scenario.factions if f.id == faction_id)
-
-
 def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return {}
-    return rules.resolve_goals(game.content, game.state.world, _faction(game, faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
+    return rules.resolve_goals(game.content, game.state.world, game.content.scenario.faction(faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
 
 
 def _home(game: Game, profile: BotProfile) -> set[str]:
@@ -484,7 +480,7 @@ def _home(game: Game, profile: BotProfile) -> set[str]:
     front = _losing_front(game, faction_id)
     if front is not None:
         return set(_front_locations(game.content, front))
-    join_at = _faction(game, faction_id).join_at
+    join_at = game.content.scenario.faction(faction_id).join_at
     return set(join_at) | {n for loc_id in join_at for n in game.content.locations[loc_id].connections}
 
 
@@ -507,7 +503,7 @@ def _losing_front(game: Game, faction_id: str) -> str | None:
     content = game.content
     if not rules.season_one(content, game.state.world):
         return None
-    goals = _faction(game, faction_id).goals
+    goals = game.content.scenario.faction(faction_id).goals
     fronts = [front for front in rules.front_ids(content) if goals.get(front)]
     if not fronts:
         return None

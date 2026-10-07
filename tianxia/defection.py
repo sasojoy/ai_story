@@ -15,10 +15,6 @@ if TYPE_CHECKING:
     from .battle_instance import BattleInstance
 
 
-def _faction(content: Content, faction_id: str) -> FactionDef:
-    return next(f for f in content.scenario.factions if f.id == faction_id)
-
-
 def enlisted(battle: BattleInstance | None, name: str) -> bool:
     """名字還在一場沒打完的決戰的參戰名單上（集結中或開打中；出局的、離開大區的也算，名字還在陣上）。
     參戰者的陣營是加入那一刻記下的，叛投不會跟著改：讓他叛投，就會留在舊陣營那一邊打到底，
@@ -51,7 +47,7 @@ def refusal(state: GameState, content: Content, target: FactionDef, battle: Batt
     if p.defected:
         return "這一季你已經叛投過一次了。"
     if enlisted(battle, p.name):
-        return f"決戰還沒打完，你名字還在{_faction(content, p.faction).name}的陣上，打完再說。"
+        return f"決戰還沒打完，你名字還在{content.scenario.faction(p.faction).name}的陣上，打完再說。"
     if target.id == p.faction or p.location not in target.join_at:
         return "你已經不在叛投的地方了。"
     return None
@@ -68,7 +64,7 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
     接上三方目前的人數。只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下、
     門派、功勞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
     p = state.player
-    old = _faction(content, p.faction)
+    old = content.scenario.faction(p.faction)
     lost = []
     if ranks.rank_of(state) > 1:
         title = ranks.title(content, state)
@@ -109,7 +105,7 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
     """真的叛投：離開舊陣營的門派、清掉舊陣營的進度、改投、記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞。
     呼叫端（Game._defect_step）先確認過還在投靠點、還能叛投。"""
     p, w = state.player, state.world
-    old = _faction(content, p.faction)
+    old = content.scenario.faction(p.faction)
     msgs = [target.defect_text] if target.defect_text else []
     sect = _sect_left(p, old, content)
     if sect is not None:  # 拜入門派等於加入陣營（第一季設計 5.1）：叛投就一起離開

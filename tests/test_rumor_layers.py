@@ -1,8 +1,8 @@
 """傳聞分層（一）：聽得到什麼（計畫 2026-10-06-傳聞分層-1-聽得到什麼）。
 
-用真實內容（content/）：要驗的是真實的五個大區（潁川汝南、南陽、冀州、幽州、洛陽）、地點與陣營。每個測試自己載一份，
-開關在 fixture 裡才打開；開關開著的季是「蓋了章」的（auto_open_first_season 開出來的季照當下的 Config 蓋章）。
-週末設定（季長 2.5 天）的季曆一天是 86400 ÷ 33.6 ≈ 2571 個世界秒。"""
+用真實內容（content/）：要驗的是真實的五個大區（潁川汝南、南陽、冀州、幽州、洛陽）、地點與陣營。每個測試拿自己的一份
+（conftest.real_content 的複本），開關在 fixture 裡才打開；開關開著的季是「蓋了章」的（auto_open_first_season 開出來的季
+照當下的 Config 蓋章）。週末設定（季長 2.5 天）的季曆一天是 86400 ÷ 33.6 ≈ 2571 個世界秒。"""
 from __future__ import annotations
 
 import random
@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
+from conftest import real_content
 from tianxia import atlas, calendar, foreshadow, journal, mapview, orders, ranks, rules, rumor_view, timetable
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -24,7 +25,7 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

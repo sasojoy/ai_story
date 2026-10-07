@@ -1,12 +1,11 @@
 """第一季濃縮版 T6：陣營軍令、最小糧草、第 1 階守勢行動（計畫 2026-10-05-T6-軍令）。
 
-規則與引擎的測試用真實內容（content/）：要驗的就是真實的插槽、戰線與大勢人物。每個測試自己載一份，
-開關在測試裡才打開，不會漏到別的測試。開關開著的季是「蓋了章」的：auto_open_first_season 開出來的季
-照當下的 Config 蓋章（world_state.stamp_season）。"""
+規則與引擎的測試用真實內容（content/）：要驗的就是真實的插槽、戰線與大勢人物。每個測試拿自己的一份
+（conftest.real_content 的複本），開關在測試裡才打開，不會漏到別的測試。開關開著的季是「蓋了章」的：
+auto_open_first_season 開出來的季照當下的 Config 蓋章（world_state.stamp_season）。"""
 from __future__ import annotations
 
 import random
-import re
 from pathlib import Path
 from unittest import mock
 
@@ -22,23 +21,7 @@ from tianxia.state import Convoy, Order, PlayerState, WorldState
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 
-@pytest.fixture
-def real():
-    """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
-    return c
-
-
-@pytest.fixture
-def on(real):
-    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。"""
-    real.config.season_one = True
-    real.config.season_days = 2.5
-    real.config.server_max_players = 2
-    return real
-
+# fixture real、on（真實內容，開關關著／照週末設定打開）在 tests/conftest.py：test_enlist、test_enlist_web 也用同一份
 
 BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
@@ -122,6 +105,19 @@ def test_quota_scales_with_server_cap(on):
     assert orders.quota(on, siege) == 1200
     on.config.server_max_players = 30
     assert orders.quota(on, siege) == 12  # 整季模擬的 30 人
+
+
+def test_the_defend_quota_base_is_nine_hundred_on_both_sides(on):
+    """守城（官軍、黃巾兩邊）的額度基數是 900（content/orders.json）：滿編 3000 人就是 900、整季模擬的 30 人是 9、
+    週末設定的 2 人照最少 4。整併時的突變抽查發現這個數字沒有測試釘住（攻城的 1200 見上一條）。"""
+    for side in ("guan", "huang"):
+        defend = next(t for t in on.orders.templates if t.kind == "defend" and t.side == side)
+        on.config.server_max_players = 2
+        assert orders.quota(on, defend) == 4
+        on.config.server_max_players = 3000
+        assert orders.quota(on, defend) == 900
+        on.config.server_max_players = 30
+        assert orders.quota(on, defend) == 9
 
 
 def test_issue_week_one_by_the_rules(on):

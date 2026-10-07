@@ -10,7 +10,6 @@ import pytest
 from tianxia.content import load_content
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
-STAT_KEYS = {"silver", "good", "evil", "fame", "str", "agi", "con", "wis"}
 REGIONS = [  # （大區, 新地點, 最少事件數, 最多事件數）
     ("youzhou", {"loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot"}, 5, 7),
     ("jizhou", {"julu_altar", "guangzong", "luzhi_camp", "xiaquyang", "haozu_fort", "baima_ford"}, 7, 9),
@@ -46,7 +45,8 @@ def test_every_new_location_has_one_or_two_explore_events(content, region, locat
 
 @pytest.mark.parametrize("region", REGION_IDS)
 def test_events_stay_within_the_reward_limits(content, region):
-    """每個上限都是每個選項結果（effect、fail_effect 各自）的上限；同一則事件的選項互斥。"""
+    """同一則事件的選項互斥；一半以上的事件要冒險（檢定或動手），傳聞最多兩則。每個選項結果的獎勵上限
+    （effect、fail_effect 各自）跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（region-<大區>）。"""
     events = _events(region)
     risky = 0
     rumors = 0
@@ -59,18 +59,6 @@ def test_events_stay_within_the_reward_limits(content, region):
                 assert "fail_effect" in c, e["id"]
             if "check" in c:
                 assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
-            for key in ("effect", "fail_effect"):
-                eff = c.get(key, {})
-                stats = eff.get("stats", {})
-                assert set(stats) <= STAT_KEYS, e["id"]
-                assert -40 <= stats.get("silver", 0) <= 40 and -3 <= stats.get("fame", 0) <= 3, e["id"]
-                assert -3 <= stats.get("good", 0) <= 3 and -3 <= stats.get("evil", 0) <= 3, e["id"]
-                assert all(stats.get(k, 0) <= 1 for k in ("str", "agi", "con", "wis")), e["id"]
-                assert set(eff.get("trend", {})) <= {"front"} and all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
-                assert sum(eff.get("materials", {}).values()) <= 1, e["id"]
-                assert all(content.materials[m].tier <= 2 for m in eff.get("materials", {})), e["id"]
-                assert not eff.get("flags_add") and not eff.get("world_flags_add"), e["id"]
-                assert not eff.get("next_event") and not eff.get("recruit") and not eff.get("join_sect"), e["id"]
-                rumors += bool(eff.get("rumor"))
+            rumors += sum(bool(c.get(key, {}).get("rumor")) for key in ("effect", "fail_effect"))
     assert risky * 2 >= len(events)
     assert rumors <= 2

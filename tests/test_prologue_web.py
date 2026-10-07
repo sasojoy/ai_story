@@ -8,31 +8,25 @@ from __future__ import annotations
 import json
 import random
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 from test_prologue import _to_step
 
 import server
+import webharness
 from tianxia import prologue
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parent.parent
-NODE = shutil.which("node")
-pytestmark = pytest.mark.skipif(NODE is None, reason="沒有 node，前端畫面測試略過")
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const fs = require("fs"), vm = require("vm");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-let src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 的 checkout 是 CRLF
-const end = src.lastIndexOf("\n})();");
-if (end < 0) throw new Error("app.js 的最後不是 })();");
-src = src.slice(0, end) + `
-  globalThis.__H = { S, pro, shown, prologueKey, topHtml, tabsHtml, idleMenu, actionBar, guideHtml, nextGuidePage, guideCue, scrollToGuideTarget, setMain, pageJianghu, pagePractice,
-    pageCraft, peekBlock, sheetHtml, applyGlow, renderTop, render, goTab };
-` + src.slice(end);
+const vm = require("vm");
+// 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
+const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
+  "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "peekBlock", "sheetHtml", "applyGlow",
+  "renderTop", "render", "goTab"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];
@@ -84,31 +78,23 @@ const ctx = {
 };
 for (const [k, v] of Object.entries(input.stored || {})) store.set(k, v);
 vm.createContext(ctx);
-vm.runInContext(src, ctx);
+vm.runInContext(app, ctx);
 const H = ctx.__H;
 H.S.stage = "game";
 H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-Promise.resolve(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners })).then((out) => {
-  process.stdout.write(JSON.stringify(out === undefined ? null : out));
-});
+finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners }));
 """
 
 
 def run(m, script, *, S=None, menxia=None, stored=None, responses=None):
-    """在 node 裡跑 app.js：m 是 /api/main 回的那份（S.main）、menxia 是 /api/menxia 回的那份，script 是函式本體（可用 H、m、T；
-    要等網路的寫成 async，fetch 是假的：T.calls 記下問了什麼，responses 是「網址開頭 → 回的 JSON」）。"""
-    done = subprocess.run(
-        [NODE, "-e", DRIVER], capture_output=True, text=True, encoding="utf-8", timeout=60,
-        input=json.dumps({
-            "app": str(ROOT / "web" / "app.js"), "m": m, "script": script, "S": S or {}, "menxia": menxia, "stored": stored or {},
-            "responses": responses or {},
-        }),
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    """在 node 裡跑 app.js（tests/webharness.py）：m 是 /api/main 回的那份（S.main）、menxia 是 /api/menxia 回的那份，script 是函式本體
+    （可用 H、m、T；要等網路的寫成 async，fetch 是假的：T.calls 記下問了什麼，responses 是「網址開頭 → 回的 JSON」）。"""
+    return webharness.run(DRIVER, {
+        "m": m, "script": script, "S": S or {}, "menxia": menxia, "stored": stored or {}, "responses": responses or {},
+    })
 
 
 @pytest.fixture

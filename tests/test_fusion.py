@@ -999,8 +999,13 @@ def test_with_two_or_more_candidates_the_model_picks_one(ready, content, world):
     assert "旋風腿" in listing and "疾風腿" in listing and "湖邊" not in listing  # 基礎武學不是合成物，不在清單上
 
 
-@pytest.mark.parametrize("client", [named("不在清單上"), model_down()])
-def test_when_the_model_picks_nothing_on_the_list_the_rules_pick(ready, content, world, client):
+@pytest.mark.parametrize(("client", "proposed"), [
+    pytest.param(named("不在清單上"), None, id="model-names-something-off-the-list"),
+    pytest.param(model_down(), None, id="model-down"),
+    # Review Focus 2：C 段拿到的名字不在這時的候選裡（A 段之後情況變了）——改由規則挑，不叫模型
+    pytest.param(must_not_ask(), ("亂取的名字", ""), id="proposed-name-is-no-candidate"),
+])
+def test_when_the_model_picks_nothing_on_the_list_the_rules_pick(ready, content, world, client, proposed):
     two_fast_arts(content, world)
     landing_on(content)
     ready.player.arts = ["lake_kick"]
@@ -1008,20 +1013,7 @@ def test_when_the_model_picks_nothing_on_the_list_the_rules_pick(ready, content,
     expected = landing.rule_pick(
         landing.art_candidates(world, "武學", "快", "無"), key, world.read().tianji,
     )
-    art, _ = fusion.fuse(ready, content, world, client, "lake_kick", "feng")
-    assert art.id == expected.id
-
-
-def test_a_proposed_pick_that_is_no_candidate_falls_back_to_the_rules(ready, content, world):
-    """Review Focus 2：C 段拿到的名字不在這時的候選裡（A 段之後情況變了）——改由規則挑，不叫模型。"""
-    two_fast_arts(content, world)
-    landing_on(content)
-    ready.player.arts = ["lake_kick"]
-    key = fusion.fuse_key("lake_kick", "feng")
-    expected = landing.rule_pick(
-        landing.art_candidates(world, "武學", "快", "無"), key, world.read().tianji,
-    )
-    art, _ = fusion.fuse(ready, content, world, must_not_ask(), "lake_kick", "feng", proposed=("亂取的名字", ""))
+    art, _ = fusion.fuse(ready, content, world, client, "lake_kick", "feng", proposed=proposed)
     assert art.id == expected.id
 
 
@@ -1303,22 +1295,6 @@ def test_blending_and_melting_the_result_never_makes_xinde(ready, content, world
     assert ready.player.stats["xinde"] < xinde
 
 
-def test_a_blend_can_land_on_a_known_art(ready, content, world):
-    ready.player.arts = ["lake_kick"]
-    key = fusion.blend_key("basic_fist", "lake_kick")
-    shape = fusion.blend_shape(
-        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
-    )
-    known = generate_from_name("候選拳", shape.kind, "候選拳").model_copy(update={
-        "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "乙",
-    })
-    world.claim_recipe("融|測試", known)
-    landing_on(content)
-    art, msgs = fusion.blend(ready, content, world, must_not_ask(), "basic_fist", "lake_kick")
-    assert art.id == "候選拳" and "合出來的竟是一門已有的" in msgs[0] and "由乙首創" in msgs[0]
-    assert world.lookup_recipe(key).id == "候選拳"
-
-
 def test_a_blend_can_land_on_one_of_its_own_arts(ready, content, world):
     """Review Focus 4：旋風腿（快）＋湖邊腿法（快）→ 快；唯一的候選是放進去的旋風腿自己——合到它（企劃者接受）：
     你本來就有，什麼都不收，配方照樣記下來。"""
@@ -1462,6 +1438,7 @@ def test_the_blend_sentence_names_the_two_arts_in_the_order_of_the_art_card(read
 
 @pytest.mark.parametrize(("a", "b"), ART_ORDER)
 def test_a_landed_blend_sentence_follows_the_same_order(ready, content, world, a, b):
+    """武學＋武學也會合到一門已知的（候選拳，乙首創）：登記成這個配方、不叫模型；句子照功法卡的順序寫兩門，不管放進爐子的先後。"""
     ready.player.arts = ["lake_kick"]
     key = fusion.blend_key("basic_fist", "lake_kick")
     shape = fusion.blend_shape(
@@ -1473,8 +1450,9 @@ def test_a_landed_blend_sentence_follows_the_same_order(ready, content, world, a
     world.claim_recipe("融|測試", known)
     landing_on(content)
     art, msgs = fusion.blend(ready, content, world, must_not_ask(), a, b)
-    assert art.id == "候選拳"
+    assert art.id == "候選拳" and "由乙首創" in msgs[0]
     assert msgs[0].startswith("你把【粗淺拳腳】與【湖邊腿法】合而為一，合出來的竟是一門已有的")
+    assert world.lookup_recipe(key).id == "候選拳"
 
 
 def test_a_blend_is_refused_when_the_holdings_are_full(ready, content, world):

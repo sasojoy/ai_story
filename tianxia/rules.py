@@ -439,11 +439,6 @@ def recompute_trends(world: WorldState, content: Content) -> None:
             world.trends[trend.id] = _weighted(world, content, trend)
 
 
-def recompute_derived(state: GameState, content: Content) -> None:
-    """同 recompute_trends，對這個角色看到的那一份賽季。"""
-    recompute_trends(state.world, content)
-
-
 def is_revealed(world: WorldState, content: Content, trend_id: str) -> bool:
     """這條線浮現了沒：記在 revealed 裡，或者本來就是公開的線（內容改版前開的那一季沒記到新加的公開線，照樣算浮現）。"""
     if trend_id in world.revealed:
@@ -669,7 +664,7 @@ def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
 def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int) -> int:
     """這一次變動對看畫面的人（viewer＝他的陣營 id，散人是 None）是好事（1）、壞事（−1）還是無關（0）：
     他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強、割據上的官軍與黃巾）一律 0。"""
-    faction = next((f for f in content.scenario.factions if f.id == viewer), None)
+    faction = content.scenario.find_faction(viewer)
     goal = faction.goals.get(trend_id, 0) if faction is not None else 0
     if not goal:
         return 0

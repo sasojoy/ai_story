@@ -144,10 +144,15 @@ def test_insight_weighs_the_insight_branch(game):
 # ── 奇遇判定先於三選一 ───────────────────────────────────
 
 
-def test_a_rare_event_comes_before_the_three_way_split(game):
+def _the_rare_step_always_hits(game):
+    """湖邊：「scroll」這則奇遇還沒看過，奇遇那一步一定擲中。"""
     _lake(game)
     game.state.player.seen_events.discard("scroll")
     game.content.config.rare_explore_chance = 1.0
+
+
+def test_a_rare_event_comes_before_the_three_way_split(game):
+    _the_rare_step_always_hits(game)
     game.choose("act:explore")
     assert game.state.pending_event == "scroll"
     assert game.state.battles == [] and game.state.player.materials == {}
@@ -166,10 +171,8 @@ def test_a_rare_event_never_comes_from_the_event_branch(game):
 
 def test_a_seen_qiyu_can_come_back_from_the_rare_step(game):
     """企劃者 2026-10-03 改：奇遇看過之後不從奇遇池拿掉。"""
-    _lake(game)
-    game.state.player.seen_events.discard("scroll")
+    _the_rare_step_always_hits(game)
     game.content.events["scroll"].once = False
-    game.content.config.rare_explore_chance = 1.0
     game.choose("act:explore")
     assert game.state.pending_event == "scroll"
     game.choose("choice:0")

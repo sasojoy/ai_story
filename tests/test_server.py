@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 import llm_queue
 import server
 import server_push
+import webharness
 from conftest import at, season_one_events
 from tianxia import (
     atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
@@ -105,6 +106,16 @@ def model_breaker_closed(monkeypatch):
     """鎖內模型呼叫的全服斷路器是 server 的模組狀態：每個測試從關著開始，前一個測試的模型失敗（conftest 把 chat_structured
     假成連不上）不會讓這一個的鎖內呼叫全部跳過。"""
     monkeypatch.setattr(server, "_breaker_until", None, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(monkeypatch):
+    """這個檔測的是伺服器，不是密碼：scrypt 換成最便宜的一組參數（一次約 40 毫秒變成幾微秒；測試整併第 4 區）。
+    雜湊與比對都在呼叫的當下讀 accounts.SCRYPT_PARAMS，所以註冊、登入、改密碼照舊走同一條路；
+    正式的參數與雜湊在 tests/test_accounts.py 測、也釘在那裡。正式程式不動。"""
+    from tianxia import accounts
+
+    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
 
 
 @pytest.fixture
@@ -1156,12 +1167,9 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
 
 def _app_functions_in_node(js: str, script: str) -> str:
     """把 app.js 裡幾個不碰畫面的函式（戰鬥卡片的折疊、看完整戰報、數字行）拿出來在 node 裡跑，回傳 script 印出的東西；
-    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。"""
-    import shutil
-    import subprocess
-
-    node = shutil.which("node")
-    if node is None:
+    網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。
+    node 由 tests/webharness.py 跑。"""
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     names = ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink", "TRAIT_LEAD")
     consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
@@ -1171,10 +1179,9 @@ def _app_functions_in_node(js: str, script: str) -> str:
         if f"function {name}(" in js
     ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
-    done = subprocess.run([node, "-"], input=(prelude + "\n".join(consts + funcs) + "\n" + script).encode("utf-8"),
-                          capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    return done.stdout.decode("utf-8")
+    done = webharness.node(prelude + "\n".join(consts + funcs) + "\n" + script)
+    assert done.returncode == 0, done.stderr
+    return done.stdout
 
 
 def test_the_report_link_sits_in_the_process_head_row_of_the_fight_card():
@@ -2556,7 +2563,10 @@ def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypat
     assert cards["武學"]["price"] == 9
 
 
-def test_forge_cultivate_and_melt_through_the_endpoints(client):
+def test_forge_cultivate_and_melt_through_the_endpoints(client, monkeypatch):
+    # 合成會擲品質，擲到上品時這一次修練有幾 % 的機會直接成了絕學，那一門就等著定名、熔不掉（亂數沒固定，量過約兩百次
+    # 有一次讓這個測試失敗）。這裡只看三個端點接不接得上，所以把絕學的機會關成 0
+    monkeypatch.setitem(server.CONTENT.config.cultivate_cap, "絕學", 0)
     _a_player_with_insights(client)
     r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
     assert "衍生出" in r["message"]
@@ -4879,65 +4889,36 @@ class _ScriptedQueue:
         return job()
 
 
-@pytest.mark.parametrize("site", SITES)
-def test_a_duplicate_request_is_refused_where_the_fallback_would_let_the_second_tab_pick_the_result(site, monkeypatch):
-    """審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——評分 40 是一個結果（灌水的寫法本來
-    該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都擋下來：不擲骰、不登記、不打、
-    什麼都不收，回一句短話，眼前的事還在原地。對話也是（FB-077，PM 2026-10-06）：以前第二件拿 cancelled 先進鎖，把「無心多談，你只好
-    先行告辭」寫進紀錄、求見的選單也收掉，第一件的回話後來照樣套不上；現在被擋下來、什麼都不動，第一件照常套用。潤色照舊不插句子。"""
-    queue = _ScriptedQueue("run", "busy") if site == "narrate" else _ScriptedQueue("busy")
-    monkeypatch.setattr(server, "QUEUE", queue)
-    game, run, seen = _ready(site, monkeypatch)
-    stamina = game.state.player.stamina
-    if site == "dialogue":
-        with pytest.raises(server.GameError, match=server.BUSY_DIALOGUE):
-            run()
-        assert _asked(seen, "dialogue") == []
-        stored = open_characters().load("測試")
-        assert stored.player.pending_companion is None and stored.player.stamina == stamina
-        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
-    elif site == "fight":
-        with pytest.raises(server.GameError, match="還在對峙，稍等。"):
-            run()
-        assert _asked(seen, "fight") == []
-        stored = open_characters().load("測試")
-        assert stored.battles == [] and stored.pending_event == "kou_boss" and stored.player.stamina == stamina
-    elif site == "forge":
-        with pytest.raises(server.GameError, match="上一爐還沒出爐。"):
-            run()
-        assert _asked(seen, "forge") == [] and open_world().lookup_recipe(FIST_FENG) is None
-        assert open_characters().load("沈青衫").player.stats["xinde"] == 100
-    elif site == "score":
-        with pytest.raises(server.GameError, match="上一句還在掂量，稍等。"):
-            run()
-        assert _asked(seen, "score") == [] and _asked(seen, "rate") == []  # 沒評分、也沒擲骰
-        stored = open_characters().load("測試")
-        assert stored.pending_event is not None and not any(e.title.endswith("隨口應對") for e in stored.journal)
-    else:
-        run()  # 評分照常、擲骰照常；潤色那一件被擋下來：不插句子
-        assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}] and _asked(seen, "narrate") == []
-        assert GAMBLE_NARRATION not in game.state.journal[0].lines
-    assert queue.calls == (2 if site == "narrate" else 1)
+REFUSED_AS_DUPLICATE = {  # 重複的那一件：各呼叫點自己的一句（潤色沒有，不插句子就是了）
+    "dialogue": server.BUSY_DIALOGUE, "fight": "還在對峙，稍等。", "forge": "上一爐還沒出爐。", "score": "上一句還在掂量，稍等。",
+}
 
 
 @pytest.mark.parametrize("site", SITES)
-def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site, monkeypatch):
-    """PM 2026-10-06：排超過 llm_queue_wait_seconds 秒還沒輪到的那一件，跟重複的那一件一樣處理——不給退路（評分 40、首次取名用
-    退路字表）。沒被服務到的人拿一個結果沒有道理（灌水的寫法本來該得 0 分，退路字表的名字整季登記），再試一次就好。評分、開爐、
-    大場面、對話：不擲骰、不登記、不打、不開口、什麼都不收，回一句短話，眼前的事還在原地（對話是 FB-077 之後：跟重複的那一件
-    一樣被擋下來，不再取消那一輪）；潤色不插句子（沒給 busy 訊息的呼叫點，跟重複的那一件一樣）。"""
-    queue = _ScriptedQueue("run", "timeout") if site == "narrate" else _ScriptedQueue("timeout")
+@pytest.mark.parametrize("why", ["duplicate", "queue-timeout"])
+def test_a_request_the_queue_refuses_gets_no_fallback(why, site, monkeypatch):
+    """重複的那一件（why=duplicate）。審查 M2、控制者裁示：同一個玩家已經有一件在等模型，第二件（另一個分頁）不能拿退路——
+    評分 40 是一個結果（灌水的寫法本來該得 0 分）、首次取名用退路字表是一個結果（整季登記）。所以隨口應對的評分、開爐、大場面都
+    擋下來：不擲骰、不登記、不打、什麼都不收，回一句短話，眼前的事還在原地。對話也是（FB-077，PM 2026-10-06）：以前第二件拿
+    cancelled 先進鎖，把「無心多談，你只好先行告辭」寫進紀錄、求見的選單也收掉，第一件的回話後來照樣套不上；現在被擋下來、什麼都
+    不動，第一件照常套用。潤色照舊不插句子。
+
+    排太久的那一件（why=queue-timeout）。PM 2026-10-06：排超過 llm_queue_wait_seconds 秒還沒輪到的那一件，跟重複的那一件一樣
+    處理——不給退路。沒被服務到的人拿一個結果沒有道理，再試一次就好；每個呼叫點回同一句 BUSY_QUEUE_TIMEOUT（對話是 FB-077 之後：
+    跟重複的那一件一樣被擋下來，不再取消那一輪）；潤色不插句子（沒給 busy 訊息的呼叫點，跟重複的那一件一樣）。"""
+    answer = "busy" if why == "duplicate" else "timeout"
+    queue = _ScriptedQueue("run", answer) if site == "narrate" else _ScriptedQueue(answer)
     monkeypatch.setattr(server, "QUEUE", queue)
     game, run, seen = _ready(site, monkeypatch)
     stamina = game.state.player.stamina
-    refusal = server.BUSY_QUEUE_TIMEOUT
+    refusal = REFUSED_AS_DUPLICATE.get(site) if why == "duplicate" else server.BUSY_QUEUE_TIMEOUT
     if site == "dialogue":
         with pytest.raises(server.GameError, match=refusal):
             run()
         assert _asked(seen, "dialogue") == []
         stored = open_characters().load("測試")
         assert stored.player.pending_companion is None and stored.player.stamina == stamina
-        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
+        assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
     elif site == "fight":
         with pytest.raises(server.GameError, match=refusal):
             run()
@@ -4956,7 +4937,7 @@ def test_a_request_that_times_out_in_the_queue_is_refused_like_a_duplicate(site,
         stored = open_characters().load("測試")
         assert stored.pending_event is not None and not any(e.title.endswith("隨口應對") for e in stored.journal)
     else:
-        run()  # 評分照常、擲骰照常；潤色那一件排太久：不插句子
+        run()  # 評分照常、擲骰照常；潤色那一件被擋下來（或排太久）：不插句子
         assert _asked(seen, "rate") == [{"kind": "rate", "rate": 85}] and _asked(seen, "narrate") == []
         assert GAMBLE_NARRATION not in game.state.journal[0].lines
     assert queue.calls == (2 if site == "narrate" else 1)
@@ -5434,11 +5415,8 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
     要還原成原本的字（審查 I-1），不然舊的「前面還有 N 件」會一路留在按鈕上，直到自己那一件做完；問不到（斷線）不動。
     收掉之後不再問，收掉那一刻才回來的回應也不寫（審查 M-4：已經在路上的那一趟 fetch 不能把字寫到還原好的按鈕上）。"""
     import json
-    import shutil
-    import subprocess
 
-    node = shutil.which("node")
-    if node is None:
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     watch = _js_function(js, "function watchQueue(") + "\n  }"
@@ -5469,9 +5447,9 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
       console.log(JSON.stringify({{ seen, final: el.textContent, urls: urls[0], more: seen.length - calls }}));
     }})();
     """
-    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    out = json.loads(done.stdout.decode("utf-8"))
+    done = webharness.node(script)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
     assert out["urls"] == ["/api/queue", "same-origin"]
     base = "思量中……"
     assert out["seen"] == [
@@ -5490,11 +5468,8 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     重畫之前 S.message 要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。
     在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
     import json
-    import shutil
-    import subprocess
 
-    node = shutil.which("node")
-    if node is None:
+    if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     parts = [
@@ -5530,9 +5505,9 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
       console.log(JSON.stringify({ refused, done, offline }));
     })();
     """
-    done = subprocess.run([node, "-"], input=script.encode("utf-8"), capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
-    out = json.loads(done.stdout.decode("utf-8"))
+    done = webharness.node(script)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
     refused = out["refused"]
     assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
     assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句

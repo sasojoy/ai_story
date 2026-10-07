@@ -1,6 +1,7 @@
 """第一季濃縮版 T5：頭銜、召見、第 2 階晉升奇遇、部下（計畫 2026-10-05-T5-晉升）。
 
-用真實內容（content/）：要驗的就是真實的晉升定義、奇遇、部下與大勢人物。每個測試自己載一份，開關在測試裡才打開。"""
+用真實內容（content/）：要驗的就是真實的晉升定義、奇遇、部下與大勢人物。每個測試拿自己的一份
+（conftest.real_content 的複本），開關在測試裡才打開。"""
 from __future__ import annotations
 
 import random
@@ -9,6 +10,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import bot_policy, calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -21,7 +23,7 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

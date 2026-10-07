@@ -1,10 +1,8 @@
 """第一季濃縮版 T4：大勢人物、聲威、敗走與接手（計畫 2026-10-04-T4）。
 
 規則與引擎的測試大多用真實內容（content/）：要驗的就是濃縮版內容表第一節的 14 位人物、他們的戰線與接位鏈。
-每個測試自己載一份，開關在測試裡才打開，不會漏到別的測試。"""
+每個測試拿自己的一份（conftest.real_content 的複本），開關在測試裡才打開，不會漏到別的測試。"""
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
@@ -12,18 +10,16 @@ import random
 import re
 from unittest import mock
 
-from conftest import FixedRandom
-from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, rules, team, timetable, world
+from conftest import FixedRandom, real_content
+from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates
 from tianxia.state import BotProfile, FigureState, GameState, PlayerState
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.models import Config, FigureChange
 from tianxia.server_bots import reserved_names
 from tianxia.world_state import fresh_season
-
-CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 # 濃縮版內容表 1.1（企劃者已審）：id → (character, name, faction, front, location, destiny, start_prestige,
 # actions_per_day, push, successor, active_from_week, start_status)；squad 一律是 figure_<id>
@@ -58,7 +54,7 @@ SQUAD_TABLE = {
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
     return c

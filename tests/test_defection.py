@@ -4,22 +4,20 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import battle_instance, bot, bot_policy, defection
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef
 from tianxia.state import BotProfile, Convoy, PlayerState, Summons
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -301,6 +299,21 @@ def test_confirm_when_defecting_is_no_longer_allowed(on):
     on.config.season_one = False  # 開關在確認之前關掉
     assert other.choose("defect:confirm")[-1] == "（現在不能叛投。）"
     assert other.state.player.faction == "guan"
+
+
+def test_a_faction_missing_from_the_scenario_fails_at_the_first_click_and_changes_nothing(on):
+    """存檔裡的陣營劇本裡已經沒有了（內容拿掉或改了一個陣營的 id，存檔沒跟上）：第一下（按「叛投X」）就失敗，什麼都
+    還沒改；不能讓確認畫面照常出來、等到「確定」時已經清掉進度又改投了才失敗（整併最終審查 area 8 M1）。
+    確認畫面已經開著的舊存檔，「確定」也在清進度、改陣營之前就失敗。"""
+    game = _game(on, faction="gone", at="huangjin_camp")
+    p = game.state.player
+    with pytest.raises(LookupError, match="gone"):
+        game.choose("defect:huang")
+    assert (p.faction, p.defected) == ("gone", False)  # 伺服器那邊整筆交易撤回、重讀存檔，記憶體裡剩什麼都不留
+    p.rank, p.pending_defect = 2, "huang"  # 叛投會把階級清回 1：拿它看「確定」有沒有先動了進度
+    with pytest.raises(LookupError, match="gone"):
+        game.choose("defect:confirm")
+    assert (p.faction, p.rank, p.defected) == ("gone", 2, False)
 
 
 def test_confirm_screen_blocks_map_travel(on):

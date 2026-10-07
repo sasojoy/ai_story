@@ -609,10 +609,16 @@ def test_the_free_text_option_needs_no_move_and_is_not_counted_as_a_move(tmp_pat
     assert "b1" in load_content(root).battles
 
 
-def test_battle_option_restricted_to_an_unknown_faction_rejected(tmp_path):
+@pytest.mark.parametrize("haunt", [
+    pytest.param(lambda b: b["acts"][0]["options"][0].update(faction="ghost"), id="an-option-for-an-unknown-faction"),
+    pytest.param(lambda b: b["outcomes"][0].update(faction="ghost"), id="an-outcome-for-an-unknown-faction"),
+    pytest.param(lambda b: b["outcomes"][0].update(trend_delta={"ghost": -10}), id="an-outcome-moving-an-unknown-trend"),
+])
+def test_a_battle_naming_an_unknown_faction_or_trend_is_rejected(tmp_path, haunt):
+    """決戰寫到不存在的陣營（選項、結果）或不存在的大勢線（結果的 trend_delta）：載入時報錯，錯誤訊息寫出那個 id。"""
     root = copy_fixture(tmp_path)
     battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["acts"][0]["options"][0]["faction"] = "ghost"
+    haunt(battle)
     write_battles_json(root, [battle])
     with pytest.raises(ContentError, match="ghost"):
         load_content(root)
@@ -765,24 +771,6 @@ def test_battle_rounds_per_act_and_decisive_margin_must_be_at_least_one(tmp_path
     battle[field] = 0
     write_battles_json(root, [battle])
     with pytest.raises(ContentError, match=rf"{field}[\s\S]*greater than or equal to 1"):
-        load_content(root)
-
-
-def test_battle_outcome_with_unknown_faction_rejected(tmp_path):
-    root = copy_fixture(tmp_path)
-    battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["outcomes"][0]["faction"] = "ghost"
-    write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="ghost"):
-        load_content(root)
-
-
-def test_battle_outcome_trend_delta_with_unknown_trend_rejected(tmp_path):
-    root = copy_fixture(tmp_path)
-    battle = json.loads(json.dumps(MINIMAL_BATTLE))
-    battle["outcomes"][0]["trend_delta"] = {"ghost": -10}
-    write_battles_json(root, [battle])
-    with pytest.raises(ContentError, match="ghost"):
         load_content(root)
 
 
@@ -2090,6 +2078,21 @@ def test_a_prologue_scene_whose_method_the_hut_cannot_give_is_refused(prologue_r
 
     edit_json(prologue_root / "locations.json", narrow)
     with pytest.raises(ContentError, match=r"序章的有所感每個做法都要選得對"):
+        load_content(prologue_root)
+
+
+@pytest.mark.parametrize("field, label", [("title", "標題"), ("text", "場景"), ("method", "做法")])
+def test_a_blank_line_in_an_insight_scene_is_refused(prologue_root, field, label):
+    """有所感的場景：標題、場景、每個做法都不能是空白的句子（content._check_line 的第一條；整併最終審查 area 8 M5 要釘住，
+    以前只有心裡話與戰況變化的空白有測試）。"""
+    def blank(scenes):
+        if field == "method":
+            scenes[0]["methods"][0]["text"] = "  "
+        else:
+            scenes[0][field] = "  "
+
+    edit_json(prologue_root / "insight_scenes.json", blank)
+    with pytest.raises(ContentError, match=f"有所感 hut_four的{label}：有空白的句子"):
         load_content(prologue_root)
 
 

@@ -1,10 +1,13 @@
 """OllamaClient 送給 Ollama 的參數（2026-10-03 實測換 gemma4:26b：要關掉思考、拿掉重複懲罰、拉長常駐時間）。"""
 import pytest
+import requests
 from pydantic import BaseModel
 
 from tianxia.battle_instance import SuccessRateJudgment
 from tianxia.engine import Game
 from tianxia.ollama_client import OllamaClient, _ensure_required_present
+
+REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」
 
 
 def test_defaults_keep_the_old_payload_and_send_no_think_field():
@@ -95,3 +98,52 @@ def test_an_empty_list_or_string_still_counts_as_truncated():
         with pytest.raises(ValueError, match=field):
             _ensure_required_present({"options": [], "name": ""}, Reply, [field])
     _ensure_required_present({"options": ["甲"], "name": "鑄韌拳"}, Reply, ["options", "name"])
+
+
+# ── 模型沒裝（Ollama 回 404）：錯誤訊息照字寫，三個地方都是同一句 ──────────────────────
+
+
+class _Reply:
+    """假的 HTTP 回應：status 400 以上時 raise_for_status 丟 HTTPError，跟 requests 一樣。"""
+
+    def __init__(self, status, content=""):
+        self.status_code, self._content = status, content
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code}", response=self)
+
+    def json(self):
+        return {"message": {"content": self._content}}
+
+
+def _first_reply_is_404():
+    yield _Reply(404)
+
+
+def _the_post_raises_an_http_404():
+    raise requests.HTTPError("404", response=_Reply(404))
+    yield  # 讓它也是個產生器：第一趟就丟例外
+
+
+def _the_retry_gets_404():
+    yield _Reply(200, "這不是 JSON")  # 第一趟格式不對，重問
+    yield _Reply(404)
+
+
+@pytest.mark.parametrize("replies", [_first_reply_is_404, _the_post_raises_an_http_404, _the_retry_gets_404],
+                         ids=["first-post", "http-error", "retry"])
+def test_a_missing_model_is_reported_in_the_same_words_at_each_of_the_three_places(monkeypatch, replies):
+    """模型沒裝時主控台看到的那一句（整併第 8 區把三份合成 _model_missing，最終審查 M5 要釘住字）：
+    第一趟就回 404、送出時就丟 404 的 HTTPError、格式不對重問那一趟回 404，都是這一句，模型名字照 client 的。"""
+    stream = replies()
+
+    def post(url, json=None, timeout=None):
+        return next(stream)
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
+    client = OllamaClient(model="gemma4:26b")
+    with pytest.raises(RuntimeError) as raised:
+        client.chat_structured([{"role": "user", "content": "取個名字"}], SuccessRateJudgment)
+    assert str(raised.value) == "Ollama 回傳 404：模型 'gemma4:26b' 未找到，請先 `ollama pull gemma4:26b`。"

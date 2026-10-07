@@ -7,23 +7,21 @@ content/opportunities.json 與 content/orders.json 的 rank2 裡新寫的句子�
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import bot, bot_policy, calendar, figures, opportunities, push, rules, timetable
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, OppDef
 from tianxia.state import BotProfile, PlayerState, TimelineResult
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-
 
 @pytest.fixture
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -603,9 +601,10 @@ def test_dawn_failure_waits_for_tomorrows_dawn(on):
     assert _try(game, "huang_dawn").enabled
 
 
-def test_dawn_host_falls_back_to_zhangliang(on):
+@pytest.mark.parametrize("hour", [5, 8], ids=["at-dawn", "in-the-widened-hours"])  # 8＝辰時：放寬出來的那幾個曆時
+def test_dawn_host_falls_back_to_zhangliang(on, hour):
     game = _game(on, faction="huang", at="xiaquyang")
-    _at_hour(game, 5)
+    _at_hour(game, hour)
     w = game.state.world
     w.figures["zhangbao"] = figures.state_of(game.state, on, "zhangbao").model_copy(update={"status": "retired"})
     assert "opp:try:huang_dawn" not in _ids(game)  # 下曲陽沒人主持
@@ -876,16 +875,6 @@ def test_dawn_retry_stays_inside_the_widened_dawn(on):
     assert _try(game, "huang_dawn") is None
     _at_hour(game, 5, day=1)
     assert _try(game, "huang_dawn").enabled
-
-
-def test_dawn_host_fallback_holds_in_the_widened_hours(on):
-    game = _game(on, faction="huang", at="xiaquyang")
-    w = game.state.world
-    w.figures["zhangbao"] = figures.state_of(game.state, on, "zhangbao").model_copy(update={"status": "retired"})
-    _at_hour(game, 8)  # 辰時：放寬出來的那幾個曆時
-    assert "opp:try:huang_dawn" not in _ids(game)  # 下曲陽沒人主持
-    game.state.player.location = "guangzong"
-    assert next(o for o in game.options(odds=False) if o.id == "opp:try:huang_dawn").label.startswith("替張梁捧旗")
 
 
 def test_aftermath_lasts_at_least_the_target_minutes(on):
