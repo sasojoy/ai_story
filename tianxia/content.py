@@ -126,12 +126,15 @@ def _config(root: Path, profile: str | None) -> Config:
 
 
 def profile_line(content: Content, profile: str | None) -> str:
-    """啟動時跟資料庫路徑一起印的那一行：用的是哪一份設定、打開了什麼。設錯時一眼看得出來。"""
-    if profile is None:
-        return "設定：預設"
+    """啟動時跟資料庫路徑一起印的那一行：用的是哪一份設定、打開了什麼。設錯時一眼看得出來。
+    測試期間一鍵補滿體力（Config.beta_free_refill）開著才在整行後面多一句；沒開的設定印的一個字都不變。"""
     cfg = content.config
-    switch = "開啟" if cfg.season_one else "關閉"
-    return f"設定：{profile}（第一季濃縮版規則{switch}、季長 {cfg.season_days:g} 天、人數上限 {cfg.server_max_players}）"
+    if profile is None:
+        line = "設定：預設"
+    else:
+        switch = "開啟" if cfg.season_one else "關閉"
+        line = f"設定：{profile}（第一季濃縮版規則{switch}、季長 {cfg.season_days:g} 天、人數上限 {cfg.server_max_players}）"
+    return line + "　測試期一鍵補滿體力：開" if cfg.beta_free_refill else line
 
 
 def _scale_marks(obj, scale: float) -> None:
