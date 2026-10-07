@@ -963,6 +963,20 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
         need(faction_id in factions, f"orders.json rank2：沒有陣營 {faction_id}")
         for text in (action.name, action.ok, action.fail):
             need(to_traditional(text) == text, f"orders.json rank2.{faction_id}：文字只能用繁體中文（「{text[:12]}」）")
+    # 第 3、4 階的行動（正式版戊一）：id 不重複、陣營存在、標籤是某個地點真的帶的（拼錯的那個行動哪裡都不會出現）、檢定的屬性認得、
+    # 有檢定就要寫沒過的那一句。標籤不看地點在不在戰線上：validate 遇到壞掉的大區多邊形還會繼續跑，atlas.region_of 會丟 ValueError
+    rank_action_ids = [a.id for a in c.orders.rank_actions]
+    need(len(set(rank_action_ids)) == len(rank_action_ids), "orders.json rank_actions：id 重複")
+    place_tags = {t for loc in c.locations.values() for t in loc.tags}
+    for a in c.orders.rank_actions:
+        where = f"orders.json rank_actions.{a.id}"
+        need(a.faction in factions, f"{where}：沒有陣營 {a.faction}")
+        need(set(a.tags) <= place_tags, f"{where}：tags 有沒有地點帶的標籤 {sorted(set(a.tags) - place_tags)}")
+        if a.check is not None:
+            known(where, [a.check.stat], STATS, "屬性")
+        need(a.check is None or bool(a.fail.strip()), f"{where}：有檢定就要寫 fail（沒過的那一句）")
+        for text in (a.name, a.ok, a.fail):
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
     for faction_id, petition in c.orders.petition.items():
         need(faction_id in factions, f"orders.json petition：沒有陣營 {faction_id}")
         known(f"orders.json petition.{faction_id}", petition.characters, c.characters, "人物")

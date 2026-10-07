@@ -751,7 +751,8 @@ ALLOW_FIXED = frozenset({
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
-ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+# act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
+ALLOW_FAMILIES = ("act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
 
 
 def allow_known(entry: str) -> bool:
@@ -1794,6 +1795,26 @@ class Rank2Action(_Strict):
     fail: str  # 失敗的敘事（{地點}）
 
 
+class RankAction(_Strict):
+    """第 3、4 階的行動（第一季設計 5.5；正式版戊一）。id 也是選項（act:rank:<id>）與軍令記功的 kind。
+    tags：只能在帶其中一個標籤的地點做（空＝有戰線的地方都行）；chaos_only：那條戰線要在亂局。
+    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強推割據。
+    content/orders.json 的 rank_actions 三筆是新寫的初稿，待 joy 潤（JSON 沒有註解，標記記在這裡）。"""
+
+    id: str
+    faction: str
+    rank: Literal[3, 4]
+    name: str
+    stamina: int = Field(ge=0)
+    weekly: int = Field(gt=0)  # 每週（季曆）最多幾次，不論成敗都算
+    tags: list[str] = Field(default_factory=list)
+    chaos_only: bool = False
+    check: Check | None = None
+    push: int = Field(gt=0)
+    ok: str  # 成功的敘事（{地點}）
+    fail: str = ""  # 失敗的敘事（{地點}）；有 check 就一定要寫（content.validate 擋）
+
+
 class OrderCaller(_Strict):
     """黃巾發令的人（{號令}）：照順序第一個沒退場的（figure 是 None 的那一筆是最後的退路）。"""
 
@@ -1811,6 +1832,7 @@ class OrdersContent(_Strict):
     # 另外 {守勢}＝那個陣營的守勢行動名字（duties）、{糧草}＝接糧車要交的份數
     how: dict[str, str] = Field(default_factory=dict)
     rank2: dict[str, Rank2Action] = Field(default_factory=dict)  # 陣營 id → 第 2 階行動（正式版乙一）
+    rank_actions: list[RankAction] = Field(default_factory=list)  # 第 3、4 階的行動（正式版戊一）
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）

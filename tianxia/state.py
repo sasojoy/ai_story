@@ -267,6 +267,7 @@ class PlayerState(BaseModel):
     # 「機緣 id:東西 key」；密謀的一處是「plot:密謀 id:處的 key」（值都是曆日）
     opp_tried: dict[str, int] = Field(default_factory=dict)
     rank2_days: dict[int, int] = Field(default_factory=dict)  # 曆日 → 那天做了幾次第 2 階行動；只留今天
+    rank_action_weeks: dict[str, int] = Field(default_factory=dict)  # 「季曆週:行動 id」→ 這一週做了幾次第 3、4 階行動；只留這一週（正式版戊一）
     # ── 機緣・乙二（拼圖、推理與集體密謀）；同樣每季重來、叛投時 opportunities.clear 清掉（opp_settled 例外，見 clear）──
     opp_pieces: dict[str, list[str]] = Field(default_factory=dict)  # 拼圖型：機緣 id → 已經拿到的東西的 key
     patron: str | None = None  # 靠山（晉升奇遇 4.2）：yuan、cao、self；計畫丙升第 3 階時寫入，叛投清掉
