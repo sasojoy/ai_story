@@ -371,8 +371,8 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
 def bag_text(state: GameState, content: Content) -> str:
     """背包：隨身帶著的材料（糧草、伏筆要用），階高的排前面。"""
     items = materials.bag_contents(state, content)
-    pills = state.player.legend_items
-    if not items and pills <= 0:
+    pills, stamina_pills = state.player.legend_items, state.player.stamina_pills
+    if not items and pills <= 0 and stamina_pills <= 0:
         return "**背包**　還沒有東西——打贏對手、沿路採集，或在奇遇裡拿到。"
     lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"] if items else ["**背包**　隨身帶著的東西。"]
     lines += [
@@ -383,6 +383,14 @@ def bag_text(state: GameState, content: Content) -> str:
         if items:  # 材料那行標題寫「材料，分三階」：丹接在底下會被當成材料，另起小標題（空行隔開，標題才不會併進上一項）
             lines += ["", "**傳奇道具**"]
         lines.append(f"- {content.config.legend_item_name} ×{pills}　{content.config.legend_item_note}")
+    if stamina_pills > 0:  # 回體丹（內測贈送）：同樣不是材料；在狀態列體力條旁邊按「服丹」吃
+        if items or pills > 0:
+            lines += ["", "**丹藥**"]
+        cfg = content.config
+        lines.append(
+            f"- {cfg.stamina_pill_name} ×{stamina_pills}　{cfg.stamina_pill_note}"
+            f"每顆回 {cfg.stamina_pill_restore} 點，在狀態列體力條旁邊按「服丹」。"
+        )
     return "\n".join(lines)
 
 

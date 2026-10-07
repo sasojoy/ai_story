@@ -129,6 +129,15 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 /* 氣血條上的字壓在紅條、底色與斜紋上都要讀得清楚：描一圈底色。「傷 N」靠右，落在斜紋那一頭 */
 .bar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
 .bar.hp > span.inj { position: absolute; top: 0; right: 0; padding: 0 7px; }
+/* 回體丹（內測贈送）：體力條右端一顆小鈕「丹 N」，跟氣血條的「傷 N」同一個位置；整條高度內、不擠格線 */
+.bar.stam > .pill-btn {
+  position: absolute; top: 2px; right: 2px; height: 16px; padding: 0 5px; border-radius: 8px;
+  border: 1px solid var(--stam); background: var(--card); color: var(--ink); font-size: 10px; line-height: 14px;
+  font-weight: 700; cursor: pointer;
+}
+.bar.stam > .pill-btn:disabled { opacity: 0.45; cursor: default; }
+/* 有丹時體力條多擠一顆鈕：把寬度從氣血條那邊借一點，「體力 132/150」才不會被鈕蓋住 */
+.vitals:has(.pill-btn) { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto auto; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .num em { font-style: normal; font-weight: 400; color: var(--ink-2); font-size: 11px; margin-right: 2px; }
 .more-stats { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.7; }

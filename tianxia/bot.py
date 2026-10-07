@@ -45,6 +45,16 @@ def can_practise(game: Game, kind: str) -> bool:
     return team.can_practise(game.state, game.content, kind)
 
 
+PILL_BELOW = 10  # 回體丹（內測贈送）：體力掉到連一次探索、遊歷都不夠時才吃一顆，跟急著玩的真人一樣；夾在上限，不會吃在半滿的時候浪費
+
+
+def take_pill(game: Game) -> None:
+    """體力見底、手上有回體丹就服一顆（只走 Game.take_stamina_pill，跟真人按體力條上的「丹」一樣）。整季機器人與伺服器假人共用。"""
+    p = game.state.player
+    if p.stamina_pills > 0 and p.stamina < PILL_BELOW:
+        game.take_stamina_pill()
+
+
 def allocate_points(game: Game, rng: random.Random) -> None:
     """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。
     迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
@@ -308,6 +318,7 @@ def play_season(
     for step in range(max_steps):
         if game.state.world.ended:
             break
+        take_pill(game)
         options = [o for o in game.options(odds=False) if o.enabled]
         choice = pick(game, options, rng) if options else None
         if choice is not None:

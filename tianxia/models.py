@@ -1324,6 +1324,15 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
+    # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
+    # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
+    stamina_pill_name: str = "回體丹"
+    stamina_pill_note: str = "服下立刻回復體力。"
+    stamina_pill_restore: int = Field(default=100, ge=1)
+    # 內測贈送：建立新角色時送 beta_gift_stamina_pills 顆（真人、假人、整季機器人都一樣）；關掉之後新角色不再送，手上的照樣能吃。
+    # 舊角色不補送，換季不再送（剩下的跟著帶到下一季）
+    beta_gift: bool = True
+    beta_gift_stamina_pills: int = Field(default=20, ge=0)
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
     # FB-068（企劃者 2026-10-05）：熔掉全服登記的武學（合成出來的）時，「練成花的八成」那一份至少退這麼多——合成也花了東西。
