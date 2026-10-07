@@ -75,7 +75,7 @@ class Insight(BaseModel):
     # id 是「悟:流水號」，名字不要求全服唯一。下面三項只有它們才有 ──
     place: str = ""  # 在哪悟的（地點的名字）；合併出來的是空的
     glyph: list[list[int]] = Field(default_factory=list)  # 畫的那一筆（0～100 的點位，簡化過），修練頁畫縮圖
-    glyph_note: str = ""  # 規則讀到的那一筆（例：「一筆畫成、圓轉不斷、畫得很慢」）
+    glyph_note: str = ""  # 舊版存的「規則讀到的那一筆」（筆畫的幾何）；2026-10-06 起不寫、不顯示，留著讓舊存檔讀得回來
 
 
 def is_renamed(art: MartialArt) -> bool:

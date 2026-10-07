@@ -11,6 +11,10 @@
 6. 其餘（差不多是一條直線）→ 剛
 
 屬性只由這裡定，模型只看圖寫名字與說明（實測同一張鋸齒圖被形容成「震盪」「連波」「連峰」，形容會飄，不能拿來定屬性）。
+
+玩家面前不寫任何筆畫的幾何（折角、圓轉、快慢……，企劃者 2026-10-06：「會降低玩家的驚喜感」）。規則另外多讀幾樣
+（大小、蜿蜒、橫直、升沉、頭尾、起筆收筆的緩急），換成意象與質感的詞（Glyph.imagery：「熊熊烈火般的剛烈」「氣象開闊」），
+只交給模型當線索、模型叫不動時當說明的退路。
 點位是客戶端送的：亂送的點頂多讓玩家挑到他要的屬性，跟老老實實畫一筆一樣，不必防。"""
 from __future__ import annotations
 
@@ -31,6 +35,13 @@ FAST_MS = 600  # 畫完不到這麼多毫秒算快
 SLOW_MS = 1500  # 超過這麼多毫秒算慢
 CURVE_DEG = 180.0  # 總共轉過這麼多度（半圈）以上、硬折角又少，算一路圓轉
 TOO_SMALL = 3.0  # 外框比這還小（畫布座標）就是點了一下，不算一筆
+CANVAS = 256  # 網頁畫布的邊長（web/app.js 的 SENSE_SIZE）：量「畫得多大」用
+BIG = 0.55  # 外框對角線佔畫布對角線這幾成以上算畫得大
+SMALL = 0.25  # 這幾成以下算畫得小
+WINDING = 3.0  # 筆畫全長是外框對角線的這幾倍以上算蜿蜒繁複
+PLAIN = 1.3  # 這幾倍以下算簡淨（差不多一道過去）
+FLAT = 2.0  # 寬是高的這幾倍以上算橫（反過來算直）
+SURGE = 1.6  # 前三分之一跟後三分之一的速度差這幾倍以上，算起筆急收筆緩（或反過來）
 
 
 class GlyphError(ValueError):
@@ -46,28 +57,50 @@ class Glyph:
     duration: int  # 畫了幾毫秒
     rising: bool  # 往上走（畫布的 y 越往下越大：終點比起點高）
     points: list[list[int]]  # 等距取樣、縮到 0～100 的點位（存進意境、畫縮圖）
+    size: float = 0.0  # 外框對角線佔畫布對角線的幾成
+    winding: float = 1.0  # 筆畫全長是外框對角線的幾倍
+    lie: str = ""  # 「橫」「直」或空字串（不偏哪邊）
+    surge: str = ""  # 「急收緩」（起筆急、收筆緩）、「緩收急」（先慢後快）或空字串
 
-    def note(self) -> str:
-        """規則讀到的那一筆，寫成一句話（畫布底下即時寫、交給模型、存進意境）：「一筆畫成，圓轉不斷，頭尾相接，畫得很慢」。"""
-        shape = []
-        if self.corners >= 2:
-            shape.append(f"折了{_count(self.corners)}個硬角")
-        elif self.corners == 1:
-            shape.append("中間折了一下")
-        if self.turning >= CURVE_DEG and self.corners < 2:
-            shape.append("圓轉不斷")
-        if not shape:
-            shape.append("幾乎是一道直線")
+    def imagery(self) -> list[str]:
+        """這一筆的意象與質感（最多四個詞，照固定順序挑，同一筆永遠一樣）：只交給模型當線索、當說明的退路，不直接給玩家看
+        筆畫本身。第一個詞跟著畫出來的屬性走，其餘看大小、蜿蜒、頭尾、升沉、橫直、緩急。"""
+        words = [ATTRIBUTE_IMAGERY.get(self.attribute, "")]
+        if self.size >= BIG:
+            words.append("氣象開闊")
+        elif self.size <= SMALL:
+            words.append("凝而不散")
+        if self.winding >= WINDING:
+            words.append("層層相疊、纏綿不絕")
+        elif self.winding <= PLAIN:
+            words.append("簡淨，一往無前")
         if self.closed:
-            shape.append("頭尾相接")
+            words.append("圓融自足，自成一方天地")
+        elif self.rising:
+            words.append("有升騰之勢")
         else:
-            shape.append("往上收" if self.rising else "往下走")
-        speed = "畫得很快" if self.duration < FAST_MS else "畫得很慢" if self.duration >= SLOW_MS else "不疾不徐"
-        return "一筆畫成，" + "，".join(shape) + "，" + speed
+            words.append("有沉墜之意")
+        if self.surge == "急收緩":
+            words.append("來勢洶洶而餘韻悠長")
+        elif self.surge == "緩收急":
+            words.append("先斂後發，蓄勢待放")
+        elif self.lie == "橫":
+            words.append("橫亙如地平")
+        elif self.lie == "直":
+            words.append("上下貫通")
+        return [w for w in words if w][:4]
+
+    def mood(self) -> str:
+        """意象串成一句（給模型的線索）：「熊熊烈火般的剛烈、氣象開闊、有升騰之勢」。"""
+        return "、".join(self.imagery())
 
 
-def _count(n: int) -> str:
-    return "一兩三四五六七八九"[n - 1] if 1 <= n <= 9 else "好幾"
+ATTRIBUTE_IMAGERY = {  # 畫出來的屬性 → 意象（附錄 A 的四象：風快、火剛、水柔、山慢）
+    "剛": "熊熊烈火般的剛烈",
+    "柔": "流水般的綿柔",
+    "快": "疾風般的迅捷",
+    "慢": "山岳般的沉穩厚重",
+}
 
 
 def _clean(points) -> list[tuple[float, float, float]]:
@@ -136,7 +169,33 @@ def read(points) -> Glyph:
     attribute = _attribute(corners, turning, closed, duration)
     scale = 100 / max(width, height)
     box = [[round((x - min(xs)) * scale), round((y - min(ys)) * scale)] for x, y in _resample(pts, THUMB)]
-    return Glyph(attribute, corners, round(turning, 1), closed, duration, rising, box)
+    length = sum(math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+    lie = "橫" if width >= FLAT * height else "直" if height >= FLAT * width else ""
+    return Glyph(
+        attribute, corners, round(turning, 1), closed, duration, rising, box,
+        size=round(min(1.0, diag / (CANVAS * math.sqrt(2))), 2), winding=round(length / diag, 2), lie=lie, surge=_surge(raw),
+    )
+
+
+def _surge(raw: list[tuple[float, float, float]]) -> str:
+    """起筆與收筆的緩急：前三分之一的點跟後三分之一的點各自的速度（畫布單位／毫秒）比一比。時間都一樣（沒有計時）就是空字串。"""
+    third = len(raw) // 3
+    if third < 2:
+        return ""
+
+    def speed(part):
+        dist = sum(math.dist(part[i][:2], part[i + 1][:2]) for i in range(len(part) - 1))
+        spent = part[-1][2] - part[0][2]
+        return dist / spent if spent > 0 else None
+
+    head, tail = speed(raw[: third + 1]), speed(raw[-third - 1:])
+    if not head or not tail:
+        return ""
+    if head >= SURGE * tail:
+        return "急收緩"
+    if tail >= SURGE * head:
+        return "緩收急"
+    return ""
 
 
 def _corners(angles: list[float]) -> tuple[int, set[int]]:

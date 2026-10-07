@@ -7034,6 +7034,7 @@ def test_a_journey_costs_less_stamina_with_light_body_and_the_button_says_so(gam
     assert before - game.state.player.stamina == base - 2
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("traits_worn", [(), ("慢", "慢", "慢"), ("虛", "虛", "虛"), ("剛", "剛", "剛")])
 def test_the_models_push_in_a_big_fight_is_the_same_points_with_or_without_roll_traits(game, traits_worn):
     """Task 3 審查 I1：判讀的優勢（最多 ±15 個百分點，武學與成長設計 8.3）走完整條路（_fight_with → team.fight →
