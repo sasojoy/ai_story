@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 from conftest import FixedRandom, next_season
+from test_cultivation import kicker_art
+from test_practice_hardening import harden
 from tests.test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
 from tianxia import defection, guide
 from tianxia.content import ContentError, load_content
@@ -525,6 +527,39 @@ def test_a_failed_refinement_triggers_refine_fail(game):
     assert game.guide_box() is None
     game.state.player.art_mastery = {"basic_fist": 2}
     game._check_hints()
+    assert _key(game) == "h_refine_fail"
+
+
+def _tempering_game(hints_content, world):
+    """joy 的加難（方案 C，breakthrough.heat = 8，跟正式內容一樣）：上品、第十成的【旋風腿】，下一次修練是往絕學添火候。"""
+    c = harden(hints_content)
+    _with(c, "h_refine_fail")
+    game = Game.new(c, "沈浪", rng=random.Random(0), world=world)
+    game.skip_tutorial()
+    world.claim_skill_name(kicker_art())
+    p = game.state.player
+    p.arts, p.insights, p.stamina, p.location = ["旋風腿"], ["feng"], 150, "cave"
+    p.art_levels["旋風腿"], p.art_quality["旋風腿"] = 10, "上品"
+    return game
+
+
+def test_tempering_toward_mastery_is_not_a_failed_refinement(hints_content, world):
+    """往絕學修練只添火候（cultivation._temper，也記在 art_mastery），不擲骰、沒有失敗：師父不說「沒成也不白修」（整合審查 I1）。"""
+    game = _tempering_game(hints_content, world)
+    assert game.cultivate("旋風腿")[0].startswith("【旋風腿】又添了一分火候")
+    assert game.state.player.art_mastery["旋風腿"] == 1
+    assert "h_refine_fail" not in _queued(game) and _key(game) != "h_refine_fail"
+
+
+def test_a_real_failure_on_the_way_to_upper_grade_still_says_it(hints_content, world):
+    """同樣的加難設定，往上品修練真的擲骰失敗了：照舊說（art_mastery 記的是失敗幾次）。"""
+    game = _tempering_game(hints_content, world)
+    game.state.player.art_quality["旋風腿"] = "中品"
+    for _ in range(5):
+        game.cultivate("旋風腿")
+        if game.state.player.art_mastery.get("旋風腿", 0) > 0:
+            break
+    assert game.state.player.art_quality["旋風腿"] == "中品" and game.state.player.art_mastery["旋風腿"] > 0
     assert _key(game) == "h_refine_fail"
 
 

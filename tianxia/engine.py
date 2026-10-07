@@ -1535,6 +1535,16 @@ class Game:
             hint_rules.queue(self.state, self.content, [hint_id])
             self._surface_hint()
 
+    def _refine_failed(self) -> bool:
+        """有一門往下一品修練失敗過、還沒練成（art_mastery 記失敗幾次）：h_refine_fail 的條件。joy 的加難方案 C 衝絕學時，art_mastery
+        記的是火候（cultivation._temper）：添火候不擲骰、不是失敗，不算（服丹強行衝關沒成也留著火候，那也沒有越修越容易，一樣不算）。"""
+        s, c = self.state, self.content
+        for art_id, count in s.player.art_mastery.items():
+            art = team.resolve_art(art_id, c, self.world) if count > 0 else None
+            if art is not None and not cultivation.heat_mode(c, martial_arts.next_quality(team.art_quality(s, art))):
+                return True
+        return False
+
     def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
         """此刻成立的碰到才說（設計 5.2）：看的都是角色現在的狀態（修練失敗留下熟練度、戰報裡有一場沒打贏的、路上見聞真的發生過……），
         「第一次」由 hints_seen 管。順序照設計的表：師父的在前、引薦人的在後。h_snubbed（被名將打發）與 h_mandate（玉璽碎片的秘密
@@ -1553,7 +1563,7 @@ class Game:
             neigong = team.player_art(s, c, self.world, p.member.neigong_id) if p.member.neigong_id else None
             if wugong and neigong and martial_arts.counters(wugong.attribute, neigong.attribute):  # 相剋是一對一對的，兩個方向都一樣
                 on.append("h_clash")
-        if want("h_refine_fail") and any(v > 0 for v in p.art_mastery.values()):  # 修練失敗才會累積熟練度，成功就歸零
+        if want("h_refine_fail") and self._refine_failed():  # 修練失敗才會累積熟練度，成功就歸零（往絕學添的火候不算）
             on.append("h_refine_fail")
         # 第一場沒打贏的仗：僵持與落敗都算（以前只算落敗：身法閃成僵持的人師父不開口）；決戰與挑戰本人不在這三種裡
         if want("h_lose") and any(r.tier not in team.WIN_TIERS for r in s.battles if r.kind in ("train", "wild", "event")):
