@@ -143,6 +143,12 @@ def _week(game, n, offset=3600.0):
     w.time = calendar.week_start(n, game.content, w) + offset
 
 
+def _next_day(game, days=1):
+    """往後推 days 個季曆日（同一週裡）：每人每曆日每條線的推動上限（daily_push_cap）換一天重算。"""
+    w = game.state.world
+    w.time += days * calendar.DAY / calendar.cal_scale(game.content, w)
+
+
 def _chaos(game, front, value=50):
     game.state.world.trends[front] = value
     rules.recompute_trends(game.state.world, game.content)
@@ -339,10 +345,13 @@ def test_an_option_that_is_not_on_the_menu_is_refused(on):
 
 
 def test_weekly_limit_resets_on_monday(on):
+    """一週 3 次分在三個曆日做（同一個曆日推兩次就碰到每人每曆日的上限，企劃者裁決 E1：那一下灰掉，見下面）。"""
     game = _game(on, "haoqiang", "runan_wilds")
     _chaos(game, "yingru", 50)
     _week(game, 2)
-    for _ in range(3):
+    for day in range(3):
+        if day:
+            _next_day(game)
         game.choose("act:rank:fortify")
     option = _option(game, "act:rank:fortify")
     assert not option.enabled and "這週已經做滿 3 次" in option.label
@@ -370,7 +379,10 @@ def test_the_count_is_per_action_and_seize_is_once_a_week(on):
     _week(game, 2)
     game.choose("act:rank:seize")
     assert not _option(game, "act:rank:seize").enabled and "這週已經做滿 1 次" in _option(game, "act:rank:seize").label
-    assert _option(game, "act:rank:fortify").enabled  # 另一個行動各算各的
+    assert "今天這條線已經推滿" in _option(game, "act:rank:fortify").label  # 占據郡縣推滿了今天的割據（E1）
+    _next_day(game)
+    assert _option(game, "act:rank:fortify").enabled  # 另一個行動各算各的：週次數不吃占據郡縣的
+    assert "這週已經做滿 1 次" in _option(game, "act:rank:seize").label
     assert game.state.player.rank_action_weeks == {"2:seize": 1}
 
 
@@ -397,11 +409,20 @@ def test_switch_off_no_rank_actions(real):
 
 def test_the_actions_leave_a_bot_loop_no_endless_option(on):
     """整季機器人只在「沒有任何可按的選項」時推進時間（bot.pick、play_season）：這幾個行動花體力、做滿就灰掉，
-    不是永遠按得下去的選項（像 act:rest）；play_season 只收 enabled 的。一直按到不能按為止，一定停得下來。"""
+    不是永遠按得下去的選項（像 act:rest）；play_season 只收 enabled 的。一直按到不能按為止，一定停得下來。
+    同一個曆日裡先碰到的是每人每曆日的推動上限（兩次 5 點推滿 10 點，企劃者裁決 E1），換一天再按到這一週做滿。"""
     game = _game(on, "haoqiang", "runan_wilds")
     _chaos(game, "yingru", 50)
     _week(game, 2)
     pressed = 0
+    while (option := _option(game, "act:rank:fortify")) is not None and option.enabled:
+        game.choose("act:rank:fortify")
+        pressed += 1
+        assert pressed <= 2
+    assert pressed == 2
+    game.state.player.stamina = 100
+    assert not _option(game, "act:rank:fortify").enabled  # 體力夠、還是灰的：今天這條線推滿了
+    _next_day(game)
     while (option := _option(game, "act:rank:fortify")) is not None and option.enabled:
         game.choose("act:rank:fortify")
         pressed += 1
@@ -626,3 +647,157 @@ def test_defecting_keeps_the_counter_but_the_old_actions_do_not_follow(on):
     assert rank_actions.left(game.state, on, _action(on, "fortify")) == 3  # 煽動起事的那一次不算進修築塢堡
     game.choose("act:rank:fortify")
     assert p.rank_action_weeks == {"1:incite": 1, "1:fortify": 1}  # 兩個行動各記各的
+
+
+# ── 企劃者裁決 E1（2026-10-07）：這條線今天推滿了，行動灰掉 ─────────────────
+# 每人每曆日每條線的推動上限（daily_push_cap，緩衝之後的量）不改；推滿了的那條線，第 3、4 階行動按下去只會推 +0，
+# 所以灰掉、寫「今天這條線已經推滿」，按了被拒絕（不扣體力、不記次數）。還推得動一點的照常按、照常付。
+# 「推滿了沒」跟 Game.push_trend 走 push.py 的同一個地方（push.room_left），不另算一份。
+
+
+def _fill(game, line, amount=None):
+    """把自己今天在這條線上的推動帳記到 amount（預設正好推滿上限）。"""
+    w = game.state.world
+    day = calendar.point(w.time, game.content, w).cal_day
+    game.state.player.pushed[f"{day}:{line}"] = game.content.config.daily_push_cap if amount is None else amount
+
+
+FULL = "今天這條線已經推滿"
+
+
+def test_a_full_line_greys_the_action_and_says_why(on):
+    game = _game(on, "huang", "runan")
+    _fill(game, "yingru")
+    option = _option(game, "act:rank:incite")
+    assert option is not None and not option.enabled
+    assert option.label == f"在一地煽動起事（{FULL}）"  # 新寫，待 joy 潤
+    assert game.state.player.stamina >= _action(on, "incite").stamina  # 體力夠：灰掉是因為推滿了
+
+
+def test_pressing_an_action_on_a_full_line_is_refused_and_costs_nothing(on):
+    game = _game(on, "huang", "runan")
+    _fill(game, "yingru")
+    before = rules.trend_value(game.state, on, "yingru")
+    with _always(True):
+        assert game.choose("act:rank:incite") == ["（此刻無法這麼做。）"]
+    p = game.state.player
+    assert (p.stamina, p.rank_action_weeks, p.contrib) == (100, {}, 0)
+    assert rules.trend_value(game.state, on, "yingru") == before
+
+
+def test_partial_room_is_pushed_and_paid_in_full(on):
+    """還推得動 3 點（推 5 點的行動）：照常按、照常付全部體力、記一次，只推得動的那 3 點。"""
+    game = _game(on, "huang", "runan")
+    cap = on.config.daily_push_cap
+    _fill(game, "yingru", cap - 3)
+    option = _option(game, "act:rank:incite")
+    assert option.enabled and FULL not in option.label
+    before = rules.trend_value(game.state, on, "yingru")
+    with _always(True):
+        msgs = game.choose("act:rank:incite")
+    assert msgs[0] == _said(on, "incite", "ok", "runan")
+    assert rules.trend_value(game.state, on, "yingru") == before + 3
+    assert game.state.player.stamina == 100 - _action(on, "incite").stamina
+    assert sum(game.state.player.rank_action_weeks.values()) == 1
+    assert FULL in _option(game, "act:rank:incite").label  # 推滿了：下一次灰掉
+
+
+def test_two_incites_fill_the_day_and_the_third_is_grey(on):
+    """戊一最終審查量到的：一個人煽動起事 47→52→57→57，第三次推 +0 卻照扣體力、照寫成功。現在第三次灰掉、按了被拒絕。"""
+    game = _game(on, "huang", "runan")
+    _week(game, 2)
+    before = rules.trend_value(game.state, on, "yingru")
+    with _always(True):
+        game.choose("act:rank:incite")
+        game.choose("act:rank:incite")
+        assert rules.trend_value(game.state, on, "yingru") == before + 10
+        option = _option(game, "act:rank:incite")
+        assert not option.enabled and option.label == f"在一地煽動起事（{FULL}）"
+        stamina = game.state.player.stamina
+        assert game.choose("act:rank:incite") == ["（此刻無法這麼做。）"]
+    assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {"2:incite": 2}
+
+
+def test_the_next_calendar_day_reopens_the_line(on):
+    game = _game(on, "huang", "runan")
+    _week(game, 2)
+    _fill(game, "yingru")
+    assert not _option(game, "act:rank:incite").enabled
+    _next_day(game)
+    assert _option(game, "act:rank:incite").enabled
+
+
+def test_a_menu_built_before_the_line_filled_is_refused(on):
+    """選單是推滿之前拿到的（例如在別的分頁推滿了）：choose 重建選單、按下去被拒絕，什麼都不扣。"""
+    game = _game(on, "haoqiang", "runan_wilds")
+    _chaos(game, "yingru", 50)
+    assert _option(game, "act:rank:fortify").enabled  # 玩家看到的選單
+    _fill(game, "geju")
+    assert game.choose("act:rank:fortify") == ["（此刻無法這麼做。）"]
+    assert game.state.player.stamina == 100 and game.state.player.rank_action_weeks == {}
+
+
+def test_the_weekly_limit_label_comes_before_the_full_line(on):
+    """這週做滿而且今天這條線也推滿：只寫一個原因，先寫這週做滿。"""
+    game = _game(on, "huang", "runan")
+    _week(game, 2)
+    game.state.player.rank_action_weeks = {"2:incite": _action(on, "incite").weekly}
+    _fill(game, "yingru")
+    option = _option(game, "act:rank:incite")
+    assert not option.enabled and option.label == "在一地煽動起事（這週已經做滿 3 次）"
+
+
+def test_hao_actions_check_geju_and_huang_incite_checks_its_front(on):
+    """看哪一條線跟推哪一條線同一個判斷：豪強（修築塢堡、占據郡縣）看割據，黃巾煽動起事看所在的戰線。"""
+    hao = _game(on, "haoqiang", "runan")
+    _chaos(hao, "yingru", 50)
+    _seat(hao)
+    _fill(hao, "yingru")  # 戰線推滿了：豪強的行動不推戰線，照樣按得下去
+    assert _option(hao, "act:rank:fortify").enabled and _option(hao, "act:rank:seize").enabled
+    _fill(hao, "geju")
+    assert FULL in _option(hao, "act:rank:fortify").label and FULL in _option(hao, "act:rank:seize").label
+    huang = _game(on, "huang", "runan")
+    _fill(huang, "geju")  # 割據推滿了：黃巾的行動不推割據
+    assert _option(huang, "act:rank:incite").enabled
+    _fill(huang, "yingru")
+    assert FULL in _option(huang, "act:rank:incite").label
+
+
+def test_seize_after_one_fortify_pushes_what_is_left(on):
+    """在任的豪強：修築塢堡（5）之後占據郡縣（10）推得動 5 點，照常付 30 體力；之後兩個都灰（一個推滿、一個這週做滿）。"""
+    game = _game(on, "haoqiang", "runan")
+    _chaos(game, "yingru", 50)
+    _seat(game)
+    _week(game, 2)
+    geju = rules.trend_value(game.state, on, "geju")
+    game.choose("act:rank:fortify")
+    assert _option(game, "act:rank:seize").enabled
+    game.choose("act:rank:seize")
+    assert rules.trend_value(game.state, on, "geju") == geju + 10
+    assert game.state.player.stamina == 100 - 20 - 30
+    assert _option(game, "act:rank:fortify").label == f"修築塢堡（{FULL}）"
+    assert _option(game, "act:rank:seize").label == "趁亂占據郡縣（這週已經做滿 1 次）"
+
+
+def test_the_menu_and_push_trend_read_the_same_room(on):
+    """「推滿了沒」只有一個地方算（push.room_left，push_trend 與選單都走它）：把它換成永遠沒有空間，
+    選單灰掉、push_trend 也一點都推不動；換成還有空間，帳上推滿了選單也照樣亮著。"""
+    from tianxia import push
+
+    game = _game(on, "huang", "runan")
+    before = rules.trend_value(game.state, on, "yingru")
+    with mock.patch.object(push, "room_left", return_value=0.0):
+        assert FULL in _option(game, "act:rank:incite").label
+        game.push_trend("yingru", 5, source="test")
+    assert rules.trend_value(game.state, on, "yingru") == before
+    _fill(game, "yingru")
+    with mock.patch.object(push, "room_left", return_value=5.0):
+        assert _option(game, "act:rank:incite").enabled
+
+
+def test_rank_two_and_duty_are_not_greyed_by_a_full_line(on):
+    """裁決只管第 3、4 階的行動：第 2 階行動與守勢行動照舊按得下去（推力被上限吃掉的那一份照舊）。"""
+    game = _game(on, "huang", "runan", rank=2)
+    _fill(game, "yingru")
+    assert _option(game, "act:rank2").enabled and FULL not in _option(game, "act:rank2").label
+    assert _option(game, "act:duty").enabled

@@ -25,9 +25,27 @@ def active_count(state: GameState, faction: str | None, now_time: float, window_
     return max(1, len(recent | {state.player.name}))
 
 
+def used_today(pushed: dict[str, float], cal_day: int, trend_id: str) -> float:
+    """這個人今天（季曆第 cal_day 天）在這條線上已經推了多少（PlayerState.pushed 的帳，鍵是「曆日:大勢線 id」，緩衝後的量）。"""
+    return pushed.get(f"{cal_day}:{trend_id}", 0.0)
+
+
+def room_left(used: float, cap: float) -> float:
+    """今天這條線已經推了 used、上限 cap：還推得動多少（不小於 0；浮點誤差留下的不到 10^-FRACTION_DIGITS 一絲當 0，
+    不然選單會說還推得動、按下去卻什麼都沒推）。
+    「這條線今天推滿了沒」只在這裡算：Game.push_trend（經 split_by_cap）與第 3、4 階行動的選單（經 room，企劃者裁決 E1）都走它。"""
+    left = cap - used
+    return left if left >= 10**-FRACTION_DIGITS else 0.0
+
+
+def room(pushed: dict[str, float], cal_day: int, trend_id: str, cap: float) -> float:
+    """這個人今天在這條線上還推得動多少（緩衝後的量）：0 是推滿了。"""
+    return room_left(used_today(pushed, cal_day, trend_id), cap)
+
+
 def split_by_cap(pushed: float, used: float, cap: float) -> tuple[float, float]:
     """緩衝後的推力 pushed 碰上今天這條線已經推了 used、上限 cap：回傳（還推得動的, 超過的）兩份，加起來是 pushed。"""
-    moved = min(pushed, max(0.0, cap - used))
+    moved = min(pushed, room_left(used, cap))
     return moved, pushed - moved
 
 

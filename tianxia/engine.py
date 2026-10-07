@@ -1933,18 +1933,41 @@ class Game:
 
     def _rank_action_options(self, loc: Location) -> list[Option]:
         """第 3、4 階的行動（正式版戊一）：做得了（陣營、階；第 4 階是這一週在任）、這裡做得了（戰線、標籤、亂局）才出現，
-        不是按了才說不行；這週做滿就灰掉、寫明。"""
+        不是按了才說不行；這週做滿就灰掉、寫明。這個行動推的那條線今天已經推滿（每人每曆日上限，按下去只會推 +0）也灰掉、
+        寫明（企劃者裁決 E1）；一次只寫一個原因，這週做滿先寫。還推得動一點的照常按、照常付。choose 照這份選單重驗，
+        所以推滿之前拿到的舊選單按下去也一樣被拒絕、不扣體力、不記次數。"""
         s, c = self.state, self.content
         opts: list[Option] = []
+        line = self._rank_action_line(loc.id)
         for action in rank_actions.mine(s, c):
             if not rank_actions.where_ok(s, c, action, loc.id):
                 continue
             option_id = f"{RANK_ACTION_PREFIX}{action.id}"
             if rank_actions.left(s, c, action) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
+            elif line is not None and self._push_room(line) <= 0:
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
             else:
                 opts.append(self._cost_option(option_id, action.name, action.stamina))
         return opts
+
+    def _rank_action_line(self, loc_id: str) -> str | None:
+        """第 3、4 階行動在這裡推哪一條線：自己陣營有割據的目標就推割據（豪強的修築塢堡、占據郡縣），否則推所在的戰線
+        （黃巾的煽動起事）；都沒有目標是 None（不推）。選單看推滿了沒、_rank_action 真的推，都照這一個判斷。"""
+        goals = self._goals()
+        if goals.get(GEJU):
+            return GEJU
+        front = front_of(self.content, loc_id)
+        return front if front is not None and goals.get(front) else None
+
+    def _push_room(self, trend_id: str) -> float:
+        """自己今天在這條線上還推得動多少（每人每曆日上限，緩衝後的量）：跟 push_trend 走 push.py 的同一個算法（push.room）。
+        第一季的規則沒開時 push_trend 不設上限，這裡也是無限。"""
+        s, c = self.state, self.content
+        if not calendar.season_one_on(s.world, c):
+            return math.inf
+        day = calendar.point(s.world.time, c, s.world).cal_day
+        return push.room(s.player.pushed, day, trend_id, c.config.daily_push_cap)
 
     def _rank_action(self, action_id: str) -> list[str]:
         """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（黃巾推所在戰線往己方，
@@ -1960,11 +1983,9 @@ class Game:
         if action.check is not None and not roll_check(action.check, s, c, self.world, self.rng):
             return [action.fail.replace("{地點}", loc.name)]
         msgs = [action.ok.replace("{地點}", loc.name)]
-        goals = self._goals()
-        if goals.get(GEJU):
-            msgs += self.push_trend(GEJU, goals[GEJU] * action.push, source="rank")
-        elif goals.get(front):
-            msgs += self.push_trend(front, goals[front] * action.push, source="rank")
+        line = self._rank_action_line(loc.id)
+        if line is not None:
+            msgs += self.push_trend(line, self._goals()[line] * action.push, source="rank")
         return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
 
     def _order_credit(self, **kw) -> list[str]:
@@ -3473,8 +3494,8 @@ class Game:
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         key = f"{at.cal_day}:{trend_id}"
         pushed = push.buffered(abs(delta), push.active_count(s, p.faction, now, window))
-        used = p.pushed.get(key, 0.0)
-        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)
+        used = push.used_today(p.pushed, at.cal_day, trend_id)
+        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
         p.pushed = push.recent_days(p.pushed, at.cal_day)
         p.pushed[key] = used + moved
 
