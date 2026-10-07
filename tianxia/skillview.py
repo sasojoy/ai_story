@@ -290,14 +290,14 @@ def _best_forge(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt,
 ) -> tuple[Insight, fusion.QualityOdds] | None:
     """這一門配手上哪一個意境合成最好：上品機率最高（同分看下品少），機率照 fusion.fuse_odds（跟開爐實際擲的同一套）。
-    合出來的那一門你已經有了的組合不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
+    合出來的那一門你已經有了、血統裡已經融過的意境都不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
     if prologue.fuse_base(state, content) is not None:
         return None
     owned, best = set(owned_arts(state)), None
     for insight_id in state.player.insights:
         insight = insights.resolve(insight_id, content, world, state)
         known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id, insight.attribute if insight else None))
-        if insight is None or (known is not None and known.id in owned):
+        if insight is None or (known is not None and known.id in owned) or fusion.lineage_has(art_id, insight, content, world):
             continue
         odds = fusion.fuse_odds(state, content, art_id, art, insight)
         rank = (odds.odds["上品"], -odds.odds["下品"])
