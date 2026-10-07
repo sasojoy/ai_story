@@ -4,12 +4,8 @@
 這個小改版不看開關。"""
 from __future__ import annotations
 
-import json
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
+import webharness
 from conftest import walk_to
 from tianxia import journal
 from tianxia.models import ExploreMix
@@ -205,12 +201,8 @@ def test_skipping_stays_skipped_into_the_next_season():
 
 # ── 網頁：收起記的是 key（FB-076）。把 web/app.js 裡說書人那一段切出來在 node 裡跑；沒有 node 就略過 ─────────────
 
-NODE = shutil.which("node")
-APP = Path(__file__).parent.parent / "web" / "app.js"
+APP = webharness.APP
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
 const a = src.indexOf("\n  const GUIDE_KEY");
 const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
 if (a < 0 || b < 4) throw new Error("app.js 裡找不到說書人的那一段");
@@ -226,20 +218,14 @@ const pro = () => null; // guideHtml 問序章（pro()）：這裡的框不在�
 const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, guideShut, setGuideShut, guideKey: typeof guideKey === 'function' ? guideKey : (g) => g.text, openGuide: typeof openGuide === 'function' ? openGuide : null, shutGuide: typeof shutGuide === 'function' ? shutGuide : null };")(S, esc, pro);
 const box = (key, text, end = false, pending = false, done = []) => ({ speaker: "說書人", key, text, done, end, pending });
 const shown = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : html ? "?" : ""; };
-const out = new Function("H", "S", "box", "shown", input.script)(H, S, box, shown);
-process.stdout.write(JSON.stringify(out === undefined ? null : out));
+finish(new Function("H", "S", "box", "shown", input.script)(H, S, box, shown));
 """
 
 
 def run_js(script, broken=False):
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", DRIVER], input=json.dumps({"app": str(APP), "script": script, "broken": broken}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"script": script, "broken": broken})
 
 
 def test_a_collapsed_box_stays_collapsed_when_a_pending_event_changes_the_sentence():

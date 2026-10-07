@@ -36,6 +36,19 @@ def test_register_stores_a_salted_hash_not_the_password(store):
     assert len(bytes.fromhex(login["salt"])) == 16 and len(bytes.fromhex(login["hash"])) == 32
 
 
+def test_the_production_scrypt_parameters_are_pinned():
+    """正式的 scrypt 參數與雜湊（測試整併第 4 區）：tests/test_server.py 為了快把參數換成最便宜的一組（那裡測的不是密碼），
+    這個檔照舊用正式參數，這一條把參數本身釘住——帳號只存鹽與雜湊、不存參數，改了參數，已經設好的密碼就全部對不上。"""
+    import hashlib
+
+    from tianxia import accounts
+
+    assert accounts.SCRYPT_PARAMS == {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
+    salt = bytes(range(16))
+    expected = hashlib.scrypt("秘密 pw".encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, dklen=32).hex()
+    assert accounts.hash_password("秘密 pw", salt) == expected
+
+
 def test_the_same_password_gets_a_different_salt(store):
     store.register("alpha", "same-pw")
     store.register("beta", "same-pw")
@@ -71,6 +84,59 @@ def test_an_unknown_account_and_a_wrong_password_read_the_same(store):
     with pytest.raises(AccountError) as unknown:
         store.authenticate("nobody", "secret-pw")
     assert str(wrong.value) == str(unknown.value) == "帳號或密碼不對。"
+
+
+def test_an_unknown_account_still_pays_one_full_hash_like_a_wrong_password(store, monkeypatch):
+    """帳號不存在也照樣用正式參數算一次雜湊（鹽是一份固定的假鹽）：不然「帳號不存在」比「密碼錯」快，量回話的時間就分得出
+    帳號在不在（CLAUDE.md：帳號不存在與密碼錯回同一句話）。密碼錯的那一次也正好是一次。"""
+    import hashlib
+
+    from tianxia import accounts
+
+    calls = []
+    real = hashlib.scrypt
+
+    def spy(password, **kwargs):
+        calls.append(kwargs)
+        return real(password, **kwargs)
+
+    monkeypatch.setattr(accounts.hashlib, "scrypt", spy)
+    with pytest.raises(AccountError):
+        store.authenticate("nobody", "secret-pw")
+    assert calls == [{"salt": accounts._DUMMY_SALT, "n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}]
+    store.register("alpha", "secret-pw")
+    calls.clear()
+    with pytest.raises(AccountError):
+        store.authenticate("alpha", "nope-nope")
+    assert len(calls) == 1 and {k: v for k, v in calls[0].items() if k != "salt"} == {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
+
+
+def test_an_over_long_password_pays_one_full_hash_of_its_first_part_only(store, monkeypatch):
+    """太長的密碼（比 PASSWORD_MAX 長）不會是任何帳號的密碼，但照樣用正式參數、固定的假鹽算一次雜湊，而且只算前面
+    PASSWORD_MAX 個字：送一大串來不能比一般的密碼便宜（拿掉這次雜湊就是），也不能比較貴（整串雜湊就是）。
+    帳號存不存在都一樣（這一關在查帳號之前）。整併最終審查 extras M1 要釘住。"""
+    import hashlib
+
+    from tianxia import accounts
+
+    calls = []
+    real = hashlib.scrypt
+
+    def spy(password, **kwargs):
+        calls.append((password, kwargs))
+        return real(password, **kwargs)
+
+    monkeypatch.setattr(accounts.hashlib, "scrypt", spy)
+    store.register("alpha", "secret-pw")
+    too_long = "長" * (accounts.PASSWORD_MAX + 50)
+    for login in ("alpha", "nobody"):
+        calls.clear()
+        with pytest.raises(AccountError, match="帳號或密碼不對。"):
+            store.authenticate(login, too_long)
+        assert calls == [(
+            too_long[:accounts.PASSWORD_MAX].encode("utf-8"),
+            {"salt": accounts._DUMMY_SALT, "n": 2 ** 14, "r": 8, "p": 1, "dklen": 32},
+        )]
 
 
 def test_five_failures_in_ten_minutes_lock_the_login(store, clock):

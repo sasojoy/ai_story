@@ -14,7 +14,6 @@ from tianxia.models import Condition
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 SOCIAL_FILES = sorted((CONTENT_DIR / "events").glob("social_*.json"))
-STAT_KEYS = {"silver", "good", "evil", "fame", "str", "agi", "con", "wis", "xinde"}
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +66,7 @@ def test_storytellers_retell_every_location_trace(content):
 
 @pytest.mark.parametrize("path", SOCIAL_FILES, ids=[p.stem for p in SOCIAL_FILES])
 def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content, path):
+    """每個選項結果（含隨口應對）的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（social-<檔名>）。"""
     events = json.loads(path.read_text(encoding="utf-8"))
     assert events
     for e in events:
@@ -79,12 +79,3 @@ def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content
             if "check" in c:
                 assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 7, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
                 assert "fail_effect" in c, e["id"]
-            for key in ("effect", "fail_effect"):
-                eff = c.get(key, {})
-                stats = eff.get("stats", {})
-                assert set(stats) <= STAT_KEYS, e["id"]
-                assert -40 <= stats.get("silver", 0) <= 40 and stats.get("xinde", 0) <= 12, e["id"]
-                assert all(-3 <= stats.get(k, 0) <= 3 for k in ("fame", "good", "evil")), e["id"]
-                assert all(stats.get(k, 0) <= 1 for k in ("str", "agi", "con", "wis")), e["id"]
-                for banned in ("flags_add", "world_flags_add", "next_event", "recruit", "join_sect", "learn_skills", "marks"):
-                    assert not eff.get(banned), (e["id"], banned)

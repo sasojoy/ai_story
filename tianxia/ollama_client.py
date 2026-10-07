@@ -163,6 +163,18 @@ class InLockClient:
             raise
 
 
+def capped(client: Any, seconds: int | float, retry: bool | None = None) -> Any:
+    """client 的複本，HTTP 逾時最多 seconds 秒（client 自己的逾時比較短就用它的；沒有 timeout 欄位的假物件就是 seconds）；
+    retry 給了就一併設上。原本的 client 不動（同一個角色別的請求可能正在用它）。鎖內的 quick_client、鎖外照預算分的
+    naming.propose、fight_llm.judge、server.within_budget、悟意境取名的一趟都用它。"""
+    copied = copy.copy(client)
+    own = getattr(client, "timeout", None)
+    copied.timeout = min(float(own), seconds) if isinstance(own, (int, float)) else seconds
+    if retry is not None:
+        copied.retry = retry
+    return copied
+
+
 def quick_client(client: Any, seconds: int | float, budget: ModelBudget) -> Any:
     """行動鎖內叫模型用的 client（Game._quick_client）：client 的複本，HTTP 逾時最多 seconds 秒、不重問（retry=False：
     chat_structured 失敗直接丟出第一次的例外，不再多送一趟），外面包一層 InLockClient 看 budget。這樣鎖內任何一步模型呼叫
@@ -172,11 +184,7 @@ def quick_client(client: Any, seconds: int | float, budget: ModelBudget) -> Any:
     的測試與腳本也一樣給複本、設上上限。"""
     if client is None or budget.gave_up:
         return None
-    quick = copy.copy(client)
-    own = getattr(client, "timeout", None)
-    quick.timeout = min(own, seconds) if isinstance(own, (int, float)) else seconds
-    quick.retry = False
-    return InLockClient(quick, budget)
+    return InLockClient(capped(client, seconds, retry=False), budget)
 
 
 class OllamaClient:
@@ -207,14 +215,6 @@ class OllamaClient:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )
 
-    def check_health(self) -> bool:
-        try:
-            res = requests.get(f"{self.base_url}/api/tags", timeout=5)
-            return res.status_code == 200
-        except Exception as e:
-            logger.warning(f"Ollama 連線檢查失敗: {e}")
-            return False
-
     def warm(self, seconds: float = 2.0) -> bool:
         """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完：
         逾時（模型還在載）也算送到了。悟意境的畫布一出現就送（insight_llm.warm）。連不上回 False。"""
@@ -228,6 +228,10 @@ class OllamaClient:
             logger.warning(f"Ollama 暖機失敗: {e}")
             return False
         return True
+
+    def _model_missing(self) -> RuntimeError:
+        """Ollama 回 404（模型沒裝）時丟的錯：第一趟、HTTPError、重問那一趟都是這一句。"""
+        return RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
 
     def _build_payload(
         self, messages: list[dict[str, str]], temperature: float, num_predict: int = 1024,
@@ -278,7 +282,7 @@ class OllamaClient:
         try:
             res = requests.post(url, json=payload, timeout=self.timeout)
             if res.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             res.raise_for_status()
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
@@ -286,7 +290,7 @@ class OllamaClient:
             return response_model.model_validate(data)
         except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             if not self.retry:  # 行動鎖內的複本：不重問，鎖最多被這一趟佔住 timeout 秒；例外照原樣丟給呼叫端走退路
                 raise
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 re-prompt 重試...")
@@ -297,7 +301,7 @@ class OllamaClient:
             retry_payload = self._build_payload(retry_messages, temperature, num_predict=num_predict, json_schema=schema)
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
-                raise RuntimeError(f"Ollama 回傳 404：模型 '{self.model}' 未找到，請先 `ollama pull {self.model}`。")
+                raise self._model_missing()
             res.raise_for_status()
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)

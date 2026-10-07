@@ -3,26 +3,16 @@
 再檢查樣式。沒有 node 就略過（樣式的檢查照樣跑）。"""
 from __future__ import annotations
 
-import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
+import webharness
+
 ROOT = Path(__file__).parent.parent
-NODE = shutil.which("node")
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
-const fn = (name) => {
-  const a = src.indexOf(`\n  function ${name}(`);
-  if (a < 0) throw new Error(`app.js 裡找不到 function ${name}`);
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
 // 一行就是一個假的元素：classList 與屬性夠 decorateHearsay、hearToggle 用
 const line = () => {
   const classes = new Set(["tx-line", "tx-new", "tx-hearsay"]), attrs = {};
@@ -33,20 +23,14 @@ const lines = [line(), line()];
 globalThis.document = { querySelectorAll: (sel) => (sel === ".battle-card .tx-hearsay" ? lines : []) };
 const S = { hearOpen: null, main: { card_id: input.cardId } };
 const H = new Function("S", [fn("decorateHearsay"), fn("hearToggle"), "return { decorateHearsay, hearToggle };"].join("\n"))(S);
-const out = new Function("H", "S", "lines", input.script)(H, S, lines);
-process.stdout.write(JSON.stringify(out === undefined ? null : out));
+finish(new Function("H", "S", "lines", input.script)(H, S, lines));
 """
 
 
 def run(script, card_id=7):
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", DRIVER], input=json.dumps({"app": str(ROOT / "web" / "app.js"), "script": script, "cardId": card_id}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"script": script, "cardId": card_id})
 
 
 def test_the_hearsay_line_becomes_a_button_that_starts_folded():

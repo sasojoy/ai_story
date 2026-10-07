@@ -230,8 +230,13 @@ PICK_RULES = (
 )
 
 
+def _dash_note(thing: MartialArt | Insight) -> str:
+    """送給模型的提示裡，一門武學或一個意境名字後面的「——說明」；沒有說明就是空的。"""
+    return f"——{thing.note}" if thing.note else ""
+
+
 def _pick_messages(what: str, items: list[MartialArt] | list[Insight]) -> list[dict[str, str]]:
-    listing = "\n".join(f"- {i.name}（屬{i.attribute}）" + (f"——{i.note}" if i.note else "") for i in items)
+    listing = "\n".join(f"- {i.name}（屬{i.attribute}）" + _dash_note(i) for i in items)
     return [
         {"role": "system", "content": PICK_SYSTEM},
         {"role": "user", "content": f"{what}\n\n清單：\n{listing}\n\n{PICK_RULES}"},
@@ -327,8 +332,7 @@ def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art
 
 def _fuse_messages(base: MartialArt, insight: Insight, *, note: str = "") -> list[dict[str, str]]:
     """note 是 traits.naming_note 那一行（新武學的功效，取名要配得上它）；沒有功效的內容傳空的，提示跟以前一樣。"""
-    base_note = f"——{base.note}" if base.note else ""
-    insight_note = f"——{insight.note}" if insight.note else ""
+    base_note, insight_note = _dash_note(base), _dash_note(insight)
     return [
         {"role": "system", "content": naming.SYSTEM_PROMPT},
         {"role": "user", "content": (
@@ -567,8 +571,7 @@ def _own_merged(state: GameState, a: str, b: str) -> Insight | None:
 
 
 def _merge_messages(a: Insight, b: Insight) -> list[dict[str, str]]:
-    a_note = f"——{a.note}" if a.note else ""
-    b_note = f"——{b.note}" if b.note else ""
+    a_note, b_note = _dash_note(a), _dash_note(b)
     return [
         {"role": "system", "content": naming.SYSTEM_PROMPT},
         {"role": "user", "content": (
@@ -676,8 +679,7 @@ def blend_problem(state: GameState, content: Content, world: WorldStateStore, a:
 
 def _blend_messages(a: MartialArt, b: MartialArt, kind: str, *, note: str = "") -> list[dict[str, str]]:
     """note 同 _fuse_messages：新武學的功效那一行。"""
-    a_note = f"——{a.note}" if a.note else ""
-    b_note = f"——{b.note}" if b.note else ""
+    a_note, b_note = _dash_note(a), _dash_note(b)
     return [
         {"role": "system", "content": naming.SYSTEM_PROMPT},
         {"role": "user", "content": (

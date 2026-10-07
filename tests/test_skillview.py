@@ -1,5 +1,3 @@
-import pytest
-
 from tianxia import fusion, insights, library, rules, skillview, team, traits
 from tianxia.martial_arts import MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import new_game_state
@@ -68,16 +66,6 @@ def test_member_card_for_a_companion_reads_the_shared_world_state(state, content
     world.update_companion("mate", lambda p: setattr(p, "level", 3))
     card = skillview.member_card(state, content, world, "mate")
     assert card.startswith("### 韓鐵\n第 3 級")
-
-
-def test_library_is_empty_until_something_is_learned(state, content, world):
-    assert skillview.library(state, content, world) == []
-    rules.learn_skill(state, content, "fist")
-    assert skillview.library(state, content, world) == [
-        ("武學　長拳（絕學・屬剛）第1成 ●○○○○○○○○○", "武學"),  # 熟練度十格條，見 skillview.level_bar
-    ]
-    rules.learn_skill(state, content, "breath")
-    assert ("內功　吐納法（絕學・屬陰）第1成 ●○○○○○○○○○", "內功") in skillview.library(state, content, world)
 
 
 def test_detail_before_learning_says_so(state, content, world):
@@ -482,13 +470,12 @@ def _whirlwind(world) -> MartialArt:
     return art
 
 
-def test_the_players_card_library_and_detail_show_the_players_own_quality(state, content, world):
+def test_the_players_card_and_detail_show_the_players_own_quality(state, content, world):
     art = _whirlwind(world)
     state.player.member.wugong_id = "旋風腿"
     state.player.art_quality["旋風腿"] = "上品"
     label = f"旋風腿（上品・屬{art.attribute}）第1成"
     assert f"武學　{label}" in skillview.member_card(state, content, world, "player")
-    assert skillview.library(state, content, world)[0][0].startswith(f"武學　{label}")
     text = skillview.detail(state, content, world, "武學")
     assert text.startswith(f"【旋風腿】上品・屬{art.attribute}")
     assert f"第1成 ●○○○○○○○○○，威力 {28 * art.base_power / 8:.1f}（" in text  # 威力也照自己的品質（上品區間，保留這門的微調）

@@ -2,24 +2,16 @@
 （IntersectionObserver，至少一半進了可視範圍）停留約 1.5 秒，才送 /api/do/view_orders；卡片離開畫面就重新計時。
 
 把 web/app.js 裡那一段（從 ORDERS_SEEN_MS 到 watchOrders 結束）切出來在 node 裡跑，餵假的 document、IntersectionObserver、計時器與 api；
-沒有 node 就略過。"""
+node 由 tests/webharness.py 跑；沒有 node 就略過。"""
 from __future__ import annotations
-
-import json
-import shutil
-import subprocess
-from pathlib import Path
 
 import pytest
 
-from tests.test_orders import on, real  # noqa: F401（fixture：真內容、第一季開著）
+import webharness
 
-NODE = shutil.which("node")
-APP = Path(__file__).parent.parent / "web" / "app.js"
+# fixture on（真實內容、第一季開著）在 tests/conftest.py，跟 test_orders、test_enlist 同一份
+
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
 const a = src.indexOf("\n  const ORDERS_SEEN_MS");
 const b = src.indexOf("\n  }\n", src.indexOf("\n  function watchOrders(")) + 4;
 if (a < 0 || b < 4) throw new Error("app.js 裡找不到入伍段的那一段（ORDERS_SEEN_MS … watchOrders）");
@@ -65,16 +57,11 @@ const H = new Function(
   src.slice(a, b) + "\nreturn { watchOrders, resetOrdersWatch, ORDERS_SEEN_MS, ORDERS_RETRY_MS };",
 )(S, documentFake, useObserver, fakeSetTimeout, fakeClearTimeout, api, applyMain);
 const tick = async (ms) => { env.tick(ms); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
-Promise.resolve(new Function("H", "S", "env", "tick", "return (async () => {" + input.script + "})()")(H, S, env, tick)).then((out) => {
-  process.stdout.write(JSON.stringify(out === undefined ? null : out));
-});
+finish(new Function("H", "S", "env", "tick", "return (async () => {" + input.script + "})()")(H, S, env, tick));
 """
 
 
 GUIDE_DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n");
 const a = src.indexOf("\n  const GUIDE_KEY");
 const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
 if (a < 0 || b < 4) throw new Error("app.js 裡找不到說書人的那一段");
@@ -84,19 +71,14 @@ const S = { guideRoad: null, guideFull: null, guidePage: null };
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const pro = () => null; // 序章之外
 const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, nextGuidePage, openGuide };")(S, esc, pro);
-process.stdout.write(JSON.stringify(new Function("H", "S", "boxes", input.script)(H, S, input.boxes)));
+finish(new Function("H", "S", "boxes", input.script)(H, S, input.boxes));
 """
 
 
 def run_guide_js(script, boxes):
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", GUIDE_DRIVER], input=json.dumps({"app": str(APP), "script": script, "boxes": boxes}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(GUIDE_DRIVER, {"script": script, "boxes": boxes})
 
 
 def _real_boxes(on):
@@ -160,14 +142,9 @@ def test_the_ending_box_is_one_unpaged_card_with_its_acknowledge_button_in_the_h
 
 
 def run_js(script, no_observer=False):
-    if NODE is None:
+    if webharness.NODE is None:
         pytest.skip("沒有 node")
-    done = subprocess.run(
-        [NODE, "-e", DRIVER], input=json.dumps({"app": str(APP), "script": script, "noObserver": no_observer}),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"script": script, "noObserver": no_observer})
 
 
 def test_the_card_counts_as_seen_after_a_second_and_a_half_on_screen():
@@ -224,13 +201,16 @@ def test_a_redraw_keeps_the_running_timer_and_follows_the_new_card():
     assert got == {"live": 1, "target": "new card", "early": 0, "calls": 1}
 
 
-def test_a_redraw_where_the_card_is_off_screen_cancels_the_timer():
-    got = run_js("""
+@pytest.mark.parametrize("redraw", [
+    pytest.param("H.watchOrders(); env.live()[0].show(0);", id="the-new-card-is-off-screen"),  # 重畫之後新的卡片不在畫面上
+    pytest.param("S.sheet = true; H.watchOrders();", id="the-settings-sheet-opens"),  # 抽屜一開整頁重畫
+])
+def test_a_redraw_where_the_card_is_off_screen_cancels_the_timer(redraw):
+    got = run_js(f"""
       H.watchOrders();
       env.live()[0].show(1);
       await tick(1000);
-      H.watchOrders();
-      env.live()[0].show(0);                 // 重畫之後新的卡片不在畫面上
+      {redraw}
       await tick(5000);
       return env.calls.length;
     """)
@@ -306,19 +286,6 @@ def test_the_fixed_bars_do_not_count_as_screen():
       return { margin, sheet, bare: env.live()[0].opts.rootMargin };
     """)
     assert got == {"margin": "-110px 0px -56px 0px", "sheet": 0, "bare": "0px 0px 0px 0px"}
-
-
-def test_opening_the_settings_sheet_mid_countdown_cancels_the_wait():
-    got = run_js("""
-      H.watchOrders();
-      env.live()[0].show(1);
-      await tick(1000);
-      S.sheet = true;
-      H.watchOrders();                                    // 抽屜一開整頁重畫
-      await tick(5000);
-      return env.calls.length;
-    """)
-    assert got == 0
 
 
 def test_a_late_callback_from_a_replaced_observer_is_ignored():
@@ -412,7 +379,7 @@ def test_the_timer_does_not_send_if_the_observer_last_said_the_card_is_off_scree
 def test_the_next_page_button_leaves_no_gap_above_it():
     """375×812 量過（長社投靠官軍、剛剛卡片是「投靠官軍」）：入伍段第一步第一頁，「下一段 ▸」上面留 4px 的話行動列下緣是 757，碰到
     分頁列（756）；不留是 753。這是量出來的數字，改樣式表時要重量。"""
-    css = (APP.parent / "style.css").read_text(encoding="utf-8")
+    css = (webharness.APP.parent / "style.css").read_text(encoding="utf-8")
     rule = next(line for line in css.splitlines() if line.startswith(".guide-next {"))
     assert "margin: 0 0 0 auto" in rule
 
@@ -461,7 +428,7 @@ def test_a_browser_without_intersection_observer_still_counts_the_card_once_it_i
 
 
 def test_the_page_calls_it_after_every_draw_and_resets_it_on_login_and_logout():
-    js = APP.read_text(encoding="utf-8").replace("\r\n", "\n")
+    js = webharness.APP.read_text(encoding="utf-8").replace("\r\n", "\n")
     after_page = js[js.index("\n  function afterPage() {"):js.index("\n  // ── 登入與取名號 ──")]
     assert "watchOrders();" in after_page
     enter = js[js.index("\n  function enter(data) {"):js.index("\n  function setMain(main) {")]

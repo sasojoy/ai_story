@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from . import atlas, cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
-# 不 import 整個 library 模組：這個檔案自己有一個叫 library() 的函式
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -439,19 +438,6 @@ def boost_line(state: GameState, content: Content, world: WorldStateStore) -> st
         if echo != 1:
             parts.append(f"【{art.name}】共鳴 {_pct(echo - 1)}")
     return "威力加成：" + "・".join(parts) if parts else ""
-
-
-def library(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str]]:
-    """武學庫：（顯示文字, kind），kind 是「內功」或「武學」（練功時鍛鍊哪一欄）。"""
-    member = state.player.member
-    items = []
-    for kind, slot_id, level in (
-        ("內功", member.neigong_id, member.neigong_level),
-        ("武學", member.wugong_id, member.wugong_level),
-    ):
-        if slot_id:
-            items.append((f"{kind}　{_art_label(content, world, slot_id, level, state)}", kind))
-    return items
 
 
 def detail(state: GameState, content: Content, world: WorldStateStore, kind: str) -> str:

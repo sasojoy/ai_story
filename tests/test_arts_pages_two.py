@@ -1,17 +1,16 @@
 """修練頁與煉製頁的第二批修整（arts-polish-2：QA 實機走一遍的 FB-081～085）。
 一節一個 FB：引擎與伺服器的部分直接跑；web/app.js 沒有建置步驟、也沒有前端測試框架，網頁的部分把函式從原始碼切出來
-交給 node 跑（不相干的畫法換成一行的假貨），沒有 node 就略過那幾個。"""
+交給 node 跑（不相干的畫法換成一行的假貨；node 由 tests/webharness.py 跑），沒有 node 就略過那幾個。"""
 from __future__ import annotations
 
 import json
 import random
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
+import webharness
 from tianxia import fusion, journal, library, skillview
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -19,25 +18,9 @@ from tianxia.martial_arts import generate_from_name
 
 ROOT = Path(__file__).parent.parent
 CONTENT_DIR = ROOT / "content"
-NODE = shutil.which("node")
-needs_node = pytest.mark.skipif(NODE is None, reason="沒有 node，前端畫面測試略過")
+needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 的 checkout 是 CRLF
-// IIFE 裡兩格縮排的函式：從標頭到下一個兩格縮排的收尾（含 async）；一行寫完的 const 照名字抓
-const fn = (name) => {
-  let a = src.indexOf(`\n  function ${name}(`);
-  if (a < 0) a = src.indexOf(`\n  async function ${name}(`);
-  if (a < 0) throw new Error(`app.js 裡找不到 function ${name}`);
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
-const konst = (name) => {
-  const m = src.match(new RegExp(`^  const ${name} = .*;$`, "m"));
-  if (!m) throw new Error(`app.js 裡找不到 const ${name}`);
-  return m[0];
-};
 const calls = [];
 const store = {};
 globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
@@ -56,24 +39,12 @@ const parts = [
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.store = store;
-(async () => {
-  const out = await new Function("H", "S", `return (async () => { ${input.script} })();`)(H, S);
-  process.stdout.write(JSON.stringify(out === undefined ? null : out));
-})().catch((e) => { process.stderr.write(String(e.stack || e)); process.exit(1); });
+finish(new Function("H", "S", `return (async () => { ${input.script} })();`)(H, S));
 """
 
 
 def run(script: str, *, S=None, consts=(), fns=(), stubs=""):
-    done = subprocess.run(
-        [NODE, "-e", DRIVER],
-        input=json.dumps({
-            "app": str(ROOT / "web" / "app.js"), "script": script, "S": S or {}, "consts": list(consts), "fns": list(fns),
-            "stubs": stubs,
-        }),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"script": script, "S": S or {}, "consts": list(consts), "fns": list(fns), "stubs": stubs})
 
 
 @pytest.fixture(scope="module")
