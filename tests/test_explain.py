@@ -575,6 +575,29 @@ def test_the_howto_page_only_says_what_is_true_here(content, game, on, tmp_path)
     assert "風聲" in text and f"打贏大勢人物本人，他對你的情誼會掉 {on.config.figure_defeat_affinity}" in text
 
 
+def test_the_howto_feeling_sentence_covers_letting_go(game):
+    """審查 M2：選對做法之後也可以不畫、順其自然（sensing.LET_GO，落回這一處的基本意境），選對了也還要擲一次（sensing.rate，
+    沒抓住給一點心得）：玩法說明不能說「再畫一筆才悟得到」。說的兩條路是卡上那兩顆鈕的名字。"""
+    text = game.howto_text()
+    assert "再畫一筆才悟得到" not in text
+    _feeling(game)
+    game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"
+    labels = dict(sensing.menu(game.state, game.content))
+    assert "畫" in labels[sensing.DRAW] and "順其自然" in labels[sensing.LET_GO]  # 卡上真的有這兩條路
+    assert "選對了還要看機緣（沒抓住也有一點心得）" in text
+    assert "抓住了可以畫一筆，也可以順其自然" in text and "選錯了，今天在那裡就悟不出了" in text
+
+
+def test_the_howto_drill_sentence_follows_the_squad_not_the_place(game):
+    """審查 M2：操練是遇上自己陣營的**隊伍**（Game._drills_with 看隊伍的陣營），不是「在自己陣營的地方」——有自己人也有對手的地方，
+    遊歷挑到誰看運氣（_train 用 rng 挑），挑到對手照打、照樣會輸。遊歷也不是「一定開打」：只有自己人的地方是操練。"""
+    text = game.howto_text()
+    assert "在自己陣營的地方是操練" not in text and "只在有對手的地方出現，一定開打" not in text
+    assert "遇上對手一定開打" in text and "遇上自己陣營的隊伍是操練：不打、不會輸" in text
+    assert "兩種都有的地方，遇上誰看運氣" in text
+    assert "（行動列底下那一行寫著這裡、今天還推不推得動）" in text  # 審查 M1：那一行看今天的上限
+
+
 def test_the_full_stamina_note_shows_when_nearly_full(game):
     from tianxia import guide
 
