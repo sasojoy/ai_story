@@ -935,6 +935,8 @@ def admin_choices(game: Game) -> dict:
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
         **timetable_choices(game),
+        # 這一季照第一季的規則（開關開著、開季時蓋了章）：管理者區多「每週的事」（立刻發本週軍令、立刻輪替第 4 階席次）
+        "season_one": rules.season_one(CONTENT, world),
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
@@ -1261,6 +1263,9 @@ ADMIN_ACTIONS = {
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
+    # 管理者觸發鈕（企劃者 2026-10-07）：每週的事照週一的做法立刻再做一次
+    "issue_orders": lambda g, b: g.admin_issue_orders(),
+    "rotate_seats": lambda g, b: g.admin_rotate_seats(),
 }
 
 

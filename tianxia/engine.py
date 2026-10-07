@@ -4836,6 +4836,57 @@ class Game:
         self._write("取消決戰", [line], tag="管理者")
         return self._log([line])
 
+    # ── 管理者：每週的事（管理者觸發鈕第 1 組，企劃者 2026-10-07）────────────
+    # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
+
+    def admin_issue_orders(self) -> list[str]:
+        """立刻發本週軍令：這一週的軍令整批換成照週一的做法（orders.issue，週一掛鉤用的同一個函式）此刻重新挑的一批，
+        各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；達成過的效果已經套在戰況上，留著（控制者裁決）。
+        不動 hooked_week：下週一照常發令。"""
+        refusal = self._admin_refusal("發本週軍令")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        if not orders.active(s, c):
+            return self._log(["（這一季沒有軍令。）"])
+        week = orders.week_of(s, c)
+        replaced = sum(1 for o in s.world.orders if o.week == week)
+        s.world.orders = [o for o in s.world.orders if o.week != week]  # orders.issue 看到這一週已經有令就不發
+        orders.issue(s, c, week, self.rng)
+        self._save_season()
+        issued = [o for o in s.world.orders if o.week == week]
+        listing = "；".join(
+            f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
+            for f in c.scenario.factions if any(o.faction == f.id for o in issued)
+        ) or "這一週挑不出軍令"
+        msg = f"已照週一的做法重發第 {week} 週的軍令，換掉原本的 {replaced} 道（進度不算了，已經達成的效果留著）——{listing}。"
+        self._write("重發軍令", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_rotate_seats(self) -> list[str]:
+        """立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情（seats.rotate，週一掛鉤用的同一個函式）。
+        不動 hooked_week：下週一照常再排。賽季時鐘暫停中不排（_admin_refusal；自然的路暫停時也不補缺、不輪替）；
+        第 1 週沒有上一週可排（seats.rotate 自己也什麼都不做），說一聲。"""
+        refusal = self._admin_refusal("輪替第 4 階席次")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        if not season_one(c, s.world):
+            return self._log(["（這一季沒有第 4 階席次。）"])
+        week = calendar.point(s.world.time, c, s.world).week
+        if week < 2:
+            return self._log(["（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"])
+        seats.rotate(s, c, week)
+        self._save_season()
+        held = s.world.seats
+        listing = "；".join(
+            f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
+            for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
+        ) or "帳上還沒有人有第 4 階的資格"
+        msg = f"已照第 {week - 1} 週的貢獻輪替第 4 階席次（下週一照常再排）——{listing}。"
+        self._write("輪替席次", [msg], tag="管理者")
+        return self._log([msg])
+
     # ── 畫面文字 ──────────────────────────────────────────
 
     def location_text(self) -> str:
