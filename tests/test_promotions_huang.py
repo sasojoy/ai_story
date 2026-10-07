@@ -759,3 +759,67 @@ def test_the_real_events_that_donate_or_give_runic_pieces_are_huang_promotions(o
     reached = {effect.next_event for event in on.events.values() for choice in event.choices
                for effect in (choice.effect, choice.fail_effect) if effect.next_event}
     assert not reached & promo_ids
+
+
+def test_the_real_timetable_moves_the_presenters_where_the_leg_casts_expect_them(on):
+    """丙二最終審查 m2：上面換人的測試都用 _retire 手設人物的狀態，沒有一個把 legs 的版本跟真的時刻表結果接起來。這裡照真的時刻表結算
+    （timetable.resolve，跟管理者定結果走的是同一條）：第 7 週秦頡斬張曼成 → 宛城之戰官軍大勝 → 張角病逝，每一步之後看召見的
+    出面的人是誰、他此刻在哪裡。時刻表若把趙弘、張梁、張寶挪到別處（或改了誰在哪一件事退場），這一條就會斷。
+    （人物表裡趙弘的起始地點改了不會斷：第 7 週張曼成退場，趙弘照接位的規則到任、站在張曼成的營裡。）"""
+    from tianxia import timetable
+
+    game = _game(on, at="xiaquyang")
+    state, p, rng = game.state, game.state.player, random.Random(0)
+    events = {e.id: e for e in on.timetable}
+
+    def settle(event_id, key=None):
+        timetable.resolve(state, on, events[event_id], rng, key=key)
+        assert event_id in state.world.timeline
+
+    def standing(fid):
+        now = figures.state_of(state, on, fid)
+        return now.status, now.location
+
+    # 開頭：張寶在下曲陽給符，下一段是南陽黃巾營的張曼成
+    _ready(game, 2)
+    assert ranks.check_summons(state, on) == ["張寶召你到下曲陽。"]
+    assert standing("zhangbao") == ("active", "xiaquyang")
+    game.choose("act:summons")
+    game.choose("choice:0")
+    assert (p.summons.event, p.summons.figure, p.summons.location) == (
+        "promo_huang_3_zmc", "zhangmancheng", "nanyang_huangjin_camp")
+    assert standing("zhangmancheng") == ("active", "nanyang_huangjin_camp")
+
+    # 第 3 週張曼成攻殺太守（成）、第 7 週秦頡斬張曼成：他退場，趙弘還在營裡——召見那一句沒變、悄悄換成趙弘
+    settle("zhangmancheng_wan", "成")
+    settle("qinjie_slays_zhangmancheng")
+    assert standing("zhangmancheng")[0] == "retired"
+    assert standing("zhaohong") == ("active", "nanyang_huangjin_camp")
+    assert ranks.check_summons(state, on) == []
+    assert (p.summons.event, p.summons.figure, p.summons.location) == (
+        "promo_huang_3_zh", "zhaohong", "nanyang_huangjin_camp")
+
+    # 第 9 週宛城之戰官軍大勝：趙弘戰死，南陽沒有人接符，改去廣宗的張梁
+    settle("wancheng", "guan:大勝")
+    assert standing("zhaohong")[0] == "retired"
+    assert standing("zhangliang") == ("active", "guangzong")
+    assert ranks.check_summons(state, on) == ["南陽那邊沒有人接應了，改去廣宗支援張梁。"]
+    assert (p.summons.event, p.summons.figure, p.summons.location) == ("promo_huang_3_zl", "zhangliang", "guangzong")
+    p.location = "guangzong"
+    game.choose("act:summons")
+    assert "你升為小方渠帥。" in game.choose("choice:2")
+
+    # 張角還在：他親自交密令；第 10 週張角病逝：由張寶在下曲陽交令
+    _ready(game, 3)
+    assert ranks.check_summons(state, on) == ["張角召你到廣宗。"]
+    assert (p.summons.event, p.summons.figure) == ("promo_huang_4", "zhangjiao")
+    assert standing("zhangjiao") == ("active", "guangzong")
+    settle("zhangjiao_dies", "成")
+    assert standing("zhangjiao")[0] == "retired"
+    assert standing("zhangbao") == ("active", "xiaquyang")
+    assert ranks.check_summons(state, on) == ["張寶召你到下曲陽。"]
+    assert (p.summons.event, p.summons.figure, p.summons.location) == ("promo_huang_4_heir", "zhangbao", "xiaquyang")
+    p.location = "xiaquyang"
+    game.choose("act:summons")
+    game.choose("choice:0")
+    assert p.qualified and p.runic_pieces == 0
