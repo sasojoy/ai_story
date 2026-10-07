@@ -46,7 +46,7 @@ def summons_place(state: GameState, content: Content, promo: PromotionDef) -> st
         return promo.location
     from . import atlas  # noqa: PLC0415  atlas → world → ranks：在函式裡 import，避免循環
 
-    bases = next(f.join_at for f in content.scenario.factions if f.id == promo.faction)
+    bases = content.scenario.faction(promo.faction).join_at
     routes = atlas.shortest_routes(state, content)
     here = state.player.location
     reachable = [loc for loc in bases if loc == here or loc in routes]

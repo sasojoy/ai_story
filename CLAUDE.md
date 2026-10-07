@@ -110,12 +110,11 @@
 
 - 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：加 `--share`（cloudflared 開 trycloudflare 臨時公開網址，每次重開都換）；要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
 - 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
-- 測試分三種跑法（2026-10-06；整套約 7 分鐘，單核）：
-  - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`）。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
-  - **平常的整套**：`.venv/Scripts/python.exe -m pytest -q`，不跑標了 `@pytest.mark.slow` 的（整季模擬、真實內容跑整季、量表與模擬腳本，約一分鐘）。
-  - **合併前**：`.venv/Scripts/python.exe -m pytest -q -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。
+- 測試（2026-10-07）：開發用的依賴在 `requirements-dev.txt`（`-r requirements.txt` 加 `pytest-xdist`；伺服器不用裝），裝好之後加 `-n auto`（或 `-n 8`）平行跑；這台 16 核整套約 1 分鐘，單一行程約 3 分 40 秒。venv 路徑有中文時 worker 要 `PYTHONIOENCODING=utf-8`，`tests/conftest.py` 在開 worker 前已經補上。網頁測試預設每個行程一個常駐 node，`TIANXIA_WEB_HARNESS=process` 改回每次各開一個。三種跑法：
+  - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
+  - **平常的整套**：`.venv/Scripts/python.exe -m pytest -q -n auto`，不跑標了 `@pytest.mark.slow` 的（整季模擬、真實內容跑整季、量表與模擬腳本）。
+  - **合併前**：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。不寫 `-m ""`：PowerShell 5.1 會把空字串參數吞掉。
   - 新寫的測試要跑整季、整個腳本、或單一個超過一秒的，標 `@pytest.mark.slow`（整個檔都是就寫 `pytestmark = pytest.mark.slow`）。
-  - 裝了 `pytest-xdist` 的話加 `-n auto` 平行跑（`test_for.py` 挑到三個檔以上自動加）：雲端 4 核心整套 6 分 54 秒 → 1 分 56 秒、全過。它還不在 `requirements.txt` 裡。
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 [--profile weekend]`
 - 第一季整季模擬與驗收：`.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60`（預設 `--profile weekend`；數字照實報，不為了驗收調參數）

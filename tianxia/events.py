@@ -111,11 +111,6 @@ def note_round(state: GameState, content: Content, event: Event, action: str) ->
     rounds.setdefault(key, []).append(event.id)
 
 
-def fortune_events(state: GameState, content: Content) -> list[Event]:
-    """還能觸發的新立門戶福緣事件（條件成立，也就是那位地品還沒入門），依內容順序。"""
-    return [e for e in content.events.values() if e.fortune and check_condition(e.condition, state, content)]
-
-
 def visible_choices(event: Event, state: GameState, content: Content | None = None) -> list[tuple[int, Choice]]:
     """content 給了才判得了季曆的條件（night、week_*，見 rules.check_condition）。"""
     return [(i, c) for i, c in enumerate(event.choices) if check_condition(c.condition, state, content)]

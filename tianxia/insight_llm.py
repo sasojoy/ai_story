@@ -6,11 +6,9 @@
 這個模組不讀時鐘：總時間用 budget（秒）扣，照給出去的 timeout 算（同 naming.propose）。"""
 from __future__ import annotations
 
-import copy
-
 from . import naming, zh
 from .models import Content
-from .ollama_client import OllamaClient
+from .ollama_client import OllamaClient, capped
 
 SYSTEM_PROMPT = (
     "你是武俠小說裡替意境取名的人。有人在某個地方心有所感，用手指一筆畫下了心中的形。"
@@ -49,10 +47,7 @@ def _once(
     client: OllamaClient, content: Content, msgs: list[dict], seconds: float, person: naming.PersonCheck | None,
 ) -> tuple[str | None, str]:
     """送一趟（不重問）：名字過得了 naming.name_problem 才收。"""
-    caller = copy.copy(client)
-    own = getattr(client, "timeout", None)
-    caller.timeout = min(float(own), seconds) if isinstance(own, (int, float)) else seconds
-    caller.retry = False
+    caller = capped(client, seconds, retry=False)
     try:
         reply = caller.chat_structured(msgs, naming.NameReply, required_fields=["name"])
     except Exception:  # noqa: BLE001  連不上、逾時、格式不對——一律當這次沒拿到

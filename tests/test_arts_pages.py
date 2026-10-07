@@ -1,38 +1,18 @@
 """修練頁與煉製頁的畫面（arts-polish-1：W2、W5、W7、W9）。
 web/app.js 沒有建置步驟、也沒有前端測試框架：這裡把兩頁的函式從原始碼切出來交給 node 跑（不相干的畫法換成一行的假貨），
-檢查出來的 HTML 與按鈕按下去之後的動作。沒有 node 就略過。"""
+檢查出來的 HTML 與按鈕按下去之後的動作。node 由 tests/webharness.py 跑（切函式的 fn、konst 也在那裡）；沒有 node 就略過。"""
 from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).parent.parent
-NODE = shutil.which("node")
-pytestmark = pytest.mark.skipif(NODE is None, reason="沒有 node，前端畫面測試略過")
+import webharness
+
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const fs = require("fs");
-const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const src = fs.readFileSync(input.app, "utf8").replace(/\r\n/g, "\n"); // Windows 的 checkout 是 CRLF
-// IIFE 裡兩格縮排的函式：從標頭到下一個兩格縮排的收尾（含 async）；一行寫完的 const 照名字抓
-const fn = (name) => {
-  let a = src.indexOf(`\n  function ${name}(`);
-  if (a < 0) a = src.indexOf(`\n  async function ${name}(`);
-  if (a < 0) throw new Error(`app.js 裡找不到 function ${name}`);
-  const header = src.slice(a + 1, src.indexOf("\n", a + 1));
-  if (/\{.*\}\s*$/.test(header)) return "\n" + header; // 一行寫完的函式（例：guideKey）
-  return src.slice(a, src.indexOf("\n  }\n", a) + 4);
-};
-const konst = (name) => {
-  const m = src.match(new RegExp(`^  const ${name} = .*;$`, "m"));
-  if (!m) throw new Error(`app.js 裡找不到 const ${name}`);
-  return m[0];
-};
 const calls = [];
 const scrolls = [];
 globalThis.window = { scrollTo: (...a) => scrolls.push(["to", ...a]), scrollBy: (...a) => scrolls.push(["by", ...a]), scrollY: input.scrollY || 0 };
@@ -53,24 +33,12 @@ const parts = [
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.scrolls = scrolls; H.dom = dom;
-(async () => {
-  const out = await new Function("H", "S", `return (async () => { ${input.script} })();`)(H, S);
-  process.stdout.write(JSON.stringify(out === undefined ? null : out));
-})().catch((e) => { process.stderr.write(String(e.stack || e)); process.exit(1); });
+finish(new Function("H", "S", `return (async () => { ${input.script} })();`)(H, S));
 """
 
 
 def run(script: str, *, S=None, consts=(), fns=(), stubs=""):
-    done = subprocess.run(
-        [NODE, "-e", DRIVER],
-        input=json.dumps({
-            "app": str(ROOT / "web" / "app.js"), "script": script, "S": S or {}, "consts": list(consts), "fns": list(fns),
-            "stubs": stubs,
-        }),
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
-    )
-    assert done.returncode == 0, done.stderr
-    return json.loads(done.stdout)
+    return webharness.run(DRIVER, {"script": script, "S": S or {}, "consts": list(consts), "fns": list(fns), "stubs": stubs})
 
 
 def art(id="basic_fist", name="基礎拳腳", kind="武學", worn=True, **over):
@@ -210,7 +178,7 @@ def test_the_forge_wait_text_does_not_promise_a_minute():
     """取名實際約 3～5 秒（模型關著走字表更快），「要花上一分鐘」會讓人以為壞了。句子待 joy 潤。"""
     wait = run("return H.FORGE_WAIT;", consts=["FORGE_WAIT"], stubs="")
     assert wait == "爐火正旺。若這是江湖上第一次合出來，要等它取名，請稍候。"
-    assert "一分鐘" not in (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "一分鐘" not in webharness.APP.read_text(encoding="utf-8")
 
 
 # ── W9：熔煉的確認框問什麼，由伺服器寫好、放在按鈕上 ─────────────────────────

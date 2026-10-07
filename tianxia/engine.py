@@ -7,6 +7,7 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import math
 import random
@@ -52,7 +53,7 @@ from .state import (
 )
 from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
-    resume_season_clock, settle_season_start, showdown_battle, showdown_key, sim_tick, start_pending_battle,
+    resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
 from .world_state import WorldStateStore, season_length_days
 
@@ -116,6 +117,20 @@ PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
 FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
+# 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
+PREPARING_TEXT = "賽季籌備中，等待管理者開季"
+PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+
+
+def _not_while_preparing(action: Callable) -> Callable:
+    """Game 的動作：籌備中什麼都不能做，只回一句 PREPARING_REFUSAL（照一般的拒絕寫進紀錄，_log）；不然照常做。"""
+    @functools.wraps(action)
+    def guarded(self: Game, *args, **kwargs):
+        if self._preparing():
+            return self._log([PREPARING_REFUSAL])
+        return action(self, *args, **kwargs)
+
+    return guarded
 
 
 class FreeTextRequest(BaseModel):
@@ -628,7 +643,7 @@ class Game:
         投靠確認、求見名單、閉關、在路上、打坐，都不是就是在地點上能做的事。"""
         s, c = self.state, self.content
         if self._preparing():
-            return [Option(id="season:preparing", label="賽季籌備中，等待管理者開季", enabled=False)]
+            return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
         if s.world.ended:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
@@ -656,13 +671,13 @@ class Game:
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if s.player.pending_faction:
-            faction = self._faction(s.player.pending_faction)
+            faction = self.content.scenario.faction(s.player.pending_faction)
             return [
                 Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
                 Option(id="faction:cancel", label="再想想"),
             ]
         if s.player.pending_defect:
-            target = self._faction(s.player.pending_defect)
+            target = self.content.scenario.faction(s.player.pending_defect)
             return [
                 Option(id="defect:confirm", label=f"確定叛投{target.name}"),
                 Option(id="defect:cancel", label="再想想"),
@@ -1207,7 +1222,7 @@ class Game:
         """畫完那一筆的 A 段（server.py 在行動鎖內、很快地呼叫）：還在感悟狀態才開單；讀不出那一筆回一句話（字串）。
         只讀、不改狀態。單子的 needs_name 是 True 才要在鎖外叫模型看圖取名（insight_llm.name）。"""
         if self._preparing():
-            return "（賽季籌備中，等待管理者開季。）"
+            return PREPARING_REFUSAL
         return sensing.request(self.state, self.content, self.world, points, png)
 
     def sense_draw(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None = None) -> list[str]:
@@ -1255,16 +1270,16 @@ class Game:
         s, c = self.state, self.content
         if kind == "faction":
             if arg == "confirm":
-                return f"投靠{self._faction(s.player.pending_faction).name}"
+                return f"投靠{self.content.scenario.faction(s.player.pending_faction).name}"
             if arg == "cancel":
                 return "再想想"
-            return f"考慮投靠{self._faction(arg).name}"
+            return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
-                return f"叛投{self._faction(s.player.pending_defect).name}"
+                return f"叛投{self.content.scenario.faction(s.player.pending_defect).name}"
             if arg == "cancel":
                 return "再想想"
-            return f"考慮叛投{self._faction(arg).name}"
+            return f"考慮叛投{self.content.scenario.faction(arg).name}"
         if kind == "move":
             return f"前往 {c.locations[arg.partition(':')[0]].name}"
         if kind == "choice":
@@ -1820,7 +1835,7 @@ class Game:
             and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
             and ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1) is not None  # 而且真的有下一階可升
         ):
-            faction = next((f.name for f in c.scenario.factions if f.id == figure.faction), figure.faction)
+            faction = c.scenario.faction_name(figure.faction, figure.faction)
             hint += f"，或在{faction}再升一階"
         return [f"{line}（{hint}）"]
 
@@ -1947,9 +1962,6 @@ class Game:
         msgs += self._count_talk(companion_id)
         return msgs
 
-    def _faction(self, faction_id: str):
-        return next(f for f in self.content.scenario.factions if f.id == faction_id)
-
     def _faction_step(self, arg: str) -> list[str]:
         """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
         不能改投、三方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。"""
@@ -1958,7 +1970,7 @@ class Game:
             p.pending_faction = None
             return ["你決定再想想。"]
         if arg == "confirm":
-            faction = self._faction(p.pending_faction)
+            faction = self.content.scenario.faction(p.pending_faction)
             p.pending_faction = None
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
@@ -1968,7 +1980,7 @@ class Game:
             if season_one(self.content, self.state.world):
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
-        faction = self._faction(arg)
+        faction = self.content.scenario.faction(arg)
         p.pending_faction = faction.id
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
@@ -1985,7 +1997,7 @@ class Game:
             p.pending_defect = None
             return ["你決定再想想。"]
         if arg == "confirm":
-            target = self._faction(p.pending_defect)
+            target = self.content.scenario.faction(p.pending_defect)
             p.pending_defect = None
             reason = defection.refusal(self.state, self.content, target, self.world.get_battle())
             if reason is not None:
@@ -1993,7 +2005,7 @@ class Game:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
             return defection.defect(self.state, self.content, target)
-        target = self._faction(arg)
+        target = self.content.scenario.faction(arg)
         p.pending_defect = target.id
         prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text())
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
@@ -2457,8 +2469,8 @@ class Game:
         """這場決戰能站的每一方（id → 名字）：交戰的兩軍，加上第三方（戰鬥系統第六節；名字照劇本的陣營）。"""
         names = {f.id: f.name for f in definition.factions}
         if definition.third is not None:
-            names[definition.third.faction] = next(
-                (f.name for f in self.content.scenario.factions if f.id == definition.third.faction), definition.third.faction,
+            names[definition.third.faction] = self.content.scenario.faction_name(
+                definition.third.faction, definition.third.faction,
             )
         return names
 
@@ -3103,7 +3115,7 @@ class Game:
 
     def _goals(self) -> dict[str, int]:
         """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
-        faction = next((f for f in self.content.scenario.factions if f.id == self.state.player.faction), None)
+        faction = self.content.scenario.find_faction(self.state.player.faction)
         return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
@@ -3169,7 +3181,7 @@ class Game:
                 msgs = change_trend(s, c, trend_id, whole)
 
         if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
-            faction = next((f for f in c.scenario.factions if f.id == p.faction), None)
+            faction = c.scenario.find_faction(p.faction)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
@@ -3490,7 +3502,7 @@ class Game:
     def travel_refusal(self, loc_id: str, mode: TravelMode = "walk") -> str | None:
         """用這種走法安排前往這裡，不行的原因；可以時為 None。server.py 拿它分辨「沒能出發」。"""
         if self._preparing():
-            return "賽季籌備中，等待管理者開季"
+            return PREPARING_TEXT
         if loc_id not in self.content.locations or mode not in atlas.MODES:
             return "無法安排前往這裡"
         return atlas.travel_refusal(self.state, self.content, loc_id, mode)
@@ -3636,6 +3648,7 @@ class Game:
             return None  # 序章裡會被擋下的一爐：不開取名的單子（forge 照常回那句話）
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
+    @_not_while_preparing
     def forge(
         self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
         other_art: str | None = None,
@@ -3647,8 +3660,6 @@ class Game:
         首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
         三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         refusal = prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
@@ -3688,12 +3699,11 @@ class Game:
     def forge_line(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> str:
         return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
+    @_not_while_preparing
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
         被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
         use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
             self.state, self.content, self.world, art_id,
         )
@@ -3724,11 +3734,10 @@ class Game:
             return None
         return cultivation.master_request(self.state, self.content, self.world)
 
+    @_not_while_preparing
     def name_mastered(self, name: str) -> list[str]:
         """替第一個練成絕學的武學取正式名字；定成了才寫江湖紀錄，江湖史寫進共用賽季所以要存回
         （名字不合格、被用掉、沒有等著取名的武學都只回一句話）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, pending = self._xinde(), self.state.player.naming
         msgs = self._log(cultivation.name_mastered(self.state, self.content, self.world, name))
         if pending is not None and self.state.player.naming is None:
@@ -3736,10 +3745,9 @@ class Game:
             self._save_season()
         return msgs
 
+    @_not_while_preparing
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
         # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
@@ -3747,11 +3755,10 @@ class Game:
         self._menxia_entry(tag, xinde)
         return msgs
 
+    @_not_while_preparing
     def melt_art(self, art_id: str) -> list[str]:
         """熔煉：功法庫裡的一門熔成心得（見 library.melt_art）；身上正在練的不能熔。熔成了才寫江湖紀錄，
         被拒絕（身上正在練的、庫裡沒有）只回一句話（武學與成長計畫 F12）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde, held = self._xinde(), library.held_count(self.state)
         only = prologue_rules.melt_only(self.state, self.content)  # 序章只准熔師父說的那一門（None＝不限）
         msgs = library.melt_art(self.state, self.content, self.world, art_id, only=only)
@@ -3765,10 +3772,9 @@ class Game:
             return msgs
         return self._log(msgs)
 
+    @_not_while_preparing
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         refusal = prologue_rules.melt_insight_problem(self.state, self.content)  # 序章的意境是合成要用的，熔了後面就走不下去
         if refusal is not None:
             return self._log([refusal])
@@ -3783,10 +3789,9 @@ class Game:
         修練頁的練成鈕灰掉、寫它；跟 practice 的拒絕同一個判斷。序章外是 None（心得夠不夠、練滿了沒由網頁照 slot_cards 自己看）。"""
         return prologue_rules.practice_problem(self.state, self.content, self.world, kind)
 
+    @_not_while_preparing
     def practice(self, kind: str) -> list[str]:
         """練成：身上這一門加深一成，花心得、累積受傷風險（見 team.practice）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         refusal = prologue_rules.practice_problem(self.state, self.content, self.world, kind)  # 序章只准練新得的那一門
         if refusal is not None:
             return self._log([refusal])
@@ -3805,20 +3810,18 @@ class Game:
             return msgs
         return msgs + self._menxia_entry(msgs[0], xinde, guide=True)
 
+    @_not_while_preparing
     def heal(self) -> list[str]:
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         xinde = self._xinde()
         msgs = self._log(team.heal(self.state, self.content, self.state.player.member))
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 
+    @_not_while_preparing
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（武學與成長設計 6.2）：每項最高 stat_cap，這個版本不能洗點。
         配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
         只回一句話，不留紀錄（武學與成長計畫 F12）。"""
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         p, cfg = self.state.player, self.content.config
         name = cfg.stat_names.get(stat, stat)
         if stat not in team.COMBAT_STATS:
@@ -3866,9 +3869,6 @@ class Game:
 
     # ── 門下與隊伍 ────────────────────────────────────────
 
-    def team_members(self) -> list[tuple[str, str]]:
-        return [(team.member_name(self.state, self.content, key), key) for key in team.team_keys(self.state)]
-
     def roster_lines(self) -> list[tuple[str, str]]:
         return roster.roster_lines(self.state, self.content, self.world)
 
@@ -3879,18 +3879,16 @@ class Game:
     SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
     FOLLOWER_IN_TEAM = "部下一直跟著你出戰，不用加入，也不能移出。"  # 計畫 T5
 
+    @_not_while_preparing
     def add_to_team(self, companion_id: str) -> list[str]:
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
         if companion_id.startswith(team.FOLLOWER_KEY):
             return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.add_to_team(self.state, companion_id))
 
+    @_not_while_preparing
     def remove_from_team(self, companion_id: str) -> list[str]:
-        if self._preparing():
-            return self._log(["（賽季籌備中，等待管理者開季。）"])
         if companion_id == PLAYER:
             return self._log([self.SELF_IN_TEAM])
         if companion_id.startswith(team.FOLLOWER_KEY):
@@ -3898,9 +3896,6 @@ class Game:
         return self._log(team.remove_from_team(self.state, companion_id))
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
-
-    def skill_library(self) -> list[tuple[str, str]]:
-        return skillview.library(self.state, self.content, self.world)
 
     def skill_detail(self, kind: str) -> str:
         return skillview.detail(self.state, self.content, self.world, kind)
@@ -4471,10 +4466,10 @@ class Game:
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
             return f"**{character.name}**\n\n{last}"
         if s.player.pending_faction:
-            faction = self._faction(s.player.pending_faction)
+            faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.pending_defect:
-            target = self._faction(s.player.pending_defect)
+            target = self.content.scenario.faction(s.player.pending_defect)
             return f"**叛投{target.name}**\n\n{defection.prompt(s, c, target, self.faction_counts_text())}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
@@ -4497,7 +4492,7 @@ class Game:
         p, w = s.player, s.world
         names = c.config.stat_names
         sect = c.sects[p.sect].name if p.sect else None
-        faction = next((f.name for f in c.scenario.factions if f.id == p.faction), None)
+        faction = c.scenario.faction_name(p.faction)
         now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
         mates = []
         for cid in p.team:

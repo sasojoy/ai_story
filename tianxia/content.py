@@ -8,6 +8,7 @@ sanguo-companions 合併大幅簡化了這裡的驗證規則（見設計文件�
 """
 from __future__ import annotations
 
+import functools
 import json
 import math
 import re
@@ -333,6 +334,20 @@ def _material_sources(c: Content) -> set[str]:
 NUMBER_IN_TEXT = re.compile(r"[0-9０-９%％]")  # 心裡話不能攤出成功率（也不能寫難度）
 
 
+def _check_line(need, where: str, text: str, numbers: str = "") -> None:
+    """玩家看得到、寫死在內容裡的一句：不能是空白、只能用繁體中文、不能寫數字或百分比。numbers 接在「不能寫數字或百分比」
+    後面，說明這一類的句子為什麼不能寫（有所感的場景、心裡話、戰況變化各有一句）。"""
+    need(bool(text.strip()), f"{where}：有空白的句子")
+    need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+    need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比{numbers}（「{text[:12]}」）")
+
+
+def _check_traditional(need, where: str, text: str | None) -> None:
+    """寫了的話只能用繁體中文（時刻表、伏筆的文字：空白另有檢查，數字可以寫）。"""
+    if text:
+        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+
+
 def check_insight_scenes(c: Content, need) -> None:
     """有所感的場景（content/insight_scenes.json，悟意境設計 3.1、4.1）。沒有這個檔就不檢查（探索照舊直接悟）。
     - 每段三到四個做法、屬性各不相同；hints 要是它自己做法裡有的屬性；locations 要是存在的地點、tags 要至少對得上一個地點。
@@ -347,10 +362,7 @@ def check_insight_scenes(c: Content, need) -> None:
         return
     all_tags = {tag for loc in c.locations.values() for tag in loc.tags}
 
-    def check_text(where: str, text: str) -> None:
-        need(bool(text.strip()), f"{where}：有空白的句子")
-        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
-        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比（「{text[:12]}」）")
+    check_text = functools.partial(_check_line, need)
 
     for scene in scenes.values():
         where = f"有所感 {scene.id}"
@@ -388,10 +400,7 @@ def check_check_voice(c: Content, need) -> None:
     熟練加成併進括號的那一句（config.practice_bonus 的 line）照同樣的文字規矩。"""
     bands = c.check_voice.bands
 
-    def check_text(where: str, text: str) -> None:
-        need(bool(text.strip()), f"{where}：有空白的句子")
-        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
-        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，成功率不攤在選項上（「{text[:12]}」）")
+    check_text = functools.partial(_check_line, need, numbers="，成功率不攤在選項上")
 
     need(bool(bands), "check_voice.json：至少要有一檔（每個檢定選項的括號裡都要有一句）")
     gaps = [band.min_gap for band in bands]
@@ -417,10 +426,7 @@ def check_front_lines(c: Content, need) -> None:
     lines = c.front_lines
     factions = {f.id for f in c.scenario.factions}
 
-    def check_text(where: str, text: str) -> None:
-        need(bool(text.strip()), f"{where}：有空白的句子")
-        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
-        need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，戰況變化只用一句話說（「{text[:12]}」）")
+    check_text = functools.partial(_check_line, need, numbers="，戰況變化只用一句話說")
 
     def check_pool(where: str, pool: list[str]) -> None:
         need(bool(pool), f"{where}：不能是空的")
@@ -555,9 +561,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     order = {e.id: i for i, e in enumerate(c.timetable)}
     rolled = {e.id for e in c.timetable if e.roll_side is not None}
 
-    def check_text(where: str, text: str | None) -> None:
-        if text:
-            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+    check_text = functools.partial(_check_traditional, need)
 
     def check_people(where: str, ev: TimetableEvent, texts, keys) -> None:
         """人物欄位（濃縮版內容表 8.1）：texts 裡的 {人物:<id>} 與人物效果的鍵 keys 裡的 @人物:<id>。id 要在人物表上，
@@ -896,9 +900,7 @@ def check_foreshadows(
         need(not duplicated, f"{label} id 重複：{'、'.join(duplicated)}")
     events = {e.id: e for e in c.timetable}
 
-    def check_text(where: str, text: str | None) -> None:
-        if text:
-            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
+    check_text = functools.partial(_check_traditional, need)
 
     for item in fs.items:
         need(bool(item.name.strip()), f"伏筆物品 {item.id}：name 不能是空的")

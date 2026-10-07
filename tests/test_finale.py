@@ -1,26 +1,23 @@
 """第一季濃縮版 T9：結局、季末公告、決定性勝利、結算畫面（計畫 2026-10-05-T9-結局與結算畫面）。
 
-用真實內容（content/）：要驗的就是那六種結局、三條戰線與季末大事。每個測試自己載一份，開關在測試裡才打開；
-auto_open_first_season 開出來的季照當下的 Config 蓋章，所以開關開著的季是「蓋了章」的。"""
+用真實內容（content/）：要驗的就是那六種結局、三條戰線與季末大事。每個測試拿自己的一份（conftest.real_content 的複本），
+開關在測試裡才打開；auto_open_first_season 開出來的季照當下的 Config 蓋章，所以開關開著的季是「蓋了章」的。"""
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import calendar, guide, rules
 from tianxia import world as world_mod
-from tianxia.content import load_content
 from tianxia.engine import Game
-
-CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     return c
 
