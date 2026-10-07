@@ -127,14 +127,13 @@ def _leg_text(content: Content, cast: PromotionCast, location: str) -> str:
 def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[str]:
     """手上的多段召見照當下重挑一次版本：換了版本或地點就改寫召見（召見自動改由接手的人發、地點跟著人走）；
     沒有成立的版本時照舊等著。只有玩家讀到的那一句話變了才回傳新的那一句：只換了演的事件、人與地點與話都沒變（何進的索賄
-    在盧植下獄之前、之後各一版）時悄悄換，不把同一句話又寫進紀錄一次（開發預審 N4）。"""
+    在盧植下獄之前、之後各一版）時悄悄換，不把同一句話又寫進紀錄一次（開發預審 N4）；事件與地點都沒換、只換了出面的人
+    （營中授印的兩個版本，皇甫嵩退場、朱儁接手）話就變了，照樣說。"""
     s = state.player.summons
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
         return []
     cast, location = found
-    if (cast.event, location) == (s.event, s.location):
-        return []
     told = _told_line(content, promo, s)
     s.event, s.location, s.figure = cast.event, location, cast.figure
     line = _leg_text(content, cast, location)
@@ -142,10 +141,12 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
 
 
 def _told_line(content: Content, promo: PromotionDef, s: Summons) -> str | None:
-    """上一次告訴玩家的召見那一句（這一段原本挑中的版本、原本的地點）；這一段還沒挑到版本（等著）的是 None。"""
+    """上一次告訴玩家的召見那一句（這一段原本挑中的版本、原本的地點）；這一段還沒挑到版本（等著）的是 None。
+    版本用事件加出面的人認：兩個版本可以共用同一個事件（營中授印），只靠事件 id 會認成第一個。"""
     if s.event is None or not s.location or s.leg >= len(promo.legs):
         return None
-    old = next((cast for cast in promo.legs[s.leg].casts if cast.event == s.event), None)
+    casts = [cast for cast in promo.legs[s.leg].casts if cast.event == s.event]
+    old = next((cast for cast in casts if cast.figure == s.figure), casts[0] if casts else None)
     return _leg_text(content, old, s.location) if old is not None else None
 
 
