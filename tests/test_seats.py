@@ -840,3 +840,135 @@ def test_a_pause_holds_the_refill_of_a_freed_seat_until_the_resume(on):
     assert "你補上了校尉的缺，到下週一為止。" in third.sync(1210.0)
     assert holder.world.get_season().seats["guan"] == ["乙", "丙"]
     assert "你補上了校尉的缺，到下週一為止。" not in third.sync(1220.0)  # 只補一次
+
+
+# ── 修正輪：名字不再符合資格時從帳與名單拿掉（沒有幽靈席次）──────────
+
+
+def _on_the_books(w, name, faction="guan"):
+    return name in w.seat_ledger.get(faction, {}), name in w.seats.get(faction, [])
+
+
+def test_report_drops_a_name_that_no_longer_qualifies(on):
+    """名號還在席次帳與名單上，可是這個人現在不是有資格的人（存檔讀不懂、重新開始成散人）：自己的下一次抄帳把他拿掉。"""
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified, fresh.state.player.rank = None, False, 0
+    assert seats.report(fresh.state, on) == []
+    assert _on_the_books(w, "甲") == (False, False) and _on_the_books(w, "乙") == (True, True)  # 別人不動
+    assert list(w.seat_ledger["guan"]) == ["乙"]
+
+
+def test_report_drops_a_member_who_is_in_the_faction_but_no_longer_qualified(on):
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    holder.state.player.qualified = False  # 還在官軍，可是資格沒了（重新開始後再投靠回來也一樣）
+    seats.report(holder.state, on)
+    assert _on_the_books(w, "甲") == (False, False)
+
+
+def test_report_drops_the_name_from_the_other_factions_but_keeps_its_own(on):
+    w = WorldState(season_one=True)
+    for faction in ("guan", "haoqiang"):
+        w.seat_ledger[faction] = {"甲": {1: 3}}
+        w.seats[faction] = ["甲"]
+    game = _qualified(on, "甲", faction="huang", world=w)
+    assert seats.report(game.state, on) == ["你補上了大方渠帥的缺，到下週一為止。"]
+    assert _on_the_books(w, "甲", "guan") == (False, False) and _on_the_books(w, "甲", "haoqiang") == (False, False)
+    assert _on_the_books(w, "甲", "huang") == (True, True)  # 自己現在的陣營：照常抄、照常補
+
+
+def test_report_keeps_a_qualified_holders_own_books(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", weeks={1: 5}, world=w)
+    seats.report(game.state, on)
+    game.state.player.contrib_weeks[2] = 4
+    seats.report(game.state, on)
+    assert w.seat_ledger == {"guan": {"甲": {1: 5, 2: 4}}} and w.seats == {"guan": ["甲"]}
+
+
+def test_the_cleanup_leaves_the_frozen_list_of_an_ended_season_alone(on):
+    """季末那一刻的名單是之後頭銜要讀的（設計 13.3）：收季之後沒人再動它，也不替誰除名。"""
+    w = WorldState(season_one=True)
+    w.seat_ledger["guan"], w.seats["guan"], w.ended = {"甲": {1: 3}}, ["甲"], True
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)
+    assert _on_the_books(w, "甲") == (True, True)
+
+
+def test_the_cleanup_needs_the_season_rules_on(on):
+    off = WorldState()  # 沒蓋章：這一季是舊規則
+    off.seat_ledger["guan"], off.seats["guan"] = {"甲": {1: 3}}, ["甲"]
+    fresh = _qualified(on, "甲", world=off)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)
+    assert _on_the_books(off, "甲") == (True, True)
+
+
+def test_a_restarted_character_does_not_keep_a_ghost_seat(on, monkeypatch):
+    """伺服器重現（server.open_game）：存檔讀不懂，備份起來，同一個名號重新開始成散人。席次帳與名單上的名字不能留下來，
+    不然週一會一直把他排回去，這個缺整季都被一個不在這個陣營的人佔著。清理在他重新開始後的第一次同步，而且要存回共用賽季。"""
+    import server
+    from tianxia.characters import name_key, open_characters
+
+    monkeypatch.setattr(server, "CONTENT", on)
+    holder, other = _qualified(on, "甲", weeks={1: 9}), _qualified(on, "乙", weeks={1: 5})
+    holder.world.mutate_season(lambda s: setattr(s, "hooked_week", 1))  # 第 1 週的掛鉤（開季那一刻）已經跑過了
+    for game, now in ((holder, 1000.0), (other, 1001.0)):
+        game.sync(now)
+        open_characters().save(game.state)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["甲", "乙"]
+    with open_characters().db.transaction() as conn:  # 佈署之後存檔格式不相容
+        conn.execute("UPDATE characters SET data = '{not json' WHERE key = ?", (name_key("甲"),))
+    restarted = server.open_game("甲")
+    restarted.client = None
+    assert restarted.state.player.faction is None and not restarted.state.player.qualified
+    restarted.sync(1010.0)
+    season = restarted.world.get_season()
+    assert season.seats["guan"] == ["乙"] and list(season.seat_ledger["guan"]) == ["乙"]
+    restarted.sync(1020.0)
+    other.sync(1030.0)
+    week_two = 1000.0 + _real_seconds_to_week(on, restarted, 2) + 5
+    other.sync(week_two)  # 週一：排名讀不到他
+    season = restarted.world.get_season()
+    assert season.seats["guan"] == ["乙"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙。"]
+
+
+def test_a_sync_saves_the_season_once_for_the_cleanup_and_never_for_a_stranger(on, monkeypatch):
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    holder = _qualified(on, "甲", weeks={1: 4})
+    holder.sync(1000.0)
+    del saves[:]
+    fresh = Game.new(on, "甲", rng=random.Random(0))  # 重新開始的甲：散人
+    fresh.client = None
+    fresh.sync(1010.0)
+    assert len(saves) == 1 and holder.world.get_season().seats["guan"] == []
+    fresh.sync(1020.0)
+    assert len(saves) == 1  # 清過了：不再存
+    stranger = Game.new(on, "路人", rng=random.Random(0))
+    stranger.client = None
+    stranger.sync(1030.0)
+    stranger.sync(1040.0)
+    assert len(saves) == 1  # 沒有名字在帳上的人，同步不碰共用賽季
+
+
+def test_on_the_books_looks_in_every_faction_ledger_and_list(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    assert not seats.on_the_books(game.state)
+    w.seat_ledger["huang"] = {"甲": {}}  # 只在別的陣營的帳上
+    assert seats.on_the_books(game.state)
+    w.seat_ledger.clear()
+    w.seats["haoqiang"] = ["甲"]  # 只在名單上（不該單獨出現，可是兩處各自都要看）
+    assert seats.on_the_books(game.state)
+    w.seats.clear()
+    w.seat_ledger["guan"], w.seats["guan"] = {"乙": {}}, ["乙"]
+    assert not seats.on_the_books(game.state)

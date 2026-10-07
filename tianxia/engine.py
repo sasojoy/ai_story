@@ -545,7 +545,8 @@ class Game:
             self._write("召見", summons)
         # 第四階席次：抄帳、補缺（正式版丁）。輪詢只同步、只存角色（server.poll_main → act_look），所以帳或名單變了要自己把共用賽季存回去，
         # 不然補上的缺、那一則陣營軍情都會丟掉，下一次輪詢又補一次、又寫一則紀錄
-        ledger_before = self.state.world.model_dump(include={"seat_ledger", "seats"}) if self.state.player.qualified else None
+        watching = self.state.player.qualified or seats.on_the_books(self.state)  # 沒資格、帳上也沒有名字的人，同步不碰共用賽季
+        ledger_before = self.state.world.model_dump(include={"seat_ledger", "seats"}) if watching else None
         seated = self._report_seat()
         if ledger_before is not None and self.state.world.model_dump(include={"seat_ledger", "seats"}) != ledger_before:
             self._save_season()
