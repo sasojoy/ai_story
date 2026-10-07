@@ -60,7 +60,6 @@ from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
-DOOMED_ASK = "這一仗必敗，真的要打？"  # 勝算寫「必敗」（team.DOOMED）的遊歷，按下去前問的那一句（FB-095；網頁的 ask()，確定才打，其他都取消）
 BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
@@ -904,8 +903,7 @@ class Game:
         foes = [squad for squad in squads if not self._drills_with(squad)]
         if not foes:
             return self._cost_option("act:train", "操練", cost, note="零風險")
-        word = self._train_odds(foes, odds and prologue_rules.fight_tier(self.state, self.content) is None)  # 序章的勝負寫好了，不標勝算
-        note = self._train_note(foes, word)
+        note = self._train_note(foes, odds and prologue_rules.fight_tier(self.state, self.content) is None)  # 序章的勝負寫好了，不標勝算
         if len(foes) < len(squads):
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
@@ -917,20 +915,15 @@ class Game:
             option.wait = BIG_FIGHT_WAIT
         return option
 
-    def _train_odds(self, squads: list[Squad], odds: bool) -> str:
-        """遊歷按鈕上的勝算那一個字（勝算的計算比較貴，所以照既有慣例吃 odds 旗標；不算就是空字串）。"""
+    def _train_note(self, squads: list[Squad], odds: bool) -> str:
+        """遊歷按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
+        who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
         if not odds:
-            return ""
+            return who
         # 多路對手時以**最強的**那個當參考（真的開打平常是用 Game.rng 隨機挑；池子裡有大場面對手的地方照 _train_pick 挑，
         # 見 _train）：這個標籤的用途是警告玩家，寧可低估也不要給出過度樂觀的承諾。
         hardest = max(squads, key=lambda s: s.difficulty)
-        return self.odds(hardest.id)
-
-    @staticmethod
-    def _train_note(squads: list[Squad], word: str) -> str:
-        """遊歷按鈕上的補充說明：對手是誰、勝算那一個字（沒算勝算就只寫對手）。"""
-        who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
-        return f"{who}・{word}" if word else who
+        return f"{who}・{self.odds(hardest.id)}"
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算；有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""

@@ -1,6 +1,8 @@
-"""FB-092～095 與 h_lose（QA 走 joy 版序章與入伍段，main 8d4d470，2026-10-06；規劃者決定，專職開發做）。
+"""FB-093～095（QA 走 joy 版序章與入伍段，main 8d4d470，2026-10-06）。
 
-用真實內容（conftest 的 real、on：這個測試自己的一份複本）。每一條是一個 commit，先寫測試。
+joy 在 GitHub 上也做了 FB-092～095（PR #30、#31），併進 main 之後 PM 裁示 joy 的為準（chain-on-main，2026-10-07）：我們的重複做法
+拿掉了（FB-092 整段都是 joy 的，這裡沒有測試）。留下的是我們加在 joy 的做法上、她沒有的東西（結語、一週保底、網頁的「在下面 ↓」），
+以及跑在 joy 的程式上、她的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）。
 新寫的句子都在待 joy 潤的清單上（見 fb-report.md）：這裡的測試只認事實（講了什麼、對不對得上規則），不鎖死字句。"""
 from __future__ import annotations
 
@@ -14,10 +16,6 @@ import server
 import webharness
 from tianxia import guide
 from tianxia.rules import front_of
-
-
-def _step(content, step_id):
-    return next(step for step in content.tutorial.steps if step.id == step_id)
 
 
 # ── FB-093：入伍第 2 步沒說軍令怎麼出力 ─────────────────────────────────
@@ -185,15 +183,9 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
 
 
 # ── FB-095：剛出師的新角色去黃巾別部營寨遊歷，挨了三場打 ───────────────────────────
-# 出師時師父點名三處、疾行又到得了，按鈕寫了「必敗」新玩家還是會去看看。師父多說一句；規劃者定：寫「必敗」的遊歷按下去先問一次
-# （網頁裡的 ask()，不是 confirm()）。「必敗」只在一個地方算：遊歷按鈕上的勝算那一個字，問不問就看它，不另外算一次。
-
-
-def test_fb095_the_farewell_warns_about_the_places_it_just_named(real):
-    page = _step(real, "p11_farewell").text.split("\n\n")[0]
-    named = page.index("譙縣曹家的莊院就是一處")  # 三處都點名完了
-    assert "那幾處都是人家的窩" in page[named:] and "沒投靠就別" in page[named:] and "動手" in page[named:]
-    assert page.index("跟誰、什麼時候跟") > page.index("沒投靠就別")  # 在「你自己拿主意」之前：話還是順的
+# joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（engine.TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
+# 多一句別去營寨惹事（她的測試：tests/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下她的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
+# 選單（機器人）不問也不擲骰、伺服器照常打、網頁上問與取消（同一個 Option.confirm、同一個 ask()，PM 裁示用到同一件東西的測試留著）。
 
 
 def _train(game):
@@ -202,15 +194,14 @@ def _train(game):
 
 @pytest.mark.parametrize("word, asks", [("必敗", True), ("凶險", False), ("難分勝負", False), ("五五波", False), ("有把握", False), ("穩勝", False)])
 def test_fb095_only_a_losing_fight_asks_first(on, monkeypatch, word, asks):
-    """問不問看遊歷按鈕上的勝算那一個字（Game.odds，標籤用的就是它）：只有「必敗」問；其他勝算不問。"""
-    from tianxia.engine import DOOMED_ASK, Game
+    """問不問看遊歷按鈕上的勝算那一個字（Game.odds，標籤用的就是它）：只有「必敗」問；勝算表上其他每一個字都不問。"""
+    from tianxia.engine import TRAIN_CONFIRM, Game
 
     game = _game(on, at="huangjin_camp")  # 散人在黃巾的營寨：對手是黃巾的人
     monkeypatch.setattr(Game, "odds", lambda self, squad_id: word)
     option = _train(game)
     assert word in option.label
-    assert (option.confirm == DOOMED_ASK) is asks and (option.confirm != "") is asks
-    assert DOOMED_ASK == "這一仗必敗，真的要打？"
+    assert (option.confirm == TRAIN_CONFIRM) is asks and (option.confirm != "") is asks
 
 
 def test_fb095_a_real_newcomer_at_the_yellow_turban_camp_is_asked(on):
@@ -219,13 +210,6 @@ def test_fb095_a_real_newcomer_at_the_yellow_turban_camp_is_asked(on):
     game.state.player.member.wugong_id = None
     option = _train(game)
     assert "必敗" in option.label and option.confirm
-
-
-def test_fb095_a_drill_among_your_own_side_never_asks(on):
-    """投了黃巾的人在自己的營寨遊歷是操練、零風險：不是必敗，不問。"""
-    game = _game(on, faction="huang", at="huangjin_camp")
-    option = _train(game)
-    assert "操練" in option.label and option.confirm == ""
 
 
 def test_fb095_options_without_odds_never_ask_and_listing_them_rolls_nothing(on):
@@ -264,22 +248,22 @@ _ASK_SCRIPT = """return (async () => {
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
-    from tianxia.engine import DOOMED_ASK
+    from tianxia.engine import TRAIN_CONFIRM
 
     game = _game(on, at="huangjin_camp")
     game.state.player.member.wugong_id = None
     m = server.main_view(game)
     train = next(o for o in m["options"] if o["id"] == "act:train")
-    assert train["confirm"] == DOOMED_ASK
+    assert train["confirm"] == TRAIN_CONFIRM
     after = {"main": m, "message": ""}
-    cancel = _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": 'await click("ask-no");'}
+    cancel = _ASK_SCRIPT % {"ask": TRAIN_CONFIRM, "then": 'await click("ask-no");'}
     out = run(m, cancel, responses={"/api/choose": after})
     assert out["seen"] == [{"asked": True, "calls": []}] and out["calls"] == []  # 問了；取消之後什麼都沒送
-    yes = _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": 'await click("ask-yes");'}
+    yes = _ASK_SCRIPT % {"ask": TRAIN_CONFIRM, "then": 'await click("ask-yes");'}
     out = run(m, yes, responses={"/api/choose": after})
-    assert out["seen"][0]["calls"] == [] and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 按確定才送
+    assert out["seen"][0]["calls"] == [] and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 按「照打」才送
     m_safe = {**m, "options": [{**o, "confirm": ""} if o["id"] == "act:train" else o for o in m["options"]]}
-    out = run(m_safe, _ASK_SCRIPT % {"ask": DOOMED_ASK, "then": ""}, responses={"/api/choose": {"main": m_safe, "message": ""}})
+    out = run(m_safe, _ASK_SCRIPT % {"ask": TRAIN_CONFIRM, "then": ""}, responses={"/api/choose": {"main": m_safe, "message": ""}})
     assert out["seen"][0]["asked"] is False and out["calls"] == [["/api/choose", {"id": "act:train"}]]  # 不必敗的：不問、直接打
 
 
