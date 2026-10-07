@@ -78,6 +78,7 @@ class Option(BaseModel):
     label: str
     enabled: bool = True
     wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
+    confirm: str = ""  # 按下去之前先問一次的話（FB-095：必敗的遊歷）；網頁照它跳確認層，空的直接送
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,8 @@ def _points(lines: list[str]) -> int:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
+# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事
+TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -864,6 +867,8 @@ class Game:
         if len(foes) < len(squads):
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
+        if "必敗" in note.split("・"):  # FB-095：剛出師的人疾行到敵營按遊歷，三場就掉三分之一的銀兩
+            option.confirm = TRAIN_CONFIRM
         pick = self._train_pick(loc)
         if (pick is not None and not self._drills_with(pick) and self.is_big(pick)
                 and prologue_rules.fight_tier(self.state, self.content) is None):  # 寫好的那一場不等模型
@@ -1379,6 +1384,10 @@ class Game:
             return []
         return rewards
 
+    def enlist_glow(self, option_ids: list[str]) -> list[str]:
+        """入伍段「出一次力」那一步，選單上能完成它的那幾顆（FB-093，enlist.glow）；網頁讓它們發光。"""
+        return enlist.glow(self.state, self.content, option_ids)
+
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
         其他（略過、早就做完的舊角色）是 None。done 是上一次行動完成的那幾行（✔ 與獎勵）。框上寫的人照這一步
@@ -1730,7 +1739,9 @@ class Game:
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
-        return msgs + self._order_credit(kind="duty", front=front)
+        credit = self._order_credit(kind="duty", front=front)
+        # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
+        return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
 
     def _take_convoy(self) -> list[str]:
         """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
@@ -4658,7 +4669,7 @@ class Game:
         """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
         截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
         收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
-        沒達成的打擊軍令多一個 how：怎麼打、他在哪（atlas.strike_how，FB-072）；其他軍令與打完的打擊沒有這個鍵。"""
+        沒達成的軍令多一個 how：怎麼出力（atlas.order_how，FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵。"""
         s, c = self.state, self.content
         if s.world.ended:
             return []
@@ -4671,8 +4682,8 @@ class Game:
                 "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
                 "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
             }
-            if o.template == "strike" and not o.done and o.figure is not None:
-                view["how"] = atlas.strike_how(s, c, o)  # 怎麼打、他在哪（FB-072）；其他軍令與打完的打擊沒有這個鍵
+            if not o.done and (o.template != "strike" or o.figure is not None):
+                view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
             views.append(view)
         return views
 

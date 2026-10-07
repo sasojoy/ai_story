@@ -523,7 +523,8 @@ def fuse(
                 name, note = _named(client, content, world, _fuse_messages(base, insight, note=trait_note), proposed)
             for candidate_name in _candidates(content, world, key, base.kind, tianji, name):
                 candidate = generate_from_name(
-                    candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY, attribute=insight.attribute,
+                    candidate_name, base.kind, candidate_name, tianji, weights=LOW_ONLY,
+                    attribute=(preset.attribute if preset is not None else None) or insight.attribute,
                 )
                 candidate = candidate.model_copy(update={
                     # 師門配方沒有首創者（誰先合出來都一樣）：不記名號、標 preset，卡片寫師門、江湖史不列

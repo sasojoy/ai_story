@@ -600,7 +600,7 @@ def test_enlistment_after_joining_only_in_season_one(on):
     assert not any("老兵" in m or "引導完成" in m for m in msgs)  # 引薦人的話在對話框，不在「剛剛」
     game.view_orders()
     box = game.guide_box()
-    assert box["key"] == "r3_first_order" and box["text"] == "挑一道軍令，出一次力" and box["done"] == ["✔ 引導完成"]
+    assert box["key"] == "r3_first_order" and box["text"].startswith("挑一道軍令，出一次力") and box["done"] == ["✔ 引導完成"]
     _order(game, "siege", "guan", front="yingru")
     with _win():
         game.choose("act:train")
@@ -1078,16 +1078,18 @@ def test_a_target_off_the_front_but_challengeable_still_gets_the_place(on):
     assert card["how"] == _how("何進", "他現在在洛陽一帶，那裡你還沒摸清")
 
 
-def test_only_open_strike_cards_carry_how(on):
-    """沒達成的打擊才有「怎麼打」；達成了、別種軍令都沒有這個鍵。"""
+def test_every_open_card_says_how_to_do_it(on):
+    """FB-093：每一道沒達成的軍令都寫怎麼出力（以前只有打擊）；守城寫陣營自己的守勢行動；達成了就沒有這個鍵。"""
     game = _game(on, faction="guan")
     strike = _order(game, "strike", "guan", front="yingru", figure="bocai")
-    _order(game, "siege", "guan", front="yingru")
-    _order(game, "defend", "guan", front="yingru")
+    siege = _order(game, "siege", "guan", front="yingru")
+    defend = _order(game, "defend", "guan", front="yingru")
     cards = {card["id"]: card for card in game.orders_view()}
-    assert len(cards) == 3 and "how" in cards[strike.id]
-    assert [c["id"] for c in cards.values() if "how" in c] == [strike.id]
-    strike.done = True
+    assert len(cards) == 3 and all("how" in card for card in cards.values())
+    assert cards[siege.id]["how"] == "到潁川汝南一帶遊歷，打贏一場對面的兵記一次。"
+    assert cards[defend.id]["how"] == "在潁川汝南一帶按「巡哨」（收在「此地還能做」裡），做一次記一次。"
+    for o in (strike, siege, defend):
+        o.done = True
     assert all("how" not in card for card in game.orders_view())
 
 
@@ -1231,3 +1233,66 @@ def test_marked_region_label_takes_the_box_of_the_text_actually_drawn(on):
         assert box[2] <= on.map.width - mapview.EDGE, region.id  # 加了記號也不出界
         plain, _ = mapview._region_labels(game.state, on, region, "situation", [])
         assert "◎" not in plain
+
+
+# ── FB-093／094／095：入伍第 2 步發光、守勢行動也算、必敗的遊歷先問 ─────────────
+
+
+def _recruit(on, faction, at):
+    game = _game(on, at=at)
+    game.state.player.tutorial_step = BASE
+    game.choose(f"faction:{faction}")
+    game.choose("faction:confirm")
+    game.view_orders()
+    return game
+
+
+@pytest.mark.parametrize(("faction", "at"), [("guan", "changshe"), ("huang", "huangjin_camp"), ("haoqiang", "cao_manor")])
+def test_the_duty_action_finishes_the_first_order_step_and_glows(on, faction, at):
+    """FB-094 選甲：入伍第 2 步「出一次力」也認自己陣營的守勢行動（巡哨、傳道、保境安民），這週的軍令一道都辦不到也走得完；
+    FB-093：那顆按鈕在第 2 步會發光，「此地還能做」自己打開。"""
+    game = _recruit(on, faction, at)
+    game.state.world.orders = []
+    _order(game, "strike", faction, figure="zhangjiao")  # 新手打不動的那種
+    assert game.guide_box()["key"] == "r3_first_order"
+    ids = [o.id for o in game.options() if o.enabled]
+    assert "act:duty" in ids and "act:duty" in game.enlist_glow(ids)
+    game.choose("act:duty")
+    assert enlist.done(game.state, on)
+    assert game.enlist_glow([o.id for o in game.options() if o.enabled]) == []  # 做完就不亮了
+
+
+def test_nothing_glows_before_the_orders_are_opened(on):
+    game = _game(on, at="changshe")
+    game.state.player.tutorial_step = BASE
+    game.choose("faction:guan")
+    game.choose("faction:confirm")
+    assert game.guide_box()["key"] == "r2_briefing"
+    assert game.enlist_glow([o.id for o in game.options() if o.enabled]) == []
+
+
+def test_a_siege_front_makes_training_glow(on):
+    game = _recruit(on, "guan", "changshe")
+    game.state.world.orders = []
+    _order(game, "siege", "guan", front=rules.front_of(game.content, "changshe"))
+    assert "act:train" in game.enlist_glow(["act:train", "act:rest"])
+    assert "act:rest" not in game.enlist_glow(["act:train", "act:rest"])
+
+
+def test_hopeless_training_asks_first_and_fair_training_does_not(on):
+    """FB-095：遊歷標「必敗」時按鈕帶一句確認（輸了掉氣血、內傷、一成銀兩）；勝算過得去、或只是操練時不問。"""
+    from tianxia.engine import TRAIN_CONFIRM
+
+    game = _game(on, at="huangjin_camp")
+    game.state.player.tutorial_step = BASE
+
+    def train():
+        return next(o for o in game.options() if o.id == "act:train")
+
+    with mock.patch.object(Game, "odds", return_value="必敗"):
+        assert train().confirm == TRAIN_CONFIRM
+    with mock.patch.object(Game, "odds", return_value="勝算七成"):
+        assert train().confirm == ""
+    game.state.player.faction = "huang"  # 自己人的營寨：操練、零風險
+    with mock.patch.object(Game, "odds", return_value="必敗"):
+        assert train().confirm == ""

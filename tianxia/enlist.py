@@ -2,8 +2,9 @@
 不佔 tutorial_step：記在 PlayerState.enlist_step（None＝還沒開始）。只在第一季開始（beta 季沒有軍令）。"""
 from __future__ import annotations
 
+from . import orders
 from .models import Content, Recruiter
-from .rules import season_one
+from .rules import front_of, season_one
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -144,3 +145,26 @@ def box(state: GameState, content: Content) -> dict | None:
             "end": True, "pending": False, "full": True,
         }
     return None
+
+
+def glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]:
+    """入伍段停在「出一次力」那一步時，選單上能完成它的那幾顆（FB-093）：守勢行動（巡哨、傳道、保境安民；不在軍令裡也算，
+    見 Game._duty）、接糧車、挑戰這週打擊的那位人物、在算得上攻城或截糧的地方遊歷。網頁讓它們發光，收在「此地還能做」裡的會攤開。
+    不在這一步是空的。"""
+    if not active(state, content):
+        return []
+    step = _steps(content)[state.player.enlist_step]
+    if step.done_when.action != "order":
+        return []
+    loc = state.player.location
+    hot = {"act:duty", "act:convoy"}
+    for o in orders.current(state, content, state.player.faction):
+        if o.done:
+            continue
+        if o.template == "strike" and o.figure is not None:
+            hot.add(f"act:challenge:{o.figure}")
+        elif (o.template == "siege" and o.front is not None and front_of(content, loc) == o.front) or (
+            o.template == "intercept" and o.location is not None and loc in orders.neighbors(content, o.location)
+        ):
+            hot.add("act:train")
+    return [i for i in option_ids if i in hot]

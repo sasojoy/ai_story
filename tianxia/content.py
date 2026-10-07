@@ -29,7 +29,7 @@ from .models import (
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
-from .martial_arts import ATTRIBUTES, QUALITIES
+from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
 from .zh import to_traditional
 
@@ -1736,6 +1736,16 @@ def validate(c: Content) -> None:
         need(problem in (None, PRESET_CLASH), f"{where}：名字 {recipe.name} 過不了命名過濾（{problem}）")
         recipe_keys.add((recipe.base, recipe.insight))
         recipe_names.add(recipe.name)
+        # 師門教的那一門換上身，不能跟開局送的另一種相剋（FB-092：選火的新人照師父的話做就 −20%）
+        attribute = recipe.attribute or (recipe_insight.attribute if recipe_insight is not None else None)
+        need(recipe.attribute is None or recipe.attribute in ATTRIBUTES, f"{where}：屬性 {recipe.attribute} 不是陰陽剛柔快慢虛實之一")
+        base_skill = c.skills.get(recipe.base)
+        for other_id in c.config.starter_skills:
+            other = c.skills.get(other_id)
+            if base_skill is None or other is None or other.kind == base_skill.kind:
+                continue
+            need(ATTRIBUTE_COUNTERS.get(attribute) != other.attribute,
+                 f"{where}：合出來屬{attribute}，跟開局送的【{other.name}】（屬{other.attribute}）相剋；師門配方寫 attribute 改掉")
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
     for insight in c.insights.values():

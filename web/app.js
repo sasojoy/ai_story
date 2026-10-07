@@ -377,8 +377,11 @@
   // 元件（reveal 比上一次畫的多出來的）加 .lit 閃一下，一秒內重畫也還在。data-glow 寫的是鍵，可以寫好幾個（空白隔開，例：收著的
   // 武學列「改練 修練 熔煉」）。不在序章什麼都不加。每次畫完頁面、狀態列都呼叫，前一次的先清掉
   let litBefore = null, litKeys = [], litTimer = 0;
+  const guideGlow = () => (S.main && S.main.guide && S.main.guide.glow) || [];
   function applyGlow() {
     document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
+    // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮
+    guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
     const p = pro();
     if (!p) { litBefore = null; litKeys = []; return; }
     const fresh = litBefore ? p.reveal.filter((k) => !litBefore.includes(k)) : [];
@@ -759,7 +762,9 @@
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度
     const extras = m.options.filter((o) => !used.has(o.id));
-    const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+    // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民，FB-093）：摺疊先攤開，那一顆發光（applyGlow）
+    const hotHere = extras.some((o) => guideGlow().includes(o.id));
+    const here = extras.length ? `<details class="fold here"${hotHere ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
@@ -2034,7 +2039,13 @@
     if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
   }
 
-  async function choose(btn, id) {
+  async function choose(btn, id, sure = false) {
+    // 按下去之前要先問一次的選項（伺服器寫在 confirm，FB-095：必敗的遊歷）：問過、按了「照打」才送
+    const ask0 = ((S.main && S.main.options) || []).find((o) => o.id === id);
+    if (!sure && ask0 && ask0.confirm) {
+      ask(ask0.confirm, "照打", () => choose(btn, id, true));
+      return;
+    }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
       S.sensing = true;
       renderPage();

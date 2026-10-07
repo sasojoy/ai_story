@@ -815,6 +815,9 @@ class PresetRecipe(_Strict):
     insight: str  # 基本意境 id
     name: str
     note: str = ""
+    # 師門傳下來時改過的屬性（FB-092）：沒寫就跟意境（一般的合成規則）。火（剛）融出來會跟開局的內功（柔）相剋，
+    # 師父教的那一門不能讓新人一照做就 −20%，所以烈爐拳寫成陽；載入時檢查每一門都不跟開局送的另一門相剋
+    attribute: str | None = None
 
 
 class Recruiter(_Strict):
