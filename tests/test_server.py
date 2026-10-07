@@ -5933,6 +5933,8 @@ NOT_IN_THE_FINGERPRINT = {
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
         "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
         "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+        "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
+        "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
