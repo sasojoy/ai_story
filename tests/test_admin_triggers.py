@@ -257,7 +257,8 @@ def test_an_early_start_counts_as_happened_so_the_date_passes_quietly(on):
     assert after.time > season.schedule["changshe_fire"] and "changshe_fire" not in after.showdowns_waiting
     assert admin.world.get_battle() is None  # 沒有第二場
     assert [battle.record_id for _, battle in admin.world.ended_battles()] == [first]
-    assert admin.admin_start_showdown("changshe_fire", past) == ["（長社火攻已經開打過了。）"]
+    # 開過、取消了、沒有結果：照舊開不了，說怎麼收尾（FB-099，見 tests/test_fb099_cancelled_showdown.py）
+    assert admin.admin_start_showdown("changshe_fire", past) == ["（長社火攻開打後被取消，還沒有結果；要收尾請用「定結果」。）"]
 
 
 def test_an_active_battle_blocks_the_buttons(on):

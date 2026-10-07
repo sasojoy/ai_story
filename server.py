@@ -955,7 +955,8 @@ def admin_choices(game: Game) -> dict:
 
 
 RESULT_WORDS = (("guan:", "官軍"), ("huang:", "黃巾"))  # 結果鍵的白話（定結果的下拉選單）
-TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "due": "時間到了", "later": "還沒到"}
+# cancelled：開打後被取消、還沒有結果（FB-099）：要收尾用「定結果」（只有管理者看得到）
+TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "cancelled": "開打後取消・待定結果", "due": "時間到了", "later": "還沒到"}
 
 
 def _result_label(key: str) -> str:
@@ -990,7 +991,7 @@ def timetable_choices(game: Game) -> dict:
         return {"timetable": [], "results": [], "locks": []}
     now = time.time()
     rows = []
-    for row in timetable.status_rows(state, CONTENT):
+    for row in timetable.status_rows(state, CONTENT, cancelled=game.cancelled_showdowns()):
         rows.append({
             "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],

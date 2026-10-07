@@ -5010,6 +5010,8 @@ class Game:
         w = self.state.world
         if event.id in w.timeline:
             return f"（{event.title}已經結算了。）"
+        if event.id in self.cancelled_showdowns():  # FB-099：開過、被取消、還沒有結果——照舊開不了，說清楚怎麼收尾
+            return f"（{event.title}開打後被取消，還沒有結果；要收尾請用「定結果」。）"
         if event.id in w.showdowns_opened:
             return f"（{event.title}已經開打過了。）"
         if event.version_from is not None and event.version_from not in w.timeline:
@@ -5021,6 +5023,15 @@ class Game:
         if showdown_battle(self.state, self.content, event) is None:
             return f"（內容裡沒有{event.title}這一場的戰鬥。）"
         return None
+
+    def cancelled_showdowns(self) -> set[str]:
+        """開打後被取消、時間軸上還沒有結果的時刻表決戰（FB-099；管理者工具的三場大戲與時刻表那兩列照它寫）：開過集結
+        （showdowns_opened，記號照舊留著、不會再開），時間軸上沒有它，此刻也不是在打的那一場（取消決戰把它從共用狀態拿掉了）。
+        真的打完的時間軸上有結果，不算；還在集結、開打或剛收場的那一場是此刻的那一場，也不算。"""
+        w = self.state.world
+        battle = self.world.get_battle()
+        live = battle.battle_id if battle is not None else None
+        return {eid for eid, battle_id in w.showdowns_opened.items() if eid not in w.timeline and battle_id != live}
 
     def admin_start_showdown(self, event_id: str, now: float) -> list[str]:
         """立刻開時刻表上這一場決戰：照時刻表開（admin_start_battle → world.open_showdown，跟時間到了一樣：同一個函式、同一句集結
