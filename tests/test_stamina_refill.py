@@ -12,12 +12,13 @@ import random
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from test_prologue_web import run
 
 import server
 import webharness
 from conftest import real_content
-from tianxia import bot, bot_policy, engine, skillview
+from tianxia import bot, bot_policy, engine, journal, skillview
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.models import Config
@@ -45,6 +46,13 @@ def test_the_switch_is_off_by_default_and_only_the_weekend_profile_turns_it_on()
     assert real_content("weekend").config.beta_free_refill is True
 
 
+def test_the_button_label_cannot_be_empty():
+    """空字串的話網頁會退回畫「丹 N」（label 是假值），引擎卻照樣補滿：鈕上寫的跟按下去的對不上。載入時就擋。"""
+    with pytest.raises(ValidationError, match="at least 1 character"):
+        Config(beta_free_refill_label="")
+    assert Config(beta_free_refill_label="滿").beta_free_refill_label == "滿"
+
+
 # ── 開關打開：補滿 ──────────────────────────────────────
 
 
@@ -54,21 +62,50 @@ def test_a_press_fills_stamina_to_the_top_for_free(game):
     p.stamina = 37.0
     silver = p.stats["silver"]
     msgs = game.take_stamina_pill()
-    assert p.stamina == cap(game) == 150
+    assert p.stamina == cap(game) == game.status_data()["stamina_max"]
     assert p.stamina_pills == 20  # 丹的數量不動
     assert p.stats["silver"] == silver  # 不花銀兩
     assert msgs[0] == engine.REFILL_LINE
-    assert msgs[-1] == "體力 +113"
+    assert msgs[-1] == f"體力 +{cap(game) - 37}"
 
 
 def test_a_press_writes_one_journal_line(game):
     refill_on(game)
     game.state.player.stamina = 37.0
+    game.state.world.time = 4321.0  # 不是 0：紀錄的時間要是世界時間（引擎不讀電腦時鐘），讀牆上時鐘或寫死 0 都會露餡
     before = len(game.state.journal)
     game.take_stamina_pill()
     assert len(game.state.journal) == before + 1
     entry = game.state.journal[0]  # 新的在最前面
-    assert (entry.title, entry.lines, entry.changes) == (engine.REFILL_TITLE, [engine.REFILL_LINE], ["體力 +113"])
+    assert (entry.title, entry.lines, entry.changes) == (
+        engine.REFILL_TITLE, [engine.REFILL_LINE], [f"體力 +{cap(game) - 37}"],
+    )
+    assert entry.time == game.state.world.time == 4321.0
+
+
+def test_the_gain_matches_what_the_bar_moves(game):
+    """「體力 +N」照狀態列的算法（int，不進位）：體力有小數是常態（每 3 分鐘回 1 點、一路累積），不能寫 +0 而條子明明動了，
+    也不能寫 +112 而條子從 37 走到頂是 +113。"""
+    refill_on(game)
+    p = game.state.player
+    for stamina in (149.97, 37.6, 0.4):
+        p.stamina = stamina
+        bar_before = game.status_data()["stamina"]
+        msgs = game.take_stamina_pill()
+        moved = game.status_data()["stamina"] - bar_before
+        assert moved == cap(game) - int(stamina) >= 1, stamina
+        assert msgs[-1] == f"體力 +{moved}" and game.state.journal[0].changes == [f"體力 +{moved}"], stamina
+
+
+def test_the_refill_goes_into_the_action_log(game):
+    """成功、體力已滿、序章的拒絕都要經過 _log（GameState.log：工具列與「剛剛」讀它，戰況變化的換字也在那裡）。"""
+    refill_on(game)
+    p = game.state.player
+    p.stamina = 37.0
+    game.take_stamina_pill()
+    assert game.state.log[-3:] == [engine.REFILL_LINE, f"體力 +{cap(game) - 37}", journal.LOG_BREAK]
+    game.take_stamina_pill()
+    assert game.state.log[-2:] == [engine.REFILL_FULL, journal.LOG_BREAK]
 
 
 def test_it_works_with_no_pills_at_all(game):
@@ -121,6 +158,7 @@ def test_the_hut_keeps_its_own_stamina_plan_with_the_switch_on_too(prologue_cont
     before = len(game.state.journal)
     msgs = game.take_stamina_pill()
     assert msgs == [engine.REFILL_HUT] and p.stamina == 0 and len(game.state.journal) == before
+    assert game.state.log[-2:] == [engine.REFILL_HUT, journal.LOG_BREAK]
     assert game.status_data()["pills"] is None
 
 
@@ -164,7 +202,8 @@ def test_the_refill_allows_and_refuses_exactly_what_the_pill_does(content, situa
     """丹在打坐、閉關、在路上都吃得了、只加體力、不動那個狀態；補滿一樣：照做、不動狀態（不多拒絕、也不多放行）。"""
     pill_game, pill_before, _ = press_in(content, situation, free=False)
     free_game, free_before, _ = press_in(content, situation, free=True)
-    assert pill_game.state.player.stamina == 120  # 丹：+100，吃得了
+    restore = pill_game.content.config.stamina_pill_restore
+    assert pill_game.state.player.stamina == min(cap(pill_game), 20 + restore)  # 丹：+restore，吃得了
     assert free_game.state.player.stamina == cap(free_game)  # 補滿：照做
     assert marks(pill_game) == pill_before and marks(free_game) == free_before == pill_before  # 狀態都沒被動
     assert pill_game.state.player.stamina_pills == 19 and free_game.state.player.stamina_pills == 20
@@ -191,9 +230,12 @@ def test_with_the_switch_off_a_press_still_eats_a_pill_and_restores_a_hundred(ga
     assert game.content.config.beta_free_refill is False
     p = game.state.player
     p.stamina = 37.0
+    restore = game.content.config.stamina_pill_restore
     msgs = game.take_stamina_pill()
-    assert p.stamina == 137 and p.stamina_pills == 19
-    assert msgs == ["你服下一顆回體丹，一股暖意自丹田散開，精神為之一振。", "體力 +100（回體丹還剩 19 顆）"]
+    assert p.stamina == min(cap(game), 37 + restore) and p.stamina_pills == 19
+    assert msgs == [
+        "你服下一顆回體丹，一股暖意自丹田散開，精神為之一振。", f"體力 +{round(p.stamina - 37)}（回體丹還剩 19 顆）",
+    ]
     assert game.state.journal[0].title == "服下回體丹"
 
 
@@ -207,7 +249,8 @@ def test_with_the_switch_off_and_no_pills_there_is_nothing_to_press(game):
 def test_the_status_payload_is_unchanged_with_the_switch_off(game):
     """關著時 status 的 pills 一個鍵都沒多：跟 joy 的測試寫的同一份。"""
     game.state.player.stamina = 40.0
-    assert game.status_data()["pills"] == {"name": "回體丹", "count": 20, "restore": 100, "full": False}
+    restore = game.content.config.stamina_pill_restore
+    assert game.status_data()["pills"] == {"name": "回體丹", "count": 20, "restore": restore, "full": False}
 
 
 # ── 狀態列與背包 ──────────────────────────────────────
@@ -218,7 +261,7 @@ def test_the_status_bar_offers_the_refill_even_with_no_pills(game):
     p = game.state.player
     p.stamina, p.stamina_pills = 40.0, 0
     assert game.status_data()["pills"] == {
-        "name": "回體丹", "count": 0, "restore": 100, "full": False, "refill": LABEL,
+        "name": "回體丹", "count": 0, "restore": game.content.config.stamina_pill_restore, "full": False, "refill": LABEL,
     }
     p.stamina = float(cap(game))
     assert game.status_data()["pills"]["full"] is True
@@ -240,7 +283,8 @@ def test_the_bot_takes_a_pill_not_the_free_refill(game):
     p = game.state.player
     p.stamina = 0.0
     bot.take_pill(game)
-    assert p.stamina == 100 and p.stamina_pills == 19  # 丹：+100、少一顆；不是補滿
+    restore = game.content.config.stamina_pill_restore
+    assert p.stamina == restore < cap(game) and p.stamina_pills == 19  # 丹：+restore、少一顆；不是補滿
 
 
 def test_the_bot_with_no_pills_does_not_get_the_refill(game):
@@ -278,6 +322,8 @@ def test_the_page_shows_the_refill_button_with_no_pills(game):
     top = run(server.main_view(game), "return H.topHtml();")
     assert 'data-act="pill"' in top and f">{LABEL}</button>" in top
     assert "丹0" not in top and "disabled" not in top.split('data-act="pill"')[1].split(">")[0]
+    # 給輔助科技讀的那句也走補滿的那一支：寫補滿、寫免費，不是 joy 的「服下回體丹（剩 N 顆…）」
+    assert f'aria-label="{LABEL}體力（測試期間免費，不花回體丹）"' in top and "服下回體丹（剩" not in top
 
 
 @needs_node
@@ -294,6 +340,8 @@ def test_with_the_switch_off_the_button_is_joys_pill_button_and_vanishes_at_zero
     game.state.player.stamina = 40.0
     top = run(server.main_view(game), "return H.topHtml();")
     assert 'data-act="pill"' in top and ">丹20</button>" in top and LABEL not in top
+    restore = game.content.config.stamina_pill_restore
+    assert f'aria-label="服下回體丹（剩 20 顆，回 {restore} 點體力）"' in top  # joy 的那一句，一個字不差
     game.state.player.stamina_pills = 0
     top = run(server.main_view(game), "return H.topHtml();")
     assert "pill-btn" not in top and 'data-act="pill"' not in top
@@ -312,7 +360,7 @@ def test_clicking_the_refill_button_posts_to_the_same_route_as_the_pill(game):
       return { calls: T.calls.map((c) => c[0]), stamina: H.S.main.status.stamina };
     })();"""
     out = run(before, script, responses={"/api/do/pill": {"main": after, "message": ""}})
-    assert out == {"calls": ["/api/do/pill"], "stamina": 150}
+    assert out == {"calls": ["/api/do/pill"], "stamina": cap(game)}
 
 
 # ── 伺服器：週末設定 ──────────────────────────────────
@@ -335,9 +383,10 @@ def test_the_pill_route_refills_to_the_top_under_the_weekend_profile(monkeypatch
     open_characters().save(game.state)
     r = client.post("/api/do/pill", json={}).json()
     status = r["main"]["status"]
-    assert status["stamina"] == status["stamina_max"] == 150, r["message"]
+    top = weekend.config.stamina_max
+    assert status["stamina"] == status["stamina_max"] == top, r["message"]
     assert status["pills"]["refill"] == LABEL and status["pills"]["count"] == 0
     saved = open_characters().load("補滿人").player
-    assert saved.stamina >= 150 and saved.stamina_pills == 0
+    assert saved.stamina >= top and saved.stamina_pills == 0
     again = client.post("/api/do/pill", json={}).json()  # 再按一次：滿的，只回一句話、不出錯
     assert engine.REFILL_FULL in again["message"]  # 伺服器把引擎的 Markdown 轉成 HTML

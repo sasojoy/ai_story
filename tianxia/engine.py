@@ -4176,7 +4176,7 @@ class Game:
             return self._log([REFILL_HUT])
         if p.stamina >= cfg.stamina_max:
             return self._log([REFILL_FULL])
-        gained = f"體力 +{round(cfg.stamina_max - p.stamina)}"
+        gained = f"體力 +{int(cfg.stamina_max) - int(p.stamina)}"  # 狀態列顯示 int(體力)：寫的數字就是條子實際走的那一段（體力有小數是常態）
         p.stamina = float(cfg.stamina_max)
         journal.add_entry(self.state, JournalEntry(
             time=self.state.world.time, title=REFILL_TITLE, lines=[REFILL_LINE], changes=[gained],

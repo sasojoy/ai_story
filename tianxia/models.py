@@ -1383,7 +1383,8 @@ class Config(_Strict):
     # 不限次數；關著時回體丹一個字不變。只在測試期間開（content/profiles/weekend.json），content/config.json 不寫；測試期過了就關掉。
     # 伺服器假人與整季機器人不吃這個，照舊吃丹（bot.take_pill 傳 pill_only=True），平衡量表不受影響
     beta_free_refill: bool = False
-    beta_free_refill_label: str = "補滿"  # 開關打開時狀態列那顆鈕上的字（取代「丹 N」）；新寫，待 joy 潤
+    # 開關打開時狀態列那顆鈕上的字（取代「丹 N」）；新寫，待 joy 潤。不能是空字串：網頁見空字串會退回畫「丹 N」，引擎卻照樣補滿
+    beta_free_refill_label: str = Field(default="補滿", min_length=1)
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
     # FB-068（企劃者 2026-10-05）：熔掉全服登記的武學（合成出來的）時，「練成花的八成」那一份至少退這麼多——合成也花了東西。
