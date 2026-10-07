@@ -130,7 +130,7 @@ def menu(state: GameState, content: Content) -> list[tuple[str, str]]:
     s, scene, _ = got
     if s.stage == "draw":
         return [(DRAW, "把心中的形畫下來"), (LET_GO, "不畫了，順其自然")]
-    return [(f"{PREFIX}{i}", scene.methods[j].text + scene.methods[j].note) for i, j in enumerate(s.order)]
+    return [(f"{PREFIX}{i}", scene.methods[j].text) for i, j in enumerate(s.order)]
 
 
 def choose(state: GameState, content: Content, index: int, rng: random.Random) -> list[str]:

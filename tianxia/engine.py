@@ -4393,7 +4393,7 @@ class Game:
                 parts.append("\n\n".join([f"**{sights.title}**\n\n{sights.text}"] + [ch.effect.text for ch in sights.choices if ch.effect.text]))
             scene = self.content.insight_scenes.get(step.explore_scene) if step.explore_scene else None
             if scene is not None:  # 草廬四景是有所感的場景：場景的引子與卡上的每一個做法（悟到的句子是引擎照屬性寫的，不寫死）
-                parts.append("\n\n".join([f"**{scene.title}**\n\n{scene.text}"] + [m.text + m.note for m in scene.methods]))
+                parts.append("\n\n".join([f"**{scene.title}**\n\n{scene.text}"] + [m.text for m in scene.methods]))
         if t.leave_text:
             parts.append(t.leave_text)
         return "\n\n---\n\n".join(parts)

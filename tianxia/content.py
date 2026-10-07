@@ -376,8 +376,7 @@ def check_insight_scenes(c: Content, need) -> None:
             need(loc_id in c.locations, f"{where}：未知的地點 {loc_id}")
         for tag in scene.tags:
             need(tag in all_tags, f"{where}：沒有任何地點有標籤「{tag}」")
-        for text, label in [(scene.title, "標題"), (scene.text.replace("{痕跡}", ""), "場景"), *((m.text, "做法") for m in scene.methods),
-                            *((m.note, "做法的提醒") for m in scene.methods if m.note)]:
+        for text, label in [(scene.title, "標題"), (scene.text.replace("{痕跡}", ""), "場景"), *((m.text, "做法") for m in scene.methods)]:
             check_text(f"{where}的{label}", text)
         need(not scene.prologue or not (scene.tags or scene.locations), f"{where}：序章的場景只給草廬用，不寫 tags、locations")
         need(scene.prologue or not scene.flags_add, f"{where}：flags_add 只給序章的場景用")

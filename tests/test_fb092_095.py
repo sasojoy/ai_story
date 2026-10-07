@@ -7,57 +7,17 @@ from __future__ import annotations
 import re
 
 import pytest
-from conftest import FixedRandom
 from test_prologue_web import run
 from tests.test_orders import _game, _order
 
 import server
 import webharness
-from tianxia import figures, guide, models, orders, sensing, team
-from tianxia.martial_arts import content_art
+from tianxia import figures, guide, models, orders
 from tianxia.rules import front_of
 
 
 def _step(content, step_id):
     return next(step for step in content.tutorial.steps if step.id == step_id)
-
-
-def _art(skill_id, kind, attribute):
-    return content_art(skill_id, skill_id, kind, attribute, "下品")
-
-
-# ── FB-092：序章選「火」，新武學跟吐納相剋 ─────────────────────────────
-
-
-def test_fb092_the_fire_method_says_the_fire_does_not_suit_the_breath(real):
-    """四景的「灶裡那盆火」是屬剛的做法，師門配方給的是屬剛的【烈爐拳】，跟身上柔的基礎吐納相剋：選之前先說一句。"""
-    scene = real.insight_scenes["prologue_hut"]
-    fire = next(m for m in scene.methods if m.attribute == "剛")
-    card = fire.text + fire.note  # 選的那張卡上那一行：做法加上它的提醒（提醒只在卡上，見 test_fbx_the_fire_warning_is_on_the_choosing_card_only）
-    assert "灶裡那盆火" in fire.text and "火性剛烈" in card and "吐納" in card
-    breath = real.skills[real.config.starter_skills[0]]
-    assert (breath.kind, breath.attribute) == ("內功", "柔") and breath.name == "基礎吐納"  # 句子說的是真的：吐納屬柔
-    others = [m.text for m in scene.methods if m.attribute != "剛"]
-    assert not any("吐納" in text for text in others)  # 另外三個做法不相剋，不多說
-
-
-def test_fb092_step_five_says_how_pairing_works_to_everyone(real):
-    """第 5 步（改練）的話對每個人都多兩句：同一路加兩成、相剋的冤家少兩成，扯了後腿先練上去，之後內功也能融意境換路數。"""
-    step = _step(real, "p5_level")
-    text = step.text
-    assert "講緣分" in text and "同一路" in text and "兩成" in text and "冤家" in text and "內功" in text and "融意境" in text
-    assert "改練" in text and "功法庫" in text and "練到第三成" in text  # 原本的指示還在
-    assert step.glow == ["tab:practice", "switch", "practice"]  # 發光不動
-
-
-def test_fb092_what_the_master_says_about_pairing_is_what_the_rules_do(real):
-    """師父說的三件事都是真的：同屬性 +20%、相剋的一對 −20%（team.pairing，照 Config）；內功能當合成的底、融了意境還是內功
-    （tests/test_fusion.py::test_a_neigong_base_stays_a_neigong 釘住）。"""
-    breath = _art("jichu_tuna", "內功", "柔")
-    assert real.config.pairing_bonus == 0.2 and real.config.pairing_penalty == 0.2
-    assert team.pairing(real, _art("a", "武學", "柔"), breath) == 1.2  # 同一路
-    assert team.pairing(real, _art("b", "武學", "剛"), breath) == 0.8  # 剛配柔：冤家
-    assert team.pairing(real, _art("c", "武學", "快"), breath) == 1.0  # 不相干的不加不減
 
 
 # ── FB-093：入伍第 2 步沒說軍令怎麼出力 ─────────────────────────────────
@@ -594,38 +554,6 @@ def test_fbx_the_ending_does_not_claim_a_last_action_was_counted(on):
     game.choose("act:duty")  # 這一週沒有守城軍令：巡哨替誰都沒記
     box = _finished(game, on)
     assert "也算在裡頭" not in box["text"]
-
-
-def test_fbx_the_fire_warning_is_on_the_choosing_card_only(real):
-    """四景的「灶裡那盆火」提醒（FB-092）在選的那張卡上，不織進選了之後的敘述（「你……。」「你……——心念漸漸凝住了」）、
-    也不交給模型當做法（審查 Minor 5）。"""
-    import random
-
-    game = _game(real, at=real.tutorial.location)
-    state = game.state
-    sensing.start(state, real, real.insight_scenes["prologue_hut"], random.Random(0))
-    labels = {option_id: label for option_id, label in sensing.menu(state, real)}
-    fire = next(option_id for option_id, label in labels.items() if "灶裡那盆火" in label)
-    assert "火性剛烈" in labels[fire] and "吐納" in labels[fire]  # 卡上看得到
-    assert not any("吐納" in label for option_id, label in labels.items() if option_id != fire)
-    msgs = sensing.choose(state, real, int(fire.removeprefix(sensing.PREFIX)), FixedRandom(0.0))  # 擲骰必中：進感悟狀態
-    assert "灶裡那盆火" in msgs[0] and "火性剛烈" not in "".join(msgs)
-    assert "灶裡那盆火" in sensing.scene_text(state, real) and "火性剛烈" not in sensing.scene_text(state, real)
-    req = sensing.request(state, real, game.world, None)
-    assert not isinstance(req, str) and "灶裡那盆火" in req.facts["method"] and "火性剛烈" not in req.facts["method"]
-
-
-def test_fbx_a_method_note_is_checked_like_the_rest_of_the_card(real):
-    from tianxia.content import ContentError, validate
-
-    bad = real.model_copy(deep=True)
-    fire = next(m for m in bad.insight_scenes["prologue_hut"].methods if m.attribute == "剛")
-    fire.note = "（火性刚烈，跟你吐纳的柔不太合）"  # 簡體
-    with pytest.raises(ContentError, match="做法的提醒"):
-        validate(bad)
-    fire.note = "（火性剛烈，跟你吐納的柔不太合）99"  # 數字
-    with pytest.raises(ContentError, match="做法的提醒"):
-        validate(bad)
 
 
 def test_fbx_pressing_the_duty_button_notes_the_action_exactly_once(on, monkeypatch):
