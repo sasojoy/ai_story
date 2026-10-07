@@ -11,8 +11,8 @@ from .state import GameState, Summons
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
 HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
 
-HIGHEST_RANK = 3  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺），求見門檻不看資格
-SEAT_RANK = 4  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）
+SEAT_RANK = seats.SEAT_RANK  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）；階號只在 seats 寫一次
+HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次，求見門檻不看資格也不看席次
 
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {

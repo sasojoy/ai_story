@@ -89,7 +89,7 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
 def clear_progress(p: PlayerState) -> None:
     """叛投時清掉舊陣營的個人進度（第一季設計 5.1；晉升奇遇文件第一節：取消還沒去的召見；軍備物資 4.5：donations 歸零）。
     之後的計畫把自己的陣營進度加在這裡（乙一：機緣已加；乙二：靠山隨機緣清；丙一：第 4 階資格與說過的「只缺一個機會」已加），叛投就不會漏清。
-    這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（例如活躍名單）寫在 defect() 裡，
+    這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（活躍名單、第四階席次的帳與名單）寫在 defect() 裡，
     跟 active_pushers 的清理放在一起。
     刻意沒清的：`runic_pieces`（符文殘片，丙二）與聽過的伏筆片段（`fragments`）——它們是「知道的事」、不是陣營給的身份，
     跟伏筆物品一樣留著。計畫沒寫這一條，是現在的做法、待企劃者確認（在 PM 那裡）；tests/test_promotions_huang.py 的
@@ -108,7 +108,8 @@ def clear_progress(p: PlayerState) -> None:
 
 
 def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
-    """真的叛投：離開舊陣營的門派、清掉舊陣營的進度、改投、記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞。
+    """真的叛投：離開舊陣營的門派、讓出舊陣營的第四階席次（帳與這一週的名單，seats.leave）、清掉舊陣營的進度、改投、
+    記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞。
     呼叫端（Game._defect_step）先確認過還在投靠點、還能叛投。"""
     p, w = state.player, state.world
     old = content.scenario.faction(p.faction)
@@ -118,7 +119,9 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
         p.flags.add(f"叛出:{sect.id}")
         p.sect = None
         msgs.append(f"你也就此離開了{sect.name}。")
-    seats.leave(state, old.id)  # 第四階席次的帳與這一週的名單：在任的人讓出缺、候缺的人不再排進去（正式版丁）
+    # 第四階席次的帳與這一週的名單：在任的人讓出缺、候缺的人不再排進去（正式版丁）。leave 只讀名號與舊陣營的 id，
+    # 排在 clear_progress 前後、改投前後結果都一樣；放這裡是因為舊陣營的 id 在這一段都還拿得到
+    seats.leave(state, old.id)
     clear_progress(p)
     opportunities.leave_plots(state)  # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
     p.faction, p.defected = target.id, True

@@ -2,7 +2,8 @@
 
 有資格的人（PlayerState.qualified，計畫丙一）每週一照上一週的貢獻排名，前 N 名上任（N＝factions.rank4_seats）。
 排名要讀每個人上一週的貢獻，可是週一的掛鉤只拿得到共用的賽季：所以有資格的人每次行動、同步時把自己每週的貢獻
-抄進 WorldState.seat_ledger（report），週一照這本帳排（rotate）。有空缺時當下補上。只有第一季的規則開著才有。
+抄進 WorldState.seat_ledger（report），週一照這本帳排（rotate）。有空缺時當下補上。叛投讓出席次（leave）；名號不再是有資格的人
+（存檔讀不懂、重新開始成散人）就在他自己下一次抄帳時除名（report）。只有第一季的規則開著才有。
 
 名字一律寫名號：陣營軍情不匿名（傳聞分層第七節；rules.display_name 只給地方傳聞用），所以帳上不另存顯示名。"""
 from __future__ import annotations
@@ -12,15 +13,17 @@ from .models import Content
 from .rules import add_rumor, season_one
 from .state import GameState, WorldState
 
-TITLES_RANK = 4
+# 第 4 階的階號：rank_of 在任回它、ranks.TITLES 用它當索引（0 號是空字串）；ranks.SEAT_RANK 與 ranks.HIGHEST_RANK（它少一）都從這裡來。
+# 寫在 seats、不寫在 ranks：ranks 在檔頭 import seats，seats 只好在函式裡才拿得到 ranks.TITLES
+SEAT_RANK = 4
 
 
 def _title(faction: str) -> str:
     """這個陣營第 4 階的頭銜（校尉、大方渠帥、一方之主）；陣營沒有頭銜表時是空字串。"""
-    from .ranks import TITLES  # noqa: PLC0415  ranks → seats：在函式裡 import，避免循環
+    from .ranks import TITLES  # noqa: PLC0415  ranks 在檔頭 import seats：這裡在函式裡 import，避免循環
 
     titles = TITLES.get(faction)
-    return titles[TITLES_RANK] if titles else ""
+    return titles[SEAT_RANK] if titles else ""
 
 
 def seated(state: GameState) -> bool:
@@ -90,9 +93,10 @@ def rotate(state: GameState, content: Content, week: int) -> list[str]:
     同分照帳上的先後（先拿到資格的優先）。每個週一都發一則陣營軍情「本週在任的校尉：甲、乙。」，名單沒變的那一週也發
     （第一季設計 晉升奇遇 §一：每週上任另外發一則；帳上沒有人的陣營沒有名單可發）。回傳空串列：名單寫在陣營軍情裡，不上天下大事。
     一個週一只發一次：掛鉤看 WorldState.hooked_week，不管幾個人同步、暫停了幾次，那一週只跑一回。
-    排名讀帳、不讀存檔：週一的掛鉤只拿得到共用賽季。賽季時鐘暫停時時間不動，掛鉤自然不會跑（暫停的那一週過完才排，只排一次）。"""
+    排名讀帳、不讀存檔：週一的掛鉤只拿得到共用賽季。賽季時鐘暫停時時間不動，掛鉤自然不會跑（暫停的那一週過完才排，只排一次）。
+    第 1 週沒有「上一週」可排（開季那一刻的掛鉤，帳是空的）：week < 2 什麼都不做，空缺是 report 當下補的。"""
     w = state.world
-    if not season_one(content, w) or w.ended:
+    if week < 2 or not season_one(content, w) or w.ended:
         return []
     n = factions.rank4_seats(content.config)
     for faction, ledger in w.seat_ledger.items():

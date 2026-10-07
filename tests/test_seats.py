@@ -512,7 +512,8 @@ def test_a_drifter_is_rank_zero_whatever_the_list_says(on):
 
 
 def test_the_stored_rank_stays_three_for_a_seated_member(on):
-    """存檔的階（PlayerState.rank）不隨席次動：求見門檻、晉升都還讀它；第 4 階只是 rank_of 看的此刻。"""
+    """存檔的階（PlayerState.rank）不隨席次動：求見門檻（audience_bar）還讀它；第 4 階只是 rank_of 看的此刻，
+    next_rank_up 讀 rank_of ＋ 1，超過 HIGHEST_RANK 就是 None。"""
     game = _qualified(on, "甲")
     seats.report(game.state, on)
     assert game.state.player.rank == 3 and ranks.rank_of(game.state) == 4
@@ -1027,3 +1028,20 @@ def test_a_monday_inside_the_unsynced_stretch_before_a_pause_rotates_once_after_
     assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
     game.sync(1000.0 + week_two + 830)
     assert [t for t in _notes(store.get_season()) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
+
+
+def test_the_week_one_hook_has_no_last_week_to_rank(on):
+    """第 1 週的掛鉤沒有「上一週」可排（讀的是第 0 週、全是 0 分）：什麼都不動、不發名單。補缺（report）照常，空缺是當下補的。"""
+    w = _season({"甲": 50, "乙": 40, "丙": 30})
+    w.seats["guan"] = ["丙"]
+    before = len(w.rumors)
+    assert seats.rotate(_qualified(on, "甲", world=w).state, on, 1) == []
+    assert w.seats["guan"] == ["丙"] and len(w.rumors) == before
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["甲", "乙"]
+
+
+def test_rank_numbers_come_from_one_place():
+    """第 4 階的階號只在 seats 寫一次：rank_of 在任回它、頭銜表用它當索引、存檔的階最高是它少一。"""
+    assert ranks.SEAT_RANK == seats.SEAT_RANK == 4 and ranks.HIGHEST_RANK == seats.SEAT_RANK - 1
+    assert all(len(titles) == seats.SEAT_RANK + 1 for titles in ranks.TITLES.values())  # 0 號是空字串，1～4 是頭銜
