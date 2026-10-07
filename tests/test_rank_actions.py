@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from tianxia import calendar, models, rank_actions, rules, seats
+from tianxia import calendar, events, models, rank_actions, rules, seats
 from tianxia.content import ContentError, validate
 from tianxia.engine import RANK_ACTION_PREFIX, Game
 from tianxia.models import Check, OrdersContent, RankAction
@@ -173,12 +173,17 @@ def _seat(game, faction="haoqiang"):
     game.state.world.seats = {faction: [game.state.player.name]}
 
 
+def _check_note(game, action_id):
+    """有檢定的行動在括號裡寫的那一段（跟事件選項同一個寫法，events.check_note；企劃者裁決 E5.3）。心裡話是 joy 的字，不在這裡寫死。"""
+    return events.check_note(_action(game.content, action_id).check, game.state, game.content, game.world)
+
+
 def test_incite_needs_rank_three_and_a_town(on):
     game = _game(on, "huang", "runan", rank=2)
     assert "act:rank:incite" not in _ids(game)
     game.state.player.rank = 3
     option = _option(game, "act:rank:incite")
-    assert option.label == "在一地煽動起事（體力 20）"
+    assert option.label == f"在一地煽動起事（體力 20・{_check_note(game, 'incite')}）"
     game.state.player.location = "runan_wilds"  # 野外不是城鎮
     assert "act:rank:incite" not in _ids(game)
 
@@ -328,10 +333,12 @@ def test_nothing_where_there_is_no_front(on):
 
 
 def test_the_option_is_grey_when_the_stamina_is_short(on):
+    """體力不夠：同一個選項、同一個標籤（含檢定那一段，裁決 E5.3／預審 F7），只是按不下去；網頁把按不下去的花體力選項寫成「體力不夠」。"""
     game = _game(on, "huang", "runan")
     game.state.player.stamina = 19
     option = _option(game, "act:rank:incite")
-    assert option is not None and not option.enabled and option.label == "在一地煽動起事（體力 20）"
+    assert option is not None and not option.enabled
+    assert option.label == f"在一地煽動起事（體力 20・{_check_note(game, 'incite')}）"
     game.state.player.stamina = 20
     assert _option(game, "act:rank:incite").enabled
 
@@ -793,6 +800,61 @@ def test_the_menu_and_push_trend_read_the_same_room(on):
     _fill(game, "yingru")
     with mock.patch.object(push, "room_left", return_value=5.0):
         assert _option(game, "act:rank:incite").enabled
+
+
+# ── 企劃者裁決 E5.3（2026-10-07）：有檢定的行動照事件選項的寫法寫檢定 ─────────────────
+# 「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」：括號裡體力後面接的，就是事件選項括號裡的那一段（events.check_note，choice_label
+# 也用它），沒有第二份寫法；吃到惡名熟練加成的照寫「＋N」與熟練那一句。不寫失手多耗體力（這些行動失敗不另扣）。灰掉的標籤照舊。
+
+
+def test_the_check_reads_like_an_event_option(on):
+    """悟性 5 煽動起事（難度 7）：「在一地煽動起事（體力 20・悟性 5：{差 -2 那一檔的心裡話}）」。"""
+    game = _game(on, "huang", "runan")
+    incite = _action(on, "incite")
+    outlook = rules.check_outlook(incite.check, game.state, on, game.world)
+    voice = events.voice_line("wis", outlook.gap, on)
+    assert _option(game, "act:rank:incite").label == f"在一地煽動起事（體力 20・悟性 5：{voice}）"
+
+
+def test_rank_actions_and_event_options_share_one_check_writer(on):
+    """把 events.check_note 換掉：事件選項與第 3 階、第 2 階的行動都跟著換（不是各寫一份）。"""
+    game = _game(on, "huang", "runan")
+    choice = next(ch for e in on.events.values() for ch in e.choices if ch.check is not None and not ch.combat)
+    with mock.patch.object(events, "check_note", return_value="記號"):
+        assert "（記號）" in events.choice_label(choice, game.state, on, game.world)
+        assert _option(game, "act:rank:incite").label == "在一地煽動起事（體力 20・記號）"
+        game.state.player.rank = 2
+        game.state.player.location = "julu_altar"
+        assert _option(game, "act:rank2").label == f"施符水收人心（體力 {on.config.rank2_stamina}・記號）"
+
+
+def test_evil_practice_shows_in_the_label(on):
+    """內容的複本：煽動起事的檢定吃惡名的熟練加成。惡名 10 → 「悟性 5＋1：」接熟練那一句、逗號、心裡話。"""
+    incite = _action(on, "incite")
+    incite.check = incite.check.model_copy(update={"practice": "evil"})
+    game = _game(on, "huang", "runan")
+    game.state.player.stats["evil"] = 10
+    label = _option(game, "act:rank:incite").label
+    practiced = rules.practice_line(incite.check, game.state, on, game.world).rstrip("。")
+    assert label.startswith(f"在一地煽動起事（體力 20・悟性 5＋1：{practiced}，")
+
+
+def test_actions_without_a_check_keep_their_label(on):
+    game = _game(on, "haoqiang", "runan")
+    _chaos(game, "yingru", 50)
+    _seat(game)
+    assert _option(game, "act:rank:fortify").label == "修築塢堡（體力 20）"
+    assert _option(game, "act:rank:seize").label == "趁亂占據郡縣（體力 30）"
+
+
+def test_grey_labels_do_not_carry_the_check(on):
+    """灰掉的原因照舊只寫原因（這週做滿、今天推滿、第 2 階今天做滿）。"""
+    game = _game(on, "huang", "runan", rank=2)
+    game.state.player.rank2_days = {calendar.point(game.state.world.time, on, game.state.world).cal_day: on.config.rank2_daily}
+    assert _option(game, "act:rank2").label == f"施符水收人心（今天已經做滿 {on.config.rank2_daily} 次）"
+    game.state.player.rank = 3
+    _fill(game, "yingru")
+    assert _option(game, "act:rank:incite").label == f"在一地煽動起事（{FULL}）"
 
 
 def test_rank_two_and_duty_are_not_greyed_by_a_full_line(on):
