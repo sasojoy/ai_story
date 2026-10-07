@@ -384,25 +384,26 @@ def test_each_faction_rotates_on_its_own_ledger(on):
     ]
 
 
-def test_no_note_when_the_list_is_unchanged(on):
+def test_the_list_is_posted_every_monday_even_when_nobody_changed(on):
+    """第一季設計（晉升奇遇 §一、傳聞分層 4.1）：每週上任另外發一則陣營軍情，名單沒變的那一週也發。"""
     w = _season({"甲": 50, "乙": 40})
     w.seats["guan"] = ["甲", "乙"]
     before = len(w.rumors)
     seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
-    assert len(w.rumors) == before and w.seats["guan"] == ["甲", "乙"]
+    assert w.seats["guan"] == ["甲", "乙"] and _notes(w, before) == ["本週在任的校尉：甲、乙。"]
 
 
-def test_a_reshuffle_of_the_same_people_posts_nothing(on):
-    """名單有變指的是誰在任，不是排在前面還是後面：補缺的丙先坐進去，週一排完還是同一批人（排名順序變了）就不重發一遍。"""
+def test_a_reshuffle_of_the_same_people_is_posted_in_the_new_order(on):
+    """排的先後變了、在任的還是同一批人：名單照新的排名寫回，軍情照新的排名寫。"""
     w = _season({"甲": 10, "乙": 60})
     w.seats["guan"] = ["甲", "乙"]
     before = len(w.rumors)
     seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
-    assert w.seats["guan"] == ["乙", "甲"]  # 名單照新的排名寫回
-    assert len(w.rumors) == before
+    assert w.seats["guan"] == ["乙", "甲"]
+    assert _notes(w, before) == ["本週在任的校尉：乙、甲。"]
 
 
-def test_a_changed_set_posts_one_note_even_when_only_one_seat_moves(on):
+def test_a_changed_list_posts_one_note_even_when_only_one_seat_moves(on):
     w = _season({"甲": 50, "乙": 10, "丙": 40})
     w.seats["guan"] = ["甲", "乙"]
     before = len(w.rumors)
@@ -544,7 +545,7 @@ def _two_challengers(game):
 
 
 def test_a_season_walking_into_week_two_rotates_the_seats_then_issues_the_orders(on, monkeypatch):
-    """整條路：時間走進第 2 週，掛鉤先排席次、再發軍令（軍令之後要讀在任的人）；每週只排一次。"""
+    """整條路：時間走進第 2 週，掛鉤先排席次、再發軍令（軍令之後要讀在任的人）；每週只排一次、只發一則。"""
     from tianxia import orders
 
     game = _qualified(on, "甲", weeks={1: 7})
@@ -568,6 +569,28 @@ def test_a_season_walking_into_week_two_rotates_the_seats_then_issues_the_orders
     assert _notes(season).count("本週在任的校尉：乙、丙。") == 1
     game.sync(week_two + 4)  # 同一週再同步：不再排、不再發
     assert _notes(game.world.get_season()).count("本週在任的校尉：乙、丙。") == 1
+
+
+def test_two_players_syncing_across_a_monday_post_one_note_and_every_monday_posts(on):
+    """名單是共用賽季裡每週一的掛鉤發的：兩個人先後同步走過同一個週一還是一則；下一個週一名單沒變也再發一則。"""
+    first = _qualified(on, "甲", weeks={1: 7})
+    second = _qualified(on, "乙", weeks={1: 50})
+    _two_challengers(first)
+    first.sync(1000.0)
+    second.sync(1000.0)
+    assert first.world.get_season().seats["guan"] == ["甲", "乙"]
+    note = "本週在任的校尉：乙、丙。"
+    week_two = 1000.0 + _real_seconds_to_week(on, first, 2) + 5
+    first.sync(week_two)
+    second.sync(week_two + 1)
+    first.sync(week_two + 2)
+    assert _notes(first.world.get_season()).count(note) == 1
+    week_three = 1000.0 + _real_seconds_to_week(on, first, 3) + 5
+    second.sync(week_three)
+    first.sync(week_three + 1)
+    season = first.world.get_season()
+    assert season.seats["guan"] == ["乙", "丙"]  # 第 2 週沒人記貢獻：同分，照帳上的先後
+    assert _notes(season).count(note) == 2  # 名單沒變的那一週也發
 
 
 # ── N5：賽季時鐘暫停時凍結世界的變化 ─────────────────────
