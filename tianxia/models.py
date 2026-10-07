@@ -1805,7 +1805,7 @@ class RankAction(_Strict):
     faction: str
     rank: Literal[3, 4]
     name: str
-    stamina: int = Field(ge=0)
+    stamina: int = Field(ge=1)  # 每個行動都花體力（至少 1）：選項上寫「體力 N」，沒有花費的行動等於免費的推力
     weekly: int = Field(gt=0)  # 每週（季曆）最多幾次，不論成敗都算
     tags: list[str] = Field(default_factory=list)
     chaos_only: bool = False

@@ -118,7 +118,9 @@ def test_the_check_stat_must_be_a_known_stat(real):
         validate(real)
 
 
-@pytest.mark.parametrize("change", [{"rank": 2}, {"rank": 5}, {"stamina": -1}, {"weekly": 0}, {"push": 0}, {"surprise": 1}])
+@pytest.mark.parametrize(
+    "change", [{"rank": 2}, {"rank": 5}, {"stamina": -1}, {"stamina": 0}, {"weekly": 0}, {"push": 0}, {"surprise": 1}],
+)
 def test_the_model_refuses_nonsense_numbers_and_unknown_fields(change):
     fields = {"id": "x", "faction": "huang", "rank": 3, "name": "甲", "stamina": 1, "weekly": 1, "push": 1, "ok": "好"}
     with pytest.raises(ValidationError):
