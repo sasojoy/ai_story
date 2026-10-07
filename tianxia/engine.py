@@ -127,6 +127,9 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+# 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
+# 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
+HEARD_TITLE = "聽聞"
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
@@ -4934,8 +4937,9 @@ class Game:
 
     # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────
     # 輸入一個名號：照角色存檔認人（不分大小寫，同 CharacterStore），在這一把行動鎖裡讀他的存檔、補算到此刻，做完存回去——
-    # 跟伺服器替每個人做動作一樣（重讀 → 同步 → 動作 → 存檔）。給他的東西都走自然那條路的同一個函式；他的江湖紀錄記一則
-    # （標「管理者」：不然他會看到一張沒來由的召見），管理者自己也記一則。拒絕的字只有管理者看得到。
+    # 跟伺服器替每個人做動作一樣（重讀 → 同步 → 動作 → 存檔）。給他的東西都走自然那條路的同一個函式；他的江湖紀錄記一則，
+    # 看起來跟自然發生的一樣（不標管理者，審查 M-1：管理者的動作波及玩家時一向不提管理者，例如取消決戰），管理者自己記一則、
+    # 標「管理者」。拒絕的字只有管理者看得到。
 
     def _admin_target(self, name: str, *, sync: bool = True) -> Game | None:
         """名號對到的那個角色（不分大小寫、不管前後空白）；沒有這個人、或存檔讀不懂，是 None。給自己就是這一份 Game（伺服器在
@@ -4997,7 +5001,7 @@ class Game:
         why, promo = self._summons_plan(target)
         lines = [] if promo is None else ranks.issue_summons(target.state, self.content, promo)
         if lines:
-            target._write("召見", lines, tag="管理者")
+            target._write("召見", lines)  # 同步時自然發的召見也是這個標題；不標管理者（審查 M-1）
         self._save_target(target)
         if why is not None:
             return self._log([why])
@@ -5023,7 +5027,9 @@ class Game:
         why = opportunities.offer_refusal(s, self.content, o, self.world)
         if why is None:
             lines, done = opportunities.offer(s, self.content, o, self.world)
-            target._write(opportunities.title(s, self.content, f"offer:{o.id}"), lines, tag="管理者")
+            # 聽到的（線索、內鬼的特徵）照自然聽到的樣子，不說是哪一個機緣；其他照機緣的寫法。都不標管理者（審查 M-1）
+            heard = o.kind in opportunities.HEARD_KINDS
+            target._write(HEARD_TITLE if heard else opportunities.title(s, self.content, f"offer:{o.id}"), lines)
         self._save_target(target)
         if why is not None:
             return self._log([why])
@@ -5052,7 +5058,7 @@ class Game:
         s = target.state
         why = foreshadow.grant_refusal(s, c, chain, i)
         if why is None:
-            target._write("聽聞", foreshadow.grant_fragment(s, c, chain.id, i, self.world), tag="管理者")
+            target._write(HEARD_TITLE, foreshadow.grant_fragment(s, c, chain.id, i, self.world))  # 不標管理者（審查 M-1）
         self._save_target(target)
         if why is not None:
             return self._log([why])

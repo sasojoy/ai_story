@@ -860,6 +860,7 @@ def title(state: GameState, content: Content, arg: str) -> str:
 KIND_NAMES = {
     "bond": "情誼型", "accumulate": "累積型", "timing": "天時地利型", "puzzle": "拼圖型", "deduce": "推理型", "plot": "集體密謀型",
 }
+HEARD_KINDS = ("timing", "deduce")  # 給的是聽來的線索（hear_clue）：江湖紀錄照自然聽到的樣子，不寫是哪一個機緣（審查 M-1）
 PLOT_NO_OFFER = "（集體密謀沒有交給一個人的那一刻：第 3 階以上的人在己方人物所在的地方請命就能發起，或響應同陣營的人發起的。）"
 
 

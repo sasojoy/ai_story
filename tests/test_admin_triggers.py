@@ -351,7 +351,9 @@ def test_summon_issues_the_same_summons_as_reaching_the_threshold(on, rank):
     assert saved.player.summons.model_dump() == natural.state.player.summons.model_dump()
     assert saved.player.surveyed == natural.state.player.surveyed and saved.player.surveyed
     entry = _entry(saved, "召見")
-    assert _said(entry) == _said(_entry(natural.state, "召見")) and entry.tag == "管理者"
+    told = _entry(natural.state, "召見")  # 審查 M-1：他那一則跟自然收到的一模一樣，不寫是管理者發的
+    assert (entry.title, entry.tag, entry.lines, entry.changes) == (told.title, told.tag, told.lines, told.changes)
+    assert entry.tag != "管理者" and _entry(admin.state, "發召見").tag == "管理者"  # 管理者自己那一則照舊標
     assert saved.player.contrib == 0 and saved.player.opp_done == []
     assert msg == f"已替乙發第 {rank + 1} 階的召見：{_said(entry)[0]}"
     assert _entry(admin.state, "發召見").lines == [msg]
@@ -410,7 +412,7 @@ def test_the_name_is_matched_like_the_saves_and_the_admin_can_target_himself(on)
     assert open_characters().load("Ruby").player.summons is not None
     admin.state.player.faction = "guan"
     admin.admin_summon("管")
-    assert admin.state.player.summons is not None and _entry(admin.state, "召見").tag == "管理者"
+    assert admin.state.player.summons is not None and _entry(admin.state, "召見").tag == ""
 
 
 # ── 給他一個機緣：每一種 ─────────────────────────────────
@@ -426,8 +428,9 @@ def test_timing_gives_the_clue_exactly_as_hearing_it(on):
     [msg] = admin.admin_give_opportunity("乙", "guan_courier")
     saved = _saved(admin, "乙")
     assert saved.player.opp_clues == natural.state.player.opp_clues
-    entry = _entry(saved, "機緣・荒丘的信使")
-    assert _said(entry) == heard and entry.tag == "管理者"
+    entry = _entry(saved, "聽聞")  # 審查 M-1：自然聽到線索不會說出是哪一個機緣，也不寫是管理者給的
+    assert _said(entry) == heard and entry.tag == ""
+    assert not any(e.title.startswith("機緣") for e in saved.journal)
     assert opportunities.heard_clues(saved, on) == opportunities.heard_clues(natural.state, on)  # 見聞頁的個人線索
     assert msg.startswith("已給乙機緣「荒丘的信使」：聽到了線索")
     assert admin.admin_give_opportunity("乙", "guan_courier") == ["（乙已經聽過「荒丘的信使」的線索。）"]
@@ -449,7 +452,8 @@ def test_accumulate_reaches_the_milestone_exactly_as_counting_up(on):
     p, q = saved.player, natural.state.player
     assert (p.opp_counts, p.opp_items, p.opp_fronts) == (q.opp_counts, q.opp_items, q.opp_fronts)
     assert p.opp_fronts == {"guan_deserter": "yingru"}  # 長社在潁川汝南：降卒要送去那條戰線的官軍主將
-    assert _said(_entry(saved, "機緣・降卒的消息")) == said[-1:]
+    entry = _entry(saved, "機緣・降卒的消息")
+    assert _said(entry) == said[-1:] and entry.tag == ""
     assert admin.admin_give_opportunity("乙", "guan_deserter") == ["（乙已經拿到知道運糧小道的降卒了，送去就完成。）"]
 
 
@@ -464,7 +468,8 @@ def test_bond_raises_the_affinity_to_where_the_topic_appears(on):
     need = foreshadow.need(on, next(o for o in on.opportunities if o.id == "guan_zhujun").bond.affinity)
     assert saved.player.affinities["zhujun"] == need
     assert any(o.id == "talk:opp:guan_zhujun" for o in opportunities.talk_options(saved, on, "zhujun"))
-    assert _said(_entry(saved, "機緣・朱儁的出身")) == [f"朱儁情誼 +{need}"]
+    entry = _entry(saved, "機緣・朱儁的出身")
+    assert _said(entry) == [f"朱儁情誼 +{need}"] and entry.tag == ""
     assert admin.admin_give_opportunity("乙", "guan_zhujun") == [
         f"（乙跟朱儁的情誼已經到 {need}，話題「出身」已經在對話選單上。）"]
 
@@ -495,7 +500,8 @@ def test_deduce_tells_every_trait_of_this_seasons_mole_as_hearing_them_would(on)
     admin.admin_give_opportunity("乙", "huang_mole")
     saved = _saved(admin, "乙")
     assert {k for k in saved.player.opp_clues if k.startswith("huang_mole:")} == mole
-    assert len(_said(_entry(saved, "機緣・營中的內鬼"))) == len(mole)
+    entry = _entry(saved, "聽聞")
+    assert len(_said(entry)) == len(mole) and entry.tag == ""
     assert admin.admin_give_opportunity("乙", "huang_mole") == ["（內鬼的特徵乙都聽過了。）"]
 
 
@@ -542,7 +548,8 @@ def test_fragment_is_added_exactly_as_hearing_it(on):
     saved = _saved(admin, "乙")
     assert saved.player.fragments == natural.state.player.fragments
     entry = _entry(saved, "聽聞")
-    assert _said(entry) == heard and entry.tag == "管理者"
+    assert _said(entry) == heard and entry.tag == ""
+    assert _entry(admin.state, "給伏筆片段").tag == "管理者"
     assert foreshadow.heard_texts(saved, on, admin.world) == foreshadow.heard_texts(natural.state, on, natural.world)
     after = admin.world.get_season()
     assert len(after.rumors) == rumors and after.locks == locks

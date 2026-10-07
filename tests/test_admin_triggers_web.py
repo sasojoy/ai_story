@@ -107,7 +107,8 @@ def test_a_players_own_story_through_the_routes(client):
     assert saved.summons is not None and saved.opp_clues == ["guan_courier"] and saved.fragments == {"fs_changshe_guan": [0]}
     main = player.get("/api/main").json()
     journal = "".join(main.get(key) or "" for key in ("latest", "journal", "older"))
-    assert "召見" in journal and "機緣・荒丘的信使" in journal and "聽聞" in journal
+    assert "召見" in journal and "聽聞" in journal
+    assert "管理者" not in journal and "機緣・荒丘的信使" not in journal  # 審查 M-1：看起來跟自然發生的一樣
     assert server.game_for("沈青衫").state.player.summons is not None  # 他那一份 Game 進鎖時重讀了存檔
 
 
