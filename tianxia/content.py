@@ -1250,6 +1250,14 @@ def validate(c: Content) -> None:
             if insight_id in c.insights and c.insights[insight_id].grant is not None:
                 need(False, f"{where}：{c.insights[insight_id].name}只能靠名聲悟得，事件不能給")
         known(where, eff.affinity, c.characters, "人物")
+        # 黃巾的第 3、4 階奇遇（正式版丙二）：捐糧的據點存在、份量大於 0（0 份換算出 0、不拿糧也記一筆貢獻）；給的片段存在
+        known(where, list(eff.donate_grain), c.locations, "地點")
+        need(all(n > 0 for n in eff.donate_grain.values()), f"{where}：donate_grain 的份量要大於 0")
+        for ref in eff.fs_fragments:
+            chain_id, _, index = ref.rpartition(":")
+            found = next((ch for ch in c.foreshadows.chains if ch.id == chain_id), None)
+            need(found is not None and index.isdecimal() and int(index) < len(found.fragments),
+                 f"{where}：fs_fragments 的 {ref} 不存在（要寫「鏈 id:片段序號」，序號從 0 起）")
         known(where, eff.trend, trend_ids | {FRONT_KEY}, "大勢線")
         front_needs_total(where, eff.trend)
         not_derived(where, eff.trend)
@@ -1296,6 +1304,8 @@ def validate(c: Content) -> None:
                     # 晉升奇遇的效果（只能寫在手寫的晉升選項上）：summons_next、event_mods、patron 是正式版丙一的
                     ("promote", eff.promote), ("followers", eff.followers), ("summons_next", eff.summons_next),
                     ("event_mods", eff.event_mods), ("patron", eff.patron),
+                    # 黃巾奇遇的捐糧、給片段、記殘片（正式版丙二）：同樣只准寫在手寫的選項上，不是隨口一句話換得到的
+                    ("donate_grain", eff.donate_grain), ("fs_fragments", eff.fs_fragments), ("runic", eff.runic),
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")

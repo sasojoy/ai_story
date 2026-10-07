@@ -240,6 +240,7 @@ class PlayerState(BaseModel):
     rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
+    runic_pieces: int = 0  # 符文殘片（伏筆文件第七節；基準量，黃巾第 4 階的密令給的；玉璽大勢任務讀它）；角色每季重來
     qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、頭銜寫「…（…候缺）」；上任與席次是計畫丁的事
     rank_hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次；跟新手引導的 hints_seen 無關）
 
