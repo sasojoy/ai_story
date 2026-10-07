@@ -107,11 +107,16 @@
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
     recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
     recapOpen: false,
+    howto: undefined, // 設定抽屜「玩法說明」上一次要到的那一頁（伺服器寫好的 HTML）：undefined＝還沒要到；每次攤開都再問（loadHowto）
+    howtoOpen: false,
+    howtoFailed: false, // 最近一次要玩法說明沒要到：卡上寫一句、給「再試一次」
+    howtoSeq: 0, // 玩法說明的第幾次請求：晚回來的舊請求（後面又問了一次、或已經登出）不蓋掉新的
     ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
     ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
     ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
     ordersVisible: false, // 觀察者最後一次說的：軍令卡（扣掉頂上與底下兩條固定的）至少一半在畫面上嗎
     ordersRetried: false, // 送不出去、已經補過一次重試了嗎（不連著試）
+    stamOpen: false, // 狀態列體力條點開的說明攤開著嗎（explain-1）；再點一次收起
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -207,6 +212,7 @@
 
   function enter(data) {
     resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
+    forgetHowto(); // 玩法說明也是（登入失效之後重新登入，沒經過登出那顆鈕）
     S.here = null; // 「此地還能做」摺疊的開合與自動打開過的記錄也重來（FB-087）
     S.hereAuto = {};
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
@@ -333,7 +339,9 @@
     const vitals = [
       // 回體丹（企劃者 2026-10-07 內測贈送）：有丹時體力條右端多一顆「丹 N」，按了吃一顆；體力滿了是灰的。序章裡伺服器不給 pills。
       // 測試期間一鍵補滿打開時（pills.refill）：沒有丹也有這顆鈕、字改成「補滿」，按了直接補滿、不花丹
-      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span>${s.pills
+      // 點體力條（丹／補滿那顆鈕以外的地方）在底下攤開體力怎麼回（explain-1；s.stamina_help 是伺服器照設定寫好的幾行）
+      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"${s.stamina_help && s.stamina_help.length
+        ? ` data-act="stam-help" role="button" tabindex="0" aria-expanded="${!!S.stamOpen}" aria-controls="stam-help"` : ""}><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span>${s.pills
         ? `<button class="pill-btn" data-act="pill" ${s.pills.full ? "disabled" : ""} aria-label="${s.pills.refill
           // 測試期間一鍵補滿（伺服器給 pills.refill＝鈕上的字，沒有丹也給）：鈕寫「補滿」不寫丹數；關著時沒有這個鍵，照 joy 的寫法
           ? `${esc(s.pills.refill)}體力（測試期間免費，不花${esc(s.pills.name)}）`
@@ -360,6 +368,8 @@
       </div>
       ${inPro ? "" : subs}
       ${vitals ? `<div class="vitals">${vitals}</div>` : ""}
+      ${S.stamOpen && shown("stamina") && s.stamina_help && s.stamina_help.length
+        ? `<div class="more-stats stam-help" id="stam-help">${s.stamina_help.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : ""}
       ${S.showMore ? `<div class="more-stats">
         ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
@@ -782,6 +792,7 @@
     // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
+    const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
     const cells = ACT_CELLS.map((d) => {
@@ -792,6 +803,7 @@
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
+      noted.push([name, o.id]);
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
@@ -821,7 +833,19 @@
     const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
-    return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
+    // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
+    // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
+    const notes = open || hotHere ? "" : actNotesHtml(m, noted);
+    return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${notes}${moveCard}${here}`;
+  }
+
+  // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
+  // 句子是伺服器照規則寫好的（m.action_notes：選項 id → 一句；序章裡是空的），這裡只照格子的順序排、前面冠格子上的名字。
+  // 只寫畫出來的格子；打坐、移動的格子本身就寫著（回體力、幾條路），沒有說明
+  function actNotesHtml(m, noted) {
+    const notes = m.action_notes || {};
+    const rows = noted.filter(([, id]) => notes[id]).map(([name, id]) => `<p><b>${esc(name)}</b>${esc(notes[id])}</p>`);
+    return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
 
   // 「此地還能做」摺疊畫成開著還是收著（FB-087）。摺疊裡的鈕（例：求見盧植）被擋下來、或輪詢帶來新畫面，整頁重畫、摺疊是新畫的 DOM，
@@ -1768,10 +1792,14 @@
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
+          <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
           <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
         </div>
+        ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howtoFailed
+          ? '<p class="muted">說明沒拿到，連不上伺服器。</p><button class="btn small" data-act="howto-retry">再試一次</button>'
+          : S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
@@ -1941,6 +1969,32 @@
   }
 
   // 設定頁的「重看序章」：序章的文字是內容、不會變，同一次載入只問一次。沒有序章的內容回空字串，就不畫那顆鈕
+  // 設定抽屜的「玩法說明」（explain-1）：伺服器照設定與這一季寫好的一頁（/api/howto，已經是跳脫過的 HTML）。每次攤開都再問一次
+  // （一個 GET、按了才問；換季、第一季的開關換了說明跟著對，審查 M5），問的時候卡上先放著上一次要到的那一頁。要不到（連不上、
+  // 伺服器出錯）就記 howtoFailed，卡上寫一句、給「再試一次」。晚回來的舊請求（後面又問了一次、已經登出）不算：回傳 false
+  async function loadHowto() {
+    const seq = ++S.howtoSeq;
+    S.howtoFailed = false;
+    let text = null;
+    try { text = (await api("/api/howto")).text || ""; } catch (e) { text = null; }
+    if (seq !== S.howtoSeq) return false;
+    if (text === null) S.howtoFailed = true;
+    else S.howto = text;
+    return true;
+  }
+  // 登出、換帳號：上一個人的那一頁與開合都不留，還在路上的請求也不算
+  function forgetHowto() {
+    S.howto = undefined;
+    S.howtoOpen = false;
+    S.howtoFailed = false;
+    S.howtoSeq += 1;
+  }
+  // 問一次玩法說明：先畫出「正在翻書……」（或上一次那一頁），回來了（而且抽屜與這張卡還開著）再畫；抽屜停在原地
+  async function refreshHowto() {
+    renderKeepingSheet();
+    if (await loadHowto() && S.sheet && S.howtoOpen) renderKeepingSheet();
+  }
+
   async function loadRecap() {
     if (S.recap !== undefined) return;
     try { S.recap = (await api("/api/prologue")).text || ""; } catch (e) { return; } // 問不到：下次打開設定再問
@@ -2402,7 +2456,13 @@
             renderKeepingSheet(); // 等資料的時候人可能已經往下捲了
           }
           break;
-        case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
+        case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
+        case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
+          S.howtoOpen = !S.howtoOpen;
+          if (S.howtoOpen) await refreshHowto();
+          else renderKeepingSheet();
+          break;
+        case "howto-retry": S.howtoFailed = false; await refreshHowto(); break; // 要不到時卡上的「再試一次」
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
@@ -2415,6 +2475,7 @@
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
+        case "stam-help": S.stamOpen = !S.stamOpen; renderTop(); break; // 點體力條：底下攤開／收起體力怎麼回（explain-1）；丹的鈕自己是一顆，點它不會走到這裡
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
@@ -2460,7 +2521,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
@@ -2582,6 +2643,12 @@
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"]')) {
       ev.preventDefault();
       hearToggle(ev.target);
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.bar.stam[data-act="stam-help"]')) {
+      ev.preventDefault();
+      S.stamOpen = !S.stamOpen;
+      renderTop();
+      document.querySelector('.bar.stam[data-act="stam-help"]')?.focus(); // 狀態列是重畫的：焦點放回體力條，鍵盤可以再按一次收起
     }
   });
 

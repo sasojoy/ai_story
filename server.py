@@ -788,6 +788,8 @@ def _main_view_body(game: Game) -> dict:
         "quest": quest,
         "scene": scene,
         "options": [o.model_dump() for o in options],
+        # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
+        "action_notes": game.action_notes(o.id for o in options),
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
@@ -953,7 +955,8 @@ def admin_choices(game: Game) -> dict:
 
 
 RESULT_WORDS = (("guan:", "官軍"), ("huang:", "黃巾"))  # 結果鍵的白話（定結果的下拉選單）
-TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "due": "時間到了", "later": "還沒到"}
+# cancelled：開打後被取消、還沒有結果（FB-099）：要收尾用「定結果」（只有管理者看得到）
+TIMETABLE_STATES = {"done": "已結算", "running": "開打了", "cancelled": "開打後取消・待定結果", "due": "時間到了", "later": "還沒到"}
 
 
 def _result_label(key: str) -> str:
@@ -988,7 +991,7 @@ def timetable_choices(game: Game) -> dict:
         return {"timetable": [], "results": [], "locks": []}
     now = time.time()
     rows = []
-    for row in timetable.status_rows(state, CONTENT):
+    for row in timetable.status_rows(state, CONTENT, cancelled=game.cancelled_showdowns()):
         rows.append({
             "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
@@ -1390,6 +1393,14 @@ def api_prologue(request: Request):
     """設定頁的「重看序章」：序章的事件與師父的話排成一頁（Markdown 轉成 HTML）；沒有序章的內容是空字串，網頁就不畫那顆鈕。"""
     game = _game(request)
     return look(game, lambda g: {"text": md(g.prologue_recap())})
+
+
+@app.get("/api/howto")
+def api_howto(request: Request):
+    """設定抽屜的「玩法說明」（explain-1）：五個行動、體力、情誼、心得、意境、背包各一兩句，數字照設定（Markdown 轉成 HTML）。
+    不看個人狀態，網頁同一次載入只問一次。"""
+    game = _game(request)
+    return look(game, lambda g: {"text": md(g.howto_text())})
 
 
 @app.post("/api/sense")

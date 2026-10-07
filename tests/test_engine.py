@@ -603,7 +603,7 @@ def test_socializing_with_a_deep_interaction_companion_starts_a_dialogue(content
     assert msgs == ["他點了點頭。"]
     assert game.state.player.pending_companion == "mate"
     assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
-    assert game.scene_text() == "**韓鐵**\n\n他點了點頭。"
+    assert game.scene_text() == "**韓鐵**（情誼 0）\n\n他點了點頭。"  # 名字旁寫著情誼（explain-1）
 
 
 def test_continuing_and_leaving_a_dialogue(content, game):
@@ -611,7 +611,7 @@ def test_continuing_and_leaving_a_dialogue(content, game):
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose("act:socialize")
         msgs = game.choose("talk:0")
-        assert msgs == ["他點了點頭。", "（好感度 +1）"]
+        assert msgs == ["他點了點頭。", "（情誼 +1）"]
         assert game.state.player.affinities["mate"] == 1
         msgs = game.choose("talk:leave")
     assert msgs == ["你結束了這段交談，先行告辭。"]
@@ -4706,7 +4706,7 @@ def test_choose_applies_a_prepared_talk_turn_without_calling_the_model(content, 
     prepared = _prepared(game, "talk:0", turn=NEXT_TURN)
     with _no_model(), mock.patch.object(game.client, "chat_structured", side_effect=AssertionError("不該呼叫模型")):
         msgs = game.choose("talk:0", prepared=prepared)
-    assert msgs == ["他笑了笑。", "（好感度 +1）"]
+    assert msgs == ["他笑了笑。", "（情誼 +1）"]
     assert game.state.player.stamina == before - content.config.talk_stamina
     assert game._talks_used("mate") == 1  # 這一輪算進今天的輪數
     assert game.state.player.last_offered_dialogue["mate"] == [["再聊聊", "起身告辭"], ["雪中送炭", "尋常寒暄"]]

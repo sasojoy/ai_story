@@ -7,23 +7,46 @@
 之後碰到還有機會聽到；佇列照 id 去重（同一條不會排兩次）。"""
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
+from . import calendar
 from .models import Content
 from .state import GameState, HintNote
 
-# 設計 5.2 的十八條（第 7 條 h_snubbed 與第 18 條 h_mandate 不看狀態，由事件自己叫 Game._hint）；content/hints.json 的 id 只能是這些。
-# 觸發條件在 Game._hint_triggers（計畫三 Task 2）
+# 設計 5.2 的十八條（第 7 條 h_snubbed 與第 18 條 h_mandate 不看狀態，由事件自己叫 Game._hint），加上 explain-1 的 h_bond（第一次交友、
+# 第一次跟人物談話：情誼有什麼用）；content/hints.json 的 id 只能是這些。觸發條件在 Game._hint_triggers（計畫三 Task 2）
 KNOWN = frozenset({
     "h_merge", "h_clash", "h_refine_fail", "h_lose", "h_injury", "h_basic_art", "h_snubbed", "h_recruit", "h_free_text",
     "h_road", "h_cap", "h_spectator", "h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure", "h_mandate",
+    "h_bond",
 })
 
 
-# 不看狀態、由事件發生時自己叫 Game._hint 的兩條（被名將打發、玉璽碎片的秘密揭開）；其餘都是狀態提示（Game._hint_triggers 看角色此刻的狀態）。
+# 不看狀態、由事件發生時自己叫 Game._hint 的三條（被名將打發、玉璽碎片的秘密揭開、第一次交友或談話）；其餘都是狀態提示（Game._hint_triggers 看角色此刻的狀態）。
 # 排隊的限速只管狀態提示：同一時間最多一條在框上或排著（Game._queue_triggered_hints）；事件型的當場排，不吃限速
-EVENT_ONLY = frozenset({"h_snubbed", "h_mandate"})
+EVENT_ONLY = frozenset({"h_snubbed", "h_mandate", "h_bond"})
 STATE = KNOWN - EVENT_ONLY
+
+# 提示裡可以寫的數字（explain-1）：句子裡寫 {名字}，上框時換成設定裡的值，句子不寫死數字（設定改了，話跟著改）
+PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def values(content: Content) -> dict[str, str]:
+    """{名字} → 設定裡的值。"""
+    return {"signature": str(content.config.signature_affinity)}
+
+
+def unknown(content: Content, text: str) -> list[str]:
+    """這句話裡不認得的 {名字}（載入時擋，content.validate）。"""
+    known = values(content)
+    return [name for name in PLACEHOLDER.findall(text) if name not in known]
+
+
+def fill(content: Content, text: str) -> str:
+    """把 {名字} 換成設定裡的值；不認得的照原樣留著（載入時已經擋過）。"""
+    known = values(content)
+    return PLACEHOLDER.sub(lambda m: known.get(m.group(1), m.group(0)), text)
 
 
 def defined(content: Content, hint_id: str) -> bool:
@@ -38,15 +61,16 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
     if hint is None:
         return None
     if hint.by == "mentor":
-        return HintNote(id=hint_id, speaker=h.head, text=hint.text)
+        first = hint.season_one and calendar.season_one_on(state.world, content)  # 第一季才是真的那幾句（HintDef.season_one）
+        return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.season_one if first else hint.text))
     faction = state.player.faction
     if faction is not None and faction in hint.texts:
         e = content.tutorial.enlist
         who = e.recruiters.get(faction) if e is not None else None
         name = who.name if who is not None else content.scenario.faction_name(faction, faction)  # 引薦人沒寫（測試內容）用陣營名
-        return HintNote(id=hint_id, speaker=name, text=hint.texts[faction], by=faction)
+        return HintNote(id=hint_id, speaker=name, text=fill(content, hint.texts[faction]), by=faction)
     if faction is None and hint.drifter:
-        return HintNote(id=hint_id, speaker=h.head, text=hint.drifter)
+        return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.drifter))
     return None
 
 

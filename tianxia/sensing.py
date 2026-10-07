@@ -33,6 +33,8 @@ LET_GO = "sense:let"  # 「順其自然」：不畫了，落回做法那個基�
 PREFIX = "sense:"
 FALLBACK_TRIES = 8  # 退路字表換名字最多試幾次（跟自己手上的意境、江湖上的名號撞名就換）
 STALE = "（那一刻已經過去了，心中的形也散了。）"
+# 選做法之前卡上先說選錯的代價（explain-1；待 joy 潤）：跟 choose 的規則一樣——選錯了這一處今天不再悟（missed_today）。序章草廬不寫（做法都對）
+MISS_WARNING = "選錯了做法，今天在這裡就悟不出了。"
 
 
 def mark_key(location: str) -> str:
@@ -113,7 +115,9 @@ def scene_text(state: GameState, content: Content) -> str:
             f"**有所感・{scene.title}**\n\n{text}\n\n你{method.text}——心念漸漸凝住了。"
             "此刻心中有一個形：一筆畫下來，手指離開就算畫完。"
         )
-    return f"**有所感・{scene.title}**\n\n{text}"
+    # 選做法這一步：底下一小行（引用寫法，網頁畫成場景裡的小字淡色，比一整段內文矮）說選錯的代價；序章四景做法都對，不寫
+    warning = "" if scene.prologue else f"\n\n> {MISS_WARNING}"
+    return f"**有所感・{scene.title}**\n\n{text}{warning}"
 
 
 def insights_marks(state: GameState, loc: Location) -> str:

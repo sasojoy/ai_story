@@ -615,6 +615,8 @@ def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
 #   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強是第三方、可以下場（趁亂搶地盤、保存實力，決戰改版五）
 # 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
+# explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tests/test_explain.py 管（數字照設定、風聲只在第一季說）
+PLACEHOLDER_LINES |= {("h_bond", "text"), ("h_bond", "season_one")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
 DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
 
@@ -623,7 +625,7 @@ def test_the_real_hint_book_has_all_eighteen(content):
     from tianxia import hints
 
     ids = [h.id for h in content.hints.hints]
-    assert len(ids) == 18 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容
+    assert len(ids) == 19 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond）
     assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
 
 
@@ -680,6 +682,8 @@ def _hint_cells(content):
         cells.update({(hint.id, voice): text for voice, text in hint.texts.items()})
         if hint.drifter:
             cells[(hint.id, "drifter")] = hint.drifter
+        if hint.season_one:  # 第一季才說的那一句（explain-1 的 h_bond）
+            cells[(hint.id, "season_one")] = hint.season_one
     return cells
 
 
@@ -717,10 +721,10 @@ HINT_PINS = {
 
 
 def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content):
-    """提示書的三十一句：二十七句是設計 10.5 的原文（各釘一段），四句是待 joy 潤的（PLACEHOLDER_LINES）；兩邊合起來正好是書裡的每一句，
-    以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
+    """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
+    explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 31 and not set(HINT_PINS) & PLACEHOLDER_LINES
+    assert len(cells) == 33 and not set(HINT_PINS) & PLACEHOLDER_LINES
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key

@@ -136,6 +136,11 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   font-weight: 700; cursor: pointer;
 }
 .bar.stam > .pill-btn:disabled { opacity: 0.45; cursor: default; }
+/* 點體力條攤開體力怎麼回（explain-1）：整條是按鈕（丹的鈕自己另外一顆，點它照樣是服丹／補滿）；說明排在數字那一列底下，小字一行一句 */
+.bar.stam[data-act="stam-help"] { cursor: pointer; }
+.bar.stam[data-act="stam-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.more-stats.stam-help { line-height: 1.5; }
+.more-stats.stam-help p { margin: 0; }
 /* 有丹時體力條多擠一顆鈕：把寬度從氣血條那邊借一點，「體力 132/150」才不會被鈕蓋住 */
 .vitals:has(.pill-btn) { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto auto; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }
@@ -779,6 +784,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ink-drop { position: absolute; width: 10px; height: 10px; border-radius: 50%; pointer-events: none; background: color-mix(in srgb, var(--gold) 45%, transparent);
   transform: translate(-50%, -50%) scale(0); animation: ink-burst 0.6s cubic-bezier(0.1, 0.8, 0.2, 1) forwards; }
 @keyframes ink-burst { 0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } 100% { transform: translate(-50%, -50%) scale(16); opacity: 0; } }
+/* 行動列底下那幾行（explain-1）：這一下會怎樣。小字淡色、緊貼行動列（吃掉行動列下緣 12px 的一半），一個行動一行，名字粗一點。
+   排在行動列之後，不動第一屏的「剛剛」、場景與行動列；375 寬一行約 27 字，長的照常折行 */
+.act-notes { margin: -6px 4px 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.act-notes p { margin: 0; }
+.act-notes b { margin-right: 6px; color: var(--ink); font-weight: 600; }
 .act-move { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
 .act-move .options { margin: 8px 0 0; }
 .act-move .move-mode { margin: 0; }
@@ -829,6 +839,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .who.static { cursor: default; }
 .who.static .more-ico { display: none; } /* 序章裡屬性還沒亮：名號不是按鈕，不畫展開的小箭頭 */
 .recap { margin-top: 10px; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow-y: auto; }
+/* 設定抽屜的「玩法說明」（explain-1）：跟重看序章一樣是抽屜裡的一張卡；不另外限高、不自己捲（抽屜本身會捲，電腦上滾輪在暗處也捲它），
+   手機上不會出現捲軸裡還有捲軸。一節一個小標題，底下一兩句 */
+.howto { margin-top: 10px; font-size: 14px; line-height: 1.65; }
+.howto h4 { margin: 12px 0 2px; font-size: 15px; }
+.howto h4:first-child { margin-top: 0; }
+.howto ul { margin: 0; padding-left: 1.2em; }
+.howto li + li { margin-top: 2px; }
 .recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 @media (prefers-reduced-motion: reduce) {
   .glow, .lit { animation: none; }

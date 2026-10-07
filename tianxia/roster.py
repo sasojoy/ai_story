@@ -68,7 +68,7 @@ def attempt_recruit(
         if loss:
             msgs.append(f"銀兩 -{loss}")
         return msgs
-    return [f"【{disp}】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交友」，培養交情再試，成功率會更高。"]
+    return [f"【{disp}】婉拒了你這次的招攬，看來還需要多花心思——先多來幾趟「交友」，培養情誼再試，成功率會更高。"]
 
 
 def recruit(state: GameState, content: Content, world: WorldStateStore, char_id: str) -> list[str]:

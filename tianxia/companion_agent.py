@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 MAX_HISTORY_MESSAGES = 40
 MEMORY_CONSOLIDATION_INTERVAL = 20
 MAX_RETRIES = 3
-SIGNATURE_SKILL_AFFINITY_THRESHOLD = 70  # 情誼達到這個門檻，才能向對方習得本命武學（設計文件七.1）
+# 情誼達到 Config.signature_affinity，才能向對方習得本命武學（設計文件七.1；explain-1 從這裡的常數搬進設定，提示與玩法說明讀同一個數）
 DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交友 tag，就該重新語意化一次性情漂移
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，
@@ -269,7 +269,7 @@ def _apply_turn(
 
     msgs = [turn.narrative]
     if delta:
-        msgs.append(f"（好感度 {'+' if delta >= 0 else ''}{delta}）")
+        msgs.append(f"（情誼 {'+' if delta >= 0 else ''}{delta}）")  # 玩家看到的一律叫「情誼」（explain-1）；程式裡照舊叫 affinity／好感度
     return msgs
 
 
@@ -438,7 +438,7 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     from .rules import learn_skill
 
     p = state.player
-    if p.affinities.get(companion_id, 0) < SIGNATURE_SKILL_AFFINITY_THRESHOLD:
+    if p.affinities.get(companion_id, 0) < content.config.signature_affinity:
         return []
     flag = f"學會本命:{companion_id}"
     if flag in p.flags:

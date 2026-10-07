@@ -11,15 +11,15 @@ import functools
 import hashlib
 import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, martial_arts, materials, naming, opportunities, orders,
-    push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, styles, team, timetable, traits,
+    figures, flavor, foreshadow, front_lines, fusion, howto, insights, journal, library, martial_arts, materials, naming, opportunities,
+    orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, styles, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
@@ -73,6 +73,12 @@ ROAD_TASKS: dict[str, tuple[str, str]] = {
     "gather": ("路邊採集", "找過了"),
 }
 ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
+
+
+def drill_share(amount: int, share: float) -> int:
+    """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
+    操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個。"""
+    return int(amount * share + 0.5)
 
 
 class Option(BaseModel):
@@ -239,7 +245,8 @@ class Game:
                 game.state.player.stamina = float(content.config.stamina_max)
         p = game.state.player
         p.visited.add(p.location)
-        if content.config.beta_gift:  # 內測贈送（企劃者 2026-10-07）：真人、假人、整季機器人建角色時一樣拿到
+        gift = content.config.beta_gift and content.config.beta_gift_stamina_pills > 0
+        if gift:  # 內測贈送（企劃者 2026-10-07）：真人、假人、整季機器人建角色時一樣拿到
             p.stamina_pills += content.config.beta_gift_stamina_pills
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
@@ -247,7 +254,19 @@ class Game:
         )
         if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
             game._write(content.scenario.name, [content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(content))
+        if gift:
+            game._note_gift()
         return game
+
+    def _note_gift(self) -> None:
+        """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：
+        「剛剛」不換（序章第一屏照舊什麼都不放），江湖紀錄裡看得到。只寫字，不擲骰、不動數值（假人、整季機器人照樣有這一行）。"""
+        entries = self.state.journal
+        line = howto.gift_line(self.content)
+        if entries and entries[0].tag == journal.SEASON_START:
+            entries[0] = entries[0].model_copy(update={"lines": [*entries[0].lines, line]})
+        else:
+            self._write(self.content.scenario.name, [line], tag=journal.SEASON_START)
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
 
@@ -937,6 +956,55 @@ class Game:
         hardest = max(squads, key=lambda s: s.difficulty)
         return f"{who}・{self.odds(hardest.id)}"
 
+    def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
+        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
+        探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（_train_line），交友照會不會直接開口談話
+        （_socialize_figure）與這裡有沒有交友事件。只給 option_ids 裡有的。序章裡是空的：探索、遊歷照那一步寫好的走（草廬四景、
+        斷眉），師父自己會說。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return {}
+        ids = set(option_ids)
+        loc = c.locations[s.player.location]
+        notes: dict[str, str] = {}
+        if "act:explore" in ids:
+            legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
+            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend)
+        if "act:train" in ids:
+            notes["act:train"] = self._train_line(loc)
+        if "act:socialize" in ids:
+            figure = self._socialize_figure()
+            notes["act:socialize"] = howto.social_line(
+                None if figure is None else c.characters[figure].name, has_events_here(c, loc, "socialize"), self._audience_hall(),
+            )
+        if "act:call" in ids:
+            notes["act:call"] = howto.CALL_LINE
+        if not s.player.picking_audience:  # 只有一位人物時選單上直接列的「求見某某」（行動列交友那一格放它）
+            for option_id in ids:
+                cid = option_id.removeprefix("call:")
+                if option_id.startswith("call:") and cid in c.characters:
+                    notes[option_id] = howto.call_line(c.characters[cid].name, self._can_meet(cid))
+        return notes
+
+    def _train_line(self, loc: Location) -> str:
+        """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
+        （Game._drill：對手的 drill_reward_share、不給銀兩素材），打贏或操練推不推大勢：train_trend_push 會推的線裡，有一條今天
+        還推得動（_push_room，跟 push_trend 同一個上限的算法；審查 M1：推滿了那一行就不說推動戰局）。第一季的規則沒開時沒有上限。"""
+        c = self.content
+        squads = [c.squads[sid] for sid in self._train_squad_ids(loc)]
+        foes = [squad for squad in squads if not self._drills_with(squad)]
+        own = [squad for squad in squads if self._drills_with(squad)]
+        share = c.config.drill_reward_share
+        gains = [word for word, on in (
+            ("銀兩", any(q.reward_silver for q in foes)), ("心得", any(q.reward_xinde for q in foes)), ("經驗", any(q.exp for q in foes)),
+        ) if on]
+        drill_gains = [word for word, on in (
+            ("心得", any(drill_share(q.reward_xinde, share) for q in own)), ("經驗", any(drill_share(q.exp, share) for q in own)),
+        ) if on]
+        drops = any(materials.may_drop(q, c) for q in foes)
+        push = any(delta and self._push_room(line) > 0 for line, delta in self.train_trend_push(loc.id).items())
+        return howto.train_line(bool(foes), gains, drops, push, drill_gains, bool(own))
+
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
         有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
@@ -1514,8 +1582,9 @@ class Game:
         一個選項擠出第一屏（FB-076）；它排著等，事件了結之後上框。key 是那一條的 id，pending 永遠是 False；full：話不被切掉（設計 6.2）；
         hint：這是碰到才說的框（結語、入伍段的框沒有這個鍵）——網頁認它，在修練頁、煉製頁也畫（在那兩頁做的事觸發的提示不必切回江湖頁才看到）。"""
         p = self.state.player
-        # 有所感（悟意境設計第零節）的卡也一樣：選做法、畫一筆都佔著畫面，跟事件待處理同一種等法
-        if not p.hint_queue or self.state.pending_event is not None or p.sensing is not None:
+        # 有所感（悟意境設計第零節）的卡也一樣：選做法、畫一筆都佔著畫面，跟事件待處理同一種等法。跟人物談話也是（explain-1）：
+        # 對話的幾個選項跟事件的選項一樣佔著畫面，第一次談話說的 h_bond 擺在上面會把「告辭」擠出第一屏；告辭之後上框
+        if not p.hint_queue or self.state.pending_event is not None or p.sensing is not None or p.pending_companion is not None:
             return None
         note = p.hint_queue[0]
         return {
@@ -1709,6 +1778,13 @@ class Game:
             return self._explore()
         if what == "train":
             return self._train()
+        msgs = self._socialize(prepared)
+        self._hint("h_bond")  # 第一次交友：情誼有什麼用（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）
+        return msgs
+
+    def _socialize(self, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        """交友（act:socialize，體力呼叫端已經扣了）：福緣到了先發福緣；這裡至多一位人物、見得到就開口對話；不然抽一則
+        這裡的交友事件，沒有就是打發話。"""
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -1766,13 +1842,15 @@ class Game:
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
         """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
         try:
-            return companion_agent.start_dialogue(
+            msgs = companion_agent.start_dialogue(
                 self._quick_client(), self.state, self.content, self.world, companion_id, self.rng,
                 turn=self._prepared_turn(prepared),
             )
         except companion_agent.DialogueUnavailable:
             self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
             return self._dialogue_unavailable(companion_id)
+        self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（_hint_box）
+        return msgs
 
     def _explore(self) -> list[str]:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
@@ -1811,13 +1889,10 @@ class Game:
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
-        mix = c.config.explore_mix_of(loc.tags).weights
-        branches = [b for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)]
-        if not branches:
+        weighted = self._explore_weights(loc)
+        if not weighted:
             return ["你四處走走，一無所獲。"]
-        # 悟性：落在「悟意境」那一支的比重 ×（1＋3%×（悟性−5））；另外兩支不動（武學與成長設計 6.1）
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
-        branch = self.rng.choices(branches, weights=[mix[b] * (wis if b == "insight" else 1) for b in branches])[0]
+        branch = self.rng.choices([b for b, _ in weighted], weights=[w for _, w in weighted])[0]
         if branch == "insight":
             if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
                 return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
@@ -1827,6 +1902,18 @@ class Game:
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
         return self._present(pick_event(s, c, "explore", self.rng, "common"), "explore")
+
+    def _explore_weights(self, loc: Location) -> list[tuple[ExploreBranch, float]]:
+        """探索三選一此刻在這裡的候選與比重（探索三選一設計第三節）：照地點類型（Config.explore_mix），比例是 0 的與做不了的
+        （_explore_can）拿掉；悟意境那一支的比重 ×（1＋3%×（悟性−5）），另外兩支不動（武學與成長設計 6.1）。
+        探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
+        s, c = self.state, self.content
+        mix = c.config.explore_mix_of(loc.tags).weights
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        return [
+            (b, mix[b] * (wis if b == "insight" else 1))
+            for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)
+        ]
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
@@ -2213,7 +2300,23 @@ class Game:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
-        return f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
+        # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
+        bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
+        return (
+            f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
+            + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
+        )
+
+    def howto_text(self) -> str:
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項）：五個行動、體力、情誼、心得、意境、背包，數字讀設定（howto.page）。
+        序章略過的人也看得到（設定抽屜誰都打得開）。招募那一句只在內容裡真的有人能招募時才寫。"""
+        c = self.content
+        return howto.page(c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()))
+
+    def affinity_text(self, companion_id: str) -> str:
+        """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
+        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""
+        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -3205,8 +3308,8 @@ class Game:
         msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
         self._outcome("操練", msgs[0])
         share = c.config.drill_reward_share
-        xinde = int(squad.reward_xinde * share + 0.5)  # 四捨五入（round 是銀行家進位）
-        exp = int(squad.exp * share + 0.5)
+        xinde = drill_share(squad.reward_xinde, share)
+        exp = drill_share(squad.exp, share)
         xinde_line = None
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
@@ -4909,6 +5012,8 @@ class Game:
         w = self.state.world
         if event.id in w.timeline:
             return f"（{event.title}已經結算了。）"
+        if event.id in self.cancelled_showdowns():  # FB-099：開過、被取消、還沒有結果——照舊開不了，說清楚怎麼收尾
+            return f"（{event.title}開打後被取消，還沒有結果；要收尾請用「定結果」。）"
         if event.id in w.showdowns_opened:
             return f"（{event.title}已經開打過了。）"
         if event.version_from is not None and event.version_from not in w.timeline:
@@ -4920,6 +5025,15 @@ class Game:
         if showdown_battle(self.state, self.content, event) is None:
             return f"（內容裡沒有{event.title}這一場的戰鬥。）"
         return None
+
+    def cancelled_showdowns(self) -> set[str]:
+        """開打後被取消、時間軸上還沒有結果的時刻表決戰（FB-099；管理者工具的三場大戲與時刻表那兩列照它寫）：開過集結
+        （showdowns_opened，記號照舊留著、不會再開），時間軸上沒有它，此刻也不是在打的那一場（取消決戰把它從共用狀態拿掉了）。
+        真的打完的時間軸上有結果，不算；還在集結、開打或剛收場的那一場是此刻的那一場，也不算。"""
+        w = self.state.world
+        battle = self.world.get_battle()
+        live = battle.battle_id if battle is not None else None
+        return {eid for eid, battle_id in w.showdowns_opened.items() if eid not in w.timeline and battle_id != live}
 
     def admin_start_showdown(self, event_id: str, now: float) -> list[str]:
         """立刻開時刻表上這一場決戰：照時刻表開（admin_start_battle → world.open_showdown，跟時間到了一樣：同一個函式、同一句集結
@@ -5133,7 +5247,8 @@ class Game:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
-            return f"**{character.name}**\n\n{last}"
+            # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）
+            return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{last}"
         if s.player.pending_faction:
             faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
@@ -5209,6 +5324,10 @@ class Game:
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+        # 點體力條看的說明（explain-1）：怎麼回、新手期、打坐、回體丹或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
+        data["stamina_help"] = howto.stamina_lines(
+            c, w, roster.newbie(s, c, c.config.newbie_stamina_days), p.stamina_pills, button=data["pills"] is not None,
+        )
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣

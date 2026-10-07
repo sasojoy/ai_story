@@ -883,6 +883,9 @@ class HintDef(_Strict):
     text: str = ""
     texts: dict[str, str] = Field(default_factory=dict)
     drifter: str = ""
+    # 第一季的規則開著時師父改說這一句（只有師父的條能寫；空的就照 text）：有些事只有第一季才是真的（explain-1 的 h_bond：
+    # 情誼夠深人物會透露伏筆、機緣的風聲），beta 那一季說了就是假話
+    season_one: str = ""
 
 
 class Hints(_Strict):
@@ -1451,6 +1454,9 @@ class Config(_Strict):
     rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
     talk_stamina: int = 2  # 跟大勢人物對話，每一輪扣的體力
     talk_turns_per_day: int = 3  # 同一位大勢人物，每個遊戲日最多聊幾輪（只算玩家選的 talk:N）
+    # 情誼到這裡，人物把本命武學傳給你（設計文件七.1，companion_agent._maybe_grant_signature_skill）。explain-1 從 companion_agent 的常數搬來：
+    # 碰到才說的 h_bond 與玩法說明寫的數字讀它，不在句子裡寫死
+    signature_affinity: int = Field(default=70, ge=0, le=100)
     audience_rank_discount: int = 5  # 投靠了名將的陣營，每升一階抵掉幾點求見門檻（武學與成長設計 9.1）【預設】
     # ── 伺服器假人（伺服器假人設計第四、六節）──
     bots_min_per_faction: int = 5  # 每個陣營（真人＋假人）至少幾人，不足由假人程式補

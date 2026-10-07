@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Collection
 from typing import Literal
 
 from . import calendar, figures
@@ -364,16 +365,20 @@ def result_keys(state: GameState, content: Content, event: TimetableEvent) -> li
     return [key[len(prefix):] for key in event.outcomes if key.startswith(prefix)]
 
 
-def status_rows(state: GameState, content: Content) -> list[dict]:
+def status_rows(state: GameState, content: Content, cancelled: Collection[str] = ()) -> list[dict]:
     """設定頁「時刻表」的每一列：id、週次、標題、種類、世界秒、狀態（done 已結算／running 決戰開過集結還沒收場／
-    due 時間到了還沒結算／later 還沒到）、結果鍵（含版本）、能不能排時間（決戰與季末，還沒結算也還沒開過）。"""
+    cancelled 開打後被取消、還沒有結果（FB-099，呼叫端照 Game.cancelled_showdowns 給）／due 時間到了還沒結算／later 還沒到）、
+    結果鍵（含版本）、能不能排時間（決戰與季末，還沒結算也還沒開過）。"""
     w = state.world
     rows = []
     for event in content.timetable:
         at = when(state, content, event)
         done = w.timeline.get(event.id)
         opened = event.id in w.showdowns_opened
-        status = "done" if done else "running" if opened else "due" if at <= w.time + calendar.EPS_SECONDS else "later"
+        status = (
+            "done" if done else ("cancelled" if event.id in cancelled else "running") if opened
+            else "due" if at <= w.time + calendar.EPS_SECONDS else "later"
+        )
         rows.append({
             "id": event.id, "week": event.week, "title": event.title, "kind": event.kind, "when": at, "state": status,
             "result": done.key if done else None,

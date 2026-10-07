@@ -139,6 +139,13 @@ def _default_rolls(squad: Squad) -> tuple[tuple[int, float], ...]:
     return DEFAULT_DROPS[-1][1]
 
 
+def may_drop(squad: Squad, content: Content) -> bool:
+    """打贏這支隊伍有沒有機會掉素材（行動列底下遊歷那一行，explain-1）：跟 roll_squad_drops 讀同一份表，不擲骰。"""
+    if squad.drops:
+        return any(drop.material in content.materials and drop.chance > 0 for drop in squad.drops)
+    return any(chance > 0 and by_tier(content, tier, squad.attribute) for tier, chance in _default_rolls(squad))
+
+
 def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list[tuple[str, int]]:
     """打贏這支隊伍掉什麼：`Squad.drops` 寫了就照它，沒寫就走依難度的預設表。
 

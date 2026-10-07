@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 import webharness
 from conftest import walk_to
-from tianxia import journal
+from tianxia import howto, journal
 from tianxia.models import ExploreMix
 
 STEP_ONE, STEP_TWO, STEP_THREE, OUTRO = "先探索一下。", "去湖邊。", "看看地圖。", "去闖吧。"
@@ -35,7 +35,8 @@ def test_a_new_character_sees_the_first_step_in_the_box(game):
     """8.3：全新角色一進江湖頁就有對話框與第一步的話；開場那一則「剛剛」只有劇本的開場，說書人那一句記在 guide。"""
     assert game.guide_box() == _box(STEP_ONE)
     entry = game.state.journal[0]
-    assert entry.lines == ["測試開始。"] and entry.guide == [f"【說書人】{STEP_ONE}"]
+    # 開場之後一行是內測贈送的回體丹（explain-1）
+    assert entry.lines == ["測試開始。", howto.gift_line(game.content)] and entry.guide == [f"【說書人】{STEP_ONE}"]
     assert "說書人" not in journal.card_html(entry)
     assert f"【說書人】{STEP_ONE}" in journal.rows_html([entry])  # 江湖紀錄照舊看得到
 

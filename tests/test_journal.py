@@ -5,7 +5,7 @@ from html import escape
 
 from conftest import FixedRandom, walk_to
 
-from tianxia import journal
+from tianxia import howto, journal
 from tianxia.engine import LOG_BREAK, Game
 from tianxia.characters import name_key, open_characters
 from tianxia.models import ExploreMix
@@ -44,7 +44,8 @@ def test_new_game_opens_with_the_season_intro(game):
     assert len(game.state.journal) == 1
     entry = latest(game)
     assert (entry.title, entry.tag) == ("測試劇本", "賽季開始")
-    assert entry.lines == ["測試開始。"]  # 地點描述留給場景，不寫進紀錄
+    # 地點描述留給場景，不寫進紀錄；開場之後一行是內測贈送的回體丹（explain-1）
+    assert entry.lines == ["測試開始。", howto.gift_line(game.content)]
     assert entry.guide == ["【說書人】先探索一下。"]  # 說書人的第一句在對話框；江湖紀錄記在 guide（引導重做設計 8.1）
     assert (entry.changes, entry.battle_id, entry.time) == ([], None, 0.0)
 
