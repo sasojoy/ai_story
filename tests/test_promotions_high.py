@@ -1162,7 +1162,7 @@ def test_every_seal_ending_grants_the_qualification(on, choice, silver, mods, he
     roll_side = next(e.roll_side for e in on.timetable if e.id == "luzhi_jailed")  # 擲「成」對誰有利
     sign = 1 if roll_side == "huang" else -1
     assert game.state.world.event_mods["luzhi_jailed"] == pytest.approx(sign * mods)
-    assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+    assert ranks.title(on, game.state) == "校尉" and "你補上了校尉的缺，到下週一為止。" in msgs  # 席次空著：當下補上（正式版丁）
     assert any(r.text == "甲取得校尉的資格，候缺。" and r.faction == "guan" for r in game.state.world.rumors)
     assert ranks.check_summons(game.state, on) == []
 
@@ -1310,7 +1310,7 @@ def test_a_whole_guan_career_from_rank_two_to_the_qualification(on):
     game.choose("choice:2")
     assert (p.rank, p.qualified, p.summons, p.followers) == (
         3, True, None, ["follower_guan_spear", "follower_guan_crossbow"])
-    assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+    assert ranks.title(on, game.state) == "校尉"  # 席次空著：取得資格的同一個動作補上（正式版丁）
 
 
 @pytest.mark.parametrize("slot", ["effect", "fail_effect"])

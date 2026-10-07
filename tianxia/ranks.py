@@ -3,7 +3,7 @@
 只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。"""
 from __future__ import annotations
 
-from . import calendar, figures
+from . import calendar, figures, seats
 from .models import Content, PromotionCast, PromotionDef
 from .rules import add_rumor, season_one
 from .state import GameState, Summons
@@ -11,7 +11,8 @@ from .state import GameState, Summons
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
 HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
 
-HIGHEST_RANK = 3  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺），上任是計畫丁的事，求見門檻不看資格
+HIGHEST_RANK = 3  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺），求見門檻不看資格
+SEAT_RANK = 4  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）
 
 # 第一季設計 5.2【定】：0 號是空字串（散人沒有階），1～4 是各陣營的頭銜
 TITLES: dict[str, list[str]] = {
@@ -22,9 +23,14 @@ TITLES: dict[str, list[str]] = {
 
 
 def rank_of(state: GameState) -> int:
-    """此刻的階：散人 0；投靠了就至少第 1 階（存檔裡記的是晉升過的階，投靠本身不寫）。"""
+    """此刻的階：散人 0；投靠了就至少第 1 階（存檔裡記的是晉升過的階，投靠本身不寫）；有第四階資格而且這一週在任
+    （seats.seated，正式版丁）是 4。存檔的 PlayerState.rank 仍停在 HIGHEST_RANK：4 只是此刻的身份，週一被擠下來就回到 3。"""
     p = state.player
-    return 0 if p.faction is None else max(p.rank, 1)
+    if p.faction is None:
+        return 0
+    if p.qualified and seats.seated(state):
+        return SEAT_RANK
+    return max(p.rank, 1)
 
 
 def title(content: Content, state: GameState) -> str | None:
@@ -34,8 +40,8 @@ def title(content: Content, state: GameState) -> str | None:
     titles = TITLES.get(state.player.faction or "")
     if not titles:
         return None
-    if state.player.qualified:  # 第 4 階資格（候缺）：上任是計畫丁的事。「X（Y候缺）」的寫法是新寫的初稿，待 joy 潤
-        return f"{titles[3]}（{titles[4]}候缺）"
+    if state.player.qualified and rank_of(state) < SEAT_RANK:  # 有第 4 階資格、這一週沒在任（候缺）；在任的往下讀第 4 階的頭銜
+        return f"{titles[3]}（{titles[4]}候缺）"  # 「X（Y候缺）」的寫法是新寫的初稿，待 joy 潤
     return titles[min(rank_of(state), len(titles) - 1)] or None
 
 

@@ -241,7 +241,7 @@ class PlayerState(BaseModel):
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
     runic_pieces: int = 0  # 符文殘片（伏筆文件第七節；基準量，黃巾第 4 階的密令給的；玉璽大勢任務讀它）；角色每季重來
-    qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、頭銜寫「…（…候缺）」；上任與席次是計畫丁的事
+    qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、沒在任時頭銜寫「…（…候缺）」；上任與席次見 seats.py（正式版丁）
     rank_hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次；跟新手引導的 hints_seen 無關）
 
     # ── 大勢人物（計畫 T4、軍令文件 4.5）：剛被你打敗的人物 id → 到哪個「現實」時間（秒，Game.now）之前不見你、也不跟你交手。

@@ -546,7 +546,7 @@ class Game:
         # 第四階席次：抄帳、補缺（正式版丁）。輪詢只同步、只存角色（server.poll_main → act_look），所以帳或名單變了要自己把共用賽季存回去，
         # 不然補上的缺、那一則陣營軍情都會丟掉，下一次輪詢又補一次、又寫一則紀錄
         ledger_before = self.state.world.model_dump(include={"seat_ledger", "seats"}) if self.state.player.qualified else None
-        seated = seats.report(self.state, self.content)
+        seated = self._report_seat()
         if ledger_before is not None and self.state.world.model_dump(include={"seat_ledger", "seats"}) != ledger_before:
             self._save_season()
         if seated:
@@ -555,6 +555,13 @@ class Game:
         self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons + seated)
+
+    def _report_seat(self) -> list[str]:
+        """第四階席次的抄帳與補缺（seats.report）：賽季時鐘暫停中不做（丁 N5 的裁決：暫停凍結世界的變化，
+        不補缺、不發軍情、帳也不抄；繼續之後的第一次同步補上，只補一次）。暫停時畫面照常可看、同步照常走，所以這裡要自己擋。"""
+        if self.world.paused_at() is not None:
+            return []
+        return seats.report(self.state, self.content)
 
     def _settle_plots(self) -> list[str]:
         """集體密謀的結算（正式版乙二；opportunities.settle）：賽季時鐘暫停中不結算。暫停時畫面照常可看、計時器的同步照常走
@@ -1164,7 +1171,7 @@ class Game:
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
-            msgs += seats.report(self.state, self.content)  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
+            msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
         finally:
@@ -1214,7 +1221,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
-            msgs += seats.report(s, c)  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
+            msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
             self.last_gamble = FreeTextOutcome(
@@ -3685,7 +3692,7 @@ class Game:
             msgs = self._depart(route, mode)
             msgs += self._hear_after_stamina(stamina)
             msgs += ranks.check_summons(s, c)  # 疾行送到糧車也記貢獻（計畫 T5）
-            msgs += seats.report(s, c)  # 同上：第四階席次的帳也要抄（正式版丁）
+            msgs += self._report_seat()  # 同上：第四階席次的帳也要抄（正式版丁）
             self._check_hints()  # 出發之後看一遍（疾行立刻到：抵達的地方教基礎武學、站著大勢人物，新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
         finally:

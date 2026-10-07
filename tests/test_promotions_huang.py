@@ -559,7 +559,7 @@ def test_every_zhangjiao_ending(on, choice, affinity, fragment, revealed):
     assert p.runic_pieces == (0 if revealed else 2)
     assert any(m.startswith("你聽到一件事：") for m in msgs) is fragment
     assert (p.fragments.get("fs_zhangjiao_huang") == [0]) is fragment
-    assert ranks.title(on, game.state) == "小方渠帥（大方渠帥候缺）"
+    assert ranks.title(on, game.state) == "大方渠帥" and "你補上了大方渠帥的缺，到下週一為止。" in msgs  # 席次空著：當下補上（正式版丁）
     assert any(r.text == "甲取得大方渠帥的資格，候缺。" and r.faction == "huang" for r in game.state.world.rumors)
 
 
@@ -657,7 +657,7 @@ def test_a_huang_player_walks_all_the_way_up(on):
     game.choose("choice:1")
     assert (p.rank, p.qualified, p.followers) == (
         3, True, ["follower_huang_believer", "follower_huang_strongman"])
-    assert game.status_data()["affiliation"] == "黃巾軍・小方渠帥（大方渠帥候缺）"
+    assert game.status_data()["affiliation"] == "黃巾軍・大方渠帥"  # 席次空著：取得資格的同一個動作補上（正式版丁）
     notes = [r.text for r in game.state.world.rumors if r.layer == "faction" and r.faction == "huang"]
     assert "甲升為小方渠帥。" in notes and "甲取得大方渠帥的資格，候缺。" in notes
 

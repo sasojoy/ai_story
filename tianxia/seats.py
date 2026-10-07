@@ -2,7 +2,7 @@
 
 有資格的人（PlayerState.qualified，計畫丙一）每週一照上一週的貢獻排名，前 N 名上任（N＝factions.rank4_seats）。
 排名要讀每個人上一週的貢獻，可是週一的掛鉤只拿得到共用的賽季：所以有資格的人每次行動、同步時把自己每週的貢獻
-抄進 WorldState.seat_ledger（report），週一照這本帳排（之後的任務）。有空缺時當下補上。只有第一季的規則開著才有。
+抄進 WorldState.seat_ledger（report），週一照這本帳排（rotate）。有空缺時當下補上。只有第一季的規則開著才有。
 
 名字一律寫名號：陣營軍情不匿名（傳聞分層第七節；rules.display_name 只給地方傳聞用），所以帳上不另存顯示名。"""
 from __future__ import annotations
@@ -47,3 +47,26 @@ def report(state: GameState, content: Content) -> list[str]:
     # 新寫，待 joy 潤：下面這一則陣營軍情與回傳給自己的那一句
     add_rumor(state, f"{p.name}補上了{title}的缺。", content=content, layer="faction", faction=p.faction)
     return [f"你補上了{title}的缺，到下週一為止。"]
+
+
+def rotate(state: GameState, content: Content, week: int) -> list[str]:
+    """週一 00:00 的掛鉤（world.WEEK_HOOKS，排在軍令發令之前）：每個陣營照上一週（week − 1）帳上的貢獻排名，前 N 名上任；
+    同分照帳上的先後（先拿到資格的優先）。誰在任有變才發一則陣營軍情「本週在任的校尉：甲、乙。」——比的是人，不是排的先後
+    （補缺的人先坐進去，週一排完還是同一批人就不重發）。回傳空串列：名單寫在陣營軍情裡，不上天下大事。
+    排名讀帳、不讀存檔：週一的掛鉤只拿得到共用賽季。賽季時鐘暫停時時間不動，掛鉤自然不會跑（暫停的那一週過完才排，只排一次）。"""
+    w = state.world
+    if not season_one(content, w) or w.ended:
+        return []
+    n = factions.rank4_seats(content.config)
+    for faction, ledger in w.seat_ledger.items():
+        title = _title(faction)
+        if not title:
+            continue
+        order = {name: i for i, name in enumerate(ledger)}
+        ranked = sorted(order, key=lambda name: (-ledger[name].get(week - 1, 0), order[name]))
+        holders = ranked[:n]
+        if holders and set(holders) != set(w.seats.get(faction, [])):
+            # 新寫，待 joy 潤：每週在任名單的陣營軍情
+            add_rumor(state, f"本週在任的{title}：{'、'.join(holders)}。", content=content, layer="faction", faction=faction)
+        w.seats[faction] = holders
+    return []
