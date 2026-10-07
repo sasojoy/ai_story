@@ -202,6 +202,42 @@ class FuseQuality(_Strict):
     })
 
 
+class CultivateFit(_Strict):
+    """修練的機率看這一回的搭配（企劃者 2026-10-07 選 PR #28 方案 B；原則同 FuseQuality：「不要套死固數值」）。
+    cultivation.fit 把三樣乘起來：練到第幾成（×（level_base＋成×level_step））、用的是不是原本融進去的那個意境（代用
+    ×substitute）、在不在對味的地方修（所在地點探索悟得到同屬性的意境 ×home_ground）。寫了必成的那一階（Config.cultivate_sure_by，
+    W8 剛放寬的第一階）不看搭配。全設成 level_base 1、其他 0 或 1 就是不乘（以前的樣子）。
+    lines 是修練頁與修練結果裡那一句話（含蓄，不寫倍數）：因素 → 句子，空字串就不說。"""
+
+    level_base: float = Field(default=0.5, ge=0)
+    level_step: float = Field(default=0.05, ge=0)
+    substitute: float = Field(default=0.7, ge=0)
+    home_ground: float = Field(default=1.5, ge=0)
+    lines: dict[str, str] = Field(default_factory=lambda: {
+        "home_ground": "此地的氣象跟這路功夫相投，練起來格外順手。",
+        "substitute": "拿別的意境代替，總是隔了一層。",
+        "raw": "招式還不夠熟，心思有一半花在招上。",
+    })
+    raw_below: float = Field(default=0.8, ge=0)  # 成數那一項低於這個倍數才說 raw 那一句
+
+
+class Breakthrough(_Strict):
+    """絕學要契機（企劃者 2026-10-07 選 PR #28 方案 C）：上品往絕學不再擲骰。在上品反覆修練只累積火候（Player.art_mastery，
+    一次 +1），火候滿 heat、成數也到了，剩下那一步要等契機——拿身上這一門打贏一場不輕鬆的仗（對手難度 ÷ 我方威力 ≥ min_ratio），
+    或在全服決戰裡出手滿 showdown_rounds 回合（當成難度比 showdown_ratio 的一仗）。每個契機擲一次頓悟：
+    chance ×（難度比 ÷ par_ratio）× 修練的搭配（CultivateFit）× 悟性，夾在 1～max_chance。破境丹不等契機：火候滿了勾著丹修練，
+    就是服丹強行衝關（legend_item_bonus × 搭配 × 悟性，cultivation.force_odds）。
+    heat 是 0 就是關著：上品往絕學照以前的機率擲（Config.cultivate_odds 的「絕學」）。"""
+
+    heat: int = Field(default=8, ge=0)
+    chance: float = Field(default=25, ge=0, le=100)
+    par_ratio: float = Field(default=0.5, gt=0)
+    min_ratio: float = Field(default=0.3, ge=0)
+    max_chance: float = Field(default=60, ge=0, le=100)
+    showdown_rounds: int = Field(default=3, ge=1)
+    showdown_ratio: float = Field(default=1.0, ge=0)
+
+
 class FrontLines(_Strict):
     """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
     「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
@@ -779,6 +815,9 @@ class PresetRecipe(_Strict):
     insight: str  # 基本意境 id
     name: str
     note: str = ""
+    # 師門傳下來時改過的屬性（FB-092）：沒寫就跟意境（一般的合成規則）。火（剛）融出來會跟開局的內功（柔）相剋，
+    # 師父教的那一門不能讓新人一照做就 −20%，所以烈爐拳寫成陽；載入時檢查每一門都不跟開局送的另一門相剋
+    attribute: str | None = None
 
 
 class Recruiter(_Strict):
@@ -948,6 +987,10 @@ class BattleTuning(_Strict):
     third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
     third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
     third_cap: int = 10  # 一場最多推第三方的大勢線幾點
+    # 隊伍的路數多樣（一門打不遍，2026-10-07 企劃者選甲）：這一回合出固定招的同一邊，身上武學的屬性每多一種，這一邊的力量
+    # 多乘 diversity_per，最多 diversity_cap。屬性在加入戰局時快照（BattleParticipant.attribute），只有第一季開著時才快照
+    diversity_per: float = Field(default=0.05, ge=0)
+    diversity_cap: float = Field(default=0.15, ge=0)  # 四路以上封頂：兩軍份量相當時，一回合大約多推 1 點
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -987,6 +1030,47 @@ class BattleTuning(_Strict):
         if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
             raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
         return self
+
+
+class StyleRule(_Strict):
+    """一門打不遍（企劃者 2026-10-07 選甲，docs/superpowers/specs/2026-10-07-武學難度與長期目標-提案.md 第三節）：大場面的對手
+    （頭目、大勢人物本人、難度到 big_fight_difficulty）各有路數——最怕哪一路（soft）、最會對付哪一路（hard），照「天機｜隊伍」
+    雜湊從 attributes 裡挑，每季、每個人都不一樣。上陣的人身上武學的屬性落在 soft 乘 1＋soft_bonus、落在 hard 乘 1－hard_penalty
+    （跟屬性相剋的 ×1.3 疊在一起）。只在第一季開著時有（rules.season_one）。提示一律含蓄：不寫屬性、不寫倍數；
+    words 是給模型看的打法描述（大場面判讀、人物對話），lines 是戰報裡的一句。"""
+
+    soft_bonus: float = Field(default=0.25, ge=0)
+    hard_penalty: float = Field(default=0.25, ge=0, lt=1)
+    attributes: list[Attribute] = Field(default_factory=lambda: ["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"])
+    talk_affinity: int = 20  # 人物對話裡不經意露出自己的習慣：好感到這裡才會（交情不到，人家不跟你聊武藝）
+    words: dict[Attribute, str] = Field(default_factory=lambda: {
+        "陰": "陰寒內斂、後發制人", "陽": "熾烈外放、大開大闔", "剛": "剛猛硬打、以力壓人", "柔": "綿柔卸勁、借力打力",
+        "快": "輕快迅捷、搶攻破綻", "慢": "沉穩緩重、步步為營", "虛": "虛實難測、聲東擊西", "實": "紮實穩打、一招是一招",
+    })
+    lines: dict[Literal["soft", "hard"], str] = Field(default_factory=lambda: {
+        "soft": "你這一路正好打在對方的軟處，他接得手忙腳亂。",
+        "hard": "對方似乎早料到你這一路，處處受制。",
+    })
+
+    @model_validator(mode="after")
+    def _two_different_roads(self) -> StyleRule:
+        if len(set(self.attributes)) < 2:
+            raise ValueError("styles.attributes 至少要兩個不同的屬性（怕的與擅長對付的要是兩路）")
+        missing = [a for a in self.attributes if a not in self.words]
+        if missing:
+            raise ValueError(f"styles.words 少了 {'、'.join(missing)} 的打法描述")
+        if set(self.lines) != {"soft", "hard"}:
+            raise ValueError("styles.lines 要寫 soft 與 hard 兩句")
+        return self
+
+
+class FirstEcho(_Strict):
+    """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
+    每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
+    只在第一季開著時有。"""
+
+    fame_per: int = Field(default=1, ge=0)
+    cap: int = Field(default=5, ge=1)
 
 
 class Config(_Strict):
@@ -1040,6 +1124,8 @@ class Config(_Strict):
     # （server.prepare_fight 扣掉等鎖的時間傳給 fight_llm.judge，跟開爐取名同一個理由：trycloudflare 約 100 秒切斷請求）
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
+    styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
+    first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     big_fight_budget_seconds: int = Field(default=60, ge=0)
     # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
     # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
@@ -1196,7 +1282,7 @@ class Config(_Strict):
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
-    practice_xinde_per_level: int = 1  # 練成：第 N 成升 N+1 成花 N × 這個數的心得
+    practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
     # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣；那時合成不花，設計 12.1 起三種合成一樣花，見 fuse_stamina）。合併→熔掉（melt_insight_xinde）→再合併
@@ -1221,8 +1307,10 @@ class Config(_Strict):
     # 企劃者 2026-10-06（W8）：第一階（下品→中品）放寬成 40% 起、每失敗一次 +20%、第三次必成（見 cultivate_sure_by）。理由：試玩
     # 走一遍，連續四次（40 體力）還是下品，第一次玩一個 session 可能什麼都沒得到；第一階是新手第一次感覺到「修練有用」的地方，
     # 要夠快。中品→上品（10%、+6）、上品→絕學（4%、+3）一個數字都沒動
+    # 企劃者 2026-10-07（PR #28 方案 B）：中品→上品改成 6%、+3，再乘這一回的搭配（cultivate_fit）。上品→絕學在方案 C（breakthrough）
+    # 開著時不擲骰（火候＋契機），「絕學」那一組只在 breakthrough.heat 是 0 時用得到
     cultivate_odds: dict[str, tuple[int, int]] = Field(
-        default_factory=lambda: {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
+        default_factory=lambda: {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
     )
     # 第幾次修練必成（W8）：寫了的那一階，第 N 次（失敗 N−1 次之後）機會直接是 100%——蓋過悟性的乘數與 cultivate_cap。
     # 沒寫的那一階照舊：機會加到 100% 才必成（上品第 16 次），絕學沒有保底。預設只有第一階寫了，第三次必成
@@ -1231,9 +1319,23 @@ class Config(_Strict):
     # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
     # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）
     cultivate_cap: dict[str, int] = Field(default_factory=lambda: {"絕學": 50})
+    # 企劃者 2026-10-07（PR #28 方案 A）：衝哪一品之前要先練到第幾成（「火候不到，練不出那一品」）。沒寫的那一品不擋。
+    # 序章安排好一定升品的那一步不看這個（劇本只練到第三成）
+    cultivate_min_level: dict[str, int] = Field(default_factory=lambda: {"中品": 4, "上品": 7, "絕學": 10})
+    cultivate_fit: CultivateFit = Field(default_factory=CultivateFit)  # 方案 B：修練的機率看搭配
+    breakthrough: Breakthrough = Field(default_factory=Breakthrough)  # 方案 C：絕學要契機
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
+    # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
+    # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
+    stamina_pill_name: str = "回體丹"
+    stamina_pill_note: str = "服下立刻回復體力。"
+    stamina_pill_restore: int = Field(default=100, ge=1)
+    # 內測贈送：建立新角色時送 beta_gift_stamina_pills 顆（真人、假人、整季機器人都一樣）；關掉之後新角色不再送，手上的照樣能吃。
+    # 舊角色不補送，換季不再送（剩下的跟著帶到下一季）
+    beta_gift: bool = True
+    beta_gift_stamina_pills: int = Field(default=20, ge=0)
     explore_legend_chance: float = Field(default=0.02, ge=0, le=1)  # 每按一次探索（不論走哪一支）撿到一枚的機率
     melt_refund_ratio: float = Field(default=0.8, ge=0, le=1)  # 熔一門武學退回練成花的心得的幾成
     # FB-068（企劃者 2026-10-05）：熔掉全服登記的武學（合成出來的）時，「練成花的八成」那一份至少退這麼多——合成也花了東西。

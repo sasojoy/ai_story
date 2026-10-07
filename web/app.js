@@ -81,7 +81,7 @@
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
-    senseNote: "", // 畫布底下那一行：規則讀到的這一筆（/api/sense_read）
+    senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
     stroking: false, // 手指正按在畫布上：輪詢不重畫（重畫會換掉畫布、手指底下的那一筆就斷了）
     forgeLine: "",
     map: null,
@@ -302,7 +302,9 @@
       ? esc(s.calendar.text)
       : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}`;
     const vitals = [
-      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>` : "",
+      // 回體丹（企劃者 2026-10-07 內測贈送）：有丹時體力條右端多一顆「丹 N」，按了吃一顆；體力滿了是灰的。序章裡伺服器不給 pills
+      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span>${s.pills
+        ? `<button class="pill-btn" data-act="pill" ${s.pills.full ? "disabled" : ""} aria-label="服下${esc(s.pills.name)}（剩 ${s.pills.count} 顆，回 ${s.pills.restore} 點體力）">丹${s.pills.count}</button>` : ""}</div>` : "",
       shown("hp") ? `<div class="bar hp" title="氣血" data-glow="hp"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
         // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
         // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
@@ -377,8 +379,11 @@
   // 元件（reveal 比上一次畫的多出來的）加 .lit 閃一下，一秒內重畫也還在。data-glow 寫的是鍵，可以寫好幾個（空白隔開，例：收著的
   // 武學列「改練 修練 熔煉」）。不在序章什麼都不加。每次畫完頁面、狀態列都呼叫，前一次的先清掉
   let litBefore = null, litKeys = [], litTimer = 0;
+  const guideGlow = () => (S.main && S.main.guide && S.main.guide.glow) || [];
   function applyGlow() {
     document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
+    // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮
+    guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
     const p = pro();
     if (!p) { litBefore = null; litKeys = []; return; }
     const fresh = litBefore ? p.reveal.filter((k) => !litBefore.includes(k)) : [];
@@ -759,7 +764,9 @@
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度
     const extras = m.options.filter((o) => !used.has(o.id));
-    const here = extras.length ? `<details class="fold here"><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+    // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民，FB-093）：摺疊先攤開，那一顆發光（applyGlow）
+    const hotHere = extras.some((o) => guideGlow().includes(o.id));
+    const here = extras.length ? `<details class="fold here"${hotHere ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
@@ -1291,7 +1298,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
-        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
+        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
@@ -1915,8 +1922,8 @@
   }
 
   // ── 有所感的畫布（悟意境設計 0.2 第 3、4 步）──
-  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器規則讀到什麼（/api/sense_read，
-  // 跟送出時讀的是同一套 glyph.read），寫在畫布底下。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
+  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器這一筆讀不讀得出來
+  // （/api/sense_read，跟送出時讀的是同一套 glyph.read），畫布底下只寫成不成，不寫筆畫的幾何。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
   const SENSE_SIZE = 256;
   function sensePadHtml() {
     const ready = S.sensePts.length > 1;
@@ -1992,7 +1999,7 @@
       try {
         const r = await api("/api/sense_read", { points: pts });
         if (S.sensePts !== pts) return; // 等回應時又畫了一筆
-        S.senseNote = r.note ? `這一筆：${r.note}` : (r.problem || "");
+        S.senseNote = r.ok ? "心中的形已經落下。" : (r.problem || ""); // 不寫筆畫讀到什麼（企劃者 2026-10-06：留住驚喜）
       } catch (e) { S.senseNote = ""; }
       const note = document.getElementById("sense-note");
       if (note) note.textContent = S.senseNote;
@@ -2034,7 +2041,13 @@
     if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
   }
 
-  async function choose(btn, id) {
+  async function choose(btn, id, sure = false) {
+    // 按下去之前要先問一次的選項（伺服器寫在 confirm，FB-095：必敗的遊歷）：問過、按了「照打」才送
+    const ask0 = ((S.main && S.main.options) || []).find((o) => o.id === id);
+    if (!sure && ask0 && ask0.confirm) {
+      ask(ask0.confirm, "照打", () => choose(btn, id, true));
+      return;
+    }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
       S.sensing = true;
       renderPage();
@@ -2291,6 +2304,7 @@
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
+        case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {

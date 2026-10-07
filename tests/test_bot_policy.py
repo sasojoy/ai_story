@@ -405,6 +405,7 @@ def test_a_bot_walks_to_the_battle_when_it_cannot_afford_to_hurry(content, game,
     )
     content.locations["town"].connections.append("hill")
     game.state.player.stamina = 0
+    game.state.player.stamina_pills = 0  # 身上還有回體丹的話假人會先服丹、改成趕路
     monkeypatch.setattr(bot_policy, "pick", lambda game, options, profile, rng: "move:hill")
     enabled = {o.id for o in game.options(odds=False) if o.enabled}
     assert {"move:lake", "move:hill"} <= enabled  # 平常的挑選兩條路都走得了

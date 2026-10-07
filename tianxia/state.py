@@ -152,6 +152,7 @@ class PlayerState(BaseModel):
     # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
     art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -335,6 +336,16 @@ class Order(BaseModel):
     applied: int = 0
 
 
+class Echo(BaseModel):
+    """一門首創的武學或意境，這一季照著合出來的人（首創名望回饋，Config.first_echo）。名望由首創者自己的 Game 在同步時補
+    （paid 記補到第幾個人），合的那一下不去動別人的角色。"""
+
+    creator: str  # 首創者的名號（身分）
+    name: str  # 寫給首創者看的名字，連括號（武學【】、意境「」），合出來那一刻的顯示名字
+    followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
+    paid: int = 0  # 已經補給首創者的人數
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -386,6 +397,7 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
+    echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
 
 
 class Fighter(BaseModel):

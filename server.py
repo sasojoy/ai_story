@@ -815,6 +815,8 @@ def _main_view_body(game: Game) -> dict:
         "push": HUB is not None,
         "push_spread": game.content.config.push_world_min_seconds,
     }
+    if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
+        view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
         view["fronts"] = status["fronts"]
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
@@ -1235,6 +1237,7 @@ MAIN_ACTIONS = {
     "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
+    "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -1379,12 +1382,14 @@ def api_sense(request: Request, body: dict = Body(default={})):
 
 @app.post("/api/sense_read")
 def api_sense_read(request: Request, body: dict = Body(default={})):
-    """畫布底下那一行「這一筆：…」（不算行動、不拿鎖、不碰狀態）：規則讀到的特徵，跟送出時讀的是同一套（glyph.read）。"""
+    """畫布底下那一行（不算行動、不拿鎖、不碰狀態）：這一筆讀不讀得出來（跟送出時讀的是同一套 glyph.read）。讀得出來只回 ok，
+    不寫規則讀到什麼——玩家面前不寫筆畫的幾何（企劃者 2026-10-06），那一筆的感覺留到意境的說明；讀不出來回一句話（只點了一下）。"""
     _game(request)
     try:
-        return {"note": glyph.read(body.get("points")).note()}
+        glyph.read(body.get("points"))
     except glyph.GlyphError as e:
-        return {"note": "", "problem": str(e)}
+        return {"ok": False, "problem": str(e)}
+    return {"ok": True}
 
 
 @app.post("/api/sense_warm")

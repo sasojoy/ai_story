@@ -99,7 +99,7 @@ def test_prologue_step_4_the_real_hut_fusion_is_the_lowest_quality_even_if_a_rol
     assert game.state.player.tutorial_step == 4  # 第 4 步做完了
 
 
-def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_melting_pays_eight(real, world):
+def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_melting_pays_sixteen(real, world):
     game = _hut_up_to_the_fusion(real, world)
     insight = game.state.player.insights[0]
     game.forge("jichu_quanjiao", [insight], proposed=(None, ""))
@@ -118,8 +118,9 @@ def test_prologue_steps_6_and_10_one_cultivation_reaches_the_middle_grade_and_me
     assert game.state.player.tutorial_step == 9
     before = game.state.player.stats["xinde"]
     melted = game.melt_art("manniu_quan")
-    assert melted[0] == "你把【蠻牛拳】熔成了心得。" and "心得 +8" in melted  # 同上：引擎的一般那句，退回的心得是真的 8 點
-    assert game.state.player.stats["xinde"] - before == 8
+    # 同上：引擎的一般那句，退回的心得是真的 16 點（練成每成 2N 之後，練成花的八成跟著翻倍）
+    assert melted[0] == "你把【蠻牛拳】熔成了心得。" and "心得 +16" in melted
+    assert game.state.player.stats["xinde"] - before == 16
 
 
 def test_the_hut_rows_carry_the_server_glow_lists_and_the_forge_page_the_pick_cues(real, world):

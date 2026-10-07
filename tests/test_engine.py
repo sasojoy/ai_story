@@ -376,7 +376,7 @@ def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
     # 選項底下沒有另一行（wait 是按下去等模型時換上的字，不是另一行；不是大場面就是空的）
-    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait"} and o.wait == "" for o in game.options())
+    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait", "confirm"} and o.wait == o.confirm == "" for o in game.options())
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log
@@ -7034,6 +7034,7 @@ def test_a_journey_costs_less_stamina_with_light_body_and_the_button_says_so(gam
     assert before - game.state.player.stamina == base - 2
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("traits_worn", [(), ("慢", "慢", "慢"), ("虛", "虛", "虛"), ("剛", "剛", "剛")])
 def test_the_models_push_in_a_big_fight_is_the_same_points_with_or_without_roll_traits(game, traits_worn):
     """Task 3 審查 I1：判讀的優勢（最多 ±15 個百分點，武學與成長設計 8.3）走完整條路（_fight_with → team.fight →

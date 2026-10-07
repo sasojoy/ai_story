@@ -13,9 +13,13 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from conftest import FixedRandom
 from tianxia import team
 from tianxia.engine import Game
+
+pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
 ROOT = Path(__file__).parent.parent
 

@@ -244,13 +244,25 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             insights.resolve(art.insight, content, world, state) if art.insight else None
         )
         insight_name = insight.name if insight else None
-        problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(state, content, world, art_id)
+        gate = prologue.sure_rng(state, content) is None  # 序章一定升品的那一步不看成數門檻（跟 Game.cultivate 同一個判斷）
+        problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(
+            state, content, world, art_id, gate=gate, use_legend=True,  # 火候滿了、手上有丹：這一列給「服丹強行衝關」那一格
+        )
         legend = None
         if problem is None:
             target = next_quality(art.quality)
             failures = p.art_mastery.get(art_id, 0)
-            note = f"{cultivation.odds_note(cultivation.odds_for(state, content, target, failures), target)}・體力 {content.config.cultivate_stamina}"
-            legend = _legend_choice(state, content, target, failures)
+            cost = f"體力 {content.config.cultivate_stamina}"
+            if cultivation.heat_mode(content, target):  # 方案 C：上品往絕學只添火候，不寫機率；滿了只剩服丹強行衝關那一格
+                note = f"{cultivation.heat_note(content, failures)}・{cost}"
+                if failures >= content.config.breakthrough.heat:
+                    legend = _force_choice(state, content, world, art_id)
+            else:
+                odds = cultivation.odds_for(state, content, target, failures, 0, world, art_id)
+                note = f"{cultivation.odds_note(odds, target)}・{cost}"
+                legend = _legend_choice(state, content, world, art_id, target, failures)
+            if gate and target not in content.config.cultivate_sure_by:  # 方案 B：這一回的搭配，含蓄的一句（不寫倍數）
+                note += "".join(f"　{line}" for line in cultivation.fit(state, content, world, art_id).lines)
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
@@ -290,14 +302,14 @@ def _best_forge(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt,
 ) -> tuple[Insight, fusion.QualityOdds] | None:
     """這一門配手上哪一個意境合成最好：上品機率最高（同分看下品少），機率照 fusion.fuse_odds（跟開爐實際擲的同一套）。
-    合出來的那一門你已經有了的組合不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
+    合出來的那一門你已經有了、血統裡已經融過的意境都不算（那一爐開不了）。序章照劇本合、沒有可用的意境就是 None。"""
     if prologue.fuse_base(state, content) is not None:
         return None
     owned, best = set(owned_arts(state)), None
     for insight_id in state.player.insights:
         insight = insights.resolve(insight_id, content, world, state)
         known = world.lookup_recipe(fusion.fuse_key(art_id, insight_id, insight.attribute if insight else None))
-        if insight is None or (known is not None and known.id in owned):
+        if insight is None or (known is not None and known.id in owned) or fusion.lineage_has(art_id, insight, content, world):
             continue
         odds = fusion.fuse_odds(state, content, art_id, art, insight)
         rank = (odds.odds["上品"], -odds.odds["下品"])
@@ -306,7 +318,9 @@ def _best_forge(
     return None if best is None else (best[1], best[2])
 
 
-def _legend_choice(state: GameState, content: Content, target: str, failures: int) -> dict | None:
+def _legend_choice(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, target: str, failures: int,
+) -> dict | None:
     """修練頁上「服下破境丹」那一格（預設不勾）要的資料：下一步是絕學、手上有丹才有，否則 None。
     note 是勾了之後機率欄換成的那一句；加成機率照 cultivation.boost_for 算，跟實際擲的一致。"""
     boost = cultivation.boost_for(state, content, target, use_legend=True)
@@ -317,8 +331,21 @@ def _legend_choice(state: GameState, content: Content, target: str, failures: in
         "count": count,
         "bonus": boost,
         "label": f"服下{cfg.legend_item_name}（+{boost}%，剩 {count} 枚）",
-        "note": f"{cultivation.odds_for(state, content, target, failures, boost)}% 晉為{target}"
+        "note": f"{cultivation.odds_for(state, content, target, failures, boost, world, art_id)}% 晉為{target}"
                 f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
+    }
+
+
+def _force_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict:
+    """方案 C 火候滿了的那一門：「服下破境丹」那一格換成強行衝關（待 joy 潤）。資料形狀跟 _legend_choice 一樣，網頁照舊畫；
+    bonus 是這一次衝開的機會（cultivation.force_odds，跟實際擲的一致）。"""
+    cfg, count = content.config, state.player.legend_items
+    odds = cultivation.force_odds(state, content, world, art_id)
+    return {
+        "count": count,
+        "bonus": odds,
+        "label": f"服下{cfg.legend_item_name}強行衝關（剩 {count} 枚）",
+        "note": f"約 {odds}% 衝開・體力 {cfg.cultivate_stamina}",
     }
 
 
@@ -334,7 +361,6 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
-                "glyph_note": insight.glyph_note,
             }
             if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
                 row["glow"] = prologue.insight_glow(state, content)
@@ -345,8 +371,8 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
 def bag_text(state: GameState, content: Content) -> str:
     """背包：隨身帶著的材料（糧草、伏筆要用），階高的排前面。"""
     items = materials.bag_contents(state, content)
-    pills = state.player.legend_items
-    if not items and pills <= 0:
+    pills, stamina_pills = state.player.legend_items, state.player.stamina_pills
+    if not items and pills <= 0 and stamina_pills <= 0:
         return "**背包**　還沒有東西——打贏對手、沿路採集，或在奇遇裡拿到。"
     lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"] if items else ["**背包**　隨身帶著的東西。"]
     lines += [
@@ -357,6 +383,14 @@ def bag_text(state: GameState, content: Content) -> str:
         if items:  # 材料那行標題寫「材料，分三階」：丹接在底下會被當成材料，另起小標題（空行隔開，標題才不會併進上一項）
             lines += ["", "**傳奇道具**"]
         lines.append(f"- {content.config.legend_item_name} ×{pills}　{content.config.legend_item_note}")
+    if stamina_pills > 0:  # 回體丹（內測贈送）：同樣不是材料；在狀態列體力條旁邊按「服丹」吃
+        if items or pills > 0:
+            lines += ["", "**丹藥**"]
+        cfg = content.config
+        lines.append(
+            f"- {cfg.stamina_pill_name} ×{stamina_pills}　{cfg.stamina_pill_note}"
+            f"每顆回 {cfg.stamina_pill_restore} 點，在狀態列體力條旁邊按「服丹」。"
+        )
     return "\n".join(lines)
 
 

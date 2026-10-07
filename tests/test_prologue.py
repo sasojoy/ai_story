@@ -1303,6 +1303,7 @@ def test_the_season_bot_leaves_the_start_like_a_human_on_content_with_a_prologue
     assert game.state.player.location == "town" and prologue.fused_arts(game.state, prologue_content, game.world)[0].preset
 
 
+@pytest.mark.slow
 def test_the_season_bot_plays_the_same_game_on_content_without_a_prologue(content, tmp_path, monkeypatch):
     """bot.play_season 現在也傳 graduated=True：沒有序章時，同一顆種子玩出來的整季要跟不傳一模一樣。"""
     from tianxia import bot
@@ -1322,3 +1323,32 @@ def test_the_season_bot_plays_the_same_game_on_content_without_a_prologue(conten
     monkeypatch.setattr(Game, "_graduate", boom, raising=False)
     old = bot.play_season(content, 1, max_steps=300, world=open_world(tmp_path / "b.db"))
     assert new.state.model_dump_json() == old.state.model_dump_json()
+
+
+def test_the_fire_recipe_does_not_clash_with_the_starting_breath(world):
+    """FB-092：序章選了火，師父要你改練的【烈爐拳】不跟開局的【基礎吐納】（柔）相剋；師門配方寫成陽，比照四條路都不吃 −20%。"""
+    from conftest import real_content
+    from tianxia import team
+
+    content = real_content()
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "烈火", rng=random.Random(0), world=world)
+    game.state.player.insights.append("huo")
+    game.state.player.stats["xinde"] = 50
+    msgs = game.forge("jichu_quanjiao", ["huo"])
+    assert "【烈爐拳】" in msgs[0] and "屬陽" in msgs[0] and not any("相剋" in m for m in msgs)
+    art = next(a for a in (team.player_art(game.state, content, game.world, i) for i in game.state.player.arts) if a and a.name == "烈爐拳")
+    assert team.pairing(content, art, content.skills["jichu_tuna"]) == 1.0
+
+
+def test_a_masters_recipe_that_clashes_with_the_starting_art_is_refused(prologue_root):
+    """FB-092：師門配方合出來的那一門跟開局送的另一種相剋，載入時就擋下來。"""
+    path = prologue_root / "preset_recipes.json"
+    recipes = json.loads(path.read_text(encoding="utf-8"))
+    for recipe in recipes:
+        recipe["attribute"] = "剛"
+    path.write_text(json.dumps(recipes, ensure_ascii=False), encoding="utf-8")
+    from tianxia.content import ContentError
+
+    with pytest.raises(ContentError, match="跟開局送的【粗淺吐納】（屬柔）相剋"):
+        load_content(prologue_root)

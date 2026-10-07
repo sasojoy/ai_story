@@ -31,7 +31,7 @@ class FightRequest(BaseModel):
     battle_seq: int  # 開單時的戰報流水號（GameState.battle_seq）
     event: str | None  # 開單時眼前的事件（GameState.pending_event）；遊歷、挑戰本人是 None
     ours: list[str]  # 我方每人一行：名字、武學與內功（名字、品質、屬性、正邪、說明）；部下也上陣
-    theirs: str  # 對手一行：名字、屬性、難度（挑戰本人照他此刻的聲威）、有來歷的再接一句描述
+    theirs: str  # 對手一行：名字、屬性、難度（挑戰本人照他此刻的聲威）、第一季的路數（styles.fight_line）、有來歷的再接一句描述
 
 
 class Judgment(BaseModel):
@@ -61,6 +61,8 @@ def member_line(name: str, arts: list[MartialArt | None]) -> str:
 SYSTEM = (
     "你是武俠小說裡的說書人，也是看招的行家。給你雙方的陣容，你判斷哪一方佔優勢、寫兩版過程。"
     "判斷只看招式路數、屬性相剋、說明裡的打法對不對路；名字取得多威風一概不算。"
+    "對手寫了路數時：我方的招正好是他吃不消的那一路就該佔優，是他最會對付的那一路就該吃虧；"
+    "過程裡用招式寫出來，不要說出「路數」「屬性」這些字。"
     "全程使用繁體中文。"
 )
 

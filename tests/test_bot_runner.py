@@ -295,6 +295,7 @@ def test_bots_do_nothing_until_the_admin_opens_the_season(content, clock):
     assert open_characters().names() == set()
 
 
+@pytest.mark.slow
 def test_a_season_of_server_bots_runs_to_the_end_and_both_sides_fight(runner, world, content, clock, monkeypatch):
     """整季：只有假人程式，用假時鐘跑完一季；背景跨過門檻開戰，兩邊的假人都以一般參戰者上場。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
