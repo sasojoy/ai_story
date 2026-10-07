@@ -392,3 +392,93 @@ def test_the_signature_art_threshold_is_the_config(content, game):
     assert companion_agent._maybe_grant_signature_skill(game.state, content, ch, "mate") == []
     game.state.player.affinities["mate"] = 10
     assert companion_agent._maybe_grant_signature_skill(game.state, content, ch, "mate")[0].startswith("你與韓鐵情誼深厚")
+
+
+# ── 三、體力：點體力條看怎麼回；建角色送回體丹記一行；快滿時說為什麼 ─────────────────────────────
+
+
+def _help(game):
+    return game.status_data()["stamina_help"]
+
+
+def test_the_stamina_help_reads_the_config(game):
+    cfg = game.content.config
+    cfg.time_scale, cfg.stamina_regen_seconds, cfg.stamina_max = 1.0, 180, 150
+    cfg.newbie_stamina_multiplier, cfg.rest_regen_multiplier = 1, 2
+    cfg.beta_free_refill, cfg.stamina_pill_restore = False, 100
+    assert _help(game) == [
+        "體力每 3 分鐘回 1 點，滿 150 就不再回。",
+        "打坐時體力回復 ×2；坐著不能做別的，隨時可以起身。",
+        f"回體丹一顆回 100 點（還有 {game.state.player.stamina_pills} 顆），按體力條右端的「丹」服下。",
+    ]
+    cfg.stamina_regen_seconds, cfg.stamina_max, cfg.rest_regen_multiplier, cfg.stamina_pill_restore = 120, 250, 3, 150
+    cfg.newbie_stamina_multiplier = 3
+    help_now = _help(game)
+    assert help_now[0] == "體力每 2 分鐘回 1 點，滿 250 就不再回。"
+    assert help_now[1].startswith("新手期：開季後的") and help_now[1].endswith("內，體力回復 ×3（你還在新手期）。")
+    assert help_now[2].startswith("打坐時體力回復 ×3，跟新手期疊乘")
+    assert "一顆回 150 點" in help_now[3]
+    cfg.time_scale = 2.0  # 遊戲時間跑得比現實快：現實裡每 1 分鐘就回 1 點
+    assert _help(game)[0].startswith("體力每 1 分鐘回 1 點")
+    cfg.beta_free_refill, cfg.beta_free_refill_label = True, "補滿"
+    assert _help(game)[-1] == "測試期間按體力條上的「補滿」直接補滿，不花回體丹。"
+
+
+def test_the_newbie_window_is_written_in_real_time_for_this_season(on, tmp_path):
+    """新手期 18 個季曆天：週末設定（2.5 天的季）是現實約 13 個小時；14 天的季（beta）是 3 天（roster.newbie 的同一個比例）。
+    季長照這一季開季時蓋的章（同一個世界裡換了設定也一樣）。"""
+    from tianxia.sqlite_world import open_world
+
+    game = Game.new(on, "乙", rng=random.Random(0))
+    assert "新手期：加入這一季後的約 13 個小時內，體力回復 ×3（你還在新手期）。" in _help(game)
+    plain = real_content()
+    plain.config.auto_open_first_season = True
+    beta = Game.new(plain, "甲", rng=random.Random(0), world=open_world(tmp_path / "beta.db"))
+    assert "新手期：開季後的 3 天內，體力回復 ×3（你還在新手期）。" in _help(beta)
+    beta.state.world.time = 4 * 86400  # 開季四天：過了
+    assert "新手期：開季後的 3 天內，體力回復 ×3（你的新手期已經過了）。" in _help(beta)
+
+
+def test_the_stamina_help_leaves_out_the_pill_button_when_there_is_none(prologue_content, world):
+    """序章裡體力條上沒有丹的鈕（status 的 pills 是 None）：說明也不提它。"""
+    hut = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
+    assert hut.status_data()["pills"] is None
+    assert not any("丹" in line for line in _help(hut))
+
+
+def test_a_new_character_gets_a_journal_line_for_the_gift(content):
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    head = game.state.journal[0]
+    assert head.tag == "賽季開始" and head.lines[-1] == howto.gift_line(content)
+    assert head.lines[-1] == f"內測贈禮：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。"
+    assert sum(1 for e in game.state.journal if e.tag == "賽季開始") == 1  # 接在開場那一則裡，不另起一則
+
+
+def test_no_gift_no_line_and_the_refill_wording(content):
+    content.config.beta_gift = False
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    assert not any("內測贈禮" in line for e in game.state.journal for line in e.lines)
+    content.config.beta_gift, content.config.beta_free_refill = True, True
+    other = Game.new(content, "柳青", rng=random.Random(0), world=game.world)
+    assert other.state.journal[0].lines[-1].endswith("測試期間體力條上的「補滿」不花丹，丹先留著。")
+
+
+def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_content, world):
+    """序章第一屏的「剛剛」照舊什麼都不放（開場那一則是江湖上的事，T7 審查 I2）：贈禮那一行接在開場那一則裡，江湖紀錄看得到。"""
+    hut = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
+    assert hut.now_entry_html() == ""
+    assert any(line.startswith("內測贈禮") for line in hut.state.journal[0].lines)
+
+
+def test_the_full_stamina_note_says_why():
+    from tianxia import guide
+
+    assert guide.FULL_STAMINA_NOTE == "體力將滿：滿了就不再回，別讓它浪費。"
+
+
+def test_the_full_stamina_note_shows_when_nearly_full(game):
+    from tianxia import guide
+
+    game.skip_tutorial()
+    game.state.player.stamina = game.content.config.stamina_max
+    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)

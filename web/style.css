@@ -136,6 +136,11 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   font-weight: 700; cursor: pointer;
 }
 .bar.stam > .pill-btn:disabled { opacity: 0.45; cursor: default; }
+/* 點體力條攤開體力怎麼回（explain-1）：整條是按鈕（丹的鈕自己另外一顆，點它照樣是服丹／補滿）；說明排在數字那一列底下，小字一行一句 */
+.bar.stam[data-act="stam-help"] { cursor: pointer; }
+.bar.stam[data-act="stam-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.more-stats.stam-help { line-height: 1.5; }
+.more-stats.stam-help p { margin: 0; }
 /* 有丹時體力條多擠一顆鈕：把寬度從氣血條那邊借一點，「體力 132/150」才不會被鈕蓋住 */
 .vitals:has(.pill-btn) { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto auto; }
 .num { font-size: 13px; font-weight: 600; white-space: nowrap; }

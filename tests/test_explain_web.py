@@ -89,6 +89,57 @@ def test_the_conversation_view_shows_the_bond(content):
     assert re.search(r'<section class="card scene"><p><strong>韓鐵</strong>（情誼 12）</p>', page)
 
 
+# ── 點體力條看體力怎麼回 ─────────────────────────────────────────
+
+
+def test_tapping_the_stamina_bar_opens_the_help_and_the_pill_keeps_its_own_target():
+    m = _main()
+    help_lines = m["status"]["stamina_help"]
+    assert help_lines and m["status"]["pills"]  # 新角色有內測贈送的丹：體力條上有那顆鈕
+    closed = run(m, "return H.topHtml();")
+    bar = re.search(r'<div class="bar stam"[^>]*>', closed).group(0)
+    assert 'data-act="stam-help"' in bar and 'aria-expanded="false"' in bar
+    # 丹的鈕在體力條裡面、自己帶 data-act="pill"：點它時 closest("[data-act]") 先碰到它，不會走到攤開說明
+    inside = closed[closed.index(bar):closed.index("</div>", closed.index(bar))]
+    assert 'class="pill-btn" data-act="pill"' in inside
+    assert 'class="more-stats stam-help"' not in closed
+    out = run(m, """return (async () => {
+      const el = { dataset: { act: "stam-help" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => el } });
+      const opened = H.topHtml();
+      const first = H.S.stamOpen;
+      await T.docListeners.click[0]({ target: { closest: () => el } });
+      return { first, opened, second: H.S.stamOpen };
+    })();""")
+    assert out["first"] is True and out["second"] is False
+    block = re.search(r'<div class="more-stats stam-help" id="stam-help">(.*?)</div>', out["opened"]).group(1)
+    assert re.findall(r"<p>(.*?)</p>", block) == help_lines  # 伺服器寫好的幾行，一行一段
+    assert 'aria-expanded="true"' in out["opened"]
+
+
+def test_the_pill_click_still_takes_a_pill():
+    m = _main()
+    out = run(m, """return (async () => {
+      const el = { dataset: { act: "pill" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => el } });
+      return { calls: T.calls.map((c) => c[0]), open: H.S.stamOpen };
+    })();""", responses={"/api/do/pill": {"main": m, "message": ""}})
+    assert any(url.startswith("/api/do/pill") for url in out["calls"]) and out["open"] is False
+
+
+def test_no_help_from_an_old_server_means_a_plain_bar():
+    m = _main()
+    m["status"].pop("stamina_help")
+    bar = re.search(r'<div class="bar stam"[^>]*>', run(m, "return H.topHtml();")).group(0)
+    assert "data-act" not in bar
+
+
+def test_the_help_lines_are_escaped():
+    m = _main()
+    m["status"]["stamina_help"] = ["<b>x</b>"]
+    assert "&lt;b&gt;x&lt;/b&gt;" in run(m, "return H.topHtml();", S={"stamOpen": True})
+
+
 def test_notes_are_escaped():
     m = _main()
     m["action_notes"] = {"act:explore": "<b>x</b>"}

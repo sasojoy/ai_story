@@ -245,7 +245,8 @@ class Game:
                 game.state.player.stamina = float(content.config.stamina_max)
         p = game.state.player
         p.visited.add(p.location)
-        if content.config.beta_gift:  # 內測贈送（企劃者 2026-10-07）：真人、假人、整季機器人建角色時一樣拿到
+        gift = content.config.beta_gift and content.config.beta_gift_stamina_pills > 0
+        if gift:  # 內測贈送（企劃者 2026-10-07）：真人、假人、整季機器人建角色時一樣拿到
             p.stamina_pills += content.config.beta_gift_stamina_pills
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
@@ -253,7 +254,19 @@ class Game:
         )
         if not game.state.journal:  # 第二季起建的角色：__init__ 的換季重來已經寫了開場那一則，不再寫一次（FB-052）
             game._write(content.scenario.name, [content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(content))
+        if gift:
+            game._note_gift()
         return game
+
+    def _note_gift(self) -> None:
+        """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：
+        「剛剛」不換（序章第一屏照舊什麼都不放），江湖紀錄裡看得到。只寫字，不擲骰、不動數值（假人、整季機器人照樣有這一行）。"""
+        entries = self.state.journal
+        line = howto.gift_line(self.content)
+        if entries and entries[0].tag == journal.SEASON_START:
+            entries[0] = entries[0].model_copy(update={"lines": [*entries[0].lines, line]})
+        else:
+            self._write(self.content.scenario.name, [line], tag=journal.SEASON_START)
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
 
@@ -5292,6 +5305,10 @@ class Game:
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
+        # 點體力條看的說明（explain-1）：怎麼回、新手期、打坐、回體丹或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
+        data["stamina_help"] = howto.stamina_lines(
+            c, w, roster.newbie(s, c, c.config.newbie_stamina_days), p.stamina_pills, button=data["pills"] is not None,
+        )
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣

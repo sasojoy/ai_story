@@ -9,6 +9,9 @@ from .state import GameState
 from .world import current_act, current_storyline, season_endings, storyline_off
 from .world_state import WorldStateStore
 
+# 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）
+FULL_STAMINA_NOTE = "體力將滿：滿了就不再回，別讓它浪費。"
+
 
 def steps(state: GameState, content: Content) -> list[TutorialStep]:
     """這一季的引導步驟：第一季才有的（TutorialStep.season_one）只在 rules.season_one 成立時算進來（計畫 T6）。
@@ -153,7 +156,7 @@ def next_hint(state: GameState, content: Content, world: WorldStateStore | None 
         return f"（{who.name}）{pending_line(state, content) or who.lines[state.player.enlist_step]}"  # 有事件待處理時跟框一樣（F12）
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
-        hints.append("體力將滿，別讓它浪費。")
+        hints.append(FULL_STAMINA_NOTE)
     return "　".join(hints)
 
 
