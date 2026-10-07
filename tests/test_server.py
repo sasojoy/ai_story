@@ -774,17 +774,18 @@ def test_menxia_practice_and_heal(client, monkeypatch):
 
 
 def test_menxia_practice_costs_xinde_and_says_how_much_is_missing(client, monkeypatch):
-    """練成花心得：第 1 成升第 2 成 1 點、第 2 成升第 3 成 2 點；不夠時直接說還差多少，等級與心得都不動。"""
+    """練成花心得（每成 2N，企劃者 2026-10-07 方案 A）：第 1 成升第 2 成 2 點、第 2 成升第 3 成 4 點；不夠時直接說還差多少，
+    等級與心得都不動。"""
     monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
     _player(client)
     game = server.game_for("沈青衫")
-    game.state.player.stats["xinde"] = 1
+    game.state.player.stats["xinde"] = 2
     open_characters().save(game.state)
     out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
     assert "第2成" in out["message"]
     assert open_characters().load("沈青衫").player.stats["xinde"] == 0
-    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()  # 第 2 成升第 3 成要 2 點，只剩 0 點
-    assert "要 2 點心得，你只有 0 點" in out["message"] and "還差 2 點" in out["message"]
+    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()  # 第 2 成升第 3 成要 4 點，只剩 0 點
+    assert "要 4 點心得，你只有 0 點" in out["message"] and "還差 4 點" in out["message"]
     saved = open_characters().load("沈青衫").player
     assert saved.member.wugong_level == 2 and saved.stats["xinde"] == 0
 
@@ -2533,7 +2534,7 @@ def test_menxia_view_lists_owned_arts_insights_and_holdings(client):
     assert view["holdings"] == {"count": 3, "cap": 50}
     assert [row["name"] for row in view["owned_arts"]] == ["基礎吐納", "基礎拳腳"]
     assert view["insights"][0]["name"] == "風" and view["naming"] is None
-    assert view["slot_cards"][0]["price"] == 1
+    assert view["slot_cards"][0]["price"] == 2
 
 
 def test_menxia_view_rows_carry_what_the_pages_need(client):
@@ -2560,20 +2561,21 @@ def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypat
     game.state.player.member.wugong_level = 9
     open_characters().save(game.state)
     cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
-    assert cards["武學"]["price"] == 9
+    assert cards["武學"]["price"] == 18
 
 
-def test_forge_cultivate_and_melt_through_the_endpoints(client, monkeypatch):
-    # 合成會擲品質，擲到上品時這一次修練有幾 % 的機會直接成了絕學，那一門就等著定名、熔不掉（亂數沒固定，量過約兩百次
-    # 有一次讓這個測試失敗）。這裡只看三個端點接不接得上，所以把絕學的機會關成 0
-    monkeypatch.setitem(server.CONTENT.config.cultivate_cap, "絕學", 0)
+def test_forge_cultivate_and_melt_through_the_endpoints(client):
+    # 合成會擲品質；修練往絕學是添火候（方案 C），不會一擲就成了等著定名、熔不掉的絕學。這裡只看三個端點接不接得上
     _a_player_with_insights(client)
     r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
     assert "衍生出" in r["message"]
     new = r["menxia"]["owned_arts"][-1]
-    assert new["insight"] == "風" and new["cultivate"]["ok"] and new["worn"] is False
+    assert new["insight"] == "風" and new["cultivate"]["ok"] is False and "火候不到" in new["cultivate"]["note"]  # 才第一成（方案 A）
+    game = server.game_for("沈青衫")
+    game.state.player.art_levels[new["id"]] = 10  # 功法庫裡的這一門練到第十成：每一品都修得下去
+    open_characters().save(game.state)
     r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
-    assert "修練" in r["message"]
+    assert "修練" in r["message"] or "火候" in r["message"]
     assert f"體力 -{server.CONTENT.config.cultivate_stamina}" in r["message"]  # FB-070 (b)：頁頂的回話寫出花的體力，跟合併一樣
     assert open_characters().load("沈青衫").player.stamina < server.CONTENT.config.stamina_max  # 花了體力
     r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
@@ -2581,13 +2583,16 @@ def test_forge_cultivate_and_melt_through_the_endpoints(client, monkeypatch):
     assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
 
 
-def _a_peerless_candidate(client, pills=2):
-    """一門融過意境、已經是上品的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。回傳（功法 id，Game）。"""
+def _a_peerless_candidate(client, pills=2, heat=None):
+    """一門融過意境、已經是上品、練到第十成的武學（下一步是絕學）、火候 heat（預設滿了）、手上有 pills 枚破境丹、體力夠。
+    回傳（功法 id，Game）。"""
     _a_player_with_insights(client)
     r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
     art_id = r["menxia"]["owned_arts"][-1]["id"]
     game = server.game_for("沈青衫")
     game.state.player.art_quality[art_id] = "上品"
+    game.state.player.art_levels[art_id] = 10
+    game.state.player.art_mastery[art_id] = server.CONTENT.config.breakthrough.heat if heat is None else heat
     game.state.player.legend_items = pills
     game.state.player.stamina = server.CONTENT.config.stamina_max
     open_characters().save(game.state)
@@ -2595,43 +2600,52 @@ def _a_peerless_candidate(client, pills=2):
 
 
 def test_the_pill_is_taken_only_when_the_request_ticks_it_with_a_real_true(client):
-    """勾了才服：use_legend 只認布林 true。累積了 8 次失敗之後，基本機率 28%、服丹 43%：擲 30%，不服輸、服了贏。"""
+    """勾了才服：use_legend 只認布林 true。火候滿了的那一門（方案 C），沒勾就修不下去（等契機），勾了是服丹強行衝關：
+    成不成都用掉一枚，沒成火候還在。"""
     from conftest import FixedRandom
 
     art_id, game = _a_peerless_candidate(client)
     game.rng = FixedRandom(0.99)
-    for odd in (False, None, "true", 1, "yes", [True], {"a": 1}):  # 沒勾，或不是真正的 true：丹留著
+    for odd in (False, None, "true", 1, "yes", [True], {"a": 1}):  # 沒勾，或不是真正的 true：丹留著、什麼都不動
         body = {"art": art_id} if odd is None else {"art": art_id, "use_legend": odd}
         out = client.post("/api/menxia/cultivate", json=body).json()
-        assert "還差一點火候" in out["message"] and "你服下" not in out["message"], odd
-    game.rng = FixedRandom(0.30)
-    out = client.post("/api/menxia/cultivate", json={"art": art_id}).json()  # 第 8 次失敗之後的基本機率 25%：輸
-    assert "還差一點火候" in out["message"]
+        assert "不在練功房裡" in out["message"] and "你服下" not in out["message"], odd
     saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 2 and saved.art_quality[art_id] == "上品" and saved.art_mastery[art_id] == 8
-    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()  # 同一個 30：28% + 15% 贏
-    assert "你服下一枚【破境丹】" in out["message"] and "晉為絕學" in out["message"]
+    assert saved.legend_items == 2 and saved.stamina == server.CONTENT.config.stamina_max
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()  # 擲 99：沒衝開
+    assert "強行衝關" in out["message"] and "彈了回來" in out["message"]
     saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 1 and saved.art_quality[art_id] == "絕學"
+    assert saved.legend_items == 1 and saved.art_quality[art_id] == "上品"
+    assert saved.art_mastery[art_id] == server.CONTENT.config.breakthrough.heat
+    game.rng = FixedRandom(0.0)
+    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()
+    assert "強行衝關" in out["message"] and "晉為絕學" in out["message"]
+    saved = open_characters().load("沈青衫").player
+    assert saved.legend_items == 0 and saved.art_quality[art_id] == "絕學"
 
 
 def test_a_stale_page_ticking_a_pill_you_no_longer_hold_still_cultivates(client):
+    """火候還沒滿：勾了丹也只是添火候（丹不在這一步用），頁面過期、手上已經沒有丹也照樣修。"""
     from conftest import FixedRandom
 
-    art_id, game = _a_peerless_candidate(client, pills=0)
+    art_id, game = _a_peerless_candidate(client, pills=0, heat=0)
     game.rng = FixedRandom(0.10)
     out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True})
-    assert out.status_code == 200 and "你身上已經沒有破境丹了，這一回沒服。" in out.json()["message"]
+    assert out.status_code == 200 and "又添了一分火候" in out.json()["message"]
     saved = open_characters().load("沈青衫").player
     assert saved.legend_items == 0 and saved.art_mastery[art_id] == 1 and saved.stamina < server.CONTENT.config.stamina_max
 
 
 def test_the_practice_page_offers_the_pill_for_the_peerless_step(client):
-    art_id, _ = _a_peerless_candidate(client)
+    """火候滿了的那一門：機率欄寫「火候已足」，破境丹那一格換成強行衝關，寫的機會跟實際擲的一樣（cultivation.force_odds）。"""
+    from tianxia import cultivation
+
+    art_id, game = _a_peerless_candidate(client)
     row = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == art_id)
-    assert row["cultivate"]["note"] == "4% 晉為絕學・體力 10"
-    assert row["cultivate"]["legend"]["label"] == "服下破境丹（+15%，剩 2 枚）"
-    assert row["cultivate"]["legend"]["note"] == "19% 晉為絕學（含破境丹 +15%）・體力 10"
+    odds = cultivation.force_odds(game.state, server.CONTENT, game.world, art_id)
+    assert row["cultivate"]["ok"] and row["cultivate"]["note"] == "火候已足・體力 10"
+    assert row["cultivate"]["legend"]["label"] == "服下破境丹強行衝關（剩 2 枚）"
+    assert row["cultivate"]["legend"]["note"] == f"約 {odds}% 衝開・體力 10"
     breath = client.get("/api/menxia").json()["owned_arts"][0]
     assert breath["cultivate"]["ok"] is False and breath["cultivate"]["legend"] is None
 

@@ -130,18 +130,44 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
         game.forge(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
     switch_to_the_strongest(game)
     if p.stamina >= CULTIVATE_RESERVE:
-        for art_id in library.owned_arts(state):
-            if cultivation.cultivate_problem(state, content, world, art_id) is None:
-                game.cultivate(art_id, use_legend=takes_the_pill(game, art_id))
+        for art_id in worn_first(game):
+            pill = takes_the_pill(game, art_id)
+            if cultivation.cultivate_problem(state, content, world, art_id, use_legend=pill) is None:
+                game.cultivate(art_id, use_legend=pill)
                 break
 
 
+def worn_first(game: Game) -> list[str]:
+    """修練挑哪一門：身上的兩門先（武學、內功），再照功法庫的順序。成數門檻（方案 A）與火候（方案 C）都綁在練成上，
+    身上那兩門才練得上去；契機也只看身上那兩門。整季機器人與伺服器假人共用。"""
+    member, owned = game.state.player.member, library.owned_arts(game.state)
+    worn = [a for a in (member.wugong_id, member.neigong_id) if a in owned]
+    return worn + [a for a in owned if a not in worn]
+
+
+def awaits_chance(game: Game) -> bool:
+    """身上有一門火候滿了、等著契機（方案 C）：機器人這時有挑戰本人可打就去打（見 pick）。"""
+    state, content, world = game.state, game.content, game.world
+    rule, member = content.config.breakthrough, state.player.member
+    if rule.heat <= 0 or state.player.naming is not None:
+        return False
+    for art_id, level in ((member.wugong_id, member.wugong_level), (member.neigong_id, member.neigong_level)):
+        art = team.resolve_art(art_id, content, world) if art_id else None
+        if art is None or next_quality(team.art_quality(state, art)) != "絕學":
+            continue
+        if level >= content.config.cultivate_min_level.get("絕學", 0) and state.player.art_mastery.get(art_id, 0) >= rule.heat:
+            return True
+    return False
+
+
 def takes_the_pill(game: Game, art_id: str) -> bool:
-    """這一次衝的是絕學、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服）。
+    """這一次衝的是絕學、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服；方案 C 開著時是火候滿了才服）。
     只在這一步傳 use_legend：別的步驟用不上丹，傳了只會多一句「這一回沒服」。要不要算丹由 cultivation.boost_for 決定。"""
     state, content, world = game.state, game.content, game.world
     art = team.player_art(state, content, world, art_id)
     target = next_quality(art.quality) if art is not None else None
+    if cultivation.heat_mode(content, target):  # 方案 C：火候滿了才服（強行衝關）；還在添火候時服了也沒用
+        return state.player.legend_items > 0 and state.player.art_mastery.get(art_id, 0) >= content.config.breakthrough.heat
     return target is not None and cultivation.boost_for(state, content, target, use_legend=True) > 0
 
 
@@ -252,6 +278,10 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         o for o in options
         if not (o.id.startswith("call:") and o.id != "call:back" and not game.can_meet_figure(o.id.partition(":")[2]))
     ]
+    if awaits_chance(game):  # 火候滿了、等契機：有挑戰本人可打就去打一場硬仗（打不贏、閉門不見的按不下去，本來就不在這裡）
+        hard = [o for o in options if o.id.startswith("act:challenge:")]
+        if hard:
+            return rng.choice(hard).id
     return rng.choice(options).id if options else None
 
 

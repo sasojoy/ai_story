@@ -175,7 +175,8 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     assert art.name == "穿林腿" and art.preset
     assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
     assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
-    assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"]  # 心得的帳：20 → −5 → −3 → +8 → 20
+    # 心得的帳：20 → 合成 −5 → 練到第三成 −6 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
+    assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"] + 5
     assert "mentor_hut" not in atlas.visible_locations(game.state, content)
     assert any(content.tutorial.leave_text in line for e in game.state.journal for line in e.lines)
 
@@ -687,19 +688,19 @@ def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content
     assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
-    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 1 點，照引導去練一次練得起；
-    心得見底時，訊息直接說差多少，新手才知道要去賺。"""
+    """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 2 點（每成 2N，企劃者 2026-10-07 方案 A），
+    照引導去練一次練得起；心得見底時，訊息直接說差多少，新手才知道要去賺。"""
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     member = game.state.player.member
     start = game.state.player.stats["xinde"]
     assert start >= team.practice_price(content, 1)
     msgs = game.practice("武學")
-    assert member.wugong_level == 2 and "心得 -1" in msgs
-    assert game.state.player.stats["xinde"] == start - 1
+    assert member.wugong_level == 2 and "心得 -2" in msgs
+    assert game.state.player.stats["xinde"] == start - 2
     game.state.player.stats["xinde"] = 0
     msgs = game.practice("武學")
     assert member.wugong_level == 2
-    assert "要 2 點心得，你只有 0 點" in msgs[0] and "還差 2 點" in msgs[0]
+    assert "要 4 點心得，你只有 0 點" in msgs[0] and "還差 4 點" in msgs[0]
 
 
 def test_event_taught_arts_still_reach_a_character_whose_slots_are_full(content):
