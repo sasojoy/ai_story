@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from tianxia import calendar, events, models, rank_actions, rules, seats
+from tianxia import calendar, events, models, opportunities, rank_actions, rules, seats
 from tianxia.content import ContentError, validate
 from tianxia.engine import RANK_ACTION_PREFIX, Game
 from tianxia.models import Check, OrdersContent, RankAction
@@ -333,14 +333,28 @@ def test_nothing_where_there_is_no_front(on):
 
 
 def test_the_option_is_grey_when_the_stamina_is_short(on):
-    """體力不夠：同一個選項、同一個標籤（含檢定那一段，裁決 E5.3／預審 F7），只是按不下去；網頁把按不下去的花體力選項寫成「體力不夠」。"""
+    """體力不夠：灰掉、只寫體力，不帶檢定那一段（審查 I1 改裁決：這些行動在「此地還能做」裡，網頁照原文印灰掉的標籤，
+    帶著心裡話會讀成是悟性不夠才灰的）。體力夠了才寫檢定（裁決 E5.3）。"""
     game = _game(on, "huang", "runan")
     game.state.player.stamina = 19
     option = _option(game, "act:rank:incite")
-    assert option is not None and not option.enabled
-    assert option.label == f"在一地煽動起事（體力 20・{_check_note(game, 'incite')}）"
+    assert option is not None and not option.enabled and option.label == "在一地煽動起事（體力 20）"
     game.state.player.stamina = 20
     assert _option(game, "act:rank:incite").enabled
+    assert _option(game, "act:rank:incite").label == f"在一地煽動起事（體力 20・{_check_note(game, 'incite')}）"
+
+
+def test_a_rank_two_check_action_short_of_stamina_reads_only_its_cost(on):
+    """第 2 階行動也一樣（審查 I1）：施符水收人心體力不夠時灰掉，標籤是「施符水收人心（體力 15）」；夠了才帶檢定那一段。"""
+    game = _game(on, "huang", "julu_altar", rank=2)
+    cost = on.config.rank2_stamina
+    game.state.player.stamina = cost - 1
+    option = _option(game, "act:rank2")
+    assert option is not None and not option.enabled and option.label == f"施符水收人心（體力 {cost}）"
+    game.state.player.stamina = cost
+    note = events.check_note(opportunities.rank2_action(game.state, on).check, game.state, on, game.world)
+    option = _option(game, "act:rank2")
+    assert option.enabled and option.label == f"施符水收人心（體力 {cost}・{note}）"
 
 
 def test_an_option_that_is_not_on_the_menu_is_refused(on):

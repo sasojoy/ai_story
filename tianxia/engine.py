@@ -36,7 +36,7 @@ from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
     RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
@@ -1912,9 +1912,16 @@ class Game:
             return []
         if opportunities.rank2_left(s, c) <= 0:
             return [Option(id="act:rank2", enabled=False, label=f"{action.name}（今天已經做滿 {c.config.rank2_daily} 次）")]
-        # 檢定照事件選項的寫法接在體力後面（企劃者裁決 E5.3：「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」，標籤的樣子待 joy 潤）
-        note = event_rules.check_note(action.check, s, c, self.world)
+        note = self._check_cost_note(action.check, c.config.rank2_stamina)
         return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina, note=note)]
+
+    def _check_cost_note(self, check: Check | None, cost: int) -> str:
+        """有檢定的行動（第 2 階行動、第 3 階煽動起事）括號裡體力後面接的那一段：照事件選項的寫法寫檢定（企劃者裁決 E5.3：
+        「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」，標籤的樣子待 joy 潤）。體力不夠時不寫（審查 I1）：這些行動在「此地還能做」
+        裡，網頁照原文印灰掉的標籤，帶著心裡話會讀成是屬性不夠才灰的，所以照舊只寫「{行動}（體力 N）」。沒有檢定是空字串。"""
+        if check is None or self.state.player.stamina < cost:
+            return ""
+        return event_rules.check_note(check, self.state, self.content, self.world)
 
     def _rank2(self) -> list[str]:
         """做一次第 2 階行動：扣體力、記今天一次；過檢定才成功——成功往己方推所在戰線 rank2_push 點（push_trend），
@@ -1950,8 +1957,8 @@ class Game:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
             elif line is not None and self._push_room(line) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
-            else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面（裁決 E5.3，同 _rank2_options）
-                note = event_rules.check_note(action.check, s, c, self.world) if action.check is not None else ""
+            else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面，體力不夠時不寫（裁決 E5.3、審查 I1，同 _rank2_options）
+                note = self._check_cost_note(action.check, action.stamina)
                 opts.append(self._cost_option(option_id, action.name, action.stamina, note=note))
         return opts
 
