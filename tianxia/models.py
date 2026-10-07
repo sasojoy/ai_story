@@ -984,6 +984,10 @@ class BattleTuning(_Strict):
     third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
     third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
     third_cap: int = 10  # 一場最多推第三方的大勢線幾點
+    # 隊伍的路數多樣（一門打不遍，2026-10-07 企劃者選甲）：這一回合出固定招的同一邊，身上武學的屬性每多一種，這一邊的力量
+    # 多乘 diversity_per，最多 diversity_cap。屬性在加入戰局時快照（BattleParticipant.attribute），只有第一季開著時才快照
+    diversity_per: float = Field(default=0.05, ge=0)
+    diversity_cap: float = Field(default=0.15, ge=0)  # 四路以上封頂：兩軍份量相當時，一回合大約多推 1 點
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -1023,6 +1027,47 @@ class BattleTuning(_Strict):
         if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
             raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
         return self
+
+
+class StyleRule(_Strict):
+    """一門打不遍（企劃者 2026-10-07 選甲，docs/superpowers/specs/2026-10-07-武學難度與長期目標-提案.md 第三節）：大場面的對手
+    （頭目、大勢人物本人、難度到 big_fight_difficulty）各有路數——最怕哪一路（soft）、最會對付哪一路（hard），照「天機｜隊伍」
+    雜湊從 attributes 裡挑，每季、每個人都不一樣。上陣的人身上武學的屬性落在 soft 乘 1＋soft_bonus、落在 hard 乘 1－hard_penalty
+    （跟屬性相剋的 ×1.3 疊在一起）。只在第一季開著時有（rules.season_one）。提示一律含蓄：不寫屬性、不寫倍數；
+    words 是給模型看的打法描述（大場面判讀、人物對話），lines 是戰報裡的一句。"""
+
+    soft_bonus: float = Field(default=0.25, ge=0)
+    hard_penalty: float = Field(default=0.25, ge=0, lt=1)
+    attributes: list[Attribute] = Field(default_factory=lambda: ["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"])
+    talk_affinity: int = 20  # 人物對話裡不經意露出自己的習慣：好感到這裡才會（交情不到，人家不跟你聊武藝）
+    words: dict[Attribute, str] = Field(default_factory=lambda: {
+        "陰": "陰寒內斂、後發制人", "陽": "熾烈外放、大開大闔", "剛": "剛猛硬打、以力壓人", "柔": "綿柔卸勁、借力打力",
+        "快": "輕快迅捷、搶攻破綻", "慢": "沉穩緩重、步步為營", "虛": "虛實難測、聲東擊西", "實": "紮實穩打、一招是一招",
+    })
+    lines: dict[Literal["soft", "hard"], str] = Field(default_factory=lambda: {
+        "soft": "你這一路正好打在對方的軟處，他接得手忙腳亂。",
+        "hard": "對方似乎早料到你這一路，處處受制。",
+    })
+
+    @model_validator(mode="after")
+    def _two_different_roads(self) -> StyleRule:
+        if len(set(self.attributes)) < 2:
+            raise ValueError("styles.attributes 至少要兩個不同的屬性（怕的與擅長對付的要是兩路）")
+        missing = [a for a in self.attributes if a not in self.words]
+        if missing:
+            raise ValueError(f"styles.words 少了 {'、'.join(missing)} 的打法描述")
+        if set(self.lines) != {"soft", "hard"}:
+            raise ValueError("styles.lines 要寫 soft 與 hard 兩句")
+        return self
+
+
+class FirstEcho(_Strict):
+    """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
+    每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
+    只在第一季開著時有。"""
+
+    fame_per: int = Field(default=1, ge=0)
+    cap: int = Field(default=5, ge=1)
 
 
 class Config(_Strict):
@@ -1076,6 +1121,8 @@ class Config(_Strict):
     # （server.prepare_fight 扣掉等鎖的時間傳給 fight_llm.judge，跟開爐取名同一個理由：trycloudflare 約 100 秒切斷請求）
     big_fight_difficulty: float = 100  # 難度到這裡就算大場面【預設】
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
+    styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
+    first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     big_fight_budget_seconds: int = Field(default=60, ge=0)
     # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
     # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的

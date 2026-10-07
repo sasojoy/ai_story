@@ -5914,6 +5914,7 @@ NOT_IN_THE_FINGERPRINT = {
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
         "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
         "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+        "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",

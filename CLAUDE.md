@@ -44,6 +44,7 @@
 - `tianxia/team.py`：隊伍與門下：本人、同伴、部下的屬性與加成（`player_boost`／`mate_boost`／`follower_boost`、`pairing`、`resonance`）、氣血與內傷（`neili_cap`、`take_encounter_toll`、`heal`）、經驗與配點、練成與改練（`practice`、`switch_art`）、打一場（`fight`）、戰前勝算（`estimate`：固定種子模擬 40 場，**每次重算、沒有快取**；不含閃避）。根骨一律從 `con_of(state, content, world, key)` 讀。
 - `tianxia/rounds.py`：勝負算好之後照結果拆成 3～5 回合的數字（誰出手、對手氣勢、你掉多少氣血），中途不翻盤。
 - `tianxia/battlelog.py`：戰報（`GameState.battles`，最近 20 場）、回合的句子（`round_lines`，句型在 `content/combat_lines.json`）、場景戰鬥卡片與戰報分頁的文字。
+- `tianxia/styles.py`：一門打不遍：大場面對手的路數（怕哪一路、最會對付哪一路，照天機＋隊伍 id 雜湊、每季不同）、對威力的倍數、戰報那一句、給模型的打法描述；只在第一季開著時有。
 - `tianxia/fight_llm.py`：大場面在行動鎖外請模型判讀（優勢＋佔上風、落下風兩版過程）；只問模型、不碰狀態。
 - `tianxia/battle_instance.py`：全服即時多人戰鬥（決戰）的純邏輯——集結、逐幕逐回合鎖步、回合結算、回合上限與收場判定（`decide_outcome`、時刻表決戰的 `decide_result`）、機器人補位。資料存在共用世界狀態的 `active_battle`。
 
@@ -209,6 +210,8 @@
 - **大勢人物**：選單上「挑戰本人」（`act:challenge:<id>`，難度跟著聲威）；打贏扣他的聲威與情誼，`snub_hours` 現實小時內閉門不見。
 - **伏筆**：片段（行動後偷聽、對話裡的片段選項）、準備事件、最後一步；鎖定只在大事揭曉時露出來，先完成與搶輸的敘事一模一樣。
 - **叛投**：一季一次，在別陣營的投靠點（「此地還能做」裡的「叛投X」，要再按一次確認，可以「再想想」）。身份歸零：晉升、召見、部下、本季貢獻、押著的糧車作廢，舊陣營的門派一起離開、這一季拜不回去；屬性、武學、同伴、銀兩、素材、紀錄都不動。新舊陣營各一則軍情（寫本名），當地一則地方傳聞（照匿名規則）。名字還在沒打完的決戰陣上不能叛投；假人與整季機器人不叛投。
+- **一門打不遍**（企劃者 2026-10-07 選甲，`styles.py`、`Config.styles`）：大場面對手（同 `Game.is_big`）每季各有路數：上陣的人身上武學屬性落在他怕的那一路威力 ×1.25、落在他最會對付的那一路 ×0.75（乘在 `Boost.factor`，跟相剋的 ×1.3 疊；`team.fight` 與 `estimate` 都走 `_styled_fighters`）。提示含蓄：戰報裡打贏且用了軟處、或沒打贏且用了硬處各一句；大場面判讀的對手那一行多寫打法（`styles.fight_line`）；大勢人物好感到 `talk_affinity`（20）時對話提示裡多一段他的武藝習慣（`styles.talk_line`），只能不經意流露。決戰裡同一邊出固定招的人武學屬性每多一路，力量 ×（1＋`diversity_per` 0.05），最多 `diversity_cap` 0.15（屬性在加入時快照進 `BattleParticipant.attribute`）。
+- **首創名望回饋**（`Config.first_echo`）：別人照著你首創的武學或意境合出同一門（照著合、合到舊的都算），`fusion.echo` 記在這一季的 `WorldState.echoes`；你下次同步時每人名望 +1（`Game._deliver_echoes`，一門最多 5 人），湊滿 5 人時江湖上傳一句。
 - 結局與休季的結算卡（江湖頁最上面）。beta 的黃巾決戰門檻、主線、`kou_boss` 等由 `scenario.json` 的 `season_one_off` 關掉。
 
 ### 全服決戰

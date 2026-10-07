@@ -335,6 +335,16 @@ class Order(BaseModel):
     applied: int = 0
 
 
+class Echo(BaseModel):
+    """一門首創的武學或意境，這一季照著合出來的人（首創名望回饋，Config.first_echo）。名望由首創者自己的 Game 在同步時補
+    （paid 記補到第幾個人），合的那一下不去動別人的角色。"""
+
+    creator: str  # 首創者的名號（身分）
+    name: str  # 寫給首創者看的名字，連括號（武學【】、意境「」），合出來那一刻的顯示名字
+    followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
+    paid: int = 0  # 已經補給首創者的人數
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -386,6 +396,7 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
+    echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
 
 
 class Fighter(BaseModel):

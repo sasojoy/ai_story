@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, insights, journal, library, materials, naming, opportunities, orders,
-    push, ranks, roster, rounds, sensing, skillview, team, timetable, traits,
+    push, ranks, roster, rounds, sensing, skillview, styles, team, timetable, traits,
 )
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -524,6 +524,7 @@ class Game:
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
+        self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -967,9 +968,7 @@ class Game:
         """大場面：對手標了頭目、是大勢人物本人（figures 的 squad），或難度到 big_fight_difficulty（武學與成長設計 8.3）。
         只看對手本身：遊歷遇上自己陣營的隊伍是操練、不打架，那是遊歷那一條路自己擋（_fight_squad、_train_option）；
         劇情戰從來不操練（_event_battle 不看陣營），黃巾的人打黃巾的頭目照樣是大場面（Task 2 審查修正 1）。"""
-        c = self.content
-        own = {fig.squad for fig in c.figures.values()}
-        return squad.boss or squad.id in own or squad.difficulty >= c.config.big_fight_difficulty
+        return styles.is_big(self.content, squad)
 
     def _big_trip(self, loc: Location) -> bool:
         """這裡遊歷可能撞上大場面：池子（_train_squad_ids）裡有不是自己人的大場面對手。這種地點的遊歷一律照 _train_pick 挑對手
@@ -1021,7 +1020,8 @@ class Game:
         if option is None or not option.enabled:
             return None
         s = self.state
-        theirs = f"{squad.name}（屬{squad.attribute or '不明'}，難度 {squad.difficulty:.0f}）"
+        theirs = f"{squad.name}（屬{squad.attribute or '不明'}，難度 {squad.difficulty:.0f}"
+        theirs += styles.fight_line(self.content, styles.style_of(s, self.content, self.world, squad)) + "）"  # 一門打不遍
         return fight_llm.FightRequest(
             option_id=option_id, squad_id=squad.id, location=s.player.location, battle_seq=s.battle_seq,
             event=s.pending_event,
@@ -1063,6 +1063,12 @@ class Game:
             swing = self.content.config.big_fight_swing
             shift = encounter.advantage_shift(squad.difficulty, max(-swing, min(swing, judged.advantage)))
         return team.fight(self.state, self.content, self.world, squad.id, self.rng, shift=shift, **kw)
+
+    def _style_note(self, squad: Squad, result: encounter.EncounterResult) -> list[str]:
+        """大場面對手的路數（styles，一門打不遍）在戰報裡含蓄的一句：打贏、用的剛好是他怕的那一路；或沒打贏、用的是他拿手對付的
+        那一路。其他時候（不是大場面、第一季沒開、不相干的一路）什麼都不說。"""
+        style = styles.style_of(self.state, self.content, self.world, squad)
+        return styles.note(self.content, style, team.worn_attribute(self.state, self.content, self.world), result.tier)
 
     @staticmethod
     def _narrate(record, result: encounter.EncounterResult, judged: fight_llm.Judgment | None) -> None:
@@ -2061,6 +2067,12 @@ class Game:
             outer.attribute if outer else None, inner.attribute if inner else None,
         )
 
+    def _battle_road(self) -> str:
+        """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
+        if not season_one(self.content, self.state.world):
+            return ""
+        return team.worn_attribute(self.state, self.content, self.world) or ""
+
     def _backfill_battle_scores(self) -> None:
         """自己在戰局上的份量快照是空的（決戰打到一半上線這一版：上線前就在場上的人沒有 scores），補上現在的；
         已經有快照的人不動（加入之後換武學不影響這一場）。只在玩家自己的請求路徑呼叫（sync、_battle_choose）：
@@ -2074,12 +2086,13 @@ class Game:
         me = battle.participants.get(name)
         if me is None or me.scores or me.eliminated:
             return
-        scores = self._battle_scores()
+        scores, road = self._battle_scores(), self._battle_road()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
             if mine is not None and not mine.scores:  # 鎖裡再看一次：別的路徑剛補過就不蓋掉
                 mine.scores = dict(scores)
+                mine.attribute = mine.attribute or road
 
         self.world.mutate_battle(_fill)
 
@@ -2334,6 +2347,26 @@ class Game:
             lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
         journal.add_entry(self.state, entry)
+
+    def _deliver_echoes(self) -> None:
+        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（fusion.echo 記在 WorldState.echoes），
+        你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
+        做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
+        p = self.state.player
+        rule = self.content.config.first_echo
+        lines, gained = [], 0
+        for entry in self.state.world.echoes.values():
+            due = len(entry.followers) - entry.paid
+            if entry.creator != p.name or due <= 0:
+                continue
+            entry.paid = len(entry.followers)
+            gained += due * rule.fame_per
+            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}練了出來。")
+        if not lines:
+            return
+        p.stats["fame"] = p.stats.get("fame", 0) + gained
+        self._write(journal.ECHO, lines + ([f"名望 +{gained}"] if gained else []))
+        self._save_season()  # 補到第幾個人記在共用賽季裡
 
     def _deliver_renames(self) -> None:
         """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
@@ -2706,7 +2739,7 @@ class Game:
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
-                    b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores,
+                    b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -2721,7 +2754,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores,
+                    scores=scores, attribute=self._battle_road(),
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -2820,6 +2853,8 @@ class Game:
         judged = None if wild or scripted is not None else self._judged(squad)
         result = self._fight_with(squad, judged, tier=scripted)
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
+        if scripted is None:
+            record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
@@ -3065,6 +3100,7 @@ class Game:
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty)
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
+        record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
@@ -3544,6 +3580,7 @@ class Game:
         judged = self._judged(squad)  # 打頭目這種大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
+        record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
         # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
         # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
