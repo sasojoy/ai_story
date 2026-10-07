@@ -266,6 +266,29 @@
       ${tabsHtml()}
       ${S.sheet ? sheetHtml() : ""}`;
     renderPage();
+    if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
+  }
+
+  // 設定抽屜在電腦上只有中間 640px 寬、自己捲：滑鼠在兩旁的暗處（.sheet-bg）滾輪時，頁面不動、改捲抽屜。不然指標不在抽屜上就
+  // 捲不到抽屜下半的管理者工具（企劃者 2026-10-07「管理者按鈕電腦版看不到，但手機版可以看到」；手機上抽屜滿版，怎麼滑都捲得到）。
+  // 只掛在暗處（render 畫抽屜時），不掛在整份文件上：別處的捲動照舊是瀏覽器自己的、不必等主執行緒（審查 M-3）。ctrl＋滾輪與
+  // 觸控板捏合是瀏覽器的縮放，不攔。點暗處照舊關掉抽屜（click 的 sheet-close），這裡只管滾輪。deltaMode 1 以「行」計（Firefox），2 以「頁」
+  function sheetWheel(ev) {
+    if (ev.ctrlKey) return;
+    const sheet = document.querySelector(".sheet");
+    if (!sheet) return;
+    ev.preventDefault();
+    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? sheet.clientHeight || 600 : 1;
+    sheet.scrollBy(0, ev.deltaY * unit);
+  }
+
+  // 抽屜開著時整個重畫（查玩家、打開設定時補抓回來的管理者資料、序章回顧）：抽屜是新畫的、捲動回到頂；照原本捲到的地方放回去，
+  // 查到的玩家才不會被丟回「設定」那一行之下好幾屏（審查 M-2）。抽屜原本沒開（剛打開）就照常從頂上開始
+  function renderKeepingSheet() {
+    const top = document.querySelector(".sheet")?.scrollTop;
+    render();
+    const sheet = document.querySelector(".sheet");
+    if (sheet && top != null) sheet.scrollTop = top;
   }
 
   // 底部分頁列：序章裡只畫亮起來的分頁（格數跟著變，不是固定五格），一個都沒有就整列不畫。data-glow 給序章指路（applyGlow）
@@ -1919,7 +1942,7 @@
   async function loadRecap() {
     if (S.recap !== undefined) return;
     try { S.recap = (await api("/api/prologue")).text || ""; } catch (e) { return; } // 問不到：下次打開設定再問
-    if (S.sheet) render();
+    if (S.sheet) renderKeepingSheet();
   }
 
   async function loadReports(id) {
@@ -2374,7 +2397,7 @@
           if (S.main.admin) { // 每次打開都重抓：時刻表與可以定的結果會變；查過的玩家也重查（給過的機緣、片段就不再列）
             S.admin = await api("/api/admin");
             if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
-            render();
+            renderKeepingSheet(); // 等資料的時候人可能已經往下捲了
           }
           break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
@@ -2557,18 +2580,6 @@
     }
   });
 
-  // 設定抽屜在電腦上只有中間 640px 寬、自己捲：滑鼠在兩旁的暗處（.sheet-bg）滾輪時，頁面不動、改捲抽屜。不然指標不在抽屜上就
-  // 捲不到抽屜下半的管理者工具（企劃者 2026-10-07「管理者按鈕電腦版看不到，但手機版可以看到」；手機上抽屜滿版，怎麼滑都捲得到）。
-  // 點暗處照舊關掉抽屜（click 的 sheet-close），這裡只管滾輪。deltaMode 1 是以「行」為單位（Firefox），2 是以「頁」
-  document.addEventListener("wheel", (ev) => {
-    if (!(ev.target instanceof Element) || !ev.target.closest(".sheet-bg")) return;
-    const sheet = document.querySelector(".sheet");
-    if (!sheet) return;
-    ev.preventDefault();
-    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? sheet.clientHeight || 600 : 1;
-    sheet.scrollBy(0, ev.deltaY * unit);
-  }, { passive: false });
-
   document.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const form = ev.target;
@@ -2635,7 +2646,7 @@
         S.adPlayerName = name;
         if (!name) { S.adPlayer = null; formMsg(form, "先填名號。"); return; }
         S.adPlayer = await api("/api/admin/player", { name });
-        render();
+        renderKeepingSheet(); // 查到的那個人就在表單底下：抽屜停在原地（審查 M-2）
       } else if (form.id === "pw-form") {
         // 改密碼、重設密碼一律回 200，訊息就是結果（失敗時寫原因）；成功才清空欄位，失敗留著讓人改
         const r = await api("/api/password", data);
