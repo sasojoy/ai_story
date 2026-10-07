@@ -971,7 +971,9 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     for a in c.orders.rank_actions:
         where = f"orders.json rank_actions.{a.id}"
         need(a.faction in factions, f"{where}：沒有陣營 {a.faction}")
-        need(set(a.tags) <= place_tags, f"{where}：tags 有沒有地點帶的標籤 {sorted(set(a.tags) - place_tags)}")
+        need(bool(a.id) and ":" not in a.id, f"{where}：id 不能是空的、也不能有冒號（選項是 act:rank:<id>，軍令記功的 kind 也是它）")
+        need(set(a.tags) <= place_tags, f"{where}：tags 裡有的標籤，沒有任何地點帶：{sorted(set(a.tags) - place_tags)}")
+        need("{地點}" in a.ok, f"{where}：ok 要寫 {{地點}}（成功的那一句要說在哪裡）")
         if a.check is not None:
             known(where, [a.check.stat], STATS, "屬性")
         need(a.check is None or bool(a.fail.strip()), f"{where}：有檢定就要寫 fail（沒過的那一句）")

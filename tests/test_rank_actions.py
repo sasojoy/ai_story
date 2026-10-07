@@ -510,3 +510,29 @@ def test_rank_action_weeks_survive_a_save_and_load(on):
     open_characters().save(game.state)
     loaded = open_characters().load("甲")
     assert loaded.player.rank_action_weeks == game.state.player.rank_action_weeks == {"2:fortify": 2}
+
+
+@pytest.mark.parametrize("bad_id", ["", "a:b", ":x", "x:"])
+def test_a_rank_action_id_is_not_empty_and_has_no_colon(real, bad_id):
+    """id 是選項 act:rank:<id> 的尾巴（_rank_action_id 照前綴切）、也是軍令記功的 kind：空的或帶冒號都會切錯。"""
+    next(a for a in real.orders.rank_actions if a.id == "fortify").id = bad_id
+    with pytest.raises(ContentError, match="id 不能"):
+        validate(real)
+
+
+def test_the_success_text_must_name_the_place(real):
+    """成功的那一句要有 {地點}：玩家看到的是「你在汝南…」，沒寫就不知道在哪裡做的。"""
+    next(a for a in real.orders.rank_actions if a.id == "incite").ok = "你振臂一呼，幾十個鄉民扯下了頭巾。"
+    with pytest.raises(ContentError, match="rank_actions.incite.*ok.*地點"):
+        validate(real)
+
+
+def test_a_good_id_with_an_underscore_or_digits_loads(real):
+    next(a for a in real.orders.rank_actions if a.id == "fortify").id = "fort_2"
+    validate(real)
+
+
+def test_the_tags_error_says_which_tags_no_location_carries(real):
+    next(a for a in real.orders.rank_actions if a.id == "incite").tags = ["城鎮", "城池村"]
+    with pytest.raises(ContentError, match=r"tags 裡有的標籤，沒有任何地點帶：\['城池村'\]"):
+        validate(real)
