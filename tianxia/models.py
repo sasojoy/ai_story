@@ -1297,7 +1297,14 @@ class Config(_Strict):
     neili_base: float = 300
     neili_per_level: float = 20
     neili_regen_hours: float = 2  # 氣血從零回滿所需時間
-    newbie_days: float = 3  # 每季前幾天氣血回復加倍（第一季：從自己加入那一刻起的季曆天，見 roster.since_join；beta 那一季：季的第幾天）
+    # 新手期（第一季設計第十四節；體力平衡提案第〇節，企劃者 2026-10-07）：從自己加入那一刻起的季曆天（roster.since_join），
+    # 照季長自動縮放：18 季曆天＝14 天的季 3 個現實天、週末 2.5 天的季約 13 小時。beta 那一季照同一個比例從季初算（14 天的季也是 3 天）
+    newbie_days: float = 18  # 這段期間氣血回復加倍
+    newbie_stamina_days: float = 18  # 這段期間體力回復乘 newbie_stamina_multiplier（跟打坐的倍數疊乘）
+    newbie_stamina_multiplier: float = Field(default=1, ge=1)  # 正式值在 content/config.json（3）；測試內容照舊 1
+    # 事件失敗另扣的體力（檢定失敗、隨口應對失敗的 fail_effect.stamina）乘這個倍數、四捨五入（15 → 8、5 → 3）；
+    # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
+    event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
     seclusion_xinde_per_hour: int = 15
     xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
     # ── 探索三選一（探索三選一設計）──

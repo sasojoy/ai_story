@@ -107,11 +107,13 @@ def since_join(state: GameState, content: Content) -> float | None:
     return elapsed * calendar.cal_scale(content, w)
 
 
-def newbie(state: GameState, content: Content) -> bool:
-    """新手福利還在：前 newbie_days 天氣血回復加倍。"""
+def newbie(state: GameState, content: Content, days: float | None = None) -> bool:
+    """新手福利還在：加入以來還沒過 days 個季曆天（沒給就是 newbie_days，氣血回復加倍那一條；體力那一條給
+    newbie_stamina_days）。beta 那一季沒有 joined_at，從季初照同一個季曆比例算（14 天的季，18 季曆天＝3 天）。"""
     since = since_join(state, content)
-    elapsed = state.world.time if since is None else since
-    return elapsed <= content.config.newbie_days * rules.DAY
+    elapsed = state.world.time * calendar.cal_scale(content, state.world) if since is None else since
+    limit = content.config.newbie_days if days is None else days
+    return elapsed <= limit * rules.DAY
 
 
 def fortune_due(state: GameState, content: Content) -> bool:
