@@ -34,8 +34,8 @@ from . import insights, landing, library, naming, sensing, team, traits
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
-from .rules import add_rumor
-from .state import GameState
+from .rules import add_rumor, season_one
+from .state import Echo, GameState
 from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
@@ -298,6 +298,28 @@ def _special_rumor(state: GameState, content: Content, art: MartialArt, first: b
     return [line]
 
 
+ECHO_RUMOR = "江湖上照著{who}首創的{thing}練出來的人越來越多了。"
+
+
+def echo(state: GameState, content: Content, thing: MartialArt | Insight, first: bool) -> None:
+    """首創名望回饋（Config.first_echo）：你合出別人首創的那一門（照著合、合到舊的都算），在這一季的 WorldState.echoes 記你一筆；
+    首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、最多算 cap 個人，湊滿那一下
+    江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；第一季沒開著時什麼都不做。"""
+    me = state.player.name
+    if first or not thing.creator or thing.creator == me or getattr(thing, "preset", False):
+        return
+    if not season_one(content, state.world):
+        return
+    rule = content.config.first_echo
+    shown = f"【{thing.name}】" if isinstance(thing, MartialArt) else f"「{thing.name}」"
+    entry = state.world.echoes.setdefault(thing.id, Echo(creator=thing.creator, name=shown))
+    if me in entry.followers or len(entry.followers) >= rule.cap:
+        return
+    entry.followers.append(me)
+    if len(entry.followers) == rule.cap:
+        add_rumor(state, ECHO_RUMOR.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
+
+
 def can_forge(state: GameState, content: Content) -> bool:
     """現在有沒有可能拿意境開爐：持有沒滿、有意境，而且付得起一次武學＋意境（還要有武學）或一次合併（設計 12.1：
     兩種都花心得與體力）。只看結構、不查全服配方表（那要打資料庫；狀態列每次輪詢都會算這個），所以「合出來的你已經有了」
@@ -530,6 +552,7 @@ def fuse(
         state, cfg.fuse_xinde, cfg.fuse_stamina,
     )
     msgs += _special_rumor(state, content, art, first)
+    echo(state, content, art, first)
     return art, msgs + _store_forged(state, content, world, art, quality)
 
 
@@ -660,6 +683,7 @@ def merge(
         head += f"\n{result.note}"
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     cfg = content.config
+    echo(state, content, result, first)
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
     return result, [head] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
 
@@ -774,4 +798,5 @@ def blend(
     )
     msgs = [head + _arrival(art, first, landed)] + _charge(state, cfg.fuse_xinde, cfg.fuse_stamina)
     msgs += _special_rumor(state, content, art, first)
+    echo(state, content, art, first)
     return art, msgs + _store_forged(state, content, world, art, quality)
