@@ -8,7 +8,7 @@ import random
 
 import pytest
 
-from tianxia import calendar, factions, ranks, seats
+from tianxia import calendar, factions, push, ranks, seats
 from tianxia.engine import Game
 from tianxia.state import WorldState
 
@@ -33,9 +33,11 @@ def _qualified(content, name, faction="guan", weeks=None, world=None):
 # ── Task 1：帳與補缺 ────────────────────────────────────────
 
 
-def test_defaults_so_old_saves_load():
-    w = WorldState()
-    assert (w.seat_ledger, w.seats) == ({}, {})
+def test_a_season_saved_before_the_seat_fields_loads_with_empty_ones():
+    old = WorldState(season_one=True).model_dump(mode="json")
+    del old["seat_ledger"], old["seats"]  # 丁之前存的賽季：沒有這兩個鍵
+    w = WorldState.model_validate(old)
+    assert (w.seat_ledger, w.seats) == ({}, {}) and w.season_one
 
 
 def test_report_copies_the_weekly_contribution(on):
@@ -130,6 +132,14 @@ def test_a_drifter_is_not_on_the_ledger(on):
     assert seats.report(game.state, on) == [] and game.state.world.seat_ledger == {}
 
 
+def test_a_season_opened_without_the_stamp_has_no_seats(on):
+    """開關開著、可是這一季開季時沒蓋章（舊季還在跑）：規則看章，不只看設定（rules.season_one）。"""
+    w = WorldState()  # season_one 預設 False：沒蓋章
+    assert on.config.season_one and not w.season_one
+    game = _qualified(on, "甲", world=w)
+    assert seats.report(game.state, on) == [] and w.seats == {} and w.seat_ledger == {} and w.rumors == []
+
+
 def test_switch_off_no_ledger(real):
     game = _qualified(real, "甲")
     assert seats.report(game.state, real) == [] and game.state.world.seat_ledger == {}
@@ -203,6 +213,88 @@ def test_the_ledger_is_copied_after_a_free_text_answer(on):
     game.answer_event(request, llm_rate=50)
     assert game.state.world.seat_ledger["guan"]["甲"] == {1: 4}
 
+
+def _credit_inside(monkeypatch, name, points):
+    """讓 Game.<name> 在做完它自己的事之後替這個人記 points 點第 1 週的貢獻（動作自己記的貢獻，推大勢、護糧、密謀都是這樣記的）。"""
+    real = getattr(Game, name)
+
+    def wrapped(self, *args, **kwargs):
+        out = real(self, *args, **kwargs)
+        push.add_contribution(self.state.player, 1, points)
+        return out
+
+    monkeypatch.setattr(Game, name, wrapped)
+
+
+def _assert_ledger_is_the_new_total(game, total):
+    assert game.state.player.contrib_weeks == {1: total}
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: total}
+
+
+def test_choose_copies_the_ledger_after_the_action_and_the_plots_credit_it(on, monkeypatch):
+    """帳要抄動作自己記的貢獻（週一排名讀它）：抄的那一行排在動作與密謀結算之後，不是之前。"""
+    _credit_inside(monkeypatch, "_act", 3)
+    _credit_inside(monkeypatch, "_settle_plots", 2)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.choose("act:explore")
+    _assert_ledger_is_the_new_total(game, 9)
+
+
+def test_travel_copies_the_ledger_after_the_trip_credits_it(on, monkeypatch):
+    """疾行送到糧車在 _depart 裡記貢獻：travel 抄帳要排在它之後。"""
+    _credit_inside(monkeypatch, "_depart", 3)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.travel(str(on.locations[game.state.player.location].connections[0]), "dash")
+    _assert_ledger_is_the_new_total(game, 7)
+
+
+def test_answer_event_copies_the_ledger_after_the_effect_credits_it(on, monkeypatch):
+    """隨口應對的效果推大勢、記貢獻（apply_effect）：answer_event 抄帳要排在效果之後。"""
+    _credit_inside(monkeypatch, "_apply", 3)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game._present(on.events["jz_gz_deserter"])  # noqa: SLF001
+    request = game.free_text_request("我把他押回去")
+    assert request is not None
+    game.answer_event(request, llm_rate=50)
+    assert game.state.player.contrib_weeks[1] >= 7  # 效果真的記了那 3 點（事件自己的效果也可能再記）
+    assert game.state.world.seat_ledger["guan"]["甲"] == game.state.player.contrib_weeks
+
+
+def test_sync_copies_the_ledger_after_arrivals_and_plots_credit_it(on, monkeypatch):
+    """抵達（護糧送到）與密謀結算都在同步裡記貢獻：抄帳要排在它們之後，不然不在線時記的貢獻週一讀不到。"""
+    _credit_inside(monkeypatch, "_arrivals", 3)
+    _credit_inside(monkeypatch, "_settle_plots", 2)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.sync(1000.0)
+    _assert_ledger_is_the_new_total(game, 9)
+
+
+def test_a_sync_with_nothing_new_saves_the_season_zero_times(on, monkeypatch):
+    """輪詢每 10 秒同步一次：帳與名單沒變就不存共用賽季（有變才存，才不會每次輪詢都整份重寫）。"""
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.sync(1000.0)  # 補上缺、抄帳：存一次
+    assert len(saves) == 1
+    game.sync(1010.0)
+    game.sync(1020.0)
+    assert len(saves) == 1  # 什麼都沒變：不存
+    game.state.player.contrib_weeks[1] = 6
+    game.sync(1030.0)
+    assert len(saves) == 2  # 帳多了新的貢獻：存
+
+
+def test_a_sync_of_someone_unqualified_never_saves_the_season(on, monkeypatch):
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    plain = Game.new(on, "丙", rng=random.Random(0))
+    plain.client = None
+    plain.state.player.faction = "guan"  # 有陣營、沒有資格
+    plain.sync(1000.0)
+    plain.sync(1010.0)
+    assert saves == [] and plain.state.world.seat_ledger == {}
 
 # ── Task 2：每週輪替、rank_of 與頭銜 ────────────────────────
 
