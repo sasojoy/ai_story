@@ -233,10 +233,7 @@
       {
         "id": "r3_first_order",
         "done_when": {
-          "action": "order",
-          "or_actions": [
-            "duty"
-          ]
+          "action": "order"
         }
       }
     ],

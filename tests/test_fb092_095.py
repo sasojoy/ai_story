@@ -83,8 +83,9 @@ def test_fb093_the_ending_no_longer_recites_every_kind(on):
 
 
 # ── FB-094：豪強入伍第 2 步這一週做不到 ─────────────────────────────────
-# 第一道軍令那一步放寬：替軍令記到一次，或做一次自己陣營的守勢行動（巡哨、傳道、保境安民）都算；軍令本身（怎麼發、怎麼記）不動。
-# 一週（季曆）之後還沒做完，引薦人照樣說結語、入伍段關起來。
+# joy 選甲（Game._duty：守勢行動不在這週軍令裡也算第 2 步；tests/test_orders.py 三邊各一條）。這裡留下 joy 的測試沒蓋到的：
+# 有守城軍令時巡哨照樣替它記一次又走完這一步、別的行動不算；豪強的結語（我們的）；一週（季曆）之後還沒做完，引薦人照樣說結語、
+# 入伍段關起來（我們加的保底，joy 的版本沒有：enlist.expire、PlayerState.enlist_since）。
 
 
 def _finished(game, on):
@@ -100,39 +101,12 @@ def enlist_done(state, content):
     return enlist.done(state, content)
 
 
-def test_fb094_a_magnate_finishes_enlistment_in_week_one_by_keeping_the_peace(on):
-    """豪強第一週只有一道「打擊」軍令（難度 98 的大勢人物，新角色打不贏）：在自己的地盤做「保境安民」就算第一道。"""
-    game = _enlisted(on, "haoqiang", place="cao_manor")
-    p = game.state.player
-    assert not enlist_done(game.state, on) and DUTY["haoqiang"] in game.guide_box()["text"]  # 框上指的就是這一個
-    before = [list(o.progress.values()) for o in game.state.world.orders]
-    game.choose("act:duty")
-    box = _finished(game, on)
-    assert box["speaker"] == "季伯平" and box["text"] == on.tutorial.enlist.recruiters["haoqiang"].done
-    assert [list(o.progress.values()) for o in game.state.world.orders] == before  # 軍令的記功沒動：他一道軍令也沒做
-    game.guide_ack()
-    assert game.guide_box() is None and not p.enlist_end
-
-
-@pytest.mark.parametrize("with_defend_order", [True, False])
-def test_fb094_the_imperial_side_finishes_by_patrolling_with_or_without_a_defence_order(on, with_defend_order):
+def test_fb094_patrolling_under_a_defence_order_credits_it_once_and_finishes_the_step(on):
     game = _enlisted(on, "guan")
-    if with_defend_order:
-        order = _order(game, "defend", "guan", front=front_of(on, "changshe"), quota=900)
+    order = _order(game, "defend", "guan", front=front_of(on, "changshe"), quota=900)
     game.choose("act:duty")
     _finished(game, on)
-    if with_defend_order:
-        assert order.progress == {game.state.player.name: 1}  # 有守城軍令時，這一下照舊替它記了一次（軍令不動）
-
-
-def test_fb094_an_order_credit_still_finishes_the_step_as_before(on):
-    from tests.test_orders import _win
-
-    game = _enlisted(on, "guan")
-    _order(game, "siege", "guan", front=front_of(on, "changshe"))
-    with _win():
-        game.choose("act:train")
-    _finished(game, on)
+    assert order.progress == {game.state.player.name: 1}  # 有守城軍令時，這一下照舊替它記了一次（軍令不動）
 
 
 def test_fb094_other_actions_do_not_finish_it(on):
@@ -390,8 +364,8 @@ def test_fbw1_the_cue_for_an_enlistment_box_is_worked_out_again_on_resize(on):
 
 
 # ── 審查之後的最後一輪（review-fb.md、fb-fix-brief.md）──────────────────────────────────────────────
-# 老石結語不說沒發生的事、守勢行動只記一次。（第 2 步多的那一句與「做得了」的判斷跟著 FB-093 拿掉了：joy 的版本由引薦人的
-# order_hint 點名守勢行動、軍令卡寫怎麼做；火的提醒跟著 FB-092 拿掉了。）
+# 老石結語不說沒發生的事。（第 2 步多的那一句與「做得了」的判斷跟著 FB-093 拿掉了：joy 的版本由引薦人的 order_hint 點名守勢
+# 行動、軍令卡寫怎麼做；火的提醒跟著 FB-092 拿掉了；「守勢行動只記一次」釘的是我們的 or_actions，跟著 FB-094 換成 joy 的 _duty。）
 
 
 def test_fbx_the_ending_does_not_claim_a_last_action_was_counted(on):
@@ -406,16 +380,3 @@ def test_fbx_the_ending_does_not_claim_a_last_action_was_counted(on):
     assert "也算在裡頭" not in box["text"]
 
 
-def test_fbx_pressing_the_duty_button_notes_the_action_exactly_once(on, monkeypatch):
-    """守勢行動算不算入伍段那一步，由 Game.choose 照每個 act: 行動記一次（or_actions）；_duty 裡不再另外記一次（審查 Minor 1：
-    多的那一行拿掉也沒有任何測試會紅）。這裡釘「一次」：之後有人又加回去會看到。"""
-    from tianxia import engine
-
-    seen = []
-    real_note = engine.note_action
-    monkeypatch.setattr(engine, "note_action", lambda s, c, w, action: (seen.append(action), real_note(s, c, w, action))[1])
-    game = _enlisted(on, "guan")
-    seen.clear()
-    game.choose("act:duty")
-    assert seen.count("duty") == 1
-    _finished(game, on)

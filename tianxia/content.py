@@ -1732,7 +1732,6 @@ def validate(c: Content) -> None:
             where = f"入伍段 {step.id}"
             known(where, step.done_when.locations, c.locations, "地點")
             check_condition(where, step.done_when.condition)
-            need(not step.done_when.or_actions or step.done_when.action, f"{where}：or_actions 要跟 action 一起寫（action 是主要的那一個）")
         for faction_id, who in enlist.recruiters.items():
             need(faction_id in faction_ids, f"入伍段：引薦人 {who.name} 的陣營 {faction_id} 不是劇本的陣營")
             need(

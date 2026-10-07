@@ -53,7 +53,7 @@ def _step_done(
 
 def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: TutorialGoal, action: str) -> bool:
     """這個行動讓一項完成條件成立了嗎（每一項都要符合）：引導的步驟與入伍段的步驟（enlist.note）共用。"""
-    if goal.action and action != goal.action and action not in goal.or_actions:  # or_actions：這一步也認的別種動作（FB-094）
+    if goal.action and goal.action != action:
         return False
     if goal.locations and state.player.location not in goal.locations:
         return False
