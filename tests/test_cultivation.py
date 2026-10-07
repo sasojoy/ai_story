@@ -69,8 +69,13 @@ def test_the_real_content_carries_the_new_first_step_numbers():
     from tianxia.models import Config
 
     cfg = load_content(Path(__file__).parent.parent / "content").config
-    assert cfg.cultivate_odds == Config().cultivate_odds == {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
+    assert cfg.cultivate_odds == Config().cultivate_odds == {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
     assert cfg.cultivate_sure_by == Config().cultivate_sure_by == {"中品": 3}
+    # 企劃者 2026-10-07（PR #28 選 A＋B＋C）：成數門檻、修練看搭配、絕學要契機
+    assert cfg.practice_xinde_per_level == Config().practice_xinde_per_level == 2
+    assert cfg.cultivate_min_level == Config().cultivate_min_level == {"中品": 4, "上品": 7, "絕學": 10}
+    assert cfg.cultivate_fit == Config().cultivate_fit
+    assert cfg.breakthrough == Config().breakthrough and cfg.breakthrough.heat == 8
 
 
 def test_the_climb_to_a_peerless_art_stops_at_half_and_a_pill_adds_on_top_of_the_cap(content):

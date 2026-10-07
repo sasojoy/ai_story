@@ -2450,6 +2450,9 @@ class Game:
         lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        rule = c.config.breakthrough
+        if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
+            lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
         trends = {t.id: t.name for t in c.scenario.trends}
         moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
         if definition is not None and definition.third is not None and battle.third_push:  # 割據的增減也列進每個參戰者的戰報
@@ -2877,6 +2880,7 @@ class Game:
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts)
+        msgs += self._seize(record)
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
@@ -3112,6 +3116,7 @@ class Game:
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
+        msgs += self._seize(record)
         msgs.insert(0, self._file_battle(record))
         return msgs
 
@@ -3252,6 +3257,15 @@ class Game:
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         return msgs + levels
+
+    def _seize(self, record) -> list[str]:
+        """絕學的契機（方案 C，cultivation.seize）：打贏了（險勝以上）、序章外，照這一場的難度比擲一次頓悟。
+        說出來的話也記進這一場戰報的敘事（戰鬥卡片「結果」那一段）。"""
+        if record.tier not in team.WIN_TIERS or record.our_power <= 0 or prologue_rules.active(self.state, self.content):
+            return []
+        msgs = cultivation.seize(self.state, self.content, self.world, record.difficulty / record.our_power, self.rng)
+        record.notes += msgs
+        return msgs
 
     def _file_battle(self, record) -> str:
         battlelog.add_record(self.state, record)
@@ -3579,6 +3593,7 @@ class Game:
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
+        story += self._seize(record)
         msgs = [self._file_battle(record)] + rewards + story
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])
@@ -3741,14 +3756,16 @@ class Game:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
         被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
         use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
+        sure = prologue_rules.sure_rng(self.state, self.content)  # 序章第 6 步：第一次修練一定升品，也不看成數門檻（劇本只練到第三成）
         problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
-            self.state, self.content, self.world, art_id,
+            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend,
         )
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
-        rng = prologue_rules.sure_rng(self.state, self.content) or self.rng  # 序章第 6 步：第一次修練一定升品
-        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, rng, use_legend)
+        msgs = cultivation.cultivate(
+            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None,
+        )
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (

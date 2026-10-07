@@ -92,7 +92,7 @@
 - **玩家看得到的時刻只有一個寫法**：第一季一律走 `calendar.point_text`（「第 N 週・週X HH:MM」，N 前後有空格）；寫時間的地方都經過 `calendar.stamp_text`／`Game.stamp`（狀態列第二行、下一件、軍令截止、江湖史、傳聞、戰報都是），不要在別處自己拼。開關關著時照舊「第2天 14:05」。
 - **名字原創**：我們寫的內容（武學、人物、意境）不用金庸等作品的專有名詞。模型取的名字與玩家替絕學定的名字都過 `naming.name_problem`（禁用名單 `content/banned_names.json`、只能是中文、不能跟素材、人物、內容武學、意境、江湖上任何角色的名號同名），全服重名在登記時原子判斷。
 - **改名之後 id 跟顯示的名字不同**（絕學定名只改顯示的名字）：寫給玩家看的一律用 `team.resolve_art(...).name`，認東西的一律用 id。
-- **改內容後跑 `pytest`**：`tests/test_real_content.py` 會讓機器人用真實內容玩完整季，抓出內容錯誤（也鎖住事件難度帶 `DIFFICULTY_BANDS`）。
+- **改內容後跑 `scripts/test_for.py`**（會挑到 `tests/test_real_content.py`，連 slow 一起跑）：它讓機器人用真實內容玩完整季，抓出內容錯誤（也鎖住事件難度帶 `DIFFICULTY_BANDS`）。
 - **賽季由管理者開**：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，加上 `.local/admins.txt` 與 `TIANXIA_ADMINS`）在設定頁按「開季」；季結束（或管理者「立刻收季」）進入「休季」，管理者按「開啟下一季」。換季時：同伴全部重獲自由、等級武學歸零；全服登記的武學、配方、改過的名字、意境、第一個練成絕學的人都照季分開存，新的一季自然是空的；上一季的首創（合成、意境、絕學）寫進那一季的江湖史；天機 +1（同一個配方長出不同的東西）；沒打完的決戰清掉；跟人物的好感度只帶一成。測試內容用 `auto_open_first_season: true` 直接開季。資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上，只有登入那個帳號的人進得了；玩家不能取管理者的名號。
 - **第一季濃縮版的規則掛在開關後面**：`Config.season_one`（`config.json` 預設關，`weekend` 設定打開）加上這一季開季時蓋的章（`rules.season_one`）。開關打開時正在跑的那一季照舊用 beta 的規則；開關關著時 beta 一個字都不變，新功能一律先問 `rules.season_one`。
 - **陣營**（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」（要確認一次：先按 `faction:<id>`，再按 `faction:confirm`），或拜入陣營名下的門派；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面寫「門派・陣營・頭銜」（有哪幾樣寫哪幾樣），都沒有才是散人。
@@ -111,7 +111,11 @@
 
 - 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：加 `--share`（cloudflared 開 trycloudflare 臨時公開網址，每次重開都換）；要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
 - 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
-- 測試：`.venv/Scripts/python.exe -m pytest -q`
+- 測試（2026-10-07）：開發用的依賴在 `requirements-dev.txt`（`-r requirements.txt` 加 `pytest-xdist`；伺服器不用裝），裝好之後加 `-n auto`（或 `-n 8`）平行跑；這台 16 核整套約 1 分鐘，單一行程約 3 分 40 秒。venv 路徑有中文時 worker 要 `PYTHONIOENCODING=utf-8`，`tests/conftest.py` 在開 worker 前已經補上。網頁測試預設每個行程一個常駐 node，`TIANXIA_WEB_HARNESS=process` 改回每次各開一個。三種跑法：
+  - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
+  - **平常的整套**：`.venv/Scripts/python.exe -m pytest -q -n auto`，不跑標了 `@pytest.mark.slow` 的（整季模擬、真實內容跑整季、量表與模擬腳本）。
+  - **合併前**：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。不寫 `-m ""`：PowerShell 5.1 會把空字串參數吞掉。
+  - 新寫的測試要跑整季、整個腳本、或單一個超過一秒的，標 `@pytest.mark.slow`（整個檔都是就寫 `pytestmark = pytest.mark.slow`）。
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 [--profile weekend]`
 - 第一季整季模擬與驗收：`.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60`（預設 `--profile weekend`；數字照實報，不為了驗收調參數）
@@ -174,9 +178,10 @@
 ### 武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main）
 - **身上一門內功、一門武學**，開局送基礎吐納與基礎拳腳。**取消自創**（設計 3.8）：玩家不能自己取名造武學，新武學靠合成。
 - **心得管學、體力管練**（設計 4.7，推翻了「練功免費」的兩次舊決定）：
-  - 練成（成）：第 N 成升 N+1 成花 N×`practice_xinde_per_level`（1）點心得，只看第幾成、不看品質；有 15% 機會受傷。
-  - 修練（品）：融過意境的武學，用它融的那個意境反覆修練衝品質，一次花 `cultivate_stamina`（10）體力；機率照 `cultivate_odds`（中品 20%、每失敗一次 +10；上品 10%、+6；絕學 4%、+3），乘悟性加成。中品、上品加到 100% 必成；**絕學沒有保底**，累積最多到 `cultivate_cap`（50%）。品質每人各練各的（`PlayerState.art_quality`），熟練度記在 `art_mastery`，升品時成不變。
-  - 破境丹（`legend_items`）：探索偶爾撿到；修練頁每一門武學勾「服下破境丹」（預設不勾，伺服器只認布林 `true` 的 `use_legend`），服的那一次多 `legend_item_bonus`（15）%（加在上限之上），成不成都用掉一枚；被拒絕的修練不擲骰、丹也不動。
+  - 練成（成）：第 N 成升 N+1 成花 N×`practice_xinde_per_level`（2）點心得（練滿十成 90），只看第幾成、不看品質；有 15% 機會受傷。
+  - 修練（品）：融過意境的武學，用它融的那個意境反覆修練衝品質，一次花 `cultivate_stamina`（10）體力。**衝哪一品之前先要練到幾成**（`cultivate_min_level`：中品 4、上品 7、絕學 10；序章一定升品的那一步不看）。中品 40%、+20%、第三次必成（`cultivate_sure_by`）；上品 6%、+3，乘悟性，**再乘這一回的搭配**（`cultivation.fit`／`Config.cultivate_fit`：成數 ×（0.5＋成×0.05）、拿同屬性的別的意境代用 ×0.7、所在地點探索悟得到同屬性的意境 ×1.5；修練頁與結果只寫一句含蓄的話，不寫倍數）。品質每人各練各的（`PlayerState.art_quality`），熟練度記在 `art_mastery`，升品時成不變。
+  - **絕學要契機**（`Config.breakthrough`，企劃者 2026-10-07 選 PR #28 的 A＋B＋C）：上品往絕學的修練不擲骰，只添火候（`art_mastery`，滿 8）；火候滿了、身上那一門十成，打贏一場難度比（對手難度 ÷ 我方威力）≥ 0.3 的仗、或在決戰裡出手滿 3 回合（當難度比 1.0），擲一次頓悟（`cultivation.seize`，從 `Game._seize` 與 `_file_showdown` 呼叫）：25% ×（難度比 ÷ 0.5）× 搭配 × 悟性，夾在 1～60%；沒成留一句「摸到了又滑走」。火候滿了在練功房裡只能勾破境丹強行衝關（`force_odds`：15% × 搭配 × 悟性），成不成都用掉一枚。整季機器人修練先挑身上那兩門（`bot.worn_first`），火候滿了有挑戰本人就去打（`bot.awaits_chance`）。
+  - 破境丹（`legend_items`）：探索偶爾撿到；修練頁每一門武學勾「服下破境丹」（預設不勾，伺服器只認布林 `true` 的 `use_legend`）。方案 C 開著時只在火候滿了的那一門出現（強行衝關）；被拒絕的修練不擲骰、丹也不動。測試內容（`tests/fixtures/content/config.json`）把三樣都關著，舊的修練測試照舊量階梯；新規則的測試在 `tests/test_practice_hardening.py`。
   - 絕學定名：全服第一個練成的人拿到取名權（`world.claim_master`，一人一次只留一門；還有一門沒定名時不能衝第二門），名字過 `naming.name_problem`、`world.rename_skill`（原子），id 不變只改顯示的名字（沿用原名也算定名），江湖史記一行；等著定名的那門不能熔。
 - **意境**（設計 3.2、附錄 A）：基本意境 風（快）、火（剛）、水（柔）、山（慢）靠探索悟（照地點地形，附錄 C）；浩然（正）、血煞（邪）靠善名、惡名到門檻；奇遇可以直接給（`Effect.insights`，只能是靠探索悟的基本意境）。悟到已經會的化成 10 心得。意境永久學會，合成、修練、合併都不會用掉。
 - **三種合成**（煉製頁的太極火爐，`Game.forge(art_id, insight_ids, proposed=None, other_art=None)`）：
@@ -187,6 +192,7 @@
   - 合成出來的武學從第一成起修，不繼承底的品質（擋「絕學的底合出絕學的複本、熔掉就賺」的迴圈）。全服登記的那一筆是下品；**自己那一份的品質照這一爐的搭配算機率再擲**（企劃者 2026-10-06「不要套死固數值」；`fusion.fuse_odds`／`blend_odds`）：底自己那一份的品質與成數（兩門時平均）、意境的來歷（合併出來的、有正邪的、自己首悟的加分）、兩者同屬性加分相剋扣分、悟性（同修練的 `stat_factor`）加成一個造化分，從 `Config.fuse_quality_odds`（普通搭配的平均，下品 50、中品 30、上品 20）往上下推，上品夾在 5～45%、下品 15～80%，權重全在 `Config.fuse_quality`；首創、照著合、合到舊的都照自己這一爐算。週末設定整季平均剛好落在 50／30／20，十四天設定隨角色變強上移到約 34／38／28，記在 `art_quality` 也記在 `art_rolled`，修練從擲到的那一品接著往上。合成前的說明寫這一爐的三個機率與最多兩句原因（「火候還淺、底子尚淺」，`FuseQuality.lines`），不寫品級；結果句寫擲到的。序章那一爐固定下品。
   - **配方全服共享**：第一個合出來的人等模型取名（叫不動走退路字表），之後查表、不用等；別人首創、你還沒有的照樣能合。
   - **合到舊的**（設計 12.2）：一個組合這一季第一次被合時，規則先判會不會合到這一季已經合出來的同類（`landing`：每個候選 +`land_chance_per_candidate` 5%、最多 90%，擲骰是天機＋配方鍵的雜湊）；候選兩個以上由模型從清單挑一個（挑到清單外的當沒挑、改由規則挑）；合到的那一門登記成這個配方，合到你已經有的不收錢。基礎武學、名將武學、內容寫好的意境不在候選裡。
+  - **血統裡融過的意境不能再融**（企劃者 2026-10-06 回報「同一種意境合成後的產物無限合成上去」）：意境不會用掉，不擋就能「武學＋風 → 乙、乙＋風 → 丙……」一代一代疊、每代都把風推到功效第一位。`fusion.lineage_has` 沿底（`base`）與武學＋武學的兩門來源（`parents`）一路往上查：全服的意境照 id 認，私有意境照屬性認（跟配方鍵認私有意境同一套）；輪流融兩個意境也擋（甲＋風→乙、乙＋火→丙、丙＋風 擋）。擋在 `fuse_problem` 最前面（「…的來歷裡早已融過「風」——同一股意，再融也只是舊路重走。」），卷軸卡的機率條也不拿這種意境算。
   - **合成的意義是拿到你還沒有的**：配方已經登記、合出來的那一門你已經有了，就不准合（「…你已經有了——換一組試試吧」，排在花費與持有上限之前，同一爐連按兩下也只扣一次）。「已經有了」一律照功法的 id 認。合出來的對應欄位空著就直接配上身，否則進功法庫。
 - **持有上限**（武學與意境合計，`library.cap_of`）：50＋（等級 // 5）×3＋max(0, 博聞−5)×2（一季最多 88 格）。滿了不能合成、合併、學新的；悟意境照收（博聞被扣下來而超過上限時，熔回上限以內之前不能合成）。
 - **熔煉**：功法庫裡的武學熔成心得＝max(基本值, 練成花的八成)＋品質加給（只算自己修練上去的那幾階：中品 5、上品 15、絕學 40，減去登記時的那一階；合成擲到的品質也算登記時就有，`art_rolled`）；全服登記的武學基本值 `melt_min_refund`（4），內容裡的武學沒有基本值（不然「學、熔、再學」就是無本迴圈）。意境熔成 10 心得。身上正在練的不能熔（先改練）。

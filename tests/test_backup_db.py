@@ -74,6 +74,7 @@ def test_backup_while_someone_keeps_writing(tmp_path):
     assert backup_db.verify(out)["characters"] == 2
 
 
+@pytest.mark.slow
 def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
     """資料庫長大（好幾步才複製得完）、寫入又一直不停：一步一步複製的線上備份每次被寫入打斷就從頭來，
     永遠做不完（量過：41MB、每秒三百多筆寫入，十二秒內沒做完）。要一口氣讀完同一個時間點的快照，不被寫入打斷。"""

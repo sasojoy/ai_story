@@ -184,6 +184,7 @@ def test_the_bot_weighs_the_traits_of_the_inner_art_too(content, world):
     assert p.member.neigong_id == rich.id and p.member.wugong_id == "basic_fist"
 
 
+@pytest.mark.slow
 def test_the_trait_measure_script_still_runs():
     """scripts/measure_traits.py（計畫六 Task 5，只量不擋）：另開一個行程跑單一功效的兩段（少量場數、不跑整季），退出碼 0、
     每一個功效都有一行——引擎改了名字它就會壞，這條抓得到（整季那一段由 sim 跑，太慢不放進測試）。"""
@@ -612,6 +613,7 @@ def test_pick_never_takes_the_road_options_meant_for_humans(game):
     assert pick(game, options, random.Random(0)) is None
 
 
+@pytest.mark.slow
 def test_play_season_completes_a_full_season(content):
     game = play_season(content, 0, max_steps=500)
     assert game.state.world.ended
@@ -619,6 +621,7 @@ def test_play_season_completes_a_full_season(content):
     assert game.state.world.time > 0
 
 
+@pytest.mark.slow
 def test_play_season_is_deterministic_for_a_given_seed(tmp_path, content):
     """同一顆種子要重現一模一樣的結果——各自給獨立的共用世界狀態，不然招募/取名的
     競態結果會因為兩次呼叫共用同一份檔案而互相汙染，讓比較失去意義。"""

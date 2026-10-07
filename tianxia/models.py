@@ -202,6 +202,42 @@ class FuseQuality(_Strict):
     })
 
 
+class CultivateFit(_Strict):
+    """修練的機率看這一回的搭配（企劃者 2026-10-07 選 PR #28 方案 B；原則同 FuseQuality：「不要套死固數值」）。
+    cultivation.fit 把三樣乘起來：練到第幾成（×（level_base＋成×level_step））、用的是不是原本融進去的那個意境（代用
+    ×substitute）、在不在對味的地方修（所在地點探索悟得到同屬性的意境 ×home_ground）。寫了必成的那一階（Config.cultivate_sure_by，
+    W8 剛放寬的第一階）不看搭配。全設成 level_base 1、其他 0 或 1 就是不乘（以前的樣子）。
+    lines 是修練頁與修練結果裡那一句話（含蓄，不寫倍數）：因素 → 句子，空字串就不說。"""
+
+    level_base: float = Field(default=0.5, ge=0)
+    level_step: float = Field(default=0.05, ge=0)
+    substitute: float = Field(default=0.7, ge=0)
+    home_ground: float = Field(default=1.5, ge=0)
+    lines: dict[str, str] = Field(default_factory=lambda: {
+        "home_ground": "此地的氣象跟這路功夫相投，練起來格外順手。",
+        "substitute": "拿別的意境代替，總是隔了一層。",
+        "raw": "招式還不夠熟，心思有一半花在招上。",
+    })
+    raw_below: float = Field(default=0.8, ge=0)  # 成數那一項低於這個倍數才說 raw 那一句
+
+
+class Breakthrough(_Strict):
+    """絕學要契機（企劃者 2026-10-07 選 PR #28 方案 C）：上品往絕學不再擲骰。在上品反覆修練只累積火候（Player.art_mastery，
+    一次 +1），火候滿 heat、成數也到了，剩下那一步要等契機——拿身上這一門打贏一場不輕鬆的仗（對手難度 ÷ 我方威力 ≥ min_ratio），
+    或在全服決戰裡出手滿 showdown_rounds 回合（當成難度比 showdown_ratio 的一仗）。每個契機擲一次頓悟：
+    chance ×（難度比 ÷ par_ratio）× 修練的搭配（CultivateFit）× 悟性，夾在 1～max_chance。破境丹不等契機：火候滿了勾著丹修練，
+    就是服丹強行衝關（legend_item_bonus × 搭配 × 悟性，cultivation.force_odds）。
+    heat 是 0 就是關著：上品往絕學照以前的機率擲（Config.cultivate_odds 的「絕學」）。"""
+
+    heat: int = Field(default=8, ge=0)
+    chance: float = Field(default=25, ge=0, le=100)
+    par_ratio: float = Field(default=0.5, gt=0)
+    min_ratio: float = Field(default=0.3, ge=0)
+    max_chance: float = Field(default=60, ge=0, le=100)
+    showdown_rounds: int = Field(default=3, ge=1)
+    showdown_ratio: float = Field(default=1.0, ge=0)
+
+
 class FrontLines(_Strict):
     """戰況變化的說法（content/front_lines.json，FB-064）。第一季規則開著時，推動戰線的那一行寫成一句話：
     「{戰線}：{陣營}{句子}」，例「潁川汝南：官軍步步進逼」，不寫數字。句子分三段（tianxia/front_lines.py 的 BANDS：
@@ -1243,7 +1279,7 @@ class Config(_Strict):
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
-    practice_xinde_per_level: int = 1  # 練成：第 N 成升 N+1 成花 N × 這個數的心得
+    practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
     merge_xinde: int = 5  # 合併（意境＋意境）一次
     # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣；那時合成不花，設計 12.1 起三種合成一樣花，見 fuse_stamina）。合併→熔掉（melt_insight_xinde）→再合併
@@ -1268,8 +1304,10 @@ class Config(_Strict):
     # 企劃者 2026-10-06（W8）：第一階（下品→中品）放寬成 40% 起、每失敗一次 +20%、第三次必成（見 cultivate_sure_by）。理由：試玩
     # 走一遍，連續四次（40 體力）還是下品，第一次玩一個 session 可能什麼都沒得到；第一階是新手第一次感覺到「修練有用」的地方，
     # 要夠快。中品→上品（10%、+6）、上品→絕學（4%、+3）一個數字都沒動
+    # 企劃者 2026-10-07（PR #28 方案 B）：中品→上品改成 6%、+3，再乘這一回的搭配（cultivate_fit）。上品→絕學在方案 C（breakthrough）
+    # 開著時不擲骰（火候＋契機），「絕學」那一組只在 breakthrough.heat 是 0 時用得到
     cultivate_odds: dict[str, tuple[int, int]] = Field(
-        default_factory=lambda: {"中品": (40, 20), "上品": (10, 6), "絕學": (4, 3)}
+        default_factory=lambda: {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
     )
     # 第幾次修練必成（W8）：寫了的那一階，第 N 次（失敗 N−1 次之後）機會直接是 100%——蓋過悟性的乘數與 cultivate_cap。
     # 沒寫的那一階照舊：機會加到 100% 才必成（上品第 16 次），絕學沒有保底。預設只有第一階寫了，第三次必成
@@ -1278,6 +1316,11 @@ class Config(_Strict):
     # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
     # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）
     cultivate_cap: dict[str, int] = Field(default_factory=lambda: {"絕學": 50})
+    # 企劃者 2026-10-07（PR #28 方案 A）：衝哪一品之前要先練到第幾成（「火候不到，練不出那一品」）。沒寫的那一品不擋。
+    # 序章安排好一定升品的那一步不看這個（劇本只練到第三成）
+    cultivate_min_level: dict[str, int] = Field(default_factory=lambda: {"中品": 4, "上品": 7, "絕學": 10})
+    cultivate_fit: CultivateFit = Field(default_factory=CultivateFit)  # 方案 B：修練的機率看搭配
+    breakthrough: Breakthrough = Field(default_factory=Breakthrough)  # 方案 C：絕學要契機
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15

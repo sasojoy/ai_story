@@ -4,6 +4,11 @@
 W8 起 40%、+20%）、中品→上品加到 100% 就必成，上品→絕學沒有保底，累積的機會最多到 Config.cultivate_cap（預設 50%），剩下靠破境丹——探索偶爾撿到的傳奇道具，
 由玩家自己決定哪一次衝絕學要服（修練頁勾「服下破境丹」）：服的那一次多 Config.legend_item_bonus%，成不成都用掉一枚；
 被拒絕的修練（體力不足、沒有意境、還有絕學等著取名……）不擲骰，丹也不動（企劃者 2026-10-05）。
+企劃者 2026-10-07（PR #28 選 A＋B＋C）加了三件事，數字都在 Config：
+- A：衝哪一品之前要先練到第幾成（Config.cultivate_min_level；序章一定升品的那一步不看，gate=False）。
+- B：機率看這一回的搭配（fit：成數、原本的意境還是代用、在不在對味的地方；Config.cultivate_fit），寫了必成的那一階不看。
+- C：Config.breakthrough.heat 不是 0 時，上品往絕學不擲骰：修練只累積火候（熟練度那一欄），火候滿了要等契機
+  （seize：打贏一場硬仗、在決戰裡出手）才擲一次頓悟；火候滿了也可以勾著破境丹修練，服丹強行衝關（force_odds）。
 品質是每個人各練各的（PlayerState.art_quality），熟練度記在 PlayerState.art_mastery；升品時「成」不變。
 第一個把某門武學修到絕學的人替全服取正式名字：功法 id 不變，只改顯示的名字（world.rename_skill）——
 所以這裡凡是「認東西」的都用 id（art_id），凡是寫給玩家看的都用 resolve_art 回來的 art.name（改名之後兩者不一樣）。
@@ -12,6 +17,7 @@ W8 起 40%、+20%）、中品→上品加到 100% 就必成，上品→絕學沒
 from __future__ import annotations
 
 import random
+from typing import NamedTuple
 
 from . import insights, library, naming, team
 from .martial_arts import next_quality
@@ -21,11 +27,49 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 
+class Fit(NamedTuple):
+    """這一回修練的搭配：乘在機率上的倍數，與修練頁、結果裡那幾句含蓄的話（不寫倍數）。"""
+
+    factor: float
+    lines: list[str]
+
+
+def fit(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> Fit:
+    """方案 B（Config.cultivate_fit）：成數 ×（level_base＋成×level_step）、拿別的意境代用 ×substitute、所在地點探索悟得到同屬性的
+    意境 ×home_ground。融的是私有意境的武學（全服只記屬性）認不出原本是哪一個，不算代用。"""
+    cfg = content.config.cultivate_fit
+    art = team.resolve_art(art_id, content, world)
+    if art is None:
+        return Fit(1.0, [])
+    raw = cfg.level_base + (library.level_of(state, art_id) or 1) * cfg.level_step
+    factor, lines = raw, []
+    used = insights.for_cultivation(state, content, world, art)
+    if art.insight is not None and used is not None and used.id != art.insight and cfg.substitute != 1:
+        factor *= cfg.substitute
+        lines.append(cfg.lines.get("substitute", ""))
+    attribute = insights.art_attribute(art, content, world, state)
+    here = content.locations.get(state.player.location)
+    if attribute and here is not None and cfg.home_ground != 1 and any(
+        content.insights[i].attribute == attribute for i in insights.explore_gives(here, content)
+    ):
+        factor *= cfg.home_ground
+        lines.insert(0, cfg.lines.get("home_ground", ""))
+    if raw < cfg.raw_below:
+        lines.append(cfg.lines.get("raw", ""))
+    return Fit(factor, [line for line in lines if line])
+
+
+def heat_mode(content: Content, target_quality: str | None) -> bool:
+    """方案 C 開著、而且這一步衝的是絕學：修練只累積火候，不擲骰。"""
+    return target_quality == "絕學" and content.config.breakthrough.heat > 0
+
+
 def chance(
     content: Content, target_quality: str, failures: int, boost: int = 0, *, wis: float = team.BASE_STAT,
+    fit: float = 1.0,
 ) -> int:
     """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，乘上悟性的加成（×（1＋3%×（悟性−5）），
-    武學與成長設計 6.1），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
+    武學與成長設計 6.1）與這一回的搭配（fit，見 fit()），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
     （破境丹，見 boost_for），總和最多 100。悟性在上限之內、丹在上限之上（計畫二 G2）：上限是企劃者訂的天花板，
     丹才是越過它的那一招。寫明會必成的那一次（沒乘悟性就到 100、這一階也沒有上限）悟性再低照樣必成。
     Config.cultivate_sure_by 寫了第幾次必成的那一階（預設只有下品→中品，第 3 次），那一次起直接 100%，蓋過悟性與上限（W8）。"""
@@ -38,7 +82,7 @@ def chance(
     if raw >= 100 and cap >= 100:
         base = 100
     else:
-        base = min(cap, round(raw * team.stat_factor(content, wis)))
+        base = min(cap, round(raw * team.stat_factor(content, wis) * fit))
     return min(100, base + boost)
 
 
@@ -52,21 +96,37 @@ def next_try_note(odds: int, target: str) -> str:
     return f"下一次約 {odds}% 的機會晉為{target}" if odds < 100 else f"下一次一定晉為{target}"
 
 
-def odds_for(state: GameState, content: Content, target_quality: str, failures: int, boost: int = 0) -> int:
-    """這個玩家這一次的機率：chance 帶上自己的悟性。擲骰、「下一次約 N%」與修練頁寫的都用它，頁面上寫的就是實際擲的。"""
-    return chance(content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT))
+def heat_note(content: Content, heat: int) -> str:
+    """方案 C 修練頁卡片上那一句（待 joy 潤）：火候還沒滿寫幾分，滿了只說剩下的不在練功房裡——契機是什麼不明說。"""
+    need = content.config.breakthrough.heat
+    return f"火候 {heat}／{need}" if heat < need else "火候已足"
+
+
+def odds_for(
+    state: GameState, content: Content, target_quality: str, failures: int, boost: int = 0,
+    world: WorldStateStore | None = None, art_id: str | None = None,
+) -> int:
+    """這個玩家這一次的機率：chance 帶上自己的悟性，給了 world 與 art_id 再帶上這一回的搭配（fit；寫了必成的那一階不看搭配）。
+    擲骰、「下一次約 N%」與修練頁寫的都用它，頁面上寫的就是實際擲的。"""
+    factor = 1.0
+    if world is not None and art_id is not None and target_quality not in content.config.cultivate_sure_by:
+        factor = fit(state, content, world, art_id).factor
+    return chance(content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT), fit=factor)
 
 
 def boost_for(state: GameState, content: Content, target_quality: str, use_legend: bool = False) -> int:
     """這一次衝 target_quality 的加成（%）：玩家勾了服破境丹、衝的是絕學、手上也還有丹才有。要不要算丹全由這裡決定：
-    擲骰與修練頁寫的加成機率都用它，頁面上寫的就是實際擲的。"""
-    if use_legend and target_quality == "絕學" and state.player.legend_items > 0:
+    擲骰與修練頁寫的加成機率都用它，頁面上寫的就是實際擲的。方案 C 開著時往絕學的修練不擲骰，丹另有用法（見 force_odds）。"""
+    if use_legend and target_quality == "絕學" and not heat_mode(content, target_quality) and state.player.legend_items > 0:
         return content.config.legend_item_bonus
     return 0
 
 
-def cultivate_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> str | None:
-    """不能修練的原因；None＝可以。"""
+def cultivate_problem(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool = True, use_legend: bool = False,
+) -> str | None:
+    """不能修練的原因；None＝可以。gate＝要不要看成數門檻（序章一定升品的那一步不看）。
+    方案 C 火候已滿的那一門，只有勾了破境丹、手上也有丹才修得下去（服丹強行衝關，見 force_odds）。"""
     art = team.resolve_art(art_id, content, world)
     if art is None or art_id not in library.owned_arts(state):
         return "你沒有這門武學。"
@@ -82,10 +142,17 @@ def cultivate_problem(state: GameState, content: Content, world: WorldStateStore
     target = next_quality(team.art_quality(state, art))
     if target is None:
         return "已經是絕學，修無可修。"
+    need = content.config.cultivate_min_level.get(target, 0) if gate else 0
+    level = library.level_of(state, art_id) or 1
+    if level < need:  # 方案 A（待 joy 潤）
+        return f"【{art.name}】才練到第{level}成，火候不到——先練到第{need}成，才談得上{target}。"
     if target == "絕學" and state.player.naming is not None:
         # 取名的權利一人一次只留一門（PlayerState.naming）；再衝一門絕學會把它蓋掉，那門就永遠沒有人替它定名
         pending = team.resolve_art(state.player.naming, content, world)
         return f"你練成絕學的【{pending.name if pending else state.player.naming}】還沒定名，先替它取好正式的名字。"
+    full = heat_mode(content, target) and state.player.art_mastery.get(art_id, 0) >= content.config.breakthrough.heat
+    if full and not (use_legend and state.player.legend_items > 0):
+        return f"【{art.name}】的火候已足，再關起門來練也是原地打轉——剩下那一步，不在練功房裡。"  # 方案 C（待 joy 潤）
     cost = content.config.cultivate_stamina
     if state.player.stamina < cost:
         return f"體力不足：修練一次要 {cost}。"
@@ -94,12 +161,14 @@ def cultivate_problem(state: GameState, content: Content, world: WorldStateStore
 
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
-    use_legend: bool = False,
+    use_legend: bool = False, gate: bool = True,
 ) -> list[str]:
     """修練一次：花體力，擲一次能不能升一品。被拒絕時只回原因（什麼都不扣、不動，破境丹也留著）。
     use_legend：玩家勾了「服下破境丹」。衝絕學、手上有丹才真的服（這一次的機率多一份加成，成不成都用掉一枚）；
-    頁面過期了（丹已經沒有、下一步不是絕學）不拒絕這次修練，照一般的機率擲，多回一句話說這一回沒服。"""
-    problem = cultivate_problem(state, content, world, art_id)
+    頁面過期了（丹已經沒有、下一步不是絕學）不拒絕這次修練，照一般的機率擲，多回一句話說這一回沒服。
+    方案 C 開著、衝的是絕學時：火候還沒滿就添一分火候（_temper，勾了丹也不服）；滿了只有勾了丹才修得下去——服下一枚強行衝關
+    （_force，機會見 force_odds），不然要等契機（seize）。"""
+    problem = cultivate_problem(state, content, world, art_id, gate, use_legend)
     if problem is not None:
         return [problem]
     p = state.player
@@ -111,6 +180,10 @@ def cultivate(
     p.stamina -= cost
     # 花的體力寫在擲骰那一句後面，跟合併的回話（fusion.merge）同一種寫法（FB-070）；江湖紀錄的數值變化另由 engine 照實際扣的算
     tired = f"體力 -{cost}"
+    if heat_mode(content, target):
+        if failures >= content.config.breakthrough.heat:
+            return _force(state, content, world, art_id, rng) + [tired]
+        return _temper(state, content, art_id, art.name, failures) + [tired]
     pill = content.config.legend_item_name
     boost = boost_for(state, content, target, use_legend)
     msgs: list[str] = []
@@ -122,10 +195,11 @@ def cultivate(
             msgs.append(f"{pill}只在衝擊絕學時用得上，這一回沒服。")
         else:
             msgs.append(f"你身上已經沒有{pill}了，這一回沒服。")
-    if rng.random() * 100 < odds_for(state, content, target, failures, boost):
+    matched = fit(state, content, world, art_id) if target not in content.config.cultivate_sure_by else Fit(1.0, [])
+    if rng.random() * 100 < odds_for(state, content, target, failures, boost, world, art_id):
         p.art_quality[art_id] = target
         p.art_mastery.pop(art_id, None)
-        msgs += [f"【{art.name}】修練有成，從{quality}晉為{target}！", tired]
+        msgs += [f"【{art.name}】修練有成，從{quality}晉為{target}！", *matched.lines, tired]
         if target == "絕學":
             msgs += _mastered(state, world, art_id)
         return msgs
@@ -135,10 +209,74 @@ def cultivate(
         hint = f"，服下{pill}可再 +{content.config.legend_item_bonus}%"
     msgs += [
         f"【{art.name}】修練了一回，還差一點火候（熟練度 {failures + 1}，"
-        f"{next_try_note(odds_for(state, content, target, failures + 1), target)}{hint}）。",
+        f"{next_try_note(odds_for(state, content, target, failures + 1, 0, world, art_id), target)}{hint}）。",
+        *matched.lines,
         tired,
     ]
     return msgs
+
+
+def _temper(state: GameState, content: Content, art_id: str, name: str, heat: int) -> list[str]:
+    """方案 C：上品往絕學的修練只添火候（待 joy 潤）。滿了那一次多一句：剩下的不在練功房裡——契機是什麼不明說。"""
+    need = content.config.breakthrough.heat
+    state.player.art_mastery[art_id] = heat + 1
+    if heat + 1 >= need:
+        return [f"【{name}】的火候已足。你隱約覺得，剩下那一步不在練功房裡。"]
+    return [f"【{name}】又添了一分火候（{heat + 1}／{need}）。"]
+
+
+def seize(
+    state: GameState, content: Content, world: WorldStateStore, ratio: float, rng: random.Random,
+) -> list[str]:
+    """方案 C 的契機：剛打贏一場難度比（對手難度 ÷ 我方威力，決戰是 Breakthrough.showdown_ratio）ratio 的仗。身上兩門
+    （武學先、內功後）裡第一門上品、成數到了、火候滿了的，擲一次頓悟（只擲一門，一場仗最多一次）。
+    機會＝chance ×（ratio ÷ par_ratio）× 搭配（fit）× 悟性，夾在 1～max_chance（破境丹不在這裡服，見 force_odds）。
+    難度比不到 min_ratio、方案 C 關著、還有絕學等著定名，都什麼也不做。成了寫「頓悟」與取名的話，沒成只留一句摸到了又滑走（含蓄的提示）。"""
+    cfg = content.config
+    rule = cfg.breakthrough
+    p = state.player
+    if rule.heat <= 0 or ratio < rule.min_ratio or p.naming is not None:
+        return []
+    member = p.member
+    for art_id in (member.wugong_id, member.neigong_id):
+        art = team.resolve_art(art_id, content, world) if art_id else None
+        if art is None or next_quality(team.art_quality(state, art)) != "絕學":
+            continue
+        if (library.level_of(state, art_id) or 1) < cfg.cultivate_min_level.get("絕學", 0):
+            continue
+        if p.art_mastery.get(art_id, 0) < rule.heat:
+            continue
+        odds = rule.chance * ratio / rule.par_ratio * fit(state, content, world, art_id).factor
+        odds *= team.stat_factor(content, p.stats.get("wis", team.BASE_STAT))
+        if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
+            p.art_quality[art_id] = "絕學"
+            p.art_mastery.pop(art_id, None)
+            return [f"這一戰打到最後，【{art.name}】忽然通了——從上品晉為絕學！"] + _mastered(state, world, art_id)
+        return [f"打到緊處，【{art.name}】似乎摸到了什麼，轉眼又滑走了。"]
+    return []
+
+
+def force_odds(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
+    """方案 C：火候滿了、不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 搭配（fit）× 悟性，
+    夾在 1～breakthrough.max_chance。丹還是由玩家自己決定哪一次服（企劃者 2026-10-05），只是現在服在這裡。"""
+    cfg = content.config
+    odds = cfg.legend_item_bonus * fit(state, content, world, art_id).factor
+    odds *= team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
+    return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
+
+
+def _force(state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random) -> list[str]:
+    """服丹強行衝關（待 joy 潤）：成不成都用掉一枚；沒成火候還在，下一次照樣可以再服、或等契機。"""
+    p, cfg = state.player, content.config
+    art = team.resolve_art(art_id, content, world)
+    odds = force_odds(state, content, world, art_id)
+    p.legend_items -= 1
+    msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
+    if rng.random() * 100 < odds:
+        p.art_quality[art_id] = "絕學"
+        p.art_mastery.pop(art_id, None)
+        return msgs + [f"【{art.name}】衝開了最後那一層，從上品晉為絕學！"] + _mastered(state, world, art_id)
+    return msgs + [f"【{art.name}】撞在那一層上，又彈了回來（約 {odds}% 的機會）。"]
 
 
 def _mastered(state: GameState, world: WorldStateStore, art_id: str) -> list[str]:
