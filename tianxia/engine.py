@@ -26,7 +26,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
-    choice_label, event_candidates, free_text_note, has_events_here, pick_event, visible_choices,
+    choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
 )
 from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import speaker_of as guide_speaker_of
@@ -933,10 +933,11 @@ class Game:
         return f"{who}・{self.odds(hardest.id)}"
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
-        """動手的選項寫對手與勝算；有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
+        """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
+        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
-            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）"
+            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
         return choice_label(choice, self.state, self.content, self.world)
 
     def odds(self, squad_id: str) -> str:
@@ -3883,7 +3884,7 @@ class Game:
         self._play_rounds(record, squad, result.tier, None, self._hp_facts())  # 氣血照開打時的樣子：厚拉高的下限這一場也起了作用
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
-        effect = choice.effect if won else choice.fail_effect
+        effect = choice.effect if won else failed(choice.fail_effect, c)  # 打輸另扣的體力減半，同檢定失敗（企劃者裁決 E6）
         story = apply_effect(effect, s, c, self.world, push=self.push_trend)
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes

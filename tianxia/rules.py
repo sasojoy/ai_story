@@ -233,7 +233,7 @@ def fail_stamina(amount: int, content: Content) -> int:
 
 
 def failed(effect: Effect, content: Content) -> Effect:
-    """檢定失敗、隨口應對失敗要套的 fail_effect：扣的體力照 fail_stamina 縮過。劇情戰落敗不走這裡。"""
+    """檢定失敗、隨口應對失敗、劇情戰落敗（企劃者裁決 E6，2026-10-07）要套的 fail_effect：扣的體力照 fail_stamina 縮過。"""
     stamina = fail_stamina(effect.stamina, content)
     return effect if stamina == effect.stamina else effect.model_copy(update={"stamina": stamina})
 

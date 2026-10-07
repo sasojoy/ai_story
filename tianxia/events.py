@@ -146,13 +146,14 @@ def check_note(check: Check, state: GameState, content: Content, world: WorldSta
 def stamina_note(choice: Choice, content: Content) -> str:
     """選項會扣的體力寫在選項上（體力平衡提案第〇節，企劃者 2026-10-07：不再暗扣）：選了（或成功）就扣的寫「（體力 -10）」；
     檢定失敗才另扣的寫「（失手多耗體力 8）」，數字是 fail_stamina 縮過、比成功那一邊多扣的部分；兩樣都有用逗號接在同一個括號。
-    動手的選項（choice.combat）的輸贏是仗，不在這裡寫。"""
+    動手的選項（choice.combat，劇情戰）打輸另扣的一樣減半、一樣只寫多出來的那一份，寫「輸了多耗體力 N」（企劃者裁決 E6，
+    新寫，待 joy 潤）；勝算照舊寫在對手那個括號裡（Game._choice_label）。"""
     paid = -choice.effect.stamina if choice.effect.stamina < 0 else 0
     parts = [f"體力 -{paid}"] if paid else []
-    if choice.check and not choice.combat:
+    if choice.check or choice.combat:
         extra = -fail_stamina(choice.fail_effect.stamina, content) - paid
         if extra > 0:
-            parts.append(f"失手多耗體力 {extra}")
+            parts.append(f"{'輸了' if choice.combat else '失手'}多耗體力 {extra}")
     return f"（{'，'.join(parts)}）" if parts else ""
 
 
