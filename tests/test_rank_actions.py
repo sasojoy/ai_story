@@ -9,10 +9,10 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from tianxia import calendar, models, rank_actions, rules
+from tianxia import calendar, models, rank_actions, rules, seats
 from tianxia.content import ContentError, validate
 from tianxia.engine import RANK_ACTION_PREFIX, Game
-from tianxia.models import OrdersContent, RankAction
+from tianxia.models import Check, OrdersContent, RankAction
 from tianxia.state import PlayerState
 
 
@@ -384,12 +384,6 @@ def test_the_journal_title_names_the_action_and_the_place(on):
     assert game.state.journal[0].title == "在一地煽動起事・汝南"  # 江湖紀錄最新的在最前面
 
 
-def test_no_rank_actions_in_a_resting_season(on):
-    game = _game(on, "huang", "runan")
-    game.state.world.ended = True
-    assert not any(i.startswith("act:rank:") for i in _ids(game))
-
-
 def test_switch_off_no_rank_actions(real):
     game = _game(real, "huang", "runan")
     assert not any(i.startswith("act:rank:") for i in _ids(game))
@@ -536,3 +530,93 @@ def test_the_tags_error_says_which_tags_no_location_carries(real):
     next(a for a in real.orders.rank_actions if a.id == "incite").tags = ["城鎮", "城池村"]
     with pytest.raises(ContentError, match=r"tags 裡有的標籤，沒有任何地點帶：\['城池村'\]"):
         validate(real)
+
+
+@pytest.mark.parametrize("state", ["resting", "preparing", "paused"])
+def test_no_rank_actions_while_the_season_is_closed(on, state):
+    """休季、籌備中、賽季時鐘暫停：選單上沒有第 3、4 階的行動，直接按也什麼都不發生（體力、這週的次數都不動）。
+    這三個都在 options()／_everyday_options 的早退裡；行動的選項不能跑到它們前面。"""
+    if state == "preparing":
+        on.config.auto_open_first_season = False
+    game = _game(on, "huang", "runan")
+    if state == "preparing":
+        game.state.world.season_one = True  # 籌備中的季還沒蓋章；蓋著章才看得出擋住的是籌備中的早退，不是章
+    elif state == "resting":
+        game.world.mutate_season(lambda s: setattr(s, "ended", True))
+        game.state.world = game.world.get_season()
+    else:
+        assert game.world.pause_clock(1000.0)
+    assert game.world.season_phase() == ("running" if state == "paused" else state)
+    stamina = game.state.player.stamina
+    assert not any(i.startswith("act:rank:") for i in _ids(game))
+    msgs = game.choose("act:rank:incite")
+    assert len(msgs) == 1 and msgs[0].startswith("（") and not msgs[0].startswith("（你")  # 一句拒絕的話
+    assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
+
+
+def test_a_menu_built_before_monday_is_refused_after_the_seat_changes_hands(on):
+    """審查焦點 1，走 choose：選單上有占據郡縣（在任），週一輪替時別人上週貢獻比他多、擠掉了他；按下去是被拒絕的，什麼都沒扣。"""
+    game = _game(on, "haoqiang", "runan")
+    _chaos(game, "yingru", 50)
+    _seat(game)
+    w = game.state.world
+    w.seat_ledger = {"haoqiang": {"乙": {1: 50}, "甲": {1: 5}}}  # 上一週乙做得比較多；這個伺服器每個陣營 1 席
+    assert "act:rank:seize" in _ids(game)  # 玩家看到的選單
+    _week(game, 2, offset=0)
+    seats.rotate(game.state, on, 2)  # 週一 00:00：乙上任、甲掉出來
+    assert w.seats == {"haoqiang": ["乙"]}
+    stamina = game.state.player.stamina
+    assert game.choose("act:rank:seize") == ["（此刻無法這麼做。）"]
+    assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
+    assert "act:rank:fortify" in _ids(game)  # 還有資格：修築塢堡照舊做得了
+
+
+def test_a_menu_built_while_the_front_was_in_chaos_is_refused_once_it_left(on):
+    """審查焦點 2，走 choose：選單上有修築塢堡，戰線離開亂局（黃巾壓過去了）；按下去是被拒絕的，什麼都沒扣。"""
+    game = _game(on, "haoqiang", "runan_wilds")
+    _chaos(game, "yingru", 50)
+    assert "act:rank:fortify" in _ids(game)
+    _chaos(game, "yingru", 80)
+    stamina = game.state.player.stamina
+    assert game.choose("act:rank:fortify") == ["（此刻無法這麼做。）"]
+    assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
+
+
+def test_a_failed_check_on_a_geju_action_pushes_nothing_credits_nothing_and_still_counts(on):
+    """真實內容的豪強行動都沒有檢定，失敗那一支走不到：給修築塢堡一個檢定（內容的複本），逼它失敗。"""
+    fortify = _action(on, "fortify")
+    fortify.check = Check(stat="str", difficulty=7)
+    fortify.fail = "你的部曲在{地點}挖了半天，牆還是塌了。"
+    game = _game(on, "haoqiang", "runan_wilds")
+    _chaos(game, "yingru", 50)
+    geju = rules.trend_value(game.state, on, "geju")
+    with _always(False), mock.patch.object(Game, "_order_credit", return_value=[]) as credit:
+        msgs = game.choose("act:rank:fortify")
+    assert msgs[0] == "你的部曲在汝南荒野挖了半天，牆還是塌了。"
+    assert rules.trend_value(game.state, on, "geju") == geju
+    credit.assert_not_called()
+    assert game.state.player.rank_action_weeks == {"1:fortify": 1}
+    assert game.state.player.stamina == 80
+
+
+def test_defecting_keeps_the_counter_but_the_old_actions_do_not_follow(on):
+    """叛投不清 rank_action_weeks（行動 id 跟陣營綁，同 rank2_days）：黃巾第 3 階這週用過煽動起事，叛去豪強——
+    身份歸零（第 1 階）沒有任何第 3、4 階行動；之後長到第 3 階，修築塢堡是自己的一份次數，不吃煽動起事的。"""
+    game = _game(on, "huang", "runan")
+    with _always(True):
+        game.choose("act:rank:incite")
+    assert game.state.player.rank_action_weeks == {"1:incite": 1}
+    game.state.player.location = "cao_manor"
+    game.choose("defect:haoqiang")
+    game.choose("defect:confirm")
+    p = game.state.player
+    assert (p.faction, p.rank, p.qualified) == ("haoqiang", 0, False)
+    _chaos(game, "yingru", 50)
+    assert not any(i.startswith("act:rank:") for i in _ids(game))  # 第 1 階：什麼都沒有
+    assert p.rank_action_weeks == {"1:incite": 1}  # 舊的那筆還在（沒清）
+    p.rank = 3  # 之後在豪強這邊晉升到第 3 階
+    fortify = _option(game, "act:rank:fortify")
+    assert fortify is not None and fortify.enabled
+    assert rank_actions.left(game.state, on, _action(on, "fortify")) == 3  # 煽動起事的那一次不算進修築塢堡
+    game.choose("act:rank:fortify")
+    assert p.rank_action_weeks == {"1:incite": 1, "1:fortify": 1}  # 兩個行動各記各的
