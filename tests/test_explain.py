@@ -494,8 +494,37 @@ def test_no_gift_no_line_and_the_refill_wording(content):
     game = Game.new(content, "沈浪", rng=random.Random(0))
     assert not any("內測贈禮" in line for e in game.state.journal for line in e.lines)
     content.config.beta_gift, content.config.beta_free_refill = True, True
+    content.config.beta_free_refill_label = "補到滿"  # 鈕上的字照設定
     other = Game.new(content, "柳青", rng=random.Random(0), world=game.world)
-    assert other.state.journal[0].lines[-1].endswith("測試期間體力條上的「補滿」不花丹，丹先留著。")
+    assert other.state.journal[0].lines[-1] == (
+        f"內測贈禮：回體丹 {content.config.beta_gift_stamina_pills} 顆（一顆回 {content.config.stamina_pill_restore} 點體力），"
+        "先收著；測試期間按體力條上的「補到滿」就能免費補滿，不花丹。"
+    )
+
+
+@pytest.mark.parametrize("profile, refill", [("weekend", True), (None, False)])
+def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch, profile, refill):
+    """控制者走查：測試期一鍵補滿打開時（週末設定），體力條那顆鈕是「補滿」、不花丹——建角色記下的那一行要說丹先收著、按「補滿」免費；
+    關著時照舊說按「丹」服下。走伺服器建角色的那條路（序章裡建的角色）。"""
+    from fastapi.testclient import TestClient
+
+    import server
+    from tianxia.content import load_content
+
+    content = load_content(server.ROOT / "content", profile=profile)
+    content.config.auto_open_first_season = True
+    monkeypatch.setattr(server, "CONTENT", content)
+    assert content.config.beta_free_refill is refill
+    client = TestClient(server.app)
+    client.post("/api/register", json={"login": f"gift_{profile}", "password": "secret-pw", "again": "secret-pw"})
+    client.post("/api/character", json={"name": "贈禮人"})
+    line = server.game_for("贈禮人").state.journal[0].lines[-1]
+    assert line == howto.gift_line(content)
+    if refill:
+        assert f"先收著；測試期間按體力條上的「{content.config.beta_free_refill_label}」就能免費補滿，不花丹。" in line
+        assert "服下" not in line
+    else:
+        assert line.endswith("按體力條右端的「丹」服下。") and "補滿" not in line
 
 
 def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_content, world):
