@@ -26,7 +26,7 @@ const vm = require("vm");
 // 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
   "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "peekBlock", "sheetHtml", "applyGlow",
-  "renderTop", "render", "goTab", "renderPage", "refreshPage"]);
+  "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];
@@ -88,7 +88,8 @@ H.S.main = input.m;
 H.S.menxia = input.menxia || null;
 Object.assign(H.S, input.S || {});
 // script 可以是 async（回傳 Promise）：等它做完再印
-finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners, docListeners, bodyHtml }));
+// ctx 與 Element：測試可以換掉 fetch／setTimeout（讓請求被擋下來），也可以做出 instanceof Element 的假事件目標（toggle 事件，見 tests/test_fb087_here_fold.py）
+finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, calls, qs, listeners, docListeners, bodyHtml, ctx, Element: ctx.Element }));
 """
 
 

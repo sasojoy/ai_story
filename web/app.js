@@ -62,6 +62,8 @@
     hearOpen: null, // 戰鬥卡片底下聽來的那一句展開著的那一場（卡片的戰報流水號）；換成下一場就收回（FB-074）
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
+    here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
+    hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
     hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
     guideRoad: null, // 在路上、或眼前有事件待處理（pending 的那一句）時說書人的框展開著的那一句（內容本身）；這兩種預設收成一行，離開就清掉（FB-055、FB-076）
@@ -203,6 +205,8 @@
 
   function enter(data) {
     resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
+    S.here = null; // 「此地還能做」摺疊的開合與自動打開過的記錄也重來（FB-087）
+    S.hereAuto = {};
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
     if (data.stage === "game") {
       S.stage = "game";
@@ -773,14 +777,30 @@
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
-    // 入伍段第一道軍令那一步（伺服器在框上帶 glow，FB-093）要按的守勢行動（巡哨、傳道、保境安民）就在這裡面：那一步摺疊先打開、
-    // 那顆發光（data-glow 寫成字面，test_content 掃它對照 models.GLOW_KEYS）；其他時候照舊收著
+    // 入伍段第一道軍令那一步（伺服器在框上帶 glow，FB-093）要按的守勢行動（巡哨、傳道、保境安民）就在這裡面：那一步開頭摺疊先打開一次、
+    // 那顆發光（data-glow 寫成字面，test_content 掃它對照 models.GLOW_KEYS）；其他時候收著。開合記在 S.here（hereFold），重畫照它補回
     const extras = m.options.filter((o) => !used.has(o.id));
     const glowDuty = !!(m.guide && (m.guide.glow || []).includes("act:duty")) && extras.some((o) => o.id === "act:duty");
-    const here = extras.length ? `<details class="fold here"${glowDuty ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+    const here = extras.length ? `<details class="fold here"${hereFold(m, glowDuty) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}"${o.id === "act:duty" ? ' data-glow="act:duty"' : ""} ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${moveCard}${here}`;
+  }
+
+  // 「此地還能做」摺疊畫成開著還是收著（FB-087）。摺疊裡的鈕（例：求見盧植）被擋下來、或輪詢帶來新畫面，整頁重畫、摺疊是新畫的 DOM，
+  // 不記的話就收起來——玩家要再點開才看得到剛按的那一顆。所以開合記在 S.here（跟軍令卡記 S.ordersShut 同一個做法）：玩家點開、收起時 toggle
+  // 事件記下（檔案最後的 toggle 監聽），重畫照它補回；補畫出來的那一下 toggle 記下的還是同一個值，不會繞圈。
+  // 記的是這一處（S.here.at 對上目前的地點）：換了地方就沒有記，從收著開始，不然開過一次，每個城鎮都攤著一排按鈕；回到原處、中間沒在別處開關過，還是原樣。
+  // 發光的那一步（guide-3b 審查 Minor 11）：發光的鈕在摺疊裡，收著就看不到，所以那一步在這一處**開頭**自動打開一次（hereAuto 記打開過了，
+  // 同一步換一處、或換下一步各算一次）；打開之後就是玩家的——收起來的不再每次重畫都被打開
+  function hereFold(m, glowDuty) {
+    const at = (m.status && m.status.location) || "";
+    const auto = `${guideKey(m.guide) || ""}@${at}`;
+    if (glowDuty && !S.hereAuto[auto]) {
+      S.hereAuto[auto] = true;
+      S.here = { at, open: true };
+    }
+    return !!(S.here && S.here.at === at && S.here.open);
   }
 
   // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
@@ -2790,6 +2810,8 @@
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
     if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
+    // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
+    else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
