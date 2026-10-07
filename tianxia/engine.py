@@ -2305,6 +2305,12 @@ class Game:
             + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
         )
 
+    def howto_text(self) -> str:
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項）：五個行動、體力、情誼、心得、意境、背包，數字讀設定（howto.page）。
+        序章略過的人也看得到（設定抽屜誰都打得開）。招募那一句只在內容裡真的有人能招募時才寫。"""
+        c = self.content
+        return howto.page(c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()))
+
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
         玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""

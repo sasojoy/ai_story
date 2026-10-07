@@ -839,6 +839,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .who.static { cursor: default; }
 .who.static .more-ico { display: none; } /* 序章裡屬性還沒亮：名號不是按鈕，不畫展開的小箭頭 */
 .recap { margin-top: 10px; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow-y: auto; }
+/* 設定抽屜的「玩法說明」（explain-1）：跟重看序章一樣是抽屜裡的一張卡；不另外限高、不自己捲（抽屜本身會捲，電腦上滾輪在暗處也捲它），
+   手機上不會出現捲軸裡還有捲軸。一節一個小標題，底下一兩句 */
+.howto { margin-top: 10px; font-size: 14px; line-height: 1.65; }
+.howto h4 { margin: 12px 0 2px; font-size: 15px; }
+.howto h4:first-child { margin-top: 0; }
+.howto ul { margin: 0; padding-left: 1.2em; }
+.howto li + li { margin-top: 2px; }
 .recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 @media (prefers-reduced-motion: reduce) {
   .glow, .lit { animation: none; }

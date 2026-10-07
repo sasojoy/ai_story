@@ -107,6 +107,8 @@
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）
     recap: undefined, // 設定頁「重看序章」的文字：undefined＝還沒問過伺服器，""＝沒有序章；同一次載入只問一次（loadRecap）
     recapOpen: false,
+    howto: undefined, // 設定抽屜「玩法說明」的那一頁（伺服器寫好的 HTML）：undefined＝還沒問到；按了才問（loadHowto）
+    howtoOpen: false,
     ordersSeen: false, // 入伍段第一步的 view_orders 送過了嗎（軍令卡真的在畫面上才送，見 watchOrders）；登入、登出清掉
     ordersObs: null, // 盯著軍令卡的 IntersectionObserver（整頁重畫就換一個）
     ordersTimer: null, // 軍令卡進畫面之後的計時（ORDERS_SEEN_MS）；離開畫面就取消
@@ -1787,10 +1789,12 @@
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
+          <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
           <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
         </div>
+        ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
@@ -1960,6 +1964,13 @@
   }
 
   // 設定頁的「重看序章」：序章的文字是內容、不會變，同一次載入只問一次。沒有序章的內容回空字串，就不畫那顆鈕
+  // 設定抽屜的「玩法說明」（explain-1）：伺服器照設定寫好的一頁（/api/howto，已經是跳脫過的 HTML），按了才問、同一次載入只問一次；
+  // 問不到（連不上）就留著 undefined，下次按再問
+  async function loadHowto() {
+    if (S.howto) return;
+    try { S.howto = (await api("/api/howto")).text || ""; } catch (e) { S.howto = undefined; }
+  }
+
   async function loadRecap() {
     if (S.recap !== undefined) return;
     try { S.recap = (await api("/api/prologue")).text || ""; } catch (e) { return; } // 問不到：下次打開設定再問
@@ -2421,7 +2432,15 @@
             renderKeepingSheet(); // 等資料的時候人可能已經往下捲了
           }
           break;
-        case "sheet-close": S.sheet = false; S.recapOpen = false; render(); break;
+        case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
+        case "howto": // 玩法說明：攤開／收起；還沒問過就問一次，回來再畫（抽屜停在原地，見 renderKeepingSheet）
+          S.howtoOpen = !S.howtoOpen;
+          renderKeepingSheet();
+          if (S.howtoOpen && !S.howto) {
+            await loadHowto();
+            renderKeepingSheet();
+          }
+          break;
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;

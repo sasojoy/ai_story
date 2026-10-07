@@ -2,6 +2,7 @@
 
 - 江湖頁行動列底下那幾行：探索、遊歷、交友這一下會怎樣（explore_line、train_line、social_line）；
 - 狀態列體力條點開的說明（stamina_lines）與建角色時送回體丹的那一行（gift_line）；
+- 設定抽屜的「玩法說明」（page，Markdown）。
 
 這裡只把事實寫成字：比重、獎勵、推不推戰局由呼叫端照引擎真正的規則算好傳進來（Game._explore_weights、遊歷的對手、
 Game.train_trend_push），數字一律讀 Config，句子裡不寫死任何數。不改狀態、不擲骰、不讀時鐘。所有句子待 joy 潤。"""
@@ -141,4 +142,80 @@ def gift_line(content: Content) -> str:
     if cfg.beta_free_refill:
         return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力；測試期間體力條上的「{cfg.beta_free_refill_label}」不花丹，丹先留著。"
     return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
+
+
+# ── 設定抽屜的「玩法說明」（explain-1 第四項）──────────────────────────────
+
+
+def _kind_name(tags: Sequence[str]) -> str:
+    """一種地點類型（Config.explore_mix 的一筆）怎麼叫：照它的標籤（三個以上寫「等地」）；沒有標籤的是「其他地方」。"""
+    if not tags:
+        return "其他地方"
+    return "、".join(tags[:3]) + ("等地" if len(tags) > 3 else "")
+
+
+def mix_sentence(content: Content) -> str:
+    """玩法說明裡探索的比例：每一種地點類型一句「營寨、祭壇、塢堡多半碰上事件，也可能遇野怪、悟意境」——跟探索擲骰讀同一份
+    Config.explore_mix（還沒扣掉「這裡做不了」的支：那是行動列底下那一行的事）。"""
+    return "；".join(
+        _kind_name(mix.tags) + explore_line(list(mix.weights.items())).removeprefix("這裡") for mix in content.config.explore_mix
+    )
+
+
+def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
+    """設定抽屜的「玩法說明」（Markdown）：五個行動、體力、情誼、心得、意境、背包，各一兩句。數字全讀 Config，句子不寫死。
+    不看個人狀態（新手期還在不在、還有幾顆丹寫在體力條點開的說明），網頁同一次載入只問一次。
+    season：這一季（第一季才有的事只在第一季說；新手期照這一季蓋的季長換成現實時間）。recruitable：內容裡有沒有能招募的人物
+    （正式內容現在沒有：不提招募）。"""
+    cfg = content.config
+    cost = cfg.action_cost
+    first = calendar.season_one_on(season, content)
+    legend = f"每次探索還有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    bond = [
+        "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（求見名單上也有）。",
+        f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
+    ]
+    if first:
+        bond.append("- 情誼夠深，他會跟你聊起一些風聲：伏筆的片段、機緣的話題。")
+    if recruitable:
+        bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
+    if first:  # 挑戰大勢人物本人只有第一季才有（Game._challenge）
+        bond.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
+    bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
+    lines = [
+        "#### 行動",
+        f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}",
+        f"- **遊歷**（體力 {cost['train']}）：只在有對手的地方出現，一定開打，按鈕上寫勝算。打贏得銀兩、心得、經驗，可能掉素材；"
+        "每一場都會扣些氣血，輸了還會掉銀兩。在自己陣營的地方是操練：不會輸，"
+        f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。打贏或操練多半還會{PUSH_WORD}"
+        "（行動列底下那一行寫著這裡會不會）。",
+        f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
+        f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物每天最多 "
+        f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
+        "- **移動**：步行不花體力、只花時間；趕路快一些、疾行立刻到，兩種都花體力。步行、趕路時，每一段路可以邊走邊想、"
+        "沿途打聽、留意地形、路邊採集各一次。",
+        "",
+        "#### 體力",
+        *[f"- {line}" for line in stamina_lines(content, season)],
+        "- 點狀態列的體力條，也看得到這幾句。",
+        "",
+        "#### 情誼",
+        *bond,
+        "",
+        "#### 心得",
+        f"- 學武的本錢：練成（第 N 成升下一成花 N×{cfg.practice_xinde_per_level}）、合成（{cfg.fuse_xinde} 心得、"
+        f"{cfg.fuse_stamina} 體力）、合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）都花它。",
+        f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
+        "用不上的功法熔掉也能拿回一些。",
+        "",
+        "#### 意境",
+        "- 探索落在悟意境時「有所感」：選對做法、再畫一筆才悟得到；選錯了，今天在那裡就悟不出了。哪裡悟得到什麼看地形。",
+        "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
+        "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"
+        f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
+        "",
+        "#### 背包",
+        "- 素材不拿來煉製：第一季裡折成糧草，押糧車、準備伏筆都要用。",
+    ]
+    return "\n".join(lines)
 

@@ -476,6 +476,70 @@ def test_the_full_stamina_note_says_why():
     assert guide.FULL_STAMINA_NOTE == "體力將滿：滿了就不再回，別讓它浪費。"
 
 
+def test_the_full_stamina_note_shows_when_nearly_full_and_not_below(game):
+    from tianxia import guide
+
+    game.skip_tutorial()
+    game.state.player.stamina = game.content.config.stamina_max * 0.5
+    assert guide.FULL_STAMINA_NOTE not in guide.next_hint(game.state, game.content, game.world)
+
+
+# ── 四、設定抽屜的「玩法說明」：五個行動、體力、情誼、心得、意境、背包；數字全讀設定 ─────────────────────────────
+
+
+def _odd_numbers(cfg):
+    """把頁面會寫到的數字都換成不常見、彼此不同的值：頁面上每一個數都要是其中之一（不是寫死在句子裡的）。"""
+    cfg.action_cost = {"explore": 7, "train": 8, "socialize": 4}
+    cfg.talk_stamina, cfg.talk_turns_per_day, cfg.rest_regen_multiplier = 6, 9, 2.5
+    cfg.drill_reward_share, cfg.signature_affinity, cfg.affinity_carry_ratio = 0.4, 66, 0.2
+    cfg.figure_defeat_affinity, cfg.practice_xinde_per_level, cfg.fuse_xinde, cfg.fuse_stamina = 11, 12, 13, 14
+    cfg.merge_xinde, cfg.merge_stamina, cfg.seclusion_xinde_per_hour, cfg.road_think_xinde = 16, 17, 19, 21
+    cfg.duplicate_insight_xinde, cfg.recruit_affinity_bonus = 23, 0.27
+    cfg.stamina_regen_seconds, cfg.time_scale, cfg.stamina_max, cfg.newbie_stamina_multiplier = 300, 1.0, 222, 3.5
+    cfg.stamina_pill_restore, cfg.beta_free_refill = 133, False
+    # 2：換季帶 0.2 → 2 成（操練 0.4 → 4 成已在上面）；5：每 300 秒＝5 分鐘；1：「回 1 點」是 stamina_regen_seconds 的定義（每幾秒回一點）
+    return {"7", "8", "4", "6", "9", "2.5", "66", "11", "12", "13", "14", "16", "17", "19", "21", "23", "27",
+            "5", "222", "3.5", "133", "2", "1"}
+
+
+def test_the_howto_page_has_every_section_and_reads_the_config(game):
+    allowed = _odd_numbers(game.content.config)
+    text = game.howto_text()
+    for title in ("#### 行動", "#### 體力", "#### 情誼", "#### 心得", "#### 意境", "#### 背包"):
+        assert title in text
+    for action in ("探索", "遊歷", "打坐", "交友", "移動"):
+        assert f"- **{action}**" in text
+    assert "（體力 7）" in text and "（體力 8）" in text and "（體力 4）" in text and "每輪體力 6" in text and "最多 9 輪" in text
+    assert "×2.5" in text and "對手 4 成" in text and "情誼到 66" in text and "只帶 2 成" in text
+    assert "N×12" in text and "合成（13 心得、14 體力）" in text and "合併（16 心得、17 體力）" in text
+    assert "每小時至少 19" in text and "邊走邊想（21）" in text and "化成 23 心得" in text
+    assert "體力每 5 分鐘回 1 點，滿 222 就不再回。" in text and "回體丹一顆回 133 點，" in text
+    assert "糧草" in text and "伏筆" in text  # 背包：素材是糧草與伏筆用的
+    span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
+    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "")))
+    assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
+
+
+def test_the_howto_explore_sentence_follows_the_mix(game):
+    game.content.config.explore_mix = [
+        ExploreMix(kind="town", tags=["城鎮", "官署", "城池", "寺院"], weights={"insight": 70, "wild": 0, "event": 30}),
+        ExploreMix(kind="wild", tags=[], weights={"insight": 10, "wild": 50, "event": 40}),
+    ]
+    assert "城鎮、官署、城池等地多半悟意境，也可能碰上事件；其他地方多半遇野怪，也可能碰上事件、悟意境。" in game.howto_text()
+
+
+def test_the_howto_page_only_says_what_is_true_here(content, game, on, tmp_path):
+    """招募那一句只在內容裡有人能招募時寫（測試內容有、正式內容沒有）；風聲與挑戰本人只在第一季的規則開著時寫。"""
+    from tianxia.sqlite_world import open_world
+
+    assert "想招攬的人" in game.howto_text() and "最多多 50 個百分點" in game.howto_text()
+    assert "風聲" not in game.howto_text() and "打贏大勢人物本人" not in game.howto_text()
+    first = Game.new(on, "乙", rng=random.Random(0), world=open_world(tmp_path / "s1.db"))  # 另一個世界：照週末設定開的季
+    text = first.howto_text()
+    assert "想招攬的人" not in text  # 正式內容沒有人能招募
+    assert "風聲" in text and f"打贏大勢人物本人，他對你的情誼會掉 {on.config.figure_defeat_affinity}" in text
+
+
 def test_the_full_stamina_note_shows_when_nearly_full(game):
     from tianxia import guide
 

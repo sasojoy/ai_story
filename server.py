@@ -1394,6 +1394,14 @@ def api_prologue(request: Request):
     return look(game, lambda g: {"text": md(g.prologue_recap())})
 
 
+@app.get("/api/howto")
+def api_howto(request: Request):
+    """設定抽屜的「玩法說明」（explain-1）：五個行動、體力、情誼、心得、意境、背包各一兩句，數字照設定（Markdown 轉成 HTML）。
+    不看個人狀態，網頁同一次載入只問一次。"""
+    game = _game(request)
+    return look(game, lambda g: {"text": md(g.howto_text())})
+
+
 @app.post("/api/sense")
 def api_sense(request: Request, body: dict = Body(default={})):
     """有所感畫完那一筆：points 是 [[x, y, 毫秒], …]，png 是畫布的小圖（base64，不含 data: 開頭）。"""

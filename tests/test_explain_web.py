@@ -140,6 +140,71 @@ def test_the_help_lines_are_escaped():
     assert "&lt;b&gt;x&lt;/b&gt;" in run(m, "return H.topHtml();", S={"stamOpen": True})
 
 
+# ── 設定抽屜的「玩法說明」 ─────────────────────────────────────────
+
+HOWTO = "<h4>行動</h4><ul><li>探索</li></ul>"
+
+OPEN_HOWTO = """return (async () => {
+  let sheet = { scrollTop: 0 };
+  Object.defineProperty(T.qs, ".sheet", { get: () => sheet, configurable: true, enumerable: true });
+  let html = "";
+  Object.defineProperty(T.els.app, "innerHTML", { get: () => html, set(v) { html = v; sheet = { scrollTop: 0 }; }, configurable: true });
+  const tap = async (act) => {
+    const el = { dataset: { act }, classList: { contains: () => false } };
+    await T.docListeners.click[0]({ target: { closest: () => el } });
+  };
+  await tap("sheet");  // 齒輪：打開設定抽屜
+  const drawer = html;
+  sheet.scrollTop = 120;  // 人往下捲了一點才按
+  await tap("howto");
+  const opened = html, kept = sheet.scrollTop;
+  await tap("howto");  // 收起
+  const closed = html;
+  await tap("howto");  // 再打開：不再問伺服器
+  return { drawer, opened, kept, closed, again: html, calls: T.calls.map((c) => c[0]).filter((u) => u.startsWith("/api/howto")) };
+})();"""
+
+
+def _skipped(prologue_content, world):
+    """走序章的新角色按了「略過序章」：站在起點，狀態列整條都在（齒輪也在）。"""
+    game = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
+    game.skip_tutorial()
+    game.client = None
+    return _main(game)
+
+
+def test_the_howto_page_is_reachable_with_the_prologue_skipped(prologue_content, world):
+    m = _skipped(prologue_content, world)
+    assert m["prologue"] is None
+    assert 'data-act="sheet"' in run(m, "return H.topHtml();")  # 右上角的齒輪
+    out = run(m, OPEN_HOWTO, responses={"/api/howto": {"text": HOWTO}, "/api/prologue": {"text": ""}})
+    assert 'data-act="howto"' in out["drawer"] and "玩法說明" in out["drawer"] and 'class="howto card"' not in out["drawer"]
+    assert f'<div class="howto card" id="howto">{HOWTO}</div>' in out["opened"] and 'aria-expanded="true"' in out["opened"]
+    assert out["kept"] == 120  # 抽屜停在原地（renderKeepingSheet），沒有被丟回頂上
+    assert 'class="howto card"' not in out["closed"] and HOWTO in out["again"]
+    assert out["calls"] == ["/api/howto"]  # 同一次載入只問一次
+
+
+def test_the_howto_button_sits_at_the_top_of_the_drawer_for_everyone():
+    m = _main()
+    drawer = run(m, "return H.sheetHtml();", S={"sheet": True})
+    assert drawer.index('data-act="howto"') < drawer.index('data-op="skip_tutorial"')  # 一般設定的第一顆
+    assert "admin-zone" not in drawer  # 一般玩家也有（不是管理者工具）
+
+
+def test_the_howto_endpoint_serves_the_page_as_html():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(server.app)
+    client.post("/api/register", json={"login": "howto_01", "password": "secret-pw", "again": "secret-pw"})
+    client.post("/api/character", json={"name": "說明人"})
+    client.post("/api/do/skip_tutorial", json={})
+    text = client.get("/api/howto").json()["text"]
+    cfg = server.CONTENT.config
+    assert "<h4>行動</h4>" in text and "<h4>背包</h4>" in text
+    assert f"<strong>探索</strong>（體力 {cfg.action_cost['explore']}）" in text and "<script" not in text
+
+
 def test_notes_are_escaped():
     m = _main()
     m["action_notes"] = {"act:explore": "<b>x</b>"}
