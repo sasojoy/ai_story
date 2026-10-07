@@ -302,7 +302,9 @@
       ? esc(s.calendar.text)
       : `第 ${s.day} 天 ${esc(s.clock)}<small>／共 ${dayCount(s.season_days)} 天</small>`}${s.resting != null ? "　🧘 打坐中" : ""}`;
     const vitals = [
-      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span></div>` : "",
+      // 回體丹（企劃者 2026-10-07 內測贈送）：有丹時體力條右端多一顆「丹 N」，按了吃一顆；體力滿了是灰的。序章裡伺服器不給 pills
+      shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span>體力 ${s.stamina}/${s.stamina_max}</span>${s.pills
+        ? `<button class="pill-btn" data-act="pill" ${s.pills.full ? "disabled" : ""} aria-label="服下${esc(s.pills.name)}（剩 ${s.pills.count} 顆，回 ${s.pills.restore} 點體力）">丹${s.pills.count}</button>` : ""}</div>` : "",
       shown("hp") ? `<div class="bar hp" title="氣血" data-glow="hp"><i style="width:${pct(s.hp, s.hp_max)}%"></i>${s.injury >= 1
         // 內傷（FB-049）：斜紋是上限裡被內傷佔掉、回不來的那一截（寬＝內傷÷上限，回滿時紅條剛好接到它）；
         // 「傷 N」靠右另寫在斜紋那一頭，不再接在「氣血 N/M」後面跨過紅條的交界
@@ -2302,6 +2304,7 @@
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
+        case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {

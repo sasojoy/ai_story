@@ -220,6 +220,8 @@ class Game:
                 game.state.player.stamina = float(content.config.stamina_max)
         p = game.state.player
         p.visited.add(p.location)
+        if content.config.beta_gift:  # 內測贈送（企劃者 2026-10-07）：真人、假人、整季機器人建角色時一樣拿到
+            p.stamina_pills += content.config.beta_gift_stamina_pills
         game._log(
             [f"══ {content.scenario.name} ══", content.scenario.intro, game.location_text()]
             + tutorial_intro(content)
@@ -362,6 +364,7 @@ class Game:
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
+        fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
@@ -3883,6 +3886,29 @@ class Game:
         return msgs
 
     @_not_while_preparing
+    def take_stamina_pill(self) -> list[str]:
+        """服一顆回體丹（企劃者 2026-10-07）：體力回 stamina_pill_restore，夾在上限。沒有丹、體力是滿的、還在草廬序章裡
+        （序章的體力是照步驟算好的：探索、合成、修練剛好用完，接著才教打坐，prologue.start_stamina）都只回一句話、不收丹。
+        吃了才寫江湖紀錄（數值變化寫體力與丹）。打坐中也能吃：只是多回一截，打坐照舊。"""
+        p, cfg = self.state.player, self.content.config
+        name = cfg.stamina_pill_name
+        if p.stamina_pills <= 0:
+            return self._log([f"你身上沒有{name}了。"])
+        if prologue_rules.active(self.state, self.content):
+            return self._log([f"草廬裡先照師父說的做，{name}留著出了草廬再吃。"])
+        if p.stamina >= cfg.stamina_max:
+            return self._log(["體力是滿的，這時候服丹是糟蹋。"])
+        before = p.stamina
+        p.stamina = min(float(cfg.stamina_max), p.stamina + cfg.stamina_pill_restore)
+        p.stamina_pills -= 1
+        msgs = [f"你服下一顆{name}，一股暖意自丹田散開，精神為之一振。"]
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=f"服下{name}", lines=msgs,
+            changes=[f"體力 +{round(p.stamina - before)}", f"{name} -1"],
+        ))
+        return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"])
+
+    @_not_while_preparing
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（武學與成長設計 6.2）：每項最高 stat_cap，這個版本不能洗點。
         配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
@@ -4577,6 +4603,11 @@ class Game:
             "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
             "stamina": int(p.stamina),
             "stamina_max": c.config.stamina_max,
+            # 回體丹（企劃者 2026-10-07）：有丹、而且不在草廬序章裡才給，網頁照它在體力條旁畫「服丹」鈕（體力滿了鈕是灰的）
+            "pills": None if p.stamina_pills <= 0 or prologue_rules.active(s, c) else {
+                "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
+                "full": p.stamina >= c.config.stamina_max,
+            },
             "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
             "hp_max": round(cap),
             "injury": int(p.member.injury),

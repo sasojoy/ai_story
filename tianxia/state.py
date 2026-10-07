@@ -152,6 +152,7 @@ class PlayerState(BaseModel):
     # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
     art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
