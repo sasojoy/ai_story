@@ -334,7 +334,6 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
-                "glyph_note": insight.glyph_note,
             }
             if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
                 row["glow"] = prologue.insight_glow(state, content)
