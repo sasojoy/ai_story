@@ -216,3 +216,87 @@ def test_logging_in_again_starts_the_fold_over(glowing):
       H.enter({ stage: "gate" });
       return { remembered, here: H.S.here, auto: Object.keys(H.S.hereAuto) };"""))
     assert out["remembered"]["open"] is True and out["here"] is None and out["auto"] == []
+
+
+# ── 收起來的摺疊裡有發光的鈕（FB-087 審查 M3）─────────────────────────────────
+# 入伍段第一道軍令那一步，玩家把「此地還能做」收起來之後，發光的巡哨／傳道／保境安民藏在裡面：沒有光、也沒有「在下面 ↓」。
+# 現在摺疊收著時光改給它的標題列（同一個 .glow），「在下面 ↓」把標題列當目標；打開之後光回到鈕上。
+# 假 DOM 裡的摺疊：一個假摺疊（開著與否看 state.open）、一顆假的標題列、一顆發光的鈕；鈕的 closest("details:not([open])")
+# 只在摺疊收著時才回摺疊（跟真的 DOM 一樣）；"#page .glow" 像真的 querySelector 一樣回第一個有 .glow 的元素，位置照 rects。
+FAKE_FOLD = """
+const state = { open: false };
+const summary = T.el([]), duty = T.el(["act:duty"]);
+const box = { querySelector: (sel) => (sel === ":scope > summary" ? summary : null) };
+duty.closest = (sel) => (sel === "details:not([open])" && !state.open ? box : null);
+const rects = new Map([[summary, { top: 740, bottom: 802 }], [duty, { top: 0, bottom: 0 }]]); // 收著的鈕量不到位置：全是 0
+Object.defineProperty(T.qs, "#page .glow", { configurable: true, get: () => {
+  const lit = T.fake.list.find((e) => e.classes.has("glow"));
+  return lit ? { getBoundingClientRect: () => rects.get(lit) || { top: 500, bottom: 560 } } : null;
+} });
+const inserted = [];
+T.qs[".card.guide .guide-head"] = { firstElementChild: { insertAdjacentHTML: (pos, html) => inserted.push(html) }, querySelector: () => null };
+T.qs[".tabs"] = { getBoundingClientRect: () => ({ top: 756 }) };
+const glowing = () => ({ summary: summary.classes.has("glow"), button: duty.classes.has("glow") });
+"""
+
+
+def test_a_closed_fold_with_the_glowing_button_inside_glows_its_summary_instead(glowing):
+    out = run(glowing, _script(FAKE_FOLD + """
+      H.applyGlow();
+      return glowing();"""))
+    assert out == {"summary": True, "button": False}  # 看不到的鈕不發光，光改給摺疊的標題列
+
+
+def test_opening_the_fold_moves_the_glow_back_to_the_button_and_closing_it_moves_it_again(glowing):
+    """玩家點開、收起摺疊時 toggle 事件就重算光：不必等下一次重畫。"""
+    out = run(glowing, _script(FAKE_FOLD + """
+      H.applyGlow();
+      const closed = glowing();
+      state.open = true; toggle(true);
+      const opened = glowing();
+      state.open = false; toggle(false);
+      return { closed, opened, closedAgain: glowing() };"""))
+    assert out == {"closed": {"summary": True, "button": False}, "opened": {"summary": False, "button": True},
+                   "closedAgain": {"summary": True, "button": False}}
+
+
+def test_an_open_fold_keeps_the_glow_on_the_button(glowing):
+    out = run(glowing, _script(FAKE_FOLD + """
+      state.open = true;
+      H.applyGlow();
+      return glowing();"""))
+    assert out == {"summary": False, "button": True}
+
+
+def test_the_below_cue_points_at_the_summary_when_the_closed_fold_is_cut_off(glowing):
+    """要按的東西整個在第一屏外時框上有「在下面 ↓」：目標是看得到的標題列（#page .glow 第一個有光的），不是量不到位置的鈕。"""
+    out = run(glowing, _script(FAKE_FOLD + """
+      H.applyGlow(); // 摺疊收著：標題列的底邊 802 在分頁列（756）底下
+      const closed = inserted.length;
+      inserted.length = 0;
+      rects.set(duty, { top: 500, bottom: 560 }); // 打開之後鈕有了位置：整個在第一屏裡，不用再指
+      state.open = true; toggle(true); // 打開之後光回到鈕
+      const opened = inserted.length;
+      rects.set(duty, { top: 740, bottom: 802 }); // 展開把鈕推到分頁列底下：照舊要有
+      inserted.length = 0;
+      toggle(true);
+      return { closed, opened, pushedDown: inserted.length, html: inserted[0] };"""))
+    assert out["closed"] == 1 and out["opened"] == 0 and out["pushedDown"] == 1
+    assert 'data-act="guide-below"' in out["html"] and "在下面 ↓" in out["html"]
+
+
+def test_a_closed_fold_whose_summary_is_on_the_first_screen_gets_no_cue(glowing):
+    out = run(glowing, _script(FAKE_FOLD + """
+      rects.set(summary, { top: 600, bottom: 650 });
+      H.applyGlow();
+      return { glowing: glowing(), cues: inserted.length };"""))
+    assert out == {"glowing": {"summary": True, "button": False}, "cues": 0}
+
+
+def test_a_glow_outside_any_fold_is_unchanged(glowing):
+    """摺疊以外的鈕（closest 找不到收著的摺疊）：光照舊在鈕上。"""
+    out = run(glowing, _script("""
+      const e = T.el(["act:duty"]);
+      H.applyGlow();
+      return [...e.classes];"""))
+    assert out == ["glow"]

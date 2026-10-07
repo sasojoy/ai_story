@@ -386,6 +386,12 @@
   // 元件（reveal 比上一次畫的多出來的）加 .lit 閃一下，一秒內重畫也還在。data-glow 寫的是鍵，可以寫好幾個（空白隔開，例：收著的
   // 武學列「改練 修練 熔煉」）。不在序章什麼都不加。每次畫完頁面、狀態列都呼叫，前一次的先清掉
   let litBefore = null, litKeys = [], litTimer = 0;
+  // 發光的鈕收在關著的摺疊裡（入伍段第一道軍令那一步，玩家把「此地還能做」收起來了，FB-087 審查 M3）：看不到的鈕發光沒有意義，
+  // 位置也量不到（「在下面 ↓」會當成整個在第一屏），光改給那個摺疊的標題列（同一個 .glow）；摺疊一打開，toggle 事件重跑 applyGlow，光回到鈕上
+  function glowTarget(el) {
+    const closed = el.closest("details:not([open])");
+    return (closed && closed.querySelector(":scope > summary")) || el;
+  }
   function applyGlow() {
     document.querySelectorAll(".glow, .lit").forEach((el) => el.classList.remove("glow", "lit"));
     const p = pro();
@@ -394,7 +400,7 @@
       litKeys = [];
       // 序章之外，對話框也可以叫某顆鈕發光（入伍段第一道軍令那一步，FB-093）：框上帶的 glow，畫面上有的、按得下去的才加；不閃、沒有「在下面」
       const keys = (S.main && S.main.guide && S.main.guide.glow) || [];
-      keys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+      keys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
       guideCue(); // 發光的鈕在「此地還能做」摺疊裡、整個落在分頁列底下時，框上也要有「在下面 ↓」（FB-W1）
       return;
     }
@@ -405,7 +411,7 @@
       clearTimeout(litTimer);
       litTimer = setTimeout(() => { litKeys = []; }, 1000);
     }
-    p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => el.classList.add("glow")));
+    p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
     litKeys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]`).forEach((el) => el.classList.add("lit")));
     guideCue();
   }
@@ -2812,6 +2818,8 @@
     if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
+    // 摺疊開了或收了：發光的鈕在裡面的話，光在鈕與標題列之間換邊（glowTarget）
+    if (S.stage === "game") applyGlow();
   }, true);
 
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）

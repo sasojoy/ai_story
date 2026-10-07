@@ -47,8 +47,10 @@ const mk = (id) => (els[id] = els[id] || {
 ["app", "toast", "page", "top", "peek"].forEach(mk); // render() 只寫 #app 的 innerHTML；#top 要讀得到 hidden
 // applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, classes: Set }。只認 applyGlow 會問的三種選擇器
 const fake = { list: [] };
-const el = (glow, disabled = false) => {
+// closedFold：這顆鈕收在關著的摺疊裡時的假摺疊 { querySelector: () => 標題列的假元素 }；applyGlow 問 closest("details:not([open])") 才給（FB-087 審查 M3）
+const el = (glow, disabled = false, closedFold = null) => {
   const e = { glow, disabled, classes: new Set() };
+  e.closest = (sel) => (sel === "details:not([open])" ? closedFold : null);
   e.classList = { add: (...c) => c.forEach((x) => e.classes.add(x)), remove: (...c) => c.forEach((x) => e.classes.delete(x)), contains: (c) => e.classes.has(c) };
   fake.list.push(e);
   return e;
