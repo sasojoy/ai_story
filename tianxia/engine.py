@@ -988,7 +988,8 @@ class Game:
 
     def _train_line(self, loc: Location) -> str:
         """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
-        （Game._drill：對手的 drill_reward_share、不給銀兩素材），打贏或操練推不推大勢（train_trend_push）。"""
+        （Game._drill：對手的 drill_reward_share、不給銀兩素材），打贏或操練推不推大勢：train_trend_push 會推的線裡，有一條今天
+        還推得動（_push_room，跟 push_trend 同一個上限的算法；審查 M1：推滿了那一行就不說推動戰局）。第一季的規則沒開時沒有上限。"""
         c = self.content
         squads = [c.squads[sid] for sid in self._train_squad_ids(loc)]
         foes = [squad for squad in squads if not self._drills_with(squad)]
@@ -1001,7 +1002,8 @@ class Game:
             ("心得", any(drill_share(q.reward_xinde, share) for q in own)), ("經驗", any(drill_share(q.exp, share) for q in own)),
         ) if on]
         drops = any(materials.may_drop(q, c) for q in foes)
-        return howto.train_line(bool(foes), gains, drops, bool(self.train_trend_push(loc.id)), drill_gains, bool(own))
+        push = any(delta and self._push_room(line) > 0 for line, delta in self.train_trend_push(loc.id).items())
+        return howto.train_line(bool(foes), gains, drops, push, drill_gains, bool(own))
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；

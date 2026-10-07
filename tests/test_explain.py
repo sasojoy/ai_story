@@ -118,6 +118,41 @@ def test_the_train_line_mentions_the_drill_where_both_sides_are(game):
     assert _notes(game)["act:train"] == "打贏得心得、經驗，可能掉素材，推動戰局；遇上自己人是操練"
 
 
+def _pushing_place(game):
+    """第一季真內容裡第一個遊歷打贏會推大勢的地方（官軍）：站過去，回傳這一趟會推的線。"""
+    for loc_id in game.content.locations:
+        game.state.player.location = loc_id
+        if game._train_squad_ids(game.content.locations[loc_id]) and game.train_trend_push(loc_id):
+            return list(game.train_trend_push(loc_id))
+    raise AssertionError("真內容裡沒有遊歷會推大勢的地方")
+
+
+def test_the_train_line_drops_the_push_once_todays_room_is_spent(on):
+    """審查 M1：今天這條線推滿了（每人每曆日上限，Game._push_room 是 0），打贏也推不動：那一行不再說「推動戰局」。
+    還推得動一點就照說（push_trend 照推那一點）。"""
+    from tianxia import calendar
+
+    game = Game.new(on, "甲", rng=random.Random(0))
+    game.state.player.faction = "guan"
+    lines = _pushing_place(game)
+    assert _notes(game)["act:train"].endswith("推動戰局") or "推動戰局；" in _notes(game)["act:train"]
+    day = calendar.point(game.state.world.time, on, game.state.world).cal_day
+    cap = on.config.daily_push_cap
+    for line in lines:
+        game.state.player.pushed[f"{day}:{line}"] = cap
+    assert all(game._push_room(line) <= 0 for line in lines)
+    assert "推動戰局" not in _notes(game)["act:train"]
+    game.state.player.pushed[f"{day}:{lines[0]}"] = cap - 1  # 還剩一點：照說
+    assert "推動戰局" in _notes(game)["act:train"]
+
+
+def test_the_train_line_keeps_the_push_outside_season_one(game):
+    """第一季的規則沒開：push_trend 不設上限（_push_room 是無限），記帳裡寫什麼都照說推動戰局。"""
+    _lake(game)
+    game.state.player.pushed = {f"{day}:kou": 999.0 for day in range(1, 5)}
+    assert _notes(game)["act:train"].endswith("推動戰局")
+
+
 def test_the_train_line_leaves_out_the_push_where_the_place_pushes_nothing(game):
     _lake(game)
     game.content.locations["lake"].train_trend = {}
