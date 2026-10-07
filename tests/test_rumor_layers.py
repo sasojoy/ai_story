@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 import server
 from conftest import real_content
-from tianxia import atlas, calendar, foreshadow, journal, mapview, orders, ranks, rules, rumor_view, timetable
+from tianxia import (
+    atlas, calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
+)
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
@@ -411,6 +414,94 @@ def test_heard_clues_are_personal_and_only_yours(on):
     clues = foreshadow.heard_texts(jia.state, on, jia.world)
     assert len(clues) == 1 and clues[0] in _layers(jia)["personal"]["body"]
     assert _layers(yi)["personal"]["body"] == rumor_view.PERSONAL_EMPTY  # 片段是一個人一個人聽的
+
+
+# ── FB-086：機緣的線索（天時地利與內鬼的特徵）也列在個人線索 ─────────────────────────────
+
+
+def _hear(game, region, pick=0):
+    """照真的路徑聽一則機緣的線索（opportunities.hear_clues；骰子固定一定聽到、挑池子裡第 pick 個），回傳寫進江湖紀錄的那一行。"""
+    rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[pick])
+    lines = opportunities.hear_clues(game.state, game.content, region, rng, world=game.world)
+    assert len(lines) == 1, (region, lines)
+    return lines[0]
+
+
+def _personal(game) -> list[str]:
+    body = _layers(game)["personal"]["body"]
+    return [] if body == rumor_view.PERSONAL_EMPTY else body.split("\n\n")
+
+
+def test_a_heard_opportunity_clue_and_a_mole_fragment_are_both_in_the_personal_layer(on):
+    """FB-086：「你聽到一件事」有三種來源（伏筆片段、天時地利型的線索、推理型內鬼的特徵），個人線索三種都收；
+    機緣的兩種照聽到的先後排，字跟江湖紀錄那一行的字一模一樣（只是不帶「你聽到一件事：」，跟伏筆片段在這裡的寫法一致）。"""
+    game = _game(on, "甲", "huang", at="xiaquyang")
+    game.state.player.rank = 3  # 內鬼是第 4 階的機緣，要已經是第 3 階才聽得到特徵
+    dawn_line = _hear(game, "jizhou")  # 冀州的池子裡排第一的是黎明祭天的線索（天時地利型）
+    mole_line = _hear(game, "luoyang")  # 洛陽只有內鬼的特徵（推理型）
+    dawn = next(o for o in on.opportunities if o.id == "huang_dawn").timing.clue
+    prefix = journal.FRAGMENT_PREFIX
+    assert dawn_line == f"{prefix}{dawn}" and mole_line.startswith(prefix)
+    assert game.state.player.opp_clues[0] == "huang_dawn" and game.state.player.opp_clues[1].startswith("huang_mole:")
+    assert _personal(game) == [dawn_line.removeprefix(prefix), mole_line.removeprefix(prefix)]  # 先聽到的在前
+
+
+def test_opportunity_clues_are_only_yours_and_only_the_ones_you_heard(on):
+    jia, yi = _game(on, "甲", "huang", at="xiaquyang"), _game(on, "乙", "huang", at="xiaquyang")
+    jia.state.player.rank = yi.state.player.rank = 3
+    heard = _hear(jia, "jizhou").removeprefix(journal.FRAGMENT_PREFIX)
+    assert _personal(yi) == []  # 乙一則都沒聽到：甲聽的不算乙的，沒聽到的線索（內容裡寫了但沒聽到）也不列
+    assert _layers(yi)["personal"]["body"] == rumor_view.PERSONAL_EMPTY
+    other = _hear(yi, "luoyang").removeprefix(journal.FRAGMENT_PREFIX)
+    assert _personal(jia) == [heard] and _personal(yi) == [other]  # 各看各的
+    assert other not in "\n".join(_personal(jia)) and heard not in "\n".join(_personal(yi))
+    everything = {o.timing.clue for o in on.opportunities if o.kind == "timing"} | {
+        t.text for o in on.opportunities if o.kind == "deduce" for t in o.deduce.traits}
+    assert len(everything) > 2 and len(_personal(jia)) == 1  # 內容裡的線索不只這幾句，沒聽到的一句都沒露出來
+
+
+def test_foreshadow_fragments_in_the_personal_layer_are_unchanged_and_come_before_opportunity_clues(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    chain = next(c for c in on.foreshadows.chains if c.side == "guan" and c.fragments)
+    game.state.player.fragments[chain.id] = [0]
+    fragments = foreshadow.heard_texts(game.state, on, game.world)
+    assert len(fragments) == 1 and _personal(game) == fragments  # 沒聽過機緣的線索：跟以前一模一樣
+    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    assert _personal(game) == [*fragments, clue]  # 伏筆片段照舊在前，機緣的線索接在後面
+    assert foreshadow.heard_texts(game.state, on, game.world) == fragments  # 伏筆那一條讀的東西沒被動到
+
+
+def test_personal_rumors_stay_first_then_fragments_then_opportunity_clues(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    game.state.world.rumors.append(Rumor(time=3.0, text="只說給甲聽的。", layer="personal", character="甲"))
+    chain = next(c for c in on.foreshadows.chains if c.side == "guan" and c.fragments)
+    game.state.player.fragments[chain.id] = [0]
+    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    lines = _personal(game)
+    assert lines[0].endswith("只說給甲聽的。") and lines[-1] == clue and len(lines) == 3
+
+
+def test_a_finished_opportunitys_clue_stays_listed_like_a_finished_chains_fragment(on):
+    """完成了的機緣，線索照舊留著（不標記、不收起來）：跟伏筆完成之後片段還在個人線索裡一樣——聽過的線索是一份紀錄。"""
+    game = _game(on, "甲", "guan", at="yingchuan")
+    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    game.state.player.opp_done.append("guan_courier")
+    assert _personal(game) == [clue]
+
+
+def test_a_clue_whose_opportunity_left_the_content_is_skipped_not_a_crash(on):
+    game = _game(on, "甲", "guan", at="yingchuan")
+    game.state.player.opp_clues += ["no_such_opportunity", "huang_mole:no_such_trait", "guan_courier"]
+    assert len(_personal(game)) == 1  # 只剩對得上的那一則
+
+
+def test_after_defecting_the_old_factions_clues_are_gone_with_the_rest_of_their_progress(on):
+    """叛投時機緣的線索跟其餘進度一起作廢（opportunities.clear，機緣文件第一節）：個人線索讀的就是 opp_clues，所以一起沒了。"""
+    game = _game(on, "甲", "guan", at="yingchuan")
+    _hear(game, "yingru")
+    assert len(_personal(game)) == 1
+    defection.clear_progress(game.state.player)
+    assert _personal(game) == []
 
 
 def test_with_the_switch_off_there_are_no_layers(real):

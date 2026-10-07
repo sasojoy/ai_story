@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import calendar, foreshadow, orders
+from . import calendar, foreshadow, opportunities, orders
 from .models import Content
 from .rules import Ears, audible, ears_of
 from .state import GameState, Rumor
@@ -70,7 +70,8 @@ def layers(
 ) -> list[dict[str, str]]:
     """見聞頁的四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一段 {id, title, body}（body 是 Markdown）。
     陣營軍情只有自己陣營的、散人寫一句說明；所在大區只有此刻人在的大區、傳聞板上的（在路上是這段路兩頭）；個人線索是寫給
-    自己的傳聞加上聽過的伏筆片段（foreshadow.heard_texts）。所在大區那一段同一句傳聞合成一行、句尾接（×N）（_local_listing）；
+    自己的傳聞，加上聽過的伏筆片段（foreshadow.heard_texts），再加上聽過的機緣線索（opportunities.heard_clues：天時地利型的線索
+    與內鬼的特徵，FB-086）——三樣都是「你聽到一件事」，都只有自己聽過的。所在大區那一段同一句傳聞合成一行、句尾接（×N）（_local_listing）；
     其他三層照舊一則一行。when 是時間的寫法（Game._day_stamp）。"""
     ears = ears_of(state, content)
     heard = [r for r in state.world.rumors if audible(r, ears)]
@@ -79,7 +80,11 @@ def layers(
         return [r for r in heard if r.layer == layer]
 
     faction = _listing(of("faction"), when, FACTION_EMPTY) if state.player.faction else FACTION_LONER
-    personal = [f"{when(r.time)}　{r.text}" for r in of("personal")[::-1]] + foreshadow.heard_texts(state, content, world)
+    personal = (
+        [f"{when(r.time)}　{r.text}" for r in of("personal")[::-1]]  # 寫給自己的傳聞，新的在前
+        + foreshadow.heard_texts(state, content, world)  # 伏筆片段，照鏈與片段的順序
+        + opportunities.heard_clues(state, content)  # 機緣的線索（天時地利與內鬼的特徵），照聽到的先後（FB-086）
+    )
     title = LOCAL_TITLE.format(regions=_region_names(content, ears), days=content.config.rumor_board_days)
     return [
         {"id": "world", "title": WORLD_TITLE, "body": _listing(of("world"), when, WORLD_EMPTY)},
