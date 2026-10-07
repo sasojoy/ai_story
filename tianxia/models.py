@@ -1927,9 +1927,6 @@ class OrdersContent(_Strict):
     templates: list[OrderTemplate] = Field(default_factory=list)
     slots: dict[str, dict[str, OrderSlots]] = Field(default_factory=dict)  # 戰線 id → 陣營 id → 插槽
     duties: dict[str, Duty] = Field(default_factory=dict)  # 陣營 id → 守勢行動
-    # 軍令卡上「做法」那一行（FB-093），照種類（攻城、守城、截糧、護糧；打擊那一行是算出來的，atlas.strike_how）。插槽同發布文字，
-    # 另外 {守勢}＝那個陣營的守勢行動名字（duties）、{糧草}＝接糧車要交的份數
-    how: dict[str, str] = Field(default_factory=dict)
     rank2: dict[str, Rank2Action] = Field(default_factory=dict)  # 陣營 id → 第 2 階行動（正式版乙一）
     rank_actions: list[RankAction] = Field(default_factory=list)  # 第 3、4 階的行動（正式版戊一）
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱

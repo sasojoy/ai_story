@@ -71,13 +71,6 @@ def test_fb093_the_defence_action_is_named_from_the_content_for_each_side(on):
         assert not any(other in card["how"] for f, other in DUTY.items() if f != faction), faction
 
 
-def test_fb093_a_finished_order_has_no_how_line(on):
-    game = _enlisted(on, "guan")
-    order = _order(game, "siege", "guan", front=front_of(on, "changshe"))
-    order.done = True
-    assert "how" not in game.orders_view()[0]
-
-
 def test_fb093_the_step_two_box_names_what_you_can_do_where_you_stand(on):
     """第 2 步的框多一句：你腳下這裡做得了的，是〇〇——在長社（官軍）是巡哨，在黃巾別部營寨（黃巾）是傳道。"""
     for faction in ("guan", "huang"):

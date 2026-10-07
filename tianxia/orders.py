@@ -235,8 +235,6 @@ def fill(state: GameState, content: Content, order: Order, text: str) -> str:
         "{人物}": figure_name(content, order.figure),
         "{主將}": _commander(state, content, order),
         "{號令}": _caller(state, content),
-        "{守勢}": duty_name(content, order.faction),  # 軍令卡「做法」那一行用的（content.orders.how）
-        "{糧草}": str(content.config.convoy_grain),
     }
     for slot, value in slots.items():
         text = text.replace(slot, value)
@@ -247,13 +245,6 @@ def duty_name(content: Content, faction: str | None) -> str:
     """這個陣營的守勢行動叫什麼（巡哨、傳道、保境安民，orders.json 的 duties）；沒有守勢行動的陣營是空字串。"""
     duty = content.orders.duties.get(faction or "")
     return duty.name if duty is not None else ""
-
-
-def how(state: GameState, content: Content, order: Order) -> str | None:
-    """軍令卡上「做法」那一行（FB-093；content.orders.how 照種類寫，名字與地點照這一道軍令填）。打擊那一行是算出來的
-    （atlas.strike_how：他現在在哪、挑戰得了嗎），這裡不管；內容沒寫這一種就是 None。"""
-    text = content.orders.how.get(order.template)
-    return fill(state, content, order, text) if text else None
 
 
 TRAIN_NAME, CONVOY_NAME, CHALLENGE_NAME = "遊歷", "接下糧車", "挑戰"  # 引擎選單上這三個行動的名字（守勢行動的名字照內容）

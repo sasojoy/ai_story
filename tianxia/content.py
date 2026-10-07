@@ -702,7 +702,6 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}")
-HOW_SLOTS = ORDER_SLOTS + ("{守勢}", "{糧草}")  # 軍令卡「做法」那一行（orders.json 的 how）多兩個：守勢行動的名字、接糧車要交的糧草份數
 ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
 
 
@@ -738,14 +737,6 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
             if side in factions:
                 need(slot.escort[1] in factions[side].join_at, f"{where}：護糧的終點 {slot.escort[1]} 不是這個陣營的據點")
     known("orders.json 的 duties", o.duties, factions, "陣營")
-    # 「做法」那一行（FB-093）：打擊是算出來的（atlas.strike_how），其他每一種有模板的軍令都要有一句，不能憑空多寫；插槽只用認得的
-    how_kinds = {t.kind for t in o.templates} - {"strike"}
-    need(not o.templates or how_kinds <= set(o.how), f"orders.json 的 how：缺 {sorted(how_kinds - set(o.how))}（每一種軍令寫一句做法）")
-    need(set(o.how) <= set(ORDER_PERSONAL) - {"strike"}, f"orders.json 的 how：不認得的種類 {sorted(set(o.how) - set(ORDER_PERSONAL) - {'strike'})}")
-    for kind, text in o.how.items():
-        need(bool(text.strip()), f"orders.json 的 how.{kind}：不能是空的")
-        for slot in re.findall(r"\{[^{}]*\}", text):
-            need(slot in HOW_SLOTS, f"orders.json 的 how.{kind}：不認得的插槽 {slot}")
     for side, squad_id in o.convoy_squads.items():
         squad = c.squads.get(squad_id)
         need(squad is not None and squad.faction == side, f"orders.json 的 convoy_squads：{side} 的糧隊 {squad_id} 不存在或不屬於這個陣營")
