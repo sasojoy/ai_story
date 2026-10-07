@@ -10,6 +10,14 @@ from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
 HINT = "你在陣營裡已小有名氣，只缺一個讓大人物記住你的機會。"  # 機緣文件第一節：第 3、4 階進度到了、機緣還沒有（每階說一次）
+# 晉升卡住、沒有人能出面時說的那一句（企劃者裁決 E3，每個陣營一句；新寫，待 joy 潤）。三個地方用它：發不出召見（第 4 階就是
+# 席次沒有人能主持）、手上那一段的召見沒有版本成立了、第一段演完下一段沒有人接（見 _stalled）。豪強現在的內容走不到（第 3、4 階
+# 都沒有出面的人物），留給之後的內容。只說給自己聽，不發傳聞。
+NO_PRESENTER: dict[str, str] = {
+    "guan": "營中現在沒人能替你引見，等局勢變了再說。",
+    "huang": "幾位將軍眼下都不在，沒人能替你引見，等局勢變了再說。",
+    "haoqiang": "各家眼下都顧不上你，沒人能替你牽線，等局勢變了再說。",
+}
 
 SEAT_RANK = seats.SEAT_RANK  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）；階號只在 seats 寫一次
 HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次，求見門檻不看資格也不看席次
@@ -165,7 +173,8 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
         return []
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
-        return []
+        return _stalled(state, s.rank, s.leg)  # 這一段沒有人能出面了（裁決 E3 的「召見撤回」）：召見留著，說一次
+    state.player.summons_stall = ""
     cast, location = found
     told = _told_line(content, promo, s)
     if location != s.location:  # 換了地點（人走了、換了人，或往下一段時還沒有版本、現在補上）：說不說都摸清（裁決 E2）
@@ -173,6 +182,17 @@ def _refresh(state: GameState, content: Content, promo: PromotionDef) -> list[st
     s.event, s.location, s.figure = cast.event, location, cast.figure
     line = _leg_text(content, cast, location)
     return [line] if line != told else []
+
+
+def _stalled(state: GameState, rank: int, leg: int) -> list[str]:
+    """晉升卡在第 rank 階第 leg 段、沒有人能出面：第一次回 NO_PRESENTER 那一句（陣營的口吻），之後同一個地方卡著就不再說；
+    找到版本時（三個呼叫的地方各自）把記號清掉，所以解開之後又卡住會再說一次（企劃者裁決 E3）。"""
+    p = state.player
+    key = f"{p.faction}:{rank}:{leg}"
+    if p.summons_stall == key:
+        return []
+    p.summons_stall = key
+    return [NO_PRESENTER.get(p.faction or "", NO_PRESENTER["guan"])]
 
 
 def _scene_open(state: GameState, promo: PromotionDef) -> bool:
@@ -223,7 +243,8 @@ def check_summons(state: GameState, content: Content) -> list[str]:
         return [_summons_text(content, promo, handoff, location)]
     found = current_cast(state, content, promo, 0, None)
     if found is None:
-        return []
+        return _stalled(state, rank, 0)  # 沒有人能出面（第 4 階就是席次沒有人能主持，裁決 E3）：先不發，說一次
+    p.summons_stall = ""
     cast, location = found
     p.summons = Summons(rank=rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
     scout(state, content, location)
@@ -240,7 +261,8 @@ def next_leg(state: GameState, content: Content, from_event: str) -> list[str]:
     s.leg, s.prev, s.event, s.location = s.leg + 1, from_event, None, ""
     found = current_cast(state, content, promo, s.leg, s.prev)
     if found is None:
-        return []
+        return _stalled(state, s.rank, s.leg)  # 下一段沒有人接（裁決 E3）：說在這個選項的結果裡，之後的檢查不再說
+    state.player.summons_stall = ""
     cast, location = found
     s.event, s.location, s.figure = cast.event, location, cast.figure
     scout(state, content, location)  # 裁決 E2

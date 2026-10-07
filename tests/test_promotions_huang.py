@@ -528,12 +528,12 @@ def test_the_talisman_can_come_from_zhangliang_when_zhangbao_is_out(on):
 
 
 def test_nobody_to_hand_over_the_talisman_means_no_summons(on):
-    """N1：張寶與張梁都不在：先不發（不發一張找不到人的召見）；之後有人回來才發。"""
+    """N1：張寶與張梁都不在：先不發（不發一張找不到人的召見）；之後有人回來才發。沒有人能引見那一句說一次（企劃者裁決 E3）。"""
     game = _game(on, at="xiaquyang")
     _retire(game, "zhangbao")
     _retire(game, "zhangliang")
     _ready(game, 2)
-    assert ranks.check_summons(game.state, on) == [] and game.state.player.summons is None
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["huang"]] and game.state.player.summons is None
     game.state.world.figures["zhangbao"] = game.state.world.figures["zhangbao"].model_copy(update={"status": "active"})
     assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
 

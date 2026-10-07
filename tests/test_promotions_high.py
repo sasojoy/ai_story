@@ -391,7 +391,9 @@ def test_no_summons_while_nobody_can_present(on):
     game = _game(on, faction="guan")
     _ready(game)
     _retire(game, "luzhi", "jailed")  # 董卓還在孟津渡、不在盧植營
-    assert ranks.check_summons(game.state, on) == [] and game.state.player.summons is None
+    # 先不發召見；沒有人能引見那一句說一次（企劃者裁決 E3，原本一句話都沒有）
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]] and game.state.player.summons is None
+    assert ranks.check_summons(game.state, on) == []
 
 
 def test_second_leg_follows_the_first(on):
@@ -684,12 +686,12 @@ def test_a_leg_without_a_place_uses_its_own_location_or_the_nearest_base(on):
 
 def test_the_second_leg_waits_when_no_version_holds_yet(on):
     """NN4：下一段此刻沒有成立的版本時召見留在這一段之後等著（地點空著）：沒有召見那一句、沒有「應召」，假人不往哪裡走；
-    版本之後成立了，下一次檢查補上地點、說那一句。"""
+    版本之後成立了，下一次檢查補上地點、說那一句。等著的當下說一次沒有人能引見（企劃者裁決 E3），之後的檢查不再說。"""
     _test_rank3(on)
     game = _game(on, faction="guan", at="luoyang_palace")
     _ready(game)
     ranks.check_summons(game.state, on)
-    assert ranks.next_leg(game.state, on, "別的事件") == []  # 沒有哪個版本的 after 是它
+    assert ranks.next_leg(game.state, on, "別的事件") == [ranks.NO_PRESENTER["guan"]]  # 沒有哪個版本的 after 是它
     s = game.state.player.summons
     assert (s.leg, s.prev, s.event, s.location) == (1, "別的事件", None, "")
     assert ranks.summons_line(game.state, on) is None and ranks.summons_event(game.state, on) is None
@@ -1212,11 +1214,11 @@ def test_the_camp_version_passes_to_zhujun_when_huangfusong_is_out_too(on):
 
 
 def test_nobody_to_present_rank_four_means_no_summons(on):
-    """N6：何進、皇甫嵩、朱儁都不在場：先不發（不發一張找不到人的召見），之後有人回來才發。"""
+    """N6：何進、皇甫嵩、朱儁都不在場：先不發（不發一張找不到人的召見），之後有人回來才發。沒有人能引見那一句說一次（裁決 E3）。"""
     game = _game(on, faction="guan", at="changshe")
     for fid in ("hejin", "huangfusong", "zhujun"):
         _retire(game, fid, "retired")
-    assert _summon_to(game, 4, "guan") == [] and game.state.player.summons is None
+    assert _summon_to(game, 4, "guan") == [ranks.NO_PRESENTER["guan"]] and game.state.player.summons is None
     game.state.world.figures["zhujun"] = figures.state_of(game.state, on, "zhujun").model_copy(update={"status": "active"})
     assert ranks.check_summons(game.state, on) == ["朱儁召你到長社營中授印。"]
 
@@ -1735,3 +1737,152 @@ def test_stops_you_can_see_now_are_surveyed_too(on):
 def test_the_far_summons_places_are_marked_important(on):
     """樓桑里（豪強第 4 階）與下曲陽（黃巾第 3、4 階）在地圖上沒摸清時也畫出名字（Location.important）。"""
     assert on.locations["loushang_village"].important and on.locations["xiaquyang"].important
+
+
+# ── 企劃者裁決 E3（2026-10-07）：沒有人能引見時說一句 ─────────────────────
+# 三個地方會卡住、原本一句話都沒有：發不出召見（check_summons；第 4 階就是「席次沒有人能主持」）、手上的召見那一段的版本都不成立了
+# （_refresh；企劃者說的「召見撤回」）、第一段演完第二段沒有人能接（next_leg）。卡住時說一次（每個陣營一句，待 joy 潤），
+# 解開之後又卡住才再說；記號存在角色存檔（PlayerState.summons_stall），不升 SCHEMA_VERSION。只說給自己聽，不發傳聞。
+
+
+def _stall_rank3_guan(game):
+    """官軍第 3 階第一段沒有人能出面：盧植下獄，董卓還在孟津渡（不在盧植營）。"""
+    _retire(game, "luzhi", "jailed")
+
+
+def test_nobody_to_present_says_so_once(on):
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    rumors = len(game.state.world.rumors)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.check_summons(game.state, on) == []  # 每次行動、同步都問一次：只說第一次
+    assert game.state.player.summons is None
+    assert len(game.state.world.rumors) == rumors  # 自己的事，不發傳聞（陣營軍情、地方傳聞都沒有）
+
+
+def test_the_line_goes_into_the_journal_once_through_sync(on):
+    """同步時的召見那一則（江湖紀錄「召見」）：卡住的那一句也走這裡，第二次同步不再寫。"""
+    game = _game(on, faction="guan", at="changshe")
+    _hear_only_the_promotion_hint(game)
+    _stall_rank3_guan(game)
+    game.world.save_season(game.state.world)  # sync 讀的是全服狀態裡的那一份，人物的改動要先存進去
+    _ready(game)
+    game.sync(game.now + 1)
+    game.sync(game.now + 2)
+    said = [e for e in game.state.journal if ranks.NO_PRESENTER["guan"] in e.lines]
+    assert len(said) == 1 and said[0].title == "召見"
+
+
+def test_it_is_said_again_after_the_stall_clears_and_comes_back(on):
+    """卡住 → 說一次；董卓到了盧植營、召見發出來（解開）；董卓也走了、手上那份召見沒有人出面（又卡住）→ 再說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    _place(game, "dongzhuo", "luzhi_camp")
+    assert ranks.check_summons(game.state, on) == ["董卓派人來找你：到盧植營見他。"]
+    assert game.state.player.summons_stall == ""
+    _retire(game, "dongzhuo")
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.check_summons(game.state, on) == []
+    assert game.state.player.summons is not None  # 召見還在手上：人回來了就照常演
+
+
+def test_a_held_rank_four_summons_whose_presenters_all_left_says_so(on):
+    """手上第 4 階的召見（何進），何進、皇甫嵩、朱儁都不在了：召見那一句、要演的事件都空了，說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    _ready(game, rank=3, contrib=10**6)
+    assert ranks.check_summons(game.state, on) == ["何進召你到大將軍府。"]
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert ranks.summons_line(game.state, on) is None and p.summons is not None
+    assert ranks.check_summons(game.state, on) == []
+
+
+def test_a_held_summons_that_comes_back_and_stalls_again_says_it_again(on):
+    """手上的召見卡住（說一次）→ 朱儁回來、照常改寫召見（解開）→ 朱儁又走了（又卡住）→ 再說一次。"""
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game, rank=3, contrib=10**6)
+    ranks.check_summons(game.state, on)
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    _place(game, "zhujun", "changshe")
+    assert ranks.check_summons(game.state, on) == ["朱儁召你到長社營中授印。"]
+    _retire(game, "zhujun")
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+
+
+def test_rank_four_with_nobody_to_preside_says_so(on):
+    """第 4 階（席次）沒有人能主持：發不出第 4 階的召見，同一個地方說。"""
+    game = _game(on, faction="guan", at="changshe")
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid)
+    _ready(game, rank=3, contrib=10**6)
+    assert ranks.check_summons(game.state, on) == [ranks.NO_PRESENTER["guan"]]
+    assert game.state.player.summons is None
+
+
+def test_next_leg_with_nobody_says_so_in_the_choice_result(on):
+    """黃巾第 3 階：張寶在下曲陽給了符，可是南陽的張曼成、趙弘與廣宗的張梁都不在了。選項的結果就接那一句，之後的檢查不再說。"""
+    game = _game(on, faction="huang", at="xiaquyang")
+    _hear_only_the_promotion_hint(game)
+    _ready(game)
+    assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
+    for fid in ("zhangmancheng", "zhaohong", "zhangliang"):
+        _retire(game, fid)
+    game.choose("act:summons")
+    assert game.state.pending_event == "promo_huang_3_talisman"
+    msgs = game.choose("choice:0")
+    assert ranks.NO_PRESENTER["huang"] in msgs
+    assert msgs.index("你把符貼身收好。") < msgs.index(ranks.NO_PRESENTER["huang"])
+    assert ranks.check_summons(game.state, on) == []
+    assert game.state.player.summons.leg == 1
+
+
+def test_each_faction_has_its_own_line(on):
+    """官軍、黃巾照真實內容；豪強現在的內容不會卡住（第 3、4 階都沒有出面的人物），在內容的複本裡給它一位退場的人物才走得到。"""
+    assert set(ranks.NO_PRESENTER) == {f.id for f in on.scenario.factions}
+    assert len(set(ranks.NO_PRESENTER.values())) == 3
+    huang = _game(on, faction="huang", at="huangjin_camp")
+    _ready(huang)
+    _retire(huang, "zhangbao")
+    _retire(huang, "zhangliang")
+    assert ranks.check_summons(huang.state, on) == [ranks.NO_PRESENTER["huang"]]
+    cast = next(x for x in on.promotions if x.faction == "haoqiang" and x.rank == 3).legs[0].casts[0]
+    cast.figure = "hejin"  # 內容的複本：豪強第 3 階由一位人物出面（真實內容沒有）
+    hao = _game(on, faction="haoqiang", at="cao_manor")
+    _ready(hao)
+    _retire(hao, "hejin")
+    assert ranks.check_summons(hao.state, on) == [ranks.NO_PRESENTER["haoqiang"]]
+
+
+def test_with_current_content_haoqiang_never_stalls(on):
+    """真實內容：人物全部退場，豪強第 3、4 階照樣發得出召見（沒有出面的人物），所以豪強那一句現在走不到（列在 joy 的清單上）。"""
+    for rank in (3, 4):
+        game = _game(on, faction="haoqiang", at="cao_manor")
+        for fid in on.figures:
+            _retire(game, fid)
+        _ready(game, rank=rank - 1, contrib=10**6)
+        assert ranks.check_summons(game.state, on) != [ranks.NO_PRESENTER["haoqiang"]]
+        assert game.state.player.summons is not None
+
+
+def test_defecting_clears_the_stall_marker(on):
+    game = _game(on, faction="guan", at="changshe")
+    _ready(game)
+    _stall_rank3_guan(game)
+    ranks.check_summons(game.state, on)
+    assert game.state.player.summons_stall
+    defection.clear_progress(game.state.player)
+    assert game.state.player.summons_stall == ""
+
+
+def test_old_saves_without_the_stall_marker_load():
+    p = PlayerState.model_validate({"name": "甲", "location": "x", "stats": {}, "stamina": 0})
+    assert p.summons_stall == ""
+    again = PlayerState.model_validate_json(p.model_copy(update={"summons_stall": "guan:3:0"}).model_dump_json())
+    assert again.summons_stall == "guan:3:0"
