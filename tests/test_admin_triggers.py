@@ -13,7 +13,7 @@ import random
 import pytest
 
 from conftest import FixedRandom, real_content
-from tianxia import calendar, foreshadow, opportunities, orders, ranks, seats
+from tianxia import calendar, foreshadow, opportunities, orders, ranks, rules, seats
 from tianxia.characters import open_characters
 from tianxia.engine import PAUSED_REFUSAL, Game
 from tianxia.sqlite_world import open_world
@@ -70,10 +70,20 @@ def _week_orders(game, week):
     return [o.model_dump() for o in game.world.get_season().orders if o.week == week]
 
 
-def test_issue_orders_redraws_this_week_exactly_like_the_monday_hook(on, tmp_path):
-    """雙胞胎都自然走進第 2 週（週一的掛鉤發令）。B 這一週做了一道（達成、效果套上去）、另一道有進度，然後按「立刻發本週軍令」：
-    這一週的軍令跟 A 週一發的一模一樣（沒有進度、沒有達成），陣營軍情照週一那樣再發一輪；達成過的效果留著（戰況不退回）；
-    不動 hooked_week，下週一照常發令。"""
+def _credit_defend(game, order, name):
+    """照自然的路替這一道守城記功，記到額度（守勢行動一次記一次；達成那一刻套效果）。"""
+    season = game.world.get_season()
+    game.state.world = season
+    for _ in range(order.quota):
+        orders.credit(game.state, game.content, order.faction, name, kind="duty", front=order.front)
+    game.world.save_season(season)
+    game.state.world = game.world.get_season()
+
+
+def test_issue_orders_redraws_the_unfinished_ones_like_the_monday_hook(on, tmp_path):
+    """雙胞胎都自然走進第 2 週（週一的掛鉤發令）。B 這一週達成了一道守城（效果套上去）、另一道有進度，然後按「立刻發本週軍令」
+    （審查 I-1）：沒達成的照週一的挑法重挑（跟 A 週一發的一樣、沒有進度），陣營軍情照週一那樣再發一輪，只是少了那一道已達成的；
+    已達成的那一道原封不動（還是達成、進度與記下的效果都在），戰況不退回；不動 hooked_week，下週一照常發令。"""
     a, b = _twins(on, tmp_path)
     for game in (a, b):
         _into_week(game, 2)
@@ -81,14 +91,13 @@ def test_issue_orders_redraws_this_week_exactly_like_the_monday_hook(on, tmp_pat
     issued_on_monday = [r.text for r in a.world.get_season().rumors if r.time >= monday - 1 and r.text.startswith(orders.ISSUED)]
     assert issued_on_monday and _week_orders(a, 2) == _week_orders(b, 2)
 
+    week2 = [o for o in b.world.get_season().orders if o.week == 2]
+    done = next(o for o in week2 if o.template == "defend")
+    _credit_defend(b, done, "甲")
     season = b.world.get_season()
-    week2 = [o for o in season.orders if o.week == 2]
-    done = next(o for o in week2 if o.template in ("siege", "defend", "intercept", "escort"))
-    vehicle = b.state
-    vehicle.world = season
-    done.progress = {"甲": done.quota}
-    orders._complete(vehicle, on, done)  # noqa: SLF001  達成：效果套在戰況上
-    other = next(o for o in week2 if o is not done)
+    done_record = next(o for o in season.orders if o.id == done.id).model_dump()
+    assert done_record["done"]
+    other = next(o for o in season.orders if o.week == 2 and o.id != done.id)
     other.progress = {"乙": 1}
     b.world.save_season(season)
     trends = dict(b.world.get_season().trends)
@@ -98,14 +107,47 @@ def test_issue_orders_redraws_this_week_exactly_like_the_monday_hook(on, tmp_pat
 
     [msg] = b.admin_issue_orders()
     after = b.world.get_season()
-    assert _week_orders(b, 2) == _week_orders(a, 2)  # 照週一的挑法重挑：進度、達成都清掉
-    assert [r.text for r in after.rumors[before:]] == issued_on_monday  # 軍情照週一那樣再發一輪
+    mine = _week_orders(b, 2)
+    assert [o for o in mine if o["id"] == done.id] == [done_record]  # 已達成的那一道原封不動、只有一道
+    assert [o for o in mine if o["id"] != done.id] == [o for o in _week_orders(a, 2) if o["id"] != done.id]  # 沒達成的照週一重挑
+    assert [r.text for r in after.rumors[before:]] == [t for t in issued_on_monday if t != f"{orders.ISSUED}{done.text}"]
     assert after.trends == trends  # 達成過的效果留著
     assert after.hooked_week == hooked
-    assert "換掉" in msg and f"{len(week2)} 道" in msg
+    assert f"換掉沒達成的 {len(week2) - 1} 道" in msg and "已達成的 1 道照舊" in msg
     _into_week(b, 3)
     week3 = [o for o in b.world.get_season().orders if o.week == 3]
     assert week3 and b.world.get_season().hooked_week == 3  # 下週一照常發令
+
+
+def test_a_reissue_cannot_complete_the_same_order_twice(on):
+    """審查 I-1：重挑出來的軍令 id 是決定性的（{週}:{陣營}:{種類}:{戰線}），已達成的那一道不能再變成「沒達成」——
+    重發之後再記滿一次，戰況不再動（效果不會套兩次）。"""
+    admin = _game(on)
+    _into_week(admin, 2)
+    done = next(o for o in admin.world.get_season().orders if o.week == 2 and o.template == "defend")
+    _credit_defend(admin, done, "甲")
+    first = rules.trend_value(admin.state, on, done.front)
+    admin.admin_issue_orders()
+    assert [o.done for o in admin.world.get_season().orders if o.id == done.id] == [True]
+    _credit_defend(admin, done, "乙")
+    assert rules.trend_value(admin.state, on, done.front) == first
+
+
+def test_next_monday_still_sees_a_siege_completed_before_the_reissue(on):
+    """審查 I-1：下週一發令時，「敵方上週攻下過這條戰線」（or_enemy_siege）讀的是上週已達成的攻城：重發不能把它拿掉。"""
+    from tianxia.state import Order
+
+    admin = _game(on)
+    _into_week(admin, 2)
+    siege = Order(id="2:guan:siege:yingru", template="siege", faction="guan", week=2, front="yingru", quota=4, text="（測試）",
+                  done=True, applied=3, progress={"甲": 4})
+    admin.world.mutate_season(lambda s: s.orders.append(siege))
+    admin.state.world = admin.world.get_season()
+    admin.admin_issue_orders()
+    season = admin.world.get_season()
+    assert [o for o in season.orders if o.id == siege.id] == [siege]
+    admin.state.world = season
+    assert orders._enemy_sieged_last_week(admin.state, "huang", "yingru", 3)  # noqa: SLF001  _issuable 讀的就是它
 
 
 def test_issue_orders_refusals(on):

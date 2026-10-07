@@ -187,6 +187,7 @@ def test_weekly_buttons_ask_then_post_to_their_routes(client):
     out = _click(main, admin, [{"act": "admin", "op": "issue_orders"}, {"act": "admin", "op": "rotate_seats"}],
                  {"/api/do/": done})
     assert "立刻發本週軍令" in out["asked"][0] and "立刻輪替第 4 階席次" in out["asked"][1]
+    assert "已經達成的照舊留著" in out["asked"][0]  # 審查 I-1：達成的不換
     posts = [c for c in out["calls"] if c[0].startswith("/api/do/")]
     assert [c[0] for c in posts] == ["/api/do/issue_orders", "/api/do/rotate_seats"]
 

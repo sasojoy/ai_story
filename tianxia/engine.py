@@ -4842,9 +4842,9 @@ class Game:
     # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
 
     def admin_issue_orders(self) -> list[str]:
-        """立刻發本週軍令：這一週的軍令整批換成照週一的做法（orders.issue，週一掛鉤用的同一個函式）此刻重新挑的一批，
-        各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；達成過的效果已經套在戰況上，留著（控制者裁決）。
-        不動 hooked_week：下週一照常發令。"""
+        """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
+        各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
+        是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
         refusal = self._admin_refusal("發本週軍令")
         if refusal:
             return self._log(refusal)
@@ -4852,16 +4852,17 @@ class Game:
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
         week = orders.week_of(s, c)
-        replaced = sum(1 for o in s.world.orders if o.week == week)
-        s.world.orders = [o for o in s.world.orders if o.week != week]  # orders.issue 看到這一週已經有令就不發
-        orders.issue(s, c, week, self.rng)
+        replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
+        kept = {o.id for o in s.world.orders if o.week == week and o.done}
+        orders.issue(s, c, week, self.rng, redraw=True)
         self._save_season()
-        issued = [o for o in s.world.orders if o.week == week]
+        issued = [o for o in s.world.orders if o.week == week and o.id not in kept]
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
-        ) or "這一週挑不出軍令"
-        msg = f"已照週一的做法重發第 {week} 週的軍令，換掉原本的 {replaced} 道（進度不算了，已經達成的效果留著）——{listing}。"
+        ) or "這一週沒有要重挑的軍令"
+        msg = (f"已照週一的做法重發第 {week} 週的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+               f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
 
