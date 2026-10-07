@@ -146,6 +146,17 @@ def test_the_train_line_drops_the_push_once_todays_room_is_spent(on):
     assert "推動戰局" in _notes(game)["act:train"]
 
 
+def test_the_train_line_keeps_the_push_while_any_line_has_room(game, monkeypatch):
+    """遊歷打贏會推兩條線、其中一條今天推滿了：另一條照推（push_trend 一條一條算上限），照說推動戰局；兩條都滿了才不說。"""
+    _lake(game)
+    monkeypatch.setattr(Game, "train_trend_push", lambda self, loc_id=None: {"甲線": 1, "乙線": -1})
+    full = {"甲線"}
+    monkeypatch.setattr(Game, "_push_room", lambda self, line: 0.0 if line in full else 3.0)
+    assert "推動戰局" in _notes(game)["act:train"]
+    full.add("乙線")
+    assert "推動戰局" not in _notes(game)["act:train"]
+
+
 def test_the_train_line_keeps_the_push_outside_season_one(game):
     """第一季的規則沒開：push_trend 不設上限（_push_room 是無限），記帳裡寫什麼都照說推動戰局。"""
     _lake(game)

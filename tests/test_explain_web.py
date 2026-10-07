@@ -198,6 +198,7 @@ def test_the_howto_page_is_fetched_again_on_each_open_showing_the_last_one_meanw
       const shown = html;
       await tap("howto");  // 收起
       const second = tap("howto"); await settle();
+      H.render();  // 等的時候別的東西讓抽屜整個重畫（輪詢、管理者資料回來）：照樣放著上一頁
       const meanwhile = html;
       pending[1].ok("<p>第二版</p>"); await second;
       return { loading, shown, meanwhile, after: html, asked: pending.length };
