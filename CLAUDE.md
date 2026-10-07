@@ -91,7 +91,7 @@
 - **玩家看得到的時刻只有一個寫法**：第一季一律走 `calendar.point_text`（「第 N 週・週X HH:MM」，N 前後有空格）；寫時間的地方都經過 `calendar.stamp_text`／`Game.stamp`（狀態列第二行、下一件、軍令截止、江湖史、傳聞、戰報都是），不要在別處自己拼。開關關著時照舊「第2天 14:05」。
 - **名字原創**：我們寫的內容（武學、人物、意境）不用金庸等作品的專有名詞。模型取的名字與玩家替絕學定的名字都過 `naming.name_problem`（禁用名單 `content/banned_names.json`、只能是中文、不能跟素材、人物、內容武學、意境、江湖上任何角色的名號同名），全服重名在登記時原子判斷。
 - **改名之後 id 跟顯示的名字不同**（絕學定名只改顯示的名字）：寫給玩家看的一律用 `team.resolve_art(...).name`，認東西的一律用 id。
-- **改內容後跑 `pytest`**：`tests/test_real_content.py` 會讓機器人用真實內容玩完整季，抓出內容錯誤（也鎖住事件難度帶 `DIFFICULTY_BANDS`）。
+- **改內容後跑 `scripts/test_for.py`**（會挑到 `tests/test_real_content.py`，連 slow 一起跑）：它讓機器人用真實內容玩完整季，抓出內容錯誤（也鎖住事件難度帶 `DIFFICULTY_BANDS`）。
 - **賽季由管理者開**：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，加上 `.local/admins.txt` 與 `TIANXIA_ADMINS`）在設定頁按「開季」；季結束（或管理者「立刻收季」）進入「休季」，管理者按「開啟下一季」。換季時：同伴全部重獲自由、等級武學歸零；全服登記的武學、配方、改過的名字、意境、第一個練成絕學的人都照季分開存，新的一季自然是空的；上一季的首創（合成、意境、絕學）寫進那一季的江湖史；天機 +1（同一個配方長出不同的東西）；沒打完的決戰清掉；跟人物的好感度只帶一成。測試內容用 `auto_open_first_season: true` 直接開季。資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上，只有登入那個帳號的人進得了；玩家不能取管理者的名號。
 - **第一季濃縮版的規則掛在開關後面**：`Config.season_one`（`config.json` 預設關，`weekend` 設定打開）加上這一季開季時蓋的章（`rules.season_one`）。開關打開時正在跑的那一季照舊用 beta 的規則；開關關著時 beta 一個字都不變，新功能一律先問 `rules.season_one`。
 - **陣營**（`content/scenario.json` 的 `factions`）：玩家開局是散人，在陣營的 `join_at` 地點按「投靠」（要確認一次：先按 `faction:<id>`，再按 `faction:confirm`），或拜入陣營名下的門派；陣營人數看全服投靠名冊（`WorldStateStore.faction_counts()`）。全服決戰只能站自己陣營那邊，散人與不在交戰雙方的陣營不能參戰，只在一旁觀戰、照常遊玩。狀態列的名號後面寫「門派・陣營・頭銜」（有哪幾樣寫哪幾樣），都沒有才是散人。
@@ -110,7 +110,11 @@
 
 - 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：加 `--share`（cloudflared 開 trycloudflare 臨時公開網址，每次重開都換）；要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
 - 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
-- 測試：`.venv/Scripts/python.exe -m pytest -q`
+- 測試（2026-10-07）：開發用的依賴在 `requirements-dev.txt`（`-r requirements.txt` 加 `pytest-xdist`；伺服器不用裝），裝好之後加 `-n auto`（或 `-n 8`）平行跑；這台 16 核整套約 1 分鐘，單一行程約 3 分 40 秒。venv 路徑有中文時 worker 要 `PYTHONIOENCODING=utf-8`，`tests/conftest.py` 在開 worker 前已經補上。網頁測試預設每個行程一個常駐 node，`TIANXIA_WEB_HARNESS=process` 改回每次各開一個。三種跑法：
+  - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
+  - **平常的整套**：`.venv/Scripts/python.exe -m pytest -q -n auto`，不跑標了 `@pytest.mark.slow` 的（整季模擬、真實內容跑整季、量表與模擬腳本）。
+  - **合併前**：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。不寫 `-m ""`：PowerShell 5.1 會把空字串參數吞掉。
+  - 新寫的測試要跑整季、整個腳本、或單一個超過一秒的，標 `@pytest.mark.slow`（整個檔都是就寫 `pytestmark = pytest.mark.slow`）。
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 [--profile weekend]`
 - 第一季整季模擬與驗收：`.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60`（預設 `--profile weekend`；數字照實報，不為了驗收調參數）

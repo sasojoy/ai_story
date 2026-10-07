@@ -1303,6 +1303,7 @@ def test_the_season_bot_leaves_the_start_like_a_human_on_content_with_a_prologue
     assert game.state.player.location == "town" and prologue.fused_arts(game.state, prologue_content, game.world)[0].preset
 
 
+@pytest.mark.slow
 def test_the_season_bot_plays_the_same_game_on_content_without_a_prologue(content, tmp_path, monkeypatch):
     """bot.play_season 現在也傳 graduated=True：沒有序章時，同一顆種子玩出來的整季要跟不傳一模一樣。"""
     from tianxia import bot
