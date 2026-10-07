@@ -5093,7 +5093,10 @@ class Game:
             "name": p.name,
             "line": f"{p.name}：{'・'.join(parts)}，在{place}",
             "summons": {"ok": why is None, "note": why or f"會發第 {promo.rank} 階的召見"},
-            "opportunities": [{"id": o.id, "label": opportunities.offer_label(c, o)} for o in opps],
+            # note：確認框多問的那一句（情誼型補的是真的情誼，審查 M-5）；其他種類是空字串
+            "opportunities": [
+                {"id": o.id, "label": opportunities.offer_label(c, o), "note": opportunities.offer_note(s, c, o)} for o in opps
+            ],
             "fragments": [{"id": f"{ch.id}:{i}", "label": foreshadow.grant_label(c, ch, i)} for ch, i in frags],
         }
 

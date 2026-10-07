@@ -247,9 +247,34 @@ def test_the_player_lookup_draws_his_tools_and_each_button_posts_his_name(client
     posts = [c for c in out["calls"] if c[0].startswith("/api/do/")]
     assert posts == [
         ["/api/do/summon", {"hours": 1, "name": "沈青衫"}],
-        ["/api/do/give_opportunity", {"hours": 1, "name": "沈青衫", "id": "guan_courier"}],
+        ["/api/do/give_opportunity", {"hours": 1, "name": "沈青衫", "id": "guan_courier", "note": ""}],  # note 只給確認框用
         ["/api/do/give_fragment", {"hours": 1, "name": "沈青衫", "id": "fs_changshe_guan:0"}],
     ]
+
+
+BOND_ASK = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  const selects = { "ad-opp": { value: "guan_zhujun", selectedIndex: 0, options: [{ text: "官軍・第 3 階・朱儁的出身（情誼型）" }] } };
+  const byId = T.ctx.document.getElementById;
+  T.ctx.document.getElementById = (id) => selects[id] || byId(id);
+  const el = { dataset: { act: "admin", op: "give_opportunity" }, classList: { contains: () => false, add() {}, remove() {} } };
+  await T.docListeners.click[0]({ target: { closest: () => el } });
+  return T.bodyHtml[T.bodyHtml.length - 1];
+})();"""
+
+
+@needs_node
+def test_the_bond_confirm_says_what_raising_affinity_also_does(client):
+    """審查 M-5：情誼型的確認框把伺服器算好的那一句（招募成算、其他話題、換季帶幾成）一起問。"""
+    player = TestClient(server.app)
+    _player(player)
+    _enlisted()
+    _, main, admin = _views(client)
+    view = client.post("/api/admin/player", json={"name": "沈青衫"}).json()
+    note = next(x["note"] for x in view["opportunities"] if x["id"] == "guan_zhujun")
+    assert "招募他的成算約 +" in note
+    asked = run(main, BOND_ASK, S={"admin": admin, "sheet": True, "adPlayer": view, "adPlayerName": "沈青衫"})
+    assert "朱儁的出身" in asked and note in asked
 
 
 @needs_node

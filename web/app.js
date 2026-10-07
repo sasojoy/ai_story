@@ -1905,7 +1905,9 @@
       rotate_seats: ["立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情；下週一照常再排，確定？", "確定輪替"],
       start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
       summon: [`立刻替 ${body.name} 發召見（${(S.adPlayer && S.adPlayer.summons && S.adPlayer.summons.note) || "下一階"}；不看貢獻與機緣的門檻，其餘照自然發召見的做法），確定？`, "確定發召見"],
-      give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了，確定？`, "確定給他"],
+      // 情誼型多一句（伺服器算好的 note：情誼補到幾、招募成算、其他話題、換季帶幾成，審查 M-5）
+      give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了。${
+        body.note ? `${body.note}。` : ""}確定？`, "確定給他"],
       give_fragment: [`給 ${body.name} 伏筆片段「${picked("ad-frag")}」：跟自然聽到一樣，記進他的個人線索，確定？`, "確定給他"],
     }[op] || ["確定要這麼做？", "確定"];
   }
@@ -2439,7 +2441,10 @@
           }
           if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
             body.name = (S.adPlayer && S.adPlayer.name) || "";
-            if (op === "give_opportunity") body.id = document.getElementById("ad-opp").value;
+            if (op === "give_opportunity") {
+              body.id = document.getElementById("ad-opp").value;
+              body.note = ((S.adPlayer && S.adPlayer.opportunities) || []).find((x) => x.id === body.id)?.note || "";
+            }
             if (op === "give_fragment") body.id = document.getElementById("ad-frag").value;
           }
           const [text, yes] = adminAsk(op, body);

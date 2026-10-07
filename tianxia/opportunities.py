@@ -869,6 +869,25 @@ def offer_label(content: Content, o: OppDef) -> str:
     return f"{content.scenario.faction(o.faction).name}・第 {o.rank} 階・{o.name}（{KIND_NAMES.get(o.kind, o.kind)}）"
 
 
+def offer_note(state: GameState, content: Content, o: OppDef) -> str:
+    """管理者確認框多問的那一句（審查 M-5）：情誼型補的是真的情誼，不只開這個話題——招募他的成算（roster.recruit_chance，
+    照補完的情誼重算）、跟他之間其他要情誼的話題（伏筆的對話片段、拼圖型的請策）、換季照 affinity_carry_ratio 帶進下一季。
+    數字照程式算。其他種類是空字串。"""
+    if o.kind != "bond":
+        return ""
+    from . import roster  # noqa: PLC0415  只有這裡用得到
+
+    cid, p, cfg = o.bond.character, state.player, content.config
+    have, need = p.affinities.get(cid, 0), foreshadow.need(content, o.bond.affinity)
+    after = state.model_copy(update={"player": p.model_copy(update={"affinities": {**p.affinities, cid: need}})})
+    gain = round((roster.recruit_chance(content, after, cid) - roster.recruit_chance(content, state, cid)) * 100)
+    character = content.characters[cid]
+    closed = "" if character.kind == "recruitable" else "（他現在不在招募名單上）"
+    return (f"這是真的情誼變動：{character.name}情誼 {have}→{need}；招募他的成算約 +{gain} 個百分點{closed}、"
+            f"跟他之間其他要情誼的話題（伏筆的對話片段、拼圖型的請策）也照新的情誼開、"
+            f"換季帶 {cfg.affinity_carry_ratio:.0%}（{int(need * cfg.affinity_carry_ratio)} 點）進下一季")
+
+
 def _culprit_traits(state: GameState, content: Content, o: OppDef, world) -> list:
     """推理型：本季內鬼（天機決定）的特徵裡，這個人還沒聽過的那幾則，照內容的順序。"""
     traits = next(s.traits for s in o.deduce.suspects if s.id == culprit(content, o, _world_tianji(world)))

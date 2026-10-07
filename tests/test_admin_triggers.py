@@ -474,6 +474,23 @@ def test_bond_raises_the_affinity_to_where_the_topic_appears(on):
         f"（乙跟朱儁的情誼已經到 {need}，話題「出身」已經在對話選單上。）"]
 
 
+def test_the_bond_entry_says_what_else_the_affinity_changes(on):
+    """審查 M-5：情誼型補的是真的情誼——清單上那一項帶一句話（確認框照它問），數字照程式算：招募成算多幾個百分點
+    （roster.recruit_chance）、換季帶幾成（Config.affinity_carry_ratio）；其他種類沒有這一句。"""
+    admin = _game(on)
+    _member(on, "乙")
+    view = admin.admin_player_choices("乙")
+    notes = {x["id"]: x["note"] for x in view["opportunities"]}
+    need = foreshadow.need(on, next(o for o in on.opportunities if o.id == "guan_zhujun").bond.affinity)
+    cfg = on.config
+    gain = round((min(0.95, cfg.recruit_base_chance + need / 100 * cfg.recruit_affinity_bonus) - cfg.recruit_base_chance) * 100)
+    note = notes["guan_zhujun"]
+    assert f"朱儁情誼 0→{need}" in note and f"招募他的成算約 +{gain} 個百分點" in note
+    assert f"換季帶 {cfg.affinity_carry_ratio:.0%}（{int(need * cfg.affinity_carry_ratio)} 點）" in note
+    assert "伏筆的對話片段" in note and "（他現在不在招募名單上）" in note  # 朱儁是 locked：招募名單上沒有他
+    assert notes["guan_courier"] == notes["guan_deserter"] == ""
+
+
 def test_puzzle_hands_over_every_piece_so_presenting_is_next(on):
     admin = _game(on)
     _member(on, "乙", rank=3)
