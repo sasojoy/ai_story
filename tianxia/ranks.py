@@ -235,6 +235,14 @@ def check_summons(state: GameState, content: Content) -> list[str]:
             return []
         p.rank_hinted.append(rank)
         return [HINT]
+    return issue_summons(state, content, promo)
+
+
+def issue_summons(state: GameState, content: Content, promo: PromotionDef) -> list[str]:
+    """發 promo 那一階的召見（門檻都過了之後，check_summons 呼叫；管理者的「立刻替他發召見」略過貢獻與機緣的門檻也走這裡，
+    管理者觸發鈕 2026-10-07）：第 2 階照召見地點與出面的人寫；第 3、4 階從第一段起、挑此刻成立的版本，沒有人能出面就先不發、
+    說一次 NO_PRESENTER。不論哪一種都把到召見地點的路摸清（裁決 E2）。回傳召見的那一句。"""
+    p, w = state.player, state.world
     if not promo.legs:  # 第 2 階：照 T5
         location = summons_place(state, content, promo)
         fid, handoff = presenter(state, content, promo, location)
@@ -243,10 +251,10 @@ def check_summons(state: GameState, content: Content) -> list[str]:
         return [_summons_text(content, promo, handoff, location)]
     found = current_cast(state, content, promo, 0, None)
     if found is None:
-        return _stalled(state, rank, 0)  # 沒有人能出面（第 4 階就是席次沒有人能主持，裁決 E3）：先不發，說一次
+        return _stalled(state, promo.rank, 0)  # 沒有人能出面（第 4 階就是席次沒有人能主持，裁決 E3）：先不發，說一次
     p.summons_stall = ""
     cast, location = found
-    p.summons = Summons(rank=rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
+    p.summons = Summons(rank=promo.rank, figure=cast.figure, location=location, since=w.time, leg=0, event=cast.event)
     scout(state, content, location)
     return [_leg_text(content, cast, location)]
 

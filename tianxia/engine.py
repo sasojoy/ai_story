@@ -25,6 +25,7 @@ from . import events as event_rules  # note_round 走模組屬性（測試要能
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
 )
@@ -37,7 +38,7 @@ from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
-    RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
+    PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -125,6 +126,10 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
     "排好的決戰照原本的時間開，時間在暫停裡過了的現在就開始集結。"
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
+NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+# 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
+# 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
+HEARD_TITLE = "聽聞"
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
@@ -4835,6 +4840,265 @@ class Game:
         self._save_season()
         self._write("取消決戰", [line], tag="管理者")
         return self._log([line])
+
+    # ── 管理者：每週的事（管理者觸發鈕第 1 組，企劃者 2026-10-07）────────────
+    # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
+
+    def admin_issue_orders(self) -> list[str]:
+        """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
+        各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
+        是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
+        refusal = self._admin_refusal("發本週軍令")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        if not orders.active(s, c):
+            return self._log(["（這一季沒有軍令。）"])
+        week = orders.week_of(s, c)
+        replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
+        kept = {o.id for o in s.world.orders if o.week == week and o.done}
+        orders.issue(s, c, week, self.rng, redraw=True)
+        self._save_season()
+        issued = [o for o in s.world.orders if o.week == week and o.id not in kept]
+        listing = "；".join(
+            f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
+            for f in c.scenario.factions if any(o.faction == f.id for o in issued)
+        ) or "這一週沒有要重挑的軍令"
+        msg = (f"已照週一的做法重發第 {week} 週的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+               f"——{listing}。")
+        self._write("重發軍令", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_rotate_seats(self) -> list[str]:
+        """立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情（seats.rotate，週一掛鉤用的同一個函式）。
+        不動 hooked_week：下週一照常再排。賽季時鐘暫停中不排（_admin_refusal；自然的路暫停時也不補缺、不輪替）；
+        第 1 週沒有上一週可排（seats.rotate 自己也什麼都不做），說一聲。"""
+        refusal = self._admin_refusal("輪替第 4 階席次")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        if not season_one(c, s.world):
+            return self._log(["（這一季沒有第 4 階席次。）"])
+        week = calendar.point(s.world.time, c, s.world).week
+        if week < 2:
+            return self._log(["（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"])
+        seats.rotate(s, c, week)
+        self._save_season()
+        held = s.world.seats
+        listing = "；".join(
+            f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
+            for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
+        ) or "帳上還沒有人有第 4 階的資格"
+        msg = f"已照第 {week - 1} 週的貢獻輪替第 4 階席次（下週一照常再排）——{listing}。"
+        self._write("輪替席次", [msg], tag="管理者")
+        return self._log([msg])
+
+    # ── 管理者：三場大戲（管理者觸發鈕第 3 組）──────────────────────
+    # 「立刻開戰」（admin_start_battle）早就照時刻表開時刻表決戰（world.open_showdown：照版本挑那一筆、照前線戰況定起點、
+    # 在 WorldState.showdowns_opened 記下開過了，時間到了不再開）。這裡只是每一場一顆鈕、照時刻表的大事認，按不下去時說清楚為什麼。
+
+    def admin_showdowns(self) -> list[tuple[TimetableEvent, str | None]]:
+        """三場大戲那三顆鈕：時刻表上的每一件決戰，與此刻按下去會被拒絕的原因（開得了是 None）。這一季沒有時刻表時是空的。"""
+        if not season_one(self.content, self.state.world):
+            return []
+        return [(e, self._showdown_refusal(e)) for e in self.content.timetable if e.kind == "showdown"]
+
+    def _showdown_refusal(self, event: TimetableEvent) -> str | None:
+        """這一件決戰此刻開不開得了：已經結算、已經開過（時刻表那一份記號，開過就不再開）、要看別的大事定版本而那件還沒結算
+        （宛城，PM 2026-10-05）、另一場還在集結或開打，都開不了。"""
+        w = self.state.world
+        if event.id in w.timeline:
+            return f"（{event.title}已經結算了。）"
+        if event.id in w.showdowns_opened:
+            return f"（{event.title}已經開打過了。）"
+        if event.version_from is not None and event.version_from not in w.timeline:
+            source = self._timetable_event(event.version_from)
+            return f"（{event.title}要等{source.title if source else event.version_from}結算了才知道是哪一版。）"
+        battle = self.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            return "（已經有一場戰鬥在進行。）"
+        if showdown_battle(self.state, self.content, event) is None:
+            return f"（內容裡沒有{event.title}這一場的戰鬥。）"
+        return None
+
+    def admin_start_showdown(self, event_id: str, now: float) -> list[str]:
+        """立刻開時刻表上這一場決戰：照時刻表開（admin_start_battle → world.open_showdown，跟時間到了一樣：同一個函式、同一句集結
+        號角），開過就記在 showdowns_opened，排定的時間到了不再開。版本照此刻的規則（宛城看第 3 週的結果）。"""
+        refusal = self._timetable_refusal("開這一場決戰")
+        if refusal:
+            return self._log(refusal)
+        event = self._timetable_event(event_id)
+        if event is None or event.kind != "showdown":
+            return self._log(["（時刻表上沒有這一場決戰。）"])
+        why = self._showdown_refusal(event)
+        if why:
+            return self._log([why])
+        return self.admin_start_battle(showdown_battle(self.state, self.content, event).id, now)
+
+    # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────
+    # 輸入一個名號：照角色存檔認人（不分大小寫，同 CharacterStore），在這一把行動鎖裡讀他的存檔、補算到此刻，做完存回去——
+    # 跟伺服器替每個人做動作一樣（重讀 → 同步 → 動作 → 存檔）。給他的東西都走自然那條路的同一個函式；他的江湖紀錄記一則，
+    # 看起來跟自然發生的一樣（不標管理者，審查 M-1：管理者的動作波及玩家時一向不提管理者，例如取消決戰），管理者自己記一則、
+    # 標「管理者」。拒絕的字只有管理者看得到。
+
+    def _admin_target(self, name: str, *, sync: bool = True) -> Game | None:
+        """名號對到的那個角色（不分大小寫、不管前後空白）；沒有這個人、或存檔讀不懂，是 None。給自己就是這一份 Game（伺服器在
+        動作結束時存的就是它）。別人的：讀存檔、接上同一份共用賽季、不叫模型，sync 為真時補算到此刻（self.now）。"""
+        key = name_key(name)
+        if not key:
+            return None
+        if key == name_key(self.state.player.name):
+            return self
+        try:
+            state = CharacterStore(self.world.db).load(name)
+        except ValueError:  # 讀不懂的存檔（pydantic 的 ValidationError）：不動它，他自己登入時伺服器會備份重開
+            return None
+        if state is None:
+            return None
+        target = Game(self.content, state, self.rng, self.world)
+        target.client = None  # 替別人做的事一個模型都不叫
+        if sync:
+            target.sync(self.now)
+        return target
+
+    def _save_target(self, target: Game) -> None:
+        """存回他的存檔（給自己的話不必：伺服器動作結束時會存）。他的同步可能存過共用賽季（席次的帳、密謀），管理者這一份跟著重讀。"""
+        if target is self:
+            return
+        CharacterStore(self.world.db).save(target.state)
+        self.state.world = self.world.get_season()
+
+    def _summons_plan(self, target: Game) -> tuple[str | None, PromotionDef | None]:
+        """「立刻替他發召見」：（拒絕的原因, 要發的那一階）。發的是下一階（rank_of + 1）；不看貢獻門檻、也不看那一階的機緣做了沒
+        （控制者裁決：測試要跳過的就是這兩樣）。散人、手上已經有召見、已經取得第 4 階資格、到頂、第 3、4 階第一段此刻沒有人能出面
+        （企劃者裁決 E3 那一句的情況），都不發。"""
+        s, c, p = target.state, self.content, target.state.player
+        if p.faction is None:
+            return f"（{p.name}是散人，沒有陣營可以召見他。）", None
+        if p.summons is not None:
+            return f"（{p.name}手上已經有一張第 {p.summons.rank} 階的召見了。）", None
+        if p.qualified:
+            return f"（{p.name}已經取得第 {ranks.SEAT_RANK} 階的資格了。）", None
+        promo = ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1)
+        if promo is None:
+            return f"（{p.name}已經升到頂了。）", None
+        if promo.legs and ranks.current_cast(s, c, promo, 0, None) is None:
+            line = ranks.NO_PRESENTER.get(p.faction, ranks.NO_PRESENTER["guan"])
+            return f"（第 {promo.rank} 階此刻沒有人能出面召見{p.name}：{line}）", None
+        return None, promo
+
+    def admin_summon(self, name: str) -> list[str]:
+        """立刻替他發召見：下一階的召見照 ranks.issue_summons（check_summons 過了門檻之後的同一條：召見地點、出面的人、摸清路、那一句），
+        第 3、4 階從第一段起。他的江湖紀錄記一則「召見」（同步時發的召見也是這個標題）。"""
+        refusal = self._admin_refusal("發召見")
+        if refusal:
+            return self._log(refusal)
+        if not season_one(self.content, self.state.world):
+            return self._log(["（這一季沒有陣營的階級，發不了召見。）"])
+        target = self._admin_target(name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
+        why, promo = self._summons_plan(target)
+        lines = [] if promo is None else ranks.issue_summons(target.state, self.content, promo)
+        if lines:
+            target._write("召見", lines)  # 同步時自然發的召見也是這個標題；不標管理者（審查 M-1）
+        self._save_target(target)
+        if why is not None:
+            return self._log([why])
+        msg = f"已替{target.state.player.name}發第 {promo.rank} 階的召見：{lines[0]}"
+        self._write("發召見", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_give_opportunity(self, name: str, opp_id: str) -> list[str]:
+        """給他一個機緣：放到這一種機緣自然送上門那一刻之後的樣子（opportunities.offer，每一種用自然那條路的同一個函式；
+        集體密謀型沒有那一刻，拒絕）。別的陣營的、完成過的、階不夠的、已經給過的都拒絕。"""
+        refusal = self._admin_refusal("給機緣")
+        if refusal:
+            return self._log(refusal)
+        if not opportunities.active(self.state, self.content):
+            return self._log(["（這一季沒有機緣。）"])
+        o = next((x for x in self.content.opportunities if x.id == opp_id), None)
+        if o is None:
+            return self._log(["（沒有這個機緣。）"])
+        target = self._admin_target(name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
+        s = target.state
+        why = opportunities.offer_refusal(s, self.content, o, self.world)
+        if why is None:
+            lines, done = opportunities.offer(s, self.content, o, self.world)
+            # 聽到的（線索、內鬼的特徵）照自然聽到的樣子，不說是哪一個機緣；其他照機緣的寫法。都不標管理者（審查 M-1）
+            heard = o.kind in opportunities.HEARD_KINDS
+            target._write(HEARD_TITLE if heard else opportunities.title(s, self.content, f"offer:{o.id}"), lines)
+        self._save_target(target)
+        if why is not None:
+            return self._log([why])
+        msg = f"已給{s.player.name}機緣「{o.name}」：{done}。"
+        self._write("給機緣", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_give_fragment(self, name: str, ref: str) -> list[str]:
+        """給他一個伏筆片段（ref 是「鏈 id:片段序號」）：照效果給片段的同一條（foreshadow.grant_fragment：記進聽過的片段、
+        江湖紀錄那一句「你聽到一件事：…」、不發傳聞）。不是他那一方的、已經聽過的、那條伏筆已經用不上的都拒絕。
+        給管理者的那一句不寫片段的原文（天機的答案填在裡面，管理者自己也是玩家），也不提鎖定。"""
+        refusal = self._admin_refusal("給伏筆片段")
+        if refusal:
+            return self._log(refusal)
+        c = self.content
+        if not foreshadow.active(self.state, c):
+            return self._log(["（這一季沒有伏筆。）"])
+        chain_id, _, index = ref.rpartition(":")
+        chain = foreshadow.chain(c, chain_id)
+        if chain is None or not index.isdecimal() or not 0 <= int(index) < len(chain.fragments):
+            return self._log(["（沒有這一則伏筆片段。）"])
+        i = int(index)
+        target = self._admin_target(name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
+        s = target.state
+        why = foreshadow.grant_refusal(s, c, chain, i)
+        if why is None:
+            target._write(HEARD_TITLE, foreshadow.grant_fragment(s, c, chain.id, i, self.world))  # 不標管理者（審查 M-1）
+        self._save_target(target)
+        if why is not None:
+            return self._log([why])
+        event = self._timetable_event(chain.event)
+        msg = f"已讓{s.player.name}聽到{event.title if event else chain.event}那條伏筆的第 {i + 1} 則片段。"
+        self._write("給伏筆片段", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_player_choices(self, name: str) -> dict:
+        """管理者區「玩家個人劇情」查一個名號：他是誰（陣營・頭銜，在哪裡）、能不能替他發召見（不能的話為什麼）、能給他的機緣與伏筆片段
+        （從內容裡挑此刻給得了的：他那一方、他的階、還沒完成也還沒給過）。只讀：不補算、不存檔。查不到回 {"refusal": …}。"""
+        if not self.is_admin():
+            return {"refusal": "（只有管理者能查玩家。）"}
+        target = self._admin_target(name, sync=False)
+        if target is None:
+            return {"refusal": NO_SUCH_PLAYER.format(name=name.strip())}
+        s, c, p = target.state, self.content, target.state.player
+        if season_one(c, s.world):
+            why, promo = self._summons_plan(target)
+        else:
+            why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
+        parts = [c.scenario.faction(p.faction).name if p.faction else "散人"]
+        title = ranks.title(c, s)
+        if title:
+            parts.append(title)
+        place = c.locations[p.location].name if p.location in c.locations else p.location
+        opps = [o for o in c.opportunities if opportunities.offer_refusal(s, c, o, self.world) is None] \
+            if opportunities.active(s, c) else []
+        frags = [(ch, i) for ch in c.foreshadows.chains for i in range(len(ch.fragments))
+                 if foreshadow.grant_refusal(s, c, ch, i) is None] if foreshadow.active(s, c) else []
+        return {
+            "name": p.name,
+            "line": f"{p.name}：{'・'.join(parts)}，在{place}",
+            "summons": {"ok": why is None, "note": why or f"會發第 {promo.rank} 階的召見"},
+            # note：確認框多問的那一句（情誼型補的是真的情誼，審查 M-5）；其他種類是空字串
+            "opportunities": [
+                {"id": o.id, "label": opportunities.offer_label(c, o), "note": opportunities.offer_note(s, c, o)} for o in opps
+            ],
+            "fragments": [{"id": f"{ch.id}:{i}", "label": foreshadow.grant_label(c, ch, i)} for ch, i in frags],
+        }
 
     # ── 畫面文字 ──────────────────────────────────────────
 

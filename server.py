@@ -457,15 +457,18 @@ def start_push(config) -> server_push.PushHub | None:
     return HUB
 
 
-def _tell_tabs(game: Game) -> None:
+def _tell_tabs(game: Game, also: str = "") -> None:
     """動作做完、行動鎖已經放掉：叫這個角色開著的分頁刷新（推送開著時；其他分頁會去抓 /api/main，這一個分頁通常正忙著、
     會略過）。只有動作的端點叫它（api_choose、api_answer、api_do、api_menxia_do、api_travel），而且在動作成功之後：
     動作丟例外時交易整筆撤回、什麼都沒變，不通知。
     絕不能放進 act／look／act_look／poll_main／_entry：輪詢與開頁也走那些，通知一寫在輪詢的路上，同一個角色兩個看得到的
     分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……，預檢 B1）。
-    一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。"""
+    一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。
+    also：另一個名號——管理者動到別人的存檔（玩家個人劇情，PLAYER_ADMIN_ACTIONS），他開著的分頁也刷新。"""
     if HUB is not None:
         HUB.notify(game.state.player.name.casefold())
+        if also.strip():
+            HUB.notify(also.strip().casefold())
 
 
 # ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
@@ -935,6 +938,13 @@ def admin_choices(game: Game) -> dict:
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
         "trends": [{"label": t.name, "id": t.id} for t in CONTENT.scenario.trends if rules.pushable(CONTENT, world, t.id)],
         **timetable_choices(game),
+        # 這一季照第一季的規則（開關開著、開季時蓋了章）：管理者區多「每週的事」（立刻發本週軍令、立刻輪替第 4 階席次）
+        "season_one": rules.season_one(CONTENT, world),
+        # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
+        "showdowns": [
+            {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
+            for event, why in game.admin_showdowns()
+        ],
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
@@ -1261,7 +1271,17 @@ ADMIN_ACTIONS = {
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
+    # 管理者觸發鈕（企劃者 2026-10-07）：每週的事照週一的做法立刻再做一次
+    "issue_orders": lambda g, b: g.admin_issue_orders(),
+    "rotate_seats": lambda g, b: g.admin_rotate_seats(),
+    # 三場大戲：照時刻表開（跟「立刻開戰」同一條路），開過就算開過
+    "start_showdown": lambda g, b: g.admin_start_showdown(str(b.get("id", "")), time.time()),
+    # 玩家個人劇情：name 是那個玩家的名號，在這一把行動鎖裡讀他的存檔、補算、做完存回去（見 Game._admin_target）
+    "summon": lambda g, b: g.admin_summon(str(b.get("name", ""))),
+    "give_opportunity": lambda g, b: g.admin_give_opportunity(str(b.get("name", "")), str(b.get("id", ""))),
+    "give_fragment": lambda g, b: g.admin_give_fragment(str(b.get("name", "")), str(b.get("id", ""))),
 }
+PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
 
 @app.post("/api/choose")
@@ -1298,7 +1318,7 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
         raise HTTPException(404)
-    _tell_tabs(game)
+    _tell_tabs(game, str(body.get("name", "")) if op in PLAYER_ADMIN_ACTIONS else "")
     return {"main": look(game, main_view), "message": joined(msgs)}
 
 
@@ -1481,6 +1501,17 @@ def api_admin(request: Request):
     if not game.is_admin():
         raise HTTPException(403)
     return look(game, admin_choices)
+
+
+@app.post("/api/admin/player")
+def api_admin_player(request: Request, body: dict = Body(...)):
+    """管理者區「玩家個人劇情」查一個名號（Game.admin_player_choices）：他是誰、能不能發召見、能給的機緣與伏筆片段。只讀。
+    名號放在 POST 的內容裡、不放在網址上。查不到回 200 加 {"refusal": …}（原因寫在表單那一行）。"""
+    game = _game(request)
+    if not game.is_admin():
+        raise HTTPException(403)
+    name = str(body.get("name", ""))
+    return look(game, lambda g: g.admin_player_choices(name))
 
 
 @app.post("/api/admin/reset_password")

@@ -15,8 +15,8 @@ from typing import NamedTuple
 
 from . import calendar, figures, foreshadow, push, ranks, timetable
 from .journal import fragment_line
-from .models import Content, OppDef, OppPiece, Rank2Action
-from .rules import GEJU, add_rumor, change_trend, front_of, roll_check, season_one
+from .models import Content, Effect, OppDef, OppPiece, Rank2Action
+from .rules import GEJU, add_rumor, apply_effect, change_trend, front_of, roll_check, season_one
 from .state import GameState, PlayerState, Plot, WorldState
 
 DONE = "（機緣「{name}」完成。）"
@@ -265,14 +265,21 @@ def after_success(state: GameState, content: Content, source: str, loc_id: str, 
         p.opp_counts[o.id] = p.opp_counts.get(o.id, 0) + 1
         if a.tick:
             msgs.append(a.tick.replace("{地點}", place))
-        n = foreshadow.need(content, a.count)
-        if p.opp_counts[o.id] >= n:
-            chief = _commander_name(state, content, front, "huang", "黃巾渠帥") if front else "黃巾渠帥"
-            msgs.append(a.milestone.replace("{n}", str(n)).replace("{渠帥}", chief))
-            p.opp_items[o.id] = a.item
-            if front is not None:
-                p.opp_fronts[o.id] = front
+        if p.opp_counts[o.id] >= foreshadow.need(content, a.count):
+            msgs += _milestone(state, content, o, front)
     return msgs
+
+
+def _milestone(state: GameState, content: Content, o: OppDef, front: str | None) -> list[str]:
+    """累積型湊滿換算後的次數那一刻（after_success；管理者的「給他一個機緣」也走這裡）：說那一句、拿到東西、記下要送去哪條戰線
+    （做的那個地點的戰線；沒有戰線就不記，照 _deliver_here 的規則交）。"""
+    a, p = o.accumulate, state.player
+    n = foreshadow.need(content, a.count)
+    chief = _commander_name(state, content, front, "huang", "黃巾渠帥") if front else "黃巾渠帥"
+    p.opp_items[o.id] = a.item
+    if front is not None:
+        p.opp_fronts[o.id] = front
+    return [a.milestone.replace("{n}", str(n)).replace("{渠帥}", chief)]
 
 
 def _deliver_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
@@ -382,7 +389,12 @@ def hear_clues(state: GameState, content: Content, region: str | None, rng: rand
                     pool.append((key, t.text))
     if not pool or rng.random() >= foreshadow.fragment_chance(content):
         return []
-    key, text = rng.choice(pool)
+    return hear_clue(state, *rng.choice(pool))
+
+
+def hear_clue(state: GameState, key: str, text: str) -> list[str]:
+    """聽到一則機緣的線索（hear_clues 擲中的那一則；管理者的「給他一個機緣」也走這裡）：記進 opp_clues（見聞頁的個人線索照它列），
+    回傳寫進江湖紀錄的那一句（「你聽到一件事：…」）。不發傳聞。"""
     state.player.opp_clues.append(key)
     return [fragment_line(text)]
 
@@ -837,3 +849,118 @@ def title(state: GameState, content: Content, arg: str) -> str:
         return f"密謀・{o.name}" if o is not None else "密謀"
     o = next((x for x in content.opportunities if x.id == rest.partition(":")[0]), None)
     return f"機緣・{o.name}" if o is not None else "機緣"
+
+
+# ── 管理者：給他一個機緣（管理者觸發鈕第 2 組，企劃者 2026-10-07）─────────────────
+# 控制者裁決：把這個人放到「自然送上門（或觸發）那一刻之後」的樣子，下一步此刻就按得下去；用自然那條路的同一個函式。
+# 每一種的「那一刻」（見 offer）：情誼型＝情誼到了話題出現的門檻；天時地利型＝聽到線索；推理型＝聽到內鬼的特徵；
+# 累積型＝湊滿次數、拿到東西；拼圖型＝東西湊齊。集體密謀型沒有交給一個人的那一刻（要他自己請命發起、或響應別人的），拒絕。
+# 這裡的字都是只有管理者看得到的（管理者的字不歸 joy）；寫進玩家江湖紀錄的是自然那條路的原句。
+
+KIND_NAMES = {
+    "bond": "情誼型", "accumulate": "累積型", "timing": "天時地利型", "puzzle": "拼圖型", "deduce": "推理型", "plot": "集體密謀型",
+}
+HEARD_KINDS = ("timing", "deduce")  # 給的是聽來的線索（hear_clue）：江湖紀錄照自然聽到的樣子，不寫是哪一個機緣（審查 M-1）
+PLOT_NO_OFFER = "（集體密謀沒有交給一個人的那一刻：第 3 階以上的人在己方人物所在的地方請命就能發起，或響應同陣營的人發起的。）"
+
+
+def offer_label(content: Content, o: OppDef) -> str:
+    """管理者下拉選單上的那一行：「官軍・第 3 階・荒丘的信使（天時地利型）」。"""
+    return f"{content.scenario.faction(o.faction).name}・第 {o.rank} 階・{o.name}（{KIND_NAMES.get(o.kind, o.kind)}）"
+
+
+def offer_note(state: GameState, content: Content, o: OppDef) -> str:
+    """管理者確認框多問的那一句（審查 M-5）：情誼型補的是真的情誼，不只開這個話題——招募他的成算（roster.recruit_chance，
+    照補完的情誼重算）、跟他之間其他要情誼的話題（伏筆的對話片段、拼圖型的請策）、換季照 affinity_carry_ratio 帶進下一季。
+    數字照程式算。其他種類是空字串。"""
+    if o.kind != "bond":
+        return ""
+    from . import roster  # noqa: PLC0415  只有這裡用得到
+
+    cid, p, cfg = o.bond.character, state.player, content.config
+    have, need = p.affinities.get(cid, 0), foreshadow.need(content, o.bond.affinity)
+    after = state.model_copy(update={"player": p.model_copy(update={"affinities": {**p.affinities, cid: need}})})
+    gain = round((roster.recruit_chance(content, after, cid) - roster.recruit_chance(content, state, cid)) * 100)
+    character = content.characters[cid]
+    closed = "" if character.kind == "recruitable" else "（他現在不在招募名單上）"
+    return (f"這是真的情誼變動：{character.name}情誼 {have}→{need}；招募他的成算約 +{gain} 個百分點{closed}、"
+            f"跟他之間其他要情誼的話題（伏筆的對話片段、拼圖型的請策）也照新的情誼開、"
+            f"換季帶 {cfg.affinity_carry_ratio:.0%}（{int(need * cfg.affinity_carry_ratio)} 點）進下一季")
+
+
+def _culprit_traits(state: GameState, content: Content, o: OppDef, world) -> list:
+    """推理型：本季內鬼（天機決定）的特徵裡，這個人還沒聽過的那幾則，照內容的順序。"""
+    traits = next(s.traits for s in o.deduce.suspects if s.id == culprit(content, o, _world_tianji(world)))
+    return [t for t in o.deduce.traits if t.key in traits and f"{o.id}:{t.key}" not in state.player.opp_clues]
+
+
+def offer_refusal(state: GameState, content: Content, o: OppDef, world=None) -> str | None:
+    """管理者給這個人這一種機緣會被拒絕的原因；給得了是 None。順序：別的陣營的（散人也是）、完成過、階不夠（第 4 階要先是第 3 階，
+    同 open_ones）、集體密謀型、已經給過了（各種的「那一刻」已經過了）。"""
+    p = state.player
+    if o.faction != p.faction:
+        who = "是散人" if p.faction is None else f"是{content.scenario.faction(p.faction).name}的人"
+        return f"（「{o.name}」是{content.scenario.faction(o.faction).name}的機緣，{p.name}{who}。）"
+    if o.id in p.opp_done:
+        return f"（{p.name}已經完成過「{o.name}」。）"
+    if o not in open_ones(state, content):
+        return f"（「{o.name}」是第 {o.rank} 階的機緣，{p.name}要先升到第 3 階。）"
+    if o.kind == "plot":
+        return PLOT_NO_OFFER
+    if o.kind == "bond":
+        need = foreshadow.need(content, o.bond.affinity)
+        if p.affinities.get(o.bond.character, 0) >= need:
+            name = content.characters[o.bond.character].name
+            return f"（{p.name}跟{name}的情誼已經到 {need}，話題「{o.bond.topic}」已經在對話選單上。）"
+    elif o.kind == "timing":
+        if o.id in p.opp_items:
+            return f"（{p.name}已經拿到{o.timing.item}了。）"
+        if o.id in p.opp_clues:
+            return f"（{p.name}已經聽過「{o.name}」的線索。）"
+    elif o.kind == "accumulate":
+        if o.id in p.opp_items:
+            return f"（{p.name}已經拿到{o.accumulate.item}了，送去就完成。）"
+    elif o.kind == "puzzle":
+        if all(_has_piece(state, o, piece.key) for piece in o.puzzle.pieces):
+            return f"（「{o.name}」要的東西{p.name}都湊齊了。）"
+    elif o.kind == "deduce":
+        if not _culprit_traits(state, content, o, world):
+            return f"（內鬼的特徵{p.name}都聽過了。）"
+    return None
+
+
+def offer(state: GameState, content: Content, o: OppDef, world=None) -> tuple[list[str], str]:
+    """管理者「給他一個機緣」（先過 offer_refusal）：照這一種機緣自然送上門的那一刻，用自然那條路的同一個函式。
+    回傳（寫進他江湖紀錄的幾行——自然那條路的原句, 給管理者看的那一句「做了什麼」）。
+    - 情誼型：情誼補到話題出現的門檻（rules.apply_effect 的情誼，跟事件加情誼同一條；紀錄寫「某某情誼 +N」）。
+    - 天時地利型：聽到線索（hear_clue，hear_clues 擲中時的同一條）；時段與地點照舊要等、要去。
+    - 推理型：聽到本季內鬼還沒聽過的每一個特徵（hear_clue）；指認照舊到問話的人那裡。
+    - 累積型：次數記滿、拿到東西（_milestone，after_success 湊滿那一刻的同一條；戰線記他此刻所在地點的）；送去照舊。
+    - 拼圖型：每一樣還沒拿的東西都給他（_give_piece，問到、買到、做到那一刻的同一條；紀錄寫那一樣拿到時的原句，不花錢、不擲骰）。"""
+    p = state.player
+    if o.kind == "bond":
+        cid, need = o.bond.character, foreshadow.need(content, o.bond.affinity)
+        lines = apply_effect(Effect(affinity={cid: need - p.affinities.get(cid, 0)}), state, content, world)
+        return lines, f"跟{content.characters[cid].name}的情誼補到 {need}，跟他交談時有話題「{o.bond.topic}」"
+    if o.kind == "timing":
+        return hear_clue(state, o.id, o.timing.clue), "聽到了線索；照舊要在那個時段、到那個地方才試得了"
+    if o.kind == "deduce":
+        traits = _culprit_traits(state, content, o, world)
+        lines = [line for t in traits for line in hear_clue(state, f"{o.id}:{t.key}", t.text)]
+        return lines, f"聽到內鬼的 {len(traits)} 個特徵；照舊到問話的人那裡指認"
+    if o.kind == "accumulate":
+        n = foreshadow.need(content, o.accumulate.count)
+        p.opp_counts[o.id] = max(p.opp_counts.get(o.id, 0), n)
+        lines = _milestone(state, content, o, front_of(content, p.location))
+        return lines, f"次數直接記滿 {n} 次、拿到{o.accumulate.item}；照舊要送去才完成"
+    lines = []
+    for piece in o.puzzle.pieces:
+        if _has_piece(state, o, piece.key):
+            continue
+        _give_piece(state, o, piece.key)
+        if piece.how == "ask":
+            fid = _speaker_of(state, content, o, piece)
+            lines.append(piece.lines.get(fid or "", piece.lines.get("*", "")))
+        else:
+            lines.append(piece.ok)
+    return [line for line in lines if line], "要的東西都給他了；照舊要到呈交的地方交出去才完成"

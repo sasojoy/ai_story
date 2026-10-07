@@ -268,19 +268,29 @@ def _faction_news(state: GameState, faction: str, text: str) -> None:
     rules.add_rumor(state, text, layer="faction", faction=faction)
 
 
-def issue(state: GameState, content: Content, week: int, rng: random.Random) -> list[str]:
+def issue(state: GameState, content: Content, week: int, rng: random.Random, *, redraw: bool = False) -> list[str]:
     """週初發令（world.WEEK_HOOKS 每週一 00:00 跑一次，week 是剛跨進的那一週）。先清掉上週沒達成的（達成的留著）；
     只發「現在這一週」：追趕時一次跨過好幾週，跨過的週不補發（RF1）。每道寫一則陣營軍情「本週軍令：…」。
-    一律回空串列（見檔頭：回傳的訊息會進觸發同步那個人的江湖紀錄）。rng 沒用到：挑法是決定性的。"""
+    一律回空串列（見檔頭：回傳的訊息會進觸發同步那個人的江湖紀錄）。rng 沒用到：挑法是決定性的。
+    redraw：管理者的「立刻發本週軍令」（管理者觸發鈕，審查 I-1）——這一週還沒達成的拿掉、照同樣的挑法重挑；已經達成的原封不動
+    （進度、套過的效果、給 _enemy_order 與下週 or_enemy_siege 讀的紀錄都留著），重挑出來跟它同一個 id 的那一道跳過、不發軍情，
+    所以同一道不會達成兩次。週一的掛鉤不帶它，照舊。"""
     if not active(state, content):
         return []
     w = state.world
     w.orders = [o for o in w.orders if o.done or o.week >= week]
-    if week != week_of(state, content) or any(o.week == week for o in w.orders):
+    if week != week_of(state, content):
+        return []
+    done = {o.id for o in w.orders if o.week == week and o.done}
+    if redraw:
+        w.orders = [o for o in w.orders if o.week != week or o.done]
+    elif any(o.week == week for o in w.orders):
         return []
     for faction in content.scenario.factions:
         for t, front, fid in _picks(state, content, faction.id, week):
             order = _build(state, content, t, week, front, fid)
+            if order.id in done:
+                continue
             w.orders.append(order)
             _faction_news(state, faction.id, f"{ISSUED}{order.text}")
     return []
