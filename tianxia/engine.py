@@ -96,6 +96,13 @@ class TollFacts:
     gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
 
 
+def _rank_action_id(arg: str) -> str | None:
+    """選項 act:rank:<id> 去掉 act: 之後的那一段（_act、_action_title 收到的 arg）：是第 3、4 階的行動就回行動 id，不是回 None。
+    前綴只在 RANK_ACTION_PREFIX 寫一次。"""
+    head = RANK_ACTION_PREFIX.partition(":")[2]
+    return arg.removeprefix(head) if arg.startswith(head) else None
+
+
 def _points(lines: list[str]) -> int:
     """heal_fraction 回的「氣血 +N」那一行的 N：功效演出句的括號（FB-084）寫的跟戰報上那一行是同一個數，不另外算一份。"""
     return next((int(m.removeprefix("氣血 +")) for m in lines if m.startswith("氣血 +")), 0)
@@ -104,15 +111,6 @@ def _points(lines: list[str]) -> int:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
-
-
-def _rank_action_id(arg: str) -> str | None:
-    """選項 act:rank:<id> 去掉 act: 之後的那一段（_act、_action_title 收到的 arg）：是第 3、4 階的行動就回行動 id，不是回 None。
-    前綴只在 RANK_ACTION_PREFIX 寫一次。"""
-    head = RANK_ACTION_PREFIX.partition(":")[2]
-    return arg.removeprefix(head) if arg.startswith(head) else None
-
-
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -1365,7 +1363,7 @@ class Game:
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
         if rank_action is not None:
-            name = next((a.name for a in c.orders.rank_actions if a.id == rank_action), "行動")
+            name = next(a.name for a in c.orders.rank_actions if a.id == rank_action)  # choose 已經驗過選項在選單上，一定找得到
             return f"{name}・{c.locations[s.player.location].name}"
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
