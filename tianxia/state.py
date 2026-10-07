@@ -260,12 +260,12 @@ class PlayerState(BaseModel):
     fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
     fs_asked: int = 0  # 答到第幾題（0＝question，1 起是 then 的追問）
 
-    # ── 機緣（正式版乙一、機緣文件）；角色每季重來，叛投時 opportunities.clear 清掉 ──
+    # ── 機緣（正式版乙一、機緣文件）；角色每季重來，叛投時 opportunities.clear 清掉（opp_clues 例外，見 clear）──
     opp_done: list[str] = Field(default_factory=list)  # 完成的機緣 id
     opp_counts: dict[str, int] = Field(default_factory=dict)  # 累積型：機緣 id → 記了幾次
     opp_items: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 拿到、還沒交的東西（名字）
     opp_fronts: dict[str, str] = Field(default_factory=dict)  # 機緣 id → 那件東西要送去哪條戰線
-    opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id
+    opp_clues: list[str] = Field(default_factory=list)  # 聽過線索的機緣 id；叛投不清（企劃者裁決 E5.2，同伏筆片段）
     # 失敗過、同一回（或同一曆日）不能再試的記號。鍵：天時地利型與推理型的指認是機緣 id（值是時段鍵／曆日）；拼圖的一樣東西是
     # 「機緣 id:東西 key」；密謀的一處是「plot:密謀 id:處的 key」（值都是曆日）
     opp_tried: dict[str, int] = Field(default_factory=dict)

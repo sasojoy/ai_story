@@ -99,10 +99,12 @@ def done_for_rank(state: GameState, content: Content, rank: int) -> bool:
 
 
 def clear(p: PlayerState) -> None:
-    """叛投時清掉機緣的一切（機緣文件第一節：換季、叛投清掉）。換季不用叫：角色每季重來。
+    """叛投時清掉機緣的進度（機緣文件第一節：換季、叛投清掉）。換季不用叫：角色每季重來。
     rank2_days 不清：那是每人每曆日第 2 階行動的限次，不屬於哪個陣營的進度，叛投不能拿來重置它。
-    乙二：拼圖拿到的東西與靠山一起清；opp_settled 不清（結算過的集體密謀不會因為叛投再結算一次）。"""
-    p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried = [], {}, {}, {}, [], {}
+    乙二：拼圖拿到的東西與靠山一起清；opp_settled 不清（結算過的集體密謀不會因為叛投再結算一次）。
+    opp_clues（聽過的線索）不清（企劃者裁決 E5.2，2026-10-07）：跟伏筆片段、符文殘片一樣是「知道的事」，個人線索照舊列著；
+    舊陣營的機緣照樣做不了——做得了的一律經過 open_ones（只看自己陣營的），線索的鍵是機緣 id，也不會擋住新陣營的線索。"""
+    p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_tried = [], {}, {}, {}, {}
     p.opp_pieces, p.patron = {}, None
 
 
@@ -389,7 +391,7 @@ def heard_clues(state: GameState, content: Content) -> list[str]:
     """聽過的機緣線索（見聞頁的「個人線索」，FB-086）：天時地利型的線索加上推理型內鬼的特徵片段，照聽到的先後（opp_clues 的順序），
     字跟當時寫進江湖紀錄的那一句一樣（hear_clues 的 text，只是不帶「你聽到一件事：」，跟伏筆片段 foreshadow.heard_texts 的寫法一致）。
     只有這個人自己聽過的（opp_clues 是他的存檔）；機緣完成了、時段過了照舊留著（跟伏筆完成之後片段還在一樣，不標記）；
-    叛投時 clear 連 opp_clues 一起清，所以舊陣營的線索跟著進度作廢。內容裡已經沒有的機緣或特徵（改版拿掉）略過。
+    叛投之後舊陣營的線索也留著（clear 不清 opp_clues，企劃者裁決 E5.2），只是那些機緣做不了了。內容裡已經沒有的機緣或特徵（改版拿掉）略過。
     機緣沒在跑（開關關著、沒有機緣）時是空的。"""
     if not active(state, content):
         return []

@@ -182,11 +182,13 @@ def test_completion_publishes_nothing(on):
     assert len(game.state.world.rumors) == before  # 機緣不發任何傳聞
 
 
-def test_clear_drops_all_progress():
+def test_clear_drops_all_progress_but_keeps_the_clues():
+    """叛投清掉機緣的進度；聽過的線索留著（企劃者裁決 E5.2，同伏筆片段與符文殘片：是「知道的事」，不是陣營給的身份）。"""
     p = PlayerState(name="甲", location="x", stats={}, stamina=0, opp_done=["a"], opp_counts={"b": 1},
                     opp_items={"c": "信"}, opp_fronts={"c": "yingru"}, opp_clues=["d"], opp_tried={"e": 3})
     opportunities.clear(p)
-    assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_clues, p.opp_tried) == ([], {}, {}, {}, [], {})
+    assert (p.opp_done, p.opp_counts, p.opp_items, p.opp_fronts, p.opp_tried) == ([], {}, {}, {}, {})
+    assert p.opp_clues == ["d"]
 
 
 def test_switch_off_no_opportunities(real):

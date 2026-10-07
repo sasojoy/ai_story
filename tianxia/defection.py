@@ -91,9 +91,9 @@ def clear_progress(p: PlayerState) -> None:
     之後的計畫把自己的陣營進度加在這裡（乙一：機緣已加；乙二：靠山隨機緣清；丙一：第 4 階資格與說過的「只缺一個機會」已加），叛投就不會漏清。
     這裡只放玩家**個人**的進度（PlayerState 上的欄位）；全服狀態那一側的清理（活躍名單、第四階席次的帳與名單）寫在 defect() 裡，
     跟 active_pushers 的清理放在一起。
-    刻意沒清的：`runic_pieces`（符文殘片，丙二）與聽過的伏筆片段（`fragments`）——它們是「知道的事」、不是陣營給的身份，
-    跟伏筆物品一樣留著。計畫沒寫這一條，是現在的做法、待企劃者確認（在 PM 那裡）；tests/test_promotions_huang.py 的
-    test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。"""
+    刻意沒清的：`runic_pieces`（符文殘片，丙二）、聽過的伏筆片段（`fragments`）與聽過的機緣線索（`opp_clues`，企劃者裁決 E5.2）
+    ——它們是「知道的事」、不是陣營給的身份，跟伏筆物品一樣留著。殘片與片段當初是現在的做法、待企劃者確認（在 PM 那裡）；
+    tests/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。"""
     p.rank = 0
     p.summons = None
     p.qualified, p.rank_hinted = False, []  # 第 4 階資格（候缺）與說過的「只缺一個機會」（正式版丙一）
@@ -105,7 +105,7 @@ def clear_progress(p: PlayerState) -> None:
     p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】
     # 舊陣營的引薦人排著還沒說的提示作廢（新手引導計畫三，N7）：換了邊之後由新的引薦人說；師父的（by 是空的）不動
     p.hint_queue = [n for n in p.hint_queue if p.faction is None or n.by != p.faction]
-    opportunities.clear(p)  # 機緣的完成、計數、物品、線索全部作廢（機緣文件第一節；正式版乙一）
+    opportunities.clear(p)  # 機緣的完成、計數、物品全部作廢（機緣文件第一節；正式版乙一）；聽過的線索留著（裁決 E5.2）
 
 
 def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
