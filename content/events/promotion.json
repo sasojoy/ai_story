@@ -255,5 +255,425 @@
         }
       }
     ]
+  },
+  {
+    "id": "promo_guan_3_memorial",
+    "title": "晉升・盧植營",
+    "actions": [],
+    "text": "盧植把一卷竹簡交給你：「廣宗旦夕可破，只缺雲梯與糧。這份奏表，你親手送進宮去。」",
+    "choices": [
+      {
+        "text": "「末將這就去。」",
+        "effect": {
+          "text": "你把竹簡貼身收好。",
+          "summons_next": "promo_guan_3_memorial"
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_3_palace",
+    "title": "晉升・洛陽宮城",
+    "actions": [],
+    "text": "宮門口，守門的黃門伸手要竹簡：「奏表要先過我們的手。」",
+    "choices": [
+      {
+        "text": "「照規矩交給黃門。」",
+        "effect": {
+          "text": "奏表照常遞了上去，從此石沉大海。",
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ]
+        }
+      },
+      {
+        "text": "「這份奏表，請大將軍代呈。」",
+        "effect": {
+          "text": "你報出大將軍的名號，請他的人當場代呈。外戚樂得讓宦官難看，奏表很快遞了上去。",
+          "trend": {
+            "jizhou": -1
+          },
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ]
+        }
+      },
+      {
+        "text": "「塞錢給黃門，請他快些。」",
+        "effect": {
+          "text": "黃門掂了掂錢袋，奏表遞上去了。盧植事後知道了這件事。",
+          "stats": {
+            "silver": -20
+          },
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ],
+          "affinity": {
+            "luzhi": -10
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_3_gift",
+    "title": "晉升・盧植營",
+    "actions": [],
+    "text": "董卓叫人抬出一口沉甸甸的箱子：「這份薄禮，替我送進大將軍府。何大將軍會明白的。」",
+    "choices": [
+      {
+        "text": "「末將這就去。」",
+        "effect": {
+          "text": "箱子沉得兩個人才抬得動。",
+          "summons_next": "promo_guan_3_gift"
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_3_hejin",
+    "title": "晉升・大將軍府",
+    "actions": [],
+    "text": "大將軍府的門吏盯著那口箱子，眼睛發亮。",
+    "choices": [
+      {
+        "text": "「照送。」",
+        "effect": {
+          "text": "箱子抬進了府裡。董卓的人事後拍了拍你的肩。",
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ],
+          "affinity": {
+            "dongzhuo": 5
+          }
+        }
+      },
+      {
+        "text": "「勸他別送。」",
+        "effect": {
+          "text": "你把箱子原樣退給門吏，託人捎話給董卓：這份禮送不得。事後董卓瞇起眼看了你半晌，把禮收了回去。",
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ],
+          "affinity": {
+            "dongzhuo": -5
+          }
+        }
+      },
+      {
+        "text": "「私下扣下來。」",
+        "effect": {
+          "text": "你從箱子裡分了一份給自己。這件事，董卓遲早會知道。",
+          "stats": {
+            "silver": 30
+          },
+          "promote": 3,
+          "followers": [
+            "follower_guan_spear"
+          ],
+          "affinity": {
+            "dongzhuo": -15
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_4",
+    "title": "晉升・大將軍府",
+    "actions": [],
+    "text": "何進親手把校尉的印綬放進你掌心：「本將軍向來賞罰分明。等有了缺，你就領兵。」出了府門，一個小黃門跟上來，笑著說印綬要在宮裡「登記」，才算數。",
+    "choices": [
+      {
+        "text": "「給他。」",
+        "effect": {
+          "text": "小黃門把錢收進袖裡，笑得更開了。",
+          "stats": {
+            "silver": -50
+          },
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "huang",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「拒絕。」",
+        "effect": {
+          "text": "小黃門的笑僵在臉上，一甩袖子走了。",
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "guan",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「回府告訴大將軍。」",
+        "effect": {
+          "text": "何進聽完，沉吟了半天：「此事……容後再議。」",
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "guan",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "hejin": 5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_4_late",
+    "title": "晉升・大將軍府",
+    "actions": [],
+    "text": "何進親手把校尉的印綬放進你掌心：「本將軍向來賞罰分明。等有了缺，你就領兵。」出了府門，一個小黃門跟上來，笑著說印綬要在宮裡「登記」，才算數。",
+    "choices": [
+      {
+        "text": "「給他。」",
+        "effect": {
+          "text": "小黃門把錢收進袖裡，笑得更開了。",
+          "stats": {
+            "silver": -50
+          },
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「拒絕。」",
+        "effect": {
+          "text": "小黃門的笑僵在臉上。你想起廣宗城下那個寧可下獄也不肯低頭的人。",
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「回府告訴大將軍。」",
+        "effect": {
+          "text": "何進聽完，沉吟了半天：「此事……容後再議。」",
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ],
+          "affinity": {
+            "hejin": 5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_guan_4_camp",
+    "title": "晉升・營中授印",
+    "actions": [],
+    "text": "營中的主將把校尉的印綬交到你手上：「朝廷的缺一空出來，你就領兵。」一個來營中的監軍宦官笑著湊過來，說印綬要「登記」才算數。",
+    "choices": [
+      {
+        "text": "「給他。」",
+        "effect": {
+          "text": "監軍把錢收進袖裡。",
+          "stats": {
+            "silver": -50
+          },
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "huang",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「拒絕。」",
+        "effect": {
+          "text": "監軍的笑僵在臉上，一甩袖子走了。",
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "guan",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      },
+      {
+        "text": "「去告訴主將。」",
+        "effect": {
+          "text": "主將聽完，冷冷看了監軍一眼。",
+          "event_mods": [
+            {
+              "event": "luzhi_jailed",
+              "side": "guan",
+              "amount": 0.05
+            }
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_guan_crossbow"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_hao_3",
+    "title": "晉升・汝南酒樓",
+    "actions": [],
+    "text": "汝南城裡的酒樓，兩撥人一前一後找上你。先來的是袁家的門客，衣冠楚楚，開口就是四世三公；後來的是曹家的部曲，一身風塵，開口就是糧、馬、兵。兩邊都要你一句話。",
+    "choices": [
+      {
+        "text": "「我跟袁家。」",
+        "effect": {
+          "text": "袁家的門客拱了拱手：「本初公會記得你。」",
+          "patron": "yuan",
+          "promote": 3,
+          "followers": [
+            "follower_haoqiang_retainer"
+          ],
+          "affinity": {
+            "yuanshao": 15,
+            "caocao": -5
+          }
+        }
+      },
+      {
+        "text": "「我跟曹家。」",
+        "effect": {
+          "text": "曹家的部曲咧嘴一笑：「痛快。」",
+          "patron": "cao",
+          "promote": 3,
+          "followers": [
+            "follower_haoqiang_retainer"
+          ],
+          "affinity": {
+            "caocao": 15,
+            "yuanshao": -5
+          }
+        }
+      },
+      {
+        "text": "「我誰的人也不是。」",
+        "effect": {
+          "text": "兩撥人對看了一眼，各自走了。酒樓裡的人卻都記住了你。",
+          "stats": {
+            "fame": 2
+          },
+          "patron": "self",
+          "promote": 3,
+          "followers": [
+            "follower_haoqiang_retainer"
+          ],
+          "affinity": {
+            "yuanshao": -3,
+            "caocao": -3
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_hao_4",
+    "title": "晉升・樓桑里",
+    "actions": [],
+    "text": "樓桑里村口的大桑樹下，劉備三人已經等著你。張飛扛來一罈酒，關羽站在樹蔭外，只是看著。劉備開口：「天下大亂，各自為戰終究守不住。不如結個盟，不論將來誰先得了寸土，都不忘了今天。」",
+    "choices": [
+      {
+        "text": "「好，結盟。」",
+        "effect": {
+          "text": "張飛拍開酒罈，四個碗碰在一起。",
+          "promote": 4,
+          "followers": [
+            "follower_haoqiang_buqu"
+          ],
+          "affinity": {
+            "liubei": 10,
+            "guanyu": 5,
+            "zhangfei": 5
+          }
+        }
+      },
+      {
+        "text": "「結盟可以，但地盤各憑本事。」",
+        "effect": {
+          "text": "關羽第一次正眼看你：「直話，好。」",
+          "promote": 4,
+          "followers": [
+            "follower_haoqiang_buqu"
+          ],
+          "affinity": {
+            "guanyu": 8,
+            "liubei": 3
+          }
+        }
+      },
+      {
+        "text": "「張翼德，先比一場再說。」",
+        "check": {
+          "stat": "str",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你把張飛摔了個四腳朝天，他爬起來大笑：「好！這盟我結！」",
+          "promote": 4,
+          "followers": [
+            "follower_haoqiang_buqu"
+          ],
+          "affinity": {
+            "zhangfei": 10,
+            "guanyu": -3
+          }
+        },
+        "fail_effect": {
+          "text": "張飛把你按在地上，大笑著把你拉起來：「有種！這盟我結！」",
+          "promote": 4,
+          "followers": [
+            "follower_haoqiang_buqu"
+          ],
+          "affinity": {
+            "zhangfei": 5,
+            "guanyu": -3
+          }
+        }
+      }
+    ]
   }
 ]

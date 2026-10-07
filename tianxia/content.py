@@ -809,14 +809,15 @@ def check_promotions(c: Content, need, known) -> None:
         known(where, [follower.wugong], c.skills, "武學")
     for event in c.events.values():
         for choice in event.choices:
-            if choice.effect.promote is None and not choice.effect.followers:
-                continue
-            where = f"事件 {event.id}"
-            need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
-            known(where, choice.effect.followers, c.followers, "部下")
-            side = promo_events.get(event.id)
-            need(all(c.followers[f].faction == side for f in choice.effect.followers if f in c.followers),
-                 f"{where}：給的部下要是 {side} 的")
+            for effect in (choice.effect, choice.fail_effect):  # 檢定輸的那一邊也一樣（promo_hao_4 的摔角是第一則在 fail_effect 晉升的）
+                if effect.promote is None and not effect.followers:
+                    continue
+                where = f"事件 {event.id}"
+                need(event.id in promo_events, f"{where}：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）")
+                known(where, effect.followers, c.followers, "部下")
+                side = promo_events.get(event.id)
+                need(all(c.followers[f].faction == side for f in effect.followers if f in c.followers),
+                     f"{where}：給的部下要是 {side} 的")
     # 第 3、4 階的三種新效果（正式版丙一）：選項的 effect 與 fail_effect 都查
     for event in c.events.values():
         for choice in event.choices:

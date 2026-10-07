@@ -8,7 +8,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import real_content
+from conftest import FixedRandom, real_content
 from tianxia import bot_policy, defection, enlist, figures, ranks, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -854,3 +854,422 @@ def test_a_player_who_heard_the_hint_at_rank_two_does_not_hear_it_again(on):
     _ready(game)
     game.sync(game.now + 1)
     assert p.summons is not None and _tell_hints(game) == [] and p.hint_queue == []
+
+
+# ── Task 3：官軍、豪強的第 3、4 階奇遇（內容）─────────────────
+
+
+def _summon_to(game, rank, faction):
+    _ready(game, rank=rank - 1, contrib=10**6)
+    return ranks.check_summons(game.state, game.content)
+
+
+def test_guan_rank_three_two_legs(on):
+    game = _game(on, faction="guan", at="luzhi_camp")
+    assert _summon_to(game, 3, "guan") == ["盧植派人來找你：到盧植營見他。"]
+    game.choose("act:summons")
+    msgs = game.choose("choice:0")
+    assert "把盧植的奏表送到洛陽宮城。" in msgs and game.state.player.summons.location == "luoyang_palace"
+    game.state.player.location = "luoyang_palace"
+    game.choose("act:summons")
+    msgs = game.choose("choice:1")
+    p = game.state.player
+    assert "你升為軍司馬。" in msgs and p.rank == 3 and p.followers[-1] == "follower_guan_spear"
+
+
+def test_bribe_after_the_jailing_changes_nothing(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    w = game.state.world
+    w.timeline["luzhi_jailed"] = TimelineResult(key="成", time=w.time)
+    _summon_to(game, 4, "guan")
+    assert game.state.player.summons.event == "promo_guan_4_late"
+    game.choose("act:summons")
+    game.choose("choice:1")
+    assert w.event_mods.get("luzhi_jailed", 0.0) == 0.0 and game.state.player.qualified
+
+
+def test_refusing_the_bribe_helps_luzhi(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    _summon_to(game, 4, "guan")
+    game.choose("act:summons")
+    game.choose("choice:1")  # 拒絕
+    event = next(e for e in on.timetable if e.id == "luzhi_jailed")
+    expected = 0.05 if event.roll_side == "guan" else -0.05
+    assert game.state.world.event_mods["luzhi_jailed"] == pytest.approx(expected)
+
+
+def test_bribe_mods_are_capped(on):
+    game = _game(on, faction="guan")
+    for _ in range(10):
+        rules.apply_effect(Effect(event_mods=[{"event": "luzhi_jailed", "side": "guan", "amount": 0.05}]),
+                           game.state, on, game.world)
+    assert abs(game.state.world.event_mods["luzhi_jailed"]) == pytest.approx(timetable.EVENT_MODS_CAP)
+
+
+def test_hao_rank_three_sets_the_patron(on):
+    game = _game(on, faction="haoqiang", at="runan")
+    _summon_to(game, 3, "haoqiang")
+    game.choose("act:summons")
+    game.choose("choice:1")
+    assert (game.state.player.patron, game.state.player.rank) == ("cao", 3)
+
+
+def test_hao_rank_four_reacts_to_the_patron(on):
+    game = _game(on, faction="haoqiang", at="loushang_village")
+    game.state.player.patron = "self"
+    _summon_to(game, 4, "haoqiang")
+    game.choose("act:summons")
+    msgs = game.choose("choice:0")
+    assert "劉備笑了：「都是白手起家。」" in msgs and "你取得一方之主的資格，候缺。" in msgs
+
+
+def test_camp_version_when_hejin_is_out(on):
+    game = _game(on, faction="guan", at="changshe")
+    _retire(game, "hejin", "crippled")
+    assert _summon_to(game, 4, "guan") == ["皇甫嵩召你到長社營中授印。"]
+    assert game.state.player.summons.location == "changshe"
+
+
+# 以下是這個任務自己多寫的：內容的結構、每條路、兩句修過的話、m3
+
+
+def test_the_real_promotions_are_defined(on):
+    by = {(p.faction, p.rank): p for p in on.promotions}
+    assert {"guan", "haoqiang"} <= {faction for faction, rank in by if rank == 3}
+    assert {"guan", "haoqiang"} <= {faction for faction, rank in by if rank == 4}
+    guan3, guan4, hao3, hao4 = by[("guan", 3)], by[("guan", 4)], by[("haoqiang", 3)], by[("haoqiang", 4)]
+    assert [[c.event for c in leg.casts] for leg in guan3.legs] == [
+        ["promo_guan_3_memorial", "promo_guan_3_gift"], ["promo_guan_3_palace", "promo_guan_3_hejin"]]
+    assert [(c.figure, c.at, c.after) for c in guan3.legs[0].casts] == [
+        ("luzhi", "luzhi_camp", None), ("dongzhuo", "luzhi_camp", None)]
+    assert [(c.figure, c.at, c.after) for c in guan3.legs[1].casts] == [
+        (None, "luoyang_palace", "promo_guan_3_memorial"), (None, "dajiangjun_fu", "promo_guan_3_gift")]
+    assert guan3.closing == "營裡又撥了一個鄉勇到你帳下：「軍司馬，往後聽你調遣。」"
+    assert len(guan4.legs) == 1
+    assert [(c.event, c.figure, c.at, c.before_event) for c in guan4.legs[0].casts] == [
+        ("promo_guan_4", "hejin", "dajiangjun_fu", "luzhi_jailed"), ("promo_guan_4_late", "hejin", "dajiangjun_fu", None),
+        ("promo_guan_4_camp", "huangfusong", None, None), ("promo_guan_4_camp", "zhujun", None, None)]
+    assert [c.summons_text for c in guan4.legs[0].casts] == [
+        "何進召你到{據點}。", "何進召你到{據點}。", "皇甫嵩召你到{據點}營中授印。", "朱儁召你到{據點}營中授印。"]
+    assert guan4.closing == "又一個鄉勇撥到你帳下。校尉的缺一空出來，你就領兵。"
+    assert [(leg.location, [c.event for c in leg.casts]) for leg in hao3.legs] == [("runan", ["promo_hao_3"])]
+    assert [(leg.location, [c.event for c in leg.casts]) for leg in hao4.legs] == [("loushang_village", ["promo_hao_4"])]
+    assert hao3.closing == "一個門客收拾了行囊，跟到你身邊：「往後替您跑腿。」"
+    assert hao4.closing == "一個家養部曲扛著刀跟了上來：「一方之主，往後這條命是您的。」"
+    assert {k: (v.text, v.affinity) for k, v in hao4.patron_lines.items()} == {
+        "yuan": ("關羽冷冷道：「四世三公的門客？」", {"guanyu": -3}),
+        "cao": ("劉備頓了一下：「曹孟德的人……也好。」", {}),
+        "self": ("劉備笑了：「都是白手起家。」", {"liubei": 5}),
+    }
+    assert guan3.patron_lines == guan4.patron_lines == hao3.patron_lines == {}
+
+
+def test_the_new_events_are_wired_to_their_legs(on):
+    """第一段的事件選項寫 summons_next（自己的 id）、不晉升；最後一段每個選項（含檢定輸的那一邊）晉升到那一階、給那一階的部下。"""
+    first_leg = {"promo_guan_3_memorial", "promo_guan_3_gift"}
+    followers = {
+        "promo_guan_3_palace": (3, ["follower_guan_spear"]), "promo_guan_3_hejin": (3, ["follower_guan_spear"]),
+        "promo_guan_4": (4, ["follower_guan_crossbow"]), "promo_guan_4_late": (4, ["follower_guan_crossbow"]),
+        "promo_guan_4_camp": (4, ["follower_guan_crossbow"]),
+        "promo_hao_3": (3, ["follower_haoqiang_retainer"]), "promo_hao_4": (4, ["follower_haoqiang_buqu"]),
+    }
+    for event_id in first_leg:
+        event = on.events[event_id]
+        assert event.actions == [] and len(event.choices) == 1
+        for choice in event.choices:
+            assert choice.effect.summons_next == event_id and choice.effect.promote is None and not choice.effect.followers
+    for event_id, (rank, given) in followers.items():
+        event = on.events[event_id]
+        assert event.actions == [] and len(event.choices) == 3
+        for choice in event.choices:
+            slots = [choice.effect, choice.fail_effect] if choice.check is not None else [choice.effect]
+            for effect in slots:
+                assert (effect.promote, effect.followers, effect.summons_next) == (rank, given, None)
+    titles = {event_id: on.events[event_id].title for event_id in [*first_leg, *followers]}
+    assert titles == {
+        "promo_guan_3_memorial": "晉升・盧植營", "promo_guan_3_gift": "晉升・盧植營", "promo_guan_3_palace": "晉升・洛陽宮城",
+        "promo_guan_3_hejin": "晉升・大將軍府", "promo_guan_4": "晉升・大將軍府", "promo_guan_4_late": "晉升・大將軍府",
+        "promo_guan_4_camp": "晉升・營中授印", "promo_hao_3": "晉升・汝南酒樓", "promo_hao_4": "晉升・樓桑里",
+    }
+
+
+def test_bribe_mods_only_name_the_jailing_and_only_the_bribe_events_write_them(on):
+    writers = {}
+    for event in on.events.values():
+        for choice in event.choices:
+            for effect in (choice.effect, choice.fail_effect):
+                for mod in effect.event_mods:
+                    assert (mod.event, mod.amount) == ("luzhi_jailed", 0.05)
+                    writers.setdefault(event.id, []).append(mod.side)
+    assert writers == {"promo_guan_4": ["huang", "guan", "guan"], "promo_guan_4_camp": ["huang", "guan", "guan"]}
+    assert [c.effect.event_mods for c in on.events["promo_guan_4_late"].choices] == [[], [], []]  # 結算之後不分前後兩版：這一則本來就不寫
+
+
+def test_the_patron_is_only_written_by_the_two_families_scene(on):
+    patrons = {
+        event.id: [choice.effect.patron for choice in event.choices]
+        for event in on.events.values() if any(choice.effect.patron for choice in event.choices)
+    }
+    assert patrons == {"promo_hao_3": ["yuan", "cao", "self"]}
+
+
+@pytest.mark.parametrize("choice, silver, affinity, text", [
+    (0, 0, {}, "奏表照常遞了上去，從此石沉大海。"),
+    (1, 0, {}, None),
+    (2, -20, {"luzhi": -10}, "黃門掂了掂錢袋，奏表遞上去了。盧植事後知道了這件事。"),
+])
+def test_every_palace_ending_makes_a_sima(on, choice, silver, affinity, text):
+    game = _game(on, faction="guan", at="luoyang_palace")
+    p = game.state.player
+    p.stats["silver"] = 100
+    p.affinities["luzhi"] = 50
+    _summon_to(game, 3, "guan")
+    p.summons.leg, p.summons.prev = 1, "promo_guan_3_memorial"
+    ranks.check_summons(game.state, on)
+    assert p.summons.event == "promo_guan_3_palace" and p.summons.location == "luoyang_palace"
+    game.choose("act:summons")
+    msgs = game.choose(f"choice:{choice}")
+    assert "你升為軍司馬。" in msgs and p.rank == 3 and p.followers == ["follower_guan_spear"] and p.summons is None
+    assert p.stats["silver"] == 100 + silver and p.affinities["luzhi"] == 50 + affinity.get("luzhi", 0)
+    if text is not None:
+        assert text in msgs
+    assert any(r.text == "甲升為軍司馬。" and r.faction == "guan" for r in game.state.world.rumors)
+
+
+def test_asking_the_grand_general_to_present_it_stays_at_the_palace(on):
+    """NF3：奏表當場轉交——選項的反應不寫「轉身去了大將軍府」，人還在洛陽宮城（這個選項照舊往官軍推冀州一點）。"""
+    game = _game(on, faction="guan", at="luoyang_palace")
+    _summon_to(game, 3, "guan")
+    p = game.state.player
+    p.summons.leg, p.summons.prev = 1, "promo_guan_3_memorial"
+    ranks.check_summons(game.state, on)
+    jizhou = game.state.world.trends["jizhou"]
+    game.choose("act:summons")
+    msgs = game.choose("choice:1")
+    text = on.events["promo_guan_3_palace"].choices[1].effect.text
+    assert text == "你報出大將軍的名號，請他的人當場代呈。外戚樂得讓宦官難看，奏表很快遞了上去。"
+    assert text in msgs and "轉身去了大將軍府" not in "".join(msgs)
+    assert p.location == "luoyang_palace" and p.rank == 3
+    assert game.state.world.trends["jizhou"] == jizhou - 1 and "冀州：官軍小有進展" in msgs  # 外戚得意：冀州往官軍推一點，不寫數字
+
+
+@pytest.mark.parametrize("choice, affinity, silver", [(0, 5, 0), (1, -5, 0), (2, -15, 30)])
+def test_the_dongzhuo_way_to_rank_three(on, choice, affinity, silver):
+    """盧植不在（下獄）、董卓接手：盧植營的第一段演送禮，第二段是大將軍府，不看董卓在不在；三個選項都晉升。"""
+    game = _game(on, faction="guan", at="luzhi_camp")
+    p = game.state.player
+    p.stats["silver"] = 100
+    p.affinities["dongzhuo"] = 40
+    _retire(game, "luzhi", "jailed")
+    game.state.world.figures["dongzhuo"] = figures.state_of(game.state, on, "dongzhuo").model_copy(
+        update={"front": "jizhou", "location": "luzhi_camp"})
+    assert _summon_to(game, 3, "guan") == ["董卓派人來找你：到盧植營見他。"]
+    game.choose("act:summons")
+    assert "把董卓的厚禮送進大將軍府。" in game.choose("choice:0")
+    _retire(game, "dongzhuo", "crippled")  # 第二段不看董卓在不在
+    p.location = "dajiangjun_fu"
+    assert ranks.summons_event(game.state, on) == "promo_guan_3_hejin"
+    game.choose("act:summons")
+    msgs = game.choose(f"choice:{choice}")
+    assert "你升為軍司馬。" in msgs and (p.rank, p.location) == (3, "dajiangjun_fu")
+    assert p.affinities["dongzhuo"] == 40 + affinity and p.stats["silver"] == 100 + silver
+
+
+def test_advising_dongzhuo_not_to_send_it_keeps_the_player_at_the_office(on):
+    """NF3：勸他別送發生在大將軍府、董卓不在場：反應不寫「抬回營中」，人還在大將軍府。"""
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    p = game.state.player
+    _summon_to(game, 3, "guan")
+    p.summons.leg, p.summons.prev = 1, "promo_guan_3_gift"
+    ranks.check_summons(game.state, on)
+    assert p.summons.event == "promo_guan_3_hejin"
+    game.choose("act:summons")
+    msgs = game.choose("choice:1")
+    text = on.events["promo_guan_3_hejin"].choices[1].effect.text
+    assert text == "你把箱子原樣退給門吏，託人捎話給董卓：這份禮送不得。事後董卓瞇起眼看了你半晌，把禮收了回去。"
+    assert text in msgs and "抬回營中" not in "".join(msgs) and p.location == "dajiangjun_fu"
+
+
+@pytest.mark.parametrize("choice, silver, mods, hejin", [(0, -50, 0.05, 0), (1, 0, -0.05, 0), (2, 0, -0.05, 5)])
+def test_every_seal_ending_grants_the_qualification(on, choice, silver, mods, hejin):
+    """第 4 階（何進版）：三個選項都取得資格（軍司馬不變）、給弩手；給錢往黃巾加一點、其他往官軍加一點；告訴大將軍的得何進情誼。"""
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    p = game.state.player
+    p.stats["silver"] = 100
+    p.affinities["hejin"] = 20
+    _summon_to(game, 4, "guan")
+    game.choose("act:summons")
+    msgs = game.choose(f"choice:{choice}")
+    assert "你取得校尉的資格，候缺。" in msgs and (p.rank, p.qualified) == (3, True)
+    assert p.followers == ["follower_guan_crossbow"] and p.summons is None and p.stats["silver"] == 100 + silver
+    assert p.affinities["hejin"] == 20 + hejin
+    roll_side = next(e.roll_side for e in on.timetable if e.id == "luzhi_jailed")  # 擲「成」對誰有利
+    sign = 1 if roll_side == "huang" else -1
+    assert game.state.world.event_mods["luzhi_jailed"] == pytest.approx(sign * mods)
+    assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+    assert any(r.text == "甲取得校尉的資格，候缺。" and r.faction == "guan" for r in game.state.world.rumors)
+    assert ranks.check_summons(game.state, on) == []
+
+
+def test_after_the_jailing_the_refusal_remembers_the_prisoner(on):
+    game = _game(on, faction="guan", at="dajiangjun_fu")
+    w = game.state.world
+    w.timeline["luzhi_jailed"] = TimelineResult(key="成", time=w.time)
+    p = game.state.player
+    _summon_to(game, 4, "guan")
+    game.choose("act:summons")
+    msgs = game.choose("choice:1")
+    assert "小黃門的笑僵在臉上。你想起廣宗城下那個寧可下獄也不肯低頭的人。" in msgs and p.qualified
+
+
+def test_the_seal_event_changes_with_the_jailing_while_the_summons_stays_quiet(on):
+    """N4：盧植下獄那一刻，手上的何進召見悄悄換成「之後」那一版，同一句話不重複寫。"""
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    assert _summon_to(game, 4, "guan") == ["何進召你到大將軍府。"] and p.summons.event == "promo_guan_4"
+    w = game.state.world
+    w.timeline["luzhi_jailed"] = TimelineResult(key="成", time=w.time)
+    assert ranks.check_summons(game.state, on) == [] and p.summons.event == "promo_guan_4_late"
+
+
+def test_the_camp_version_pays_the_same_way(on):
+    game = _game(on, faction="guan", at="changshe")
+    p = game.state.player
+    p.stats["silver"] = 100
+    _retire(game, "hejin", "crippled")
+    _summon_to(game, 4, "guan")
+    assert p.summons.event == "promo_guan_4_camp" and p.summons.figure == "huangfusong"
+    game.choose("act:summons")
+    msgs = game.choose("choice:0")  # 給他
+    assert "監軍把錢收進袖裡。" in msgs and (p.qualified, p.stats["silver"]) == (True, 50)
+    roll_side = next(e.roll_side for e in on.timetable if e.id == "luzhi_jailed")
+    assert game.state.world.event_mods["luzhi_jailed"] == pytest.approx(0.05 if roll_side == "huang" else -0.05)
+
+
+def test_the_camp_version_passes_to_zhujun_when_huangfusong_is_out_too(on):
+    game = _game(on, faction="guan", at="changshe")
+    _retire(game, "hejin", "crippled")
+    _retire(game, "huangfusong", "retired")
+    assert _summon_to(game, 4, "guan") == ["朱儁召你到長社營中授印。"]
+    assert game.state.player.summons.figure == "zhujun"
+
+
+def test_nobody_to_present_rank_four_means_no_summons(on):
+    """N6：何進、皇甫嵩、朱儁都不在場：先不發（不發一張找不到人的召見），之後有人回來才發。"""
+    game = _game(on, faction="guan", at="changshe")
+    for fid in ("hejin", "huangfusong", "zhujun"):
+        _retire(game, fid, "retired")
+    assert _summon_to(game, 4, "guan") == [] and game.state.player.summons is None
+    game.state.world.figures["zhujun"] = figures.state_of(game.state, on, "zhujun").model_copy(update={"status": "active"})
+    assert ranks.check_summons(game.state, on) == ["朱儁召你到長社營中授印。"]
+
+
+@pytest.mark.parametrize("choice, patron, affinity, fame_gain", [
+    (0, "yuan", {"yuanshao": 15, "caocao": -5}, 0),
+    (1, "cao", {"caocao": 15, "yuanshao": -5}, 0),
+    (2, "self", {"yuanshao": -3, "caocao": -3}, 2),
+])
+def test_every_hao_rank_three_choice_sets_a_patron(on, choice, patron, affinity, fame_gain):
+    game = _game(on, faction="haoqiang", at="runan")
+    p = game.state.player
+    p.affinities.update({"yuanshao": 30, "caocao": 30})
+    fame = p.stats.get("fame", 0)
+    _summon_to(game, 3, "haoqiang")
+    game.choose("act:summons")
+    msgs = game.choose(f"choice:{choice}")
+    assert (p.patron, p.rank, p.followers) == (patron, 3, ["follower_haoqiang_retainer"])
+    assert {k: p.affinities[k] for k in ("yuanshao", "caocao")} == {k: 30 + v for k, v in affinity.items()}
+    assert p.stats.get("fame", 0) == fame + fame_gain and "你升為地方豪強。" in msgs
+
+
+@pytest.mark.parametrize("patron, line, shift", [
+    ("yuan", "關羽冷冷道：「四世三公的門客？」", ("guanyu", -3)),
+    ("cao", "劉備頓了一下：「曹孟德的人……也好。」", None),
+    ("self", "劉備笑了：「都是白手起家。」", ("liubei", 5)),
+    (None, None, None),
+])
+def test_hao_rank_four_line_for_every_patron(on, patron, line, shift):
+    game = _game(on, faction="haoqiang", at="loushang_village")
+    p = game.state.player
+    p.patron = patron
+    p.affinities.update({"guanyu": 30, "liubei": 30, "zhangfei": 30})
+    _summon_to(game, 4, "haoqiang")
+    game.choose("act:summons")
+    msgs = game.choose("choice:0")  # 好，結盟
+    said = [m for m in msgs if m.startswith(("關羽冷冷道", "劉備頓了一下", "劉備笑了"))]
+    assert said == ([line] if line else [])
+    base = {"liubei": 40, "guanyu": 35}  # 結盟本身 +10／+5（張飛 +5）
+    if shift is not None:
+        base[shift[0]] += shift[1]
+    assert (p.affinities["liubei"], p.affinities["guanyu"]) == (base["liubei"], base["guanyu"])
+    assert p.affinities["zhangfei"] == 35
+    assert "你取得一方之主的資格，候缺。" in msgs and p.qualified and p.followers == ["follower_haoqiang_buqu"]
+
+
+@pytest.mark.parametrize("win, text, zhang, guan", [
+    (True, "你把張飛摔了個四腳朝天，他爬起來大笑：「好！這盟我結！」", 10, -3),
+    (False, "張飛把你按在地上，大笑著把你拉起來：「有種！這盟我結！」", 5, -3),
+])
+def test_the_wrestling_oath_promotes_whether_you_win_or_lose(on, win, text, zhang, guan):
+    """檢定輸了也晉升（儀式不是考試）：兩邊都取得資格、給部曲，只有情誼和那一句不同。"""
+    game = _game(on, faction="haoqiang", at="loushang_village")
+    p = game.state.player
+    p.affinities.update({"zhangfei": 30, "guanyu": 30})
+    _summon_to(game, 4, "haoqiang")
+    game.rng = FixedRandom(0.0 if win else 0.99)
+    game.choose("act:summons")
+    msgs = game.choose("choice:2")
+    assert text in msgs and "你取得一方之主的資格，候缺。" in msgs
+    assert (p.affinities["zhangfei"], p.affinities["guanyu"]) == (30 + zhang, 30 + guan)
+    assert p.qualified and p.followers == ["follower_haoqiang_buqu"] and p.summons is None
+
+
+def test_the_wrestling_check_stays_in_the_danger_band(on):
+    """B3：樓桑里的事件沒有地點與標籤，危險度 1，難度帶 3～6（tests/test_real_content.py 鎖著）：臂力 6。"""
+    choice = on.events["promo_hao_4"].choices[2]
+    assert (choice.check.stat, choice.check.difficulty) == ("str", 6)
+    assert [c.check for c in on.events["promo_hao_4"].choices[:2]] == [None, None]
+
+
+def test_a_whole_guan_career_from_rank_two_to_the_qualification(on):
+    """從第 2 階走到資格：貢獻到了、機緣先沒有——只說一次 HINT；補上機緣才收到召見；兩段演完升第 3 階，然後同樣的路上第 4 階。"""
+    game = _game(on, faction="guan", at="luzhi_camp")
+    p = game.state.player
+    p.rank, p.contrib = 2, 10**6
+    assert ranks.check_summons(game.state, on) == [ranks.HINT]
+    assert ranks.check_summons(game.state, on) == []
+    _ready(game, rank=2, contrib=10**6)
+    assert ranks.check_summons(game.state, on) == ["盧植派人來找你：到盧植營見他。"]
+    game.choose("act:summons")
+    game.choose("choice:0")
+    p.location = "luoyang_palace"
+    game.choose("act:summons")
+    msgs = game.choose("choice:0")
+    assert p.rank == 3 and ranks.HINT in msgs  # 第 4 階的進度到了、機緣還沒有：升階的那一下行動最後的檢查就說了
+    assert p.rank_hinted == [3, 4] and ranks.check_summons(game.state, on) == []
+    _ready(game, rank=3, contrib=10**6)  # 補上第 4 階的機緣
+    assert ranks.check_summons(game.state, on) == ["何進召你到大將軍府。"]
+    p.location = "dajiangjun_fu"
+    game.choose("act:summons")
+    game.choose("choice:2")
+    assert (p.rank, p.qualified, p.summons, p.followers) == (
+        3, True, None, ["follower_guan_spear", "follower_guan_crossbow"])
+    assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+
+
+@pytest.mark.parametrize("slot", ["effect", "fail_effect"])
+def test_promote_and_followers_are_checked_in_the_fail_effect_too(real, slot):
+    """m3（Task 1 review）：promote／followers 只能寫在晉升奇遇的選項上，成功與失敗兩邊都查（promo_hao_4 是第一則在 fail_effect 用到的）。"""
+    stray = next(e for e in real.events.values() if not e.id.startswith("promo_") and e.choices)
+    setattr(stray.choices[0], slot, Effect(promote=3))
+    with pytest.raises(ContentError, match="promote／followers 只能寫在晉升奇遇"):
+        validate(real)
+
+
+def test_followers_in_the_fail_effect_must_belong_to_the_faction(real):
+    real.events["promo_hao_4"].choices[2].fail_effect.followers = ["follower_guan_spear"]
+    with pytest.raises(ContentError, match="給的部下要是 haoqiang 的"):
+        validate(real)
+    real.events["promo_hao_4"].choices[2].fail_effect.followers = ["follower_no_such"]
+    with pytest.raises(ContentError, match="follower_no_such"):
+        validate(real)
