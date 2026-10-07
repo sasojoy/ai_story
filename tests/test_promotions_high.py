@@ -1949,3 +1949,46 @@ def test_rank_two_is_still_promised_the_rank_up(on):
     game.state.player.stats["fame"] = _hejin_bar(game) - 3
     assert _hejin_bar(game) == 25
     assert "或在官軍再升一階" in game._brush_off("hejin")[0]  # noqa: SLF001
+
+
+# ── 企劃者裁決 E5.1（2026-10-07）：「給他。」銀兩不夠 50 時不出現 ─────────────────
+# 三則授印（何進一前一後、營中授印）的「給他。」花 50 兩；原本銀兩不夠也按得下去（apply_effect 把銀兩夾在 0，少付了照樣有效果）。
+# 只加條件（min_stats），選項的字是 joy 的、不動。另外兩個選項沒有條件，畫面上至少還有兩個。
+
+GIVE = "「給他。」"
+SEAL_EVENTS = ("promo_guan_4", "promo_guan_4_late", "promo_guan_4_camp")
+
+
+def _seal_scene(on, event_id, silver):
+    game = _game(on, faction="guan", at="dajiangjun_fu", rank=3)
+    game.state.player.stats["silver"] = silver
+    game.state.pending_event = event_id
+    return game
+
+
+def _labels(game):
+    return [o.label for o in game.options(odds=False)]
+
+
+@pytest.mark.parametrize("event_id", SEAL_EVENTS)
+def test_the_give_option_needs_fifty_silver(on, event_id):
+    poor = _seal_scene(on, event_id, 49)
+    assert not any(label.startswith(GIVE) for label in _labels(poor))
+    assert {"choice:1", "choice:2"} <= {o.id for o in poor.options(odds=False)}  # 另外兩個選項的 id 不變
+    assert poor.choose("choice:0") == ["（此刻無法這麼做。）"]  # 舊的選單硬按：被拒絕，什麼都沒扣
+    p = poor.state.player
+    assert (p.stats["silver"], p.qualified, poor.state.pending_event) == (49, False, event_id)
+    rich = _seal_scene(on, event_id, 50)
+    assert any(label.startswith(GIVE) for label in _labels(rich))
+    rich.choose("choice:0")
+    assert (rich.state.player.stats["silver"], rich.state.player.qualified) == (0, True)
+
+
+def test_every_give_option_is_gated_by_its_own_price(on):
+    """三則都照實際的價錢擋（50 兩，effect.stats.silver）；拿掉其中一則的條件、或條件跟價錢對不上，這裡就紅。"""
+    gives = [(e.id, ch) for e in on.events.values() if e.id in SEAL_EVENTS for ch in e.choices if ch.text == GIVE]
+    assert sorted(eid for eid, _ in gives) == sorted(SEAL_EVENTS)
+    for eid, ch in gives:
+        price = -ch.effect.stats["silver"]
+        assert price == 50, eid
+        assert ch.condition is not None and ch.condition.min_stats == {"silver": price}, eid
