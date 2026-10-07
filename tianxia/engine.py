@@ -4887,6 +4887,48 @@ class Game:
         self._write("輪替席次", [msg], tag="管理者")
         return self._log([msg])
 
+    # ── 管理者：三場大戲（管理者觸發鈕第 3 組）──────────────────────
+    # 「立刻開戰」（admin_start_battle）早就照時刻表開時刻表決戰（world.open_showdown：照版本挑那一筆、照前線戰況定起點、
+    # 在 WorldState.showdowns_opened 記下開過了，時間到了不再開）。這裡只是每一場一顆鈕、照時刻表的大事認，按不下去時說清楚為什麼。
+
+    def admin_showdowns(self) -> list[tuple[TimetableEvent, str | None]]:
+        """三場大戲那三顆鈕：時刻表上的每一件決戰，與此刻按下去會被拒絕的原因（開得了是 None）。這一季沒有時刻表時是空的。"""
+        if not season_one(self.content, self.state.world):
+            return []
+        return [(e, self._showdown_refusal(e)) for e in self.content.timetable if e.kind == "showdown"]
+
+    def _showdown_refusal(self, event: TimetableEvent) -> str | None:
+        """這一件決戰此刻開不開得了：已經結算、已經開過（時刻表那一份記號，開過就不再開）、要看別的大事定版本而那件還沒結算
+        （宛城，PM 2026-10-05）、另一場還在集結或開打，都開不了。"""
+        w = self.state.world
+        if event.id in w.timeline:
+            return f"（{event.title}已經結算了。）"
+        if event.id in w.showdowns_opened:
+            return f"（{event.title}已經開打過了。）"
+        if event.version_from is not None and event.version_from not in w.timeline:
+            source = self._timetable_event(event.version_from)
+            return f"（{event.title}要等{source.title if source else event.version_from}結算了才知道是哪一版。）"
+        battle = self.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            return "（已經有一場戰鬥在進行。）"
+        if showdown_battle(self.state, self.content, event) is None:
+            return f"（內容裡沒有{event.title}這一場的戰鬥。）"
+        return None
+
+    def admin_start_showdown(self, event_id: str, now: float) -> list[str]:
+        """立刻開時刻表上這一場決戰：照時刻表開（admin_start_battle → world.open_showdown，跟時間到了一樣：同一個函式、同一句集結
+        號角），開過就記在 showdowns_opened，排定的時間到了不再開。版本照此刻的規則（宛城看第 3 週的結果）。"""
+        refusal = self._timetable_refusal("開這一場決戰")
+        if refusal:
+            return self._log(refusal)
+        event = self._timetable_event(event_id)
+        if event is None or event.kind != "showdown":
+            return self._log(["（時刻表上沒有這一場決戰。）"])
+        why = self._showdown_refusal(event)
+        if why:
+            return self._log([why])
+        return self.admin_start_battle(showdown_battle(self.state, self.content, event).id, now)
+
     # ── 畫面文字 ──────────────────────────────────────────
 
     def location_text(self) -> str:

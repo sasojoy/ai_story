@@ -62,7 +62,7 @@ def _player(client, login="shen_01", name="沈青衫"):
 
 
 NEW_OPS = (
-    ("issue_orders", {}), ("rotate_seats", {}),
+    ("issue_orders", {}), ("rotate_seats", {}), ("start_showdown", {"id": "changshe_fire"}),
 )
 
 
@@ -88,6 +88,19 @@ def test_weekly_ops_reach_the_engine(client):
     assert "第 1 週沒有上一週的貢獻可排" in out["message"]
 
 
+def test_showdown_buttons_list_and_open_through_the_route(client):
+    game = _admin(client)
+    rows = client.get("/api/admin").json()["showdowns"]
+    assert [(r["id"], r["label"], r["enabled"]) for r in rows] == [
+        ("changshe_fire", "長社火攻", True), ("wancheng", "宛城之戰", False), ("guangzong", "廣宗決戰", True)]
+    assert "要等張曼成攻殺南陽太守結算" in rows[1]["note"]
+    out = client.post("/api/do/start_showdown", json={"id": "changshe_fire"}).json()
+    assert "長社火攻的集結號角已經吹響" in out["message"]
+    assert game.world.get_battle().battle_id == "changshe_fire"
+    rows = client.get("/api/admin").json()["showdowns"]
+    assert [r["enabled"] for r in rows] == [False, False, False] and "已經開打過了" in rows[0]["note"]
+
+
 # ── 網頁 ─────────────────────────────────────────────
 
 
@@ -101,13 +114,16 @@ def _views(client):
 def test_the_new_controls_are_drawn_only_for_admins(client):
     _, main, admin = _views(client)
     sheet = run(main, "return H.sheetHtml();", S={"admin": admin})
-    for text in ('data-op="issue_orders"', 'data-op="rotate_seats"', "立刻發本週軍令", "立刻輪替第 4 階席次"):
+    for text in ('data-op="issue_orders"', 'data-op="rotate_seats"', "立刻發本週軍令", "立刻輪替第 4 階席次",
+                 'data-op="start_showdown" data-id="changshe_fire">立刻開這一場',
+                 'data-op="start_showdown" data-id="wancheng" disabled>立刻開這一場', "要等張曼成攻殺南陽太守結算",
+                 'data-op="start_showdown" data-id="guangzong">立刻開這一場'):
         assert text in sheet, text
     player = run({**main, "admin": False}, "return H.sheetHtml();", S={"admin": admin})
-    for text in ("管理者工具", "issue_orders", "rotate_seats"):
+    for text in ("管理者工具", "issue_orders", "rotate_seats", "start_showdown"):
         assert text not in player, text
-    beta = run(main, "return H.sheetHtml();", S={"admin": {**admin, "season_one": False}})
-    assert "issue_orders" not in beta  # 開關關著：沒有每週的事
+    beta = run(main, "return H.sheetHtml();", S={"admin": {**admin, "season_one": False, "showdowns": []}})
+    assert "issue_orders" not in beta and "start_showdown" not in beta  # 開關關著：沒有每週的事、沒有三場大戲
 
 
 CLICK = """return (async () => {
@@ -140,3 +156,13 @@ def test_weekly_buttons_ask_then_post_to_their_routes(client):
     assert "立刻發本週軍令" in out["asked"][0] and "立刻輪替第 4 階席次" in out["asked"][1]
     posts = [c for c in out["calls"] if c[0].startswith("/api/do/")]
     assert [c[0] for c in posts] == ["/api/do/issue_orders", "/api/do/rotate_seats"]
+
+
+@needs_node
+def test_a_showdown_button_asks_by_name_then_posts_its_id(client):
+    _, main, admin = _views(client)
+    out = _click(main, admin, [{"act": "admin", "op": "start_showdown", "id": "guangzong"}],
+                 {"/api/do/": {"main": main, "message": "好了"}})
+    assert "立刻開「廣宗決戰」" in out["asked"][0]
+    [post] = [c for c in out["calls"] if c[0].startswith("/api/do/")]
+    assert post[0] == "/api/do/start_showdown" and post[1]["id"] == "guangzong"

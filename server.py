@@ -937,6 +937,11 @@ def admin_choices(game: Game) -> dict:
         **timetable_choices(game),
         # 這一季照第一季的規則（開關開著、開季時蓋了章）：管理者區多「每週的事」（立刻發本週軍令、立刻輪替第 4 階席次）
         "season_one": rules.season_one(CONTENT, world),
+        # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
+        "showdowns": [
+            {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
+            for event, why in game.admin_showdowns()
+        ],
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
@@ -1266,6 +1271,8 @@ ADMIN_ACTIONS = {
     # 管理者觸發鈕（企劃者 2026-10-07）：每週的事照週一的做法立刻再做一次
     "issue_orders": lambda g, b: g.admin_issue_orders(),
     "rotate_seats": lambda g, b: g.admin_rotate_seats(),
+    # 三場大戲：照時刻表開（跟「立刻開戰」同一條路），開過就算開過
+    "start_showdown": lambda g, b: g.admin_start_showdown(str(b.get("id", "")), time.time()),
 }
 
 

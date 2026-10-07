@@ -171,3 +171,88 @@ def test_rotate_seats_refused_with_the_switch_off(real):
     admin = _game(real)
     assert admin.admin_rotate_seats() == ["（這一季沒有第 4 階席次。）"]
     assert seats.SEAT_RANK == 4
+
+
+# ── 第 3 組：三場大戲 ─────────────────────────────────────
+
+
+def _battle(game):
+    battle = game.world.get_battle()
+    return None if battle is None or battle.phase == "ended" else battle
+
+
+def test_start_showdown_opens_exactly_as_the_timetable_would(on, tmp_path):
+    """雙胞胎同一刻：A 讓時刻表自然開長社（排定的時間就是此刻，季的事把它記進等著開的、推進之後開集結——world 的同一串函式），
+    B 按「立刻開這一場」。兩邊開出來的那一場（哪一筆、起點、集結截止……整份）、集結號角、開過的記號一模一樣。"""
+    from tianxia import world as world_mod
+
+    a, b = _twins(on, tmp_path)
+
+    def due_now(season):
+        season.schedule["changshe_fire"] = season.time
+        world_mod._note_due_showdowns(world_mod._season_vehicle(on, season), on)  # noqa: SLF001  季的事那一步
+    a.world.mutate_season(due_now)
+    natural = world_mod.start_pending_battle(a.world, on, NOW)
+    pressed = b.admin_start_showdown("changshe_fire", NOW)
+    assert natural == pressed == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
+    assert b.world.get_battle().model_dump() == a.world.get_battle().model_dump()
+    assert b.world.get_season().showdowns_opened == a.world.get_season().showdowns_opened == {"changshe_fire": "changshe_fire"}
+
+
+def test_an_early_start_counts_as_happened_so_the_date_passes_quietly(on):
+    """第 1 週就開了長社、取消掉（時間軸上沒有結果，只剩開過的記號）：排定的日子過了也不再開集結。"""
+    admin = _game(on)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    first = admin.world.get_battle().record_id
+    admin.admin_cancel_battle()
+    season = admin.world.get_season()
+    assert "changshe_fire" not in season.timeline and "changshe_fire" in season.showdowns_opened
+    cal_hour = calendar.cal_hour_seconds(on, season)
+    past = NOW + (season.schedule["changshe_fire"] + 3 * cal_hour - season.time)
+    admin.sync(past)
+    after = admin.world.get_season()
+    assert after.time > season.schedule["changshe_fire"] and "changshe_fire" not in after.showdowns_waiting
+    assert admin.world.get_battle() is None  # 沒有第二場
+    assert [battle.record_id for _, battle in admin.world.ended_battles()] == [first]
+    assert admin.admin_start_showdown("changshe_fire", past) == ["（長社火攻已經開打過了。）"]
+
+
+def test_an_active_battle_blocks_the_buttons(on):
+    admin = _game(on)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    battle = admin.world.get_battle().model_dump()
+    assert admin.admin_start_showdown("guangzong", NOW) == ["（已經有一場戰鬥在進行。）"]
+    assert admin.world.get_battle().model_dump() == battle and "guangzong" not in admin.world.get_season().showdowns_opened
+    notes = {event.id: why for event, why in admin.admin_showdowns()}
+    assert notes["guangzong"] == "（已經有一場戰鬥在進行。）" and notes["changshe_fire"] == "（長社火攻已經開打過了。）"
+
+
+@pytest.mark.parametrize(("week3", "battle_id"), [("成", "wancheng_jia"), ("不成", "wancheng_yi")])
+def test_wancheng_takes_the_version_the_rule_picks(on, week3, battle_id):
+    """宛城看第 3 週（張曼成攻殺南陽太守）的結果：還沒結算時按不下去、說要等它；結算之後開的是那一版。"""
+    admin = _game(on)
+    assert admin.admin_start_showdown("wancheng", NOW) == ["（宛城之戰要等張曼成攻殺南陽太守結算了才知道是哪一版。）"]
+    assert admin.world.get_battle() is None
+    admin.admin_resolve_event("zhangmancheng_wan", week3)
+    admin.admin_start_showdown("wancheng", NOW)
+    assert _battle(admin).battle_id == battle_id
+    assert admin.world.get_season().showdowns_opened == {"wancheng": battle_id}
+
+
+def test_start_showdown_refusals(on):
+    player = _game(on, "甲")
+    assert player.admin_start_showdown("changshe_fire", NOW) == ["（只有管理者能開這一場決戰。）"]
+    admin = _game(on)
+    assert admin.admin_start_showdown("luzhi_siege", NOW) == ["（時刻表上沒有這一場決戰。）"]
+    assert admin.admin_start_showdown("nope", NOW) == ["（時刻表上沒有這一場決戰。）"]
+    admin.admin_resolve_event("changshe_fire", "guan:大勝")
+    assert admin.admin_start_showdown("changshe_fire", NOW) == ["（長社火攻已經結算了。）"]
+    assert admin.world.pause_clock(NOW + 1)
+    assert admin.admin_start_showdown("guangzong", NOW + 2) == [PAUSED_REFUSAL]
+    assert admin.world.get_battle() is None
+
+
+def test_start_showdown_refused_with_the_switch_off(real):
+    admin = _game(real)
+    assert admin.admin_start_showdown("changshe_fire", NOW) == ["（這一季沒有時刻表。）"]
+    assert admin.admin_showdowns() == [] and admin.world.get_battle() is None

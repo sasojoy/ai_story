@@ -1776,7 +1776,10 @@
               <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
               ${a.season_one ? `
                 <p class="muted">每週的事（照週一的做法立刻再做一次；下週一照常）</p>
-                <div class="row"><button class="btn small" data-act="admin" data-op="issue_orders">立刻發本週軍令</button><button class="btn small" data-act="admin" data-op="rotate_seats">立刻輪替第 4 階席次</button></div>` : ""}
+                <div class="row wrap"><button class="btn small" data-act="admin" data-op="issue_orders">立刻發本週軍令</button><button class="btn small" data-act="admin" data-op="rotate_seats">立刻輪替第 4 階席次</button></div>` : ""}
+              ${a.showdowns && a.showdowns.length ? `
+                <p class="muted">三場大戲（照時刻表開集結；開過就算這一場開過了，排定的時間到了不會再開）</p>
+                ${a.showdowns.map((s) => `<div class="row ad-row"><span class="ad-tag">${esc(s.label)}</span>${s.note ? `<span class="muted ad-note">${esc(s.note)}</span>` : ""}<button class="btn small" data-act="admin" data-op="start_showdown" data-id="${esc(s.id)}"${s.enabled ? "" : " disabled"}>立刻開這一場</button></div>`).join("")}` : ""}
               ${a.timetable.length ? timetableHtml(a) : ""}
               <p class="muted">救場</p>
               <div class="row ad-row"><span class="ad-tag">戰況</span><select class="input" id="ad-front" aria-label="定戰況的線">${opts(a.trends)}</select><input class="input" id="ad-value" type="number" value="50" min="0" max="100" aria-label="戰況" style="max-width:76px"><button class="btn small" data-act="admin" data-op="set_trend">定戰況</button></div>
@@ -1856,6 +1859,7 @@
       // 管理者觸發鈕（企劃者 2026-10-07）：照 Game.admin_issue_orders／admin_rotate_seats 實際做的事寫
       issue_orders: ["立刻發本週軍令：照週一的做法重挑這一週的軍令、換掉現有的（已經做的進度不算了，已經達成的效果留著），各陣營發一則軍情；下週一照常發令，確定？", "確定重發"],
       rotate_seats: ["立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情；下週一照常再排，確定？", "確定輪替"],
+      start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
     }[op] || ["確定要這麼做？", "確定"];
   }
 
@@ -2377,6 +2381,10 @@
           if (op === "set_trend") { body.id = document.getElementById("ad-front").value; body.value = Number(document.getElementById("ad-value").value || 0); }
           if (op === "resolve_event") { const [id, key] = document.getElementById("ad-result").value.split("|"); body.id = id; body.key = key; }
           if (op === "clear_lock") body.id = document.getElementById("ad-lock").value;
+          if (op === "start_showdown") {
+            body.id = el.dataset.id;
+            body.title = ((S.admin && S.admin.showdowns) || []).find((s) => s.id === body.id)?.label || body.id;
+          }
           const [text, yes] = adminAsk(op, body);
           ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
           break;
