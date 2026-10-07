@@ -1,6 +1,7 @@
 """第一季正式版・丙一：第 3、4 階晉升的機制，與官軍、豪強的四則奇遇（計畫 2026-10-06-第一季正式版-丙一）。
 
-用真實內容（content/）：每個測試拿自己的一份（conftest.real_content 的複本），開關在測試裡才打開。"""
+用真實內容（content/）：每個測試拿自己的一份（conftest.real_content 的複本），開關在測試裡才打開。
+釘住的內容：content/promotions.json、content/events/promotion.json（scripts/test_for.py 改到這兩個檔時靠檔名挑到這裡）。"""
 from __future__ import annotations
 
 import random

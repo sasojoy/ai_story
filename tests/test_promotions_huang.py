@@ -1,7 +1,8 @@
 """第一季正式版・丙二：黃巾的第 3、4 階奇遇（計畫 2026-10-06-第一季正式版-丙二）。
 
 用真實內容（content/）：fixture real、on 在 tests/conftest.py（每個測試拿 real_content 的一份複本，開關在 on 裡才打開）。
-週末設定（人數上限 2）：帶糧 2 份換算成 1。"""
+週末設定（人數上限 2）：帶糧 2 份換算成 1。
+釘住的內容：content/promotions.json、content/events/promotion.json（scripts/test_for.py 改到這兩個檔時靠檔名挑到這裡）。"""
 from __future__ import annotations
 
 import random

@@ -1,6 +1,7 @@
 """第一季正式版・戊一：第 3、4 階的行動（計畫 2026-10-06-第一季正式版-戊一）。
 
-用真實內容（content/）：fixture real、on 在 tests/conftest.py（每個測試拿 real_content 的一份複本；on 是週末設定打開）。"""
+用真實內容（content/）：fixture real、on 在 tests/conftest.py（每個測試拿 real_content 的一份複本；on 是週末設定打開）。
+釘住的內容：content/orders.json 的 rank_actions（scripts/test_for.py 改到這個檔時靠檔名挑到這裡）。"""
 from __future__ import annotations
 
 import random
