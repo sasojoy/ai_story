@@ -16,7 +16,7 @@ from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
     audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
-    trend_value,
+    trend_name, trend_value,
 )
 from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
@@ -292,6 +292,28 @@ def strike_how(state: GameState, content: Content, order: Order) -> str:
     else:
         where = "他在哪裡你還沒摸清"
     return f"到{name}所在的地方挑戰他本人，打贏記一次（{where}）。"
+
+
+def order_how(state: GameState, content: Content, order: Order) -> str:
+    """軍令卡上多寫的一行：這道軍令怎麼出力（FB-093：以前要等做完一次，引薦人的結語才說）。打擊照 strike_how；
+    守城寫陣營自己的守勢行動（巡哨、傳道、保境安民），那一顆收在「此地還能做」裡。地點都是軍令本身就寫出來的，不多洩漏。"""
+    if order.template == "strike":
+        return strike_how(state, content, order)
+    def place(loc_id: str | None) -> str:
+        return content.locations[loc_id].name if loc_id in content.locations else "那裡"
+
+    front = trend_name(content, order.front) if order.front else "戰線"
+    if order.template == "siege":
+        return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
+    if order.template == "defend":
+        duty = content.orders.duties.get(order.faction)
+        return f"在{front}一帶按「{duty.name if duty else '守勢'}」（收在「此地還能做」裡），做一次記一次。"
+    if order.template == "intercept":
+        return f"到{place(order.location)}或附近遊歷，撞上對面的運糧隊、打贏記一次。"
+    if order.template == "escort":
+        return (f"帶 {content.config.convoy_grain} 份糧草到{place(order.start)}接下糧車，"
+                f"送到{place(order.end)}記一次。")
+    return ""
 
 
 def strike_marks(state: GameState, content: Content) -> tuple[set[str], set[str]]:

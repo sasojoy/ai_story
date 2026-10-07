@@ -456,11 +456,13 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
     assert [s.done_when.action for s in e.steps] == ["view_orders", "order"]
     assert set(e.recruiters) == {f.id for f in content.scenario.factions}
     assert {k: v.name for k, v in e.recruiters.items()} == {"guan": "老石", "huang": "青禾", "haoqiang": "季伯平"}
-    for who in e.recruiters.values():
+    for faction_id, who in e.recruiters.items():
         assert who.intro and who.briefing and who.order_hint and who.done and who.rejoin
         assert len(who.lines) == len(e.steps) == 2 and all(who.lines)
         assert not any(line.startswith(who.name) for line in who.lines)  # 框上的名字另外寫（F9）
-        assert who.order_hint == who.lines[1] and who.lines[0] == "看看「本週軍令」"
+        assert who.lines == ["看看「本週軍令」", "挑一道軍令，出一次力"]
+        # FB-093／FB-094：「出一次力」那一步點明軍令卡寫了怎麼做，一時做不到就按營裡的守勢行動（不在軍令裡也算）
+        assert "卡上" in who.order_hint and f"「{content.orders.duties[faction_id].name}」" in who.order_hint
         assert "{" not in "".join([who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines])  # 沒有留下的預留位
     skills = {skill.name for skill in content.skills.values()}  # 引薦人說的營地武學，內容裡真的有（N13）
     for faction_id, names in {

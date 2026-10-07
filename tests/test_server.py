@@ -4015,7 +4015,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
@@ -4184,8 +4184,8 @@ def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
     step = tutorial.steps[1]
     assert main["guide"] == {
         "speaker": tutorial.speaker, "key": step.id, "scene": "", "text": step.text, "line": step.line,
-        "done": main["guide"]["done"], "end": False, "pending": False,
-    }  # key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
+        "done": main["guide"]["done"], "end": False, "pending": False, "glow": [],
+    }  # glow：入伍段「出一次力」那一步才有東西（FB-093）。key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
     assert tutorial.speaker == "師父" and step.id == "p2_apprentice"
     client.post("/api/do/skip_tutorial", json={})
     assert client.get("/api/main").json()["guide"] is None
