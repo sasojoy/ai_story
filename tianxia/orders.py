@@ -241,44 +241,6 @@ def fill(state: GameState, content: Content, order: Order, text: str) -> str:
     return text
 
 
-def duty_name(content: Content, faction: str | None) -> str:
-    """這個陣營的守勢行動叫什麼（巡哨、傳道、保境安民，orders.json 的 duties）；沒有守勢行動的陣營是空字串。"""
-    duty = content.orders.duties.get(faction or "")
-    return duty.name if duty is not None else ""
-
-
-TRAIN_NAME, CONVOY_NAME, CHALLENGE_NAME = "遊歷", "接下糧車", "挑戰"  # 引擎選單上這三個行動的名字（守勢行動的名字照內容）
-
-
-def doable_here(state: GameState, content: Content, faction: str | None, loc_id: str) -> list[tuple[str, str]]:
-    """站在這個地點、這週還沒達成的軍令，做得了的行動（入伍段第一道軍令那一步的框用，FB-093）：（行動叫什麼, 選單上那顆鈕的 id），
-    去重、照軍令的順序。條件跟各行動記功的條件是同一份：攻城、截糧是遊歷打贏（win_counts 同一套地點判斷）、守城是守勢行動
-    （duty_counts）、護糧是在起點接糧車（escort_at）、打擊是人物此刻就在這裡而且挑戰得了（figures.can_challenge）。
-    這裡只看軍令與地點，不看按不按得下去（體力、糧草）：框要不要指它，由呼叫端拿選單上的 id 去對（enlist.how_here）。"""
-    front = rules.front_of(content, loc_id)
-    acts: list[tuple[str, str]] = []
-    for o in current(state, content, faction):
-        if o.done:
-            continue
-        act = None
-        if o.template == "siege" and front is not None and o.front == front and loc_id in siege_places(content, o.faction, o.front):
-            act = (TRAIN_NAME, "act:train")
-        elif o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
-            act = (TRAIN_NAME, "act:train")
-        elif o.template == "defend" and front is not None and o.front == front:
-            act = (duty_name(content, o.faction), "act:duty")
-        elif o.template == "escort" and o.start == loc_id:
-            act = (CONVOY_NAME, "act:convoy")
-        elif (
-            o.template == "strike" and o.figure is not None and figures.can_challenge(state, content, o.figure)
-            and figures.state_of(state, content, o.figure).location == loc_id
-        ):
-            act = (CHALLENGE_NAME, f"act:challenge:{o.figure}")
-        if act and act not in acts:
-            acts.append(act)
-    return acts
-
-
 def _build(
     state: GameState, content: Content, t: OrderTemplate, week: int, front: str | None, fid: str | None,
 ) -> Order:

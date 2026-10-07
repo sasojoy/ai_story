@@ -870,10 +870,6 @@ class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
-    # 第一道軍令那一步（done_when 是 order）框上多的一句（FB-093）：{做法} 換成「你腳下這裡這週的軍令做得了的行動」（巡哨、遊歷……，
-    # orders.doable_here）；一個都做不了時用 how_none。兩句三位引薦人共用（待 joy 潤）
-    how_here: str = ""
-    how_none: str = ""
 
 
 class Tutorial(_Strict):

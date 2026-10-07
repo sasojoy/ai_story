@@ -71,28 +71,6 @@ def test_fb093_the_defence_action_is_named_from_the_content_for_each_side(on):
         assert not any(other in card["how"] for f, other in DUTY.items() if f != faction), faction
 
 
-def test_fb093_the_step_two_box_names_what_you_can_do_where_you_stand(on):
-    """第 2 步的框多一句：你腳下這裡做得了的，是〇〇——在長社（官軍）是巡哨，在黃巾別部營寨（黃巾）是傳道。"""
-    for faction in ("guan", "huang"):
-        game = _enlisted(on, faction)
-        place = JOIN_AT[faction]
-        _order(game, "defend", faction, front=front_of(on, place))
-        box = game.guide_box()
-        assert DUTY[faction] in box["text"] and box["text"].startswith(on.tutorial.enlist.recruiters[faction].order_hint), faction
-        assert box["line"] == "挑一道軍令，出一次力" and not box.get("paged")  # 收起來那一行不動、也不分頁
-
-
-def test_fb093_the_sentence_has_a_fallback_when_nothing_can_be_done_here(on):
-    game = _enlisted(on, "guan")
-    _order(game, "defend", "guan", front=front_of(on, "changshe"))
-    quiet = next(  # 一處不在任何戰線上的地方：這週的軍令沒有一道在這裡做得了
-        loc_id for loc_id, loc in on.locations.items() if front_of(on, loc_id) is None and not loc.prologue_only and not loc.enemies
-    )
-    game.state.player.location = quiet
-    text = game.guide_box()["text"]
-    assert on.tutorial.enlist.how_none in text and DUTY["guan"] not in text
-
-
 def test_fb093_the_ending_no_longer_recites_every_kind(on):
     """結語（做完之後）把「每一種怎麼做」整段背一遍的部分縮成一句誇獎：怎麼做改寫在軍令卡上。"""
     for faction, who in on.tutorial.enlist.recruiters.items():
@@ -159,13 +137,6 @@ def test_fb094_other_actions_do_not_finish_it(on):
     game = _enlisted(on, "guan")
     game.choose("act:rest")
     assert not enlist_done(game.state, on)
-
-
-def test_fb094_the_box_names_the_defence_action_even_without_a_defence_order(on):
-    """豪強這一週沒有守城軍令：框上說你腳下做得了的仍是保境安民（它現在也算數）。"""
-    game = _enlisted(on, "haoqiang", place="cao_manor")
-    assert not any(o.template == "defend" for o in game.state.world.orders)
-    assert DUTY["haoqiang"] in game.guide_box()["text"]
 
 
 def test_fb094_the_magnates_ending_says_what_the_peace_is_for(on):
@@ -433,108 +404,8 @@ def test_fb093_the_step_glows_the_sides_defence_button(on):
 
 
 # ── 審查之後的最後一輪（review-fb.md、fb-fix-brief.md）──────────────────────────────────────────────
-# 第 2 步那一句只點得下去的行動、老石結語不說沒發生的事、火的提醒只在草廬那張卡上、守勢行動只記一次、
-# 「做得了」的判斷（orders.doable_here）每一種軍令各有一個測試。
-
-
-def _here(on, faction, place):
-    return _game(on, faction=faction, at=place)
-
-
-def _doable(game):
-    p = game.state.player
-    return orders.doable_here(game.state, game.content, p.faction, p.location)
-
-
-def _menu(game):
-    return {o.id: o for o in game.options(odds=False, tick=False)}
-
-
-def _agrees_with_the_menu(game, doable):
-    """寫出來的行動名字，跟選單上那顆按得下去的鈕是同一個（名字在 orders 裡寫死一份，這裡把它對回引擎真的標籤；挑戰的標籤是
-    「挑戰某某」，所以看開頭）。"""
-    menu = _menu(game)
-    assert doable, "沒有可對的行動"
-    for name, option_id in doable:
-        assert option_id in menu and menu[option_id].enabled and menu[option_id].label.startswith(name), (name, option_id)
-
-
-def test_fbx_doable_here_for_a_siege_is_a_train_where_the_enemy_can_be_fought(on):
-    front = front_of(on, "changshe")
-    place = orders.siege_places(on, "guan", front)[0]
-    game = _here(on, "guan", place)
-    _order(game, "siege", "guan", front=front)
-    assert _doable(game) == [("遊歷", "act:train")]
-    _agrees_with_the_menu(game, _doable(game))
-    elsewhere = next(loc for loc in on.locations if front_of(on, loc) not in (None, front))  # 別的戰線：這道攻城不在這裡記
-    game.state.player.location = elsewhere
-    assert _doable(game) == []
-    off_front = next(loc for loc in on.locations if front_of(on, loc) is None and not on.locations[loc].prologue_only)
-    game.state.player.location = off_front
-    assert _doable(game) == []
-
-
-def test_fbx_doable_here_for_an_interception_is_a_train_at_the_place_and_its_neighbours(on):
-    where = "hilltop_wilds"
-    game = _here(on, "guan", where)
-    _order(game, "intercept", "guan", location=where)
-    for place in sorted(orders.neighbors(on, where)):
-        game.state.player.location = place
-        assert _doable(game) == [("遊歷", "act:train")], place
-        _agrees_with_the_menu(game, _doable(game))  # 糧隊是這一帶遊歷會多遇上的：這顆鈕真的在
-    far = next(loc for loc in on.locations if loc not in orders.neighbors(on, where) and not on.locations[loc].prologue_only)
-    game.state.player.location = far
-    assert _doable(game) == []
-
-
-def test_fbx_doable_here_for_an_escort_is_taking_the_cart_at_its_start_only(on):
-    game = _here(on, "guan", "luoyang_road")
-    _order(game, "escort", "guan", start="luoyang_road", end="changshe")
-    assert _doable(game) == [("接下糧車", "act:convoy")]
-    assert _menu(game)["act:convoy"].label.startswith("接下糧車")  # 名字對得上（沒有糧草所以灰著，下一個測試管）
-    game.state.player.location = "changshe"  # 終點不是起點
-    assert _doable(game) == []
-
-
-def test_fbx_doable_here_for_a_strike_is_a_challenge_where_the_figure_stands_and_can_be_fought(on, monkeypatch):
-    game = _here(on, "guan", "changshe")
-    fid = next(
-        f for f, fig in on.figures.items() if fig.faction != "guan" and figures.can_challenge(game.state, on, f)
-    )
-    spot = figures.state_of(game.state, on, fid).location
-    game.state.player.location = spot
-    _order(game, "strike", "guan", figure=fid)
-    assert _doable(game) == [("挑戰", f"act:challenge:{fid}")]
-    _agrees_with_the_menu(game, _doable(game))
-    other = next(loc for loc in on.locations if loc != spot and not on.locations[loc].prologue_only)
-    game.state.player.location = other  # 他不在這裡
-    assert _doable(game) == []
-    game.state.player.location = spot
-    monkeypatch.setattr(figures, "can_challenge", lambda *a, **k: False)  # 挑戰不得（戰線空著、退場……）
-    assert _doable(game) == []
-
-
-def test_fbx_the_step_two_sentence_only_names_what_can_be_pressed_now(on):
-    """審查 Minor 3：護糧在起點「做得了」，可是新角色沒有糧草，接下糧車的鈕是灰的；框上不能指一顆按不下去的鈕。
-    都按不下去時（沒有糧草、體力不夠）退回「這裡做不了」那一句。"""
-    game = _enlisted(on, "guan")
-    game.state.world.orders = [o for o in game.state.world.orders if o.faction != "guan"]
-    _order(game, "escort", "guan", start="luoyang_road", end="changshe")
-    game.state.player.location = "luoyang_road"
-    assert not _menu(game)["act:convoy"].enabled and _doable(game) == [("接下糧車", "act:convoy")]
-    text = game.guide_box()["text"]
-    assert "接下糧車" not in text
-    game.state.player.materials = {"man_3": 1}  # 一個天品（9 份）夠了
-    assert _menu(game)["act:convoy"].enabled and "接下糧車" in game.guide_box()["text"]
-    # 體力不夠：巡哨、遊歷都灰；不再叫人去做
-    front_place = JOIN_AT["guan"]
-    game.state.player.location = front_place
-    _order(game, "defend", "guan", front=front_of(on, front_place))
-    assert DUTY["guan"] in game.guide_box()["text"]
-    game.state.player.stamina = 0
-    assert not _menu(game)["act:duty"].enabled
-    quiet = game.guide_box()["text"]
-    assert DUTY["guan"] not in quiet and on.tutorial.enlist.how_none in quiet
+# 老石結語不說沒發生的事、守勢行動只記一次。（第 2 步多的那一句與「做得了」的判斷跟著 FB-093 拿掉了：joy 的版本由引薦人的
+# order_hint 點名守勢行動、軍令卡寫怎麼做；火的提醒跟著 FB-092 拿掉了。）
 
 
 def test_fbx_the_ending_does_not_claim_a_last_action_was_counted(on):

@@ -1735,9 +1735,6 @@ def validate(c: Content) -> None:
             need(not step.done_when.or_actions or step.done_when.action, f"{where}：or_actions 要跟 action 一起寫（action 是主要的那一個）")
             bad = [key for key in step.glow if key not in GLOW_KEYS]
             need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵）")
-        # 第一道軍令那一步框上多的一句（FB-093）：{做法} 要寫在 how_here 裡；兩句要嘛都寫、要嘛都不寫
-        need(bool(enlist.how_here) == bool(enlist.how_none), "入伍段：how_here 與 how_none 要一起寫")
-        need(not enlist.how_here or "{做法}" in enlist.how_here, "入伍段：how_here 要有 {做法}（換成這裡做得了的行動）")
         for faction_id, who in enlist.recruiters.items():
             need(faction_id in faction_ids, f"入伍段：引薦人 {who.name} 的陣營 {faction_id} 不是劇本的陣營")
             need(

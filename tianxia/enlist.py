@@ -2,9 +2,7 @@
 不佔 tutorial_step：記在 PlayerState.enlist_step（None＝還沒開始）。只在第一季開始（beta 季沒有軍令）。"""
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
-
-from . import calendar, orders, rules
+from . import calendar, orders
 from .models import Content, Recruiter
 from .rules import front_of, season_one
 from .state import GameState
@@ -135,27 +133,7 @@ def expire(state: GameState, content: Content) -> list[str]:
     return told(state, content)
 
 
-def how_here(state: GameState, content: Content, enabled: Callable[[], Collection[str]] | None = None) -> str:
-    """第一道軍令那一步框上多的一句（FB-093）：你腳下這裡這週的軍令做得了的行動（orders.doable_here）；一個都做不了寫 how_none。
-    內容沒寫這兩句（Enlist.how_here）就是空字串，框跟以前一樣。
-    enabled：回傳「選單上此刻按得下去的鈕的 id」的函式（Game 給的；只在要寫這一句時才叫）。給了就只點名按得下去的：沒有糧草的人
-    不能被指去接糧車、體力見底的人不能被指去巡哨——點名一顆灰的鈕比什麼都不說更糟（審查 Minor 3）。沒給就不過濾（只看軍令與地點）。"""
-    e = content.tutorial.enlist
-    if e is None or not e.how_here:
-        return ""
-    p = state.player
-    acts = orders.doable_here(state, content, p.faction, p.location)
-    duty = orders.duty_name(content, p.faction)  # 守勢行動現在也算第一道（FB-094）：在有戰線的地方，不管這週有沒有守城軍令
-    if duty and (duty, "act:duty") not in acts and rules.front_of(content, p.location) is not None:
-        acts.append((duty, "act:duty"))
-    if enabled is not None:
-        pressable = set(enabled())
-        acts = [act for act in acts if act[1] in pressable]
-    names = list(dict.fromkeys(name for name, _ in acts))
-    return e.how_here.replace("{做法}", "、".join(names)) if names else e.how_none
-
-
-def box(state: GameState, content: Content, enabled: Callable[[], Collection[str]] | None = None) -> dict | None:
+def box(state: GameState, content: Content) -> dict | None:
     """入伍段的對話框：進行中是這一步的話（第一步前面接入營那一段）；剛走完是結尾、等「知道了」。其他是 None。
     key 是這一步的 id（結尾是 "enlist_end"），跟說書人的框同一個欄位（FB-076：網頁記收起記的是它）；
     眼前有事件還沒了結時話換成「先把眼前的「…」了結」、pending 標 True、收起來那一行送空字串（跟說書人的框一樣，FB-063／FB-076，
@@ -174,9 +152,6 @@ def box(state: GameState, content: Content, enabled: Callable[[], Collection[str
         step = _steps(content)[i]
         blocked = pending_line(state, content)
         paragraphs = _texts(who, i)
-        sentence = how_here(state, content, enabled) if step.done_when.action == "order" and blocked is None else ""
-        if sentence:  # 第一道軍令那一步：框上多一句，指出你腳下這裡做得了什麼（FB-093）；接在同一段後面，不分頁
-            paragraphs[-1] = paragraphs[-1].rstrip("。") + "。" + sentence
         box = {
             "speaker": who.name, "key": step.id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
