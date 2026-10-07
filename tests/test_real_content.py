@@ -479,7 +479,7 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
         "guan": {
             "intro": "我姓石，管這一屯。官軍沒什麼大道理：黃巾燒村子，我們就去把火滅了。",
             "briefing": "看這三條線：潁川汝南、南陽、冀州。越往黃巾那頭偏，就越糟。",
-            "done": "「做得乾淨。」老石點點頭，「記著：攻城，就到那條戰線遊歷，打贏對面的兵；",
+            "done": "「做得乾淨。」老石點點頭，「往後每一道怎麼做，軍令卡上都寫著，照著辦就是。",  # FB-093：每一種怎麼做搬到軍令卡上
             "rejoin": "「又是你。……行，回來就好，營裡的規矩你都懂。」",
         },
         "huang": {
@@ -593,6 +593,167 @@ def test_nobody_is_recruitable_anywhere(content):
     """正式內容沒有哪個地點可以招募人：沒有人物標成 kind=recruitable 又寫了招募地點。"""
     recruitable = {cid: ch.recruit_at for cid, ch in content.characters.items() if ch.kind == "recruitable"}
     assert [cid for cid, at in recruitable.items() if at in content.locations] == []
+
+
+def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
+    """碰到才說的 h_recruit（設計 5.2 第 8 條，「第一次碰到能招募的同伴」）寫好了、也接好了（Game._hint_triggers 看 _recruit_target），
+    可是這一季的內容沒有任何人能招募（上面幾個測試），所以它現在在任何地方都不會說。這個測試是留給之後的人看的：哪天有人把某位人物改成
+    可招募（recruitable、有 recruit_at），這裡會叫——那一刻 h_recruit 開始會說：確認它的話（「先交友，交情越深越肯跟你走」）
+    還對得上招募真正的做法、招募的按鈕真的在，再把這個測試改成相反的。"""
+    game = Game.new(content, "甲", rng=random.Random(0))
+    for loc_id in content.locations:
+        game.state.player.location = loc_id
+        assert game._recruit_target() is None, loc_id
+        assert "h_recruit" not in game._hint_triggers(), loc_id
+
+
+# ── 碰到才說的正式內容（新手引導計畫三 Task 3；設計 10.5、10.6）──────────────────────────────
+# content/hints.json 的句子照設計文件原文，**只有這四句改了**（設計寫的跟現在的遊戲對不上，只改事實、其餘照原文；
+# 每一句都是一句白話，待 joy 潤——JSON 沒地方寫記號，所以記在這裡與 task 報告）：
+#   h_cap（師父）：原文「最多五十樣」，上限其實是 50 起跳、隨等級與博聞往上加 → 「有個上限」
+#   h_showdown（老石、青禾）：原文「穩守、猛攻」，現在的招是強攻、固守、奇襲（決戰改版一）
+#   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強是第三方、可以下場（趁亂搶地盤、保存實力，決戰改版五）
+# 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
+PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
+RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
+DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
+
+
+def test_the_real_hint_book_has_all_eighteen(content):
+    from tianxia import hints
+
+    ids = [h.id for h in content.hints.hints]
+    assert len(ids) == 18 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容
+    assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
+
+
+def test_the_real_hint_book_has_the_right_voice_for_each_hint(content):
+    factions = {f.id for f in content.scenario.factions}
+    by_id = {h.id: h for h in content.hints.hints}
+    for hint_id, hint in by_id.items():
+        if hint_id in RECRUITER_HINTS:
+            assert hint.by == "recruiter" and set(hint.texts) == factions and not hint.text, hint_id  # 三個陣營一個不少
+            assert bool(hint.drifter) == (hint_id in DRIFTER_HINTS), hint_id  # 散人版只有 13、14、17；15、16 散人碰不到
+        else:
+            assert hint.by == "mentor" and hint.text and not hint.texts and not hint.drifter, hint_id
+    assert [h for h in RECRUITER_HINTS if h not in by_id] == []
+
+
+def test_hint_text_never_carries_the_mentor_prefix_itself(content):
+    """框上的字由 head 寫（「想起師父說過」）：話本身不重複那個開頭（設計 10.5：前面都加「想起師父說過：」是畫面的事）。"""
+    from tianxia.zh import to_traditional
+
+    lines = [(h.id, "text", h.text) for h in content.hints.hints if h.text]
+    lines += [(h.id, voice, text) for h in content.hints.hints for voice, text in h.texts.items()]
+    lines += [(h.id, "drifter", h.drifter) for h in content.hints.hints if h.drifter]
+    lines.append(("season_return", "text", content.hints.season_return))
+    for hint_id, voice, text in lines:
+        assert "想起師父說過" not in text, (hint_id, voice)
+        assert to_traditional(text) == text, (hint_id, voice)  # 繁體
+
+
+def test_the_merge_hint_points_at_the_craft_tab(content):
+    text = next(h.text for h in content.hints.hints if h.id == "h_merge")
+    assert "『煉製』" in text and "合成" not in text  # 分頁叫「煉製」（企劃者 2026-10-06）
+
+
+def test_the_lines_that_followed_the_game_say_what_the_game_does(content):
+    """設計文件的原文跟現在的遊戲對不上的那四句，改成現在的事實（見上面 PLACEHOLDER_LINES）。"""
+    by_id = {h.id: h for h in content.hints.hints}
+    assert "五十" not in by_id["h_cap"].text and "上限" in by_id["h_cap"].text
+    showdown = by_id["h_showdown"].texts
+    for faction in ("guan", "huang"):
+        assert "穩守" not in showdown[faction] and "猛攻" not in showdown[faction]
+        assert all(move in showdown[faction] for move in ("強攻", "固守", "奇襲")) and "放手一搏" in showdown[faction]
+    assert "不下場" not in showdown["haoqiang"]
+    third = next(b.third for b in content.battles.values() if b.third is not None)
+    assert third.grab in showdown["haoqiang"] and third.keep in showdown["haoqiang"]  # 豪強兩招的名字照決戰的設定
+    assert all(_hint_cells(content).get(key) for key in PLACEHOLDER_LINES)  # 標成待潤的四句真的在書裡（上一版這裡拿它跟自己的字面比，永遠成立）
+
+
+def _hint_cells(content):
+    """提示書裡每一句話，鍵是（提示 id, 誰說的）：師父的 "text"、陣營的 "guan"／"huang"／"haoqiang"、散人的 "drifter"。"""
+    cells = {}
+    for hint in content.hints.hints:
+        if hint.text:
+            cells[(hint.id, "text")] = hint.text
+        cells.update({(hint.id, voice): text for voice, text in hint.texts.items()})
+        if hint.drifter:
+            cells[(hint.id, "drifter")] = hint.drifter
+    return cells
+
+
+# 設計 10.5 的原文，每一句各釘一小段（逐字、挑最能代表那一句的地方）：有人潤字、改壞標點、換了陣營的口氣，這裡會看到。
+# 沒有釘的只有 PLACEHOLDER_LINES 那四句（改成現在的事實，待 joy 潤；它們的事實由上一個測試管）。
+HINT_PINS = {
+    ("h_merge", "text"): "到『煉製』把兩個意境合在一起試試",
+    ("h_clash", "text"): "同一路的，威力多兩成；剛配柔、快配慢這種冤家，打起來互相扯後腿，少兩成",
+    ("h_refine_fail", "text"): "沒成也不白修，下一回機會就大一點",
+    ("h_lose", "text"): "打不過就回去練，江湖上沒人笑你，送了命才有人笑",
+    ("h_injury", "text"): "內傷可不會，它一直壓著你的氣血",
+    ("h_basic_art", "text"): "同一個意境融進不同的底，長出來的功夫就不一樣",
+    ("h_snubbed", "text"): "投了他那一邊、升了階，也算有了門路",
+    ("h_recruit", "text"): "交情越深，人家越肯跟你走",
+    ("h_free_text", "text"): "自己寫一句打算怎麼做，說得通，成算就高",
+    ("h_road", "text"): "邊走邊打聽、邊走邊想，改了主意就折返",
+    ("h_spectator", "text"): "散人有散人的自在，可這一仗輪不到你出手",
+    ("h_mandate", "text"): "等哪天天下人都搶紅了眼，你就知道了",
+    ("h_foreshadow", "guan"): "最後一步下去，那件大事就照咱們的意思落地，別人要到揭曉那天才知道",
+    ("h_foreshadow", "huang"): "片段一塊一塊湊齊，該備的備好，最後一步做下去，大事的結果就暗中定了",
+    ("h_foreshadow", "haoqiang"): "別聲張，揭曉那天再收帳",
+    ("h_foreshadow", "drifter"): "湊齊了、準備好了，最後一步下去，那件大事怎麼收場，就由你在暗中定了",
+    ("h_event_reveal", "guan"): "看三條線誰佔上風，也看有沒有人暗中把它鎖定了",
+    ("h_event_reveal", "huang"): "戰況是大家一刀一槍打出來的，可也有人早就在暗地裡把它定死了",
+    ("h_event_reveal", "haoqiang"): "要是有人早一步在暗中下了注，就照他的意思收場",
+    ("h_event_reveal", "drifter"): "結果不是老天擲骰子。看戰況，也看有沒有人在暗地裡動過手腳",
+    ("h_promotion", "guan"): "在營裡出夠了力，就會被召見、往上升一階",
+    ("h_promotion", "huang"): "替黃天出夠了力，就會被召見、升一階",
+    ("h_promotion", "haoqiang"): "出了力就有回報，被召見、升一階",
+    ("h_figure", "guan"): "軍令要你打擊他，就是這個意思",
+    ("h_figure", "huang"): "一條戰線的勝負都繫在他身上",
+    ("h_figure", "haoqiang"): "要是當面輸了一場，也得先收攤避一避",
+    ("h_figure", "drifter"): "那位就是能左右整條戰線的人物",
+}
+
+
+def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content):
+    """提示書的三十一句：二十七句是設計 10.5 的原文（各釘一段），四句是待 joy 潤的（PLACEHOLDER_LINES）；兩邊合起來正好是書裡的每一句，
+    以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
+    cells = _hint_cells(content)
+    assert len(cells) == 31 and not set(HINT_PINS) & PLACEHOLDER_LINES
+    assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
+    for key, sentence in HINT_PINS.items():
+        assert sentence in cells[key], key
+    assert content.hints.season_return == "「又是一年亂世。徒兒，去吧——記得替為師帶壺好酒回來。」"
+    # 師父說的「兩成」要跟規則是同一個數（h_clash）
+    assert content.config.pairing_bonus == content.config.pairing_penalty == 0.2
+
+
+def test_the_rejoin_greetings_live_in_the_enlistment_block_only(content):
+    """再投靠的招呼（10.6）是計畫二放在 tutorial.json 入伍段的 rejoin：提示表裡不再寫一份。"""
+    enlist = content.tutorial.enlist
+    assert {faction: bool(who.rejoin) for faction, who in enlist.recruiters.items()} == {"guan": True, "huang": True, "haoqiang": True}
+    assert not any(h.id.startswith("s_") for h in content.hints.hints)
+
+
+def test_every_real_hint_can_be_said_by_someone_who_can_meet_it(content):
+    """每一條對某個真的角色說得出來：師父的條散人與有陣營的都說得出；陣營的條有陣營時說得出，散人只有 13、14、17 說得出。"""
+    from tianxia import hints
+    from tianxia.state import new_game_state
+
+    state = new_game_state(content, "甲")
+    factions = [f.id for f in content.scenario.factions]
+    for hint in content.hints.hints:
+        state.player.faction = None  # 散人
+        note = hints.note_for(state, content, hint.id)
+        assert (note is not None) == (hint.by == "mentor" or hint.id in DRIFTER_HINTS), hint.id
+        assert note is None or (note.speaker == content.hints.head and note.by == ""), hint.id  # 散人聽到的都是師父講的
+        for faction in factions:
+            state.player.faction = faction
+            note = hints.note_for(state, content, hint.id)
+            assert note is not None and note.by == (faction if hint.by == "recruiter" else ""), (hint.id, faction)
+            who = content.tutorial.enlist.recruiters[faction].name
+            assert note.speaker == (who if hint.by == "recruiter" else content.hints.head), (hint.id, faction)
 
 
 def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(content):

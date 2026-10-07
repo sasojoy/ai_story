@@ -1,0 +1,1047 @@
+"""第一季正式版・丁：第四階席次與每週輪替（計畫 2026-10-06-第一季正式版-丁）。
+
+用真實內容（content/）：fixture real 在 tests/conftest.py（每個測試拿 real_content 的一份複本），開關在 on 裡才打開。
+席次照人數上限換算：測試裡把人數上限調成 250（0.008 × 250 ＝ 2 席）。"""
+from __future__ import annotations
+
+import random
+
+import pytest
+
+from tianxia import calendar, factions, push, ranks, seats
+from tianxia.engine import Game
+from tianxia.state import WorldState
+
+
+@pytest.fixture
+def on(real):
+    real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 250
+    return real
+
+
+def _qualified(content, name, faction="guan", weeks=None, world=None):
+    game = Game.new(content, name, rng=random.Random(0))
+    game.client = None  # 沒有任何地方會叫模型
+    if world is not None:
+        game.state.world = world
+    p = game.state.player
+    p.faction, p.rank, p.qualified = faction, 3, True
+    p.contrib_weeks = dict(weeks or {})
+    return game
+
+
+# ── Task 1：帳與補缺 ────────────────────────────────────────
+
+
+def test_a_season_saved_before_the_seat_fields_loads_with_empty_ones():
+    old = WorldState(season_one=True).model_dump(mode="json")
+    del old["seat_ledger"], old["seats"]  # 丁之前存的賽季：沒有這兩個鍵
+    w = WorldState.model_validate(old)
+    assert (w.seat_ledger, w.seats) == ({}, {}) and w.season_one
+
+
+def test_report_copies_the_weekly_contribution(on):
+    assert factions.rank4_seats(on.config) == 2
+    game = _qualified(on, "甲", weeks={1: 40, 2: 15})
+    seats.report(game.state, on)
+    assert game.state.world.seat_ledger == {"guan": {"甲": {1: 40, 2: 15}}}
+
+
+def test_the_ledger_is_a_copy_that_the_next_report_replaces(on):
+    game = _qualified(on, "甲", weeks={1: 7})
+    seats.report(game.state, on)
+    game.state.player.contrib_weeks[2] = 3  # 之後又記了一週的貢獻：帳要等下一次抄才換
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: 7}
+    seats.report(game.state, on)
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: 7, 2: 3}
+
+
+def test_the_ledger_keeps_the_order_in_which_they_qualified(on):
+    """插入順序＝拿到資格的先後（同分時先拿到的優先）：再抄一次不改順序。"""
+    w = WorldState(season_one=True)
+    first, second = _qualified(on, "甲", world=w), _qualified(on, "乙", world=w)
+    seats.report(first.state, on)
+    seats.report(second.state, on)
+    first.state.player.contrib_weeks = {1: 9}
+    seats.report(first.state, on)
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙"]
+
+
+def test_each_faction_has_its_own_ledger_and_seats(on):
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    yellow = _qualified(on, "丙", faction="huang", world=w)
+    assert seats.report(yellow.state, on) == ["你補上了大方渠帥的缺，到下週一為止。"]  # 官軍的席次坐滿了，不擋黃巾
+    assert w.seats == {"guan": ["甲", "乙"], "huang": ["丙"]} and set(w.seat_ledger) == {"guan", "huang"}
+
+
+def test_a_free_seat_is_filled_at_once(on):
+    game = _qualified(on, "甲")
+    before = len(game.state.world.rumors)
+    msgs = seats.report(game.state, on)
+    assert msgs == ["你補上了校尉的缺，到下週一為止。"] and seats.seated(game.state)
+    note = game.state.world.rumors[before]
+    assert (note.layer, note.faction, note.text) == ("faction", "guan", "甲補上了校尉的缺。")
+    assert seats.report(game.state, on) == []  # 已經在任：不再說
+
+
+def test_an_anonymous_member_is_named_in_the_faction_note(on):
+    """陣營軍情一律寫本名（傳聞分層第七節）：匿名的人補上了缺，軍情照寫名號。"""
+    game = _qualified(on, "甲")
+    game.state.player.anonymous = True
+    before = len(game.state.world.rumors)
+    seats.report(game.state, on)
+    assert game.state.world.rumors[before].text == "甲補上了校尉的缺。"
+
+
+def test_the_note_names_the_title_of_the_faction(on):
+    for faction, title in (("guan", "校尉"), ("huang", "大方渠帥"), ("haoqiang", "一方之主")):
+        game = _qualified(on, f"甲{faction}", faction=faction)
+        assert seats.report(game.state, on) == [f"你補上了{title}的缺，到下週一為止。"]
+
+
+def test_no_seat_when_full(on):
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    third = _qualified(on, "丙", world=w)
+    assert seats.report(third.state, on) == [] and not seats.seated(third.state)
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙", "丙"]
+
+
+def test_a_full_faction_still_keeps_the_ledger_of_the_others(on):
+    """沒補上缺的人照樣在帳上（週一照帳排，下週他也有機會）。"""
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙", "丙"):
+        seats.report(_qualified(on, name, weeks={1: 5}, world=w).state, on)
+    assert w.seats == {"guan": ["甲", "乙"]}
+    assert w.seat_ledger["guan"]["丙"] == {1: 5}
+
+
+def test_unqualified_members_are_not_on_the_ledger(on):
+    game = _qualified(on, "甲")
+    game.state.player.qualified = False
+    seats.report(game.state, on)
+    assert game.state.world.seat_ledger == {}
+
+
+def test_a_drifter_is_not_on_the_ledger(on):
+    game = _qualified(on, "甲")
+    game.state.player.faction = None
+    assert seats.report(game.state, on) == [] and game.state.world.seat_ledger == {}
+
+
+def test_a_season_opened_without_the_stamp_has_no_seats(on):
+    """開關開著、可是這一季開季時沒蓋章（舊季還在跑）：規則看章，不只看設定（rules.season_one）。"""
+    w = WorldState()  # season_one 預設 False：沒蓋章
+    assert on.config.season_one and not w.season_one
+    game = _qualified(on, "甲", world=w)
+    assert seats.report(game.state, on) == [] and w.seats == {} and w.seat_ledger == {} and w.rumors == []
+
+
+def test_switch_off_no_ledger(real):
+    game = _qualified(real, "甲")
+    assert seats.report(game.state, real) == [] and game.state.world.seat_ledger == {}
+
+
+def test_no_seat_after_the_season_ends(on):
+    """季末那一刻的名單是之後頭銜（設計 13.3）要讀的：休季裡晚到的叛投、同步都不能再改它。"""
+    game = _qualified(on, "甲")
+    game.state.world.ended = True
+    assert seats.report(game.state, on) == [] and game.state.world.seats == {} and game.state.world.seat_ledger == {}
+
+
+def test_a_faction_without_titles_has_no_seats(on, monkeypatch):
+    """_title 找不到第 4 階的頭銜（沒有這個陣營的頭銜表）：不排席次，不寫「你補上了的缺」。現在三個陣營都有，這只是底線。"""
+    monkeypatch.setitem(ranks.TITLES, "guan", ["", "", "", "", ""])
+    game = _qualified(on, "甲")
+    assert seats.report(game.state, on) == [] and game.state.world.seats == {}
+
+
+def test_a_sync_fills_the_seat_once_and_it_sticks(on):
+    """伺服器的輪詢只同步、只存角色（server.poll_main → act_look）：同步補上的缺、抄的帳要存回共用賽季，下一次同步不再補一次。"""
+    from tianxia.characters import open_characters
+
+    game = _qualified(on, "甲", weeks={1: 7})
+    open_characters().save(game.state)
+    first = game.sync(1000.0)
+    assert "你補上了校尉的缺，到下週一為止。" in first
+    assert [e.title for e in game.state.journal if e.title == "席次"] == ["席次"]
+    open_characters().save(game.state)
+    again = Game(on, open_characters().load("甲"), random.Random(0))
+    again.client = None
+    assert again.state.world.seats == {"guan": ["甲"]} and again.state.world.seat_ledger["guan"]["甲"] == {1: 7}
+    assert "你補上了校尉的缺，到下週一為止。" not in again.sync(1010.0)
+    assert [e.title for e in again.state.journal if e.title == "席次"] == ["席次"]  # 紀錄裡也只有一則
+    assert sum(r.text == "甲補上了校尉的缺。" for r in again.world.get_season().rumors) == 1
+
+
+def test_a_sync_copies_the_ledger_of_a_seated_member_too(on):
+    """已經在任的人同步時，只是帳多了新的一週的貢獻：照樣存回去（不然週一排名讀到舊帳）。"""
+    from tianxia.characters import open_characters
+
+    game = _qualified(on, "甲", weeks={1: 7})
+    game.sync(1000.0)
+    game.state.player.contrib_weeks[2] = 5
+    game.sync(1010.0)
+    open_characters().save(game.state)
+    again = Game(on, open_characters().load("甲"), random.Random(0))
+    assert again.state.world.seat_ledger["guan"]["甲"] == {1: 7, 2: 5}
+
+
+def test_the_ledger_is_copied_when_an_action_ends(on):
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.choose("act:explore")
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: 4}
+
+
+def test_the_ledger_is_copied_after_a_fast_trip(on):
+    """疾行送到糧車也記貢獻（engine.travel 與 choose 一樣收在 check_summons 那一行）：travel 也要抄帳。"""
+    game = _qualified(on, "甲", weeks={1: 4})
+    here = on.locations[game.state.player.location]
+    game.travel(str(here.connections[0]), "dash")
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: 4}
+
+
+def test_the_ledger_is_copied_after_a_free_text_answer(on):
+    """隨口應對的效果也可能推大勢、記貢獻（六則真的事件有 trend）：answer_event 也要抄帳。"""
+    game = _qualified(on, "甲", weeks={1: 4})
+    game._present(on.events["jz_gz_deserter"])  # noqa: SLF001
+    request = game.free_text_request("我把他押回去")
+    assert request is not None
+    game.answer_event(request, llm_rate=50)
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: 4}
+
+
+def _credit_inside(monkeypatch, name, points):
+    """讓 Game.<name> 在做完它自己的事之後替這個人記 points 點第 1 週的貢獻（動作自己記的貢獻，推大勢、護糧、密謀都是這樣記的）。"""
+    real = getattr(Game, name)
+
+    def wrapped(self, *args, **kwargs):
+        out = real(self, *args, **kwargs)
+        push.add_contribution(self.state.player, 1, points)
+        return out
+
+    monkeypatch.setattr(Game, name, wrapped)
+
+
+def _assert_ledger_is_the_new_total(game, total):
+    assert game.state.player.contrib_weeks == {1: total}
+    assert game.state.world.seat_ledger["guan"]["甲"] == {1: total}
+
+
+def test_choose_copies_the_ledger_after_the_action_and_the_plots_credit_it(on, monkeypatch):
+    """帳要抄動作自己記的貢獻（週一排名讀它）：抄的那一行排在動作與密謀結算之後，不是之前。"""
+    _credit_inside(monkeypatch, "_act", 3)
+    _credit_inside(monkeypatch, "_settle_plots", 2)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.choose("act:explore")
+    _assert_ledger_is_the_new_total(game, 9)
+
+
+def test_travel_copies_the_ledger_after_the_trip_credits_it(on, monkeypatch):
+    """疾行送到糧車在 _depart 裡記貢獻：travel 抄帳要排在它之後。"""
+    _credit_inside(monkeypatch, "_depart", 3)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.travel(str(on.locations[game.state.player.location].connections[0]), "dash")
+    _assert_ledger_is_the_new_total(game, 7)
+
+
+def test_answer_event_copies_the_ledger_after_the_effect_credits_it(on, monkeypatch):
+    """隨口應對的效果推大勢、記貢獻（apply_effect）：answer_event 抄帳要排在效果之後。"""
+    _credit_inside(monkeypatch, "_apply", 3)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game._present(on.events["jz_gz_deserter"])  # noqa: SLF001
+    request = game.free_text_request("我把他押回去")
+    assert request is not None
+    game.answer_event(request, llm_rate=50)
+    assert game.state.player.contrib_weeks[1] >= 7  # 效果真的記了那 3 點（事件自己的效果也可能再記）
+    assert game.state.world.seat_ledger["guan"]["甲"] == game.state.player.contrib_weeks
+
+
+def test_sync_copies_the_ledger_after_arrivals_and_plots_credit_it(on, monkeypatch):
+    """抵達（護糧送到）與密謀結算都在同步裡記貢獻：抄帳要排在它們之後，不然不在線時記的貢獻週一讀不到。"""
+    _credit_inside(monkeypatch, "_arrivals", 3)
+    _credit_inside(monkeypatch, "_settle_plots", 2)
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.sync(1000.0)
+    _assert_ledger_is_the_new_total(game, 9)
+
+
+def test_a_sync_with_nothing_new_saves_the_season_zero_times(on, monkeypatch):
+    """輪詢每 10 秒同步一次：帳與名單沒變就不存共用賽季（有變才存，才不會每次輪詢都整份重寫）。"""
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    game = _qualified(on, "甲", weeks={1: 4})
+    game.sync(1000.0)  # 補上缺、抄帳：存一次
+    assert len(saves) == 1
+    game.sync(1010.0)
+    game.sync(1020.0)
+    assert len(saves) == 1  # 什麼都沒變：不存
+    game.state.player.contrib_weeks[1] = 6
+    game.sync(1030.0)
+    assert len(saves) == 2  # 帳多了新的貢獻：存
+
+
+def test_a_sync_of_someone_unqualified_never_saves_the_season(on, monkeypatch):
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    plain = Game.new(on, "丙", rng=random.Random(0))
+    plain.client = None
+    plain.state.player.faction = "guan"  # 有陣營、沒有資格
+    plain.sync(1000.0)
+    plain.sync(1010.0)
+    assert saves == [] and plain.state.world.seat_ledger == {}
+
+# ── Task 2：每週輪替、rank_of 與頭銜 ────────────────────────
+
+
+def _season(ledger, faction="guan"):
+    """一份共用賽季：帳照 ledger（名號 → 上一週第 1 週的貢獻）寫好。"""
+    w = WorldState(season_one=True)
+    for name, pts in ledger.items():
+        w.seat_ledger.setdefault(faction, {})[name] = {1: pts}
+    return w
+
+
+def _notes(w, since=0):
+    return [r.text for r in w.rumors[since:] if r.layer == "faction"]
+
+
+def test_rotation_reads_the_ledger_not_the_saves(on):
+    w = _season({"甲": 50, "乙": 10, "丙": 30})
+    game = _qualified(on, "乙", world=w)
+    before = len(w.rumors)
+    assert seats.rotate(game.state, on, 2) == []  # 名單寫在陣營軍情裡，不上天下大事
+    assert w.seats["guan"] == ["甲", "丙"]
+    note = w.rumors[before]
+    assert (note.layer, note.faction, note.text) == ("faction", "guan", "本週在任的校尉：甲、丙。")
+
+
+def test_rotation_ranks_the_week_before_the_one_that_just_began(on):
+    """第 week 週的週一排名讀第 week − 1 週的貢獻：別的週的點數不算。"""
+    w = WorldState(season_one=True)
+    w.seat_ledger["guan"] = {"甲": {1: 5, 2: 90}, "乙": {1: 30, 3: 90}, "丙": {1: 20}}
+    game = _qualified(on, "甲", world=w)
+    seats.rotate(game.state, on, 2)
+    assert w.seats["guan"] == ["乙", "丙"]
+    seats.rotate(game.state, on, 3)  # 第 3 週讀第 2 週：只有甲有
+    assert w.seats["guan"] == ["甲", "乙"]  # 乙、丙第 2 週都是 0：同分照帳上的先後，乙在丙前面
+
+
+def test_a_missing_week_counts_as_zero(on):
+    w = WorldState(season_one=True)
+    w.seat_ledger["guan"] = {"甲": {}, "乙": {1: 1}, "丙": {2: 99}}
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["乙", "甲"]
+
+
+def test_tie_goes_to_the_earlier_qualifier(on):
+    w = _season({"甲": 20, "乙": 20, "丙": 20})
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["甲", "乙"]
+
+
+def test_the_seat_count_follows_the_server_size(on):
+    w = _season({"甲": 9, "乙": 8, "丙": 7})
+    on.config.server_max_players = 50  # 0.008 × 50 ＝ 0.4 席：至少留 1 席
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["甲"]
+
+
+def test_vacancy_fill_lasts_until_monday(on):
+    w = _season({"甲": 50, "乙": 40})
+    w.seats["guan"] = ["甲"]
+    third = _qualified(on, "丙", world=w)
+    seats.report(third.state, on)  # 週三補上
+    assert w.seats["guan"] == ["甲", "丙"]
+    seats.rotate(third.state, on, 2)  # 週一照上週：甲 50、乙 40、丙 0
+    assert w.seats["guan"] == ["甲", "乙"] and not seats.seated(third.state)
+
+
+def test_the_filler_keeps_the_seat_when_last_weeks_work_was_enough(on):
+    """補缺的人上週的功勞夠就留任（「到下週一為止」只是說下週一重排，不是一定下台）。"""
+    w = _season({"甲": 50, "乙": 40})
+    w.seats["guan"] = ["甲"]
+    third = _qualified(on, "丙", weeks={1: 45}, world=w)
+    seats.report(third.state, on)
+    seats.rotate(third.state, on, 2)
+    assert w.seats["guan"] == ["甲", "丙"] and seats.seated(third.state)
+
+
+def test_each_faction_rotates_on_its_own_ledger(on):
+    w = _season({"甲": 5, "乙": 9, "丙": 1})
+    w.seat_ledger["huang"] = {"丁": {1: 3}, "戊": {1: 8}}
+    before = len(w.rumors)
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats == {"guan": ["乙", "甲"], "huang": ["戊", "丁"]}
+    notes = w.rumors[before:]
+    assert [(r.faction, r.text) for r in notes] == [
+        ("guan", "本週在任的校尉：乙、甲。"), ("huang", "本週在任的大方渠帥：戊、丁。"),
+    ]
+
+
+def test_the_list_is_posted_every_monday_even_when_nobody_changed(on):
+    """第一季設計（晉升奇遇 §一、傳聞分層 4.1）：每週上任另外發一則陣營軍情，名單沒變的那一週也發。"""
+    w = _season({"甲": 50, "乙": 40})
+    w.seats["guan"] = ["甲", "乙"]
+    before = len(w.rumors)
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["甲", "乙"] and _notes(w, before) == ["本週在任的校尉：甲、乙。"]
+
+
+def test_a_reshuffle_of_the_same_people_is_posted_in_the_new_order(on):
+    """排的先後變了、在任的還是同一批人：名單照新的排名寫回，軍情照新的排名寫。"""
+    w = _season({"甲": 10, "乙": 60})
+    w.seats["guan"] = ["甲", "乙"]
+    before = len(w.rumors)
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["乙", "甲"]
+    assert _notes(w, before) == ["本週在任的校尉：乙、甲。"]
+
+
+def test_a_changed_list_posts_one_note_even_when_only_one_seat_moves(on):
+    w = _season({"甲": 50, "乙": 10, "丙": 40})
+    w.seats["guan"] = ["甲", "乙"]
+    before = len(w.rumors)
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert _notes(w, before) == ["本週在任的校尉：甲、丙。"]
+
+
+def test_a_faction_whose_ledger_emptied_loses_its_seats_without_a_note(on):
+    """帳上沒有人（叛投讓出席次之後的底線）：名單清空，不發「本週在任的校尉：。」這種空句。"""
+    w = WorldState(season_one=True)
+    w.seat_ledger["guan"] = {}
+    w.seats["guan"] = ["甲"]
+    before = len(w.rumors)
+    seats.rotate(_qualified(on, "乙", world=w).state, on, 2)
+    assert w.seats["guan"] == [] and len(w.rumors) == before
+
+
+def test_a_faction_without_titles_is_left_alone_by_the_rotation(on, monkeypatch):
+    """跟 report 一樣：找不到第 4 階的頭銜就不排、不發「本週在任的：…」這種缺了頭銜的句子。"""
+    monkeypatch.setitem(ranks.TITLES, "guan", ["", "", "", "", ""])
+    w = _season({"甲": 50, "乙": 40})
+    w.seats["guan"] = ["乙"]
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["乙"] and w.rumors == []
+
+
+def test_rotation_never_posts_to_the_world_news(on):
+    """名單是陣營軍情，不上天下大事（傳聞分層 4.1）：公開的傳聞一則都沒多。"""
+    w = _season({"甲": 50})
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert [r.layer for r in w.rumors] == ["faction"]
+
+
+def test_rotation_does_nothing_in_a_season_opened_without_the_stamp(on):
+    w = _season({"甲": 50})
+    w.season_one = False  # 這一季開季時沒蓋章：舊季照舊
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats == {} and w.rumors == []
+
+
+def test_the_config_switch_off_stops_a_stamped_season(on):
+    """管理者把 Config.season_one 關掉、資料庫裡卻還有一季蓋著章：規則兩個都要看（rules.season_one），beta 的規則一個字不變。"""
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", weeks={1: 5}, world=w)
+    on.config.season_one = False
+    assert seats.report(game.state, on) == [] and w.seats == {} and w.seat_ledger == {} and w.rumors == []
+    w.seat_ledger["guan"] = {"甲": {1: 5}}
+    assert seats.rotate(game.state, on, 2) == [] and w.seats == {} and w.rumors == []
+    w.seat_ledger["guan"], w.seats["guan"] = {"甲": {1: 5}}, ["甲"]
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)  # 規則關著：連除名也不動
+    assert w.seats == {"guan": ["甲"]} and w.seat_ledger == {"guan": {"甲": {1: 5}}}
+
+
+def test_rotation_leaves_the_ended_season_alone(on):
+    """季末那一刻的名單是之後頭銜要讀的（設計 13.3）：收季之後的週一不再排。"""
+    w = _season({"甲": 50, "乙": 40})
+    w.seats["guan"] = ["乙"]
+    w.ended = True
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["乙"]
+
+
+def test_rank_and_title_follow_the_seat(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    assert ranks.rank_of(game.state) == 3 and ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+    w.seats["guan"] = ["甲"]
+    assert ranks.rank_of(game.state) == 4 and ranks.title(on, game.state) == "校尉"
+    w.seats["guan"] = []  # 週一被擠下來：回到候缺
+    assert ranks.rank_of(game.state) == 3 and ranks.title(on, game.state) == "軍司馬（校尉候缺）"
+
+
+def test_the_title_of_a_seated_member_in_each_faction(on):
+    for faction, title in (("guan", "校尉"), ("huang", "大方渠帥"), ("haoqiang", "一方之主")):
+        w = WorldState(season_one=True)
+        game = _qualified(on, f"甲{faction}", faction=faction, world=w)
+        seats.report(game.state, on)
+        assert (ranks.rank_of(game.state), ranks.title(on, game.state)) == (4, title)
+
+
+def test_a_seat_in_another_faction_does_not_count(on):
+    """在任看自己陣營的名單：別的陣營的名單上剛好有同名的人（叛投前的舊帳）不算。"""
+    w = WorldState(season_one=True)
+    w.seats["huang"] = ["甲"]
+    game = _qualified(on, "甲", faction="guan", world=w)
+    assert ranks.rank_of(game.state) == 3
+
+
+def test_an_unqualified_name_on_the_list_is_still_rank_three_or_below(on):
+    """rank_of 只有「有資格而且在任」才是 4：沒資格的人就算名號在名單上（不該發生）也不被抬成第 4 階。"""
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    game.state.player.qualified = False
+    w.seats["guan"] = ["甲"]
+    assert ranks.rank_of(game.state) == 3 and ranks.title(on, game.state) == "軍司馬"
+
+
+def test_a_drifter_is_rank_zero_whatever_the_list_says(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    game.state.player.faction = None
+    w.seats["guan"] = ["甲"]
+    assert ranks.rank_of(game.state) == 0
+
+
+def test_the_stored_rank_stays_three_for_a_seated_member(on):
+    """存檔的階（PlayerState.rank）不隨席次動：求見門檻（audience_bar）還讀它；第 4 階只是 rank_of 看的此刻，
+    next_rank_up 讀 rank_of ＋ 1，超過 HIGHEST_RANK 就是 None。"""
+    game = _qualified(on, "甲")
+    seats.report(game.state, on)
+    assert game.state.player.rank == 3 and ranks.rank_of(game.state) == 4
+    assert ranks.next_rank_up(game.state, on) is None  # 沒有第 5 階：被打發時不會許諾「再升一階」
+
+
+def test_the_defection_prompt_names_the_seat_title(on):
+    from tianxia import defection
+
+    game = _qualified(on, "甲")
+    seats.report(game.state, on)
+    text = defection.prompt(game.state, on, on.scenario.faction("huang"), "")
+    assert "身份歸零（你現在是校尉）" in text  # 讓出席次這個代價就寫在頭銜裡，沒有另寫一句
+
+
+def test_the_defection_prompt_for_a_waiting_candidate_names_the_candidacy(on):
+    from tianxia import defection
+
+    game = _qualified(on, "甲")
+    text = defection.prompt(game.state, on, on.scenario.faction("huang"), "")
+    assert "身份歸零（你現在是軍司馬（校尉候缺））" in text
+
+
+def test_the_status_line_shows_the_seat_title(on):
+    game = _qualified(on, "甲")
+    assert game.status_data()["affiliation"].endswith("軍司馬（校尉候缺）")
+    seats.report(game.state, on)
+    assert game.status_data()["affiliation"].endswith("校尉")
+
+
+def test_the_week_hook_runs_the_rotation(on):
+    from tianxia import world as world_mod
+
+    w = _season({"甲": 50})
+    w.hooked_week = 2  # 週一的掛鉤跑的時候 hooked_week 已經是剛跨進的那一週
+    game = _qualified(on, "甲", world=w)
+    world_mod.WEEK_HOOKS[0](game.state, on, random.Random(0))  # 排第一個：在軍令發令之前
+    assert w.seats["guan"] == ["甲"]
+
+
+def _real_seconds_to_week(content, game, week):
+    """從開季算起，到第 week 週週一 00:00 要多少現實秒（世界秒 ÷ time_scale）。"""
+    return calendar.week_start(week, content, game.state.world) / content.config.time_scale
+
+
+def _two_challengers(game):
+    """第 1 週：帳上多了兩個上一週比甲多做事的人（乙 50、丙 40），甲 7；席次兩席。第 1 週的掛鉤（開季那一刻）已經跑過了。"""
+    def _apply(season):
+        season.seat_ledger.update({"guan": {"乙": {1: 50}, "丙": {1: 40}, "甲": {1: 7}}})
+        season.hooked_week = 1
+
+    game.world.mutate_season(_apply)
+
+
+def test_a_season_walking_into_week_two_rotates_the_seats_then_issues_the_orders(on, monkeypatch):
+    """整條路：時間走進第 2 週，掛鉤先排席次、再發軍令（軍令之後要讀在任的人）；每週只排一次、只發一則。"""
+    from tianxia import orders
+
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    order_calls = []
+    real_issue = orders.issue
+
+    def spy(state, content, week, rng):
+        order_calls.append(list(state.world.seats.get("guan", [])))  # 發令那一刻，席次已經排好了
+        return real_issue(state, content, week, rng)
+
+    monkeypatch.setattr(orders, "issue", spy)
+    game.sync(1000.0)
+    assert game.world.get_season().seats["guan"] == ["甲"]  # 週內：甲補上了缺（兩席還空一席）
+    order_calls.clear()
+    week_two = 1000.0 + _real_seconds_to_week(on, game, 2) + 5
+    game.sync(week_two)
+    season = game.world.get_season()
+    assert season.seats["guan"] == ["乙", "丙"]
+    assert order_calls == [["乙", "丙"]]
+    assert _notes(season).count("本週在任的校尉：乙、丙。") == 1
+    game.sync(week_two + 4)  # 同一週再同步：不再排、不再發
+    assert _notes(game.world.get_season()).count("本週在任的校尉：乙、丙。") == 1
+
+
+def test_two_players_syncing_across_a_monday_post_one_note_and_every_monday_posts(on):
+    """名單是共用賽季裡每週一的掛鉤發的：兩個人先後同步走過同一個週一還是一則；下一個週一名單沒變也再發一則。"""
+    first = _qualified(on, "甲", weeks={1: 7})
+    second = _qualified(on, "乙", weeks={1: 50})
+    _two_challengers(first)
+    first.sync(1000.0)
+    second.sync(1000.0)
+    assert first.world.get_season().seats["guan"] == ["甲", "乙"]
+    note = "本週在任的校尉：乙、丙。"
+    week_two = 1000.0 + _real_seconds_to_week(on, first, 2) + 5
+    first.sync(week_two)
+    second.sync(week_two + 1)
+    first.sync(week_two + 2)
+    assert _notes(first.world.get_season()).count(note) == 1
+    week_three = 1000.0 + _real_seconds_to_week(on, first, 3) + 5
+    second.sync(week_three)
+    first.sync(week_three + 1)
+    season = first.world.get_season()
+    assert season.seats["guan"] == ["乙", "丙"]  # 第 2 週沒人記貢獻：同分，照帳上的先後
+    assert _notes(season).count(note) == 2  # 名單沒變的那一週也發
+
+
+# ── N5：賽季時鐘暫停時凍結世界的變化 ─────────────────────
+
+
+def _pause(game, now):
+    assert game.world.pause_clock(now)
+
+
+def _resume(game, now):
+    from tianxia.world import resume_season_clock
+
+    assert resume_season_clock(game.world, game.content, now, random.Random(0), "繼續。") is not None
+
+
+def test_a_pause_holds_the_seat_fill_and_the_resume_fills_it_once(on):
+    from tianxia.characters import open_characters
+
+    game = _qualified(on, "甲", weeks={1: 7})
+    _pause(game, 1000.0)
+    msgs = game.sync(1100.0)
+    assert "你補上了校尉的缺，到下週一為止。" not in msgs
+    season = game.world.get_season()
+    assert season.seats == {} and season.seat_ledger == {}  # 暫停中不補缺、帳也不動
+    assert [r.text for r in season.rumors if "補上" in r.text] == []
+    assert [e.title for e in game.state.journal if e.title == "席次"] == []
+    _resume(game, 1200.0)
+    assert "你補上了校尉的缺，到下週一為止。" in game.sync(1210.0)
+    open_characters().save(game.state)
+    season = game.world.get_season()
+    assert season.seats == {"guan": ["甲"]} and season.seat_ledger["guan"]["甲"] == {1: 7}
+    assert sum(r.text == "甲補上了校尉的缺。" for r in season.rumors) == 1
+    assert "你補上了校尉的缺，到下週一為止。" not in game.sync(1220.0)
+    assert [e.title for e in game.state.journal if e.title == "席次"] == ["席次"]
+
+
+def test_an_action_during_a_pause_does_not_fill_a_seat(on):
+    """伺服器本來就擋暫停中的動作；引擎自己也不在暫停中補缺。choose 與隨口應對在引擎裡本來就被擋（選單只剩一顆灰的、
+    free_text_request 回 None），到不了抄帳那一行；travel 沒有這一層，直接叫它（測試與腳本的路）就靠 _report_seat 擋。"""
+    game = _qualified(on, "甲", weeks={1: 7})
+    _pause(game, 1000.0)
+    assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
+    game.travel(str(on.locations[game.state.player.location].connections[0]), "dash")
+    game._present(on.events["jz_gz_deserter"])  # noqa: SLF001
+    assert game.free_text_request("我把他押回去") is None
+    assert game.world.get_season().seats == {} and game.world.get_season().seat_ledger == {}
+    _resume(game, 1500.0)
+    assert "你補上了校尉的缺，到下週一為止。" in game.sync(1510.0)
+
+
+def test_a_pause_holds_the_monday_rotation_and_the_resume_rotates_once(on):
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    game.sync(1000.0)  # 甲補上空著的缺
+    store = game.world
+    assert store.get_season().seats["guan"] == ["甲"]
+    hooked = store.get_season().hooked_week
+    week_two = _real_seconds_to_week(on, game, 2)
+    _pause(game, 1001.0)
+    game.sync(1000.0 + week_two + 100)  # 現實時間已經過了週一，可是賽季時鐘停著
+    season = store.get_season()
+    assert season.hooked_week == hooked and season.seats["guan"] == ["甲"]
+    assert _notes(season).count("本週在任的校尉：乙、丙。") == 0
+    resume_at = 1000.0 + week_two + 200
+    _resume(game, resume_at)
+    game.sync(resume_at + week_two)  # 繼續之後走過週一
+    season = store.get_season()
+    assert season.hooked_week == hooked + 1 and season.seats["guan"] == ["乙", "丙"]
+    assert _notes(season).count("本週在任的校尉：乙、丙。") == 1
+    game.sync(resume_at + week_two + 30)
+    assert _notes(store.get_season()).count("本週在任的校尉：乙、丙。") == 1
+    assert ranks.title(on, game.state) == "軍司馬（校尉候缺）"  # 甲被擠下來了：回到候缺
+
+
+# ── Task 3：叛投讓出席次 ──────────────────────────────────
+
+
+def _huang(content):
+    return next(f for f in content.scenario.factions if f.id == "huang")
+
+
+def _defect_through_the_menu(game, now):
+    """照伺服器的做法：先同步（讀最新的共用賽季），再走叛投的兩步（站在黃巾的投靠點）。"""
+    game.state.player.location = "huangjin_camp"
+    game.sync(now)
+    game.choose("defect:huang")
+    return game.choose("defect:confirm")
+
+
+def test_defection_frees_the_seat(on):
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    holder.state.player.location = "huangjin_camp"
+    defection.defect(holder.state, on, _huang(on))
+    assert "甲" not in w.seat_ledger.get("guan", {}) and "甲" not in w.seats.get("guan", [])
+    nxt = _qualified(on, "乙", world=w)
+    assert seats.report(nxt.state, on) == ["你補上了校尉的缺，到下週一為止。"]
+
+
+def test_leave_takes_only_the_one_name_out_of_the_one_faction(on):
+    w = WorldState(season_one=True)
+    a, b = _qualified(on, "甲", world=w), _qualified(on, "乙", world=w)
+    other = _qualified(on, "丙", faction="huang", world=w)
+    for g in (a, b, other):
+        seats.report(g.state, on)
+    w.seat_ledger["huang"]["甲"] = {1: 1}  # 別的陣營的帳上剛好也有同名的人（不該發生；叛投走過的人在舊陣營已經被拿掉）：只拿叫到的那個陣營
+    w.seats["huang"].append("甲")
+    seats.leave(a.state, "guan")
+    assert w.seats == {"guan": ["乙"], "huang": ["丙", "甲"]}
+    assert list(w.seat_ledger["guan"]) == ["乙"] and list(w.seat_ledger["huang"]) == ["丙", "甲"]
+    seats.leave(other.state, "guan")  # 不是他的陣營：什麼都不動
+    assert w.seats == {"guan": ["乙"], "huang": ["丙", "甲"]}
+
+
+def test_leave_keeps_the_order_of_the_others(on):
+    w = WorldState(season_one=True)
+    games = [_qualified(on, name, world=w) for name in ("甲", "乙", "丙", "丁")]
+    for g in games:
+        seats.report(g.state, on)
+    seats.leave(games[1].state, "guan")
+    assert list(w.seat_ledger["guan"]) == ["甲", "丙", "丁"]  # 同分時先拿到資格的優先：剩下的人先後不變
+    assert w.seats["guan"] == ["甲"]  # 乙讓出的缺還空著（甲、乙原本坐滿兩席）
+
+
+def test_leave_with_nothing_on_the_books_is_harmless(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    seats.leave(game.state, "guan")  # 沒有帳也沒有名單
+    seats.leave(game.state, "huang")
+    assert w.seat_ledger == {} and w.seats == {}  # 也不留下空的陣營項目
+
+
+def test_a_waiting_candidate_who_defects_leaves_the_ledger_too(on):
+    """還沒補上缺、在帳上候缺的人叛投：帳上也拿掉，不然週一的排名會把一個已經不在這個陣營的人排進去。"""
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    waiting = _qualified(on, "丙", weeks={1: 99}, world=w)
+    seats.report(waiting.state, on)
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙", "丙"] and w.seats["guan"] == ["甲", "乙"]
+    defection.defect(waiting.state, on, _huang(on))
+    assert list(w.seat_ledger["guan"]) == ["甲", "乙"] and w.seats["guan"] == ["甲", "乙"]
+
+
+def test_a_defector_does_not_come_back_on_monday(on):
+    """沒有幽靈席次：上一週貢獻最多的人叛投走了，週一的排名讀不到他，名單與軍情裡都沒有他。"""
+    from tianxia import defection
+
+    w = _season({"甲": 90, "乙": 40, "丙": 30})
+    holder = _qualified(on, "甲", weeks={1: 90}, world=w)
+    w.seats["guan"] = ["甲", "乙"]
+    defection.defect(holder.state, on, _huang(on))
+    before = len(w.rumors)
+    seats.rotate(holder.state, on, 2)
+    assert w.seats["guan"] == ["乙", "丙"]
+    assert _notes(w, before) == ["本週在任的校尉：乙、丙。"]
+
+
+def test_the_defector_holds_no_seat_in_the_new_faction(on):
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    defection.defect(holder.state, on, _huang(on))
+    assert holder.state.player.faction == "huang" and not holder.state.player.qualified
+    assert not seats.seated(holder.state) and ranks.rank_of(holder.state) == 1
+    assert ranks.title(on, holder.state) == "信眾"
+    # 舊陣營那邊也讓出來了：叛投當下就讓（defect 呼叫 leave），不等他下一次抄帳的除名（report 的 _drop_stale 是第二道）
+    assert w.seats.get("guan", []) == [] and "甲" not in w.seat_ledger.get("guan", {})
+    assert seats.report(holder.state, on) == [] and w.seats.get("huang", []) == []  # 新陣營要重新晉升
+
+
+def test_seated_reads_the_current_faction_only(on):
+    """名單照陣營分開：在任看的是自己現在的陣營的名單。叛投走 defect（它呼叫 leave）之後，舊陣營的名單上沒有他，新陣營也沒有。"""
+    from tianxia import defection
+
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    assert seats.seated(holder.state) and w.seats == {"guan": ["甲"]}
+    defection.defect(holder.state, on, _huang(on))
+    assert not seats.seated(holder.state)
+    assert w.seats == {"guan": []}  # 沒有幽靈席次：舊名單空出來，新陣營從頭來
+
+
+def test_a_seated_holder_who_defects_through_the_menu_leaves_no_ghost(on):
+    """走真正的選單：叛投確定那一下，共用賽季裡席次與帳都沒有他；同一個動作結尾的抄帳也沒有把他寫回去。"""
+    holder = _qualified(on, "甲", weeks={1: 9})
+    holder.sync(1000.0)
+    assert holder.world.get_season().seats["guan"] == ["甲"]
+    msgs = _defect_through_the_menu(holder, 1010.0)
+    assert "你叛出官軍，投了黃巾軍。" in msgs
+    season = holder.world.get_season()
+    assert season.seats["guan"] == [] and "甲" not in season.seat_ledger["guan"]
+    assert holder.state.player.faction == "huang" and ranks.title(on, holder.state) == "信眾"
+    holder.sync(1020.0)  # 之後的輪詢也不會把他寫回去
+    season = holder.world.get_season()
+    assert season.seats["guan"] == [] and "甲" not in season.seat_ledger["guan"]
+
+
+def test_the_next_waiting_member_fills_the_freed_seat_on_the_next_poll(on):
+    """甲讓出席次；候缺的丙下一次輪詢（只同步、只存角色）就補上，存得住、不補第二次。"""
+    from tianxia.characters import open_characters
+
+    holder = _qualified(on, "甲", weeks={1: 9})
+    second = _qualified(on, "乙", weeks={1: 5})
+    waiting = _qualified(on, "丙", weeks={1: 3})
+    for game, now in ((holder, 1000.0), (second, 1001.0), (waiting, 1002.0)):
+        game.sync(now)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["甲", "乙"] and list(season.seat_ledger["guan"]) == ["甲", "乙", "丙"]
+    assert ranks.title(on, waiting.state) == "軍司馬（校尉候缺）"
+    _defect_through_the_menu(holder, 1010.0)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["乙"] and list(season.seat_ledger["guan"]) == ["乙", "丙"]
+    msgs = waiting.sync(1020.0)
+    assert "你補上了校尉的缺，到下週一為止。" in msgs and ranks.title(on, waiting.state) == "校尉"
+    open_characters().save(waiting.state)
+    again = Game(on, open_characters().load("丙"), random.Random(0))
+    again.client = None
+    assert again.state.world.seats["guan"] == ["乙", "丙"]
+    assert "你補上了校尉的缺，到下週一為止。" not in again.sync(1030.0)
+    assert sum(r.text == "丙補上了校尉的缺。" for r in again.world.get_season().rumors) == 1
+
+
+def test_a_pause_holds_the_refill_of_a_freed_seat_until_the_resume(on):
+    holder = _qualified(on, "甲", weeks={1: 9})
+    waiting = _qualified(on, "乙", weeks={1: 5})
+    third = _qualified(on, "丙", weeks={1: 3})
+    for game, now in ((holder, 1000.0), (waiting, 1001.0), (third, 1002.0)):
+        game.sync(now)
+    assert holder.world.get_season().seats["guan"] == ["甲", "乙"]
+    _defect_through_the_menu(holder, 1010.0)
+    assert holder.world.get_season().seats["guan"] == ["乙"]
+    _pause(third, 1011.0)
+    assert "你補上了校尉的缺，到下週一為止。" not in third.sync(1100.0)
+    assert holder.world.get_season().seats["guan"] == ["乙"]  # 暫停中：空著的缺不補
+    _resume(third, 1200.0)
+    assert "你補上了校尉的缺，到下週一為止。" in third.sync(1210.0)
+    assert holder.world.get_season().seats["guan"] == ["乙", "丙"]
+    assert "你補上了校尉的缺，到下週一為止。" not in third.sync(1220.0)  # 只補一次
+
+
+# ── 修正輪：名字不再符合資格時從帳與名單拿掉（沒有幽靈席次）──────────
+
+
+def _on_the_books(w, name, faction="guan"):
+    return name in w.seat_ledger.get(faction, {}), name in w.seats.get(faction, [])
+
+
+def test_report_drops_a_name_that_no_longer_qualifies(on):
+    """名號還在席次帳與名單上，可是這個人現在不是有資格的人（存檔讀不懂、重新開始成散人）：自己的下一次抄帳把他拿掉。"""
+    w = WorldState(season_one=True)
+    for name in ("甲", "乙"):
+        seats.report(_qualified(on, name, world=w).state, on)
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified, fresh.state.player.rank = None, False, 0
+    assert seats.report(fresh.state, on) == []
+    assert _on_the_books(w, "甲") == (False, False) and _on_the_books(w, "乙") == (True, True)  # 別人不動
+    assert list(w.seat_ledger["guan"]) == ["乙"]
+
+
+def test_report_drops_a_member_who_is_in_the_faction_but_no_longer_qualified(on):
+    w = WorldState(season_one=True)
+    holder = _qualified(on, "甲", world=w)
+    seats.report(holder.state, on)
+    holder.state.player.qualified = False  # 還在官軍，可是資格沒了（重新開始後再投靠回來也一樣）
+    seats.report(holder.state, on)
+    assert _on_the_books(w, "甲") == (False, False)
+
+
+def test_report_drops_the_name_from_the_other_factions_but_keeps_its_own(on):
+    w = WorldState(season_one=True)
+    for faction in ("guan", "haoqiang"):
+        w.seat_ledger[faction] = {"甲": {1: 3}}
+        w.seats[faction] = ["甲"]
+    game = _qualified(on, "甲", faction="huang", world=w)
+    assert seats.report(game.state, on) == ["你補上了大方渠帥的缺，到下週一為止。"]
+    assert _on_the_books(w, "甲", "guan") == (False, False) and _on_the_books(w, "甲", "haoqiang") == (False, False)
+    assert _on_the_books(w, "甲", "huang") == (True, True)  # 自己現在的陣營：照常抄、照常補
+
+
+def test_report_keeps_a_qualified_holders_own_books(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", weeks={1: 5}, world=w)
+    seats.report(game.state, on)
+    game.state.player.contrib_weeks[2] = 4
+    seats.report(game.state, on)
+    assert w.seat_ledger == {"guan": {"甲": {1: 5, 2: 4}}} and w.seats == {"guan": ["甲"]}
+
+
+def test_the_cleanup_leaves_the_frozen_list_of_an_ended_season_alone(on):
+    """季末那一刻的名單是之後頭銜要讀的（設計 13.3）：收季之後沒人再動它，也不替誰除名。"""
+    w = WorldState(season_one=True)
+    w.seat_ledger["guan"], w.seats["guan"], w.ended = {"甲": {1: 3}}, ["甲"], True
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)
+    assert _on_the_books(w, "甲") == (True, True)
+
+
+def test_the_cleanup_needs_the_season_rules_on(on):
+    off = WorldState()  # 沒蓋章：這一季是舊規則
+    off.seat_ledger["guan"], off.seats["guan"] = {"甲": {1: 3}}, ["甲"]
+    fresh = _qualified(on, "甲", world=off)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)
+    assert _on_the_books(off, "甲") == (True, True)
+
+
+def test_a_restarted_character_does_not_keep_a_ghost_seat(on, monkeypatch):
+    """伺服器重現（server.open_game）：存檔讀不懂，備份起來，同一個名號重新開始成散人。席次帳與名單上的名字不能留下來，
+    不然週一會一直把他排回去，這個缺整季都被一個不在這個陣營的人佔著。清理在他重新開始後的第一次同步，而且要存回共用賽季。"""
+    import server
+    from tianxia.characters import name_key, open_characters
+
+    monkeypatch.setattr(server, "CONTENT", on)
+    holder, other = _qualified(on, "甲", weeks={1: 9}), _qualified(on, "乙", weeks={1: 5})
+    holder.world.mutate_season(lambda s: setattr(s, "hooked_week", 1))  # 第 1 週的掛鉤（開季那一刻）已經跑過了
+    for game, now in ((holder, 1000.0), (other, 1001.0)):
+        game.sync(now)
+        open_characters().save(game.state)
+    season = holder.world.get_season()
+    assert season.seats["guan"] == ["甲", "乙"]
+    with open_characters().db.transaction() as conn:  # 佈署之後存檔格式不相容
+        conn.execute("UPDATE characters SET data = '{not json' WHERE key = ?", (name_key("甲"),))
+    restarted = server.open_game("甲")
+    restarted.client = None
+    assert restarted.state.player.faction is None and not restarted.state.player.qualified
+    restarted.sync(1010.0)
+    season = restarted.world.get_season()
+    assert season.seats["guan"] == ["乙"] and list(season.seat_ledger["guan"]) == ["乙"]
+    restarted.sync(1020.0)
+    other.sync(1030.0)
+    week_two = 1000.0 + _real_seconds_to_week(on, restarted, 2) + 5
+    other.sync(week_two)  # 週一：排名讀不到他
+    season = restarted.world.get_season()
+    assert season.seats["guan"] == ["乙"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙。"]
+
+
+def test_a_sync_saves_the_season_once_for_the_cleanup_and_never_for_a_stranger(on, monkeypatch):
+    saves = []
+    real_save = Game._save_season  # noqa: SLF001
+    monkeypatch.setattr(Game, "_save_season", lambda self: saves.append(1) or real_save(self))
+    holder = _qualified(on, "甲", weeks={1: 4})
+    holder.sync(1000.0)
+    del saves[:]
+    fresh = Game.new(on, "甲", rng=random.Random(0))  # 重新開始的甲：散人
+    fresh.client = None
+    fresh.sync(1010.0)
+    assert len(saves) == 1 and holder.world.get_season().seats["guan"] == []
+    fresh.sync(1020.0)
+    assert len(saves) == 1  # 清過了：不再存
+    stranger = Game.new(on, "路人", rng=random.Random(0))
+    stranger.client = None
+    stranger.sync(1030.0)
+    stranger.sync(1040.0)
+    assert len(saves) == 1  # 沒有名字在帳上的人，同步不碰共用賽季
+
+
+def test_on_the_books_looks_in_every_faction_ledger_and_list(on):
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", world=w)
+    assert not seats.on_the_books(game.state)
+    w.seat_ledger["huang"] = {"甲": {}}  # 只在別的陣營的帳上
+    assert seats.on_the_books(game.state)
+    w.seat_ledger.clear()
+    w.seats["haoqiang"] = ["甲"]  # 只在名單上（不該單獨出現，可是兩處各自都要看）
+    assert seats.on_the_books(game.state)
+    w.seats.clear()
+    w.seat_ledger["guan"], w.seats["guan"] = {"乙": {}}, ["乙"]
+    assert not seats.on_the_books(game.state)
+
+
+def test_a_catch_up_over_several_mondays_posts_one_note_per_monday_stamped_at_that_monday(on):
+    """伺服器停了幾週、第一次同步一口氣補過第 2 到第 5 週的週一：每個週一各一則，時間記在那個週一，不是一則也不是每個人各四則。"""
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    game.sync(1000.0)
+    game.sync(1000.0 + _real_seconds_to_week(on, game, 5) + 5)
+    season = game.world.get_season()
+    assert season.hooked_week == 5
+    notes = [r for r in season.rumors if r.text.startswith("本週在任的校尉：")]
+    assert [r.text for r in notes] == ["本週在任的校尉：乙、丙。"] * 4
+    assert [r.time for r in notes] == pytest.approx([calendar.week_start(k, on, season) for k in (2, 3, 4, 5)])
+    assert all(r.layer == "faction" and r.faction == "guan" for r in notes)
+
+
+def test_a_monday_inside_the_unsynced_stretch_before_a_pause_rotates_once_after_the_resume(on):
+    """暫停前還沒補算的那一段裡就跨過了週一（沒人同步、主機端直接暫停）：暫停中不排，繼續時補算那一段才排，只排一次。"""
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    game.sync(1000.0)
+    store = game.world
+    week_two = _real_seconds_to_week(on, game, 2)
+    _pause(game, 1000.0 + week_two + 50)  # 現實裡週一已經過了，賽季時間還沒有人補算
+    game.sync(1000.0 + week_two + 500)  # 暫停中的輪詢：什麼都不動
+    season = store.get_season()
+    assert season.hooked_week == 1 and season.seats["guan"] == ["甲"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == []
+    _resume(game, 1000.0 + week_two + 800)  # 繼續：補算暫停前的那一段，週一在這裡跨過去
+    season = store.get_season()
+    assert season.hooked_week == 2 and season.seats["guan"] == ["乙", "丙"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
+    game.sync(1000.0 + week_two + 830)
+    assert [t for t in _notes(store.get_season()) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
+
+
+def test_the_week_one_hook_has_no_last_week_to_rank(on):
+    """第 1 週的掛鉤沒有「上一週」可排（讀的是第 0 週、全是 0 分）：什麼都不動、不發名單。補缺（report）照常，空缺是當下補的。"""
+    w = _season({"甲": 50, "乙": 40, "丙": 30})
+    w.seats["guan"] = ["丙"]
+    before = len(w.rumors)
+    assert seats.rotate(_qualified(on, "甲", world=w).state, on, 1) == []
+    assert w.seats["guan"] == ["丙"] and len(w.rumors) == before
+    seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
+    assert w.seats["guan"] == ["甲", "乙"]
+
+
+def test_rank_numbers_come_from_one_place():
+    """第 4 階的階號只在 seats 寫一次：rank_of 在任回它、頭銜表用它當索引、存檔的階最高是它少一。"""
+    assert ranks.SEAT_RANK == seats.SEAT_RANK == 4 and ranks.HIGHEST_RANK == seats.SEAT_RANK - 1
+    assert all(len(titles) == seats.SEAT_RANK + 1 for titles in ranks.TITLES.values())  # 0 號是空字串，1～4 是頭銜

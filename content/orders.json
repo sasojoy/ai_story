@@ -114,6 +114,12 @@
       "huang": {"intercept": "baima_ford", "escort": ["xiaquyang", "julu_altar"]}
     }
   },
+  "how": {
+    "siege": "到{戰線}遊歷，打贏對面的兵，贏一場記一次。",
+    "defend": "在{戰線}的地方做「{守勢}」，做一次記一次。",
+    "intercept": "到{地點}或相鄰的站遊歷，撞上敵方的糧隊就打，打贏記一次。",
+    "escort": "先備好糧草（{糧草}份），到{起點}接下糧車，一路送到{終點}。"
+  },
   "duties": {
     "guan": {"name": "巡哨", "text": "你帶人沿{地點}的道路巡了一圈，盤查了幾個形跡可疑的人，沒出什麼事。"},
     "huang": {"name": "傳道", "text": "你在{地點}的村口講了一段黃天的道理，幾個面黃肌瘦的鄉民聽完，向你討了一碗符水。"},
@@ -127,6 +133,18 @@
               "ok": "你在{地點}的村口畫符化水，一個發熱的孩子喝下之後睡安穩了，他娘跪下來給你磕頭。",
               "fail": "你在{地點}畫了符、化了水，那家人道了謝，眼神裡卻還是將信將疑。"}
   },
+  "rank_actions": [
+    {"id": "incite", "faction": "huang", "rank": 3, "name": "在一地煽動起事", "stamina": 20, "weekly": 3,
+     "tags": ["城鎮"], "check": {"stat": "wis", "difficulty": 7}, "push": 5,
+     "ok": "你在{地點}的市集上振臂一呼：「蒼天已死，黃天當立！」幾十個鄉民扯下頭巾，換上了黃的。",
+     "fail": "你在{地點}喊了半天，圍觀的人一鬨而散，怕官府來抓。"},
+    {"id": "fortify", "faction": "haoqiang", "rank": 3, "name": "修築塢堡", "stamina": 20, "weekly": 3,
+     "chaos_only": true, "push": 5,
+     "ok": "你帶著部曲在{地點}挖溝築牆，一座塢堡的雛形立了起來，附近的鄉民扛著家當往裡搬。"},
+    {"id": "seize", "faction": "haoqiang", "rank": 4, "name": "趁亂占據郡縣", "stamina": 30, "weekly": 1,
+     "tags": ["城鎮"], "chaos_only": true, "push": 10,
+     "ok": "趁著官軍與黃巾殺得難分難解，你帶人進了{地點}的縣衙，把官印收進了自己的匣子。"}
+  ],
   "commander_fallback": {"guan": "營中", "huang": "渠帥", "haoqiang": "家主"},
   "callers": [
     {"figure": "zhangjiao", "text": "大賢良師有令"},

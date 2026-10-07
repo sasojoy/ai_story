@@ -587,6 +587,7 @@ def test_enlistment_after_joining_only_in_season_one(on):
     from tianxia import guide
 
     game = _game(on, at="changshe")
+    game.set_hints_off(True)  # 這個測試看入伍段的框：長社站著大勢人物，真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）
     off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
     assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步
     game.state.player.tutorial_step = BASE  # 序章十一步做完了
@@ -638,7 +639,10 @@ def test_a_returning_player_who_finished_the_tutorial_keeps_going(on):
     game = _game(on)
     game.state.player.tutorial_step = BASE
     game._reset_player_for_new_season(2)
-    assert game.state.player.tutorial_step == BASE and game.guide_box() is None
+    assert game.state.player.tutorial_step == BASE
+    assert game.guide_box()["key"] == "s_return"  # 沒有引導的框了，只有開季師父送行的一句（碰到才說，新手引導計畫三）
+    game.guide_ack()
+    assert game.guide_box() is None
 
 
 # ── Task 9：假人照軍令出力、第一週走完一道軍令 ─────────────────────

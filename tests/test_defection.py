@@ -207,6 +207,20 @@ def test_defect_leaves_old_faction_sect_only(on):
     assert other.state.player.sect == "cao_manor"
 
 
+def test_defecting_drops_the_old_sides_queued_hints(on):
+    """碰到才說（新手引導計畫三，N7）：舊陣營的引薦人排著還沒說的提示作廢（新的一邊碰到時由新的引薦人說）；師父那一條照舊。"""
+    from tianxia.state import HintNote
+
+    game = _game(on, faction="guan", at="huangjin_camp")
+    p = game.state.player
+    p.hint_queue = [
+        HintNote(id="h_promotion", speaker="老石", text="上頭點你的名了。", by="guan"),
+        HintNote(id="h_merge", speaker="想起師父說過", text="意境可以合。"),
+    ]
+    defection.defect(game.state, on, _faction(on, "huang"))
+    assert [n.id for n in p.hint_queue] == ["h_merge"]
+
+
 def test_clear_progress_is_the_one_place_to_reset():
     p = PlayerState(name="甲", location="x", stats={}, stamina=0, rank=3, contrib=5, followers=["a"])
     defection.clear_progress(p)

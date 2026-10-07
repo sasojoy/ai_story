@@ -20,6 +20,7 @@ ESTIMATE_SEED = 20260929  # 固定種子：同樣的情況每次都算出同樣�
 WIN_TIERS = {"大勝", "險勝"}
 DRAW_TIERS = {"僵持"}
 ODDS = ((90, "穩勝"), (65, "有把握"), (35, "五五波"), (10, "凶險"))  # 勝率（%）門檻；再低就是必敗
+DOOMED = "必敗"  # 勝算最低的那一個字；遊歷按鈕寫了它，按下去要先問一次（FB-095，Game._train_option 認這個字）
 
 
 COMBAT_STATS = ("str", "agi", "con", "wis", "lore")  # 五屬性：升級給點、狀態列、＋鈕、事件檢定都照這份與這個順序；
@@ -765,7 +766,7 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
     for pct, word in ODDS:
         if wins * 100 >= pct * runs:
             return word
-    return "必敗"
+    return DOOMED
 
 
 def estimate(

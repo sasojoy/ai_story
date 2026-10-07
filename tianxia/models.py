@@ -62,6 +62,7 @@ class Condition(_Strict):
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
+    grain_min: int = Field(default=0, ge=0)  # 糧草至少幾份（基準量，照 foreshadow.need 換算；0＝不檢查；正式版丙二的帶糧選項）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
     # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
     fight_tiers: list[str] = Field(default_factory=list)
@@ -72,6 +73,15 @@ Condition.model_rebuild()
 
 
 FRONT_KEY = "front"  # Effect.trend／Location.train_trend 的特殊鍵：效果發生地所在大區的戰線（rules.resolve_trend）
+
+
+class EventMod(_Strict):
+    """一般伏筆（伏筆文件 4.4）：event 那件大事 side 那一方的成功率 +amount；那件大事還沒結算才算，全服合計夾在 ±0.20
+    （timetable.add_mod）。只有擲骰的大事（有 roll_side）才有意義，content.validate 擋別的。"""
+
+    event: str
+    side: Literal["guan", "huang"]
+    amount: float
 
 
 class Effect(_Strict):
@@ -100,6 +110,14 @@ class Effect(_Strict):
     promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
     followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
     affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（夾在 0～100，訊息「皇甫嵩情誼 +10」）
+    # ── 第 3、4 階晉升（正式版丙一）：同樣只寫在晉升奇遇的選項上，各自的規則見 content.check_promotions ──
+    summons_next: str | None = None  # 寫這一則事件自己的 id：演完這一段，召見往下一段（只有最後一段以前的奇遇可以）
+    event_mods: list[EventMod] = Field(default_factory=list)  # 一般伏筆：某件擲骰大事的成功率修正（暗中的，不寫字）
+    patron: Literal["yuan", "cao", "self"] | None = None  # 豪強升第 3 階時記下的靠山（PlayerState.patron）
+    # ── 黃巾的第 3、4 階奇遇（正式版丙二）；份量與片段數都是基準量／序號，載入時檢查（content.check_effect） ──
+    donate_grain: dict[str, int] = Field(default_factory=dict)  # 捐糧：據點 id → 基準量（照 foreshadow.need 換算）；同護糧送到，記捐獻與一次推動的貢獻
+    fs_fragments: list[str] = Field(default_factory=list)  # 直接給一則伏筆片段：「鏈 id:片段序號」（0 起）；做得了那條鏈的人才給、聽過的不再給
+    runic: int = Field(default=0, ge=0)  # 符文殘片幾片（基準量，PlayerState.runic_pieces；玉璽大勢任務讀它，plan 玉璽碎片-2 用同一個名字）
 
 
 class Material(_Strict):
@@ -484,6 +502,9 @@ class SenseMethod(_Strict):
 
     attribute: SenseAttribute
     text: str  # 選項上那一行（例：「順著水流走一段，看它怎麼繞開石頭」）
+    # 選項上接在那一行後面的提醒（例：序章的爐火「（火性剛烈，跟你吐納的柔不太合）」，FB-092）：只在選的那張卡上看得到，不織進選了之後
+    # 的敘述（「你……。」）、也不交給模型當做法——那些句子讀起來是你做了什麼，不是替你挑做法的人在提醒你
+    note: str = ""
 
 
 class InsightScene(_Strict):
@@ -714,16 +735,22 @@ class Milestone(_Strict):
     condition: Condition
 
 
+GoalAction = Literal[
+    "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
+    "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
+    "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
+    "duty",  # 做了一次自己陣營的守勢行動（巡哨、傳道、保境安民），不管有沒有替軍令記到（FB-094）
+]
+
+
 class TutorialGoal(_Strict):
     """每一項都要符合才算完成；空的（或 False 的）欄位不檢查。"""
 
     # order：替軍令記到一次（計畫 T6）。choice～melt：序章（新手引導計畫一）那幾步要的動作：選了事件的選項、打開修練／煉製頁、
     # 修練、打坐、遊歷、配點、熔煉
-    action: Literal[
-        "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
-        "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
-        "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
-    ] | None = None
+    action: GoalAction | None = None
+    # action 以外，做了這幾個動作之一也算（FB-094：第一道軍令那一步，替軍令記到一次「或」做一次守勢行動）；action 沒寫就不用
+    or_actions: list[GoalAction] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
@@ -745,7 +772,8 @@ REVEAL_KEYS = frozenset({
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
-GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight"})
+# act:duty 是入伍段第一道軍令那一步發光的鈕：自己陣營的守勢行動（EnlistStep.glow，在「此地還能做」裡，FB-093）
+GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight", "act:duty"})
 
 
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
@@ -759,7 +787,8 @@ ALLOW_FIXED = frozenset({
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
-ALLOW_FAMILIES = ("act:challenge:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+# act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
+ALLOW_FAMILIES = ("act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
 
 
 def allow_known(entry: str) -> bool:
@@ -835,12 +864,19 @@ class Recruiter(_Strict):
 class EnlistStep(_Strict):
     id: str
     done_when: TutorialGoal
+    # 這一步框在畫面上時，要發光的鈕（GLOW_KEYS，跟序章的 glow 同一套）：第一道軍令那一步發光「act:duty」，也就是自己陣營的守勢行動
+    # （巡哨、傳道、保境安民）；網頁只加在畫面上真的有、按得下去的那顆（FB-093）
+    glow: list[str] = Field(default_factory=list)
 
 
 class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+    # 第一道軍令那一步（done_when 是 order）框上多的一句（FB-093）：{做法} 換成「你腳下這裡這週的軍令做得了的行動」（巡哨、遊歷……，
+    # orders.doable_here）；一個都做不了時用 how_none。兩句三位引薦人共用（待 joy 潤）
+    how_here: str = ""
+    how_none: str = ""
 
 
 class Tutorial(_Strict):
@@ -853,6 +889,25 @@ class Tutorial(_Strict):
     prologue_steps: int = 0  # 前幾步是序章（都在草廬）；走完就出師
     start_event: str | None = None  # 新角色一進來就端出的事件（遇險）
     leave_text: str = ""  # 走完序章、抵達起點時接在抵達那一則（「剛剛」）的一句
+
+
+class HintDef(_Strict):
+    """碰到才說的一條（新手引導設計第五節）：mentor 寫成「想起師父說過」（框上的字是 Hints.head）；recruiter 由自己那一邊的引薦人說，
+    texts 是陣營 id → 那一位說的話，drifter 是散人時師父說的版本（沒有就散人不說，也不記成說過）。"""
+
+    id: str
+    by: Literal["mentor", "recruiter"]
+    text: str = ""
+    texts: dict[str, str] = Field(default_factory=dict)
+    drifter: str = ""
+
+
+class Hints(_Strict):
+    """碰到才說（content/hints.json，新手引導計畫三）：沒有這個檔就是沒有提示。"""
+
+    head: str = "想起師父說過"  # 師父那幾條框上寫的字
+    hints: list[HintDef] = Field(default_factory=list)
+    season_return: str = ""  # 第二季起開季時師父的一句（設計 7.1）；空的就沒有
 
 
 class FactionDef(_Strict):
@@ -1214,6 +1269,9 @@ class Config(_Strict):
     convoy_grain: int = Field(default=4, ge=1)  # 接一車糧要交出幾份糧草（軍令文件 3.4：份量 ≥ 4）
     duty_stamina: int = Field(default=10, ge=0)  # 第 1 階守勢行動（巡哨、傳道、保境安民）的體力
     rank2_contrib: int = Field(default=300, ge=0)  # 升第 2 階的貢獻門檻（計畫 T5、第五節：推 30 點大勢）
+    # 升第 3、4 階的貢獻門檻（正式版丙一；【預設】企劃者 2026-10-06 同意，用整季模擬調）：到了還要完成過那一階的一種機緣才發召見
+    rank3_contrib: int = Field(default=900, ge=0)
+    rank4_contrib: int = Field(default=1800, ge=0)
     # ── 機緣與第 2 階行動（正式版乙一；全部【預設】，企劃者 2026-10-06 同意）──
     rank2_stamina: int = Field(default=15, ge=0)  # 第 2 階行動（招降黃巾散兵、施符水收人心）的體力
     rank2_daily: int = Field(default=3, ge=0)  # 每曆日最多做幾次（不論成敗都算一次）
@@ -1839,6 +1897,26 @@ class Rank2Action(_Strict):
     fail: str  # 失敗的敘事（{地點}）
 
 
+class RankAction(_Strict):
+    """第 3、4 階的行動（第一季設計 5.5；正式版戊一）。id 也是選項（act:rank:<id>）與軍令記功的 kind。
+    tags：只能在帶其中一個標籤的地點做（空＝有戰線的地方都行）；chaos_only：那條戰線要在亂局。
+    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強推割據。
+    content/orders.json 的 rank_actions 三筆是新寫的初稿，待 joy 潤（JSON 沒有註解，標記記在這裡）。"""
+
+    id: str
+    faction: str
+    rank: Literal[3, 4]
+    name: str
+    stamina: int = Field(ge=1)  # 每個行動都花體力（至少 1）：選項上寫「體力 N」，沒有花費的行動等於免費的推力
+    weekly: int = Field(gt=0)  # 每週（季曆）最多幾次，不論成敗都算
+    tags: list[str] = Field(default_factory=list)
+    chaos_only: bool = False
+    check: Check | None = None
+    push: int = Field(gt=0)
+    ok: str  # 成功的敘事（{地點}）
+    fail: str = ""  # 失敗的敘事（{地點}）；有 check 就一定要寫（content.validate 擋）
+
+
 class OrderCaller(_Strict):
     """黃巾發令的人（{號令}）：照順序第一個沒退場的（figure 是 None 的那一筆是最後的退路）。"""
 
@@ -1852,28 +1930,65 @@ class OrdersContent(_Strict):
     templates: list[OrderTemplate] = Field(default_factory=list)
     slots: dict[str, dict[str, OrderSlots]] = Field(default_factory=dict)  # 戰線 id → 陣營 id → 插槽
     duties: dict[str, Duty] = Field(default_factory=dict)  # 陣營 id → 守勢行動
+    # 軍令卡上「做法」那一行（FB-093），照種類（攻城、守城、截糧、護糧；打擊那一行是算出來的，atlas.strike_how）。插槽同發布文字，
+    # 另外 {守勢}＝那個陣營的守勢行動名字（duties）、{糧草}＝接糧車要交的份數
+    how: dict[str, str] = Field(default_factory=dict)
     rank2: dict[str, Rank2Action] = Field(default_factory=dict)  # 陣營 id → 第 2 階行動（正式版乙一）
+    rank_actions: list[RankAction] = Field(default_factory=list)  # 第 3、4 階的行動（正式版戊一）
     commander_fallback: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 沒有主將時 {主將} 寫的泛稱
     callers: list[OrderCaller] = Field(default_factory=list)  # {號令}
     convoy_squads: dict[str, str] = Field(default_factory=dict)  # 陣營 id → 自己的運糧隊（截糧打的是對方的）
     petition: dict[str, Petition] = Field(default_factory=dict)  # 陣營 id → 請命的說法（正式版乙二；計畫己再加機密軍令）
 
 
+class PromotionCast(_Strict):
+    """一段奇遇的一個版本（晉升奇遇文件第一節「人物不在」與「時局」）：照順序第一個成立的演。
+    figure 寫了：那位人物要在場（active）；at 也寫了就要在 at，沒寫 at 就是他此刻的所在。
+    before_event：那件時刻表大事還沒結算才成立（何進的索賄在盧植下獄之前、之後各一版）。
+    flags_none：這些世界旗標都不在才成立。after：上一段演的是這一則才成立（董卓版的第二段接董卓版的第一段）。"""
+
+    event: str
+    figure: str | None = None
+    at: str | None = None
+    before_event: str | None = None
+    flags_none: list[str] = Field(default_factory=list)
+    after: str | None = None
+    summons_text: str  # 召見的話（{據點}＝地點名）
+
+
+class PromotionLeg(_Strict):
+    """晉升奇遇的一段（一個地點的戲）。location 是 cast 沒寫 at、也沒有 figure 時的地點（可寫 "nearest_base"）。"""
+
+    location: str | None = None
+    casts: list[PromotionCast]
+
+
+class PatronLine(_Strict):
+    """豪強升第 4 階時，看靠山多一句話（晉升奇遇文件 4.3）。"""
+
+    text: str
+    affinity: dict[str, int] = Field(default_factory=dict)
+
+
 class PromotionDef(_Strict):
     """一階的晉升（濃縮版內容表 2.1、2.2；計畫 T5）。figure 是出面的大勢人物（豪強的馬商不是人物，空著），不在時由
     successor 出面、演 event_handoff。location 是地點 id，或 "nearest_base"（豪強：離自己最近的投靠點）。
-    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。"""
+    召見文字放這裡（{據點} 換成地點名）；結尾那一句（closing）接在選項的反應後面。
+    第 2 階照舊寫上面那幾個欄位（location、event_main、summons_text 空著會被 content.validate 擋下）；
+    第 3、4 階（正式版丙一）改寫 legs：一段一個地點、每段幾個版本（PromotionCast），patron_lines 是豪強第 4 階看靠山的那一句。"""
 
     faction: str
-    rank: int = Field(ge=2)
+    rank: int = Field(ge=2, le=4)
     figure: str | None = None
     successor: str | None = None
-    location: str
-    event_main: str
+    location: str = ""
+    event_main: str = ""
     event_handoff: str | None = None
-    summons_text: str
+    summons_text: str = ""
     summons_handoff: str | None = None
     closing: str
+    legs: list[PromotionLeg] = Field(default_factory=list)
+    patron_lines: dict[str, PatronLine] = Field(default_factory=dict)  # 靠山（yuan、cao、self）→ 那一句
 
 
 class OppBond(_Strict):
@@ -2113,4 +2228,5 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

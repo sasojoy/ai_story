@@ -104,6 +104,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
+    if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算
+        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+
+        if content is None or materials.grain_of(state, content) < foreshadow.need(content, cond.grain_min):
+            return False
     if cond.fight_tiers:
         # 這次行動打的那一場：battle_card 每次行動開頭清掉、打完才指向那筆紀錄，所以上一次行動留下的紀錄不算
         fought = next((r for r in state.battles if r.id == state.battle_card), None)
@@ -754,6 +759,36 @@ def apply_effect(
         p.affinities[character_id] = max(0, min(100, before + delta))
         if p.affinities[character_id] != before:
             msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
+    if effect.patron is not None:  # 豪強的靠山（晉升奇遇 4.2；正式版丙一）
+        p.patron = effect.patron
+    if (effect.donate_grain or effect.fs_fragments or effect.runic) and season_one(content, state.world):  # 黃巾的第 3、4 階奇遇（正式版丙二）：開關關著什麼都不做
+        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+        from .push import add_contribution  # noqa: PLC0415  只引這個函式：不能 import push 整個模組，apply_effect 的參數就叫 push
+
+        for loc_id, base in effect.donate_grain.items():  # 捐糧：同護糧送到（Game._convoy_arrives）——記捐獻、記一次推動的貢獻；糧不夠、換算出 0 份就什麼都不記
+            amount = foreshadow.need(content, base)
+            lines = foreshadow.spend_grain(state, content, amount)
+            if lines:
+                msgs += lines
+                key = f"{loc_id}:糧草"
+                p.donations[key] = p.donations.get(key, 0) + amount
+                week = calendar.point(state.world.time, content, state.world).week
+                add_contribution(p, week, content.config.contrib_per_push)
+        for ref in effect.fs_fragments:  # 直接給片段：「鏈 id:片段序號」；不發傳聞
+            chain_id, _, index = ref.rpartition(":")
+            if index.isdecimal():
+                msgs += foreshadow.grant_fragment(state, content, chain_id, int(index), world)
+        p.runic_pieces += effect.runic
+    if effect.event_mods:  # 一般伏筆（伏筆文件 4.4）：那件大事還沒結算才算；不寫字（暗中的）
+        from . import timetable  # noqa: PLC0415  timetable → rules：在函式裡 import，避免循環
+
+        for mod in effect.event_mods:
+            if mod.event not in state.world.timeline:
+                timetable.add_mod(state, content, mod.event, mod.side, mod.amount)
+    if effect.summons_next is not None:  # 晉升奇遇演完一段：召見往下一段（正式版丙一）；放在 promote 前面，下一段的召見那一句先出
+        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+
+        msgs += ranks.next_leg(state, content, effect.summons_next)
     if effect.promote is not None or effect.followers:  # 晉升奇遇（計畫 T5）：開關關著時 ranks 什麼都不做
         from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
 

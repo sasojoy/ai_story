@@ -2,7 +2,9 @@
 不佔 tutorial_step：記在 PlayerState.enlist_step（None＝還沒開始）。只在第一季開始（beta 季沒有軍令）。"""
 from __future__ import annotations
 
-from . import orders
+from collections.abc import Callable, Collection
+
+from . import calendar, orders, rules
 from .models import Content, Recruiter
 from .rules import front_of, season_one
 from .state import GameState
@@ -48,6 +50,7 @@ def begin_if_joined(state: GameState, content: Content) -> bool:
     if recruiter(state, content) is None:
         return False
     p.enlist_step = 0
+    p.enlist_since = state.world.time
     return True
 
 
@@ -107,13 +110,52 @@ def note(state: GameState, content: Content, world: WorldStateStore, action: str
     todo = _steps(content)
     while active(state, content) and goal_met(state, content, world, todo[state.player.enlist_step].done_when, action):
         state.player.enlist_step += 1
+        state.player.enlist_since = state.world.time  # 新的這一步從這一刻開始算（最後一步一週做不完就收，expire）
         msgs.append(TICK)
     if msgs and done(state, content):
         state.player.enlist_end = True
     return msgs + (told(state, content) if msgs else [])
 
 
-def box(state: GameState, content: Content) -> dict | None:
+def expire(state: GameState, content: Content) -> list[str]:
+    """最後一步（第一道軍令）從開始算起一週（季曆）還沒做完，引薦人照樣說結語、入伍段關起來（FB-094）：不然這一週做不到的人
+    （豪強一開始只有打不贏的打擊軍令）框會一直掛在那裡。看世界時間（Game.sync 傳進來的現在），引擎不讀電腦時鐘；暫停中世界時間
+    不走，所以不會被暫停吃掉。只動最後一步：看軍令卡那一步由網頁自己送。這一版之前存的角色沒有 enlist_since：這一次才從現在算起。
+    回傳引薦人的結語（江湖紀錄的那一行，跟 note 走完時一樣）；沒收就是空的。"""
+    p = state.player
+    if not active(state, content) or p.enlist_step != len(_steps(content)) - 1:
+        return []
+    if p.enlist_since is None:
+        p.enlist_since = state.world.time
+        return []
+    if state.world.time - p.enlist_since < calendar.WEEK / calendar.cal_scale(content, state.world):
+        return []
+    p.enlist_step = len(_steps(content))
+    p.enlist_end = True
+    return told(state, content)
+
+
+def how_here(state: GameState, content: Content, enabled: Callable[[], Collection[str]] | None = None) -> str:
+    """第一道軍令那一步框上多的一句（FB-093）：你腳下這裡這週的軍令做得了的行動（orders.doable_here）；一個都做不了寫 how_none。
+    內容沒寫這兩句（Enlist.how_here）就是空字串，框跟以前一樣。
+    enabled：回傳「選單上此刻按得下去的鈕的 id」的函式（Game 給的；只在要寫這一句時才叫）。給了就只點名按得下去的：沒有糧草的人
+    不能被指去接糧車、體力見底的人不能被指去巡哨——點名一顆灰的鈕比什麼都不說更糟（審查 Minor 3）。沒給就不過濾（只看軍令與地點）。"""
+    e = content.tutorial.enlist
+    if e is None or not e.how_here:
+        return ""
+    p = state.player
+    acts = orders.doable_here(state, content, p.faction, p.location)
+    duty = orders.duty_name(content, p.faction)  # 守勢行動現在也算第一道（FB-094）：在有戰線的地方，不管這週有沒有守城軍令
+    if duty and (duty, "act:duty") not in acts and rules.front_of(content, p.location) is not None:
+        acts.append((duty, "act:duty"))
+    if enabled is not None:
+        pressable = set(enabled())
+        acts = [act for act in acts if act[1] in pressable]
+    names = list(dict.fromkeys(name for name, _ in acts))
+    return e.how_here.replace("{做法}", "、".join(names)) if names else e.how_none
+
+
+def box(state: GameState, content: Content, enabled: Callable[[], Collection[str]] | None = None) -> dict | None:
     """入伍段的對話框：進行中是這一步的話（第一步前面接入營那一段）；剛走完是結尾、等「知道了」。其他是 None。
     key 是這一步的 id（結尾是 "enlist_end"），跟說書人的框同一個欄位（FB-076：網頁記收起記的是它）；
     眼前有事件還沒了結時話換成「先把眼前的「…」了結」、pending 標 True、收起來那一行送空字串（跟說書人的框一樣，FB-063／FB-076，
@@ -129,13 +171,19 @@ def box(state: GameState, content: Content) -> dict | None:
     p = state.player
     if active(state, content):
         i = p.enlist_step
+        step = _steps(content)[i]
         blocked = pending_line(state, content)
         paragraphs = _texts(who, i)
+        sentence = how_here(state, content, enabled) if step.done_when.action == "order" and blocked is None else ""
+        if sentence:  # 第一道軍令那一步：框上多一句，指出你腳下這裡做得了什麼（FB-093）；接在同一段後面，不分頁
+            paragraphs[-1] = paragraphs[-1].rstrip("。") + "。" + sentence
         box = {
-            "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
+            "speaker": who.name, "key": step.id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
             "done": list(p.guide_done), "end": False, "pending": blocked is not None, "full": True,
         }
+        if step.glow:  # 這一步要按的鈕發光（FB-093）；網頁只亮畫面上真的有、按得下去的那顆
+            box["glow"] = list(step.glow)
         if len(paragraphs) > 1 and blocked is None:
             box["paged"] = True
         return box

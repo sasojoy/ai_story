@@ -61,15 +61,16 @@ def test_new_fields_have_defaults_so_old_saves_load():
 
 
 def test_real_promotions_valid(real):
-    by_side = {p.faction: p for p in real.promotions}
-    assert set(by_side) == {"guan", "huang", "haoqiang"} and all(p.rank == 2 for p in real.promotions)
+    rank2 = [p for p in real.promotions if p.rank == 2]  # 第 3、4 階（正式版丙一）另有自己的測試（test_promotions_high.py）
+    by_side = {p.faction: p for p in rank2}
+    assert set(by_side) == {"guan", "huang", "haoqiang"} and len(rank2) == 3
     guan, huang, gentry = by_side["guan"], by_side["huang"], by_side["haoqiang"]
     assert (guan.figure, guan.successor, guan.location) == ("huangfusong", "zhujun", "changshe")
     assert (huang.figure, huang.successor, huang.location) == ("bocai", "pengtuo", "huangjin_camp")
     assert (gentry.figure, gentry.successor, gentry.location, gentry.event_handoff) == (None, None, "nearest_base", None)
     assert guan.summons_text == "皇甫嵩召你到長社營中。" and guan.summons_handoff == "朱儁召你到長社營中。"
     assert gentry.summons_text == "中山的馬商張世平、蘇雙到了{據點}，指名要見你。"
-    for p in real.promotions:
+    for p in rank2:
         for event_id in filter(None, (p.event_main, p.event_handoff)):
             event = real.events[event_id]
             assert event.actions == [] and len(event.choices) == 3
@@ -266,7 +267,7 @@ def test_every_choice_promotes_and_gives_two_followers(on, pick, reaction, affin
         2, None, ["follower_guan_spear", "follower_guan_crossbow"], affinity)
     assert game.status_data()["affiliation"] == "官軍・屯長"
     assert list(game.state.world.promoted_today.values()) == [["甲"]]
-    assert ranks.check_summons(game.state, on) == []  # 第 3 階這一版沒有定義：不再發
+    assert ranks.check_summons(game.state, on) == []  # 第 3 階要貢獻 900 與機緣：還沒到
 
 
 def test_affinity_clamps_and_needs_a_character(on):
