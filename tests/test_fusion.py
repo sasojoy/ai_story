@@ -854,10 +854,11 @@ def landing_on(content):
 
 
 def two_fast_arts(content, world):
-    """乙先合出兩門「武學・快・無」：旋風腿（基礎拳腳＋風）、疾風腿（旋風腿＋風）。這時合到舊的還關著，兩門都是新的。"""
+    """乙先合出兩門「武學・快・無」：旋風腿（基礎拳腳＋風）、疾風腿（長拳＋風）。這時合到舊的還關著，兩門都是新的。"""
     other = other_player(content)
+    other.player.arts = ["fist"]
     fusion.fuse(other, content, world, named("旋風腿"), "basic_fist", "feng")
-    fusion.fuse(other, content, world, named("疾風腿"), "旋風腿", "feng")
+    fusion.fuse(other, content, world, named("疾風腿"), "fist", "feng")
     return other
 
 
@@ -968,21 +969,23 @@ def test_landing_twice_charges_once(ready, content, world):
 
 def test_landing_on_the_base_itself_is_free_and_stays_that_way(ready, content, world):
     """Review Focus 4（企劃者 2026-10-05：「旋風腿＋風」合出旋風腿可以接受；「一旦公式訂了就不能再變」）：
-    旋風腿（快）＋風（快）本來會得到「武學・快・無」，唯一的候選是底自己——合到它：你本來就有，什麼都不收，
-    配方照樣記下來；之後機會怎麼變都不重判。"""
+    旋風腿（快）＋一個私有的快意境本來會得到「武學・快・無」，唯一的候選是底自己——合到它：你本來就有，什麼都不收，
+    配方照樣記下來；之後機會怎麼變都不重判。（旋風腿＋風本身現在被血統擋下，見 lineage_has。）"""
     made, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.own_insights["悟:1"] = Insight(id="悟:1", name="湖中影", attribute="快")
+    ready.player.insights.append("悟:1")
     landing_on(content)
     xinde, stamina = ready.player.stats["xinde"], ready.player.stamina
-    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "feng")
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), "旋風腿", "悟:1")
     assert art is None and msgs == [
-        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【旋風腿】＋「風」）。不收心得、體力。",
+        "這一爐的路數，竟又歸到【旋風腿】——你多摸清了一條練法（【旋風腿】＋「湖中影」）。不收心得、體力。",
     ]
     assert (ready.player.stats["xinde"], ready.player.stamina) == (xinde, stamina)
-    key = fusion.fuse_key("旋風腿", "feng")
+    key = fusion.fuse_key("旋風腿", "悟:1", "快")
     assert world.lookup_recipe(key).id == made.id
     content.config.land_chance_per_candidate = 0.0  # 機會改了也不重判：配方已經定了
     assert world.lookup_recipe(key).id == made.id
-    assert "你已經有了" in fusion.fuse_problem(ready, content, world, "旋風腿", "feng")
+    assert "你已經有了" in fusion.fuse_problem(ready, content, world, "旋風腿", "悟:1")
 
 
 def test_with_two_or_more_candidates_the_model_picks_one(ready, content, world):
@@ -1899,3 +1902,54 @@ def test_a_season_of_only_presets_writes_no_firsts_line(prologue_content, world)
     game.forge("basic_fist", ["feng"])
     next_season(prologue_content, world, game)
     assert not any("合成首創" in r.text for _, rumors in world.chronicle_before(2) for r in rumors)
+
+
+# ── 血統裡融過的意境不能再融（企劃者 2026-10-06：「同一種意境合成後的產物無限合成上去」）────────
+
+
+def test_a_fused_art_cannot_take_the_same_insight_again(ready, content, world):
+    """武學＋風 → 乙；乙＋風 就被擋下（意境不會用掉，不擋就能一代一代往上疊）。"""
+    b, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    problem = fusion.fuse_problem(ready, content, world, b.id, "feng")
+    assert problem is not None and "早已融過「風」" in problem and "【旋風腿】" in problem
+    art, msgs = fusion.fuse(ready, content, world, must_not_ask(), b.id, "feng")
+    assert art is None and msgs == [problem]
+
+
+def test_taking_turns_between_two_insights_is_still_blocked(ready, content, world):
+    """A＋風 → 乙、乙＋火 → 丙、丙＋風：風在丙的血統裡（乙那一代融的），照樣擋；丙＋火也擋。"""
+    b, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    c, _ = fusion.fuse(ready, content, world, named("烈風腿"), b.id, "huo")
+    assert c is not None
+    assert "早已融過「風」" in fusion.fuse_problem(ready, content, world, c.id, "feng")
+    assert "早已融過「火」" in fusion.fuse_problem(ready, content, world, c.id, "huo")
+    ready.player.insights.append("shui")
+    assert fusion.fuse_problem(ready, content, world, c.id, "shui") is None  # 沒融過的意境照樣能融
+
+
+def test_a_blend_carries_both_parents_lineage(ready, content, world):
+    """武學＋武學合出來的那一門，兩門來源融過的意境都算在它的血統裡。"""
+    ready.player.arts = ["lake_kick"]
+    b, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    blended, _ = fusion.blend(ready, content, world, named("湖風拳"), b.id, "lake_kick")
+    assert fusion.lineage_has(blended.id, insights.resolve("feng", content, world), content, world)
+    assert not fusion.lineage_has(blended.id, insights.resolve("huo", content, world), content, world)
+
+
+def test_a_private_insight_is_matched_by_its_attribute(ready, content, world):
+    """私有意境（悟意境 0.2b）的 id 不進全服登記：融過一個私有的快意境，同一條血統就不能再融任何私有的快意境；
+    全服的「風」（也屬快）是另一個意境，照 id 認，不受影響。"""
+    for n, name in ((1, "湖中影"), (2, "掠水痕")):
+        ready.player.own_insights[f"悟:{n}"] = Insight(id=f"悟:{n}", name=name, attribute="快")
+        ready.player.insights.append(f"悟:{n}")
+    b, _ = fusion.fuse(ready, content, world, named("影腿"), "basic_fist", "悟:1")
+    assert b.insight is None and b.insight_attr == "快"
+    assert "早已融過「掠水痕」" in fusion.fuse_problem(ready, content, world, b.id, "悟:2")
+    assert fusion.fuse_problem(ready, content, world, b.id, "feng") is None
+
+
+def test_the_scroll_card_skips_an_insight_already_in_the_lineage(ready, content, world):
+    b, _ = fusion.fuse(ready, content, world, named("旋風腿"), "basic_fist", "feng")
+    ready.player.insights = ["feng"]
+    row = next(r for r in skillview.art_rows(ready, content, world) if r["id"] == b.id)
+    assert "forge_odds" not in row

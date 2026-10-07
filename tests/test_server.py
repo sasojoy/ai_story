@@ -6308,7 +6308,7 @@ def test_drawing_a_new_shape_asks_the_model_outside_the_lock_with_the_picture(cl
 
     def fake_name(client_, content, facts, image="", budget=None, person=None):
         seen["image"], seen["locked"] = image, game.world.db.writing()
-        return "湖心月", "一圈一圈的圓轉。", "看圖"
+        return "湖心月", "如一泓靜水，綿柔不盡。", "看圖"
 
     with mock.patch.object(server.insight_llm, "name", fake_name):
         r = client.post("/api/sense", json={"points": points, "png": "AAAA"})
@@ -6317,6 +6317,7 @@ def test_drawing_a_new_shape_asks_the_model_outside_the_lock_with_the_picture(cl
     assert not any(o["id"].startswith("sense:") for o in r.json()["main"]["options"])
     own = game.state.player.own_insights
     assert [i.name for i in own.values()] == ["湖心月"] and list(own.values())[0].glyph
+    assert list(own.values())[0].note == "如一泓靜水，綿柔不盡。"
     assert game.state.journal[0].title.startswith("有所感・")
 
 
@@ -6340,7 +6341,7 @@ def test_the_canvas_line_reads_the_stroke_without_touching_the_game(client):
     _player(client)
     from tianxia import glyph
 
-    assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json()["note"].startswith("一筆畫成")
+    assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json() == {"ok": True}
     assert client.post("/api/sense_read", json={"points": "x"}).json()["problem"]
 
 

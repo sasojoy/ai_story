@@ -81,7 +81,7 @@
     wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
-    senseNote: "", // 畫布底下那一行：規則讀到的這一筆（/api/sense_read）
+    senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
     stroking: false, // 手指正按在畫布上：輪詢不重畫（重畫會換掉畫布、手指底下的那一筆就斷了）
     forgeLine: "",
     map: null,
@@ -1291,7 +1291,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
-        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}${insOpen.glyph_note ? `・${esc(insOpen.glyph_note)}` : ""}・只屬於你</p>` : ""}</div>
+        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
@@ -1915,8 +1915,8 @@
   }
 
   // ── 有所感的畫布（悟意境設計 0.2 第 3、4 步）──
-  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器規則讀到什麼（/api/sense_read，
-  // 跟送出時讀的是同一套 glyph.read），寫在畫布底下。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
+  // 一筆畫到底：手指按下去開始一筆（之前畫的清掉），離開畫布就算畫完；不滿意清掉重畫。畫完問伺服器這一筆讀不讀得出來
+  // （/api/sense_read，跟送出時讀的是同一套 glyph.read），畫布底下只寫成不成，不寫筆畫的幾何。送出帶點位與一張小 PNG（只轉交給模型看圖，不存）
   const SENSE_SIZE = 256;
   function sensePadHtml() {
     const ready = S.sensePts.length > 1;
@@ -1992,7 +1992,7 @@
       try {
         const r = await api("/api/sense_read", { points: pts });
         if (S.sensePts !== pts) return; // 等回應時又畫了一筆
-        S.senseNote = r.note ? `這一筆：${r.note}` : (r.problem || "");
+        S.senseNote = r.ok ? "心中的形已經落下。" : (r.problem || ""); // 不寫筆畫讀到什麼（企劃者 2026-10-06：留住驚喜）
       } catch (e) { S.senseNote = ""; }
       const note = document.getElementById("sense-note");
       if (note) note.textContent = S.senseNote;

@@ -311,8 +311,31 @@ def can_forge(state: GameState, content: Content) -> bool:
     return can_merge or can_fuse
 
 
+def lineage_has(art_id: str, insight: Insight, content: Content, world: WorldStateStore) -> bool:
+    """這門武學的血統裡（它自己、它的底、底的底……武學＋武學的兩門來源也算）有沒有融過這個意境（企劃者 2026-10-06 回報：
+    意境合成不會用掉，「武學＋風 → 乙、乙＋風 → 丙……」可以無限往上疊，每一代都把風的屬性推到功效第一位）。
+    全服的意境照 id 認；私有意境（悟意境設計 0.2b）的 id 不進全服登記，照它的屬性認——跟配方鍵 fuse_key 認私有意境的方法一樣，
+    融過任何一個同屬性私有意境的血統，也不能再融同屬性的私有意境。"""
+    own = insights.is_own(insight.id)
+    seen: set[str] = set()
+    todo = [art_id]
+    while todo:
+        current = todo.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        art = team.resolve_art(current, content, world)
+        if art is None:
+            continue
+        if (art.insight is None and art.insight_attr == insight.attribute) if own else art.insight == insight.id:
+            return True
+        todo += [a for a in [art.base, *art.parents] if a]
+    return False
+
+
 def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str | None:
-    """不能合成的原因；None＝可以。合出來的那一門你已經有了也不准（合成的意義是拿到你還沒有的武學）。
+    """不能合成的原因；None＝可以。血統裡融過這個意境的不准（lineage_has）；合出來的那一門你已經有了也不准
+    （合成的意義是拿到你還沒有的武學）。
     「你已經有了」排在花費與持有上限之前：同一爐連按兩下、開兩個分頁時，第二下在 C 段重驗看見的真正變化是
     「已經有了」，不是第一下花掉之後才不夠的心得、或剛好被第一下填滿的持有（企劃者 2026-10-05：不能重複扣）。"""
     if art_id not in library.owned_arts(state):
@@ -321,6 +344,9 @@ def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art
         return "你還沒悟到這個意境。"
     if team.player_art(state, content, world, art_id) is None or insights.resolve(insight_id, content, world, state) is None:
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
+    insight = insights.resolve(insight_id, content, world, state)
+    if lineage_has(art_id, insight, content, world):
+        return f"【{team.player_art(state, content, world, art_id).name}】的來歷裡早已融過「{insight.name}」——同一股意，再融也只是舊路重走。"
     known = world.lookup_recipe(fuse_key_for(state, content, world, art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
         return f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。"
