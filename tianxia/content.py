@@ -840,6 +840,12 @@ def check_promotions(c: Content, need, known) -> None:
                 need(all(e.promote is not None for e in sides),
                      f"{where}：最後一段的選項每一邊（檢定、戰鬥的輸贏也一樣）都要寫 promote，不然召見留在原地，「應召」又能重演同一幕")
             for effect in (choice.effect, choice.fail_effect):
+                if effect.donate_grain or effect.runic:
+                    # 捐糧（記貢獻）與符文殘片自己不看陣營：只准寫在晉升奇遇（召見只發給自己陣營的人），或事件／選項的條件寫了
+                    # factions 的地方，沒投靠的人、別的陣營的人才領不到（丙二審查）
+                    reachable = event.id in promo_events or bool(event.condition.factions) or bool(choice.condition.factions)
+                    need(reachable, f"{where}：donate_grain／runic 只能寫在晉升奇遇，或條件寫了 factions 的事件、選項"
+                                    "（不然散人與別的陣營的人也領得到貢獻與殘片）")
                 if effect.promote is not None:
                     need(2 <= effect.promote <= 4, f"{where}：promote 要在 2～4 之間（第 2 到 4 階），寫了 {effect.promote}")
                     ranks_here = leg_ranks.get(event.id)

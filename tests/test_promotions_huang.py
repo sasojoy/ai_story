@@ -9,7 +9,8 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from tianxia import figures, foreshadow, materials, ranks, rules
+from conftest import real_content
+from tianxia import calendar, figures, foreshadow, materials, ranks, rules
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, Effect
@@ -74,13 +75,20 @@ def test_donate_grain_records_and_counts(on):
 
 
 def test_donate_grain_adds_up_and_goes_into_this_weeks_account(on):
+    """貢獻記在捐的那一週的帳上（季曆第幾週）：隔了幾週再捐一次，兩週各記各的。"""
     game = _game(on, at="nanyang_huangjin_camp")
     _grain(game, 5)
-    for _ in range(2):
+    w = game.state.world
+    weeks = []
+    for week in (2, 5):  # 第 2 週與第 5 週（週末設定一週五個小時）各捐一次
+        w.time = calendar.week_start(week, on, w) + 60
+        weeks.append(calendar.point(w.time, on, w).week)
         rules.apply_effect(Effect(donate_grain={"nanyang_huangjin_camp": 2}), game.state, on, game.world)
     p = game.state.player
+    assert weeks[0] != weeks[1]
     assert p.donations == {"nanyang_huangjin_camp:糧草": 2}
-    assert p.contrib == 2 * on.config.contrib_per_push and sum(p.contrib_weeks.values()) == p.contrib
+    assert p.contrib == 2 * on.config.contrib_per_push
+    assert p.contrib_weeks == {weeks[0]: on.config.contrib_per_push, weeks[1]: on.config.contrib_per_push}
 
 
 def test_a_donation_without_the_grain_records_nothing(on):
@@ -109,7 +117,11 @@ def test_donation_with_a_trend_still_pushes(on):
         extra = (game.push_trend,) if use_push else ()  # 引擎走第五個參數 push；沒給就直接 change_trend
         msgs = rules.apply_effect(effect, game.state, on, game.world, *extra)
         assert game.state.player.donations == {"nanyang_huangjin_camp:糧草": 1} and msgs
-        assert game.state.player.contrib >= on.config.contrib_per_push
+        per_push = on.config.contrib_per_push
+        # 沒給 push：捐糧記一次貢獻，trend 直接改戰況、不記；給了 push（Game.push_trend）：trend 走個人推動，另記自己的貢獻——
+        # 兩次都記在一起才大於一次，所以這一支真的用到了傳進來的 push，不是只靠捐糧那一份
+        contrib = game.state.player.contrib
+        assert (contrib > per_push) if use_push else (contrib == per_push)
 
 
 def test_fragment_given_once(on):
@@ -286,9 +298,7 @@ def test_receiver_changes_after_week_seven(on):
     ranks.check_summons(game.state, on)
     game.choose("act:summons")
     game.choose("choice:0")
-    _retire(game, "zhangmancheng")  # 第 7 週秦頡斬張曼成
-    w = game.state.world
-    w.figures["zhaohong"] = figures.state_of(game.state, on, "zhaohong").model_copy(update={"front": "nanyang"})
+    _retire(game, "zhangmancheng")  # 第 7 週秦頡斬張曼成（趙弘本來就在南陽黃巾營、在場：不必另外改他）
     # 地點與召見那一句都沒變，悄悄換成趙弘那一版（丙一 _refresh：同一句話不再寫進紀錄一次）；到了才知道是趙弘
     assert ranks.check_summons(game.state, on) == []
     assert game.state.player.summons.event == "promo_huang_3_zh"
@@ -428,6 +438,11 @@ def test_the_labels_and_the_spec_scenes_are_as_written(on):
     assert on.events["promo_huang_3_zmc"].choices[2].effect.text == "一旁的趙弘看了你一眼。"
     assert on.events["promo_huang_4"].text.startswith("廣宗城裡最深的一間靜室。張角瘦得只剩一副骨架，眼睛卻亮得嚇人。他把一卷黃帛交給你：")
     assert on.events["promo_huang_4"].text.endswith("像是自言自語：「南華老仙給我的，不只是一部書……」")
+    # 另外四句出自晉升奇遇文件（3.2、3.3）：揭開之後的張角那句、趙弘開口那句、張角點頭、交令的人手上那卷黃帛
+    assert "「天下都知道了。那就讓他們來搶。」" in on.events["promo_huang_4_revealed"].text
+    assert on.events["promo_huang_3_zh"].text.endswith("「符？我不看符，我看你帶了什麼來。」")
+    assert [on.events[e].choices[1].effect.text for e in ("promo_huang_4", "promo_huang_4_revealed")] == ["張角點了點頭。"] * 2
+    assert "「這是大賢良師留下的黃天密令，見令如見他。」" in on.events["promo_huang_4_heir"].text
 
 
 def test_inner_quotes_are_stored_as_corner_brackets(on):
@@ -453,6 +468,7 @@ def test_every_zhangmancheng_ending_makes_a_small_leader(on, choice, affinity):
     game.choose("act:summons")
     msgs = game.choose(f"choice:{choice}")
     assert "你升為小方渠帥。" in msgs and (p.rank, p.followers, p.summons) == (3, ["follower_huang_believer"], None)
+    assert ranks.promotion_for(on, "huang", 3).closing in msgs  # 玩家看到的訊息裡真的有結尾那一句，不只是資料裡寫了
     assert {k: p.affinities[k] for k in ("zhangmancheng", "zhaohong")} == {
         "zhangmancheng": 20 + affinity.get("zhangmancheng", 0), "zhaohong": 20 + affinity.get("zhaohong", 0)}
     assert any(r.text == "甲升為小方渠帥。" and r.faction == "huang" for r in game.state.world.rumors)
@@ -501,7 +517,7 @@ def test_every_zhangliang_ending_at_guangzong(on, choice, affinity, grain):
 
 def test_the_talisman_can_come_from_zhangliang_when_zhangbao_is_out(on):
     game = _game(on, at="guangzong")
-    _retire(game, "zhangbao", "crippled")
+    _retire(game, "zhangbao")
     _ready(game, 2)
     assert ranks.check_summons(game.state, on) == ["張梁召你到廣宗。"]
     assert game.state.player.summons.event == "promo_huang_3_talisman_zl"
@@ -513,7 +529,7 @@ def test_the_talisman_can_come_from_zhangliang_when_zhangbao_is_out(on):
 def test_nobody_to_hand_over_the_talisman_means_no_summons(on):
     """N1：張寶與張梁都不在：先不發（不發一張找不到人的召見）；之後有人回來才發。"""
     game = _game(on, at="xiaquyang")
-    _retire(game, "zhangbao", "crippled")
+    _retire(game, "zhangbao")
     _retire(game, "zhangliang")
     _ready(game, 2)
     assert ranks.check_summons(game.state, on) == [] and game.state.player.summons is None
@@ -537,6 +553,7 @@ def test_every_zhangjiao_ending(on, choice, affinity, fragment, revealed):
     game.choose("act:summons")
     msgs = game.choose(f"choice:{choice}")
     assert "你取得大方渠帥的資格，候缺。" in msgs and (p.rank, p.qualified) == (3, True)
+    assert ranks.promotion_for(on, "huang", 4).closing in msgs  # 玩家看到的訊息裡真的有結尾那一句
     assert p.followers == ["follower_huang_strongman"] and p.summons is None
     assert p.affinities["zhangjiao"] == 20 + affinity
     assert p.runic_pieces == (0 if revealed else 2)
@@ -590,7 +607,7 @@ def test_the_heir_is_zhangliang_when_zhangbao_is_out_and_the_swap_is_told(on):
     _retire(game, "zhangjiao")
     _ready(game, 3)
     assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
-    _retire(game, "zhangbao", "crippled")
+    _retire(game, "zhangbao")
     assert ranks.check_summons(game.state, on) == ["張梁召你到廣宗。"]  # 同一則事件、換了出面的人：話變了，照樣說
     assert (game.state.player.summons.event, game.state.player.summons.figure) == ("promo_huang_4_heir", "zhangliang")
 
@@ -643,3 +660,102 @@ def test_a_huang_player_walks_all_the_way_up(on):
     assert game.status_data()["affiliation"] == "黃巾軍・小方渠帥（大方渠帥候缺）"
     notes = [r.text for r in game.state.world.rumors if r.layer == "faction" and r.faction == "huang"]
     assert "甲升為小方渠帥。" in notes and "甲取得大方渠帥的資格，候缺。" in notes
+
+
+# ── 審查後的修正（丙二 Task 1、2 的 Minor）─────────────────────────────
+
+
+def test_a_new_season_resets_the_runic_pieces_and_the_fragments(on):
+    """審查 Minor 1：換季是新角色，符文殘片與聽過的片段都重來（_reset_player_for_new_season 蓋一個新的 PlayerState）。"""
+    on.config.admins = ["管"]
+    admin = _game(on, "管")
+    player = _game(on, "甲")
+    p = player.state.player
+    p.runic_pieces, p.fragments = 2, {"fs_zhangjiao_huang": [0]}
+    player.sync(100.0)
+    admin.admin_end_season(now=200.0)
+    admin.admin_next_season(now=300.0)
+    player.sync(400.0)
+    p = player.state.player
+    assert (p.faction, p.runic_pieces, p.fragments) == (None, 0, {})
+
+
+def test_defecting_keeps_the_runic_pieces_for_now(on):
+    """審查 Minor 1：叛投清掉貢獻、捐獻、階與部下，可是符文殘片（跟聽過的片段一樣是知道的事）留著。這是現在的做法，
+    計畫沒寫、待企劃者確認（見 defection.clear_progress 的說明）；改了就改這個測試。"""
+    from tianxia import defection
+
+    game = _game(on, at="nanyang_huangjin_camp")
+    p = game.state.player
+    p.runic_pieces, p.fragments = 2, {"fs_zhangjiao_huang": [0]}
+    p.contrib, p.donations, p.rank, p.followers = 900, {"nanyang_huangjin_camp:糧草": 1}, 3, ["follower_huang_believer"]
+    defection.clear_progress(p)
+    assert (p.contrib, p.donations, p.rank, p.followers) == (0, {}, 0, [])
+    assert p.runic_pieces == 2 and p.fragments == {"fs_zhangjiao_huang": [0]}
+
+
+def test_the_fragment_grant_checks_foreshadowing_itself(on, monkeypatch):
+    """審查 Minor 4：grant_fragment 自己先看伏筆有沒有在跑，不全靠 capable 裡的那一道（以後 capable 改了寫法，beta 季也不會給）。
+    把 capable 換成永遠成立的假的，伏筆沒在跑（第一季的開關關著）時仍然什麼都不給；開著時給。"""
+    monkeypatch.setattr(foreshadow, "capable", lambda *args, **kwargs: True)
+    open_game = _game(on, name="乙")  # 先開季（這一季蓋著第一季的章）；開著時給
+    assert foreshadow.grant_fragment(open_game.state, on, "fs_zhangjiao_huang", 0) != []
+    beta = real_content()  # 開關關著的那一份（on 是同一份真實內容打開開關之後的樣子）
+    game = _game(beta)
+    assert not foreshadow.active(game.state, beta)
+    assert foreshadow.grant_fragment(game.state, beta, "fs_zhangjiao_huang", 0) == []
+    assert game.state.player.fragments == {}
+
+
+# 捐糧與符文殘片自己不看陣營（審查 Task 1 Minor 8）：由所在的事件擋，載入時檢查
+
+
+def _rank2_event(on):
+    return on.events["promo_huang_2"]
+
+
+@pytest.mark.parametrize("field, value", [("donate_grain", {"nanyang_huangjin_camp": 2}), ("runic", 2)])
+def test_donations_and_runic_pieces_need_an_event_only_one_side_can_reach(on, field, value):
+    """沒投靠的人、別的陣營的人領得到貢獻與殘片就是漏洞：只准寫在晉升奇遇（召見只發給自己陣營的人），或條件寫了 factions
+    的事件；兩邊都不是的，載入時擋下。"""
+    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None)
+    setattr(event.choices[0].effect, field, value)
+    with pytest.raises(ContentError, match=f"{event.id}：donate_grain／runic 只能寫在晉升奇遇"):
+        validate(on)
+
+
+@pytest.mark.parametrize("field, value", [("donate_grain", {"nanyang_huangjin_camp": 2}), ("runic", 2)])
+def test_a_factions_condition_gates_the_event_or_the_choice(on, field, value):
+    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None)
+    setattr(event.choices[0].effect, field, value)
+    event.condition = event.condition.model_copy(update={"factions": ["huang"]})
+    validate(on)  # 事件整個只給黃巾：過得了
+    event.condition = event.condition.model_copy(update={"factions": []})
+    with pytest.raises(ContentError, match="donate_grain／runic 只能寫在晉升奇遇"):
+        validate(on)
+    event.choices[0].condition = event.choices[0].condition.model_copy(update={"factions": ["huang"]})
+    validate(on)  # 只有這個選項給黃巾：也過得了
+
+
+def test_a_promotion_event_may_donate_and_give_runic_pieces(on):
+    """晉升奇遇本來就只有自己陣營的人演得到（召見只發給自己陣營）：不必另外寫 factions。真的內容就是這樣。"""
+    _rank2_event(on).choices[0].effect.donate_grain = {"nanyang_huangjin_camp": 2}
+    _rank2_event(on).choices[0].effect.runic = 2
+    validate(on)
+
+
+def test_the_real_events_that_donate_or_give_runic_pieces_are_huang_promotions(on):
+    """現在真的內容裡用到這兩個效果的事件（兩側的選項都算）：全是黃巾的晉升奇遇；而且沒有任何事件用 next_event 接到晉升奇遇，
+    所以只有拿著自己陣營的召見的人演得到。"""
+    users = {
+        event.id for event in on.events.values() for choice in event.choices for effect in (choice.effect, choice.fail_effect)
+        if effect.donate_grain or effect.runic
+    }
+    huang = {c.event for p in on.promotions if p.faction == "huang" for leg in p.legs for c in leg.casts}
+    assert users == {"promo_huang_3_zh", "promo_huang_3_zl", "promo_huang_4"}  # 捐糧：趙弘、張梁那兩則；符文殘片：張角的密令
+    assert users <= huang
+    promo_ids = {c.event for p in on.promotions for leg in p.legs for c in leg.casts} | {
+        e for p in on.promotions for e in (p.event_main, p.event_handoff) if e}
+    reached = {effect.next_event for event in on.events.values() for choice in event.choices
+               for effect in (choice.effect, choice.fail_effect) if effect.next_event}
+    assert not reached & promo_ids
