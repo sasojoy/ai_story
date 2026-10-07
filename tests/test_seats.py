@@ -437,11 +437,26 @@ def test_rotation_never_posts_to_the_world_news(on):
     assert [r.layer for r in w.rumors] == ["faction"]
 
 
-def test_rotation_does_nothing_with_the_switch_off_or_after_the_season(on):
+def test_rotation_does_nothing_in_a_season_opened_without_the_stamp(on):
     w = _season({"甲": 50})
-    w.season_one = False  # 這一季開季時沒開：舊季照舊
+    w.season_one = False  # 這一季開季時沒蓋章：舊季照舊
     seats.rotate(_qualified(on, "甲", world=w).state, on, 2)
     assert w.seats == {} and w.rumors == []
+
+
+def test_the_config_switch_off_stops_a_stamped_season(on):
+    """管理者把 Config.season_one 關掉、資料庫裡卻還有一季蓋著章：規則兩個都要看（rules.season_one），beta 的規則一個字不變。"""
+    w = WorldState(season_one=True)
+    game = _qualified(on, "甲", weeks={1: 5}, world=w)
+    on.config.season_one = False
+    assert seats.report(game.state, on) == [] and w.seats == {} and w.seat_ledger == {} and w.rumors == []
+    w.seat_ledger["guan"] = {"甲": {1: 5}}
+    assert seats.rotate(game.state, on, 2) == [] and w.seats == {} and w.rumors == []
+    w.seat_ledger["guan"], w.seats["guan"] = {"甲": {1: 5}}, ["甲"]
+    fresh = _qualified(on, "甲", world=w)
+    fresh.state.player.faction, fresh.state.player.qualified = None, False
+    seats.report(fresh.state, on)  # 規則關著：連除名也不動
+    assert w.seats == {"guan": ["甲"]} and w.seat_ledger == {"guan": {"甲": {1: 5}}}
 
 
 def test_rotation_leaves_the_ended_season_alone(on):
@@ -772,16 +787,22 @@ def test_the_defector_holds_no_seat_in_the_new_faction(on):
     assert holder.state.player.faction == "huang" and not holder.state.player.qualified
     assert not seats.seated(holder.state) and ranks.rank_of(holder.state) == 1
     assert ranks.title(on, holder.state) == "信眾"
+    # 舊陣營那邊也讓出來了：叛投當下就讓（defect 呼叫 leave），不等他下一次抄帳的除名（report 的 _drop_stale 是第二道）
+    assert w.seats.get("guan", []) == [] and "甲" not in w.seat_ledger.get("guan", {})
     assert seats.report(holder.state, on) == [] and w.seats.get("huang", []) == []  # 新陣營要重新晉升
 
 
 def test_seated_reads_the_current_faction_only(on):
-    """名單照陣營分開：就算新陣營的名單上剛好有同名的人（別的人），在任看的是自己現在的陣營。"""
+    """名單照陣營分開：在任看的是自己現在的陣營的名單。叛投走 defect（它呼叫 leave）之後，舊陣營的名單上沒有他，新陣營也沒有。"""
+    from tianxia import defection
+
     w = WorldState(season_one=True)
     holder = _qualified(on, "甲", world=w)
     seats.report(holder.state, on)
-    holder.state.player.faction, holder.state.player.qualified = "huang", False
-    assert not seats.seated(holder.state)  # 甲還留在官軍的名單上（沒呼叫 leave）：不算黃巾的席次
+    assert seats.seated(holder.state) and w.seats == {"guan": ["甲"]}
+    defection.defect(holder.state, on, _huang(on))
+    assert not seats.seated(holder.state)
+    assert w.seats == {"guan": []}  # 沒有幽靈席次：舊名單空出來，新陣營從頭來
 
 
 def test_a_seated_holder_who_defects_through_the_menu_leaves_no_ghost(on):
@@ -972,3 +993,37 @@ def test_on_the_books_looks_in_every_faction_ledger_and_list(on):
     w.seats.clear()
     w.seat_ledger["guan"], w.seats["guan"] = {"乙": {}}, ["乙"]
     assert not seats.on_the_books(game.state)
+
+
+def test_a_catch_up_over_several_mondays_posts_one_note_per_monday_stamped_at_that_monday(on):
+    """伺服器停了幾週、第一次同步一口氣補過第 2 到第 5 週的週一：每個週一各一則，時間記在那個週一，不是一則也不是每個人各四則。"""
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    game.sync(1000.0)
+    game.sync(1000.0 + _real_seconds_to_week(on, game, 5) + 5)
+    season = game.world.get_season()
+    assert season.hooked_week == 5
+    notes = [r for r in season.rumors if r.text.startswith("本週在任的校尉：")]
+    assert [r.text for r in notes] == ["本週在任的校尉：乙、丙。"] * 4
+    assert [r.time for r in notes] == pytest.approx([calendar.week_start(k, on, season) for k in (2, 3, 4, 5)])
+    assert all(r.layer == "faction" and r.faction == "guan" for r in notes)
+
+
+def test_a_monday_inside_the_unsynced_stretch_before_a_pause_rotates_once_after_the_resume(on):
+    """暫停前還沒補算的那一段裡就跨過了週一（沒人同步、主機端直接暫停）：暫停中不排，繼續時補算那一段才排，只排一次。"""
+    game = _qualified(on, "甲", weeks={1: 7})
+    _two_challengers(game)
+    game.sync(1000.0)
+    store = game.world
+    week_two = _real_seconds_to_week(on, game, 2)
+    _pause(game, 1000.0 + week_two + 50)  # 現實裡週一已經過了，賽季時間還沒有人補算
+    game.sync(1000.0 + week_two + 500)  # 暫停中的輪詢：什麼都不動
+    season = store.get_season()
+    assert season.hooked_week == 1 and season.seats["guan"] == ["甲"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == []
+    _resume(game, 1000.0 + week_two + 800)  # 繼續：補算暫停前的那一段，週一在這裡跨過去
+    season = store.get_season()
+    assert season.hooked_week == 2 and season.seats["guan"] == ["乙", "丙"]
+    assert [t for t in _notes(season) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
+    game.sync(1000.0 + week_two + 830)
+    assert [t for t in _notes(store.get_season()) if t.startswith("本週在任的校尉：")] == ["本週在任的校尉：乙、丙。"]
