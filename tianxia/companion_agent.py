@@ -119,6 +119,22 @@ def _fallback_relationship_note(delta: int, disp_name: str) -> str:
     return f"{disp_name}{trend}。"
 
 
+def _habit(
+    character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str, affinity: int,
+) -> str:
+    """大勢人物的武藝習慣（一門打不遍）：他這一季的路數（styles），交情到 styles.talk_affinity 才放進提示，讓他不經意露一兩句。
+    不是大勢人物、第一季沒開、交情不到都是空的。"""
+    from . import styles  # 函式內 import：styles → rules → …，避免循環引用
+
+    if affinity < content.config.styles.talk_affinity:
+        return ""
+    fig = next((f for f in content.figures.values() if f.character == companion_id), None)
+    squad = content.squads.get(fig.squad) if fig is not None else None
+    if squad is None:
+        return ""
+    return styles.talk_line(content, styles.style_of(state, content, world, squad), character.name)
+
+
 def build_system_prompt(
     character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
 ) -> str:
@@ -150,6 +166,7 @@ def build_system_prompt(
         f"【{character.name}的出身】{character.background}\n"
         f"【{character.name}此時的處境】{character.situation}\n"
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
+        f"{_habit(character, state, content, world, companion_id, affinity)}"
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"

@@ -690,7 +690,7 @@ def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_diffic
     game.state.player.followers = ["follower_guan_spear"]
     assert _option(game, "act:challenge:bocai").wait == "兩人對峙……"
     request = game.fight_request("act:challenge:bocai")
-    assert request.squad_id == "figure_bocai" and request.theirs.startswith("波才（屬剛，難度 120）")
+    assert request.squad_id == "figure_bocai" and request.theirs.startswith("波才（屬剛，難度 120；此人的路數：")  # 第一季多寫他的路數（一門打不遍）
     assert len(request.ours) == 2 and request.ours[1].startswith("持矛鄉勇：武學【")
     assert request.ours[0].startswith("官甲：武學【") and "內功【" in request.ours[0]
     judgment = fight_llm.Judgment(advantage=-15, winning="佔上風。", losing="落下風。")
@@ -765,7 +765,7 @@ def test_a_challenge_can_be_dodged_into_a_draw(on, world):
     before = game.state.model_copy(deep=True)
     msgs = game.choose("act:challenge:bocai")
     record = game.state.battles[0]
-    assert (record.event, record.tier) == ("挑戰波才", "僵持") and record.notes == [battlelog.DODGE_NOTE]
+    assert (record.event, record.tier) == ("挑戰波才", "僵持") and record.notes[0] == battlelog.DODGE_NOTE
     assert p.stats["silver"] == 50 and "銀兩 -5" not in msgs
     assert world.get_season().figures["bocai"].prestige == 60 and p.snubbed_until == {}
     assert record.changes == team.take_encounter_toll(before, on, world, "僵持")

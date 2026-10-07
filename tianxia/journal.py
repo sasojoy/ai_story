@@ -25,6 +25,7 @@ CRAFT = "煉製"
 ALLOCATE = "配點"  # 升級的屬性點分配到屬性上（武學與成長設計 6.2）；連按幾次併成一則
 WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的標題；連續的會併成一則
 RENAMED = "絕學定名"  # 手上的武學被人定了正式的名字（FB-083，Game._deliver_renames；待 joy 潤）
+ECHO = "首創流傳"  # 別人照著你首創的配方合了出來，名望回饋（Game._deliver_echoes；待 joy 潤）
 AWAY = "你不在的時候"  # 離線一陣子再上線時的那一則摘要（傳聞分層設計第八節，Game._deliver_away；待 joy 潤）
 SEASON_START = "賽季開始"  # 開場那一則（標題是劇本名）的標籤：Game.new 與換季重來都寫它
 GUIDE_ONLY = "新手引導"  # 沒有紀錄可接時，只放引導那幾行的那一則（add_guide）的標題
