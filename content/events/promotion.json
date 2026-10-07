@@ -675,5 +675,314 @@
         }
       }
     ]
+  },
+  {
+    "id": "promo_huang_3_talisman",
+    "title": "晉升・下曲陽",
+    "actions": [],
+    "text": "張寶咬破手指，在黃紙上畫了一道符，塞進你懷裡：「南陽要人。帶著這道符去，他們就知道你是自己人。」",
+    "choices": [
+      {
+        "text": "「是。」",
+        "effect": {
+          "text": "你把符貼身收好。",
+          "summons_next": "promo_huang_3_talisman"
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_3_talisman_zl",
+    "title": "晉升・廣宗",
+    "actions": [],
+    "text": "張梁咬破手指，在黃紙上畫了一道符，塞進你懷裡：「南陽要人。帶著這道符去，他們就知道你是自己人。」",
+    "choices": [
+      {
+        "text": "「是。」",
+        "effect": {
+          "text": "你把符貼身收好。",
+          "summons_next": "promo_huang_3_talisman_zl"
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_3_zmc",
+    "title": "晉升・南陽黃巾營",
+    "actions": [],
+    "text": "神上使接過符，對著日光看了很久：「你信黃天嗎？」",
+    "choices": [
+      {
+        "text": "「信。」",
+        "effect": {
+          "text": "張曼成把符還給你，點了點頭。",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhangmancheng": 10
+          }
+        }
+      },
+      {
+        "text": "「我信大賢良師。」",
+        "effect": {
+          "text": "張曼成沉默了一下：「那也好。」",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhangmancheng": 3
+          }
+        }
+      },
+      {
+        "text": "「我信的是手上的刀。」",
+        "effect": {
+          "text": "一旁的趙弘看了你一眼。",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhangmancheng": -3,
+            "zhaohong": 5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_3_zh",
+    "title": "晉升・南陽黃巾營",
+    "actions": [],
+    "text": "趙弘接過符，看也不看就收進懷裡：「符？我不看符，我看你帶了什麼來。」",
+    "choices": [
+      {
+        "text": "「帶了糧。」",
+        "condition": {
+          "grain_min": 2
+        },
+        "effect": {
+          "text": "趙弘叫人把糧袋扛進倉裡，第一次正眼看你。",
+          "donate_grain": {
+            "nanyang_huangjin_camp": 2
+          },
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhaohong": 10
+          }
+        }
+      },
+      {
+        "text": "「帶了人。」",
+        "effect": {
+          "text": "趙弘點點頭：「人也好，城頭缺人。」",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhaohong": 5
+          }
+        }
+      },
+      {
+        "text": "「只帶了這道符。」",
+        "effect": {
+          "text": "「那就先去城頭站一夜。」",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_3_zl",
+    "title": "晉升・廣宗",
+    "actions": [],
+    "text": "張梁看了看符：「這符我認得。南陽那邊去不成了，就留在廣宗吧。你帶了什麼來？」",
+    "choices": [
+      {
+        "text": "「帶了糧。」",
+        "condition": {
+          "grain_min": 2
+        },
+        "effect": {
+          "text": "張梁叫人把糧袋扛進城裡：「弟兄們今晚有飯吃了。」",
+          "donate_grain": {
+            "guangzong": 2
+          },
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhangliang": 10
+          }
+        }
+      },
+      {
+        "text": "「帶了人。」",
+        "effect": {
+          "text": "張梁拍了拍你的肩：「人比什麼都要緊。」",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ],
+          "affinity": {
+            "zhangliang": 5
+          }
+        }
+      },
+      {
+        "text": "「只帶了這道符。」",
+        "effect": {
+          "text": "「那就先去城頭站一夜。」",
+          "promote": 3,
+          "followers": [
+            "follower_huang_believer"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_4",
+    "title": "晉升・廣宗靜室",
+    "actions": [],
+    "text": "廣宗城裡最深的一間靜室。張角瘦得只剩一副骨架，眼睛卻亮得嚇人。他把一卷黃帛交給你：「這是黃天密令，見令如見我。」說完，他摸了摸胸口那個從不離身的錦囊，像是自言自語：「南華老仙給我的，不只是一部書……」",
+    "choices": [
+      {
+        "text": "「大賢良師，錦囊裡是什麼？」",
+        "effect": {
+          "text": "他淡淡一笑：「等黃天立了，你自會知道。」",
+          "runic": 2,
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 3
+          }
+        }
+      },
+      {
+        "text": "「弟子不問。」",
+        "effect": {
+          "text": "張角點了點頭。",
+          "runic": 2,
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 10
+          }
+        }
+      },
+      {
+        "text": "「大賢良師，您該多歇著。」",
+        "effect": {
+          "text": "「黃天不等人。」",
+          "fs_fragments": [
+            "fs_zhangjiao_huang:0"
+          ],
+          "runic": 2,
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_4_revealed",
+    "title": "晉升・廣宗靜室",
+    "actions": [],
+    "text": "廣宗城裡最深的一間靜室。張角瘦得只剩一副骨架，眼睛卻亮得嚇人。他摸了摸胸口的錦囊，不再遮掩：「天下都知道了。那就讓他們來搶。」他把一卷黃帛交給你：「這是黃天密令，見令如見我。」",
+    "choices": [
+      {
+        "text": "「大賢良師，錦囊裡是什麼？」",
+        "effect": {
+          "text": "他淡淡一笑：「如今天下都知道了，何必問我。」",
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 3
+          }
+        }
+      },
+      {
+        "text": "「弟子不問。」",
+        "effect": {
+          "text": "張角點了點頭。",
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 10
+          }
+        }
+      },
+      {
+        "text": "「大賢良師，您該多歇著。」",
+        "effect": {
+          "text": "「黃天不等人。」",
+          "fs_fragments": [
+            "fs_zhangjiao_huang:0"
+          ],
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ],
+          "affinity": {
+            "zhangjiao": 5
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "promo_huang_4_heir",
+    "title": "晉升・黃天密令",
+    "actions": [],
+    "text": "一卷黃帛交到你手上，封口的硃砂印是大賢良師的：「這是大賢良師留下的黃天密令，見令如見他。」",
+    "choices": [
+      {
+        "text": "「弟子領命。」",
+        "effect": {
+          "text": "你把黃帛收進懷裡，像收著一團火。",
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ]
+        }
+      },
+      {
+        "text": "「黃天不會倒。」",
+        "effect": {
+          "text": "交令的人看了你很久，只說了一聲：「好。」",
+          "promote": 4,
+          "followers": [
+            "follower_huang_strongman"
+          ]
+        }
+      }
+    ]
   }
 ]

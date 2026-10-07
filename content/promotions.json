@@ -156,5 +156,88 @@
         }
       }
     }
+  },
+  {
+    "faction": "huang",
+    "rank": 3,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_huang_3_talisman",
+            "figure": "zhangbao",
+            "at": "xiaquyang",
+            "summons_text": "張寶召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_3_talisman_zl",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "張梁召你到{據點}。"
+          }
+        ]
+      },
+      {
+        "casts": [
+          {
+            "event": "promo_huang_3_zmc",
+            "figure": "zhangmancheng",
+            "at": "nanyang_huangjin_camp",
+            "summons_text": "帶著符去{據點}。"
+          },
+          {
+            "event": "promo_huang_3_zh",
+            "figure": "zhaohong",
+            "at": "nanyang_huangjin_camp",
+            "summons_text": "帶著符去{據點}。"
+          },
+          {
+            "event": "promo_huang_3_zl",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "南陽那邊沒有人接應了，改去{據點}支援張梁。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個信眾提著包袱跟了上來：「小方渠帥，往後聽你的。」"
+  },
+  {
+    "faction": "huang",
+    "rank": 4,
+    "legs": [
+      {
+        "casts": [
+          {
+            "event": "promo_huang_4",
+            "figure": "zhangjiao",
+            "at": "guangzong",
+            "flags_none": [
+              "runic_revealed"
+            ],
+            "summons_text": "張角召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_revealed",
+            "figure": "zhangjiao",
+            "at": "guangzong",
+            "summons_text": "張角召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_heir",
+            "figure": "zhangbao",
+            "at": "xiaquyang",
+            "summons_text": "張寶召你到{據點}。"
+          },
+          {
+            "event": "promo_huang_4_heir",
+            "figure": "zhangliang",
+            "at": "guangzong",
+            "summons_text": "張梁召你到{據點}。"
+          }
+        ]
+      }
+    ],
+    "closing": "一個太平力士被帶到你身後：「渠帥，往後聽你的。」"
   }
 ]
