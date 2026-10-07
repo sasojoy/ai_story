@@ -43,16 +43,18 @@ def test_advance_also_stamps_the_join_before_moving_time(content, world):
     assert game.state.player.joined_at == 0.0
 
 
-def test_newbie_regen_doubles_for_three_calendar_days_from_joining(content, world):
-    """氣血回復加倍：從自己加入那一刻起的季曆 3 天（2.5 天的季，季曆 3 天是現實約 2 小時），之後恢復一倍。"""
+def test_newbie_regen_doubles_for_newbie_days_from_joining(content, world):
+    """氣血回復加倍：從自己加入那一刻起的季曆 newbie_days 天（18；2.5 天的季約 13 小時），之後恢復一倍。"""
     install_season_one(content)
     late = _late_joiner(content, world)
     p = late.state.player
     day = DAY / calendar.cal_scale(content, late.state.world)
+    n = content.config.newbie_days
+    assert n == 18
     gained = []
-    for after in (3 * day - 1, 3 * day + 1):
+    for after in (n * day - 1, n * day + 1):
         late.state.world.time = p.joined_at + after
-        assert roster.newbie(late.state, content) is (after < 3 * day)
+        assert roster.newbie(late.state, content) is (after < n * day)
         p.member.neili = 10.0
         late._advance_player_local(600)
         gained.append(p.member.neili - 10.0)

@@ -373,7 +373,7 @@ def test_reports_view_is_empty_with_no_battles(game):
 def test_status_text_still_reads_the_same(game):
     text = game.status_text()
     assert text.startswith("### 測試　·　散人　第1級")
-    assert "⚡ 體力 150/150" in text
+    assert "⚡ 體力 250/250" in text
 
 
 # ── 開局、讀檔 ────────────────────────────────────────────
@@ -3330,7 +3330,7 @@ def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:explore")
     assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟
-    assert game.state.player.stamina < 150
+    assert game.state.player.stamina < server.CONTENT.config.stamina_max
 
 
 def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_trip(game, lock_events):

@@ -223,6 +223,19 @@ def add_marks(marks: dict[str, int], state: GameState) -> None:
         state.world.marks[key] = state.world.marks.get(key, 0) + n
 
 
+def fail_stamina(amount: int, content: Content) -> int:
+    """事件失敗另扣的體力（只縮扣的，不縮給的）乘 event_fail_stamina_scale、四捨五入（15 → 8、5 → 3；體力平衡提案第〇節）。"""
+    if amount >= 0:
+        return amount
+    return -int(-amount * content.config.event_fail_stamina_scale + 0.5)
+
+
+def failed(effect: Effect, content: Content) -> Effect:
+    """檢定失敗、隨口應對失敗要套的 fail_effect：扣的體力照 fail_stamina 縮過。劇情戰落敗不走這裡。"""
+    stamina = fail_stamina(effect.stamina, content)
+    return effect if stamina == effect.stamina else effect.model_copy(update={"stamina": stamina})
+
+
 def check_result_line(success: bool) -> tuple[str, str]:
     """檢定的結果：（江湖紀錄的標記, 敘事裡的那一行）。一律是本人出手，所以不寫誰（企劃者 2026-10-05），
     只寫「成功」「失敗」——事件選項、隨口應對、伏筆的最後一步都用這一個。"""

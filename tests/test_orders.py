@@ -421,7 +421,7 @@ def test_duty_pushes_the_front_and_counts_for_defend(on):
     # 守勢行動推的一點戰況：回給呼叫端的話是一句話（小的那一段三句裡的一句）、不是數字（FB-064）
     assert sum(m in {f"潁川汝南：黃巾{p}" for p in ("稍佔上風", "略有斬獲", "小有進展")} for m in msgs) == 1
     assert any("軍令「守城・潁川汝南」：你 1 次" in m for m in msgs)
-    assert game.state.player.stamina == 140
+    assert game.state.player.stamina == game.content.config.stamina_max - 10
     assert game.state.player.contrib == 10  # 推 1 點記 10 貢獻（T3）
     assert game.state.journal[0].title == "傳道・長社"
     assert game.state.journal[0].lines[0] == msgs[0]  # 那句敘事寫進「剛剛」與紀錄（FB-043：以前被當成結果標記藏起來）

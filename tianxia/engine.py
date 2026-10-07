@@ -26,7 +26,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .events import (
-    choice_label, event_candidates, has_events_here, pick_event, visible_choices,
+    choice_label, event_candidates, free_text_note, has_events_here, pick_event, visible_choices,
 )
 from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import speaker_of as guide_speaker_of
@@ -42,7 +42,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
-    ears_of, fill_marks, free_text_rate, here_regions,
+    ears_of, failed, fill_marks, free_text_rate, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -640,6 +640,8 @@ class Game:
         regen = seconds / cfg.stamina_regen_seconds
         if p.resting_since is not None:
             regen *= cfg.rest_regen_multiplier  # 打坐中回復加倍
+        if roster.newbie(self.state, self.content, cfg.newbie_stamina_days):
+            regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快，跟打坐疊乘（體力平衡提案第〇節）
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -699,7 +701,7 @@ class Game:
                 for i, ch in visible_choices(event, s, c)
             ]
             if event.free_text is not None:
-                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt))
+                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
             return opts
         if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
             menu = sensing.menu(s, c)
@@ -1230,7 +1232,7 @@ class Game:
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
             self._outcome(tag, line)
-            effect = choice.effect if success else choice.fail_effect
+            effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
@@ -3833,7 +3835,7 @@ class Game:
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
             msgs.append(line)
             self._outcome(tag, line)
-            return msgs + self._apply(choice.effect if success else choice.fail_effect)
+            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c))
         return msgs + self._apply(choice.effect)
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:

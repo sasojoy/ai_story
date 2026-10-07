@@ -564,7 +564,7 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
     ids = lambda game: [o.id for o in game.options()]  # noqa: E731
     guan = _player(on, world, "官甲", "guan", "huangjin_camp")
     challenge = _option(guan, "act:challenge:bocai")
-    assert challenge.enabled and challenge.label.startswith("挑戰波才（體力 10・")
+    assert challenge.enabled and challenge.label.startswith(f"挑戰波才（體力 {on.config.action_cost['train']}・")
     assert "act:challenge:pengtuo" not in ids(guan)
     for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "changshe")):
         assert not any(i.startswith("act:challenge:") for i in ids(_player(on, world, name, faction, at))), name
@@ -624,7 +624,7 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert {"波才敗走。", "波才聲威 -5", "波才情誼 -5"} <= set(msgs)
     assert world.get_season().figures["bocai"].prestige == 55
     p = winner.state.player
-    assert (p.affinities["bocai"], p.contrib, p.snubbed_until["bocai"], p.stamina) == (15, 50, 1000.0 + 2 * 3600, stamina - 10)
+    assert (p.affinities["bocai"], p.contrib, p.snubbed_until["bocai"], p.stamina) == (15, 50, 1000.0 + 2 * 3600, stamina - on.config.action_cost["train"])
     assert winner.state.battles[0].event == "挑戰波才" and "波才聲威 -5" in winner.state.battles[0].changes
     option = _option(winner, "act:challenge:bocai")
     assert (option.enabled, option.label) == (False, "挑戰波才（剛吃了敗仗，閉門不見）")
