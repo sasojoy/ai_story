@@ -155,6 +155,11 @@ def _action(content, action_id):
     return next(a for a in content.orders.rank_actions if a.id == action_id)
 
 
+def _said(content, action_id, field, loc_id):
+    """行動成功（ok）或失敗（fail）時玩家讀到的那一句：照內容檔的字、填上地點名。句子是 joy 在潤的，內容檔改了字，測試不該跟著變紅。"""
+    return getattr(_action(content, action_id), field).replace("{地點}", content.locations[loc_id].name)
+
+
 def _seat(game, faction="haoqiang"):
     """有第 4 階資格、這一週在任（計畫丁）：rank_of 才是 4。"""
     game.state.player.qualified = True
@@ -181,7 +186,7 @@ def test_incite_pushes_the_front_and_credits_orders(on):
     before = rules.trend_value(game.state, on, "yingru")
     with _always(True), mock.patch.object(Game, "_order_credit", return_value=[]) as credit:
         msgs = game.choose("act:rank:incite")
-    assert msgs[0].startswith("你在汝南的市集上振臂一呼")
+    assert msgs[0] == _said(on, "incite", "ok", "runan")
     credit.assert_called_once_with(kind="incite", location="runan", front="yingru", weight=5)
     assert rules.trend_value(game.state, on, "yingru") == before + 5  # 黃巾往己方（往 100）推 5 點
 
@@ -191,7 +196,7 @@ def test_failed_incite_counts_but_does_not_push(on):
     before = rules.trend_value(game.state, on, "yingru")
     with _always(False), mock.patch.object(Game, "_order_credit", return_value=[]) as credit:
         msgs = game.choose("act:rank:incite")
-    assert msgs[0].startswith("你在汝南喊了半天") and rules.trend_value(game.state, on, "yingru") == before
+    assert msgs[0] == _said(on, "incite", "fail", "runan") and rules.trend_value(game.state, on, "yingru") == before
     assert sum(game.state.player.rank_action_weeks.values()) == 1
     credit.assert_not_called()  # 沒過檢定：不替軍令記功
     assert game.state.player.stamina == 80  # 體力照扣
@@ -287,7 +292,7 @@ def test_seize_pushes_geju_by_ten_and_names_the_place(on):
     _seat(game)
     geju = rules.trend_value(game.state, on, "geju")
     msgs = game.choose("act:rank:seize")
-    assert msgs[0] == "趁著官軍與黃巾殺得難分難解，你帶人進了汝南的縣衙，把官印收進了自己的匣子。"
+    assert msgs[0] == _said(on, "seize", "ok", "runan")
     assert rules.trend_value(game.state, on, "geju") == geju + 10
 
 
