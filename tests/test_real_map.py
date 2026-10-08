@@ -261,6 +261,8 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
     # 遊歷打完接的通用戰後事件（content/events/train_aftermath.json）：寫的是過招前後的江湖見聞，哪裡都說得通
     "train_bettors", "train_campfire", "train_dropped_letter", "train_fallen_foe", "train_old_boxer",
     "train_runaway_cart", "train_sore_loser",
+    # 散人的遊俠名號奇遇（content/events/ranger.json）：寇那一則寫的是野外林子裡的綠林拜帖，哪一處野外都說得通
+    "ranger_kou_invitation",
 }
 
 

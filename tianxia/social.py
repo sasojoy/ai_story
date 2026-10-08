@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import invites, ranks, team
+from . import invites, ranger, ranks, team
 from .characters import CharacterStore
 from .state import GameState
 
@@ -95,10 +95,14 @@ def side(state: GameState, content: Content) -> str:
 
 
 def affiliation(state: GameState, content: Content) -> str:
-    """門派・陣營・頭銜（有哪幾樣寫哪幾樣），都沒有是散人——跟狀態列同一個寫法（Game.status_data）。"""
+    """門派・陣營・頭銜（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
+    狀態列（Game.status_data）與玩家卡都用這一個。"""
     p = state.player
     sect = content.sects[p.sect].name if p.sect else None
     faction = content.scenario.faction_name(p.faction)
+    named = ranger.title(content, state)
+    if faction is None and named is not None:
+        return f"{sect or '散人'}・{named}"
     return "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
 
 

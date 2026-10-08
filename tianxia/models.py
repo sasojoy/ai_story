@@ -57,6 +57,9 @@ class Condition(_Strict):
     marks_max: dict[str, int] = Field(default_factory=dict)
     # ── 伏筆的準備事件、片段事件用（計畫 T7）；預設都是不限 ──
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
+    # 遊俠名號（ranger.py）：散人、第一季開著、名號到這一階才成立（投靠了陣營一律不成立）；ranger_path 是「俠」或「寇」（不寫＝不限）
+    ranger_min: int | None = None
+    ranger_path: Literal["俠", "寇"] | None = None
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
@@ -1136,6 +1139,28 @@ class Spar(_Strict):
     per_pair_day: int = Field(default=2, ge=1)
 
 
+class Ranger(_Strict):
+    """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：只有第一季開著時有。
+    散人時攢的善名、惡名（只算加的，扣的不算）各記一本帳，俠名＝兩本取高的那一本＋懸賞的功績；走哪一條路看哪一本高
+    （善名高是「俠」、惡名高是「寇」，一樣高算俠）。投靠了陣營就凍結：帳不再記、名號不顯示、好處不給，存檔照留。
+
+    數字的依據（照整季機器人量，見 scripts/measure_sanren.py）：
+    - thresholds：第 1～4 階要多少俠名。整季隨機玩的機器人善名、惡名各 10～20 上下，只靠事件大約到第 2 階；
+      到第 3、4 階要再靠懸賞的功績，跟陣營的人要靠貢獻升第 3、4 階同一個量級。
+    - audience_per_tier：每一階抵幾點求見門檻、對所有人物都算（陣營的人每升一階抵 audience_rank_discount 5 點，可是只對自己陣營的人物）；
+      第 1 階起算。
+    - recruit_per_tier：第 2 階起每一階招募成功率加多少（第 2 階 +5%、第 4 階 +15%）：散人沒有部下，靠同伴補。
+    - qiyu_tier：到這一階，探索才遇得上散人專屬的奇遇（Condition.ranger_min）。
+    - bounty_bonus_tier／bounty_bonus：到這一階，懸賞給的銀兩再乘多少。"""
+
+    thresholds: list[int] = Field(default_factory=lambda: [5, 15, 30, 50], min_length=1)
+    audience_per_tier: int = Field(default=3, ge=0)
+    recruit_per_tier: float = Field(default=0.05, ge=0, le=1)
+    qiyu_tier: int = Field(default=3, ge=1)
+    bounty_bonus_tier: int = Field(default=4, ge=1)
+    bounty_bonus: float = Field(default=1.25, ge=1)
+
+
 class Raid(_Strict):
     """截殺（敵對陣營的玩家對打，企劃者 2026-10-08 在決策卡選「有限制地開」：「只能打敵對陣營、新手期和城裡不能打，
     輸了損失一點銀兩和氣血，同一人有冷卻」）。玩家卡上的一顆鈕，不必對方同意，對方下線、在忙也照打（他在「此地還有」的名單上就行）。
@@ -1244,6 +1269,7 @@ class Config(_Strict):
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
+    ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人
