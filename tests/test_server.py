@@ -5858,7 +5858,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
-        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act",
+        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_peer_answer", "api_party_leave",
     }
 
 
@@ -6441,3 +6441,20 @@ def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
     assert client.get("/api/peer", params={"name": "沒這個人"}).json() == {"card": None, "gone": social.GONE}
     out = client.post("/api/peer/act", json={"name": "林小竹", "action": "no-such", "amount": "x"}).json()
     assert "沒有這個動作" in out["message"] and out["card"]["name"] == "林小竹"
+
+
+def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
+    """第二層：甲向乙抱拳、送銀兩；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
+    _player(client, "shen_02", "沈青衫")
+    other = TestClient(server.app)
+    _player(other, "lin_02", "林小竹")
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "bow"}).json()
+    assert "抱拳見禮" in out["message"]
+    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "silver", "amount": 5}).json()
+    assert "送給了林小竹" in gift["message"]
+    [call] = other.get("/api/main").json()["calls"]
+    assert call["text"] == "沈青衫向你抱拳見禮。"
+    got = other.post("/api/peer/answer", json={"id": call["id"], "reply": "bow"}).json()
+    assert "抱拳還禮" in got["message"] and got["main"]["calls"] == [] and got["main"]["party"] is None
+    left = other.post("/api/party/leave", json={}).json()
+    assert "沒有跟著誰" in left["message"]

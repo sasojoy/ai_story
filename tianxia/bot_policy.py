@@ -6,14 +6,15 @@
 """
 from __future__ import annotations
 
+import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, sensing, server_bots, team
+from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, SkillDef
-from .state import BotProfile
+from .state import BotProfile, Overture
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
@@ -43,6 +44,13 @@ CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVA
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 MASTER_TRIES = 5  # 定名時模型的名字用不了，字表最多另組幾個
+# 回應別人遞過來的事（玩家互動第二層：打招呼、結伴邀請），照人的步調：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
+# 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
+REPLY_MIN_SECONDS = 30  # 收到之後至少隔這麼多現實秒數才回
+REPLY_SPREAD_SECONDS = 150  # 再加上 0～這麼多秒（每一件各擲一次，同一件永遠一樣）
+GREET_REPLY_SHARE = 0.65  # 打招呼：回禮的比例，其餘不理
+TRAVEL_ACCEPT_SHARE = 0.4  # 結伴邀請：答應的比例
+TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：鎖內一定不叫模型（同 server.NO_NAME）
 
 
@@ -87,10 +95,13 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     在路上的假人這一輪跳過，連照顧動作都不做（地圖擴充設計 3.4）。
     slot 是這一輪的取名名額（見 NamingSlot）：武學的事開出要取名的單時放進 slot.job，這一輪就只做到那裡。"""
     game.options(odds=False)  # 每一輪先替全服戰鬥追趕一次時間（集結截止、回合逾時），跟真人的畫面刷新一樣；在路上、趕路的假人也不例外
+    answered = answer_calls(game, profile)
     if game.state.player.journey is not None:
-        return []
+        return answered
+    if game.state.player.tagalong is not None:
+        return answered  # 答應了跟人結伴同行：在原地等他動身，不自己走開
     look_after(game, rng)
-    msgs = tend_arts(game, rng, slot)
+    msgs = answered + tend_arts(game, rng, slot)
     if slot is not None and slot.job is not None:
         return msgs  # 這一輪在爐前等名字，不做別的（不然體力可能花掉，C 段開不成）
     s = game.state
@@ -127,6 +138,37 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
             return msgs + game.choose(step)
     choice = pick(game, options, profile, rng)
     return msgs + game.choose(choice) if choice else msgs
+
+
+def _roll(profile: BotProfile, overture: Overture, salt: str) -> float:
+    """這個假人對這一件的決定性擲骰（0～1）：同一件、同一個假人永遠一樣，所以每一輪重看不會改主意。"""
+    digest = hashlib.sha256(f"{profile.seed}|{overture.id}|{salt}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def answer_calls(game: Game, profile: BotProfile) -> list[str]:
+    """回應別人遞過來的打招呼與結伴邀請（玩家互動第二層），只走 Game.answer_overture，跟真人按回應鈕同一條路。
+    每一件先等一段（REPLY_MIN_SECONDS＋擲出來的一段），再照擲骰回、拒或不理；結伴答應不了（在路上、手上有事、對方走了）就婉拒。"""
+    msgs: list[str] = []
+    s = game.state
+    for overture in list(s.player.inbox):
+        if game.now - overture.at < REPLY_MIN_SECONDS + _roll(profile, overture, "wait") * REPLY_SPREAD_SECONDS:
+            continue
+        roll = _roll(profile, overture, "answer")
+        if overture.kind == "greet":
+            gesture = social.GESTURES.get(overture.gesture)
+            if gesture is None or roll >= GREET_REPLY_SHARE:
+                continue
+            reply = gesture.replies[int(_roll(profile, overture, "which") * len(gesture.replies))][0]
+        elif roll < TRAVEL_ACCEPT_SHARE:
+            busy = s.pending_event is not None or game.join_refusal(overture.sender) is not None
+            reply = "no" if busy else "yes"
+        elif roll < TRAVEL_ACCEPT_SHARE + TRAVEL_REJECT_SHARE:
+            reply = "no"
+        else:
+            continue
+        msgs += game.answer_overture(overture.id, reply)
+    return msgs
 
 
 def look_after(game: Game, rng: random.Random) -> None:

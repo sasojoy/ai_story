@@ -117,6 +117,27 @@ class Sensing(BaseModel):
     serial: int = 0  # 這一次感悟的流水號（PlayerState.sense_serial）：鎖外看圖取名回來，C 段照它認是不是同一次
 
 
+class Overture(BaseModel):
+    """玩家之間遞出去、還沒回的一件事（玩家互動第二層）：打招呼、結伴同行的邀請。收的人記在 PlayerState.inbox，
+    送的人記在 PlayerState.sent，兩邊同一個 id；回了、或過了 Config.invite_seconds 現實秒數沒回，兩邊都拿掉。"""
+
+    id: str  # 「送的人｜流水號」
+    kind: Literal["greet", "travel"]
+    sender: str
+    to: str
+    gesture: str = ""  # 打招呼的禮節（social.GESTURES 的鍵）；結伴是空的
+    at: float  # 送出的現實時刻（Game.now）
+    location: str  # 在哪裡遞的
+
+
+class Tagalong(BaseModel):
+    """答應了別人的結伴同行：跟著 leader 走，路線與走法由他定。只記在跟著的那個人身上（帶頭的人照這一欄從資料庫查）。
+    since 是答應的現實時刻：帶頭的人 Config.party_wait_seconds 之內沒動身就散了；動身之後一路到終點才散。"""
+
+    leader: str
+    since: float
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -275,6 +296,12 @@ class PlayerState(BaseModel):
     opp_pieces: dict[str, list[str]] = Field(default_factory=dict)  # 拼圖型：機緣 id → 已經拿到的東西的 key
     patron: str | None = None  # 靠山（晉升奇遇 4.2）：yuan、cao、self；計畫丙升第 3 階時寫入，叛投清掉
     opp_settled: list[int] = Field(default_factory=list)  # 結算過的集體密謀 id（只結算一次；換季跟著新角色清空）
+
+    # ── 玩家之間的互動（第二層：打招呼、結伴同行）；角色每季重來，跟著清空。存在角色的 JSON，不升 SCHEMA_VERSION ──
+    inbox: list[Overture] = Field(default_factory=list)  # 別人遞給我、我還沒回的
+    sent: list[Overture] = Field(default_factory=list)  # 我遞出去、對方還沒回的
+    overture_serial: int = 0
+    tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）

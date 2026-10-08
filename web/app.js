@@ -1210,7 +1210,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${m.scene}${m.here && m.here.length ? hereHtml(m) : ""}</section>`;
+        : `<section class="card scene">${m.scene}${m.here && m.here.length ? hereHtml(m) : ""}${m.party || (m.calls && m.calls.length) ? socialHtml(m) : ""}</section>`;
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
@@ -1249,6 +1249,30 @@
       open ? "" : `<button class="linkish here-more" data-act="here-more">還有 ${all.length - HERE_SHOW} 人 ▾</button>`}</div>`;
   }
 
+  // 玩家互動第二層：別人遞給你、還沒回的打招呼與結伴邀請（一件一行，後面是固定的回應鈕），以及結伴同行的那一行
+  // （跟著別人的人有「分道揚鑣」）。字都是伺服器寫好的（social.calls、Game.party_view）
+  function socialHtml(m) {
+    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.replies.map((r) =>
+      `<button class="btn small" data-act="answer" data-id="${esc(c.id)}" data-reply="${esc(r.id)}">${esc(r.label)}</button>`).join("")}</div>`).join("");
+    const party = m.party ? `<div class="party"><span>${esc(m.party.text)}</span>${m.party.lead ? ""
+      : '<button class="btn small ghost" data-act="party-leave">分道揚鑣</button>'}</div>` : "";
+    return `<div class="calls">${calls}${party}</div>`;
+  }
+  async function answerCall(id, reply) {
+    await busy(async () => {
+      const r = await api("/api/peer/answer", { id, reply });
+      if (r.main) setMain(r.main);
+      renderPage();
+    });
+  }
+  async function leaveParty() {
+    await busy(async () => {
+      const r = await api("/api/party/leave", {});
+      if (r.main) setMain(r.main);
+      renderPage();
+    });
+  }
+
   // 玩家卡（第一層）：點「此地還有」的名字疊上來的抽屜。名號、門派・陣營・頭銜、等級、身上兩門（名字與品質），底下是卡上的動作鈕
   // （伺服器照 social.ACTIONS 給，第二層的贈物、結伴、打招呼、切磋、論武都掛在這裡）。人走了（card 是 null）寫伺服器給的那一句
   function peerHtml() {
@@ -1258,7 +1282,7 @@
       : !c ? `<p>${esc(P.gone || "他已經不在這裡了。")}</p>`
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div></div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
-        ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount"><input class="input" name="amount" type="number" inputmode="numeric" min="1" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：1～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
+        ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="1" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：1～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? `<div class="peer-acts">${c.actions.map((b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`).join("")}</div>` : ""}`;
     return `<div class="sheet-bg" data-act="peer-close"></div>
       <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
@@ -1268,6 +1292,10 @@
         <div class="row"><button class="btn ghost" data-act="peer-close">關閉</button></div>
       </div>`;
   }
+  // 卡上的鈕要先挑一樣（贈素材）：一個下拉選單，每一樣寫身上有幾份
+  const choiceSelect = (b) => (b.choices && b.choices.length
+    ? `<select class="input" name="choice" aria-label="挑一樣">${b.choices.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}（${x.max}）</option>`).join("")}</select>`
+    : "");
   async function openPeer(name) {
     S.peer = { name, loading: true };
     render();
@@ -1281,14 +1309,14 @@
     render();
   }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
-  async function peerAct(i, sure = false, amount = 0) {
+  async function peerAct(i, sure = false, amount = 0, choice = "") {
     const P = S.peer;
     const b = P && P.card && P.card.actions[i];
     if (!b) return;
     if (b.amount > 0 && !amount) { S.peer.amountFor = i; render(); return; }
-    if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount)); return; }
+    if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount, choice)); return; }
     await busy(async () => {
-      const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount });
+      const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice });
       if (r.main) setMain(r.main);
       S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
       render();
@@ -2574,6 +2602,8 @@
         case "peer-close": S.peer = null; render(); break;
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
+        case "answer": await answerCall(el.dataset.id, el.dataset.reply); break;
+        case "party-leave": await leaveParty(); break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
@@ -2802,7 +2832,7 @@
         const n = Math.floor(Number(data.amount));
         if (i == null || !(n >= 1)) return;
         S.peer.amountFor = null;
-        await peerAct(i, false, n);
+        await peerAct(i, false, n, data.choice || "");
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));

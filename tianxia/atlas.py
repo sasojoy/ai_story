@@ -602,6 +602,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
     if p.fs_asking is not None:
         return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True)
+    if p.tagalong is not None and p.journey is not None:  # 結伴同行：路線由帶頭的人定（玩家互動第二層）
+        return TravelBlock(f"跟著{p.tagalong.leader}同行，要改道先分道揚鑣", to_jianghu=True)
     if p.busy_until is not None:
         return TravelBlock("閉關中，不能安排前往")
     if p.resting_since is not None:
