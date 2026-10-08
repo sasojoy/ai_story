@@ -1276,7 +1276,7 @@
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div></div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="1" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：1～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
-        ${c.actions.length ? `<div class="peer-acts">${c.actions.map((b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`).join("")}</div>` : ""}`;
+        ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
     return `<div class="sheet-bg" data-act="peer-close"></div>
       <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
         <div class="grip"></div>
@@ -1284,6 +1284,23 @@
         ${body}
         <div class="row"><button class="btn ghost" data-act="peer-close">關閉</button></div>
       </div>`;
+  }
+  // 卡上的鈕：同一個 group 的（論武出哪一樣，每一樣一顆）收成一個下拉清單＋一顆鈕，按下去送清單上選的那一顆（照它在 actions 裡的索引）；
+  // 只有一顆的 group 照常畫。下拉清單整排佔滿一列，其餘的鈕照舊兩欄
+  function peerActsHtml(actions) {
+    const groups = {};
+    actions.forEach((b, i) => { if (b.group && b.enabled) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
+    const done = new Set();
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    const html = actions.map((b, i) => {
+      const members = b.group && b.enabled ? groups[`${b.action}|${b.group}`] : null;
+      if (!members || members.length < 2) return one(b, i);
+      if (done.has(members)) return "";
+      done.add(members);
+      return `<div class="peer-pick"><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}">${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
+        + `<button class="btn" data-act="peer-pick">${esc(b.group)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
+    }).join("");
+    return `<div class="peer-acts">${html}</div>`;
   }
   // 卡上的鈕要先挑一樣（贈素材）：一個下拉選單，每一樣寫身上有幾份
   const choiceSelect = (b) => (b.choices && b.choices.length
@@ -2594,6 +2611,7 @@
         case "peer": await openPeer(el.dataset.name); break;
         case "peer-close": S.peer = null; render(); break;
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
+        case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
         case "party-leave": await leaveParty(); break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;

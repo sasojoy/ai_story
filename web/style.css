@@ -894,3 +894,5 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .call > span, .party > span { flex: 1 1 100%; }
 .peer-amount { flex-wrap: wrap; }
 .peer-amount select { flex: 1 1 100%; }
+.peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }
+.peer-pick select { min-width: 0; }

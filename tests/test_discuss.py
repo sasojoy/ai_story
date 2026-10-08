@@ -151,6 +151,9 @@ def test_the_card_buttons(pair):
         return [(b["label"], b["arg"]) for b in card["actions"] if b["action"] == "discuss"]
 
     assert buttons("甲", "乙") == [("論武・以【粗淺拳腳】", "invite:art:basic_fist"), ("論武・以「風」", "invite:insight:feng")]
+    card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
+    picks = [(b["group"], b["pick"]) for b in card["actions"] if b["action"] == "discuss"]
+    assert picks == [("論武", "【粗淺拳腳】"), ("論武", "「風」")]  # 網頁照 group 收成一個下拉清單
     _invite(content, world)
     assert buttons("甲", "乙") == [("收回論武邀請", "cancel")]
     assert buttons("乙", "甲") == [("以【長拳】應之", "yes:art:fist"), ("以「火」應之", "yes:insight:huo"), ("婉拒論武", "no")]

@@ -39,11 +39,16 @@ class CardButton:
     confirm: str = ""  # 按下去之前先問一次的話；空的直接送
     amount: int = 0  # >0：按下去要先填一個數量（1～amount），送 params["amount"]
     choices: list[dict] = field(default_factory=list)  # 有的話先挑一樣（[{id, label, max}]），送 params["choice"]；數量上限照那一樣的 max
+    # 同一種互動裡「每一樣東西一顆」的鈕（論武出哪一樣）：同一個 group 的鈕網頁收成一個下拉清單（每一項寫 pick）配一顆寫 group 的鈕，
+    # 卡片不會隨東西變多一直變長。空的照常一顆一顆畫
+    group: str = ""
+    pick: str = ""
 
     def view(self) -> dict:
         return {
             "action": self.action, "label": self.label, "arg": self.arg, "note": self.note,
             "enabled": self.enabled, "confirm": self.confirm, "amount": self.amount, "choices": self.choices,
+            "group": self.group, "pick": self.pick,
         }
 
 
