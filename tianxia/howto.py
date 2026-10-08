@@ -2,17 +2,20 @@
 
 - 江湖頁行動列底下那幾行：探索、遊歷、交友這一下會怎樣（explore_line、train_line、social_line）；
 - 狀態列體力條點開的說明（stamina_lines）與建角色時送回體丹的那一行（gift_line）；
+- 江湖頁的戰況圖卡、態勢、大事、主線點開的說明（war_help，explain-2：這一季在打什麼、亂局與割據、大事怎麼定、你能怎麼出力）；
 - 設定抽屜的「玩法說明」（page，Markdown）。
 
 這裡只把事實寫成字：比重、獎勵、推不推戰局由呼叫端照引擎真正的規則算好傳進來（Game._explore_weights、遊歷的對手、
-Game.train_trend_push），數字一律讀 Config，句子裡不寫死任何數。不改狀態、不擲骰、不讀時鐘。所有句子待 joy 潤。"""
+Game.train_trend_push），數字一律讀 Config（或內容、規則模組的常數），句子裡不寫死任何數。不改狀態、不擲骰、不讀時鐘。
+所有句子待 joy 潤。"""
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, rules
+from . import calendar, rules, timetable
 from .models import Content
-from .state import WorldState
+from .rules import _STANCE_NAMES as STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
+from .state import GameState, WorldState
 
 # 探索三選一的三支（models.EXPLORE_BRANCHES）在說明裡怎麼叫
 BRANCH_WORDS: dict[str, str] = {"insight": "悟意境", "wild": "遇野怪", "event": "碰上事件"}
@@ -162,6 +165,104 @@ def gift_line(content: Content) -> str:
         return (f"內測贈禮：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
                 f"測試期間按體力條上的「{cfg.beta_free_refill_label}」就能免費補滿，不花丹。")
     return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
+
+
+# ── 江湖頁的戰況、態勢、大事、主線點開的說明（explain-2 第一項，FB-100）──────────────────────
+# 第一季濃縮版才有（呼叫端在 rules.season_one 後面）。亂局帶讀 Config.chaos_low／chaos_high，此刻在亂局的戰線讀 rules.chaos_fronts，
+# 大事的件數讀時刻表、擲骰的上下限讀 timetable 的常數、改寫得了的大事讀伏筆的鏈：不另寫一份判斷。戰況的變化照舊不寫數字（FB-064），
+# 這裡寫的只有規則的門檻與此刻的狀態。
+
+
+def _count(n: int) -> str:
+    """幾條：十以內寫國字（跟態勢卡底下「三條戰線合計」同一種寫法），再多寫數字。"""
+    return rules._COUNT_WORDS[n] if 0 <= n < len(rules._COUNT_WORDS) else str(n)
+
+
+def _band(content: Content) -> str:
+    cfg = content.config
+    return f"{cfg.chaos_low}～{cfg.chaos_high}"
+
+
+def _tenths(p: float) -> str:
+    """機率寫成「幾成」：0.1 → 一成。"""
+    return f"{_count(round(p * 10))}成"
+
+
+def season_line(content: Content) -> str:
+    """這一季在打什麼（第一季設計第一、四節）：劇本名、官軍與黃巾爭的幾條戰線、豪強割據。"""
+    fronts = [rules.trend_name(content, f) for f in rules.front_ids(content)]
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    return (f"這一季是{content.scenario.name}：{guan}與{huang}在{_count(len(fronts))}條戰線上爭（{'、'.join(fronts)}），"
+            f"{hao}趁亂割據。")
+
+
+def stance_help(content: Content) -> list[str]:
+    """態勢小標點開的說明：這一季在打什麼、三方的態勢怎麼算、割據怎麼漲落（rules.stances、geju_per_day）。
+    此刻漲還是落，面板上本來就有一句（status.stance_notes 的 chaos_note），這裡只寫規則。"""
+    n = len(rules.front_ids(content))
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    return [
+        season_line(content),
+        f"{guan}、{huang}的態勢是{_count(n)}條戰線合起來的；{hao}的態勢是割據：有戰線在亂局（戰況 {_band(content)}）就漸長，"
+        f"投靠陣營的人越多長得越快，{_count(n)}條都穩下來就漸消。",
+    ]
+
+
+def fronts_help(state: GameState, content: Content) -> list[str]:
+    """戰況圖卡點開的說明：兩端、亂局帶、此刻哪幾條在亂局（rules.chaos_fronts）、玩家怎麼推（Game.train_trend_push：
+    官軍、黃巾往自己那一邊，散人照地方本來的方向，豪強只在亂局裡推割據；軍令達成時整個陣營推一把）。"""
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
+    now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
+    return [
+        f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局（條上淺色那一段），{hao}趁機割據。{now}",
+        f"在戰線上遊歷打贏、操練、做軍令，會把那條戰線往你陣營那一邊推；散人照那個地方本來的方向，{hao}只在亂局裡推割據。",
+    ]
+
+
+def _lockable(content: Content) -> int:
+    """關鍵伏筆改寫得了的大事有幾件：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果，foreshadow 文件 2.4）。"""
+    sides = {"guan", "huang"}
+    return len({chain.event for chain in content.foreshadows.chains if chain.side in sides})
+
+
+def board_help(content: Content) -> list[str]:
+    """大事小標點開的說明：時刻表的大事怎麼定（timetable.resolve：給了結果照它→有人鎖定照鎖定→固定的照寫好的→其餘照戰況擲骰；
+    擲骰的機率照 roll_chance，戰況給的先夾在 CHANCE_FLOOR～CHANCE_CEIL，軍令與一般伏筆的修正另加）。件數讀時刻表。"""
+    kinds = [e.kind for e in content.timetable]
+    fixed, roll, showdown = (kinds.count(k) for k in ("fixed", "roll", "showdown"))
+    parts = []
+    if fixed:
+        parts.append(f"{fixed} 件史書寫定，到時候就發生")
+    if roll:
+        parts.append(f"{roll} 件看戰況擲骰：那條戰線越偏向哪一邊，那一邊越容易成（戰況最多給到{_tenths(timetable.CHANCE_CEIL)}、"
+                     f"最少也有{_tenths(timetable.CHANCE_FLOOR)}），軍令與伏筆還能再推一點")
+    if showdown:
+        parts.append(f"{showdown} 場決戰由上陣的人在戰場上打出來")
+    finale = "；最後是季末收場" if "finale" in kinds else ""
+    lines = [f"這一季有 {len(kinds)} 件大事，照時刻表一件件揭曉：{'；'.join(parts)}{finale}。"]
+    locks = _lockable(content)
+    if locks:
+        lines.append(f"其中 {locks} 件可以被關鍵伏筆改寫：有人暗中做成了最後一步，那件大事就照他那一邊揭曉，揭曉之前誰也看不出來。")
+    return lines
+
+
+def quest_help(content: Content) -> list[str]:
+    """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。"""
+    return [
+        "你能做的：在戰線上遊歷打贏、操練，推動戰況；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起推一把；"
+        "聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事。",
+    ]
+
+
+def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
+    """江湖頁四個地方點開的說明（status.war_help）：stance＝態勢小標、fronts＝戰況圖卡、board＝大事小標、quest＝主線小標。"""
+    return {
+        "stance": stance_help(content),
+        "fronts": fronts_help(state, content),
+        "board": board_help(content),
+        "quest": quest_help(content),
+    }
 
 
 # ── 設定抽屜的「玩法說明」（explain-1 第四項）──────────────────────────────

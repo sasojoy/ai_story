@@ -441,6 +441,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-panel > :last-child { margin-bottom: 0; }
 .stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 .stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+/* 點開戰況、態勢、大事、主線看的說明（explain-2）：小字淡色，一行一段；面板裡的接在最後、上面一條細線隔開。
+   戰況圖卡那一段排在圖卡底下（#war 包著兩樣），只推動它底下的小地圖 */
+.war-help { font-size: 12px; line-height: 1.55; color: var(--ink-2); }
+.war-help p { margin: 4px 0 0; }
+.peek-panel > .war-help { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.war { margin-bottom: 12px; }
+.war > .fronts { margin-bottom: 0; }
+.war > .fronts-help { margin: 2px 4px 0; }
+.fronts[data-act="fronts-help"] { cursor: pointer; }
+.fronts[data-act="fronts-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
 @media (max-width: 340px) {
   .peek-chip::after { display: none; }
 }
