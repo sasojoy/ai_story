@@ -167,6 +167,14 @@ class FreeTextRequest(BaseModel):
     text: str
 
 
+class BattleTextRequest(BaseModel):
+    """放手一搏鎖外評估的單子（server.py 的 A 段拿到、B 段送模型評成功率、C 段交回 submit_battle_custom_action 重驗才送出）。"""
+    battle_id: str
+    act_index: int  # 送出時是第幾幕：評分照這一幕的情境（C 段送出時換了幕也照這個評過的分）
+    faction_name: str
+    text: str
+
+
 class FreeTextOutcome(BaseModel):
     """擲完骰的結果：server.py 拿它在鎖外請模型潤色，再交回 add_gamble_narration 插進那一則江湖紀錄。"""
     event_id: str
@@ -703,6 +711,9 @@ class Game:
             if battle.phase == "muster":
                 # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
                 # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場
+                return self._battle_options(battle, definition) + self._everyday_options(odds)
+            if self._free_agent() and self.state.player.name not in battle.participants:
+                # 開打了還沒投效的散人：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
                 return self._battle_options(battle, definition) + self._everyday_options(odds)
             battle_menu = self._battle_options(battle, definition)
             if self.state.player.resting_since is not None:
@@ -1682,8 +1693,9 @@ class Game:
             on.append("h_cap")
         status = self._battle_status(tick=False) if want("h_spectator") or want("h_showdown") else None
         watching = status is not None and self._watching_battle(*status)
-        # 散人只在決戰所在的大區才說（N3）：_watching_battle 對散人在集結時永遠是 True，人在別處不算「遇上」
-        if want("h_spectator") and status is not None and p.faction is None and watching and self._at_battle(status[1]):
+        # 散人只在決戰所在的大區、還沒投效時才說（N3）：人在別處不算「遇上」；說的是可以臨時投效（試玩回饋 2026-10-08）
+        if want("h_spectator") and status is not None and p.faction is None and p.name not in status[0].participants \
+                and self._at_battle(status[1]):
             on.append("h_spectator")
         if want("h_foreshadow") and any(p.fragments.values()):
             on.append("h_foreshadow")
@@ -2631,14 +2643,14 @@ class Game:
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
-        # 每回合最前面那一行出招比例只留在回合紀錄（戰報）與給模型的判定裡：潤色退回系統訊息時（沒有模型、逾時、或在假人的
-        # Game 裡結算）不放進場景的記錄，場景上的比例只由「對面上一回合」那一段寫一次（審查 I1）
+        # 每回合最前面那一行出招比例只留在回合紀錄（戰報）裡，場景上的比例只由「對面上一回合」那一段寫一次（審查 I1）。
+        # 場景的記錄就是系統判定的那幾句（第一句是 resolve_round 寫的「誰佔了上風、為什麼」），不叫模型潤色：結算在行動鎖裡，
+        # 以前每回合在鎖內等模型最多 in_lock_model_timeout 秒，全服所有人的動作都跟著等（試玩回饋 2026-10-08）
         shown = battle_instance.without_mix_line(battle, msgs)
-        narration = battle_instance.narrate_round(self._quick_client(), definition, battle, msgs, fallback=shown)
+        narration = "\n".join(shown)
         if narration:
             battle.narrative_log.append(narration)
-            battle.rounds[-1].narration = narration  # resolve_round 剛記下這一回合
-        return [narration] if narration else (shown or ["這一回合結算了。"])
+        return shown or ["這一回合結算了。"]
 
     def _run_battle_tick(self, definition: BattleDef) -> tuple[battle_instance.BattleInstance | None, list[str]]:
         """在 mutate_battle 裡跑一次 _advance_battle_round，給被動追趕（options()/scene_text()）用。"""
@@ -2718,6 +2730,9 @@ class Game:
                 battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
             )
             result["title"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}"
+            result["reason"] = battle_instance.overruled_reason(
+                battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
+            )
             if event is None:
                 return
             key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
@@ -2733,6 +2748,8 @@ class Game:
             if b.record_id != battle.record_id:
                 return
             b.outcome_title = str(result["title"])
+            if result.get("reason"):  # 伏筆鎖定的一方贏了、戰場上卻是另一方佔上風：敗因不能寫成戰場那一邊贏
+                b.outcome_reason = str(result["reason"])
             b.outcome_text = str(result.get("text") or b.outcome_text or "")
             b.outcome_trend_delta = dict(result.get("trends") or {})  # 只給戰報顯示：已經由 resolve 套過了
             b.outcome_world_flags = []
@@ -2891,7 +2908,7 @@ class Game:
             lines += [f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else []
             journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
             return
-        lines = ([battle.outcome_text] if battle.outcome_text else []) + [f"你出手 {me.acted_rounds} 回合"]
+        lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t] + [f"你出手 {me.acted_rounds} 回合"]
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         rule = c.config.breakthrough
@@ -2955,8 +2972,23 @@ class Game:
         return names
 
     def _off_side(self, definition: BattleDef) -> bool:
-        """劇本分陣營、而自己的陣營（散人沒有）不是這場決戰能站的任何一方（兩軍或第三方）。"""
-        return bool(self.content.scenario.factions) and self.state.player.faction not in self._sides(definition)
+        """劇本分陣營、而自己的陣營不是這場決戰能站的任何一方（兩軍或第三方）。散人不算：可以臨時投效兩軍之一（_free_agent）。"""
+        p = self.state.player
+        return bool(self.content.scenario.factions) and p.faction is not None and p.faction not in self._sides(definition)
+
+    def _free_agent(self) -> bool:
+        """劇本分陣營、自己是散人：決戰時可以臨時投效交戰的兩軍之一，只算這一場（試玩回饋 2026-10-08）——
+        不寫進投靠名冊、不改自己的陣營、不算叛投；不能投效第三方。"""
+        return bool(self.content.scenario.factions) and self.state.player.faction is None
+
+    def _enlist_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
+        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。"""
+        me = battle.participants.get(self.state.player.name)
+        return [
+            Option(id=f"battle:enlist:{f.id}", label=f"已臨時投效【{f.name}】", enabled=False)
+            if me is not None and me.faction == f.id else Option(id=f"battle:enlist:{f.id}", label=f"臨時投效【{f.name}】（只算這一場）")
+            for f in definition.factions
+        ]
 
     def _at_battle(self, definition: BattleDef) -> bool:
         """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
@@ -3025,6 +3057,8 @@ class Game:
         if self._off_side(definition):
             return None
         me = battle.participants.get(self.state.player.name)
+        if me is None and self._free_agent():  # 散人沒有自己的一方：不會為了投效趕過去，投效了才算自己這一方
+            return None
         if me is not None:
             return definition.region if me.away and not me.eliminated else None
         return None if self._at_battle(definition) else definition.region
@@ -3043,11 +3077,15 @@ class Game:
             if me is not None:
                 side = self._sides(definition).get(me.faction, me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
-                return f"{header}\n\n你已加入【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
+                joined = "臨時投效" if self._free_agent() else "加入"
+                return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
+            if self._free_agent():
+                return f"{header}\n\n集結中，還剩現實 {left}。你是散人，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
-        # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡
-        count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合）"
+        # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡。
+        # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
+        count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None:
@@ -3075,11 +3113,24 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
+    def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
+        """「已送出 X／在場 Y，最遲 M 分 S 秒後結算」：在場的人都送出就提早結算，不然等這一回合逾時（暫停中停在按下暫停那一刻）。"""
+        me = battle.participants.get(self.state.player.name)
+        third = me is not None and battle_instance.is_third(definition, me)  # 兩軍的人不算豪強（他們不該知道有幾個）
+        sent, present = battle_instance.round_progress(battle, definition, with_third=third)
+        paused = self.world.paused_at()
+        left = max(0, int(battle.round.opened_real + definition.round_seconds - (self.now if paused is None else paused)))
+        due = f"最遲 {left // 60} 分 {left % 60} 秒後結算" if left else "時間到了，即將結算"
+        return f"已送出 {sent}／在場 {present}，{due}"
+
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
         p = battle.participants.get(name)
         tuning = self.content.config.battle
+        if self._free_agent():  # 散人：集結時、或開打了還沒參戰，給臨時投效的兩顆
+            if battle.phase == "muster" or p is None:
+                return self._enlist_options(battle, definition)
         if battle.phase == "muster":
             sides = list(self._sides(definition).items())  # 兩軍加第三方（id, 名字）
             if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊（第三方的人只看到自己那一方）
@@ -3094,7 +3145,7 @@ class Game:
         if p.eliminated:
             return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
         if name in battle.round.pending_actions:
-            return [Option(id="battle:waiting", label="（已選擇，等待其他人……）", enabled=False)]
+            return [Option(id="battle:waiting", label=f"（已選擇，等其他人：{self._round_wait(battle, definition)}）", enabled=False)]
         out = []
         for o in battle_instance.options_for(battle, definition, name):
             if o.free_text:
@@ -3132,18 +3183,12 @@ class Game:
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
         return option.text if option else None
 
-    def submit_battle_custom_action(self, text: str) -> list[str]:
-        """自訂行動輸入框的送出：截到 20 字，查到這回合對應的 free_text 選項，機制效果
-        還是走它的 tag（跟按按鈕完全一樣的查表邏輯），玩家打的字只會被餵給 LLM 潤色。
-        這裡用 tick=True（不是 tick=False）——跟 _battle_choose() 不一樣，這個方法不是
-        透過 choose() 進來的，choose() 開頭那次 self.options(odds=False) 呼叫順便推進
-        過一次集結逾時/回合逾時的保護在這裡沒有發生過，這個方法是自己的入口，必須自己
-        負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
-        「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
-        成功率的評分在行動鎖內（server.py 的 battle_text 走 act），所以用 _quick_client 的短逾時複本；評不到就是保底值。"""
+    def _battle_text_check(self, text: str, tick: bool) -> tuple[BattleDef, str, str, str] | list[str]:
+        """放手一搏現在送不送得出去：送得出去回傳（這場的定義, 選項的 tag, 截到 20 字的文字, 自己站的那一方的名字），
+        不行回傳要給玩家看的那一句。tick 照 _battle_status。"""
         if self.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
             return [f"（{PAUSED_TEXT}。）"]
-        status = self._battle_status()
+        status = self._battle_status(tick=tick)
         if status is None:
             return ["（此刻無法這麼做。）"]
         battle, definition = status
@@ -3157,10 +3202,38 @@ class Game:
         text = text.strip()[:20]
         if not text:
             return ["（請先輸入你想做的事。）"]
-        act = battle_instance.current_act(battle, definition)
         faction_name = next((f.name for f in definition.factions if f.id == p.faction), p.faction)
-        success_rate = battle_instance.assess_action_success_rate(self._quick_client(), act, faction_name, text)
-        return self._submit_battle_action(name, definition, option.tag, text, success_rate)
+        return definition, option.tag, text, faction_name
+
+    def battle_text_request(self, text: str) -> BattleTextRequest | list[str]:
+        """放手一搏的階段 A（server.py 在行動鎖內、很快地呼叫）：送得出去就回傳要在鎖外送模型評成功率的單子，不行回傳那一句話。
+        只讀，不推進戰鬥（同 free_text_request）。"""
+        checked = self._battle_text_check(text, tick=False)
+        if isinstance(checked, list):
+            return checked
+        definition, _, text, faction_name = checked
+        return BattleTextRequest(
+            battle_id=definition.id, act_index=self.world.get_battle().act_index, faction_name=faction_name, text=text,
+        )
+
+    def submit_battle_custom_action(self, text: str, llm_rate: int | None = None) -> list[str]:
+        """自訂行動輸入框的送出：截到 20 字，查到這回合對應的 free_text 選項，機制效果
+        還是走它的 tag（跟按按鈕完全一樣的查表邏輯），玩家打的字只會被餵給 LLM 評成功率。
+        這裡用 tick=True（不是 tick=False）——跟 _battle_choose() 不一樣，這個方法不是
+        透過 choose() 進來的，choose() 開頭那次 self.options(odds=False) 呼叫順便推進
+        過一次集結逾時/回合逾時的保護在這裡沒有發生過，這個方法是自己的入口，必須自己
+        負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
+        「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
+        llm_rate 是 server.py 在行動鎖外評好的成功率（battle_text_request 開的單子；試玩回饋 2026-10-08：鎖內等模型全服跟著等）；
+        沒給（直接呼叫的測試、腳本）就在這裡評，用 _quick_client 的短逾時複本，評不到就是保底值。"""
+        checked = self._battle_text_check(text, tick=True)
+        if isinstance(checked, list):
+            return checked
+        definition, tag, text, faction_name = checked
+        if llm_rate is None:
+            act = battle_instance.current_act(self.world.get_battle(), definition)
+            llm_rate = battle_instance.assess_action_success_rate(self._quick_client(), act, faction_name, text)
+        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate)
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -3174,8 +3247,12 @@ class Game:
         kind, _, rest = arg.partition(":")
         # 已經報名的人在區內走動時改選陣營不是「加入」，不用再驗人在不在戰場（_at_battle 在路上一律是否）
         changing_sides = kind == "join" and name in battle.participants
-        if kind in ("join", "join_late") and not changing_sides and not self._at_battle(definition):
+        if kind == "enlist":
+            changing_sides = name in battle.participants
+        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._at_battle(definition):
             return [f"（{self._absent_reason(definition)}。）"]
+        if kind == "enlist":
+            return self._enlist(battle, definition, rest, changing_sides)
         if kind == "join":
             if self.content.scenario.factions and rest != self.state.player.faction:
                 return ["（你只能站在自己陣營這一邊。）"]
@@ -3208,6 +3285,34 @@ class Game:
             self._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
+
+    def _enlist(
+        self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str, changing_sides: bool,
+    ) -> list[str]:
+        """散人臨時投效交戰的一方（_free_agent）：集結時跟加入一樣（還能改投另一邊），開打了照晚到的人算、當回合就能出手。
+        參戰名單上記投效的那一方，自己的陣營照舊是散人。"""
+        name = self.state.player.name
+        armies = {f.id: f.name for f in definition.factions}
+        if not self._free_agent() or side not in armies:
+            return ["（此刻無法這麼做。）"]
+        if changing_sides and battle.phase != "muster":
+            return ["（開打之後就不能改投了。）"]
+        stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
+        scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
+        if battle.phase == "muster":
+            self.world.mutate_battle(
+                lambda b: battle_instance.join_faction(b, name, side, cap, power, scores=scores, attribute=road)
+            )
+            msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
+        else:
+            self.world.mutate_battle(
+                lambda b: battle_instance.auto_assign_latecomer(
+                    b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road,
+                )
+            )
+            msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
+        self._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
+        return msgs
 
     def _submit_battle_action(
         self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,

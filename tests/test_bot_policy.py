@@ -118,6 +118,18 @@ def test_a_bot_joins_its_own_side_of_a_battle_as_an_ordinary_fighter(content, ga
     assert fighter.faction == "guan" and not fighter.is_bot
 
 
+def test_a_drifter_bot_never_enlists_for_a_battle_and_does_not_rally_to_it(content, game):
+    """散人可以臨時投效決戰（試玩回饋 2026-10-08），那是給真人的；散人的假人不投效，也不會為了投效趕過去。"""
+    _install_factions(content)
+    definition = _install_battle(content)
+    game.world.start_battle(definition, now=game.now)
+    assert any(o.id.startswith("battle:enlist:") for o in game.options())  # 真人看得到
+    assert game.rally_region() is None
+    for seed in range(5):
+        bot_policy.take_turn(game, _profile(None), random.Random(seed))
+    assert game.state.player.name not in game.world.get_battle().participants
+
+
 def _active_battle_with(game, definition, faction, scores=None):
     """假人站 faction 這一邊、已經開打；scores 是它加入時快照的每招份量（沒給＝舊資料，每招 0）。"""
     game.state.player.faction = faction

@@ -7,9 +7,8 @@
 （這件事 LLM 做得到、也實測過排序穩定），系統拿這個機率真的擲骰、用寫死的公式換算
 成戰局推動/氣血損耗——玩家的奇葩操作因此真的會影響戰局（賭贏大賺、賭輸慘賠），但
 「最後是不是成功」跟「成功該加多少」都是系統的亂數/公式決定，LLM 從頭到尾不會直接
-吐出任何被拿去套用的數字，只吐一個被擲骰消費掉的機率。LLM 另外也負責在固定骨架
-（BattleDef.acts）裡，依這一回合發生的事生成一段敘事潤色，骨架本身一定會照三招的算法/擲骰
-結果往下走，不會被 LLM 帶偏。
+吐出任何被拿去套用的數字，只吐一個被擲骰消費掉的機率。回合的敘事是系統判定的句子（誰佔了上風、為什麼，
+見 round_line／round_causes），不叫模型潤色：結算在行動鎖裡，鎖內等模型會讓全服跟著等（試玩回饋 2026-10-08）。
 
 這裡是純粹的資料模型跟引擎函式，不碰共用儲存的存讀鎖（那是 world_state.py::
 get_battle/mutate_battle/start_battle 的事）、不碰網頁介面（那是 engine.py/server.py 的事）。
@@ -24,7 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import encounter, zh
+from . import encounter
 from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
 from .ollama_client import OllamaClient
 
@@ -92,8 +91,17 @@ class BattleRoundRecord(BaseModel):
     custom_texts: dict[str, str] = Field(default_factory=dict)  # 名號 -> 自訂行動文字
     success_rates: dict[str, int] = Field(default_factory=dict)  # 名號 -> LLM 評估的成功率
     messages: list[str] = Field(default_factory=list)  # 系統判定的結算訊息
-    narration: str = ""  # LLM 潤色的敘事（engine 結算完才補上；沒有就是空字串）
+    narration: str = ""  # 以前 LLM 潤色的敘事（2026-10-08 起回合不再叫模型，新的回合是空字串；舊資料留著）
     trend_after: int  # 結算後的戰局
+
+
+class RoundSwing(BaseModel):
+    """一回合戰局往哪邊走、為什麼（round_causes 寫的那幾句）：收場時挑出關鍵的回合寫成敗因（outcome_reason）。
+    存在 BattleInstance 裡（不像 rounds 寫進資料庫就讀不回來），一場最多 total_rounds 筆。"""
+
+    round: int  # 整場的第幾回合（1 起算）
+    delta: int  # 這一回合戰局變了多少（正是往第一方，負是往第二方）
+    causes: str = ""  # 這一回合的原因，「；」分開
 
 
 class BattleInstance(BaseModel):
@@ -102,6 +110,7 @@ class BattleInstance(BaseModel):
     muster_deadline_real: float = 0.0
     participants: dict[str, BattleParticipant] = Field(default_factory=dict)
     trend: int = 50
+    trend_start: int | None = None  # 開打時的戰局（時刻表決戰照戰況算，不一定是 50）；舊資料沒有是 None
     act_index: int = 0
     round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)
@@ -110,6 +119,8 @@ class BattleInstance(BaseModel):
     narrative_log: list[str] = Field(default_factory=list)
     outcome_title: str | None = None
     outcome_text: str | None = None
+    outcome_reason: str = ""  # 勝負的關鍵（outcome_reason 寫的那一句）：收場訊息、參戰者的戰報都放；舊資料、沒分勝負是空的
+    swings: list[RoundSwing] = Field(default_factory=list)  # 每一回合戰局怎麼走（resolve_round 記），寫敗因用；舊資料沒有是空的
     outcome_world_flags: list[str] = Field(default_factory=list)  # 結果要套用到共用賽季的世界旗標（複製自
     # BattleOutcome.world_flags_add，不是參照——戰鬥結算只碰共用戰鬥狀態本身，套用到賽季是
     # 呼叫端 engine.py 的事，見 Game._apply_battle_outcome；這裡存一份複本給它讀，不用
@@ -131,7 +142,9 @@ def start_muster(definition: BattleDef, now: float, trend_start: int | None = No
     """開一場集結。trend_start 是這一場的起點（時刻表決戰照前線戰況算，見 start_from_front）；不給時照
     definition.trend_start（beta 那場不變）。起點寫進 trend 之後就不再跟著戰線變。"""
     start = definition.trend_start if trend_start is None else trend_start
-    return BattleInstance(battle_id=definition.id, trend=start, muster_deadline_real=now + definition.muster_seconds)
+    return BattleInstance(
+        battle_id=definition.id, trend=start, trend_start=start, muster_deadline_real=now + definition.muster_seconds,
+    )
 
 
 def shift_deadlines(instance: BattleInstance, seconds: float) -> None:
@@ -318,6 +331,14 @@ def round_is_complete(instance: BattleInstance) -> bool:
     return bool(active) and all(p.name in instance.round.pending_actions for p in active)
 
 
+def round_progress(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> tuple[int, int]:
+    """這一回合（已送出, 在場）的人數：在場是還沒倒下、沒離開大區的人，已送出是其中選好行動的。
+    畫面寫「已送出 X／在場 Y」，讓人知道是在等人、不是壞了（試玩回饋 2026-10-08）。
+    第三方（地方豪強）有幾個人，兩軍不該知道（戰鬥系統第六節），所以只有 with_third（看的人自己站第三方）才算進去。"""
+    active = [p for p in _active_participants(instance) if with_third or not is_third(definition, p)]
+    return sum(1 for p in active if p.name in instance.round.pending_actions), len(active)
+
+
 def counter_coefficient(tuning: BattleTuning, move: str, enemy_mix: dict[str, float]) -> float:
     """剋制係數（戰鬥系統 3.4）：1 ＋ 0.5 × 對面出「被你剋的招」的比例 － 0.5 × 對面出「剋你的招」的比例，0.5～1.5。
     enemy_mix 是對面這回合各招的比例（_mix；對面沒人出固定招時呼叫端不呼叫、係數當 1）。"""
@@ -468,6 +489,11 @@ def resolve_round(
             moves[name] = option.move
     mixes = {side: _mix(moves, factions, side) for side in (first, second)}
     force, counts, gamble_delta = {first: 0.0, second: 0.0}, {first: 0, second: 0}, 0
+    names = {f.id: f.name for f in definition.factions}
+    gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
+    coefs: dict[str, list[float]] = {first: [], second: []}  # 陣營 → 這一回合每個出固定招的人的剋制係數，回合摘要用
+    fitness: dict[str, list[tuple[float, float]]] = {first: [], second: []}  # 陣營 → 每個出固定招的人的（份量, 氣血狀態），回合摘要用
+    trend_before = instance.trend
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
         if p is None or p.eliminated or is_third(definition, p):  # 第三方已經在 _third_round 結算（出手也在那裡數）
@@ -483,21 +509,27 @@ def resolve_round(
             sign = 1 if p.faction == first else -1
             if custom_text:
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {success_rate}%）")
+            side_name = names.get(p.faction, p.faction)
             if succeeded:
                 delta = gamble.success_trend_base + round(risk * gamble.success_trend_per_risk)
                 damage = gamble.success_neili_damage
-                msgs.append(f"{name}這一搏成功了！")
+                msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
             else:
                 delta = -round(risk * gamble.failure_trend_per_risk)
                 damage = gamble.failure_neili_base + risk * gamble.failure_neili_per_risk
-                msgs.append(f"{name}這一搏失敗了，付出了慘痛代價。")
+                # 代價照引擎算的寫出來（試玩回饋 2026-10-08：「慘痛的代價是什麼？」）
+                cost = f"{side_name}的戰局倒退 {-delta}，" if delta else ""
+                msgs.append(f"{name}這一搏失敗了，付出了慘痛代價：{cost}自己氣血 -{round(damage)}。")
             gamble_delta += sign * delta
+            gambles[p.faction] = gambles.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
             enemy = second if p.faction == first else first
             coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
             force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
             counts[p.faction] += 1
+            coefs[p.faction].append(coef)
+            fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
             damage = tuning.damage[move] * (2 - coef)
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
@@ -519,7 +551,6 @@ def resolve_round(
             push = -tuning.push_max
         elif mine + theirs > 0:
             push = tuning.push_max * (mine - theirs) / (mine + theirs)
-        names = {f.id: f.name for f in definition.factions}
         sides = "；".join(
             f"{names[side]}：" + "・".join(f"{m} {round(mixes[side][m] * 100)}%" for m in MOVES)
             for side in (first, second) if mixes[side]
@@ -535,9 +566,17 @@ def resolve_round(
         third_lines.append(f"{definition.third.grab} {grabs} 人、{definition.third.keep} {keeps} 人。")
     instance.last_mix = mixes
     instance.round_number += 1
+    # 這一回合為什麼往哪邊推（試玩回饋 2026-10-08：全是官軍卻輸了，卻看不出為什麼）：放在場景上看得到的第一行
+    auto = {side: sum(1 for n in moves if factions[n] == side and n in instance.round.auto_picked) for side in (first, second)}
+    causes = round_causes(names, (first, second), push, counts, mixes, coefs, gambles, auto, fitness)
+    msgs.insert(1 if counts[first] or counts[second] else 0, round_line(names, (first, second), trend_before, instance.trend, causes))
+    instance.swings.append(RoundSwing(round=instance.round_number, delta=instance.trend - trend_before, causes="；".join(causes)))
     decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
     if decisive or instance.round_number >= total_rounds(definition):
         msgs += _record_outcome(instance, decide_outcome(instance, definition))
+        instance.outcome_reason = outcome_reason(instance, definition)
+        if instance.outcome_reason:
+            msgs.append(instance.outcome_reason)
         msgs += settle_third(instance, definition, tuning)
     else:
         # 只往後換：回合上限之前就開打的舊資料，round_number 從 0 數起，不能把幕倒退回去
@@ -553,6 +592,101 @@ def resolve_round(
     ))
     instance.round = BattleRound(opened_real=now)
     return msgs
+
+
+def _main_move(mix: dict[str, float]) -> str:
+    """這一邊這回合出得最多的那一招（一樣多時照 MOVES 的順序）。"""
+    return max(MOVES, key=lambda m: mix.get(m, 0.0))
+
+
+def round_causes(
+    names: dict[str, str], armies: tuple[str, str], push: float, counts: dict[str, int], mixes: dict[str, dict[str, float]],
+    coefs: dict[str, list[float]], gambles: dict[str, int], auto: dict[str, int],
+    fitness: dict[str, list[tuple[float, float]]] | None = None,
+) -> list[str]:
+    """這一回合戰局為什麼這樣走，寫成幾句話（試玩回饋 2026-10-08：輸了要看得懂為什麼）。都照結算的數字挑，不叫模型：
+    - 三招交鋒（推力不是 0）：對面沒人正面出招 → 一邊壓上；平均剋制係數差到 0.2 → 誰的哪招剋住誰的哪招；
+      人數差到 1.5 倍 → 人多；都不是 → 份量（武藝）與氣血狀態，兩者裡差得多的那一個（fitness 是每個人的（份量, 氣血狀態））；
+    - 放手一搏：每一邊這一回合賭贏賭輸的淨推動（失手寫倒退多少）；
+    - 逾時沒出手、被系統代為固守的人數（固守會被奇襲剋）。"""
+    out: list[str] = []
+    shift = round(push)
+    if shift:
+        win, lose = (armies[0], armies[1]) if shift > 0 else (armies[1], armies[0])
+        w, lo = names.get(win, win), names.get(lose, lose)
+        if not counts[lose]:
+            out.append(f"{lo}沒有人正面出陣迎戰，{w}放手壓了上去")
+        else:
+            avg = {side: sum(coefs[side]) / len(coefs[side]) for side in armies if coefs[side]}
+            if avg.get(win, 1.0) - avg.get(lose, 1.0) >= 0.2:
+                out.append(f"{w}的{_main_move(mixes[win])}剋住了{lo}的{_main_move(mixes[lose])}")
+            elif counts[win] >= 1.5 * counts[lose]:
+                out.append(f"{w}人多勢眾（{counts[win]} 人對 {counts[lose]} 人）")
+            else:
+                out.append(_edge(w, lo, (fitness or {}).get(win, []), (fitness or {}).get(lose, [])))
+    for side in armies:
+        delta = gambles.get(side, 0)
+        if delta < 0:
+            out.append(f"{names.get(side, side)}有人放手一搏失手，戰局倒退了 {-delta}")
+        elif delta > 0:
+            out.append(f"{names.get(side, side)}有人放手一搏得手，戰局推進了 {delta}")
+    for side in armies:
+        if auto.get(side):
+            out.append(f"{names.get(side, side)}有 {auto[side]} 人遲遲沒有下令，只能原地固守")
+    return out
+
+
+def _edge(w: str, lo: str, mine: list[tuple[float, float]], theirs: list[tuple[float, float]]) -> str:
+    """出招沒剋、人數也差不多時，贏的一方贏在哪：平均份量（武藝）與平均氣血狀態，比例差得多的那一個。"""
+    def avg(rows: list[tuple[float, float]], i: int) -> float:
+        return sum(r[i] for r in rows) / len(rows) if rows else 0.0
+
+    ratio = [avg(mine, i) / avg(theirs, i) if avg(theirs, i) > 0 else math.inf for i in (0, 1)]
+    if ratio[1] > ratio[0]:
+        return f"{lo}氣血耗損，漸漸撐不住{w}"
+    return f"{w}的武藝更勝一籌"
+
+
+def round_line(names: dict[str, str], armies: tuple[str, str], before: int, after: int, causes: list[str]) -> str:
+    """場景上這一回合的第一行：誰佔了上風、戰局從多少到多少（戰局越高越偏向第一方），再接原因。"""
+    if after > before:
+        head = f"這一回合{names.get(armies[0], armies[0])}佔了上風（戰局 {before}→{after}）"
+    elif after < before:
+        head = f"這一回合{names.get(armies[1], armies[1])}佔了上風（戰局 {before}→{after}）"
+    else:
+        head = f"這一回合兩軍相持不下（戰局 {after}）"
+    return head + ("：" + "；".join(causes) + "。" if causes else "。")
+
+
+KEY_ROUNDS = 2  # 敗因最多舉幾個回合
+
+
+def outcome_reason(instance: BattleInstance, definition: BattleDef) -> str:
+    """收場時寫勝負的關鍵（試玩回饋 2026-10-08）：戰局停在哪一邊（剛好 50 不寫），就挑往那一邊推得最多的幾個回合
+    （最多 KEY_ROUNDS 個，照回合先後寫），連同那一回合的原因；開打時起點就偏向贏家的也寫一句。只看公開的戰局，不看伏筆鎖定。"""
+    first, second = definition.factions[0].id, definition.factions[1].id
+    names = {f.id: f.name for f in definition.factions}
+    if instance.trend == CENTER:
+        return ""
+    winner, sign = (first, 1) if instance.trend > CENTER else (second, -1)
+    parts: list[str] = []
+    start = instance.trend_start
+    if start is not None and (start - CENTER) * sign > 0:
+        parts.append(f"開戰時{names[winner]}就佔了地利（戰局從 {start} 起算）")
+    key = sorted((s for s in instance.swings if s.delta * sign > 0 and s.causes), key=lambda s: -abs(s.delta))[:KEY_ROUNDS]
+    parts += [f"第 {s.round} 回合，{s.causes}" for s in sorted(key, key=lambda s: s.round)]
+    return f"勝負的關鍵：{'；'.join(parts)}。" if parts else ""
+
+
+def overruled_reason(instance: BattleInstance, definition: BattleDef, lock_side: str | None, defender: str) -> str:
+    """時刻表決戰收場時，伏筆鎖定的一方贏了、戰場上卻是另一方佔上風：勝負的關鍵改寫這一句（原本那一句寫的是戰場上的贏家）。
+    戰場上的贏家跟最後的贏家是同一方就是空字串（照舊用 outcome_reason）。"""
+    field, _ = result_at(instance.trend, definition, None, defender)
+    winner, _ = result_at(instance.trend, definition, lock_side, defender)
+    if field == winner:
+        return ""
+    name = next((f.name for f in definition.factions if f.id == field), field)
+    return f"勝負的關鍵：戰場上{name}佔了上風，卻沒能扭轉大局。"
 
 
 def _record_outcome(instance: BattleInstance, outcome: BattleOutcome) -> list[str]:
@@ -684,44 +818,8 @@ def assess_action_success_rate(
     return max(0, min(100, result.success_rate))
 
 
-# 試玩時潤色寫出「劍尖相碰」這種武俠單挑的畫面；全服決戰是兩軍對陣，要寫成漢末的戰陣。
-BATTLE_NARRATOR_PROMPT = (
-    "你是漢末三國文字遊戲的戰場敘事生成器，只潤色既有判定，不自創結果。這是兩軍對陣的戰場："
-    "旌旗、陣列、鼓聲號角、弓弩齊發、騎兵衝陣、步卒廝殺；不要寫成武俠的單打獨鬥或刀劍特寫，"
-    "也不要提到判定裡沒有的人物或事件。用繁體中文。"
-)
-
-
 def without_mix_line(instance: BattleInstance, msgs: list[str]) -> list[str]:
     """這回合的系統訊息拿掉最前面那一行出招比例（resolve_round 在有人出固定招的回合才加那一行，而且一定放第一行；
-    判斷看 instance.last_mix：任何一邊有比例就代表有那一行）。出招比例只留在回合紀錄（戰報）與給模型的判定裡，
+    判斷看 instance.last_mix：任何一邊有比例就代表有那一行）。出招比例只留在回合紀錄（戰報）裡，
     場景上的記錄（narrative_log）不放它——場景已經有「對面上一回合」那一段，每回合再留一行 53 字會讓場景每回合多約 88px。"""
     return list(msgs[1:] if any(instance.last_mix.values()) else msgs)
-
-
-def narrate_round(
-    client: OllamaClient | None, definition: BattleDef, instance: BattleInstance, msgs: list[str],
-    fallback: list[str] | None = None,
-) -> str:
-    """這回合的 LLM 潤色：給它目前幕的框架文字跟系統已經判定好的事件訊息，請它寫一段
-    貼合戰場氣氛的敘事——骨架跟結果都已經是定案的了，LLM 只是把它寫得生動一點，連不上
-    或生成失敗就直接用系統訊息本身（沒給 fallback 就是整串 msgs；給了就用 fallback，呼叫端拿掉不想進場景記錄的
-    那一行出招比例，見 without_mix_line），不會讓戰鬥卡住。"""
-    plain = "\n".join(msgs if fallback is None else fallback)
-    if client is None:
-        return plain
-    act = current_act(instance, definition)
-    prompt = (
-        f"戰場目前的局面：【{act.title}】{act.text}\n"
-        f"這一回合系統判定發生的事：{'；'.join(msgs) if msgs else '雙方交戰，暫無重大變化。'}\n"
-        "請用兩三句話，貼合戰場氣氛，把這些已經判定好的事寫成生動的敘事，不要改變、也不要"
-        "新增任何判定結果，只是把它寫得有畫面感。"
-    )
-    try:
-        text = client.chat_text(
-            [{"role": "system", "content": BATTLE_NARRATOR_PROMPT}, {"role": "user", "content": prompt}],
-            num_predict=200,
-        )
-    except Exception:
-        return plain
-    return zh.to_traditional(text.strip()) or plain

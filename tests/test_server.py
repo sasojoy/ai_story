@@ -2895,7 +2895,7 @@ def test_battle_free_text_shows_and_submits(game):
     with at(game, after_muster):
         assert server.look(game, server.main_view)["free_text"] == game.battle_free_text_prompt()
         with mock.patch("server.time.time", return_value=after_muster):
-            server.act(game, lambda g: server.MAIN_ACTIONS["battle_text"](g, {"text": "直取波才首級"}))
+            server.battle_text(game, "直取波才首級")
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
@@ -2959,6 +2959,30 @@ def test_the_free_text_action_already_replies_and_is_not_journaled(client):
     out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
     assert "等待其他人" in out["message"]
     assert _journal_titles() == before
+
+
+def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypatch):
+    """試玩回饋 2026-10-08：放手一搏的成功率以前在行動鎖裡評，最多等 in_lock_model_timeout 秒，全服跟著等。現在鎖外評，
+    評好的分照樣送進這一回合。"""
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    seen = []
+
+    def rate(c, act, faction_name, text):
+        seen.append((open_world().db.writing(), faction_name, text))
+        return 73
+
+    monkeypatch.setattr(battle_instance, "assess_action_success_rate", rate)
+    client.post("/api/do/battle_text", json={"text": "火燒糧草"})
+    assert seen == [(False, "官軍", "火燒糧草")]
+    assert open_world().get_battle().round.success_rates == {"沈青衫": 73}
+
+
+def test_the_free_text_action_does_not_ask_the_model_when_it_cannot_be_sent(client, monkeypatch):
+    _a_showdown_fighter(client, started=True)  # 還沒加入戰局：送不出去
+    monkeypatch.setattr(battle_instance, "assess_action_success_rate", lambda *a: pytest.fail("不該評"))
+    out = client.post("/api/do/battle_text", json={"text": "火燒糧草"}).json()
+    assert "（此刻無法這麼做。）" in out["message"]
 
 
 def test_an_ordinary_option_does_not_come_back_with_a_message(client):
@@ -5209,7 +5233,9 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     """靜態檢查：server.py 裡只有鎖外的四個函式（對話備料、大場面備料、開爐備料、隨口應對）呼叫 model_call；請求的鎖內段落（act、look、
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
-    assert _users_in_server("model_call") == {"prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw"}
+    assert _users_in_server("model_call") == {
+        "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+    }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
@@ -5905,6 +5931,12 @@ FINGERPRINTED = {
         "phase": lambda st: setattr(st.active_battle, "phase", "active"),
         "round_number": lambda st: setattr(st.active_battle, "round_number", 1),
         "trend": lambda st: setattr(st.active_battle, "trend", 55),
+        # 「已送出 X／在場 Y」（試玩回饋 2026-10-08）：兩軍有人出手，開著的分頁要更新那個數
+        "round": lambda st: (
+            setattr(st.active_battle, "phase", "active"),
+            st.active_battle.participants.__setitem__("甲", battle_instance.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1)),
+            st.active_battle.round.pending_actions.__setitem__("甲", "guan_hold"),
+        ),
     },
 }
 NOT_IN_THE_FINGERPRINT = {
@@ -5953,9 +5985,8 @@ NOT_IN_THE_FINGERPRINT = {
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
-        "participants": "加入的人數、誰出手了，畫面上哪裡都看不到，還跟著假人的節奏變（推送計畫 F2）",
+        "participants": "誰加入、誰出手了，畫面上看不到；這一回合送出幾個的人數算在 round 那一格（推送計畫 F2）",
         "act_index": "換幕只在 round_number 加一的那一下發生",
-        "round": "這一回合誰出手了、寫了什麼，同 participants",
         "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
         "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
         "third_gain": "豪強整場的收穫累計（兩軍不能從畫面看出豪強做了什麼），只在 resolve_round 裡加，那一下 round_number 也變了",
@@ -5969,6 +6000,9 @@ NOT_IN_THE_FINGERPRINT = {
         "unfinished": "同上",
         "record_id": "資料庫裡的流水號，不是畫面",
         "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
+        "trend_start": "開打時就定了，跟 phase 一起寫入",
+        "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "outcome_reason": "收場時跟 phase 一起寫入",
     },
 }
 WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
