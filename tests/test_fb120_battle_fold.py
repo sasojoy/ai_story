@@ -151,6 +151,27 @@ def test_the_keyboard_opens_the_folded_line(battle):
 
 
 @node
+def test_focus_goes_back_to_the_toggle_after_opening_and_folding(battle):
+    """審查 M4：攤開、收起都整頁重畫，原本有焦點的那一行（那一顆）不見了：焦點放回新畫出來的開關（同戰況圖卡的做法），
+    鍵盤再按一次就能收起、再攤開。"""
+    watcher, _ = battle
+    m = server.main_view(watcher)
+    script = CLICK + """return (async () => {
+      H.S.tab = "jianghu"; H.renderPage();
+      const focused = [];
+      T.qs['#page .battle-shut button'] = { focus: () => focused.push("shut") };
+      T.qs['#page .battle-fold'] = { focus: () => focused.push("fold") };
+      const target = Object.assign(Object.create(T.Element.prototype), { matches: (sel) => sel === '.battle-fold[data-act="battle-open"]' });
+      for (const fn of T.docListeners.keydown) fn({ key: "Enter", target, preventDefault: () => {} });
+      const afterOpen = focused.slice();
+      await tap("battle-shut");
+      return { afterOpen, afterShut: focused.slice(afterOpen.length), open: H.S.battleOpen };
+    })();"""
+    out = run(m, script)
+    assert out["afterOpen"] == ["shut"] and out["afterShut"] == ["fold"] and out["open"] is None
+
+
+@node
 def test_the_open_state_is_forgotten_when_the_battle_is_over(battle):
     """打完了（場景裡沒有開打中的回合）：記著的攤開清掉，下一場開打照舊先收著。"""
     watcher, _ = battle

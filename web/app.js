@@ -1125,10 +1125,18 @@
     // 名字是伺服器 Markdown 轉好的 HTML 拿掉標籤：已經跳脫過，不再跳脫一次
     return `<p class="battle-fold" data-act="battle-open" role="button" tabindex="0" aria-expanded="false">${w.name}　第 ${w.round} 回合・${BATTLE_PEEK}</p>\n${w.rest}`;
   }
+  // 攤開、收起都整頁重畫，原本有焦點的那一行（那一顆）跟著不見：焦點放回新畫出來的開關，鍵盤再按一次就收起、再攤開
+  // （同戰況圖卡的 frontsTap，審查 M4）
   function battleOpen() {
     const w = battleWatch(S.main);
     S.battleOpen = w ? w.name : null;
     renderPage();
+    document.querySelector("#page .battle-shut button")?.focus();
+  }
+  function battleShut() {
+    S.battleOpen = null;
+    renderPage();
+    document.querySelector("#page .battle-fold")?.focus();
   }
 
   function actionBar(m) {
@@ -3011,7 +3019,7 @@
         case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
         case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）
-        case "battle-shut": S.battleOpen = null; renderPage(); break; // 攤開的戰場底下「收起戰場」
+        case "battle-shut": battleShut(); break; // 攤開的戰場底下「收起戰場」
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
