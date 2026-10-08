@@ -138,17 +138,29 @@ def _feeling_view():
     return server.main_view(game)
 
 
-def test_each_method_shows_its_kind_and_the_notes_sit_under_the_methods():
+def test_the_methods_keep_their_numbers_and_the_notes_sit_under_the_methods():
+    """審查 I1：做法鈕照舊寫 1～4，不寫心意（輿圖「這裡能悟」加上心意，卡就成了查表）；做法底下兩行小字照舊。"""
     m = _feeling_view()
     help_ = m["sense_help"]
+    assert "tags" not in help_
     page = run(m, "return H.pageJianghu();")
-    for option in m["options"]:
-        assert re.search(rf'data-id="{option["id"]}"[^>]*>\s*<span class="k sense">{help_["tags"][option["id"]]}</span>', page)
+    assert 'class="k sense"' not in page
+    for n, option in enumerate(m["options"], 1):
+        assert re.search(rf'data-id="{option["id"]}"[^>]*>\s*<span class="k">{n}</span>', page)
     block = re.search(r'<div class="act-notes sense-notes">(.*?)</div>', page).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == help_["lines"]
     last = max(page.index(f'data-id="{o["id"]}"') for o in m["options"])
     assert page.index('class="act-notes sense-notes"') > last  # 排在做法後面：不把做法往下推
     assert "（城鎮）" in page  # 標題後面的地形（潁川郡是城鎮）
+
+
+def test_the_kind_labels_are_drawn_when_the_server_sends_them():
+    """一行恢復（sensing.SHOW_KINDS）時網頁照 tags 畫在那一小格：這一段畫法留著。"""
+    m = _feeling_view()
+    m["sense_help"]["tags"] = {o["id"]: kind for o, kind in zip(m["options"], "剛柔快慢")}
+    page = run(m, "return H.pageJianghu();")
+    for option, kind in zip(m["options"], "剛柔快慢"):
+        assert re.search(rf'data-id="{option["id"]}"[^>]*>\s*<span class="k sense">{kind}</span>', page)
 
 
 def test_without_the_server_help_the_methods_keep_their_numbers():

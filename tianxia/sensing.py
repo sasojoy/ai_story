@@ -42,9 +42,12 @@ MISS_LINE = "心浮氣躁，什麼也沒抓住。要到 {moment} 之後，這裡
 MISS_WARNING_SEASON = "選錯了做法，這一季之內在這裡就悟不出了。"
 MISS_LINE_SEASON = "心浮氣躁，什麼也沒抓住。這一季之內，這裡是悟不出東西了。"
 # 選做法那一步的提示（explain-2 第三項，FB-100「有所感只能用猜的、略過序章的人不知道意境是什麼」；待 joy 潤）：
-# 標題後面寫這一處的地形（地點的標籤）、每個做法的鈕上寫它是哪一種心意（做法自己的屬性），做法底下兩行小字（網頁排在鈕的下面，
-# 不把做法往下推）：做法跟此地的關係、意境拿來做什麼。全都不看這一處悟得到哪一種（不讀 pool_attributes）：哪一個做法是對的，
-# 卡上看不出來——四個做法換哪一個是對的，卡上的字一個都不變。場景的文字是 joy 的，不動。序章草廬（做法都對）不加。
+# 標題後面寫這一處的地形（地點的標籤），做法底下兩行小字（網頁排在鈕的下面，不把做法往下推）：做法跟此地的關係、意境拿來做什麼。
+# 全都不看這一處悟得到哪一種（不讀 pool_attributes）：四個做法換哪一個是對的，卡上的字一個都不變。場景的文字是 joy 的，不動。
+# 序章草廬（做法都對）不加。
+# 做法鈕上不寫心意（審查 I1）：輿圖詳情欄「這裡能悟：水、風」加上鈕上的「柔」「快」，卡就成了查表（四十處都是）；鈕上照舊 1～4，
+# 做法的文字留給玩家自己讀。企劃者要恢復時把 SHOW_KINDS 改成 True（一行）：method_help 照做法給 tags，網頁照它畫在那一小格。
+SHOW_KINDS = False
 FRAMING = "做法各是一種心意（{kinds}），跟此地景致合得上的那一種，才悟得出這裡的意境。"
 INSIGHT_LINE = "意境能融進武學出新招、兩兩合成新的意境；融過它的武學，要靠它修練衝品質。"
 
@@ -151,9 +154,9 @@ def scene_text(state: GameState, content: Content) -> str:
 
 
 def method_help(state: GameState, content: Content) -> dict | None:
-    """選做法那一步，網頁畫在做法上與做法底下的提示（explain-2）：tags＝選項 id → 那個做法是哪一種心意（鈕上原本寫 1～4 的那一格
-    改寫它，不多佔寬度），lines＝做法底下的兩行小字（FRAMING、INSIGHT_LINE）。只讀做法自己的屬性與這張卡上有哪幾種，
-    不讀這一處悟得到什麼：哪一個是對的看不出來。不在選做法這一步、或是序章草廬：None。"""
+    """選做法那一步，網頁畫在做法底下的提示（explain-2）：lines＝兩行小字（FRAMING、INSIGHT_LINE）；SHOW_KINDS 打開時另有
+    tags＝選項 id → 那個做法是哪一種心意（鈕上原本寫 1～4 的那一格改寫它；審查 I1 起預設不給）。只讀做法自己的屬性與這張卡上
+    有哪幾種，不讀這一處悟得到什麼。不在選做法這一步、或是序章草廬：None。"""
     got = current(state, content)
     if got is None or got[0].stage != "choose" or got[1].prologue:
         return None
@@ -161,10 +164,15 @@ def method_help(state: GameState, content: Content) -> dict | None:
     # 照固定的順序（剛柔快慢）列，不照內容寫的順序：內容裡常把對的那一個寫在最前面，照它列就等於說出答案
     present = {m.attribute for m in scene.methods}
     kinds = "、".join(a for a in insights.SENSE_ATTRIBUTES if a in present)
-    return {
-        "tags": {f"{PREFIX}{i}": scene.methods[j].attribute for i, j in enumerate(s.order)},
-        "lines": [FRAMING.format(kinds=kinds), INSIGHT_LINE],
-    }
+    help_: dict = {"lines": [FRAMING.format(kinds=kinds), INSIGHT_LINE]}
+    if SHOW_KINDS:
+        help_["tags"] = {f"{PREFIX}{i}": scene.methods[j].attribute for i, j in enumerate(s.order)}
+    return help_
+
+
+def is_method(option_id: str) -> bool:
+    """選做法的選項（sense:0、sense:1……；不是「畫下來」「順其自然」）。"""
+    return option_id.startswith(PREFIX) and option_id[len(PREFIX):].isdigit()
 
 
 def insights_marks(state: GameState, loc: Location) -> str:

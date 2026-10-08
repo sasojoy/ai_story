@@ -350,8 +350,21 @@ def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
     assert "**有所感・湖光**（湖畔）" in text  # 地形寫在標題同一行
     assert help_["lines"] == [sensing.FRAMING.format(kinds="剛、柔、快、慢"), sensing.INSIGHT_LINE]
     assert "意境" in help_["lines"][1] and "合成" in help_["lines"][1] and "修練" in help_["lines"][1]
+    # 審查 I1：每個做法不標心意（輿圖「這裡能悟」加上鈕上的心意，卡就成了查表）；鈕上照舊 1～4，卡上的字也不寫哪一個做法是哪一種
+    assert "tags" not in help_
+    for method in scene.methods:
+        assert f"{method.attribute}・{method.text}" not in text and f"（{method.attribute}）{method.text}" not in text
+
+
+def test_the_kind_labels_come_back_with_one_switch(game, monkeypatch):
+    """企劃者要恢復鈕上的心意：sensing.SHOW_KINDS 改 True（一行），伺服器就照做法給 tags，網頁照它畫。"""
+    from tianxia import sensing
+
+    monkeypatch.setattr(sensing, "SHOW_KINDS", True)
+    scene = _feeling(game)
+    _, help_, _ = _card(game)
     order = game.state.player.sensing.order
-    assert help_["tags"] == {f"sense:{i}": scene.methods[j].attribute for i, j in enumerate(order)}  # 每個做法鈕上寫它的心意
+    assert help_["tags"] == {f"sense:{i}": scene.methods[j].attribute for i, j in enumerate(order)}
 
 
 def test_the_feeling_hint_is_the_same_whichever_method_is_right(game):

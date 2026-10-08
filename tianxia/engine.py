@@ -5267,10 +5267,10 @@ class Game:
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
-        """有所感選做法那一步，網頁畫在做法鈕上的心意與鈕底下的兩行小字（explain-2，sensing.method_help）；選單上沒有做法
-        （不在選做法、戰場蓋過了畫面）是 None。只讀做法自己的屬性，不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
+        """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；
+        選單上沒有做法（不在選做法、戰場蓋過了畫面）是 None。不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
         got = sensing.method_help(self.state, self.content)
-        if got is None or not any(i in got["tags"] for i in option_ids):
+        if got is None or not any(sensing.is_method(i) for i in option_ids):
             return None
         return got
 
