@@ -19,7 +19,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, social, sqlite_world, team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
@@ -5854,10 +5854,12 @@ def _function_users(attribute: str) -> set[str | None]:
 
 
 def test_only_the_action_endpoints_tell_other_tabs():
-    """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
+    """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有動作的端點在叫，act／look／act_look／
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
-    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense"}
+    assert _users_in_server("_tell_tabs") == {
+        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act",
+    }
 
 
 def test_current_fingerprint_follows_the_public_world():
@@ -6422,3 +6424,20 @@ def test_the_canvas_warms_the_model(client):
     with mock.patch.object(server.insight_llm, "warm", return_value=True) as warm:
         assert client.post("/api/sense_warm").json() == {"ok": True}
     warm.assert_called_once()
+
+
+# ── 玩家之間的互動（第一層）────────────────────────────────
+
+
+def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
+    """兩個人都略過序章、站在同一個起點：江湖畫面的 here 列出對方（陣營括號），/api/peer 給玩家卡；人不在了 card 是 None。"""
+    _player(client, "shen_01", "沈青衫")
+    other = TestClient(server.app)
+    _player(other, "lin_01", "林小竹")
+    here = client.get("/api/main").json()["here"]
+    assert here == [{"name": "林小竹", "side": "散人"}]
+    got = client.get("/api/peer", params={"name": "林小竹"}).json()
+    assert got["card"]["name"] == "林小竹" and got["card"]["level"] >= 1 and isinstance(got["card"]["actions"], list)
+    assert client.get("/api/peer", params={"name": "沒這個人"}).json() == {"card": None, "gone": social.GONE}
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "no-such", "amount": "x"}).json()
+    assert "沒有這個動作" in out["message"] and out["card"]["name"] == "林小竹"
