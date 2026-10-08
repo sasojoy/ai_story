@@ -5558,7 +5558,7 @@ def test_admin_has_no_queue_numbers_while_the_switch_is_off(client, monkeypatch)
 
 
 def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
-    """網頁沒有測試框架：標記擋住「伺服器有 /api/queue、網頁卻沒人問」。等模型的四個地方（對話、大場面、隨口應對、開爐）各開一個
+    """網頁沒有測試框架：標記擋住「伺服器有 /api/queue、網頁卻沒人問」。等模型的幾個地方（對話、大場面、對話「自己說」、隨口應對、開爐、有所感）各開一個
     watchQueue、在 finally 裡收掉；管理者區只在伺服器給了數字時多一行。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     assert js.count("function watchQueue(") == 1 and '"/api/queue"' in _js_function(js, "function watchQueue(")
@@ -5569,7 +5569,9 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     forge = _js_function(js, "async function forge(")
     assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
-    assert js.count("watchQueue(") == 5  # 定義一個、使用四個（對話與大場面是同一個選項流程；有所感畫完送出另一個）
+    say = _js_function(js, "async function sayLine(")
+    assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
+    assert js.count("watchQueue(") == 6  # 定義一個、使用五個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」各另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 
