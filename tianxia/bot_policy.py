@@ -40,6 +40,7 @@ PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心�
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
 SERVER_BLEND_SHARE = 0.15  # 武學＋武學的份額：比整季機器人低，持有 30 門就有 435 對、每一對都是首創要叫模型【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
+INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 MASTER_TRIES = 5  # 定名時模型的名字用不了，字表最多另組幾個
@@ -98,13 +99,17 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         return msgs + _sense(game, rng, slot)
     if s.player.pending_companion:
         return msgs + game.choose("talk:leave")
+    answer = _answer_invite(game, rng)
+    if answer is not None:
+        return msgs + game.choose(answer)
     rally = _toward_battle(game)
     if rally is not None:
         return msgs + rally
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:", "battle:enlist:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
+        and not o.id.startswith(("road:", "defect:", "battle:enlist:", "invite:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
+        # 邀請由上面的 _answer_invite 答，不交給打分數亂按
     ]
     if not options:
         return msgs
@@ -127,6 +132,18 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
             return msgs + game.choose(step)
     choice = pick(game, options, profile, rng)
     return msgs + game.choose(choice) if choice else msgs
+
+
+def _answer_invite(game: Game, rng: random.Random) -> str | None:
+    """有人在這裡邀假人切磋（玩家互動第二層）：跟真人一樣在自己這一輪看到才答——付得起體力時 INVITE_YES 的機會答應，
+    其餘婉拒（真人也會婉拒，假人不能每一張都答應，不然看得出來）。一次只答一張，最早的那張。沒有邀請是 None。"""
+    incoming = [o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:yes:")]
+    if not incoming:
+        return None
+    first = incoming[0]
+    if first.enabled and rng.random() < INVITE_YES:
+        return first.id
+    return "invite:no:" + first.id.removeprefix("invite:yes:")
 
 
 def look_after(game: Game, rng: random.Random) -> None:

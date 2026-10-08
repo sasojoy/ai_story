@@ -213,6 +213,7 @@
 - **叛投**：一季一次，在別陣營的投靠點（「此地還能做」裡的「叛投X」，要再按一次確認，可以「再想想」）。身份歸零：晉升、召見、部下、本季貢獻、押著的糧車作廢，舊陣營的門派一起離開、這一季拜不回去；屬性、武學、同伴、銀兩、素材、紀錄都不動。新舊陣營各一則軍情（寫本名），當地一則地方傳聞（照匿名規則）。名字還在沒打完的決戰陣上不能叛投；假人與整季機器人不叛投。
 - **一門打不遍**（企劃者 2026-10-07 選甲，`styles.py`、`Config.styles`）：大場面對手（同 `Game.is_big`）每季各有路數：上陣的人身上武學屬性落在他怕的那一路威力 ×1.25、落在他最會對付的那一路 ×0.75（乘在 `Boost.factor`，跟相剋的 ×1.3 疊；`team.fight` 與 `estimate` 都走 `_styled_fighters`）。提示含蓄：戰報裡打贏且用了軟處、或沒打贏且用了硬處各一句；大場面判讀的對手那一行多寫打法（`styles.fight_line`）；大勢人物好感到 `talk_affinity`（20）時對話提示裡多一段他的武藝習慣（`styles.talk_line`），只能不經意流露。決戰裡同一邊出固定招的人武學屬性每多一路，力量 ×（1＋`diversity_per` 0.05），最多 `diversity_cap` 0.15（屬性在加入時快照進 `BattleParticipant.attribute`）。
 - **首創名望回饋**（`Config.first_echo`）：別人照著你首創的武學或意境合出同一門（照著合、合到舊的都算），`fusion.echo` 記在這一季的 `WorldState.echoes`；你下次同步時每人名望 +1（`Game._deliver_echoes`，一門最多 5 人），湊滿 5 人時江湖上傳一句。
+- **切磋**（玩家互動第二層，企劃者 2026-10-08；`tianxia/spar.py` 登記進玩家卡 `social.ACTIONS`，規則在 `Game.spar_invite`／`answer_invite`／`_spar`）：同一地點的人發邀請（`WorldState.invites`，`tianxia/invites.py`，`invite_ttl_seconds` 600 秒逾時），對方答應才打；收到的邀請也進閒著的選單（`invite:yes|no|cancel:<id>`，假人照它答，`bot_policy._answer_invite`）。本人對本人單次判定（不帶同伴部下，從發邀請的一方算、另一方照鏡像），不扣氣血、不掉銀兩，雙方各花一次遊歷的體力、各一份戰報（`kind="spar"`），經驗與心得照 `Config.spar`，同一對人每個遊戲日最多 `per_pair_day` 場（`WorldState.spar_tally`）。動到別人時 `Game.touched` 記名號，`server._tell_tabs` 一起叫醒他們的分頁。
 - 結局與休季的結算卡（江湖頁最上面）。beta 的黃巾決戰門檻、主線、`kou_boss` 等由 `scenario.json` 的 `season_one_off` 關掉。
 
 ### 全服決戰
