@@ -65,7 +65,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_MAX, SAY_OPTION, Game
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -569,7 +569,7 @@ def _open_request(game: Game, open_it: Callable[[], object]) -> tuple[float, obj
     return started, request
 
 
-def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn | None:
+def prepare_dialogue(game: Game, option_id: str, text: str | None = None) -> companion_agent.PreparedTurn | None:
     """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
     模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
       A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
@@ -581,8 +581,9 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
         另一條連線的那一件照常套用。以前這種情況拿 cancelled 先進鎖，當成「生成不出對話」寫一行告辭、把選單收掉，之後那一件的回話
         重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
       C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
-    這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。"""
-    started, request = _open_request(game, lambda: game.dialogue_request(option_id))
+    這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。
+    text 只有「自己說」（SAY_OPTION）用：玩家打的那一句（見 say）。"""
+    started, request = _open_request(game, lambda: game.dialogue_request(option_id, text))
     if request is None:
         return None
     cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
@@ -595,6 +596,17 @@ def prepare_dialogue(game: Game, option_id: str) -> companion_agent.PreparedTurn
         return companion_agent.prepare_turn(client, request)
 
     return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started), busy=BUSY_DIALOGUE)
+
+
+def say(game: Game, text: str) -> list[str] | None:
+    """跟人物對話時的「自己說」（企劃者 2026-10-08）：玩家打的那一句跟按選項走同一條三段式（prepare_dialogue）——
+    A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～SAY_MAX 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
+    C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
+    送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
+    prepared = prepare_dialogue(game, SAY_OPTION, text)
+    if prepared is None:
+        raise GameError(f"寫一句 1～{SAY_MAX} 字的話；交談已經結束的話，就不必再說了。")
+    return act(game, lambda g: g.choose(SAY_OPTION, prepared=prepared, text=text))
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -1361,6 +1373,14 @@ def api_choose(request: Request, body: dict = Body(...)):
 def api_answer(request: Request, body: dict = Body(...)):
     game = _game(request)
     answer_event(game, str(body.get("text", "")))
+    _tell_tabs(game)
+    return {"main": look(game, main_view)}
+
+
+@app.post("/api/say")
+def api_say(request: Request, body: dict = Body(...)):
+    game = _game(request)
+    say(game, str(body.get("text", "")))
     _tell_tabs(game)
     return {"main": look(game, main_view)}
 

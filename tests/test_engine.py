@@ -603,7 +603,7 @@ def test_socializing_with_a_deep_interaction_companion_starts_a_dialogue(content
         msgs = game.choose("act:socialize")
     assert msgs == ["他點了點頭。"]
     assert game.state.player.pending_companion == "mate"
-    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
     assert game.scene_text() == "**韓鐵**（情誼 0）\n\n他點了點頭。"  # 名字旁寫著情誼（explain-1）
 
 
@@ -4821,7 +4821,7 @@ def test_choose_applies_a_prepared_opening_without_calling_the_model(content, ga
     assert msgs == ["他笑了笑。"]
     assert game.state.player.pending_companion == "mate"
     assert game.state.player.stamina == before - content.config.action_cost["socialize"]
-    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
 
 
 def test_a_prepared_failure_for_the_opening_refunds_the_socialize_cost(content, game):
@@ -5743,7 +5743,7 @@ def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game)
     p = game.state.player
     assert p.pending_companion == "scholar" and not p.picking_audience
     assert p.stamina == content.config.stamina_max - content.config.action_cost["socialize"]
-    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
     assert game.state.journal[0].title == "求見・書生"
     noted.assert_called_once()
     assert noted.call_args.args[3] == "socialize"  # 指名求見算一次交友（新手引導、任務）

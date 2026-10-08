@@ -13,7 +13,7 @@ from typing import NamedTuple
 
 from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
 from . import prologue as prologue_rules
-from .engine import FREE_TEXT_OPTION, Game, Option
+from .engine import FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .sqlite_world import open_world
@@ -275,7 +275,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         for option in options:  # 集結時選單照常有別的事可做（FB-009）；還沒參戰就先加入，跟以前選單只剩加入時一樣
             if option.id.startswith("battle:join"):
                 return option.id
-    options = [o for o in options if o.id != FREE_TEXT_OPTION]  # 隨口應對要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
+    options = [o for o in options if o.id not in (FREE_TEXT_OPTION, SAY_OPTION)]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
     # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
     options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
     if s.pending_event:
