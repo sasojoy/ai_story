@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Literal
+import re
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
-from . import encounter
+from . import encounter, zh
 from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
 from .ollama_client import OllamaClient
 
@@ -68,6 +69,25 @@ class BattleParticipant(BaseModel):
     role: str = ""  # 加入時依本人最突出的屬性給的職位（屬性的鍵，role_for；名字在 BattleTuning.roles）；空的是沒有職位
 
 
+class GambleMoment(BaseModel):
+    """一次放手一搏（收場時挑「最有戲」的那一次寫進傳聞，試玩回饋 2026-10-08）。"""
+
+    name: str
+    faction: str
+    text: str
+    story: str = ""  # 播出來的那一版劇情；模型沒寫是空的
+    rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
+    won: bool
+
+
+def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
+    """哪一次放手一搏最有戲：成了的勝過沒成的；同樣成了，成功率越低越有戲；同樣沒成，也是越荒唐（成功率越低）越有戲；
+    一樣有戲時留先發生的那一次。只看規則，不叫模型。"""
+    if old is None:
+        return True
+    return (new.won, -new.rate) > (old.won, -old.rate)
+
+
 class BattleRound(BaseModel):
     pending_actions: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> tag
     custom_texts: dict[str, str] = Field(default_factory=dict)  # 玩家名號 -> 自訂行動文字（free_text 選項才有）
@@ -76,6 +96,8 @@ class BattleRound(BaseModel):
     # 呼叫 LLM，見模組說明。這個欄位有值就代表這個人這回合是賭局型行動，沒有值就是出固定的三招，
     # resolve_round 靠這個區分兩條路徑）。
     opened_real: float = 0.0  # 這回合開放選擇的時間點，逾時代選判斷用
+    stories: dict[str, list[str]] = Field(default_factory=dict)  # 名號 ->［成功版, 失敗版］放手一搏的劇情（評成功率的同一次
+    # 模型呼叫寫的，試玩回饋 2026-10-08）；擲骰後播對應的那一版，空字串或沒有就用固定句
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
 
@@ -120,6 +142,7 @@ class BattleInstance(BaseModel):
     narrative_log: list[str] = Field(default_factory=list)
     outcome_title: str | None = None
     outcome_text: str | None = None
+    highlight: GambleMoment | None = None  # 這一場到目前最有戲的放手一搏（more_dramatic）；收場時寫進傳聞，成功的人加名望
     outcome_reason: str = ""  # 勝負的關鍵（outcome_reason 寫的那一句）：收場訊息、參戰者的戰報都放；舊資料、沒分勝負是空的
     swings: list[RoundSwing] = Field(default_factory=list)  # 每一回合戰局怎麼走（resolve_round 記），寫敗因用；舊資料沒有是空的
     outcome_world_flags: list[str] = Field(default_factory=list)  # 結果要套用到共用賽季的世界旗標（複製自
@@ -308,6 +331,7 @@ def set_away(instance: BattleInstance, name: str, away: bool) -> None:
         instance.round.pending_actions.pop(name, None)
         instance.round.custom_texts.pop(name, None)
         instance.round.success_rates.pop(name, None)
+        instance.round.stories.pop(name, None)
 
 
 def current_act(instance: BattleInstance, definition: BattleDef) -> BattleAct:
@@ -347,6 +371,7 @@ def fixed_options(instance: BattleInstance, definition: BattleDef, name: str) ->
 
 def submit_action(
     instance: BattleInstance, name: str, tag: str, text: str | None = None, success_rate: int | None = None,
+    stories: tuple[str, str] | list[str] | None = None,
 ) -> None:
     """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。text/success_rate
     是 free_text 選項才有（見 BattleOption.free_text）——success_rate 是呼叫端（engine.py
@@ -363,6 +388,8 @@ def submit_action(
         instance.round.custom_texts[name] = text
     if success_rate is not None:
         instance.round.success_rates[name] = max(0, min(100, success_rate))
+        if stories:
+            instance.round.stories[name] = [str(stories[0]), str(stories[1])]
 
 
 def round_is_complete(instance: BattleInstance) -> bool:
@@ -553,19 +580,33 @@ def resolve_round(
                 plus = f"，{role_name(tuning, p.role)} +{success_rate - assessed}" if success_rate != assessed else ""
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
             side_name = names.get(p.faction, p.faction)
+            win_story, lose_story = (instance.round.stories.get(name) or ["", ""])[:2]
             # 試玩回饋 2026-10-08：對戰局只有小影響，主要的代價是自己的氣血池（扣到 0 就照下面倒下出局）
             if succeeded:
                 # 越強越有份量：推進乘實力（新手打五折、練滿最多兩倍）
                 might = max(tuning.gamble_strength_min, min(tuning.gamble_strength_max, strength(tuning, p.power) / tuning.gamble_strength_ref))
                 delta = max(1, round((gamble.success_trend_base + risk * gamble.success_trend_per_risk) * might))
                 damage = p.neili_cap * gamble.success_neili_share
-                msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
+                if win_story:  # 模型寫的劇情，數字照引擎算的另外附在後面
+                    msgs.append(f"{win_story}（{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}）")
+                else:
+                    msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
             else:
                 delta = -min(gamble.failure_trend_cap, round(risk * gamble.failure_trend_per_risk))
                 damage = p.neili_cap * min(1.0, gamble.failure_neili_share_base + risk * gamble.failure_neili_share_per_risk)
                 # 代價照引擎算的寫出來（試玩回饋 2026-10-08：「慘痛的代價是什麼？」）
                 cost = f"{side_name}的戰局倒退 {-delta}，" if delta else ""
-                msgs.append(f"{name}這一搏失敗了，付出了慘痛代價：{cost}自己氣血 -{round(damage)}。")
+                if lose_story:
+                    msgs.append(f"{lose_story}（{cost}自己氣血 -{round(damage)}）")
+                else:
+                    msgs.append(f"{name}這一搏失敗了，付出了慘痛代價：{cost}自己氣血 -{round(damage)}。")
+            if custom_text:
+                moment = GambleMoment(
+                    name=name, faction=p.faction, text=custom_text, story=win_story if succeeded else lose_story,
+                    rate=assessed, won=succeeded,
+                )
+                if more_dramatic(moment, instance.highlight):
+                    instance.highlight = moment
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
@@ -845,34 +886,71 @@ def bot_choose_action(
 class SuccessRateJudgment(BaseModel):
     success_rate: int = DEFAULT_FREE_TEXT_SUCCESS_RATE
     reasoning: str = ""
+    win: str = ""  # 成功的那一版劇情（40 字內，試玩回饋 2026-10-08）
+    lose: str = ""  # 失敗的那一版劇情
+
+
+class GambleVerdict(NamedTuple):
+    """評一次放手一搏：成功率，加上擲骰前先寫好的兩版劇情（成功、失敗；寫壞的是空字串，那一版就用固定句）。"""
+
+    rate: int
+    win: str = ""
+    lose: str = ""
+
+
+STORY_LIMIT = 60  # 劇情要模型寫 40 字內；多給一點餘裕，超過的整段不用（截斷的半句話比固定句難看）
+_DIGITS = re.compile(r"[0-9０-９]")
+
+
+def clean_story(raw: str, name: str) -> str:
+    """模型寫的一版劇情整理成能播的一句：轉繁體、去掉換行與 markdown、引號；有阿拉伯數字（數字只能是引擎的）、太長、
+    空的都不用（回空字串）。不是以名號開頭的補上名號，句尾補句號。"""
+    text = zh.to_traditional(str(raw or ""))
+    text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
+    if not text or len(text) > STORY_LIMIT or _DIGITS.search(text):
+        return ""
+    if not text.startswith(name):
+        text = name + text
+    return text if text[-1] in "。！？…" else text + "。"
 
 
 def assess_action_success_rate(
     client: OllamaClient | None, act: BattleAct, faction_name: str, text: str,
 ) -> int:
+    """只要成功率（舊的呼叫端）：見 assess_gamble。"""
+    return assess_gamble(client, act, faction_name, text).rate
+
+
+def assess_gamble(
+    client: OllamaClient | None, act: BattleAct, faction_name: str, text: str, name: str = "",
+) -> GambleVerdict:
     """請 LLM 評估這段自訂行動聽起來有多可能成功（0~100）——只評機率，不評「成不成功」
     本身（那是 resolve_round 擲骰決定的），也不會被拿去當作任何數值直接套用，只是擲骰
     用的機率輸入。連不上/生成失敗/格式不對都回傳保底值（見 DEFAULT_FREE_TEXT_SUCCESS_RATE），
     不會讓整個行動失敗——這類評估本來就是錦上添花，寧可給一個偏低的保守值，也不要卡住
     玩家的回合。"""
     if client is None:
-        return DEFAULT_FREE_TEXT_SUCCESS_RATE
+        return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    who = name or "這位少俠"
     messages = [
         {"role": "system", "content": (
-            "你是漢末兩軍交戰的戰場判定系統，負責評估玩家描述的行動合理的成功機率，不是故事"
-            "寫手、也不負責決定最終是否成功。只能根據行動本身在戰場上的合理性判斷，"
-            "請給出 0~100 的整數 success_rate（成功機率）與一句話 reasoning。"
+            "你是漢末兩軍交戰的戰場判定系統，也是說書人。第一件事：評估玩家描述的行動在戰場上合理的成功機率，"
+            "給出 0~100 的整數 success_rate 與一句話 reasoning（只根據行動本身的合理性，荒唐的行動就給低分）。"
+            "第二件事：替這個行動寫兩版結果，win 是成功的那一版、lose 是失敗的那一版，各一句、40 字以內、繁體中文，"
+            f"以「{who}」開頭。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
+            "不要寫任何數字、不要寫戰局推進多少或扣多少氣血，也不要替玩家決定最後的勝負以外的事。"
         )},
         {"role": "user", "content": (
             f"戰場情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"
-            f"玩家的行動：「{text}」\n請給出 success_rate、reasoning。"
+            f"玩家的行動：「{text}」\n請給出 success_rate、reasoning、win、lose。"
         )},
     ]
     try:
         result = client.chat_structured(messages, SuccessRateJudgment, temperature=0.7, required_fields=["success_rate"])
     except Exception:
-        return DEFAULT_FREE_TEXT_SUCCESS_RATE
-    return max(0, min(100, result.success_rate))
+        return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    rate = max(0, min(100, int(result.success_rate)))
+    return GambleVerdict(rate, clean_story(result.win, who), clean_story(result.lose, who))
 
 
 def without_mix_line(instance: BattleInstance, msgs: list[str]) -> list[str]:

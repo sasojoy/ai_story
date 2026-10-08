@@ -571,7 +571,7 @@ def test_a_side_with_nobody_left_in_the_fight_gets_pushed_ten(three, out):
 
 def test_a_side_that_is_all_gambling_gets_pushed_ten_and_the_gamble_still_counts(three):
     """放手一搏的人不算進三招的比例、也不算進人數：黃巾只有一個人而且在賭，官軍推滿 10；賭輸再加 1（一個人失手最多倒退 1，
-    試玩回饋 2026-10-08），氣血池 300 扣五成。"""
+    試玩回饋 2026-10-08），氣血池 300 扣 35%。"""
     gamble = three.model_copy(deep=True)
     gamble.acts[0].options.append(BattleOption(text="放手一搏", tag="huang_reckless", faction="huang", free_text=True))
     gamble.free_text_gamble = FreeTextGamble()
@@ -581,7 +581,7 @@ def test_a_side_that_is_all_gambling_gets_pushed_ten_and_the_gamble_still_counts
     msgs = bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
     assert battle.trend == 61  # 三招推 +10，黃巾賭輸 −(−1)＝ +1
     assert battle.last_mix["huang"] == {}
-    assert "乙這一搏失敗了，付出了慘痛代價：黃巾的戰局倒退 1，自己氣血 -150。" in msgs  # 代價照引擎算的寫（試玩回饋 2026-10-08）
+    assert "乙這一搏失敗了，付出了慘痛代價：黃巾的戰局倒退 1，自己氣血 -105。" in msgs  # 代價照引擎算的寫（試玩回饋 2026-10-08）
 
 
 def test_an_empty_side_is_pushed_ten_even_when_the_side_that_is_present_has_no_force(three):
@@ -1726,7 +1726,7 @@ def test_the_round_summary_counts_the_gambles_per_side(three):
     assert _summary(msgs) == (
         "這一回合黃巾佔了上風（戰局 50→39）：官軍沒有人正面出陣迎戰，黃巾放手壓了上去；官軍有人放手一搏失手，戰局倒退了 1。"
     )
-    assert "甲這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -5000。" in msgs
+    assert "甲這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -3500。" in msgs
 
 
 def test_a_battle_records_how_each_round_swung_and_names_the_key_rounds(three):
@@ -1821,18 +1821,19 @@ def test_one_failed_gamble_barely_moves_the_battle_and_mostly_hurts_the_gambler(
     msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
     # 三招：官軍只剩一人固守、黃巾兩人，推 −2（少了一個人出固定招）；失手最多倒退 1
     assert battle.trend == 50 - 2 - 1
-    assert "官0這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -150。" in msgs  # 300 × (0.1 + 100 × 0.004)
-    assert battle.participants["官0"].neili == 150
+    assert "官0這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -105。" in msgs  # 300 × (0.1 + 100 × 0.0025)
+    assert battle.participants["官0"].neili == 195
 
 
-def test_a_gambler_who_fails_twice_at_long_odds_falls_out_of_the_battle():
+def test_a_wild_gambler_survives_two_failures_and_falls_on_the_third():
+    """成功率 0 失手一次扣 35%（試玩回饋 2026-10-08：亂寫的人至少還能多玩幾回合），第三次才倒下。"""
     gamble, battle = _gamblers(2, 2)
-    for _ in range(2):
+    for turn in range(3):
         bi.submit_action(battle, "官0", "guan_reckless", text="單騎衝陣", success_rate=0)
         for name in ("官1", "黃0", "黃1"):
             bi.submit_action(battle, name, f"{battle.participants[name].faction}_hold")
         msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
-    assert battle.participants["官0"].eliminated
+        assert battle.participants["官0"].eliminated == (turn == 2)
     assert "官0氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。" in msgs
 
 
@@ -1859,7 +1860,7 @@ def test_a_successful_gamble_is_still_worth_more_than_one_failure_costs():
 def test_the_playtest_battle_replayed_is_no_longer_a_rout_for_the_yellow_turbans():
     """試玩回饋 2026-10-08 那一場：12 個官軍，前五回合各有一人放手一搏、成功率 45／5／0／0／0 全失手，其餘出固定招；
     黃巾的固定招跟官軍不相上下（每回合只動 ±1 上下）。舊公式累計 −45、戰局 50→5、黃巾得勢；現在五次失手一共倒退 5，
-    失手的人氣血見底、之後固守的份量變弱，戰局慢慢滑到 39，兩軍膠著。"""
+    失手的人氣血變少、之後固守的份量變弱，戰局滑到 45，兩軍膠著。"""
     gamble, battle = _gamblers(12, 12)
     real = load_content(CONTENT_DIR).battles["huangjin_showdown"]
     gamble.free_text_gamble = real.free_text_gamble  # 照正式內容的數值
@@ -1874,7 +1875,7 @@ def test_the_playtest_battle_replayed_is_no_longer_a_rout_for_the_yellow_turbans
         bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
         if battle.phase != "active":
             break
-    assert battle.trend == 39
+    assert battle.trend == 45
     assert bi.decide_outcome(battle, gamble).title == "兩軍膠著"
 
 
@@ -1912,3 +1913,70 @@ def test_a_stronger_gambler_pushes_further_when_the_gamble_lands():
         pushed[power] = battle.trend - 40  # 黃巾固守推滿 −10（官軍唯一的人在賭）
     # 2 ＋ 10 × 0.06 ＝ 2.6：威力 0（實力 20）打五折 1、威力 160（實力 100）照算 3、練滿（實力 220，夾在兩倍）5
     assert pushed == {0: 1, 160: 3, 400: 5}
+
+
+# ── 放手一搏的劇情與最有戲的一幕（試玩回饋 2026-10-08）─────────────────
+
+
+def test_the_played_story_follows_the_dice_and_the_numbers_follow_the_story():
+    for rate, roll, expected in (
+        (1, 0.0, "官0扮成絕世美女，對面主將看呆了，陣腳大亂。（官軍的戰局推進 4，自己氣血 -15）"),  # (2＋99×0.06)×0.5
+        (0, 0.999, "官0扮成絕世美女，化妝太差，敵軍作嘔把他轟了回來。（官軍的戰局倒退 1，自己氣血 -105）"),
+    ):
+        gamble, battle = _gamblers(1, 1)
+        bi.submit_action(
+            battle, "官0", "guan_reckless", text="扮成絕世美女色誘對面主將", success_rate=rate,
+            stories=("官0扮成絕世美女，對面主將看呆了，陣腳大亂。", "官0扮成絕世美女，化妝太差，敵軍作嘔把他轟了回來。"),
+        )
+        bi.submit_action(battle, "黃0", "huang_hold")
+        msgs = bi.resolve_round(battle, gamble, FixedRandom(roll), now=1, tuning=BattleTuning())
+        assert expected in msgs
+        assert not any("慘痛代價" in m for m in msgs)
+
+
+def test_without_a_story_the_fixed_line_is_played():
+    gamble, battle = _gamblers(1, 1)
+    bi.submit_action(battle, "官0", "guan_reckless", text="衝陣", success_rate=0, stories=("", ""))
+    bi.submit_action(battle, "黃0", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
+    assert "官0這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -105。" in msgs
+
+
+def test_a_story_is_cleaned_before_it_can_be_played():
+    assert bi.clean_story("彩加试图色诱敌将，却被追杀十里", "彩加") == "彩加試圖色誘敵將，卻被追殺十里。"  # 轉繁體、補句號
+    assert bi.clean_story("**被識破**，挨了一頓打。", "彩加") == "彩加被識破，挨了一頓打。"  # 去 markdown、補名號
+    assert bi.clean_story("彩加帶著3萬分身殺過去。", "彩加") == ""  # 數字只能是引擎的
+    assert bi.clean_story("彩加" + "很" * 70, "彩加") == ""  # 太長的整段不用
+    assert bi.clean_story("", "彩加") == ""
+
+
+def test_one_model_call_rates_the_gamble_and_writes_both_stories():
+    from unittest import mock as _mock
+    client = _mock.Mock()
+    client.chat_structured.return_value = bi.SuccessRateJudgment(
+        success_rate=3, win="彩加的影分身嚇退了敌军", lose="彩加结印结到手抽筋，被一箭射中屁股",
+    )
+    act = _gamble_three().acts[0]
+    verdict = bi.assess_gamble(client, act, "官軍", "用上影分身之術十萬個分身", "彩加")
+    assert verdict == (3, "彩加的影分身嚇退了敵軍。", "彩加結印結到手抽筋，被一箭射中屁股。")
+    assert client.chat_structured.call_count == 1
+    prompt = client.chat_structured.call_args.args[0][0]["content"]
+    assert "不要寫任何數字" in prompt and "以「彩加」開頭" in prompt
+    client.chat_structured.side_effect = RuntimeError("down")
+    assert bi.assess_gamble(client, act, "官軍", "衝", "彩加") == (bi.DEFAULT_FREE_TEXT_SUCCESS_RATE, "", "")
+
+
+def test_the_most_dramatic_gamble_is_a_long_shot_that_landed():
+    def m(rate, won):
+        return bi.GambleMoment(name="甲", faction="guan", text="x", rate=rate, won=won)
+
+    assert bi.more_dramatic(m(5, True), m(0, False))  # 成了的勝過沒成的
+    assert bi.more_dramatic(m(5, True), m(30, True))  # 同樣成了，越不可能越有戲
+    assert bi.more_dramatic(m(0, False), m(40, False))  # 同樣沒成，越荒唐越有戲
+    assert not bi.more_dramatic(m(5, True), m(5, True))  # 一樣有戲留先發生的
+    gamble, battle = _gamblers(2, 1)
+    bi.submit_action(battle, "官0", "guan_reckless", text="刺殺主將", success_rate=5, stories=("官0刺中了。", "官0撲空了。"))
+    bi.submit_action(battle, "官1", "guan_reckless", text="可唔可以快少少", success_rate=0)
+    bi.submit_action(battle, "黃0", "huang_hold")
+    bi.resolve_round(battle, gamble, FixedRandom(0.04), now=1, tuning=BattleTuning())  # 擲 4：5% 中、0% 不中
+    assert (battle.highlight.name, battle.highlight.won, battle.highlight.story) == ("官0", True, "官0刺中了。")

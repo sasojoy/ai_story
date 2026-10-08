@@ -6,14 +6,15 @@
 """
 from __future__ import annotations
 
+import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, cultivation, library, naming, orders, rules, sensing, server_bots, team
+from . import atlas, battle_instance, bot, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, SkillDef
-from .state import BotProfile
+from .state import BotProfile, Invite
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
@@ -40,6 +41,14 @@ PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心�
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
 SERVER_BLEND_SHARE = 0.15  # 武學＋武學的份額：比整季機器人低，持有 30 門就有 435 對、每一對都是首創要叫模型【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
+INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
+# 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
+# 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
+REPLY_MIN_SECONDS = 30  # 收到之後至少隔這麼多現實秒數才回
+REPLY_SPREAD_SECONDS = 150  # 再加上 0～這麼多秒（每一件各擲一次，同一件永遠一樣）
+GREET_REPLY_SHARE = 0.65  # 打招呼：回禮的比例，其餘不理
+TRAVEL_ACCEPT_SHARE = 0.4  # 結伴邀請：答應的比例
+TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 MASTER_TRIES = 5  # 定名時模型的名字用不了，字表最多另組幾個
@@ -72,13 +81,23 @@ class SenseJob:
     request: object  # sensing.SenseRequest
 
 
+@dataclass(frozen=True)
+class DiscussJob:
+    """答應論武、首創要請模型取名（或挑一個）的那一爐：A 段在鎖內開的單（Game.peer_request），交給 bot_runner 在鎖外取名，
+    C 段再拿鎖交回 Game.peer_act（params 帶 proposed）。"""
+
+    sender: str
+    item: str
+    request: naming.NamingRequest
+
+
 @dataclass
 class NamingSlot:
     """這一輪這個假人能不能把一件取名交給模型（首創的爐或絕學定名；bot_runner 給：一次一件、兩件之間要隔一段時間）。
     open 時開成單子放進 job；不 open 時那一爐不開、那個名先不定，skipped 加一（只是數字，主控台只印總數）。"""
 
     open: bool = False
-    job: ForgeJob | MasterJob | SenseJob | None = None
+    job: ForgeJob | MasterJob | SenseJob | DiscussJob | None = None
     skipped: int = 0
 
 
@@ -98,13 +117,25 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         return msgs + _sense(game, rng, slot)
     if s.player.pending_companion:
         return msgs + game.choose("talk:leave")
+    discussed = _answer_discuss(game, rng, slot)
+    if discussed is not None:
+        return msgs + discussed
+    answer = _answer_invite(game, rng)
+    if answer is not None:
+        return msgs + game.choose(answer)
+    answer = answer_call(game, profile)
+    if answer is not None:
+        return msgs + game.choose(answer)
+    if s.player.tagalong is not None:
+        return msgs  # 答應了跟人結伴同行：在原地等他動身，不自己走開
     rally = _toward_battle(game)
     if rally is not None:
         return msgs + rally
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:", "battle:enlist:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
+        and not o.id.startswith(("road:", "defect:", "battle:enlist:", "invite:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
+        # 邀請由上面的 _answer_invite 答，不交給打分數亂按
     ]
     if not options:
         return msgs
@@ -127,6 +158,83 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
             return msgs + game.choose(step)
     choice = pick(game, options, profile, rng)
     return msgs + game.choose(choice) if choice else msgs
+
+
+def _answer_invite(game: Game, rng: random.Random) -> str | None:
+    """有人在這裡邀假人切磋（玩家互動第二層）：跟真人一樣在自己這一輪看到才答——付得起體力時 INVITE_YES 的機會答應，
+    其餘婉拒（真人也會婉拒，假人不能每一張都答應，不然看得出來）。一次只答一張，最早的那張。沒有邀請是 None。"""
+    world = game.state.world
+    incoming = [  # 論武的邀請由 _answer_discuss 答（選單上那一顆是灰的，要在玩家卡上挑出哪一樣）
+        o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:yes:")
+        and getattr(invites.find(world, o.id.removeprefix("invite:yes:")), "kind", "") == "spar"
+    ]
+    if not incoming:
+        return None
+    first = incoming[0]
+    if first.enabled and rng.random() < INVITE_YES:
+        return first.id
+    return "invite:no:" + first.id.removeprefix("invite:yes:")
+
+
+def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
+    """這個假人對這一張的決定性擲骰（0～1）：同一張、同一個假人永遠一樣，所以每一輪重看不會改主意。"""
+    digest = hashlib.sha256(f"{profile.seed}|{invite.id}|{salt}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def answer_call(game: Game, profile: BotProfile) -> str | None:
+    """別人遞過來的打招呼、結伴邀請（玩家互動第二層），要回的那一個選項（invite:<回應>:<編號>，跟真人按的同一顆）；這一輪不回是 None。
+    每一張先等一段（收到之後 REPLY_MIN_SECONDS＋擲出來的一段現實秒），再照擲骰回、拒或不理；結伴答應不了（手上有事、對方走了）就婉拒。
+    一輪只回一張，最早的那張先。"""
+    s = game.state
+    menu = {o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith("invite:")}
+    for inv in invites.incoming(s.world, s.player.name):
+        if inv.kind not in ("greet", "travel"):
+            continue
+        waited = (s.world.time - inv.sent_at) / game.content.config.time_scale
+        if waited < REPLY_MIN_SECONDS + _roll(profile, inv, "wait") * REPLY_SPREAD_SECONDS:
+            continue
+        roll = _roll(profile, inv, "answer")
+        gesture = social.gesture_of(inv)
+        if gesture is not None:
+            if roll >= GREET_REPLY_SHARE:
+                continue
+            verb = gesture.replies[int(_roll(profile, inv, "which") * len(gesture.replies))][0]
+        elif roll < TRAVEL_ACCEPT_SHARE:
+            verb = "yes" if game.join_refusal(inv.sender) is None else "no"
+        elif roll < TRAVEL_ACCEPT_SHARE + TRAVEL_REJECT_SHARE:
+            verb = "no"
+        else:
+            continue
+        option = f"invite:{verb}:{inv.id}"
+        if option in menu:
+            return option
+    return None
+
+
+def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str] | None:
+    """有人在這裡邀假人論武：跟切磋一樣 INVITE_YES 的機會答應，挑第一樣自己這邊合得成的（身上的在前）出；挑不到就婉拒。
+    走玩家卡同一條路（Game.peer_request、peer_act）。首創要取名時開單放進 slot（這一輪到此為止，B、C 段在 bot_runner）；
+    這一輪沒有取名的名額就先放著（邀請還在，下一輪再答）、照常做別的事（回 None）。沒有論武邀請也是 None。"""
+    p = game.state.player
+    pending = [i for i in invites.incoming(game.state.world, p.name) if i.kind == "discuss" and i.location == p.location]
+    if not pending or "act:rest" not in {o.id for o in game.options(odds=False, tick=False)}:
+        return None
+    inv = pending[0]
+    theirs = inv.payload.get("item", "")
+    item = next(
+        (key for key, _ in game.discuss_items() if key != theirs and game.discuss_problem(key, theirs, inv.sender) is None), None,
+    )
+    if item is None or game.peer_card(inv.sender) is None or rng.random() >= INVITE_YES:  # 他走了：收掉這張
+        return game.choose(f"invite:no:{inv.id}")
+    params = {"arg": f"yes:{item}"}
+    request = game.peer_request(inv.sender, "discuss", params)
+    if request is None:
+        return game.peer_act(inv.sender, "discuss", {**params, "proposed": NO_NAME})
+    if slot is None or not slot.open:
+        return None
+    slot.job = DiscussJob(inv.sender, item, request)
+    return []
 
 
 def look_after(game: Game, rng: random.Random) -> None:
@@ -266,7 +374,7 @@ def _master(game: Game, slot: NamingSlot | None) -> None:
         slot.skipped += 1
 
 
-def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob, proposed: tuple[str | None, str]) -> list[str]:
+def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, proposed: tuple[str | None, str]) -> list[str]:
     """C 段（bot_runner 在鎖內、重讀角色之後呼叫）：
     - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）。
       取新名字的單（沒有候選）要是沒有過得了過濾的名字（模型沒取到、或這時重驗過不了），這一爐不開、不收費：
@@ -275,6 +383,10 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob, proposed: tuple[
     - 絕學定名：還輪到這一門才定。模型的名字先過一次完整的過濾（naming.recheck），跟原名一樣、過不了、或定的時候
       被用掉了，就用退路字表另組（salt 從 0 起），最多 MASTER_TRIES 個，一定跟原名不同。都定不成就留著，下次再來。"""
     state, content, world = game.state, game.content, game.world
+    if isinstance(job, DiscussJob):  # 論武：同首創的爐，取新名字卻沒有名字可用就不答（不用字表名字搶首創）
+        if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
+            return []
+        return game.peer_act(job.sender, "discuss", {"arg": f"yes:{job.item}", "proposed": proposed})
     if isinstance(job, SenseJob):  # 取不到名字照樣交回：私有意境走退路字表，不記首悟（Game._sense_apply 只記模型取的）
         return game.sense_draw(job.request, proposed)
     if isinstance(job, ForgeJob):

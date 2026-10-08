@@ -1029,6 +1029,9 @@ class BattleTuning(_Strict):
     role_move_bonus: float = Field(default=0.15, ge=0)  # 先鋒的強攻、斥候的奇襲、盾陣的固守，份量多這麼多（加入時算進份量快照）
     role_gamble_rate: int = Field(default=10, ge=0)  # 軍師放手一搏的成功率多這麼多（模型評完再加，夾在 100）
     role_counter_relief: float = Field(default=0.5, ge=0, le=1)  # 參謀被剋時，剋制係數低於 1 的那一截減掉這麼多成
+    # 鼓勵自己寫放手一搏（試玩回饋 2026-10-08，Joy：「怎麼多鼓勵玩家自行創作」）：每場收場挑最有戲的那一次寫進天下大事傳聞
+    # （battle_instance.more_dramatic：成了的勝過沒成的，同樣成了或同樣沒成都是成功率越低越有戲），那一次是成了的，那個人名望多這麼多
+    highlight_fame: int = Field(default=1, ge=0)
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0
@@ -1118,6 +1121,21 @@ class StyleRule(_Strict):
         return self
 
 
+class Spar(_Strict):
+    """切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）：同一地點的兩個玩家，一方發邀請、對方接受才打。
+    雙方各用本人的威力（不帶同伴與部下：比的是兩個人的功夫），照 encounter 的單次判定；不扣氣血、不掉銀兩、不掉素材。
+    數字的依據：跟自己陣營操練一樣是零風險，操練只給對手獎勵的三成（drill_reward_share），危險度 1 一帶的散兵中位數是
+    經驗 19、心得 14.5，三成是經驗約 6、心得約 4。切磋要兩個人湊在一起、雙方都花一次遊歷的體力，給得比操練略多一點：
+    經驗各 exp；心得贏的 win_xinde、輸的 lose_xinde（輸了也學到東西），平手各 draw_xinde。同一對人每個遊戲日最多 per_pair_day 場，
+    免得兩個人互刷。"""
+
+    exp: int = Field(default=8, ge=0)
+    win_xinde: int = Field(default=6, ge=0)
+    lose_xinde: int = Field(default=3, ge=0)
+    draw_xinde: int = Field(default=4, ge=0)
+    per_pair_day: int = Field(default=2, ge=1)
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1180,6 +1198,10 @@ class Config(_Strict):
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
+    spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
+    # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
+    # 兩個人都在線上才有切磋，等的是現實的人
+    invite_ttl_seconds: int = Field(default=600, ge=30)
     big_fight_budget_seconds: int = Field(default=60, ge=0)
     # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
     # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
@@ -1473,6 +1495,12 @@ class Config(_Strict):
     # 碰到才說的 h_bond 與玩法說明寫的數字讀它，不在句子裡寫死
     signature_affinity: int = Field(default=70, ge=0, le=100)
     audience_rank_discount: int = 5  # 投靠了名將的陣營，每升一階抵掉幾點求見門檻（武學與成長設計 9.1）【預設】
+    # ── 玩家之間的互動（企劃者 2026-10-08）──
+    # 「此地還有誰」只列這麼多現實秒數之內同步過的人：網頁開著每 10 秒同步一次，假人在線時 1～3 分鐘做一個動作，
+    # 十分鐘夠把在線的都列進來；關了網頁、下了線的人十分鐘後就不在名單上（真人假人同一條規則）
+    presence_seconds: float = 600
+    # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
+    party_wait_seconds: float = 600
     # ── 伺服器假人（伺服器假人設計第四、六節）──
     bots_min_per_faction: int = 5  # 每個陣營（真人＋假人）至少幾人，不足由假人程式補
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2
@@ -1569,7 +1597,7 @@ class FreeTextGamble(_Strict):
     failure_trend_per_risk: float = 0.02  # 失敗時，戰局往對方倒退的量（乘上風險、四捨五入，取負）
     failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
     failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
-    failure_neili_share_per_risk: float = 0.004  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣五成，兩次就倒下出局）
+    failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
     side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少
 
 

@@ -284,7 +284,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
-    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith(("road:", "defect:"))]
+    # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
+    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith(("road:", "defect:", "invite:"))]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options

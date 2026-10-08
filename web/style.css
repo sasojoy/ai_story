@@ -868,3 +868,31 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .glow, .lit { animation: none; }
   .lib button.libr.glow { animation: none; } /* 上面那條的 animation-name 比 .glow 的選擇器重，要自己關；金邊還在，只是不呼吸 */
 }
+
+/* ── 玩家之間的互動（第一層）：場景卡底下「此地還有」與玩家卡 ── */
+.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; line-height: 1.6; }
+.here-k { color: var(--ink-2); font-size: 13px; }
+.peer-name { background: none; border: 0; padding: 2px 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.peer-name small { color: var(--ink-2); text-decoration: none; display: inline-block; }
+.here-more { font-size: 13px; }
+.peer-head h3 { margin: 0 0 2px; font-size: 20px; }
+.peer-title { color: var(--ink-2); font-size: 13px; }
+.peer-title .peer-seg { white-space: nowrap; }
+.peer-arts { display: grid; gap: 8px; margin: 14px 0; }
+.peer-art { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.peer-art small { color: var(--ink-2); flex: none; }
+.peer-art b { flex: 1; min-width: 0; }
+.peer-art span { flex: none; color: var(--ink-2); font-size: 13px; }
+.peer-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.peer-acts .btn small { display: block; font-size: 12px; color: var(--ink-2); font-weight: normal; }
+.peer-msg { margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--gold) 12%, var(--paper)); font-size: 14px; }
+.peer-msg p { margin: 0; }
+.peer-amount { margin-bottom: 12px; }
+/* 第二層：別人遞給你的打招呼、結伴邀請，與結伴同行的那一行（場景卡底下，「此地還有」之後） */
+.calls { display: grid; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; }
+.call, .party { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.call > span, .party > span { flex: 1 1 100%; }
+.peer-amount { flex-wrap: wrap; }
+.peer-amount select { flex: 1 1 100%; }
+.peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }
+.peer-pick select { min-width: 0; }

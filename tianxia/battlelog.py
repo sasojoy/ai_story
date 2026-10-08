@@ -18,7 +18,7 @@ from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰"}
+KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋"}
 NO_RECORD = "（還沒有戰報。）"
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
@@ -115,7 +115,8 @@ def _when(record: BattleRecord, when: Callable[[float], str]) -> str:
 def _result_line(record: BattleRecord) -> str:
     if record.kind == "showdown":  # 全服決戰沒有我方威力與對手難度：寫結果與自己站的那一邊
         return f"**{record.tier}**　你站在{record.side}"
-    return f"**{record.tier}**　我方威力 {record.our_power:.0f}　對手難度 {record.difficulty:.0f}"
+    rival = "對手威力" if record.kind == "spar" else "對手難度"  # 切磋的對手是另一個玩家：寫他的威力
+    return f"**{record.tier}**　我方威力 {record.our_power:.0f}　{rival} {record.difficulty:.0f}"
 
 
 def gains_list(record: BattleRecord) -> list[str]:

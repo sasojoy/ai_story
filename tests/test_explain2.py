@@ -248,14 +248,17 @@ def test_the_fame_amounts_follow_the_content_when_it_changes(on):
 
 
 def test_only_events_and_the_first_echo_give_fame_in_the_code():
-    """名望的來源只有兩條：事件的效果（rules.apply_effect 照內容的 stats 加減）與第一季的首創回饋（Game._deliver_echoes）。
-    程式裡直接寫名望的只有首創回饋那一行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
+    """名望的來源只有三條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
+    決戰最有戲的那一搏（Game._file_showdown）。程式裡直接寫名望的只有後兩條那兩行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
     for path in sorted((ROOT / "tianxia").glob("*.py")):
         for line in path.read_text(encoding="utf-8").splitlines():
             if re.search(r"""stats\[\s*["']fame["']\s*\]\s*[+-]?=""", line):
                 writes.append((path.name, line.strip()))
-    assert writes == [("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + gained')]
+    assert writes == [
+        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + gained'),
+        ("engine.py", 's.player.stats["fame"] = s.player.stats.get("fame", 0) + fame'),  # 決戰最有戲的那一搏（試玩回饋 2026-10-08）
+    ]
     givers = []
 
     def scan(node, where):

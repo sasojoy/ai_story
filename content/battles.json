@@ -20,7 +20,7 @@
       "failure_trend_per_risk": 0.02,
       "failure_trend_cap": 1,
       "failure_neili_share_base": 0.1,
-      "failure_neili_share_per_risk": 0.004,
+      "failure_neili_share_per_risk": 0.0025,
       "side_trend_cap": 5
     },
     "acts": [
@@ -127,7 +127,7 @@
       "failure_trend_per_risk": 0.02,
       "failure_trend_cap": 1,
       "failure_neili_share_base": 0.1,
-      "failure_neili_share_per_risk": 0.004,
+      "failure_neili_share_per_risk": 0.0025,
       "side_trend_cap": 5
     },
     "acts": [
@@ -213,7 +213,7 @@
       "failure_trend_per_risk": 0.02,
       "failure_trend_cap": 1,
       "failure_neili_share_base": 0.1,
-      "failure_neili_share_per_risk": 0.004,
+      "failure_neili_share_per_risk": 0.0025,
       "side_trend_cap": 5
     },
     "acts": [
@@ -299,7 +299,7 @@
       "failure_trend_per_risk": 0.02,
       "failure_trend_cap": 1,
       "failure_neili_share_base": 0.1,
-      "failure_neili_share_per_risk": 0.004,
+      "failure_neili_share_per_risk": 0.0025,
       "side_trend_cap": 5
     },
     "acts": [
@@ -384,7 +384,7 @@
       "failure_trend_per_risk": 0.02,
       "failure_trend_cap": 1,
       "failure_neili_share_base": 0.1,
-      "failure_neili_share_per_risk": 0.004,
+      "failure_neili_share_per_risk": 0.0025,
       "side_trend_cap": 5
     },
     "acts": [

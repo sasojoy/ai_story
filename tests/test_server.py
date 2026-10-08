@@ -19,7 +19,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, sqlite_world, team,
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, social, sqlite_world, team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
@@ -2970,19 +2970,21 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     client.post("/api/choose", json={"id": "battle:join_late"})
     seen = []
 
-    def rate(c, act, faction_name, text):
-        seen.append((open_world().db.writing(), faction_name, text))
-        return 73
+    def rate(c, act, faction_name, text, name):
+        seen.append((open_world().db.writing(), faction_name, text, name))
+        return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
 
-    monkeypatch.setattr(battle_instance, "assess_action_success_rate", rate)
+    monkeypatch.setattr(battle_instance, "assess_gamble", rate)
     client.post("/api/do/battle_text", json={"text": "火燒糧草"})
-    assert seen == [(False, "官軍", "火燒糧草")]
-    assert open_world().get_battle().round.success_rates == {"沈青衫": 73}
+    assert seen == [(False, "官軍", "火燒糧草", "沈青衫")]
+    battle = open_world().get_battle()
+    assert battle.round.success_rates == {"沈青衫": 73}
+    assert battle.round.stories == {"沈青衫": ["沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。"]}  # 同一次呼叫寫的兩版劇情
 
 
 def test_the_free_text_action_does_not_ask_the_model_when_it_cannot_be_sent(client, monkeypatch):
     _a_showdown_fighter(client, started=True)  # 還沒加入戰局：送不出去
-    monkeypatch.setattr(battle_instance, "assess_action_success_rate", lambda *a: pytest.fail("不該評"))
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a: pytest.fail("不該評"))
     out = client.post("/api/do/battle_text", json={"text": "火燒糧草"}).json()
     assert "（此刻無法這麼做。）" in out["message"]
 
@@ -5237,6 +5239,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+        "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5854,10 +5857,12 @@ def _function_users(attribute: str) -> set[str | None]:
 
 
 def test_only_the_action_endpoints_tell_other_tabs():
-    """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有五個動作的端點在叫，act／look／act_look／
+    """預檢 B1 釘在結構上：HUB.notify 只在 _tell_tabs 裡，而 _tell_tabs 只有動作的端點在叫，act／look／act_look／
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
-    assert _users_in_server("_tell_tabs") == {"api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense"}
+    assert _users_in_server("_tell_tabs") == {
+        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
+    }
 
 
 def test_current_fingerprint_follows_the_public_world():
@@ -5981,6 +5986,8 @@ NOT_IN_THE_FINGERPRINT = {
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
         "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
         "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+        "invites": "玩家之間的邀請只有發的人與收的人看得到，伺服器做完動作直接叫醒他們兩個的分頁（Game.touched）；算進去會叫醒全服",
+        "spar_tally": "切磋的每日次數，畫面上看不到",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
@@ -6005,6 +6012,7 @@ NOT_IN_THE_FINGERPRINT = {
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",
+        "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
     },
 }
 WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
@@ -6422,3 +6430,39 @@ def test_the_canvas_warms_the_model(client):
     with mock.patch.object(server.insight_llm, "warm", return_value=True) as warm:
         assert client.post("/api/sense_warm").json() == {"ok": True}
     warm.assert_called_once()
+
+
+# ── 玩家之間的互動（第一層）────────────────────────────────
+
+
+def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
+    """兩個人都略過序章、站在同一個起點：江湖畫面的 here 列出對方（陣營括號），/api/peer 給玩家卡；人不在了 card 是 None。"""
+    _player(client, "shen_01", "沈青衫")
+    other = TestClient(server.app)
+    _player(other, "lin_01", "林小竹")
+    here = client.get("/api/main").json()["here"]
+    assert here == [{"name": "林小竹", "side": "散人"}]
+    got = client.get("/api/peer", params={"name": "林小竹"}).json()
+    assert got["card"]["name"] == "林小竹" and got["card"]["level"] >= 1 and isinstance(got["card"]["actions"], list)
+    assert client.get("/api/peer", params={"name": "沒這個人"}).json() == {"card": None, "gone": social.GONE}
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "no-such", "amount": "x"}).json()
+    assert "沒有這個動作" in out["message"] and out["card"]["name"] == "林小竹"
+
+
+def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
+    """第二層：甲向乙抱拳、送銀兩；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
+    _player(client, "shen_02", "沈青衫")
+    other = TestClient(server.app)
+    _player(other, "lin_02", "林小竹")
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "bow"}).json()
+    assert "抱拳見禮" in out["message"]
+    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "silver", "amount": 5}).json()
+    assert "送給了林小竹" in gift["message"]
+    [call] = other.get("/api/main").json()["calls"]
+    assert call["text"] == "沈青衫向你抱拳見禮。"
+    other.post("/api/choose", json={"id": call["options"][0]["id"]})
+    main = other.get("/api/main").json()
+    assert main["calls"] == [] and main["party"] is None
+    assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
+    left = other.post("/api/party/leave", json={}).json()
+    assert "沒有跟著誰" in left["message"]

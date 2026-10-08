@@ -117,6 +117,14 @@ class Sensing(BaseModel):
     serial: int = 0  # 這一次感悟的流水號（PlayerState.sense_serial）：鎖外看圖取名回來，C 段照它認是不是同一次
 
 
+class Tagalong(BaseModel):
+    """答應了別人的結伴同行：跟著 leader 走，路線與走法由他定。只記在跟著的那個人身上（帶頭的人照這一欄從資料庫查）。
+    since 是答應的現實時刻：帶頭的人 Config.party_wait_seconds 之內沒動身就散了；動身之後一路到終點才散。"""
+
+    leader: str
+    since: float
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -276,6 +284,9 @@ class PlayerState(BaseModel):
     patron: str | None = None  # 靠山（晉升奇遇 4.2）：yuan、cao、self；計畫丙升第 3 階時寫入，叛投清掉
     opp_settled: list[int] = Field(default_factory=list)  # 結算過的集體密謀 id（只結算一次；換季跟著新角色清空）
 
+    # ── 玩家之間的互動（第二層：結伴同行；邀請本身在 WorldState.invites）；角色每季重來，跟著清空。存在角色的 JSON，不升 SCHEMA_VERSION ──
+    tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
+
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
 
@@ -366,14 +377,29 @@ class Order(BaseModel):
     applied: int = 0
 
 
+class Invite(BaseModel):
+    """玩家向同一地點的另一個玩家發的邀請（invites.py；玩家互動第二層）。payload 是這一種邀請自己要的東西（論武雙方出的武學或意境）。"""
+
+    id: str
+    kind: str  # "spar"（切磋）、"discuss"（論武）、"travel"（結伴同行）、"greet"（打招呼，payload 的 gesture 是哪一種禮節）
+    sender: str  # 名號（身分）
+    target: str
+    location: str  # 發邀請時兩人所在的地點 id；接受時兩人都還要在這裡
+    sent_at: float  # 世界秒
+    expires_at: float
+    payload: dict[str, str] = Field(default_factory=dict)
+
+
 class Echo(BaseModel):
     """一門首創的武學或意境，這一季照著合出來的人（首創名望回饋，Config.first_echo）。名望由首創者自己的 Game 在同步時補
     （paid 記補到第幾個人），合的那一下不去動別人的角色。"""
 
     creator: str  # 首創者的名號（身分）
+    co_creator: str | None = None  # 論武合出來的：另一個首創者（名望一樣補給他，補到第幾個人記在 co_paid）
     name: str  # 寫給首創者看的名字，連括號（武學【】、意境「」），合出來那一刻的顯示名字
     followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
     paid: int = 0  # 已經補給首創者的人數
+    co_paid: int = 0  # 已經補給 co_creator 的人數
 
 
 class WorldState(BaseModel):
@@ -427,6 +453,8 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
+    invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
+    spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
     # ── 第四階席次（第一季設計 5.4；正式版丁）。週一的掛鉤讀不到別人的存檔，所以有資格的人每次行動、同步時把自己每週的貢獻抄一份到
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──
@@ -457,7 +485,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown"]  # 遊歷／劇情／探索撞上的野怪／全服決戰（舊戰報的 train 不遷移，照舊顯示「遊歷」）
+    kind: Literal["train", "event", "wild", "showdown", "spar"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋（舊戰報的 train 不遷移，照舊顯示「遊歷」）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

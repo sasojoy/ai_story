@@ -59,7 +59,7 @@ import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, team, timetable,
+    server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -466,11 +466,13 @@ def _tell_tabs(game: Game, also: str = "") -> None:
     絕不能放進 act／look／act_look／poll_main／_entry：輪詢與開頁也走那些，通知一寫在輪詢的路上，同一個角色兩個看得到的
     分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……，預檢 B1）。
     一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。
-    also：另一個名號——管理者動到別人的存檔（玩家個人劇情，PLAYER_ADMIN_ACTIONS），他開著的分頁也刷新。"""
+    also：另一個名號——管理者動到別人的存檔（玩家個人劇情，PLAYER_ADMIN_ACTIONS），他開著的分頁也刷新。
+    game.touched：這一個動作動到的別人（邀請、切磋，Game._other_side），通知完清掉。"""
+    others, game.touched = set(game.touched), set()  # 這一個動作動到的別人（切磋、邀請）：他們的分頁也刷新
     if HUB is not None:
         HUB.notify(game.state.player.name.casefold())
-        if also.strip():
-            HUB.notify(also.strip().casefold())
+        for name in {also.strip(), *others} - {""}:
+            HUB.notify(name.casefold())
 
 
 # ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
@@ -688,6 +690,25 @@ def prepare_forge(
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
 
 
+def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
+    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
+    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
+    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.request is None:
+        return None
+    started, request = _open_request(game, lambda: game.peer_request(name, action, params))
+    if request is None:
+        return NO_NAME
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+
+
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
@@ -784,17 +805,17 @@ def battle_text(game: Game, text: str) -> list[str]:
     act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
     total = game.content.config.free_text_budget_seconds
 
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
-            return battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
-        return battle_instance.assess_action_success_rate(client, act_, request.faction_name, request.text)
+            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
+        # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
+        return battle_instance.assess_gamble(client, act_, request.faction_name, request.text, request.name)
 
-    rate = model_call(
-        game, score, fallback=battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
-        busy=BUSY_FREE_TEXT,
-    )
-    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -837,6 +858,10 @@ def _main_view_body(game: Game) -> dict:
         # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
         "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
+        # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
+        "here": game.peers_here(),
+        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
+        "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
@@ -1387,6 +1412,45 @@ MENXIA_ACTIONS = {
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
 }
+
+
+@app.get("/api/peer")
+def api_peer(request: Request, name: str = ""):
+    """玩家卡（social.card）：他不在這裡了 card 是 None，網頁照 gone 那一句說。只讀。"""
+    game = _game(request)
+    return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
+
+
+@app.post("/api/peer/act")
+def api_peer_act(request: Request, body: dict = Body(default={})):
+    """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
+    game = _game(request)
+    name, action = str(body.get("name", "")), str(body.get("action", ""))
+    params = {"arg": str(body.get("arg", "")), "choice": str(body.get("choice", ""))}
+    try:
+        params["amount"] = int(body.get("amount", 0))
+    except (TypeError, ValueError):
+        params["amount"] = 0
+    proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
+    if proposed is not None:
+        params["proposed"] = proposed
+    msgs = act(game, lambda g: g.peer_act(name, action, params))
+    _tell_tabs(game)
+    return {
+        "card": look(game, lambda g: g.peer_card(name)),
+        "gone": social.GONE,
+        "main": look(game, main_view),
+        "message": joined(msgs),
+    }
+
+
+@app.post("/api/party/leave")
+def api_party_leave(request: Request):
+    """還在等帶頭的人動身時的「分道揚鑣」（Game.leave_party）；在路上時走選單的 act:part。回傳 {main, message}。"""
+    game = _game(request)
+    msgs = act(game, lambda g: g.leave_party())
+    _tell_tabs(game)
+    return {"main": look(game, main_view), "message": joined(msgs)}
 
 
 @app.get("/api/menxia")

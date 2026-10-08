@@ -53,6 +53,37 @@ class CharacterStore:
         with self.db.snapshot() as conn:
             return {row["name"] for row in conn.execute("SELECT name FROM characters")}
 
+    def present(self, location: str, since: float, exclude: str = "") -> list[GameState]:
+        """此刻人在 location、上次同步不早於 since 的角色（玩家之間的互動第一層：「此地還有誰」），照名號排序；exclude 是名號，
+        不列自己。真人與假人一起查、不分（伺服器假人設計第五節）。在 SQL 裡先挑地點與時間，免得每次畫面都把整張表讀進來；
+        讀不懂的存檔跳過。路上、序章裡的人由呼叫端再篩（social.visible）。"""
+        sql = (
+            "SELECT data FROM characters WHERE json_extract(data, '$.player.location') = ? "
+            "AND json_extract(data, '$.last_real') >= ? AND key != ? ORDER BY name"
+        )
+        with self.db.snapshot() as conn:
+            rows = conn.execute(sql, (location, since, name_key(exclude))).fetchall()
+        states: list[GameState] = []
+        for row in rows:
+            try:
+                states.append(GameState.model_validate_json(row["data"]))
+            except ValidationError:
+                continue
+        return states
+
+    def tagging(self, leader: str) -> list[GameState]:
+        """答應跟著 leader（名號原樣）結伴同行的人（PlayerState.tagalong），照名號排序；還算不算數由呼叫端看（social.party）。"""
+        sql = "SELECT data FROM characters WHERE json_extract(data, '$.player.tagalong.leader') = ? ORDER BY name"
+        with self.db.snapshot() as conn:
+            rows = conn.execute(sql, (leader,)).fetchall()
+        states: list[GameState] = []
+        for row in rows:
+            try:
+                states.append(GameState.model_validate_json(row["data"]))
+            except ValidationError:
+                continue
+        return states
+
     def all(self, bots_only: bool = False) -> list[GameState]:
         """照名號排序；讀不懂的存檔跳過（不讓一份壞檔拖垮榜單或假人程式）。"""
         sql = "SELECT data FROM characters" + (" WHERE is_bot = 1" if bots_only else "") + " ORDER BY name"
