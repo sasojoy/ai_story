@@ -60,12 +60,18 @@
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     peekOpen: null, // 江湖頁那一排小標（態勢｜大事｜主線）展開著的那一塊：{ id, week }；點同一個收起，換週就不再對得上（FB-039、正式版辛）
     hearOpen: null, // 戰鬥卡片底下聽來的那一句展開著的那一場（卡片的戰報流水號）；換成下一場就收回（FB-074）
+    // 第一屏放不下時一步一步收（FB-107 的 fitFirstScreen）：
+    fitted: [], // 這一次收了哪幾步（FIT_STEPS 的 key），給測試與除錯看
+    fitWidth: 0, // 上一次量的是哪個寬度：視窗只有高度變了（手機網址列收合）不重量（fitOnResize）
+    hintTight: false, // 💡 收成一行（第 3 步要的）；狀態列照它畫（hintHtml），玩家點開了（hintOpen）就一直攤開
+    linesOpen: null, // 戰鬥卡片底下收成一行的補充攤開著的那一場（卡片的戰報流水號），重畫時不再收（第 4 步）
+    ownOpen: null, // 決戰時收成一行的所在地、集結那一句攤開過的那一處那一場（fitOwnKey），重畫時不再收（第 7、8 步）
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
-    hintOpen: false, // 在路上時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路就清掉
+    hintOpen: false, // 在路上（或 FB-107 收成一行，hintTight）時狀態列的 💡 提示展開著嗎（預設只露一行，FB-060）；下了路、不收了就清掉
     guideRoad: null, // 在路上、或眼前有事件待處理（pending 的那一句）時說書人的框展開著的那一句（內容本身）；這兩種預設收成一行，離開就清掉（FB-055、FB-076）
     busy: false,
     menxia: null,
@@ -413,7 +419,8 @@
   // 江湖頁第一屏放不下行動列時（FB-107 的 fitFirstScreen，S.hintTight）不在路上也收成一行，點了看全文；別的分頁照舊整段
   function hintHtml(s) {
     const tight = s.journey == null && S.hintTight && S.tab === "jianghu";
-    if (s.journey == null && !tight) S.hintOpen = false;
+    // 不在路上、也沒收成一行：清掉「點開了」。收成一行的時候去別的分頁看一眼（那裡照整段畫），回來照舊攤開（審查 M9）
+    if (s.journey == null && !S.hintTight) S.hintOpen = false;
     if (!s.hint) return "";
     if (s.journey == null && S.main && S.main.guide && S.main.guide.hint) return "";
     if (s.journey == null && S.main && S.main.options && !idleMenu(S.main) && !waitingMenu(S.main)) return "";
@@ -554,18 +561,21 @@
       renderTop();
       return true;
     } },
-    // 4. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）
+    // 4. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）。
+    //    點開記在 S.linesOpen（這一場的卡片），跟聽來的那一句（S.hearOpen）各記各的（審查 M5）；數字收不進一行的那一行不收
     { key: "lines", run: () => {
-      if (S.hearOpen != null && S.hearOpen === S.main.card_id) return false; // 玩家點開過：不收回去
-      const lines = document.querySelectorAll(".battle-card .tx-extra .tx-line:not(.tx-hearsay)");
-      lines.forEach((el) => {
+      if (S.linesOpen != null && S.linesOpen === S.main.card_id) return false; // 玩家點開過：不收回去
+      let any = false;
+      document.querySelectorAll(".battle-card .tx-extra .tx-line:not(.tx-hearsay)").forEach((el) => {
         el.classList.add("tx-tight");
-        el.setAttribute("data-act", "hear-more");
+        if (!fitDigitsShown(el)) { el.classList.remove("tx-tight"); return; }
+        el.setAttribute("data-act", "line-more");
         el.setAttribute("role", "button");
         el.setAttribute("tabindex", "0");
         el.setAttribute("aria-expanded", "false");
+        any = true;
       });
-      return lines.length > 0;
+      return any;
     } },
     // 5. 戰鬥卡片的第一回合也收進「展開過程」（那一行與按鈕照舊在；得失照舊在）
     { key: "rounds", run: () => {
@@ -588,18 +598,20 @@
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
       const scene = document.querySelector("#page > .card.scene:not(.road)");
-      if (!scene || !scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === S.main.scene) return false;
+      if (!scene || !scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === fitOwnKey()) return false;
       scene.classList.add("fit-own");
       return fitClip(scene.querySelectorAll(":scope > hr ~ p"));
     } },
-    // 8. 決戰集結、加入的鈕在戰場名字那一行（FB-105 的 musterScene）時，名字底下集結那一句收成一行：開頭是「集結中，還剩現實 N 分 N 秒」，
-    //    後半（「選擇陣營加入…」）名字旁那一小句已經說了。點了攤開（同上）
+    // 8. 戰場名字底下、分隔線之前那幾句（集結、開打的消息，開頭是「集結中，還剩現實 N 分 N 秒」）收成一行，點了攤開（同上）。
+    //    加入的鈕在名字那一行（FB-105 的 musterScene）時從那一行底下算起，後半（「選擇陣營加入…」）名字旁那一小句已經說了；
+    //    沒有鈕（人不在那個大區、加入過了、觀戰）時從名字底下算起——別的大區集結時那一句「…這場決戰在南陽，人要到了那裡…」兩行高，
+    //    以前沒有鈕就從來不收（走查）。數字收不進一行的那一句不收（fitClip）
     { key: "muster", run: () => {
       const scene = document.querySelector("#page > .card.scene:not(.road)");
-      const head = scene && scene.querySelector(":scope > .muster-head");
-      if (!head || S.ownOpen === S.main.scene) return false;
+      if (!scene || !scene.querySelector(":scope > hr") || S.ownOpen === fitOwnKey()) return false;
+      const head = scene.querySelector(":scope > .muster-head") || scene.querySelector(":scope > p");
       const lines = [];
-      for (let p = head.nextElementSibling; p && p.tagName !== "HR"; p = p.nextElementSibling) if (p.tagName === "P") lines.push(p);
+      for (let p = head && head.nextElementSibling; p && p.tagName !== "HR"; p = p.nextElementSibling) if (p.tagName === "P") lines.push(p);
       scene.classList.add("fit-muster");
       return fitClip(lines);
     } },
@@ -632,16 +644,44 @@
     fitUnclip(page);
     page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
   }
-  // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）
+  // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
+  // 收了之後數字（倒數、戰局）會藏到「…」後面的那一段不收
   function fitClip(paras) {
+    let any = false;
     paras.forEach((p) => {
       p.classList.add("fit-clip");
+      if (!fitDigitsShown(p)) { p.classList.remove("fit-clip"); return; }
       p.setAttribute("data-act", "own-more");
       p.setAttribute("role", "button");
       p.setAttribute("tabindex", "0");
       p.setAttribute("aria-expanded", "false");
+      any = true;
     });
-    return paras.length > 0;
+    return any;
+  }
+  // 收成一行之後，裡面的數字還整個看得到嗎：最後一個數字的右緣要在那一行右緣往內 1em 以內（「…」佔的位置）。
+  // 收成一行的字照樣排在框外面（只是畫不出來），所以量得到它在哪。量不了（瀏覽器沒有 Range）就當看得到
+  function fitDigitsShown(el) {
+    if (!document.createRange || !document.createTreeWalker) return true;
+    const walk = document.createTreeWalker(el, 4); // NodeFilter.SHOW_TEXT
+    let node = null, at = -1;
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const i = n.data.search(/[0-9０-９][^0-9０-９]*$/);
+      if (i >= 0) { node = n; at = i; }
+    }
+    if (!node) return true;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + 1);
+    const em = parseFloat(getComputedStyle(el).fontSize) || 16;
+    return range.getBoundingClientRect().right <= el.getBoundingClientRect().right - em;
+  }
+  // 攤開過的是哪一處的哪一場（審查 I2）：所在地＋場景第一段（戰場名字），數字拿掉。集結、開打時場景裡的倒數與回合每一次輪詢都在變，
+  // 拿整個場景當記號的話，玩家剛攤開的那幾段下一輪就又收回去
+  function fitOwnKey() {
+    const m = S.main || {};
+    const first = String(m.scene || "").split("</p>")[0].replace(/[0-9０-９]+/g, "#");
+    return `${(m.status && m.status.location) || ""}|${first}`;
   }
   function fitUnclip(root) {
     root.querySelectorAll(".fit-clip").forEach((p) => {
@@ -652,6 +692,7 @@
   // 收了哪幾步（記在 S.fitted，給測試與除錯看）
   function fitFirstScreen() {
     S.fitted = [];
+    S.fitWidth = window.innerWidth; // 這一次量的是哪個寬度（fitOnResize 看它）
     if (S.stage !== "game" || S.tab !== "jianghu" || !S.main || S.main.on_road || pro() || !fitPage()) return;
     fitReset();
     for (const step of FIT_STEPS) {
@@ -659,9 +700,22 @@
       if (step.run()) S.fitted.push(step.key);
     }
   }
-  // 決戰時收成一行的那幾段（所在地、集結那一句）：點了攤開（原地，不重畫）；記住這一個場景攤開過，重畫時不再收
+  // 視窗大小變了（檔案最後的 resize 監聽）：寬度變了（轉向、拉視窗）才重量。手機捲動時網址列收起、跑出來只改高度，也會觸發 resize——
+  // 那時重量的話，第一屏外的那幾段會邊捲邊收、邊攤開（審查 M6）。平常的重畫（afterPage）照樣每次都量
+  function fitOnResize() {
+    if (window.innerWidth === S.fitWidth) return;
+    fitFirstScreen();
+  }
+  // 戰鬥卡片底下收成一行的補充（第 4 步）：點了原地攤開、再點收起，不重畫；攤開記在 S.linesOpen（這一場的卡片），重畫時不再收
+  function lineToggle(el) {
+    const open = !el.classList.contains("open");
+    S.linesOpen = open ? S.main.card_id : null;
+    el.classList.toggle("open", open);
+    el.setAttribute("aria-expanded", String(open));
+  }
+  // 決戰時收成一行的那幾段（所在地、集結那一句）：點了攤開（原地，不重畫）；記住這一處的這一場攤開過（fitOwnKey），重畫時不再收
   function ownOpen() {
-    S.ownOpen = S.main.scene;
+    S.ownOpen = fitOwnKey();
     const scene = document.querySelector("#page > .card.scene:not(.road)");
     if (!scene) return;
     scene.classList.remove("fit-own", "fit-muster");
@@ -2835,7 +2889,8 @@
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
-        case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句（與 FB-107 收成一行的補充）：原地展開／收起，不重畫
+        case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
+        case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
@@ -3007,9 +3062,13 @@
       ev.preventDefault();
       toggleMore(true);
     }
-    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"], .tx-tight[data-act="hear-more"]')) {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"]')) {
       ev.preventDefault();
       hearToggle(ev.target);
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-tight[data-act="line-more"]')) {
+      ev.preventDefault();
+      lineToggle(ev.target);
     }
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('[data-act="own-more"]')) {
       ev.preventDefault();
@@ -3364,7 +3423,7 @@
   let cueTimer = 0;
   window.addEventListener("resize", () => {
     if (S.stage === "game" && S.tab === "map") applyMapView();
-    if (S.stage === "game" && S.tab === "jianghu") { fitFirstRound(); fitFirstScreen(); } // 寬度變了，第一回合佔幾行、第一屏放不放得下也跟著變
+    if (S.stage === "game" && S.tab === "jianghu") { fitFirstRound(); fitOnResize(); } // 寬度變了，第一回合佔幾行、第一屏放不放得下也跟著變（只有高度變了不重量，見 fitOnResize）
     // 序章裡師父框上的「在下面 ↓」只在畫面重畫時算；視窗大小變了（轉向、拉視窗）目標離第一屏多遠也跟著變，去抖後重算、不重畫（T7 走查 W-F）
     clearTimeout(cueTimer);
     cueTimer = setTimeout(() => { if (S.stage === "game") guideCue(); }, 150);

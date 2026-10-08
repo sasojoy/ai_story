@@ -298,8 +298,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .page.fit-space > .card.scene { padding-top: 8px; padding-bottom: 8px; }
 .page.fit-space > .card.guide { padding-top: 6px; padding-bottom: 6px; }
 /* 玩家互動那幾塊（「此地還有」、結伴、邀請）是另一條線的，這裡不動它們 */
-/* 2. 師父的框收緊（框裡的話一個字都不切）：「知道了」照樣 38px 高、點得到，上下各 −9px，標題那一行只佔字的高度；話的行高 1.6→1.5 */
-.card.guide.fit-box .guide-head .btn { margin-top: -9px; margin-bottom: -9px; }
+/* 2. 師父的框收緊（框裡的話一個字都不切）：「知道了」照樣 38px 高、點得到；上 −6px 伸進框的內距（第 1 步之後是 6px，不出框），
+   下 −2px 剛好停在話的第一行上面（.guide-text 的 margin-top 2px，不壓字，審查 M1）——標題那一行 38→30px；話的行高 1.6→1.5 */
+.card.guide.fit-box .guide-head .btn { margin-top: -6px; margin-bottom: -2px; }
 .card.guide.fit-box .guide-text { line-height: 1.5; }
 /* 3. 💡 收成一行（在路上那一種，FB-060：點了看全文），app.js 的 hintHtml 照 S.hintTight 畫 */
 /* 4. 戰鬥卡片底下的補充收成一行、放不下加「…」，點了看全文（同聽來的那一句，上下多 7px 的點擊範圍用負的 margin 吃回去） */

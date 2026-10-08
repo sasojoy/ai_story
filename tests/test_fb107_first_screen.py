@@ -59,12 +59,16 @@ const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
 let tops = 0;
 const renderTop = () => { tops += 1; };
-const mhead = L.muster ? el("head", ["muster-head"], { tagName: "DIV" }) : null;
-const musterLines = (L.muster || 0) ? Array.from({ length: L.muster }, () => el("musterp", [], { tagName: "P" })) : [];
+// 場景卡：加入的鈕在名字那一行時（L.join 不是 false）名字包在 muster-head 裡；沒有鈕時名字是場景卡第一個 <p>
+const T = L.texts || {};
+const mhead = L.muster && L.join !== false ? el("head", ["muster-head"], { tagName: "DIV" }) : null;
+const title = L.hr && !mhead ? el("title", [], { tagName: "P", text: "廣宗決戰" }) : null;
+const musterLines = (L.muster || 0) ? Array.from({ length: L.muster }, (_, i) => el("musterp", [], { tagName: "P", text: (T.muster || [])[i] || "" })) : [];
 const hr = L.hr ? el("hr", [], { tagName: "HR" }) : null;
-const own = (L.own || 0) ? Array.from({ length: L.own }, () => el("ownp", [], { tagName: "P" })) : [];
-// 場景卡的順序：名字那一行（muster-head）、集結那一句、分隔線、所在地
-const order = [mhead, ...musterLines, hr, ...own].filter(Boolean);
+const own = (L.own || 0) ? Array.from({ length: L.own }, (_, i) => el("ownp", [], { tagName: "P", text: (T.own || [])[i] || "" })) : [];
+lines.forEach((x, i) => { x.text = (T.lines || [])[i] || ""; });
+// 場景卡的順序：名字那一行（muster-head 或名字那一段）、集結那一句、分隔線、所在地
+const order = [mhead || title, ...musterLines, hr, ...own].filter(Boolean);
 order.forEach((e, i) => { e.nextElementSibling = order[i + 1] || null; });
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
 const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22 }, input.save || {});
@@ -84,7 +88,8 @@ const bottom = () => {
   return b;
 };
 const target = actbar || last;
-if (target) target.getBoundingClientRect = () => ({ bottom: bottom() });
+// 畫面上的位置＝頁面上的位置 − 捲了多少（分頁列固定在畫面底下）
+if (target) target.getBoundingClientRect = () => ({ bottom: bottom() - globalThis.window.scrollY });
 tabs.getBoundingClientRect = () => ({ top: 756 });
 if (body) Object.defineProperty(body, "scrollHeight", { get: () => L.nowBody });
 if (body) Object.defineProperty(body, "clientHeight", { get: () => bodyHeight() });
@@ -111,27 +116,38 @@ const where = {
 };
 const q = (sel) => { if (!where[sel]) throw new Error("假頁面不認得的選擇器：" + sel); return where[sel](); };
 globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : null), querySelector: (s) => q(s)[0] || null, querySelectorAll: q };
-globalThis.window = { scrollY: 0 };
+globalThis.window = { scrollY: input.scrollY || 0, innerWidth: input.width || 375 };
+// 量數字露不露得出來（input.measure）：每個字 15px 寬、一行 300px，「…」佔 1em（15px）——第 19 個字以後的數字就藏起來了。
+// 沒給就跟沒有 Range 的瀏覽器一樣（fitDigitsShown 當看得到）
+if (input.measure) {
+  document.createTreeWalker = (e) => { let done = false; return { nextNode: () => (done ? null : (done = true, { data: e.text || "" })) }; };
+  document.createRange = () => ({ setStart(n, i) { this.i = i; }, setEnd() {}, getBoundingClientRect() { return { right: (this.i + 1) * 15 }; } });
+  globalThis.getComputedStyle = () => ({ fontSize: "15px" });
+  [...lines, ...musterLines, ...own].forEach((x) => { x.getBoundingClientRect = () => ({ right: 300 }); });
+}
 page.querySelectorAll = q;
 if (now) now.querySelector = (s) => (s === ".tx-now" ? body : null);
 if (scene) {
-  scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead : null);
+  scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead
+    : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
-const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
-  main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
+const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
+  fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
-const H = new Function("S", "pro", "idleMenu", "renderTop", code + "\nreturn { fitFirstScreen, fitOver, ownOpen, FIT_STEPS };")(S, pro, idleMenu, renderTop);
+const H = new Function("S", "pro", "idleMenu", "renderTop", code
+  + "\nreturn { fitFirstScreen, fitOver, ownOpen, fitOwnKey, fitOnResize, lineToggle, FIT_STEPS };")(S, pro, idleMenu, renderTop);
 const snap = () => ({
   fitted: S.fitted, bottom: bottom(), page: [...page.classes].sort(), card: card ? [...card.classes].sort() : null,
-  box: box ? [...box.classes].sort() : null, hintTight: S.hintTight, tops,
+  box: box ? [...box.classes].sort() : null, hintTight: S.hintTight, tops, hearOpen: S.hearOpen, linesOpen: S.linesOpen,
   lines: lines.map((x) => [...x.classes].sort()), lineAttrs: lines.map((x) => x.attrs), rounds: rounds ? [...rounds.classes].sort() : null,
   now: now ? [...now.classes].sort() : null, scene: scene ? [...scene.classes].sort() : null, own: own.map((x) => x.attrs),
   ownClip: own.map((x) => has(x, "fit-clip")), musterClip: musterLines.map((x) => has(x, "fit-clip")),
-  menu: menu ? [...menu.classes].sort() : null,
+  musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
 });
-finish(new Function("H", "S", "snap", "L", input.script || "H.fitFirstScreen(); return snap();")(H, S, snap, L));
+finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
+  H, S, snap, L, globalThis.window, { lines }));
 """
 
 
@@ -160,8 +176,15 @@ def test_it_folds_step_by_step_and_stops_as_soon_as_the_row_fits():
     out = run({**FIGHT, "bottom": 790})
     assert out["fitted"] == ["space", "lines"] and out["bottom"] <= 740
     assert "fit-space" in out["page"] and "fit-space" in out["card"]
-    assert out["lines"] == [["tx-line", "tx-tight"]] and out["lineAttrs"][0]["data-act"] == "hear-more"  # 點得開（同聽來的那一句）
+    assert out["lines"] == [["tx-line", "tx-tight"]] and out["lineAttrs"][0]["data-act"] == "line-more"  # 點得開（自己的開合，審查 M5）
     assert out["rounds"] == ["rounds"]
+
+
+@node
+def test_a_scrolled_page_is_measured_from_the_top():
+    """量的是捲回最上面時行動列在哪（畫面上的位置＋捲了多少）：捲下去 100px、行動列在畫面上的 700，頁面上是 800——照樣要收。"""
+    out = run({**FIGHT, "bottom": 800}, scrollY=100)
+    assert out["fitted"][:2] == ["space", "lines"] and out["bottom"] <= 740
 
 
 @node
@@ -200,10 +223,31 @@ def test_a_hint_the_player_opened_stays_open():
 
 @node
 def test_the_short_form_expands_fully_and_stays_open():
-    """玩家按了「展開過程」（ul 掛 open）、點開過補充（S.hearOpen 是這一場）：重畫之後不再收回去，其他步驟照樣收。"""
-    out = run({**FIGHT, "rounds": True, "roundsOpen": True}, S={"hearOpen": 7})
+    """玩家按了「展開過程」（ul 掛 open）、點開過補充（S.linesOpen 是這一場）：重畫之後不再收回去，其他步驟照樣收。"""
+    out = run({**FIGHT, "rounds": True, "roundsOpen": True}, S={"linesOpen": 7})
     assert "lines" not in out["fitted"] and "rounds" not in out["fitted"]
     assert out["rounds"] == ["open", "rounds"] and out["lines"] == [["tx-line"]]
+
+
+@node
+def test_the_description_and_the_hearsay_line_open_separately():
+    """對手的描述與聽來的那一句各記各的（審查 M5）：點開描述不會讓聽來的那一句跟著攤開；攤開過聽來的那一句，描述照樣收。"""
+    out = run(FIGHT, "H.fitFirstScreen(); H.lineToggle(els.lines[0]); return snap();")
+    assert out["linesOpen"] == 7 and out["hearOpen"] is None and out["lines"] == [["open", "tx-line", "tx-tight"]]
+    heard = run(FIGHT, S={"hearOpen": 7})
+    assert "lines" in heard["fitted"] and heard["lines"] == [["tx-line", "tx-tight"]]
+    again = run(FIGHT, S={"linesOpen": 6})  # 攤開的是上一場：這一場照樣收
+    assert "lines" in again["fitted"]
+
+
+@node
+def test_a_line_whose_numbers_would_hide_behind_the_ellipsis_is_not_folded():
+    """收成一行之後數字會藏到「…」後面的那一行不收（例如以後多一行「江湖大事：…戰局 62」）；數字在前面的照收。"""
+    texts = {"lines": ["（偷網賊：趁漁家不在偷收漁網的毛賊，滑得像泥鰍，一見人就往水裡鑽，還說他偷過 3 張網。）"]}
+    out = run({**FIGHT, "texts": texts}, measure=True)
+    assert "lines" not in out["fitted"] and out["lines"] == [["tx-line"]] and out["lineAttrs"] == [{}]
+    plain = run({**FIGHT, "texts": {"lines": ["（偷網賊：趁漁家不在偷收漁網的毛賊，滑得像泥鰍，一見人就往水裡鑽。）"]}}, measure=True)
+    assert "lines" in plain["fitted"]
 
 
 @node
@@ -243,11 +287,35 @@ def test_the_location_under_a_battle_folds_only_when_idle():
     assert "own" not in event["fitted"] and "fit-own" not in event["scene"] and event["ownClip"] == [False, False]
     no_battle = run({**layout, "hr": False})
     assert "own" not in no_battle["fitted"]
-    opened = run(layout, "H.fitFirstScreen(); H.ownOpen(); return { s: snap(), open: S.ownOpen };")
-    assert "fit-own" not in opened["s"]["scene"] and opened["s"]["ownClip"] == [False, False] and opened["open"] == "<p>x</p>"
+    opened = run(layout, "H.fitFirstScreen(); H.ownOpen(); return { s: snap(), open: S.ownOpen, key: H.fitOwnKey() };")
+    assert "fit-own" not in opened["s"]["scene"] and opened["s"]["ownClip"] == [False, False] and opened["open"] == opened["key"]
     assert opened["s"]["own"] == [{}, {}]
-    again = run(layout, S={"ownOpen": "<p>x</p>"})
+    again = run(layout, "S.ownOpen = H.fitOwnKey(); H.fitFirstScreen(); return snap();")
     assert "own" not in again["fitted"]  # 攤開過的同一個場景，重畫時不再收
+    roomy = run(layout, "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
+    assert roomy["fitted"] == [] and "fit-own" not in roomy["scene"] and roomy["ownClip"] == [False, False]  # 重量之前全部還原
+
+
+MUSTER = "<p><strong>廣宗決戰</strong></p>\n<p>集結中，還剩現實 {} 秒。選擇陣營加入；集結期間照常行動。</p>\n<hr />\n<p>【盧植營】危險 ★★</p>"
+
+
+@node
+def test_opened_lines_stay_open_while_the_countdown_ticks():
+    """審查 I2：攤開過的所在地、集結那一句，下一次輪詢倒數變了（場景的字跟著變）也不收回去；換了地方、換了一場才重新收。"""
+    layout = {"bottom": 800, "actbar": True, "scene": True, "muster": 1, "hr": True, "own": 2}
+    main = {"card_id": 7, "on_road": False, "status": {"location": "luzhi_camp"}, "scene": MUSTER.format("26 分 2")}
+    script = """
+      H.fitFirstScreen(); const folded = snap();
+      H.ownOpen(); const opened = snap();
+      S.main = Object.assign({}, S.main, { scene: S.main.scene.replace("26 分 2", "25 分 52") }); H.fitFirstScreen(); const polled = snap();
+      S.main = Object.assign({}, S.main, { status: { location: "guangzong" } }); H.fitFirstScreen(); const moved = snap();
+      return { folded, opened, polled, moved };"""
+    out = run(layout, script, S={"main": main})
+    assert out["folded"]["ownClip"] == [True, True] and out["folded"]["musterClip"] == [True]
+    assert out["opened"]["ownClip"] == [False, False] and out["opened"]["musterClip"] == [False]
+    assert out["polled"]["ownClip"] == [False, False] and out["polled"]["musterClip"] == [False]
+    assert "own" not in out["polled"]["fitted"] and "muster" not in out["polled"]["fitted"]
+    assert out["moved"]["ownClip"] == [True, True]  # 換了地方：重新收
 
 
 @node
@@ -265,7 +333,22 @@ def test_the_muster_line_folds_to_its_countdown_after_the_location():
     opened = run(layout, "H.fitFirstScreen(); H.ownOpen(); return snap();")
     assert opened["musterClip"] == [False] and opened["ownClip"] == [False, False] and "fit-muster" not in opened["scene"]
     plain = run({**layout, "muster": 0})
-    assert "muster" not in plain["fitted"]  # 沒有加入的鈕（已加入、觀戰）：沒有這一步
+    assert "muster" not in plain["fitted"]  # 戰場名字底下沒有句子：沒有這一步
+
+
+@node
+def test_the_muster_notice_folds_without_a_join_row():
+    """走查：在別的大區、不能加入時，「宛城之戰 集結中…這場決戰在南陽，人要到了那裡…」兩行高，以前沒有加入的鈕就從來不收。
+    現在從戰場名字底下算起照樣收成一行（開頭是倒數，點得開）；數字會藏到「…」後面的那一句不收。"""
+    layout = {"bottom": 800, "actbar": True, "scene": True, "muster": 1, "join": False, "hr": True, "own": 2}
+    out = run(layout)
+    assert out["fitted"] == ["space", "own", "muster"] and out["musterClip"] == [True] and out["bottom"] <= 740
+    assert out["musterAttrs"] == [{"data-act": "own-more", "role": "button", "tabindex": "0", "aria-expanded": "false"}]
+    notice = "集結中，還剩現實 26 分 2 秒。這場決戰在南陽，人要到了那裡才能加入；集結期間照常行動。"
+    measured = run({**layout, "texts": {"muster": [notice]}}, measure=True)
+    assert measured["musterClip"] == [True]  # 倒數在前面：收了照樣看得到
+    late = run({**layout, "texts": {"muster": ["第三回合：官軍強攻、黃巾固守，兩軍在城下殺成一團，戰局 62。"]}}, measure=True)
+    assert late["musterClip"] == [False] and "muster" not in late["fitted"]
 
 
 @node
@@ -297,8 +380,25 @@ def test_every_draw_and_every_resize_refits():
     assert "fitFirstScreen" in calls and calls.index("decorateHearsay") < calls.index("fitFirstScreen")
     assert calls.index("fitFirstRound") < calls.index("fitFirstScreen")
     resize = js[js.index('window.addEventListener("resize"'):]
-    assert "fitFirstScreen()" in resize[:resize.index("});")]
+    assert "fitOnResize()" in resize[:resize.index("});")]  # 寬度變了才重量（見下一個測試）
     assert "case \"own-more\": ownOpen(); break;" in js  # 收成一行的那幾段點得開
+    assert "case \"line-more\": lineToggle(el); break;" in js
+    assert re.search(r"""matches\('\.tx-tight\[data-act="line-more"\]'\)\) \{\s*ev\.preventDefault\(\);\s*lineToggle\(ev\.target\);""", js)
+
+
+@node
+def test_only_a_width_change_refits_on_resize():
+    """審查 M6：手機捲動時網址列收起、跑出來只改視窗高度（也會觸發 resize）——不重量，不然第一屏外的那幾段會邊捲邊收、邊攤開。
+    寬度變了（轉向、拉視窗）才重量；平常的重畫（afterPage）照舊每次量。"""
+    script = """
+      H.fitFirstScreen(); const first = snap();
+      L.bottom = 700; W.innerHeight = 700; H.fitOnResize(); const tall = snap();
+      W.innerWidth = 812; H.fitOnResize(); const turned = snap();
+      return { first, tall, turned, width: S.fitWidth };"""
+    out = run(FIGHT, script)
+    assert out["first"]["fitted"] == ["space", "lines", "rounds"]
+    assert out["tall"]["fitted"] == ["space", "lines", "rounds"] and "fit-fold" in out["tall"]["rounds"]  # 只有高度變了：不動
+    assert out["turned"]["fitted"] == [] and out["turned"]["rounds"] == ["rounds"] and out["width"] == 812
 
 
 HINT_DRIVER = r"""
@@ -323,6 +423,15 @@ def test_the_hint_is_drawn_folded_only_when_the_fit_asked_and_only_on_the_jiangh
 def test_a_folded_hint_the_player_opened_stays_open_on_redraw():
     out = webharness.run(HINT_DRIVER, {"S": {"hintTight": True, "hintOpen": True}})
     assert out["open"] is True and 'class="hint road-hint"' in out["html"] and "clamp" not in out["html"]
+
+
+@node
+def test_an_opened_hint_stays_open_after_a_look_at_another_tab():
+    """審查 M9：收成一行的 💡 點開了，去修練頁看一眼（那裡照整段畫），回來照舊攤開；不收了（hintTight 拿掉）才清掉。"""
+    away = webharness.run(HINT_DRIVER, {"S": {"hintTight": True, "hintOpen": True, "tab": "practice"}})
+    assert away["open"] is True and '<span class="hint">' in away["html"]
+    done = webharness.run(HINT_DRIVER, {"S": {"hintTight": False, "hintOpen": True}})
+    assert done["open"] is False
 
 
 # ── 真的卡片：收起來的那幾樣不含得失與結果 ─────────────────────────
@@ -392,11 +501,38 @@ def test_the_box_step_keeps_every_word_and_the_tap_target():
     玩家互動那幾塊（「此地還有」、結伴、邀請）是另一條線的：收的時候不碰它們的樣式。"""
     css = _css()
     rules = _rules(css, "fit-box")
-    assert rules[".card.guide.fit-box .guide-head .btn"].split() == "margin-top: -9px; margin-bottom: -9px;".split()
+    assert set(re.findall(r"([\w-]+):", rules[".card.guide.fit-box .guide-head .btn"])) == {"margin-top", "margin-bottom"}
     assert rules[".card.guide.fit-box .guide-text"].strip() == "line-height: 1.5;"
     assert not any("clamp" in body or "display: none" in body or "overflow" in body for body in rules.values())
     fit_rules = re.findall(r"(?m)^([^{}\n@]*\bfit-[^{}\n]*)\{", css)
     assert not any(re.search(r"\.(here|calls|call|party|peer)\b", sel) for sel in fit_rules), fit_rules
+
+
+def _px(body: str, prop: str) -> float:
+    return float(re.search(rf"(?:^|;|\s){prop}:\s*(-?[\d.]+)px", body).group(1))
+
+
+def test_the_tightened_box_button_stays_inside_the_box_and_off_the_words():
+    """審查 M1：收緊的框裡「知道了」（.btn.small，38px）不壓到話的第一行、也不伸出框外。照 style.css 的數字排一次：
+    標題那一行（12px × 1.65）是 flex、置中；鈕的上下 margin 是負的。鈕的下緣不能超過那一行的下緣＋話的 margin-top，
+    上緣不能超過框（第 1 步之後）的內距；那一行還是要比沒收時（38px）矮。"""
+    css = _css()
+    base = re.search(r"(?m)^body \{([^}]*)\}", css).group(1)
+    line_height = float(re.search(r"font: [\d.]+px/([\d.]+)", base).group(1))
+    head = re.search(r"(?m)^\.guide-head \{([^}]*)\}", css).group(1)
+    assert "align-items: center" in head and "display: flex" in head
+    head_line = _px(head, "font-size") * line_height
+    button = _px(re.search(r"(?m)^\.btn\.small \{([^}]*)\}", css).group(1), "min-height")
+    fit = _rules(css, "fit-box")[".card.guide.fit-box .guide-head .btn"]
+    top, bottom = _px(fit, "margin-top"), _px(fit, "margin-bottom")
+    text_gap = float(re.search(r"(?m)^\.guide-text \{[^}]*margin: ([\d.]+)px", css).group(1))
+    pad = _px(_rules(css, "fit-space")[".page.fit-space > .card.guide"], "padding-top")
+    row = max(head_line, button + top + bottom)  # 標題那一行的高度（鈕的 margin box 與字取大的）
+    edge_top = (row - (button + top + bottom)) / 2 + top  # 鈕的上緣（相對於那一行的頂；負的是往上伸）
+    edge_bottom = edge_top + button
+    assert edge_bottom <= row + text_gap, (edge_bottom, row, text_gap)  # 不壓字
+    assert edge_top >= -pad, (edge_top, pad)  # 不出框
+    assert row < button  # 真的有收
 
 
 def test_the_players_here_row_does_not_style_the_here_fold():
