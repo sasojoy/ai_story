@@ -406,6 +406,11 @@
     "choices": [
       {
         "text": "在人群裡問他：收留佃農的那些人，也算豪強嗎",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 6,

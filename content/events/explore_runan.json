@@ -396,6 +396,11 @@
     "choices": [
       {
         "text": "沿著裂縫攀上臺頂",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 5
@@ -437,6 +442,32 @@
         "text": "在臺下歇歇腳",
         "effect": {
           "text": "風從臺頂呼嘯而過，你坐在牆根下，看著遠處汝南城的影子發了一會兒呆。"
+        }
+      },
+      {
+        "text": "攀上臺頂，看清官軍哨騎往哪去",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你站在臺頂，看見西北一隊哨騎正往汝南城去。你把方向記牢，下山報給了營裡的人。",
+          "stats": {
+            "fame": 1,
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "攀到一半，土塊崩落，你連人帶土滑了下來。",
+          "stamina": -15
         }
       }
     ]
@@ -944,6 +975,11 @@
     "choices": [
       {
         "text": "翻牆追進粟田",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 5
@@ -984,6 +1020,31 @@
         "effect": {
           "text": "莊上燈火通明了大半夜，那人沒再出現。",
           "stamina": -5
+        }
+      },
+      {
+        "text": "翻牆追進粟田，把他從另一頭放走",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你在粟田裡追上那人，低聲對了一句暗號，指給他一條沒有莊丁的田埂。回莊時你只說人跑了。",
+          "stats": {
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "收割後的粟茬刮得腿上全是血口子，那人早就沒影了。",
+          "stamina": -10
         }
       }
     ]
@@ -1155,6 +1216,11 @@
       },
       {
         "text": "好言安撫，問清散部往哪去了",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 5
@@ -1177,6 +1243,11 @@
       },
       {
         "text": "追上劫掠的那夥嘍囉",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "你在河灣追上了那夥嘍囉，把搶走的牛趕了回來。村人哭著向你叩頭。",
@@ -1195,6 +1266,32 @@
           },
           "stamina": -15
         }
+      },
+      {
+        "text": "認出是哪一部的人，追上去叫他們把牛還來",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你在河灣追上那夥人，報出自己的來歷，罵他們壞了大賢良師的規矩。為首的低著頭把牛趕了回來。",
+          "stats": {
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "那夥人不認你，推推搡搡把你趕走了。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
       }
     ],
     "free_text": {
@@ -1205,9 +1302,6 @@
         "text": "地窖裡的婦孺都有了去處，臨走前她們告訴你散部往哪去了。",
         "stats": {
           "good": 2
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {
@@ -1229,6 +1323,11 @@
     "choices": [
       {
         "text": "蹲下來推敲這些記號",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 6,
@@ -1250,6 +1349,11 @@
       },
       {
         "text": "躲在樹後，等送信的人來",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 5,
@@ -1272,6 +1376,11 @@
       },
       {
         "text": "順著竹枝找過去",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "竹枝指向的窪地裡藏著一隊黃巾別部，你殺進去打散了他們，沒讓他們聚成。",
@@ -1288,6 +1397,38 @@
             "silver": -15
           },
           "stamina": -20
+        }
+      },
+      {
+        "text": "看懂記號，照竹枝的方向去會合",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "三長一短是三天後聚眾。你照竹枝找到窪地裡的弟兄，替他們把散在附近的人一個個找了回來。",
+          "stats": {
+            "xinde": 6,
+            "fame": 1
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你猜不透其中的意思，在荒野裡繞了大半天。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "暗記不關你的事，繞開老槐樹走",
+        "effect": {
+          "text": "你踢了踢那排石子，沒動它，沿著田埂往別處去了。"
         }
       }
     ]
@@ -1364,6 +1505,11 @@
     "choices": [
       {
         "text": "趁換班翻過柵欄",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 8
@@ -1385,6 +1531,11 @@
       },
       {
         "text": "趴在柵外的溝裡，數巡哨的人頭",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 6,
@@ -1407,6 +1558,11 @@
       },
       {
         "text": "拔刀砍開一道柵門",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "你砍翻了守門的兵卒，營裡大亂，你趁亂撤走。黃巾連夜加固了營門，好幾天不敢出營劫掠。",
@@ -1424,6 +1580,38 @@
           },
           "stamina": -20
         }
+      },
+      {
+        "text": "上望樓替弟兄守一夜，盯住霧裡的動靜",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "霧裡果然有人摸近柵欄，你一聲喊，巡哨的人圍過去，抓到一個官軍的斥候。渠帥第二天親自來看你。",
+          "stats": {
+            "fame": 1,
+            "xinde": 6
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "後半夜你在望樓上打了個盹，被巡營的頭目一腳踢醒。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "霧太大，回去歇著",
+        "effect": {
+          "text": "你在霧裡站了一會兒，望樓上的火把一明一滅，你轉身走了。"
+        }
       }
     ],
     "free_text": {
@@ -1435,9 +1623,6 @@
         "stats": {
           "fame": 1,
           "xinde": 3
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {
@@ -1456,6 +1641,11 @@
     "choices": [
       {
         "text": "扛起拒馬樁走給他看",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 7
@@ -1497,6 +1687,11 @@
       },
       {
         "text": "說要跟渠帥本人過招",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "toumu",
         "effect": {
           "text": "你和渠帥鬥了幾十回合，終於把他打翻在地。流民們目瞪口呆，好些人當夜就溜出了營。",

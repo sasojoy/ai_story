@@ -30,7 +30,10 @@
         "condition": {
           "min_stats": {
             "silver": 15
-          }
+          },
+          "factions_none": [
+            "huang"
+          ]
         },
         "effect": {
           "text": "領頭的漢子拱手道謝，說等鐵匠打好了刀，村裡守夜的人就不必拿竹竿了。",

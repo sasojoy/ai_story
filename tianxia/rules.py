@@ -164,6 +164,8 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.factions and p.faction not in cond.factions:
         return False
+    if p.faction is not None and p.faction in cond.factions_none:
+        return False
     if cond.ranger_min is not None or cond.ranger_path is not None:
         from . import ranger  # noqa: PLC0415  ranger → rules：在函式裡 import，避免循環
 

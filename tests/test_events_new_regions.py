@@ -43,6 +43,12 @@ def test_every_new_location_has_one_or_two_explore_events(content, region, locat
     assert all(1 <= n <= 2 for n in per_place.values()), per_place
 
 
+def _shown_to(cond: dict, faction: str | None) -> bool:
+    if cond.get("factions") and faction not in cond["factions"]:
+        return False
+    return faction is None or faction not in cond.get("factions_none", [])
+
+
 @pytest.mark.parametrize("region", REGION_IDS)
 def test_events_stay_within_the_reward_limits(content, region):
     """同一則事件的選項互斥；一半以上的事件要冒險（檢定或動手），傳聞最多兩則。每個選項結果的獎勵上限
@@ -51,7 +57,9 @@ def test_events_stay_within_the_reward_limits(content, region):
     risky = 0
     rumors = 0
     for e in events:
-        assert 2 <= len(e["choices"]) <= 3, e["id"]
+        for faction in (None, "guan", "huang", "haoqiang"):  # 選項照陣營分邊（2026-10-08）：每一種身分看得到的都是 2～3 個
+            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction)]
+            assert 2 <= len(shown) <= 3, (e["id"], faction)
         if any("check" in c or "combat" in c for c in e["choices"]):
             risky += 1
         for c in e["choices"]:

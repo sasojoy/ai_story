@@ -57,6 +57,8 @@ class Condition(_Strict):
     marks_max: dict[str, int] = Field(default_factory=dict)
     # ── 伏筆的準備事件、片段事件用（計畫 T7）；預設都是不限 ──
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
+    # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
+    factions_none: list[str] = Field(default_factory=list)
     # 遊俠名號（ranger.py）：散人、第一季開著、名號到這一階才成立（投靠了陣營一律不成立）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None

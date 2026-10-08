@@ -55,6 +55,12 @@ def test_every_location_offers_checks_on_at_least_three_different_stats(content)
     assert not narrow, narrow
 
 
+def _shown_to(cond: dict, faction: str | None) -> bool:
+    if cond.get("factions") and faction not in cond["factions"]:
+        return False
+    return faction is None or faction not in cond.get("factions_none", [])
+
+
 @pytest.mark.parametrize("path", EXPLORE_FILES, ids=[p.stem for p in EXPLORE_FILES])
 def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
     """每個選項結果的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（explore-<檔名>）。"""
@@ -63,7 +69,9 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
     rumors = 0
     for e in events:
         assert len(e["locations"]) == 1 and "condition" not in e and "actions" not in e, e["id"]
-        assert 2 <= len(e["choices"]) <= 4, e["id"]
+        for faction in (None, "guan", "huang", "haoqiang"):  # 選項照陣營分邊（2026-10-08）：每一種身分看得到的都是 2～4 個
+            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction)]
+            assert 2 <= len(shown) <= 4, (e["id"], faction)
         checks = [c["check"] for c in e["choices"] if "check" in c]
         assert len({ck["stat"] for ck in checks}) >= 2, e["id"]  # 不同長處的人有不同的路
         for c in e["choices"]:

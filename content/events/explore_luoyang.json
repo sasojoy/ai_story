@@ -88,6 +88,11 @@
     "choices": [
       {
         "text": "搶先一步撲過去撿起漆筒",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 4
@@ -134,6 +139,11 @@
       },
       {
         "text": "拔刀迎上那幾個黃巾漢子",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "你把那夥人打散，從地上撿起一面寫著符字的黃布。驛卒連聲道謝。",
@@ -150,6 +160,31 @@
           "stats": {
             "silver": -10
           }
+        }
+      },
+      {
+        "text": "搶先撿起漆筒，丟給林邊的弟兄",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "你一把抄起漆筒，反手拋進林邊。那幾個漢子接住就跑，臨走朝你比了個手勢。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "驛卒撲上來死死抱住漆筒，你搶了兩下沒搶到，只好鬆手走開。",
+          "stamina": -8
         }
       }
     ]

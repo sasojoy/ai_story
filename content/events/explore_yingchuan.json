@@ -28,6 +28,11 @@
       },
       {
         "text": "接過竹筒，騎他的馬先跑一趟",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 5
@@ -84,6 +89,11 @@
       },
       {
         "text": "細看斷口，覺得斷得太整齊",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 5
@@ -109,6 +119,31 @@
         "text": "繞到小巷走",
         "effect": {
           "text": "你從小巷繞了過去，身後還聽得到軍候的叫罵聲。"
+        }
+      },
+      {
+        "text": "細看斷口，悄悄把鋸痕抹掉",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "斷口一半齊整，是被人先鋸過的。你蹲下去假裝看熱鬧，用泥把那半截抹花了。軍候罵了半天，只當是車軸老朽。",
+          "stats": {
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你剛伸手，軍候就喝問你在做什麼，你只好說是看熱鬧，被他攆到一邊。",
+          "stamina": -10
         }
       }
     ]
@@ -275,6 +310,11 @@
     "choices": [
       {
         "text": "伏在案上裝睡，聽他們說什麼",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 4,
@@ -509,6 +549,11 @@
       },
       {
         "text": "一腳踢開枯木",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shanzei",
         "effect": {
           "text": "你把三個散兵打得四散奔逃，挑菜的鄉民們這才敢過田埂，一路向你道謝。",
@@ -589,6 +634,11 @@
       },
       {
         "text": "先翻看皮囊裡的東西",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 4,
@@ -612,6 +662,31 @@
         "text": "土丘上有人，別管閒事",
         "effect": {
           "text": "你繞開那片荒草，人影一直沒有動。"
+        }
+      },
+      {
+        "text": "翻看皮囊，把求援書扣下來",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "皮囊裡是一封漢軍屯長的求援書。你把它揣進懷裡，帶回去給營裡的人看，西邊土堡的官軍這幾天是等不到援兵了。",
+          "stats": {
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "書信被血浸得字跡模糊，你辨了半天，戰馬早跑遠了。",
+          "stamina": -5
         }
       }
     ]
@@ -648,6 +723,11 @@
       },
       {
         "text": "溜出營柵，摸近去數清對面的營火",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 7
@@ -671,6 +751,32 @@
         "text": "推說另有要事",
         "effect": {
           "text": "屯長哼了一聲，把長戟塞給了別人。"
+        }
+      },
+      {
+        "text": "站到半夜，記下營裡的口令再溜走",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你在營柵上聽了半夜換崗的口令，天亮前藉口解手溜出營外，把口令帶到了對面。",
+          "stats": {
+            "fame": 1,
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你剛摸到營門，就被巡營的屯長撞見，挨了一頓罵、被押回營柵站到天亮。",
+          "stamina": -20
         }
       }
     ]
@@ -726,6 +832,11 @@
       },
       {
         "text": "趕走在舊壘下翻撿的嘍囉",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "幾個嘍囉被你打得丟下麻袋就跑，麻袋裡是他們剛撿的鐵。",
@@ -762,6 +873,11 @@
     "choices": [
       {
         "text": "正面衝上去",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "你衝散了卸糧的人，搶回大半車糧。營中的人都在說這件事。",
@@ -784,6 +900,11 @@
       },
       {
         "text": "繞到後頭割斷繩子，趕著牛車就跑",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 6
@@ -828,6 +949,31 @@
         "effect": {
           "text": "他們卸完糧，把牛車推進溝裡，車夫在車轅上掙扎了很久才鬆開繩子。"
         }
+      },
+      {
+        "text": "幫著把麻袋扛上肩，一起運回營",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "str",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你一肩兩袋，跟著卸糧的人一路扛回營裡。管事的數著糧袋笑開了口，分了你一份。",
+          "stats": {
+            "silver": 15
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "麻袋太沉，你扛到半路就摔進溝裡，糧撒了一地，被罵了一路。",
+          "stamina": -15
+        }
       }
     ],
     "free_text": {
@@ -839,9 +985,6 @@
         "stats": {
           "good": 1,
           "silver": 10
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {
@@ -1524,6 +1667,11 @@
       },
       {
         "text": "坐下來陪他說話，勸他親自去尋兒子",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 6,

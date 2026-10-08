@@ -9,6 +9,11 @@
     "choices": [
       {
         "text": "一口飲盡，跪下叩首思過",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 6,
@@ -82,6 +87,11 @@
     "choices": [
       {
         "text": "趁巡燈的空檔溜進去抄幾卷",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 8
@@ -126,6 +136,11 @@
       },
       {
         "text": "硬闖偏殿，把名冊燒了",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "taiping_lishi",
         "effect": {
           "text": "你打倒衝進來的力士，把一架竹簡推進火盆。往後這一帶誰入過道，再也查不清了。",
@@ -144,6 +159,32 @@
             "silver": -15
           }
         }
+      },
+      {
+        "text": "替道童守一夜偏殿，防人來偷名冊",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "後半夜真有個黑影摸到窗下，你一聲斷喝，那人翻牆跑了。祭酒天亮聽說了這事，叫道童把你的名字記進名冊。",
+          "stats": {
+            "fame": 1,
+            "xinde": 6
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你守到四更撐不住睡了過去，醒來時架上少了一卷，道童嚇得直哭。",
+          "stamina": -15
+        }
       }
     ]
   },
@@ -157,6 +198,11 @@
     "choices": [
       {
         "text": "背著他泅過冰冷的壕水",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 8,
@@ -203,6 +249,35 @@
         "effect": {
           "text": "他苦笑一聲，把黃巾重新繫回頭上，低頭走回營去。"
         }
+      },
+      {
+        "text": "勸他回營，替他在渠帥面前說情",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你陪他走回營壘，跟渠帥說他是想娘、不是想逃。渠帥罵了兩句，只罰他守三夜壕，回頭拍拍你的肩說營裡記你一份情。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "渠帥不聽，叫人把他綁了，連你也挨了一頓數落。",
+          "stamina": -10,
+          "stats": {
+            "fame": -1
+          }
+        }
       }
     ],
     "free_text": {
@@ -214,9 +289,6 @@
         "stats": {
           "good": 2,
           "fame": 1
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {
@@ -276,6 +348,11 @@
       },
       {
         "text": "截住換防的渠帥一行",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "toumu",
         "effect": {
           "text": "你在營壘之間的小路上截住渠帥的親隨，搶下一面令旗。隔天一整段營壘的鼓號都亂了套。",
@@ -293,6 +370,31 @@
           "stats": {
             "fame": -1
           }
+        }
+      },
+      {
+        "text": "替渠帥巡一遍營壘，揪出鬆動的柵欄",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你沿著營壘外的鹿角走了一圈，指出三處朽了的柵欄。渠帥連夜叫人換上新木，賞了你一面小旗。",
+          "stats": {
+            "fame": 2
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "鹿角的倒刺劃破了你的手臂，柵欄沒查完，天就亮了。",
+          "stamina": -15
         }
       }
     ]
@@ -424,6 +526,11 @@
     "choices": [
       {
         "text": "下壕去挖一整夜的土",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 6,
@@ -446,6 +553,11 @@
       },
       {
         "text": "扛木樁去築柵",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 5
@@ -485,6 +597,31 @@
             "silver": -20
           }
         }
+      },
+      {
+        "text": "趁夜把白天挖的壕偷偷填回一段",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你摸黑推了半夜的土，天亮時那一段壕溝淺得一步就跨得過。監工的軍侯對著它罵了一早上，也查不出是誰幹的。",
+          "stats": {
+            "xinde": 6
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "推土的聲音驚動了巡夜的士卒，你伏在土堆後頭大半夜才敢溜走。",
+          "stamina": -15
+        }
       }
     ],
     "free_text": {
@@ -496,9 +633,6 @@
         "stats": {
           "silver": 10,
           "xinde": 4
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {
@@ -610,6 +744,11 @@
       },
       {
         "text": "混在搬糧的人裡溜進城看看",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 7
@@ -634,6 +773,11 @@
       },
       {
         "text": "不肯低頭，跟攔路的兵動手",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shanzei",
         "effect": {
           "text": "你把攔路的散兵打得四散，被押著的幾個青壯趁亂跑了。",
@@ -651,6 +795,32 @@
           "stats": {
             "fame": -1
           }
+        }
+      },
+      {
+        "text": "替管工的頭目把青壯分成幾班輪著背",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你把青壯照力氣分成三班，一班背石、一班運土、一班歇著。一天下來城牆多高了一截，頭目說要在將軍面前提你一句。",
+          "stats": {
+            "xinde": 6,
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "分好的班一下就亂了，青壯們吵成一團，頭目嫌你添亂，罰你多扛了半天土。",
+          "stamina": -15
         }
       }
     ]
@@ -1003,6 +1173,11 @@
     "choices": [
       {
         "text": "湊過去細看那片木傳",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 6

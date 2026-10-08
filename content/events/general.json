@@ -10,6 +10,11 @@
     "choices": [
       {
         "text": "一把扣住他的手腕，逼問鐵牌來歷",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 4
@@ -67,6 +72,30 @@
         "effect": {
           "text": "你轉過身，湖上的畫舫正緩緩駛過。"
         }
+      },
+      {
+        "text": "扣住他的手腕，低聲對上暗號",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "str",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "你在他耳邊說了一句「黃天當立」，醉漢酒醒了一半，悄悄把城裡官府近日的動靜都說給你聽。",
+          "stats": {
+            "xinde": 5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "醉漢身子一扭，竟像泥鰍般滑脫，轉眼消失在人群裡。"
+        }
       }
     ]
   },
@@ -78,6 +107,11 @@
     "choices": [
       {
         "text": "悄悄退出，回報官府",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "effect": {
           "text": "官兵連夜查抄倉庫，黃巾軍在城裡的據點被拔了一個。",
           "stats": {
@@ -101,6 +135,11 @@
       },
       {
         "text": "拔劍闖進去",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "你率眾闖進倉庫，殺得黃巾軍四散奔逃！",
@@ -116,6 +155,23 @@
         "fail_effect": {
           "text": "寡不敵眾，你帶傷殺出重圍。",
           "stamina": -20
+        }
+      },
+      {
+        "text": "報上來歷，幫他們把私鹽搬完",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "effect": {
+          "text": "頭目聽你報出是哪一方的人，叫手下讓出一副扁擔。天亮前私鹽全搬上了車，頭目分了你一份。",
+          "stats": {
+            "silver": 20
+          },
+          "trend": {
+            "front": 2
+          }
         }
       }
     ]

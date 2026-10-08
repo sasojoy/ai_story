@@ -33,6 +33,7 @@ NOT_GATED: dict[tuple[str, int], tuple[int, str]] = {
     ("jz_hz_rentdebt", 1): (20, "檢定選項，成功、失敗都付 20：PM（fix-1009 brief 規則 2）明定不擋"),
     ("ny_yu_ropetoll", 2): (5, "講價的檢定，成功付 5、失敗付 20：PM（fix-1009 brief 規則 2）明定不擋"),
     ("yz_yan_cold_night", 1): (5, "檢定選項，成功才分出 5 兩的乾糧、失敗不花錢：比照上面兩則不擋（fix-1009 裁決）"),
+    ("yz_yan_cold_night", 3): (5, "黃巾那一邊的同一件事（分乾糧、指回營的路），檢定成功才花錢：跟選項 1 一樣不擋"),
 }
 
 

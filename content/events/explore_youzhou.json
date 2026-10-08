@@ -273,6 +273,11 @@
     "choices": [
       {
         "text": "當眾點破符水的底細",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 4
@@ -319,7 +324,10 @@
         "condition": {
           "min_stats": {
             "silver": 5
-          }
+          },
+          "factions_none": [
+            "guan"
+          ]
         },
         "effect": {
           "text": "道人笑著收下錢，叮囑你黃天當立的日子就快到了。",
@@ -852,6 +860,11 @@
       },
       {
         "text": "走過去分他們乾糧，勸他們回鄉",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 5
@@ -873,6 +886,11 @@
       },
       {
         "text": "趁他們凍得沒力氣，動手拿人",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "你制伏了這群嘍囉，把他們綁了押下山，交給附近的亭長。",
@@ -889,6 +907,32 @@
           "stats": {
             "fame": -1
           }
+        }
+      },
+      {
+        "text": "分他們乾糧，指一條回冀州大營的山路",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "幾個人捧著乾糧，聽你說廣宗的大營還在，又把黃巾繫緊了。天亮時他們照你指的山路往南去了。",
+          "stats": {
+            "good": 2,
+            "silver": -5
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "他們不信你，以為你是來誘捕的官差，揮著刀把你趕走了。",
+          "stamina": -10
         }
       }
     ]

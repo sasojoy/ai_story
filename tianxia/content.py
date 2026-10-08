@@ -406,6 +406,25 @@ def check_insight_scenes(c: Content, need) -> None:
             need(not scene.hints or bool(set(scene.hints) & pool), f"{where}：線索 {scene.hints} 指不到這裡悟得到的 {sorted(pool)}")
 
 
+def check_faction_choices(c: Content, need) -> None:
+    """選項照陣營分邊（Condition.factions／factions_none，企劃者 2026-10-08「加入黃巾軍了，探索還一堆打黃巾的任務」）之後，
+    每一種身分（散人與每個陣營）碰得到的事件，至少要剩一個選項看得見——不然那個人會卡在一則沒有選項的事件上。
+    只看陣營這一項：其他條件（銀兩、旗標）本來就由寫事件的人負責留一條退路。"""
+    def allows(cond: Condition, faction: str | None) -> bool:
+        if cond.factions and faction not in cond.factions:
+            return False
+        return faction is None or faction not in cond.factions_none
+
+    for event in c.events.values():
+        for faction in [None, *(f.id for f in c.scenario.factions)]:
+            if not allows(event.condition, faction):
+                continue
+            need(
+                any(allows(choice.condition, faction) for choice in event.choices),
+                f"事件 {event.id}：{faction or '散人'}碰得到這則事件，選項卻全被陣營條件擋掉了",
+            )
+
+
 def check_check_voice(c: Content, need) -> None:
     """檢定選項括號裡的那一句（content/check_voice.json，joy 寫的；取代 S1 的 check_lines.json，驗證照它的標準）：
     至少一檔、照 min_gap 由高到低排而且不重複；每一檔都要說得出每一種有人檢定的屬性（沒寫的屬性用 "default"）；
@@ -1247,6 +1266,7 @@ def validate(c: Content) -> None:
         known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
         known(where, cond.members_none, c.characters, "人物")
         known(where, cond.factions, faction_ids, "陣營")
+        known(where, cond.factions_none, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         for week in (cond.week_min, cond.week_max):
             need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
@@ -1415,6 +1435,7 @@ def validate(c: Content) -> None:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)
     check_insight_scenes(c, need)
+    check_faction_choices(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_traits(c, need)

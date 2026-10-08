@@ -654,6 +654,11 @@
     "choices": [
       {
         "text": "上前舉起大石示力",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 4
@@ -679,6 +684,11 @@
       },
       {
         "text": "替門客登錄名籍，核對鄉里戶貫",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 3

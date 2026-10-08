@@ -444,6 +444,11 @@
     "choices": [
       {
         "text": "幫漁戶在灣口打一排木樁，擋住賊船",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 4
@@ -522,6 +527,11 @@
     "choices": [
       {
         "text": "掀了草亭，砸了木牌",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "你把亭裡的嘍囉打得滾進河裡，木牌劈成柴火。過往的船家遠遠看著，沒人敢靠近，也沒人去報信。",
@@ -542,6 +552,11 @@
       },
       {
         "text": "湊過去看那本帳簿",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 4
@@ -600,6 +615,33 @@
           },
           "marks": {
             "yu_river:交米": 1
+          }
+        }
+      },
+      {
+        "text": "亮出黃巾，坐下來幫小頭目記帳",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "小頭目識字不多，見你寫得一手好字，把筆塞給你。一下午記下的例錢比他三天記的還清楚，他分了你幾個錢。",
+          "stats": {
+            "silver": 10
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你寫錯了兩條船的數目，小頭目罵你添亂，把筆搶了回去。",
+          "stats": {
+            "fame": -1
           }
         }
       }
@@ -699,6 +741,11 @@
     "choices": [
       {
         "text": "直接衝過去",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shanzei",
         "effect": {
           "text": "你打得散兵四散奔逃，又一個人把大樹推下了路溝。後面跟上來的行人朝你拱手，這段路總算又通了。",
@@ -737,6 +784,11 @@
       },
       {
         "text": "跟樹後的漢子攀談，打聽他們是哪一部的",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 4
@@ -771,6 +823,33 @@
           },
           "marks": {
             "nanyang_road:棄車": 1
+          }
+        }
+      },
+      {
+        "text": "上前認個同鄉，叫他們回營歸隊",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "幾句話你就聽出他們是散了營的逃兵。你說南陽營裡正缺人，回去不追究。當夜他們把大樹拖開，跟著你指的路回營去了。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "他們聽出你是營裡的人，怕被抓回去，一擁而上搶了你的錢就跑。",
+          "stats": {
+            "silver": -15
           }
         }
       }
@@ -1083,6 +1162,11 @@
       },
       {
         "text": "幫伍長查，查一個算一份錢",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 5
@@ -1152,6 +1236,11 @@
       },
       {
         "text": "去掂一掂那幾個漢子的包袱",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 6
@@ -1180,6 +1269,31 @@
           "stats": {
             "silver": 10
           }
+        }
+      },
+      {
+        "text": "幫那幾個漢子把包袱搬上船",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "包袱裡是一捆捆槍頭。你替他們搬上船，撐篙送過河，對岸接應的人塞給你幾個錢。",
+          "stats": {
+            "silver": 10
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你一篙沒撐穩，一包槍頭掉進了河裡，漢子們罵了你一路。",
+          "stamina": -15
         }
       }
     ]

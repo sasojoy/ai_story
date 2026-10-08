@@ -9,6 +9,11 @@
     "choices": [
       {
         "text": "挑最重的那對石鎖",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 5
@@ -236,6 +241,11 @@
     "choices": [
       {
         "text": "迎上去攔住散兵",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shanzei",
         "effect": {
           "text": "散兵被你打得丟下刀槍逃回坡後。逃難的人家趁機把箱籠搬上別的車，向你作揖道謝。",
@@ -333,6 +343,11 @@
     "choices": [
       {
         "text": "拼讀殘簡上的字",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 5,
@@ -383,6 +398,32 @@
             "evil": 1
           }
         }
+      },
+      {
+        "text": "拼出殘簡，帶回南陽黃巾營",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你辨出這是官軍在潁川的布陣與糧期，連夜送到南陽黃巾營。管事的渠帥看了直拍大腿，賞了你一筆錢。",
+          "stats": {
+            "silver": 20,
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "殘簡燒得太厲害，你拼了半天只認得幾個字，白費了一下午。",
+          "stamina": -10
+        }
       }
     ]
   },
@@ -396,6 +437,11 @@
     "choices": [
       {
         "text": "下場角力",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "check": {
           "stat": "str",
           "difficulty": 8
@@ -452,6 +498,11 @@
     "choices": [
       {
         "text": "接過來一口喝乾",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 8,
@@ -608,6 +659,11 @@
     "choices": [
       {
         "text": "讀一讀木牘",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 4
@@ -657,6 +713,31 @@
             "xinde": 3
           }
         }
+      },
+      {
+        "text": "讀一讀木牘，原樣送回營裡",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "木牘是各營約在淯水會合運糧的暗號，落到官府手裡就全完了。你把它原封送回營中，管糧的頭目記下了你的功勞。",
+          "stats": {
+            "fame": 2,
+            "silver": 10
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "字跡被水泡糊了大半，你只看出是些人名，猜不出用意。"
+        }
       }
     ]
   },
@@ -670,6 +751,11 @@
     "choices": [
       {
         "text": "從繩下潛過去",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 5
@@ -694,6 +780,11 @@
       },
       {
         "text": "上岸打散守繩的嘍囉",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "嘍囉們被你打得四散，船家們拍手叫好，七手八腳拆了攔繩。",
@@ -751,6 +842,24 @@
             "yu_river:交米": 1
           }
         }
+      },
+      {
+        "text": "亮出黃巾，替守繩的弟兄收一回例錢",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "effect": {
+          "text": "嘍囉們見你頭上的黃巾，挪出位子讓你坐。你替他們收了半天的米，頭目分了你一份。",
+          "stats": {
+            "silver": 10,
+            "evil": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        }
       }
     ],
     "free_text": {
@@ -762,9 +871,6 @@
         "stats": {
           "good": 1,
           "fame": 1
-        },
-        "trend": {
-          "front": -1
         }
       },
       "fail_effect": {

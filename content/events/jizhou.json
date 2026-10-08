@@ -9,6 +9,11 @@
     "choices": [
       {
         "text": "告訴他黃天會護著他",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "effect": {
           "text": "少年咬牙立了誓，道人替他在額上纏起黃巾。",
           "trend": {
@@ -71,6 +76,11 @@
       },
       {
         "text": "起身質問他拿什麼讓人人有田",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "taiping_lishi",
         "effect": {
           "text": "力士圍上來被你打退，你趁亂走出草棚。信眾們望著你，眼神又懼又疑。",
@@ -91,7 +101,10 @@
         "condition": {
           "min_stats": {
             "silver": 10
-          }
+          },
+          "factions_none": [
+            "guan"
+          ]
         },
         "effect": {
           "text": "道人向你稽首，說黃天記得每一個心誠的人。",
@@ -115,6 +128,11 @@
     "choices": [
       {
         "text": "低頭挑土，暗中記下營壘的布置",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 7
@@ -146,6 +164,11 @@
       },
       {
         "text": "推開監工，衝出營壘",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "huangjin_sishi",
         "effect": {
           "text": "追來的死士被你打倒在壕溝邊，你翻過土堆，消失在城外的蘆葦裡。",
@@ -162,6 +185,32 @@
           "stats": {
             "silver": -10
           }
+        }
+      },
+      {
+        "text": "挑土之餘，替監工把民夫的人數點清",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 7
+        },
+        "effect": {
+          "text": "你一邊挑土一邊把各段的民夫點了一遍，報給監工哪一段缺人、哪一段偷懶。監工頭目收起鞭子，說營壘明天就能加高一層。",
+          "stamina": -10,
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "人來人往，你點了三遍三個數，監工嫌你礙事，一鞭抽在你背上。",
+          "stamina": -15
         }
       }
     ]
@@ -196,6 +245,11 @@
       },
       {
         "text": "提醒軍侯多盤問幾句",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "effect": {
           "text": "漢子被帶去盤問，從他的包袱裡搜出一條黃布。軍侯朝你點了點頭。",
           "stats": {
@@ -275,6 +329,11 @@
     "choices": [
       {
         "text": "攔下糧車",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "taiping_lishi",
         "effect": {
           "text": "你打散了押車的力士，把種糧還給了農婦。",

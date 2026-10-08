@@ -26,6 +26,11 @@
       },
       {
         "text": "拔刀砍斷繩子",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "押人的黃巾兵被你打退，一串青壯趁亂四散奔逃。",
@@ -82,6 +87,11 @@
       },
       {
         "text": "趁夜放火燒糧",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "huangjin_sishi",
         "effect": {
           "text": "火從糧倉一角燒起來，你殺退守倉的死士，趁亂逃出營外。身後的火光映紅了半邊天。",
@@ -119,6 +129,11 @@
     "choices": [
       {
         "text": "衝上去救人",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "louluo",
         "effect": {
           "text": "嘍囉們被你打下了水，船家千恩萬謝，硬塞給你一串錢。",
@@ -297,6 +312,11 @@
       },
       {
         "text": "守在他身前，等追兵到來",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shanzei",
         "effect": {
           "text": "追來的是一隊黃巾散兵，被你殺退了。斥候說他是郡府派出來探路的，向你道了謝。",
@@ -321,6 +341,32 @@
             "silver": 15,
             "evil": 2
           }
+        }
+      },
+      {
+        "text": "認出他身上的黃布，背他回營",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "他是營裡派出去探路的弟兄。你背著他繞開馬蹄聲，天黑前進了營門，渠帥記下了你的名號。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "他比你想的重，你背不遠就被馬蹄聲逼進草叢，兩個人伏到天黑才敢動。",
+          "stamina": -15
         }
       }
     ]

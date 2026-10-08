@@ -10,6 +10,11 @@
     "choices": [
       {
         "text": "答應護送",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "黃巾軍果然來劫，被你殺退，布商千恩萬謝。",
@@ -44,6 +49,24 @@
         "effect": {
           "text": "布商嘆了口氣，另找他人去了。"
         }
+      },
+      {
+        "text": "答應護送，半路把貨船帶進弟兄的水寨",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "effect": {
+          "text": "你把船引進蘆葦深處，水寨的弟兄早等在那裡。布商哭喊著被放上岸，貨留下了，寨主分了你一份。",
+          "stats": {
+            "silver": 20,
+            "evil": 2
+          },
+          "trend": {
+            "front": 2
+          }
+        }
       }
     ]
   },
@@ -59,12 +82,20 @@
         "huangjin_member",
         "huangjin_spy",
         "huangjin_traitor"
+      ],
+      "factions_none": [
+        "huang"
       ]
     },
     "text": "幾名黃巾軍攔住你，為首的咧嘴一笑：「看你身手不錯，跟著波才渠帥混，吃香的喝辣的，怎樣？」",
     "choices": [
       {
         "text": "入夥",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "effect": {
           "text": "你接過黃巾營寨的狼頭牌，從此是道上的人了。",
           "stats": {
@@ -142,6 +173,11 @@
     "choices": [
       {
         "text": "獻上黃巾營寨布防",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "effect": {
           "text": "校尉大喜，當夜便調兵突襲。",
           "stats": {
@@ -182,6 +218,11 @@
     "choices": [
       {
         "text": "動手",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "effect": {
           "text": "糧船上的人跪了一地，你分到了一份。",
           "stats": {
@@ -195,6 +236,11 @@
       },
       {
         "text": "放走糧船，從此與黃巾營寨一刀兩斷",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "effect": {
           "text": "你悄悄解開纜繩，看著糧船消失在夜色裡。",
           "stats": {
@@ -210,6 +256,15 @@
             "huangjin_traitor"
           ],
           "rumor": "{name}在劫船時倒戈，放走了一整船糧食，黃巾營寨揚言要他的命。"
+        }
+      },
+      {
+        "text": "推說身上有傷，今晚不去",
+        "effect": {
+          "text": "傳令的人罵了你兩句，帶著別人走了。",
+          "stats": {
+            "fame": -1
+          }
         }
       }
     ]
@@ -233,6 +288,11 @@
     "choices": [
       {
         "text": "夜襲黃巾軍的哨船",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "combat": "shuikou",
         "effect": {
           "text": "你摸上哨船，一把火燒了個乾淨。",
@@ -268,6 +328,31 @@
             "good": 2
           }
         }
+      },
+      {
+        "text": "上哨船替弟兄守一夜",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你在哨船上守到天明，兩次看見對岸有小船想偷渡，都被你喝了回去。哨船上的頭目記下了你的名號。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "河風吹了一夜，你凍得手腳發麻，天亮換崗時差點從船上跌進河裡。",
+          "stamina": -15
+        }
       }
     ]
   },
@@ -282,6 +367,11 @@
     "choices": [
       {
         "text": "悄悄救人",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 6
@@ -322,6 +412,9 @@
       "world_flags_none": [
         "huangjin_crushed",
         "bocai_defeated"
+      ],
+      "factions_none": [
+        "huang"
       ]
     },
     "text": "中軍大帳前，一個鐵塔般的大漢拄著青銅大戟，冷冷地看著你：「就是你，最近專跟我黃巾營寨作對？」——正是波才。",

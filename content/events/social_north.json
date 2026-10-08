@@ -479,6 +479,11 @@
     "choices": [
       {
         "text": "引經據典，跟他辯一辯",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "wis",
           "difficulty": 6,
@@ -504,6 +509,11 @@
       },
       {
         "text": "跟著跪下聽完一整場講道",
+        "condition": {
+          "factions_none": [
+            "guan"
+          ]
+        },
         "check": {
           "stat": "con",
           "difficulty": 4,
@@ -585,6 +595,11 @@
       },
       {
         "text": "趁亂把一袋糧推給牆邊的城民",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
         "check": {
           "stat": "agi",
           "difficulty": 6
@@ -610,6 +625,30 @@
         "text": "不碰這些糧，轉身離開",
         "effect": {
           "text": "糧車一輛輛推進城門。城外的村子，大概又少了幾戶人家。"
+        }
+      },
+      {
+        "text": "請小頭目先分一袋給牆邊的城民",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你說黃天之下不該有人餓死，小頭目想了想，叫人拆開一袋粟分給牆邊的人。城民們看你的眼神都不一樣了。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "小頭目說糧是給打仗的人吃的，叫你少管閒事。",
+          "stats": {
+            "fame": -1
+          }
         }
       }
     ]
