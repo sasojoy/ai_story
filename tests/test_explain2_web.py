@@ -87,3 +87,50 @@ def test_each_peek_panel_ends_with_its_explanation(chip):
     block = re.search(rf'<div class="war-help {chip}-help">(.*?)</div>', panel).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == m["status"]["war_help"][chip]
     assert panel.rindex("war-help") > panel.index('class="peek-panel')  # 接在面板最後
+
+
+# ── 二、新手期江湖頁的「玩法說明」入口 ─────────────────────────────
+
+
+def test_the_newbie_entry_is_the_last_line_under_the_action_row():
+    m = _season_one()
+    assert m["status"]["howto_entry"] is True
+    page = run(m, "return H.pageJianghu();")
+    block = re.search(r'<div class="act-notes">(.*?)</div>', page).group(1)
+    rows = re.findall(r"<p[^>]*>.*?</p>", block)
+    assert 'data-act="howto-open"' in rows[-1] and "玩法說明" in rows[-1]  # 最後一行
+    assert sum('data-act="howto-open"' in r for r in rows) == 1
+    # 第一屏不動：入口以前的整頁（剛剛、場景、整排行動、說明那幾行）跟沒有入口時一個字都不差
+    m["status"]["howto_entry"] = False
+    without = run(m, "return H.pageJianghu();")
+    assert 'data-act="howto-open"' not in without
+    cut = page.index('<p class="howto-entry">')
+    assert page[:cut] == without[:cut]
+
+
+def test_the_newbie_entry_gives_way_with_the_notes():
+    """展開移動時說明那一塊讓位（explain-1），入口跟著讓位：不把走法那張卡往下推。"""
+    page = run(_season_one(), "return H.pageJianghu();", S={"wheelSel": "move"})
+    assert 'class="card act-move"' in page and "howto-open" not in page
+
+
+def test_the_newbie_entry_opens_the_drawer_on_the_howto_page():
+    m = _season_one()
+    out = run(m, f"""return (async () => {{
+      {_click("howto-open")}
+      return {{ sheet: H.S.sheet, open: H.S.howtoOpen, html: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) }};
+    }})();""", responses={"/api/howto": {"text": "<h4>行動</h4>"}})
+    assert out["sheet"] is True and out["open"] is True
+    assert "/api/howto" in out["calls"]  # 跟齒輪＋「玩法說明」一樣去要那一頁
+    assert 'class="howto card" id="howto"' in out["html"] and "<h4>行動</h4>" in out["html"]
+
+
+def test_the_entry_line_keeps_the_notes_line_height():
+    """版面釘子：入口那顆鈕跟說明同一個字級，按的範圍用內距撐大、再用同樣大小的負外距收回，所以那一行跟其他行一樣高（12px×1.5）。"""
+    css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    notes = re.search(r"^\.act-notes \{([^}]*)\}", css, re.M).group(1)
+    entry = re.search(r"^\.act-notes \.howto-entry button \{([^}]*)\}", css, re.M).group(1)
+    assert "font-size: 12px" in notes and "font-size: 12px" in entry and "line-height: inherit" in entry
+    pad = re.search(r"padding: (\d+)px", entry).group(1)
+    top, _, bottom, _ = re.search(r"margin: ([^;]+);", entry).group(1).split()
+    assert top == bottom == f"-{pad}px"  # 上下的內距＝上下的負外距

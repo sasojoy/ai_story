@@ -599,7 +599,9 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
     cycle = howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
     assert f"同一位人物{cycle}最多 9 輪" in text
-    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "")))
+    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tests/test_explain2.py 對過內容
+    fame = re.search(r"#### 名望\n(?:- .*\n)+", text).group(0)
+    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "").replace(fame, "")))
     assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
 
 

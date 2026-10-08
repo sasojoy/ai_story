@@ -847,9 +847,14 @@
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
   // 句子是伺服器照規則寫好的（m.action_notes：選項 id → 一句；序章裡是空的），這裡只照格子的順序排、前面冠格子上的名字。
   // 只寫畫出來的格子；打坐、移動的格子本身就寫著（回體力、幾條路），沒有說明
+  // 新手期（伺服器給 status.howto_entry：加入起跟體力回復加快同一段，序章裡沒有）最後多一行「玩法說明」的入口（explain-2，FB-100：
+  // 說明藏在齒輪裡，主畫面沒有一句指向它）。排在這一塊的最後：剛剛、場景、整排行動一個 px 都不動；點了打開設定抽屜、攤開玩法說明。
+  // 過了新手期這一行就不畫，抽屜裡那一顆照舊
+  const HOWTO_ENTRY = '<p class="howto-entry"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
   function actNotesHtml(m, noted) {
     const notes = m.action_notes || {};
     const rows = noted.filter(([, id]) => notes[id]).map(([name, id]) => `<p><b>${esc(name)}</b>${esc(notes[id])}</p>`);
+    if (m.status && m.status.howto_entry) rows.push(HOWTO_ENTRY);
     return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
 
@@ -2495,6 +2500,17 @@
           else renderKeepingSheet();
           break;
         case "howto-retry": S.howtoFailed = false; await refreshHowto(); break; // 要不到時卡上的「再試一次」
+        case "howto-open": // 江湖頁新手期的「玩法說明 ›」（explain-2）：打開設定抽屜、攤開玩法說明（跟齒輪＋「玩法說明」兩下一樣）
+          S.sheet = true;
+          S.howtoOpen = true;
+          render();
+          loadRecap();
+          await refreshHowto();
+          if (S.main.admin) { // 跟齒輪打開時一樣：管理者的時刻表與可以定的結果會變，重抓
+            S.admin = await api("/api/admin");
+            renderKeepingSheet();
+          }
+          break;
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;

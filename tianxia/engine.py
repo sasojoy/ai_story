@@ -2342,10 +2342,14 @@ class Game:
         )
 
     def howto_text(self) -> str:
-        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項）：五個行動、體力、情誼、心得、意境、背包，數字讀設定（howto.page）。
-        序章略過的人也看得到（設定抽屜誰都打得開）。招募那一句只在內容裡真的有人能招募時才寫。"""
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
+        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
+        真的有人能招募時才寫。"""
         c = self.content
-        return howto.page(c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()))
+        rule = stance_rule_note(self.state, c) if season_one(c, self.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
+        return howto.page(
+            c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
+        )
 
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
@@ -5367,9 +5371,11 @@ class Game:
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
         # 點體力條看的說明（explain-1）：怎麼回、新手期、打坐、回體丹或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
-        data["stamina_help"] = howto.stamina_lines(
-            c, w, roster.newbie(s, c, c.config.newbie_stamina_days), p.stamina_pills, button=data["pills"] is not None,
-        )
+        newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
+        data["stamina_help"] = howto.stamina_lines(c, w, newbie, p.stamina_pills, button=data["pills"] is not None)
+        # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
+        # 過了新手期只剩設定抽屜那一顆
+        data["howto_entry"] = newbie and not prologue_rules.active(s, c)
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣

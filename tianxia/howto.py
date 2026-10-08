@@ -265,6 +265,177 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
     }
 
 
+# ── 名望怎麼來（explain-2 第二項，FB-100「名望不知道怎麼來」）──────────────────────────
+# 引擎裡真的給名望的只有兩條路（rules.apply_effect 的 stats 與 Game._deliver_echoes）：事件的效果（內容寫的 stats.fame）與第一季的首創回饋
+# （Config.first_echo）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
+
+FameRange = tuple[int, int]
+
+
+def _effects(event) -> list[tuple[object, bool]]:
+    """一則事件的每一個效果，連同它是不是動手才拿得到的（動手的選項：劇情戰打贏）。"""
+    out: list[tuple[object, bool]] = []
+    for choice in event.choices:
+        out += [(choice.effect, choice.combat is not None), (choice.fail_effect, choice.combat is not None)]
+    if event.free_text is not None:
+        out += [(event.free_text.effect, False), (event.free_text.fail_effect, False)]
+    return out
+
+
+def fame_ranges(content: Content, season: WorldState) -> dict[str, FameRange]:
+    """事件給、扣的名望（只看內容）：
+    - "common"：可重複的事件（探索、交友、遊歷之後碰上的；劇情接下去的那幾段、晉升的劇情也算）裡不動手就拿得到的；
+    - "big"：動手打贏的（劇情戰）、一次性與奇遇（events.is_rare）、新立門戶福緣；
+    - "loss"：任何一個效果扣的（檢定失手、做了丟臉的事；寫成負數，(最多扣, 最少扣)）。
+    每堆（最小, 最大）；這一堆沒有就不在回傳裡。"""
+    from .events import is_rare  # noqa: PLC0415  events → rules → …：只有這裡用到
+
+    off = rules.season_one_off(content, season, "events")
+    piles: dict[str, list[int]] = {"common": [], "big": [], "loss": []}
+    for event in content.events.values():
+        if event.id in off:
+            continue
+        rare = is_rare(event) or event.fortune
+        for effect, fight in _effects(event):
+            fame = effect.stats.get("fame", 0)
+            if fame < 0:
+                piles["loss"].append(fame)
+            elif fame > 0:
+                piles["big" if rare or fight else "common"].append(fame)
+    return {key: (min(values), max(values)) for key, values in piles.items() if values}
+
+
+def _plus(span: FameRange) -> str:
+    low, high = span
+    return f"+{low}" if low == high else f"+{low}～+{high}"
+
+
+def fame_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋）、拿來做什麼（求見門檻、視野、拜師學藝）。數字讀內容與設定。"""
+    cfg = content.config
+    spans = fame_ranges(content, season)
+    lines = []
+    if "common" in spans:
+        lines.append(f"事件裡出頭、仗義、露臉的做法（探索、交友、遊歷之後碰上的事）：一次 {_plus(spans['common'])}。")
+    if "big" in spans:
+        lines.append(f"劇情裡打贏強敵、奇遇與一次性的大事：一次 {_plus(spans['big'])}。")
+    if "loss" in spans:
+        most, least = spans["loss"]
+        lines.append(f"檢定失手、做了丟臉的事會掉：{-least}～{-most}。" if most != least else f"檢定失手、做了丟臉的事會掉 {-most}。")
+    echo = cfg.first_echo
+    if calendar.season_one_on(season, content) and echo.fame_per > 0:
+        lines.append(f"你首創的武學或意境，別人照著合出同一門：每多一個人 +{echo.fame_per}，一門最多算 {echo.cap} 個人。")
+    bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
+    uses = []
+    if bars:
+        uses.append(f"求見大勢人物（門檻最低 {bars[0]}、最高 {bars[-1]}；不夠的會打發你）")
+    uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
+    lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
+    if lessons:
+        uses.append(f"有些師父要名望 {lessons[0]} 以上才肯教")
+    lines.append(f"名望拿來：{'；'.join(uses)}。")
+    return lines
+
+
+# ── 投靠、軍令與三方（explain-2 第二項）──────────────────────────────
+
+
+def _place_names(content: Content, ids: Sequence[str]) -> str:
+    return "、".join(content.locations[i].name for i in ids if i in content.locations)
+
+
+def join_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「投靠與軍令」那一節：投靠（劇本有陣營才寫）；軍令、晉升、叛投只在第一季（orders、ranks、defection 都掛在開關後面）。"""
+    cfg = content.config
+    if not content.scenario.factions:
+        return []
+    lines = [
+        "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，遊歷打贏、操練把戰況推向你那一邊，"
+        "遇上自己陣營的隊伍是操練；全服決戰只能替自己的陣營出戰。散人照樣能玩，只是沒有軍令與晉升。",
+    ]
+    if not calendar.season_one_on(season, content):
+        return lines
+    from . import orders  # noqa: PLC0415  orders → timetable、figures：只有第一季的這幾行用到
+
+    kinds = "、".join(orders.KIND_NAMES.values())
+    lines += [
+        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；全陣營湊滿額度的那一刻，整個陣營一起推一把。"
+        "本週的軍令卡在江湖頁行動列底下。",
+        f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
+        f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。",
+        "**叛投**：一季一次，到別的陣營收人的地方叛投；晉升、召見、部下、這一季的貢獻歸零，屬性、武學、同伴、銀兩不動。",
+    ]
+    return lines
+
+
+def faction_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「三方有什麼不同」：每個陣營在哪裡投靠、往哪裡推、拿得到哪幾種軍令、守勢與晉升之後多的行動、頭銜。
+    全照內容（劇本的陣營與目標、orders.json 的軍令範本、守勢行動、第 2 階行動、第 3、4 階行動）與 ranks.TITLES；第一季才有。"""
+    if not calendar.season_one_on(season, content) or not content.scenario.factions:
+        return []
+    from . import orders, ranks  # noqa: PLC0415  第一季的這一節才用到
+
+    fronts = set(rules.front_ids(content))
+    out = []
+    for faction in content.scenario.factions:
+        fid = faction.id
+        goals = faction.goals
+        pushed = {d for key, d in goals.items() if key in fronts}
+        if pushed:
+            side = STANCE_NAMES["guan"] if pushed == {-1} else STANCE_NAMES["huang"] if pushed == {1} else "各自"
+            aim = f"把戰線往{side}那一邊推"
+        elif rules.GEJU in goals:
+            aim = "不推戰線，戰線在亂局時遊歷、操練推割據"
+        else:
+            aim = "照地方本來的方向推"
+        kinds = [orders.KIND_NAMES[k] for k in orders.KIND_NAMES if any(t.kind == k and t.side == fid for t in content.orders.templates)]
+        orders_text = (f"軍令只有{kinds[0]}" if len(kinds) == 1 else f"軍令有{'、'.join(kinds)}") if kinds else "沒有軍令"
+        acts = []
+        duty = content.orders.duties.get(fid)
+        if duty is not None:
+            acts.append(f"在戰線上的差事是「{duty.name}」")
+        rank2 = content.orders.rank2.get(fid)
+        if rank2 is not None:
+            acts.append(f"第 2 階起多「{rank2.name}」")
+        acts += [f"第 {a.rank} 階起多「{a.name}」" for a in sorted(content.orders.rank_actions, key=lambda a: a.rank) if a.faction == fid]
+        titles = [t for t in ranks.TITLES.get(fid, []) if t]
+        title = f"；頭銜從{titles[0]}做到{titles[-1]}" if len(titles) > 1 else ""
+        where = _place_names(content, faction.join_at)
+        head = f"**{faction.name}**" + (f"（在{where}投靠）" if where else "")
+        out.append(f"{head}：{aim}。{orders_text}；{'，'.join(acts) or '沒有額外的行動'}{title}。")
+    return out
+
+
+def season_page_lines(content: Content, season: WorldState, rule: str = "") -> list[str]:
+    """玩法說明「這一季在打什麼」：跟點戰況、態勢、大事、主線看的是同一套句子（不看此刻的戰況），加上收季規則（rule＝
+    rules.stance_rule_note，呼叫端照這一季算好）。第一季才有。"""
+    if not calendar.season_one_on(season, content):
+        return []
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    n = len(rules.front_ids(content))
+    lines = [
+        season_line(content),
+        f"每條戰線 0 是{guan}穩控、100 是{huang}控制，戰況落在 {_band(content)} 是亂局；{guan}、{huang}的態勢是{_count(n)}條戰線合起來的，"
+        f"{hao}的態勢是割據：有戰線在亂局就漸長，{_count(n)}條都穩下來就漸消。",
+        *board_help(content),
+    ]
+    if rule:
+        lines.append(f"收季：{rule}")
+    lines += quest_help(content)
+    lines.append("江湖頁最上面的「態勢」「大事」「主線」與底下的戰況圖卡，點開都有說明。")
+    return lines
+
+
+def pages_lines() -> list[str]:
+    """玩法說明「修練與煉製」：底部兩個分頁各做什麼（修練頁 pagePractice、煉製頁 pageCraft 的實際內容）。價錢寫在「心得」那一節。"""
+    return [
+        "**修練**：身上的內功與武學。練成（花心得升一成）、修練（融過意境的武學，拿它融的那個意境衝品質，花體力）、改練、"
+        "熔掉用不上的武學與意境（拿回心得）、閉關；也看得到同伴與人物卡。",
+        "**煉製**：太極火爐。一門武學＋一個意境合出新武學、兩門武學合出第三門、兩個意境合出新的意境；放進爐裡的都不會用掉。"
+        "最底下是背包。",
+    ]
+
+
 # ── 設定抽屜的「玩法說明」（explain-1 第四項）──────────────────────────────
 
 
@@ -283,11 +454,17 @@ def mix_sentence(content: Content) -> str:
     )
 
 
-def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
-    """設定抽屜的「玩法說明」（Markdown）：五個行動、體力、情誼、心得、意境、背包，各一兩句。數字全讀 Config，句子不寫死。
-    不看個人狀態（新手期還在不在、還有幾顆丹寫在體力條點開的說明），網頁同一次載入只問一次。
+def _section(title: str, lines: Sequence[str]) -> list[str]:
+    """一節：標題與每一行一個項目；沒有句子就整節不寫。"""
+    return [f"#### {title}", *[f"- {line}" for line in lines], ""] if lines else []
+
+
+def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
+    """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、五個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
+    情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
+    不看個人狀態（新手期還在不在、還有幾顆丹寫在體力條點開的說明），網頁每次攤開問一次。
     season：這一季（第一季才有的事只在第一季說；新手期照這一季蓋的季長換成現實時間）。recruitable：內容裡有沒有能招募的人物
-    （正式內容現在沒有：不提招募）。"""
+    （正式內容現在沒有：不提招募）。rule：收季規則（rules.stance_rule_note，呼叫端照這一季算好；第一季才有）。"""
     cfg = content.config
     cost = cfg.action_cost
     first = calendar.season_one_on(season, content)
@@ -304,6 +481,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
         bond.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     lines = [
+        *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
         f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}",
         # 操練看的是遇上的隊伍（Game._drills_with），不是地方：兩種都有的地方 _train 隨機挑一路（審查 M2）
@@ -321,6 +499,9 @@ def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
         *[f"- {line}" for line in stamina_lines(content, season)],
         "- 點狀態列的體力條，也看得到這幾句。",
         "",
+        *_section("名望", fame_lines(content, season)),
+        *_section("投靠與軍令", join_lines(content, season)),
+        *_section("三方有什麼不同", faction_lines(content, season)),
         "#### 情誼",
         *bond,
         "",
@@ -328,8 +509,9 @@ def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
         f"- 學武的本錢：練成（第 N 成升下一成花 N×{cfg.practice_xinde_per_level}）、合成（{cfg.fuse_xinde} 心得、"
         f"{cfg.fuse_stamina} 體力）、合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
-        "用不上的功法熔掉也能拿回一些。",
+        "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
         "",
+        *_section("修練與煉製", pages_lines()),
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行

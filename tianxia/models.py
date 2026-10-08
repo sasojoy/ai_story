@@ -1309,7 +1309,9 @@ class Config(_Strict):
     # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
     event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
     seclusion_xinde_per_hour: int = 15
-    xinde_hint_threshold: int = 50  # 心得擱到這個量、而且還有功夫沒練滿時，主畫面提示玩家去門下練功
+    # 狀態列 💡 心得提示的下限（skillview.practice_hint）：心得至少這麼多、而且真的付得起又做得了一件事（練成下一成、或一次合成）才提示。
+    # explain-2（FB-100「心得到 34 也不知道要拿去哪裡用」）從 50 改成 0：只看「付得起、做得了」——最便宜那一件做得了的事就是門檻
+    xinde_hint_threshold: int = Field(default=0, ge=0)
     # ── 探索三選一（探索三選一設計）──
     # 這裡有還能遇上的奇遇（一次性或奇遇事件）時，探索先滾這個機率，中了就是奇遇、不走三選一。
     # 照整季模擬換算（設計第二節，企劃者 2026-10-03 改）：一個玩家一季在奇遇池非空的地點探索 E 次，

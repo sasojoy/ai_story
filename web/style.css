@@ -799,6 +799,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-notes { margin: -6px 4px 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 .act-notes p { margin: 0; }
 .act-notes b { margin-right: 6px; color: var(--ink); font-weight: 600; }
+/* 新手期的「玩法說明 ›」入口（explain-2）：跟上面幾行同一個字級、同一個行高，不多佔高度；按的範圍用內距加負外距撐大，行高不變 */
+.act-notes .howto-entry button { font-size: 12px; line-height: inherit; font-weight: 600; padding: 8px 6px; margin: -8px 2px -8px -6px; }
 .act-move { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
 .act-move .options { margin: 8px 0 0; }
 .act-move .move-mode { margin: 0; }

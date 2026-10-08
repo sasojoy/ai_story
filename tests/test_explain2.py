@@ -2,15 +2,20 @@
 
 一、點戰況圖卡、態勢、大事、主線看的說明（status.war_help，句子在 tianxia/howto.py）：這一季在打什麼、亂局與割據、大事怎麼定、
     你能怎麼出力。門檻讀設定、此刻在亂局的讀 rules.chaos_fronts、大事的件數讀時刻表、擲骰的上下限讀 timetable 的常數。
-句子待 joy 潤；這裡驗的是「說的跟規則一樣」：設定改了、時刻表改了，字跟著變。"""
+二、設定抽屜的玩法說明多五節（這一季在打什麼、名望、投靠與軍令、三方有什麼不同、修練與煉製）；新手期江湖頁有入口；
+    狀態列的心得提示改成「付得起、做得了」就提示。
+句子待 joy 潤；這裡驗的是「說的跟規則一樣」：設定改了、時刻表改了、內容改了，字跟著變。"""
 from __future__ import annotations
 
+import json
 import random
-
-import pytest
+import re
+from pathlib import Path
 
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
+
+ROOT = Path(__file__).parent.parent
 
 
 def _war(content, name="甲"):
@@ -87,3 +92,219 @@ def test_the_rewritable_events_are_the_ones_guan_and_huang_chains_point_at(on):
     assert f"其中 {len(events)} 件可以被關鍵伏筆改寫" in howto.board_help(on)[1]
     on.foreshadows.chains = [c for c in on.foreshadows.chains if c.side == "haoqiang"]
     assert len(howto.board_help(on)) == 1 and "伏筆改寫" not in "".join(howto.board_help(on))
+
+
+# ── 二、玩法說明多五節、新手期的入口、心得提示 ─────────────────────────────
+
+
+def _titles(text):
+    return re.findall(r"^#### (.+)$", text, re.M)
+
+
+def test_the_howto_page_has_the_new_sections_in_season_one(on):
+    titles = _titles(_war(on).howto_text())
+    assert titles[0] == "這一季在打什麼"  # 為什麼要做這些：排在最前面
+    for title in ("名望", "投靠與軍令", "三方有什麼不同", "修練與煉製"):
+        assert title in titles
+    assert titles.index("名望") < titles.index("投靠與軍令") < titles.index("三方有什麼不同") < titles.index("情誼")
+    assert titles.index("心得") < titles.index("修練與煉製") < titles.index("意境")
+
+
+def test_the_beta_page_leaves_out_what_only_season_one_has(real):
+    """開關關著（beta）：沒有戰線、軍令、晉升、三方的不同；名望、投靠、修練與煉製照寫。"""
+    text = _war(real).howto_text()
+    titles = _titles(text)
+    assert "這一季在打什麼" not in titles and "三方有什麼不同" not in titles
+    assert {"名望", "投靠與軍令", "修練與煉製"} <= set(titles)
+    assert "**投靠**" in text and "**軍令**" not in text and "**晉升**" not in text and "首創的武學或意境" not in text
+
+
+def test_the_season_section_is_the_war_explanations_and_the_closing_rule(on):
+    game = _war(on)
+    section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
+    assert howto.season_line(on) in section and "35～65 是亂局" in section
+    for line in howto.board_help(on) + howto.quest_help(on):
+        assert line in section
+    assert f"收季：{rules.stance_rule_note(game.state, on)}" in section  # 收季規則讀 stance_rule_note（第 N 週起、幾分）
+    on.config.chaos_low, on.config.chaos_high = 30, 70
+    assert "30～70 是亂局" in game.howto_text()
+
+
+def _fame_spans(content, off=()):
+    """名望的三堆，在測試裡另外照內容算一次（不靠 howto）：可重複事件裡不動手的、動手或一次性與奇遇的、扣的。"""
+    piles = {"common": [], "big": [], "loss": []}
+    for event in content.events.values():
+        if event.id in off:
+            continue
+        rare = event.once or event.qiyu or event.fortune
+        effects = [(c.effect, c.combat) for c in event.choices] + [(c.fail_effect, c.combat) for c in event.choices]
+        if event.free_text is not None:
+            effects += [(event.free_text.effect, None), (event.free_text.fail_effect, None)]
+        for effect, combat in effects:
+            fame = effect.stats.get("fame", 0)
+            if fame < 0:
+                piles["loss"].append(fame)
+            elif fame > 0:
+                piles["big" if rare or combat else "common"].append(fame)
+    return {k: (min(v), max(v)) for k, v in piles.items() if v}
+
+
+def _fame_section(game):
+    return re.search(r"#### 名望\n((?:- .*\n)+)", game.howto_text()).group(1)
+
+
+def test_the_fame_amounts_are_the_ones_the_content_gives(on):
+    game = _war(on)
+    spans = _fame_spans(on, set(on.scenario.season_one_off.events))
+    section = _fame_section(game)
+    low, high = spans["common"]
+    assert f"（探索、交友、遊歷之後碰上的事）：一次 +{low}～+{high}。" in section
+    low, high = spans["big"]
+    assert f"劇情裡打贏強敵、奇遇與一次性的大事：一次 +{low}～+{high}。" in section
+    most, least = spans["loss"]
+    assert f"做了丟臉的事會掉：{-least}～{-most}。" in section
+
+
+def test_the_fame_amounts_follow_the_content_when_it_changes(on):
+    game = _war(on)
+    common = next(e for e in on.events.values() if not (e.once or e.qiyu or e.fortune) and "explore" in e.actions
+                  and any(c.combat is None and c.effect.stats.get("fame", 0) > 0 for c in e.choices))
+    choice = next(c for c in common.choices if c.combat is None and c.effect.stats.get("fame", 0) > 0)
+    choice.effect.stats["fame"] = 9
+    assert "碰上的事）：一次 +1～+9。" in _fame_section(game)
+    # 這一季關掉的 beta 事件（season_one_off）不算：開關開著時改了它也不影響
+    for c in on.events["kou_boss"].choices:
+        if c.effect.stats.get("fame", 0) > 0:
+            c.effect.stats["fame"] = 77
+    assert "+77" not in _fame_section(game)
+
+
+def test_only_events_and_the_first_echo_give_fame_in_the_code():
+    """名望的來源只有兩條：事件的效果（rules.apply_effect 照內容的 stats 加減）與第一季的首創回饋（Game._deliver_echoes）。
+    程式裡直接寫名望的只有首創回饋那一行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
+    writes = []
+    for path in sorted((ROOT / "tianxia").glob("*.py")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if re.search(r"""stats\[\s*["']fame["']\s*\]\s*[+-]?=""", line):
+                writes.append((path.name, line.strip()))
+    assert writes == [("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + gained')]
+    givers = []
+
+    def scan(node, where):
+        if isinstance(node, dict):
+            if isinstance(node.get("stats"), dict) and node["stats"].get("fame", 0) > 0:
+                givers.append(where)
+            for value in node.values():
+                scan(value, where)
+        elif isinstance(node, list):
+            for value in node:
+                scan(value, where)
+
+    for path in sorted((ROOT / "content").rglob("*.json")):
+        scan(json.loads(path.read_text(encoding="utf-8")), path.relative_to(ROOT / "content").as_posix())
+    assert givers and all(where.startswith("events/") for where in givers), sorted(set(givers))
+
+
+def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on, real):
+    on.config.first_echo.fame_per, on.config.first_echo.cap = 2, 7
+    assert "別人照著合出同一門：每多一個人 +2，一門最多算 7 個人。" in _fame_section(_war(on))
+    on.config.first_echo.fame_per = 0
+    assert "首創的武學或意境" not in _fame_section(_war(on, "乙"))
+    assert "首創的武學或意境" not in _fame_section(_war(real))  # beta 沒有首創回饋（fusion.echo 只在第一季記）
+
+
+def test_what_fame_is_for_follows_the_content(on):
+    game = _war(on)
+    bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
+    lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)
+    line = _fame_section(game).splitlines()[-1]
+    assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and f"名望到 {on.config.vision_fame}，輿圖多看一站" in line
+    assert f"有些師父要名望 {lessons[0]} 以上才肯教" in line
+    on.config.vision_fame = 12
+    assert "名望到 12，輿圖多看一站" in _fame_section(game)
+
+
+def test_joining_and_orders_read_the_config(on):
+    on.config.contrib_per_push, on.config.rank2_contrib, on.config.audience_rank_discount = 7, 210, 4
+    text = _war(on).howto_text()
+    assert "推 1 點戰況記 7）" in text and "到 210 會有人召見" in text and "求見他的門檻就低 4" in text
+    assert "攻城、守城、截糧、護糧、打擊" in text
+
+
+def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
+    from tianxia import ranks
+
+    section = re.search(r"#### 三方有什麼不同\n((?:- .*\n)+)", _war(on).howto_text()).group(1)
+    rows = section.splitlines()
+    assert len(rows) == len(on.scenario.factions)
+    for faction, row in zip(on.scenario.factions, rows):
+        assert row.startswith(f"- **{faction.name}**（在{'、'.join(on.locations[i].name for i in faction.join_at)}投靠）")
+        titles = [t for t in ranks.TITLES[faction.id] if t]
+        assert f"頭銜從{titles[0]}做到{titles[-1]}" in row
+        assert f"「{on.orders.duties[faction.id].name}」" in row
+        for action in on.orders.rank_actions:
+            assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
+    guan, huang, hao = rows
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，戰線在亂局時遊歷、操練推割據" in hao
+    assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
+    on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
+    assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)
+
+
+def _fresh(content, name="甲"):
+    """新角色、略過序章（站在起點、拿了盤纏）。"""
+    from tianxia.sqlite_world import open_world
+
+    game = Game.new(content, name, rng=random.Random(0), world=open_world(), prologue=True)
+    game.client = None
+    game.skip_tutorial()
+    return game
+
+
+def test_the_howto_entry_is_there_only_in_the_newbie_window(on):
+    from tianxia import calendar
+
+    game = _fresh(on)
+    assert game.status_data()["howto_entry"] is True
+    s = game.state
+    window = on.config.newbie_stamina_days * calendar.DAY / calendar.cal_scale(on, s.world)  # 跟體力回復加快同一段（roster.newbie）
+    s.player.joined_at = s.world.time - window + 1
+    assert game.status_data()["howto_entry"] is True
+    s.player.joined_at = s.world.time - window - 1
+    assert game.status_data()["howto_entry"] is False
+
+
+def test_no_howto_entry_in_the_prologue(prologue_content, world):
+    hut = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
+    assert hut.status_data()["howto_entry"] is False  # 序章裡師父會說
+
+
+def test_the_xinde_hint_shows_once_the_next_level_is_affordable(on):
+    """FB-100：剛出師、心得 34 的人看不到提示（以前要攢到 50）。現在只看「付得起、做得了」：心得夠練下一成就提示去「修練」。"""
+    from tianxia import team
+
+    game = _fresh(on)
+    s = game.state
+    member = s.player.member
+    price = min(team.practice_price(on, member.wugong_level), team.practice_price(on, member.neigong_level))
+    s.player.stats["xinde"] = price - 1
+    assert game.status_data()["hint"] is None
+    s.player.stats["xinde"] = price
+    hint = game.status_data()["hint"]
+    assert hint and "去「修練」練成" in hint and f"你已攢下 {price} 點心得" in hint
+    s.player.stats["xinde"] = 34  # QA 那一輪的心得
+    assert "去「修練」" in game.status_data()["hint"]
+
+
+def test_the_xinde_hint_points_to_the_forge_when_only_a_forge_is_doable(on):
+    game = _fresh(on)
+    s, cfg = game.state, on.config
+    s.player.member.wugong_level = s.player.member.neigong_level = 10  # 兩門都練滿了：沒得練成
+    s.player.stats["xinde"] = max(cfg.fuse_xinde, cfg.merge_xinde)
+    s.player.insights = []
+    assert game.status_data()["hint"] is None  # 沒有意境：合不了
+    s.player.insights = ["feng"]
+    hint = game.status_data()["hint"]
+    assert hint and "去「煉製」" in hint and "修練" not in hint
+    s.player.stamina = 0
+    assert game.status_data()["hint"] is None  # 付不起體力：做不了
