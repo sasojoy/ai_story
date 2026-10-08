@@ -731,7 +731,7 @@ class Game:
     def options(self, odds: bool = True, tick: bool = True) -> list[Option]:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
-        battle_status = self._battle_status(tick=tick)
+        battle_status = self._battle_for_me(tick=tick)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：選單只剩一顆灰的
             return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
         if battle_status is not None and not self._watching_battle(*battle_status):
@@ -2703,6 +2703,13 @@ class Game:
             return None
         return battle, definition
 
+    def _battle_for_me(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
+        """這個人的選單、場景、放手一搏、決戰的動作看的那一場：同 _battle_status（tick 照樣把戰鬥追到現在），只是序章裡一律當作
+        沒有（FB-113）——草廬與序章開場都在潁川汝南，以前長社火攻集結時新人第一個畫面就是兩顆投效，按了之後序章被戰場蓋掉、
+        又走不開。不給投效與加入、不畫戰場；修好之前就上了名單的人也一樣（只是被代選固守，收場不領軍餉，見 _showdown_pay）。"""
+        status = self._battle_status(tick=tick)
+        return None if prologue_rules.active(self.state, self.content) else status
+
     def _shelve_unfinished_battle(self, text: str = "") -> None:
         """季終時還沒打完的決戰收起來（自然收季見 _battle_status、管理者收季見 admin_end_season；呼叫端先確認
         有一場還沒收場的）。不算結果：不動大勢、不寫旗標、不寫江湖史、不加戰報（FB-015）；但每個參戰者要有交代（FB-035）。
@@ -3096,8 +3103,11 @@ class Game:
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
     ) -> list[str]:
         """決戰的軍餉（Config.showdown_pay）：照出手回合數發銀兩與經驗，贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
-        （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。"""
+        （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。
+        序章裡的人不發（FB-113）：修好之前在序章裡投效、出手的新人，以前 1 級大勝拿 120 經驗、序章中途升到 5 級（FB-122）。"""
         c, s = self.content, self.state
+        if prologue_rules.active(s, c):
+            return []
         pay, p = c.config.showdown_pay, s.player
         share = max(pay.idle_share, min(1.0, me.acted_rounds / pay.full_rounds))
         won = bool(battle.outcome_side) and me.faction == battle.outcome_side
@@ -3361,8 +3371,8 @@ class Game:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
         ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
         戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，server.py 用這個決定輸入框
-        要不要顯示。"""
-        status = self._battle_status(tick=False)
+        要不要顯示。序章裡沒有（_battle_for_me）。"""
+        status = self._battle_for_me(tick=False)
         if status is None:
             return None
         battle, definition = status
@@ -3385,7 +3395,7 @@ class Game:
         不行回傳要給玩家看的那一句。tick 照 _battle_status。"""
         if self.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
             return [f"（{PAUSED_TEXT}。）"]
-        status = self._battle_status(tick=tick)
+        status = self._battle_for_me(tick=tick)  # 序章裡送不出去（FB-113）
         if status is None:
             return ["（此刻無法這麼做。）"]
         battle, definition = status
@@ -3440,8 +3450,8 @@ class Game:
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
         推進過一次了（options() 內部會 tick），這裡用 tick=False 只讀，避免同一次請求裡
-        重複推進兩次。"""
-        status = self._battle_status(tick=False)
+        重複推進兩次。序章裡一律擋下（_battle_for_me，FB-113）：選單上本來就沒有，直接送也不行。"""
+        status = self._battle_for_me(tick=False)
         if status is None:
             return ["（此刻無法這麼做。）"]
         battle, definition = status
@@ -6366,8 +6376,8 @@ class Game:
 
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
-        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
-        battle_status = self._battle_status(tick=False)
+        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。"""
+        battle_status = self._battle_for_me(tick=False)
         if battle_status is None:
             return self._own_scene_text()
         battle_scene = self._battle_scene_text(*battle_status)
