@@ -499,7 +499,8 @@ def test_anonymous_lockers_are_named_in_the_announcement(fs, world):
 
 
 def test_wrong_answer_penalties(fs, world):
-    """長社官軍收走物品；黃巾情誼 −5；送金帛亮出黃巾要等一個曆日、塞包袱沒有損失；進大將軍府說錯三樣全部作廢。"""
+    """長社官軍收走物品；黃巾情誼 −5；送金帛亮出黃巾要等一個遊戲日（fix-1008 項目七，以前是一個曆日）、塞包袱沒有損失；
+    進大將軍府說錯三樣全部作廢。"""
     t = night_in_window(fs)
     wrong = next(d for d in "東南西北" if d != wind(world))
     guan = player(fs, world, "甲", "guan", "lake", time=t)
@@ -516,7 +517,8 @@ def test_wrong_answer_penalties(fs, world):
     assert option(huang, "fs:fs_fire_huang").label == "勸營（官軍縮在城裡，我還怕他放火？）"
 
     luzhi_t = cal(fs, 7, 2)  # 盧植下獄在第 8 週週一：前 7 曆日內
-    bribe = player(fs, world, "丙", "huang", "port", time=luzhi_t)
+    early = cal(fs, 7, 0, 0, 30)  # 時間窗剛開：答錯要等一個遊戲日（第一季是六個曆日），窗還沒關、還能再試
+    bribe = player(fs, world, "丙", "huang", "port", time=early)
     bribe.state.player.fs_counters = {"guanyin": 2}
     bribe.choose("fs:fs_jail_huang")
     assert bribe.choose("fs:fs_jail_huang:2") == ["▸ 直接把包袱塞給他", "他裝作不認識你。"]
@@ -524,9 +526,11 @@ def test_wrong_answer_penalties(fs, world):
     bribe.choose("fs:fs_jail_huang")
     assert bribe.choose("fs:fs_jail_huang:3") == ["▸ 亮出黃巾", "他嚇得跑了。"]
     assert option(bribe, "fs:fs_jail_huang").label == "送金帛（時候未到）"
-    bribe.state.world.time = luzhi_t + DAY / calendar.cal_scale(fs) - 1
+    game_day = rules.day_seconds(fs, bribe.state.world)
+    assert game_day == pytest.approx(6 * DAY / calendar.cal_scale(fs))
+    bribe.state.world.time = early + game_day - 1
     assert not option(bribe, "fs:fs_jail_huang").enabled
-    bribe.state.world.time = luzhi_t + DAY / calendar.cal_scale(fs)
+    bribe.state.world.time = early + game_day
     assert option(bribe, "fs:fs_jail_huang").enabled
     bribe.choose("fs:fs_jail_huang")
     assert bribe.choose("fs:fs_jail_huang:1")[1] == "老宦官接過包袱掂了掂，沒有多看你一眼：「話會帶到。」"

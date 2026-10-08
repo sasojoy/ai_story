@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line
+from .rules import can_meet, check_chance, check_result_line, day_seconds
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -627,8 +627,8 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
         p.affinities[cid] = max(0, min(100, before + delta))
         if p.affinities[cid] != before:
             lines.append(f"{_figure_name(content, cid)}情誼 {p.affinities[cid] - before:+d}")
-    if wrong.cooldown_days:
-        p.fs_cooldown_until[c.id] = now + wrong.cooldown_days * DAY / calendar.cal_scale(content, state.world)
+    if wrong.cooldown_days:  # 遊戲日（跟著季長縮，rules.day_seconds）：從答錯那一刻起整整那麼久（fix-1008 項目七，控制者裁示）
+        p.fs_cooldown_until[c.id] = now + wrong.cooldown_days * day_seconds(content, state.world)
     return lines
 
 

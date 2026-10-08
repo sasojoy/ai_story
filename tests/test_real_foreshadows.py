@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FixedRandom
-from tianxia import calendar, foreshadow, team, timetable
+from tianxia import calendar, foreshadow, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -683,7 +683,18 @@ def test_wrong_answers_cost_what_the_table_says(fs_content, world):
     game, msgs = attempt("fs_luzhi_huang", ["3"])
     assert msgs[1] == "他嚇得跑了，一個遊戲日內不會再出現。"
     assert fs_option(game, "fs:fs_luzhi_huang").label == "黃圈（時候未到）"
-    game.state.world.time += 86400 / calendar.cal_scale(c)  # 過一個曆日
+    game_day = rules.day_seconds(c, game.state.world)  # 一個遊戲日（fix-1008 項目七）：第一季是六個曆日
+    event_at = timetable.when(game.state, c, next(e for e in c.timetable if e.id == "luzhi_jailed"))
+    assert game.state.world.time + game_day > event_at  # 大事前三個曆日答錯：等不到大事揭曉，這一季這條鏈就沒了
+    game.state.world.time = event_at - 60
+    assert fs_option(game, "fs:fs_luzhi_huang").label == "黃圈（時候未到）"
+    game = fs_ready(c, world, "fs_luzhi_huang")
+    game.state.world.time = event_at - 7 * 86400 / calendar.cal_scale(c) + 60  # 時間窗剛開就答錯：等一個遊戲日還來得及
+    fs_run(world, game, "fs_luzhi_huang", ["3"])
+    wrong_at = game.state.world.time
+    game.state.world.time = wrong_at + game_day - 1
+    assert fs_option(game, "fs:fs_luzhi_huang").label == "黃圈（時候未到）"
+    game.state.world.time = wrong_at + game_day
     assert fs_option(game, "fs:fs_luzhi_huang").enabled
 
     for answer in ("2", "3"):
