@@ -59,7 +59,7 @@ import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, team, timetable,
+    server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -837,6 +837,8 @@ def _main_view_body(game: Game) -> dict:
         # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
         "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         "minimap": game.minimap_svg(),
+        # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
+        "here": game.peers_here(),
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
@@ -1387,6 +1389,33 @@ MENXIA_ACTIONS = {
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
 }
+
+
+@app.get("/api/peer")
+def api_peer(request: Request, name: str = ""):
+    """玩家卡（social.card）：他不在這裡了 card 是 None，網頁照 gone 那一句說。只讀。"""
+    game = _game(request)
+    return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
+
+
+@app.post("/api/peer/act")
+def api_peer_act(request: Request, body: dict = Body(default={})):
+    """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
+    game = _game(request)
+    name, action = str(body.get("name", "")), str(body.get("action", ""))
+    params = {"arg": str(body.get("arg", ""))}
+    try:
+        params["amount"] = int(body.get("amount", 0))
+    except (TypeError, ValueError):
+        params["amount"] = 0
+    msgs = act(game, lambda g: g.peer_act(name, action, params))
+    _tell_tabs(game)
+    return {
+        "card": look(game, lambda g: g.peer_card(name)),
+        "gone": social.GONE,
+        "main": look(game, main_view),
+        "message": joined(msgs),
+    }
 
 
 @app.get("/api/menxia")

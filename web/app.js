@@ -258,7 +258,7 @@
 
   // ── 整體 ──
   function render() {
-    if (S.stage !== "game" || !S.sheet) closeAsk(); // 管理者確認框只疊在設定抽屜上；抽屜關了、被登出就一起收掉
+    if (S.stage !== "game" || (!S.sheet && !S.peer)) closeAsk(); // 確認框疊在設定抽屜或玩家卡上；抽屜關了、被登出就一起收掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
@@ -271,7 +271,7 @@
         <main class="page" id="page"></main>
       </div>
       ${tabsHtml()}
-      ${S.sheet ? sheetHtml() : ""}`;
+      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}`;
     renderPage();
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
@@ -1210,7 +1210,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${m.scene}</section>`;
+        : `<section class="card scene">${m.scene}${m.here && m.here.length ? hereHtml(m) : ""}</section>`;
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
@@ -1234,6 +1234,65 @@
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${fronts}${tail}`;
     return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${fronts}${tail}`;
+  }
+
+  // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。
+  // 人多時先列 HERE_SHOW 個、其餘收在「還有 N 人」裡（點了全列，記在 S.hereOpen）。真人假人是同一份名單（伺服器不分）
+  const HERE_SHOW = 5;
+  function hereHtml(m) {
+    const all = m.here || [];
+    if (!all.length) return "";
+    const open = S.hereOpen || all.length <= HERE_SHOW + 1;
+    const list = open ? all : all.slice(0, HERE_SHOW);
+    return `<div class="here"><span class="here-k">此地還有</span>${list.map((p) =>
+      `<button class="peer-name" data-act="peer" data-name="${esc(p.name)}">${esc(p.name)}<small>（${esc(p.side)}）</small></button>`).join("")}${
+      open ? "" : `<button class="linkish here-more" data-act="here-more">還有 ${all.length - HERE_SHOW} 人 ▾</button>`}</div>`;
+  }
+
+  // 玩家卡（第一層）：點「此地還有」的名字疊上來的抽屜。名號、門派・陣營・頭銜、等級、身上兩門（名字與品質），底下是卡上的動作鈕
+  // （伺服器照 social.ACTIONS 給，第二層的贈物、結伴、打招呼、切磋、論武都掛在這裡）。人走了（card 是 null）寫伺服器給的那一句
+  function peerHtml() {
+    const P = S.peer;
+    const c = P.card;
+    const body = P.loading ? '<p class="muted">……</p>'
+      : !c ? `<p>${esc(P.gone || "他已經不在這裡了。")}</p>`
+      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div></div>
+        <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
+        ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount"><input class="input" name="amount" type="number" inputmode="numeric" min="1" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：1～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
+        ${c.actions.length ? `<div class="peer-acts">${c.actions.map((b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`).join("")}</div>` : ""}`;
+    return `<div class="sheet-bg" data-act="peer-close"></div>
+      <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
+        <div class="grip"></div>
+        ${P.msg ? `<div class="peer-msg">${P.msg}</div>` : ""}
+        ${body}
+        <div class="row"><button class="btn ghost" data-act="peer-close">關閉</button></div>
+      </div>`;
+  }
+  async function openPeer(name) {
+    S.peer = { name, loading: true };
+    render();
+    try {
+      const r = await api(`/api/peer?name=${encodeURIComponent(name)}`);
+      if (!S.peer || S.peer.name !== name) return; // 等的時候關掉或換了人
+      S.peer = { name, card: r.card, gone: r.gone };
+    } catch (e) {
+      S.peer = null;
+    }
+    render();
+  }
+  // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
+  async function peerAct(i, sure = false, amount = 0) {
+    const P = S.peer;
+    const b = P && P.card && P.card.actions[i];
+    if (!b) return;
+    if (b.amount > 0 && !amount) { S.peer.amountFor = i; render(); return; }
+    if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount)); return; }
+    await busy(async () => {
+      const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount });
+      if (r.main) setMain(r.main);
+      S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      render();
+    });
   }
 
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫。
@@ -2511,6 +2570,10 @@
             renderKeepingSheet(); // 等資料的時候人可能已經往下捲了
           }
           break;
+        case "peer": await openPeer(el.dataset.name); break;
+        case "peer-close": S.peer = null; render(); break;
+        case "peer-act": await peerAct(Number(el.dataset.i)); break;
+        case "here-more": S.hereOpen = true; renderPage(); break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
@@ -2589,7 +2652,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
@@ -2734,6 +2797,12 @@
       if (form.id === "gate-form") {
         submit.disabled = true;
         enter(await api(S.gateMode === "register" ? "/api/register" : "/api/login", data));
+      } else if (form.id === "peer-amount") {
+        const i = S.peer ? S.peer.amountFor : null;
+        const n = Math.floor(Number(data.amount));
+        if (i == null || !(n >= 1)) return;
+        S.peer.amountFor = null;
+        await peerAct(i, false, n);
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));
