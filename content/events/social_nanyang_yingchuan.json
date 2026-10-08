@@ -303,11 +303,7 @@
       },
       {
         "text": "留下一點錢當賀禮",
-        "condition": {
-          "min_stats": {
-            "silver": 10
-          }
-        },
+        "condition": {"min_stats": {"silver": 10}},
         "effect": {
           "text": "老父推辭不過收下了，新人朝你深深一揖。",
           "stats": {"silver": -10, "good": 2}
@@ -390,11 +386,7 @@
       },
       {
         "text": "掏錢買幾斗粟分給沒籍的人",
-        "condition": {
-          "min_stats": {
-            "silver": 20
-          }
-        },
+        "condition": {"min_stats": {"silver": 20}},
         "effect": {
           "text": "你在糧商那裡買了幾斗粟分給幾戶最急的人家，杯水車薪，但總算有幾家今晚不必餓著。",
           "stats": {"silver": -20, "good": 2}
