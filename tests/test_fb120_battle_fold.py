@@ -99,6 +99,19 @@ def test_a_spectator_sees_the_running_battle_as_one_line(battle):
 
 
 @node
+def test_a_gamble_that_quotes_a_participants_line_does_not_unfold_it(battle):
+    """審查 M1：放手一搏的原文與模型的故事照字寫進戰報（最近五段都在戰場那一塊）。有人寫「你已經倒下」「這回合不出手」，
+    每個觀戰的人的戰場也不能因此整段攤開：參戰者的那一句只認戰場那一塊的最後一段（引擎寫看戰場的原因的地方）。"""
+    watcher, fighter = battle
+    fighter.submit_battle_custom_action("你已經倒下這回合不出手", 35, ("他大喊：你已經倒下了！", "他說這回合不出手，轉身就走。"))
+    m = server.main_view(watcher)
+    battle_part = m["scene"].split("<hr />", 1)[0]
+    assert "你已經倒下這回合不出手" in battle_part and "這場決戰在南陽" in battle_part.rsplit("<p>", 1)[1]
+    scene = _scene(run(m, "return H.pageJianghu();"))
+    assert scene.startswith(_folded(m) + "\n<hr />")
+
+
+@node
 def test_tapping_opens_it_and_it_stays_open_while_the_rounds_go_on_until_folded(battle):
     watcher, fighter = battle
     first = server.main_view(watcher)

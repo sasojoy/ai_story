@@ -1109,7 +1109,10 @@
     if (cut < 0 || m.on_road) return null;
     const block = scene.slice(0, cut);
     const round = BATTLE_ROUND.exec(block), head = /^<p>([\s\S]*?)<\/p>/.exec(block);
-    if (!round || !head || BATTLE_MINE.test(block)) return null;
+    // 參戰者那一句只看戰場那一塊的最後一段：引擎把看戰場的原因（觀戰、離開大區、倒下）寫在最後；中間的戰報有放手一搏的原文與
+    // 模型的故事，有人寫「你已經倒下」也不能讓每個觀戰的人的戰場整段攤開（審查 M1）
+    const last = block.slice(block.lastIndexOf("<p>"));
+    if (!round || !head || BATTLE_MINE.test(last)) return null;
     return { block, rest: scene.slice(cut), name: head[1].replace(/<[^>]*>/g, "").trim(), round: Number(round[1]) };
   }
   function battleScene(m) {
