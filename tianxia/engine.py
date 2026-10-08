@@ -1019,12 +1019,17 @@ class Game:
             for option_id in ids:
                 cid = option_id.removeprefix("call:")
                 if option_id.startswith("call:") and cid in c.characters:
-                    # 談滿了（跟選單灰掉的判斷同一個次序：沒閉門不見、見得到、這個遊戲日談滿）：格子只放得下「已談滿」，
-                    # 整句連同換日的那一刻寫在這一行（day-scale 審查 I1）
-                    talked_out = not self._snubbed_character(cid) and self._can_meet(cid) and self._talks_left(cid) == 0
-                    notes[option_id] = (
-                        self._talked_out_note() if talked_out else howto.call_line(c.characters[cid].name, self._can_meet(cid))
-                    )
+                    # 跟選單上那一顆的判斷同一個次序、同一句話（FB-103：格子寫什麼，這一行就說什麼）：閉門不見寫整句（格子只放得下
+                    # 「閉門不見」）；見不到寫還差幾點名望、會被打發；談滿了寫整句連同換日的那一刻（格子只放得下「已談滿」，day-scale 審查 I1）
+                    name = c.characters[cid].name
+                    if self._snubbed_character(cid):
+                        notes[option_id] = SNUB_NOTE
+                    elif not self._can_meet(cid):
+                        notes[option_id] = howto.call_line(name, False, self._fame_gap(cid))
+                    elif self._talks_left(cid) == 0:
+                        notes[option_id] = self._talked_out_note()
+                    else:
+                        notes[option_id] = howto.call_line(name, True)
         return notes
 
     def _insight_blocked(self, loc: Location) -> bool:

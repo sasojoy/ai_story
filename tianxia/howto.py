@@ -71,9 +71,14 @@ def social_line(figure: str | None, events: bool, hall: bool) -> str:
 CALL_LINE = "挑一位人物談話，聊得投機情誼會漲；名望不夠的會打發你"
 
 
-def call_line(name: str, meet: bool) -> str:
-    """選單上直接列的「求見某某」（這裡只有一位人物）：見得到就是談話；見不到會被打發（Game._brush_off：不花體力）。"""
-    return f"和{name}談話，聊得投機情誼會漲" if meet else f"名望不夠，{name}會打發你（不花體力）"
+def call_line(name: str, meet: bool, gap: int | None = None) -> str:
+    """選單上直接列的「求見某某」（這裡只有一位人物）：見得到就是談話；見不到會被打發（Game._brush_off：不花體力）。
+    gap：還差幾點名望（選項括號裡的「名望還差 N」），給了就照選項的說法開頭（FB-103：那一行跟格子說同一回事）。"""
+    if meet:
+        return f"和{name}談話，聊得投機情誼會漲"
+    if gap is not None:
+        return f"名望還差 {gap}，{name}會打發你（不花體力）"  # FB-103，待 joy 潤
+    return f"名望不夠，{name}會打發你（不花體力）"
 
 
 # ── 體力（explain-1 第三項）──────────────────────────────────────
