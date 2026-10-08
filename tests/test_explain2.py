@@ -36,7 +36,7 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     assert f"這一季是{on.scenario.name}" in stance and "潁川汝南、南陽、冀州" in stance and "割據" in stance  # 在打什麼、割據
     assert "亂局" in "".join(help_["fronts"]) and "0 是官軍穩控、100 是黃巾控制" in help_["fronts"][0]  # 三條戰線與亂局帶
     board = "".join(help_["board"])
-    assert "看戰況擲骰" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
+    assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
     quest = "".join(help_["quest"])
     assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力
 
@@ -70,16 +70,41 @@ def test_the_fronts_explanation_names_the_fronts_in_chaos_from_the_rule(on):
     assert rules.chaos_fronts(s, on) == [] and "現在沒有戰線在亂局。" in game.status_data()["war_help"]["fronts"][0]
 
 
+def _rolls(content):
+    rolls = [e for e in content.timetable if e.kind == "roll"]
+    return len(rolls), sum(e.front is not None for e in rolls)
+
+
 def test_the_big_event_counts_follow_the_timetable(on):
     kinds = [e.kind for e in on.timetable]
+    roll, fronted = _rolls(on)
     line = howto.board_help(on)[0]
     assert f"這一季有 {len(kinds)} 件大事" in line
-    assert f"{kinds.count('fixed')} 件史書寫定" in line and f"{kinds.count('roll')} 件看戰況擲骰" in line
+    assert f"{kinds.count('fixed')} 件史書寫定" in line
+    assert f"{roll} 件擲骰（{fronted} 件看戰況" in line and f"{roll - fronted} 件不在戰線上" in line  # 審查 Minor 5：盧植下獄沒有戰線
     assert f"{kinds.count('showdown')} 場決戰" in line and "季末收場" in line
-    first_roll = next(e for e in on.timetable if e.kind == "roll")
+    first_roll = next(e for e in on.timetable if e.kind == "roll" and e.front is not None)
     first_roll.kind = "fixed"  # 時刻表改了：件數跟著變
     line = howto.board_help(on)[0]
-    assert f"{kinds.count('fixed') + 1} 件史書寫定" in line and f"{kinds.count('roll') - 1} 件看戰況擲骰" in line
+    assert f"{kinds.count('fixed') + 1} 件史書寫定" in line and f"{roll - 1} 件擲骰（{fronted - 1} 件看戰況" in line
+    for e in on.timetable:
+        e.front = e.front or "yingru"  # 每一件都在戰線上：不寫「不在戰線上」那一段
+    assert "不在戰線上" not in howto.board_help(on)[0]
+
+
+def test_the_events_that_can_be_skipped_are_named_as_such(on):
+    """審查 Minor 5：寫好的大事不一定發生——skip_if_out 的人物先退場了就跳過（timetable.resolve）。件數照時刻表。"""
+    skips = sum(e.skip_if_out is not None for e in on.timetable)
+    assert skips and f"有 {skips} 件要看那位人物還在不在：他先退場了，那件就不發生。" in howto.board_help(on)
+    for e in on.timetable:
+        e.skip_if_out = None
+    assert not any("退場" in line for line in howto.board_help(on))
+
+
+def test_orders_push_only_when_the_quota_is_met(on):
+    """審查 Minor 5：一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推一把（orders.credit）。"""
+    line = howto.fronts_help(_war(on).state, on)[1]
+    assert "做軍令，會" not in line and "軍令湊滿額度" in line
 
 
 def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
@@ -97,8 +122,10 @@ def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules
     kinds = [e.kind for e in on.timetable]
     locks = {c.event for c in on.foreshadows.chains if c.side in ("guan", "huang")}
     bars = {v for e in on.scenario.endings if e.season_one for v in (*e.stance_min.values(), *(100 - x for x in e.stance_max.values()))}
+    roll, fronted = _rolls(on)
+    skips = sum(e.skip_if_out is not None for e in on.timetable)
     allowed = {"0", "100", "33", "67", "9", str(len(kinds)), str(len(locks)), *(str(kinds.count(k)) for k in ("fixed", "roll", "showdown")),
-               *(str(b) for b in bars)}
+               str(fronted), str(roll - fronted), str(skips), *(str(b) for b in bars)}
     help_ = game.status_data()["war_help"]
     section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
     for text in [*(line for lines in help_.values() for line in lines), section]:
@@ -109,9 +136,10 @@ def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules
 def test_the_rewritable_events_are_the_ones_guan_and_huang_chains_point_at(on):
     """關鍵伏筆改寫得了的大事：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果）；伏筆拿掉就不提。"""
     events = {c.event for c in on.foreshadows.chains if c.side in ("guan", "huang")}
-    assert f"其中 {len(events)} 件可以被關鍵伏筆改寫" in howto.board_help(on)[1]
+    assert f"其中 {len(events)} 件可以被關鍵伏筆改寫" in howto.board_help(on)[-1]
+    lines = len(howto.board_help(on))
     on.foreshadows.chains = [c for c in on.foreshadows.chains if c.side == "haoqiang"]
-    assert len(howto.board_help(on)) == 1 and "伏筆改寫" not in "".join(howto.board_help(on))
+    assert len(howto.board_help(on)) == lines - 1 and "伏筆改寫" not in "".join(howto.board_help(on))
 
 
 # ── 二、玩法說明多五節、新手期的入口、心得提示 ─────────────────────────────
@@ -373,6 +401,13 @@ def _feeling(game, methods=METHODS, prologue=False, seed=0):
     return scene
 
 
+def insights_pool(game):
+    """這一處悟得到的意境的屬性（判斷做法對錯的那一份）。"""
+    from tianxia import insights
+
+    return insights.pool_attributes(game.content.locations[game.state.player.location], game.content)
+
+
 def _card(game):
     ids = [o.id for o in game.options(odds=False)]
     return game.scene_text(), game.method_help(ids), [(o.id, o.label) for o in game.options(odds=False)]
@@ -385,6 +420,8 @@ def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
     text, help_, _ = _card(game)
     assert "**有所感・湖光**（湖畔）" in text  # 地形寫在標題同一行
     assert help_["lines"] == [sensing.FRAMING.format(kinds="剛、柔、快、慢"), sensing.INSIGHT_LINE]
+    # 審查 Minor 5：一處悟得到兩種（湖邊：水、風）的時候，對的做法有兩個：不能說「那一種」
+    assert len(insights_pool(game)) == 2 and "那一種" not in sensing.FRAMING and "合得上的" in sensing.FRAMING
     assert "意境" in help_["lines"][1] and "合成" in help_["lines"][1] and "修練" in help_["lines"][1]
     # 審查 I1：每個做法不標心意（輿圖「這裡能悟」加上鈕上的心意，卡就成了查表）；鈕上照舊 1～4，卡上的字也不寫哪一個做法是哪一種
     assert "tags" not in help_

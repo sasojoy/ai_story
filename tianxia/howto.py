@@ -219,7 +219,9 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     return [
         f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局（條上淺色那一段），{hao}趁機割據。{now}",
-        f"在戰線上遊歷打贏、操練、做軍令，會把那條戰線往你陣營那一邊推；散人照那個地方本來的方向，{hao}只在亂局裡推割據。",
+        # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
+        f"在戰線上遊歷打贏、操練，會把那條戰線往你陣營那一邊推，軍令湊滿額度時整個陣營再推一把；散人照那個地方本來的方向，"
+        f"{hao}只在亂局裡推割據。",
     ]
 
 
@@ -231,19 +233,29 @@ def _lockable(content: Content) -> int:
 
 def board_help(content: Content) -> list[str]:
     """大事小標點開的說明：時刻表的大事怎麼定（timetable.resolve：給了結果照它→有人鎖定照鎖定→固定的照寫好的→其餘照戰況擲骰；
-    擲骰的機率照 roll_chance，戰況給的先夾在 CHANCE_FLOOR～CHANCE_CEIL，軍令與一般伏筆的修正另加）。件數讀時刻表。"""
+    擲骰的機率照 roll_chance：有戰線的照戰況、先夾在 CHANCE_FLOOR～CHANCE_CEIL，沒有戰線的照它自己的 base_chance；軍令與一般伏筆的
+    修正另加）。skip_if_out 的人物先退場了那件就跳過（resolve）。件數讀時刻表。"""
     kinds = [e.kind for e in content.timetable]
     fixed, roll, showdown = (kinds.count(k) for k in ("fixed", "roll", "showdown"))
+    fronted = sum(e.kind == "roll" and e.front is not None for e in content.timetable)
     parts = []
     if fixed:
-        parts.append(f"{fixed} 件史書寫定，到時候就發生")
+        parts.append(f"{fixed} 件史書寫定，到時候照寫好的揭曉")
     if roll:
-        parts.append(f"{roll} 件看戰況擲骰：那條戰線越偏向哪一邊，那一邊越容易成（戰況最多給到{_tenths(timetable.CHANCE_CEIL)}、"
-                     f"最少也有{_tenths(timetable.CHANCE_FLOOR)}），軍令與伏筆還能再推一點")
+        how = []
+        if fronted:
+            how.append(f"{fronted} 件看戰況：那條戰線越偏向哪一邊，那一邊越容易成，戰況最多給到{_tenths(timetable.CHANCE_CEIL)}、"
+                       f"最少也有{_tenths(timetable.CHANCE_FLOOR)}")
+        if roll - fronted:
+            how.append(f"{roll - fronted} 件不在戰線上，各有各的機會")  # 例：盧植下獄（審查 Minor 5）
+        parts.append(f"{roll} 件擲骰（{'；'.join(how)}），軍令與伏筆還能再推一點")
     if showdown:
         parts.append(f"{showdown} 場決戰由上陣的人在戰場上打出來")
     finale = "；最後是季末收場" if "finale" in kinds else ""
     lines = [f"這一季有 {len(kinds)} 件大事，照時刻表一件件揭曉：{'；'.join(parts)}{finale}。"]
+    skips = sum(e.skip_if_out is not None for e in content.timetable)
+    if skips:  # 寫好的、擲骰的都可能：那位人物先退場（重創、被打敗）就不公告、不套效果（審查 Minor 5）
+        lines.append(f"有 {skips} 件要看那位人物還在不在：他先退場了，那件就不發生。")
     locks = _lockable(content)
     if locks:
         lines.append(f"其中 {locks} 件可以被關鍵伏筆改寫：有人暗中做成了最後一步，那件大事就照他那一邊揭曉，揭曉之前誰也看不出來。")
