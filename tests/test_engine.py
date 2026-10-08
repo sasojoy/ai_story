@@ -5375,8 +5375,8 @@ def test_the_road_sight_cap_counts_the_day_of_the_arrival(content, game):
     p = game.state.player
     p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉（心得 +1）
     game.advance(rules.day_ends(content, game.state.world) - 300 - game.state.world.time)  # 換日前五分鐘
-    game.choose("move:lake")  # 走三分鐘，23:58 抵達
-    game.advance(600)  # 第 2 天 00:05 才補算
+    game.choose("move:lake")  # 走三分鐘，換日前兩分鐘抵達
+    game.advance(600)  # 換日之後五分鐘才補算
     assert p.road_rewards_today == {"sight": [1, 1]}
 
 

@@ -1400,7 +1400,7 @@ class Game:
         return self._log(msgs)
 
     def _sense_apply(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None) -> list[str]:
-        """畫完（或順其自然）之後真的悟：sensing.finish 改狀態；悟成就在這一處留一筆痕跡（一人一天只算一次）、序章那一段加旗標、
+        """畫完（或順其自然）之後真的悟：sensing.finish 改狀態；悟成就在這一處留一筆痕跡（一人一個遊戲日只算一次）、序章那一段加旗標、
         記新手引導；悟到自己的新意境而且名字是模型取的，記全服的首悟紀錄（0.2b 第 5 點：第一個在這裡這樣悟到的人）。
         名字走退路字表的不記：伺服器假人不叫模型，記了就會露出「首悟者的名字都是字表風格」（同 2026-10-05 合成首創的決定）。"""
         s, c = self.state, self.content

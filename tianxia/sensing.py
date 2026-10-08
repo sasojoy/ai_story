@@ -27,7 +27,7 @@ from .rules import day_ends_text, game_day
 from .state import GameState, Sensing
 from .world_state import WorldStateStore
 
-MARK = "悟"  # 地方痕跡的名字：「地點 id:悟」，這一處悟成過幾個人（rules.add_marks，一人一天只算一次）
+MARK = "悟"  # 地方痕跡的名字：「地點 id:悟」，這一處悟成過幾個人（rules.add_marks，一人一個遊戲日只算一次）
 DRAW = "sense:draw"  # 感悟狀態的「畫下來」：按下去只叫出畫布，真正送出走 request／finish
 LET_GO = "sense:let"  # 「順其自然」：不畫了，落回做法那個基本意境
 PREFIX = "sense:"
