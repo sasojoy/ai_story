@@ -140,8 +140,9 @@ if (input.measure) {
 page.querySelectorAll = q;
 if (now) now.querySelector = (s) => (s === ".tx-now" ? body : null);
 if (scene) {
+  // 「收起戰場」那一行（FB-120）：只能觀戰的人自己攤開了開打中的戰場（L.battleShut）
   scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead
-    : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : null);
+    : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null) : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
 const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
