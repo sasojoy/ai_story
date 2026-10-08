@@ -25,7 +25,7 @@ from conftest import FixedRandom, real_content
 from tianxia import bot
 from tianxia.engine import FREE_TEXT_OPTION, Game
 from tianxia.team import WIN_TIERS
-from tianxia.models import Check, Choice, Condition, Content, Effect, Event, FreeTextChoice
+from tianxia.models import Check, Choice, Condition, Content, Effect, Event, FreeTextChoice, Squad
 
 # 效果（檢定成功、打贏）也扣銀兩、但照規矩不擋的選項：（事件 id, 選項序號）→（價錢, 理由）。這幾則照舊夾在 0。
 # 「選了就一定付」的選項不該出現在這裡：要嘛擋，要嘛由企劃者裁決之後寫上理由。
@@ -137,32 +137,74 @@ def test_a_gated_scene_never_loses_all_its_options(real):
         assert any(ch.condition == Condition() for ch in real.events[eid].choices), eid
 
 
-def test_a_player_short_of_the_price_does_not_see_it(real):
-    """每一個擋好的選項：差一兩就不出現、從舊的選單硬按也被拒絕（什麼都沒扣）；錢剛好夠就出現，付完剛好歸零。
+def _price_problems(game: Game, content: Content, eid: str, i: int, price: int) -> list[str]:
+    """一個擋好的選項：差一兩就不出現、從舊的選單硬按也被拒絕（什麼都沒扣）；錢剛好夠就出現，付完剛好歸零。
     成功（打贏）才付錢的檢定、仗也擋得（審查 Minor 1：白名單上那幾則哪天改成擋的）：檢定照必成擲（失手不付這筆錢）；
-    仗的勝負照真的打，打贏才看付完是不是歸零。"""
-    game = _game(real)
+    仗用最好的運氣打（FixedRandom 0.999：運氣擲到頂），打贏才量（審查 M3：看這一場的戰報 battles[0].tier；江湖紀錄的標記是
+    「大勝官軍巡騎」這種、從來不是單獨的「大勝」）。打贏另有對手給的銀兩（戰報的 silver），付完剩下的要剛好是它；
+    打不贏（強敵）量不到，不算（輸了扣的是懲罰，不是這個價錢）。"""
+    option = f"choice:{i}"
+    choice = content.events[eid].choices[i]
     problems = []
-    for eid, i, price in gated(real):
-        option = f"choice:{i}"
-        choice = real.events[eid].choices[i]
-        if option in _scene(game, eid, price - 1):
-            problems.append(f"{eid} {option}：差一兩還看得到")
-        if game.choose(option) != ["（此刻無法這麼做。）"] or game.state.player.stats["silver"] != price - 1:
-            problems.append(f"{eid} {option}：差一兩硬按沒被拒絕")
-        if game.state.pending_event != eid:
-            problems.append(f"{eid} {option}：被拒絕之後事件不見了")
-        if option not in _scene(game, eid, price):
-            problems.append(f"{eid} {option}：錢剛好夠卻看不到")
-        rng, game.rng = game.rng, FixedRandom(0.0) if choice.check is not None else game.rng  # 檢定必成：成功才付的那筆一定付
-        try:
-            game.choose(option)
-        finally:
-            game.rng = rng
-        won = choice.combat is None or (game.state.journal and game.state.journal[0].tag in WIN_TIERS)
-        if won and game.state.player.stats["silver"] != 0:
-            problems.append(f"{eid} {option}：付了 {price} 兩之後剩 {game.state.player.stats['silver']}")
+    if option in _scene(game, eid, price - 1):
+        problems.append(f"{eid} {option}：差一兩還看得到")
+    if game.choose(option) != ["（此刻無法這麼做。）"] or game.state.player.stats["silver"] != price - 1:
+        problems.append(f"{eid} {option}：差一兩硬按沒被拒絕")
+    if game.state.pending_event != eid:
+        problems.append(f"{eid} {option}：被拒絕之後事件不見了")
+    if option not in _scene(game, eid, price):
+        problems.append(f"{eid} {option}：錢剛好夠卻看不到")
+    roll = FixedRandom(0.0) if choice.check is not None else FixedRandom(0.999) if choice.combat is not None else game.rng
+    rng, game.rng = game.rng, roll  # 檢定必成、仗運氣最好：成功（打贏）才付的那筆一定付
+    try:
+        game.choose(option)
+    finally:
+        game.rng = rng
+    left, kept, note = game.state.player.stats["silver"], 0, ""
+    if choice.combat is not None:
+        record = game.state.battles[0]
+        if record.tier not in WIN_TIERS:
+            return problems
+        kept, note = record.silver, f"（打贏另得 {record.silver} 兩）"
+    if left != kept:
+        problems.append(f"{eid} {option}：付了 {price} 兩之後剩 {left}{note}")
+    return problems
+
+
+def test_a_player_short_of_the_price_does_not_see_it(real):
+    """真實內容裡每一個擋好的選項都照 _price_problems 驗一次。"""
+    game = _game(real)
+    problems = [line for eid, i, price in gated(real) for line in _price_problems(game, real, eid, i, price)]
     assert not problems, "\n".join(problems)
+
+
+def _gated_fight(real: Content, cost: int, gate: int) -> None:
+    """一則只由串接出現的事件：打一支很弱、打贏還給 5 兩的隊伍，打贏付 cost 兩；條件擋 gate 兩。"""
+    real.squads["fx_weak"] = Squad(id="fx_weak", name="地痞", difficulty=1, reward_silver=5)
+    real.events["fx_fight"] = Event(
+        id="fx_fight", title="攔路", text="地痞攔路。", actions=[],
+        choices=[
+            Choice(text="打過去，再賠他藥錢", combat="fx_weak", condition=Condition(min_stats={"silver": gate}),
+                   effect=Effect(text="你打贏了，賠了他藥錢。", stats={"silver": -cost}), fail_effect=Effect(text="你打輸了。")),
+            Choice(text="走開"),
+        ],
+    )
+
+
+def test_a_gated_fight_is_checked_after_a_win(real):
+    """審查 M3：仗那一支真的量得到東西。打贏一支給 5 兩的隊伍、付 6 兩：剛好剩對手給的 5 兩，不算問題。"""
+    _gated_fight(real, cost=6, gate=6)
+    game = _game(real)
+    assert _price_problems(game, real, "fx_fight", 0, 6) == []
+    assert game.state.battles[0].tier in WIN_TIERS and game.state.player.stats["silver"] == 5
+
+
+def test_the_fight_check_notices_a_price_that_was_not_paid(real):
+    """價錢對不上（條件擋 6 兩、打贏其實只付 4 兩）：打贏之後剩的不是對手給的那 5 兩，紅。"""
+    _gated_fight(real, cost=4, gate=6)
+    game = _game(real)
+    problems = _price_problems(game, real, "fx_fight", 0, 6)
+    assert problems == ["fx_fight choice:0：付了 6 兩之後剩 7（打贏另得 5 兩）"]
 
 
 def test_a_broke_bot_always_has_something_to_press(real):
