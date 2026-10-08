@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 from . import calendar, rules, timetable
 from .models import Content
-from .rules import _STANCE_NAMES as STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
+from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
 
 # 探索三選一的三支（models.EXPLORE_BRANCHES）在說明裡怎麼叫
@@ -176,9 +176,7 @@ def gift_line(content: Content) -> str:
 # 這裡寫的只有規則的門檻與此刻的狀態。
 
 
-def _count(n: int) -> str:
-    """幾條：十以內寫國字（跟態勢卡底下「三條戰線合計」同一種寫法），再多寫數字。"""
-    return rules._COUNT_WORDS[n] if 0 <= n < len(rules._COUNT_WORDS) else str(n)
+_count = rules.count_word  # 幾條：十以內寫國字（跟態勢卡底下「三條戰線合計」同一種寫法），再多寫數字
 
 
 def _band(content: Content) -> str:
@@ -199,26 +197,41 @@ def season_line(content: Content) -> str:
             f"{hao}趁亂割據。")
 
 
-def stance_help(content: Content) -> list[str]:
-    """態勢小標點開的說明：這一季在打什麼、三方的態勢怎麼算、割據怎麼漲落（rules.stances、geju_per_day）。
-    此刻漲還是落，面板上本來就有一句（status.stance_notes 的 chaos_note），這裡只寫規則。"""
-    n = len(rules.front_ids(content))
+# 亂局帶與割據的規則各只寫一次（審查 Minor 7）：態勢、戰況圖卡、玩法說明「這一季在打什麼」都拿這兩句，改一處三處一起變
+
+
+def front_rule(content: Content, card: bool = True) -> str:
+    """戰線的兩端與亂局帶（rules.in_chaos：chaos_low～chaos_high，含兩端）。card：在戰況圖卡上說（指著條上淺色那一段）。"""
     guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
-    return [
-        season_line(content),
-        f"{guan}、{huang}的態勢是{_count(n)}條戰線合起來的；{hao}的態勢是割據：有戰線在亂局（戰況 {_band(content)}）就漸長，"
-        f"投靠陣營的人越多長得越快，{_count(n)}條都穩下來就漸消。",
-    ]
+    shade = "（條上淺色那一段）" if card else ""
+    return f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局{shade}，{hao}趁機割據。"
+
+
+def geju_rule(content: Content) -> str:
+    """三方的態勢怎麼算（rules.stances）與割據怎麼漲落（rules.geju_per_day：有戰線在亂局就漲、乘投靠人數的係數，一條都沒有就落）。
+    漲、落的速度設成 0 時照實說不動；此刻漲還是落，態勢面板上本來就有一句（status.stance_notes 的 chaos_note），這裡只寫規則。"""
+    cfg = content.config
+    n = _count(len(rules.front_ids(content)))
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    rise = "就漸長，投靠陣營的人越多長得越快" if cfg.geju_chaos_per_day > 0 else "也不漲"
+    calm = "就漸消" if cfg.geju_calm_per_day > 0 else "就停住"
+    return (f"{guan}、{huang}的態勢是{n}條戰線合起來的；{hao}的態勢是割據：有戰線在亂局（戰況 {_band(content)}）{rise}，"
+            f"{n}條都穩下來{calm}。")
+
+
+def stance_help(content: Content) -> list[str]:
+    """態勢小標點開的說明：這一季在打什麼、三方的態勢怎麼算、割據怎麼漲落。"""
+    return [season_line(content), geju_rule(content)]
 
 
 def fronts_help(state: GameState, content: Content) -> list[str]:
     """戰況圖卡點開的說明：兩端、亂局帶、此刻哪幾條在亂局（rules.chaos_fronts）、玩家怎麼推（Game.train_trend_push：
     官軍、黃巾往自己那一邊，散人照地方本來的方向，豪強只在亂局裡推割據；軍令達成時整個陣營推一把）。"""
-    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    hao = STANCE_NAMES["haoqiang"]
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     return [
-        f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局（條上淺色那一段），{hao}趁機割據。{now}",
+        front_rule(content) + now,
         # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         f"在戰線上遊歷打贏、操練，會把那條戰線往你陣營那一邊推，軍令湊滿額度時整個陣營再推一把；散人照那個地方本來的方向，"
         f"{hao}只在亂局裡推割據。",
@@ -426,14 +439,7 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     rules.stance_rule_note，呼叫端照這一季算好）。第一季才有。"""
     if not calendar.season_one_on(season, content):
         return []
-    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
-    n = len(rules.front_ids(content))
-    lines = [
-        season_line(content),
-        f"每條戰線 0 是{guan}穩控、100 是{huang}控制，戰況落在 {_band(content)} 是亂局；{guan}、{huang}的態勢是{_count(n)}條戰線合起來的，"
-        f"{hao}的態勢是割據：有戰線在亂局就漸長，{_count(n)}條都穩下來就漸消。",
-        *board_help(content),
-    ]
+    lines = [season_line(content), front_rule(content, card=False), geju_rule(content), *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
     lines += quest_help(content)

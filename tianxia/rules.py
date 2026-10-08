@@ -562,10 +562,14 @@ def chaos_note(state: GameState, content: Content, players: int | None = None) -
 _COUNT_WORDS = "零一二三四五六七八九十"
 
 
+def count_word(n: int) -> str:
+    """幾條、幾件寫給玩家看：十以內寫國字（「三條戰線」），再多寫數字。態勢卡與玩法說明（howto）共用這一個寫法。"""
+    return _COUNT_WORDS[n] if 0 <= n < len(_COUNT_WORDS) else str(n)
+
+
 def stance_sum_note(content: Content) -> str:
     """官軍、黃巾的態勢是幾條戰況合起來的（FB-065；權重不印）：「三條戰線合計」。"""
-    count = len(front_ids(content))
-    return f"{_COUNT_WORDS[count] if count < len(_COUNT_WORDS) else count}條戰線合計"
+    return f"{count_word(len(front_ids(content)))}條戰線合計"
 
 
 def stances(state: GameState, content: Content) -> dict[str, int]:
@@ -575,7 +579,8 @@ def stances(state: GameState, content: Content) -> dict[str, int]:
 
 
 _STANCE_SIDES = ("guan", "huang", "haoqiang")
-_STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}  # 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）
+# 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）；玩法說明（howto）照它寫，跟卡上同一個叫法
+STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
 _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
 
 
@@ -611,7 +616,7 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     elif set(reach) == set(_STANCE_SIDES) and len(set(reach.values())) == 1:
         rule = f"哪一方的態勢一到 {min(reach.values())}，{ending}"
     else:
-        rule = "、".join(f"{_STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach) + f"，{ending}"
+        rule = "、".join(f"{STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach) + f"，{ending}"
     week = calendar.point(state.world.time, content, state.world).week
     start = content.config.decisive_from_week
     return f"第 {start} 週起，{rule}" if week < start else rule

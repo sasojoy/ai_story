@@ -114,6 +114,26 @@ def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
     assert "最多給到八成、最少也有二成" in howto.board_help(on)[0]
 
 
+def test_the_chaos_and_geju_rule_is_written_once(on):
+    """審查 Minor 7：亂局帶與割據的規則只寫一次（howto.front_rule、howto.geju_rule），態勢、戰況圖卡、玩法說明都拿它；
+    割據回落的速度設成 0，三處一起不再說「漸消」。"""
+    game = _war(on)
+    geju, front = howto.geju_rule(on), howto.front_rule(on, card=False)
+    help_ = game.status_data()["war_help"]
+    section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
+    assert geju in help_["stance"] and f"- {geju}" in section and f"- {front}" in section
+    assert help_["fronts"][0].startswith(howto.front_rule(on, card=True))
+    on.config.geju_calm_per_day = 0
+    texts = [howto.geju_rule(on), *game.status_data()["war_help"]["stance"], game.howto_text()]
+    assert all("漸消" not in t for t in texts) and "停住" in howto.geju_rule(on)
+
+
+def test_howto_reads_only_public_names_from_rules():
+    """審查 Minor 7：howto 不拿 rules 的私有名字（_STANCE_NAMES、_COUNT_WORDS）。"""
+    source = (ROOT / "tianxia" / "howto.py").read_text(encoding="utf-8")
+    assert not re.search(r"rules\._[A-Za-z]|from \.rules import _", source)
+
+
 def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules(on):
     """審查 Minor 3（照 explain-1 的 numbers <= allowed）：戰況、態勢、大事、主線的說明與玩法說明「這一季在打什麼」那一節，
     每一個阿拉伯數字都要是設定、時刻表、伏筆鏈、結局算出來的數（設定換成不常見的值，句子裡不能寫死別的數）。"""
