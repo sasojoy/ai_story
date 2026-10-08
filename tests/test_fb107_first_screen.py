@@ -427,11 +427,15 @@ def _guide(script, scene="", **extra):
 @node
 def test_a_step_box_starts_folded_during_a_muster_and_full_otherwise():
     """企劃者 2026-10-08：決戰集結時，入伍、步驟的框（今天整段或分頁攤開的）預設收成一行，點了攤開——同在路上（FB-055）。
-    沒有集結照舊攤開；序章裡師父的框不收；「知道了」那種碰到才說的框不收（裁示見交接報告：量過的情形用不到）。"""
+    「知道了」那種碰到才說的框也收（裁示：控制者量的潁水河畔＋內傷框＋別處集結 762～784，這一輪收集結那一句之後估 745～767，還是
+    放不下）。沒有集結照舊攤開；序章裡師父的框不收；在路上「知道了」的框照舊攤開（路上另有排法）。"""
     out = _guide("return [kind(step), kind(ack)];", MUSTER_SCENE.format("12 分 5"))
-    assert out == ["line", "card"]
-    assert _guide("return kind(step);") == "card"
-    assert _guide("return kind(step);", MUSTER_SCENE.format("12 分 5"), pro={"reveal": []}) == "card"
+    assert out == ["line", "line"]
+    assert _guide("return [kind(step), kind(ack)];") == ["card", "card"]
+    assert _guide("return [kind(step), kind(ack)];", MUSTER_SCENE.format("12 分 5"), pro={"reveal": []}) == ["card", "card"]
+    assert _guide("return kind(ack, true);", MUSTER_SCENE.format("12 分 5")) == "card"
+    opened = "H.openGuide(ack); const a = kind(ack); S.main = { scene: S.main.scene.replace('12 分 5', '11 分 55') }; return [a, kind(ack)];"
+    assert _guide(opened, MUSTER_SCENE.format("12 分 5")) == ["card", "card"]  # 點開了：倒數變了也不收
     joined = MUSTER_SCENE.format("1 分 5").replace("集結中，還剩現實 1 分 5 秒。選擇陣營加入；集結期間照常行動。", "你已加入【官軍】，集結還剩現實 1 分 5 秒。集結結束就開打，在那之前照常行動。")
     assert _guide("return kind(step);", joined) == "line"  # 加入了、還在集結：照樣收著
 
