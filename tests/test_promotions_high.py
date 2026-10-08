@@ -1992,3 +1992,55 @@ def test_every_give_option_is_gated_by_its_own_price(on):
         price = -ch.effect.stats["silver"]
         assert price == 50, eid
         assert ch.condition is not None and ch.condition.min_stats == {"silver": price}, eid
+
+
+# ── fix-1008 項目一（PM 2026-10-08）：「塞錢給黃門，請他快些。」銀兩不夠 20 時不出現 ─────────────────
+# 洛陽宮城那一段（promo_guan_3_palace）的第三個選項花 20 兩；原本銀兩不夠也按得下去（apply_effect 把銀兩夾在 0，少付了照樣晉升）。
+# 照 E5.1「給他。」的做法只加條件（min_stats），選項與結果的字是 joy 的、不動。另外兩個選項（照規矩交給黃門、請大將軍代呈）沒有條件，
+# 畫面上至少還有兩個。
+
+BRIBE = "「塞錢給黃門，請他快些。」"
+PALACE = "promo_guan_3_palace"
+
+
+def _palace_scene(on, silver):
+    game = _game(on, faction="guan", at="luoyang_palace", rank=2)
+    game.state.player.stats["silver"] = silver
+    game.state.player.affinities["luzhi"] = 30
+    game.state.pending_event = PALACE
+    return game
+
+
+def _bribe(on):
+    [(index, choice)] = [(i, ch) for i, ch in enumerate(on.events[PALACE].choices) if ch.text == BRIBE]
+    return index, choice
+
+
+def test_the_palace_bribe_needs_its_price_in_silver(on):
+    index, choice = _bribe(on)
+    price = -choice.effect.stats["silver"]
+    poor = _palace_scene(on, price - 1)
+    assert not any(label.startswith(BRIBE) for label in _labels(poor))
+    others = {f"choice:{i}" for i in range(len(on.events[PALACE].choices)) if i != index}
+    assert len(others) >= 1 and others <= {o.id for o in poor.options(odds=False)}  # 另外的選項照舊在、id 不變
+    assert poor.choose(f"choice:{index}") == ["（此刻無法這麼做。）"]  # 舊的選單硬按：被拒絕，什麼都沒扣、沒升
+    p = poor.state.player
+    assert (p.stats["silver"], p.rank, p.affinities["luzhi"], poor.state.pending_event) == (price - 1, 2, 30, PALACE)
+    rich = _palace_scene(on, price)
+    assert any(label.startswith(BRIBE) for label in _labels(rich))
+    msgs = rich.choose(f"choice:{index}")
+    q = rich.state.player
+    assert (q.stats["silver"], q.rank, q.affinities["luzhi"]) == (0, 3, 20) and "你升為軍司馬。" in msgs
+
+
+def test_the_palace_bribe_is_gated_by_its_own_price(on):
+    """條件跟價錢是同一個數（effect.stats.silver）：只改其中一邊，這裡就紅。"""
+    _, choice = _bribe(on)
+    price = -choice.effect.stats["silver"]
+    assert price == 20
+    assert choice.condition.min_stats == {"silver": price}
+
+
+def test_the_palace_scene_never_loses_all_its_options(on):
+    """沒有錢的人照樣有路可走：沒有條件的選項至少一個。"""
+    assert any(ch.condition == type(ch.condition)() for ch in on.events[PALACE].choices if ch.text != BRIBE)
