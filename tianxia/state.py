@@ -384,9 +384,11 @@ class Echo(BaseModel):
     （paid 記補到第幾個人），合的那一下不去動別人的角色。"""
 
     creator: str  # 首創者的名號（身分）
+    co_creator: str | None = None  # 論武合出來的：另一個首創者（名望一樣補給他，補到第幾個人記在 co_paid）
     name: str  # 寫給首創者看的名字，連括號（武學【】、意境「」），合出來那一刻的顯示名字
     followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
     paid: int = 0  # 已經補給首創者的人數
+    co_paid: int = 0  # 已經補給 co_creator 的人數
 
 
 class WorldState(BaseModel):

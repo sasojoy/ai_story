@@ -56,6 +56,9 @@ class CardAction:
     buttons: Callable[[Game, Game], list[CardButton]]
     run: Callable[[Game, Game, dict], list[str]]
     order: int = 100  # 卡上由上而下的順序（小的在前）
+    # 按下去之前要不要先請模型（論武的首創取名）：回 naming.NamingRequest 就由伺服器在行動鎖外取名（三段式的 A 段，只讀），
+    # 取好的（名字, 說明）放進 params["proposed"] 再交給 run；不給或回 None 照常直接 run
+    request: Callable[[Game, Game, dict], object] | None = None
 
 
 ACTIONS: dict[str, CardAction] = {}
