@@ -5145,7 +5145,6 @@ class Game:
         me.stamina -= cfg.stamina
         s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
         s.world.raided[name_key(them.name)] = s.world.time
-        self._save_season()
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(ours, theirs, self.rng)
         mirrored = self._spar_mirror(result, theirs)
@@ -5161,6 +5160,9 @@ class Game:
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
         if winner is self:
             msgs += self._raid_bounty(them.name)
+        # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
+        # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
+        self._save_season()
         return msgs
 
     def post_wanted(self, other: Game, amount: int) -> list[str]:
