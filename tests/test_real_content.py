@@ -613,6 +613,7 @@ def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
 #   h_cap（師父）：原文「最多五十樣」，上限其實是 50 起跳、隨等級與博聞往上加 → 「有個上限」
 #   h_showdown（老石、青禾）：原文「穩守、猛攻」，現在的招是強攻、固守、奇襲（決戰改版一）
 #   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強是第三方、可以下場（趁亂搶地盤、保存實力，決戰改版五）
+#   h_showdown（三個陣營）：FB-105 多一句「集結的時候先按戰場名字旁的『加入』」（以前沒說按哪裡，加入收在摺疊裡）
 # 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
 # explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tests/test_explain.py 管（數字照設定、風聲只在第一季說）
@@ -668,6 +669,9 @@ def test_the_lines_that_followed_the_game_say_what_the_game_does(content):
         assert "穩守" not in showdown[faction] and "猛攻" not in showdown[faction]
         assert all(move in showdown[faction] for move in ("強攻", "固守", "奇襲")) and "放手一搏" in showdown[faction]
     assert "不下場" not in showdown["haoqiang"]
+    # FB-105：集結時要先按加入（網頁畫在場景卡戰場名字旁，web/app.js 的 musterScene）；三個陣營的那一則都說在哪按（待 joy 潤）
+    for faction in ("guan", "huang", "haoqiang"):
+        assert "戰場名字旁的『加入』" in showdown[faction], faction
     third = next(b.third for b in content.battles.values() if b.third is not None)
     assert third.grab in showdown["haoqiang"] and third.keep in showdown["haoqiang"]  # 豪強兩招的名字照決戰的設定
     assert all(_hint_cells(content).get(key) for key in PLACEHOLDER_LINES)  # 標成待潤的四句真的在書裡（上一版這裡拿它跟自己的字面比，永遠成立）

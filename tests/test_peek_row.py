@@ -40,9 +40,10 @@ const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false,
 const parts = [
   // pro、shown：序章（新手引導計畫一）把小標一塊一塊藏起來要看的；這裡的 m 沒有 prologue，所以全亮
   ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
-    "peekSeason", "peekParts", "peekBlock"].map(konst),
+    "peekSeason", "peekParts", "peekBlock", "optParts", "MUSTER_JOIN"].map(konst),
+  // musterJoins、musterScene：決戰集結時還沒參戰的加入鈕畫在場景卡上（FB-105）；pageJianghu 用它們排場景卡與選項
   ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek",
-    "peekHtml", "peekTap", "pageJianghu"].map(fn),
+    "peekHtml", "peekTap", "musterJoins", "musterScene", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
   `const splitChips = (html) => [html, ""], nowMore = () => "展開全文", followsMode = (id) => id.startsWith("move:");
    const fightCard = () => '<div class="fight-card"></div>', actionBar = () => '<div class="actbar"></div>';
