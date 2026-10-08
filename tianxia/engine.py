@@ -18,9 +18,10 @@ from pydantic import BaseModel
 
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, howto, insights, journal, library, martial_arts, materials, naming, opportunities,
-    orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
+    figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts, materials, naming,
+    opportunities, orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
 )
+from . import spar as _spar  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -201,6 +202,8 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
+        self.touched: set[str] = set()
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
@@ -845,6 +848,7 @@ class Game:
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
+        opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
@@ -1278,6 +1282,8 @@ class Game:
                 msgs = self._foreshadow(arg)
             elif kind == "sense":
                 msgs = self._sense(arg)
+            elif kind == "invite":
+                msgs = self._invite(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1470,6 +1476,13 @@ class Game:
             return ROAD_TASKS[what][0]
         if kind == "opp":
             return opportunities.title(s, c, arg)
+        if kind == "invite":
+            inv = invites.find(s.world, arg.partition(":")[2])
+            if inv is None:
+                return "邀請"
+            verb = arg.partition(":")[0]
+            what = invites.kind_name(inv.kind)
+            return {"yes": f"{what}・{inv.sender}", "no": f"婉拒{what}", "cancel": "收回邀請"}[verb]
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
@@ -4523,6 +4536,186 @@ class Game:
         self._check_hints()  # 博聞加了持有上限會變（h_cap 的條件）：配成了之後看一遍（新手引導計畫三）
         return self._log([f"{name} +1{left}"])
 
+    # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
+    # 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
+    # 對方那一份照 social 的做法拿（_peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。收到的邀請也列在選單上
+    # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，bot_policy._answer_invite）。邀請存在這一季的 WorldState.invites。
+    # 「是假人」不影響任何一句話。
+
+    def _spar_problem(self, who: Game, *, me: bool) -> str | None:
+        """這個人此刻能不能切磋（拒絕的話；能是 None）：不在序章、閒著（選單上有打坐：不在事件、路上、閉關、打坐、決戰裡）、
+        體力付得起一次遊歷。me 是說話的人自己（「你」），不然寫對方的名號。"""
+        s, c = who.state, self.content
+        name = "你" if me else s.player.name
+        if prologue_rules.active(s, c):
+            return f"{name}還在草廬學藝，下山之後才能切磋。"
+        if "act:rest" not in {o.id for o in who.options(odds=False, tick=False)}:
+            return f"{name}此刻正忙，騰不出手來切磋。"
+        cost = c.config.action_cost["train"]
+        if s.player.stamina < cost:
+            return f"{name}體力不夠（切磋要 {cost} 點）。"
+        return None
+
+    def _spar_pair(self, other: str) -> str:
+        """同一對人的帳本鍵：兩個名號（不分大小寫）排序後接起來，誰發的都記在同一本。"""
+        return "|".join(sorted((name_key(self.state.player.name), name_key(other))))
+
+    def _spars_left(self, other: str) -> int:
+        """這一對人這個遊戲日還能切磋幾場（Spar.per_pair_day）。"""
+        day, count = self.state.world.spar_tally.get(self._spar_pair(other), (0, 0))
+        used = count if day == game_day(self.content, self.state.world) else 0
+        return max(0, self.content.config.spar.per_pair_day - used)
+
+    def spar_refusal(self, other: Game) -> str | None:
+        """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
+        之間沒有一張還在等的邀請。"""
+        s, c = self.state, self.content
+        if not season_one(c, s.world):
+            return "（此刻無法這麼做。）"
+        for who, me in ((self, True), (other, False)):
+            problem = self._spar_problem(who, me=me)
+            if problem is not None:
+                return problem
+        if self._spars_left(other.state.player.name) <= 0:
+            return f"你們今天已經切磋過 {c.config.spar.per_pair_day} 場了，改天再說。"
+        if invites.between(s.world, s.player.name, other.state.player.name, "spar") is not None:
+            return "已經有一張切磋的邀請在等回覆了。"
+        return None
+
+    def spar_invite(self, other: Game) -> list[str]:
+        """玩家卡上的「切磋」：向這個人發一張邀請，他在 invite_ttl_seconds 內答應才打。被拒絕只回一句話。"""
+        s = self.state
+        problem = self.spar_refusal(other)
+        if problem is not None:
+            return [problem]
+        name = other.state.player.name
+        invites.expire(s.world)
+        invites.send(s.world, self.content, "spar", s.player.name, name, s.player.location)
+        self._save_season()
+        self.touched.add(name)  # 他的選單、他看你的那張卡要多出答應、婉拒
+        return [f"你向{name}抱拳，邀他過幾招；等他回覆。"]
+
+    def _invite_options(self) -> list[Option]:
+        """閒著的時候：別人發給你、而且就在你這個地點的邀請（答應、婉拒），你發出去還在等的（收回）。逾時的不列。"""
+        s, c = self.state, self.content
+        p = s.player
+        opts: list[Option] = []
+        for inv in invites.incoming(s.world, p.name):
+            if inv.location != p.location:
+                continue
+            what = invites.kind_name(inv.kind)
+            opts.append(self._cost_option(f"invite:yes:{inv.id}", f"答應{inv.sender}的{what}", c.config.action_cost["train"]))
+            opts.append(Option(id=f"invite:no:{inv.id}", label=f"婉拒{inv.sender}的{what}"))
+        for inv in invites.outgoing(s.world, p.name):
+            opts.append(Option(id=f"invite:cancel:{inv.id}", label=f"收回給{inv.target}的{invites.kind_name(inv.kind)}邀請"))
+        return opts
+
+    def _invite(self, arg: str) -> list[str]:
+        """選單上的邀請選項：invite:yes|no|cancel:<編號>。對方那一份照玩家卡的做法拿（_peer），做完存回去。"""
+        verb, _, invite_id = arg.partition(":")
+        inv = invites.find(self.state.world, invite_id)
+        if inv is None:
+            return ["這份邀請已經不在了。"]
+        other = None if verb == "cancel" else self._peer(inv.sender)
+        msgs = self.answer_invite(inv, other, verb)
+        if other is not None:
+            CharacterStore(self.world.db).save(other.state)
+        return msgs
+
+    def answer_invite(self, inv, other: Game | None, verb: str) -> list[str]:
+        """答應（yes）、婉拒（no）、收回（cancel）一張邀請。other 是另一個人那一份（_peer；他不在這裡了是 None）；
+        呼叫端負責把 other 存回去（玩家卡走 peer_act，選單走 _invite）。"""
+        s = self.state
+        what = invites.kind_name(inv.kind)
+        invites.drop(s.world, inv.id)
+        self._save_season()
+        if verb == "cancel":
+            self.touched.add(inv.target)  # 他畫面上那兩顆答應、婉拒要拿掉
+            self._outcome("收回邀請", f"你收回了給{inv.target}的{what}邀請。")
+            return [f"你收回了給{inv.target}的{what}邀請。"]
+        if other is None:
+            return [social.GONE]
+        self.touched.add(other.state.player.name)
+        if verb == "no":
+            other._write(f"{s.player.name}婉拒了{what}", [f"{s.player.name}拱手婉拒了你的邀請。"])
+            self._outcome("婉拒", f"你婉拒了{inv.sender}的{what}。")
+            return [f"你婉拒了{inv.sender}的{what}。"]
+        return self._spar(inv, other)
+
+    def _spar(self, inv, other: Game) -> list[str]:
+        """答應一場切磋：重驗（還在發邀請的那個地點、兩個人都閒著、體力付得起、今天這一對還沒打滿），雙方各花一次遊歷的體力，
+        用本人的威力照單次判定打一場（從發邀請的那一方算，收的一方照鏡像），不扣氣血、不掉銀兩；雙方各一份戰報（回合演出不帶數字）
+        與一則江湖紀錄，經驗與心得照 Config.spar。驗不過就把邀請收掉（answer_invite 已經收了）、說一句為什麼。"""
+        c, cfg = self.content, self.content.config.spar
+        me, them = self.state.player, other.state.player
+        problem = None if inv.location == me.location else social.GONE
+        for who, mine in ((self, True), (other, False)):
+            problem = problem or self._spar_problem(who, me=mine)
+        if problem is None and self._spars_left(them.name) <= 0:
+            problem = f"你們今天已經切磋過 {cfg.per_pair_day} 場了，改天再說。"
+        if problem is not None:
+            return [problem]
+        cost = c.config.action_cost["train"]
+        me.stamina -= cost
+        them.stamina -= cost
+        day = game_day(c, self.state.world)
+        key = self._spar_pair(them.name)
+        last_day, count = self.state.world.spar_tally.get(key, (0, 0))
+        self.state.world.spar_tally[key] = [day, (count if last_day == day else 0) + 1]
+        self._save_season()
+        ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
+        result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
+        other._spar_record(result, me.name, ours, self)
+        return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other)
+
+    @staticmethod
+    def _spar_power(who: Game, against: Game) -> float:
+        """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。"""
+        s, c, w = who.state, who.content, who.world
+        members, conditions, boosts = team._fighters(s, c, w)
+        return encounter.member_power(
+            members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
+        )
+
+    @staticmethod
+    def _spar_mirror(result: encounter.EncounterResult, power: float) -> encounter.EncounterResult:
+        """從另一邊看同一場：他贏就是你輸，他輸了你贏（差距夠大算大勝，門檻照你自己的威力當難度），平手照舊平手。"""
+        if result.tier in team.WIN_TIERS:
+            tier = "落敗"
+        elif result.tier in team.DRAW_TIERS:
+            tier = result.tier
+        else:
+            big = dict(encounter.tier_thresholds(result.our_power))["大勝"]  # 你的難度是他的威力
+            tier = "大勝" if -result.margin >= big else "險勝"
+        return result.model_copy(update={"tier": tier, "margin": -result.margin, "our_power": power, "difficulty": result.our_power})
+
+    def _spar_record(self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game) -> list[str]:
+        """這一邊的戰報、獎勵與紀錄。對手寫成一支只為這一場存在的隊伍（名號、威力、身上那一門的屬性），戰報只列本人。"""
+        s, c, cfg = self.state, self.content, self.content.config.spar
+        p = s.player
+        squad = Squad(
+            id=f"spar:{rival}", name=rival, difficulty=rival_power,
+            attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
+        )
+        record = battlelog.new_record(s, c, self.world, squad, result, "spar")
+        record.ours = record.ours[:1]
+        xinde = cfg.win_xinde if result.tier in team.WIN_TIERS else cfg.draw_xinde if result.tier in team.DRAW_TIERS else cfg.lose_xinde
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+        record.xinde = xinde
+        before = p.member.level
+        ups = team.add_exp(c, p.member, cfg.exp, p.name)
+        if p.member.level > before:
+            p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
+            ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+        record.exp = cfg.exp
+        record.notes += ups
+        self._play_rounds(record, squad, result.tier, None)
+        line = self._file_battle(record)
+        msgs = [line, f"心得 +{xinde}"] + ups
+        if self._draft is None:  # 對方那一邊：不是他自己按的，替他記一則
+            self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record))
+        return msgs
+
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
@@ -5257,6 +5450,7 @@ class Game:
             return self._log(["（沒有這個動作。）"])
         msgs = handler.run(self, other, dict(params or {}))
         CharacterStore(self.world.db).save(other.state)
+        self.touched.add(other.state.player.name)  # 他開著的分頁也刷新（server._tell_tabs）
         return self._log(msgs)
 
     # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────
@@ -5564,7 +5758,25 @@ class Game:
             # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局與割據、大事怎麼定、你能怎麼出力。
             # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
             data["war_help"] = howto.war_help(s, c)
+            data["invites"] = self._invite_status()
         return data
+
+    def _invite_status(self) -> dict:
+        """玩家卡要的邀請（玩家互動第二層）：收到的（就在你這個地點的）與發出去還在等的，各一份；剩幾秒是現實秒。
+        答應、婉拒、收回照選單上的 id 送（invite:yes|no|cancel:<編號>，走 choose），發邀請走 /api/do/invite。"""
+        s, c = self.state, self.content
+        p = s.player
+
+        def row(inv, who: str) -> dict:
+            return {
+                "id": inv.id, "kind": inv.kind, "kind_name": invites.kind_name(inv.kind), "who": who,
+                "seconds_left": max(0, round((inv.expires_at - s.world.time) / c.config.time_scale)),
+            }
+
+        return {
+            "incoming": [row(i, i.sender) for i in invites.incoming(s.world, p.name) if i.location == p.location],
+            "outgoing": [row(i, i.target) for i in invites.outgoing(s.world, p.name)],
+        }
 
     def _calendar_status(self) -> dict:
         """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事：季曆時刻 at，加上倒數 in_seconds。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""
