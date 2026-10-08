@@ -37,8 +37,6 @@ TO_GATE: set[tuple[str, int]] = {
     ("yc_city_petition", 2), ("yc_wilds_toll", 3), ("yz_market_wrist", 2), ("yz_market_fushui", 2), ("yz_lou_sandals", 2),
     ("yz_juma_toll", 3), ("yz_juma_ironsand", 2),
     ("luoyang_beimang_search", 0),
-    ("mk_yingshui_bareshore", 2), ("mk_mengjin_ferrymen", 2), ("mk_yu_fishmarket", 2), ("mk_yu_tollhut", 3),
-    ("mk_nyroad_ambush", 3),
     ("sc_xy_wedding", 2), ("sc_xy_register", 2), ("sc_zhuo_wedding", 2), ("sc_rn_mourning", 2), ("sc_rnac_recommend", 2),
     ("sc_rnmk_measure", 2), ("sc_rnmk_wedding", 2), ("sc_qiao_liubo", 2),
     ("tale_yc_riverbank", 0), ("tale_wan_road", 0), ("tale_rnmk_ford", 0),
