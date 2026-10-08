@@ -183,6 +183,21 @@ def test_kana_in_a_field_nobody_sees_keeps_the_rate(model):
     assert len(model["sent"]) == 1
 
 
+def test_a_hidden_field_is_left_as_the_model_wrote_it(model):
+    """不上畫面的欄位連看都不看（不清掉、不算數）：reasoning 照模型寫的留著。"""
+    model["replies"] = [_judgment(success_rate=12, reasoning="これは無理")]
+    reply = OllamaClient().chat_structured([{"role": "user", "content": "評"}], SuccessRateJudgment, required_fields=["success_rate"])
+    assert (reply.success_rate, reply.reasoning) == (12, "これは無理")
+
+
+def test_only_the_kana_item_of_a_list_is_cleared_and_the_order_kept(model):
+    """清單裡只清掉夾了假名的那一項、換成空字串，順序不動：對話的選項與 tag 一一對應，少一項就對錯人。"""
+    turn = json.dumps({"narrative": "「坐吧。」", "options": ["閒聊幾句", "就此告辭"], "option_tags": ["尋常寒暄", "いい"]}, ensure_ascii=False)
+    model["replies"] = [turn]
+    got = OllamaClient().chat_structured([{"role": "user", "content": "談"}], companion_agent.CompanionTurn, required_fields=["options"])
+    assert got.options == ["閒聊幾句", "就此告辭"] and got.option_tags == ["尋常寒暄", ""] and len(model["sent"]) == 1
+
+
 def test_a_player_named_sakura_keeps_the_gamble_rate_and_both_stories(model):
     """名號是「さくら」：兩版劇情照提示以名號開頭——72 照用、兩版都播。"""
     win, lose = "さくら大喊一聲，敵軍嚇得後退。", "さくら喊破了嗓子，被人絆了一跤。"
