@@ -81,6 +81,21 @@ def test_enter_or_space_on_the_front_cards_opens_their_explanation():
     assert 'id="fronts-help"' in out["opened"] and out["prevented"] == 2
 
 
+def test_the_front_cards_button_names_the_three_values():
+    """審查 Minor 4：圖卡變成 role="button" 之後，裡面的 meter 不再念得出來；鈕的名字自己帶三條戰線的值（同一份資料），畫面不變。"""
+    m = _season_one()
+    m["fronts"][0]["chaos"] = True
+    page = run(m, "return H.pageJianghu();")
+    cards = re.search(r'<div class="fronts"[^>]*>', page).group(0)
+    label = re.search(r'aria-label="([^"]*)"', cards).group(1)
+    for f in m["fronts"]:
+        assert f"{f['name']} {f['value']}" in label
+    assert f"{m['fronts'][0]['name']} {m['fronts'][0]['value']}（亂局）" in label and label.endswith("點開看說明）")
+    m["status"].pop("war_help")  # 沒有說明時：照舊是一組，meter 自己念得出來
+    plain = re.search(r'<div class="fronts"[^>]*>', run(m, "return H.pageJianghu();")).group(0)
+    assert 'role="group"' in plain and "點開看說明" not in plain
+
+
 def test_the_front_cards_are_not_a_button_without_the_server_explanation():
     """伺服器沒給說明（舊版）：照舊只是一排圖卡，不能點。"""
     m = _season_one()
