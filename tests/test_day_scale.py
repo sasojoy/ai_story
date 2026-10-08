@@ -250,12 +250,41 @@ def test_the_capped_road_texts_name_the_moment(content):
     game.choose("road:think")
     moment = rules.day_ends_text(content, game.state.world)
     gather = next(o for o in game.options() if o.id == "road:gather")
-    assert gather.label == f"路邊採集（收穫拿滿了，{moment} 之後才有）"
+    assert gather.label == "路邊採集（收穫拿滿了）"  # 鈕上不寫時刻（2×2 格子放不下，審查 M1）；按下去那一句寫
     game.rng = FixedRandom(0.1)
     assert game.choose("road:gather") == [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{moment} 之後再說）。"]
     walk_to(game, "lake")
     game.choose("move:town")
     assert game.choose("road:think") == [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{moment} 之後才會再有）。"]
+
+
+CJK_PX, ASCII_PX, SPACE_PX = 12, 7.2, 3.6  # 12 px 的字：中文與全形標點一個字 12 px；數字、英文字母約 0.6 字寬；空格與冒號約 0.3
+
+
+def _note_px(text: str) -> float:
+    """路上小事那顆鈕的補充小字（12 px）大約多寬：寧可算寬（數字照 0.6 字寬、空格照 0.3）。"""
+    return sum(SPACE_PX if ch in " :" else ASCII_PX if ch.isascii() else CJK_PX for ch in text)
+
+
+ROAD_NOTE_PX = 143  # 375 px 上，2×2 格子一格的補充小字大約有多寬（(375 − 32 − 8) ÷ 2 − 左右 padding 24），超過就折成兩行
+
+
+@pytest.mark.parametrize("days, one", [(WEEKEND, True), (14, False)])
+def test_the_capped_road_task_button_note_fits_one_line_of_the_road_grid(content, days, one):
+    """審查 M1：拿滿了的那顆鈕，補充小字要放得進 2×2 格子的一行（約 143 px，12 px 字），不然邊走邊想、路邊採集兩列都多出一行。
+    週末的換日時刻本身就約 118 px（「第 11 週・週三 00:00」），「拿滿了，〔時刻〕後」約 178 px：鈕上只寫拿滿了，時刻寫在按下去的那一句。"""
+    game = _game(content, days, one=one)
+    content.config.road_reward_daily_cap = 1
+    game.state.world.time = 11.5 * rules.day_seconds(content, game.state.world)  # 季末前一天：時刻的字最長（兩位數的週、天）
+    game.choose("move:lake")
+    game.choose("road:think")
+    gather = next(o for o in game.options() if o.id == "road:gather")  # 邊走邊想這一段路已經做過（「想過了」），看採集那一顆
+    note = gather.label.partition("（")[2].removesuffix("）")
+    assert note == "收穫拿滿了" and _note_px(note) <= ROAD_NOTE_PX
+    moment = rules.day_ends_text(content, game.state.world)
+    if one:  # 週末的季曆寫法帶時刻放不下（所以鈕上不寫）；預設「第13天 00:00」放得下，但兩種設定用同一句
+        assert _note_px(f"拿滿了，{moment}後") > ROAD_NOTE_PX
+    assert moment in game.choose("road:gather")[0]  # 按下去那一句照舊寫換日的那一刻
 
 
 def test_a_road_sight_counts_toward_the_scaled_day_of_its_arrival(content):

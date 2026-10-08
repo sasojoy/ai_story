@@ -5206,7 +5206,7 @@ def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, 
     game.choose("move:lake")  # 同一天的第三段路
     think = _task(game, "think")
     moment = rules.day_ends_text(content, game.state.world)  # 換日的那一刻（遊戲日跟著季長縮，企劃者 2026-10-08）
-    assert (think.label, think.enabled) == (f"邊走邊想（收穫拿滿了，{moment} 之後才有）", True)
+    assert (think.label, think.enabled) == ("邊走邊想（收穫拿滿了）", True)  # 鈕上不寫時刻（2×2 格子放不下）；按下去那一句寫
     xinde = p.stats["xinde"]
     assert game.choose("road:think") == [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{moment} 之後才會再有）。"]
     assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
@@ -5246,7 +5246,7 @@ def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
     game.choose("road:think")
     gather = _task(game, "gather")
     moment = rules.day_ends_text(content, game.state.world)
-    assert (gather.label, gather.enabled) == (f"路邊採集（收穫拿滿了，{moment} 之後才有）", True)
+    assert (gather.label, gather.enabled) == ("路邊採集（收穫拿滿了）", True)
     game.rng = FixedRandom(0.1)  # 沒到上限的話這一擲撿得到
     assert game.choose("road:gather") == [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{moment} 之後再說）。"]
     assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}

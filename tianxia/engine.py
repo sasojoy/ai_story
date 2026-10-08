@@ -876,7 +876,8 @@ class Game:
     def _road_task_options(self, j: Journey) -> list[Option]:
         """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
         疾行一站一站立刻抵達，沒有。這個遊戲日的收穫拿滿了（每天上限，遊戲日跟著季長縮）的邊走邊想、路邊採集照樣按得下去，
-        補充改寫成拿滿了、換日的那一刻之後才有（待 joy 潤）。"""
+        補充改寫「收穫拿滿了」（待 joy 潤）。鈕上不寫換日的那一刻：375 px 上 2×2 格子一格的小字只有約 143 px，時刻本身就約 118 px，
+        再加字就折成兩行、整個格子變高（day-scale 審查 M1）；時刻寫在按下去的那一句（_road_think、_road_gather）。"""
         if j.mode == "dash":
             return []
         hints = {
@@ -886,9 +887,8 @@ class Game:
             "gather": "有機會撿到素材",
         }
         if not self._road_reward_due("task"):
-            moment = day_ends_text(self.content, self.state.world)
             for what in ROAD_REWARD_TASKS:
-                hints[what] = f"收穫拿滿了，{moment} 之後才有"  # 不留「心得 +3」：拿滿了就沒有
+                hints[what] = "收穫拿滿了"  # 不留「心得 +3」：拿滿了就沒有
         done = self.state.player.leg_actions
         return [
             Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
