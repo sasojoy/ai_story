@@ -242,6 +242,8 @@ class PlayerState(BaseModel):
     ranger_good: int = 0
     ranger_evil: int = 0
     ranger_deeds: int = 0
+    bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
+    picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
@@ -381,6 +383,29 @@ class Order(BaseModel):
     applied: int = 0
 
 
+class Bounty(BaseModel):
+    """懸賞榜上的一張（bounties.py；PM 2026-10-08 派工「加強散人玩法」）。陣營的每週一自動掛（討伐、打探、護送），
+    玩家花銀兩掛的是通緝（wanted：懸賞一個敵對陣營的人，接了的人照截殺的規則打他）。前 quota 個完成的人各拿一份賞
+    （通緝只有一份）；接了還沒完成的記在 takers。"""
+
+    id: str
+    kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝
+    faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
+    week: int  # 掛出來的那一週（季曆）
+    expires: float  # 世界秒：過了就下榜（通緝沒人完成時把押金退給掛單的人）
+    silver: int
+    deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
+    quota: int = 1
+    location: str | None = None  # 討伐：對手所在；打探：要去探索的地方；護送：起點（在這裡接）
+    end: str | None = None  # 護送的終點
+    squad: str | None = None  # 討伐的對手（Squad.id）
+    poster: str | None = None  # 通緝：掛單人的名號
+    target: str | None = None  # 通緝：要打的人的名號
+    takers: list[str] = Field(default_factory=list)  # 接了、還沒完成的名號
+    done_by: list[str] = Field(default_factory=list)
+    refunded: bool = False  # 通緝下榜時押金退過了
+
+
 class Invite(BaseModel):
     """玩家向同一地點的另一個玩家發的邀請（invites.py；玩家互動第二層）。payload 是這一種邀請自己要的東西（論武雙方出的武學或意境）。"""
 
@@ -457,6 +482,8 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
+    bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：這一週陣營掛的，加上還沒下榜的通緝；換季整個重來
+    bounty_seq: int = 0  # 懸賞的流水號
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     # 截殺（Config.raid）：「發起的名號鍵>目標的名號鍵」→ 上一次截殺的世界秒（同一個人對同一個目標的冷卻）；

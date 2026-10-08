@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
+from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
 from . import prologue as prologue_rules
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -285,7 +285,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
                 return option.id
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
-    options = [o for o in options if o.id not in ("act:rest", "act:halt") and not o.id.startswith(("road:", "defect:", "invite:"))]
+    # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
+    options = [
+        o for o in options
+        if o.id not in ("act:rest", "act:halt", "act:bounties") and not o.id.startswith(("road:", "defect:", "invite:"))
+    ]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options
@@ -296,6 +300,23 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         if hard:
             return rng.choice(hard).id
     return rng.choice(options).id if options else None
+
+
+def take_bounties(game: Game) -> None:
+    """城裡的懸賞榜上有揭得下的就揭（打開、揭、返回，走 Game 的選單；不花體力）。做不做得成看之後隨機走到哪裡。"""
+    s, c = game.state, game.content
+    if s.pending_event or not bounties.board_here(s, c):
+        return
+    if not any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
+        return
+    if "act:bounties" not in {o.id for o in game.options(odds=False) if o.enabled}:
+        return
+    game.choose("act:bounties")
+    for option in game.options(odds=False):
+        if option.enabled and option.id.startswith("bounty:take:"):
+            game.choose(option.id)
+    if s.player.picking_bounty:
+        game.choose("bounty:back")
 
 
 def play_season(
@@ -333,6 +354,7 @@ def play_season(
                 allocate_points(game, rng)
                 spend_xinde(game, rng)
                 forge_and_cultivate(game, rng)
+            take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:

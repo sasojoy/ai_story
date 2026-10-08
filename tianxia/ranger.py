@@ -81,6 +81,11 @@ def recruit_bonus(state: GameState, content: Content) -> float:
     return max(0, tier(state, content) - 1) * content.config.ranger.recruit_per_tier
 
 
+def exp_factor(state: GameState, content: Content) -> float:
+    """打贏一場拿的經驗乘多少（第 1 階起每一階 exp_per_tier）：陣營的人跟自己人操練拿經驗，散人在外頭闖蕩、每一仗學得多一些。"""
+    return 1.0 + tier(state, content) * content.config.ranger.exp_per_tier
+
+
 def bounty_factor(state: GameState, content: Content) -> float:
     """懸賞的銀兩乘多少（到 bounty_bonus_tier 階才有）。"""
     cfg = content.config.ranger
@@ -92,7 +97,7 @@ def unlocks(content: Content) -> list[str]:
     cfg = content.config.ranger
     out = []
     for t in range(1, len(cfg.thresholds) + 1):
-        parts = [f"求見門檻 -{t * cfg.audience_per_tier}"]
+        parts = [f"求見門檻 -{t * cfg.audience_per_tier}", f"打贏的經驗 +{round(t * cfg.exp_per_tier * 100)}%"]
         if t >= 2:
             parts.append(f"招募 +{round((t - 1) * cfg.recruit_per_tier * 100)}%")
         if t == cfg.qiyu_tier:
