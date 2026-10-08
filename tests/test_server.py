@@ -3229,7 +3229,7 @@ def test_the_generated_turn_is_applied_and_saved(game, save_dir):
     _stand_by_a_figure(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
         server.choose(game, "act:socialize")
-    assert [o.id for o in game.options()] == ["talk:0", "talk:1", "talk:leave"]
+    assert [o.id for o in game.options()] == ["talk:0", "talk:1", "talk:say", "talk:leave"]
     before = game.state.player.stamina
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN) as gen, \
             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內再生成一次")):
@@ -3242,6 +3242,93 @@ def test_the_generated_turn_is_applied_and_saved(game, save_dir):
     ]
     assert "他點了點頭。" in game.state.journal[0].lines
     assert open_characters().exists("測試")
+
+
+# ── 自己說（企劃者 2026-10-08）：模型寫的三個選項之外自己打一句話，走同一條三段式 ──────────────
+
+
+def _talking(game):
+    _stand_by_a_figure(game)
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
+        server.choose(game, "act:socialize")
+    assert game.state.player.pending_companion == "luzhi"
+
+
+def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
+    """A 鎖內開單、B 鎖外請模型歸類那句話並寫回應、C 鎖內重驗套用；好感度照模型挑的類別查表（真誠請教 +6），
+    體力與輪數跟按選項一樣，玩家原話進對話歷史、用過的話與江湖紀錄。"""
+    _talking(game)
+    lock_events.clear()
+    before, used = game.state.player.stamina, game._talks_used("luzhi")  # noqa: SLF001
+    liking = game.state.player.affinities.get("luzhi", 0)
+    sent = []
+
+    def generate(client, messages):
+        lock_events.append("generate")
+        sent.append(messages[-1]["content"])
+        return DIALOGUE_TURN.model_copy(update={"player_tag": "真誠請教"})
+
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
+        server.say(game, "  久仰大名，  特來請教  ")
+    p = game.state.player
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
+    assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
+    assert p.affinities["luzhi"] == liking + companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"])
+    assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
+    assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
+    assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
+    assert p.used_dialogue_options["luzhi"][-1] == "久仰大名， 特來請教"
+    assert game.state.journal[0].lines[0] == "你：「久仰大名， 特來請教」"
+    assert "talk:say" in {o.id for o in game.options()}  # 下一輪照樣可以再自己說
+
+
+def test_a_tag_off_the_list_counts_as_small_talk(game):
+    """模型挑了清單外的類別（或沒挑）：當尋常寒暄（照盧植的查表）；不信任模型自己編的類別。"""
+    _talking(game)
+    for tag in ("天下第一好話", None):
+        before = game.state.player.affinities.get("luzhi", 0)
+        with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN.model_copy(update={"player_tag": tag})):
+            server.say(game, "今日天氣不錯")
+        assert game.state.player.affinities["luzhi"] == before + companion_agent.resolve_tag_delta("尋常寒暄", server.CONTENT.characters["luzhi"])
+
+
+def test_a_bad_line_is_refused_before_anything_happens(game):
+    """空白、超過 20 字、不在對話裡：丟 GameError，不叫模型、不扣體力、不算輪數。"""
+    _talking(game)
+    before = game.state.player.stamina
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該叫模型")):
+        for text in ("", "   ", "一" * 21):
+            with pytest.raises(server.GameError, match="20 字"):
+                server.say(game, text)
+        assert game.choose("talk:say") == ["（寫下你想說的話，20 字以內。）"]  # 只叫出輸入框
+        assert game.state.player.stamina == pytest.approx(before, abs=0.5) and game.state.player.pending_companion == "luzhi"
+        server.choose(game, "talk:leave")
+        with pytest.raises(server.GameError):
+            server.say(game, "再會")
+
+
+def test_saying_a_line_in_simplified_chinese_is_kept_in_traditional(game):
+    _talking(game)
+    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
+        server.say(game, "你好吗，将军")
+    assert game.state.player.dialogue_history["luzhi"][-2]["content"] == "你好嗎，將軍"
+
+
+def test_a_failed_reply_to_your_own_line_ends_the_talk_for_free(game):
+    _talking(game)
+    before = game.state.player.stamina
+    with mock.patch.object(companion_agent, "generate_turn", side_effect=companion_agent.DialogueUnavailable("連不上")):
+        server.say(game, "久仰大名")
+    assert game.state.player.pending_companion is None and game.state.player.stamina == pytest.approx(before, abs=0.5)
+
+
+def test_saying_needs_the_same_stamina_as_an_option(game):
+    _talking(game)
+    game.state.player.stamina = 0
+    open_characters().save(game.state)  # 伺服器進鎖先從資料庫重讀
+    assert {o.id: o.enabled for o in game.options()}["talk:say"] is False
+    with pytest.raises(server.GameError):
+        server.say(game, "久仰大名")
 
 
 def test_a_failed_generation_ends_the_talk_for_free(game, lock_events):
@@ -5861,7 +5948,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
-        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
+        "api_choose", "api_answer", "api_say", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
     }
 
 
