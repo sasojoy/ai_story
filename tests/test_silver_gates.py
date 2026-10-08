@@ -8,13 +8,16 @@ effect.stats.silver 扣的數，錢不夠時選項不出現。只加條件，選
 min_stats.silver（慣例是剛好等於價錢）。懲罰從結構上認：檢定失敗、打輸（fail_effect）、隨口應對失敗都不算，照舊夾在 0。
 其餘不擋的（檢定成功或打贏也要付錢的）列在 NOT_GATED，一則一句理由；joy 新寫的付錢選項忘了擋，這裡就紅。
 
-釘住的內容：content/events/ 底下有付錢選項的檔（scripts/test_for.py 靠檔名挑到這裡）：explore_luoyang.json、
-explore_nanyang.json、explore_runan.json、explore_yingchuan.json、explore_youzhou.json、general.json、luoyang.json、marks.json、
-social_nanyang_yingchuan.json、social_north.json、social_runan.json、tales.json、train_aftermath.json、treasure.json、trend.json、
-以及原本就擋好的 foreshadow_prep.json、jizhou.json、nanyang.json、promotion.json、ranger.json、youzhou.json。"""
+釘住的內容：content/events/ 底下的每一個檔（任何一則事件都可能寫進付錢的選項；scripts/test_for.py 靠檔名挑到這裡，
+test_this_file_names_every_event_file 守著這份清單）：explore_jizhou.json、explore_luoyang.json、explore_nanyang.json、
+explore_runan.json、explore_yingchuan.json、explore_youzhou.json、foreshadow_fragments.json、foreshadow_prep.json、general.json、
+jizhou.json、kou.json、luoyang.json、marks.json、nanyang.json、prologue.json、promotion.json、ranger.json、recruit.json、sects.json、
+social_nanyang_yingchuan.json、social_north.json、social_runan.json、stealth.json、tales.json、train_aftermath.json、treasure.json、
+trend.json、youzhou.json。"""
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import pytest
 
@@ -101,6 +104,14 @@ def test_every_paying_choice_is_gated_or_whitelisted(real):
     """選了就付錢的選項都要擋（min_stats.silver ≥ 價錢）；不擋的要在 NOT_GATED 寫理由。新寫的付錢選項忘了擋，這裡就紅。"""
     missing = ungated(real)
     assert not missing, "\n".join(f"{eid} 選項 {i}：付 {price} 兩，門檻 {gate}" for eid, i, price, gate in missing)
+
+
+def test_this_file_names_every_event_file():
+    """scripts/test_for.py 改到一個內容檔時，只挑寫到那個檔名的測試檔：開頭那份清單要列出 content/events/ 的每一個檔，
+    joy 改哪一個事件檔都會跑到這裡。新增事件檔時把名字補進開頭那一段。"""
+    events = Path(__file__).parent.parent / "content" / "events"
+    missing = sorted(p.name for p in events.glob("*.json") if p.name not in (__doc__ or ""))
+    assert not missing, f"開頭的清單少了這幾個事件檔（scripts/test_for.py 會挑不到這裡）：{'、'.join(missing)}"
 
 
 def test_the_whitelist_is_not_stale(real):
