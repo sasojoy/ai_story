@@ -151,7 +151,7 @@ def test_a_broke_bot_always_has_something_to_press(real):
         ids = _scene(game, eid, 0)
         assert not any((eid, int(o.partition(":")[2])) in priced for o in ids if o.startswith("choice:") and o != FREE_TEXT_OPTION), eid
         picked = bot.pick(game, game.options(odds=False), rng)
-        assert picked is not None and picked.startswith("choice:") and picked != FREE_TEXT_OPTION, (eid, picked)
+        assert picked in ids and picked.startswith("choice:") and picked != FREE_TEXT_OPTION, (eid, picked)
 
 
 # ── 守門本身會不會紅（突變）：拿掉一個條件、新寫一個忘了擋的付錢選項 ─────────────────────────────
