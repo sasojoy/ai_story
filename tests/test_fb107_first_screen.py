@@ -57,8 +57,17 @@ const body = L.now ? el("body", ["tx-now"]) : null;
 const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
-let tops = 0;
-const renderTop = () => { tops += 1; };
+// 狀態列（#top）的高度（FB-123）：input.topHeight；input.realTop 時 renderTop 照真的那樣先量高度、重畫（💡 收成一行時矮 input.topSaves）、
+// 再交給 fitTopMoved
+const topEl = { offsetHeight: input.topHeight || 120 };
+let tops = 0, HH = null;
+const renderTop = () => {
+  tops += 1;
+  if (!input.realTop) return;
+  const before = topEl.offsetHeight;
+  topEl.offsetHeight = (input.topHeight || 120) - (S.hintTight && !S.hintOpen ? input.topSaves || 20 : 0);
+  HH.fitTopMoved(before);
+};
 // 場景卡：加入的鈕在名字那一行時（L.join 不是 false）名字包在 muster-head 裡；沒有鈕時名字是場景卡第一個 <p>
 const T = L.texts || {};
 const mhead = L.muster && L.join !== false ? el("head", ["muster-head"], { tagName: "DIV" }) : null;
@@ -90,7 +99,9 @@ const bottom = () => {
 const target = actbar || last;
 // 畫面上的位置＝頁面上的位置 − 捲了多少（分頁列固定在畫面底下）
 if (target) target.getBoundingClientRect = () => ({ bottom: bottom() - globalThis.window.scrollY });
-tabs.getBoundingClientRect = () => ({ top: 756 });
+// 分頁列頂：手機網址列收起時分頁列跟著往下（FB-123），測試用 els.setTabsTop 換
+let tabsTop = input.tabsTop || 756;
+tabs.getBoundingClientRect = () => ({ top: tabsTop });
 if (body) Object.defineProperty(body, "scrollHeight", { get: () => L.nowBody });
 if (body) Object.defineProperty(body, "clientHeight", { get: () => bodyHeight() });
 const where = {
@@ -115,7 +126,8 @@ const where = {
   ".fit-tight": () => all.filter((x) => has(x, "fit-tight")),
 };
 const q = (sel) => { if (!where[sel]) throw new Error("假頁面不認得的選擇器：" + sel); return where[sel](); };
-globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : null), querySelector: (s) => q(s)[0] || null, querySelectorAll: q };
+globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : id === "top" ? topEl : null),
+  querySelector: (s) => q(s)[0] || null, querySelectorAll: q, activeElement: null };
 globalThis.window = { scrollY: input.scrollY || 0, innerWidth: input.width || 375 };
 // 量數字露不露得出來（input.measure）：每個字 15px 寬、一行 300px，「…」佔 1em（15px）——第 19 個字以後的數字就藏起來了。
 // 沒給就跟沒有 Range 的瀏覽器一樣（fitDigitsShown 當看得到）
@@ -137,7 +149,8 @@ const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOp
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
 const H = new Function("S", "pro", "idleMenu", "renderTop", code
-  + "\nreturn { fitFirstScreen, fitOver, ownOpen, fitOwnKey, fitOnResize, lineToggle, FIT_STEPS };")(S, pro, idleMenu, renderTop);
+  + "\nreturn { fitFirstScreen, fitOver, ownOpen, fitOwnKey, fitOnResize, fitTopMoved, lineToggle, FIT_STEPS };")(S, pro, idleMenu, renderTop);
+HH = H;
 const snap = () => ({
   fitted: S.fitted, bottom: bottom(), page: [...page.classes].sort(), card: card ? [...card.classes].sort() : null,
   box: box ? [...box.classes].sort() : null, hintTight: S.hintTight, tops, hearOpen: S.hearOpen, linesOpen: S.linesOpen,
@@ -147,7 +160,7 @@ const snap = () => ({
   musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
-  H, S, snap, L, globalThis.window, { lines }));
+  H, S, snap, L, globalThis.window, { lines, top: topEl, setTabsTop: (v) => { tabsTop = v; } }));
 """
 
 

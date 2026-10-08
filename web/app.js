@@ -63,6 +63,8 @@
     // 第一屏放不下時一步一步收（FB-107 的 fitFirstScreen）：
     fitted: [], // 這一次收了哪幾步（FIT_STEPS 的 key），給測試與除錯看
     fitWidth: 0, // 上一次量的是哪個寬度：視窗只有高度變了（手機網址列收合）不重量（fitOnResize）
+    fitBase: null, // 量的基準：{ width, top } 這個寬度量到過最小的分頁列頂（網址列跑出來時），不跟著網址列跑（fitTabsTop，FB-123）
+    fitting: false, // fitFirstScreen 正在收：它自己重畫狀態列（收 💡、還原）時不再重量（fitTopMoved，FB-123）
     hintTight: false, // 💡 收成一行（第 3 步要的）；狀態列照它畫（hintHtml），玩家點開了（hintOpen）就一直攤開
     linesOpen: null, // 戰鬥卡片底下收成一行的補充攤開著的那一場（卡片的戰報流水號），重畫時不再收（第 4 步）
     ownOpen: null, // 決戰時收成一行的所在地、集結那一句攤開過的那一處那一場（fitOwnKey），重畫時不再收（第 7、8 步）
@@ -319,10 +321,12 @@
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
     if (!el) return;
+    const before = el.offsetHeight; // 狀態列重畫前多高：變了就重量第一屏（fitTopMoved，FB-123）
     const html = topHtml();
     el.innerHTML = html;
     el.hidden = !html;
     applyGlow();
+    fitTopMoved(before);
   }
 
   function topHtml() {
@@ -546,7 +550,22 @@
   function fitOver() {
     const target = fitTarget(), tabs = document.querySelector(".tabs");
     if (!target || !tabs) return 0;
-    return target.getBoundingClientRect().bottom + (window.scrollY || 0) - (tabs.getBoundingClientRect().top - FIT_MARGIN);
+    return target.getBoundingClientRect().bottom + (window.scrollY || 0) - (fitTabsTop(tabs) - FIT_MARGIN);
+  }
+  // 分頁列頂的基準（FB-123）：分頁列固定在畫面底下，手機捲動時網址列收起、跑出來，它跟著上下移幾十 px。集結時倒數每一輪都整頁重畫、
+  // 重量，拿當下的位置量的話，網址列每換一次狀態就多收或少收一步、畫面跟著跳。同一個寬度記住量到過最小的那個（網址列跑出來的時候：
+  // 一開頁面、捲回頂端都是），寬度變了（轉向、拉視窗）重記。輸入框有焦點時不記：舊的 Android 開鍵盤會把視窗縮小，記下來的話
+  // 收起鍵盤之後整頁還收到底
+  function fitTabsTop(tabs) {
+    const top = tabs.getBoundingClientRect().top, width = window.innerWidth;
+    const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement && document.activeElement.tagName) || "");
+    if (!S.fitBase || S.fitBase.width !== width) {
+      if (typing) return top;
+      S.fitBase = { width, top };
+    } else if (!typing) {
+      S.fitBase.top = Math.min(S.fitBase.top, top);
+    }
+    return S.fitBase.top;
   }
   const FIT_STEPS = [
     // 1. 間距：卡與卡之間、卡的內距收緊一點（style.css 的 .page.fit-space），一個字都不少
@@ -703,11 +722,24 @@
     S.fitted = [];
     S.fitWidth = window.innerWidth; // 這一次量的是哪個寬度（fitOnResize 看它）
     if (S.stage !== "game" || S.tab !== "jianghu" || !S.main || S.main.on_road || pro() || !fitPage()) return;
-    fitReset();
-    for (const step of FIT_STEPS) {
-      if (fitOver() <= 0) break;
-      if (step.run()) S.fitted.push(step.key);
+    S.fitting = true; // 收 💡、還原時會重畫狀態列：那不是「狀態列變了」（fitTopMoved）
+    try {
+      fitReset();
+      for (const step of FIT_STEPS) {
+        if (fitOver() <= 0) break;
+        if (step.run()) S.fitted.push(step.key);
+      }
+    } finally {
+      S.fitting = false;
     }
+  }
+  // 狀態列變高變矮（FB-123）：點名號展開配點、收起，💡 冒出來或變兩行，攤開體力說明——行動列跟著上下移，重量一次（從還原開始：
+  // 收起名號之後收著的那幾樣攤回來）。renderTop 把重畫之前的高度交過來；高度沒變（只是數字換了）不量。fitFirstScreen 自己收 💡、
+  // 還原 💡 時重畫狀態列不算（S.fitting），不會一直重量
+  function fitTopMoved(before) {
+    const top = document.getElementById("top");
+    if (!top || S.fitting || top.offsetHeight === before) return;
+    fitFirstScreen();
   }
   // 視窗大小變了（檔案最後的 resize 監聽）：寬度變了（轉向、拉視窗）才重量。手機捲動時網址列收起、跑出來只改高度，也會觸發 resize——
   // 那時重量的話，第一屏外的那幾段會邊捲邊收、邊攤開（審查 M6）。平常的重畫（afterPage）照樣每次都量
