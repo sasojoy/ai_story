@@ -1118,6 +1118,21 @@ class StyleRule(_Strict):
         return self
 
 
+class Spar(_Strict):
+    """切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）：同一地點的兩個玩家，一方發邀請、對方接受才打。
+    雙方各用本人的威力（不帶同伴與部下：比的是兩個人的功夫），照 encounter 的單次判定；不扣氣血、不掉銀兩、不掉素材。
+    數字的依據：跟自己陣營操練一樣是零風險，操練只給對手獎勵的三成（drill_reward_share），危險度 1 一帶的散兵中位數是
+    經驗 19、心得 14.5，三成是經驗約 6、心得約 4。切磋要兩個人湊在一起、雙方都花一次遊歷的體力，給得比操練略多一點：
+    經驗各 exp；心得贏的 win_xinde、輸的 lose_xinde（輸了也學到東西），平手各 draw_xinde。同一對人每個遊戲日最多 per_pair_day 場，
+    免得兩個人互刷。"""
+
+    exp: int = Field(default=8, ge=0)
+    win_xinde: int = Field(default=6, ge=0)
+    lose_xinde: int = Field(default=3, ge=0)
+    draw_xinde: int = Field(default=4, ge=0)
+    per_pair_day: int = Field(default=2, ge=1)
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1180,6 +1195,10 @@ class Config(_Strict):
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
+    spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
+    # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
+    # 兩個人都在線上才有切磋，等的是現實的人
+    invite_ttl_seconds: int = Field(default=600, ge=30)
     big_fight_budget_seconds: int = Field(default=60, ge=0)
     # 人物對話的生成（鎖外的 B 段）與隨口應對的評分、潤色也各有一份總預算（PM 2026-10-06，跟開爐取名、大場面同一套；評分與潤色
     # 共用 free_text_budget_seconds，潤色用評分剩下的，控制者 2026-10-06）：server.py 從 A 段開始量、扣掉等行動鎖與排模型佇列的
