@@ -802,24 +802,32 @@
   // 是戰鬥引擎寫的，另一條線正在改那一段，這裡不動它（fix-1008 裁示）。
   // 只認「全都按得下去」的時候：已經加入或投效過的人有一顆是灰的「已加入」，照舊收在摺疊裡，畫面跟以前一樣；打不了這場仗的人
   // （不是交戰的一方、不在決戰的大區）選單上本來就沒有這幾顆。開打了才到的散人還能投效，也一樣畫在名字那一行（開打後的「加入戰局」
-  // 是選單上唯一的一顆，本來就看得到，不在這裡）。在路上加入不了，不管
+  // battle:join_late 是選單上唯一的一顆，本來就看得到，不在這裡：所以 MUSTER_JOIN 結尾要有冒號）。
+  // 場景卡沒畫的時候不搬，照舊留在選單上（摺疊或選項列），鈕永遠不會不見：在路上（在路上的人加入不了，選單上本來就沒有這幾顆；
+  // 萬一有，路上的場景卡收成兩行、不畫名字那一行），以及序章師父說話、草廬的場景卡不畫的那幾步（masterTalks）
   const MUSTER_JOIN = /^battle:(join|enlist):/;
   // 鈕旁邊那一小句（待 joy 潤）：加入的那一顆在名字右邊，這句夾在名字與鈕中間、指向它；散人的兩顆在名字底下另起一行，這句在名字右邊、往下指。
-  // 放不下時省略號收尾（style.css 的 .muster-note），名字那一行不因此變高、不折行
-  const MUSTER_NOTE = { join: "報名在這裡 →", enlist: "挑一邊臨時投效，只算這一場 ↓" };
+  // 放不下時省略號收尾（style.css 的 .muster-note），名字那一行不因此變高、不折行。箭頭另外放（MUSTER_ARROW），讀螢幕的軟體不唸它（aria-hidden）
+  const MUSTER_NOTE = { join: "報名在這裡", enlist: "挑一邊臨時投效，只算這一場" };
+  const MUSTER_ARROW = { join: "→", enlist: "↓" };
+  // 序章：師父在說話（框顯示著）、眼前又沒有事件時，草廬那張地點描寫卡不畫——它是靜態的，而師父的整段話要用這塊地方（T7 審查 I1）
+  // 出師那一段路（在路上）不算：第一條路的說明卡要留著（T7 審查 N2）。pageJianghu 照它決定畫不畫場景卡，musterJoins 照它決定搬不搬加入的鈕
+  const masterTalksOf = (m) => !!pro() && !!m.guide && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:"));
   function musterJoins(m) {
-    if (m.on_road) return [];
+    if (m.on_road || masterTalksOf(m)) return [];
     const joins = m.options.filter((o) => MUSTER_JOIN.test(o.id));
     return joins.length && joins.every((o) => o.enabled) ? joins : [];
   }
   // 場景卡（伺服器的 Markdown）第一段是戰場名字（「**廣宗決戰**」）：包成一行，名字、那一小句、加入的鈕排在同一行；散人臨時投效的
-  // 兩顆字多，另起一行排在名字底下（.wide，鈕上只寫「臨時投效【官軍】」，「只算這一場」寫在那一小句裡）。認不出第一段就排在卡片最上面
+  // 兩顆字多，另起一行排在名字底下（.wide，鈕上只寫「臨時投效【官軍】」，「只算這一場」寫在那一小句裡）。認不出第一段就排在卡片最上面。
+  // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）
   function musterScene(m, scene) {
     const joins = musterJoins(m);
     if (!joins.length) return scene;
-    const wide = joins.some((o) => o.id.startsWith("battle:enlist:"));
-    const note = `<span class="muster-note">${esc(MUSTER_NOTE[wide ? "enlist" : "join"])}</span>`;
-    const row = `<div class="options muster-join${wide ? " wide" : ""}" role="group" aria-label="參戰">${joins.map((o) =>
+    const kind = joins.some((o) => o.id.startsWith("battle:enlist:")) ? "enlist" : "join";
+    const wide = kind === "enlist";
+    const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${MUSTER_ARROW[kind]}</span></span>`;
+    const row = `<div class="options muster-join${wide ? " wide" : ""}" role="group" aria-label="參戰" aria-describedby="muster-note">${joins.map((o) =>
       `<button class="btn small primary" data-act="choose" data-id="${esc(o.id)}"><span>${esc(wide ? optParts(o)[0] : o.label)}</span></button>`).join("")}</div>`;
     const head = /^<p>([\s\S]*?)<\/p>\n?/.exec(scene);
     return head ? `<div class="muster-head"><p>${head[1]}</p>${note}${row}</div>\n${scene.slice(head[0].length)}` : `<div class="muster-head">${note}${row}</div>\n${scene}`;
@@ -1235,9 +1243,8 @@
     // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
     // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
     if (!m.on_road) S.sceneOpen = false;
-    // 序章：師父在說話（框顯示著）、眼前又沒有事件時，草廬那張地點描寫卡不畫——它是靜態的，而師父的整段話要用這塊地方（T7 審查 I1）
-    // 出師那一段路（在路上）不算：第一條路的說明卡要留著（T7 審查 N2）
-    const masterTalks = !!pro() && !!m.guide && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:"));
+    // 序章：師父在說話時草廬那張地點描寫卡不畫（masterTalksOf，那裡寫著為什麼）
+    const masterTalks = masterTalksOf(m);
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`

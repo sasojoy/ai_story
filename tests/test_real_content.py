@@ -613,7 +613,7 @@ def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
 #   h_cap（師父）：原文「最多五十樣」，上限其實是 50 起跳、隨等級與博聞往上加 → 「有個上限」
 #   h_showdown（老石、青禾）：原文「穩守、猛攻」，現在的招是強攻、固守、奇襲（決戰改版一）
 #   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強是第三方、可以下場（趁亂搶地盤、保存實力，決戰改版五）
-#   h_showdown（三個陣營）：FB-105 多一句「集結的時候先按戰場名字旁的『加入』」（以前沒說按哪裡，加入收在摺疊裡）
+#   h_showdown（三個陣營）：FB-105 多一句「先按戰場名字旁的『加入』報名」（以前沒說按哪裡，加入收在摺疊裡）
 # 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
 # explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tests/test_explain.py 管（數字照設定、風聲只在第一季說）
@@ -669,12 +669,26 @@ def test_the_lines_that_followed_the_game_say_what_the_game_does(content):
         assert "穩守" not in showdown[faction] and "猛攻" not in showdown[faction]
         assert all(move in showdown[faction] for move in ("強攻", "固守", "奇襲")) and "放手一搏" in showdown[faction]
     assert "不下場" not in showdown["haoqiang"]
-    # FB-105：集結時要先按加入（網頁畫在場景卡戰場名字旁，web/app.js 的 musterScene）；三個陣營的那一則都說在哪按（待 joy 潤）
+    # FB-105：集結時要先按加入（網頁畫在場景卡戰場名字旁，web/app.js 的 musterScene）；三個陣營的那一則都點名那一顆鈕（待 joy 潤）。
+    # 鈕上的字照引擎集結時給的標籤（「加入【官軍】」的「【」之前那一段），不在這裡另寫一份：joy 潤字只要還點名那顆鈕就不必改測試
+    join = _muster_join_word(content)
     for faction in ("guan", "huang", "haoqiang"):
-        assert "戰場名字旁的『加入』" in showdown[faction], faction
+        assert f"『{join}』" in showdown[faction], faction
     third = next(b.third for b in content.battles.values() if b.third is not None)
     assert third.grab in showdown["haoqiang"] and third.keep in showdown["haoqiang"]  # 豪強兩招的名字照決戰的設定
     assert all(_hint_cells(content).get(key) for key in PLACEHOLDER_LINES)  # 標成待潤的四句真的在書裡（上一版這裡拿它跟自己的字面比，永遠成立）
+
+
+def _muster_join_word(content):
+    """集結時自己陣營那一顆加入鈕上的字（「加入【官軍】」→「加入」）：開一場真的決戰、讀引擎給的選單。"""
+    battle = next(b for b in content.battles.values() if b.region is not None and "guan" in {f.id for f in b.factions})
+    spot = next(loc for loc in content.locations if (r := region_of(content, loc)) is not None and r.id == battle.region)
+    game = Game.new(content, "甲", rng=random.Random(0))
+    game.client = None
+    game.state.player.faction, game.state.player.location = "guan", spot
+    game.world.start_battle(battle, now=game.now)
+    [label] = [o.label for o in game.options() if o.id == "battle:join:guan"]
+    return label.split("【")[0]
 
 
 def _hint_cells(content):
