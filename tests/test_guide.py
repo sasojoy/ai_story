@@ -49,7 +49,7 @@ def test_next_hint_follows_tutorial_then_act_goal(state, content):
     state.player.stamina = 50
     assert next_hint(state, content) == "壓制寇亂"
     state.player.stamina = 150
-    assert "體力將滿" in next_hint(state, content)
+    assert "體力滿了" in next_hint(state, content)  # 滿了（FB-108）；九成到還沒滿是「體力將滿」
 
 
 def test_next_hint_defers_to_a_pending_event_while_the_tutorial_is_active(state, content):
@@ -82,16 +82,16 @@ def test_next_hint_hides_stamina_reminder_when_not_idle(state, content):
     state.player.tutorial_step = 3
     state.player.stamina = 150
     state.pending_event = "drunk"
-    assert "體力將滿" not in next_hint(state, content)
+    assert "體力將滿" not in next_hint(state, content) and "體力滿了" not in next_hint(state, content)
     state.pending_event = None
     state.world.ended = True
-    assert "體力將滿" not in next_hint(state, content)
+    assert "體力將滿" not in next_hint(state, content) and "體力滿了" not in next_hint(state, content)
     state.world.ended = False
     state.player.resting_since = 0.0
-    assert "體力將滿" not in next_hint(state, content)
+    assert "體力將滿" not in next_hint(state, content) and "體力滿了" not in next_hint(state, content)
     state.player.resting_since = None
     state.player.journey = Journey(mode="walk", path=["lake"], arrive_at=[180.0])
-    assert "體力將滿" not in next_hint(state, content)
+    assert "體力將滿" not in next_hint(state, content) and "體力滿了" not in next_hint(state, content)
 
 
 def test_quest_text_after_season_end(state, content):
@@ -152,5 +152,5 @@ def test_quest_text_is_empty_when_everything_is_skipped(state, content):
     for ending in content.scenario.endings:
         ending.hint = ""
     assert quest_text(state, content) == ""
-    state.player.stamina = 150  # 只剩「體力將滿」的提醒時照樣畫
-    assert "體力將滿" in quest_text(state, content)
+    state.player.stamina = 150  # 只剩體力的提醒時照樣畫（150 是滿的：「體力滿了」，FB-108）
+    assert "體力滿了" in quest_text(state, content)

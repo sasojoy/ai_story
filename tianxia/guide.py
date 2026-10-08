@@ -9,8 +9,10 @@ from .state import GameState
 from .world import current_act, current_storyline, season_endings, storyline_off
 from .world_state import WorldStateStore
 
-# 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）
+# 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）：九成到還沒滿
 FULL_STAMINA_NOTE = "體力將滿：滿了就不再回，別讓它浪費。"
+# 已經滿了（FB-108：250/250 還寫「將滿」，跟狀態列對不上；測試期常有補滿）。待 joy 潤
+STAMINA_FULL_NOTE = "體力滿了：不再往上回，先去用掉一些。"
 
 
 def steps(state: GameState, content: Content) -> list[TutorialStep]:
@@ -156,7 +158,7 @@ def next_hint(state: GameState, content: Content, world: WorldStateStore | None 
         return f"（{who.name}）{pending_line(state, content) or who.lines[state.player.enlist_step]}"  # 有事件待處理時跟框一樣（F12）
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
-        hints.append(FULL_STAMINA_NOTE)
+        hints.append(STAMINA_FULL_NOTE if state.player.stamina >= content.config.stamina_max else FULL_STAMINA_NOTE)
     return "　".join(hints)
 
 
