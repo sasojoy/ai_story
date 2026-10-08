@@ -7723,3 +7723,77 @@ def test_the_most_dramatic_gamble_of_a_battle_goes_round_the_world_and_earns_fam
     assert game.state.player.stats["fame"] == fame + 1
     entry = next(e for e in game.state.journal if e.title.startswith("測試決戰・"))
     assert "名望 +1" in entry.changes and "你那一搏成了這一仗最有戲的一幕，江湖上傳開了。" in entry.lines
+
+
+def _paid_showdown(content, game, foe_rounds=3):
+    """照正式的軍餉設定（測試內容把軍餉關掉）打一場三回合的決戰，官軍贏（戰局 65 以上是官軍大勝）。"""
+    from tianxia.models import MOVES, BattleOutcome, ShowdownPay
+
+    content.config.showdown_pay = ShowdownPay()
+    definition = _three_round_showdown(content)
+    definition.outcomes = [
+        BattleOutcome(faction="guan", trend_min=65, title="官軍大勝", text="官軍獲勝。"),
+        BattleOutcome(faction="huang", trend_max=35, title="黃巾得勢", text="黃巾獲勝。"),
+        BattleOutcome(faction="guan", title="兩軍膠著", text="不分勝負。"),
+    ]
+    game.state.player.faction = "guan"
+    foe = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(foe, 0.0):
+        game.choose("battle:join:guan")
+        foe.choose("battle:join:huang")
+    game.world.mutate_battle(lambda b: setattr(b.participants["乙"], "scores", {m: 1.0 for m in MOVES}))  # 乙打不動：官軍大勝
+    if not foe_rounds:  # 乙離開了大區，一回合都沒出手
+        game.world.mutate_battle(lambda b: battle_instance.set_away(b, "乙", True))
+    start = definition.muster_seconds + 1
+    for i in range(3):
+        with at(game, start + i), at(foe, start + i):
+            if i < foe_rounds:
+                foe.choose("battle:act:huang_hold")
+            game.choose("battle:act:guan_strong")
+    with at(foe, start + 10):
+        foe.sync(start + 10)
+    return definition, foe
+
+
+def test_every_fighter_draws_pay_and_the_winners_draw_more(content, game):
+    """決戰的軍餉（試玩回饋 2026-10-08）：參戰照出手回合數（滿 6 回合）發銀兩與經驗，贏的一方大勝再加一倍。"""
+    silver = game.state.player.stats.get("silver", 0)
+    _, foe = _paid_showdown(content, game)
+    battle = game.world.ended_battles(after=0)[-1][1]
+    assert (battle.outcome_side, battle.outcome_margin) == ("guan", "大勝")
+    entry = next(e for e in game.state.journal if e.title == "測試決戰・官軍大勝")
+    # 出手 3／6 回合：40 × 0.5 × 2 ＝ 40 兩、60 × 0.5 × 2 ＝ 60 經驗
+    assert ["銀兩 +40", "經驗 +60"] == [c for c in entry.changes if c.startswith(("銀兩", "經驗"))]
+    assert "得勝的軍餉發下來了。" in entry.lines
+    assert game.state.player.stats["silver"] == silver + 40
+    lost = next(e for e in foe.state.journal if e.title == "測試決戰・官軍大勝")
+    assert ["銀兩 +20", "經驗 +30"] == [c for c in lost.changes if c.startswith(("銀兩", "經驗"))]  # 輸的一方照拿基本軍餉
+    assert "軍餉發下來了。" in lost.lines
+    foe.sync(foe.now + 60)  # 補過的不會再補
+    assert sum(e.title == "測試決戰・官軍大勝" for e in foe.state.journal) == 1
+
+
+def test_someone_who_never_acted_draws_only_a_token(content, game):
+    _, foe = _paid_showdown(content, game, foe_rounds=0)  # 乙一回合都沒出手（全程被代選）
+    lost = next(e for e in foe.state.journal if e.title == "測試決戰・官軍大勝")
+    assert ["銀兩 +4", "經驗 +6"] == [c for c in lost.changes if c.startswith(("銀兩", "經驗"))]  # 一成
+
+
+def test_a_faction_member_also_banks_contribution_but_a_drifter_who_enlisted_does_not(content, game):
+    """投靠了陣營、替自己陣營出戰的人另記本季貢獻（推大勢的帳：contrib_per_push × 點數 × 份量）；臨時投效的散人不記。"""
+    from tianxia.models import ShowdownPay
+
+    content.config.showdown_pay = ShowdownPay()
+    content.config.season_one = True
+    game.state.world.season_one = True
+    battle = battle_instance.BattleInstance(battle_id="t", phase="ended", outcome_side="guan", outcome_margin="險勝")
+    me = battle_instance.BattleParticipant(name=game.state.player.name, faction="guan", neili=1, neili_cap=1, acted_rounds=6)
+    game.state.player.faction = "guan"
+    lines: list[str] = []
+    changes = game._showdown_pay(battle, me, lines)
+    per = content.config.contrib_per_push
+    # 滿出手、險勝：40 × 1.5 ＝ 60 兩、90 經驗；貢獻（2 ＋ 3）點 × contrib_per_push
+    assert changes[:2] == ["銀兩 +60", "經驗 +90"] and changes[2] == f"貢獻 +{5 * per}"
+    game.state.player.faction = None  # 散人臨時投效官軍
+    assert not any(c.startswith("貢獻") for c in game._showdown_pay(battle, me, []))

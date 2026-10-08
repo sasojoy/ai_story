@@ -2769,6 +2769,7 @@ class Game:
                 battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
             )
             result["title"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}"
+            result["side"], result["margin"] = winner, margin
             result["reason"] = battle_instance.overruled_reason(
                 battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
             )
@@ -2787,6 +2788,7 @@ class Game:
             if b.record_id != battle.record_id:
                 return
             b.outcome_title = str(result["title"])
+            b.outcome_side, b.outcome_margin = str(result.get("side") or ""), str(result.get("margin") or "")
             if result.get("reason"):  # 伏筆鎖定的一方贏了、戰場上卻是另一方佔上風：敗因不能寫成戰場那一邊贏
                 b.outcome_reason = str(result["reason"])
             b.outcome_text = str(result.get("text") or b.outcome_text or "")
@@ -2954,7 +2956,7 @@ class Game:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         h = battle.highlight
         fame = c.config.battle.highlight_fame
-        highlight_changes = []
+        highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
         if earlier is None and h is not None and h.name == me.name and h.won and fame:  # 這一場最有戲的那一搏是自己的、而且成了
             s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
             lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
@@ -2996,6 +2998,39 @@ class Game:
             time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines, changes=changes,
             battle_id=record.id,
         ))
+
+    def _showdown_pay(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
+    ) -> list[str]:
+        """決戰的軍餉（Config.showdown_pay）：照出手回合數發銀兩與經驗，贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
+        （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。"""
+        c, s = self.content, self.state
+        pay, p = c.config.showdown_pay, s.player
+        share = max(pay.idle_share, min(1.0, me.acted_rounds / pay.full_rounds))
+        won = bool(battle.outcome_side) and me.faction == battle.outcome_side
+        bonus = pay.win_bonus.get(battle.outcome_margin, 0.0) if won else 0.0
+        silver = round(pay.silver * share * (1 + bonus))
+        exp = round(pay.exp * share * (1 + bonus))
+        changes = []
+        if silver:
+            p.stats["silver"] = p.stats.get("silver", 0) + silver
+            changes.append(f"銀兩 +{silver}")
+        if exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
+            before = p.member.level
+            lines += team.add_exp(c, p.member, exp, p.name)
+            if p.member.level > before:
+                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
+                lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+            changes.append(f"經驗 +{exp}")
+        if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
+            push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
+            contrib = round(c.config.contrib_per_push * push_points * share)
+            if contrib and season_one(c, s.world):
+                push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+                changes.append(f"貢獻 +{contrib}")
+        if changes:
+            lines.append(f"{'得勝的' if won else ''}軍餉發下來了。")
+        return changes
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：

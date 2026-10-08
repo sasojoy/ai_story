@@ -6011,6 +6011,8 @@ NOT_IN_THE_FINGERPRINT = {
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",
+        "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
+        "outcome_margin": "收場時跟 phase 一起寫入",
         "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
     },
 }
