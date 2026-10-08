@@ -294,8 +294,8 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
 
 
 # ── 名望怎麼來（explain-2 第二項，FB-100「名望不知道怎麼來」）──────────────────────────
-# 引擎裡真的給名望的只有兩條路（rules.apply_effect 的 stats 與 Game._deliver_echoes）：事件的效果（內容寫的 stats.fame）與第一季的首創回饋
-# （Config.first_echo）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
+# 引擎裡真的給名望的只有三條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（Game._deliver_echoes，
+# Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
 
 FameRange = tuple[int, int]
 
@@ -339,7 +339,7 @@ def _plus(span: FameRange) -> str:
 
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
-    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋）、拿來做什麼（求見門檻、視野、拜師學藝）。數字讀內容與設定。"""
+    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野、拜師學藝）。數字讀內容與設定。"""
     cfg = content.config
     spans = fame_ranges(content, season)
     lines = []
@@ -353,6 +353,8 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     echo = cfg.first_echo
     if calendar.season_one_on(season, content) and echo.fame_per > 0:
         lines.append(f"你首創的武學或意境，別人照著合出同一門：每多一個人 +{echo.fame_per}，一門最多算 {echo.cap} 個人。")
+    if cfg.battle.highlight_fame > 0:
+        lines.append(f"決戰裡放手一搏，成了、而且是那一仗最有戲的一幕：+{cfg.battle.highlight_fame}。")
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:

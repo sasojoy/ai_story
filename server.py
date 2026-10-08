@@ -690,6 +690,25 @@ def prepare_forge(
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
 
 
+def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
+    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
+    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
+    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.request is None:
+        return None
+    started, request = _open_request(game, lambda: game.peer_request(name, action, params))
+    if request is None:
+        return NO_NAME
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+
+
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
@@ -786,17 +805,17 @@ def battle_text(game: Game, text: str) -> list[str]:
     act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
     total = game.content.config.free_text_budget_seconds
 
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
-            return battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
-        return battle_instance.assess_action_success_rate(client, act_, request.faction_name, request.text)
+            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
+        # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
+        return battle_instance.assess_gamble(client, act_, request.faction_name, request.text, request.name)
 
-    rate = model_call(
-        game, score, fallback=battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
-        busy=BUSY_FREE_TEXT,
-    )
-    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -1412,6 +1431,9 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         params["amount"] = int(body.get("amount", 0))
     except (TypeError, ValueError):
         params["amount"] = 0
+    proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
+    if proposed is not None:
+        params["proposed"] = proposed
     msgs = act(game, lambda g: g.peer_act(name, action, params))
     _tell_tabs(game)
     return {

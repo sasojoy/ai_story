@@ -1029,6 +1029,9 @@ class BattleTuning(_Strict):
     role_move_bonus: float = Field(default=0.15, ge=0)  # 先鋒的強攻、斥候的奇襲、盾陣的固守，份量多這麼多（加入時算進份量快照）
     role_gamble_rate: int = Field(default=10, ge=0)  # 軍師放手一搏的成功率多這麼多（模型評完再加，夾在 100）
     role_counter_relief: float = Field(default=0.5, ge=0, le=1)  # 參謀被剋時，剋制係數低於 1 的那一截減掉這麼多成
+    # 鼓勵自己寫放手一搏（試玩回饋 2026-10-08，Joy：「怎麼多鼓勵玩家自行創作」）：每場收場挑最有戲的那一次寫進天下大事傳聞
+    # （battle_instance.more_dramatic：成了的勝過沒成的，同樣成了或同樣沒成都是成功率越低越有戲），那一次是成了的，那個人名望多這麼多
+    highlight_fame: int = Field(default=1, ge=0)
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0
@@ -1594,7 +1597,7 @@ class FreeTextGamble(_Strict):
     failure_trend_per_risk: float = 0.02  # 失敗時，戰局往對方倒退的量（乘上風險、四捨五入，取負）
     failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
     failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
-    failure_neili_share_per_risk: float = 0.004  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣五成，兩次就倒下出局）
+    failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
     side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少
 
 

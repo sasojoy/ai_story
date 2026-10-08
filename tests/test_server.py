@@ -2970,19 +2970,21 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     client.post("/api/choose", json={"id": "battle:join_late"})
     seen = []
 
-    def rate(c, act, faction_name, text):
-        seen.append((open_world().db.writing(), faction_name, text))
-        return 73
+    def rate(c, act, faction_name, text, name):
+        seen.append((open_world().db.writing(), faction_name, text, name))
+        return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
 
-    monkeypatch.setattr(battle_instance, "assess_action_success_rate", rate)
+    monkeypatch.setattr(battle_instance, "assess_gamble", rate)
     client.post("/api/do/battle_text", json={"text": "火燒糧草"})
-    assert seen == [(False, "官軍", "火燒糧草")]
-    assert open_world().get_battle().round.success_rates == {"沈青衫": 73}
+    assert seen == [(False, "官軍", "火燒糧草", "沈青衫")]
+    battle = open_world().get_battle()
+    assert battle.round.success_rates == {"沈青衫": 73}
+    assert battle.round.stories == {"沈青衫": ["沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。"]}  # 同一次呼叫寫的兩版劇情
 
 
 def test_the_free_text_action_does_not_ask_the_model_when_it_cannot_be_sent(client, monkeypatch):
     _a_showdown_fighter(client, started=True)  # 還沒加入戰局：送不出去
-    monkeypatch.setattr(battle_instance, "assess_action_success_rate", lambda *a: pytest.fail("不該評"))
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a: pytest.fail("不該評"))
     out = client.post("/api/do/battle_text", json={"text": "火燒糧草"}).json()
     assert "（此刻無法這麼做。）" in out["message"]
 
@@ -5237,6 +5239,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+        "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6009,6 +6012,7 @@ NOT_IN_THE_FINGERPRINT = {
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",
+        "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
     },
 }
 WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}

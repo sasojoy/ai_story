@@ -21,7 +21,8 @@ from . import (
     figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts, materials, naming,
     opportunities, orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
 )
-from . import spar as _spar  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
+from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
+from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -175,6 +176,7 @@ class BattleTextRequest(BaseModel):
     act_index: int  # 送出時是第幾幕：評分照這一幕的情境（C 段送出時換了幕也照這個評過的分）
     faction_name: str
     text: str
+    name: str = ""  # 送出的人的名號：劇情以他開頭（試玩回饋 2026-10-08）
 
 
 class FreeTextOutcome(BaseModel):
@@ -2714,6 +2716,9 @@ class Game:
         if battle.unfinished:
             return
         definition = self.content.battles.get(battle.battle_id)
+        line = self._highlight_line(battle, definition)
+        if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
+            self.world.mutate_season(lambda season: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
         if definition is not None and definition.third is not None and battle.third_push:
             # 第三方（地方豪強）收場的割據推動：一般收場與時刻表收場都推（時刻表那一支不套保底的大勢變化，所以要在分支之前）
             self.world.mutate_season(lambda season: self._apply_third_push(season, battle, definition))
@@ -2732,6 +2737,18 @@ class Game:
                 self._apply_outcome_trends_and_flags(self.state.world, battle)
             self._deliver_battle_results()
         self._open_waiting_showdown()
+
+    @staticmethod
+    def _highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
+        """收場時那一則傳聞：這一場最有戲的放手一搏（battle.highlight）。天下大事傳聞照慣例具名（假人不寫放手一搏，不會出現）。"""
+        h = battle.highlight
+        if h is None:
+            return ""
+        where = definition.name if definition is not None else battle.battle_id
+        head = f"{where}上，{h.name}放手一搏：「{h.text}」"
+        if h.won:
+            return f"{head}——成算不到{h.rate // 10 + 1}成，竟然成了。{h.story}".rstrip()
+        return f"{head}——沒成，倒成了兩軍口中的笑談。{h.story}".rstrip()
 
     def _apply_third_push(self, season: WorldState, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
         """第三方收場推的大勢線（戰鬥系統第六節）：一般收場與時刻表收場都推；資料庫那份與記憶體那份共用這一段。
@@ -2848,10 +2865,14 @@ class Game:
         rule = self.content.config.first_echo
         lines, gained = [], 0
         for entry in self.state.world.echoes.values():
-            due = len(entry.followers) - entry.paid
-            if entry.creator != p.name or due <= 0:
+            co = entry.co_creator == p.name  # 論武合出來的：另一個首創者照自己的帳補（co_paid）
+            due = len(entry.followers) - (entry.co_paid if co else entry.paid)
+            if p.name not in (entry.creator, entry.co_creator) or due <= 0:
                 continue
-            entry.paid = len(entry.followers)
+            if co:
+                entry.co_paid = len(entry.followers)
+            else:
+                entry.paid = len(entry.followers)
             gained += due * rule.fame_per
             lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}練了出來。")
         if not lines:
@@ -2944,6 +2965,13 @@ class Game:
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        h = battle.highlight
+        fame = c.config.battle.highlight_fame
+        highlight_changes = []
+        if earlier is None and h is not None and h.name == me.name and h.won and fame:  # 這一場最有戲的那一搏是自己的、而且成了
+            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
+            lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
+            highlight_changes.append(f"名望 +{fame}")
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -2963,6 +2991,8 @@ class Game:
         if earlier is None:
             changes = [front_lines.mark(tid, d) if in_words and can_draw_side_change(c, tid) else plain(tid) for tid, d in moves.items()]
             record_changes = [plain(tid) for tid in moves if not (in_words and can_draw_side_change(c, tid))]
+            changes += highlight_changes
+            record_changes += highlight_changes
         else:
             changes, record_changes = [], []
             lines += [
@@ -3258,9 +3288,12 @@ class Game:
         definition, _, text, faction_name = checked
         return BattleTextRequest(
             battle_id=definition.id, act_index=self.world.get_battle().act_index, faction_name=faction_name, text=text,
+            name=self.state.player.name,
         )
 
-    def submit_battle_custom_action(self, text: str, llm_rate: int | None = None) -> list[str]:
+    def submit_battle_custom_action(
+        self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
+    ) -> list[str]:
         """自訂行動輸入框的送出：截到 20 字，查到這回合對應的 free_text 選項，機制效果
         還是走它的 tag（跟按按鈕完全一樣的查表邏輯），玩家打的字只會被餵給 LLM 評成功率。
         這裡用 tick=True（不是 tick=False）——跟 _battle_choose() 不一樣，這個方法不是
@@ -3269,15 +3302,17 @@ class Game:
         負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
         「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
         llm_rate 是 server.py 在行動鎖外評好的成功率（battle_text_request 開的單子；試玩回饋 2026-10-08：鎖內等模型全服跟著等）；
-        沒給（直接呼叫的測試、腳本）就在這裡評，用 _quick_client 的短逾時複本，評不到就是保底值。"""
+        沒給（直接呼叫的測試、腳本）就在這裡評，用 _quick_client 的短逾時複本，評不到就是保底值。
+        stories 是同一次模型呼叫寫好的（成功版, 失敗版）劇情（battle_instance.assess_gamble）；擲骰後播對應的那一版。"""
         checked = self._battle_text_check(text, tick=True)
         if isinstance(checked, list):
             return checked
         definition, tag, text, faction_name = checked
         if llm_rate is None:
             act = battle_instance.current_act(self.world.get_battle(), definition)
-            llm_rate = battle_instance.assess_action_success_rate(self._quick_client(), act, faction_name, text)
-        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate)
+            verdict = battle_instance.assess_gamble(self._quick_client(), act, faction_name, text, self.state.player.name)
+            llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
+        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate, stories)
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -3362,6 +3397,7 @@ class Game:
 
     def _submit_battle_action(
         self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,
+        stories: tuple[str, str] | None = None,
     ) -> list[str]:
         """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項，連同 LLM 先評好
         的成功率）並嘗試結算這回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡
@@ -3370,7 +3406,7 @@ class Game:
         captured: dict[str, list[str]] = {"msgs": []}
 
         def _apply(b: battle_instance.BattleInstance) -> None:
-            battle_instance.submit_action(b, name, tag, text, success_rate)
+            battle_instance.submit_action(b, name, tag, text, success_rate, stories)
             captured["msgs"] = self._advance_battle_round(b, definition)
 
         battle = self.world.mutate_battle(_apply)
@@ -4566,18 +4602,18 @@ class Game:
     # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，bot_policy._answer_invite）。邀請存在這一季的 WorldState.invites。
     # 「是假人」不影響任何一句話。
 
-    def _spar_problem(self, who: Game, *, me: bool) -> str | None:
-        """這個人此刻能不能切磋（拒絕的話；能是 None）：不在序章、閒著（選單上有打坐：不在事件、路上、閉關、打坐、決戰裡）、
-        體力付得起一次遊歷。me 是說話的人自己（「你」），不然寫對方的名號。"""
+    def _spar_problem(self, who: Game, *, me: bool, what: str = "切磋", cost: int | None = None) -> str | None:
+        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（選單上有打坐：
+        不在事件、路上、閉關、打坐、決戰裡）、體力付得起（cost 沒給是一次遊歷）。me 是說話的人自己（「你」），不然寫對方的名號。"""
         s, c = who.state, self.content
         name = "你" if me else s.player.name
         if prologue_rules.active(s, c):
-            return f"{name}還在草廬學藝，下山之後才能切磋。"
+            return f"{name}還在草廬學藝，下山之後才能{what}。"
         if "act:rest" not in {o.id for o in who.options(odds=False, tick=False)}:
-            return f"{name}此刻正忙，騰不出手來切磋。"
-        cost = c.config.action_cost["train"]
+            return f"{name}此刻正忙，騰不出手來{what}。"
+        cost = c.config.action_cost["train"] if cost is None else cost
         if s.player.stamina < cost:
-            return f"{name}體力不夠（切磋要 {cost} 點）。"
+            return f"{name}體力不夠（{what}要 {cost} 點）。"
         return None
 
     def _spar_pair(self, other: str) -> str:
@@ -4634,6 +4670,8 @@ class Game:
                 continue
             if inv.kind == "travel":  # 結伴同行：答應不花體力（趕路、疾行的體力出發時各付各的）
                 opts.append(Option(id=f"invite:yes:{inv.id}", label=f"答應{inv.sender}的{what}"))
+            elif inv.kind == "discuss":  # 論武要挑自己出哪一樣：在他的玩家卡上答（discuss_buttons）；選單上只提醒、只能婉拒
+                opts.append(Option(id=f"invite:yes:{inv.id}", enabled=False, label=f"答應{inv.sender}的{what}（在他的玩家卡上挑你要出的）"))
             else:
                 opts.append(self._cost_option(f"invite:yes:{inv.id}", f"答應{inv.sender}的{what}", c.config.action_cost["train"]))
             opts.append(Option(id=f"invite:no:{inv.id}", label=f"婉拒{inv.sender}的{what}"))
@@ -4655,9 +4693,12 @@ class Game:
             CharacterStore(self.world.db).save(other.state)
         return msgs
 
-    def answer_invite(self, inv, other: Game | None, verb: str) -> list[str]:
+    def answer_invite(
+        self, inv, other: Game | None, verb: str, item: str = "", proposed: tuple[str | None, str] | None = None,
+    ) -> list[str]:
         """答應（yes）、婉拒（no）、收回（cancel）一張邀請。other 是另一個人那一份（_peer；他不在這裡了是 None）；
-        呼叫端負責把 other 存回去（玩家卡走 peer_act，選單走 _invite）。"""
+        呼叫端負責把 other 存回去（玩家卡走 peer_act，選單走 _invite）。論武答應時 item 是你出的那一樣，proposed 是鎖外取好的名字
+        （discuss_request 的 C 段；沒給才在鎖裡叫模型，整季腳本與測試）。"""
         s = self.state
         what = invites.kind_name(inv.kind)
         invites.drop(s.world, inv.id)
@@ -4678,6 +4719,8 @@ class Game:
             return [f"你婉拒了{inv.sender}的{what}。"]
         if inv.kind == "travel":
             return self._join(inv, other)
+        if inv.kind == "discuss":
+            return self._discuss(inv, other, item, proposed)
         return self._spar(inv, other)
 
     def _greet_back(self, inv, other: Game, gesture: social.Gesture, verb: str) -> list[str]:
@@ -4724,6 +4767,141 @@ class Game:
         result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
         other._spar_record(result, me.name, ours, self)
         return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other)
+
+    # ── 論武（玩家互動第二層）：兩個人各出一樣（武學或意境）合成一樣新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
+    # 走 fusion 的三種合成（fusion.Partner：對方出的那一樣不必是你的、不佔你的持有）；血統、持有上限、「已經有了」照舊各自擋。
+    # 開爐的是答應的那一方（discuss_request 是 A 段，伺服器在鎖外取名，_discuss 是 C 段），發邀請的那一方接著照配方合出同一門。
+
+    def discuss_items(self) -> list[tuple[str, str]]:
+        """論武時你出得了的：身上與功法庫的武學（「art:<id>」）、悟得的全服意境（「insight:<id>」；自己畫圖悟的私有意境不行）。
+        回傳（鍵, 寫給人看的名字），身上的在前。"""
+        s, c = self.state, self.content
+        out: list[tuple[str, str]] = []
+        for art_id in library.owned_arts(s):
+            art = team.player_art(s, c, self.world, art_id)
+            if art is not None:
+                out.append((f"art:{art_id}", f"【{art.name}】"))
+        for insight_id in s.player.insights:
+            insight = None if insights.is_own(insight_id) else insights.resolve(insight_id, c, self.world, s)
+            if insight is not None:
+                out.append((f"insight:{insight_id}", f"「{insight.name}」"))
+        return out
+
+    def _discuss_cost(self) -> tuple[int, int]:
+        """論武這一邊付的（心得, 體力）：一爐的一半（fusion.half_price）；三種合成一樣價錢，照合成的算。"""
+        cfg = self.content.config
+        return fusion.half_price(cfg.fuse_xinde, cfg.fuse_stamina)
+
+    def discuss_refusal(self, other: Game) -> str | None:
+        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。"""
+        s, c = self.state, self.content
+        if not season_one(c, s.world):
+            return "（此刻無法這麼做。）"
+        cost = self._discuss_cost()[1]
+        for who, me in ((self, True), (other, False)):
+            problem = self._spar_problem(who, me=me, what="論武", cost=cost)
+            if problem is not None:
+                return problem
+        if invites.between(s.world, s.player.name, other.state.player.name, "discuss") is not None:
+            return "已經有一張論武的邀請在等回覆了。"
+        return None
+
+    def discuss_invite(self, other: Game, item: str) -> list[str]:
+        """玩家卡上的「論武・以 X」：帶著你要出的那一樣發一張邀請，對方在卡上挑他出的那一樣答應才開爐。"""
+        s = self.state
+        problem = self.discuss_refusal(other)
+        if problem is not None:
+            return [problem]
+        label = dict(self.discuss_items()).get(item)
+        if label is None:
+            return ["你身上沒有這一樣。"]
+        name = other.state.player.name
+        invites.expire(s.world)
+        invites.send(s.world, self.content, "discuss", s.player.name, name, s.player.location, {"item": item})
+        self._save_season()
+        self.touched.add(name)
+        return [f"你拿出{label}，邀{name}一起論武；等他回覆。"]
+
+    @staticmethod
+    def _discuss_args(mine: str, theirs: str) -> tuple[str | None, list[str], str | None, str]:
+        """兩樣東西排成 fusion 的三種合成：（武學, 意境們, 第二門武學, 對方出的那一樣的 id）。兩門武學＝blend（你的在前），
+        武學＋意境＝fuse（不管誰出武學），兩個意境＝merge。"""
+        (mk, _, mid), (tk, _, tid) = mine.partition(":"), theirs.partition(":")
+        if mk == tk == "art":
+            return mid, [], tid, tid
+        if mk == "art":
+            return mid, [tid], None, tid
+        if tk == "art":
+            return tid, [mid], None, tid
+        return None, [mid, tid], None, tid
+
+    def _discuss_partner(self, mine: str, theirs: str, other_name: str):
+        art_id, insight_ids, other_art, lent = self._discuss_args(mine, theirs)
+        return art_id, insight_ids, other_art, fusion.Partner(lent=lent, name=other_name, price=self._discuss_cost())
+
+    def discuss_request(self, inv, other: Game, item: str) -> naming.NamingRequest | None:
+        """論武的 A 段（鎖內、只讀）：答應的那一方出 item、發邀請的那一方出邀請上那一樣，這一爐要不要模型取名或挑？
+        要就回單子（伺服器在鎖外交給 naming.generate，假人程式交給 bot_runner），不要是 None。"""
+        if inv is None or inv.kind != "discuss" or item not in dict(self.discuss_items()):
+            return None
+        art_id, insight_ids, other_art, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
+        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art, partner=partner)
+
+    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed) -> tuple[bool, list[str]]:
+        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合成了沒有, 訊息）。"""
+        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name)
+        client, rng = self._quick_client(), self.rng
+        if other_art is not None:
+            thing, msgs = fusion.blend(self.state, self.content, self.world, client, art_id, other_art, proposed, rng, partner)
+        elif art_id is not None:
+            thing, msgs = fusion.fuse(self.state, self.content, self.world, client, art_id, insight_ids[0], proposed, rng, partner)
+        else:
+            thing, msgs = fusion.merge(self.state, self.content, self.world, client, *insight_ids, proposed, partner)
+        return thing is not None, msgs
+
+    def discuss_problem(self, mine: str, theirs: str, other_name: str) -> str | None:
+        """這一邊合不合得成（拒絕的話；fusion 的 *_problem，對方那一樣當作借來的、價錢是一半）。只讀；假人挑要出哪一樣也問它。"""
+        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name)
+        s, c, w = self.state, self.content, self.world
+        if other_art is not None:
+            return fusion.blend_problem(s, c, w, art_id, other_art, partner)
+        if art_id is not None:
+            return fusion.fuse_problem(s, c, w, art_id, insight_ids[0], partner)
+        return fusion.merge_problem(s, c, w, *insight_ids, partner)
+
+    def _discuss(self, inv, other: Game, item: str, proposed) -> list[str]:
+        """答應論武（C 段）：重驗（還在發邀請的那個地點、兩個人都閒著、兩樣東西都還在各自手上、兩邊各自合得成），你先開爐
+        （新配方的名字照 proposed），他接著照配方合出同一門；各付一半，各記一則江湖紀錄。驗不過就說一句為什麼（邀請已經收了）。"""
+        me, them = self.state.player, other.state.player
+        theirs = inv.payload.get("item", "")
+        problem = None if inv.location == me.location else social.GONE
+        cost = self._discuss_cost()[1]
+        for who, mine in ((self, True), (other, False)):
+            problem = problem or self._spar_problem(who, me=mine, what="論武", cost=cost)
+        if problem is None and item not in dict(self.discuss_items()):
+            problem = "你身上沒有這一樣。"
+        if problem is None and theirs not in dict(other.discuss_items()):
+            problem = f"{them.name}身上已經沒有他要出的那一樣了。"
+        if problem is None and item == theirs:
+            problem = "兩個人出的是同一樣，論不出新東西。"
+        if problem is None:
+            problem = self.discuss_problem(item, theirs, them.name)
+        if problem is None:
+            mine_problem = other.discuss_problem(theirs, item, me.name)
+            problem = None if mine_problem is None else f"{them.name}那邊合不成：{mine_problem}"
+        if problem is not None:
+            return [problem]
+        made, msgs = self._discuss_forge(item, theirs, them.name, proposed)
+        if not made:
+            return msgs
+        _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""))  # 配方剛登記：他照查表合出同一門，不取名
+        self._save_season()
+        other._write(f"論武・{me.name}", their_msgs)
+        if self._draft is None:
+            self._write(f"論武・{them.name}", msgs)
+        else:
+            self._outcome("論武", msgs[0])
+        return msgs
 
     @staticmethod
     def _spar_power(who: Game, against: Game) -> float:
@@ -5495,6 +5673,13 @@ class Game:
         """玩家卡（social.card）；他不在這裡了是 None（網頁照 social.GONE 那一句說）。"""
         other = self._peer(name)
         return None if other is None else social.card(self, other)
+
+    def peer_request(self, name: str, action: str, params: dict | None = None) -> naming.NamingRequest | None:
+        """玩家卡上的鈕按下去之前要不要先請模型（social.CardAction.request；論武的首創取名）：三段式的 A 段，只讀。
+        對方不在這裡、這一種互動沒有登記或不需要模型，是 None。"""
+        handler = social.ACTIONS.get(action)
+        other = None if handler is None or handler.request is None else self._peer(name)
+        return None if other is None else handler.request(self, other, dict(params or {}))
 
     def peer_act(self, name: str, action: str, params: dict | None = None) -> list[str]:
         """按了玩家卡上的一顆鈕：對方還在這裡、這一種互動有登記，才交給它做（social.CardAction.run），做完存回對方的存檔。
