@@ -19,9 +19,10 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts, materials, naming,
-    opportunities, orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
+    opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
 )
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
+from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
@@ -136,6 +137,17 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+
+
+@dataclass(frozen=True)
+class RaidSpoils:
+    """一場截殺分出勝負之後的帳（Config.raid）：誰贏、輸的人失了多少銀兩、贏的拿走多少、輸的人掉多少氣血、贏的記多少貢獻。"""
+
+    winner: str
+    lost: int
+    taken: int
+    hp: int
+    contrib: int
 # 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
 # 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
 HEARD_TITLE = "聽聞"
@@ -4986,6 +4998,144 @@ class Game:
             self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record))
         return msgs
 
+    # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
+    # 只有兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人不能截殺，也不會被截殺。對方下線、在忙也照打：
+    # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
+
+    def raid_shown(self, other: Game) -> bool:
+        """卡上要不要畫「截殺」：第一季開著、兩個人都投靠了陣營、而且不同陣營。"""
+        mine, theirs = self.state.player.faction, other.state.player.faction
+        return season_one(self.content, self.state.world) and mine is not None and theirs is not None and mine != theirs
+
+    @staticmethod
+    def _raid_key(attacker: str, target: str) -> str:
+        return f"{name_key(attacker)}>{name_key(target)}"
+
+    def raid_refusal(self, other: Game) -> str | None:
+        """「截殺」按不按得下去（拒絕的話；能是 None）：不在城鎮類的地點、兩個人都過了新手期、你閒著付得起體力、
+        你上一次截殺他已經過了冷卻、他沒有剛被人截殺過。對方忙不忙不看（截殺不必他同意）。"""
+        s, c, cfg = self.state, self.content, self.content.config.raid
+        if not self.raid_shown(other):
+            return "（此刻無法這麼做。）"
+        loc = c.locations[s.player.location]
+        if c.config.explore_mix_of(loc.tags).kind == "town":
+            return "城裡耳目眾多，不便動手。"
+        if roster.newbie(s, c):
+            return "你初入江湖，還在新手期，先別結這種仇。"
+        them = other.state.player.name
+        if roster.newbie(other.state, c):
+            return f"{them}初入江湖，還在新手期，下不了這個手。"
+        problem = self._spar_problem(self, me=True, what="截殺", cost=cfg.stamina)
+        if problem is not None:
+            return problem
+        w = s.world
+        last = w.raids.get(self._raid_key(s.player.name, them))
+        if last is not None and w.time - last < cfg.pair_cooldown_seconds:
+            return f"你不久前才截殺過{them}，過一陣子再說。"
+        hit = w.raided.get(name_key(them))
+        if hit is not None and w.time - hit < cfg.shield_seconds:
+            return f"{them}剛被人截殺過，元氣未復，這時下手太不講江湖道義。"
+        return None
+
+    def raid_odds(self, other: Game) -> str:
+        """截殺的勝算（「有把握」這種字，同遊歷的按鈕）：本人對本人的威力，照固定種子模擬。"""
+        theirs = self._spar_power(other, self)
+        squad = Squad(id=f"raid:{other.state.player.name}", name=other.state.player.name, difficulty=theirs)
+        return team.odds_word(self._spar_power(self, other), squad)
+
+    def raid_targets(self) -> list[tuple[str, str]]:
+        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。不是第一季、自己是散人時是空的。"""
+        s = self.state
+        if s.player.faction is None or not season_one(self.content, s.world):
+            return []
+        out = []
+        for state in social.here(self):
+            other = self._kin(state)
+            if self.raid_shown(other) and self.raid_refusal(other) is None:
+                out.append((state.player.name, self.raid_odds(other)))
+        return out
+
+    def raid(self, other: Game) -> list[str]:
+        """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
+        與一點氣血（不變成內傷）；贏的一方記一點本季貢獻；平手誰都不失什麼。雙方各一份戰報與一則江湖紀錄。"""
+        problem = self.raid_refusal(other)
+        if problem is not None:
+            return [problem]
+        s, c, cfg = self.state, self.content, self.content.config.raid
+        me, them = s.player, other.state.player
+        me.stamina -= cfg.stamina
+        s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
+        s.world.raided[name_key(them.name)] = s.world.time
+        self._save_season()
+        ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
+        result = encounter.resolve_encounter(ours, theirs, self.rng)
+        mirrored = self._spar_mirror(result, theirs)
+        if result.tier in team.WIN_TIERS:
+            winner, loser = self, other
+        elif mirrored.tier in team.WIN_TIERS:
+            winner, loser = other, self
+        else:
+            winner = loser = None
+        spoils = winner._raid_spoils(loser) if winner is not None else None
+        self.touched.add(them.name)
+        other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
+        return self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
+
+    def _raid_spoils(self, loser: Game) -> RaidSpoils:
+        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，不變成內傷），self 拿走一部分銀兩、記一點貢獻。"""
+        c, cfg = self.content, self.content.config.raid
+        lp, wp = loser.state.player, self.state.player
+        purse = lp.stats.get("silver", 0)
+        lost = min(cfg.silver_cap, math.ceil(purse * cfg.silver_share)) if purse > 0 else 0
+        taken = math.ceil(lost * cfg.take_share)
+        lp.stats["silver"] = purse - lost
+        wp.stats["silver"] = wp.stats.get("silver", 0) + taken
+        con = team.con_of(loser.state, c, loser.world, PLAYER)
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss, agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        contrib = c.config.contrib_per_push * cfg.win_contrib_push
+        push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
+
+    def _raid_record(
+        self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
+        spoils: RaidSpoils | None, *, attacker: bool,
+    ) -> list[str]:
+        """這一邊的戰報與紀錄。對手寫成一支只為這一場存在的隊伍（同切磋），戰報只列本人。"""
+        s, c = self.state, self.content
+        p = s.player
+        squad = Squad(
+            id=f"raid:{rival}", name=rival, difficulty=rival_power,
+            attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
+        )
+        record = battlelog.new_record(s, c, self.world, squad, result, "raid")
+        record.ours = record.ours[:1]
+        won = spoils is not None and name_key(spoils.winner) == name_key(p.name)
+        hp_lost: int | None = 0
+        if spoils is None:
+            story = f"你攔下{rival}動手，兩人鬥了半天不分高下，各自退開。" if attacker else \
+                f"{rival}半路攔下你動手，兩人鬥了半天不分高下，各自退開。"
+        elif won:
+            record.silver = spoils.taken
+            record.changes.append(f"貢獻 +{spoils.contrib}")
+            story = f"你攔下{rival}動手，{rival}不敵，丟下銀兩走了。" if attacker else \
+                f"{rival}半路截殺你，反被你打退，丟下銀兩走了。"
+        else:
+            record.silver = -spoils.lost
+            hp_lost = spoils.hp
+            if spoils.hp > 0:
+                record.changes.append(f"氣血 -{spoils.hp}")
+            story = f"你攔下{rival}動手，卻不是他的對手，只得丟下銀兩脫身。" if attacker else \
+                f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
+        record.notes.append(story)
+        self._play_rounds(record, squad, result.tier, hp_lost)
+        line = self._file_battle(record)
+        msgs = [line, story, *battlelog.gains_list(record)]
+        if attacker:
+            msgs.insert(0, f"體力 -{c.config.raid.stamina}")
+        if self._draft is None:
+            self._write(f"截殺・{rival}" if attacker else f"遭{rival}截殺", msgs, tag=battlelog.outcome_text(record))
+        return msgs
+
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
 
@@ -6074,7 +6224,7 @@ class Game:
         else:
             why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
         parts = [c.scenario.faction(p.faction).name if p.faction else "散人"]
-        title = ranks.title(c, s)
+        title = ranks.title(c, s) or ranger.title(c, s)
         if title:
             parts.append(title)
         place = c.locations[p.location].name if p.location in c.locations else p.location
@@ -6162,8 +6312,6 @@ class Game:
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
-        sect = c.sects[p.sect].name if p.sect else None
-        faction = c.scenario.faction_name(p.faction)
         now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
         mates = []
         for cid in p.team:
@@ -6173,7 +6321,8 @@ class Game:
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
             "name": p.name,
-            "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
+            "affiliation": social.affiliation(s, c),
+            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,

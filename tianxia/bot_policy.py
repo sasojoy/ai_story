@@ -41,6 +41,10 @@ PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心�
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
 SERVER_BLEND_SHARE = 0.15  # 武學＋武學的份額：比整季機器人低，持有 30 門就有 435 對、每一對都是首創要叫模型【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
+# 截殺（Config.raid）：此地有截殺得了、而且勝算夠的敵對陣營的人時，每一輪有 RAID_CHANCE 的機會動手；只挑 RAID_ODDS 的對象
+# （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
+RAID_CHANCE = 0.1
+RAID_ODDS = CHALLENGE_ODDS
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
 # 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
@@ -131,6 +135,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     rally = _toward_battle(game)
     if rally is not None:
         return msgs + rally
+    raided = _raid(game, rng)
+    if raided is not None:
+        return msgs + raided
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
@@ -174,6 +181,15 @@ def _answer_invite(game: Game, rng: random.Random) -> str | None:
     if first.enabled and rng.random() < INVITE_YES:
         return first.id
     return "invite:no:" + first.id.removeprefix("invite:yes:")
+
+
+def _raid(game: Game, rng: random.Random) -> list[str] | None:
+    """此地有截殺得了、勝算在 RAID_ODDS 的人時，RAID_CHANCE 的機會截殺第一個（走玩家卡同一條路，Game.peer_act）。
+    沒有對象時不擲骰（不改到其他行為的亂數）；這一輪不動手是 None。"""
+    targets = [name for name, odds in game.raid_targets() if odds in RAID_ODDS]
+    if not targets or rng.random() >= RAID_CHANCE:
+        return None
+    return game.peer_act(targets[0], "raid")
 
 
 def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
