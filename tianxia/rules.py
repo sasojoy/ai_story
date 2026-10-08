@@ -24,17 +24,18 @@ def display_name(state: GameState) -> str:
 
 def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
-    此刻的階（ranks.rank_of）每比第 1 階高一階抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。散人、敵對陣營，
-    以及不在大勢人物表上的人物只看名望。最低 0。
+    此刻的階（ranks.rank_of）每比第 1 階高一階抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。敵對陣營，
+    以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）。最低 0。
     第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
     rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
-    from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+    from . import ranger, ranks  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
 
     bar = content.characters[companion_id].audience_fame
     figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
     if figure is not None and p.faction is not None and p.faction == figure.faction:
         bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
+    bar -= ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵一點，對所有人物都算（陣營的人是 0）
     return max(0, bar)
 
 
@@ -154,6 +155,15 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.factions and p.faction not in cond.factions:
         return False
+    if cond.ranger_min is not None or cond.ranger_path is not None:
+        from . import ranger  # noqa: PLC0415  ranger → rules：在函式裡 import，避免循環
+
+        if content is None or not ranger.active(state, content):
+            return False
+        if cond.ranger_min is not None and ranger.tier(state, content) < cond.ranger_min:
+            return False
+        if cond.ranger_path is not None and ranger.path(state) != cond.ranger_path:
+            return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算
@@ -811,6 +821,10 @@ def apply_effect(
         p.stats[key] = after
         if after != before:
             msgs.append(f"{names.get(key, key)} {after - before:+d}")
+        if key in ("good", "evil"):
+            from . import ranger  # noqa: PLC0415  ranger → rules：在函式裡 import，避免循環
+
+            ranger.note_gain(state, content, key, after - before)  # 散人的遊俠名號照實際加了多少記帳
         if capped:  # 被上限夾掉了，玩家要知道是到頂、不是事件沒效果
             msgs.append(f"（{names.get(key, key)}已到頂 {content.config.stat_cap}）")
     if any(key in ("good", "evil") for key in effect.stats):

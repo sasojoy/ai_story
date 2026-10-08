@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
     figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts, materials, naming,
-    opportunities, orders, push, rank_actions, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
+    opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
 )
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
@@ -6224,7 +6224,7 @@ class Game:
         else:
             why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
         parts = [c.scenario.faction(p.faction).name if p.faction else "散人"]
-        title = ranks.title(c, s)
+        title = ranks.title(c, s) or ranger.title(c, s)
         if title:
             parts.append(title)
         place = c.locations[p.location].name if p.location in c.locations else p.location
@@ -6312,8 +6312,6 @@ class Game:
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
-        sect = c.sects[p.sect].name if p.sect else None
-        faction = c.scenario.faction_name(p.faction)
         now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
         mates = []
         for cid in p.team:
@@ -6323,7 +6321,8 @@ class Game:
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
             "name": p.name,
-            "affiliation": "・".join(name for name in (sect, faction, ranks.title(c, s)) if name) or "散人",
+            "affiliation": social.affiliation(s, c),
+            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,

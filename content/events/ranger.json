@@ -1,0 +1,103 @@
+[
+  {
+    "id": "ranger_xia_injustice",
+    "title": "路見不平",
+    "tags": [
+      "官道"
+    ],
+    "qiyu": true,
+    "weight": 0.3,
+    "once": true,
+    "condition": {
+      "ranger_min": 3,
+      "ranger_path": "俠"
+    },
+    "text": "官道旁幾個地痞圍著一個賣炭的老漢，炭車翻在溝裡。人群裡有人認出了你，低聲說：「是那位行俠的……」地痞們回頭看你，手上的棍子遲疑了一下。",
+    "choices": [
+      {
+        "text": "上前喝止",
+        "check": {
+          "stat": "str",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你一聲斷喝，搶過為首那人的棍子折成兩截。地痞們一哄而散，老漢千恩萬謝，圍觀的人把這件事傳了好幾條街。",
+          "stats": {
+            "good": 2,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你出手慢了半步，地痞們仗著人多纏住你，最後各自掛彩散去。老漢還是謝了你。",
+          "stats": {
+            "good": 1
+          },
+          "stamina": -6
+        }
+      },
+      {
+        "text": "掏錢替老漢解圍",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
+        "effect": {
+          "text": "你丟下一串錢，說炭車的錢你出了。地痞們撿了錢走人，老漢把一筐好炭硬塞給你。",
+          "stats": {
+            "silver": -10,
+            "good": 1,
+            "fame": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ranger_kou_invitation",
+    "title": "綠林拜帖",
+    "tags": [
+      "野外"
+    ],
+    "qiyu": true,
+    "weight": 0.3,
+    "once": true,
+    "condition": {
+      "ranger_min": 3,
+      "ranger_path": "寇"
+    },
+    "text": "林子裡跳出幾條漢子，卻不動刀。為首的抱拳道：「久聞大名。寨主備了酒，請你上山坐坐，有一樁買賣想跟你商量。」",
+    "choices": [
+      {
+        "text": "上山赴宴",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "寨主想劫一支過路的商隊，請你壓陣。你看準時機，只取了一份最輕的就走，寨主反倒更敬你三分。",
+          "stats": {
+            "silver": 30,
+            "evil": 1,
+            "fame": 2
+          }
+        },
+        "fail_effect": {
+          "text": "酒裡下了東西。你醒來時躺在山腳，錢袋輕了不少，山上傳來一陣哄笑。",
+          "stats": {
+            "silver": -10
+          }
+        }
+      },
+      {
+        "text": "抱拳婉拒",
+        "effect": {
+          "text": "你說改日再叨擾。那幾條漢子也不勉強，留下一枝箭當信物，說山上的門隨時為你開著。",
+          "stats": {
+            "fame": 1
+          }
+        }
+      }
+    ]
+  }
+]

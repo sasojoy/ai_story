@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, rules, team
+from . import calendar, ranger, rules, team
 from .models import Content
 from .state import GameState
 from .world_state import WorldStateStore
@@ -26,7 +26,8 @@ def owned_companions(world: WorldStateStore, player_name: str) -> list[str]:
 def recruit_chance(content: Content, state: GameState, companion_id: str) -> float:
     cfg = content.config
     affinity = state.player.affinities.get(companion_id, 0)
-    return min(0.95, max(0.05, cfg.recruit_base_chance + (affinity / 100) * cfg.recruit_affinity_bonus))
+    bonus = ranger.recruit_bonus(state, content)  # 散人的遊俠名號第 2 階起加成（陣營的人是 0）
+    return min(0.95, max(0.05, cfg.recruit_base_chance + (affinity / 100) * cfg.recruit_affinity_bonus + bonus))
 
 
 def _seed_starting_skills(world: WorldStateStore, companion_id: str, ch) -> None:
