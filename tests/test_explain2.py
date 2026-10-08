@@ -12,6 +12,9 @@ import random
 import re
 from pathlib import Path
 
+import pytest
+from conftest import real_content
+
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
 
@@ -380,6 +383,80 @@ def test_no_method_help_when_the_methods_are_not_on_the_menu(game):
     """戰場蓋過了畫面（選單是戰鬥選項）：做法不在選單上，就不給提示。"""
     _feeling(game)
     assert game.method_help(["battle:act:0"]) is None
+
+
+# ── 四、潁川附近打得贏的遊歷（內容）：潁水河畔的河灘潑皮、偷網賊 ─────────────────────────────
+
+RIVER = "yingshui"
+NEW_SQUADS = ("hetan_popi", "touwang_zei")
+WINNABLE = ("穩勝", "有把握")  # 「有勝算」：team.ODDS 沒有這個詞，取有把握（勝率 65% 以上）或更好
+
+
+def _graduate(content, seed):
+    """走完序章的新角色（假人、整季機器人走的同一條路：Game.new(graduated=True)），站在起點。"""
+    from tianxia.sqlite_world import open_world
+
+    world = open_world()
+    if not world.get_season().storyline:
+        world.seed_first_season(content)
+    world.open_season(content, now=0.0)
+    game = Game.new(content, f"出師{seed}", rng=random.Random(seed), world=world, graduated=True)
+    game.client = None
+    return game
+
+
+@pytest.mark.parametrize("profile", ["weekend", None])
+def test_a_fresh_character_can_win_by_the_yingshui(profile):
+    """FB-100：剛出師的人在潁川一帶找不到打得贏的仗（長社、黃巾別部營寨都是必敗，潁川郊野難分勝負）。
+    潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。"""
+    content = real_content(profile)
+    content.config.auto_open_first_season = True
+    for game in [_fresh(content), *(_graduate(content, seed) for seed in (1, 2, 3))]:
+        game.state.player.location = RIVER
+        for sid in NEW_SQUADS:
+            assert game.odds(sid) in WINNABLE, (game.state.player.name, sid, game.odds(sid))
+        train = next(o for o in game.options() if o.id == "act:train")
+        assert train.enabled and train.label.split("・")[-1].rstrip("）") in WINNABLE, train.label
+
+
+def test_the_river_squads_sit_within_two_stops_of_the_start(on):
+    from collections import deque
+
+    start = on.scenario.start_location
+    assert start == "yingchuan"
+    dist, todo = {start: 0}, deque([start])
+    while todo:
+        here = todo.popleft()
+        for there in on.locations[here].connections:
+            if str(there) not in dist:
+                dist[str(there)] = dist[here] + 1
+                todo.append(str(there))
+    assert dist[RIVER] <= 2
+    assert set(NEW_SQUADS) <= set(on.locations[RIVER].enemies)
+
+
+def test_every_side_fights_the_river_squads(on):
+    """不屬於任何陣營：誰遇上都是真的打（不會變成某一邊的零風險操練），散人與三邊的人一樣是勝算有把握的仗。"""
+    game = _war(on)
+    for faction in [None, *(f.id for f in on.scenario.factions)]:
+        game.state.player.faction = faction
+        assert not any(game._drills_with(on.squads[sid]) for sid in NEW_SQUADS)
+    for sid in NEW_SQUADS:
+        assert on.squads[sid].faction is None and on.squads[sid].desc
+
+
+def test_the_river_squad_names_pass_the_name_rules(on):
+    from tianxia import naming
+
+    for sid in NEW_SQUADS:
+        assert naming.name_problem(on.squads[sid].name, on) is None
+
+
+def test_the_big_camp_opponents_stay_as_they_were(on):
+    """給有經驗的人打的營寨對手不動（brief）：黃巾別部營寨、長社照舊。"""
+    assert on.locations["huangjin_camp"].enemies == ["shuikou", "toumu"]
+    assert on.locations["changshe"].enemies == ["louluo", "shuikou"]
+    assert (on.squads["shuikou"].difficulty, on.squads["toumu"].difficulty, on.squads["louluo"].difficulty) == (35, 70, 15)
 
 
 # ── 五、FB-101：行動列底下兩處小字 ─────────────────────────────
