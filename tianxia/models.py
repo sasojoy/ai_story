@@ -778,6 +778,7 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", 
 ALLOW_FIXED = frozenset({
     "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
+    "act:bounties",  # 懸賞榜（第一季、城鎮類的地點）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1149,6 +1150,8 @@ class Ranger(_Strict):
       到第 3、4 階要再靠懸賞的功績，跟陣營的人要靠貢獻升第 3、4 階同一個量級。
     - audience_per_tier：每一階抵幾點求見門檻、對所有人物都算（陣營的人每升一階抵 audience_rank_discount 5 點，可是只對自己陣營的人物）；
       第 1 階起算。
+    - exp_per_tier：第 1 階起每一階打贏的經驗多幾成（第 2 階 +20%）：陣營的人能跟自己陣營的隊伍操練（零風險拿經驗），散人碰上的都是真打；
+      整季機器人量到沒有這一項時陣營的人季末等級比散人高四級（scripts/measure_sanren.py）。
     - recruit_per_tier：第 2 階起每一階招募成功率加多少（第 2 階 +5%、第 4 階 +15%）：散人沒有部下，靠同伴補。
     - qiyu_tier：到這一階，探索才遇得上散人專屬的奇遇（Condition.ranger_min）。
     - bounty_bonus_tier／bounty_bonus：到這一階，懸賞給的銀兩再乘多少。"""
@@ -1156,9 +1159,41 @@ class Ranger(_Strict):
     thresholds: list[int] = Field(default_factory=lambda: [5, 15, 30, 50], min_length=1)
     audience_per_tier: int = Field(default=3, ge=0)
     recruit_per_tier: float = Field(default=0.05, ge=0, le=1)
+    exp_per_tier: float = Field(default=0.05, ge=0, le=1)
     qiyu_tier: int = Field(default=3, ge=1)
     bounty_bonus_tier: int = Field(default=4, ge=1)
     bounty_bonus: float = Field(default=1.25, ge=1)
+
+
+class Bounties(_Strict):
+    """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：只有第一季開著時有，在城鎮類的地點查看（「懸賞榜」不花體力）。
+    官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
+    散人兩邊的都能接（通緝也是），陣營的人只能接自己陣營的；接了才算數，一個人同時最多接 max_taken 張。
+
+    數字的依據：
+    - silver：週末設定一天大約收 100 兩（Raid 的註解），一張討伐（要去指定的地方、打贏指定的對手）給 40 兩，比一場遊歷多一些；
+      打探（去某處探索一次）最省事、給 20；護送（從一個城鎮走到另一個不相鄰的城鎮）花時間、給 30。
+    - exp：完成一張給的經驗（本人與帶著的同伴，同打贏一場）。陣營的人能跟自己陣營的隊伍操練（零風險拿經驗），散人碰上的隊伍都是真打；
+      整季機器人量到陣營的人季末等級比散人高三、四級（scripts/measure_sanren.py），懸賞的經驗是補這一截的主要來源。
+    - deeds：散人完成一張記的俠名（遊俠名號的門檻 5／15／30／50）：一季隨機玩只靠事件到第 1、2 階，每週做兩三張就能多爬一兩階。
+      陣營的人不記（名號凍結），照樣拿銀兩。
+    - faction_share：陣營的人做自己陣營的懸賞，銀兩與經驗只拿幾成（他們另有軍令、貢獻、晉升與部下；懸賞榜主要是給散人的）。
+    - auto_weeks：陣營的懸賞掛幾週（地點散在整張地圖上，走過去常常要大半週；只掛一週的話整季機器人揭了五十張只做成三張）。
+    - quota：一張陣營懸賞前幾個完成的人有賞（照伺服器人數上限換算：100 人的量 3 張，最少 quota_min）。
+    - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。"""
+
+    kinds: list[str] = Field(default_factory=lambda: ["strike", "strike", "scout", "escort"])
+    silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15})
+    deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4})
+    exp: dict[str, int] = Field(default_factory=lambda: {"strike": 15, "scout": 10, "escort": 12, "wanted": 15})
+    quota_base: int = Field(default=3, ge=1)
+    quota_min: int = Field(default=1, ge=1)
+    max_taken: int = Field(default=3, ge=1)
+    auto_weeks: int = Field(default=2, ge=1)
+    faction_share: float = Field(default=0.5, ge=0, le=1)
+    post_min: int = Field(default=20, ge=1)
+    post_max: int = Field(default=200, ge=1)
+    post_weeks: int = Field(default=1, ge=1)
 
 
 class Raid(_Strict):
@@ -1269,6 +1304,7 @@ class Config(_Strict):
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
+    bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——

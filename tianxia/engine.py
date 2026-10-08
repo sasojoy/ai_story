@@ -17,12 +17,14 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm, fight_llm,
-    figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts, materials, naming,
-    opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview, social, styles, team, timetable, traits,
+    atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
+    fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
+    materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview,
+    social, styles, team, timetable, traits,
 )
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
+from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
 from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
@@ -471,6 +473,8 @@ class Game:
             p.location = c.scenario.start_location
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
+        if p.picking_bounty and not bounties.board_here(s, c):
+            p.picking_bounty = False  # 開關關了、人不在城鎮了：收起懸賞榜
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -605,6 +609,10 @@ class Game:
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
+        refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
+        if refunds:
+            self._write(bounties.BOARD, refunds)
+            self._save_season()
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -789,6 +797,8 @@ class Game:
             ]
         if s.player.picking_audience:
             return self._audience_options()
+        if s.player.picking_bounty:
+            return self._bounty_options()
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -869,6 +879,8 @@ class Game:
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
+        if bounties.board_here(s, c):  # 懸賞榜：第一季、城鎮類的地點；只是打開第二層選單，不花體力
+            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(bounties.open_bounties(s, c))} 張）"))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
@@ -1304,6 +1316,8 @@ class Game:
                 msgs = self._sense(arg)
             elif kind == "invite":
                 msgs = self._invite(arg)
+            elif kind == "bounty":
+                msgs = self._bounty(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1496,6 +1510,8 @@ class Game:
             return ROAD_TASKS[what][0]
         if kind == "opp":
             return opportunities.title(s, c, arg)
+        if kind == "bounty":
+            return bounties.BOARD
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1517,6 +1533,7 @@ class Game:
             "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
+            "bounties": f"{bounties.BOARD}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1825,6 +1842,9 @@ class Game:
             return self._rank_action(action_id)
         if what == "convoy":
             return self._take_convoy()
+        if what == "bounties":
+            self.state.player.picking_bounty = True  # 打開懸賞榜（見 _bounty_options），不花體力
+            return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -1928,7 +1948,8 @@ class Game:
         """
         if prologue_rules.active(self.state, self.content):
             return self._explore_outcome()  # 序章裡不撿破境丹（新手引導計畫一）
-        return self._explore_outcome() + self._legend_find()
+        scouted = bounties.on_explore(self.state, self.content, self.world, self.state.player.location)  # 懸賞榜的打探：探索一次就算
+        return self._explore_outcome() + self._legend_find() + scouted
 
     def _legend_find(self) -> list[str]:
         """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會）。
@@ -2366,6 +2387,38 @@ class Game:
                 opts.append(self._cost_option(option_id, ch.name, cost, note=f"還能談 {left}/{per_day} 輪"))
         opts.append(Option(id="call:back", label="返回"))
         return opts
+
+    def _bounty_options(self) -> list[Option]:
+        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他還有名額的每一張一顆「揭下」（接不了的灰掉、寫為什麼），
+        最後是永遠按得下去的「返回」。都不花體力。"""
+        s, c = self.state, self.content
+        mine = {b.id for b in bounties.mine(s, c)}
+        opts = []
+        for b in bounties.open_bounties(s, c):
+            line = f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}（{bounties.reward_text(s, c, b)}）"
+            if b.id in mine:
+                opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
+                continue
+            if not bounties.can_take(s, b):
+                continue  # 別的陣營的：陣營的人看不到
+            problem = bounties.take_problem(s, c, b)
+            opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
+                               enabled=problem is None))
+        opts.append(Option(id="bounty:back", label="返回"))
+        return opts
+
+    def _bounty(self, arg: str) -> list[str]:
+        """懸賞榜上的選擇：揭下、放棄，或返回（收起懸賞榜）。揭下、放棄之後榜還開著，可以接著挑。"""
+        s, c = self.state, self.content
+        verb, _, bounty_id = arg.partition(":")
+        if verb == "back":
+            s.player.picking_bounty = False
+            return ["你離開了懸賞榜。"]
+        if verb == "take":
+            return bounties.take(s, c, bounty_id)
+        if verb == "drop":
+            return bounties.drop(s, c, bounty_id)
+        return ["（此刻無法這麼做。）"]
 
     def _talked_out_note(self) -> str:
         """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」
@@ -3548,6 +3601,7 @@ class Game:
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
                 extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
+                extra += bounties.on_win(s, c, self.world, loc.id, squad.id)  # 懸賞榜的討伐
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes
@@ -3930,7 +3984,8 @@ class Game:
                 if line:
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
-        exp = round(squad.exp * more)  # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘
+        # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
+        exp = round(squad.exp * more * ranger.exp_factor(self.state, self.content))
         record.exp = exp
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
@@ -4162,7 +4217,7 @@ class Game:
                 text = f"{text}\n\n{flourish}"
         self._hide(text)
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
-        convoy = self._convoy_arrives(loc_id)
+        convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
         guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
         thresholds = check_thresholds(s, c, self.world, client, now=self.now)
         t = c.tutorial
@@ -5003,9 +5058,13 @@ class Game:
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：第一季開著、兩個人都投靠了陣營、而且不同陣營。"""
+        """卡上要不要畫「截殺」：第一季開著、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。"""
         mine, theirs = self.state.player.faction, other.state.player.faction
-        return season_one(self.content, self.state.world) and mine is not None and theirs is not None and mine != theirs
+        if not season_one(self.content, self.state.world):
+            return False
+        if mine is not None and theirs is not None and mine != theirs:
+            return True
+        return bounties.hunting(self.state, self.content, other.state.player.name)
 
     @staticmethod
     def _raid_key(attacker: str, target: str) -> str:
@@ -5044,9 +5103,10 @@ class Game:
         return team.odds_word(self._spar_power(self, other), squad)
 
     def raid_targets(self) -> list[tuple[str, str]]:
-        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。不是第一季、自己是散人時是空的。"""
+        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。不是第一季時是空的；
+        散人只有揭了通緝的那個人。"""
         s = self.state
-        if s.player.faction is None or not season_one(self.content, s.world):
+        if not season_one(self.content, s.world):
             return []
         out = []
         for state in social.here(self):
@@ -5079,7 +5139,25 @@ class Game:
         spoils = winner._raid_spoils(loser) if winner is not None else None
         self.touched.add(them.name)
         other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
-        return self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
+        msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
+        if winner is self:
+            msgs += self._raid_bounty(them.name)
+        return msgs
+
+    def post_wanted(self, other: Game, amount: int) -> list[str]:
+        """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（bounties.post）；成了寫一則江湖紀錄、存季。"""
+        msgs = bounties.post(self.state, self.content, other.state, amount)
+        if msgs and msgs[0].startswith("你押了"):
+            self._write(bounties.BOARD, msgs)
+            self._save_season()
+        return msgs
+
+    def _raid_bounty(self, target: str) -> list[str]:
+        """截殺打贏、揭了通緝他的懸賞：交差（賞銀、散人的俠名），補進這一則江湖紀錄。"""
+        msgs = bounties.on_raid_win(self.state, self.content, self.world, target)
+        if msgs and self._draft is None:
+            self._write(bounties.BOARD, msgs)
+        return msgs
 
     def _raid_spoils(self, loser: Game) -> RaidSpoils:
         """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，不變成內傷），self 拿走一部分銀兩、記一點貢獻。"""
@@ -5092,8 +5170,9 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss, agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
-        contrib = c.config.contrib_per_push * cfg.win_contrib_push
-        push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None else 0  # 散人（揭了通緝）不記貢獻
+        if contrib:
+            push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
 
     def _raid_record(
@@ -5116,7 +5195,8 @@ class Game:
                 f"{rival}半路攔下你動手，兩人鬥了半天不分高下，各自退開。"
         elif won:
             record.silver = spoils.taken
-            record.changes.append(f"貢獻 +{spoils.contrib}")
+            if spoils.contrib:
+                record.changes.append(f"貢獻 +{spoils.contrib}")
             story = f"你攔下{rival}動手，{rival}不敵，丟下銀兩走了。" if attacker else \
                 f"{rival}半路截殺你，反被你打退，丟下銀兩走了。"
         else:
@@ -6323,6 +6403,7 @@ class Game:
             "name": p.name,
             "affiliation": social.affiliation(s, c),
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
+            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；開關關著是空的
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,

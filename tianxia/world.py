@@ -5,7 +5,7 @@ import math
 import random
 from collections.abc import Callable
 
-from . import battle_instance, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
+from . import battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -26,6 +26,7 @@ EPS_CAL_HOURS = 1e-9  # 找下一個曆時交界時的浮點誤差（以曆時�
 WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: seats.rotate(state, content, state.world.hooked_week),  # 第四階輪替（正式版丁）：排在發令之前
     lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
+    lambda state, content, rng: bounties.issue(state, content, state.world.hooked_week, rng),  # 懸賞榜：兩個陣營各掛討伐、打探、護送
 ]
 
 

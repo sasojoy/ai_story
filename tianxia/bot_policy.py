@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team
+from . import atlas, battle_instance, bot, bounties, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, SkillDef
@@ -45,6 +45,10 @@ CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVA
 # （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
 RAID_CHANCE = 0.1
 RAID_ODDS = CHALLENGE_ODDS
+# 懸賞榜（bounties.py）：城裡看得到還接得了的懸賞就去揭（不花體力），手上有就往要去的地方走、到了照做；
+# 比推大勢的遊歷值得，比軍令低（陣營的事先做）【預設】
+BOUNTY_SCORE = 8.0
+BOUNTY_MOVE_SCORE = 6.0
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
 # 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
@@ -455,6 +459,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return effect_score(effect, _goals(game, profile), moved)
     if kind == "talk":
         return 0.0 if arg == "leave" else None
+    if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
+        verb = arg.partition(":")[0]
+        return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
     if kind == "call":
         # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
         # 萬一停在求見選單上，只會按返回
@@ -463,7 +470,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
         summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
-        return base + order_hop + summons_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        bounty_hop = BOUNTY_MOVE_SCORE if arg.partition(":")[0] == _bounty_hop(game) else 0.0  # 往懸賞要去的地方
+        return base + order_hop + summons_hop + bounty_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
@@ -473,11 +481,16 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
         if arg == "call":
             return None
+        if arg == "bounties":  # 懸賞榜：有揭得下的才打開（不然只是開了又返回）
+            return BOUNTY_SCORE if _takeable(game) else None
+        if arg == "explore" and _bounty_here(game, "scout"):
+            return BOUNTY_SCORE
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
         if arg == "train":
             s = game.state
             bonus = ORDER_SCORE if orders.win_counts(s, game.content, s.player.faction, s.player.location) else 0.0
+            bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
@@ -646,6 +659,24 @@ def _summons_hop(game: Game) -> str | None:
     """往召見的地點，路程最近的那一站；沒有召見、已經在、走不到時是 None（計畫 T5）。"""
     summons = game.state.player.summons
     return next_hop(game, [summons.location]) if summons is not None else None
+
+
+def _takeable(game: Game) -> bool:
+    """此地的懸賞榜上有揭得下的。"""
+    s, c = game.state, game.content
+    return any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c))
+
+
+def _bounty_here(game: Game, kind: str) -> bool:
+    """手上有一張要在這裡做的（討伐、打探）。"""
+    s = game.state
+    return any(b.kind == kind and b.location == s.player.location for b in bounties.mine(s, game.content))
+
+
+def _bounty_hop(game: Game) -> str | None:
+    """往手上的懸賞要去的地方，路程最近的那一站；沒有、已經在、走不到時是 None。"""
+    places = bounties.targets(game.state, game.content)
+    return next_hop(game, places) if places else None
 
 
 def _order_hop(game: Game) -> str | None:
