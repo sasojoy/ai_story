@@ -79,9 +79,11 @@ def test_no_targets_for_loners_or_after_a_defection(on):
     assert defection.targets_here(once.state, on) == []
 
 
-def test_no_targets_with_switch_off(real):
-    # 分開測：on 與 real 是同一份內容（on 只是把開關打開），同一個測試裡再拿 real 就已經是開著的了
-    off = _game(real, faction="guan", at="huangjin_camp")  # 開關關著（config.json 預設）
+def test_targets_with_switch_off_too(real):
+    """叛投不看第一季的開關（企劃者 2026-10-08）：開關關著（config.json 預設）照樣叛投得了；劇本沒有陣營才沒有。"""
+    off = _game(real, faction="guan", at="huangjin_camp")
+    assert [f.id for f in defection.targets_here(off.state, real)] == ["huang"]
+    real.scenario.factions = []
     assert defection.targets_here(off.state, real) == []
 
 
@@ -303,15 +305,16 @@ def test_confirm_after_defecting_elsewhere_does_nothing(on):
 
 
 def test_confirm_when_defecting_is_no_longer_allowed(on):
-    """確認畫面還開著、規則卻已經不讓叛投了（沒有陣營，或第一季的規則關了）：不叛投，話不說「不在叛投的地方」。"""
+    """確認畫面還開著、規則卻已經不讓叛投了（自己沒有陣營，或劇本拿掉了陣營）：不叛投，話不說「不在叛投的地方」。"""
     game = _game(on, at="huangjin_camp")  # 散人
     game.state.player.pending_defect = "huang"
     assert game.choose("defect:confirm")[-1] == "（現在不能叛投。）"
     assert game.state.player.faction is None and game.state.player.pending_defect is None
     other = _game(on, "乙", faction="guan", at="huangjin_camp")
     other.choose("defect:huang")
-    on.config.season_one = False  # 開關在確認之前關掉
-    assert other.choose("defect:confirm")[-1] == "（現在不能叛投。）"
+    target = _faction(on, "huang")
+    on.scenario.factions = []  # 劇本在確認之前拿掉了陣營（第一季的開關關掉不算：叛投不看它）
+    assert defection.refusal(other.state, on, target) == "現在不能叛投。"
     assert other.state.player.faction == "guan"
 
 
@@ -363,9 +366,29 @@ def test_new_season_allows_defecting_again(on):
     assert (player.state.player.faction, player.state.player.defected) == (None, False)
 
 
-def test_switch_off_no_defect_option(real):
-    game = _game(real, faction="guan", at="huangjin_camp")
+def test_a_season_stamped_before_the_switch_can_defect(on):
+    """Joy 2026-10-08「我現在需要先把轉陣營的功能開給正在運行中的伺服器」：設定開著、這一季開季時蓋的章卻是關的
+    （開關打開之前就開的那一季），一樣叛投得了；結果訊息照常、一季一次、清進度與傳聞在章關著時不出錯。"""
+    from tianxia import rules
+    game = _game(on, faction="guan", at="huangjin_camp")
+    game.state.world.season_one = False  # 開季時蓋的章是關的
+    assert not rules.season_one(on, game.state.world)
+    assert "defect:huang" in _ids(game)
+    game.choose("defect:huang")
+    msgs = game.choose("defect:confirm")
+    p = game.state.player
+    assert (p.faction, p.defected) == ("huang", True)
+    assert any("投了" in m for m in msgs)
+    game.state.player.location = "changshe"  # 官軍的投靠點：一季只能一次
     assert not any(i.startswith("defect:") for i in _ids(game))
+
+
+def test_switch_off_defect_option_and_confirm(real):
+    game = _game(real, faction="guan", at="huangjin_camp")
+    assert "defect:huang" in _ids(game)
+    game.choose("defect:huang")
+    game.choose("defect:confirm")
+    assert (game.state.player.faction, game.state.player.defected) == ("huang", True)
 
 
 # ── 決戰中不能叛投（最終審查 Important 1）──────────────────────────────
@@ -519,3 +542,17 @@ def test_server_bot_turn_never_picks_a_defect_option(on):
         bot_policy.take_turn(game, profile, random.Random(seed))
         p = game.state.player
         assert (p.faction, p.defected, p.pending_defect) == ("guan", False, None)
+
+
+def test_enlisted_cannot_defect_with_the_switch_off(real):
+    """開關關著的那一季（beta 的黃巾決戰）：名字在沒打完的決戰陣上一樣不能叛投。"""
+    real.config.admins = ["管"]
+    admin = _game(real, "管")
+    admin.sync(1000.0)
+    admin.admin_start_battle("huangjin_showdown", 1000.0)
+    assert _battle(admin).phase == "muster"
+    game = _game(real, faction="guan", at="yingchuan")
+    game.choose("battle:join:guan")
+    assert "甲" in _battle(game).participants
+    game.state.player.location = "huangjin_camp"
+    _no_defect(game)

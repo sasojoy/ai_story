@@ -2576,7 +2576,7 @@ class Game:
         return [prompt]
 
     def _defect_targets(self) -> list[FactionDef]:
-        """這一刻選單上能叛投去的陣營。先用不碰資料庫的條件擋掉大多數人（散人、開關關著、叛投過），
+        """這一刻選單上能叛投去的陣營。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），
         剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。"""
         if not defection.can_defect(self.state, self.content):
             return []
