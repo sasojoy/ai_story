@@ -302,6 +302,23 @@ def test_the_xinde_hint_shows_once_the_next_level_is_affordable(on):
     assert "去「修練」" in game.status_data()["hint"]
 
 
+def test_no_xinde_hint_while_the_season_is_being_prepared(content, world):
+    """審查 Minor 1：籌備中練成、合成都被擋（「賽季籌備中，等待管理者開季」），提示不能叫人去按。開了季就回來。"""
+    from tianxia import team
+
+    content.config.auto_open_first_season = False
+    content.config.admins = ["管理者"]
+    game = Game.new(content, "甲", rng=random.Random(1), world=world)
+    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.stats["xinde"] = team.practice_price(content, 1) + 10
+    assert world.season_phase() == "preparing"
+    assert game.practice("武學") == ["（賽季籌備中，等待管理者開季。）"]
+    assert game.status_data()["hint"] is None
+    Game.new(content, "管理者", rng=random.Random(2), world=world).admin_open_season(now=0.0)
+    game.sync(10.0)
+    assert game.status_data()["hint"]
+
+
 def test_the_xinde_hint_points_to_the_forge_when_only_a_forge_is_doable(on):
     game = _fresh(on)
     s, cfg = game.state, on.config
