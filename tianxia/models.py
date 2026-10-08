@@ -1013,9 +1013,22 @@ class BattleTuning(_Strict):
     """全服決戰的三招與推力（戰鬥系統設計 3.4）。全部【預設】：企劃者 2026-10-06「照預設做、測完再調」。
     放在 Config 前面：Config.battle 的預設工廠要在 Config 類別建起來時就找得到它。"""
 
-    power_base: float = 40.0  # 實力 ＝ power_base ＋ power_per × min(威力, power_cap)，最多 100
-    power_per: float = 0.4
-    power_cap: float = 150.0
+    # 實力 ＝ power_base ＋ power_per × min(威力, power_cap)（試玩回饋 2026-10-08，Joy：「玩家越強應該越有份量，而不是一視同仁，
+    # 那前面都白練了」）。舊值 40＋0.4×min(威力,150)、最多 100，新手（威力約 25）50、練上去的最多 100，只差兩倍、威力 150 以上
+    # 就沒差。整季機器人（14 天）季末威力 195～397，週末設定 91～262：新值新手 32.5、威力 100 是 70、300 是 170、400 封頂 220。
+    power_base: float = 20.0
+    power_per: float = 0.5
+    power_cap: float = 400.0
+    # 放手一搏成功時的推進乘上實力 ÷ gamble_strength_ref，夾在 gamble_strength_min～max（新手打五折、練滿最多兩倍）；失敗不乘
+    gamble_strength_ref: float = 100.0
+    gamble_strength_min: float = 0.5
+    gamble_strength_max: float = 2.0
+    # 進場依屬性給職位（試玩回饋 2026-10-08，Joy：「大決戰進場時，可以根據屬性給大家職位，對戰局走向的選擇也會稍微不同」）：
+    # 本人五屬性裡最高的那一項（同分照臂力、身法、根骨、悟性、博聞的順序；五項一樣高沒有職位）。
+    roles: dict[str, str] = Field(default_factory=lambda: {"str": "先鋒", "agi": "斥候", "con": "盾陣", "wis": "軍師", "lore": "參謀"})
+    role_move_bonus: float = Field(default=0.15, ge=0)  # 先鋒的強攻、斥候的奇襲、盾陣的固守，份量多這麼多（加入時算進份量快照）
+    role_gamble_rate: int = Field(default=10, ge=0)  # 軍師放手一搏的成功率多這麼多（模型評完再加，夾在 100）
+    role_counter_relief: float = Field(default=0.5, ge=0, le=1)  # 參謀被剋時，剋制係數低於 1 的那一截減掉這麼多成
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0

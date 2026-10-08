@@ -182,24 +182,43 @@ def test_auto_assign_latecomer_ignores_a_faction_not_in_the_battle(definition):
 
 
 def test_move_scores_follow_the_designs_examples():
-    """戰鬥系統 3.4：剛招式＋剛內功 → 強攻 100、固守 75、奇襲 50；剛＋柔 → 80／85／60（實力 100 時）。"""
+    """戰鬥系統 3.4：剛招式＋剛內功 → 強攻 100、固守 75、奇襲 50；剛＋柔 → 80／85／60（實力 100 時：威力 160）。"""
     t = BattleTuning()
-    assert bi.move_scores(t, 150, "剛", "剛") == {"強攻": 100, "固守": 75, "奇襲": 50}
-    assert bi.move_scores(t, 150, "剛", "柔") == {"強攻": 80, "固守": 85, "奇襲": 60}
+    assert bi.move_scores(t, 160, "剛", "剛") == {"強攻": 100, "固守": 75, "奇襲": 50}
+    assert bi.move_scores(t, 160, "剛", "柔") == {"強攻": 80, "固守": 85, "奇襲": 60}
 
 
-def test_strength_runs_from_forty_to_a_hundred():
+def test_the_stronger_you_are_the_more_you_weigh_in_a_battle():
+    """越強越有份量（試玩回饋 2026-10-08）：實力 20＋0.5×威力，威力 400 封頂。新手（威力約 25）32.5，
+    整季練上去的（威力 300）170，五倍多；舊的 40＋0.4×min(威力,150)、最多 100 只差兩倍。"""
     t = BattleTuning()
-    assert bi.move_scores(t, 0, None, None) == {"強攻": 30, "固守": 30, "奇襲": 30}  # 實力 40 × 適性 75%
-    assert bi.move_scores(t, 400, None, None)["強攻"] == 75  # 威力封頂 150 → 實力 100
-    assert bi.move_scores(t, -20, None, None) == bi.move_scores(t, 0, None, None)  # 負的威力不會把實力壓到 40 以下
+    assert bi.move_scores(t, 0, None, None) == {"強攻": 15, "固守": 15, "奇襲": 15}  # 實力 20 × 適性 75%
+    newbie, seasoned = bi.strength(t, 25), bi.strength(t, 300)
+    assert (newbie, seasoned) == (32.5, 170)
+    assert seasoned / newbie > 5
+    assert bi.strength(t, 1000) == bi.strength(t, 400) == 220  # 威力 400 封頂
+    assert bi.move_scores(t, -20, None, None) == bi.move_scores(t, 0, None, None)  # 負的威力不會把實力壓到底子以下
 
 
-def test_strength_never_passes_a_hundred_even_with_a_generous_tuning():
-    """實力封頂 100：把基準調到 80，威力 150 本來是 80 ＋ 60 ＝ 140，仍然算 100（強攻 75 ＝ 100 × 適性 75%）。"""
-    t = BattleTuning(power_base=80)
-    assert bi.move_scores(t, 150, None, None) == {"強攻": 75, "固守": 75, "奇襲": 75}
-    assert bi.move_scores(t, 0, None, None) == {"強攻": 60, "固守": 60, "奇襲": 60}  # 80 × 75%：沒封頂的地方照算
+def test_a_role_adds_a_little_weight_to_its_favourite_move():
+    t = BattleTuning()
+    plain = bi.move_scores(t, 160, None, None)
+    for role, move in bi.ROLE_MOVES.items():
+        scores = bi.move_scores(t, 160, None, None, role=role)
+        assert scores[move] == round(plain[move] * 1.15, 1)
+        assert all(scores[m] == plain[m] for m in MOVES if m != move)
+    assert bi.move_scores(t, 160, None, None, role="wis") == plain  # 軍師、參謀不改份量
+
+
+def test_the_role_is_the_standout_stat_and_nobody_gets_one_when_all_are_even():
+    order = ("str", "agi", "con", "wis", "lore")
+    assert bi.role_for({k: 5 for k in order}, order) == ""
+    assert bi.role_for({**{k: 5 for k in order}, "con": 8}, order) == "con"
+    assert bi.role_for({**{k: 5 for k in order}, "agi": 7, "lore": 7}, order) == "agi"  # 同分照順序
+    t = BattleTuning()
+    assert [bi.role_name(t, k) for k in order] == ["先鋒", "斥候", "盾陣", "軍師", "參謀"]
+    assert bi.role_text(t, "str") == "先鋒（強攻的份量多 15%）"
+    assert bi.role_text(t, "") == ""
 
 
 @pytest.mark.parametrize("attribute, good, bad", [
@@ -207,18 +226,18 @@ def test_strength_never_passes_a_hundred_even_with_a_generous_tuning():
     ("陰", "固守", "強攻"), ("慢", "固守", "奇襲"), ("快", "奇襲", "固守"), ("虛", "奇襲", "強攻"),
 ])
 def test_each_attribute_favours_one_move_and_hurts_another(attribute, good, bad):
-    """設計 3.4 的表：武學屬性 ±15、內功屬性 ±10，另一招不動（威力 150 → 實力 100，適性就是份量）。"""
+    """設計 3.4 的表：武學屬性 ±15、內功屬性 ±10，另一招不動（威力 160 → 實力 100，適性就是份量）。"""
     third = next(m for m in MOVES if m not in (good, bad))
-    outer = bi.move_scores(BattleTuning(), 150, attribute, None)
+    outer = bi.move_scores(BattleTuning(), 160, attribute, None)
     assert (outer[good], outer[third], outer[bad]) == (90, 75, 60)
-    inner = bi.move_scores(BattleTuning(), 150, None, attribute)
+    inner = bi.move_scores(BattleTuning(), 160, None, attribute)
     assert (inner[good], inner[third], inner[bad]) == (85, 75, 65)
 
 
 def test_affinity_is_clamped_between_fifty_and_a_hundred():
     """適性夾在 50～100：擅長加到頂不會超過 100，兩邊都不擅長也不會低於 50。"""
     t = BattleTuning(affinity_base=95.0, affinity_outer=30.0, affinity_inner=30.0)
-    scores = bi.move_scores(t, 150, "剛", "剛")  # 強攻 95+60 → 夾到 100；奇襲 95−60 → 夾到 50
+    scores = bi.move_scores(t, 160, "剛", "剛")  # 強攻 95+60 → 夾到 100；奇襲 95−60 → 夾到 50
     assert (scores["強攻"], scores["奇襲"]) == (100, 50)
 
 
@@ -416,8 +435,8 @@ def test_resolve_round_gamble_success_pushes_trend_toward_the_actors_faction(gam
     bi.submit_action(instance, "甲", "guan_reckless", success_rate=50)  # 甲在 guan（factions[0]，正向）
     bi.submit_action(instance, "乙", "huang_hold")
     msgs = bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))  # random()=0.0，永遠擲骰成功
-    # 三招：官軍沒人出固定招（甲在賭）、黃巾有乙 → 推 −10；賭贏 5 + 50 × 0.3 ＝ +20 加在三招合成之後
-    assert instance.trend == 50 - 10 + 20
+    # 三招：官軍沒人出固定招（甲在賭）、黃巾有乙 → 推 −10；賭贏 5 + 50 × 0.3 ＝ 20，甲威力 0（實力 20）打五折 → +10
+    assert instance.trend == 50 - 10 + 10
     assert any("這一搏成功了" in m for m in msgs)
     assert instance.participants["甲"].neili == 90  # 100 - success_neili_damage(10)
 
@@ -438,8 +457,8 @@ def test_resolve_round_gamble_direction_flips_for_the_second_faction(gamble_defi
     bi.submit_action(instance, "甲", "guan_hold")
     bi.submit_action(instance, "乙", "huang_reckless", success_rate=50)
     bi.resolve_round(instance, gamble_definition, FixedRandom(0.0))
-    # 三招：只有甲出固定招 → +10；乙賭贏往 huang 那邊再推 −20，合起來落在 40
-    assert instance.trend == 50 + 10 - 20
+    # 三招：只有甲出固定招 → +10；乙賭贏往 huang 那邊再推 −20，乙威力 0 打五折 −10，合起來落在 50
+    assert instance.trend == 50 + 10 - 10
 
 
 def test_resolve_round_gamble_higher_risk_means_bigger_reward_and_bigger_cost(gamble_definition):
@@ -1857,3 +1876,39 @@ def test_the_playtest_battle_replayed_is_no_longer_a_rout_for_the_yellow_turbans
             break
     assert battle.trend == 39
     assert bi.decide_outcome(battle, gamble).title == "兩軍膠著"
+
+
+def test_a_strategist_gets_ten_more_points_on_a_gamble_and_the_line_says_so():
+    gamble, battle = _gamblers(1, 1)
+    battle.participants["官0"].role = "wis"
+    bi.submit_action(battle, "官0", "guan_reckless", text="火燒糧草", success_rate=35)
+    bi.submit_action(battle, "黃0", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.44), now=1, tuning=BattleTuning())  # 擲 44：35 不中、45 中
+    assert "官0放手一搏：「火燒糧草」（評估成功率 35%，軍師 +10）" in msgs
+    assert any(m.startswith("官0這一搏成功了") for m in msgs)
+
+
+def test_an_adviser_loses_less_when_the_other_side_counters_their_move():
+    t = BattleTuning()
+    hit = {}
+    for role in ("", "lore"):
+        battle = _two_fighters(_gamble_three())
+        battle.participants["甲"].role = role
+        bi.submit_action(battle, "甲", "guan_strong")
+        bi.submit_action(battle, "乙", "huang_hold")  # 固守剋強攻
+        bi.resolve_round(battle, _gamble_three(), random.Random(0), now=1, tuning=t)
+        hit[role] = battle.trend
+    assert hit[""] < hit["lore"] <= 50  # 一樣吃虧，參謀吃得少
+
+
+def test_a_stronger_gambler_pushes_further_when_the_gamble_lands():
+    pushed = {}
+    for power in (0, 160, 400):
+        gamble, battle = _gamblers(1, 1)
+        battle.participants["官0"].power = power
+        bi.submit_action(battle, "官0", "guan_reckless", text="衝陣", success_rate=90)
+        bi.submit_action(battle, "黃0", "huang_hold")
+        bi.resolve_round(battle, gamble, FixedRandom(0.0), now=1, tuning=BattleTuning())
+        pushed[power] = battle.trend - 40  # 黃巾固守推滿 −10（官軍唯一的人在賭）
+    # 2 ＋ 10 × 0.06 ＝ 2.6：威力 0（實力 20）打五折 1、威力 160（實力 100）照算 3、練滿（實力 220，夾在兩倍）5
+    assert pushed == {0: 1, 160: 3, 400: 5}

@@ -7669,3 +7669,28 @@ def test_everyday_options_use_the_memoed_preparing(game):
         game.options()
         game.options()
     assert len(reads) == 1
+
+
+def test_a_fighter_joins_with_the_role_of_their_standout_stat_and_it_shows(content, game):
+    """進場依屬性給職位（試玩回饋 2026-10-08）：根骨最高是盾陣，固守的份量多一成半；決戰畫面與戰報都寫。"""
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    game.state.player.stats["con"] = 8
+    foe = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(foe, 0.0):
+        game.choose("battle:join:guan")
+        foe.choose("battle:join:huang")
+        assert "你的職位：盾陣（固守的份量多 15%）" in game.scene_text()
+    battle = game.world.get_battle()
+    me, them = battle.participants[game.state.player.name], battle.participants["乙"]
+    assert (me.role, them.role) == ("con", "")  # 乙五項一樣高：沒有職位
+    start = definition.muster_seconds + 1
+    with at(game, start):
+        assert "你的職位：盾陣" in game.scene_text()
+    for i in range(3):
+        with at(game, start + i), at(foe, start + i):
+            game.choose("battle:act:guan_hold")
+            foe.choose("battle:act:huang_hold")
+    game.sync(start + 10)  # 收場那一下是乙出的手：自己的那一則同步時補
+    assert "你以盾陣出陣，出手 3 回合" in game.state.journal[0].lines
