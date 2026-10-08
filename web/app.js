@@ -30,6 +30,7 @@
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
+  const SAY_OPTION = "talk:say"; // 跟人物對話時的「自己說」（engine.SAY_OPTION）：按了叫出輸入框，送出走 /api/say
   const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
@@ -241,6 +242,7 @@
 
   function setMain(main) {
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
+    if (!(main.options || []).some((o) => o.id === SAY_OPTION)) S.saying = false; // 交談結束了，「自己說」的輸入框跟著收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
@@ -1567,7 +1569,8 @@
     // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
     const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
-        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : o.id === SAY_OPTION && S.saying && o.enabled ? `
+        <form class="free answer" id="say-form"><input class="input" name="text" maxlength="20" placeholder="想對他說的話（20字內）" aria-label="自己說"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
@@ -2748,6 +2751,13 @@
       if (input) input.focus();
       return;
     }
+    if (id === SAY_OPTION) { // 自己說：先叫出輸入框，寫好再送（見 sayLine）
+      S.saying = true;
+      renderPage();
+      const input = document.querySelector("#say-form .input");
+      if (input) input.focus();
+      return;
+    }
     await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
@@ -2763,6 +2773,7 @@
       try {
         const r = await api("/api/choose", { id });
         S.answering = false;
+        S.saying = false;
         S.wheelSel = null; // 收起展開的移動
         applyMain(r.main);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2776,6 +2787,26 @@
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
     if (document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
+  }
+
+  // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
+  async function sayLine(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = "對方沉吟中…";
+      const stop = watchQueue(submitBtn, "對方沉吟中…");
+      try {
+        const r = await api("/api/say", { text });
+        S.saying = false;
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        stop();
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        submitBtn.textContent = "說出口";
+      }
+    });
   }
 
   // 隨口應對：送出後要等模型評這個做法，首次常要好幾秒，按鈕先寫「思量中……」
@@ -3240,6 +3271,9 @@
       } else if (form.id === "answer-form") {
         if (!data.text.trim()) return;
         await answer(form, data.text.trim());
+      } else if (form.id === "say-form") {
+        if (!data.text.trim()) return;
+        await sayLine(form, data.text.trim());
       } else if (form.id === "free-form") {
         if (!data.text.trim()) return;
         await doMain("battle_text", { text: data.text });

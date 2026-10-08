@@ -125,6 +125,7 @@
 - 同伴加成量表：`.venv/Scripts/python.exe scripts/measure_companions.py`（只量不改）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見「量表與教訓」）
 - 隨口應對的真模型實測：`.venv/Scripts/python.exe scripts/try_event_llm.py`（要先開 Ollama；會印出保底警告）
+- 對話「自己說」的真模型實測（模型挑的類別、好感度、回應）：`.venv/Scripts/python.exe scripts/try_say.py [--figure luzhi] [句子…]`
 - 決戰放手一搏的真模型實測（成功率＋成敗兩版劇情）：`.venv/Scripts/python.exe scripts/try_battle_gamble.py`
 - 黃巾聲勢來源分析：`.venv/Scripts/python.exe scripts/sim_trend_sources.py --seasons 4 [--variant zero|half] [--cap N]`
 - 幫帳號設密碼（主機端）：`.venv/Scripts/python.exe scripts/set_password.py <帳號> [--character <名號>] [--db <資料庫檔>]`（角色不存在時直接建立；密碼寫到 `.local/`，不印在畫面上）
@@ -147,7 +148,7 @@
 - **體力**（體力平衡提案第〇節，企劃者 2026-10-07 定案）：上限 250，每 3 分鐘回 1 點（`stamina_regen_seconds`）；新手期（加入起 `newbie_stamina_days` 18 季曆天，週末約 13 小時、14 天的季 3 天）回復 ×`newbie_stamina_multiplier`（3），跟打坐疊乘；氣血加倍的 `newbie_days` 也是 18。探索、遊歷各 6，交友 3，招募 15。事件檢定、隨口應對失敗另扣的體力乘 `event_fail_stamina_scale`（0.5，四捨五入，`rules.failed`），選項上寫「（體力 -N）」「（失手多耗體力 N）」（`events.stamina_note`）。回體丹一顆回 150（內測新角色送 20 顆，`beta_gift`）。
 - **探索**（探索三選一設計）：這裡有還能遇上的一次性或奇遇事件時先滾 `rare_explore_chance`（2.5%）；沒中就照地點類型（`explore_mix`：營寨類、城鎮類、其餘）抽「悟意境／野怪／事件」三支之一（悟意境那一支的比重乘悟性的加成；做不了的那一支拿掉重抽）；不論走哪一支，最後再擲 `explore_legend_chance`（2%）撿一枚破境丹。**探索不撿素材。** 野怪扣的氣血打五折、打贏不推大勢。
 - **遊歷**（`act:train`）：只在這裡有敵人（或軍令帶來的運糧隊）時出現，**必定開打**；遇上自己陣營的隊伍是操練（零風險：給經驗與心得、推大勢，不給銀兩、不掉素材）。打完有 `train_event_chance`（30%）接一則 `actions: ["train"]` 的戰後事件。按鈕寫勝算，多路對手時取**最強的**那個算（標籤是警告，寧可低估）。
-- **交友與求見**：見不見得到看求見門檻（`rules.audience_bar`：人物的 `audience_fame`，投靠他那個陣營的人每晉升一次抵 `audience_rank_discount`），或結識過；門檻不夠的求見一直按得下去，但只會被打發（他自己口吻的一句、寫還差多少名望；不花體力、不叫模型）。只有一位人物的地點直接列「求見某某」，兩位以上打開求見名單（不花體力）。對話每輪 `talk_stamina`（2），同一位人物每個遊戲日最多 `talk_turns_per_day`（3）輪。
+- **交友與求見**：見不見得到看求見門檻（`rules.audience_bar`：人物的 `audience_fame`，投靠他那個陣營的人每晉升一次抵 `audience_rank_discount`），或結識過；門檻不夠的求見一直按得下去，但只會被打發（他自己口吻的一句、寫還差多少名望；不花體力、不叫模型）。只有一位人物的地點直接列「求見某某」，兩位以上打開求見名單（不花體力）。對話每輪 `talk_stamina`（2），同一位人物每個遊戲日最多 `talk_turns_per_day`（3）輪。三個模型寫的選項底下多一顆「自己說…」（`talk:say`，按了才出現 20 字輸入框，送出走 `/api/say`，三段式同對話）：模型把那句話歸進 `DIALOGUE_TAGS` 的一類（`CompanionTurn.player_tag`，清單外的當「尋常寒暄」），好感度照 tag 查表；體力與輪數跟按選項一樣，模型叫不動就結束交談、不扣體力；玩家原話進對話歷史，那句話在提示裡框成台詞、不是指示（`companion_agent.free_line`）。假人與整季機器人不寫。
 - **招募**：成功率 35%＋50%×情誼／100，夾在 5%～95%（按鈕上寫）；失敗有 40% 被要求決鬥、賠 15 兩。
 - **打坐**（`act:rest`）：永遠按得下去；坐下之後體力回復是平常的 `rest_regen_multiplier`（2）倍，期間不能做別的，隨時「起身」，回滿自己起身。只推玩家自己的時間，不碰共用賽季時鐘。
 - **閉關**：1～12 小時，出關得心得 小時 × `seclusion_xinde_per_hour` ×（1＋悟性／20），期間氣血回復加倍。
