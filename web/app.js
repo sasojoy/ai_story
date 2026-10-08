@@ -410,12 +410,14 @@
   // 分頁列底下；框是比較專門的那一句，提示等它，按了「知道了」（或框不在了）就回來。在路上照舊（框排在選項底下，提示收成一行）
   const WAITING = new Set(["act:stand", "act:break"]);
   const waitingMenu = (m) => m.options.length > 0 && m.options.every((o) => WAITING.has(o.id));
+  // 江湖頁第一屏放不下行動列時（FB-107 的 fitFirstScreen，S.hintTight）不在路上也收成一行，點了看全文；別的分頁照舊整段
   function hintHtml(s) {
-    if (s.journey == null) S.hintOpen = false;
+    const tight = s.journey == null && S.hintTight && S.tab === "jianghu";
+    if (s.journey == null && !tight) S.hintOpen = false;
     if (!s.hint) return "";
     if (s.journey == null && S.main && S.main.guide && S.main.guide.hint) return "";
     if (s.journey == null && S.main && S.main.options && !idleMenu(S.main) && !waitingMenu(S.main)) return "";
-    if (s.journey == null) return `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>`;
+    if (s.journey == null && !tight) return `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>`;
     return `<div class="more-stats"><button class="hint road-hint${S.hintOpen ? "" : " clamp"}" data-act="hint-more" aria-expanded="${S.hintOpen}">${esc(s.hint)}</button></div>`;
   }
 
@@ -537,6 +539,20 @@
       if (card) card.classList.add("fit-space"); // 戰鬥卡片的內距寫在 .battle-card 底下（style.css 的 .battle-card.fit-space）
       return true;
     } },
+    // 2. 師父的框收緊：「知道了」不再撐高標題那一行、話的行高小一點；框裡的話一個字都不切（設計 6.2）
+    { key: "box", run: () => {
+      const box = document.querySelector("#page > .card.guide");
+      if (box) box.classList.add("fit-box");
+      return !!box;
+    } },
+    // 3. 💡（狀態列底下那一行心得提示）收成一行、放不下加「…」，點了看全文（在路上那一種，FB-060）。狀態列是另外畫的（renderTop）：
+    //    記在 S.hintTight，輪詢重畫狀態列時照它畫；玩家點開了（S.hintOpen）就不收
+    { key: "hint", run: () => {
+      if (S.hintTight || !document.querySelector("#top .more-stats .hint")) return false; // 已經收過、玩家點開了：不再收
+      S.hintTight = true;
+      renderTop();
+      return true;
+    } },
     // 2. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）
     { key: "lines", run: () => {
       if (S.hearOpen != null && S.hearOpen === S.main.card_id) return false; // 玩家點開過：不收回去
@@ -599,6 +615,8 @@
     if (!page) return;
     page.classList.remove("fit-space");
     page.querySelectorAll(".fit-space").forEach((el) => el.classList.remove("fit-space"));
+    page.querySelectorAll(".fit-box").forEach((el) => el.classList.remove("fit-box"));
+    if (S.hintTight && !S.hintOpen) { S.hintTight = false; renderTop(); } // 玩家點開了 💡：留著（展開的就是整段）
     page.querySelectorAll(".tx-tight").forEach((el) => {
       el.classList.remove("tx-tight");
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));

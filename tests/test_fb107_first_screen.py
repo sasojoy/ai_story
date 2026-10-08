@@ -54,6 +54,10 @@ const rounds = L.rounds ? el("rounds", L.roundsOpen ? ["rounds", "open"] : ["rou
 const now = L.now ? el("now", ["now", L.nowFits ? "fits" : "clamp"].concat(L.nowOpen ? ["open"] : [])) : null;
 const body = L.now ? el("body", ["tx-now"]) : null;
 const scene = L.scene ? el("scene", ["card", "scene"]) : null;
+const box = L.box ? el("box", ["card", "guide"]) : null;
+const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
+let tops = 0;
+const renderTop = () => { tops += 1; };
 const mhead = L.muster ? el("head", ["muster-head"], { tagName: "DIV" }) : null;
 const musterLines = (L.muster || 0) ? Array.from({ length: L.muster }, () => el("musterp", [], { tagName: "P" })) : [];
 const hr = L.hr ? el("hr", [], { tagName: "HR" }) : null;
@@ -62,12 +66,14 @@ const own = (L.own || 0) ? Array.from({ length: L.own }, () => el("ownp", [], { 
 const order = [mhead, ...musterLines, hr, ...own].filter(Boolean);
 order.forEach((e, i) => { e.nextElementSibling = order[i + 1] || null; });
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, line: 20, rounds: 23, own: 27, muster: 27, options: 22 }, input.save || {});
+const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22 }, input.save || {});
 const bodyHeight = () => (now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
 const bottom = () => {
   let b = L.bottom;
   if (has(page, "fit-space")) b -= SAVE.space;
   if (card && has(card, "fit-space")) b -= SAVE.cardSpace;
+  if (box && has(box, "fit-box")) b -= SAVE.box;
+  if (hint && S.hintTight && !S.hintOpen) b -= SAVE.hint;
   lines.forEach((x) => { if (has(x, "tx-tight") && !has(x, "open")) b -= SAVE.line; });
   if (rounds && has(rounds, "fit-fold") && !has(rounds, "open")) b -= SAVE.rounds;
   if (now) b -= Math.min(L.nowBody || 0, 120) - bodyHeight();
@@ -91,7 +97,10 @@ const where = {
   "#page > .now:not(.open)": () => (now && !has(now, "open") ? [now] : []),
   "#page > .card.scene:not(.road)": () => (scene ? [scene] : []),
   "#page > .options": () => (menu ? [menu] : []),
+  "#page > .card.guide": () => (box ? [box] : []),
+  "#top .more-stats .hint": () => (hint ? [hint] : []),
   ".fit-space": () => all.filter((x) => x !== page && has(x, "fit-space")),
+  ".fit-box": () => all.filter((x) => has(x, "fit-box")),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
   ".fit-fold": () => all.filter((x) => has(x, "fit-fold")),
   ".now.fit-short": () => all.filter((x) => has(x, "now", "fit-short")),
@@ -108,12 +117,14 @@ if (scene) {
   scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
-const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, ownOpen: null, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
+const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
+  main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
-const H = new Function("S", "pro", "idleMenu", code + "\nreturn { fitFirstScreen, fitOver, ownOpen, FIT_STEPS };")(S, pro, idleMenu);
+const H = new Function("S", "pro", "idleMenu", "renderTop", code + "\nreturn { fitFirstScreen, fitOver, ownOpen, FIT_STEPS };")(S, pro, idleMenu, renderTop);
 const snap = () => ({
   fitted: S.fitted, bottom: bottom(), page: [...page.classes].sort(), card: card ? [...card.classes].sort() : null,
+  box: box ? [...box.classes].sort() : null, hintTight: S.hintTight, tops,
   lines: lines.map((x) => [...x.classes].sort()), lineAttrs: lines.map((x) => x.attrs), rounds: rounds ? [...rounds.classes].sort() : null,
   now: now ? [...now.classes].sort() : null, scene: scene ? [...scene.classes].sort() : null, own: own.map((x) => x.attrs),
   ownClip: own.map((x) => has(x, "fit-clip")), musterClip: musterLines.map((x) => has(x, "fit-clip")),
@@ -154,10 +165,36 @@ def test_it_folds_step_by_step_and_stops_as_soon_as_the_row_fits():
 
 @node
 def test_with_a_box_up_the_battle_card_goes_to_its_short_form():
-    """QA 量的：新人打完第一場、三行的框（814）。間距、描述、第一回合都收：第一回合收進「展開過程」。"""
-    out = run(FIGHT)
-    assert out["fitted"] == ["space", "lines", "rounds"] and out["bottom"] <= 740
-    assert "fit-fold" in out["rounds"]
+    """打完一場、框在畫面上（QA 量過 814～842 的那幾種）：間距、框收緊、描述、第一回合依序收；第一回合收進「展開過程」。"""
+    out = run({**FIGHT, "box": True, "bottom": 840})
+    assert out["fitted"] == ["space", "box", "lines", "rounds"] and out["bottom"] <= 740
+    assert "fit-fold" in out["rounds"] and "fit-box" in out["box"]
+
+
+@node
+def test_the_box_is_tightened_before_anything_is_folded():
+    """框收緊（「知道了」不撐高標題那一行、行高小一點）不少任何字：排在間距之後、任何收起來的東西之前。"""
+    out = run({**FIGHT, "box": True, "bottom": 790})
+    assert out["fitted"] == ["space", "box"] and out["lines"] == [["tx-line"]] and out["rounds"] == ["rounds"]
+
+
+@node
+def test_a_two_line_hint_folds_to_one_line_and_comes_back_when_there_is_room():
+    """💡 在狀態列（另外畫，renderTop）：要收時記 S.hintTight、重畫狀態列；之後有空間了重量時還原、再重畫一次。"""
+    layout = {"bottom": 790, "actbar": True, "scene": True, "hint": True, "card": True, "lines": [False], "rounds": True}
+    script = """
+      H.fitFirstScreen(); const tight = snap();
+      L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
+      return { tight, roomy };"""
+    out = run(layout, script)
+    assert out["tight"]["fitted"] == ["space", "hint"] and out["tight"]["hintTight"] is True and out["tight"]["tops"] == 1
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["hintTight"] is False and out["roomy"]["tops"] == 2
+
+
+@node
+def test_a_hint_the_player_opened_stays_open():
+    out = run({"bottom": 790, "actbar": True, "scene": True, "hint": True}, S={"hintTight": True, "hintOpen": True})
+    assert "hint" not in out["fitted"] and out["hintTight"] is True and out["tops"] == 0
 
 
 @node
@@ -263,6 +300,30 @@ def test_every_draw_and_every_resize_refits():
     assert "case \"own-more\": ownOpen(); break;" in js  # 收成一行的那幾段點得開
 
 
+HINT_DRIVER = r"""
+const S = Object.assign({ hintOpen: false, hintTight: false, tab: "jianghu", main: { guide: null, options: [{ id: "act:rest" }] } }, input.S);
+const H = new Function("S", [konst("esc"), konst("WAITING"), konst("waitingMenu"), "const idleMenu = () => true;", fn("hintHtml"),
+  "return { hintHtml };"].join("\n"))(S);
+finish({ html: H.hintHtml({ hint: "💡 你已攢下 45 點心得。", journey: null }), open: S.hintOpen });
+"""
+
+
+@node
+@pytest.mark.parametrize("state, folded", [
+    ({"hintTight": True}, True), ({"hintTight": False}, False), ({"hintTight": True, "tab": "practice"}, False),
+])
+def test_the_hint_is_drawn_folded_only_when_the_fit_asked_and_only_on_the_jianghu_page(state, folded):
+    out = webharness.run(HINT_DRIVER, {"S": state})
+    assert ('class="hint road-hint clamp"' in out["html"] and 'data-act="hint-more"' in out["html"]) is folded
+    assert ('<span class="hint">' in out["html"]) is not folded
+
+
+@node
+def test_a_folded_hint_the_player_opened_stays_open_on_redraw():
+    out = webharness.run(HINT_DRIVER, {"S": {"hintTight": True, "hintOpen": True}})
+    assert out["open"] is True and 'class="hint road-hint"' in out["html"] and "clamp" not in out["html"]
+
+
 # ── 真的卡片：收起來的那幾樣不含得失與結果 ─────────────────────────
 
 
@@ -323,6 +384,18 @@ def test_the_spacing_step_only_shrinks_gaps_and_paddings():
     assert rules and all(re.fullmatch(r"\s*((margin|padding)(-top|-bottom)?: \d+px;\s*)+", body) for body in rules.values()), rules
     gaps = rules[".page.fit-space > .peek, .page.fit-space > .now, .page.fit-space > .card, .page.fit-space > .guide-line"]
     assert "margin-bottom: 8px" in gaps
+
+
+def test_the_box_step_keeps_every_word_and_the_tap_target():
+    """框收緊只動「知道了」佔的高度（鈕本身照樣 38px，上下 −9px）與話的行高；不 clamp、不藏字（設計 6.2：話不會被切掉）。
+    玩家互動那幾塊（「此地還有」、結伴、邀請）是另一條線的：收的時候不碰它們的樣式。"""
+    css = _css()
+    rules = _rules(css, "fit-box")
+    assert rules[".card.guide.fit-box .guide-head .btn"].split() == "margin-top: -9px; margin-bottom: -9px;".split()
+    assert rules[".card.guide.fit-box .guide-text"].strip() == "line-height: 1.5;"
+    assert not any("clamp" in body or "display: none" in body or "overflow" in body for body in rules.values())
+    fit_rules = re.findall(r"(?m)^([^{}\n@]*\bfit-[^{}\n]*)\{", css)
+    assert not any(re.search(r"\.(here|calls|call|party|peer)\b", sel) for sel in fit_rules), fit_rules
 
 
 def test_the_players_here_row_does_not_style_the_here_fold():
