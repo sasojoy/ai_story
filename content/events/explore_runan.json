@@ -560,6 +560,11 @@
       },
       {
         "text": "跟著大家買一斗米",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "你咬牙付了錢，扛著一斗米走出人群。",
           "stats": {
