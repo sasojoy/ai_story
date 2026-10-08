@@ -308,3 +308,75 @@ def test_the_xinde_hint_points_to_the_forge_when_only_a_forge_is_doable(on):
     assert hint and "去「煉製」" in hint and "修練" not in hint
     s.player.stamina = 0
     assert game.status_data()["hint"] is None  # 付不起體力：做不了
+
+
+# ── 三、有所感的卡：意境是什麼、做法跟此地的關係，不洩漏哪一個是對的 ─────────────────────
+
+
+METHODS = (("柔", "看水"), ("剛", "打水"), ("快", "追風"), ("慢", "靜坐"))
+
+
+def _feeling(game, methods=METHODS, prologue=False, seed=0):
+    from tianxia import sensing
+    from tianxia.models import InsightScene, SenseMethod
+
+    scene = InsightScene(
+        id="lake_view", title="湖光", text="湖水拍岸。", locations=["lake"], prologue=prologue,
+        methods=[SenseMethod(attribute=a, text=t) for a, t in methods],
+    )
+    game.content.insight_scenes = {scene.id: scene}
+    game.state.player.location = "lake"
+    game.state.player.sensing = None
+    sensing.start(game.state, game.content, scene, random.Random(seed))
+    return scene
+
+
+def _card(game):
+    ids = [o.id for o in game.options(odds=False)]
+    return game.scene_text(), game.method_help(ids), [(o.id, o.label) for o in game.options(odds=False)]
+
+
+def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
+    from tianxia import sensing
+
+    scene = _feeling(game)
+    text, help_, _ = _card(game)
+    assert "**有所感・湖光**（湖畔）" in text  # 地形寫在標題同一行
+    assert help_["lines"] == [sensing.FRAMING.format(kinds="剛、柔、快、慢"), sensing.INSIGHT_LINE]
+    assert "意境" in help_["lines"][1] and "合成" in help_["lines"][1] and "修練" in help_["lines"][1]
+    order = game.state.player.sensing.order
+    assert help_["tags"] == {f"sense:{i}": scene.methods[j].attribute for i, j in enumerate(order)}  # 每個做法鈕上寫它的心意
+
+
+def test_the_feeling_hint_is_the_same_whichever_method_is_right(game):
+    """選對選錯只看這一處悟得到什麼（insights.pool_attributes）：換成別的做法才是對的，卡上的字、鈕上的心意、做法底下的小字一個都不變。
+    做法照內容寫的順序常把對的那一個寫在最前面：心意照固定的順序列，內容換了順序也一樣。"""
+    from tianxia import insights
+
+    lake = game.content.locations["lake"]
+    lake.insights = ["shui"]  # 只有柔是對的
+    _feeling(game)
+    soft = _card(game)
+    assert insights.pool_attributes(lake, game.content) == {"柔"}
+    lake.insights = ["huo"]  # 換成只有剛是對的
+    _feeling(game)
+    assert insights.pool_attributes(lake, game.content) == {"剛"} and _card(game) == soft
+    _feeling(game, methods=METHODS[1:] + METHODS[:1])  # 內容把剛寫在最前面（同一副洗牌）
+    text, help_, _ = _card(game)
+    assert text == soft[0] and help_["lines"] == soft[1]["lines"]
+
+
+def test_no_method_help_in_the_hut_or_while_drawing(game):
+    _feeling(game)
+    game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"
+    text, help_, _ = _card(game)
+    assert help_ is None and "（湖畔）" in text  # 畫的那一步：做法已經選了，不再畫提示（地形照寫）
+    _feeling(game, prologue=True)  # 序章草廬：四個做法都對，卡照舊
+    text, help_, _ = _card(game)
+    assert help_ is None and "（湖畔）" not in text
+
+
+def test_no_method_help_when_the_methods_are_not_on_the_menu(game):
+    """戰場蓋過了畫面（選單是戰鬥選項）：做法不在選單上，就不給提示。"""
+    _feeling(game)
+    assert game.method_help(["battle:act:0"]) is None

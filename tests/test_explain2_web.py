@@ -125,6 +125,56 @@ def test_the_newbie_entry_opens_the_drawer_on_the_howto_page():
     assert 'class="howto card" id="howto"' in out["html"] and "<h4>行動</h4>" in out["html"]
 
 
+def _feeling_view():
+    """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。"""
+    from tianxia import insights, sensing
+
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    loc = content.locations[game.state.player.location]
+    sensing.start(game.state, content, insights.scenes_for(loc, content)[0], random.Random(0))
+    return server.main_view(game)
+
+
+def test_each_method_shows_its_kind_and_the_notes_sit_under_the_methods():
+    m = _feeling_view()
+    help_ = m["sense_help"]
+    page = run(m, "return H.pageJianghu();")
+    for option in m["options"]:
+        assert re.search(rf'data-id="{option["id"]}"[^>]*>\s*<span class="k sense">{help_["tags"][option["id"]]}</span>', page)
+    block = re.search(r'<div class="act-notes sense-notes">(.*?)</div>', page).group(1)
+    assert re.findall(r"<p>(.*?)</p>", block) == help_["lines"]
+    last = max(page.index(f'data-id="{o["id"]}"') for o in m["options"])
+    assert page.index('class="act-notes sense-notes"') > last  # 排在做法後面：不把做法往下推
+    assert "（城鎮）" in page  # 標題後面的地形（潁川郡是城鎮）
+
+
+def test_without_the_server_help_the_methods_keep_their_numbers():
+    m = _feeling_view()
+    m["sense_help"] = None
+    page = run(m, "return H.pageJianghu();")
+    assert 'class="k sense"' not in page and "sense-notes" not in page
+    assert re.search(r'<span class="k">1</span>', page)
+
+
+def test_the_xinde_hint_steps_aside_while_a_choice_card_is_up():
+    """心得一付得起就提示（explain-2）：新人幾乎一直有那一行。事件、有所感這類一次一組的選項在眼前時不畫，不把最後一個選項擠下去；
+    平常閒著（行動列）照畫，在路上照舊收成一行。"""
+    hint = "💡 你已攢下 20 點心得。去「修練」練成內功、武學。"
+    idle = _season_one()
+    idle["status"]["hint"] = hint
+    assert hint in run(idle, "return H.topHtml();")
+    feeling = _feeling_view()
+    feeling["status"]["hint"] = hint
+    assert hint not in run(feeling, "return H.topHtml();")
+    road = _season_one()
+    road["status"].update(hint=hint, journey="往潁川郊野，還要 3 分鐘")
+    road["options"] = [{"id": "act:on_road", "label": "趕路中", "enabled": False}]
+    assert "road-hint" in run(road, "return H.topHtml();")
+
+
 def test_the_entry_line_keeps_the_notes_line_height():
     """版面釘子：入口那顆鈕跟說明同一個字級，按的範圍用內距撐大、再用同樣大小的負外距收回，所以那一行跟其他行一樣高（12px×1.5）。"""
     css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")

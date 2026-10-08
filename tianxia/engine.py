@@ -5266,6 +5266,14 @@ class Game:
         loc = self.content.locations[self.state.player.location]
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
+    def method_help(self, option_ids: Iterable[str]) -> dict | None:
+        """有所感選做法那一步，網頁畫在做法鈕上的心意與鈕底下的兩行小字（explain-2，sensing.method_help）；選單上沒有做法
+        （不在選做法、戰場蓋過了畫面）是 None。只讀做法自己的屬性，不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
+        got = sensing.method_help(self.state, self.content)
+        if got is None or not any(i in got["tags"] for i in option_ids):
+            return None
+        return got
+
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
         地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""

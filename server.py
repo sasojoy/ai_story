@@ -789,6 +789,8 @@ def _main_view_body(game: Game) -> dict:
         "options": [o.model_dump() for o in options],
         # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
         "action_notes": game.action_notes(o.id for o in options),
+        # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
+        "sense_help": game.method_help(o.id for o in options),
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
