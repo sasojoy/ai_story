@@ -1547,12 +1547,17 @@ class FreeTextGamble(_Strict):
     排序穩定、同一行動重複問也不會亂跳），擲骰跟換算成數值完全是系統做的，不信任 LLM
     自己決定「這次到底成不成功」或「成功了該加多少」。"""
 
-    success_trend_base: int = 5  # 成功時，戰局推動的基礎量
-    success_trend_per_risk: float = 0.3  # 成功時，風險每 1 點再加多少戰局推動
-    success_neili_damage: float = 10  # 成功時的氣血損耗（固定小額，賭贏了代價不高）
-    failure_trend_per_risk: float = 0.1  # 失敗時，戰局往對方倒退的量（乘上風險，取負）
-    failure_neili_base: float = 20  # 失敗時的基礎氣血損耗
-    failure_neili_per_risk: float = 3.0  # 失敗時，風險每 1 點再加多少氣血損耗
+    # 試玩回饋 2026-10-08（Joy：「個別玩家如果失敗除了稍微影響大局比較嚴重的懲罰是扣自己的氣血，自己的扣到0就自己先出局」）：
+    # 舊值（成功 5＋風險×0.3、失敗倒退風險×0.1）讓五個人亂寫就把全官軍推輸（50→5）。現在一個人對戰局只有小影響、
+    # 一邊一回合放手一搏合起來也有上限（固定招一回合最多推 BattleTuning.push_max 10），主要的代價是自己的氣血池。
+    success_trend_base: int = 2  # 成功時，戰局推動的基礎量
+    success_trend_per_risk: float = 0.06  # 成功時，風險每 1 點再加多少戰局推動（成功率 0 成了是 +8，再受 side_trend_cap 夾）
+    success_neili_share: float = 0.05  # 成功時扣氣血池上限的幾成（賭贏了代價不高）
+    failure_trend_per_risk: float = 0.02  # 失敗時，戰局往對方倒退的量（乘上風險、四捨五入，取負）
+    failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
+    failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
+    failure_neili_share_per_risk: float = 0.004  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣五成，兩次就倒下出局）
+    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少
 
 
 class ThirdParty(_Strict):

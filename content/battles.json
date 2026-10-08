@@ -14,12 +14,14 @@
     "decisive_margin": 40,
     "action_tags": {},
     "free_text_gamble": {
-      "success_trend_base": 5,
-      "success_trend_per_risk": 0.3,
-      "success_neili_damage": 10,
-      "failure_trend_per_risk": 0.1,
-      "failure_neili_base": 20,
-      "failure_neili_per_risk": 3.0
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.004,
+      "side_trend_cap": 5
     },
     "acts": [
       {
@@ -119,12 +121,14 @@
     "decisive_margin": 40,
     "action_tags": {},
     "free_text_gamble": {
-      "success_trend_base": 5,
-      "success_trend_per_risk": 0.3,
-      "success_neili_damage": 10,
-      "failure_trend_per_risk": 0.1,
-      "failure_neili_base": 20,
-      "failure_neili_per_risk": 3.0
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.004,
+      "side_trend_cap": 5
     },
     "acts": [
       {
@@ -203,12 +207,14 @@
     "decisive_margin": 40,
     "action_tags": {},
     "free_text_gamble": {
-      "success_trend_base": 5,
-      "success_trend_per_risk": 0.3,
-      "success_neili_damage": 10,
-      "failure_trend_per_risk": 0.1,
-      "failure_neili_base": 20,
-      "failure_neili_per_risk": 3.0
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.004,
+      "side_trend_cap": 5
     },
     "acts": [
       {
@@ -287,12 +293,14 @@
     "decisive_margin": 40,
     "action_tags": {},
     "free_text_gamble": {
-      "success_trend_base": 5,
-      "success_trend_per_risk": 0.3,
-      "success_neili_damage": 10,
-      "failure_trend_per_risk": 0.1,
-      "failure_neili_base": 20,
-      "failure_neili_per_risk": 3.0
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.004,
+      "side_trend_cap": 5
     },
     "acts": [
       {
@@ -370,12 +378,14 @@
     "decisive_margin": 40,
     "action_tags": {},
     "free_text_gamble": {
-      "success_trend_base": 5,
-      "success_trend_per_risk": 0.3,
-      "success_neili_damage": 10,
-      "failure_trend_per_risk": 0.1,
-      "failure_neili_base": 20,
-      "failure_neili_per_risk": 3.0
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.004,
+      "side_trend_cap": 5
     },
     "acts": [
       {

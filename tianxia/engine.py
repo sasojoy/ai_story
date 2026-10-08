@@ -3187,6 +3187,13 @@ class Game:
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
         return option.text if option else None
 
+    # 放手一搏輸入框旁邊那一句（試玩回饋 2026-10-08）：成功率照舊不事前顯示（賭局的感覺），只講清楚賭的是什麼
+    BATTLE_GAMBLE_NOTE = "寫得越險，成了戰果越大；失手時大局只會小小倒退，重傷的是你自己，氣血見底就倒下出局。"
+
+    def battle_free_text_note(self) -> str | None:
+        """有放手一搏輸入框時（battle_free_text_prompt 不是 None）回傳輸入框旁邊的說明，否則 None。"""
+        return self.BATTLE_GAMBLE_NOTE if self.battle_free_text_prompt() is not None else None
+
     def _battle_text_check(self, text: str, tick: bool) -> tuple[BattleDef, str, str, str] | list[str]:
         """放手一搏現在送不送得出去：送得出去回傳（這場的定義, 選項的 tag, 截到 20 字的文字, 自己站的那一方的名字），
         不行回傳要給玩家看的那一句。tick 照 _battle_status。"""
