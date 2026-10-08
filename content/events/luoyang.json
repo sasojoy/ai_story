@@ -209,6 +209,11 @@
     "choices": [
       {
         "text": "由他搜",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "伍長翻了半天，順手摸走幾枚錢，揮手放你過去。",
           "stats": {

@@ -78,6 +78,11 @@
     "choices": [
       {
         "text": "買下",
+        "condition": {
+          "min_stats": {
+            "silver": 150
+          }
+        },
         "effect": {
           "text": "你展開舊符，上面畫著一座山，山勢像極了嵩山。",
           "stats": {

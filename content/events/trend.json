@@ -57,6 +57,6 @@
      {"text": "跟船家講價，讓他照舊價分批渡人", "check": {"stat": "wis", "difficulty": 6},
       "effect": {"text": "你算給船家聽：照舊價多跑幾趟，賺得比坐地起價還多，還不會被人砸了船。船家想了想，點頭了。", "stats": {"good": 1, "fame": 1}},
       "fail_effect": {"text": "船家冷笑一聲，說聽你囉嗦也得收錢，伸手討了幾個才把船撐離岸。", "stats": {"silver": -5}}},
-     {"text": "出高價，自己先上船", "effect": {"text": "你遞上銀子，船家立刻替你在船頭騰了個位子。", "stats": {"silver": -20}}}
+     {"text": "出高價，自己先上船", "condition": {"min_stats": {"silver": 20}}, "effect": {"text": "你遞上銀子，船家立刻替你在船頭騰了個位子。", "stats": {"silver": -20}}}
    ]}
 ]

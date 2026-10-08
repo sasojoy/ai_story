@@ -31,12 +31,6 @@ NOT_GATED: dict[tuple[str, int], tuple[int, str]] = {
     ("yz_yan_cold_night", 1): (5, "檢定選項，成功才分出 5 兩的乾糧、失敗不花錢：比照上面兩則不擋（fix-1009 裁決）"),
 }
 
-# 這份計畫要擋、還沒擋的（逐檔擋完就從這裡拿掉；全部擋完這個清單就刪掉）
-TO_GATE: set[tuple[str, int]] = {
-    ("luoyang_beimang_search", 0),
-    ("train_campfire", 1), ("yuxi_antique", 0), ("trend_baima_ford_panic", 2),
-}
-
 
 def price_of(effect: Effect) -> int:
     """這個效果扣幾兩（沒扣、或是給錢都是 0）。"""
@@ -105,7 +99,8 @@ def _scene(game: Game, event_id: str, silver: int) -> list[str]:
 
 def test_every_paying_choice_is_gated_or_whitelisted(real):
     """選了就付錢的選項都要擋（min_stats.silver ≥ 價錢）；不擋的要在 NOT_GATED 寫理由。新寫的付錢選項忘了擋，這裡就紅。"""
-    assert {(eid, i) for eid, i, _, _ in ungated(real)} == TO_GATE
+    missing = ungated(real)
+    assert not missing, "\n".join(f"{eid} 選項 {i}：付 {price} 兩，門檻 {gate}" for eid, i, price, gate in missing)
 
 
 def test_the_whitelist_is_not_stale(real):
@@ -162,16 +157,17 @@ def test_a_broke_bot_always_has_something_to_press(real):
 # ── 守門本身會不會紅（突變）：拿掉一個條件、新寫一個忘了擋的付錢選項 ─────────────────────────────
 
 
-def test_the_guard_catches_a_removed_gate(real):
-    eid, i, price = next((e, i, p) for e, i, p in gated(real) if (e, i) not in TO_GATE)
+@pytest.mark.parametrize("eid, i, price", [("yuxi_antique", 0, 150), ("beggar", 0, 5), ("mk_nyroad_ambush", 3, 15)])
+def test_the_guard_catches_a_removed_gate(real, eid, i, price):
+    assert (eid, i, price) in gated(real)
     real.events[eid].choices[i].condition = Condition()
-    assert (eid, i, price, None) in ungated(real)
+    assert ungated(real) == [(eid, i, price, None)]
 
 
 def test_the_guard_catches_a_gate_below_the_price(real):
-    eid, i, price = next((e, i, p) for e, i, p in gated(real) if (e, i) not in TO_GATE)
+    eid, i, price = gated(real)[0]
     real.events[eid].choices[i].condition = Condition(min_stats={"silver": price - 1})
-    assert (eid, i, price, price - 1) in ungated(real)
+    assert ungated(real) == [(eid, i, price, price - 1)]
 
 
 def test_the_guard_catches_a_new_ungated_paying_choice(real):
