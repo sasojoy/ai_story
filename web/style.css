@@ -343,6 +343,18 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .card.scene.road { padding: 8px 12px; font-size: 14px; line-height: 1.55; cursor: pointer; }
 .card.scene.road.clamp > p:not(:first-child) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } /* 在路上：整段話小一號，路上的五個選項才全在第一屏（FB-055） */
 .scene h2, .scene h3 { font-size: 18px; }
+/* 決戰集結時還沒參戰（FB-105）：加入的鈕在戰場名字那一行的右邊（app.js 的 musterScene）。鈕是 .btn.small（38px 高，點得到），
+   上下各 −8px：佔的高度只有 22px，不高過名字那一行，剛剛、場景與整排行動一個 px 都不往下推（375×812 估過，見 tests/test_fb105_muster_join.py）。
+   名字與鈕中間那一小句（.muster-note，「報名在這裡 →」）佔剩下的寬度、靠右貼著鈕；放不下就省略號收尾——基準寬度 0（flex: 1 1 0），
+   這一行永遠不會因為它折行。散人臨時投效的兩顆字多、放不進名字旁邊：另起一行（.wide）、兩顆並排，這一行就是實打實的 38px，
+   不往上吃（不然蓋到名字）；那一小句留在名字右邊往下指 */
+.scene .muster-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 2px; }
+.scene .muster-head > p { flex: none; margin: 0; font: 600 16px var(--serif); }
+.scene .muster-note { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.scene .muster-join { display: flex; flex: none; flex-wrap: wrap; gap: 6px; margin: 0; }
+.scene .muster-join .btn { width: auto; margin: -8px 0; }
+.scene .muster-join.wide { flex-basis: 100%; }
+.scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
