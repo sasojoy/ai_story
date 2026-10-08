@@ -784,17 +784,17 @@ def battle_text(game: Game, text: str) -> list[str]:
     act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
     total = game.content.config.free_text_budget_seconds
 
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
-            return battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
-        return battle_instance.assess_action_success_rate(client, act_, request.faction_name, request.text)
+            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
+        # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
+        return battle_instance.assess_gamble(client, act_, request.faction_name, request.text, request.name)
 
-    rate = model_call(
-        game, score, fallback=battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
-        busy=BUSY_FREE_TEXT,
-    )
-    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
 
 
 # ── 畫面資料 ──────────────────────────────────────────

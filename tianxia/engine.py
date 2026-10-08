@@ -173,6 +173,7 @@ class BattleTextRequest(BaseModel):
     act_index: int  # 送出時是第幾幕：評分照這一幕的情境（C 段送出時換了幕也照這個評過的分）
     faction_name: str
     text: str
+    name: str = ""  # 送出的人的名號：劇情以他開頭（試玩回饋 2026-10-08）
 
 
 class FreeTextOutcome(BaseModel):
@@ -2693,6 +2694,9 @@ class Game:
         if battle.unfinished:
             return
         definition = self.content.battles.get(battle.battle_id)
+        line = self._highlight_line(battle, definition)
+        if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
+            self.world.mutate_season(lambda season: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
         if definition is not None and definition.third is not None and battle.third_push:
             # 第三方（地方豪強）收場的割據推動：一般收場與時刻表收場都推（時刻表那一支不套保底的大勢變化，所以要在分支之前）
             self.world.mutate_season(lambda season: self._apply_third_push(season, battle, definition))
@@ -2711,6 +2715,18 @@ class Game:
                 self._apply_outcome_trends_and_flags(self.state.world, battle)
             self._deliver_battle_results()
         self._open_waiting_showdown()
+
+    @staticmethod
+    def _highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
+        """收場時那一則傳聞：這一場最有戲的放手一搏（battle.highlight）。天下大事傳聞照慣例具名（假人不寫放手一搏，不會出現）。"""
+        h = battle.highlight
+        if h is None:
+            return ""
+        where = definition.name if definition is not None else battle.battle_id
+        head = f"{where}上，{h.name}放手一搏：「{h.text}」"
+        if h.won:
+            return f"{head}——成算不到{h.rate // 10 + 1}成，竟然成了。{h.story}".rstrip()
+        return f"{head}——沒成，倒成了兩軍口中的笑談。{h.story}".rstrip()
 
     def _apply_third_push(self, season: WorldState, battle: battle_instance.BattleInstance, definition: BattleDef) -> None:
         """第三方收場推的大勢線（戰鬥系統第六節）：一般收場與時刻表收場都推；資料庫那份與記憶體那份共用這一段。
@@ -2923,6 +2939,13 @@ class Game:
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        h = battle.highlight
+        fame = c.config.battle.highlight_fame
+        highlight_changes = []
+        if earlier is None and h is not None and h.name == me.name and h.won and fame:  # 這一場最有戲的那一搏是自己的、而且成了
+            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
+            lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
+            highlight_changes.append(f"名望 +{fame}")
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -2942,6 +2965,8 @@ class Game:
         if earlier is None:
             changes = [front_lines.mark(tid, d) if in_words and can_draw_side_change(c, tid) else plain(tid) for tid, d in moves.items()]
             record_changes = [plain(tid) for tid in moves if not (in_words and can_draw_side_change(c, tid))]
+            changes += highlight_changes
+            record_changes += highlight_changes
         else:
             changes, record_changes = [], []
             lines += [
@@ -3237,9 +3262,12 @@ class Game:
         definition, _, text, faction_name = checked
         return BattleTextRequest(
             battle_id=definition.id, act_index=self.world.get_battle().act_index, faction_name=faction_name, text=text,
+            name=self.state.player.name,
         )
 
-    def submit_battle_custom_action(self, text: str, llm_rate: int | None = None) -> list[str]:
+    def submit_battle_custom_action(
+        self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
+    ) -> list[str]:
         """自訂行動輸入框的送出：截到 20 字，查到這回合對應的 free_text 選項，機制效果
         還是走它的 tag（跟按按鈕完全一樣的查表邏輯），玩家打的字只會被餵給 LLM 評成功率。
         這裡用 tick=True（不是 tick=False）——跟 _battle_choose() 不一樣，這個方法不是
@@ -3248,15 +3276,17 @@ class Game:
         負責先追趕一次，不然集結剛好逾時的那一刻送出的行動會在 submit_action() 裡被
         「battle.phase 還是 muster」悄悄吃掉（見那次遇到的真實 bug）。
         llm_rate 是 server.py 在行動鎖外評好的成功率（battle_text_request 開的單子；試玩回饋 2026-10-08：鎖內等模型全服跟著等）；
-        沒給（直接呼叫的測試、腳本）就在這裡評，用 _quick_client 的短逾時複本，評不到就是保底值。"""
+        沒給（直接呼叫的測試、腳本）就在這裡評，用 _quick_client 的短逾時複本，評不到就是保底值。
+        stories 是同一次模型呼叫寫好的（成功版, 失敗版）劇情（battle_instance.assess_gamble）；擲骰後播對應的那一版。"""
         checked = self._battle_text_check(text, tick=True)
         if isinstance(checked, list):
             return checked
         definition, tag, text, faction_name = checked
         if llm_rate is None:
             act = battle_instance.current_act(self.world.get_battle(), definition)
-            llm_rate = battle_instance.assess_action_success_rate(self._quick_client(), act, faction_name, text)
-        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate)
+            verdict = battle_instance.assess_gamble(self._quick_client(), act, faction_name, text, self.state.player.name)
+            llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
+        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate, stories)
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -3341,6 +3371,7 @@ class Game:
 
     def _submit_battle_action(
         self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,
+        stories: tuple[str, str] | None = None,
     ) -> list[str]:
         """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項，連同 LLM 先評好
         的成功率）並嘗試結算這回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡
@@ -3349,7 +3380,7 @@ class Game:
         captured: dict[str, list[str]] = {"msgs": []}
 
         def _apply(b: battle_instance.BattleInstance) -> None:
-            battle_instance.submit_action(b, name, tag, text, success_rate)
+            battle_instance.submit_action(b, name, tag, text, success_rate, stories)
             captured["msgs"] = self._advance_battle_round(b, definition)
 
         battle = self.world.mutate_battle(_apply)

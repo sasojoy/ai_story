@@ -7694,3 +7694,32 @@ def test_a_fighter_joins_with_the_role_of_their_standout_stat_and_it_shows(conte
             foe.choose("battle:act:huang_hold")
     game.sync(start + 10)  # 收場那一下是乙出的手：自己的那一則同步時補
     assert "你以盾陣出陣，出手 3 回合" in game.state.journal[0].lines
+
+
+def test_the_most_dramatic_gamble_of_a_battle_goes_round_the_world_and_earns_fame(content, game):
+    """每場收場挑最有戲的那一搏寫進天下大事傳聞；那一搏是成了的，那個人名望 +1（試玩回饋 2026-10-08）。"""
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    foe = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0), at(foe, 0.0):
+        game.choose("battle:join:guan")
+        foe.choose("battle:join:huang")
+    me = game.state.player.name
+    game.world.mutate_battle(lambda b: setattr(b, "highlight", battle_instance.GambleMoment(
+        name=me, faction="guan", text="扮成絕世美女色誘對面主將", story=f"{me}一扭腰，對面主將看傻了眼。", rate=0, won=True,
+    )))
+    fame = game.state.player.stats.get("fame", 0)
+    start = definition.muster_seconds + 1
+    for i in range(3):
+        with at(game, start + i), at(foe, start + i):
+            foe.choose("battle:act:huang_hold")
+            game.choose("battle:act:guan_hold")
+    assert game.world.get_battle().phase == "ended"
+    line = f"測試決戰上，{me}放手一搏：「扮成絕世美女色誘對面主將」——成算不到1成，竟然成了。{me}一扭腰，對面主將看傻了眼。"
+    with at(game, start + 5):
+        game.choose("act:rest")  # 再存一次賽季：傳聞不會被記憶體那份蓋掉
+    assert [r.text for r in game.world.get_season().rumors].count(line) == 1
+    assert game.state.player.stats["fame"] == fame + 1
+    entry = next(e for e in game.state.journal if e.title.startswith("測試決戰・"))
+    assert "名望 +1" in entry.changes and "你那一搏成了這一仗最有戲的一幕，江湖上傳開了。" in entry.lines
