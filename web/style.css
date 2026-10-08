@@ -387,6 +387,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .road-links .btn { flex: 1 1 auto; min-height: 48px; }
 .free { display: flex; gap: 8px; margin-bottom: 12px; }
 .free .input { flex: 1; }
+.free-note { margin: -6px 0 12px; font-size: 13px; color: var(--ink-2); }
 .mini { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; cursor: pointer; position: relative; background: #e9e2cc; }
 .mini svg { height: 150px !important; }
 .mini::after { content: "展開輿圖 ›"; position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 8px; }

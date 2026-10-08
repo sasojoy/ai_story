@@ -213,6 +213,7 @@ def test_main_view_has_everything_the_page_draws(game):
     assert view["scene"].startswith("<p>")
     assert {"id", "label", "enabled"} <= set(view["options"][0])
     assert view["free_text"] is None
+    assert view["free_text_note"] is None
     assert view["card"] is None
     assert view["minimap"].startswith("<svg")
     assert view["admin"] is False
@@ -2956,6 +2957,7 @@ def test_the_free_text_action_already_replies_and_is_not_journaled(client):
     client.post("/api/choose", json={"id": "battle:join_late"})
     before = _journal_titles()
     assert client.get("/api/main").json()["free_text"]
+    assert "重傷的是你自己" in client.get("/api/main").json()["free_text_note"]
     out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
     assert "等待其他人" in out["message"]
     assert _journal_titles() == before

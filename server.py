@@ -824,6 +824,7 @@ def _main_view_body(game: Game) -> dict:
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt(),
+        "free_text_note": game.battle_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,

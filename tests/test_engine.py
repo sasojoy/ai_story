@@ -1,3 +1,4 @@
+from math import isclose
 import contextlib
 import random
 import re
@@ -3518,10 +3519,13 @@ def test_battle_free_text_prompt_shows_when_available(content, game):
     after_muster = _join_and_open(content, game, definition)
     with at(game, after_muster):
         assert game.battle_free_text_prompt() == "放手一搏（20字內）"
+        # 輸入框旁邊講清楚賭的是什麼（試玩回饋 2026-10-08），成功率不事前寫
+        assert "重傷的是你自己" in game.battle_free_text_note() and "%" not in game.battle_free_text_note()
 
 
 def test_battle_free_text_prompt_is_none_outside_battle(content, game):
     assert game.battle_free_text_prompt() is None
+    assert game.battle_free_text_note() is None
 
 
 def test_battle_free_text_prompt_is_none_after_submitting(content, game):
@@ -3602,8 +3606,9 @@ def _install_battle_def_with_gamble(content):
     definition.id = "t3"
     content.battles[definition.id] = definition
     definition.free_text_gamble = FreeTextGamble(
-        success_trend_base=5, success_trend_per_risk=0.3, success_neili_damage=10,
-        failure_trend_per_risk=0.1, failure_neili_base=20, failure_neili_per_risk=3.0,
+        success_trend_base=5, success_trend_per_risk=0.3, success_neili_share=0.05,
+        failure_trend_per_risk=0.1, failure_trend_cap=100, failure_neili_share_base=0.1, failure_neili_share_per_risk=0.01,
+        side_trend_cap=100,
     )
     return definition
 
@@ -3620,12 +3625,10 @@ def test_submit_battle_custom_action_assesses_success_rate_and_feeds_the_gamble(
         game.submit_battle_custom_action("直取波才首級")
     battle = game.world.get_battle()
     cap = game._battle_neili_cap()
-    # success_rate=20、risk=80：成功時只扣固定的 10（傷害很小，賭贏代價低），失敗時扣
-    # 20+80*3=260——用的是 game.rng（真的隨機，不是 FixedRandom），究竟成功還是失敗
-    # 不好預測，但傷害一定精確落在這兩個數字其中之一，不會是別的數字，證明真的
-    # 走了賭局公式（不是固定的數字）。
+    # success_rate=20、risk=80：成功時扣氣血池的 5%（賭贏代價低），失敗時扣（0.1＋80×0.01）＝九成——用的是 game.rng
+    # （真的隨機，不是 FixedRandom），究竟成功還是失敗不好預測，但傷害一定精確落在這兩個數字其中之一，證明真的走了賭局公式。
     damage = cap - battle.participants["沈浪"].neili
-    assert damage in (10, 260)
+    assert any(isclose(damage, cap * share) for share in (0.05, 0.9))
 
 
 def test_a_battle_threshold_crossed_in_the_background_starts_the_battle(content, game):

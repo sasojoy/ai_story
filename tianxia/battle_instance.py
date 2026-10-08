@@ -488,7 +488,7 @@ def resolve_round(
         if option is not None and option.move is not None:
             moves[name] = option.move
     mixes = {side: _mix(moves, factions, side) for side in (first, second)}
-    force, counts, gamble_delta = {first: 0.0, second: 0.0}, {first: 0, second: 0}, 0
+    force, counts = {first: 0.0, second: 0.0}, {first: 0, second: 0}
     names = {f.id: f.name for f in definition.factions}
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
     coefs: dict[str, list[float]] = {first: [], second: []}  # 陣營 → 這一回合每個出固定招的人的剋制係數，回合摘要用
@@ -506,21 +506,20 @@ def resolve_round(
             gamble = definition.free_text_gamble
             risk = 100 - success_rate
             succeeded = rng.random() * 100 < success_rate
-            sign = 1 if p.faction == first else -1
             if custom_text:
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {success_rate}%）")
             side_name = names.get(p.faction, p.faction)
+            # 試玩回饋 2026-10-08：對戰局只有小影響，主要的代價是自己的氣血池（扣到 0 就照下面倒下出局）
             if succeeded:
                 delta = gamble.success_trend_base + round(risk * gamble.success_trend_per_risk)
-                damage = gamble.success_neili_damage
+                damage = p.neili_cap * gamble.success_neili_share
                 msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
             else:
-                delta = -round(risk * gamble.failure_trend_per_risk)
-                damage = gamble.failure_neili_base + risk * gamble.failure_neili_per_risk
+                delta = -min(gamble.failure_trend_cap, round(risk * gamble.failure_trend_per_risk))
+                damage = p.neili_cap * min(1.0, gamble.failure_neili_share_base + risk * gamble.failure_neili_share_per_risk)
                 # 代價照引擎算的寫出來（試玩回饋 2026-10-08：「慘痛的代價是什麼？」）
                 cost = f"{side_name}的戰局倒退 {-delta}，" if delta else ""
                 msgs.append(f"{name}這一搏失敗了，付出了慘痛代價：{cost}自己氣血 -{round(damage)}。")
-            gamble_delta += sign * delta
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
@@ -541,6 +540,16 @@ def resolve_round(
             p.eliminated = True
             p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
+    # 同一邊同一回合放手一搏合起來有上限（一個人亂寫、一群人亂寫都不能抵過全軍的固定招）
+    if definition.free_text_gamble is not None:
+        cap = definition.free_text_gamble.side_trend_cap
+        for side, raw in list(gambles.items()):
+            capped = max(-cap, min(cap, raw))
+            if capped != raw:
+                gambles[side] = capped
+                verb = "推進" if capped > 0 else "倒退"
+                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合放手一搏合起來只{verb}了 {abs(capped)}。")
+    gamble_delta = sum((1 if side == first else -1) * d for side, d in gambles.items())
     push = 0.0
     if counts[first] or counts[second]:
         mine = force[first] / math.sqrt(counts[first]) * diversity(instance, moves, first, tuning) if counts[first] else 0.0
