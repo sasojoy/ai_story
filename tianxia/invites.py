@@ -1,4 +1,4 @@
-"""玩家之間的邀請（玩家互動第二層：切磋、論武；介面 thread 的結伴同行也掛在這裡）：一個人在同一地點向另一個人發邀請，
+"""玩家之間的邀請（玩家互動第二層：切磋、論武、結伴同行、打招呼）：一個人在同一地點向另一個人發邀請，
 對方接受、婉拒，或放著等它逾時。邀請存在這一季的 WorldState.invites（跟 echoes 一樣在賽季裡，換季自然清空，不改資料庫結構）。
 
 這個模組只管邀請本身（發、查、收、作廢），純函式、只動傳進來的 WorldState；誰在不在同一地點、接受之後做什麼，
@@ -11,7 +11,7 @@ from .characters import name_key
 from .models import Content
 from .state import Invite, WorldState
 
-KINDS = {"spar": "切磋", "discuss": "論武"}  # 介面 thread 的結伴同行加 "travel"
+KINDS = {"spar": "切磋", "discuss": "論武", "travel": "結伴同行", "greet": "打招呼"}
 
 
 def kind_name(kind: str) -> str:

@@ -888,3 +888,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peer-msg { margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--gold) 12%, var(--paper)); font-size: 14px; }
 .peer-msg p { margin: 0; }
 .peer-amount { margin-bottom: 12px; }
+/* 第二層：別人遞給你的打招呼、結伴邀請，與結伴同行的那一行（場景卡底下，「此地還有」之後） */
+.calls { display: grid; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; }
+.call, .party { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.call > span, .party > span { flex: 1 1 100%; }
+.peer-amount { flex-wrap: wrap; }
+.peer-amount select { flex: 1 1 100%; }

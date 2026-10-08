@@ -71,6 +71,19 @@ class CharacterStore:
                 continue
         return states
 
+    def tagging(self, leader: str) -> list[GameState]:
+        """答應跟著 leader（名號原樣）結伴同行的人（PlayerState.tagalong），照名號排序；還算不算數由呼叫端看（social.party）。"""
+        sql = "SELECT data FROM characters WHERE json_extract(data, '$.player.tagalong.leader') = ? ORDER BY name"
+        with self.db.snapshot() as conn:
+            rows = conn.execute(sql, (leader,)).fetchall()
+        states: list[GameState] = []
+        for row in rows:
+            try:
+                states.append(GameState.model_validate_json(row["data"]))
+            except ValidationError:
+                continue
+        return states
+
     def all(self, bots_only: bool = False) -> list[GameState]:
         """照名號排序；讀不懂的存檔跳過（不讓一份壞檔拖垮榜單或假人程式）。"""
         sql = "SELECT data FROM characters" + (" WHERE is_bot = 1" if bots_only else "") + " ORDER BY name"

@@ -860,6 +860,8 @@ def _main_view_body(game: Game) -> dict:
         "minimap": game.minimap_svg(),
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
+        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
+        "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
@@ -1424,7 +1426,7 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
     """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
     game = _game(request)
     name, action = str(body.get("name", "")), str(body.get("action", ""))
-    params = {"arg": str(body.get("arg", ""))}
+    params = {"arg": str(body.get("arg", "")), "choice": str(body.get("choice", ""))}
     try:
         params["amount"] = int(body.get("amount", 0))
     except (TypeError, ValueError):
@@ -1440,6 +1442,15 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+
+
+@app.post("/api/party/leave")
+def api_party_leave(request: Request):
+    """還在等帶頭的人動身時的「分道揚鑣」（Game.leave_party）；在路上時走選單的 act:part。回傳 {main, message}。"""
+    game = _game(request)
+    msgs = act(game, lambda g: g.leave_party())
+    _tell_tabs(game)
+    return {"main": look(game, main_view), "message": joined(msgs)}
 
 
 @app.get("/api/menxia")
