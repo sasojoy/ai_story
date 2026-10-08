@@ -49,6 +49,16 @@ _NARRATE_SYSTEM_PROMPT = (
 )
 
 
+_NOT_WORDS = re.compile(r"[\W_]+")  # 空白與標點（中英文、全形半形都算）：比對結果句時拿掉，只比字
+
+
+def tells_the_outcome(narration: str, effect_text: str) -> bool:
+    """潤色那一段是不是已經把結果文字整句寫進去了（FB-124：提示詞叫模型不要重複，模型有時照樣寫）。空白、標點不算；
+    只寫了一部分不算（引擎照舊接整句，後半段才不會不見）；結果文字是空的（effect 沒寫字）也不算。"""
+    outcome = _NOT_WORDS.sub("", effect_text)
+    return bool(outcome) and outcome in _NOT_WORDS.sub("", narration)
+
+
 def _scene(event: Event) -> str:
     return f"【{event.title}】{_MARKS_PLACEHOLDER.sub('一些人', event.text)}"
 
