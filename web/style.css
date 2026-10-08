@@ -100,6 +100,8 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
    不能叫 .seg：那是全站的分段選單（display: flex、下方留白），套到頭銜上每一段都會變成整列 */
 .who-title { margin-top: 1px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
 .who-title .who-seg { white-space: nowrap; }
+.who-ranger { margin-top: 2px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
+.who-ranger small { display: block; font-size: 11.5px; color: var(--ink-2); opacity: 0.85; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
 /* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
 .who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
@@ -472,8 +474,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .peek-chip::after { display: none; }
 }
 /* 第一季的本週軍令（計畫 T6） */
-.orders .order { padding: 8px 0; border-top: 1px solid var(--line); }
-.orders .order:first-child { border-top: 0; padding-top: 0; }
+.orders .order, .bounties .order { padding: 8px 0; border-top: 1px solid var(--line); }
+.orders .order:first-child, .bounties .order:first-child { border-top: 0; padding-top: 0; }
 .order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
@@ -482,6 +484,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
 .order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.bounty-foot { margin-top: 8px; }
 .order-cart { padding-bottom: 8px; font-size: 13px; color: var(--ink); }
 .order.done .order-head b::after { content: " ✔"; color: var(--gold); }
 /* 第一季的結算卡（休季，計畫 T9） */
