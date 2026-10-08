@@ -518,9 +518,10 @@
   // 企劃者：375×812 上「剛剛」、場景與整排行動都在第一屏（按完不用捲就看得到結果）。打完一場又跳出師父「碰到才說」的框、💡 兩行、
   // 決戰集結（場景多一段戰場、「此地還有」、結伴那幾行）時，行動列會掉到分頁列底下。框照企劃者 10/5 的決定留在行動列上面、話不切；
   // 這裡畫好之後量一次：行動列（事件、有所感這種一組選項時是最後一顆）的下緣離分頁列不到 FIT_MARGIN，就照 FIT_STEPS 的順序一步一步收，
-  // 收到放得下就停——放得下的畫面一點都不動。先收不少任何字的（間距），再收看一眼就夠的（對手的描述、第一回合、剛剛的後半、
-  // 決戰時所在地的描述、集結那一句的後半），每一樣都點得開、看得到全文；得失與結果那幾行（數字）、框裡的話都不收。
-  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結時又有框：見 fix1008-report.md）就是放不下，不再藏別的
+  // 收到放得下就停——放得下的畫面一點都不動。先收不少任何字的（間距、框的行高），再收 💡 與看一眼就夠的（對手的描述、第一回合、
+  // 剛剛的後半、決戰時所在地的描述、集結那一句的後半），每一樣都點得開、看得到全文；得失與結果那幾行（數字）、框裡的話都不收。
+  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結又有框的時候：場景裡「此地還有」、結伴那幾行不歸這裡收）
+  // 就是放不下，不再藏別的
   // 量的是畫面本身（字體、寬度、狀態列幾行都算進去），所以手機高一點、字少一點就少收或不收。重畫、轉向、拉視窗之後重量（先全部還原）
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
@@ -553,7 +554,7 @@
       renderTop();
       return true;
     } },
-    // 2. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）
+    // 4. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）
     { key: "lines", run: () => {
       if (S.hearOpen != null && S.hearOpen === S.main.card_id) return false; // 玩家點開過：不收回去
       const lines = document.querySelectorAll(".battle-card .tx-extra .tx-line:not(.tx-hearsay)");
@@ -566,13 +567,13 @@
       });
       return lines.length > 0;
     } },
-    // 3. 戰鬥卡片的第一回合也收進「展開過程」（那一行與按鈕照舊在；得失照舊在）
+    // 5. 戰鬥卡片的第一回合也收進「展開過程」（那一行與按鈕照舊在；得失照舊在）
     { key: "rounds", run: () => {
       const list = document.querySelector(".battle-card ul.rounds:not(.open), .battle-card p.rounds-tale:not(.open)");
       if (list) list.classList.add("fit-fold");
       return !!list;
     } },
-    // 4. 「剛剛」（不是戰鬥卡片的那種）收著時只露三行（同在路上，FB-060），「展開全文」照舊
+    // 6. 「剛剛」（不是戰鬥卡片的那種）收著時只露三行（同在路上，FB-060），「展開全文」照舊
     { key: "now", run: () => {
       const now = document.querySelector("#page > .now:not(.open)");
       const body = now && now.querySelector(".tx-now");
@@ -583,7 +584,7 @@
       if (body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits"); // 三行就放得下：不要淡出與「展開全文」
       return true;
     } },
-    // 5. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
+    // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
       const scene = document.querySelector("#page > .card.scene:not(.road)");
@@ -591,7 +592,7 @@
       scene.classList.add("fit-own");
       return fitClip(scene.querySelectorAll(":scope > hr ~ p"));
     } },
-    // 6. 決戰集結、加入的鈕在戰場名字那一行（FB-105 的 musterScene）時，名字底下集結那一句收成一行：開頭是「集結中，還剩現實 N 分 N 秒」，
+    // 8. 決戰集結、加入的鈕在戰場名字那一行（FB-105 的 musterScene）時，名字底下集結那一句收成一行：開頭是「集結中，還剩現實 N 分 N 秒」，
     //    後半（「選擇陣營加入…」）名字旁那一小句已經說了。點了攤開（同上）
     { key: "muster", run: () => {
       const scene = document.querySelector("#page > .card.scene:not(.road)");
@@ -602,7 +603,7 @@
       scene.classList.add("fit-muster");
       return fitClip(lines);
     } },
-    // 7. 一組選項（事件、有所感的做法）時，鈕與鈕之間收緊、鈕矮一點（44px，觸控照樣按得到）
+    // 9. 一組選項（事件、有所感的做法）時，鈕與鈕之間收緊、鈕矮一點（44px，觸控照樣按得到）
     { key: "options", run: () => {
       const menu = document.querySelector("#page > .options");
       if (menu) menu.classList.add("fit-tight");
@@ -631,7 +632,7 @@
     fitUnclip(page);
     page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
   }
-  // 場景卡裡收成一行的段落（第 5、6 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）
+  // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）
   function fitClip(paras) {
     paras.forEach((p) => {
       p.classList.add("fit-clip");
