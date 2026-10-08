@@ -176,6 +176,19 @@ def test_the_audience_button_greys_out_with_the_moment(content):
     assert (option.label, option.enabled) == (f"求見韓鐵（已經談滿 3 輪，{moment} 之後再來）", False)
 
 
+def test_the_note_row_spells_out_a_talked_out_audience(content):
+    """審查 I1：單人地點談滿了，行動列底下那一行寫整句（幾輪照設定、換日的那一刻），不再寫「和某某談話，聊得投機情誼會漲」。"""
+    game = _game(content, WEEKEND, one=True)
+    ch = content.characters["mate"]
+    ch.deep_interaction, ch.audience_fame = True, 0
+    content.config.talk_turns_per_day = 4
+    game.state.player.fortune = True
+    assert game.action_notes(["call:mate"])["call:mate"] == howto.call_line("韓鐵", True)
+    game.state.player.talks_today["mate"] = [rules.game_day(content, game.state.world), 4]
+    moment = rules.day_ends_text(content, game.state.world)
+    assert game.action_notes(["call:mate"])["call:mate"] == game._talked_out_note() == f"已經談滿 4 輪，{moment} 之後再來"
+
+
 def test_the_audience_list_names_the_moment_and_drops_today(content):
     game = _game(content, WEEKEND, one=True)
     for cid in ("mate", "scholar"):

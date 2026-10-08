@@ -300,3 +300,30 @@ def test_notes_are_escaped():
     m["action_notes"] = {"act:explore": "<b>x</b>"}
     page = run(m, "return H.pageJianghu();")
     assert "&lt;b&gt;x&lt;/b&gt;" in page
+
+
+def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_the_moment():
+    """day-scale 審查 I1：這裡唯一那位人物談滿了、又沒有交友的事時，行動列的交友格放的是灰掉的「求見某某」。格子約 60 px、不換行，
+    放不下「第 1 週・週日 00:00 之後再來」（會被切成「週・週日 00:0」這種碎片）：格子寫「已談滿」，整句連同換日的那一刻寫在底下那一行。
+    孟津渡是正式內容裡真的會這樣的地方（週末設定）。"""
+    from tianxia import rules
+
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    p = game.state.player
+    p.location = "mengjin_ford"
+    (cid,) = game._figures_here()
+    p.flags.add(f"結識:{cid}")
+    p.fortune = True
+    p.talks_today[cid] = [rules.game_day(content, game.state.world), content.config.talk_turns_per_day]
+    m = server.main_view(game)
+    ids = [o["id"] for o in m["options"]]
+    assert "act:socialize" not in ids and not next(o for o in m["options"] if o["id"] == f"call:{cid}")["enabled"]
+    bar = run(m, "return H.actionBar(H.S.main);")
+    cell = re.search(r'<button class="act-ink off" data-key="social".*?</button>', bar, re.S).group(0)
+    assert "<b>求見</b><small>已談滿</small>" in cell and "00:00" not in cell
+    note = game._talked_out_note()
+    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 1 週・週") and note.endswith(" 之後再來")
+    assert f"<p><b>求見</b>{note}</p>" in bar  # 整句在行動列底下那一行（整列寬、第一屏）

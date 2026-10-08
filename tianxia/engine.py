@@ -982,7 +982,12 @@ class Game:
             for option_id in ids:
                 cid = option_id.removeprefix("call:")
                 if option_id.startswith("call:") and cid in c.characters:
-                    notes[option_id] = howto.call_line(c.characters[cid].name, self._can_meet(cid))
+                    # 談滿了（跟選單灰掉的判斷同一個次序：沒閉門不見、見得到、這個遊戲日談滿）：格子只放得下「已談滿」，
+                    # 整句連同換日的那一刻寫在這一行（day-scale 審查 I1）
+                    talked_out = not self._snubbed_character(cid) and self._can_meet(cid) and self._talks_left(cid) == 0
+                    notes[option_id] = (
+                        self._talked_out_note() if talked_out else howto.call_line(c.characters[cid].name, self._can_meet(cid))
+                    )
         return notes
 
     def _insight_blocked_until(self, loc: Location) -> str | None:
