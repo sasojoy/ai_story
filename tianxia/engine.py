@@ -20,7 +20,7 @@ from . import (
     atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview,
-    social, styles, team, timetable, traits,
+    social, styles, team, timetable, traits, zh,
 )
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
@@ -124,6 +124,20 @@ LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣�
 
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
+# 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
+SAY_OPTION = "talk:say"
+SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
+
+
+def say_text(text: str | None) -> str | None:
+    """「自己說」那句話能不能送：先去頭尾空白、中間連著的空白併成一個，1～SAY_MAX 字才算數，再轉繁體（zh.to_traditional）；
+    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。"""
+    if text is None:
+        return None
+    text = " ".join(text.split())
+    if not text or len(text) > SAY_MAX:
+        return None
+    return zh.to_traditional(text)
 # 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
@@ -779,6 +793,8 @@ class Game:
             dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
+            if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
+                opts.append(self._cost_option(SAY_OPTION, "自己說…", talk_cost))
             opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
             opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
             opts.append(Option(id="talk:leave", label="告辭"))
@@ -1089,7 +1105,7 @@ class Game:
         認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
         self.world.save_season(self.state.world)
 
-    def dialogue_request(self, option_id: str) -> companion_agent.DialogueRequest | None:
+    def dialogue_request(self, option_id: str, text: str | None = None) -> companion_agent.DialogueRequest | None:
         """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
         會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
@@ -1097,6 +1113,7 @@ class Game:
           （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
         - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（這個遊戲日還沒談滿、體力夠）；
           名望不夠的求見也按得下去，但那是被打發、不生成。玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
+        - `talk:say`（SAY_OPTION，「自己說」）：手上有對話、選項沒停用、text 過得了 say_text；玩家這一步就是那句話。
         其他選項都不呼叫對話模型。
         只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
         進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
@@ -1104,6 +1121,11 @@ class Game:
         if option is None or not option.enabled:
             return None
         kind, _, arg = option_id.partition(":")
+        if option_id == SAY_OPTION:
+            companion_id, said = self.state.player.pending_companion, say_text(text)
+            if companion_id is None or said is None:
+                return None
+            return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True)
         if kind == "talk":
             companion_id = self.state.player.pending_companion
             if companion_id is None or not arg.isdecimal():
@@ -1130,14 +1152,14 @@ class Game:
         )
 
     def _checked_prepared(
-        self, option_id: str, prepared: companion_agent.PreparedTurn | None,
+        self, option_id: str, prepared: companion_agent.PreparedTurn | None, text: str | None = None,
     ) -> companion_agent.PreparedTurn | None:
         """進鎖後重驗鎖外生成的結果：選項、人物、玩家這一步都要跟「現在」重算出來的單子一致才採用；
         對不上（連點兩下、選項清單已換）就當沒給，走一般路徑在鎖內生成——很少發生，慢一點可以接受。
         對不上時連它的失敗（turn=None）一起丟掉，不能讓別張單子的失敗結束現在這段對話。"""
         if prepared is None:
             return None
-        request = self.dialogue_request(option_id)
+        request = self.dialogue_request(option_id, text)
         if request is None:
             return None
         same = (prepared.option_id, prepared.companion_id, prepared.player_action) == (
@@ -1271,9 +1293,10 @@ class Game:
 
     def choose(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
-        fight: fight_llm.PreparedFight | None = None,
+        fight: fight_llm.PreparedFight | None = None, text: str | None = None,
     ) -> list[str]:
-        """prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
+        """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
+        prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
         只有對話選項用得到，進來先重驗，驗不過就忽略。
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
@@ -1292,7 +1315,10 @@ class Game:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         if option_id == sensing.DRAW:
             return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
-        prepared = self._checked_prepared(option_id, prepared) if kind in ("act", "talk", "call") else None
+        said = say_text(text) if option_id == SAY_OPTION else None
+        if option_id == SAY_OPTION and said is None:
+            return self._log([f"（寫下你想說的話，{SAY_MAX} 字以內。）"])  # 選項本身只叫出輸入框
+        prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call") else None
         self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
         stamina = self.state.player.stamina
@@ -1302,7 +1328,7 @@ class Game:
             elif kind == "move":
                 msgs = self._move(arg)
             elif kind == "talk":
-                msgs = self._talk(arg, prepared)
+                msgs = self._talk(arg, prepared, said)
             elif kind == "faction":
                 msgs = self._faction_step(arg)
             elif kind == "defect":
@@ -2509,7 +2535,7 @@ class Game:
         self.state.player.pending_companion = None
         return [f"{self.content.characters[companion_id].name}似乎無心多談，你只好先行告辭。"]
 
-    def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+    def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None, said: str | None = None) -> list[str]:
         companion_id = self.state.player.pending_companion
         if companion_id is None:
             return ["（此刻無法這麼做。）"]
@@ -2523,10 +2549,16 @@ class Game:
             heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
         try:
-            msgs = companion_agent.continue_dialogue(
-                self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                turn=self._prepared_turn(prepared),
-            )
+            if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
+                msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
+                    self._quick_client(), self.state, self.content, self.world, companion_id, said,
+                    turn=self._prepared_turn(prepared),
+                )
+            else:
+                msgs = companion_agent.continue_dialogue(
+                    self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
+                    turn=self._prepared_turn(prepared),
+                )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算

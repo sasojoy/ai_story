@@ -244,11 +244,11 @@ def test_talk_clue_option_fixed_text_once(fs, world):
     game = player(fs, world, "甲", "guan", "lake")
     p = game.state.player
     _talking(game, "huangfusong", 5)
-    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(game) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
     p.affinities["huangfusong"] = 6
     opts = game.options()
-    assert [o.id for o in opts] == ["talk:0", "talk:1", "talk:clue:fs_fire_guan:2", "talk:leave"]
-    assert opts[2].label == "問起破敵之策" and opts[2].enabled
+    assert [o.id for o in opts] == ["talk:0", "talk:1", "talk:say", "talk:clue:fs_fire_guan:2", "talk:leave"]
+    assert opts[3].label == "問起破敵之策" and opts[3].enabled
     assert game.dialogue_request("talk:clue:fs_fire_guan:2") is None  # 不送模型
     stamina = p.stamina
     msgs = game.choose("talk:clue:fs_fire_guan:2")
@@ -256,7 +256,7 @@ def test_talk_clue_option_fixed_text_once(fs, world):
     assert p.stamina == stamina and p.talks_today == {} and p.pending_companion == "huangfusong"
     assert p.fragments == {"fs_fire_guan": [2]}
     assert game.state.journal[0].lines == msgs
-    assert ids(game) == ["talk:0", "talk:1", "talk:leave"]  # 只說一次
+    assert ids(game) == ["talk:0", "talk:1", "talk:say", "talk:leave"]  # 只說一次
     assert game.choose("talk:clue:fs_fire_guan:2") == ["（此刻無法這麼做。）"]
 
 
@@ -275,7 +275,7 @@ def test_talk_clue_goes_to_the_stand_in_when_the_figure_is_out(fs, world):
     assert "talk:clue:fs_fire_guan:2" not in ids(other)
     huang = player(fs, world, "丙", "huang", "lake")
     _talking(huang, "huangfusong", 50)
-    assert ids(huang) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(huang) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
 
 
 def only_unheard(fs, game: Game, *keep: tuple[str, int]) -> None:
@@ -869,7 +869,7 @@ def test_foreshadow_off_switch_changes_nothing(fs, world, monkeypatch):
     assert not any(i.startswith("fs:") for i in ids(guan))
     _talking(guan, "zhujun", 100)
     guan.state.world.figures["huangfusong"] = FigureState(status="retired")
-    assert ids(guan) == ["talk:0", "talk:1", "talk:leave"]
+    assert ids(guan) == ["talk:0", "talk:1", "talk:say", "talk:leave"]
     assert foreshadow.hear_from_event(guan.state, fs, "fs_ev_boatman", world) == []
     lake = player(fs, world, "乙", "guan", "lake")
     from tianxia.events import event_candidates
