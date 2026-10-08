@@ -150,7 +150,8 @@ class BotRunner:
         return True
 
     def _name_and_apply(
-        self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob | bot_policy.SenseJob, report: TickReport,
+        self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob | bot_policy.SenseJob | bot_policy.DiscussJob,
+        report: TickReport,
     ) -> None:
         """假人取名的 B、C 段：首創配方（企劃者 2026-10-05）與絕學定名（2026-10-06）都請模型取，不然名字是字表的樣子、
         或江湖史同一個名字出現兩次，看得出是假人。B 在行動鎖外請模型取名或挑一個（這個迴圈一個一個來，所以同時只有一件）；
@@ -173,7 +174,7 @@ class BotRunner:
                 person=self.world.is_character_name,
             )
         report.named += 1
-        if isinstance(job, bot_policy.ForgeJob) and proposed[0] is None and not job.request.choices:
+        if isinstance(job, (bot_policy.ForgeJob, bot_policy.DiscussJob)) and proposed[0] is None and not job.request.choices:
             return
         try:
             with self.world.action_lock(timeout=LOCK_WAIT):
