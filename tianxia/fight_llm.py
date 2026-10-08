@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+from typing import ClassVar
 
 from pydantic import BaseModel
 
@@ -35,6 +36,9 @@ class FightRequest(BaseModel):
 
 
 class Judgment(BaseModel):
+    # 兩版過程必填（沒寫是被截斷），但夾了模型的日文假名只丟那一版、走範本回合，優勢照用（ollama_client.screen_kana，審查 I1）
+    KANA_ESSENTIAL: ClassVar[tuple[str, ...]] = ()
+
     advantage: int = 0
     winning: str = ""
     losing: str = ""

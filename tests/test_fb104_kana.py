@@ -1,9 +1,13 @@
 """FB-104（QA 7cc1fd7，2026-10-08）：董卓的回話裡出現「這酒い好！」——模型文字夾了日文假名，zh.to_traditional 只轉簡繁、補異體字，
 假名原樣上了畫面與江湖紀錄。
 
-現在模型的回答（chat_text 的那一段、chat_structured 的每一個字串欄位）夾了假名，就當成這一次模型呼叫失敗（ollama_client.ModelSpokeKana）：
-會重問的（chat_structured，鎖外）照樣重問一趟，提醒它用繁體中文；不重問的（chat_text、鎖內的複本）丟給呼叫端走原本的退路
-（對話取消、點綴不插句、潤色用固定文字）。不偷偷拿掉假名（CLAUDE.md「保底值會把模型壞了偽裝成模型給了中庸的答案」）。
+現在模型自己寫的假名只讓「那一段字」失敗（ollama_client.ModelSpokeKana／screen_kana；審查 I1 縮小過）：
+- chat_text 的那一段：當成這一次呼叫失敗，呼叫端走原本的退路（點綴不插句、潤色用固定文字）；
+- chat_structured：主體欄位（對話的敘事與選項、取的名字……）夾了就整個失敗——會重問的（鎖外）重問一趟、提醒用繁體中文；
+  其他欄位（放手一搏的兩版劇情、大場面的兩版過程、名字的說明）只清掉那一欄、走固定文字，成功率與優勢照用、不重問；
+  不上畫面的欄位（reasoning）不看；
+- 玩家自己寫的做法、名號裡的假名，模型照抄不算。
+不偷偷從句子中間拿掉假名（CLAUDE.md「保底值會把模型壞了偽裝成模型給了中庸的答案」）。
 模型有回、只是那一句不能用：鎖內的額度不因此用完、全服斷路器不打開。對話失敗跟以前叫不動模型一模一樣（不扣體力、這輪取消）。
 
 假的模型：把 requests.post 換掉，回一段夾了假名的字；不連任何網路。"""
@@ -15,8 +19,10 @@ import random
 import pytest
 import requests
 
-from tianxia import companion_agent, event_llm, flavor, naming
-from tianxia.battle_instance import SuccessRateJudgment
+from tianxia import companion_agent, event_llm, fight_llm, flavor, naming
+from tianxia.battle_instance import GambleVerdict, SuccessRateJudgment, assess_gamble
+from tianxia.fight_llm import FightRequest
+from tianxia.models import BattleAct, BattleOption
 from tianxia.engine import Game
 from tianxia.ollama_client import InLockClient, ModelBudget, ModelSpokeKana, OllamaClient, has_kana
 
@@ -149,3 +155,78 @@ def test_flavor_and_the_free_text_polish_drop_a_kana_line(model):
 
 def test_a_name_with_kana_never_passes(content):
     assert naming.name_problem("鐵い拳", content) == "只能是中文字"
+
+
+# ── 審查 I1：數字留著；玩家自己寫的假名、不顯示的欄位不算 ─────────────────────
+# 評成功率、大場面判讀這種「數字＋幾段字」的回答：哪一段字夾了模型自己的假名，就只有那一段走固定文字，數字與其他段照用、不重問
+# （以前整個回答作廢、退回保底 40——CLAUDE.md「保底值會把模型壞了偽裝成模型給了中庸的答案」）。玩家自己寫的做法、名號裡的假名，
+# 模型照抄不算（假名在送出去的字裡就有）；reasoning 這種不上畫面的欄位不看。對話的敘事、選項、名字本身才是那一段字：照舊整個失敗。
+
+def _judgment(**fields):
+    return json.dumps({"success_rate": 0, "reasoning": "", "win": "", "lose": "", **fields}, ensure_ascii=False)
+
+
+EVENT = type("E", (), {"title": "茶館", "text": "說書人拍了一下醒木。"})()
+ACT = BattleAct(id="a1", title="夜襲", text="營火忽明忽暗。", goal="拖住敵軍", options=[BattleOption(text="穩守", tag="hold")])
+
+
+def test_kana_in_the_players_own_answer_keeps_the_models_rate(model):
+    """隨口應對寫「ああ」：模型評 3、reasoning 照抄「ああ」——用 3，不是保底 40，也不重問。"""
+    model["replies"] = [_judgment(success_rate=3, reasoning="「ああ」只是一聲，不是做法。")]
+    assert event_llm.assess_event_success_rate(OllamaClient(), EVENT, "ああ") == 3
+    assert len(model["sent"]) == 1
+
+
+def test_kana_in_a_field_nobody_sees_keeps_the_rate(model):
+    model["replies"] = [_judgment(success_rate=12, reasoning="これは無理")]
+    assert event_llm.assess_event_success_rate(OllamaClient(), EVENT, "拍桌子") == 12
+    assert len(model["sent"]) == 1
+
+
+def test_a_player_named_sakura_keeps_the_gamble_rate_and_both_stories(model):
+    """名號是「さくら」：兩版劇情照提示以名號開頭——72 照用、兩版都播。"""
+    win, lose = "さくら大喊一聲，敵軍嚇得後退。", "さくら喊破了嗓子，被人絆了一跤。"
+    model["replies"] = [_judgment(success_rate=72, reasoning="さくら的喊聲或許有用", win=win, lose=lose)]
+    assert assess_gamble(OllamaClient(), ACT, "官軍", "大喊一聲衝上去", name="さくら") == GambleVerdict(72, win, lose)
+    assert len(model["sent"]) == 1
+
+
+def test_real_kana_in_a_story_drops_only_that_story(model):
+    """模型自己寫了假名（「さくらは」不是名號）：那一版用固定句（空字串），成功率與另一版照用。"""
+    lose = "さくら喊破了嗓子，被人絆了一跤。"
+    model["replies"] = [_judgment(success_rate=72, win="さくらは大喊一聲。", lose=lose)]
+    assert assess_gamble(OllamaClient(), ACT, "官軍", "大喊一聲衝上去", name="さくら") == GambleVerdict(72, "", lose)
+    assert len(model["sent"]) == 1
+
+
+def test_a_big_fight_keeps_its_advantage_when_one_account_has_kana(model):
+    """大場面判讀：名號裡的假名照抄可以；模型自己寫了假名的那一版走範本回合（空字串），優勢照用。"""
+    request = FightRequest(option_id="act:train", squad_id="s", location="town", battle_seq=1, event=None,
+                           ours=["さくら：赤手空拳"], theirs="山賊頭目：屬剛・難度 120")
+    winning, losing = "さくら一拳打在頭目胸口，頭目退了三步。", "さくらは倒れた。"
+    model["replies"] = [json.dumps({"advantage": 9, "winning": winning, "losing": losing}, ensure_ascii=False)]
+    assert fight_llm.judge(OllamaClient(), request, 15) == fight_llm.Judgment(advantage=9, winning=winning, losing="")
+    assert len(model["sent"]) == 1
+
+
+def test_a_dialogue_may_say_the_players_kana_name_but_not_speak_kana(model):
+    messages = [{"role": "user", "content": "さくら走上前來拱手。"}]
+    model["replies"] = [_turn("「さくら？好怪的名號。坐吧。」")]
+    assert companion_agent.generate_turn(OllamaClient(), messages).narrative == "「さくら？好怪的名號。坐吧。」"
+    model["replies"] = [_turn("「さくらさん，坐吧。」"), _turn("「さくらさん，坐吧。」")]  # 「さくらさん」是模型自己加的
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(OllamaClient(), messages)
+
+
+def test_the_polish_may_quote_the_players_kana(model):
+    model["replies"] = ["你只「ああ」了一聲，滿座茶客都轉過頭來。"]
+    assert event_llm.narrate_event_gamble(OllamaClient(), EVENT, "ああ", False, "茶客都看過來。") == "你只「ああ」了一聲，滿座茶客都轉過頭來。"
+
+
+def test_a_name_reply_keeps_its_name_and_drops_a_kana_description(model):
+    model["replies"] = [json.dumps({"name": "斷浪拳", "description": "これは拳"}, ensure_ascii=False)]
+    reply = OllamaClient().chat_structured([{"role": "user", "content": "取名"}], naming.NameReply, required_fields=["name"])
+    assert (reply.name, reply.description) == ("斷浪拳", "") and len(model["sent"]) == 1
+    model["replies"] = [json.dumps({"name": "斷いの拳", "description": "一拳"}, ensure_ascii=False)] * 2  # 名字本身：照舊失敗
+    with pytest.raises(ModelSpokeKana):
+        OllamaClient().chat_structured([{"role": "user", "content": "取名"}], naming.NameReply, required_fields=["name"])
