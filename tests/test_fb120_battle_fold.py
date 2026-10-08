@@ -209,6 +209,23 @@ def test_a_participant_who_walked_out_of_the_region_is_not_folded(battle):
 
 
 @node
+def test_a_scene_with_enlist_buttons_on_the_name_line_is_not_folded(battle):
+    """審查 M5：名字那一行有加入或臨時投效的鈕（musterJoins）時不收——收了的話那幾顆鈕就沒地方畫。今天的引擎不會給這種人
+    分隔線（散人在決戰的大區裡、還沒投效時整個畫面就是戰場），可是戰鬥那條線在改散人的戰場畫面（FB-109、FB-113），
+    改成戰場底下接自己眼前的事時，就是這一種：照舊整段、鈕排在名字那一行。"""
+    watcher, _ = battle
+    m = server.main_view(watcher)
+    enlist = [{"id": f"battle:enlist:{side}", "label": f"臨時投效【{name}】（只算這一場）", "enabled": True, "wait": ""}
+              for side, name in (("guan", "官軍"), ("huang", "黃巾軍"))]
+    drifter = {**m, "options": enlist + m["options"]}
+    assert "<hr />" in drifter["scene"] and "回合" in drifter["scene"].split("<hr />", 1)[0]
+    scene = _scene(run(drifter, "return H.pageJianghu();"))
+    assert "battle-fold" not in scene and "這一回合" in scene
+    assert scene.startswith('<div class="muster-head"><p><strong>宛城之戰</strong></p>')
+    assert re.findall(r'data-id="(battle:enlist:\w+)"', scene) == ["battle:enlist:guan", "battle:enlist:huang"]
+
+
+@node
 def test_a_muster_is_left_to_the_first_screen_fit(on):
     """還在集結（沒有回合數）：不歸這裡收，照舊是 FB-107 收集結那一句。"""
     watcher = _player(on, "觀戰甲", "guan", "yingchuan")
