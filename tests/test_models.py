@@ -182,7 +182,7 @@ def test_a_location_starts_with_no_insights():
 def test_battle_tuning_defaults_are_the_designs():
     """戰鬥系統設計 3.4【預設】。"""
     t = Config().battle
-    assert (t.power_base, t.power_per, t.power_cap) == (40.0, 0.4, 150.0)
+    assert (t.power_base, t.power_per, t.power_cap) == (20.0, 0.5, 400.0)  # 越強越有份量（試玩回饋 2026-10-08）
     assert (t.affinity_base, t.affinity_outer, t.affinity_inner) == (75.0, 15.0, 10.0)
     assert (t.counter, t.push_max) == (0.5, 10.0)
     assert t.damage == {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0} and t.strong_mitigation_cap == 0.6

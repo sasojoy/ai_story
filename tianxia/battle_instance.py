@@ -65,6 +65,7 @@ class BattleParticipant(BaseModel):
     acted_rounds: int = 0  # 自己送出行動、而且結算了的回合數：玩家按的、假人自己選的都算，逾時被系統代選的不算（見 resolve_round）
     fell_round: int | None = None  # 在整場的第幾回合倒下；沒倒下是 None
     attribute: str = ""  # 加入時身上武學的屬性（隊伍多樣性，一門打不遍）；只有第一季開著時才快照，空的不算一路
+    role: str = ""  # 加入時依本人最突出的屬性給的職位（屬性的鍵，role_for；名字在 BattleTuning.roles）；空的是沒有職位
 
 
 class BattleRound(BaseModel):
@@ -190,24 +191,63 @@ def stalemate(trend: int) -> float:
     return max(0.0, 1 - abs(trend - CENTER) / CENTER)
 
 
-def move_scores(tuning: BattleTuning, power: float, outer: str | None, inner: str | None) -> dict[str, float]:
-    """這個人每一招的份量（還沒乘氣血狀態，戰鬥系統 3.4）：實力 × 適性 ÷ 100。
-    實力 ＝ min(100, 40 ＋ 0.4 × min(威力, 150))；適性 ＝ 75 ± 武學（招式）屬性 15 ± 內功屬性 10，夾在 50～100。
+ROLE_MOVES: dict[str, str] = {"str": "強攻", "agi": "奇襲", "con": "固守"}  # 職位拿手的那一招（份量多 role_move_bonus）
+
+
+def role_for(stats: dict[str, float], order: tuple[str, ...]) -> str:
+    """進場的職位：本人屬性裡最高的那一項（同分照 order 的順序）；每一項都一樣高（例如剛開局全是 5）沒有職位。"""
+    values = [stats.get(k, 0.0) for k in order]
+    if not values or max(values) == min(values):
+        return ""
+    return order[values.index(max(values))]
+
+
+def role_name(tuning: BattleTuning, role: str) -> str:
+    return tuning.roles.get(role, "")
+
+
+def role_text(tuning: BattleTuning, role: str) -> str:
+    """職位與它做什麼，一句話（決戰畫面用）；沒有職位是空字串。數字照 tuning 寫。"""
+    name = role_name(tuning, role)
+    if not name:
+        return ""
+    if role in ROLE_MOVES:
+        does = f"{ROLE_MOVES[role]}的份量多 {round(tuning.role_move_bonus * 100)}%"
+    elif role == "wis":
+        does = f"放手一搏的成功率多 {tuning.role_gamble_rate} 個百分點"
+    elif role == "lore":
+        does = f"被對面剋住時，吃虧少 {round(tuning.role_counter_relief * 100)}%"
+    else:
+        return name
+    return f"{name}（{does}）"
+
+
+def strength(tuning: BattleTuning, power: float) -> float:
+    """實力（份量的底子）：power_base ＋ power_per × min(威力, power_cap)。越強越有份量（試玩回饋 2026-10-08）。"""
+    return tuning.power_base + tuning.power_per * min(max(power, 0.0), tuning.power_cap)
+
+
+def move_scores(
+    tuning: BattleTuning, power: float, outer: str | None, inner: str | None, role: str = "",
+) -> dict[str, float]:
+    """這個人每一招的份量（還沒乘氣血狀態，戰鬥系統 3.4）：實力 × 適性 ÷ 100，職位拿手的那一招再乘（1＋role_move_bonus）。
+    實力見 strength；適性 ＝ 75 ± 武學（招式）屬性 15 ± 內功屬性 10，夾在 50～100。
     outer／inner 是武學與內功的屬性（沒學是 None，不加減）。加入戰局時由那個玩家自己的 Game 算好快照進來。"""
-    strength = min(100.0, tuning.power_base + tuning.power_per * min(max(power, 0.0), tuning.power_cap))
+    base = strength(tuning, power)
     scores = {}
     for move in MOVES:
         fit = tuning.affinity_base
         for attribute, step in ((outer, tuning.affinity_outer), (inner, tuning.affinity_inner)):
             good, bad = tuning.affinity.get(attribute, (None, None)) if attribute else (None, None)
             fit += step if move == good else -step if move == bad else 0.0
-        scores[move] = round(strength * max(50.0, min(100.0, fit)) / 100, 1)
+        bonus = 1 + tuning.role_move_bonus if ROLE_MOVES.get(role) == move else 1.0
+        scores[move] = round(base * max(50.0, min(100.0, fit)) / 100 * bonus, 1)
     return scores
 
 
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
-    scores: dict[str, float] | None = None, attribute: str = "",
+    scores: dict[str, float] | None = None, attribute: str = "", role: str = "",
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。"""
@@ -215,7 +255,7 @@ def join_faction(
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
-        scores=dict(scores or {}), attribute=attribute,
+        scores=dict(scores or {}), attribute=attribute, role=role,
     )
 
 
@@ -238,7 +278,7 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
-    attribute: str = "",
+    attribute: str = "", role: str = "",
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores 同 join_faction。"""
@@ -248,7 +288,7 @@ def auto_assign_latecomer(
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
-        scores=dict(scores or {}), attribute=attribute,
+        scores=dict(scores or {}), attribute=attribute, role=role,
     )
 
 
@@ -504,14 +544,20 @@ def resolve_round(
         custom_text = instance.round.custom_texts.get(name)
         if success_rate is not None and definition.free_text_gamble is not None:
             gamble = definition.free_text_gamble
+            assessed = success_rate
+            if p.role == "wis":  # 軍師：模型評完再加（職位，試玩回饋 2026-10-08）
+                success_rate = min(100, success_rate + tuning.role_gamble_rate)
             risk = 100 - success_rate
             succeeded = rng.random() * 100 < success_rate
             if custom_text:
-                msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {success_rate}%）")
+                plus = f"，{role_name(tuning, p.role)} +{success_rate - assessed}" if success_rate != assessed else ""
+                msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
             side_name = names.get(p.faction, p.faction)
             # 試玩回饋 2026-10-08：對戰局只有小影響，主要的代價是自己的氣血池（扣到 0 就照下面倒下出局）
             if succeeded:
-                delta = gamble.success_trend_base + round(risk * gamble.success_trend_per_risk)
+                # 越強越有份量：推進乘實力（新手打五折、練滿最多兩倍）
+                might = max(tuning.gamble_strength_min, min(tuning.gamble_strength_max, strength(tuning, p.power) / tuning.gamble_strength_ref))
+                delta = max(1, round((gamble.success_trend_base + risk * gamble.success_trend_per_risk) * might))
                 damage = p.neili_cap * gamble.success_neili_share
                 msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
             else:
@@ -525,6 +571,8 @@ def resolve_round(
             move = moves[name]
             enemy = second if p.faction == first else first
             coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
+            if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
+                coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
             force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
             counts[p.faction] += 1
             coefs[p.faction].append(coef)

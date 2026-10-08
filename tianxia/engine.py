@@ -2524,8 +2524,13 @@ class Game:
         inner = team.player_art(self.state, self.content, self.world, p.member.neigong_id)
         return battle_instance.move_scores(
             self.content.config.battle, self._battle_power(),
-            outer.attribute if outer else None, inner.attribute if inner else None,
+            outer.attribute if outer else None, inner.attribute if inner else None, role=self._battle_role(),
         )
+
+    def _battle_role(self) -> str:
+        """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
+        stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
+        return battle_instance.role_for(stats, team.COMBAT_STATS)
 
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
@@ -2546,13 +2551,14 @@ class Game:
         me = battle.participants.get(name)
         if me is None or me.scores or me.eliminated:
             return
-        scores, road = self._battle_scores(), self._battle_road()
+        scores, road, role = self._battle_scores(), self._battle_road(), self._battle_role()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
             if mine is not None and not mine.scores:  # 鎖裡再看一次：別的路徑剛補過就不蓋掉
                 mine.scores = dict(scores)
                 mine.attribute = mine.attribute or road
+                mine.role = mine.role or role
 
         self.world.mutate_battle(_fill)
 
@@ -2912,7 +2918,9 @@ class Game:
             lines += [f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else []
             journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
             return
-        lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t] + [f"你出手 {me.acted_rounds} 回合"]
+        lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
+        role = battle_instance.role_name(c.config.battle, me.role)
+        lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         rule = c.config.breakthrough
@@ -3082,7 +3090,9 @@ class Game:
                 side = self._sides(definition).get(me.faction, me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
                 joined = "臨時投效" if self._free_agent() else "加入"
-                return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。集結結束就開打，在那之前照常行動{leaving}。"
+                role = battle_instance.role_text(self.content.config.battle, me.role)
+                role = f"你的職位：{role}。" if role else ""
+                return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent():
                 return f"{header}\n\n集結中，還剩現實 {left}。你是散人，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
@@ -3092,6 +3102,8 @@ class Game:
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
+        if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
+            lines.append(f"你的職位：{role}")
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             if battle_instance.is_third(definition, p):  # 第三方：兩軍各一行，再加膠著程度（戰鬥系統第六節；全是公開的戰局）
@@ -3272,6 +3284,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
+                    role=self._battle_role(),
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -3286,7 +3299,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(),
+                    scores=scores, attribute=self._battle_road(), role=self._battle_role(),
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -3310,15 +3323,16 @@ class Game:
             return ["（開打之後就不能改投了。）"]
         stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
+        role = self._battle_role()
         if battle.phase == "muster":
             self.world.mutate_battle(
-                lambda b: battle_instance.join_faction(b, name, side, cap, power, scores=scores, attribute=road)
+                lambda b: battle_instance.join_faction(b, name, side, cap, power, scores=scores, attribute=road, role=role)
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
         else:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
-                    b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road,
+                    b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
