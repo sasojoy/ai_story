@@ -373,10 +373,13 @@ def test_the_feeling_hint_is_the_same_whichever_method_is_right(game):
 
 
 def test_no_method_help_in_the_hut_or_while_drawing(game):
+    from tianxia import sensing
+
     _feeling(game)
     game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"
     text, help_, _ = _card(game)
     assert help_ is None and "（湖畔）" in text  # 畫的那一步：做法已經選了，不再畫提示（地形照寫）
+    assert sensing.method_help(game.state, game.content) is None  # 不只是選單上沒有做法：規則本身就只在選做法那一步給
     _feeling(game, prologue=True)  # 序章草廬：四個做法都對，卡照舊
     text, help_, _ = _card(game)
     assert help_ is None and "（湖畔）" not in text
