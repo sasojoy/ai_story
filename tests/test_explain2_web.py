@@ -242,6 +242,47 @@ def test_the_xinde_hint_shows_while_resting_or_in_seclusion():
     assert secluded["status"]["hint"] in run(secluded, "return H.topHtml();")
 
 
+def _hinted_game():
+    """週末設定的新角色、付得起下一成（狀態列有 💡），師父「碰到才說」的內傷那一條排上框（打完一場常見的那一條）。"""
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    game.state.player.stats["xinde"] = 20
+    game._hint("h_injury")
+    game._surface_hint()
+    return game
+
+
+def test_one_piece_of_guidance_at_a_time_the_box_before_the_hint():
+    """審查 M6：碰到才說的框在江湖頁上時不畫 💡（兩樣一起，打完一場之後行動列會被推到分頁列底下）；框是比較專門的那一句，提示等它。
+    沒有框的閒著畫面照畫。"""
+    game = _hinted_game()
+    m = server.main_view(game)
+    assert m["guide"] and m["guide"].get("hint") and m["status"]["hint"]
+    assert any(o["id"] == "act:rest" for o in m["options"])  # 平常閒著的行動列
+    assert m["status"]["hint"] not in run(m, "return H.topHtml();")
+    m["guide"] = None
+    assert m["status"]["hint"] in run(m, "return H.topHtml();")
+
+
+def test_the_hint_comes_back_once_the_box_is_dismissed():
+    game = _hinted_game()
+    m = server.main_view(game)
+    hint = m["status"]["hint"]
+    game.guide_ack()
+    after = server.main_view(game)
+    assert after["guide"] is None and after["status"]["hint"] == hint
+    out = run(m, """return (async () => {
+      const before = H.topHtml();
+      const el = { dataset: { act: "guide-ack" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => el } });
+      return { before, after: H.topHtml(), calls: T.calls.map((c) => c[0]) };
+    })();""", responses={"/api/do/guide_ack": {"main": after}})
+    assert "/api/do/guide_ack" in out["calls"]
+    assert hint not in out["before"] and hint in out["after"]
+
+
 def test_the_drill_row_reads_drill_once():
     """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。"""
     content = real_content("weekend")
