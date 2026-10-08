@@ -62,7 +62,8 @@ def attribute_line(content: Content) -> str:
 
 
 def practice_hint(state: GameState, content: Content) -> str | None:
-    """主畫面的提示：心得擱到 `xinde_hint_threshold` 以上、而且確實有事可做時才回傳一句話。
+    """主畫面的提示：確實有事可做、而且付得起時才回傳一句話（心得還要至少 `xinde_hint_threshold`，現在是 0：explain-2 起
+    只看「付得起、做得了」，第一件做得了的事就提示——以前要攢到 50，新人心得 34 不知道拿去哪裡用，FB-100）。
 
     心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境、
     持有沒滿、付得起一次，見 fusion.can_forge）。兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。

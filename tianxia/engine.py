@@ -2354,10 +2354,14 @@ class Game:
         )
 
     def howto_text(self) -> str:
-        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項）：五個行動、體力、情誼、心得、意境、背包，數字讀設定（howto.page）。
-        序章略過的人也看得到（設定抽屜誰都打得開）。招募那一句只在內容裡真的有人能招募時才寫。"""
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
+        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
+        真的有人能招募時才寫。"""
         c = self.content
-        return howto.page(c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()))
+        rule = stance_rule_note(self.state, c) if season_one(c, self.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
+        return howto.page(
+            c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
+        )
 
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
@@ -5367,6 +5371,14 @@ class Game:
         loc = self.content.locations[self.state.player.location]
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
+    def method_help(self, option_ids: Iterable[str]) -> dict | None:
+        """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；
+        選單上沒有做法（不在選做法、戰場蓋過了畫面）是 None。不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
+        got = sensing.method_help(self.state, self.content)
+        if got is None or not any(sensing.is_method(i) for i in option_ids):
+            return None
+        return got
+
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
         地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
@@ -5464,7 +5476,8 @@ class Game:
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c),
             "stat_uses_note": skillview.STAT_CHECK_NOTE,
-            "hint": skillview.practice_hint(s, c),  # 心得擱著沒用、又還有功夫沒練滿時才有
+            # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
+            "hint": None if self._preparing() else skillview.practice_hint(s, c),
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
             "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
@@ -5472,9 +5485,11 @@ class Game:
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
         # 點體力條看的說明（explain-1）：怎麼回、新手期、打坐、回體丹或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
-        data["stamina_help"] = howto.stamina_lines(
-            c, w, roster.newbie(s, c, c.config.newbie_stamina_days), p.stamina_pills, button=data["pills"] is not None,
-        )
+        newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
+        data["stamina_help"] = howto.stamina_lines(c, w, newbie, p.stamina_pills, button=data["pills"] is not None)
+        # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
+        # 過了新手期只剩設定抽屜那一顆
+        data["howto_entry"] = newbie and not prologue_rules.active(s, c)
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣
@@ -5487,6 +5502,9 @@ class Game:
             data["stances"] = stances(s, c)
             data["stance_notes"] = {"sum": stance_sum_note(c), "haoqiang": chaos_note(s, c, self._roster_players())}
             data["stance_rule"] = stance_rule_note(s, c)  # 態勢卡底下的收季規則（正式版辛）
+            # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局與割據、大事怎麼定、你能怎麼出力。
+            # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
+            data["war_help"] = howto.war_help(s, c)
         return data
 
     def _calendar_status(self) -> dict:

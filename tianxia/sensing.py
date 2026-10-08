@@ -41,6 +41,16 @@ MISS_LINE = "心浮氣躁，什麼也沒抓住。要到 {moment} 之後，這裡
 # 換日寫不出來（這一季最後一個遊戲日、季末延後或提前，rules.day_ends_text 是 None）時的兩句（day-scale 審查 M2；待 joy 潤）
 MISS_WARNING_SEASON = "選錯了做法，這一季之內在這裡就悟不出了。"
 MISS_LINE_SEASON = "心浮氣躁，什麼也沒抓住。這一季之內，這裡是悟不出東西了。"
+# 選做法那一步的提示（explain-2 第三項，FB-100「有所感只能用猜的、略過序章的人不知道意境是什麼」；待 joy 潤）：
+# 標題後面寫這一處的地形（地點的標籤），做法底下兩行小字（網頁排在鈕的下面，不把做法往下推）：做法跟此地的關係、意境拿來做什麼。
+# 全都不看這一處悟得到哪一種（不讀 pool_attributes）：四個做法換哪一個是對的，卡上的字一個都不變。場景的文字是 joy 的，不動。
+# 序章草廬（做法都對）不加。
+# 做法鈕上不寫心意（審查 I1）：輿圖詳情欄「這裡能悟：水、風」加上鈕上的「柔」「快」，卡就成了查表（四十處都是）；鈕上照舊 1～4，
+# 做法的文字留給玩家自己讀。企劃者要恢復時把 SHOW_KINDS 改成 True（一行）：method_help 照做法給 tags，網頁照它畫在那一小格。
+SHOW_KINDS = False
+# 一處可能悟得到兩種（湖邊：水、風），對的做法就不只一個：不寫「那一種」（審查 Minor 5）
+FRAMING = "做法各是一種心意（{kinds}），跟此地景致合得上的，才悟得出這裡的意境。"
+INSIGHT_LINE = "意境能融進武學出新招、兩兩合成新的意境；融過它的武學，要靠它修練衝品質。"
 
 
 def mark_key(location: str) -> str:
@@ -119,23 +129,51 @@ def rate(state: GameState, content: Content, loc: Location) -> int:
     return base + bonus
 
 
+def place_tags(scene: InsightScene, loc: Location) -> str:
+    """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。"""
+    return "" if scene.prologue or not loc.tags else f"（{'、'.join(loc.tags)}）"
+
+
 def scene_text(state: GameState, content: Content) -> str:
-    """場景那一塊（Markdown）：標題、場景；進了感悟狀態再接一句叫人畫下來。"""
+    """場景那一塊（Markdown）：標題（後面括號寫這一處的地形，explain-2）、場景；進了感悟狀態再接一句叫人畫下來。"""
     got = current(state, content)
     if got is None:
         return ""
     s, scene, loc = got
     marks = insights_marks(state, loc)
     text = scene.text.replace("{痕跡}", marks)
+    title = f"**有所感・{scene.title}**{place_tags(scene, loc)}"  # 地形跟標題同一行：不多佔高度
     if s.stage == "draw":
         method = next(m for m in scene.methods if m.attribute == s.method)
         return (
-            f"**有所感・{scene.title}**\n\n{text}\n\n你{method.text}——心念漸漸凝住了。"
+            f"{title}\n\n{text}\n\n你{method.text}——心念漸漸凝住了。"
             "此刻心中有一個形：一筆畫下來，手指離開就算畫完。"
         )
     # 選做法這一步：底下一小行（引用寫法，網頁畫成場景裡的小字淡色，比一整段內文矮）說選錯的代價；序章四景做法都對，不寫
     warning = "" if scene.prologue else f"\n\n> {miss_warning(state, content)}"
-    return f"**有所感・{scene.title}**\n\n{text}{warning}"
+    return f"{title}\n\n{text}{warning}"
+
+
+def method_help(state: GameState, content: Content) -> dict | None:
+    """選做法那一步，網頁畫在做法底下的提示（explain-2）：lines＝兩行小字（FRAMING、INSIGHT_LINE）；SHOW_KINDS 打開時另有
+    tags＝選項 id → 那個做法是哪一種心意（鈕上原本寫 1～4 的那一格改寫它；審查 I1 起預設不給）。只讀做法自己的屬性與這張卡上
+    有哪幾種，不讀這一處悟得到什麼。不在選做法這一步、或是序章草廬：None。"""
+    got = current(state, content)
+    if got is None or got[0].stage != "choose" or got[1].prologue:
+        return None
+    s, scene, _ = got
+    # 照固定的順序（剛柔快慢）列，不照內容寫的順序：內容裡常把對的那一個寫在最前面，照它列就等於說出答案
+    present = {m.attribute for m in scene.methods}
+    kinds = "、".join(a for a in insights.SENSE_ATTRIBUTES if a in present)
+    help_: dict = {"lines": [FRAMING.format(kinds=kinds), INSIGHT_LINE]}
+    if SHOW_KINDS:
+        help_["tags"] = {f"{PREFIX}{i}": scene.methods[j].attribute for i, j in enumerate(s.order)}
+    return help_
+
+
+def is_method(option_id: str) -> bool:
+    """選做法的選項（sense:0、sense:1……；不是「畫下來」「順其自然」）。"""
+    return option_id.startswith(PREFIX) and option_id[len(PREFIX):].isdigit()
 
 
 def insights_marks(state: GameState, loc: Location) -> str:

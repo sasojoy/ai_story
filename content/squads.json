@@ -1,5 +1,9 @@
 [
   {"id": "dipi", "name": "流寇散兵", "difficulty": 8, "attribute": "剛", "reward_silver": 5, "reward_xinde": 8, "exp": 10},
+  {"id": "hetan_popi", "name": "河灘潑皮", "difficulty": 4, "attribute": "柔", "reward_silver": 3, "reward_xinde": 4, "exp": 5,
+   "desc": "在河灘上攔著流民收「過河錢」的幾個潑皮，手裡的竹篙比刀還趁手。"},
+  {"id": "touwang_zei", "name": "偷網賊", "difficulty": 5, "attribute": "快", "reward_silver": 2, "reward_xinde": 5, "exp": 6,
+   "desc": "趁漁家不在偷收漁網的毛賊，滑得像泥鰍，一見人就往水裡鑽。"},
   {"id": "shanzei", "name": "黃巾散兵", "difficulty": 15, "attribute": "剛", "reward_silver": 10, "reward_xinde": 12, "exp": 15, "faction": "huang"},
   {"id": "yelang", "name": "山匪", "difficulty": 15, "attribute": "快", "reward_xinde": 12, "exp": 15},
   {"id": "heixiong", "name": "山寨悍匪", "difficulty": 30, "attribute": "剛", "reward_xinde": 20, "exp": 25},

@@ -64,8 +64,9 @@ def test_the_notes_give_way_when_the_guide_points_into_the_here_fold():
 
 
 def test_no_notes_without_server_notes():
-    """伺服器沒給（舊版、序章裡是空的）：不畫那一塊。"""
+    """伺服器沒給（舊版、序章裡是空的）：不畫那一塊。新手期的「玩法說明」入口（explain-2）也是排在這一塊的，這裡把它關掉。"""
     m = _main()
+    m["status"]["howto_entry"] = False
     m.pop("action_notes")
     assert 'class="act-notes"' not in run(m, "return H.pageJianghu();")
     m["action_notes"] = {}

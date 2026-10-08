@@ -117,6 +117,7 @@
     ordersVisible: false, // 觀察者最後一次說的：軍令卡（扣掉頂上與底下兩條固定的）至少一半在畫面上嗎
     ordersRetried: false, // 送不出去、已經補過一次重試了嗎（不連著試）
     stamOpen: false, // 狀態列體力條點開的說明攤開著嗎（explain-1）；再點一次收起
+    frontsOpen: false, // 江湖頁戰況圖卡點開的說明攤開著嗎（explain-2）；再點一次收起
     pushLive: false, // 伺服器推送連著嗎（見「伺服器推送」那一段）：連著時平常 60 秒才輪詢，沒連就每 10 秒
   };
 
@@ -402,9 +403,18 @@
 
   // 💡 心得提示：兩行長，在路上又有路程那一行時，會把路上最底下的「走法」擠到分頁列底下（FB-060）。
   // 所以在路上收成一行（放不下的加「…」），點了展開看全文；下了路就清掉、照舊整段顯示
+  // 不在路上、眼前是事件、有所感、對話、決戰這類一次一組的選項時（不是平常閒著的行動列）不畫（explain-2）：心得一付得起就提示之後，
+  // 新人幾乎一直有這一行，會把事件的最後一個選項、有所感的最後一個做法擠到分頁列底下（同 FB-076 的對話框）；了結了就回來。
+  // 打坐（只剩「起身」）與閉關（只剩「提前出關」）照畫（審查 I2）：最長的空檔，修練、煉製照樣做得了，也沒有選項會被擠下去。
+  // 師父「碰到才說」的框（伺服器標 guide.hint）在畫面上時也不畫（審查 M6）：一次只給一句指點——兩樣一起，打完一場之後行動列會被推到
+  // 分頁列底下；框是比較專門的那一句，提示等它，按了「知道了」（或框不在了）就回來。在路上照舊（框排在選項底下，提示收成一行）
+  const WAITING = new Set(["act:stand", "act:break"]);
+  const waitingMenu = (m) => m.options.length > 0 && m.options.every((o) => WAITING.has(o.id));
   function hintHtml(s) {
     if (s.journey == null) S.hintOpen = false;
     if (!s.hint) return "";
+    if (s.journey == null && S.main && S.main.guide && S.main.guide.hint) return "";
+    if (s.journey == null && S.main && S.main.options && !idleMenu(S.main) && !waitingMenu(S.main)) return "";
     if (s.journey == null) return `<div class="more-stats"><span class="hint">${esc(s.hint)}</span></div>`;
     return `<div class="more-stats"><button class="hint road-hint${S.hintOpen ? "" : " clamp"}" data-act="hint-more" aria-expanded="${S.hintOpen}">${esc(s.hint)}</button></div>`;
   }
@@ -846,9 +856,14 @@
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
   // 句子是伺服器照規則寫好的（m.action_notes：選項 id → 一句；序章裡是空的），這裡只照格子的順序排、前面冠格子上的名字。
   // 只寫畫出來的格子；打坐、移動的格子本身就寫著（回體力、幾條路），沒有說明
+  // 新手期（伺服器給 status.howto_entry：加入起跟體力回復加快同一段，序章裡沒有）最後多一行「玩法說明」的入口（explain-2，FB-100：
+  // 說明藏在齒輪裡，主畫面沒有一句指向它）。排在這一塊的最後：剛剛、場景、整排行動一個 px 都不動；點了打開設定抽屜、攤開玩法說明。
+  // 過了新手期這一行就不畫，抽屜裡那一顆照舊
+  const HOWTO_ENTRY = '<p class="howto-entry"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
   function actNotesHtml(m, noted) {
     const notes = m.action_notes || {};
     const rows = noted.filter(([, id]) => notes[id]).map(([name, id]) => `<p><b>${esc(name)}</b>${esc(notes[id])}</p>`);
+    if (m.status && m.status.howto_entry) rows.push(HOWTO_ENTRY);
     return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
 
@@ -942,7 +957,16 @@
     return seen.season !== peekSeason(m) || seen.week !== week || seen.count < m.bulletin.length;
   }
 
-  // 三塊的小標與面板：{ id, label（給讀的人聽的整句）, chip（小標裡的字）, flag（要不要亮點）, panel（點開的內容） }；沒有就是 null
+  // 點開說明的那幾行（explain-2：戰況圖卡、態勢、大事、主線各一小段；伺服器照規則寫好的 status.war_help[鍵]，一行一段，跳脫）。
+  // 伺服器沒給（開關關著、舊版）就是空字串
+  function warHelp(m, key, id = "") {
+    const lines = m.status && m.status.war_help && m.status.war_help[key];
+    return lines && lines.length
+      ? `<div class="war-help ${key}-help"${id ? ` id="${id}"` : ""}>${lines.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
+  }
+
+  // 三塊的小標與面板：{ id, label（給讀的人聽的整句）, chip（小標裡的字）, flag（要不要亮點）, panel（點開的內容） }；沒有就是 null。
+  // 面板最後接一小段說明（explain-2）：小標點開才畫，所以第一屏照舊只有那一排 44px
   function stancePeek(m) {
     const s = m.status;
     if (m.season_result || !s || !s.stances) return null; // 休季：結算卡上有最終態勢；開關關著：status 沒有 stances
@@ -953,7 +977,7 @@
       id: "stance",
       label: `三方態勢：${rows.map((x) => `${x.name} ${x.value}`).join("、")}`,
       chip: `<span class="peek-name">態勢</span><span class="peek-nums">${rows.map((x) => `<b class="side-${esc(x.side)}">${x.value}</b>`).join("·")}</span>`,
-      panel: `${stanceBars(rows, "三方態勢")}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}`,
+      panel: `${stanceBars(rows, "三方態勢")}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}${warHelp(m, "stance")}`,
     };
   }
 
@@ -964,13 +988,13 @@
       label: `本週江湖大事 ${m.bulletin.length} 則`,
       chip: `<span class="peek-name">大事</span><b class="peek-count">${m.bulletin.length}</b>`,
       flag: boardUnseen(m, week),
-      panel: m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join(""),
+      panel: m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("") + warHelp(m, "board"),
     };
   }
 
   // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫（計畫 T8）
   function questPeek(m) {
-    return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest } : null;
+    return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest + warHelp(m, "quest") } : null;
   }
 
   const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null];
@@ -1035,11 +1059,31 @@
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
   // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
   // 三方態勢在江湖頁最上面那一排小標的態勢面板裡（正式版辛），不在這一排底下重複
-  function frontsHtml(fronts, band) {
+  // tap：伺服器有給戰況的說明（status.war_help.fronts，explain-2）時整排圖卡是一顆按鈕，點了在底下攤開說明（跟點體力條同一個做法）。
+  // 變成按鈕之後裡面的 meter 不再念得出來（審查 Minor 4）：鈕的名字自己帶三條戰線的值，用的是同一份資料，畫面不變
+  function frontsHtml(fronts, band, tap = false) {
     const shade = band ? `<span class="chaos-band" aria-hidden="true" title="亂局帶" style="left:${pct(band.low, 100)}%;width:${pct(band.high - band.low, 100)}%"></span>` : "";
-    return `<div class="fronts" role="group" aria-label="戰況：0 官軍穩控，100 黃巾控制">${fronts.map((f) => `
+    const act = tap ? ` data-act="fronts-help" role="button" tabindex="0" aria-expanded="${!!S.frontsOpen}" aria-controls="fronts-help"` : ' role="group"';
+    const values = fronts.map((f) => `${f.name} ${f.value}${f.chaos ? "（亂局）" : ""}`).join("、");
+    const label = tap ? `戰況：${values}（0 官軍穩控，100 黃巾控制；點開看說明）` : "戰況：0 官軍穩控，100 黃巾控制";
+    return `<div class="fronts"${act} aria-label="${esc(label)}">${fronts.map((f) => `
       <div class="front${f.chaos ? " chaos" : ""}"><div class="front-head"><span>${esc(f.name)}</span><b>${f.value}</b></div>
         <div class="front-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${f.value}" aria-label="${esc(f.name)}${f.chaos ? "，在亂局" : ""}"><i style="width:${pct(f.value, 100)}%"></i>${shade}</div>${frontEnds(f.chaos)}</div>`).join("")}</div>`;
+  }
+
+  // 江湖頁那一排戰況圖卡＋點開的說明（explain-2）：包在 #war 裡，點圖卡原地換掉這一塊（同 peekTap：不重畫整頁，「剛剛」不再播浮現動畫），
+  // 說明排在圖卡底下，只推動它底下的小地圖。伺服器沒給說明（開關關著、舊版）就照舊只是一排圖卡、不能點
+  function frontsBlock(m) {
+    const help = !!(m.status && m.status.war_help && m.status.war_help.fronts && m.status.war_help.fronts.length);
+    return `<div class="war" id="war">${frontsHtml(m.fronts, m.status && m.status.chaos_band, help)}${
+      help && S.frontsOpen ? warHelp(m, "fronts", "fronts-help") : ""}</div>`;
+  }
+
+  function frontsTap() {
+    S.frontsOpen = !S.frontsOpen;
+    const box = document.getElementById("war");
+    if (box && S.main && S.main.fronts) box.outerHTML = frontsBlock(S.main);
+    document.querySelector('.fronts[data-act="fronts-help"]')?.focus(); // 換掉之後焦點放回圖卡，鍵盤可以再按一次收起
   }
 
   // 說書人的對話框（引導重做設計 8.1、6.2）：行動列（或事件的選項）上方，框上寫說話的人（之後換成師父、引薦人）。
@@ -1145,12 +1189,18 @@
       const [, dest, note] = o.label.match(/^折返\s*(.*?)（([^（）]*)）$/) || [null, o.label.replace(/^折返\s*/, ""), ""];
       return taskButton(o, `↩ 折返 ${dest}`.trim(), note);
     };
+    // 有所感選做法（explain-2）：伺服器給了 sense_help.tags 才把鈕上原本寫 1～4 的那一格改寫這個做法是哪一種心意（不多佔寬度）。
+    // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
+    const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>${optLabelHtml(o)}
+          ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
+    // 有所感選做法（explain-2）：鈕底下兩行小字（做法跟此地的關係、意境拿來做什麼），排在做法後面，不把做法往下推
+    const senseNotes = !idleMenu(m) && m.sense_help && m.sense_help.lines && m.sense_help.lines.length
+      ? `<div class="act-notes sense-notes">${m.sense_help.lines.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     // 在路上，那段固定的說明只露兩行、點了看全文（FB-055）：剛按完路上小事時「剛剛」的結果卡會長高，狀態列又有提示的話，
     // 最後一排小事會掉到分頁列底下；說明的內容路上的選項與捷徑本來就寫著。展開記在 S.sceneOpen，下了路就清掉
     if (!m.on_road) S.sceneOpen = false;
@@ -1169,7 +1219,8 @@
     const week = peekWeek(m);
     const peek = peekBlock(m);
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
-    const fronts = m.fronts && shown("fronts") ? frontsHtml(m.fronts, m.status && m.status.chaos_band) : "";
+    // 點圖卡在底下攤開說明（explain-2，frontsBlock）
+    const fronts = m.fronts && shown("fronts") ? frontsBlock(m) : "";
     const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], week, m.convoy) : "";
@@ -1182,7 +1233,7 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${fronts}${tail}`;
-    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${skip}${orderCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${fronts}${tail}`;
   }
 
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫。
@@ -2467,6 +2518,18 @@
           else renderKeepingSheet();
           break;
         case "howto-retry": S.howtoFailed = false; await refreshHowto(); break; // 要不到時卡上的「再試一次」
+        case "howto-open": // 江湖頁新手期的「玩法說明 ›」（explain-2）：打開設定抽屜、攤開玩法說明（跟齒輪＋「玩法說明」兩下一樣）
+          S.sheet = true;
+          S.howtoOpen = true;
+          render();
+          loadRecap();
+          await refreshHowto();
+          if (S.main.admin) { // 跟齒輪打開時一樣：管理者的時刻表與可以定的結果會變，重抓；查過的玩家也重查（審查 Nit）
+            S.admin = await api("/api/admin");
+            if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
+            renderKeepingSheet();
+          }
+          break;
         case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
@@ -2480,6 +2543,7 @@
         case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "stam-help": S.stamOpen = !S.stamOpen; renderTop(); break; // 點體力條：底下攤開／收起體力怎麼回（explain-1）；丹的鈕自己是一顆，點它不會走到這裡
+        case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
@@ -2653,6 +2717,10 @@
       S.stamOpen = !S.stamOpen;
       renderTop();
       document.querySelector('.bar.stam[data-act="stam-help"]')?.focus(); // 狀態列是重畫的：焦點放回體力條，鍵盤可以再按一次收起
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.fronts[data-act="fronts-help"]')) {
+      ev.preventDefault();
+      frontsTap(); // 戰況圖卡是一顆 role="button" 的 div：鍵盤也點得開（explain-2）
     }
   });
 

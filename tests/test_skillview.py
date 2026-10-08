@@ -173,6 +173,7 @@ def test_an_art_card_at_the_ninth_and_tenth_level_does_not_repeat_itself():
 
 def test_practice_hint_is_quiet_below_the_threshold(state, content):
     state.player.member.wugong_id = "basic_fist"
+    content.config.xinde_hint_threshold = 50  # 設定還留著這個下限（explain-2 起預設 0）：設了就照它
     state.player.stats["xinde"] = content.config.xinde_hint_threshold - 1
     assert skillview.practice_hint(state, content) is None
 
@@ -189,9 +190,9 @@ def test_practice_hint_lists_the_slots_it_can_afford(state, content):
 def test_practice_hint_names_both_slots_when_both_can_be_practised(state, content):
     state.player.member.wugong_id = "basic_fist"
     state.player.member.neigong_id = "basic_breath"
-    state.player.stats["xinde"] = content.config.xinde_hint_threshold
+    state.player.stats["xinde"] = team.practice_price(content, 1)  # 兩門都還在第一成：付得起第二成就兩門都能練
     hint = skillview.practice_hint(state, content)
-    assert "練成內功、武學" in hint and str(content.config.xinde_hint_threshold) in hint
+    assert "練成內功、武學" in hint and f"你已攢下 {team.practice_price(content, 1)} 點心得" in hint
 
 
 def test_practice_hint_skips_a_slot_whose_next_level_it_cannot_pay(state, content):

@@ -363,6 +363,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @media (prefers-reduced-motion: reduce) { .sense-pad.brewing .sense-canvas { animation: none; opacity: 0.7; } }
 .options .btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font-size: 12px; color: var(--ink-2); }
 .options .btn.go .k { background: var(--accent); color: #fff; }
+/* 有所感的做法（explain-2）：伺服器給了心意才用（審查 I1 起預設不給，sensing.SHOW_KINDS）：那一格寫剛柔快慢而不是 1～4，一樣寬，鈕不變高 */
+.options .btn .k.sense { font: 600 13px var(--serif); color: var(--ink); }
+/* 有所感做法底下的兩行小字（explain-2）：跟行動列底下那幾行同一個樣子，排在做法後面 */
+.act-notes.sense-notes { margin-top: -4px; }
 /* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
 .options .btn .b-name { flex: 1 1 auto; min-width: 0; }
 .options .btn .b-move { flex: none; margin-left: auto; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
@@ -441,6 +445,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-panel > :last-child { margin-bottom: 0; }
 .stance-rule { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 .stance-how { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+/* 點開戰況、態勢、大事、主線看的說明（explain-2）：小字淡色，一行一段；面板裡的接在最後、上面一條細線隔開。
+   戰況圖卡那一段排在圖卡底下（#war 包著兩樣），只推動它底下的小地圖 */
+.war-help { font-size: 12px; line-height: 1.55; color: var(--ink-2); }
+.war-help p { margin: 4px 0 0; }
+.peek-panel > .war-help { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.war { margin-bottom: 12px; }
+.war > .fronts { margin-bottom: 0; }
+.war > .fronts-help { margin: 2px 4px 0; }
+.fronts[data-act="fronts-help"] { cursor: pointer; }
+.fronts[data-act="fronts-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
 @media (max-width: 340px) {
   .peek-chip::after { display: none; }
 }
@@ -789,6 +803,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-notes { margin: -6px 4px 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 .act-notes p { margin: 0; }
 .act-notes b { margin-right: 6px; color: var(--ink); font-weight: 600; }
+/* 新手期的「玩法說明 ›」入口（explain-2）：跟上面幾行同一個字級、同一個行高，不多佔高度；按的範圍用內距加負外距撐大，行高不變 */
+.act-notes .howto-entry button { font-size: 12px; line-height: inherit; font-weight: 600; padding: 8px 6px; margin: -8px 2px -8px -6px; }
 .act-move { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
 .act-move .options { margin: 8px 0 0; }
 .act-move .move-mode { margin: 0; }

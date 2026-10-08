@@ -54,14 +54,14 @@ def test_the_explore_line_drops_what_cannot_happen_here_like_the_roll_does(game)
     assert _notes(game)["act:explore"] == "這裡多半碰上事件，也可能悟意境"
     game.state.player.sense_misses["lake"] = game_day(game.content, game.state.world)  # 這個遊戲日在這裡選錯過做法：悟意境那一支沒了
     moment = day_ends_text(game.content, game.state.world)  # 只因為選錯而拿掉的：句尾說什麼時候才悟得出
-    assert _notes(game)["act:explore"] == f"這裡多半碰上事件；這裡要到 {moment} 之後才悟得出"
+    assert _notes(game)["act:explore"] == f"這裡會碰上事件；這裡要到 {moment} 之後才悟得出"  # 只剩一支：不說「多半」（FB-101）
 
 
 def test_the_explore_line_and_the_roll_read_the_same_weights(game, monkeypatch):
     """說明與擲骰都讀 Game._explore_weights：換掉它，兩邊一起變（說的跟擲的不會各寫一份）。"""
     _lake(game)
     monkeypatch.setattr(Game, "_explore_weights", lambda self, loc: [("wild", 1.0)])
-    assert _notes(game)["act:explore"] == "這裡多半遇野怪"
+    assert _notes(game)["act:explore"] == "這裡會遇野怪"
     seq = game.state.battle_seq
     game._explore()
     assert game.state.battle_seq == seq + 1  # 真的打了一場野怪
@@ -85,7 +85,7 @@ def test_the_explore_line_mentions_the_breakthrough_pill_only_when_it_can_drop(g
 
 def test_explore_line_words():
     assert howto.explore_line([]) == "這裡多半一無所獲"
-    assert howto.explore_line([("insight", 0.0), ("event", 3.0)]) == "這裡多半碰上事件"  # 比重 0 的不提
+    assert howto.explore_line([("insight", 0.0), ("event", 3.0)]) == "這裡會碰上事件"  # 比重 0 的不提；只剩一支寫「會」（FB-101）
     assert howto.explore_line([("insight", 2.0), ("wild", 2.0), ("event", 1.0)], "破境丹") == "這裡可能悟意境、遇野怪、碰上事件；偶得破境丹"
 
 
@@ -104,9 +104,9 @@ def test_the_train_line_is_a_drill_on_your_own_ground(game):
     game.state.player.faction = "guan"
     game.content.squads["thug"].faction = "guan"
     line = _notes(game)["act:train"]
-    assert line == "操練不冒險：得心得、經驗，推動戰局；不給銀兩、素材"
+    assert line == "不冒險：得心得、經驗，推動戰局；不給銀兩、素材"  # 格子上已經寫「操練」，這一行不再開頭寫一次（FB-101）
     game.content.config.drill_reward_share = 0.0  # 操練什麼都不給的話，就不說給
-    assert _notes(game)["act:train"] == "操練不冒險：沒什麼賞，推動戰局；不給銀兩、素材"
+    assert _notes(game)["act:train"] == "不冒險：沒什麼賞，推動戰局；不給銀兩、素材"
 
 
 def test_the_train_line_mentions_the_drill_where_both_sides_are(game):
@@ -599,7 +599,9 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
     cycle = howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
     assert f"同一位人物{cycle}最多 9 輪" in text
-    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "")))
+    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tests/test_explain2.py 對過內容
+    fame = re.search(r"#### 名望\n(?:- .*\n)+", text).group(0)
+    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "").replace(fame, "")))
     assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
 
 
