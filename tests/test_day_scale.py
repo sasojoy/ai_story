@@ -127,8 +127,8 @@ def test_with_the_switch_off_the_moment_rounds_up_to_the_minute(content):
 
 def test_no_moment_is_named_once_the_next_day_would_start_at_or_after_the_season_end(content):
     """審查 M2：最後一個遊戲日的換日剛好是收季那一刻（季曆會把它寫成「第 12 週・週日 23:59」，那一分鐘什麼都不會重算）；
-    季末延後時，季曆寫不出名義季長之後的時刻（一樣卡在 23:59）；季末提前時，換日在收季之後。這三種都不寫時刻（None），
-    呼叫端改寫「這一季之內不會再…」。"""
+    季末延後時，季曆寫不出名義季長之後的時刻（一樣卡在 23:59）；季末提前時，換日在收季之後。這三種都不寫時刻（None）。
+    呼叫端照 rules.day_turn 分：收季前不會再換日寫「這一季之內不會再…」，季末延後還會換日寫「過一陣子」（FB-102，tests/test_fb102_postponed_finale.py）。"""
     content.config.season_one = True
     season = _season(content, WEEKEND, one=True)
     season.time = 12.5 * SHORT  # 第 13 個遊戲日：第 12 週・週二 00:00 換日，還寫得出來

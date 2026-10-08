@@ -84,21 +84,30 @@ def day_ends(content: Content, world: WorldState, time: float | None = None) -> 
     return end
 
 
-def day_ends_text(content: Content, world: WorldState, time: float | None = None) -> str | None:
-    """換日那一刻寫給玩家看：一律走 calendar.stamp_text——第一季是「第 3 週・週五 00:00」（point_text），
-    開關關著是「第3天 00:00」。不要在別處自己拼時間。
-    寫不出來時回 None，呼叫端改寫「這一季之內不會再…」（day-scale 審查 M2）：換日在收季那一刻或之後（最後一個遊戲日、管理者把
-    季末提前），或在名義季長之後（管理者把季末延後：季曆只到最後一週週日 23:59，寫出來會是一個什麼都不會重算的時刻）。
-    開關關著時「第N天 HH:MM」只寫到分：不是整分的換日（短的 beta 季）往後進位，寫出來的那一刻不會早於真的換日。"""
+def day_turn(content: Content, world: WorldState, time: float | None = None) -> tuple[str, str | None]:
+    """下一次換日寫給玩家看是哪一種（FB-102）：
+    - ("at", 時刻)：換日在真的季末之前、寫得出來——一律走 calendar.stamp_text（第一季「第 3 週・週五 00:00」，開關關著「第3天 00:00」）；
+    - ("later", None)：換日在真的季末（排定的季末，管理者可以往後排）之前，可是在名義季長之後：季曆只寫到最後一週週日 23:59，
+      寫不出那一刻，但還會換日、上限照樣重算——句子不承諾時刻、也不說「這一季之內」（「過一陣子」，待 joy 潤）；
+    - ("season", None)：換日在收季那一刻或之後（最後一個遊戲日、管理者把季末提前）：「這一季之內不會再…」才是真的。
+    開關關著時「第N天 HH:MM」只寫到分：不是整分的換日（短的 beta 季）往後進位，寫出來的那一刻不會早於真的換日。
+    什麼時候換日不在這裡改（rules.day_ends）。"""
     from .world import season_end_time  # noqa: PLC0415  world → rules：在函式裡 import，避免循環
 
     end = day_ends(content, world, time)
-    last = min(season_end_time(world, content), season_length_days(world, content) * DAY)
-    if end >= last - calendar.EPS_SECONDS:
-        return None
+    if end >= season_end_time(world, content) - calendar.EPS_SECONDS:
+        return ("season", None)
+    if end >= season_length_days(world, content) * DAY - calendar.EPS_SECONDS:
+        return ("later", None)
     if not calendar.season_one_on(world, content):
         end = math.ceil(end / calendar.MINUTE - calendar.EPS_MINUTES) * calendar.MINUTE
-    return calendar.stamp_text(end, content, world)
+    return ("at", calendar.stamp_text(end, content, world))
+
+
+def day_ends_text(content: Content, world: WorldState, time: float | None = None) -> str | None:
+    """換日那一刻的寫法（day_turn 的 "at"）；寫不出來（"later"、"season"）回 None。寫句子的地方用 day_turn 分三種說法（FB-102）。"""
+    kind, moment = day_turn(content, world, time)
+    return moment if kind == "at" else None
 
 
 def add_world_flags(state: GameState, flags) -> None:
