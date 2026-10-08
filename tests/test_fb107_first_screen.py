@@ -401,6 +401,56 @@ def test_only_a_width_change_refits_on_resize():
     assert out["turned"]["fitted"] == [] and out["turned"]["rounds"] == ["rounds"] and out["width"] == 812
 
 
+GUIDE_DRIVER = r"""
+// 說書人那一段（GUIDE_KEY 到 guideHtml）切出來：決戰集結時入伍、步驟的框預設收成一行（企劃者 2026-10-08，FB-107 修正輪）
+const a = src.indexOf("\n  const GUIDE_KEY");
+const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
+const store = {};
+globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+const S = { guideRoad: null, guideFull: null, guidePage: null, main: { scene: input.scene || "" } };
+const esc = (s) => String(s);
+const pro = () => input.pro || null;
+const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, openGuide, shutGuide };")(S, esc, pro);
+const kind = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : ""; };
+const step = { speaker: "老石", key: "r3_battle", text: "要打大仗了。\n\n先按戰場名字旁的『加入』報名。", line: "去報名", done: [], end: false, paged: true, full: true };
+const ack = { speaker: "師父", key: "h_injury", text: "打一場掉的氣血，大半會自己回來。", done: [], end: true };
+finish(new Function("H", "S", "kind", "step", "ack", input.script)(H, S, kind, step, ack));
+"""
+
+MUSTER_SCENE = "<p><strong>長社火攻</strong></p>\n<p>集結中，還剩現實 {} 秒。選擇陣營加入；集結期間照常行動。</p>\n<hr />\n<p>【長社】危險 ★★</p>"
+
+
+def _guide(script, scene="", **extra):
+    return webharness.run(GUIDE_DRIVER, {"script": script, "scene": scene, **extra})
+
+
+@node
+def test_a_step_box_starts_folded_during_a_muster_and_full_otherwise():
+    """企劃者 2026-10-08：決戰集結時，入伍、步驟的框（今天整段或分頁攤開的）預設收成一行，點了攤開——同在路上（FB-055）。
+    沒有集結照舊攤開；序章裡師父的框不收；「知道了」那種碰到才說的框不收（裁示見交接報告：量過的情形用不到）。"""
+    out = _guide("return [kind(step), kind(ack)];", MUSTER_SCENE.format("12 分 5"))
+    assert out == ["line", "card"]
+    assert _guide("return kind(step);") == "card"
+    assert _guide("return kind(step);", MUSTER_SCENE.format("12 分 5"), pro={"reveal": []}) == "card"
+    joined = MUSTER_SCENE.format("1 分 5").replace("集結中，還剩現實 1 分 5 秒。選擇陣營加入；集結期間照常行動。", "你已加入【官軍】，集結還剩現實 1 分 5 秒。集結結束就開打，在那之前照常行動。")
+    assert _guide("return kind(step);", joined) == "line"  # 加入了、還在集結：照樣收著
+
+
+@node
+def test_an_opened_step_box_stays_open_while_the_countdown_ticks_and_folds_when_told():
+    """點開了：輪詢倒數變了（場景的字跟著變）也不收回去；自己按「收起」才收；集結結束（開打了）就回到平常的樣子（攤開），
+    下一場集結又從收著開始。"""
+    script = """
+      const out = [kind(step)];
+      H.openGuide(step); out.push(kind(step));
+      S.main = { scene: S.main.scene.replace("12 分 5", "11 分 55") }; out.push(kind(step));
+      S.main = { scene: "<p><strong>長社火攻</strong></p>\\n<p>【第一幕】（第 1／9 回合）火起</p>\\n<hr />\\n<p>【長社】</p>" }; out.push(kind(step));
+      S.main = { scene: S.main.scene.replace("【第一幕】（第 1／9 回合）火起", "集結中，還剩現實 9 分 0 秒。") }; out.push(kind(step));
+      H.openGuide(step); H.shutGuide(step); out.push(kind(step));
+      return out;"""
+    assert _guide(script, MUSTER_SCENE.format("12 分 5")) == ["line", "card", "card", "card", "line", "line"]
+
+
 HINT_DRIVER = r"""
 const S = Object.assign({ hintOpen: false, hintTight: false, tab: "jianghu", main: { guide: null, options: [{ id: "act:rest" }] } }, input.S);
 const H = new Function("S", [konst("esc"), konst("WAITING"), konst("waitingMenu"), "const idleMenu = () => true;", fn("hintHtml"),
