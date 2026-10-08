@@ -89,6 +89,23 @@ def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
     assert "最多給到八成、最少也有二成" in howto.board_help(on)[0]
 
 
+def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules(on):
+    """審查 Minor 3（照 explain-1 的 numbers <= allowed）：戰況、態勢、大事、主線的說明與玩法說明「這一季在打什麼」那一節，
+    每一個阿拉伯數字都要是設定、時刻表、伏筆鏈、結局算出來的數（設定換成不常見的值，句子裡不能寫死別的數）。"""
+    on.config.chaos_low, on.config.chaos_high, on.config.decisive_from_week = 33, 67, 9
+    game = _war(on)
+    kinds = [e.kind for e in on.timetable]
+    locks = {c.event for c in on.foreshadows.chains if c.side in ("guan", "huang")}
+    bars = {v for e in on.scenario.endings if e.season_one for v in (*e.stance_min.values(), *(100 - x for x in e.stance_max.values()))}
+    allowed = {"0", "100", "33", "67", "9", str(len(kinds)), str(len(locks)), *(str(kinds.count(k)) for k in ("fixed", "roll", "showdown")),
+               *(str(b) for b in bars)}
+    help_ = game.status_data()["war_help"]
+    section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
+    for text in [*(line for lines in help_.values() for line in lines), section]:
+        numbers = set(re.findall(r"\d+", text))
+        assert numbers <= allowed, (numbers - allowed, text)
+
+
 def test_the_rewritable_events_are_the_ones_guan_and_huang_chains_point_at(on):
     """關鍵伏筆改寫得了的大事：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果）；伏筆拿掉就不提。"""
     events = {c.event for c in on.foreshadows.chains if c.side in ("guan", "huang")}
@@ -270,6 +287,8 @@ def _fresh(content, name="甲"):
 def test_the_howto_entry_is_there_only_in_the_newbie_window(on):
     from tianxia import calendar
 
+    on.config.newbie_days = 1  # 氣血加倍那一段（newbie_days）跟體力那一段分開：入口跟的是體力那一段（審查 Minor 3）
+    on.config.newbie_stamina_days = 18
     game = _fresh(on)
     assert game.status_data()["howto_entry"] is True
     s = game.state

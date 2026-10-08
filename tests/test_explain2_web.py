@@ -58,6 +58,29 @@ def test_tapping_the_front_cards_opens_their_explanation_below_them():
     assert opened[:opened.index('<div class="war"')] == closed[:closed.index('<div class="war"')]
 
 
+def test_enter_or_space_on_the_front_cards_opens_their_explanation():
+    """審查 Minor 3：圖卡是 role="button" 的 div，鍵盤也點得開（Enter、空白鍵），再按一次收起；別的鍵、別的元素不動。"""
+    m = _season_one()
+    out = run(m, """return (async () => {
+      const cards = new T.Element();
+      cards.matches = (sel) => sel === '.fronts[data-act="fronts-help"]';
+      const other = new T.Element();
+      other.matches = () => false;
+      let prevented = 0;
+      const press = (key, target) => T.docListeners.keydown.forEach((fn) => fn({ key, target, preventDefault: () => { prevented += 1; } }));
+      press("Enter", cards);
+      const afterEnter = H.S.frontsOpen;
+      const opened = H.pageJianghu();
+      press(" ", cards);
+      const afterSpace = H.S.frontsOpen;
+      press("a", cards);
+      press("Enter", other);
+      return { afterEnter, afterSpace, still: H.S.frontsOpen, opened, prevented };
+    })();""")
+    assert out["afterEnter"] is True and out["afterSpace"] is False and out["still"] is False
+    assert 'id="fronts-help"' in out["opened"] and out["prevented"] == 2
+
+
 def test_the_front_cards_are_not_a_button_without_the_server_explanation():
     """伺服器沒給說明（舊版）：照舊只是一排圖卡，不能點。"""
     m = _season_one()
