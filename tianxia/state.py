@@ -147,7 +147,7 @@ class PlayerState(BaseModel):
     used_dialogue_options: dict[str, list[str]] = Field(default_factory=dict)  # 人物 id -> 說過的話（避免重複）
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
-    talks_today: dict[str, list[int]] = Field(default_factory=dict)  # 人物 id -> [第幾個遊戲日, 當天已聊幾輪]
+    talks_today: dict[str, list[int]] = Field(default_factory=dict)  # 人物 id -> [第幾個遊戲日（rules.game_day，跟著季長縮）, 當天已聊幾輪]
     picking_audience: bool = False  # 按了「求見」、正在挑要拜會哪一位人物（兩位以上大勢人物的地點）；舊存檔沒這欄就是沒在挑
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
@@ -159,7 +159,7 @@ class PlayerState(BaseModel):
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
     sensing: Sensing | None = None  # 有所感、還沒了結的那一次
     sense_serial: int = 0  # 有所感的流水號（每次有所感 +1）
-    sense_misses: dict[str, int] = Field(default_factory=dict)  # 地點 id → 選錯做法是第幾天：那一天這裡探索不再落在悟意境
+    sense_misses: dict[str, int] = Field(default_factory=dict)  # 地點 id → 選錯做法是第幾個遊戲日（rules.game_day）：那一個遊戲日這裡探索不再落在悟意境
     # 私有的意境（畫圖悟來的，或拿私有的合併出來的）：id「悟:流水號」→ 本體；id 同時也記在 insights（學會了哪些）裡
     own_insights: dict[str, Insight] = Field(default_factory=dict)
     own_serial: int = 0  # 私有意境的流水號
@@ -178,7 +178,7 @@ class PlayerState(BaseModel):
     # 防重複（events.pick_event 照它抽、events.note_round 在 Game._present 真的端出事件時才記）：池子（「地點:行動」或「*:行動」）→ 這一輪看過的事件 id，照看到的先後；輪完清空。
     # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
-    mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾天（一天只算一次；角色每季重來，跟著清空）
+    mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0

@@ -1,6 +1,7 @@
 """數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、習得武學。"""
 from __future__ import annotations
 
+import math
 import random
 import re
 from collections.abc import Callable
@@ -8,9 +9,9 @@ from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
-from .models import FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
+from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
-from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore
+from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, season_length_days
 
 DAY = 86400
 
@@ -46,8 +47,57 @@ def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
 
 
 def current_day(state: GameState) -> int:
-    """賽季第幾天（從 1 開始）。"""
+    """賽季第幾天（從 1 開始），照世界天（24 個世界小時）：beta 主線的 day_min／day_max、beta 那一季的新立門戶福緣用它。
+    「每天幾次」「當天不能再…」這種上限不用它，用 game_day（跟著季長縮）。"""
     return int(state.world.time // DAY) + 1
+
+
+# ── 遊戲日（企劃者 2026-10-08：「1 天是照現實的一天，但週末期間有縮時的話，就要等比例調整。」）──────────
+# 以「遊戲日」為單位的上限（同一位人物一天談幾輪、路上收穫一天幾次、有所感選錯了當天不再悟、地方痕跡一人一天一次）
+# 都照這裡的長度換日：現實 24 小時 ×（這一季蓋章的季長 ÷ 14 天）。14 天的季剛好 24 小時（一個字都不變）；週末 2.5 天的季
+# 約 4.3 小時。換成季曆，兩種季都是 6 個曆日。季長照開季時蓋的章（world_state.season_length_days，跟季曆同一個章），
+# 設定中途換了也不會動到正在跑的這一季。開關關著的 beta 季一樣照這條算：14 天的季照舊 24 小時，別的季長照比例。
+# 每日推力上限、新手期、第 2 階行動、機緣的「當天」本來就是季曆天，不走這裡。
+
+FULL_SEASON_DAYS = DEFAULT_SEASON_DAYS  # 一個遊戲日剛好是現實一天的季長（正式版 14 天）；短的季照比例縮
+
+
+def day_seconds(content: Content, world: WorldState) -> float:
+    """一個遊戲日有幾個世界秒：DAY × 季長 ÷ FULL_SEASON_DAYS（季長照 world 蓋的章；沒有章的舊季照 14 天）。"""
+    return DAY * season_length_days(world, content) / FULL_SEASON_DAYS
+
+
+def game_day(content: Content, world: WorldState, time: float | None = None) -> int:
+    """世界秒 time（不給就是此刻）落在這一季的第幾個遊戲日（從 1 起）。上限的帳記的是這個號碼：記的是別的號碼就當前幾天的。"""
+    t = world.time if time is None else time
+    return int(t // day_seconds(content, world)) + 1
+
+
+def day_ends(content: Content, world: WorldState, time: float | None = None) -> float:
+    """time（不給就是此刻）所在的遊戲日結束、下一個遊戲日開始的那一刻（世界秒）：game_day 在這一刻剛好換成下一天
+    （n × 一天的長度碰上浮點誤差時，往後挪到第一個真的換了日的值，寫出來的時刻跟真的換日的那一刻不會差一點）。"""
+    day = game_day(content, world, time)
+    end = day * day_seconds(content, world)
+    while game_day(content, world, end) <= day:
+        end = math.nextafter(end, math.inf)
+    return end
+
+
+def day_ends_text(content: Content, world: WorldState, time: float | None = None) -> str | None:
+    """換日那一刻寫給玩家看：一律走 calendar.stamp_text——第一季是「第 3 週・週五 00:00」（point_text），
+    開關關著是「第3天 00:00」。不要在別處自己拼時間。
+    寫不出來時回 None，呼叫端改寫「這一季之內不會再…」（day-scale 審查 M2）：換日在收季那一刻或之後（最後一個遊戲日、管理者把
+    季末提前），或在名義季長之後（管理者把季末延後：季曆只到最後一週週日 23:59，寫出來會是一個什麼都不會重算的時刻）。
+    開關關著時「第N天 HH:MM」只寫到分：不是整分的換日（短的 beta 季）往後進位，寫出來的那一刻不會早於真的換日。"""
+    from .world import season_end_time  # noqa: PLC0415  world → rules：在函式裡 import，避免循環
+
+    end = day_ends(content, world, time)
+    last = min(season_end_time(world, content), season_length_days(world, content) * DAY)
+    if end >= last - calendar.EPS_SECONDS:
+        return None
+    if not calendar.season_one_on(world, content):
+        end = math.ceil(end / calendar.MINUTE - calendar.EPS_MINUTES) * calendar.MINUTE
+    return calendar.stamp_text(end, content, world)
 
 
 def add_world_flags(state: GameState, flags) -> None:
@@ -215,9 +265,9 @@ def fill_marks(text: str, state: GameState) -> str:
     return _MARKS_TOKEN.sub(lambda m: fuzzy_count(state.world.marks.get(m.group(1), 0)), text)
 
 
-def add_marks(marks: dict[str, int], state: GameState) -> None:
-    """留下地方痕跡：同一個人對同一個痕跡，同一個遊戲日只算第一次（不讓一個人刷出整條變化）。"""
-    day = current_day(state)
+def add_marks(marks: dict[str, int], state: GameState, content: Content) -> None:
+    """留下地方痕跡：同一個人對同一個痕跡，同一個遊戲日只算第一次（不讓一個人刷出整條變化）。遊戲日跟著季長縮（game_day）。"""
+    day = game_day(content, state.world)
     for key, n in marks.items():
         if state.player.mark_days.get(key) == day:
             continue
@@ -836,7 +886,7 @@ def apply_effect(
         jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add and jade_seal_flag not in state.world.flags
     )
     add_world_flags(state, effect.world_flags_add)
-    add_marks(effect.marks, state)
+    add_marks(effect.marks, state, content)
     if effect.clue_items or effect.fs_counters:  # 伏筆的準備事件：開關關著時什麼都不給、不寫字（foreshadow.grant）
         from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
 

@@ -15,10 +15,10 @@ import pytest
 from conftest import real_content
 from test_explore import _lake
 
-from tianxia import atlas, companion_agent, hints, howto, sensing
+from tianxia import atlas, companion_agent, hints, howto, rules, sensing
 from tianxia.engine import Game
 from tianxia.models import ExploreMix, HintDef, InsightScene, SenseMethod
-from tianxia.rules import current_day
+from tianxia.rules import day_ends_text, game_day
 
 ROOT = Path(__file__).parent.parent
 
@@ -52,8 +52,9 @@ def test_the_explore_line_drops_what_cannot_happen_here_like_the_roll_does(game)
     """做不了的那一支擲骰時拿掉、比例分給另外兩支（Game._explore_can）：說明也不提。"""
     _lake(game, tags=["營寨"], enemies=())  # 沒有會打的對手：營寨也遇不到野怪
     assert _notes(game)["act:explore"] == "這裡多半碰上事件，也可能悟意境"
-    game.state.player.sense_misses["lake"] = current_day(game.state)  # 今天在這裡選錯過做法：悟意境那一支沒了
-    assert _notes(game)["act:explore"] == "這裡多半碰上事件"
+    game.state.player.sense_misses["lake"] = game_day(game.content, game.state.world)  # 這個遊戲日在這裡選錯過做法：悟意境那一支沒了
+    moment = day_ends_text(game.content, game.state.world)  # 只因為選錯而拿掉的：句尾說什麼時候才悟得出
+    assert _notes(game)["act:explore"] == f"這裡多半碰上事件；這裡要到 {moment} 之後才悟得出"
 
 
 def test_the_explore_line_and_the_roll_read_the_same_weights(game, monkeypatch):
@@ -211,26 +212,31 @@ def _feeling(game, prologue=False):
 def test_the_feeling_card_warns_before_a_method_is_chosen(game):
     _feeling(game)
     text = game.scene_text()
-    assert sensing.MISS_WARNING in text and text.index("湖水拍岸") < text.index(sensing.MISS_WARNING)
-    assert sensing.MISS_WARNING == "選錯了做法，今天在這裡就悟不出了。"
+    warning = sensing.miss_warning(game.state, game.content)
+    assert warning in text and text.index("湖水拍岸") < text.index(warning)
+    moment = rules.day_ends_text(game.content, game.state.world)  # 換日的那一刻（遊戲日跟著季長縮，企劃者 2026-10-08）
+    assert warning == f"選錯了做法，這裡要到 {moment} 之後才悟得出。"
 
 
 def test_the_warning_matches_the_rule(game):
-    """說的是真的：選錯了，這一處今天不再落在悟意境那一支（Game._explore_can 看 sensing.missed_today）。"""
+    """說的是真的：選錯了，這一處到換日之前不再落在悟意境那一支（Game._explore_can 看 sensing.missed_today）。"""
     scene = _feeling(game)
     wrong = [scene.methods[j].attribute for j in game.state.player.sensing.order].index("剛")  # 湖邊悟得到水、風：剛是錯的
     game.choose(f"sense:{wrong}")
-    assert sensing.missed_today(game.state, game.content.locations["lake"])
+    assert sensing.missed_today(game.state, game.content, game.content.locations["lake"])
     assert not game._explore_can("insight", game.content.locations["lake"])
+    game.state.world.time = rules.day_ends(game.content, game.state.world)  # 到了卡上寫的那一刻，又悟得出
+    assert game._explore_can("insight", game.content.locations["lake"])
 
 
 def test_no_warning_once_drawing_or_in_the_hut(game):
     _feeling(game)
+    warning = sensing.miss_warning(game.state, game.content)
     game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"
-    assert "有所感・湖光" in game.scene_text() and sensing.MISS_WARNING not in game.scene_text()
+    assert "有所感・湖光" in game.scene_text() and warning not in game.scene_text()
     game.state.player.sensing = None
     _feeling(game, prologue=True)  # 序章草廬的四景：四個做法都對，不嚇人
-    assert "有所感・湖光" in game.scene_text() and sensing.MISS_WARNING not in game.scene_text()
+    assert "有所感・湖光" in game.scene_text() and warning not in game.scene_text()
 
 
 # ── 二、情誼：看得到、只叫「情誼」、第一次交友或談話時說它有什麼用 ─────────────────────────────
@@ -591,7 +597,9 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     assert "體力每 5 分鐘回 1 點，滿 222 就不再回。" in text and "回體丹一顆回 133 點，" in text
     assert "糧草" in text and "伏筆" in text  # 背包：素材是糧草與伏筆用的
     span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
-    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "")))
+    cycle = howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
+    assert f"同一位人物{cycle}最多 9 輪" in text
+    numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "")))
     assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
 
 
@@ -625,7 +633,7 @@ def test_the_howto_feeling_sentence_covers_letting_go(game):
     labels = dict(sensing.menu(game.state, game.content))
     assert "畫" in labels[sensing.DRAW] and "順其自然" in labels[sensing.LET_GO]  # 卡上真的有這兩條路
     assert "選對了還要看機緣（沒抓住也有一點心得）" in text
-    assert "抓住了可以畫一筆，也可以順其自然" in text and "選錯了，今天在那裡就悟不出了" in text
+    assert "抓住了可以畫一筆，也可以順其自然" in text and "選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）" in text
 
 
 def test_the_howto_drill_sentence_follows_the_squad_not_the_place(game):

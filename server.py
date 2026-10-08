@@ -36,7 +36,6 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
-import os
 import re
 import secrets
 import shutil
@@ -63,7 +62,7 @@ from tianxia import (
     timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
-from tianxia.content import PROFILE_ENV, load_content, profile_line
+from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, Game
@@ -73,7 +72,7 @@ from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
-PROFILE = os.environ.get(PROFILE_ENV) or None  # 設定覆寫檔（例如 weekend）；run_bots.py 要設同一個
+PROFILE = env_profile()  # 設定覆寫檔（TIANXIA_PROFILE，例如 weekend）；run_bots.py、scripts/set_password.py 讀同一個
 CONTENT = load_content(ROOT / "content", profile=PROFILE)
 PORT = 7861
 COOKIE = "tx_session"

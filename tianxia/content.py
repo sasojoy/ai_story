@@ -55,6 +55,14 @@ class ContentError(Exception):
 PROFILE_ENV = "TIANXIA_PROFILE"
 
 
+def env_profile() -> str | None:
+    """這台機器用哪一份設定覆寫檔：環境變數 TIANXIA_PROFILE（沒設或空字串＝預設）。server.py、run_bots.py 與主機端建角色的
+    scripts/set_password.py 都從這裡讀，三邊的設定才會一樣（set_password 以前不看它：週末設定下建的角色拿到預設設定的贈禮那一行）。"""
+    import os  # noqa: PLC0415  只有這裡與 _with_local_admins 用得到
+
+    return os.environ.get(PROFILE_ENV) or None
+
+
 def load_content(root: Path, profile: str | None = None) -> Content:
     """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
     不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""

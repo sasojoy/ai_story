@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import random
 import sys
 import time
@@ -19,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia.content import PROFILE_ENV, load_content, profile_line  # noqa: E402
+from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
 from tianxia.database import default_path  # noqa: E402
 from tianxia.models import Content  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -52,7 +51,7 @@ def main(argv: list[str] | None = None, clock: Callable[[], float] = time.time, 
     parser = argparse.ArgumentParser(description="讓賽季時鐘暫停或繼續（停機維護用）")
     parser.add_argument("action", choices=("pause", "resume", "status"), help="pause 暫停、resume 繼續、status 看現在的狀態")
     parser.add_argument("--db", default=None, help="資料庫檔（預設：環境變數 TIANXIA_DB，沒設就是 saves/tianxia.db）")
-    parser.add_argument("--profile", default=os.environ.get(PROFILE_ENV) or None, help="設定覆寫檔，要跟伺服器同一份（預設讀 TIANXIA_PROFILE）")
+    parser.add_argument("--profile", default=env_profile(), help="設定覆寫檔，要跟伺服器同一份（預設讀 TIANXIA_PROFILE）")
     args = parser.parse_args(argv)
     path = Path(args.db) if args.db else default_path()
     print(f"資料庫：{path.resolve()}")

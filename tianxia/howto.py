@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar
+from . import calendar, rules
 from .models import Content
 from .state import WorldState
 
@@ -19,11 +19,15 @@ BRANCH_WORDS: dict[str, str] = {"insight": "悟意境", "wild": "遇野怪", "ev
 PUSH_WORD = "推動戰局"  # 遊歷打贏、操練會推大勢（第一季是戰線，豪強在亂局推割據）：一律這樣說，不露數字
 
 
-def explore_line(weights: Sequence[tuple[str, float]], legend: str | None = None) -> str:
+def explore_line(
+    weights: Sequence[tuple[str, float]], legend: str | None = None, blocked: bool = False, until: str | None = None,
+) -> str:
     """探索這一下多半會怎樣。weights 是探索真的擲骰用的那一份（支, 比重）：照地點類型（Config.explore_mix）、
     做不了的已經拿掉、悟意境那一支乘過悟性（Game._explore_weights）。比重嚴格最大的那一支寫「多半」，其他寫「也可能」
     （照比重由大到小）；並列最大就一起寫「可能」。不寫百分比。legend 是破境丹的名字（探索每次另擲一次撿不撿得到；
-    機率是 0 時呼叫端給 None）。"""
+    機率是 0 時呼叫端給 None）。blocked：悟意境那一支只因為這個遊戲日在這裡選錯過做法才拿掉（Game._insight_blocked）；
+    句尾補一句什麼時候才悟得出——until 是換日的那一刻（rules.day_ends_text，已經照季的時間寫法寫好），None 是這一季之內
+    不會再換日（待 joy 潤）。"""
     ranked = sorted((pair for pair in weights if pair[1] > 0), key=lambda pair: -pair[1])  # 穩定排序：並列照原本的順序
     words = [BRANCH_WORDS[branch] for branch, _ in ranked]
     if not words:
@@ -32,7 +36,8 @@ def explore_line(weights: Sequence[tuple[str, float]], legend: str | None = None
         head = f"這裡多半{words[0]}" + (f"，也可能{'、'.join(words[1:])}" if len(words) > 1 else "")
     else:
         head = f"這裡可能{'、'.join(words)}"
-    return head + (f"；偶得{legend}" if legend else "")
+    tail = "" if not blocked else f"；這裡要到 {until} 之後才悟得出" if until else "；這一季之內這裡悟不出了"
+    return head + (f"；偶得{legend}" if legend else "") + tail
 
 
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
@@ -82,6 +87,18 @@ def _span(seconds: float) -> str:
     if days >= 2:
         return f"{round(days * 2) / 2:g} 天"
     return f"約 {max(1, round(seconds / calendar.HOUR))} 個小時"
+
+
+def day_every(content: Content, season: WorldState) -> str:
+    """「每個遊戲日」寫給玩家看（交友輪數上限那一句；遊戲日跟著季長縮，rules.day_seconds，企劃者 2026-10-08）：一個遊戲日剛好是
+    現實一天（14 天的季）寫「每天」，一個字都不變；週末那一季的一天不是 24 小時，寫成現實的長度「每 4 小時 17 分（現實時間）」
+    （世界秒 ÷ time_scale，到整分）。待 joy 潤。"""
+    real = rules.day_seconds(content, season) / content.config.time_scale
+    if abs(real - calendar.DAY) < 1:
+        return "每天"
+    hours, minutes = divmod(round(real / 60), 60)
+    parts = [f"{hours} 小時"] * bool(hours) + [f"{minutes} 分"] * bool(minutes)
+    return f"每 {' '.join(parts)}（現實時間）"
 
 
 def regen_line(content: Content) -> str:
@@ -194,7 +211,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"打贏或操練多半還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",
         f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
-        f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物每天最多 "
+        f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；趕路快一些、疾行立刻到，兩種都花體力。步行、趕路時，每一段路可以邊走邊想、"
         "沿途打聽、留意地形、路邊採集各一次。",
@@ -214,7 +231,9 @@ def page(content: Content, season: WorldState, *, recruitable: bool) -> str:
         "",
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
-        "- 探索落在悟意境時「有所感」，先選做法：選錯了，今天在那裡就悟不出了；選對了還要看機緣（沒抓住也有一點心得），"
+        # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行
+        "- 探索落在悟意境時「有所感」，先選做法：選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；"
+        "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。",
         "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
         "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"

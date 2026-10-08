@@ -4554,12 +4554,13 @@ def test_three_turns_a_day_with_the_same_figure(content, game):
         game.choose("talk:0")
         game.choose("talk:0")
         msgs = game.choose("talk:0")
-        assert msgs[-1] == "天色已晚，韓鐵起身送客，改日再敘。"
+        moment = rules.day_ends_text(content, game.state.world)  # 換日的那一刻（遊戲日跟著季長縮，企劃者 2026-10-08）
+        assert msgs[-1] == f"韓鐵起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"
         assert game.state.player.pending_companion is None
         with mock.patch("tianxia.engine.pick_event", return_value=None):
             msgs = game.choose("act:socialize")
-        assert msgs == ["韓鐵今日事忙，改日再來拜會吧。"]
-        game.state.world.time += 86400  # 隔天重算
+        assert msgs == [f"韓鐵事忙，要到 {moment} 之後才得空。"]
+        game.state.world.time = rules.day_ends(content, game.state.world)  # 換日重算
         game.choose("act:socialize")
     assert game.state.player.pending_companion == "mate"
 
@@ -5204,9 +5205,10 @@ def test_thinking_on_the_road_pays_only_the_first_few_times_a_game_day(content, 
     assert p.road_rewards_today == {"task": [1, 2]}
     game.choose("move:lake")  # 同一天的第三段路
     think = _task(game, "think")
-    assert (think.label, think.enabled) == ("邊走邊想（今天沒有收穫了）", True)
+    moment = rules.day_ends_text(content, game.state.world)  # 換日的那一刻（遊戲日跟著季長縮，企劃者 2026-10-08）
+    assert (think.label, think.enabled) == ("邊走邊想（收穫拿滿了）", True)  # 鈕上不寫時刻（2×2 格子放不下）；按下去那一句寫
     xinde = p.stats["xinde"]
-    assert game.choose("road:think") == ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+    assert game.choose("road:think") == [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{moment} 之後才會再有）。"]
     assert p.stats["xinde"] == xinde and p.road_rewards_today == {"task": [1, 2]}
     assert game.state.journal[0].changes == []
     assert (_task(game, "think").label, _task(game, "think").enabled) == ("邊走邊想（想過了，到下一站再說）", False)
@@ -5216,7 +5218,7 @@ def test_the_road_reward_count_starts_over_the_next_game_day(content, game):
     content.config.road_reward_daily_cap = 1
     p = game.state.player
     _leg(game, "lake", "think")
-    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過（跟每天對話輪數同一個算法）
+    game.state.world.time = rules.day_ends(content, game.state.world)  # 換日：紀錄是前一天的就當沒拿過（跟每天對話輪數同一個算法）
     game.choose("move:town")
     assert _task(game, "think").label == "邊走邊想（心得 +3）"
     xinde = p.stats["xinde"]
@@ -5243,9 +5245,10 @@ def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
     game.choose("move:lake")
     game.choose("road:think")
     gather = _task(game, "gather")
-    assert (gather.label, gather.enabled) == ("路邊採集（今天沒有收穫了）", True)
+    moment = rules.day_ends_text(content, game.state.world)
+    assert (gather.label, gather.enabled) == ("路邊採集（收穫拿滿了）", True)
     game.rng = FixedRandom(0.1)  # 沒到上限的話這一擲撿得到
-    assert game.choose("road:gather") == ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+    assert game.choose("road:gather") == [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{moment} 之後再說）。"]
     assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}
     assert not _task(game, "gather").enabled  # 照樣算這段路做過了
     # 沿途打聽、留意地形沒有經濟上的收穫，不設上限
@@ -5367,13 +5370,13 @@ def test_at_the_days_cap_sights_that_hand_you_something_stay_away(content, game)
 
 
 def test_the_road_sight_cap_counts_the_day_of_the_arrival(content, game):
-    """下線補算跨過午夜：第 1 天 23:58 抵達的那一站，收穫算第 1 天（紀錄上寫的也是那一刻）。"""
+    """下線補算跨過換日：第 1 個遊戲日結束前兩分鐘抵達的那一站，收穫算第 1 天（紀錄上寫的也是那一刻）。"""
     content.config.road_sight_chance = 1.0
     p = game.state.player
     p.recent_sights = ["sight_wind", "sight_north_peddler"]  # 只剩烏鴉（心得 +1）
-    game.advance(DAY - 300 - game.state.world.time)  # 第 1 天 23:55
-    game.choose("move:lake")  # 走三分鐘，23:58 抵達
-    game.advance(600)  # 第 2 天 00:05 才補算
+    game.advance(rules.day_ends(content, game.state.world) - 300 - game.state.world.time)  # 換日前五分鐘
+    game.choose("move:lake")  # 走三分鐘，換日前兩分鐘抵達
+    game.advance(600)  # 換日之後五分鐘才補算
     assert p.road_rewards_today == {"sight": [1, 1]}
 
 
@@ -5383,7 +5386,7 @@ def test_road_sight_rewards_start_over_the_next_game_day(content, game):
     p = game.state.player
     p.recent_sights = ["sight_wind", "sight_north_peddler"]
     walk_to(game, "lake")
-    game.state.world.time += DAY  # 隔天：紀錄是前一天的就當沒拿過
+    game.state.world.time = rules.day_ends(content, game.state.world)  # 換日：紀錄是前一天的就當沒拿過
     p.recent_sights = ["sight_wind", "sight_north_peddler"]
     xinde = p.stats["xinde"]
     walk_to(game, "town")
@@ -5621,11 +5624,12 @@ def test_the_audience_list_names_each_figure_and_why_some_cannot_be_seen(content
     assert game.state.player.picking_audience
     assert [(o.id, o.label, o.enabled) for o in game.options()] == [
         ("call:mate", "韓鐵（名望還差 10）", True),  # 求見一直都在（武學與成長設計 9.1）；被打發是一定的，寫真正的差距
-        ("call:scholar", "書生（體力 5・今天還能談 3/3 輪）", True),
+        ("call:scholar", "書生（體力 5・還能談 3/3 輪）", True),
         ("call:back", "返回", True),
     ]
     scene = game.scene_text()
-    assert scene.startswith("**求見**") and "每位人物每天最多談 3 輪，各算各的" in scene
+    moment = rules.day_ends_text(content, game.state.world)  # 遊戲日跟著季長縮：寫換日的那一刻，不寫「每天」（企劃者 2026-10-08）
+    assert scene.startswith("**求見**") and f"每位人物各算各的，最多談 3 輪，到 {moment} 重新算起" in scene
     assert game.state.journal[0].title == "求見・小鎮"
     assert game.state.player.stamina == content.config.stamina_max  # 打開名單不花體力
 
@@ -5634,7 +5638,7 @@ def test_a_prior_meeting_opens_the_door_in_the_audience_list(content, game):
     _hall(content, game, mate_fame=10)
     game.state.player.flags.add("結識:mate")
     game.choose("act:call")
-    assert _labels(game)["call:mate"] == ("韓鐵（體力 5・今天還能談 3/3 輪）", True)
+    assert _labels(game)["call:mate"] == ("韓鐵（體力 5・還能談 3/3 輪）", True)
 
 
 def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game):
@@ -5654,7 +5658,7 @@ def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game)
 
 
 def test_the_daily_limit_counts_per_figure(content, game):
-    """每位人物每天最多談 3 輪，各算各的：跟書生談滿了，韓鐵照樣見得到。"""
+    """每位人物一個遊戲日最多談 3 輪，各算各的：跟書生談滿了，韓鐵照樣見得到。"""
     _hall(content, game)
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose("act:call")
@@ -5662,13 +5666,14 @@ def test_the_daily_limit_counts_per_figure(content, game):
         game.choose("talk:0")
         game.choose("talk:0")
         msgs = game.choose("talk:0")
-    assert msgs[-1] == "天色已晚，書生起身送客，改日再敘。"
+    moment = rules.day_ends_text(content, game.state.world)
+    assert msgs[-1] == f"書生起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"
     game.choose("act:call")
     labels = _labels(game)
-    assert labels["call:scholar"] == ("書生（今天已經談滿 3 輪，明天再來）", False)
-    assert labels["call:mate"] == ("韓鐵（體力 5・今天還能談 3/3 輪）", True)
+    assert labels["call:scholar"] == (f"書生（已經談滿 3 輪，{moment} 之後再來）", False)
+    assert labels["call:mate"] == ("韓鐵（體力 5・還能談 3/3 輪）", True)
     assert game.choose("call:scholar") == ["（此刻無法這麼做。）"]
-    game.state.world.time += DAY  # 隔天重算
+    game.state.world.time = rules.day_ends(content, game.state.world)  # 換日重算（遊戲日跟著季長縮）
     assert _labels(game)["call:scholar"][1]
 
 
@@ -5688,7 +5693,7 @@ def test_going_back_always_works_and_closes_the_list(content, game):
     game.choose("act:call")
     game.state.player.stamina = 0
     labels = _labels(game)
-    assert labels["call:scholar"] == ("書生（體力 5・今天還能談 3/3 輪）", False)  # 體力不夠
+    assert labels["call:scholar"] == ("書生（體力 5・還能談 3/3 輪）", False)  # 體力不夠
     assert labels["call:back"] == ("返回", True)  # 永遠有路可退，不會卡死
     assert game.choose("call:back") == ["你收回名帖，暫且不求見了。"]
     assert not game.state.player.picking_audience
@@ -5927,14 +5932,15 @@ def test_a_figure_who_turned_you_away_after_a_defeat_stays_shut(content, game):
 
 
 def test_the_audience_button_stays_but_greys_out_once_the_day_is_used_up(content, game):
-    """每天 3 輪談滿後，單人地點的求見不消失：灰掉、寫跟求見名單同一句（設計 9.1：求見一直都在）。"""
+    """一個遊戲日 3 輪談滿後，單人地點的求見不消失：灰掉、寫跟求見名單同一句（設計 9.1：求見一直都在）。"""
     cid = _stand_by_one_figure(content, game)
     game.state.player.stats["fame"] = 30
-    game.state.player.talks_today[cid] = [rules.current_day(game.state), content.config.talk_turns_per_day]
+    game.state.player.talks_today[cid] = [rules.game_day(content, game.state.world), content.config.talk_turns_per_day]
     option = next(o for o in game.options() if o.id == f"call:{cid}")
-    assert (option.label, option.enabled) == ("求見韓鐵（今天已經談滿 3 輪，明天再來）", False)
+    moment = rules.day_ends_text(content, game.state.world)
+    assert (option.label, option.enabled) == (f"求見韓鐵（已經談滿 3 輪，{moment} 之後再來）", False)
     assert game.choose(f"call:{cid}") == ["（此刻無法這麼做。）"]
-    game.state.world.time += DAY  # 隔天重算
+    game.state.world.time = rules.day_ends(content, game.state.world)  # 換日重算（遊戲日跟著季長縮）
     assert next(o for o in game.options() if o.id == f"call:{cid}").enabled
 
 
