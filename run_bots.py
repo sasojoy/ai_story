@@ -7,13 +7,12 @@
 """
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 
 from tianxia import database
 from tianxia.bot_runner import BotRunner, TickReport, log_failure
-from tianxia.content import PROFILE_ENV, load_content, profile_line
+from tianxia.content import env_profile, load_content, profile_line
 from tianxia.ollama_client import OllamaClient
 
 ROOT = Path(__file__).parent
@@ -22,7 +21,7 @@ ROOT = Path(__file__).parent
 def main(ticks: int | None = None) -> None:
     """ticks=None 一直跑下去；給數字時跑完那麼多輪就結束（測試用）。
     某一輪出錯只記一筆（不含名號，見 bot_runner.log_failure）就繼續下一輪；Ctrl+C 乾淨結束。"""
-    profile = os.environ.get(PROFILE_ENV) or None  # 跟 server.py 用同一份設定覆寫檔
+    profile = env_profile()  # 跟 server.py 用同一份設定覆寫檔（TIANXIA_PROFILE）
     content = load_content(ROOT / "content", profile=profile)
     # 假人只在鎖外替首創的配方與絕學定名請模型取名（見 bot_runner._name_and_apply）；bot_naming 關著就不給 client
     client = OllamaClient.from_config(content.config) if content.config.bot_naming else None
