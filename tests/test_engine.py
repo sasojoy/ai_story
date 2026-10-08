@@ -1896,25 +1896,25 @@ def test_the_round_by_round_mix_line_never_reaches_the_scene_log(game):
     definition.rounds_per_act, definition.decisive_margin = 6, 51  # 打五回合還沒收場（戰局推到底也不算壓倒性）
     battle = _play_rounds(game, definition, 5)
     assert battle.phase == "active" and battle.round_number == 5
-    assert not any("（戰局 " in line or "強攻 " in line for line in battle.narrative_log)
+    assert not any("%（戰局 " in line or "強攻 0%" in line for line in battle.narrative_log)
     records = game.world.battle_rounds(battle.record_id)
     assert len(records) == 5 and all("（戰局 " in r.messages[0] and r.messages[0].startswith(("官軍：", "黃巾：")) for r in records)
     scene = game._battle_scene_text(battle, definition)
-    assert scene.count("對面上一回合") == 1 and "（戰局 " not in scene  # 最新一回合的比例還在，只寫一次
+    assert scene.count("對面上一回合") == 1 and "%（戰局 " not in scene  # 最新一回合的比例還在，只寫一次
     assert scene.count("強攻 ") == 1
 
 
-def test_a_modelled_narration_still_sees_the_mix_line(game):
-    """模型寫得出來的時候，吃的是完整的系統判定（含出招比例）；只有退回系統訊息時才把那一行拿掉。"""
+def test_a_round_is_resolved_without_asking_the_model(game):
+    """試玩回饋 2026-10-08：回合在行動鎖裡結算，以前每回合在鎖內等模型潤色，全服跟著等。現在模型叫得動也不叫，
+    場景記錄的是系統判定的句子，第一句說誰佔了上風、為什麼。"""
     battle, definition = _open_three_move_battle(game)
     definition.rounds_per_act = 6
     client = mock.Mock()
     client.chat_text.return_value = "戰場上煙塵四起。"
     with mock.patch.object(Game, "_quick_client", return_value=client):
         battle = _play_rounds(game, definition, 1)
-    assert battle.narrative_log[-1] == "戰場上煙塵四起。"
-    prompt = client.chat_text.call_args.args[0][1]["content"]
-    assert "（戰局 " in prompt
+    assert not client.chat_text.called and not client.chat_structured.called
+    assert battle.narrative_log[-1].startswith("這一回合")
 
 
 def test_a_resolved_round_with_only_the_mix_line_still_tells_the_player_something(game):
@@ -1926,7 +1926,7 @@ def test_a_resolved_round_with_only_the_mix_line_still_tells_the_player_somethin
         b, definition, "機", 10_000.0, random.Random(0), faction="huang", is_bot=True,
     ))
     msgs = game.choose("battle:act:guan_hold")
-    assert msgs == ["這一回合結算了。"]
+    assert len(msgs) == 1 and msgs[0].startswith("這一回合")  # 誰佔了上風、為什麼（試玩回饋 2026-10-08）
 
 
 def test_the_scene_reads_the_act_text_of_whoever_leads(game):
@@ -2149,28 +2149,62 @@ def test_with_factions_joining_the_other_side_directly_is_refused(content, game)
     assert game.world.get_battle().participants == {}
 
 
-def test_with_factions_a_free_agent_or_an_outside_faction_watches_and_keeps_playing(content, game):
+def test_with_factions_an_outside_faction_watches_and_keeps_playing(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
-        for faction in (None, "haoqiang"):
-            game.state.player.faction = faction
-            assert "act:explore" in ids(game)
-            assert not any(i.startswith("battle:") for i in ids(game))
-            scene = game.scene_text()
-            assert "測試決戰" in scene and "觀戰" in scene and "選擇陣營" not in scene
+        game.state.player.faction = "haoqiang"
+        assert "act:explore" in ids(game)
+        assert not any(i.startswith("battle:") for i in ids(game))
+        scene = game.scene_text()
+        assert "測試決戰" in scene and "觀戰" in scene and "選擇陣營" not in scene
 
 
-def test_with_factions_a_free_agent_can_leave_the_sidelines_once_the_battle_is_under_way(content, game):
+def test_with_factions_a_free_agent_can_enlist_with_either_army_for_this_battle_only(content, game):
+    """試玩回饋 2026-10-08：散人集結時可以臨時投效交戰的兩軍之一（不能投第三方），照常遊玩；只算這一場：
+    參戰名單記投效的那一方，自己照樣是散人、不進投靠名冊；集結時還能改投另一邊。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=1000.0)
+    with at(game, 1000.0):
+        assert game.state.player.faction is None
+        assert "act:explore" in ids(game)
+        assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
+        assert "臨時投效" in game.scene_text()
+        assert "你臨時投效了官軍" in game.choose("battle:enlist:guan")[0]
+        assert game.world.get_battle().participants[game.state.player.name].faction == "guan"
+        assert game.state.player.faction is None and game.world.faction_counts().get("guan", 0) == 0
+        opts = {o.id: (o.label, o.enabled) for o in game.options()}
+        assert opts["battle:enlist:guan"] == ("已臨時投效【官軍】", False) and opts["battle:enlist:huang"][1]
+        game.choose("battle:enlist:huang")  # 集結時改投
+        assert game.world.get_battle().participants[game.state.player.name].faction == "huang"
+        assert game.state.journal[0].title == "測試決戰・改投黃巾"
+
+
+def test_with_factions_a_free_agent_can_enlist_late_and_fight_this_round(content, game):
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        assert game._battle_status()[0].phase == "active"
+        assert "act:explore" in ids(game)  # 還沒投效：照常遊玩，不鎖在戰場上
+        assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
+        assert "這一回合就能出手" in game.choose("battle:enlist:guan")[0]
+        assert game.world.get_battle().participants[game.state.player.name].faction == "guan"
+        assert any(i.startswith("battle:act:guan_") for i in ids(game)) and "act:explore" not in ids(game)
+        assert game.state.player.faction is None
+
+
+def test_with_factions_a_free_agent_who_joined_a_faction_joins_its_side(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
     with at(game, definition.muster_seconds + 1):
         assert game._battle_status()[0].phase == "active"
-        assert "act:explore" in ids(game)
-        assert not any(i.startswith("battle:") for i in ids(game))
         game.choose("faction:guan")
         game.choose("faction:confirm")
         assert game.state.player.faction == "guan"
@@ -2370,7 +2404,7 @@ def test_the_armies_never_hear_anything_about_the_warlords(content, tmp_path):
     （人數、收穫、「地方上有人蠢蠢欲動」）也會讓這裡失敗。豪強的紀錄只留在回合紀錄（戰報底稿）裡。"""
     alone = _two_showdown_rounds(content, tmp_path / "alone.db", 0)
     crowded = _two_showdown_rounds(content, tmp_path / "crowded.db", 2)
-    assert any("（戰局 " in p for p in crowded["prompts"])  # 抓到的真的是決戰回合的判定
+    assert crowded["prompts"] == [] == alone["prompts"]  # 回合結算不叫模型（試玩回饋 2026-10-08）
     for what in ("replies", "prompts", "narrative_log", "scene"):
         assert crowded[what] == alone[what], what
     assert [r.messages[-1] for r in crowded["records"]] == ["趁亂搶地盤 1 人、保存實力 1 人。"] * 2  # 回合紀錄才留著
@@ -2610,11 +2644,12 @@ def test_the_battle_scene_shows_which_round_of_how_many(content, game):
         game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
     with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 開打
-        assert "【初探】（第 1／3 回合）雙方試探。" in game.scene_text()
+        assert "【初探】（第 1／3 回合・已送出 0／在場 2，最遲 2 分 0 秒後結算）雙方試探。" in game.scene_text()
         game.world.mutate_battle(lambda b: battle_instance.submit_action(b, "乙玩家", "huang_hold"))
+        assert "（第 1／3 回合・已送出 1／在場 2，" in game.scene_text()  # 在等人，不是壞了（試玩回饋 2026-10-08）
         game.choose("battle:act:guan_hold")  # 兩人都出手了：第 1 回合結算
         assert game.world.get_battle().round_number == 1
-        assert "【初探】（第 2／3 回合）雙方試探。" in game.scene_text()
+        assert "【初探】（第 2／3 回合・已送出 0／在場 2，" in game.scene_text()
 
 
 def test_the_fighting_menu_still_replaces_everything_once_the_muster_closes(content, game):
@@ -2663,8 +2698,8 @@ def test_muster_auto_closes_once_the_deadline_passes(content, game):
     assert status is not None and status[0].phase == "active"
 
 
-def _a_round_against_a_bot(content, game, narration=None):
-    """沈浪站官軍、一個機器人站黃巾；集結一過，沈浪送出固守。narration 給了就把回合敘事換成這一句。回傳之後的戰局。"""
+def _a_round_against_a_bot(content, game):
+    """沈浪站官軍、一個機器人站黃巾；集結一過，沈浪送出固守。回傳之後的戰局。"""
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
@@ -2672,8 +2707,7 @@ def _a_round_against_a_bot(content, game, narration=None):
         game.world.mutate_battle(
             lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
         )
-    narrate = mock.patch.object(battle_instance, "narrate_round", return_value=narration) if narration else contextlib.nullcontext()
-    with at(game, definition.muster_seconds + 1), narrate:
+    with at(game, definition.muster_seconds + 1):
         game._battle_status()  # 推進一次，確保集結已關閉、進入 active
         game.choose("battle:act:guan_hold")  # 人類送出，機器人在同一次 tick 裡自動補上，回合應該已經結算
     return game.world.get_battle()
@@ -2958,7 +2992,9 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
 
     entry = game.state.journal[0]  # 收場那一下出手的人當場就有
     assert (entry.title, entry.tag) == ("測試決戰・官軍大勝", "你站在官軍")
-    assert entry.lines == ["官軍獲勝。", "你出手 3 回合"]
+    assert entry.lines == [  # 結果之後寫勝負的關鍵（試玩回饋 2026-10-08）
+        "官軍獲勝。", "勝負的關鍵：第 1 回合，黃巾氣血耗損，漸漸撐不住官軍；第 3 回合，黃巾沒有人正面出陣迎戰，官軍放手壓了上去。", "你出手 3 回合",
+    ]
     assert entry.changes == ["寇亂 -20"]
     report = game.state.battles[0]
     assert report.kind == "showdown" and entry.battle_id == report.id
@@ -2970,7 +3006,8 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
     fallen.sync(start + 10)
     mine = fallen.state.journal[0]
     assert (mine.title, mine.tag) == ("測試決戰・官軍大勝", "你站在黃巾")
-    assert mine.lines == ["官軍獲勝。", "你出手 2 回合", "你在第 2 回合倒下，轉為觀戰"]
+    assert mine.lines[0] == "官軍獲勝。" and mine.lines[1].startswith("勝負的關鍵：")
+    assert mine.lines[2:] == ["你出手 2 回合", "你在第 2 回合倒下，轉為觀戰"]
     assert fallen.state.battles[0].kind == "showdown" and fallen.state.battles[0].opponent == "官軍"
 
     watcher.sync(start + 10)
@@ -5485,11 +5522,6 @@ def test_the_chronicle_lists_earlier_seasons_after_this_one(content, game):
     game.sync(2.0)
     text = game.chronicle_text()
     assert text.index("第 2 季（本季）") < text.index("### 第 1 季") < text.index("第一季的大事")
-
-
-def test_the_round_narration_is_kept_with_the_round(content, game):
-    battle = _a_round_against_a_bot(content, game, narration="一場惡戰。")
-    assert [r.narration for r in game.world.battle_rounds(battle.record_id)] == ["一場惡戰。"]
 
 
 # ── 同伴也拿經驗（試玩回饋 FB-002）────────────────────────────

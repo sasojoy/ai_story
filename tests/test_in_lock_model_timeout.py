@@ -2,8 +2,8 @@
 
 每個玩家的行動都在 WorldStateStore.action_lock() 裡做（SQLite 的 BEGIN IMMEDIATE），鎖拿著的時候全服玩家與假人都在等。
 鎖外的路徑（對話備料、開爐取名、隨口應對的評分與潤色）有自己的做法，鎖內還有幾處會叫模型：
-大事潤色、決戰回合敘事、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
-它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
+大事潤色、重複事件與重遊的點綴句、決戰自訂行動的評分（網頁走鎖外，見 server.battle_text；直接呼叫才在鎖內評）、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
+（決戰回合的敘事 2026-10-08 起不叫模型。）它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
 每一處都退回固定的文字，不丟例外。
 
 這裡把 OllamaClient 的兩個呼叫換成「記下當下那個 client 的 timeout、然後丟逾時」，一條路徑一條路徑地跑，
@@ -118,24 +118,6 @@ def _an_unrated_free_text_answer(game):
     assert any("你：「大喊官兵來了」" in m for m in msgs)
 
 
-def _a_round_narration(game):
-    definition = _install_battle_def(game.content)
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0):
-        game.choose("battle:join:guan")
-        game.world.mutate_battle(
-            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=100.0, is_bot=True)
-        )
-    with at(game, definition.muster_seconds + 1):
-        game._battle_status()
-        game.world.mutate_battle(lambda b: setattr(b.participants["機器人"], "neili", 1.0))  # 這一回合倒下：有一句系統訊息可退回
-        game.choose("battle:act:guan_hold")
-    battle = game.world.get_battle()
-    rounds = game.world.battle_rounds(battle.record_id)
-    # 潤色失敗就用系統判定的訊息本身（不含每回合那一行出招比例，那只留在回合紀錄），戰鬥不會卡住
-    assert rounds and "氣血耗盡" in rounds[-1].narration and "（戰局 " not in rounds[-1].narration
-
-
 def _a_custom_battle_action(game):
     definition = _install_battle_def_with_free_text(game.content)
     after_muster = _join_and_open(game.content, game, definition)
@@ -199,7 +181,6 @@ SCENARIOS = {
     "大事潤色（管理者定戰況）": _a_threshold_through_admin_set_trend,
     "大事潤色（隨口應對）": _a_threshold_through_a_free_text_answer,
     "隨口應對的鎖內評分": _an_unrated_free_text_answer,
-    "決戰回合敘事": _a_round_narration,
     "決戰自訂行動的評分": _a_custom_battle_action,
     "重複事件的點綴句": _a_repeated_event,
     "疾行重遊的點綴句與大事潤色": _a_revisit_by_dashing,

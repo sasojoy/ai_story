@@ -76,12 +76,14 @@ def _deliver(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, item) -> boo
 
 def world_fingerprint(
     season_number: int, phase: str, season, battle, *, rumor_id: int | None = None, chronicle_count: int | None = None,
-    paused: bool = False,
+    paused: bool = False, progress: tuple[int, int] | None = None,
 ) -> str:
     """大家都看得到的世界部分的指紋。時間本身不算（時鐘一直在走，靠慢速輪詢更新）。
     paused 是賽季時鐘有沒有暫停（SharedWorldState.paused_at 是不是 None）：暫停中每個人的選單都只剩一顆灰的，這是全服看得到的
     變化，要算；停了幾分鐘不算（畫面上的分鐘數每分鐘都在變，不能每分鐘叫醒一次全服）。
-    決戰只看階段、第幾回合與戰局（每個人的畫面都不一樣的那幾樣）；加入的人數、這一回合出手了幾個畫面上哪裡都看不到，不算。
+    決戰只看階段、第幾回合與戰局（每個人的畫面都不一樣的那幾樣），加上 progress：兩軍這一回合（已送出, 在場）的人數
+    （battle_instance.round_progress，呼叫端照內容算好給；畫面寫「已送出 X／在場 Y」，試玩回饋 2026-10-08）。豪強不算在裡面：
+    他們出手叫醒全服，兩軍就看得出豪強有動靜。
     rumor_id（最大的天下大事傳聞流水號）與 chronicle_count（江湖史則數）不給就從 season.rumors、season.chronicle 算；
     伺服器的看守給資料庫數好的（SqliteWorldStore.fingerprint_parts），不必把每一則讀回來。兩種給法算出同一個指紋。"""
     if rumor_id is None:
@@ -100,7 +102,7 @@ def world_fingerprint(
         "figures": {k: v.model_dump() for k, v in sorted(season.figures.items())},
         "rumor": rumor_id,
         "chronicle": chronicle_count,
-        "battle": None if battle is None else [battle.battle_id, battle.phase, battle.round_number, battle.trend],
+        "battle": None if battle is None else [battle.battle_id, battle.phase, battle.round_number, battle.trend, progress],
     }
     blob = json.dumps(public, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()

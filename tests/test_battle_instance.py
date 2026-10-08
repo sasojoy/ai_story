@@ -556,7 +556,8 @@ def test_a_side_that_is_all_gambling_gets_pushed_ten_and_the_gamble_still_counts
     bi.submit_action(battle, "乙", "huang_reckless", text="夜襲", success_rate=0)  # 一定失敗
     msgs = bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
     assert battle.trend == 70  # 三招推 +10，黃巾賭輸 −(−10)＝ +10，合起來再夾 0～100
-    assert battle.last_mix["huang"] == {} and "乙這一搏失敗了，付出了慘痛代價。" in msgs
+    assert battle.last_mix["huang"] == {}
+    assert "乙這一搏失敗了，付出了慘痛代價：黃巾的戰局倒退 10，自己氣血 -320。" in msgs  # 代價照引擎算的寫（試玩回饋 2026-10-08）
 
 
 def test_an_empty_side_is_pushed_ten_even_when_the_side_that_is_present_has_no_force(three):
@@ -579,7 +580,8 @@ def test_the_mix_line_stays_first_in_a_round_where_someone_falls(three):
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
     assert msgs[0].startswith("官軍：強攻 100%") and "（戰局 " in msgs[0]
-    assert "氣血耗盡" in msgs[1] and len(msgs) == 2
+    assert msgs[1] == "這一回合黃巾佔了上風（戰局 50→43）：黃巾的固守剋住了官軍的強攻。"  # 摘要接在比例後面
+    assert "氣血耗盡" in msgs[2] and len(msgs) == 3
 
 
 def test_the_mix_line_stays_first_when_the_act_changes(three):
@@ -590,7 +592,7 @@ def test_the_mix_line_stays_first_when_the_act_changes(three):
     bi.submit_action(battle, "甲", "guan_hold")
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, two, random.Random(0), now=1, tuning=BattleTuning())
-    assert msgs[0].startswith("官軍：強攻 0%・固守 100%") and msgs[-1] == "【鏖戰】犬牙交錯。" and len(msgs) == 2
+    assert msgs[0].startswith("官軍：強攻 0%・固守 100%") and msgs[-1] == "【鏖戰】犬牙交錯。" and len(msgs) == 3
 
 
 def test_without_the_mix_line_keeps_everything_else(three):
@@ -599,30 +601,11 @@ def test_without_the_mix_line_keeps_everything_else(three):
     bi.submit_action(battle, "甲", "guan_hold")
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
-    assert len(msgs) == 1 and bi.without_mix_line(battle, msgs) == []
+    assert len(msgs) == 2 and bi.without_mix_line(battle, msgs) == ["這一回合兩軍相持不下（戰局 50）。"]
     assert bi.without_mix_line(battle, ["第一句", "第二句"]) == ["第二句"]  # 這個回合有出招：丟掉第一句
     quiet = _two_fighters(three)  # 沒人出固定招：沒有那一行，什麼都不丟
-    assert bi.resolve_round(quiet, three, random.Random(0), now=1, tuning=BattleTuning()) == []
+    assert bi.resolve_round(quiet, three, random.Random(0), now=1, tuning=BattleTuning()) == ["這一回合兩軍相持不下（戰局 50）。"]
     assert bi.without_mix_line(quiet, ["某句"]) == ["某句"]
-
-
-def test_narrate_round_falls_back_to_the_given_text_not_the_raw_messages():
-    definition = BattleDef(
-        id="t", name="t", factions=[BattleFaction(id="a", name="甲"), BattleFaction(id="b", name="乙")],
-        acts=[BattleAct(id="a1", title="t", text="x", goal="g", options=[BattleOption(text="o", tag="x")])],
-        outcomes=[BattleOutcome(faction="a", title="甲勝", text="甲勝。")],
-    )
-    instance = bi.start_muster(definition, now=0)
-    msgs = ["官軍：固守 100%（戰局 +0）", "乙倒下了。"]
-    assert bi.narrate_round(None, definition, instance, msgs) == "\n".join(msgs)  # 沒給 fallback：照舊
-    assert bi.narrate_round(None, definition, instance, msgs, fallback=["乙倒下了。"]) == "乙倒下了。"
-    client = mock.Mock()
-    client.chat_text.side_effect = RuntimeError("連不上")
-    assert bi.narrate_round(client, definition, instance, msgs, fallback=[]) == ""
-    client = mock.Mock()
-    client.chat_text.return_value = "煙塵四起。"
-    assert bi.narrate_round(client, definition, instance, msgs, fallback=[]) == "煙塵四起。"
-    assert "（戰局 +0）" in client.chat_text.call_args.args[0][1]["content"]  # 模型看得到完整的判定
 
 
 def test_a_participant_without_scores_counts_as_zero(three):
@@ -1228,40 +1211,6 @@ def test_bot_choose_action_returns_none_for_a_non_participant(definition):
     assert bi.bot_choose_action(instance, definition, "幽靈", random.Random(0)) is None
 
 
-# ── LLM 敘事潤色（可選，失敗/無 client 就退回系統訊息）────────────
-
-
-def test_narrate_round_without_a_client_returns_the_raw_system_messages(definition):
-    instance = _active_battle(definition)
-    assert bi.narrate_round(None, definition, instance, ["甲選了穩紮穩打。"]) == "甲選了穩紮穩打。"
-
-
-def test_narrate_round_uses_the_llm_text_when_available(definition):
-    instance = _active_battle(definition)
-    client = mock.Mock()
-    client.chat_text.return_value = "戰場上煙塵四起。"
-    assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "戰場上煙塵四起。"
-
-
-def test_narrate_round_falls_back_when_the_llm_call_fails(definition):
-    instance = _active_battle(definition)
-    client = mock.Mock()
-    client.chat_text.side_effect = RuntimeError("連不上")
-    assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "甲選了穩紮穩打。"
-
-
-def test_narrate_round_writes_a_late_han_battle_in_traditional_characters(definition):
-    """戰況潤色是漢末兩軍對陣，不是武俠單挑；輸出轉成繁體（試玩時出現「劍尖相碰」這種武俠寫法）。"""
-    instance = _active_battle(definition)
-    client = mock.Mock()
-    client.chat_text.return_value = "战场上烟尘四起。"
-    text = bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"])
-    system = client.chat_text.call_args.args[0][0]["content"]
-    assert "漢末" in system and "兩軍對陣" in system and "單打獨鬥" in system
-    assert "武俠遊戲" not in system
-    assert text == "戰場上煙塵四起。"
-
-
 def test_the_free_text_judge_is_set_in_the_late_han(definition):
     instance = _active_battle(definition)
     client = mock.Mock()
@@ -1379,14 +1328,6 @@ def test_early_end_at_ninety_or_ten(showdown):
     assert played(58, 15, *down).phase == "ended"  # 10
     for trend, phase in ((85, "ended"), (84, "active"), (15, "ended"), (16, "active")):  # beta 那場：起點 50
         assert played(50, trend, *(up if trend > 50 else down)).phase == phase, trend
-
-
-def test_narrate_round_decodes_byte_tokens_the_model_left_in(definition):
-    """FB-075：長社火攻第一回合出現「旌旗仍<0xE5><0xB7><0x93>然屹立」，決戰場景列最近五段、玩家看得到。"""
-    instance = _active_battle(definition)
-    client = mock.Mock()
-    client.chat_text.return_value = "火光中，旌旗仍<0xE5><0xB7><0x8D>然屹立。"
-    assert bi.narrate_round(client, definition, instance, ["甲選了穩紮穩打。"]) == "火光中，旌旗仍巍然屹立。"
 
 
 # ── 決戰改版 5：地方豪強第三方（戰鬥系統第六節）──────────────────────────
@@ -1693,3 +1634,121 @@ def test_what_the_warlords_picked_only_reaches_the_round_record(with_third):
     assert not any("趁亂搶地盤" in m or "保存實力" in m for m in msgs)
     assert "趁亂搶地盤 1 人、保存實力 1 人。" in battle.rounds[-1].messages
     assert not any("趁亂搶地盤" in line or "保存實力" in line for line in battle.narrative_log)
+
+
+# ── 輸贏要看得懂、等待要看得出在等人（試玩回饋 2026-10-08）──────────────────
+
+
+def _summary(msgs):
+    return next(m for m in msgs if m.startswith("這一回合"))
+
+
+def test_the_round_summary_names_a_counter(three):
+    msgs = _fight(three, [("甲", "guan", "強攻"), ("乙", "huang", "固守")]).rounds[-1].messages
+    assert _summary(msgs) == "這一回合黃巾佔了上風（戰局 50→45）：黃巾的固守剋住了官軍的強攻。"
+
+
+def test_the_round_summary_names_the_numbers_when_nobody_counters(three):
+    picks = [(f"官{i}", "guan", "固守") for i in range(4)] + [("乙", "huang", "固守")]
+    msgs = _fight(three, picks).rounds[-1].messages
+    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→53）：官軍人多勢眾（4 人對 1 人）。"
+
+
+def test_the_round_summary_says_the_other_side_did_not_come_out(three):
+    battle = _two_fighters(three)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.fill_timed_out_actions(battle, three)  # 乙沒出手：被代選固守
+    battle.participants["乙"].away = True  # 這一回合走開了：不算出手
+    battle.round.pending_actions.pop("乙")
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→60）：黃巾沒有人正面出陣迎戰，官軍放手壓了上去。"
+
+
+def test_the_round_summary_counts_the_ones_who_never_gave_an_order(three):
+    battle = _two_fighters(three)
+    bi.submit_action(battle, "甲", "guan_raid")  # 奇襲剋固守：乙逾時被代為固守
+    bi.fill_timed_out_actions(battle, three)
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert _summary(msgs) == (
+        "這一回合官軍佔了上風（戰局 50→55）：官軍的奇襲剋住了黃巾的固守；黃巾有 1 人遲遲沒有下令，只能原地固守。"
+    )
+
+
+def test_the_round_summary_tells_a_weaker_side_from_a_worn_out_one(three):
+    battle = _two_fighters(three)
+    battle.participants["乙"].neili = 30  # 份量一樣，乙只剩一成氣血
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert _summary(msgs).endswith("：黃巾氣血耗損，漸漸撐不住官軍。")
+    stronger = _two_fighters(three)
+    stronger.participants["甲"].scores = {m: 90.0 for m in MOVES}
+    bi.submit_action(stronger, "甲", "guan_hold")
+    bi.submit_action(stronger, "乙", "huang_hold")
+    msgs = bi.resolve_round(stronger, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert _summary(msgs).endswith("：官軍的武藝更勝一籌。")
+
+
+def test_the_round_summary_counts_the_gambles_per_side(three):
+    gamble = three.model_copy(deep=True)
+    gamble.acts[0].options.append(BattleOption(text="放手一搏", tag="guan_reckless", faction="guan", free_text=True))
+    gamble.free_text_gamble = FreeTextGamble()
+    battle = _two_fighters(gamble)
+    battle.participants["甲"].neili_cap = battle.participants["甲"].neili = 10_000
+    bi.submit_action(battle, "甲", "guan_reckless", text="分兵埋伏", success_rate=0)  # 一定失敗
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
+    # 官軍唯一的人在賭：黃巾的固守推滿 10，再加上官軍賭輸倒退 10
+    assert _summary(msgs) == (
+        "這一回合黃巾佔了上風（戰局 50→30）：官軍沒有人正面出陣迎戰，黃巾放手壓了上去；官軍有人放手一搏失手，戰局倒退了 10。"
+    )
+    assert "甲這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 10，自己氣血 -320。" in msgs
+
+
+def test_a_battle_records_how_each_round_swung_and_names_the_key_rounds(three):
+    battle = _two_fighters(three)
+    for guan, huang in (("guan_strong", "huang_hold"), ("guan_raid", "huang_hold"), ("guan_raid", "huang_hold")):
+        bi.submit_action(battle, "甲", guan)
+        bi.submit_action(battle, "乙", huang)
+        bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
+    assert [s.round for s in battle.swings] == [1, 2, 3] and [s.delta for s in battle.swings] == [-5, 4, 4]
+    battle.trend = 53  # 官軍贏：挑往官軍推最多的兩回合，照回合先後寫
+    assert bi.outcome_reason(battle, three) == (
+        "勝負的關鍵：第 2 回合，官軍的奇襲剋住了黃巾的固守；第 3 回合，官軍的奇襲剋住了黃巾的固守。"
+    )
+    battle.trend = 50
+    assert bi.outcome_reason(battle, three) == ""  # 停在中線：不寫
+
+
+def test_the_outcome_reason_mentions_a_head_start_and_lands_in_the_closing_messages(three):
+    one = three.model_copy(deep=True)
+    one.rounds_per_act = 1  # 一回合就收場
+    battle = bi.start_muster(one, now=0, trend_start=58)
+    assert battle.trend_start == 58
+    for name, side in (("甲", "guan"), ("乙", "huang")):
+        bi.join_faction(battle, name, side, neili_cap=300, scores={m: 50.0 for m in MOVES})
+    bi.close_muster(battle, one, random.Random(0), now=0)
+    bi.submit_action(battle, "甲", "guan_raid")
+    bi.submit_action(battle, "乙", "huang_hold")
+    msgs = bi.resolve_round(battle, one, random.Random(0), now=1, tuning=BattleTuning())
+    assert battle.phase == "ended"
+    reason = "勝負的關鍵：開戰時官軍就佔了地利（戰局從 58 起算）；第 1 回合，官軍的奇襲剋住了黃巾的固守。"
+    assert battle.outcome_reason == reason and msgs[-1] == reason
+
+
+def test_a_locked_result_that_the_field_disagrees_with_gets_its_own_reason(three):
+    battle = bi.start_muster(three, now=0)
+    battle.trend = 60  # 戰場上官軍佔上風
+    assert bi.overruled_reason(battle, three, "huang", "guan") == "勝負的關鍵：戰場上官軍佔了上風，卻沒能扭轉大局。"
+    assert bi.overruled_reason(battle, three, "guan", "guan") == ""
+    assert bi.overruled_reason(battle, three, None, "guan") == ""
+
+
+def test_round_progress_counts_who_has_sent_among_those_present(three):
+    battle = _two_fighters(three)
+    battle.participants["丙"] = bi.BattleParticipant(name="丙", faction="guan", neili=1, neili_cap=1, away=True)
+    assert bi.round_progress(battle, three) == (0, 2)  # 離開大區的不算在場
+    bi.submit_action(battle, "甲", "guan_hold")
+    assert bi.round_progress(battle, three) == (1, 2)
+    battle.participants["乙"].eliminated = True
+    assert bi.round_progress(battle, three) == (1, 1)

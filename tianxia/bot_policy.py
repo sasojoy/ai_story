@@ -104,7 +104,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:"))  # 叛投：假人不換陣營（計畫甲）
+        and not o.id.startswith(("road:", "defect:", "battle:enlist:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
     ]
     if not options:
         return msgs

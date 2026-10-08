@@ -58,8 +58,8 @@ from starlette.concurrency import run_in_threadpool
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules, server_bots, team,
-    timetable,
+    battle_instance, companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
+    server_bots, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -425,9 +425,12 @@ def current_fingerprint() -> str:
     全服狀態、天下大事傳聞的最大流水號、江湖史的則數在同一個快照裡讀（fingerprint_parts）：分開讀的話，中間有人寫就會讀到
     一半舊一半新的指紋、白白廣播兩次；傳聞與江湖史也不讀回每一列，讓資料庫數，所以隨著一季的列數長大也不會變慢。"""
     shared, rumor_id, chronicle_count = open_world().fingerprint_parts()
+    battle = shared.active_battle
+    definition = CONTENT.battles.get(battle.battle_id) if battle is not None else None
+    progress = battle_instance.round_progress(battle, definition) if definition is not None and battle.phase == "active" else None
     return server_push.world_fingerprint(
-        shared.season_number, shared.season_phase(), shared.season, shared.active_battle,
-        rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None,
+        shared.season_number, shared.season_phase(), shared.season, battle,
+        rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None, progress=progress,
     )
 
 
@@ -766,6 +769,32 @@ def answer_event(game: Game, text: str) -> list[str] | None:
         if narration:
             act(game, lambda g: g.add_gamble_narration(outcome, narration), paused_ok=True)  # 擲骰已經做完了，只是插回一兩句
     return msgs
+
+
+def battle_text(game: Game, text: str) -> list[str]:
+    """決戰的放手一搏，跟 answer_event 一樣分三段（試玩回饋 2026-10-08：以前成功率在行動鎖裡評，最多等 in_lock_model_timeout 秒，
+    全服所有人的動作都跟著等）：
+      A（鎖內、很快）同步時間，問引擎這句話現在送不送得出去（Game.battle_text_request）；不行就回那一句、模型一次都不叫；
+      B（鎖外、很慢）請模型評成功率（model_call：佇列開著要排隊），預算是 Config.free_text_budget_seconds 扣掉 A 段與排隊花掉的，
+        模型失敗、太慢一律保底值；同一個人上一句還在評、或排太久沒輪到，照隨口應對擋下來、什麼都不送；
+      C（鎖內、很快）Game.submit_battle_custom_action 重驗還送得出去，才帶著評好的分送出（可能湊滿這一回合而結算）。"""
+    started, request = _open_request(game, lambda: game.battle_text_request(text))
+    if isinstance(request, list):
+        return request
+    act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
+    total = game.content.config.free_text_budget_seconds
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
+        return battle_instance.assess_action_success_rate(client, act_, request.faction_name, request.text)
+
+    rate = model_call(
+        game, score, fallback=battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
+        busy=BUSY_FREE_TEXT,
+    )
+    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -1241,7 +1270,6 @@ def api_main(request: Request):
 # 只有不寫紀錄的動作（例如管理者的操作）才用得到，前端拿它跳一句提示。
 MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
-    "battle_text": lambda g, b: g.submit_battle_custom_action(str(b.get("text", ""))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
@@ -1316,6 +1344,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
+    elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
+        msgs = battle_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
