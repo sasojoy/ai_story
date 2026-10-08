@@ -42,8 +42,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line, current_day,
-    ears_of, failed, fill_marks, free_text_rate, here_regions,
+    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
+    day_ends_text, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -788,7 +788,7 @@ class Game:
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
-        # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、今天談滿）、福緣也沒到、也不在召見的地點：
+        # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、這個遊戲日談滿）、福緣也沒到、也不在召見的地點：
         # 交友只會花 5 點體力換同一句打發，所以不給，這條路只剩不花體力的求見（下面）
         only_the_door = len(people) == 1 and ranks.summons_event(s, c) is None and self.socialize_is_futile()
         if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door:
@@ -803,10 +803,7 @@ class Game:
             elif not self._can_meet(cid):
                 opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望還差 {self._fame_gap(cid)}）"))  # 按下去走打發，見 _brush_off
             elif self._talks_left(cid) == 0:  # 求見一直都在：談滿了也留著、灰掉，說法跟求見名單一樣
-                opts.append(Option(
-                    id=f"call:{cid}", enabled=False,
-                    label=f"求見{ch.name}（今天已經談滿 {c.config.talk_turns_per_day} 輪，明天再來）",
-                ))
+                opts.append(Option(id=f"call:{cid}", enabled=False, label=f"求見{ch.name}（{self._talked_out_note()}）"))
             else:
                 opts.append(self._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
         if len(people) >= AUDIENCE_HALL_FIGURES:
@@ -878,7 +875,8 @@ class Game:
 
     def _road_task_options(self, j: Journey) -> list[Option]:
         """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
-        疾行一站一站立刻抵達，沒有。今天的收穫拿滿了（每天上限）的邊走邊想、路邊採集照樣按得下去，補充改寫「今天沒有收穫了」。"""
+        疾行一站一站立刻抵達，沒有。這個遊戲日的收穫拿滿了（每天上限，遊戲日跟著季長縮）的邊走邊想、路邊採集照樣按得下去，
+        補充改寫成拿滿了、換日的那一刻之後才有（待 joy 潤）。"""
         if j.mode == "dash":
             return []
         hints = {
@@ -888,8 +886,9 @@ class Game:
             "gather": "有機會撿到素材",
         }
         if not self._road_reward_due("task"):
+            moment = day_ends_text(self.content, self.state.world)
             for what in ROAD_REWARD_TASKS:
-                hints[what] = "今天沒有收穫了"  # 不留「心得 +3」：拿滿了就沒有
+                hints[what] = f"收穫拿滿了，{moment} 之後才有"  # 不留「心得 +3」：拿滿了就沒有
         done = self.state.player.leg_actions
         return [
             Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
@@ -969,7 +968,7 @@ class Game:
         notes: dict[str, str] = {}
         if "act:explore" in ids:
             legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
-            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend)
+            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, self._insight_blocked_until(loc))
         if "act:train" in ids:
             notes["act:train"] = self._train_line(loc)
         if "act:socialize" in ids:
@@ -985,6 +984,16 @@ class Game:
                 if option_id.startswith("call:") and cid in c.characters:
                     notes[option_id] = howto.call_line(c.characters[cid].name, self._can_meet(cid))
         return notes
+
+    def _insight_blocked_until(self, loc: Location) -> str | None:
+        """探索那一行的悟意境那一支，只因為這個遊戲日在這裡選錯過做法才拿掉時（這裡本來悟得到、比重不是 0）：換日的那一刻
+        （rules.day_ends_text）；其他時候 None。"""
+        c = self.content
+        if not sensing.missed_today(self.state, c, loc):
+            return None
+        if c.config.explore_mix_of(loc.tags).weights.get("insight", 0) <= 0 or not insights.explore_gives(loc, c):
+            return None
+        return day_ends_text(c, self.state.world)
 
     def _train_line(self, loc: Location) -> str:
         """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
@@ -1028,7 +1037,7 @@ class Game:
         - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
         - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
           （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
-        - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（今天還沒談滿、體力夠）；
+        - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（這個遊戲日還沒談滿、體力夠）；
           名望不夠的求見也按得下去，但那是被打發、不生成。玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
         其他選項都不呼叫對話模型。
         只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
@@ -1395,7 +1404,7 @@ class Game:
         msgs, own, by_model = sensing.finish(s, c, self.world, req, proposed, client)
         if msgs == [sensing.STALE]:
             return msgs
-        add_marks({sensing.mark_key(req.location): 1}, s)
+        add_marks({sensing.mark_key(req.location): 1}, s, c)
         if scene is not None and scene.flags_add:
             s.player.flags.update(scene.flags_add)
         if own is not None and by_model and self.world.claim_insight_first(
@@ -1918,8 +1927,8 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            if sensing.missed_today(self.state, loc):
-                return False  # 今天在這裡選錯過做法：這裡今天悟不出什麼（Q2）
+            if sensing.missed_today(self.state, self.content, loc):
+                return False  # 這個遊戲日在這裡選錯過做法：換日之前這裡悟不出什麼（Q2）
             return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
             return bool(self._wild_foes(loc))
@@ -2239,24 +2248,30 @@ class Game:
         return [f"{line}（{hint}）"]
 
     def _talks_used(self, companion_id: str) -> int:
-        """今天（遊戲日，跟福緣用同一個算法）已經跟這位人物聊了幾輪；紀錄是前幾天的就當沒聊過。"""
+        """這個遊戲日（rules.game_day，跟著季長縮）已經跟這位人物聊了幾輪；紀錄是別的號碼（前幾天的，或縮放之前照 24 小時
+        記的舊帳）就當沒聊過。"""
         record = self.state.player.talks_today.get(companion_id)
-        return record[1] if record and record[0] == current_day(self.state) else 0
+        return record[1] if record and record[0] == game_day(self.content, self.state.world) else 0
 
     def _talks_left(self, companion_id: str) -> int:
-        """今天（遊戲日）還能跟這位人物聊幾輪。"""
+        """這個遊戲日還能跟這位人物聊幾輪。"""
         return max(0, self.content.config.talk_turns_per_day - self._talks_used(companion_id))
 
+    def _talks_reopen(self) -> str:
+        """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_ends_text）。"""
+        return day_ends_text(self.content, self.state.world)
+
     def _count_talk(self, companion_id: str) -> list[str]:
-        """記一輪；今天聊滿了就自動告辭。"""
-        self.state.player.talks_today[companion_id] = [current_day(self.state), self._talks_used(companion_id) + 1]
+        """記一輪；這個遊戲日聊滿了就自動告辭，寫明什麼時候再來（待 joy 潤）。"""
+        self.state.player.talks_today[companion_id] = [game_day(self.content, self.state.world), self._talks_used(companion_id) + 1]
         if self._talks_left(companion_id) > 0:
             return []
         self.state.player.pending_companion = None
-        return [f"天色已晚，{self.content.characters[companion_id].name}起身送客，改日再敘。"]
+        name = self.content.characters[companion_id].name
+        return [f"{name}起身送客，改日再敘：要到 {self._talks_reopen()} 之後才能再來拜會。"]
 
     def _deep_interaction_target(self) -> str | None:
-        """這個地點此刻能深度對話的人物 id：見得到（名望或結識）、今天還沒聊滿，也沒在對你閉門不見（T4）；沒有就是 None。"""
+        """這個地點此刻能深度對話的人物 id：見得到（名望或結識）、這個遊戲日還沒聊滿，也沒在對你閉門不見（T4）；沒有就是 None。"""
         for companion_id in self._figures_here():
             if self._can_meet(companion_id) and self._talks_left(companion_id) > 0 and not self._snubbed_character(companion_id):
                 return companion_id
@@ -2267,7 +2282,7 @@ class Game:
         return len(self._figures_here()) >= AUDIENCE_HALL_FIGURES
 
     def _socialize_figure(self) -> str | None:
-        """交友會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、今天還沒談滿，見
+        """交友會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、這個遊戲日還沒談滿，見
         _deep_interaction_target）；兩位以上的地點交友只走福緣與地點事件，人物要按「求見」指名。"""
         if self._audience_hall():
             return None
@@ -2275,8 +2290,8 @@ class Game:
 
     def _audience_options(self) -> list[Option]:
         """求見的第二層選單：這裡每一位大勢人物一個選項，最後是永遠按得下去的「返回」。名望不夠（也沒結識過）的人
-        也按得下去，只是會被打發（見 _brush_off）；今天已經跟他談滿、或剛吃了敗仗閉門不見的人按不下去並寫明原因；
-        每天的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
+        也按得下去，只是會被打發（見 _brush_off）；這個遊戲日已經跟他談滿、或剛吃了敗仗閉門不見的人按不下去並寫明原因
+        （談滿的寫換日的那一刻）；每個遊戲日的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
         c = self.content
         cost = c.config.action_cost["socialize"]
         per_day = c.config.talk_turns_per_day
@@ -2290,20 +2305,26 @@ class Game:
             elif not self._can_meet(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {self._fame_gap(companion_id)}）"))  # 按下去走打發，見 _brush_off
             elif left == 0:
-                opts.append(Option(id=option_id, label=f"{ch.name}（今天已經談滿 {per_day} 輪，明天再來）", enabled=False))
+                opts.append(Option(id=option_id, label=f"{ch.name}（{self._talked_out_note()}）", enabled=False))
             else:
-                opts.append(self._cost_option(option_id, ch.name, cost, note=f"今天還能談 {left}/{per_day} 輪"))
+                opts.append(self._cost_option(option_id, ch.name, cost, note=f"還能談 {left}/{per_day} 輪"))
         opts.append(Option(id="call:back", label="返回"))
         return opts
 
+    def _talked_out_note(self) -> str:
+        """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」
+        ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。"""
+        return f"已經談滿 {self.content.config.talk_turns_per_day} 輪，{self._talks_reopen()} 之後再來"
+
     def _audience_intro(self) -> str:
-        """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物每天最多談幾輪，各算各的。"""
+        """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物各算各的，一個遊戲日最多談幾輪、什麼時候重新算起。"""
         here = self.content.locations[self.state.player.location].name
         per_day = self.content.config.talk_turns_per_day
         # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
         return (
-            f"{here}有好幾位人物，挑一位求見。每位人物每天最多談 {per_day} 輪，各算各的；名望不夠的會被打發，談滿的明天再來。"
+            f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，到 {self._talks_reopen()} 重新算起；"
+            "名望不夠的會被打發。"
             + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
         )
 
@@ -2329,8 +2350,8 @@ class Game:
                 return f"{ch.name}{SNUB_NOTE}。"
             if not self._can_meet(companion_id):
                 return self._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
-            if self._talks_left(companion_id) == 0:
-                return f"{ch.name}今日事忙，改日再來拜會吧。"
+            if self._talks_left(companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
+                return f"{ch.name}事忙，要到 {self._talks_reopen()} 之後才得空。"
         return "此地無人可訪，你只好悻悻離去。"
 
     def socialize_starts_dialogue(self) -> bool:
@@ -3710,24 +3731,26 @@ class Game:
         return spot.behind, spot.ahead
 
     def _road_rewards_used(self, kind: str, day: int | None = None) -> int:
-        """這一天（遊戲日，跟每天對話輪數同一個算法；不給就是今天）路上已經拿過幾次收穫；kind 是 "task"（路上小事）或
-        "sight"（見聞）。紀錄是別天的就當沒拿過。"""
+        """這一個遊戲日（rules.game_day，跟每天對話輪數同一個算法、跟著季長縮；不給就是此刻的）路上已經拿過幾次收穫；
+        kind 是 "task"（路上小事）或 "sight"（見聞）。紀錄是別的號碼就當沒拿過。"""
         record = self.state.player.road_rewards_today.get(kind)
-        return record[1] if record and record[0] == (day or current_day(self.state)) else 0
+        return record[1] if record and record[0] == (day or game_day(self.content, self.state.world)) else 0
 
     def _road_reward_due(self, kind: str, day: int | None = None) -> bool:
-        """這一天路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
+        """這一個遊戲日路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
         return self._road_rewards_used(kind, day) < self.content.config.road_reward_daily_cap
 
     def _count_road_reward(self, kind: str, day: int | None = None) -> None:
         """記一次真的給出去的收穫（沒撿到東西的採集不算）。"""
-        day = day or current_day(self.state)
+        day = day or game_day(self.content, self.state.world)
         self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
 
     def _road_think(self) -> list[str]:
-        """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。今天的收穫拿滿了就照樣想，只是沒有心得。"""
+        """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。這個遊戲日的收穫拿滿了就照樣想，只是沒有心得
+        （寫換日的那一刻，待 joy 潤）。"""
         if not self._road_reward_due("task"):
-            return ["你邊走邊想，今天想得夠多了，沒有新的心得。"]
+            moment = day_ends_text(self.content, self.state.world)
+            return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{moment} 之後才會再有）。"]
         p, amount = self.state.player, self.content.config.road_think_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         self._count_road_reward("task")
@@ -3763,10 +3786,10 @@ class Game:
 
     def _road_gather(self) -> list[str]:
         """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
-        今天的收穫拿滿了就不翻（也不擲骰）；撿到了才算一次收穫。"""
+        這個遊戲日的收穫拿滿了就不翻（也不擲骰，寫換日的那一刻，待 joy 潤）；撿到了才算一次收穫。"""
         s, c = self.state, self.content
         if not self._road_reward_due("task"):
-            return ["你留心路邊，今天已經撿夠了，沒再去翻。"]
+            return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{day_ends_text(c, s.world)} 之後再說）。"]
         if self.rng.random() >= c.config.road_gather_chance:
             return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
         kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}
@@ -3883,11 +3906,11 @@ class Game:
         """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
         見聞裡平均挑一則（最近看過的 road_sight_recent 則先排除，池子不夠才重複）。文字寫進這次抵達的紀錄，小收穫照慣例
         接在後面。寫好的文字、不呼叫模型，下線補算時照樣發生。機率是 0 或池子是空的時候連骰子都不擲。
-        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：抵達那一天（when，下線補算時是當時的
-        抵達時間）的 "sight" 收穫拿滿了，給銀兩、素材的見聞就不挑（文字寫的就是拿到東西），給心得的照寫文字、不給心得；
-        真的給了才算一次。沒有收穫的見聞不算次數。"""
+        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：抵達那一個遊戲日（when，下線補算時是當時的
+        抵達時間；遊戲日跟著季長縮，rules.game_day）的 "sight" 收穫拿滿了，給銀兩、素材的見聞就不挑（文字寫的就是拿到東西），
+        給心得的照寫文字、不給心得；真的給了才算一次。沒有收穫的見聞不算次數。"""
         s, c = self.state, self.content
-        day = int(when // DAY) + 1 if when is not None else current_day(s)
+        day = game_day(c, s.world, when)
         capped = not self._road_reward_due("sight", day)
         region = atlas.region_of(c, loc_id)
         area = region.id if region is not None else None

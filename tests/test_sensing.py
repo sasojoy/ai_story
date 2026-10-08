@@ -135,7 +135,7 @@ def test_a_wrong_method_ends_it_for_today(lake):
     _open(lake)
     msgs = _pick(lake, "剛")  # 湖邊只悟得到柔（水）與快（風）
     assert any("心浮氣躁" in m for m in msgs) and lake.state.player.sensing is None
-    assert sensing.missed_today(lake.state, lake.content.locations["lake"])
+    assert sensing.missed_today(lake.state, lake.content, lake.content.locations["lake"])
     assert not lake._explore_can("insight", lake.content.locations["lake"])
 
 

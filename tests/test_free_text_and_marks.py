@@ -184,12 +184,12 @@ def test_server_bots_never_pick_the_free_text_option(gamble_game):
 # ── B 地方痕跡 ───────────────────────────────────────────
 
 
-def test_marks_count_once_per_person_per_day(state):
-    add_marks({"town:棚屋": 2}, state)
-    add_marks({"town:棚屋": 2}, state)
+def test_marks_count_once_per_person_per_day(state, content):
+    add_marks({"town:棚屋": 2}, state, content)
+    add_marks({"town:棚屋": 2}, state, content)
     assert state.world.marks == {"town:棚屋": 2}
-    state.world.time += DAY
-    add_marks({"town:棚屋": 1}, state)
+    state.world.time += DAY  # 沒蓋章的季照 14 天：一個遊戲日剛好 24 小時
+    add_marks({"town:棚屋": 1}, state, content)
     assert state.world.marks == {"town:棚屋": 3}
 
 

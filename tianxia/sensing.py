@@ -1,7 +1,7 @@
 """有所感（悟意境設計第零節；企劃者 2026-10-06「甲案加乙案」）：探索落在悟意境那一支、這一處有場景時，不再直接悟到，
 而是跳出一張「有所感」的卡：
 
-1. 場景＋三四個做法（甲案）。選的做法屬性在這一處悟得到的意境裡才算選對；選錯什麼都沒悟到，這一處當天不能再悟（Q2）。
+1. 場景＋三四個做法（甲案）。選的做法屬性在這一處悟得到的意境裡才算選對；選錯什麼都沒悟到，這一處到換日之前不能再悟（Q2；遊戲日跟著季長縮）。
 2. 選對還要擲一次（Q3）：七成，悟性每點 ±3%，夾在 40～95；這一處悟成過的人越多越容易（模糊人數每一檔 +3%，最多 +9%，Q7）。
    沒擲中給一點心得（「差一點就抓到了」）。
 3. 擲中就進感悟狀態（乙案）：玩家一筆畫下心中的形。規則讀那一筆的屬性（glyph.py），跟做法的屬性用合併的規則結合
@@ -23,7 +23,7 @@ from . import glyph, insight_llm, insights, naming
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
-from .rules import current_day
+from .rules import day_ends_text, game_day
 from .state import GameState, Sensing
 from .world_state import WorldStateStore
 
@@ -33,8 +33,11 @@ LET_GO = "sense:let"  # 「順其自然」：不畫了，落回做法那個基�
 PREFIX = "sense:"
 FALLBACK_TRIES = 8  # 退路字表換名字最多試幾次（跟自己手上的意境、江湖上的名號撞名就換）
 STALE = "（那一刻已經過去了，心中的形也散了。）"
-# 選做法之前卡上先說選錯的代價（explain-1；待 joy 潤）：跟 choose 的規則一樣——選錯了這一處今天不再悟（missed_today）。序章草廬不寫（做法都對）
-MISS_WARNING = "選錯了做法，今天在這裡就悟不出了。"
+# 選做法之前卡上先說選錯的代價（explain-1；待 joy 潤）：跟 choose 的規則一樣——選錯了這一處到換日之前不再悟（missed_today）。
+# 換日照遊戲日（rules.game_day，跟著季長縮，企劃者 2026-10-08）：週末那一季一天不是 24 小時，所以不寫「今天」，寫換日的那一刻
+# （rules.day_ends_text：第一季是季曆的寫法，開關關著是「第N天 HH:MM」）。序章草廬不寫（做法都對）
+MISS_WARNING = "選錯了做法，這裡要到 {moment} 之後才悟得出。"
+MISS_LINE = "心浮氣躁，什麼也沒抓住。要到 {moment} 之後，這裡才悟得出東西。"  # 選錯了的那一句（待 joy 潤）
 
 
 def mark_key(location: str) -> str:
@@ -46,9 +49,15 @@ def can_sense(state: GameState, content: Content, loc: Location) -> bool:
     return bool(content.insight_scenes) and bool(insights.scenes_for(loc, content))
 
 
-def missed_today(state: GameState, loc: Location) -> bool:
-    """今天在這一處選錯過做法：探索不再落在悟意境那一支（Q2，換日就好）。"""
-    return state.player.sense_misses.get(loc.id) == current_day(state)
+def missed_today(state: GameState, content: Content, loc: Location) -> bool:
+    """這個遊戲日在這一處選錯過做法：探索不再落在悟意境那一支（Q2，換日就好；遊戲日跟著季長縮，rules.game_day）。
+    帳上記的是別的號碼（前幾天的，或縮放之前照 24 小時記的舊帳）就當沒選錯過。"""
+    return state.player.sense_misses.get(loc.id) == game_day(content, state.world)
+
+
+def miss_warning(state: GameState, content: Content) -> str:
+    """選做法之前卡上那一行：選錯了要到哪一刻之後才悟得出（此刻所在的遊戲日結束的那一刻）。"""
+    return MISS_WARNING.format(moment=day_ends_text(content, state.world))
 
 
 def start(state: GameState, content: Content, scene: InsightScene, rng: random.Random) -> list[str]:
@@ -116,7 +125,7 @@ def scene_text(state: GameState, content: Content) -> str:
             "此刻心中有一個形：一筆畫下來，手指離開就算畫完。"
         )
     # 選做法這一步：底下一小行（引用寫法，網頁畫成場景裡的小字淡色，比一整段內文矮）說選錯的代價；序章四景做法都對，不寫
-    warning = "" if scene.prologue else f"\n\n> {MISS_WARNING}"
+    warning = "" if scene.prologue else f"\n\n> {miss_warning(state, content)}"
     return f"**有所感・{scene.title}**\n\n{text}{warning}"
 
 
@@ -138,7 +147,7 @@ def menu(state: GameState, content: Content) -> list[tuple[str, str]]:
 
 
 def choose(state: GameState, content: Content, index: int, rng: random.Random) -> list[str]:
-    """選了一個做法：選錯什麼都沒有（這一處今天不再悟），選對擲骰；擲中進感悟狀態，沒擲中給一點心得。"""
+    """選了一個做法：選錯什麼都沒有（這一處到換日之前不再悟），選對擲骰；擲中進感悟狀態，沒擲中給一點心得。"""
     got = current(state, content)
     p = state.player
     if got is None or got[0].stage != "choose" or not 0 <= index < len(got[0].order):
@@ -148,8 +157,8 @@ def choose(state: GameState, content: Content, index: int, rng: random.Random) -
     msgs = [f"你{method.text}。"]
     if not scene.prologue and method.attribute not in insights.pool_attributes(loc, content):
         p.sensing = None
-        p.sense_misses[loc.id] = current_day(state)
-        return msgs + ["心浮氣躁，什麼也沒抓住。今天在這裡，是悟不出什麼了。"]
+        p.sense_misses[loc.id] = game_day(content, state.world)
+        return msgs + [MISS_LINE.format(moment=day_ends_text(content, state.world))]
     if rng.random() * 100 >= rate(state, content, loc):
         p.sensing = None
         amount = content.config.sense_miss_xinde

@@ -1144,7 +1144,7 @@ class Config(_Strict):
     road_gather_chance: float = Field(default=0.4, ge=0, le=1)  # 路邊採集：撿到一樣一階素材的機率
     road_sight_chance: float = Field(default=0.3, ge=0, le=1)  # 路上見聞：每抵達一站有幾成機會看見一則（路上設計第五節）
     road_sight_recent: int = Field(default=5, ge=0)  # 路上見聞：最近看過的幾則先排除，池子不夠才重複
-    road_reward_daily_cap: int = Field(default=6, ge=0)  # 路上小事、見聞的收穫每個遊戲日各前幾次才有
+    road_reward_daily_cap: int = Field(default=6, ge=0)  # 路上小事、見聞的收穫每個遊戲日各前幾次才有（遊戲日跟著季長縮：rules.day_seconds）
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
@@ -1453,7 +1453,7 @@ class Config(_Strict):
     server_max_players: int = 30  # 伺服器人數上限；第四階席次、之後的軍令陣營額度照它等比例換算
     rank4_seat_ratio: float = 0.008  # 每陣營第四階席次＝上限 × 這個比例（四捨五入，最少 1 席）
     talk_stamina: int = 2  # 跟大勢人物對話，每一輪扣的體力
-    talk_turns_per_day: int = 3  # 同一位大勢人物，每個遊戲日最多聊幾輪（只算玩家選的 talk:N）
+    talk_turns_per_day: int = 3  # 同一位大勢人物，每個遊戲日最多聊幾輪（只算玩家選的 talk:N；遊戲日跟著季長縮：rules.day_seconds）
     # 情誼到這裡，人物把本命武學傳給你（設計文件七.1，companion_agent._maybe_grant_signature_skill）。explain-1 從 companion_agent 的常數搬來：
     # 碰到才說的 h_bond 與玩法說明寫的數字讀它，不在句子裡寫死
     signature_affinity: int = Field(default=70, ge=0, le=100)
