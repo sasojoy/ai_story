@@ -21,9 +21,10 @@ from pathlib import Path
 
 import pytest
 
-from conftest import real_content
+from conftest import FixedRandom, real_content
 from tianxia import bot
 from tianxia.engine import FREE_TEXT_OPTION, Game
+from tianxia.team import WIN_TIERS
 from tianxia.models import Check, Choice, Condition, Content, Effect, Event, FreeTextChoice
 
 # 效果（檢定成功、打贏）也扣銀兩、但照規矩不擋的選項：（事件 id, 選項序號）→（價錢, 理由）。這幾則照舊夾在 0。
@@ -137,11 +138,14 @@ def test_a_gated_scene_never_loses_all_its_options(real):
 
 
 def test_a_player_short_of_the_price_does_not_see_it(real):
-    """每一個擋好的選項：差一兩就不出現、從舊的選單硬按也被拒絕（什麼都沒扣）；錢剛好夠就出現，付完剛好歸零。"""
+    """每一個擋好的選項：差一兩就不出現、從舊的選單硬按也被拒絕（什麼都沒扣）；錢剛好夠就出現，付完剛好歸零。
+    成功（打贏）才付錢的檢定、仗也擋得（審查 Minor 1：白名單上那幾則哪天改成擋的）：檢定照必成擲（失手不付這筆錢）；
+    仗的勝負照真的打，打贏才看付完是不是歸零。"""
     game = _game(real)
     problems = []
     for eid, i, price in gated(real):
         option = f"choice:{i}"
+        choice = real.events[eid].choices[i]
         if option in _scene(game, eid, price - 1):
             problems.append(f"{eid} {option}：差一兩還看得到")
         if game.choose(option) != ["（此刻無法這麼做。）"] or game.state.player.stats["silver"] != price - 1:
@@ -150,8 +154,13 @@ def test_a_player_short_of_the_price_does_not_see_it(real):
             problems.append(f"{eid} {option}：被拒絕之後事件不見了")
         if option not in _scene(game, eid, price):
             problems.append(f"{eid} {option}：錢剛好夠卻看不到")
-        game.choose(option)
-        if game.state.player.stats["silver"] != 0:
+        rng, game.rng = game.rng, FixedRandom(0.0) if choice.check is not None else game.rng  # 檢定必成：成功才付的那筆一定付
+        try:
+            game.choose(option)
+        finally:
+            game.rng = rng
+        won = choice.combat is None or (game.state.journal and game.state.journal[0].tag in WIN_TIERS)
+        if won and game.state.player.stats["silver"] != 0:
             problems.append(f"{eid} {option}：付了 {price} 兩之後剩 {game.state.player.stats['silver']}")
     assert not problems, "\n".join(problems)
 
