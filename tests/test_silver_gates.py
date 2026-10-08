@@ -103,7 +103,11 @@ def _scene(game: Game, event_id: str, silver: int) -> list[str]:
 def test_every_paying_choice_is_gated_or_whitelisted(real):
     """選了就付錢的選項都要擋（min_stats.silver ≥ 價錢）；不擋的要在 NOT_GATED 寫理由。新寫的付錢選項忘了擋，這裡就紅。"""
     missing = ungated(real)
-    assert not missing, "\n".join(f"{eid} 選項 {i}：付 {price} 兩，門檻 {gate}" for eid, i, price, gate in missing)
+    assert not missing, "\n".join(
+        [f"{eid} 選項 {i}：付 {price} 兩，門檻 {gate}" for eid, i, price, gate in missing]
+        + ['怎麼修：在那個選項加上 "condition": {"min_stats": {"silver": 價錢}}（價錢就是它 effect 扣的銀兩）；'
+           "要是懲罰、或檢定成功（打贏）才付的錢，照規矩不擋，就寫進這個檔的 NOT_GATED，附一句理由。"]
+    )
 
 
 def test_this_file_names_every_event_file():
