@@ -26,7 +26,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import calendar, database, rules, server_bots  # noqa: E402
+from tianxia import calendar, database, rules, server_bots, team  # noqa: E402
 from tianxia.bot_runner import BotRunner, TickReport  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
@@ -89,7 +89,25 @@ def run_season(
     weekly: dict[int, dict[str, int]] = {}
     orders_done: dict[str, tuple[str, int]] = {}
     geju_first: dict[int, tuple[int, str]] = {}  # 割據第一次到 85、到 100 是第幾週、什麼時候（曆法的時間章）
-    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}):
+    raided: Counter = Counter()  # 截殺（Config.raid）：被截殺的次數、輸的次數、失的銀兩與氣血，照名號（輸出不列名號）
+    raid_losses: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])  # 名號 → [輸幾場, 失銀, 失氣血]
+    raid_tiers: Counter = Counter()
+    real_record, real_spoils = Game._raid_record, Game._raid_spoils
+
+    def count_record(self, result, rival, rival_power, rival_game, spoils, *, attacker):
+        if not attacker:
+            raided[self.state.player.name] += 1
+            raid_tiers["守方勝" if result.tier in team.WIN_TIERS else "平手" if spoils is None else "攻方勝"] += 1
+        return real_record(self, result, rival, rival_power, rival_game, spoils, attacker=attacker)
+
+    def count_spoils(self, loser):
+        spoils = real_spoils(self, loser)
+        row = raid_losses[loser.state.player.name]
+        row[0], row[1], row[2] = row[0] + 1, row[1] + spoils.lost, row[2] + spoils.hp
+        return spoils
+
+    with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}), \
+            mock.patch.object(Game, "_raid_record", count_record), mock.patch.object(Game, "_raid_spoils", count_spoils):
         world, characters = open_world(db_path), open_characters(db_path)
         world.seed_first_season(content)
         world.open_season(content, now[0])
@@ -146,6 +164,15 @@ def run_season(
         "stuck": not season.ended,
         "bots": {side: sum(1 for s in everyone if s.player.bot is not None and s.player.faction == side) for side in SIDES},
     }
+    purse = {st.player.name: st.player.stats.get("silver", 0) for st in everyone}
+    top = max(raided, key=lambda n: (raided[n], raid_losses[n][1]), default=None)
+    worst = max(raid_losses, key=lambda n: raid_losses[n][1], default=None)
+    result["raids"] = {
+        "total": sum(raided.values()), "tiers": dict(raid_tiers), "victims": len(raided),
+        "median": statistics.median(raided.values()) if raided else 0,
+        "top": None if top is None else (raided[top], *raid_losses[top], purse.get(top, 0)),
+        "worst": None if worst is None else (raided[worst], *raid_losses[worst], purse.get(worst, 0)),
+    }
     result["checks"] = checks(result, content)
     return result
 
@@ -171,6 +198,12 @@ def summary(seed: int, r: dict) -> str:
     lines.append("  軍令達成（週:道）：" + "　".join(
         f"{SIDE_NAMES[s]} " + (" ".join(f"{w}:{n}" for w, n in weeks.items()) or "0") for s, weeks in r["orders"].items()))
     lines.append("  升第 2 階：" + "、".join(f"{SIDE_NAMES[s]} {n}" for s, n in r["promoted"].items()))
+    raids = r["raids"]
+    def victim(row):
+        return "沒有" if row is None else f"被截殺 {row[0]} 次、輸 {row[1]} 次、失銀 {row[2]} 兩、失氣血 {row[3]}（季末身上 {row[4]} 兩）"
+    lines.append(f"  截殺：共 {raids['total']} 場（" + "、".join(f"{k} {v}" for k, v in sorted(raids["tiers"].items()))
+                 + f"）；被截殺過的 {raids['victims']} 人，每人中位數 {raids['median']} 次")
+    lines.append(f"    被截殺最多的人：{victim(raids['top'])}；失銀最多的人：{victim(raids['worst'])}")
     c = r["checks"]
     medians = "、".join(f"{FRONT_NAMES[f]} {m}" for f, m in c["medians"].items())
     lines.append(f"  驗收：第 6 週前沒有決定性勝利 {'✔' if c['no_early_decisive'] else '✘'}；"

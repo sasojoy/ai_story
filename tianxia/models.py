@@ -1136,6 +1136,32 @@ class Spar(_Strict):
     per_pair_day: int = Field(default=2, ge=1)
 
 
+class Raid(_Strict):
+    """截殺（敵對陣營的玩家對打，企劃者 2026-10-08 在決策卡選「有限制地開」：「只能打敵對陣營、新手期和城裡不能打，
+    輸了損失一點銀兩和氣血，同一人有冷卻」）。玩家卡上的一顆鈕，不必對方同意，對方下線、在忙也照打（他在「此地還有」的名單上就行）。
+    雙方各用本人的威力（同切磋：同伴、部下不上場，比的是兩個人；也免得帶滿同伴的人變成路霸），照 encounter 的單次判定。
+
+    數字的依據（損失要小，不能讓人被打到玩不下去）：
+    - 發起的人花 stamina（10）體力：比一次遊歷（6）貴，截殺不能比遊歷更划算地刷。
+    - 輸的一方失 silver_share（5%）的銀兩、最多 silver_cap（15）兩，贏的拿走其中 take_share（一半，進位）；其餘散落。
+      週末設定每天大約收 100 兩，最多 15 兩約一兩場遊歷；照比例扣，身上越少扣得越少，永遠扣不光。
+    - 輸的一方扣氣血上限的 hp_loss（8%），不變成內傷（自己會回，不必花錢療傷）；遊歷落敗是 30%、其中兩成變內傷。
+    - 平手（僵持）誰都不失什麼，發起的人的體力照付。
+    - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（1 小時）之內誰都不能再截殺他，
+      不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
+    - 贏的一方記一點本季貢獻（contrib_per_push × win_contrib_push）：截殺是替陣營做事，但比推大勢一點還少，不會變成升階的捷徑。
+    時間都是世界秒（跟邀請的逾時同一套）。"""
+
+    stamina: int = Field(default=10, ge=0)
+    silver_share: float = Field(default=0.05, ge=0, le=1)
+    silver_cap: int = Field(default=15, ge=0)
+    take_share: float = Field(default=0.5, ge=0, le=1)
+    hp_loss: float = Field(default=0.08, ge=0, le=1)
+    pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)
+    shield_seconds: float = Field(default=3600, ge=0)
+    win_contrib_push: int = Field(default=1, ge=0)
+
+
 class ShowdownPay(_Strict):
     """全服決戰的軍餉（試玩回饋 2026-10-08，Joy：「參加就會有基本的軍餉獎勵，獲勝有更多」）。參戰者收場後各自補戰報時拿
     （Game._file_showdown，下線的人回來補，只發一次），這一季打的才發；沒打完收兵的不發。
@@ -1217,6 +1243,7 @@ class Config(_Strict):
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
+    raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人
