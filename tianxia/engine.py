@@ -736,12 +736,10 @@ class Game:
             return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
         if battle_status is not None and not self._watching_battle(*battle_status):
             battle, definition = battle_status
-            if battle.phase == "muster":
+            if not self._fighting(battle, definition):
                 # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
-                # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場
-                return self._battle_options(battle, definition) + self._everyday_options(odds)
-            if self._free_agent() and self.state.player.name not in battle.participants:
-                # 開打了還沒投效的散人：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
+                # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場。
+                # 開打了還沒投效的散人也一樣：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
                 return self._battle_options(battle, definition) + self._everyday_options(odds)
             battle_menu = self._battle_options(battle, definition)
             if self.state.player.resting_since is not None:
@@ -3141,6 +3139,14 @@ class Game:
         if me is not None:
             return me.away
         return not self._at_battle(definition)
+
+    def _fighting(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
+        """開打了、自己在場上打得了這一場：戰鬥選單取代整份選單（options），戰場取代整個場景（scene_text）。兩邊都問這一個，
+        選單照常給的人場景上就看得到自己眼前的事。不是的人：集結中、只能觀戰（_watching_battle）、開打了還沒投效的散人
+        （FB-109：以前選單照給、場景卻只剩戰場，事件內文、有所感、人物的回話、投靠的確認都看不到）。"""
+        if battle.phase == "muster" or self._watching_battle(battle, definition):
+            return False
+        return not (self._free_agent() and self.state.player.name not in battle.participants)
 
     def _sides(self, definition: BattleDef) -> dict[str, str]:
         """這場決戰能站的每一方（id → 名字）：交戰的兩軍，加上第三方（戰鬥系統第六節；名字照劇本的陣營）。"""
@@ -6359,14 +6365,14 @@ class Game:
         return got
 
     def scene_text(self) -> str:
-        """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
-        地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
+        """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
+        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
         battle_status = self._battle_status(tick=False)
         if battle_status is None:
             return self._own_scene_text()
         battle_scene = self._battle_scene_text(*battle_status)
-        if not self._watching_battle(*battle_status) and battle_status[0].phase != "muster":
-            return battle_scene  # 開打後戰場取代整個畫面；集結時照常遊玩，自己眼前的事接在底下
+        if self._fighting(*battle_status):
+            return battle_scene  # 開打後在場上的人：戰場取代整個畫面；其餘照常遊玩，自己眼前的事接在底下（同 options）
         return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
 
     def _own_scene_text(self) -> str:

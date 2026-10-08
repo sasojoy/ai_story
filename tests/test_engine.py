@@ -2225,6 +2225,62 @@ def test_a_watcher_still_sees_their_own_event_below_the_battle(content, game):
     assert "測試決戰" in scene and event.title in scene
 
 
+def _drifter_busy_with(game, busy):
+    """散人眼前有事（FB-109 的四種）：擺好，回傳那件事寫在場景上、一定看得到的一句。"""
+    from tianxia import sensing
+    from tianxia.models import InsightScene, SenseMethod
+
+    s, c = game.state, game.content
+    if busy == "event":
+        s.pending_event = "drunk"
+        return c.events["drunk"].text.split("\n")[0][:12]
+    if busy == "faction":
+        game.choose("faction:guan")  # 投靠的確認：「這一季不能改投」與三方人數寫在場景上
+        return "投靠官軍"
+    if busy == "talk":
+        s.player.pending_companion = "mate"
+        s.player.dialogue_history["mate"] = [{"role": "assistant", "content": "久仰大名，今日總算見著了。"}]
+        return "久仰大名，今日總算見著了。"
+    scene = InsightScene(
+        id="town_bell", title="鐘聲", text="鐘聲從城樓上盪開。", tags=["城鎮"], hints=["慢"],
+        methods=[SenseMethod(attribute=a, text=t) for a, t in (("柔", "聽聲"), ("剛", "敲鐘"), ("快", "追聲"), ("慢", "靜坐"))],
+    )
+    c.insight_scenes = {scene.id: scene}
+    sensing.start(s, c, scene, random.Random(0))
+    return "有所感・鐘聲"
+
+
+@pytest.mark.parametrize("busy", ["event", "faction", "talk", "sense"])
+def test_with_factions_a_drifter_who_has_not_enlisted_sees_their_own_scene_once_the_battle_runs(content, game, busy):
+    """FB-109：開打後人在決戰的大區、還沒臨時投效的散人照常遊玩（投效兩顆接在平常的選單前面），場景也要跟集結期、觀戰的人一樣：
+    戰場底下接自己眼前的事。以前開打後場景只回戰場，事件內文、有所感卡、人物的回話、投靠的確認都看不到，只剩按鈕。
+    （現有的場景測試只看集結期；這裡是開打後。）"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        assert game._battle_status()[0].phase == "active"
+        line = _drifter_busy_with(game, busy)
+        assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
+        battle, _, own = game.scene_text().partition("\n\n---\n\n")
+        assert "測試決戰" in battle and "回合" in battle
+        assert line in own and "測試決戰" not in own
+
+
+def test_with_factions_a_drifter_who_enlisted_after_the_start_sees_only_the_battle(content, game):
+    """投效了（開打後才投效的也一樣）就是場上的人：選單整份換成三招，整個畫面就是戰場（FB-109 只改還沒投效的散人）。"""
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    game.world.start_battle(definition, now=0.0)
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=100.0))
+    with at(game, definition.muster_seconds + 1):
+        game._battle_status()
+        game.choose("battle:enlist:guan")
+        scene = game.scene_text()
+    assert "測試決戰" in scene and "---" not in scene and game.location_text() not in scene
+
+
 def test_with_factions_a_latecomer_joins_their_own_side(content, game):
     _install_factions(content)
     definition = _install_battle_def(content)
