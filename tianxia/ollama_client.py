@@ -121,6 +121,42 @@ def _ensure_required_present(data: dict, response_model: type, required: list[st
             raise ValueError(f"LLM 回應缺少必要欄位 {name!r}，疑似被截斷")
 
 
+# 日文假名（FB-104：董卓的回話裡出現過「這酒い好！」）：平假名、片假名（含擴充與半形）。
+# 不含片假名的中點「・」（U+30FB）與半形中點（U+FF65）：遊戲裡的標題、時刻一直用「・」，模型照抄是對的
+KANA = re.compile(r"[ぁ-ゟ゠-ヺー-ヿㇰ-ㇿｦ-ﾟ]")
+
+
+def has_kana(text: str) -> bool:
+    return bool(KANA.search(text or ""))
+
+
+class ModelSpokeKana(ValueError):
+    """模型回的文字夾了日文假名：當成這一次模型呼叫失敗（FB-104），各處照原本失敗的路走——chat_structured 會重問的照樣重問一趟，
+    不重問的（chat_text、鎖內的複本）呼叫端走退路的固定文字。不偷偷把假名拿掉：拿掉之後的句子常常不通，看起來像模型正常回答
+    （CLAUDE.md「保底值會把模型壞了偽裝成模型給了中庸的答案」）。是 ValueError 的子類，chat_structured 的重問接得到。
+    模型本身沒壞（有回、只是不能用），所以鎖內的 InLockClient 不因為它把這次拿鎖的額度用完、也不打開全服斷路器。"""
+
+
+def _strings(value: Any):
+    """結構化回答裡的每一段字（dict、list、pydantic 物件一路往下找）。"""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _strings(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            yield from _strings(v)
+    elif hasattr(value, "model_dump"):
+        yield from _strings(value.model_dump())
+
+
+def reject_kana(value: Any) -> None:
+    """回答（字串或結構化）裡有任何一段夾了假名就丟 ModelSpokeKana。"""
+    if any(has_kana(s) for s in _strings(value)):
+        raise ModelSpokeKana("模型的回答夾了日文假名")
+
+
 class ModelGaveUp(RuntimeError):
     """這一次拿鎖期間已經有一次模型呼叫逾時或失敗了：之後的呼叫不送出去，各處照例走退路的固定文字。"""
 
@@ -158,6 +194,8 @@ class InLockClient:
             raise ModelGaveUp("這一次拿鎖期間已經有一次模型呼叫失敗，這一次不再叫模型")
         try:
             return getattr(self._client, method)(*args, **kwargs)
+        except ModelSpokeKana:  # 模型有回、只是那一句不能用（FB-104）：這一步走退路，額度與斷路器不動
+            raise
         except Exception:
             self._budget.gave_up = True
             raise
@@ -265,7 +303,9 @@ class OllamaClient:
         payload = self._build_payload(messages, temperature, num_predict=num_predict)
         res = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
         res.raise_for_status()
-        return res.json().get("message", {}).get("content", "")
+        content = res.json().get("message", {}).get("content", "")
+        reject_kana(content)  # 夾了日文假名：當成失敗（FB-104），呼叫端照例不插那一句
+        return content
 
     def chat_structured(
         self, messages: list[dict[str, str]], response_model: Type[T], temperature: float = 0.8,
@@ -287,17 +327,21 @@ class OllamaClient:
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
             _ensure_required_present(data, response_model, required)
-            return response_model.model_validate(data)
+            result = response_model.model_validate(data)
+            reject_kana(result)  # 夾了日文假名：當成這一趟失敗（FB-104），底下照格式不對一樣重問一趟
+            return result
         except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
                 raise self._model_missing()
             if not self.retry:  # 行動鎖內的複本：不重問，鎖最多被這一趟佔住 timeout 秒；例外照原樣丟給呼叫端走退路
                 raise
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 re-prompt 重試...")
-            retry_messages = list(messages) + [{
-                "role": "user",
-                "content": "【錯誤提醒】你上一次輸出的內容無法解析為合法的 JSON 或不符 Schema。請務必且僅輸出符合 Schema 的合法 JSON 物件，嚴禁 Markdown 標記或額外文字。",
-            }]
+            reminder = (
+                "【錯誤提醒】你上一次的回答夾了日文假名。請全部用繁體中文重寫，照樣只輸出符合 Schema 的合法 JSON 物件。"
+                if isinstance(e, ModelSpokeKana) else
+                "【錯誤提醒】你上一次輸出的內容無法解析為合法的 JSON 或不符 Schema。請務必且僅輸出符合 Schema 的合法 JSON 物件，嚴禁 Markdown 標記或額外文字。"
+            )
+            retry_messages = list(messages) + [{"role": "user", "content": reminder}]
             retry_payload = self._build_payload(retry_messages, temperature, num_predict=num_predict, json_schema=schema)
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
@@ -306,4 +350,6 @@ class OllamaClient:
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
             _ensure_required_present(data, response_model, required)
-            return response_model.model_validate(data)
+            result = response_model.model_validate(data)
+            reject_kana(result)  # 重問那一趟也夾了：丟給呼叫端走退路
+            return result
