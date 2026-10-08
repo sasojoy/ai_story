@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Type, TypeVar
 
 import requests
 from pydantic import BaseModel, ValidationError
+from pydantic_core import PydanticUndefined
 
 if TYPE_CHECKING:
     from .models import Config
@@ -121,6 +122,84 @@ def _ensure_required_present(data: dict, response_model: type, required: list[st
             raise ValueError(f"LLM 回應缺少必要欄位 {name!r}，疑似被截斷")
 
 
+# 日文假名（FB-104：董卓的回話裡出現過「這酒い好！」）：平假名、片假名（含擴充與半形）。
+# 不含片假名的中點「・」（U+30FB）與半形中點（U+FF65）：遊戲裡的標題、時刻一直用「・」，模型照抄是對的
+KANA = re.compile(r"[ぁ-ゟ゠-ヺー-ヿㇰ-ㇿｦ-ﾟ]")
+KANA_RUN = re.compile(KANA.pattern + "+")  # 連在一起的一段假名（「さくら」「ああ」）
+
+# 結構化回答裡從來不上畫面的欄位（評成功率的 reasoning）：夾了假名也不管（審查 I1）
+HIDDEN_FIELDS = frozenset({"reasoning"})
+
+
+def has_kana(text: str) -> bool:
+    return bool(KANA.search(text or ""))
+
+
+class ModelSpokeKana(ValueError):
+    """模型回的文字夾了日文假名：當成這一段字失敗（FB-104；審查 I1 縮到「只有那一段」）。
+    - chat_text：那一段就是整個回答，丟這個例外，呼叫端走退路的固定文字（點綴不插句、潤色用 effect 原文）；
+    - chat_structured：只看會上畫面的欄位（HIDDEN_FIELDS 不看）。夾了假名的欄位是這個回答的主體（必填欄位，或回答的類別
+      在 KANA_ESSENTIAL 寫明的，例如對話的敘事與選項、取的名字）才丟這個例外——會重問的（鎖外）照樣重問一趟、提醒用繁體中文；
+      其他欄位（放手一搏的兩版劇情、大場面的兩版過程、名字的說明）只把那一欄清成預設值（空字串），呼叫端照例用固定文字，
+      **數字（成功率、優勢）與其他乾淨的欄位照用、不重問**——不然評分就退回保底 40，模型壞了又偽裝成中庸的答案（CLAUDE.md）。
+    - 玩家自己寫的假名（隨口應對、放手一搏的做法、名號）會出現在送出去的 messages 裡：回答裡跟它一模一樣的一段假名是照抄，不算。
+    不偷偷把假名從句子中間拿掉：拿掉之後的句子常常不通，看起來像模型正常回答。是 ValueError 的子類，chat_structured 的重問接得到。
+    模型本身沒壞（有回、只是不能用），所以鎖內的 InLockClient 不因為它把這次拿鎖的額度用完、也不打開全服斷路器。"""
+
+
+def _strings(value: Any):
+    """結構化回答裡的每一段字（dict、list、pydantic 物件一路往下找）。"""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _strings(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            yield from _strings(v)
+    elif hasattr(value, "model_dump"):
+        yield from _strings(value.model_dump())
+
+
+def echoed_kana(messages: list[dict[str, str]] | None) -> frozenset[str]:
+    """送出去的 messages 裡出現過的每一段假名：玩家自己寫的做法、名號（審查 I1）。回答裡一模一樣的一段是照抄，不算模型說日文。"""
+    return frozenset(run for m in messages or () for run in KANA_RUN.findall(str(m.get("content", ""))))
+
+
+def model_kana(value: Any, echoed: frozenset[str] = frozenset()) -> bool:
+    """這一段（字串或結構化）裡有沒有模型自己寫的假名：一段連續的假名跟送出去的某一段一模一樣才算照抄（「さくら」可以，
+    「さくらは」不行）。"""
+    return any(run not in echoed for s in _strings(value) for run in KANA_RUN.findall(s))
+
+
+def reject_kana(value: Any, echoed: frozenset[str] = frozenset()) -> None:
+    """回答（字串或結構化）裡有任何一段夾了模型自己寫的假名就丟 ModelSpokeKana。"""
+    if model_kana(value, echoed):
+        raise ModelSpokeKana("模型的回答夾了日文假名")
+
+
+def screen_kana(result: Any, echoed: frozenset[str], essential: set[str]) -> Any:
+    """chat_structured 的回答過一遍假名（審查 I1）：不上畫面的欄位不看；主體欄位（essential）夾了模型的假名丟 ModelSpokeKana；
+    其他欄位夾了就清成那一欄的預設值（字串清成空字串；清單只清掉夾了的那幾項、換成空字串，順序不動——對話的選項與 tag 是一一對應的）。
+    數字欄位沒有字，永遠照用。"""
+    fields = getattr(type(result), "model_fields", {})
+    bad = [name for name in fields if name not in HIDDEN_FIELDS and model_kana(getattr(result, name), echoed)]
+    if not bad:
+        return result
+    if essential.intersection(bad):
+        raise ModelSpokeKana("模型的回答夾了日文假名")
+    update: dict[str, Any] = {}
+    for name in bad:
+        value = getattr(result, name)
+        if isinstance(value, list):
+            update[name] = ["" if model_kana(v, echoed) else v for v in value]
+        else:
+            default = fields[name].get_default(call_default_factory=True)
+            update[name] = "" if default is PydanticUndefined else default
+    logger.warning(f"模型的回答在 {bad} 夾了日文假名：那幾欄走固定文字，其他欄位照用")
+    return result.model_copy(update=update)
+
+
 class ModelGaveUp(RuntimeError):
     """這一次拿鎖期間已經有一次模型呼叫逾時或失敗了：之後的呼叫不送出去，各處照例走退路的固定文字。"""
 
@@ -158,6 +237,8 @@ class InLockClient:
             raise ModelGaveUp("這一次拿鎖期間已經有一次模型呼叫失敗，這一次不再叫模型")
         try:
             return getattr(self._client, method)(*args, **kwargs)
+        except ModelSpokeKana:  # 模型有回、只是那一句不能用（FB-104）：這一步走退路，額度與斷路器不動
+            raise
         except Exception:
             self._budget.gave_up = True
             raise
@@ -265,7 +346,9 @@ class OllamaClient:
         payload = self._build_payload(messages, temperature, num_predict=num_predict)
         res = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
         res.raise_for_status()
-        return res.json().get("message", {}).get("content", "")
+        content = res.json().get("message", {}).get("content", "")
+        reject_kana(content, echoed_kana(messages))  # 夾了模型自己寫的日文假名：當成失敗（FB-104），呼叫端照例不插那一句
+        return content
 
     def chat_structured(
         self, messages: list[dict[str, str]], response_model: Type[T], temperature: float = 0.8,
@@ -278,6 +361,10 @@ class OllamaClient:
         payload = self._build_payload(messages, temperature, num_predict=num_predict, json_schema=schema)
         url = f"{self.base_url}/api/chat"
         required = required_fields or []
+        # 假名（FB-104、審查 I1）：主體欄位＝回答類別寫明的（KANA_ESSENTIAL），沒寫就是必填的；玩家自己寫進 messages 的假名照抄不算。
+        # 必填是「沒有就是被截斷」，主體是「這一段字壞了整個回答就沒用」：大場面的兩版過程必填、卻不是主體（壞一版用範本回合，優勢照用）
+        essential = set(getattr(response_model, "KANA_ESSENTIAL", required))
+        echoed = echoed_kana(messages)
 
         try:
             res = requests.post(url, json=payload, timeout=self.timeout)
@@ -287,17 +374,21 @@ class OllamaClient:
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
             _ensure_required_present(data, response_model, required)
-            return response_model.model_validate(data)
+            result = response_model.model_validate(data)
+            # 主體欄位夾了日文假名：當成這一趟失敗（FB-104），底下照格式不對一樣重問一趟；其他欄位只清掉那一欄（審查 I1）
+            return screen_kana(result, echoed, essential)
         except (json.JSONDecodeError, ValidationError, requests.RequestException, ValueError) as e:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
                 raise self._model_missing()
             if not self.retry:  # 行動鎖內的複本：不重問，鎖最多被這一趟佔住 timeout 秒；例外照原樣丟給呼叫端走退路
                 raise
             logger.warning(f"首次 LLM JSON 解析/請求失敗 ({e})，觸發 re-prompt 重試...")
-            retry_messages = list(messages) + [{
-                "role": "user",
-                "content": "【錯誤提醒】你上一次輸出的內容無法解析為合法的 JSON 或不符 Schema。請務必且僅輸出符合 Schema 的合法 JSON 物件，嚴禁 Markdown 標記或額外文字。",
-            }]
+            reminder = (
+                "【錯誤提醒】你上一次的回答夾了日文假名。請全部用繁體中文重寫，照樣只輸出符合 Schema 的合法 JSON 物件。"
+                if isinstance(e, ModelSpokeKana) else
+                "【錯誤提醒】你上一次輸出的內容無法解析為合法的 JSON 或不符 Schema。請務必且僅輸出符合 Schema 的合法 JSON 物件，嚴禁 Markdown 標記或額外文字。"
+            )
+            retry_messages = list(messages) + [{"role": "user", "content": reminder}]
             retry_payload = self._build_payload(retry_messages, temperature, num_predict=num_predict, json_schema=schema)
             res = requests.post(url, json=retry_payload, timeout=self.timeout)
             if res.status_code == 404:
@@ -306,4 +397,5 @@ class OllamaClient:
             content = res.json().get("message", {}).get("content", "")
             data = parse_json_robustly(content)
             _ensure_required_present(data, response_model, required)
-            return response_model.model_validate(data)
+            result = response_model.model_validate(data)
+            return screen_kana(result, echoed, essential)  # 重問那一趟主體欄位也夾了：丟給呼叫端走退路

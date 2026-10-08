@@ -48,7 +48,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
-    day_ends_text, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
+    day_turn, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -1016,8 +1016,8 @@ class Game:
         if "act:explore" in ids:
             legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
             blocked = self._insight_blocked(loc)
-            until = day_ends_text(c, s.world) if blocked else None
-            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until)
+            kind, until = day_turn(c, s.world) if blocked else ("at", None)
+            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until, later=kind == "later")
         if "act:train" in ids:
             notes["act:train"] = self._train_line(loc)
         if "act:socialize" in ids:
@@ -1031,12 +1031,17 @@ class Game:
             for option_id in ids:
                 cid = option_id.removeprefix("call:")
                 if option_id.startswith("call:") and cid in c.characters:
-                    # 談滿了（跟選單灰掉的判斷同一個次序：沒閉門不見、見得到、這個遊戲日談滿）：格子只放得下「已談滿」，
-                    # 整句連同換日的那一刻寫在這一行（day-scale 審查 I1）
-                    talked_out = not self._snubbed_character(cid) and self._can_meet(cid) and self._talks_left(cid) == 0
-                    notes[option_id] = (
-                        self._talked_out_note() if talked_out else howto.call_line(c.characters[cid].name, self._can_meet(cid))
-                    )
+                    # 跟選單上那一顆的判斷同一個次序、同一句話（FB-103：格子寫什麼，這一行就說什麼）：閉門不見寫整句（格子只放得下
+                    # 「閉門不見」）；見不到寫還差幾點名望、會被打發；談滿了寫整句連同換日的那一刻（格子只放得下「已談滿」，day-scale 審查 I1）
+                    name = c.characters[cid].name
+                    if self._snubbed_character(cid):
+                        notes[option_id] = SNUB_NOTE
+                    elif not self._can_meet(cid):
+                        notes[option_id] = howto.call_line(name, False, self._fame_gap(cid))
+                    elif self._talks_left(cid) == 0:
+                        notes[option_id] = self._talked_out_note()
+                    else:
+                        notes[option_id] = howto.call_line(name, True)
         return notes
 
     def _insight_blocked(self, loc: Location) -> bool:
@@ -2331,10 +2336,11 @@ class Game:
         """這個遊戲日還能跟這位人物聊幾輪。"""
         return max(0, self.content.config.talk_turns_per_day - self._talks_used(companion_id))
 
-    def _talks_reopen(self) -> str | None:
-        """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_ends_text）；None＝這一季之內
-        不會再換日（最後一個遊戲日、季末延後或提前），句子改寫「這一季之內」（day-scale 審查 M2）。"""
-        return day_ends_text(self.content, self.state.world)
+    def _talks_reopen(self) -> tuple[str, str | None]:
+        """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_turn）；None＝這一季之內
+        不會再換日（最後一個遊戲日、季末提前），句子改寫「這一季之內」（day-scale 審查 M2）；季末延後、換日在名義季長之後寫不出那一刻
+        時是 ("later", None)，句子寫「過一陣子」（FB-102）。回傳 rules.day_turn 的（哪一種, 時刻）。"""
+        return day_turn(self.content, self.state.world)
 
     def _count_talk(self, companion_id: str) -> list[str]:
         """記一輪；這個遊戲日聊滿了就自動告辭，寫明什麼時候再來（待 joy 潤）。"""
@@ -2342,7 +2348,9 @@ class Game:
         if self._talks_left(companion_id) > 0:
             return []
         self.state.player.pending_companion = None
-        name, moment = self.content.characters[companion_id].name, self._talks_reopen()
+        name, (kind, moment) = self.content.characters[companion_id].name, self._talks_reopen()
+        if kind == "later":
+            return [f"{name}起身送客，改日再敘：過一陣子再來拜會吧。"]  # FB-102，待 joy 潤
         if moment is None:
             return [f"{name}起身送客：這一季之內不能再來拜會了。"]
         return [f"{name}起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"]
@@ -2423,8 +2431,8 @@ class Game:
     def _talked_out_note(self) -> str:
         """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」
         ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。開頭一律是「已經談滿」：網頁行動列的格子認它，只寫「已談滿」（審查 I1）。"""
-        moment = self._talks_reopen()
-        when = f"{moment} 之後再來" if moment else "這一季之內不能再來"
+        kind, moment = self._talks_reopen()
+        when = f"{moment} 之後再來" if moment else "過一陣子再來" if kind == "later" else "這一季之內不能再來"  # 「過一陣子」：FB-102
         return f"已經談滿 {self.content.config.talk_turns_per_day} 輪，{when}"
 
     def _audience_intro(self) -> str:
@@ -2433,8 +2441,8 @@ class Game:
         per_day = self.content.config.talk_turns_per_day
         # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
-        moment = self._talks_reopen()
-        again = f"到 {moment} 重新算起" if moment else "這一季之內不再重算"
+        kind, moment = self._talks_reopen()
+        again = f"到 {moment} 重新算起" if moment else "過一陣子重新算起" if kind == "later" else "這一季之內不再重算"  # FB-102
         return (
             f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；"
             "名望不夠的會被打發。"
@@ -2468,7 +2476,9 @@ class Game:
             if not self._can_meet(companion_id):
                 return self._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
             if self._talks_left(companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
-                moment = self._talks_reopen()
+                kind, moment = self._talks_reopen()
+                if kind == "later":
+                    return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
                 return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
         return "此地無人可訪，你只好悻悻離去。"
 
@@ -4051,9 +4061,11 @@ class Game:
         self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
 
     def _road_reopen(self, after: str) -> str:
-        """路上收穫拿滿了那兩句括號裡的話：「〔換日的那一刻〕 {after}」；這一季之內不會再換日（rules.day_ends_text 是 None，
+        """路上收穫拿滿了那兩句括號裡的話：「〔換日的那一刻〕 {after}」；這一季之內不會再換日（rules.day_turn 是 "season"，
         day-scale 審查 M2）時是「這一季之內不會再有」（待 joy 潤）。"""
-        moment = day_ends_text(self.content, self.state.world)
+        kind, moment = day_turn(self.content, self.state.world)
+        if kind == "later":  # 季末延後、換日寫不出那一刻（FB-102，待 joy 潤）：「之後才會再有」→「過一陣子才會再有」
+            return "過一陣子" + after.removeprefix("之後")
         return f"{moment} {after}" if moment else "這一季之內不會再有"
 
     def _road_think(self) -> list[str]:

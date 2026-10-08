@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from random import Random
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -56,6 +57,9 @@ class DialogueUnavailable(Exception):
 
 class CompanionTurn(BaseModel):
     """交友一回合的 LLM 輸出：敘事 + 3 個帶 tag 的選項，好感度查表覆寫，不信任這裡任何數字。"""
+
+    # 敘事與選項就是這一輪本身：夾了模型的日文假名，這一輪照叫不動模型處理（ollama_client.screen_kana，FB-104／審查 I1）
+    KANA_ESSENTIAL: ClassVar[tuple[str, ...]] = ("narrative", "options")
 
     narrative: str = ""
     options: list[str] = Field(default_factory=list)

@@ -319,7 +319,7 @@ def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
         for action in on.orders.rank_actions:
             assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
     guan, huang, hao = rows
-    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，戰線在亂局時遊歷、操練推割據" in hao
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在亂局的戰線上遊歷打贏才推割據" in hao  # FB-112
     assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
     on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
     assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)

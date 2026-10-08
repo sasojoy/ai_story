@@ -23,7 +23,7 @@ from . import glyph, insight_llm, insights, naming
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
-from .rules import day_ends_text, game_day
+from .rules import day_turn, game_day
 from .state import GameState, Sensing
 from .world_state import WorldStateStore
 
@@ -38,9 +38,12 @@ STALE = "（那一刻已經過去了，心中的形也散了。）"
 # （rules.day_ends_text：第一季是季曆的寫法，開關關著是「第N天 HH:MM」）。序章草廬不寫（做法都對）
 MISS_WARNING = "選錯了做法，這裡要到 {moment} 之後才悟得出。"
 MISS_LINE = "心浮氣躁，什麼也沒抓住。要到 {moment} 之後，這裡才悟得出東西。"  # 選錯了的那一句（待 joy 潤）
-# 換日寫不出來（這一季最後一個遊戲日、季末延後或提前，rules.day_ends_text 是 None）時的兩句（day-scale 審查 M2；待 joy 潤）
+# 換日在收季那一刻或之後（這一季最後一個遊戲日、季末提前，rules.day_turn 是 "season"）時的兩句（day-scale 審查 M2；待 joy 潤）
 MISS_WARNING_SEASON = "選錯了做法，這一季之內在這裡就悟不出了。"
 MISS_LINE_SEASON = "心浮氣躁，什麼也沒抓住。這一季之內，這裡是悟不出東西了。"
+# 管理者把季末往後排、換日落在名義季長之後（季曆寫不出那一刻，但還會換日）時的兩句：不承諾時刻、也不說整季（FB-102；待 joy 潤）
+MISS_WARNING_LATER = "選錯了做法，這裡要過一陣子才悟得出。"
+MISS_LINE_LATER = "心浮氣躁，什麼也沒抓住。要過一陣子，這裡才悟得出東西。"
 # 選做法那一步的提示（explain-2 第三項，FB-100「有所感只能用猜的、略過序章的人不知道意境是什麼」；待 joy 潤）：
 # 標題後面寫這一處的地形（地點的標籤），做法底下兩行小字（網頁排在鈕的下面，不把做法往下推）：做法跟此地的關係、意境拿來做什麼。
 # 全都不看這一處悟得到哪一種（不讀 pool_attributes）：四個做法換哪一個是對的，卡上的字一個都不變。場景的文字是 joy 的，不動。
@@ -68,15 +71,16 @@ def missed_today(state: GameState, content: Content, loc: Location) -> bool:
     return state.player.sense_misses.get(loc.id) == game_day(content, state.world)
 
 
-def _until(template: str, season_line: str, state: GameState, content: Content) -> str:
-    """寫得出換日的那一刻就填進 template，寫不出來（這一季之內不會再換日）用 season_line。"""
-    moment = day_ends_text(content, state.world)
-    return template.format(moment=moment) if moment else season_line
+def _until(template: str, season_line: str, later_line: str, state: GameState, content: Content) -> str:
+    """寫得出換日的那一刻就填進 template；這一季之內不會再換日用 season_line；還會換日、只是季曆寫不出那一刻（季末延後）用
+    later_line（rules.day_turn，FB-102）。"""
+    kind, moment = day_turn(content, state.world)
+    return template.format(moment=moment) if kind == "at" else later_line if kind == "later" else season_line
 
 
 def miss_warning(state: GameState, content: Content) -> str:
     """選做法之前卡上那一行：選錯了要到哪一刻之後才悟得出（此刻所在的遊戲日結束的那一刻）。"""
-    return _until(MISS_WARNING, MISS_WARNING_SEASON, state, content)
+    return _until(MISS_WARNING, MISS_WARNING_SEASON, MISS_WARNING_LATER, state, content)
 
 
 def start(state: GameState, content: Content, scene: InsightScene, rng: random.Random) -> list[str]:
@@ -205,7 +209,7 @@ def choose(state: GameState, content: Content, index: int, rng: random.Random) -
     if not scene.prologue and method.attribute not in insights.pool_attributes(loc, content):
         p.sensing = None
         p.sense_misses[loc.id] = game_day(content, state.world)
-        return msgs + [_until(MISS_LINE, MISS_LINE_SEASON, state, content)]
+        return msgs + [_until(MISS_LINE, MISS_LINE_SEASON, MISS_LINE_LATER, state, content)]
     if rng.random() * 100 >= rate(state, content, loc):
         p.sensing = None
         amount = content.config.sense_miss_xinde

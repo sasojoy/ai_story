@@ -786,7 +786,7 @@ def test_the_where_to_join_line_waits_for_the_tutorial_and_season_one(enlisting)
     game.state.player.tutorial_step = 1  # 引導還沒走完（Game.new 的新角色已經在序章之後）
     assert "想投靠的話……" not in game.quest_text()
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
-    game.state.player.stamina = enlisting.config.stamina_max  # 讓「下一步」有一句（體力將滿）
+    game.state.player.stamina = enlisting.config.stamina_max  # 讓「下一步」有一句（體力滿了）
     text = game.quest_text()
     assert "**投靠**：想投靠的話……" in text and text.index("**投靠**") < text.index("**下一步**")
     enlisting.tutorial.enlist.drifter_line = ""

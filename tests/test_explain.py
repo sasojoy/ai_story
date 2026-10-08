@@ -652,5 +652,5 @@ def test_the_full_stamina_note_shows_when_nearly_full(game):
     from tianxia import guide
 
     game.skip_tutorial()
-    game.state.player.stamina = game.content.config.stamina_max
-    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)
+    game.state.player.stamina = game.content.config.stamina_max * 0.95
+    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)  # 滿了另一句（FB-108，tests/test_fb108_full_stamina.py）

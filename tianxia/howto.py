@@ -24,13 +24,14 @@ PUSH_WORD = "推動戰局"  # 遊歷打贏、操練會推大勢（第一季是�
 
 def explore_line(
     weights: Sequence[tuple[str, float]], legend: str | None = None, blocked: bool = False, until: str | None = None,
+    later: bool = False,
 ) -> str:
     """探索這一下多半會怎樣。weights 是探索真的擲骰用的那一份（支, 比重）：照地點類型（Config.explore_mix）、
     做不了的已經拿掉、悟意境那一支乘過悟性（Game._explore_weights）。比重嚴格最大的那一支寫「多半」，其他寫「也可能」
     （照比重由大到小）；並列最大就一起寫「可能」；只剩一支寫「會」（FB-101）。不寫百分比。legend 是破境丹的名字（探索每次另擲一次撿不撿得到；
     機率是 0 時呼叫端給 None）。blocked：悟意境那一支只因為這個遊戲日在這裡選錯過做法才拿掉（Game._insight_blocked）；
-    句尾補一句什麼時候才悟得出——until 是換日的那一刻（rules.day_ends_text，已經照季的時間寫法寫好），None 是這一季之內
-    不會再換日（待 joy 潤）。"""
+    句尾補一句什麼時候才悟得出——until 是換日的那一刻（rules.day_turn，已經照季的時間寫法寫好），None 是這一季之內
+    不會再換日；later：還會換日、只是季末延後了寫不出那一刻（FB-102），不承諾時刻（待 joy 潤）。"""
     ranked = sorted((pair for pair in weights if pair[1] > 0), key=lambda pair: -pair[1])  # 穩定排序：並列照原本的順序
     words = [BRANCH_WORDS[branch] for branch, _ in ranked]
     if not words:
@@ -41,7 +42,8 @@ def explore_line(
         head = f"這裡多半{words[0]}，也可能{'、'.join(words[1:])}"
     else:
         head = f"這裡可能{'、'.join(words)}"
-    tail = "" if not blocked else f"；這裡要到 {until} 之後才悟得出" if until else "；這一季之內這裡悟不出了"
+    tail = "" if not blocked else f"；這裡要到 {until} 之後才悟得出" if until else "；這裡要過一陣子才悟得出" if later \
+        else "；這一季之內這裡悟不出了"
     return head + (f"；偶得{legend}" if legend else "") + tail
 
 
@@ -71,9 +73,14 @@ def social_line(figure: str | None, events: bool, hall: bool) -> str:
 CALL_LINE = "挑一位人物談話，聊得投機情誼會漲；名望不夠的會打發你"
 
 
-def call_line(name: str, meet: bool) -> str:
-    """選單上直接列的「求見某某」（這裡只有一位人物）：見得到就是談話；見不到會被打發（Game._brush_off：不花體力）。"""
-    return f"和{name}談話，聊得投機情誼會漲" if meet else f"名望不夠，{name}會打發你（不花體力）"
+def call_line(name: str, meet: bool, gap: int | None = None) -> str:
+    """選單上直接列的「求見某某」（這裡只有一位人物）：見得到就是談話；見不到會被打發（Game._brush_off：不花體力）。
+    gap：還差幾點名望（選項括號裡的「名望還差 N」），給了就照選項的說法開頭（FB-103：那一行跟格子說同一回事）。"""
+    if meet:
+        return f"和{name}談話，聊得投機情誼會漲"
+    if gap is not None:
+        return f"名望還差 {gap}，{name}會打發你（不花體力）"  # FB-103，待 joy 潤
+    return f"名望不夠，{name}會打發你（不花體力）"
 
 
 # ── 體力（explain-1 第三項）──────────────────────────────────────
@@ -224,23 +231,57 @@ def stance_help(content: Content) -> list[str]:
     return [season_line(content), geju_rule(content)]
 
 
+# 推線的那一句只說「有些地方」（FB-112）：推不推看地點的 train_trend（Game.train_trend_push），很多有對手的地方不推（潁水河畔），
+# 行動列底下那一行（train_line 的 PUSH_WORD）照這一處的實情寫
+SOME_PLACES = "有些地方遊歷打贏、操練會推動戰況（行動列底下那一行寫著這裡推不推）"
+
+
+def _order_pushers(content: Content) -> list[str]:
+    """軍令湊滿額度時會推戰況的陣營（orders.json 的範本裡有 effect.trend > 0 的）；豪強只有打擊（挫聲威，不推線）。"""
+    return [f.id for f in content.scenario.factions if any(t.side == f.id and t.effect.trend > 0 for t in content.orders.templates)]
+
+
+def _drill_pushes(content: Content, faction_id: str) -> bool:
+    """這個陣營操練（遇上自己陣營的隊伍）的地方，有沒有一處會推大勢（Location.train_trend）。正式內容的豪強兩處（鄉里結社、豪族塢堡）都不推。"""
+    return any(
+        loc.train_trend and any(s in content.squads and content.squads[s].faction == faction_id for s in loc.enemies)
+        for loc in content.locations.values()
+    )
+
+
+def _geju_sides(content: Content) -> list[str]:
+    """只推割據、不推戰線的陣營（劇本的目標只有 GEJU）：第一季的豪強。"""
+    fronts = set(rules.front_ids(content))
+    return [f.id for f in content.scenario.factions if rules.GEJU in f.goals and not set(f.goals) & fronts]
+
+
+def _geju_push(content: Content, faction_id: str) -> str:
+    """豪強怎麼推割據：在亂局的戰線上遊歷打贏；操練的地方推不推照內容寫（FB-112）。"""
+    drill = "、操練" if _drill_pushes(content, faction_id) else ""
+    tail = "" if drill else "，操練推不動"
+    return f"在亂局的戰線上遊歷打贏{drill}才推割據{tail}"
+
+
 def fronts_help(state: GameState, content: Content) -> list[str]:
     """戰況圖卡點開的說明：兩端、亂局帶、此刻哪幾條在亂局（rules.chaos_fronts）、玩家怎麼推（Game.train_trend_push：
-    官軍、黃巾往自己那一邊，散人照地方本來的方向，豪強只在亂局裡推割據；軍令達成時整個陣營推一把）。"""
-    hao = STANCE_NAMES["haoqiang"]
+    有 train_trend 的地方才推；官軍、黃巾往自己那一邊，散人照地方本來的方向，豪強只在亂局裡推割據；軍令達成時，軍令會推線的陣營
+    整個推一把）。句子照內容（FB-112）。"""
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
-    return [
-        front_rule(content) + now,
-        # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
-        f"在戰線上遊歷打贏、操練，會把那條戰線往你陣營那一邊推，軍令湊滿額度時整個陣營再推一把；散人照那個地方本來的方向，"
-        f"{hao}只在亂局裡推割據。",
-    ]
+    parts = [f"{SOME_PLACES}，往你陣營那一邊推"]
+    pushers = _order_pushers(content)
+    if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
+        parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
+    tail = "散人照那個地方本來的方向推"
+    for fid in _geju_sides(content):
+        tail += f"，{STANCE_NAMES.get(fid, fid)}{_geju_push(content, fid)}"
+    return [front_rule(content) + now, "；".join(parts) + f"；{tail}。"]
 
 
 def _lockable(content: Content) -> int:
-    """關鍵伏筆改寫得了的大事有幾件：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果，foreshadow 文件 2.4）。"""
-    sides = {"guan", "huang"}
+    """關鍵伏筆改寫得了的大事有幾件：會鎖定大事的兩方（timetable.SIDE_NAMES，跟 foreshadow.LOCK_SIDES 同一份；官軍、黃巾）的鏈指著的
+    那幾件（豪強的鏈是第三方，不改寫結果，foreshadow 文件 2.4）。"""
+    sides = set(timetable.SIDE_NAMES)
     return len({chain.event for chain in content.foreshadows.chains if chain.side in sides})
 
 
@@ -276,10 +317,16 @@ def board_help(content: Content) -> list[str]:
 
 
 def quest_help(content: Content) -> list[str]:
-    """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。"""
+    """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
+    （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
+    散人做不了（foreshadow.capable 要陣營對得上）。"""
+    locks = "、".join(timetable.SIDE_NAMES.values())
+    third = "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))
+    geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
+    aside = f"{third}做完只在揭曉時留名{'、推一把割據' if geju else ''}，不改結果；" if third else ""
     return [
-        "你能做的：在戰線上遊歷打贏、操練，推動戰況；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起推一把；"
-        "聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事。",
+        f"你能做的：{SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
 
@@ -379,17 +426,27 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     cfg = content.config
     if not content.scenario.factions:
         return []
+    # FB-112：推線只說有些地方；散人可以在決戰的大區臨時投效兩軍之一，只算那一場（Game._free_agent、_enlist_options；
+    # 不進投靠名冊、不算叛投、不能投第三方）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
     lines = [
-        "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，遊歷打贏、操練把戰況推向你那一邊，"
-        "遇上自己陣營的隊伍是操練；全服決戰只能替自己的陣營出戰。散人照樣能玩，只是沒有軍令與晉升。",
+        "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
+        f"{SOME_PLACES}，推向你那一邊，遇上自己陣營的隊伍是操練；全服決戰只能替自己的陣營出戰。"
+        "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
     if not calendar.season_one_on(season, content):
         return lines
     from . import orders  # noqa: PLC0415  orders → timetable、figures：只有第一季的這幾行用到
 
     kinds = "、".join(orders.KIND_NAMES.values())
+    # 湊滿額度那一刻的效果照 orders.json（FB-112：打擊不推線，是挫大勢人物的聲威）
+    pushing = [orders.KIND_NAMES[k] for k in orders.KIND_NAMES if any(t.kind == k and t.effect.trend > 0 for t in content.orders.templates)]
+    denting = [orders.KIND_NAMES[k] for k in orders.KIND_NAMES
+               if any(t.kind == k and t.effect.figure_prestige < 0 for t in content.orders.templates)]
+    effects = [f"{'、'.join(pushing)}推一把戰況"] if pushing else []
+    effects += [f"{'、'.join(denting)}挫大勢人物的聲威"] if denting else []
+    met = f"全陣營湊滿額度的那一刻一起見效（{'，'.join(effects)}）" if effects else "全陣營湊滿額度的那一刻一起見效"
     lines += [
-        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；全陣營湊滿額度的那一刻，整個陣營一起推一把。"
+        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
         "本週的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
         f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。",
@@ -406,6 +463,7 @@ def faction_lines(content: Content, season: WorldState) -> list[str]:
     from . import orders, ranks  # noqa: PLC0415  第一季的這一節才用到
 
     fronts = set(rules.front_ids(content))
+    pushers = _order_pushers(content)
     out = []
     for faction in content.scenario.factions:
         fid = faction.id
@@ -415,11 +473,13 @@ def faction_lines(content: Content, season: WorldState) -> list[str]:
             side = STANCE_NAMES["guan"] if pushed == {-1} else STANCE_NAMES["huang"] if pushed == {1} else "各自"
             aim = f"把戰線往{side}那一邊推"
         elif rules.GEJU in goals:
-            aim = "不推戰線，戰線在亂局時遊歷、操練推割據"
+            aim = f"不推戰線，{_geju_push(content, fid)}"  # 操練的地方推不推照內容（FB-112）
         else:
             aim = "照地方本來的方向推"
         kinds = [orders.KIND_NAMES[k] for k in orders.KIND_NAMES if any(t.kind == k and t.side == fid for t in content.orders.templates)]
         orders_text = (f"軍令只有{kinds[0]}" if len(kinds) == 1 else f"軍令有{'、'.join(kinds)}") if kinds else "沒有軍令"
+        if kinds and fid not in pushers:  # 豪強只有打擊：湊滿額度是挫大勢人物的聲威，不推線（FB-112）
+            orders_text += "，不推戰線"
         acts = []
         duty = content.orders.duties.get(fid)
         if duty is not None:
@@ -497,7 +557,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
     ]
     if first:
-        bond.append("- 情誼夠深，他會跟你聊起一些風聲：伏筆的片段、機緣的話題。")
+        # 片段只給做得了那條鏈的人（foreshadow.capable 要陣營對得上）：散人聽不到（審查 M4，待 joy 潤）
+        bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     if first:  # 挑戰大勢人物本人只有第一季才有（Game._challenge）
@@ -511,7 +572,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- **遊歷**（體力 {cost['train']}）：只在有隊伍的地方出現。遇上對手一定開打，按鈕上寫勝算：打贏得銀兩、心得、經驗，"
         "可能掉素材；每一場都會扣些氣血，輸了還會掉銀兩。遇上自己陣營的隊伍是操練：不打、不會輸，"
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
-        f"打贏或操練多半還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",
+        f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
         f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
