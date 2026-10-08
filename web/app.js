@@ -512,6 +512,143 @@
     el.setAttribute("aria-expanded", String(open));
   }
 
+  // ── 第一屏放不下時一步一步收（FB-107）──
+  // 企劃者：375×812 上「剛剛」、場景與整排行動都在第一屏（按完不用捲就看得到結果）。打完一場又跳出師父「碰到才說」的框、💡 兩行、
+  // 決戰集結（場景多一段戰場、「此地還有」、結伴那幾行）時，行動列會掉到分頁列底下。框照企劃者 10/5 的決定留在行動列上面、話不切；
+  // 這裡畫好之後量一次：行動列（事件、有所感這種一組選項時是最後一顆）的下緣離分頁列不到 FIT_MARGIN，就照 FIT_STEPS 的順序一步一步收，
+  // 收到放得下就停——放得下的畫面一點都不動。先收不少任何字的（間距），再收看一眼就夠的（對手的描述、第一回合、剛剛的後半、
+  // 決戰時所在地的描述、集結那一句的後半），每一樣都點得開、看得到全文；得失與結果那幾行（數字）、框裡的話都不收。
+  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結時又有框：見 fix1008-report.md）就是放不下，不再藏別的
+  // 量的是畫面本身（字體、寬度、狀態列幾行都算進去），所以手機高一點、字少一點就少收或不收。重畫、轉向、拉視窗之後重量（先全部還原）
+  const FIT_MARGIN = 16;
+  const fitPage = () => document.getElementById("page");
+  // 要放進第一屏的那一塊：平常閒著是行動列；事件、有所感、對話、決戰這種一組選項時是選單最後一顆
+  const fitTarget = () => document.querySelector("#page > .act-bar") || document.querySelector("#page > .options > :last-child");
+  function fitOver() {
+    const target = fitTarget(), tabs = document.querySelector(".tabs");
+    if (!target || !tabs) return 0;
+    return target.getBoundingClientRect().bottom + (window.scrollY || 0) - (tabs.getBoundingClientRect().top - FIT_MARGIN);
+  }
+  const FIT_STEPS = [
+    // 1. 間距：卡與卡之間、卡的內距收緊一點（style.css 的 .page.fit-space），一個字都不少
+    { key: "space", run: () => {
+      fitPage().classList.add("fit-space");
+      const card = document.querySelector("#page > .battle-card");
+      if (card) card.classList.add("fit-space"); // 戰鬥卡片的內距寫在 .battle-card 底下（style.css 的 .battle-card.fit-space）
+      return true;
+    } },
+    // 2. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）
+    { key: "lines", run: () => {
+      if (S.hearOpen != null && S.hearOpen === S.main.card_id) return false; // 玩家點開過：不收回去
+      const lines = document.querySelectorAll(".battle-card .tx-extra .tx-line:not(.tx-hearsay)");
+      lines.forEach((el) => {
+        el.classList.add("tx-tight");
+        el.setAttribute("data-act", "hear-more");
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        el.setAttribute("aria-expanded", "false");
+      });
+      return lines.length > 0;
+    } },
+    // 3. 戰鬥卡片的第一回合也收進「展開過程」（那一行與按鈕照舊在；得失照舊在）
+    { key: "rounds", run: () => {
+      const list = document.querySelector(".battle-card ul.rounds:not(.open), .battle-card p.rounds-tale:not(.open)");
+      if (list) list.classList.add("fit-fold");
+      return !!list;
+    } },
+    // 4. 「剛剛」（不是戰鬥卡片的那種）收著時只露三行（同在路上，FB-060），「展開全文」照舊
+    { key: "now", run: () => {
+      const now = document.querySelector("#page > .now:not(.open)");
+      const body = now && now.querySelector(".tx-now");
+      if (!body) return false;
+      now.dataset.fitWas = now.classList.contains("fits") ? "fits" : "clamp";
+      now.classList.replace("fits", "clamp");
+      now.classList.add("fit-short");
+      if (body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits"); // 三行就放得下：不要淡出與「展開全文」
+      return true;
+    } },
+    // 5. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
+    //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
+    { key: "own", run: () => {
+      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      if (!scene || !scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === S.main.scene) return false;
+      scene.classList.add("fit-own");
+      return fitClip(scene.querySelectorAll(":scope > hr ~ p"));
+    } },
+    // 6. 決戰集結、加入的鈕在戰場名字那一行（FB-105 的 musterScene）時，名字底下集結那一句收成一行：開頭是「集結中，還剩現實 N 分 N 秒」，
+    //    後半（「選擇陣營加入…」）名字旁那一小句已經說了。點了攤開（同上）
+    { key: "muster", run: () => {
+      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      const head = scene && scene.querySelector(":scope > .muster-head");
+      if (!head || S.ownOpen === S.main.scene) return false;
+      const lines = [];
+      for (let p = head.nextElementSibling; p && p.tagName !== "HR"; p = p.nextElementSibling) if (p.tagName === "P") lines.push(p);
+      scene.classList.add("fit-muster");
+      return fitClip(lines);
+    } },
+    // 7. 一組選項（事件、有所感的做法）時，鈕與鈕之間收緊、鈕矮一點（44px，觸控照樣按得到）
+    { key: "options", run: () => {
+      const menu = document.querySelector("#page > .options");
+      if (menu) menu.classList.add("fit-tight");
+      return !!menu;
+    } },
+  ];
+  // 還原（重量之前）：只拿掉 fitFirstScreen 自己加的東西
+  function fitReset() {
+    const page = fitPage();
+    if (!page) return;
+    page.classList.remove("fit-space");
+    page.querySelectorAll(".fit-space").forEach((el) => el.classList.remove("fit-space"));
+    page.querySelectorAll(".tx-tight").forEach((el) => {
+      el.classList.remove("tx-tight");
+      ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+    });
+    page.querySelectorAll(".fit-fold").forEach((el) => el.classList.remove("fit-fold"));
+    page.querySelectorAll(".now.fit-short").forEach((el) => {
+      el.classList.remove("fit-short");
+      if (el.dataset.fitWas && !el.classList.contains("open")) el.classList.replace(el.classList.contains("fits") ? "fits" : "clamp", el.dataset.fitWas);
+      delete el.dataset.fitWas;
+    });
+    page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster"));
+    fitUnclip(page);
+    page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
+  }
+  // 場景卡裡收成一行的段落（第 5、6 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）
+  function fitClip(paras) {
+    paras.forEach((p) => {
+      p.classList.add("fit-clip");
+      p.setAttribute("data-act", "own-more");
+      p.setAttribute("role", "button");
+      p.setAttribute("tabindex", "0");
+      p.setAttribute("aria-expanded", "false");
+    });
+    return paras.length > 0;
+  }
+  function fitUnclip(root) {
+    root.querySelectorAll(".fit-clip").forEach((p) => {
+      p.classList.remove("fit-clip");
+      ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => p.removeAttribute(a));
+    });
+  }
+  // 收了哪幾步（記在 S.fitted，給測試與除錯看）
+  function fitFirstScreen() {
+    S.fitted = [];
+    if (S.stage !== "game" || S.tab !== "jianghu" || !S.main || S.main.on_road || pro() || !fitPage()) return;
+    fitReset();
+    for (const step of FIT_STEPS) {
+      if (fitOver() <= 0) break;
+      if (step.run()) S.fitted.push(step.key);
+    }
+  }
+  // 決戰時收成一行的那幾段（所在地、集結那一句）：點了攤開（原地，不重畫）；記住這一個場景攤開過，重畫時不再收
+  function ownOpen() {
+    S.ownOpen = S.main.scene;
+    const scene = document.querySelector("#page > .card.scene:not(.road)");
+    if (!scene) return;
+    scene.classList.remove("fit-own", "fit-muster");
+    fitUnclip(scene);
+  }
+
   // ── 入伍段第一步（新手引導計畫二，preflight F5）：軍令卡真的在畫面上才算看過 ──
   // 框是引薦人的第一步（key 是 r2_briefing；伺服器要等序章走完、引薦人的框輪到了才送這個 key）時，軍令卡在行動列底下。手機上第一屏放不下它，
   // 一畫出來就送的話，引薦人那段話還沒讀就被換成下一步。所以等卡片至少一半進了畫面、停留 ORDERS_SEEN_MS，才送一次 view_orders；
@@ -577,6 +714,7 @@
       fitFirstRound(); // 戰鬥卡片收著的第一回合最多兩行，放不下就只留數字（PM 2026-10-05）
       sensePadReady(); // 有所感的畫布：接上手指、補畫已經畫好的那一筆
       decorateHearsay(); // 戰鬥卡片底下聽來的那一句收成一行（FB-074）
+      fitFirstScreen(); // 最後：第一屏放不下行動列時一步一步收（FB-107）
     }
     if (S.tab === "map") mapReady();
   }
@@ -2678,7 +2816,8 @@
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
-        case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
+        case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句（與 FB-107 收成一行的補充）：原地展開／收起，不重畫
+        case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
@@ -2849,9 +2988,13 @@
       ev.preventDefault();
       toggleMore(true);
     }
-    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"]')) {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"], .tx-tight[data-act="hear-more"]')) {
       ev.preventDefault();
       hearToggle(ev.target);
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('[data-act="own-more"]')) {
+      ev.preventDefault();
+      ownOpen();
     }
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.bar.stam[data-act="stam-help"]')) {
       ev.preventDefault();
@@ -3202,7 +3345,7 @@
   let cueTimer = 0;
   window.addEventListener("resize", () => {
     if (S.stage === "game" && S.tab === "map") applyMapView();
-    if (S.stage === "game" && S.tab === "jianghu") fitFirstRound(); // 寬度變了，第一回合佔幾行也跟著變
+    if (S.stage === "game" && S.tab === "jianghu") { fitFirstRound(); fitFirstScreen(); } // 寬度變了，第一回合佔幾行、第一屏放不放得下也跟著變
     // 序章裡師父框上的「在下面 ↓」只在畫面重畫時算；視窗大小變了（轉向、拉視窗）目標離第一屏多遠也跟著變，去抖後重算、不重畫（T7 走查 W-F）
     clearTimeout(cueTimer);
     cueTimer = setTimeout(() => { if (S.stage === "game") guideCue(); }, 150);

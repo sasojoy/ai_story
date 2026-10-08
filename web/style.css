@@ -289,6 +289,28 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    簡寫（權重比它高）會把左邊歸零、條就壓在第一個字上 */
 .battle-card .tx-extra .tx-hearsay { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding-top: 7px; padding-bottom: 7px; margin: -5px 0; }
 .battle-card .tx-extra .tx-hearsay.open { white-space: normal; overflow: visible; text-overflow: clip; }
+/* ── 第一屏放不下時一步一步收（FB-107，app.js 的 fitFirstScreen / FIT_STEPS）：每一步一個 class，放得下就停在那一步 ── */
+/* 1. 間距：頁頂、卡與卡之間 12→8，「剛剛」、戰鬥卡片、場景、對話框的內距收一點；一個字都不少 */
+.page.fit-space { padding-top: 8px; }
+.page.fit-space > .peek, .page.fit-space > .now, .page.fit-space > .card, .page.fit-space > .guide-line { margin-bottom: 8px; }
+.page.fit-space > .now { padding-top: 6px; padding-bottom: 6px; }
+.battle-card.fit-space { padding-top: 6px; padding-bottom: 6px; } /* 戰鬥卡片的規則一律寫在 .battle-card 底下（tests/test_server.py） */
+.page.fit-space > .card.scene { padding-top: 8px; padding-bottom: 8px; }
+.page.fit-space > .card.guide { padding-top: 6px; padding-bottom: 6px; }
+.page.fit-space .scene .here, .page.fit-space .scene .calls { margin-top: 4px; padding-top: 4px; }
+/* 2. 戰鬥卡片底下的補充收成一行、放不下加「…」，點了看全文（同聽來的那一句，上下多 7px 的點擊範圍用負的 margin 吃回去） */
+.battle-card .tx-extra .tx-line.tx-tight { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding-top: 7px; padding-bottom: 7px; margin: -5px 0; }
+.battle-card .tx-extra .tx-line.tx-tight.open { white-space: normal; overflow: visible; text-overflow: clip; }
+/* 3. 第一回合也收進「展開過程」（按了 .open 照舊一回合一回合攤開）；「得失」那一段不在這裡面，照舊看得到 */
+.battle-card ul.rounds.fit-fold:not(.open) { display: none; }
+.battle-card p.rounds-tale.fit-fold:not(.open) { display: none; }
+/* 4. 「剛剛」收著時只露三行（同在路上，FB-060） */
+.now.clamp.fit-short .tx-now { max-height: 4.8em; }
+/* 5、6. 決戰時接在戰場底下的所在地（fit-own）、集結那一句（fit-muster）：每段一行、放不下加「…」，點了攤開（app.js 的 fitClip、ownOpen） */
+.card.scene p.fit-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+/* 7. 一組選項（事件、有所感的做法）：縫 8→6、鈕高 48→44（觸控照樣按得到） */
+.page > .options.fit-tight { gap: 6px; }
+.page > .options.fit-tight > .btn { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */
@@ -882,7 +904,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 
 /* ── 玩家之間的互動（第一層）：場景卡底下「此地還有」與玩家卡 ── */
-.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; line-height: 1.6; }
+/* 只認 div：「此地還能做」的摺疊是 <details class="fold here">（FB-087），寫成 .here 的話它也被套上虛線、上緣與 flex（FB-107 順手修） */
+div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; line-height: 1.6; }
 .here-k { color: var(--ink-2); font-size: 13px; }
 .peer-name { background: none; border: 0; padding: 2px 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .peer-name small { color: var(--ink-2); text-decoration: none; display: inline-block; }
