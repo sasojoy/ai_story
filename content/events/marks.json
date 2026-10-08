@@ -120,6 +120,11 @@
       },
       {
         "text": "分他們一點乾糧",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "幾戶人家接過乾糧，沒有人說話。",
           "stats": {
@@ -328,6 +333,11 @@
       },
       {
         "text": "謝過他的好意，照價付錢過河",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "老船工推辭不過，收了錢，船頭那個座還是留給了你。",
           "stats": {
@@ -483,6 +493,11 @@
       },
       {
         "text": "買兩條魚就走",
+        "condition": {
+          "min_stats": {
+            "silver": 3
+          }
+        },
         "effect": {
           "text": "魚販替你用柳條穿好魚鰓，說灣裡的魚今年特別肥。",
           "stats": {
@@ -570,6 +585,11 @@
       },
       {
         "text": "照木牌上的數目交錢",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "小頭目在帳簿上記了一筆，連你的名號也問了。",
           "stats": {
@@ -739,6 +759,11 @@
       },
       {
         "text": "乖乖交錢",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
         "effect": {
           "text": "散兵掂了掂錢，笑著揮手讓你過去。你身後又有一輛牛車停了下來。",
           "stats": {

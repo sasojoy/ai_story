@@ -248,6 +248,11 @@
       },
       {
         "text": "請大家喝一輪，化解火氣",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "酒一端上來，火氣也就消了。屠戶舉碗敬你，說你是個懂事的。",
           "stats": {
@@ -311,6 +316,11 @@
       },
       {
         "text": "買一包符灰帶走",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "道人笑著收下錢，叮囑你黃天當立的日子就快到了。",
           "stats": {
@@ -438,6 +448,11 @@
       },
       {
         "text": "掏錢請人從鄰村收些現成的來",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
         "effect": {
           "text": "鄰村的草鞋一到，婦人們總算能歇口氣，老嫗拉著你的手直說好人。",
           "stats": {
@@ -711,6 +726,11 @@
       },
       {
         "text": "老實付錢過河",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
         "effect": {
           "text": "你付了錢，水寇揮手放你過去。",
           "stats": {
@@ -787,6 +807,11 @@
       },
       {
         "text": "出錢向老鐵匠買一包",
+        "condition": {
+          "min_stats": {
+            "silver": 15
+          }
+        },
         "effect": {
           "text": "老鐵匠掂了掂銀錢，把一包黑砂遞給你。",
           "stats": {

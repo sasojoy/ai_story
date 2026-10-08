@@ -177,6 +177,11 @@
     "choices": [
       {
         "text": "施捨幾兩銀子",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "老乞丐咧開缺牙的嘴笑了，多看了你兩眼。",
           "stats": {
@@ -234,6 +239,11 @@
       },
       {
         "text": "捐些香油錢",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "知客僧雙手合十：「施主善心。」",
           "stats": {
@@ -317,6 +327,11 @@
     "choices": [
       {
         "text": "花幾個錢向茶客打聽消息",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "茶客壓低聲音：「潁川那邊不太平，波才又在招兵買馬。還有人說，嵩山裡挖出過前朝的古錢……」",
           "stats": {
@@ -370,6 +385,11 @@
       },
       {
         "text": "買一碗魚湯",
+        "condition": {
+          "min_stats": {
+            "silver": 3
+          }
+        },
         "effect": {
           "text": "一碗熱騰騰的魚湯下肚，渾身都是力氣。",
           "stamina": 15,

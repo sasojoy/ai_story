@@ -164,6 +164,11 @@
       },
       {
         "text": "塞給他幾個錢，勸他先回去",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
         "effect": {
           "text": "老書生收下錢，嘆了口氣，把訴狀小心收進懷裡。",
           "stats": {
@@ -525,6 +530,11 @@
       },
       {
         "text": "乖乖交錢",
+        "condition": {
+          "min_stats": {
+            "silver": 10
+          }
+        },
         "effect": {
           "text": "你數了十個錢給他們，散兵挪開枯木讓你過去。",
           "stats": {

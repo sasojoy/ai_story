@@ -63,9 +63,12 @@
     // 第一屏放不下時一步一步收（FB-107 的 fitFirstScreen）：
     fitted: [], // 這一次收了哪幾步（FIT_STEPS 的 key），給測試與除錯看
     fitWidth: 0, // 上一次量的是哪個寬度：視窗只有高度變了（手機網址列收合）不重量（fitOnResize）
+    fitBase: null, // 量的基準：{ width, top } 這個寬度量到過最小的分頁列頂（網址列跑出來時），不跟著網址列跑（fitTabsTop，FB-123）
+    fitting: false, // fitFirstScreen 正在收：它自己重畫狀態列（收 💡、還原）時不再重量（fitTopMoved，FB-123）
     hintTight: false, // 💡 收成一行（第 3 步要的）；狀態列照它畫（hintHtml），玩家點開了（hintOpen）就一直攤開
     linesOpen: null, // 戰鬥卡片底下收成一行的補充攤開著的那一場（卡片的戰報流水號），重畫時不再收（第 4 步）
     ownOpen: null, // 決戰時收成一行的所在地、集結那一句攤開過的那一處那一場（fitOwnKey），重畫時不再收（第 7、8 步）
+    battleOpen: null, // 只能觀戰的人攤開了的開打中的戰場（戰場的名字）；收起、這一場打完就清掉（battleScene，FB-120）
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     bountyShut: null, // 江湖頁「懸賞」卡收起來時手上那幾張的 id（逗號接起來）；揭了新的或交了差就重新展開
@@ -319,10 +322,12 @@
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
     if (!el) return;
+    const before = el.offsetHeight; // 狀態列重畫前多高：變了就重量第一屏（fitTopMoved，FB-123）
     const html = topHtml();
     el.innerHTML = html;
     el.hidden = !html;
     applyGlow();
+    fitTopMoved(before);
   }
 
   function topHtml() {
@@ -546,7 +551,22 @@
   function fitOver() {
     const target = fitTarget(), tabs = document.querySelector(".tabs");
     if (!target || !tabs) return 0;
-    return target.getBoundingClientRect().bottom + (window.scrollY || 0) - (tabs.getBoundingClientRect().top - FIT_MARGIN);
+    return target.getBoundingClientRect().bottom + (window.scrollY || 0) - (fitTabsTop(tabs) - FIT_MARGIN);
+  }
+  // 分頁列頂的基準（FB-123）：分頁列固定在畫面底下，手機捲動時網址列收起、跑出來，它跟著上下移幾十 px。集結時倒數每一輪都整頁重畫、
+  // 重量，拿當下的位置量的話，網址列每換一次狀態就多收或少收一步、畫面跟著跳。同一個寬度記住量到過最小的那個（網址列跑出來的時候：
+  // 一開頁面、捲回頂端都是），寬度變了（轉向、拉視窗）重記。輸入框有焦點時不記：舊的 Android 開鍵盤會把視窗縮小，記下來的話
+  // 收起鍵盤之後整頁還收到底
+  function fitTabsTop(tabs) {
+    const top = tabs.getBoundingClientRect().top, width = window.innerWidth;
+    const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement && document.activeElement.tagName) || "");
+    if (!S.fitBase || S.fitBase.width !== width) {
+      if (typing) return top;
+      S.fitBase = { width, top };
+    } else if (!typing) {
+      S.fitBase.top = Math.min(S.fitBase.top, top);
+    }
+    return S.fitBase.top;
   }
   const FIT_STEPS = [
     // 1. 間距：卡與卡之間、卡的內距收緊一點（style.css 的 .page.fit-space），一個字都不少
@@ -618,6 +638,7 @@
     { key: "muster", run: () => {
       const scene = document.querySelector("#page > .card.scene:not(.road)");
       if (!scene || !scene.querySelector(":scope > hr") || S.ownOpen === fitOwnKey()) return false;
+      if (scene.querySelector(":scope > .battle-shut")) return false; // 只能觀戰的人自己攤開的開打中的戰場（FB-120）：不收
       const head = scene.querySelector(":scope > .muster-head") || scene.querySelector(":scope > p");
       const lines = [];
       for (let p = head && head.nextElementSibling; p && p.tagName !== "HR"; p = p.nextElementSibling) if (p.tagName === "P") lines.push(p);
@@ -703,11 +724,24 @@
     S.fitted = [];
     S.fitWidth = window.innerWidth; // 這一次量的是哪個寬度（fitOnResize 看它）
     if (S.stage !== "game" || S.tab !== "jianghu" || !S.main || S.main.on_road || pro() || !fitPage()) return;
-    fitReset();
-    for (const step of FIT_STEPS) {
-      if (fitOver() <= 0) break;
-      if (step.run()) S.fitted.push(step.key);
+    S.fitting = true; // 收 💡、還原時會重畫狀態列：那不是「狀態列變了」（fitTopMoved）
+    try {
+      fitReset();
+      for (const step of FIT_STEPS) {
+        if (fitOver() <= 0) break;
+        if (step.run()) S.fitted.push(step.key);
+      }
+    } finally {
+      S.fitting = false;
     }
+  }
+  // 狀態列變高變矮（FB-123）：點名號展開配點、收起，💡 冒出來或變兩行，攤開體力說明——行動列跟著上下移，重量一次（從還原開始：
+  // 收起名號之後收著的那幾樣攤回來）。renderTop 把重畫之前的高度交過來；高度沒變（只是數字換了）不量。fitFirstScreen 自己收 💡、
+  // 還原 💡 時重畫狀態列不算（S.fitting），不會一直重量
+  function fitTopMoved(before) {
+    const top = document.getElementById("top");
+    if (!top || S.fitting || top.offsetHeight === before) return;
+    fitFirstScreen();
   }
   // 視窗大小變了（檔案最後的 resize 監聽）：寬度變了（轉向、拉視窗）才重量。手機捲動時網址列收起、跑出來只改高度，也會觸發 resize——
   // 那時重量的話，第一屏外的那幾段會邊捲邊收、邊攤開（審查 M6）。平常的重畫（afterPage）照樣每次都量
@@ -1051,6 +1085,58 @@
       `<button class="btn small primary" data-act="choose" data-id="${esc(o.id)}"><span>${esc(wide ? optParts(o)[0] : o.label)}</span></button>`).join("")}</div>`;
     const head = /^<p>([\s\S]*?)<\/p>\n?/.exec(scene);
     return head ? `<div class="muster-head"><p>${head[1]}</p>${note}${row}</div>\n${scene.slice(head[0].length)}` : `<div class="muster-head">${note}${row}</div>\n${scene}`;
+  }
+
+  // ── 只能觀戰的人：開打中的全服決戰收成一行（FB-120）──
+  // 開打後 Game.scene_text 給只能觀戰的人的是「戰場＋分隔線＋自己眼前的事」，戰場那一塊有名字、「【幕】（第 N／M 回合・…）」、最近五段
+  // 戰報（放手一搏的原文、模型的故事）與觀戰的原因，QA 量到師父的框被擠到 1130、行動列 1226 以下（分頁列頂 756）。沒在打這一場的人
+  // （人不在決戰的大區、沒加入、沒臨時投效：伺服器才會在戰場底下接分隔線）那一塊收成一行，點了攤開、底下一顆「收起戰場」；
+  // 攤開記的是戰場的名字（S.battleOpen：回合每輪都在變，記名字輪詢才不會收回去），自己收起或這一場打完（場景裡沒有開打中的回合）才清掉。
+  // 參戰的人照舊：在場時整個畫面就是戰場（沒有分隔線）；離開大區、倒下的人最後一句是 BATTLE_MINE。集結時沒有回合數，歸 FB-107 收
+  // 集結那一句。只認伺服器給的字（戰鬥引擎 _battle_scene_text 的寫法，戰鬥那條線在改，FB-109、FB-113）：兩個正規式的測試在
+  // tests/test_fb120_battle_fold.py，用真的戰場驗，寫法變了那裡就紅
+  // BATTLE_ROUND：開打後的回合數（「【圍城日久】（第 4／9 回合・已送出…）」），集結時沒有；
+  // BATTLE_MINE：參戰者看戰場的那一句（離開了大區、倒下了），他是這一場的人，不收
+  const BATTLE_ROUND = /（第\s*(\d+)\s*／\s*\d+\s*回合/;
+  const BATTLE_MINE = /這回合不出手|你已經倒下/;
+  // 收成一行時接在回合數後面的那兩三個字、攤開之後戰場底下那一顆（都待 joy 潤）
+  const BATTLE_PEEK = "點開看";
+  const BATTLE_SHUT = "收起戰場";
+  // 只能觀戰、正在開打：{ block 分隔線之前的戰場那一塊, rest 分隔線起的其餘, name 戰場名字, round 第幾回合 }；不是就 null
+  function battleWatch(m) {
+    const scene = (m && m.scene) || "";
+    const cut = scene.search(/<hr\s*\/?>/);
+    if (cut < 0 || m.on_road) return null;
+    const block = scene.slice(0, cut);
+    const round = BATTLE_ROUND.exec(block), head = /^<p>([\s\S]*?)<\/p>/.exec(block);
+    // 參戰者那一句只看戰場那一塊的最後一段：引擎把看戰場的原因（觀戰、離開大區、倒下）寫在最後；中間的戰報有放手一搏的原文與
+    // 模型的故事，有人寫「你已經倒下」也不能讓每個觀戰的人的戰場整段攤開（審查 M1）
+    const last = block.slice(block.lastIndexOf("<p>"));
+    if (!round || !head || BATTLE_MINE.test(last)) return null;
+    return { block, rest: scene.slice(cut), name: head[1].replace(/<[^>]*>/g, "").trim(), round: Number(round[1]) };
+  }
+  function battleScene(m) {
+    if (!BATTLE_ROUND.test(m.scene || "")) S.battleOpen = null; // 這一場打完了（或還在集結、沒有決戰）：下一場照舊先收著
+    const w = battleWatch(m);
+    if (!w || musterJoins(m).length) return m.scene;
+    if (S.battleOpen === w.name) {
+      return `${w.block}<p class="battle-shut"><button class="linkish" data-act="battle-shut" aria-expanded="true">${BATTLE_SHUT}</button></p>\n${w.rest}`;
+    }
+    // 名字是伺服器 Markdown 轉好的 HTML 拿掉標籤：已經跳脫過，不再跳脫一次
+    return `<p class="battle-fold" data-act="battle-open" role="button" tabindex="0" aria-expanded="false">${w.name}　第 ${w.round} 回合・${BATTLE_PEEK}</p>\n${w.rest}`;
+  }
+  // 攤開、收起都整頁重畫，原本有焦點的那一行（那一顆）跟著不見：焦點放回新畫出來的開關，鍵盤再按一次就收起、再攤開
+  // （同戰況圖卡的 frontsTap，審查 M4）
+  function battleOpen() {
+    const w = battleWatch(S.main);
+    S.battleOpen = w ? w.name : null;
+    renderPage();
+    document.querySelector("#page .battle-shut button")?.focus();
+  }
+  function battleShut() {
+    S.battleOpen = null;
+    renderPage();
+    document.querySelector("#page .battle-fold")?.focus();
   }
 
   function actionBar(m) {
@@ -1497,7 +1583,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${musterScene(m, m.scene)}${m.here && m.here.length ? hereHtml(m) : ""}${m.party || (m.calls && m.calls.length) ? socialHtml(m) : ""}</section>`;
+        : `<section class="card scene">${musterScene(m, battleScene(m))}${m.here && m.here.length ? hereHtml(m) : ""}${m.party || (m.calls && m.calls.length) ? socialHtml(m) : ""}</section>`;
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
@@ -2932,6 +3018,8 @@
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
         case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
+        case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）
+        case "battle-shut": battleShut(); break; // 攤開的戰場底下「收起戰場」
         case "hint-more": S.hintOpen = !S.hintOpen; renderTop(); break; // 狀態列只重畫它自己（江湖頁不動，「剛剛」不會重播）
         case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;
         case "guide-below": scrollToGuideTarget(); break;
@@ -3113,6 +3201,10 @@
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('[data-act="own-more"]')) {
       ev.preventDefault();
       ownOpen();
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.battle-fold[data-act="battle-open"]')) {
+      ev.preventDefault();
+      battleOpen(); // 收成一行的戰場是一個 role="button" 的 <p>：鍵盤也點得開（FB-120）
     }
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.bar.stam[data-act="stam-help"]')) {
       ev.preventDefault();

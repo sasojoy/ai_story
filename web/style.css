@@ -315,6 +315,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now.clamp.fit-short .tx-now { max-height: 4.8em; }
 /* 7、8. 決戰時接在戰場底下的所在地（fit-own）、集結那一句（fit-muster）：每段一行、放不下加「…」，點了攤開（app.js 的 fitClip、ownOpen） */
 .card.scene p.fit-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+/* FB-120：只能觀戰的人，開打中的戰場收成一行（名字那一行的字體，app.js 的 battleScene）；放不下加「…」，點了攤開。
+   攤開之後戰場底下一顆「收起戰場」，靠右、小字，不多撐一行的高度以外的空間 */
+.card.scene p.battle-fold { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.card.scene p.battle-shut { margin: 0; text-align: right; font-size: 13px; line-height: 1.5; }
 /* 9. 一組選項（事件、有所感的做法）：縫 8→6、鈕高 48→44（觸控照樣按得到） */
 .page > .options.fit-tight { gap: 6px; }
 .page > .options.fit-tight > .btn { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
