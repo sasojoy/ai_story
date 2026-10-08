@@ -466,11 +466,13 @@ def _tell_tabs(game: Game, also: str = "") -> None:
     絕不能放進 act／look／act_look／poll_main／_entry：輪詢與開頁也走那些，通知一寫在輪詢的路上，同一個角色兩個看得到的
     分頁就會互相叫醒、永遠停不下來（一個分頁輪詢 → 通知另一個 → 它輪詢 → 通知回來……，預檢 B1）。
     一般的仗（prepare_fight 的 A 段）不經過 act，所以通知也不能寫在 act 裡（預檢 F1）。
-    also：另一個名號——管理者動到別人的存檔（玩家個人劇情，PLAYER_ADMIN_ACTIONS），他開著的分頁也刷新。"""
+    also：另一個名號——管理者動到別人的存檔（玩家個人劇情，PLAYER_ADMIN_ACTIONS），他開著的分頁也刷新。
+    game.touched：這一個動作動到的別人（邀請、切磋，Game._other_side），通知完清掉。"""
+    others, game.touched = set(game.touched), set()  # 這一個動作動到的別人（切磋、邀請）：他們的分頁也刷新
     if HUB is not None:
         HUB.notify(game.state.player.name.casefold())
-        if also.strip():
-            HUB.notify(also.strip().casefold())
+        for name in {also.strip(), *others} - {""}:
+            HUB.notify(name.casefold())
 
 
 # ── 鎖外的模型呼叫（線上架構設計 5.2：LLM 佇列）──
@@ -839,7 +841,7 @@ def _main_view_body(game: Game) -> dict:
         "minimap": game.minimap_svg(),
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
-        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼與結伴邀請（玩家互動第二層）
+        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
         "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
@@ -1418,16 +1420,6 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         "main": look(game, main_view),
         "message": joined(msgs),
     }
-
-
-@app.post("/api/peer/answer")
-def api_peer_answer(request: Request, body: dict = Body(default={})):
-    """回應別人遞過來的打招呼或結伴邀請（Game.answer_overture）：回傳 {main, message}。"""
-    game = _game(request)
-    overture_id, reply = str(body.get("id", "")), str(body.get("reply", ""))
-    msgs = act(game, lambda g: g.answer_overture(overture_id, reply))
-    _tell_tabs(game)
-    return {"main": look(game, main_view), "message": joined(msgs)}
 
 
 @app.post("/api/party/leave")

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import ranks, team
+from . import invites, ranks, team
 from .characters import CharacterStore
 from .state import GameState
 
@@ -124,9 +124,10 @@ def card(game: Game, other: Game) -> dict:
 
 
 # ── 第二層：贈物、打招呼、結伴同行（企劃者 2026-10-08「互動的兩層也可以派下去做了」）────────────
-# 打招呼、結伴是「遞過去、等對方回」的事（state.Overture）：收的人在場景底下看到一行、按回應的鈕（Game.answer_overture），
-# 過了 Config.invite_seconds 現實秒數沒回就作罷（對方下線、假人沒理，都是這樣）。只有固定的禮節與固定的回應，沒有自由文字：
-# 假人不寫自由文字（伺服器假人設計），而真人假人要一模一樣。數值一律由這裡的規則定。
+# 打招呼、結伴是邀請（invites.py，跟切磋同一套：存在這一季的 WorldState.invites，invite_ttl_seconds 沒回就作廢——對方下線、
+# 假人沒理都是這樣）。收到的列在閒著的選單上（invite:<回應>:<編號>，Game._invite_options），場景底下也畫一份（calls），
+# 回應走 choose（Game._invite → answer_invite）。只有固定的禮節與固定的回應，沒有自由文字：假人不寫自由文字（伺服器假人設計），
+# 而真人假人要一模一樣。數值一律由這裡與 Game 的規則定。
 
 
 @dataclass(frozen=True)
@@ -146,44 +147,40 @@ GESTURES: dict[str, Gesture] = {
     "taunt": Gesture("挑釁", "斜眼打量，出言挑釁", "斜眼打量你，出言挑釁", (("cold", "冷眼以對"), ("retort", "出言回敬"))),
     "toast": Gesture("敬酒", "舉杯敬酒", "舉杯向你敬酒", (("drink", "舉杯回敬"), ("decline", "婉言推辭了"))),
 }
-TRAVEL_REPLIES = (("yes", "答應"), ("no", "婉拒"))
 GIFT_KINDS = ("silver", "pill", "material")
 
 
-def _sent_to(state: GameState, kind: str, to: str) -> bool:
-    return any(o.kind == kind and o.to == to for o in state.player.sent)
+def gesture_of(invite) -> Gesture | None:
+    return GESTURES.get(invite.payload.get("gesture", "")) if invite.kind == "greet" else None
 
 
-def send(game: Game, other: Game, kind: str, gesture: str = "") -> str | None:
-    """遞一件事過去（打招呼、結伴邀請）：兩邊各記一份。不行時回一句拒絕的話（只回給按的人）。"""
-    from .state import Overture
+def invite_text(invite) -> str:
+    """場景底下那一行：別人遞給你的是什麼。"""
+    gesture = gesture_of(invite)
+    if gesture is not None:
+        return f"{invite.sender}{gesture.got}。"
+    if invite.kind == "travel":
+        return f"{invite.sender}邀你結伴同行（答應了由他定去哪、怎麼走）。"
+    return f"{invite.sender}邀你{invites.kind_name(invite.kind)}。"
 
-    me, them = game.state.player, other.state.player
-    if _sent_to(game.state, kind, them.name):
-        return f"（還在等{them.name}回應。）"
-    if len(them.inbox) >= game.content.config.inbox_cap:
-        return f"（{them.name}正忙著應付別人，等一下再說。）"
-    me.overture_serial += 1
-    overture = Overture(
-        id=f"{me.name}｜{me.overture_serial}", kind=kind, sender=me.name, to=them.name, gesture=gesture,
-        at=game.now, location=me.location,
-    )
-    me.sent.append(overture)
-    them.inbox.append(overture.model_copy())
-    return None
+
+def _short(option) -> str:
+    """場景底下的回應鈕只寫動作：答應、婉拒、回禮的那幾個字（選單上的全名寫是誰的哪一種）。"""
+    verb = option.id.split(":")[1]
+    return {"yes": "答應", "no": "婉拒"}.get(verb) or option.label.split("：")[-1]
 
 
 def calls(game: Game) -> list[dict]:
-    """場景底下「別人遞給你的」：[{id, text, replies: [{id, label}]}]，舊的在前。"""
+    """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled}]}]，舊的在前。回應鈕就是選單上的那幾個選項
+    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）。"""
+    menu = {o.id: o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:")}
     rows = []
-    for o in game.state.player.inbox:
-        if o.kind == "greet" and o.gesture in GESTURES:
-            g = GESTURES[o.gesture]
-            rows.append({"id": o.id, "text": f"{o.sender}{g.got}。", "replies": [{"id": r, "label": label} for r, label in g.replies]})
-        elif o.kind == "travel":
+    for inv in invites.incoming(game.state.world, game.state.player.name):
+        opts = [menu[i] for i in menu if i.endswith(f":{inv.id}") and not i.startswith("invite:cancel:")]
+        if opts:
             rows.append({
-                "id": o.id, "text": f"{o.sender}邀你結伴同行（答應了由他定去哪、怎麼走）。",
-                "replies": [{"id": r, "label": label} for r, label in TRAVEL_REPLIES],
+                "text": invite_text(inv),
+                "options": [{"id": o.id, "label": _short(o), "enabled": o.enabled} for o in opts],
             })
     return rows
 
@@ -249,20 +246,34 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
     return [f"你把{thing}送給了{them.name}。", *mine]
 
 
+def _waiting(game: Game, other: Game, kind: str):
+    return invites.between(game.state.world, game.state.player.name, other.state.player.name, kind)
+
+
+def _send(game: Game, other: Game, kind: str, payload: dict | None = None) -> None:
+    s = game.state
+    invites.expire(s.world)
+    invites.send(s.world, game.content, kind, s.player.name, other.state.player.name, s.player.location, payload)
+    game._save_season()
+
+
 def _greet_buttons(game: Game, other: Game) -> list[CardButton]:
-    waiting = _sent_to(game.state, "greet", other.state.player.name)
+    waiting = _waiting(game, other, "greet") is not None
     return [
-        CardButton(action="greet", label=g.label, arg=key, enabled=not waiting, note="等他回禮" if waiting else "")
+        CardButton(action="greet", label=g.label, arg=key, enabled=not waiting, note="等回禮" if waiting else "")
         for key, g in GESTURES.items()
     ]
 
 
 def _greet(game: Game, other: Game, params: dict) -> list[str]:
-    gesture = GESTURES.get(str(params.get("arg") or ""))
+    key = str(params.get("arg") or "")
+    gesture = GESTURES.get(key)
     if gesture is None:
         return ["（沒有這種禮數。）"]
-    refusal = send(game, other, "greet", str(params["arg"]))
-    return [refusal] if refusal else [f"你向{other.state.player.name}{gesture.did}。"]
+    if _waiting(game, other, "greet") is not None:
+        return [f"（{other.state.player.name}還沒回禮。）"]
+    _send(game, other, "greet", {"gesture": key})
+    return [f"你向{other.state.player.name}{gesture.did}。"]
 
 
 def _travel_note(game: Game, other: Game) -> str | None:
@@ -274,7 +285,7 @@ def _travel_note(game: Game, other: Game) -> str | None:
         return f"你正跟著{me.tagalong.leader}同行"
     if them.tagalong is not None:
         return "他已經跟別人結伴了"
-    if _sent_to(game.state, "travel", them.name):
+    if _waiting(game, other, "travel") is not None:
         return "等他回應"
     return None
 
@@ -290,8 +301,8 @@ def _travel(game: Game, other: Game, params: dict) -> list[str]:
     note = _travel_note(game, other)
     if note is not None:
         return [f"（{note}。）"]
-    refusal = send(game, other, "travel")
-    return [refusal] if refusal else [f"你邀{other.state.player.name}結伴同行，等他回應。"]
+    _send(game, other, "travel")
+    return [f"你邀{other.state.player.name}結伴同行，等他回應。"]
 
 
 register(CardAction(id="greet", buttons=_greet_buttons, run=_greet, order=10))

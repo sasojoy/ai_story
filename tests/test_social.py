@@ -164,34 +164,36 @@ def test_materials_and_pills_can_be_given_too(content):
     assert not any(b["arg"] == "pill" for b in a.peer_card("乙")["actions"])  # 沒有丹了就不畫那一顆
 
 
+def _calls(game):
+    return game.calls_here()
+
+
 def test_a_greeting_waits_for_a_reply_and_both_sides_remember_it(content):
     a = _player(content, "甲")
     _player(content, "乙")
     assert a.peer_act("乙", "greet", {"arg": "bow"}) == ["你向乙抱拳見禮。"]
-    assert a.peer_act("乙", "greet", {"arg": "toast"}) == ["（還在等乙回應。）"]
+    assert a.peer_act("乙", "greet", {"arg": "toast"}) == ["（乙還沒回禮。）"]
     assert all(not b["enabled"] for b in a.peer_card("乙")["actions"] if b["action"] == "greet")
+    assert not any(o.id.startswith("invite:") for o in a.options())  # 打招呼不用收回
     _done(a)
     b = _as(content, a.world, "乙", NOW + 10)
-    [call] = b.calls_here()
-    assert call["text"] == "甲向你抱拳見禮。" and [r["label"] for r in call["replies"]] == ["抱拳還禮", "點頭致意"]
-    assert b.answer_overture(call["id"], "nope") == ["（沒有這種回應。）"]
-    assert b.answer_overture(call["id"], "bow") == ["你抱拳還禮。"]
+    [call] = _calls(b)
+    assert call["text"] == "甲向你抱拳見禮。" and [o["label"] for o in call["options"]] == ["抱拳還禮", "點頭致意"]
+    assert b.choose(call["options"][0]["id"])[-1] == "你抱拳還禮。"
     _done(b)
-    assert b.calls_here() == [] and b.answer_overture(call["id"], "bow") == ["（這件事已經過去了。）"]
+    assert _calls(b) == []
     a = _as(content, a.world, "甲", NOW + 20)
-    assert a.state.player.sent == [] and "你向乙抱拳見禮，乙抱拳還禮。" in _lines(a)
+    assert "你向乙抱拳見禮，乙抱拳還禮。" in _lines(a) and a.peer_card("乙")["actions"][0]["enabled"]
 
 
-def test_an_unanswered_greeting_times_out_on_both_sides(content):
+def test_an_unanswered_greeting_runs_out(content):
     a = _player(content, "甲")
     _player(content, "乙")
     a.peer_act("乙", "greet", {"arg": "taunt"})
     _done(a)
-    later = NOW + content.config.invite_seconds + 1
-    a = _as(content, a.world, "甲", later)
+    later = NOW + content.config.invite_ttl_seconds / content.config.time_scale + 1
     b = _as(content, a.world, "乙", later)
-    assert a.state.player.sent == [] and "乙沒有回禮。" in _lines(a)
-    assert b.calls_here() == []
+    assert _calls(b) == [] and not any(o.id.startswith("invite:") for o in b.options())
 
 
 def _walk_to_lake(game):
@@ -204,8 +206,9 @@ def test_travelling_together_the_follower_copies_the_leaders_route_and_shares_ro
     assert a.peer_act("乙", "travel") == ["你邀乙結伴同行，等他回應。"]
     _done(a)
     b = _as(content, a.world, "乙", NOW + 5)
-    [call] = b.calls_here()
-    assert b.answer_overture(call["id"], "yes") == ["你答應與甲結伴同行，等他動身。"]
+    [call] = _calls(b)
+    assert [o["label"] for o in call["options"]] == ["答應", "婉拒"]
+    assert b.choose(call["options"][0]["id"])[-1] == "你答應與甲結伴同行，等他動身。"
     _done(b)
     a = _as(content, a.world, "甲", NOW + 6)
     assert a.party_view()["names"] == ["乙"]
@@ -275,40 +278,55 @@ def test_a_rejected_or_stale_party_comes_to_nothing(content):
     a.peer_act("乙", "travel")
     _done(a)
     b = _as(content, a.world, "乙", NOW + 5)
-    b.answer_overture(b.calls_here()[0]["id"], "no")
+    b.choose(_calls(b)[0]["options"][1]["id"])
     _done(b)
     a = _as(content, a.world, "甲", NOW + 6)
-    assert "乙婉拒了結伴同行。" in _lines(a)
+    assert "乙拱手婉拒了你的邀請。" in _lines(a)
     a.peer_act("乙", "travel")
     _done(a)
     b = _as(content, a.world, "乙", NOW + 7)
-    b.answer_overture(b.calls_here()[0]["id"], "yes")
+    b.choose(_calls(b)[0]["options"][0]["id"])
     _done(b)
     b = _as(content, a.world, "乙", NOW + 7 + content.config.party_wait_seconds + 1)
     assert b.state.player.tagalong is None and "甲遲遲沒有動身，你們各走各的。" in _lines(b)
 
 
-def test_bots_answer_at_a_human_pace(content):
+@pytest.mark.parametrize("kind, arg, want", [
+    ("greet", "bow", {"bow", "nod", None}),
+    ("travel", "", {"yes", "no", None}),
+])
+def test_bots_answer_at_a_human_pace(content, kind, arg, want):
+    """假人回打招呼、結伴邀請：剛收到不回；過了一陣子，各種假人（seed 不同）有回有拒有不理（None）。"""
     from tianxia import bot_policy
 
     a = _player(content, "甲")
-    bot = _player(content, "乙", bot=True)
-    a.peer_act("乙", "greet", {"arg": "bow"})
-    a.peer_act("乙", "travel")
+    _player(content, "乙", bot=True)
+    a.peer_act("乙", kind, {"arg": arg})
     _done(a)
-    sent_at = a.now
-    b = _as(content, a.world, "乙", sent_at + 1)
-    assert bot_policy.answer_calls(b, b.state.player.bot) == []  # 剛收到：不會馬上回
-    outcomes = {}
-    for seed in range(40):  # 各種假人（seed 不同）：有回有拒有不理，回的都在 REPLY_MIN_SECONDS 之後
-        b = _as(content, a.world, "乙", sent_at + 1)
+    b = _as(content, a.world, "乙", NOW + 1)
+    assert bot_policy.answer_call(b, b.state.player.bot) is None
+    later = NOW + (bot_policy.REPLY_MIN_SECONDS + bot_policy.REPLY_SPREAD_SECONDS + 1) * content.config.time_scale
+    b = _as(content, a.world, "乙", later)
+    seen = set()
+    for seed in range(60):
         b.state.player.bot.seed = seed
-        b.now = sent_at + bot_policy.REPLY_MIN_SECONDS + bot_policy.REPLY_SPREAD_SECONDS + 1
-        bot_policy.answer_calls(b, b.state.player.bot)
-        left = {o.kind for o in b.state.player.inbox}
-        outcomes.setdefault("greet", set()).add("greet" in left)
-        outcomes.setdefault("travel", set()).add(
-            "waiting" if "travel" in left else "yes" if b.state.player.tagalong else "no"
-        )
-    assert outcomes["greet"] == {True, False} and outcomes["travel"] == {"waiting", "yes", "no"}
-    assert bot.state.player.bot is not None
+        option = bot_policy.answer_call(b, b.state.player.bot)
+        seen.add(option.split(":")[1] if option else None)
+    assert seen == want
+    b.state.player.bot.seed = next(n for n in range(60) if (lambda o: o and o.split(":")[1] in ("bow", "yes"))(
+        bot_policy.answer_call(b, b.state.player.bot.model_copy(update={"seed": n}))))
+    bot_policy.take_turn(b, b.state.player.bot, random.Random(0))  # 照選單那一顆按下去
+    assert _calls(b) == []
+
+
+def test_a_bot_waiting_for_its_leader_stays_put(content):
+    from tianxia import bot_policy
+    from tianxia.state import Tagalong
+
+    _player(content, "甲")
+    b = _player(content, "乙", bot=True)
+    b.state.player.tagalong = Tagalong(leader="甲", since=NOW)
+    before = b.state.player.location
+    for _ in range(5):
+        bot_policy.take_turn(b, b.state.player.bot, random.Random(0))
+    assert b.state.player.location == before and b.state.player.journey is None

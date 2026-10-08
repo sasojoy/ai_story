@@ -5858,7 +5858,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
-        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_peer_answer", "api_party_leave",
+        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
     }
 
 
@@ -5983,6 +5983,8 @@ NOT_IN_THE_FINGERPRINT = {
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
         "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
         "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+        "invites": "玩家之間的邀請只有發的人與收的人看得到，伺服器做完動作直接叫醒他們兩個的分頁（Game.touched）；算進去會叫醒全服",
+        "spar_tally": "切磋的每日次數，畫面上看不到",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
@@ -6454,7 +6456,9 @@ def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
     assert "送給了林小竹" in gift["message"]
     [call] = other.get("/api/main").json()["calls"]
     assert call["text"] == "沈青衫向你抱拳見禮。"
-    got = other.post("/api/peer/answer", json={"id": call["id"], "reply": "bow"}).json()
-    assert "抱拳還禮" in got["message"] and got["main"]["calls"] == [] and got["main"]["party"] is None
+    other.post("/api/choose", json={"id": call["options"][0]["id"]})
+    main = other.get("/api/main").json()
+    assert main["calls"] == [] and main["party"] is None
+    assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
     left = other.post("/api/party/leave", json={}).json()
     assert "沒有跟著誰" in left["message"]

@@ -1249,21 +1249,14 @@
       open ? "" : `<button class="linkish here-more" data-act="here-more">還有 ${all.length - HERE_SHOW} 人 ▾</button>`}</div>`;
   }
 
-  // 玩家互動第二層：別人遞給你、還沒回的打招呼與結伴邀請（一件一行，後面是固定的回應鈕），以及結伴同行的那一行
-  // （跟著別人的人有「分道揚鑣」）。字都是伺服器寫好的（social.calls、Game.party_view）
+  // 玩家互動第二層：別人遞給你、還沒回的打招呼、結伴、切磋邀請（一件一行，後面是回應鈕——就是選單上的 invite: 選項，按了走 choose），
+  // 以及結伴同行的那一行（跟著別人的人有「分道揚鑣」）。字都是伺服器寫好的（social.calls、Game.party_view）
   function socialHtml(m) {
-    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.replies.map((r) =>
-      `<button class="btn small" data-act="answer" data-id="${esc(c.id)}" data-reply="${esc(r.id)}">${esc(r.label)}</button>`).join("")}</div>`).join("");
+    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map((o) =>
+      `<button class="btn small" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`).join("")}</div>`).join("");
     const party = m.party ? `<div class="party"><span>${esc(m.party.text)}</span>${m.party.lead ? ""
       : '<button class="btn small ghost" data-act="party-leave">分道揚鑣</button>'}</div>` : "";
     return `<div class="calls">${calls}${party}</div>`;
-  }
-  async function answerCall(id, reply) {
-    await busy(async () => {
-      const r = await api("/api/peer/answer", { id, reply });
-      if (r.main) setMain(r.main);
-      renderPage();
-    });
   }
   async function leaveParty() {
     await busy(async () => {
@@ -2602,7 +2595,6 @@
         case "peer-close": S.peer = null; render(); break;
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
-        case "answer": await answerCall(el.dataset.id, el.dataset.reply); break;
         case "party-leave": await leaveParty(); break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
