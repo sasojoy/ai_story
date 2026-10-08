@@ -187,6 +187,23 @@ def test_the_xinde_hint_steps_aside_while_a_choice_card_is_up():
     assert "road-hint" in run(road, "return H.topHtml();")
 
 
+def test_the_xinde_hint_shows_while_resting_or_in_seclusion():
+    """審查 I2：打坐（選單只剩「起身」）與閉關（只剩「提前出關」）是最長的空檔，修練、煉製照樣做得了，也沒有選項會被擠下去：提示照畫。"""
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    game.state.player.stats["xinde"] = 20
+    game.choose("act:rest")
+    resting = server.main_view(game)
+    assert [o["id"] for o in resting["options"]] == ["act:stand"] and resting["status"]["hint"]
+    assert resting["status"]["hint"] in run(resting, "return H.topHtml();")
+    secluded = _season_one()
+    secluded["status"]["hint"] = "💡 你已攢下 20 點心得。去「修練」練成內功、武學。"
+    secluded["options"] = [{"id": "act:break", "label": "提前出關", "enabled": True}]
+    assert secluded["status"]["hint"] in run(secluded, "return H.topHtml();")
+
+
 def test_the_drill_row_reads_drill_once():
     """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。"""
     content = real_content("weekend")
