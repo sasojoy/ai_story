@@ -279,8 +279,9 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
 
 
 def _lockable(content: Content) -> int:
-    """關鍵伏筆改寫得了的大事有幾件：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果，foreshadow 文件 2.4）。"""
-    sides = {"guan", "huang"}
+    """關鍵伏筆改寫得了的大事有幾件：會鎖定大事的兩方（timetable.SIDE_NAMES，跟 foreshadow.LOCK_SIDES 同一份；官軍、黃巾）的鏈指著的
+    那幾件（豪強的鏈是第三方，不改寫結果，foreshadow 文件 2.4）。"""
+    sides = set(timetable.SIDE_NAMES)
     return len({chain.event for chain in content.foreshadows.chains if chain.side in sides})
 
 
@@ -556,7 +557,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
     ]
     if first:
-        bond.append("- 情誼夠深，他會跟你聊起一些風聲：伏筆的片段、機緣的話題。")
+        # 片段只給做得了那條鏈的人（foreshadow.capable 要陣營對得上）：散人聽不到（審查 M4，待 joy 潤）
+        bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     if first:  # 挑戰大勢人物本人只有第一季才有（Game._challenge）
@@ -570,7 +572,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- **遊歷**（體力 {cost['train']}）：只在有隊伍的地方出現。遇上對手一定開打，按鈕上寫勝算：打贏得銀兩、心得、經驗，"
         "可能掉素材；每一場都會扣些氣血，輸了還會掉銀兩。遇上自己陣營的隊伍是操練：不打、不會輸，"
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
-        f"打贏或操練多半還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",
+        f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
         f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",

@@ -85,6 +85,32 @@ def test_drifters_hear_they_can_enlist_for_one_battle(on):
     assert "臨時投效" in tail and "只算那一場" in tail and "決戰" in tail and "大區" in tail
 
 
+def _page(on):
+    return howto.page(on, Game.new(on, "己").state.world, recruitable=False)
+
+
+def test_the_how_to_page_says_only_some_places_push_too(on):
+    """審查 M4：玩法說明「遊歷」那一項以前寫「打贏或操練多半還會推動戰局」——豪強的操練從來不推、潁水河畔什麼都不推。"""
+    text = _page(on)
+    assert "多半還會" not in text
+    train = next(line for line in text.splitlines() if line.startswith("- **遊歷**"))
+    assert "有些地方" in train and "行動列底下" in train
+
+
+def test_the_how_to_page_does_not_promise_fragments_to_drifters(on):
+    """審查 M4：「情誼夠深，他會跟你聊起…伏筆的片段」散人也看得到，可是散人拿不到片段（foreshadow.capable 要陣營對得上）。"""
+    line = next(line for line in _page(on).splitlines() if "伏筆的片段" in line)
+    assert "散人" in line[line.index("伏筆的片段"):] or "散人" in line[:line.index("伏筆的片段")], line
+
+
+def test_the_number_of_rewritable_events_follows_the_lock_sides(on, monkeypatch):
+    """審查 M4：「其中 N 件可以被關鍵伏筆改寫」數的是會鎖定大事的那兩方的鏈（timetable.SIDE_NAMES，跟 foreshadow.LOCK_SIDES 同一份），不另寫一份。"""
+    events = lambda sides: len({c.event for c in on.foreshadows.chains if c.side in sides})  # noqa: E731
+    assert howto._lockable(on) == events(set(foreshadow.LOCK_SIDES))  # noqa: SLF001
+    monkeypatch.setattr(timetable, "SIDE_NAMES", {"haoqiang": "豪強"})  # 換一份：數字跟著換，不是寫死的兩方
+    assert howto._lockable(on) == events({"haoqiang"}) != events(set(foreshadow.LOCK_SIDES))  # noqa: SLF001
+
+
 def test_battle_roles_are_not_explained_yet(on):
     world = Game.new(on, "戊").state.world
     text = "".join(howto.join_lines(on, world) + howto.faction_lines(on, world) + howto.quest_help(on) + [_fronts(on)])
