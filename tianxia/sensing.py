@@ -38,6 +38,9 @@ STALE = "（那一刻已經過去了，心中的形也散了。）"
 # （rules.day_ends_text：第一季是季曆的寫法，開關關著是「第N天 HH:MM」）。序章草廬不寫（做法都對）
 MISS_WARNING = "選錯了做法，這裡要到 {moment} 之後才悟得出。"
 MISS_LINE = "心浮氣躁，什麼也沒抓住。要到 {moment} 之後，這裡才悟得出東西。"  # 選錯了的那一句（待 joy 潤）
+# 換日寫不出來（這一季最後一個遊戲日、季末延後或提前，rules.day_ends_text 是 None）時的兩句（day-scale 審查 M2；待 joy 潤）
+MISS_WARNING_SEASON = "選錯了做法，這一季之內在這裡就悟不出了。"
+MISS_LINE_SEASON = "心浮氣躁，什麼也沒抓住。這一季之內，這裡是悟不出東西了。"
 
 
 def mark_key(location: str) -> str:
@@ -55,9 +58,15 @@ def missed_today(state: GameState, content: Content, loc: Location) -> bool:
     return state.player.sense_misses.get(loc.id) == game_day(content, state.world)
 
 
+def _until(template: str, season_line: str, state: GameState, content: Content) -> str:
+    """寫得出換日的那一刻就填進 template，寫不出來（這一季之內不會再換日）用 season_line。"""
+    moment = day_ends_text(content, state.world)
+    return template.format(moment=moment) if moment else season_line
+
+
 def miss_warning(state: GameState, content: Content) -> str:
     """選做法之前卡上那一行：選錯了要到哪一刻之後才悟得出（此刻所在的遊戲日結束的那一刻）。"""
-    return MISS_WARNING.format(moment=day_ends_text(content, state.world))
+    return _until(MISS_WARNING, MISS_WARNING_SEASON, state, content)
 
 
 def start(state: GameState, content: Content, scene: InsightScene, rng: random.Random) -> list[str]:
@@ -158,7 +167,7 @@ def choose(state: GameState, content: Content, index: int, rng: random.Random) -
     if not scene.prologue and method.attribute not in insights.pool_attributes(loc, content):
         p.sensing = None
         p.sense_misses[loc.id] = game_day(content, state.world)
-        return msgs + [MISS_LINE.format(moment=day_ends_text(content, state.world))]
+        return msgs + [_until(MISS_LINE, MISS_LINE_SEASON, state, content)]
     if rng.random() * 100 >= rate(state, content, loc):
         p.sensing = None
         amount = content.config.sense_miss_xinde

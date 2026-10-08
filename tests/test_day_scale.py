@@ -12,7 +12,7 @@ from conftest import FixedRandom, install_season_one, walk_to
 
 from tianxia import calendar, companion_agent, howto, rules, sensing
 from tianxia.engine import Game
-from tianxia.models import InsightScene, SenseMethod
+from tianxia.models import InsightScene, SenseMethod, TimetableEvent
 from tianxia.state import WorldState
 
 DAY = 86400
@@ -105,7 +105,82 @@ def test_the_moment_uses_the_stamp_format_when_the_switch_is_off(content):
     season.time = 1.3 * DAY
     assert rules.day_ends_text(content, season) == calendar.stamp_text(2 * DAY, content, season) == "第3天 00:00"
     short = _season(content, WEEKEND)  # 開關關著的短季（beta 規則）：一樣照比例換日，寫法照舊
-    assert rules.day_ends_text(content, short) == calendar.day_clock_text(rules.day_ends(content, short)) == "第1天 04:17"
+    assert rules.day_ends_text(content, short) == "第1天 04:18"
+
+
+def test_with_the_switch_off_the_moment_rounds_up_to_the_minute(content):
+    """審查 M2：「第N天 HH:MM」只寫到分。不是整分的換日（短的 beta 季）往後進位：寫出來的那一刻不會早於真的換日（04:17:08.6 寫 04:18）。
+    整分的照寫（14 天的季剛好午夜）。"""
+    short = _season(content, WEEKEND)
+    end = rules.day_ends(content, short)
+    assert calendar.day_clock_text(end) == "第1天 04:17"  # 照舊無條件捨去會早 52 秒
+    for n in range(1, 13):
+        short.time = (n - 0.5) * SHORT
+        text = rules.day_ends_text(content, short)
+        written = int(text[1:text.index("天")]) * DAY - DAY + int(text[-5:-3]) * 3600 + int(text[-2:]) * 60
+        # 不早於真的換日（容浮點誤差：剛好整分的換日算出來可能多 10^-11 秒，那一分照寫，不往後多跳一分）
+        assert -calendar.EPS_SECONDS <= written - rules.day_ends(content, short) < 60, (n, text)
+    whole = _season(content, 14)
+    whole.time = 0.5 * DAY
+    assert rules.day_ends_text(content, whole) == "第2天 00:00"
+
+
+def test_no_moment_is_named_once_the_next_day_would_start_at_or_after_the_season_end(content):
+    """審查 M2：最後一個遊戲日的換日剛好是收季那一刻（季曆會把它寫成「第 12 週・週日 23:59」，那一分鐘什麼都不會重算）；
+    季末延後時，季曆寫不出名義季長之後的時刻（一樣卡在 23:59）；季末提前時，換日在收季之後。這三種都不寫時刻（None），
+    呼叫端改寫「這一季之內不會再…」。"""
+    content.config.season_one = True
+    season = _season(content, WEEKEND, one=True)
+    season.time = 12.5 * SHORT  # 第 13 個遊戲日：第 12 週・週二 00:00 換日，還寫得出來
+    assert rules.day_ends_text(content, season) == "第 12 週・週二 00:00"
+    season.time = 13.5 * SHORT  # 最後一個遊戲日
+    assert rules.day_ends_text(content, season) is None
+    later = _season(content, WEEKEND, one=True)
+    content.timetable.append(TimetableEvent(id="finale", week=12, title="季末", kind="finale"))
+    later.schedule["finale"] = 16 * SHORT  # 管理者把季末往後排：名義季長之後的換日，季曆寫不出來
+    later.time = 13.5 * SHORT
+    assert rules.day_ends_text(content, later) is None
+    earlier = _season(content, WEEKEND, one=True)
+    earlier.schedule["finale"] = 10 * SHORT  # 季末提前：第 10 個遊戲日結束就收季
+    earlier.time = 9.5 * SHORT
+    assert rules.day_ends_text(content, earlier) is None
+    earlier.time = 8.5 * SHORT
+    assert rules.day_ends_text(content, earlier) is not None
+    beta = _season(content, 14)  # 開關關著：最後一天（第 14 天）的換日就是收季
+    beta.time = 13.5 * DAY
+    assert rules.day_ends_text(content, beta) is None
+    beta.time = 12.5 * DAY
+    assert rules.day_ends_text(content, beta) == "第14天 00:00"
+
+
+def test_on_the_last_game_day_the_texts_say_not_this_season(content):
+    """最後一個遊戲日：有所感、交友、路上收穫那幾句不寫時刻，改寫「這一季之內」（待 joy 潤）。"""
+    game = _lake(content, WEEKEND, one=True)
+    game.state.world.time = 13.5 * SHORT
+    sensing.start(game.state, content, SCENE, random.Random(0))
+    assert "> 選錯了做法，這一季之內在這裡就悟不出了。" in sensing.scene_text(game.state, content)
+    game.state.player.sensing = None
+    assert _miss(game)[-1] == "心浮氣躁，什麼也沒抓住。這一季之內，這裡是悟不出東西了。"
+    assert game.action_notes(["act:explore"])["act:explore"].endswith("；這一季之內這裡悟不出了")
+    game.state.player.location = "town"
+    msgs = _talk_out(game)
+    assert msgs[-1] == "韓鐵起身送客：這一季之內不能再來拜會了。"
+    assert game._talked_out_note() == "已經談滿 3 輪，這一季之內不能再來"
+    with mock.patch("tianxia.engine.pick_event", return_value=None):
+        assert game.choose("act:socialize") == ["韓鐵事忙，這一季之內都不得空。"]
+    content.characters["scholar"].deep_interaction = True
+    content.characters["scholar"].audience_fame = 0
+    assert "最多談 3 輪，這一季之內不再重算；" in game._audience_intro()
+    content.config.road_reward_daily_cap = 1
+    game.choose("move:lake")
+    game.choose("road:think")
+    game.rng = FixedRandom(0.1)
+    assert game.choose("road:gather") == ["你留心路邊，這陣子已經撿夠了，沒再去翻（這一季之內不會再有）。"]
+    walk_to(game, "lake")
+    game.choose("move:town")
+    assert game.choose("road:think") == ["你邊走邊想，這陣子想得夠多了，沒有新的心得（這一季之內不會再有）。"]
+    texts = [*msgs, game._talked_out_note(), game._audience_intro()]
+    assert not any("23:59" in t or "第 12 週・週日" in t for t in texts)
 
 
 # ── 交友：同一位人物一個遊戲日最多談 talk_turns_per_day 輪 ──────────────

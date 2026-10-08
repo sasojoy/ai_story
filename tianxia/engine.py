@@ -968,7 +968,9 @@ class Game:
         notes: dict[str, str] = {}
         if "act:explore" in ids:
             legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
-            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, self._insight_blocked_until(loc))
+            blocked = self._insight_blocked(loc)
+            until = day_ends_text(c, s.world) if blocked else None
+            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until)
         if "act:train" in ids:
             notes["act:train"] = self._train_line(loc)
         if "act:socialize" in ids:
@@ -990,15 +992,14 @@ class Game:
                     )
         return notes
 
-    def _insight_blocked_until(self, loc: Location) -> str | None:
-        """探索那一行的悟意境那一支，只因為這個遊戲日在這裡選錯過做法才拿掉時（這裡本來悟得到、比重不是 0）：換日的那一刻
-        （rules.day_ends_text）；其他時候 None。"""
+    def _insight_blocked(self, loc: Location) -> bool:
+        """探索那一行的悟意境那一支，是不是只因為這個遊戲日在這裡選錯過做法才拿掉（這裡本來悟得到、比重不是 0）：是的話那一行
+        句尾補一句什麼時候才悟得出（howto.explore_line）。"""
         c = self.content
-        if not sensing.missed_today(self.state, c, loc):
-            return None
-        if c.config.explore_mix_of(loc.tags).weights.get("insight", 0) <= 0 or not insights.explore_gives(loc, c):
-            return None
-        return day_ends_text(c, self.state.world)
+        return (
+            sensing.missed_today(self.state, c, loc)
+            and c.config.explore_mix_of(loc.tags).weights.get("insight", 0) > 0 and bool(insights.explore_gives(loc, c))
+        )
 
     def _train_line(self, loc: Location) -> str:
         """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
@@ -2262,8 +2263,9 @@ class Game:
         """這個遊戲日還能跟這位人物聊幾輪。"""
         return max(0, self.content.config.talk_turns_per_day - self._talks_used(companion_id))
 
-    def _talks_reopen(self) -> str:
-        """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_ends_text）。"""
+    def _talks_reopen(self) -> str | None:
+        """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_ends_text）；None＝這一季之內
+        不會再換日（最後一個遊戲日、季末延後或提前），句子改寫「這一季之內」（day-scale 審查 M2）。"""
         return day_ends_text(self.content, self.state.world)
 
     def _count_talk(self, companion_id: str) -> list[str]:
@@ -2272,8 +2274,10 @@ class Game:
         if self._talks_left(companion_id) > 0:
             return []
         self.state.player.pending_companion = None
-        name = self.content.characters[companion_id].name
-        return [f"{name}起身送客，改日再敘：要到 {self._talks_reopen()} 之後才能再來拜會。"]
+        name, moment = self.content.characters[companion_id].name, self._talks_reopen()
+        if moment is None:
+            return [f"{name}起身送客：這一季之內不能再來拜會了。"]
+        return [f"{name}起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"]
 
     def _deep_interaction_target(self) -> str | None:
         """這個地點此刻能深度對話的人物 id：見得到（名望或結識）、這個遊戲日還沒聊滿，也沒在對你閉門不見（T4）；沒有就是 None。"""
@@ -2318,8 +2322,10 @@ class Game:
 
     def _talked_out_note(self) -> str:
         """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」
-        ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。"""
-        return f"已經談滿 {self.content.config.talk_turns_per_day} 輪，{self._talks_reopen()} 之後再來"
+        ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。開頭一律是「已經談滿」：網頁行動列的格子認它，只寫「已談滿」（審查 I1）。"""
+        moment = self._talks_reopen()
+        when = f"{moment} 之後再來" if moment else "這一季之內不能再來"
+        return f"已經談滿 {self.content.config.talk_turns_per_day} 輪，{when}"
 
     def _audience_intro(self) -> str:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物各算各的，一個遊戲日最多談幾輪、什麼時候重新算起。"""
@@ -2327,8 +2333,10 @@ class Game:
         per_day = self.content.config.talk_turns_per_day
         # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
+        moment = self._talks_reopen()
+        again = f"到 {moment} 重新算起" if moment else "這一季之內不再重算"
         return (
-            f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，到 {self._talks_reopen()} 重新算起；"
+            f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；"
             "名望不夠的會被打發。"
             + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
         )
@@ -2356,7 +2364,8 @@ class Game:
             if not self._can_meet(companion_id):
                 return self._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
             if self._talks_left(companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
-                return f"{ch.name}事忙，要到 {self._talks_reopen()} 之後才得空。"
+                moment = self._talks_reopen()
+                return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
         return "此地無人可訪，你只好悻悻離去。"
 
     def socialize_starts_dialogue(self) -> bool:
@@ -3750,12 +3759,17 @@ class Game:
         day = day or game_day(self.content, self.state.world)
         self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
 
+    def _road_reopen(self, after: str) -> str:
+        """路上收穫拿滿了那兩句括號裡的話：「〔換日的那一刻〕 {after}」；這一季之內不會再換日（rules.day_ends_text 是 None，
+        day-scale 審查 M2）時是「這一季之內不會再有」（待 joy 潤）。"""
+        moment = day_ends_text(self.content, self.state.world)
+        return f"{moment} {after}" if moment else "這一季之內不會再有"
+
     def _road_think(self) -> list[str]:
         """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。這個遊戲日的收穫拿滿了就照樣想，只是沒有心得
         （寫換日的那一刻，待 joy 潤）。"""
         if not self._road_reward_due("task"):
-            moment = day_ends_text(self.content, self.state.world)
-            return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{moment} 之後才會再有）。"]
+            return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{self._road_reopen('之後才會再有')}）。"]
         p, amount = self.state.player, self.content.config.road_think_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         self._count_road_reward("task")
@@ -3794,7 +3808,7 @@ class Game:
         這個遊戲日的收穫拿滿了就不翻（也不擲骰，寫換日的那一刻，待 joy 潤）；撿到了才算一次收穫。"""
         s, c = self.state, self.content
         if not self._road_reward_due("task"):
-            return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{day_ends_text(c, s.world)} 之後再說）。"]
+            return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{self._road_reopen('之後再說')}）。"]
         if self.rng.random() >= c.config.road_gather_chance:
             return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
         kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}

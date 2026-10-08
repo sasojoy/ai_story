@@ -19,12 +19,15 @@ BRANCH_WORDS: dict[str, str] = {"insight": "悟意境", "wild": "遇野怪", "ev
 PUSH_WORD = "推動戰局"  # 遊歷打贏、操練會推大勢（第一季是戰線，豪強在亂局推割據）：一律這樣說，不露數字
 
 
-def explore_line(weights: Sequence[tuple[str, float]], legend: str | None = None, blocked_until: str | None = None) -> str:
+def explore_line(
+    weights: Sequence[tuple[str, float]], legend: str | None = None, blocked: bool = False, until: str | None = None,
+) -> str:
     """探索這一下多半會怎樣。weights 是探索真的擲骰用的那一份（支, 比重）：照地點類型（Config.explore_mix）、
     做不了的已經拿掉、悟意境那一支乘過悟性（Game._explore_weights）。比重嚴格最大的那一支寫「多半」，其他寫「也可能」
     （照比重由大到小）；並列最大就一起寫「可能」。不寫百分比。legend 是破境丹的名字（探索每次另擲一次撿不撿得到；
-    機率是 0 時呼叫端給 None）。blocked_until：悟意境那一支只因為這個遊戲日在這裡選錯過做法才拿掉時，換日的那一刻
-    （Game._insight_blocked_until，已經照季的時間寫法寫好）；句尾補一句什麼時候才悟得出（待 joy 潤）。"""
+    機率是 0 時呼叫端給 None）。blocked：悟意境那一支只因為這個遊戲日在這裡選錯過做法才拿掉（Game._insight_blocked）；
+    句尾補一句什麼時候才悟得出——until 是換日的那一刻（rules.day_ends_text，已經照季的時間寫法寫好），None 是這一季之內
+    不會再換日（待 joy 潤）。"""
     ranked = sorted((pair for pair in weights if pair[1] > 0), key=lambda pair: -pair[1])  # 穩定排序：並列照原本的順序
     words = [BRANCH_WORDS[branch] for branch, _ in ranked]
     if not words:
@@ -33,8 +36,8 @@ def explore_line(weights: Sequence[tuple[str, float]], legend: str | None = None
         head = f"這裡多半{words[0]}" + (f"，也可能{'、'.join(words[1:])}" if len(words) > 1 else "")
     else:
         head = f"這裡可能{'、'.join(words)}"
-    blocked = f"；這裡要到 {blocked_until} 之後才悟得出" if blocked_until else ""
-    return head + (f"；偶得{legend}" if legend else "") + blocked
+    tail = "" if not blocked else f"；這裡要到 {until} 之後才悟得出" if until else "；這一季之內這裡悟不出了"
+    return head + (f"；偶得{legend}" if legend else "") + tail
 
 
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
