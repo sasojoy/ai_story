@@ -208,12 +208,15 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
     assert givers and all(where.startswith("events/") for where in givers), sorted(set(givers))
 
 
-def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on, real):
+def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
     on.config.first_echo.fame_per, on.config.first_echo.cap = 2, 7
     assert "別人照著合出同一門：每多一個人 +2，一門最多算 7 個人。" in _fame_section(_war(on))
     on.config.first_echo.fame_per = 0
     assert "首創的武學或意境" not in _fame_section(_war(on, "乙"))
-    assert "首創的武學或意境" not in _fame_section(_war(real))  # beta 沒有首創回饋（fusion.echo 只在第一季記）
+    beta = real_content()  # 另一份（on 與 real 是同一份，開關已經打開）：開關關著、回饋照預設
+    beta.config.auto_open_first_season = True
+    assert beta.config.first_echo.fame_per > 0
+    assert "首創的武學或意境" not in _fame_section(_war(beta))  # beta 沒有首創回饋（fusion.echo 只在第一季記）
 
 
 def test_what_fame_is_for_follows_the_content(on):
