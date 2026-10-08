@@ -42,6 +42,7 @@ class MartialArt(BaseModel):
     # 首創者寫給別人看的名號：名號（江湖史一律具名，傳聞分層第七節）；這一版之前匿名行走的人記的是「某位少俠」，照舊；
     # 功法卡、後到的人那一句、換季的江湖史都寫這個（shown_creator）。舊資料沒有，照 creator
     creator_shown: str | None = None
+    co_creator: str | None = None  # 論武（兩人合出來的）第一次合出來時的另一個人的名號（身分）；寫給別人看的兩個名號在 creator_shown
     # 師門配方（content/preset_recipes.json，新手引導）的功夫：寫好的、傳下來的，沒有首創者——功法卡寫「師門傳下來的功夫」，
     # 換季的江湖史「合成首創」不列（sqlite_world._season_firsts_lines）
     preset: bool = False
@@ -69,6 +70,7 @@ class Insight(BaseModel):
     lean: str = "無"  # 正、邪、無（設計 7.3）
     creator: str | None = None  # 合併出來的：第一個合出來的人的名號（身分）；基本意境是 None
     creator_shown: str | None = None  # 首悟者寫給別人看的名號：名號（見 MartialArt.creator_shown；這一版之前匿名記下的「某位少俠」照舊）
+    co_creator: str | None = None  # 論武合出來的：另一個人的名號（見 MartialArt.co_creator）
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
     # ── 私有的意境（畫圖悟來的、或拿私有的去合併出來的；悟意境設計 0.2b）：存在悟的人自己的存檔（PlayerState.own_insights），

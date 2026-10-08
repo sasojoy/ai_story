@@ -690,6 +690,25 @@ def prepare_forge(
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
 
 
+def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
+    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
+    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
+    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.request is None:
+        return None
+    started, request = _open_request(game, lambda: game.peer_request(name, action, params))
+    if request is None:
+        return NO_NAME
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+
+
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
@@ -841,6 +860,8 @@ def _main_view_body(game: Game) -> dict:
         "minimap": game.minimap_svg(),
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
+        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
+        "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
         "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
@@ -1405,11 +1426,14 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
     """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
     game = _game(request)
     name, action = str(body.get("name", "")), str(body.get("action", ""))
-    params = {"arg": str(body.get("arg", ""))}
+    params = {"arg": str(body.get("arg", "")), "choice": str(body.get("choice", ""))}
     try:
         params["amount"] = int(body.get("amount", 0))
     except (TypeError, ValueError):
         params["amount"] = 0
+    proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
+    if proposed is not None:
+        params["proposed"] = proposed
     msgs = act(game, lambda g: g.peer_act(name, action, params))
     _tell_tabs(game)
     return {
@@ -1418,6 +1442,15 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+
+
+@app.post("/api/party/leave")
+def api_party_leave(request: Request):
+    """還在等帶頭的人動身時的「分道揚鑣」（Game.leave_party）；在路上時走選單的 act:part。回傳 {main, message}。"""
+    game = _game(request)
+    msgs = act(game, lambda g: g.leave_party())
+    _tell_tabs(game)
+    return {"main": look(game, main_view), "message": joined(msgs)}
 
 
 @app.get("/api/menxia")

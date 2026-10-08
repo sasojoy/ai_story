@@ -5239,6 +5239,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+        "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5860,7 +5861,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     poll_main／_entry 都不叫。以後誰把通知挪進共用的底層，輪詢會連帶通知，這個測試先紅。"""
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
-        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act",
+        "api_choose", "api_answer", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
     }
 
 
@@ -6448,3 +6449,22 @@ def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
     assert client.get("/api/peer", params={"name": "沒這個人"}).json() == {"card": None, "gone": social.GONE}
     out = client.post("/api/peer/act", json={"name": "林小竹", "action": "no-such", "amount": "x"}).json()
     assert "沒有這個動作" in out["message"] and out["card"]["name"] == "林小竹"
+
+
+def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
+    """第二層：甲向乙抱拳、送銀兩；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
+    _player(client, "shen_02", "沈青衫")
+    other = TestClient(server.app)
+    _player(other, "lin_02", "林小竹")
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "bow"}).json()
+    assert "抱拳見禮" in out["message"]
+    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "silver", "amount": 5}).json()
+    assert "送給了林小竹" in gift["message"]
+    [call] = other.get("/api/main").json()["calls"]
+    assert call["text"] == "沈青衫向你抱拳見禮。"
+    other.post("/api/choose", json={"id": call["options"][0]["id"]})
+    main = other.get("/api/main").json()
+    assert main["calls"] == [] and main["party"] is None
+    assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
+    left = other.post("/api/party/leave", json={}).json()
+    assert "沒有跟著誰" in left["message"]
