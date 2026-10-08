@@ -19,7 +19,7 @@ from tianxia import battle_instance, battlelog, figures, front_lines, journal, r
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
-from tianxia.models import FrontLines
+from tianxia.models import FrontLines, ShowdownPay
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 BAND_KEYS = ["1", "2-3", "4+"]
@@ -30,6 +30,7 @@ def real():
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.showdown_pay = ShowdownPay(silver=0, exp=0, contrib_push=0, win_contrib_push={})  # 這裡驗戰況的說法，不驗軍餉
     return c
 
 

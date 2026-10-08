@@ -1136,6 +1136,24 @@ class Spar(_Strict):
     per_pair_day: int = Field(default=2, ge=1)
 
 
+class ShowdownPay(_Strict):
+    """全服決戰的軍餉（試玩回饋 2026-10-08，Joy：「參加就會有基本的軍餉獎勵，獲勝有更多」）。參戰者收場後各自補戰報時拿
+    （Game._file_showdown，下線的人回來補，只發一次），這一季打的才發；沒打完收兵的不發。
+
+    份量照出手回合數：出手 full_rounds 回合以上拿滿，不到照比例，一回合都沒出手（掛機、全程被代選）只拿 idle_share。
+    數字的依據：週末設定平衡量到每天大約收 100 兩，一場決戰的軍餉落在半天到一天的遊歷收入——滿出手的基本軍餉 40 兩、
+    大勝再加一倍到 80 兩；經驗照遊歷一場 10～15 點，基本 60 點約四五場遊歷。"""
+
+    silver: int = Field(default=40, ge=0)  # 基本軍餉（滿出手）
+    exp: int = Field(default=60, ge=0)
+    full_rounds: int = Field(default=6, ge=1)  # 出手幾回合算滿（黃巾決戰一場 9 回合，時刻表決戰也是 3 幕 × 3）
+    idle_share: float = Field(default=0.1, ge=0, le=1)  # 一回合都沒出手的人拿幾成
+    win_bonus: dict[str, float] = Field(default_factory=lambda: {"大勝": 1.0, "險勝": 0.5})  # 贏的一方另加基本軍餉的幾倍
+    # 投靠了陣營的人另記本季貢獻（照推大勢的帳：contrib_per_push × 這幾點 × 份量）；臨時投效的散人、第三方不記
+    contrib_push: int = Field(default=2, ge=0)  # 參戰就記的
+    win_contrib_push: dict[str, int] = Field(default_factory=lambda: {"大勝": 5, "險勝": 3})  # 贏的一方另記的
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1198,6 +1216,7 @@ class Config(_Strict):
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
+    showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人

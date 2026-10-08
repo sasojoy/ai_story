@@ -12,5 +12,6 @@
   "cultivate_odds": {"中品": [40, 20], "上品": [10, 6], "絕學": [4, 3]},
   "cultivate_min_level": {},
   "cultivate_fit": {"level_base": 1, "level_step": 0, "substitute": 1, "home_ground": 1},
-  "breakthrough": {"heat": 0}
+  "breakthrough": {"heat": 0},
+  "showdown_pay": {"silver": 0, "exp": 0, "contrib_push": 0, "win_contrib_push": {}}
 }

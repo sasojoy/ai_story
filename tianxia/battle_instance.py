@@ -143,6 +143,8 @@ class BattleInstance(BaseModel):
     outcome_title: str | None = None
     outcome_text: str | None = None
     highlight: GambleMoment | None = None  # 這一場到目前最有戲的放手一搏（more_dramatic）；收場時寫進傳聞，成功的人加名望
+    outcome_side: str = ""  # 贏的那一方（陣營 id）；保底的「膠著」、沒分勝負、舊資料是空的（軍餉的獲勝加給看它）
+    outcome_margin: str = ""  # 「大勝」或「險勝」；outcome_side 是空的時候也是空的
     outcome_reason: str = ""  # 勝負的關鍵（outcome_reason 寫的那一句）：收場訊息、參戰者的戰報都放；舊資料、沒分勝負是空的
     swings: list[RoundSwing] = Field(default_factory=list)  # 每一回合戰局怎麼走（resolve_round 記），寫敗因用；舊資料沒有是空的
     outcome_world_flags: list[str] = Field(default_factory=list)  # 結果要套用到共用賽季的世界旗標（複製自
@@ -792,6 +794,9 @@ def _record_outcome(instance: BattleInstance, outcome: BattleOutcome) -> list[st
     回傳要給大家看的兩行。"""
     instance.phase = "ended"
     instance.outcome_title, instance.outcome_text = outcome.title, outcome.text
+    if outcome.trend_min is not None or outcome.trend_max is not None:  # 有門檻的才是分出了勝負；最後那個保底是膠著
+        instance.outcome_side = outcome.faction
+        instance.outcome_margin = "大勝" if abs(instance.trend - CENTER) >= BIG_WIN_MARGIN else "險勝"
     instance.outcome_world_flags = list(outcome.world_flags_add)
     instance.outcome_trend_delta = dict(outcome.trend_delta)
     return [f"══ {outcome.title} ══", outcome.text]
