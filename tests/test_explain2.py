@@ -380,3 +380,40 @@ def test_no_method_help_when_the_methods_are_not_on_the_menu(game):
     """戰場蓋過了畫面（選單是戰鬥選項）：做法不在選單上，就不給提示。"""
     _feeling(game)
     assert game.method_help(["battle:act:0"]) is None
+
+
+# ── 五、FB-101：行動列底下兩處小字 ─────────────────────────────
+
+
+def _notes(game):
+    return game.action_notes([o.id for o in game.options(odds=False)])
+
+
+def test_the_drill_line_does_not_say_drill_again(on):
+    """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。"""
+    game = _war(on)
+    game.state.player.faction = "huang"
+    game.state.player.location = "huangjin_camp"
+    train = next(o for o in game.options(odds=False) if o.id == "act:train")
+    assert train.label.startswith("操練（")
+    line = _notes(game)["act:train"]
+    assert line.startswith("不冒險：") and "操練" not in line
+
+
+def test_one_branch_left_is_not_mostly(on):
+    """只剩一支走得了（例：潁川選錯了做法，悟意境那一支到換日都沒了）：不寫「多半」，寫「會」。正式內容每一處都照這條。"""
+    from tianxia.rules import game_day
+
+    game = _war(on)
+    s = game.state
+    s.player.sense_misses[s.player.location] = game_day(on, s.world)
+    line = _notes(game)["act:explore"]
+    assert line.startswith("這裡會碰上事件") and "多半" not in line
+    for loc in on.locations.values():
+        s.player.location = loc.id
+        weights = [w for w in game._explore_weights(loc) if w[1] > 0]
+        note = _notes(game).get("act:explore")
+        if note is not None and len(weights) == 1:
+            assert "多半" not in note and note.startswith("這裡會"), (loc.id, note)
+        if note is not None and len(weights) > 1:
+            assert "這裡會" not in note, (loc.id, note)

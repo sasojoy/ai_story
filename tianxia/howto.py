@@ -27,7 +27,7 @@ def explore_line(
 ) -> str:
     """探索這一下多半會怎樣。weights 是探索真的擲骰用的那一份（支, 比重）：照地點類型（Config.explore_mix）、
     做不了的已經拿掉、悟意境那一支乘過悟性（Game._explore_weights）。比重嚴格最大的那一支寫「多半」，其他寫「也可能」
-    （照比重由大到小）；並列最大就一起寫「可能」。不寫百分比。legend 是破境丹的名字（探索每次另擲一次撿不撿得到；
+    （照比重由大到小）；並列最大就一起寫「可能」；只剩一支寫「會」（FB-101）。不寫百分比。legend 是破境丹的名字（探索每次另擲一次撿不撿得到；
     機率是 0 時呼叫端給 None）。blocked：悟意境那一支只因為這個遊戲日在這裡選錯過做法才拿掉（Game._insight_blocked）；
     句尾補一句什麼時候才悟得出——until 是換日的那一刻（rules.day_ends_text，已經照季的時間寫法寫好），None 是這一季之內
     不會再換日（待 joy 潤）。"""
@@ -35,8 +35,10 @@ def explore_line(
     words = [BRANCH_WORDS[branch] for branch, _ in ranked]
     if not words:
         head = "這裡多半一無所獲"
-    elif len(words) == 1 or ranked[0][1] > ranked[1][1]:
-        head = f"這裡多半{words[0]}" + (f"，也可能{'、'.join(words[1:])}" if len(words) > 1 else "")
+    elif len(words) == 1:  # 只剩一支走得了（FB-101）：不說「多半」，好像還有別的可能
+        head = f"這裡會{words[0]}"
+    elif ranked[0][1] > ranked[1][1]:
+        head = f"這裡多半{words[0]}，也可能{'、'.join(words[1:])}"
     else:
         head = f"這裡可能{'、'.join(words)}"
     tail = "" if not blocked else f"；這裡要到 {until} 之後才悟得出" if until else "；這一季之內這裡悟不出了"
@@ -46,11 +48,12 @@ def explore_line(
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練
-    給的（只有心得、經驗，照 Config.drill_reward_share 算出來不是 0 的）；drills：這裡也有自己陣營的隊伍。沒有會打的對手＝操練。"""
+    給的（只有心得、經驗，照 Config.drill_reward_share 算出來不是 0 的）；drills：這裡也有自己陣營的隊伍。沒有會打的對手＝操練。
+    沒有會打的對手時，行動列那一格本身就寫「操練」（Game._train_option），這一行接在它後面：不再開頭寫一次「操練」（FB-101）。"""
     pushed = f"，{PUSH_WORD}" if push else ""
     if not foes:
         got = f"得{'、'.join(drill_gains)}" if drill_gains else "沒什麼賞"
-        return f"操練不冒險：{got}{pushed}；不給銀兩、素材"
+        return f"不冒險：{got}{pushed}；不給銀兩、素材"
     got = f"打贏得{'、'.join(gains)}" if gains else "打贏沒什麼賞"
     return got + ("，可能掉素材" if drops else "") + pushed + ("；遇上自己人是操練" if drills else "")
 

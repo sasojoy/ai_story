@@ -175,6 +175,19 @@ def test_the_xinde_hint_steps_aside_while_a_choice_card_is_up():
     assert "road-hint" in run(road, "return H.topHtml();")
 
 
+def test_the_drill_row_reads_drill_once():
+    """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。"""
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    game.state.player.faction = "huang"
+    game.state.player.location = "huangjin_camp"
+    page = run(server.main_view(game), "return H.pageJianghu();")
+    row = next(r for r in re.findall(r"<p><b>(.*?)</b>(.*?)</p>", page) if r[0] == "操練")
+    assert (row[0] + row[1]).count("操練") == 1 and row[1].startswith("不冒險：")
+
+
 def test_the_entry_line_keeps_the_notes_line_height():
     """版面釘子：入口那顆鈕跟說明同一個字級，按的範圍用內距撐大、再用同樣大小的負外距收回，所以那一行跟其他行一樣高（12px×1.5）。"""
     css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")
