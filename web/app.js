@@ -2521,8 +2521,9 @@
           render();
           loadRecap();
           await refreshHowto();
-          if (S.main.admin) { // 跟齒輪打開時一樣：管理者的時刻表與可以定的結果會變，重抓
+          if (S.main.admin) { // 跟齒輪打開時一樣：管理者的時刻表與可以定的結果會變，重抓；查過的玩家也重查（審查 Nit）
             S.admin = await api("/api/admin");
+            if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
             renderKeepingSheet();
           }
           break;

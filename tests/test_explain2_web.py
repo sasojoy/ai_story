@@ -255,6 +255,17 @@ def test_the_drill_row_reads_drill_once():
     assert (row[0] + row[1]).count("操練") == 1 and row[1].startswith("不冒險：")
 
 
+def test_the_newbie_entry_refreshes_the_admin_view_like_the_gear():
+    """審查 Nit：管理者從入口打開抽屜，跟按齒輪一樣重抓 /api/admin 與查過的那位玩家（/api/admin/player）。"""
+    m = _season_one(admin=True)
+    out = run(m, f"""return (async () => {{
+      {_click("howto-open")}
+      return T.calls.map((c) => c[0]);
+    }})();""", S={"adPlayerName": "沈青衫"}, responses={"/api/howto": {"text": "<p>x</p>"}, "/api/admin/player": {"name": "沈青衫"},
+                                                    "/api/admin": {}})
+    assert "/api/admin" in out and "/api/admin/player" in out
+
+
 def test_the_entry_line_keeps_the_notes_line_height():
     """版面釘子：入口那顆鈕跟說明同一個字級，按的範圍用內距撐大、再用同樣大小的負外距收回，所以那一行跟其他行一樣高（12px×1.5）。"""
     css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")
