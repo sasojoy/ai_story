@@ -34,9 +34,6 @@ NOT_GATED: dict[tuple[str, int], tuple[int, str]] = {
 # 這份計畫要擋、還沒擋的（逐檔擋完就從這裡拿掉；全部擋完這個清單就刪掉）
 TO_GATE: set[tuple[str, int]] = {
     ("luoyang_beimang_search", 0),
-    ("sc_xy_wedding", 2), ("sc_xy_register", 2), ("sc_zhuo_wedding", 2), ("sc_rn_mourning", 2), ("sc_rnac_recommend", 2),
-    ("sc_rnmk_measure", 2), ("sc_rnmk_wedding", 2), ("sc_qiao_liubo", 2),
-    ("tale_yc_riverbank", 0), ("tale_wan_road", 0), ("tale_rnmk_ford", 0),
     ("train_campfire", 1), ("yuxi_antique", 0), ("trend_baima_ford_panic", 2),
 }
 
