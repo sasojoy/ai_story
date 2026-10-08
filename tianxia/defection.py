@@ -1,14 +1,17 @@
 """叛投（第一季設計 5.1、傳聞分層設計第五節；計畫 2026-10-06-第一季正式版-甲-叛投）。
 
 已經投靠的人，在別的陣營的投靠點改投：一季最多一次，身份歸零，舊陣營的個人進度帶不走、部下全部離隊；
-新、舊兩個陣營的軍情各一則（寫名字），當地一則地方傳聞（可以匿名）。只有第一季的規則開著才有。"""
+新、舊兩個陣營的軍情各一則（寫名字），當地一則地方傳聞（可以匿名）。
+不看第一季的開關（企劃者 2026-10-08：開關打開之前就開著的那一季也要能轉陣營）：劇本有陣營就有。
+章關著的那一季，舊陣營進度裡第一季才有的那幾樣（晉升、席次、機緣、密謀、軍令貢獻）本來就是空的，清掉也沒事；
+陣營軍情那一層在那一季沒地方顯示，照記不畫。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from . import opportunities, ranks, seats
 from .models import Content, FactionDef, Sect
-from .rules import add_rumor, display_name, season_one
+from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
 
 if TYPE_CHECKING:
@@ -23,10 +26,10 @@ def enlisted(battle: BattleInstance | None, name: str) -> bool:
 
 
 def can_defect(state: GameState, content: Content, battle: BattleInstance | None = None) -> bool:
-    """這一季還能叛投嗎：第一季的規則開著、已經投靠、這一季還沒叛投過、名字不在沒打完的決戰的參戰名單上。
+    """這一季還能叛投嗎：劇本有陣營、已經投靠、這一季還沒叛投過、名字不在沒打完的決戰的參戰名單上。
     battle 是目前全服的那一場決戰（Game 傳 world.get_battle()；這個模組不碰全服狀態），沒有決戰就不傳。"""
     p = state.player
-    return season_one(content, state.world) and p.faction is not None and not p.defected \
+    return bool(content.scenario.factions) and p.faction is not None and not p.defected \
         and not enlisted(battle, p.name)
 
 
@@ -42,7 +45,7 @@ def refusal(state: GameState, content: Content, target: FactionDef, battle: Batt
     """現在不能叛投去 target 的原因（一句話，不含括號）；可以就是 None。跟 targets_here 同一套規則（target 在
     targets_here 裡 ⇔ 這裡是 None），確認畫面按「確定」時用它再驗一次，並把真正的原因說給玩家聽。"""
     p = state.player
-    if not season_one(content, state.world) or p.faction is None:
+    if not content.scenario.factions or p.faction is None:
         return "現在不能叛投。"
     if p.defected:
         return "這一季你已經叛投過一次了。"
