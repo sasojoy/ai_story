@@ -181,7 +181,7 @@ def test_someone_who_cannot_join_sees_no_change(on):
 def test_with_an_event_open_the_join_button_still_sits_by_the_name_and_only_once(on):
     """集結時碰上事件（選單是一排選項、不是行動列）：加入照樣在名字那一行，不在選項裡再列一次；事件的選項照舊。"""
     game = _muster(on, "guan")
-    game.state.pending_event = "jz_altar_talisman"
+    game.state.pending_event = "jz_gz_forge"
     m = server.main_view(game)
     assert [o["id"] for o in m["options"]][0] == "battle:join:guan" and "act:rest" not in [o["id"] for o in m["options"]]
     page = _page(m)
