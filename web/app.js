@@ -1901,6 +1901,17 @@
     const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
+    // 兵器（兵器設計 3.6）：身上那把一行、兵器架每把一行與「換上」鈕。字都是伺服器給的資料，一律 esc
+    const wp = x.weapons;
+    const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
+        <b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>
+        ${wornNow ? "" : `<button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button>`}
+      </div>`;
+    const weaponsBlock = wp && (wp.worn || wp.rack.length) ? `<section class="weapons"><div class="label">兵器</div>
+        ${wp.worn ? weaponRow(wp.worn, true) : '<p class="muted">手上沒有兵器。</p>'}
+        ${wp.rack.length ? `<small class="muted">兵器架 ${wp.rack.length}/${wp.cap | 0}</small>${wp.rack.map((w) => weaponRow(w, false)).join("")}` : ""}
+        <p class="muted">城裡的鐵匠鋪買得到、修得好。</p>
+      </section>` : "";
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
@@ -1916,6 +1927,7 @@
       ${attrNoteHtml(x)}
       <div class="label">身上的兩門</div>
       ${worn}
+      ${weaponsBlock}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
       ${chips}
       ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')
@@ -3114,6 +3126,7 @@
           S.person = S.person === el.dataset.key ? null : el.dataset.key;
           await loadMenxia();
           break;
+        case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 兵器架上那一把換到手上
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
           const was = S.menxia;
@@ -3445,7 +3458,7 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
+    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal", "weapons"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 

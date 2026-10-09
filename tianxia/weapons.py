@@ -235,6 +235,8 @@ def repair(state: GameState, content: Content) -> list[str]:
 
 def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
     """換兵器（2.2）：兵器架上那一把換到手上，手上那把放回架上（手上空著就直接拿下來）。不花體力。"""
+    if not content.config.weapons.enabled:
+        return ["（此刻無法這麼做。）"]
     p = state.player
     chosen = next((w for w in p.rack if w.id == weapon_id), None)
     if chosen is None:
@@ -244,3 +246,57 @@ def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
         p.rack.append(p.weapon)
     p.weapon = chosen
     return [f"你換上了【{chosen.name}】。"]
+
+
+TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
+
+
+def _pct(ratio: float) -> str:
+    """跟 skillview._pct 同一種寫法：帶正負號、最多一位小數、整數不寫「.0」。"""
+    return f"{ratio:+.1%}".replace(".0%", "%")
+
+
+def _describe(w: Weapon) -> str:
+    return f"【{w.name}】{w.kind}・屬{w.attribute}・{TIER_WORDS.get(w.tier, '')}{w.quality}・鋒利度 {w.edge}"
+
+
+def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
+    """配不上的那一句（待 joy 潤）：拳腳、弓弩寫成「拳腳法」「弓弩法」不通順，各自另寫。"""
+    mine = art_weapon(art.id, content, world) if art is not None else None
+    if not mine:
+        return "你身上沒有用得上兵器的武學"
+    if mine == "拳腳":
+        return f"這把{w.kind}用不上你的拳腳功夫"
+    if mine == "弓弩":
+        return f"這把{w.kind}用不上你的弓弩上的功夫"
+    return f"這把{w.kind}用不上你的{mine}法"
+
+
+def card_line(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str:
+    """本人卡上的「兵器」那一行（3.6）：空手或開關關著是空字串。"""
+    w = state.player.weapon
+    if not content.config.weapons.enabled or w is None:
+        return ""
+    if not usable(w, art, content, world):
+        return f"兵器　{_describe(w)}，{_mismatch(w, art, content, world)}"
+    return f"兵器　{_describe(w)}，威力 {_pct(bonus(w, art, content, world))}"
+
+
+def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> dict:
+    fits = usable(w, art, content, world)
+    return {
+        "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
+        "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
+    }
+
+
+def rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict:
+    """修練頁的兵器那一塊（server.menxia_view 的 weapons）：身上那把、兵器架、格數。開關關著時 worn 是 None、rack 是空的。"""
+    p = state.player
+    if not content.config.weapons.enabled:
+        return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
+    return {
+        "worn": _row(p.weapon, art, content, world) if p.weapon else None,
+        "rack": [_row(w, art, content, world) for w in p.rack],
+        "cap": content.config.weapons.rack_cap,
+    }

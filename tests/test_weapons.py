@@ -504,3 +504,80 @@ def test_challenging_a_great_figure_wears_the_blade_but_a_story_fight_does_not(w
                          tier="落敗", our_power=1.0, difficulty=1.0)
     game._file_battle(story)
     assert p.weapon.edge == edge
+
+
+# ── Task 7：看得到（角色卡、修練頁的兵器架） ──
+
+def test_card_line_reports_bonus_or_mismatch(content, world):
+    _on(content)
+    game = _game(content, world)
+    art = team.player_art(game.state, content, world, game.state.player.member.wugong_id)
+    assert weapons.card_line(game.state, content, world, art) == ""
+    game.state.player.weapon = _blade(attribute="快", edge=80)
+    line = weapons.card_line(game.state, content, world, art)
+    assert "【試刃】" in line and "鋒利度 80" in line and "+4.5%" in line
+    game.state.player.weapon = _blade(kind="刀")
+    assert "用不上你的" in weapons.card_line(game.state, content, world, art)
+    content.config.weapons.enabled = False
+    assert weapons.card_line(game.state, content, world, art) == ""
+
+
+def test_card_line_mismatch_wording_per_kind(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.weapon = _blade(kind="刀")
+    for art_id, word in (("sword", "劍"), ("fist", "拳腳")):
+        art = team.resolve_art(art_id, content, world)
+        line = weapons.card_line(game.state, content, world, art)
+        assert "用不上你的" in line and word in line, line
+    assert "沒有用得上兵器的武學" in weapons.card_line(game.state, content, world, None)
+
+
+def test_player_card_has_the_weapon_line(content, world):
+    from tianxia import skillview
+    _on(content)
+    game = _game(content, world)
+    assert "兵器" not in skillview.member_card(game.state, content, world, "player")
+    game.state.player.weapon = _blade(attribute="快")
+    game.state.player.member.wugong_id = "sword"
+    assert "【試刃】" in skillview.member_card(game.state, content, world, "player")
+
+
+def test_rows_for_the_practice_page(content, world):
+    _on(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.member.wugong_id = "sword"
+    p.weapon = _blade(attribute="快")
+    p.rack = [Weapon(id="兵:2", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
+    art = team.player_art(game.state, content, world, p.member.wugong_id)
+    data = weapons.rows(game.state, content, world, art)
+    assert data["worn"]["name"] == "試刃" and data["worn"]["fits"] and data["worn"]["bonus"] == "+5%"
+    assert data["rack"][0]["id"] == "兵:2" and not data["rack"][0]["fits"] and data["rack"][0]["bonus"] is None
+    assert data["cap"] == content.config.weapons.rack_cap
+    content.config.weapons.enabled = False
+    assert weapons.rows(game.state, content, world, art)["worn"] is None
+    assert weapons.rows(game.state, content, world, art)["rack"] == []
+
+
+def test_menxia_view_and_the_wield_action(content, world):
+    import server
+    _on(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.rack = [Weapon(id="兵:2", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
+    view = server.menxia_view(game)
+    assert view["weapons"]["worn"] is None and view["weapons"]["rack"][0]["id"] == "兵:2"
+    server.MENXIA_ACTIONS["wield"](game, {"weapon": "兵:2"})
+    assert p.weapon.id == "兵:2" and p.rack == []
+    assert server.menxia_view(game)["weapons"]["worn"]["name"] == "厚背刀"
+
+
+def test_wield_is_refused_when_weapons_are_off(content, world):
+    game = _game(content, world)  # 測試內容預設關著
+    assert content.config.weapons.enabled is False
+    p = game.state.player
+    p.rack = [Weapon(id="兵:2", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
+    msgs = game.wield_weapon("兵:2")
+    assert msgs and not msgs[0].startswith("你換上了")
+    assert p.weapon is None and [w.id for w in p.rack] == ["兵:2"]
