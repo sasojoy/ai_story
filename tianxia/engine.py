@@ -20,7 +20,7 @@ from . import (
     atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview,
-    social, styles, team, timetable, traits, zh,
+    social, styles, team, timetable, traits, weapons, zh,
 )
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
@@ -233,6 +233,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了的提醒（_file_battle）；沒有草稿的呼叫端（切磋的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
@@ -4066,12 +4067,17 @@ class Game:
         return msgs
 
     def _file_battle(self, record) -> str:
+        self._last_wear = []
+        if record.kind != "event":  # 兵器磨損（兵器設計 3.4）：劇情戰不扣；全服決戰不走這裡。提醒進戰鬥卡片也進江湖紀錄
+            self._last_wear = weapons.wear(self.state, self.content, record.tier)
+            record.notes += self._last_wear
         battlelog.add_record(self.state, record)
         self.state.battle_card = record.id
         line = battlelog.summary_line(record)
         if self._draft is not None:
             self._draft.outcome(battlelog.outcome_text(record), line)
             self._draft.battle_id = record.id
+            self._draft.notes += self._last_wear
             if record.exp:
                 self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
@@ -5115,7 +5121,7 @@ class Game:
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
         line = self._file_battle(record)
-        msgs = [line, f"心得 +{xinde}"] + ups
+        msgs = [line, f"心得 +{xinde}"] + ups + self._last_wear
         if self._draft is None:  # 對方那一邊：不是他自己按的，替他記一則
             self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record))
         return msgs
@@ -5278,7 +5284,7 @@ class Game:
         record.notes.append(story)
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
-        msgs = [line, story, *battlelog.gains_list(record)]
+        msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
         if attacker:
             msgs.insert(0, f"體力 -{c.config.raid.stamina}")
         if self._draft is None:

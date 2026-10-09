@@ -183,3 +183,64 @@ def test_styled_fighters_multiplies_the_weapon_into_the_player_only(content, wor
     off = team._styled_fighters(game.state, content, world, arts, squad)[2]
     assert off[0].factor == pytest.approx(base[0].factor * 1.05)
 
+
+
+# ── Task 4：打仗會鈍 ──
+
+def _new_state(content, world, name):
+    import random
+    from tianxia.engine import Game
+    return Game.new(content, name, rng=random.Random(0), world=world).state
+
+
+def test_wear_by_tier_and_warn_once(content, world):
+    _on(content)
+    state = _new_state(content, world, "鈍刀")
+    state.player.weapon = _blade(edge=35)
+    assert weapons.wear(state, content, "大勝") == []
+    assert state.player.weapon.edge == 33
+    msgs = weapons.wear(state, content, "落敗")
+    assert state.player.weapon.edge == 28 and msgs == [weapons.EDGE_WARNING.format(name="試刃")]
+    assert weapons.wear(state, content, "僵持") == []  # 只提醒一次
+    assert state.player.weapon.edge == 25
+    state.player.weapon.edge = 1
+    weapons.wear(state, content, "落敗")
+    assert state.player.weapon.edge == 0
+
+
+def test_wear_does_nothing_without_weapon_or_switch(content, world):
+    state = _new_state(content, world, "空手")
+    _on(content)
+    assert weapons.wear(state, content, "落敗") == []
+    content.config.weapons.enabled = False
+    state.player.weapon = _blade()
+    assert weapons.wear(state, content, "落敗") == [] and state.player.weapon.edge == 100  # 開關關著
+
+
+def test_training_fight_wears_the_blade_and_the_reminder_reaches_the_journal(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.weapon = _blade(edge=31)
+    game.state.player.location = "lake"
+    game.state.player.stamina = 100.0
+    game.sync(0.0)
+    game.choose("act:train")
+    assert game.state.player.weapon.edge < 31
+    record = game.state.battles[-1]
+    assert record.kind == "train"
+    assert weapons.EDGE_WARNING.format(name="試刃") in record.notes  # 戰鬥卡片
+    assert any(weapons.EDGE_WARNING.format(name="試刃") in line for line in game.state.journal[0].lines)  # 江湖紀錄
+
+
+def test_file_battle_skips_event_fights(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.weapon = _blade()
+    from tianxia.state import BattleRecord
+    record = BattleRecord(id=1, time=0.0, location="湖邊", kind="event", event="劇情", opponent="誰", ours=[],
+                          tier="落敗", our_power=1.0, difficulty=1.0)
+    game._file_battle(record)
+    assert game.state.player.weapon.edge == 100
+    record = record.model_copy(update={"id": 2, "kind": "wild"})
+    game._file_battle(record)
+    assert game.state.player.weapon.edge == 95

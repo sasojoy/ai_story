@@ -144,6 +144,7 @@ class Draft:
     changes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補上的數值變化（例如經驗）
     guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
     glyph: list[list[int]] = field(default_factory=list)  # 有所感畫的那一筆（JournalEntry.glyph，紀錄裡畫縮圖）
+    notes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補進敘事的話（兵器鈍了的提醒）；訊息已經有的不重複
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -169,6 +170,7 @@ class Draft:
             if new is not None:
                 kept.append(new)
         changes, lines = split_changes(kept)
+        lines += [n for n in self.notes if n not in lines]
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
             battle_id=self.battle_id, guide=list(self.guide), glyph=list(self.glyph),

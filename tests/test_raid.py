@@ -248,3 +248,22 @@ def test_a_bot_raids_only_targets_it_can_beat(pair, monkeypatch):
     msgs = _do(content, world, "甲", lambda g: bot_policy._raid(g, random.Random(0)))[0]
     assert msgs and _load(world, "乙").battles[0].kind == "raid"
     assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == []  # 冷卻中
+
+
+def test_both_sides_of_a_raid_dull_their_own_blade_and_the_defender_reads_the_warning_in_the_journal(pair, monkeypatch):
+    from tianxia import weapons
+    from tianxia.state import Weapon
+    content, world = pair
+    content.config.weapons.enabled = True
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.weapon = Weapon(id=f"兵:{name}", name=f"{name}刃", kind="拳腳", attribute="剛", tier=1, quality="下品", edge=30)
+        CharacterStore(world.db).save(state)
+    _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    for name in ("甲", "乙"):
+        after = _load(world, name)
+        warning = weapons.EDGE_WARNING.format(name=f"{name}刃")
+        assert after.player.weapon.edge < 30 and after.player.edge_warned
+        assert warning in after.battles[0].notes
+        assert warning in after.journal[0].lines, name  # 發起的與被截殺的，江湖紀錄都讀得到
+        assert after.journal[0].lines.count(warning) == 1

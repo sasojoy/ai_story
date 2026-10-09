@@ -10,7 +10,7 @@ import hashlib
 
 from .martial_arts import MartialArt, counters
 from .models import Content
-from .state import Weapon
+from .state import GameState, Weapon
 from .world_state import WorldStateStore
 
 
@@ -78,3 +78,19 @@ def style_factor(weapon: Weapon | None, art: MartialArt | None, content: Content
     if weapon.attribute == style.hard:
         return 1 - rule.style_hard
     return 1.0
+
+
+EDGE_WARNING = "你的{name}刀口鈍了，找間鐵匠鋪修一修。"  # 待 joy 潤
+
+
+def wear(state: GameState, content: Content, tier: str) -> list[str]:
+    """打完一場，身上那把扣鋒利度（3.4，照結果）；第一次鈍到 edge_warn 以下回一句提醒（只一次，修好才重設）。
+    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）。"""
+    rule, p = content.config.weapons, state.player
+    if not rule.enabled or p.weapon is None:
+        return []
+    p.weapon.edge = max(0, p.weapon.edge - rule.wear.get(tier, 0))
+    if p.weapon.edge < rule.edge_warn and not p.edge_warned:
+        p.edge_warned = True
+        return [EDGE_WARNING.format(name=p.weapon.name)]
+    return []
