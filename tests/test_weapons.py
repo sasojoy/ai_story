@@ -51,3 +51,29 @@ def test_fused_art_inherits_weapon_kind(content, world, monkeypatch):
     assert weapons.art_weapon("b1", content, world) in ("拳腳", "劍")
     assert weapons.art_weapon("b1", content, world) == weapons.art_weapon("b1", content, world)
     assert weapons.art_weapon("old", content, world) is None
+
+
+# ── Task 2：兵器的資料、設定與存檔 ──
+
+def test_old_save_without_weapon_fields_loads(content, world):
+    import random
+    from tianxia.engine import Game
+    from tianxia.state import GameState
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    raw = game.state.model_dump()
+    for key in ("weapon", "rack", "weapon_serial", "picking_smith", "edge_warned"):
+        raw["player"].pop(key, None)
+    loaded = GameState.model_validate(raw)
+    assert loaded.player.weapon is None and loaded.player.rack == [] and loaded.player.weapon_serial == 0
+
+
+def test_weapon_round_trips_through_json():
+    from tianxia.state import Weapon
+    w = Weapon(id="兵:1", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")
+    assert Weapon.model_validate_json(w.model_dump_json()) == w
+    assert w.edge == 100 and w.tempers == 0
+
+
+def test_fixture_turns_weapons_off_and_real_content_on(content):
+    assert content.config.weapons.enabled is False
+    assert real_content().config.weapons.enabled is True

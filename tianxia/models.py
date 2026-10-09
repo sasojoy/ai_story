@@ -1245,6 +1245,27 @@ class ShowdownPay(_Strict):
     win_contrib_push: dict[str, int] = Field(default_factory=lambda: {"大勝": 5, "險勝": 3})  # 贏的一方另記的
 
 
+class WeaponRules(_Strict):
+    """兵器（docs/superpowers/specs/2026-10-09-兵器-design.md）。數字都是【預設】，量表（scripts/measure_weapons.py）校準後可以改。
+    加成＝（階＋品質＋淬煉＋屬性搭配）×（edge_floor＋（1－edge_floor）×鋒利度／100），乘在本人的 Boost.factor；
+    參考內外同屬性 +20%、正邪共鳴最多 +20%，最好的兵器約抵其中一項。"""
+
+    enabled: bool = True
+    tier_bonus: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})
+    quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
+    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（第二批才淬得了）
+    match: float = Field(default=0.05, ge=0)  # 跟身上武學同屬性加、相剋扣
+    edge_floor: float = Field(default=0.5, ge=0, le=1)  # 全鈍時剩幾成加成
+    wear: dict[str, int] = Field(default_factory=lambda: {"大勝": 2, "險勝": 2, "僵持": 3, "落敗": 5})  # 一場扣多少鋒利度
+    style_soft: float = Field(default=0.1, ge=0)  # 兵器屬性落在大場面對手怕的那一路：威力 ×(1＋這個)
+    style_hard: float = Field(default=0.1, ge=0)  # 落在他最會對付的那一路：×(1－這個)
+    shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（開局 50 兩買得起一把）
+    repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢（另加一個一階素材）
+    drop_chance: float = Field(default=0.03, ge=0, le=1)  # 打贏遊歷或野怪掉一把一階下品的機會
+    rack_cap: int = Field(default=6, ge=1)  # 兵器架幾格（六種兵器各一把）
+    edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1310,6 +1331,7 @@ class Config(_Strict):
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
+    weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——

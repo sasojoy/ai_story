@@ -125,6 +125,23 @@ class Tagalong(BaseModel):
     since: float
 
 
+class Weapon(BaseModel):
+    """一把兵器（兵器設計 2.1）。id 是「兵:流水號」（PlayerState.weapon_serial），只在這個角色身上唯一。
+    recipe／copy_of／original 是第二、三批（打造、仿品、神兵原品）用的，第一批買來與掉落的都是空的。"""
+
+    id: str
+    name: str
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # 陰陽剛柔快慢虛實
+    tier: int  # 1～3
+    quality: str  # 下品、中品、上品
+    edge: int = 100  # 鋒利度 0～100（3.4）
+    tempers: int = 0  # 淬煉次數（4.7，第二批）
+    recipe: str | None = None
+    copy_of: str | None = None
+    original: bool = False
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -160,6 +177,12 @@ class PlayerState(BaseModel):
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
+    # ── 兵器（兵器設計第二節）：身上一把、兵器架上的幾把；換季時角色重來自然清空 ──
+    weapon: Weapon | None = None
+    rack: list[Weapon] = Field(default_factory=list)
+    weapon_serial: int = 0
+    picking_smith: bool = False  # 打開了鐵匠鋪的第二層選單（同 picking_bounty）
+    edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
