@@ -4,7 +4,8 @@
     "name": "挾風槍法",
     "kind": "武學",
     "attribute": "快",
-    "desc": "曹操的本命武學。"
+    "desc": "曹操的本命武學。",
+    "weapon": "槍"
   },
   {
     "id": "caocao_neigong",
@@ -18,7 +19,8 @@
     "name": "雙股劍",
     "kind": "武學",
     "attribute": "柔",
-    "desc": "劉備的本命武學。"
+    "desc": "劉備的本命武學。",
+    "weapon": "劍"
   },
   {
     "id": "liubei_neigong",
@@ -32,7 +34,8 @@
     "name": "青龍刀法",
     "kind": "武學",
     "attribute": "剛",
-    "desc": "關羽的本命武學。"
+    "desc": "關羽的本命武學。",
+    "weapon": "刀"
   },
   {
     "id": "guanyu_neigong",
@@ -46,7 +49,8 @@
     "name": "丈八蛇矛",
     "kind": "武學",
     "attribute": "剛",
-    "desc": "張飛的本命武學。"
+    "desc": "張飛的本命武學。",
+    "weapon": "槍"
   },
   {
     "id": "zhangfei_neigong",
@@ -60,7 +64,8 @@
     "name": "江東槍法",
     "kind": "武學",
     "attribute": "快",
-    "desc": "孫堅的本命武學。"
+    "desc": "孫堅的本命武學。",
+    "weapon": "槍"
   },
   {
     "id": "sunjian_neigong",
@@ -74,7 +79,8 @@
     "name": "四世劍",
     "kind": "武學",
     "attribute": "虛",
-    "desc": "袁紹的本命武學。"
+    "desc": "袁紹的本命武學。",
+    "weapon": "劍"
   },
   {
     "id": "yuanshao_neigong",
@@ -88,7 +94,8 @@
     "name": "仁厚棍法",
     "kind": "武學",
     "attribute": "柔",
-    "desc": "陶謙的本命武學。"
+    "desc": "陶謙的本命武學。",
+    "weapon": "棍"
   },
   {
     "id": "taoqian_neigong",
@@ -102,7 +109,8 @@
     "name": "追風步",
     "kind": "武學",
     "attribute": "快",
-    "desc": "江湖上流傳的輕身步法，講究腳下快。"
+    "desc": "江湖上流傳的輕身步法，講究腳下快。",
+    "weapon": "拳腳"
   },
   {
     "id": "hunyuan",
@@ -117,7 +125,8 @@
     "kind": "武學",
     "attribute": "剛",
     "quality": "上品",
-    "desc": "軍中操練的長矛刺法，十個人站成一排，一起往前捅。"
+    "desc": "軍中操練的長矛刺法，十個人站成一排，一起往前捅。",
+    "weapon": "槍"
   },
   {
     "id": "qiangnu",
@@ -125,7 +134,8 @@
     "kind": "武學",
     "attribute": "快",
     "quality": "上品",
-    "desc": "漢軍的看家本事，上弦慢，射得遠。"
+    "desc": "漢軍的看家本事，上弦慢，射得遠。",
+    "weapon": "弓弩"
   },
   {
     "id": "taiping_gun",
@@ -133,7 +143,8 @@
     "kind": "武學",
     "attribute": "柔",
     "quality": "上品",
-    "desc": "信眾拿扁擔、竹竿練出來的棍法，不講招式，講人多。"
+    "desc": "信眾拿扁擔、竹竿練出來的棍法，不講招式，講人多。",
+    "weapon": "棍"
   },
   {
     "id": "lishi_chui",
@@ -141,7 +152,8 @@
     "kind": "武學",
     "attribute": "剛",
     "quality": "上品",
-    "desc": "力士掄大錘的路數，一錘下去，盾牌連人一起倒。"
+    "desc": "力士掄大錘的路數，一錘下去，盾牌連人一起倒。",
+    "weapon": "棍"
   },
   {
     "id": "menke_jian",
@@ -149,7 +161,8 @@
     "kind": "武學",
     "attribute": "虛",
     "quality": "上品",
-    "desc": "豪族養的門客防身用的劍法，虛晃的多，真刺的少。"
+    "desc": "豪族養的門客防身用的劍法，虛晃的多，真刺的少。",
+    "weapon": "劍"
   },
   {
     "id": "buqu_dao",
@@ -157,7 +170,8 @@
     "kind": "武學",
     "attribute": "實",
     "quality": "上品",
-    "desc": "塢堡私兵練的刀法，守門守牆，一步不退。"
+    "desc": "塢堡私兵練的刀法，守門守牆，一步不退。",
+    "weapon": "刀"
   },
   {
     "id": "jichu_tuna",
@@ -173,7 +187,8 @@
     "kind": "武學",
     "attribute": "實",
     "quality": "下品",
-    "desc": "街頭巷尾都學得到的粗淺拳腳，紮實，但沒什麼變化。"
+    "desc": "街頭巷尾都學得到的粗淺拳腳，紮實，但沒什麼變化。",
+    "weapon": "拳腳"
   },
   {
     "id": "xiangyong_gun",
@@ -186,7 +201,8 @@
       "fame": 0,
       "silver": 10
     },
-    "desc": "鄉勇在大桑樹下操練的棍法，一招一式穩紮穩打。"
+    "desc": "鄉勇在大桑樹下操練的棍法，一招一式穩紮穩打。",
+    "weapon": "棍"
   },
   {
     "id": "ganshan_tui",
@@ -199,7 +215,8 @@
       "fame": 0,
       "silver": 10
     },
-    "desc": "獵戶翻山追獸練出來的腿腳，又快又遠。"
+    "desc": "獵戶翻山追獸練出來的腿腳，又快又遠。",
+    "weapon": "拳腳"
   },
   {
     "id": "yujia_quan",
@@ -212,7 +229,8 @@
       "fame": 0,
       "silver": 10
     },
-    "desc": "潁水漁家在船頭隨浪起伏練出的拳路，順勢卸力。"
+    "desc": "潁水漁家在船頭隨浪起伏練出的拳路，順勢卸力。",
+    "weapon": "拳腳"
   },
   {
     "id": "dukou_duanda",
@@ -225,7 +243,8 @@
       "fame": 5,
       "silver": 20
     },
-    "desc": "運糧船上的船伕腳夫在擠滿人的船上纏鬥的貼身功夫，虛實難測。"
+    "desc": "運糧船上的船伕腳夫在擠滿人的船上纏鬥的貼身功夫，虛實難測。",
+    "weapon": "拳腳"
   },
   {
     "id": "youxia_jian",
@@ -238,7 +257,8 @@
       "fame": 5,
       "silver": 20
     },
-    "desc": "涿郡遊俠兒的劍法，大開大合，意氣風發。"
+    "desc": "涿郡遊俠兒的劍法，大開大合，意氣風發。",
+    "weapon": "劍"
   },
   {
     "id": "shouling_jinggong",
@@ -276,7 +296,8 @@
       "at": "luzhi_camp",
       "faction": "guan"
     },
-    "desc": "官軍營中操練的制式刀法，劈砍直截了當。"
+    "desc": "官軍營中操練的制式刀法，劈砍直截了當。",
+    "weapon": "刀"
   },
   {
     "id": "xingwu_lianqi",
@@ -300,7 +321,8 @@
       "at": "nanyang_huangjin_camp",
       "faction": "huang"
     },
-    "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。"
+    "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。",
+    "weapon": "刀"
   },
   {
     "id": "fushui_zhang",
@@ -312,7 +334,8 @@
       "at": "huangjin_camp",
       "faction": "huang"
     },
-    "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。"
+    "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。",
+    "weapon": "拳腳"
   },
   {
     "id": "taiping_daoyin",
@@ -348,7 +371,8 @@
       "at": "cao_manor",
       "sect": "cao_manor"
     },
-    "desc": "曹家護院的拳法，守得住門，也打得退賊。"
+    "desc": "曹家護院的拳法，守得住門，也打得退賊。",
+    "weapon": "拳腳"
   },
   {
     "id": "shusheng_jian",
@@ -360,7 +384,8 @@
       "at": "yingchuan_academy",
       "sect": "yingchuan_academy"
     },
-    "desc": "書院士子佩劍防身的劍法，綿長而有禮。"
+    "desc": "書院士子佩劍防身的劍法，綿長而有禮。",
+    "weapon": "劍"
   },
   {
     "id": "manniu_quan",
@@ -368,6 +393,7 @@
     "kind": "武學",
     "attribute": "剛",
     "quality": "下品",
-    "desc": "斷眉東拼西湊的拳路，全憑一身蠻力；譜上卻密密麻麻記滿了他挨打換來的心得。"
+    "desc": "斷眉東拼西湊的拳路，全憑一身蠻力；譜上卻密密麻麻記滿了他挨打換來的心得。",
+    "weapon": "拳腳"
   }
 ]

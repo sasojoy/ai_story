@@ -14,6 +14,8 @@ TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地�
 CompanionKind = Literal["locked", "recruitable"]
 MartialKind = Literal["內功", "武學"]
 Attribute = Literal["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"]  # 見 tianxia/martial_arts.py
+WeaponKind = Literal["劍", "刀", "槍", "棍", "弓弩", "拳腳"]  # 兵器種類（兵器設計 2.3）；內功不配兵器
+WEAPON_KINDS: tuple[str, ...] = ("劍", "刀", "槍", "棍", "弓弩", "拳腳")
 Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial_arts.py 的 QUALITIES
 Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
 TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
@@ -450,6 +452,7 @@ class SkillDef(_Strict):
     quality: Quality = "絕學"
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
     special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
+    weapon: WeaponKind | None = None  # 這門武學配哪一種兵器（兵器設計 2.3）；內功是 None。正式內容的武學一律要填（test_weapons 鎖住）
 
 
 class GeneralTrait(_Strict):

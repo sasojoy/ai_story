@@ -555,6 +555,7 @@ def check_traits(c: Content, need) -> None:
             need(first == t.id, f"content/traits.json：特別功效 {first} 與 {t.id} 掛在同一個掛點 {t.hook}，身上只會留下一個")
     owners: dict[str, list[str]] = {}
     for skill in c.skills.values():
+        need(skill.kind == "武學" or skill.weapon is None, f"內功 {skill.id} 不能有兵器種類（兵器設計 2.3）")
         if skill.special is not None:
             need(skill.special in specials, f"武學 {skill.id}：特別功效 {skill.special} 不存在")
             owners.setdefault(skill.special, []).append(skill.id)

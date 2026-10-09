@@ -1,16 +1,16 @@
 [
-  {"id": "fist", "name": "長拳", "kind": "武學", "attribute": "剛"},
+  {"id": "fist", "name": "長拳", "kind": "武學", "attribute": "剛", "weapon": "拳腳"},
   {"id": "breath", "name": "吐納法", "kind": "內功", "attribute": "陰"},
-  {"id": "sword", "name": "流雲劍", "kind": "武學", "attribute": "柔"},
-  {"id": "step", "name": "追風步", "kind": "武學", "attribute": "快"},
-  {"id": "palm", "name": "驚濤掌", "kind": "武學", "attribute": "剛"},
-  {"id": "heavy", "name": "開碑手", "kind": "武學", "attribute": "剛"},
-  {"id": "family", "name": "家傳劍", "kind": "武學", "attribute": "柔"},
-  {"id": "needle", "name": "飛針", "kind": "武學", "attribute": "虛"},
-  {"id": "wave", "name": "浪濤劍", "kind": "武學", "attribute": "柔"},
-  {"id": "sky", "name": "天外劍", "kind": "武學", "attribute": "快"},
+  {"id": "sword", "name": "流雲劍", "kind": "武學", "attribute": "柔", "weapon": "劍"},
+  {"id": "step", "name": "追風步", "kind": "武學", "attribute": "快", "weapon": "拳腳"},
+  {"id": "palm", "name": "驚濤掌", "kind": "武學", "attribute": "剛", "weapon": "拳腳"},
+  {"id": "heavy", "name": "開碑手", "kind": "武學", "attribute": "剛", "weapon": "拳腳"},
+  {"id": "family", "name": "家傳劍", "kind": "武學", "attribute": "柔", "weapon": "劍"},
+  {"id": "needle", "name": "飛針", "kind": "武學", "attribute": "虛", "weapon": "弓弩"},
+  {"id": "wave", "name": "浪濤劍", "kind": "武學", "attribute": "柔", "weapon": "劍"},
+  {"id": "sky", "name": "天外劍", "kind": "武學", "attribute": "快", "weapon": "劍"},
   {"id": "calm", "name": "靜心訣", "kind": "內功", "attribute": "虛"},
   {"id": "basic_breath", "name": "粗淺吐納", "kind": "內功", "attribute": "柔", "quality": "下品"},
-  {"id": "basic_fist", "name": "粗淺拳腳", "kind": "武學", "attribute": "實", "quality": "下品"},
-  {"id": "lake_kick", "name": "湖邊腿法", "kind": "武學", "attribute": "快", "quality": "下品", "learn": {"at": "lake", "silver": 10}}
+  {"id": "basic_fist", "name": "粗淺拳腳", "kind": "武學", "attribute": "實", "quality": "下品", "weapon": "拳腳"},
+  {"id": "lake_kick", "name": "湖邊腿法", "kind": "武學", "weapon": "拳腳", "attribute": "快", "quality": "下品", "learn": {"at": "lake", "silver": 10}}
 ]
