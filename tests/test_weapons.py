@@ -581,3 +581,106 @@ def test_wield_is_refused_when_weapons_are_off(content, world):
     msgs = game.wield_weapon("兵:2")
     assert msgs and not msgs[0].startswith("你換上了")
     assert p.weapon is None and [w.id for w in p.rack] == ["兵:2"]
+
+
+# ── Task 8：整季機器人與伺服器假人會買、會修、會換 ──
+
+def _sworder(content, world, silver=200):
+    game = _town(content, world, silver)
+    game.state.player.member.wugong_id = "sword"
+    return game
+
+
+def _wanted(game, content, world):
+    p = game.state.player
+    art = team.player_art(game.state, content, world, p.member.wugong_id)
+    return weapons.wanted(game.state, content, world, art)
+
+
+def test_wanted_prefers_wield_then_buy_then_repair(content, world):
+    game = _sworder(content, world)
+    p = game.state.player
+    assert _wanted(game, content, world) == "smith:buy:劍"
+    p.weapon = _blade(kind="刀")
+    p.rack = [Weapon(id="兵:9", name="軟鋼劍", kind="劍", attribute="柔", tier=1, quality="下品")]
+    assert _wanted(game, content, world) == "smith:wield:兵:9"
+    p.weapon, p.rack = _blade(edge=40), []
+    p.materials = {next(m.id for m in content.materials.values() if m.tier == 1): 2}
+    assert _wanted(game, content, world) == "smith:repair"
+    p.weapon.edge = 90
+    assert _wanted(game, content, world) is None
+
+
+def test_wanted_is_none_away_from_the_smith_or_without_an_art(content, world):
+    game = _sworder(content, world)
+    assert weapons.wanted(game.state, content, world, None) is None
+    game.state.player.location = "lake"
+    assert _wanted(game, content, world) is None
+
+
+def test_pick_never_chooses_the_smith_door(content, world):
+    import random
+    from tianxia import bot
+    game = _sworder(content, world)
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "act:smith" in {o.id for o in options}
+    for seed in range(50):
+        assert bot.pick(game, options, random.Random(seed)) != "act:smith"
+
+
+def test_visit_smith_buys_and_closes_the_menu(content, world):
+    from tianxia import bot
+    game = _sworder(content, world)
+    bot.visit_smith(game)
+    assert game.state.player.weapon is not None and game.state.player.weapon.kind == "劍"
+    assert not game.state.player.picking_smith
+
+
+def test_visit_smith_does_nothing_when_nothing_is_wanted(content, world):
+    from tianxia import bot
+    game = _sworder(content, world, silver=0)
+    bot.visit_smith(game)
+    assert game.state.player.weapon is None and not game.state.player.picking_smith
+
+
+def test_server_bot_buys_through_the_policy(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _sworder(content, world)
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    smith = _ids(game)["act:smith"]
+    assert bot_policy.score(game, smith, profile) is not None
+    game.choose("act:smith")
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled}
+    assert max(scored, key=lambda k: scored[k] if scored[k] is not None else -1) == "smith:buy:劍"
+    assert scored["smith:back"] == 0.0
+
+
+def test_server_bot_does_not_enter_the_smith_with_nothing_to_do_and_always_can_leave(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _sworder(content, world, silver=0)
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    assert bot_policy.score(game, _ids(game)["act:smith"], profile) is None
+    game.choose("act:smith")
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled}
+    assert scored == {"smith:back": 0.0}
+
+
+def test_a_server_bot_in_the_smith_menu_never_gets_stuck_and_usually_buys(content, world):
+    import random
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
+    bought = 0
+    for seed in range(10):
+        game = _sworder(content, world)
+        rng = random.Random(seed)
+        game.choose("act:smith")
+        for _ in range(6):
+            if not game.state.player.picking_smith:
+                break
+            bot_policy.take_turn(game, profile, rng)
+        assert not game.state.player.picking_smith
+        bought += game.state.player.weapon is not None
+    assert bought >= 5

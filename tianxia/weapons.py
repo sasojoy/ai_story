@@ -248,6 +248,26 @@ def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
     return [f"你換上了【{chosen.name}】。"]
 
 
+REPAIR_AT = 50  # 機器人與假人鈍到這裡以下才修
+
+
+def wanted(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str | None:
+    """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用）：先把架上配得上的換到手上，再買一把配得上的，再修。"""
+    if not smith_here(state, content) or art is None:
+        return None
+    p = state.player
+    if not usable(p.weapon, art, content, world):
+        fit = next((w for w in p.rack if usable(w, art, content, world)), None)
+        if fit is not None:
+            return f"smith:wield:{fit.id}"
+        kind = art_weapon(art.id, content, world)
+        if kind and buy_problem(state, content, kind) is None:
+            return f"smith:buy:{kind}"
+    if p.weapon is not None and p.weapon.edge < REPAIR_AT and repair_problem(state, content) is None:
+        return "smith:repair"
+    return None
+
+
 TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
 
 
