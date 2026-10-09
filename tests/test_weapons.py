@@ -395,3 +395,79 @@ def test_shop_names_are_original_and_unique():
     taken = {s.name for s in c.skills.values()} | {m.name for m in c.materials.values()} | {ch.name for ch in c.characters.values()}
     assert not names & taken
     assert not [n for n in names if naming.name_problem(n, c, None)]
+
+
+# ── Task 6：打贏掉現成的 ──
+
+def test_roll_drop_gives_a_tier_one_blade(content, world):
+    import random
+    _on(content)
+    state = _new_state(content, world, "撿刀")
+    content.config.weapons.drop_chance = 1.0
+    msgs = weapons.roll_drop(state, content, random.Random(1))
+    assert state.player.weapon is not None and state.player.weapon.tier == 1 and state.player.weapon.quality == "下品"
+    assert msgs[0] == weapons.DROP_LINE.format(name=state.player.weapon.name)
+    content.config.weapons.drop_chance = 0.0
+    assert weapons.roll_drop(state, content, random.Random(1)) == []
+
+
+def test_roll_drop_skips_when_rack_full_or_off(content, world):
+    import random
+    _on(content)
+    state = _new_state(content, world, "滿架")
+    state.player.weapon = _blade()
+    state.player.rack = [_blade() for _ in range(content.config.weapons.rack_cap)]
+    content.config.weapons.drop_chance = 1.0
+    assert weapons.roll_drop(state, content, random.Random(1)) == []
+    state.player.rack = []
+    content.config.weapons.enabled = False
+    assert weapons.roll_drop(state, content, random.Random(1)) == []
+
+
+def _win_a_fight(game, kind_action="act:train"):
+    p = game.state.player
+    p.location, p.stamina = "lake", 100.0
+    for _ in range(10):  # 打到贏一場為止（測試內容的湖邊對手不難）
+        game.sync(0.0)
+        if kind_action not in _ids(game):
+            break
+        before = len(game.state.battles)
+        game.choose(kind_action)
+        if len(game.state.battles) > before and game.state.battles[-1].tier in team.WIN_TIERS:
+            return game.state.battles[-1]
+        p.stamina = 100.0
+    return None
+
+
+def test_training_win_can_drop_a_weapon_into_the_record(content, world):
+    _on(content)
+    content.config.weapons.drop_chance = 1.0
+    game = _game(content, world)
+    record = _win_a_fight(game)
+    p = game.state.player
+    assert record is not None and p.weapon is not None
+    assert record.kind == "train"
+    assert f"兵器【{p.weapon.name}】" in record.materials  # 戰鬥卡片「得失」
+    from tianxia import battlelog
+    assert f"兵器【{p.weapon.name}】" in battlelog.gains_list(record)
+    lines = game.state.journal[0].lines
+    assert any(weapons.DROP_LINE.format(name=p.weapon.name) in line for line in lines)  # 江湖紀錄
+
+
+def test_no_drop_when_chance_is_zero(content, world):
+    _on(content)
+    content.config.weapons.drop_chance = 0.0
+    game = _game(content, world)
+    assert _win_a_fight(game) is not None
+    assert game.state.player.weapon is None
+
+
+def test_local_attribute_reads_the_material_ids_real_content_writes():
+    from types import SimpleNamespace
+    c = real_content()
+    player = SimpleNamespace(location="")
+    state = SimpleNamespace(player=player)
+    for loc_id in c.locations:
+        player.location = loc_id
+        assert weapons._local_attribute(state, c) in weapons.ATTR_WORDS
+    assert any(c.locations[i].materials for i in c.locations)

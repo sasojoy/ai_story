@@ -4108,6 +4108,11 @@ class Game:
                 if line:
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
+            if record.kind in ("train", "wild"):  # 兵器掉落（兵器設計 4.8）：只有遊歷與探索野怪；劇情戰、挑戰本人（kind=event）不掉
+                dropped = weapons.roll_drop(self.state, self.content, self.rng)
+                if dropped:
+                    record.materials.append(weapons.GAIN_LINE.format(name=dropped[0].removeprefix(weapons.DROP_PREFIX).strip("【】")))
+                    msgs += dropped
         # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
         exp = round(squad.exp * more * ranger.exp_factor(self.state, self.content))
         record.exp = exp

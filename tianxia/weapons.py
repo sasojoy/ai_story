@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hashlib
+import random
 
 from .martial_arts import MartialArt, counters
 from .models import WEAPON_KINDS, Content
@@ -119,9 +120,14 @@ def smith_here(state: GameState, content: Content) -> bool:
 
 
 def _local_attribute(state: GameState, content: Content) -> str:
-    """當地鐵匠打的屬性：Location.materials（路邊採集出什麼屬性）的第一個，沒寫就是剛。"""
-    here = content.locations[state.player.location].materials or []
-    return here[0] if here else "剛"
+    """當地鐵匠打的屬性：Location.materials（路邊採集出的素材）第一樣的屬性，沒寫就是剛。
+    內容裡寫的是素材 id（「man_1」），查素材的屬性；直接寫屬性字（測試內容）也認；認不得的略過。"""
+    for entry in content.locations[state.player.location].materials or []:
+        material = content.materials.get(entry)
+        attribute = material.attribute if material is not None else entry
+        if attribute in ATTR_WORDS:
+            return attribute
+    return "剛"
 
 
 def stock(state: GameState, content: Content) -> list[Weapon]:
@@ -151,6 +157,22 @@ def store(state: GameState, content: Content, weapon: Weapon) -> str:
         return f"你把【{weapon.name}】拿在手上。"
     p.rack.append(weapon)
     return f"【{weapon.name}】放上了兵器架。"
+
+
+DROP_PREFIX = "撿到一把"
+DROP_LINE = DROP_PREFIX + "【{name}】"
+GAIN_LINE = "兵器【{name}】"  # 戰鬥卡片「得失」那一格（素材寫「精鐵砂 ×1」，兵器寫「兵器【厚背刀】」）
+
+
+def roll_drop(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    """打贏遊歷或野怪的掉落（4.8）：drop_chance 掉一把一階下品，種類隨機、屬性照當地。架子滿了不掉（不擲骰）。"""
+    rule = content.config.weapons
+    if not rule.enabled or rack_full(state, content) or rng.random() >= rule.drop_chance:
+        return []
+    kind = rng.choice(WEAPON_KINDS)
+    attribute = _local_attribute(state, content)
+    weapon = new_weapon(state, name=shop_name(kind, attribute), kind=kind, attribute=attribute, tier=1, quality="下品")
+    return [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
 
 
 def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
