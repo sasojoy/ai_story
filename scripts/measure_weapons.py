@@ -17,6 +17,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,8 +25,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_weapons_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database  # noqa: E402
+from tianxia import bot, database, naming  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
+from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 
@@ -63,7 +65,13 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
             count["repairs"] += 1
         last["id"], last["edge"] = w.id, w.edge
 
-    game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(weapons_on)}.db"), observe=observe)
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("量測不連模型")
+
+    # 同 measure_sanren：模型一個都不連（取名走退路字表），每次跑的結果才一樣
+    with mock.patch.object(naming, "propose", lambda *a, **k: (None, "")),             mock.patch.object(naming, "pick", lambda *a, **k: (None, "")),             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse),             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse):
+        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(weapons_on)}.db"), observe=observe)
     p = game.state.player
     tiers = {1: 0, 2: 0, 3: 0}
     for mid, n in p.materials.items():
