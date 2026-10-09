@@ -490,6 +490,8 @@ class Game:
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.picking_bounty and not bounties.board_here(s, c):
             p.picking_bounty = False  # 開關關了、人不在城鎮了：收起懸賞榜
+        if p.picking_smith and not weapons.smith_here(s, c):
+            p.picking_smith = False  # 開關關了、人不在城鎮了：收起鐵匠鋪
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -613,6 +615,8 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
+        if self.state.player.picking_smith and not weapons.smith_here(self.state, self.content):
+            self.state.player.picking_smith = False  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -814,6 +818,8 @@ class Game:
             return self._audience_options()
         if s.player.picking_bounty:
             return self._bounty_options()
+        if s.player.picking_smith:
+            return self._smith_options()
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -896,6 +902,8 @@ class Game:
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
         if bounties.board_here(s, c):  # 懸賞榜：第一季、城鎮類的地點；只是打開第二層選單，不花體力
             opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(bounties.open_bounties(s, c))} 張）"))
+        if weapons.smith_here(s, c):  # 鐵匠鋪（兵器設計 4.1）：只是打開第二層選單，不花體力
+            opts.append(Option(id="act:smith", label=weapons.SMITH))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
@@ -1348,6 +1356,8 @@ class Game:
                 msgs = self._invite(arg)
             elif kind == "bounty":
                 msgs = self._bounty(arg)
+            elif kind == "smith":
+                msgs = self._smith(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1549,6 +1559,8 @@ class Game:
             return opportunities.title(s, c, arg)
         if kind == "bounty":
             return bounties.BOARD
+        if kind == "smith":
+            return weapons.SMITH
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1571,6 +1583,7 @@ class Game:
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
+            "smith": f"{weapons.SMITH}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1882,6 +1895,9 @@ class Game:
         if what == "bounties":
             self.state.player.picking_bounty = True  # 打開懸賞榜（見 _bounty_options），不花體力
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
+        if what == "smith":
+            self.state.player.picking_smith = True  # 打開鐵匠鋪（見 _smith_options），不花體力
+            return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -2459,6 +2475,48 @@ class Game:
         if verb == "drop":
             return bounties.drop(s, c, bounty_id)
         return ["（此刻無法這麼做。）"]
+
+    def _smith_options(self) -> list[Option]:
+        """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼），手上那把一顆「修」，
+        兵器架上每把一顆「換上」，最後是永遠按得下去的「離開」。都不花體力。"""
+        s, c = self.state, self.content
+        opts = []
+        for item in weapons.stock(s, c):
+            problem = weapons.buy_problem(s, c, item.kind)
+            note = problem or f"{c.config.weapons.shop_price} 兩"
+            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）",
+                               enabled=problem is None))
+        if s.player.weapon is not None:
+            problem = weapons.repair_problem(s, c)
+            note = problem or f"一個一階素材＋{c.config.weapons.repair_silver} 兩"
+            opts.append(Option(id="smith:repair", label=f"修【{s.player.weapon.name}】（鋒利度 {s.player.weapon.edge}・{note}）",
+                               enabled=problem is None))
+        for w in s.player.rack:
+            opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
+        opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
+        return opts
+
+    def _smith(self, arg: str) -> list[str]:
+        """鐵匠鋪上的選擇：買、修、換上，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+        s, c = self.state, self.content
+        verb, _, rest = arg.partition(":")
+        if verb == "back":
+            s.player.picking_smith = False
+            return [f"你離開了{weapons.SMITH}。"]
+        if verb == "buy":
+            return weapons.buy(s, c, rest)
+        if verb == "repair":
+            return weapons.repair(s, c)
+        if verb == "wield":
+            return weapons.wield(s, c, rest)
+        return ["（此刻無法這麼做。）"]
+
+    def wield_weapon(self, weapon_id: str) -> list[str]:
+        """修練頁的「換上」（兵器設計 2.2）：哪裡都能換、不花體力；寫一則修練紀錄。"""
+        msgs = self._log(weapons.wield(self.state, self.content, weapon_id))
+        if msgs and msgs[0].startswith("你換上了"):
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
 
     def _talked_out_note(self) -> str:
         """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」

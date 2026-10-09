@@ -286,9 +286,10 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
+    # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith（之後補上）
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties") and not o.id.startswith(("road:", "defect:", "invite:"))
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith") and not o.id.startswith(("road:", "defect:", "invite:"))
     ]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
