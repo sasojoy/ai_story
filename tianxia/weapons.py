@@ -164,15 +164,20 @@ DROP_LINE = DROP_PREFIX + "【{name}】"
 GAIN_LINE = "兵器【{name}】"  # 戰鬥卡片「得失」那一格（素材寫「精鐵砂 ×1」，兵器寫「兵器【厚背刀】」）
 
 
-def roll_drop(state: GameState, content: Content, rng: random.Random) -> list[str]:
-    """打贏遊歷或野怪的掉落（4.8）：drop_chance 掉一把一階下品，種類隨機、屬性照當地。架子滿了不掉（不擲骰）。"""
+def drop(state: GameState, content: Content, rng: random.Random) -> tuple[Weapon | None, list[str]]:
+    """打贏遊歷或野怪的掉落（4.8）：drop_chance 掉一把一階下品，種類隨機、屬性照當地。架子滿了不掉（不擲骰）。
+    回（掉出來的兵器, 訊息）；沒掉是（None, []）。"""
     rule = content.config.weapons
     if not rule.enabled or rack_full(state, content) or rng.random() >= rule.drop_chance:
-        return []
+        return None, []
     kind = rng.choice(WEAPON_KINDS)
     attribute = _local_attribute(state, content)
     weapon = new_weapon(state, name=shop_name(kind, attribute), kind=kind, attribute=attribute, tier=1, quality="下品")
-    return [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
+    return weapon, [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
+
+
+def roll_drop(state: GameState, content: Content, rng: random.Random) -> list[str]:
+    return drop(state, content, rng)[1]
 
 
 def buy_problem(state: GameState, content: Content, kind: str) -> str | None:

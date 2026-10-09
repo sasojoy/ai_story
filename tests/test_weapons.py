@@ -471,3 +471,36 @@ def test_local_attribute_reads_the_material_ids_real_content_writes():
         player.location = loc_id
         assert weapons._local_attribute(state, c) in weapons.ATTR_WORDS
     assert any(c.locations[i].materials for i in c.locations)
+
+
+def test_challenging_a_great_figure_wears_the_blade_but_a_story_fight_does_not(world):
+    import random
+    from unittest import mock
+    from tianxia.encounter import EncounterResult
+    from tianxia.engine import Game
+    c = real_content()
+    c.config.season_one = True
+    c.config.auto_open_first_season = True
+    c.config.weapons.enabled = True
+    game = Game.new(c, "官甲", rng=random.Random(0), world=world)
+    game.client = None
+    p = game.state.player
+    p.faction, p.location = "guan", "huangjin_camp"
+    p.tutorial_step = len(c.tutorial.steps)
+    p.visited.add("huangjin_camp")
+    p.stamina = 250.0
+    game.now = 1000.0
+    p.weapon = _blade(edge=100)
+    fight = EncounterResult(tier="險勝", margin=20, our_power=200, difficulty=120)
+    with mock.patch.object(team, "fight", return_value=fight):
+        game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert record.event == "挑戰波才" and record.kind == "event"  # 戰報類型沒變
+    assert p.weapon.edge < 100
+    # 真正的劇情戰（沒說要磨）照舊不磨
+    edge = p.weapon.edge
+    from tianxia.state import BattleRecord
+    story = BattleRecord(id=99, time=0.0, location="某處", kind="event", event="劇情", opponent="誰", ours=[],
+                         tier="落敗", our_power=1.0, difficulty=1.0)
+    game._file_battle(story)
+    assert p.weapon.edge == edge

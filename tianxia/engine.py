@@ -3973,7 +3973,7 @@ class Game:
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
-        msgs.insert(0, self._file_battle(record))
+        msgs.insert(0, self._file_battle(record, wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器照磨（兵器設計 3.4）
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
@@ -4108,10 +4108,10 @@ class Game:
                 if line:
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
-            if record.kind in ("train", "wild"):  # 兵器掉落（兵器設計 4.8）：只有遊歷與探索野怪；劇情戰、挑戰本人（kind=event）不掉
-                dropped = weapons.roll_drop(self.state, self.content, self.rng)
-                if dropped:
-                    record.materials.append(weapons.GAIN_LINE.format(name=dropped[0].removeprefix(weapons.DROP_PREFIX).strip("【】")))
+            if record.kind in ("train", "wild"):  # 兵器掉落（兵器設計 4.8）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
+                weapon, dropped = weapons.drop(self.state, self.content, self.rng)
+                if weapon is not None:
+                    record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
                     msgs += dropped
         # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
         exp = round(squad.exp * more * ranger.exp_factor(self.state, self.content))
@@ -4129,9 +4129,11 @@ class Game:
         record.notes += msgs
         return msgs
 
-    def _file_battle(self, record) -> str:
+    def _file_battle(self, record, wear: bool | None = None) -> str:
+        """歸檔一場戰報。wear：這一場要不要磨兵器（兵器設計 3.4）；None＝照戰報類型，劇情戰（kind=event）不磨，
+        挑戰本人雖然也是 event，由 _challenge 明說要磨。全服決戰不走這裡。提醒進戰鬥卡片也進江湖紀錄。"""
         self._last_wear = []
-        if record.kind != "event":  # 兵器磨損（兵器設計 3.4）：劇情戰不扣；全服決戰不走這裡。提醒進戰鬥卡片也進江湖紀錄
+        if (record.kind != "event") if wear is None else wear:
             self._last_wear = weapons.wear(self.state, self.content, record.tier)
             record.notes += self._last_wear
         battlelog.add_record(self.state, record)
