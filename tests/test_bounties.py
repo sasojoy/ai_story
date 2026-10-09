@@ -43,14 +43,26 @@ def setup(content, world):
 
 
 def _do(content, world, name, act):
+    """照伺服器的 act 做一個動作：從資料庫重讀自己、同步、做、只存角色（server.act 不替動作存季）。動作改了共用賽季卻沒自己存的，
+    改的那些在這裡就丟了——以前這裡每一步都補存季，蓋住了截殺交差沒存季（FB-119）。"""
     state = CharacterStore(world.db).load(name)
     game = Game(content, state, random.Random(0), world)
     game.client = None
     game.sync(NOW)
     msgs = act(game)
-    game._save_season()
     CharacterStore(world.db).save(game.state)
     return msgs, game
+
+
+def _direct(content, world, name, act):
+    """直接呼叫 bounties 的函式（揭下、交差的掛鉤）：伺服器上它們都在某個動作裡跑、由那個動作存季；直接呼叫沒有動作替它存，
+    這裡自己存（同 _do，只多存季）。"""
+    def run(game):
+        msgs = act(game)
+        game._save_season()
+        return msgs
+
+    return _do(content, world, name, run)
 
 
 def _load(world, name):
@@ -103,7 +115,7 @@ def test_no_board_outside_town_or_with_the_switch_off(setup):
 def test_scouting_pays_silver_exp_and_deeds_to_a_loner(setup):
     content, world = setup
     b = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="lake")
-    _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
     before = _load(world, "丙").player
 
     def scout(g):
@@ -126,9 +138,9 @@ def test_a_faction_member_only_sees_and_takes_his_own_side_at_half_pay(setup):
     menu = _ids(content, world, "甲")
     assert f"bounty:take:{ours.id}" in menu and f"bounty:take:{theirs.id}" not in menu
     assert "俠名" not in menu[f"bounty:take:{ours.id}"].label  # 陣營的人名號凍結
-    assert _do(content, world, "甲", lambda g: bounties.take(g.state, g.content, theirs.id))[0] == ["這一張不是給你接的。"]
-    _do(content, world, "甲", lambda g: bounties.take(g.state, g.content, ours.id))
-    msgs, game = _do(content, world, "甲", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    assert _direct(content, world, "甲", lambda g: bounties.take(g.state, g.content, theirs.id))[0] == ["這一張不是給你接的。"]
+    _direct(content, world, "甲", lambda g: bounties.take(g.state, g.content, ours.id))
+    msgs, game = _direct(content, world, "甲", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
     assert f"銀兩 +{round(20 * content.config.bounties.faction_share)}" in msgs
     assert game.state.player.ranger_deeds == 0
 
@@ -136,26 +148,26 @@ def test_a_faction_member_only_sees_and_takes_his_own_side_at_half_pay(setup):
 def test_strike_counts_any_enemy_squad_at_that_place(setup):
     content, world = setup
     b = _post(world, kind="strike", faction="guan", silver=20, deeds=3, location="lake", squad="thug")
-    _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
-    assert _do(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "town", "thug"))[0] == []
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    assert _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "town", "thug"))[0] == []
     content.squads["thug"].faction = "guan"  # 自己人：不算
-    assert _do(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))[0] == []
+    assert _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))[0] == []
     content.squads["thug"].faction = "huang"
-    msgs, _ = _do(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
     assert msgs[0].startswith("【懸賞】") and "俠名 +3" in msgs
 
 
 def test_escort_is_taken_at_the_start_and_done_on_arrival(setup):
     content, world = setup
     b = _post(world, kind="escort", faction="guan", silver=15, deeds=2, location="lake", end="town")
-    assert "要在湖邊接" in _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))[0][0]
+    assert "要在湖邊接" in _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))[0][0]
 
     def at_lake(g):
         g.state.player.location = "lake"
         return bounties.take(g.state, g.content, b.id)
 
-    assert _do(content, world, "丙", at_lake)[0][0].startswith("你揭下了")
-    msgs, _ = _do(content, world, "丙", lambda g: bounties.on_arrive(g.state, g.content, g.world, "town"))
+    assert _direct(content, world, "丙", at_lake)[0][0].startswith("你揭下了")
+    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_arrive(g.state, g.content, g.world, "town"))
     assert msgs and _load(world, "丙").player.bounties_done == 1
 
 
@@ -164,9 +176,9 @@ def test_at_most_max_taken_and_quota_runs_out(setup):
     content.config.bounties.max_taken = 1
     first = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
     second = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
-    _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, first.id))
-    assert "先交了差" in _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, second.id))[0][0]
-    _, game = _do(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, first.id))
+    assert "先交了差" in _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, second.id))[0][0]
+    _, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))
     assert first.id not in {x.id for x in bounties.open_bounties(game.state, content)}  # 名額用完下榜
 
 
@@ -179,7 +191,7 @@ def test_tier_four_loners_get_the_silver_bonus(setup):
         bounties.take(g.state, g.content, b.id)
         return bounties.on_explore(g.state, g.content, g.world, "lake")
 
-    msgs, game = _do(content, world, "丙", strong)
+    msgs, game = _direct(content, world, "丙", strong)
     assert ranger.tier(game.state, content) == 4 and f"銀兩 +{round(20 * content.config.ranger.bounty_bonus)}" in msgs
 
 
@@ -200,7 +212,7 @@ def test_wanted_poster_hunter_and_the_raid(setup, monkeypatch):
     assert "已經掛著" in _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))[0][0]
     # 散人揭了通緝：卡上多一顆截殺
     assert not any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
-    _do(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
     assert any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
     monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1000.0 if who.state.player.name == "丙" else 1.0))
     msgs, game = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
@@ -208,6 +220,31 @@ def test_wanted_poster_hunter_and_the_raid(setup, monkeypatch):
     assert any(m.startswith("【懸賞】") for m in msgs) and p.bounties_done == 1
     assert p.contrib == 0 and not any("貢獻" in m for m in msgs)  # 散人不記貢獻
     assert p.ranger_deeds == content.config.bounties.deeds["wanted"]
+
+
+def test_a_wanted_closed_by_a_raid_is_saved_to_the_season(setup, monkeypatch):
+    """FB-119：截殺打贏交了通緝的差，要存回共用賽季（Game.raid 以前在打之前就存了季，交差改的 done_by／takers 沒再存，
+    server.act 只存角色）。沒存的話同一張還在榜上、可以再揭再領，過期了押金還照退給掛單的人。"""
+    content, world = setup
+    for name in ("甲", "乙", "丙"):
+        state = _load(world, name)
+        state.player.location = "lake"
+        CharacterStore(world.db).save(state)
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))
+    b = world.get_season().bounties[-1]
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1000.0 if who.state.player.name == "丙" else 1.0))
+    msgs, _ = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
+    assert any(m.startswith("【懸賞】") for m in msgs)
+    saved = next(x for x in world.get_season().bounties if x.id == b.id)
+    assert saved.done_by == ["丙"] and saved.takers == []
+    _, again = _do(content, world, "丙", lambda g: g)
+    assert not bounties.hunting(again.state, content, "乙")  # 卡上的截殺跟著收掉
+    assert b.id not in {x.id for x in bounties.open_bounties(again.state, content)}  # 名額用完，下榜
+    world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == b.id), "expires", 0.0))
+    _, poster = _do(content, world, "甲", lambda g: None)
+    assert poster.state.player.stats["silver"] == 150  # 有人交了差：押金不退
+    assert not next(x for x in world.get_season().bounties if x.id == b.id).refunded
 
 
 def test_an_unclaimed_wanted_refunds_the_poster(setup):

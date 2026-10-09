@@ -204,20 +204,26 @@ def test_on_the_road_a_join_option_stays_in_the_menu(on):
 
 @node
 def test_while_the_master_talks_in_the_hut_the_enlist_buttons_stay_in_the_menu(on):
-    """序章：師父在說話（框在、眼前沒有事件）時草廬那張場景卡不畫（masterTalks）。這時集結的投效鈕不搬（搬了就沒地方畫、整個不見），
-    照舊收在「此地還能做」的摺疊裡，跟以前一樣。草廬在潁川汝南，長社火攻集結時新角色在序章第 2 步就有這兩顆（審查 M2 的情形）。"""
+    """序章：草廬在潁川汝南，長社火攻集結時新角色在序章第 2 步以前就有投效兩顆（審查 M2 的情形）；現在序章裡引擎不給投效、
+    場景也不畫戰場（FB-113），頁面上沒有參戰那一列。
+    畫面這一層守的照舊：師父在說話（框在、眼前沒有事件）時草廬那張場景卡不畫（masterTalks），選單上萬一有投效鈕也不搬
+    （搬了就沒地方畫、整個不見），照舊收在「此地還能做」的摺疊裡。"""
     game = Game.new(on, "沈浪", rng=random.Random(0), prologue=True)
     game.client = None
     _to_step(game, 1)
     game.world.start_battle(on.battles["changshe_fire"], now=game.now)
     m = server.main_view(game)
-    enlist = [o["id"] for o in m["options"] if o["id"].startswith("battle:enlist:")]
-    assert m["prologue"] is not None and m["guide"] is not None and enlist
-    assert not any(o["id"].startswith("choice:") for o in m["options"]) and not m["on_road"]
-    page = _page(m)
+    assert m["prologue"] is not None and m["guide"] is not None
+    assert not any(o["id"].startswith("battle:") for o in m["options"]) and "長社火攻" not in m["scene"]  # FB-113
+    assert "muster-" not in _page(m)
+    enlist = [{"id": f"battle:enlist:{side}", "label": f"臨時投效【{name}】（只算這一場）", "enabled": True, "wait": "", "confirm": ""}
+              for side, name in (("guan", "官軍"), ("huang", "黃巾軍"))]
+    stray = {**m, "options": enlist + m["options"]}
+    assert not any(o["id"].startswith("choice:") for o in stray["options"]) and not stray["on_road"]
+    page = _page(stray)
     assert '<section class="card scene">' not in page and "muster-" not in page  # 場景卡沒畫
-    for oid in enlist:
-        assert page.count(f'data-id="{oid}"') == 1 and oid in _fold(page)
+    for o in enlist:
+        assert page.count(f'data-id="{o["id"]}"') == 1 and o["id"] in _fold(page)
 
 
 @node

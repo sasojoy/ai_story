@@ -745,17 +745,15 @@ class Game:
     def options(self, odds: bool = True, tick: bool = True) -> list[Option]:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
-        battle_status = self._battle_status(tick=tick)
+        battle_status = self._battle_for_me(tick=tick)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：選單只剩一顆灰的
             return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
         if battle_status is not None and not self._watching_battle(*battle_status):
             battle, definition = battle_status
-            if battle.phase == "muster":
+            if not self._fighting(battle, definition):
                 # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
-                # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場
-                return self._battle_options(battle, definition) + self._everyday_options(odds)
-            if self._free_agent() and self.state.player.name not in battle.participants:
-                # 開打了還沒投效的散人：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
+                # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場。
+                # 開打了還沒投效的散人也一樣：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
                 return self._battle_options(battle, definition) + self._everyday_options(odds)
             battle_menu = self._battle_options(battle, definition)
             if self.state.player.resting_since is not None:
@@ -2737,6 +2735,13 @@ class Game:
             return None
         return battle, definition
 
+    def _battle_for_me(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
+        """這個人的選單、場景、放手一搏、決戰的動作看的那一場：同 _battle_status（tick 照樣把戰鬥追到現在），只是序章裡一律當作
+        沒有（FB-113）——草廬與序章開場都在潁川汝南，以前長社火攻集結時新人第一個畫面就是兩顆投效，按了之後序章被戰場蓋掉、
+        又走不開。不給投效與加入、不畫戰場；修好之前就上了名單的人也一樣（只是被代選固守，收場不領軍餉，見 _showdown_pay）。"""
+        status = self._battle_status(tick=tick)
+        return None if prologue_rules.active(self.state, self.content) else status
+
     def _shelve_unfinished_battle(self, text: str = "") -> None:
         """季終時還沒打完的決戰收起來（自然收季見 _battle_status、管理者收季見 admin_end_season；呼叫端先確認
         有一場還沒收場的）。不算結果：不動大勢、不寫旗標、不寫江湖史、不加戰報（FB-015）；但每個參戰者要有交代（FB-035）。
@@ -3130,8 +3135,11 @@ class Game:
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
     ) -> list[str]:
         """決戰的軍餉（Config.showdown_pay）：照出手回合數發銀兩與經驗，贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
-        （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。"""
+        （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。
+        序章裡的人不發（FB-113）：修好之前在序章裡投效、出手的新人，以前 1 級大勝拿 120 經驗、序章中途升到 5 級（FB-122）。"""
         c, s = self.content, self.state
+        if prologue_rules.active(s, c):
+            return []
         pay, p = c.config.showdown_pay, s.player
         share = max(pay.idle_share, min(1.0, me.acted_rounds / pay.full_rounds))
         won = bool(battle.outcome_side) and me.faction == battle.outcome_side
@@ -3173,6 +3181,14 @@ class Game:
         if me is not None:
             return me.away
         return not self._at_battle(definition)
+
+    def _fighting(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
+        """開打了、自己在場上打得了這一場：戰鬥選單取代整份選單（options），戰場取代整個場景（scene_text）。兩邊都問這一個，
+        選單照常給的人場景上就看得到自己眼前的事。不是的人：集結中、只能觀戰（_watching_battle）、開打了還沒投效的散人
+        （FB-109：以前選單照給、場景卻只剩戰場，事件內文、有所感、人物的回話、投靠的確認都看不到）。"""
+        if battle.phase == "muster" or self._watching_battle(battle, definition):
+            return False
+        return not (self._free_agent() and self.state.player.name not in battle.participants)
 
     def _sides(self, definition: BattleDef) -> dict[str, str]:
         """這場決戰能站的每一方（id → 名字）：交戰的兩軍，加上第三方（戰鬥系統第六節；名字照劇本的陣營）。"""
@@ -3387,8 +3403,8 @@ class Game:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
         ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
         戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，server.py 用這個決定輸入框
-        要不要顯示。"""
-        status = self._battle_status(tick=False)
+        要不要顯示。序章裡沒有（_battle_for_me）。"""
+        status = self._battle_for_me(tick=False)
         if status is None:
             return None
         battle, definition = status
@@ -3411,7 +3427,7 @@ class Game:
         不行回傳要給玩家看的那一句。tick 照 _battle_status。"""
         if self.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
             return [f"（{PAUSED_TEXT}。）"]
-        status = self._battle_status(tick=tick)
+        status = self._battle_for_me(tick=tick)  # 序章裡送不出去（FB-113）
         if status is None:
             return ["（此刻無法這麼做。）"]
         battle, definition = status
@@ -3466,8 +3482,8 @@ class Game:
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
         推進過一次了（options() 內部會 tick），這裡用 tick=False 只讀，避免同一次請求裡
-        重複推進兩次。"""
-        status = self._battle_status(tick=False)
+        重複推進兩次。序章裡一律擋下（_battle_for_me，FB-113）：選單上本來就沒有，直接送也不行。"""
+        status = self._battle_for_me(tick=False)
         if status is None:
             return ["（此刻無法這麼做。）"]
         battle, definition = status
@@ -5177,7 +5193,6 @@ class Game:
         me.stamina -= cfg.stamina
         s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
         s.world.raided[name_key(them.name)] = s.world.time
-        self._save_season()
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(ours, theirs, self.rng)
         mirrored = self._spar_mirror(result, theirs)
@@ -5193,6 +5208,9 @@ class Game:
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
         if winner is self:
             msgs += self._raid_bounty(them.name)
+        # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
+        # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
+        self._save_season()
         return msgs
 
     def post_wanted(self, other: Game, amount: int) -> list[str]:
@@ -6389,14 +6407,14 @@ class Game:
         return got
 
     def scene_text(self) -> str:
-        """有全服戰鬥時大家都看得到戰場；只能觀戰的人照常遊玩，自己眼前的事（事件、對話、
-        地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。"""
-        battle_status = self._battle_status(tick=False)
+        """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
+        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。"""
+        battle_status = self._battle_for_me(tick=False)
         if battle_status is None:
             return self._own_scene_text()
         battle_scene = self._battle_scene_text(*battle_status)
-        if not self._watching_battle(*battle_status) and battle_status[0].phase != "muster":
-            return battle_scene  # 開打後戰場取代整個畫面；集結時照常遊玩，自己眼前的事接在底下
+        if self._fighting(*battle_status):
+            return battle_scene  # 開打後在場上的人：戰場取代整個畫面；其餘照常遊玩，自己眼前的事接在底下（同 options）
         return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
 
     def _own_scene_text(self) -> str:
