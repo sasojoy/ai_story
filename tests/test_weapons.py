@@ -77,3 +77,109 @@ def test_weapon_round_trips_through_json():
 def test_fixture_turns_weapons_off_and_real_content_on(content):
     assert content.config.weapons.enabled is False
     assert real_content().config.weapons.enabled is True
+
+
+# ── Task 3：加成乘進威力、一門打不遍 ──
+
+from tianxia import team  # noqa: E402
+from tianxia.state import Weapon  # noqa: E402
+
+
+def _on(content):
+    content.config.weapons.enabled = True
+    return content
+
+
+def _blade(kind="劍", attribute="柔", tier=1, quality="下品", edge=100):
+    return Weapon(id="兵:1", name="試刃", kind=kind, attribute=attribute, tier=tier, quality=quality, edge=edge)
+
+
+def _game(content, world, art="sword"):
+    import random
+    from tianxia import rules
+    from tianxia.engine import Game
+    game = Game.new(content, "試劍", rng=random.Random(0), world=world)
+    game.client = None
+    rules.learn_skill(game.state, content, art)
+    return game
+
+
+def test_bonus_adds_tier_quality_and_match(content, world):
+    _on(content)
+    sword = team.resolve_art("sword", content, world)  # 流雲劍：柔
+    assert weapons.bonus(_blade(attribute="柔"), sword, content, world) == pytest.approx(0.05 + 0.05)
+    assert weapons.bonus(_blade(attribute="剛"), sword, content, world) == pytest.approx(0.0)  # 剛剋柔：0.05−0.05
+    assert weapons.bonus(_blade(attribute="快", tier=3, quality="上品"), sword, content, world) == pytest.approx(0.19)
+
+
+def test_bonus_is_zero_when_kind_differs_or_off(content, world):
+    sword = team.resolve_art("sword", content, world)
+    assert weapons.bonus(_blade(), sword, content, world) == 0.0  # 開關關著
+    _on(content)
+    assert weapons.bonus(_blade(kind="刀"), sword, content, world) == 0.0
+    assert weapons.bonus(None, sword, content, world) == 0.0
+    assert weapons.bonus(_blade(), None, content, world) == 0.0
+
+
+def test_edge_scales_the_bonus_down_to_half(content, world):
+    _on(content)
+    sword = team.resolve_art("sword", content, world)
+    full = weapons.bonus(_blade(attribute="快"), sword, content, world)
+    assert weapons.bonus(_blade(attribute="快", edge=0), sword, content, world) == pytest.approx(full * 0.5)
+    assert weapons.bonus(_blade(attribute="快", edge=50), sword, content, world) == pytest.approx(full * 0.75)
+
+
+def test_player_boost_multiplies_the_weapon(content, world):
+    _on(content)
+    game = _game(content, world)
+    before = team.player_boost(game.state, content, world).factor
+    game.state.player.weapon = _blade(attribute="快")
+    assert team.player_boost(game.state, content, world).factor == pytest.approx(before * 1.05)
+
+
+def test_bonus_follows_the_worn_art(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.weapon = _blade(attribute="快")
+    from tianxia import rules
+    rules.learn_skill(game.state, content, "fist")  # 換上拳腳：劍用不上
+    if game.state.player.member.wugong_id != "fist":
+        team.switch_art(game.state, content, world, "fist")
+    assert game.state.player.member.wugong_id == "fist"
+    wugong = team.player_art(game.state, content, world, "fist")
+    neigong = team.player_art(game.state, content, world, game.state.player.member.neigong_id)
+    assert team.player_boost(game.state, content, world).factor == pytest.approx(
+        team.pairing(content, wugong, neigong) * team.resonance(game.state, content, wugong)
+        * team.resonance(game.state, content, neigong)
+    )
+
+
+def test_style_factor_is_softer_than_the_art_one(content, world):
+    from tianxia.styles import Style
+    _on(content)
+    sword = team.resolve_art("sword", content, world)
+    assert weapons.style_factor(_blade(attribute="快"), sword, content, world, Style("快", "慢")) == pytest.approx(1.1)
+    assert weapons.style_factor(_blade(attribute="慢"), sword, content, world, Style("快", "慢")) == pytest.approx(0.9)
+    assert weapons.style_factor(_blade(attribute="剛"), sword, content, world, Style("快", "慢")) == 1.0
+    assert weapons.style_factor(_blade(kind="刀", attribute="快"), sword, content, world, Style("快", "慢")) == 1.0
+    assert weapons.style_factor(_blade(attribute="快"), sword, content, world, None) == 1.0
+
+
+def test_styled_fighters_multiplies_the_weapon_into_the_player_only(content, world, monkeypatch):
+    from tianxia import styles
+    from tianxia.styles import Style
+    _on(content)
+    game = _game(content, world)
+    squad = next(iter(content.squads.values()))
+    arts = team.team_arts(game.state, content, world)
+    base = team._styled_fighters(game.state, content, world, arts, squad)[2]
+    game.state.player.weapon = _blade(attribute="快")
+    monkeypatch.setattr(styles, "style_of", lambda *a, **k: Style("快", "慢"))
+    boosts = team._styled_fighters(game.state, content, world, arts, squad)[2]
+    # 身上武學流雲劍（柔）不在路數裡，所以變的只有兵器：本人 ×1.05（加成）×1.1（路數）
+    assert boosts[0].factor == pytest.approx(base[0].factor * 1.05 * 1.1)
+    assert [b.factor for b in boosts[1:]] == [b.factor for b in base[1:]]
+    monkeypatch.setattr(styles, "style_of", lambda *a, **k: None)
+    off = team._styled_fighters(game.state, content, world, arts, squad)[2]
+    assert off[0].factor == pytest.approx(base[0].factor * 1.05)
+
