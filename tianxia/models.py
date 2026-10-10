@@ -1263,7 +1263,7 @@ class WeaponRules(_Strict):
     shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（開局 50 兩買得起一把）
     repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢（另加一個一階素材）
     drop_chance: float = Field(default=0.03, ge=0, le=1)  # 打贏遊歷或野怪掉一把一階下品的機會
-    rack_cap: int = Field(default=6, ge=1)  # 兵器架幾格（六種兵器各一把）
+    rack_cap: int = Field(default=100, ge=1)  # 裝備庫幾格（企劃者 2026-10-10：原來的 6 格改 100；程式裡的 rack 就是玩家看到的「裝備庫」）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
 
 

@@ -104,7 +104,9 @@ TOWN_TAG = "城鎮"
 NOUNS = {"劍": "劍", "刀": "刀", "槍": "槍", "棍": "棍", "弓弩": "弩", "拳腳": "拳套"}
 ATTR_WORDS = {"陰": "寒鐵", "陽": "赤銅", "剛": "厚背", "柔": "軟鋼", "快": "輕鋒", "慢": "沉鐵", "虛": "花紋", "實": "重鐵"}  # 待 joy 潤
 NO_REPAIR_MATERIAL = "沒有一階素材"
-RACK_FULL = "兵器架滿了"
+RACK_FULL = "裝備庫滿了"  # 程式裡的 rack、rack_cap、rack_full 就是玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名）
+NOT_HERE = "這裡沒有鐵匠鋪"
+FITS_MARK = "・配得上你的武學"  # 待 joy 潤：鐵匠鋪的「買」鈕上，種類對得上身上那門武學的那一把
 
 
 def shop_name(kind: str, attribute: str) -> str:
@@ -150,13 +152,13 @@ def rack_full(state: GameState, content: Content) -> bool:
 
 
 def store(state: GameState, content: Content, weapon: Weapon) -> str:
-    """拿到一把：手上空著就拿在手上，不然放上兵器架（呼叫端先用 rack_full 擋）。"""
+    """拿到一把：手上空著就拿在手上，不然放上裝備庫（呼叫端先用 rack_full 擋）。拿在手上的是另一把，鈍了要有它自己的提醒。"""
     p = state.player
     if p.weapon is None:
-        p.weapon = weapon
+        p.weapon, p.edge_warned = weapon, False
         return f"你把【{weapon.name}】拿在手上。"
     p.rack.append(weapon)
-    return f"【{weapon.name}】放上了兵器架。"
+    return f"【{weapon.name}】放上了裝備庫。"
 
 
 DROP_PREFIX = "撿到一把"
@@ -176,11 +178,9 @@ def drop(state: GameState, content: Content, rng: random.Random) -> tuple[Weapon
     return weapon, [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
 
 
-def roll_drop(state: GameState, content: Content, rng: random.Random) -> list[str]:
-    return drop(state, content, rng)[1]
-
-
 def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
+    if not smith_here(state, content):
+        return NOT_HERE  # 鐵匠鋪的選單關了、人走了：引擎層自己也再驗一次
     if kind not in WEAPON_KINDS:
         return "沒有這種兵器"
     if rack_full(state, content):
@@ -200,7 +200,7 @@ def buy(state: GameState, content: Content, kind: str) -> list[str]:
     return [f"你花 {price} 兩買下一把【{weapon.name}】。", store(state, content, weapon)]
 
 
-def _tier_one_material(state: GameState, content: Content) -> str | None:
+def repair_material(state: GameState, content: Content) -> str | None:
     """修要用的一階素材：背包裡數量最多的那一種（同數照 id），沒有是 None。"""
     held = [(n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials and content.materials[mid].tier == 1]
     return max(held, key=lambda pair: (pair[0], pair[1]))[1] if held else None
@@ -208,11 +208,13 @@ def _tier_one_material(state: GameState, content: Content) -> str | None:
 
 def repair_problem(state: GameState, content: Content) -> str | None:
     p, rule = state.player, content.config.weapons
+    if not smith_here(state, content):
+        return NOT_HERE
     if p.weapon is None:
         return "手上沒有兵器"
     if p.weapon.edge >= 100:
         return "刀口還利"
-    if _tier_one_material(state, content) is None:
+    if repair_material(state, content) is None:
         return NO_REPAIR_MATERIAL
     short = rule.repair_silver - p.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
@@ -224,7 +226,7 @@ def repair(state: GameState, content: Content) -> list[str]:
     if problem is not None:
         return [f"（{problem}。）"]
     p, rule = state.player, content.config.weapons
-    material = _tier_one_material(state, content)
+    material = repair_material(state, content)
     p.materials[material] -= 1
     if not p.materials[material]:
         del p.materials[material]
@@ -234,17 +236,17 @@ def repair(state: GameState, content: Content) -> list[str]:
 
 
 def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
-    """換兵器（2.2）：兵器架上那一把換到手上，手上那把放回架上（手上空著就直接拿下來）。不花體力。"""
+    """換兵器（2.2）：裝備庫上那一把換到手上，手上那把放回架上（手上空著就直接拿下來）。不花體力。"""
     if not content.config.weapons.enabled:
         return ["（此刻無法這麼做。）"]
     p = state.player
     chosen = next((w for w in p.rack if w.id == weapon_id), None)
     if chosen is None:
-        return ["兵器架上沒有這一把。"]
+        return ["裝備庫上沒有這一把。"]
     p.rack.remove(chosen)
     if p.weapon is not None:
         p.rack.append(p.weapon)
-    p.weapon = chosen
+    p.weapon, p.edge_warned = chosen, False  # 換上來的是另一把：鈍了要有它自己的提醒
     return [f"你換上了【{chosen.name}】。"]
 
 
@@ -252,7 +254,7 @@ REPAIR_AT = 50  # 機器人與假人鈍到這裡以下才修
 
 
 def wanted(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str | None:
-    """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用）：先把架上配得上的換到手上，再買一把配得上的，再修。"""
+    """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用）：先把裝備庫裡配得上的換到手上，再買一把配得上的，再修配得上的那把。"""
     if not smith_here(state, content) or art is None:
         return None
     p = state.player
@@ -263,7 +265,7 @@ def wanted(state: GameState, content: Content, world: WorldStateStore, art: Mart
         kind = art_weapon(art.id, content, world)
         if kind and buy_problem(state, content, kind) is None:
             return f"smith:buy:{kind}"
-    if p.weapon is not None and p.weapon.edge < REPAIR_AT and repair_problem(state, content) is None:
+    if usable(p.weapon, art, content, world) and p.weapon.edge < REPAIR_AT and repair_problem(state, content) is None:
         return "smith:repair"
     return None
 
@@ -311,7 +313,7 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
 
 
 def rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict:
-    """修練頁的兵器那一塊（server.menxia_view 的 weapons）：身上那把、兵器架、格數。開關關著時 worn 是 None、rack 是空的。"""
+    """修練頁的兵器那一塊（server.menxia_view 的 weapons）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}

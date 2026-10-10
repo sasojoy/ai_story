@@ -177,7 +177,8 @@ class PlayerState(BaseModel):
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
-    # ── 兵器（兵器設計第二節）：身上一把、兵器架上的幾把；換季時角色重來自然清空 ──
+    # ── 兵器（兵器設計第二節）：身上一把、裝備庫裡的幾把；換季時角色重來自然清空 ──
+    # rack ＝ 玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名；程式識別字 rack、rack_cap、rack_full 不動）
     weapon: Weapon | None = None
     rack: list[Weapon] = Field(default_factory=list)
     weapon_serial: int = 0

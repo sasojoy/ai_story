@@ -303,10 +303,10 @@ def test_buy_refused_when_rack_full(content, world):
     assert len(p.rack) == content.config.weapons.rack_cap
     silver = p.stats["silver"]
     option = _ids(game)["smith:buy:棍"]
-    assert not option.enabled and "兵器架" in option.label
+    assert not option.enabled and "裝備庫" in option.label
     game.choose("smith:buy:棍")
     assert p.stats["silver"] == silver
-    assert weapons.buy(game.state, content, "棍") == ["（兵器架滿了。）"]
+    assert weapons.buy(game.state, content, "棍") == ["（裝備庫滿了。）"]
     assert p.stats["silver"] == silver
 
 
@@ -343,13 +343,13 @@ def test_repair_refused_without_silver(content, world):
 def test_wield_swaps_with_the_rack(content, world):
     game = _town(content, world, silver=500)
     game.choose("act:smith")
-    game.choose("smith:buy:劍")
     game.choose("smith:buy:刀")
+    game.choose("smith:buy:劍")
     p = game.state.player
     blade = p.rack[0]
-    game.choose(f"smith:wield:{blade.id}")
-    assert p.weapon.kind == "刀" and [w.kind for w in p.rack] == ["劍"]
-    assert game.wield_weapon("兵:999") == ["兵器架上沒有這一把。"]
+    game.choose(f"smith:wield:{blade.id}")  # 鐵匠鋪只列配得上身上武學（流雲劍）的
+    assert p.weapon.kind == "劍" and [w.kind for w in p.rack] == ["刀"]
+    assert game.wield_weapon("兵:999") == ["裝備庫上沒有這一把。"]
 
 
 def test_wield_takes_a_weapon_into_an_empty_hand(content, world):
@@ -399,29 +399,29 @@ def test_shop_names_are_original_and_unique():
 
 # ── Task 6：打贏掉現成的 ──
 
-def test_roll_drop_gives_a_tier_one_blade(content, world):
+def test_drop_gives_a_tier_one_blade(content, world):
     import random
     _on(content)
     state = _new_state(content, world, "撿刀")
     content.config.weapons.drop_chance = 1.0
-    msgs = weapons.roll_drop(state, content, random.Random(1))
-    assert state.player.weapon is not None and state.player.weapon.tier == 1 and state.player.weapon.quality == "下品"
-    assert msgs[0] == weapons.DROP_LINE.format(name=state.player.weapon.name)
+    weapon, msgs = weapons.drop(state, content, random.Random(1))
+    assert weapon is state.player.weapon and weapon.tier == 1 and weapon.quality == "下品"
+    assert msgs[0] == weapons.DROP_LINE.format(name=weapon.name)
     content.config.weapons.drop_chance = 0.0
-    assert weapons.roll_drop(state, content, random.Random(1)) == []
+    assert weapons.drop(state, content, random.Random(1)) == (None, [])
 
 
-def test_roll_drop_skips_when_rack_full_or_off(content, world):
+def test_drop_skips_when_rack_full_or_off(content, world):
     import random
     _on(content)
     state = _new_state(content, world, "滿架")
     state.player.weapon = _blade()
     state.player.rack = [_blade() for _ in range(content.config.weapons.rack_cap)]
     content.config.weapons.drop_chance = 1.0
-    assert weapons.roll_drop(state, content, random.Random(1)) == []
+    assert weapons.drop(state, content, random.Random(1)) == (None, [])
     state.player.rack = []
     content.config.weapons.enabled = False
-    assert weapons.roll_drop(state, content, random.Random(1)) == []
+    assert weapons.drop(state, content, random.Random(1)) == (None, [])
 
 
 def _win_a_fight(game, kind_action="act:train"):
@@ -506,7 +506,7 @@ def test_challenging_a_great_figure_wears_the_blade_but_a_story_fight_does_not(w
     assert p.weapon.edge == edge
 
 
-# ── Task 7：看得到（角色卡、修練頁的兵器架） ──
+# ── Task 7：看得到（角色卡、修練頁的裝備庫） ──
 
 def test_card_line_reports_bonus_or_mismatch(content, world):
     _on(content)
@@ -684,3 +684,142 @@ def test_a_server_bot_in_the_smith_menu_never_gets_stuck_and_usually_buys(conten
         assert not game.state.player.picking_smith
         bought += game.state.player.weapon is not None
     assert bought >= 5
+
+
+# ── 最後一輪修正（企劃者 2026-10-10 與整枝審查） ──
+
+def test_the_default_rack_holds_a_hundred():
+    from tianxia.models import WeaponRules
+    assert WeaponRules().rack_cap == 100 and real_content().config.weapons.rack_cap == 100
+
+
+def test_nothing_players_read_still_says_bingqijia(content, world):
+    game = _town(content, world, silver=10_000)
+    game.choose("act:smith")
+    content.config.weapons.rack_cap = 1
+    game.choose("smith:buy:劍")
+    game.choose("smith:buy:刀")
+    labels = " ".join(o.label for o in game.options(odds=False))
+    texts = [weapons.RACK_FULL, labels] + game.choose("smith:buy:棍") + game.wield_weapon("兵:999")
+    assert "兵器架" not in " ".join(texts) and "裝備庫" in " ".join(texts)
+    assert weapons.store(game.state, content, _blade()) == "【試刃】放上了裝備庫。"
+
+
+@pytest.mark.parametrize("menu", ["picking_smith", "picking_bounty"])
+def test_travel_is_refused_while_a_town_menu_is_open_and_goes_once_it_is_closed(content, world, menu):
+    game = _town(content, world)
+    p = game.state.player
+    setattr(p, menu, True)
+    refusal = game.travel_refusal("lake")
+    assert refusal is not None and "先" in refusal
+    game.travel("lake")
+    assert p.journey is None and p.location == "town"
+    setattr(p, menu, False)
+    game.travel("lake", "dash")
+    assert p.location == "lake" and not p.picking_smith and not p.picking_bounty
+    assert "smith:buy:劍" not in _ids(game) and "smith:back" not in _ids(game)
+
+
+@pytest.mark.parametrize("walk", ["move", "travel", "dash"])
+def test_departing_never_leaves_a_stale_smith_menu(content, world, walk):
+    game = _town(content, world)
+    p = game.state.player
+    p.picking_smith = p.picking_bounty = True  # 就算有別的路徑繞過了 travel_block，出發本身也收起第二層選單
+    if walk == "move":
+        game._move("lake")
+    else:
+        game.travel_refusal = lambda *a, **k: None  # 繞過檢查，直接測 _depart 的防線
+        game.travel("lake", "dash" if walk == "dash" else "walk")
+    assert not p.picking_smith and not p.picking_bounty
+    assert not any(o.id.startswith("smith:") or o.id.startswith("bounty:") for o in game.options(odds=False))
+
+
+def test_buy_and_repair_refuse_away_from_a_smith(content, world):
+    game = _town(content, world)
+    p = game.state.player
+    p.weapon = _blade(edge=10)
+    tier_one = next(m.id for m in content.materials.values() if m.tier == 1)
+    p.materials = {tier_one: 1}
+    p.location = "lake"
+    silver = p.stats["silver"]
+    assert weapons.buy_problem(game.state, content, "劍") is not None
+    assert weapons.repair_problem(game.state, content) is not None
+    weapons.buy(game.state, content, "劍")
+    weapons.repair(game.state, content)
+    assert p.rack == [] and p.weapon.edge == 10 and p.stats["silver"] == silver and p.materials == {tier_one: 1}
+
+
+def test_the_dull_warning_is_per_weapon(content, world):
+    _on(content)
+    state = _new_state(content, world, "雙刃")
+    p = state.player
+    p.weapon = _blade(edge=31)
+    spare = Weapon(id="兵:2", name="備刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=31)
+    p.rack = [spare]
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="試刃")]
+    assert weapons.wear(state, content, "落敗") == []
+    weapons.wield(state, content, "兵:2")
+    assert p.weapon is spare and p.edge_warned is False
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="備刃")]  # 換上來的這把有自己的提醒
+
+
+def test_a_blade_taken_into_an_empty_hand_gets_its_own_warning(content, world):
+    _on(content)
+    state = _new_state(content, world, "空手")
+    state.player.edge_warned = True  # 上一把鈍了、提醒過，之後空手了
+    weapons.store(state, content, _blade(edge=31))
+    assert state.player.edge_warned is False
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="試刃")]
+
+
+def test_repair_label_names_the_material_it_will_use(content, world):
+    game = _town(content, world)
+    p = game.state.player
+    p.weapon = _blade(edge=10)
+    tier_one = next(m.id for m in content.materials.values() if m.tier == 1)
+    p.materials = {tier_one: 2}
+    game.choose("act:smith")
+    label = _ids(game)["smith:repair"].label
+    assert content.materials[tier_one].name in label and "×1" in label and "5 兩" in label and "鋒利度 10" in label
+
+
+def test_buy_labels_mark_only_the_kind_that_fits_the_worn_art(content, world):
+    game = _sworder(content, world)
+    game.choose("act:smith")
+    labeled = {kind: weapons.FITS_MARK in _ids(game)[f"smith:buy:{kind}"].label for kind in WEAPON_KINDS}
+    assert labeled == {kind: kind == "劍" for kind in WEAPON_KINDS}
+
+
+def test_smith_menu_lists_wield_buttons_only_for_blades_that_fit(content, world):
+    game = _sworder(content, world)
+    p = game.state.player
+    p.weapon = _blade(kind="刀")
+    p.rack = [
+        Weapon(id="兵:7", name="軟鋼劍", kind="劍", attribute="柔", tier=1, quality="下品"),
+        Weapon(id="兵:8", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品"),
+        Weapon(id="兵:9", name="花紋槍", kind="槍", attribute="虛", tier=1, quality="下品"),
+    ]
+    game.choose("act:smith")
+    wields = [i for i in _ids(game) if i.startswith("smith:wield:")]
+    assert wields == ["smith:wield:兵:7"]
+    # 其餘的在修練頁換，鐵匠鋪的引擎層也不攔（wield 本來就哪裡都能換）
+    assert game.wield_weapon("兵:8")[0].startswith("你換上了")
+
+
+def test_smith_menu_has_no_wield_buttons_without_a_fitting_blade(content, world):
+    game = _sworder(content, world)
+    game.state.player.rack = [Weapon(id="兵:8", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
+    game.choose("act:smith")
+    assert not [i for i in _ids(game) if i.startswith("smith:wield:")]
+
+
+def test_wanted_repairs_only_a_blade_that_fits(content, world):
+    game = _sworder(content, world, silver=200)
+    p = game.state.player
+    p.materials = {next(m.id for m in content.materials.values() if m.tier == 1): 2}
+    p.weapon = _blade(kind="刀", edge=10)  # 配不上的鈍刀：不值得修（會先去買一把劍）
+    assert _wanted(game, content, world) == "smith:buy:劍"
+    p.stats["silver"] = 5  # 買不起劍、手上又是配不上的刀：什麼都不按
+    assert _wanted(game, content, world) is None
+    p.weapon = _blade(kind="劍", edge=10)
+    assert _wanted(game, content, world) == "smith:repair"

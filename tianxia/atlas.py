@@ -596,6 +596,10 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
     if p.picking_audience:
         return TravelBlock("求見中，先返回才能安排前往", to_jianghu=True)
+    if p.picking_bounty:
+        return TravelBlock("懸賞榜還開著，先離開才能安排前往", to_jianghu=True)
+    if p.picking_smith:
+        return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if p.pending_defect:

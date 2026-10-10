@@ -561,7 +561,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .acard { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--q, var(--line)); border-radius: 16px;
   padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
 .acard.empty { color: var(--ink-2); }
-/* 修練頁的兵器塊（app.js 的 weaponsBlock）：身上那把與兵器架上每把一行，右邊是「換上」 */
+/* 修練頁的兵器塊（app.js 的 weaponsBlock）：身上那把與裝備庫上每把一行，右邊是「換上」 */
 .weapons .wrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 2px; }
 .weapons .wrow .btn { margin-left: auto; }
 .weapons p { margin: 4px 2px; }

@@ -2477,22 +2477,29 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def _smith_options(self) -> list[Option]:
-        """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼），手上那把一顆「修」，
-        兵器架上每把一顆「換上」，最後是永遠按得下去的「離開」。都不花體力。"""
+        """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），
+        手上那把一顆「修」（寫明用掉哪一種素材），裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），
+        最後是永遠按得下去的「離開」。都不花體力。"""
         s, c = self.state, self.content
+        art = team.player_art(s, c, self.world, s.player.member.wugong_id)
+        fit_kind = weapons.art_weapon(art.id, c, self.world) if art is not None else None
         opts = []
         for item in weapons.stock(s, c):
             problem = weapons.buy_problem(s, c, item.kind)
             note = problem or f"{c.config.weapons.shop_price} 兩"
-            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）",
+            mark = weapons.FITS_MARK if c.config.weapons.enabled and item.kind == fit_kind else ""
+            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）{mark}",
                                enabled=problem is None))
         if s.player.weapon is not None:
             problem = weapons.repair_problem(s, c)
-            note = problem or f"一個一階素材＋{c.config.weapons.repair_silver} 兩"
+            material = weapons.repair_material(s, c)
+            use = f"{c.materials[material].name}×1" if material is not None else "一個一階素材"
+            note = problem or f"{use}＋{c.config.weapons.repair_silver} 兩"
             opts.append(Option(id="smith:repair", label=f"修【{s.player.weapon.name}】（鋒利度 {s.player.weapon.edge}・{note}）",
                                enabled=problem is None))
         for w in s.player.rack:
-            opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
+            if weapons.usable(w, art, c, self.world):
+                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
         opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
         return opts
 
@@ -4259,6 +4266,7 @@ class Game:
         在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
         新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
         s, c = self.state, self.content
+        s.player.picking_bounty = s.player.picking_smith = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了

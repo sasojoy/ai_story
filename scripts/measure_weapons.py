@@ -1,5 +1,6 @@
 """兵器量表（docs/superpowers/specs/2026-10-09-兵器-design.md 第七節，第一批的部分）：整季機器人跑幾個種子，
-比開兵器與關兵器：季末等級、遊歷勝率、修了幾次、季末手上一二三階素材。只量不改。
+比開兵器與關兵器：季末等級、遊歷勝率、修了幾次、季末手上一二三階素材；每行最後附這一季跑了幾個世界小時、結局 id、
+每個遊戲日幾場遊歷或野怪（用來看兩邊是不是提早收季、場數差多少）。只量不改。
 
 勝率與場數：state.battles 只留最近 20 場，所以在 observe 裡逐步累計新出現的戰報（記看過的流水號）；只算遊歷與探索野怪
 （kind train／wild），大勝與險勝算贏。修幾次：同一把兵器的鋒利度比上一步高就是修了一次（鋒利度只有鐵匠修得上去；換一把、
@@ -25,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_weapons_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, naming  # noqa: E402
+from tianxia import bot, database, naming, rules  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -76,7 +77,11 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
     tiers = {1: 0, 2: 0, 3: 0}
     for mid, n in p.materials.items():
         tiers[content.materials[mid].tier] += n
+    season = game.state.world
+    hours = season.time / 3600  # 世界秒換成小時：這一季實際跑了多久（收季那一刻）
+    days = season.time / rules.day_seconds(content, season)  # 遊戲日（短的季一天不是 24 小時）
     return {
+        "hours": hours, "ending": season.ending_id or "—", "per_day": count["fights"] / days if days else 0.0,
         "level": p.member.level, "win": count["wins"] / count["fights"] if count["fights"] else 0.0,
         "fights": count["fights"], "repairs": count["repairs"],
         "edge_avg": sum(edges) / len(edges) if edges else None,
@@ -96,7 +101,8 @@ def main() -> None:
             edge = "—" if r["edge_avg"] is None else round(r["edge_avg"])
             print(f"種子 {seed} 兵器{'開' if on else '關'}：等級 {r['level']}、遊歷勝率 {r['win']:.0%}（{r['fights']} 場）、"
                   f"修 {r['repairs']} 次、平均鋒利度 {edge}、"
-                  f"季末兵器 {r['weapon']}、素材 {r['mats']}、銀兩 {r['silver']}", flush=True)
+                  f"季末兵器 {r['weapon']}、素材 {r['mats']}、銀兩 {r['silver']}、"
+                  f"季長 {r['hours']:.1f} 小時（世界時間）、結局 {r['ending']}、每遊戲日 {r['per_day']:.1f} 場", flush=True)
 
 
 if __name__ == "__main__":

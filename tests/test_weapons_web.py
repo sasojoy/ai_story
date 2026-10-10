@@ -1,4 +1,4 @@
-"""兵器的網頁那一半（兵器設計 3.6）：修練頁的兵器塊——身上那把、兵器架每把一行與「換上」鈕；字都跳脫；沒東西就不畫。
+"""兵器的網頁那一半（兵器設計 3.6）：修練頁的兵器塊——身上那把、裝備庫每把一行與「換上」鈕；字都跳脫；沒東西就不畫。
 餵真的引擎給的 /api/main 與 /api/menxia 給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def test_the_practice_page_draws_the_worn_weapon_and_the_rack(views):
     page = run(m, "return H.pagePractice();", menxia=x)
     assert 'class="weapons"' in page and "【試刃】" in page and "鋒利度 80" in page and "威力 +4.5%" in page
     assert page.count('data-act="wield"') == 1 and 'data-id="兵:2"' in page  # 身上那把不用換上
-    assert "兵器架 1/6" in page and "用不上" in page
+    assert "裝備庫 1/6" in page and "用不上" in page
     assert "<b>厚背刀</b>" not in page and "&lt;b&gt;厚背刀&lt;/b&gt;" in page  # 名字跳脫
 
 
@@ -50,3 +50,17 @@ def test_nothing_is_drawn_without_weapons(views):
     assert 'class="weapons"' not in run(m, "return H.pagePractice();", menxia=x)
     del x["weapons"]  # 舊的伺服器沒有這一欄
     assert 'class="weapons"' not in run(m, "return H.pagePractice();", menxia=x)
+
+
+def test_a_long_rack_lists_eight_and_then_a_more_button(views):
+    m, x = views
+    rack = [_row(id=f"兵:{i + 2}", name=f"備刃{i}") for i in range(12)]
+    x["weapons"] = {"worn": _row(), "cap": 100, "rack": rack}
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert page.count('data-act="wield"') == 8 and "備刃7" in page and "備刃8" not in page
+    assert 'data-act="rack-all"' in page and "再列 4 件" in page and "裝備庫 12/100" in page
+    everything = run(m, "return H.pagePractice();", menxia=x, S={"rackAll": True})  # 按了「再列」之後全部攤開
+    assert everything.count('data-act="wield"') == 12 and "rack-all" not in everything and "再列" not in everything
+    x["weapons"]["rack"] = rack[:8]  # 剛好八把：不必多按一次
+    short = run(m, "return H.pagePractice();", menxia=x)
+    assert short.count('data-act="wield"') == 8 and "再列" not in short

@@ -167,3 +167,4 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
     out = capsys.readouterr().out
     assert "種子 1 兵器開：" in out and "種子 1 兵器關：" in out
     assert out.count("遊歷勝率") == 2
+    assert out.count("小時（世界時間）") == 2 and out.count("結局 ") == 2 and out.count("每遊戲日") == 2  # 季長、結局、每日場數

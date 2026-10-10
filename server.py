@@ -958,7 +958,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
         "insights": game.insight_rows(),
         "naming": game.naming_row(),
-        # 兵器（兵器設計 3.6）：身上那把、兵器架；開關關著時 worn 是 None、rack 是空的，修練頁那一塊不畫
+        # 兵器（兵器設計 3.6）：身上那把、裝備庫；開關關著時 worn 是 None、rack 是空的，修練頁那一塊不畫
         "weapons": weapons.rows(game.state, game.content, game.world,
                                 team.player_art(game.state, game.content, game.world, member.wugong_id)),
     }
@@ -1434,7 +1434,7 @@ MENXIA_ACTIONS = {
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
-    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 兵器架上那一把換到手上（兵器設計 2.2）
+    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一把換到手上（兵器設計 2.2）
 }
 
 
