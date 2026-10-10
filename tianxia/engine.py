@@ -19,7 +19,8 @@ from pydantic import BaseModel
 from . import (
     atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
-    materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview,
+    materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
+    skillview,
     social, styles, team, timetable, traits, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -1987,7 +1988,7 @@ class Game:
             self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
             return self._dialogue_unavailable(companion_id)
         self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（_hint_box）
-        return msgs
+        return msgs + self._overhear(companion_id, msgs)
 
     def _explore(self) -> list[str]:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
@@ -2004,7 +2005,7 @@ class Game:
         if prologue_rules.active(self.state, self.content):
             return self._explore_outcome()  # 序章裡不撿破境丹（新手引導計畫一）
         scouted = bounties.on_explore(self.state, self.content, self.world, self.state.player.location)  # 懸賞榜的打探：探索一次就算
-        return self._explore_outcome() + self._legend_find() + scouted
+        return self._explore_outcome() + self._legend_find() + self._scrap_find() + scouted
 
     def _legend_find(self) -> list[str]:
         """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會）。
@@ -2581,6 +2582,7 @@ class Game:
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
         msgs += self._count_talk(companion_id)
         return msgs
@@ -4418,8 +4420,33 @@ class Game:
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
             msgs.append(line)
             self._outcome(tag, line)
-            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c))
-        return msgs + self._apply(choice.effect)
+            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c)) + self._tale_clue(event)
+        return msgs + self._apply(choice.effect) + self._tale_clue(event)
+
+    def _tale_clue(self, event: Event) -> list[str]:
+        """說書的事件了結時，偶爾多一句說書版的口訣（Config.secrets，tianxia/secret_recipes.py），記進武學譜。
+        擲骰用自己的亂數，不動 self.rng。"""
+        s, cfg = self.state, self.content.config.secrets
+        seed = f"說書|{s.player.name}|{s.world.time}|{event.id}"
+        if event.id not in cfg.tale_events or not secret_recipes.roll(cfg.tale_chance, seed):
+            return []
+        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.TALE, seed)
+        return [cfg.tale_frame.format(clue=clue)] if clue else []
+
+    def _scrap_find(self) -> list[str]:
+        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；同 _tale_clue 用自己的亂數。"""
+        s, cfg = self.state, self.content.config.secrets
+        seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
+        if not secret_recipes.roll(cfg.scrap_chance, seed):
+            return []
+        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
+        return [cfg.scrap_frame.format(clue=clue)] if clue else []
+
+    def _overhear(self, companion_id: str, msgs: list[str]) -> list[str]:
+        """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
+        if secret_recipes.overheard(self.state, self.content, self.world, companion_id, "\n".join(msgs)):
+            return [self.content.config.secrets.overheard]
+        return []
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         s, c = self.state, self.content
@@ -4521,6 +4548,7 @@ class Game:
         hours = (end_time - p.seclusion_start) / HOUR
         amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20))
         p.busy_until = None
+        p.seclusion_done = end_time  # 天時地利的「心靜」：出關之後一陣子開爐（fusion.setting_points）
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         msg = f"你結束閉關（{hours:.1f} 小時），心得 +{amount}。"
         tag, change = f"{hours:.1f} 小時", f"心得 +{amount}"
@@ -6699,6 +6727,8 @@ class Game:
             "affiliation": social.affiliation(s, c),
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
             "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；開關關著是空的
+            # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
+            "manual": secret_recipes.view(s, c, self.world),
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,

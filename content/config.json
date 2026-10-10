@@ -53,5 +53,22 @@
   "bots_min_per_faction": 5,
   "bot_strength": 0.6,
   "bot_tick_seconds": 20,
-  "bot_fill_seconds": 3600
+  "bot_fill_seconds": 3600,
+  "fuse_quality": {
+    "terrain": 10,
+    "night_match": 10,
+    "night_clash": -6,
+    "battlefield": 10,
+    "calm": 8,
+    "setting_good": "冥冥之中，天時地利都站在你這一邊。",
+    "setting_bad": "時辰地氣都不太對，爐火燒得有些勉強。"
+  },
+  "secrets": {
+    "quality_points": 30,
+    "insight_points": 10,
+    "tale_events": ["teahouse", "tale_yc_riverbank", "tale_yc_academy", "tale_wan_road", "tale_xy_river", "tale_mt_scribes", "tale_xqy_fort", "tale_rnmk_ford", "tale_rn_mengjin"],
+    "tale_chance": 0.8,
+    "scrap_chance": 0.06,
+    "talk_affinity": 20
+  }
 }
