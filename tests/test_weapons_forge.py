@@ -438,3 +438,260 @@ def test_echo_delivery_says_forged_for_weapons(content, world):
     game._deliver_echoes()
     entry = game.state.journal[0]
     assert entry.title == journal.ECHO and "江湖上又有 1 人照著你首創的【寒星劍】打了出來。" in entry.lines
+
+
+# ── Task 6：接進鐵匠鋪 ──
+
+import contextlib  # noqa: E402
+from unittest import mock  # noqa: E402
+
+GO_SWORD_YANG = "smith:forge-go:劍:gang_1:kuai_1"
+
+
+def _smithy(content, world, **kw):
+    game = _forger(content, world, **kw)
+    game.choose("act:smith")
+    return game
+
+
+def _at_go(content, world, **kw):
+    game = _smithy(content, world, **kw)
+    for oid in (smithing.OPEN, f"{smithing.KIND}劍", f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1"):
+        game.choose(oid)
+    return game
+
+
+def test_the_forge_door_is_on_the_smith_menu_and_greys_out_with_a_reason(content, world):
+    game = _smithy(content, world)
+    assert _ids(game)[smithing.OPEN].enabled
+    game.state.player.materials = {"gang_1": 1}
+    door = _ids(game)[smithing.OPEN]
+    assert not door.enabled and smithing.NOT_ENOUGH in door.label
+    game.state.player.materials, game.state.player.stats["silver"] = {"gang_1": 2}, 3
+    assert "還差 17 兩" in _ids(game)[smithing.OPEN].label
+
+
+def test_the_forge_door_sits_between_wield_and_dismantle(content, world):
+    game = _forger(content, world)
+    p = game.state.player
+    p.weapon = _blade(kind="刀")
+    p.rack = [_blade(wid="兵:7", name="軟鋼劍")]
+    game.choose("act:smith")
+    ids = list(_ids(game))
+    assert ids.index("smith:wield:兵:7") < ids.index(smithing.OPEN) < ids.index("smith:dismantle:兵:7")  # FB-125：換上與拆解不相鄰
+
+
+def test_the_wizard_walks_kind_main_aux_then_go(content, world):
+    game = _smithy(content, world)
+    game.choose(smithing.OPEN)
+    ids = list(_ids(game))
+    assert ids[0] == f"{smithing.KIND}劍"  # 配得上身上武學的種類排第一
+    assert {f"{smithing.KIND}{k}" for k in WEAPON_KINDS} <= set(ids) and smithing.CANCEL in ids and "smith:back" not in ids
+    game.choose(f"{smithing.KIND}劍")
+    mains = [i for i in _ids(game) if i.startswith(smithing.MAIN)]
+    assert mains[0] == f"{smithing.MAIN}gang_2"  # 高階的排前面
+    game.choose(f"{smithing.MAIN}gang_1")
+    aux = _ids(game)[f"{smithing.AUX}kuai_1"]
+    assert "→ 屬陽" in aux.label
+    game.choose(aux.id)
+    go = _ids(game)[GO_SWORD_YANG]
+    assert go.enabled and "工錢 20 兩" in go.label and "下品 46%" in go.label and go.wait == smithing.FORGE_WAIT
+    game.choose(go.id)
+    p = game.state.player
+    assert p.weapon is not None and p.weapon.recipe == KEY_SWORD_YANG
+    assert p.smith_draft is None and p.picking_smith and smithing.OPEN in _ids(game)  # 打完回到鐵匠鋪的選單
+    forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
+    assert len(forged) == 1 and any(p.weapon.name in line for line in forged[0].lines)  # 一爐一則紀錄
+
+
+def test_each_forge_gets_its_own_entry_and_a_cancel_does_not_join_the_last_forge(content, world):
+    """打開單子那一步另起一則（journal._mergeable_head 只看最新一則同不同標題）：連打兩爐是兩則；打開又不打了是第三則，
+    不併進第二爐那一則。"""
+    game = _at_go(content, world)
+    game.choose(GO_SWORD_YANG)  # 第一爐
+    for oid in (smithing.OPEN, f"{smithing.KIND}劍", f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
+        game.choose(oid)  # 打完再按「打造兵器…」打第二爐
+    forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
+    assert len(forged) == 2
+    game.choose(smithing.OPEN)
+    game.choose(smithing.CANCEL)
+    forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
+    assert len(forged) == 3
+    assert any(smithing.CANCELLED in line for line in forged[0].lines)  # 最新的一則是打開又不打了
+    assert not any(smithing.CANCELLED in line for line in forged[1].lines)  # 第二爐那一則沒被併進去
+
+
+def test_a_known_recipe_says_its_name_and_does_not_wait(content, world):
+    game = _at_go(content, world)
+    game.choose(GO_SWORD_YANG)
+    name = world.lookup_weapon_recipe(KEY_SWORD_YANG).name
+    for oid in (smithing.OPEN, f"{smithing.KIND}劍", f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1"):
+        game.choose(oid)
+    go = _ids(game)[GO_SWORD_YANG]
+    assert f"【{name}】" in go.label and go.wait == ""
+
+
+def test_undo_steps_back_and_cancel_returns_to_the_smith_menu(content, world):
+    game = _smithy(content, world)
+    for oid in (smithing.OPEN, f"{smithing.KIND}劍", f"{smithing.MAIN}gang_1"):
+        game.choose(oid)
+    game.choose(smithing.UNDO)
+    assert game.state.player.smith_draft.main is None and any(i.startswith(smithing.MAIN) for i in _ids(game))
+    game.choose(smithing.CANCEL)
+    assert game.state.player.smith_draft is None and "smith:back" in _ids(game)
+    assert game.state.player.materials == {"gang_1": 3, "gang_2": 2, "kuai_1": 2}  # 什麼都沒花
+
+
+def test_a_second_press_of_the_same_forge_button_does_nothing(content, world):
+    game = _at_go(content, world)
+    game.choose(GO_SWORD_YANG)
+    p = game.state.player
+    before = (p.stats["silver"], dict(p.materials), len(p.rack) + (p.weapon is not None))
+    assert game.choose(GO_SWORD_YANG) == ["（此刻無法這麼做。）"]
+    assert (p.stats["silver"], p.materials, len(p.rack) + (p.weapon is not None)) == before
+
+
+def test_aux_list_leaves_out_the_main_when_only_one_is_held(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.materials = {"gang_2": 1, "gang_1": 1}
+    for oid in (smithing.OPEN, f"{smithing.KIND}劍", f"{smithing.MAIN}gang_2"):
+        game.choose(oid)
+    assert [i for i in _ids(game) if i.startswith(smithing.AUX)] == [f"{smithing.AUX}gang_1"]
+    assert game.choose("smith:forge-go:劍:gang_2:gang_2") == ["（此刻無法這麼做。）"]  # 舊分頁的單子：不在選單上
+    assert p.materials == {"gang_2": 1, "gang_1": 1} and p.stats["silver"] == 200
+
+
+def test_leaving_the_smith_mid_way_starts_the_forge_over(content, world):
+    game = _at_go(content, world)
+    p = game.state.player
+    p.location = "lake"
+    game.sync(1.0)
+    assert not p.picking_smith and p.smith_draft is None  # 人不在城鎮：鐵匠鋪收起來，單子一起清掉（存檔不留舊單子）
+    p.location = "town"
+    game.sync(2.0)
+    game.choose("act:smith")
+    assert p.smith_draft is None and smithing.OPEN in _ids(game)
+    assert game.choose(GO_SWORD_YANG) == ["（此刻無法這麼做。）"]
+
+
+def test_a_saved_draft_that_the_content_no_longer_supports_is_dropped_on_load(content, world):
+    """存檔裡的單子指著內容已經沒有的素材（內容改版），或根本沒開著鐵匠鋪：存檔修補時清掉，選單不會因為查不到素材而丟錯。"""
+    from tianxia.state import SmithDraft
+    game = _smithy(content, world)
+    p = game.state.player
+    p.smith_draft = SmithDraft(kind="劍", main="gone_material")
+    game._drop_stale_references()
+    assert p.smith_draft is None and p.picking_smith and smithing.OPEN in _ids(game)
+    p.smith_draft, p.picking_smith = SmithDraft(kind="劍"), False
+    game._drop_stale_references()
+    assert p.smith_draft is None
+
+
+def test_choose_takes_a_name_prepared_outside_the_lock(content, world):
+    game = _at_go(content, world)
+    game.client = object()  # 有 client 才開單（伺服器上的 Game 一定有）
+    req = game.smith_forge_request(GO_SWORD_YANG)
+    assert req is not None and req.kind == "weapon" and req.key == KEY_SWORD_YANG
+    assert game.smith_forge_request("smith:forge-go:劍:gang_1:gang_2") is None  # 不在選單上的單子不開
+    game.client = None
+    assert game.smith_forge_request(GO_SWORD_YANG) is None  # 沒有 client（假人鎖內的 Game）不開
+    game.choose(GO_SWORD_YANG, proposed=("寒星劍", "劍身映著寒光。"))
+    assert game.state.player.weapon.name == "寒星劍"
+
+
+@pytest.fixture
+def lock_events(monkeypatch):
+    """記錄行動鎖「拿到、放掉」的順序（同 tests/test_server.py 的 lock_events）。"""
+    from tianxia.sqlite_world import SqliteWorldStore
+    events = []
+    real = SqliteWorldStore.action_lock
+
+    @contextlib.contextmanager
+    def spy(self, timeout=None):
+        with real(self, timeout):
+            events.append("enter")
+            yield
+        events.append("exit")
+
+    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy)
+    return events
+
+
+@pytest.fixture
+def server_ready(monkeypatch):
+    """伺服器的兩支測試用（照 tests/test_server.py 的 season_already_open、fresh_server_memory、model_breaker_closed；那三個是
+    test_server.py 自己的 autouse，這個檔沒有）。server.CONTENT 是正式內容，content/config.json 沒寫 auto_open_first_season
+    （models.py 預設 False）：不打開的話 server.game_for 開出來的世界停在籌備中，smith_forge_request 的 _preparing() 讓 A 段回 None、
+    B 段不叫模型，C 段的選單只剩 season:preparing，打造被拒。角色快取、登入狀態、排程那一份 Game、模型佇列、斷路器都是 server 的
+    模組狀態，前後都清（不然 GAMES 裡留著上一個測試開在別的暫存資料庫上的 Game）。一定要在 server.game_for 之前生效：
+    測試把它寫在參數裡（fixture 比測試本體先跑），不要在測試裡呼叫 _server_forger 之後才設。"""
+    import server
+    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
+    monkeypatch.setattr(server, "_breaker_until", None, raising=False)
+
+    def clear():
+        for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
+            store.clear()
+        server.WORLD_GAME = None
+        server.QUEUE = None  # 模型佇列：從關著開始（Config.llm_queue_slots 預設 0）
+
+    clear()
+    yield
+    clear()
+
+
+def _server_forger(name):
+    """伺服器上這個角色唯一的那份 Game（照 tests/test_server.py::_forger）：站在起點的城鎮、單子挑好了拳套、存進資料庫（進鎖會重讀）。
+    呼叫它的測試要帶 server_ready（季要開著、伺服器記憶體要清過）。"""
+    import server
+    from tianxia.characters import open_characters
+    from tianxia.state import SmithDraft
+    game = server.game_for(name)
+    p = game.state.player
+    p.materials, p.stats["silver"] = {"gang_1": 1, "kuai_1": 1}, 200
+    p.picking_smith, p.smith_draft = True, SmithDraft(kind="拳腳", main="gang_1", aux="kuai_1")
+    open_characters().save(game.state)
+    return game
+
+
+def _named(reply_name, events=None, game=None):
+    from tianxia.ollama_client import OllamaClient
+
+    def chat_structured(model, messages, response_model, **kwargs):
+        if events is not None:
+            events.append("generate")
+            assert not game.world.db.writing()  # 鎖外：這個執行緒沒拿著寫入交易
+        return naming.NameReply(name=reply_name, description="一句話。")
+
+    return mock.patch.object(OllamaClient, "chat_structured", chat_structured)
+
+
+GO_FIST = "smith:forge-go:拳腳:gang_1:kuai_1"
+
+
+def test_a_new_weapon_recipe_is_named_outside_the_action_lock(server_ready, lock_events):
+    import server
+    from tianxia.characters import open_characters
+    game = _server_forger("鍛刀人")
+    lock_events.clear()
+    with _named("驚雷拳套", lock_events, game):
+        server.choose(game, GO_FIST)
+    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內開單 → 鎖外取名 → 鎖內登記
+    saved = open_characters().load("鍛刀人").player
+    assert saved.weapon is not None and saved.weapon.name == "驚雷拳套"
+    assert open_world().lookup_weapon_recipe(weapons.recipe_key("拳腳", "gang_1", "kuai_1")).name == "驚雷拳套"
+
+
+def test_two_tabs_forging_the_same_order_charge_once(server_ready):
+    import server
+    from tianxia.characters import open_characters
+    game = _server_forger("兩頁人")
+    with _named("驚雷拳套"):
+        first = server.prepare_smith_forge(game, GO_FIST)
+        second = server.prepare_smith_forge(game, GO_FIST)  # 兩個分頁都走完 A、B
+    server.act(game, lambda g: g.choose(GO_FIST, proposed=first))
+    server.act(game, lambda g: g.choose(GO_FIST, proposed=second))
+    saved = open_characters().load("兩頁人").player
+    assert saved.stats["silver"] == 180 and saved.materials == {}
+    assert len(saved.rack) + (saved.weapon is not None) == 1

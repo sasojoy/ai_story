@@ -163,6 +163,14 @@ class WeaponRecipe(BaseModel):
         return self.name
 
 
+class SmithDraft(BaseModel):
+    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+
+    kind: str | None = None
+    main: str | None = None
+    aux: str | None = None
+
+
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。"""
@@ -234,6 +242,7 @@ class PlayerState(BaseModel):
     picking_smith: bool = False  # 打開了鐵匠鋪的第二層選單（同 picking_bounty）
     edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──

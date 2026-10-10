@@ -18,7 +18,7 @@ from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content
 from .ollama_client import OllamaClient
-from .state import GameState, Weapon, WeaponRecipe
+from .state import GameState, SmithDraft, Weapon, WeaponRecipe
 from .world_state import WorldStateStore
 
 NOT_ENOUGH = "身上的素材不到兩個"  # 待 joy 潤
@@ -224,3 +224,171 @@ def forge(
     msgs.append(weapons.store(state, content, weapon))
     fusion.echo(state, content, recipe, first, made="打")
     return weapon, msgs
+
+
+# ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----
+
+OPEN = "smith:forge"
+KIND = "smith:forge-kind:"
+MAIN = "smith:forge-main:"
+AUX = "smith:forge-aux:"
+GO = "smith:forge-go:"
+UNDO = "smith:forge-undo"
+CANCEL = "smith:forge-cancel"
+GO_VERB = "forge-go"
+STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel")
+FORGE_TITLE = "打造"
+FORGE_WAIT = "鐵匠掂著料，想給它取個名字……"  # 待 joy 潤：首創配方等模型取名時按鈕上的字（Option.wait）
+ASK_KIND = "要打哪一種兵器？"  # 以下待 joy 潤
+ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"
+ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"
+READY = "料都齊了，看一眼機率再開爐。"
+CANCELLED = "你把素材收了回去，這回先不打。"
+NEW_RECIPE = "這個配方還沒人打過"
+KNOWN_RECIPE = "照【{name}】的配方打"
+ATTR_MARK = "・跟你的武學同屬性"
+
+
+def is_go(option_id: str) -> bool:
+    return option_id.startswith(GO)
+
+
+def parse_go(option_id: str) -> tuple[str, str, str]:
+    """開爐那一顆的 id 拆回（種類, 主料, 輔料）；拆不出來是三個空字串（forge_problem 會擋下來）。"""
+    parts = option_id[len(GO):].split(":") if is_go(option_id) else []
+    return (parts[0], parts[1], parts[2]) if len(parts) == 3 else ("", "", "")
+
+
+def is_forge_step(arg: str) -> bool:
+    """smith: 後面這一段是打造的一步（含打開與開爐）：江湖紀錄的標題是「打造」；打開以外的每一步併進同一則
+    （Game.choose 照它 merge，打開那一步 "forge" 另起一則）。"""
+    return arg.partition(":")[0].startswith("forge")
+
+
+def title(arg: str) -> str:
+    """鐵匠鋪上這一下的江湖紀錄標題：打造的每一步是「打造」，其餘是「鐵匠鋪」。"""
+    return FORGE_TITLE if is_forge_step(arg) else weapons.SMITH
+
+
+def _held(state: GameState, content: Content) -> list[tuple[str, int]]:
+    """背包裡打得了的素材：高階的先、同階數量多的先、再照 id（最可能要用的排在第一屏）。"""
+    mats = content.materials
+    return sorted(
+        ((mid, n) for mid, n in state.player.materials.items() if n > 0 and mid in mats),
+        key=lambda pair: (-mats[pair[0]].tier, -pair[1], pair[0]),
+    )
+
+
+def draft_stale(content: Content, draft: SmithDraft) -> bool:
+    """存檔裡的單子指著內容已經沒有的種類或素材（內容改版）：選單畫不出來（go_option 查素材會丟 KeyError），要從頭來。"""
+    return (draft.kind is not None and draft.kind not in WEAPON_KINDS) or any(
+        mid is not None and mid not in content.materials for mid in (draft.main, draft.aux))
+
+
+def open_problem(state: GameState, content: Content) -> str | None:
+    """「打造兵器…」按不按得下去：裝備庫滿了、素材不到兩個、最便宜的一爐也付不起，就灰掉寫原因。"""
+    if weapons.rack_full(state, content):
+        return weapons.RACK_FULL
+    held = _held(state, content)
+    if sum(n for _, n in held) < 2:
+        return NOT_ENOUGH
+    short = min(price(content, content.materials[mid].tier) for mid, _ in held) - state.player.stats.get("silver", 0)
+    return f"還差 {short} 兩" if short > 0 else None
+
+
+def forge_door(state: GameState, content: Content):
+    """鐵匠鋪選單上的「打造兵器…」：打開一步一步的單子（step 的 "forge"）。"""
+    from .engine import Option  # noqa: PLC0415  延後 import：engine → smithing
+
+    problem = open_problem(state, content)
+    return Option(id=OPEN, label=f"打造兵器…（{problem or '挑種類、主料、輔料'}）", enabled=problem is None)
+
+
+def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
+    """單子往前或往後一步（選項都由 Game.choose 驗過在選單上，arg 一定是選單給的）。開爐（forge-go）不在這裡，見 forge。"""
+    p = state.player
+    if verb == "forge":
+        p.smith_draft = SmithDraft()
+        return [ASK_KIND]
+    d = p.smith_draft
+    if d is None:
+        return ["（此刻無法這麼做。）"]
+    if verb == "forge-kind":
+        d.kind = arg
+        return [ASK_MAIN]
+    if verb == "forge-main":
+        d.main = arg
+        return [ASK_AUX]
+    if verb == "forge-aux":
+        d.aux = arg
+        return [READY]
+    if verb == "forge-undo":
+        if d.aux is not None:
+            d.aux = None
+            return [ASK_AUX]
+        if d.main is not None:
+            d.main = None
+            return [ASK_MAIN]
+        d.kind = None
+        return [ASK_KIND]
+    if verb == "forge-cancel":
+        p.smith_draft = None
+        return [CANCELLED]
+    return ["（此刻無法這麼做。）"]
+
+
+def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
+    """開爐那一顆：寫配方名（有人打過）或「還沒人打過」、種類屬性階、工錢與三個品質的機率（不寫品級）；打不成灰掉寫原因。
+    沒人打過的要等模型取名，帶 wait。"""
+    from .engine import Option  # noqa: PLC0415
+
+    known = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
+    tier = tier_of(content, main)
+    problem = forge_problem(state, content, kind, main, aux)
+    head = KNOWN_RECIPE.format(name=known.name) if known else NEW_RECIPE
+    odds = fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))
+    note = problem or f"工錢 {price(content, tier)} 兩；{odds}"
+    attribute = attribute_of(world, content, kind, main, aux)
+    return Option(
+        id=f"{GO}{kind}:{main}:{aux}",
+        label=f"開爐：{head}（{weapons.NOUNS[kind]}・屬{attribute}・{weapons.TIER_WORDS[tier]}・{note}）",
+        enabled=problem is None, wait="" if known else FORGE_WAIT,
+    )
+
+
+def draft_options(state: GameState, content: Content, world: WorldStateStore, art) -> list:
+    """單子這一步的選單：挑種類（配得上身上武學的排第一）→ 挑主料（寫階、剩幾個、工錢；付不起灰掉）→ 挑輔料（寫合出來的屬性；
+    主料那一種只剩一個時不列）→ 開爐。每一步後面是「上一步」「不打了」（挑種類那一步只有「不打了」）。"""
+    from .engine import Option  # noqa: PLC0415
+
+    d = state.player.smith_draft
+    fit = weapons.art_weapon(art.id, content, world) if art is not None else None
+    undo, cancel = Option(id=UNDO, label="上一步"), Option(id=CANCEL, label="不打了")
+    if d.kind is None:
+        kinds = sorted(WEAPON_KINDS, key=lambda k: k != fit)
+        return [Option(id=f"{KIND}{k}", label=weapons.NOUNS[k] + (weapons.FITS_MARK if k == fit else "")) for k in kinds] + [cancel]
+    mats = content.materials
+    held = _held(state, content)
+    if d.main is None:
+        silver = state.player.stats.get("silver", 0)
+        out = []
+        for mid, n in held:
+            m = mats[mid]
+            cost = price(content, m.tier)
+            note = f"還差 {cost - silver} 兩" if cost > silver else f"工錢 {cost} 兩"
+            out.append(Option(id=f"{MAIN}{mid}", label=f"主料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {n}・{note}）",
+                              enabled=cost <= silver))
+        return out + [undo, cancel]
+    if d.aux is None:
+        tianji = world.read().tianji
+        out = []
+        for mid, n in held:
+            left = n - (1 if mid == d.main else 0)
+            if left < 1:
+                continue
+            m = mats[mid]
+            attribute = attribute_with(content, tianji, d.kind, d.main, mid)
+            mark = ATTR_MARK if art is not None and d.kind == fit and attribute == art.attribute else ""
+            out.append(Option(id=f"{AUX}{mid}", label=f"輔料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {left}）→ 屬{attribute}{mark}"))
+        return out + [undo, cancel]
+    return [go_option(state, content, world, d.kind, d.main, d.aux), undo, cancel]

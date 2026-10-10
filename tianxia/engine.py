@@ -20,7 +20,7 @@ from . import (
     atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
-    skillview,
+    skillview, smithing,
     social, styles, team, timetable, traits, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -507,7 +507,9 @@ class Game:
         if p.picking_bounty and not bounties.board_here(s, c):
             p.picking_bounty = False  # 開關關了、人不在城鎮了：收起懸賞榜
         if p.picking_smith and not weapons.smith_here(s, c):
-            p.picking_smith = False  # 開關關了、人不在城鎮了：收起鐵匠鋪
+            p.picking_smith, p.smith_draft = False, None  # 開關關了、人不在城鎮了：收起鐵匠鋪，打造的單子一起清
+        if p.smith_draft is not None and (not p.picking_smith or smithing.draft_stale(c, p.smith_draft)):
+            p.smith_draft = None  # 單子只在鐵匠鋪開著時有意義；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -632,7 +634,7 @@ class Game:
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
         if self.state.player.picking_smith and not weapons.smith_here(self.state, self.content):
-            self.state.player.picking_smith = False  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪
+            self.state.player.picking_smith, self.state.player.smith_draft = False, None  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，打造的單子一起清
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -1321,6 +1323,7 @@ class Game:
     def choose(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
+        proposed: tuple[str | None, str] | None = None,
     ) -> list[str]:
         """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
         prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
@@ -1328,7 +1331,9 @@ class Game:
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
-        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
+        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。
+        proposed 只有鐵匠鋪的開爐（`smith:forge-go:…`）用：server.prepare_smith_forge 在鎖外先取好的（名字, 說明），C 段
+        （smithing.forge）再過一次過濾；沒給（整季機器人、腳本、測試）首創配方才在鎖內取名。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
@@ -1379,7 +1384,7 @@ class Game:
             elif kind == "bounty":
                 msgs = self._bounty(arg)
             elif kind == "smith":
-                msgs = self._smith(arg)
+                msgs = self._smith(arg, proposed)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1396,7 +1401,11 @@ class Game:
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
-            journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
+            # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
+            # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
+            # 會全部併進上一爐那一則
+            journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs),
+                              merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge")
         finally:
             self._draft = None
             self._fight = None
@@ -1582,7 +1591,7 @@ class Game:
         if kind == "bounty":
             return bounties.BOARD
         if kind == "smith":
-            return weapons.SMITH
+            return smithing.title(arg)
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1919,6 +1928,7 @@ class Game:
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "smith":
             self.state.player.picking_smith = True  # 打開鐵匠鋪（見 _smith_options），不花體力
+            self.state.player.smith_draft = None  # 每次走進鐵匠鋪，打造的單子從頭開始（Review Focus 4）
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
@@ -2505,10 +2515,13 @@ class Game:
         """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），
         手上那把一顆「修」（寫明用掉哪一種素材），裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），
         裝備庫裡每把一顆「拆解」（4.7.1，最多 DISMANTLE_LIST 顆，最鈍最低階的先，多的一行灰掉的說明指到修練頁），
+        換上與拆解中間一顆「打造兵器…」（打開一步一步的單子，見 smithing.draft_options；單子打開時整份選單換成那一步），
         最後是永遠按得下去的「離開」。都不花體力。"""
         s, c = self.state, self.content
         art = team.player_art(s, c, self.world, s.player.member.wugong_id)
         fit_kind = weapons.art_weapon(art.id, c, self.world) if art is not None else None
+        if s.player.smith_draft is not None:
+            return smithing.draft_options(s, c, self.world, art)  # 打造兵器…挑到一半：只畫這一步
         opts = []
         for item in weapons.stock(s, c):
             problem = weapons.buy_problem(s, c, item.kind)
@@ -2527,6 +2540,7 @@ class Game:
             if weapons.usable(w, art, c, self.world):
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
+            opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
             breakable = sorted(s.player.rack, key=weapons.dismantle_order)
             for w in breakable[:weapons.DISMANTLE_LIST]:
                 opts.append(Option(
@@ -2539,13 +2553,22 @@ class Game:
         opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
         return opts
 
-    def _smith(self, arg: str) -> list[str]:
-        """鐵匠鋪上的選擇：買、修、換上、拆解，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+    def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
+        """鐵匠鋪上的選擇：買、修、換上、拆解、打造的每一步，或離開（收起選單與打造的單子）。做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
-            s.player.picking_smith = False
+            s.player.picking_smith, s.player.smith_draft = False, None
             return [f"你離開了{weapons.SMITH}。"]
+        if verb == smithing.GO_VERB:
+            kind, main, aux = smithing.parse_go(f"smith:{arg}")
+            client = None if proposed is not None else self._quick_client()  # 鎖外取好名字了就不在鎖裡叫模型
+            weapon, msgs = smithing.forge(s, c, self.world, client, kind, main, aux, proposed=proposed, rng=self.rng)
+            if weapon is not None:
+                s.player.smith_draft = None  # 打完收起單子：同一顆連按兩下、兩個分頁，第二下已經不在選單上（Review Focus 1）
+            return msgs
+        if verb in smithing.STEP_VERBS:
+            return smithing.step(s, c, verb, rest)
         if verb == "buy":
             return weapons.buy(s, c, rest)
         if verb == "repair":
@@ -4348,6 +4371,7 @@ class Game:
         新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
         s, c = self.state, self.content
         s.player.picking_bounty = s.player.picking_smith = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
+        s.player.smith_draft = None  # 打造到一半的單子也不帶上路
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -4694,6 +4718,16 @@ class Game:
         else:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
+
+    def smith_forge_request(self, option_id: str) -> naming.NamingRequest | None:
+        """鐵匠鋪開爐的 A 段（server.prepare_smith_forge 在行動鎖內、很快地呼叫）：這一爐是這一季沒人打過的配方，就回取名的單子；
+        不必（這個 Game 沒有 client、籌備中、這顆鈕不在選單上或按不下去、打不成、配方已經有人登記）是 None。只讀、不推進戰鬥。"""
+        if self.client is None or self._preparing() or not smithing.is_go(option_id):
+            return None
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
+        if option is None or not option.enabled:
+            return None
+        return smithing.forge_request(self.state, self.content, self.world, *smithing.parse_go(option_id))
 
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
