@@ -695,3 +695,47 @@ def test_two_tabs_forging_the_same_order_charge_once(server_ready):
     saved = open_characters().load("兩頁人").player
     assert saved.stats["silver"] == 180 and saved.materials == {}
     assert len(saved.rack) + (saved.weapon is not None) == 1
+
+
+# ── Task 7：淬煉 ──
+
+
+def test_temper_uses_the_cheapest_material_at_or_above_the_weapon_tier(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.weapon = _blade(tier=2)  # 二階、柔，配身上的流雲劍（柔）
+    p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    assert smithing.temper_material(game.state, content) == "gang_2"  # 一階不夠格；二階比三階便宜
+    opt = _ids(game)[smithing.TEMPER]
+    assert opt.enabled and "第 1/5 次" in opt.label and "玄鋼骨×1＋30 兩" in opt.label
+    msgs = game.choose(smithing.TEMPER)
+    assert p.weapon.tempers == 1 and p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
+    assert weapons.bonus(p.weapon, _art(game, content, world), content, world) == pytest.approx(0.10 + 0.01 + 0.05)
+    assert any("淬" in m for m in msgs) and game.state.journal[0].title == smithing.TEMPER_TITLE
+
+
+def test_a_tier_one_temper_costs_only_the_material(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.weapon, p.materials = _blade(), {"gang_1": 2}
+    assert "精鐵砂×1）" in _ids(game)[smithing.TEMPER].label  # 一階不收錢，鈕上不寫兩
+    game.choose(smithing.TEMPER)
+    assert p.weapon.tempers == 1 and p.stats["silver"] == 200 and p.materials == {"gang_1": 1}
+
+
+def test_temper_stops_at_five_and_refuses_without_a_fitting_material_or_silver(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.weapon, p.materials = _blade(), {"gang_1": 3}
+    p.weapon.tempers = 5
+    opt = _ids(game)[smithing.TEMPER]
+    assert not opt.enabled and smithing.FULL in opt.label
+    assert smithing.temper(game.state, content) == [f"（{smithing.FULL}。）"] and p.materials == {"gang_1": 3}
+    p.weapon = _blade(tier=3)
+    assert smithing.temper_problem(game.state, content) == "沒有三階以上的素材"
+    p.weapon, p.materials, p.stats["silver"] = _blade(tier=2), {"gang_2": 1}, 10
+    assert smithing.temper_problem(game.state, content) == "還差 20 兩"
+    p.weapon = None
+    assert smithing.TEMPER not in _ids(game)  # 空手沒有淬煉鈕
+    p.weapon, p.location = _blade(), "lake"
+    assert smithing.temper_problem(game.state, content) == weapons.NOT_HERE

@@ -16,7 +16,7 @@ from collections import Counter
 from . import fusion, naming, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
-from .models import WEAPON_KINDS, Content
+from .models import WEAPON_KINDS, Content, Material
 from .ollama_client import OllamaClient
 from .state import GameState, SmithDraft, Weapon, WeaponRecipe
 from .world_state import WorldStateStore
@@ -236,7 +236,7 @@ GO = "smith:forge-go:"
 UNDO = "smith:forge-undo"
 CANCEL = "smith:forge-cancel"
 GO_VERB = "forge-go"
-STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel")
+STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel", "temper")
 FORGE_TITLE = "打造"
 FORGE_WAIT = "鐵匠掂著料，想給它取個名字……"  # 待 joy 潤：首創配方等模型取名時按鈕上的字（Option.wait）
 ASK_KIND = "要打哪一種兵器？"  # 以下待 joy 潤
@@ -266,8 +266,10 @@ def is_forge_step(arg: str) -> bool:
 
 
 def title(arg: str) -> str:
-    """鐵匠鋪上這一下的江湖紀錄標題：打造的每一步是「打造」，其餘是「鐵匠鋪」。"""
-    return FORGE_TITLE if is_forge_step(arg) else weapons.SMITH
+    """鐵匠鋪上這一下的江湖紀錄標題：打造的每一步是「打造」、淬煉是「淬煉」，其餘是「鐵匠鋪」。"""
+    if is_forge_step(arg):
+        return FORGE_TITLE
+    return TEMPER_TITLE if arg == "temper" else weapons.SMITH
 
 
 def _held(state: GameState, content: Content) -> list[tuple[str, int]]:
@@ -307,6 +309,8 @@ def forge_door(state: GameState, content: Content):
 def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
     """單子往前或往後一步（選項都由 Game.choose 驗過在選單上，arg 一定是選單給的）。開爐（forge-go）不在這裡，見 forge。"""
     p = state.player
+    if verb == "temper":
+        return temper(state, content)
     if verb == "forge":
         p.smith_draft = SmithDraft()
         return [ASK_KIND]
@@ -392,3 +396,79 @@ def draft_options(state: GameState, content: Content, world: WorldStateStore, ar
             out.append(Option(id=f"{AUX}{mid}", label=f"輔料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {left}）→ 屬{attribute}{mark}"))
         return out + [undo, cancel]
     return [go_option(state, content, world, d.kind, d.main, d.aux), undo, cancel]
+
+
+# ---- 淬煉（4.7）：只淬身上那把；素材挑同階以上最便宜的 ----
+
+TEMPER = "smith:temper"
+TEMPER_TITLE = "淬煉"
+FULL = "已經淬滿了"  # 待 joy 潤
+
+
+def temper_material(state: GameState, content: Content) -> str | None:
+    """淬身上那把要用的素材：階不低於兵器的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
+    w = state.player.weapon
+    if w is None:
+        return None
+    mats = content.materials
+    held = [(mats[mid].tier, -n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier >= w.tier]
+    return min(held)[2] if held else None
+
+
+def temper_price(content: Content, material: Material) -> int:
+    return content.config.weapons.temper_silver.get(str(material.tier), 0)
+
+
+def temper_problem(state: GameState, content: Content) -> str | None:
+    p = state.player
+    if not weapons.smith_here(state, content):
+        return weapons.NOT_HERE
+    if p.weapon is None:
+        return "手上沒有兵器"
+    if p.weapon.tempers >= content.config.weapons.temper_max:
+        return FULL
+    mid = temper_material(state, content)
+    if mid is None:
+        return f"沒有{weapons.TIER_WORDS[p.weapon.tier]}以上的素材"
+    short = temper_price(content, content.materials[mid]) - p.stats.get("silver", 0)
+    return f"還差 {short} 兩" if short > 0 else None
+
+
+def temper(state: GameState, content: Content) -> list[str]:
+    """淬煉身上那把（4.7）：用一個同階以上的素材（＋那一階的工錢），淬煉次數 +1（加成每次 +temper_step，bonus 現算）。"""
+    problem = temper_problem(state, content)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    p = state.player
+    mid = temper_material(state, content)
+    material = content.materials[mid]
+    cost = temper_price(content, material)
+    p.materials[mid] -= 1
+    if not p.materials[mid]:
+        del p.materials[mid]
+    p.stats["silver"] -= cost
+    p.weapon.tempers += 1
+    msgs = [f"鐵匠拿{material.name}把【{p.weapon.name}】淬了一回，這是第 {p.weapon.tempers} 次。"]  # 待 joy 潤
+    if cost:
+        msgs.append(f"銀兩 -{cost}")
+    return msgs + [f"{material.name} -1"]
+
+
+def temper_option(state: GameState, content: Content):
+    """鐵匠鋪選單上的「淬煉」（手上有兵器才有）：寫第幾次、用哪一個素材與工錢；淬滿、沒料、沒錢灰掉寫原因。"""
+    from .engine import Option  # noqa: PLC0415
+
+    w = state.player.weapon
+    if w is None:
+        return None
+    rule = content.config.weapons
+    if w.tempers >= rule.temper_max:
+        return Option(id=TEMPER, label=f"淬煉【{w.name}】（{FULL}）", enabled=False)
+    problem = temper_problem(state, content)
+    if problem is None:
+        m = content.materials[temper_material(state, content)]
+        cost = temper_price(content, m)
+        note = f"{m.name}×1" + (f"＋{cost} 兩" if cost else "")
+    else:
+        note = problem
+    return Option(id=TEMPER, label=f"淬煉【{w.name}】（第 {w.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)

@@ -2536,6 +2536,9 @@ class Game:
             note = problem or f"{use}＋{c.config.weapons.repair_silver} 兩"
             opts.append(Option(id="smith:repair", label=f"修【{s.player.weapon.name}】（鋒利度 {s.player.weapon.edge}・{note}）",
                                enabled=problem is None))
+        temper = smithing.temper_option(s, c)  # 淬煉身上那把（兵器設計 4.7）；空手沒有
+        if temper is not None:
+            opts.append(temper)
         for w in s.player.rack:
             if weapons.usable(w, art, c, self.world):
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
