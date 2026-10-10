@@ -1574,10 +1574,11 @@ def api_sense_warm(request: Request):
 
 @app.post("/api/forge_line")
 def api_forge_line(request: Request, body: dict = Body(default={})):
-    """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
+    """煉製頁選了東西就更新說明（不算行動、不存檔）。爐裡只放了一樣時多給 picks：另一格放得進來的每一樣合不合得了，
+    判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
     game = _game(request)
     art, picked, other = forge_args(body)
-    return {"line": look(game, lambda g: md(g.forge_line(art, picked, other_art=other)))}
+    return look(game, lambda g: {"line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other)})
 
 
 @app.get("/api/reports")

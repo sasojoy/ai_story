@@ -4599,6 +4599,10 @@ class Game:
     def forge_line(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> str:
         return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
+    def forge_picks(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> dict | None:
+        """爐裡只放了一樣時，另一格放得進來的每一樣合不合得了（skillview.forge_picks）。只讀。"""
+        return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+
     @_not_while_preparing
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
