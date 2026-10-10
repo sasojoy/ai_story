@@ -142,6 +142,27 @@ class Weapon(BaseModel):
     original: bool = False
 
 
+class WeaponRecipe(BaseModel):
+    """全服登記的兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes 表）：這一季第一個打出來的人取名，之後照著打的人查表。
+    名字跟武學、改過的名字、意境共用一個名字空間（sqlite_world._name_taken）。id 就是名字（首創名望回饋 fusion.echo 照它記）。"""
+
+    name: str
+    key: str  # 配方鍵 weapons.recipe_key：「兵|種類|主料+輔料」（前綴就是欄位：武器「兵|」，之後防具「鎧|」，裝備四欄設計 4.7）
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # 主料與輔料合出來的屬性（insights.merged_attribute，種子是天機＋配方鍵）
+    tier: int  # 主料的階
+    main: str  # 主料的素材 id
+    aux: str  # 輔料的素材 id
+    creator: str | None = None  # 首創者的名號（身分）
+    creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下；同 MartialArt.creator_shown）
+    co_creator: str | None = None  # fusion.echo 讀；兵器沒有論武，一律 None
+    note: str = ""  # 模型替這個名字寫的一句說明；退路字表的名字沒有
+
+    @property
+    def id(self) -> str:
+        return self.name
+
+
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。"""

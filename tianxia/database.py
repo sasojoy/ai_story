@@ -192,9 +192,23 @@ SCHEMA_V3_TABLES: tuple[str, ...] = (
     )""",
 )
 
-SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES  # 新檔一次建好
-MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
-SCHEMA_VERSION = 3
+# 第 4 版（兵器設計第五節、兵器第二批）：全服的裝備配方。配方鍵的前綴就是欄位（裝備四欄設計 4.7）：這一批只有武器「兵|種類|主料+輔料」；
+# 之後防具打造用同一張表、前綴「鎧|主料+輔料」，不必再升版。名字跟功法、改過的名字、意境共用一個名字空間（sqlite_world._name_taken）。照季分，換季不刪。
+SCHEMA_V4_TABLES: tuple[str, ...] = (
+    """CREATE TABLE gear_recipes (
+        season INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        creator TEXT,
+        data TEXT NOT NULL,
+        PRIMARY KEY (season, key)
+    )""",
+    "CREATE UNIQUE INDEX gear_recipes_by_name ON gear_recipes (season, name)",
+)
+
+SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES  # 新檔一次建好
+MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
+SCHEMA_VERSION = 4
 
 
 def default_path() -> Path:

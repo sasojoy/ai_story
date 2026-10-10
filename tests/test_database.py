@@ -22,7 +22,8 @@ V1_TABLES = {
 }
 V2_TABLES = {"skill_aliases", "insights", "insight_recipes", "masters"}
 V3_TABLES = {"insight_firsts"}
-TABLES = V1_TABLES | V2_TABLES | V3_TABLES
+V4_TABLES = {"gear_recipes"}
+TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES
 
 
 def _count(db: Database, table: str) -> int:
@@ -130,10 +131,10 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
 
     assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
-    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES)
+    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES)
     # 真正的存取層讀得回來
     store = AccountStore(db)
     assert store.authenticate("shenlang", "sesame88").character == "沈浪"

@@ -74,3 +74,63 @@ def test_smith_dismantle_buttons_ask_first_with_their_own_yes_word(content, worl
     assert all(o.confirm == "" for oid, o in opts.items() if not oid.startswith("smith:dismantle:"))
     game.choose("smith:dismantle:兵:2")  # 問一次是網頁的事：引擎收到照拆（機器人、腳本都這樣走）
     assert p.rack == [] and p.materials == {"gang_1": 1}
+
+
+# ── Task 2：兵器配方的資料與資料庫第 4 版 ──
+
+from tianxia.martial_arts import Insight, generate_from_name  # noqa: E402
+from tianxia.sqlite_world import open_world  # noqa: E402
+from tianxia.state import WeaponRecipe  # noqa: E402
+
+
+@pytest.fixture
+def store(tmp_path):
+    return open_world(tmp_path / "w.db")
+
+
+def _recipe(name="寒星劍", key="兵|劍|gang_1+kuai_1", creator="甲"):
+    return WeaponRecipe(name=name, key=key, kind="劍", attribute="陽", tier=1, main="gang_1", aux="kuai_1",
+                        creator=creator, creator_shown=creator)
+
+
+def test_weapon_recipe_id_is_its_name_and_round_trips():
+    r = _recipe()
+    assert r.id == "寒星劍"
+    assert WeaponRecipe.model_validate_json(r.model_dump_json()) == r
+
+
+def test_the_first_weapon_recipe_claim_wins_and_later_ones_read_it(store):
+    first = _recipe()
+    assert store.claim_weapon_recipe(first.key, first) == (first, True)
+    got, is_first = store.claim_weapon_recipe(first.key, _recipe(name="霜鳴劍", creator="乙"))
+    assert is_first is False and got.name == "寒星劍" and got.creator == "甲"
+    assert store.lookup_weapon_recipe(first.key) == first
+    assert store.lookup_weapon_recipe("兵|劍|kuai_1+gang_1") is None  # 主輔對調是另一個配方
+    assert store.is_skill_name_taken("霜鳴劍") is False  # 沒登記上的名字不佔名字空間
+
+
+def test_weapon_recipe_names_share_the_namespace_with_arts_and_insights(store):
+    store.claim_skill_name(generate_from_name("寒星劍", "武學", "寒星劍"))
+    assert store.claim_weapon_recipe("兵|劍|gang_1+kuai_1", _recipe()) == (None, False)  # 武學用掉的名字
+    other = _recipe(name="霜鳴劍", key="兵|劍|gang_1+gang_1")
+    assert store.claim_weapon_recipe(other.key, other) == (other, True)
+    assert store.is_skill_name_taken("霜鳴劍") is True
+    assert store.claim_skill_name(generate_from_name("霜鳴劍", "武學", "霜鳴劍")) is False  # 反過來也擋
+    got, first = store.claim_insight_recipe("feng+huo", Insight(id="霜鳴劍", name="霜鳴劍", attribute="陽"))
+    assert (got, first) == (None, False)
+    clash = _recipe(name="霜鳴劍", key="兵|刀|gang_1+gang_1")
+    assert store.claim_weapon_recipe(clash.key, clash) == (None, False)  # 兩個配方不能同名
+
+
+def test_weapon_recipes_are_per_season(store, content):
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    r = _recipe()
+    store.claim_weapon_recipe(r.key, r)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.lookup_weapon_recipe(r.key) is None
+    with store.db.snapshot() as conn:  # 換季不刪資料：上一季的配方留著
+        assert conn.execute("SELECT season FROM gear_recipes WHERE key = ?", (r.key,)).fetchone()["season"] == 1
+    again = _recipe(creator="乙")
+    assert store.claim_weapon_recipe(r.key, again) == (again, True)  # 新的一季：同一個配方別人首創、名字也能再用
