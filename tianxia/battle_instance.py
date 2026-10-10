@@ -928,25 +928,27 @@ def assess_action_success_rate(
 
 def assess_gamble(
     client: OllamaClient | None, act: BattleAct, faction_name: str, text: str, name: str = "",
+    setting: str = "漢末兩軍交戰的戰場", place: str = "戰場",
 ) -> GambleVerdict:
     """請 LLM 評估這段自訂行動聽起來有多可能成功（0~100）——只評機率，不評「成不成功」
     本身（那是 resolve_round 擲骰決定的），也不會被拿去當作任何數值直接套用，只是擲骰
     用的機率輸入。連不上/生成失敗/格式不對都回傳保底值（見 DEFAULT_FREE_TEXT_SUCCESS_RATE），
     不會讓整個行動失敗——這類評估本來就是錦上添花，寧可給一個偏低的保守值，也不要卡住
-    玩家的回合。"""
+    玩家的回合。
+    act 只讀 title 與 text（單人頭目戰傳 duel 的 Scene）；setting、place 換掉提示裡的「漢末兩軍交戰的戰場」與「戰場」。"""
     if client is None:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     who = name or "這位少俠"
     messages = [
         {"role": "system", "content": (
-            "你是漢末兩軍交戰的戰場判定系統，也是說書人。第一件事：評估玩家描述的行動在戰場上合理的成功機率，"
+            f"你是{setting}判定系統，也是說書人。第一件事：評估玩家描述的行動在{place}上合理的成功機率，"
             "給出 0~100 的整數 success_rate 與一句話 reasoning（只根據行動本身的合理性，荒唐的行動就給低分）。"
             "第二件事：替這個行動寫兩版結果，win 是成功的那一版、lose 是失敗的那一版，各一句、40 字以內、繁體中文，"
             f"以「{who}」開頭。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
             "不要寫任何數字、不要寫戰局推進多少或扣多少氣血，也不要替玩家決定最後的勝負以外的事。"
         )},
         {"role": "user", "content": (
-            f"戰場情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"
+            f"{place}情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"
             f"玩家的行動：「{text}」\n請給出 success_rate、reasoning、win、lose。"
         )},
     ]

@@ -26,7 +26,7 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
-    Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
+    Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
@@ -108,6 +108,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
+        duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
         if (root / "insight_scenes.json").exists() else {},
         events=events,
@@ -1177,6 +1178,27 @@ def check_foreshadows(
         need(False, f"伏筆計數 {key}：有鏈讀它，卻沒有任何效果（或官銀的規則）寫它")
 
 
+def check_duels(c: Content, need, known) -> None:
+    """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
+    面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
+    from .models import MOVES  # noqa: PLC0415
+
+    factions = {f.id for f in c.scenario.factions}
+    for boss in c.duels.values():
+        where = f"頭目 {boss.id}"
+        need(bool(boss.locations), f"{where}：至少要有一個地點")
+        known(where, boss.locations, c.locations, "地點")
+        known(where, boss.drops, c.materials, "素材")
+        for i, foe in enumerate(boss.foes):
+            if foe.side is not None:
+                need(foe.side in factions, f"{where} 的第 {i + 1} 個面貌：未知的陣營 {foe.side}")
+            need(set(foe.moves) <= set(MOVES), f"{where} 的第 {i + 1} 個面貌：moves 只能寫{'、'.join(MOVES)}")
+            need(all(w >= 0 for w in foe.moves.values()) and (not foe.moves or sum(foe.moves.values()) > 0),
+                 f"{where} 的第 {i + 1} 個面貌：moves 的權重不能是負的、也不能全是 0")
+        for faction in sorted(factions):
+            need(any(foe.side != faction for foe in boss.foes), f"{where}：{faction} 的人挑不到一個不是自己人的面貌")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
@@ -1978,6 +2000,7 @@ def validate(c: Content) -> None:
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
     check_opportunities(c, need, known, front_ids)
+    check_duels(c, need, known)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

@@ -126,12 +126,31 @@ class Tagalong(BaseModel):
 
 
 class Manual(BaseModel):
-    """武學譜（tianxia/secrets.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
+    """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。"""
 
     tianji: int = 0
     heard: dict[str, list[int]] = Field(default_factory=dict)  # 秘方 id → 聽過第幾句口訣（0 說書、1 人物、2 殘譜）
     solved: list[str] = Field(default_factory=list)  # 合中過的秘方 id，照先後
+
+
+class DuelState(BaseModel):
+    """一場還沒打完的單人頭目戰（tianxia/duel.py）。開打時快照你的份量、職位與氣血池，之後不回頭查；打完才把池子掉的氣血扣回本人。
+    move／tell 是他下一回合要出的招與你看到的架勢（回合開始時就擲好：架勢有幾成是真的見 DuelTuning.tell_truth）。"""
+
+    boss: str
+    foe: int  # DuelBoss.foes 的第幾個面貌
+    round: int = 0  # 打完了幾回合
+    edge: float = 50.0  # 氣勢：越高越是你佔上風
+    hp: float  # 氣血池剩多少
+    hp_cap: float  # 開打時的氣血上限（池子的比例照它算）
+    hp_start: float  # 開打時的氣血（打完扣回本人：開打時的 − 剩的）
+    power: float  # 你的武學威力快照
+    scores: dict[str, float] = Field(default_factory=dict)  # 三招的份量快照
+    role: str = ""
+    move: str = ""
+    tell: str = ""
+    lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
 
 
 class PlayerState(BaseModel):
@@ -302,6 +321,9 @@ class PlayerState(BaseModel):
     opp_settled: list[int] = Field(default_factory=list)  # 結算過的集體密謀 id（只結算一次；換季跟著新角色清空）
 
     # ── 玩家之間的互動（第二層：結伴同行；邀請本身在 WorldState.invites）；角色每季重來，跟著清空。存在角色的 JSON，不升 SCHEMA_VERSION ──
+    duel: DuelState | None = None  # 正在打的單人頭目戰（tianxia/duel.py）；None＝沒有
+    duel_tally: dict[str, int] = Field(default_factory=dict)  # 「季號:頭目 id」→ 這一季遇上幾次（Config.duel.per_boss_season）
+    duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
 
 
@@ -531,7 +553,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）（舊戰報的 train 不遷移，照舊顯示「遊歷」）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）（舊戰報的 train 不遷移，照舊顯示「遊歷」）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

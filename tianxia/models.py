@@ -1251,6 +1251,84 @@ class Bounties(_Strict):
     post_weeks: int = Field(default=1, ge=1)
 
 
+class DuelTuning(_Strict):
+    """單人頭目戰（Joy 2026-10-10：「多加一些特殊事件，有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）。
+    內容在 content/duels.json（DuelBoss）；規則在 tianxia/duel.py。一場 3～5 回合，每回合出決戰的三招之一（固守剋強攻、強攻剋奇襲、
+    奇襲剋固守）或放手一搏；兩邊爭一條氣勢（edge，從 start 起，越高越是你佔上風），你用自己的氣血池（開打時的氣血）。
+
+    數字的依據（全部【預設】，測完再調）：
+    - 招式的推力 ＝ push_base ×（2 × 你的份量 ÷（你的＋他的）− 1）＋ counter_push × 剋（剋他 +1、被剋 −1、同招 0）＋ 運氣 ±luck。
+      份量照決戰（battle_instance.move_scores：實力 × 適性 × 職位）；對手的份量是 strength(難度) × 0.75（適性的基準）。
+      份量相當時一回合大約 ±8～12，四回合打完落在 70 以上（大勝）要剋中兩三次；練得比他強兩倍，不剋也推得動。
+    - 每回合他打你：氣血池上限的 hit（8%），被剋 ×hit_countered、剋他 ×hit_countering，再乘 √(他的份量 ÷ 你的)（夾在 0.5～hit_scale_max）。
+      最弱的新人四回合全被剋約 77%，不會一場打死；遊歷落敗是 30%。
+    - 放手一搏照決戰（模型只評成功率、寫成敗兩版劇情；評不到 40；軍師 +10）：成了推 (gamble_base＋風險 × gamble_per_risk) × 實力倍數，
+      扣池子 success_hp；沒成倒退 min(fail_cap, 風險 × fail_per_risk)、扣池子 fail_hp_base＋風險 × fail_hp_per_risk（同決戰）。
+      單人戰裡成了的放手一搏要真的扭轉局面（大事件的單人體驗版），所以推得比決戰多（決戰一個人的推力要跟幾十個人分）。
+    - 遇上：在有頭目的地點探索，先擲 explore_chance；同一隻一人一季最多 per_boss_season 次，任兩場之間隔 cooldown_seconds 世界秒。
+    - 結果：打完最後一回合看氣勢，≥ big 大勝、≥ win 險勝、> draw 僵持，其餘落敗；中途到 early_win 以上提前大勝、early_lose 以下或池子見底
+      提前落敗。獎勵照 reward_share 打折（落敗沒有），大勝、險勝另擲 legend_chance 撿一枚破境丹。"""
+
+    explore_chance: float = Field(default=0.05, ge=0, le=1)
+    per_boss_season: int = Field(default=2, ge=1)
+    cooldown_seconds: float = Field(default=7200, ge=0)
+    start: float = 50.0
+    big: float = 70.0
+    win: float = 55.0
+    draw: float = 45.0
+    early_win: float = 90.0
+    early_lose: float = 10.0
+    push_base: float = 14.0
+    counter_push: float = 8.0
+    luck: float = 4.0
+    foe_fit: float = 0.75
+    hit: float = Field(default=0.08, ge=0, le=1)
+    hit_scale_max: float = Field(default=1.5, ge=0.5)
+    hit_countered: float = 1.6
+    hit_countering: float = 0.5
+    gamble_base: float = 10.0
+    gamble_per_risk: float = 0.15
+    success_hp: float = Field(default=0.03, ge=0, le=1)
+    fail_per_risk: float = 0.05
+    fail_cap: float = 4.0
+    fail_hp_base: float = 0.1
+    fail_hp_per_risk: float = 0.0025
+    tell_truth: float = Field(default=0.6, ge=0, le=1)  # 回合開始時寫的他的架勢有幾成是真的（其餘是虛招）
+    reward_share: dict[str, float] = Field(default_factory=lambda: {"大勝": 1.0, "險勝": 0.7, "僵持": 0.3})
+    legend_chance: dict[str, float] = Field(default_factory=lambda: {"大勝": 0.25, "險勝": 0.1})
+
+
+class DuelFoe(_Strict):
+    """一隻頭目的一個面貌：照玩家的陣營挑（side 是他站的陣營；跟玩家同陣營的不挑，換下一個）。文字待內容方改。
+    intro 是遇上時的場景；win、lose 是你打贏、打輸時的結語。moves 是他出招的偏好（三招的權重，沒寫的當 1）。"""
+
+    side: str | None = None
+    name: str
+    title: str
+    intro: str
+    win: str
+    lose: str
+    moves: dict[str, float] = Field(default_factory=dict)
+
+
+class DuelBoss(_Strict):
+    """一隻單人頭目（content/duels.json）：在 locations 這幾個地點探索時可能遇上。difficulty 照地點的危險度定（同一帶最強的對手再高一點），
+    rounds 是幾回合（3～5）。獎勵照結果打折（DuelTuning.reward_share），drops 只有大勝、險勝才給（每一樣一個）。
+    foes 照玩家陣營挑面貌（DuelFoe.side）：每個陣營都要挑得到一個不是自己人的。"""
+
+    id: str
+    locations: list[str]
+    difficulty: float = Field(gt=0)
+    rounds: int = Field(default=4, ge=3, le=5)
+    attribute: str | None = None  # 他的路數（剋不剋得到你身上武學的屬性，同遊歷的對手）
+    exp: int = Field(default=0, ge=0)
+    silver: int = Field(default=0, ge=0)
+    xinde: int = Field(default=0, ge=0)
+    fame: int = Field(default=0, ge=0)  # 打贏（大勝、險勝）的名望
+    drops: list[str] = Field(default_factory=list)
+    foes: list[DuelFoe] = Field(min_length=1)
+
+
 class Raid(_Strict):
     """截殺（敵對陣營的玩家對打，企劃者 2026-10-08 在決策卡選「有限制地開」：「只能打敵對陣營、新手期和城裡不能打，
     輸了損失一點銀兩和氣血，同一人有冷卻」）。玩家卡上的一顆鈕，不必對方同意，對方下線、在忙也照打（他在「此地還有」的名單上就行）。
@@ -1380,6 +1458,7 @@ class Config(_Strict):
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
+    duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
@@ -2453,6 +2532,7 @@ class Content(_Strict):
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
+    duels: dict[str, DuelBoss] = Field(default_factory=dict)  # 單人頭目戰（content/duels.json）；沒有這個檔就是空的
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）

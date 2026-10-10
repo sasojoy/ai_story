@@ -248,8 +248,8 @@ def test_the_fame_amounts_follow_the_content_when_it_changes(on):
 
 
 def test_only_events_and_the_first_echo_give_fame_in_the_code():
-    """名望的來源只有三條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
-    決戰最有戲的那一搏（Game._file_showdown）。程式裡直接寫名望的只有後兩條那兩行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
+    """名望的來源只有四條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
+    決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）。程式裡直接寫名望的只有後三條那三行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
     for path in sorted((ROOT / "tianxia").glob("*.py")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -258,6 +258,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
     assert writes == [
         ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + gained'),
         ("engine.py", 's.player.stats["fame"] = s.player.stats.get("fame", 0) + fame'),  # 決戰最有戲的那一搏（試玩回饋 2026-10-08）
+        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + boss.fame'),  # 打贏頭目（單人頭目戰，content/duels.json）
     ]
     givers = []
 
@@ -273,7 +274,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
 
     for path in sorted((ROOT / "content").rglob("*.json")):
         scan(json.loads(path.read_text(encoding="utf-8")), path.relative_to(ROOT / "content").as_posix())
-    assert givers and all(where.startswith("events/") for where in givers), sorted(set(givers))
+    assert givers and all(where.startswith("events/") for where in givers), sorted(set(givers))  # 頭目的名望寫在 fame 欄位，不是 stats
 
 
 def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
