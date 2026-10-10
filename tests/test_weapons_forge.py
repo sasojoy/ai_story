@@ -759,3 +759,65 @@ def test_rows_carry_tempers_and_the_recipe_text(content, world):
     assert "淬煉" not in weapons.card_line(game.state, content, world, art)
     assert weapons.recipe_text(content, "兵|劍|gang_1+gang_1") == "精鐵砂＋精鐵砂"
     assert weapons.recipe_text(content, None) is None
+
+
+# ── Task 9：整季機器人會打造與淬煉、假人不打造 ──
+
+
+def test_forge_plan_reaches_for_the_highest_tier_and_stops_once_it_has_one(content, world):
+    game = _forger(content, world)
+    s, p = game.state, game.state.player
+    art = _art(game, content, world)
+    assert smithing.forge_plan(s, content, world, art) == ("劍", "gang_2", "gang_2")  # 最高階、夠兩個就主輔同一種
+    p.materials = {"gang_2": 1, "gang_1": 2, "kuai_1": 3}
+    assert smithing.forge_plan(s, content, world, art) == ("劍", "gang_2", "kuai_1")  # 輔料挑低一階數量最多的
+    p.rack = [_blade(tier=2, wid="兵:3", name="寒星劍")]
+    p.rack[0].recipe = weapons.recipe_key("劍", "gang_2", "gang_2")
+    assert smithing.forge_plan(s, content, world, art) is None  # 已經有一把同階、自己打的、配得上的
+    p.rack = []
+    p.stats["silver"] = 10
+    assert smithing.forge_plan(s, content, world, art) is None  # 打不起
+
+
+def test_better_in_rack_compares_the_bonus(content, world):
+    game = _forger(content, world)
+    p = game.state.player
+    art = _art(game, content, world)
+    p.weapon = _blade(attribute="剛")  # 剛剋柔：+5% −5% ＝ 0
+    p.rack = [_blade(attribute="柔", wid="兵:2", name="軟劍")]  # 同屬性：+10%
+    assert smithing.better_in_rack(game.state, content, world, art).id == "兵:2"
+    p.weapon, p.rack = p.rack[0], [p.weapon]
+    assert smithing.better_in_rack(game.state, content, world, art) is None
+
+
+def test_visit_smith_forges_then_tempers_and_leaves(content, world):
+    from tianxia import bot
+    game = _forger(content, world, silver=30)  # 買不起架上的劍（40），打得起一爐一階（20）
+    p = game.state.player
+    p.materials = {"gang_1": 6}
+    bot.visit_smith(game)
+    assert p.weapon is not None and p.weapon.recipe == weapons.recipe_key("劍", "gang_1", "gang_1")
+    assert p.weapon.tempers == 4 and p.materials == {} and p.stats["silver"] == 10  # 打一把用兩個，剩四個全拿去淬（一階不收錢）
+    assert not p.picking_smith and p.smith_draft is None
+
+
+def test_visit_smith_never_leaves_a_draft_open(content, world, monkeypatch):
+    from tianxia import bot
+    game = _forger(content, world)
+    monkeypatch.setattr(smithing, "wizard_steps", lambda kind, main, aux: [smithing.OPEN, f"{smithing.KIND}{kind}"])  # 走到一半就停
+    bot.visit_smith(game)
+    assert not game.state.player.picking_smith and game.state.player.smith_draft is None
+
+
+def test_server_bots_never_open_the_forge_or_temper(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _smithy(content, world)
+    game.state.player.weapon = _blade()
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored[smithing.OPEN] is None and scored[smithing.TEMPER] is None
+    game.choose(smithing.OPEN)
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored[smithing.CANCEL] == 0.0  # 萬一停在單子上，只會按「不打了」
+    assert all(v is None for k, v in scored.items() if k != smithing.CANCEL)

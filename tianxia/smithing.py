@@ -472,3 +472,58 @@ def temper_option(state: GameState, content: Content):
     else:
         note = problem
     return Option(id=TEMPER, label=f"淬煉【{w.name}】（第 {w.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)
+
+
+# ---- 整季機器人用的（兵器設計第六節：量平衡要用到打造與淬煉；伺服器假人這一批不打造，附帶決定 e）----
+
+
+def wizard_steps(kind: str, main: str, aux: str) -> list[str]:
+    """照單子打一把要按的五顆（打開、種類、主料、輔料、開爐）。"""
+    return [OPEN, f"{KIND}{kind}", f"{MAIN}{main}", f"{AUX}{aux}", f"{GO}{kind}:{main}:{aux}"]
+
+
+def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) -> tuple[str, str, str] | None:
+    """整季機器人要打哪一把：身上那門武學配得上的種類；主料挑背包裡最高階的（同階先挑跟武學同屬性的、再挑最多的、再照 id）；
+    輔料先挑同一種（夠兩個時），不然挑跟主料最近一階、數量最多的。手上或裝備庫已經有一把配得上、階比主料高、或同階而且是自己打的，
+    就不打（不然每次路過都打一把）。打不成（forge_problem）是 None。"""
+    if art is None or not weapons.smith_here(state, content):
+        return None
+    kind = weapons.art_weapon(art.id, content, world)
+    if kind is None:
+        return None
+    mats = content.materials
+    held = {mid: n for mid, n in state.player.materials.items() if n > 0 and mid in mats}
+    if sum(held.values()) < 2:
+        return None
+    top = max(mats[mid].tier for mid in held)
+    mine = [w for w in [state.player.weapon, *state.player.rack] if weapons.usable(w, art, content, world)]
+    if any(w.tier > top or (w.tier == top and w.recipe is not None) for w in mine):
+        return None
+    main = min((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != art.attribute, -held[mid], mid))
+    if held[main] >= 2:
+        aux = main
+    else:
+        aux = min((mid for mid in held if mid != main), key=lambda mid: (top - mats[mid].tier, -held[mid], mid))
+    return (kind, main, aux) if forge_problem(state, content, kind, main, aux) is None else None
+
+
+def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
+    """裝備庫裡威力加成比手上那把高的那一把（最高的；同分照 id），沒有是 None。"""
+    now = weapons.bonus(state.player.weapon, art, content, world)
+    best = max(state.player.rack, key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
+    return best if best is not None and weapons.bonus(best, art, content, world) > now + 1e-9 else None
+
+
+def temper_wanted(state: GameState, content: Content, world: WorldStateStore, art) -> bool:
+    """手上那把配得上、淬得了、而且沒有更高的一把要打（素材先留給打新的）。"""
+    return (
+        weapons.usable(state.player.weapon, art, content, world) and temper_problem(state, content) is None
+        and forge_plan(state, content, world, art) is None
+    )
+
+
+def has_errand(state: GameState, content: Content, world: WorldStateStore, art) -> bool:
+    return (
+        forge_plan(state, content, world, art) is not None or better_in_rack(state, content, world, art) is not None
+        or temper_wanted(state, content, world, art)
+    )

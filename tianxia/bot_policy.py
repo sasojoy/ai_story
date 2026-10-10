@@ -477,8 +477,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
         verb = arg.partition(":")[0]
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
-    if kind == "smith":  # 鐵匠鋪上：照 weapons.wanted 按那一顆，沒事就離開
-        return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg == "back" else None
+    if kind == "smith":  # 鐵匠鋪上：照 weapons.wanted 按那一顆，沒事就離開；不打造、不淬煉（附帶決定 e），萬一停在單子上只按「不打了」
+        return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "call":
         # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
         # 萬一停在求見選單上，只會按返回
