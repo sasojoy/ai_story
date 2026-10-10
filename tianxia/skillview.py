@@ -140,7 +140,7 @@ def forge_line(
         if a is None or b is None:
             return "（選了不存在的東西。）"
         shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
-        odds = fusion.blend_odds(state, content, art_id, a, other_art, b)
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b, shape=shape)
         head = (
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"

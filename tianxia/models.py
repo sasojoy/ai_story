@@ -215,6 +215,18 @@ class FuseQuality(_Strict):
     counter_attribute: float = -10  # 相剋的一對
     wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（跟修練同一套 stat_factor）
     shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # ── 天時地利（PM 2026-10-10 派工、企劃者選「甲乙都做」的乙）：同一爐換時間地點，造化分不一樣；規則不寫給玩家看，
+    # 只在合成前的說明（lines）與結果（setting_good／setting_bad）留一句含蓄的話。預設全是 0（測試內容不開），正式值在 config.json。
+    # 一爐最多算 setting_max 條（照分數的絕對值挑），fusion.setting_points 算。
+    terrain: float = 0  # 在探索悟得到同屬性意境的地方融這個意境（跟修練的 home_ground 同一個判斷）
+    night_match: float = 0  # 有正邪的那一爐：邪的在夜裡、正的在白天
+    night_clash: float = 0  # 反過來：邪的在白天、正的在夜裡（負的）
+    battlefield: float = 0  # 合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區
+    calm: float = 0  # 出關之後 calm_hours 遊戲小時之內開爐
+    calm_hours: float = Field(default=2, ge=0)  # 一個時辰
+    setting_max: int = Field(default=2, ge=0)
+    setting_good: str = ""  # 天時地利合起來是加分時，結果多一句
+    setting_bad: str = ""  # 合起來是扣分時，結果多一句
     # 說明那一句的寫法：因素 → [加分時, 扣分時]（語氣照企劃者「不要那麼直白」，不寫成攻略）
     lines: dict[str, list[str]] = Field(default_factory=lambda: {
         "quality": ["底子厚實", "底子尚淺"],
@@ -222,6 +234,10 @@ class FuseQuality(_Strict):
         "insight": ["意境來歷不凡", ""],
         "attribute": ["兩股氣息相投", "兩股氣息相衝"],
         "wis": ["你心思靈透", "你心思還不夠靈透"],
+        "terrain": ["此地氣象與這股意相合", ""],
+        "night": ["時辰正對", "時辰不對"],
+        "battlefield": ["殺伐之氣未散", ""],
+        "calm": ["出關未久，心如止水", ""],
     })
 
 
@@ -832,6 +848,43 @@ class TutorialStep(_Strict):
     survey: list[str] = Field(default_factory=list)
 
 
+class ArtPattern(_Strict):
+    """秘方（content/secret_recipes.json）裡的一門武學：寫了的每一項都要對得上。武學多半是合出來的、每季 id 都不一樣，
+    所以秘方不認 id，認形狀（屬性、種類、正邪、自己那一份至少什麼品）。"""
+
+    attribute: str | None = None
+    kind: str | None = None  # 內功／武學
+    lean: str | None = None  # 正／邪／無
+    min_quality: str | None = None
+
+
+class InsightPattern(_Strict):
+    """秘方裡的一個意境：id（內容的六個基本意境）或屬性、正邪；寫了的每一項都要對得上。"""
+
+    id: str | None = None
+    attribute: str | None = None
+    lean: str | None = None
+
+
+class SecretRecipe(_Strict):
+    """秘方（PM 2026-10-10 派工「口訣與秘方」，企劃者「合成要講究邏輯，最好能隱含技巧都藏彩蛋」）：每季照天機挑一批
+    （Config.secrets.per_season，tianxia/secrets.py）。合中了出一門內容寫好名號的武學或意境：品質機率好一截、一定帶一條特別功效，
+    首創的人江湖上傳一句、寫進江湖史。線索是三句口訣（clues：說書版、人物順口版、殘譜版），只講意象，不點名意境或屬性。
+    fuse：art＋insight；merge：left、right 兩格分左右；blend：arts 兩門不分先後。"""
+
+    id: str
+    kind: Literal["fuse", "merge", "blend"]
+    art: ArtPattern | None = None
+    insight: InsightPattern | None = None
+    left: InsightPattern | None = None
+    right: InsightPattern | None = None
+    arts: list[ArtPattern] = Field(default_factory=list)
+    name: str
+    note: str = ""
+    special: str | None = None  # 特別功效 id（traits.json 的 special）；沒寫照天機挑一條。合出意境的秘方不用
+    clues: list[str] = Field(min_length=3, max_length=3)
+
+
 class PresetRecipe(_Strict):
     """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
     第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
@@ -1242,6 +1295,27 @@ class ShowdownPay(_Strict):
     win_contrib_push: dict[str, int] = Field(default_factory=lambda: {"大勝": 5, "險勝": 3})  # 贏的一方另記的
 
 
+class Secrets(_Strict):
+    """口訣與秘方（tianxia/secrets.py；PM 2026-10-10 派工，企劃者選「甲乙都做」的甲）。預設全關（測試內容沒有秘方池），
+    正式值在 config.json。"""
+
+    # 每季照天機挑幾條：種類 → 條數（池子不夠就全上）
+    per_season: dict[str, int] = Field(default_factory=lambda: {"fuse": 2, "merge": 2, "blend": 2})
+    quality_points: float = 0  # 合中秘方的那一爐，造化分加這麼多（+20：普通搭配的上品從兩成拉到三成，還是夾在上限之內）
+    insight_points: float = 0  # 拿秘方合出來的意境去融，那一爐的「意境來歷」再加這麼多
+    tale_events: list[str] = Field(default_factory=list)  # 這些事件了結之後，有 tale_chance 的機會多一句說書版的口訣
+    tale_chance: float = Field(default=0, ge=0, le=1)
+    scrap_chance: float = Field(default=0, ge=0, le=1)  # 探索最後擲一次，撿到一頁殘譜（殘譜版的口訣）
+    talk_affinity: int = Field(default=20, ge=0)  # 跟人物的情誼到這麼多，他才會不經意引一句（人物順口版）
+    # 寫給玩家看的框（{clue} 換成口訣）
+    tale_frame: str = "說書先生收場前搖頭晃腦念了兩句：「{clue}」——茶客們聽得一頭霧水。"
+    scrap_frame: str = "你在亂石堆裡翻出一頁殘譜，字跡斑駁，只認得出一句：「{clue}」"
+    overheard: str = "（這句話你記進了武學譜。）"
+    hit_line: str = "爐中忽地一變——這一爐竟暗合了江湖上流傳的一句口訣。"
+    rumor: str = "江湖上傳開了：{who}參透了一句口訣，合出了{thing}。"
+    chronicle: str = "{who}參透口訣，首創{thing}。"
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1304,6 +1378,7 @@ class Config(_Strict):
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
+    secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
@@ -2385,6 +2460,7 @@ class Content(_Strict):
     opportunities: list[OppDef] = Field(default_factory=list)  # 機緣（content/opportunities.json，正式版乙一）
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
+    secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示

@@ -27,7 +27,7 @@ from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
     Content, CraftNames, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
     TimetableEvent, TraitBook, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
@@ -105,6 +105,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "followers.json").exists() else {},
         preset_recipes=[_build(PresetRecipe, raw) for raw in _read(root / "preset_recipes.json")]
         if (root / "preset_recipes.json").exists() else [],
+        secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
+        if (root / "secret_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
         if (root / "insight_scenes.json").exists() else {},
@@ -1908,6 +1910,8 @@ def validate(c: Content) -> None:
             need(ATTRIBUTE_COUNTERS.get(attribute) != other.attribute,
                  f"{where}：合出來屬{attribute}，跟開局送的【{other.name}】（屬{other.attribute}）相剋；師門配方寫 attribute 改掉")
 
+    _validate_secrets(c, need)
+
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
     for insight in c.insights.values():
         need(insight.grant is None or insight.lean != "無", f"意境 {insight.id}：靠名聲悟得的意境要有正邪")
@@ -1982,3 +1986,59 @@ def validate(c: Content) -> None:
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))
+
+
+def _validate_secrets(c: Content, need) -> None:
+    """秘方池（content/secret_recipes.json）與 Config.secrets：每一種寫對該寫的格子、形狀裡的值都在清單裡、名號過得了命名過濾、
+    口訣三句各 20 字內而且不帶數字（只講意象）。"""
+    cfg = c.config.secrets
+    need(set(cfg.per_season) <= {"fuse", "merge", "blend"}, f"Config.secrets.per_season 只能有 fuse、merge、blend：{sorted(cfg.per_season)}")
+    for event_id in cfg.tale_events:
+        need(event_id in c.events, f"Config.secrets.tale_events：事件 {event_id} 不存在")
+    special_ids = {t.id for t in c.traits.special}
+    ids, names = set(), set()
+
+    def art_ok(where: str, pattern) -> None:
+        need(pattern.attribute is None or pattern.attribute in ATTRIBUTES, f"{where}：屬性 {pattern.attribute} 不在清單裡")
+        need(pattern.kind in (None, "內功", "武學"), f"{where}：種類只能是內功或武學")
+        need(pattern.lean in (None, "正", "邪", "無"), f"{where}：正邪只能是正、邪、無")
+        need(pattern.min_quality is None or pattern.min_quality in QUALITIES, f"{where}：品質 {pattern.min_quality} 不在清單裡")
+        need(any(v is not None for v in (pattern.attribute, pattern.kind, pattern.lean, pattern.min_quality)), f"{where}：什麼都沒寫，誰都合得上")
+
+    def insight_ok(where: str, pattern) -> None:
+        need(pattern.id is None or pattern.id in c.insights, f"{where}：意境 {pattern.id} 不存在")
+        need(pattern.attribute is None or pattern.attribute in ATTRIBUTES, f"{where}：屬性 {pattern.attribute} 不在清單裡")
+        need(pattern.lean in (None, "正", "邪", "無"), f"{where}：正邪只能是正、邪、無")
+        need(any(v is not None for v in (pattern.id, pattern.attribute, pattern.lean)), f"{where}：什麼都沒寫，誰都合得上")
+
+    for recipe in c.secret_recipes:
+        where = f"秘方 {recipe.id}"
+        need(recipe.id not in ids, f"{where}：id 重複")
+        need(recipe.name not in names, f"{where}：名號 {recipe.name} 重複")
+        ids.add(recipe.id)
+        names.add(recipe.name)
+        problem = name_problem(recipe.name, c)
+        need(problem is None, f"{where}：名號 {recipe.name} 過不了命名過濾（{problem}）")
+        need(recipe.special is None or recipe.special in special_ids, f"{where}：特別功效 {recipe.special} 不存在")
+        for i, clue in enumerate(recipe.clues):
+            need(0 < len(clue) <= 20, f"{where}：第 {i + 1} 句口訣要 1～20 字")
+            need(not re.search(r"[0-9０-９]", clue), f"{where}：第 {i + 1} 句口訣不寫數字")
+        if recipe.kind == "fuse":
+            need(recipe.art is not None and recipe.insight is not None and not recipe.arts and recipe.left is None and recipe.right is None,
+                 f"{where}：武學＋意境只寫 art 與 insight")
+            if recipe.art is not None:
+                art_ok(f"{where} 的武學", recipe.art)
+            if recipe.insight is not None:
+                insight_ok(f"{where} 的意境", recipe.insight)
+        elif recipe.kind == "merge":
+            need(recipe.left is not None and recipe.right is not None and recipe.art is None and recipe.insight is None and not recipe.arts,
+                 f"{where}：意境＋意境只寫 left 與 right")
+            need(recipe.special is None, f"{where}：合出意境的秘方沒有特別功效")
+            for side in ("left", "right"):
+                if getattr(recipe, side) is not None:
+                    insight_ok(f"{where} 的 {side}", getattr(recipe, side))
+        else:
+            need(len(recipe.arts) == 2 and recipe.art is None and recipe.insight is None and recipe.left is None and recipe.right is None,
+                 f"{where}：武學＋武學只寫 arts 兩門")
+            for i, pattern in enumerate(recipe.arts):
+                art_ok(f"{where} 的第 {i + 1} 門", pattern)

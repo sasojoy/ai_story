@@ -52,6 +52,7 @@
 - `tianxia/martial_arts.py`：武學的品質、熟練度（成）、威力、屬性與相剋；內容武學與全服登記武學的資料形狀。
 - `tianxia/insights.py`：意境的查（`resolve`）、悟（`learn`：新的記進 `PlayerState.insights`、已經會的化成心得）、探索悟哪一個（`explore_pool`／`roll_explore`）、合併的配方鍵、屬性與正邪（`merge_key`／`merged_attribute`／`merged_lean`）；善名、惡名到門檻悟浩然、血煞（`grant_by_name`）。只讀寫 `PlayerState.insights`。
 - `tianxia/fusion.py`：三種合成——武學＋意境 → 新武學（`fuse`）、意境＋意境 → 新意境（`merge`）、武學＋武學 → 第三門新武學（`blend`，`MartialArt.parents` 記兩個來源）；配方全服共享、首創者等模型取名；`forge_request` 是取名三段式的 A 段；`can_forge` 是狀態列提示用的便宜檢查。
+- `tianxia/secret_recipes.py`：口訣與秘方：這一季挑哪幾條（`active`，照天機）、這一爐合不合得上（`match_fuse`／`match_merge`／`match_blend`）、武學譜（`manual`、`solve`、`view`）、三種線索（`hear`：說書與殘譜；`talk_line`／`overheard`：人物順口）。
 - `tianxia/landing.py`：合到舊的（設計 12.2）：候選、機會、決定性的擲骰（天機＋配方鍵的雜湊）、規則挑（`rule_pick`）、模型挑的名字對得上候選才用（`choose`）。
 - `tianxia/naming.py`：玩家看得到的名字的把關與取名（`clean_name`、`name_problem`、`propose`、`pick`、`generate`、`recheck`、`fallback_name`）；模型只給名字與一句說明，過不了走決定性的退路字表（`content/craft_names.json`）。
 - `tianxia/cultivation.py`：修練（衝品質）與絕學定名（`cultivate`、`odds_for`、`boost_for`、`name_mastered`）；只改狀態與回傳訊息。
@@ -121,6 +122,7 @@
 - 伺服器假人：`.venv/Scripts/python.exe run_bots.py`（跟 `server.py` 同時開著）
 - 假人整季模擬：`.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 [--profile weekend]`
 - 第一季整季模擬與驗收：`.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60`（預設 `--profile weekend`；數字照實報，不為了驗收調參數）
+- 秘方與天時地利量表：`.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile weekend|none]`——隨機、解口訣、全知三種機器人一季合中幾條秘方、聽到幾句口訣、天時地利讓上品機率多幾點；只量不改。
 - 合成量表：`.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile weekend] [--reserve N]`——一季裡三種合成第一次的組合數、合到舊的比例、模型呼叫數、`bot.FORGE_RESERVE` 夠不夠；只量不改。一個機器人獨佔一個資料庫，合到舊的一定合到它自己已經有的，所以那個比例是全服的下限。
 - 同伴加成量表：`.venv/Scripts/python.exe scripts/measure_companions.py`（只量不改）
 - **好玩度量表**：`.venv/Scripts/python.exe scripts/fun_run.py --seeds 1 2 3`／`--calibrate`（見「量表與教訓」）
@@ -198,6 +200,8 @@
   - **合到舊的**（設計 12.2）：一個組合這一季第一次被合時，規則先判會不會合到這一季已經合出來的同類（`landing`：每個候選 +`land_chance_per_candidate` 5%、最多 90%，擲骰是天機＋配方鍵的雜湊）；候選兩個以上由模型從清單挑一個（挑到清單外的當沒挑、改由規則挑）；合到的那一門登記成這個配方，合到你已經有的不收錢。基礎武學、名將武學、內容寫好的意境不在候選裡。
   - **血統裡融過的意境不能再融**（企劃者 2026-10-06 回報「同一種意境合成後的產物無限合成上去」）：意境不會用掉，不擋就能「武學＋風 → 乙、乙＋風 → 丙……」一代一代疊、每代都把風推到功效第一位。`fusion.lineage_has` 沿底（`base`）與武學＋武學的兩門來源（`parents`）一路往上查：全服的意境照 id 認，私有意境照屬性認（跟配方鍵認私有意境同一套）；輪流融兩個意境也擋（甲＋風→乙、乙＋火→丙、丙＋風 擋）。擋在 `fuse_problem` 最前面（「…的來歷裡早已融過「風」——同一股意，再融也只是舊路重走。」），卷軸卡的機率條也不拿這種意境算。
   - **合成的意義是拿到你還沒有的**：配方已經登記、合出來的那一門你已經有了，就不准合（「…你已經有了——換一組試試吧」，排在花費與持有上限之前，同一爐連按兩下也只扣一次）。「已經有了」一律照功法的 id 認。合出來的對應欄位空著就直接配上身，否則進功法庫。
+- **口訣與秘方**（PM 2026-10-10 派工，企劃者「合成要講究邏輯，最好能隱含技巧都藏彩蛋」選甲乙都做的甲；`tianxia/secret_recipes.py`、`content/secret_recipes.json`、`Config.secrets`；不看第一季開關）：每季照天機從秘方池挑 `per_season`（武學＋意境、意境＋意境、武學＋武學各 2）條，全服同一批。秘方認形狀不認 id（武學的屬性、種類、正邪、自己那一份至少幾品；意境的 id 或屬性，私有意境照屬性認；意境＋意境分左右兩格，武學＋武學不分先後）。合中了配方鍵是「秘|秘方 id」、先於合到舊的：出內容寫好名號與說明的那一門（不叫模型；名號撞到角色或別的武學走退路字表），造化分 +`quality_points`（30），武學一定帶一條特別功效（`special` 沒寫照天機挑），意境拿去融時「意境來歷」再 +`insight_points`（10）；結果多一句「暗合口訣」，這一季第一個合中的江湖上傳一句（具名）、寫進江湖史；秘方合出來的不當合到舊的候選（`MartialArt.secret`／`Insight.secret`）。合成前的說明不算秘方的加成（不然調組合看機率就探得出來）。線索是每條三句口訣（說書版、人物順口版、殘譜版）：`tale_events` 裡的事件了結時 `tale_chance`（八成）多一句說書版；探索最後擲 `scrap_chance`（6%）撿一頁殘譜；跟人物情誼到 `talk_affinity`（20）時他的系統提示裡多一句他知道的那條（照天機＋人物 id 雜湊），他原字原句說出來（不看標點）才算聽到。聽過的、合中過的記在武學譜（`PlayerState.manual`，只記這一季的天機），`status_data["manual"]` 給畫面（一條一筆：聽過的口訣、合中了寫名號）。擲骰用自己的亂數，不動 `Game.rng`。假人與整季機器人不讀口訣，只會偶然撞到。量表（`scripts/measure_secrets.py`，2026-10-10）：14 天設定 3 個種子，隨機合一季偶然合中 1.7／6 條、聽過口訣就去湊的 5.7／6、聽到口訣 6～8 句；週末設定 5 個種子一季只合 15 爐，隨機 0.2、解口訣 0、全知 0.6，口訣約 3 句——週末一季太短，秘方主要是長季的東西。天時地利讓隨機合的上品機率平均只多不到 1 個百分點（碰到的爐一兩成），存心挑兩條的一爐多 10 個百分點。
+- **天時地利**（同一份派工的乙；`fusion.setting_points`，權重在 `Config.fuse_quality`，預設 0、正式值在 `config.json`）：同一爐換時間地點，造化分不一樣：在探索悟得到同屬性意境的地方融它 +`terrain`（10）；有正邪的那一爐（融的意境、兩門合出來的那一門）邪在夜裡、正在白天 +`night_match`（10），反過來 `night_clash`（−6）；合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區 +`battlefield`（10）；出關 `calm_hours`（2）遊戲小時之內 +`calm`（8，`PlayerState.seclusion_done`）；一爐最多算 `setting_max`（2）條。合成前的說明照 `FuseQuality.lines` 寫原因（「此地氣象與這股意相合」），結果合起來加分多一句 `setting_good`、扣分 `setting_bad`；規則本身不寫出來。意境＋意境沒有品質，不算。
 - **持有上限**（武學與意境合計，`library.cap_of`）：50＋（等級 // 5）×3＋max(0, 博聞−5)×2（一季最多 88 格）。滿了不能合成、合併、學新的；悟意境照收（博聞被扣下來而超過上限時，熔回上限以內之前不能合成）。
 - **熔煉**：功法庫裡的武學熔成心得＝max(基本值, 練成花的八成)＋品質加給（只算自己修練上去的那幾階：中品 5、上品 15、絕學 40，減去登記時的那一階；合成擲到的品質也算登記時就有，`art_rolled`）；全服登記的武學基本值 `melt_min_refund`（4），內容裡的武學沒有基本值（不然「學、熔、再學」就是無本迴圈）。意境熔成 10 心得。身上正在練的不能熔（先改練）。
 - **改練**（`team.switch_art`）：把庫裡的換上身、換下來的回庫，熟練度各自保留（`PlayerState.art_levels` 只在換下來時寫、換上去時取）。
