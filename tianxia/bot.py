@@ -13,7 +13,7 @@ from typing import NamedTuple
 
 from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
 from . import prologue as prologue_rules
-from .engine import FREE_TEXT_OPTION, SAY_OPTION, Game, Option
+from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .sqlite_world import open_world
@@ -288,8 +288,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties") and not o.id.startswith(("road:", "defect:", "invite:"))
-    ]
+        if o.id not in ("act:rest", "act:halt", "act:bounties", DUEL_FLEE) and not o.id.startswith(("road:", "defect:", "invite:"))
+    ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options

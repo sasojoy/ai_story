@@ -2900,6 +2900,36 @@ def test_battle_free_text_shows_and_submits(game):
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
+def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
+    """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
+    from tianxia import duel
+
+    game.client = None
+    game.state.player.location = "changshe"
+    with at(game, 0.0):
+        game._duel_start(duel.available(game.state, game.content))
+        view = server.look(game, server.main_view)
+        assert view["free_text"] == game.duel_free_text_prompt() and view["free_op"] == "duel_text"
+        assert view["free_text_note"] == game.DUEL_GAMBLE_NOTE
+        seen = []
+
+        def rate(client, act_, faction_name, text, name, setting, place):
+            seen.append((open_world().db.writing(), act_.title, faction_name, text, name, place))
+            return battle_instance.GambleVerdict(100, "測試一把撒出石灰。", "測試踩到自己的衣角。")
+
+        monkeypatch.setattr(battle_instance, "assess_gamble", rate)
+        with mock.patch("server.time.time", return_value=0.0):
+            msgs = server.duel_text(game, "撒石灰")
+    assert seen == [(False, "黃巾小帥段鐵頭", "散人", "撒石灰", "測試", duel.PLACE)]
+    assert msgs[0].startswith("第 1 回合：測試一把撒出石灰。（氣勢 +")
+
+
+def test_duel_text_without_a_duel_asks_no_model(game, monkeypatch):
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
+    with at(game, 0.0), mock.patch("server.time.time", return_value=0.0):
+        assert server.duel_text(game, "撒石灰") == ["（此刻無法這麼做。）"]
+
+
 # ── 決戰選項的回話（FB-030）：網頁上要看得到按下去發生了什麼 ──────────────
 
 
@@ -5325,7 +5355,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {
-        "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+        "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，

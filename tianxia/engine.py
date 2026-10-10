@@ -22,6 +22,7 @@ from . import (
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, sensing, skillview,
     social, styles, team, timetable, traits, zh,
 )
+from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
@@ -43,7 +44,7 @@ from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
-    PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
+    DuelBoss, PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -56,7 +57,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, WorldState,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, WorldState,
     new_game_state,
 )
 from .world import (
@@ -126,6 +127,7 @@ RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
+DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
 SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
 
 
@@ -205,6 +207,17 @@ class BattleTextRequest(BaseModel):
     faction_name: str
     text: str
     name: str = ""  # 送出的人的名號：劇情以他開頭（試玩回饋 2026-10-08）
+
+
+class DuelTextRequest(BaseModel):
+    """頭目戰放手一搏鎖外評估的單子（server.duel_text 的 A 段拿到、B 段送模型、C 段交回 duel_gamble 重驗：同一隻、同一回合、同一句才用）。"""
+    boss: str
+    round: int
+    text: str
+    name: str
+    faction_name: str
+    title: str
+    scene: str
 
 
 class FreeTextOutcome(BaseModel):
@@ -783,6 +796,10 @@ class Game:
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
             return opts
+        if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
+            return [Option(id=f"duel:{move}", label=duel_rules.move_label(move)) for move in MOVES] + [
+                Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
+            ]
         if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
             menu = sensing.menu(s, c)
             if menu:
@@ -1309,6 +1326,8 @@ class Game:
         kind, _, arg = option_id.partition(":")
         if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
+        if kind == "duel":  # 頭目戰同決戰：每回合的出招不寫紀錄，分出勝負那一下由 _duel_finish 寫一則、一份戰報
+            return self._log(self._duel_act(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         if option_id == sensing.DRAW:
@@ -2006,6 +2025,9 @@ class Game:
         scene = prologue_rules.explore_scene(s, c)
         if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
+        boss = duel_rules.available(s, c)  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
+        if boss is not None and self.rng.random() < c.config.duel.explore_chance:
+            return self._duel_start(boss)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
         weighted = self._explore_weights(loc)
@@ -4469,6 +4491,7 @@ class Game:
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
+            and s.player.duel is None  # 單人頭目戰打到一半：同上
         )
 
     def seclusion_refusal(self) -> str | None:
@@ -5283,6 +5306,203 @@ class Game:
             msgs.insert(0, f"體力 -{c.config.raid.stamina}")
         if self._draft is None:
             self._write(f"截殺・{rival}" if attacker else f"遭{rival}截殺", msgs, tag=battlelog.outcome_text(record))
+        return msgs
+
+    # ── 單人頭目戰（tianxia/duel.py；Joy 2026-10-10：「有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）──
+
+    def _duel_start(self, boss: DuelBoss) -> list[str]:
+        """探索遇上頭目：快照份量、職位與氣血池（同加入決戰），記這一季遇上幾次與冷卻，擲他第一回合的招。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.duel
+        now, cap = self._player_hp_and_cap()
+        duel = DuelState(
+            boss=boss.id, foe=duel_rules.foe_index(boss, p.faction), edge=cfg.start, hp=now, hp_cap=cap, hp_start=now,
+            power=self._battle_power(), scores=self._battle_scores(), role=self._battle_role(),
+        )
+        key = duel_rules.season_key(s, boss.id)
+        p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
+        p.duel_last = [float(p.season_number), s.world.time]
+        foe = boss.foes[duel.foe]
+        duel_rules.roll_next(duel, foe, cfg, self.rng)
+        p.duel = duel
+        self._outcome(f"遇上{foe.title}{foe.name}", "")
+        role = battle_instance.role_name(c.config.battle, duel.role)
+        return [f"你在{c.locations[p.location].name}走著，{foe.title}{foe.name}攔住了去路！", foe.intro] + (
+            [f"你以{role}的架勢迎上去。"] if role else []
+        )
+
+    def _duel_scene(self) -> str:
+        duel = self.state.player.duel
+        boss, foe = duel_rules.foe_of(self.content, duel)
+        lines = [
+            f"**{foe.title}・{foe.name}**（頭目戰 第 {duel.round + 1}／{boss.rounds} 回合）",
+            foe.intro if duel.round == 0 else duel.lines[-1],
+            f"氣勢：{duel_rules.edge_words(duel.edge)}（{duel.edge:.0f}／100）　你的氣血：{duel.hp:.0f}／{duel.hp_cap:.0f}",
+            f"{duel.tell}（架勢不一定是真的。）",
+            "固守剋強攻、強攻剋奇襲、奇襲剋固守；也可以在下面寫一句，放手一搏。",
+        ]
+        return "\n\n".join(lines)
+
+    def duel_free_text_prompt(self) -> str | None:
+        """頭目戰打到一半時輸入框的提示語，否則 None（server.py 照它決定輸入框，送出走 duel_text）。"""
+        return "放手一搏：寫下你要怎麼對付他（20 字以內）" if self.state.player.duel is not None else None
+
+    DUEL_GAMBLE_NOTE = "寫得越險，成了越能扭轉局面；失手時氣勢倒退，重傷的是你自己。這一回合他的招不算。"
+
+    def duel_free_text_note(self) -> str | None:
+        return self.DUEL_GAMBLE_NOTE if self.state.player.duel is not None else None
+
+    def _duel_text_check(self, text: str) -> str | list[str]:
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        if self.state.player.duel is None:
+            return ["（此刻無法這麼做。）"]
+        text = text.strip()[:FREE_TEXT_MAX]
+        if not text:
+            return ["（請先輸入你想做的事。）"]
+        return text
+
+    def duel_text_request(self, text: str) -> DuelTextRequest | list[str]:
+        """頭目戰放手一搏的 A 段（鎖內、只讀）：送得出去回傳要在鎖外送模型的單子，不行回傳那一句話。"""
+        checked = self._duel_text_check(text)
+        if isinstance(checked, list):
+            return checked
+        s, c = self.state, self.content
+        duel = s.player.duel
+        here = duel_rules.scene(c, duel)
+        return DuelTextRequest(
+            boss=duel.boss, round=duel.round, text=checked, name=s.player.name, faction_name=self._duel_side(),
+            title=here.title, scene=here.text,
+        )
+
+    def _duel_side(self) -> str:
+        faction = self.state.player.faction
+        return self.content.scenario.faction_name(faction, faction) if faction else "散人"
+
+    def duel_gamble(
+        self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
+        request: DuelTextRequest | None = None,
+    ) -> list[str]:
+        """頭目戰放手一搏的 C 段：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合才用，
+        對不上（這一回合已經出過招、換了一場）就丟掉重評。沒給分數（假人不寫自由文字；腳本、測試）在這裡用 _quick_client 評，
+        評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
+        checked = self._duel_text_check(text)
+        if isinstance(checked, list):
+            return self._log(checked)
+        s, c = self.state, self.content
+        duel = s.player.duel
+        if request is not None and (request.boss, request.round, request.text) != (duel.boss, duel.round, checked):
+            llm_rate, stories = None, None
+        if llm_rate is None:
+            verdict = battle_instance.assess_gamble(
+                self._quick_client(), duel_rules.scene(c, duel), self._duel_side(), checked, s.player.name,
+                setting=duel_rules.SETTING, place=duel_rules.PLACE,
+            )
+            llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
+        s.battle_card = None
+        s.player.guide_done = []
+        boss, _ = duel_rules.foe_of(c, duel)
+        won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, self.rng)
+        story = (stories or ("", ""))[0 if won else 1]
+        if not story:
+            story = f"你放手一搏：「{checked}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
+        line = f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 -{hp}）"
+        return self._log(self._duel_after(line))
+
+    def _duel_act(self, arg: str) -> list[str]:
+        """選單上的一招，或抽身退走。"""
+        s, c = self.state, self.content
+        duel = s.player.duel
+        if duel is None:
+            return ["（此刻無法這麼做。）"]
+        boss, foe = duel_rules.foe_of(c, duel)
+        if arg == "flee":
+            return self._duel_finish(None, "你虛晃一招，抽身退走。")
+        if arg not in MOVES:
+            return ["（此刻無法這麼做。）"]
+        his = duel.move
+        delta, hp, beat = duel_rules.exchange(duel, boss, arg, c.config.duel, c.config.battle, self.rng)
+        line = (
+            f"第 {duel.round + 1} 回合：你{arg}，{foe.name}{his}——{duel_rules.COUNTER_WORDS[beat]}。"
+            f"（氣勢 {delta:+d}，你氣血 -{hp}）"
+        )
+        return self._duel_after(line)
+
+    def _duel_after(self, line: str) -> list[str]:
+        """出完一招（或放手一搏）之後：記這一回合，分出勝負就收場，否則擲他下一回合的招。"""
+        s, c = self.state, self.content
+        duel = s.player.duel
+        boss, foe = duel_rules.foe_of(c, duel)
+        duel.lines.append(line)
+        duel.round += 1
+        tier = duel_rules.verdict(duel, boss, c.config.duel)
+        if tier is not None:
+            return self._duel_finish(tier, line)
+        duel_rules.roll_next(duel, foe, c.config.duel, self.rng)
+        return [line]
+
+    def _duel_finish(self, tier: str | None, line: str) -> list[str]:
+        """收場：池子掉的氣血扣回本人（兩成變內傷，根骨減，同遊歷）、照結果發獎勵、一份戰報與一則江湖紀錄。tier 是 None 是抽身退走
+        （不寫戰報，沒有獎勵）。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.duel
+        duel = p.duel
+        boss, foe = duel_rules.foe_of(c, duel)
+        p.duel = None
+        lost = max(0.0, duel.hp_start - duel.hp)
+        now, _ = self._player_hp_and_cap()
+        if lost > 0:
+            con = team.con_of(s, c, self.world, PLAYER)
+            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con))
+            p.member.neili = max(0.0, now - lost)
+        title = f"頭目戰・{foe.name}"
+        if tier is None:
+            msgs = [line] + ([f"氣血 -{round(lost)}"] if round(lost) else [])
+            self._write(title, msgs, tag="抽身退走")
+            return msgs
+        squad = Squad(id=f"duel:{boss.id}", name=f"{foe.title}{foe.name}", difficulty=boss.difficulty, attribute=boss.attribute)
+        result = encounter.EncounterResult(tier=tier, margin=duel.edge - cfg.start, our_power=duel.power, difficulty=boss.difficulty)
+        record = battlelog.new_record(s, c, self.world, squad, result, "duel", event=title)
+        record.ours = record.ours[:1]  # 同伴不上場：比的是你一個人
+        record.rounds = list(duel.lines)
+        won = tier in team.WIN_TIERS
+        record.notes.append(foe.win if won else foe.lose if tier == "落敗" else f"{foe.name}見討不了好，虛晃一招退走了。")
+        share = cfg.reward_share.get(tier, 0.0)
+        extra: list[str] = []
+        exp = round(boss.exp * share)
+        if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
+            before = p.member.level
+            extra += team.add_exp(c, p.member, exp, p.name)
+            if p.member.level > before:
+                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
+                extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+            record.exp = exp
+        silver = round(boss.silver * share)
+        if silver:
+            p.stats["silver"] = p.stats.get("silver", 0) + silver
+            record.silver = silver
+        xinde = round(boss.xinde * share)
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+        if won:
+            for material_id in boss.drops:
+                if materials.grant(s, c, material_id) is not None:
+                    record.materials.append(materials.item_text(c, material_id))
+            if boss.fame:
+                p.stats["fame"] = p.stats.get("fame", 0) + boss.fame
+                record.changes.append(f"名望 +{boss.fame}")
+            chance = cfg.legend_chance.get(tier, 0.0)
+            if chance > 0 and self.rng.random() < chance:
+                p.legend_items += 1
+                record.changes.append(f"{c.config.legend_item_name} +1")
+                extra.append(f"他身上掉出一枚【{c.config.legend_item_name}】——{c.config.legend_item_note}")
+        if round(lost):
+            record.changes.append(f"氣血 -{round(lost)}")
+        record.notes += extra
+        summary = self._file_battle(record)
+        msgs = [line, summary, *record.notes, *battlelog.gains_list(record)]
+        self._write(title, msgs, tag=battlelog.outcome_text(record))
         return msgs
 
     def _xinde(self) -> int:
@@ -6426,6 +6646,8 @@ class Game:
         if s.pending_event:
             event = c.events[s.pending_event]
             return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
+        if s.player.duel is not None:
+            return self._duel_scene()
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
         if sense_card:
             return sense_card
