@@ -118,7 +118,8 @@ def test_a_hint_that_arrives_with_a_poll_is_drawn_on_the_practice_and_craft_page
     assert out["first"] is False  # 一開始沒有提示
     assert out["arrived"] is True  # 輪詢帶來提示：頁面重畫、框出現
     assert out["untouched"] is True  # 同一份畫面再輪詢一次：不重畫
-    assert out["calls"] == ["/api/menxia", "/api/menxia"]
+    # 煉製頁重畫時另問一次說明與「現在合得出來的」（/api/forge_line，企劃者 2026-10-10）；沒變的那一次不問
+    assert out["calls"] == (["/api/menxia", "/api/forge_line", "/api/menxia"] if tab == "craft" else ["/api/menxia", "/api/menxia"])
 
 
 def test_a_poll_that_takes_the_hint_away_redraws_too(game):

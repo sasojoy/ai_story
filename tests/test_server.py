@@ -2512,7 +2512,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
     assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
-    assert "S.message = FORGE_WAIT;" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」）
+    assert "S.forgeResult = { at, html: esc(FORGE_WAIT) };" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」），寫在開爐旁邊
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
 
@@ -5632,8 +5632,8 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
 
 def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     """審查 M-2：開爐被擋下來（另一個分頁的上一爐還沒出爐，伺服器回 400）之後，煉製頁上方不能還寫著「爐火正旺。……請稍候」：
-    重畫之前 S.message 要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。
-    在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
+    重畫之前結果那一格（S.forgeResult，2026-10-10 起寫在開爐旁邊）要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），
+    爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。頁面不捲到最上面。在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
     import json
 
     if webharness.NODE is None:
@@ -5651,9 +5651,11 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     globalThis.setTimeout = () => 0;  // watchQueue 的計時器不真的跑
     let S, seen, button, bar, api;
     const document = { getElementById: (id) => (id === "forge" ? button : bar), querySelector: () => null };
-    const window = { scrollTo() {} };
+    let scrolled = 0;
+    const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
-    const renderPage = () => seen.push(S.message);
+    const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw();
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
@@ -5663,7 +5665,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
       bar = { textContent: "" };
       api = answer;
       await forge();
-      return { renderedWith: seen, message: S.message, waiting: bar.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy };
+      return { renderedWith: seen, message: S.forgeResult.html, waiting: button.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy, scrolled };
     };
     (async () => {
       const refused = await run(async () => { throw new Error("上一爐還沒出爐。"); });
@@ -5681,6 +5683,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     assert refused["sel"] == 2 and refused["line"] == "舊說明" and refused["busy"] is False  # 爐裡的東西留著、可以再按
     assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 0 and out["done"]["line"] == ""
     assert "爐火正旺" not in out["offline"]["message"]  # 別的錯（例如斷線）也不再停在「爐火正旺」
+    assert out["done"]["scrolled"] == 0  # 開爐之後不捲到最上面（企劃者 2026-10-10「點完又會跳到畫面最上面」）
 
 
 def test_app_js_parses():

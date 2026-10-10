@@ -43,6 +43,19 @@ MERGE_PREFIX = "合|"
 LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全服登記的那一份一律是下品
 
 
+class Refusal(str):
+    """合不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
+    （skillview.forge_picks／forge_ideas，企劃者 2026-10-10「常常丟上去按合成才知道」）。判斷只寫在這幾個 *_problem 裡。"""
+
+    short: str = "合不了"
+
+
+def _refuse(text: str, short: str) -> Refusal:
+    out = Refusal(text)
+    out.short = short
+    return out
+
+
 @dataclass(frozen=True)
 class Partner:
     """論武（玩家互動第二層，企劃者 2026-10-08）：兩個人各出一樣合成。這一爐有一樣是對方出的（lent，武學或意境的 id）：
@@ -230,16 +243,16 @@ def merge_shape(world: WorldStateStore, a: Insight, b: Insight) -> tuple[str, st
 
 def _full_line(state: GameState, content: Content) -> str:
     cap = library.cap_of(state, content)
-    return f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。"
+    return _refuse(f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。", "持有滿了")
 
 
 def _xinde_line(state: GameState, price: int, what: str) -> str | None:
     xinde = state.player.stats.get("xinde", 0)
-    return None if xinde >= price else f"心得不足：{what}要 {price} 點，你只有 {xinde} 點。"
+    return None if xinde >= price else _refuse(f"心得不足：{what}要 {price} 點，你只有 {xinde} 點。", "心得不足")
 
 
 def _stamina_line(state: GameState, need: int, what: str) -> str | None:
-    return None if state.player.stamina >= need else f"體力不足：{what}一次要 {need}。"
+    return None if state.player.stamina >= need else _refuse(f"體力不足：{what}一次要 {need}。", "體力不足")
 
 
 def _charge(state: GameState, xinde: int, stamina: int) -> list[str]:
@@ -407,10 +420,10 @@ def fuse_problem(
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
     insight = insights.resolve(insight_id, content, world, state)
     if lineage_has(art_id, insight, content, world):
-        return f"【{team.player_art(state, content, world, art_id).name}】的來歷裡早已融過「{insight.name}」——同一股意，再融也只是舊路重走。"
+        return _refuse(f"【{team.player_art(state, content, world, art_id).name}】的來歷裡早已融過「{insight.name}」——同一股意，再融也只是舊路重走。", "來歷裡融過")
     known = world.lookup_recipe(fuse_key_for(state, content, world, art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
-        return f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。"
+        return _refuse(f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "fuse")
@@ -645,11 +658,11 @@ def merge_problem(
     if insights.is_own(a) or insights.is_own(b):
         made = _own_merged(state, a, b)
         if made is not None:
-            return f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。"
+            return _refuse(f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。", "已經有了")
     else:
         known = world.lookup_insight_recipe(merge_key(a, b))
         if known is not None and known.id in held:
-            return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
+            return _refuse(f"這兩個合起來還是「{known.name}」，你已經悟得了。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "merge")
@@ -769,7 +782,7 @@ def blend_problem(
         return "找不到它的資料。"
     known = world.lookup_recipe(blend_key(a, b))
     if known is not None and known.id in owned:
-        return f"這兩門合出來還是【{known.name}】，你已經有了——換一門吧。"
+        return _refuse(f"這兩門合出來還是【{known.name}】，你已經有了——換一門吧。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "fuse")
