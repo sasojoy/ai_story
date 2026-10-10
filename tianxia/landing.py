@@ -58,12 +58,12 @@ def art_candidates(
 ) -> list[MartialArt]:
     return [
         art for art in world.fused_arts()
-        if (art.kind, art.attribute, art.lean) == (kind, attribute, lean)
+        if (art.kind, art.attribute, art.lean) == (kind, attribute, lean) and not art.secret  # 秘方合的是內容寫好的那一門
     ]
 
 
 def insight_candidates(world: WorldStateStore, attribute: str, lean: str) -> list[Insight]:
     return [
         insight for insight in world.merged_insights()
-        if (insight.attribute, insight.lean) == (attribute, lean)
+        if (insight.attribute, insight.lean) == (attribute, lean) and not insight.secret
     ]

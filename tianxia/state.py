@@ -125,6 +125,15 @@ class Tagalong(BaseModel):
     since: float
 
 
+class Manual(BaseModel):
+    """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
+    對不上就當空的。"""
+
+    tianji: int = 0
+    heard: dict[str, list[int]] = Field(default_factory=dict)  # 秘方 id → 聽過第幾句口訣（0 說書、1 人物、2 殘譜）
+    solved: list[str] = Field(default_factory=list)  # 合中過的秘方 id，照先後
+
+
 class DuelState(BaseModel):
     """一場還沒打完的單人頭目戰（tianxia/duel.py）。開打時快照你的份量、職位與氣血池，之後不回頭查；打完才把池子掉的氣血扣回本人。
     move／tell 是他下一回合要出的招與你看到的架勢（回合開始時就擲好：架勢有幾成是真的見 DuelTuning.tell_truth）。"""
@@ -209,6 +218,8 @@ class PlayerState(BaseModel):
     anonymous: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
+    seclusion_done: float | None = None  # 上一次出關的遊戲時間（天時地利的「心靜」）；沒閉關過是 None
+    manual: Manual = Field(default_factory=Manual)  # 武學譜（口訣與秘方）
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
     # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；
