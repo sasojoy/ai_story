@@ -887,6 +887,9 @@ def _main_view_body(game: Game) -> dict:
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
+        # 決戰的即時戰局條（Joy 2026-10-10）：場景裡畫著的這一場（集結、開打），與「剛剛」是一場決戰時收場那一刻的
+        "battle_gauge": game.battle_gauge(),
+        "card_gauge": game.card_gauge() if card is not None else None,
         # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起（最新一則就是卡片那一場時，latest 是卡片的補充）
         "latest": latest,
         "journal": game.journal_html(1, RECENT_ROWS),
@@ -1022,6 +1025,7 @@ def reports_view(game: Game, record_id: int | None) -> dict:
         "list": [{"label": label, "id": rid} for label, rid in game.battle_list()],
         "selected": record_id,
         "detail": md(game.battle_detail(record_id)) if record_id is not None else md(REPORT_EMPTY_TEXT),
+        "gauge": game.record_gauge(record_id),  # 決戰的戰報畫收場那一刻的戰局條（Joy 2026-10-10）；不是決戰是 None
     }
 
 

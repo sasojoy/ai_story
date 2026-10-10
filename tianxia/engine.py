@@ -3240,6 +3240,7 @@ class Game:
         record = BattleRecord(
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
+            gauge=self._gauge_of(battle, definition, me.faction) if definition is not None else None,
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
@@ -3407,6 +3408,34 @@ class Game:
         if me is not None:
             return definition.region if me.away and not me.eliminated else None
         return None if self._at_battle(definition) else definition.region
+
+    def _gauge_of(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
+        """battle_instance.gauge 的參數：時刻表決戰（第一季開著）照偏離中線分大勝，其餘照 outcomes 的門檻。"""
+        timetable = definition.timetable_event is not None and season_one(self.content, self.state.world)
+        return battle_instance.gauge(battle, definition, side, timetable)
+
+    def battle_gauge(self) -> dict | None:
+        """場景裡畫著的這場決戰（集結、開打）的戰局條（Joy 2026-10-10）；沒有、序章裡是 None。只讀，不推進戰鬥。
+        自己在場上就站自己那一邊看；還沒加入的看自己陣營那一邊；散人、第三方看第一方在左。"""
+        status = self._battle_for_me(tick=False)
+        if status is None:
+            return None
+        battle, definition = status
+        p = battle.participants.get(self.state.player.name)
+        side = p.faction if p is not None else self.state.player.faction
+        return self._gauge_of(battle, definition, side)
+
+    def record_gauge(self, record_id: int | None) -> dict | None:
+        """戰報頁那一筆是決戰時收場那一刻的戰局條；不是決戰、找不到是 None。"""
+        record = battlelog.find(self.state, record_id) if record_id is not None else None
+        return record.gauge if record is not None else None
+
+    def card_gauge(self) -> dict | None:
+        """「剛剛」那張戰鬥卡片是一場決戰時，收場那一刻的戰局條（BattleRecord.gauge）；不是就 None。"""
+        if not self.shows_battle_card():
+            return None
+        record = battlelog.find(self.state, self.state.battle_card)
+        return record.gauge if record is not None else None
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"

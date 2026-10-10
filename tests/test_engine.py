@@ -1892,17 +1892,17 @@ def _play_rounds(game, definition, count):
 
 def test_the_round_by_round_mix_line_never_reaches_the_scene_log(game):
     """審查 I1：沒有模型（或逾時、或在假人的 Game 裡結算）時潤色退回系統訊息本身，以前每一回合那一行出招比例
-    （官軍：強攻 x%・…（戰局 ±n））都會進場景最近五段的記錄，每段約 88px；現在它只留在回合紀錄（戰報）。
+    （官軍：強攻 x%・…（三招交鋒，戰線往哪邊推了多少））都會進場景最近五段的記錄，每段約 88px；現在它只留在回合紀錄（戰報）。
     場景上的出招比例只寫一次：上一回合那一段引用。"""
     battle, definition = _open_three_move_battle(game)
     definition.rounds_per_act, definition.decisive_margin = 6, 51  # 打五回合還沒收場（戰局推到底也不算壓倒性）
     battle = _play_rounds(game, definition, 5)
     assert battle.phase == "active" and battle.round_number == 5
-    assert not any("%（戰局 " in line or "強攻 0%" in line for line in battle.narrative_log)
+    assert not any("%（三招交鋒" in line or "強攻 0%" in line for line in battle.narrative_log)
     records = game.world.battle_rounds(battle.record_id)
-    assert len(records) == 5 and all("（戰局 " in r.messages[0] and r.messages[0].startswith(("官軍：", "黃巾：")) for r in records)
+    assert len(records) == 5 and all("（三招交鋒" in r.messages[0] and r.messages[0].startswith(("官軍：", "黃巾：")) for r in records)
     scene = game._battle_scene_text(battle, definition)
-    assert scene.count("對面上一回合") == 1 and "%（戰局 " not in scene  # 最新一回合的比例還在，只寫一次
+    assert scene.count("對面上一回合") == 1 and "%（三招交鋒" not in scene  # 最新一回合的比例還在，只寫一次
     assert scene.count("強攻 ") == 1
 
 

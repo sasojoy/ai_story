@@ -498,6 +498,32 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-panel > .war-help { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .war { margin-bottom: 12px; }
 .war > .fronts { margin-bottom: 0; }
+/* 決戰的即時戰局條（Joy 2026-10-10，web/app.js 的 gaugeHtml）：拔河，左邊是自己那一邊，旗子被拉向佔上風的那一頭；
+   淺色兩截是大勝、兩道細線是當場分勝負、條上的色帶是上一回合怎麼移的、底下一格一回合。顏色照陣營（同戰況圖卡：官軍石青、黃巾金） */
+.gauge { margin: 6px 0 10px; }
+.gauge .side-guan { --c: var(--kuai); }
+.gauge .side-huang { --c: var(--gold); }
+.gauge .side-haoqiang { --c: var(--rou); }
+.g-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 1.5; }
+.g-side { color: var(--c, var(--ink-2)); white-space: nowrap; }
+.g-side.mine { font-weight: 700; }
+.g-side b { font-variant-numeric: tabular-nums; color: var(--ink); }
+.g-bar { position: relative; height: 18px; margin-top: 2px; border-radius: 9px; background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.g-zone { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--c, var(--ink-2)) 22%, transparent); display: flex; align-items: center; font-style: normal; }
+.g-zone.right { justify-content: flex-end; }
+.g-zone span { position: relative; z-index: 1; padding: 0 6px; font-size: 10px; line-height: 1; font-weight: 600; color: var(--c, var(--ink-2)); white-space: nowrap; overflow: hidden; }
+.g-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink-2); opacity: 0.55; }
+.g-mid { position: absolute; top: 3px; bottom: 3px; left: 50%; width: 1px; background: var(--ink-2); opacity: 0.35; }
+.g-trail { position: absolute; top: 6px; height: 6px; border-radius: 3px; background: var(--c, var(--ink-2)); opacity: 0.6; }
+.g-flag { position: absolute; z-index: 2; top: 1px; bottom: 1px; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--ink); box-shadow: 0 0 0 2px var(--card); transition: left 0.5s ease; }
+.g-rounds { display: flex; gap: 3px; list-style: none; margin: 5px 0 0; padding: 0; }
+.g-r { flex: 1 1 0; min-width: 0; height: 16px; border-radius: 4px; background: var(--card-2); color: var(--ink-2); font-size: 10px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.g-r[class*="side-"] { background: var(--c); color: #fff; }
+.g-r.side-huang { color: #2a241d; } /* 金底配白字太淡：兩種模式都用深墨 */
+.g-r.tie { background: var(--line); color: var(--ink); }
+.g-r.g-now { box-shadow: inset 0 0 0 1.5px var(--ink); color: var(--ink); font-weight: 700; }
+.g-cap { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.battle-card .gauge { margin: 8px 0 4px; }
 .war > .fronts-help { margin: 2px 4px 0; }
 .fronts[data-act="fronts-help"] { cursor: pointer; }
 .fronts[data-act="fronts-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }

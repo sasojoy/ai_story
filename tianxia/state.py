@@ -596,6 +596,7 @@ class BattleRecord(BaseModel):
     # 叫 narration 不叫 story：battlelog 的 story_text／_story_block 已經是「結果」那一段（計畫三 G11）
     narration: str = ""
     guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；那一句演出寫在 notes 裡（跟 DODGE_NOTE 一樣，結果那一段）
+    gauge: dict | None = None  # 決戰收場那一刻的戰局條（battle_instance.gauge，站在自己那一邊看）；不是決戰、舊戰報是 None
     # 功效的演出句（13.6，content/trait_lines.json）：一句一行、前面標〔功效名〕，只在功效真的改到結果時才有（engine.Game._trait_lines）。
     # 放在「過程」裡回合（或大場面模型那一段）的前與後
     trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
