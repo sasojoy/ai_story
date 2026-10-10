@@ -40,7 +40,8 @@ def _player(on, name, faction, place):
 
 
 def _fight_round(fighter):
-    """參戰的那一個送出這一回合（場上只有他，送出就結算）。"""
+    """參戰的那一個送出這一回合（場上只有他，送出就結算）。對面沒人、一回合推滿 push_max（正式 20），戰局先拉回中線，免得兩回合就收場。"""
+    fighter.world.mutate_battle(lambda b: setattr(b, "trend", 50))
     move = next(o.id for o in fighter.options(odds=False) if o.enabled and o.id.startswith("battle:act:"))
     fighter.choose(move)
 
