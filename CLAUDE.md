@@ -56,6 +56,7 @@
 - `tianxia/naming.py`：玩家看得到的名字的把關與取名（`clean_name`、`name_problem`、`propose`、`pick`、`generate`、`recheck`、`fallback_name`）；模型只給名字與一句說明，過不了走決定性的退路字表（`content/craft_names.json`）。
 - `tianxia/cultivation.py`：修練（衝品質）與絕學定名（`cultivate`、`odds_for`、`boost_for`、`name_mastered`）；只改狀態與回傳訊息。
 - `tianxia/library.py`：功法庫：持有上限（`holding_cap`、`cap_of`、`full`）、新武學放哪（`store_art`）、各地學基礎武學（`lessons_here`、`learn`）、熔煉（`melt_art`、`melt_insight`、`melt_value`）。
+- `tianxia/weapons.py`：兵器（`docs/superpowers/specs/2026-10-09-兵器-design.md`）：武學的兵器種類（`art_weapon`，合成的照底或兩門來源推）、身上那把的加成（`bonus`，乘在本人 `Boost.factor`）與一門打不遍（`style_factor`）、鋒利度（`wear`，`_file_battle` 呼叫、劇情戰不扣、挑戰本人要扣）、鐵匠鋪（`smith_here`、`stock`、`buy`、`repair`、`wield`、`dismantle`；買與修自己也驗人在不在鐵匠鋪）、掉落（`drop`，回掉出來的那把與訊息）、角色卡與修練頁（`card_line`、`rows`）、機器人該按哪一顆（`wanted`）。只 import models、state、martial_arts、world_state、insights、materials（拆解要查素材與 `insights.PAIR_ATTRIBUTES`；兩者都不 import weapons，沒有環），`team` 反過來呼叫它。
 - `tianxia/materials.py`：素材的掉落與背包。素材**不再拿去煉製**，現在的用途是糧草（押糧車）與伏筆。
 - `tianxia/skillview.py`：修練、煉製頁與狀態列提示的說明文字（人物卡、功法卡、武學列、煉製那一行、背包、`practice_hint`、`boost_line`）；只讀狀態、不改數值，說法以 `team.py`、`encounter.py`、`fusion.py` 的實際規則為準。
 
@@ -203,6 +204,7 @@
 - **改練**（`team.switch_art`）：把庫裡的換上身、換下來的回庫，熟練度各自保留（`PlayerState.art_levels` 只在換下來時寫、換上去時取）。
 - **素材**：只剩打贏掉（`Squad.drops` 或依難度的預設表）、路邊採集、事件與路上見聞給；用途是糧草與伏筆。`content.py` 載入時檢查每一種素材都拿得到。
 - **狀態列提示**（`skillview.practice_hint`）：心得 ≥ `xinde_hint_threshold`（50）而且真的有事可做（還能練成、或付得起一次合成）時，提示去「修練」或「煉製」；休季不提示。
+- **兵器**（第一批，`Config.weapons`，預設開、測試內容關著；`scripts/measure_weapons.py` 量開關對照）：身上一把、裝備庫 `rack_cap`（100）格（玩家看到的名字是「裝備庫」，程式裡的 `PlayerState.rack`、`rack_cap` 沒改名；企劃者 2026-10-10）；種類（劍刀槍棍弓弩拳腳）對上身上那門武學才有加成，配不上的加成是 0（乘數 1）、換兵器（`Game.wield_weapon`／`smith:wield`）也要開關開著；鈍了的提醒每換一把重算（`edge_warned` 在換上、空手拿起時歸零）：一階 +5%、二階 +10%、三階 +15%，品質下 0／中 +2%／上 +4%，同屬性 +5%、相剋 −5%，再乘鋒利度係數（0.5＋0.5×鋒利度／100），乘在本人的 `Boost.factor`；大場面對手的一門打不遍兵器屬性另算 ×1.1／×0.9。每場扣鋒利度（大勝、險勝 2，僵持 3，落敗 5；遊歷、野怪、挑戰本人、切磋、截殺都扣，劇情戰與決戰不扣），低於 30 提醒一次。城鎮（標籤「城鎮」）有鐵匠鋪（`act:smith` → `smith:buy|repair|wield|dismantle|back`，不花體力；開著時跟求見一樣擋地圖安排前往〔`atlas.travel_block`〕，出發時 `_depart` 也再收一次）：架上六種一階下品各 40 兩（種類對得上身上武學的那把標「配得上你的武學」）、修一次一個一階素材（鈕上寫是哪一種）＋5 兩回滿；選單只列裝備庫裡配得上身上武學的「換上」，其餘到修練頁換（修練頁的裝備庫先列 8 件、其餘按「再列 N 件」，同功法庫）。打贏遊歷或野怪 3% 掉一把一階下品（`weapons.drop`；種類隨機，因為隊伍沒有武學可對；只有 `train`／`wild` 掉，挑戰本人不掉）。整季機器人（`bot.visit_smith`）與假人（`bot_policy` 的 `SMITH_SCORE`）會買會換，鈍到 `weapons.REPAIR_AT`（50）以下才修。**拆解**（設計 4.7.1，企劃者 2026-10-10；`weapons.dismantle`、`Game.dismantle_weapon`、`MENXIA_ACTIONS["dismantle"]`）：裝備庫裡的一把拆成**一個**素材（同階；剛柔快慢直接對屬性，陰陽虛實查 `insights.PAIR_ATTRIBUTES` 的兩個來源、由兵器 id 的 sha256 挑一個；不花銀兩與體力、不問第二次、不必在鐵匠鋪），身上那把不能拆；鐵匠鋪選單最多列 8 顆「拆解」（刀口最鈍、階最低的先，多的收成一行灰掉的說明），修練頁裝備庫每列一顆；機器人與假人不拆。打造、淬煉、神兵是第二、三批。
 
 ### 第一季濃縮版（`rules.season_one` 開著時才有）
 - **季曆**：一季壓成 `season_weeks`（12）週，季曆秒＝世界秒×`cal_scale`；週末設定 2.5 天時一週是現實 5 小時。季長照開季時蓋的章，設定中途換了也不影響正在跑的這一季。

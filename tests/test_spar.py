@@ -268,3 +268,22 @@ def test_the_card_buttons_follow_the_invite(pair):
     _do(content, world, "乙", lambda g: g.peer_act("甲", "spar", {"arg": "yes"}))
     assert _load(world, "甲").battles[0].kind == _load(world, "乙").battles[0].kind == "spar"
     assert spar_buttons("甲", "乙") == [("切磋", "invite")]
+
+
+def test_each_side_of_a_spar_dulls_its_own_blade_and_hears_the_warning(pair):
+    from tianxia import weapons
+    from tianxia.state import Weapon
+    content, world = pair
+    content.config.weapons.enabled = True
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.weapon = Weapon(id=f"兵:{name}", name=f"{name}刃", kind="拳腳", attribute="剛", tier=1, quality="下品", edge=30)
+        CharacterStore(world.db).save(state)
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "spar", {"arg": "invite"}))
+    _do(content, world, "乙", lambda g: g.choose(f"invite:yes:{_invite_id(world)}"))
+    for name in ("甲", "乙"):
+        after = _load(world, name)
+        assert after.player.weapon.edge < 30
+        warning = weapons.EDGE_WARNING.format(name=f"{name}刃")
+        assert warning in after.battles[0].notes
+        assert any(warning in line for e in after.journal for line in e.lines)

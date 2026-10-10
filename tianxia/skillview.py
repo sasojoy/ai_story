@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import atlas, cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits
+from . import atlas, cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -445,6 +445,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         f"內功　{_art_label(content, world, member.neigong_id, member.neigong_level, own)}",
         f"武學　{_art_label(content, world, member.wugong_id, member.wugong_level, own)}",
     ]
+    if key == PLAYER and (weapon := weapons.card_line(state, content, world, team.player_art(state, content, world, member.wugong_id))):
+        lines.append(weapon)  # 兵器（兵器設計 3.6）：空手或開關關著不寫
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)

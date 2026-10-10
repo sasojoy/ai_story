@@ -157,3 +157,14 @@ def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path,
     assert result["pause"]["at_day"] is not None
     assert result["pause"]["season_moved"] == 0.0 and result["pause"]["bot_moves"] == 0
     assert result["ended"] and isinstance(result["late_joiners"], int)
+
+
+def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons(capsys, monkeypatch):
+    """兵器量表：--seeds 1 跑一次，兵器開、兵器關各印一行（只量不改，不驗數字）。"""
+    measure = _load("measure_weapons")
+    monkeypatch.setattr(sys, "argv", ["measure_weapons.py", "--seeds", "1", "--profile", "weekend"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert "種子 1 兵器開：" in out and "種子 1 兵器關：" in out
+    assert out.count("遊歷勝率") == 2
+    assert out.count("小時（世界時間）") == 2 and out.count("結局 ") == 2 and out.count("每遊戲日") == 2  # 季長、結局、每日場數

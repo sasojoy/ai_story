@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits
+from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits, weapons
 from . import prologue as prologue_rules
 from .engine import FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -286,9 +286,10 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
+    # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties") and not o.id.startswith(("road:", "defect:", "invite:"))
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith") and not o.id.startswith(("road:", "defect:", "invite:"))
     ]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
@@ -317,6 +318,24 @@ def take_bounties(game: Game) -> None:
             game.choose(option.id)
     if s.player.picking_bounty:
         game.choose("bounty:back")
+
+
+def visit_smith(game: Game) -> None:
+    """城裡有鐵匠鋪就看一眼（兵器設計第六節）：照 weapons.wanted 一顆一顆按到沒事做，再離開。不花體力。"""
+    s, c = game.state, game.content
+    art = team.player_art(s, c, game.world, s.player.member.wugong_id)
+    if s.pending_event or weapons.wanted(s, c, game.world, art) is None:
+        return
+    if "act:smith" not in {o.id for o in game.options(odds=False) if o.enabled}:
+        return
+    game.choose("act:smith")
+    for _ in range(4):  # 換、買、修最多各一次，夠了
+        move = weapons.wanted(s, c, game.world, team.player_art(s, c, game.world, s.player.member.wugong_id))
+        if move is None or move not in {o.id for o in game.options(odds=False) if o.enabled}:
+            break
+        game.choose(move)
+    if s.player.picking_smith:
+        game.choose("smith:back")
 
 
 def play_season(
@@ -355,6 +374,7 @@ def play_season(
                 spend_xinde(game, rng)
                 forge_and_cultivate(game, rng)
             take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
+            visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:

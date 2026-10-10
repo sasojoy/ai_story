@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, bounties, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team
+from . import atlas, battle_instance, bot, bounties, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team, weapons
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import Content, Effect, SkillDef
@@ -49,6 +49,7 @@ RAID_ODDS = CHALLENGE_ODDS
 # 比推大勢的遊歷值得，比軍令低（陣營的事先做）【預設】
 BOUNTY_SCORE = 8.0
 BOUNTY_MOVE_SCORE = 6.0
+SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
 # 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
@@ -462,6 +463,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
         verb = arg.partition(":")[0]
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
+    if kind == "smith":  # 鐵匠鋪上：照 weapons.wanted 按那一顆，沒事就離開
+        return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
         # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
         # 萬一停在求見選單上，只會按返回
@@ -483,6 +486,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return None
         if arg == "bounties":  # 懸賞榜：有揭得下的才打開（不然只是開了又返回）
             return BOUNTY_SCORE if _takeable(game) else None
+        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修的才進去（不然只是開了又離開）
+            return SMITH_SCORE if _smith_want(game) else None
         if arg == "explore" and _bounty_here(game, "scout"):
             return BOUNTY_SCORE
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
@@ -665,6 +670,13 @@ def _takeable(game: Game) -> bool:
     """此地的懸賞榜上有揭得下的。"""
     s, c = game.state, game.content
     return any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c))
+
+
+def _smith_want(game: Game) -> str | None:
+    """此刻在鐵匠鋪最該按的那一顆（weapons.wanted），沒事是 None。"""
+    s = game.state
+    art = team.player_art(s, game.content, game.world, s.player.member.wugong_id)
+    return weapons.wanted(s, game.content, game.world, art)
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

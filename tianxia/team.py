@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter, rounds, styles, traits
+from . import calendar, encounter, rounds, styles, traits, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -592,14 +592,16 @@ def resonance(state: GameState, content: Content, art: MartialArt | None) -> flo
 
 def player_boost(state: GameState, content: Content, world: WorldStateStore) -> encounter.Boost:
     """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
-    正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。"""
+    正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
+    再乘身上兵器的加成（兵器設計第三節）。"""
     stats, member = state.player.stats, state.player.member
     wugong = player_art(state, content, world, member.wugong_id)
     neigong = player_art(state, content, world, member.neigong_id)
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
         inner=stat_bonus(content, con_of(state, content, world, PLAYER)),
-        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong),
+        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
+        * (1 + weapons.bonus(state.player.weapon, wugong, content, world)),  # 兵器（兵器設計 3.1）：配不上是 1
     )
 
 
@@ -789,7 +791,13 @@ def _styled_fighters(
     members, conditions, boosts = _fighters(state, content, world)
     style = styles.style_of(state, content, world, squad)
     attributes = [arts[m.wugong_id].attribute if m.wugong_id in arts else None for m in members]
-    return members, conditions, styles.styled(boosts, attributes, content, style)
+    boosts = styles.styled(boosts, attributes, content, style)
+    # 兵器的一門打不遍（兵器設計 3.3）：只有本人有兵器，本人一定是陣容的第一個（team_participants）
+    worn = weapons.style_factor(state.player.weapon, player_art(state, content, world, state.player.member.wugong_id),
+                                content, world, style)
+    if worn != 1.0:
+        boosts = [boosts[0].model_copy(update={"factor": boosts[0].factor * worn}), *boosts[1:]]
+    return members, conditions, boosts
 
 
 def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:
