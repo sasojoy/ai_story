@@ -3091,7 +3091,7 @@ class Game:
         journal.add_entry(self.state, entry)
 
     def _deliver_echoes(self) -> None:
-        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（fusion.echo 記在 WorldState.echoes），
+        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（兵器配方打了出來）（fusion.echo 記在 WorldState.echoes），
         你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
         做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
         p = self.state.player
@@ -3107,7 +3107,7 @@ class Game:
             else:
                 entry.paid = len(entry.followers)
             gained += due * rule.fame_per
-            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}練了出來。")
+            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
         if not lines:
             return
         p.stats["fame"] = p.stats.get("fame", 0) + gained

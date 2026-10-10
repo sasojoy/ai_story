@@ -304,3 +304,137 @@ def test_fuse_odds_are_unchanged_by_the_refactor(content, world):
          ("attribute", fusion._attribute_points(content, base.attribute, "快"))],
         content.config.fuse_quality, content.config.fuse_quality_odds,
     )
+
+
+# ── Task 5：開爐的取名、退路字表、首創名望回饋 ──
+
+from tianxia import naming  # noqa: E402
+
+
+def test_kind_problem_wants_this_kinds_word_and_no_other_kinds(content):
+    assert weapons.kind_problem("劍", "寒星劍") is None
+    assert weapons.kind_problem("槍", "裂雷矛") is None
+    assert weapons.kind_problem("拳腳", "驚雷拳套") is None
+    assert weapons.kind_problem("劍", "寒星") == weapons.KIND_MISSING
+    assert weapons.kind_problem("劍", "寒星刀") == weapons.KIND_MISSING
+    assert weapons.kind_problem("劍", "刀劍雙絕") == weapons.KIND_CLASH
+    assert weapons.kind_problem("劍", "厚背劍") == weapons.SHOP_CLASH  # 鐵匠鋪架上的現成兵器名
+
+
+def test_fallback_names_carry_the_weapon_word_and_are_stable(content):
+    for kind in WEAPON_KINDS:
+        for salt in range(naming.CLAIM_ATTEMPTS):
+            name = weapons.fallback_name(content, weapons.recipe_key(kind, "gang_1", "kuai_1"), kind, salt=salt, tianji=1)
+            assert name.endswith(weapons.NOUNS[kind]) and weapons.kind_problem(kind, name) is None
+            assert naming.name_problem(name, content) is None
+    assert weapons.fallback_name(content, "兵|劍|gang_1+kuai_1", "劍") == weapons.fallback_name(content, "兵|劍|gang_1+kuai_1", "劍")
+
+
+def test_validate_checks_the_weapon_fallback_names(content):
+    from tianxia.content import ContentError, validate
+    content.craft_names.weapon = ["刀"]  # 「某刀劍」看起來是兩種兵器：載入當下就要報錯
+    with pytest.raises(ContentError, match="craft_names.weapon 組出的兵器名"):
+        validate(content)
+    content.craft_names.weapon = []
+    with pytest.raises(ContentError, match="craft_names.weapon 不能是空的"):
+        validate(content)
+    assert real_content().craft_names.weapon  # 正式內容載入時已經驗過每一個組合
+
+
+def test_propose_drops_a_name_the_check_refuses(content):
+    class Fake:
+        timeout = 5
+
+        def chat_structured(self, messages, model, **kwargs):
+            return naming.NameReply(name="寒星刀", description="一句話。")
+
+    assert naming.propose(Fake(), content, [], check=lambda n: weapons.kind_problem("劍", n)) == (None, "")
+    assert naming.propose(Fake(), content, [], check=lambda n: None) == ("寒星刀", "一句話。")
+    assert naming.recheck(content, ("寒星刀", "x"), check=lambda n: weapons.kind_problem("劍", n)) == (None, "")
+
+
+def test_forge_request_opens_a_naming_order_only_for_a_new_recipe(content, world):
+    game = _forger(content, world)
+    req = smithing.forge_request(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert req.kind == "weapon" and req.key == KEY_SWORD_YANG and req.choices == ()
+    assert "精鐵砂" in req.messages[1]["content"] and "「劍」" in req.messages[1]["content"]
+    assert req.check("寒星刀") == weapons.KIND_MISSING and req.check("寒星劍") is None
+    game.state.player.stats["silver"] = 0
+    assert smithing.forge_request(game.state, content, world, "劍", "gang_1", "kuai_1") is None  # 打不成的不開單
+
+
+def test_first_forge_registers_the_recipe_with_the_fallback_name_and_charges(content, world):
+    game = _forger(content, world)
+    s = game.state
+    weapon, msgs = smithing.forge(s, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert weapon.name == weapons.fallback_name(content, KEY_SWORD_YANG, "劍", tianji=world.read().tianji)  # 沒有模型：退路字表
+    assert (weapon.kind, weapon.attribute, weapon.tier, weapon.recipe) == ("劍", "陽", 1, KEY_SWORD_YANG)
+    assert weapon.quality in ("下品", "中品", "上品")
+    assert s.player.weapon is weapon  # 手上空著：直接拿在手上
+    assert s.player.materials == {"gang_1": 2, "gang_2": 2, "kuai_1": 1} and s.player.stats["silver"] == 180
+    assert s.player.forge_counts == {KEY_SWORD_YANG: 1}
+    recipe = world.lookup_weapon_recipe(KEY_SWORD_YANG)
+    assert recipe.name == weapon.name and recipe.creator == s.player.name and recipe.creator_shown == s.player.name
+    assert any(smithing.FIRST_LINE in m for m in msgs)
+    assert "銀兩 -20" in msgs and "精鐵砂 -1" in msgs and "驚羽 -1" in msgs
+
+
+def test_a_proposed_name_is_rechecked_and_registered(content, world):
+    game = _forger(content, world)
+    weapon, _ = smithing.forge(game.state, content, world, None, "劍", "gang_1", "kuai_1",
+                               proposed=("「寒星劍」", "劍身映著寒光。"), rng=random.Random(0))
+    assert weapon.name == "寒星劍"
+    assert world.lookup_weapon_recipe(KEY_SWORD_YANG).note == "劍身映著寒光。"
+
+
+@pytest.mark.parametrize("proposed", ["寒星刀", "寒星", "厚背劍"])
+def test_a_proposed_name_for_another_weapon_kind_falls_back_to_the_table(content, world, proposed):
+    game = _forger(content, world)
+    weapon, _ = smithing.forge(game.state, content, world, None, "劍", "gang_1", "kuai_1",
+                               proposed=(proposed, "說明"), rng=random.Random(0))
+    assert weapon.name == weapons.fallback_name(content, KEY_SWORD_YANG, "劍", tianji=world.read().tianji)
+    assert weapon.name.endswith("劍") and world.lookup_weapon_recipe(KEY_SWORD_YANG).note == ""
+
+
+def test_a_second_smith_follows_the_registered_recipe_without_naming(content, world, monkeypatch):
+    first = _forger(content, world, name="甲鐵匠")
+    smithing.forge(first.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    registered = world.lookup_weapon_recipe(KEY_SWORD_YANG)
+    second = _forger(content, world, name="乙鐵匠")
+    asked = []
+    monkeypatch.setattr(naming, "propose", lambda *a, **k: asked.append(1) or ("不該用", ""))
+    assert smithing.forge_request(second.state, content, world, "劍", "gang_1", "kuai_1") is None  # 查表就好，不開單
+    weapon, msgs = smithing.forge(second.state, content, world, object(), "劍", "gang_1", "kuai_1", rng=random.Random(1))
+    assert asked == [] and weapon.name == registered.name
+    assert any("甲鐵匠首創" in m for m in msgs)
+    weapon, msgs = smithing.forge(first.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(2))
+    assert any(smithing.MINE_LINE in m for m in msgs)
+
+
+def test_a_refused_forge_registers_nothing_and_charges_nothing(content, world):
+    game = _forger(content, world, silver=5)
+    weapon, msgs = smithing.forge(game.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert weapon is None and msgs == ["（還差 15 兩。）"]
+    assert world.lookup_weapon_recipe(KEY_SWORD_YANG) is None
+    assert game.state.player.materials == {"gang_1": 3, "gang_2": 2, "kuai_1": 2} and game.state.player.forge_counts == {}
+
+
+def test_following_someone_elses_recipe_echoes_with_the_forge_verb(content, world, monkeypatch):
+    monkeypatch.setattr(fusion, "season_one", lambda *a, **k: True)
+    first = _forger(content, world, name="甲鐵匠")
+    smithing.forge(first.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    name = world.lookup_weapon_recipe(KEY_SWORD_YANG).name
+    second = _forger(content, world, name="乙鐵匠")
+    smithing.forge(second.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    entry = second.state.world.echoes[name]
+    assert entry.creator == "甲鐵匠" and entry.followers == ["乙鐵匠"] and entry.name == f"【{name}】" and entry.made == "打"
+
+
+def test_echo_delivery_says_forged_for_weapons(content, world):
+    from tianxia import journal
+    from tianxia.state import Echo
+    game = _forger(content, world)
+    game.state.world.echoes["寒星劍"] = Echo(creator=game.state.player.name, name="【寒星劍】", followers=["乙"], made="打")
+    game._deliver_echoes()
+    entry = game.state.journal[0]
+    assert entry.title == journal.ECHO and "江湖上又有 1 人照著你首創的【寒星劍】打了出來。" in entry.lines

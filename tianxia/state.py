@@ -508,6 +508,7 @@ class Echo(BaseModel):
     followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
     paid: int = 0  # 已經補給首創者的人數
     co_paid: int = 0  # 已經補給 co_creator 的人數
+    made: str = "練"  # 照著做出來的動詞：武學、意境是「練」，兵器配方是「打」（smithing.forge）
 
 
 class WorldState(BaseModel):

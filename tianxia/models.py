@@ -150,6 +150,8 @@ class CraftNames(_Strict):
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
+    # 兵器配方的退路中間字（兵器設計 4.4、附帶決定 c）：字首＋這一個字＋兵器字；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
+    weapon: list[str] = Field(default_factory=lambda: list("霜霆雷星月嵐濤岳燼鳴影紋芒魄痕翎"))
 
 
 class CombatLines(_Strict):

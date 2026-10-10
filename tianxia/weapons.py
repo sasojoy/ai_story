@@ -116,6 +116,36 @@ def shop_name(kind: str, attribute: str) -> str:
     return f"{ATTR_WORDS[attribute]}{NOUNS[kind]}"
 
 
+# 名字看得出是哪一種兵器的字（附帶決定 c）：自己這一種至少要有一個、別種的一個都不能有
+WEAPON_WORDS: dict[str, tuple[str, ...]] = {
+    "劍": ("劍",), "刀": ("刀",), "槍": ("槍", "矛"), "棍": ("棍", "杖", "錘"), "弓弩": ("弩", "弓"), "拳腳": ("拳套", "護手", "拳"),
+}
+KIND_MISSING = "名字看不出是什麼兵器"  # 待 joy 潤
+KIND_CLASH = "名字像是另一種兵器"  # 待 joy 潤
+SHOP_CLASH = "跟鐵匠鋪架上的兵器同名"  # 待 joy 潤
+
+
+def kind_problem(kind: str, name: str) -> str | None:
+    """兵器配方的名字對不對得上種類（附帶決定 c；naming.NamingRequest.check 跑它）：要有這一種的字、不能有別種的字、
+    不能跟架上的現成兵器（shop_name）同名——不然買的跟打的分不出來。None＝可以。"""
+    if not any(word in name for word in WEAPON_WORDS.get(kind, ())):
+        return KIND_MISSING
+    if any(word in name for other, words in WEAPON_WORDS.items() if other != kind for word in words):
+        return KIND_CLASH
+    if name in {shop_name(k, a) for k in WEAPON_KINDS for a in ATTR_WORDS}:
+        return SHOP_CLASH
+    return None
+
+
+def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: int = 0) -> str:
+    """兵器配方的退路名字（模型叫不動、取壞了）：字首＋craft_names.weapon 的一個字＋兵器字（NOUNS），一定帶兵器的字。
+    種子同 naming.fallback_name（配方鍵＋這一季的天機，加鹽），同一個配方同一季永遠組出同一個名字。"""
+    names = content.craft_names
+    seed = key if tianji == 0 else f"{tianji}|{key}"
+    digest = hashlib.sha256(f"{seed}#{salt}".encode()).digest()
+    return names.prefixes[digest[0] % len(names.prefixes)] + names.weapon[digest[1] % len(names.weapon)] + NOUNS[kind]
+
+
 def smith_here(state: GameState, content: Content) -> bool:
     """這裡有沒有鐵匠鋪（4.1）：開關開著、人不在路上、所在地點有「城鎮」標籤。"""
     if not content.config.weapons.enabled or state.player.journey is not None:

@@ -35,7 +35,7 @@ from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
-from .state import Echo, GameState
+from .state import Echo, GameState, WeaponRecipe
 from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
@@ -435,25 +435,28 @@ def _special_rumor(state: GameState, content: Content, art: MartialArt, first: b
 
 
 ECHO_RUMOR = "江湖上照著{who}首創的{thing}練出來的人越來越多了。"
+ECHO_RUMOR_FORGED = "江湖上照著{who}首創的{thing}打出來的人越來越多了。"  # 待 joy 潤：兵器配方
 
 
-def echo(state: GameState, content: Content, thing: MartialArt | Insight, first: bool) -> None:
-    """首創名望回饋（Config.first_echo）：你合出別人首創的那一門（照著合、合到舊的都算），在這一季的 WorldState.echoes 記你一筆；
-    首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、最多算 cap 個人，湊滿那一下
-    江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；第一季沒開著時什麼都不做。"""
+def echo(state: GameState, content: Content, thing: MartialArt | Insight | WeaponRecipe, first: bool, made: str = "練") -> None:
+    """首創名望回饋（Config.first_echo）：你合出（或打出，made="打"）別人首創的那一門（照著合、合到舊的都算），在這一季的
+    WorldState.echoes 記你一筆；首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、
+    最多算 cap 個人，湊滿那一下江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；
+    第一季沒開著時什麼都不做。意境寫「」，武學與兵器寫【】。"""
     me = state.player.name
     if first or not thing.creator or me in (thing.creator, thing.co_creator) or getattr(thing, "preset", False):
         return
     if not season_one(content, state.world):
         return
     rule = content.config.first_echo
-    shown = f"【{thing.name}】" if isinstance(thing, MartialArt) else f"「{thing.name}」"
-    entry = state.world.echoes.setdefault(thing.id, Echo(creator=thing.creator, co_creator=thing.co_creator, name=shown))
+    shown = f"「{thing.name}」" if isinstance(thing, Insight) else f"【{thing.name}】"
+    entry = state.world.echoes.setdefault(thing.id, Echo(creator=thing.creator, co_creator=thing.co_creator, name=shown, made=made))
     if me in entry.followers or len(entry.followers) >= rule.cap:
         return
     entry.followers.append(me)
     if len(entry.followers) == rule.cap:
-        add_rumor(state, ECHO_RUMOR.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
+        template = ECHO_RUMOR if made == "練" else ECHO_RUMOR_FORGED
+        add_rumor(state, template.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
 
 
 def can_forge(state: GameState, content: Content) -> bool:
