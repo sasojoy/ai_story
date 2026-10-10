@@ -1,6 +1,7 @@
 """煉製頁的網頁那一半（企劃者 2026-10-10「合成流程也很麻煩畫面跳來跳去……武學數量很多的時候，很難選，而且合過的意境不能合，
-常常丟上去按合成才知道」）：合不了的灰掉、寫原因、點了只說為什麼；「現在合得出來的」一列一組、點「開爐」就合；開爐之後頁面不捲、
-結果寫在按的地方旁邊。資料是真的引擎給的（skillview.forge_picks／forge_ideas），畫面在 tests/test_prologue_web.py 的假瀏覽器裡跑。"""
+常常丟上去按合成才知道」）：合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
+結果寫在開爐底下、爐裡的東西留著。不替玩家列出合得出來的組合（企劃者同日退回：「這樣改不就變成玩家腦都不用動」）。
+資料是真的引擎給的（skillview.forge_picks），畫面在 tests/test_prologue_web.py 的假瀏覽器裡跑。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -54,34 +55,34 @@ def test_only_what_fits_can_be_shown(made):
     assert "只看合得了的" in html and 'data-id="basic_fist"' not in html and f'data-id="{art.id}"' not in html
 
 
-def test_the_ideas_list_and_one_tap_forges_without_scrolling(made):
+def test_forging_keeps_the_pot_and_writes_the_result_under_the_button_without_scrolling(made):
     game, art = made
-    ideas = game.forge_ideas()
     after = server.menxia_view(game)
     out = run(server.main_view(game), """return (async () => {
-      const html = H.pageCraft();
       let scrolled = 0;
       T.ctx.window.scrollTo = () => { scrolled += 1; };
-      const btn = { dataset: { act: "idea-forge" }, disabled: false, textContent: "開爐", classList: { add() {} } };
-      H.ideaToPot(H.S.forgeIdeas.items[0]);
-      await H.forge(btn);
-      return { html, calls: T.calls.map((c) => c[0]), body: T.calls[0][1], result: H.S.forgeResult, sel: H.S.forgeSel.length, scrolled };
-    })();""", S={"tab": "craft", "forgeIdeas": ideas}, menxia=server.menxia_view(game),
+      const btn = { disabled: false, textContent: "開爐", classList: { add() {} } };
+      const byId = T.ctx.document.getElementById;
+      T.ctx.document.getElementById = (id) => (id === "forge" ? btn : byId(id));
+      await H.forge();
+      return { html: H.pageCraft(), calls: T.calls.map((c) => c[0]), body: (T.calls.find((c) => c[0] === "/api/menxia/forge") || [])[1], result: H.S.forgeResult, sel: H.S.forgeSel.length, scrolled };
+    })();""", S={"tab": "craft", "forgeSel": [{"type": "art", "id": "basic_fist"}, {"type": "ins", "id": "huo"}]},
+        menxia=server.menxia_view(game),
         responses={"/api/menxia/forge": {"menxia": after, "message": "<p>煉成了。</p>", "main": server.main_view(game)},
-                   "/api/forge_line": {"line": "", "picks": None, "ideas": ideas}})
-    assert "現在合得出來的" in out["html"] and "沒人合過" in out["html"] and 'data-act="idea-forge"' in out["html"]
-    first = ideas["items"][0]
-    assert out["calls"][0] == "/api/menxia/forge" and out["body"] == {"art": first["art"], "other_art": first["other_art"], "insights": first["insights"]}
-    assert out["calls"][-1] == "/api/forge_line"  # 爐空了：重問「現在合得出來的」
-    assert out["result"] == {"at": "ideas", "html": "<p>煉成了。</p>"} and out["sel"] == 0
+                   "/api/forge_line": {"line": "", "picks": None}})
+    assert out["calls"].count("/api/menxia/forge") == 1 and out["body"]["art"] == "basic_fist" and out["body"]["insights"] == ["huo"]
+    assert out["calls"][-1] == "/api/forge_line"  # 心得、體力變了：重問說明
+    assert out["result"] == {"html": "<p>煉成了。</p>"} and out["sel"] == 2  # 爐裡的東西留著，換一格就能再合
+    assert out["html"].index('id="forge"') < out["html"].index("煉成了。")  # 結果寫在開爐底下
+    assert "現在合得出來的" not in out["html"] and "idea-forge" not in out["html"]  # 不替玩家列答案（企劃者 2026-10-10 退回）
     assert out["scrolled"] == 0  # 不跳到最上面
 
 
-def test_the_forge_line_endpoint_gives_marks_and_ideas(made, monkeypatch):
+def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     game, art = made
     monkeypatch.setattr(server, "look", lambda g, view: view(g))
     monkeypatch.setattr(server, "_game", lambda request: game)
     one = server.api_forge_line(None, {"insights": ["feng"]})
     assert one["picks"]["arts"]["basic_fist"]["short"] == "已經有了" and "ideas" not in one
     empty = server.api_forge_line(None, {})
-    assert empty["picks"] is None and empty["ideas"] == game.forge_ideas() and empty["ideas"]["total"] > 0
+    assert empty["picks"] is None and "ideas" not in empty

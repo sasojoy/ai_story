@@ -944,17 +944,10 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }
 .peer-pick select { min-width: 0; }
 
-/* 煉製頁（企劃者 2026-10-10）：合不了的灰掉、寫兩三個字的原因；清單的篩選；「現在合得出來的」點子；結果就寫在開爐底下 */
+/* 煉製頁（企劃者 2026-10-10）：合不了的灰掉、寫兩三個字的原因；清單的篩選；結果就寫在開爐底下 */
 .chip.no { opacity: 0.5; border-style: dashed; }
 .chip.no .why { font-style: normal; color: var(--ink-2); }
 .craft-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .craft-filter select.input { width: auto; flex: 1 1 72px; min-width: 72px; padding: 6px 8px; font-size: 13px; }
 .craft-filter .fchip { flex: 0 0 auto; }
-.ideas { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.idea { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 6px 6px 6px 10px; }
-.idea-pick { flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; }
-.idea-pick b { display: block; font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
-.idea-pick small { color: var(--ink-2); font-size: 11px; }
-.idea-pick .fresh { font-style: normal; color: var(--gold); font-weight: 600; }
-.idea .btn { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }

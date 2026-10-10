@@ -189,10 +189,6 @@ def forge_line(
     return head if problem is None else f"{head}\n⚠ {problem}"
 
 
-# 煉製頁「現在合得出來的」最多送幾組（一個人滿持有時組合上千，畫面只要前面幾組，總數另給）
-IDEAS_MAX = 40
-
-
 def _no(problem: str) -> dict:
     """一樣合不了的東西在清單上怎麼標：short 是兩三個字（fusion.Refusal），why 是按下去時會說的那一整句。"""
     return {"short": getattr(problem, "short", "合不了"), "why": str(problem)}
@@ -229,48 +225,6 @@ def forge_picks(
                 state, content, world, insight_ids[0], insight_id)
         ins[insight_id] = None if problem is None else _no(problem)
     return {"arts": arts, "insights": ins}
-
-
-def forge_ideas(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """爐是空的時，列出現在合得出來、你還沒有的組合（企劃者 2026-10-10「武學跟意境堆一大堆都懶得合」）：
-    每一組照開爐時同一個判斷（fusion 的 *_problem）過了才列，沒人合過的（不是師門配方）標 fresh、排前面——
-    「沒人合過」煉製頁說明那一行本來就寫，這裡不多露什麼（合到舊的機率照舊不露）。武學照修練頁的順序（身上的先、品質高的先）。
-    序章裡不列（師父一步一步帶）。回 {"items": 前 IDEAS_MAX 組, "total": 總共幾組}。"""
-    if prologue.active(state, content):
-        return {"items": [], "total": 0}
-    member = state.player.member
-    arts = []
-    for art_id in owned_arts(state):
-        art = team.player_art(state, content, world, art_id)
-        if art is not None:
-            arts.append((art_id, art))
-    arts.sort(key=lambda p: (
-        p[0] not in (member.neigong_id, member.wugong_id), -QUALITIES.index(p[1].quality), -(level_of(state, p[0]) or 0), p[1].name,
-    ))
-    held = [(i, insights.resolve(i, content, world, state)) for i in state.player.insights]
-    held = [(i, ins) for i, ins in held if ins is not None]
-    found = []
-    for art_id, art in arts:
-        for insight_id, insight in held:
-            if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
-                fresh = (world.lookup_recipe(fusion.fuse_key(art_id, insight_id, insight.attribute)) is None
-                         and fusion.preset_for(content, art_id, insight_id) is None)
-                found.append({"kind": "fuse", "art": art_id, "other_art": None, "insights": [insight_id],
-                              "label": f"【{art.name}】＋「{insight.name}」", "fresh": fresh})
-    for n, (a, art_a) in enumerate(arts):
-        for b, art_b in arts[n + 1:]:
-            if fusion.blend_problem(state, content, world, a, b) is None:
-                fresh = world.lookup_recipe(fusion.blend_key(a, b)) is None
-                found.append({"kind": "blend", "art": a, "other_art": b, "insights": [],
-                              "label": f"【{art_a.name}】＋【{art_b.name}】", "fresh": fresh})
-    for n, (a, ins_a) in enumerate(held):
-        for b, ins_b in held[n:]:  # 同一個意境也能合併
-            if fusion.merge_problem(state, content, world, a, b) is None:
-                fresh = world.lookup_insight_recipe(fusion.merge_key(a, b)) is None  # 跟說明那一行（_known_insight_recipe）同一個查法
-                found.append({"kind": "merge", "art": None, "other_art": None, "insights": [a, b],
-                              "label": f"「{ins_a.name}」＋「{ins_b.name}」", "fresh": fresh})
-    found.sort(key=lambda f: not f["fresh"])  # 穩定排序：沒人合過的先，其餘照合成、兩門武學、合併與上面的順序
-    return {"items": found[:IDEAS_MAX], "total": len(found)}
 
 
 def heal_button(state: GameState, content: Content) -> dict:

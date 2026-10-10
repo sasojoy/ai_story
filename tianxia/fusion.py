@@ -45,7 +45,7 @@ LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全
 
 class Refusal(str):
     """合不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
-    （skillview.forge_picks／forge_ideas，企劃者 2026-10-10「常常丟上去按合成才知道」）。判斷只寫在這幾個 *_problem 裡。"""
+    （skillview.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。判斷只寫在這幾個 *_problem 裡。"""
 
     short: str = "合不了"
 

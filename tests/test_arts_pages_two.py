@@ -498,8 +498,8 @@ def test_the_same_order_reaches_the_page_data(real):
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
 CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
-             "pickMark", "craftView", "craftFilterRow", "craftChip", "ideasHtml"]
-CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "IDEAS_PAGE"]
+             "pickMark", "craftView", "craftFilterRow", "craftChip"]
+CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE"]
 
 
 def _menxia(**over):

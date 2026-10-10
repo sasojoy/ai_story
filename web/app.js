@@ -2001,33 +2001,6 @@
     return `<button class="chip r${rank}${no ? " no" : ""}${used ? " used" : ""}" data-act="pick" data-type="${type}"${used ? "" : extra} data-id="${esc(thing.id)}"${used ? " disabled" : ""}>
           <b>${esc(thing.name)}</b><small>${no ? `<i class="why">${esc(no.short)}</i>` : esc(sub)}</small></button>`;
   }
-  // 「現在合得出來的」：爐是空的時伺服器列的組合（skillview.forge_ideas，跟開爐同一套判斷），沒人合過的排前面。
-  // 點那一列＝放進爐裡看說明，右邊的「開爐」一按就合（企劃者 2026-10-10「合成就算只是一直點點點我都覺得很麻煩」）
-  const IDEAS_PAGE = 5;
-  function ideasHtml() {
-    const d = S.forgeIdeas;
-    if (pro() || S.forgeSel.length || !d) return "";
-    const result = S.forgeResult && S.forgeResult.at === "ideas" ? `<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
-    if (!d.items.length) return `<div class="label" id="forge-ideas">現在合得出來的</div>${result}<p class="muted">手上的武學與意境，現在沒有合得出新東西的組合。</p>`;
-    const shown = S.ideasAll ? d.items : d.items.slice(0, IDEAS_PAGE);
-    const more = d.items.length - shown.length;
-    const kind = { fuse: "合成", blend: "合成", merge: "合併" };
-    return `<div class="label" id="forge-ideas">現在合得出來的 <small class="muted">${d.total} 組</small></div>${result}
-      <div class="ideas">${shown.map((it, n) => `<div class="idea">
-        <button class="idea-pick" data-act="idea" data-i="${n}"><b>${esc(it.label)}</b><small>${kind[it.kind]}${it.fresh ? '・<i class="fresh">沒人合過</i>' : ""}</small></button>
-        <button class="btn small primary" data-act="idea-forge" data-i="${n}">開爐</button></div>`).join("")}</div>
-      ${more > 0 ? `<button class="btn ghost lib-more" data-act="ideas-all">再列 ${more} 組</button>` : ""}
-      ${d.total > d.items.length && S.ideasAll ? `<p class="muted">還有 ${d.total - d.items.length} 組，合掉幾爐再來看。</p>` : ""}`;
-  }
-  // 把一組點子放進爐裡（武學放左邊）
-  function ideaToPot(it) {
-    const sel = [];
-    if (it.art) sel.push({ type: "art", id: it.art });
-    if (it.other_art) sel.push({ type: "art", id: it.other_art });
-    for (const id of it.insights) sel.push({ type: "ins", id });
-    S.forgeSel = sel;
-  }
-
   function pageCraft() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -2050,9 +2023,10 @@
     const ins = order(x.insights.filter((i) => keep("ins", i)));
     const artsShown = v.all || pro() ? arts : arts.slice(0, CRAFT_PAGE);
     const ready = forgeReady();
-    const result = S.forgeResult && S.forgeResult.at === "pot" ? `<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
+    const result = S.forgeResult ? `<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」。
-    // 開爐的結果就寫在「開爐」底下（企劃者 2026-10-10「點完又會跳到畫面最上面」），頁面不捲
+    // 開爐的結果就寫在「開爐」底下、爐裡的東西留著（企劃者 2026-10-10「點完又會跳到畫面最上面，要繼續合成還要往下拉」），
+    // 頁面不捲：拿掉一格、換一樣就能再合
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
@@ -2060,7 +2034,6 @@
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
       <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
       ${result}
-      ${ideasHtml()}
       ${attrNoteHtml(x)}
       <div class="label">功法${filterChips("craft")}</div>
       ${craftFilterRow(x)}
@@ -2566,7 +2539,7 @@
     S.menxia = await api(`/api/menxia${S.person ? `?person=${encodeURIComponent(S.person)}` : ""}`);
     trimPot();
     if (S.tab === "practice" || S.tab === "craft") renderPage();
-    if (S.tab === "craft") updateForgeLine(); // 「現在合得出來的」、爐裡那一樣的標記
+    if (S.tab === "craft" && S.forgeSel.length) updateForgeLine(); // 爐裡那一樣的標記
   }
 
   async function loadMap(place) {
@@ -2622,7 +2595,7 @@
     S.artInfo = null; S.insOpen = null; S.libAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
     S.artNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
-    S.forgeResult = null; S.ideasAll = false; // 上一爐的結果、列完的點子也收起（篩選留著）
+    S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
     render();
@@ -2976,10 +2949,9 @@
       const r = await api("/api/forge_line", forgeBody());
       if (seq !== forgeLineSeq || pot !== JSON.stringify(S.forgeSel)) return;
       S.forgeLine = r.line;
-      const drawn = JSON.stringify([S.forgePicks, S.forgeIdeas]);
+      const drawn = JSON.stringify(S.forgePicks);
       S.forgePicks = r.picks || null;
-      if (r.ideas) S.forgeIdeas = r.ideas;
-      if (S.tab === "craft" && JSON.stringify([S.forgePicks, S.forgeIdeas]) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上的標記、點子變了
+      if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
       const el = document.getElementById("forge-line");
       if (el) el.innerHTML = r.line;
     } catch (e) { /* 提示過 */ }
@@ -2997,11 +2969,9 @@
     if (before !== undefined && after !== undefined && after !== before) window.scrollBy({ top: after - before, left: 0, behavior: "instant" });
   }
 
-  // 開爐：from 是按的那一顆（爐子底下的「開爐」，或點子清單那一列的「開爐」）。結果寫在按的地方旁邊，頁面不捲（企劃者 2026-10-10）
-  async function forge(from) {
-    const btn = from || document.getElementById("forge");
-    const at = from && from.dataset.act === "idea-forge" ? "ideas" : "pot";
-    const anchor = at === "ideas" ? "#forge-ideas" : "#forge";
+  // 開爐：結果寫在「開爐」底下，頁面不捲；爐裡的東西留著，拿掉一格換一樣就能再合（企劃者 2026-10-10）
+  async function forge() {
+    const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
     let guideMoved = false;
     await busy(async () => {
@@ -3011,14 +2981,14 @@
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
       document.querySelector(".furnace .w-furnace")?.classList.add("forging");
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
-      S.forgeResult = { at, html: esc(FORGE_WAIT) };
+      S.forgeResult = { html: esc(FORGE_WAIT) };
       const stop = watchQueue(btn, "爐火正旺…");
       try {
         const r = await api("/api/menxia/forge", forgeBody());
         S.menxia = r.menxia;
         S.message = "";
-        S.forgeResult = { at, html: r.message };
-        S.forgeSel = [];
+        S.forgeResult = { html: r.message };
+        trimForgeSel(); // 爐裡的東西留著（合成、合併都不會用掉），只拿掉已經不在手上的
         S.forgeLine = "";
         S.forgePicks = null;
         setMain(r.main);
@@ -3027,12 +2997,12 @@
       } catch (e) {
         // 被擋下來（另一個分頁的上一爐還沒出爐：400）或連不上：等的時候寫的「爐火正旺……請稍候」不能留著，換成這一句，
         // 爐裡放的東西不動；api() 已經用提示泡泡講過一次，結果那一格再留一份
-        S.forgeResult = { at, html: esc(failText(e)) };
+        S.forgeResult = { html: esc(failText(e)) };
       } finally { stop(); }
     });
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
-    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else keepPlace(() => renderPage(), anchor);
-    updateForgeLine(); // 爐空了：重問一次說明與「現在合得出來的」
+    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else keepPlace(() => renderPage());
+    updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
   }
 
   async function travel(mode) {
@@ -3240,17 +3210,6 @@
         case "pick": pick(el.dataset.type, el.dataset.id); break;
         case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; renderPage(); updateForgeLine(); break;
         case "forge": await forge(); break;
-        case "idea": { // 點子那一列：放進爐裡看說明
-          const it = S.forgeIdeas?.items[Number(el.dataset.i)];
-          if (!it || S.busy) break;
-          ideaToPot(it); S.forgeResult = null; renderPage(); updateForgeLine(); break;
-        }
-        case "idea-forge": { // 點子那一列的「開爐」：放進爐裡、直接開
-          const it = S.forgeIdeas?.items[Number(el.dataset.i)];
-          if (!it || S.busy) break;
-          ideaToPot(it); await forge(el); break;
-        }
-        case "ideas-all": S.ideasAll = true; keepPlace(() => renderPage(), "#forge-ideas"); break;
         case "craft-all": craftView().all = true; renderPage(); break;
         case "craft-ok": craftView().okOnly = !craftView().okOnly; renderPage(); break;
         case "forge-hub":
@@ -3536,13 +3495,12 @@
         || S.guideDrawn !== guideSig(); // 對話框換了（輪詢帶來新的提示、提示在別處被收掉）：兩頁最上面畫著它
       if (!changed) {
         // 合成與合併都要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）
-        // 爐是空的時「現在合得出來的」也看體力，一樣重問
-        if (tab === "craft" && old.status.stamina !== S.main.status.stamina) updateForgeLine();
+        if (tab === "craft" && S.forgeSel.length && old.status.stamina !== S.main.status.stamina) updateForgeLine();
         return;
       }
       redrawPage(true);
       // 爐裡有東西：說明裡的心得、能不能開爐也跟著更新
-      if (tab === "craft" || (S.forgeSel.length && trimmed)) updateForgeLine(); // 爐是空的：「現在合得出來的」也重問
+      if (S.forgeSel.length && (trimmed || tab === "craft")) updateForgeLine();
       return;
     }
     if (tab === "map") {
