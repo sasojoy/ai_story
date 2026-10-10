@@ -952,10 +952,85 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .craft-filter .fchip { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }
 
-/* 煉製頁的武學譜（manualHtml）：一條秘方一格，口訣一句一行，合中了的那一格淡金底 */
-.manual .fold-body { display: flex; flex-direction: column; gap: 10px; }
-.manual-row { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; }
-.manual-row.solved { border-left-color: var(--gold, #b8902f); }
-.manual-clue { margin: 0; font-family: var(--serif, serif); line-height: 1.7; }
-.manual-state { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
-.manual-row.solved .manual-state { color: var(--gold, #b8902f); font-weight: 600; }
+/* 武學譜（manualEntry 是煉製頁上的入口，bookHtml 是點開的一本書）：線裝古書的版面——泛黃的紙、雙線版框、界欄，
+   口訣直書大字，合中了的那一頁蓋一方朱印。顏色只在這一段用，暗色時換成燈下的舊紙 */
+:root {
+  --bk-paper: #f2e5c6; --bk-paper-2: #e8d6ad; --bk-ink: #241a11; --bk-ink-2: #6d5a43; --bk-rule: #a9814b;
+  --bk-cover: #2f4a5c; --bk-cover-2: #1d3140; --bk-slip: #f6edd8; --bk-seal: #b3261e; --bk-thread: #e9dcc0; --bk-seal-ink: #fbf3e2;
+  --bk-serif: "Noto Serif TC", "Noto Serif CJK TC", "Source Han Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bk-paper: #2b241b; --bk-paper-2: #221c15; --bk-ink: #efe1c3; --bk-ink-2: #b39e7f; --bk-rule: #8a6a3e;
+    --bk-cover: #23394a; --bk-cover-2: #142431; --bk-slip: #e9dcc0; --bk-seal: #c4372c; --bk-thread: #cdbd9c;
+  }
+}
+.book-icon { width: 40px; height: 46px; flex: none; }
+.book-icon .bk-cover { fill: var(--bk-cover); }
+.book-icon .bk-slip { fill: var(--bk-slip); stroke: var(--bk-seal); stroke-width: 1.2; }
+.book-icon .bk-slip-ink { stroke: var(--bk-ink); stroke-width: 2.2; stroke-dasharray: 4 3; }
+.book-icon .bk-thread { stroke: var(--bk-thread); stroke-width: 1.4; fill: none; }
+.manual-entry {
+  display: flex; align-items: center; gap: 14px; width: 100%; margin: 4px 0 12px; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--bk-rule); border-radius: var(--radius); color: var(--bk-ink); font: inherit;
+  background: linear-gradient(135deg, var(--bk-paper) 0%, var(--bk-paper-2) 100%); box-shadow: var(--shadow);
+}
+.manual-entry span { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.manual-entry b { font-family: var(--bk-serif); font-size: 19px; letter-spacing: 4px; }
+.manual-entry small { color: var(--bk-ink-2); font-size: 13px; }
+.manual-entry .go { font-style: normal; color: var(--bk-seal); font-weight: 600; white-space: nowrap; }
+
+.book-layer {
+  position: fixed; inset: 0; z-index: 42; overflow-y: auto; overscroll-behavior: contain; color: var(--bk-ink);
+  background: radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.10), transparent 60%), var(--bk-paper-2);
+  animation: fade 0.2s; padding-bottom: calc(24px + var(--bottom));
+}
+.book-bar {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px;
+  padding: calc(8px + var(--top)) 12px 8px; background: var(--bk-cover-2); color: var(--bk-slip);
+}
+.book-back { border: 0; background: transparent; color: inherit; font: 600 16px var(--sans); padding: 6px 8px; cursor: pointer; }
+.book-bar-title { font-family: var(--bk-serif); letter-spacing: 4px; opacity: 0.85; }
+.book-cover {
+  position: relative; height: 210px; overflow: hidden; margin-bottom: 18px;
+  background: linear-gradient(180deg, var(--bk-cover-2) 0%, var(--bk-cover) 70%);
+}
+.book-hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 120px; }
+.book-moon { position: absolute; top: 40px; left: 54px; width: 34px; height: 34px; border-radius: 50%; background: rgba(246, 237, 216, 0.6); box-shadow: 0 0 24px 6px rgba(246, 237, 216, 0.18); }
+.book-hills .far { fill: rgba(233, 220, 192, 0.16); }
+.book-hills .near { fill: rgba(63, 125, 92, 0.45); }
+.book-title {
+  position: absolute; top: 22px; right: 36px; padding: 16px 10px; writing-mode: vertical-rl; background: var(--bk-slip); border: 2px solid var(--bk-seal);
+  box-shadow: inset 0 0 0 3px var(--bk-slip), inset 0 0 0 4px var(--bk-seal), 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.book-title span { display: block; font: 700 30px/1 var(--bk-serif); letter-spacing: 10px; color: #241a11; }
+.book-sub { position: absolute; left: 20px; bottom: 14px; margin: 0; color: var(--bk-slip); font-size: 13px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.leaves { display: flex; flex-direction: column; gap: 22px; padding: 0 16px; max-width: 560px; margin: 0 auto; }
+.leaf {
+  position: relative; padding: 14px 16px 12px; border: 2px solid var(--bk-rule);
+  box-shadow: inset 0 0 0 4px var(--bk-paper), inset 0 0 0 5px var(--bk-rule), 0 3px 10px rgba(60, 40, 20, 0.18);
+  background:
+    radial-gradient(ellipse at 85% 15%, rgba(150, 110, 50, 0.10), transparent 55%),
+    radial-gradient(ellipse at 10% 90%, rgba(150, 110, 50, 0.12), transparent 50%),
+    var(--bk-paper);
+}
+.leaf-head { display: flex; justify-content: space-between; font: 600 13px var(--bk-serif); color: var(--bk-ink-2); letter-spacing: 2px; padding: 0 4px 8px; border-bottom: 1px solid var(--bk-rule); }
+.leaf.solved .leaf-state { color: var(--bk-seal); }
+/* 直書、右起；界欄是一欄一條細線，欄寬＝行高 */
+.leaf-text {
+  writing-mode: vertical-rl; width: 100%; height: 300px; overflow-x: auto; overflow-y: hidden; padding: 14px 6px;
+  font: 700 26px/44px var(--bk-serif); letter-spacing: 3px; color: var(--bk-ink);
+  background: repeating-linear-gradient(to left, transparent 0 43px, rgba(169, 129, 75, 0.35) 43px 44px) right 6px top 0 / auto 100% no-repeat;
+}
+.leaf-text p { margin: 0 0 0 44px; } /* 兩則口訣之間空一欄 */
+.leaf-text p:last-child { margin-left: 0; }
+.leaf-text span { display: block; }
+.leaf-foot { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 4px 0; border-top: 1px solid var(--bk-rule); }
+.leaf-sign { font: 15px var(--bk-serif); color: var(--bk-ink-2); }
+.leaf-sign b { color: var(--bk-ink); font-size: 17px; }
+.seal { width: 60px; height: 60px; flex: none; transform: rotate(-5deg); filter: drop-shadow(0 0 0.5px var(--bk-seal)); }
+.seal .seal-bg { fill: var(--bk-seal); }
+.seal .seal-rim { fill: none; stroke: var(--bk-seal-ink); stroke-width: 1.2; opacity: 0.85; }
+.seal .seal-ink text { fill: var(--bk-seal-ink); font-family: var(--bk-serif); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.leaf.empty .leaf-text { height: 180px; color: var(--bk-ink-2); }
+.leaf-hint { margin: 10px 4px 0; color: var(--bk-ink-2); font: 14px var(--bk-serif); }
