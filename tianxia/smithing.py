@@ -112,7 +112,7 @@ FORGED = "鐵匠把{what}下爐，打出一把【{name}】（{kind}・屬{attrib
 FIRST_LINE = "這是江湖上第一次有人打出這把兵器——這個配方從此就叫這個名字。"  # 待 joy 潤
 MINE_LINE = "這是你首創的配方，又打了一把。"  # 待 joy 潤
 FOLLOW_LINE = "這個配方由{who}首創，你照著打出了同一把。"  # 待 joy 潤
-FIZZLE = "爐火熄了，這一次什麼也沒打成（名字都被用掉了，再試一次）。"
+FIZZLE = "爐火熄了，這一次什麼也沒打成（名字都被用掉了，再試一次）。"  # 待 joy 潤
 
 
 def _messages(content: Content, kind: str, main: str, aux: str, attribute: str, tier: int) -> list[dict[str, str]]:
@@ -239,14 +239,18 @@ GO_VERB = "forge-go"
 STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel", "temper")
 FORGE_TITLE = "打造"
 FORGE_WAIT = "鐵匠掂著料，想給它取個名字……"  # 待 joy 潤：首創配方等模型取名時按鈕上的字（Option.wait）
-ASK_KIND = "要打哪一種兵器？"  # 以下待 joy 潤
-ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"
-ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"
-READY = "料都齊了，看一眼機率再開爐。"
-CANCELLED = "你把素材收了回去，這回先不打。"
-NEW_RECIPE = "這個配方還沒人打過"
-KNOWN_RECIPE = "照【{name}】的配方打"
-ATTR_MARK = "・跟你的武學同屬性"
+ASK_KIND = "要打哪一種兵器？"  # 待 joy 潤
+ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"  # 待 joy 潤
+ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"  # 待 joy 潤
+READY = "料都齊了，看一眼機率再開爐。"  # 待 joy 潤
+PICKED_KIND = "兵器：{what}。"  # 待 joy 潤：每挑一樣，這一步的回話先回報挑了什麼（進同一則「打造」紀錄），再問下一步
+PICKED_MAIN = "主料：{what}。"  # 待 joy 潤
+PICKED_AUX = "輔料：{what}。"  # 待 joy 潤
+CANCELLED = "你把素材收了回去，這回先不打。"  # 待 joy 潤
+NEW_RECIPE = "這個配方還沒人打過"  # 待 joy 潤
+KNOWN_RECIPE = "照【{name}】的配方打"  # 待 joy 潤
+ATTR_MARK = "・跟你的武學同屬性"  # 待 joy 潤
+GO_LABEL = "開爐：{what} → {head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料
 
 
 def is_go(option_id: str) -> bool:
@@ -306,8 +310,13 @@ def forge_door(state: GameState, content: Content):
     return Option(id=OPEN, label=f"打造兵器…（{problem or '挑種類、主料、輔料'}）", enabled=problem is None)
 
 
+def _material_name(content: Content, mid: str) -> str:
+    return content.materials[mid].name if mid in content.materials else mid
+
+
 def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
-    """單子往前或往後一步（選項都由 Game.choose 驗過在選單上，arg 一定是選單給的）。開爐（forge-go）不在這裡，見 forge。"""
+    """單子往前或往後一步（選項都由 Game.choose 驗過在選單上，arg 一定是選單給的）。開爐（forge-go）不在這裡，見 forge。
+    挑種類、主料、輔料的回話先寫挑了什麼（PICKED_*），再問下一步：這幾句併進同一則「打造」紀錄，事後看得到這一爐放了哪兩樣。"""
     p = state.player
     if verb == "temper":
         return temper(state, content)
@@ -319,13 +328,13 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
         return ["（此刻無法這麼做。）"]
     if verb == "forge-kind":
         d.kind = arg
-        return [ASK_MAIN]
+        return [PICKED_KIND.format(what=weapons.NOUNS.get(arg, arg)), ASK_MAIN]
     if verb == "forge-main":
         d.main = arg
-        return [ASK_AUX]
+        return [PICKED_MAIN.format(what=_material_name(content, arg)), ASK_AUX]
     if verb == "forge-aux":
         d.aux = arg
-        return [READY]
+        return [PICKED_AUX.format(what=_material_name(content, arg)), READY]
     if verb == "forge-undo":
         if d.aux is not None:
             d.aux = None
@@ -342,8 +351,8 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
 
 
 def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
-    """開爐那一顆：寫配方名（有人打過）或「還沒人打過」、種類屬性階、工錢與三個品質的機率（不寫品級）；打不成灰掉寫原因。
-    沒人打過的要等模型取名，帶 wait。"""
+    """開爐那一顆：先寫放進爐裡的主料＋輔料，再寫配方名（有人打過）或「還沒人打過」、種類屬性階、工錢與三個品質的機率（不寫品級）；
+    打不成灰掉寫原因。沒人打過的要等模型取名，帶 wait。"""
     from .engine import Option  # noqa: PLC0415
 
     known = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
@@ -355,7 +364,10 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
     attribute = attribute_of(world, content, kind, main, aux)
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",
-        label=f"開爐：{head}（{weapons.NOUNS[kind]}・屬{attribute}・{weapons.TIER_WORDS[tier]}・{note}）",
+        label=GO_LABEL.format(
+            what=f"{content.materials[main].name}＋{content.materials[aux].name}", head=head, kind=weapons.NOUNS[kind],
+            attribute=attribute, tier=weapons.TIER_WORDS[tier], note=note,
+        ),
         enabled=problem is None, wait="" if known else FORGE_WAIT,
     )
 

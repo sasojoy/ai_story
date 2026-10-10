@@ -1906,6 +1906,7 @@
     // 兵器（兵器設計 3.6）：身上那把一行、裝備庫每把一行。字都是伺服器給的資料，一律 esc
     // FB-125：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
     // 第二批：淬過的寫「淬煉 N/5」，自己打的寫配方（主料＋輔料）
+    // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字，以及下面兵器塊底下那句說明（鐵匠鋪打得出、買得到、修得好，也淬得了）
     const wp = x.weapons;
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
         <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}</div>

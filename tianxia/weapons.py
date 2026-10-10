@@ -387,8 +387,13 @@ def grade(w: Weapon) -> str:
     return f"{TIER_WORDS.get(w.tier, '')}{w.quality}"
 
 
+def grade_line(w: Weapon) -> str:
+    """鐵匠鋪「換上」「拆解」鈕上用來分辨同一個配方好幾把的那一段：「一階中品」，淬過的再接「・淬煉 2」（終審 F2）。"""
+    return grade(w) + (f"・淬煉 {w.tempers}" if w.tempers else "")  # 待 joy 潤
+
+
 def _describe(w: Weapon) -> str:
-    tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""
+    tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""  # 待 joy 潤
     return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
 
 

@@ -496,12 +496,17 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     game.choose(aux.id)
     go = _ids(game)[GO_SWORD_YANG]
     assert go.enabled and "工錢 20 兩" in go.label and "下品 46%" in go.label and go.wait == smithing.FORGE_WAIT
+    assert go.label.startswith("開爐：精鐵砂＋驚羽 → ")  # 按下去之前看得到放了哪兩樣（終審 F1）
     game.choose(go.id)
     p = game.state.player
     assert p.weapon is not None and p.weapon.recipe == KEY_SWORD_YANG
     assert p.smith_draft is None and p.picking_smith and smithing.OPEN in _ids(game)  # 打完回到鐵匠鋪的選單
     forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
     assert len(forged) == 1 and any(p.weapon.name in line for line in forged[0].lines)  # 一爐一則紀錄
+    lines = forged[0].lines
+    # 每一步挑了什麼都回報在同一則紀錄裡（終審 F1）：種類、主料、輔料各一行，順序跟著步驟走
+    picked = [i for i, line in enumerate(lines) if line in ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。")]
+    assert [lines[i] for i in picked] == ["兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。"]
 
 
 def test_each_forge_gets_its_own_entry_and_a_cancel_does_not_join_the_last_forge(content, world):
@@ -529,6 +534,7 @@ def test_a_known_recipe_says_its_name_and_does_not_wait(content, world):
         game.choose(oid)
     go = _ids(game)[GO_SWORD_YANG]
     assert f"【{name}】" in go.label and go.wait == ""
+    assert go.label.startswith("開爐：精鐵砂＋驚羽 → ")  # 打過的配方也寫放了哪兩樣（終審 F1）
 
 
 def test_undo_steps_back_and_cancel_returns_to_the_smith_menu(content, world):

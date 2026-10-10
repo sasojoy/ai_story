@@ -806,6 +806,23 @@ def test_smith_menu_lists_wield_buttons_only_for_blades_that_fit(content, world)
     assert game.wield_weapon("兵:8")[0].startswith("你換上了")
 
 
+def test_smith_wield_and_dismantle_labels_tell_two_blades_of_one_recipe_apart(content, world):
+    """終審 F2：同一個配方打出好幾把，名字、種類一樣，標籤要寫階與品質，淬過的再寫淬煉幾次（沒淬過不寫）。"""
+    game = _sworder(content, world)
+    p = game.state.player
+    p.weapon = _blade(kind="刀")
+    p.rack = [
+        Weapon(id="兵:7", name="軟鋼劍", kind="劍", attribute="柔", tier=1, quality="下品"),
+        Weapon(id="兵:8", name="軟鋼劍", kind="劍", attribute="柔", tier=2, quality="中品", tempers=2),
+    ]
+    game.choose("act:smith")
+    opts = _ids(game)
+    assert opts["smith:wield:兵:7"].label == "換上【軟鋼劍】（劍・一階下品・鋒利度 100）"
+    assert opts["smith:wield:兵:8"].label == "換上【軟鋼劍】（劍・二階中品・淬煉 2・鋒利度 100）"
+    assert opts["smith:dismantle:兵:7"].label.startswith("拆解【軟鋼劍】（一階下品）→ ")
+    assert opts["smith:dismantle:兵:8"].label.startswith("拆解【軟鋼劍】（二階中品・淬煉 2）→ ")
+
+
 def test_smith_menu_has_no_wield_buttons_without_a_fitting_blade(content, world):
     game = _sworder(content, world)
     game.state.player.rack = [Weapon(id="兵:8", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
@@ -937,8 +954,8 @@ def test_smith_menu_lists_dismantle_buttons_with_their_result(content, world):
     p.rack = [_rack_weapon("兵:5", attribute="剛"), _rack_weapon("兵:6", attribute="快")]
     game.choose("act:smith")
     opts = _ids(game)
-    assert opts["smith:dismantle:兵:5"].label == "拆解【剛兵:5】→ 精鐵砂×1"
-    assert opts["smith:dismantle:兵:6"].label == "拆解【快兵:6】→ 驚羽×1" and opts["smith:dismantle:兵:6"].enabled
+    assert opts["smith:dismantle:兵:5"].label == "拆解【剛兵:5】（一階下品）→ 精鐵砂×1"  # 終審 F2：同一個配方打好幾把，標籤要分得出階與品質
+    assert opts["smith:dismantle:兵:6"].label == "拆解【快兵:6】（一階下品）→ 驚羽×1" and opts["smith:dismantle:兵:6"].enabled
     assert "smith:dismantle:兵:1" not in opts  # 手上那把不能拆
     msgs = game.choose("smith:dismantle:兵:5")
     assert game.state.player.materials == {"gang_1": 1} and game.state.player.picking_smith  # 做完選單還開著

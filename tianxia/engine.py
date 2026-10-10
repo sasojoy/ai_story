@@ -2513,8 +2513,9 @@ class Game:
 
     def _smith_options(self) -> list[Option]:
         """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），
-        手上那把一顆「修」（寫明用掉哪一種素材），裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），
-        裝備庫裡每把一顆「拆解」（4.7.1，最多 DISMANTLE_LIST 顆，最鈍最低階的先，多的一行灰掉的說明指到修練頁），
+        手上那把一顆「修」（寫明用掉哪一種素材）、一顆「淬煉」（手上有兵器才有，寫第幾次與用哪一個素材，見 smithing.temper_option），
+        裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換；標籤寫階品質與淬煉次數，同一個配方打好幾把才分得出來），
+        裝備庫裡每把一顆「拆解」（4.7.1，最多 DISMANTLE_LIST 顆，最鈍最低階的先，多的一行灰掉的說明指到修練頁；標籤同樣寫階品質），
         換上與拆解中間一顆「打造兵器…」（打開一步一步的單子，見 smithing.draft_options；單子打開時整份選單換成那一步），
         最後是永遠按得下去的「離開」。都不花體力。"""
         s, c = self.state, self.content
@@ -2541,13 +2542,13 @@ class Game:
             opts.append(temper)
         for w in s.player.rack:
             if weapons.usable(w, art, c, self.world):
-                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
+                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
             breakable = sorted(s.player.rack, key=weapons.dismantle_order)
             for w in breakable[:weapons.DISMANTLE_LIST]:
                 opts.append(Option(
-                    id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】→ {weapons.dismantle_material(c, w).name}×1",
+                    id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{weapons.grade_line(w)}）→ {weapons.dismantle_material(c, w).name}×1",
                     confirm=weapons.dismantle_confirm(c, w), confirm_yes=weapons.DISMANTLE_YES,  # FB-125：先問一次
                 ))
             if len(breakable) > weapons.DISMANTLE_LIST:
@@ -2557,7 +2558,7 @@ class Game:
         return opts
 
     def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
-        """鐵匠鋪上的選擇：買、修、換上、拆解、打造的每一步，或離開（收起選單與打造的單子）。做完選單還開著，可以接著挑。"""
+        """鐵匠鋪上的選擇：買、修、淬煉、換上、拆解、打造的每一步（含開爐），或離開（收起選單與打造的單子）。做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
