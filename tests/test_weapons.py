@@ -915,11 +915,19 @@ def test_game_dismantle_weapon_works_anywhere_and_writes_a_practice_entry(conten
     p = game.state.player
     p.location = "lake"  # 拆解不必在鐵匠鋪
     p.rack = [_rack_weapon("兵:5")]
-    before = len(game.state.journal) if hasattr(game.state, "journal") else None
+    from tianxia import journal
+    game.state.journal.clear()
     msgs = game.dismantle_weapon("兵:5")
     assert msgs[0].startswith(weapons.DISMANTLE_PREFIX) and p.rack == []
-    assert game.dismantle_weapon("兵:5")[0] == weapons.DISMANTLE_MISSING
-    assert before is None or len(game.state.journal) >= before
+    [entry] = game.state.journal  # 一則修練紀錄，標籤是結果那一句（同 wield／熔煉）
+    assert entry.title == journal.PRACTICE and entry.tag == msgs[0]
+    refused = game.dismantle_weapon("兵:5")  # 裝備庫已經空了：拒絕，不寫紀錄
+    assert refused[0] == weapons.DISMANTLE_MISSING
+    assert game.state.journal == [entry] and entry.tag == msgs[0]
+    content.config.weapons.enabled = False  # 開關關了也不寫
+    p.rack = [_rack_weapon("兵:6")]
+    game.dismantle_weapon("兵:6")
+    assert game.state.journal == [entry] and [w.id for w in p.rack] == ["兵:6"]
 
 
 def test_smith_menu_lists_dismantle_buttons_with_their_result(content, world):
