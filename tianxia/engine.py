@@ -207,6 +207,7 @@ class BattleTextRequest(BaseModel):
     faction_name: str
     text: str
     name: str = ""  # 送出的人的名號：劇情以他開頭（試玩回饋 2026-10-08）
+    target: str = ""  # 點名的對手與身手（battle_instance.target_line，Joy 2026-10-10）：給模型多一行；沒點名是空的
 
 
 class DuelTextRequest(BaseModel):
@@ -3106,6 +3107,15 @@ class Game:
         lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
         role = battle_instance.role_name(c.config.battle, me.role)
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
+        if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
+            lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
+        if me.hurt_dealt >= 0.5:
+            lines.append(f"你的放手一搏點名打傷了對手，打掉他們氣血 {round(me.hurt_dealt)}")
+        if me.targeted_by:
+            lines.append(f"{'、'.join(me.targeted_by)}在陣上點名要對付你" + (
+                f"，你被打掉氣血 {round(me.hurt_taken)}" if me.hurt_taken >= 0.5 else "，卻沒能傷到你"))
+        elif me.hurt_taken >= 0.5:
+            lines.append(f"你太顯眼，被對面集火，打掉氣血 {round(me.hurt_taken)}")
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         h = battle.highlight
@@ -3361,11 +3371,31 @@ class Game:
                 last.append(f"> 你上一回合：{p.last_result}")
             if last:
                 lines.append("\n".join(last))
+            lines += self._battle_spotlight(battle, definition, p)
         if p is not None and p.eliminated:
             lines.append("（你已經倒下，只能在一旁觀戰。）")
         elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」
             lines.append(watch_line)
         return "\n\n".join(lines)
+
+    def _battle_spotlight(
+        self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
+    ) -> list[str]:
+        """點名與顯眼（Joy 2026-10-10）：上一回合誰盯上了你、你被牽制了沒有、這一幕還能不能放手一搏、你是不是顯眼的人。"""
+        if p.eliminated or battle.phase != "active":
+            return []
+        out = []
+        hunters = battle.last_targets.get(p.name)
+        if hunters:
+            out.append(f"{'、'.join(hunters)}盯上了你。")
+        if battle_instance.pinned(battle, p):
+            out.append("你被牽制住了，這一回合只能固守。")
+        elif (definition.free_text_gamble is not None and not battle_instance.is_third(definition, p)
+              and not battle_instance.can_gamble(battle, definition, p)):
+            out.append("這一幕你已經放手一搏過了，下一幕才能再搏。")
+        if battle.marked.get(p.name) == battle.act_index:
+            out.append("你在這一幕太顯眼了，對面的強攻會往你身上招呼。")
+        return out
 
     def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         """「已送出 X／在場 Y，最遲 M 分 S 秒後結算」：在場的人都送出就提早結算，不然等這一回合逾時（暫停中停在按下暫停那一刻）。"""
@@ -3473,9 +3503,11 @@ class Game:
         if isinstance(checked, list):
             return checked
         definition, _, text, faction_name = checked
+        battle = self.world.get_battle()
         return BattleTextRequest(
-            battle_id=definition.id, act_index=self.world.get_battle().act_index, faction_name=faction_name, text=text,
+            battle_id=definition.id, act_index=battle.act_index, faction_name=faction_name, text=text,
             name=self.state.player.name,
+            target=battle_instance.target_line(battle, definition, self.state.player.name, text, self.content.config.battle),
         )
 
     def submit_battle_custom_action(
@@ -3496,8 +3528,12 @@ class Game:
             return checked
         definition, tag, text, faction_name = checked
         if llm_rate is None:
-            act = battle_instance.current_act(self.world.get_battle(), definition)
-            verdict = battle_instance.assess_gamble(self._quick_client(), act, faction_name, text, self.state.player.name)
+            battle = self.world.get_battle()
+            act = battle_instance.current_act(battle, definition)
+            target = battle_instance.target_line(battle, definition, self.state.player.name, text, self.content.config.battle)
+            verdict = battle_instance.assess_gamble(
+                self._quick_client(), act, faction_name, text, self.state.player.name, target=target,
+            )
             llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
         return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate, stories)
 

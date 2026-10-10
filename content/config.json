@@ -53,5 +53,6 @@
   "bots_min_per_faction": 5,
   "bot_strength": 0.6,
   "bot_tick_seconds": 20,
-  "bot_fill_seconds": 3600
+  "bot_fill_seconds": 3600,
+  "battle": {"push_max": 20}
 }

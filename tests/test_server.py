@@ -3000,7 +3000,7 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     client.post("/api/choose", json={"id": "battle:join_late"})
     seen = []
 
-    def rate(c, act, faction_name, text, name):
+    def rate(c, act, faction_name, text, name, target=""):
         seen.append((open_world().db.writing(), faction_name, text, name))
         return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
 
@@ -6138,6 +6138,8 @@ NOT_IN_THE_FINGERPRINT = {
         "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
+        "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",
         "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
         "outcome_margin": "收場時跟 phase 一起寫入",

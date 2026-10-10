@@ -824,7 +824,9 @@ def battle_text(game: Game, text: str) -> list[str]:
         if client is None and game.client is not None:
             return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
         # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
-        return battle_instance.assess_gamble(client, act_, request.faction_name, request.text, request.name)
+        return battle_instance.assess_gamble(
+            client, act_, request.faction_name, request.text, request.name, target=request.target,
+        )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
     return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))

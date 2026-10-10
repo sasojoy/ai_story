@@ -1043,7 +1043,11 @@ class BattleTuning(_Strict):
     affinity_inner: float = 10.0
     affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: dict(DEFAULT_AFFINITY))  # 屬性 →（擅長, 不擅長）
     counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
-    push_max: float = 10.0  # 一回合最多推多少
+    # 一回合最多推多少。Joy 2026-10-10（決戰試玩回饋第 3 點）：舊值 10 時兩軍份量相當，固定招全軍一回合只推 ±1～2，放手一搏成了一次就推 8～11，
+    # 「跟從預設選項的玩家現在毫無存在感」。合成重演（長社火攻 5 對 5、9 回合、每人每回合兩成想搏、成功率照那場的分佈；
+    # 搏的人每幕最多一次）：push_max 20、side_trend_cap 4 時固定招佔戰局變動的 58%～60%（舊值 38%），
+    # 三個人一直搏的那種場面固定招佔 67%（舊值 46%）。正式值寫在 content/config.json 的 battle.push_max（20）；這裡的預設 10 是測試內容與舊的單元測試量公式用的。
+    push_max: float = 10.0
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
     third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
@@ -1054,6 +1058,21 @@ class BattleTuning(_Strict):
     # 多乘 diversity_per，最多 diversity_cap。屬性在加入戰局時快照（BattleParticipant.attribute），只有第一季開著時才快照
     diversity_per: float = Field(default=0.05, ge=0)
     diversity_cap: float = Field(default=0.15, ge=0)  # 四路以上封頂：兩軍份量相當時，一回合大約多推 1 點
+    lead_crowd: int = Field(default=3, ge=2)  # 回合原因點名帶頭出固定招的人；同一招有這麼多人時寫成「結成陣勢」
+    # 放手一搏點名敵方參戰者（Joy 2026-10-10：「玩家會點名敵對的玩家……顯示成功，但是其實被點名的玩家根本沒受到任何影響」）：
+    # 文字裡出現對面參戰者的名號（2 字以上，取最先出現的那一個）就是指名攻擊，由引擎認、不靠模型。
+    # 成了：戰局推進只剩 target_push_share，其餘化成對他的傷害：他氣血池上限的 target_hit_base＋風險 × target_hit_per_risk，
+    # 最多 target_hit_max；成功率（加職位之後）≤ pin_rate 的險招成了，他下一回合被牽制、只能固守。失手照舊只傷自己。
+    target_push_share: float = Field(default=0.5, ge=0, le=1)
+    target_hit_base: float = Field(default=0.10, ge=0, le=1)
+    target_hit_per_risk: float = Field(default=0.0015, ge=0)
+    target_hit_max: float = Field(default=0.25, ge=0, le=1)
+    pin_rate: int = Field(default=15, ge=0, le=100)
+    # 引人注目：這一幕被點名過、或自己放手一搏成過的人是「顯眼」的，對面這一回合每一個出強攻的人，另外有 focus_per_attacker 的傷害
+    # 平分到這一邊顯眼的人身上（每人最多他上限的 focus_cap）。一個人一回合被別人打掉的（點名＋集火）合起來最多他上限的 target_round_cap
+    focus_per_attacker: float = Field(default=15.0, ge=0)
+    focus_cap: float = Field(default=0.12, ge=0, le=1)
+    target_round_cap: float = Field(default=0.30, ge=0, le=1)
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -1787,7 +1806,10 @@ class FreeTextGamble(_Strict):
     failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
     failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
     failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
-    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少
+    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少（正式內容 content/battles.json 2026-10-10 從 5 調成 4，見 BattleTuning.push_max）
+    # 放手一搏不再「誰手快誰刷」（Joy 2026-10-10 決戰試玩回饋第 3 點：「跟從預設選項的玩家現在毫無存在感」）：
+    # 一個人每一幕最多放手一搏 per_act 次（一場三幕最多三次），其餘回合出固定招
+    per_act: int = Field(default=1, ge=1)
 
 
 class ThirdParty(_Strict):

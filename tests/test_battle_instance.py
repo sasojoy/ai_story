@@ -604,7 +604,7 @@ def test_the_mix_line_stays_first_in_a_round_where_someone_falls(three):
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
     assert msgs[0].startswith("官軍：強攻 100%") and "（戰局 " in msgs[0]
-    assert msgs[1] == "這一回合黃巾佔了上風（戰局 50→43）：黃巾的固守剋住了官軍的強攻。"  # 摘要接在比例後面
+    assert msgs[1] == "這一回合黃巾佔了上風（戰局 50→43）：黃巾的固守剋住了官軍的強攻，乙一馬當先。"  # 摘要接在比例後面
     assert "氣血耗盡" in msgs[2] and len(msgs) == 3
 
 
@@ -1669,13 +1669,13 @@ def _summary(msgs):
 
 def test_the_round_summary_names_a_counter(three):
     msgs = _fight(three, [("甲", "guan", "強攻"), ("乙", "huang", "固守")]).rounds[-1].messages
-    assert _summary(msgs) == "這一回合黃巾佔了上風（戰局 50→45）：黃巾的固守剋住了官軍的強攻。"
+    assert _summary(msgs) == "這一回合黃巾佔了上風（戰局 50→45）：黃巾的固守剋住了官軍的強攻，乙一馬當先。"
 
 
 def test_the_round_summary_names_the_numbers_when_nobody_counters(three):
     picks = [(f"官{i}", "guan", "固守") for i in range(4)] + [("乙", "huang", "固守")]
     msgs = _fight(three, picks).rounds[-1].messages
-    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→53）：官軍人多勢眾（4 人對 1 人）。"
+    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→53）：官軍人多勢眾（4 人對 1 人），官3等 4 人結成固守陣勢。"
 
 
 def test_the_round_summary_says_the_other_side_did_not_come_out(three):
@@ -1685,7 +1685,7 @@ def test_the_round_summary_says_the_other_side_did_not_come_out(three):
     battle.participants["乙"].away = True  # 這一回合走開了：不算出手
     battle.round.pending_actions.pop("乙")
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
-    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→60）：黃巾沒有人正面出陣迎戰，官軍放手壓了上去。"
+    assert _summary(msgs) == "這一回合官軍佔了上風（戰局 50→60）：黃巾沒有人正面出陣迎戰，官軍放手壓了上去，甲帶頭固守。"
 
 
 def test_the_round_summary_counts_the_ones_who_never_gave_an_order(three):
@@ -1694,7 +1694,7 @@ def test_the_round_summary_counts_the_ones_who_never_gave_an_order(three):
     bi.fill_timed_out_actions(battle, three)
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
     assert _summary(msgs) == (
-        "這一回合官軍佔了上風（戰局 50→55）：官軍的奇襲剋住了黃巾的固守；黃巾有 1 人遲遲沒有下令，只能原地固守。"
+        "這一回合官軍佔了上風（戰局 50→55）：官軍的奇襲剋住了黃巾的固守，甲一馬當先；黃巾有 1 人遲遲沒有下令，只能原地固守。"
     )
 
 
@@ -1704,13 +1704,13 @@ def test_the_round_summary_tells_a_weaker_side_from_a_worn_out_one(three):
     bi.submit_action(battle, "甲", "guan_hold")
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, three, random.Random(0), now=1, tuning=BattleTuning())
-    assert _summary(msgs).endswith("：黃巾氣血耗損，漸漸撐不住官軍。")
+    assert _summary(msgs).endswith("：黃巾氣血耗損，漸漸撐不住官軍，甲帶頭固守。")
     stronger = _two_fighters(three)
     stronger.participants["甲"].scores = {m: 90.0 for m in MOVES}
     bi.submit_action(stronger, "甲", "guan_hold")
     bi.submit_action(stronger, "乙", "huang_hold")
     msgs = bi.resolve_round(stronger, three, random.Random(0), now=1, tuning=BattleTuning())
-    assert _summary(msgs).endswith("：官軍的武藝更勝一籌。")
+    assert _summary(msgs).endswith("：官軍的武藝更勝一籌，甲帶頭固守。")
 
 
 def test_the_round_summary_counts_the_gambles_per_side(three):
@@ -1724,7 +1724,7 @@ def test_the_round_summary_counts_the_gambles_per_side(three):
     msgs = bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
     # 官軍唯一的人在賭：黃巾的固守推滿 10，再加上官軍賭輸倒退 1
     assert _summary(msgs) == (
-        "這一回合黃巾佔了上風（戰局 50→39）：官軍沒有人正面出陣迎戰，黃巾放手壓了上去；官軍有人放手一搏失手，戰局倒退了 1。"
+        "這一回合黃巾佔了上風（戰局 50→39）：官軍沒有人正面出陣迎戰，黃巾放手壓了上去，乙帶頭固守；官軍有人放手一搏失手，戰局倒退了 1。"
     )
     assert "甲這一搏失敗了，付出了慘痛代價：官軍的戰局倒退 1，自己氣血 -3500。" in msgs
 
@@ -1738,7 +1738,7 @@ def test_a_battle_records_how_each_round_swung_and_names_the_key_rounds(three):
     assert [s.round for s in battle.swings] == [1, 2, 3] and [s.delta for s in battle.swings] == [-5, 4, 4]
     battle.trend = 53  # 官軍贏：挑往官軍推最多的兩回合，照回合先後寫
     assert bi.outcome_reason(battle, three) == (
-        "勝負的關鍵：第 2 回合，官軍的奇襲剋住了黃巾的固守；第 3 回合，官軍的奇襲剋住了黃巾的固守。"
+        "勝負的關鍵：第 2 回合，官軍的奇襲剋住了黃巾的固守，甲一馬當先；第 3 回合，官軍的奇襲剋住了黃巾的固守，甲一馬當先。"
     )
     battle.trend = 50
     assert bi.outcome_reason(battle, three) == ""  # 停在中線：不寫
@@ -1756,7 +1756,7 @@ def test_the_outcome_reason_mentions_a_head_start_and_lands_in_the_closing_messa
     bi.submit_action(battle, "乙", "huang_hold")
     msgs = bi.resolve_round(battle, one, random.Random(0), now=1, tuning=BattleTuning())
     assert battle.phase == "ended"
-    reason = "勝負的關鍵：開戰時官軍就佔了地利（戰局從 58 起算）；第 1 回合，官軍的奇襲剋住了黃巾的固守。"
+    reason = "勝負的關鍵：開戰時官軍就佔了地利（戰局從 58 起算）；第 1 回合，官軍的奇襲剋住了黃巾的固守，甲一馬當先。"
     assert battle.outcome_reason == reason and msgs[-1] == reason
 
 

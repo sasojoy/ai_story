@@ -67,6 +67,14 @@ class BattleParticipant(BaseModel):
     fell_round: int | None = None  # 在整場的第幾回合倒下；沒倒下是 None
     attribute: str = ""  # 加入時身上武學的屬性（隊伍多樣性，一門打不遍）；只有第一季開著時才快照，空的不算一路
     role: str = ""  # 加入時依本人最突出的屬性給的職位（屬性的鍵，role_for；名字在 BattleTuning.roles）；空的是沒有職位
+    # 以下是 Joy 2026-10-10 決戰試玩回饋加的（舊資料沒有這幾欄就是預設值）
+    gambled_act: int = -1  # 最近一次放手一搏是在第幾幕（BattleTuning.gamble_per_act：一幕最多搏幾次）
+    gambles_this_act: int = 0  # 那一幕搏了幾次
+    pinned_round: int = 0  # 被險招牽制住、只能固守的那一回合（整場的第幾回合，1 起算）；0 是沒有
+    led_rounds: int = 0  # 帶頭出固定招、而且那一回合自己這一邊佔了上風的回合數（戰報寫）
+    targeted_by: list[str] = Field(default_factory=list)  # 放手一搏點名過他的人（照先後、不重複）
+    hurt_taken: float = 0.0  # 被別人打掉的氣血（點名的放手一搏、對面強攻的集火）
+    hurt_dealt: float = 0.0  # 自己的放手一搏打掉被點名的人多少氣血
 
 
 class GambleMoment(BaseModel):
@@ -147,6 +155,8 @@ class BattleInstance(BaseModel):
     outcome_margin: str = ""  # 「大勝」或「險勝」；outcome_side 是空的時候也是空的
     outcome_reason: str = ""  # 勝負的關鍵（outcome_reason 寫的那一句）：收場訊息、參戰者的戰報都放；舊資料、沒分勝負是空的
     swings: list[RoundSwing] = Field(default_factory=list)  # 每一回合戰局怎麼走（resolve_round 記），寫敗因用；舊資料沒有是空的
+    marked: dict[str, int] = Field(default_factory=dict)  # 名號 → 在第幾幕變得顯眼（被點名、或自己放手一搏成過）；同一幕才算
+    last_targets: dict[str, list[str]] = Field(default_factory=dict)  # 上一回合：被點名的人 → 點名他的人（場景寫「X 盯上了你」）
     outcome_world_flags: list[str] = Field(default_factory=list)  # 結果要套用到共用賽季的世界旗標（複製自
     # BattleOutcome.world_flags_add，不是參照——戰鬥結算只碰共用戰鬥狀態本身，套用到賽季是
     # 呼叫端 engine.py 的事，見 Game._apply_battle_outcome；這裡存一份複本給它讀，不用
@@ -363,7 +373,54 @@ def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> l
     if is_third(definition, p):
         return third_options(definition)
     act = current_act(instance, definition)
-    return [o for o in act.options if o.faction in (None, p.faction)]
+    options = [o for o in act.options if o.faction in (None, p.faction)]
+    if pinned(instance, p):  # 被險招牽制住：這一回合只能固守
+        held = [o for o in options if o.move == "固守" and not o.free_text]
+        if held:
+            return held
+    if not can_gamble(instance, definition, p):  # 這一幕放手一搏過了
+        options = [o for o in options if not o.free_text]
+    return options
+
+
+def pinned(instance: BattleInstance, p: BattleParticipant) -> bool:
+    """這一回合（整場第 round_number＋1 回合）是不是被牽制住、只能固守。"""
+    return p.pinned_round == instance.round_number + 1
+
+
+def can_gamble(instance: BattleInstance, definition: BattleDef, p: BattleParticipant) -> bool:
+    """這一幕還能不能放手一搏（FreeTextGamble.per_act）。"""
+    limit = definition.free_text_gamble.per_act if definition.free_text_gamble is not None else 1
+    return p.gambled_act != instance.act_index or p.gambles_this_act < limit
+
+
+def find_target(instance: BattleInstance, definition: BattleDef, name: str, text: str) -> BattleParticipant | None:
+    """放手一搏的文字裡點名的對面參戰者：名號 2 字以上、在文字裡最先出現的那一個（一樣早取長的）。只認交戰兩軍裡對面那一邊、
+    還沒倒下的人；第三方（地方豪強）兩軍打不到。由引擎認，不靠模型。"""
+    me = instance.participants.get(name)
+    armies = {f.id for f in definition.factions}
+    if me is None or me.faction not in armies:
+        return None
+    found = [
+        (text.find(q.name), -len(q.name), q.name) for q in instance.participants.values()
+        if q.faction in armies and q.faction != me.faction and not q.eliminated and len(q.name) >= 2 and q.name in text
+    ]
+    return instance.participants[min(found)[2]] if found else None
+
+
+def target_line(instance: BattleInstance, definition: BattleDef, name: str, text: str, tuning: BattleTuning) -> str:
+    """給模型評成功率的那一行：點名的對手是誰、身手跟你比如何（只寫比較，不寫數字）；沒點名是空字串。"""
+    target = find_target(instance, definition, name, text)
+    me = instance.participants.get(name)
+    if target is None or me is None:
+        return ""
+    ratio = strength(tuning, target.power) / max(1.0, strength(tuning, me.power))
+    how = ("遠比玩家強" if ratio >= 1.5 else "比玩家強" if ratio >= 1.1 else "跟玩家不相上下" if ratio > 0.9
+           else "比玩家弱" if ratio > 0.6 else "遠比玩家弱")
+    role = role_name(tuning, target.role)
+    side = next((f.name for f in definition.factions if f.id == target.faction), target.faction)
+    hurt = "，已經帶傷" if target.neili < target.neili_cap * 0.5 else ""
+    return f"{target.name}（{side}{'的' + role if role else ''}，身手{how}{hurt}）"
 
 
 def fixed_options(instance: BattleInstance, definition: BattleDef, name: str) -> list[BattleOption]:
@@ -562,6 +619,9 @@ def resolve_round(
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
     coefs: dict[str, list[float]] = {first: [], second: []}  # 陣營 → 這一回合每個出固定招的人的剋制係數，回合摘要用
     fitness: dict[str, list[tuple[float, float]]] = {first: [], second: []}  # 陣營 → 每個出固定招的人的（份量, 氣血狀態），回合摘要用
+    shares: dict[str, list[tuple[float, str, str]]] = {first: [], second: []}  # 陣營 →（力量, 名號, 招）：回合原因點名帶頭的人
+    hits: list[_Hit] = []  # 點名的放手一搏成了：對被點名的人的傷害等這一圈結算完才一起扣（誰先誰後不影響這一回合的力量）
+    targets_now: dict[str, list[str]] = {}  # 這一回合被點名的人 → 點名他的人
     trend_before = instance.trend
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
@@ -583,13 +643,29 @@ def resolve_round(
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
             side_name = names.get(p.faction, p.faction)
             win_story, lose_story = (instance.round.stories.get(name) or ["", ""])[:2]
+            if p.gambled_act == act_index:  # 一幕最多搏幾次（FreeTextGamble.per_act）
+                p.gambles_this_act += 1
+            else:
+                p.gambled_act, p.gambles_this_act = act_index, 1
+            target = find_target(instance, definition, name, custom_text or "")
+            if target is not None:  # 點名：這一幕他變得顯眼；成不成都記下誰盯上了他
+                instance.marked[target.name] = act_index
+                if name not in target.targeted_by:
+                    target.targeted_by.append(name)
+                targets_now.setdefault(target.name, []).append(name)
             # 試玩回饋 2026-10-08：對戰局只有小影響，主要的代價是自己的氣血池（扣到 0 就照下面倒下出局）
             if succeeded:
                 # 越強越有份量：推進乘實力（新手打五折、練滿最多兩倍）
                 might = max(tuning.gamble_strength_min, min(tuning.gamble_strength_max, strength(tuning, p.power) / tuning.gamble_strength_ref))
                 delta = max(1, round((gamble.success_trend_base + risk * gamble.success_trend_per_risk) * might))
                 damage = p.neili_cap * gamble.success_neili_share
-                if win_story:  # 模型寫的劇情，數字照引擎算的另外附在後面
+                instance.marked[name] = act_index  # 搏成了的人也顯眼
+                if target is not None:  # 點名：推進打折，其餘化成對他的傷害（等這一圈結算完才扣，訊息到時候再寫）
+                    delta = max(1, round(delta * tuning.target_push_share))
+                    want = target.neili_cap * min(tuning.target_hit_max, tuning.target_hit_base + risk * tuning.target_hit_per_risk)
+                    hits.append(_Hit(len(msgs), name, target.name, want, success_rate <= tuning.pin_rate, win_story, side_name, delta, damage))
+                    msgs.append("")
+                elif win_story:  # 模型寫的劇情，數字照引擎算的另外附在後面
                     msgs.append(f"{win_story}（{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}）")
                 else:
                     msgs.append(f"{name}這一搏成功了！{side_name}的戰局推進 {delta}，自己氣血 -{round(damage)}。")
@@ -617,6 +693,7 @@ def resolve_round(
             if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
                 coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
             force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
+            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef, name, move))
             counts[p.faction] += 1
             coefs[p.faction].append(coef)
             fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
@@ -631,6 +708,11 @@ def resolve_round(
             p.eliminated = True
             p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
+    harmed: dict[str, float] = {}  # 這一回合每個人被別人打掉多少（點名＋集火，target_round_cap）
+    for hit in hits:
+        msgs[hit.index] = _land_hit(instance, tuning, hit, harmed, msgs)
+    msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
+    instance.last_targets = targets_now
     # 同一邊同一回合放手一搏合起來有上限（一個人亂寫、一群人亂寫都不能抵過全軍的固定招）
     if definition.free_text_gamble is not None:
         cap = definition.free_text_gamble.side_trend_cap
@@ -668,7 +750,8 @@ def resolve_round(
     instance.round_number += 1
     # 這一回合為什麼往哪邊推（試玩回饋 2026-10-08：全是官軍卻輸了，卻看不出為什麼）：放在場景上看得到的第一行
     auto = {side: sum(1 for n in moves if factions[n] == side and n in instance.round.auto_picked) for side in (first, second)}
-    causes = round_causes(names, (first, second), push, counts, mixes, coefs, gambles, auto, fitness)
+    leads = _leads(instance, shares, mixes, tuning, push, (first, second))
+    causes = round_causes(names, (first, second), push, counts, mixes, coefs, gambles, auto, fitness, leads, tuning.lead_crowd)
     msgs.insert(1 if counts[first] or counts[second] else 0, round_line(names, (first, second), trend_before, instance.trend, causes))
     instance.swings.append(RoundSwing(round=instance.round_number, delta=instance.trend - trend_before, causes="；".join(causes)))
     decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
@@ -694,6 +777,113 @@ def resolve_round(
     return msgs
 
 
+class _Hit(NamedTuple):
+    """一次點名成了的放手一搏，等這一圈結算完才扣被點名的人（_land_hit）。index 是訊息先佔好的位置。"""
+
+    index: int
+    attacker: str
+    target: str
+    want: float
+    pin: bool
+    story: str
+    side_name: str
+    delta: int
+    damage: float
+
+
+def _harm(tuning: BattleTuning, q: BattleParticipant, want: float, harmed: dict[str, float]) -> float:
+    """別人這一回合打掉 q 的氣血：不超過他剩的、也不超過這一回合被打的上限（target_round_cap，免得被圍毆秒殺）。"""
+    room = q.neili_cap * tuning.target_round_cap - harmed.get(q.name, 0.0)
+    hit = max(0.0, min(want, room, q.neili))
+    q.neili -= hit
+    q.hurt_taken += hit
+    harmed[q.name] = harmed.get(q.name, 0.0) + hit
+    return hit
+
+
+def _fell(instance: BattleInstance, q: BattleParticipant, msgs: list[str]) -> None:
+    if q.neili <= 0 and not q.eliminated:
+        q.eliminated = True
+        q.fell_round = instance.round_number + 1
+        msgs.append(f"{q.name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
+
+
+def _land_hit(
+    instance: BattleInstance, tuning: BattleTuning, hit: _Hit, harmed: dict[str, float], msgs: list[str],
+) -> str:
+    """點名的放手一搏成了：扣被點名的人、記帳；險招成了他下一回合被牽制。回傳那一搏的訊息（劇情＋括號裡的數字）。"""
+    q, me = instance.participants[hit.target], instance.participants[hit.attacker]
+    dealt = _harm(tuning, q, hit.want, harmed)
+    me.hurt_dealt += dealt
+    pinned_now = hit.pin and q.neili > 0
+    if pinned_now:
+        q.pinned_round = instance.round_number + 2  # 這一回合是第 round_number＋1 回合，牽制的是下一回合
+    numbers = f"{hit.side_name}的戰局推進 {hit.delta}，{q.name}氣血 -{round(dealt)}，自己氣血 -{round(hit.damage)}"
+    line = f"{hit.story}（{numbers}）" if hit.story else f"{hit.attacker}這一搏成功了，正中{q.name}！{numbers}。"
+    if pinned_now:
+        line += f"{q.name}被牽制住了，下一回合只能固守。"
+    _fell(instance, q, msgs)
+    return line
+
+
+def _focus_fire(
+    instance: BattleInstance, tuning: BattleTuning, moves: dict[str, str], factions: dict[str, str],
+    armies: tuple[str, str], names: dict[str, str], act_index: int, harmed: dict[str, float],
+) -> list[str]:
+    """引人注目：對面這一回合每一個出強攻的人，另外有 focus_per_attacker 的傷害平分到這一邊這一幕顯眼的人身上
+    （每人最多他上限的 focus_cap，也受 target_round_cap 夾）。"""
+    out: list[str] = []
+    for side in armies:
+        enemy = armies[1] if side == armies[0] else armies[0]
+        attackers = sum(1 for n, m in moves.items() if factions.get(n) == enemy and m == "強攻")
+        marked = [
+            q for q in instance.participants.values()
+            if q.faction == side and not q.eliminated and not q.away and instance.marked.get(q.name) == act_index
+        ]
+        if not attackers or not marked or tuning.focus_per_attacker <= 0:
+            continue
+        each = tuning.focus_per_attacker * attackers / len(marked)
+        landed = []
+        for q in marked:
+            dealt = _harm(tuning, q, min(each, q.neili_cap * tuning.focus_cap), harmed)
+            if dealt >= 0.5:
+                landed.append(f"{q.name}氣血 -{round(dealt)}")
+        if landed:
+            out.append(f"{names.get(enemy, enemy)}的強攻盯著顯眼的人打：{'、'.join(landed)}。")
+        for q in marked:
+            _fell(instance, q, out)
+    return out
+
+
+def _leads(
+    instance: BattleInstance, shares: dict[str, list[tuple[float, str, str]]], mixes: dict[str, dict[str, float]],
+    tuning: BattleTuning, push: float, armies: tuple[str, str],
+) -> dict[str, tuple[str, str, int]]:
+    """每一邊這一回合帶頭出固定招的人：出得最多的那一招裡力量最大的那一個（名號, 招, 出這一招的人數）。
+    推力往哪邊，那一邊帶頭的人記一個 led_rounds（戰報寫）。"""
+    out: dict[str, tuple[str, str, int]] = {}
+    for side in armies:
+        if not shares[side]:
+            continue
+        move = _main_move(mixes[side])
+        crew = [row for row in shares[side] if row[2] == move]
+        _, lead, _ = max(crew, key=lambda row: (row[0], row[1]))
+        out[side] = (lead, move, len(crew))
+    shift = round(push)
+    winner = armies[0] if shift > 0 else armies[1] if shift < 0 else None
+    if winner in out:
+        instance.participants[out[winner][0]].led_rounds += 1
+    return out
+
+
+def lead_clause(lead: tuple[str, str, int], crowd: int, with_move: bool = True) -> str:
+    """「張三帶頭強攻」／「張三等 4 人結成強攻陣勢」；前一句已經寫了招（剋住的那一句）就不再寫招：「張三一馬當先」／「張三等 4 人結成陣勢」。"""
+    name, move, count = lead
+    if count >= crowd:
+        return f"{name}等 {count} 人結成{move if with_move else ''}陣勢"
+    return f"{name}帶頭{move}" if with_move else f"{name}一馬當先"
+
+
 def _main_move(mix: dict[str, float]) -> str:
     """這一邊這回合出得最多的那一招（一樣多時照 MOVES 的順序）。"""
     return max(MOVES, key=lambda m: mix.get(m, 0.0))
@@ -702,28 +892,33 @@ def _main_move(mix: dict[str, float]) -> str:
 def round_causes(
     names: dict[str, str], armies: tuple[str, str], push: float, counts: dict[str, int], mixes: dict[str, dict[str, float]],
     coefs: dict[str, list[float]], gambles: dict[str, int], auto: dict[str, int],
-    fitness: dict[str, list[tuple[float, float]]] | None = None,
+    fitness: dict[str, list[tuple[float, float]]] | None = None, leads: dict[str, tuple[str, str, int]] | None = None,
+    crowd: int = 3,
 ) -> list[str]:
     """這一回合戰局為什麼這樣走，寫成幾句話（試玩回饋 2026-10-08：輸了要看得懂為什麼）。都照結算的數字挑，不叫模型：
     - 三招交鋒（推力不是 0）：對面沒人正面出招 → 一邊壓上；平均剋制係數差到 0.2 → 誰的哪招剋住誰的哪招；
       人數差到 1.5 倍 → 人多；都不是 → 份量（武藝）與氣血狀態，兩者裡差得多的那一個（fitness 是每個人的（份量, 氣血狀態））；
     - 放手一搏：每一邊這一回合賭贏賭輸的淨推動（失手寫倒退多少）；
-    - 逾時沒出手、被系統代為固守的人數（固守會被奇襲剋）。"""
+    - 逾時沒出手、被系統代為固守的人數（固守會被奇襲剋）。
+    leads 給了，佔上風那一邊帶頭出固定招的人接在第一句後面（Joy 2026-10-10：「跟從預設選項的玩家……應該也要有出場機會」）。"""
     out: list[str] = []
     shift = round(push)
     if shift:
         win, lose = (armies[0], armies[1]) if shift > 0 else (armies[1], armies[0])
         w, lo = names.get(win, win), names.get(lose, lose)
+        lead = (leads or {}).get(win)
+        tail = f"，{lead_clause(lead, crowd)}" if lead else ""
         if not counts[lose]:
-            out.append(f"{lo}沒有人正面出陣迎戰，{w}放手壓了上去")
+            out.append(f"{lo}沒有人正面出陣迎戰，{w}放手壓了上去{tail}")
         else:
             avg = {side: sum(coefs[side]) / len(coefs[side]) for side in armies if coefs[side]}
             if avg.get(win, 1.0) - avg.get(lose, 1.0) >= 0.2:
-                out.append(f"{w}的{_main_move(mixes[win])}剋住了{lo}的{_main_move(mixes[lose])}")
+                tail = f"，{lead_clause(lead, crowd, with_move=False)}" if lead else ""
+                out.append(f"{w}的{_main_move(mixes[win])}剋住了{lo}的{_main_move(mixes[lose])}{tail}")
             elif counts[win] >= 1.5 * counts[lose]:
-                out.append(f"{w}人多勢眾（{counts[win]} 人對 {counts[lose]} 人）")
+                out.append(f"{w}人多勢眾（{counts[win]} 人對 {counts[lose]} 人）{tail}")
             else:
-                out.append(_edge(w, lo, (fitness or {}).get(win, []), (fitness or {}).get(lose, [])))
+                out.append(_edge(w, lo, (fitness or {}).get(win, []), (fitness or {}).get(lose, [])) + tail)
     for side in armies:
         delta = gambles.get(side, 0)
         if delta < 0:
@@ -928,14 +1123,15 @@ def assess_action_success_rate(
 
 def assess_gamble(
     client: OllamaClient | None, act: BattleAct, faction_name: str, text: str, name: str = "",
-    setting: str = "漢末兩軍交戰的戰場", place: str = "戰場",
+    setting: str = "漢末兩軍交戰的戰場", place: str = "戰場", target: str = "",
 ) -> GambleVerdict:
     """請 LLM 評估這段自訂行動聽起來有多可能成功（0~100）——只評機率，不評「成不成功」
     本身（那是 resolve_round 擲骰決定的），也不會被拿去當作任何數值直接套用，只是擲骰
     用的機率輸入。連不上/生成失敗/格式不對都回傳保底值（見 DEFAULT_FREE_TEXT_SUCCESS_RATE），
     不會讓整個行動失敗——這類評估本來就是錦上添花，寧可給一個偏低的保守值，也不要卡住
     玩家的回合。
-    act 只讀 title 與 text（單人頭目戰傳 duel 的 Scene）；setting、place 換掉提示裡的「漢末兩軍交戰的戰場」與「戰場」。"""
+    act 只讀 title 與 text（單人頭目戰傳 duel 的 Scene）；setting、place 換掉提示裡的「漢末兩軍交戰的戰場」與「戰場」。
+    target 是玩家點名的對手（target_line，引擎認的）：多給模型一行，成功率要反映打的是誰。"""
     if client is None:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     who = name or "這位少俠"
@@ -949,7 +1145,8 @@ def assess_gamble(
         )},
         {"role": "user", "content": (
             f"{place}情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"
-            f"玩家的行動：「{text}」\n請給出 success_rate、reasoning、win、lose。"
+            + (f"玩家點名攻擊的對手：{target}\n" if target else "")
+            + f"玩家的行動：「{text}」\n請給出 success_rate、reasoning、win、lose。"
         )},
     ]
     try:
