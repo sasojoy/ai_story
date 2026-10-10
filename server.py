@@ -1435,6 +1435,7 @@ MENXIA_ACTIONS = {
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一把換到手上（兵器設計 2.2）
+    "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）
 }
 
 

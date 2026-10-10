@@ -823,3 +823,169 @@ def test_wanted_repairs_only_a_blade_that_fits(content, world):
     assert _wanted(game, content, world) is None
     p.weapon = _blade(kind="劍", edge=10)
     assert _wanted(game, content, world) == "smith:repair"
+
+
+# ── 拆解（兵器設計 4.7.1）：裝備庫裡的一把拆成一個素材 ──
+
+def _stocked(content):
+    """測試內容只有剛三階與快一階：補上其餘的屬性與階，每種屬性每一階都有，好驗屬性對應。"""
+    from tianxia.models import Material
+    for attribute in ("陰", "陽", "柔", "慢", "虛", "實", "快"):
+        if attribute == "快" and any(m.attribute == "快" and m.tier > 1 for m in content.materials.values()):
+            continue
+        for tier in (1, 2, 3):
+            mid = f"t_{attribute}_{tier}"
+            content.materials[mid] = Material(id=mid, name=f"{attribute}料{tier}", attribute=attribute, tier=tier)
+    return content
+
+
+def _rack_weapon(wid="兵:5", attribute="剛", tier=1, edge=100, kind="刀"):
+    return Weapon(id=wid, name=f"{attribute}{wid}", kind=kind, attribute=attribute, tier=tier, quality="下品", edge=edge)
+
+
+@pytest.mark.parametrize("attribute,tier,expected", [("剛", 1, "gang_1"), ("剛", 2, "gang_2"), ("快", 1, "kuai_1"), ("剛", 3, "gang_3")])
+def test_dismantle_material_matches_tier_and_the_four_plain_attributes(content, attribute, tier, expected):
+    assert weapons.dismantle_material(content, _rack_weapon(attribute=attribute, tier=tier)).id == expected
+
+
+def test_dismantle_material_follows_a_plain_attribute_when_the_content_has_it(content):
+    _stocked(content)
+    for attribute in ("剛", "柔", "快", "慢"):
+        m = weapons.dismantle_material(content, _rack_weapon(attribute=attribute, tier=2))
+        assert m.tier == 2 and m.attribute == attribute
+
+
+def test_dismantle_material_falls_back_to_the_tier_when_the_attribute_is_missing(content):
+    m = weapons.dismantle_material(content, _rack_weapon(attribute="柔", tier=2))  # 測試內容沒有柔
+    assert m.tier == 2
+
+
+@pytest.mark.parametrize("attribute,sources", [("陽", {"剛", "快"}), ("陰", {"柔", "慢"}), ("虛", {"快", "柔"}), ("實", {"剛", "慢"})])
+def test_compound_attributes_dismantle_into_one_of_their_two_sources(content, attribute, sources):
+    _stocked(content)
+    seen = set()
+    for i in range(40):
+        w = _rack_weapon(wid=f"兵:{i}", attribute=attribute, tier=1)
+        m = weapons.dismantle_material(content, w)
+        assert m.attribute in sources and m.tier == 1
+        assert weapons.dismantle_material(content, w).id == m.id  # 同一把永遠拆出同一個
+        seen.add(m.attribute)
+    assert seen == sources  # 兩個來源都有人抽到（雜湊不是永遠同一邊）
+
+
+def test_dismantle_removes_the_rack_weapon_and_gives_one_material(content, world):
+    game = _town(content, world)
+    p = game.state.player
+    p.weapon = _blade()
+    p.rack = [_rack_weapon("兵:5"), _rack_weapon("兵:6", attribute="快")]
+    silver, stamina = p.stats["silver"], p.stamina
+    msgs = weapons.dismantle(game.state, content, "兵:5")
+    assert [w.id for w in p.rack] == ["兵:6"] and p.weapon.id == "兵:1"
+    assert p.materials == {"gang_1": 1}
+    assert msgs[0].startswith(weapons.DISMANTLE_PREFIX) and "精鐵砂" in msgs[0]
+    assert p.stats["silver"] == silver and p.stamina == stamina  # 不花銀兩、不花體力
+    weapons.dismantle(game.state, content, "兵:6")
+    assert p.materials == {"gang_1": 1, "kuai_1": 1}
+
+
+def test_the_worn_weapon_and_unknown_ids_cannot_be_dismantled(content, world):
+    game = _town(content, world)
+    p = game.state.player
+    p.weapon = _blade()
+    p.rack = [_rack_weapon("兵:5")]
+    for wid in ("兵:1", "兵:99", ""):
+        msgs = weapons.dismantle(game.state, content, wid)
+        assert msgs == [weapons.DISMANTLE_MISSING]
+    assert p.weapon.id == "兵:1" and [w.id for w in p.rack] == ["兵:5"] and p.materials == {}
+
+
+def test_dismantle_is_refused_when_weapons_are_off(content, world):
+    game = _game(content, world)
+    assert content.config.weapons.enabled is False
+    p = game.state.player
+    p.rack = [_rack_weapon("兵:5")]
+    msgs = game.dismantle_weapon("兵:5")
+    assert msgs and not msgs[0].startswith(weapons.DISMANTLE_PREFIX)
+    assert [w.id for w in p.rack] == ["兵:5"] and p.materials == {}
+    assert weapons.dismantle(game.state, content, "兵:5") == ["（此刻無法這麼做。）"]
+
+
+def test_game_dismantle_weapon_works_anywhere_and_writes_a_practice_entry(content, world):
+    game = _town(content, world)
+    p = game.state.player
+    p.location = "lake"  # 拆解不必在鐵匠鋪
+    p.rack = [_rack_weapon("兵:5")]
+    before = len(game.state.journal) if hasattr(game.state, "journal") else None
+    msgs = game.dismantle_weapon("兵:5")
+    assert msgs[0].startswith(weapons.DISMANTLE_PREFIX) and p.rack == []
+    assert game.dismantle_weapon("兵:5")[0] == weapons.DISMANTLE_MISSING
+    assert before is None or len(game.state.journal) >= before
+
+
+def test_smith_menu_lists_dismantle_buttons_with_their_result(content, world):
+    game = _sworder(content, world)
+    p = game.state.player
+    p.weapon = _blade()
+    p.rack = [_rack_weapon("兵:5", attribute="剛"), _rack_weapon("兵:6", attribute="快")]
+    game.choose("act:smith")
+    opts = _ids(game)
+    assert opts["smith:dismantle:兵:5"].label == "拆解【剛兵:5】→ 精鐵砂×1"
+    assert opts["smith:dismantle:兵:6"].label == "拆解【快兵:6】→ 驚羽×1" and opts["smith:dismantle:兵:6"].enabled
+    assert "smith:dismantle:兵:1" not in opts  # 手上那把不能拆
+    msgs = game.choose("smith:dismantle:兵:5")
+    assert game.state.player.materials == {"gang_1": 1} and game.state.player.picking_smith  # 做完選單還開著
+    assert "smith:dismantle:兵:5" not in _ids(game)
+    assert any(m.startswith(weapons.DISMANTLE_PREFIX) for m in msgs)
+
+
+def test_smith_menu_has_no_dismantle_without_a_rack_or_with_weapons_off(content, world):
+    game = _sworder(content, world)
+    game.choose("act:smith")
+    assert not [i for i in _ids(game) if i.startswith("smith:dismantle")]
+    game.state.player.rack = [_rack_weapon("兵:5")]
+    content.config.weapons.enabled = False
+    assert game.choose("smith:dismantle:兵:5") != [] and game.state.player.rack  # 開關關了：不拆
+    assert game.state.player.materials == {}
+
+
+def test_smith_menu_caps_dismantle_buttons_at_eight_lowest_edge_then_tier_first(content, world):
+    game = _sworder(content, world)
+    p = game.state.player
+    p.rack = [_rack_weapon(f"兵:{i}", tier=1 + i % 3, edge=100 - (i % 5) * 10) for i in range(2, 14)]  # 12 把
+    game.choose("act:smith")
+    ids = [i for i in _ids(game) if i.startswith("smith:dismantle:")]
+    assert len(ids) == 8
+    expected = [f"smith:dismantle:{w.id}" for w in sorted(p.rack, key=lambda w: (w.edge, w.tier, w.id))[:8]]
+    assert ids == expected  # 選單上就是這個順序
+    more = _ids(game)["smith:dismantle-more"]
+    assert not more.enabled and more.label == "還有 4 件，到修練頁的裝備庫拆"
+    p.rack = p.rack[:8]
+    game.state.player.picking_smith = True
+    assert "smith:dismantle-more" not in _ids(game)
+    p.rack = p.rack[:3]
+    assert "smith:dismantle-more" not in _ids(game)
+
+
+def test_dismantle_is_not_something_bots_ever_want(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _sworder(content, world, silver=0)
+    game.state.player.rack = [_rack_weapon("兵:5")]
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    game.choose("act:smith")
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored["smith:dismantle:兵:5"] is None  # 假人不拆
+    assert not (_wanted(game, content, world) or "").startswith("smith:dismantle")
+
+
+def test_menxia_dismantle_action_gives_a_material_and_writes_a_practice_entry(content, world):
+    import server
+    _on(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.rack = [_rack_weapon("兵:2")]
+    server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})
+    assert p.rack == [] and p.materials == {"gang_1": 1}
+    assert server.menxia_view(game)["weapons"]["rack"] == []
+    assert server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})[0] == weapons.DISMANTLE_MISSING
+    assert server.MENXIA_ACTIONS["dismantle"](game, {})[0] == weapons.DISMANTLE_MISSING

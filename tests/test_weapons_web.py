@@ -64,3 +64,14 @@ def test_a_long_rack_lists_eight_and_then_a_more_button(views):
     x["weapons"]["rack"] = rack[:8]  # 剛好八把：不必多按一次
     short = run(m, "return H.pagePractice();", menxia=x)
     assert short.count('data-act="wield"') == 8 and "再列" not in short
+
+
+def test_every_rack_row_has_a_dismantle_button_and_the_worn_one_does_not(views):
+    m, x = views
+    x["weapons"] = {"worn": _row(), "cap": 100, "rack": [_row(id="兵:2", name="<i>厚背刀</i>"), _row(id="兵:3", name="備刃", fits=False, bonus=None)]}
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert page.count('data-act="dismantle"') == 2 and 'data-act="dismantle" data-id="兵:2"' in page and 'data-act="dismantle" data-id="兵:3"' in page
+    assert page.count('data-act="wield"') == 2  # 換上照舊
+    assert "<i>厚背刀</i>" not in page and "&lt;i&gt;厚背刀&lt;/i&gt;" in page
+    x["weapons"]["rack"] = []
+    assert 'data-act="dismantle"' not in run(m, "return H.pagePractice();", menxia=x)  # 身上那把不能拆

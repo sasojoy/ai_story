@@ -2479,6 +2479,7 @@ class Game:
     def _smith_options(self) -> list[Option]:
         """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），
         手上那把一顆「修」（寫明用掉哪一種素材），裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），
+        裝備庫裡每把一顆「拆解」（4.7.1，最多 DISMANTLE_LIST 顆，最鈍最低階的先，多的一行灰掉的說明指到修練頁），
         最後是永遠按得下去的「離開」。都不花體力。"""
         s, c = self.state, self.content
         art = team.player_art(s, c, self.world, s.player.member.wugong_id)
@@ -2500,11 +2501,18 @@ class Game:
         for w in s.player.rack:
             if weapons.usable(w, art, c, self.world):
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
+        if c.config.weapons.enabled:
+            breakable = sorted(s.player.rack, key=weapons.dismantle_order)
+            for w in breakable[:weapons.DISMANTLE_LIST]:
+                opts.append(Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】→ {weapons.dismantle_material(c, w).name}×1"))
+            if len(breakable) > weapons.DISMANTLE_LIST:
+                opts.append(Option(id="smith:dismantle-more", label=weapons.DISMANTLE_MORE.format(n=len(breakable) - weapons.DISMANTLE_LIST),
+                                   enabled=False))
         opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
         return opts
 
     def _smith(self, arg: str) -> list[str]:
-        """鐵匠鋪上的選擇：買、修、換上，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+        """鐵匠鋪上的選擇：買、修、換上、拆解，或離開（收起選單）。做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
@@ -2516,12 +2524,21 @@ class Game:
             return weapons.repair(s, c)
         if verb == "wield":
             return weapons.wield(s, c, rest)
+        if verb == "dismantle":
+            return weapons.dismantle(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
     def wield_weapon(self, weapon_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2）：哪裡都能換、不花體力；寫一則修練紀錄。"""
         msgs = self._log(weapons.wield(self.state, self.content, weapon_id))
         if msgs and msgs[0].startswith("你換上了"):
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
+    def dismantle_weapon(self, weapon_id: str) -> list[str]:
+        """修練頁裝備庫的「拆解」（兵器設計 4.7.1）：哪裡都能拆、不花體力；寫一則修練紀錄。"""
+        msgs = self._log(weapons.dismantle(self.state, self.content, weapon_id))
+        if msgs and msgs[0].startswith(weapons.DISMANTLE_PREFIX):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 

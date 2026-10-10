@@ -1906,13 +1906,13 @@
     const wp = x.weapons;
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
         <b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>
-        ${wornNow ? "" : `<button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button>`}
+        ${wornNow ? "" : `<button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}">拆解</button>`}
       </div>`;
     const weaponsBlock = wp && (wp.worn || wp.rack.length) ? `<section class="weapons"><div class="label">兵器</div>
         ${wp.worn ? weaponRow(wp.worn, true) : '<p class="muted">手上沒有兵器。</p>'}
         ${wp.rack.length ? `<small class="muted">裝備庫 ${wp.rack.length}/${wp.cap | 0}</small>${(S.rackAll || wp.rack.length <= LIB_PAGE ? wp.rack : wp.rack.slice(0, LIB_PAGE)).map((w) => weaponRow(w, false)).join("")}
           ${S.rackAll || wp.rack.length <= LIB_PAGE ? "" : `<button class="btn ghost lib-more" data-act="rack-all">再列 ${wp.rack.length - LIB_PAGE} 件</button>`}` : ""}
-        <p class="muted">城裡的鐵匠鋪買得到、修得好。</p>
+        <p class="muted">城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。</p>
       </section>` : "";
     return `
       ${proGuide()}
@@ -3130,6 +3130,7 @@
           await loadMenxia();
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
+        case "dismantle": await mx("dismantle", { weapon: el.dataset.id }); break; // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
           const was = S.menxia;

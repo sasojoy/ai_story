@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import random
 
+from .insights import PAIR_ATTRIBUTES
 from .martial_arts import MartialArt, counters
-from .models import WEAPON_KINDS, Content
+from .materials import by_tier
+from .models import WEAPON_KINDS, Content, Material
 from .state import GameState, Weapon
 from .world_state import WorldStateStore
 
@@ -248,6 +250,42 @@ def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
         p.rack.append(p.weapon)
     p.weapon, p.edge_warned = chosen, False  # 換上來的是另一把：鈍了要有它自己的提醒
     return [f"你換上了【{chosen.name}】。"]
+
+
+DISMANTLE_PREFIX = "你拆解了"
+DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
+DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾把可拆的，其餘到修練頁的裝備庫拆
+DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
+
+
+def dismantle_material(content: Content, weapon: Weapon) -> Material:
+    """拆一把兵器拿到的素材（兵器設計 4.7.1）：同階；屬性剛柔快慢直接對，陰陽虛實是兩個屬性合出來的（insights.PAIR_ATTRIBUTES），
+    從兩個來源裡挑一個，由兵器 id 的 sha256 決定（同一把永遠拆出同一種）。該階該屬性沒有素材時 by_tier 退回同階的全部。"""
+    attribute = weapon.attribute
+    sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
+    if sources is not None:
+        attribute = sources[hashlib.sha256(weapon.id.encode("utf-8")).digest()[0] % 2]
+    return (by_tier(content, weapon.tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
+
+
+def dismantle_order(weapon: Weapon) -> tuple[int, int, str]:
+    """可拆的排前面的是刀口最鈍的，再來階數低的，最後照 id 求穩定（4.7.1）。"""
+    return (weapon.edge, weapon.tier, weapon.id)
+
+
+def dismantle(state: GameState, content: Content, weapon_id: str) -> list[str]:
+    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪，也不問第二次。
+    手上那把不能拆（先換下來）；開關關著或裝備庫沒這一把，什麼都不動。"""
+    if not content.config.weapons.enabled:
+        return ["（此刻無法這麼做。）"]
+    p = state.player
+    chosen = next((w for w in p.rack if w.id == weapon_id), None)
+    if chosen is None:
+        return [DISMANTLE_MISSING]
+    material = dismantle_material(content, chosen)
+    p.rack.remove(chosen)
+    p.materials[material.id] = p.materials.get(material.id, 0) + 1
+    return [f"{DISMANTLE_PREFIX}【{chosen.name}】，拆出了{material.name}×1。"]
 
 
 REPAIR_AT = 50  # 機器人與假人鈍到這裡以下才修

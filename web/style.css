@@ -564,6 +564,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 修練頁的兵器塊（app.js 的 weaponsBlock）：身上那把與裝備庫上每把一行，右邊是「換上」 */
 .weapons .wrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 2px; }
 .weapons .wrow .btn { margin-left: auto; }
+.weapons .wrow .btn + .btn { margin-left: 0; } /* 換上與拆解兩顆並排：只有第一顆靠右推 */
 .weapons p { margin: 4px 2px; }
 .acard .hd { display: flex; gap: 10px; align-items: center; }
 .acard .hd > div { min-width: 0; }
