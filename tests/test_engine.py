@@ -3053,8 +3053,10 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
     assert entry.lines == [  # 結果之後寫勝負的關鍵（試玩回饋 2026-10-08）
         "官軍獲勝。", "勝負的關鍵：第 1 回合，黃巾氣血耗損，漸漸撐不住官軍，沈浪帶頭固守；第 3 回合，黃巾沒有人正面出陣迎戰，官軍放手壓了上去，沈浪帶頭固守。",
         "你出手 3 回合", "你帶頭衝陣、替自己這一邊佔了上風 3 回合",  # 出固定招的人也有名字（Joy 2026-10-10）
+        "你的戰功 15，在官軍排第 1／1（出手 3 回合、帶頭佔上風 3 回合）",  # 個人戰功（Joy 2026-10-10）
+        "你是官軍這一仗的首功，名字傳遍了江湖。",
     ]
-    assert entry.changes == ["寇亂 -20"]
+    assert entry.changes == ["寇亂 -20", "名望 +2"]
     report = game.state.battles[0]
     assert report.kind == "showdown" and entry.battle_id == report.id
     assert (report.opponent, report.side, report.tier) == ("黃巾", "官軍", "官軍大勝")
@@ -3066,7 +3068,10 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
     mine = fallen.state.journal[0]
     assert (mine.title, mine.tag) == ("測試決戰・官軍大勝", "你站在黃巾")
     assert mine.lines[0] == "官軍獲勝。" and mine.lines[1].startswith("勝負的關鍵：")
-    assert mine.lines[2:] == ["你出手 2 回合", "你在第 2 回合倒下，轉為觀戰"]
+    assert mine.lines[2:] == [
+        "你出手 2 回合", "你在第 2 回合倒下，轉為觀戰", "你的戰功 4，在黃巾排第 1／1（出手 2 回合）", "你是黃巾這一仗的首功，名字傳遍了江湖。",
+    ]
+    assert (game.state.player.showdowns, game.state.player.top_merits) == (1, 1)
     assert fallen.state.battles[0].kind == "showdown" and fallen.state.battles[0].opponent == "官軍"
 
     watcher.sync(start + 10)
@@ -3098,7 +3103,7 @@ def test_an_offline_fighter_gets_the_showdown_on_the_next_sync_without_the_timed
     assert _showdown_entries(back) == []  # 讀回來還沒同步：還沒補
     back.sync(end + 10)
     entry = back.state.journal[0]
-    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 -20"]
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 -20", "名望 +2"]  # 黃巾只有他一個：首功
     assert "你出手 1 回合" in entry.lines and not any("倒下" in line for line in entry.lines)
     assert back.state.battles[0].kind == "showdown"
 
@@ -6556,8 +6561,8 @@ def test_showdown_result_feeds_timetable(content, world):
     assert (report.title, report.tag) == ("長社火攻・官軍大勝", "你站在官軍")
     # 第一季規則開著、潁川汝南是一條戰線：大勢增減不再是帶正負號的數字（FB-064）——江湖紀錄存的是機器可讀的標籤（畫出來是
     # 一句話，官軍看是綠的），戰報不收
-    assert season.timeline["changshe_fire"].text in report.lines and report.changes == [front_lines.mark("yingru", -15)]
-    assert game.state.battles[0].changes == [] and "潁川汝南 -15" not in game.state.battles[0].notes
+    assert season.timeline["changshe_fire"].text in report.lines and report.changes == [front_lines.mark("yingru", -15), "名望 +2"]
+    assert game.state.battles[0].changes == ["名望 +2"] and "潁川汝南 -15" not in game.state.battles[0].notes
     assert any("潁川汝南：官軍" in html and "tx-up" in html for html in (game.battle_extra_html(),))
     assert game.state.battles[0].tier == "官軍大勝"
     assert any(e.title == "江湖大事" and "火光燭天" in e.tag for e in game.state.journal)
@@ -7777,9 +7782,10 @@ def test_the_most_dramatic_gamble_of_a_battle_goes_round_the_world_and_earns_fam
     with at(game, start + 5):
         game.choose("act:rest")  # 再存一次賽季：傳聞不會被記憶體那份蓋掉
     assert [r.text for r in game.world.get_season().rumors].count(line) == 1
-    assert game.state.player.stats["fame"] == fame + 1
+    top = content.config.battle.top_fame  # 官軍只有他一個，也是首功（個人戰功）：名望合起來寫一筆
+    assert game.state.player.stats["fame"] == fame + 1 + top
     entry = next(e for e in game.state.journal if e.title.startswith("測試決戰・"))
-    assert "名望 +1" in entry.changes and "你那一搏成了這一仗最有戲的一幕，江湖上傳開了。" in entry.lines
+    assert f"名望 +{1 + top}" in entry.changes and "你那一搏成了這一仗最有戲的一幕，江湖上傳開了。" in entry.lines
 
 
 def _paid_showdown(content, game, foe_rounds=3):
@@ -7814,16 +7820,16 @@ def _paid_showdown(content, game, foe_rounds=3):
 
 
 def test_every_fighter_draws_pay_and_the_winners_draw_more(content, game):
-    """決戰的軍餉（試玩回饋 2026-10-08）：參戰照出手回合數（滿 6 回合）發銀兩與經驗，贏的一方大勝再加一倍。"""
+    """決戰的軍餉（試玩回饋 2026-10-08）：參戰照個人戰功發銀兩與經驗（只出手 6 回合的戰功算一倍，Joy 2026-10-10），贏的一方大勝再加一倍。"""
     silver = game.state.player.stats.get("silver", 0)
     _, foe = _paid_showdown(content, game)
     battle = game.world.ended_battles(after=0)[-1][1]
     assert (battle.outcome_side, battle.outcome_margin) == ("guan", "大勝")
     entry = next(e for e in game.state.journal if e.title == "測試決戰・官軍大勝")
-    # 出手 3／6 回合：40 × 0.5 × 2 ＝ 40 兩、60 × 0.5 × 2 ＝ 60 經驗
-    assert ["銀兩 +40", "經驗 +60"] == [c for c in entry.changes if c.startswith(("銀兩", "經驗"))]
+    # 出手 3 回合、帶頭佔上風 3 回合：戰功 3×2＋3×3 ＝ 15，份量 15／12 ＝ 1.25：40 × 1.25 × 2 ＝ 100 兩、60 × 1.25 × 2 ＝ 150 經驗
+    assert ["銀兩 +100", "經驗 +150"] == [c for c in entry.changes if c.startswith(("銀兩", "經驗"))]
     assert "得勝的軍餉發下來了。" in entry.lines
-    assert game.state.player.stats["silver"] == silver + 40
+    assert game.state.player.stats["silver"] == silver + 100
     lost = next(e for e in foe.state.journal if e.title == "測試決戰・官軍大勝")
     assert ["銀兩 +20", "經驗 +30"] == [c for c in lost.changes if c.startswith(("銀兩", "經驗"))]  # 輸的一方照拿基本軍餉
     assert "軍餉發下來了。" in lost.lines

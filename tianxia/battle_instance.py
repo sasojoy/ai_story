@@ -92,6 +92,10 @@ class BattleParticipant(BaseModel):
     targeted_by: list[str] = Field(default_factory=list)  # 放手一搏點名過他的人（照先後、不重複）
     hurt_taken: float = 0.0  # 被別人打掉的氣血（點名的放手一搏、對面強攻的集火）
     hurt_dealt: float = 0.0  # 自己的放手一搏打掉被點名的人多少氣血
+    # 個人戰功（Joy 2026-10-10，merit）：舊資料沒有這幾欄就是 0
+    gambles_won: int = 0  # 放手一搏成了幾次
+    hits_landed: int = 0  # 點名的放手一搏真的打掉對方氣血幾次
+    stood_marked: int = 0  # 被點名或被集火打掉氣血、回合結束還站著的回合數
 
 
 class GambleMoment(BaseModel):
@@ -678,6 +682,7 @@ def resolve_round(
                 delta = max(1, round((gamble.success_trend_base + risk * gamble.success_trend_per_risk) * might))
                 damage = p.neili_cap * gamble.success_neili_share
                 instance.marked[name] = act_index  # 搏成了的人也顯眼
+                p.gambles_won += 1
                 if target is not None:  # 點名：推進打折，其餘化成對他的傷害（等這一圈結算完才扣，訊息到時候再寫）
                     delta = max(1, round(delta * tuning.target_push_share))
                     want = target.neili_cap * min(tuning.target_hit_max, tuning.target_hit_base + risk * tuning.target_hit_per_risk)
@@ -730,6 +735,10 @@ def resolve_round(
     for hit in hits:
         msgs[hit.index] = _land_hit(instance, tuning, hit, harmed, msgs)
     msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
+    for hurt_name, amount in harmed.items():  # 被盯上打掉了氣血、回合結束還站著：戰功（撐住）
+        q = instance.participants.get(hurt_name)
+        if q is not None and amount >= 0.5 and not q.eliminated:
+            q.stood_marked += 1
     instance.last_targets = targets_now
     # 同一邊同一回合放手一搏合起來有上限（一個人亂寫、一群人亂寫都不能抵過全軍的固定招）
     if definition.free_text_gamble is not None:
@@ -838,6 +847,8 @@ def _land_hit(
     q, me = instance.participants[hit.target], instance.participants[hit.attacker]
     dealt = _harm(tuning, q, hit.want, harmed)
     me.hurt_dealt += dealt
+    if dealt >= 0.5:
+        me.hits_landed += 1
     pinned_now = hit.pin and q.neili > 0
     if pinned_now:
         q.pinned_round = instance.round_number + 2  # 這一回合是第 round_number＋1 回合，牽制的是下一回合
@@ -975,12 +986,61 @@ def round_line(names: dict[str, str], armies: tuple[str, str], before: int, afte
     return head + ("：" + "；".join(causes) + "。" if causes else "。")
 
 
-def gauge(instance: BattleInstance, definition: BattleDef, viewer_side: str | None, timetable: bool) -> dict:
+MERIT_TOP = 3  # 戰局條旁「本場戰功」每一邊列幾個人
+MERIT_PARTS = (  # 戰功的每一項怎麼寫（順序就是戰報與畫面上的順序）
+    ("acted", "出手 {n} 回合"), ("led", "帶頭佔上風 {n} 回合"), ("gamble", "搏成 {n} 次"),
+    ("hit", "點名打傷 {n} 次"), ("stood", "被盯上撐住 {n} 回合"),
+)
+
+
+def merit_counts(p: BattleParticipant) -> dict[str, int]:
+    return {"acted": p.acted_rounds, "led": p.led_rounds, "gamble": p.gambles_won, "hit": p.hits_landed, "stood": p.stood_marked}
+
+
+def merit(tuning: BattleTuning, p: BattleParticipant) -> int:
+    """個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項照 BattleTuning.merit_points 記分。"""
+    return sum(tuning.merit_points.get(key, 0) * n for key, n in merit_counts(p).items())
+
+
+def merit_parts(p: BattleParticipant) -> list[str]:
+    counts = merit_counts(p)
+    return [text.format(n=counts[key]) for key, text in MERIT_PARTS if counts[key]]
+
+
+def merit_ranking(instance: BattleInstance, tuning: BattleTuning, side: str) -> list[tuple[BattleParticipant, int]]:
+    """一邊的參戰者照戰功排（同分照名號，免得每次刷新順序亂跳）。"""
+    rows = [(p, merit(tuning, p)) for p in instance.participants.values() if p.faction == side]
+    return sorted(rows, key=lambda row: (-row[1], row[0].name))
+
+
+def top_merit(instance: BattleInstance, tuning: BattleTuning, side: str) -> BattleParticipant | None:
+    """這一邊的首功：戰功最高、至少 1 分的那一個；沒人出過手就沒有。"""
+    ranking = merit_ranking(instance, tuning, side)
+    return ranking[0][0] if ranking and ranking[0][1] > 0 else None
+
+
+def merit_board(instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None) -> dict:
+    """戰局條旁的「本場戰功」：兩邊各列前 MERIT_TOP 名（戰功 0 的不列）、看的人自己在自己那一邊排第幾、戰功怎麼來的。"""
+    board: dict = {"me": None}
+    for key, side in (("left", left), ("right", right)):
+        ranking = merit_ranking(instance, tuning, side)
+        board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer} for p, m in ranking[:MERIT_TOP] if m > 0]
+        for rank, (p, m) in enumerate(ranking, 1):
+            if p.name == viewer:
+                board["me"] = {"rank": rank, "of": len(ranking), "merit": m, "parts": merit_parts(p)}
+    return board
+
+
+def gauge(
+    instance: BattleInstance, definition: BattleDef, viewer_side: str | None, timetable: bool,
+    tuning: BattleTuning | None = None, viewer: str | None = None,
+) -> dict:
     """決戰畫面的即時戰局條（Joy 2026-10-10 轉玩家反饋：「有辦法看即時戰局？」）：拔河，兩軍各佔一頭，數字只畫在這裡。
 
     左邊是看的人那一邊（兩軍以外的人看第一方在左）；lean 是「往左邊那一方偏多少」（0～100，100 是左邊大獲全勝），
     網頁把旗子畫在 100−lean：誰佔上風，旗子就被拉到誰那一頭。zones 是分勝負的那一截（時刻表決戰是偏離中線 BIG_WIN_MARGIN
-    的大勝，其餘照 outcomes 的門檻），decisive 是偏離中線多少當場收場。rounds 是每一回合從哪裡到哪裡、誰佔上風。"""
+    的大勝，其餘照 outcomes 的門檻），decisive 是偏離中線多少當場收場。rounds 是每一回合從哪裡到哪裡、誰佔上風。
+    merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）。"""
     first, second = definition.factions[0].id, definition.factions[1].id
     names = {f.id: f.name for f in definition.factions}
     left = viewer_side if viewer_side in (first, second) else first
@@ -1030,6 +1090,7 @@ def gauge(instance: BattleInstance, definition: BattleDef, viewer_side: str | No
         "right": {"id": right, "name": names[right], "mine": viewer_side == right},
         "lean": now, "start": lean(start), "decisive": definition.decisive_margin, "zones": zones, "rounds": rounds,
         "caption": caption,
+        "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer),
     }
 
 

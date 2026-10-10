@@ -63,7 +63,16 @@ def _page(m):
 def _scene(page):
     """場景卡的內容，拿掉戰局條（它自己的測試在 test_battle_gauge.py）：這裡比的是伺服器給的那一段文字。"""
     scene = re.search(r'<section class="card scene">(.*?)</section>', page, re.S).group(1)
-    return re.sub(r'<div class="gauge".*?<p class="g-cap">.*?</p></div>', "", scene)
+    start = scene.find('<div class="gauge"')
+    if start < 0:
+        return scene
+    depth = 0
+    for tag in re.finditer(r"<(/?)div\b", scene[start:]):  # 戰局條裡還有好幾層 div：數到對應的那一個收尾
+        depth += -1 if tag.group(1) else 1
+        if depth == 0:
+            end = scene.index(">", start + tag.start()) + 1
+            return scene[:start] + scene[end:]
+    return scene
 
 
 def _fold(page):

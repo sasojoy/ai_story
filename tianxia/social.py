@@ -129,6 +129,8 @@ def card(game: Game, other: Game) -> dict:
         "name": o.player.name,
         "affiliation": affiliation(o, other.content),
         "level": o.player.member.level,
+        # 這一季的決戰戰績（Joy 2026-10-10 個人戰功）：沒打過是空字串
+        "record": f"參戰 {o.player.showdowns} 場・首功 {o.player.top_merits} 次" if o.player.showdowns else "",
         "arts": arts(other),
         "actions": buttons,
     }

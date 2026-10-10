@@ -1095,6 +1095,11 @@ class BattleTuning(_Strict):
     # 鼓勵自己寫放手一搏（試玩回饋 2026-10-08，Joy：「怎麼多鼓勵玩家自行創作」）：每場收場挑最有戲的那一次寫進天下大事傳聞
     # （battle_instance.more_dramatic：成了的勝過沒成的，同樣成了或同樣沒成都是成功率越低越有戲），那一次是成了的，那個人名望多這麼多
     highlight_fame: int = Field(default=1, ge=0)
+    # 個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項做到一次記幾分（battle_instance.merit）。
+    # 出手是自己送出、結算了的回合（逾時被代選的不算，掛機的人分數很少）；帶頭是自己帶頭的那一招替這一邊佔了上風；搏成是放手一搏成了；
+    # 打傷是點名的放手一搏真的打掉對方氣血；撐住是這一回合被點名或被集火打掉氣血、回合結束還站著。只出手一回合就倒下的人自然只有 2 分。
+    merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2})
+    top_fame: int = Field(default=2, ge=0)  # 收場時兩軍各一位首功（戰功最高、至少 1 分）上天下大事傳聞，名望多這麼多
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0
@@ -1382,7 +1387,8 @@ class ShowdownPay(_Strict):
     """全服決戰的軍餉（試玩回饋 2026-10-08，Joy：「參加就會有基本的軍餉獎勵，獲勝有更多」）。參戰者收場後各自補戰報時拿
     （Game._file_showdown，下線的人回來補，只發一次），這一季打的才發；沒打完收兵的不發。
 
-    份量照出手回合數：出手 full_rounds 回合以上拿滿，不到照比例，一回合都沒出手（掛機、全程被代選）只拿 idle_share。
+    份量照個人戰功（battle_instance.merit）：戰功等於只出手 full_rounds 回合的那一份算一倍，帶頭、搏成、打傷、撐住另外加，最多 share_cap 倍；
+    一回合都沒出手（掛機、全程被代選）只拿 idle_share。
     數字的依據：週末設定平衡量到每天大約收 100 兩，一場決戰的軍餉落在半天到一天的遊歷收入——滿出手的基本軍餉 40 兩、
     大勝再加一倍到 80 兩；經驗照遊歷一場 10～15 點，基本 60 點約四五場遊歷。"""
 
@@ -1390,6 +1396,7 @@ class ShowdownPay(_Strict):
     exp: int = Field(default=60, ge=0)
     full_rounds: int = Field(default=6, ge=1)  # 出手幾回合算滿（黃巾決戰一場 9 回合，時刻表決戰也是 3 幕 × 3）
     idle_share: float = Field(default=0.1, ge=0, le=1)  # 一回合都沒出手的人拿幾成
+    share_cap: float = Field(default=2.0, ge=1)  # 份量照戰功算（戰功 ÷ 出手 full_rounds 回合的戰功），最多拿到這麼多倍（Joy 2026-10-10 個人戰功）
     win_bonus: dict[str, float] = Field(default_factory=lambda: {"大勝": 1.0, "險勝": 0.5})  # 贏的一方另加基本軍餉的幾倍
     # 投靠了陣營的人另記本季貢獻（照推大勢的帳：contrib_per_push × 這幾點 × 份量）；臨時投效的散人、第三方不記
     contrib_push: int = Field(default=2, ge=0)  # 參戰就記的

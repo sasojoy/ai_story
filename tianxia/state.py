@@ -284,6 +284,9 @@ class PlayerState(BaseModel):
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
     battle_results_seen: list[int] = Field(default_factory=list)
+    # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
+    showdowns: int = 0
+    top_merits: int = 0
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
