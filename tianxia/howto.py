@@ -341,8 +341,8 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
 
 
 # ── 名望怎麼來（explain-2 第二項，FB-100「名望不知道怎麼來」）──────────────────────────
-# 引擎裡真的給名望的只有三條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（Game._deliver_echoes，
-# Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
+# 引擎裡真的給名望的只有四條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（Game._deliver_echoes，
+# Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）、打贏頭目（Game._duel_finish，DuelBoss.fame）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
 
 FameRange = tuple[int, int]
 
@@ -402,6 +402,9 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
         lines.append(f"你首創的武學或意境，別人照著合出同一門：每多一個人 +{echo.fame_per}，一門最多算 {echo.cap} 個人。")
     if cfg.battle.highlight_fame > 0:
         lines.append(f"決戰裡放手一搏，成了、而且是那一仗最有戲的一幕：+{cfg.battle.highlight_fame}。")
+    duel_fame = sorted(boss.fame for boss in content.duels.values() if boss.fame > 0)
+    if duel_fame:  # 單人頭目戰打贏（Game._duel_finish）
+        lines.append(f"探索時遇上攔路的頭目、打贏了：{_plus((duel_fame[0], duel_fame[-1]))}。")
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:

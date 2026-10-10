@@ -93,6 +93,12 @@ def run_season(
     raid_losses: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])  # 名號 → [輸幾場, 失銀, 失氣血]
     raid_tiers: Counter = Counter()
     real_record, real_spoils = Game._raid_record, Game._raid_spoils
+    duels: Counter = Counter()  # 單人頭目戰（Config.duel）：照結果數場數（抽身退走記「抽身」）
+    real_finish = Game._duel_finish
+
+    def count_finish(self, tier, line):
+        duels[tier or "抽身"] += 1
+        return real_finish(self, tier, line)
 
     def count_record(self, result, rival, rival_power, rival_game, spoils, *, attacker):
         if not attacker:
@@ -107,7 +113,8 @@ def run_season(
         return spoils
 
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}), \
-            mock.patch.object(Game, "_raid_record", count_record), mock.patch.object(Game, "_raid_spoils", count_spoils):
+            mock.patch.object(Game, "_raid_record", count_record), mock.patch.object(Game, "_raid_spoils", count_spoils), \
+            mock.patch.object(Game, "_duel_finish", count_finish):
         world, characters = open_world(db_path), open_characters(db_path)
         world.seed_first_season(content)
         world.open_season(content, now[0])
@@ -173,6 +180,7 @@ def run_season(
         "top": None if top is None else (raided[top], *raid_losses[top], purse.get(top, 0)),
         "worst": None if worst is None else (raided[worst], *raid_losses[worst], purse.get(worst, 0)),
     }
+    result["duels"] = dict(duels)
     result["checks"] = checks(result, content)
     return result
 
@@ -204,6 +212,7 @@ def summary(seed: int, r: dict) -> str:
     lines.append(f"  截殺：共 {raids['total']} 場（" + "、".join(f"{k} {v}" for k, v in sorted(raids["tiers"].items()))
                  + f"）；被截殺過的 {raids['victims']} 人，每人中位數 {raids['median']} 次")
     lines.append(f"    被截殺最多的人：{victim(raids['top'])}；失銀最多的人：{victim(raids['worst'])}")
+    lines.append("  頭目戰：" + ("、".join(f"{k} {v}" for k, v in sorted(r["duels"].items())) or "沒遇上"))
     c = r["checks"]
     medians = "、".join(f"{FRONT_NAMES[f]} {m}" for f, m in c["medians"].items())
     lines.append(f"  驗收：第 6 週前沒有決定性勝利 {'✔' if c['no_early_decisive'] else '✘'}；"
