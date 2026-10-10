@@ -143,9 +143,31 @@ def stock(state: GameState, content: Content) -> list[Weapon]:
     ]
 
 
-def new_weapon(state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str) -> Weapon:
+FORGE_PREFIX = "兵|"  # 兵器配方鍵的開頭（兵器設計 4.4）：前綴就是欄位（裝備四欄設計 4.7），之後防具打造用同一張 gear_recipes 表、前綴「鎧|」
+
+
+def recipe_key(kind: str, main: str, aux: str) -> str:
+    """兵器配方鍵（4.4）：「兵|種類|主料+輔料」。前綴「兵|」就是武器那一欄（之後防具是「鎧|主料+輔料」，共用 gear_recipes）。
+    主輔不交換：同兩種素材對調是另一個配方。"""
+    return f"{FORGE_PREFIX}{kind}|{main}+{aux}"
+
+
+def recipe_parts(key: str | None) -> tuple[str, str, str] | None:
+    """recipe_key 拆回（種類, 主料, 輔料）；不是武器欄的配方鍵（別的前綴，例如之後防具的「鎧|」，或 None）回 None。"""
+    if not key or not key.startswith(FORGE_PREFIX):
+        return None
+    kind, _, pair = key[len(FORGE_PREFIX):].partition("|")
+    main, plus, aux = pair.partition("+")
+    return (kind, main, aux) if kind and plus and main and aux else None
+
+
+def new_weapon(
+    state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
+) -> Weapon:
+    """新的一把（流水號 +1）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
     state.player.weapon_serial += 1
-    return Weapon(id=f"兵:{state.player.weapon_serial}", name=name, kind=kind, attribute=attribute, tier=tier, quality=quality)
+    return Weapon(id=f"兵:{state.player.weapon_serial}", name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
+                  recipe=recipe)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

@@ -134,3 +134,75 @@ def test_weapon_recipes_are_per_season(store, content):
         assert conn.execute("SELECT season FROM gear_recipes WHERE key = ?", (r.key,)).fetchone()["season"] == 1
     again = _recipe(creator="乙")
     assert store.claim_weapon_recipe(r.key, again) == (again, True)  # 新的一季：同一個配方別人首創、名字也能再用
+
+
+# ── Task 3：打造的規則 ──
+
+from tianxia import smithing  # noqa: E402
+
+
+def _forger(content, world, silver=200, name="試劍"):
+    """在城鎮、悟性 5（不加不扣）、背包：精鐵砂（剛一階）×3、玄鋼骨（剛二階）×2、驚羽（快一階）×2。"""
+    game = _town(content, world, silver=silver, name=name)
+    p = game.state.player
+    p.stats["wis"] = 5
+    p.materials = {"gang_1": 3, "gang_2": 2, "kuai_1": 2}
+    return game
+
+
+def test_recipe_key_keeps_main_and_aux_apart():
+    assert weapons.recipe_key("劍", "gang_1", "kuai_1") == "兵|劍|gang_1+kuai_1"
+    assert weapons.recipe_key("劍", "kuai_1", "gang_1") != weapons.recipe_key("劍", "gang_1", "kuai_1")
+    assert weapons.recipe_parts("兵|劍|gang_1+kuai_1") == ("劍", "gang_1", "kuai_1")
+    assert weapons.recipe_parts("兵|拳腳|gang_1+gang_1") == ("拳腳", "gang_1", "gang_1")
+    assert weapons.recipe_parts("融|sword+feng") is None and weapons.recipe_parts(None) is None
+    assert weapons.recipe_parts("鎧|gang_1+kuai_1") is None  # 前綴就是欄位：之後防具的配方鍵不是兵器的
+
+
+def test_attribute_follows_merged_attribute_for_same_and_paired_attributes(content, world):
+    """同屬性、四對（剛快、柔慢、快柔、剛慢）合出來的屬性跟主輔順序無關。"""
+    assert smithing.attribute_of(world, content, "劍", "gang_1", "gang_1") == "剛"
+    assert smithing.attribute_of(world, content, "劍", "gang_1", "kuai_1") == "陽"  # 剛＋快
+    assert smithing.attribute_of(world, content, "劍", "kuai_1", "gang_1") == "陽"
+    assert smithing.attribute_with(content, 3, "刀", "gang_2", "gang_1") == "剛"
+
+
+def test_other_pairs_follow_the_recipe_seed_so_swapping_main_and_aux_can_differ():
+    """剛＋柔、快＋慢不在四對裡、也不同屬性：照「天機|配方鍵」的雜湊從兩者挑一個。主輔對調是另一個配方鍵（4.4：主輔不交換），
+    挑到的可能不一樣。測試內容只有剛與快，這裡用正式內容的柳絲綿（rou_1）；天機 0 時這一組剛好不一樣（照 sha256 算好的，
+    配方鍵前綴是「兵|」，前綴或種子的寫法改了要重算）。"""
+    rc = real_content()
+    assert smithing.attribute_with(rc, 0, "劍", "gang_1", "rou_1") == "剛"
+    assert smithing.attribute_with(rc, 0, "劍", "rou_1", "gang_1") == "柔"
+
+
+def test_tier_and_price_follow_the_main_material(content):
+    assert smithing.tier_of(content, "gang_2") == 2 and smithing.tier_of(content, "kuai_1") == 1
+    assert [smithing.price(content, t) for t in (1, 2, 3)] == [20, 60, 150]
+
+
+def test_forge_problem_reasons(content, world):
+    game = _forger(content, world)
+    s, p = game.state, game.state.player
+    p.materials = {"gang_1": 1, "kuai_1": 1}
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "kuai_1") is None
+    assert smithing.forge_problem(s, content, "斧", "gang_1", "kuai_1") == "沒有這種兵器"
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "nope") == "沒有這種素材"
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "gang_1") == "精鐵砂不夠（要 2 個）"  # 主輔同一種要兩個
+    assert smithing.forge_problem(s, content, "劍", "gang_2", "gang_1") == "玄鋼骨不夠（要 1 個）"
+    p.stats["silver"] = 5
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "kuai_1") == "還差 15 兩"
+    p.stats["silver"] = 200
+    p.weapon = _blade()
+    p.rack = [_blade(wid=f"兵:{i + 2}") for i in range(content.config.weapons.rack_cap)]
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "kuai_1") == weapons.RACK_FULL
+    p.rack = []
+    p.location = "lake"
+    assert smithing.forge_problem(s, content, "劍", "gang_1", "kuai_1") == weapons.NOT_HERE
+
+
+def test_new_weapon_can_carry_its_recipe(content, world):
+    game = _forger(content, world)
+    w = weapons.new_weapon(game.state, name="寒星劍", kind="劍", attribute="陽", tier=1, quality="中品", recipe="兵|劍|gang_1+kuai_1")
+    assert w.recipe == "兵|劍|gang_1+kuai_1" and w.id.startswith("兵:")
+    assert weapons.new_weapon(game.state, name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品").recipe is None
