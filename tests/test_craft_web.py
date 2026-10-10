@@ -86,3 +86,27 @@ def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     assert one["picks"]["arts"]["basic_fist"]["short"] == "已經有了" and "ideas" not in one
     empty = server.api_forge_line(None, {})
     assert empty["picks"] is None and "ideas" not in empty
+
+
+def test_the_manual_lists_only_the_clues_heard_and_what_was_solved(made):
+    """武學譜（status.manual，PM 2026-10-10 派工）：煉製頁背包上面一個摺疊，一條秘方一格，聽過的口訣一句一行，合中了寫名號；
+    沒聽過的不列、不寫還差幾句。開合記在 S.manualOpen（煉製頁常重畫）。"""
+    game, art = made
+    main = server.main_view(game)
+    main["status"]["manual"] = [{"clues": ["風過山崗<留痕>", "山不動而風自回"], "solved": None},
+                                {"clues": ["火入水中"], "solved": "沸雪掌"}]
+    shut = run(main, "return H.pageCraft();", S={"tab": "craft"}, menxia=server.menxia_view(game))
+    assert '<details class="fold manual">' in shut and "武學譜" in shut and "2 條・參透 1" in shut
+    assert "「風過山崗&lt;留痕&gt;」" in shut and "「山不動而風自回」" in shut and "尚未參透" in shut
+    assert "已參透：合出【沸雪掌】" in shut
+    assert shut.index("武學譜") < shut.index("背包")
+    opened = run(main, "return H.pageCraft();", S={"tab": "craft", "manualOpen": True}, menxia=server.menxia_view(game))
+    assert '<details class="fold manual" open>' in opened
+
+
+def test_an_empty_manual_says_so_without_hinting_at_any_recipe(made):
+    game, art = made
+    main = server.main_view(game)
+    assert main["status"]["manual"] == []  # 測試內容沒有秘方
+    html = run(main, "return H.pageCraft();", S={"tab": "craft"}, menxia=server.menxia_view(game))
+    assert "還沒記下任何口訣" in html and "manual-row" not in html
