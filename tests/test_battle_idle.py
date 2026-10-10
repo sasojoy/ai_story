@@ -1,6 +1,6 @@
-"""決戰的掛機懲罰（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰，下一回合預設也固守之類」）：
-回合逾時被代選就是掛機，下一回合起不等他（其他人送齊就結算，他照舊被代選固守、份量打折）、戰功沒有；
-連續 idle_leave 回合撤下陣；自己按任何行動就解除。畫面的「已送出／在場」不算掛機的人，另寫「掛機 N 人不等」。"""
+"""決戰的掛機（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰，下一回合預設也固守之類」，接著改口
+「固守就別打折了 他進戰場已經很有心 戰功正常算」）：回合逾時被代選就是掛機，下一回合起不等他（其他人送齊就結算，
+他照舊被代選固守，份量與戰功照常）；自己按任何行動就解除。畫面的「已送出／在場」不算掛機的人，另寫「掛機 N 人不等」。"""
 import random
 
 from test_battle_gauge import showdown  # noqa: F401（fixture）
@@ -42,7 +42,8 @@ def test_everyone_idle_still_waits_for_the_timeout(gamble):
     assert not bi.round_is_complete(battle)
 
 
-def test_an_idle_hold_pushes_at_half_weight(gamble):
+def test_an_idle_hold_pushes_like_a_real_one(gamble):
+    """Joy：「固守就別打折了 他進戰場已經很有心」：代選的固守份量照常。"""
     def push(auto):
         battle = _battle(gamble, [("甲", "guan"), ("乙", "huang"), ("丙", "huang")])
         battle.participants["甲"].scores = {m: 10.0 for m in CODES}  # 官軍弱：看得出黃巾推了多少
@@ -55,23 +56,18 @@ def test_an_idle_hold_pushes_at_half_weight(gamble):
         bi.resolve_round(battle, gamble, random.Random(0), now=1, tuning=BattleTuning())
         return 50 - battle.trend  # 黃巾那邊推了多少
 
-    assert 0 < push(auto=True) < push(auto=False)
+    assert push(auto=True) == push(auto=False) > 0
 
 
-def test_three_idle_rounds_take_you_off_the_field_until_you_act(gamble):
+def test_an_idler_stays_on_the_field(gamble):
     gamble.rounds_per_act = 5  # 打得夠久
     battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
-    msgs = []
-    for _ in range(BattleTuning().idle_leave):
-        msgs = _timeout_round(battle, gamble, {"甲": "固守"})
+    for _ in range(4):
+        _timeout_round(battle, gamble, {"甲": "固守"})
     b = battle.participants["乙"]
-    assert b.left_field and "乙在陣上發呆太久，被撤了下去。" in msgs
-    assert b not in bi._active_participants(battle) and bi.idle_count(battle, gamble) == 0
-    neili = b.neili
-    _timeout_round(battle, gamble, {"甲": "強攻"})  # 撤下陣的人不出手、不挨打、不代選
-    assert b.neili == neili and "乙" not in battle.round.pending_actions
-    _submit(battle, "乙", "奇襲")  # 自己按了：回到陣上、不算掛機
-    assert not b.left_field and b.idle_streak == 0 and b in bi._active_participants(battle)
+    assert b.idle_streak == 4 and b in bi._active_participants(battle) and battle.round.pending_actions == {}
+    _submit(battle, "乙", "奇襲")
+    assert b.idle_streak == 0
 
 
 def test_acting_clears_the_idle_mark_at_once(gamble):
@@ -81,15 +77,19 @@ def test_acting_clears_the_idle_mark_at_once(gamble):
     assert not bi.idle(battle.participants["乙"]) and bi.round_progress(battle, gamble) == (1, 2)
 
 
-def test_idle_rounds_earn_no_merit(gamble):
+def test_idle_rounds_still_earn_merit(gamble):
     battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
     _timeout_round(battle, gamble, {"甲": "固守"})
-    assert bi.merit(BattleTuning(), battle.participants["乙"]) == 0
+    b = battle.participants["乙"]
+    assert (b.acted_rounds, b.held_rounds) == (0, 1)
+    assert bi.merit(BattleTuning(), b) == bi.merit(BattleTuning(), battle.participants["甲"]) - (
+        BattleTuning().merit_points["led"] * battle.participants["甲"].led_rounds)
+    assert bi.merit_parts(b) == ["代為固守 1 回合"]
 
 
 def test_old_participants_read_as_not_idle():
     p = bi.BattleParticipant.model_validate({"name": "甲", "faction": "guan", "neili": 1, "neili_cap": 1})
-    assert (p.idle_streak, p.left_field) == (0, False)
+    assert (p.idle_streak, p.held_rounds) == (0, 0)
 
 
 # ── 引擎：不等掛機的人、場景寫出來 ─────────────────────────────

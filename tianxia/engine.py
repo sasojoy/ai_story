@@ -3531,11 +3531,8 @@ class Game:
         p = battle.participants.get(self.state.player.name)
         if p is None or p.eliminated or battle.phase != "active":
             return []
-        if p.left_field:
-            return ["**你掛機太久，被撤下陣了**：這一回合不算你。按任何一招就回到陣上。"]
         if battle_instance.idle(p):
-            share = "零一二三四五六七八九十"[round(self.content.config.battle.idle_share * 10)]
-            return [f"**你上一回合沒出手**，系統替你固守、份量只算{share}成；這一回合大家不等你，按任何一招就不算掛機。"]
+            return ["**你上一回合沒出手**，系統替你固守了；這一回合大家不等你，按任何一招就不算掛機。"]
         return []
 
     def _battle_spotlight(

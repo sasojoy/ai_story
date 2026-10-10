@@ -97,9 +97,10 @@ class BattleParticipant(BaseModel):
     hits_landed: int = 0  # 點名的放手一搏真的打掉對方氣血幾次
     stood_marked: int = 0  # 被點名或被集火打掉氣血、回合結束還站著的回合數
     # 掛機（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰」）：連續幾回合是逾時被代選的（自己送出就歸零）。
-    # 1 以上就是掛機：下一回合起不等他（其他人送齊就結算，他照舊被代選固守）；到 BattleTuning.idle_leave 就撤下陣（left_field）
+    # 1 以上就是掛機：下一回合起不等他（其他人送齊就結算，他照舊被代選固守）。固守的份量與戰功照常算、也不撤下陣
+    # （Joy：「固守就別打折了 他進戰場已經很有心 戰功正常算」）
     idle_streak: int = 0
-    left_field: bool = False  # 掛機太久被撤下陣：不出手、不等他、不挨打；自己按任何行動就回到陣上
+    held_rounds: int = 0  # 逾時被系統代為出手（固守）的回合數：不算自己出手（acted_rounds），戰功照一樣算
 
 
 class GambleMoment(BaseModel):
@@ -354,13 +355,13 @@ def auto_assign_latecomer(
 
 
 def _active_participants(instance: BattleInstance) -> list[BattleParticipant]:
-    """還在場上、這回合要出手的人：沒倒下，沒離開決戰的大區，也沒因為掛機太久被撤下陣。"""
-    return [p for p in instance.participants.values() if not p.eliminated and not p.away and not p.left_field]
+    """還在場上、這回合要出手的人：沒倒下，也沒離開決戰的大區。"""
+    return [p for p in instance.participants.values() if not p.eliminated and not p.away]
 
 
 def idle(p: BattleParticipant) -> bool:
     """掛機中：上一回合（或更早，連續）是逾時被代選的，還沒自己按過行動。"""
-    return p.idle_streak > 0 and not p.left_field
+    return p.idle_streak > 0
 
 
 def set_away(instance: BattleInstance, name: str, away: bool) -> None:
@@ -471,7 +472,6 @@ def submit_action(
     p = instance.participants.get(name)
     if p is None or p.eliminated or p.away or instance.phase != "active":
         return
-    p.left_field = False  # 掛機撤下陣的人自己按了行動：回到陣上
     instance.round.pending_actions[name] = tag
     if name in instance.round.auto_picked:  # 系統代選過、結算前自己又選了：這回合算自己出手
         instance.round.auto_picked.remove(name)
@@ -584,6 +584,7 @@ def _third_round(
             p.acted_rounds += 1
         else:
             p.idle_streak += 1
+            p.held_rounds += 1
         grab = tag == THIRD_GRAB
         move = "奇襲" if grab else "固守"
         total += p.scores.get(move, 0.0) * condition(p) * (1.0 if grab else tuning.third_keep_share)  # 份量在扣血之前算
@@ -681,6 +682,7 @@ def resolve_round(
             p.acted_rounds += 1
         else:  # 逾時被代選：掛機（下一回合起不等他）
             p.idle_streak += 1
+            p.held_rounds += 1
         success_rate = instance.round.success_rates.get(name)
         custom_text = instance.round.custom_texts.get(name)
         if success_rate is not None and definition.free_text_gamble is not None:
@@ -745,9 +747,8 @@ def resolve_round(
             coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
             if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
                 coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
-            slack = tuning.idle_share if name in instance.round.auto_picked else 1.0  # 掛機被代選的固守份量打折
-            force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef * slack  # 份量在扣這一回合的血之前算
-            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef * slack, name, move))
+            force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
+            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef, name, move))
             counts[p.faction] += 1
             coefs[p.faction].append(coef)
             fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
@@ -766,10 +767,6 @@ def resolve_round(
     for hit in hits:
         msgs[hit.index] = _land_hit(instance, tuning, hit, harmed, msgs)
     msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
-    for q in _active_participants(instance):  # 連續掛機到 idle_leave 回合：撤下陣（按任何行動就回來，submit_action）
-        if q.idle_streak >= tuning.idle_leave:
-            q.left_field = True
-            msgs.append(f"{q.name}在陣上發呆太久，被撤了下去。")
     for hurt_name, amount in harmed.items():  # 被盯上打掉了氣血、回合結束還站著：戰功（撐住）
         q = instance.participants.get(hurt_name)
         if q is not None and amount >= 0.5 and not q.eliminated:
@@ -1023,13 +1020,13 @@ def round_line(names: dict[str, str], armies: tuple[str, str], before: int, afte
 
 MERIT_TOP = 3  # 戰局條旁「本場戰功」每一邊列幾個人
 MERIT_PARTS = (  # 戰功的每一項怎麼寫（順序就是戰報與畫面上的順序）
-    ("acted", "出手 {n} 回合"), ("led", "帶頭佔上風 {n} 回合"), ("gamble", "搏成 {n} 次"),
+    ("acted", "出手 {n} 回合"), ("held", "代為固守 {n} 回合"), ("led", "帶頭佔上風 {n} 回合"), ("gamble", "搏成 {n} 次"),
     ("hit", "點名打傷 {n} 次"), ("stood", "被盯上撐住 {n} 回合"),
 )
 
 
 def merit_counts(p: BattleParticipant) -> dict[str, int]:
-    return {"acted": p.acted_rounds, "led": p.led_rounds, "gamble": p.gambles_won, "hit": p.hits_landed, "stood": p.stood_marked}
+    return {"acted": p.acted_rounds, "held": p.held_rounds, "led": p.led_rounds, "gamble": p.gambles_won, "hit": p.hits_landed, "stood": p.stood_marked}
 
 
 def merit(tuning: BattleTuning, p: BattleParticipant) -> int:

@@ -1096,14 +1096,10 @@ class BattleTuning(_Strict):
     # （battle_instance.more_dramatic：成了的勝過沒成的，同樣成了或同樣沒成都是成功率越低越有戲），那一次是成了的，那個人名望多這麼多
     highlight_fame: int = Field(default=1, ge=0)
     # 個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項做到一次記幾分（battle_instance.merit）。
-    # 出手是自己送出、結算了的回合（逾時被代選的不算，掛機的人分數很少）；帶頭是自己帶頭的那一招替這一邊佔了上風；搏成是放手一搏成了；
+    # 出手是自己送出、結算了的回合，逾時被系統代為固守的回合（held）照一樣算（Joy：「他進戰場已經很有心 戰功正常算」）；帶頭是自己帶頭的那一招替這一邊佔了上風；搏成是放手一搏成了；
     # 打傷是點名的放手一搏真的打掉對方氣血；撐住是這一回合被點名或被集火打掉氣血、回合結束還站著。只出手一回合就倒下的人自然只有 2 分。
-    merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2})
+    merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "held": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2})
     top_fame: int = Field(default=2, ge=0)  # 收場時兩軍各一位首功（戰功最高、至少 1 分）上天下大事傳聞，名望多這麼多
-    # 掛機（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰，下一回合預設也固守之類」）：回合逾時被代選就是掛機，
-    # 下一回合起不等他（其他人送齊就結算，他照舊被代選固守）；被代選的那一招份量乘 idle_share；連續 idle_leave 回合撤下陣
-    idle_share: float = Field(default=0.5, ge=0, le=1)
-    idle_leave: int = Field(default=3, ge=1)
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0
