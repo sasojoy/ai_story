@@ -739,3 +739,23 @@ def test_temper_stops_at_five_and_refuses_without_a_fitting_material_or_silver(c
     assert smithing.TEMPER not in _ids(game)  # 空手沒有淬煉鈕
     p.weapon, p.location = _blade(), "lake"
     assert smithing.temper_problem(game.state, content) == weapons.NOT_HERE
+
+
+# ── Task 8：畫面 ──
+
+
+def test_rows_carry_tempers_and_the_recipe_text(content, world):
+    game = _forger(content, world)
+    smithing.forge(game.state, content, world, None, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    p = game.state.player
+    p.weapon.tempers = 2
+    art = _art(game, content, world)
+    row = weapons.rows(game.state, content, world, art)["worn"]
+    assert row["tempers"] == 2 and row["temper_max"] == 5 and row["recipe"] == "精鐵砂＋驚羽"
+    assert "淬煉 2 次" in weapons.card_line(game.state, content, world, art)
+    p.weapon = _blade()
+    row = weapons.rows(game.state, content, world, art)["worn"]
+    assert row["recipe"] is None and row["tempers"] == 0
+    assert "淬煉" not in weapons.card_line(game.state, content, world, art)
+    assert weapons.recipe_text(content, "兵|劍|gang_1+gang_1") == "精鐵砂＋精鐵砂"
+    assert weapons.recipe_text(content, None) is None

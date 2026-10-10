@@ -130,3 +130,13 @@ def test_a_smith_dismantle_option_asks_with_its_own_yes_word(views):
     out = run(m, _CHOOSE_CLICK)
     assert "拆成精鐵砂×1" in out["asked"] and ">拆掉<" in out["asked"] and ">照打<" not in out["asked"]
     assert out["calls"] == []
+
+
+def test_rack_rows_show_tempers_and_the_recipe(views):
+    m, x = views
+    x["weapons"] = {"worn": _row(confirm="", grade="一階中品", tempers=2, temper_max=5, recipe="精鐵砂＋驚羽"), "cap": 100, "rack": []}
+    block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "淬煉 2/5" in block and "配方 精鐵砂＋驚羽" in block and "一階中品" in block
+    x["weapons"]["worn"] = _row(confirm="", grade="一階下品", tempers=0, temper_max=5, recipe=None)
+    plain = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "淬煉 0" not in plain and "配方 " not in plain

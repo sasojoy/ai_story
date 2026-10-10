@@ -1905,16 +1905,17 @@
     const mates = x.roster.length > 1;
     // 兵器（兵器設計 3.6）：身上那把一行、裝備庫每把一行。字都是伺服器給的資料，一律 esc
     // FB-125：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
+    // 第二批：淬過的寫「淬煉 N/5」，自己打的寫配方（主料＋輔料）
     const wp = x.weapons;
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
-        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span></div>
+        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}</div>
         ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}" data-confirm="${esc(w.confirm || "")}">拆解</button></div>`}
       </div>`;
     const weaponsBlock = wp && (wp.worn || wp.rack.length) ? `<section class="weapons"><div class="label">兵器</div>
         ${wp.worn ? weaponRow(wp.worn, true) : '<p class="muted">手上沒有兵器。</p>'}
         ${wp.rack.length ? `<small class="muted">裝備庫 ${wp.rack.length}/${wp.cap | 0}</small>${(S.rackAll || wp.rack.length <= LIB_PAGE ? wp.rack : wp.rack.slice(0, LIB_PAGE)).map((w) => weaponRow(w, false)).join("")}
           ${S.rackAll || wp.rack.length <= LIB_PAGE ? "" : `<button class="btn ghost lib-more" data-act="rack-all">再列 ${wp.rack.length - LIB_PAGE} 件</button>`}` : ""}
-        <p class="muted">城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。</p>
+        <p class="muted">城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。</p>
       </section>` : "";
     return `
       ${proGuide()}

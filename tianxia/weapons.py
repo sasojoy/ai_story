@@ -191,6 +191,16 @@ def recipe_parts(key: str | None) -> tuple[str, str, str] | None:
     return (kind, main, aux) if kind and plus and main and aux else None
 
 
+def recipe_text(content: Content, key: str | None) -> str | None:
+    """配方寫給玩家看（修練頁的裝備庫）：「精鐵砂＋驚羽」（主料在前）；不是自己打的（買的、掉落的）是 None。"""
+    parts = recipe_parts(key)
+    if parts is None:
+        return None
+    _, main, aux = parts
+    name = lambda mid: content.materials[mid].name if mid in content.materials else mid  # noqa: E731
+    return f"{name(main)}＋{name(aux)}"
+
+
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
 ) -> Weapon:
@@ -378,7 +388,8 @@ def grade(w: Weapon) -> str:
 
 
 def _describe(w: Weapon) -> str:
-    return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}・鋒利度 {w.edge}"
+    tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""
+    return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
 
 
 def dismantle_confirm(content: Content, w: Weapon) -> str:
@@ -415,6 +426,8 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
         "grade": grade(w),
         "confirm": "" if worn else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）
+        "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
+        "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
     }
 
 
