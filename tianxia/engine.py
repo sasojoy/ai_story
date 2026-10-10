@@ -95,6 +95,7 @@ class Option(BaseModel):
     enabled: bool = True
     wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
     confirm: str = ""  # 按下去之前先問一次的話（FB-095：必敗的遊歷）；網頁照它跳確認層，空的直接送
+    confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
 
 
 @dataclass(frozen=True)
@@ -2528,7 +2529,10 @@ class Game:
         if c.config.weapons.enabled:
             breakable = sorted(s.player.rack, key=weapons.dismantle_order)
             for w in breakable[:weapons.DISMANTLE_LIST]:
-                opts.append(Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】→ {weapons.dismantle_material(c, w).name}×1"))
+                opts.append(Option(
+                    id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】→ {weapons.dismantle_material(c, w).name}×1",
+                    confirm=weapons.dismantle_confirm(c, w), confirm_yes=weapons.DISMANTLE_YES,  # FB-125：先問一次
+                ))
             if len(breakable) > weapons.DISMANTLE_LIST:
                 opts.append(Option(id="smith:dismantle-more", label=weapons.DISMANTLE_MORE.format(n=len(breakable) - weapons.DISMANTLE_LIST),
                                    enabled=False))

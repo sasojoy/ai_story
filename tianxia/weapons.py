@@ -274,7 +274,7 @@ def dismantle_order(weapon: Weapon) -> tuple[int, int, str]:
 
 
 def dismantle(state: GameState, content: Content, weapon_id: str) -> list[str]:
-    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪，也不問第二次。
+    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪。網頁先問一次（FB-125：修練頁照 `rows` 的 confirm、鐵匠鋪照 `Option.confirm`），引擎收到就拆。
     手上那把不能拆（先換下來）；開關關著或裝備庫沒這一把，什麼都不動。"""
     if not content.config.weapons.enabled:
         return ["（此刻無法這麼做。）"]
@@ -316,8 +316,22 @@ def _pct(ratio: float) -> str:
     return f"{ratio:+.1%}".replace(".0%", "%")
 
 
+DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
+DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
+
+
+def grade(w: Weapon) -> str:
+    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫，第二批有中品、上品之後才分得出來）。"""
+    return f"{TIER_WORDS.get(w.tier, '')}{w.quality}"
+
+
 def _describe(w: Weapon) -> str:
-    return f"【{w.name}】{w.kind}・屬{w.attribute}・{TIER_WORDS.get(w.tier, '')}{w.quality}・鋒利度 {w.edge}"
+    return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}・鋒利度 {w.edge}"
+
+
+def dismantle_confirm(content: Content, w: Weapon) -> str:
+    """拆解之前問的那一句（FB-125，企劃者 2026-10-10 第二批附帶決定 a）：修練頁與鐵匠鋪同一句，寫明拆出什麼。"""
+    return DISMANTLE_ASK.format(name=w.name, grade=grade(w), material=dismantle_material(content, w).name)
 
 
 def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
@@ -342,11 +356,13 @@ def card_line(state: GameState, content: Content, world: WorldStateStore, art: M
     return f"兵器　{_describe(w)}，威力 {_pct(bonus(w, art, content, world))}"
 
 
-def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> dict:
+def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore, worn: bool = False) -> dict:
     fits = usable(w, art, content, world)
     return {
         "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
         "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
+        "grade": grade(w),
+        "confirm": "" if worn else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）
     }
 
 
@@ -356,7 +372,7 @@ def rows(state: GameState, content: Content, world: WorldStateStore, art: Martia
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
     return {
-        "worn": _row(p.weapon, art, content, world) if p.weapon else None,
+        "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
         "rack": [_row(w, art, content, world) for w in p.rack],
         "cap": content.config.weapons.rack_cap,
     }
