@@ -27,7 +27,7 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
-    "pickMark", "craftView", "craftFilterRow", "craftChip", "manualHtml", ...input.fns].map(fn),
+    "pickMark", "craftView", "craftFilterRow", "craftChip", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
   `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "";`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",

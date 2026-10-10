@@ -26,7 +26,7 @@ const vm = require("vm");
 // 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
   "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "peekBlock", "sheetHtml", "applyGlow",
-  "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine"]);
+  "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine", "bookHtml"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];

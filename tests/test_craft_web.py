@@ -88,25 +88,45 @@ def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     assert empty["picks"] is None and "ideas" not in empty
 
 
-def test_the_manual_lists_only_the_clues_heard_and_what_was_solved(made):
-    """武學譜（status.manual，PM 2026-10-10 派工）：煉製頁背包上面一個摺疊，一條秘方一格，聽過的口訣一句一行，合中了寫名號；
-    沒聽過的不列、不寫還差幾句。開合記在 S.manualOpen（煉製頁常重畫）。"""
+def test_the_craft_page_has_a_way_into_the_manual_and_it_opens_as_a_book_over_everything(made):
+    """武學譜（status.manual；企劃者 2026-10-10「武學譜能不能獨立一頁，做得更豪華一些」）：煉製頁背包上面只放一個入口，
+    寫幾則、參透幾則；點了開全螢幕的一本書（S.book），左上返回。一條秘方一頁，口訣照標點斷成一欄一段，合中了蓋朱印寫名號；
+    沒聽過的不列、不寫還差幾句。"""
     game, art = made
     main = server.main_view(game)
-    main["status"]["manual"] = [{"clues": ["風過山崗<留痕>", "山不動而風自回"], "solved": None},
+    main["status"]["manual"] = [{"clues": ["風過山崗<留痕>，雲自回", "山不動而風自回"], "solved": None},
                                 {"clues": ["火入水中"], "solved": "沸雪掌"}]
-    shut = run(main, "return H.pageCraft();", S={"tab": "craft"}, menxia=server.menxia_view(game))
-    assert '<details class="fold manual">' in shut and "武學譜" in shut and "2 條・參透 1" in shut
-    assert "「風過山崗&lt;留痕&gt;」" in shut and "「山不動而風自回」" in shut and "尚未參透" in shut
-    assert "已參透：合出【沸雪掌】" in shut
-    assert shut.index("武學譜") < shut.index("背包")
-    opened = run(main, "return H.pageCraft();", S={"tab": "craft", "manualOpen": True}, menxia=server.menxia_view(game))
-    assert '<details class="fold manual" open>' in opened
+    out = run(main, """return (async () => {
+      H.S.tab = "craft"; H.render();
+      const page = H.pageCraft();
+      const open = { dataset: { act: "book-open" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => open } });
+      const opened = T.els.app.innerHTML;
+      const back = { dataset: { act: "book-close" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => back } });
+      return { page, opened, closed: T.els.app.innerHTML, book: H.S.book };
+    })();""", menxia=server.menxia_view(game))
+    page = out["page"]
+    assert 'data-act="book-open"' in page and "收錄口訣 2 則・已參透 1" in page and page.index("武學譜") < page.index("背包")
+    assert "風過山崗" not in page  # 口訣只在書裡
+    book = out["opened"]
+    assert 'class="book-layer"' in book and 'data-act="book-close"' in book and "本季所聞口訣 2 則・已參透 1 則" in book
+    assert "<span>風過山崗&lt;留痕&gt;，</span><span>雲自回</span>" in book and "<span>山不動而風自回</span>" in book
+    assert "第一則" in book and "第二則" in book and book.count('class="seal"') == 1 and 'aria-label="沸雪掌"' in book
+    assert "合出<b>【沸雪掌】</b>" in book and "尚待參悟" in book
+    assert 'class="book-layer"' not in out["closed"] and out["book"] is False
 
 
 def test_an_empty_manual_says_so_without_hinting_at_any_recipe(made):
     game, art = made
     main = server.main_view(game)
     assert main["status"]["manual"] == []  # 測試內容沒有秘方
-    html = run(main, "return H.pageCraft();", S={"tab": "craft"}, menxia=server.menxia_view(game))
-    assert "還沒記下任何口訣" in html and "manual-row" not in html
+    out = run(main, "H.S.book = true; return { page: H.pageCraft(), book: H.bookHtml() };", S={"tab": "craft"}, menxia=server.menxia_view(game))
+    assert "卷中尚無一字" in out["page"] and "卷中尚無一字" in out["book"] and "leaf empty" in out["book"] and "seal" not in out["book"]
+
+
+def test_changing_tab_closes_the_book(made):
+    game, art = made
+    out = run(server.main_view(game), "return (async () => { await H.goTab(\"practice\"); return H.S.book; })();",
+              S={"tab": "craft", "book": True}, menxia=server.menxia_view(game))
+    assert out is False

@@ -283,7 +283,8 @@
         <main class="page" id="page"></main>
       </div>
       ${tabsHtml()}
-      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}`;
+      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
+      ${S.book ? bookHtml() : ""}`;
     renderPage();
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
@@ -2047,20 +2048,69 @@
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
-      ${manualHtml((S.main && S.main.status && S.main.status.manual) || [])}
+      ${manualEntry(manualRows())}
       <details class="fold"><summary>背包</summary><div class="fold-body">${x.bag}</div></details>`;
   }
 
-  // 武學譜（status.manual，secret_recipes.view）：這一季聽過的口訣，一條秘方一格，合中了寫它的名號。只列聽過的那幾句，
-  // 不寫種類、配方、還差幾句（還沒拿到的線索一律不露）。開合記在 S.manualOpen，煉製頁常重畫也不會自己收起來
-  function manualHtml(rows) {
-    const body = rows.length ? rows.map((r) => `<div class="manual-row${r.solved ? " solved" : ""}">
-        ${r.clues.map((c) => `<p class="manual-clue">「${esc(c)}」</p>`).join("")}
-        <p class="manual-state">${r.solved ? `已參透：合出【${esc(r.solved)}】` : "尚未參透"}</p></div>`).join("")
-      : '<p class="muted">還沒記下任何口訣。江湖上流傳的老話，有時藏著合成的門道。</p>';
+  // 武學譜（status.manual，secret_recipes.view；企劃者 2026-10-10「武學譜能不能獨立一頁，做得更豪華一些」）：
+  // 煉製頁上只放一個入口（manualEntry），點了開全螢幕的一本書（bookHtml，S.book，疊在整個畫面上、左上返回）。
+  // 一條秘方一頁，聽過的口訣直書大字，合中了蓋一方朱印寫它的名號。只列聽過的那幾句：不寫種類、配方、還差幾句（還沒拿到的線索一律不露）
+  function manualRows() { return (S.main && S.main.status && S.main.status.manual) || []; }
+  const CN_NUM = "〇一二三四五六七八九十";
+  const cnNum = (n) => n <= 10 ? CN_NUM[n] : n < 20 ? `十${CN_NUM[n - 10]}` : `${CN_NUM[Math.floor(n / 10)]}十${n % 10 ? CN_NUM[n % 10] : ""}`;
+  // 一卷線裝書（入口與封面共用）：書衣、題簽、四道線
+  function bookIcon() {
+    return `<svg class="book-icon" viewBox="0 0 48 56" aria-hidden="true"><rect x="4" y="3" width="40" height="50" rx="2" class="bk-cover"/>
+    <rect x="22" y="9" width="12" height="32" class="bk-slip"/><path d="M28 13v24" class="bk-slip-ink"/>
+    <path d="M10 3v50M4 12h6M4 24h6M4 36h6M4 48h6" class="bk-thread"/></svg>`;
+  }
+  function manualEntry(rows) {
     const solved = rows.filter((r) => r.solved).length;
-    const count = rows.length ? `<small class="muted">${rows.length} 條${solved ? `・參透 ${solved}` : ""}</small>` : "";
-    return `<details class="fold manual"${S.manualOpen ? " open" : ""}><summary>武學譜 ${count}</summary><div class="fold-body">${body}</div></details>`;
+    const sub = rows.length ? `收錄口訣 ${rows.length} 則${solved ? `・已參透 ${solved}` : ""}` : "卷中尚無一字";
+    return `<button class="manual-entry" data-act="book-open">${bookIcon()}<span><b>武學譜</b><small>${sub}</small></span><i class="go">翻閱 ›</i></button>`;
+  }
+  // 直書一句一欄：口訣照標點斷開（「日出東嶺，」「一寸一寸爬上峰頂。」），每一段自己起一欄，不在句中折行
+  const clauses = (text) => text.split(/(?<=[，。；！？、：])/).filter((t) => t.trim());
+  // 朱印：名號照字數排成方印（四字兩行兩列、其餘一直行），字是白的（陰刻）。只有合中了才有
+  function sealSvg(name) {
+    const chars = [...name].slice(0, 6);
+    const n = chars.length;
+    const cols = n === 4 ? 2 : n > 4 ? 2 : 1;
+    const rows = Math.ceil(n / cols);
+    const cell = 40 / Math.max(rows, cols);
+    // 直書的方印：右行先讀，由上而下
+    const glyphs = chars.map((ch, k) => {
+      const col = Math.floor(k / rows), row = k % rows;
+      const cx = 46 - (col + 0.5) * (40 / cols);
+      const cy = 6 + (row + 0.5) * (40 / rows);
+      return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${(cell * 0.86).toFixed(1)}">${esc(ch)}</text>`;
+    }).join("");
+    return `<svg class="seal" viewBox="0 0 52 52" role="img" aria-label="${esc(name)}"><rect x="2" y="2" width="48" height="48" rx="3" class="seal-bg"/>
+      <rect x="5" y="5" width="42" height="42" rx="1.5" class="seal-rim"/><g class="seal-ink">${glyphs}</g></svg>`;
+  }
+  function bookHtml() {
+    const rows = manualRows();
+    const solved = rows.filter((r) => r.solved).length;
+    const leaves = rows.length ? rows.map((r, k) => `<article class="leaf${r.solved ? " solved" : ""}">
+        <header class="leaf-head"><span>第${cnNum(k + 1)}則</span><span class="leaf-state">${r.solved ? "已參透" : "未參透"}</span></header>
+        <div class="leaf-text">${r.clues.map((c) => `<p>${clauses(c).map((t) => `<span>${esc(t)}</span>`).join("")}</p>`).join("")}</div>
+        <footer class="leaf-foot">${r.solved ? `${sealSvg(r.solved)}<span class="leaf-sign">合出<b>【${esc(r.solved)}】</b></span>` : '<span class="leaf-sign muted">尚待參悟</span>'}</footer>
+      </article>`).join("")
+      : `<article class="leaf empty"><div class="leaf-text"><p>卷中尚無一字</p></div>
+        <p class="leaf-hint">江湖上流傳的老話，有時藏著合成的門道。</p></article>`;
+    return `<div class="book-layer" role="dialog" aria-label="武學譜">
+      <header class="book-bar"><button class="book-back" data-act="book-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">武學譜</span></header>
+      <div class="book-cover">
+        <svg class="book-hills" viewBox="0 0 375 120" preserveAspectRatio="none" aria-hidden="true">
+          <path class="hill far" d="M0 86 C40 58 70 64 104 46 C134 30 160 52 190 40 C226 26 258 48 292 36 C326 24 352 40 375 34 V120 H0Z"/>
+          <path class="hill near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>
+        </svg>
+        <i class="book-moon" aria-hidden="true"></i>
+        <div class="book-title"><span>武學譜</span></div>
+        <p class="book-sub">本季所聞口訣 ${rows.length} 則${solved ? `・已參透 ${solved} 則` : ""}</p>
+      </div>
+      <div class="leaves">${leaves}</div>
+    </div>`;
   }
 
   // ── 輿圖 ──
@@ -2609,6 +2659,7 @@
     S.artNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
+    S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
     render();
@@ -3104,6 +3155,8 @@
         case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
         case "party-leave": await leaveParty(); break;
+        case "book-open": S.bookFrom = window.scrollY; S.book = true; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
+        case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
@@ -3670,8 +3723,7 @@
   // 重畫（輪詢、換分頁回來）時照 S.ordersShut 補回，那一下補出來的 toggle 記下的還是同一週，不會繞圈
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
-    if (box instanceof Element && box.matches("details.manual")) S.manualOpen = box.open;
-    else if (box instanceof Element && box.matches("details.bounties")) S.bountyShut = box.open ? null : box.dataset.key;
+    if (box instanceof Element && box.matches("details.bounties")) S.bountyShut = box.open ? null : box.dataset.key;
     else if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
