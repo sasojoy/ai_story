@@ -2900,6 +2900,7 @@ class Game:
             battle_instance.fill_timed_out_actions(battle, definition, tuning=tuning)
         if not battle_instance.round_is_complete(battle):
             return []
+        battle_instance.fill_idle_actions(battle, definition, tuning=tuning)  # 不等掛機的人：其他人送齊了，替他們代選
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
@@ -3494,7 +3495,8 @@ class Game:
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡。
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
-        lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
+        lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
+        lines += battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
@@ -3524,6 +3526,18 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
+    def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
+        """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""
+        p = battle.participants.get(self.state.player.name)
+        if p is None or p.eliminated or battle.phase != "active":
+            return []
+        if p.left_field:
+            return ["**你掛機太久，被撤下陣了**：這一回合不算你。按任何一招就回到陣上。"]
+        if battle_instance.idle(p):
+            share = "零一二三四五六七八九十"[round(self.content.config.battle.idle_share * 10)]
+            return [f"**你上一回合沒出手**，系統替你固守、份量只算{share}成；這一回合大家不等你，按任何一招就不算掛機。"]
+        return []
+
     def _battle_spotlight(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
     ) -> list[str]:
@@ -3548,10 +3562,11 @@ class Game:
         me = battle.participants.get(self.state.player.name)
         third = me is not None and battle_instance.is_third(definition, me)  # 兩軍的人不算豪強（他們不該知道有幾個）
         sent, present = battle_instance.round_progress(battle, definition, with_third=third)
+        idlers = battle_instance.idle_count(battle, definition, with_third=third)  # 掛機的不等（Joy 2026-10-10），另外寫
         paused = self.world.paused_at()
         left = max(0, int(battle.round.opened_real + definition.round_seconds - (self.now if paused is None else paused)))
         due = f"最遲 {left // 60} 分 {left % 60} 秒後結算" if left else "時間到了，即將結算"
-        return f"已送出 {sent}／在場 {present}，{due}"
+        return f"已送出 {sent}／在場 {present}" + (f"（掛機 {idlers} 人不等）" if idlers else "") + f"，{due}"
 
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""

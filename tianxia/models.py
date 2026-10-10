@@ -1100,6 +1100,10 @@ class BattleTuning(_Strict):
     # 打傷是點名的放手一搏真的打掉對方氣血；撐住是這一回合被點名或被集火打掉氣血、回合結束還站著。只出手一回合就倒下的人自然只有 2 分。
     merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2})
     top_fame: int = Field(default=2, ge=0)  # 收場時兩軍各一位首功（戰功最高、至少 1 分）上天下大事傳聞，名望多這麼多
+    # 掛機（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰，下一回合預設也固守之類」）：回合逾時被代選就是掛機，
+    # 下一回合起不等他（其他人送齊就結算，他照舊被代選固守）；被代選的那一招份量乘 idle_share；連續 idle_leave 回合撤下陣
+    idle_share: float = Field(default=0.5, ge=0, le=1)
+    idle_leave: int = Field(default=3, ge=1)
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
     affinity_inner: float = 10.0

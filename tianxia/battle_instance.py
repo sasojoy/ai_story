@@ -96,6 +96,10 @@ class BattleParticipant(BaseModel):
     gambles_won: int = 0  # 放手一搏成了幾次
     hits_landed: int = 0  # 點名的放手一搏真的打掉對方氣血幾次
     stood_marked: int = 0  # 被點名或被集火打掉氣血、回合結束還站著的回合數
+    # 掛機（Joy 2026-10-10：「掛機的人很影響節奏，是不是有掛機懲罰」）：連續幾回合是逾時被代選的（自己送出就歸零）。
+    # 1 以上就是掛機：下一回合起不等他（其他人送齊就結算，他照舊被代選固守）；到 BattleTuning.idle_leave 就撤下陣（left_field）
+    idle_streak: int = 0
+    left_field: bool = False  # 掛機太久被撤下陣：不出手、不等他、不挨打；自己按任何行動就回到陣上
 
 
 class GambleMoment(BaseModel):
@@ -350,8 +354,13 @@ def auto_assign_latecomer(
 
 
 def _active_participants(instance: BattleInstance) -> list[BattleParticipant]:
-    """還在場上、這回合要出手的人：沒倒下，也沒離開決戰的大區。"""
-    return [p for p in instance.participants.values() if not p.eliminated and not p.away]
+    """還在場上、這回合要出手的人：沒倒下，沒離開決戰的大區，也沒因為掛機太久被撤下陣。"""
+    return [p for p in instance.participants.values() if not p.eliminated and not p.away and not p.left_field]
+
+
+def idle(p: BattleParticipant) -> bool:
+    """掛機中：上一回合（或更早，連續）是逾時被代選的，還沒自己按過行動。"""
+    return p.idle_streak > 0 and not p.left_field
 
 
 def set_away(instance: BattleInstance, name: str, away: bool) -> None:
@@ -462,9 +471,11 @@ def submit_action(
     p = instance.participants.get(name)
     if p is None or p.eliminated or p.away or instance.phase != "active":
         return
+    p.left_field = False  # 掛機撤下陣的人自己按了行動：回到陣上
     instance.round.pending_actions[name] = tag
     if name in instance.round.auto_picked:  # 系統代選過、結算前自己又選了：這回合算自己出手
         instance.round.auto_picked.remove(name)
+    p.idle_streak = 0  # 按了任何行動就不算掛機
     if text:
         instance.round.custom_texts[name] = text
     if success_rate is not None:
@@ -474,17 +485,23 @@ def submit_action(
 
 
 def round_is_complete(instance: BattleInstance) -> bool:
-    """所有還在場上的人都送出行動了（陣亡的人不用等）。"""
-    active = _active_participants(instance)
-    return bool(active) and all(p.name in instance.round.pending_actions for p in active)
+    """所有還在場上、沒在掛機的人都送出行動了（陣亡的人不用等；掛機的人也不等，結算前由 fill_idle_actions 代選）。
+    場上全是掛機的人時照舊等這一回合逾時。"""
+    awaited = [p for p in _active_participants(instance) if not idle(p)]
+    return bool(awaited) and all(p.name in instance.round.pending_actions for p in awaited)
 
 
 def round_progress(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> tuple[int, int]:
     """這一回合（已送出, 在場）的人數：在場是還沒倒下、沒離開大區的人，已送出是其中選好行動的。
     畫面寫「已送出 X／在場 Y」，讓人知道是在等人、不是壞了（試玩回饋 2026-10-08）。
     第三方（地方豪強）有幾個人，兩軍不該知道（戰鬥系統第六節），所以只有 with_third（看的人自己站第三方）才算進去。"""
-    active = [p for p in _active_participants(instance) if with_third or not is_third(definition, p)]
+    active = [p for p in _active_participants(instance) if (with_third or not is_third(definition, p)) and not idle(p)]
     return sum(1 for p in active if p.name in instance.round.pending_actions), len(active)
+
+
+def idle_count(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> int:
+    """掛機中的人數（round_progress 的「在場」不算他們；畫面另寫「掛機 N 人」）。"""
+    return sum(1 for p in _active_participants(instance) if idle(p) and (with_third or not is_third(definition, p)))
 
 
 def counter_coefficient(tuning: BattleTuning, move: str, enemy_mix: dict[str, float]) -> float:
@@ -525,12 +542,21 @@ def safest_option_tag(
     return min(options, key=lambda o: tuning.damage[o.move]).tag
 
 
-def fill_timed_out_actions(instance: BattleInstance, definition: BattleDef, tuning: BattleTuning | None = None) -> None:
+def fill_idle_actions(instance: BattleInstance, definition: BattleDef, tuning: BattleTuning | None = None) -> None:
+    """其他人都送齊了、不等掛機的人：還沒送出的掛機者照逾時一樣代選（fill_timed_out_actions）。"""
+    fill_timed_out_actions(instance, definition, tuning, only_idle=True)
+
+
+def fill_timed_out_actions(
+    instance: BattleInstance, definition: BattleDef, tuning: BattleTuning | None = None, only_idle: bool = False,
+) -> None:
     """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項（三招時是固守）；
     這一幕他沒有固定選項（驗過的內容每邊每幕都有三招，走不到這裡）就跳過他。
     代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。
     第三方（戰鬥系統第六節）沒有作戰方針與 AI 代挑：先於一切判斷，逾時一律代出「保存實力」。"""
     for p in _active_participants(instance):
+        if only_idle and not idle(p):
+            continue
         if p.name not in instance.round.pending_actions:
             if is_third(definition, p):
                 instance.round.pending_actions[p.name] = THIRD_KEEP
@@ -556,6 +582,8 @@ def _third_round(
             continue
         if name not in instance.round.auto_picked:
             p.acted_rounds += 1
+        else:
+            p.idle_streak += 1
         grab = tag == THIRD_GRAB
         move = "奇襲" if grab else "固守"
         total += p.scores.get(move, 0.0) * condition(p) * (1.0 if grab else tuning.third_keep_share)  # 份量在扣血之前算
@@ -651,6 +679,8 @@ def resolve_round(
             continue
         if name not in instance.round.auto_picked:
             p.acted_rounds += 1
+        else:  # 逾時被代選：掛機（下一回合起不等他）
+            p.idle_streak += 1
         success_rate = instance.round.success_rates.get(name)
         custom_text = instance.round.custom_texts.get(name)
         if success_rate is not None and definition.free_text_gamble is not None:
@@ -715,8 +745,9 @@ def resolve_round(
             coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
             if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
                 coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
-            force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
-            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef, name, move))
+            slack = tuning.idle_share if name in instance.round.auto_picked else 1.0  # 掛機被代選的固守份量打折
+            force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef * slack  # 份量在扣這一回合的血之前算
+            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef * slack, name, move))
             counts[p.faction] += 1
             coefs[p.faction].append(coef)
             fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
@@ -735,6 +766,10 @@ def resolve_round(
     for hit in hits:
         msgs[hit.index] = _land_hit(instance, tuning, hit, harmed, msgs)
     msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
+    for q in _active_participants(instance):  # 連續掛機到 idle_leave 回合：撤下陣（按任何行動就回來，submit_action）
+        if q.idle_streak >= tuning.idle_leave:
+            q.left_field = True
+            msgs.append(f"{q.name}在陣上發呆太久，被撤了下去。")
     for hurt_name, amount in harmed.items():  # 被盯上打掉了氣血、回合結束還站著：戰功（撐住）
         q = instance.participants.get(hurt_name)
         if q is not None and amount >= 0.5 and not q.eliminated:
