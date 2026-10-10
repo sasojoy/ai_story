@@ -110,3 +110,17 @@ def test_the_round_settles_without_the_idler_and_the_scene_says_so(showdown):
     assert "（掛機 1 人不等）" in a.scene_text()
     a.choose("battle:act:guan_raid")  # 甲一出手就結算，不必再等逾時
     assert a.world.get_battle().round_number == 2
+
+
+def test_an_idler_who_never_acted_is_not_the_first_merit(gamble):
+    """代為固守照算戰功，但全程沒按過一招的人不拿首功；一邊全員都沒按過就從缺（PM 2026-10-10）。"""
+    battle = _battle(gamble, [("甲", "guan"), ("乙", "huang"), ("丙", "huang")])
+    b, c = battle.participants["乙"], battle.participants["丙"]
+    b.held_rounds = 4  # 乙全程掛機
+    c.acted_rounds = 1  # 丙只按過一招
+    tuning = BattleTuning()
+    assert bi.merit(tuning, b) > bi.merit(tuning, c) > 0
+    assert bi.merit_board(battle, tuning, "huang", "guan", None)["left"][0]["name"] == "乙"  # 戰功榜照常列
+    assert bi.top_merit(battle, tuning, "huang") is c
+    c.acted_rounds = 0
+    assert bi.top_merit(battle, tuning, "huang") is None  # 這一邊全員都沒按過：從缺

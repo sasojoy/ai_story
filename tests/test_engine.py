@@ -3131,7 +3131,7 @@ def test_a_fighter_back_during_the_off_season_gets_the_showdown_that_ended_it(co
     back.sync(end + 10)
     assert ids(back) == ["season:resting"]
     entry = back.state.journal[0]
-    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 +50", "名望 +2"]  # 還是這一季打的：大勢照常是數值變化；代為固守的回合照算戰功，他是這一邊的首功
+    assert entry.title == "測試決戰・官軍大勝" and entry.changes == ["寇亂 +50"]  # 還是這一季打的：大勢照常是數值變化；全程掛機不拿首功
     assert "你出手 0 回合" in entry.lines
     open_characters().save(back.state)
 

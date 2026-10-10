@@ -1046,9 +1046,9 @@ def merit_ranking(instance: BattleInstance, tuning: BattleTuning, side: str) -> 
 
 
 def top_merit(instance: BattleInstance, tuning: BattleTuning, side: str) -> BattleParticipant | None:
-    """這一邊的首功：戰功最高、至少 1 分的那一個；沒人出過手就沒有。"""
-    ranking = merit_ranking(instance, tuning, side)
-    return ranking[0][0] if ranking and ranking[0][1] > 0 else None
+    """這一邊的首功：自己至少按過一招的人裡戰功最高、至少 1 分的那一個；一邊全員都沒按過就從缺。
+    代為固守的回合照算戰功，但全程掛機的人不拿首功（PM 2026-10-10：認真打的人看了不服）。"""
+    return next((p for p, m in merit_ranking(instance, tuning, side) if m > 0 and p.acted_rounds > 0), None)
 
 
 def merit_board(instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None) -> dict:

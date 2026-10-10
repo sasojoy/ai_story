@@ -3235,7 +3235,8 @@ class Game:
             if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
                 fame += tuning.highlight_fame
                 lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
-            if rank == 1 and mine > 0:  # 這一邊的首功（同 battle_instance.top_merit）
+            top = battle_instance.top_merit(battle, tuning, me.faction) if me.faction in armies else None
+            if top is not None and top.name == me.name:  # 這一邊的首功
                 s.player.top_merits += 1
                 fame += tuning.top_fame
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
