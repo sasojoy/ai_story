@@ -951,3 +951,11 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .craft-filter select.input { width: auto; flex: 1 1 72px; min-width: 72px; padding: 6px 8px; font-size: 13px; }
 .craft-filter .fchip { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }
+
+/* 煉製頁的武學譜（manualHtml）：一條秘方一格，口訣一句一行，合中了的那一格淡金底 */
+.manual .fold-body { display: flex; flex-direction: column; gap: 10px; }
+.manual-row { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; }
+.manual-row.solved { border-left-color: var(--gold, #b8902f); }
+.manual-clue { margin: 0; font-family: var(--serif, serif); line-height: 1.7; }
+.manual-state { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+.manual-row.solved .manual-state { color: var(--gold, #b8902f); font-weight: 600; }

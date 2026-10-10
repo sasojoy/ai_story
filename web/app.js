@@ -2047,7 +2047,20 @@
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
+      ${manualHtml((S.main && S.main.status && S.main.status.manual) || [])}
       <details class="fold"><summary>背包</summary><div class="fold-body">${x.bag}</div></details>`;
+  }
+
+  // 武學譜（status.manual，secret_recipes.view）：這一季聽過的口訣，一條秘方一格，合中了寫它的名號。只列聽過的那幾句，
+  // 不寫種類、配方、還差幾句（還沒拿到的線索一律不露）。開合記在 S.manualOpen，煉製頁常重畫也不會自己收起來
+  function manualHtml(rows) {
+    const body = rows.length ? rows.map((r) => `<div class="manual-row${r.solved ? " solved" : ""}">
+        ${r.clues.map((c) => `<p class="manual-clue">「${esc(c)}」</p>`).join("")}
+        <p class="manual-state">${r.solved ? `已參透：合出【${esc(r.solved)}】` : "尚未參透"}</p></div>`).join("")
+      : '<p class="muted">還沒記下任何口訣。江湖上流傳的老話，有時藏著合成的門道。</p>';
+    const solved = rows.filter((r) => r.solved).length;
+    const count = rows.length ? `<small class="muted">${rows.length} 條${solved ? `・參透 ${solved}` : ""}</small>` : "";
+    return `<details class="fold manual"${S.manualOpen ? " open" : ""}><summary>武學譜 ${count}</summary><div class="fold-body">${body}</div></details>`;
   }
 
   // ── 輿圖 ──
@@ -3657,7 +3670,8 @@
   // 重畫（輪詢、換分頁回來）時照 S.ordersShut 補回，那一下補出來的 toggle 記下的還是同一週，不會繞圈
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
-    if (box instanceof Element && box.matches("details.bounties")) S.bountyShut = box.open ? null : box.dataset.key;
+    if (box instanceof Element && box.matches("details.manual")) S.manualOpen = box.open;
+    else if (box instanceof Element && box.matches("details.bounties")) S.bountyShut = box.open ? null : box.dataset.key;
     else if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
