@@ -217,6 +217,18 @@ class FuseQuality(_Strict):
     counter_attribute: float = -10  # 相剋的一對
     wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（跟修練同一套 stat_factor）
     shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # ── 天時地利（PM 2026-10-10 派工、企劃者選「甲乙都做」的乙）：同一爐換時間地點，造化分不一樣；規則不寫給玩家看，
+    # 只在合成前的說明（lines）與結果（setting_good／setting_bad）留一句含蓄的話。預設全是 0（測試內容不開），正式值在 config.json。
+    # 一爐最多算 setting_max 條（照分數的絕對值挑），fusion.setting_points 算。
+    terrain: float = 0  # 在探索悟得到同屬性意境的地方融這個意境（跟修練的 home_ground 同一個判斷）
+    night_match: float = 0  # 有正邪的那一爐：邪的在夜裡、正的在白天
+    night_clash: float = 0  # 反過來：邪的在白天、正的在夜裡（負的）
+    battlefield: float = 0  # 合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區
+    calm: float = 0  # 出關之後 calm_hours 遊戲小時之內開爐
+    calm_hours: float = Field(default=2, ge=0)  # 一個時辰
+    setting_max: int = Field(default=2, ge=0)
+    setting_good: str = ""  # 天時地利合起來是加分時，結果多一句
+    setting_bad: str = ""  # 合起來是扣分時，結果多一句
     # 說明那一句的寫法：因素 → [加分時, 扣分時]（語氣照企劃者「不要那麼直白」，不寫成攻略）
     lines: dict[str, list[str]] = Field(default_factory=lambda: {
         "quality": ["底子厚實", "底子尚淺"],
@@ -224,6 +236,10 @@ class FuseQuality(_Strict):
         "insight": ["意境來歷不凡", ""],
         "attribute": ["兩股氣息相投", "兩股氣息相衝"],
         "wis": ["你心思靈透", "你心思還不夠靈透"],
+        "terrain": ["此地氣象與這股意相合", ""],
+        "night": ["時辰正對", "時辰不對"],
+        "battlefield": ["殺伐之氣未散", ""],
+        "calm": ["出關未久，心如止水", ""],
     })
 
 
@@ -836,6 +852,43 @@ class TutorialStep(_Strict):
     survey: list[str] = Field(default_factory=list)
 
 
+class ArtPattern(_Strict):
+    """秘方（content/secret_recipes.json）裡的一門武學：寫了的每一項都要對得上。武學多半是合出來的、每季 id 都不一樣，
+    所以秘方不認 id，認形狀（屬性、種類、正邪、自己那一份至少什麼品）。"""
+
+    attribute: str | None = None
+    kind: str | None = None  # 內功／武學
+    lean: str | None = None  # 正／邪／無
+    min_quality: str | None = None
+
+
+class InsightPattern(_Strict):
+    """秘方裡的一個意境：id（內容的六個基本意境）或屬性、正邪；寫了的每一項都要對得上。"""
+
+    id: str | None = None
+    attribute: str | None = None
+    lean: str | None = None
+
+
+class SecretRecipe(_Strict):
+    """秘方（PM 2026-10-10 派工「口訣與秘方」，企劃者「合成要講究邏輯，最好能隱含技巧都藏彩蛋」）：每季照天機挑一批
+    （Config.secrets.per_season，tianxia/secrets.py）。合中了出一門內容寫好名號的武學或意境：品質機率好一截、一定帶一條特別功效，
+    首創的人江湖上傳一句、寫進江湖史。線索是三句口訣（clues：說書版、人物順口版、殘譜版），只講意象，不點名意境或屬性。
+    fuse：art＋insight；merge：left、right 兩格分左右；blend：arts 兩門不分先後。"""
+
+    id: str
+    kind: Literal["fuse", "merge", "blend"]
+    art: ArtPattern | None = None
+    insight: InsightPattern | None = None
+    left: InsightPattern | None = None
+    right: InsightPattern | None = None
+    arts: list[ArtPattern] = Field(default_factory=list)
+    name: str
+    note: str = ""
+    special: str | None = None  # 特別功效 id（traits.json 的 special）；沒寫照天機挑一條。合出意境的秘方不用
+    clues: list[str] = Field(min_length=3, max_length=3)
+
+
 class PresetRecipe(_Strict):
     """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
     第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
@@ -1047,7 +1100,11 @@ class BattleTuning(_Strict):
     affinity_inner: float = 10.0
     affinity: dict[str, tuple[Move, Move]] = Field(default_factory=lambda: dict(DEFAULT_AFFINITY))  # 屬性 →（擅長, 不擅長）
     counter: float = 0.5  # 剋制係數 ＝ 1 ＋ counter × 對面被你剋的比例 － counter × 對面剋你的比例
-    push_max: float = 10.0  # 一回合最多推多少
+    # 一回合最多推多少。Joy 2026-10-10（決戰試玩回饋第 3 點）：舊值 10 時兩軍份量相當，固定招全軍一回合只推 ±1～2，放手一搏成了一次就推 8～11，
+    # 「跟從預設選項的玩家現在毫無存在感」。合成重演（長社火攻 5 對 5、9 回合、每人每回合兩成想搏、成功率照那場的分佈；
+    # 搏的人每幕最多一次）：push_max 20、side_trend_cap 4 時固定招佔戰局變動的 58%～60%（舊值 38%），
+    # 三個人一直搏的那種場面固定招佔 67%（舊值 46%）。正式值寫在 content/config.json 的 battle.push_max（20）；這裡的預設 10 是測試內容與舊的單元測試量公式用的。
+    push_max: float = 10.0
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
     third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
@@ -1058,6 +1115,21 @@ class BattleTuning(_Strict):
     # 多乘 diversity_per，最多 diversity_cap。屬性在加入戰局時快照（BattleParticipant.attribute），只有第一季開著時才快照
     diversity_per: float = Field(default=0.05, ge=0)
     diversity_cap: float = Field(default=0.15, ge=0)  # 四路以上封頂：兩軍份量相當時，一回合大約多推 1 點
+    lead_crowd: int = Field(default=3, ge=2)  # 回合原因點名帶頭出固定招的人；同一招有這麼多人時寫成「結成陣勢」
+    # 放手一搏點名敵方參戰者（Joy 2026-10-10：「玩家會點名敵對的玩家……顯示成功，但是其實被點名的玩家根本沒受到任何影響」）：
+    # 文字裡出現對面參戰者的名號（2 字以上，取最先出現的那一個）就是指名攻擊，由引擎認、不靠模型。
+    # 成了：戰局推進只剩 target_push_share，其餘化成對他的傷害：他氣血池上限的 target_hit_base＋風險 × target_hit_per_risk，
+    # 最多 target_hit_max；成功率（加職位之後）≤ pin_rate 的險招成了，他下一回合被牽制、只能固守。失手照舊只傷自己。
+    target_push_share: float = Field(default=0.5, ge=0, le=1)
+    target_hit_base: float = Field(default=0.10, ge=0, le=1)
+    target_hit_per_risk: float = Field(default=0.0015, ge=0)
+    target_hit_max: float = Field(default=0.25, ge=0, le=1)
+    pin_rate: int = Field(default=15, ge=0, le=100)
+    # 引人注目：這一幕被點名過、或自己放手一搏成過的人是「顯眼」的，對面這一回合每一個出強攻的人，另外有 focus_per_attacker 的傷害
+    # 平分到這一邊顯眼的人身上（每人最多他上限的 focus_cap）。一個人一回合被別人打掉的（點名＋集火）合起來最多他上限的 target_round_cap
+    focus_per_attacker: float = Field(default=15.0, ge=0)
+    focus_cap: float = Field(default=0.12, ge=0, le=1)
+    target_round_cap: float = Field(default=0.30, ge=0, le=1)
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -1202,6 +1274,84 @@ class Bounties(_Strict):
     post_weeks: int = Field(default=1, ge=1)
 
 
+class DuelTuning(_Strict):
+    """單人頭目戰（Joy 2026-10-10：「多加一些特殊事件，有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）。
+    內容在 content/duels.json（DuelBoss）；規則在 tianxia/duel.py。一場 3～5 回合，每回合出決戰的三招之一（固守剋強攻、強攻剋奇襲、
+    奇襲剋固守）或放手一搏；兩邊爭一條氣勢（edge，從 start 起，越高越是你佔上風），你用自己的氣血池（開打時的氣血）。
+
+    數字的依據（全部【預設】，測完再調）：
+    - 招式的推力 ＝ push_base ×（2 × 你的份量 ÷（你的＋他的）− 1）＋ counter_push × 剋（剋他 +1、被剋 −1、同招 0）＋ 運氣 ±luck。
+      份量照決戰（battle_instance.move_scores：實力 × 適性 × 職位）；對手的份量是 strength(難度) × 0.75（適性的基準）。
+      份量相當時一回合大約 ±8～12，四回合打完落在 70 以上（大勝）要剋中兩三次；練得比他強兩倍，不剋也推得動。
+    - 每回合他打你：氣血池上限的 hit（8%），被剋 ×hit_countered、剋他 ×hit_countering，再乘 √(他的份量 ÷ 你的)（夾在 0.5～hit_scale_max）。
+      最弱的新人四回合全被剋約 77%，不會一場打死；遊歷落敗是 30%。
+    - 放手一搏照決戰（模型只評成功率、寫成敗兩版劇情；評不到 40；軍師 +10）：成了推 (gamble_base＋風險 × gamble_per_risk) × 實力倍數，
+      扣池子 success_hp；沒成倒退 min(fail_cap, 風險 × fail_per_risk)、扣池子 fail_hp_base＋風險 × fail_hp_per_risk（同決戰）。
+      單人戰裡成了的放手一搏要真的扭轉局面（大事件的單人體驗版），所以推得比決戰多（決戰一個人的推力要跟幾十個人分）。
+    - 遇上：在有頭目的地點探索，先擲 explore_chance；同一隻一人一季最多 per_boss_season 次，任兩場之間隔 cooldown_seconds 世界秒。
+    - 結果：打完最後一回合看氣勢，≥ big 大勝、≥ win 險勝、> draw 僵持，其餘落敗；中途到 early_win 以上提前大勝、early_lose 以下或池子見底
+      提前落敗。獎勵照 reward_share 打折（落敗沒有），大勝、險勝另擲 legend_chance 撿一枚破境丹。"""
+
+    explore_chance: float = Field(default=0.05, ge=0, le=1)
+    per_boss_season: int = Field(default=2, ge=1)
+    cooldown_seconds: float = Field(default=7200, ge=0)
+    start: float = 50.0
+    big: float = 70.0
+    win: float = 55.0
+    draw: float = 45.0
+    early_win: float = 90.0
+    early_lose: float = 10.0
+    push_base: float = 14.0
+    counter_push: float = 8.0
+    luck: float = 4.0
+    foe_fit: float = 0.75
+    hit: float = Field(default=0.08, ge=0, le=1)
+    hit_scale_max: float = Field(default=1.5, ge=0.5)
+    hit_countered: float = 1.6
+    hit_countering: float = 0.5
+    gamble_base: float = 10.0
+    gamble_per_risk: float = 0.15
+    success_hp: float = Field(default=0.03, ge=0, le=1)
+    fail_per_risk: float = 0.05
+    fail_cap: float = 4.0
+    fail_hp_base: float = 0.1
+    fail_hp_per_risk: float = 0.0025
+    tell_truth: float = Field(default=0.6, ge=0, le=1)  # 回合開始時寫的他的架勢有幾成是真的（其餘是虛招）
+    reward_share: dict[str, float] = Field(default_factory=lambda: {"大勝": 1.0, "險勝": 0.7, "僵持": 0.3})
+    legend_chance: dict[str, float] = Field(default_factory=lambda: {"大勝": 0.25, "險勝": 0.1})
+
+
+class DuelFoe(_Strict):
+    """一隻頭目的一個面貌：照玩家的陣營挑（side 是他站的陣營；跟玩家同陣營的不挑，換下一個）。文字待內容方改。
+    intro 是遇上時的場景；win、lose 是你打贏、打輸時的結語。moves 是他出招的偏好（三招的權重，沒寫的當 1）。"""
+
+    side: str | None = None
+    name: str
+    title: str
+    intro: str
+    win: str
+    lose: str
+    moves: dict[str, float] = Field(default_factory=dict)
+
+
+class DuelBoss(_Strict):
+    """一隻單人頭目（content/duels.json）：在 locations 這幾個地點探索時可能遇上。difficulty 照地點的危險度定（同一帶最強的對手再高一點），
+    rounds 是幾回合（3～5）。獎勵照結果打折（DuelTuning.reward_share），drops 只有大勝、險勝才給（每一樣一個）。
+    foes 照玩家陣營挑面貌（DuelFoe.side）：每個陣營都要挑得到一個不是自己人的。"""
+
+    id: str
+    locations: list[str]
+    difficulty: float = Field(gt=0)
+    rounds: int = Field(default=4, ge=3, le=5)
+    attribute: str | None = None  # 他的路數（剋不剋得到你身上武學的屬性，同遊歷的對手）
+    exp: int = Field(default=0, ge=0)
+    silver: int = Field(default=0, ge=0)
+    xinde: int = Field(default=0, ge=0)
+    fame: int = Field(default=0, ge=0)  # 打贏（大勝、險勝）的名望
+    drops: list[str] = Field(default_factory=list)
+    foes: list[DuelFoe] = Field(min_length=1)
+
+
 class Raid(_Strict):
     """截殺（敵對陣營的玩家對打，企劃者 2026-10-08 在決策卡選「有限制地開」：「只能打敵對陣營、新手期和城裡不能打，
     輸了損失一點銀兩和氣血，同一人有冷卻」）。玩家卡上的一顆鈕，不必對方同意，對方下線、在忙也照打（他在「此地還有」的名單上就行）。
@@ -1267,6 +1417,27 @@ class WeaponRules(_Strict):
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
 
 
+class Secrets(_Strict):
+    """口訣與秘方（tianxia/secrets.py；PM 2026-10-10 派工，企劃者選「甲乙都做」的甲）。預設全關（測試內容沒有秘方池），
+    正式值在 config.json。"""
+
+    # 每季照天機挑幾條：種類 → 條數（池子不夠就全上）
+    per_season: dict[str, int] = Field(default_factory=lambda: {"fuse": 2, "merge": 2, "blend": 2})
+    quality_points: float = 0  # 合中秘方的那一爐，造化分加這麼多（+20：普通搭配的上品從兩成拉到三成，還是夾在上限之內）
+    insight_points: float = 0  # 拿秘方合出來的意境去融，那一爐的「意境來歷」再加這麼多
+    tale_events: list[str] = Field(default_factory=list)  # 這些事件了結之後，有 tale_chance 的機會多一句說書版的口訣
+    tale_chance: float = Field(default=0, ge=0, le=1)
+    scrap_chance: float = Field(default=0, ge=0, le=1)  # 探索最後擲一次，撿到一頁殘譜（殘譜版的口訣）
+    talk_affinity: int = Field(default=20, ge=0)  # 跟人物的情誼到這麼多，他才會不經意引一句（人物順口版）
+    # 寫給玩家看的框（{clue} 換成口訣）
+    tale_frame: str = "說書先生收場前搖頭晃腦念了兩句：「{clue}」——茶客們聽得一頭霧水。"
+    scrap_frame: str = "你在亂石堆裡翻出一頁殘譜，字跡斑駁，只認得出一句：「{clue}」"
+    overheard: str = "（這句話你記進了武學譜。）"
+    hit_line: str = "爐中忽地一變——這一爐竟暗合了江湖上流傳的一句口訣。"
+    rumor: str = "江湖上傳開了：{who}參透了一句口訣，合出了{thing}。"
+    chronicle: str = "{who}參透口訣，首創{thing}。"
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1329,7 +1500,9 @@ class Config(_Strict):
     big_fight_swing: int = Field(default=15, ge=0)  # 模型判讀最多把勝算推多少個百分點【預設】
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
+    secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
+    duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
@@ -1734,7 +1907,10 @@ class FreeTextGamble(_Strict):
     failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
     failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
     failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
-    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少
+    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少（正式內容 content/battles.json 2026-10-10 從 5 調成 4，見 BattleTuning.push_max）
+    # 放手一搏不再「誰手快誰刷」（Joy 2026-10-10 決戰試玩回饋第 3 點：「跟從預設選項的玩家現在毫無存在感」）：
+    # 一個人每一幕最多放手一搏 per_act 次（一場三幕最多三次），其餘回合出固定招
+    per_act: int = Field(default=1, ge=1)
 
 
 class ThirdParty(_Strict):
@@ -2404,6 +2580,7 @@ class Content(_Strict):
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
+    duels: dict[str, DuelBoss] = Field(default_factory=dict)  # 單人頭目戰（content/duels.json）；沒有這個檔就是空的
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）
@@ -2411,6 +2588,7 @@ class Content(_Strict):
     opportunities: list[OppDef] = Field(default_factory=list)  # 機緣（content/opportunities.json，正式版乙一）
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
+    secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示

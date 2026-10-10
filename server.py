@@ -58,7 +58,7 @@ from starlette.concurrency import run_in_threadpool
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, companion_agent, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
+    battle_instance, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
     server_bots, social, team, timetable, weapons,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -824,10 +824,34 @@ def battle_text(game: Game, text: str) -> list[str]:
         if client is None and game.client is not None:
             return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
         # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
-        return battle_instance.assess_gamble(client, act_, request.faction_name, request.text, request.name)
+        return battle_instance.assess_gamble(
+            client, act_, request.faction_name, request.text, request.name, target=request.target,
+        )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
     return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
+
+
+def duel_text(game: Game, text: str) -> list[str]:
+    """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
+    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
+    started, request = _open_request(game, lambda: game.duel_text_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    scene = duel.Scene(request.title, request.scene)
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return fallback
+        return battle_instance.assess_gamble(
+            client, scene, request.faction_name, request.text, request.name, setting=duel.SETTING, place=duel.PLACE,
+        )
+
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -856,8 +880,9 @@ def _main_view_body(game: Game) -> dict:
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
-        "free_text": game.battle_free_text_prompt(),
-        "free_text_note": game.battle_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
+        "free_text": game.battle_free_text_prompt() or game.duel_free_text_prompt(),
+        "free_text_note": game.battle_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
+        "free_op": "battle_text" if game.battle_free_text_prompt() is not None else "duel_text",  # 輸入框送到哪裡（決戰或頭目戰）
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
@@ -1397,6 +1422,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
+    elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
+        msgs = duel_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
@@ -1554,10 +1581,11 @@ def api_sense_warm(request: Request):
 
 @app.post("/api/forge_line")
 def api_forge_line(request: Request, body: dict = Body(default={})):
-    """煉製頁選了東西就更新說明（不算行動、不存檔）。"""
+    """煉製頁選了東西就更新說明（不算行動、不存檔）。爐裡只放了一樣時多給 picks：另一格放得進來的每一樣合不合得了，
+    判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
     game = _game(request)
     art, picked, other = forge_args(body)
-    return {"line": look(game, lambda g: md(g.forge_line(art, picked, other_art=other)))}
+    return look(game, lambda g: {"line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other)})
 
 
 @app.get("/api/reports")

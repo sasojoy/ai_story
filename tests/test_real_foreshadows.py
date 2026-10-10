@@ -193,9 +193,10 @@ def candidates(c, game: Game) -> list:
 
 
 def meet(c, game: Game, event_id: str, monkeypatch) -> None:
-    """讓這個角色在腳下的地點探索時，一定遇上指定的事件（只留那一則、事件那一支必中、不抽奇遇）。"""
+    """讓這個角色在腳下的地點探索時，一定遇上指定的事件（只留那一則、事件那一支必中、不抽奇遇、不遇頭目）。"""
     monkeypatch.setattr(c, "events", {event_id: ALL_EVENTS[event_id]})
     monkeypatch.setattr(c.config, "rare_explore_chance", 0.0)
+    monkeypatch.setattr(c, "duels", {})  # 長社、鉅鹿道壇有頭目：FixedRandom(0.0) 一定擲中
     for mix in c.config.explore_mix:
         monkeypatch.setattr(mix, "weights", {"event": 1})
     game.state.player.stamina = 150

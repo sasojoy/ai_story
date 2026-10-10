@@ -140,7 +140,7 @@ def forge_line(
         if a is None or b is None:
             return "（選了不存在的東西。）"
         shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
-        odds = fusion.blend_odds(state, content, art_id, a, other_art, b)
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b, shape=shape)
         head = (
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
@@ -187,6 +187,44 @@ def forge_line(
             f"或放兩個意境，合出新的意境。{count}。"
         )
     return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def _no(problem: str) -> dict:
+    """一樣合不了的東西在清單上怎麼標：short 是兩三個字（fusion.Refusal），why 是按下去時會說的那一整句。"""
+    return {"short": getattr(problem, "short", "合不了"), "why": str(problem)}
+
+
+def forge_picks(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
+    other_art: str | None = None,
+) -> dict | None:
+    """爐裡只放了一樣時，另一格還能放什麼（企劃者 2026-10-10「合過的意境不能合，常常丟上去按合成才知道」）：
+    {"arts": {id: 合不了的標記或 None}, "insights": {...}}。每一格都照開爐時同一個判斷算（序章的 prologue.fuse_problem，
+    再來 fusion 的 fuse_problem／blend_problem／merge_problem），不另寫一套。爐是空的、放滿了、放的不是你的東西：None。"""
+    owned, held = owned_arts(state), state.player.insights
+    if other_art or len(insight_ids) + (1 if art_id else 0) != 1:
+        return None
+    if (art_id and art_id not in owned) or (insight_ids and insight_ids[0] not in held):
+        return None
+    arts, ins = {}, {}
+    for other in owned:
+        if art_id:  # 武學＋武學
+            if other == art_id:
+                continue
+            problem = prologue.fuse_problem(state, content, art_id, [], other) or fusion.blend_problem(state, content, world, art_id, other)
+        else:  # 這一門＋爐裡那個意境
+            problem = prologue.fuse_problem(state, content, other, insight_ids) or fusion.fuse_problem(
+                state, content, world, other, insight_ids[0])
+        arts[other] = None if problem is None else _no(problem)
+    for insight_id in held:
+        if art_id:
+            problem = prologue.fuse_problem(state, content, art_id, [insight_id]) or fusion.fuse_problem(
+                state, content, world, art_id, insight_id)
+        else:  # 合併：同一個意境也能放兩次
+            problem = prologue.fuse_problem(state, content, None, [insight_ids[0], insight_id]) or fusion.merge_problem(
+                state, content, world, insight_ids[0], insight_id)
+        ins[insight_id] = None if problem is None else _no(problem)
+    return {"arts": arts, "insights": ins}
 
 
 def heal_button(state: GameState, content: Content) -> dict:

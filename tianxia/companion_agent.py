@@ -143,6 +143,13 @@ def _habit(
     return styles.talk_line(content, styles.style_of(state, content, world, squad), character.name)
 
 
+def _secret_line(character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str) -> str:
+    """他知道的一句武林口訣（口訣與秘方，tianxia/secret_recipes.py）：情誼夠了才放進提示，只能不經意原字原句引一次。"""
+    from . import secret_recipes  # 函式內 import：同 _habit
+
+    return secret_recipes.talk_line(state, content, world, companion_id, character.name)
+
+
 def build_system_prompt(
     character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
 ) -> str:
@@ -175,6 +182,7 @@ def build_system_prompt(
         f"【{character.name}此時的處境】{character.situation}\n"
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
         f"{_habit(character, state, content, world, companion_id, affinity)}"
+        f"{_secret_line(character, state, content, world, companion_id)}"
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"

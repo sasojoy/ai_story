@@ -30,17 +30,30 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import insights, landing, library, naming, sensing, team, traits
+from . import calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
-from .rules import add_rumor, season_one
+from .rules import add_chronicle, add_rumor, season_one
 from .state import Echo, GameState
 from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
 MERGE_PREFIX = "合|"
 LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全服登記的那一份一律是下品
+
+
+class Refusal(str):
+    """合不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
+    （skillview.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。判斷只寫在這幾個 *_problem 裡。"""
+
+    short: str = "合不了"
+
+
+def _refuse(text: str, short: str) -> Refusal:
+    out = Refusal(text)
+    out.short = short
+    return out
 
 
 @dataclass(frozen=True)
@@ -124,27 +137,82 @@ def _attribute_points(content: Content, a: str, b: str) -> float:
 
 
 def insight_points(state: GameState, content: Content, insight: Insight) -> float:
-    """意境的來歷：內容寫好的基本意境 0；有正邪的（善名、惡名悟來的）、合併出來的另外加分；自己首悟的再加。"""
+    """意境的來歷：內容寫好的基本意境 0；有正邪的（善名、惡名悟來的）、合併出來的另外加分；自己首悟的再加；
+    秘方合出來的再加（Config.secrets.insight_points）。"""
     rule = content.config.fuse_quality
     points = rule.insight_merged if insight.parents else (rule.insight_lean if insight.lean != "無" else 0.0)
     if insight.creator and insight.creator == state.player.name:
         points += rule.insight_own
+    if insight.secret:
+        points += content.config.secrets.insight_points
     return points
 
 
-def fuse_odds(state: GameState, content: Content, art_id: str, base: MartialArt, insight: Insight) -> QualityOdds:
-    """武學＋意境這一爐的品質機率：底自己那一份的品質與成數、意境的來歷、兩者屬性合不合、你的悟性。
+def setting_points(
+    state: GameState, content: Content, attribute: str, lean: str, insight: Insight | None = None,
+) -> list[tuple[str, float]]:
+    """天時地利（PM 2026-10-10 派工乙）：這一爐在此時此地開的造化分，最多 setting_max 條（照分數的絕對值挑）。
+    地利：融的意境在這裡探索悟得到同屬性的（insight 有給才算，跟修練的 home_ground 同一個判斷）。
+    晝夜：有正邪的那一爐（lean：融的意境、或兩門合出來的那一門），邪在夜裡、正在白天加分，反過來扣分。
+    戰場：合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區。心靜：出關之後 calm_hours 遊戲小時之內。
+    權重全在 Config.fuse_quality，預設 0（不開）。"""
+    rule = content.config.fuse_quality
+    w, p = state.world, state.player
+    here = content.locations.get(p.location)
+    out: list[tuple[str, float]] = []
+    if rule.terrain and insight is not None and here is not None and any(
+        content.insights[i].attribute == insight.attribute for i in insights.explore_gives(here, content)
+    ):
+        out.append(("terrain", rule.terrain))
+    if lean in ("正", "邪") and (rule.night_match or rule.night_clash):
+        night = calendar.is_night(w.time, content, w)
+        out.append(("night", rule.night_match if (lean == "邪") == night else rule.night_clash))
+    if rule.battlefield and attribute == "剛" and here is not None and (
+        content.config.explore_mix_of(here.tags).kind == "camp"
+        or (season_one(content, w) and rules.front_of(content, here.id) in rules.chaos_fronts(state, content))
+    ):
+        out.append(("battlefield", rule.battlefield))
+    if rule.calm and p.seclusion_done is not None and 0 <= w.time - p.seclusion_done <= rule.calm_hours * calendar.HOUR:
+        out.append(("calm", rule.calm))
+    out = sorted((item for item in out if item[1]), key=lambda item: -abs(item[1]))
+    return out[: rule.setting_max]
+
+
+def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]:
+    """結果多一句含蓄的話：天時地利合起來加分寫 setting_good、扣分寫 setting_bad；沒有、或那句是空的就不寫。"""
+    rule = content.config.fuse_quality
+    total = sum(points for _, points in scored)
+    line = rule.setting_good if total > 0 else rule.setting_bad if total < 0 else ""
+    return [line] if line else []
+
+
+def fuse_odds(
+    state: GameState, content: Content, art_id: str, base: MartialArt, insight: Insight, *, secret: bool = False,
+) -> QualityOdds:
+    """武學＋意境這一爐的品質機率：底自己那一份的品質與成數、意境的來歷、兩者屬性合不合、你的悟性、天時地利；
+    合中秘方的那一爐再加 Config.secrets.quality_points（secret；合成前的說明不給，不然調著組合看機率就探得出秘方）。
     照這一爐的組成算，配方有沒有人合過、會不會合到舊的都一樣。"""
     scored = _art_points(state, content, [(art_id, base)])
     scored.append(("insight", insight_points(state, content, insight)))
     scored.append(("attribute", _attribute_points(content, base.attribute, insight.attribute)))
+    scored += setting_points(state, content, insight.attribute, insight.lean, insight)
+    if secret:
+        scored.append(("secret", content.config.secrets.quality_points))
     return _points(content, scored)
 
 
-def blend_odds(state: GameState, content: Content, a: str, art_a: MartialArt, b: str, art_b: MartialArt) -> QualityOdds:
-    """武學＋武學這一爐的品質機率：兩門自己那一份的品質與成數（平均）、兩門屬性合不合、你的悟性。"""
+def blend_odds(
+    state: GameState, content: Content, a: str, art_a: MartialArt, b: str, art_b: MartialArt, *,
+    shape: Shape | None = None, secret: bool = False,
+) -> QualityOdds:
+    """武學＋武學這一爐的品質機率：兩門自己那一份的品質與成數（平均）、兩門屬性合不合、你的悟性、天時地利
+    （照合出來的那一門的屬性與正邪，shape；沒給不算）；秘方同 fuse_odds。"""
     scored = _art_points(state, content, [(a, art_a), (b, art_b)])
     scored.append(("attribute", _attribute_points(content, art_a.attribute, art_b.attribute)))
+    if shape is not None:
+        scored += setting_points(state, content, shape.attribute, shape.lean)
+    if secret:
+        scored.append(("secret", content.config.secrets.quality_points))
     return _points(content, scored)
 
 
@@ -177,6 +245,17 @@ def fuse_key_for(state: GameState, content: Content, world: WorldStateStore, art
     """fuse_key，私有意境的屬性從這個玩家自己的存檔查。查不到（失效的引用）照 id 寫——那一爐本來就會被擋下來。"""
     insight = insights.resolve(insight_id, content, world, state)
     return fuse_key(art_id, insight_id, insight.attribute if insight is not None else None)
+
+
+def fuse_lookup_key(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str:
+    """這一爐（武學＋意境）登記用的配方鍵：合得上這一季的秘方就是「秘|秘方 id」，否則是 fuse_key_for。查不到資料照 fuse_key_for。"""
+    art = team.player_art(state, content, world, art_id)
+    insight = insights.resolve(insight_id, content, world, state)
+    if art is not None and insight is not None and preset_for(content, art_id, insight_id) is None:
+        secret = secret_recipes.match_fuse(state, content, world, art_id, art, insight)
+        if secret is not None:
+            return secret_recipes.key(secret)
+    return fuse_key_for(state, content, world, art_id, insight_id)
 
 
 def merge_key(a: str, b: str) -> str:
@@ -230,16 +309,16 @@ def merge_shape(world: WorldStateStore, a: Insight, b: Insight) -> tuple[str, st
 
 def _full_line(state: GameState, content: Content) -> str:
     cap = library.cap_of(state, content)
-    return f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。"
+    return _refuse(f"武學與意境已經滿了（{library.held_count(state)}/{cap}），先熔掉一些。", "持有滿了")
 
 
 def _xinde_line(state: GameState, price: int, what: str) -> str | None:
     xinde = state.player.stats.get("xinde", 0)
-    return None if xinde >= price else f"心得不足：{what}要 {price} 點，你只有 {xinde} 點。"
+    return None if xinde >= price else _refuse(f"心得不足：{what}要 {price} 點，你只有 {xinde} 點。", "心得不足")
 
 
 def _stamina_line(state: GameState, need: int, what: str) -> str | None:
-    return None if state.player.stamina >= need else f"體力不足：{what}一次要 {need}。"
+    return None if state.player.stamina >= need else _refuse(f"體力不足：{what}一次要 {need}。", "體力不足")
 
 
 def _charge(state: GameState, xinde: int, stamina: int) -> list[str]:
@@ -407,10 +486,10 @@ def fuse_problem(
         return "找不到它的資料。"  # 存檔裡記著、內容與全服登記裡都沒有（失效的引用）
     insight = insights.resolve(insight_id, content, world, state)
     if lineage_has(art_id, insight, content, world):
-        return f"【{team.player_art(state, content, world, art_id).name}】的來歷裡早已融過「{insight.name}」——同一股意，再融也只是舊路重走。"
-    known = world.lookup_recipe(fuse_key_for(state, content, world, art_id, insight_id))
+        return _refuse(f"【{team.player_art(state, content, world, art_id).name}】的來歷裡早已融過「{insight.name}」——同一股意，再融也只是舊路重走。", "來歷裡融過")
+    known = world.lookup_recipe(fuse_lookup_key(state, content, world, art_id, insight_id))
     if known is not None and known.id in library.owned_arts(state):
-        return f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。"
+        return _refuse(f"這一爐合出來還是【{known.name}】，你已經有了——換一組試試吧。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "fuse")
@@ -448,6 +527,8 @@ def forge_request(
             return None
         art_a = team.player_art(state, content, world, art_id)
         art_b = team.player_art(state, content, world, other_art)
+        if secret_recipes.match_blend(state, content, world, art_id, art_a, other_art, art_b) is not None:
+            return None  # 秘方：名字內容寫好了
         tianji, seed = recipe_seed(world, key)
         shape = blend_shape(art_a, art_b, seed)
         candidates = landing.art_candidates(world, shape.kind, shape.attribute, shape.lean)
@@ -459,9 +540,9 @@ def forge_request(
         insight_id = insight_ids[0]
         if fuse_problem(state, content, world, art_id, insight_id, partner) is not None:
             return None
-        key = fuse_key_for(state, content, world, art_id, insight_id)
-        if world.lookup_recipe(key) is not None:
-            return None
+        key = fuse_lookup_key(state, content, world, art_id, insight_id)
+        if world.lookup_recipe(key) is not None or key.startswith(secret_recipes.PREFIX):
+            return None  # 查表就好；秘方的名字內容寫好了，不用模型
         if preset_for(content, art_id, insight_id) is not None:
             return None  # 師門配方：名字寫好了，不用模型（fuse 也不擲合到舊的）
         base = team.player_art(state, content, world, art_id)
@@ -478,6 +559,8 @@ def forge_request(
             return None
         key = merge_key(a, b)
         ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
+        if secret_recipes.match_merge(content, world, ia, ib) is not None:
+            return None  # 秘方：名字內容寫好了
         if insights.is_own(a) or insights.is_own(b):  # 有私有意境的合併：沒有配方、每次都叫模型（悟意境設計 0.2b 第 4 點）
             return naming.NamingRequest("merge", key, "意境", _merge_messages(ia, ib))
         if world.lookup_insight_recipe(key) is not None:
@@ -544,7 +627,19 @@ def fuse(
     own = insights.is_own(insight_id)
     key = fuse_key(art_id, insight_id, insight.attribute)
     preset = preset_for(content, art_id, insight_id)  # 師門配方：這一季誰先合、後合都是它，所以先算好（_fuse_line 也要看）
+    secret = None if preset is not None else secret_recipes.match_fuse(state, content, world, art_id, base, insight)
+    if secret is not None:  # 秘方先於合到舊的：配方鍵換成秘方的，全服共用同一門
+        key = secret_recipes.key(secret)
     art, first, landed = world.lookup_recipe(key), False, False
+    if art is None and secret is not None:
+        art, first = _claim_secret_art(
+            state, content, world, secret, key, base.kind, insight.attribute, partner,
+            new_traits=traits.inherit_fuse(base, insight.attribute),
+            # 私有意境不進全服登記（同一般的合成）：只記屬性
+            update={"insight": None if own else insight.id, "insight_attr": insight.attribute, "base": art_id, "lean": insight.lean},
+        )
+        if art is None:
+            return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
     if art is None:
         tianji, _ = recipe_seed(world, key)
         candidates = landing.art_candidates(world, base.kind, insight.attribute, insight.lean)
@@ -586,15 +681,54 @@ def fuse(
         if landed:  # 這一爐才把這一組登記到那一門：新摸清一條練法（FB-078）；不是這一爐登記的（別人先到）照舊說「已經有了」
             return None, [_new_road(f"【{art.name}】", "練法", f"【{base.name}】＋「{insight.name}」")]
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
-    cfg = content.config
     # 新武學自己那一份的品質照這一爐的搭配擲（fuse_odds；序章 rng 是 None，固定下品），從擲到的那一品接著修
-    quality = roll_quality(fuse_odds(state, content, art_id, base, insight), rng)
-    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None, quality=quality)] + _charge(
-        state, *_price(content, partner, "fuse"),
-    )
-    msgs += _special_rumor(state, content, art, first)
+    quality = roll_quality(fuse_odds(state, content, art_id, base, insight, secret=secret is not None), rng)
+    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None, quality=quality)]
+    msgs += _secret_lines(state, content, world, secret, f"【{art.name}】", first)
+    msgs += setting_line(content, setting_points(state, content, insight.attribute, insight.lean, insight))
+    msgs += _charge(state, *_price(content, partner, "fuse"))
+    if secret is None:  # 秘方那一門的傳聞由 _secret_lines 傳（不再另傳一句特別功效的）
+        msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
     return art, msgs + _store_forged(state, content, world, art, quality)
+
+
+def _claim_secret_art(
+    state: GameState, content: Content, world: WorldStateStore, secret, key: str, kind: str, attribute: str,
+    partner: Partner | None, *, new_traits: list[str], update: dict,
+) -> tuple[MartialArt | None, bool]:
+    """合中秘方、這一季還沒人登記：照內容寫好的名號與說明登記（不叫模型、不擲合到舊的），一定帶一條特別功效。
+    名號剛好被某個角色或別的武學用掉時，照退路字表換一個（說明不帶）。"""
+    tianji, _ = recipe_seed(world, key)
+    name = None if world.is_character_name(secret.name) else secret.name
+    for candidate_name in _candidates(content, world, key, kind, tianji, name):
+        candidate = generate_from_name(candidate_name, kind, candidate_name, tianji, weights=LOW_ONLY, attribute=attribute)
+        candidate = candidate.model_copy(update={
+            "origin": "fused", **_makers(state, partner), "note": secret.note if candidate_name == name else "",
+            "traits": new_traits, "special": secret_recipes.special_for(content, secret, tianji), "secret": secret.id, **update,
+        })
+        art, first = world.claim_recipe(key, candidate)
+        if art is not None:
+            return art, first
+    return None, False
+
+
+def _secret_lines(
+    state: GameState, content: Content, world: WorldStateStore, secret, thing: str, first: bool,
+) -> list[str]:
+    """合中秘方：結果多一句「暗合口訣」，記進武學譜；這一季第一個合中的，江湖上傳一句（具名，同 _special_rumor）、寫進江湖史。"""
+    if secret is None:
+        return []
+    cfg = content.config.secrets
+    secret_recipes.solve(state, secret_recipes.tianji_of(world), secret)
+    lines = [cfg.hit_line] if cfg.hit_line else []
+    if first:
+        who = state.player.name
+        rumor = cfg.rumor.format(who=who, thing=thing)
+        add_rumor(state, rumor, None, content=content, named=True)
+        add_chronicle(state, cfg.chronicle.format(who=who, thing=thing))
+        lines.append(rumor)
+    return lines
 
 
 def _store_forged(
@@ -642,14 +776,15 @@ def merge_problem(
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
     if ia is None or ib is None:
         return "找不到它的資料。"
-    if insights.is_own(a) or insights.is_own(b):
+    secret = secret_recipes.match_merge(content, world, ia, ib)
+    if secret is None and (insights.is_own(a) or insights.is_own(b)):
         made = _own_merged(state, a, b)
         if made is not None:
-            return f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。"
+            return _refuse(f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。", "已經有了")
     else:
-        known = world.lookup_insight_recipe(merge_key(a, b))
+        known = world.lookup_insight_recipe(secret_recipes.key(secret) if secret is not None else merge_key(a, b))
         if known is not None and known.id in held:
-            return f"這兩個合起來還是「{known.name}」，你已經悟得了。"
+            return _refuse(f"這兩個合起來還是「{known.name}」，你已經悟得了。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "merge")
@@ -696,9 +831,24 @@ def merge(
     key = merge_key(a, b)
     tianji = recipe_seed(world, key)[0]
     attribute, lean = merge_shape(world, ia, ib)
-    if insights.is_own(a) or insights.is_own(b):
+    secret = secret_recipes.match_merge(content, world, ia, ib)  # 秘方（照左右兩格；私有意境照屬性認）先於私有的合併
+    if secret is None and (insights.is_own(a) or insights.is_own(b)):
         return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed)
+    if secret is not None:  # 配方鍵換成秘方的，名字內容寫好了
+        key = secret_recipes.key(secret)
     result, first, landed = world.lookup_insight_recipe(key), False, False
+    if result is None and secret is not None:
+        name = None if world.is_character_name(secret.name) else secret.name
+        for candidate_name in _candidates(content, world, key, "意境", tianji, name):
+            candidate = Insight(
+                id=candidate_name, name=candidate_name, attribute=attribute, lean=lean, **_makers(state, partner),
+                note=secret.note if candidate_name == name else "", parents=sorted([a, b]), secret=secret.id,
+            )
+            result, first = world.claim_insight_recipe(key, candidate)
+            if result is not None:
+                break
+        if result is None:
+            return None, ["兩股意念始終融不到一塊（名字都被用掉了，再試一次）。"]
     if result is None:
         candidates = landing.insight_candidates(world, attribute, lean)
         if landing.lands(content, key, tianji, len(candidates)):
@@ -728,10 +878,10 @@ def merge(
     if result.note:
         head += f"\n{result.note}"
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
-    cfg = content.config
     echo(state, content, result, first)
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
-    return result, [head] + _charge(state, *_price(content, partner, "merge"))
+    extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first)
+    return result, [head] + extra + _charge(state, *_price(content, partner, "merge"))
 
 
 def _merge_own(
@@ -767,9 +917,11 @@ def blend_problem(
         return "兩門都要是你會的武學。"
     if team.player_art(state, content, world, a) is None or team.player_art(state, content, world, b) is None:
         return "找不到它的資料。"
-    known = world.lookup_recipe(blend_key(a, b))
+    art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
+    secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
+    known = world.lookup_recipe(secret_recipes.key(secret) if secret is not None else blend_key(a, b))
     if known is not None and known.id in owned:
-        return f"這兩門合出來還是【{known.name}】，你已經有了——換一門吧。"
+        return _refuse(f"這兩門合出來還是【{known.name}】，你已經有了——換一門吧。", "已經有了")
     if library.full(state, content):
         return _full_line(state, content)
     xinde, stamina = _price(content, partner, "fuse")
@@ -808,8 +960,22 @@ def blend(
     art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
     key = blend_key(a, b)
     tianji, seed = recipe_seed(world, key)
-    shape = blend_shape(art_a, art_b, seed)
+    shape = blend_shape(art_a, art_b, seed)  # 秘方也照這一組的種子定形狀：合成前的說明寫的屬性跟合出來的對得上
+    secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
+    if secret is not None:
+        key = secret_recipes.key(secret)
     art, first, landed = world.lookup_recipe(key), False, False
+    if art is None and secret is not None:
+        art, first = _claim_secret_art(
+            state, content, world, secret, key, shape.kind, shape.attribute, partner,
+            new_traits=traits.inherit_blend(art_a, art_b, shape.attribute),
+            update={
+                "insight": shape.insight, "insight_attr": shape.insight_attr, "base": None, "parents": sorted([a, b]),
+                "lean": shape.lean,
+            },
+        )
+        if art is None:
+            return None, ["爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"]
     if art is None:
         candidates = landing.art_candidates(world, shape.kind, shape.attribute, shape.lean)
         if landing.lands(content, key, tianji, len(candidates)):
@@ -839,14 +1005,17 @@ def blend(
         if landed:  # 同 fuse：這一爐才登記的新配方（FB-078）
             return None, [_new_road(f"【{art.name}】", "練法", f"【{lead.name}】＋【{follow.name}】")]
         return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
-    cfg = content.config
-    quality = roll_quality(blend_odds(state, content, a, art_a, b, art_b), rng)  # 同 fuse：照這一爐的搭配擲
+    # 同 fuse：照這一爐的搭配擲
+    quality = roll_quality(blend_odds(state, content, a, art_a, b, art_b, shape=shape, secret=secret is not None), rng)
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
     head = (
         f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"
         f"（{quality}・屬{art.attribute}）！"
     )
-    msgs = [head + _arrival(art, first, landed)] + _charge(state, *_price(content, partner, "fuse"))
-    msgs += _special_rumor(state, content, art, first)
+    msgs = [head + _arrival(art, first, landed)] + _secret_lines(state, content, world, secret, f"【{art.name}】", first)
+    msgs += setting_line(content, setting_points(state, content, shape.attribute, shape.lean))
+    msgs += _charge(state, *_price(content, partner, "fuse"))
+    if secret is None:
+        msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
     return art, msgs + _store_forged(state, content, world, art, quality)

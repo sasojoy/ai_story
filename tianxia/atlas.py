@@ -592,6 +592,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         what = f"「{title}」" if title is not None else "眼前的事"
         return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
     p = state.player
+    if p.duel is not None:  # 單人頭目戰打到一半（tianxia/duel.py）
+        return TravelBlock("正跟人交手，先分出勝負或抽身退走", to_jianghu=True)
     if p.pending_companion:
         return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
     if p.picking_audience:

@@ -10,10 +10,10 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, bounties, cultivation, invites, library, naming, orders, rules, sensing, server_bots, social, team, weapons
+from . import atlas, battle_instance, bot, bounties, cultivation, duel, invites, library, naming, orders, rules, sensing, server_bots, social, team, weapons
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
-from .models import Content, Effect, SkillDef
+from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
@@ -124,6 +124,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     s = game.state
     if s.player.sensing is not None:
         return msgs + _sense(game, rng, slot)
+    if s.player.duel is not None:
+        return msgs + game.choose(f"duel:{duel_move(game, rng)}")
     if s.player.pending_companion:
         return msgs + game.choose("talk:leave")
     discussed = _answer_discuss(game, rng, slot)
@@ -444,6 +446,16 @@ def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Ran
     return rng.choice([option_id for _, option_id in scored])
 
 
+# 頭目戰：假人照看到的架勢出剋它的那一招的機會（其餘亂出）。真人也是看架勢出招，架勢有三成是虛招（DuelTuning.tell_truth）
+DUEL_READ = 0.6
+
+
+def duel_move(game: Game, rng: random.Random) -> str:
+    """頭目戰的一招：不寫放手一搏（假人不寫自由文字）、不抽身。整季機器人（bot.pick）是隨機挑選單上的招。"""
+    answer = duel.answer_to(game.state.player.duel)
+    return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
+
+
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
@@ -453,6 +465,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
         return _battle_score(game, arg)
+    if kind == "duel":
+        return None  # 頭目戰在 take_turn 前面就出招了（duel_move）
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
         effect = event.choices[int(arg)].effect

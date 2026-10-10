@@ -3051,7 +3051,8 @@ def test_every_fighter_gets_the_showdown_in_their_journal_and_battle_reports(con
     entry = game.state.journal[0]  # 收場那一下出手的人當場就有
     assert (entry.title, entry.tag) == ("測試決戰・官軍大勝", "你站在官軍")
     assert entry.lines == [  # 結果之後寫勝負的關鍵（試玩回饋 2026-10-08）
-        "官軍獲勝。", "勝負的關鍵：第 1 回合，黃巾氣血耗損，漸漸撐不住官軍；第 3 回合，黃巾沒有人正面出陣迎戰，官軍放手壓了上去。", "你出手 3 回合",
+        "官軍獲勝。", "勝負的關鍵：第 1 回合，黃巾氣血耗損，漸漸撐不住官軍，沈浪帶頭固守；第 3 回合，黃巾沒有人正面出陣迎戰，官軍放手壓了上去，沈浪帶頭固守。",
+        "你出手 3 回合", "你帶頭衝陣、替自己這一邊佔了上風 3 回合",  # 出固定招的人也有名字（Joy 2026-10-10）
     ]
     assert entry.changes == ["寇亂 -20"]
     report = game.state.battles[0]
@@ -7853,3 +7854,51 @@ def test_a_faction_member_also_banks_contribution_but_a_drifter_who_enlisted_doe
     assert changes[:2] == ["銀兩 +60", "經驗 +90"] and changes[2] == f"貢獻 +{5 * per}"
     game.state.player.faction = None  # 散人臨時投效官軍
     assert not any(c.startswith("貢獻") for c in game._showdown_pay(battle, me, []))
+
+
+def test_a_gamble_naming_an_enemy_tells_the_model_who_it_is(content, game):
+    """點名的對手由引擎認（Joy 2026-10-10），單子上多一行給模型。"""
+    definition = _install_battle_def_with_gamble(content)
+    after_muster = _join_and_open(content, game, definition)
+    with at(game, after_muster):
+        assert game.battle_text_request("生擒機器人").target.startswith("機器人（黃巾，身手")
+        assert game.battle_text_request("火燒連營").target == ""
+
+
+def test_the_battle_scene_says_who_is_after_you_and_what_you_can_do(content, game):
+    definition = _install_battle_def_with_gamble(content)
+    after_muster = _join_and_open(content, game, definition)
+
+    def spot(b):
+        b.last_targets = {"沈浪": ["機器人"]}
+        b.marked = {"沈浪": b.act_index}
+        b.participants["沈浪"].gambled_act, b.participants["沈浪"].gambles_this_act = b.act_index, 1
+
+    game.world.mutate_battle(spot)
+    with at(game, after_muster):
+        scene = game.scene_text()
+        assert "機器人盯上了你。" in scene and "這一幕你已經放手一搏過了" in scene and "你在這一幕太顯眼了" in scene
+        assert game.battle_free_text_prompt() is None
+        assert game.submit_battle_custom_action("再搏一次") == ["（此刻無法這麼做。）"]
+    game.world.mutate_battle(lambda b: setattr(b.participants["沈浪"], "pinned_round", b.round_number + 1))
+    with at(game, after_muster):
+        assert "你被牽制住了，這一回合只能固守。" in game.scene_text()
+        assert [o.id for o in game.options()] == ["battle:act:guan_hold"]
+
+
+def test_the_showdown_report_says_who_you_hurt_and_who_hunted_you(content, game):
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+
+    def scars(b):
+        me = b.participants["沈浪"]
+        me.hurt_dealt, me.targeted_by, me.hurt_taken = 120.4, ["甲", "乙"], 80.0
+
+    game.world.mutate_battle(scars)
+    _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    lines = _showdown_entries(game)[0].lines
+    assert "你的放手一搏點名打傷了對手，打掉他們氣血 120" in lines
+    assert "甲、乙在陣上點名要對付你，你被打掉氣血 80" in lines

@@ -2512,7 +2512,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
     assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
-    assert "S.message = FORGE_WAIT;" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」）
+    assert "S.forgeResult = { html: esc(FORGE_WAIT) };" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」），寫在開爐旁邊
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
 
@@ -2900,6 +2900,36 @@ def test_battle_free_text_shows_and_submits(game):
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
+def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
+    """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
+    from tianxia import duel
+
+    game.client = None
+    game.state.player.location = "changshe"
+    with at(game, 0.0):
+        game._duel_start(duel.available(game.state, game.content))
+        view = server.look(game, server.main_view)
+        assert view["free_text"] == game.duel_free_text_prompt() and view["free_op"] == "duel_text"
+        assert view["free_text_note"] == game.DUEL_GAMBLE_NOTE
+        seen = []
+
+        def rate(client, act_, faction_name, text, name, setting, place):
+            seen.append((open_world().db.writing(), act_.title, faction_name, text, name, place))
+            return battle_instance.GambleVerdict(100, "測試一把撒出石灰。", "測試踩到自己的衣角。")
+
+        monkeypatch.setattr(battle_instance, "assess_gamble", rate)
+        with mock.patch("server.time.time", return_value=0.0):
+            msgs = server.duel_text(game, "撒石灰")
+    assert seen == [(False, "黃巾小帥段鐵頭", "散人", "撒石灰", "測試", duel.PLACE)]
+    assert msgs[0].startswith("第 1 回合：測試一把撒出石灰。（氣勢 +")
+
+
+def test_duel_text_without_a_duel_asks_no_model(game, monkeypatch):
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
+    with at(game, 0.0), mock.patch("server.time.time", return_value=0.0):
+        assert server.duel_text(game, "撒石灰") == ["（此刻無法這麼做。）"]
+
+
 # ── 決戰選項的回話（FB-030）：網頁上要看得到按下去發生了什麼 ──────────────
 
 
@@ -2970,7 +3000,7 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     client.post("/api/choose", json={"id": "battle:join_late"})
     seen = []
 
-    def rate(c, act, faction_name, text, name):
+    def rate(c, act, faction_name, text, name, target=""):
         seen.append((open_world().db.writing(), faction_name, text, name))
         return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
 
@@ -5325,7 +5355,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     _locked）與排程（world_step）都不碰它。tianxia/（引擎，鎖內的 _quick_client 在那裡）沒有人 import llm_queue
     （Config 的三個開關欄位 llm_queue_* 是設定，不算）。"""
     assert _users_in_server("model_call") == {
-        "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text",
+        "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
@@ -5632,8 +5662,8 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
 
 def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     """審查 M-2：開爐被擋下來（另一個分頁的上一爐還沒出爐，伺服器回 400）之後，煉製頁上方不能還寫著「爐火正旺。……請稍候」：
-    重畫之前 S.message 要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），爐裡放的東西留著；成功的路照舊（訊息換成結果、爐清空）。
-    在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
+    重畫之前結果那一格（S.forgeResult，2026-10-10 起寫在開爐旁邊）要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），
+    爐裡放的東西留著；成功的路訊息換成結果、爐裡的東西留著（2026-10-10，換一格就能再合）。頁面不捲到最上面。在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
     import json
 
     if webharness.NODE is None:
@@ -5646,14 +5676,17 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
         _js_function(js, "function watchQueue(") + "\n  }",
         _js_function(js, "async function busy(") + "\n  }",
         _js_function(js, "async function forge(") + "\n  }",
+        _js_function(js, "function trimForgeSel(") + "\n  }",
     ]
     script = "\n".join(parts) + """
     globalThis.setTimeout = () => 0;  // watchQueue 的計時器不真的跑
     let S, seen, button, bar, api;
     const document = { getElementById: (id) => (id === "forge" ? button : bar), querySelector: () => null };
-    const window = { scrollTo() {} };
+    let scrolled = 0;
+    const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
-    const renderPage = () => seen.push(S.message);
+    const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw();
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
@@ -5663,11 +5696,11 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
       bar = { textContent: "" };
       api = answer;
       await forge();
-      return { renderedWith: seen, message: S.message, waiting: bar.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy };
+      return { renderedWith: seen, message: S.forgeResult.html, waiting: button.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy, scrolled };
     };
     (async () => {
       const refused = await run(async () => { throw new Error("上一爐還沒出爐。"); });
-      const done = await run(async () => ({ menxia: { x: 1 }, message: "<p>煉成了。</p>", main: {} }));
+      const done = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>煉成了。</p>", main: {} }));
       const offline = await run(async () => { S.offline = true; throw new Error("fetch failed"); });
       console.log(JSON.stringify({ refused, done, offline }));
     })();
@@ -5679,8 +5712,9 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
     assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句
     assert refused["sel"] == 2 and refused["line"] == "舊說明" and refused["busy"] is False  # 爐裡的東西留著、可以再按
-    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 0 and out["done"]["line"] == ""
+    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 2 and out["done"]["line"] == ""  # 爐裡的東西留著，換一格就能再合
     assert "爐火正旺" not in out["offline"]["message"]  # 別的錯（例如斷線）也不再停在「爐火正旺」
+    assert out["done"]["scrolled"] == 0  # 開爐之後不捲到最上面（企劃者 2026-10-10「點完又會跳到畫面最上面」）
 
 
 def test_app_js_parses():
@@ -6104,6 +6138,8 @@ NOT_IN_THE_FINGERPRINT = {
         "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
+        "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",
         "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
         "outcome_margin": "收場時跟 phase 一起寫入",
