@@ -98,11 +98,10 @@ class QualityOdds:
     reasons: tuple[str, ...] = ()
 
 
-def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
-    """把各因素的分數加成造化分，從普通搭配的平均（Config.fuse_quality_odds）往上或往下推，上品、下品各自夾住，中品是剩下的。"""
-    cfg = content.config
-    rule = cfg.fuse_quality
-    base = cfg.fuse_quality_odds
+def odds_from_points(scored: list[tuple[str, float]], rule, base: dict[str, float]) -> QualityOdds:
+    """把各因素的分數加成造化分，從 base（普通搭配的平均）往上或往下推，上品、下品各自夾住，中品是剩下的。
+    rule 要有 up_per_point、low_per_point、up_range、low_range、shown_from、lines（FuseQuality、SmithQuality 都有）；
+    合成（_points）與打造（smithing.forge_odds）共用這一個。"""
     total = sum(base.values()) or 1
     up0, low0 = base.get("上品", 0) * 100 / total, base.get("下品", 0) * 100 / total
     score = sum(points for _, points in scored)
@@ -117,6 +116,12 @@ def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
         if line and len(reasons) < 2:
             reasons.append(line)
     return QualityOdds(odds, tuple(reasons))
+
+
+def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
+    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推。"""
+    cfg = content.config
+    return odds_from_points(scored, cfg.fuse_quality, cfg.fuse_quality_odds)
 
 
 def _art_points(state: GameState, content: Content, arts: list[tuple[str, MartialArt]]) -> list[tuple[str, float]]:
@@ -148,6 +153,29 @@ def insight_points(state: GameState, content: Content, insight: Insight) -> floa
     return points
 
 
+def terrain_here(state: GameState, content: Content, attribute: str) -> bool:
+    """天時地利的「地利」（合成與打造共用）：此地探索悟得到這個屬性的意境（跟修練的 home_ground 同一個判斷）。"""
+    here = content.locations.get(state.player.location)
+    return here is not None and any(
+        content.insights[i].attribute == attribute for i in insights.explore_gives(here, content)
+    )
+
+
+def battlefield_here(state: GameState, content: Content) -> bool:
+    """天時地利的「戰場」（合成與打造共用）：人在營寨類地點，或（第一季）所在大區的戰線正在亂局。"""
+    here = content.locations.get(state.player.location)
+    return here is not None and (
+        content.config.explore_mix_of(here.tags).kind == "camp"
+        or (season_one(content, state.world) and rules.front_of(content, here.id) in rules.chaos_fronts(state, content))
+    )
+
+
+def calm_now(state: GameState, hours: float) -> bool:
+    """天時地利的「心靜」（合成與打造共用）：出關之後 hours 遊戲小時之內。"""
+    p, w = state.player, state.world
+    return p.seclusion_done is not None and 0 <= w.time - p.seclusion_done <= hours * calendar.HOUR
+
+
 def setting_points(
     state: GameState, content: Content, attribute: str, lean: str, insight: Insight | None = None,
 ) -> list[tuple[str, float]]:
@@ -157,22 +185,16 @@ def setting_points(
     戰場：合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區。心靜：出關之後 calm_hours 遊戲小時之內。
     權重全在 Config.fuse_quality，預設 0（不開）。"""
     rule = content.config.fuse_quality
-    w, p = state.world, state.player
-    here = content.locations.get(p.location)
+    w = state.world
     out: list[tuple[str, float]] = []
-    if rule.terrain and insight is not None and here is not None and any(
-        content.insights[i].attribute == insight.attribute for i in insights.explore_gives(here, content)
-    ):
+    if rule.terrain and insight is not None and terrain_here(state, content, insight.attribute):
         out.append(("terrain", rule.terrain))
     if lean in ("正", "邪") and (rule.night_match or rule.night_clash):
         night = calendar.is_night(w.time, content, w)
         out.append(("night", rule.night_match if (lean == "邪") == night else rule.night_clash))
-    if rule.battlefield and attribute == "剛" and here is not None and (
-        content.config.explore_mix_of(here.tags).kind == "camp"
-        or (season_one(content, w) and rules.front_of(content, here.id) in rules.chaos_fronts(state, content))
-    ):
+    if rule.battlefield and attribute == "剛" and battlefield_here(state, content):
         out.append(("battlefield", rule.battlefield))
-    if rule.calm and p.seclusion_done is not None and 0 <= w.time - p.seclusion_done <= rule.calm_hours * calendar.HOUR:
+    if rule.calm and calm_now(state, rule.calm_hours):
         out.append(("calm", rule.calm))
     out = sorted((item for item in out if item[1]), key=lambda item: -abs(item[1]))
     return out[: rule.setting_max]

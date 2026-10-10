@@ -206,3 +206,101 @@ def test_new_weapon_can_carry_its_recipe(content, world):
     w = weapons.new_weapon(game.state, name="寒星劍", kind="劍", attribute="陽", tier=1, quality="中品", recipe="兵|劍|gang_1+kuai_1")
     assert w.recipe == "兵|劍|gang_1+kuai_1" and w.id.startswith("兵:")
     assert weapons.new_weapon(game.state, name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品").recipe is None
+
+
+# ── Task 4：品質擲骰 ──
+
+from tianxia import fusion  # noqa: E402
+
+KEY_SWORD_YANG = "兵|劍|gang_1+kuai_1"
+
+
+def test_plain_same_tier_odds_start_from_fifty_thirty_twenty_and_add_the_aux(content, world):
+    game = _forger(content, world)
+    odds = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert odds.odds == {"下品": 46.0, "中品": 32.0, "上品": 22.0}  # 同階輔料 +4
+    assert odds.reasons == ("輔料壓得住主料",)
+
+
+def test_a_lower_tier_aux_drags_the_odds_down(content, world):
+    game = _forger(content, world)
+    odds = smithing.forge_odds(game.state, content, world, "劍", "gang_2", "kuai_1")
+    assert odds.odds == {"下品": 58.0, "中品": 26.0, "上品": 16.0}  # 輔料低一階 −8
+    assert odds.reasons == ("輔料壓不住主料",)
+
+
+def test_practice_adds_up_to_a_cap(content, world):
+    game = _forger(content, world)
+    game.state.player.forge_counts = {KEY_SWORD_YANG: 3}
+    odds = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert odds.odds == {"下品": 40.0, "中品": 35.0, "上品": 25.0}  # 熟手 +6、輔料 +4
+    assert odds.reasons == ("這個配方你打得順手", "輔料壓得住主料")
+    game.state.player.forge_counts = {KEY_SWORD_YANG: 100}
+    assert smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1").odds == {"下品": 36.0, "中品": 37.0, "上品": 27.0}
+
+
+def test_wisdom_pushes_the_top_grade_up(content, world):
+    game = _forger(content, world)
+    plain = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1")
+    game.state.player.stats["wis"] = 12
+    sharp = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert sharp.odds["上品"] > plain.odds["上品"] and sharp.odds["下品"] < plain.odds["下品"]
+
+
+def test_setting_is_off_in_the_fixture_and_on_in_real_content(content, world):
+    game = _forger(content, world)
+    game.state.player.seclusion_done = game.state.world.time
+    assert smithing.setting_points(game.state, content, "剛") == []
+    q = real_content().config.weapons.quality
+    assert (q.terrain, q.battlefield, q.calm) == (10, 10, 8) and q.setting_good
+
+
+def test_terrain_battlefield_and_calm(content, world, monkeypatch):
+    game = _forger(content, world)
+    q = content.config.weapons.quality
+    q.terrain, q.battlefield, q.calm = 10, 10, 8
+    monkeypatch.setattr(fusion, "terrain_here", lambda state, content, attribute: attribute == "剛")  # 當作此地探索悟得到剛的意境
+    assert smithing.setting_points(game.state, content, "剛") == [("terrain", 10)]
+    assert smithing.setting_points(game.state, content, "陽") == []
+    monkeypatch.setattr(fusion, "battlefield_here", lambda state, content: True)
+    assert smithing.setting_points(game.state, content, "陽") == []  # 戰場只算打出剛的
+    game.state.player.seclusion_done = game.state.world.time
+    assert smithing.setting_points(game.state, content, "剛") == [("terrain", 10), ("battlefield", 10)]  # 最多兩條
+    assert smithing.setting_points(game.state, content, "陽") == [("calm", 8)]
+    odds = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "gang_1")
+    assert odds.odds == {"下品": 26.0, "中品": 42.0, "上品": 32.0}  # 輔料 +4、地利 +10、戰場 +10
+    q.setting_good = "爐火正旺。"
+    assert smithing.setting_line(content, [("terrain", 10)]) == ["爐火正旺。"]
+    assert smithing.setting_line(content, []) == []
+
+
+def test_terrain_is_the_same_rule_as_fusion(content, world):
+    """地利沿用合成那一套（附帶決定 b）：此地探索悟得到同屬性的意境才算，跟 fusion.setting_points 的地利同一個判斷。"""
+    from tianxia import insights
+    game = _forger(content, world)
+    here = content.locations[game.state.player.location]
+    gives = {content.insights[i].attribute for i in insights.explore_gives(here, content)}
+    for attribute in ("剛", "柔", "快", "慢", "陽", "陰", "虛", "實"):
+        assert fusion.terrain_here(game.state, content, attribute) == (attribute in gives)
+
+
+def test_practice_counts_reset_with_a_new_season(content, world):
+    from conftest import next_season
+    game = _forger(content, world)
+    game.state.player.forge_counts = {KEY_SWORD_YANG: 3}
+    next_season(content, world, game)
+    assert game.state.player.forge_counts == {}
+
+
+def test_fuse_odds_are_unchanged_by_the_refactor(content, world):
+    """合成的品質機率改走 odds_from_points 之後，數字一模一樣（同一個公式，只是 rule 與 base 改成參數）。"""
+    from tianxia.martial_arts import Insight
+    game = _forger(content, world)
+    base = team.player_art(game.state, content, world, "sword")
+    insight = Insight(id="風", name="風", attribute="快")
+    odds = fusion.fuse_odds(game.state, content, "sword", base, insight)
+    assert odds == fusion.odds_from_points(
+        [*fusion._art_points(game.state, content, [("sword", base)]), ("insight", 0.0),
+         ("attribute", fusion._attribute_points(content, base.attribute, "快"))],
+        content.config.fuse_quality, content.config.fuse_quality_odds,
+    )

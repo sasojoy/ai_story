@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from collections import Counter
 
-from . import weapons
+from . import fusion, team, weapons
+from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content
 from .state import GameState
@@ -59,3 +60,42 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
         return weapons.RACK_FULL
     short = price(content, tier_of(content, main)) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
+
+
+def setting_points(state: GameState, content: Content, attribute: str) -> list[tuple[str, float]]:
+    """打造的天時地利（附帶決定 b）：地利、戰場、心靜都同合成（地利看此地探索悟得到同屬性的意境）。最多 setting_max 條。
+    兵器沒有正邪，所以合成的「晝夜」這裡沒有。"""
+    rule = content.config.weapons.quality
+    out: list[tuple[str, float]] = []
+    if rule.terrain and fusion.terrain_here(state, content, attribute):
+        out.append(("terrain", rule.terrain))
+    if rule.battlefield and attribute == "剛" and fusion.battlefield_here(state, content):
+        out.append(("battlefield", rule.battlefield))
+    if rule.calm and fusion.calm_now(state, rule.calm_hours):
+        out.append(("calm", rule.calm))
+    out.sort(key=lambda item: -abs(item[1]))
+    return out[: rule.setting_max]
+
+
+def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]:
+    """結果多一句含蓄的話：天時地利合起來加分寫 setting_good、扣分寫 setting_bad；沒有、或那句是空的就不寫。"""
+    rule = content.config.weapons.quality
+    total = sum(points for _, points in scored)
+    line = rule.setting_good if total > 0 else rule.setting_bad if total < 0 else ""
+    return [line] if line else []
+
+
+def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str) -> QualityOdds:
+    """這一爐的品質機率（4.3）：輔料的階（比主料高幾階）、悟性、熟手（這個配方這一季打過幾次，有上限）、天時地利，
+    從 Config.weapons.quality.odds 推（fusion.odds_from_points）。只看這一爐的組成，配方有沒有人打過都一樣。"""
+    rule = content.config.weapons.quality
+    m, a = content.materials[main], content.materials[aux]
+    wis = state.player.stats.get("wis", team.BASE_STAT)
+    done = state.player.forge_counts.get(weapons.recipe_key(kind, main, aux), 0)
+    scored = [
+        ("aux", rule.aux_tier.get(str(a.tier - m.tier), 0.0)),
+        ("wis", (team.stat_factor(content, wis) - 1) * 100 * rule.wis_weight),
+        ("practice", min(rule.practice_cap, rule.practice_point * done)),
+    ]
+    scored += setting_points(state, content, attribute_of(world, content, kind, main, aux))
+    return fusion.odds_from_points(scored, rule, rule.odds)

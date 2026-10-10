@@ -1396,6 +1396,41 @@ class ShowdownPay(_Strict):
     win_contrib_push: dict[str, int] = Field(default_factory=lambda: {"大勝": 5, "險勝": 3})  # 贏的一方另記的
 
 
+class SmithQuality(_Strict):
+    """打造的品質機率（兵器設計 4.3；跟 FuseQuality 同一套推法，fusion.odds_from_points）：這一爐的組成加成造化分，
+    從 odds（下品 50／中品 30／上品 20）往上或往下推，上品夾在 up_range、下品夾在 low_range。數字都是【預設】。
+    天時地利（企劃者 2026-10-10 第二批附帶決定 b：沿用合成那一套）預設 0（測試內容不開），正式值在 config.json：
+    地利同合成（此地探索悟得到同屬性的意境，fusion.terrain_here），戰場、心靜也同合成；兵器沒有正邪，所以沒有晝夜。"""
+
+    odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    up_per_point: float = Field(default=0.5, ge=0)
+    low_per_point: float = Field(default=1.0, ge=0)
+    up_range: tuple[float, float] = (5, 45)
+    low_range: tuple[float, float] = (15, 80)
+    # 輔料比主料高幾階 → 分數（「-1」是輔料低一階）：同階或更高加分、低階扣分（4.3）
+    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12})
+    wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（同 FuseQuality.wis_weight）
+    practice_point: float = Field(default=2, ge=0)  # 熟手：這個配方這一季你打過一次加幾分
+    practice_cap: float = Field(default=10, ge=0)  # 熟手最多加幾分
+    terrain: float = 0  # 地利：此地探索悟得到跟打出來的兵器同屬性的意境（fusion.terrain_here，同合成）
+    battlefield: float = 0  # 戰場：打出剛的兵器、人在營寨或（第一季）亂局的大區（fusion.battlefield_here）
+    calm: float = 0  # 心靜：出關之後 calm_hours 遊戲小時之內（fusion.calm_now）
+    calm_hours: float = Field(default=2, ge=0)
+    setting_max: int = Field(default=2, ge=0)  # 一爐最多算幾條天時地利（照分數的絕對值挑）
+    setting_good: str = ""  # 天時地利合起來加分時，結果多一句
+    setting_bad: str = ""  # 合起來扣分時，結果多一句
+    shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # 說明那一句：因素 → [加分時, 扣分時]（待 joy 潤）
+    lines: dict[str, list[str]] = Field(default_factory=lambda: {
+        "aux": ["輔料壓得住主料", "輔料壓不住主料"],
+        "wis": ["你心思靈透", "你心思還不夠靈透"],
+        "practice": ["這個配方你打得順手", ""],
+        "terrain": ["此地水土與這股料性相合", ""],
+        "battlefield": ["殺伐之氣未散", ""],
+        "calm": ["出關未久，心如止水", ""],
+    })
+
+
 class WeaponRules(_Strict):
     """兵器（docs/superpowers/specs/2026-10-09-兵器-design.md）。數字都是【預設】，量表（scripts/measure_weapons.py）校準後可以改。
     加成＝（階＋品質＋淬煉＋屬性搭配）×（edge_floor＋（1－edge_floor）×鋒利度／100），乘在本人的 Boost.factor；
@@ -1416,6 +1451,7 @@ class WeaponRules(_Strict):
     rack_cap: int = Field(default=100, ge=1)  # 裝備庫幾格（企劃者 2026-10-10：原來的 6 格改 100；程式裡的 rack 就是玩家看到的「裝備庫」）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
     forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得
+    quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
 
 
 class Secrets(_Strict):
