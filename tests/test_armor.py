@@ -557,3 +557,47 @@ def test_the_armor_page_only_sees_armor_in_a_rack_with_all_four_slots(content, w
     content.config.weapons.rack_cap = 4
     p.armor = _jacket(aid="甲:9")
     assert armor.rack_full(s, content)  # 格數四欄合算
+
+
+# ── PM：白淬白修 ──
+
+def _repairable(content, world, kind, *, art="sword"):
+    """站在鐵匠鋪、手上一把鈍了的兵器（劍或別種）、背包有一階素材、銀兩夠：修與淬煉都按得下去。art 是身上的武學（None：空著）。"""
+    game = _town(content, world, weapons_on=True)
+    p = game.state.player
+    if art is not None:
+        rules.learn_skill(game.state, content, art)
+        p.member.wugong_id = art
+    p.weapon = Weapon(id="兵:1", name="試刃", kind=kind, attribute="柔", tier=1, quality="下品", edge=40)
+    p.materials = {"gang_1": 3}
+    game.choose("act:smith")
+    return game
+
+
+@pytest.mark.parametrize("kind,art", [("刀", "sword"), ("劍", None)])  # 配不上（種類不同）、身上沒有武學
+def test_repair_and_temper_warn_when_the_worn_weapon_does_not_fit(content, world, kind, art):
+    from tianxia import smithing
+    game = _repairable(content, world, kind, art=art)
+    opts = _ids(game)
+    for oid in ("smith:repair", smithing.TEMPER):
+        assert opts[oid].enabled and opts[oid].label.endswith(weapons.UNFIT_NOTE)  # 按得下去，只多一句提醒
+    game.choose("smith:repair")  # 照樣修得動：id 沒變、也沒擋
+    assert game.state.player.weapon.edge == 100 and game.state.player.materials == {"gang_1": 2}
+
+
+def test_repair_and_temper_say_nothing_extra_when_the_weapon_fits_or_the_button_is_off(content, world):
+    from tianxia import smithing
+    game = _repairable(content, world, "劍")  # 流雲劍配劍
+    opts = _ids(game)
+    assert weapons.UNFIT_NOTE not in opts["smith:repair"].label and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+    assert opts["smith:repair"].label == "修【試刃】（鋒利度 40・精鐵砂×1＋5 兩）"  # 配得上：原樣
+    # 配不上、可是灰掉的鈕不再添一句：修滿的不用修、沒料修不了、淬滿了
+    p = game.state.player
+    p.member.wugong_id = None
+    p.weapon.edge, p.weapon.tempers, p.materials = 100, content.config.weapons.temper_max, {}
+    opts = _ids(game)
+    assert not opts["smith:repair"].enabled and weapons.UNFIT_NOTE not in opts["smith:repair"].label
+    assert not opts[smithing.TEMPER].enabled and smithing.FULL in opts[smithing.TEMPER].label and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+    p.weapon.tempers = 0
+    opts = _ids(game)
+    assert not opts[smithing.TEMPER].enabled and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label

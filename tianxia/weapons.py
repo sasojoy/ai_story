@@ -111,6 +111,12 @@ def wear(state: GameState, content: Content, tier: str) -> list[str]:
 NOUNS = {"劍": "劍", "刀": "刀", "槍": "槍", "棍": "棍", "弓弩": "弩", "拳腳": "拳套"}
 ATTR_WORDS = {"陰": "寒鐵", "陽": "赤銅", "剛": "厚背", "柔": "軟鋼", "快": "輕鋒", "慢": "沉鐵", "虛": "花紋", "實": "重鐵"}  # 待 joy 潤
 FITS_MARK = "・配得上你的武學"  # 待 joy 潤：鐵匠鋪的「買」鈕上，種類對得上身上那門武學的那一把
+UNFIT_NOTE = "・這把配不上你的武學，加成用不上"  # 待 joy 潤：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+
+
+def worn_unfit(state: GameState, art: MartialArt | None, content: Content, world: WorldStateStore) -> bool:
+    """身上有一把兵器、可是配不上身上這門武學（art 是 None 也算配不上）：它現在的加成是 0，修與淬煉都看不到回報（PM 2026-10-11）。"""
+    return state.player.weapon is not None and not usable(state.player.weapon, art, content, world)
 
 
 def shop_name(kind: str, attribute: str) -> str:
