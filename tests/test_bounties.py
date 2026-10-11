@@ -496,6 +496,43 @@ def test_board_lines_card_rows_and_the_take_reply_show_the_due_time_and_places_l
     assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"][0]["due"] == "期限 第 3 週・週一 00:00・名額還剩 3"
 
 
+def test_a_bounty_filled_by_others_or_expired_says_so_once(setup):
+    """FB-121 第 5 件：揭了的那一張被別人交滿名額、或過了期限，同步時補一句、拿掉名字（只補一次），不再默默消失。"""
+    content, world = setup
+    full = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")  # 名額 1
+    late = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    for name in ("甲", "丙"):
+        _direct(content, world, name, lambda g: bounties.take(g.state, g.content, full.id))
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, late.id))
+    _direct(content, world, "甲", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))  # 甲先交了：名額滿
+    world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == late.id), "expires", 0.0))
+    _, game = _do(content, world, "丙", lambda g: None)
+    told = [line for e in game.state.journal if e.title == bounties.BOARD for line in e.lines]
+    assert bounties.LAPSED_FULL.format(title=bounties.title(content, full)) in told
+    assert bounties.LAPSED_DUE.format(title=bounties.title(content, late)) in told
+    assert all("丙" not in b.takers for b in world.get_season().bounties)
+    _, game = _do(content, world, "丙", lambda g: None)
+    assert [line for e in game.state.journal if e.title == bounties.BOARD for line in e.lines] == told  # 只補一次
+
+
+def test_issue_keeps_an_expired_bounty_until_its_takers_hear_of_it():
+    """過了期限還有人揭著的單，掛新單時先留著（不在榜上、不能揭），等揭的人同步聽到那一句之後的下一次掛單才清掉。"""
+    content = real_content("weekend")
+    state = GameState(player=Game.new(content, "丙", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
+    bounties.issue(state, content, 1)
+    held = state.world.bounties[0]
+    held.takers = ["丙"]
+    state.world.time = 3 * bounties.week_seconds(state, content)
+    bounties.issue(state, content, 4)
+    assert held.id in {b.id for b in state.world.bounties}
+    assert held.id not in {b.id for b in bounties.open_bounties(state, content)}
+    assert {b.week for b in state.world.bounties if b.id != held.id} == {4}  # 其他過期的照清
+    assert bounties.deliver_lapses(state, content) == [bounties.LAPSED_DUE.format(title=bounties.title(content, held))]
+    state.world.time = 4 * bounties.week_seconds(state, content)
+    bounties.issue(state, content, 5)
+    assert held.id not in {b.id for b in state.world.bounties}
+
+
 @pytest.mark.slow
 def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     """正式內容、預設設定（14 天、第一季規則關著）讓整季機器人玩一季（懸賞榜設計 10.2 的 slow）：12 週每週剛好一批

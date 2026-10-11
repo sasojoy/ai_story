@@ -25,6 +25,8 @@ KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
+LAPSED_FULL = "【懸賞】「{title}」名額被別人交滿了，你手上這一張作廢。"  # 待 joy 潤（FB-121 第 5 件，deliver_lapses）
+LAPSED_DUE = "【懸賞】「{title}」過了期限，你手上這一張作廢。"  # 待 joy 潤
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -303,6 +305,26 @@ def deliver_refunds(state: GameState, content: Content) -> list[str]:
     return msgs
 
 
+def deliver_lapses(state: GameState, content: Content) -> list[str]:
+    """我揭了、還沒交差的那一張被別人交滿了名額、或過了期限：拿掉我的名字、補一句（FB-121 第 5 件；寫法同 deliver_refunds，同步時呼叫）。
+    過了期限還有人揭著的單，issue 掛新單時先留著（等揭的人同步時在這裡拿掉），不然他回來只看到那一張默默不見了。"""
+    p, now = state.player, state.world.time
+    me = name_key(p.name)
+    msgs: list[str] = []
+    for b in state.world.bounties:
+        if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
+            continue
+        if _left(b) <= 0:
+            line = LAPSED_FULL
+        elif b.expires <= now:
+            line = LAPSED_DUE
+        else:
+            continue
+        b.takers = [t for t in b.takers if name_key(t) != me]
+        msgs.append(line.format(title=title(content, b)))
+    return msgs
+
+
 # ── 每週一自動掛單 ──────────────────────────────
 
 
@@ -351,7 +373,9 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}")
     w.bounties = [
         b for b in w.bounties
-        if b.expires > now or (b.kind == "wanted" and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回
+        if b.expires > now
+        or (b.kind == "wanted" and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回
+        or b.takers  # 過期了還有人揭著：留到他們同步時聽到那一句（deliver_lapses）
     ]
     expires = calendar.week_start(week + cfg.auto_weeks, content, w)
     for faction in ENEMY:

@@ -650,6 +650,10 @@ class Game:
         if refunds:
             self._write(bounties.BOARD, refunds)
             self._save_season()
+        lapses = bounties.deliver_lapses(self.state, self.content)  # 揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
+        if lapses:
+            self._write(bounties.BOARD, lapses)
+            self._save_season()
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
