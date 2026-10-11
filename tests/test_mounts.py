@@ -1,6 +1,7 @@
 """坐騎（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第五節；計畫 docs/superpowers/plans/2026-10-11-裝備-2-坐騎.md）。"""
 from __future__ import annotations
 
+import math
 import random
 
 import pytest
@@ -129,3 +130,141 @@ def test_a_mount_cannot_be_changed_on_the_road_but_can_in_seclusion(content, wor
     stamina = p.stamina
     assert game.wield_weapon("騎:2") == [equipment.WIELDED.format(name="青驄駒")] and p.mount.id == "騎:2" and p.stamina == stamina
     assert [m.id for m in p.rack] == ["騎:1"]
+
+
+# ── Task 2：移動的時間與體力 ──
+
+def test_pure_travel_math_takes_the_pace_and_the_saving(content):
+    """設計 5.2（企劃者選丙）：先照原本的四捨五入（至少 1），再乘（1－腳力）四捨五入、至少 1；.5 一律進位。5.3：時間乘步調。"""
+    assert atlas.travel_seconds(9, "walk", pace=0.7) == pytest.approx(378.0)
+    assert atlas.travel_seconds(9, "hurry", pace=0.7) == pytest.approx(189.0) and atlas.travel_seconds(9, "dash", pace=0.7) == 0
+    assert atlas.mode_when(9, "walk", pace=0.7) == "約 6 分鐘" and atlas.mode_when(9, "dash", pace=0.7) == "立刻到"
+    assert atlas.ride_stamina(6, 0.25) == 5  # 4.5 進位（Python 的 round 會給 4）
+    assert atlas.ride_stamina(8, 0.1875) == 7  # 6.5 進位
+    assert atlas.ride_stamina(1, 0.6) == 1 and atlas.ride_stamina(0, 0.6) == 0  # 至少 1 點；步行本來就不花
+    assert [atlas.foot_stamina(content, 3.0, m) for m in ("walk", "hurry", "dash")] == [0, 3, 6]
+    assert [atlas.travel_stamina(content, 3.0, m, saving=0.25) for m in ("walk", "hurry", "dash")] == [0, 2, 5]
+    assert atlas.mode_text(content, 3.0, "hurry", pace=0.775, saving=0.1875) == "趕路約 1 分鐘・體力 2"
+    assert atlas.arrival_times(10.0, [3.0, 4.5], "walk", pace=0.7) == pytest.approx([136.0, 325.0])
+
+
+def test_half_up_survives_the_float_products_the_tables_reach():
+    """設計 5.2「.5 一律進位」：表裡的數字相乘會落在浮點的 .5 邊界上，差一點點就被 floor(x＋0.5) 漏掉進位——
+    30×(1−0.55)＝13.499999999999998（名駒省 55% 的 30 點）、0.30×0.75 乘 100＝22.499999999999996（餓了一半的駑馬脫身）。
+    half_up 多補一個遠小於任何有意義差距的量（1e-9）。"""
+    assert math.floor(30 * (1 - 0.55) + 0.5) == 13 and mounts.half_up(30 * (1 - 0.55)) == 14  # 為什麼不能單用 floor(x＋0.5)
+    assert [mounts.half_up(x) for x in (4.5, 0.5, 4.4999, 4.6, 0.0, 13.499999999999998)] == [5, 1, 4, 5, 0, 14]
+    assert atlas.ride_stamina(30, 0.55) == 14 and atlas.ride_stamina(6, 0.25) == 5
+    assert atlas.ride_stamina(1, 0.9) == 1  # 至少 1 點照舊
+    assert mounts.pct(0.30 * 0.75) == "23%" and mounts.pct(0.525) == "53%" and mounts.pct(0.125) == "13%"
+    # 守方駑馬吃飽（省 25%）、攻方良駒餓到底（省 20%）：腳力差 4.999999999999999%，要寫「約 1 成」而不是「不到一成」
+    gap = 0.25 - 0.40 * 0.5
+    assert gap < 0.05 and mounts.tenths(gap) == 1 and mounts.odds_text(gap) == "約 1 成"
+    assert mounts.tenths(0.04) == 0 and mounts.odds_text(0.04) == "不到一成"  # 真的不到半成的照舊
+
+
+def test_foot_stamina_keeps_the_old_rounding(content):
+    """foot_stamina 就是原本的 travel_stamina：floor(x＋0.5)、至少 1 點，老數字不能因為坐騎這一批挪動（trunk 的算法不補 1e-9）。"""
+    assert [atlas.foot_stamina(content, m, "hurry") for m in (0.2, 0.5, 1.5, 2.5, 9.0)] == [1, 1, 2, 3, 9]
+    assert [atlas.foot_stamina(content, m, "dash") for m in (0.2, 0.25, 4.5)] == [1, 1, 9]
+
+
+def test_the_pure_functions_have_no_default_pace_or_saving(content):
+    """設計 5.3：漏改的呼叫處直接丟 TypeError，不會悄悄照沒騎馬算。"""
+    for call in (lambda: atlas.travel_seconds(9, "walk"), lambda: atlas.travel_stamina(content, 9, "dash"),
+                 lambda: atlas.mode_when(9, "walk"), lambda: atlas.mode_text(content, 9, "walk", pace=1.0),
+                 lambda: atlas.arrival_times(0.0, [9], "walk")):
+        with pytest.raises(TypeError):
+            call()
+
+
+@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 2 分鐘"), ("hurry", 2, "約 1 分鐘"), ("dash", 5, "立刻到")])
+def test_every_place_that_states_the_stamina_matches_what_departing_takes(content, world, mode, cost, when):
+    """Review Focus 1：騎著餓了一半的駑馬（飽足 50：省 18.75%、步調 0.775）往湖邊（3 分鐘路程），選單「前往」、輿圖三顆鈕、
+    地點詳情、輿圖的拒絕話寫的體力與時間，都等於出發時實際扣的（設計 5.3 的呼叫處表，一處都不能漏乘）。"""
+    game = _game(content, world, horse=_horse(edge=50))
+    p = game.state.player
+    game.set_move_mode(mode)
+    oid = "move:lake" if mode == "walk" else f"move:lake:{mode}"
+    word, price = atlas.MODES[mode], f"・體力 {cost}" if cost else ""
+    assert _ids(game)[oid].label == f"前往 湖邊（{word}{when}{price}）"
+    [button] = [b for b in game.travel_options("lake") if b.mode == mode]
+    assert button.label == f"{word}（{when}{price}）"
+    assert f"{word}{when}{price}" in game.place_detail("lake")
+    if cost:
+        p.stamina = cost - 0.5
+        assert game.travel_refusal("lake", mode) == f"體力不足，{word}要 {cost} 體力"
+        assert _ids(game)[oid].label == f"前往 湖邊（{word}・體力不足，要 {cost}）"
+        p.stamina = 100.0
+    start = game.state.world.time
+    game.choose(oid)
+    assert p.stamina == 100.0 - cost
+    if mode != "dash":
+        assert p.journey.pace == pytest.approx(0.775)
+        assert p.journey.arrive_at[0] - start == pytest.approx(3.0 * 60 * atlas.TIME_SHARE[mode] * 0.775)
+        assert game.state.journal[0].tag == f"{word}{when}"  # 紀錄的標籤用同一個步調
+
+
+@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 1 分鐘"), ("hurry", 2, "約 1 分鐘"), ("dash", 2, "立刻到")])
+def test_turning_back_on_the_road_states_and_takes_the_same_stamina(content, world, mode, cost, when):
+    """走到一半折返（設計 5.3：三種走法各驗一次）：回程照路上的位置算（road_spot 讀出發時的步調），鈕上寫的時間與體力就是扣的、
+    排好的。回程 1.5 分鐘：趕路原本 2 點、疾行 3 點，騎餓了一半的駑馬（省 18.75%）2×0.8125＝1.625 → 2、3×0.8125＝2.4375 → 2；
+    回程的步調照折返那一刻的坐騎（飽足還是 50：0.775）。road_spot 要是用步調 1 反推，會算成走了六成一（回程 1.8375 分鐘）：
+    疾行 4 點 → 3，步行、趕路排的抵達時刻也多兩成多。"""
+    game = _game(content, world, horse=_horse(edge=50))
+    p = game.state.player
+    start = game.state.world.time
+    game.choose("move:lake")  # 步行：步調 0.775，139.5 秒到
+    assert p.journey.arrive_at[0] - start == pytest.approx(139.5)
+    game.advance(139.5 / 2)  # 走到一半
+    game.set_move_mode(mode)
+    oid = "road:back" if mode == "walk" else f"road:back:{mode}"
+    word, price = atlas.MODES[mode], f"・體力 {cost}" if cost else ""
+    assert _ids(game)[oid].label == f"折返 小鎮（{word}{when}{price}）"
+    before, turn = p.stamina, game.state.world.time
+    game.choose(oid)
+    assert before - p.stamina == cost
+    if mode == "dash":
+        assert p.location == "town" and p.journey is None
+    else:
+        assert p.journey.pace == pytest.approx(0.775)
+        assert p.journey.arrive_at[-1] - turn == pytest.approx(1.5 * 60 * atlas.TIME_SHARE[mode] * 0.775)
+
+
+def test_turning_on_the_road_replans_with_the_horse_as_it_is_then(content, world):
+    """設計 5.3：在路上改道、折返照改道那一刻的坐騎與飽足重算一趟——已經走掉的半段照出發時的步調算，新的這一趟用新的步調與腳力。
+    吃飽出發（步調 0.7）走到一半，路上餓到底（步調 0.85、腳力 0.125）：回程 1.5 分鐘疾行原本 3 點，照現在的腳力 3×0.875＝2.625 → 3
+    （照出發時吃飽的算會是 2）；改步行回去，Journey.pace 換成 0.85。"""
+    game = _game(content, world, horse=_horse())
+    p = game.state.player
+    game.choose("move:lake")  # 126 秒到
+    game.advance(63.0)  # 走到一半（照出發時的步調 0.7）
+    p.mount.edge = 0
+    [dash] = [b for b in game.travel_options("town") if b.mode == "dash"]
+    assert dash.label == "疾行（立刻到・體力 3）"
+    before, turn = p.stamina, game.state.world.time
+    game.travel("town", "walk")
+    assert p.stamina == before and p.journey.pace == pytest.approx(0.85)
+    assert p.journey.arrive_at[-1] - turn == pytest.approx(1.5 * 60 * 0.85)
+
+
+def test_the_spot_on_the_road_keeps_the_pace_the_trip_was_planned_with(content, world):
+    """設計 5.3：路上的位置照出發時快照的步調反推；路上餓了不回頭改寫已經排好的抵達時刻與位置。"""
+    game = _game(content, world, horse=_horse())  # 吃飽：步調 0.7
+    start = game.state.world.time
+    game.choose("move:lake")
+    j = game.state.player.journey
+    assert j.arrive_at[0] - start == pytest.approx(126.0)
+    game.advance(63.0)
+    assert atlas.road_spot(game.state, content).done == pytest.approx(0.5)
+    game.state.player.mount.edge = 0  # 路上餓了：現在的步調是 0.85
+    assert atlas.road_spot(game.state, content).done == pytest.approx(0.5) and j.arrive_at[0] - start == pytest.approx(126.0)
+
+
+def test_the_map_routes_layer_counts_walking_minutes_on_horseback(content, world):
+    """設計 5.3 的表漏列的：輿圖路線層的「N 分鐘」也乘步調，跟詳情欄、「前往」寫的步行時間一樣。"""
+    from tianxia.mapview import render_map
+    game = _game(content, world, horse=_horse())  # 吃飽的駑馬：步行快三成
+    game.state.world.flags.add("cave_open")
+    svg = render_map(game.state, content, "routes", selected="cave")
+    assert ">2 分鐘<" in svg and ">5 分鐘<" in svg  # 湖邊 3×0.7＝2.1、寶洞 7.5×0.7＝5.25（沒騎馬時是 3、8）

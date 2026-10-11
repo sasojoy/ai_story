@@ -97,9 +97,16 @@ def raid_flee(content: Content, attacker: GameState, target: GameState) -> float
 
 # ---- 字 ----
 
+def half_up(x: float) -> int:
+    """四捨五入、.5 一律進位（5.2；不用 round：Python 的 round 把 .5 捨到偶數，round(4.5) 是 4）。多補一個 1e-9：表裡的數字
+    相乘常常差一點點才到 .5（30×(1－0.55)＝13.499999999999998），單用 math.floor(x＋0.5) 會漏掉那一個進位；1e-9 比任何有意義的
+    差距小得多，只救浮點誤差。這一批坐騎的數字（體力、幾成、百分比）都走這裡。"""
+    return math.floor(x + 0.5 + 1e-9)
+
+
 def tenths(chance: float) -> int:
-    """幾成：四捨五入、.5 進位（不用 round：round(2.5) 是 2）。"""
-    return int(chance * 10 + 0.5)
+    """幾成：四捨五入、.5 進位（half_up）。"""
+    return half_up(chance * 10)
 
 
 def odds_text(chance: float) -> str:
@@ -109,9 +116,10 @@ def odds_text(chance: float) -> str:
 
 
 def pct(ratio: float) -> str:
-    """寫成整數百分比（設計 2.5 的例子：25%×0.8＝20%）：.5 進位，同 tenths 與 atlas 的 math.floor(x + 0.5)。
-    不用 f"{ratio:.0%}"：它跟 round 一樣把 .5 捨到偶數，餓到底的駑馬省 12.5% 會寫成 12%、騎兵 2.5% 寫成 2%。"""
-    return f"{math.floor(ratio * 100 + 0.5)}%"
+    """寫成整數百分比（設計 2.5 的例子：25%×0.8＝20%）：.5 進位（half_up），同 tenths 與 atlas.ride_stamina。
+    不用 f"{ratio:.0%}"：它跟 round 一樣把 .5 捨到偶數，餓到底的駑馬省 12.5% 會寫成 12%、騎兵 2.5% 寫成 2%；
+    也不單用 floor(x＋0.5)：餓了一半的駑馬脫身 0.30×0.75＝22.499999999999996 個百分點會寫成 22%、該寫 23%。"""
+    return f"{half_up(ratio * 100)}%"
 
 
 def coat_for(loc_id: str) -> str:

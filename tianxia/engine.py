@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
-    materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, weapons, zh,
 )
@@ -945,15 +945,17 @@ class Game:
     def _move_option(self, here: str, dest_id: str) -> Option:
         """選單上的「前往 相鄰地點」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、
         寫明原因（跟大地圖的「安排前往」按鈕同一個說法）。步行的 id 維持 move:<地點>（機器人、假人與舊的呼叫端
-        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。"""
+        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。
+        時間與體力走 atlas.route_text／route_stamina，跟 _move 出發時 _depart 實際扣的是同一條路（騎著馬照腳力省、步調照坐騎，
+        裝備四欄 5.3；閒著時不在路上，不會是剛出發就折返）。"""
         c, mode = self.content, self.move_mode
         dest = c.locations[dest_id]
-        minutes = atlas.leg_minutes(c, here, dest_id)
+        route = atlas.Route((dest_id,), (atlas.leg_minutes(c, here, dest_id),))
         option_id = f"move:{dest_id}" if mode == "walk" else f"move:{dest_id}:{mode}"
-        cost = atlas.travel_stamina(c, minutes, mode)
+        cost = atlas.route_stamina(self.state, c, route, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, mode)}）")
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
 
     def _back_way(self) -> atlas.Route:
         """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
@@ -4450,7 +4452,8 @@ class Game:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
         疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
         在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
-        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
+        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
+        騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
         s, c = self.state, self.content
         s.player.picking_bounty = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
@@ -4459,15 +4462,16 @@ class Game:
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
         minutes = route.minutes
         at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
+        pace = mounts.pace(s, c)  # 出發這一刻的步調（裝備四欄 5.3）：寫進 Journey、排抵達時刻、紀錄的標籤都用這一個數；路上餓了、換了馬都不回頭改
         cost = atlas.route_stamina(s, c, route, mode)
         s.player.stamina -= cost
         legs = [0.0] if at_once else list(route.legs)
         s.player.journey = Journey(
-            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode),
-            origin=route.origin, share=route.share,
+            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode, pace=pace),
+            origin=route.origin, share=route.share, pace=pace,
         )
         if self._draft is not None:
-            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode, pace=pace)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
         verb = "改道" if rerouting else "動身"

@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas, mapart
+from . import atlas, mapart, mounts
 from .atlas import KNOWN, Odds
 from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
@@ -255,14 +255,16 @@ def _layer_marks(
             if marks:
                 prefixes[loc_id] = f"{marks} "
     elif layer == "routes":
+        # 騎著馬步行也快（裝備四欄 5.3）：跟詳情欄、「前往」寫的步行時間同一個數；圖例照舊寫「步行要幾分鐘」
+        pace = mounts.pace(state, content)
         if state.player.journey is None:
             for loc_id, route in atlas.routes(state, content).items():
-                notes[loc_id] = f"{atlas.whole_minutes(route.minutes)} 分鐘" if route.path else "所在地"
+                notes[loc_id] = f"{atlas.whole_minutes(route.minutes * pace)} 分鐘" if route.path else "所在地"
         else:  # 在路上：從路上算起，跟「安排前往」的改道同一套走法（見 atlas.way_to）
             for loc_id in known:
                 way = atlas.way_to(state, content, loc_id)
                 if way is not None:
-                    notes[loc_id] = f"{atlas.whole_minutes(way.minutes)} 分鐘"
+                    notes[loc_id] = f"{atlas.whole_minutes(way.minutes * pace)} 分鐘"
     return prefixes, notes, discs
 
 
