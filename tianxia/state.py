@@ -574,6 +574,9 @@ class WorldState(BaseModel):
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：這一週陣營掛的，加上還沒下榜的通緝；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
+    # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
+    bounty_week: int = 0
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     # 截殺（Config.raid）：「發起的名號鍵>目標的名號鍵」→ 上一次截殺的世界秒（同一個人對同一個目標的冷卻）；

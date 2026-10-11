@@ -13,10 +13,14 @@ from tianxia import bot, bot_policy, bounties, calendar, ranger, rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
+from tianxia.sqlite_world import open_world
 from tianxia.state import Bounty, GameState, WorldState
+from tianxia.world import advance_world_state, settle_season_start
+from tianxia.world_state import fresh_season
 
 NOW = 1000.0
 WEEK = 10_000_000.0  # 測試裡的懸賞一律掛到很久以後
+HOUR = 3600.0
 
 
 def _seat(content, world, people):
@@ -391,6 +395,101 @@ def test_weekly_issue_on_the_real_map():
     state.world.time = 3 * bounties.week_seconds(state, content)
     bounties.issue(state, content, 4)
     assert len(state.world.bounties) == len(board)  # 過期的下榜
+
+
+def _beta_season(content, **kw) -> WorldState:
+    """第一季規則關著的季（預設設定 14 天、season_one 維持 False）照劇本種出的一份共用賽季（world_state.fresh_season，蓋了章），
+    kw 蓋掉幾個欄位；直接拿 world.advance_world_state 推。"""
+    season = fresh_season(content)
+    for key, value in kw.items():
+        setattr(season, key, value)
+    return season
+
+
+def test_a_beta_season_posts_one_batch_at_each_week_start():
+    """第一季規則關著的季，季曆跨進新的一週就掛那一週的一批（懸賞榜設計 3.3）：一小時一步走三週多，每週剛好一批、
+    bounty_week 跟著遞增，hooked_week 一直是 0（週初掛鉤只屬於第一季）。"""
+    content = real_content()
+    assert not content.config.season_one
+    season = _beta_season(content)
+    rng = random.Random(0)
+    batches = []
+    for _ in range(3 * 28 + 1):  # 14 天的季一週是現實 28 小時
+        before = {b.id for b in season.bounties}
+        advance_world_state(season, content, HOUR, rng)
+        new = [b for b in season.bounties if b.id not in before]
+        if new:
+            batches.append((calendar.point(season.time, content, season).week, {b.week for b in new}, len(new)))
+    assert [(week, weeks) for week, weeks, _ in batches] == [(1, {1}), (2, {2}), (3, {3}), (4, {4})]
+    assert all(0 < n <= 2 * len(content.config.bounties.kinds) for *_, n in batches)
+    assert season.bounty_week == 4 and season.hooked_week == 0
+    assert {b.expires for b in season.bounties if b.week == 4} == {calendar.week_start(6, content, season)}
+
+
+def test_going_live_mid_season_posts_only_this_week():
+    """上線那一刻（懸賞榜設計 2.4 情形一）：季走到第 8 週（第 210 小時）、榜上一張都沒有，推進一步只掛第 8 週那一批（不補掛 1～7 週），
+    期限錨在 week_start(10)＝第 252 小時（不是 210＋56）。"""
+    content = real_content()
+    season = _beta_season(content, time=210 * HOUR)
+    advance_world_state(season, content, HOUR, random.Random(0))
+    assert {b.week for b in season.bounties} == {8}
+    assert 0 < len(season.bounties) <= 2 * len(content.config.bounties.kinds)
+    assert {b.expires for b in season.bounties} == {calendar.week_start(10, content, season)} == {252 * HOUR}
+    assert season.bounty_week == 8 and season.hooked_week == 0
+
+
+def test_issue_skips_old_weeks_and_posts_a_week_once():
+    """第一季那一條（WEEK_HOOKS）也走同一道擋：被補跑舊週時不掛；同一週叫兩次只掛一次（懸賞榜設計 3.2、3.4）。"""
+    content = real_content("weekend")
+    state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
+    state.world.time = 3 * bounties.week_seconds(state, content)  # 第 4 週週一
+    bounties.issue(state, content, 2)
+    assert state.world.bounties == [] and state.world.bounty_week == 0
+    bounties.issue(state, content, 4)
+    board = list(state.world.bounties)
+    bounties.issue(state, content, 4)
+    assert board and state.world.bounties == board and state.world.bounty_week == 4
+    assert {b.expires for b in board} == {calendar.week_start(6, content, state.world)}
+
+
+def test_opening_a_beta_season_posts_week_one_and_leaves_hooked_week_alone():
+    """規則關著的季開季那一刻（world.settle_season_start）掛第 1 週，不碰 hooked_week；再叫一次不重掛，收了季不掛（懸賞榜設計 3.3）。"""
+    content = real_content()
+    season = _beta_season(content)
+    settle_season_start(season, content, random.Random(0))
+    board = list(season.bounties)
+    assert board and {b.week for b in board} == {1} and season.bounty_week == 1 and season.hooked_week == 0
+    settle_season_start(season, content, random.Random(0))
+    assert season.bounties == board
+    ended = _beta_season(content, ended=True)
+    assert settle_season_start(ended, content, random.Random(0)) == [] and ended.bounties == []
+
+
+@pytest.mark.slow
+def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
+    """正式內容、預設設定（14 天、第一季規則關著）讓整季機器人玩一季（懸賞榜設計 10.2 的 slow）：12 週每週剛好一批
+    （同一週的單在同一步一起出現），bounty_week 最後是 12、hooked_week 一直是 0。"""
+    content = real_content()
+    assert not content.config.season_one and content.config.bounties.enabled
+    seen: dict[str, tuple[int, int]] = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
+    step = [0]
+
+    def observe(game):
+        step[0] += 1
+        for b in game.state.world.bounties:
+            if b.kind != "wanted":
+                seen.setdefault(b.id, (step[0], b.week))
+
+    game = bot.play_season(content, 1, world=open_world(tmp_path / "season.db"), observe=observe)
+    season = game.state.world
+    batches: dict[int, set[int]] = {}
+    for at, week in seen.values():
+        batches.setdefault(week, set()).add(at)
+    assert season.ended and sorted(batches) == list(range(1, 13))
+    assert all(len(steps) == 1 for steps in batches.values())
+    sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, 13)]
+    assert all(0 < n <= 2 * len(content.config.bounties.kinds) for n in sizes)
+    assert season.bounty_week == 12 and season.hooked_week == 0
 
 
 def test_bots_skip_the_board_button_but_score_taking(setup):

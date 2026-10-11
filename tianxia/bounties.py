@@ -1,6 +1,6 @@
 """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；Config.bounties）。
 
-- 官軍、黃巾每週一 00:00（季曆，world.WEEK_HOOKS → issue）各自動掛討伐兩張、打探、護送各一張（Config.bounties.kinds）：討伐是到指定的地方遊歷、
+- 官軍、黃巾每週一 00:00（季曆；第一季走 world.WEEK_HOOKS、規則關著的季走 tick，都叫 issue）各自動掛討伐兩張、打探、護送各一張（Config.bounties.kinds）：討伐是到指定的地方遊歷、
   打贏一場對頭陣營的隊伍；打探是到指定的地方探索一次；護送是在起點的城鎮接下、走到終點的城鎮。掛 auto_weeks 週，過期的下榜。
 - 投靠了陣營的人可以在玩家卡上花銀兩通緝一個敵對陣營的人（押金就是賞金）；接了通緝的人在卡上對他「截殺」，照截殺的規則打，
   打贏就完成。沒人完成就在 post_weeks 週後下榜，押金在掛單的人下次同步時退回（deliver_refunds）。
@@ -291,6 +291,14 @@ def deliver_refunds(state: GameState, content: Content) -> list[str]:
 # ── 每週一自動掛單 ──────────────────────────────
 
 
+def tick(state: GameState, content: Content) -> list[str]:
+    """第一季規則關著的季的週初掛單（world.advance_world_state 每一步、world.settle_season_start 開季那一刻）：季曆跨進新的一週
+    就掛這一週的（只掛這一週，以前的週不補掛；同一週只掛一次，見 issue 的兩道擋）。每一步最多一小時，所以最多晚一小時掛，
+    期限錨在週初、不會跟著延後。不回傳訊息。"""
+    w = state.world
+    return issue(state, content, calendar.point(w.time, content, w).week)
+
+
 def _strike(content: Content, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
     enemy = ENEMY[faction]
     spots = [
@@ -315,11 +323,14 @@ def _escort(content: Content, rng: random.Random) -> tuple[str, str] | None:
 
 
 def issue(state: GameState, content: Content, week: int, rng: random.Random | None = None) -> list[str]:
-    """週初掛單（world.WEEK_HOOKS）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張（同一週同一個陣營的討伐不重複地點）。不回傳訊息。
-    rng 不用（介面跟其他週初掛鉤一樣）。"""
-    if not active(state, content):
-        return []
+    """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
+    （同一週同一個陣營的討伐不重複地點）。不回傳訊息。rng 不用（介面跟其他週初掛鉤一樣）。
+    兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
+    這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
     w, cfg = state.world, content.config.bounties
+    if not active(state, content) or week != calendar.point(w.time, content, w).week or week <= w.bounty_week:
+        return []
+    w.bounty_week = week
     now = w.time
     # 自己一份亂數（週次、流水號、此刻的戰況）：不動季的 rng，排在後面的大事擲骰不會因為多了懸賞榜而位移
     rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}")
@@ -327,7 +338,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
         b for b in w.bounties
         if b.expires > now or (b.kind == "wanted" and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回
     ]
-    expires = now + cfg.auto_weeks * week_seconds(state, content)
+    expires = calendar.week_start(week + cfg.auto_weeks, content, w)
     for faction in ENEMY:
         if faction not in {f.id for f in content.scenario.factions}:
             continue
