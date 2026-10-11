@@ -342,6 +342,9 @@ class PlayerState(BaseModel):
     ranger_deeds: int = 0
     bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
     picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
+    # 懸賞榜第三層：正在替哪一張求藝、求兵挑東西（懸賞 id，懸賞榜設計 4.4）。按「交出…」記下；回到懸賞榜、返回、交完、打開懸賞榜時清掉。
+    # 那一張下榜了、交不出了，選單當它不存在（Game._bounty_options），所以存檔修補、出發都不必另外收
+    bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天

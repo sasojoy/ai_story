@@ -37,6 +37,20 @@ GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
 EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
 RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下
+HAND_IN_VERBS = ("pick", "unpick", "give")  # 挑一件、回到懸賞榜、交出：江湖紀錄併成一則（Game.choose，懸賞榜設計 4.8）
+UNITS = {"art": "門", "arms": "把"}
+GIVE_YES = "交出"  # 待 joy 潤：確認層上那一顆（Option.confirm_yes）
+STUCK = "這幾張你現在交不出：{titles}（求藝要合成出來、不在身上練的功夫；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
+MORE = {  # 待 joy 潤：第三層只列最不值錢的 give_list 件（設計 4.4），多的收成這一行
+    "art": "還有 {n} 門合用的沒列出來（列的是熔掉最不值錢的；要交別的，先把前面這幾門熔掉、改練或交掉）",
+    "arms": "還有 {n} 把合用的沒列出來（列的是最不值錢的；要交別的，先把前面這幾把拆掉或交掉）",
+}
+WORN_NOTE = "【{name}】身上正在練，先改練別的才能交"  # 待 joy 潤
+NAMING_NOTE = "【{name}】還等著定名，先替它定名"  # 待 joy 潤
+UNPICK = "回到懸賞榜"  # 待 joy 潤：第三層最後一顆（bounty:unpick）
+UNPICKED = "你回到懸賞榜前。"  # 待 joy 潤：按了 bounty:unpick 的回話（Game._bounty）
+TEMPERED_NOTE = "淬煉過 {n} 次，賞銀不會多給。"  # 待 joy 潤：第三層交兵器的確認句
+HELD_NOTE = "這是你手上那把，交了你就空手了。"  # 待 joy 潤：同上，交的是手上那把
 NOT_YOURS = "這一張不是給你的。"  # 待 joy 潤；fit_problem 的拒絕句（設計 4.5）都寫成常數，測試引用常數，潤字不必改測試
 GIVEN_BEFORE = "這一張你已經交過了。"  # 待 joy 潤
 NO_ART = "你的功法庫裡沒有這一門。"  # 待 joy 潤
@@ -381,17 +395,22 @@ def _quality_rank(quality: str) -> int:
     return QUALITIES.index(quality) if quality in QUALITIES else 0
 
 
+def _melt(state: GameState, content: Content, world: WorldStateStore, art_id: str, memo: dict) -> int:
+    """熔掉能換幾點心得：一律取 library.melt_value（熔煉頁、排序、標籤、確認句同一個數，不自己算）。"""
+    if ("melt", art_id) not in memo:
+        memo[("melt", art_id)] = library.melt_value(state, content, world, art_id)
+    return memo[("melt", art_id)]
+
+
 def _cheapness(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple:
-    """「最不值錢的先」（設計 4.4）：求藝照熔煉值（library.melt_value，熔煉頁與確認句同一個數）、品質（低的先；PM 2026-10-11：
+    """「最不值錢的先」（設計 4.4）：求藝照熔煉值（_melt，熔煉頁與確認句同一個數）、品質（低的先；PM 2026-10-11：
     熔煉值只算自己修練上去的幾階，合成時擲到上品的跟下品的可以同值，打平時不能先交掉上品的）、再照名字；求兵照品質、階、鋒利度、id。"""
     if b.kind == "arms":
         w = _weapon(state, item_id)
         return (_quality_rank(w.quality), w.tier, w.edge, w.id)
-    if ("melt", item_id) not in memo:
-        memo[("melt", item_id)] = library.melt_value(state, content, world, item_id)
     art = _art_of(item_id, content, world, memo)
     quality = team.art_quality(state, art)  # 同 team.player_art(...).quality，用查過的那份少一次資料庫
-    return (memo[("melt", item_id)], _quality_rank(quality), art.name)
+    return (_melt(state, content, world, item_id, memo), _quality_rank(quality), art.name)
 
 
 def fitting(state: GameState, content: Content, world: WorldStateStore, b: Bounty, memo: dict | None = None) -> list[str]:
@@ -408,6 +427,77 @@ def fitting(state: GameState, content: Content, world: WorldStateStore, b: Bount
         return []
     items = [i for i in candidates if fit_problem(state, content, world, b, i, memo) is None]
     return sorted(items, key=lambda i: _cheapness(state, content, world, b, i, memo))
+
+
+def _arms_base(content: Content, w: Weapon) -> int:
+    """求兵交這一把的銀兩底數（設計 4.7）：arms_silver[品質] × arms_tier[階]，還沒乘名號加成（交給 _silver 乘）。淬煉不加錢。"""
+    cfg = content.config.bounties
+    return cfg.arms_silver[w.quality] * cfg.arms_tier[str(w.tier)]
+
+
+def pick_label(state: GameState, content: Content, b: Bounty, count: int) -> str:
+    """懸賞榜第二層，交得出的求藝、求兵那一行（設計 4.3 第 1 點）：「交出… 官軍・求藝・剛（賞…；你有 2 門合用；期限…・名額還剩 3）」。
+    待 joy 潤（整行；Task 4 的 test_the_board_lists_hand_ins_first_then_takes_then_one_greyed_line 鎖了整行，潤了一起改）。"""
+    return (f"交出… {issuer(content, b)}・{title(content, b)}（{reward_text(state, content, b)}；你有 {count} {UNITS[b.kind]}合用；"
+            f"{due_line(state, content, b)}）")
+
+
+def stuck_label(content: Content, asks: list[Bounty]) -> str:
+    """懸賞榜第二層，交不出的求藝、求兵收成的那一行灰掉的（設計 4.3 第 3 點）：選單才不會長到手機第一屏放不下（FB-128）。"""
+    return STUCK.format(titles="、".join(f"{issuer(content, b)}・{title(content, b)}" for b in asks))
+
+
+def pick_line(content: Content, b: Bounty) -> str:
+    """按了「交出…」的回話（待 joy 潤）。"""
+    return f"你替「{issuer(content, b)}・{title(content, b)}」挑一件要交的東西。"
+
+
+def _offer(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple[str, str]:
+    """第三層一顆交出鈕的（標籤, 確認句）（設計 4.4，待 joy 潤）。求藝寫種類、品質、第幾成與熔掉能換多少心得；求兵寫階品、鋒利度、
+    實拿多少銀兩（照 _silver：散人第 4 階的加成算在裡面），淬過的寫明不加錢，手上那把寫明交了就空手。"""
+    who = issuer(content, b)
+    if b.kind == "art":
+        art = team.player_art(state, content, world, item_id)
+        level, melt = library.level_of(state, item_id), _melt(state, content, world, item_id, memo)
+        return (f"交出【{art.name}】（{art.kind}・{art.quality}・第{level}成；熔掉能換 {melt} 心得）",
+                f"把【{art.name}】（{art.quality}・第{level}成）交給{who}？交了就沒了；熔掉的話能換 {melt} 心得。")
+    w = _weapon(state, item_id)
+    held = w is state.player.weapon
+    silver = _silver(state, content, b, base=_arms_base(content, w))
+    ask = f"把【{w.name}】（{weapons.grade(w)}）交給{who}？交了就沒了。"
+    if w.tempers:
+        ask += TEMPERED_NOTE.format(n=w.tempers)
+    if held:
+        ask += HELD_NOTE
+    return f"交出【{w.name}】（{weapons.grade(w)}・鋒利度 {w.edge}{'・在手上' if held else ''}）→ 賞銀 {silver}", ask
+
+
+def hand_in_options(
+    state: GameState, content: Content, world: WorldStateStore, b: Bounty, items: list[str], memo: dict | None = None,
+) -> list:
+    """懸賞榜第三層（替 b 挑一件，設計 4.4）：合用的（items，fitting 排好的）最不值錢的 give_list 件各一顆交出，每顆先問一次
+    （確認只在網頁那一層；give 自己整個重驗）；多的收成一行灰掉的；身上正在練、等著定名的那門要是對得上，灰掉寫原因；
+    最後永遠按得下去的「回到懸賞榜」。只讓交最不值錢的這幾件是有意的：交出去就沒了，該交的是最捨得的。"""
+    from .engine import Option  # noqa: PLC0415  engine 會 import 這裡（同 smithing.temper_option）
+
+    memo = {} if memo is None else memo
+    p, cfg = state.player, content.config.bounties
+    opts = []
+    for item in items[:cfg.give_list]:
+        label, ask = _offer(state, content, world, b, item, memo)
+        opts.append(Option(id=f"bounty:give:{b.id}:{item}", label=label, confirm=ask, confirm_yes=GIVE_YES))
+    if len(items) > cfg.give_list:
+        opts.append(Option(id="bounty:more", label=MORE[b.kind].format(n=len(items) - cfg.give_list), enabled=False))
+    if b.kind == "art":
+        worn = (p.member.neigong_id, p.member.wugong_id)
+        for art_id in dict.fromkeys(a for a in (*worn, p.naming) if a):
+            art = _art_of(art_id, content, world, memo)
+            if art is None or art_id in content.skills or art.origin != "fused" or art.preset or art.attribute != b.attribute:
+                continue  # 本來就不合用的不列
+            note = WORN_NOTE if art_id in worn else NAMING_NOTE
+            opts.append(Option(id=f"bounty:give:{b.id}:{art_id}", label=note.format(name=art.name), enabled=False))
+    opts.append(Option(id="bounty:unpick", label=UNPICK))
+    return opts
 
 
 def give_problem(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str) -> str | None:
@@ -487,7 +577,7 @@ def give(state: GameState, content: Content, world: WorldStateStore, bounty_id: 
             p.weapon, p.edge_warned, emptied = None, False, True
         else:
             p.rack.remove(w)
-        msgs = _complete(state, content, world, b, silver=cfg.arms_silver[w.quality] * cfg.arms_tier[str(w.tier)])
+        msgs = _complete(state, content, world, b, silver=_arms_base(content, w))
     msgs[0] = GIVEN.format(name=name, issuer=issuer(content, b), title=title(content, b))
     xinde = cfg.xinde.get(b.kind, 0)
     if xinde:

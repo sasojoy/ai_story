@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from conftest import real_content
-from test_bounties import _direct, _do, _load, _post, beta_setup  # noqa: F401  （beta_setup 是 fixture）
+from test_bounties import _direct, _do, _ids, _load, _post, beta_setup  # noqa: F401  （beta_setup 是 fixture）
 from tianxia import bounties, calendar, library
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, validate
@@ -455,3 +455,115 @@ def test_give_checks_everything_again(beta_setup):
     _edit(world, "丙", lambda p: setattr(p, "location", "town"))
     assert _direct(content, world, "丙", _give(b.id, good.id))[0][0].startswith(bounties.GIVEN_PREFIX)
     assert _direct(content, world, "丙", _give(b.id, good.id))[0] == [bounties.GONE]  # 名額 1：交滿了
+
+
+def _open(content, world, name, *picks):
+    """打開懸賞榜、照順序按 picks（例如 bounty:pick:b3），回最後的選單（id → Option，照選單的順序）。"""
+    for option_id in ("act:bounties", *picks):
+        _do(content, world, name, lambda g: g.choose(option_id))
+    return _ids(content, world, name)
+
+
+def test_the_board_lists_hand_ins_first_then_takes_then_one_greyed_line(beta_setup):
+    """設計 4.3：交得出的求藝、求兵每張一顆「交出…」排最前面（寫賞、你有幾件合用、期限與名額），再來原本的揭下，交不出的收成一行灰掉的，
+    最後「返回」。「懸賞榜（N 張）」的 N 等於列出的張數（灰掉那一行照它包含幾張算）；陣營的人只算自己陣營的，豪強也有自己的可做。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    art = _art(world)
+    _art(world, attribute="柔", faction="huang")
+    _arms(world, attribute="快", weapon_kind="槍", faction="haoqiang")
+    assert _ids(content, world, "丙")["act:bounties"].label == "懸賞榜（4 張）"
+    assert _ids(content, world, "甲")["act:bounties"].label == "懸賞榜（2 張）"
+    assert _ids(content, world, "丁")["act:bounties"].label == "懸賞榜（1 張）"  # 地方豪強有自己的求兵（FB-121 第 3 件）
+    menu = _open(content, world, "丙")
+    assert list(menu) == [f"bounty:pick:{art.id}", f"bounty:take:{scout.id}", "bounty:none", "bounty:back"]
+    assert menu[f"bounty:pick:{art.id}"].label == (
+        "交出… 官軍・求藝・剛（賞銀 20・經驗 30・心得 20・俠名 +2・素材，偶有兵器；你有 1 門合用；期限 到季末・名額還剩 3）"
+    )
+    stuck = menu["bounty:none"]
+    assert not stuck.enabled and "黃巾・求藝・柔" in stuck.label and "地方豪強・求兵・屬快的槍" in stuck.label
+    assert list(_open(content, world, "丁")) == ["bounty:none", "bounty:back"]
+
+
+def test_picking_lists_the_cheapest_first_with_a_confirm_and_a_way_back(beta_setup):
+    """設計 4.4：第三層列合用的、熔掉最不值錢的 give_list 件，每顆先問一次（確認句的心得數就是 library.melt_value，確認層那一顆寫
+    「交出」）；多的一行灰掉；身上正在練、對得上的那門灰掉寫原因；最後「回到懸賞榜」。"""
+    content, world = beta_setup
+    content.config.bounties.give_list = 2
+    high, low, mid, worn = (_fused(world, n) for n in ("烈焰掌", "鐵砂掌", "斷金拳", "開碑拳"))
+
+    def library_of(p):
+        p.arts = [high.id, low.id, mid.id]
+        p.art_levels = {high.id: 7, low.id: 1, mid.id: 5}
+        p.member.wugong_id = worn.id
+
+    _edit(world, "丙", library_of)
+    art = _art(world)
+    menu = _open(content, world, "丙", f"bounty:pick:{art.id}")
+    assert list(menu) == [
+        f"bounty:give:{art.id}:{low.id}", f"bounty:give:{art.id}:{mid.id}", "bounty:more", f"bounty:give:{art.id}:{worn.id}", "bounty:unpick",
+    ]
+    first = menu[f"bounty:give:{art.id}:{low.id}"]
+    melt = _do(content, world, "丙", lambda g: library.melt_value(g.state, g.content, g.world, low.id))[0]
+    assert first.label == f"交出【鐵砂掌】（武學・下品・第1成；熔掉能換 {melt} 心得）"
+    assert first.confirm == f"把【鐵砂掌】（下品・第1成）交給官軍？交了就沒了；熔掉的話能換 {melt} 心得。" and first.confirm_yes == "交出"
+    assert not menu["bounty:more"].enabled and menu["bounty:more"].label == bounties.MORE["art"].format(n=1)
+    stuck = menu[f"bounty:give:{art.id}:{worn.id}"]
+    assert not stuck.enabled and stuck.label == bounties.WORN_NOTE.format(name="開碑拳")
+    assert menu["bounty:unpick"].label == bounties.UNPICK
+    _do(content, world, "丙", lambda g: g.choose("bounty:unpick"))
+    assert "bounty:back" in _ids(content, world, "丙") and _load(world, "丙").player.bounty_pick is None
+
+
+def test_an_arms_id_with_a_colon_works_and_the_weapon_in_hand_can_go(beta_setup):
+    """兵器 id「兵:1」帶冒號：交出的選項 id 照 partition 只切一次（設計 4.4）；手上那把列得出來、按得下去，標籤寫實拿的銀兩，
+    確認句寫明淬煉不加錢、交了就空手（14.1 丙）。交完回到懸賞榜（第二層）。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    _edit(world, "丙", lambda p: setattr(p, "weapon", _blade("兵:1", quality="中品", tempers=2)))
+    b = _arms(world)
+    option = _open(content, world, "丙", f"bounty:pick:{b.id}")[f"bounty:give:{b.id}:兵:1"]
+    assert option.label == "交出【柔劍1】（一階中品・鋒利度 100・在手上）→ 賞銀 35"
+    assert bounties.TEMPERED_NOTE.format(n=2) in option.confirm and bounties.HELD_NOTE in option.confirm
+    msgs, game = _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{b.id}:兵:1"))
+    assert msgs[0].startswith(bounties.GIVEN_PREFIX) and game.state.player.weapon is None
+    assert game.state.player.bounty_pick is None and "bounty:back" in _ids(content, world, "丙")
+
+
+def test_a_stale_pick_falls_back_to_the_board(beta_setup):
+    """bounty_pick 指的那一張已經交不出了（那一門在修練頁熔掉了）、或下榜了（過了期限、別人先交滿最後一個名額）：當它不存在，
+    照第二層畫（設計 4.4），不必另外收；第三層的鈕已經不在選單上，按了只回「（此刻無法這麼做。）」，東西還在（兩個分頁、兩個人搶名額）。"""
+    content, world = beta_setup
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    art, last = _art(world), _art(world, quota=1)
+    assert "bounty:unpick" in _open(content, world, "丙", f"bounty:pick:{art.id}")
+    _edit(world, "丙", lambda p: p.arts.remove(good.id))  # 在修練頁熔掉了
+    assert list(_ids(content, world, "丙")) == ["bounty:none", "bounty:back"]
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == art.id), "expires", 0.0))  # 過了期限
+    assert list(_ids(content, world, "丙")) == [f"bounty:pick:{last.id}", "bounty:back"]
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:pick:{last.id}"))
+    world.mutate_season(lambda s: next(x for x in s.bounties if x.id == last.id).done_by.append("乙"))  # 別人先交滿最後一個名額
+    assert _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{last.id}:{good.id}"))[0] == ["（此刻無法這麼做。）"]
+    assert list(_ids(content, world, "丙")) == ["bounty:back"] and good.id in _load(world, "丙").player.arts
+
+
+def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
+    """設計 4.8：打開榜一則（「懸賞榜・此地」），挑一件與交出併成一則（「懸賞榜」）；返回照舊一則；下一次再來另起一則，不併進上一次的。"""
+    content, world = beta_setup
+    good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+    _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
+    first, second = _art(world), _art(world)
+    start = len(_load(world, "丙").journal)
+    for b, item in ((first, good.id), (second, other.id)):
+        _open(content, world, "丙", f"bounty:pick:{b.id}", f"bounty:give:{b.id}:{item}", "bounty:back")
+    journal = _load(world, "丙").journal
+    assert len(journal) == start + 6  # 每次三則：打開、挑與交、返回
+    handed = journal[1]
+    assert handed.title == bounties.BOARD and handed.lines[0] == bounties.pick_line(content, second)
+    assert any(line.startswith(bounties.GIVEN_PREFIX) for line in handed.lines)
+    assert journal[2].title.startswith(f"{bounties.BOARD}・")

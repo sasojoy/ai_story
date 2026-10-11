@@ -1412,12 +1412,14 @@ class Game:
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
-            # 會全部併進上一爐那一則
+            # 會全部併進上一爐那一則。懸賞榜的挑一件、回到懸賞榜、交出同理併成一則「懸賞榜」（懸賞榜設計 4.8）：打開榜那一則的標題是
+            # 「懸賞榜・此地」，每次來都另起一則，不會併進上一次來的；揭下、放棄、返回照舊各一則
             entry = self._draft.entry(self.state.world.time, msgs)
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             if not quiet:
-                journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge")
+                journal.add_entry(self.state, entry, merge=(kind == "smith" and smithing.is_forge_step(arg) and arg != "forge") or (
+                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS))
         finally:
             self._draft = None
             self._fight = None
@@ -1937,6 +1939,7 @@ class Game:
             return self._take_convoy()
         if what == "bounties":
             self.state.player.picking_bounty = True  # 打開懸賞榜（見 _bounty_options），不花體力
+            self.state.player.bounty_pick = None  # 每次打開都從第二層開始（第三層是替一張求藝、求兵挑東西）
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "smith":
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
@@ -2491,12 +2494,28 @@ class Game:
         return opts
 
     def _bounty_options(self) -> list[Option]:
-        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），
-        最後是永遠按得下去的「返回」。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣。"""
+        """懸賞榜的第二層選單（bounties.py）：交得出的求藝、求兵每張一顆「交出…」（按了到第三層挑一件；排最前面，當場就能交），
+        手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），交不出的求藝、求兵收成一行灰掉的，
+        最後是永遠按得下去的「返回」。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣
+        （灰掉那一行照它包含幾張算）。bounty_pick 指著一張還交得出的求藝、求兵時整份換成第三層（bounties.hand_in_options）；
+        那一張下榜了、交不出了就當它不存在，照第二層畫（懸賞榜設計 4.3、4.4）。"""
         s, c = self.state, self.content
+        shown = bounties.visible(s, c)
+        memo: dict = {}  # 這一次畫選單查過的武學與熔煉值（world.get_skill 每次一條 SQLite 查詢）
+        picked = next((b for b in shown if b.id == s.player.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
+        items = bounties.fitting(s, c, self.world, picked, memo) if picked is not None else []
+        if items:
+            return bounties.hand_in_options(s, c, self.world, picked, items, memo)
         mine = {b.id for b in bounties.mine(s, c)}
-        opts = []
-        for b in bounties.visible(s, c):
+        ready, opts, stuck = [], [], []
+        for b in shown:
+            if b.kind in bounties.GIVE_KINDS:  # 求藝、求兵不用揭
+                have = bounties.fitting(s, c, self.world, b, memo)
+                if have:
+                    ready.append(Option(id=f"bounty:pick:{b.id}", label=bounties.pick_label(s, c, b, len(have))))
+                else:
+                    stuck.append(b)
+                continue
             line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
                     f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
@@ -2505,20 +2524,37 @@ class Game:
             problem = bounties.take_problem(s, c, b)
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
-        opts.append(Option(id="bounty:back", label="返回"))
-        return opts
+        if stuck:
+            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck), enabled=False))
+        return ready + opts + [Option(id="bounty:back", label="返回")]
 
     def _bounty(self, arg: str) -> list[str]:
-        """懸賞榜上的選擇：揭下、放棄，或返回（收起懸賞榜）。揭下、放棄之後榜還開著，可以接著挑。"""
+        """懸賞榜上的選擇：揭下、放棄、交出…（到第三層挑一件）、回到懸賞榜、交出，或返回（收起懸賞榜）。做完榜還開著，可以接著挑。
+        交出的 id 是「give:懸賞 id:東西 id」：兵器 id「兵:3」帶冒號，懸賞 id（b17）與合成武學的 id（中文名字）都沒有，所以只切一次。"""
         s, c = self.state, self.content
-        verb, _, bounty_id = arg.partition(":")
+        verb, _, rest = arg.partition(":")
         if verb == "back":
-            s.player.picking_bounty = False
+            s.player.picking_bounty, s.player.bounty_pick = False, None
             return ["你離開了懸賞榜。"]
         if verb == "take":
-            return bounties.take(s, c, bounty_id)
+            return bounties.take(s, c, rest)
         if verb == "drop":
-            return bounties.drop(s, c, bounty_id)
+            return bounties.drop(s, c, rest)
+        if verb == "pick":
+            b = next((x for x in s.world.bounties if x.id == rest), None)
+            if b is None:
+                return [bounties.GONE]
+            s.player.bounty_pick = rest
+            return [bounties.pick_line(c, b)]
+        if verb == "unpick":
+            s.player.bounty_pick = None
+            return [bounties.UNPICKED]
+        if verb == "give":
+            bounty_id, _, item = rest.partition(":")
+            msgs = bounties.give(s, c, self.world, bounty_id, item)
+            if msgs[0].startswith(bounties.GIVEN_PREFIX):
+                s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
+            return msgs
         return ["（此刻無法這麼做。）"]
 
     def _smith_options(self) -> list[Option]:
