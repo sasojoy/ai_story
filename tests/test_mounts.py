@@ -268,3 +268,103 @@ def test_the_map_routes_layer_counts_walking_minutes_on_horseback(content, world
     game.state.world.flags.add("cave_open")
     svg = render_map(game.state, content, "routes", selected="cave")
     assert ">2 分鐘<" in svg and ">5 分鐘<" in svg  # 湖邊 3×0.7＝2.1、寶洞 7.5×0.7＝5.25（沒騎馬時是 3、8）
+
+
+# ── Task 3：飽足、餵、結伴同行 ──
+
+def test_each_new_leg_makes_the_horse_hungrier(content, world):
+    """設計 5.4：每抵達新的一站扣：步行、趕路 −5，疾行 −10；剛出發就折返（回到原地、不換段）不扣；坐騎關著不扣。"""
+    game = _game(content, world, horse=_horse())
+    p = game.state.player
+    walk_to(game, "lake")
+    assert p.mount.edge == 95
+    game.set_move_mode("dash")
+    game.choose("move:town:dash")
+    assert p.location == "town" and p.mount.edge == 85
+    game.set_move_mode("hurry")
+    game.choose("move:lake:hurry")
+    game.choose("road:back:hurry")  # 剛出發就折返：立刻回原地
+    assert p.location == "town" and p.journey is None and p.mount.edge == 85
+    content.config.mounts.enabled = False
+    game.set_move_mode("walk")
+    walk_to(game, "lake")
+    assert p.mount.edge == 85
+
+
+def test_a_hungry_horse_warns_once_and_feeding_fills_it_and_resets_the_warning(content, world):
+    game = _game(content, world, horse=_horse(edge=33))
+    p = game.state.player
+    p.materials = {"gang_1": 2}
+    warn = mounts.HUNGRY_WARNING.format(name="棗騮馬")
+    assert warn in walk_to(game, "lake") and p.mount.edge == 28 and p.hunger_warned
+    assert warn not in walk_to(game, "town")  # 只提醒一次
+    assert game.feed_mount() == [mounts.FED.format(material="精鐵砂", name="棗騮馬")]
+    assert p.mount.edge == 100 and not p.hunger_warned and p.materials == {"gang_1": 1}
+    from tianxia import journal
+    assert game.state.journal[0].title == journal.PRACTICE  # 修練頁的「餵」寫一則修練紀錄
+    assert game.feed_mount() == [f"（{mounts.NOT_HUNGRY}。）"] and p.materials == {"gang_1": 1}
+
+
+def test_feeding_needs_a_mount_a_tier_one_material_and_free_hands(content, world):
+    """設計 5.4：一個一階素材（屬性不限），閒著時哪裡都能餵——不在路上、不在閉關。"""
+    game = _game(content, world)
+    p = game.state.player
+    assert game.feed_mount() == [f"（{mounts.NO_MOUNT}。）"]
+    p.mount = _horse(edge=40)
+    assert game.feed_mount() == [f"（{equipment.NO_REPAIR_MATERIAL}。）"]
+    p.materials = {"gang_2": 3}  # 二階的不算
+    assert mounts.feed_note(game.state, content) == equipment.NO_REPAIR_MATERIAL
+    p.materials["kuai_1"] = 1
+    assert mounts.feed_note(game.state, content) == "驚羽×1"
+    p.busy_until = game.state.world.time + 3600.0
+    assert game.feed_mount() == [f"（{mounts.FEED_SECLUDED}。）"]
+    p.busy_until = None
+    game.choose("move:lake")
+    assert game.feed_mount() == [f"（{mounts.FEED_ON_ROAD}。）"]
+    assert p.mount.edge == 40 and p.materials == {"gang_2": 3, "kuai_1": 1}
+
+
+NOW = 1_000_000.0
+
+
+def _traveller(content, name, horse=None, stamina=100.0):
+    """結伴同行的一方（同 tests/test_social.py 的 _player）：在小鎮、存回資料庫。"""
+    _on(content)
+    game = Game.new(content, name, rng=random.Random(0))
+    game.client = None
+    game.sync(NOW)
+    p = game.state.player
+    p.location, p.stamina, p.mount = "town", stamina, horse
+    CharacterStore(game.world.db).save(game.state)
+    return game
+
+
+def _follow(game, leader):
+    game.state.player.tagalong = Tagalong(leader=leader, since=NOW)
+    CharacterStore(game.world.db).save(game.state)
+
+
+def test_travelling_together_follows_the_leaders_horse_and_each_pays_with_his_own(content):
+    """設計 5.8（Review Focus 1）：整隊照帶頭的人的坐騎走（照抄的這一趟連步調一起抄，抵達時刻一樣），體力各付各的：
+    帶頭的騎吃飽的駑馬趕路 3→2，跟著的沒馬照原價 3。"""
+    a = _traveller(content, "甲", horse=_horse())
+    b = _traveller(content, "乙")
+    _follow(b, "甲")
+    a.set_move_mode("hurry")
+    assert "乙跟著你。" in a.choose("move:lake:hurry")
+    stored = CharacterStore(a.world.db).load("乙").player
+    assert a.state.player.stamina == 98.0 and stored.stamina == 97.0
+    assert stored.journey == a.state.player.journey and stored.journey.pace == pytest.approx(0.7)
+
+
+def test_a_follower_with_his_own_horse_keeps_up_where_on_foot_he_could_not(content):
+    """跟著的人照自己的坐騎算：帶頭的沒馬疾行到湖邊 6 點，跟著的騎吃飽的駑馬只要 5 點，手上剛好 5 點跟得上；
+    疾行一段只扣有騎馬的人的飽足。"""
+    a = _traveller(content, "甲")
+    b = _traveller(content, "乙", horse=_horse(), stamina=5.0)
+    _follow(b, "甲")
+    a.set_move_mode("dash")
+    assert "乙跟著你。" in a.choose("move:lake:dash")
+    stored = CharacterStore(a.world.db).load("乙").player
+    assert stored.stamina == 0.0 and stored.location == "lake" and stored.mount.edge == 90
+    assert a.state.player.stamina == 94.0 and a.state.player.mount is None

@@ -14,6 +14,7 @@ import hashlib
 import math
 
 from . import equipment
+from .equipment import NO_REPAIR_MATERIAL, repair_material
 from .models import Content
 from .state import Equipment, GameState
 
@@ -23,6 +24,13 @@ TIER_NAMES = {1: "駑馬", 2: "良駒", 3: "名駒"}  # 5.6（待 joy 潤）
 NOUNS = {1: "馬", 2: "駒", 3: "駒"}  # 名字＝毛色＋這個字；名駒的專名是裝備三的內容（template），還沒有時照「駒」（待 joy 潤）
 COATS = ("棗騮", "青驄", "黑鬃", "白蹄", "花斑", "黃棕")  # 待 joy 潤：12 個名字都過了 naming.name_problem、沒在內容裡出現過
 WEAR_WORD = equipment.WEAR_WORDS["mount"]  # 「飽足度」：寫到它的地方都讀這個，不寫死（3.1、2.5）
+HUNGRY_WARNING = "你的{name}餓得直打響鼻，餵牠一把料吧。"  # 待 joy 潤（5.4）
+NO_MOUNT = "身上沒有坐騎"  # 待 joy 潤：「餵」灰掉時的原因
+NOT_HUNGRY = "還不餓"  # 待 joy 潤
+FEED_ON_ROAD = "在路上，到了下一站再餵"  # 待 joy 潤
+FEED_SECLUDED = "閉關中"  # 待 joy 潤
+FED = "你拿{material}把【{name}】餵飽了。"  # 待 joy 潤；Game.feed_mount 照開頭 FED_PREFIX 寫修練紀錄
+FED_PREFIX = "你拿"
 
 
 def on(content: Content) -> bool:
@@ -143,3 +151,57 @@ def name_of(item: Equipment) -> str:
 def grade(item: Equipment) -> str:
     """「駑馬・下品」（5.6：坐騎不用 equipment.grade 的「一階下品」）。"""
     return f"{TIER_NAMES.get(item.tier, '')}・{item.quality}"
+
+
+# ---- 飽足與餵（5.4） ----
+
+def hunger(state: GameState, content: Content, mode: str) -> list[str]:
+    """抵達新的一站（Game._arrivals 的 new_leg）：身上那匹扣飽足度（步行、趕路 −5，疾行 −10）；第一次低到 edge_warn 以下回一句提醒
+    （只一次，餵過或換一匹才重設）。沒騎馬、開關關著不扣。結伴同行時每個人照自己的馬扣（各自那一份 Game 的 _arrivals）。"""
+    item, rule = riding(state, content), content.config.mounts
+    if item is None:
+        return []
+    item.edge = max(0, item.edge - rule.hunger.get(mode, 0))
+    if item.edge < rule.edge_warn and not state.player.hunger_warned:
+        state.player.hunger_warned = True
+        return [HUNGRY_WARNING.format(name=name_of(item))]
+    return []
+
+
+def feed_problem(state: GameState, content: Content) -> str | None:
+    """餵不了的原因：沒騎馬（或開關關著）、在路上、閉關中、吃飽了、沒有一階素材。閒著時哪裡都能餵（不看打坐、選單，見計畫「範圍與取捨」）。"""
+    p = state.player
+    item = riding(state, content)
+    if item is None:
+        return NO_MOUNT
+    if p.journey is not None:
+        return FEED_ON_ROAD
+    if p.busy_until is not None:
+        return FEED_SECLUDED
+    if item.edge >= 100:
+        return NOT_HUNGRY
+    if repair_material(state, content) is None:
+        return NO_REPAIR_MATERIAL
+    return None
+
+
+def feed_note(state: GameState, content: Content) -> str:
+    """「餵」鈕上那一段（修練頁、馬市）：餵得了寫用哪一種素材（「精鐵砂×1」），餵不了寫為什麼。"""
+    problem = feed_problem(state, content)
+    if problem is not None:
+        return problem
+    return f"{content.materials[repair_material(state, content)].name}×1"
+
+
+def feed(state: GameState, content: Content) -> list[str]:
+    """餵（5.4）：一個一階素材（屬性不限，背包裡最多的那一種，同修兵器），飽足回滿，不花銀兩；重設提醒。"""
+    problem = feed_problem(state, content)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    p = state.player
+    material = repair_material(state, content)
+    p.materials[material] -= 1
+    if not p.materials[material]:
+        del p.materials[material]
+    p.mount.edge, p.hunger_warned = 100, False
+    return [FED.format(material=content.materials[material].name, name=name_of(p.mount))]

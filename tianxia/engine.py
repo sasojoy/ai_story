@@ -2664,6 +2664,14 @@ class Game:
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
+    def feed_mount(self) -> list[str]:
+        """修練頁坐騎那一列的「餵」（裝備四欄 5.4，MENXIA_ACTIONS["feed"]）：閒著時哪裡都能餵（不在路上、不在閉關），
+        一個一階素材餵滿、不花銀兩；寫一則修練紀錄。整季機器人與假人也走這裡（bot.feed_mount）。"""
+        msgs = self._log(mounts.feed(self.state, self.content))
+        if msgs and msgs[0].startswith(mounts.FED_PREFIX):
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
     def dismantle_weapon(self, item_id: str) -> list[str]:
         """修練頁裝備庫的「拆解」（兵器設計 4.7.1、裝備四欄設計 4.8）：武器、防具哪裡都能拆、不花體力；坐騎、寶物不能拆；寫一則修練紀錄。"""
         msgs = self._log(equipment.dismantle(self.state, self.content, item_id, equipment.DISMANTLABLE))
@@ -4464,6 +4472,7 @@ class Game:
         at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
         pace = mounts.pace(s, c)  # 出發這一刻的步調（裝備四欄 5.3）：寫進 Journey、排抵達時刻、紀錄的標籤都用這一個數；路上餓了、換了馬都不回頭改
         cost = atlas.route_stamina(s, c, route, mode)
+        foot = atlas.route_foot_stamina(s, c, route, mode)  # 不算坐騎的那一份：結伴同行時跟著的人照自己的坐騎再省（_lead，5.8）
         s.player.stamina -= cost
         legs = [0.0] if at_once else list(route.legs)
         s.player.journey = Journey(
@@ -4476,7 +4485,7 @@ class Game:
                 self._draft.changes.append(f"體力 -{cost}")
         verb = "改道" if rerouting else "動身"
         told = f"{s.player.name}{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
-        party = parted + self._lead(start, cost, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層）
+        party = parted + self._lead(start, foot, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層），體力各付各的
         if mode == "dash" or at_once:
             return party + self._arrivals()
         left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
@@ -4516,6 +4525,8 @@ class Game:
                 if new_leg:
                     s.player.leg_actions = set()
                 msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                if new_leg:
+                    msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
                 if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
                     msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
             done = j.reached > j.last or s.world.ended
@@ -6653,8 +6664,10 @@ class Game:
             self.touched.add(tag.leader)
         return [f"你與{tag.leader}分道揚鑣。"]
 
-    def _lead(self, start: str | None, cost: int, told: str) -> list[str]:
-        """結伴同行：帶頭的你出發、改道、喊停之後，跟著的人照抄這一趟（同樣的路、同樣的抵達時間），趕路、疾行的體力各付各的。
+    def _lead(self, start: str | None, foot: int, told: str) -> list[str]:
+        """結伴同行：帶頭的你出發、改道、喊停之後，跟著的人照抄這一趟（同樣的路、同樣的抵達時間，連步調 Journey.pace 一起抄：
+        整隊照帶頭的人的坐騎走，_partners 才認得出同行）。趕路、疾行的體力各付各的（裝備四欄 5.8）：foot 是不算坐騎的體力
+        （atlas.route_foot_stamina；喊停是 0），每個跟著的人照自己的坐騎再省（atlas.ride_stamina、mounts.saving）。
         start 是你動身的地點（從路上改道、喊停時是 None）。跟不上的人（體力不夠、手上有事、已經不在這裡）就散了，兩邊各記一句。
         回傳寫給你的幾句。told 是寫進跟著的人紀錄的那一句。"""
         me = self.state.player
@@ -6662,6 +6675,7 @@ class Game:
         lines: list[str] = []
         for other in self._party(catch_up=True):
             o = other.state.player
+            cost = atlas.ride_stamina(foot, mounts.saving(other.state, self.content))  # 這個人自己騎的馬省下之後要付的
             # 路是帶頭的人認得的路，跟著的人不必自己認得（所以不問 travel_refusal），只看他手上有沒有事、體力夠不夠
             block = atlas.travel_block(other.state, self.content)
             if start is not None and (o.journey is not None or o.location != start):
