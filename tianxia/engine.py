@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
@@ -249,7 +249,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
-        self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了的提醒（_file_battle）；沒有草稿的呼叫端（切磋的另一邊）自己接到訊息裡
+        self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
@@ -4100,7 +4100,7 @@ class Game:
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
-        msgs.insert(0, self._file_battle(record, wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器照磨（兵器設計 3.4）
+        msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
@@ -4256,13 +4256,19 @@ class Game:
         record.notes += msgs
         return msgs
 
-    def _file_battle(self, record, wear: bool | None = None) -> str:
+    def _file_battle(self, record, wear: bool | None = None, armor_wear: bool | None = None) -> str:
         """歸檔一場戰報。wear：這一場要不要磨兵器（兵器設計 3.4）；None＝照戰報類型，劇情戰（kind=event）不磨，
-        挑戰本人雖然也是 event，由 _challenge 明說要磨。全服決戰不走這裡。提醒進戰鬥卡片也進江湖紀錄。"""
+        挑戰本人雖然也是 event，由 _challenge 明說要磨。armor_wear：要不要磨防具（裝備四欄設計 4.5）；None＝照 armor.wears
+        （遊歷、探索野怪、截殺自己這一邊落敗才磨；切磋、頭目戰、劇情戰不磨），挑戰本人由 _challenge 明說要磨。全服決戰不走這裡。
+        兩樣的提醒合在 _last_wear（兵器先、防具後），進戰鬥卡片也進江湖紀錄（防具照兵器的做法；設計第九節「戰報不寫防具」指的是
+        不每一場寫一句省了多少，這一句只在低於 edge_warn 時出現一次）。截殺輸的一方先扣血（_raid_spoils）、後磨，
+        所以那一場用的是磨之前的耐久（同兵器的時序）。"""
         self._last_wear = []
         if (record.kind != "event") if wear is None else wear:
-            self._last_wear = weapons.wear(self.state, self.content, record.tier)
-            record.notes += self._last_wear
+            self._last_wear += weapons.wear(self.state, self.content, record.tier)
+        if armor.wears(record.kind, record.tier) if armor_wear is None else armor_wear:
+            self._last_wear += armor.wear(self.state, self.content, record.tier)
+        record.notes += self._last_wear
         battlelog.add_record(self.state, record)
         self.state.battle_card = record.id
         line = battlelog.summary_line(record)
@@ -5425,7 +5431,8 @@ class Game:
 
     def raid(self, other: Game) -> list[str]:
         """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
-        與一點氣血（不變成內傷）；贏的一方記一點本季貢獻；平手誰都不失什麼。雙方各一份戰報與一則江湖紀錄。"""
+        與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
+        雙方各一份戰報與一則江湖紀錄。"""
         problem = self.raid_refusal(other)
         if problem is not None:
             return [problem]
@@ -5470,7 +5477,8 @@ class Game:
         return msgs
 
     def _raid_spoils(self, loser: Game) -> RaidSpoils:
-        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，不變成內傷），self 拿走一部分銀兩、記一點貢獻。"""
+        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
+        self 拿走一部分銀兩、記一點貢獻。"""
         c, cfg = self.content, self.content.config.raid
         lp, wp = loser.state.player, self.state.player
         purse = lp.stats.get("silver", 0)
@@ -5479,7 +5487,8 @@ class Game:
         lp.stats["silver"] = purse - lost
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss, agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None else 0  # 散人（揭了通緝）不記貢獻
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)

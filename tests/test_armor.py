@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 from conftest import next_season, real_content, walk_to
-from tianxia import armor, equipment, rules, team, weapons
+from tianxia import armor, encounter, equipment, rules, team, weapons
 from tianxia.state import BattleRecord, Equipment, Weapon
 
 
@@ -276,3 +276,139 @@ def test_shop_names_are_original_and_do_not_clash_with_weapons():
     taken = {s.name for s in c.skills.values()} | {m.name for m in c.materials.values()} | {ch.name for ch in c.characters.values()}
     assert not names & taken
     assert not [n for n in names if naming.name_problem(n, c, None)]
+
+
+# ── Task 3：扣氣血、截殺、磨耐久 ──
+
+def _hp_lost(state, content, world, tier):
+    """直接扣一場（team.take_encounter_toll）：本人掉了多少氣血、多了多少內傷。"""
+    member = state.player.member
+    con = team.con_of(state, content, world, "player")
+    before, _ = team.member_neili(content, member, con)
+    injury = member.injury
+    team.take_encounter_toll(state, content, world, tier)
+    after, _ = team.member_neili(content, member, con)
+    return before - after, member.injury - injury
+
+
+def _soft(game, layers=3):
+    """身上換一門化勁 layers 層的武學（照 tests/test_trait_numbers.py::_wear；三層是 30%）。"""
+    from tianxia.martial_arts import generate_from_name
+    art = generate_from_name("護體拳", "武學", "護體拳", attribute="柔").model_copy(
+        update={"origin": "fused", "traits": ["柔"] * layers, "special": None},
+    )
+    game.world.claim_skill_name(art)
+    game.state.player.member.wugong_id = art.id
+    game.state.player.art_quality[art.id] = "下品"
+    return art
+
+
+def _fought(game, tier):
+    """在湖邊打一場、結果寫死（同 tests/test_trait_numbers.py::_fought），回傳那一場的戰報。"""
+    if game.state.player.location != "lake":
+        walk_to(game, "lake")
+    result = encounter.EncounterResult(tier=tier, margin=0, our_power=10, difficulty=5)
+    with mock.patch.object(team, "fight", return_value=result):
+        game.choose("act:train")
+    return game.state.battles[0]
+
+
+def test_armor_cuts_the_player_toll_and_injury_by_the_same_share(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.armor = _jacket()  # 虛對虛：9%
+    bare = game.state.model_copy(deep=True)
+    bare.player.armor = None
+    lost, hurt = _hp_lost(game.state, content, world, "落敗")
+    lost0, hurt0 = _hp_lost(bare, content, world, "落敗")
+    assert lost == pytest.approx(lost0 * 0.91) and hurt == pytest.approx(hurt0 * 0.91)
+    assert team.armor_cut(game.state, content, world) == pytest.approx(0.09)
+    content.config.armor.enabled = False
+    assert team.armor_cut(game.state, content, world) == 0.0
+
+
+def test_soft_and_armor_together_are_capped_at_sixty_percent(game):
+    content, world = _on(game.content), game.world
+    content.config.armor.tier_cut = {"1": 0.5}  # 防具 50%（沒有內功：沒有 ±3%）＋化勁 30%：超過合計上限
+    _soft(game)
+    game.state.player.armor = _jacket()
+    bare = game.state.model_copy(deep=True)
+    bare.player.member.wugong_id = None  # 拿掉化勁
+    bare.player.armor = None
+    lost, _ = _hp_lost(game.state, content, world, "落敗")
+    lost0, _ = _hp_lost(bare, content, world, "落敗")
+    assert lost == pytest.approx(lost0 * 0.4)
+
+
+def test_toll_saved_stays_zero_with_armor_alone(content, world):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.armor = _jacket()
+    assert team.toll_saved(game.state, content, world, "落敗") == (0, 0)  # 防具不是功效：不寫化勁那一句
+
+
+def test_soft_says_only_what_it_saved_on_top_of_the_armor(game):
+    """FB-084 加上防具（設計 4.3）：戰鬥卡片「（化勁）少扣了 N 點」是「只有防具」跟「防具加化勁」的差，不把防具省的算給化勁。"""
+    content = _on(game.content)
+    rules.learn_skill(game.state, content, "calm")
+    game.state.player.member.neigong_id = "calm"
+    _soft(game)  # 化勁 30%
+    game.state.player.armor = _jacket()  # 虛對虛：9%
+    walk_to(game, "lake")
+    plain = game.state.model_copy(deep=True)
+    plain.player.member.wugong_id = None  # 只拿掉化勁、留著防具
+    armor_only, _ = _hp_lost(plain, content, game.world, "落敗")
+    record = _fought(game, "落敗")
+    shown = next(int(ch.removeprefix("氣血 -")) for ch in record.changes if ch.startswith("氣血 -"))
+    (line,) = [x for x in record.trait_before + record.trait_after if x.startswith("〔化勁〕")]
+    assert line.endswith(f"（少扣了 {round(armor_only) - shown} 點氣血）")
+    assert shown == round(armor_only * (1 - 0.39) / (1 - 0.09))  # 真的扣的是防具加化勁 39%
+
+
+@pytest.mark.parametrize("kind,tier,worn", [
+    ("train", "大勝", True), ("wild", "落敗", True), ("raid", "落敗", True), ("raid", "大勝", False),
+    ("spar", "落敗", False), ("duel", "落敗", False), ("event", "落敗", False),
+])
+def test_file_battle_wears_the_armor_only_in_training_wild_and_a_lost_raid(content, world, kind, tier, worn):
+    _on(content)
+    game = _game(content, world)
+    game.state.player.armor = _jacket()
+    record = BattleRecord(id=1, time=0.0, location="湖邊", kind=kind, event="劇情", opponent="誰", ours=[], tier=tier,
+                          our_power=1.0, difficulty=1.0)
+    game._file_battle(record)
+    assert (game.state.player.armor.edge < 100) is worn
+
+
+def test_both_reminders_reach_the_record_and_the_journal_lines(content, world):
+    """防具破了的提醒照兵器的做法，戰鬥卡片與江湖紀錄都寫（計畫「範圍與取捨」；設計第九節的「戰報不寫防具」指每一場不寫省了多少）。"""
+    _on(content, weapons_on=True)
+    game = _game(content, world)
+    p = game.state.player
+    p.armor = _jacket(edge=31)
+    p.weapon = Weapon(id="兵:1", name="試刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=31)
+    record = BattleRecord(id=1, time=0.0, location="湖邊", kind="train", event="", opponent="誰", ours=[], tier="落敗",
+                          our_power=1.0, difficulty=1.0)
+    game._file_battle(record)
+    assert record.notes == [weapons.EDGE_WARNING.format(name="試刃"), armor.WORN_WARNING.format(name="試甲")]
+    assert game._last_wear == record.notes  # 切磋、截殺的訊息與守方的江湖紀錄都從這裡讀
+
+
+def test_challenging_a_great_figure_wears_the_armor_like_training(world):
+    from tianxia.encounter import EncounterResult
+    from tianxia.engine import Game
+    c = real_content()
+    c.config.season_one = True
+    c.config.auto_open_first_season = True
+    game = Game.new(c, "官甲", rng=random.Random(0), world=world)
+    game.client = None
+    p = game.state.player
+    p.faction, p.location = "guan", "huangjin_camp"
+    p.tutorial_step = len(c.tutorial.steps)
+    p.visited.add("huangjin_camp")
+    p.stamina = 250.0
+    game.now = 1000.0
+    p.armor = _jacket()
+    fight = EncounterResult(tier="險勝", margin=20, our_power=200, difficulty=120)
+    with mock.patch.object(team, "fight", return_value=fight):
+        game.choose("act:challenge:bocai")
+    assert game.state.battles[0].kind == "event" and p.armor.edge == 98  # 挑戰本人的戰報是 event，但防具照磨（險勝扣 2）
