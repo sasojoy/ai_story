@@ -59,7 +59,7 @@ import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, smithing, social, team, timetable, weapons,
+    server_bots, smithing, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1002,9 +1002,9 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
         "insights": game.insight_rows(),
         "naming": game.naming_row(),
-        # 兵器（兵器設計 3.6）：身上那把、裝備庫；開關關著時 worn 是 None、rack 是空的，修練頁那一塊不畫
-        "weapons": weapons.rows(game.state, game.content, game.world,
-                                team.player_art(game.state, game.content, game.world, member.wugong_id)),
+        # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
+        # 都關著時 slots 是空的，修練頁那一塊不畫
+        "gear": game.gear_rows(),
     }
 
 
@@ -1480,8 +1480,8 @@ MENXIA_ACTIONS = {
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
-    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一把換到手上（兵器設計 2.2）
-    "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）
+    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具都走這裡，網頁照舊送 weapon 這個鍵
+    "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
 }
 
 

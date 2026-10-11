@@ -348,6 +348,10 @@ def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldS
     return f"這把{w.kind}用不上你的{mine}法"
 
 
+EMPTY = "手上沒有兵器。"  # 修練頁武器那一段手上空著（原本寫在 web/app.js）
+RACK_NOTE = "城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。"  # 待 joy 潤：修練頁武器那一段底下（兵器第二批 Task 8 的字）
+
+
 def card_line(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str:
     """本人卡上的「兵器」那一行（3.6）：空手或開關關著是空字串。"""
     w = state.player.weapon

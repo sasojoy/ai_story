@@ -5882,6 +5882,10 @@ class Game:
             "cap": library.cap_of(self.state, self.content),
         }
 
+    def gear_rows(self) -> dict:
+        """修練頁「裝備」那一塊的資料（skillview.gear_rows；裝備四欄設計 2.5）。"""
+        return skillview.gear_rows(self.state, self.content, self.world)
+
     def art_rows(self) -> list[dict]:
         return skillview.art_rows(self.state, self.content, self.world)
 

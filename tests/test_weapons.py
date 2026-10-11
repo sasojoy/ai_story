@@ -587,10 +587,11 @@ def test_menxia_view_and_the_wield_action(content, world):
     p = game.state.player
     p.rack = [Weapon(id="兵:2", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
     view = server.menxia_view(game)
-    assert view["weapons"]["worn"] is None and view["weapons"]["rack"][0]["id"] == "兵:2"
+    [slot] = view["gear"]["slots"]  # 測試內容防具關著：只有武器那一段
+    assert slot["slot"] == "weapon" and slot["worn"] is None and slot["rack"][0]["id"] == "兵:2"
     server.MENXIA_ACTIONS["wield"](game, {"weapon": "兵:2"})
     assert p.weapon.id == "兵:2" and p.rack == []
-    assert server.menxia_view(game)["weapons"]["worn"]["name"] == "厚背刀"
+    assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["name"] == "厚背刀"
 
 
 def test_wield_is_refused_when_weapons_are_off(content, world):
@@ -1063,6 +1064,6 @@ def test_menxia_dismantle_action_gives_a_material_and_writes_a_practice_entry(co
     p.rack = [_rack_weapon("兵:2")]
     server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})
     assert p.rack == [] and p.materials == {"gang_1": 1}
-    assert server.menxia_view(game)["weapons"]["rack"] == []
+    assert server.menxia_view(game)["gear"]["slots"][0]["rack"] == []
     assert server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})[0] == weapons.DISMANTLE_MISSING
     assert server.MENXIA_ACTIONS["dismantle"](game, {})[0] == weapons.DISMANTLE_MISSING

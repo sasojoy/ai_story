@@ -601,3 +601,51 @@ def test_repair_and_temper_say_nothing_extra_when_the_weapon_fits_or_the_button_
     p.weapon.tempers = 0
     opts = _ids(game)
     assert not opts[smithing.TEMPER].enabled and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+
+
+# ── Task 5：修練頁「裝備」與角色卡 ──
+
+def test_gear_rows_list_each_open_slot_and_count_the_whole_rack(content, world):
+    from tianxia import skillview
+    _on(content, weapons_on=True)
+    game = _game(content, world)
+    p = game.state.player
+    p.armor = _jacket()
+    p.rack = [_jacket(aid="甲:2", name="鐵葉甲", attribute="剛"), _blade()]
+    gear = skillview.gear_rows(game.state, content, world)
+    assert gear["cap"] == 100 and gear["used"] == 2
+    assert [g["slot"] for g in gear["slots"]] == ["weapon", "armor"] and [g["label"] for g in gear["slots"]] == ["武器", "防具"]
+    weapon_slot, armor_slot = gear["slots"]
+    assert weapon_slot["worn"] is None and [r["id"] for r in weapon_slot["rack"]] == ["兵:3"]
+    assert armor_slot["worn"]["id"] == "甲:1" and [r["id"] for r in armor_slot["rack"]] == ["甲:2"]
+    assert weapon_slot["empty"] == weapons.EMPTY and armor_slot["empty"] == armor.EMPTY and armor_slot["note"] == armor.RACK_NOTE
+    content.config.weapons.enabled = False
+    gear = skillview.gear_rows(game.state, content, world)
+    assert [g["slot"] for g in gear["slots"]] == ["armor"] and gear["used"] == 2  # 關著的欄位不列，東西照樣佔格子
+
+
+def test_player_card_has_the_armor_line_under_the_weapon_line(content, world):
+    from tianxia import skillview
+    _on(content, weapons_on=True)
+    game = _game(content, world)
+    p = game.state.player
+    assert "防具" not in skillview.member_card(game.state, content, world, "player")
+    rules.learn_skill(game.state, content, "sword")
+    p.member.wugong_id = "sword"
+    p.weapon = Weapon(id="兵:1", name="試刃", kind="劍", attribute="柔", tier=1, quality="下品")
+    p.armor = _jacket(edge=80)
+    lines = skillview.member_card(game.state, content, world, "player").splitlines()
+    at = next(i for i, line in enumerate(lines) if line.startswith("兵器"))
+    assert lines[at + 1] == "防具　【試甲】屬虛・一階下品・耐久度 80，一場少扣 8% 氣血（跟你的內功同屬性）"
+
+
+def test_menxia_view_sends_gear_and_the_wield_action_takes_armor(content, world):
+    import server
+    _on(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.rack = [_jacket(aid="甲:2")]
+    view = server.menxia_view(game)
+    assert "weapons" not in view and [g["slot"] for g in view["gear"]["slots"]] == ["armor"]
+    server.MENXIA_ACTIONS["wield"](game, {"weapon": "甲:2"})  # 網頁照舊送 weapon 這個鍵：防具的 id 也走它
+    assert p.armor.id == "甲:2" and server.menxia_view(game)["gear"]["slots"][0]["worn"]["id"] == "甲:2"

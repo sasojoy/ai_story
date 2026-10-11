@@ -563,12 +563,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .acard { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--q, var(--line)); border-radius: 16px;
   padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
 .acard.empty { color: var(--ink-2); }
-/* 修練頁的兵器塊（app.js 的 weaponsBlock）：一把一行。FB-125：名字與說明在左邊自己折行，兩顆鈕包在右邊不折行，
-   列與列之間一條線，看得出哪顆鈕屬於哪一把 */
-.weapons .wrow { display: flex; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
-.weapons .wrow .winfo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 6px; }
-.weapons .wrow .wbtns { flex: none; display: flex; gap: 6px; }
-.weapons p { margin: 4px 2px; }
+/* 修練頁的「裝備」塊（app.js 的 gearBlock，裝備四欄設計 2.5）：一欄一小段（.gear-slot），一件一行。FB-125：名字與說明在左邊自己折行，
+   兩顆鈕包在右邊不折行，列與列之間一條線，看得出哪顆鈕屬於哪一件 */
+.gear .sub { font-size: 12px; color: var(--ink-2); margin: 10px 2px 2px; }
+.gear .wrow { display: flex; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.gear .wrow .winfo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 6px; }
+.gear .wrow .wbtns { flex: none; display: flex; gap: 6px; }
+.gear p { margin: 4px 2px; }
 .acard .hd { display: flex; gap: 10px; align-items: center; }
 .acard .hd > div { min-width: 0; }
 .acard .hd h3 { margin: 0; font: 700 18px/1.3 var(--serif); }
