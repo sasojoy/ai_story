@@ -10,8 +10,9 @@
   一張求兵（交一把指定種類與屬性的兵器）。不用揭、在城鎮的懸賞榜上直接交（交了就沒了），前 give_quota 個交的有賞；
   散人三方都能交，陣營的人只交自己陣營的、拿全額。
 
-每季都有（企劃者 2026-10-10「整個懸賞榜每季都有」，懸賞榜設計 2.2）：只看 Config.bounties.enabled 與劇本有沒有陣營（active），
+每季都有（企劃者 2026-10-10「整個懸賞榜每季都有」，懸賞榜設計 2.2）：只看 Config.bounties.enabled、劇本有沒有陣營、這一季收了沒有（active），
 不看第一季開關；關著時每個函式都什麼都不做、回空的。
+過了期限只有一個問法（past_due，FB-152、FB-153）：這一季收了，榜上的一律算過了；寫「到季末」的單撐到季真的收了；其他的照自己的期限。
 只改 GameState（玩家與共用的季）；不 import engine、world（world 會 import 這裡，掛 WEEK_HOOKS）。"""
 from __future__ import annotations
 
@@ -67,14 +68,17 @@ BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
 LAPSED_FULL = "【懸賞】「{title}」名額被別人交滿了，你手上這一張作廢。"  # 待 joy 潤（FB-121 第 5 件，deliver_lapses）
 LAPSED_DUE = "【懸賞】「{title}」過了期限，你手上這一張作廢。"  # 待 joy 潤
+LAPSED_SEASON = "【懸賞】這一季收了，你手上「{title}」作廢。"  # 待 joy 潤（FB-152、FB-153：寫「到季末」的單撐到季真的收了；收季那一刻手上揭著的都補這一句，第 11、12 週掛的一樣）
 LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣營掛的，這一張作廢。"  # 待 joy 潤（FB-151：投靠、叛投那一下；換版前就換了陣營的存檔由 deliver_lapses 補同一句）
 STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 
 
 def active(state: GameState, content: Content) -> bool:
-    """懸賞榜開著：設定開著（Config.bounties.enabled）、劇本有陣營（沒有陣營就沒有人掛單）。不看第一季開關（懸賞榜設計 2.2）。"""
-    return content.config.bounties.enabled and bool(content.scenario.factions)
+    """懸賞榜開著：設定開著（Config.bounties.enabled）、劇本有陣營（沒有陣營就沒有人掛單）、這一季還沒收（休季沒有榜：不開榜、不掛單、
+    卡上沒有通緝鈕，FB-152）。不看第一季開關（懸賞榜設計 2.2）。作廢與退押金（deliver_lapses、deliver_refunds）不問這一個：
+    收季之後揭著的人、掛單的人同步時才收到那一句與押金。"""
+    return content.config.bounties.enabled and bool(content.scenario.factions) and not state.world.ended
 
 
 def is_town(content: Content, loc_id: str) -> bool:
@@ -149,11 +153,26 @@ def _left(b: Bounty) -> int:
     return b.quota - len(b.done_by)
 
 
+def to_season_end(b: Bounty, content: Content, world: WorldState) -> bool:
+    """這一張的期限寫「到季末」：到期在名義季長（開季時蓋的章）或之後。第 11 週掛的正好到季末、第 12 週掛的在季末後一週。
+    比的是名義季長，不是真正收季的時刻：第一季管理者可以把季末往後排（Game.admin_schedule），這種單要撐到季真的收了（past_due）。"""
+    return b.expires >= season_length_days(world, content) * calendar.DAY - calendar.EPS_SECONDS
+
+
+def past_due(b: Bounty, content: Content, world: WorldState) -> bool:
+    """這一張過了期限（FB-152、FB-153）：所有看期限的地方都問這一個（open_bounties、post_problem、deliver_refunds、deliver_lapses、issue）。
+    這一季收了（world.ended）一律算過了——第 11 週與第 12 週掛的一樣，不是一張「過了期限」、一張一直掛到下一季開；
+    寫「到季末」的單（to_season_end）在季真的收之前都不算——管理者把季末往後排時，名義季末過了它也還在；其他的照自己的 expires。"""
+    if world.ended:
+        return True
+    return not to_season_end(b, content, world) and b.expires <= world.time
+
+
 def due_text(b: Bounty, content: Content, world: WorldState) -> str:
     """給玩家看的期限（懸賞榜設計 3.5）：第一季寫「第 5 週・週一 00:00」、規則關著寫「第11天 12:00」（calendar.stamp_text，跟 Game.stamp
-    同一個寫法；這裡不能 import engine）。到季末或過了季末一律寫「到季末」：規則關著時 stamp_text 不會夾，14 天的季第 11、12 週掛的單
+    同一個寫法；這裡不能 import engine）。到季末或過了季末一律寫「到季末」（to_season_end）：規則關著時 stamp_text 不會夾，14 天的季第 11、12 週掛的單
     會寫成這一季沒有的「第15天 00:00」「第16天 04:00」。真正的 expires 不夾：收季時懸賞榜跟著 WorldState 整個重來。"""
-    if b.expires >= season_length_days(world, content) * calendar.DAY - calendar.EPS_SECONDS:
+    if to_season_end(b, content, world):
         return SEASON_END
     return calendar.stamp_text(b.expires, content, world)
 
@@ -164,12 +183,12 @@ def due_line(state: GameState, content: Content, b: Bounty) -> str:
 
 
 def open_bounties(state: GameState, content: Content) -> list[Bounty]:
-    """榜上還有效的（沒過期、還有名額）。截殺關著（Config.raid.enabled）時通緝不算：只能靠截殺交差，揭了也交不了
+    """榜上還有效的（沒過期〔past_due〕、還有名額）；休季（active 為假）一張都沒有。截殺關著（Config.raid.enabled）時通緝不算：只能靠截殺交差，揭了也交不了
     （mine、take、hunting、status、整季機器人與假人都經過這裡，自然看不到、揭不了、不佔格）；押金照期限退（deliver_refunds 直接掃榜）。"""
     if not active(state, content):
         return []
-    now, raids = state.world.time, content.config.raid.enabled
-    return [b for b in state.world.bounties if b.expires > now and _left(b) > 0 and (raids or b.kind != "wanted")]
+    w, raids = state.world, content.config.raid.enabled
+    return [b for b in w.bounties if not past_due(b, content, w) and _left(b) > 0 and (raids or b.kind != "wanted")]
 
 
 def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
@@ -655,8 +674,7 @@ def post_problem(state: GameState, content: Content, target_state: GameState, am
     if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
         return f"{t.name}初入江湖，還在新手期，通緝不了他。"  # 待 joy 潤
     me = name_key(p.name)
-    now = state.world.time
-    if any(b.kind == "wanted" and b.poster and name_key(b.poster) == me and b.expires > now and _left(b) > 0
+    if any(b.kind == "wanted" and b.poster and name_key(b.poster) == me and not past_due(b, content, state.world) and _left(b) > 0
            for b in state.world.bounties):
         return "你已經掛著一張通緝了，等它揭下再說。"
     cfg = content.config.bounties
@@ -685,12 +703,12 @@ def post(state: GameState, content: Content, target_state: GameState, amount: in
 
 
 def deliver_refunds(state: GameState, content: Content) -> list[str]:
-    """我掛的通緝過期了、沒人完成：押金退回（掛單的人同步時呼叫）。"""
-    p, now = state.player, state.world.time
+    """我掛的通緝過期了（past_due：寫「到季末」的撐到收季）、沒人完成：押金退回（掛單的人同步時呼叫）。"""
+    p, w = state.player, state.world
     me = name_key(p.name)
     msgs: list[str] = []
-    for b in state.world.bounties:
-        if (b.kind == "wanted" and not b.refunded and not b.done_by and b.expires <= now
+    for b in w.bounties:
+        if (b.kind == "wanted" and not b.refunded and not b.done_by and past_due(b, content, w)
                 and b.poster and name_key(b.poster) == me):
             b.refunded = True
             p.stats["silver"] = p.stats.get("silver", 0) + b.silver
@@ -699,14 +717,19 @@ def deliver_refunds(state: GameState, content: Content) -> list[str]:
 
 
 def deliver_lapses(state: GameState, content: Content) -> list[str]:
-    """我揭了、還沒交差的那一張被別人交滿了名額、或過了期限：拿掉我的名字、補一句（FB-121 第 5 件；寫法同 deliver_refunds，同步時呼叫）。
+    """我揭了、還沒交差的那一張被別人交滿了名額、過了自己的期限、或這一季收了：拿掉我的名字、補一句（FB-121 第 5 件；寫法同 deliver_refunds，同步時呼叫）。
     過了期限還有人揭著的單，issue 掛新單時先留著（等揭的人同步時在這裡拿掉），不然他回來只看到那一張默默不見了。
-    名字還留在自己陣營接不了的單上（FB-151：換版之前就換了陣營的存檔、不經過 Game.choose 就改了陣營的入口）：不管過期、名額滿與否，
-    先說陣營的原因（那才是它先消失的原因），一樣拿掉名字、只說一次。"""
-    p, now = state.player, state.world.time
+    原因照「哪一個先發生」說，優先序：
+    1. 陣營（FB-151）：名字還留在自己陣營接不了的單上（換版之前就換了陣營的存檔、不經過 Game.choose 就改了陣營的入口），不管過期、名額滿與否，
+       那才是它先消失的原因；
+    2. 名額滿了（FB-121）：揭的人在榜上看到它少了一張，早於季收；
+    3. 自己的期限（沒寫「到季末」的單，到期在季末之前）：揭的人一直沒同步、季先收了，照樣說「過了期限」；
+    4. 這一季收了（FB-152、FB-153）：寫「到季末」的單、和季收了時還沒到期的，同一句，第 11 週與第 12 週掛的一樣。
+    季還在跑時，寫「到季末」的單不在這裡作廢（管理者把季末往後排也一樣，past_due）。一樣拿掉名字、只說一次。"""
+    p, w = state.player, state.world
     me = name_key(p.name)
     msgs: list[str] = []
-    for b in state.world.bounties:
+    for b in w.bounties:
         if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
             continue
         name = title(content, b)
@@ -714,10 +737,12 @@ def deliver_lapses(state: GameState, content: Content) -> list[str]:
             line = LAPSED_SIDE.format(faction=content.scenario.faction_name(p.faction, "別的陣營"), title=name)
         elif _left(b) <= 0:
             line = LAPSED_FULL.format(title=name)
-        elif b.expires <= now:
-            line = LAPSED_DUE.format(title=name)
-        else:
+        elif not past_due(b, content, w):
             continue
+        elif not to_season_end(b, content, w) and b.expires <= w.time:  # 自己的期限先到（不管季收了沒有）
+            line = LAPSED_DUE.format(title=name)
+        else:  # 寫「到季末」的、或季收了時還沒到期的：past_due 為真只剩季收了這一個原因
+            line = LAPSED_SEASON.format(title=name)
         b.takers = [t for t in b.takers if name_key(t) != me]
         msgs.append(line)
     return msgs
@@ -788,19 +813,18 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     if not active(state, content) or week != calendar.point(w.time, content, w).week or week <= w.bounty_week:
         return []
     w.bounty_week = week
-    now = w.time
     # 自己一份亂數（週次、流水號、此刻的戰況）：不動季的 rng，排在後面的大事擲骰不會因為多了懸賞榜而位移
     rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}")
     w.bounties = [
         b for b in w.bounties
-        if b.expires > now
+        if not past_due(b, content, w)
         or (b.kind == "wanted" and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回
         or b.takers  # 過期了還有人揭著：留到他們同步時聽到那一句（deliver_lapses）
     ]
     expires = calendar.week_start(week + cfg.auto_weeks, content, w)
     # 同一地點不重複掛（FB-121 第 2 件：同一處兩張一樣的單，一次遊歷或探索交兩張差）：避開榜上還有效的同種單已經用掉的地點。
     # 討伐只看同一個陣營（兩邊打的對頭不同，on_win 不會一次交兩張）；打探不分陣營；護送不分陣營、不重複終點。濾完沒地方可挑就跳過那一張
-    live = [b for b in w.bounties if b.expires > now and _left(b) > 0]
+    live = [b for b in w.bounties if not past_due(b, content, w) and _left(b) > 0]
     scouted = {b.location for b in live if b.kind == "scout"}
     ends = {b.end for b in live if b.kind == "escort"}
     for faction in ENEMY:
