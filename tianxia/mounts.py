@@ -27,7 +27,7 @@ WEAR_WORD = equipment.WEAR_WORDS["mount"]  # 「飽足度」：寫到它的地�
 HUNGRY_WARNING = "你的{name}餓得直打響鼻，餵牠一把料吧。"  # 待 joy 潤（5.4）
 NO_MOUNT = "身上沒有坐騎"  # 待 joy 潤：「餵」灰掉時的原因
 NOT_HUNGRY = "還不餓"  # 待 joy 潤
-FEED_ON_ROAD = "在路上，到了下一站再餵"  # 待 joy 潤
+FEED_ON_ROAD = "在路上，停下來再餵"  # 待 joy 潤
 FEED_SECLUDED = "閉關中"  # 待 joy 潤
 FED = "你拿{material}把【{name}】餵飽了。"  # 待 joy 潤；Game.feed_mount 照開頭 FED_PREFIX 寫修練紀錄
 FED_PREFIX = "你拿"
@@ -154,7 +154,7 @@ def pct(ratio: float) -> str:
 
 def coat_for(loc_id: str) -> str:
     """馬市那一匹的毛色（5.6）：照地點 id 的 sha256 挑，同一處永遠一樣、正式內容四處不一樣。取前 8 個位元組當整數：
-    只取第一個位元組的話涿郡、宛城會撞成同一色（Task 4 的測試鎖住）。"""
+    只取第一個位元組的話涿郡、宛城會撞成同一色（`test_four_markets_in_the_real_content_each_sell_their_own_coat` 鎖住）。"""
     digest = hashlib.sha256(loc_id.encode("utf-8")).digest()
     return COATS[int.from_bytes(digest[:8], "big") % len(COATS)]
 

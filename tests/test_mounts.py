@@ -822,14 +822,30 @@ def test_the_raid_button_says_how_likely_the_target_rides_away(riders):
     assert button()["confirm"] == plain
 
 
-def test_whether_he_rides_away_is_rolled_on_its_own_seed(riders):
-    """設計 5.10：random.Random(f"截殺脫身|{攻方}|{守方}|{世界秒}")；擲不中就照平常打（有戰報）。"""
+@pytest.mark.parametrize("fled", [True, False], ids=["roll_under_the_odds_rides_away", "roll_over_the_odds_is_fought"])
+def test_whether_he_rides_away_is_rolled_on_its_own_seed(riders, monkeypatch, fled):
+    """設計 5.10：random.Random(f"截殺脫身|{攻方}|{守方}|{世界秒}")；擲中跑掉（沒有戰報），擲不中就照平常打（雙方各一份戰報）。
+    真正的機率（駑馬 25%）離這顆種子擲出的數太遠，兩邊都會跑掉、抓不到「根本沒擲」；所以把機會釘在擲出的數的兩側各一點點，
+    一個測試兩種結果：差一點點跑得掉、差一點點跑不掉。"""
     content, world = riders
-    _ride(world, "乙", _horse())  # 25%
+    _ride(world, "乙", _horse())
     game = _loaded(content, world, "甲")
-    fled = random.Random(f"截殺脫身|甲|乙|{game.state.world.time}").random() < 0.25
-    game.peer_act("乙", "raid")
-    assert (game.state.battles == []) is fled
+    roll = random.Random(f"截殺脫身|甲|乙|{game.state.world.time}").random()
+    assert roll > 0.002  # 下面「差一點點」是 0.001：擲出的數要大過它，機會才是正的
+    odds = roll + 0.001 if fled else roll - 0.001
+    monkeypatch.setattr(Game, "raid_flee_odds", lambda self, other: odds)
+    msgs = game.peer_act("乙", "raid")
+    _saved(game)
+    a, b = CharacterStore(world.db).load("甲"), CharacterStore(world.db).load("乙")
+    flee_text = mounts.RAID_FLED.format(rival="乙", horse="棗騮馬")
+    if fled:
+        assert flee_text in msgs and a.battles == [] and b.battles == []
+        assert (a.journal[0].tag, b.journal[0].tag) == (mounts.RAID_FLED_TAG, mounts.RAID_ESCAPED_TAG)
+    else:
+        assert flee_text not in msgs and "體力 -10" in msgs
+        assert len(a.battles) == 1 == len(b.battles) and a.battles[0].kind == b.battles[0].kind == "raid"
+        assert {a.journal[0].tag, b.journal[0].tag}.isdisjoint({mounts.RAID_FLED_TAG, mounts.RAID_ESCAPED_TAG})
+        assert (a.journal[0].title, b.journal[0].title) == ("截殺・乙", "遭甲截殺")
 
 
 def _hopeless(game, horse):

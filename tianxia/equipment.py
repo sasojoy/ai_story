@@ -1,6 +1,6 @@
 """裝備四欄的共用部分（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第二、三節；裝備一）。
 
-身上每欄一件（PlayerState.weapon、armor；坐騎、寶物等裝備二、三），其餘放四欄共用的裝備庫（PlayerState.rack，
+身上每欄一件（PlayerState.weapon、armor、mount〔坐騎，裝備二〕；寶物是裝備三），其餘放四欄共用的裝備庫（PlayerState.rack，
 Config.weapons.rack_cap 格）。這裡只放不看欄位內容的部分：欄位表、各欄開著沒、裝備庫裡某一欄的、滿了沒、拿到新東西放哪、換上、
 拆解的共用流程與問句、階品寫法、鐵匠鋪的字。要看欄位內容的（加成、減損、架上、每一列的字）在各欄自己的模組（weapons、armor），
 它們反過來 import 這裡；這裡不 import weapons、armor，也不 import team、rules（team 會呼叫 weapons、armor，rules 會 import team）。
@@ -111,7 +111,7 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
     不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
-    開著的欄位裡找不到是 WIELD_MISSING（表外的坐騎、寶物也是找不到）。"""
+    開著的欄位裡找不到是 WIELD_MISSING（表外的寶物也是找不到）。"""
     p = state.player
     chosen = _find(p, item_id, slots)
     if chosen is None:
