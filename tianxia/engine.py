@@ -2654,8 +2654,9 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def wield_weapon(self, item_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中）、不花體力，換進那一件自己的欄位；
-        寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）也走它。"""
+        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中），坐騎路上不能換（equipment.wield 擋）、
+        不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）、
+        坐騎的 id（騎:N）也走它。"""
         msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
         if msgs and msgs[0].startswith("你換上了"):
             self._menxia_entry(msgs[0], self._xinde())

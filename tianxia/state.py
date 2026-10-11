@@ -58,6 +58,9 @@ class Journey(BaseModel):
     # 舊存檔沒有這兩欄＝從 location 出發的一般路程。
     origin: str | None = None  # 第一段那條路的另一頭；None＝從 location 出發
     share: float = 0.0  # 出發時 origin—path[0] 那條路已經走掉的幾成（第一段只走剩下的）
+    # 出發那一刻的步調（裝備四欄 5.3，mounts.pace）：步行、趕路的時間乘它；抵達時刻照它排好，路上的位置（atlas.road_spot）也照它反推，
+    # 路上餓了、換了馬都不回頭改。舊存檔沒有這一欄＝沒騎馬（1.0）。不加嚴格的驗證：一筆壞值不該讓整個角色讀不進來
+    pace: float = 1.0
 
     @property
     def last(self) -> int:
@@ -253,6 +256,9 @@ class PlayerState(BaseModel):
     smith_page: str = "weapon"  # 鐵匠鋪停在哪一頁（"weapon"／"armor"，裝備四欄 4.6）：開門時設成第一個開著的，收起鐵匠鋪時設回來（equipment.open_smith／close_smith）
     edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
     armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
+    mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
+    hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
+    picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id

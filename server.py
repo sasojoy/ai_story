@@ -1480,7 +1480,7 @@ MENXIA_ACTIONS = {
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
-    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具都走這裡，網頁照舊送 weapon 這個鍵
+    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
 }
 
