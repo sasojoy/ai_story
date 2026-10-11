@@ -176,3 +176,42 @@ def repair_material(state: GameState, content: Content) -> str | None:
     """修要用的一階素材（武器、防具一樣）：背包裡數量最多的那一種（同數照 id），沒有是 None。"""
     held = [(n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials and content.materials[mid].tier == 1]
     return max(held, key=lambda pair: (pair[0], pair[1]))[1] if held else None
+
+
+# ---- 鐵匠鋪的兩頁（裝備四欄設計 4.6）：兵器、防具；兩欄都開著時預設兵器頁，最後「離開」前一顆切到另一頁 ----
+
+SMITH_PAGES = ("weapon", "armor")  # 照這個順序：進門停在第一個開著的
+PAGE_LABELS = {"weapon": "轉去看兵器", "armor": "轉去看防具"}  # 待 joy 潤：切頁那一顆
+
+
+def smith_open(state: GameState, content: Content) -> bool:
+    """鐵匠鋪開不開門：武器或防具開著、人在城鎮。進門（act:smith）、收選單（存檔修補、同步）看這個；能不能買修打某一欄的東西
+    另看那一欄自己的 smith_here（weapons.smith_here、armor.smith_here）。"""
+    return any(on(content, slot) for slot in SMITH_PAGES) and in_town(state, content)
+
+
+def first_page(content: Content) -> str:
+    """走進鐵匠鋪停在哪一頁：第一個開著的（兩欄都開著是兵器頁）。"""
+    return next((slot for slot in SMITH_PAGES if on(content, slot)), SMITH_PAGES[0])
+
+
+def page(p: PlayerState, content: Content) -> str:
+    """鐵匠鋪現在停在哪一頁：存著的那一頁還開著就是它，不然退回 first_page（開關中途關了、舊存檔）。"""
+    return p.smith_page if p.smith_page in SMITH_PAGES and on(content, p.smith_page) else first_page(content)
+
+
+def other_page(p: PlayerState, content: Content) -> str | None:
+    """切頁那一顆要切到哪一頁：另一頁也開著才有（只開一欄時不畫切頁鈕）。"""
+    here = page(p, content)
+    return next((slot for slot in SMITH_PAGES if slot != here and on(content, slot)), None)
+
+
+def open_smith(p: PlayerState, content: Content) -> None:
+    """走進鐵匠鋪（act:smith）：打開選單、打造的單子從頭開始（兵器第二批 Review Focus 4）、停在第一個開著的那一頁。"""
+    p.picking_smith, p.smith_draft, p.smith_page = True, None, first_page(content)
+
+
+def close_smith(p: PlayerState) -> None:
+    """收起鐵匠鋪：選單、打造的單子、停在哪一頁一起清。凡是把 picking_smith 設成 False 的地方都走這裡（離開、存檔修補、
+    同步時人不在城鎮、出發），存檔裡不留舊的單子或舊的頁（裝備四欄設計 3.2）。"""
+    p.picking_smith, p.smith_draft, p.smith_page = False, None, SMITH_PAGES[0]

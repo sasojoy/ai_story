@@ -412,3 +412,148 @@ def test_challenging_a_great_figure_wears_the_armor_like_training(world):
     with mock.patch.object(team, "fight", return_value=fight):
         game.choose("act:challenge:bocai")
     assert game.state.battles[0].kind == "event" and p.armor.edge == 98  # 挑戰本人的戰報是 event，但防具照磨（險勝扣 2）
+
+
+# ── Task 4：鐵匠鋪分兵器、防具兩頁 ──
+
+def test_with_both_on_the_smith_opens_on_the_weapon_page_and_switches(content, world):
+    from tianxia import smithing
+    game = _town(content, world, weapons_on=True)
+    p = game.state.player
+    game.choose("act:smith")
+    ids = list(_ids(game))
+    assert "smith:buy:劍" in ids and ids[-2:] == ["smith:page:armor", "smith:back"]  # 切頁排在「離開」前面
+    assert not any(i.startswith(armor.BUY) for i in ids) and p.smith_page == "weapon"
+    entries = len(game.state.journal)
+    assert game.choose("smith:page:armor") == [] and p.smith_page == "armor"
+    assert len(game.state.journal) == entries  # 切頁不寫紀錄
+    ids = list(_ids(game))
+    assert ids[:4] == [f"{armor.BUY}{a}" for a in armor.SHOP_ATTRIBUTES] and ids[-2:] == ["smith:page:weapon", "smith:back"]
+    assert not any(i.startswith("smith:buy:") for i in ids) and smithing.OPEN not in ids  # 打造兵器…只在兵器頁
+    game.choose("smith:page:weapon")
+    assert p.smith_page == "weapon" and "smith:buy:劍" in _ids(game)
+
+
+def test_with_only_armor_on_the_smith_opens_on_the_armor_page_and_closes_away_from_town(content, world):
+    game = _town(content, world)  # 武器關、防具開（測試內容的武器本來就關著）
+    p = game.state.player
+    assert "act:smith" in _ids(game)
+    game.choose("act:smith")
+    ids = list(_ids(game))
+    assert p.smith_page == "armor" and ids[-1] == "smith:back"
+    assert not any(i.startswith(("smith:buy:", "smith:page:", "smith:forge")) for i in ids)  # 沒有灰掉的兵器鈕、沒有切頁
+    p.location = "lake"
+    game.sync(1.0)
+    assert not p.picking_smith and "act:smith" not in _ids(game)
+
+
+def test_with_only_weapons_on_the_menu_has_no_page_button(content, world):
+    game = _town(content, world, weapons_on=True)
+    content.config.armor.enabled = False
+    game.choose("act:smith")
+    ids = list(_ids(game))
+    assert ids[-1] == "smith:back" and not any(i.startswith("smith:page:") for i in ids)
+    assert game.state.player.smith_page == "weapon"
+
+
+def test_armor_page_buys_repairs_wields_and_dismantles(content, world):
+    game = _town(content, world, inner="basic_breath")  # 粗淺吐納：屬柔
+    p = game.state.player
+    game.choose("act:smith")
+    opts = _ids(game)
+    assert "少扣 9% 氣血・跟你的內功同屬性・40 兩" in opts[f"{armor.BUY}柔"].label
+    assert "跟你的內功相剋" in opts[f"{armor.BUY}剛"].label
+    game.choose(f"{armor.BUY}柔")
+    game.choose(f"{armor.BUY}快")
+    assert p.armor.name == "軟皮甲" and [a.name for a in p.rack] == ["輕綃衫"]
+    p.armor.edge, p.materials = 40, {"gang_1": 1}
+    opts = _ids(game)
+    spare = p.rack[0].id
+    assert opts[armor.REPAIR].label == "修【軟皮甲】（耐久度 40・精鐵砂×1＋5 兩）"
+    assert opts[f"smith:dismantle:{spare}"].confirm.startswith("把【輕綃衫】（一階下品）拆成")
+    assert opts[f"smith:dismantle:{spare}"].confirm_yes == "拆掉"  # FB-125：防具頁的拆解也先問一次
+    ids = list(opts)
+    assert ids.index(armor.REPAIR) < ids.index(f"smith:wield:{spare}") < ids.index(f"smith:dismantle:{spare}") < ids.index("smith:back")
+    game.choose(armor.REPAIR)
+    assert p.armor.edge == 100 and p.stats["silver"] == 200 - 40 - 40 - 5
+    game.choose(f"smith:wield:{spare}")
+    assert p.armor.name == "輕綃衫" and [a.name for a in p.rack] == ["軟皮甲"]
+    game.choose(f"smith:dismantle:{p.rack[0].id}")
+    assert p.rack == [] and sum(p.materials.values()) == 1 and p.picking_smith  # 做完選單還開著
+
+
+@pytest.mark.parametrize("exit_by", ["back", "walk_away", "depart", "reconcile"])
+def test_every_way_out_of_the_smith_resets_the_page(content, world, exit_by):
+    game = _town(content, world, weapons_on=True)
+    p = game.state.player
+    game.choose("act:smith")
+    game.choose("smith:page:armor")
+    if exit_by == "back":
+        game.choose("smith:back")
+    elif exit_by == "walk_away":
+        p.location = "lake"
+        game.sync(1.0)
+    elif exit_by == "depart":
+        game.travel_refusal = lambda *a, **k: None  # 繞過「鐵匠鋪還開著」的檢查，直接測 _depart 的防線（同 test_weapons）
+        game.travel("lake", "dash")
+    else:
+        content.config.weapons.enabled = content.config.armor.enabled = False
+        game._drop_stale_references()
+    assert not p.picking_smith and p.smith_page == "weapon" and p.smith_draft is None
+
+
+def test_a_button_from_the_other_page_does_nothing(content, world):
+    """兩個分頁一個停在兵器頁、一個停在防具頁：另一頁的鈕不在選單上，按了什麼都不動（choose 只認選單上真的有的）。"""
+    game = _town(content, world, weapons_on=True)
+    p = game.state.player
+    game.choose("act:smith")
+    assert game.choose(f"{armor.BUY}柔") == ["（此刻無法這麼做。）"] and p.armor is None and p.stats["silver"] == 200
+    game.choose("smith:page:armor")
+    assert game.choose("smith:buy:劍") == ["（此刻無法這麼做。）"] and p.weapon is None and p.stats["silver"] == 200
+    assert game.choose("smith:page:armor") == ["（此刻無法這麼做。）"]  # 已經在防具頁：切到同一頁的鈕不在選單上
+
+
+def test_a_forging_draft_is_dropped_when_weapons_close_and_the_armor_page_stays(content, world):
+    """打造單子挑到一半時武器被關（內容改版、管理者改設定）、防具還開著：鐵匠鋪照開（只剩防具頁），單子要清掉——
+    _smith_options 先看單子、後看停在哪一頁，不清的話畫出來的還是灰掉的兵器單子、沒有切頁鈕，只能按「不打了」。"""
+    from tianxia.state import SmithDraft
+    game = _town(content, world, weapons_on=True)
+    p = game.state.player
+    game.choose("act:smith")
+    p.smith_draft = SmithDraft(kind="劍")  # 單子挑到一半
+    content.config.weapons.enabled = False
+    game.sync(1.0)
+    assert p.picking_smith and p.smith_draft is None
+    ids = list(_ids(game))
+    assert ids[:4] == [f"{armor.BUY}{a}" for a in armor.SHOP_ATTRIBUTES] and ids[-1] == "smith:back"
+    assert not any(i.startswith(("smith:forge", "smith:page:")) for i in ids)
+    p.smith_draft = SmithDraft(kind="劍")
+    game._drop_stale_references()  # 存檔修補也清
+    assert p.picking_smith and p.smith_draft is None
+
+
+def test_the_armor_page_only_sees_armor_in_a_rack_with_all_four_slots(content, world):
+    """裝備四欄 3.3（Review Focus 3 的防具那一側）：裝備庫裡混了武器、坐騎、寶物，防具那幾個函式與鐵匠鋪防具頁只看到防具；
+    坐騎、寶物（之後的批次）與武器不列、不能換、不能拆，格數照算。"""
+    game = _town(content, world)  # 只開防具；靜心訣（虛）
+    s, p = game.state, game.state.player
+    ng = _neigong(game, content, world)
+    p.rack = [
+        _blade(),
+        Equipment(id="騎:4", slot="mount", name="棗騮馬", tier=3, quality="上品"),
+        Equipment(id="寶:5", slot="treasure", name="烏木名刺", tier=3, quality="上品"),
+        _jacket(aid="甲:2", attribute="柔"),
+    ]
+    assert [r["id"] for r in armor.rows(s, content, ng)["rack"]] == ["甲:2"]
+    for item_id in ("兵:3", "騎:4", "寶:5"):
+        assert armor.wield(s, content, item_id) == [equipment.WIELD_MISSING]
+        assert armor.dismantle(s, content, item_id) == [equipment.DISMANTLE_MISSING]
+    assert armor.wanted(s, content, ng) == "smith:wield:甲:2"  # 柔不剋虛：6%，比身上空著好；坐騎、寶物不在候選裡
+    game.choose("act:smith")
+    picked = [i for i in _ids(game) if i.startswith(("smith:wield:", "smith:dismantle:"))]
+    assert picked == ["smith:wield:甲:2", "smith:dismantle:甲:2"]
+    assert game.choose("smith:wield:騎:4") == ["（此刻無法這麼做。）"]  # 不在選單上
+    assert p.armor is None and len(p.rack) == 4 and p.materials == {}
+    content.config.weapons.rack_cap = 4
+    p.armor = _jacket(aid="甲:9")
+    assert armor.rack_full(s, content)  # 格數四欄合算
