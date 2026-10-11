@@ -8,12 +8,21 @@ import pytest
 from conftest import install_season_one, real_content
 from tianxia import ranger, roster, rules, social
 from tianxia.engine import Game
-from tianxia.models import Condition, Effect
+from tianxia.models import Condition, Effect, FactionDef
+
+
+def _factions(content):
+    """名號要劇本有陣營才有（懸賞榜設計 2.2 第 2 點）：測試內容沒有陣營，照 test_raid 的 pair 補兩個。"""
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+    ]
 
 
 @pytest.fixture
 def game(content, world):
     install_season_one(content)
+    _factions(content)
     content.config.auto_open_first_season = True
     g = Game.new(content, "甲", rng=random.Random(0), world=world)
     g.client = None
@@ -65,13 +74,27 @@ def test_joining_a_faction_freezes_it(game):
     assert ranger.tier(s, c) == 2
 
 
-def test_nothing_while_the_switch_is_off(content, world):
+def test_nothing_without_factions(content, world):
+    """劇本沒有陣營（測試內容）就沒有「散人」可言：什麼都不記。"""
     content.config.auto_open_first_season = True
     g = Game.new(content, "乙", rng=random.Random(0), world=world)
     g.sync(1000.0)
     rules.apply_effect(Effect(stats={"good": 30}), g.state, g.content, g.world)
     assert g.state.player.ranger_good == 0 and ranger.title(g.content, g.state) is None
     assert g.status_data()["affiliation"] == "散人"
+
+
+def test_the_name_counts_with_the_season_one_switch_off(content, world):
+    """第一季規則關著的季、劇本有陣營：照記、照給好處（懸賞榜設計 2.2 第 2 點，企劃者 2026-10-10「整個懸賞榜每季都有」）。"""
+    _factions(content)
+    content.config.auto_open_first_season = True
+    g = Game.new(content, "乙", rng=random.Random(0), world=world)
+    g.sync(1000.0)
+    assert not g.world.get_season().season_one
+    rules.apply_effect(Effect(stats={"good": 15}), g.state, g.content, g.world)
+    assert g.state.player.ranger_good == 15 and ranger.tier(g.state, content) == 2
+    assert g.status_data()["affiliation"] == "散人・一方豪俠"
+    assert ranger.audience_discount(g.state, content) == 2 * content.config.ranger.audience_per_tier
 
 
 def test_audience_and_recruit_perks(game):

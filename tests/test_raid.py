@@ -19,9 +19,7 @@ from tianxia.state import BotProfile
 NOW = 1000.0
 
 
-@pytest.fixture
-def pair(content, world):
-    install_season_one(content)
+def _seat(content, world):
     content.config.auto_open_first_season = True
     content.config.newbie_days = -1  # 測試不等新手期過去；新手期另外測
     content.scenario.factions = [
@@ -39,6 +37,19 @@ def pair(content, world):
         game.sync(NOW)
         CharacterStore(world.db).save(game.state)
     return content, world
+
+
+@pytest.fixture
+def pair(content, world):
+    """第一季（install_season_one）：官軍的甲、黃巾的乙，都在湖畔。"""
+    install_season_one(content)
+    return _seat(content, world)
+
+
+@pytest.fixture
+def beta_pair(content, world):
+    """第一季規則關著的季（不叫 install_season_one，season_one 維持 False）：截殺每季都有（懸賞榜設計 2.2 第 3 點）。其餘同 pair。"""
+    return _seat(content, world)
 
 
 def _do(content, world, name, act, rng=None):
@@ -82,11 +93,27 @@ def test_the_button_shows_only_between_enemy_factions(pair):
         assert _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0] == ["（此刻無法這麼做。）"]
 
 
-def test_the_switch_off_has_no_raids(pair):
+def test_raids_happen_with_the_season_one_switch_off_without_contribution(beta_pair, monkeypatch):
+    """截殺每季都有（企劃者 2026-10-10）；第一季規則關著的季沒有晉升，打贏不記貢獻，戰報與紀錄都不寫「貢獻」（懸賞榜設計 6.1）。"""
+    content, world = beta_pair
+    assert not world.get_season().season_one
+    [button] = _raid_buttons(content, world, "甲", "乙")
+    assert button["enabled"]
+    assert [name for name, _ in _do(content, world, "甲", lambda g: g.raid_targets())[0]] == ["乙"]  # 假人也看得到（真人假人一樣）
+    msgs, _ = _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    me, them = _load(world, "甲"), _load(world, "乙")
+    assert me.player.contrib == 0 and not any("貢獻" in m for m in msgs)
+    assert not any("貢獻" in line for line in me.battles[0].changes)
+    assert them.player.stats["silver"] < 200 and me.player.stats["silver"] > 200  # 輸贏照舊
+
+
+def test_the_raid_switch_off_has_no_raids(pair):
+    """Config.raid.enabled（主機的緊急開關，懸賞榜設計 2.2 第 3 點）關著：沒有截殺鈕、按了也打不了、假人沒有對象。"""
     content, world = pair
-    content.config.season_one = False
-    world.mutate_season(lambda season: setattr(season, "season_one", False))
+    content.config.raid.enabled = False
     assert _raid_buttons(content, world, "甲", "乙") == []
+    assert _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0] == ["（此刻無法這麼做。）"]
+    assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == []
 
 
 def test_not_in_a_town_and_not_on_newcomers(pair):

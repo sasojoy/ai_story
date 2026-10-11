@@ -19,17 +19,12 @@ NOW = 1000.0
 WEEK = 10_000_000.0  # 測試裡的懸賞一律掛到很久以後
 
 
-@pytest.fixture
-def setup(content, world):
-    install_season_one(content)
+def _seat(content, world, people):
+    """開角色：都在城鎮（town）、會基礎拳腳、體力 100、銀兩 200，照伺服器的做法同步一次存進資料庫。"""
     content.config.auto_open_first_season = True
     content.config.newbie_days = -1  # 截殺不等新手期
-    content.scenario.factions = [
-        FactionDef(id="guan", name="官軍", join_at=["town"]),
-        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
-    ]
     content.squads["thug"].faction = "huang"  # 湖邊的對手算黃巾：官軍的討伐打它
-    for name, faction in (("甲", "guan"), ("乙", "huang"), ("丙", None)):
+    for name, faction in people:
         game = Game.new(content, name, rng=random.Random(0), world=world)
         game.client = None
         rules.learn_skill(game.state, content, "fist")
@@ -40,6 +35,29 @@ def setup(content, world):
         game.sync(NOW)
         CharacterStore(world.db).save(game.state)
     return content, world
+
+
+@pytest.fixture
+def setup(content, world):
+    """第一季（install_season_one）：官軍的甲、黃巾的乙、散人丙。"""
+    install_season_one(content)
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+    ]
+    return _seat(content, world, (("甲", "guan"), ("乙", "huang"), ("丙", None)))
+
+
+@pytest.fixture
+def beta_setup(content, world):
+    """第一季規則關著的季（不叫 install_season_one，season_one 維持 False、季長照測試內容）：三個陣營（加地方豪強的丁），其餘同 setup
+    （懸賞榜設計 10.1）。懸賞榜、名號、截殺、通緝每季都有。"""
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+        FactionDef(id="haoqiang", name="地方豪強", join_at=["cave"]),
+    ]
+    return _seat(content, world, (("甲", "guan"), ("乙", "huang"), ("丙", None), ("丁", "haoqiang")))
 
 
 def _do(content, world, name, act):
@@ -99,17 +117,37 @@ def test_the_board_is_in_town_and_takes_a_bounty(setup):
     assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"][0]["id"] == b.id
 
 
-def test_no_board_outside_town_or_with_the_switch_off(setup):
+def test_no_board_outside_town(setup):
     content_, world_ = setup
+    _post(world_, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
     state = _load(world_, "丙")
     state.player.location = "lake"
     CharacterStore(world_.db).save(state)
     assert "act:bounties" not in _ids(content_, world_, "丙")
-    content_.config.season_one = False
-    world_.mutate_season(lambda s: setattr(s, "season_one", False))
-    state.player.location = "town"
-    CharacterStore(world_.db).save(state)
-    assert "act:bounties" not in _ids(content_, world_, "丙")
+
+
+def test_the_board_stays_with_the_season_one_switch_off(beta_setup):
+    """懸賞榜每季都有（企劃者 2026-10-10）：第一季規則關著的季照樣有榜、揭得下，散人交差照記俠名。"""
+    content, world = beta_setup
+    assert not content.config.season_one and not world.get_season().season_one
+    b = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    assert "act:bounties" in _ids(content, world, "丙")
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    assert "俠名 +2" in _ids(content, world, "丙")[f"bounty:take:{b.id}"].label
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))
+    assert msgs[0].startswith("【懸賞】") and game.state.player.ranger_deeds == 2
+
+
+def test_no_board_when_switched_off_or_without_factions(setup):
+    content, world = setup
+    _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    assert "act:bounties" in _ids(content, world, "丙")
+    content.config.bounties.enabled = False
+    assert "act:bounties" not in _ids(content, world, "丙")
+    content.config.bounties.enabled = True
+    content.scenario.factions = []  # 劇本沒有陣營：沒有人掛單
+    assert "act:bounties" not in _ids(content, world, "丙")
 
 
 def test_scouting_pays_silver_exp_and_deeds_to_a_loner(setup):
@@ -245,6 +283,58 @@ def test_a_wanted_closed_by_a_raid_is_saved_to_the_season(setup, monkeypatch):
     _, poster = _do(content, world, "甲", lambda g: None)
     assert poster.state.player.stats["silver"] == 150  # 有人交了差：押金不退
     assert not next(x for x in world.get_season().bounties if x.id == b.id).refunded
+
+
+def test_a_wanted_runs_end_to_end_with_the_season_one_switch_off(beta_setup, monkeypatch):
+    """通緝與截殺每季都有：押錢 → 揭下 → 卡上有截殺 → 打贏交差；散人記俠名、誰都不記貢獻（懸賞榜設計 10.2）。"""
+    content, world = beta_setup
+    for name in ("甲", "乙", "丙"):
+        state = _load(world, name)
+        state.player.location = "lake"  # 湖畔不是城鎮類，截殺打得了
+        CharacterStore(world.db).save(state)
+    msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))
+    assert msgs[0].startswith("你押了 50 兩")
+    b = world.get_season().bounties[-1]
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    assert any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1.0 if who.state.player.name == "乙" else 1000.0))
+    msgs, game = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
+    p = game.state.player
+    assert any(m.startswith("【懸賞】") for m in msgs) and p.bounties_done == 1
+    assert p.ranger_deeds == content.config.bounties.deeds["wanted"] and p.contrib == 0
+    world.mutate_season(lambda s: s.raided.clear())  # 乙剛被截殺過的保護時間：清掉，換甲截殺他
+    msgs, game = _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))
+    assert game.state.player.contrib == 0 and not any("貢獻" in m for m in msgs)  # 敵對陣營互截：規則關著的季不記貢獻
+
+
+def test_with_raids_switched_off_a_wanted_is_not_an_undeliverable_bounty(setup):
+    """Config.raid.enabled 關著時通緝一起收（懸賞榜設計 2.2 第 3 點）：卡上沒有通緝鈕、押不了；已經押的不在榜上、揭了的人手上不算它
+    （不佔 max_taken）、假人不會為它打開榜；開關打開之後還沒到期的照常出現；過了期限押金照退。"""
+    content, world = setup
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.location = "lake"
+        CharacterStore(world.db).save(state)
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))
+    b = world.get_season().bounties[-1]
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    content.config.raid.enabled = False
+    card = _do(content, world, "乙", lambda g: g.peer_card("甲"))[0]
+    assert not any(x["action"] in ("wanted", "raid") for x in card["actions"])  # 押不了、也截殺不了
+    assert _do(content, world, "乙", lambda g: g.peer_act("甲", "wanted", {"amount": 50}))[0] == ["（此刻無法這麼做。）"]
+    _, game = _do(content, world, "丙", lambda g: g)
+    assert bounties.open_bounties(game.state, content) == [] and bounties.mine(game.state, content) == []
+    assert not bounties.hunting(game.state, content, "乙") and not bot_policy._takeable(game)
+    content.config.bounties.max_taken = 1
+    scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    assert _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, scout.id))[0][0].startswith("你揭下了")  # 不佔格
+    content.config.raid.enabled = True
+    _, game = _do(content, world, "丙", lambda g: g)
+    assert b.id in {x.id for x in bounties.mine(game.state, content)}  # 開關打開：還沒到期的照常出現，揭的人手上照舊
+    content.config.raid.enabled = False
+    world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == b.id), "expires", 0.0))
+    _, poster = _do(content, world, "甲", lambda g: None)
+    assert poster.state.player.stats["silver"] == 200  # 過了期限押金照退
 
 
 def test_an_unclaimed_wanted_refunds_the_poster(setup):

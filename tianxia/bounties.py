@@ -7,14 +7,15 @@
 - 散人兩邊的都能接，陣營的人只能接自己陣營的（can_take）；接了才算，一個人同時最多接 max_taken 張。
   前 quota 個完成的人各拿一份：銀兩（遊俠名號到第 4 階的散人另有加成）與經驗，散人另記俠名（ranger.add_deeds）。
 
-全部掛在第一季開關後面（rules.season_one）；開關關著時每個函式都什麼都不做、回空的。
+每季都有（企劃者 2026-10-10「整個懸賞榜每季都有」，懸賞榜設計 2.2）：只看 Config.bounties.enabled 與劇本有沒有陣營（active），
+不看第一季開關；關著時每個函式都什麼都不做、回空的。
 只改 GameState（玩家與共用的季）；不 import engine、world（world 會 import 這裡，掛 WEEK_HOOKS）。"""
 from __future__ import annotations
 
 import math
 import random
 
-from . import calendar, ranger, rules, team
+from . import calendar, ranger, team
 from .characters import name_key
 from .models import Content
 from .state import Bounty, GameState
@@ -26,7 +27,8 @@ BOARD = "懸賞榜"
 
 
 def active(state: GameState, content: Content) -> bool:
-    return rules.season_one(content, state.world)
+    """懸賞榜開著：設定開著（Config.bounties.enabled）、劇本有陣營（沒有陣營就沒有人掛單）。不看第一季開關（懸賞榜設計 2.2）。"""
+    return content.config.bounties.enabled and bool(content.scenario.factions)
 
 
 def is_town(content: Content, loc_id: str) -> bool:
@@ -35,7 +37,7 @@ def is_town(content: Content, loc_id: str) -> bool:
 
 
 def board_here(state: GameState, content: Content) -> bool:
-    """這裡看得到懸賞榜：第一季開著、人在城鎮類的地點。"""
+    """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點。"""
     return active(state, content) and is_town(content, state.player.location)
 
 
@@ -88,11 +90,12 @@ def _left(b: Bounty) -> int:
 
 
 def open_bounties(state: GameState, content: Content) -> list[Bounty]:
-    """榜上還有效的（沒過期、還有名額）。"""
+    """榜上還有效的（沒過期、還有名額）。截殺關著（Config.raid.enabled）時通緝不算：只能靠截殺交差，揭了也交不了
+    （mine、take、hunting、status、整季機器人與假人都經過這裡，自然看不到、揭不了、不佔格）；押金照期限退（deliver_refunds 直接掃榜）。"""
     if not active(state, content):
         return []
-    now = state.world.time
-    return [b for b in state.world.bounties if b.expires > now and _left(b) > 0]
+    now, raids = state.world.time, content.config.raid.enabled
+    return [b for b in state.world.bounties if b.expires > now and _left(b) > 0 and (raids or b.kind != "wanted")]
 
 
 def can_take(state: GameState, b: Bounty) -> bool:
@@ -233,8 +236,8 @@ def hunting(state: GameState, content: Content, target: str) -> bool:
 
 
 def post_problem(state: GameState, content: Content, target_state: GameState, amount: int | None = None) -> str | None:
-    """通緝這個人按不按得下去：第一季、你投靠了陣營、他是敵對陣營的人、你手上沒有還掛著的通緝、錢夠。"""
-    if not active(state, content):
+    """通緝這個人按不按得下去：懸賞榜與截殺都開著、你投靠了陣營、他是敵對陣營的人、你手上沒有還掛著的通緝、錢夠。"""
+    if not active(state, content) or not content.config.raid.enabled:
         return "（此刻無法這麼做。）"
     p, t = state.player, target_state.player
     if p.faction is None or t.faction is None or p.faction == t.faction:

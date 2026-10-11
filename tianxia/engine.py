@@ -505,7 +505,7 @@ class Game:
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.picking_bounty and not bounties.board_here(s, c):
-            p.picking_bounty = False  # 開關關了、人不在城鎮了：收起懸賞榜
+            p.picking_bounty = False  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜
         if p.picking_smith and not weapons.smith_here(s, c):
             p.picking_smith, p.smith_draft = False, None  # 開關關了、人不在城鎮了：收起鐵匠鋪，打造的單子一起清
         if p.smith_draft is not None and (not p.picking_smith or smithing.draft_stale(c, p.smith_draft)):
@@ -5350,13 +5350,15 @@ class Game:
         return msgs
 
     # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
-    # 只有兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人不能截殺，也不會被截殺。對方下線、在忙也照打：
+    # 每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。
+    # 兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：第一季開著、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。"""
+        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。
+        每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；raid_targets 與 raid_refusal 都先問這裡。"""
         mine, theirs = self.state.player.faction, other.state.player.faction
-        if not season_one(self.content, self.state.world):
+        if not self.content.config.raid.enabled:
             return False
         if mine is not None and theirs is not None and mine != theirs:
             return True
@@ -5399,11 +5401,8 @@ class Game:
         return team.odds_word(self._spar_power(self, other), squad)
 
     def raid_targets(self) -> list[tuple[str, str]]:
-        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。不是第一季時是空的；
+        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。截殺關著時是空的（raid_shown 擋）；
         散人只有揭了通緝的那個人。"""
-        s = self.state
-        if not season_one(self.content, s.world):
-            return []
         out = []
         for state in social.here(self):
             other = self._kin(state)
@@ -5468,7 +5467,8 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss, agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
-        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None else 0  # 散人（揭了通緝）不記貢獻
+        # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
+        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
@@ -6899,8 +6899,8 @@ class Game:
         data = {
             "name": p.name,
             "affiliation": social.affiliation(s, c),
-            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
-            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；開關關著是空的
+            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營是 None
+            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；懸賞榜關著是空的
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "anonymous": p.anonymous,
