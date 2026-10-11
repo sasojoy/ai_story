@@ -116,6 +116,36 @@ def shop_name(kind: str, attribute: str) -> str:
     return f"{ATTR_WORDS[attribute]}{NOUNS[kind]}"
 
 
+# 名字看得出是哪一種兵器的字（附帶決定 c）：自己這一種至少要有一個、別種的一個都不能有
+WEAPON_WORDS: dict[str, tuple[str, ...]] = {
+    "劍": ("劍",), "刀": ("刀",), "槍": ("槍", "矛"), "棍": ("棍", "杖", "錘"), "弓弩": ("弩", "弓"), "拳腳": ("拳套", "護手", "拳"),
+}
+KIND_MISSING = "名字看不出是什麼兵器"  # 待 joy 潤
+KIND_CLASH = "名字像是另一種兵器"  # 待 joy 潤
+SHOP_CLASH = "跟鐵匠鋪架上的兵器同名"  # 待 joy 潤
+
+
+def kind_problem(kind: str, name: str) -> str | None:
+    """兵器配方的名字對不對得上種類（附帶決定 c；naming.NamingRequest.check 跑它）：要有這一種的字、不能有別種的字、
+    不能跟架上的現成兵器（shop_name）同名——不然買的跟打的分不出來。None＝可以。"""
+    if not any(word in name for word in WEAPON_WORDS.get(kind, ())):
+        return KIND_MISSING
+    if any(word in name for other, words in WEAPON_WORDS.items() if other != kind for word in words):
+        return KIND_CLASH
+    if name in {shop_name(k, a) for k in WEAPON_KINDS for a in ATTR_WORDS}:
+        return SHOP_CLASH
+    return None
+
+
+def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: int = 0) -> str:
+    """兵器配方的退路名字（模型叫不動、取壞了）：字首＋craft_names.weapon 的一個字＋兵器字（NOUNS），一定帶兵器的字。
+    種子同 naming.fallback_name（配方鍵＋這一季的天機，加鹽），同一個配方同一季永遠組出同一個名字。"""
+    names = content.craft_names
+    seed = key if tianji == 0 else f"{tianji}|{key}"
+    digest = hashlib.sha256(f"{seed}#{salt}".encode()).digest()
+    return names.prefixes[digest[0] % len(names.prefixes)] + names.weapon[digest[1] % len(names.weapon)] + NOUNS[kind]
+
+
 def smith_here(state: GameState, content: Content) -> bool:
     """這裡有沒有鐵匠鋪（4.1）：開關開著、人不在路上、所在地點有「城鎮」標籤。"""
     if not content.config.weapons.enabled or state.player.journey is not None:
@@ -143,9 +173,41 @@ def stock(state: GameState, content: Content) -> list[Weapon]:
     ]
 
 
-def new_weapon(state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str) -> Weapon:
+FORGE_PREFIX = "兵|"  # 兵器配方鍵的開頭（兵器設計 4.4）：前綴就是欄位（裝備四欄設計 4.7），之後防具打造用同一張 gear_recipes 表、前綴「鎧|」
+
+
+def recipe_key(kind: str, main: str, aux: str) -> str:
+    """兵器配方鍵（4.4）：「兵|種類|主料+輔料」。前綴「兵|」就是武器那一欄（之後防具是「鎧|主料+輔料」，共用 gear_recipes）。
+    主輔不交換：同兩種素材對調是另一個配方。"""
+    return f"{FORGE_PREFIX}{kind}|{main}+{aux}"
+
+
+def recipe_parts(key: str | None) -> tuple[str, str, str] | None:
+    """recipe_key 拆回（種類, 主料, 輔料）；不是武器欄的配方鍵（別的前綴，例如之後防具的「鎧|」，或 None）回 None。"""
+    if not key or not key.startswith(FORGE_PREFIX):
+        return None
+    kind, _, pair = key[len(FORGE_PREFIX):].partition("|")
+    main, plus, aux = pair.partition("+")
+    return (kind, main, aux) if kind and plus and main and aux else None
+
+
+def recipe_text(content: Content, key: str | None) -> str | None:
+    """配方寫給玩家看（修練頁的裝備庫）：「精鐵砂＋驚羽」（主料在前）；不是自己打的（買的、掉落的）是 None。"""
+    parts = recipe_parts(key)
+    if parts is None:
+        return None
+    _, main, aux = parts
+    name = lambda mid: content.materials[mid].name if mid in content.materials else mid  # noqa: E731
+    return f"{name(main)}＋{name(aux)}"
+
+
+def new_weapon(
+    state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
+) -> Weapon:
+    """新的一把（流水號 +1）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
     state.player.weapon_serial += 1
-    return Weapon(id=f"兵:{state.player.weapon_serial}", name=name, kind=kind, attribute=attribute, tier=tier, quality=quality)
+    return Weapon(id=f"兵:{state.player.weapon_serial}", name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
+                  recipe=recipe)
 
 
 def rack_full(state: GameState, content: Content) -> bool:
@@ -274,7 +336,7 @@ def dismantle_order(weapon: Weapon) -> tuple[int, int, str]:
 
 
 def dismantle(state: GameState, content: Content, weapon_id: str) -> list[str]:
-    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪，也不問第二次。
+    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪。網頁先問一次（FB-125：修練頁照 `rows` 的 confirm、鐵匠鋪照 `Option.confirm`），引擎收到就拆。
     手上那把不能拆（先換下來）；開關關著或裝備庫沒這一把，什麼都不動。"""
     if not content.config.weapons.enabled:
         return ["（此刻無法這麼做。）"]
@@ -316,8 +378,28 @@ def _pct(ratio: float) -> str:
     return f"{ratio:+.1%}".replace(".0%", "%")
 
 
+DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
+DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
+
+
+def grade(w: Weapon) -> str:
+    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫，第二批有中品、上品之後才分得出來）。"""
+    return f"{TIER_WORDS.get(w.tier, '')}{w.quality}"
+
+
+def grade_line(w: Weapon) -> str:
+    """鐵匠鋪「換上」「拆解」鈕上用來分辨同一個配方好幾把的那一段：「一階中品」，淬過的再接「・淬煉 2」（終審 F2）。"""
+    return grade(w) + (f"・淬煉 {w.tempers}" if w.tempers else "")  # 待 joy 潤
+
+
 def _describe(w: Weapon) -> str:
-    return f"【{w.name}】{w.kind}・屬{w.attribute}・{TIER_WORDS.get(w.tier, '')}{w.quality}・鋒利度 {w.edge}"
+    tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""  # 待 joy 潤
+    return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
+
+
+def dismantle_confirm(content: Content, w: Weapon) -> str:
+    """拆解之前問的那一句（FB-125，企劃者 2026-10-10 第二批附帶決定 a）：修練頁與鐵匠鋪同一句，寫明拆出什麼。"""
+    return DISMANTLE_ASK.format(name=w.name, grade=grade(w), material=dismantle_material(content, w).name)
 
 
 def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
@@ -342,11 +424,15 @@ def card_line(state: GameState, content: Content, world: WorldStateStore, art: M
     return f"兵器　{_describe(w)}，威力 {_pct(bonus(w, art, content, world))}"
 
 
-def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> dict:
+def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore, worn: bool = False) -> dict:
     fits = usable(w, art, content, world)
     return {
         "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
         "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
+        "grade": grade(w),
+        "confirm": "" if worn else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）
+        "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
+        "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
     }
 
 
@@ -356,7 +442,7 @@ def rows(state: GameState, content: Content, world: WorldStateStore, art: Martia
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
     return {
-        "worn": _row(p.weapon, art, content, world) if p.weapon else None,
+        "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
         "rack": [_row(w, art, content, world) for w in p.rack],
         "cap": content.config.weapons.rack_cap,
     }

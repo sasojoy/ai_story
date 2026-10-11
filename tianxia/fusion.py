@@ -35,7 +35,7 @@ from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
-from .state import Echo, GameState
+from .state import Echo, GameState, WeaponRecipe
 from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
@@ -98,11 +98,10 @@ class QualityOdds:
     reasons: tuple[str, ...] = ()
 
 
-def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
-    """把各因素的分數加成造化分，從普通搭配的平均（Config.fuse_quality_odds）往上或往下推，上品、下品各自夾住，中品是剩下的。"""
-    cfg = content.config
-    rule = cfg.fuse_quality
-    base = cfg.fuse_quality_odds
+def odds_from_points(scored: list[tuple[str, float]], rule, base: dict[str, float]) -> QualityOdds:
+    """把各因素的分數加成造化分，從 base（普通搭配的平均）往上或往下推，上品、下品各自夾住，中品是剩下的。
+    rule 要有 up_per_point、low_per_point、up_range、low_range、shown_from、lines（FuseQuality、SmithQuality 都有）；
+    合成（_points）與打造（smithing.forge_odds）共用這一個。"""
     total = sum(base.values()) or 1
     up0, low0 = base.get("上品", 0) * 100 / total, base.get("下品", 0) * 100 / total
     score = sum(points for _, points in scored)
@@ -117,6 +116,12 @@ def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
         if line and len(reasons) < 2:
             reasons.append(line)
     return QualityOdds(odds, tuple(reasons))
+
+
+def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
+    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推。"""
+    cfg = content.config
+    return odds_from_points(scored, cfg.fuse_quality, cfg.fuse_quality_odds)
 
 
 def _art_points(state: GameState, content: Content, arts: list[tuple[str, MartialArt]]) -> list[tuple[str, float]]:
@@ -148,6 +153,29 @@ def insight_points(state: GameState, content: Content, insight: Insight) -> floa
     return points
 
 
+def terrain_here(state: GameState, content: Content, attribute: str) -> bool:
+    """天時地利的「地利」（合成與打造共用）：此地探索悟得到這個屬性的意境（跟修練的 home_ground 同一個判斷）。"""
+    here = content.locations.get(state.player.location)
+    return here is not None and any(
+        content.insights[i].attribute == attribute for i in insights.explore_gives(here, content)
+    )
+
+
+def battlefield_here(state: GameState, content: Content) -> bool:
+    """天時地利的「戰場」（合成與打造共用）：人在營寨類地點，或（第一季）所在大區的戰線正在亂局。"""
+    here = content.locations.get(state.player.location)
+    return here is not None and (
+        content.config.explore_mix_of(here.tags).kind == "camp"
+        or (season_one(content, state.world) and rules.front_of(content, here.id) in rules.chaos_fronts(state, content))
+    )
+
+
+def calm_now(state: GameState, hours: float) -> bool:
+    """天時地利的「心靜」（合成與打造共用）：出關之後 hours 遊戲小時之內。"""
+    p, w = state.player, state.world
+    return p.seclusion_done is not None and 0 <= w.time - p.seclusion_done <= hours * calendar.HOUR
+
+
 def setting_points(
     state: GameState, content: Content, attribute: str, lean: str, insight: Insight | None = None,
 ) -> list[tuple[str, float]]:
@@ -157,22 +185,16 @@ def setting_points(
     戰場：合出剛的武學、人在營寨類地點或（第一季）正在亂局的大區。心靜：出關之後 calm_hours 遊戲小時之內。
     權重全在 Config.fuse_quality，預設 0（不開）。"""
     rule = content.config.fuse_quality
-    w, p = state.world, state.player
-    here = content.locations.get(p.location)
+    w = state.world
     out: list[tuple[str, float]] = []
-    if rule.terrain and insight is not None and here is not None and any(
-        content.insights[i].attribute == insight.attribute for i in insights.explore_gives(here, content)
-    ):
+    if rule.terrain and insight is not None and terrain_here(state, content, insight.attribute):
         out.append(("terrain", rule.terrain))
     if lean in ("正", "邪") and (rule.night_match or rule.night_clash):
         night = calendar.is_night(w.time, content, w)
         out.append(("night", rule.night_match if (lean == "邪") == night else rule.night_clash))
-    if rule.battlefield and attribute == "剛" and here is not None and (
-        content.config.explore_mix_of(here.tags).kind == "camp"
-        or (season_one(content, w) and rules.front_of(content, here.id) in rules.chaos_fronts(state, content))
-    ):
+    if rule.battlefield and attribute == "剛" and battlefield_here(state, content):
         out.append(("battlefield", rule.battlefield))
-    if rule.calm and p.seclusion_done is not None and 0 <= w.time - p.seclusion_done <= rule.calm_hours * calendar.HOUR:
+    if rule.calm and calm_now(state, rule.calm_hours):
         out.append(("calm", rule.calm))
     out = sorted((item for item in out if item[1]), key=lambda item: -abs(item[1]))
     return out[: rule.setting_max]
@@ -413,25 +435,28 @@ def _special_rumor(state: GameState, content: Content, art: MartialArt, first: b
 
 
 ECHO_RUMOR = "江湖上照著{who}首創的{thing}練出來的人越來越多了。"
+ECHO_RUMOR_FORGED = "江湖上照著{who}首創的{thing}打出來的人越來越多了。"  # 待 joy 潤：兵器配方
 
 
-def echo(state: GameState, content: Content, thing: MartialArt | Insight, first: bool) -> None:
-    """首創名望回饋（Config.first_echo）：你合出別人首創的那一門（照著合、合到舊的都算），在這一季的 WorldState.echoes 記你一筆；
-    首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、最多算 cap 個人，湊滿那一下
-    江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；第一季沒開著時什麼都不做。"""
+def echo(state: GameState, content: Content, thing: MartialArt | Insight | WeaponRecipe, first: bool, made: str = "練") -> None:
+    """首創名望回饋（Config.first_echo）：你合出（或打出，made="打"）別人首創的那一門（照著合、合到舊的都算），在這一季的
+    WorldState.echoes 記你一筆；首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、
+    最多算 cap 個人，湊滿那一下江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；
+    第一季沒開著時什麼都不做。意境寫「」，武學與兵器寫【】。"""
     me = state.player.name
     if first or not thing.creator or me in (thing.creator, thing.co_creator) or getattr(thing, "preset", False):
         return
     if not season_one(content, state.world):
         return
     rule = content.config.first_echo
-    shown = f"【{thing.name}】" if isinstance(thing, MartialArt) else f"「{thing.name}」"
-    entry = state.world.echoes.setdefault(thing.id, Echo(creator=thing.creator, co_creator=thing.co_creator, name=shown))
+    shown = f"「{thing.name}」" if isinstance(thing, Insight) else f"【{thing.name}】"
+    entry = state.world.echoes.setdefault(thing.id, Echo(creator=thing.creator, co_creator=thing.co_creator, name=shown, made=made))
     if me in entry.followers or len(entry.followers) >= rule.cap:
         return
     entry.followers.append(me)
     if len(entry.followers) == rule.cap:
-        add_rumor(state, ECHO_RUMOR.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
+        template = ECHO_RUMOR if made == "練" else ECHO_RUMOR_FORGED
+        add_rumor(state, template.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
 
 
 def can_forge(state: GameState, content: Content) -> bool:

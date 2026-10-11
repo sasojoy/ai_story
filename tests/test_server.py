@@ -4174,7 +4174,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
@@ -5357,6 +5357,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
+        "prepare_smith_forge",  # 鐵匠鋪開爐的首創取名（兵器第二批）：跟 prepare_forge 同一套三段
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）

@@ -142,6 +142,35 @@ class Weapon(BaseModel):
     original: bool = False
 
 
+class WeaponRecipe(BaseModel):
+    """全服登記的兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes 表）：這一季第一個打出來的人取名，之後照著打的人查表。
+    名字跟武學、改過的名字、意境共用一個名字空間（sqlite_world._name_taken）。id 就是名字（首創名望回饋 fusion.echo 照它記）。"""
+
+    name: str
+    key: str  # 配方鍵 weapons.recipe_key：「兵|種類|主料+輔料」（前綴就是欄位：武器「兵|」，之後防具「鎧|」，裝備四欄設計 4.7）
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # 主料與輔料合出來的屬性（insights.merged_attribute，種子是天機＋配方鍵）
+    tier: int  # 主料的階
+    main: str  # 主料的素材 id
+    aux: str  # 輔料的素材 id
+    creator: str | None = None  # 首創者的名號（身分）
+    creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下；同 MartialArt.creator_shown）
+    co_creator: str | None = None  # fusion.echo 讀；兵器沒有論武，一律 None
+    note: str = ""  # 模型替這個名字寫的一句說明；退路字表的名字沒有
+
+    @property
+    def id(self) -> str:
+        return self.name
+
+
+class SmithDraft(BaseModel):
+    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+
+    kind: str | None = None
+    main: str | None = None
+    aux: str | None = None
+
+
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。"""
@@ -212,6 +241,8 @@ class PlayerState(BaseModel):
     weapon_serial: int = 0
     picking_smith: bool = False  # 打開了鐵匠鋪的第二層選單（同 picking_bounty）
     edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
+    forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
@@ -486,6 +517,7 @@ class Echo(BaseModel):
     followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
     paid: int = 0  # 已經補給首創者的人數
     co_paid: int = 0  # 已經補給 co_creator 的人數
+    made: str = "練"  # 照著做出來的動詞：武學、意境是「練」，兵器配方是「打」（smithing.forge）
 
 
 class WorldState(BaseModel):

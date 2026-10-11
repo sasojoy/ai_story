@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
-from .state import Rumor, WorldState
+from .state import Rumor, WeaponRecipe, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -201,6 +201,16 @@ class WorldStateStore(Protocol):
 
     def claim_insight_recipe(self, key: str, insight: Insight) -> tuple[Insight | None, bool]:
         """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
+        ...
+
+    # ── 兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes；這一季）──
+    def lookup_weapon_recipe(self, key: str) -> WeaponRecipe | None:
+        """這個兵器配方這一季有沒有人打過；有就回登記在案的那一筆（全服看到同一個名字）。"""
+        ...
+
+    def claim_weapon_recipe(self, key: str, recipe: WeaponRecipe) -> tuple[WeaponRecipe | None, bool]:
+        """跟 claim_recipe 同一套，原子判斷：配方有了 → (登記在案的, False)；名字被任何功法、改過的名字、意境、兵器配方用掉
+        → (None, False)，呼叫端換名字再試；否則登記、回 (recipe, True)。"""
         ...
 
     # ── 合到舊的（武學與成長設計 12.2；這一季）──

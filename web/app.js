@@ -1903,17 +1903,20 @@
     const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
-    // 兵器（兵器設計 3.6）：身上那把一行、裝備庫每把一行與「換上」鈕。字都是伺服器給的資料，一律 esc
+    // 兵器（兵器設計 3.6）：身上那把一行、裝備庫每把一行。字都是伺服器給的資料，一律 esc
+    // FB-125：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
+    // 第二批：淬過的寫「淬煉 N/5」，自己打的寫配方（主料＋輔料）
+    // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字，以及下面兵器塊底下那句說明（鐵匠鋪打得出、買得到、修得好，也淬得了）
     const wp = x.weapons;
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
-        <b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>
-        ${wornNow ? "" : `<button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}">拆解</button>`}
+        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}</div>
+        ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}" data-confirm="${esc(w.confirm || "")}">拆解</button></div>`}
       </div>`;
     const weaponsBlock = wp && (wp.worn || wp.rack.length) ? `<section class="weapons"><div class="label">兵器</div>
         ${wp.worn ? weaponRow(wp.worn, true) : '<p class="muted">手上沒有兵器。</p>'}
         ${wp.rack.length ? `<small class="muted">裝備庫 ${wp.rack.length}/${wp.cap | 0}</small>${(S.rackAll || wp.rack.length <= LIB_PAGE ? wp.rack : wp.rack.slice(0, LIB_PAGE)).map((w) => weaponRow(w, false)).join("")}
           ${S.rackAll || wp.rack.length <= LIB_PAGE ? "" : `<button class="btn ghost lib-more" data-act="rack-all">再列 ${wp.rack.length - LIB_PAGE} 件</button>`}` : ""}
-        <p class="muted">城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。</p>
+        <p class="muted">城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。</p>
       </section>` : "";
     return `
       ${proGuide()}
@@ -2866,7 +2869,7 @@
     // btn 已經不在頁面上：照 id 重找畫面上那一顆，「處理中」才標得到、擋下來時才還原得了（整合審查 M1）
     const ask0 = ((S.main && S.main.options) || []).find((o) => o.id === id);
     if (!sure && ask0 && ask0.confirm) {
-      ask(ask0.confirm, "照打", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
+      ask(ask0.confirm, ask0.confirm_yes || "照打", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
       return;
     }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
@@ -3266,7 +3269,9 @@
           await loadMenxia();
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
-        case "dismantle": await mx("dismantle", { weapon: el.dataset.id }); break; // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）
+        case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
+          ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
+          break;
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
           const was = S.menxia;

@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, team, traits, weapons
+from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, smithing, team, traits, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -321,19 +321,43 @@ def take_bounties(game: Game) -> None:
 
 
 def visit_smith(game: Game) -> None:
-    """城裡有鐵匠鋪就看一眼（兵器設計第六節）：照 weapons.wanted 一顆一顆按到沒事做，再離開。不花體力。"""
-    s, c = game.state, game.content
-    art = team.player_art(s, c, game.world, s.player.member.wugong_id)
-    if s.pending_event or weapons.wanted(s, c, game.world, art) is None:
+    """城裡有鐵匠鋪就看一眼（兵器設計第六節）：照 weapons.wanted 換、買、修；再照 smithing.forge_plan 打一把、把裝備庫裡更好的換上、
+    淬煉手上那把；最後收掉打造的單子、離開。不花體力。假人不走這裡（bot_policy 只買、修、換）。"""
+    s, c, w = game.state, game.content, game.world
+
+    def art():
+        return team.player_art(s, c, w, s.player.member.wugong_id)
+
+    def enabled() -> set[str]:
+        return {o.id for o in game.options(odds=False) if o.enabled}
+
+    if s.pending_event or not weapons.smith_here(s, c):
         return
-    if "act:smith" not in {o.id for o in game.options(odds=False) if o.enabled}:
+    if weapons.wanted(s, c, w, art()) is None and not smithing.has_errand(s, c, w, art()):
+        return
+    if "act:smith" not in enabled():
         return
     game.choose("act:smith")
     for _ in range(4):  # 換、買、修最多各一次，夠了
-        move = weapons.wanted(s, c, game.world, team.player_art(s, c, game.world, s.player.member.wugong_id))
-        if move is None or move not in {o.id for o in game.options(odds=False) if o.enabled}:
+        move = weapons.wanted(s, c, w, art())
+        if move is None or move not in enabled():
             break
         game.choose(move)
+    plan = smithing.forge_plan(s, c, w, art())
+    if plan is not None:
+        for oid in smithing.wizard_steps(*plan):
+            if oid not in enabled():
+                break
+            game.choose(oid)
+    better = smithing.better_in_rack(s, c, w, art())
+    if better is not None and f"smith:wield:{better.id}" in enabled():
+        game.choose(f"smith:wield:{better.id}")
+    for _ in range(c.config.weapons.temper_max):
+        if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
+            break
+        game.choose(smithing.TEMPER)
+    if s.player.smith_draft is not None and smithing.CANCEL in enabled():
+        game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上
     if s.player.picking_smith:
         game.choose("smith:back")
 

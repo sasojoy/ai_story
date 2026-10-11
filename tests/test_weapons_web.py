@@ -75,3 +75,68 @@ def test_every_rack_row_has_a_dismantle_button_and_the_worn_one_does_not(views):
     assert "<i>厚背刀</i>" not in page and "&lt;i&gt;厚背刀&lt;/i&gt;" in page
     x["weapons"]["rack"] = []
     assert 'data-act="dismantle"' not in run(m, "return H.pagePractice();", menxia=x)  # 身上那把不能拆
+
+
+def _weapons_block(page):
+    return page.split('class="weapons"')[1].split("</section>")[0]
+
+
+def test_rack_rows_keep_both_buttons_together_and_show_the_grade(views):
+    """FB-125：「換上」「拆解」包在同一個不折行的容器裡（不會折到下一把的名字上），每列寫階與品質，拆解帶著問句。"""
+    m, x = views
+    ask = "把【厚背刀】（二階中品）拆成玄鋼骨×1？拆掉就沒了。"
+    x["weapons"] = {"worn": _row(grade="一階下品", confirm=""), "cap": 100,
+                    "rack": [_row(id="兵:2", name="厚背刀", grade="二階中品", confirm=ask)]}
+    block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert block.count('class="wbtns"') == 1  # 只有裝備庫那一列有鈕
+    assert "二階中品" in block and "一階下品" in block
+    assert f'data-confirm="{ask}"' in block
+
+
+_DISMANTLE_CLICK = """return (async () => {
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  await click({ act: "dismantle", id: "兵:2", confirm: "把【厚背刀】（一階下品）拆成精鐵砂×1？拆掉就沒了。" });
+  const asked = T.bodyHtml.join("");
+  const before = T.calls.map((c) => c[0]);
+  %(then)s
+  return { asked, before, calls: T.calls.map((c) => [c[0], c[1]]) };
+})();"""
+
+
+def test_dismantle_asks_first_and_sends_only_on_yes(views):
+    m, x = views
+    x["weapons"] = {"worn": None, "cap": 100, "rack": [_row(id="兵:2", name="厚背刀", grade="一階下品", confirm="問")]}
+    reply = {"/api/menxia/dismantle": {"menxia": x, "message": "", "main": m}}
+    out = run(m, _DISMANTLE_CLICK % {"then": 'await click({ act: "ask-no" });'}, menxia=x, responses=reply)
+    assert "拆成精鐵砂×1" in out["asked"] and "拆掉" in out["asked"]
+    assert out["before"] == [] and out["calls"] == []  # 問了；取消之後什麼都沒送
+    out = run(m, _DISMANTLE_CLICK % {"then": 'await click({ act: "ask-yes" });'}, menxia=x, responses=reply)
+    assert [c[0] for c in out["calls"]] == ["/api/menxia/dismantle"] and out["calls"][0][1]["weapon"] == "兵:2"
+
+
+_CHOOSE_CLICK = """return (async () => {
+  const click = (act, id) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act, id }, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  await click("choose", "smith:dismantle:兵:2");
+  return { asked: T.bodyHtml.join(""), calls: T.calls.map((c) => c[0]) };
+})();"""
+
+
+def test_a_smith_dismantle_option_asks_with_its_own_yes_word(views):
+    m, _ = views
+    m = {**m, "options": [{"id": "smith:dismantle:兵:2", "label": "拆解【厚背刀】→ 精鐵砂×1", "enabled": True, "wait": "",
+                           "confirm": "把【厚背刀】（一階下品）拆成精鐵砂×1？拆掉就沒了。", "confirm_yes": "拆掉"}]}
+    out = run(m, _CHOOSE_CLICK)
+    assert "拆成精鐵砂×1" in out["asked"] and ">拆掉<" in out["asked"] and ">照打<" not in out["asked"]
+    assert out["calls"] == []
+
+
+def test_rack_rows_show_tempers_and_the_recipe(views):
+    m, x = views
+    x["weapons"] = {"worn": _row(confirm="", grade="一階中品", tempers=2, temper_max=5, recipe="精鐵砂＋驚羽"), "cap": 100, "rack": []}
+    block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "淬煉 2/5" in block and "配方 精鐵砂＋驚羽" in block and "一階中品" in block
+    x["weapons"]["worn"] = _row(confirm="", grade="一階下品", tempers=0, temper_max=5, recipe=None)
+    plain = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "淬煉 0" not in plain and "配方 " not in plain
