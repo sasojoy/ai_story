@@ -478,7 +478,7 @@ def test_the_market_tag_is_not_written_as_terrain(content):
     assert sensing.place_tags(SimpleNamespace(prologue=False), loc) == "（城鎮）"
 
 
-# 機器人跟 act:market 同一個 commit（CLAUDE.md「新增永遠按得下去的選項要一併改 bot.py::pick()」）：不然伺服器假人進了馬市就卡住
+# 機器人的排除與給分跟 act:market 一起做（CLAUDE.md「新增永遠按得下去的選項要一併改 bot.py::pick()」）：不然伺服器假人進了馬市就卡住
 
 def test_wanted_wields_a_faster_horse_then_buys_then_feeds(content, world):
     game = _market_game(content, world, silver=130)
@@ -904,3 +904,40 @@ def test_the_hopeless_fight_warning_says_the_horse_may_save_the_silver(game, mon
     assert confirm() == TRAIN_CONFIRM  # 沒騎馬：照舊那一句
     game.state.player.mount = _horse(edge=60)  # 駑馬 30%×0.8＝24% → 約 2 成
     assert confirm() == TRAIN_CONFIRM_RIDING.format(odds="約 2 成")  # 待 joy 潤的那一句從常數組，只鎖「約 2 成」
+
+
+# ── Task 8：整季機器人去馬市、餵馬；假人照顧自己時餵馬 ──
+
+def test_visit_market_buys_a_nag_only_with_silver_to_spare_and_closes_the_menu(content, world):
+    from tianxia import bot
+    game = _market_game(content, world, silver=content.config.mounts.shop_price + bot.MOUNT_SILVER_RESERVE - 1)
+    p = game.state.player
+    bot.visit_market(game)
+    assert p.mount is None and not p.picking_market
+    p.stats["silver"] = 130
+    bot.visit_market(game)
+    assert p.mount is not None and p.stats["silver"] == 30 and not p.picking_market
+
+
+def test_feed_mount_feeds_below_half_and_only_with_free_hands(content, world):
+    from tianxia import bot
+    game = _game(content, world, horse=_horse(edge=50))
+    p = game.state.player
+    p.materials = {"gang_1": 2}
+    bot.feed_mount(game)
+    assert p.mount.edge == 50  # 不到 50 才餵
+    p.mount.edge = 49
+    p.busy_until = game.state.world.time + 3600.0
+    bot.feed_mount(game)
+    assert p.mount.edge == 49  # 閉關中不餵
+    p.busy_until = None
+    bot.feed_mount(game)
+    assert p.mount.edge == 100 and p.materials == {"gang_1": 1}
+
+
+def test_a_server_bot_feeds_its_horse_while_looking_after_itself(content, world):
+    from tianxia import bot_policy
+    game = _game(content, world, horse=_horse(edge=40))
+    game.state.player.materials = {"gang_1": 1}
+    bot_policy.look_after(game, random.Random(0))
+    assert game.state.player.mount.edge == 100

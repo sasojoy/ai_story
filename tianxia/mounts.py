@@ -279,7 +279,7 @@ def wield(state: GameState, content: Content, item_id: str) -> list[str]:
     return equipment.wield(state, content, item_id, ("mount",))
 
 
-# ---- 機器人（設計第九節）：跟 act:market 同一個 commit，伺服器假人才不會卡在馬市 ----
+# ---- 機器人（設計第九節）：整季機器人（bot.visit_market）與伺服器假人（bot_policy.MARKET_SCORE）共用 ----
 
 def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
     """在馬市最該按的那一顆（整季機器人與伺服器假人共用）：裝備庫裡有比身上快的（比吃飽的腳力，餓了的好馬不吃虧）就換上；

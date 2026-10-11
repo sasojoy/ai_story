@@ -288,7 +288,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
     # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith。鐵匠鋪的切頁（smith:page:）也只是換一頁（裝備四欄設計第九節）
-    # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount（Task 8；這之前整季機器人就是不進馬市）
+    # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
     options = [
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", DUEL_FLEE)
@@ -345,6 +345,37 @@ def market_want(game: Game) -> str | None:
     """在馬市最該按的那一顆（整季機器人與伺服器假人共用；裝備四欄設計第九節）：換上更快的、沒馬就買（留 MOUNT_SILVER_RESERVE）、
     飽足低於 mounts.FEED_AT 就餵。沒事是 None。"""
     return mounts.wanted(game.state, game.content, reserve=MOUNT_SILVER_RESERVE)
+
+
+def visit_market(game: Game) -> None:
+    """城裡有馬市就看一眼（裝備四欄設計第九節）：照 market_want 換、買、餵（最多各一次），最後離開。不花體力。
+    沒事要做時連選單都不叫。假人不走這裡（bot_policy 照 market_want 給分）。"""
+    s = game.state
+    if s.pending_event or market_want(game) is None:
+        return
+
+    def enabled() -> set[str]:
+        return {o.id for o in game.options(odds=False) if o.enabled}
+
+    if "act:market" not in enabled():
+        return
+    game.choose("act:market")
+    for _ in range(3):
+        move = market_want(game)
+        if move is None or move not in enabled():
+            break
+        game.choose(move)
+    if s.player.picking_market:
+        game.choose(mounts.BACK)
+
+
+def feed_mount(game: Game) -> None:
+    """飽足低於 mounts.FEED_AT 就餵（設計第九節：約每 10 段一次；走 Game.feed_mount，同修練頁的「餵」）：閒著時哪裡都能餵，
+    在路上、閉關中、沒有一階素材時什麼都不做。整季機器人每一步看一次，假人在 bot_policy.look_after 看。"""
+    s, c = game.state, game.content
+    item = mounts.riding(s, c)
+    if item is not None and item.edge < mounts.FEED_AT and mounts.feed_problem(s, c) is None:
+        game.feed_mount()
 
 
 def visit_smith(game: Game) -> None:
@@ -438,6 +469,8 @@ def play_season(
                 forge_and_cultivate(game, rng)
             take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
             visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
+            visit_market(game)  # 路過馬市就看一眼（沒事要買要換要餵的時候什麼都不做）
+            feed_mount(game)  # 馬餓了就餵（閒著時哪裡都能餵）
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:
