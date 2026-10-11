@@ -1002,7 +1002,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "owned_arts": [{**row, "card": md(row["card"])} for row in game.art_rows()],
         "insights": game.insight_rows(),
         "naming": game.naming_row(),
-        # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
+        # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
         # 都關著時 slots 是空的，修練頁那一塊不畫
         "gear": game.gear_rows(),
     }
@@ -1482,6 +1482,7 @@ MENXIA_ACTIONS = {
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
+    "feed": lambda g, b: g.feed_mount(),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }
 
 

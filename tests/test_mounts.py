@@ -538,3 +538,57 @@ def test_a_server_bot_in_the_market_never_gets_stuck_and_usually_buys(content, w
         assert not game.state.player.picking_market
         bought += game.state.player.mount is not None
     assert bought >= 5
+
+
+# ── Task 5：修練頁、角色卡 ──
+
+def test_gear_rows_have_a_mount_slot_with_feed_on_the_worn_horse(content, world):
+    from tianxia import skillview
+    game = _game(content, world, horse=_horse(edge=60))
+    p = game.state.player
+    p.materials = {"gang_1": 1}
+    p.rack = [_horse(hid="騎:2", name="青驄駒", tier=2, quality="中品")]
+    gear = skillview.gear_rows(game.state, content, world)
+    [slot] = gear["slots"]  # 測試內容武器、防具關著：只有坐騎那一段
+    assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("mount", "坐騎", mounts.EMPTY, mounts.RACK_NOTE)
+    worn = slot["worn"]
+    # 設計 2.5：路上快、騎兵、脫身寫在修練頁這一列。飽足 60（係數 0.8）：省 25%→20%、快 30%→24%、騎兵 5%→4%、脫身 30%→24%
+    assert (worn["grade"], worn["wear_word"], worn["edge"]) == (mounts.grade(p.mount), mounts.WEAR_WORD, 60)
+    assert (worn["save"], worn["speed"], worn["cavalry"], worn["escape"]) == ("20%", "24%", "4%", "24%")
+    assert worn["feed"] is True and worn["feed_note"] == "精鐵砂×1" and worn["wield_ok"] is True
+    [spare] = slot["rack"]  # 良駒中品吃飽：品質只加省體力、路上快（43%、48%），騎兵、脫身照階（10%、50%）
+    assert (spare["id"], spare["save"], spare["speed"], spare["cavalry"], spare["escape"], spare["feed"]) == ("騎:2", "43%", "48%", "10%", "50%", False)
+    assert (spare["wield_ok"], spare["wield_note"]) == (True, "")
+    assert gear["used"] == 1
+    content.config.mounts.enabled = False
+    assert skillview.gear_rows(game.state, content, world)["slots"] == []
+
+
+def test_a_rack_horse_cannot_be_wielded_on_the_road(content, world):
+    """設計 2.3：路上不能換坐騎——修練頁裝備庫那一列的「換上」在路上灰掉、寫原因，不必按了才知道（按下去 equipment.wield 也擋）。"""
+    from tianxia import skillview
+    game = _game(content, world, horse=_horse())
+    game.state.player.rack = [_horse(hid="騎:2", name="青驄駒", tier=2)]
+    game.choose("move:lake")
+    [spare] = skillview.gear_rows(game.state, content, world)["slots"][0]["rack"]
+    assert (spare["wield_ok"], spare["wield_note"]) == (False, mounts.ON_ROAD)
+
+
+def test_player_card_has_the_mount_line(content, world):
+    from tianxia import skillview
+    game = _game(content, world)
+    assert "坐騎" not in skillview.member_card(game.state, content, world, "player")
+    game.state.player.mount = _horse(edge=60)
+    lines = skillview.member_card(game.state, content, world, "player").splitlines()
+    line = mounts.card_line(game.state, content)  # 整行待 joy 潤：只鎖名字、飽足度、省幾成
+    assert "【棗騮馬】" in line and f"{mounts.WEAR_WORD} 60" in line and "20%" in line  # 設計 2.5：25%×飽足係數 0.8
+    assert line in lines and lines.index(line) > next(i for i, x in enumerate(lines) if x.startswith("武學"))
+
+
+def test_the_practice_page_feed_action_feeds_the_horse(content, world):
+    import server
+    game = _game(content, world, horse=_horse(edge=40))
+    game.state.player.materials = {"gang_1": 1}
+    assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["feed"] is True
+    server.MENXIA_ACTIONS["feed"](game, {})
+    assert game.state.player.mount.edge == 100 and server.menxia_view(game)["gear"]["slots"][0]["worn"]["feed"] is False

@@ -31,6 +31,9 @@ FEED_ON_ROAD = "在路上，到了下一站再餵"  # 待 joy 潤
 FEED_SECLUDED = "閉關中"  # 待 joy 潤
 FED = "你拿{material}把【{name}】餵飽了。"  # 待 joy 潤；Game.feed_mount 照開頭 FED_PREFIX 寫修練紀錄
 FED_PREFIX = "你拿"
+EMPTY = "身上沒有坐騎。"  # 待 joy 潤：修練頁坐騎那一段身上空著
+RACK_NOTE = "城裡的馬市買得到駑馬；一個一階素材就餵得飽。"  # 待 joy 潤：修練頁坐騎那一段底下
+ON_ROAD = "在路上"  # 待 joy 潤：修練頁裝備庫那一列「換上」灰掉時的原因（2.3：路上不能換坐騎）
 NOT_MARKET = "這裡沒有馬市"  # 待 joy 潤
 BOUGHT = "你花 {price} 兩買下一匹【{name}】。"  # 待 joy 潤
 ENTERED = "你走進馬市，馬嘶聲此起彼落。"  # 待 joy 潤：打開馬市（Game._act）
@@ -286,3 +289,46 @@ def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
     if p.mount is not None and p.mount.edge < FEED_AT and feed_problem(state, content) is None:
         return FEED
     return None
+
+
+# ---- 看得到（2.5）：修練頁每一列、角色卡那一行 ----
+
+def _row(state: GameState, content: Content, item: Equipment, worn: bool) -> dict:
+    """修練頁坐騎那一段的一列：階品、飽足度（wear_word）、趕路疾行省幾成（save）、路上快幾成（speed）、決戰強攻奇襲多幾成（cavalry）、
+    落敗脫身的機會（escape）——設計 2.5：路上快、騎兵、脫身寫在修練頁這一列，不擠進角色卡；每一項都照這一匹自己的階、品質與飽足算
+    （同 cavalry()／escape() 的公式，只是不看身上騎的是不是牠）。身上那匹另給「餵」鈕的能不能按（feed）與那一段字（feed_note：
+    用哪一種素材，或為什麼不行）。每一列給「換上」能不能按（wield_ok）與原因（wield_note）：路上不能換坐騎（2.3），網頁照它把裝備庫
+    那一列的「換上」灰掉，不必按了才知道。裝備庫裡的沒有「餵」，也沒有拆解（4.8）。"""
+    rule, fed = content.config.mounts, fed_factor(content, item)
+    on_road = state.player.journey is not None
+    row = {
+        "id": item.id, "name": name_of(item), "tier": item.tier, "quality": item.quality, "grade": grade(item),
+        "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「飽足度 N」（3.1 的字表，不在網頁寫死）
+        "save": pct(leg_power(content, item)), "speed": pct(speed_of(content, item)),
+        "cavalry": pct(_cell(rule.cavalry, item) * fed), "escape": pct(_cell(rule.escape, item) * fed),
+        "feed": False, "feed_note": "", "wield_ok": not on_road, "wield_note": ON_ROAD if on_road else "",
+    }
+    if worn:
+        row["feed"] = feed_problem(state, content) is None
+        row["feed_note"] = feed_note(state, content)
+    return row
+
+
+def rows(state: GameState, content: Content) -> dict:
+    """修練頁的坐騎那一段（skillview.gear_rows）：身上那匹、裝備庫裡的馬。開關關著時 worn 是 None、rack 是空的。"""
+    p = state.player
+    if not on(content):
+        return {"worn": None, "rack": []}
+    return {
+        "worn": _row(state, content, p.mount, True) if p.mount is not None else None,
+        "rack": [_row(state, content, m, False) for m in equipment.in_slot(p, "mount")],
+    }
+
+
+def card_line(state: GameState, content: Content) -> str:
+    """本人卡上的「坐騎」那一行（2.5，待 joy 潤）：沒騎或開關關著是空字串。路上快、騎兵、脫身寫在修練頁那一列（_row 的 speed、
+    cavalry、escape），不擠進角色卡。"""
+    item = riding(state, content)
+    if item is None:
+        return ""
+    return f"坐騎　【{name_of(item)}】{grade(item)}・{WEAR_WORD} {item.edge}，趕路疾行省 {pct(leg_power(content, item))} 體力"
