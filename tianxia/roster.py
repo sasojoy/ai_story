@@ -117,6 +117,16 @@ def newbie(state: GameState, content: Content, days: float | None = None) -> boo
     return elapsed <= limit * rules.DAY
 
 
+def raid_newbie(state: GameState, content: Content) -> bool:
+    """截殺與通緝的新手期（企劃者 2026-10-10，懸賞榜設計 14.1 丁）：一律從自己加入這一季的那一刻（joined_at）算 newbie_days 個季曆天，
+    不看第一季開關——規則關著的季（14 天）開季三天之後才來的人也有保護。joined_at 還沒蓋（第一次同步之前）算剛加入。
+    第一季的結果跟 newbie 一樣（第一季本來就從 joined_at 算）。新手的體力、氣血福利照舊走 newbie（beta 從季初算），since_join 不動。"""
+    w = state.world
+    joined = state.player.joined_at
+    elapsed = 0.0 if joined is None else max(0.0, w.time - joined)
+    return elapsed * calendar.cal_scale(content, w) <= content.config.newbie_days * rules.DAY
+
+
 def fortune_due(state: GameState, content: Content) -> bool:
     """新立門戶福緣：第 fortune_day_min 天起交友必定先觸發（第 1 天是加入那一刻起的頭 24 個鐘頭；beta 是季的第幾天）。"""
     if state.player.fortune:

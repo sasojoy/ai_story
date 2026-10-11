@@ -316,7 +316,8 @@ class PlayerState(BaseModel):
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
     # 賽季時間（世界秒）。新角色與換季重來的角色先是 None，第一次同步補算完賽季之後才蓋上（Game._stamp_join）——建角的那一刻
     # 賽季可能已經好幾個鐘頭沒人補算，那時就蓋會把福利白白吃掉一段。舊存檔沒有這一欄讀成 0.0：從季初算，跟以前一樣。
-    # 只有第一季的規則開著才讀（roster.since_join）
+    # 新手福利只在第一季的規則開著時從這裡算（roster.since_join；beta 從季初算）；截殺與通緝的新手期每季都從這裡算
+    # （roster.raid_newbie，懸賞榜設計 14.1 丁）
     joined_at: float | None = 0.0
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
@@ -492,7 +493,7 @@ class Bounty(BaseModel):
     kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
-    expires: float  # 世界秒：過了就下榜（通緝沒人完成時把押金退給掛單的人）
+    expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
     silver: int
     deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
     quota: int = 1
@@ -583,8 +584,11 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
-    bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：這一週陣營掛的，加上還沒下榜的通緝；換季整個重來
+    bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
+    # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
+    bounty_week: int = 0
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     # 截殺（Config.raid）：「發起的名號鍵>目標的名號鍵」→ 上一次截殺的世界秒（同一個人對同一個目標的冷卻）；

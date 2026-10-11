@@ -61,7 +61,7 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
-    # 遊俠名號（ranger.py）：散人、第一季開著、名號到這一階才成立（投靠了陣營一律不成立）；ranger_path 是「俠」或「寇」（不寫＝不限）
+    # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
@@ -801,7 +801,7 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", 
 ALLOW_FIXED = frozenset({
     "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
-    "act:bounties",  # 懸賞榜（第一季、城鎮類的地點）
+    "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
@@ -1221,7 +1221,7 @@ class Spar(_Strict):
 
 
 class Ranger(_Strict):
-    """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：只有第一季開著時有。
+    """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：劇本有陣營就有，每季都有（懸賞榜設計 2.2）。
     散人時攢的善名、惡名（只算加的，扣的不算）各記一本帳，俠名＝兩本取高的那一本＋懸賞的功績；走哪一條路看哪一本高
     （善名高是「俠」、惡名高是「寇」，一樣高算俠）。投靠了陣營就凍結：帳不再記、名號不顯示、好處不給，存檔照留。
 
@@ -1246,7 +1246,7 @@ class Ranger(_Strict):
 
 
 class Bounties(_Strict):
-    """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：只有第一季開著時有，在城鎮類的地點查看（「懸賞榜」不花體力）。
+    """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
     官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
     散人兩邊的都能接（通緝也是），陣營的人只能接自己陣營的；接了才算數，一個人同時最多接 max_taken 張。
 
@@ -1262,6 +1262,7 @@ class Bounties(_Strict):
     - quota：一張陣營懸賞前幾個完成的人有賞（照伺服器人數上限換算：100 人的量 3 張，最少 quota_min）。
     - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。"""
 
+    enabled: bool = True  # 懸賞榜的開關（主機要整個關掉時用）；開著也要劇本有陣營才有（bounties.active）
     kinds: list[str] = Field(default_factory=lambda: ["strike", "strike", "scout", "escort"])
     silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15})
     deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4})
@@ -1367,9 +1368,15 @@ class Raid(_Strict):
     - 平手（僵持）誰都不失什麼，發起的人的體力照付。
     - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（1 小時）之內誰都不能再截殺他，
       不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
+      截殺每季都有之後（懸賞榜設計 3.7）：14 天的季有 336 小時，保護時間照舊 1 小時，一季最多可能被截約 300 次；每小時的比例跟週末一樣，
+      一季加起來的量多五倍多。要不要另一組數字等 sim_server_bots 量完再定（設計 14.2 第 12 條）。
     - 贏的一方記一點本季貢獻（contrib_per_push × win_contrib_push）：截殺是替陣營做事，但比推大勢一點還少，不會變成升階的捷徑。
+      只在第一季規則開著時記（其他季沒有晉升；Game._raid_spoils）。
+    - enabled：主機的緊急開關（懸賞榜設計 2.2 第 3 點）。截殺每季都有、劇本有陣營就有；上線之後假人截殺真人太兇時改設定就關，不必退版。
+      關著時通緝一起收（通緝只能靠截殺交差）：押不了、揭不了、不算張數，已經押的照期限退押金。
     時間都是世界秒（跟邀請的逾時同一套）。"""
 
+    enabled: bool = True
     stamina: int = Field(default=10, ge=0)
     silver_share: float = Field(default=0.05, ge=0, le=1)
     silver_cap: int = Field(default=15, ge=0)
