@@ -10,6 +10,7 @@
 `gear_recipes` 的列數就是它的首創數），以及銀兩花在鐵匠鋪的比例（設計第七節第 5 項）：鐵匠鋪花掉的是包住買、修、打造、
 淬煉四個函式、記呼叫前後銀兩少了多少；全季收入是每一步不算鐵匠鋪的銀兩淨增加（只加正的）——同一步裡別的花費（療傷等）
 會先抵掉收入，所以收入略少算、比例略高估。週末設定一季只走約 350 步（FB-129），量打造與淬煉要用預設的 14 天（不給 `--profile`）。
+兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）。
 
 用法：.venv/Scripts/python.exe scripts/measure_weapons.py --seeds 1 2 3 [--profile weekend]
 """
@@ -50,6 +51,7 @@ atexit.register(_cleanup)
 def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.weapons.enabled = weapons_on
+    content.config.armor.enabled = False  # 兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）
     seen: set[int] = set()
     count = {"fights": 0, "wins": 0, "repairs": 0, "smith_silver": 0, "income": 0}
     edges: list[int] = []
@@ -105,7 +107,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
     season = game.state.world
     hours = season.time / 3600  # 世界秒換成小時：這一季實際跑了多久（收季那一刻）
     days = season.time / rules.day_seconds(content, season)  # 遊戲日（短的季一天不是 24 小時）
-    owned = [w for w in [p.weapon, *p.rack] if w is not None]
+    owned = [w for w in [p.weapon, *p.rack] if w is not None and w.slot == "weapon"]  # 裝備四欄 3.3：只算武器
     forged = [w for w in owned if w.recipe]
     with game.world.db.snapshot() as conn:
         firsts = conn.execute("SELECT COUNT(*) FROM gear_recipes").fetchone()[0]
