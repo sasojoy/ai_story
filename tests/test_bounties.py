@@ -14,7 +14,7 @@ from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
 from tianxia.sqlite_world import open_world
-from tianxia.state import Bounty, GameState, WorldState
+from tianxia.state import Bounty, GameState, PlayerState, WorldState
 from tianxia.world import advance_world_state, settle_season_start
 from tianxia.world_state import fresh_season
 
@@ -598,6 +598,42 @@ def test_no_seclusion_while_the_board_or_the_smith_is_open(beta_setup):
     _do(content, world, "丙", lambda g: g.choose("smith:back"))
     _, game = _do(content, world, "丙", lambda g: g.seclude(2))
     assert game.state.player.busy_until is not None  # 兩個都收起來就閉得了
+
+
+def test_the_same_place_is_not_posted_twice_while_a_bounty_is_up(content):
+    """FB-121 第 2 件：榜上還有效的同一種單已經用掉的地點不再掛（討伐同一個陣營不重複、打探不分陣營、護送不重複終點），
+    一次遊歷或探索不會交兩張差。測試內容只有湖邊打得到黃巾、打探只有湖邊與山洞兩處：第 2 週沒地方可挑就跳過。"""
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+    ]
+    content.squads["thug"].faction = "huang"
+    state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=WorldState())
+    for week in (1, 2):
+        state.world.time = (week - 1) * bounties.week_seconds(state, content)
+        bounties.issue(state, content, week)
+    board = state.world.bounties
+    assert [(b.faction, b.location) for b in board if b.kind == "strike"] == [("guan", "lake")]
+    assert sorted(b.location for b in board if b.kind == "scout") == ["cave", "lake"]
+
+
+def test_live_bounties_never_share_a_place_on_the_real_map():
+    """FB-121 第 2 件（設計 7.2）照正式地圖、14 天的季一週一週掛完一季：每一週掛完，榜上還有效的打探不重複地點、
+    護送不重複終點（都不分陣營），討伐同一個陣營不重複地點。測試內容只有一個城鎮、掛不出護送，所以用正式內容。"""
+    content = real_content()
+    state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=_beta_season(content))
+    w = state.world
+    for week in range(1, 13):
+        w.time = calendar.week_start(week, content, w)
+        bounties.issue(state, content, week)
+        live = [b for b in w.bounties if b.expires > w.time]
+        assert {b.week for b in live} == ({week} if week == 1 else {week - 1, week})  # 掛兩週：上一週的還在
+        for kind, place in (("scout", lambda b: b.location), ("escort", lambda b: b.end),
+                            ("strike", lambda b: (b.faction, b.location))):
+            spots = [place(b) for b in live if b.kind == kind]
+            assert len(spots) == len(set(spots)), (week, kind, spots)
+    assert w.bounty_week == 12
+    assert any(b.kind == "escort" for b in w.bounties) and any(b.kind == "scout" for b in w.bounties)  # 不是空轉
 
 
 def test_bots_skip_the_board_button_but_score_taking(setup):

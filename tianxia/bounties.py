@@ -357,16 +357,21 @@ def _strike(content: Content, faction: str, rng: random.Random, used: set[str]) 
     return rng.choice(spots) if spots else None
 
 
-def _scout(content: Content, rng: random.Random) -> str | None:
-    spots = [loc_id for loc_id, loc in content.locations.items() if loc.danger >= 2 and not is_town(content, loc_id)]
+def _scout(content: Content, rng: random.Random, used: set[str]) -> str | None:
+    """打探的地點：危險度 2 以上、不是城鎮；used 是榜上還有效的打探已經用掉的地點（不分陣營）。"""
+    spots = [
+        loc_id for loc_id, loc in content.locations.items()
+        if loc.danger >= 2 and not is_town(content, loc_id) and loc_id not in used
+    ]
     return rng.choice(spots) if spots else None
 
 
-def _escort(content: Content, rng: random.Random) -> tuple[str, str] | None:
+def _escort(content: Content, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+    """護送的起點與終點：兩個不相鄰的城鎮；used 是榜上還有效的護送已經用掉的終點（不分陣營）。"""
     towns = [loc_id for loc_id in content.locations if is_town(content, loc_id)]
     pairs = [
         (a, b) for a in towns for b in towns
-        if a != b and b not in {str(x) for x in content.locations[a].connections}
+        if a != b and b not in {str(x) for x in content.locations[a].connections} and b not in used
     ]
     return rng.choice(pairs) if pairs else None
 
@@ -390,10 +395,15 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
         or b.takers  # 過期了還有人揭著：留到他們同步時聽到那一句（deliver_lapses）
     ]
     expires = calendar.week_start(week + cfg.auto_weeks, content, w)
+    # 同一地點不重複掛（FB-121 第 2 件：同一處兩張一樣的單，一次遊歷或探索交兩張差）：避開榜上還有效的同種單已經用掉的地點。
+    # 討伐只看同一個陣營（兩邊打的對頭不同，on_win 不會一次交兩張）；打探不分陣營；護送不分陣營、不重複終點。濾完沒地方可挑就跳過那一張
+    live = [b for b in w.bounties if b.expires > now and _left(b) > 0]
+    scouted = {b.location for b in live if b.kind == "scout"}
+    ends = {b.end for b in live if b.kind == "escort"}
     for faction in ENEMY:
         if faction not in {f.id for f in content.scenario.factions}:
             continue
-        used: set[str] = set()
+        used = {b.location for b in live if b.kind == "strike" and b.faction == faction}
         for kind in cfg.kinds:
             spec: dict = {}
             if kind == "strike":
@@ -403,14 +413,16 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
                 used.add(spot[0])
                 spec = {"location": spot[0], "squad": spot[1]}
             elif kind == "scout":
-                loc = _scout(content, rng)
+                loc = _scout(content, rng, scouted)
                 if loc is None:
                     continue
+                scouted.add(loc)
                 spec = {"location": loc}
             elif kind == "escort":
-                pair = _escort(content, rng)
+                pair = _escort(content, rng, ends)
                 if pair is None:
                     continue
+                ends.add(pair[1])
                 spec = {"location": pair[0], "end": pair[1]}
             else:
                 continue

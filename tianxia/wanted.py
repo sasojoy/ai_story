@@ -26,7 +26,7 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
     cfg = game.content.config.bounties
     top = min(cfg.post_max, s.player.stats.get("silver", 0))
     return [social.CardButton(
-        action=KIND, label="通緝", amount=top,
+        action=KIND, label="通緝", amount=top, amount_min=cfg.post_min,  # 輸入框從 post_min 起（FB-121 第 6 件）
         note=f"賞金 {cfg.post_min}～{top} 兩，押在懸賞榜上；沒人揭成就退回",
         confirm=f"真的要花錢通緝{o.player.name}？",
     )]

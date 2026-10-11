@@ -51,6 +51,19 @@ def test_the_bounty_card_lists_what_you_hold_and_opens_the_board(setup):  # noqa
     assert "到城鎮的懸賞榜前" in away and 'data-id="act:bounties"' not in away
 
 
+def test_the_wanted_amount_box_starts_at_the_lowest_bounty(setup):  # noqa: F811
+    """FB-121 第 6 件：通緝的金額輸入框下限照規則（post_min，20 兩），不是贈物那樣的 1；贈物照舊從 1 起。"""
+    content, world = setup
+    card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
+    i = next(k for k, b in enumerate(card["actions"]) if b["action"] == "wanted")
+    gift = next(b for b in card["actions"] if b["action"] == "gift" and b["amount"] > 0)
+    assert card["actions"][i]["amount_min"] == content.config.bounties.post_min == 20 and gift["amount_min"] == 1
+    html = run(_view(content, world, "甲"), "H.render(); return T.els.app.innerHTML;",
+               S={"peer": {"name": "乙", "card": card, "amountFor": i}})
+    box = html.split('id="peer-amount"')[1].split("</form>")[0]
+    assert 'min="20"' in box and "：20～200" in box
+
+
 def test_with_the_board_open_the_card_points_nowhere(setup):  # noqa: F811
     content, world = setup
     b = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
