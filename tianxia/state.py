@@ -304,7 +304,8 @@ class PlayerState(BaseModel):
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
     # 賽季時間（世界秒）。新角色與換季重來的角色先是 None，第一次同步補算完賽季之後才蓋上（Game._stamp_join）——建角的那一刻
     # 賽季可能已經好幾個鐘頭沒人補算，那時就蓋會把福利白白吃掉一段。舊存檔沒有這一欄讀成 0.0：從季初算，跟以前一樣。
-    # 只有第一季的規則開著才讀（roster.since_join）
+    # 新手福利只在第一季的規則開著時從這裡算（roster.since_join；beta 從季初算）；截殺與通緝的新手期每季都從這裡算
+    # （roster.raid_newbie，懸賞榜設計 14.1 丁）
     joined_at: float | None = 0.0
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────

@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, ranger, team
+from . import calendar, ranger, roster, team
 from .characters import name_key
 from .models import Content
 from .state import Bounty, GameState
@@ -236,12 +236,14 @@ def hunting(state: GameState, content: Content, target: str) -> bool:
 
 
 def post_problem(state: GameState, content: Content, target_state: GameState, amount: int | None = None) -> str | None:
-    """通緝這個人按不按得下去：懸賞榜與截殺都開著、你投靠了陣營、他是敵對陣營的人、你手上沒有還掛著的通緝、錢夠。"""
+    """通緝這個人按不按得下去：懸賞榜與截殺都開著、你投靠了陣營、他是敵對陣營的人、他過了新手期、你手上沒有還掛著的通緝、錢夠。"""
     if not active(state, content) or not content.config.raid.enabled:
         return "（此刻無法這麼做。）"
     p, t = state.player, target_state.player
     if p.faction is None or t.faction is None or p.faction == t.faction:
         return "只能通緝敵對陣營的人。"
+    if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
+        return f"{t.name}初入江湖，還在新手期，通緝不了他。"  # 待 joy 潤
     me = name_key(p.name)
     now = state.world.time
     if any(b.kind == "wanted" and b.poster and name_key(b.poster) == me and b.expires > now and _left(b) > 0

@@ -10,7 +10,7 @@ import random
 import pytest
 
 from conftest import install_season_one
-from tianxia import encounter, rules, social, team
+from tianxia import calendar, encounter, roster, rules, social, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
@@ -134,6 +134,32 @@ def test_not_in_a_town_and_not_on_newcomers(pair):
     before = _load(world, "乙").player.stats["silver"]
     assert "新手期" in _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0][0]
     assert _load(world, "乙").player.stats["silver"] == before
+
+
+def test_a_late_comer_in_a_beta_season_is_protected_from_his_own_join_time(beta_pair):
+    """第一季規則關著的季，截殺的新手期從各自加入的那一刻算（企劃者 2026-10-10，懸賞榜設計 14.1 丁）：季初就在的兩個人早就過了，
+    很晚才來的人在自己的新手期內截殺不了別人、也不會被截殺；新手的體力、氣血福利照舊從季初算（roster.newbie 不動）。"""
+    content, world = beta_pair
+    content.config.newbie_days = 18
+    newbie = content.config.newbie_days * 86400 / calendar.cal_scale(content, world.get_season())  # 新手期幾個世界秒（測試內容約 10 小時）
+    world.mutate_season(lambda season: setattr(season, "time", 2 * newbie))
+    game = Game.new(content, "丙", rng=random.Random(0), world=world)
+    game.client = None
+    rules.learn_skill(game.state, content, "fist")
+    game.state.player.faction, game.state.player.location, game.state.player.stamina = "guan", "lake", 100.0
+    game.sync(NOW)
+    CharacterStore(world.db).save(game.state)
+    late = _load(world, "丙")
+    late.world = world.get_season()  # 角色存檔不含賽季：接上共用的那一份
+    assert late.player.joined_at == pytest.approx(2 * newbie)
+    assert roster.raid_newbie(late, content) and not roster.newbie(late, content)  # 福利照舊從季初算
+    assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"]  # 季初就在的兩個人
+    [button] = _raid_buttons(content, world, "丙", "乙")
+    assert not button["enabled"] and "你初入江湖" in button["note"]
+    [button] = _raid_buttons(content, world, "乙", "丙")
+    assert not button["enabled"] and "丙初入江湖" in button["note"]
+    world.mutate_season(lambda season: setattr(season, "time", season.time + newbie + 60))
+    assert _raid_buttons(content, world, "乙", "丙")[0]["enabled"]
 
 
 @pytest.mark.parametrize("tier", ["大勝", "險勝"])

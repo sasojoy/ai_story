@@ -5377,10 +5377,10 @@ class Game:
         loc = c.locations[s.player.location]
         if c.config.explore_mix_of(loc.tags).kind == "town":
             return "城裡耳目眾多，不便動手。"
-        if roster.newbie(s, c):
+        if roster.raid_newbie(s, c):  # 新手期從各自加入的那一刻算，不看第一季開關（懸賞榜設計 14.1 丁）
             return "你初入江湖，還在新手期，先別結這種仇。"
         them = other.state.player.name
-        if roster.newbie(other.state, c):
+        if roster.raid_newbie(other.state, c):
             return f"{them}初入江湖，還在新手期，下不了這個手。"
         problem = self._spar_problem(self, me=True, what="截殺", cost=cfg.stamina)
         if problem is not None:

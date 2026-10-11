@@ -9,7 +9,7 @@ import random
 import pytest
 
 from conftest import install_season_one, real_content
-from tianxia import bot, bot_policy, bounties, ranger, rules
+from tianxia import bot, bot_policy, bounties, calendar, ranger, rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
@@ -335,6 +335,24 @@ def test_with_raids_switched_off_a_wanted_is_not_an_undeliverable_bounty(setup):
     world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == b.id), "expires", 0.0))
     _, poster = _do(content, world, "甲", lambda g: None)
     assert poster.state.player.stats["silver"] == 200  # 過了期限押金照退
+
+
+def test_no_wanted_on_a_newcomer(beta_setup):
+    """通緝補一道新手期（企劃者 2026-10-10，懸賞榜設計 6.2、14.1 丁）：截殺不了還在新手期的人，押了錢也只能等退，所以先不讓押。
+    新手期從他自己加入的那一刻算，規則關著的季也一樣。"""
+    content, world = beta_setup
+    content.config.newbie_days = 18
+    newbie = content.config.newbie_days * 86400 / calendar.cal_scale(content, world.get_season())
+    world.mutate_season(lambda season: setattr(season, "time", 2 * newbie))
+    _seat(content, world, (("戊", "huang"),))
+    content.config.newbie_days = 18  # _seat 把新手期關掉了，這裡要它
+    [button] = [x for x in _do(content, world, "甲", lambda g: g.peer_card("戊"))[0]["actions"] if x["action"] == "wanted"]
+    assert not button["enabled"] and "戊初入江湖" in button["note"]
+    assert "新手期" in _do(content, world, "甲", lambda g: g.peer_act("戊", "wanted", {"amount": 50}))[0][0]
+    assert _load(world, "甲").player.stats["silver"] == 200
+    world.mutate_season(lambda season: setattr(season, "time", season.time + newbie + 60))
+    [button] = [x for x in _do(content, world, "甲", lambda g: g.peer_card("戊"))[0]["actions"] if x["action"] == "wanted"]
+    assert button["enabled"]
 
 
 def test_an_unclaimed_wanted_refunds_the_poster(setup):
