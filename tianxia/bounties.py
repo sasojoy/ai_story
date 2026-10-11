@@ -134,6 +134,18 @@ def mine(state: GameState, content: Content) -> list[Bounty]:
     ]
 
 
+def visible(state: GameState, content: Content) -> list[Bounty]:
+    """這個人在懸賞榜上看得到的（FB-121 第 3 件）：手上揭了的，加上接得了（can_take）、自己還沒交過的。「懸賞榜（N 張）」的 N
+    只算這些（0 張不畫那顆鈕：打開只有「返回」就是 FB 抱怨的事），榜上列的也是這些，所以 N 等於打開之後列出的張數。
+    不查武學與兵器，所以不收 world。"""
+    me = name_key(state.player.name)
+    held = {b.id for b in mine(state, content)}
+    return [
+        b for b in open_bounties(state, content)
+        if b.id in held or (can_take(state, b) and me not in (name_key(t) for t in b.done_by))
+    ]
+
+
 def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
     """「接下」按不按得下去（拒絕的話）。"""
     p = state.player

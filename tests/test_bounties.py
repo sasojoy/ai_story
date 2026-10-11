@@ -560,6 +560,46 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     assert season.bounty_week == 12 and season.hooked_week == 0
 
 
+def test_the_board_count_only_counts_what_you_can_see(beta_setup):
+    """FB-121 第 3 件：「懸賞榜（N 張）」只算看得到的——陣營的人不算別的陣營的、交過的不算、截殺關著時通緝不算；0 張不畫那顆鈕
+    （豪強的人這一批還沒有自己的懸賞，不給一顆打開只有「返回」的鈕）。N 等於打開之後列出的張數。"""
+    content, world = beta_setup
+    _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    done = _post(world, kind="strike", faction="guan", silver=20, deeds=3, location="lake", squad="thug", quota=3, done_by=["甲"])
+    _post(world, kind="wanted", faction="guan", silver=50, deeds=4, poster="甲", target="乙")
+
+    def button(name):
+        return _ids(content, world, name).get("act:bounties")
+
+    assert button("丙").label == "懸賞榜（4 張）"  # 散人：兩邊的都算，通緝也算
+    assert button("甲").label == "懸賞榜（1 張）"  # 官軍：黃巾的、自己交過的、自己掛的通緝都不算
+    assert button("丁") is None  # 豪強：沒有一張是給他的
+    _do(content, world, "甲", lambda g: g.choose("act:bounties"))
+    assert [o for o in _ids(content, world, "甲") if o != "bounty:back"] == [f"bounty:take:{b.id}" for b in world.get_season().bounties
+                                                                         if b.kind == "scout" and b.faction == "guan"]
+    assert f"bounty:take:{done.id}" not in _ids(content, world, "甲")
+    content.config.raid.enabled = False
+    assert button("丙").label == "懸賞榜（3 張）"  # 截殺關著：通緝不算張數
+
+
+def test_no_seclusion_while_the_board_or_the_smith_is_open(beta_setup):
+    """FB-121 第 4 件：懸賞榜開著時閉關，選單會卡在榜上（options 先回懸賞榜，排在閉關前面），所以擋下來；鐵匠鋪同一個洞一起補。"""
+    content, world = beta_setup
+    _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    msgs, game = _do(content, world, "丙", lambda g: g.seclude(2))
+    assert msgs == ["你現在無法閉關。"] and game.state.player.busy_until is None
+    _do(content, world, "丙", lambda g: g.choose("bounty:back"))
+    content.config.weapons.enabled = True
+    _do(content, world, "丙", lambda g: g.choose("act:smith"))
+    msgs, game = _do(content, world, "丙", lambda g: g.seclude(2))
+    assert msgs == ["你現在無法閉關。"] and game.state.player.busy_until is None
+    _do(content, world, "丙", lambda g: g.choose("smith:back"))
+    _, game = _do(content, world, "丙", lambda g: g.seclude(2))
+    assert game.state.player.busy_until is not None  # 兩個都收起來就閉得了
+
+
 def test_bots_skip_the_board_button_but_score_taking(setup):
     content, world = setup
     _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")

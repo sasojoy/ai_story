@@ -926,8 +926,9 @@ class Game:
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
-        if bounties.board_here(s, c):  # 懸賞榜：第一季、城鎮類的地點；只是打開第二層選單，不花體力
-            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(bounties.open_bounties(s, c))} 張）"))
+        shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
+        if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
+            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
         if weapons.smith_here(s, c):  # 鐵匠鋪（兵器設計 4.1）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
@@ -2484,19 +2485,17 @@ class Game:
         return opts
 
     def _bounty_options(self) -> list[Option]:
-        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他還有名額的每一張一顆「揭下」（接不了的灰掉、寫為什麼），
-        最後是永遠按得下去的「返回」。都不花體力。"""
+        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），
+        最後是永遠按得下去的「返回」。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣。"""
         s, c = self.state, self.content
         mine = {b.id for b in bounties.mine(s, c)}
         opts = []
-        for b in bounties.open_bounties(s, c):
+        for b in bounties.visible(s, c):
             line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
                     f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
                 continue
-            if not bounties.can_take(s, b):
-                continue  # 別的陣營的：陣營的人看不到
             problem = bounties.take_problem(s, c, b)
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
@@ -4685,6 +4684,7 @@ class Game:
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
+            and not s.player.picking_bounty and not s.player.picking_smith  # 懸賞榜、鐵匠鋪開著：選單卡在第二層，先離開（FB-121 第 4 件）
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
             and s.player.duel is None  # 單人頭目戰打到一半：同上
