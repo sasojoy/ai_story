@@ -378,7 +378,8 @@ def _escort(content: Content, rng: random.Random, used: set[str]) -> tuple[str, 
 
 def issue(state: GameState, content: Content, week: int, rng: random.Random | None = None) -> list[str]:
     """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
-    （同一週同一個陣營的討伐不重複地點）。不回傳訊息。rng 不用（介面跟其他週初掛鉤一樣）。
+    （避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；
+    濾完沒地方可挑就跳過那一張）。不回傳訊息。rng 不用（介面跟其他週初掛鉤一樣）。
     兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
     這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
     w, cfg = state.world, content.config.bounties

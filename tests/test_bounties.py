@@ -617,6 +617,26 @@ def test_the_same_place_is_not_posted_twice_while_a_bounty_is_up(content):
     assert sorted(b.location for b in board if b.kind == "scout") == ["cave", "lake"]
 
 
+def test_a_place_frees_up_once_its_bounty_is_past_due_or_filled(content):
+    """同一地點不重複只看榜上還有效的單（issue 的 live：沒過期、名額沒滿）：第 1 週的兩張打探到第 2 週一張過了期限
+    （還有人揭著，issue 照樣留在榜上等 deliver_lapses）、一張名額被交滿，湖邊與山洞就又能掛第 2 週的打探。"""
+    content.scenario.factions = [
+        FactionDef(id="guan", name="官軍", join_at=["town"]),
+        FactionDef(id="huang", name="黃巾", join_at=["lake"]),
+    ]
+    content.squads["thug"].faction = "huang"
+    state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=WorldState())
+    w = state.world
+    bounties.issue(state, content, 1)
+    held, filled = [b for b in w.bounties if b.kind == "scout"]
+    w.time = bounties.week_seconds(state, content)  # 第 2 週的週初
+    held.expires, held.takers = w.time, ["甲"]  # 過了期限、還有人揭著
+    filled.done_by = [f"交差{i}" for i in range(filled.quota)]  # 名額交滿了，期限還沒到
+    bounties.issue(state, content, 2)
+    assert held in w.bounties and filled in w.bounties  # 兩張都還在榜上，只是不算有效
+    assert sorted(b.location for b in w.bounties if b.kind == "scout" and b.week == 2) == ["cave", "lake"]
+
+
 def test_live_bounties_never_share_a_place_on_the_real_map():
     """FB-121 第 2 件（設計 7.2）照正式地圖、14 天的季一週一週掛完一季：每一週掛完，榜上還有效的打探不重複地點、
     護送不重複終點（都不分陣營），討伐同一個陣營不重複地點。測試內容只有一個城鎮、掛不出護送，所以用正式內容。"""

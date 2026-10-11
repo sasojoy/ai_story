@@ -364,6 +364,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 關著時：玩家卡上沒有「截殺」，假人也不截殺；通緝一起收——卡上沒有「通緝」、押不了，已經押的不在懸賞榜上、揭了的人手上不算它，到期照退押金給掛單的人。要再打開就把那一行刪掉、兩個程式一起重開，還沒到期的通緝照常出現。整個懸賞榜也有一個開關（`"bounties": {"enabled": false}`），一般用不到。
 
+**要退回懸賞榜第一批之前的程式時**，先把 `content/config.json` 裡這兩個開關的 `"enabled": false` 拿掉：舊程式不認得 `enabled` 這個欄位，啟動時讀設定就報錯、開不起來。
+
 ## 給 session 用：不開視窗的啟動與停止
 
 Claude session 不能開互動視窗，改用 `Start-Process` 在背景啟動，輸出寫進 log。**記下回傳的 PID**，停的時候要用：
