@@ -375,7 +375,7 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
 
 
 def rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict:
-    """修練頁的兵器那一塊（server.menxia_view 的 weapons）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
+    """修練頁的兵器那一塊（skillview.gear_rows 把它併進 server.menxia_view 的 gear 裡 slot 是 weapon 的那一段）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
