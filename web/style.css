@@ -415,6 +415,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
 .options .btn .b-name { flex: 1 1 auto; min-width: 0; }
 .options .btn .b-move { flex: none; margin-left: auto; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+/* FB-132：鐵匠鋪的長標籤照標點切成小段（app.js 的 nbHtml），每段不折行，段與段之間才換行——375px 上「下品」「沒人」「壓得住」不會被拆在兩行 */
+.nb { display: inline-block; white-space: nowrap; }
 .move-mode { margin-bottom: 8px; } /* 走法切換：一列、緊貼在第一個「前往」上面（排在選項之間，A4） */
 .options > .move-mode { margin: 4px 0 0; }
 /* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
