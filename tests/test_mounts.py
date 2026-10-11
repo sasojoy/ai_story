@@ -700,3 +700,207 @@ def test_a_duel_takes_its_scores_without_the_horse(content, world):
     rules.learn_skill(game.state, content, "fist")
     game._duel_start(content.duels["lake_boss"])
     assert game.state.player.duel.scores == game._battle_scores(mounted=False) != game._battle_scores()
+
+
+# ── Task 7：截殺追逃、落敗策馬脫身 ──
+
+def test_the_flee_chance_is_the_gap_in_legs_capped(content):
+    """設計 5.10：脫身機率＝守方腳力－攻方腳力，夾在 0～40%。例：駑馬對沒馬 25%、良駒對駑馬 15%、名駒對沒馬封頂 40%、攻方比較快 0。"""
+    from tianxia.state import new_game_state
+    _on(content)
+    a, b = new_game_state(content, "甲"), new_game_state(content, "乙")
+    assert mounts.raid_flee(content, a, b) == 0.0
+    b.player.mount = _horse()
+    assert mounts.raid_flee(content, a, b) == pytest.approx(0.25)
+    a.player.mount, b.player.mount = _horse(), _horse(tier=2)
+    assert mounts.raid_flee(content, a, b) == pytest.approx(0.15)
+    a.player.mount = _horse(tier=3)
+    assert mounts.raid_flee(content, a, b) == 0.0  # 攻方的馬比較快：跑不掉
+    a.player.mount, b.player.mount = None, _horse(tier=3, quality="上品")
+    assert mounts.raid_flee(content, a, b) == pytest.approx(0.40)  # 60 對 0：封頂
+    content.config.mounts.enabled = False
+    assert mounts.raid_flee(content, a, b) == 0.0
+
+
+RAID_NOW = 1000.0
+
+
+@pytest.fixture
+def riders(content, world):
+    """截殺的兩個人（同 tests/test_raid.py 的 pair）：官軍甲、黃巾乙在湖邊，坐騎開著、都還沒騎馬。"""
+    from conftest import install_season_one
+    from tianxia.models import FactionDef
+    install_season_one(content)
+    _on(content)
+    content.config.auto_open_first_season = True
+    content.config.newbie_days = -1
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", join_at=["town"]), FactionDef(id="huang", name="黃巾", join_at=["lake"])]
+    for name, faction in (("甲", "guan"), ("乙", "huang")):
+        game = Game.new(content, name, rng=random.Random(0), world=world)
+        game.client = None
+        rules.learn_skill(game.state, content, "fist")
+        p = game.state.player
+        p.faction, p.location, p.stamina, p.stats["silver"] = faction, "lake", 100.0, 200
+        game.sync(RAID_NOW)
+        CharacterStore(world.db).save(game.state)
+    return content, world
+
+
+def _loaded(content, world, name):
+    """伺服器那樣：重讀、同步。做完自己 _saved：只存角色，不替它存季（peer_act／server.act 都只存角色，FB-119）。"""
+    game = Game(content, CharacterStore(world.db).load(name), random.Random(0), world)
+    game.client = None
+    game.sync(RAID_NOW)
+    return game
+
+
+def _saved(game):
+    CharacterStore(game.world.db).save(game.state)
+
+
+def _ride(world, name, horse):
+    store = CharacterStore(world.db)
+    state = store.load(name)
+    state.player.mount = horse
+    store.save(state)
+
+
+def _no_fight(*args, **kwargs):
+    raise AssertionError("跑掉了不該開打")
+
+
+def _arm(world, name):
+    """兩邊各穿一件兵器、一件防具（鋒利度、耐久度 100）：跑掉了要是誤走 _file_battle／_raid_spoils，看得出磨了。"""
+    store = CharacterStore(world.db)
+    state = store.load(name)
+    state.player.weapon = Equipment(id="兵:1", slot="weapon", name="試刃", kind="拳腳", attribute="剛", tier=1, quality="下品")
+    state.player.armor = Equipment(id="甲:2", slot="armor", name="軟皮甲", attribute="柔", tier=1, quality="下品")
+    store.save(state)
+
+
+def test_a_faster_horse_rides_away_from_a_raid_and_the_cooldowns_still_stick(riders, monkeypatch):
+    """Review Focus 4：跑掉了不打（不走 resolve_encounter：截殺唯一用到 Game.rng 的地方）、誰都不失銀兩與氣血、沒有戰報、
+    不磨兵器防具、不扣飽足、不動 Game.rng；發起的人照付體力；冷卻照記而且真的存回共用賽季（這裡不替它存季）；兩邊各一則江湖紀錄。"""
+    content, world = riders
+    content.config.weapons.enabled = content.config.armor.enabled = True  # 測試內容關著：打開才看得出磨了沒
+    for name in ("甲", "乙"):
+        _arm(world, name)
+    _ride(world, "乙", _horse(tier=3, quality="上品"))
+    monkeypatch.setattr(Game, "raid_flee_odds", lambda self, other: 1.0)  # 必定跑掉：不靠亂數
+    monkeypatch.setattr(encounter, "resolve_encounter", _no_fight)
+    game = _loaded(content, world, "甲")
+    dice = game.rng.getstate()  # 玩家卡的 _peer／_kin 跟你共用這一份亂數
+    msgs = game.peer_act("乙", "raid")
+    _saved(game)
+    assert game.rng.getstate() == dice  # 策馬脫身用自己的亂數（「截殺脫身|攻方|守方|世界秒」），Game.rng 一個都沒吃
+    assert "體力 -10" in msgs and mounts.RAID_FLED.format(rival="乙", horse="棗騮馬") in msgs
+    a, b = CharacterStore(world.db).load("甲"), CharacterStore(world.db).load("乙")
+    assert a.player.stamina == 90.0 and a.player.stats["silver"] == 200 == b.player.stats["silver"]
+    assert a.battles == [] and b.battles == [] and b.player.mount.edge == 100
+    assert [(s.player.weapon.edge, s.player.armor.edge) for s in (a, b)] == [(100, 100), (100, 100)]
+    assert (a.journal[0].title, a.journal[0].tag) == ("截殺・乙", mounts.RAID_FLED_TAG)
+    assert (b.journal[0].title, b.journal[0].tag) == ("遭甲截殺", mounts.RAID_ESCAPED_TAG)
+    season = world.get_season()
+    assert season.raids and season.raided  # 冷卻在共用賽季：_raid_fled 自己存了
+    again = _loaded(content, world, "甲")
+    assert again.raid_refusal(again._load_kin("乙")) == "你不久前才截殺過乙，過一陣子再說。"
+
+
+def test_the_raid_button_says_how_likely_the_target_rides_away(riders):
+    content, world = riders
+
+    def button():
+        game = _loaded(content, world, "甲")
+        return next(b for b in game.peer_card("乙")["actions"] if b["action"] == "raid")
+
+    plain = button()["confirm"]  # 誰都沒騎馬：原本那一句（Joy 的，不動）
+    _ride(world, "乙", _horse())  # 守方吃飽的駑馬 25%、攻方沒馬
+    assert button()["confirm"] == plain + mounts.RAID_FLEE_ASK.format(odds="約 3 成")  # 待 joy 潤的那一句從常數組，只鎖「約 3 成」
+    game = _loaded(content, world, "甲")
+    assert game.raid_flee_odds(game._load_kin("乙")) == pytest.approx(0.25)  # 確認句與 raid() 讀同一個數
+    _ride(world, "甲", _horse(tier=2))  # 攻方良駒 40% 比較快：跑不掉
+    assert button()["confirm"] == plain
+
+
+def test_whether_he_rides_away_is_rolled_on_its_own_seed(riders):
+    """設計 5.10：random.Random(f"截殺脫身|{攻方}|{守方}|{世界秒}")；擲不中就照平常打（有戰報）。"""
+    content, world = riders
+    _ride(world, "乙", _horse())  # 25%
+    game = _loaded(content, world, "甲")
+    fled = random.Random(f"截殺脫身|甲|乙|{game.state.world.time}").random() < 0.25
+    game.peer_act("乙", "raid")
+    assert (game.state.battles == []) is fled
+
+
+def _hopeless(game, horse):
+    """湖邊換成打不贏的翻江龍（同 test_engine.test_train_loss_costs_a_tenth_of_the_silver）、騎著 horse 走過去。"""
+    _on(game.content)
+    game.content.locations["lake"].enemies = ["boss"]
+    game.state.player.mount = horse
+    walk_to(game, "lake")
+
+
+def test_a_lost_fight_on_horseback_may_keep_the_silver(game, monkeypatch):
+    """設計 5.11：只保銀兩——氣血照扣、內傷照算、戰報結果照寫落敗，多一句「你策馬脫身，銀兩沒丟」；一成是 0 兩時不擲、不寫。"""
+    from conftest import FixedRandom
+    _hopeless(game, _horse(tier=3, quality="上品"))
+    monkeypatch.setattr(mounts, "escape", lambda state, content: 1.0)  # 必定脫身
+    p = game.state.player
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert record.tier == "落敗" and record.silver == 0 and mounts.ESCAPED_LOSS in record.notes
+    assert p.stats["silver"] == 50 and p.member.injury > 0
+    p.stats["silver"] = 9  # 一成是 0 兩：沒有銀兩可保
+    game.choose("act:train")
+    assert mounts.ESCAPED_LOSS not in game.state.battles[0].notes and p.stats["silver"] == 9
+
+
+def test_riding_away_from_a_loss_is_rolled_on_its_own_seed(game):
+    """random.Random(f"脫身|{名號}|{戰報流水號}")，不動 Game.rng（整季測試與量表的基準不位移）。"""
+    from conftest import FixedRandom
+    _hopeless(game, _horse(tier=3, quality="上品"))
+    p = game.state.player
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    kept = random.Random(f"脫身|{p.name}|{record.id}").random() < mounts.escape(game.state, game.content)
+    assert record.tier == "落敗" and (record.silver == 0) is kept and (p.stats["silver"] == 50) is kept
+
+
+def test_riding_away_from_a_loss_takes_nothing_from_the_games_dice(game):
+    """自己的亂數那條，另外從 Game.rng 這一頭鎖：同一場必敗的遊歷，有沒有馬，吃掉 Game.rng 的次數一樣（上一支只在「自己的種子剛好跟
+    Game.rng 給的不同結果」時才抓得到換錯亂數；這一支不論擲出什麼都抓得到，整季測試與量表的基準不位移）。"""
+    from conftest import FixedRandom
+
+    class Counting(FixedRandom):
+        draws = 0
+
+        def random(self):
+            self.draws += 1
+            return super().random()
+
+    def draws_of_one_loss(horse):
+        game.state.player.mount, game.state.player.stats["silver"] = horse, 50  # 銀兩一樣：一成是 5 兩，有東西可保
+        game.rng = Counting(0.0)
+        game.choose("act:train")
+        assert game.state.battles[0].tier == "落敗"
+        return game.rng.draws
+
+    _hopeless(game, None)  # 先走過去：路上的亂數不算
+    on_foot = draws_of_one_loss(None)
+    assert draws_of_one_loss(_horse(tier=3, quality="上品")) == on_foot > 0
+
+
+def test_the_hopeless_fight_warning_says_the_horse_may_save_the_silver(game, monkeypatch):
+    """必敗的遊歷先問的那一句（FB-095）：騎著馬多寫能保住幾成，跟 _lose_silver 擲的是同一個數（mounts.escape）。"""
+    from tianxia.engine import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING
+    _hopeless(game, None)
+    monkeypatch.setattr(Game, "odds", lambda self, squad_id: "必敗")
+
+    def confirm():
+        return next(o for o in game.options() if o.id == "act:train").confirm
+
+    assert confirm() == TRAIN_CONFIRM  # 沒騎馬：照舊那一句
+    game.state.player.mount = _horse(edge=60)  # 駑馬 30%×0.8＝24% → 約 2 成
+    assert confirm() == TRAIN_CONFIRM_RIDING.format(odds="約 2 成")  # 待 joy 潤的那一句從常數組，只鎖「約 2 成」

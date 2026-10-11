@@ -142,8 +142,10 @@ def say_text(text: str | None) -> str | None:
     if not text or len(text) > SAY_MAX:
         return None
     return zh.to_traditional(text)
-# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事
+# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事。
+# 騎著馬時改用 TRAIN_CONFIRM_RIDING（裝備四欄 5.11），TRAIN_CONFIRM 本身不動（三個測試檔拿它比全等）
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
+TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -1049,7 +1051,8 @@ class Game:
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
         if "必敗" in note.split("・"):  # FB-095：剛出師的人疾行到敵營按遊歷，三場就掉三分之一的銀兩
-            option.confirm = TRAIN_CONFIRM
+            ride = mounts.escape(self.state, self.content)  # 騎著馬策馬脫身的機會（5.11）：_lose_silver 擲的就是它
+            option.confirm = TRAIN_CONFIRM_RIDING.format(odds=mounts.odds_text(ride)) if ride > 0 else TRAIN_CONFIRM
         pick = self._train_pick(loc)
         if (pick is not None and not self._drills_with(pick) and self.is_big(pick)
                 and prologue_rules.fight_tier(self.state, self.content) is None):  # 寫好的那一場不等模型
@@ -4043,9 +4046,15 @@ class Game:
         return msgs
 
     def _lose_silver(self, record) -> list[str]:
-        """落敗失落一成銀兩（遊歷與挑戰本人共用），記在戰報上。"""
+        """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
+        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|名號|戰報流水號」，同回合演出的做法），不動 Game.rng，
+        整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
         p = self.state.player
         loss = p.stats["silver"] // 10
+        chance = mounts.escape(self.state, self.content)
+        if loss and chance > 0 and random.Random(f"脫身|{p.name}|{record.id}").random() < chance:
+            record.notes.append(mounts.ESCAPED_LOSS)
+            return [mounts.ESCAPED_LOSS]
         p.stats["silver"] -= loss
         record.silver = -loss
         return [f"銀兩 -{loss}"] if loss else []
@@ -5582,7 +5591,7 @@ class Game:
     def raid(self, other: Game) -> list[str]:
         """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
         與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
-        雙方各一份戰報與一則江湖紀錄。"""
+        雙方各一份戰報與一則江湖紀錄。被截殺的人騎的馬比較快時，開打之前先擲策馬脫身（raid_flee_odds、_raid_fled）。"""
         problem = self.raid_refusal(other)
         if problem is not None:
             return [problem]
@@ -5591,6 +5600,10 @@ class Game:
         me.stamina -= cfg.stamina
         s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
         s.world.raided[name_key(them.name)] = s.world.time
+        # 策馬脫身（裝備四欄 5.10）：付完體力、記完冷卻才擲（跑掉了冷卻照算，不然可以一直按到追上），用自己的亂數、不動 Game.rng
+        flee = self.raid_flee_odds(other)
+        if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
+            return self._raid_fled(other)
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(ours, theirs, self.rng)
         mirrored = self._spar_mirror(result, theirs)
@@ -5608,6 +5621,26 @@ class Game:
             msgs += self._raid_bounty(them.name)
         # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
         # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
+        self._save_season()
+        return msgs
+
+    def raid_flee_odds(self, other: Game) -> float:
+        """被截殺的 other 策馬脫身的機會（裝備四欄 5.10）：他的腳力減你的腳力，夾在 0～raid_escape_cap；坐騎關著是 0。
+        截殺鈕的確認句（raid.buttons）與 raid() 真正擲的都讀這一個。"""
+        return mounts.raid_flee(self.content, self.state, other.state)
+
+    def _raid_fled(self, other: Game) -> list[str]:
+        """截殺時被截殺的人策馬脫身（裝備四欄 5.10）：不打、誰都不失銀兩與氣血、不寫戰報、不磨兵器防具、不扣飽足；發起的人的體力
+        已經付了、冷卻已經記了（raid 在擲之前做完）。雙方各一則江湖紀錄。冷卻在共用賽季，最後存一次（FB-119：玩家卡走 peer_act、
+        server.act 都只存角色）。scripts/sim_season_one.py 照這個函式數跑掉幾次。"""
+        s, c = self.state, self.content
+        me, them = s.player, other.state.player
+        horse = mounts.name_of(them.mount)
+        self.touched.add(them.name)
+        other._write(f"遭{me.name}截殺", [mounts.RAID_ESCAPED.format(rival=me.name, horse=horse)], tag=mounts.RAID_ESCAPED_TAG)
+        msgs = [f"體力 -{c.config.raid.stamina}", mounts.RAID_FLED.format(rival=them.name, horse=horse)]
+        if self._draft is None:
+            self._write(f"截殺・{them.name}", msgs, tag=mounts.RAID_FLED_TAG)
         self._save_season()
         return msgs
 
