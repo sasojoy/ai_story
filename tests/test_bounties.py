@@ -359,6 +359,33 @@ def test_no_wanted_on_a_newcomer(beta_setup):
     assert button["enabled"]
 
 
+def test_a_newcomer_cannot_take_a_wanted_he_could_not_deliver(beta_setup):
+    """揭的人自己還在截殺的新手期就揭不了通緝（FB-154）：通緝只能靠截殺交差，新手期的人截殺不了（Game.raid_refusal），揭了只是白佔一格到過期。
+    榜上那一行灰掉、寫原因，bounties.take 也拒絕，整季機器人與假人不揭；別種單照揭；新手期從他自己加入那一刻算，規則關著的季一樣，過了就揭得下。"""
+    content, world = beta_setup
+    content.config.newbie_days = 18
+    newbie = content.config.newbie_days * 86400 / calendar.cal_scale(content, world.get_season())
+    world.mutate_season(lambda season: setattr(season, "time", 2 * newbie))
+    _seat(content, world, (("戊", None),))  # 季初就在的甲乙丙丁早就過了新手期，戊是很晚才來的
+    content.config.newbie_days = 18  # _seat 把新手期關掉了，這裡要它
+    wanted = _post(world, kind="wanted", faction="guan", silver=50, deeds=3, poster="甲", target="乙")
+    _do(content, world, "戊", lambda g: g.choose("act:bounties"))
+    row = _ids(content, world, "戊")[f"bounty:take:{wanted.id}"]
+    assert not row.enabled and bounties.WANTED_NEWBIE in row.label
+    assert _direct(content, world, "戊", lambda g: bounties.take(g.state, g.content, wanted.id))[0] == [bounties.WANTED_NEWBIE]
+    _, game = _do(content, world, "戊", lambda g: g)
+    assert not bounties.mine(game.state, content) and not bot_policy._takeable(game)  # 假人：沒有揭得下的，不為它打開榜
+    _direct(content, world, "戊", bot.take_bounties)
+    assert world.get_season().bounties[0].takers == []  # 整季機器人：不揭
+    scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    assert _ids(content, world, "戊")[f"bounty:take:{scout.id}"].enabled  # 擋的只有通緝
+    assert _direct(content, world, "戊", lambda g: bounties.take(g.state, g.content, scout.id))[0][0].startswith("你揭下了")
+    world.mutate_season(lambda season: setattr(season, "time", season.time + newbie + 60))
+    assert _ids(content, world, "戊")[f"bounty:take:{wanted.id}"].enabled
+    assert _direct(content, world, "戊", lambda g: bounties.take(g.state, g.content, wanted.id))[0][0].startswith("你揭下了")
+    assert world.get_season().bounties[0].takers == ["戊"]
+
+
 def test_an_unclaimed_wanted_refunds_the_poster(setup):
     content, world = setup
     for name in ("甲", "乙"):

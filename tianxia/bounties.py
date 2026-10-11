@@ -72,6 +72,7 @@ LAPSED_SEASON = "【懸賞】這一季收了，你手上「{title}」作廢。" 
 LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣營掛的，這一張作廢。"  # 待 joy 潤（FB-151：投靠、叛投那一下；換版前就換了陣營的存檔由 deliver_lapses 補同一句）
 STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
+WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -262,6 +263,8 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
         return "這一張你已經交過差了。"
     if not can_take(state, b):
         return "這一張不是給你接的。"
+    if b.kind == "wanted" and roster.raid_newbie(state, content):  # 通緝只能靠截殺交差，自己還在新手期就截殺不了（Game.raid_refusal）：揭了白佔一格（FB-154）
+        return WANTED_NEWBIE
     if len(mine(state, content)) >= content.config.bounties.max_taken:
         return f"你手上已經有 {content.config.bounties.max_taken} 張了，先交了差再說。"
     if b.kind == "escort" and p.location != b.location:
