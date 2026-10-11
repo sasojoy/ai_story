@@ -272,3 +272,186 @@ def test_giving_also_needs_the_board_here_and_the_bounty_still_up(beta_setup):
     _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
     assert _do(content, world, "丙", lambda g: check(g, art))[0] == bounties.NOT_NOW
     assert _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, art))[0] == [good.id]
+
+
+def _give(bounty_id, item_id):
+    """交出（bounties.give，直接呼叫；選單那一條路在後面測）。"""
+    return lambda g: bounties.give(g.state, g.content, g.world, bounty_id, item_id)
+
+
+def test_handing_in_an_art_takes_it_and_its_records_but_the_recipe_stays(beta_setup):
+    """設計 4.6：交出去就沒了——功法庫拿掉、四份私有紀錄（成、自己那一份的品質、熟練度、擲到的品質）清掉、不退心得；
+    全服登記的那一門照舊，照同一個配方再合一次查表就有、不叫模型（設計 4.10：這不是漏洞）。"""
+    content, world = beta_setup
+
+    def forge(g):
+        g.state.player.insights.append("feng")
+        g.state.player.stats["xinde"] = 50
+        return g.forge("fist", ["feng"], proposed=("疾風拳", "一句話。"))
+
+    _do(content, world, "丙", forge)
+    art_id = _load(world, "丙").player.arts[0]
+
+    def records(p):
+        p.art_levels[art_id], p.art_quality[art_id], p.art_mastery[art_id], p.art_rolled[art_id] = 3, "中品", 1, "中品"
+
+    _edit(world, "丙", records)
+    b = _art(world, attribute="快")
+    before = _load(world, "丙").player.stats["xinde"]
+    msgs, game = _direct(content, world, "丙", _give(b.id, art_id))
+    p = game.state.player
+    assert msgs[0] == bounties.GIVEN.format(name="疾風拳", issuer="官軍", title="求藝・快")
+    assert art_id not in p.arts and all(art_id not in r for r in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled))
+    assert p.stats["xinde"] == before + content.config.bounties.xinde["art"]  # 只有賞的心得，不退熔煉的
+    assert world.get_skill(art_id).creator == "丙"  # 全服登記的那一門不受影響，你是首創者也一樣
+    _do(content, world, "丙", lambda g: g.forge("fist", ["feng"]))  # 沒給 proposed：配方已經登記，查表、不叫模型
+    assert art_id in _load(world, "丙").player.arts
+
+
+def test_loners_and_faction_members_get_full_pay_and_only_loners_add_deeds(beta_setup):
+    """設計 4.7：求藝陣營的人也拿全額（不打 faction_share 的五成），散人另記俠名；兩邊都不記貢獻。前三個交的有賞、一人一次。
+    第 4 階的散人交求藝，銀兩也乘 1.25（14.1 乙；求兵那一半在下一支）。"""
+    content, world = beta_setup
+    good = _fused(world, "烈焰掌")
+    for name in ("甲", "丙"):
+        _edit(world, name, lambda p: p.arts.append(good.id))
+    b = _art(world)
+    loner = _direct(content, world, "丙", _give(b.id, good.id))[0]
+    member = _direct(content, world, "甲", _give(b.id, good.id))[0]
+    for msgs in (loner, member):
+        assert {"銀兩 +20", "經驗 +30", "心得 +20"} <= set(msgs)
+    assert "俠名 +2" in loner and not any("俠名" in m for m in member)
+    assert _load(world, "丙").player.ranger_deeds == 2 and _load(world, "甲").player.contrib == 0
+    assert _load(world, "甲").player.bounties_done == _load(world, "丙").player.bounties_done == 1
+    board = next(x for x in world.get_season().bounties if x.id == b.id)
+    assert board.done_by == ["丙", "甲"] and board.takers == []
+    late = _fused(world, "鐵砂掌")
+
+    def tier_four(p):
+        p.arts.append(late.id)
+        p.ranger_deeds = 50  # 遊俠名號第 4 階：懸賞銀兩 ×1.25
+
+    _edit(world, "丙", tier_four)
+    second = _art(world)
+    assert "銀兩 +25" in _direct(content, world, "丙", _give(second.id, late.id))[0]  # 20 × 1.25：求藝也套（14.1 乙），只乘一次
+
+
+def test_an_art_bounty_hands_out_materials_of_its_attribute(beta_setup):
+    """設計 4.7：求藝另給這張屬性的一階素材 2 個，art_material2_chance 再一個同屬性二階（測試內容剛有一、二階；屬性挑不到時
+    materials.by_tier 退回同階全部，所以素材測試用剛）。"""
+    content, world = beta_setup
+    content.config.bounties.art_material2_chance, content.config.bounties.art_weapon_chance = 1.0, 0.0
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    b = _art(world)
+    msgs, game = _direct(content, world, "丙", _give(b.id, good.id))
+    assert "獲得 精鐵砂 ×2" in msgs and "獲得 玄鋼骨 ×1" in msgs
+    assert game.state.player.materials == {"gang_1": 2, "gang_2": 1}
+
+
+def test_the_gift_weapon_fits_the_worn_art_and_a_full_rack_turns_it_into_silver(beta_setup):
+    """設計 4.7：送的兵器種類配身上那門武學（長拳是拳腳）、屬性同這張、一階；上品 art_weapon_top_chance、其餘中品。
+    空手時直接拿在手上；裝備庫滿了改給同品質的 arms_silver（那把兵器照價折，不乘名號加成）。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    cfg = content.config.bounties
+    cfg.art_material2_chance, cfg.art_weapon_chance, cfg.art_weapon_top_chance = 0.0, 1.0, 1.0
+    good, spare = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+    _edit(world, "丙", lambda p: p.arts.extend([good.id, spare.id]))
+    first, second = _art(world), _art(world)
+    msgs, game = _direct(content, world, "丙", _give(first.id, good.id))
+    w = game.state.player.weapon
+    assert "兵器【厚背拳套】" in msgs and (w.kind, w.attribute, w.tier, w.quality) == ("拳腳", "剛", 1, "上品")
+    _edit(world, "丙", lambda p: setattr(p, "rack", [_blade("兵:9", kind="刀")]))
+    content.config.weapons.rack_cap = 1  # 手上一把、裝備庫一把：放不下了
+    msgs, game = _direct(content, world, "丙", _give(second.id, spare.id))
+    assert bounties.RACK_FULL_SILVER.format(name="厚背拳套", silver=50) in msgs and "銀兩 +50" in msgs
+    assert [x.id for x in game.state.player.rack] == ["兵:9"] and game.state.player.stats["silver"] == 200 + 20 + 20 + 50
+
+
+def test_no_gift_weapon_and_no_silver_for_it_with_weapons_off(beta_setup):
+    content, world = beta_setup
+    content.config.bounties.art_weapon_chance = 1.0
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    b = _art(world)
+    msgs, game = _direct(content, world, "丙", _give(b.id, good.id))
+    assert not any("兵器" in m or "折成" in m for m in msgs) and game.state.player.weapon is None
+    assert game.state.player.stats["silver"] == 220
+
+
+def test_the_gift_dice_hang_on_the_season_the_name_and_the_bounty(beta_setup, monkeypatch):
+    """設計 4.7：求藝的擲骰用自己的亂數（季數＋名號＋懸賞 id），不碰 Game.rng；同一個人交同一張永遠同一個結果，
+    換一季擲出來的不一樣——懸賞 id 每季從 b1 算起，少了季數，記下哪幾號送兵器，下一季就專挑那幾張。"""
+    cfg = real_content().config.bounties
+    one = [bounties.gift_rolls(1, "丙", f"b{i}", cfg) for i in range(1, 41)]
+    assert one == [bounties.gift_rolls(1, "丙", f"b{i}", cfg) for i in range(1, 41)]
+    assert one != [bounties.gift_rolls(2, "丙", f"b{i}", cfg) for i in range(1, 41)]
+    assert any(r.armed for r in one) and not all(r.armed for r in one)
+    content, world = beta_setup
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    b = _art(world)
+    seen, real = [], bounties.gift_rolls
+    monkeypatch.setattr(bounties, "gift_rolls", lambda season, name, bid, c: seen.append((season, name, bid)) or real(season, name, bid, c))
+
+    def give(g):
+        before = g.rng.getstate()
+        bounties.give(g.state, g.content, g.world, b.id, good.id)
+        return g.rng.getstate() == before
+
+    assert _direct(content, world, "丙", give)[0] and seen == [(world.get_season_number(), "丙", b.id)]
+
+
+def test_arms_pay_by_quality_and_tier_once_with_the_tier_four_bonus(beta_setup):
+    """設計 4.7：求兵的銀兩 arms_silver[品質] × arms_tier[階]（三階 ×4），淬煉不加錢；第 4 階散人的 ×1.25 只乘一次
+    （give 把底數交給 _complete(silver=)，由 _silver 乘）。經驗 30、心得 10、散人俠名 2。陣營的人交求兵也拿全額、沒有俠名。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+
+    def armed(p):
+        p.rack = [_blade("兵:2", quality="上品", tier=3, tempers=2), _blade("兵:3", quality="中品", tier=2)]
+        p.ranger_deeds = 50  # 遊俠名號第 4 階：懸賞銀兩 ×1.25
+
+    _edit(world, "丙", armed)
+    top, mid = _arms(world), _arms(world)
+    msgs = _direct(content, world, "丙", _give(top.id, "兵:2"))[0]
+    assert msgs[0] == bounties.GIVEN.format(name="柔劍2", issuer="官軍", title="求兵・屬柔的劍")
+    assert {"銀兩 +250", "經驗 +30", "心得 +10", "俠名 +2"} <= set(msgs)  # 50 × 4 × 1.25，淬煉 2 次不加
+    assert "銀兩 +88" in _direct(content, world, "丙", _give(mid.id, "兵:3"))[0]  # 35 × 2 × 1.25＝87.5
+    assert _load(world, "丙").player.rack == []
+    _edit(world, "甲", lambda p: p.rack.append(_blade("兵:7", quality="中品")))
+    member = _arms(world)
+    msgs = _direct(content, world, "甲", _give(member.id, "兵:7"))[0]
+    assert "銀兩 +35" in msgs and not any("俠名" in m for m in msgs)  # 陣營的人交求兵也拿全額（不打 faction_share 的五成）、沒有俠名
+
+
+def test_handing_in_the_weapon_in_hand_leaves_you_empty_handed(beta_setup):
+    """企劃者 2026-10-10（14.1 丙）：手上那把准交，交完空手、鈍了的提醒重設，不自動從裝備庫換一把上手。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+
+    def armed(p):
+        p.weapon, p.edge_warned = _blade("兵:1"), True
+        p.rack = [_blade("兵:2", kind="刀")]
+
+    _edit(world, "丙", armed)
+    b = _arms(world)
+    msgs, game = _direct(content, world, "丙", _give(b.id, "兵:1"))
+    p = game.state.player
+    assert p.weapon is None and not p.edge_warned and [w.id for w in p.rack] == ["兵:2"]
+    assert msgs[-1] == bounties.EMPTY_HANDS
+
+
+def test_give_checks_everything_again(beta_setup):
+    """確認只在網頁那一層，引擎、假人、腳本都不會先問：give 整個重驗（設計 4.4 末段）。"""
+    content, world = beta_setup
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    b = _art(world, quota=1)
+    assert _direct(content, world, "丙", _give("b999", good.id))[0] == [bounties.GONE]
+    _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
+    assert _direct(content, world, "丙", _give(b.id, good.id))[0] == [bounties.NOT_NOW]
+    _edit(world, "丙", lambda p: setattr(p, "location", "town"))
+    assert _direct(content, world, "丙", _give(b.id, good.id))[0][0].startswith(bounties.GIVEN_PREFIX)
+    assert _direct(content, world, "丙", _give(b.id, good.id))[0] == [bounties.GONE]  # 名額 1：交滿了

@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import math
 import random
+from typing import NamedTuple
 
-from . import calendar, equipment, library, ranger, roster, team, weapons
+from . import calendar, equipment, library, materials, ranger, roster, team, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Content, Location
@@ -32,6 +33,10 @@ NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
 NOT_NOW = "（此刻無法這麼做。）"
 GONE = "這張懸賞已經下榜了。"  # 待 joy 潤
 ONLY_FUSED = "這一張只收合成出來的功夫。"  # 待 joy 潤
+GIVEN_PREFIX = "【懸賞】你把"
+GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
+EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
+RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下
 NOT_YOURS = "這一張不是給你的。"  # 待 joy 潤；fit_problem 的拒絕句（設計 4.5）都寫成常數，測試引用常數，潤字不必改測試
 GIVEN_BEFORE = "這一張你已經交過了。"  # 待 joy 潤
 NO_ART = "你的功法庫裡沒有這一門。"  # 待 joy 潤
@@ -257,12 +262,13 @@ def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
     return ["你手上沒有這一張。"]
 
 
-def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bounty) -> list[str]:
+def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bounty, silver: int | None = None) -> list[str]:
+    """交差：記進 done_by、拿掉 takers，發銀兩（silver 是求兵照那一把傳進來的底數，交給 _silver 乘加成）、經驗、散人的俠名。"""
     p = state.player
     name = name_key(p.name)
     b.takers = [t for t in b.takers if name_key(t) != name]
     b.done_by.append(p.name)
-    silver = _silver(state, content, b)
+    silver = _silver(state, content, b, base=silver)
     p.stats["silver"] = p.stats.get("silver", 0) + silver
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
@@ -411,6 +417,87 @@ def give_problem(state: GameState, content: Content, world: WorldStateStore, b: 
     if b.id not in {x.id for x in open_bounties(state, content)}:
         return GONE  # 過期了，或名額滿了
     return fit_problem(state, content, world, b, item_id)
+
+
+class GiftRolls(NamedTuple):
+    """求藝另給的那幾樣擲出來的結果（gift_rolls）。"""
+
+    second: bool  # 再給一個同屬性二階素材
+    armed: bool  # 給一把兵器
+    top: bool  # 那把是上品（不然中品）
+    spare: str  # 身上的武學推不出兵器種類時用的種類
+
+
+def gift_rolls(season: int, name: str, bounty_id: str, cfg) -> GiftRolls:
+    """求藝的擲骰（設計 4.7）：自己一份亂數（季數＋名號＋懸賞 id），不碰 Game.rng；照固定順序每次都抽四次（二階素材、兵器、品質、
+    退路的種類），用不用得到都抽，同一個人交同一張永遠同一個結果（一張一人只能交一次，也重擲不了）。種子一定要有季數：
+    懸賞 id 每季從 b1 算起，選項 id（bounty:pick:b17）在網頁上看得到，少了季數，記下哪幾號送兵器、下一季就專挑那幾張。"""
+    rng = random.Random(f"bounty-gift|{season}|{name}|{bounty_id}")
+    second = rng.random() < cfg.art_material2_chance
+    armed = rng.random() < cfg.art_weapon_chance
+    top = rng.random() < cfg.art_weapon_top_chance
+    return GiftRolls(second, armed, top, rng.choice(WEAPON_KINDS))
+
+
+def _art_gifts(state: GameState, content: Content, world: WorldStateStore, b: Bounty) -> list[str]:
+    """求藝另給的（設計 4.7）：這張屬性的一階素材 art_materials 個，再看擲骰給一個同屬性二階、一把一階兵器（種類配身上那門武學，
+    推不出來〔空著、內功、舊的自創武學〕用退路的種類；屬性同這張；上品或中品）。裝備庫滿了改給同品質的 arms_silver（那把兵器照價折，
+    不乘名號加成；不學裝備四欄 6.5 寄放：架上 40 兩就買得到的一階貨，折錢就是等價）。兵器開關關著不給也不折。"""
+    cfg, p = content.config.bounties, state.player
+    rolls = gift_rolls(world.get_season_number(), p.name, b.id, cfg)
+    msgs: list[str] = []
+    for tier, count in ((1, cfg.art_materials), (2, 1 if rolls.second else 0)):
+        pool = materials.by_tier(content, tier, b.attribute)  # 挑不到這個屬性時退回同階全部（內容缺一角也不會炸）
+        line = materials.grant(state, content, pool[0].id, count) if pool else None
+        if line:
+            msgs.append(line)
+    if not rolls.armed or not content.config.weapons.enabled:
+        return msgs
+    kind = weapons.art_weapon(p.member.wugong_id, content, world) or rolls.spare
+    quality = "上品" if rolls.top else "中品"
+    name = weapons.shop_name(kind, b.attribute)  # 跟鐵匠鋪架上的下品同名，靠 weapons.grade 寫出的階品分辨
+    if weapons.rack_full(state, content):
+        silver = cfg.arms_silver[quality]
+        p.stats["silver"] = p.stats.get("silver", 0) + silver
+        return msgs + [RACK_FULL_SILVER.format(name=name, silver=silver), f"銀兩 +{silver}"]
+    w = weapons.new_weapon(state, name=name, kind=kind, attribute=b.attribute, tier=1, quality=quality)
+    return msgs + [weapons.GAIN_LINE.format(name=w.name), weapons.store(state, content, w)]
+
+
+def give(state: GameState, content: Content, world: WorldStateStore, bounty_id: str, item_id: str) -> list[str]:
+    """交出（設計 4.5～4.7）：整個重驗（確認只在網頁那一層，引擎、假人、腳本都不會先問），交掉那一件，再發賞。
+    求藝：拿掉那一門與它的私有紀錄（library.remove_art），不退心得；全服登記的那一門不動。求兵：拿掉那一把（手上那把交了就空手、
+    鈍了的提醒重設，不自動換一把上手），銀兩照它的品質與階。陣營的人也拿全額；散人另記俠名。"""
+    b = next((x for x in state.world.bounties if x.id == bounty_id), None)
+    if b is None:
+        return [GONE]
+    problem = give_problem(state, content, world, b, item_id)
+    if problem is not None:
+        return [problem]
+    p, cfg = state.player, content.config.bounties
+    emptied = False
+    if b.kind == "art":
+        name = team.resolve_art(item_id, content, world).name
+        library.remove_art(state, item_id)
+        msgs = _complete(state, content, world, b)
+    else:
+        w = _weapon(state, item_id)
+        name = w.name
+        if p.weapon is w:
+            p.weapon, p.edge_warned, emptied = None, False, True
+        else:
+            p.rack.remove(w)
+        msgs = _complete(state, content, world, b, silver=cfg.arms_silver[w.quality] * cfg.arms_tier[str(w.tier)])
+    msgs[0] = GIVEN.format(name=name, issuer=issuer(content, b), title=title(content, b))
+    xinde = cfg.xinde.get(b.kind, 0)
+    if xinde:
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+        msgs.append(f"心得 +{xinde}")
+    if b.kind == "art":
+        msgs += _art_gifts(state, content, world, b)
+    if emptied:
+        msgs.append(EMPTY_HANDS)
+    return msgs
 
 
 # ── 通緝（玩家花銀兩掛的）──────────────────────────────
