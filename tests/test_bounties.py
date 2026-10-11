@@ -91,11 +91,11 @@ def _load(world, name):
     return CharacterStore(world.db).load(name)
 
 
-def _post(world, **kw) -> Bounty:
+def _post(world, expires=WEEK, **kw) -> Bounty:
     """直接在榜上貼一張（每週的自動掛單另外測）。"""
     def add(season):
         season.bounty_seq += 1
-        season.bounties.append(Bounty(id=f"b{season.bounty_seq}", week=1, expires=WEEK, **kw))
+        season.bounties.append(Bounty(id=f"b{season.bounty_seq}", week=1, expires=expires, **kw))
 
     world.mutate_season(add)
     return world.get_season().bounties[-1]
@@ -463,6 +463,37 @@ def test_opening_a_beta_season_posts_week_one_and_leaves_hooked_week_alone():
     assert season.bounties == board
     ended = _beta_season(content, ended=True)
     assert settle_season_start(ended, content, random.Random(0)) == [] and ended.bounties == []
+
+
+def _due(content, season, week):
+    """第 week 週自動掛的單（期限 week_start(週次＋2)）給玩家看的期限。"""
+    b = Bounty(id="b1", kind="scout", faction="guan", week=week, silver=10, deeds=2,
+               expires=calendar.week_start(week + content.config.bounties.auto_weeks, content, season))
+    return bounties.due_text(b, content, season)
+
+
+def test_due_text_follows_the_season_and_says_season_end_past_the_last_day():
+    """期限的寫法（懸賞榜設計 3.5）：規則關著寫「第N天 HH:MM」、第一季寫「第 N 週・週X HH:MM」；到季末或過了季末一律「到季末」——
+    14 天的季第 11、12 週掛的單到期是第 336、364 小時，不寫這一季沒有的「第15天 00:00」「第16天 04:00」；週末設定一樣。"""
+    beta = real_content()
+    season = _beta_season(beta)
+    assert [_due(beta, season, week) for week in (1, 10, 11, 12)] == ["第3天 08:00", "第13天 20:00", "到季末", "到季末"]
+    weekend = real_content("weekend")
+    season = fresh_season(weekend)
+    assert season.season_one
+    assert [_due(weekend, season, week) for week in (1, 10, 11, 12)] == ["第 3 週・週一 00:00", "第 12 週・週一 00:00", "到季末", "到季末"]
+
+
+def test_board_lines_card_rows_and_the_take_reply_show_the_due_time_and_places_left(setup):
+    """FB-121 第 5 件：懸賞榜每一行、懸賞卡每一列、揭下的回話都寫期限與名額（期限走 due_text；第一季寫季曆時刻）。"""
+    content, world = setup
+    due = calendar.week_start(3, content, world.get_season())
+    b = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake", quota=3, expires=due)
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    assert "（賞銀 10・經驗 10・俠名 +2；期限 第 3 週・週一 00:00・名額還剩 3）" in _ids(content, world, "丙")[f"bounty:take:{b.id}"].label
+    msgs, _ = _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
+    assert "期限 第 3 週・週一 00:00・名額還剩 3" in msgs[0]
+    assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"][0]["due"] == "期限 第 3 週・週一 00:00・名額還剩 3"
 
 
 @pytest.mark.slow

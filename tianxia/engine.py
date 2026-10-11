@@ -2486,7 +2486,8 @@ class Game:
         mine = {b.id for b in bounties.mine(s, c)}
         opts = []
         for b in bounties.open_bounties(s, c):
-            line = f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}（{bounties.reward_text(s, c, b)}）"
+            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
+                    f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
                 continue
@@ -6900,7 +6901,7 @@ class Game:
             "name": p.name,
             "affiliation": social.affiliation(s, c),
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營是 None
-            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；懸賞榜關著是空的
+            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額）；懸賞榜關著是空的
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "anonymous": p.anonymous,

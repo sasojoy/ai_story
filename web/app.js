@@ -1267,6 +1267,7 @@
         <div class="order-head"><b>${esc(b.title)}</b><span>${esc(b.issuer)}</span></div>
         <div class="order-how">${esc(b.how)}</div>
         <div class="order-meta">${esc(b.reward)}</div>
+        ${b.due ? `<div class="order-meta">${esc(b.due)}</div>` : ""}
       </div>`).join("");
     const open = (options || []).some((o) => o.id === "bounty:back");  // 懸賞榜正開著（選單就是榜）：卡底下不再寫什麼
     const foot = open ? "" : board

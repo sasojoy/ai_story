@@ -38,6 +38,7 @@ def test_the_bounty_card_lists_what_you_hold_and_opens_the_board(setup):  # noqa
     _do(content, world, "丙", lambda g: g.choose("bounty:back"))
     page = run(_view(content, world, "丙"), "return H.pageJianghu();")
     assert "🪧 懸賞（1）" in page and "打探・湖邊" in page and "到湖邊探索一次" in page and "俠名 +2" in page
+    assert "期限 到季末・名額還剩 1" in page  # 每一列寫期限與名額（FB-121 第 5 件；測試的單掛到季末之後）
     assert 'data-act="choose" data-id="act:bounties"' in page.split("🪧")[1]  # 在城鎮：卡底下開得了懸賞榜
     assert page.index("🪧") > page.index('data-id="act:rest"')  # 排在行動列下面，不擠第一屏
     shut = run(_view(content, world, "丙"), "return H.pageJianghu();", S={"bountyShut": b.id})
