@@ -73,6 +73,7 @@ LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣�
 STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
+HELD_FULL = "你手上已經有 {count} 張了，先交了差再說。"  # 待 joy 潤（FB-155：count 是手上真的有幾張，不是上限；截殺關了又開時可以超過上限）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -265,8 +266,9 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
         return "這一張不是給你接的。"
     if b.kind == "wanted" and roster.raid_newbie(state, content):  # 通緝只能靠截殺交差，自己還在新手期就截殺不了（Game.raid_refusal）：揭了白佔一格（FB-154）
         return WANTED_NEWBIE
-    if len(mine(state, content)) >= content.config.bounties.max_taken:
-        return f"你手上已經有 {content.config.bounties.max_taken} 張了，先交了差再說。"
+    held = len(mine(state, content))
+    if held >= content.config.bounties.max_taken:
+        return HELD_FULL.format(count=held)  # 寫手上真的有幾張，不是上限：截殺關了又開，通緝回到手上時會超過上限（FB-155）
     if b.kind == "escort" and p.location != b.location:
         return f"要在{_loc_name(content, b.location)}接。"
     return None

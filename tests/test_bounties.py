@@ -359,6 +359,35 @@ def test_no_wanted_on_a_newcomer(beta_setup):
     assert button["enabled"]
 
 
+def test_the_full_hands_refusal_states_how_many_you_really_hold(setup):
+    """手上滿了的拒絕句寫手上真的有幾張（FB-155）：平常滿格就是上限（3 張），可是截殺開關關著時通緝不佔格、又揭滿 3 張，開回來通緝回到手上，
+    手上有 4 張——每一行都寫「已經有 3 張」跟手上的張數對不上。"""
+    content, world = setup
+    cap = content.config.bounties.max_taken
+    assert cap == 3
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.location = "lake"
+        CharacterStore(world.db).save(state)
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))
+    wanted = world.get_season().bounties[-1]
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, wanted.id))
+    content.config.raid.enabled = False  # 通緝收起來：不佔格
+    for _ in range(cap):
+        scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+        assert _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, scout.id))[0][0].startswith("你揭下了")
+    extra = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    refusal = _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, extra.id))[0]
+    assert refusal == [bounties.HELD_FULL.format(count=cap)] and "3 張" in refusal[0]  # 平常滿格：就是 3 張
+    content.config.raid.enabled = True  # 開回來：通緝回到手上，4 張
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    assert _direct(content, world, "丙", lambda g: len(bounties.mine(g.state, g.content)))[0] == cap + 1
+    row = _ids(content, world, "丙")[f"bounty:take:{extra.id}"]
+    assert not row.enabled and bounties.HELD_FULL.format(count=cap + 1) in row.label and "4 張" in row.label
+    refusal = _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, extra.id))[0]
+    assert refusal == [bounties.HELD_FULL.format(count=cap + 1)]
+
+
 def test_a_newcomer_cannot_take_a_wanted_he_could_not_deliver(beta_setup):
     """揭的人自己還在截殺的新手期就揭不了通緝（FB-154）：通緝只能靠截殺交差，新手期的人截殺不了（Game.raid_refusal），揭了只是白佔一格到過期。
     榜上那一行灰掉、寫原因，bounties.take 也拒絕，整季機器人與假人不揭；別種單照揭；新手期從他自己加入那一刻算，規則關著的季一樣，過了就揭得下。"""
