@@ -170,3 +170,15 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
     assert out.count("小時（世界時間）") == 2 and out.count("結局 ") == 2 and out.count("每遊戲日") == 2  # 季長、結局、每日場數
     assert out.count("、打造 ") == 2 and out.count("淬煉 ") == 2 and out.count("首創配方 ") == 2  # 第二批：打造、淬煉、首創
     assert out.count("鐵匠鋪花掉 ") == 2 and out.count("全季收入 ") == 2  # 設計第七節第 5 項：銀兩花在鐵匠鋪的比例
+
+
+def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off(capsys, monkeypatch):
+    """散人量表（懸賞榜設計 11.1）：--profile none 不套設定覆寫檔，量的是預設設定（14 天、第一季規則關著）的季；
+    開頭印一行設定，散人、陣營各一行，再各一行中位數（只量不改，不驗數字）。"""
+    measure = _load("measure_sanren")
+    monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "設定：預設"
+    assert "種子 1 散人：" in out and "種子 1 陣營：" in out
+    assert "散人中位數：" in out and "陣營中位數：" in out

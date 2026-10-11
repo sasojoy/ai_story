@@ -9,8 +9,10 @@
 印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數，
 散人另印俠名與名號的階、懸賞完成幾張；陣營另印階與貢獻。最後一行是兩邊的中位數。
 
-用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend] [--bare]
-（--bare 是對照組：拿掉懸賞榜與名號的經驗加成，看這一版之前散人跟陣營差多少）
+用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend|none] [--bare]
+（--profile 預設 weekend：第一季規則開著的週末設定；none 是不套設定覆寫檔，量預設設定〔14 天、第一季規則關著〕的季——
+懸賞榜、名號、截殺每季都有之後，那種季也有懸賞可揭〔懸賞榜設計 11.1〕。不用空字串：PowerShell 5.1 會把它吞掉。
+--bare 是對照組：拿掉懸賞榜與名號的經驗加成，看這一版之前散人跟陣營差多少）
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ TMP = Path(tempfile.mkdtemp(prefix="measure_sanren_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
 from tianxia import bot, bot_policy, bounties, database, encounter, naming, orders, ranger, ranks, team  # noqa: E402
-from tianxia.content import load_content  # noqa: E402
+from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
@@ -142,13 +144,16 @@ def measure(seed: int, profile: str | None, side: str, bare: bool = False) -> di
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="weekend",
+                        help="設定覆寫檔（content/profiles/<名字>.json）；none＝不套，量預設設定（14 天、第一季規則關著）的季")
     parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜與名號的經驗加成")
     args = parser.parse_args()
+    profile = None if args.profile == "none" else args.profile
+    print(profile_line(load_content(ROOT / "content", profile=profile), profile), flush=True)
     rows: dict[str, list[dict]] = {"散人": [], "陣營": []}
     for seed in args.seeds:
         for side in rows:
-            row = measure(seed, args.profile, side, bare=args.bare)
+            row = measure(seed, profile, side, bare=args.bare)
             rows[side].append(row)
             extra = (f"俠名 {row['俠名']}（第 {row['名號']} 階）懸賞 {row['懸賞']}" if side == "散人"
                      else f"{row['faction']} 第 {row['階']} 階 貢獻 {row['貢獻']}")
