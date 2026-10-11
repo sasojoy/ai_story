@@ -649,3 +649,107 @@ def test_menxia_view_sends_gear_and_the_wield_action_takes_armor(content, world)
     assert "weapons" not in view and [g["slot"] for g in view["gear"]["slots"]] == ["armor"]
     server.MENXIA_ACTIONS["wield"](game, {"weapon": "甲:2"})  # 網頁照舊送 weapon 這個鍵：防具的 id 也走它
     assert p.armor.id == "甲:2" and server.menxia_view(game)["gear"]["slots"][0]["worn"]["id"] == "甲:2"
+
+
+# ── Task 6：整季機器人與假人會買、修、換防具 ──
+
+def test_smith_want_does_this_page_first_then_switches(content, world):
+    from tianxia import bot
+    game = _town(content, world, weapons_on=True)  # 內功是靜心訣（虛）、沒有武學：兵器沒事要做
+    p = game.state.player
+    assert bot.smith_want(game) == "smith:page:armor"  # 還沒進門：照進門會停的兵器頁算，防具的事在另一頁
+    game.choose("act:smith")
+    assert bot.smith_want(game) == "smith:page:armor"
+    game.choose("smith:page:armor")
+    assert bot.smith_want(game) == f"{armor.BUY}剛"
+    rules.learn_skill(game.state, content, "sword")
+    p.member.wugong_id = "sword"
+    assert bot.smith_want(game) == f"{armor.BUY}剛"  # 這一頁還有事：先做完，不來回切
+    game.choose(f"{armor.BUY}剛")
+    assert bot.smith_want(game) == "smith:page:weapon"  # 防具買好了，兵器那邊要買一把劍
+
+
+def test_visit_smith_buys_repairs_and_wields_armor_though_the_smith_opens_on_the_weapon_page(content, world):
+    from tianxia import bot
+    game = _town(content, world, weapons_on=True, inner="basic_breath")  # 粗淺吐納：屬柔
+    p = game.state.player
+    rules.learn_skill(game.state, content, "sword")
+    p.member.wugong_id = "sword"
+    bot.visit_smith(game)
+    assert p.weapon is not None and p.weapon.kind == "劍" and p.armor is not None and p.armor.attribute == "柔"
+    assert not p.picking_smith and p.smith_page == "weapon" and p.stats["silver"] == 120
+    p.weapon.tempers = content.config.weapons.temper_max  # 兵器淬滿了：那一個一階素材留給修防具
+    p.armor.edge, p.materials = 40, {"gang_1": 1}
+    bot.visit_smith(game)
+    assert p.armor.edge == 100 and p.materials == {}  # 修得到
+    p.rack.append(_jacket(aid="甲:9", attribute="柔", tier=2, name="二階軟甲"))
+    bot.visit_smith(game)
+    assert p.armor.id == "甲:9" and not p.picking_smith  # 換得上
+
+
+def test_visit_smith_with_only_armor_on_buys_on_the_armor_page_and_closes_the_door(content, world):
+    from tianxia import bot
+    game = _town(content, world)  # 只開防具：進門就是防具頁，兵器頁那一段整個跳過
+    p = game.state.player
+    bot.visit_smith(game)
+    assert p.armor is not None and p.armor.attribute == "剛" and p.stats["silver"] == 160 and not p.picking_smith
+    before = p.stats["silver"]
+    bot.visit_smith(game)  # 身上那件跟架上一樣好、也不鈍：不進門
+    assert p.stats["silver"] == before and not p.picking_smith and p.smith_page == "weapon"
+
+
+def test_a_server_bot_switches_to_the_armor_page_and_buys(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _town(content, world, weapons_on=True)
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    assert bot_policy.score(game, _ids(game)["act:smith"], profile) is not None  # 只有防具要買也進門
+
+    def best():
+        scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled}
+        return max(scored, key=lambda k: scored[k] if scored[k] is not None else -1), scored
+
+    game.choose("act:smith")
+    assert best()[0] == "smith:page:armor"
+    game.choose("smith:page:armor")
+    top, scored = best()
+    assert top == f"{armor.BUY}剛" and scored["smith:back"] == 0.0 and scored["smith:page:weapon"] is None
+
+
+def test_a_server_bot_with_only_armor_on_usually_buys_and_never_gets_stuck(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
+    bought = 0
+    for seed in range(10):
+        game = _town(content, world)
+        rng = random.Random(seed)
+        game.choose("act:smith")
+        for _ in range(6):
+            if not game.state.player.picking_smith:
+                break
+            bot_policy.take_turn(game, profile, rng)
+        assert not game.state.player.picking_smith
+        bought += game.state.player.armor is not None
+    assert bought >= 5
+
+
+def test_pick_never_presses_a_smith_page_button(content, world):
+    from tianxia import bot
+    game = _town(content, world, weapons_on=True)
+    game.choose("act:smith")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "smith:page:armor" in {o.id for o in options}
+    for seed in range(30):
+        assert bot.pick(game, options, random.Random(seed)) != "smith:page:armor"
+
+
+def test_bots_never_want_to_dismantle_armor(content, world):
+    from tianxia import bot, bot_policy
+    from tianxia.state import BotProfile
+    game = _town(content, world, silver=0)
+    game.state.player.rack = [_jacket(aid="甲:5")]
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    game.choose("act:smith")
+    assert bot_policy.score(game, _ids(game)["smith:dismantle:甲:5"], profile) is None
+    assert not (bot.smith_want(game) or "").startswith("smith:dismantle")

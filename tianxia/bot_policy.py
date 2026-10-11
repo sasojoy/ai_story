@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, bounties, cultivation, duel, invites, library, naming, orders, rules, sensing, server_bots, social, team, weapons
+from . import atlas, battle_instance, bot, bounties, cultivation, duel, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -477,7 +477,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
         verb = arg.partition(":")[0]
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
-    if kind == "smith":  # 鐵匠鋪上：照 weapons.wanted 按那一顆，沒事就離開；不打造、不淬煉（附帶決定 e），萬一停在單子上只按「不打了」
+    if kind == "smith":  # 鐵匠鋪上：照 bot.smith_want 按那一顆（含切到另一頁），沒事就離開；不打造、不淬煉、不拆（附帶決定 e），萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "call":
         # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
@@ -687,10 +687,8 @@ def _takeable(game: Game) -> bool:
 
 
 def _smith_want(game: Game) -> str | None:
-    """此刻在鐵匠鋪最該按的那一顆（weapons.wanted），沒事是 None。"""
-    s = game.state
-    art = team.player_art(s, game.content, game.world, s.player.member.wugong_id)
-    return weapons.wanted(s, game.content, game.world, art)
+    """此刻在鐵匠鋪最該按的那一顆（bot.smith_want：兵器、防具兩頁，這一頁的事先做、沒事才切頁），沒事是 None。"""
+    return bot.smith_want(game)
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

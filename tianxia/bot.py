@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import bounties, cultivation, fusion, glyph, insights, library, naming, sensing, smithing, team, traits, weapons
+from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, naming, sensing, smithing, team, traits, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -286,10 +286,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
-    # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith
+    # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith。鐵匠鋪的切頁（smith:page:）也只是換一頁（裝備四欄設計第九節）
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", DUEL_FLEE) and not o.id.startswith(("road:", "defect:", "invite:"))
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", DUEL_FLEE)
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:"))
     ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
@@ -320,44 +321,74 @@ def take_bounties(game: Game) -> None:
         game.choose("bounty:back")
 
 
+def smith_want(game: Game) -> str | None:
+    """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用；兵器設計第六節、裝備四欄設計第九節）：兵器頁照 weapons.wanted（換、買、修），
+    防具頁照 armor.wanted（換、買、修）。停在的那一頁有事先做；這一頁沒事、另一頁有事才回切頁那一顆（smith:page:<頁>），
+    下一輪再回真正的動作——不會來回切。還沒進門時照進門會停的那一頁算（equipment.first_page）。打造、淬煉、拆解不在這裡
+    （假人不打造不淬煉不拆；整季機器人的打造與淬煉在 visit_smith 另外做）。都沒事是 None。"""
+    s, c, w = game.state, game.content, game.world
+    member = s.player.member
+    moves = {
+        "weapon": weapons.wanted(s, c, w, team.player_art(s, c, w, member.wugong_id)),
+        "armor": armor.wanted(s, c, team.player_art(s, c, w, member.neigong_id)),
+    }
+    here = equipment.page(s.player, c) if s.player.picking_smith else equipment.first_page(c)
+    if moves.get(here) is not None:
+        return moves[here]
+    other = next((slot for slot, move in moves.items() if move is not None), None)
+    return None if other is None else f"smith:page:{other}"
+
+
 def visit_smith(game: Game) -> None:
-    """城裡有鐵匠鋪就看一眼（兵器設計第六節）：照 weapons.wanted 換、買、修；再照 smithing.forge_plan 打一把、把裝備庫裡更好的換上、
-    淬煉手上那把；最後收掉打造的單子、離開。不花體力。假人不走這裡（bot_policy 只買、修、換）。"""
+    """城裡有鐵匠鋪就看一眼（兵器設計第六節、裝備四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
+    打一把、把裝備庫裡更好的換上、淬煉手上那把（打造與淬煉的鈕只在兵器頁，所以兵器的事先做完）、收掉打造的單子；再切到防具頁照
+    armor.wanted 換、買、修；最後離開。每一頁最多按四下（換、買、買了再換上、修）。不花體力。假人不走這裡（bot_policy 照 smith_want）。"""
     s, c, w = game.state, game.content, game.world
 
     def art():
         return team.player_art(s, c, w, s.player.member.wugong_id)
 
+    def inner():
+        return team.player_art(s, c, w, s.player.member.neigong_id)
+
     def enabled() -> set[str]:
         return {o.id for o in game.options(odds=False) if o.enabled}
 
-    if s.pending_event or not weapons.smith_here(s, c):
+    def press(wanted: Callable[[], str | None]) -> None:
+        for _ in range(4):
+            move = wanted()
+            if move is None or move not in enabled():
+                break
+            game.choose(move)
+
+    if s.pending_event or not equipment.smith_open(s, c):
         return
-    if weapons.wanted(s, c, w, art()) is None and not smithing.has_errand(s, c, w, art()):
+    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()):
         return
     if "act:smith" not in enabled():
         return
     game.choose("act:smith")
-    for _ in range(4):  # 換、買、修最多各一次，夠了
-        move = weapons.wanted(s, c, w, art())
-        if move is None or move not in enabled():
-            break
-        game.choose(move)
-    plan = smithing.forge_plan(s, c, w, art())
-    if plan is not None:
-        for oid in smithing.wizard_steps(*plan):
-            if oid not in enabled():
+    if equipment.page(s.player, c) == "weapon":  # 進門停在兵器頁（武器關著時直接是防具頁，這一段跳過）
+        press(lambda: weapons.wanted(s, c, w, art()))
+        plan = smithing.forge_plan(s, c, w, art())
+        if plan is not None:
+            for oid in smithing.wizard_steps(*plan):
+                if oid not in enabled():
+                    break
+                game.choose(oid)
+        better = smithing.better_in_rack(s, c, w, art())
+        if better is not None and f"smith:wield:{better.id}" in enabled():
+            game.choose(f"smith:wield:{better.id}")
+        for _ in range(c.config.weapons.temper_max):
+            if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
                 break
-            game.choose(oid)
-    better = smithing.better_in_rack(s, c, w, art())
-    if better is not None and f"smith:wield:{better.id}" in enabled():
-        game.choose(f"smith:wield:{better.id}")
-    for _ in range(c.config.weapons.temper_max):
-        if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
-            break
-        game.choose(smithing.TEMPER)
-    if s.player.smith_draft is not None and smithing.CANCEL in enabled():
-        game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上
+            game.choose(smithing.TEMPER)
+        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
+            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕）
+        if armor.wanted(s, c, inner()) is not None and "smith:page:armor" in enabled():
+            game.choose("smith:page:armor")  # 防具的事在另一頁：兵器的事（含打造、淬煉）做完才切過去
+    if equipment.page(s.player, c) == "armor":
+        press(lambda: armor.wanted(s, c, inner()))
     if s.player.picking_smith:
         game.choose("smith:back")
 
