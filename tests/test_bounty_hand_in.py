@@ -8,12 +8,12 @@ import pytest
 
 from conftest import real_content
 from test_bounties import _direct, _do, _ids, _load, _post, beta_setup  # noqa: F401  （beta_setup 是 fixture）
-from tianxia import bounties, calendar, library
+from tianxia import bot, bot_policy, bounties, calendar, library
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, validate
 from tianxia.martial_arts import generate_from_name
 from tianxia.models import WEAPON_KINDS
-from tianxia.state import Equipment, GameState, PlayerState, Weapon, WorldState
+from tianxia.state import BotProfile, Equipment, GameState, PlayerState, Weapon, WorldState
 from tianxia.world_state import fresh_season
 
 LOW = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
@@ -599,3 +599,71 @@ def test_the_card_lists_hand_ins_you_can_make_even_outside_town(beta_setup):
     rows = _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"]
     assert [r["id"] for r in rows] == [scout.id, again.id, arms.id]
     assert rows[2]["have"] == bounties.HAVE + "【柔劍1】（一階下品・在手上）"  # 手上那把也算；同名的靠階品分辨
+
+
+def test_give_choice_names_the_first_hand_in_and_its_cheapest_item_but_not_the_weapon_in_hand(beta_setup):
+    """設計 9.1：整季機器人與伺服器假人共用的挑法——此地懸賞榜上第一張交得出的求藝、求兵，與第三層排第一的那一件（最不值錢的），
+    不隨機。手上那把兵器不交（交了要空手、少一截威力；真人看得到確認句自己決定）。城外沒有榜：None。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    high, low = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+
+    def kit(p):
+        p.arts, p.art_levels, p.weapon = [high.id, low.id], {high.id: 7}, _blade("兵:1")
+
+    _edit(world, "丙", kit)
+    arms, art = _arms(world), _art(world)
+
+    def choice():
+        return _do(content, world, "丙", lambda g: bounties.give_choice(g.state, g.content, g.world))[0]
+
+    assert choice() == (art.id, low.id)  # 求兵只對得上手上那把：跳過
+    _edit(world, "丙", lambda p: p.rack.append(_blade("兵:2", quality="上品")))
+    assert choice() == (arms.id, "兵:2")  # 榜上先掛的先交；手上那把下品更不值錢，照樣不交
+    _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
+    assert choice() is None
+
+
+def test_the_season_bot_hands_in_its_cheapest_art_and_never_takes_a_hand_in(beta_setup):
+    """設計 9.2：整季機器人路過城鎮時，沒得揭、只有得交也會打開榜，照 give_choice 交最不值錢的那一門，最後收起懸賞榜；
+    求藝、求兵不揭（take_problem 擋，不佔 max_taken 的格子）。"""
+    content, world = beta_setup
+    high, low = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+
+    def kit(p):
+        p.arts, p.art_levels = [high.id, low.id], {high.id: 7}
+
+    _edit(world, "丙", kit)
+    art = _art(world)
+    game = _do(content, world, "丙", lambda g: g)[1]
+    bot.take_bounties(game)
+    p = game.state.player
+    assert p.arts == [high.id] and not p.picking_bounty and p.bounty_pick is None
+    board = next(x for x in game.state.world.bounties if x.id == art.id)
+    assert board.done_by == ["丙"] and board.takers == []
+
+
+def test_server_bots_score_only_the_pick_and_the_give_that_give_choice_names(beta_setup):
+    """設計 9.3：假人在懸賞榜上只給 give_choice 指的那一張「交出…」與那一件「交出」打分（BOUNTY_SCORE），別的交出不選
+    （同分隨機會把最好的那門交掉）；回到懸賞榜、返回是 0。_takeable 認得「交得出」：沒得揭、只有得交也會打開榜。"""
+    content, world = beta_setup
+    high, low = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+
+    def kit(p):
+        p.arts, p.art_levels = [high.id, low.id], {high.id: 7}
+
+    _edit(world, "丙", kit)
+    art, other = _art(world), _art(world, faction="huang")
+    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
+    game = _do(content, world, "丙", lambda g: g)[1]
+    assert bot_policy._takeable(game)
+
+    def scores():
+        return {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled}
+
+    game.choose("act:bounties")
+    assert scores() == {f"bounty:pick:{art.id}": bot_policy.BOUNTY_SCORE, f"bounty:pick:{other.id}": None, "bounty:back": 0.0}
+    game.choose(f"bounty:pick:{art.id}")
+    assert scores() == {
+        f"bounty:give:{art.id}:{low.id}": bot_policy.BOUNTY_SCORE, f"bounty:give:{art.id}:{high.id}": None, "bounty:unpick": 0.0,
+    }

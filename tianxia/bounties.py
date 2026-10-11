@@ -501,6 +501,24 @@ def hand_in_options(
     return opts
 
 
+def give_choice(state: GameState, content: Content, world: WorldStateStore) -> tuple[str, str] | None:
+    """（懸賞 id, 東西 id）：此地懸賞榜上第一張交得出的求藝、求兵，與第三層排第一、按得下去的那一件（最不值錢的；設計 9.1）。
+    整季機器人與伺服器假人共用（照 weapons.wanted 的做法），照這個挑、不隨機：同分隨機會把最好的那門交掉。
+    手上那把兵器不交（交了要空手、少一截威力；真人看得到確認句自己決定）——設計 9.1 寫的是「排第一的那一件」，跳過手上那把是
+    計畫的取捨 3，PM 2026-10-11 確認：整季機器人與伺服器假人不交手上那把，真人可以。城外、榜關著、沒得交是 None。"""
+    if not board_here(state, content):
+        return None
+    held = state.player.weapon.id if state.player.weapon is not None else None
+    memo: dict = {}
+    for b in visible(state, content):
+        if b.kind not in GIVE_KINDS:
+            continue
+        for item in fitting(state, content, world, b, memo)[:content.config.bounties.give_list]:
+            if b.kind != "arms" or item != held:
+                return b.id, item
+    return None
+
+
 def give_problem(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str) -> str | None:
     """第三層的交出鈕亮不亮、give 真的交之前都走這裡（設計 4.5 第 1、2 條，再接 fit_problem）：懸賞榜看得到、這一張還在榜上。"""
     if not board_here(state, content):
