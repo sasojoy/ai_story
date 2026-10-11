@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
+    atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
@@ -2540,21 +2540,32 @@ class Game:
         temper = smithing.temper_option(s, c)  # 淬煉身上那把（兵器設計 4.7）；空手沒有
         if temper is not None:
             opts.append(temper)
-        for w in s.player.rack:
+        for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
             if weapons.usable(w, art, c, self.world):
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
-            breakable = sorted(s.player.rack, key=weapons.dismantle_order)
-            for w in breakable[:weapons.DISMANTLE_LIST]:
-                opts.append(Option(
-                    id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{weapons.grade_line(w)}）→ {weapons.dismantle_material(c, w).name}×1",
-                    confirm=weapons.dismantle_confirm(c, w), confirm_yes=weapons.DISMANTLE_YES,  # FB-125：先問一次
-                ))
-            if len(breakable) > weapons.DISMANTLE_LIST:
-                opts.append(Option(id="smith:dismantle-more", label=weapons.DISMANTLE_MORE.format(n=len(breakable) - weapons.DISMANTLE_LIST),
-                                   enabled=False))
+        opts += self._dismantle_options("weapon")  # 拆解（只看武器那一欄；最多 DISMANTLE_LIST 顆、先問一次）
         opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
+        return opts
+
+    def _dismantle_options(self, slot: str) -> list[Option]:
+        """鐵匠鋪那一頁的拆解（兵器設計 4.7.1、裝備四欄 4.8）：裝備庫裡這一欄的，磨損最多、階最低的先、最多 DISMANTLE_LIST 顆，
+        每顆先問一次（FB-125：confirm／confirm_yes「拆掉」），標籤寫階品質與淬煉次數（同一個配方好幾件才分得出來）；
+        多的一行灰掉的說明指到修練頁。這一欄關著是空的。"""
+        c = self.content
+        if not equipment.on(c, slot):
+            return []
+        breakable = sorted(equipment.in_slot(self.state.player, slot), key=equipment.dismantle_order)
+        opts = [
+            Option(id=f"smith:dismantle:{w.id}",
+                   label=f"拆解【{w.name}】（{equipment.grade_line(w)}）→ {equipment.dismantle_material(c, w).name}×1",
+                   confirm=equipment.dismantle_confirm(c, w), confirm_yes=equipment.DISMANTLE_YES)  # FB-125：先問一次
+            for w in breakable[:equipment.DISMANTLE_LIST]
+        ]
+        if len(breakable) > equipment.DISMANTLE_LIST:
+            opts.append(Option(id="smith:dismantle-more", enabled=False,
+                               label=equipment.DISMANTLE_MORE.format(n=len(breakable) - equipment.DISMANTLE_LIST)))
         return opts
 
     def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
@@ -2583,17 +2594,18 @@ class Game:
             return weapons.dismantle(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
-    def wield_weapon(self, weapon_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2）：哪裡都能換、不花體力；寫一則修練紀錄。"""
-        msgs = self._log(weapons.wield(self.state, self.content, weapon_id))
+    def wield_weapon(self, item_id: str) -> list[str]:
+        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中）、不花體力，換進那一件自己的欄位；
+        寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）也走它。"""
+        msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
         if msgs and msgs[0].startswith("你換上了"):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
-    def dismantle_weapon(self, weapon_id: str) -> list[str]:
-        """修練頁裝備庫的「拆解」（兵器設計 4.7.1）：哪裡都能拆、不花體力；寫一則修練紀錄。"""
-        msgs = self._log(weapons.dismantle(self.state, self.content, weapon_id))
-        if msgs and msgs[0].startswith(weapons.DISMANTLE_PREFIX):
+    def dismantle_weapon(self, item_id: str) -> list[str]:
+        """修練頁裝備庫的「拆解」（兵器設計 4.7.1、裝備四欄設計 4.8）：武器、防具哪裡都能拆、不花體力；坐騎、寶物不能拆；寫一則修練紀錄。"""
+        msgs = self._log(equipment.dismantle(self.state, self.content, item_id, equipment.DISMANTLABLE))
+        if msgs and msgs[0].startswith(equipment.DISMANTLE_PREFIX):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 

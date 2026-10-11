@@ -125,21 +125,29 @@ class Tagalong(BaseModel):
     since: float
 
 
-class Weapon(BaseModel):
-    """一把兵器（兵器設計 2.1）。id 是「兵:流水號」（PlayerState.weapon_serial），只在這個角色身上唯一。
-    recipe／copy_of／original 是第二、三批（打造、仿品、神兵原品）用的，第一批買來與掉落的都是空的。"""
+class Equipment(BaseModel):
+    """一件裝備（裝備四欄設計 3.1；原本的 Weapon，兵器設計 2.1）。slot 是哪一欄：武器、防具（裝備一），坐騎、寶物（裝備二、三）。
+    id 是「兵:N」「甲:N」（之後「騎:N」「寶:N」），共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
+    （拆解照 id 的 sha256 挑素材）。舊存檔沒有 slot：預設 weapon（兵器第一、二批的裝備庫裡都是武器）。
+    edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
+    不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
+    recipe／copy_of／original 是打造、仿品、神兵原品用的（兵器第二、三批；之後防具打造也用 recipe、tempers）。"""
 
+    slot: Literal["weapon", "armor", "mount", "treasure"] = "weapon"
     id: str
     name: str
-    kind: str  # models.WEAPON_KINDS
-    attribute: str  # 陰陽剛柔快慢虛實
+    kind: str = ""  # 武器：models.WEAPON_KINDS；其餘是空字串
+    attribute: str = ""  # 陰陽剛柔快慢虛實（武器、防具）
     tier: int  # 1～3
     quality: str  # 下品、中品、上品
-    edge: int = 100  # 鋒利度 0～100（3.4）
-    tempers: int = 0  # 淬煉次數（4.7，第二批）
+    edge: int = 100  # 0～100：武器的鋒利度、防具的耐久度（equipment.WEAR_WORDS）
+    tempers: int = 0  # 淬煉次數（兵器第二批；防具打造那一批）
     recipe: str | None = None
     copy_of: str | None = None
     original: bool = False
+
+
+Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
 
 
 class WeaponRecipe(BaseModel):
@@ -234,13 +242,17 @@ class PlayerState(BaseModel):
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
-    # ── 兵器（兵器設計第二節）：身上一把、裝備庫裡的幾把；換季時角色重來自然清空 ──
-    # rack ＝ 玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名；程式識別字 rack、rack_cap、rack_full 不動）
-    weapon: Weapon | None = None
-    rack: list[Weapon] = Field(default_factory=list)
-    weapon_serial: int = 0
+    # ── 裝備（兵器設計第二節、裝備四欄設計第三節）：身上每欄一件、四欄共用的裝備庫；換季時角色重來自然清空 ──
+    # rack ＝ 玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名；程式識別字 rack、rack_cap、rack_full 不動）。
+    # 每個讀 rack 的地方都照欄位過濾（equipment.in_slot，裝備四欄 3.3）
+    weapon: Equipment | None = None
+    armor: Equipment | None = None  # 身上的防具（裝備四欄設計第四節）；舊存檔沒有＝沒穿
+    rack: list[Equipment] = Field(default_factory=list)
+    weapon_serial: int = 0  # 四欄共用的流水號（兵:N、甲:N）
     picking_smith: bool = False  # 打開了鐵匠鋪的第二層選單（同 picking_bounty）
+    smith_page: str = "weapon"  # 鐵匠鋪停在哪一頁（"weapon"／"armor"，裝備四欄 4.6）：開門時設成第一個開著的，收起鐵匠鋪時設回來（equipment.open_smith／close_smith）
     edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
+    armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id

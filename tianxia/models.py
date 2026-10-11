@@ -1458,6 +1458,25 @@ class WeaponRules(_Strict):
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
 
 
+class ArmorRules(_Strict):
+    """防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節）。數字都是【預設】（企劃者 2026-10-10「全部照預設」），
+    量表（scripts/measure_gear.py）校準後可以改。減損＝（階＋品質＋淬煉＋對上內功）夾在 0 以上
+    ×（edge_floor＋（1－edge_floor）×耐久度／100）；本人一場仗扣的氣血乘（1－min(total_cap, 化勁＋減損)），截殺輸的一方只乘防具。
+    不掛第一季開關（2.6，同兵器）。"""
+
+    enabled: bool = True
+    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
+    quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
+    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（防具打造那一批才淬得了，4.7）
+    match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
+    edge_floor: float = Field(default=0.5, ge=0, le=1)  # 全壞時剩幾成減損（4.5：不會壞掉消失）
+    total_cap: float = Field(default=0.6, ge=0, le=1)  # 跟化勁合計最多減幾成（4.3）
+    wear: dict[str, int] = Field(default_factory=lambda: {"大勝": 1, "險勝": 2, "僵持": 3, "落敗": 5})  # 一場扣多少耐久度（4.5）
+    shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
+    repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
+    edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
+
+
 class Secrets(_Strict):
     """口訣與秘方（tianxia/secrets.py；PM 2026-10-10 派工，企劃者選「甲乙都做」的甲）。預設全關（測試內容沒有秘方池），
     正式值在 config.json。"""
@@ -1547,6 +1566,7 @@ class Config(_Strict):
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
+    armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
