@@ -6,6 +6,9 @@
   打贏就完成。沒人完成就在 post_weeks 週後下榜，押金在掛單的人下次同步時退回（deliver_refunds）。
 - 散人兩邊的都能接，陣營的人只能接自己陣營的（can_take）；接了才算，一個人同時最多接 max_taken 張。
   前 quota 個完成的人各拿一份：銀兩（遊俠名號到第 4 階的散人另有加成）與經驗，散人另記俠名（ranger.add_deeds）。
+- 求藝、求兵（懸賞榜設計第四節）：劇本的每個陣營（官軍、黃巾、地方豪強）每週一各掛一張求藝（交一門指定屬性、合成出來的武學或內功）、
+  一張求兵（交一把指定種類與屬性的兵器）。不用揭、在城鎮的懸賞榜上直接交（交了就沒了），前 give_quota 個交的有賞；
+  散人三方都能交，陣營的人只交自己陣營的、拿全額。
 
 每季都有（企劃者 2026-10-10「整個懸賞榜每季都有」，懸賞榜設計 2.2）：只看 Config.bounties.enabled 與劇本有沒有陣營（active），
 不看第一季開關；關著時每個函式都什麼都不做、回空的。
@@ -15,13 +18,17 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, ranger, roster, team
+from . import calendar, ranger, roster, team, weapons
 from .characters import name_key
-from .models import Content, Location
+from .models import WEAPON_KINDS, Content, Location
 from .state import Bounty, GameState, WorldState
 from .world_state import WorldStateStore, season_length_days
 
-KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝"}
+KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "art": "求藝", "arms": "求兵"}
+GIVE_KINDS = ("art", "arms")  # 求藝、求兵：不用揭，在懸賞榜上直接交（懸賞榜設計第四節）
+FULL_PAY = ("wanted", "art", "arms")  # 陣營的人也拿全額的（通緝是押金照數給；求藝、求兵企劃者 2026-10-10 定）
+NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
+ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
@@ -57,9 +64,19 @@ def _loc_name(content: Content, loc_id: str | None) -> str:
     return content.locations[loc_id].name if loc_id in content.locations else ""
 
 
+def _noun(b: Bounty) -> str:
+    """求兵要的那一種兵器寫成玩家看的字：照 weapons.NOUNS（拳腳寫「拳套」、弓弩寫「弩」，跟兵器名、鐵匠鋪挑種類那一步同一套；
+    「一把屬剛的拳腳」不通）。FB-133（同一把一下寫拳套、一下寫拳腳）還沒定案，joy 定了另一種寫法就改這裡。"""
+    return weapons.NOUNS.get(b.weapon_kind or "", b.weapon_kind or "")
+
+
 def title(content: Content, b: Bounty) -> str:
-    """短標題：「討伐・黃巾游騎（南陽郊野）」「打探・嵩山深處」「護送・新野→宛城」「通緝・某某」。"""
+    """短標題：「討伐・黃巾游騎（南陽郊野）」「打探・嵩山深處」「護送・新野→宛城」「通緝・某某」「求藝・剛」「求兵・屬柔的劍」。"""
     kind = KIND_NAMES.get(b.kind, b.kind)
+    if b.kind == "art":
+        return f"{kind}・{b.attribute}"
+    if b.kind == "arms":
+        return f"{kind}・屬{b.attribute}的{_noun(b)}"
     if b.kind == "strike":
         return f"{kind}・{_loc_name(content, b.location)}的{_enemy_name(content, b)}"
     if b.kind == "escort":
@@ -77,6 +94,10 @@ def how(content: Content, b: Bounty) -> str:
         return f"到{_loc_name(content, b.location)}探索一次"
     if b.kind == "escort":
         return f"在{_loc_name(content, b.location)}接下，走到{_loc_name(content, b.end)}"
+    if b.kind == "art":  # 待 joy 潤
+        return f"在城鎮的懸賞榜交出一門屬{b.attribute}、合成出來的武學或內功（交了就沒了）"
+    if b.kind == "arms":  # 待 joy 潤；手上那把也收（企劃者 2026-10-10，懸賞榜設計 14.1 丙）
+        return f"在城鎮的懸賞榜交出一把屬{b.attribute}的{_noun(b)}（裝備庫裡、手上的都行，什麼品質都收，交了就沒了）"
     return f"找到{b.target}，在他的玩家卡上截殺並打贏他"
 
 
@@ -148,6 +169,8 @@ def visible(state: GameState, content: Content) -> list[Bounty]:
 
 def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
     """「接下」按不按得下去（拒絕的話）。"""
+    if b.kind in GIVE_KINDS:  # 不擋的話整季機器人會把它們揭滿 max_taken 的格子，擋掉討伐與打探（懸賞榜設計 4.3）
+        return NO_TAKE
     p = state.player
     name = name_key(p.name)
     if name in (name_key(t) for t in b.done_by):
@@ -162,23 +185,38 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
 
 
 def reward_text(state: GameState, content: Content, b: Bounty) -> str:
-    silver = _silver(state, content, b)
+    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。俠名只有散人看得到（ranger.active）。
+    求藝多寫心得與「素材，偶有兵器」；求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）。"""
+    cfg = content.config.bounties
     deeds = b.deeds if ranger.active(state, content) else 0
     exp = _exp(state, content, b)
-    return f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・俠名 +{deeds}" if deeds else "")
+    xinde = cfg.xinde.get(b.kind, 0)
+    if b.kind == "arms":
+        low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
+                     for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
+        silver = f"{low}～{high}（照品質，高階另加）"  # 待 joy 潤
+    else:
+        silver = str(_silver(state, content, b))
+    text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") + (f"・俠名 +{deeds}" if deeds else "")
+    if b.kind == "art":
+        text += ART_GIFTS if content.config.weapons.enabled else "・素材"
+    return text
 
 
 def _share(state: GameState, content: Content, b: Bounty) -> float:
-    """陣營的人做自己陣營掛的懸賞只拿 faction_share；通緝的賞金是押金，照數給。"""
-    if b.kind == "wanted" or state.player.faction is None:
+    """陣營的人做自己陣營掛的討伐、打探、護送只拿 faction_share；通緝的賞金是押金，照數給；求藝、求兵拿全額（FULL_PAY）。"""
+    if b.kind in FULL_PAY or state.player.faction is None:
         return 1.0
     return content.config.bounties.faction_share
 
 
-def _silver(state: GameState, content: Content, b: Bounty) -> int:
+def _silver(state: GameState, content: Content, b: Bounty, base: int | None = None) -> int:
+    """實拿的銀兩：這一張的 silver（求兵是 base：交的那一把的 arms_silver × arms_tier，懸賞榜設計 4.7）× 第 4 階散人的加成 × 陣營的成數。
+    base 傳的是底數，還沒乘加成：不要在呼叫端先乘，不然會乘兩次。通緝照押金給。"""
     if b.kind == "wanted":
         return b.silver
-    return round(b.silver * ranger.bounty_factor(state, content) * _share(state, content, b))
+    amount = b.silver if base is None else base
+    return round(amount * ranger.bounty_factor(state, content) * _share(state, content, b))
 
 
 def _exp(state: GameState, content: Content, b: Bounty) -> int:
@@ -383,10 +421,18 @@ def _escort(content: Content, w: WorldState, rng: random.Random, used: set[str])
     return rng.choice(pairs) if pairs else None
 
 
+def _spread(rng: random.Random, attributes: list[str], n: int) -> list[str]:
+    """n 個屬性（求藝、求兵每一方一個）：先不重複地抽，陣營比屬性多時再補可以重複的。不寫死 3：give_attributes 只要求至少一個，
+    少於陣營數時 rng.sample(attributes, 3) 會丟 ValueError（懸賞榜設計 4.1）。"""
+    picks = rng.sample(list(attributes), min(n, len(attributes)))
+    return picks + [rng.choice(list(attributes)) for _ in range(n - len(picks))]
+
+
 def issue(state: GameState, content: Content, week: int, rng: random.Random | None = None) -> list[str]:
     """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
     （只挑已開放的地點〔_opened，FB-150：南華觀要等 xi_open 立起來〕，避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，
-    不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；濾完沒地方可挑就跳過那一張）。不回傳訊息。
+    不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；濾完沒地方可挑就跳過那一張），劇本的每個陣營再各掛
+    give_kinds 裡的每一種（求藝、求兵）。不回傳訊息。
     rng 不用（介面跟其他週初掛鉤一樣）。
     兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
     這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
@@ -439,6 +485,25 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
             w.bounties.append(Bounty(
                 id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, expires=expires,
                 silver=cfg.silver.get(kind, 0), deeds=cfg.deeds.get(kind, 0), quota=quota(content), **spec,
+            ))
+    # 求藝、求兵（懸賞榜設計 4.1）：劇本的每個陣營（含地方豪強，照劇本的順序）各掛 give_kinds 裡的每一種；屬性從 give_attributes 挑，
+    # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
+    # 後面每一張討伐、打探、護送的地點都會位移。已知的代價：種子沒有天機，每一季第 1 週的屬性一樣（設計 14.2 第 7 條）
+    give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}")
+    factions = [f.id for f in content.scenario.factions]
+    asks: dict[str, list[tuple[str, str | None]]] = {}
+    for kind in cfg.give_kinds:
+        if kind not in GIVE_KINDS or (kind == "arms" and not content.config.weapons.enabled):
+            continue
+        attributes = _spread(give_rng, cfg.give_attributes, len(factions))
+        asks[kind] = [(a, give_rng.choice(WEAPON_KINDS) if kind == "arms" else None) for a in attributes]
+    for i, faction in enumerate(factions):
+        for kind, picks in asks.items():
+            attribute, weapon_kind = picks[i]
+            w.bounty_seq += 1
+            w.bounties.append(Bounty(
+                id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, expires=expires, silver=cfg.silver.get(kind, 0),
+                deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute, weapon_kind=weapon_kind,
             ))
     return []
 

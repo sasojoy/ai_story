@@ -374,13 +374,20 @@ def test_an_unclaimed_wanted_refunds_the_poster(setup):
     assert game.state.player.stats["silver"] == 200  # 只退一次
 
 
+def _batch(content) -> int:
+    """一批幾張：官軍、黃巾各 kinds 裡的每一張，加上每個陣營各 give_kinds 裡的每一種（兵器開著才有求兵；正式內容 8＋6＝14 張）。"""
+    cfg = content.config.bounties
+    gives = [k for k in cfg.give_kinds if k != "arms" or content.config.weapons.enabled]
+    return 2 * len(cfg.kinds) + len(content.scenario.factions) * len(gives)
+
+
 def test_weekly_issue_on_the_real_map():
     content = real_content("weekend")
     state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
     again = state.model_copy(deep=True)
     bounties.issue(state, content, 1)
     board = state.world.bounties
-    assert len(board) == 2 * len(content.config.bounties.kinds)
+    assert len(board) == _batch(content) == 14
     for faction in ("guan", "huang"):
         strikes = [b for b in board if b.faction == faction and b.kind == "strike"]
         assert len({b.location for b in strikes}) == len(strikes)
@@ -421,7 +428,7 @@ def test_a_beta_season_posts_one_batch_at_each_week_start():
         if new:
             batches.append((calendar.point(season.time, content, season).week, {b.week for b in new}, len(new)))
     assert [(week, weeks) for week, weeks, _ in batches] == [(1, {1}), (2, {2}), (3, {3}), (4, {4})]
-    assert all(0 < n <= 2 * len(content.config.bounties.kinds) for *_, n in batches)
+    assert all(0 < n <= _batch(content) for *_, n in batches)
     assert season.bounty_week == 4 and season.hooked_week == 0
     assert {b.expires for b in season.bounties if b.week == 4} == {calendar.week_start(6, content, season)}
 
@@ -433,7 +440,7 @@ def test_going_live_mid_season_posts_only_this_week():
     season = _beta_season(content, time=210 * HOUR)
     advance_world_state(season, content, HOUR, random.Random(0))
     assert {b.week for b in season.bounties} == {8}
-    assert 0 < len(season.bounties) <= 2 * len(content.config.bounties.kinds)
+    assert 0 < len(season.bounties) <= _batch(content)
     assert {b.expires for b in season.bounties} == {calendar.week_start(10, content, season)} == {252 * HOUR}
     assert season.bounty_week == 8 and season.hooked_week == 0
 
@@ -556,7 +563,7 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     assert season.ended and sorted(batches) == list(range(1, 13))
     assert all(len(steps) == 1 for steps in batches.values())
     sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, 13)]
-    assert all(0 < n <= 2 * len(content.config.bounties.kinds) for n in sizes)
+    assert all(0 < n <= _batch(content) for n in sizes)
     assert season.bounty_week == 12 and season.hooked_week == 0
 
 
@@ -723,7 +730,7 @@ def test_strike_escort_and_scout_all_skip_a_closed_place_fb150():
     for kind, (field, spot) in closed.items():
         base_kind = kind.split("-")[0]
         assert not any(getattr(b, field) == spot for b in shut if b.kind == base_kind), (kind, spot)
-    assert {b.kind for b in shut} == set(content.config.bounties.kinds)
+    assert {b.kind for b in shut if b.kind not in bounties.GIVE_KINDS} == set(content.config.bounties.kinds)  # 求藝、求兵不掛地點，另算
 
     _, reopened = _post_seasons(content, flags={"shut_by_test"})
     assert [(b.kind, b.faction, b.location, b.end) for b in reopened] == [(b.kind, b.faction, b.location, b.end) for b in base]

@@ -487,10 +487,11 @@ class Order(BaseModel):
 class Bounty(BaseModel):
     """懸賞榜上的一張（bounties.py；PM 2026-10-08 派工「加強散人玩法」）。陣營的每週一自動掛（討伐、打探、護送），
     玩家花銀兩掛的是通緝（wanted：懸賞一個敵對陣營的人，接了的人照截殺的規則打他）。前 quota 個完成的人各拿一份賞
-    （通緝只有一份）；接了還沒完成的記在 takers。"""
+    （通緝只有一份）；接了還沒完成的記在 takers。求藝（art）、求兵（arms）是劇本的每個陣營每週一掛的，不用揭、在懸賞榜上直接交
+    （懸賞榜設計第四節）：location、end、squad、takers 都不用。"""
 
     id: str
-    kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝
+    kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝、"art" 求藝、"arms" 求兵
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
     expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
@@ -500,6 +501,8 @@ class Bounty(BaseModel):
     location: str | None = None  # 討伐：對手所在；打探：要去探索的地方；護送：起點（在這裡接）
     end: str | None = None  # 護送的終點
     squad: str | None = None  # 討伐的對手（Squad.id）
+    attribute: str | None = None  # 求藝、求兵要的屬性（Config.bounties.give_attributes）
+    weapon_kind: str | None = None  # 求兵要的兵器種類（models.WEAPON_KINDS）
     poster: str | None = None  # 通緝：掛單人的名號
     target: str | None = None  # 通緝：要打的人的名號
     takers: list[str] = Field(default_factory=list)  # 接了、還沒完成的名號
