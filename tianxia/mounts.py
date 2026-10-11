@@ -14,7 +14,7 @@ import hashlib
 import math
 
 from . import equipment
-from .equipment import NO_REPAIR_MATERIAL, repair_material
+from .equipment import NO_REPAIR_MATERIAL, RACK_FULL, repair_material
 from .models import Content
 from .state import Equipment, GameState
 
@@ -31,6 +31,17 @@ FEED_ON_ROAD = "在路上，到了下一站再餵"  # 待 joy 潤
 FEED_SECLUDED = "閉關中"  # 待 joy 潤
 FED = "你拿{material}把【{name}】餵飽了。"  # 待 joy 潤；Game.feed_mount 照開頭 FED_PREFIX 寫修練紀錄
 FED_PREFIX = "你拿"
+NOT_MARKET = "這裡沒有馬市"  # 待 joy 潤
+BOUGHT = "你花 {price} 兩買下一匹【{name}】。"  # 待 joy 潤
+ENTERED = "你走進馬市，馬嘶聲此起彼落。"  # 待 joy 潤：打開馬市（Game._act）
+LEAVE = "離開馬市"  # 待 joy 潤：馬市選單最後那一顆
+LEFT = "你離開了馬市。"  # 待 joy 潤
+TRAVEL_BLOCKED = "馬市還開著，先離開才能安排前往"  # 待 joy 潤：atlas.travel_block（同鐵匠鋪那一句）
+BUY = "market:buy"
+FEED = "market:feed"
+WIELD = "market:wield:"
+BACK = "market:back"
+FEED_AT = 50  # 整季機器人與假人飽足低於這裡才餵（設計第九節：約每 10 段一次）
 
 
 def on(content: Content) -> bool:
@@ -205,3 +216,73 @@ def feed(state: GameState, content: Content) -> list[str]:
         del p.materials[material]
     p.mount.edge, p.hunger_warned = 100, False
     return [FED.format(material=content.materials[material].name, name=name_of(p.mount))]
+
+
+# ---- 馬市（5.5）：買、餵、換、離開 ----
+
+def market_here(state: GameState, content: Content) -> bool:
+    """這裡有開著的馬市：坐騎開著、人不在路上、地點有「馬市」標籤。"""
+    if not on(content) or state.player.journey is not None:
+        return False
+    return MARKET_TAG in (content.locations[state.player.location].tags or [])
+
+
+def shop_item(state: GameState, content: Content) -> Equipment:
+    """馬市那一匹（還沒買，id 是「架:馬」）：駑馬下品，毛色照這一處（5.6）。「買」鈕寫它、買下來照它新開一匹。"""
+    name = horse_name(coat_for(state.player.location), 1)
+    return Equipment(id="架:馬", slot="mount", name=name, tier=1, quality="下品")
+
+
+def new_mount(state: GameState, *, name: str, tier: int, quality: str) -> Equipment:
+    """新的一匹（四欄共用的流水號 +1，id「騎:N」）。裝備三的良駒、名駒也從這裡開。"""
+    return Equipment(id=equipment.next_id(state, "mount"), slot="mount", name=name, tier=tier, quality=quality)
+
+
+def rack_full(state: GameState, content: Content) -> bool:
+    return equipment.rack_full(state, content, "mount")
+
+
+def buy_problem(state: GameState, content: Content) -> str | None:
+    if not market_here(state, content):
+        return NOT_MARKET  # 選單關了、人走了：引擎層自己也再驗一次
+    if rack_full(state, content):
+        return RACK_FULL
+    short = content.config.mounts.shop_price - state.player.stats.get("silver", 0)
+    return f"還差 {short} 兩" if short > 0 else None
+
+
+def buy(state: GameState, content: Content) -> list[str]:
+    """買一匹駑馬下品（5.5）：身上沒馬就直接騎上，不然放進裝備庫（equipment.store）。"""
+    problem = buy_problem(state, content)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    price = content.config.mounts.shop_price
+    state.player.stats["silver"] -= price
+    shop = shop_item(state, content)
+    item = new_mount(state, name=shop.name, tier=shop.tier, quality=shop.quality)
+    return [BOUGHT.format(price=price, name=name_of(item)), equipment.store(state, item)]
+
+
+def wield(state: GameState, content: Content, item_id: str) -> list[str]:
+    """馬市的「換上」：只看坐騎那一欄；路上不能換由 equipment.wield 擋（Slot.road_locked）。"""
+    return equipment.wield(state, content, item_id, ("mount",))
+
+
+# ---- 機器人（設計第九節）：跟 act:market 同一個 commit，伺服器假人才不會卡在馬市 ----
+
+def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
+    """在馬市最該按的那一顆（整季機器人與伺服器假人共用）：裝備庫裡有比身上快的（比吃飽的腳力，餓了的好馬不吃虧）就換上；
+    身上沒有坐騎、付得起馬價＋reserve 就買（馬市只賣駑馬：身上有馬就不買第二匹）；飽足低於 FEED_AT、餵得了就餵。不在馬市是 None。"""
+    if not market_here(state, content):
+        return None
+    p = state.player
+    now = fresh_power(content, p.mount)
+    best = max(equipment.in_slot(p, "mount"), key=lambda m: (fresh_power(content, m), m.id), default=None)
+    if best is not None and fresh_power(content, best) > now + 1e-9:
+        return f"{WIELD}{best.id}"
+    if p.mount is None and buy_problem(state, content) is None and \
+            p.stats.get("silver", 0) >= content.config.mounts.shop_price + reserve:
+        return BUY
+    if p.mount is not None and p.mount.edge < FEED_AT and feed_problem(state, content) is None:
+        return FEED
+    return None

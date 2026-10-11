@@ -50,6 +50,7 @@ RAID_ODDS = CHALLENGE_ODDS
 BOUNTY_SCORE = 8.0
 BOUNTY_MOVE_SCORE = 6.0
 SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力
+MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
 # 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
@@ -479,6 +480,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
     if kind == "smith":  # 鐵匠鋪上：照 bot.smith_want 按那一顆（含切到另一頁），沒事就離開；不打造、不淬煉、不拆（附帶決定 e），萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
+    if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
+        return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
         # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
         # 萬一停在求見選單上，只會按返回
@@ -502,6 +505,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return BOUNTY_SCORE if _takeable(game) else None
         if arg == "smith":  # 鐵匠鋪：有要換、要買、要修的才進去（不然只是開了又離開）
             return SMITH_SCORE if _smith_want(game) else None
+        if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
+            return MARKET_SCORE if bot.market_want(game) else None
         if arg == "explore" and _bounty_here(game, "scout"):
             return BOUNTY_SCORE
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):

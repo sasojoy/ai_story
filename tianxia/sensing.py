@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import glyph, insight_llm, insights, naming
+from . import glyph, insight_llm, insights, mounts, naming
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -134,8 +134,10 @@ def rate(state: GameState, content: Content, loc: Location) -> int:
 
 
 def place_tags(scene: InsightScene, loc: Location) -> str:
-    """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。"""
-    return "" if scene.prologue or not loc.tags else f"（{'、'.join(loc.tags)}）"
+    """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。
+    設施的標籤（馬市，裝備四欄 5.5）不是地形，不寫。"""
+    tags = [tag for tag in loc.tags if tag != mounts.MARKET_TAG]
+    return "" if scene.prologue or not tags else f"（{'、'.join(tags)}）"
 
 
 def scene_text(state: GameState, content: Content) -> str:

@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, naming, sensing, smithing, team, traits, weapons
+from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -30,6 +30,7 @@ MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做�
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
 BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
+MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
@@ -287,9 +288,10 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
     # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith。鐵匠鋪的切頁（smith:page:）也只是換一頁（裝備四欄設計第九節）
+    # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount（Task 8；這之前整季機器人就是不進馬市）
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", DUEL_FLEE)
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", DUEL_FLEE)
         and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:"))
     ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
@@ -337,6 +339,12 @@ def smith_want(game: Game) -> str | None:
         return moves[here]
     other = next((slot for slot, move in moves.items() if move is not None), None)
     return None if other is None else f"smith:page:{other}"
+
+
+def market_want(game: Game) -> str | None:
+    """在馬市最該按的那一顆（整季機器人與伺服器假人共用；裝備四欄設計第九節）：換上更快的、沒馬就買（留 MOUNT_SILVER_RESERVE）、
+    飽足低於 mounts.FEED_AT 就餵。沒事是 None。"""
+    return mounts.wanted(game.state, game.content, reserve=MOUNT_SILVER_RESERVE)
 
 
 def visit_smith(game: Game) -> None:

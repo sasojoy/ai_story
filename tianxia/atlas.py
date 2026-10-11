@@ -626,6 +626,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("懸賞榜還開著，先離開才能安排前往", to_jianghu=True)
     if p.picking_smith:
         return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
+    if p.picking_market:
+        return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 從 Task 2 起 import mounts）
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if p.pending_defect:

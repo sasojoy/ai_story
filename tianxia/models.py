@@ -803,6 +803,7 @@ ALLOW_FIXED = frozenset({
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
+    "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）

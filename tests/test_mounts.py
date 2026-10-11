@@ -368,3 +368,173 @@ def test_a_follower_with_his_own_horse_keeps_up_where_on_foot_he_could_not(conte
     stored = CharacterStore(a.world.db).load("乙").player
     assert stored.stamina == 0.0 and stored.location == "lake" and stored.mount.edge == 90
     assert a.state.player.stamina == 94.0 and a.state.player.mount is None
+
+
+# ── Task 4：馬市 ──
+
+def _market_game(content, world, **kw):
+    """小鎮臨時加上「馬市」標籤（測試內容的 locations.json 不動）：那一匹的毛色照 town 的 sha256 挑（TOWN_HORSE）。"""
+    if mounts.MARKET_TAG not in content.locations["town"].tags:
+        content.locations["town"].tags.append(mounts.MARKET_TAG)
+    return _game(content, world, **kw)
+
+
+TOWN_HORSE = mounts.horse_name(mounts.coat_for("town"), 1)  # 測試內容小鎮的馬市賣的那一匹（毛色字表待 joy 潤，不寫死）
+
+
+def test_the_market_is_where_the_tag_is_and_only_when_mounts_are_on(content, world):
+    game = _game(content, world)
+    assert "act:market" not in _ids(game)  # 小鎮沒有馬市標籤
+    content.locations["town"].tags.append(mounts.MARKET_TAG)
+    assert _ids(game)["act:market"].label == mounts.MARKET
+    content.config.mounts.enabled = False
+    assert "act:market" not in _ids(game)
+
+
+def test_four_markets_in_the_real_content_each_sell_their_own_coat():
+    c = real_content()
+    markets = sorted(loc.id for loc in c.locations.values() if mounts.MARKET_TAG in loc.tags)
+    assert markets == sorted(["zhuo_county", "runan_market", "wan_city", "xiaquyang"])
+    assert len({mounts.coat_for(m) for m in markets}) == 4  # 四處不一樣（5.6；只取 sha256 第一個位元組時涿郡、宛城會撞色）
+    assert all(equipment.TOWN_TAG in c.locations[m].tags for m in markets)
+
+
+def test_buying_a_nag_wears_it_and_the_second_goes_to_the_rack(content, world):
+    game = _market_game(content, world, silver=250)
+    p = game.state.player
+    game.choose("act:market")
+    opts = _ids(game)
+    assert list(opts) == [mounts.BUY, mounts.BACK]
+    label = opts[mounts.BUY].label  # 整句待 joy 潤：只鎖名字、階品、省幾成、價錢
+    assert f"【{TOWN_HORSE}】" in label and mounts.grade(mounts.shop_item(game.state, content)) in label
+    assert "25%" in label and "100 兩" in label
+    game.choose(mounts.BUY)
+    assert (p.mount.id, p.mount.name, p.mount.tier, p.mount.quality, p.mount.edge) == ("騎:1", TOWN_HORSE, 1, "下品", 100)
+    assert p.stats["silver"] == 150 and p.picking_market  # 做完選單還開著
+    game.choose(mounts.BUY)
+    assert [m.id for m in p.rack] == ["騎:2"] and p.stats["silver"] == 50
+    opts = _ids(game)
+    assert list(opts) == [mounts.BUY, mounts.FEED, f"{mounts.WIELD}騎:2", mounts.BACK]
+    assert not opts[mounts.BUY].enabled and "還差 50 兩" in opts[mounts.BUY].label
+    assert not opts[mounts.FEED].enabled and mounts.NOT_HUNGRY in opts[mounts.FEED].label
+    content.config.weapons.rack_cap = 1
+    p.stats["silver"] = 500
+    assert equipment.RACK_FULL in _ids(game)[mounts.BUY].label  # 身上有馬、裝備庫（四欄合算）也滿了
+
+
+def test_feeding_and_wielding_at_the_market(content, world):
+    game = _market_game(content, world, horse=_horse(edge=40))
+    p = game.state.player
+    p.materials = {"kuai_1": 1, "gang_1": 2}
+    p.rack = [_horse(hid="騎:2", name="青驄駒", tier=2)]
+    game.choose("act:market")
+    feed = _ids(game)[mounts.FEED]  # 整句待 joy 潤：只鎖名字、飽足度、用哪一種素材
+    assert feed.enabled and "【棗騮馬】" in feed.label and f"{mounts.WEAR_WORD} 40" in feed.label and "精鐵砂×1" in feed.label
+    game.choose(mounts.FEED)
+    assert p.mount.edge == 100 and p.materials == {"kuai_1": 1, "gang_1": 1}
+    game.choose(f"{mounts.WIELD}騎:2")
+    assert p.mount.id == "騎:2" and [m.id for m in p.rack] == ["騎:1"]
+    assert _ids(game)[mounts.BACK].label == mounts.LEAVE
+    assert mounts.LEFT in game.choose(mounts.BACK) and not p.picking_market
+
+
+@pytest.mark.parametrize("exit_by", ["back", "walk_away", "depart", "reconcile"])
+def test_every_way_out_of_the_market_closes_it(content, world, exit_by):
+    """Review Focus 3：凡是收起第二層選單的地方都收馬市（同鐵匠鋪）：離開、同步時人不在馬市、出發、存檔修補。"""
+    game = _market_game(content, world)
+    p = game.state.player
+    game.choose("act:market")
+    assert p.picking_market
+    if exit_by == "back":
+        game.choose(mounts.BACK)
+    elif exit_by == "walk_away":
+        p.location = "lake"
+        game.sync(1.0)
+    elif exit_by == "depart":
+        game.travel_refusal = lambda *a, **k: None  # 繞過「馬市還開著」的擋，直接測 _depart 的防線（同 test_weapons）
+        game.travel("lake", "dash")
+    else:
+        content.config.mounts.enabled = False
+        game._drop_stale_references()
+    assert not p.picking_market
+
+
+def test_an_open_market_blocks_travel_and_seclusion(content, world):
+    game = _market_game(content, world)
+    assert mounts.ENTERED in game.choose("act:market")
+    assert game.travel_refusal("lake") == mounts.TRAVEL_BLOCKED
+    assert game.seclude(1) == ["你現在無法閉關。"] and game.state.player.busy_until is None  # 閉關的拒絕話是舊的那一句（_idle）
+    game.choose(mounts.BACK)
+    assert game.travel_refusal("lake") is None
+
+
+def test_the_market_tag_is_not_written_as_terrain(content):
+    """有所感的標題括號寫的是地形（河畔、城鎮……）；「馬市」是設施，不寫。"""
+    from types import SimpleNamespace
+
+    from tianxia import sensing
+    loc = content.locations["town"]
+    loc.tags.append(mounts.MARKET_TAG)
+    assert sensing.place_tags(SimpleNamespace(prologue=False), loc) == "（城鎮）"
+
+
+# 機器人跟 act:market 同一個 commit（CLAUDE.md「新增永遠按得下去的選項要一併改 bot.py::pick()」）：不然伺服器假人進了馬市就卡住
+
+def test_wanted_wields_a_faster_horse_then_buys_then_feeds(content, world):
+    game = _market_game(content, world, silver=130)
+    s, p = game.state, game.state.player
+    assert mounts.wanted(s, content, reserve=30) == mounts.BUY  # 100＋保留 30
+    assert mounts.wanted(s, content, reserve=31) is None
+    p.mount, p.rack = _horse(edge=20), [_horse(hid="騎:2", tier=2, edge=10)]  # 良駒餓到底也比駑馬快（比的是吃飽的腳力）
+    assert mounts.wanted(s, content) == f"{mounts.WIELD}騎:2"
+    p.rack = []
+    p.materials = {"gang_1": 1}
+    assert mounts.wanted(s, content) == mounts.FEED  # 身上有馬就不買第二匹；飽足低於 50 就餵
+    p.mount.edge = 50
+    assert mounts.wanted(s, content) is None
+    p.location = "lake"
+    assert mounts.wanted(s, content) is None  # 不在馬市
+
+
+def test_pick_never_chooses_the_market_door(content, world):
+    from tianxia import bot
+    game = _market_game(content, world)
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "act:market" in {o.id for o in options}
+    for seed in range(50):
+        assert bot.pick(game, options, random.Random(seed)) != "act:market"
+
+
+def test_a_server_bot_enters_the_market_only_with_something_to_do(content, world):
+    """Review Focus 3：沒事可做不進門；進了門只有「離開」有分（不然 bot_policy.pick 會從所有 None 以外的隨機挑、或卡在門裡）。"""
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    game = _market_game(content, world, silver=50)
+    assert bot_policy.score(game, _ids(game)["act:market"], profile) is None
+    game.choose("act:market")
+    assert {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled} == {mounts.BACK: 0.0}
+    game.choose(mounts.BACK)
+    game.state.player.stats["silver"] = 200
+    assert bot_policy.score(game, _ids(game)["act:market"], profile) == bot_policy.MARKET_SCORE
+    game.choose("act:market")
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False) if o.enabled}
+    assert scored == {mounts.BUY: bot_policy.MARKET_SCORE, mounts.BACK: 0.0}
+
+
+def test_a_server_bot_in_the_market_never_gets_stuck_and_usually_buys(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
+    bought = 0
+    for seed in range(10):
+        game = _market_game(content, world)
+        rng = random.Random(seed)
+        game.choose("act:market")
+        for _ in range(6):
+            if not game.state.player.picking_market:
+                break
+            bot_policy.take_turn(game, profile, rng)
+        assert not game.state.player.picking_market
+        bought += game.state.player.mount is not None
+    assert bought >= 5

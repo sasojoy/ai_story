@@ -120,3 +120,16 @@ def test_the_css_makes_each_chunk_an_unbreakable_inline_block():
     rule = re.search(r"(?m)^\.nb\s*\{([^}]*)\}", css)
     assert rule and "white-space: nowrap" in rule.group(1) and "display: inline-block" in rule.group(1)
     assert "FB-132" in css
+
+
+def test_market_buttons_are_cut_into_chunks_like_the_smith(menu):
+    """馬市的鈕（裝備四欄 5.5，裝備二）跟鐵匠鋪一樣長：同樣切成不折行的小段，「100｜兩」「飽足｜度」不分家。"""
+    buy = "買【黑鬃馬】（駑馬・下品・趕路疾行省 25% 體力・100 兩）"
+    page = menu(("market:buy", buy), ("market:feed", "餵【棗騮馬】（飽足度 40・精鐵砂×1）"),
+                ("market:wield:騎:2", "換上【青驄駒】（良駒・下品・飽足度 100）"), ("market:back", "離開馬市"))
+    chunks, text = _chunks(page, "market:buy")
+    assert chunks == ["買【黑鬃馬】", "（駑馬・", "下品・", "趕路疾行省 25% 體力・", "100 兩）"]
+    assert "".join(_pieces(page, "market:buy")) == buy == text.strip()
+    assert _chunks(page, "market:feed")[0] == ["餵【棗騮馬】", "（飽足度 40・", "精鐵砂×1）"]
+    assert _chunks(page, "market:wield:騎:2")[0] == ["換上【青驄駒】", "（良駒・", "下品・", "飽足度 100）"]
+    assert _chunks(page, "market:back")[0] == ["離開馬市"]

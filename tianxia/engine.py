@@ -512,6 +512,8 @@ class Game:
             not p.picking_smith or not weapons.smith_here(s, c) or smithing.draft_stale(c, p.smith_draft)
         ):
             p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
+        if p.picking_market and not mounts.market_here(s, c):
+            p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -639,6 +641,8 @@ class Game:
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
         if self.state.player.smith_draft is not None and not weapons.smith_here(self.state, self.content):
             self.state.player.smith_draft = None  # 武器關了、防具還開著：鐵匠鋪照開（防具頁），兵器的單子清掉
+        if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
+            self.state.player.picking_market = False  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -850,6 +854,8 @@ class Game:
             return self._bounty_options()
         if s.player.picking_smith:
             return self._smith_options()
+        if s.player.picking_market:
+            return self._market_options()
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -935,6 +941,8 @@ class Game:
             opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
         if equipment.smith_open(s, c):  # 鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
+        if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
+            opts.append(Option(id="act:market", label=mounts.MARKET))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
@@ -1396,6 +1404,8 @@ class Game:
                 msgs = self._bounty(arg)
             elif kind == "smith":
                 msgs = self._smith(arg, proposed)
+            elif kind == "market":
+                msgs = self._market(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1606,6 +1616,8 @@ class Game:
             return bounties.BOARD
         if kind == "smith":
             return smithing.title(arg)
+        if kind == "market":
+            return mounts.MARKET
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1629,6 +1641,7 @@ class Game:
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
+            "market": f"{mounts.MARKET}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1943,6 +1956,9 @@ class Game:
         if what == "smith":
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
+        if what == "market":
+            self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
+            return [mounts.ENTERED]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -2618,6 +2634,40 @@ class Game:
         other = equipment.other_page(self.state.player, self.content)
         tail = [Option(id=f"smith:page:{other}", label=equipment.PAGE_LABELS[other])] if other is not None else []
         return tail + [Option(id="smith:back", label="離開鐵匠鋪")]
+
+    def _market_options(self) -> list[Option]:
+        """馬市的第二層選單（裝備四欄設計 5.5）：一顆「買」（駑馬下品，寫省幾成體力與價錢；買不了的灰掉寫為什麼），
+        身上有馬時一顆「餵」（寫用哪一種素材；不餓、沒素材灰掉寫為什麼），裝備庫裡每一匹一顆「換上」，最後「離開」。都不花體力。"""
+        s, c, p = self.state, self.content, self.state.player
+        item = mounts.shop_item(s, c)
+        problem = mounts.buy_problem(s, c)
+        note = problem or f"{c.config.mounts.shop_price} 兩"
+        # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
+        opts = [Option(id=mounts.BUY, enabled=problem is None,
+                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・趕路疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
+        if p.mount is not None:
+            opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
+                               label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
+        for m in equipment.in_slot(p, "mount"):
+            opts.append(Option(id=f"{mounts.WIELD}{m.id}",
+                               label=f"換上【{mounts.name_of(m)}】（{mounts.grade(m)}・{mounts.WEAR_WORD} {m.edge}）"))
+        opts.append(Option(id=mounts.BACK, label=mounts.LEAVE))
+        return opts
+
+    def _market(self, arg: str) -> list[str]:
+        """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+        s, c = self.state, self.content
+        verb, _, rest = arg.partition(":")
+        if verb == "back":
+            s.player.picking_market = False
+            return [mounts.LEFT]
+        if verb == "buy":
+            return mounts.buy(s, c)
+        if verb == "feed":
+            return mounts.feed(s, c)
+        if verb == "wield":
+            return mounts.wield(s, c, rest)
+        return ["（此刻無法這麼做。）"]
 
     def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
         """鐵匠鋪上的選擇：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子與停在哪一頁）。
@@ -4465,6 +4515,7 @@ class Game:
         s, c = self.state, self.content
         s.player.picking_bounty = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
+        s.player.picking_market = False  # 馬市也收起來（裝備四欄 5.5）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -4777,6 +4828,7 @@ class Game:
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
             and s.player.duel is None  # 單人頭目戰打到一半：同上
+            and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
         )
 
     def seclusion_refusal(self) -> str | None:
