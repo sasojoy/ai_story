@@ -133,13 +133,34 @@ def test_hand_ins_are_not_taken(beta_setup):
     ("give_attributes", ["剛", "剛", "柔"]),
     ("arms_silver", {"下品": 20, "中品": 35}),
     ("arms_tier", {"1": 1, "2": 2}),
+    # 設定覆寫檔寫 silver／exp／deeds／xinde 是整張字典換掉：少寫 art 或 arms 的賞，掛得出來、交得了，領到的卻默默是 0（用 .get(kind, 0)）
+    ("silver", {"strike": 20, "scout": 10, "escort": 15}),
+    ("exp", {"strike": 15, "scout": 10, "escort": 12, "wanted": 15, "art": 30}),
+    ("deeds", {"strike": 3, "scout": 2, "escort": 2, "wanted": 4, "art": 2}),
+    ("xinde", {"art": 20}),
 ])
 def test_validate_checks_the_bounty_settings(content, field, value):
     """設計 4.1 末段：認不得的種類（以前 issue 默默跳過）、挑不到屬性、求兵的價錢少一個品質或一個階（交那一把會 KeyError），載入時就擋；
-    give_kinds、give_attributes 重複也擋（審查補的）。"""
+    give_kinds、give_attributes 重複也擋（審查補的）；give_kinds 裡的每一種，賞的字典（銀兩、經驗、俠名、心得）都要寫它的那一項。"""
     setattr(content.config.bounties, field, value)
     with pytest.raises(ContentError, match=f"Config.bounties.{field}"):
         validate(content)
+
+
+def test_validate_requires_the_hand_in_rewards_only_for_the_kinds_that_are_hung(content):
+    """賞的字典缺哪一項，只看 give_kinds 有沒有掛那一種：預設的內容（測試內容與正式內容）照樣通過；
+    不掛求兵（give_kinds 只有 art，或清空，同 measure_sanren 的 --no-give）時，缺求兵的賞不擋。
+    銀兩是例外：求兵的銀兩走 arms_silver × arms_tier，silver 本來就沒有 arms 這一項。"""
+    validate(content)
+    validate(real_content())
+    cfg = content.config.bounties
+    assert "arms" not in cfg.silver and {"art", "arms"} <= set(cfg.exp) & set(cfg.deeds) & set(cfg.xinde)  # 預設長這樣，上面的參數才有意義
+    cfg.give_kinds = ["art"]
+    cfg.exp, cfg.deeds, cfg.xinde = ({k: v for k, v in d.items() if k != "arms"} for d in (cfg.exp, cfg.deeds, cfg.xinde))
+    validate(content)
+    cfg.give_kinds = []
+    cfg.silver, cfg.xinde = {}, {}
+    validate(content)
 
 
 def test_what_fits_an_art_bounty_and_what_does_not(beta_setup):

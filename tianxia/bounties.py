@@ -174,7 +174,7 @@ def past_due(b: Bounty, content: Content, world: WorldState) -> bool:
 def due_text(b: Bounty, content: Content, world: WorldState) -> str:
     """給玩家看的期限（懸賞榜設計 3.5）：第一季寫「第 5 週・週一 00:00」、規則關著寫「第11天 12:00」（calendar.stamp_text，跟 Game.stamp
     同一個寫法；這裡不能 import engine）。到季末或過了季末一律寫「到季末」（to_season_end）：規則關著時 stamp_text 不會夾，14 天的季第 11、12 週掛的單
-    會寫成這一季沒有的「第15天 00:00」「第16天 04:00」。真正的 expires 不夾：收季時懸賞榜跟著 WorldState 整個重來。"""
+    會寫成這一季沒有的「第15天 00:00」「第16天 04:00」。真正的 expires 不夾：懸賞榜是開下一季時才跟著 WorldState 整個重來；收季那一刻手上還揭著的單由 deliver_lapses 作廢（FB-152）。"""
     if to_season_end(b, content, world):
         return SEASON_END
     return calendar.stamp_text(b.expires, content, world)
@@ -211,7 +211,7 @@ def can_take(state: GameState, b: Bounty) -> bool:
 
 def stranded(state: GameState, content: Content, faction_id: str | None) -> list[Bounty]:
     """手上揭著、還沒交、還有效，可是投靠 faction_id 之後就接不了（同 can_take 的規則）的單（FB-151：投靠、叛投那一下要作廢的）。
-    投靠的確認畫面、叛投的確認畫面用它數張數，drop_stranded 用它拿掉名字。過期的、名額滿的不算（它們由 deliver_lapses 說自己的原因）；
+    投靠的確認畫面、叛投的確認畫面用它數張數，drop_stranded 用它拿掉名字。過期的、名額滿的不算（open_bounties 已經濾掉；它們由 deliver_lapses 說原因，而陣營的原因排第一，所以一張又過期又接不了的單，說的是陣營那一句）；
     求藝、求兵沒人揭，不會在裡面。"""
     p = state.player
     me = name_key(p.name)
