@@ -609,6 +609,7 @@ def test_the_same_place_is_not_posted_twice_while_a_bounty_is_up(content):
     ]
     content.squads["thug"].faction = "huang"
     state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=WorldState())
+    state.world.flags.add("cave_open")  # 測試內容的山洞要 cave_open 才開放：週初掛單只挑已開放的地點（FB-150）
     for week in (1, 2):
         state.world.time = (week - 1) * bounties.week_seconds(state, content)
         bounties.issue(state, content, week)
@@ -627,6 +628,7 @@ def test_a_place_frees_up_once_its_bounty_is_past_due_or_filled(content):
     content.squads["thug"].faction = "huang"
     state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=WorldState())
     w = state.world
+    w.flags.add("cave_open")  # 測試內容的山洞要 cave_open 才開放：週初掛單只挑已開放的地點（FB-150）
     bounties.issue(state, content, 1)
     held, filled = [b for b in w.bounties if b.kind == "scout"]
     w.time = bounties.week_seconds(state, content)  # 第 2 週的週初
@@ -654,6 +656,77 @@ def test_live_bounties_never_share_a_place_on_the_real_map():
             assert len(spots) == len(set(spots)), (week, kind, spots)
     assert w.bounty_week == 12
     assert any(b.kind == "escort" for b in w.bounties) and any(b.kind == "scout" for b in w.bounties)  # 不是空轉
+
+
+def _post_seasons(content, flags=(), seeds=range(5)) -> tuple[int, list[Bounty]]:
+    """用同一份內容連掛幾季（規則關著的季，一季 12 週一週一批）：每一季是一份全新的賽季，蓋掉 trends（週初掛單的亂數種子含此刻的戰況，
+    五種戰況就是五套不同的抽法）、旗標只放 flags，一週一週把時間推到週初、掛單。回傳（掛了幾批，掛過的每一張單，含已下榜的）。"""
+    posted: list[Bounty] = []
+    batches = 0
+    for seed in seeds:
+        season = _beta_season(content, trends={"huangjin": 20 + 10 * seed, "yuxi": 0}, flags=set(flags))
+        state = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=season)
+        for week in range(1, 13):
+            season.time = calendar.week_start(week, content, season)
+            before = {b.id for b in season.bounties}
+            bounties.issue(state, content, week)
+            new = [b for b in season.bounties if b.id not in before]
+            batches += bool(new)
+            posted += new
+    return batches, posted
+
+
+def test_weekly_posting_only_picks_places_that_are_open_fb150():
+    """FB-150：週初掛單只挑已開放的地點。正式內容的南華觀（jade_cave，打探的候選）要等世界旗標 xi_open 立起來才開放，
+    以前沒立旗標就照掛，揭的人「無法安排前往這裡」、那張單白占 56 小時。用正式內容、14 天的季（規則關著）掛 5 季 ×12 週＝60 批
+    （每季換一套 trends 抽不同的地點）：沒立 xi_open 時南華觀不出現在任何一張單（打探地點、討伐地點、護送起訖）；立了之後
+    同樣的 60 批裡南華觀至少當過一次打探地點。草廬（mentor_hut，序章專屬）照建構就挑不到：危險度 1、不是城鎮、沒有敵人。"""
+    content = real_content()
+    assert content.locations["jade_cave"].unlock_flag == "xi_open" and content.locations["jade_cave"].danger >= 2
+    hut = content.locations["mentor_hut"]
+    assert hut.prologue_only and hut.danger < 2 and not bounties.is_town(content, "mentor_hut") and not hut.enemies
+
+    def places(posted):
+        return {p for b in posted for p in (b.location, b.end) if p}
+
+    batches, shut = _post_seasons(content)
+    assert batches >= 50 and any(b.kind == "scout" for b in shut)  # 不是空轉
+    assert "jade_cave" not in places(shut) and "mentor_hut" not in places(shut)
+
+    batches, opened = _post_seasons(content, flags={"xi_open"})
+    assert batches >= 50
+    assert any(b.kind == "scout" and b.location == "jade_cave" for b in opened)  # 旗標立起來就照常挑得到
+    assert "mentor_hut" not in places(opened)
+
+
+def test_strike_escort_and_scout_all_skip_a_closed_place_fb150():
+    """FB-150 的另外兩種單：正式內容裡唯一沒開放的南華觀不是城鎮、也沒有敵人，只擋得到打探，所以討伐與護送的過濾在這裡人工關：
+    先掛 5 季看每一種單最常挑的地點（討伐地點、護送起點與終點、打探地點），把它們各加上一個沒立的 unlock_flag 再掛一次：
+    被關的地點在對應的欄位上一張都沒有、每一種單照樣掛得出來；旗標立起來之後掛出來的單跟當初一模一樣（開放的地點抽法不位移）。"""
+    from collections import Counter
+
+    content = real_content()
+    _, base = _post_seasons(content)
+
+    def common(kind, field):
+        return Counter(getattr(b, field) for b in base if b.kind == kind).most_common(1)[0][0]
+
+    closed = {
+        "strike": ("location", common("strike", "location")),
+        "scout": ("location", common("scout", "location")),
+        "escort-start": ("location", common("escort", "location")),
+        "escort-end": ("end", common("escort", "end")),
+    }
+    for _, spot in closed.values():
+        content.locations[spot].unlock_flag = "shut_by_test"
+    _, shut = _post_seasons(content)
+    for kind, (field, spot) in closed.items():
+        base_kind = kind.split("-")[0]
+        assert not any(getattr(b, field) == spot for b in shut if b.kind == base_kind), (kind, spot)
+    assert {b.kind for b in shut} == set(content.config.bounties.kinds)
+
+    _, reopened = _post_seasons(content, flags={"shut_by_test"})
+    assert [(b.kind, b.faction, b.location, b.end) for b in reopened] == [(b.kind, b.faction, b.location, b.end) for b in base]
 
 
 def test_bots_skip_the_board_button_but_score_taking(setup):

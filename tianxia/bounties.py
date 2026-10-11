@@ -17,7 +17,7 @@ import random
 
 from . import calendar, ranger, roster, team
 from .characters import name_key
-from .models import Content
+from .models import Content, Location
 from .state import Bounty, GameState, WorldState
 from .world_state import WorldStateStore, season_length_days
 
@@ -348,27 +348,34 @@ def tick(state: GameState, content: Content) -> list[str]:
     return issue(state, content, calendar.point(w.time, content, w).week)
 
 
-def _strike(content: Content, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+def _opened(loc: Location, w: WorldState) -> bool:
+    """這個地點全服來說開放了沒（FB-150：週初掛單只挑已開放的地點，不然揭的人「無法安排前往這裡」、那張單白占一個名額）。
+    規則同 atlas.is_unlocked 去掉看人的那一半：不是序章專屬的地點，而且 unlock_flag 沒設或已經在世界旗標裡。
+    不 import atlas（它 import rules、orders、figures，怕繞成環），所以在這裡照寫一份；那邊改了這邊要跟著改。"""
+    return not loc.prologue_only and (not loc.unlock_flag or loc.unlock_flag in w.flags)
+
+
+def _strike(content: Content, w: WorldState, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
     enemy = ENEMY[faction]
     spots = [
-        (loc_id, sid) for loc_id, loc in content.locations.items() if loc_id not in used
+        (loc_id, sid) for loc_id, loc in content.locations.items() if loc_id not in used and _opened(loc, w)
         for sid in loc.enemies if sid in content.squads and content.squads[sid].faction == enemy
     ]
     return rng.choice(spots) if spots else None
 
 
-def _scout(content: Content, rng: random.Random, used: set[str]) -> str | None:
-    """打探的地點：危險度 2 以上、不是城鎮；used 是榜上還有效的打探已經用掉的地點（不分陣營）。"""
+def _scout(content: Content, w: WorldState, rng: random.Random, used: set[str]) -> str | None:
+    """打探的地點：危險度 2 以上、不是城鎮、已開放；used 是榜上還有效的打探已經用掉的地點（不分陣營）。"""
     spots = [
         loc_id for loc_id, loc in content.locations.items()
-        if loc.danger >= 2 and not is_town(content, loc_id) and loc_id not in used
+        if loc.danger >= 2 and not is_town(content, loc_id) and loc_id not in used and _opened(loc, w)
     ]
     return rng.choice(spots) if spots else None
 
 
-def _escort(content: Content, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
-    """護送的起點與終點：兩個不相鄰的城鎮；used 是榜上還有效的護送已經用掉的終點（不分陣營）。"""
-    towns = [loc_id for loc_id in content.locations if is_town(content, loc_id)]
+def _escort(content: Content, w: WorldState, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+    """護送的起點與終點：兩個不相鄰的已開放城鎮；used 是榜上還有效的護送已經用掉的終點（不分陣營）。"""
+    towns = [loc_id for loc_id, loc in content.locations.items() if is_town(content, loc_id) and _opened(loc, w)]
     pairs = [
         (a, b) for a in towns for b in towns
         if a != b and b not in {str(x) for x in content.locations[a].connections} and b not in used
@@ -378,8 +385,9 @@ def _escort(content: Content, rng: random.Random, used: set[str]) -> tuple[str, 
 
 def issue(state: GameState, content: Content, week: int, rng: random.Random | None = None) -> list[str]:
     """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
-    （避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；
-    濾完沒地方可挑就跳過那一張）。不回傳訊息。rng 不用（介面跟其他週初掛鉤一樣）。
+    （只挑已開放的地點〔_opened，FB-150：南華觀要等 xi_open 立起來〕，避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，
+    不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；濾完沒地方可挑就跳過那一張）。不回傳訊息。
+    rng 不用（介面跟其他週初掛鉤一樣）。
     兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
     這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
     w, cfg = state.world, content.config.bounties
@@ -408,19 +416,19 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
         for kind in cfg.kinds:
             spec: dict = {}
             if kind == "strike":
-                spot = _strike(content, faction, rng, used)
+                spot = _strike(content, w, faction, rng, used)
                 if spot is None:
                     continue
                 used.add(spot[0])
                 spec = {"location": spot[0], "squad": spot[1]}
             elif kind == "scout":
-                loc = _scout(content, rng, scouted)
+                loc = _scout(content, w, rng, scouted)
                 if loc is None:
                     continue
                 scouted.add(loc)
                 spec = {"location": loc}
             elif kind == "escort":
-                pair = _escort(content, rng, ends)
+                pair = _escort(content, w, rng, ends)
                 if pair is None:
                     continue
                 ends.add(pair[1])
