@@ -14,7 +14,7 @@ from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
 from tianxia.sqlite_world import open_world
-from tianxia.state import Bounty, GameState, PlayerState, WorldState
+from tianxia.state import Bounty, BotProfile, GameState, PlayerState, WorldState
 from tianxia.world import advance_world_state, season_end_time, settle_season_start
 from tianxia.world_state import fresh_season
 
@@ -357,6 +357,28 @@ def test_no_wanted_on_a_newcomer(beta_setup):
     world.mutate_season(lambda season: setattr(season, "time", season.time + newbie + 60))
     [button] = [x for x in _do(content, world, "甲", lambda g: g.peer_card("戊"))[0]["actions"] if x["action"] == "wanted"]
     assert button["enabled"]
+
+
+def test_a_board_emptied_while_open_says_so_above_back(setup):
+    """榜開著的時候，看得到的單被別人交光，第二層不能只剩「返回」（FB-156；FB-121 第 3 件想避免的畫面換條路還是會出現）：
+    「返回」上面多一行灰掉的 bounty:empty；它按不下去，整季機器人與假人不挑它；還有別的行時不畫；返回照舊收起榜。"""
+    content, world = setup
+    scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _do(content, world, "甲", lambda g: g.choose("act:bounties"))
+    assert list(_ids(content, world, "甲")) == [f"bounty:take:{scout.id}", "bounty:back"]  # 還有單的時候不畫那一行
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, scout.id))
+    _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))  # 丙交了差，名額 1 滿了
+    menu = _ids(content, world, "甲")
+    assert list(menu) == ["bounty:empty", "bounty:back"]
+    assert not menu["bounty:empty"].enabled and menu["bounty:empty"].label == bounties.BOARD_EMPTY and menu["bounty:back"].enabled
+    _, game = _do(content, world, "甲", lambda g: g)
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    assert bot_policy.score(game, menu["bounty:empty"], profile) is None  # 假人：給不了分
+    assert "bounty:empty" not in {o.id for o in game.options(odds=False) if o.enabled}  # 整季機器人、假人都只挑 enabled 的
+    assert _do(content, world, "甲", lambda g: g.choose("bounty:empty"))[0] == ["（此刻無法這麼做。）"]  # 直接打 API 也沒作用，榜還開著
+    assert _load(world, "甲").player.picking_bounty
+    _do(content, world, "甲", lambda g: g.choose("bounty:back"))
+    assert not _load(world, "甲").player.picking_bounty and "act:bounties" not in _ids(content, world, "甲")
 
 
 def test_the_full_hands_refusal_states_how_many_you_really_hold(setup):

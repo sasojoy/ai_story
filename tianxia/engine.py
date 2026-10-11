@@ -2498,7 +2498,7 @@ class Game:
     def _bounty_options(self) -> list[Option]:
         """懸賞榜的第二層選單（bounties.py）：交得出的求藝、求兵每張一顆「交出…」（按了到第三層挑一件；排最前面，當場就能交），
         手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），交不出的求藝、求兵收成一行灰掉的，
-        最後是永遠按得下去的「返回」。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣
+        最後是永遠按得下去的「返回」；上面全空（榜開著時單被別人交光）就多一行灰掉的 bounty:empty（FB-156）。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣
         （灰掉那一行照它包含幾張算）。bounty_pick 指著一張還交得出的求藝、求兵時整份換成第三層（bounties.hand_in_options）；
         那一張下榜了、交不出了就當它不存在，照第二層畫（懸賞榜設計 4.3、4.4）。"""
         s, c = self.state, self.content
@@ -2528,6 +2528,8 @@ class Game:
                                enabled=problem is None))
         if stuck:
             opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck), enabled=False))
+        if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
+            opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
         return ready + opts + [Option(id="bounty:back", label="返回")]
 
     def _bounty(self, arg: str) -> list[str]:

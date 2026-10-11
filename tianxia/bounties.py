@@ -74,6 +74,7 @@ STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢�
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
 HELD_FULL = "你手上已經有 {count} 張了，先交了差再說。"  # 待 joy 潤（FB-155：count 是手上真的有幾張，不是上限；截殺關了又開時可以超過上限）
+BOARD_EMPTY = "榜上的懸賞都有人交了。"  # 待 joy 潤（FB-156：榜開著、看得到的單被別人交光，第二層只剩「返回」時灰掉的那一行；Game._bounty_options 的 bounty:empty）
 
 
 def active(state: GameState, content: Content) -> bool:

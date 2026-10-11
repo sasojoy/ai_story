@@ -549,7 +549,7 @@ def test_a_stale_pick_falls_back_to_the_board(beta_setup):
     _do(content, world, "丙", lambda g: g.choose(f"bounty:pick:{last.id}"))
     world.mutate_season(lambda s: next(x for x in s.bounties if x.id == last.id).done_by.append("乙"))  # 別人先交滿最後一個名額
     assert _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{last.id}:{good.id}"))[0] == ["（此刻無法這麼做。）"]
-    assert list(_ids(content, world, "丙")) == ["bounty:back"] and good.id in _load(world, "丙").player.arts
+    assert list(_ids(content, world, "丙")) == ["bounty:empty", "bounty:back"] and good.id in _load(world, "丙").player.arts  # 榜被交光：返回上面多一行灰的說明（FB-156）
 
 
 def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
