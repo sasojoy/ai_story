@@ -122,7 +122,7 @@ def test_a_named_success_hurts_the_target_and_halves_the_push(gamble):
     assert gk.neili == pytest.approx(plain.participants["姑姑"].neili - want)
     assert gk.hurt_taken == pytest.approx(want) and gk.targeted_by == ["甲"]
     assert named.participants["甲"].hurt_dealt == pytest.approx(want)
-    assert any(m.startswith("甲成了。（官軍的戰局推進") and f"姑姑氣血 -{round(want)}" in m for m in msgs)
+    assert any(m.startswith("甲成了。（替官軍把戰線推前了") and f"姑姑氣血 -{round(want)}" in m for m in msgs)
     assert named.last_targets == {"姑姑": ["甲"]} and named.marked == {"姑姑": 0, "甲": 0}
 
 
@@ -281,7 +281,7 @@ def replay_changshe(real, old: bool):
                 bi.submit_action(battle, name, bi.bot_choose_action(battle, d, name, picks, tuning))
         before = battle.trend
         msgs = bi.resolve_round(battle, d, _Queue(results), 0.0, tuning)
-        push = int(msgs[0].rsplit("（戰局 ", 1)[1].rstrip("）")) if "（戰局 " in msgs[0] else 0
+        push = battle.swings[-1].fixed if battle.swings else 0
         fixed += abs(push)
         gambled += abs(battle.trend - before - push)
     gk = battle.participants["姑姑"]
