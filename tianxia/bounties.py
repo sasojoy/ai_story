@@ -51,6 +51,7 @@ UNPICK = "回到懸賞榜"  # 待 joy 潤：第三層最後一顆（bounty:unpic
 UNPICKED = "你回到懸賞榜前。"  # 待 joy 潤：按了 bounty:unpick 的回話（Game._bounty）
 TEMPERED_NOTE = "淬煉過 {n} 次，賞銀不會多給。"  # 待 joy 潤：第三層交兵器的確認句
 HELD_NOTE = "這是你手上那把，交了你就空手了。"  # 待 joy 潤：同上，交的是手上那把
+HAVE = "你身上合用的："  # 待 joy 潤：懸賞卡那一列（have_text）；fitting 連手上那把兵器也算，所以寫「身上」不寫「庫裡」
 NOT_YOURS = "這一張不是給你的。"  # 待 joy 潤；fit_problem 的拒絕句（設計 4.5）都寫成常數，測試引用常數，潤字不必改測試
 GIVEN_BEFORE = "這一張你已經交過了。"  # 待 joy 潤
 NO_ART = "你的功法庫裡沒有這一門。"  # 待 joy 潤
@@ -810,10 +811,38 @@ def targets(state: GameState, content: Content) -> list[str]:
     return [loc for loc in out if loc in content.locations]
 
 
-def status(state: GameState, content: Content) -> list[dict]:
-    """狀態用：我手上的每一張（標題、怎麼完成、賞、期限與名額）。"""
-    return [
-        {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
-         "issuer": issuer(content, b), "due": due_line(state, content, b)}
-        for b in mine(state, content)
-    ]
+def _row(state: GameState, content: Content, b: Bounty) -> dict:
+    return {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
+            "issuer": issuer(content, b), "due": due_line(state, content, b)}
+
+
+def have_text(state: GameState, content: Content, world: WorldStateStore, b: Bounty, items: list[str], memo: dict | None = None) -> str:
+    """懸賞卡那一列的「你身上合用的：【烈焰掌】、【回風腿】等 3 門」（items 照 fitting 排好的，最不值錢的先寫兩件；待 joy 潤）。
+    兵器多寫階品（求藝送的、鐵匠鋪買的同名，例「厚背刀」，靠階品分辨），手上那把再寫「在手上」（fitting 連手上那把也算，
+    所以開頭寫「身上」不寫「庫裡」）。"""
+    memo = {} if memo is None else memo
+
+    def named(item: str) -> str:
+        if b.kind == "art":
+            return f"【{_art_of(item, content, world, memo).name}】"
+        w = _weapon(state, item)
+        return f"【{w.name}】（{weapons.grade(w)}{'・在手上' if w is state.player.weapon else ''}）"
+
+    more = f"等 {len(items)} {UNITS[b.kind]}" if len(items) > 2 else ""
+    return HAVE + "、".join(named(i) for i in items[:2]) + more
+
+
+def status(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
+    """狀態用（江湖頁的懸賞卡）：我手上揭了的每一張（標題、怎麼完成、賞、期限與名額），再加上身上有合用東西的求藝、求兵（多一個 have）。
+    合用照 fitting 判、不看人在哪裡：人在城外也列，知道去城鎮交（不能用 give_problem，它要人在城鎮，設計 4.9）。
+    每次 /api/main 都算：只在榜上有接得了、自己還沒交過的求藝、求兵時才找合用的；查過的武學存進這一次的 memo。"""
+    rows = [_row(state, content, b) for b in mine(state, content)]
+    me = name_key(state.player.name)
+    memo: dict = {}
+    for b in open_bounties(state, content):
+        if b.kind not in GIVE_KINDS or not can_take(state, b) or me in (name_key(t) for t in b.done_by):
+            continue
+        items = fitting(state, content, world, b, memo)
+        if items:
+            rows.append({**_row(state, content, b), "have": have_text(state, content, world, b, items, memo)})
+    return rows

@@ -567,3 +567,35 @@ def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
     assert handed.title == bounties.BOARD and handed.lines[0] == bounties.pick_line(content, second)
     assert any(line.startswith(bounties.GIVEN_PREFIX) for line in handed.lines)
     assert journal[2].title.startswith(f"{bounties.BOARD}・")
+
+
+def test_the_card_lists_hand_ins_you_can_make_even_outside_town(beta_setup):
+    """設計 4.9：江湖頁的懸賞卡在手上揭了的後面，多列身上有合用東西的求藝、求兵——不看人在哪裡（照 fitting，不照 give_problem）：
+    人在城外也列，知道去城鎮交；每一列寫期限與名額、你身上合用的是哪幾件（最不值錢的先寫兩件；兵器寫階品、手上那把寫「在手上」）。
+    交不出的、交過的不列。"""
+    content, world = beta_setup
+    arts = [_fused(world, n) for n in ("烈焰掌", "鐵砂掌", "斷金拳")]
+    _edit(world, "丙", lambda p: p.arts.extend(a.id for a in arts))
+    art = _art(world)
+    _art(world, attribute="柔")
+    scout = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, scout.id))
+    _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
+    rows = _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"]
+    assert [r["id"] for r in rows] == [scout.id, art.id] and "have" not in rows[0]  # 揭了的在前；柔的交不出、不列
+    assert rows[1]["title"] == "求藝・剛" and rows[1]["due"] == "期限 到季末・名額還剩 3"
+    assert rows[1]["have"] == bounties.HAVE + "【斷金拳】、【烈焰掌】等 3 門"  # 熔煉值一樣，照名字
+    assert "act:bounties" not in _ids(content, world, "丙")  # 人在城外：交出只在城鎮的懸賞榜上
+    _edit(world, "丙", lambda p: setattr(p, "location", "town"))
+    cheapest = _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, art))[0][0]
+    _open(content, world, "丙", f"bounty:pick:{art.id}", f"bounty:give:{art.id}:{cheapest}", "bounty:back")
+    again = _art(world)
+    rows = _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"]
+    assert [r["id"] for r in rows] == [scout.id, again.id]  # 交過的那一張不再列
+    assert rows[1]["have"] == bounties.HAVE + "【烈焰掌】、【鐵砂掌】"
+    content.config.weapons.enabled = True
+    _edit(world, "丙", lambda p: setattr(p, "weapon", _blade("兵:1")))
+    arms = _arms(world)
+    rows = _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"]
+    assert [r["id"] for r in rows] == [scout.id, again.id, arms.id]
+    assert rows[2]["have"] == bounties.HAVE + "【柔劍1】（一階下品・在手上）"  # 手上那把也算；同名的靠階品分辨

@@ -7021,7 +7021,8 @@ class Game:
             "name": p.name,
             "affiliation": social.affiliation(s, c),
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營是 None
-            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額）；懸賞榜關著是空的
+            # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求藝、求兵（多一個 have）；懸賞榜關著是空的
+            "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "anonymous": p.anonymous,

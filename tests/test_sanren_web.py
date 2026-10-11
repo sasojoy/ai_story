@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import pytest
 from test_bounties import _do, _post, setup  # noqa: F401  （setup 是 fixture）
+from test_bounty_hand_in import _art, _edit, _fused
 from test_prologue_web import run
 
 import server
 import webharness
+from tianxia import bounties
 from tianxia.characters import CharacterStore
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -62,6 +64,26 @@ def test_the_wanted_amount_box_starts_at_the_lowest_bounty(setup):  # noqa: F811
                S={"peer": {"name": "乙", "card": card, "amountFor": i}})
     box = html.split('id="peer-amount"')[1].split("</form>")[0]
     assert 'min="20"' in box and "：20～200" in box
+
+
+def test_the_bounty_card_lists_a_hand_in_you_can_make(setup):  # noqa: F811
+    """懸賞榜設計 4.9：身上有合用的求藝，卡上就列那一張，多一行身上合用的是哪幾件；人在城外時卡底那句寫得出可以交；
+    第三層（替那一張挑一件）開著時，選單就是懸賞榜，卡底不再叫人去看榜。"""
+    content, world = setup
+    good = _fused(world, "烈焰掌")
+    _edit(world, "丙", lambda p: p.arts.append(good.id))
+    b = _art(world)
+    card = run(_view(content, world, "丙"), "return H.pageJianghu();").split("🪧")[1].split("</details>")[0]
+    assert "懸賞（1）" in card and "求藝・剛" in card and bounties.HAVE + "【烈焰掌】" in card and "期限 到季末・名額還剩 3" in card
+    assert 'data-id="act:bounties"' in card  # 在城鎮：卡底開得了懸賞榜
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:pick:{b.id}"))
+    card = run(_view(content, world, "丙"), "return H.pageJianghu();").split("🪧")[1]
+    assert "bounty-foot" not in card.split("</details>")[0]
+    _do(content, world, "丙", lambda g: g.choose("bounty:back"))
+    _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
+    away = run(_view(content, world, "丙"), "return H.pageJianghu();")
+    assert bounties.HAVE + "【烈焰掌】" in away and "到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的功夫與兵器。" in away
 
 
 def test_with_the_board_open_the_card_points_nowhere(setup):  # noqa: F811

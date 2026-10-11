@@ -1280,7 +1280,7 @@
       <summary>📜 本週軍令（${list.length}${done ? `，已達成 ${done}` : ""}）</summary><div class="fold-body">${cart}${rows}</div></details>`;
   }
 
-  // 手上揭了的懸賞（status.bounties，bounties.status）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
+  // 手上揭了的懸賞，加上身上有合用東西的求藝、求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
   // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
   // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
   function bountiesHtml(list, options) {
@@ -1292,11 +1292,13 @@
         <div class="order-how">${esc(b.how)}</div>
         <div class="order-meta">${esc(b.reward)}</div>
         ${b.due ? `<div class="order-meta">${esc(b.due)}</div>` : ""}
+        ${b.have ? `<div class="order-meta">${esc(b.have)}</div>` : ""}
       </div>`).join("");
-    const open = (options || []).some((o) => o.id === "bounty:back");  // 懸賞榜正開著（選單就是榜）：卡底下不再寫什麼
+    // 懸賞榜正開著（第二層「返回」或第三層「回到懸賞榜」，選單就是榜）：卡底下不再寫什麼
+    const open = (options || []).some((o) => o.id === "bounty:back" || o.id === "bounty:unpick");
     const foot = open ? "" : board
       ? `<button class="btn small" data-act="choose" data-id="act:bounties" ${board.enabled ? "" : "disabled"}>看懸賞榜</button>`
-      : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的或放棄。</div>';
+      : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的功夫與兵器。</div>';  // 待 joy 潤
     return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
       <summary>🪧 懸賞（${list.length}）</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
   }
