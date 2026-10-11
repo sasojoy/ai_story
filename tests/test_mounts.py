@@ -592,3 +592,111 @@ def test_the_practice_page_feed_action_feeds_the_horse(content, world):
     assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["feed"] is True
     server.MENXIA_ACTIONS["feed"](game, {})
     assert game.state.player.mount.edge == 100 and server.menxia_view(game)["gear"]["slots"][0]["worn"]["feed"] is False
+
+
+# ── Task 6：決戰騎兵 ──
+
+def test_cavalry_multiplies_charge_and_raid_but_not_hold_and_stacks_with_the_role():
+    """設計 5.9：強攻、奇襲 ×（1＋騎兵），固守不加；跟職位疊乘。沒騎馬（預設 0）數字一個都不變。"""
+    from tianxia import battle_instance
+    from tianxia.models import BattleTuning
+    t = BattleTuning()
+    plain = battle_instance.move_scores(t, 100.0, None, None)
+    assert battle_instance.move_scores(t, 100.0, None, None, cavalry=0.0) == plain
+    rode = battle_instance.move_scores(t, 100.0, None, None, cavalry=0.1)
+    base = battle_instance.strength(t, 100.0) * t.affinity_base / 100
+    assert rode["強攻"] == round(base * 1.1, 1) and rode["奇襲"] == round(base * 1.1, 1) and rode["固守"] == plain["固守"]
+    vanguard = battle_instance.move_scores(t, 100.0, None, None, role="str", cavalry=0.1)  # 先鋒：強攻另 +15%
+    assert vanguard["強攻"] == round(base * (1 + t.role_move_bonus) * 1.1, 1)
+
+
+def test_riding_into_a_showdown_snapshots_the_horse_and_shows_it(content, game):
+    """設計 5.9：份量與騎兵在加入時快照（同職位），之後馬餓了不影響這一場；集結、開打後的畫面與戰報各寫一句。"""
+    from conftest import at
+    from test_engine import _fighter, _three_round_showdown
+    _on(content)
+    definition = _three_round_showdown(content)
+    p = game.state.player
+    p.faction, p.mount = "guan", _horse()  # 吃飽的駑馬：騎兵 +5%
+    foe = _fighter(content, game, "乙", "huang")
+    game.world.start_battle(definition, now=0.0)
+    ride = mounts.CAVALRY_LINE.format(name="棗騮馬", pct="5%")  # 待 joy 潤的句子從常數組，只鎖馬名與幾成
+    with at(game, 0.0), at(foe, 0.0):
+        game.choose("battle:join:guan")
+        foe.choose("battle:join:huang")
+        assert ride + "。集結結束就開打" in game.scene_text()  # 接在職位後面、「集結結束就開打」（舊句）前面
+    me = game.world.get_battle().participants[p.name]
+    assert me.mount == "棗騮馬" and me.cavalry == pytest.approx(0.05) and me.scores == game._battle_scores()
+    plain = game._battle_scores(mounted=False)
+    assert me.scores["強攻"] > plain["強攻"] and me.scores["奇襲"] > plain["奇襲"] and me.scores["固守"] == plain["固守"]
+    them = game.world.get_battle().participants["乙"]
+    assert (them.mount, them.cavalry) == ("", 0.0)  # 沒騎馬
+    p.mount.edge = 0  # 加入之後馬餓了：這一場照加入時的快照
+    start = definition.muster_seconds + 1
+    with at(game, start):
+        assert ride in game.scene_text()  # 馬餓了也照加入時的 5% 寫
+    for i in range(3):
+        with at(game, start + i), at(foe, start + i):
+            game.choose("battle:act:guan_hold")
+            foe.choose("battle:act:huang_hold")
+    game.sync(start + 10)  # 收場那一下是乙出的手：自己的那一則同步時補
+    assert mounts.CAVALRY_REPORT.format(name="棗騮馬") in game.state.journal[0].lines
+    assert mounts.CAVALRY_REPORT.format(name="棗騮馬") in game.state.battles[0].notes  # 戰報也寫（同一份 lines）
+
+
+def test_a_fighter_with_no_snapshot_gets_his_horse_backfilled(content, game):
+    """上線前就在場上、沒有份量快照的人：自己同步時連馬一起補（_backfill_battle_scores）。"""
+    from test_engine import _open_three_move_battle, _strip_scores
+    _on(content)
+    game.state.player.mount = _horse(tier=2)
+    _open_three_move_battle(game)
+    name = game.state.player.name
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "mount", ""))
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "cavalry", 0.0))
+    _strip_scores(game)
+    game.sync(1.0)
+    after = game.world.get_battle().participants[name]
+    assert after.scores == game._battle_scores() and (after.mount, after.cavalry) == ("棗騮馬", pytest.approx(0.10))
+
+
+def test_the_enlist_and_latecomer_paths_snapshot_the_horse_like_joining(content, game):
+    """五條加入的路：join（上面）、集結時臨時投效、開打後臨時投效、晚到（join_late）都快照馬，跟份量同一刻算。"""
+    from conftest import at
+    from test_engine import _fighter, _install_battle_def, _install_factions
+    _on(content)
+    _install_factions(content)
+    definition = _install_battle_def(content)
+    definition.rounds_per_act = 3
+    game.state.player.mount = _horse(tier=3, name="名駒甲")  # 散人（沒陣營）集結時臨時投效：名駒騎兵 +15%
+    game.world.start_battle(definition, now=0.0)
+    late = _fighter(content, game, "丙", "guan")  # 官軍，晚到
+    late.state.player.mount = _horse(tier=2, name="良駒乙", hid="騎:2")
+    drifter = _fighter(content, game, "丁", None)  # 另一個散人，開打後臨時投效
+    drifter.state.player.mount = _horse(tier=1, name="駑馬丙", hid="騎:3", edge=0)  # 餓到底：5%×0.5
+    with at(game, 0.0):
+        game.choose("battle:enlist:guan")
+    me = game.world.get_battle().participants[game.state.player.name]
+    assert (me.mount, me.cavalry) == ("名駒甲", pytest.approx(0.15)) and me.scores == game._battle_scores()
+    start = definition.muster_seconds + 1
+    with at(game, start):
+        game._battle_status()  # 集結關閉，已經開打
+    with at(late, start):
+        late.choose("battle:join_late")
+    with at(drifter, start):
+        drifter.choose("battle:enlist:huang")
+    parts = game.world.get_battle().participants
+    assert (parts["丙"].mount, parts["丙"].cavalry) == ("良駒乙", pytest.approx(0.10)) and parts["丙"].scores == late._battle_scores()
+    assert (parts["丁"].mount, parts["丁"].cavalry) == ("駑馬丙", pytest.approx(0.025)) and parts["丁"].scores == drifter._battle_scores()
+    assert mounts.pct(parts["丁"].cavalry) == "3%"  # 2.5% 進位成 3%（half_up，不是捨到偶數的 2%）
+
+
+def test_a_duel_takes_its_scores_without_the_horse(content, world):
+    """頭目戰（Joy 的 duel.py）用同一份份量快照，但騎兵只在全服決戰（設計 2.1 的三個用途）。"""
+    from test_duel import _boss
+    from tianxia.models import FactionDef
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", join_at=["town"]), FactionDef(id="huang", name="黃巾", join_at=["town"])]
+    content.duels = {"lake_boss": _boss()}
+    game = _game(content, world, at="lake", horse=_horse(tier=3))
+    rules.learn_skill(game.state, content, "fist")
+    game._duel_start(content.duels["lake_boss"])
+    assert game.state.player.duel.scores == game._battle_scores(mounted=False) != game._battle_scores()
