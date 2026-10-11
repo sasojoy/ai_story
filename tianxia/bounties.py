@@ -18,16 +18,29 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, ranger, roster, team, weapons
+from . import calendar, equipment, library, ranger, roster, team, weapons
 from .characters import name_key
+from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Content, Location
-from .state import Bounty, GameState, WorldState
+from .state import Bounty, GameState, Weapon, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "art": "求藝", "arms": "求兵"}
 GIVE_KINDS = ("art", "arms")  # 求藝、求兵：不用揭，在懸賞榜上直接交（懸賞榜設計第四節）
 FULL_PAY = ("wanted", "art", "arms")  # 陣營的人也拿全額的（通緝是押金照數給；求藝、求兵企劃者 2026-10-10 定）
 NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
+NOT_NOW = "（此刻無法這麼做。）"
+GONE = "這張懸賞已經下榜了。"  # 待 joy 潤
+ONLY_FUSED = "這一張只收合成出來的功夫。"  # 待 joy 潤
+NOT_YOURS = "這一張不是給你的。"  # 待 joy 潤；fit_problem 的拒絕句（設計 4.5）都寫成常數，測試引用常數，潤字不必改測試
+GIVEN_BEFORE = "這一張你已經交過了。"  # 待 joy 潤
+NO_ART = "你的功法庫裡沒有這一門。"  # 待 joy 潤
+WORN_ART = "身上正在練的不能交，先改練別的。"  # 待 joy 潤
+UNNAMED = "先替它定名，再談交出去。"  # 待 joy 潤
+NO_DATA = "找不到它的資料。"  # 待 joy 潤
+WANT_ART = "這一張要屬{attribute}的。"  # 待 joy 潤
+NO_WEAPON = "裝備庫裡沒有這一件。"  # 待 joy 潤
+WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
@@ -297,6 +310,107 @@ def hunting(state: GameState, content: Content, target: str) -> bool:
     """我接了通緝這個人、還沒完成（截殺的鈕看它：散人、同陣營的人也能對他下手）。"""
     key = name_key(target)
     return any(b.kind == "wanted" and name_key(b.target or "") == key for b in mine(state, content))
+
+
+# ── 求藝、求兵：在懸賞榜上直接交（懸賞榜設計第四節）──────────────────────────────
+
+
+def _art_of(art_id: str, content: Content, world: WorldStateStore, memo: dict | None):
+    """全服共享的那一門（team.resolve_art）；memo 是同一次呼叫裡查過的（world.get_skill 沒有快取，每次是一條 SQLite 查詢，設計 4.9）。"""
+    if memo is None:
+        return team.resolve_art(art_id, content, world)
+    if ("art", art_id) not in memo:
+        memo[("art", art_id)] = team.resolve_art(art_id, content, world)
+    return memo[("art", art_id)]
+
+
+def _weapon(state: GameState, item_id: str) -> Weapon | None:
+    """手上那把或裝備庫的武器欄裡 id 是 item_id 的那一把（求兵准交手上那把，企劃者 2026-10-10，14.1 丙）；都沒有是 None。
+    裝備庫混放武器與防具（裝備一）：只看武器那一欄，防具 id（「甲:N」）一律當沒有。
+    兵器 id 是「兵:3」：呼叫端照 partition 切一次，不要 split。"""
+    p = state.player
+    if p.weapon is not None and p.weapon.id == item_id:
+        return p.weapon
+    return next((w for w in equipment.in_slot(p, "weapon") if w.id == item_id), None)
+
+
+def fit_problem(
+    state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict | None = None,
+) -> str | None:
+    """這件東西合不合這一張（設計 4.5 第 3～7 條）；None＝合用。只看東西本身，不看人在哪裡、榜開沒開：江湖頁的懸賞卡
+    （status、fitting）人在城外也照它列。拒絕的話待 joy 潤；跟 library.melt_problem 判斷一樣的幾條，字另寫（那裡寫的是「熔」）。"""
+    p = state.player
+    if b.kind not in GIVE_KINDS:
+        return NOT_NOW
+    if not can_take(state, b):
+        return NOT_YOURS
+    if name_key(p.name) in (name_key(t) for t in b.done_by):
+        return GIVEN_BEFORE  # 一張一人只交一次
+    if b.kind == "arms":
+        if not content.config.weapons.enabled:
+            return NOT_NOW
+        w = _weapon(state, item_id)
+        if w is None:
+            return NO_WEAPON
+        if w.kind != b.weapon_kind or w.attribute != b.attribute:
+            return WANT_ARMS.format(attribute=b.attribute, noun=_noun(b))
+        return None
+    if item_id not in library.owned_arts(state):
+        return NO_ART
+    if item_id in (p.member.neigong_id, p.member.wugong_id):
+        return WORN_ART
+    if item_id == p.naming:
+        return UNNAMED  # 熔了、交了，全服的第一人登記還在，那門就永遠沒有人替它定名
+    art = _art_of(item_id, content, world, memo)
+    if art is None:
+        return NO_DATA  # 存檔記著、內容與全服登記都沒有的失效引用（同 fusion.fuse_problem）；後面才放心讀 origin
+    if item_id in content.skills or art.origin != "fused" or art.preset:
+        return ONLY_FUSED  # 基礎武學、內容寫好的、師門配方都不收；秘方合出來的收（設計 14.1 甲）
+    if art.attribute != b.attribute:
+        return WANT_ART.format(attribute=b.attribute)
+    return None
+
+
+def _quality_rank(quality: str) -> int:
+    return QUALITIES.index(quality) if quality in QUALITIES else 0
+
+
+def _cheapness(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple:
+    """「最不值錢的先」（設計 4.4）：求藝照熔煉值（library.melt_value，熔煉頁與確認句同一個數）、品質（低的先；PM 2026-10-11：
+    熔煉值只算自己修練上去的幾階，合成時擲到上品的跟下品的可以同值，打平時不能先交掉上品的）、再照名字；求兵照品質、階、鋒利度、id。"""
+    if b.kind == "arms":
+        w = _weapon(state, item_id)
+        return (_quality_rank(w.quality), w.tier, w.edge, w.id)
+    if ("melt", item_id) not in memo:
+        memo[("melt", item_id)] = library.melt_value(state, content, world, item_id)
+    art = _art_of(item_id, content, world, memo)
+    quality = team.art_quality(state, art)  # 同 team.player_art(...).quality，用查過的那份少一次資料庫
+    return (memo[("melt", item_id)], _quality_rank(quality), art.name)
+
+
+def fitting(state: GameState, content: Content, world: WorldStateStore, b: Bounty, memo: dict | None = None) -> list[str]:
+    """這一張合用的那幾件 id（fit_problem 過得了），最不值錢的先。不看人在哪裡（卡片在城外也列）。
+    求藝先用便宜的條件濾掉內容武學、身上的、等著定名的，剩下的每門查一次（存進 memo；status 一次查好幾張時共用）。"""
+    memo = {} if memo is None else memo
+    p = state.player
+    if b.kind == "arms":
+        candidates = ([p.weapon.id] if p.weapon is not None else []) + [w.id for w in equipment.in_slot(p, "weapon")]
+    elif b.kind == "art":
+        skip = {p.member.neigong_id, p.member.wugong_id, p.naming}
+        candidates = [a for a in p.arts if a not in content.skills and a not in skip]
+    else:
+        return []
+    items = [i for i in candidates if fit_problem(state, content, world, b, i, memo) is None]
+    return sorted(items, key=lambda i: _cheapness(state, content, world, b, i, memo))
+
+
+def give_problem(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str) -> str | None:
+    """第三層的交出鈕亮不亮、give 真的交之前都走這裡（設計 4.5 第 1、2 條，再接 fit_problem）：懸賞榜看得到、這一張還在榜上。"""
+    if not board_here(state, content):
+        return NOT_NOW
+    if b.id not in {x.id for x in open_bounties(state, content)}:
+        return GONE  # 過期了，或名額滿了
+    return fit_problem(state, content, world, b, item_id)
 
 
 # ── 通緝（玩家花銀兩掛的）──────────────────────────────
