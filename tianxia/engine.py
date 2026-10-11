@@ -3044,6 +3044,7 @@ class Game:
             battle_instance.fill_timed_out_actions(battle, definition, tuning=tuning)
         if not battle_instance.round_is_complete(battle):
             return []
+        battle_instance.fill_idle_actions(battle, definition, tuning=tuning)  # 不等掛機的人：其他人送齊了，替他們代選
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
@@ -3090,6 +3091,9 @@ class Game:
         line = self._highlight_line(battle, definition)
         if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
             self.world.mutate_season(lambda season: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
+        line = self._merit_line(battle, definition)
+        if line:  # 兩軍各一位首功（Joy 2026-10-10 個人戰功），天下大事傳聞具名
+            self.world.mutate_season(lambda season: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
         if definition is not None and definition.third is not None and battle.third_push:
             # 第三方（地方豪強）收場的割據推動：一般收場與時刻表收場都推（時刻表那一支不套保底的大勢變化，所以要在分支之前）
             self.world.mutate_season(lambda season: self._apply_third_push(season, battle, definition))
@@ -3108,6 +3112,19 @@ class Game:
                 self._apply_outcome_trends_and_flags(self.state.world, battle)
             self._deliver_battle_results()
         self._open_waiting_showdown()
+
+    def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
+        """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit）；兩邊都沒人出過手就不寫。"""
+        if definition is None:
+            return ""
+        tuning = self.content.config.battle
+        heads = [
+            (f.name, top) for f in definition.factions[:2]
+            if (top := battle_instance.top_merit(battle, tuning, f.id)) is not None
+        ]
+        if not heads:
+            return ""
+        return f"{definition.name}論功：" + "，".join(f"{side}首功{p.name}" for side, p in heads) + "。"
 
     @staticmethod
     def _highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
@@ -3347,13 +3364,29 @@ class Game:
             lines.append(f"你太顯眼，被對面集火，打掉氣血 {round(me.hurt_taken)}")
         if me.fell_round is not None:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        tuning = c.config.battle
+        mine = battle_instance.merit(tuning, me)
+        ranking = battle_instance.merit_ranking(battle, tuning, me.faction) if me.faction in armies else []
+        rank = next((i for i, (q, _) in enumerate(ranking, 1) if q.name == me.name), None)
+        if rank is not None:  # 個人戰功（Joy 2026-10-10）：自己這一邊排第幾、怎麼來的
+            parts = "、".join(battle_instance.merit_parts(me))
+            lines.append(f"你的戰功 {mine}，在{side}排第 {rank}／{len(ranking)}" + (f"（{parts}）" if parts else ""))
         h = battle.highlight
-        fame = c.config.battle.highlight_fame
+        fame = 0
         highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
-        if earlier is None and h is not None and h.name == me.name and h.won and fame:  # 這一場最有戲的那一搏是自己的、而且成了
-            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
-            lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
-            highlight_changes.append(f"名望 +{fame}")
+        if earlier is None:
+            s.player.showdowns += 1
+            if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
+                fame += tuning.highlight_fame
+                lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
+            top = battle_instance.top_merit(battle, tuning, me.faction) if me.faction in armies else None
+            if top is not None and top.name == me.name:  # 這一邊的首功
+                s.player.top_merits += 1
+                fame += tuning.top_fame
+                lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
+            if fame:
+                s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
+                highlight_changes.append(f"名望 +{fame}")
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -3384,6 +3417,7 @@ class Game:
         record = BattleRecord(
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
+            gauge=self._gauge_of(battle, definition, me.faction) if definition is not None else None,
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
@@ -3395,14 +3429,15 @@ class Game:
     def _showdown_pay(
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
     ) -> list[str]:
-        """決戰的軍餉（Config.showdown_pay）：照出手回合數發銀兩與經驗，贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
+        """決戰的軍餉（Config.showdown_pay）：照個人戰功發銀兩與經驗（最多 share_cap 倍），贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
         （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。
         序章裡的人不發（FB-113）：修好之前在序章裡投效、出手的新人，以前 1 級大勝拿 120 經驗、序章中途升到 5 級（FB-122）。"""
         c, s = self.content, self.state
         if prologue_rules.active(s, c):
             return []
         pay, p = c.config.showdown_pay, s.player
-        share = max(pay.idle_share, min(1.0, me.acted_rounds / pay.full_rounds))
+        full = pay.full_rounds * max(1, c.config.battle.merit_points.get("acted", 0))  # 只出手 full_rounds 回合的戰功算一倍
+        share = max(pay.idle_share, min(pay.share_cap, battle_instance.merit(c.config.battle, me) / full))
         won = bool(battle.outcome_side) and me.faction == battle.outcome_side
         bonus = pay.win_bonus.get(battle.outcome_margin, 0.0) if won else 0.0
         silver = round(pay.silver * share * (1 + bonus))
@@ -3552,6 +3587,34 @@ class Game:
             return definition.region if me.away and not me.eliminated else None
         return None if self._at_battle(definition) else definition.region
 
+    def _gauge_of(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
+        """battle_instance.gauge 的參數：時刻表決戰（第一季開著）照偏離中線分大勝，其餘照 outcomes 的門檻。"""
+        timetable = definition.timetable_event is not None and season_one(self.content, self.state.world)
+        return battle_instance.gauge(battle, definition, side, timetable, self.content.config.battle, self.state.player.name)
+
+    def battle_gauge(self) -> dict | None:
+        """場景裡畫著的這場決戰（集結、開打）的戰局條（Joy 2026-10-10）；沒有、序章裡是 None。只讀，不推進戰鬥。
+        自己在場上就站自己那一邊看；還沒加入的看自己陣營那一邊；散人、第三方看第一方在左。"""
+        status = self._battle_for_me(tick=False)
+        if status is None:
+            return None
+        battle, definition = status
+        p = battle.participants.get(self.state.player.name)
+        side = p.faction if p is not None else self.state.player.faction
+        return self._gauge_of(battle, definition, side)
+
+    def record_gauge(self, record_id: int | None) -> dict | None:
+        """戰報頁那一筆是決戰時收場那一刻的戰局條；不是決戰、找不到是 None。"""
+        record = battlelog.find(self.state, record_id) if record_id is not None else None
+        return record.gauge if record is not None else None
+
+    def card_gauge(self) -> dict | None:
+        """「剛剛」那張戰鬥卡片是一場決戰時，收場那一刻的戰局條（BattleRecord.gauge）；不是就 None。"""
+        if not self.shows_battle_card():
+            return None
+        record = battlelog.find(self.state, self.state.battle_card)
+        return record.gauge if record is not None else None
+
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
         watching = self._watching_battle(battle, definition)
@@ -3577,7 +3640,8 @@ class Game:
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡。
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
-        lines = [header, f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"] + battle.narrative_log[-5:]
+        lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
+        lines += battle.narrative_log[-5:]
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
@@ -3607,6 +3671,15 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
+    def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
+        """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""
+        p = battle.participants.get(self.state.player.name)
+        if p is None or p.eliminated or battle.phase != "active":
+            return []
+        if battle_instance.idle(p):
+            return ["**你上一回合沒出手**，系統替你固守了；這一回合大家不等你，按任何一招就不算掛機。"]
+        return []
+
     def _battle_spotlight(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
     ) -> list[str]:
@@ -3631,10 +3704,11 @@ class Game:
         me = battle.participants.get(self.state.player.name)
         third = me is not None and battle_instance.is_third(definition, me)  # 兩軍的人不算豪強（他們不該知道有幾個）
         sent, present = battle_instance.round_progress(battle, definition, with_third=third)
+        idlers = battle_instance.idle_count(battle, definition, with_third=third)  # 掛機的不等（Joy 2026-10-10），另外寫
         paused = self.world.paused_at()
         left = max(0, int(battle.round.opened_real + definition.round_seconds - (self.now if paused is None else paused)))
         due = f"最遲 {left // 60} 分 {left % 60} 秒後結算" if left else "時間到了，即將結算"
-        return f"已送出 {sent}／在場 {present}，{due}"
+        return f"已送出 {sent}／在場 {present}" + (f"（掛機 {idlers} 人不等）" if idlers else "") + f"，{due}"
 
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""

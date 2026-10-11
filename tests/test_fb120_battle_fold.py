@@ -67,7 +67,18 @@ def _consts():
 
 
 def _scene(page):
-    return re.search(r'<section class="card scene">(.*?)</section>', page, re.S).group(1)
+    """場景卡的內容，拿掉戰局條（它自己的測試在 test_battle_gauge.py）：這裡比的是伺服器給的那一段文字。"""
+    scene = re.search(r'<section class="card scene">(.*?)</section>', page, re.S).group(1)
+    start = scene.find('<div class="gauge"')
+    if start < 0:
+        return scene
+    depth = 0
+    for tag in re.finditer(r"<(/?)div\b", scene[start:]):  # 戰局條裡還有好幾層 div：數到對應的那一個收尾
+        depth += -1 if tag.group(1) else 1
+        if depth == 0:
+            end = scene.index(">", start + tag.start()) + 1
+            return scene[:start] + scene[end:]
+    return scene
 
 
 def _round(m):
@@ -148,7 +159,7 @@ def test_the_keyboard_opens_the_folded_line(battle):
       for (const fn of T.docListeners.keydown) fn({ key: "Enter", target, preventDefault: () => { prevented = true; } });
       return { prevented, open: H.S.battleOpen, page: T.els.page.innerHTML };"""
     out = run(m, script)
-    assert out["prevented"] and out["open"] == "宛城之戰" and m["scene"].split("<hr />", 1)[0] in out["page"]
+    assert out["prevented"] and out["open"] == "宛城之戰" and m["scene"].split("<hr />", 1)[0] in _scene(out["page"])
 
 
 @node
