@@ -61,7 +61,7 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
-    # 遊俠名號（ranger.py）：散人、第一季開著、名號到這一階才成立（投靠了陣營一律不成立）；ranger_path 是「俠」或「寇」（不寫＝不限）
+    # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
@@ -150,6 +150,8 @@ class CraftNames(_Strict):
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
+    # 兵器配方的退路中間字（兵器設計 4.4、附帶決定 c）：字首＋這一個字＋兵器字；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
+    weapon: list[str] = Field(default_factory=lambda: list("霜霆雷星月嵐濤岳燼鳴影紋芒魄痕翎"))
 
 
 class CombatLines(_Strict):
@@ -799,7 +801,7 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", 
 ALLOW_FIXED = frozenset({
     "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
-    "act:bounties",  # 懸賞榜（第一季、城鎮類的地點）
+    "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
@@ -1224,7 +1226,7 @@ class Spar(_Strict):
 
 
 class Ranger(_Strict):
-    """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：只有第一季開著時有。
+    """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：劇本有陣營就有，每季都有（懸賞榜設計 2.2）。
     散人時攢的善名、惡名（只算加的，扣的不算）各記一本帳，俠名＝兩本取高的那一本＋懸賞的功績；走哪一條路看哪一本高
     （善名高是「俠」、惡名高是「寇」，一樣高算俠）。投靠了陣營就凍結：帳不再記、名號不顯示、好處不給，存檔照留。
 
@@ -1249,7 +1251,7 @@ class Ranger(_Strict):
 
 
 class Bounties(_Strict):
-    """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：只有第一季開著時有，在城鎮類的地點查看（「懸賞榜」不花體力）。
+    """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
     官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
     散人兩邊的都能接（通緝也是），陣營的人只能接自己陣營的；接了才算數，一個人同時最多接 max_taken 張。
 
@@ -1265,6 +1267,7 @@ class Bounties(_Strict):
     - quota：一張陣營懸賞前幾個完成的人有賞（照伺服器人數上限換算：100 人的量 3 張，最少 quota_min）。
     - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。"""
 
+    enabled: bool = True  # 懸賞榜的開關（主機要整個關掉時用）；開著也要劇本有陣營才有（bounties.active）
     kinds: list[str] = Field(default_factory=lambda: ["strike", "strike", "scout", "escort"])
     silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15})
     deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4})
@@ -1370,9 +1373,15 @@ class Raid(_Strict):
     - 平手（僵持）誰都不失什麼，發起的人的體力照付。
     - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（1 小時）之內誰都不能再截殺他，
       不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
+      截殺每季都有之後（懸賞榜設計 3.7）：14 天的季有 336 小時，保護時間照舊 1 小時，一季最多可能被截約 300 次；每小時的比例跟週末一樣，
+      一季加起來的量多五倍多。要不要另一組數字等 sim_server_bots 量完再定（設計 14.2 第 12 條）。
     - 贏的一方記一點本季貢獻（contrib_per_push × win_contrib_push）：截殺是替陣營做事，但比推大勢一點還少，不會變成升階的捷徑。
+      只在第一季規則開著時記（其他季沒有晉升；Game._raid_spoils）。
+    - enabled：主機的緊急開關（懸賞榜設計 2.2 第 3 點）。截殺每季都有、劇本有陣營就有；上線之後假人截殺真人太兇時改設定就關，不必退版。
+      關著時通緝一起收（通緝只能靠截殺交差）：押不了、揭不了、不算張數，已經押的照期限退押金。
     時間都是世界秒（跟邀請的逾時同一套）。"""
 
+    enabled: bool = True
     stamina: int = Field(default=10, ge=0)
     silver_share: float = Field(default=0.05, ge=0, le=1)
     silver_cap: int = Field(default=15, ge=0)
@@ -1403,6 +1412,41 @@ class ShowdownPay(_Strict):
     win_contrib_push: dict[str, int] = Field(default_factory=lambda: {"大勝": 5, "險勝": 3})  # 贏的一方另記的
 
 
+class SmithQuality(_Strict):
+    """打造的品質機率（兵器設計 4.3；跟 FuseQuality 同一套推法，fusion.odds_from_points）：這一爐的組成加成造化分，
+    從 odds（下品 50／中品 30／上品 20）往上或往下推，上品夾在 up_range、下品夾在 low_range。數字都是【預設】。
+    天時地利（企劃者 2026-10-10 第二批附帶決定 b：沿用合成那一套）預設 0（測試內容不開），正式值在 config.json：
+    地利同合成（此地探索悟得到同屬性的意境，fusion.terrain_here），戰場、心靜也同合成；兵器沒有正邪，所以沒有晝夜。"""
+
+    odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    up_per_point: float = Field(default=0.5, ge=0)
+    low_per_point: float = Field(default=1.0, ge=0)
+    up_range: tuple[float, float] = (5, 45)
+    low_range: tuple[float, float] = (15, 80)
+    # 輔料比主料高幾階 → 分數（「-1」是輔料低一階）：同階或更高加分、低階扣分（4.3）
+    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12})
+    wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（同 FuseQuality.wis_weight）
+    practice_point: float = Field(default=2, ge=0)  # 熟手：這個配方這一季你打過一次加幾分
+    practice_cap: float = Field(default=10, ge=0)  # 熟手最多加幾分
+    terrain: float = 0  # 地利：此地探索悟得到跟打出來的兵器同屬性的意境（fusion.terrain_here，同合成）
+    battlefield: float = 0  # 戰場：打出剛的兵器、人在營寨或（第一季）亂局的大區（fusion.battlefield_here）
+    calm: float = 0  # 心靜：出關之後 calm_hours 遊戲小時之內（fusion.calm_now）
+    calm_hours: float = Field(default=2, ge=0)
+    setting_max: int = Field(default=2, ge=0)  # 一爐最多算幾條天時地利（照分數的絕對值挑）
+    setting_good: str = ""  # 天時地利合起來加分時，結果多一句
+    setting_bad: str = ""  # 合起來扣分時，結果多一句
+    shown_from: float = Field(default=3, ge=0)  # 說明那一句只寫分數絕對值到這麼多的因素，最多兩個
+    # 說明那一句：因素 → [加分時, 扣分時]（待 joy 潤）
+    lines: dict[str, list[str]] = Field(default_factory=lambda: {
+        "aux": ["輔料壓得住主料", "輔料壓不住主料"],
+        "wis": ["你心思靈透", "你心思還不夠靈透"],
+        "practice": ["這個配方你打得順手", ""],
+        "terrain": ["此地水土與這股料性相合", ""],
+        "battlefield": ["殺伐之氣未散", ""],
+        "calm": ["出關未久，心如止水", ""],
+    })
+
+
 class WeaponRules(_Strict):
     """兵器（docs/superpowers/specs/2026-10-09-兵器-design.md）。數字都是【預設】，量表（scripts/measure_weapons.py）校準後可以改。
     加成＝（階＋品質＋淬煉＋屬性搭配）×（edge_floor＋（1－edge_floor）×鋒利度／100），乘在本人的 Boost.factor；
@@ -1422,6 +1466,29 @@ class WeaponRules(_Strict):
     drop_chance: float = Field(default=0.03, ge=0, le=1)  # 打贏遊歷或野怪掉一把一階下品的機會
     rack_cap: int = Field(default=100, ge=1)  # 裝備庫幾格（企劃者 2026-10-10：原來的 6 格改 100；程式裡的 rack 就是玩家看到的「裝備庫」）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得
+    quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
+    temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
+
+
+class ArmorRules(_Strict):
+    """防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節）。數字都是【預設】（企劃者 2026-10-10「全部照預設」），
+    量表（scripts/measure_gear.py）校準後可以改。減損＝（階＋品質＋淬煉＋對上內功）夾在 0 以上
+    ×（edge_floor＋（1－edge_floor）×耐久度／100）；本人一場仗扣的氣血乘（1－min(total_cap, 化勁＋減損)），截殺輸的一方只乘防具。
+    不掛第一季開關（2.6，同兵器）。"""
+
+    enabled: bool = True
+    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
+    quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
+    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（防具打造那一批才淬得了，4.7）
+    match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
+    edge_floor: float = Field(default=0.5, ge=0, le=1)  # 全壞時剩幾成減損（4.5：不會壞掉消失）
+    total_cap: float = Field(default=0.6, ge=0, le=1)  # 跟化勁合計最多減幾成（4.3）
+    wear: dict[str, int] = Field(default_factory=lambda: {"大勝": 1, "險勝": 2, "僵持": 3, "落敗": 5})  # 一場扣多少耐久度（4.5）
+    shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
+    repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
+    edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
 
 
 class Secrets(_Strict):
@@ -1513,6 +1580,7 @@ class Config(_Strict):
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
+    armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——

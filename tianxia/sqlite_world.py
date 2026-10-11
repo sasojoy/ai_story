@@ -12,7 +12,7 @@
   換季不用清空，新的一季自然是空的，上一季的留著。第 2 版再加改過的名字（`skill_aliases`）、合併出來的意境
   （`insights`、`insight_recipes`）、第一個練成絕學的人（`masters`），同樣照季分；功法、改過的名字與意境
   共用一個名字空間（`_name_taken`）。第 3 版加感悟的首悟紀錄（`insight_firsts`，悟意境設計 0.2b）：只是紀錄，
-  意境本身私有、存在角色存檔裡，不佔名字空間。
+  意境本身私有、存在角色存檔裡，不佔名字空間。第 4 版加全服的兵器配方（`gear_recipes`，兵器設計 4.4）：照季分，名字也在同一個名字空間裡。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
-from .state import Rumor, WorldState
+from .state import Rumor, WeaponRecipe, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
     jade_seal_summary, stamp_season,
@@ -250,6 +250,27 @@ class SqliteWorldStore:
                 (season, key, name, insight.creator),
             )
             return insight, True
+
+    # ── 兵器配方（兵器設計 4.4；第 4 版）──────────────────────
+
+    def lookup_weapon_recipe(self, key: str) -> WeaponRecipe | None:
+        with self.db.snapshot() as conn:
+            return _gear_recipe(conn, self._season_number(conn), key)
+
+    def claim_weapon_recipe(self, key: str, recipe: WeaponRecipe) -> tuple[WeaponRecipe | None, bool]:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _gear_recipe(conn, season, key)
+            if existing is not None:
+                return existing, False
+            name = recipe.name.strip()
+            if _name_taken(conn, season, name):
+                return None, False  # 名字撞到，呼叫端換名字
+            conn.execute(
+                "INSERT INTO gear_recipes (season, key, name, creator, data) VALUES (?, ?, ?, ?, ?)",
+                (season, key, name, recipe.creator, recipe.model_dump_json()),
+            )
+            return recipe, True
 
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
@@ -663,10 +684,10 @@ class SqliteWorldStore:
 
 
 def _name_taken(conn: Connection, season: int, name: str) -> bool:
-    """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境都算。"""
+    """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境、兵器配方都算。"""
     return any(
         conn.execute(f"SELECT 1 FROM {table} WHERE season = ? AND name = ?", (season, name)).fetchone()
-        for table in ("skills", "skill_aliases", "insights")
+        for table in ("skills", "skill_aliases", "insights", "gear_recipes")
     )
 
 
@@ -698,6 +719,11 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
         (season, key),
     ).fetchone()
     return None if row is None else Insight.model_validate_json(row["data"])
+
+
+def _gear_recipe(conn: Connection, season: int, key: str) -> WeaponRecipe | None:
+    row = conn.execute("SELECT data FROM gear_recipes WHERE season = ? AND key = ?", (season, key)).fetchone()
+    return None if row is None else WeaponRecipe.model_validate_json(row["data"])
 
 
 def _season_firsts_lines(conn: Connection, season: int) -> list[str]:

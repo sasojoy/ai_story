@@ -14,7 +14,7 @@ from tianxia.database import SCHEMA_VERSION, open_database
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, MartialArt
 from tianxia.sqlite_world import open_world
-from tianxia.state import GameState
+from tianxia.state import GameState, WeaponRecipe
 
 ROOT = Path(__file__).resolve().parent.parent
 OLD = json.loads((Path(__file__).parent / "fixtures" / "old_saves" / "v2_main_b8a388c.json").read_text(encoding="utf-8"))
@@ -44,7 +44,7 @@ def _version_two_file(path):
 
 
 def test_a_version_two_file_with_an_old_save_upgrades_and_plays(tmp_path):
-    """第 2 版的檔（悟意境之前）：打開時就地升到第 3 版、多一張空的首悟表，舊角色讀得回來、照樣能玩，
+    """第 2 版的檔（悟意境之前）：打開時就地升到最新版、多一張空的首悟表，舊角色讀得回來、照樣能玩，
     舊的合併意境照樣查得到。"""
     path = tmp_path / "v2.db"
     state = GameState.model_validate(OLD["state"])
@@ -66,7 +66,7 @@ def test_a_version_two_file_with_an_old_save_upgrades_and_plays(tmp_path):
 
     db = open_database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
         assert c.execute("SELECT COUNT(*) FROM insight_firsts").fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == len(OLD["skills"])
     loaded = open_characters(path).load(name)
@@ -77,3 +77,38 @@ def test_a_version_two_file_with_an_old_save_upgrades_and_plays(tmp_path):
         assert insights.resolve(ins["id"], load_content(ROOT / "content"), world, loaded) is not None
     game = Game(load_content(ROOT / "content"), loaded, world=world)
     assert game.options()  # 讀回來的角色照樣有事可做
+
+
+def _version_three_file(path):
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1 + database.SCHEMA_V2_TABLES + database.SCHEMA_V3_TABLES:
+        conn.execute(statement)
+    conn.execute("PRAGMA user_version = 3")
+    return conn
+
+
+def test_a_version_three_file_upgrades_to_four_and_keeps_everything(tmp_path):
+    """第 3 版的檔（兵器第二批之前）：打開時就地升到第 4 版、多一張空的 gear_recipes，舊角色與首悟紀錄都在，兵器配方登記得進去。"""
+    path = tmp_path / "v3.db"
+    name = GameState.model_validate(OLD["state"]).player.name
+    conn = _version_three_file(path)
+    conn.execute("INSERT INTO world (id, data) VALUES (1, '{\"season_number\": 1, \"tianji\": 0}')")
+    conn.execute(
+        "INSERT INTO characters (key, name, is_bot, faction, data) VALUES (?, ?, 0, NULL, ?)",
+        (name, name, json.dumps(OLD["state"], ensure_ascii=False)),
+    )
+    conn.execute("INSERT INTO insight_firsts (season, key, name, creator, place, time) VALUES (1, 'k', '寒潭', ?, '潁川', 0)", (name,))
+    conn.commit()
+    conn.close()
+
+    db = open_database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
+        assert c.execute("SELECT COUNT(*) FROM gear_recipes").fetchone()[0] == 0
+        assert c.execute("SELECT name FROM insight_firsts").fetchone()[0] == "寒潭"
+    assert open_characters(path).load(name) is not None
+    world = open_world(path)
+    recipe = WeaponRecipe(name="寒星劍", key="兵|劍|gang_1+kuai_1", kind="劍", attribute="陽", tier=1,
+                          main="gang_1", aux="kuai_1", creator=name)
+    assert world.lookup_weapon_recipe(recipe.key) is None
+    assert world.claim_weapon_recipe(recipe.key, recipe) == (recipe, True)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, encounter, rounds, styles, traits, weapons
+from . import armor, calendar, encounter, rounds, styles, traits, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -639,6 +639,12 @@ def dodge_chance(state: GameState, content: Content) -> float:
     return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point))
 
 
+def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
+    """本人身上那件防具這一場少扣幾成氣血（裝備四欄設計 4.1、4.2）：照身上那門內功（自己那一份）算對上內功的 ±，開關關著、沒穿是 0。
+    take_encounter_toll、toll_saved 與截殺輸的一方（Game._raid_spoils）都讀它；armor 不能 import team，內功在這裡解好再傳進去。"""
+    return armor.cut(state.player.armor, player_art(state, content, world, state.player.member.neigong_id), content)
+
+
 def take_encounter_toll(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
 ) -> list[str]:
@@ -652,7 +658,8 @@ def take_encounter_toll(
     內傷是扣掉的量的固定幾成，所以照同一個比例變少。遊歷與劇情戰不帶這個旗標，一點都不變。
 
     玩家本人的身法讓一場少掉一點氣血（閃得開）、根骨讓其中變成內傷的少一點（武學與成長設計 6.1）；
-    同伴照他自己的身法、根骨（人物資質設計 14.3）。
+    同伴照他自己的身法、根骨（人物資質設計 14.3）。本人身上的防具（裝備四欄設計 4.3）跟化勁相加，合計夾在
+    `Config.armor.total_cap`；同伴不吃防具。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
@@ -663,8 +670,10 @@ def take_encounter_toll(
     for key in team_keys(state):
         if key == PLAYER:
             lo = traits.loadout(state, content, world)
+            # 化勁（13.2）＋防具（裝備四欄 4.3），合計夾在 total_cap；防具關著時 armor_cut 是 0、化勁上限 50% 本來就低於 60%，數字不變
+            cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world))
             lost, hurt = _apply_toll(
-                content, state.player.member, fraction * (1 - traits.amount(content, lo, "toll_cut")),  # 化勁（13.2）
+                content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
                 injury=0.0 if "no_injury" in lo.specials else 1.0,  # 不動：不受內傷（13.4）
             )
@@ -685,15 +694,19 @@ def toll_saved(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
 ) -> tuple[int, int]:
     """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
-    各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。只讀、不動狀態：在 take_encounter_toll 之前呼叫，
-    量的是還沒扣的那一刻；用本人的複本照 _apply_toll 同一套算，四捨五入跟「氣血 -N」「內傷 +N」的寫法一樣，
-    所以「少扣了 N」加上畫面上的「氣血 -M」剛好是沒有化勁時的 N+M。沒有這兩個功效、或這個結果不扣氣血，是 (0, 0)。"""
+    各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。防具（裝備四欄設計 4.3）不是功效、一直留著：
+    化勁的對照組是「只有防具」，真的扣的是「防具加化勁、夾在 Config.armor.total_cap」，所以防具省下的不會被算成化勁的。
+    只讀、不動狀態：在 take_encounter_toll 之前呼叫，量的是還沒扣的那一刻；用本人的複本照 _apply_toll 同一套算，四捨五入跟
+    「氣血 -N」「內傷 +N」的寫法一樣，所以「少扣了 N」加上畫面上的「氣血 -M」剛好是只有防具時的 N+M。
+    沒有這兩個功效（只有防具也算沒有）、或這個結果不扣氣血，是 (0, 0)。"""
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
     lo = traits.loadout(state, content, world)
     cut, still = traits.amount(content, lo, "toll_cut"), "no_injury" in lo.specials
     if fraction <= 0 or (cut <= 0 and not still):
         return 0, 0
+    worn = min(cfg.armor.total_cap, armor_cut(state, content, world))
+    total = min(cfg.armor.total_cap, cut + worn)
     agi, con = state.player.stats.get("agi", BASE_STAT), con_of(state, content, world, PLAYER)
 
     def toll(cut_: float, injury: float) -> tuple[float, float]:
@@ -701,9 +714,9 @@ def toll_saved(
             content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury,
         )
 
-    real_lost, real_hurt = toll(cut, 0.0 if still else 1.0)
-    saved = round(toll(0.0, 0.0 if still else 1.0)[0]) - round(real_lost) if cut > 0 else 0
-    spared = round(toll(cut, 1.0)[1]) - round(real_hurt) if still else 0
+    real_lost, real_hurt = toll(total, 0.0 if still else 1.0)
+    saved = round(toll(worn, 0.0 if still else 1.0)[0]) - round(real_lost) if cut > 0 else 0
+    spared = round(toll(total, 1.0)[1]) - round(real_hurt) if still else 0
     return max(0, saved), max(0, spared)
 
 

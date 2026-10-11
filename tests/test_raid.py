@@ -10,7 +10,7 @@ import random
 import pytest
 
 from conftest import install_season_one
-from tianxia import encounter, rules, social, team
+from tianxia import calendar, encounter, roster, rules, social, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
@@ -19,9 +19,7 @@ from tianxia.state import BotProfile
 NOW = 1000.0
 
 
-@pytest.fixture
-def pair(content, world):
-    install_season_one(content)
+def _seat(content, world):
     content.config.auto_open_first_season = True
     content.config.newbie_days = -1  # 測試不等新手期過去；新手期另外測
     content.scenario.factions = [
@@ -39,6 +37,19 @@ def pair(content, world):
         game.sync(NOW)
         CharacterStore(world.db).save(game.state)
     return content, world
+
+
+@pytest.fixture
+def pair(content, world):
+    """第一季（install_season_one）：官軍的甲、黃巾的乙，都在湖畔。"""
+    install_season_one(content)
+    return _seat(content, world)
+
+
+@pytest.fixture
+def beta_pair(content, world):
+    """第一季規則關著的季（不叫 install_season_one，season_one 維持 False）：截殺每季都有（懸賞榜設計 2.2 第 3 點）。其餘同 pair。"""
+    return _seat(content, world)
 
 
 def _do(content, world, name, act, rng=None):
@@ -82,11 +93,27 @@ def test_the_button_shows_only_between_enemy_factions(pair):
         assert _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0] == ["（此刻無法這麼做。）"]
 
 
-def test_the_switch_off_has_no_raids(pair):
+def test_raids_happen_with_the_season_one_switch_off_without_contribution(beta_pair, monkeypatch):
+    """截殺每季都有（企劃者 2026-10-10）；第一季規則關著的季沒有晉升，打贏不記貢獻，戰報與紀錄都不寫「貢獻」（懸賞榜設計 6.1）。"""
+    content, world = beta_pair
+    assert not world.get_season().season_one
+    [button] = _raid_buttons(content, world, "甲", "乙")
+    assert button["enabled"]
+    assert [name for name, _ in _do(content, world, "甲", lambda g: g.raid_targets())[0]] == ["乙"]  # 假人也看得到（真人假人一樣）
+    msgs, _ = _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    me, them = _load(world, "甲"), _load(world, "乙")
+    assert me.player.contrib == 0 and not any("貢獻" in m for m in msgs)
+    assert not any("貢獻" in line for line in me.battles[0].changes)
+    assert them.player.stats["silver"] < 200 and me.player.stats["silver"] > 200  # 輸贏照舊
+
+
+def test_the_raid_switch_off_has_no_raids(pair):
+    """Config.raid.enabled（主機的緊急開關，懸賞榜設計 2.2 第 3 點）關著：沒有截殺鈕、按了也打不了、假人沒有對象。"""
     content, world = pair
-    content.config.season_one = False
-    world.mutate_season(lambda season: setattr(season, "season_one", False))
+    content.config.raid.enabled = False
     assert _raid_buttons(content, world, "甲", "乙") == []
+    assert _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0] == ["（此刻無法這麼做。）"]
+    assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == []
 
 
 def test_not_in_a_town_and_not_on_newcomers(pair):
@@ -107,6 +134,32 @@ def test_not_in_a_town_and_not_on_newcomers(pair):
     before = _load(world, "乙").player.stats["silver"]
     assert "新手期" in _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0][0]
     assert _load(world, "乙").player.stats["silver"] == before
+
+
+def test_a_late_comer_in_a_beta_season_is_protected_from_his_own_join_time(beta_pair):
+    """第一季規則關著的季，截殺的新手期從各自加入的那一刻算（企劃者 2026-10-10，懸賞榜設計 14.1 丁）：季初就在的兩個人早就過了，
+    很晚才來的人在自己的新手期內截殺不了別人、也不會被截殺；新手的體力、氣血福利照舊從季初算（roster.newbie 不動）。"""
+    content, world = beta_pair
+    content.config.newbie_days = 18
+    newbie = content.config.newbie_days * 86400 / calendar.cal_scale(content, world.get_season())  # 新手期幾個世界秒（測試內容約 10 小時）
+    world.mutate_season(lambda season: setattr(season, "time", 2 * newbie))
+    game = Game.new(content, "丙", rng=random.Random(0), world=world)
+    game.client = None
+    rules.learn_skill(game.state, content, "fist")
+    game.state.player.faction, game.state.player.location, game.state.player.stamina = "guan", "lake", 100.0
+    game.sync(NOW)
+    CharacterStore(world.db).save(game.state)
+    late = _load(world, "丙")
+    late.world = world.get_season()  # 角色存檔不含賽季：接上共用的那一份
+    assert late.player.joined_at == pytest.approx(2 * newbie)
+    assert roster.raid_newbie(late, content) and not roster.newbie(late, content)  # 福利照舊從季初算
+    assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"]  # 季初就在的兩個人
+    [button] = _raid_buttons(content, world, "丙", "乙")
+    assert not button["enabled"] and "你初入江湖" in button["note"]
+    [button] = _raid_buttons(content, world, "乙", "丙")
+    assert not button["enabled"] and "丙初入江湖" in button["note"]
+    world.mutate_season(lambda season: setattr(season, "time", season.time + newbie + 60))
+    assert _raid_buttons(content, world, "乙", "丙")[0]["enabled"]
 
 
 @pytest.mark.parametrize("tier", ["大勝", "險勝"])
@@ -267,3 +320,33 @@ def test_both_sides_of_a_raid_dull_their_own_blade_and_the_defender_reads_the_wa
         assert warning in after.battles[0].notes
         assert warning in after.journal[0].lines, name  # 發起的與被截殺的，江湖紀錄都讀得到
         assert after.journal[0].lines.count(warning) == 1
+
+
+def _armored(world, attribute="剛"):
+    from tianxia.state import Equipment
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.armor = Equipment(id=f"甲:{name}", slot="armor", name=f"{name}的甲", attribute=attribute, tier=1, quality="下品")
+        CharacterStore(world.db).save(state)
+
+
+def test_the_raid_loser_bleeds_less_with_armor(pair, monkeypatch):
+    """裝備四欄 4.4：截殺輸的一方只吃防具（上限的 8% ×（1−防具減損）），不吃化勁、不夾合計上限。"""
+    content, world = pair
+    content.config.armor.enabled = True
+    _armored(world)
+    _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    loser = _load(world, "乙").player
+    cap = team.neili_cap(content, loser.member.level)
+    assert loser.member.neili == pytest.approx(cap * (1 - content.config.raid.hp_loss * (1 - 0.06)), abs=1)  # 沒有內功：一階下品 6%
+    assert loser.member.injury == 0
+
+
+@pytest.mark.parametrize("tier,raider_edge,target_edge", [("大勝", 100, 95), ("落敗", 95, 100), ("僵持", 100, 100)])
+def test_only_the_side_that_loses_a_raid_wears_its_armor(pair, monkeypatch, tier, raider_edge, target_edge):
+    """裝備四欄 4.5：截殺只有輸的一方挨打、只有他磨防具（落敗扣 5）；發起的人輸了也是他磨，平手誰都不磨。"""
+    content, world = pair
+    content.config.armor.enabled = True
+    _armored(world)
+    _raid(content, world, tier=tier, monkeypatch=monkeypatch)
+    assert _load(world, "甲").player.armor.edge == raider_edge and _load(world, "乙").player.armor.edge == target_edge

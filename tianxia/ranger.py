@@ -7,10 +7,10 @@
 投靠了陣營就凍結：帳不再記、名號不顯示、好處不給（陣營的人走 ranks 的頭銜），存檔照留；
 現在沒有從陣營回到散人的路（叛投是換到另一個陣營），所以凍結了就是這一季都凍結。換季整個重來（新角色）。
 
-只有第一季的規則開著（rules.season_one）才有；開關關著時什麼都不記、什麼都不給。不 import engine。"""
+每季都有（企劃者 2026-10-10，懸賞榜設計 2.2）：只看是不是散人、劇本有沒有陣營（沒有陣營就沒有「散人」可言，測試內容因此不記），
+不看第一季開關（先例是叛投 defection.can_defect）。不 import engine。"""
 from __future__ import annotations
 
-from . import rules  # 與 rules、roster 互相 import：只能引入整個模組、呼叫時才取屬性
 from .models import Content
 from .state import GameState
 
@@ -23,8 +23,8 @@ TITLES: dict[str, list[str]] = {
 
 
 def active(state: GameState, content: Content) -> bool:
-    """這個人此刻有遊俠名號可言：第一季開著、而且是散人（投靠了陣營就凍結）。"""
-    return state.player.faction is None and rules.season_one(content, state.world)
+    """這個人此刻有遊俠名號可言：劇本有陣營、而且是散人（投靠了陣營就凍結）。每季都有，不看第一季開關。"""
+    return state.player.faction is None and bool(content.scenario.factions)
 
 
 def note_gain(state: GameState, content: Content, key: str, delta: int) -> None:
@@ -61,12 +61,12 @@ def tier_of(content: Content, value: int) -> int:
 
 
 def tier(state: GameState, content: Content) -> int:
-    """此刻的階（0～4）；沒有名號可言（陣營的人、開關關著）是 0。"""
+    """此刻的階（0～4）；沒有名號可言（陣營的人、劇本沒有陣營）是 0。"""
     return tier_of(content, points(state)) if active(state, content) else 0
 
 
 def title(content: Content, state: GameState) -> str | None:
-    """狀態列寫在名號後面的那一段（「江湖遊俠」）；第 0 階、陣營的人、開關關著是 None。"""
+    """狀態列寫在名號後面的那一段（「江湖遊俠」）；第 0 階、陣營的人、劇本沒有陣營是 None。"""
     t = tier(state, content)
     return TITLES[path(state)][t] if t > 0 else None
 
@@ -109,7 +109,7 @@ def unlocks(content: Content) -> list[str]:
 
 
 def status(state: GameState, content: Content) -> dict | None:
-    """狀態列與人物卡用的資料：名號、階、俠名、下一階要多少、這一階解鎖了什麼。不是散人、開關關著是 None。"""
+    """狀態列與人物卡用的資料：名號、階、俠名、下一階要多少、這一階解鎖了什麼。不是散人、劇本沒有陣營是 None。"""
     if not active(state, content):
         return None
     cfg = content.config.ranger

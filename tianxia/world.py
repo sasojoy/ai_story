@@ -506,9 +506,12 @@ def season_hour(state: GameState, content: Content, rng: random.Random, players:
 def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
     """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
     不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，本週大事那時還是空的。
-    開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時什麼都不做，
-    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。"""
-    if not calendar.season_one_on(season, content) or season.hooked_week != 0 or season.ended:
+    開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時不跑季的事，
+    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。
+    規則關著的季只掛第 1 週的懸賞（bounties.tick；不碰 hooked_week，同一週只掛一次）：管理者開季後第一眼看到的榜不是空的。"""
+    if not calendar.season_one_on(season, content):
+        return [] if season.ended else bounties.tick(_season_vehicle(content, season), content)
+    if season.hooked_week != 0 or season.ended:
         return []
     return season_events(_season_vehicle(content, season), content, rng)
 
@@ -557,6 +560,8 @@ def advance_world_state(
         if hours:
             season.sim_accum -= hours * HOUR
             msgs += sim_tick(vehicle, content, hours, rng)
+        if cal_hour is None and not season.ended:
+            msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
             decisive = None if season.ended else decisive_ending(vehicle, content)

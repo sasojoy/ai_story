@@ -17,10 +17,10 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, event_llm,
+    armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
-    skillview,
+    skillview, smithing,
     social, styles, team, timetable, traits, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -95,6 +95,7 @@ class Option(BaseModel):
     enabled: bool = True
     wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
     confirm: str = ""  # 按下去之前先問一次的話（FB-095：必敗的遊歷）；網頁照它跳確認層，空的直接送
+    confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
 
 
 @dataclass(frozen=True)
@@ -248,7 +249,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
-        self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了的提醒（_file_battle）；沒有草稿的呼叫端（切磋的另一邊）自己接到訊息裡
+        self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
@@ -504,9 +505,13 @@ class Game:
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.picking_bounty and not bounties.board_here(s, c):
-            p.picking_bounty = False  # 開關關了、人不在城鎮了：收起懸賞榜
-        if p.picking_smith and not weapons.smith_here(s, c):
-            p.picking_smith = False  # 開關關了、人不在城鎮了：收起鐵匠鋪
+            p.picking_bounty = False  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜
+        if p.picking_smith and not equipment.smith_open(s, c):
+            equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
+        if p.smith_draft is not None and (
+            not p.picking_smith or not weapons.smith_here(s, c) or smithing.draft_stale(c, p.smith_draft)
+        ):
+            p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -630,8 +635,10 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
-        if self.state.player.picking_smith and not weapons.smith_here(self.state, self.content):
-            self.state.player.picking_smith = False  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪
+        if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
+            equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
+        if self.state.player.smith_draft is not None and not weapons.smith_here(self.state, self.content):
+            self.state.player.smith_draft = None  # 武器關了、防具還開著：鐵匠鋪照開（防具頁），兵器的單子清掉
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -646,6 +653,10 @@ class Game:
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
             self._write(bounties.BOARD, refunds)
+            self._save_season()
+        lapses = bounties.deliver_lapses(self.state, self.content)  # 揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
+        if lapses:
+            self._write(bounties.BOARD, lapses)
             self._save_season()
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
@@ -919,9 +930,10 @@ class Game:
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
-        if bounties.board_here(s, c):  # 懸賞榜：第一季、城鎮類的地點；只是打開第二層選單，不花體力
-            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(bounties.open_bounties(s, c))} 張）"))
-        if weapons.smith_here(s, c):  # 鐵匠鋪（兵器設計 4.1）：只是打開第二層選單，不花體力
+        shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
+        if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
+            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
+        if equipment.smith_open(s, c):  # 鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
@@ -1320,6 +1332,7 @@ class Game:
     def choose(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
+        proposed: tuple[str | None, str] | None = None,
     ) -> list[str]:
         """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
         prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
@@ -1327,7 +1340,9 @@ class Game:
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
-        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
+        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。
+        proposed 只有鐵匠鋪的開爐（`smith:forge-go:…`）用：server.prepare_smith_forge 在鎖外先取好的（名字, 說明），C 段
+        （smithing.forge）再過一次過濾；沒給（整季機器人、腳本、測試）首創配方才在鎖內取名。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
@@ -1378,7 +1393,7 @@ class Game:
             elif kind == "bounty":
                 msgs = self._bounty(arg)
             elif kind == "smith":
-                msgs = self._smith(arg)
+                msgs = self._smith(arg, proposed)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1395,7 +1410,14 @@ class Game:
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
-            journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
+            # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
+            # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
+            # 會全部併進上一爐那一則
+            entry = self._draft.entry(self.state.world.time, msgs)
+            # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
+            quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
+            if not quiet:
+                journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge")
         finally:
             self._draft = None
             self._fight = None
@@ -1581,7 +1603,7 @@ class Game:
         if kind == "bounty":
             return bounties.BOARD
         if kind == "smith":
-            return weapons.SMITH
+            return smithing.title(arg)
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1917,7 +1939,7 @@ class Game:
             self.state.player.picking_bounty = True  # 打開懸賞榜（見 _bounty_options），不花體力
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "smith":
-            self.state.player.picking_smith = True  # 打開鐵匠鋪（見 _smith_options），不花體力
+            equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
@@ -2469,18 +2491,17 @@ class Game:
         return opts
 
     def _bounty_options(self) -> list[Option]:
-        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他還有名額的每一張一顆「揭下」（接不了的灰掉、寫為什麼），
-        最後是永遠按得下去的「返回」。都不花體力。"""
+        """懸賞榜的第二層選單（bounties.py）：手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），
+        最後是永遠按得下去的「返回」。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣。"""
         s, c = self.state, self.content
         mine = {b.id for b in bounties.mine(s, c)}
         opts = []
-        for b in bounties.open_bounties(s, c):
-            line = f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}（{bounties.reward_text(s, c, b)}）"
+        for b in bounties.visible(s, c):
+            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
+                    f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
                 continue
-            if not bounties.can_take(s, b):
-                continue  # 別的陣營的：陣營的人看不到
             problem = bounties.take_problem(s, c, b)
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
@@ -2501,13 +2522,19 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def _smith_options(self) -> list[Option]:
-        """鐵匠鋪的第二層選單（兵器設計 4.1）：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），
-        手上那把一顆「修」（寫明用掉哪一種素材），裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），
-        裝備庫裡每把一顆「拆解」（4.7.1，最多 DISMANTLE_LIST 顆，最鈍最低階的先，多的一行灰掉的說明指到修練頁），
-        最後是永遠按得下去的「離開」。都不花體力。"""
+        """鐵匠鋪的第二層選單（兵器設計 4.1；裝備四欄設計 4.6）：分兵器、防具兩頁（equipment.page；兩欄都開著時預設兵器頁，
+        「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…挑到一半（smith_draft）時整份換成那一步。
+        兵器頁：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），手上那把一顆「修」（寫明用掉哪一種素材）
+        與「淬煉」（身上那把配不上身上的武學時，按得下去的「修」「淬煉」多一句提醒：白花料與銀兩，加成用不上），
+        裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），「打造兵器…」（排在換上與拆解中間：FB-125），
+        拆解（_dismantle_options）。防具頁見 _armor_options。裝備庫都只看這一頁那一欄（3.3）。都不花體力。"""
         s, c = self.state, self.content
         art = team.player_art(s, c, self.world, s.player.member.wugong_id)
         fit_kind = weapons.art_weapon(art.id, c, self.world) if art is not None else None
+        if s.player.smith_draft is not None:
+            return smithing.draft_options(s, c, self.world, art)  # 打造兵器…挑到一半：只畫這一步
+        if equipment.page(s.player, c) == "armor":
+            return self._armor_options()  # 防具頁（裝備四欄 4.6）
         opts = []
         for item in weapons.stock(s, c):
             problem = weapons.buy_problem(s, c, item.kind)
@@ -2515,54 +2542,129 @@ class Game:
             mark = weapons.FITS_MARK if c.config.weapons.enabled and item.kind == fit_kind else ""
             opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）{mark}",
                                enabled=problem is None))
+        # 身上那把配不上身上的武學（含沒有武學）：加成是 0，修與淬煉照樣按得下去，可是花的料與銀兩看不到回報，按鈕上提醒一句（PM 2026-10-11）
+        unfit = weapons.UNFIT_NOTE if weapons.worn_unfit(s, art, c, self.world) else ""
         if s.player.weapon is not None:
             problem = weapons.repair_problem(s, c)
             material = weapons.repair_material(s, c)
             use = f"{c.materials[material].name}×1" if material is not None else "一個一階素材"
             note = problem or f"{use}＋{c.config.weapons.repair_silver} 兩"
-            opts.append(Option(id="smith:repair", label=f"修【{s.player.weapon.name}】（鋒利度 {s.player.weapon.edge}・{note}）",
+            opts.append(Option(id="smith:repair", label=f"修【{s.player.weapon.name}】（鋒利度 {s.player.weapon.edge}・{note}）{unfit if problem is None else ''}",
                                enabled=problem is None))
-        for w in s.player.rack:
+        temper = smithing.temper_option(s, c)  # 淬煉身上那把（兵器設計 4.7）；空手沒有
+        if temper is not None:
+            if temper.enabled and unfit:  # 灰掉的（淬滿了、沒料、沒錢）照舊：沒有東西會白花
+                temper = temper.model_copy(update={"label": temper.label + unfit})
+            opts.append(temper)
+        for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
             if weapons.usable(w, art, c, self.world):
-                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・鋒利度 {w.edge}）"))
+                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
-            breakable = sorted(s.player.rack, key=weapons.dismantle_order)
-            for w in breakable[:weapons.DISMANTLE_LIST]:
-                opts.append(Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】→ {weapons.dismantle_material(c, w).name}×1"))
-            if len(breakable) > weapons.DISMANTLE_LIST:
-                opts.append(Option(id="smith:dismantle-more", label=weapons.DISMANTLE_MORE.format(n=len(breakable) - weapons.DISMANTLE_LIST),
-                                   enabled=False))
-        opts.append(Option(id="smith:back", label="離開鐵匠鋪"))
+            opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
+        opts += self._dismantle_options("weapon")  # 拆解（只看武器那一欄；最多 DISMANTLE_LIST 顆、先問一次）
+        return opts + self._smith_tail()
+
+    def _dismantle_options(self, slot: str) -> list[Option]:
+        """鐵匠鋪那一頁的拆解（兵器設計 4.7.1、裝備四欄 4.8）：裝備庫裡這一欄的，磨損最多、階最低的先、最多 DISMANTLE_LIST 顆，
+        每顆先問一次（FB-125：confirm／confirm_yes「拆掉」），標籤寫階品質與淬煉次數（同一個配方好幾件才分得出來）；
+        多的一行灰掉的說明指到修練頁。這一欄關著是空的。"""
+        c = self.content
+        if not equipment.on(c, slot):
+            return []
+        breakable = sorted(equipment.in_slot(self.state.player, slot), key=equipment.dismantle_order)
+        opts = [
+            Option(id=f"smith:dismantle:{w.id}",
+                   label=f"拆解【{w.name}】（{equipment.grade_line(w)}）→ {equipment.dismantle_material(c, w).name}×1",
+                   confirm=equipment.dismantle_confirm(c, w), confirm_yes=equipment.DISMANTLE_YES)  # FB-125：先問一次
+            for w in breakable[:equipment.DISMANTLE_LIST]
+        ]
+        if len(breakable) > equipment.DISMANTLE_LIST:
+            opts.append(Option(id="smith:dismantle-more", enabled=False,
+                               label=equipment.DISMANTLE_MORE.format(n=len(breakable) - equipment.DISMANTLE_LIST)))
         return opts
 
-    def _smith(self, arg: str) -> list[str]:
-        """鐵匠鋪上的選擇：買、修、換上、拆解，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+    def _armor_options(self) -> list[Option]:
+        """鐵匠鋪的防具頁（裝備四欄設計 4.6）：架上剛柔快慢四件各一顆「買」（一階下品；寫這件給你少扣幾成氣血、對不對得上你的內功，
+        買不了的灰掉寫為什麼），身上那件一顆「修」（寫明用掉哪一種素材），裝備庫裡每件防具一顆「換上」，拆解，兵器也開著時一顆切到兵器頁，
+        最後「離開」。都不花體力。FB-125：這一頁沒有打造入口隔開換上與拆解，靠拆解先問一次（confirm／confirm_yes）擋誤按。"""
+        s, c, p = self.state, self.content, self.state.player
+        neigong = team.player_art(s, c, self.world, p.member.neigong_id)
+        rule = c.config.armor
+        opts = []
+        # 買、修、換上三種鈕的寫法都待 joy 潤；磨損的叫法讀 armor.WEAR_WORD（3.1 的字表），不寫死
+        for attribute in armor.SHOP_ATTRIBUTES:
+            item = armor.shop_item(attribute)
+            problem = armor.buy_problem(s, c, attribute)
+            fit = armor.fit_note(item, neigong)
+            note = problem or f"{rule.shop_price} 兩"
+            opts.append(Option(
+                id=f"{armor.BUY}{attribute}", enabled=problem is None,
+                label=f"買【{item.name}】（屬{attribute}・一階・少扣 {armor.pct(armor.cut(item, neigong, c))} 氣血{'・' + fit if fit else ''}・{note}）",
+            ))
+        if p.armor is not None:
+            problem = armor.repair_problem(s, c)
+            material = equipment.repair_material(s, c)
+            use = f"{c.materials[material].name}×1" if material is not None else "一個一階素材"
+            note = problem or f"{use}＋{rule.repair_silver} 兩"
+            opts.append(Option(id=armor.REPAIR, label=f"修【{p.armor.name}】（{armor.WEAR_WORD} {p.armor.edge}・{note}）", enabled=problem is None))
+        for a in equipment.in_slot(p, "armor"):
+            opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade(a)}・{armor.WEAR_WORD} {a.edge}）"))
+        return opts + self._dismantle_options("armor") + self._smith_tail()
+
+    def _smith_tail(self) -> list[Option]:
+        """鐵匠鋪每一頁最後兩顆：另一欄也開著時一顆切頁（裝備四欄設計 4.6），再來永遠按得下去的「離開」。"""
+        other = equipment.other_page(self.state.player, self.content)
+        tail = [Option(id=f"smith:page:{other}", label=equipment.PAGE_LABELS[other])] if other is not None else []
+        return tail + [Option(id="smith:back", label="離開鐵匠鋪")]
+
+    def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
+        """鐵匠鋪上的選擇：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子與停在哪一頁）。
+        做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
-            s.player.picking_smith = False
+            equipment.close_smith(s.player)
             return [f"你離開了{weapons.SMITH}。"]
+        if verb == "page":  # 切到另一頁（裝備四欄 4.6）：只是換一頁，不回訊息（choose 照它不寫紀錄）
+            if rest == equipment.other_page(s.player, c):
+                s.player.smith_page = rest
+            return []
+        if verb == smithing.GO_VERB:
+            kind, main, aux = smithing.parse_go(f"smith:{arg}")
+            client = None if proposed is not None else self._quick_client()  # 鎖外取好名字了就不在鎖裡叫模型
+            weapon, msgs = smithing.forge(s, c, self.world, client, kind, main, aux, proposed=proposed, rng=self.rng)
+            if weapon is not None:
+                s.player.smith_draft = None  # 打完收起單子：同一顆連按兩下、兩個分頁，第二下已經不在選單上（Review Focus 1）
+            return msgs
+        if verb in smithing.STEP_VERBS:
+            return smithing.step(s, c, verb, rest)
         if verb == "buy":
             return weapons.buy(s, c, rest)
         if verb == "repair":
             return weapons.repair(s, c)
+        if verb == "armor-buy":
+            return armor.buy(s, c, rest)
+        if verb == "armor-repair":
+            return armor.repair(s, c)
+        # 換上與拆解兩頁共用 id 開頭（兵:N、甲:N 本來就全角色唯一），照停在哪一頁限定欄位
         if verb == "wield":
-            return weapons.wield(s, c, rest)
+            return (armor.wield if equipment.page(s.player, c) == "armor" else weapons.wield)(s, c, rest)
         if verb == "dismantle":
-            return weapons.dismantle(s, c, rest)
+            return (armor.dismantle if equipment.page(s.player, c) == "armor" else weapons.dismantle)(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
-    def wield_weapon(self, weapon_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2）：哪裡都能換、不花體力；寫一則修練紀錄。"""
-        msgs = self._log(weapons.wield(self.state, self.content, weapon_id))
+    def wield_weapon(self, item_id: str) -> list[str]:
+        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中）、不花體力，換進那一件自己的欄位；
+        寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）也走它。"""
+        msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
         if msgs and msgs[0].startswith("你換上了"):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
-    def dismantle_weapon(self, weapon_id: str) -> list[str]:
-        """修練頁裝備庫的「拆解」（兵器設計 4.7.1）：哪裡都能拆、不花體力；寫一則修練紀錄。"""
-        msgs = self._log(weapons.dismantle(self.state, self.content, weapon_id))
-        if msgs and msgs[0].startswith(weapons.DISMANTLE_PREFIX):
+    def dismantle_weapon(self, item_id: str) -> list[str]:
+        """修練頁裝備庫的「拆解」（兵器設計 4.7.1、裝備四欄設計 4.8）：武器、防具哪裡都能拆、不花體力；坐騎、寶物不能拆；寫一則修練紀錄。"""
+        msgs = self._log(equipment.dismantle(self.state, self.content, item_id, equipment.DISMANTLABLE))
+        if msgs and msgs[0].startswith(equipment.DISMANTLE_PREFIX):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
@@ -3104,7 +3206,7 @@ class Game:
         journal.add_entry(self.state, entry)
 
     def _deliver_echoes(self) -> None:
-        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（fusion.echo 記在 WorldState.echoes），
+        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（兵器配方打了出來）（fusion.echo 記在 WorldState.echoes），
         你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
         做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
         p = self.state.player
@@ -3120,7 +3222,7 @@ class Game:
             else:
                 entry.paid = len(entry.followers)
             gained += due * rule.fame_per
-            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}練了出來。")
+            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
         if not lines:
             return
         p.stats["fame"] = p.stats.get("fame", 0) + gained
@@ -4131,7 +4233,7 @@ class Game:
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
-        msgs.insert(0, self._file_battle(record, wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器照磨（兵器設計 3.4）
+        msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
@@ -4287,13 +4389,19 @@ class Game:
         record.notes += msgs
         return msgs
 
-    def _file_battle(self, record, wear: bool | None = None) -> str:
+    def _file_battle(self, record, wear: bool | None = None, armor_wear: bool | None = None) -> str:
         """歸檔一場戰報。wear：這一場要不要磨兵器（兵器設計 3.4）；None＝照戰報類型，劇情戰（kind=event）不磨，
-        挑戰本人雖然也是 event，由 _challenge 明說要磨。全服決戰不走這裡。提醒進戰鬥卡片也進江湖紀錄。"""
+        挑戰本人雖然也是 event，由 _challenge 明說要磨。armor_wear：要不要磨防具（裝備四欄設計 4.5）；None＝照 armor.wears
+        （遊歷、探索野怪、截殺自己這一邊落敗才磨；切磋、頭目戰、劇情戰不磨），挑戰本人由 _challenge 明說要磨。全服決戰不走這裡。
+        兩樣的提醒合在 _last_wear（兵器先、防具後），進戰鬥卡片也進江湖紀錄（防具照兵器的做法；設計第九節「戰報不寫防具」指的是
+        不每一場寫一句省了多少，這一句只在低於 edge_warn 時出現一次）。截殺輸的一方先扣血（_raid_spoils）、後磨，
+        所以那一場用的是磨之前的耐久（同兵器的時序）。"""
         self._last_wear = []
         if (record.kind != "event") if wear is None else wear:
-            self._last_wear = weapons.wear(self.state, self.content, record.tier)
-            record.notes += self._last_wear
+            self._last_wear += weapons.wear(self.state, self.content, record.tier)
+        if armor.wears(record.kind, record.tier) if armor_wear is None else armor_wear:
+            self._last_wear += armor.wear(self.state, self.content, record.tier)
+        record.notes += self._last_wear
         battlelog.add_record(self.state, record)
         self.state.battle_card = record.id
         line = battlelog.summary_line(record)
@@ -4417,7 +4525,8 @@ class Game:
         在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
         新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
         s, c = self.state, self.content
-        s.player.picking_bounty = s.player.picking_smith = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
+        s.player.picking_bounty = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
+        equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -4722,6 +4831,7 @@ class Game:
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
             and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
+            and not s.player.picking_bounty and not s.player.picking_smith  # 懸賞榜、鐵匠鋪開著：選單卡在第二層，先離開（FB-121 第 4 件）
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
             and s.player.duel is None  # 單人頭目戰打到一半：同上
@@ -4764,6 +4874,16 @@ class Game:
         else:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
+
+    def smith_forge_request(self, option_id: str) -> naming.NamingRequest | None:
+        """鐵匠鋪開爐的 A 段（server.prepare_smith_forge 在行動鎖內、很快地呼叫）：這一爐是這一季沒人打過的配方，就回取名的單子；
+        不必（這個 Game 沒有 client、籌備中、這顆鈕不在選單上或按不下去、打不成、配方已經有人登記）是 None。只讀、不推進戰鬥。"""
+        if self.client is None or self._preparing() or not smithing.is_go(option_id):
+            return None
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
+        if option is None or not option.enabled:
+            return None
+        return smithing.forge_request(self.state, self.content, self.world, *smithing.parse_go(option_id))
 
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
@@ -5382,13 +5502,15 @@ class Game:
         return msgs
 
     # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
-    # 只有兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人不能截殺，也不會被截殺。對方下線、在忙也照打：
+    # 每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。
+    # 兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：第一季開著、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。"""
+        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。
+        每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；raid_targets 與 raid_refusal 都先問這裡。"""
         mine, theirs = self.state.player.faction, other.state.player.faction
-        if not season_one(self.content, self.state.world):
+        if not self.content.config.raid.enabled:
             return False
         if mine is not None and theirs is not None and mine != theirs:
             return True
@@ -5407,10 +5529,10 @@ class Game:
         loc = c.locations[s.player.location]
         if c.config.explore_mix_of(loc.tags).kind == "town":
             return "城裡耳目眾多，不便動手。"
-        if roster.newbie(s, c):
+        if roster.raid_newbie(s, c):  # 新手期從各自加入的那一刻算，不看第一季開關（懸賞榜設計 14.1 丁）
             return "你初入江湖，還在新手期，先別結這種仇。"
         them = other.state.player.name
-        if roster.newbie(other.state, c):
+        if roster.raid_newbie(other.state, c):
             return f"{them}初入江湖，還在新手期，下不了這個手。"
         problem = self._spar_problem(self, me=True, what="截殺", cost=cfg.stamina)
         if problem is not None:
@@ -5431,11 +5553,8 @@ class Game:
         return team.odds_word(self._spar_power(self, other), squad)
 
     def raid_targets(self) -> list[tuple[str, str]]:
-        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。不是第一季時是空的；
+        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。截殺關著時是空的（raid_shown 擋）；
         散人只有揭了通緝的那個人。"""
-        s = self.state
-        if not season_one(self.content, s.world):
-            return []
         out = []
         for state in social.here(self):
             other = self._kin(state)
@@ -5445,7 +5564,8 @@ class Game:
 
     def raid(self, other: Game) -> list[str]:
         """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
-        與一點氣血（不變成內傷）；贏的一方記一點本季貢獻；平手誰都不失什麼。雙方各一份戰報與一則江湖紀錄。"""
+        與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
+        雙方各一份戰報與一則江湖紀錄。"""
         problem = self.raid_refusal(other)
         if problem is not None:
             return [problem]
@@ -5490,7 +5610,8 @@ class Game:
         return msgs
 
     def _raid_spoils(self, loser: Game) -> RaidSpoils:
-        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，不變成內傷），self 拿走一部分銀兩、記一點貢獻。"""
+        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
+        self 拿走一部分銀兩、記一點貢獻。"""
         c, cfg = self.content, self.content.config.raid
         lp, wp = loser.state.player, self.state.player
         purse = lp.stats.get("silver", 0)
@@ -5499,8 +5620,10 @@ class Game:
         lp.stats["silver"] = purse - lost
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss, agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
-        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None else 0  # 散人（揭了通緝）不記貢獻
+        cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
+        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
@@ -5837,6 +5960,10 @@ class Game:
             "count": library.held_count(self.state),
             "cap": library.cap_of(self.state, self.content),
         }
+
+    def gear_rows(self) -> dict:
+        """修練頁「裝備」那一塊的資料（skillview.gear_rows；裝備四欄設計 2.5）。"""
+        return skillview.gear_rows(self.state, self.content, self.world)
 
     def art_rows(self) -> list[dict]:
         return skillview.art_rows(self.state, self.content, self.world)
@@ -6931,8 +7058,8 @@ class Game:
         data = {
             "name": p.name,
             "affiliation": social.affiliation(s, c),
-            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、開關關著是 None
-            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞）；開關關著是空的
+            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營是 None
+            "bounties": bounties.status(s, c),  # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額）；懸賞榜關著是空的
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "anonymous": p.anonymous,

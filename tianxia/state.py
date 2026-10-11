@@ -125,21 +125,58 @@ class Tagalong(BaseModel):
     since: float
 
 
-class Weapon(BaseModel):
-    """一把兵器（兵器設計 2.1）。id 是「兵:流水號」（PlayerState.weapon_serial），只在這個角色身上唯一。
-    recipe／copy_of／original 是第二、三批（打造、仿品、神兵原品）用的，第一批買來與掉落的都是空的。"""
+class Equipment(BaseModel):
+    """一件裝備（裝備四欄設計 3.1；原本的 Weapon，兵器設計 2.1）。slot 是哪一欄：武器、防具（裝備一），坐騎、寶物（裝備二、三）。
+    id 是「兵:N」「甲:N」（之後「騎:N」「寶:N」），共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
+    （拆解照 id 的 sha256 挑素材）。舊存檔沒有 slot：預設 weapon（兵器第一、二批的裝備庫裡都是武器）。
+    edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
+    不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
+    recipe／copy_of／original 是打造、仿品、神兵原品用的（兵器第二、三批；之後防具打造也用 recipe、tempers）。"""
 
+    slot: Literal["weapon", "armor", "mount", "treasure"] = "weapon"
     id: str
     name: str
-    kind: str  # models.WEAPON_KINDS
-    attribute: str  # 陰陽剛柔快慢虛實
+    kind: str = ""  # 武器：models.WEAPON_KINDS；其餘是空字串
+    attribute: str = ""  # 陰陽剛柔快慢虛實（武器、防具）
     tier: int  # 1～3
     quality: str  # 下品、中品、上品
-    edge: int = 100  # 鋒利度 0～100（3.4）
-    tempers: int = 0  # 淬煉次數（4.7，第二批）
+    edge: int = 100  # 0～100：武器的鋒利度、防具的耐久度（equipment.WEAR_WORDS）
+    tempers: int = 0  # 淬煉次數（兵器第二批；防具打造那一批）
     recipe: str | None = None
     copy_of: str | None = None
     original: bool = False
+
+
+Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
+
+
+class WeaponRecipe(BaseModel):
+    """全服登記的兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes 表）：這一季第一個打出來的人取名，之後照著打的人查表。
+    名字跟武學、改過的名字、意境共用一個名字空間（sqlite_world._name_taken）。id 就是名字（首創名望回饋 fusion.echo 照它記）。"""
+
+    name: str
+    key: str  # 配方鍵 weapons.recipe_key：「兵|種類|主料+輔料」（前綴就是欄位：武器「兵|」，之後防具「鎧|」，裝備四欄設計 4.7）
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # 主料與輔料合出來的屬性（insights.merged_attribute，種子是天機＋配方鍵）
+    tier: int  # 主料的階
+    main: str  # 主料的素材 id
+    aux: str  # 輔料的素材 id
+    creator: str | None = None  # 首創者的名號（身分）
+    creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下；同 MartialArt.creator_shown）
+    co_creator: str | None = None  # fusion.echo 讀；兵器沒有論武，一律 None
+    note: str = ""  # 模型替這個名字寫的一句說明；退路字表的名字沒有
+
+    @property
+    def id(self) -> str:
+        return self.name
+
+
+class SmithDraft(BaseModel):
+    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+
+    kind: str | None = None
+    main: str | None = None
+    aux: str | None = None
 
 
 class Manual(BaseModel):
@@ -205,13 +242,19 @@ class PlayerState(BaseModel):
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
     materials: dict[str, int] = Field(default_factory=dict)  # 素材 id -> 數量；舊存檔沒這欄就是空背包
-    # ── 兵器（兵器設計第二節）：身上一把、裝備庫裡的幾把；換季時角色重來自然清空 ──
-    # rack ＝ 玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名；程式識別字 rack、rack_cap、rack_full 不動）
-    weapon: Weapon | None = None
-    rack: list[Weapon] = Field(default_factory=list)
-    weapon_serial: int = 0
+    # ── 裝備（兵器設計第二節、裝備四欄設計第三節）：身上每欄一件、四欄共用的裝備庫；換季時角色重來自然清空 ──
+    # rack ＝ 玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名；程式識別字 rack、rack_cap、rack_full 不動）。
+    # 每個讀 rack 的地方都照欄位過濾（equipment.in_slot，裝備四欄 3.3）
+    weapon: Equipment | None = None
+    armor: Equipment | None = None  # 身上的防具（裝備四欄設計第四節）；舊存檔沒有＝沒穿
+    rack: list[Equipment] = Field(default_factory=list)
+    weapon_serial: int = 0  # 四欄共用的流水號（兵:N、甲:N）
     picking_smith: bool = False  # 打開了鐵匠鋪的第二層選單（同 picking_bounty）
+    smith_page: str = "weapon"  # 鐵匠鋪停在哪一頁（"weapon"／"armor"，裝備四欄 4.6）：開門時設成第一個開著的，收起鐵匠鋪時設回來（equipment.open_smith／close_smith）
     edge_warned: bool = False  # 身上那把鈍到 Config.weapons.edge_warn 以下時提醒過一次了；修好就重設
+    armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
+    forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
@@ -273,7 +316,8 @@ class PlayerState(BaseModel):
     # 新手福利（氣血回復加倍、新立門戶福緣）從哪一刻起算（第一季設計第十四節「從自己加入的那天起算」）：這個角色進這一季時的
     # 賽季時間（世界秒）。新角色與換季重來的角色先是 None，第一次同步補算完賽季之後才蓋上（Game._stamp_join）——建角的那一刻
     # 賽季可能已經好幾個鐘頭沒人補算，那時就蓋會把福利白白吃掉一段。舊存檔沒有這一欄讀成 0.0：從季初算，跟以前一樣。
-    # 只有第一季的規則開著才讀（roster.since_join）
+    # 新手福利只在第一季的規則開著時從這裡算（roster.since_join；beta 從季初算）；截殺與通緝的新手期每季都從這裡算
+    # （roster.raid_newbie，懸賞榜設計 14.1 丁）
     joined_at: float | None = 0.0
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
@@ -452,7 +496,7 @@ class Bounty(BaseModel):
     kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
-    expires: float  # 世界秒：過了就下榜（通緝沒人完成時把押金退給掛單的人）
+    expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
     silver: int
     deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
     quota: int = 1
@@ -489,6 +533,7 @@ class Echo(BaseModel):
     followers: list[str] = Field(default_factory=list)  # 照著合出來的人，一人只算一次，最多 first_echo.cap 個
     paid: int = 0  # 已經補給首創者的人數
     co_paid: int = 0  # 已經補給 co_creator 的人數
+    made: str = "練"  # 照著做出來的動詞：武學、意境是「練」，兵器配方是「打」（smithing.forge）
 
 
 class WorldState(BaseModel):
@@ -542,8 +587,11 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
-    bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：這一週陣營掛的，加上還沒下榜的通緝；換季整個重來
+    bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
+    # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
+    bounty_week: int = 0
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     # 截殺（Config.raid）：「發起的名號鍵>目標的名號鍵」→ 上一次截殺的世界秒（同一個人對同一個目標的冷卻）；

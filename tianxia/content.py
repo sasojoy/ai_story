@@ -32,6 +32,7 @@ from .models import (
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
+from .weapons import NOUNS as WEAPON_NOUNS, kind_problem as weapon_kind_problem
 from .zh import to_traditional
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
@@ -1456,6 +1457,13 @@ def validate(c: Content) -> None:
         for suffix in [*names.wugong, *names.neigong, *names.insight]:
             reason = name_problem(prefix + suffix, c)
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
+    need(bool(names.weapon), "craft_names.weapon 不能是空的")
+    for prefix in names.prefixes:
+        for middle in names.weapon:
+            for kind, noun in WEAPON_NOUNS.items():
+                weapon_name = prefix + middle + noun
+                reason = name_problem(weapon_name, c) or weapon_kind_problem(kind, weapon_name)
+                need(reason is None, f"craft_names.weapon 組出的兵器名「{weapon_name}」過不了命名過濾：{reason}")
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)

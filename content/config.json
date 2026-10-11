@@ -64,6 +64,14 @@
     "setting_good": "冥冥之中，天時地利都站在你這一邊。",
     "setting_bad": "時辰地氣都不太對，爐火燒得有些勉強。"
   },
+  "weapons": {
+    "quality": {
+      "terrain": 10,
+      "battlefield": 10,
+      "calm": 8,
+      "setting_good": "爐火正旺，鐵匠說這一爐的火候對得出奇。"
+    }
+  },
   "secrets": {
     "quality_points": 30,
     "insight_points": 10,

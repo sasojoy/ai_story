@@ -4174,7 +4174,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
@@ -5357,6 +5357,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
+        "prepare_smith_forge",  # 鐵匠鋪開爐的首創取名（兵器第二批）：跟 prepare_forge 同一套三段
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6114,6 +6115,7 @@ NOT_IN_THE_FINGERPRINT = {
         "raids": "截殺的冷卻，只在打開玩家卡時看得到（截殺當下 touched 叫醒被截殺的人）",
         "bounties": "懸賞榜只在城裡打開第二層選單時看得到，揭、交差都是自己的動作（通緝當下 touched 叫醒被通緝的人）",
         "bounty_seq": "懸賞的流水號，玩家看不到",
+        "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
         "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",

@@ -1032,7 +1032,31 @@
   // 決戰三招的按鈕（決戰改版一）：引擎給「選項名（強攻・82 分）」，招與分數拆到按鈕右邊的小字、名字佔剩下的寬度——
   // 375px 上一顆按鈕的字只有約 285px，括號整句接在名字後面的話，十一、十二個字的名字會把一顆按鈕折成兩行（多 20px）
   const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分)）$/;
-  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${esc(o.label)}</span>`; };
+  // 鐵匠鋪的選項標籤很長（開爐、主料、輔料、買修淬煉），375px 上瀏覽器會在字中間斷行（FB-132：「下｜品」「沒｜人」「壓｜得住」「屬｜實」）。
+  // 照分隔的標點切成小段，每段不折行（.nb），段與段之間才換行；標籤的字一個都不改，只是多包幾層 span，每段各自跳脫。
+  // 切在「・；、，＋→」後面（連同後面跟著的空白，「→ 」不留在行頭）與「（」前面；括號尾「）」、數字與單位（「下品 46%」「工錢 150 兩」）
+  // 都留在原來那一段。一段超過 NB_MAX 個字就不包（寧可折行也不讓字衝出按鈕）
+  const NB_AFTER = "・；、，＋→";
+  const NB_MAX = 16;
+  function nbChunks(text) {
+    const s = String(text ?? ""), out = [];
+    let cur = "";
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "（" && cur) { out.push(cur); cur = ""; }
+      cur += s[i];
+      if (NB_AFTER.includes(s[i])) {
+        while (s[i + 1] === " ") cur += s[++i];
+        out.push(cur);
+        cur = "";
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+  // 「→ 」後面那個空白放在 span 外面：行內區塊尾巴上的空白會被瀏覽器吃掉（「→這個配方」貼在一起），放外面它是普通空白，既看得到、也是一個換行機會，落在行尾或行頭時自己消失
+  const nbHtml = (text) => nbChunks(text).map((t) => (t.length <= NB_MAX ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
+  // 一行寫完：tests/test_battle_buttons.py、test_peek_row.py 的假瀏覽器照名字把這一行切出去（konst），smith: 才會用到 nbHtml
+  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") ? nbHtml(o.label) : esc(o.label)}</span>`; };
   // 前四顆對到選單上哪一顆、沒有時寫什麼；第五顆是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
@@ -1313,6 +1337,7 @@
         <div class="order-head"><b>${esc(b.title)}</b><span>${esc(b.issuer)}</span></div>
         <div class="order-how">${esc(b.how)}</div>
         <div class="order-meta">${esc(b.reward)}</div>
+        ${b.due ? `<div class="order-meta">${esc(b.due)}</div>` : ""}
       </div>`).join("");
     const open = (options || []).some((o) => o.id === "bounty:back");  // 懸賞榜正開著（選單就是榜）：卡底下不再寫什麼
     const foot = open ? "" : board
@@ -1702,7 +1727,7 @@
       : !c ? `<p>${esc(P.gone || "他已經不在這裡了。")}</p>`
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
-        ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="1" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：1～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
+        ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
     return `<div class="sheet-bg" data-act="peer-close"></div>
       <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
@@ -1949,18 +1974,39 @@
     const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
-    // 兵器（兵器設計 3.6）：身上那把一行、裝備庫每把一行與「換上」鈕。字都是伺服器給的資料，一律 esc
-    const wp = x.weapons;
+    // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（這一批武器、防具；坐騎、寶物等各自那一批），每段先列身上那件、再列裝備庫裡同一欄的。
+    // 格數四欄合算（gear.used／gear.cap）。字都是伺服器給的資料，一律 esc。這一版畫不出的欄位（新伺服器多了一欄）整段略過。
+    // FB-125（兵器第二批 Task 1）：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
+    const gear = x.gear;
+    const rowButtons = (w) => `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}" data-confirm="${esc(w.confirm || "")}">拆解</button></div>`;
+    // 武器：淬過的寫「淬煉 N/5」，自己打的寫配方（兵器第二批 Task 8）
+    // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
-        <b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>
-        ${wornNow ? "" : `<button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}">拆解</button>`}
+        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}</div>
+        ${wornNow ? "" : rowButtons(w)}
       </div>`;
-    const weaponsBlock = wp && (wp.worn || wp.rack.length) ? `<section class="weapons"><div class="label">兵器</div>
-        ${wp.worn ? weaponRow(wp.worn, true) : '<p class="muted">手上沒有兵器。</p>'}
-        ${wp.rack.length ? `<small class="muted">裝備庫 ${wp.rack.length}/${wp.cap | 0}</small>${(S.rackAll || wp.rack.length <= LIB_PAGE ? wp.rack : wp.rack.slice(0, LIB_PAGE)).map((w) => weaponRow(w, false)).join("")}
-          ${S.rackAll || wp.rack.length <= LIB_PAGE ? "" : `<button class="btn ghost lib-more" data-act="rack-all">再列 ${wp.rack.length - LIB_PAGE} 件</button>`}` : ""}
-        <p class="muted">城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。</p>
-      </section>` : "";
+    // 防具：不分種類、沒有「配不上」；寫耐久度與這件一場少扣幾成氣血、對不對得上你的內功（裝備四欄設計 4.1、4.2）。
+    // 磨損的叫法照伺服器給的 wear_word（equipment.WEAR_WORDS，2.5、3.1），不寫死。這一行的寫法待 joy 潤；淬煉與配方等防具打造那一批
+    const armorRow = (a, wornNow) => `<div class="wrow">
+        <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}・${esc(a.wear_word)} ${a.edge | 0}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span></div>
+        ${wornNow ? "" : rowButtons(a)}
+      </div>`;
+    const GEAR_ROWS = { weapon: weaponRow, armor: armorRow };
+    const slotBlock = (g) => {
+      const row = GEAR_ROWS[g.slot];
+      if (!row) return "";
+      const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
+      return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>
+        ${g.worn ? row(g.worn, true) : `<p class="muted">${esc(g.empty)}</p>`}
+        ${shown.map((w) => row(w, false)).join("")}
+        ${shown.length < g.rack.length ? `<button class="btn ghost lib-more" data-act="rack-all">再列 ${g.rack.length - shown.length} 件</button>` : ""}
+        <p class="muted">${esc(g.note)}</p>
+      </section>`;
+    };
+    // 塊名由「兵器」改成「裝備」（待 joy 潤）；段名（武器、防具）是伺服器給的 label
+    const gearBlock = gear && gear.slots.some((g) => g.worn || g.rack.length) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
+        ${gear.slots.map(slotBlock).join("")}
+      </div>` : "";
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
@@ -1976,7 +2022,7 @@
       ${attrNoteHtml(x)}
       <div class="label">身上的兩門</div>
       ${worn}
-      ${weaponsBlock}
+      ${gearBlock}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
       ${chips}
       ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')
@@ -2912,7 +2958,7 @@
     // btn 已經不在頁面上：照 id 重找畫面上那一顆，「處理中」才標得到、擋下來時才還原得了（整合審查 M1）
     const ask0 = ((S.main && S.main.options) || []).find((o) => o.id === id);
     if (!sure && ask0 && ask0.confirm) {
-      ask(ask0.confirm, "照打", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
+      ask(ask0.confirm, ask0.confirm_yes || "照打", () => choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(id)}"]`) || btn, id, true));
       return;
     }
     if (id === SENSE_DRAW) { // 有所感：先叫出畫布、送暖機（模型閒置後第一次看圖要一二十秒，畫的這幾秒剛好用來載入），畫好再送
@@ -3312,7 +3358,9 @@
           await loadMenxia();
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
-        case "dismantle": await mx("dismantle", { weapon: el.dataset.id }); break; // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）
+        case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
+          ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
+          break;
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
           const was = S.menxia;
@@ -3652,7 +3700,7 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal", "weapons"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
+    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal", "gear"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 
