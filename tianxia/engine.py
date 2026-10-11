@@ -1398,6 +1398,8 @@ class Game:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
+            if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
+                msgs += bounties.drop_stranded(self.state, self.content, self.state.player.faction)
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
@@ -2866,7 +2868,9 @@ class Game:
         return defection.targets_here(self.state, self.content, self.world.get_battle())
 
     def _faction_prompt(self, faction) -> str:
-        return f"投靠後這一季不能改投（叛投另論）。{self.faction_counts_text()}。確定投靠{faction.name}？"
+        held = bounties.stranded(self.state, self.content, faction.id)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
+        lost = bounties.STRANDED_JOIN.format(n=len(held)) if held else ""
+        return f"投靠後這一季不能改投（叛投另論）。{lost}{self.faction_counts_text()}。確定投靠{faction.name}？"
 
     def faction_counts_text(self) -> str:
         """「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」：照全服投靠名冊（真人與假人一起算）。"""

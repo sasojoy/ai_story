@@ -67,6 +67,9 @@ BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
 LAPSED_FULL = "【懸賞】「{title}」名額被別人交滿了，你手上這一張作廢。"  # 待 joy 潤（FB-121 第 5 件，deliver_lapses）
 LAPSED_DUE = "【懸賞】「{title}」過了期限，你手上這一張作廢。"  # 待 joy 潤
+LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣營掛的，這一張作廢。"  # 待 joy 潤（FB-151：投靠、叛投那一下；換版前就換了陣營的存檔由 deliver_lapses 補同一句）
+STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
+STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -169,14 +172,44 @@ def open_bounties(state: GameState, content: Content) -> list[Bounty]:
     return [b for b in state.world.bounties if b.expires > now and _left(b) > 0 and (raids or b.kind != "wanted")]
 
 
+def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
+    """name 這個人、投靠 faction（None 是散人）接不接得了這一張：can_take 與 stranded（換陣營之後還接不接得了）共用這一套。"""
+    if b.kind == "wanted" and name_key(b.target or "") == name_key(name):
+        return False
+    if b.poster is not None and name_key(b.poster) == name_key(name):
+        return False
+    return faction is None or faction == b.faction
+
+
 def can_take(state: GameState, b: Bounty) -> bool:
     """這個人接不接得了這一種：散人兩邊都能接；陣營的人只能接自己陣營的；通緝不能接自己的。"""
     p = state.player
-    if b.kind == "wanted" and name_key(b.target or "") == name_key(p.name):
-        return False
-    if b.poster is not None and name_key(b.poster) == name_key(p.name):
-        return False
-    return p.faction is None or p.faction == b.faction
+    return _takeable(p.name, p.faction, b)
+
+
+def stranded(state: GameState, content: Content, faction_id: str | None) -> list[Bounty]:
+    """手上揭著、還沒交、還有效，可是投靠 faction_id 之後就接不了（同 can_take 的規則）的單（FB-151：投靠、叛投那一下要作廢的）。
+    投靠的確認畫面、叛投的確認畫面用它數張數，drop_stranded 用它拿掉名字。過期的、名額滿的不算（它們由 deliver_lapses 說自己的原因）；
+    求藝、求兵沒人揭，不會在裡面。"""
+    p = state.player
+    me = name_key(p.name)
+    return [
+        b for b in open_bounties(state, content)
+        if me in (name_key(t) for t in b.takers) and me not in (name_key(t) for t in b.done_by)
+        and not _takeable(p.name, faction_id, b)
+    ]
+
+
+def drop_stranded(state: GameState, content: Content, faction_id: str | None) -> list[str]:
+    """投靠或叛投 faction_id 的那一下（Game.choose、defection.defect）：手上新陣營接不了的單拿掉名字，每張回一句原因（FB-151）。
+    改的是共用的季（takers），呼叫端的動作結束時存季（choose 的結尾統一存）。要在 p.faction 改之前或之後呼叫都行：只看名字與 faction_id。"""
+    me = name_key(state.player.name)
+    faction = content.scenario.faction_name(faction_id, "別的陣營")
+    msgs: list[str] = []
+    for b in stranded(state, content, faction_id):
+        b.takers = [t for t in b.takers if name_key(t) != me]
+        msgs.append(LAPSED_SIDE.format(faction=faction, title=title(content, b)))
+    return msgs
 
 
 def mine(state: GameState, content: Content) -> list[Bounty]:
@@ -667,21 +700,26 @@ def deliver_refunds(state: GameState, content: Content) -> list[str]:
 
 def deliver_lapses(state: GameState, content: Content) -> list[str]:
     """我揭了、還沒交差的那一張被別人交滿了名額、或過了期限：拿掉我的名字、補一句（FB-121 第 5 件；寫法同 deliver_refunds，同步時呼叫）。
-    過了期限還有人揭著的單，issue 掛新單時先留著（等揭的人同步時在這裡拿掉），不然他回來只看到那一張默默不見了。"""
+    過了期限還有人揭著的單，issue 掛新單時先留著（等揭的人同步時在這裡拿掉），不然他回來只看到那一張默默不見了。
+    名字還留在自己陣營接不了的單上（FB-151：換版之前就換了陣營的存檔、不經過 Game.choose 就改了陣營的入口）：不管過期、名額滿與否，
+    先說陣營的原因（那才是它先消失的原因），一樣拿掉名字、只說一次。"""
     p, now = state.player, state.world.time
     me = name_key(p.name)
     msgs: list[str] = []
     for b in state.world.bounties:
         if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
             continue
-        if _left(b) <= 0:
-            line = LAPSED_FULL
+        name = title(content, b)
+        if p.faction is not None and p.faction != b.faction:  # 同 _takeable 的陣營那一條
+            line = LAPSED_SIDE.format(faction=content.scenario.faction_name(p.faction, "別的陣營"), title=name)
+        elif _left(b) <= 0:
+            line = LAPSED_FULL.format(title=name)
         elif b.expires <= now:
-            line = LAPSED_DUE
+            line = LAPSED_DUE.format(title=name)
         else:
             continue
         b.takers = [t for t in b.takers if name_key(t) != me]
-        msgs.append(line.format(title=title(content, b)))
+        msgs.append(line)
     return msgs
 
 

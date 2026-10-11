@@ -746,3 +746,185 @@ def test_bots_skip_the_board_button_but_score_taking(setup):
     assert bot_policy._takeable(game)
     bot.take_bounties(game)
     assert len(bounties.mine(game.state, content)) == 1 and not game.state.player.picking_bounty
+
+
+# ── FB-151：換陣營時手上接不了的懸賞要說一聲 ──────────────────────────────
+
+
+@pytest.fixture(params=["setup", "beta_setup"])
+def either(request):
+    """第一季的季、規則關著的季各跑一次（FB-151 的投靠與叛投兩邊都一樣）。"""
+    return request.getfixturevalue(request.param)
+
+
+def _told(game):
+    """江湖紀錄裡所有的「【懸賞】」行（懸賞榜標題的、或併進別的標題的都算）。"""
+    return [line for e in game.state.journal for line in e.lines if line.startswith("【懸賞】")]
+
+
+def _hold(content, world, name, *bounty_ids):
+    for bid in bounty_ids:
+        _direct(content, world, name, lambda g, bid=bid: bounties.take(g.state, g.content, bid))
+
+
+def _takers(world, bounty):
+    return next(b for b in world.get_season().bounties if b.id == bounty.id).takers
+
+
+def test_joining_a_faction_drops_the_other_sides_held_bounties_and_says_so_fb151(either):
+    """FB-151：散人丙揭了兩張黃巾的討伐，投靠官軍：確認畫面先講手上幾張會作廢；確定之後名字從兩張單的 takers 拿掉（存進共用的季）、
+    回話與江湖紀錄各補一句原因（不是之後才補的「過了期限」），懸賞卡空了，之後再同步也不再提。"""
+    content, world = either
+    first = _post(world, kind="strike", faction="huang", silver=10, deeds=2, location="lake")
+    second = _post(world, kind="strike", faction="huang", silver=10, deeds=2, location="cave")
+    _hold(content, world, "丙", first.id, second.id)
+    assert len(_do(content, world, "丙", lambda g: g.status_data())[0]["bounties"]) == 2
+    msgs, _ = _do(content, world, "丙", lambda g: g.choose("faction:guan"))
+    assert bounties.STRANDED_JOIN.format(n=2) in msgs[0] and msgs[0].endswith("確定投靠官軍？")
+    msgs, game = _do(content, world, "丙", lambda g: g.choose("faction:confirm"))
+    lines = [bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, b)) for b in (first, second)]
+    assert msgs[0] == "你投靠了官軍。" and [m for m in msgs if m in lines] == lines
+    assert _told(game) == lines  # 紀錄各一句，順序同手上的
+    assert "丙" not in _takers(world, first) and "丙" not in _takers(world, second)
+    assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"] == []
+    _, game = _do(content, world, "丙", lambda g: None)
+    assert _told(game) == lines  # 之後同步不再提
+    world.mutate_season(lambda s: [setattr(b, "expires", 0.0) for b in s.bounties])  # 過了期限也沒有第二句
+    _, game = _do(content, world, "丙", lambda g: None)
+    assert _told(game) == lines
+
+
+def test_joining_keeps_what_the_new_side_can_still_take_and_says_nothing_when_nothing_is_lost_fb151(either):
+    """只拿掉新陣營接不了的：丙揭了一張官軍的、一張黃巾的，投靠官軍只丟黃巾那一張（確認畫面寫 1 張）；手上沒有這種單時，確認畫面跟以前一個字不差。"""
+    content, world = either
+    nothing = _do(content, world, "丙", lambda g: g.choose("faction:guan"))[0][0]  # 手上沒有單：確認畫面沒有多一句
+    assert "懸賞" not in nothing and nothing.startswith("投靠後這一季不能改投（叛投另論）。目前")
+    _do(content, world, "丙", lambda g: g.choose("faction:cancel"))
+    ours = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    theirs = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    _hold(content, world, "丙", ours.id, theirs.id)
+    msgs, _ = _do(content, world, "丙", lambda g: g.choose("faction:guan"))
+    assert bounties.STRANDED_JOIN.format(n=1) in msgs[0]
+    msgs, game = _do(content, world, "丙", lambda g: g.choose("faction:confirm"))
+    assert bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, theirs)) in msgs
+    assert not any(bounties.title(content, ours) in m for m in msgs if m.startswith("【懸賞】"))
+    assert "丙" in _takers(world, ours) and "丙" not in _takers(world, theirs)
+    assert [b.id for b in bounties.mine(game.state, content)] == [ours.id]
+
+
+def test_defecting_drops_the_old_sides_held_bounties_and_the_prompt_lists_them_fb151(either):
+    """FB-151：官軍甲揭了兩張官軍的單，到黃巾的投靠點叛投：確認畫面把「手上 2 張…作廢」列進損失（這是唯一的損失，所以不再說
+    「沒有什麼進度要作廢」）；確定之後兩張單拿掉他的名字、回話與紀錄各補一句；沒揭單的人，確認畫面照舊。"""
+    content, world = either
+    first = _post(world, kind="strike", faction="guan", silver=10, deeds=2, location="lake")
+    second = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="cave")
+    _hold(content, world, "甲", first.id, second.id)
+    state = _load(world, "甲")
+    state.player.location = "lake"
+    CharacterStore(world.db).save(state)
+    plain = _do(content, world, "乙", lambda g: g.choose("defect:guan"))[0][0]  # 乙是黃巾的人，手上沒有單，在城鎮有官軍的投靠點
+    assert plain.startswith("叛投官軍沒有什麼進度要作廢") and "懸賞" not in plain
+    _do(content, world, "乙", lambda g: g.choose("defect:cancel"))
+    msgs, _ = _do(content, world, "甲", lambda g: g.choose("defect:huang"))
+    assert bounties.STRANDED_LOST.format(n=2, faction="官軍") in msgs[0] and "沒有什麼進度要作廢" not in msgs[0]
+    assert msgs[0].startswith("叛投黃巾之後，") and msgs[0].endswith("確定叛投黃巾？")
+    msgs, game = _do(content, world, "甲", lambda g: g.choose("defect:confirm"))
+    lines = [bounties.LAPSED_SIDE.format(faction="黃巾", title=bounties.title(content, b)) for b in (first, second)]
+    assert game.state.player.faction == "huang" and "你叛出官軍，投了黃巾。" in msgs
+    assert [m for m in msgs if m in lines] == lines and _told(game) == lines
+    assert "甲" not in _takers(world, first) and "甲" not in _takers(world, second)
+    assert _do(content, world, "甲", lambda g: g.status_data())[0]["bounties"] == []
+    _, game = _do(content, world, "甲", lambda g: None)
+    assert _told(game) == lines
+
+
+def test_a_holder_who_can_no_longer_take_a_bounty_hears_the_faction_reason_once_fb151(beta_setup):
+    """換版之前就換了陣營的存檔（名字還留在接不了的單上）：同步時拿掉名字、說陣營的原因一次，不說「過了期限」「名額被別人交滿了」；
+    單子已經過期或名額滿了，也是這一句（人是先接不了的）。"""
+    content, world = beta_setup
+    live = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="lake")
+    late = _post(world, kind="strike", faction="huang", silver=10, deeds=2, location="cave", expires=0.0)
+    full = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave", done_by=["乙"])
+    ours = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+
+    def stale(season):
+        for b in season.bounties:
+            if b.id in (live.id, late.id, full.id, ours.id):
+                b.takers.append("甲")  # 甲是官軍：黃巾的三張他早就接不了了
+
+    world.mutate_season(stale)
+    _, game = _do(content, world, "甲", lambda g: None)
+    told = _told(game)
+    lines = [bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, b)) for b in (live, late, full)]
+    assert sorted(told) == sorted(lines)
+    assert not any(bounties.LAPSED_DUE.format(title=bounties.title(content, b)) in told for b in (live, late))
+    assert bounties.LAPSED_FULL.format(title=bounties.title(content, full)) not in told
+    assert all("甲" not in _takers(world, b) for b in (live, late, full)) and "甲" in _takers(world, ours)  # 自己陣營的不動
+    _, game = _do(content, world, "甲", lambda g: None)
+    assert sorted(_told(game)) == sorted(lines)  # 只補一次
+
+
+def test_joining_a_sect_through_an_event_choice_drops_them_too_fb151(beta_setup):
+    """拜入陣營名下的門派（事件的選項，走 choose）也是投靠：散人丙手上的黃巾單同一下拿掉，回話與紀錄各一句。"""
+    from tianxia.models import Choice, Effect, Event
+
+    content, world = beta_setup
+    content.scenario.factions[0].sects = ["cloud"]  # 門派歸官軍
+    theirs = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    _hold(content, world, "丙", theirs.id)
+    event = Event(
+        id="t_join_sect", title="結社", text="有人問你要不要入夥。", actions=[],
+        choices=[Choice(text="入夥", effect=Effect(join_sect="cloud"))],
+    )
+    content.events[event.id] = event
+
+    def join(game):
+        game._present(event)
+        return game.choose("choice:0")
+
+    msgs, game = _do(content, world, "丙", join)
+    line = bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, theirs))
+    assert game.state.player.faction == "guan" and "你從此是官軍的人了。" in msgs and line in msgs
+    assert _told(game) == [line] and "丙" not in _takers(world, theirs)
+    assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"] == []
+
+
+def test_a_faction_set_by_a_bare_effect_is_caught_at_the_next_sync_with_the_faction_reason_fb151(beta_setup):
+    """入口不經過 choose 的（直接套 Effect(join_sect=…)）：效果本身不碰懸賞榜，下一次同步由 deliver_lapses 補，說的是陣營的原因、不是過期。"""
+    from tianxia.models import Effect
+
+    content, world = beta_setup
+    content.scenario.factions[0].sects = ["cloud"]
+    theirs = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    _hold(content, world, "丙", theirs.id)
+
+    def join(game):
+        rules.apply_effect(Effect(join_sect="cloud"), game.state, game.content, game.world)
+
+    _, game = _do(content, world, "丙", join)
+    assert game.state.player.faction == "guan" and "丙" in _takers(world, theirs)  # 效果本身沒碰
+    _, game = _do(content, world, "丙", lambda g: None)
+    line = bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, theirs))
+    assert _told(game) == [line] and "丙" not in _takers(world, theirs)
+    _, game = _do(content, world, "丙", lambda g: None)
+    assert _told(game) == [line]
+
+
+def test_stranded_asks_the_same_question_as_can_take_fb151(beta_setup):
+    """stranded(state, content, 陣營) ＝ 手上揭著、還有效、那個陣營的人接不了（同 can_take）的單；已過期的不算（它另有一句）；
+    散人（陣營 None）什麼都接得了，所以沒有。"""
+    content, world = beta_setup
+    huang = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="lake")
+    guan = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    old = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave", expires=0.0)
+    _hold(content, world, "丙", huang.id, guan.id)
+
+    def mark_old(season):
+        next(b for b in season.bounties if b.id == old.id).takers.append("丙")
+
+    world.mutate_season(mark_old)
+    _, game = _do(content, world, "丙", lambda g: g)
+    ids = lambda faction: sorted(b.id for b in bounties.stranded(game.state, content, faction))  # noqa: E731
+    assert ids("guan") == [huang.id] and ids("huang") == [guan.id] and ids(None) == []
+    game.state.player.faction = "guan"
+    assert bounties.mine(game.state, content) == [next(b for b in game.state.world.bounties if b.id == guan.id)]
