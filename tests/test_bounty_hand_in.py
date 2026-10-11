@@ -201,7 +201,7 @@ def test_what_fits_an_art_bounty_and_what_does_not(beta_setup):
 
 def test_what_fits_an_arms_bounty_including_the_one_in_hand(beta_setup):
     """設計 4.5 第 7 條：種類與屬性都要對、什麼品質都收；手上那把也收（企劃者 2026-10-10，14.1 丙），空手時交裝備庫裡的也行；
-    最不值錢的排前面（品質、階、鋒利度）。兵器關著一律不收。"""
+    最不值錢的排前面（賞銀的底數、鋒利度；PM 2026-10-12，順序另有 test_arms_are_listed_by_payout_base…）。兵器關著一律不收。"""
     content, world = beta_setup
     content.config.weapons.enabled = True
     arms = _arms(world)
@@ -552,6 +552,30 @@ def test_an_arms_id_with_a_colon_works_and_the_weapon_in_hand_can_go(beta_setup)
     msgs, game = _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{b.id}:兵:1"))
     assert msgs[0].startswith(bounties.GIVEN_PREFIX) and game.state.player.weapon is None
     assert game.state.player.bounty_pick is None and "bounty:back" in _ids(content, world, "丙")
+
+
+def test_arms_are_listed_by_payout_base_so_a_tier_one_mid_goes_before_a_tier_three_low(beta_setup):
+    """PM 2026-10-12：求兵「最不值錢的先」照賞銀的底數（arms_silver[品質] × arms_tier[階]）、鋒利度、id，不照品質優先——
+    三階下品（20×4＝80）比一階中品（35×1＝35）值錢，不能排在前面先被交掉。fitting、第三層的交出鈕、give_choice（整季機器人與
+    假人共用）排的是同一個順序；底數一樣時鋒利度低的先。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+
+    def armed(p):
+        p.rack = [_blade("兵:2", tier=3, quality="下品"), _blade("兵:3", quality="中品"), _blade("兵:4", quality="中品", edge=40)]
+
+    _edit(world, "丙", armed)
+    b = _arms(world)
+    assert _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, b))[0] == ["兵:4", "兵:3", "兵:2"]
+    menu = _open(content, world, "丙", f"bounty:pick:{b.id}")
+    gives = [o for o in menu.values() if o.id.startswith("bounty:give:")]
+    assert [o.id for o in gives] == [f"bounty:give:{b.id}:{i}" for i in ("兵:4", "兵:3", "兵:2")]
+    assert [o.label for o in gives] == [
+        "交出【柔劍4】（一階中品・鋒利度 40）→ 賞銀 35",
+        "交出【柔劍3】（一階中品・鋒利度 100）→ 賞銀 35",
+        "交出【柔劍2】（三階下品・鋒利度 100）→ 賞銀 80",
+    ]
+    assert _do(content, world, "丙", lambda g: bounties.give_choice(g.state, g.content, g.world))[0] == (b.id, "兵:4")
 
 
 def test_a_stale_pick_falls_back_to_the_board(beta_setup):

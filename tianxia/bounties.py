@@ -463,10 +463,12 @@ def _melt(state: GameState, content: Content, world: WorldStateStore, art_id: st
 
 def _cheapness(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple:
     """「最不值錢的先」（設計 4.4）：求藝照熔煉值（_melt，熔煉頁與確認句同一個數）、品質（低的先；PM 2026-10-11：
-    熔煉值只算自己修練上去的幾階，合成時擲到上品的跟下品的可以同值，打平時不能先交掉上品的）、再照名字；求兵照品質、階、鋒利度、id。"""
+    熔煉值只算自己修練上去的幾階，合成時擲到上品的跟下品的可以同值，打平時不能先交掉上品的）、再照名字；求兵照賞銀的底數
+    （_arms_base：arms_silver[品質] × arms_tier[階]，底數低的先；PM 2026-10-12，三階下品 80 比一階中品 35 值錢，不照品質優先）、
+    鋒利度（低的先）、id。"""
     if b.kind == "arms":
         w = _weapon(state, item_id)
-        return (_quality_rank(w.quality), w.tier, w.edge, w.id)
+        return (_arms_base(content, w), w.edge, w.id)
     art = _art_of(item_id, content, world, memo)
     quality = team.art_quality(state, art)  # 同 team.player_art(...).quality，用查過的那份少一次資料庫
     return (_melt(state, content, world, item_id, memo), _quality_rank(quality), art.name)
