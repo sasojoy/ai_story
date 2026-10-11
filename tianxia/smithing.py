@@ -13,7 +13,7 @@ import functools
 import random
 from collections import Counter
 
-from . import fusion, naming, team, weapons
+from . import equipment, fusion, naming, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -508,7 +508,7 @@ def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) 
     if sum(held.values()) < 2:
         return None
     top = max(mats[mid].tier for mid in held)
-    mine = [w for w in [state.player.weapon, *state.player.rack] if weapons.usable(w, art, content, world)]
+    mine = [w for w in [state.player.weapon, *equipment.in_slot(state.player, "weapon")] if weapons.usable(w, art, content, world)]  # 裝備四欄 3.3
     if any(w.tier > top or (w.tier == top and w.recipe is not None) for w in mine):
         return None
     main = min((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != art.attribute, -held[mid], mid))
@@ -522,7 +522,7 @@ def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) 
 def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
     """裝備庫裡威力加成比手上那把高的那一把（最高的；同分照 id），沒有是 None。"""
     now = weapons.bonus(state.player.weapon, art, content, world)
-    best = max(state.player.rack, key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
+    best = max(equipment.in_slot(state.player, "weapon"), key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
     return best if best is not None and weapons.bonus(best, art, content, world) > now + 1e-9 else None
 
 

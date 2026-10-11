@@ -267,3 +267,33 @@ def test_both_sides_of_a_raid_dull_their_own_blade_and_the_defender_reads_the_wa
         assert warning in after.battles[0].notes
         assert warning in after.journal[0].lines, name  # 發起的與被截殺的，江湖紀錄都讀得到
         assert after.journal[0].lines.count(warning) == 1
+
+
+def _armored(world, attribute="剛"):
+    from tianxia.state import Equipment
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        state.player.armor = Equipment(id=f"甲:{name}", slot="armor", name=f"{name}的甲", attribute=attribute, tier=1, quality="下品")
+        CharacterStore(world.db).save(state)
+
+
+def test_the_raid_loser_bleeds_less_with_armor(pair, monkeypatch):
+    """裝備四欄 4.4：截殺輸的一方只吃防具（上限的 8% ×（1−防具減損）），不吃化勁、不夾合計上限。"""
+    content, world = pair
+    content.config.armor.enabled = True
+    _armored(world)
+    _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    loser = _load(world, "乙").player
+    cap = team.neili_cap(content, loser.member.level)
+    assert loser.member.neili == pytest.approx(cap * (1 - content.config.raid.hp_loss * (1 - 0.06)), abs=1)  # 沒有內功：一階下品 6%
+    assert loser.member.injury == 0
+
+
+@pytest.mark.parametrize("tier,raider_edge,target_edge", [("大勝", 100, 95), ("落敗", 95, 100), ("僵持", 100, 100)])
+def test_only_the_side_that_loses_a_raid_wears_its_armor(pair, monkeypatch, tier, raider_edge, target_edge):
+    """裝備四欄 4.5：截殺只有輸的一方挨打、只有他磨防具（落敗扣 5）；發起的人輸了也是他磨，平手誰都不磨。"""
+    content, world = pair
+    content.config.armor.enabled = True
+    _armored(world)
+    _raid(content, world, tier=tier, monkeypatch=monkeypatch)
+    assert _load(world, "甲").player.armor.edge == raider_edge and _load(world, "乙").player.armor.edge == target_edge

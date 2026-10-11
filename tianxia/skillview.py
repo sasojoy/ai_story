@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import atlas, cultivation, encounter, fusion, insights, martial_arts, materials, prologue, team, traits, weapons
+from . import armor, atlas, cultivation, encounter, equipment, fusion, insights, martial_arts, materials, prologue, team, traits, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -485,9 +485,28 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     ]
     if key == PLAYER and (weapon := weapons.card_line(state, content, world, team.player_art(state, content, world, member.wugong_id))):
         lines.append(weapon)  # 兵器（兵器設計 3.6）：空手或開關關著不寫
+    if key == PLAYER and (worn_armor := armor.card_line(state, content, team.player_art(state, content, world, member.neigong_id))):
+        lines.append(worn_armor)  # 防具（裝備四欄設計 2.5）：沒穿或開關關著不寫；對上的是內功（武器看武學、防具看內功）
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)
+
+
+def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dict:
+    """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（這一批武器、防具；坐騎、寶物等
+    各自那一批加一段），每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
+    格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。"""
+    member = state.player.member
+    slots = []
+    if equipment.on(content, "weapon"):
+        art = team.player_art(state, content, world, member.wugong_id)
+        slots.append({"slot": "weapon", "label": equipment.SLOTS["weapon"].label, "empty": weapons.EMPTY, "note": weapons.RACK_NOTE,
+                      **weapons.rows(state, content, world, art)})
+    if equipment.on(content, "armor"):
+        neigong = team.player_art(state, content, world, member.neigong_id)
+        slots.append({"slot": "armor", "label": equipment.SLOTS["armor"].label, "empty": armor.EMPTY, "note": armor.RACK_NOTE,
+                      **armor.rows(state, content, neigong)})
+    return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots}
 
 
 def _pct(ratio: float) -> str:

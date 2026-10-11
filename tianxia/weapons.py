@@ -1,18 +1,25 @@
 """兵器（docs/superpowers/specs/2026-10-09-兵器-design.md）。
 
 第一批（拿著就有用）：武學的兵器種類、身上那把的加成與鋒利度、鐵匠鋪的買、修、換、打贏掉落、角色卡那一行。
-這個模組只 import models、state、martial_arts、world_state；team 反過來呼叫它（player_boost、_styled_fighters），
+這個模組只 import models、state、martial_arts、world_state、equipment；team 反過來呼叫它（player_boost、_styled_fighters），
 所以這裡不 import team——要武學本體的地方由呼叫端傳進來。
+
+裝備四欄（裝備一）：跟欄位內容無關的（裝備庫、換上、拆解、階品、鐵匠鋪的字）搬到 equipment.py，這裡原名照留（smithing、engine、測試都寫
+weapons.X）；store／rack_full／wield／dismantle 轉呼叫 equipment、只看武器那一欄。
 """
 from __future__ import annotations
 
 import hashlib
 import random
 
-from .insights import PAIR_ATTRIBUTES
+from . import equipment
+from .equipment import (  # noqa: F401  搬到 equipment 的共用部分，原名照留（smithing、engine、測試都寫 weapons.X）
+    DISMANTLE_ASK, DISMANTLE_LIST, DISMANTLE_MISSING, DISMANTLE_MORE, DISMANTLE_PREFIX, DISMANTLE_YES, NO_REPAIR_MATERIAL,
+    NOT_HERE, RACK_FULL, SMITH, TIER_WORDS, TOWN_TAG, dismantle_confirm, dismantle_material, dismantle_order, grade,
+    grade_line, repair_material,
+)
 from .martial_arts import MartialArt, counters
-from .materials import by_tier
-from .models import WEAPON_KINDS, Content, Material
+from .models import WEAPON_KINDS, Content
 from .state import GameState, Weapon
 from .world_state import WorldStateStore
 
@@ -42,9 +49,9 @@ def art_weapon(art_id: str | None, content: Content, world: WorldStateStore) -> 
 
 
 def usable(weapon: Weapon | None, art: MartialArt | None, content: Content, world: WorldStateStore) -> bool:
-    """這把兵器配不配得上身上這門武學（2.3）：開關開著、兩樣都有、種類一樣。"""
+    """這把兵器配不配得上身上這門武學（2.3）：開關開著、兩樣都有、是武器那一欄的（裝備四欄 3.3：防具、坐騎、寶物一律不算）、種類一樣。"""
     return (
-        content.config.weapons.enabled and weapon is not None and art is not None
+        content.config.weapons.enabled and weapon is not None and art is not None and weapon.slot == "weapon"
         and art_weapon(art.id, content, world) == weapon.kind
     )
 
@@ -88,7 +95,7 @@ EDGE_WARNING = "你的{name}刀口鈍了，找間鐵匠鋪修一修。"  # 待 j
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
     """打完一場，身上那把扣鋒利度（3.4，照結果）；第一次鈍到 edge_warn 以下回一句提醒（只一次，修好才重設）。
-    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）。"""
+    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）；頭目戰（kind=duel）、切磋、截殺雙方照磨（防具另有自己的條件，見 armor.wears）。"""
     rule, p = content.config.weapons, state.player
     if not rule.enabled or p.weapon is None:
         return []
@@ -101,14 +108,15 @@ def wear(state: GameState, content: Content, tier: str) -> list[str]:
 
 # ---- 鐵匠鋪（4.1～4.7）：買、修、換 ----
 
-SMITH = "鐵匠鋪"
-TOWN_TAG = "城鎮"
 NOUNS = {"劍": "劍", "刀": "刀", "槍": "槍", "棍": "棍", "弓弩": "弩", "拳腳": "拳套"}
 ATTR_WORDS = {"陰": "寒鐵", "陽": "赤銅", "剛": "厚背", "柔": "軟鋼", "快": "輕鋒", "慢": "沉鐵", "虛": "花紋", "實": "重鐵"}  # 待 joy 潤
-NO_REPAIR_MATERIAL = "沒有一階素材"
-RACK_FULL = "裝備庫滿了"  # 程式裡的 rack、rack_cap、rack_full 就是玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名）
-NOT_HERE = "這裡沒有鐵匠鋪"
 FITS_MARK = "・配得上你的武學"  # 待 joy 潤：鐵匠鋪的「買」鈕上，種類對得上身上那門武學的那一把
+UNFIT_NOTE = "・這把配不上你的武學，加成用不上"  # 待 joy 潤：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+
+
+def worn_unfit(state: GameState, art: MartialArt | None, content: Content, world: WorldStateStore) -> bool:
+    """身上有一把兵器、可是配不上身上這門武學（art 是 None 也算配不上）：它現在的加成是 0，修與淬煉都看不到回報（PM 2026-10-11）。"""
+    return state.player.weapon is not None and not usable(state.player.weapon, art, content, world)
 
 
 def shop_name(kind: str, attribute: str) -> str:
@@ -147,10 +155,9 @@ def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: 
 
 
 def smith_here(state: GameState, content: Content) -> bool:
-    """這裡有沒有鐵匠鋪（4.1）：開關開著、人不在路上、所在地點有「城鎮」標籤。"""
-    if not content.config.weapons.enabled or state.player.journey is not None:
-        return False
-    return TOWN_TAG in (content.locations[state.player.location].tags or [])
+    """這裡打得了、買得到、修得了兵器（4.1）：武器開著、人在城鎮（equipment.in_town）。鐵匠鋪開不開門另看 equipment.smith_open
+    （防具開著、武器關著時也開門，只是只有防具那一頁）。"""
+    return equipment.on(content, "weapon") and equipment.in_town(state, content)
 
 
 def _local_attribute(state: GameState, content: Content) -> str:
@@ -204,25 +211,19 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
 ) -> Weapon:
-    """新的一把（流水號 +1）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
-    state.player.weapon_serial += 1
-    return Weapon(id=f"兵:{state.player.weapon_serial}", name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
+    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
+    return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
                   recipe=recipe)
 
 
 def rack_full(state: GameState, content: Content) -> bool:
-    """手上有一把、架上也滿了就放不下（手上空著的話新的直接拿在手上，用不到架子）。"""
-    return state.player.weapon is not None and len(state.player.rack) >= content.config.weapons.rack_cap
+    """手上有一把、裝備庫（四欄合算）也滿了就放不下（手上空著的話新的直接拿在手上，用不到裝備庫）。"""
+    return equipment.rack_full(state, content, "weapon")
 
 
 def store(state: GameState, content: Content, weapon: Weapon) -> str:
-    """拿到一把：手上空著就拿在手上，不然放上裝備庫（呼叫端先用 rack_full 擋）。拿在手上的是另一把，鈍了要有它自己的提醒。"""
-    p = state.player
-    if p.weapon is None:
-        p.weapon, p.edge_warned = weapon, False
-        return f"你把【{weapon.name}】拿在手上。"
-    p.rack.append(weapon)
-    return f"【{weapon.name}】放上了裝備庫。"
+    """拿到一把：手上空著就拿在手上，不然放進裝備庫（呼叫端先用 rack_full 擋）。拿在手上的是另一把，鈍了要有它自己的提醒。"""
+    return equipment.store(state, weapon)
 
 
 DROP_PREFIX = "撿到一把"
@@ -264,12 +265,6 @@ def buy(state: GameState, content: Content, kind: str) -> list[str]:
     return [f"你花 {price} 兩買下一把【{weapon.name}】。", store(state, content, weapon)]
 
 
-def repair_material(state: GameState, content: Content) -> str | None:
-    """修要用的一階素材：背包裡數量最多的那一種（同數照 id），沒有是 None。"""
-    held = [(n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials and content.materials[mid].tier == 1]
-    return max(held, key=lambda pair: (pair[0], pair[1]))[1] if held else None
-
-
 def repair_problem(state: GameState, content: Content) -> str | None:
     p, rule = state.player, content.config.weapons
     if not smith_here(state, content):
@@ -300,54 +295,15 @@ def repair(state: GameState, content: Content) -> list[str]:
 
 
 def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
-    """換兵器（2.2）：裝備庫上那一把換到手上，手上那把放回架上（手上空著就直接拿下來）。不花體力。"""
-    if not content.config.weapons.enabled:
-        return ["（此刻無法這麼做。）"]
-    p = state.player
-    chosen = next((w for w in p.rack if w.id == weapon_id), None)
-    if chosen is None:
-        return ["裝備庫上沒有這一把。"]
-    p.rack.remove(chosen)
-    if p.weapon is not None:
-        p.rack.append(p.weapon)
-    p.weapon, p.edge_warned = chosen, False  # 換上來的是另一把：鈍了要有它自己的提醒
-    return [f"你換上了【{chosen.name}】。"]
-
-
-DISMANTLE_PREFIX = "你拆解了"
-DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
-DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾把可拆的，其餘到修練頁的裝備庫拆
-DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
-
-
-def dismantle_material(content: Content, weapon: Weapon) -> Material:
-    """拆一把兵器拿到的素材（兵器設計 4.7.1）：同階；屬性剛柔快慢直接對，陰陽虛實是兩個屬性合出來的（insights.PAIR_ATTRIBUTES），
-    從兩個來源裡挑一個，由兵器 id 的 sha256 決定（同一把永遠拆出同一種）。該階該屬性沒有素材時 by_tier 退回同階的全部。"""
-    attribute = weapon.attribute
-    sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
-    if sources is not None:
-        attribute = sources[hashlib.sha256(weapon.id.encode("utf-8")).digest()[0] % 2]
-    return (by_tier(content, weapon.tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
-
-
-def dismantle_order(weapon: Weapon) -> tuple[int, int, str]:
-    """可拆的排前面的是刀口最鈍的，再來階數低的，最後照 id 求穩定（4.7.1）。"""
-    return (weapon.edge, weapon.tier, weapon.id)
+    """換兵器（2.2）：裝備庫裡那一把換到手上，手上那把放回裝備庫。只看武器那一欄（鐵匠鋪兵器頁的「換上」）；修練頁走
+    Game.wield_weapon（武器、防具都收）。不花體力。"""
+    return equipment.wield(state, content, weapon_id, ("weapon",))
 
 
 def dismantle(state: GameState, content: Content, weapon_id: str) -> list[str]:
-    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆掉，換一個素材（dismantle_material）。不花銀兩、不花體力、不必在鐵匠鋪。網頁先問一次（FB-125：修練頁照 `rows` 的 confirm、鐵匠鋪照 `Option.confirm`），引擎收到就拆。
-    手上那把不能拆（先換下來）；開關關著或裝備庫沒這一把，什麼都不動。"""
-    if not content.config.weapons.enabled:
-        return ["（此刻無法這麼做。）"]
-    p = state.player
-    chosen = next((w for w in p.rack if w.id == weapon_id), None)
-    if chosen is None:
-        return [DISMANTLE_MISSING]
-    material = dismantle_material(content, chosen)
-    p.rack.remove(chosen)
-    p.materials[material.id] = p.materials.get(material.id, 0) + 1
-    return [f"{DISMANTLE_PREFIX}【{chosen.name}】，拆出了{material.name}×1。"]
+    """拆解（兵器設計 4.7.1）：裝備庫裡的一把拆成一個素材（equipment.dismantle_material）。只看武器那一欄（鐵匠鋪兵器頁）；
+    修練頁走 Game.dismantle_weapon。網頁先問一次（FB-125），引擎收到就拆；手上那把、開關關著、裝備庫沒這一把，什麼都不動。"""
+    return equipment.dismantle(state, content, weapon_id, ("weapon",))
 
 
 REPAIR_AT = 50  # 機器人與假人鈍到這裡以下才修
@@ -359,7 +315,7 @@ def wanted(state: GameState, content: Content, world: WorldStateStore, art: Mart
         return None
     p = state.player
     if not usable(p.weapon, art, content, world):
-        fit = next((w for w in p.rack if usable(w, art, content, world)), None)
+        fit = next((w for w in equipment.in_slot(p, "weapon") if usable(w, art, content, world)), None)  # 裝備四欄 3.3：只看武器那一欄
         if fit is not None:
             return f"smith:wield:{fit.id}"
         kind = art_weapon(art.id, content, world)
@@ -370,36 +326,14 @@ def wanted(state: GameState, content: Content, world: WorldStateStore, art: Mart
     return None
 
 
-TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
-
-
 def _pct(ratio: float) -> str:
     """跟 skillview._pct 同一種寫法：帶正負號、最多一位小數、整數不寫「.0」。"""
     return f"{ratio:+.1%}".replace(".0%", "%")
 
 
-DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
-DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
-
-
-def grade(w: Weapon) -> str:
-    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫，第二批有中品、上品之後才分得出來）。"""
-    return f"{TIER_WORDS.get(w.tier, '')}{w.quality}"
-
-
-def grade_line(w: Weapon) -> str:
-    """鐵匠鋪「換上」「拆解」鈕上用來分辨同一個配方好幾把的那一段：「一階中品」，淬過的再接「・淬煉 2」（終審 F2）。"""
-    return grade(w) + (f"・淬煉 {w.tempers}" if w.tempers else "")  # 待 joy 潤
-
-
 def _describe(w: Weapon) -> str:
     tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""  # 待 joy 潤
     return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
-
-
-def dismantle_confirm(content: Content, w: Weapon) -> str:
-    """拆解之前問的那一句（FB-125，企劃者 2026-10-10 第二批附帶決定 a）：修練頁與鐵匠鋪同一句，寫明拆出什麼。"""
-    return DISMANTLE_ASK.format(name=w.name, grade=grade(w), material=dismantle_material(content, w).name)
 
 
 def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
@@ -412,6 +346,10 @@ def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldS
     if mine == "弓弩":
         return f"這把{w.kind}用不上你的弓弩上的功夫"
     return f"這把{w.kind}用不上你的{mine}法"
+
+
+EMPTY = "手上沒有兵器。"  # 修練頁武器那一段手上空著（原本寫在 web/app.js）
+RACK_NOTE = "城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。"  # 待 joy 潤：修練頁武器那一段底下（兵器第二批 Task 8 的字）
 
 
 def card_line(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str:
@@ -437,12 +375,12 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
 
 
 def rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict:
-    """修練頁的兵器那一塊（server.menxia_view 的 weapons）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
+    """修練頁的兵器那一塊（skillview.gear_rows 把它併進 server.menxia_view 的 gear 裡 slot 是 weapon 的那一段）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
     return {
         "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
-        "rack": [_row(w, art, content, world) for w in p.rack],
+        "rack": [_row(w, art, content, world) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
         "cap": content.config.weapons.rack_cap,
     }

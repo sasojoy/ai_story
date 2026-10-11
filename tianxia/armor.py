@@ -1,0 +1,230 @@
+"""防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節；裝備一）：一場仗少扣的氣血與內傷、耐久、鐵匠鋪架上四件、
+修、換、拆、機器人該按哪一顆、修練頁每一列與角色卡那一行。
+
+只 import models、state、martial_arts、equipment；team 反過來呼叫它（take_encounter_toll、toll_saved、Game._raid_spoils 都經
+team.armor_cut），所以這裡不 import team 或 rules——身上那門內功由呼叫端解好（team.player_art）再傳進來，同 weapons 拿武學的做法。
+防具不從打仗掉（4.9）；打造與淬煉是之後的「防具打造」那一批（tempers 先算進減損，那一批不必回頭改 cut）。
+"""
+from __future__ import annotations
+
+from . import equipment
+from .equipment import NO_REPAIR_MATERIAL, NOT_HERE, RACK_FULL, grade, repair_material
+from .martial_arts import MartialArt, counters
+from .models import Content
+from .state import Equipment, GameState
+
+SHOP_ATTRIBUTES = ("剛", "柔", "快", "慢")  # 4.6：架上照屬性擺四件、不分種類；陰陽虛實要等防具打造
+SHOP_NAMES = {"剛": "鐵葉甲", "柔": "軟皮甲", "快": "輕綃衫", "慢": "厚氈袍"}  # 待 joy 潤（都過了 naming.name_problem）
+WEAR_WORD = equipment.WEAR_WORDS["armor"]  # 「耐久度」：角色卡、修練頁每一列（_row 的 wear_word）、鐵匠鋪修與換上兩顆鈕都讀這個，不寫死（3.1、2.5）
+WORN_WARNING = "你的{name}破了好幾處，找間鐵匠鋪補一補。"  # 待 joy 潤（4.5）
+EMPTY = "身上沒有防具。"  # 待 joy 潤：修練頁防具那一段身上空著
+RACK_NOTE = "城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。"  # 待 joy 潤：修練頁防具那一段底下
+NO_ARMOR = "身上沒有防具"  # 待 joy 潤：修鈕灰掉時的原因
+NO_SUCH = "沒有這一件"  # 待 joy 潤：買架上沒有的屬性（舊分頁、手改的 id）
+INTACT = "還很完好"  # 待 joy 潤：耐久滿的不用修
+MATCH_NOTE = "跟你的內功同屬性"  # 待 joy 潤
+CLASH_NOTE = "跟你的內功相剋"  # 待 joy 潤
+BUY = "smith:armor-buy:"
+REPAIR = "smith:armor-repair"
+REPAIR_AT = 50  # 機器人與假人耐久低到這裡以下才修（同 weapons.REPAIR_AT）
+
+
+def _match(attribute: str, neigong: MartialArt | None) -> int:
+    """對上內功（4.2）：同屬性 +1、相剋（ATTRIBUTE_COUNTERS 兩個方向都查）−1、其餘或沒有內功 0。"""
+    if neigong is None or not attribute:
+        return 0
+    if attribute == neigong.attribute:
+        return 1
+    return -1 if counters(attribute, neigong.attribute) or counters(neigong.attribute, attribute) else 0
+
+
+def edge_factor(content: Content, item: Equipment) -> float:
+    """耐久度係數（4.1）：全壞剩 edge_floor，滿的是 1。"""
+    floor = content.config.armor.edge_floor
+    return floor + (1 - floor) * max(0, min(100, item.edge)) / 100
+
+
+def cut(item: Equipment | None, neigong: MartialArt | None, content: Content) -> float:
+    """這件防具現在一場少扣幾成氣血（4.1）：（階＋品質＋淬煉＋對上內功）夾在 0 以上，再乘耐久度係數。開關關著、沒穿、
+    不是防具那一欄的是 0。每次現算、不快取：換了內功、修了、破了，下一場就照新的算。內傷是扣掉的量的固定幾成，所以同比例跟著少。"""
+    rule = content.config.armor
+    if not rule.enabled or item is None or item.slot != "armor":
+        return 0.0
+    base = rule.tier_cut.get(str(item.tier), 0.0) + rule.quality_cut.get(item.quality, 0.0) + rule.temper_step * item.tempers
+    base += rule.match * _match(item.attribute, neigong)
+    return max(0.0, base) * edge_factor(content, item)
+
+
+def fresh_cut(item: Equipment | None, neigong: MartialArt | None, content: Content) -> float:
+    """修好之後（耐久 100）的減損：機器人比較兩件防具用這個，不然破一點的好防具會被當成比較差的。"""
+    return cut(item.model_copy(update={"edge": 100}), neigong, content) if item is not None else 0.0
+
+
+def wears(kind: str, tier: str) -> bool:
+    """這一場磨不磨防具（4.5）：遊歷、探索野怪磨；截殺只有落敗的那一邊磨（截殺只有輸的挨打，4.4）。挑戰大勢人物本人的戰報 kind 是
+    event，由 Game._challenge 明說要磨（_file_battle 的 armor_wear）；切磋、頭目戰、劇情戰都不磨；全服決戰不走 _file_battle。"""
+    return kind in ("train", "wild") or (kind == "raid" and tier == "落敗")
+
+
+def wear(state: GameState, content: Content, tier: str) -> list[str]:
+    """打完一場，身上那件扣耐久度（4.5，照結果）；第一次低到 edge_warn 以下回一句提醒（只一次，修好或換一件才重設）。"""
+    rule, p = content.config.armor, state.player
+    if not rule.enabled or p.armor is None:
+        return []
+    p.armor.edge = max(0, p.armor.edge - rule.wear.get(tier, 0))
+    if p.armor.edge < rule.edge_warn and not p.armor_warned:
+        p.armor_warned = True
+        return [WORN_WARNING.format(name=p.armor.name)]
+    return []
+
+
+# ---- 鐵匠鋪的防具頁（4.6）：買、修、換、拆 ----
+
+def smith_here(state: GameState, content: Content) -> bool:
+    """這裡買得到、修得了防具：防具開著、人在城鎮。"""
+    return equipment.on(content, "armor") and equipment.in_town(state, content)
+
+
+def shop_item(attribute: str) -> Equipment:
+    """架上那一件（還沒買，id 是「架:屬性」）：一階下品。鐵匠鋪的「買」鈕寫它的減損、機器人比較用。"""
+    return Equipment(id=f"架:{attribute}", slot="armor", name=SHOP_NAMES[attribute], attribute=attribute, tier=1, quality="下品")
+
+
+def new_armor(state: GameState, *, name: str, attribute: str, tier: int, quality: str) -> Equipment:
+    """新的一件（四欄共用的流水號 +1，id「甲:N」）。"""
+    return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality)
+
+
+def rack_full(state: GameState, content: Content) -> bool:
+    return equipment.rack_full(state, content, "armor")
+
+
+def buy_problem(state: GameState, content: Content, attribute: str) -> str | None:
+    if not smith_here(state, content):
+        return NOT_HERE  # 鐵匠鋪的選單關了、人走了：引擎層自己也再驗一次
+    if attribute not in SHOP_ATTRIBUTES:
+        return NO_SUCH
+    if rack_full(state, content):
+        return RACK_FULL
+    short = content.config.armor.shop_price - state.player.stats.get("silver", 0)
+    return f"還差 {short} 兩" if short > 0 else None
+
+
+def buy(state: GameState, content: Content, attribute: str) -> list[str]:
+    problem = buy_problem(state, content, attribute)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    price = content.config.armor.shop_price
+    state.player.stats["silver"] -= price
+    item = new_armor(state, name=SHOP_NAMES[attribute], attribute=attribute, tier=1, quality="下品")
+    return [f"你花 {price} 兩買下一件【{item.name}】。", equipment.store(state, item)]  # 待 joy 潤
+
+
+def repair_problem(state: GameState, content: Content) -> str | None:
+    p, rule = state.player, content.config.armor
+    if not smith_here(state, content):
+        return NOT_HERE
+    if p.armor is None:
+        return NO_ARMOR
+    if p.armor.edge >= 100:
+        return INTACT
+    if repair_material(state, content) is None:
+        return NO_REPAIR_MATERIAL
+    short = rule.repair_silver - p.stats.get("silver", 0)
+    return f"還差 {short} 兩" if short > 0 else None
+
+
+def repair(state: GameState, content: Content) -> list[str]:
+    """修（4.5）：一個一階素材（屬性不限）＋工錢，耐久度回滿。只能在鐵匠鋪。"""
+    problem = repair_problem(state, content)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    p, rule = state.player, content.config.armor
+    material = repair_material(state, content)
+    p.materials[material] -= 1
+    if not p.materials[material]:
+        del p.materials[material]
+    p.stats["silver"] -= rule.repair_silver
+    p.armor.edge, p.armor_warned = 100, False
+    return [f"鐵匠拿{content.materials[material].name}把【{p.armor.name}】補好了（銀兩 -{rule.repair_silver}）。"]  # 待 joy 潤
+
+
+def wield(state: GameState, content: Content, item_id: str) -> list[str]:
+    """鐵匠鋪防具頁的「換上」：只看防具那一欄。"""
+    return equipment.wield(state, content, item_id, ("armor",))
+
+
+def dismantle(state: GameState, content: Content, item_id: str) -> list[str]:
+    """鐵匠鋪防具頁的「拆解」（4.8）：只看防具那一欄。"""
+    return equipment.dismantle(state, content, item_id, ("armor",))
+
+
+def _shop_pick(neigong: MartialArt | None) -> str:
+    """機器人買哪一件（第九節）：跟內功同屬性的；架上沒有（陰陽虛實的內功、沒有內功）就挑第一件不相剋的（照 SHOP_ATTRIBUTES 的順序，
+    每次挑同一件）。架上四件都不剋陰陽虛實，所以一定挑得到。"""
+    if neigong is not None and neigong.attribute in SHOP_ATTRIBUTES:
+        return neigong.attribute
+    return next(a for a in SHOP_ATTRIBUTES if _match(a, neigong) >= 0)
+
+
+def wanted(state: GameState, content: Content, neigong: MartialArt | None) -> str | None:
+    """在鐵匠鋪防具頁最該按的那一顆（整季機器人與伺服器假人共用，裝備四欄設計第九節）：裝備庫裡有比身上好的就換上；再來架上那一件
+    （_shop_pick）比身上的好就買（身上空著、或身上那件被內功剋）；再來耐久低於 REPAIR_AT 就修。比的是修好之後的減損（fresh_cut），
+    身上那件跟架上一樣好就不買。不在鐵匠鋪或防具關著是 None。拆解不在這裡（機器人與假人不拆）。"""
+    if not smith_here(state, content):
+        return None
+    p = state.player
+    now = fresh_cut(p.armor, neigong, content)
+    best = max(equipment.in_slot(p, "armor"), key=lambda a: (fresh_cut(a, neigong, content), a.id), default=None)
+    if best is not None and fresh_cut(best, neigong, content) > now + 1e-9:
+        return f"smith:wield:{best.id}"
+    pick = _shop_pick(neigong)
+    if fresh_cut(shop_item(pick), neigong, content) > now + 1e-9 and buy_problem(state, content, pick) is None:
+        return f"{BUY}{pick}"
+    if p.armor is not None and p.armor.edge < REPAIR_AT and repair_problem(state, content) is None:
+        return REPAIR
+    return None
+
+
+# ---- 看得到（2.5）：修練頁每一列、角色卡那一行 ----
+
+def pct(ratio: float) -> str:
+    """減損寫成整數百分比（設計 2.5 的例子：8.1% 寫 8%）。"""
+    return f"{ratio:.0%}"
+
+
+def fit_note(item: Equipment, neigong: MartialArt | None) -> str:
+    """對上內功那一句：同屬性、相剋各一句，其餘是空字串。"""
+    m = _match(item.attribute, neigong)
+    return MATCH_NOTE if m > 0 else CLASH_NOTE if m < 0 else ""
+
+
+def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bool = False) -> dict:
+    return {
+        "id": item.id, "name": item.name, "attribute": item.attribute, "tier": item.tier, "quality": item.quality,
+        "grade": grade(item), "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「耐久度 N」（3.1 的字表，不在網頁寫死）
+        "cut": pct(cut(item, neigong, content)), "fit": fit_note(item, neigong),
+        "tempers": item.tempers,  # 這一批一直是 0、網頁不畫；「淬煉 N/5」與 recipe 欄等防具打造那一批再接
+        "confirm": "" if worn else equipment.dismantle_confirm(content, item),  # 身上那件不能拆，沒有問句（FB-125）
+    }
+
+
+def rows(state: GameState, content: Content, neigong: MartialArt | None) -> dict:
+    """修練頁的防具那一段（skillview.gear_rows）：身上那件、裝備庫裡的防具。開關關著時 worn 是 None、rack 是空的。"""
+    p = state.player
+    if not equipment.on(content, "armor"):
+        return {"worn": None, "rack": []}
+    return {
+        "worn": _row(p.armor, neigong, content, worn=True) if p.armor else None,
+        "rack": [_row(a, neigong, content) for a in equipment.in_slot(p, "armor")],
+    }
+
+
+def card_line(state: GameState, content: Content, neigong: MartialArt | None) -> str:
+    """本人卡上的「防具」那一行（2.5，待 joy 潤）：沒穿或開關關著是空字串。"""
+    item = state.player.armor
+    if not equipment.on(content, "armor") or item is None:
+        return ""
+    note = fit_note(item, neigong)
+    line = f"防具　【{item.name}】屬{item.attribute}・{grade(item)}・{WEAR_WORD} {item.edge}，一場少扣 {pct(cut(item, neigong, content))} 氣血"
+    return line + (f"（{note}）" if note else "")

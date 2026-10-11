@@ -67,6 +67,26 @@ def test_old_save_without_weapon_fields_loads(content, world):
     assert loaded.player.weapon is None and loaded.player.rack == [] and loaded.player.weapon_serial == 0
 
 
+def test_old_save_from_weapons_batch_one_reads_everything_as_weapons(content, world):
+    """裝備四欄 3.2：兵器第一、二批的舊存檔（沒有 slot、armor、armor_warned、smith_page）讀得進來，裝備庫裡的東西都是武器。"""
+    import random
+    from tianxia.engine import Game
+    from tianxia.state import GameState
+    game = Game.new(content, "舊檔", rng=random.Random(0), world=world)
+    p = game.state.player
+    p.weapon = Weapon(id="兵:1", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")
+    p.rack = [Weapon(id="兵:2", name="軟鋼劍", kind="劍", attribute="柔", tier=1, quality="下品")]
+    raw = game.state.model_dump()
+    for key in ("armor", "armor_warned", "smith_page"):
+        raw["player"].pop(key)
+    raw["player"]["weapon"].pop("slot")
+    for item in raw["player"]["rack"]:
+        item.pop("slot")
+    loaded = GameState.model_validate(raw).player
+    assert loaded.armor is None and loaded.armor_warned is False and loaded.smith_page == "weapon"
+    assert loaded.weapon.slot == "weapon" and [w.slot for w in loaded.rack] == ["weapon"]
+
+
 def test_weapon_round_trips_through_json():
     from tianxia.state import Weapon
     w = Weapon(id="兵:1", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")
@@ -349,7 +369,7 @@ def test_wield_swaps_with_the_rack(content, world):
     blade = p.rack[0]
     game.choose(f"smith:wield:{blade.id}")  # 鐵匠鋪只列配得上身上武學（流雲劍）的
     assert p.weapon.kind == "劍" and [w.kind for w in p.rack] == ["刀"]
-    assert game.wield_weapon("兵:999") == ["裝備庫上沒有這一把。"]
+    assert game.wield_weapon("兵:999") == ["裝備庫上沒有這一件。"]  # 裝備四欄：防具也走這一句，量詞跟拆解一樣用「一件」
 
 
 def test_wield_takes_a_weapon_into_an_empty_hand(content, world):
@@ -567,10 +587,11 @@ def test_menxia_view_and_the_wield_action(content, world):
     p = game.state.player
     p.rack = [Weapon(id="兵:2", name="厚背刀", kind="刀", attribute="剛", tier=1, quality="下品")]
     view = server.menxia_view(game)
-    assert view["weapons"]["worn"] is None and view["weapons"]["rack"][0]["id"] == "兵:2"
+    [slot] = view["gear"]["slots"]  # 測試內容防具關著：只有武器那一段
+    assert slot["slot"] == "weapon" and slot["worn"] is None and slot["rack"][0]["id"] == "兵:2"
     server.MENXIA_ACTIONS["wield"](game, {"weapon": "兵:2"})
     assert p.weapon.id == "兵:2" and p.rack == []
-    assert server.menxia_view(game)["weapons"]["worn"]["name"] == "厚背刀"
+    assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["name"] == "厚背刀"
 
 
 def test_wield_is_refused_when_weapons_are_off(content, world):
@@ -842,6 +863,38 @@ def test_wanted_repairs_only_a_blade_that_fits(content, world):
     assert _wanted(game, content, world) == "smith:repair"
 
 
+def test_a_rack_with_all_four_slots_only_shows_each_slot_its_own(content, world):
+    """裝備四欄 3.3：裝備庫裡混了四欄，武器那幾個函式只看到武器；坐騎、寶物（之後的批次）不列、不能換、不能拆，格數照算。"""
+    from tianxia import equipment, smithing
+    from tianxia.state import Equipment
+    content.config.armor.enabled = True
+    game = _sworder(content, world)
+    p = game.state.player
+    p.rack = [
+        Equipment(id="甲:3", slot="armor", name="軟皮甲", attribute="柔", tier=1, quality="下品"),
+        Equipment(id="騎:4", slot="mount", name="棗騮馬", tier=1, quality="下品"),
+        Equipment(id="寶:5", slot="treasure", name="烏木名刺", tier=1, quality="下品"),
+        Weapon(id="兵:2", name="軟鋼劍", kind="劍", attribute="柔", tier=1, quality="下品"),
+    ]
+    art = team.player_art(game.state, content, world, p.member.wugong_id)
+    assert [r["id"] for r in weapons.rows(game.state, content, world, art)["rack"]] == ["兵:2"]
+    assert _wanted(game, content, world) == "smith:wield:兵:2"
+    assert smithing.better_in_rack(game.state, content, world, art).id == "兵:2"
+    for item_id in ("甲:3", "騎:4", "寶:5"):
+        assert weapons.wield(game.state, content, item_id) == [equipment.WIELD_MISSING]
+        assert weapons.dismantle(game.state, content, item_id) == [equipment.DISMANTLE_MISSING]
+    for item_id in ("騎:4", "寶:5"):
+        assert game.wield_weapon(item_id) == [equipment.WIELD_MISSING]
+        assert game.dismantle_weapon(item_id) == [equipment.DISMANTLE_MISSING]
+    assert p.weapon is None and len(p.rack) == 4 and p.materials == {}
+    game.choose("act:smith")
+    picked = [i for i in _ids(game) if i.startswith(("smith:wield:", "smith:dismantle:"))]
+    assert picked == ["smith:wield:兵:2", "smith:dismantle:兵:2"]
+    content.config.weapons.rack_cap = 4
+    p.weapon = _blade()
+    assert weapons.rack_full(game.state, content)  # 格數四欄合算
+
+
 # ── 拆解（兵器設計 4.7.1）：裝備庫裡的一把拆成一個素材 ──
 
 def _stocked(content):
@@ -1011,6 +1064,6 @@ def test_menxia_dismantle_action_gives_a_material_and_writes_a_practice_entry(co
     p.rack = [_rack_weapon("兵:2")]
     server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})
     assert p.rack == [] and p.materials == {"gang_1": 1}
-    assert server.menxia_view(game)["weapons"]["rack"] == []
+    assert server.menxia_view(game)["gear"]["slots"][0]["rack"] == []
     assert server.MENXIA_ACTIONS["dismantle"](game, {"weapon": "兵:2"})[0] == weapons.DISMANTLE_MISSING
     assert server.MENXIA_ACTIONS["dismantle"](game, {})[0] == weapons.DISMANTLE_MISSING

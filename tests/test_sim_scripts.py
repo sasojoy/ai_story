@@ -170,3 +170,16 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
     assert out.count("小時（世界時間）") == 2 and out.count("結局 ") == 2 and out.count("每遊戲日") == 2  # 季長、結局、每日場數
     assert out.count("、打造 ") == 2 and out.count("淬煉 ") == 2 and out.count("首創配方 ") == 2  # 第二批：打造、淬煉、首創
     assert out.count("鐵匠鋪花掉 ") == 2 and out.count("全季收入 ") == 2  # 設計第七節第 5 項：銀兩花在鐵匠鋪的比例
+
+
+def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(capsys, monkeypatch):
+    """裝備量表（防具那一項，裝備四欄設計第十節）：--seeds 1 跑一次週末設定、照手上的事走，防具開、關各印一行（只量不改，不驗數字）。"""
+    measure = _load("measure_gear")
+    monkeypatch.setattr(sys, "argv", ["measure_gear.py", "--seeds", "1", "--profile", "weekend", "--steer"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert "種子 1 防具開：" in out and "種子 1 防具關：" in out and out.count("對照（") == 1
+    assert out.count("掉氣血 ") == 2 and out.count("內傷 ") == 2 and out.count("療傷 ") == 2
+    assert out.count("穿著防具 ") == 2  # 防具開那一行的硬仗與勝率只算穿著防具的仗，要看得出算了幾場
+    assert out.count("一條氣血撐 ") == 2 and out.count("硬仗之後再打的勝率 ") == 2 and out.count("修防具 ") == 2
+    assert out.count("一階素材 ") == 2 and out.count("結局 ") == 2
