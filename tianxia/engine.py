@@ -657,6 +657,7 @@ class Game:
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
+        self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
             self._write(bounties.BOARD, refunds)
@@ -741,6 +742,7 @@ class Game:
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()
+        self._deliver_held_gear()  # 同 sync：快轉（與只 advance 的整季機器人）也補寄放的東西
         return self._log(msgs + arrived)
 
     def _stamp_join(self) -> None:
@@ -3351,6 +3353,14 @@ class Game:
         p.stats["fame"] = p.stats.get("fame", 0) + gained
         self._write(journal.ECHO, lines + ([f"名望 +{gained}"] if gained else []))
         self._save_season()  # 補到第幾個人記在共用賽季裡
+
+    def _deliver_held_gear(self) -> None:
+        """寄放的東西補發（裝備四欄 6.5）：懸賞的重賞、名將贈禮在裝備庫滿了時寄放在 PlayerState.held_gear；同步與快轉時那一欄開著、
+        身上空著或裝備庫有空位就補，一次補到裝備庫滿為止，補不完的留著（treasures.deliver_held）。閉關中也補（寶物閉關中本來就能換，
+        2.3【定】）。整季機器人只 advance、不 sync，所以 advance 也叫，不然整季模擬裡寄放的東西永遠補不回來。補了就寫一則江湖紀錄。"""
+        lines = treasures.deliver_held(self.state, self.content)
+        if lines:
+            self._write(treasures.HELD_TITLE, lines)
 
     def _deliver_renames(self) -> None:
         """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：

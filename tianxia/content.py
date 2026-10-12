@@ -1433,6 +1433,10 @@ def validate(c: Content) -> None:
             known(where, [eff.recruit], c.characters, "人物")
             if eff.recruit in c.characters:
                 need(c.characters[eff.recruit].kind == "recruitable", f"{where}：結識的 {eff.recruit} 不是可招募的同伴")
+        if eff.gear is not None:  # 奇遇給的寶物或良駒（裝備四欄 6.4）：掉落池的寶物、或一匹良駒；名將贈禮與名駒不能從事件給
+            tdef = c.gear.treasures.get(eff.gear)
+            need(eff.gear == GOOD_HORSE or (tdef is not None and tdef.pool),
+                 f"{where}：gear {eff.gear} 要是 content/gear.json 掉落池的寶物或 {GOOD_HORSE}（名將贈禮、名駒不能從事件給）")
 
     def check_free_text(where: str, ev: Event) -> None:
         """隨口應對（§8.1）：賣的是好玩不是划算，獎勵不能比同一則事件裡最好的檢定選項高；
@@ -1467,6 +1471,8 @@ def validate(c: Content) -> None:
                     ("event_mods", eff.event_mods), ("patron", eff.patron),
                     # 黃巾奇遇的捐糧、給片段、記殘片（正式版丙二）：同樣只准寫在手寫的選項上，不是隨口一句話換得到的
                     ("donate_grain", eff.donate_grain), ("fs_fragments", eff.fs_fragments), ("runic", eff.runic),
+                    # 寶物、良駒（裝備四欄 6.4）：隨口一句就換一件寶物，等於繞過稀有
+                    ("gear", eff.gear),
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
@@ -1584,6 +1590,10 @@ def validate(c: Content) -> None:
             check_condition(cw, ch.condition)
             check_effect(cw, ch.effect)
             check_effect(cw, ch.fail_effect)
+            # 奇遇給寶物、良駒（裝備四欄 6.4）只准一次性的事件：可以重複遇到的事件寫了，等於每遇一次送一件、或每遇一次換 dup_silver 兩
+            # （涿郡「馬市試騎」sc_zhuo_horse 就是這種；沒標 once 的奇遇看過也照樣留著，所以看 once、不看 qiyu）。計畫「要 PM 定的」第 5 條
+            need(ev.once or (ch.effect.gear is None and ch.fail_effect.gear is None),
+                 f"{cw}：gear 只能寫在一次性的事件（once: true）——可以重複遇到的事件寫了，等於每遇一次送一件")
             if ch.combat:
                 known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:

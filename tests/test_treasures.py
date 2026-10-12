@@ -353,3 +353,136 @@ def test_legend_treasure_doubles_the_pill_chance_on_the_same_die(content, world)
     game.rng = random.Random(7)
     dice = game.rng.getstate()
     assert game._legend_find() == [] and game.rng.getstate() == dice  # 基本機率 0：帶著也不擲
+
+
+# ── Task 3：拿到的共用路與奇遇 ──
+
+def test_a_new_thing_goes_on_an_empty_slot_or_into_the_rack(content, state):
+    _book(content)
+    p = state.player
+    assert treasures.deliver(state, content, _item("audience")) == [equipment.SLOTS["treasure"].put_on.format(name="烏木名刺")]
+    assert p.treasure.template == "audience"
+    assert treasures.deliver(state, content, _item("win_material", "寶:2")) == [equipment.STORED.format(name="拾遺囊")]
+    assert [i.id for i in p.rack] == ["寶:2"]
+
+
+def test_a_full_rack_holds_what_may_wait_and_says_what_is_lost(content, state):
+    _book(content)
+    content.config.weapons.rack_cap = 1
+    p = state.player
+    p.treasure, p.rack = _item("audience"), [_item("win_material", "寶:2")]
+    assert treasures.deliver(state, content, _item("legend", "寶:3"), hold=True) == [treasures.HELD.format(name="叩關玉")]
+    assert [i.id for i in p.held_gear] == ["寶:3"]
+    assert treasures.deliver(state, content, _item("insight", "寶:4")) == [treasures.NO_ROOM.format(name="觀山石")]
+    assert len(p.rack) == 1 and len(p.held_gear) == 1
+
+
+def test_a_treasure_got_in_seclusion_goes_on_an_empty_slot_like_any_other(content, world):
+    """設計 2.2（企劃者 2026-10-11）：閉關中拿到寶物照一般的規則——寶物欄空著就直接穿上（原本「先放裝備庫」的例外拿掉了：
+    寶物閉關中本來就能換，閉關心得照出關那一刻身上那件算）。"""
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.busy_until = game.state.world.time + 3600.0
+    assert treasures.deliver(game.state, content, _item("seclusion")) == [equipment.SLOTS["treasure"].put_on.format(name="入定蒲團")]
+    assert p.treasure.id == "寶:1" and p.rack == []
+
+
+def test_held_gear_arrives_on_sync_and_advance_when_there_is_room(content, world):
+    """設計 6.5、3.2：同步時裝備庫有空位就補，一次補到裝備庫滿為止，補不完的留著；閉關中照補（要 PM 定的第 4 條：寶物閉關中本來
+    就能換，「閉關中不補」要擋的東西已經不在了）。整季機器人只 advance、不 sync，所以快轉（advance）也補。"""
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.treasure, p.rack = _item("audience"), [_item("win_material", "寶:2")]
+    p.held_gear = [_item("legend", "寶:3"), _item("insight", "寶:4"), _item("cultivate", "寶:5")]
+    content.config.weapons.rack_cap = 2
+    p.busy_until = game.state.world.time + 3600.0  # 閉關中照補
+    game.sync(1.0)
+    assert [i.id for i in p.rack] == ["寶:2", "寶:3"] and [i.id for i in p.held_gear] == ["寶:4", "寶:5"]  # 補到滿為止，補不完的留著
+    assert game.state.journal[0].title == treasures.HELD_TITLE
+    content.config.weapons.rack_cap = 3
+    p.busy_until = None
+    game.advance(60.0)
+    assert [i.id for i in p.rack] == ["寶:2", "寶:3", "寶:4"] and [i.id for i in p.held_gear] == ["寶:5"]
+
+
+def test_an_event_gives_a_pool_treasure_and_the_same_one_again_turns_into_silver(content, state, world):
+    _book(content)
+    p = state.player
+    silver = p.stats["silver"]
+    msgs = rules.apply_effect(Effect(gear="audience"), state, content, world)
+    assert p.treasure.template == "audience"
+    assert treasures.GOT.format(name="烏木名刺", effect=treasures.effect_text(content, "audience")) in msgs
+    msgs = rules.apply_effect(Effect(gear="audience"), state, content, world)  # 設計 6.5：手上有同一件改給 50 兩
+    dup = content.config.treasures.dup_silver
+    assert treasures.DUP.format(name="烏木名刺", silver=dup) in msgs and f"銀兩 +{dup}" in msgs
+    assert p.stats["silver"] == silver + dup and p.rack == []
+
+
+def test_an_event_horse_is_a_good_horse_every_time_on_its_own_seed(content, state, world):
+    from tianxia import mounts
+    _book(content)
+    content.config.mounts.enabled = True
+    p = state.player
+    rng = random.Random(f"奇遇|{world.get_season_number()}|{p.name}|{GOOD_HORSE}|{p.weapon_serial}")
+    coat = rng.choice(mounts.COATS)
+    table = content.config.treasures.horse_quality
+    quality = rng.choices(list(table), weights=list(table.values()))[0]
+    rules.apply_effect(Effect(gear=GOOD_HORSE), state, content, world)
+    assert (p.mount.tier, p.mount.name, p.mount.quality) == (2, mounts.horse_name(coat, 2), quality)
+    rules.apply_effect(Effect(gear=GOOD_HORSE), state, content, world)
+    assert len(equipment.in_slot(p, "mount")) == 1  # 良駒不是一人一件：第二匹照給、進裝備庫
+
+
+def test_event_gear_does_nothing_with_the_slot_off_and_is_lost_when_full(content, state, world):
+    _book(content)
+    content.config.treasures.enabled = False
+    assert rules.apply_effect(Effect(gear="audience"), state, content, world) == [] and state.player.treasure is None
+    content.config.treasures.enabled = True
+    content.config.weapons.rack_cap = 0
+    state.player.treasure = _item("win_material", "寶:9")
+    serial = state.player.weapon_serial
+    assert rules.apply_effect(Effect(gear="audience"), state, content, world) == [treasures.NO_ROOM.format(name="烏木名刺")]
+    assert state.player.weapon_serial == serial and state.player.held_gear == []  # 奇遇當下拿不了就沒了（6.5），也不佔流水號
+
+
+def _give_gear(gear, once=True):
+    """測試內容的事件 drunk（可以重複遇到）第二個選項寫 gear；once 把它標成一次性的事件。"""
+    def edit(d):
+        d[0]["choices"][1]["effect"]["gear"] = gear
+        if once:
+            d[0]["once"] = True
+    return edit
+
+
+@pytest.mark.parametrize(("gear", "ok"), [("mingci", True), (GOOD_HORSE, True), ("caoxie", False), ("tashuang", False), ("ghost", False)])
+def test_events_may_give_pool_treasures_or_a_good_horse_only(tmp_path, gear, ok):
+    root = _gear_root(tmp_path)
+    edit_json(root / "events" / "test.json", _give_gear(gear))
+    if ok:
+        assert load_content(root).events["drunk"].choices[1].effect.gear == gear
+    else:
+        with pytest.raises(ContentError, match="gear"):
+            load_content(root)
+
+
+def test_only_one_time_events_may_give_gear(tmp_path):
+    """可以重複遇到的事件寫 gear，等於每遇一次送一件、或每遇一次換 50 兩（涿郡「馬市試騎」就是這種）：載入時擋，只准 once 的事件
+    （要 PM 定的第 5 條；沒標 once 的奇遇看過也照樣留著，所以只看 qiyu 不夠）。"""
+    root = _gear_root(tmp_path)
+    edit_json(root / "events" / "test.json", _give_gear("mingci", once=False))
+    with pytest.raises(ContentError, match="once"):
+        load_content(root)
+
+
+def test_free_text_and_road_sights_cannot_give_gear(tmp_path):
+    root = _gear_root(tmp_path / "a")
+    edit_json(root / "events" / "test.json",
+              lambda d: d[0].update(free_text={"prompt": "自己想辦法", "stat": "str", "effect": {"gear": "mingci"}}))
+    with pytest.raises(ContentError, match="隨口應對.*gear"):
+        load_content(root)
+    root = _gear_root(tmp_path / "b")
+    edit_json(root / "road_sights.json", lambda d: d[0].setdefault("effect", {}).update(gear="mingci"))
+    with pytest.raises(ContentError, match="小收穫只能用"):
+        load_content(root)

@@ -125,6 +125,9 @@ class Effect(_Strict):
     donate_grain: dict[str, int] = Field(default_factory=dict)  # 捐糧：據點 id → 基準量（照 foreshadow.need 換算）；同護糧送到，記捐獻與一次推動的貢獻
     fs_fragments: list[str] = Field(default_factory=list)  # 直接給一則伏筆片段：「鏈 id:片段序號」（0 起）；做得了那條鏈的人才給、聽過的不再給
     runic: int = Field(default=0, ge=0)  # 符文殘片幾片（基準量，PlayerState.runic_pieces；玉璽大勢任務讀它，plan 玉璽碎片-2 用同一個名字）
+    # 奇遇給的寶物或良駒（裝備四欄 6.4）：content/gear.json 掉落池的 id，或 GOOD_HORSE（一匹良駒）；名將贈禮與名駒不准
+    # （content.check_effect），隨口應對不准（check_free_text），路上見聞只准屬性與素材
+    gear: str | None = None
 
 
 class Material(_Strict):

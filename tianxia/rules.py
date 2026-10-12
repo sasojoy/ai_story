@@ -847,6 +847,8 @@ def apply_effect(
             msgs.append(line)
     for insight_id in effect.insights:
         msgs += insights.learn(state, content, world, insight_id)
+    if effect.gear is not None:  # 奇遇給的寶物或良駒（裝備四欄 6.4）：自己一份亂數，不碰 Game.rng
+        msgs += treasures.grant_effect(state, content, effect.gear, world.get_season_number())
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
