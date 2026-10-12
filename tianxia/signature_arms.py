@@ -27,6 +27,9 @@ RUMOR_GIFT = "聽說{general}把隨身多年的【{arm}】給了{who}。"
 RUMOR_SEIZED = "聽說{general}的【{arm}】被{who}奪走了。"
 ANNAL_GIFT = "{general}把本命兵器【{arm}】交給了你。"  # 行狀（人物）
 ANNAL_SEIZED = "你屢敗{general}，奪走了他的本命兵器【{arm}】。"
+HOW = {"gift": "親手相贈", "seized": "屢敗之後被奪走"}  # 待 joy 潤：神器譜那一行「怎麼到他手上的」
+# 待 joy 潤：神器譜一行（同 forge_secrets.divine_book 的寫法：季、名字、種類・屬性、原品在誰手上）
+BOOK_LINE = "- 第 {season} 季　【{arm}】　{noun}・屬{attribute}　{general}的本命兵器，{how}，在{owner}手上"
 
 
 def owned(p: PlayerState) -> list[Equipment]:
@@ -89,3 +92,21 @@ def annal_line(content: Content, item: Equipment, via: str) -> str:
     """行狀那一句（人物）：誰把哪一把交給你、或你奪走了誰的。"""
     general = content.characters[item.signature].name if item.signature in content.characters else item.signature
     return (ANNAL_GIFT if via == "gift" else ANNAL_SEIZED).format(general=general, arm=item.name)
+
+
+def book_rows(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str]]:
+    """神器譜裡本命兵器那幾行（打造隱藏配方設計 5.5：本命兵器也上神器譜）：（季數, 那一行），照季、同一季照給出去的先後。
+    名字、種類、屬性照現在的內容（joy 改了名，譜上跟著改）；內容拿掉了那一把不寫。"""
+    table = {arm.character: arm for arm in content.gear.signature_arms}
+    rows: list[tuple[int, str]] = []
+    for season, claims in records:
+        for cid, claim in claims.items():
+            arm = table.get(cid)
+            if arm is None:
+                continue
+            general = content.characters[cid].name if cid in content.characters else cid
+            rows.append((season, BOOK_LINE.format(
+                season=season, arm=arm.name, noun=weapons.NOUNS.get(arm.kind, arm.kind), attribute=arm.attribute,
+                general=general, how=HOW[claim.via], owner=claim.owner,
+            )))
+    return rows

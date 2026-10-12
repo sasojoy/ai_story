@@ -9,13 +9,13 @@ import pytest
 
 from conftest import next_season, real_content
 from test_treasures import _game, _gear_root, _won
-from tianxia import equipment, figures, naming, rules, signature_arms, smithing, team, treasures, weapons
+from tianxia import equipment, figures, forge_secrets, naming, rules, signature_arms, smithing, team, treasures, weapons
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import GearBook, SignatureArmDef
-from tianxia.state import FigureState, GameState, SignatureClaim, Weapon
+from tianxia.state import FigureState, GameState, GearFind, SignatureClaim, Weapon, WorldState
 
 # 測試內容用的一把：韓鐵（mate）的刀。四個字、只帶「刀」：測試內容的兵器字表組出來的刀名都是三個字，撞不到
 ARM = {"character": "mate", "name": "鐵脊長刀", "kind": "刀", "attribute": "剛"}
@@ -329,3 +329,46 @@ def test_the_fight_that_cripples_him_still_hands_over_the_spear(world):
     assert [a.signature for a in signature_arms.owned(p)] == ["sunjian"] and p.figure_wins["sunjian"] == 3
     assert signature_arms.SEIZE_LINE.format(general="孫堅", arm="江潮槍") in msgs
     assert world.get_season().signature_arms["sunjian"].via == "seized"
+
+
+# ── Task 5：神器譜 ──
+
+def test_signature_arms_join_the_divine_book_across_seasons(content, world):
+    _arms(content)
+    game = _game(content, world, "甲客")
+    season = world.get_season_number()
+    old = WorldState(signature_arms={"mate": SignatureClaim(owner="丙", via="seized")})
+    with world.db.transaction() as conn:  # 上一季：每一季的 WorldState 照季留在 seasons 表（換季不刪）
+        conn.execute("INSERT INTO seasons (number, data) VALUES (?, ?)", (season - 1, old.model_dump_json()))
+    assert world.signature_records() == [(season - 1, {"mate": SignatureClaim(owner="丙", via="seized")})]  # 這一季還沒給，不列
+    game.state.player.affinities["mate"] = 80
+    game.choose("act:rest")
+    assert [n for n, _ in world.signature_records()] == [season - 1, season]
+    book = game.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
+    lines = [line for line in book.splitlines() if "鐵脊長刀" in line]
+    assert len(lines) == 2  # 沒有打出來的神器也寫這一段
+    assert "丙" in lines[0] and signature_arms.HOW["seized"] in lines[0]
+    assert "甲客" in lines[1] and signature_arms.HOW["gift"] in lines[1] and "韓鐵" in lines[1]
+
+
+def test_no_divine_items_and_no_arms_means_no_book(content, world):
+    game = _game(_arms(content), world)
+    assert forge_secrets.DIVINE_BOOK not in game.chronicle_text()
+    assert forge_secrets.divine_book([], []) == ""
+
+
+def test_the_book_sorts_by_season_with_divine_items_first_and_skips_arms_the_content_dropped(content):
+    """divine_book 併進本命兵器：照季排，同一季打出來的神器在前；內容拿掉了的那一把不寫（book_rows）。"""
+    _arms(content)
+    find = GearFind(secret="t_star", slot="weapon", kind="劍", attribute="快", tier=3, title="暫名", divine=True,
+                    owner="乙", master_shown="乙", divine_name="流星")
+    rows = signature_arms.book_rows(content, [
+        (2, {"mate": SignatureClaim(owner="丙", via="gift"), "ghost": SignatureClaim(owner="丁", via="gift")}),
+        (4, {"mate": SignatureClaim(owner="戊", via="seized")}),
+    ])
+    assert [season for season, _ in rows] == [2, 4]  # 內容裡沒有的 ghost 不寫
+    book = forge_secrets.divine_book([(2, find), (3, find)], rows)
+    lines = book.splitlines()[2:]
+    assert [line.split("　")[0] for line in lines] == ["- 第 2 季", "- 第 2 季", "- 第 3 季", "- 第 4 季"]
+    assert "流星" in lines[0] and "鐵脊長刀" in lines[1] and "鐵脊長刀" in lines[3]  # 同一季：神器在前，本命兵器在後
+    assert forge_secrets.divine_book([], rows).startswith(forge_secrets.DIVINE_BOOK)  # 只有本命兵器也有這一段

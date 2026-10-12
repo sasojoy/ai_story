@@ -7886,7 +7886,9 @@ class Game:
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
         parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
-        book = forge_secrets.divine_book(self.world.divine_records())  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露
+        book = forge_secrets.divine_book(  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露；本命兵器也上（打造第三批）
+            self.world.divine_records(), signature_arms.book_rows(self.content, self.world.signature_records()),
+        )
         if book:
             parts.append(book)
         parts.append(self.world.jade_seal_summary())
