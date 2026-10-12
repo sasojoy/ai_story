@@ -27,6 +27,7 @@ from sqlite3 import Connection, Row
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
+from .characters import name_key
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import GearFind, Rumor, WeaponRecipe, WorldState
@@ -631,9 +632,22 @@ class SqliteWorldStore:
             if state.season_phase() != "resting":
                 return False
             lines = _season_firsts_lines(conn, state.season_number)
+            sunk = False
+            if content.config.seal.enabled and content.seal:  # 玉璽碎片（7.6、5.11）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
+                from . import seal  # noqa: PLC0415
+
+                reg = seal.filled(state.seal, content)
+                seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
+                for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
+                    state.season.chronicle.append(Rumor(time=state.season.time, text=seal.SINK.format(holder=name, shard=content.seal[shard.id].name)))
+                    sunk = True
+                for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到
+                    seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
+                             record=duel.record, where=duel.where, lines=list(duel.lines))
+                state.seal_duels = []
             for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
-            if lines:
+            if lines or sunk:
                 self._save_season(conn, state.season_number, state.season)
             state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
             state.season_number += 1
@@ -949,3 +963,15 @@ def _rumor(row: Row) -> Rumor:
 
 def _chronicle_entry(row: Row) -> Rumor:
     return Rumor(id=row["id"], time=row["time"], text=row["text"], location=row["location"])
+
+
+def _seen_real(conn: Connection, name: str) -> float | None:
+    """持有者最後一次自己上線的現實秒（玉璽碎片設計 7.6）：存檔的 seen_real，舊存檔退回 last_real；查不到那一列是 None。"""
+    row = conn.execute(
+        "SELECT json_extract(data, '$.player.seen_real') AS seen, json_extract(data, '$.last_real') AS last FROM characters WHERE key = ?",
+        (name_key(name),),
+    ).fetchone()
+    if row is None:
+        return None
+    value = row["seen"] if row["seen"] is not None else row["last"]
+    return None if value is None else float(value)

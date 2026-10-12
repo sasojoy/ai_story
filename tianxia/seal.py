@@ -265,3 +265,55 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
 
     world.mutate_battle(_snap)
     return msgs
+
+
+SINK = "{holder}懷中的『{shard}』不知所蹤。"  # 待 joy 潤（7.6：不寫原因，真人假人一樣）
+BOOK_TITLE = "### 傳國玉璽"  # 待 joy 潤：見聞→江湖史最上面（第十節）
+BOOK_STATES = {"hidden": "未現世", "held": "{holder}懷中", "sunk": "不知所蹤"}
+BOOK_EVENTS = "這一輪的大事："
+BOOK_BEFORE = "前史：{text}"
+SEAL_TITLE = "玉璽碎片"  # 待 joy 潤：補送的江湖紀錄標題
+GOT = "你得到了傳國玉璽的一角——『{shard}』（{effect}）。"
+LOST = "你懷中的『{shard}』被{other}奪走了。"
+WON = "你從{other}懷中奪得了『{shard}』。"
+KEPT = "你擋下了{other}，『{shard}』還在你懷中。"
+MISSED = "你力挫{other}，『{shard}』卻終究落回他懷中。"
+FAILED = "你沒能從{other}懷中奪下『{shard}』。"
+UNSETTLED_MINE = "你與{other}爭『{shard}』的單挑沒有打完，不分勝負。"
+SUNK_MINE = "你懷中的『{shard}』不知所蹤了。"
+PROXY_LINE = "你未及趕到，由你平日的路數應對。"
+FRESH_LINE = "你這一季還沒現身江湖，身手生疏。"
+CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
+
+
+def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: float, cfg: SealTuning) -> list[tuple[SealShard, str]]:
+    """換季那一刻判隱沒（7.6；PM 庚：連續 sink_seasons 季沒上線、而且距上次上線滿 sink_days 天）。seen：持有者名號 → 最後一次自己上線的
+    現實秒（seen_real，舊存檔退回 last_real；查不到那一列是 None，當成沒上線而且已滿）。剛結束那一季持有者沒上線就 absent +1、上線了歸零；
+    opened_real 是 None（判斷不了）不動。回這一次沉下去的（那一片, 原本的持有者），登記已經改好、各記一筆 sink。"""
+    if reg.opened_real is None:
+        return []
+    out = []
+    for shard in sorted((s for s in reg.shards.values() if s.state == "held" and s.holder), key=lambda s: s.id):
+        last = seen.get(shard.holder)
+        shard.absent = shard.absent + 1 if last is None or last < reg.opened_real else 0
+        if shard.absent >= cfg.sink_seasons and (last is None or now - last >= cfg.sink_days * 86400):
+            name = shard.holder
+            shard.state, shard.holder, shard.absent = "sunk", None, 0
+            log(reg, season, "sink", shard=shard.id, other=name)
+            out.append((shard, name))
+    return out
+
+
+def chronicle_block(content: Content, reg: SealRegistry, before: str = "") -> str:
+    """見聞→江湖史最上面那一段（第十節）：七格玉璽（未現世、某某懷中、不知所蹤），這一輪的大事（現世、易主、隱沒，照登記的 text），
+    最後一行前史（舊的 jade_seal_fragments，11.5；沒有就不寫）。Markdown。"""
+    reg = filled(reg.model_copy(deep=True), content)
+    cells = [f"- {content.seal[s].name}：{BOOK_STATES[reg.shards[s].state].format(holder=reg.shards[s].holder or '')}" for s in content.seal]
+    events = [e.text for e in reg.history if e.text and e.kind in ("emerge", "take", "keep")][-10:]
+    sunk = [SINK.format(holder=e.other, shard=content.seal[e.shard].name) for e in reg.history if e.kind == "sink" and e.shard in content.seal]
+    parts = [BOOK_TITLE, "\n".join(cells)]
+    if events or sunk:
+        parts.append(BOOK_EVENTS + "\n" + "\n".join(f"- {t}" for t in events + sunk))
+    if before:
+        parts.append(BOOK_BEFORE.format(text=before))
+    return "\n\n".join(parts)

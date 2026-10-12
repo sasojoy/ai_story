@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import battle_instance, bot_policy, gender, insight_llm, naming, server_bots
+from . import battle_instance, bot_policy, gender, insight_llm, naming, seal, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -73,6 +73,7 @@ class BotRunner:
         # 只在鎖外替首創的配方與絕學定名取名用（_name_and_apply）；None＝假人不開要取名的爐、也不定名
         self.client = client
         self.last_naming: float | None = None  # 上一次請模型取名的現實時間
+        self.seal_season: int | None = None  # 持碎片的退隱假人這一季擲過回不回來了（玉璽碎片設計 7.6）
 
     def tick(self) -> TickReport:
         report = TickReport()
@@ -229,6 +230,7 @@ class BotRunner:
         tick 開頭看過暫停了，但等這把行動鎖的時候管理者的暫停可能先寫進去：拿到鎖之後再看一次，暫停中不補人。"""
         if self.world.read().paused_at is not None:  # 欄位，不是方法（world.paused_at() 才是方法）
             return
+        self._wake_seal_bots(now, report)
         cfg = self.content.config
         season = self.world.get_season_number()
         bots = self.characters.all(bots_only=True)
@@ -247,6 +249,29 @@ class BotRunner:
             self.last_added[faction.id] = now
             report.added += 1
 
+    def _wake_seal_bots(self, now: float, report: TickReport) -> None:
+        """每季開季後第一次補人：持碎片、退隱的假人各擲一次回不回來（Config.seal.bot_return_chance），不看缺額——缺額不出現就不會叫
+        _add_bot，退隱的持碎片假人永遠不會被叫醒、必然隱沒，看得出是假人（7.6）。回來的派到名冊人數最少的陣營。
+        種子照密鹽、季別與名號（重開假人程式也是同一個結果），不用 self.rng。"""
+        if not seal.on(self.content):
+            return
+        view = self.world.seal_state()
+        if self.seal_season == view.season:
+            return
+        self.seal_season = view.season
+        holders = seal.holders(view.registry)
+        bots = self.characters.all(bots_only=True)
+        for state in list(bots):
+            profile = state.player.bot
+            if profile is None or server_bots.active(profile, view.season) or seal.key(state.player.name) not in holders:
+                continue
+            if random.Random(f"{view.registry.salt}|{view.season}|seal-return|{state.player.name}").random() >= self.content.config.seal.bot_return_chance:
+                continue
+            counts = self.world.faction_counts()
+            faction = min(self.content.scenario.factions, key=lambda f: (counts.get(f.id, 0), f.id))
+            bots = self._add_bot(faction.id, view.season, bots, now, state=state)
+            report.added += 1
+
     def _female_share(self) -> float:
         """真人裡選了女的比例（建角色或設定頁選過的才算）；選過的真人不到 FEMALE_SAMPLE 個時用 gender.BOT_FEMALE_SHARE。
         假人跟著真人的比例走，才看不出誰是假人（伺服器假人設計）。"""
@@ -255,10 +280,15 @@ class BotRunner:
             return gender.BOT_FEMALE_SHARE
         return sum(gender.female(p) for p in chosen) / len(chosen)
 
-    def _add_bot(self, faction_id: str, season: int, bots: list[GameState], now: float) -> list[GameState]:
-        """先叫醒一位退隱的假人（沿用名號，像老玩家回鍋），沒有才新建一位；回傳更新後的假人清單。"""
+    def _add_bot(
+        self, faction_id: str, season: int, bots: list[GameState], now: float, state: GameState | None = None,
+    ) -> list[GameState]:
+        """先叫醒一位退隱的假人（沿用名號，像老玩家回鍋），沒有才新建一位；回傳更新後的假人清單。
+        給了 state 就叫醒那一位（持碎片的退隱假人，_wake_seal_bots）。"""
         retired = [s for s in bots if s.player.bot is not None and not server_bots.active(s.player.bot, season)]
-        if retired:
+        if state is not None:
+            game = Game(self.content, state, self.rng, self.world)
+        elif retired:
             game = Game(self.content, self.rng.choice(retired), self.rng, self.world)
         else:
             # 名號不能撞到任何一個角色，包括讀不出來（損毀、舊格式）的存檔——不然新假人會把它蓋掉

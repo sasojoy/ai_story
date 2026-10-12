@@ -360,6 +360,14 @@
       <p class="muted">${esc(d.note)}</p></details>`;
   }
 
+  // 持有者的碎片卡（玉璽碎片設計第十節，status.seal）：哪一片與效果、這一季動過沒、此刻被牽動時那一句、這一季幾個險關的時刻；不寫機率。字待 joy 潤
+  function sealHtml(s) {
+    return `<details class="card seal" open><summary>傳承・『${esc(s.name)}』</summary>
+      <p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
+      ${s.stir ? `<p class="turn">${esc(s.stir)}</p>` : ""}
+      ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}</details>`;
+  }
+
   function renderTop() {
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
@@ -1747,6 +1755,7 @@
     // 懸賞卡跟軍令卡排在一起（散人沒有軍令，這張就是他的）：手上沒揭、也沒有合用的求藝求兵可以交時就不畫（status.bounties 兩種都收）
     const bountyCard = m.status && m.status.bounties && m.status.bounties.length && shown("orders") ? bountiesHtml(m.status.bounties, m.options) : "";
     const sealCard = m.status && m.status.seal_duel && shown("orders") ? sealDuelHtml(m.status.seal_duel) : "";
+    const sealMine = m.status && m.status.seal && shown("orders") ? sealHtml(m.status.seal) : "";
     // 序章第一步（還沒遇到師父）：選項底下一行「略過序章」，不想走序章的人直接站到起點（設計 7.3）
     const skip = pro() && pro().skip ? '<button class="linkish skip-prologue" data-act="do" data-op="skip_tutorial">略過序章</button>' : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
@@ -1755,8 +1764,8 @@
     const guide = guideHtml(m.guide, m.on_road);
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealCard}${fronts}${tail}`;
-    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

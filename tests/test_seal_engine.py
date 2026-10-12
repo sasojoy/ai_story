@@ -330,3 +330,109 @@ def test_everyone_sees_the_seal_card_and_the_parties_are_watched(sealed, world):
     assert crowd.status_data()["seal_watch"] is False
     side = _player(sealed, world, world.seal_state().duels[0].challenger.name)
     assert side.status_data()["seal_watch"] is True
+
+
+# ── Task 10：收場補送、碎片卡、江湖史 ──
+
+def _finished(content, world, taken: bool, won: bool = True):
+    """跑完一場單挑（管理者式的定結果：fixed＝taken）；won 時持有者的池子只剩 1（第一回合就見底，挑戰者大勝），否則挑戰者的只剩 1。
+    回挑戰者的名號。兩人都還沒建角色（他們第一次同步就補送）。"""
+    game = _open_duel(content, world)
+
+    def _rig(st):
+        d = st.seal_duels[0]
+        d.fixed = taken
+        (d.holder if won else d.challenger).hp = 1.0
+
+    world.mutate(_rig)
+    t = 180.0
+    while world.seal_state().duels and t < 500.0:
+        with at(game, t):
+            game.options()
+        t += 20.0
+    event = world.seal_state().registry.history[-1]
+    return event.holder if event.kind == "take" else event.other
+
+
+def test_a_take_is_delivered_to_both_with_a_seal_report_and_fame_in_the_same_season(sealed, world):
+    """5.9：易手只改登記；兩人各自同步時補一份戰報（kind seal，回合一行一行）與一則紀錄；失主名望 +5；補過的不補第二次；抄本照登記重抄。"""
+    challenger = _finished(sealed, world, taken=True)
+    old = _player(sealed, world, "懷璽", now=600.0)  # 第一次同步就補到
+    report = old.state.battles[0]
+    assert report.kind == "seal" and report.rounds and old.state.player.stats.get("fame", 0) == 5
+    assert old.state.player.heirloom is None
+    seen = old.state.player.seal_seen
+    old.sync(700.0)
+    assert old.state.player.seal_seen == seen and len([b for b in old.state.battles if b.kind == "seal"]) == 1
+    new = _player(sealed, world, challenger, now=600.0)
+    assert new.state.battles[0].kind == "seal" and new.state.player.heirloom.template == "chishou"
+
+
+def test_a_near_miss_gives_the_challenger_one_fame_and_the_holder_three(sealed, world):
+    """PM 丁：挑戰者打贏單挑（大勝）、再擲沒中，名望 +1；持有者懷璽不失 +3。"""
+    challenger = _finished(sealed, world, taken=False, won=True)
+    holder = _player(sealed, world, "懷璽", now=600.0)
+    them = _player(sealed, world, challenger, now=600.0)
+    assert holder.state.player.stats.get("fame", 0) == 3 and them.state.player.stats.get("fame", 0) == 1
+
+
+def test_a_holder_back_only_next_season_gets_the_report_but_no_fame(sealed, world):
+    """5.9：跨季才回來的只補戰報與紀錄（名望每季重來），抄本照登記。"""
+    from conftest import next_season
+
+    _finished(sealed, world, taken=True)
+    old = Game.new(sealed, "懷璽", rng=random.Random(0), world=world)  # 建好但這一季沒同步過
+    next_season(sealed, world, old)
+    assert any(b.kind == "seal" for b in old.state.battles) and old.state.player.stats.get("fame", 0) == 0
+
+
+def test_the_emergence_winner_learns_the_emerge_skill_in_the_same_season(sealed, world):
+    """11.2 第 4 條：混元一氣改給現世的得主，只在補送當下還是同一季、還沒學過、持有沒滿才給。測試內容沒有混元一氣，借一門內容武學當 emerge_skill。"""
+    from test_seal import _ended
+    from tianxia import library
+
+    skill = next(s for s in sealed.skills if s not in sealed.config.starter_skills)
+    sealed.config.seal.emerge_skill = skill
+    _setup(sealed, world)
+    game = _player(sealed, world, "旁人")
+    winner = _player(sealed, world, "得主", "guan")
+    game._seal_settle(_ended("wancheng_jia", [("得主", "guan", 9, 9)], seal_emerge="yunzhuan"), sealed.battles["wancheng_jia"],
+                      {"side": "guan", "margin": "大勝"})
+    winner.sync(50.0)
+    assert winner.state.player.heirloom.template == "yunzhuan" and skill in library.owned_arts(winner.state)
+    assert any("雲篆" in e.tag for e in winner.state.journal)
+
+
+def test_the_holder_card_tells_the_shard_its_effect_and_the_risky_dates(sealed, world):
+    """第十節：持有者的碎片卡寫哪一片與效果、「新得之季，此季不動」或「此季已動過」、這一季標了 seal 還沒到的決戰時刻（Game.stamp）；不寫機率。"""
+    _setup(sealed, world)
+    holder = _player(sealed, world, "懷璽")
+    card = holder.status_data()["seal"]
+    assert card["name"] == "螭首" and "氣血上限" in card["effect_text"] and len(card["dates"]) == 2
+    assert not any("%" in d for d in card["dates"]) and _player(sealed, world, "路人").status_data()["seal"] is None
+
+
+def test_the_chronicle_opens_with_the_seven_shards(sealed, world):
+    _setup(sealed, world)
+    text = _player(sealed, world, "路人").chronicle_text()
+    head = text.split("---")[0]
+    assert "傳國玉璽" in head and "螭首" in head and "懷璽" in head and head.count("未現世") == 6
+
+
+def test_a_retired_bot_holding_a_shard_may_come_back_regardless_of_gaps(sealed, world):
+    """7.6：每季開季後第一次補人，持碎片的退隱假人各擲一次回不回來（bot_return_chance），不看缺額；回來的派到名冊人數最少的陣營。"""
+    from tianxia.bot_runner import BotRunner, TickReport
+    from tianxia.state import BotProfile
+
+    _setup(sealed, world, holder="老假人")
+    bot = Game.new(sealed, "老假人", rng=random.Random(0), world=world)
+    bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=0)  # 上一季的：退隱
+    CharacterStore(world.db).save(bot.state)
+    sealed.config.seal.bot_return_chance = 1.0
+    runner = BotRunner(sealed, world, CharacterStore(world.db), random.Random(0), clock=lambda: 100.0)
+    report = TickReport()
+    runner._wake_seal_bots(100.0, report)
+    woken = CharacterStore(world.db).load("老假人")
+    assert woken.player.bot.season_number == world.seal_state().season and report.added == 1
+    runner._wake_seal_bots(110.0, report)
+    assert report.added == 1  # 這一季擲過了

@@ -87,3 +87,10 @@ def test_a_hidden_tab_polls_only_while_the_seal_is_watched():
     return [watched, at("/api/main").length, document.title === undefined];
     """)
     assert out == [1, 1, True]  # 假頁面的 S 沒有 baseTitle：setMain 照 sealTitle 改標題
+
+
+def test_the_holder_card_is_drawn(m):
+    m["status"]["seal"] = {"name": "雲篆", "effect_text": "練成的心得 ×0.9", "state": "新得之季，此季不動", "stir": "",
+                           "dates": ["第 6 週・週四 20:00", "第 11 週・週四 20:00"]}
+    page = run(m, "return H.pageJianghu();")
+    assert "『雲篆』" in page and "練成的心得 ×0.9" in page and "新得之季" in page and "第 6 週・週四 20:00" in page

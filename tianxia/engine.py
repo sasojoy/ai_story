@@ -52,7 +52,7 @@ from .rules import (
     GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
     day_turn, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
-    is_revealed, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
+    is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
     world_trend_value,
 )
@@ -680,6 +680,7 @@ class Game:
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
@@ -3401,6 +3402,82 @@ class Game:
         self.state.world = self.world.get_season()
         self._deliver_big_events()
         self._deliver_battle_results()
+        self._deliver_seal_results()
+
+    def _deliver_seal_results(self) -> None:
+        """玉璽碎片的事補送到自己手上（玉璽碎片設計 5.9、3.3）：全服登記流水號 > PlayerState.seal_seen、跟自己有關的每一筆——
+        現世拿到（紀錄；同一季才學 emerge_skill）、單挑收場（戰報 kind seal＋紀錄；同一季才給名望）、沒打完、隱沒、管理者指定。
+        收場那一下不改任何人的存檔（這一季沒上線過的持有者一同步就整個換成新角色，寫進去的會不見，FB-027），每個人自己同步時補；
+        跨季才回來也補得到戰報與紀錄。補完照登記重抄抄本。"""
+        c = self.content
+        if not c.seal:
+            return
+        p = self.state.player
+        reg = self.world.seal_state().registry
+        fresh = [e for e in reg.history if e.seq > p.seal_seen]
+        if not fresh:
+            return
+        p.seal_seen = max(e.seq for e in fresh)
+        current, me = self.world.get_season_number(), seal.key(p.name)
+        for e in fresh:
+            if me not in (seal.key(e.holder), seal.key(e.other)) or e.shard not in c.seal:
+                continue
+            shard = c.seal[e.shard].name
+            same = e.season == current
+            if e.kind == "emerge":
+                lines = [seal.GOT.format(shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))]
+                skill = c.config.seal.emerge_skill
+                if same and skill and skill in c.skills and skill not in library.owned_arts(self.state) and not library.full(self.state, c):
+                    lines += learn_skill(self.state, c, skill)  # 混元一氣改給現世的得主（11.2 第 4 條）
+                if same:
+                    annals.note(self.state, c, annals.DEED, e.text or lines[0], 5, place="")
+                self._write(seal.SEAL_TITLE, lines, tag=f"『{shard}』")
+            elif e.kind in ("take", "keep"):
+                self._file_seal(e, shard, same)
+            elif e.kind == "unsettled":
+                other = e.other if seal.key(e.holder) == me else e.holder
+                self._write(seal.SEAL_TITLE, [seal.UNSETTLED_MINE.format(other=other, shard=shard)], tag=f"『{shard}』")
+            elif e.kind == "sink" and seal.key(e.other) == me:
+                self._write(seal.SEAL_TITLE, [seal.SUNK_MINE.format(shard=shard)], tag=f"『{shard}』")
+            elif e.kind == "assign" and seal.key(e.holder) == me:  # 管理者指定給你（公告不寫管理者，紀錄寫成拿到）
+                self._write(seal.SEAL_TITLE, [seal.GOT.format(shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))], tag=f"『{shard}』")
+        self._copy_heirloom()
+
+    def _file_seal(self, e, shard: str, same: bool) -> None:
+        """一場奪璽單挑寫成自己的戰報（kind seal，回合一行一行；持有者的那份照挑戰者的翻過來寫）與一則紀錄；名望只在同一季才給（5.9）。"""
+        c, s, cfg = self.content, self.state, self.content.config.seal
+        challenger = e.holder if e.kind == "take" else e.other  # take：holder 是挑戰者、other 是失主；keep：holder 是持有者、other 是挑戰者
+        mine = "challenger" if seal.key(challenger) == seal.key(s.player.name) else "holder"
+        if mine == "challenger":
+            other = e.other if e.kind == "take" else e.holder  # 挑戰者看的是持有者
+        else:
+            other = challenger  # 持有者看的是挑戰者
+        won = e.result in seal_duel.WIN_VERDICTS
+        if e.kind == "take":
+            head, fame = (seal.WON, 0) if mine == "challenger" else (seal.LOST, cfg.fame["lose"])
+        elif mine == "holder":
+            head, fame = seal.KEPT, cfg.fame["keep"]
+        else:
+            head, fame = (seal.MISSED, cfg.fame["near"]) if won else (seal.FAILED, 0)
+        notes = [head.format(other=other, shard=shard)] + ([e.text] if e.text else [])
+        notes += [seal.PROXY_LINE] if mine in e.proxied else []
+        notes += [seal.FRESH_LINE] if mine == "holder" and e.fresh else []
+        changes = []
+        if same and fame:
+            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
+            changes.append(f"名望 +{fame}")
+        label = "" if same else f"第 {e.season} 季・"
+        record = BattleRecord(
+            id=s.battle_seq + 1, time=s.world.time, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"奪璽・『{shard}』",
+            opponent=other, ours=[], tier=e.result or "", our_power=0.0, difficulty=0.0, notes=notes, changes=list(changes),
+            rounds=list(e.lines),
+        )
+        battlelog.add_record(s, record)
+        s.battle_card = record.id
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
+                                          changes=changes, battle_id=record.id))
+        if same:
+            annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
 
     def _seal_settle(self, battle: battle_instance.BattleInstance, definition: BattleDef, result: dict) -> None:
         """時刻表決戰收場時的玉璽碎片（_settle_showdown 呼叫；result 是算進伏筆鎖定的官方結果，不讀 battle.outcome_side，3.3）：
@@ -3589,6 +3666,7 @@ class Game:
             seal_duel.advance(shared, self.content, self.now)
 
         self.world.mutate(_apply)
+        self._deliver_seal_results()  # 自己是一方、剛好由自己收場時當場看得到（不是一方時什麼都不做）
 
     def _seal_options(self) -> list[Option]:
         """單挑的一方、這一場開打了：三招（寫剋哪一招）擺在選單最前面；送過了換成一顆灰的「已出招」；這一回合判成不在場的三招灰掉、
@@ -3625,6 +3703,7 @@ class Game:
             out.extend(seal_duel.advance(shared, self.content, self.now))
 
         self.world.mutate(_apply)
+        self._deliver_seal_results()
         return out
 
     def _open_waiting_showdown(self) -> None:
@@ -6494,7 +6573,29 @@ class Game:
             out.extend(seal_duel.advance(shared, self.content, self.now))
 
         self.world.mutate(_apply)
+        self._deliver_seal_results()
         return self._log(out)
+
+    def seal_view(self) -> dict | None:
+        """持有者的碎片卡（第十節，status_data["seal"]）：哪一片與效果、這一季動過沒（新得之季此季不動／此季已動過／此季可能被牽動）、
+        此刻被牽動時那一句、這一季標了 seal 還沒到的決戰時刻（Game.stamp）。不寫機率。不是持有者是 None。"""
+        c = self.content
+        if not seal.on(c):
+            return None
+        view = self.world.seal_state()
+        shard = seal.shard_of(view.registry, self.state.player.name)
+        if shard is None or shard.id not in c.seal:
+            return None
+        state = seal.CARD_NEW if shard.since_season == view.season else seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_CALM
+        status = self._battle_status(tick=False)
+        stir = seal.STIR_MINE.format(shard=c.seal[shard.id].name) if status is not None and status[0].seal_shard == shard.id else ""
+        w = self.state.world
+        dates = [
+            self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in c.timetable
+            if e.seal and e.id not in w.timeline and e.id not in w.showdowns_opened
+        ] if season_one(c, w) else []
+        return {"name": c.seal[shard.id].name, "effect_text": seal.effect_text(c, c.seal[shard.id].effect), "state": state,
+                "stir": stir, "dates": dates}
 
     def seal_duel_card(self) -> dict | None:
         """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
@@ -7859,6 +7960,7 @@ class Game:
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "seal_duel": self.seal_duel_card(),  # 奪璽卡（玉璽碎片設計 5.10）：全服看得到；沒有單挑是 None
+            "seal": self.seal_view(),  # 持有者的碎片卡（玉璽碎片設計第十節）
             "seal_watch": self.seal_watch(),  # 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
@@ -8254,7 +8356,11 @@ class Game:
         book = forge_secrets.divine_book(self.world.divine_records())  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露
         if book:
             parts.append(book)
-        parts.append(self.world.jade_seal_summary())
+        if seal.on(self.content):  # 七格玉璽排在江湖史最上面（第十節）；舊的碎片紀錄只當前史一行（11.5）
+            old = self.world.get_jade_seal_fragments()
+            parts.insert(0, seal.chronicle_block(self.content, self.world.seal_state().registry, self.world.jade_seal_summary() if old else ""))
+        else:
+            parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
 
     # ── 江湖紀錄 ──────────────────────────────────────────

@@ -601,3 +601,49 @@ def test_the_battle_scene_and_report_mention_the_stir(sealed, world):
     battle.phase, battle.seal_notes = "ended", ["璽動：丙將與懷璽的懷璽陣前單挑。"]
     game._file_showdown(battle, battle.participants["旁觀者"], None)
     assert "璽動：丙將與懷璽的懷璽陣前單挑。" in game.state.battles[0].notes
+
+
+# ── Task 10：隱沒 ──
+
+def test_a_shard_sinks_only_after_three_absent_seasons_and_twenty_eight_days(sealed):
+    """PM 庚：連續三季沒上線、而且距上次上線滿 28 天才隱沒；上線了就歸零；opened_real 是 None 不動；查不到那一列（None）照沉。"""
+    from tianxia import seal
+
+    cfg = sealed.config.seal
+    day = 86400.0
+    reg = _registry(sealed, chishou="甲", xuanniu="乙")
+    reg.opened_real = 100 * day
+    for season in (2, 3):
+        assert seal.sink(reg, season, {"甲": 50 * day, "乙": 101 * day}, 110 * day, cfg) == []
+    assert (reg.shards["chishou"].absent, reg.shards["xuanniu"].absent) == (2, 0)
+    sunk = seal.sink(reg, 4, {"甲": 50 * day, "乙": 101 * day}, 110 * day, cfg)
+    assert [(s.id, name) for s, name in sunk] == [("chishou", "甲")] and reg.shards["chishou"].state == "sunk"
+    assert reg.shards["chishou"].holder is None and reg.history[-1].kind == "sink"
+    reg2 = _registry(sealed, chishou="甲")
+    reg2.opened_real = 100 * day
+    reg2.shards["chishou"].absent = 2
+    assert seal.sink(reg2, 4, {"甲": 99 * day}, 110 * day, cfg) == []  # 三季沒上線，但距上次上線還不到 28 天
+    reg2.opened_real = None
+    assert seal.sink(reg2, 5, {"甲": None}, 300 * day, cfg) == [] and reg2.shards["chishou"].absent == 3  # 判斷不了：不動
+
+
+def test_next_season_sinks_absent_holders_and_clears_the_duels(sealed, world):
+    """7.6、5.11：換季那一筆交易裡判隱沒（江湖史只寫「不知所蹤」）、清空 seal_duels（還沒收場的記成未分勝負）、寫新的 opened_real。"""
+    from conftest import next_season
+    from tianxia import seal
+    from tianxia.engine import Game
+    from test_seal_duel import _duel
+
+    world.seed_first_season(sealed)
+    if world.season_phase() == "preparing":
+        world.open_season(sealed, 0.0)
+    reg = _registry(sealed, chishou="不見人")
+    reg.opened_real = 0.0
+    reg.shards["chishou"].absent = 2
+    world.mutate(lambda st: (setattr(st, "seal", reg), st.seal_duels.append(_duel())))
+    game = Game.new(sealed, "路人", rng=random.Random(0), world=world)
+    next_season(sealed, world, game)  # 「不見人」那一列不存在：當成沒上線、而且滿 28 天
+    view = world.seal_state()
+    assert view.registry.shards["chishou"].state == "sunk" and view.duels == []
+    assert {"sink", "unsettled"} <= {e.kind for e in view.registry.history}
+    assert any("不知所蹤" in line for _, entries in world.chronicle_before(view.season) for line in [r.text for r in entries])
