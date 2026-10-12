@@ -85,6 +85,7 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
+    heroNode: null, // 修練頁人物面板點著的那個光點（HERO_NODES 的 key）；沒點過是根骨
     artInfo: null, // 修練頁哪一門攤開了「詳情」（完整的功法卡）
     libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
@@ -1910,6 +1911,113 @@
     try { localStorage.setItem(LIB_FILTER_KEY, value); } catch (e) { /* 存不了就只在這一頁有效 */ }
   }
 
+  // ── 修練頁最上面的人物面板（企劃者 2026-10-12：照她給的人物剪影與版面改一版）──
+  // 剪影（web/hero.webp，去背過的）身上的光點各對上一樣真的東西：五屬性、身上的兩門、四欄裝備。座標是剪影圖的百分比（照圖上的光點量的），
+  // side 是名字標在點的哪一邊。點了底下那一格寫它現在的數字與用處：屬性有點可配時多一顆「＋」（同狀態列的配點鈕），
+  // 武學與裝備多一顆「看這一門／看這件」捲到下面那張卡。點哪一個記在 S.heroNode（只是看的方式，輪詢重畫不跳回去）
+  const HERO_NODES = [
+    { key: "wis", kind: "stat", x: 29.4, y: 3.0, side: "r" },
+    { key: "lore", kind: "stat", x: 31.2, y: 10.0, side: "r" },
+    { key: "weapon", kind: "gear", x: 52.4, y: 15.4, side: "r" },
+    { key: "treasure", kind: "gear", x: 20.7, y: 20.8, side: "l" },
+    { key: "armor", kind: "gear", x: 47.9, y: 24.1, side: "r" },
+    { key: "con", kind: "stat", x: 27.9, y: 24.9, side: "r" },
+    { key: "str", kind: "stat", x: 17.7, y: 34.3, side: "l" },
+    { key: "內功", kind: "art", x: 27.1, y: 38.4, side: "r" },
+    { key: "武學", kind: "art", x: 50.6, y: 48.0, side: "r" },
+    { key: "agi", kind: "stat", x: 41.9, y: 63.7, side: "r" },
+    { key: "mount", kind: "gear", x: 52.1, y: 95.7, side: "r" },
+  ];
+  const HERO_GEAR_NAMES = { weapon: "武器", armor: "防具", mount: "坐騎", treasure: "寶物" };
+  // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
+  function heroInfo(n, x, s) {
+    if (n.kind === "stat") {
+      const i = (s.attrs || []).findIndex((a) => a[2] === n.key);
+      if (i < 0) return null;
+      const [name, value] = s.attrs[i];
+      const use = (s.stat_uses || [])[i];
+      const can = s.stat_points > 0 && value < s.stat_cap;
+      return {
+        label: `${name} ${value}`, lit: true,
+        title: `${name} ${value}<small>／${s.stat_cap | 0}</small>`,
+        desc: use ? use[1] : "",
+        button: can ? `<button class="btn small primary" data-act="allocate" data-stat="${esc(n.key)}">＋${esc(name)}<small>可配 ${s.stat_points | 0} 點</small></button>` : "",
+      };
+    }
+    if (n.kind === "art") {
+      const a = x.owned_arts.find((r) => r.worn && r.kind === n.key);
+      if (!a) return { label: n.key, lit: false, title: n.key, desc: `你身上還沒有${n.key}。`, button: "" };
+      return {
+        label: n.key, lit: true,
+        title: `${esc(a.name)}<small>${esc(a.quality)}</small>`,
+        desc: `${n.key}・屬${a.attribute}・第${a.level | 0}成${a.insight ? `・意境「${a.insight}」` : ""}`,
+        button: `<button class="btn small" data-act="hero-jump" data-to="worn" data-kind="${esc(n.key)}">看這一門</button>`,
+      };
+    }
+    const g = x.gear && x.gear.slots.find((sl) => sl.slot === n.key);
+    if (!g) return null; // 這一欄關著：不畫這個點
+    const label = g.label || HERO_GEAR_NAMES[n.key];
+    if (!g.worn) return { label, lit: false, title: label, desc: g.empty || "", button: "" };
+    const w = g.worn;
+    const desc = n.key === "weapon" ? `${w.kind}・屬${w.attribute}${w.grade ? `・${w.grade}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${w.bonus}` : "・用不上"}`
+      : n.key === "armor" ? `屬${w.attribute}・${w.grade}・${w.wear_word} ${w.edge | 0}・少扣 ${w.cut} 氣血`
+      : n.key === "mount" ? `${w.grade}・${w.wear_word} ${w.edge | 0}・趕路疾行省 ${w.save} 體力・路上快 ${w.speed}`
+      : w.effect_text || "";
+    return {
+      label, lit: true,
+      title: `【${esc(w.name)}】<small>${esc(label)}</small>`,
+      desc,
+      button: `<button class="btn small" data-act="hero-jump" data-to="gear" data-kind="${esc(n.key)}">看這件</button>`,
+    };
+  }
+  function heroFoot(n, info) {
+    return `<div class="hero-ft-title">${info.title}</div>
+      <div class="hero-ft-row"><p>${esc(info.desc)}</p>${info.button}</div>`;
+  }
+  function heroPanel(x, s) {
+    const nodes = HERO_NODES.map((n) => [n, heroInfo(n, x, s)]).filter(([, info]) => info);
+    if (!nodes.length) return "";
+    const pick = nodes.find(([n]) => n.key === S.heroNode) || nodes.find(([n]) => n.key === "con") || nodes[0];
+    return `<section class="hero" aria-label="人物">
+      <div class="hero-hd">
+        <div><div class="hero-name">${esc(s.name)}</div><div class="hero-tag">${esc(s.affiliation)}</div></div>
+        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${s.stat_points ? `<div class="hero-pts">可配 ${s.stat_points | 0} 點</div>` : ""}</div>
+      </div>
+      <div class="hero-stage">
+        <div class="hero-halo" aria-hidden="true"></div>
+        <div class="hero-fig">
+          <img src="/static/hero.webp" alt="" draggable="false">
+          ${nodes.map(([n, info]) => `<button class="hero-node${n === pick[0] ? " on" : ""}${info.lit ? "" : " dim"} ${n.side}" style="left:${n.x}%;top:${n.y}%" data-act="hero-node" data-key="${esc(n.key)}" aria-label="${esc(info.label)}"><i class="pulse"></i><i class="dot"></i><span>${esc(info.label)}</span></button>`).join("")}
+        </div>
+      </div>
+      <div class="hero-ft" id="hero-ft">${heroFoot(pick[0], pick[1])}</div>
+    </section>`;
+  }
+  // 點光點：只換點的樣子與底下那一格、在點上散一圈朱砂（不重畫整頁，水墨的動畫才不會斷）
+  function heroTap(el) {
+    const key = el.dataset.key;
+    const n = HERO_NODES.find((h) => h.key === key);
+    const info = n && S.menxia && S.main && heroInfo(n, S.menxia, S.main.status);
+    if (!info) return;
+    S.heroNode = key;
+    document.querySelectorAll(".hero-node.on").forEach((b) => b.classList.remove("on"));
+    el.classList.add("on");
+    const ft = document.getElementById("hero-ft");
+    if (ft) ft.innerHTML = heroFoot(n, info);
+    const ripple = document.createElement("i");
+    ripple.className = "hero-ripple";
+    ripple.style.left = el.style.left;
+    ripple.style.top = el.style.top;
+    el.parentNode.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  }
+  function heroJump(el) {
+    const target = el.dataset.to === "worn"
+      ? document.querySelector(`.acard[data-worn="${el.dataset.kind}"]`)
+      : document.querySelector(`.gear-slot[data-slot="${el.dataset.kind}"]`);
+    if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
   function pagePractice() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -1962,7 +2070,7 @@
       const slot = x.slot_cards.find((c) => c.kind === k) || { learned: false };
       const a = x.owned_arts.find((r) => r.worn && r.kind === k);
       if (!a) return `<div class="acard empty">${slot.card || `你還沒有${esc(k)}。`}</div>`;
-      return `<div class="acard ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">
+      return `<div class="acard ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}" data-worn="${esc(k)}">
         <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}</div></div><span class="worn">身上</span></div>
         ${body(a, slot)}</div>`;
     }).join("");
@@ -2052,6 +2160,7 @@
       </div>` : "";
     return `
       ${proGuide()}
+      ${heroPanel(x, s)}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       <div class="tune">
@@ -3567,6 +3676,8 @@
         case "stam-help": S.stamOpen = !S.stamOpen; renderTop(); break; // 點體力條：底下攤開／收起體力怎麼回（explain-1）；丹的鈕自己是一顆，點它不會走到這裡
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
+        case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：只換那一格，不重畫
+        case "hero-jump": heroJump(el); break; // 面板底下「看這一門／看這件」：捲到下面那張卡
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "admin": {
