@@ -476,6 +476,26 @@ def test_only_one_time_events_may_give_gear(tmp_path):
         load_content(root)
 
 
+def test_gear_on_a_once_event_chained_from_a_repeatable_one_is_refused(tmp_path):
+    """裝備三終審：串接（next_event）不看 once——Game._present 照樣叫出看過的事件，所以從可以重複遇到的事件串得到的一次性事件
+    寫了 gear，一樣每遇一次送一件；載入時擋（隔一層也擋）。"""
+    def chained(depth):
+        def edit(d):
+            _give_gear("mingci")(d)  # drunk：一次性、寫了 gear
+            hops = [e for e in d[1:] if not e.get("once")][:depth]
+            for here, there in zip(hops, hops[1:]):
+                there["once"] = True  # 中間那一層是一次性的事件，照樣被串得到
+                here["choices"][0].setdefault("effect", {})["next_event"] = there["id"]
+            hops[-1]["choices"][0].setdefault("effect", {})["next_event"] = "drunk"
+        return edit
+
+    for depth in (1, 2):
+        root = _gear_root(tmp_path / str(depth))
+        edit_json(root / "events" / "test.json", chained(depth))
+        with pytest.raises(ContentError, match="next_event"):
+            load_content(root)
+
+
 def test_free_text_and_road_sights_cannot_give_gear(tmp_path):
     root = _gear_root(tmp_path / "a")
     edit_json(root / "events" / "test.json",

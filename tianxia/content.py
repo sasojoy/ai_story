@@ -1617,6 +1617,23 @@ def validate(c: Content) -> None:
                     ch.check is None and ch.combat is None,
                     f"{where} 選項{i}：福緣事件的選項不能有檢定或戰鬥（福緣自己送上門時直接套用第一個選項的效果）",
                 )
+    # 串接（next_event）不看 once：Game._present 照樣叫出看過的事件（只標 is_repeat），所以一次性的事件只要從可以重複遇到的事件
+    # 串得到（中間隔幾層都算），寫了 gear 一樣每遇一次送一件、或換一次 dup_silver 兩（裝備三終審）
+    chains = {
+        ev.id: [eff.next_event for ch in ev.choices for eff in (ch.effect, ch.fail_effect) if eff.next_event]
+        for ev in c.events.values()
+    }
+    reach = [target for ev in c.events.values() if not ev.once for target in chains[ev.id]]
+    chained: set[str] = set()
+    while reach:
+        eid = reach.pop()
+        if eid in chained or eid not in c.events:
+            continue
+        chained.add(eid)
+        reach += chains[eid]
+    for eid in sorted(chained):
+        need(all(ch.effect.gear is None and ch.fail_effect.gear is None for ch in c.events[eid].choices),
+             f"事件 {eid}：gear 不能寫在從可以重複遇到的事件用 next_event 串得到的事件（串接不看 once，每遇一次照樣送一件）")
 
     for trend in c.scenario.trends:
         need(
