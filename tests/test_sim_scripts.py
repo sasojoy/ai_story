@@ -270,6 +270,20 @@ def test_the_server_bot_simulation_tallies_bounties_and_raids():
     assert tally.report()["每週最多幾批"] == 2
 
 
+def test_the_server_bot_simulation_reports_smithing():
+    """打造第二批：假人整季打了幾爐、幾個假人打過、手上的名器、原品、仿品各幾件（smith_report）。"""
+    from types import SimpleNamespace as NS
+    from tianxia.state import Weapon
+    sim = _load("sim_server_bots")
+    smith = NS(player=NS(
+        forge_counts={"兵|劍|gang_1+gang_1": 2, "鎧|gang_1+gang_1": 1},
+        weapon=Weapon(id="兵:1", name="甲", kind="劍", secret="t", original=True), armor=None,
+        rack=[Weapon(id="兵:2", name="乙", kind="劍", secret="t", copy_of="鑄|t"), Weapon(id="兵:3", name="丙", kind="劍", secret="u")],
+    ))
+    idle = NS(player=NS(forge_counts={}, weapon=None, armor=None, rack=[]))
+    assert sim.smith_report([smith, idle]) == {"打造": 3, "打過的假人": 1, "名器": 1, "原品": 1, "仿品": 1}
+
+
 def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypatch):
     """口訣與秘方量表多一段鑄器（打造隱藏配方設計第十二節第 1、2、4 項）：--seeds 1 跑一次週末設定，三種機器人各一行鑄器、
     三邊合起來一行、三行平均（只量不改，不驗數字）。"""
@@ -282,3 +296,4 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     assert sum(line.startswith("種子 1 ") and "鑄器：摸到 " in line for line in lines) == 3
     assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
     assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
+    assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個
