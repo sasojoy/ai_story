@@ -549,3 +549,151 @@ def test_the_practice_page_wield_action_puts_a_treasure_on(content, world):
     server.MENXIA_ACTIONS["wield"](game, {"weapon": "寶:1"})
     assert game.state.player.treasure.id == "寶:1"
     assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["name"] == "烏木名刺"
+
+
+# ── Task 5：懸賞的重賞 ──
+
+from test_bounties import _direct, _do, _post, _seat  # noqa: E402  懸賞的測試共用同一套開角色、照伺服器的做法存讀
+
+
+@pytest.fixture
+def board(content, world):
+    """第一季（install_season_one）：官軍的甲、散人丙、散人丁；寶物照 _book、坐騎開著（同 test_bounties.setup 的開法）。"""
+    from tianxia.models import FactionDef
+    install_season_one(content)
+    content.scenario.factions = [FactionDef(id="guan", name="官軍", join_at=["town"]), FactionDef(id="huang", name="黃巾", join_at=["lake"])]
+    _book(content)
+    content.config.mounts.enabled = True
+    return _seat(content, world, (("甲", "guan"), ("丙", None), ("丁", None)))
+
+
+def _strike(world, prize):
+    return _post(world, kind="strike", faction="guan", silver=20, deeds=3, location="lake", squad="thug", quota=3, prize=prize)
+
+
+def test_each_season_carries_its_tianji_for_the_weekly_dice(content, world):
+    game = _game(content, world)
+    assert world.get_season().tianji == world.read().tianji == 0
+    next_season(content, world, game)
+    assert world.read().tianji == 1 and world.get_season().tianji == 1 and game.state.world.tianji == 1
+
+
+def test_issue_hangs_prizes_on_the_first_two_strikes_of_each_side_without_moving_the_board():
+    from tianxia import bounties
+    from tianxia.state import WorldState
+    content = real_content("weekend")
+
+    def posted(treasure, horse):
+        content.config.treasures.bounty_treasure_chance, content.config.treasures.bounty_horse_chance = treasure, horse
+        state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True, tianji=4))
+        bounties.issue(state, content, 1)
+        return state.world.bounties
+
+    plain, prized = posted(0.0, 0.0), posted(1.0, 1.0)
+    assert [(b.id, b.kind, b.location, b.end) for b in plain] == [(b.id, b.kind, b.location, b.end) for b in prized]  # 另一份亂數：單子一張都不變
+    assert all(b.prize is None for b in plain) and all(b.prize is None for b in prized if b.kind != "strike")
+    for faction in ("guan", "huang"):
+        strikes = [b.prize for b in prized if b.faction == faction and b.kind == "strike"]
+        assert strikes[:2] == ["treasure", "horse"] and all(prize is None for prize in strikes[2:])
+        only_horse = [b.prize for b in posted(0.0, 1.0) if b.faction == faction and b.kind == "strike"]
+        assert only_horse[0] == "horse" and all(prize is None for prize in only_horse[1:])  # 只中一個就掛第一張
+    content.config.mounts.enabled = False
+    assert not any(b.prize == "horse" for b in posted(1.0, 1.0))  # 坐騎關著不掛良駒
+
+
+def test_prize_rolls_hang_on_tianji_week_and_side():
+    from tianxia import bounties
+    content = real_content()
+    cfg = content.config.treasures
+    rng = random.Random("bounty-prize|4|1|guan")
+    assert bounties.prize_rolls(4, 1, "guan", content) == (rng.random() < cfg.bounty_treasure_chance, rng.random() < cfg.bounty_horse_chance)
+    assert len({bounties.prize_rolls(t, 1, "guan", content) for t in range(60)}) > 1  # 換一季（天機）結果會變
+
+
+def test_only_the_first_to_finish_a_prize_strike_gets_the_treasure(board):
+    from tianxia import bounties
+    content, world = board
+    b = _strike(world, "treasure")
+    note = treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS["treasure"])
+    _, game = _do(content, world, "丙", lambda g: [])
+    assert note in bounties.reward_text(game.state, content, game.state.world.bounties[-1])  # 榜上寫「另有重賞：寶物一件」
+    for name in ("丙", "丁"):
+        _direct(content, world, name, lambda g: bounties.take(g.state, g.content, b.id))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    p = game.state.player
+    assert treasures.PRIZE_GOT.format(issuer="官軍") in msgs and p.treasure is not None and content.gear.treasures[p.treasure.template].pool
+    assert note not in bounties.reward_text(game.state, content, game.state.world.bounties[-1])  # 給出去了，榜上不再寫
+    msgs, game = _direct(content, world, "丁", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    assert game.state.player.treasure is None and treasures.PRIZE_GOT.format(issuer="官軍") not in msgs
+    assert any(m.startswith("【懸賞】") for m in msgs)  # 第二個人照舊拿銀兩經驗
+
+
+def test_a_prize_with_no_room_waits_in_held_gear_and_arrives_later(board):
+    from tianxia import bounties
+    content, world = board
+    content.config.weapons.rack_cap = 1
+    b = _strike(world, "treasure")
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+
+    def full_then_win(g):
+        p = g.state.player
+        p.treasure, p.rack = _item("audience", "寶:90"), [_item("win_material", "寶:91")]
+        return bounties.on_win(g.state, g.content, g.world, "lake", "thug")
+
+    msgs, game = _direct(content, world, "丙", full_then_win)
+    [held] = game.state.player.held_gear
+    assert treasures.HELD.format(name=held.name) in msgs
+    assert held.template not in ("audience", "win_material")  # 只抽你還沒有的（6.5）
+    content.config.weapons.rack_cap = 2
+    _, game = _do(content, world, "丙", lambda g: [])  # 同步時補發
+    assert game.state.player.held_gear == [] and held.id in [i.id for i in game.state.player.rack]
+
+
+def test_a_horse_prize_is_a_good_horse_rolled_on_season_name_and_bounty(board):
+    from tianxia import bounties, mounts
+    content, world = board
+    b = _strike(world, "horse")
+    _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    rng = random.Random(f"bounty-prize|{world.get_season_number()}|丙|{b.id}")
+    coat = rng.choice(mounts.COATS)
+    table = content.config.treasures.horse_quality
+    quality = rng.choices(list(table), weights=list(table.values()))[0]
+    horse = game.state.player.mount
+    assert (horse.tier, horse.name, horse.quality) == (2, mounts.horse_name(coat, 2), quality)
+    assert treasures.GOT_HORSE.format(grade=mounts.grade(horse), name=horse.name) in msgs
+
+
+def test_the_weekly_board_changes_with_tianji_but_not_at_zero():
+    """週初掛單原本的兩份亂數（懸賞榜第一批 bounty|…、第二批 bounty-give|…）天機不是 0 時才帶天機：測試與量表（天機 0）的基準不位移。"""
+    from tianxia import bounties
+    from tianxia.state import WorldState
+    content = real_content("weekend")
+
+    def posted(tianji):
+        state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True, tianji=tianji))
+        bounties.issue(state, content, 1)
+        return [(b.kind, b.faction, b.location, b.end, b.attribute, b.weapon_kind) for b in state.world.bounties]
+
+    assert posted(0) == posted(0)
+    assert any(posted(t) != posted(0) for t in (1, 2, 3))
+
+
+def test_the_weekly_seeds_are_byte_identical_at_tianji_zero_and_carry_it_after():
+    """天機是 0 時兩份週初亂數的種子一字不差（基準不位移）；不是 0 時兩份都在最後接「|天機」。"""
+    from tianxia import bounties
+    from tianxia.state import WorldState
+    content = real_content("weekend")
+
+    def seeds(tianji):
+        state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True, tianji=tianji))
+        seen = []
+        real = random.Random
+        with mock.patch.object(bounties.random, "Random", side_effect=lambda seed=None: (seen.append(seed), real(seed))[1]):
+            bounties.issue(state, content, 1)
+        return [s for s in seen if str(s).startswith("bounty|") or str(s).startswith("bounty-give|")]
+
+    zero, three = seeds(0), seeds(3)
+    assert len(zero) == len(three) == 2 and all(not s.endswith("|0") for s in zero)
+    assert zero[0].startswith("bounty|1|0|") and zero[1].startswith("bounty-give|1|")
+    assert [s + "|3" for s in zero] == three

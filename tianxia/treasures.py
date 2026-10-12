@@ -48,6 +48,10 @@ EMPTY = "身上沒有寶物。"  # 待 joy 潤：修練頁寶物那一段身上�
 RACK_NOTE = "寶物買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來；隨時能換。"  # 待 joy 潤：修練頁寶物那一段底下
 LOST = "這件寶物的來歷已經失傳"  # 待 joy 潤：內容拿掉了這一件（template 查不到，效果不算）
 HELD_NOTE = "寄放著：{names}——裝備庫騰出空位，下次回來就補給你。"  # 待 joy 潤：修練頁「裝備」塊底下
+PRIZE_SLOTS = {"treasure": "treasure", "horse": "mount"}  # 重賞（Bounty.prize）→ 那一欄：那一欄關著就不掛、不發
+PRIZE_WORDS = {"treasure": "寶物一件", "horse": "良駒一匹"}  # 待 joy 潤（6.4：掛單時只記「寶物一件」或「良駒一匹」）
+PRIZE_NOTE = "・另有重賞：{what}"  # 待 joy 潤：懸賞榜、懸賞卡、揭下的回話，接在賞的那一段後面
+PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
 
 
 def on(content: Content) -> bool:
@@ -270,3 +274,23 @@ def held_note(state: GameState) -> str:
     """修練頁「裝備」塊底下那一行（寄放著哪幾件，6.5）；沒有寄放的是空字串。"""
     held = state.player.held_gear
     return HELD_NOTE.format(names="、".join(f"【{item.name}】" for item in held)) if held else ""
+
+
+# ---- 懸賞的重賞（6.4）----
+
+def prize_on(content: Content, prize: str | None) -> bool:
+    """這一種重賞的那一欄開著沒（寶物看寶物、良駒看坐騎）。"""
+    return prize is not None and equipment.on(content, PRIZE_SLOTS.get(prize, ""))
+
+
+def bounty_prize(state: GameState, content: Content, season: int, bounty_id: str, prize: str, issuer: str) -> list[str]:
+    """懸賞的重賞（6.4）：第一個交差的人拿（bounties._complete 判）。哪一件寶物、良駒的毛色與品質到這一刻才定，用自己一份亂數
+    （季數＋名號＋懸賞 id；季數一定要有：懸賞 id 每季從 b1 算起，同懸賞榜第二批 gift_rolls 的理由），不碰 Game.rng。寶物只抽你還沒有的，
+    都有了改給銀兩；裝備庫滿了寄放（held_gear），不作廢。那一欄關著什麼都不給。"""
+    if not prize_on(content, prize):
+        return []
+    rng = random.Random(f"bounty-prize|{season}|{state.player.name}|{bounty_id}")
+    head = [PRIZE_GOT.format(issuer=issuer)]
+    if prize == "horse":
+        return head + _give_horse(state, content, rng, hold=True)
+    return head + _give_pool(state, content, rng, hold=True)
