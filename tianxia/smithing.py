@@ -252,8 +252,8 @@ def name_divine(
     """替手上的神器原品定名：回（定成了沒, 訊息）。只有原品主人、這一把還沒定名（forge_secrets.unnamed_originals）才行。
     自己取的名字過 naming.name_problem（帶 world.is_character_name，同絕學定名）與 forge_secrets.divine_name_problem；
     keep＝「沿用譜名」：直接用登記當下記的譜名，不過命名過濾（譜名由內容驗過；name_problem 會回 FORGE_CLASH 擋它自己）。
-    全服不重名由 world.name_divine 原子判斷。定成了：手上那把當下改名（別人的仿品下次讀檔跟著改）、江湖史一行（寫名號）、
-    江湖上傳一句（具名）；神器譜照全服那一列。不合格、被搶先、不是你的都什麼都不動，定名的權利還在。"""
+    全服不重名由 world.name_divine 原子判斷。定成了：原品與主人自己的仿品當下改名（別人的仿品下次讀檔跟著改）、首創名望回饋
+    記著的名字換掉、江湖史一行（寫名號）、江湖上傳一句（具名）；神器譜照全服那一列。不合格、被搶先、不是你的都什麼都不動，定名的權利還在。"""
     pending = forge_secrets.unnamed_originals(state, world)
     if item_id not in pending:
         return False, [NAME_GONE]
@@ -272,6 +272,8 @@ def name_divine(
     if reason is not None:
         return False, [NAME_GONE]
     item.name = name
+    forge_secrets.refresh_names(state.player, content, world)  # 主人自己手上與裝備庫裡的仿品當下跟著改成「仿・新名字」，不等下一次讀檔
+    fusion.rename_echo(state, forge_secrets.key_for(item.secret), name)  # 定名之前就有人照著打：首創名望回饋記的名字也換掉（M2）
     rule, who = content.config.forge_secrets, state.player.name
     add_chronicle(state, rule.named_chronicle.format(who=who, name=name, what=forge_secrets.what_text(item.slot, item.kind)))
     add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
@@ -322,6 +324,20 @@ def is_forge_step(arg: str) -> bool:
     """smith: 後面這一段是打造的一步（含打開與開爐）：江湖紀錄的標題是「打造」；打開以外的每一步併進同一則
     （Game.choose 照它 merge，打開那一步 "forge" 另起一則）。"""
     return arg.partition(":")[0].startswith("forge")
+
+
+# 打造單子自己的回話（step 回的那幾句）：問下一步的、退回去的、不打了的整句照常數認；挑了什麼（PICKED_*）的中間是素材或種類的名字，
+# 拆成前後兩段認。Game.choose 開爐成了併進「打造」那一則時用 is_step_line 收掉這些（FB-141），別的話（大勢門檻的消息之類）留著
+_STEP_LINES = frozenset({ASK_KIND, ASK_MAIN, ASK_AUX, ARMOR_ASK_MAIN, ARMOR_ASK_AUX, READY, CANCELLED})
+_PICKED_FRAMES = tuple(tuple(template.split("{what}")) for template in (PICKED_KIND, PICKED_MAIN, PICKED_AUX))
+
+
+def is_step_line(line: str) -> bool:
+    """這一行是不是打造單子一步一步走時自己回的話（step 的回話：問下一步、挑了什麼、上一步、不打了）。開爐的結果、拒絕句、
+    別的消息都不是。照上面的常數認，句子改了這裡跟著改，不另寫一份。"""
+    if line in _STEP_LINES:
+        return True
+    return any(len(line) > len(head) + len(tail) and line.startswith(head) and line.endswith(tail) for head, tail in _PICKED_FRAMES)
 
 
 def title(arg: str) -> str:

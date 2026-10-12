@@ -333,3 +333,30 @@ def test_naming_an_original_posts_the_name_or_keep(views):
     posts = [c[1] for c in calls if c[0] == "/api/menxia/name_divine"]
     # mx 每一次都另帶 person、kind（S.person 是 null 也照送），只比這三個鍵
     assert [(b.get("weapon"), b.get("name"), b.get("keep")) for b in posts] == [("兵:2", "斬月", None), ("兵:2", None, True)]
+
+
+_DIVINE_REFUSED = """return (async () => {
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };
+  const input = { value: "" };
+  const wanted = (id) => id === "name-divine-兵:2";
+  const real = T.ctx.document.getElementById;
+  // 被拒了：伺服器回來重畫的表單還在（假瀏覽器沒有真的 DOM，這裡替它放一張）；定成了的那一列不再畫表單，getElementById 找不到
+  let still = true;
+  T.ctx.document.getElementById = (id) => (wanted(id) && still ? { querySelector: (sel) => (sel === 'input[name="name"]' ? input : null) } : real(id));
+  const form = { id: "name-divine-兵:2", dataset: { op: "name-divine", id: "兵:2" }, data: { name: "斬月刀" }, querySelector: () => null };
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const kept = input.value;
+  still = false;
+  input.value = "";
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  return [kept, input.value];
+})();"""
+
+
+def test_a_refused_divine_name_stays_in_the_box_like_the_art_naming_form(views):
+    """終審 M4：定名被伺服器拒絕（名字不合格、有人用了），重畫出來的表單是空的——把剛打的字放回去，不用重打（同絕學定名那張）。
+    定成了那一列不再畫表單（找不到就什麼都不放）。表單 id 帶冒號，用 getElementById 找，不走選擇器。"""
+    m, x = views
+    x["gear"] = _gear(weapon={"worn": None, "rack": [_row(id="兵:2", keep="原品不能拆", divine={"pattern": "墜星劍"})]})
+    reply = {"/api/menxia/name_divine": {"menxia": x, "message": "這個名字不行。", "main": m}}
+    assert run(m, _DIVINE_REFUSED, menxia=x, responses=reply) == ["斬月刀", ""]

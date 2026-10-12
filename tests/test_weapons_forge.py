@@ -421,6 +421,43 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     assert not any(line in steps for line in lines)
 
 
+def test_a_folded_forge_keeps_an_unrelated_line_an_earlier_step_carried(content, world, monkeypatch):
+    """終審 M3：FB-141 的收合只收打造單子自己的回話（smithing.is_step_line）；前幾步順便帶來的別的話（例如大勢門檻的消息）
+    接在結果句後面留著，不從江湖紀錄消失。"""
+    game = _smithy(content, world)
+    game.choose(smithing.OPEN)
+    news = "洛陽傳來消息：宮裡的風向變了。"
+    with monkeypatch.context() as patch:
+        patch.setattr(game, "_general_gifts", lambda: [news])  # 挑種類那一步順便帶來一句別的話
+        game.choose(f"{smithing.KIND}劍")
+    for oid in (f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
+        game.choose(oid)
+    [entry] = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
+    assert entry.lines[0].startswith("鐵匠把精鐵砂與驚羽下爐，打出一把【")  # 結果句還是第一
+    assert entry.lines.index(news) > 0 and entry.lines[-1] == news  # 那句別的話接在這一爐自己的敘事後面
+    assert not any(smithing.is_step_line(line) for line in entry.lines)  # 單子自己的回話（挑了什麼、問下一步）都收掉
+
+
+def test_is_step_line_recognises_exactly_the_wizards_own_replies(content, world):
+    """smithing.is_step_line 照常數認：打開、挑種類／主料／輔料（PICKED_*）、上一步、不打了、防具那一頁的問話都是；
+    開爐的結果、拒絕句、別的消息都不是。"""
+    game = _smithy(content, world)
+    s, c = game.state, game.content
+    said = [*smithing.step(s, c, "forge", ""), *smithing.step(s, c, "forge-kind", "劍"), *smithing.step(s, c, "forge-main", "gang_1"),
+            *smithing.step(s, c, "forge-aux", "kuai_1")]
+    said += [line for _ in range(4) for line in smithing.step(s, c, "forge-undo", "")]  # 輔料、主料、種類退回去，再多按一下
+    said += smithing.step(s, c, "forge-cancel", "")
+    s.player.smith_draft = smithing.SmithDraft(kind=smithing.ARMOR_KIND)  # 防具沒有挑種類那一步
+    said += smithing.step(s, c, "forge-main", "gang_1") + smithing.step(s, c, "forge-aux", "kuai_1")
+    said += smithing.step(s, c, "forge-undo", "") + smithing.step(s, c, "forge-undo", "") + smithing.step(s, c, "forge-undo", "")
+    assert said and all(smithing.is_step_line(line) for line in said), [line for line in said if not smithing.is_step_line(line)]
+    assert {smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.ARMOR_ASK_MAIN, smithing.ARMOR_ASK_AUX,
+            smithing.READY, smithing.CANCELLED} <= set(said)  # 每一句問話都真的走過一遍
+    for other in ("鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。", "（還差 15 兩。）", "洛陽傳來消息：宮裡的風向變了。",
+                  "兵器：劍", "兵器：。", "主料：", smithing.NOT_ENOUGH, ""):
+        assert not smithing.is_step_line(other), other
+
+
 def test_each_forge_gets_its_own_entry_and_a_cancel_does_not_join_the_last_forge(content, world):
     """打開單子那一步另起一則（journal._mergeable_head 只看最新一則同不同標題）：連打兩爐是兩則；打開又不打了是第三則，
     不併進第二爐那一則。"""

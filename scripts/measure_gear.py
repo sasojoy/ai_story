@@ -154,7 +154,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
         item, msgs = real_forge(state, content_, world, kind, main, aux, *args, **kwargs)
         if item is not None and item.slot == "armor":
             count["forged"] += 1
-            count["named"] += item.secret is not None
+            count["named"] += item.secret is not None and not item.original and item.copy_of is None  # 神器原品與仿品不算名器（同 measure_secrets.py）
             grades[item.quality] += 1
             count["armor_silver"] += paid(state, before)
         return item, msgs

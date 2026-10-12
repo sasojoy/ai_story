@@ -205,14 +205,22 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     )
 
 
-def add_entry(state: GameState, entry: JournalEntry, merge: bool = False, fold: bool = False) -> None:
+def add_entry(
+    state: GameState, entry: JournalEntry, merge: bool = False, fold: bool | Callable[[str], bool] = False,
+) -> None:
     """最新的放最前面，只留最近 MAX_ENTRIES 則。
     merge=True 且最新一則是同一類（同標題）時併進那一則：敘事依序接上、數值變化加總、時間與結果標記用新的。
     fold=True（跟 merge 一起給）時併進去的敘事只留 entry 的：打造開爐成了那一下（FB-141），挑種類、主料、輔料那幾步的回報收掉、
-    結果句排第一（375 寬「剛剛」收著時看得到）；數值變化、引導照樣加總。併不進去（標題不同）時 fold 不起作用。"""
+    結果句排第一（375 寬「剛剛」收著時看得到）；數值變化、引導照樣加總。fold 也可以是一個判斷的函式（line → 要不要收）：
+    原本那一則裡它說是的那幾行收掉，其餘照留、接在 entry 的敘事後面（結果句仍排第一）——前幾步順便帶來的別的話（例如大勢門檻的
+    消息）不會跟著不見（終審 M3；呼叫端傳判斷，journal 不認識打造）。併不進去（標題不同）時 fold 不起作用。"""
     head = _mergeable_head(state, entry) if merge else None
     if head is not None:
-        state.journal[0] = _merged(head, entry, _story(entry) if fold else _story(head) + _story(entry))
+        if callable(fold):
+            lines = _story(entry) + [line for line in _story(head) if not fold(line)]
+        else:
+            lines = _story(entry) if fold else _story(head) + _story(entry)
+        state.journal[0] = _merged(head, entry, lines)
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]

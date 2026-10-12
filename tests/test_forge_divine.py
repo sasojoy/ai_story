@@ -8,6 +8,8 @@ from unittest import mock
 
 import pytest
 
+import server
+import webharness
 from conftest import FixedRandom, real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
@@ -179,6 +181,39 @@ def test_the_owner_names_the_original_once_and_the_name_takes_the_namespace(divi
     assert cfg.named_rumor.format(who="甲", name="斬月") in [r.text for r in owner.state.world.rumors]
 
 
+def test_naming_renames_the_owners_own_copies_at_once(divine_content, world):
+    """終審 M1：主人先打了仿品（「仿・無名神器」）再替原品定名——定成的同一下，他手上與裝備庫裡的仿品就跟著改成「仿・斬月」，
+    不用等下一次進鎖重讀（forge_secrets.refresh_names）。"""
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    wielded, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")  # 原品在手上，仿品進裝備庫
+    owner.state.player.weapon, owner.state.player.rack = wielded, [original]  # 換個擺法：仿品拿在手上、原品在裝備庫
+    stored, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")  # 再一把仿品進裝備庫
+    assert owner.state.player.weapon is wielded and owner.state.player.rack == [original, stored]
+    assert [i.name for i in (wielded, stored)] == [COPY_NAME.format(name=DIVINE_UNNAMED)] * 2
+    assert smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")[0]
+    assert (original.name, wielded.name, stored.name) == ("斬月", COPY_NAME.format(name="斬月"), COPY_NAME.format(name="斬月"))
+
+
+def test_naming_updates_the_first_makers_echo_entry_and_saves_it(divine_content, world, monkeypatch):
+    """終審 M2：原品定名之前就有人照著打了仿品，首創名望回饋記下的名字凍在「【無名神器】」（fusion.echo 打下的）；
+    定名時同一筆改成新名字、跟著 _save_season 存回，之後主人收到的回饋與湊滿人數的傳聞才寫得出是哪一把。"""
+    monkeypatch.setattr(fusion, "season_one", lambda *a, **k: True)  # 首創名望回饋只在第一季規則開著時有
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    other = _forger(divine_content, world, name="乙")
+    smithing.forge(other.state, divine_content, world, "劍", "gang_3", "gang_3")  # 定名之前就有人照著打
+    assert other.state.world.echoes["鑄|t_star"].name == f"【{DIVINE_UNNAMED}】"
+    world.save_season(other.state.world)  # 乙那一下動作存回共用賽季
+    owner.state.world = world.get_season()  # 甲下一次進鎖重讀
+    assert owner.name_divine(original.id, "斬月") == [smithing.DIVINE_NAMED.format(name="斬月")]
+    entry = world.get_season().echoes["鑄|t_star"]  # 從資料庫讀回來：真的存了
+    assert (entry.name, entry.creator, entry.followers, entry.made) == ("【斬月】", "甲", ["乙"], "打")
+    owner.state.world = world.get_season()
+    owner._deliver_echoes()
+    assert "江湖上又有 1 人照著你首創的【斬月】打了出來。" in owner.state.journal[0].lines
+
+
 
 def test_the_first_divine_forge_and_its_naming_go_into_the_annals(divine_content, world):
     """玩家傳（行狀，main 合進來的）：首創照第一批記名器的那一則接上神器——打出原品那一下記一則（還沒定名，寫譜名），
@@ -309,6 +344,42 @@ def test_gear_rows_mark_the_unnamed_original_with_its_book_name(divine_content, 
     smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)
     row = worn()
     assert row["divine"] is None and row["name"] == "墜星劍"  # 定了名：表單不再畫
+
+
+def _crowded_rack(content, world):
+    """手上拿著一把、裝備庫裡九把一般的，然後才打出原品——原品放在裝備庫的最後一格（equipment.store 一律接在後面）。"""
+    game = _forger(content, world, name="甲")
+    p = game.state.player
+    p.weapon = weapons.new_weapon(game.state, name="手刃", kind="劍", attribute="剛", tier=1, quality="下品")
+    p.rack = [weapons.new_weapon(game.state, name=f"備刃{i}", kind="刀", attribute="柔", tier=1, quality="下品") for i in range(9)]
+    original, _ = smithing.forge(game.state, content, world, "劍", "gang_3", "gang_3")
+    assert p.rack[-1] is original and len(p.rack) == 10  # 它真的排在最後
+    return game, original
+
+
+def test_gear_rows_put_the_unnamed_original_first_in_a_long_rack(divine_content, world):
+    """終審 I1：修練頁的裝備庫先列 8 件，原品排在最後一格就會被「再列 N 件」藏起來，定名表單找不到——還等著定名的原品排最前面，
+    其餘維持原本的先後。定了名就回到原位（不再特別排）。"""
+    game, original = _crowded_rack(divine_content, world)
+    rack = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["rack"]  # noqa: E731
+    rows = rack()
+    assert rows[0]["id"] == original.id and rows[0]["divine"] == {"pattern": "墜星劍"}
+    assert [r["name"] for r in rows[1:]] == [f"備刃{i}" for i in range(9)]  # 其餘照原來的先後
+    assert all(r["divine"] is None for r in rows[1:])
+    assert smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)[0]
+    assert [r["id"] for r in rack()] == [w.id for w in game.state.player.rack]  # 定了名：裝備庫照原樣的順序
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_the_naming_form_is_drawn_without_pressing_more_when_the_original_is_stored_last(divine_content, world):
+    """終審 I1：手上一把、裝備庫九把一般的、原品放最後——修練頁預設只列 8 件，定名表單照樣畫在前 8 件裡（不必按「再列 N 件」）。"""
+    from test_prologue_web import run
+    game, original = _crowded_rack(divine_content, world)
+    page = run(server.main_view(game), "return H.pagePractice();", menxia=server.menxia_view(game))
+    block = page.split('data-slot="weapon"')[1].split("</section>")[0]
+    assert f'data-op="name-divine" data-id="{original.id}"' in block and f'data-act="divine-keep" data-id="{original.id}"' in block
+    assert "再列 2 件" in block and block.count('data-act="wield"') == 8  # 裝備庫仍只列 8 件，表單是其中一件的
+    assert block.index("name-divine-") < block.index("備刃6")  # 原品排在一般的前面
 
 
 # ── Task 7：三階素材的新來源（兵器設計 4.9）──

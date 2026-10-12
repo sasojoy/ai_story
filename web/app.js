@@ -3611,6 +3611,10 @@
         // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
         if (!data.name.trim()) { toast("先取個名字。"); return; }
         await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打（同絕學定名那張）。
+        // 表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；定成了那一列不再畫表單，找不到就什麼都不放
+        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
         // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
