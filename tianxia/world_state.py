@@ -276,6 +276,25 @@ class WorldStateStore(Protocol):
         """這一季這個鍵的首悟紀錄：（意境名, 名號）；沒有人悟過是 None。"""
         ...
 
+    # ── 玩家傳（資料庫第 5 版 biographies）：每個角色每季一篇，跨季保留 ──
+
+    def save_annals(self, season: int, name: str, annals: list[dict], profile: dict) -> None:
+        """換季前把這個角色那一季的行狀與身家存起來（Game._reset_player_for_new_season）。已經存過的那一季：傳還沒寫成就換成這一份，
+        寫成了就不動（寫的是當時那份行狀）。"""
+        ...
+
+    def add_saved_annal(self, season: int, name: str, entry: dict) -> None:
+        """那一季的行狀已經存起來之後才補到的一則（上一季收場的決戰，下一季才回來補）：接在存著的那份後面。那一季沒存過就不記。"""
+        ...
+
+    def biography(self, season: int, name: str) -> dict | None:
+        """那一季這個角色的那一篇（欄位照 biographies 表；annals、profile 已經解開成 Python 的資料）；沒有是 None。"""
+        ...
+
+    def biographies_of(self, name: str) -> list[dict]:
+        """這個角色歷季存著的每一篇（同 biography），照季別由新到舊。"""
+        ...
+
     # ── 同伴性情漂移 ──
     def record_companion_tag(self, companion_id: str, tag: str) -> None: ...
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
@@ -441,6 +441,11 @@ class Game:
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
+        if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
+            self.world.save_annals(
+                old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
+                annals.profile(old, self.content),
+            )
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
@@ -1487,6 +1492,9 @@ class Game:
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
             self._outcome(tag, line)
+            # 行狀：隨口應對是自己的話，一律記；一次性的事、奇遇份量重一些
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對" + ("，成了。" if success else "，沒成。"),
+                        3 if event.once or event.qiyu else 1, quote=request.text)
             effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
@@ -2897,6 +2905,7 @@ class Game:
         if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
             heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
+        affinity = self.state.player.affinities.get(companion_id, 0)
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
@@ -2910,10 +2919,28 @@ class Game:
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
         msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
         msgs += self._count_talk(companion_id)
         return msgs
+
+    def _annal_talk(self, companion_id: str, delta: int, said: str | None) -> None:
+        """對話的一輪寫進行狀（玩家傳）：自己說的那一句一律記（原句與他回的頭一兩句）；挑選項的只在情誼動得多時記。"""
+        c, p = self.content, self.state.player
+        history = p.dialogue_history.get(companion_id, [])
+        reply = history[-1]["content"] if history and history[-1].get("role") == "assistant" else ""
+        asked = history[-2]["content"] if len(history) >= 2 and history[-2].get("role") == "user" else ""
+        name = annals.figure_name(c, companion_id)
+        mood = f"，情誼 {delta:+d}" if delta else ""
+        if said is not None:
+            weight = 3 if abs(delta) >= c.config.biography.talk_swing else 2
+            annals.note(self.state, c, annals.FIGURE, f"對{name}說了一句自己的話{mood}。", weight,
+                        figure=companion_id, quote=said, reply=annals.first_sentence(reply))
+        elif abs(delta) >= c.config.biography.talk_swing:
+            how = "談得投機" if delta > 0 else "話不投機"
+            annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
+                        figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
 
     def _faction_step(self, arg: str) -> list[str]:
         """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
@@ -3368,6 +3395,9 @@ class Game:
             return
         fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
         p.events_seen += [eid for _, eid, _ in fresh]
+        for _, _, r in fresh:
+            if r.locked_by == p.name:  # 行狀：你暗中鎖定的伏筆左右了這件大事（揭曉這一刻才記，鎖定的當下不能露出來）
+                annals.note(self.state, c, annals.DEED, f"你暗中布下的伏筆左右了這件大事：{r.text}", 5, place="", time=r.time)
         last = fresh[-1][2]
         if len(fresh) == 1:
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
@@ -3412,7 +3442,12 @@ class Game:
         """名將贈禮（裝備四欄 6.4）：情誼到 gift_affinity 的人物把贈禮交給你，每位名將每季全服只送一人（treasures.gifts_due 記進
         WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
         事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
-        return treasures.gifts_due(self.state, self.content)
+        given = dict(self.state.world.general_gifts)
+        msgs = treasures.gifts_due(self.state, self.content)
+        for cid, who in self.state.world.general_gifts.items():
+            if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
+                annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
+        return msgs
 
     def _deliver_renames(self) -> None:
         """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
@@ -3572,6 +3607,46 @@ class Game:
             time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines, changes=changes,
             battle_id=record.id,
         ))
+        self._annal_showdown(battle, me, name, side, role, rank, len(ranking), earlier, time)
+
+    def _annal_showdown(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, name: str, side: str, role: str,
+        rank: int | None, ranked: int, earlier: int | None, time: float,
+    ) -> None:
+        """一場決戰寫進行狀（玩家傳）：站哪邊、職位、出手幾回合、帶頭佔上風、首功或戰功排名、倒下、結果；每一次放手一搏另一則
+        （原句、播出來的那一版劇情、成敗、點名了誰）。上一季的決戰（earlier）接在存起來的那一季後面（角色已經重來了）。"""
+        c, s = self.content, self.state
+        if not annals.on(c):
+            return
+        tuning = c.config.battle
+        top = battle_instance.top_merit(battle, tuning, me.faction) if rank is not None else None
+        parts = [f"{name}，你站在{side}" + (f"以{role}出陣" if role else ""), f"出手 {me.acted_rounds} 回合"]
+        if me.led_rounds:
+            parts.append(f"帶頭佔了 {me.led_rounds} 回合上風")
+        if top is not None and top.name == me.name:
+            parts.append("是這一邊的首功")
+        elif rank is not None and rank <= 3:
+            parts.append(f"戰功排第 {rank}／{ranked}")
+        if me.fell_round is not None:
+            parts.append(f"第 {me.fell_round} 回合倒下")
+        parts.append(f"結果{battle.outcome_title or '收場'}")
+        place = self._battle_region_name(c.battles[battle.battle_id]) if battle.battle_id in c.battles and c.battles[battle.battle_id].region else ""
+        won = bool(battle.outcome_side) and battle.outcome_side == me.faction
+        entries = [annals.entry(
+            s, c, annals.SHOWDOWN, "，".join(parts) + "。", 5 if won or (top is not None and top.name == me.name) else 4,
+            place=place, time=time, season=earlier is None,
+        )]
+        for g in me.gambles:
+            what = f"在{name}陣上放手一搏" + ("，成了" if g.won else "，沒成") + (f"，點名{g.target}" if g.target else "") + "。"
+            entries.append(annals.entry(
+                s, c, annals.SHOWDOWN, what, 4 if g.won else 3, quote=g.text, reply=g.story, place=place, time=time, season=earlier is None,
+            ))
+        if earlier is None:
+            s.player.annals += entries
+            annals.trim(s, c)
+        else:
+            for e in entries:
+                self.world.add_saved_annal(earlier, s.player.name, e.model_dump())
 
     def _showdown_pay(
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
@@ -4445,6 +4520,9 @@ class Game:
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
         msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
+        won = result.tier in team.WIN_TIERS
+        annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
+                    figure=fig.character or "")
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
@@ -4995,14 +5073,22 @@ class Game:
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
         self._hide(msgs[0])
+        rare = event.once or event.qiyu  # 行狀：一次性的事、奇遇記下你怎麼選的（平常的事件太多，不記）
+        what = f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，你選了「{choice.text}」"
         if choice.combat:
+            if rare:
+                annals.note(s, c, annals.DEED, what + "。", 3)
             return msgs + self._event_battle(event, choice)
         if choice.check:
             success = roll_check(choice.check, s, c, self.world, self.rng)
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
             msgs.append(line)
             self._outcome(tag, line)
+            if rare:
+                annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
             return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c)) + self._tale_clue(event)
+        if rare:
+            annals.note(s, c, annals.DEED, what + "。", 3)
         return msgs + self._apply(choice.effect) + self._tale_clue(event)
 
     def _tale_clue(self, event: Event) -> list[str]:
@@ -5291,6 +5377,8 @@ class Game:
         if pending is not None and self.state.player.naming is None:
             self._menxia_entry(msgs[0], xinde)
             self._save_season()
+            shown = self._art_name(pending)
+            annals.note(self.state, self.content, annals.DEED, f"江湖上第一個把【{pending}】練成絕學的人，定名【{shown}】。", 5)
         return msgs
 
     @_not_while_preparing
@@ -5984,6 +6072,7 @@ class Game:
             story = f"你攔下{rival}動手，卻不是他的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)  # 行狀：截殺與被截殺（兩邊各記自己的）
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
@@ -6189,6 +6278,7 @@ class Game:
         summary = self._file_battle(record)
         msgs = [line, summary, *record.notes, *battlelog.gains_list(record)]
         self._write(title, msgs, tag=battlelog.outcome_text(record))
+        annals.note(s, c, annals.FIGHT, f"獨力對上{foe.title}{foe.name}，{tier}。", 3 if won else 2)
         return msgs
 
     def _xinde(self) -> int:
@@ -7587,6 +7677,11 @@ class Game:
             ],
         }
 
+    def annals_view(self) -> dict:
+        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。"""
+        on = annals.on(self.content)
+        return {"on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else []}
+
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
         return calendar.stamp_text(time, self.content, self.state.world, clock=clock)
@@ -7751,9 +7846,14 @@ class Game:
             lines = journal.without_fragments(lines)
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 
+    def _art_name(self, art_id: str) -> str:
+        art = team.resolve_art(art_id, self.content, self.world)
+        return art.name if art is not None else art_id
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
+        annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
             return msgs

@@ -17,5 +17,6 @@
   "weapons": {"enabled": false},
   "armor": {"enabled": false},
   "mounts": {"enabled": false},
-  "treasures": {"enabled": false}
+  "treasures": {"enabled": false},
+  "biography": {"enabled": false}
 }

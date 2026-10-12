@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import json
 import random
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -423,6 +424,48 @@ class SqliteWorldStore:
                 "SELECT name, creator FROM insight_firsts WHERE season = ? AND key = ?", (self._season_number(conn), key),
             ).fetchone()
         return None if row is None else (row["name"], row["creator"] or "")
+
+    # ── 玩家傳 ────────────────────────────────────────────
+
+    def save_annals(self, season: int, name: str, annals: list[dict], profile: dict) -> None:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO biographies (season, key, name, annals, profile) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (season, key) DO UPDATE SET annals = excluded.annals, profile = excluded.profile, name = excluded.name "
+                "WHERE biographies.text IS NULL",
+                (season, name_key(name), name, json.dumps(annals, ensure_ascii=False), json.dumps(profile, ensure_ascii=False)),
+            )
+
+    def add_saved_annal(self, season: int, name: str, entry: dict) -> None:
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT annals FROM biographies WHERE season = ? AND key = ?", (season, name_key(name)),
+            ).fetchone()
+            if row is None:
+                return
+            annals = json.loads(row["annals"]) + [entry]
+            conn.execute(
+                "UPDATE biographies SET annals = ? WHERE season = ? AND key = ?",
+                (json.dumps(annals, ensure_ascii=False), season, name_key(name)),
+            )
+
+    @staticmethod
+    def _biography_row(row: Row) -> dict:
+        out = dict(row)
+        out["annals"] = json.loads(out["annals"])
+        out["profile"] = json.loads(out["profile"])
+        out["public"] = bool(out["public"])
+        return out
+
+    def biography(self, season: int, name: str) -> dict | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT * FROM biographies WHERE season = ? AND key = ?", (season, name_key(name))).fetchone()
+        return None if row is None else self._biography_row(row)
+
+    def biographies_of(self, name: str) -> list[dict]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT * FROM biographies WHERE key = ? ORDER BY season DESC", (name_key(name),)).fetchall()
+        return [self._biography_row(row) for row in rows]
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 

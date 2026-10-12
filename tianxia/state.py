@@ -257,6 +257,21 @@ class DuelState(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
 
 
+class AnnalEntry(BaseModel):
+    """行狀的一則（玩家傳，tianxia/annals.py）：季末寫《某某傳》的材料。只記事實，不記數值以外的推測；字是當下寫好的
+    （時刻照 calendar.stamp_text、地點與人物照名字），季末不必再查這一季的狀態。"""
+
+    kind: str  # annals.KINDS：showdown 決戰、figure 跟歷史人物、fight 單挑（頭目、挑戰本人、截殺）、deed 日常的大事
+    time: float  # 世界秒
+    when: str  # 寫的當下的時刻（calendar.stamp_text）
+    place: str = ""  # 地點的名字
+    figure: str = ""  # 人物 id（content.characters）；跟人物無關是空字串
+    text: str  # 一句事實，80 字以內
+    quote: str = ""  # 你說的那一句（自己說、放手一搏、隨口應對的原句）
+    reply: str = ""  # 人物回的那一句，或放手一搏播出的那一版劇情
+    weight: int = 1  # 份量 1～5：行狀滿了先丟輕的
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -396,6 +411,12 @@ class PlayerState(BaseModel):
     # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
     # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
     renames_told: list[str] = Field(default_factory=list)
+    # 行狀（玩家傳，tianxia/annals.py）：這一季值得寫進傳裡的事，照份量留最多 Config.biography.cap 則。角色每季重來，換季前存進
+    # biographies 表（Game._reset_player_for_new_season）
+    annals: list[AnnalEntry] = Field(default_factory=list)
+    # 上一次看過的幾樣狀態（陣營、門派、階、等級、名號、同伴、寶物、情誼……，annals.watch）：每個動作結束時拿現在的跟它比，變了的記一筆。
+    # None＝還沒看過（新角色、這一版之前的存檔）：第一次只記下來、不補記以前的事
+    annals_mark: dict | None = None
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     # 遊俠名號（ranger.py；散人的成長階梯）：散人時攢的善名、惡名（只算加的）與懸賞的功績；投靠了陣營就不再記（凍結）

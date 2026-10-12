@@ -17,7 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import armor, equipment, forge_secrets, fusion, naming, team, weapons
+from . import annals, armor, equipment, forge_secrets, fusion, naming, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -226,6 +226,9 @@ def forge(
     if secret is not None:
         forge_secrets.solve(state, tianji, secret, key)
         if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；神器那一句不帶名字（還沒定名），定名時另傳（name_divine）
+            # 行狀（玩家傳）：首創。神器原品這時還叫「無名神器」，寫鑄譜上的譜名（待 joy 潤）；定名時另記一筆（name_divine）
+            deed = DIVINE_DEED.format(name=secret.name) if divine else f"江湖上第一個打出名器【{secret.name}】。"
+            annals.note(state, content, annals.DEED, deed, 4)
             rule = content.config.forge_secrets
             text = rule.divine_rumor.format(who=state.player.name) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
             add_rumor(state, text, None, content=content, named=True)
@@ -239,6 +242,8 @@ DIVINE_NAMED = "從今以後，江湖上這把神器就叫【{name}】。"  # �
 NAME_GONE = "（沒有等著你定名的神器。）"  # 待 joy 潤
 NAME_BAD = "這個名字不行：{problem}。"  # 待 joy 潤（同 cultivation.name_mastered）
 NAME_TAKEN = "【{name}】已經有人用了，換一個吧。"  # 待 joy 潤（同 cultivation.name_mastered）
+DIVINE_DEED = "江湖上第一個打出神器（鑄譜上叫【{name}】）。"  # 待 joy 潤：行狀（玩家傳），打出原品那一下
+DIVINE_NAMED_DEED = "替自己打出的神器定名【{name}】。"  # 待 joy 潤：行狀（玩家傳），同絕學定名那一則的份量 5
 
 
 def name_divine(
@@ -270,6 +275,7 @@ def name_divine(
     rule, who = content.config.forge_secrets, state.player.name
     add_chronicle(state, rule.named_chronicle.format(who=who, name=name, what=forge_secrets.what_text(item.slot, item.kind)))
     add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
+    annals.note(state, content, annals.DEED, DIVINE_NAMED_DEED.format(name=name), 5)
     return True, [DIVINE_NAMED.format(name=name)]
 
 

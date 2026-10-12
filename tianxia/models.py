@@ -1697,6 +1697,20 @@ class FirstEcho(_Strict):
     cap: int = Field(default=5, ge=1)
 
 
+class Biography(_Strict):
+    """玩家傳（企劃者 2026-10-12：「記錄玩家在大戰的行動還有一些值得紀錄的日常活動尤其跟每個歷史人物的對話互動，然後最後賽季結束時
+    凝結成一個某某傳」）。第一批只記行狀（tianxia/annals.py，PlayerState.annals）；每季都有，不掛第一季開關。"""
+
+    enabled: bool = True
+    # 行狀一季最多留幾則：超過就先丟份量最輕的、同份量丟最早的（annals.trim）。一季一百多個小時，決戰三場、人物十來位、
+    # 日常的大事幾十件；150 則夠一篇一兩千字的傳挑，存檔也只多十幾 KB
+    cap: int = Field(default=150, ge=10)
+    level_every: int = Field(default=5, ge=1)  # 等級每到這個倍數記一筆（第 5、10、15……級）
+    affinity_marks: list[int] = Field(default_factory=lambda: [20, 40, 60, 80])  # 跟人物的情誼往上跨過這幾格各記一筆
+    affinity_drop: int = Field(default=10, ge=1)  # 一個動作裡情誼掉這麼多就記一筆（交惡）
+    talk_swing: int = Field(default=5, ge=1)  # 對話一輪情誼動這麼多才記那一句（自己說的話不看這個，一律記）
+
+
 class FollowerTuning(_Strict):
     """部下（PM 2026-10-12 派工：企劃者問「部下現在是不是沒有作用」）：武學成數跟著本人的等級長、全服決戰的份量。"""
 
@@ -1774,6 +1788,7 @@ class Config(_Strict):
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
+    biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人

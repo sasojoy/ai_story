@@ -30,7 +30,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
+from . import annals, calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
@@ -717,6 +717,8 @@ def fuse(
     if secret is None:  # 秘方那一門的傳聞由 _secret_lines 傳（不再另傳一句特別功效的）
         msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
     return art, msgs + _store_forged(state, content, world, art, quality)
 
 
@@ -906,6 +908,8 @@ def merge(
         head += f"\n{result.note}"
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     echo(state, content, result, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)  # 行狀（玩家傳）：首創
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
     extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first)
     return result, [head] + extra + _charge(state, *_price(content, partner, "merge"))
@@ -1045,4 +1049,6 @@ def blend(
     if secret is None:
         msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
     return art, msgs + _store_forged(state, content, world, art, quality)

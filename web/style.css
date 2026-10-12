@@ -1086,3 +1086,18 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .leaf-recipe { flex-basis: 100%; margin: 6px 0 0; font-family: var(--bk-serif); font-size: 14px; color: var(--bk-ink-2); letter-spacing: 1px; }
 .leaf.empty .leaf-text { height: 180px; color: var(--bk-ink-2); }
 .leaf-hint { margin: 10px 4px 0; color: var(--bk-ink-2); font: 14px var(--bk-serif); }
+
+/* 見聞的「行狀」（玩家傳第一批，annalsHtml）：一則一列，新的在上。時刻與種類是一行小字，事實一行，你說的那一句與他回的那一句
+   縮排在底下；份量重的（4 以上）左邊一道朱紅。字體跟武學譜同一套襯線，留一點史書的味道，顏色照一般卡片走 */
+.annals-head h3 { margin: 0 0 4px; font-family: var(--bk-serif); letter-spacing: 0.08em; }
+.annals-head p { margin: 0; }
+ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
+.annal { padding: 10px 0 10px 10px; border-left: 3px solid transparent; }
+.annal + .annal { border-top: 1px solid var(--card-2); }
+.annal.heavy { border-left-color: var(--accent); }
+.annal-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+.annal-kind { padding: 0 6px; border: 1px solid var(--card-2); border-radius: 999px; letter-spacing: 0.1em; }
+.annal-text { margin: 4px 0 0; font-family: var(--bk-serif); line-height: 1.65; }
+.annal-quote, .annal-reply { margin: 4px 0 0 1em; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.annal-quote { color: var(--ink); }
+.annal-reply b { font-weight: 600; color: var(--ink); }

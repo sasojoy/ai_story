@@ -179,6 +179,20 @@ def test_the_owner_names_the_original_once_and_the_name_takes_the_namespace(divi
     assert cfg.named_rumor.format(who="甲", name="斬月") in [r.text for r in owner.state.world.rumors]
 
 
+
+def test_the_first_divine_forge_and_its_naming_go_into_the_annals(divine_content, world):
+    """玩家傳（行狀，main 合進來的）：首創照第一批記名器的那一則接上神器——打出原品那一下記一則（還沒定名，寫譜名），
+    定名再記一則（份量 5，同絕學定名）；別人照著打的仿品不記。"""
+    divine_content.config.biography.enabled = True
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert [(e.text, e.weight) for e in owner.state.player.annals] == [(smithing.DIVINE_DEED.format(name="墜星劍"), 4)]
+    other = _forger(divine_content, world, name="乙")
+    smithing.forge(other.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert other.state.player.annals == []  # 仿品不是首創
+    assert smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")[0]
+    assert (owner.state.player.annals[-1].text, owner.state.player.annals[-1].weight) == (smithing.DIVINE_NAMED_DEED.format(name="斬月"), 5)
+
 @pytest.mark.parametrize("slot, pick, problem", [
     ("weapon", lambda c: "斬月刀", weapons.KIND_CLASH),  # 劍的原品不能有別種兵器的字
     ("weapon", lambda c: weapons.shop_name("劍", "剛"), weapons.SHOP_CLASH),
