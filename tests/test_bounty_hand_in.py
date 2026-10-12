@@ -702,7 +702,8 @@ def test_only_a_missing_bounty_option_gets_the_new_line_fb162(beta_setup):
 
 
 def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
-    """設計 4.8：打開榜一則（「懸賞榜・此地」），挑一件與交出併成一則（「懸賞榜」）；返回照舊一則；下一次再來另起一則，不併進上一次的。"""
+    """設計 4.8（FB-161 改過）：打開榜一則（「懸賞榜・此地」），挑一件不寫紀錄、交出一則（「懸賞榜」）；返回照舊一則；
+    下一次再來另起一則，不併進上一次的。"""
     content, world = beta_setup
     good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
     _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
@@ -711,11 +712,31 @@ def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
     for b, item in ((first, good.id), (second, other.id)):
         _open(content, world, "丙", f"bounty:pick:{b.id}", f"bounty:give:{b.id}:{item}", "bounty:back")
     journal = _load(world, "丙").journal
-    assert len(journal) == start + 6  # 每次三則：打開、挑與交、返回
+    assert len(journal) == start + 6  # 每次三則：打開、交出、返回（挑一件不寫）
     handed = journal[1]
-    assert handed.title == bounties.BOARD and handed.lines[0] == bounties.pick_line(content, second)
-    assert any(line.startswith(bounties.GIVEN_PREFIX) for line in handed.lines)
+    assert handed.title == bounties.BOARD and handed.lines[0].startswith(bounties.GIVEN_PREFIX)
+    assert bounties.pick_line(content, second) not in handed.lines
     assert journal[2].title.startswith(f"{bounties.BOARD}・")
+
+
+def test_each_hand_in_gets_its_own_entry_and_browsing_writes_none(beta_setup):
+    """FB-161：同一次逛榜連交兩張，各一則、各寫各的得失（以前挑了又回的句子全留著，兩張的賞加總成一筆，分不出哪一張給了多少）；
+    挑一件、回到懸賞榜只是翻頁，不寫紀錄。"""
+    content, world = beta_setup
+    good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+    _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
+    first, second = _art(world), _art(world)
+    start = len(_load(world, "丙").journal)
+    _open(content, world, "丙", f"bounty:pick:{first.id}", "bounty:unpick", f"bounty:pick:{second.id}", "bounty:unpick",
+          f"bounty:pick:{first.id}", f"bounty:give:{first.id}:{good.id}", f"bounty:pick:{second.id}", f"bounty:give:{second.id}:{other.id}")
+    journal = _load(world, "丙").journal
+    assert len(journal) == start + 3  # 打開、交第一張、交第二張
+    second_in, first_in, opened = journal[0], journal[1], journal[2]
+    assert opened.title.startswith(f"{bounties.BOARD}・")
+    for entry, b in ((first_in, first), (second_in, second)):
+        assert entry.title == bounties.BOARD and entry.lines[0].startswith(bounties.GIVEN_PREFIX)
+        assert not any(bounties.is_browse_line(line) for line in entry.lines)
+        assert "銀兩 +20" in entry.changes  # 一張的賞，不是兩張加總
 
 
 def test_the_card_lists_hand_ins_you_can_make_even_outside_town(beta_setup):

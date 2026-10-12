@@ -1465,19 +1465,22 @@ class Game:
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
-            # 會全部併進上一爐那一則。懸賞榜的挑一件、回到懸賞榜、交出同理併成一則「懸賞榜」（懸賞榜設計 4.8）：打開榜那一則的標題是
-            # 「懸賞榜・此地」，每次來都另起一則，不會併進上一次來的；揭下、放棄、返回照舊各一則
+            # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
+            # 只有那一句回話時不寫紀錄（bounties.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
+            # 連交幾張時各寫各的得失）
             entry = self._draft.entry(self.state.world.time, msgs)
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
+            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
+                              and all(bounties.is_browse_line(line) for line in entry.lines))
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
                 # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
                 # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smithing.is_step_line）：
                 # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
                 forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
-                journal.add_entry(self.state, entry, merge=(kind == "smith" and smithing.is_forge_step(arg) and arg != "forge") or (
-                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS), fold=smithing.is_step_line if forged else False)
+                journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge",
+                                  fold=smithing.is_step_line if forged else False)
         finally:
             self._draft = None
             self._fight = None

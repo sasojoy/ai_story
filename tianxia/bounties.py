@@ -39,7 +39,10 @@ GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
 EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
 RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下
-HAND_IN_VERBS = ("pick", "unpick", "give")  # 挑一件、回到懸賞榜、交出：江湖紀錄併成一則（Game.choose，懸賞榜設計 4.8）
+# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（Game.choose）；交出每一張各一則、各寫各的得失（FB-161：
+# 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
+BROWSE_VERBS = ("pick", "unpick")
+PICKED = "你替「{what}」挑一件要交的東西。"  # 待 joy 潤：按了 bounty:pick 的回話（pick_line）
 UNITS = {"art": "門", "arms": "把"}
 GIVE_YES = "交出"  # 待 joy 潤：確認層上那一顆（Option.confirm_yes）
 STUCK = "這幾張你現在交不出：{titles}（求藝要江湖上新合出來的功夫、師門配方不算、不能是身上正在練的；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
@@ -563,7 +566,13 @@ def stuck_label(content: Content, asks: list[Bounty], kept: frozenset[str] | set
 
 def pick_line(content: Content, b: Bounty) -> str:
     """按了「交出…」的回話（待 joy 潤）。"""
-    return f"你替「{issuer(content, b)}・{title(content, b)}」挑一件要交的東西。"
+    return PICKED.format(what=f"{issuer(content, b)}・{title(content, b)}")
+
+
+def is_browse_line(line: str) -> bool:
+    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：Game.choose 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
+    head, _, tail = PICKED.partition("{what}")
+    return line == UNPICKED or (len(line) > len(head) + len(tail) and line.startswith(head) and line.endswith(tail))
 
 
 def _offer(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple[str, str]:
