@@ -127,9 +127,9 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
     def paid(state, before: int) -> int:
         return max(0, before - state.player.stats.get("silver", 0))
 
-    def heal(state, content_, member):
+    def heal(state, content_, member, where=None):
         before = state.player.stats.get("silver", 0)
-        out = real_heal(state, content_, member)
+        out = real_heal(state, content_, member, where)
         count["heal_silver"] += paid(state, before)
         return out
 

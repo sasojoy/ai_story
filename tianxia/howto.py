@@ -177,6 +177,13 @@ def gift_line(content: Content) -> str:
     return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
 
 
+def top_up_line(content: Content, added: int) -> str:
+    """拿掉一鍵補滿之後，舊角色補回體丹的那一行（Game._top_up_pills）。"""
+    cfg = content.config
+    return (f"體力條上的「{cfg.beta_free_refill_label}」收起來了；補給你{cfg.stamina_pill_name} {added} 顆，"
+            f"手上一共 {cfg.beta_gift_stamina_pills} 顆，一顆回 {cfg.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。")
+
+
 # ── 江湖頁的戰況、態勢、大事、主線點開的說明（explain-2 第一項，FB-100）──────────────────────
 # 第一季濃縮版才有（呼叫端在 rules.season_one 後面）。亂局帶讀 Config.chaos_low／chaos_high，此刻在亂局的戰線讀 rules.chaos_fronts，
 # 大事的件數讀時刻表、擲骰的上下限讀 timetable 的常數、改寫得了的大事讀伏筆的鏈：不另寫一份判斷。戰況的變化照舊不寫數字（FB-064），
@@ -579,7 +586,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
-        "- **移動**：步行不花體力、只花時間；趕路快一些、疾行立刻到，兩種都花體力。步行、趕路時，每一段路可以邊走邊想、"
+        "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         "沿途打聽、留意地形、路邊採集各一次。",
         "",
         "#### 體力",

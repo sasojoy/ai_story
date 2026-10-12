@@ -178,7 +178,7 @@ def test_the_pure_functions_have_no_default_pace_or_saving(content):
             call()
 
 
-@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 2 分鐘"), ("hurry", 2, "約 1 分鐘"), ("dash", 5, "立刻到")])
+@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 2 分鐘"), ("dash", 5, "立刻到")])
 def test_every_place_that_states_the_stamina_matches_what_departing_takes(content, world, mode, cost, when):
     """Review Focus 1：騎著餓了一半的駑馬（飽足 50：省 18.75%、步調 0.775）往湖邊（3 分鐘路程），選單「前往」、輿圖三顆鈕、
     地點詳情、輿圖的拒絕話寫的體力與時間，都等於出發時實際扣的（設計 5.3 的呼叫處表，一處都不能漏乘）。"""
@@ -205,9 +205,9 @@ def test_every_place_that_states_the_stamina_matches_what_departing_takes(conten
         assert game.state.journal[0].tag == f"{word}{when}"  # 紀錄的標籤用同一個步調
 
 
-@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 1 分鐘"), ("hurry", 2, "約 1 分鐘"), ("dash", 2, "立刻到")])
+@pytest.mark.parametrize("mode, cost, when", [("walk", 0, "約 1 分鐘"), ("dash", 2, "立刻到")])
 def test_turning_back_on_the_road_states_and_takes_the_same_stamina(content, world, mode, cost, when):
-    """走到一半折返（設計 5.3：三種走法各驗一次）：回程照路上的位置算（road_spot 讀出發時的步調），鈕上寫的時間與體力就是扣的、
+    """走到一半折返（設計 5.3：兩種走法各驗一次；趕路 2026-10-12 拿掉）：回程照路上的位置算（road_spot 讀出發時的步調），鈕上寫的時間與體力就是扣的、
     排好的。回程 1.5 分鐘：趕路原本 2 點、疾行 3 點，騎餓了一半的駑馬（省 18.75%）2×0.8125＝1.625 → 2、3×0.8125＝2.4375 → 2；
     回程的步調照折返那一刻的坐騎（飽足還是 50：0.775）。road_spot 要是用步調 1 反推，會算成走了六成一（回程 1.8375 分鐘）：
     疾行 4 點 → 3，步行、趕路排的抵達時刻也多兩成多。"""
@@ -273,7 +273,7 @@ def test_the_map_routes_layer_counts_walking_minutes_on_horseback(content, world
 # ── Task 3：飽足、餵、結伴同行 ──
 
 def test_each_new_leg_makes_the_horse_hungrier(content, world):
-    """設計 5.4：每抵達新的一站扣：步行、趕路 −5，疾行 −10；剛出發就折返（回到原地、不換段）不扣；坐騎關著不扣。"""
+    """設計 5.4：每抵達新的一站扣：步行 −5，疾行 −10；剛出發就折返（回到原地、不換段）不扣；坐騎關著不扣。"""
     game = _game(content, world, horse=_horse())
     p = game.state.player
     walk_to(game, "lake")
@@ -281,9 +281,9 @@ def test_each_new_leg_makes_the_horse_hungrier(content, world):
     game.set_move_mode("dash")
     game.choose("move:town:dash")
     assert p.location == "town" and p.mount.edge == 85
-    game.set_move_mode("hurry")
-    game.choose("move:lake:hurry")
-    game.choose("road:back:hurry")  # 剛出發就折返：立刻回原地
+    game.set_move_mode("walk")
+    game.choose("move:lake")
+    game.choose("road:back")  # 剛出發就折返：立刻回原地
     assert p.location == "town" and p.journey is None and p.mount.edge == 85
     content.config.mounts.enabled = False
     game.set_move_mode("walk")
@@ -345,15 +345,14 @@ def _follow(game, leader):
 
 
 def test_travelling_together_follows_the_leaders_horse_and_each_pays_with_his_own(content):
-    """設計 5.8（Review Focus 1）：整隊照帶頭的人的坐騎走（照抄的這一趟連步調一起抄，抵達時刻一樣），體力各付各的：
-    帶頭的騎吃飽的駑馬趕路 3→2，跟著的沒馬照原價 3。"""
+    """設計 5.8（Review Focus 1）：整隊照帶頭的人的坐騎走（照抄的這一趟連步調一起抄，抵達時刻一樣）：帶頭的騎吃飽的駑馬步行，
+    跟著的沒馬也照步調 0.7 走；步行不花體力（體力各付各的見下一條的疾行）。"""
     a = _traveller(content, "甲", horse=_horse())
     b = _traveller(content, "乙")
     _follow(b, "甲")
-    a.set_move_mode("hurry")
-    assert "乙跟著你。" in a.choose("move:lake:hurry")
+    assert "乙跟著你。" in a.choose("move:lake")
     stored = CharacterStore(a.world.db).load("乙").player
-    assert a.state.player.stamina == 98.0 and stored.stamina == 97.0
+    assert a.state.player.stamina == 100.0 and stored.stamina == 100.0
     assert stored.journey == a.state.player.journey and stored.journey.pace == pytest.approx(0.7)
 
 

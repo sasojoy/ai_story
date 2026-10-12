@@ -6,6 +6,8 @@
 - 每陣營每週達成幾道軍令；升第 2 階的人數；
 - 結局、收季時間、有沒有卡住（時間用完還沒收季）；
 - 截殺的場數照結果分（守方勝、平手、攻方勝、策馬脫身〔裝備四欄 5.10：被截殺的人騎的馬比較快，跑掉了不打〕）；
+- 傷與體力（企劃者 2026-10-12 療傷只在醫館）：每陣營假人一季平均的內傷（佔氣血上限的幾成，每現實小時取樣）、
+  療傷幾次與銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動花掉多少體力、季末等級中位數；
 - 驗收（總計畫 T11）：第 6 週以前沒有決定性勝利；三條戰線的週末中位數在 20～80。
 
 執行：.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60
@@ -27,7 +29,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import calendar, database, rules, server_bots, team  # noqa: E402
+from tianxia import bot, calendar, database, rules, server_bots, team  # noqa: E402
 from tianxia.bot_runner import BotRunner, TickReport  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
@@ -96,6 +98,34 @@ def run_season(
     real_record, real_spoils, real_fled = Game._raid_record, Game._raid_spoils, Game._raid_fled
     duels: Counter = Counter()  # 單人頭目戰（Config.duel）：照結果數場數（抽身退走記「抽身」）
     real_finish = Game._duel_finish
+    care: dict[str, Counter] = defaultdict(Counter)  # 陣營 → 療傷、療傷銀、繞路、吃丹、內傷取樣
+    real_heal, real_pill, real_choose = Game.heal, Game.take_stamina_pill, Game.choose
+    clinic_hop = getattr(bot, "clinic_hop", lambda game: None)  # 醫館之前的版本沒有（拿來量改動前的基準）
+
+    def side_of(game):
+        return game.state.player.faction or "none"
+
+    def count_heal(self):
+        silver = self.state.player.stats.get("silver", 0)
+        msgs = real_heal(self)
+        if msgs and msgs[0].startswith("療傷完畢"):
+            care[side_of(self)]["療傷"] += 1
+            care[side_of(self)]["療傷銀"] += silver - self.state.player.stats.get("silver", 0)
+        return msgs
+
+    def count_pill(self, *args, **kwargs):
+        pills = self.state.player.stamina_pills
+        msgs = real_pill(self, *args, **kwargs)
+        care[side_of(self)]["吃丹"] += pills - self.state.player.stamina_pills
+        return msgs
+
+    def count_choose(self, option_id, *args, **kwargs):
+        if option_id.startswith("move:") and option_id.partition(":")[2].partition(":")[0] == clinic_hop(self):
+            care[side_of(self)]["繞路"] += 1
+        stamina = self.state.player.stamina
+        msgs = real_choose(self, option_id, *args, **kwargs)
+        care[side_of(self)]["花體力"] += max(0, round(stamina - self.state.player.stamina))
+        return msgs
 
     def count_finish(self, tier, line):
         duels[tier or "抽身"] += 1
@@ -121,7 +151,9 @@ def run_season(
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}), \
             mock.patch.object(Game, "_raid_record", count_record), mock.patch.object(Game, "_raid_spoils", count_spoils), \
             mock.patch.object(Game, "_raid_fled", count_fled), \
-            mock.patch.object(Game, "_duel_finish", count_finish):
+            mock.patch.object(Game, "_duel_finish", count_finish), \
+            mock.patch.object(Game, "heal", count_heal), mock.patch.object(Game, "take_stamina_pill", count_pill), \
+            mock.patch.object(Game, "choose", count_choose):
         world, characters = open_world(db_path), open_characters(db_path)
         world.seed_first_season(content)
         world.open_season(content, now[0])
@@ -147,6 +179,15 @@ def run_season(
             for order in season.orders:
                 if order.done:
                     orders_done[order.id] = (order.faction, order.week)
+            if round(now[0] - START) % 3600 < tick:  # 每現實小時取樣一次內傷
+                for state in characters.all(bots_only=True):
+                    member = state.player.member
+                    if state.player.faction is None or member.level <= 0:
+                        continue
+                    con = state.player.stats.get("con", team.BASE_STAT)
+                    cap = team.neili_cap(content, member.level, con)
+                    care[state.player.faction]["樣本"] += 1
+                    care[state.player.faction]["內傷千分"] += round(1000 * member.injury / cap)
             if season.ended:
                 break
             now[0] += tick
@@ -188,6 +229,13 @@ def run_season(
         "worst": None if worst is None else (raided[worst], *raid_losses[worst], purse.get(worst, 0)),
     }
     result["duels"] = dict(duels)
+    levels = {side: [s.player.member.level for s in everyone if s.player.bot is not None and s.player.faction == side] for side in SIDES}
+    result["care"] = {
+        side: {"內傷%": round(care[side]["內傷千分"] / max(1, care[side]["樣本"]) / 10, 1),
+               **{k: care[side][k] for k in ("療傷", "療傷銀", "繞路", "吃丹", "花體力")},
+               "等級": statistics.median(levels[side]) if levels[side] else 0}
+        for side in SIDES
+    }
     result["checks"] = checks(result, content)
     return result
 
@@ -219,6 +267,8 @@ def summary(seed: int, r: dict) -> str:
     lines.append(f"  截殺：共 {raids['total']} 場（" + "、".join(f"{k} {v}" for k, v in sorted(raids["tiers"].items()))
                  + f"）；被截殺過的 {raids['victims']} 人，每人中位數 {raids['median']} 次")
     lines.append(f"    被截殺最多的人：{victim(raids['top'])}；失銀最多的人：{victim(raids['worst'])}")
+    lines.append("  傷與體力（平均內傷%／療傷次／療傷銀／繞路段／吃丹／花體力／季末等級中位數；次數與體力是全陣營合計）：" + "　".join(
+        f"{SIDE_NAMES[s]} {v['內傷%']}%/{v['療傷']}/{v['療傷銀']}/{v['繞路']}/{v['吃丹']}/{v['花體力']}/{v['等級']:g}" for s, v in r["care"].items()))
     lines.append("  頭目戰：" + ("、".join(f"{k} {v}" for k, v in sorted(r["duels"].items())) or "沒遇上"))
     c = r["checks"]
     medians = "、".join(f"{FRONT_NAMES[f]} {m}" for f, m in c["medians"].items())

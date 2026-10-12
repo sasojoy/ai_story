@@ -7,7 +7,8 @@
 城裡的懸賞榜兩邊都會去揭（bot.take_bounties）。模型一律不連（同 measure_forge）。
 
 印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數、心得，
-散人另印俠名與名號的階、懸賞完成幾張；陣營另印陣營、階與貢獻。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
+散人另印俠名與名號的階、懸賞完成幾張；陣營另印陣營、階與貢獻。每一邊另印傷與體力（企劃者 2026-10-12 療傷只在醫館）：
+一季平均的內傷（佔氣血上限的幾成，每一步取樣）、療傷幾次、花多少銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動一共花掉多少體力。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
 bounties._complete 數），以及求藝、求兵各拿到多少（銀兩、經驗、心得、素材、求藝送的兵器；交出去的武學幾門〔其中幾門是交了再
 照同一個配方合的〕、兵器幾把〔其中幾把是自己打的〕；包住 bounties.give 數）。最後兩行是兩邊的中位數。
 一個種子一個資料庫、只有一個機器人，碰不到別人，截殺一場都不會有：截殺的量看 scripts/sim_server_bots.py（設計 11.2）。
@@ -41,11 +42,13 @@ os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 save
 
 from tianxia import bot, bot_policy, bounties, database, encounter, naming, orders, ranger, ranks, team  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
+from tianxia.engine import Game  # noqa: E402
+from tianxia.state import PLAYER  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 STEER = 0.5  # 有目標的玩家：一半的時候照手上的懸賞、軍令走
-COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得")
+COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得", "內傷%", "療傷", "療傷銀", "繞路", "吃丹", "花體力")
 KINDS = ("strike", "scout", "escort", "wanted", "art", "arms")
 GOT = ("銀兩", "經驗", "心得", "一階素材", "二階素材", "三階素材", "兵器")
 TIER_WORDS = {1: "一階素材", 2: "二階素材", 3: "三階素材"}
@@ -204,14 +207,48 @@ def measure(
     def refuse(*args, **kwargs):
         raise RuntimeError("量測不連模型")
 
+    care = Counter()  # 傷與體力：療傷次數與銀兩、往醫館繞路的段數、吃了幾顆丹、內傷取樣
+    real_heal, real_pill, real_choose = Game.heal, Game.take_stamina_pill, Game.choose
+    clinic_hop = getattr(bot, "clinic_hop", lambda game: None)  # 醫館之前的版本沒有（拿來量改動前的基準）
+
+    def heal(self):
+        silver = self.state.player.stats.get("silver", 0)
+        msgs = real_heal(self)
+        if msgs and msgs[0].startswith("療傷完畢"):
+            care["療傷"] += 1
+            care["療傷銀"] += silver - self.state.player.stats.get("silver", 0)
+        return msgs
+
+    def pill(self, *args, **kwargs):
+        pills = self.state.player.stamina_pills
+        msgs = real_pill(self, *args, **kwargs)
+        care["吃丹"] += pills - self.state.player.stamina_pills
+        return msgs
+
+    def choose(self, option_id, *args, **kwargs):
+        if option_id.startswith("move:") and option_id.partition(":")[2].partition(":")[0] == clinic_hop(self):
+            care["繞路"] += 1
+        stamina = self.state.player.stamina
+        msgs = real_choose(self, option_id, *args, **kwargs)
+        care["花體力"] += max(0, round(stamina - self.state.player.stamina))
+        return msgs
+
+    def observe(game):
+        member = game.state.player.member
+        _, cap = team.member_neili(game.content, member, team.con_of(game.state, game.content, game.world, PLAYER))
+        care["樣本"] += 1
+        care["內傷千分"] += round(1000 * member.injury / cap)
+
     with mock.patch.object(naming, "propose", lambda *a, **k: (None, "")), \
             mock.patch.object(naming, "pick", lambda *a, **k: (None, "")), \
             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse), \
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
             mock.patch.object(bot, "pick", pick), \
             mock.patch.object(bounties, "_complete", tally.complete(bounties._complete)), \
-            mock.patch.object(bounties, "give", tally.give(bounties.give)):
-        game = bot.play_season(content, seed, world=world)
+            mock.patch.object(bounties, "give", tally.give(bounties.give)), \
+            mock.patch.object(Game, "heal", heal), mock.patch.object(Game, "take_stamina_pill", pill), \
+            mock.patch.object(Game, "choose", choose):
+        game = bot.play_season(content, seed, world=world, observe=observe)
     s, c = game.state, game.content
     p = s.player
     mine, whole = _power(game)
@@ -219,6 +256,8 @@ def measure(
         "等級": p.member.level, "本人威力": round(mine), "全隊威力": round(whole), "銀兩": p.stats.get("silver", 0),
         "名望": p.stats.get("fame", 0), "同伴": len(p.team), "部下": len(p.followers), "心得": p.stats.get("xinde", 0),
         "faction": p.faction, "tally": tally,
+        "內傷%": round(care["內傷千分"] / max(1, care["樣本"]) / 10, 1),
+        **{k: care[k] for k in ("療傷", "療傷銀", "繞路", "吃丹", "花體力")},
     }
     if p.faction is None:
         row["俠名"] = ranger.points(s)
