@@ -579,7 +579,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
-        "- **移動**：步行不花體力、只花時間；趕路快一些、疾行立刻到，兩種都花體力。步行、趕路時，每一段路可以邊走邊想、"
+        "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         "沿途打聽、留意地形、路邊採集各一次。",
         "",
         "#### 體力",

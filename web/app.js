@@ -35,7 +35,6 @@
   const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
-    { id: "hurry", name: "趕路" },
     { id: "dash", name: "疾行" },
   ];
   // 照「走法」切換的選項：「前往」與路上的「折返」（路上設計 3.2）。切換鈕緊貼在第一個這種選項上面（A4／W6）
@@ -1985,7 +1984,7 @@
     const w = g.worn;
     const desc = n.key === "weapon" ? `${w.kind}・屬${w.attribute}${w.grade ? `・${w.grade}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${w.bonus}` : "・用不上"}`
       : n.key === "armor" ? `屬${w.attribute}・${w.grade}・${w.wear_word} ${w.edge | 0}・少扣 ${w.cut} 氣血`
-      : n.key === "mount" ? `${w.grade}・${w.wear_word} ${w.edge | 0}・趕路疾行省 ${w.save} 體力・路上快 ${w.speed}`
+      : n.key === "mount" ? `${w.grade}・${w.wear_word} ${w.edge | 0}・疾行省 ${w.save} 體力・路上快 ${w.speed}`
       : w.effect_text || "";
     return {
       label, lit: true,
@@ -2159,13 +2158,13 @@
         <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}/${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}</div>
         ${wornNow ? "" : rowButtons(a)}
       </div>${a.divine ? divineForm(a) : ""}`;
-    // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、趕路疾行省幾成體力、路上快幾成、
+    // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、疾行省幾成體力、路上快幾成、
     // 決戰強攻奇襲多幾成、落敗脫身的機會（2.5：後三項寫在修練頁這一列，不擠進角色卡）。
     // 身上那匹一顆「餵」（餵不了的灰掉、寫為什麼；餵得了寫用哪一種素材），裝備庫裡的只有「換上」：坐騎不能拆（4.8），不用 rowButtons；
     // 路上不能換坐騎（2.3），「換上」照伺服器給的 wield_ok 灰掉、寫 wield_note（同「餵」的灰掉做法）。
     // 這一行的寫法待 joy 潤
     const mountRow = (h, wornNow) => `<div class="wrow">
-        <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・趕路疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span></div>
+        <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span></div>
         <div class="wbtns">${wornNow
           ? `<button class="btn small" data-act="feed"${h.feed ? "" : " disabled"}>餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>`
           : `<button class="btn small" data-act="wield" data-id="${esc(h.id)}"${h.wield_ok ? "" : " disabled"}>換上${h.wield_ok ? "" : `（${esc(h.wield_note)}）`}</button>`}</div>

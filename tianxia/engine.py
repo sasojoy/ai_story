@@ -265,7 +265,7 @@ class Game:
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
-        # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
+        # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
         self.move_mode: TravelMode = "walk"
@@ -2736,7 +2736,7 @@ class Game:
         note = problem or f"{c.config.mounts.shop_price} 兩"
         # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
         opts = [Option(id=mounts.BUY, enabled=problem is None,
-                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・趕路疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
+                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
         if p.mount is not None:
             opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
                                label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
@@ -4894,16 +4894,16 @@ class Game:
             origin=route.origin, share=route.share, pace=pace,
         )
         if self._draft is not None:
-            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode, pace=pace)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODE_NAMES[mode] + atlas.mode_when(minutes, mode, pace=pace)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
         verb = "改道" if rerouting else "動身"
-        told = f"{s.player.name}{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
+        told = f"{s.player.name}{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
         party = parted + self._lead(start, foot, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層），體力各付各的
         if mode == "dash" or at_once:
             return party + self._arrivals()
         left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
+        msg = f"你{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg] + party
@@ -5022,7 +5022,7 @@ class Game:
         s, c = self.state, self.content
         j = s.player.journey
         left = self._real_minutes(j.arrive_at[j.last] - s.world.time)
-        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），現實約 {left} 分鐘後抵達"
+        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODE_NAMES[j.mode]}），現實約 {left} 分鐘後抵達"
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
@@ -5034,7 +5034,7 @@ class Game:
         j.stop_at = j.reached
         msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
         if j.mode == "hurry":
-            msgs.append("（趕路已經花掉的體力不退。）")
+            msgs.append("（趕路已經花掉的體力不退。）")  # 拿掉趕路之前出發、還在路上的那一趟
         msgs += self._lead(None, 0, f"{s.player.name}喊停，到了{c.locations[j.path[j.reached]].name}就停下來。")
         self._sync_battle_presence()  # 這一趟縮短了：最後一站落在決戰的大區內，就不再算離開
         return msgs

@@ -195,7 +195,7 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 坐騎開：" in out and "種子 1 坐騎關：" in out
-    assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("趕路疾行體力 ") == 2
+    assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("疾行體力 ") == 2
     assert out.count("買馬 ") == 2 and out.count("、餵 ") == 2 and out.count("策馬脫身 ") == 2
     assert out.count("決戰騎著馬 ") == 2 and out.count("一階素材 ") == 2 and out.count("結局 ") == 2
 

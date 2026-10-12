@@ -570,8 +570,8 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
 
 
 def _toward_battle(game: Game) -> list[str] | None:
-    """自己這一方的全服決戰在集結或開打、自己人卻不在現場（見 Game.rally_region）：往那個大區路程最近的地點走一站，體力夠就趕路、
-    不夠就步行（地圖擴充設計 3.4：陣營目標急的時候趕路；假人不疾行）。不是這種情況、走不過去、或現在不能
+    """自己這一方的全服決戰在集結或開打、自己人卻不在現場（見 Game.rally_region）：往那個大區路程最近的地點走一站，步行
+    （企劃者 2026-10-12 拿掉趕路之前是體力夠就趕路；假人不疾行）。不是這種情況、走不過去、或現在不能
     安排前往（例如有事件待處理）就回傳 None，照平常挑選項。"""
     region = game.rally_region()
     if region is None:
@@ -580,9 +580,8 @@ def _toward_battle(game: Game) -> list[str] | None:
     if hop is None:
         return None
     ways = {option.mode: option for option in game.travel_options(hop) or []}
-    for mode in ("hurry", "walk"):
-        if mode in ways and ways[mode].enabled:
-            return game.travel(hop, mode)
+    if "walk" in ways and ways["walk"].enabled:
+        return game.travel(hop, "walk")
     return None
 
 

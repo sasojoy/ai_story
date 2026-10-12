@@ -8,7 +8,7 @@ from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
-TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）
+TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）；趕路 2026-10-12 拿掉，只留給拿掉之前出發、還在路上的那一趟
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
 CompanionKind = Literal["locked", "recruitable"]
@@ -1565,8 +1565,8 @@ class MountRules(_Strict):
     階：1 駑馬、2 良駒、3 名駒；查表用 str(tier)（同 WeaponRules.tier_bonus）。不掛第一季開關（2.6，同兵器、防具）。"""
 
     enabled: bool = True
-    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 趕路、疾行的體力省幾成（5.1）
-    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行、趕路的時間快幾成（5.1）
+    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 疾行的體力省幾成（5.1）
+    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行的時間快幾成（5.1）
     quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.03, "上品": 0.05})  # 只加在上面兩列
     cavalry: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})  # 決戰強攻、奇襲的份量多幾成（5.9）
     escape: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.50, "3": 0.70})  # 落敗策馬脫身、保住銀兩的機會（5.11）

@@ -1541,7 +1541,7 @@ def test_visited_and_map(game):
 # ── 安排前往 ──────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(("mode", "cost"), [("walk", 0), ("hurry", 8), ("dash", 15)])
+@pytest.mark.parametrize(("mode", "cost"), [("walk", 0), ("dash", 15)])
 def test_travel_charges_the_stamina_of_the_chosen_way_up_front(game, mode, cost):
     game.state.world.flags.add("cave_open")  # 小鎮—湖邊 3 分鐘＋湖邊—寶洞山路 4.5 分鐘
     game.state.player.stamina = 100
@@ -1586,7 +1586,7 @@ def test_travel_is_refused_with_a_reason(game):
     assert game.travel("lake", "fly") == ["（無法安排前往這裡。）"]
     game.state.player.stamina = 5
     assert game.travel("lake", "dash") == ["（體力不足，疾行要 6 體力。）"]
-    assert game.travel_refusal("lake", "hurry") is None
+    assert game.travel("lake", "hurry") == ["（無法安排前往這裡。）"]  # 企劃者 2026-10-12 拿掉趕路
     assert game.state.player.location == "town" and game.state.player.stamina == 5
     assert len(game.state.journal) == before
 
@@ -1614,9 +1614,14 @@ def test_walking_takes_time_and_arrives_on_the_next_sync(game):
     assert p.location == "lake" and p.journey is None and "lake" in p.visited
 
 
-def test_hurrying_takes_half_the_time(game):
+def _legacy_hurry(game, dest):
+    """拿掉趕路（企劃者 2026-10-12）之前以趕路出發、還在路上的那一趟：選單與地圖都不再給趕路，直接從 _depart 出發。"""
+    return game._depart(atlas.way_to(game.state, game.content, dest), "hurry")
+
+
+def test_a_trip_set_off_hurrying_before_it_was_removed_still_takes_half_the_time(game):
     game.state.world.flags.add("cave_open")
-    game.travel("cave", "hurry")
+    _legacy_hurry(game, "cave")
     assert game.state.player.journey.arrive_at == [pytest.approx(90.0), pytest.approx(225.0)]  # (3＋4.5 分鐘) × 30 秒
 
 
@@ -4972,7 +4977,7 @@ def test_you_can_stop_at_the_next_station(game):
 def test_stopping_does_not_refund_the_stamina_paid_to_hurry(game):
     game.state.world.flags.add("cave_open")
     game.state.player.stamina = 100
-    game.travel("cave", "hurry")  # 7.5 分鐘：8 點
+    _legacy_hurry(game, "cave")  # 7.5 分鐘：8 點
     msgs = game.choose("act:halt")
     assert game.state.player.stamina == 92
     assert "（趕路已經花掉的體力不退。）" in msgs
@@ -5041,16 +5046,14 @@ def test_rerouting_to_either_end_of_the_road(game):
 def test_a_reroute_charges_the_new_way_and_refunds_nothing(game):
     game.state.world.flags.add("cave_open")
     game.state.player.stamina = 100
-    game.set_move_mode("hurry")
-    game.choose("move:lake:hurry")  # 3 分鐘：3 點
-    game.choose("road:back:hurry")  # 剛出發就掉頭：不扣體力、當下回到小鎮（FB-025），原本的 3 點不退
+    _legacy_hurry(game, "lake")  # 3 分鐘：3 點（拿掉趕路之前出發的那一趟）
+    game.choose("road:back")  # 剛出發就掉頭：不扣體力、當下回到小鎮（FB-025），原本的 3 點不退
     assert game.state.player.stamina == 97 and game.state.player.journey is None
-    game.choose("move:lake:hurry")
-    game.advance(30)  # 趕路 90 秒的一成三
-    game.travel("cave", "hurry")  # 繼續：2 ＋ 4.5 ＝ 6.5 分鐘，7 點；第一段是半段路
-    assert game.state.player.stamina == pytest.approx(97 - 3 - 7 + 30 / 180)  # 走那 30 秒回了一點點
-    j = game.state.player.journey
-    assert j.arrive_at == [pytest.approx(game.state.world.time + 60), pytest.approx(game.state.world.time + 195)]
+    _legacy_hurry(game, "lake")
+    game.advance(30)  # 趕路 90 秒的三分之一
+    game.travel("cave", "dash")  # 改道疾行：2 ＋ 4.5 ＝ 6.5 分鐘，13 點；第一段是半段路
+    assert game.state.player.stamina == pytest.approx(97 - 3 - 13 + 30 / 180)  # 走那 30 秒回了一點點
+    assert game.state.player.location == "cave" and game.state.player.journey is None
 
 
 def test_dashing_from_the_road_reaches_an_end_of_the_road_first(content, game):
@@ -5090,8 +5093,7 @@ def test_rerouting_out_of_the_battle_region_leaves_it_and_turning_back_returns(c
 
 def test_turning_back_follows_the_move_mode(game):
     _partway(game)
-    game.set_move_mode("hurry")
-    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（趕路約 1 分鐘・體力 1）")
+    assert (_back(game).id, _back(game).label) == ("road:back", "折返 小鎮（步行約 1 分鐘）")
     game.set_move_mode("dash")
     game.state.player.stamina = 1
     back = _back(game)
@@ -5105,15 +5107,13 @@ def test_turning_back_follows_the_move_mode(game):
 
 def test_turning_back_right_after_setting_off_is_free_and_lands_at_once(game):
     """剛出發就折返（FB-025）：回程不到半分鐘路程時，哪種走法都不扣體力、當下就回到原地（路上裁決「給 QA 的」）。"""
-    game.set_move_mode("hurry")
-    game.choose("move:lake:hurry")
-    game.advance(10)  # 趕路 10 秒＝走了 1/3 分鐘路程
+    game.choose("move:lake")
+    game.advance(20)  # 步行 20 秒＝走了 1/3 分鐘路程
     stamina = game.state.player.stamina
-    assert [(o.label, o.enabled) for o in game.travel_options("town")] == [
-        ("步行（立刻到）", True), ("趕路（立刻到）", True), ("疾行（立刻到）", True),
-    ]
-    assert (_back(game).id, _back(game).label) == ("road:back:hurry", "折返 小鎮（立刻到）")
-    game.choose("road:back:hurry")
+    assert [(o.label, o.enabled) for o in game.travel_options("town")] == [("步行（立刻到）", True), ("疾行（立刻到）", True)]
+    game.set_move_mode("dash")
+    assert (_back(game).id, _back(game).label) == ("road:back:dash", "折返 小鎮（立刻到）")
+    game.choose("road:back:dash")
     p = game.state.player
     assert (p.location, p.journey, p.stamina) == ("town", None, stamina)
     assert (game.state.journal[0].title, game.state.journal[0].tag, game.state.journal[0].changes) == (
@@ -5122,15 +5122,20 @@ def test_turning_back_right_after_setting_off_is_free_and_lands_at_once(game):
 
 
 def test_turning_back_after_a_real_stretch_still_costs_and_takes_time(game):
-    """走了一段才折返照舊算：回程 1.5 分鐘路程，趕路 2 點、約 1 分鐘。"""
-    game.set_move_mode("hurry")
-    game.choose("move:lake:hurry")
-    game.advance(45)  # 趕路 90 秒的一半
+    """走了一段才折返照舊算：回程 1.5 分鐘路程，步行約 2 分鐘；疾行 3 點、立刻到。"""
+    game.choose("move:lake")
+    game.advance(90)  # 步行 180 秒的一半
     stamina = game.state.player.stamina
-    assert _back(game).label == "折返 小鎮（趕路約 1 分鐘・體力 2）"
-    game.choose("road:back:hurry")
+    assert _back(game).label == "折返 小鎮（步行約 2 分鐘）"
+    game.choose("road:back")
     p = game.state.player
-    assert p.journey is not None and p.journey.path == ["town"] and p.stamina == stamina - 2
+    assert p.journey is not None and p.journey.path == ["town"] and p.stamina == stamina
+    game.travel("lake")  # 再掉頭一次（回程 1.5 分鐘），改疾行
+    game.set_move_mode("dash")
+    stamina = p.stamina
+    assert _back(game).label == "折返 小鎮（疾行立刻到・體力 3）"
+    game.choose("road:back:dash")
+    assert p.journey is None and p.location == "town" and p.stamina == stamina - 3
 
 
 def test_turning_back_twice_quickly_is_not_a_free_arrival_at_the_far_end(game):
@@ -6052,7 +6057,7 @@ def test_socializing_with_a_figure_you_cannot_meet_uses_the_same_brush_off(conte
     assert game.state.player.pending_companion is None
 
 
-# ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
+# ── 主畫面的走法切換（步行／疾行）──────────────────────
 
 
 def _move_to_lake(game):
@@ -6065,15 +6070,14 @@ def test_the_menu_walks_by_default(game):
     assert (move.id, move.label, move.enabled) == ("move:lake", "前往 湖邊（步行約 3 分鐘）", True)
 
 
-def test_hurrying_from_the_menu_shows_and_spends_its_stamina(game):
+def test_hurrying_is_gone_from_the_menu(game):
+    """企劃者 2026-10-12 拿掉趕路：選趕路當成步行，選單只有步行的「前往」，趕路的 id 按不下去。"""
     game.set_move_mode("hurry")
+    assert game.move_mode == "walk"
     move = _move_to_lake(game)
-    assert (move.id, move.label, move.enabled) == ("move:lake:hurry", "前往 湖邊（趕路約 2 分鐘・體力 3）", True)
-    game.choose("move:lake:hurry")
-    p = game.state.player
-    assert p.journey.mode == "hurry" and p.journey.arrive_at == [pytest.approx(90.0)]
-    assert p.stamina == 147
-    assert (game.state.journal[0].title, game.state.journal[0].tag) == ("前往 湖邊", "趕路約 2 分鐘")
+    assert (move.id, move.label) == ("move:lake", "前往 湖邊（步行約 3 分鐘）")
+    assert game.choose("move:lake:hurry") == ["（此刻無法這麼做。）"]
+    assert game.state.player.journey is None
 
 
 def test_dashing_from_the_menu_arrives_at_once(game):
@@ -6095,7 +6099,7 @@ def test_a_mode_you_cannot_afford_disables_the_move_and_says_why(game):
 
 def test_the_move_mode_changes_labels_not_the_number_of_options(game):
     walking = ids(game)
-    for mode in ("hurry", "dash"):
+    for mode in ("dash",):
         game.set_move_mode(mode)
         assert len(ids(game)) == len(walking)
         assert f"move:lake:{mode}" in ids(game) and "move:lake" not in ids(game)
@@ -6109,7 +6113,7 @@ def test_an_unknown_mode_falls_back_to_walking(game):
 
 def test_the_move_mode_is_screen_state_and_never_saved(content, game):
     """走法不存進存檔（企劃者決定），讀存檔開的 Game 一律從步行開始；網頁上每個請求的走法由 server.py 逐次設定。"""
-    game.set_move_mode("hurry")
+    game.set_move_mode("dash")
     assert "move_mode" not in game.state.model_dump_json()
     assert Game(content, game.state, world=game.world).move_mode == "walk"
 
