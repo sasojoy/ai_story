@@ -747,11 +747,32 @@ def test_a_server_bot_cancels_a_draft_that_no_longer_matches_its_plan(content, w
 
 
 def test_server_bots_keep_silver_for_healing_after_a_forge(content, world):
+    """FB-144（PM 2026-10-13）：一爐之後留的錢從 30 兩降到 10 兩——二階 60 兩，身上 70 兩打得起（剛好留 10），65 兩不打。"""
     from tianxia import bot
-    game = _smithy(content, world, silver=80)  # 二階 60 兩：打完只剩 20，不到 FORGE_SILVER_RESERVE（30）
+    assert bot.FORGE_SILVER_RESERVE == 10
+    for silver, forges in ((65, False), (70, True)):
+        game = _smithy(content, world, silver=silver, name=f"留{silver}")
+        game.state.player.weapon = _blade()
+        game.state.player.materials = {"gang_2": 2}
+        assert (bot.forge_step(game) is not None) is forges
+        assert bot.forge_ready(game) is forges
+
+
+def test_a_server_bot_in_town_with_a_forge_ready_heads_for_the_smith(content, world):
+    """FB-144：人在城鎮、身上湊得出一爐又付得起時，「進鐵匠鋪」那顆照 SMITH_SCORE 那一套多加 FORGE_SCORE，不然假人路過城鎮
+    那幾輪多半挑了遊歷、趕路，一爐都沒打；只有換買修的事照舊 SMITH_SCORE。合起來高過往軍令走的那一步、低過軍令本身
+    （帶著糧草的假人照舊先接糧車，test_orders.test_bot_takes_a_cart_when_it_has_grain）。"""
+    from tianxia import bot, bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    game = _forger(content, world)
     game.state.player.weapon = _blade()
-    game.state.player.materials = {"gang_2": 2}
-    assert bot.forge_step(game) is None
+    door = next(o for o in game.options(odds=False) if o.id == "act:smith")
+    assert bot.forge_ready(game) and bot_policy.score(game, door, profile) == bot_policy.SMITH_SCORE + bot_policy.FORGE_SCORE
+    assert bot_policy.ORDER_MOVE_SCORE < bot_policy.SMITH_SCORE + bot_policy.FORGE_SCORE < bot_policy.ORDER_SCORE
+    game.state.player.materials = {}
+    door = next((o for o in game.options(odds=False) if o.id == "act:smith"), None)
+    assert not bot.forge_ready(game) and (door is None or bot_policy.score(game, door, profile) in (None, bot_policy.SMITH_SCORE))
 
 
 # ── 打造隱藏配方第一批 Task 1：不叫模型，一般組合照對照表（設計第八節、4.1；PM 2026-10-12 決定第 1 條）──

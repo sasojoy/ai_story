@@ -359,7 +359,9 @@ def smith_want(game: Game) -> str | None:
     return None if other is None else f"smith:page:{other}"
 
 
-FORGE_SILVER_RESERVE = 30  # 伺服器假人打一爐之後至少留幾兩（療傷、修）【預設】（同 bot_policy.LEARN_SILVER_RESERVE）
+# 伺服器假人打一爐之後至少留幾兩（療傷、修）。PM 2026-10-13（FB-144）從 30 降到 10：假人到鐵匠鋪時身上多半只有幾十兩，留 30 兩
+# 一整季一爐都打不成
+FORGE_SILVER_RESERVE = 10
 
 
 def forge_step(game: Game) -> str | None:
@@ -371,17 +373,7 @@ def forge_step(game: Game) -> str | None:
     s, c, w = game.state, game.content, game.world
     p = s.player
     art = team.player_art(s, c, w, p.member.wugong_id)
-
-    def affordable(plan):
-        if plan is None:
-            return None
-        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]))
-        return plan if p.stats.get("silver", 0) - cost >= FORGE_SILVER_RESERVE else None
-
-    plans = {
-        "weapon": affordable(smithing.forge_plan(s, c, w, art)),
-        "armor": affordable(smithing.armor_plan(s, c, w, team.player_art(s, c, w, p.member.neigong_id))),
-    }
+    plans = _forge_plans(game)
     d = p.smith_draft
     if d is not None:
         plan = plans.get(smithing.slot_of(d.kind))
@@ -405,6 +397,29 @@ def forge_step(game: Game) -> str | None:
         return f"smith:wield:{better.id}"
     other = next((slot for slot, plan in plans.items() if plan is not None and slot != here), None)
     return None if other is None else f"smith:page:{other}"
+
+
+def _forge_plans(game: Game) -> dict[str, tuple[str, str, str] | None]:
+    """這一刻兵器、防具各要打的那一爐（smithing.forge_plan／armor_plan），工錢付了之後剩不到 FORGE_SILVER_RESERVE 兩的當沒有。
+    兩樣都要人在有鐵匠鋪的城鎮（forge_plan、armor_plan 自己會問）。"""
+    s, c, w = game.state, game.content, game.world
+    p = s.player
+
+    def affordable(plan):
+        if plan is None:
+            return None
+        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]))
+        return plan if p.stats.get("silver", 0) - cost >= FORGE_SILVER_RESERVE else None
+
+    return {
+        "weapon": affordable(smithing.forge_plan(s, c, w, team.player_art(s, c, w, p.member.wugong_id))),
+        "armor": affordable(smithing.armor_plan(s, c, w, team.player_art(s, c, w, p.member.neigong_id))),
+    }
+
+
+def forge_ready(game: Game) -> bool:
+    """人在城鎮的鐵匠鋪、身上湊得出一爐又付得起（留得下 FORGE_SILVER_RESERVE）：bot_policy 給「進鐵匠鋪」多加 FORGE_SCORE（FB-144）。"""
+    return any(plan is not None for plan in _forge_plans(game).values())
 
 
 def keep_book_names(game: Game) -> None:
