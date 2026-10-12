@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
-from .state import GearFind, Rumor, WeaponRecipe, WorldState
+from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -236,6 +236,11 @@ class WorldStateStore(Protocol):
     def divine_records(self) -> list[tuple[int, GearFind]]:
         """神器譜（打造隱藏配方設計 5.5）：歷來每一季的神器原品——gear_recipes 裡「鑄|」開頭、神器配方、有原品主人的列，
         照季、再照鍵排，跨季讀（換季不刪）。回（季數, 那一列）。"""
+        ...
+
+    def signature_records(self) -> list[tuple[int, dict[str, SignatureClaim]]]:
+        """神器譜裡的名將本命兵器（打造第三批）：歷來每一季的 WorldState.signature_arms，從 seasons 表照季讀（換季不刪，所以跨季）。
+        回（季數, 人物 id → SignatureClaim）；那一季一把都沒給出去的不列。"""
         ...
 
     # ── 合到舊的（武學與成長設計 12.2；這一季）──

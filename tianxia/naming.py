@@ -80,7 +80,7 @@ def clean_name(raw: str) -> str:
 PersonCheck = Callable[[str], bool]  # 這個名字是不是江湖上某個角色的名號（WorldStateStore.is_character_name）
 PERSON_CLASH = "跟江湖上的人物同名"  # 真人、假人都回這一句：看不出那個名號是不是假人（FB-069）
 PRESET_CLASH = "跟師門傳下來的武學同名"  # 師門配方（content/preset_recipes.json，新手引導計畫一）的名字：模型、玩家取的名字不能撞它（name_problem）
-GEAR_CLASH = "跟江湖上的寶物、名駒同名"  # 待 joy 潤：content/gear.json 的寶物與名駒（裝備三；防具打造計畫 PM 決定第 4 條留下的）
+GEAR_CLASH = "跟江湖上的寶物、名駒、名將的兵器同名"  # 待 joy 潤：content/gear.json 的寶物與名駒（裝備三；防具打造計畫 PM 決定第 4 條留下的）、名將本命兵器（signature_arms，打造第三批）
 FORGE_CLASH = "跟失傳的鑄法同名"  # 待 joy 潤：隱藏配方（content/forge_secrets.json）的名器名（打造隱藏配方設計 3.1）
 
 
@@ -88,7 +88,7 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
     """名字過不了過濾的原因；None＝可以用。全服重名不在這裡查（那要看資料庫，見 world.is_skill_name_taken）。
     person 給了就也擋角色的名號（FB-069：玩家定名、模型取名、鎖內重驗都給 world.is_character_name；
     內容的驗證與退路字表只看內容、不給）。排在字數之後、字元之前，所以換了大小寫的英文名號也回同一句話。
-    寶物、名駒、隱藏配方的名器名也擋（打造隱藏配方設計 3.1）：寶物排在隱藏配方前面，隱藏配方驗自己的名字時收 FORGE_CLASH，
+    寶物、名駒、名將本命兵器、隱藏配方的名器名也擋（打造隱藏配方設計 3.1）：寶物排在隱藏配方前面，隱藏配方驗自己的名字時收 FORGE_CLASH，
     跟寶物同名的話先回 GEAR_CLASH，載入時才擋得到。"""
     if not (NAME_MIN_CHARS <= len(name) <= NAME_MAX_CHARS):
         return f"長度要 {NAME_MIN_CHARS}~{NAME_MAX_CHARS} 個字"
@@ -109,7 +109,7 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
         return "跟意境同名"
     if any(name == recipe.name for recipe in content.preset_recipes):
         return PRESET_CLASH  # 師門配方的名字留給那一筆配方（新手引導計畫一）
-    if any(name == item.name for item in [*content.gear.treasures.values(), *content.gear.steeds.values()]):
+    if any(name == item.name for item in [*content.gear.treasures.values(), *content.gear.steeds.values(), *content.gear.signature_arms]):
         return GEAR_CLASH
     if any(name == recipe.name for recipe in content.forge_secrets.values()):
         return FORGE_CLASH  # 名器的名字留給那一條隱藏配方：模型替武學、意境取名，玩家替絕學（之後神器）定名都取不到
