@@ -84,19 +84,64 @@ def _clamp(edge: float) -> float:
     return max(0.0, min(100.0, edge))
 
 
+def push_of(
+    mine: float, theirs: float, beat: int, role: str, tuning: DuelTuning, battle: BattleTuning, luck: float, foe_role: str = "",
+) -> int:
+    """一招的推力（往「我」算）：push_base ×（2 × 我 ÷ 兩邊 − 1）＋ counter_push × 剋 ＋ 運氣。我被剋而且我是參謀、或我剋人而對方是
+    參謀時，剋的那一截減半（role_counter_relief）。luck 是呼叫端擲好的（頭目戰照舊用 Game.rng，奪璽單挑用 seal.dice）。"""
+    ratio = mine / (mine + theirs) if mine + theirs > 0 else 0.5
+    relief = 1 - battle.role_counter_relief
+    weight = beat * relief if (beat < 0 and role == "lore") or (beat > 0 and foe_role == "lore") else beat
+    return round(tuning.push_base * (2 * ratio - 1) + tuning.counter_push * weight + luck)
+
+
+def harm_of(hp_cap: float, mine: float, theirs: float, beat: int, tuning: DuelTuning) -> int:
+    """我這一招挨的打（還沒跟剩下的池子取小）：上限 × hit × 剋制倍數（被剋 hit_countered、剋人 hit_countering）× √(對方 ÷ 我)（夾住）。"""
+    harm = tuning.hit_countered if beat < 0 else tuning.hit_countering if beat > 0 else 1.0
+    scale = max(0.5, min(tuning.hit_scale_max, (theirs / mine) ** 0.5)) if mine > 0 else tuning.hit_scale_max
+    return round(hp_cap * tuning.hit * harm * scale)
+
+
+def gamble_roll(
+    rate: int, hp_cap: float, power: float, role: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
+) -> tuple[bool, int, int, int]:
+    """放手一搏擲一次：（成了沒有, 推力〔還沒夾〕, 扣多少池子〔還沒跟剩下的取小〕, 實際的成功率）。軍師 +role_gamble_rate；
+    成了乘實力倍數，沒成的不乘。亂數取一次。"""
+    rate = max(0, min(100, rate + (battle.role_gamble_rate if role == "wis" else 0)))
+    risk = 100 - rate
+    if rng.random() * 100 < rate:
+        might = battle_instance.strength(battle, power) / battle.gamble_strength_ref
+        might = max(battle.gamble_strength_min, min(battle.gamble_strength_max, might))
+        return True, max(1, round((tuning.gamble_base + risk * tuning.gamble_per_risk) * might)), round(hp_cap * tuning.success_hp), rate
+    delta = -min(round(tuning.fail_cap), round(risk * tuning.fail_per_risk))
+    return False, delta, round(hp_cap * (tuning.fail_hp_base + risk * tuning.fail_hp_per_risk)), rate
+
+
+def verdict_at(edge: float, hp: float, round_: int, rounds: int, tuning: DuelTuning) -> str | None:
+    """verdict 的本體：池子見底或氣勢到 early_lose 以下提前落敗、到 early_win 以上提前大勝；打滿 rounds 回合看氣勢。還沒是 None。"""
+    if hp <= 0 or edge <= tuning.early_lose:
+        return "落敗"
+    if edge >= tuning.early_win:
+        return "大勝"
+    if round_ < rounds:
+        return None
+    if edge >= tuning.big:
+        return "大勝"
+    if edge >= tuning.win:
+        return "險勝"
+    return "僵持" if edge > tuning.draw else "落敗"
+
+
 def exchange(
     duel: DuelState, boss: DuelBoss, move: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
 ) -> tuple[int, int, int]:
-    """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。"""
+    """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。
+    推力與挨的打照 push_of、harm_of（奪璽單挑共用）；運氣照舊在這裡用 rng 擲一次。"""
     mine = duel.scores.get(move) or battle_instance.strength(battle, duel.power) * tuning.foe_fit
     theirs = foe_strength(battle, tuning, boss)
-    ratio = mine / (mine + theirs) if mine + theirs > 0 else 0.5
     beat = counter(move, duel.move)
-    weight = beat * (1 - battle.role_counter_relief) if beat < 0 and duel.role == "lore" else beat
-    delta = round(tuning.push_base * (2 * ratio - 1) + tuning.counter_push * weight + rng.uniform(-tuning.luck, tuning.luck))
-    harm = tuning.hit_countered if beat < 0 else tuning.hit_countering if beat > 0 else 1.0
-    scale = max(0.5, min(tuning.hit_scale_max, (theirs / mine) ** 0.5)) if mine > 0 else tuning.hit_scale_max
-    hp = min(duel.hp, round(duel.hp_cap * tuning.hit * harm * scale))
+    delta = push_of(mine, theirs, beat, duel.role, tuning, battle, rng.uniform(-tuning.luck, tuning.luck))
+    hp = min(duel.hp, harm_of(duel.hp_cap, mine, theirs, beat, tuning))
     before = duel.edge
     duel.edge = _clamp(duel.edge + delta)
     duel.hp -= hp
@@ -107,18 +152,8 @@ def gamble(
     duel: DuelState, rate: int, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
 ) -> tuple[bool, int, int, int]:
     """放手一搏：（成了沒有, 氣勢推了多少, 你掉多少氣血, 實際的成功率）。成功率是模型評的再加軍師的（夾在 0～100）；
-    成了的推進乘實力倍數（同決戰），沒成的不乘。這一回合他的招不算（你搶了先手，或自己栽了）。"""
-    rate = max(0, min(100, rate + (battle.role_gamble_rate if duel.role == "wis" else 0)))
-    risk = 100 - rate
-    won = rng.random() * 100 < rate
-    if won:
-        might = battle_instance.strength(battle, duel.power) / battle.gamble_strength_ref
-        might = max(battle.gamble_strength_min, min(battle.gamble_strength_max, might))
-        delta = max(1, round((tuning.gamble_base + risk * tuning.gamble_per_risk) * might))
-        hp = round(duel.hp_cap * tuning.success_hp)
-    else:
-        delta = -min(round(tuning.fail_cap), round(risk * tuning.fail_per_risk))
-        hp = round(duel.hp_cap * (tuning.fail_hp_base + risk * tuning.fail_hp_per_risk))
+    成了的推進乘實力倍數（同決戰），沒成的不乘。這一回合他的招不算（你搶了先手，或自己栽了）。擲骰照 gamble_roll（奪璽單挑共用）。"""
+    won, delta, hp, rate = gamble_roll(rate, duel.hp_cap, duel.power, duel.role, tuning, battle, rng)
     hp = min(duel.hp, hp)
     before = duel.edge
     duel.edge = _clamp(duel.edge + delta)
@@ -128,17 +163,7 @@ def gamble(
 
 def verdict(duel: DuelState, boss: DuelBoss, tuning: DuelTuning) -> str | None:
     """打完這一回合分出勝負沒有：池子見底或氣勢到 early_lose 以下提前落敗、到 early_win 以上提前大勝；打滿回合看氣勢。還沒是 None。"""
-    if duel.hp <= 0 or duel.edge <= tuning.early_lose:
-        return "落敗"
-    if duel.edge >= tuning.early_win:
-        return "大勝"
-    if duel.round < boss.rounds:
-        return None
-    if duel.edge >= tuning.big:
-        return "大勝"
-    if duel.edge >= tuning.win:
-        return "險勝"
-    return "僵持" if duel.edge > tuning.draw else "落敗"
+    return verdict_at(duel.edge, duel.hp, duel.round, boss.rounds, tuning)
 
 
 def shown_move(duel: DuelState) -> str | None:
@@ -157,17 +182,17 @@ def move_label(move: str) -> str:
     return f"{move}（剋{BEATS[move]}）"
 
 
-def edge_words(edge: float) -> str:
-    """氣勢的一句話（場景用）。"""
+def edge_words(edge: float, viewer: str = "你") -> str:
+    """氣勢的一句話（場景用）。viewer 是句子裡的那個人（奪璽單挑給圍觀的人看時寫挑戰者的名號）；頭目戰不傳。"""
     if edge >= 75:
-        return "你大佔上風"
+        return f"{viewer}大佔上風"
     if edge >= 58:
-        return "你略佔上風"
+        return f"{viewer}略佔上風"
     if edge > 42:
         return "兩邊僵持不下"
     if edge > 25:
-        return "你落了下風"
-    return "你被壓著打"
+        return f"{viewer}落了下風"
+    return f"{viewer}被壓著打"
 
 
 # ── 放手一搏的情境（給模型評成功率、寫成敗兩版劇情：battle_instance.assess_gamble）──────────
