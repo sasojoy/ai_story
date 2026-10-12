@@ -1694,6 +1694,13 @@ class Biography(_Strict):
     affinity_marks: list[int] = Field(default_factory=lambda: [20, 40, 60, 80])  # 跟人物的情誼往上跨過這幾格各記一筆
     affinity_drop: int = Field(default=10, ge=1)  # 一個動作裡情誼掉這麼多就記一筆（交惡）
     talk_swing: int = Field(default=5, ge=1)  # 對話一輪情誼動這麼多才記那一句（自己說的話不看這個，一律記）
+    # 第二批（季末寫成傳）：寫一篇最多等模型幾秒（鎖外、背景做，網頁每幾秒問一次寫好了沒，不受 trycloudflare 一個請求約 100 秒的限制）；
+    # 一篇一千多字，gemma4:26b 約一兩分鐘
+    budget_seconds: int = Field(default=240, ge=0)
+    rewrites: int = Field(default=1, ge=0)  # 寫成之後還能請史官重寫幾次（模型版、規則版都算）
+    # 分享網址的開頭（「https://tianxia.example.com」，不含結尾的斜線）。空字串＝照這次請求的網址組（trycloudflare 每次重開都換，
+    # 要長期分享得換具名 Tunnel 的固定網域，再把它寫在這裡；換網域不必改程式）
+    public_url: str = ""
 
 
 class FollowerTuning(_Strict):

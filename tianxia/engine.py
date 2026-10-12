@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
@@ -7627,9 +7627,110 @@ class Game:
         }
 
     def annals_view(self) -> dict:
-        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。"""
+        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
+        books 是歷季列傳（第二批）：存著的每一季（這一季收了、還沒換季的也算），新的在前。"""
         on = annals.on(self.content)
-        return {"on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else []}
+        return {
+            "on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else [],
+            "books": self.biography_list() if on else [],
+        }
+
+    # ── 玩家傳第二批：季末寫成《某某傳》、公開分享 ──
+
+    def _season_closed(self) -> bool:
+        """這一季收了（休季）：這一季的傳寫得了。"""
+        return self.world.season_phase() == "resting"
+
+    def biography_entry(self) -> dict | None:
+        """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
+        輪詢每次都問：季還在跑時不讀資料庫。"""
+        p = self.state.player
+        if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
+            return None
+        if not p.annals and self.world.biography(p.season_number, p.name) is None:
+            return None
+        return {"season": p.season_number, "title": biography.title(p.name)}
+
+    def biography_list(self) -> list[dict]:
+        """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
+        p = self.state.player
+        rows = {b["season"]: b for b in self.world.biographies_of(p.name)}
+        out = []
+        if self._season_closed() and p.annals and p.season_number not in rows:
+            out.append({"season": p.season_number, "title": biography.title(p.name), "written": False, "public": False})
+        out += [
+            {"season": n, "title": biography.title(b["name"]), "written": b["text"] is not None, "public": b["public"]}
+            for n, b in sorted(rows.items(), reverse=True)
+        ]
+        return out
+
+    def biography_request(self, season: int, rewrite: bool = False) -> biography.BiographyRequest | None:
+        """A 段（鎖內、只讀）：那一季那一篇要寫（或重寫）的單子。寫不了回 None：開關關著、假人、這一季還沒收、那一季沒有行狀、
+        已經寫過而不是重寫、重寫的次數用完了。這一季收了、還沒換季時，行狀與身家照角色身上的；以前的季照存起來的。"""
+        c, p = self.content, self.state.player
+        if not annals.on(c) or p.bot is not None:
+            return None
+        row = self.world.biography(season, p.name)
+        if row is None:
+            if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
+                return None
+            entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+            profile = annals.profile(self.state, c)
+        else:
+            if season == p.season_number and not self._season_closed():
+                return None
+            entries = tuple(sorted(row["annals"], key=lambda e: e.get("time", 0.0)))
+            profile = row["profile"]
+            if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
+                entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+                profile = annals.profile(self.state, c)
+            written = row["text"] is not None
+            if written != rewrite or (rewrite and row["rewrites"] >= c.config.biography.rewrites):
+                return None
+        if not entries:
+            return None
+        chronicle = dict(self.world.chronicle_before(season + 1)).get(season, [])
+        era = [r.text for r in chronicle][: biography.ERA_MAX]
+        return biography.BiographyRequest(
+            season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
+            annals=entries, era=tuple(era), rewrite=rewrite,
+        )
+
+    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+        """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        current = self.biography_request(request.season, request.rewrite)
+        if current is None or current.annals != request.annals:
+            return False
+        p = self.state.player
+        if request.season == p.season_number and p.annals:
+            self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
+        by = biography.MODEL if text else biography.RULE
+        return self.world.store_biography(
+            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
+        )
+
+    def biography_view(self, season: int) -> dict | None:
+        """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
+        那一季沒有（沒有行狀、還沒收季）回 None。"""
+        p, cfg = self.state.player, self.content.config.biography
+        row = self.world.biography(season, p.name)
+        if row is None or row["text"] is None:
+            ready = self.biography_request(season) is not None
+            if row is None and not ready:
+                return None
+            return {"season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": []}
+        return {
+            "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
+            "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
+            "can_rewrite": row["rewrites"] < cfg.rewrites, "scenario": self.content.scenario.name,
+        }
+
+    def share_biography(self, season: int, public: bool, code: str) -> str | None:
+        """公開或收回那一季的傳（寫成了才行）；回傳分享代碼（收回時也回，網頁不用它）。code 是伺服器產生的亂碼，已經有代碼就沿用。"""
+        if not annals.on(self.content) or self.state.player.bot is not None:
+            return None
+        return self.world.share_biography(season, self.state.player.name, public, code)
 
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""

@@ -280,6 +280,20 @@ class WorldStateStore(Protocol):
         """這個角色歷季存著的每一篇（同 biography），照季別由新到舊。"""
         ...
 
+    def store_biography(self, season: int, name: str, text: str, written_by: str, written_at: float, rewrite: bool) -> bool:
+        """寫成的傳存進那一季那一篇（save_annals 要先存過）：rewrite 是 False 時只在還沒寫過時存（同時兩個請求只存先到的那一篇），
+        是 True 時蓋掉舊的、重寫次數加一。存了回 True。"""
+        ...
+
+    def share_biography(self, season: int, name: str, public: bool, code: str) -> str | None:
+        """公開或收回那一篇（寫成了才行）：公開時沒有分享代碼就用 code（呼叫端產生的亂碼），有了就沿用舊的（取消再公開網址不變）。
+        回傳那一篇的分享代碼；那一篇不在或還沒寫成回 None。"""
+        ...
+
+    def biography_by_code(self, code: str) -> dict | None:
+        """公開頁照分享代碼查（不用登入）：只回公開中、寫成了的那一篇；其餘一律 None。"""
+        ...
+
     # ── 同伴性情漂移 ──
     def record_companion_tag(self, companion_id: str, tag: str) -> None: ...
 
