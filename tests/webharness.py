@@ -59,6 +59,12 @@ const slice = (head) => {
   if (a < 0) throw new Error(`app.js 裡找不到 ${head}`);
   return src.slice(a, src.indexOf("\n  }\n", a) + 4);
 };
+// busy() 連同它用到的常數、pressed、sendingLine（app.js 裡「送出指令的回饋」那一段）：切 busy 的測試用這個，不單切 busy
+const busyKit = () => {
+  const a = src.indexOf("\n  // ── 送出指令的回饋 ──"), b = src.indexOf("\n  // ── 送出指令的回饋（完）──");
+  if (a < 0 || b < a) throw new Error("app.js 裡找不到「送出指令的回饋」那一段");
+  return src.slice(a, b + 1);
+};
 // 照名字找函式（含 async）；一行寫完的函式（例：guideKey）只取那一行
 const fn = (name) => {
   let a = src.indexOf(`\n  function ${name}(`);

@@ -1552,12 +1552,16 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
     msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
+    made = op == "forge" and game.forged  # 開爐真的合成了：煉製頁把爐子清空；被拒絕（只回一句話）的東西留在爐裡（Joy 2026-10-12）
     _tell_tabs(game)
-    return {
+    out = {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+    if op == "forge":
+        out["made"] = made
+    return out
 
 
 @app.get("/api/prologue")

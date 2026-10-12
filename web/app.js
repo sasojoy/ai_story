@@ -175,6 +175,12 @@
   const failText = (e) => (S.offline ? "連不上伺服器，請稍後再試。"
     : e && e.constructor === Error && e.message ? e.message : "出了點問題，請再試一次。");
 
+  // 動作請求多久算逾時、逾時與沒送出去時講的話（見 api()、busy；待 joy 潤）
+  // 取名、大場面判讀最多 60 秒加上等鎖；trycloudflare 約 100 秒切斷一個請求
+  const ACTION_TIMEOUT_MS = 90000;
+  const TIMEOUT_TEXT = "伺服器太久沒回應，這一下可能沒做成。畫面已重新整理，再按一次就好。";
+  const UNSENT_TEXT = "沒送出去：連不上伺服器，請再按一次。";
+
   let toastTimer = 0;
   function toast(text) {
     $toast.textContent = text;
@@ -188,13 +194,24 @@
     const opts = body === undefined
       ? { credentials: "same-origin", headers }
       : { method: "POST", credentials: "same-origin", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    // 動作（POST）最多等 ACTION_TIMEOUT_MS：伺服器卡住時不讓按鈕永遠轉，說清楚、讓人可以再按一次（Joy 2026-10-12）。
+    // 輪詢與分頁的 GET 不設：上一次沒回來就不再打（pollInFlight），連不上時照舊標離線
+    const ctl = body !== undefined && typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), ACTION_TIMEOUT_MS) : 0;
     let res;
     try {
-      res = await fetch(path, opts);
+      res = await fetch(path, ctl ? { ...opts, signal: ctl.signal } : opts);
     } catch (e) {
+      if (ctl && ctl.signal.aborted) { // 逾時：伺服器還連得上（不標離線），只是這一下沒等到回應
+        toast(TIMEOUT_TEXT);
+        const err = new Error(TIMEOUT_TEXT);
+        err.timedOut = true;
+        throw err;
+      }
       setOffline(true);
+      if (body !== undefined) toast(UNSENT_TEXT); // 動作沒送出去：照實講，按鈕會還原、可以再按
       throw e;
-    }
+    } finally { clearTimeout(timer); }
     setOffline(false);
     if (res.status === 401) {
       S.stage = "gate";
@@ -2812,11 +2829,51 @@
   }
 
   // ── 動作 ──
-  async function busy(fn) {
-    if (S.busy) return;
-    S.busy = true;
-    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; lastAction = Date.now(); }
+  // ── 送出指令的回饋 ──
+  // Joy 2026-10-12「要有機制讓玩家知道指令有送出，只是在等伺服器回應」）：每一個走 busy() 的動作都一樣——
+  // 按下去的那一顆馬上標「送出中」（.sending：掃光、不能再按）；過了 WAIT_HINT_MS 還沒回來，畫面底下浮一行「已送出，等候回應…」，
+  // 再久改寫「伺服器還在處理」；回來了就收掉。上一個指令還沒回來時再按別的：以前一聲不響地丟掉（玩家以為按了沒反應），現在浮同一行講一聲。
+  // 失敗（伺服器擋下來、連不上、逾時）由 api() 用提示泡泡講，按鈕還原、可以再按。
+  const WAIT_HINT_MS = 1500; // 過了這麼久還沒回來，浮一行「已送出，等候回應…」
+  const SLOW_HINT_MS = 12000; // 再久改寫「伺服器還在處理」
+  const SENT_WAITING = "已送出，等候回應…"; // 這三句待 joy 潤
+  const SLOW_WAITING = "指令已送出，伺服器還在處理，請稍候…";
+  const STILL_WAITING = "上一個指令還在等回應，稍候再按。";
+  let pressed = null; // 最近一次點到的 [data-act]（點擊的處理器記下，busy 拿它標「送出中」）：{ el, at }
+
+  // 那一行只是提示：畫不出來（測試的假 document 沒有這些）也不能讓動作本身失敗
+  function sendingLine(text) {
+    try {
+      const el = document.getElementById("sending");
+      if (!text) { if (el) el.remove(); return; }
+      if (el) { el.lastElementChild.textContent = text; return; }
+      document.body.insertAdjacentHTML("beforeend",
+        `<div id="sending" class="sending-line" role="status" aria-live="polite"><i></i><span>${esc(text)}</span></div>`);
+    } catch (e) { /* 見上 */ }
   }
+
+  async function busy(fn) {
+    if (S.busy) { sendingLine(STILL_WAITING); return false; } // 回傳 false：這一下沒送（呼叫端別拿「失敗了」的還原去動上一個還在等的按鈕）
+    S.busy = true;
+    // 這一下是點哪一顆送出的（點擊的處理器記在 pressed；隔太久的不算，例如確認框問過才送的那一下，原本那顆早就重畫掉了）
+    const btn = pressed && Date.now() - pressed.at < 1000 && pressed.el.isConnected ? pressed.el : null;
+    if (btn) { btn.classList.add("sending"); btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
+    const hint = setTimeout(() => sendingLine(SENT_WAITING), WAIT_HINT_MS);
+    const slow = setTimeout(() => sendingLine(SLOW_WAITING), SLOW_HINT_MS);
+    let timedOut = false;
+    try { await fn(); } catch (e) { timedOut = !!(e && e.timedOut); /* api() 已經提示過 */ } finally {
+      clearTimeout(hint);
+      clearTimeout(slow);
+      sendingLine(null);
+      // 沒被重畫掉（動作失敗、或這個動作不重畫那一塊）：還原成按得下去
+      if (btn && btn.isConnected) { btn.classList.remove("sending"); btn.disabled = false; btn.removeAttribute("aria-busy"); }
+      S.busy = false;
+      lastAction = Date.now();
+    }
+    if (timedOut) setTimeout(poll, 0); // 逾時：伺服器那邊可能其實做完了，重抓一次畫面，玩家看到的才是現在的樣子
+    return true;
+  }
+  // ── 送出指令的回饋（完）──
 
   // 等模型的時候（對話、大場面、開爐、隨口應對）每 2 秒問一次佇列，按鈕上補「前面還有 N 件」。佇列關著時伺服器回 null，什麼都不多顯示
   function watchQueue(el, base) {
@@ -2959,7 +3016,7 @@
     S.sensePts.forEach(([x, y], i) => (i ? sx.lineTo(x, y) : sx.moveTo(x, y)));
     sx.stroke();
     const png = small.toDataURL("image/png").split(",")[1] || "";
-    await busy(async () => {
+    const sent = await busy(async () => {
       pad.classList.add("brewing"); // 等模型取名：整塊畫布微微晃（同煉製的爐子）
       pad.querySelectorAll("button").forEach((b) => { b.disabled = true; });
       const send = pad.querySelector('[data-act="sense-send"]');
@@ -2972,7 +3029,7 @@
         window.scrollTo({ top: 0, behavior: "smooth" });
       } finally { stop(); }
     });
-    if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
+    if (sent && document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
   }
 
   async function choose(btn, id, sure = false) {
@@ -3003,7 +3060,7 @@
       if (input) input.focus();
       return;
     }
-    await busy(async () => {
+    const sent = await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
       // 跟 server.py 的 may_generate_dialogue 同一個判斷：這些選項要等模型回話
@@ -3031,7 +3088,8 @@
     });
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
-    if (document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
+    // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
+    if (sent && document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
   }
 
   // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
@@ -3161,7 +3219,7 @@
     if (before !== undefined && after !== undefined && after !== before) window.scrollBy({ top: after - before, left: 0, behavior: "instant" });
   }
 
-  // 開爐：結果寫在「開爐」底下，頁面不捲；爐裡的東西留著，拿掉一格換一樣就能再合（企劃者 2026-10-10）
+  // 開爐：結果寫在「開爐」底下，頁面不捲（企劃者 2026-10-10）；合成了爐子清空，被拒絕的東西留著（Joy 2026-10-12）
   async function forge() {
     const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
@@ -3180,7 +3238,10 @@
         S.menxia = r.menxia;
         S.message = "";
         S.forgeResult = { html: r.message };
-        trimForgeSel(); // 爐裡的東西留著（合成、合併都不會用掉），只拿掉已經不在手上的
+        // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
+        // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
+        if (r.made) S.forgeSel = [];
+        else trimForgeSel();
         S.forgeLine = "";
         S.forgePicks = null;
         setMain(r.main);
@@ -3228,9 +3289,23 @@
     setTimeout(() => drop.remove(), 650);
   }
 
+  let pointerHeld = false; // 手指（滑鼠）正按著：輪詢先不重畫江湖頁（見 refreshPage）
+  let redrawHeld = false; // 按著的時候輪詢帶來了新畫面：放開之後補畫
+  document.addEventListener("pointerdown", () => { pointerHeld = true; }, true);
+  const releasePointer = () => {
+    pointerHeld = false;
+    if (!redrawHeld) return;
+    redrawHeld = false;
+    // 放開之後 click 才送出：等它處理完再補畫；它開始了一個動作的話，動作回來會自己畫
+    setTimeout(() => { if (!S.busy && S.stage === "game" && S.tab === "jianghu") renderPage(); }, 0);
+  };
+  document.addEventListener("pointerup", releasePointer, true);
+  document.addEventListener("pointercancel", releasePointer, true);
+
   document.addEventListener("click", async (ev) => {
     const el = ev.target.closest("[data-act]");
     if (!el) return;
+    pressed = { el, at: Date.now() };
     const act = el.dataset.act;
     if (el.classList.contains("act-ink")) {
       const [key, x, y] = [el.dataset.key, ev.clientX, ev.clientY];
@@ -3666,7 +3741,11 @@
   async function refreshPage(old) {
     const tab = S.tab;
     if (tab === "jianghu") {
-      if (pageKey(old) !== pageKey(S.main)) renderPage(); // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+      if (pageKey(old) !== pageKey(S.main)) { // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+        // 手指正按在畫面上：這時整頁換掉，按下去的那一顆就不在了，放開時 click 落空（按了沒反應）。等放開再畫
+        if (pointerHeld) redrawHeld = true;
+        else renderPage();
+      }
       return;
     }
     if (tab === "news") {
