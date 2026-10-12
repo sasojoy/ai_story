@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
-    fight_llm, figures, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
@@ -147,6 +147,8 @@ def say_text(text: str | None) -> str | None:
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
+TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 PAUSE_LINE = (  # 待 S1／joy 潤
@@ -440,6 +442,11 @@ class Game:
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
+        if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
+            self.world.save_annals(
+                old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
+                annals.profile(old, self.content),
+            )
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
@@ -512,12 +519,13 @@ class Game:
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
-            not p.picking_smith or not weapons.smith_here(s, c) or smithing.draft_stale(c, p.smith_draft)
+            not p.picking_smith or not smithing.draft_here(s, c, p.smith_draft) or smithing.draft_stale(c, p.smith_draft)
         ):
-            p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
+            p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
+        forge_secrets.refresh_names(p, c)  # 名器的名字照內容讀（打造隱藏配方設計 4.2）：joy 改了名字，存檔裡的跟著改；拿掉了留著舊名字
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -643,8 +651,8 @@ class Game:
             msgs += self._advance_player_local(elapsed)
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
-        if self.state.player.smith_draft is not None and not weapons.smith_here(self.state, self.content):
-            self.state.player.smith_draft = None  # 武器關了、防具還開著：鐵匠鋪照開（防具頁），兵器的單子清掉
+        if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
+            self.state.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
             self.state.player.picking_market = False  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
@@ -1349,7 +1357,6 @@ class Game:
     def choose(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
-        proposed: tuple[str | None, str] | None = None,
     ) -> list[str]:
         """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
         prepared 是 server.py 在鎖外先生成好的一輪對話（見 dialogue_request／companion_agent.prepare_turn）；
@@ -1357,9 +1364,7 @@ class Game:
         fight 是 server.py 在鎖外先判讀好的大場面（見 fight_request／fight_llm.judge）：一樣先重驗（_checked_fight），
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
-        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。
-        proposed 只有鐵匠鋪的開爐（`smith:forge-go:…`）用：server.prepare_smith_forge 在鎖外先取好的（名字, 說明），C 段
-        （smithing.forge）再過一次過濾；沒給（整季機器人、腳本、測試）首創配方才在鎖內取名。"""
+        不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
@@ -1410,7 +1415,7 @@ class Game:
             elif kind == "bounty":
                 msgs = self._bounty(arg)
             elif kind == "smith":
-                msgs = self._smith(arg, proposed)
+                msgs = self._smith(arg)
             elif kind == "market":
                 msgs = self._market(arg)
             else:
@@ -1484,6 +1489,9 @@ class Game:
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
             self._outcome(tag, line)
+            # 行狀：隨口應對是自己的話，一律記；一次性的事、奇遇份量重一些
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對" + ("，成了。" if success else "，沒成。"),
+                        3 if event.once or event.qiyu else 1, quote=request.text)
             effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
@@ -2594,7 +2602,7 @@ class Game:
 
     def _smith_options(self) -> list[Option]:
         """鐵匠鋪的第二層選單（兵器設計 4.1；裝備四欄設計 4.6）：分兵器、防具兩頁（equipment.page；兩欄都開著時預設兵器頁，
-        「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…挑到一半（smith_draft）時整份換成那一步。
+        「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…／打造防具…挑到一半（smith_draft）時整份換成那一步。
         兵器頁：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），手上那把一顆「修」（寫明用掉哪一種素材）
         與「淬煉」（身上那把配不上身上的武學時，按得下去的「修」「淬煉」多一句提醒：白花料與銀兩，加成用不上），
         裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），「打造兵器…」（排在換上與拆解中間：FB-125），
@@ -2603,7 +2611,8 @@ class Game:
         art = team.player_art(s, c, self.world, s.player.member.wugong_id)
         fit_kind = weapons.art_weapon(art.id, c, self.world) if art is not None else None
         if s.player.smith_draft is not None:
-            return smithing.draft_options(s, c, self.world, art)  # 打造兵器…挑到一半：只畫這一步
+            neigong = team.player_art(s, c, self.world, s.player.member.neigong_id)  # 防具的單子標跟內功同屬性的輔料
+            return smithing.draft_options(s, c, self.world, art, neigong)  # 打造兵器…／打造防具…挑到一半：只畫這一步
         if equipment.page(s.player, c) == "armor":
             return self._armor_options()  # 防具頁（裝備四欄 4.6）
         opts = []
@@ -2656,8 +2665,9 @@ class Game:
 
     def _armor_options(self) -> list[Option]:
         """鐵匠鋪的防具頁（裝備四欄設計 4.6）：架上剛柔快慢四件各一顆「買」（一階下品；寫這件給你少扣幾成氣血、對不對得上你的內功，
-        買不了的灰掉寫為什麼），身上那件一顆「修」（寫明用掉哪一種素材），裝備庫裡每件防具一顆「換上」，拆解，兵器也開著時一顆切到兵器頁，
-        最後「離開」。都不花體力。FB-125：這一頁沒有打造入口隔開換上與拆解，靠拆解先問一次（confirm／confirm_yes）擋誤按。"""
+        買不了的灰掉寫為什麼），身上那件一顆「修」（寫明用掉哪一種素材）、一顆「淬煉」，裝備庫裡的防具「換上」（最多 DISMANTLE_LIST 件、最好的先，
+        FB-134），「打造防具…」，拆解，兵器也開著時一顆切到兵器頁，最後「離開」。都不花體力。FB-125：打造入口隔開換上與拆解（同兵器頁），
+        拆解另外先問一次（confirm／confirm_yes）擋誤按。"""
         s, c, p = self.state, self.content, self.state.player
         neigong = team.player_art(s, c, self.world, p.member.neigong_id)
         rule = c.config.armor
@@ -2678,8 +2688,18 @@ class Game:
             use = f"{c.materials[material].name}×1" if material is not None else "一個一階素材"
             note = problem or f"{use}＋{rule.repair_silver} 兩"
             opts.append(Option(id=armor.REPAIR, label=f"修【{p.armor.name}】（{armor.WEAR_WORD} {p.armor.edge}・{note}）", enabled=problem is None))
-        for a in equipment.in_slot(p, "armor"):
-            opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade(a)}・{armor.WEAR_WORD} {a.edge}）"))
+        temper = smithing.temper_option(s, c, "armor")  # 淬煉身上那件（四欄設計 4.1）；沒穿沒有
+        if temper is not None:
+            opts.append(temper)
+        # FB-134：「換上」最多 DISMANTLE_LIST 件，修好之後減損高的先、同分 id 大的先——跟 armor.wanted 挑換上的鍵一樣，整季機器人與假人
+        # 要按的那一顆一定列得出來；多的一行灰掉的說明指到修練頁（同拆解）。淬過的寫「・淬煉 N」（equipment.grade_line）
+        spares = sorted(equipment.in_slot(p, "armor"), key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
+        for a in spares[:equipment.DISMANTLE_LIST]:
+            opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade_line(a)}・{armor.WEAR_WORD} {a.edge}）"))
+        if len(spares) > equipment.DISMANTLE_LIST:
+            opts.append(Option(id="smith:wield-more", enabled=False,
+                               label=equipment.WIELD_MORE.format(n=len(spares) - equipment.DISMANTLE_LIST)))
+        opts.append(smithing.forge_door(s, c, "armor"))  # 打造防具…（排在換上與拆解中間：FB-125，同兵器頁）
         return opts + self._dismantle_options("armor") + self._smith_tail()
 
     def _smith_tail(self) -> list[Option]:
@@ -2722,9 +2742,19 @@ class Game:
             return mounts.wield(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
-    def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
-        """鐵匠鋪上的選擇：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子與停在哪一頁）。
-        做完選單還開著，可以接著挑。"""
+    def _smith(self, arg: str) -> list[str]:
+        """鐵匠鋪上的選擇（_smith_act）；這一下花了銀兩或素材（買、修、淬煉、開爐；拆解拿到素材不算），再擲一次鐵匠順口（_smith_clue；
+        打造隱藏配方設計 6.2、計畫「要 PM 定的」第 3 條）。"""
+        p = self.state.player
+        silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
+        msgs = self._smith_act(arg)
+        if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
+            msgs = msgs + self._smith_clue()
+        return msgs
+
+    def _smith_act(self, arg: str) -> list[str]:
+        """鐵匠鋪上的一下（_smith 包著它）：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子
+        與停在哪一頁）。做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
@@ -2736,9 +2766,10 @@ class Game:
             return []
         if verb == smithing.GO_VERB:
             kind, main, aux = smithing.parse_go(f"smith:{arg}")
-            client = None if proposed is not None else self._quick_client()  # 鎖外取好名字了就不在鎖裡叫模型
-            weapon, msgs = smithing.forge(s, c, self.world, client, kind, main, aux, proposed=proposed, rng=self.rng)
-            if weapon is not None:
+            # 防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方設計 9.3），兵器照舊用 Game.rng
+            rng = smithing.own_rng(s, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else self.rng
+            item, msgs = smithing.forge(s, c, self.world, kind, main, aux, rng=rng)  # 不叫模型、一次做完（打造隱藏配方設計第八節）
+            if item is not None:
                 s.player.smith_draft = None  # 打完收起單子：同一顆連按兩下、兩個分頁，第二下已經不在選單上（Review Focus 1）
             return msgs
         if verb in smithing.STEP_VERBS:
@@ -2869,6 +2900,7 @@ class Game:
         if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
             heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
+        affinity = self.state.player.affinities.get(companion_id, 0)
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
@@ -2882,10 +2914,28 @@ class Game:
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
         msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
         msgs += self._count_talk(companion_id)
         return msgs
+
+    def _annal_talk(self, companion_id: str, delta: int, said: str | None) -> None:
+        """對話的一輪寫進行狀（玩家傳）：自己說的那一句一律記（原句與他回的頭一兩句）；挑選項的只在情誼動得多時記。"""
+        c, p = self.content, self.state.player
+        history = p.dialogue_history.get(companion_id, [])
+        reply = history[-1]["content"] if history and history[-1].get("role") == "assistant" else ""
+        asked = history[-2]["content"] if len(history) >= 2 and history[-2].get("role") == "user" else ""
+        name = annals.figure_name(c, companion_id)
+        mood = f"，情誼 {delta:+d}" if delta else ""
+        if said is not None:
+            weight = 3 if abs(delta) >= c.config.biography.talk_swing else 2
+            annals.note(self.state, c, annals.FIGURE, f"對{name}說了一句自己的話{mood}。", weight,
+                        figure=companion_id, quote=said, reply=annals.first_sentence(reply))
+        elif abs(delta) >= c.config.biography.talk_swing:
+            how = "談得投機" if delta > 0 else "話不投機"
+            annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
+                        figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
 
     def _faction_step(self, arg: str) -> list[str]:
         """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
@@ -2979,8 +3029,8 @@ class Game:
 
     def _battle_scores(self, mounted: bool = True) -> dict[str, float]:
         """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性；
-        騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount）。mounted=False 不算馬：單人頭目戰用同一份份量，
-        騎兵只在全服決戰（設計 2.1）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
+        騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount），帶著部下再乘（1＋部下）（_battle_troops）。
+        mounted=False 不算馬也不算部下：單人頭目戰用同一份份量，騎兵與部下只在全服決戰（設計 2.1；PM 2026-10-12）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
         不能在 world_tick 裡呼叫）。"""
         p = self.state.player
         outer = team.player_art(self.state, self.content, self.world, p.member.wugong_id)
@@ -2988,7 +3038,7 @@ class Game:
         return battle_instance.move_scores(
             self.content.config.battle, self._battle_power(),
             outer.attribute if outer else None, inner.attribute if inner else None, role=self._battle_role(),
-            cavalry=self._battle_mount()[1] if mounted else 0.0,
+            cavalry=self._battle_mount()[1] if mounted else 0.0, troops=self._battle_troops()[1] if mounted else 0.0,
         )
 
     def _battle_role(self) -> str:
@@ -3002,6 +3052,20 @@ class Game:
         item = mounts.riding(self.state, self.content)
         bonus = mounts.cavalry(self.state, self.content)
         return (mounts.name_of(item), bonus) if item is not None and bonus > 0 else ("", 0.0)
+
+    def _battle_troops(self) -> tuple[str, float]:
+        """加入決戰那一刻帶的部下（PM 2026-10-12）：（「兩名持矛鄉勇」, 每名 Config.follower.battle_per 加起來）；沒有部下
+        （第一季關著、還沒晉升）是 ("", 0.0)。跟份量一起快照進 BattleParticipant（troops、troop_bonus）。"""
+        rows = team.follower_rows(self.state, self.content)
+        if not rows:
+            return "", 0.0
+        return team.troop_names([f for _, f in rows]), len(rows) * self.content.config.follower.battle_per
+
+    def _battle_gear(self) -> dict:
+        """快照進 BattleParticipant 的坐騎與部下（join_faction／auto_assign_latecomer 的 mount、cavalry、troops、troop_bonus）。"""
+        horse, cavalry = self._battle_mount()
+        troops, bonus = self._battle_troops()
+        return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus}
 
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
@@ -3023,7 +3087,7 @@ class Game:
         if me is None or me.scores or me.eliminated:
             return
         scores, road, role = self._battle_scores(), self._battle_road(), self._battle_role()
-        horse, cavalry = self._battle_mount()
+        gear = self._battle_gear()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
@@ -3031,7 +3095,8 @@ class Game:
                 mine.scores = dict(scores)
                 mine.attribute = mine.attribute or road
                 mine.role = mine.role or role
-                mine.mount, mine.cavalry = mine.mount or horse, mine.cavalry or cavalry
+                mine.mount, mine.cavalry = mine.mount or gear["mount"], mine.cavalry or gear["cavalry"]
+                mine.troops, mine.troop_bonus = mine.troops or gear["troops"], mine.troop_bonus or gear["troop_bonus"]
 
         self.world.mutate_battle(_fill)
 
@@ -3325,6 +3390,9 @@ class Game:
             return
         fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
         p.events_seen += [eid for _, eid, _ in fresh]
+        for _, _, r in fresh:
+            if r.locked_by == p.name:  # 行狀：你暗中鎖定的伏筆左右了這件大事（揭曉這一刻才記，鎖定的當下不能露出來）
+                annals.note(self.state, c, annals.DEED, f"你暗中布下的伏筆左右了這件大事：{r.text}", 5, place="", time=r.time)
         last = fresh[-1][2]
         if len(fresh) == 1:
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
@@ -3369,7 +3437,12 @@ class Game:
         """名將贈禮（裝備四欄 6.4）：情誼到 gift_affinity 的人物把贈禮交給你，每位名將每季全服只送一人（treasures.gifts_due 記進
         WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
         事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
-        return treasures.gifts_due(self.state, self.content)
+        given = dict(self.state.world.general_gifts)
+        msgs = treasures.gifts_due(self.state, self.content)
+        for cid, who in self.state.world.general_gifts.items():
+            if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
+                annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
+        return msgs
 
     def _deliver_renames(self) -> None:
         """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
@@ -3455,6 +3528,8 @@ class Game:
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.mount:
             lines.append(mounts.CAVALRY_REPORT.format(name=me.mount))  # 騎著馬出陣（裝備四欄 5.9）；原句「你以…出陣」不動
+        if me.troops:
+            lines.append(TROOPS_REPORT.format(names=me.troops))  # 帶著部下出陣（PM 2026-10-12）
         if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
             lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
         if me.hurt_dealt >= 0.5:
@@ -3527,6 +3602,46 @@ class Game:
             time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines, changes=changes,
             battle_id=record.id,
         ))
+        self._annal_showdown(battle, me, name, side, role, rank, len(ranking), earlier, time)
+
+    def _annal_showdown(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, name: str, side: str, role: str,
+        rank: int | None, ranked: int, earlier: int | None, time: float,
+    ) -> None:
+        """一場決戰寫進行狀（玩家傳）：站哪邊、職位、出手幾回合、帶頭佔上風、首功或戰功排名、倒下、結果；每一次放手一搏另一則
+        （原句、播出來的那一版劇情、成敗、點名了誰）。上一季的決戰（earlier）接在存起來的那一季後面（角色已經重來了）。"""
+        c, s = self.content, self.state
+        if not annals.on(c):
+            return
+        tuning = c.config.battle
+        top = battle_instance.top_merit(battle, tuning, me.faction) if rank is not None else None
+        parts = [f"{name}，你站在{side}" + (f"以{role}出陣" if role else ""), f"出手 {me.acted_rounds} 回合"]
+        if me.led_rounds:
+            parts.append(f"帶頭佔了 {me.led_rounds} 回合上風")
+        if top is not None and top.name == me.name:
+            parts.append("是這一邊的首功")
+        elif rank is not None and rank <= 3:
+            parts.append(f"戰功排第 {rank}／{ranked}")
+        if me.fell_round is not None:
+            parts.append(f"第 {me.fell_round} 回合倒下")
+        parts.append(f"結果{battle.outcome_title or '收場'}")
+        place = self._battle_region_name(c.battles[battle.battle_id]) if battle.battle_id in c.battles and c.battles[battle.battle_id].region else ""
+        won = bool(battle.outcome_side) and battle.outcome_side == me.faction
+        entries = [annals.entry(
+            s, c, annals.SHOWDOWN, "，".join(parts) + "。", 5 if won or (top is not None and top.name == me.name) else 4,
+            place=place, time=time, season=earlier is None,
+        )]
+        for g in me.gambles:
+            what = f"在{name}陣上放手一搏" + ("，成了" if g.won else "，沒成") + (f"，點名{g.target}" if g.target else "") + "。"
+            entries.append(annals.entry(
+                s, c, annals.SHOWDOWN, what, 4 if g.won else 3, quote=g.text, reply=g.story, place=place, time=time, season=earlier is None,
+            ))
+        if earlier is None:
+            s.player.annals += entries
+            annals.trim(s, c)
+        else:
+            for e in entries:
+                self.world.add_saved_annal(earlier, s.player.name, e.model_dump())
 
     def _showdown_pay(
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str],
@@ -3735,6 +3850,7 @@ class Game:
                 role = battle_instance.role_text(self.content.config.battle, me.role)
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
+                ride += TROOPS_LINE.format(names=me.troops, pct=mounts.pct(me.troop_bonus)) + "。" if me.troops else ""  # 帶著部下
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent():
                 return f"{header}\n\n集結中，還剩現實 {left}。你是散人，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
@@ -3750,6 +3866,8 @@ class Game:
             lines.append(f"你的職位：{role}")
         if p is not None and p.mount:
             lines.append(mounts.CAVALRY_LINE.format(name=p.mount, pct=mounts.pct(p.cavalry)))  # 騎著馬上陣（裝備四欄 5.9，加入時的快照）
+        if p is not None and p.troops:
+            lines.append(TROOPS_LINE.format(names=p.troops, pct=mounts.pct(p.troop_bonus)))  # 帶著部下上陣（加入時的快照）
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             if battle_instance.is_third(definition, p):  # 第三方：兩軍各一行，再加膠著程度（戰鬥系統第六節；全是公開的戰局）
@@ -3968,11 +4086,11 @@ class Game:
                 return ["（你只能站在自己陣營這一邊。）"]
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
-            horse, cavalry = self._battle_mount()
+            gear = self._battle_gear()
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                    role=self._battle_role(), mount=horse, cavalry=cavalry,
+                    role=self._battle_role(), **gear,
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -3984,11 +4102,11 @@ class Game:
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()
-            horse, cavalry = self._battle_mount()
+            gear = self._battle_gear()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), mount=horse, cavalry=cavalry,
+                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear,
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -4013,11 +4131,11 @@ class Game:
         stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
-        horse, cavalry = self._battle_mount()
+        gear = self._battle_gear()
         if battle.phase == "muster":
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
-                    b, name, side, cap, power, scores=scores, attribute=road, role=role, mount=horse, cavalry=cavalry,
+                    b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
@@ -4025,7 +4143,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
-                    mount=horse, cavalry=cavalry,
+                    **gear,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
@@ -4393,6 +4511,9 @@ class Game:
         self._play_rounds(record, squad, result.tier, hp_lost, facts)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
         msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
+        won = result.tier in team.WIN_TIERS
+        annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
+                    figure=fig.character or "")
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
@@ -4905,34 +5026,70 @@ class Game:
         s.pending_event = None
         msgs = [f"▸ {choice.text}"]
         self._hide(msgs[0])
+        rare = event.once or event.qiyu  # 行狀：一次性的事、奇遇記下你怎麼選的（平常的事件太多，不記）
+        what = f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，你選了「{choice.text}」"
         if choice.combat:
+            if rare:
+                annals.note(s, c, annals.DEED, what + "。", 3)
             return msgs + self._event_battle(event, choice)
         if choice.check:
             success = roll_check(choice.check, s, c, self.world, self.rng)
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
             msgs.append(line)
             self._outcome(tag, line)
+            if rare:
+                annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
             return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c)) + self._tale_clue(event)
+        if rare:
+            annals.note(s, c, annals.DEED, what + "。", 3)
         return msgs + self._apply(choice.effect) + self._tale_clue(event)
 
     def _tale_clue(self, event: Event) -> list[str]:
-        """說書的事件了結時，偶爾多一句說書版的口訣（Config.secrets，tianxia/secret_recipes.py），記進武學譜。
-        擲骰用自己的亂數，不動 self.rng。"""
+        """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次
+        （Config.forge_secrets，打造隱藏配方設計 6.2，兩句都中兩句都寫）。擲骰用自己的亂數，不動 self.rng。"""
         s, cfg = self.state, self.content.config.secrets
-        seed = f"說書|{s.player.name}|{s.world.time}|{event.id}"
-        if event.id not in cfg.tale_events or not secret_recipes.roll(cfg.tale_chance, seed):
+        if event.id not in cfg.tale_events:
             return []
-        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.TALE, seed)
-        return [cfg.tale_frame.format(clue=clue)] if clue else []
+        out = []
+        seed = f"說書|{s.player.name}|{s.world.time}|{event.id}"
+        if secret_recipes.roll(cfg.tale_chance, seed):
+            clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.TALE, seed)
+            if clue:
+                out.append(cfg.tale_frame.format(clue=clue))
+        return out + self._forge_clue(forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
 
     def _scrap_find(self) -> list[str]:
-        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；同 _tale_clue 用自己的亂數。"""
+        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；再擲一次半張鑄譜（打造隱藏配方設計 6.2），記進鑄譜。
+        同 _tale_clue 用自己的亂數。"""
         s, cfg = self.state, self.content.config.secrets
+        out = []
         seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
-        if not secret_recipes.roll(cfg.scrap_chance, seed):
+        if secret_recipes.roll(cfg.scrap_chance, seed):
+            clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
+            if clue:
+                out.append(cfg.scrap_frame.format(clue=clue))
+        return out + self._forge_clue(forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
+
+    def _forge_clue(self, source: int, seed: str) -> list[str]:
+        """說書與殘譜的鑄器口訣（打造隱藏配方設計 6.2）：擲 tale_chance／scrap_chance（自己的亂數），中了照 forge_secrets.hear 挑一句、
+        記進鑄譜。"""
+        rule = self.content.config.forge_secrets
+        chance, frame = (rule.tale_chance, rule.tale_frame) if source == forge_secrets.TALE else (rule.scrap_chance, rule.scrap_frame)
+        if not secret_recipes.roll(chance, seed):
             return []
-        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
-        return [cfg.scrap_frame.format(clue=clue)] if clue else []
+        clue = forge_secrets.hear(self.state, self.content, secret_recipes.tianji_of(self.world), source, seed)
+        return [frame.format(clue=clue)] if clue else []
+
+    def _smith_clue(self) -> list[str]:
+        """鐵匠順口（打造隱藏配方設計 6.2；計畫「要 PM 定的」第 3 條）：鐵匠鋪的動作不花時間，種子多帶這一下之後的銀兩與素材數，
+        同一刻連按也各擲各的；中了說出這家知道的那一句（已經聽過不再說）。自己的亂數，不動 self.rng。"""
+        s, rule = self.state, self.content.config.forge_secrets
+        p = s.player
+        seed = f"鐵匠|{p.name}|{s.world.time}|{p.location}|{p.stats.get('silver', 0)}|{sum(p.materials.values())}"
+        if not secret_recipes.roll(rule.smith_chance, seed):
+            return []
+        clue = forge_secrets.hear_smith(s, self.content, secret_recipes.tianji_of(self.world))
+        return [rule.smith_frame.format(clue=clue)] if clue else []
 
     def _overhear(self, companion_id: str, msgs: list[str]) -> list[str]:
         """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
@@ -5055,16 +5212,6 @@ class Game:
             journal.add_entry(self.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
         return [msg]
 
-    def smith_forge_request(self, option_id: str) -> naming.NamingRequest | None:
-        """鐵匠鋪開爐的 A 段（server.prepare_smith_forge 在行動鎖內、很快地呼叫）：這一爐是這一季沒人打過的配方，就回取名的單子；
-        不必（這個 Game 沒有 client、籌備中、這顆鈕不在選單上或按不下去、打不成、配方已經有人登記）是 None。只讀、不推進戰鬥。"""
-        if self.client is None or self._preparing() or not smithing.is_go(option_id):
-            return None
-        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
-        if option is None or not option.enabled:
-            return None
-        return smithing.forge_request(self.state, self.content, self.world, *smithing.parse_go(option_id))
-
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
     ) -> naming.NamingRequest | None:
@@ -5185,6 +5332,8 @@ class Game:
         if pending is not None and self.state.player.naming is None:
             self._menxia_entry(msgs[0], xinde)
             self._save_season()
+            shown = self._art_name(pending)
+            annals.note(self.state, self.content, annals.DEED, f"江湖上第一個把【{pending}】練成絕學的人，定名【{shown}】。", 5)
         return msgs
 
     @_not_while_preparing
@@ -5866,6 +6015,7 @@ class Game:
             story = f"你攔下{rival}動手，卻不是他的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)  # 行狀：截殺與被截殺（兩邊各記自己的）
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
@@ -6071,6 +6221,7 @@ class Game:
         summary = self._file_battle(record)
         msgs = [line, summary, *record.notes, *battlelog.gains_list(record)]
         self._write(title, msgs, tag=battlelog.outcome_text(record))
+        annals.note(s, c, annals.FIGHT, f"獨力對上{foe.title}{foe.name}，{tier}。", 3 if won else 2)
         return msgs
 
     def _xinde(self) -> int:
@@ -7273,6 +7424,8 @@ class Game:
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
+            # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
+            "forge_manual": forge_secrets.view(s, c, self.world),
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
@@ -7467,6 +7620,115 @@ class Game:
             ],
         }
 
+    def annals_view(self) -> dict:
+        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
+        books 是歷季列傳（第二批）：存著的每一季（這一季收了、還沒換季的也算），新的在前。"""
+        on = annals.on(self.content)
+        return {
+            "on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else [],
+            "books": self.biography_list() if on else [],
+        }
+
+    # ── 玩家傳第二批：季末寫成《某某傳》、公開分享 ──
+
+    def _season_closed(self) -> bool:
+        """這一季收了（休季）：這一季的傳寫得了。"""
+        return self.world.season_phase() == "resting"
+
+    def biography_entry(self) -> dict | None:
+        """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
+        輪詢每次都問：季還在跑時不讀資料庫。"""
+        p = self.state.player
+        if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
+            return None
+        if not p.annals and self.world.biography(p.season_number, p.name) is None:
+            return None
+        return {"season": p.season_number, "title": biography.title(p.name)}
+
+    def biography_list(self) -> list[dict]:
+        """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
+        p = self.state.player
+        rows = {b["season"]: b for b in self.world.biographies_of(p.name)}
+        out = []
+        if self._season_closed() and p.annals and p.season_number not in rows:
+            out.append({"season": p.season_number, "title": biography.title(p.name), "written": False, "public": False})
+        out += [
+            {"season": n, "title": biography.title(b["name"]), "written": b["text"] is not None, "public": b["public"]}
+            for n, b in sorted(rows.items(), reverse=True)
+        ]
+        return out
+
+    def biography_request(self, season: int, rewrite: bool = False) -> biography.BiographyRequest | None:
+        """A 段（鎖內、只讀）：那一季那一篇要寫（或重寫）的單子。寫不了回 None：開關關著、假人、這一季還沒收、那一季沒有行狀、
+        已經寫過而不是重寫、重寫的次數用完了。這一季收了、還沒換季時，行狀與身家照角色身上的；以前的季照存起來的。"""
+        c, p = self.content, self.state.player
+        if not annals.on(c) or p.bot is not None:
+            return None
+        row = self.world.biography(season, p.name)
+        if row is None:
+            if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
+                return None
+            entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+            profile = annals.profile(self.state, c)
+        else:
+            if season == p.season_number and not self._season_closed():
+                return None
+            entries = tuple(sorted(row["annals"], key=lambda e: e.get("time", 0.0)))
+            profile = row["profile"]
+            if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
+                entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+                profile = annals.profile(self.state, c)
+            written = row["text"] is not None
+            if written != rewrite or (rewrite and row["rewrites"] >= c.config.biography.rewrites):
+                return None
+        if not entries:
+            return None
+        chronicle = dict(self.world.chronicle_before(season + 1)).get(season, [])
+        era = [r.text for r in chronicle][: biography.ERA_MAX]
+        return biography.BiographyRequest(
+            season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
+            annals=entries, era=tuple(era), rewrite=rewrite,
+        )
+
+    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+        """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        current = self.biography_request(request.season, request.rewrite)
+        if current is None or current.annals != request.annals:
+            return False
+        p = self.state.player
+        if request.season == p.season_number and p.annals:
+            self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
+        by = biography.MODEL if text else biography.RULE
+        return self.world.store_biography(
+            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
+        )
+
+    def biography_view(self, season: int) -> dict | None:
+        """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
+        那一季沒有（沒有行狀、還沒收季）回 None。"""
+        p, cfg = self.state.player, self.content.config.biography
+        row = self.world.biography(season, p.name)
+        if row is None or row["text"] is None:
+            ready = self.biography_request(season) is not None
+            if row is None and not ready:
+                return None
+            return {
+                "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
+                "scenario": self.content.scenario.name,
+            }
+        return {
+            "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
+            "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
+            "can_rewrite": row["rewrites"] < cfg.rewrites, "scenario": self.content.scenario.name,
+        }
+
+    def share_biography(self, season: int, public: bool, code: str) -> str | None:
+        """公開或收回那一季的傳（寫成了才行）；回傳分享代碼（收回時也回，網頁不用它）。code 是伺服器產生的亂碼，已經有代碼就沿用。"""
+        if not annals.on(self.content) or self.state.player.bot is not None:
+            return None
+        return self.world.share_biography(season, self.state.player.name, public, code)
+
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
         return calendar.stamp_text(time, self.content, self.state.world, clock=clock)
@@ -7628,9 +7890,14 @@ class Game:
             lines = journal.without_fragments(lines)
         return journal.extra_html(lines, changes, self._chip, str(entry.time))
 
+    def _art_name(self, art_id: str) -> str:
+        art = team.resolve_art(art_id, self.content, self.world)
+        return art.name if art is not None else art_id
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
+        annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
             return msgs

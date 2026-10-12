@@ -30,12 +30,12 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
+from . import annals, calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
-from .state import Echo, GameState, WeaponRecipe
+from .state import Echo, GameState, GearFind, WeaponRecipe
 from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"
@@ -438,11 +438,13 @@ ECHO_RUMOR = "江湖上照著{who}首創的{thing}練出來的人越來越多了
 ECHO_RUMOR_FORGED = "江湖上照著{who}首創的{thing}打出來的人越來越多了。"  # 待 joy 潤：兵器配方
 
 
-def echo(state: GameState, content: Content, thing: MartialArt | Insight | WeaponRecipe, first: bool, made: str = "練") -> None:
+def echo(
+    state: GameState, content: Content, thing: MartialArt | Insight | WeaponRecipe | GearFind, first: bool, made: str = "練",
+) -> None:
     """首創名望回饋（Config.first_echo）：你合出（或打出，made="打"）別人首創的那一門（照著合、合到舊的都算），在這一季的
     WorldState.echoes 記你一筆；首創者自己的 Game 同步時補名望（Game._deliver_echoes），這裡不去動別人的角色。一個人一門只算一次、
     最多算 cap 個人，湊滿那一下江湖上傳一句（具名：首創者記下的名號）。自己首創的、師門配方、內容寫好的（沒有首創者）不記；
-    第一季沒開著時什麼都不做。意境寫「」，武學與兵器寫【】。"""
+    第一季沒開著時什麼都不做。意境寫「」，武學與兵器寫【】。隱藏配方的首位發現者照 GearFind 記（id 是「鑄|配方 id」，打造隱藏配方設計 7.2）。"""
     me = state.player.name
     if first or not thing.creator or me in (thing.creator, thing.co_creator) or getattr(thing, "preset", False):
         return
@@ -715,6 +717,8 @@ def fuse(
     if secret is None:  # 秘方那一門的傳聞由 _secret_lines 傳（不再另傳一句特別功效的）
         msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
     return art, msgs + _store_forged(state, content, world, art, quality)
 
 
@@ -904,6 +908,8 @@ def merge(
         head += f"\n{result.note}"
     head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     echo(state, content, result, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)  # 行狀（玩家傳）：首創
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
     extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first)
     return result, [head] + extra + _charge(state, *_price(content, partner, "merge"))
@@ -1043,4 +1049,6 @@ def blend(
     if secret is None:
         msgs += _special_rumor(state, content, art, first)
     echo(state, content, art, first)
+    if first:
+        annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
     return art, msgs + _store_forged(state, content, world, art, quality)

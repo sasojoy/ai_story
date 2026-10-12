@@ -1,27 +1,57 @@
-"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批：自己打造）。
+"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批；四欄設計 4.7：防具照同一套；
+打造隱藏配方設計第八、九節：不再叫模型取名）。
 
 | 誰 | 做什麼 |
 |---|---|
-| 模型 | 只替這一季第一次打出來的配方取名字＋一句說明（三段式），一個數字都不碰 |
-| 引擎 | 配方鍵、屬性、階、工錢、品質擲骰、全服登記、淬煉 |
+| 引擎 | 配方鍵、屬性、階、工錢、品質擲骰、名字（一般組合照對照表）、淬煉 |
+| 模型 | 不碰打造 |
+
+防具沒有種類：單子與開爐鈕上用 ARMOR_KIND（「防具」）佔種類那一格（smith:forge-go:防具:<主料>:<輔料>），照它分派欄位、組合鍵、開關、
+設定（slot_of、recipe_key、here、rules_of）。防具的字、組合鍵、名字對照表在 armor.py。
 
 這個模組 import team 與 fusion（品質的推法、悟性、天時地利）；team 會 import weapons，所以 weapons 不能 import 這裡。
 鐵匠鋪的選單項（Option）在 engine 裡，回選單的函式延後 import（同 foreshadow.talk_options）。"""
 from __future__ import annotations
 
-import functools
 import random
 from collections import Counter
+from collections.abc import Callable
 
-from . import equipment, fusion, naming, team, weapons
+from . import annals, armor, equipment, forge_secrets, fusion, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
-from .ollama_client import OllamaClient
-from .state import GameState, SmithDraft, Weapon, WeaponRecipe
+from .rules import add_rumor
+from .state import Equipment, GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
 NOT_ENOUGH = "身上的素材不到兩個"  # 待 joy 潤
+ARMOR_KIND = "防具"  # 單子（SmithDraft.kind）與開爐鈕 id 上代表防具的那一格（防具沒有種類，四欄設計 4.7）
+
+
+def is_armor(kind: str | None) -> bool:
+    """這一爐（單子、開爐鈕、forge 的 kind）打的是防具。"""
+    return kind == ARMOR_KIND
+
+
+def slot_of(kind: str | None) -> str:
+    """這一爐打出來放哪一欄：防具 armor，其餘（兵器的種類、還沒挑種類的兵器單子）weapon。"""
+    return "armor" if kind == ARMOR_KIND else "weapon"
+
+
+def rules_of(content: Content, slot: str):
+    """打造與淬煉照哪一組設定（工錢、品質、淬煉）：防具 Config.armor，兵器 Config.weapons（四欄設計 2.6、3.4：各欄自己的設定）。"""
+    return content.config.armor if slot == "armor" else content.config.weapons
+
+
+def recipe_key(kind: str, main: str, aux: str) -> str:
+    """這一爐的組合鍵：兵器「兵|種類|主料+輔料」（weapons.recipe_key），防具「鎧|主料+輔料」（armor.recipe_key）。"""
+    return armor.recipe_key(main, aux) if kind == ARMOR_KIND else weapons.recipe_key(kind, main, aux)
+
+
+def here(state: GameState, content: Content, kind: str | None) -> bool:
+    """這一爐在這裡打得了：防具看防具的開關、其餘看武器的開關，人都要在城鎮（armor.smith_here、weapons.smith_here）。"""
+    return (armor.smith_here if kind == ARMOR_KIND else weapons.smith_here)(state, content)
 
 
 def tier_of(content: Content, main: str) -> int:
@@ -29,16 +59,17 @@ def tier_of(content: Content, main: str) -> int:
     return content.materials[main].tier
 
 
-def price(content: Content, tier: int) -> int:
-    """打一把這一階的工錢（4.2，Config.weapons.forge_silver）。"""
-    return content.config.weapons.forge_silver.get(str(tier), 0)
+def price(content: Content, tier: int, slot: str = "weapon") -> int:
+    """打一件這一階的工錢（兵器 4.2；防具照同一張表，Config.armor.forge_silver）。"""
+    return rules_of(content, slot).forge_silver.get(str(tier), 0)
 
 
 def attribute_with(content: Content, tianji: int, kind: str, main: str, aux: str) -> str:
-    """打出來的屬性（4.2）：照 insights.merged_attribute，種子是「天機|配方鍵」（同 fusion.recipe_seed），所以同一季同一個配方一樣。
+    """打出來的屬性（4.2）：照 insights.merged_attribute，種子是「天機|配方鍵」（同 fusion.recipe_seed），所以同一季同一個配方一樣；
+    防具的組合鍵是「鎧|主料+輔料」。
     同屬性與四對（剛快、柔慢、快柔、剛慢）合出來的跟主輔順序無關；其餘組合（剛柔、快慢）照種子的雜湊挑兩者之一，配方鍵分主輔，
     主輔對調是另一個配方，挑到的屬性可能不同（4.4：主輔不交換）。選單一次要算好幾個時先讀一次天機，用這一個。"""
-    seed = f"{tianji}|{weapons.recipe_key(kind, main, aux)}"
+    seed = f"{tianji}|{recipe_key(kind, main, aux)}"
     return merged_attribute(content.materials[main], content.materials[aux], seed)
 
 
@@ -47,11 +78,11 @@ def attribute_of(world: WorldStateStore, content: Content, kind: str, main: str,
 
 
 def forge_problem(state: GameState, content: Content, kind: str, main: str, aux: str) -> str | None:
-    """打不成的原因；None＝打得成。順序：不在鐵匠鋪、種類、素材認不得、素材不夠（主輔同一種要兩個）、裝備庫滿、銀兩不夠。
-    鐵匠鋪的鈕灰掉時寫它，C 段（forge）也再驗一次。"""
-    if not weapons.smith_here(state, content):
+    """打不成的原因；None＝打得成。順序：不在鐵匠鋪（這一欄關著）、種類、素材認不得、素材不夠（主輔同一種要兩個）、裝備庫滿、銀兩不夠。
+    kind 是兵器種類或 ARMOR_KIND。鐵匠鋪的鈕灰掉時寫它，forge 也再驗一次。"""
+    if not here(state, content, kind):
         return weapons.NOT_HERE
-    if kind not in WEAPON_KINDS:
+    if kind not in WEAPON_KINDS and kind != ARMOR_KIND:
         return "沒有這種兵器"
     if main not in content.materials or aux not in content.materials:
         return "沒有這種素材"
@@ -59,16 +90,16 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
     for mid, need in Counter([main, aux]).items():
         if held.get(mid, 0) < need:
             return f"{content.materials[mid].name}不夠（要 {need} 個）"
-    if weapons.rack_full(state, content):
+    if equipment.rack_full(state, content, slot_of(kind)):
         return weapons.RACK_FULL
-    short = price(content, tier_of(content, main)) - state.player.stats.get("silver", 0)
+    short = price(content, tier_of(content, main), slot_of(kind)) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def setting_points(state: GameState, content: Content, attribute: str) -> list[tuple[str, float]]:
+def setting_points(state: GameState, content: Content, attribute: str, slot: str = "weapon") -> list[tuple[str, float]]:
     """打造的天時地利（附帶決定 b）：地利、戰場、心靜都同合成（地利看此地探索悟得到同屬性的意境）。最多 setting_max 條。
-    兵器沒有正邪，所以合成的「晝夜」這裡沒有。"""
-    rule = content.config.weapons.quality
+    兵器沒有正邪，所以合成的「晝夜」這裡沒有；防具照 Config.armor.quality（同一套規則）。"""
+    rule = rules_of(content, slot).quality
     out: list[tuple[str, float]] = []
     if rule.terrain and fusion.terrain_here(state, content, attribute):
         out.append(("terrain", rule.terrain))
@@ -80,9 +111,9 @@ def setting_points(state: GameState, content: Content, attribute: str) -> list[t
     return out[: rule.setting_max]
 
 
-def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]:
+def setting_line(content: Content, scored: list[tuple[str, float]], slot: str = "weapon") -> list[str]:
     """結果多一句含蓄的話：天時地利合起來加分寫 setting_good、扣分寫 setting_bad；沒有、或那句是空的就不寫。"""
-    rule = content.config.weapons.quality
+    rule = rules_of(content, slot).quality
     total = sum(points for _, points in scored)
     line = rule.setting_good if total > 0 else rule.setting_bad if total < 0 else ""
     return [line] if line else []
@@ -90,140 +121,104 @@ def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]
 
 def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str) -> QualityOdds:
     """這一爐的品質機率（4.3）：輔料的階（比主料高幾階）、悟性、熟手（這個配方這一季打過幾次，有上限）、天時地利，
-    從 Config.weapons.quality.odds 推（fusion.odds_from_points）。只看這一爐的組成，配方有沒有人打過都一樣。"""
-    rule = content.config.weapons.quality
+    從這一欄的 quality.odds（兵器 Config.weapons、防具 Config.armor）推（fusion.odds_from_points）。只看這一爐的組成，
+    配方有沒有人打過都一樣。"""
+    rule = rules_of(content, slot_of(kind)).quality
     m, a = content.materials[main], content.materials[aux]
     wis = state.player.stats.get("wis", team.BASE_STAT)
-    done = state.player.forge_counts.get(weapons.recipe_key(kind, main, aux), 0)
+    done = state.player.forge_counts.get(recipe_key(kind, main, aux), 0)
     scored = [
         ("aux", rule.aux_tier.get(str(a.tier - m.tier), 0.0)),
         ("wis", (team.stat_factor(content, wis) - 1) * 100 * rule.wis_weight),
         ("practice", min(rule.practice_cap, rule.practice_point * done)),
     ]
-    scored += setting_points(state, content, attribute_of(world, content, kind, main, aux))
+    scored += setting_points(state, content, attribute_of(world, content, kind, main, aux), slot_of(kind))
     return fusion.odds_from_points(scored, rule, rule.odds)
 
 
-SYSTEM = (
-    "你是武俠小說裡替兵器取名的鑄劍師。你只負責取名字、寫一句話的說明，"
-    "**絕對不要提到任何數字、品質、等級或威力**。全程使用繁體中文。"
-)
 FORGED = "鐵匠把{what}下爐，打出一把【{name}】（{kind}・屬{attribute}・{grade}）。"  # 待 joy 潤
-FIRST_LINE = "這是江湖上第一次有人打出這把兵器——這個配方從此就叫這個名字。"  # 待 joy 潤
-MINE_LINE = "這是你首創的配方，又打了一把。"  # 待 joy 潤
-FOLLOW_LINE = "這個配方由{who}首創，你照著打出了同一把。"  # 待 joy 潤
-FIZZLE = "爐火熄了，這一次什麼也沒打成（名字都被用掉了，再試一次）。"  # 待 joy 潤
+ARMOR_FORGED = "鐵匠把{what}下爐，打出一件【{name}】（防具・屬{attribute}・{grade}）。"  # 待 joy 潤
 
 
-def _messages(content: Content, kind: str, main: str, aux: str, attribute: str, tier: int) -> list[dict[str, str]]:
-    """取名的提示（附帶決定 c）：寫明兵器種類與要帶的字，不寫任何數字。"""
-    m, a = content.materials[main], content.materials[aux]
-    noun = weapons.NOUNS[kind]
-    words = "、".join(f"「{w}」" for w in weapons.WEAPON_WORDS[kind])
-    return [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": (
-            f"鐵匠拿{m.name}（屬{m.attribute}）當主料、{a.name}（屬{a.attribute}）當輔料，打出一把{noun}："
-            f"屬{attribute}、{weapons.TIER_WORDS[tier]}。\n"
-            f"名字裡要有 {words} 其中一個，看得出是{noun}；不要用別種兵器的字。\n{naming.FORMAT_RULES}"
-        )},
-    ]
+def noun_label(kind: str) -> str:
+    """開爐鈕上種類那一格：兵器寫 NOUNS 的字（「棍」「拳套」），防具寫「防具」。"""
+    return ARMOR_KIND if kind == ARMOR_KIND else weapons.NOUNS[kind]
 
 
-def forge_request(
-    state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str,
-) -> naming.NamingRequest | None:
-    """A 段（行動鎖內、很快；Game.smith_forge_request 的本體）：這一爐是這一季沒人打過的配方，就開一張取名的單子給 B 段
-    （naming.generate）；打不成（forge_problem）、配方已經有人登記（查表就好）是 None。只讀。"""
-    if forge_problem(state, content, kind, main, aux) is not None:
-        return None
-    key = weapons.recipe_key(kind, main, aux)
-    if world.lookup_weapon_recipe(key) is not None:
-        return None
-    tier = tier_of(content, main)
-    return naming.NamingRequest(
-        "weapon", key, kind, _messages(content, kind, main, aux, attribute_of(world, content, kind, main, aux), tier),
-        check=functools.partial(weapons.kind_problem, kind),
-    )
+def own_rng(state: GameState, key: str) -> random.Random:
+    """防具打造的品質擲骰用自己的一份亂數（不動 Game.rng，FB-129；打造隱藏配方設計 9.3）：種子「打造|季數|名號|流水號|組合鍵」，
+    流水號是這一件會拿到的 id 號（weapon_serial＋1），同一個人同一季每一件都不同；不看時間。兵器照舊用 Game.rng。"""
+    p = state.player
+    return random.Random(f"打造|{p.season_number}|{p.name}|{p.weapon_serial + 1}|{key}")
 
 
-def _candidates(content: Content, world: WorldStateStore, key: str, kind: str, tianji: int, name: str | None):
-    """登記時依序試的名字：先試模型取的（有的話），再試退路字表（種子是配方鍵＋天機、鹽從 0 起；同 fusion._candidates），
-    組出來剛好是某個角色名號的跳過（FB-069）。"""
-    if name is not None:
-        yield name
-    for salt in range(naming.CLAIM_ATTEMPTS):
-        fallback = weapons.fallback_name(content, key, kind, salt=salt, tianji=tianji)
-        if not world.is_character_name(fallback):
-            yield fallback
-
-
-def _arrival(state: GameState, recipe: WeaponRecipe, first: bool) -> str:
-    tail = f"\n{recipe.note}" if recipe.note else ""
-    if first:
-        return tail + "\n" + FIRST_LINE
-    if recipe.creator == state.player.name:
-        return tail + "\n" + MINE_LINE
-    return tail + "\n" + FOLLOW_LINE.format(who=recipe.creator_shown or recipe.creator or "不知名的前人")
+def general_name(content: Content, world: WorldStateStore, kind: str, main: str, aux: str, attribute: str) -> str:
+    """一般組合的名字（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條）：防具照對照表（armor.table_name；防具在這一批之前不能打，
+    沒有舊的登記）；兵器先看上線前這一季登記過的「兵|」配方（10.1：只讀、不再新增，同一季同一個組合前後才不會兩個名字；下一季起
+    表裡沒有），其餘照對照表（weapons.table_name）。不叫模型、不登記。"""
+    if kind == ARMOR_KIND:
+        return armor.table_name(content, main, aux, attribute)
+    old = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
+    return old.name if old is not None else weapons.table_name(content, kind, main, aux)
 
 
 def forge(
-    state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    kind: str, main: str, aux: str, proposed: tuple[str | None, str] | None = None, rng: random.Random | None = None,
-) -> tuple[Weapon | None, list[str]]:
-    """C 段（鎖內）：打一把（4.2～4.4）。回（那一把, 訊息）；打不成回 (None, [原因])，什麼都不收、不登記。
-    配方這一季沒人打過：proposed 是鎖外先取好的（名字, 說明），再過一次 naming.recheck 與 kind_problem；沒給（整季機器人、腳本、測試）
-    才在這裡叫模型（client 是 Game._quick_client 的複本）；過不了走退路字表，claim_weapon_recipe 原子登記，名字撞到就換下一個。
-    品質照 forge_odds 擲（熟手照這一爐之前打過幾次）；收工錢與兩樣素材、熟手 +1、放進手上或裝備庫，別人首創的記首創名望回饋。"""
+    state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str, rng: random.Random | None = None,
+) -> tuple[Equipment | None, list[str]]:
+    """打一件（兵器 4.2、4.3；防具 4.7 照同一套，kind 是 ARMOR_KIND；打造隱藏配方設計 4.1、4.2、7.2）：一次拿鎖做完，不叫模型。
+    回（那一件, 訊息）；打不成回 (None, [原因])，什麼都不收。先比這一季的隱藏配方（forge_secrets.match，不擲骰）：打中了是名器，
+    名字照內容，全服第一個打出的人登記成首位發現者（world.claim_gear_find，原子）、江湖上傳一句，別人照著打記首創名望回饋；
+    沒打中照 general_name（上線前登記的舊名字 → 對照表），什麼都不登記。品質照 forge_odds 擲（隱藏配方不改機率；rng 由呼叫端給：
+    兵器 Game.rng、防具 own_rng；沒給是下品），名器也只擲這一次；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。"""
     problem = forge_problem(state, content, kind, main, aux)
     if problem is not None:
         return None, [f"（{problem}。）"]
-    key = weapons.recipe_key(kind, main, aux)
+    key, slot = recipe_key(kind, main, aux), slot_of(kind)
     tier = tier_of(content, main)
-    attribute = attribute_of(world, content, kind, main, aux)
+    tianji = world.read().tianji
+    attribute = attribute_with(content, tianji, kind, main, aux)
     odds = forge_odds(state, content, world, kind, main, aux)
-    setting = setting_points(state, content, attribute)
-    recipe, first = world.lookup_weapon_recipe(key), False
-    if recipe is None:
-        tianji, _ = fusion.recipe_seed(world, key)
-        check = functools.partial(weapons.kind_problem, kind)
-        if proposed is not None:
-            name, note = naming.recheck(content, proposed, person=world.is_character_name, check=check)
-        else:
-            name, note = naming.propose(
-                client, content, _messages(content, kind, main, aux, attribute, tier), person=world.is_character_name, check=check,
-            )
-        for candidate in _candidates(content, world, key, kind, tianji, name):
-            draft = WeaponRecipe(
-                name=candidate, key=key, kind=kind, attribute=attribute, tier=tier, main=main, aux=aux,
-                creator=state.player.name, creator_shown=state.player.name, note=note if candidate == name else "",
-            )
-            recipe, first = world.claim_weapon_recipe(key, draft)
-            if recipe is not None:
-                break
-        if recipe is None:
-            return None, [FIZZLE]
-    quality = fusion.roll_quality(odds, rng)
+    setting = setting_points(state, content, attribute, slot)
+    secret = forge_secrets.match(content, tianji, slot, kind, main, aux)  # 隱藏配方優先於上線前登記的舊名字（10.1）
+    find, first = None, False
+    if secret is not None:
+        find, first = world.claim_gear_find(forge_secrets.key(secret), forge_secrets.new_find(state, secret, kind, attribute, tier))
+        name = secret.name
+    else:
+        name = general_name(content, world, kind, main, aux, attribute)
+    quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
     p = state.player
     used = Counter([main, aux])
     for mid, n in used.items():
         p.materials[mid] -= n
         if not p.materials[mid]:
             del p.materials[mid]
-    cost = price(content, tier)
+    cost = price(content, tier, slot)
     p.stats["silver"] -= cost
     p.forge_counts[key] = p.forge_counts.get(key, 0) + 1
-    weapon = weapons.new_weapon(state, name=recipe.name, kind=kind, attribute=recipe.attribute, tier=tier, quality=quality, recipe=key)
     m, a = content.materials[main], content.materials[aux]
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
-    msgs = [FORGED.format(what=what, name=recipe.name, kind=kind, attribute=recipe.attribute, grade=weapons.grade(weapon))
-            + _arrival(state, recipe, first)]
-    msgs += setting_line(content, setting)
+    secret_id = secret.id if secret is not None else None
+    if slot == "armor":
+        item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
+        head = ARMOR_FORGED.format(what=what, name=name, attribute=attribute, grade=equipment.grade(item))
+    else:
+        item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
+        head = FORGED.format(what=what, name=name, kind=kind, attribute=attribute, grade=equipment.grade(item))
+    lines = forge_secrets.arrival(state, content, secret, find, first) if secret is not None else []
+    msgs = ["\n".join([head, *lines])]
+    msgs += setting_line(content, setting, slot)
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
-    msgs.append(weapons.store(state, content, weapon))
-    fusion.echo(state, content, recipe, first, made="打")
-    return weapon, msgs
+    msgs.append(equipment.store(state, item))
+    if secret is not None:
+        forge_secrets.solve(state, tianji, secret, key)
+        if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；江湖史不記名器，只記神器（第二批）
+            annals.note(state, content, annals.DEED, f"江湖上第一個打出名器【{secret.name}】。", 4)  # 行狀（玩家傳）：首創
+            add_rumor(state, content.config.forge_secrets.rumor.format(who=state.player.name, name=secret.name), None,
+                      content=content, named=True)
+        fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
+    return item, msgs
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----
@@ -236,9 +231,8 @@ GO = "smith:forge-go:"
 UNDO = "smith:forge-undo"
 CANCEL = "smith:forge-cancel"
 GO_VERB = "forge-go"
-STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel", "temper")
+STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel", "temper", "armor-temper")
 FORGE_TITLE = "打造"
-FORGE_WAIT = "鐵匠掂著料，想給它取個名字……"  # 待 joy 潤：首創配方等模型取名時按鈕上的字（Option.wait）
 ASK_KIND = "要打哪一種兵器？"  # 待 joy 潤
 ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"  # 待 joy 潤
 ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"  # 待 joy 潤
@@ -247,10 +241,12 @@ PICKED_KIND = "兵器：{what}。"  # 待 joy 潤：每挑一樣，這一步的�
 PICKED_MAIN = "主料：{what}。"  # 待 joy 潤
 PICKED_AUX = "輔料：{what}。"  # 待 joy 潤
 CANCELLED = "你把素材收了回去，這回先不打。"  # 待 joy 潤
-NEW_RECIPE = "這個配方還沒人打過"  # 待 joy 潤
-KNOWN_RECIPE = "照【{name}】的配方打"  # 待 joy 潤
 ATTR_MARK = "・跟你的武學同屬性"  # 待 joy 潤
-GO_LABEL = "開爐：{what} → {head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料
+ARMOR_ASK_MAIN = "挑主料：主料定這件防具的階，也定工錢。"  # 待 joy 潤（防具沒有挑種類那一步，打開就從主料挑起）
+ARMOR_ASK_AUX = "挑輔料：主料與輔料合起來定這件防具的屬性。"  # 待 joy 潤
+ARMOR_ATTR_MARK = "・跟你的內功同屬性"  # 待 joy 潤（防具看內功，四欄設計 4.2）
+GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD
+SOLVED_HEAD = " → 照鑄譜上的【{name}】打"  # 待 joy 潤：這一爐在自己的鑄譜上打中過才寫（打造隱藏配方設計 6.4）；別人打中的、沒打中過的都不寫
 
 
 def is_go(option_id: str) -> bool:
@@ -273,7 +269,7 @@ def title(arg: str) -> str:
     """鐵匠鋪上這一下的江湖紀錄標題：打造的每一步是「打造」、淬煉是「淬煉」，其餘是「鐵匠鋪」。"""
     if is_forge_step(arg):
         return FORGE_TITLE
-    return TEMPER_TITLE if arg == "temper" else weapons.SMITH
+    return TEMPER_TITLE if arg in ("temper", "armor-temper") else weapons.SMITH
 
 
 def _held(state: GameState, content: Content) -> list[tuple[str, int]]:
@@ -286,27 +282,35 @@ def _held(state: GameState, content: Content) -> list[tuple[str, int]]:
 
 
 def draft_stale(content: Content, draft: SmithDraft) -> bool:
-    """存檔裡的單子指著內容已經沒有的種類或素材（內容改版）：選單畫不出來（go_option 查素材會丟 KeyError），要從頭來。"""
-    return (draft.kind is not None and draft.kind not in WEAPON_KINDS) or any(
+    """存檔裡的單子指著內容已經沒有的種類或素材（內容改版）：選單畫不出來（go_option 查素材會丟 KeyError），要從頭來。
+    防具的單子 kind 是 ARMOR_KIND。"""
+    return (draft.kind is not None and draft.kind not in WEAPON_KINDS and draft.kind != ARMOR_KIND) or any(
         mid is not None and mid not in content.materials for mid in (draft.main, draft.aux))
 
 
-def open_problem(state: GameState, content: Content) -> str | None:
-    """「打造兵器…」按不按得下去：裝備庫滿了、素材不到兩個、最便宜的一爐也付不起，就灰掉寫原因。"""
-    if weapons.rack_full(state, content):
+def draft_here(state: GameState, content: Content, draft: SmithDraft) -> bool:
+    """這張單子在這裡還打得了（存檔修補、同步時看）：防具的單子看防具的開關、兵器的看武器的開關（人都要在城鎮）。"""
+    return here(state, content, draft.kind)
+
+
+def open_problem(state: GameState, content: Content, slot: str = "weapon") -> str | None:
+    """「打造兵器…／打造防具…」按不按得下去：這一欄放不下、素材不到兩個、最便宜的一爐也付不起，就灰掉寫原因。"""
+    if equipment.rack_full(state, content, slot):
         return weapons.RACK_FULL
     held = _held(state, content)
     if sum(n for _, n in held) < 2:
         return NOT_ENOUGH
-    short = min(price(content, content.materials[mid].tier) for mid, _ in held) - state.player.stats.get("silver", 0)
+    short = min(price(content, content.materials[mid].tier, slot) for mid, _ in held) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def forge_door(state: GameState, content: Content):
-    """鐵匠鋪選單上的「打造兵器…」：打開一步一步的單子（step 的 "forge"）。"""
+def forge_door(state: GameState, content: Content, slot: str = "weapon"):
+    """鐵匠鋪那一頁的「打造兵器…」或「打造防具…」：打開一步一步的單子（step 的 "forge"，照停在哪一頁開兵器或防具的單子）。"""
     from .engine import Option  # noqa: PLC0415  延後 import：engine → smithing
 
-    problem = open_problem(state, content)
+    problem = open_problem(state, content, slot)
+    if slot == "armor":
+        return Option(id=OPEN, label=f"打造防具…（{problem or '挑主料、輔料'}）", enabled=problem is None)  # 待 joy 潤
     return Option(id=OPEN, label=f"打造兵器…（{problem or '挑種類、主料、輔料'}）", enabled=problem is None)
 
 
@@ -320,9 +324,12 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
     p = state.player
     if verb == "temper":
         return temper(state, content)
+    if verb == "armor-temper":
+        return temper(state, content, "armor")
     if verb == "forge":
-        p.smith_draft = SmithDraft()
-        return [ASK_KIND]
+        armor_page = equipment.page(p, content) == "armor"  # 兩頁共用 smith:forge：照停在哪一頁開兵器或防具的單子
+        p.smith_draft = SmithDraft(kind=ARMOR_KIND) if armor_page else SmithDraft()
+        return [ARMOR_ASK_MAIN if armor_page else ASK_KIND]
     d = p.smith_draft
     if d is None:
         return ["（此刻無法這麼做。）"]
@@ -331,17 +338,20 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
         return [PICKED_KIND.format(what=weapons.NOUNS.get(arg, arg)), ASK_MAIN]
     if verb == "forge-main":
         d.main = arg
-        return [PICKED_MAIN.format(what=_material_name(content, arg)), ASK_AUX]
+        return [PICKED_MAIN.format(what=_material_name(content, arg)), ARMOR_ASK_AUX if d.kind == ARMOR_KIND else ASK_AUX]
     if verb == "forge-aux":
         d.aux = arg
         return [PICKED_AUX.format(what=_material_name(content, arg)), READY]
     if verb == "forge-undo":
+        armor_draft = d.kind == ARMOR_KIND
         if d.aux is not None:
             d.aux = None
-            return [ASK_AUX]
+            return [ARMOR_ASK_AUX if armor_draft else ASK_AUX]
         if d.main is not None:
             d.main = None
-            return [ASK_MAIN]
+            return [ARMOR_ASK_MAIN if armor_draft else ASK_MAIN]
+        if armor_draft:
+            return [ARMOR_ASK_MAIN]  # 防具沒有挑種類那一步：已經在第一步（選單上也沒有這一顆）
         d.kind = None
         return [ASK_KIND]
     if verb == "forge-cancel":
@@ -351,50 +361,53 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
 
 
 def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
-    """開爐那一顆：先寫放進爐裡的主料＋輔料，再寫配方名（有人打過）或「還沒人打過」、種類屬性階、工錢與三個品質的機率（不寫品級）；
-    打不成灰掉寫原因。沒人打過的要等模型取名，帶 wait。"""
+    """開爐那一顆（打造隱藏配方設計 6.4）：寫放進爐裡的主料＋輔料、種類（防具寫「防具」，noun_label）、屬性、階、工錢與三個品質的
+    機率（不寫品級）；不帶 wait（不再等模型）。不露隱藏配方：只有這一爐在**自己的**鑄譜上打中過，才在兩樣後面接 SOLVED_HEAD
+    （別人打中的、沒打中過的都不寫）。打不成灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
-    known = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
+    known = forge_secrets.solved_name(state, content, world.read().tianji, slot_of(kind), kind, main, aux)
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)
-    head = KNOWN_RECIPE.format(name=known.name) if known else NEW_RECIPE
     odds = fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))
-    note = problem or f"工錢 {price(content, tier)} 兩；{odds}"
-    attribute = attribute_of(world, content, kind, main, aux)
+    note = problem or f"工錢 {price(content, tier, slot_of(kind))} 兩；{odds}"
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",
         label=GO_LABEL.format(
-            what=f"{content.materials[main].name}＋{content.materials[aux].name}", head=head, kind=weapons.NOUNS[kind],
-            attribute=attribute, tier=weapons.TIER_WORDS[tier], note=note,
+            what=f"{content.materials[main].name}＋{content.materials[aux].name}",
+            head=SOLVED_HEAD.format(name=known) if known else "", kind=noun_label(kind),
+            attribute=attribute_of(world, content, kind, main, aux), tier=weapons.TIER_WORDS[tier], note=note,
         ),
-        enabled=problem is None, wait="" if known else FORGE_WAIT,
+        enabled=problem is None,
     )
 
 
-def draft_options(state: GameState, content: Content, world: WorldStateStore, art) -> list:
-    """單子這一步的選單：挑種類（配得上身上武學的排第一）→ 挑主料（寫階、剩幾個、工錢；付不起灰掉）→ 挑輔料（寫合出來的屬性；
-    主料那一種只剩一個時不列）→ 開爐。每一步後面是「上一步」「不打了」（挑種類那一步只有「不打了」）。"""
+def draft_options(state: GameState, content: Content, world: WorldStateStore, art, neigong=None) -> list:
+    """單子這一步的選單：兵器是挑種類（配得上身上武學的排第一）→ 挑主料（寫階、剩幾個、工錢；付不起灰掉）→ 挑輔料（寫合出來的屬性；
+    主料那一種只剩一個時不列；跟身上武學同屬性的標出來）→ 開爐。防具（kind 是 ARMOR_KIND）沒有挑種類那一步，從主料挑起、第一步沒有
+    「上一步」，輔料標的是跟身上**內功**同屬性的（neigong）。每一步後面是「上一步」「不打了」（第一步只有「不打了」）。"""
     from .engine import Option  # noqa: PLC0415
 
     d = state.player.smith_draft
-    fit = weapons.art_weapon(art.id, content, world) if art is not None else None
+    armor_draft = d.kind == ARMOR_KIND
+    fit = weapons.art_weapon(art.id, content, world) if art is not None and not armor_draft else None
     undo, cancel = Option(id=UNDO, label="上一步"), Option(id=CANCEL, label="不打了")
     if d.kind is None:
         kinds = sorted(WEAPON_KINDS, key=lambda k: k != fit)
         return [Option(id=f"{KIND}{k}", label=weapons.NOUNS[k] + (weapons.FITS_MARK if k == fit else "")) for k in kinds] + [cancel]
     mats = content.materials
     held = _held(state, content)
+    slot = slot_of(d.kind)
     if d.main is None:
         silver = state.player.stats.get("silver", 0)
         out = []
         for mid, n in held:
             m = mats[mid]
-            cost = price(content, m.tier)
+            cost = price(content, m.tier, slot)
             note = f"還差 {cost - silver} 兩" if cost > silver else f"工錢 {cost} 兩"
             out.append(Option(id=f"{MAIN}{mid}", label=f"主料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {n}・{note}）",
                               enabled=cost <= silver))
-        return out + [undo, cancel]
+        return out + ([cancel] if armor_draft else [undo, cancel])
     if d.aux is None:
         tianji = world.read().tianji
         out = []
@@ -404,119 +417,162 @@ def draft_options(state: GameState, content: Content, world: WorldStateStore, ar
                 continue
             m = mats[mid]
             attribute = attribute_with(content, tianji, d.kind, d.main, mid)
-            mark = ATTR_MARK if art is not None and d.kind == fit and attribute == art.attribute else ""
+            if armor_draft:
+                mark = ARMOR_ATTR_MARK if neigong is not None and attribute == neigong.attribute else ""
+            else:
+                mark = ATTR_MARK if art is not None and d.kind == fit and attribute == art.attribute else ""
             out.append(Option(id=f"{AUX}{mid}", label=f"輔料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {left}）→ 屬{attribute}{mark}"))
         return out + [undo, cancel]
     return [go_option(state, content, world, d.kind, d.main, d.aux), undo, cancel]
 
 
-# ---- 淬煉（4.7）：只淬身上那把；素材挑同階以上最便宜的 ----
+# ---- 淬煉（兵器 4.7；防具 4.1 照同一套）：只淬身上那一件；素材挑同階以上最便宜的 ----
 
 TEMPER = "smith:temper"
+ARMOR_TEMPER = "smith:armor-temper"  # 防具頁的「淬煉」（同 armor-buy、armor-repair 另開一個 id；兩頁各淬各的）
 TEMPER_TITLE = "淬煉"
 FULL = "已經淬滿了"  # 待 joy 潤
 
 
-def temper_material(state: GameState, content: Content) -> str | None:
-    """淬身上那把要用的素材：階不低於兵器的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
-    w = state.player.weapon
-    if w is None:
+def temper_material(state: GameState, content: Content, slot: str = "weapon") -> str | None:
+    """淬身上那一件（slot 那一欄）要用的素材：階不低於那一件的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
+    item = equipment.worn(state.player, slot)
+    if item is None:
         return None
     mats = content.materials
-    held = [(mats[mid].tier, -n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier >= w.tier]
+    held = [(mats[mid].tier, -n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier >= item.tier]
     return min(held)[2] if held else None
 
 
-def temper_price(content: Content, material: Material) -> int:
-    return content.config.weapons.temper_silver.get(str(material.tier), 0)
+def temper_price(content: Content, material: Material, slot: str = "weapon") -> int:
+    return rules_of(content, slot).temper_silver.get(str(material.tier), 0)
 
 
-def temper_problem(state: GameState, content: Content) -> str | None:
+def temper_problem(state: GameState, content: Content, slot: str = "weapon") -> str | None:
     p = state.player
-    if not weapons.smith_here(state, content):
+    if not here(state, content, ARMOR_KIND if slot == "armor" else None):
         return weapons.NOT_HERE
-    if p.weapon is None:
-        return "手上沒有兵器"
-    if p.weapon.tempers >= content.config.weapons.temper_max:
+    item = equipment.worn(p, slot)
+    if item is None:
+        return armor.NO_ARMOR if slot == "armor" else "手上沒有兵器"
+    if item.tempers >= rules_of(content, slot).temper_max:
         return FULL
-    mid = temper_material(state, content)
+    mid = temper_material(state, content, slot)
     if mid is None:
-        return f"沒有{weapons.TIER_WORDS[p.weapon.tier]}以上的素材"
-    short = temper_price(content, content.materials[mid]) - p.stats.get("silver", 0)
+        return f"沒有{weapons.TIER_WORDS[item.tier]}以上的素材"
+    short = temper_price(content, content.materials[mid], slot) - p.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def temper(state: GameState, content: Content) -> list[str]:
-    """淬煉身上那把（4.7）：用一個同階以上的素材（＋那一階的工錢），淬煉次數 +1（加成每次 +temper_step，bonus 現算）。"""
-    problem = temper_problem(state, content)
+def temper(state: GameState, content: Content, slot: str = "weapon") -> list[str]:
+    """淬煉身上那一件（兵器 4.7、防具 4.1）：用一個同階以上的素材（＋那一階的工錢），淬煉次數 +1（兵器的加成、防具的減損每次
+    +temper_step，都是現算）。"""
+    problem = temper_problem(state, content, slot)
     if problem is not None:
         return [f"（{problem}。）"]
     p = state.player
-    mid = temper_material(state, content)
+    item = equipment.worn(p, slot)
+    mid = temper_material(state, content, slot)
     material = content.materials[mid]
-    cost = temper_price(content, material)
+    cost = temper_price(content, material, slot)
     p.materials[mid] -= 1
     if not p.materials[mid]:
         del p.materials[mid]
     p.stats["silver"] -= cost
-    p.weapon.tempers += 1
-    msgs = [f"鐵匠拿{material.name}把【{p.weapon.name}】淬了一回，這是第 {p.weapon.tempers} 次。"]  # 待 joy 潤
+    item.tempers += 1
+    msgs = [f"鐵匠拿{material.name}把【{item.name}】淬了一回，這是第 {item.tempers} 次。"]  # 待 joy 潤
     if cost:
         msgs.append(f"銀兩 -{cost}")
     return msgs + [f"{material.name} -1"]
 
 
-def temper_option(state: GameState, content: Content):
-    """鐵匠鋪選單上的「淬煉」（手上有兵器才有）：寫第幾次、用哪一個素材與工錢；淬滿、沒料、沒錢灰掉寫原因。"""
+def temper_option(state: GameState, content: Content, slot: str = "weapon"):
+    """鐵匠鋪那一頁的「淬煉」（身上那一欄有東西才有；兵器頁 smith:temper、防具頁 smith:armor-temper）：寫第幾次、用哪一個素材與工錢；
+    淬滿、沒料、沒錢灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
-    w = state.player.weapon
-    if w is None:
+    item = equipment.worn(state.player, slot)
+    if item is None:
         return None
-    rule = content.config.weapons
-    if w.tempers >= rule.temper_max:
-        return Option(id=TEMPER, label=f"淬煉【{w.name}】（{FULL}）", enabled=False)
-    problem = temper_problem(state, content)
+    oid, rule = (ARMOR_TEMPER if slot == "armor" else TEMPER), rules_of(content, slot)
+    if item.tempers >= rule.temper_max:
+        return Option(id=oid, label=f"淬煉【{item.name}】（{FULL}）", enabled=False)
+    problem = temper_problem(state, content, slot)
     if problem is None:
-        m = content.materials[temper_material(state, content)]
-        cost = temper_price(content, m)
+        m = content.materials[temper_material(state, content, slot)]
+        cost = temper_price(content, m, slot)
         note = f"{m.name}×1" + (f"＋{cost} 兩" if cost else "")
     else:
         note = problem
-    return Option(id=TEMPER, label=f"淬煉【{w.name}】（第 {w.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)
+    return Option(id=oid, label=f"淬煉【{item.name}】（第 {item.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)
 
 
-# ---- 整季機器人用的（兵器設計第六節：量平衡要用到打造與淬煉；伺服器假人這一批不打造，附帶決定 e）----
+# ---- 整季機器人用的（兵器設計第六節、四欄設計第九節：量平衡要用到打造與淬煉；伺服器假人不打造不淬煉，打造隱藏配方 PM 決定第 3 條）----
 
 
 def wizard_steps(kind: str, main: str, aux: str) -> list[str]:
-    """照單子打一把要按的五顆（打開、種類、主料、輔料、開爐）。"""
-    return [OPEN, f"{KIND}{kind}", f"{MAIN}{main}", f"{AUX}{aux}", f"{GO}{kind}:{main}:{aux}"]
+    """照單子打一件要按的幾顆：兵器五顆（打開、種類、主料、輔料、開爐），防具沒有種類那一顆（四顆）。"""
+    steps = [OPEN, f"{MAIN}{main}", f"{AUX}{aux}", f"{GO}{kind}:{main}:{aux}"]
+    return steps if kind == ARMOR_KIND else [OPEN, f"{KIND}{kind}", *steps[1:]]
 
 
-def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) -> tuple[str, str, str] | None:
-    """整季機器人要打哪一把：身上那門武學配得上的種類；主料挑背包裡最高階的（同階先挑跟武學同屬性的、再挑最多的、再照 id）；
-    輔料先挑同一種（夠兩個時），不然挑跟主料最近一階、數量最多的。手上或裝備庫已經有一把配得上、階比主料高、或同階而且是自己打的，
-    就不打（不然每次路過都打一把）。打不成（forge_problem）是 None。"""
-    if art is None or not weapons.smith_here(state, content):
-        return None
-    kind = weapons.art_weapon(art.id, content, world)
-    if kind is None:
-        return None
+def _pick_pair(
+    state: GameState, content: Content, prefer: str | None, mine: list[Equipment],
+    ok: Callable[[str, str], bool] | None = None,
+) -> tuple[str, str] | None:
+    """整季機器人一爐挑哪兩樣（兵器、防具共用）：主料挑背包裡最高階的（同階先挑屬性是 prefer 的、再挑最多的、再照 id）；輔料先挑同一種
+    （夠兩個時），不然挑跟主料最近一階、數量最多的。素材不到兩個、或 mine（身上與裝備庫裡算數的那幾件）裡已經有一件階比主料高、
+    或同階而且是自己打的，是 None（不然每次路過都打一件）。ok 給了就跳過它說不行的組合（防具：合出來會被內功剋的），照同樣的順序
+    試下一個輔料、再試同階的下一個主料，都不行是 None；沒給（兵器）就是第一個組合，跟抽出來之前的 forge_plan 一模一樣。"""
     mats = content.materials
     held = {mid: n for mid, n in state.player.materials.items() if n > 0 and mid in mats}
     if sum(held.values()) < 2:
         return None
     top = max(mats[mid].tier for mid in held)
-    mine = [w for w in [state.player.weapon, *equipment.in_slot(state.player, "weapon")] if weapons.usable(w, art, content, world)]  # 裝備四欄 3.3
-    if any(w.tier > top or (w.tier == top and w.recipe is not None) for w in mine):
+    if any(item.tier > top or (item.tier == top and item.recipe is not None) for item in mine):
         return None
-    main = min((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != art.attribute, -held[mid], mid))
-    if held[main] >= 2:
-        aux = main
-    else:
-        aux = min((mid for mid in held if mid != main), key=lambda mid: (top - mats[mid].tier, -held[mid], mid))
+    mains = sorted((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != prefer, -held[mid], mid))
+    for main in mains:
+        auxes = ([main] if held[main] >= 2 else []) + sorted(
+            (mid for mid in held if mid != main), key=lambda mid: (top - mats[mid].tier, -held[mid], mid))
+        for aux in auxes:
+            if ok is None or ok(main, aux):
+                return main, aux
+    return None
+
+
+def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) -> tuple[str, str, str] | None:
+    """整季機器人要打哪一把：身上那門武學配得上的種類；主料、輔料照 _pick_pair（同階先挑跟武學同屬性的）。手上或裝備庫已經有一把
+    配得上、階比主料高、或同階而且是自己打的，就不打。打不成（forge_problem）是 None。兵器不看相剋（跟抽出 _pick_pair 之前一樣）。"""
+    if art is None or not weapons.smith_here(state, content):
+        return None
+    kind = weapons.art_weapon(art.id, content, world)
+    if kind is None:
+        return None
+    mine = [w for w in [state.player.weapon, *equipment.in_slot(state.player, "weapon")] if weapons.usable(w, art, content, world)]  # 裝備四欄 3.3
+    pair = _pick_pair(state, content, art.attribute, mine)
+    if pair is None:
+        return None
+    main, aux = pair
     return (kind, main, aux) if forge_problem(state, content, kind, main, aux) is None else None
+
+
+def armor_plan(state: GameState, content: Content, world: WorldStateStore, neigong) -> tuple[str, str, str] | None:
+    """整季機器人要打哪一件防具（照兵器的 forge_plan）：主料、輔料照 _pick_pair（同階先挑跟身上內功同屬性的：防具對上內功，四欄設計 4.2），
+    跳過合出來會被內功剋的組合（attribute_of 照天機算）。身上或裝備庫已經有一件不被內功剋的防具階比主料高、或同階而且是自己打的，
+    就不打（被內功剋的那幾件不算：不然打出一件相剋的就再也不打那一階）。防具關著、打不成是 None。"""
+    if not armor.smith_here(state, content):
+        return None
+    mine = [a for a in [state.player.armor, *equipment.in_slot(state.player, "armor")]
+            if a is not None and not armor.clashes(a.attribute, neigong)]
+    pair = _pick_pair(
+        state, content, neigong.attribute if neigong is not None else None, mine,
+        ok=lambda main, aux: not armor.clashes(attribute_of(world, content, ARMOR_KIND, main, aux), neigong),
+    )
+    if pair is None:
+        return None
+    main, aux = pair
+    return (ARMOR_KIND, main, aux) if forge_problem(state, content, ARMOR_KIND, main, aux) is None else None
 
 
 def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
@@ -539,3 +595,16 @@ def has_errand(state: GameState, content: Content, world: WorldStateStore, art) 
         forge_plan(state, content, world, art) is not None or better_in_rack(state, content, world, art) is not None
         or temper_wanted(state, content, world, art)
     )
+
+
+def armor_temper_wanted(state: GameState, content: Content, world: WorldStateStore, neigong) -> bool:
+    """身上有防具、淬得了、而且沒有更高的一件要打（素材先留給打新的）。"""
+    return (
+        state.player.armor is not None and temper_problem(state, content, "armor") is None
+        and armor_plan(state, content, world, neigong) is None
+    )
+
+
+def armor_errand(state: GameState, content: Content, world: WorldStateStore, neigong) -> bool:
+    """防具頁有打造或淬煉的事（換、買、修看 armor.wanted，bot.smith_want 已經算了）。"""
+    return armor_plan(state, content, world, neigong) is not None or armor_temper_wanted(state, content, world, neigong)

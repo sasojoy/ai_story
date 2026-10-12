@@ -6,7 +6,7 @@
 
 模型一律不連。「模型呼叫」數的是決定點，不是 HTTP：把 naming.propose（首次出現的配方要取名）與 naming.pick
 （合到舊的、候選兩個以上要挑一個）換成只記一筆、回 (None, "") 的替身（跟真的連不上時回的一樣：取名走退路字表、
-挑走規則），所以數到的就是真的上線時會送給模型的次數。兵器配方的取名（`naming.propose` 帶 `check`）不算在這裡。不用 Game 的 client 來數：Game._quick_client 在鎖內第一次
+挑走規則），所以數到的就是真的上線時會送給模型的次數。打造從 2026-10-12 起不叫模型（打造隱藏配方設計第八節）。不用 Game 的 client 來數：Game._quick_client 在鎖內第一次
 失敗之後（ModelBudget.gave_up）就回 None，而整季機器人從來不歸零，之後每一次都不會真的呼叫 chat_structured。
 chat_text／chat_structured 與 requests 另外擋成一律丟錯，其他地方（裝飾句、對話）也不會連到真的 Ollama。
 
@@ -70,9 +70,8 @@ def measure(seed: int, profile: str | None, reserve: int) -> tuple[dict[str, tup
     world = open_world(TMP / f"seed{seed}.db")
     calls: Counter = Counter()  # 取名、挑（模型呼叫的決定點）；forge*／made*（開爐）；held／steps／starved（體力）
 
-    def propose(client, content, messages, budget=None, person=None, check=None):
-        if check is None:  # 帶 check 的是兵器配方的取名（smithing.forge，兵器第二批），不算進合成的「取名」
-            calls["取名"] += 1
+    def propose(client, content, messages, budget=None, person=None):
+        calls["取名"] += 1
         return None, ""
 
     def pick(client, messages, choices, budget=None):
