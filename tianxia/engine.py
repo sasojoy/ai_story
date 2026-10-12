@@ -20,7 +20,7 @@ from . import (
     annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
-    skillview, smithing,
+    signature_arms, skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -526,6 +526,7 @@ class Game:
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
+        signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -2571,7 +2572,7 @@ class Game:
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
         if stuck:
-            kept = {b.id for b in stuck if bounties.only_original(s, b)}  # 只有神器原品對得上的那幾張照實寫（FB-145）
+            kept = {b.id: tail for b in stuck if (tail := bounties.only_original(s, b))}  # 只有神器原品或本命兵器對得上的那幾張照實寫（FB-145）
             opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck, kept), enabled=False))
         if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
             opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
@@ -2659,7 +2660,7 @@ class Game:
             return []
         breakable = sorted(equipment.in_slot(self.state.player, slot), key=equipment.dismantle_order)
         opts = [
-            Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{equipment.ORIGINAL_KEPT}）", enabled=False)  # 5.4：灰掉寫原因
+            Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{equipment.kept(w)}）", enabled=False)  # 5.4：灰掉寫原因
             if w.original else
             Option(id=f"smith:dismantle:{w.id}",
                    label=f"拆解【{w.name}】（{equipment.grade_line(w)}）→ {equipment.dismantle_material(c, w).name}×1",

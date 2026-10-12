@@ -6,9 +6,10 @@ import random
 
 import pytest
 
-from conftest import real_content
-from test_treasures import _gear_root
-from tianxia import naming
+from conftest import next_season, real_content
+from test_treasures import _game, _gear_root
+from tianxia import equipment, naming, rules, signature_arms, smithing, team, weapons
+from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.models import GearBook, SignatureArmDef
@@ -84,3 +85,70 @@ def test_old_saves_read_with_empty_signature_fields(content, world):
     loaded = GameState.model_validate(raw)
     assert loaded.player.figure_wins == {} and loaded.player.rack[0].signature is None and loaded.world.signature_arms == {}
     assert SignatureClaim(owner="甲", via="gift").model_dump() == {"owner": "甲", "via": "gift"}
+
+
+# ── Task 2：一把本命兵器 ──
+
+def test_a_signature_arm_is_a_tier_three_original_with_its_own_mark(content, world):
+    _arms(content)
+    game = _game(content, world)
+    arm = signature_arms.new_arm(game.state, content.gear.signature_arms[0])
+    assert (arm.slot, arm.name, arm.kind, arm.attribute, arm.tier, arm.quality) == ("weapon", "鐵脊長刀", "刀", "剛", 3, "上品")
+    assert (arm.original, arm.signature, arm.secret, arm.copy_of) == (True, "mate", None, None)  # 算原品、不是打出來的
+    assert arm.id.startswith("兵:") and equipment.grade(arm) == f"三階上品{equipment.SIGNATURE_MARK}"
+
+
+def test_it_counts_as_a_divine_original_and_the_bots_pick_it_from_the_rack(content, world):
+    _arms(content, name="鐵脊雙鋒", kind="劍", attribute="柔")
+    game = _game(content, world)
+    rules.learn_skill(game.state, content, "sword")  # 流雲劍：劍・柔
+    game.state.player.member.wugong_id = "sword"
+    art = team.player_art(game.state, content, world, "sword")
+    w = content.config.weapons
+    arm = signature_arms.new_arm(game.state, content.gear.signature_arms[0])
+    assert weapons.bonus(arm, art, content, world) == pytest.approx(w.original_base + w.quality_bonus["上品"] + w.match)  # 22＋4＋同屬性 5
+    game.state.player.weapon = Weapon(id="兵:90", name="甲劍", kind="劍", attribute="柔", tier=3, quality="上品")
+    game.state.player.rack = [arm]
+    assert smithing.better_in_rack(game.state, content, world, art) is arm  # 整季機器人與假人換兵器照這一份：拿到了就會換上
+
+
+def test_names_follow_the_content_on_load(content, world):
+    """名字照內容讀（joy 改名不動存檔）：每次建 Game 都照 content/gear.json 重寫；內容拿掉了那一把就留著舊名字。"""
+    _arms(content)
+    game = _game(content, world)
+    p = game.state.player
+    arm = signature_arms.new_arm(game.state, content.gear.signature_arms[0])
+    arm.name = "舊名"
+    p.rack = [arm]
+    CharacterStore(world.db).save(game.state)
+    loaded = Game(content, CharacterStore(world.db).load(p.name), random.Random(0), world)
+    assert [a.name for a in signature_arms.owned(loaded.state.player)] == ["鐵脊長刀"]
+    content.gear = GearBook()
+    signature_arms.refresh_names(loaded.state.player, content)
+    assert [a.name for a in signature_arms.owned(loaded.state.player)] == ["鐵脊長刀"]  # 拿掉了：留著
+
+
+def test_a_signature_arm_cannot_be_dismantled(content, world):
+    _arms(content)
+    game = _game(content, world)
+    p = game.state.player
+    arm = signature_arms.new_arm(game.state, content.gear.signature_arms[0])
+    p.weapon, p.rack = Weapon(id="兵:90", name="甲刀", kind="刀", attribute="剛", tier=1, quality="下品"), [arm]
+    assert weapons.dismantle(game.state, content, arm.id) == [equipment.SIGNATURE_KEPT_LINE] and arm in p.rack
+    row = weapons._row(arm, None, content, world)
+    assert (row["keep"], row["confirm"]) == (equipment.SIGNATURE_KEPT, "")  # 修練頁：鈕灰掉寫原因、沒有問句
+    game.choose("act:smith")
+    kept = {o.id: o for o in game.options(odds=False)}[f"smith:dismantle:{arm.id}"]
+    assert not kept.enabled and equipment.SIGNATURE_KEPT in kept.label  # 鐵匠鋪那一顆照樣列出、灰掉寫原因
+
+
+def test_a_new_season_clears_the_arm_and_the_claims(content, world):
+    _arms(content)
+    game = _game(content, world)
+    game.state.player.rack = [signature_arms.new_arm(game.state, content.gear.signature_arms[0])]
+    game.state.player.figure_wins = {"sunjian": 2}
+    game.state.world.signature_arms = {"mate": SignatureClaim(owner=game.state.player.name, via="gift")}
+    game._save_season()  # 歸屬真的寫進這一季那一列，換季才有東西可清
+    next_season(content, world, game)
+    assert signature_arms.owned(game.state.player) == [] and game.state.player.figure_wins == {}
+    assert game.state.world.signature_arms == {}  # 換季整個重來（兵器設計 2.5）；神器譜照 seasons 表留著（Task 5）
