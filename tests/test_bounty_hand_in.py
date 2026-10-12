@@ -11,6 +11,7 @@ from test_bounties import _direct, _do, _ids, _load, _post, beta_setup  # noqa: 
 from tianxia import bot, bot_policy, bounties, calendar, library
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, validate
+from tianxia.engine import Refused
 from tianxia.martial_arts import generate_from_name
 from tianxia.models import WEAPON_KINDS
 from tianxia.state import BotProfile, Equipment, GameState, PlayerState, Weapon, WorldState
@@ -665,12 +666,79 @@ def test_a_stale_pick_falls_back_to_the_board(beta_setup):
     assert list(_ids(content, world, "丙")) == [f"bounty:pick:{last.id}", "bounty:back"]
     _do(content, world, "丙", lambda g: g.choose(f"bounty:pick:{last.id}"))
     world.mutate_season(lambda s: next(x for x in s.bounties if x.id == last.id).done_by.append("乙"))  # 別人先交滿最後一個名額
-    assert _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{last.id}:{good.id}"))[0] == ["（此刻無法這麼做。）"]
+    # FB-162：慢的那一頁不再只得到一句「（此刻無法這麼做。）」，而是這一張為什麼交不了（下榜了）
+    assert _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{last.id}:{good.id}"))[0] == [bounties.GONE]
     assert list(_ids(content, world, "丙")) == ["bounty:empty", "bounty:back"] and good.id in _load(world, "丙").player.arts  # 榜被交光：返回上面多一行灰的說明（FB-156）
 
 
+def _two_tabs(content, world):
+    """兩個分頁搶同一張（FB-162）：丙有兩門合用的武學，同一張求藝，兩個分頁都停在第三層。回（懸賞, 甲武學, 乙武學）。"""
+    good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+    _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
+    b = _art(world)
+    _open(content, world, "丙", f"bounty:pick:{b.id}")
+    return b, good, other
+
+
+def test_the_slower_tab_hears_why_it_cannot_hand_in_anymore_and_nothing_is_written_fb162(beta_setup):
+    """FB-162：分頁 A 先交掉，分頁 B 再按「交出」（B 的畫面還停在第三層，選項已經不在選單上）：引擎回這一步為什麼不成的那一句
+    （bounties.give_problem 的原因：這一張你已經交過了），回傳值是 Refused（伺服器照它把同一句傳去網頁）；不扣不給、不寫江湖紀錄。"""
+    content, world = beta_setup
+    b, good, other = _two_tabs(content, world)
+    assert _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{b.id}:{good.id}"))[0][0].startswith(bounties.GIVEN_PREFIX)
+    after = _load(world, "丙")
+    start, silver = len(after.journal), after.player.stats["silver"]
+    for item in (good.id, other.id):  # 交掉的那一門、還在手上的另一門都一樣：這一張你已經交過了
+        msgs, game = _do(content, world, "丙", lambda g, item=item: g.choose(f"bounty:give:{b.id}:{item}"))
+        assert msgs == [bounties.GIVEN_BEFORE] and isinstance(msgs, Refused)
+    again = _load(world, "丙")
+    assert len(again.journal) == start and again.player.stats["silver"] == silver and other.id in again.player.arts
+    assert [x.takers for x in world.get_season().bounties if x.id == b.id] == [[]]
+
+
+def test_a_hand_in_whose_item_is_gone_says_the_item_is_gone_fb162(beta_setup):
+    """另一個分頁在修練頁把那一門熔掉了（榜還開著、這一張還在）：說功法庫裡沒有這一門，不是籠統的一句。"""
+    content, world = beta_setup
+    b, good, other = _two_tabs(content, world)
+    _edit(world, "丙", lambda p: p.arts.remove(good.id))
+    msgs, game = _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{b.id}:{good.id}"))
+    assert msgs == [bounties.NO_ART] and isinstance(msgs, Refused)
+
+
+def test_a_stale_option_with_no_reason_of_its_own_gets_the_general_line_fb162(beta_setup):
+    """分頁 A 按了「回到懸賞榜」，分頁 B 還停在第三層按「交出」：東西沒問題、這一張也還在，只是選項不在選單上——沒有別的原因可說，
+    回 bounties.STALE（榜上的情形變了）；擠不進選單的 take／pick／drop 也一樣，找不到那一張的說下榜了。"""
+    content, world = beta_setup
+    b, good, _ = _two_tabs(content, world)
+    _do(content, world, "丙", lambda g: g.choose("bounty:unpick"))
+    for option_id in (f"bounty:give:{b.id}:{good.id}", f"bounty:drop:{b.id}", f"bounty:take:{b.id}"):
+        msgs, game = _do(content, world, "丙", lambda g, option_id=option_id: g.choose(option_id))
+        assert msgs == [bounties.STALE] and isinstance(msgs, Refused), option_id
+    for option_id in ("bounty:pick:b999", "bounty:give:b999:x"):
+        assert _do(content, world, "丙", lambda g, option_id=option_id: g.choose(option_id))[0] == [bounties.GONE]
+
+
+def test_only_a_missing_bounty_option_gets_the_new_line_fb162(beta_setup):
+    """範圍：不是懸賞的選項不在選單上，照舊「（此刻無法這麼做。）」、不是 Refused；在選單上、只是灰著的懸賞選項（bounty:empty）也照舊
+    （tests/test_bounties.py）；在選單上的真選項回一般的清單。"""
+    content, world = beta_setup
+    b, good, _ = _two_tabs(content, world)
+    _do(content, world, "丙", lambda g: g.choose("bounty:unpick"))
+    msgs, game = _do(content, world, "丙", lambda g: g.choose("act:nonsense"))
+    assert msgs == [bounties.NOT_NOW] and not isinstance(msgs, Refused)
+
+    def twice(g):
+        first = g.choose(f"bounty:give:{b.id}:{good.id}")
+        second = g.choose("bounty:back")  # 這一下是真的、在選單上：回話不是拒絕
+        return first, second
+
+    (first, second), _ = _do(content, world, "丙", twice)
+    assert first == [bounties.STALE] and isinstance(first, Refused) and second == ["你離開了懸賞榜。"] and not isinstance(second, Refused)
+
+
 def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
-    """設計 4.8：打開榜一則（「懸賞榜・此地」），挑一件與交出併成一則（「懸賞榜」）；返回照舊一則；下一次再來另起一則，不併進上一次的。"""
+    """設計 4.8（FB-161 改過）：打開榜一則（「懸賞榜・此地」），挑一件不寫紀錄、交出一則（「懸賞榜」）；返回照舊一則；
+    下一次再來另起一則，不併進上一次的。"""
     content, world = beta_setup
     good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
     _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
@@ -679,11 +747,31 @@ def test_opening_picking_and_giving_adds_two_journal_entries(beta_setup):
     for b, item in ((first, good.id), (second, other.id)):
         _open(content, world, "丙", f"bounty:pick:{b.id}", f"bounty:give:{b.id}:{item}", "bounty:back")
     journal = _load(world, "丙").journal
-    assert len(journal) == start + 6  # 每次三則：打開、挑與交、返回
+    assert len(journal) == start + 6  # 每次三則：打開、交出、返回（挑一件不寫）
     handed = journal[1]
-    assert handed.title == bounties.BOARD and handed.lines[0] == bounties.pick_line(content, second)
-    assert any(line.startswith(bounties.GIVEN_PREFIX) for line in handed.lines)
+    assert handed.title == bounties.BOARD and handed.lines[0].startswith(bounties.GIVEN_PREFIX)
+    assert bounties.pick_line(content, second) not in handed.lines
     assert journal[2].title.startswith(f"{bounties.BOARD}・")
+
+
+def test_each_hand_in_gets_its_own_entry_and_browsing_writes_none(beta_setup):
+    """FB-161：同一次逛榜連交兩張，各一則、各寫各的得失（以前挑了又回的句子全留著，兩張的賞加總成一筆，分不出哪一張給了多少）；
+    挑一件、回到懸賞榜只是翻頁，不寫紀錄。"""
+    content, world = beta_setup
+    good, other = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")
+    _edit(world, "丙", lambda p: p.arts.extend([good.id, other.id]))
+    first, second = _art(world), _art(world)
+    start = len(_load(world, "丙").journal)
+    _open(content, world, "丙", f"bounty:pick:{first.id}", "bounty:unpick", f"bounty:pick:{second.id}", "bounty:unpick",
+          f"bounty:pick:{first.id}", f"bounty:give:{first.id}:{good.id}", f"bounty:pick:{second.id}", f"bounty:give:{second.id}:{other.id}")
+    journal = _load(world, "丙").journal
+    assert len(journal) == start + 3  # 打開、交第一張、交第二張
+    second_in, first_in, opened = journal[0], journal[1], journal[2]
+    assert opened.title.startswith(f"{bounties.BOARD}・")
+    for entry, b in ((first_in, first), (second_in, second)):
+        assert entry.title == bounties.BOARD and entry.lines[0].startswith(bounties.GIVEN_PREFIX)
+        assert not any(bounties.is_browse_line(line) for line in entry.lines)
+        assert "銀兩 +20" in entry.changes  # 一張的賞，不是兩張加總
 
 
 def test_the_card_lists_hand_ins_you_can_make_even_outside_town(beta_setup):

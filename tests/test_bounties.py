@@ -967,6 +967,61 @@ def test_joining_a_sect_through_an_event_choice_drops_them_too_fb151(beta_setup)
     assert _do(content, world, "丙", lambda g: g.status_data())[0]["bounties"] == []
 
 
+def _sect_event(content):
+    """入夥（歸官軍的門派 cloud）與婉拒兩個選項的事件；門派歸官軍。"""
+    from tianxia.models import Choice, Effect, Event
+
+    content.scenario.factions[0].sects = ["cloud"]
+    event = Event(
+        id="t_join_sect_note", title="結社", text="有人問你要不要入夥。", actions=[],
+        choices=[Choice(text="入夥", effect=Effect(join_sect="cloud")), Choice(text="婉拒")],
+    )
+    content.events[event.id] = event
+    return event
+
+
+def _labels(content, world, name, event):
+    def menu(game):
+        game._present(event)
+        return {o.id: o.label for o in game.options(odds=False)}
+
+    return _do(content, world, name, menu)[0]
+
+
+def test_an_event_choice_that_joins_a_sect_warns_about_the_bounties_it_will_void_fb159(beta_setup):
+    """FB-159：選項會拜入陣營名下的門派（Effect.join_sect → 那個門派歸哪個陣營），而手上有那個陣營接不了的單時，選項那一行
+    跟投靠的確認畫面一樣先講幾張會作廢（STRANDED_JOIN，照 bounties.stranded 數）；沒有單、單都是新陣營的、已經有陣營的人，一個字不多。
+    婉拒那種不拜入的選項不受影響；選下去真的作廢的就是那幾張。"""
+    content, world = beta_setup
+    event = _sect_event(content)
+    assert _labels(content, world, "丙", event) == {"choice:0": "入夥", "choice:1": "婉拒"}  # 手上沒有單
+    ours = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _hold(content, world, "丙", ours.id)
+    assert _labels(content, world, "丙", event)["choice:0"] == "入夥"  # 官軍的單，拜入官軍的門派不丟
+    theirs = _post(world, kind="strike", faction="huang", silver=10, deeds=2, location="lake")
+    other = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
+    _hold(content, world, "丙", theirs.id, other.id)
+    labels = _labels(content, world, "丙", event)
+    assert labels["choice:0"] == "入夥（" + bounties.STRANDED_JOIN.format(n=2) + "）" and labels["choice:1"] == "婉拒"
+    assert _labels(content, world, "甲", event)["choice:0"] == "入夥"  # 甲已經是官軍：拜入不換陣營，什麼都不丟
+    msgs, game = _do(content, world, "丙", lambda g: (g._present(event), g.choose("choice:0"))[1])
+    lapsed = {bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(content, b)) for b in (theirs, other)}
+    assert lapsed <= set(msgs)  # 警告說的兩張，選下去就是這兩張作廢
+    assert [b.id for b in bounties.mine(game.state, content)] == [ours.id]
+
+
+def test_the_sect_warning_follows_the_sect_owner_in_the_real_content():
+    """正式內容：潁川書院的「投身書院」歸官軍、曹氏莊院的「接招」歸地方豪強；選項標籤的警告看的是門派的主人（Scenario.sect_owner），不是寫死的陣營名。"""
+    content = real_content()
+    owners = {}
+    for event in content.events.values():
+        for choice in event.choices:
+            for effect in (choice.effect, choice.fail_effect):
+                if effect.join_sect:
+                    owners[event.id] = content.scenario.sect_owner(effect.join_sect).id
+    assert owners == {"yingchuan_join": "guan", "cao_manor_join": "haoqiang"}
+
+
 def test_a_faction_set_by_a_bare_effect_is_caught_at_the_next_sync_with_the_faction_reason_fb151(beta_setup):
     """入口不經過 choose 的（直接套 Effect(join_sect=…)）：效果本身不碰懸賞榜，下一次同步由 deliver_lapses 補，說的是陣營的原因、不是過期。"""
     from tianxia.models import Effect

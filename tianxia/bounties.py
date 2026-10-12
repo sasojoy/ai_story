@@ -23,7 +23,7 @@ from typing import NamedTuple
 from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
-from .models import WEAPON_KINDS, Content, Location
+from .models import WEAPON_KINDS, Choice, Content, Location
 from .state import Bounty, GameState, Weapon, WorldState
 from .world_state import WorldStateStore, season_length_days
 
@@ -33,12 +33,16 @@ FULL_PAY = ("wanted", "art", "arms")  # 陣營的人也拿全額的（通緝是�
 NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
 NOT_NOW = "（此刻無法這麼做。）"
 GONE = "這張懸賞已經下榜了。"  # 待 joy 潤
+STALE = "榜上的情形變了，這一下沒有作用；照現在的畫面再選一次。"  # 待 joy 潤（FB-162：兩個分頁搶同一張，慢的那一頁按下去的懸賞選項已經不在選單上，又沒有更具體的原因可說）
 ONLY_FUSED = "這一張要的是江湖上新合出來的功夫；基礎武學、師門傳下來的配方都不收。"  # 待 joy 潤（FB-158：師門配方也是自己在火爐合的，只寫「合成出來」會讓人以為合用）
 GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
 EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
 RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下
-HAND_IN_VERBS = ("pick", "unpick", "give")  # 挑一件、回到懸賞榜、交出：江湖紀錄併成一則（Game.choose，懸賞榜設計 4.8）
+# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（Game.choose）；交出每一張各一則、各寫各的得失（FB-161：
+# 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
+BROWSE_VERBS = ("pick", "unpick")
+PICKED = "你替「{what}」挑一件要交的東西。"  # 待 joy 潤：按了 bounty:pick 的回話（pick_line）
 UNITS = {"art": "門", "arms": "把"}
 GIVE_YES = "交出"  # 待 joy 潤：確認層上那一顆（Option.confirm_yes）
 STUCK = "這幾張你現在交不出：{titles}（求藝要江湖上新合出來的功夫、師門配方不算、不能是身上正在練的；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
@@ -224,6 +228,37 @@ def stranded(state: GameState, content: Content, faction_id: str | None) -> list
         if me in (name_key(t) for t in b.takers) and me not in (name_key(t) for t in b.done_by)
         and not _takeable(p.name, faction_id, b)
     ]
+
+
+def stale_line(state: GameState, content: Content, world: WorldStateStore, arg: str) -> str:
+    """懸賞選項（Game.choose 的 bounty:<arg>）已經不在選單上時回給玩家的一句（FB-162：兩個分頁搶同一張、慢的那一頁按下去）。
+    arg 是 bounty: 後面那一段（take／drop／pick／give:懸賞 id:東西 id…）。找不到那一張了是 GONE；交出的先看引擎自己的拒絕
+    （give_problem：交過了、東西不在了、名額滿了……，跟照舊的 give 同一套話）；都沒有更具體的原因就是 STALE。
+    只讀，不改狀態、不寫紀錄。"""
+    verb, _, rest = arg.partition(":")
+    bounty_id, _, item = rest.partition(":")
+    if verb in ("take", "drop", "pick", "give"):
+        b = next((x for x in state.world.bounties if x.id == bounty_id), None)
+        if b is None:
+            return GONE
+        if verb == "give":
+            return give_problem(state, content, world, b, item) or STALE
+    return STALE
+
+
+def join_note(state: GameState, content: Content, choice: Choice) -> str:
+    """事件選項會拜入陣營名下的門派（Effect.join_sect）、因而投靠那個陣營時，手上有新陣營接不了的懸賞：選項那一行後面多一個括號，
+    寫跟投靠的確認畫面同一句（STRANDED_JOIN，張數照 stranded 數；FB-159，原本只有選下去之後才補作廢的句子）。
+    已經有陣營的人拜入不換陣營（rules.apply_effect），門派不歸任何陣營的也不會，這兩種都沒有；成功與失敗的效果都看（先成功）。
+    沒有要警告的是空字串。"""
+    if state.player.faction is not None:
+        return ""
+    for effect in (choice.effect, choice.fail_effect):
+        owner = content.scenario.sect_owner(effect.join_sect) if effect.join_sect else None
+        held = stranded(state, content, owner.id) if owner is not None else []
+        if held:
+            return f"（{STRANDED_JOIN.format(n=len(held))}）"
+    return ""
 
 
 def drop_stranded(state: GameState, content: Content, faction_id: str | None) -> list[str]:
@@ -538,7 +573,13 @@ def stuck_label(content: Content, asks: list[Bounty], kept: dict[str, str] | Non
 
 def pick_line(content: Content, b: Bounty) -> str:
     """按了「交出…」的回話（待 joy 潤）。"""
-    return f"你替「{issuer(content, b)}・{title(content, b)}」挑一件要交的東西。"
+    return PICKED.format(what=f"{issuer(content, b)}・{title(content, b)}")
+
+
+def is_browse_line(line: str) -> bool:
+    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：Game.choose 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
+    head, _, tail = PICKED.partition("{what}")
+    return line == UNPICKED or (len(line) > len(head) + len(tail) and line.startswith(head) and line.endswith(tail))
 
 
 def _offer(state: GameState, content: Content, world: WorldStateStore, b: Bounty, item_id: str, memo: dict) -> tuple[str, str]:

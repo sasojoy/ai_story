@@ -63,12 +63,69 @@ def test_the_wield_button_sends_the_weapon_id(views):
 
 
 def test_nothing_is_drawn_without_gear(views):
+    """四欄都關著（slots 空）、或舊的伺服器沒有 gear 這一欄：整塊不畫。開著但身上什麼都沒有的樣子見下面 FB-138 那幾個。"""
     m, x = views
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)  # 測試內容把武器、防具都關著
-    x["gear"] = _gear(weapon={"worn": None, "rack": []}, armor={"worn": None, "rack": []})
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)  # 開著但什麼都沒有
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)  # 測試內容把武器、防具都關著
+    x["gear"] = _gear()
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)
     del x["gear"]  # 舊的伺服器沒有這一欄
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)
+
+
+def _where_gear():
+    """身上什麼裝備都沒有的新角色：四欄都開著、都空著（server.menxia_view 的 gear，每一段多 where：skillview.gear_rows）。"""
+    return {"cap": 100, "used": 0, "held_note": "", "slots": [
+        {"slot": "weapon", "label": "武器", "empty": "手上沒有兵器。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
+        {"slot": "armor", "label": "防具", "empty": "身上沒有防具。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
+        {"slot": "mount", "label": "坐騎", "empty": "身上沒有坐騎。", "note": "", "where": "馬市買得到駑馬：涿郡、汝南集市、宛城、下曲陽。", "worn": None, "rack": []},
+        {"slot": "treasure", "label": "寶物", "empty": "身上沒有寶物。", "note": "", "where": "買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來。", "worn": None, "rack": []},
+    ]}
+
+
+def test_a_player_with_no_gear_still_gets_a_compact_gear_block_saying_where_to_get_each(views):
+    """FB-138：四欄都開著卻都空著，也畫「裝備」塊——每一欄一行：欄名、空著的那一句、哪裡買得到；沒有鈕、沒有裝備庫的格數。
+    馬市的地名、鐵匠鋪在哪都是伺服器照內容給的 where，網頁不寫死。"""
+    m, x = views
+    x["gear"] = _where_gear()
+    page = run(m, "return H.pagePractice();", menxia=x)
+    block = page.split('class="gear gear-empty"')[1].split("功法庫")[0]  # 這一塊後面接的是「功法庫」那一段
+    assert "裝備" in block
+    for slot, label, empty in (("weapon", "武器", "手上沒有兵器。"), ("armor", "防具", "身上沒有防具。"), ("mount", "坐騎", "身上沒有坐騎。"), ("treasure", "寶物", "身上沒有寶物。")):
+        line = block.split(f'data-empty="{slot}"')[1].split("</p>")[0]
+        assert label in line and empty in line
+    assert "馬市買得到駑馬：涿郡、汝南集市、宛城、下曲陽。" in block and block.count("城鎮裡的鐵匠鋪買得到。此地就有。") == 2
+    assert "只從懸賞、名將、奇遇與打敗大勢人物得來" in block
+    assert "<button" not in block and "裝備庫" not in block  # 沒有東西可換、沒有格數可講
+    assert 'class="gear"' not in page and 'data-slot=' not in page  # 完整的那一塊（每段有身上與裝備庫）這時候不畫
+
+
+def test_the_compact_gear_block_skips_unknown_slots_and_escapes_the_text(views):
+    m, x = views
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][2]["where"] = "<b>馬市</b>在<i>這裡</i>"
+    x["gear"]["slots"][3]["where"] = ""  # 內容裡沒有那種地點：只有空著的那一句
+    x["gear"]["slots"].append({"slot": "future", "label": "未來", "empty": "什麼都沒有。", "note": "", "where": "某處", "worn": None, "rack": []})
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert 'data-empty="future"' not in page and "什麼都沒有" not in page
+    assert "&lt;b&gt;馬市&lt;/b&gt;在&lt;i&gt;這裡&lt;/i&gt;" in page and "<b>馬市</b>在" not in page
+    treasure = page.split('data-empty="treasure"')[1].split("</p>")[0]
+    assert "身上沒有寶物。" in treasure and "undefined" not in treasure
+
+
+def test_the_full_gear_block_comes_back_once_anything_is_worn_or_held(views):
+    """身上有任何一件、裝備庫裡有任何一件、或有寄放的，就是原本完整的那一塊（每段身上與裝備庫、「換上」鈕），不是精簡的。"""
+    m, x = views
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][0]["worn"] = _row()
+    full = run(m, "return H.pagePractice();", menxia=x)
+    assert 'class="gear"' in full and "gear-empty" not in full and 'data-slot="weapon"' in full and "【試刃】" in full
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][1]["rack"] = [_armor_row()]
+    assert "gear-empty" not in run(m, "return H.pagePractice();", menxia=x)
+    x["gear"] = _where_gear()
+    x["gear"]["held_note"] = "寄放著：【叩關玉】"
+    held = run(m, "return H.pagePractice();", menxia=x)
+    assert "gear-empty" not in held and "寄放著：【叩關玉】" in held
 
 
 def test_a_long_rack_lists_eight_and_then_a_more_button(views):
@@ -238,6 +295,28 @@ def test_wield_is_greyed_on_the_road_with_the_reason(views):
     x["gear"] = _mount_gear(_mount_row(), [_mount_row(id="騎:2", feed=False, feed_note="", wield_ok=False, wield_note="在路上")])
     block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
     assert 'data-act="wield" data-id="騎:2" disabled' in block and "在路上" in block
+
+
+def test_a_greyed_button_is_only_the_verb_and_the_reason_sits_in_the_title_and_on_the_row(views):
+    """FB-137：灰掉的「餵」「換上」鈕上只寫動詞（原因塞在鈕裡會把左邊的說明擠成一行六、七個字，那一列變 4～6 行）；
+    原因放在鈕的 title，也寫在那一列自己的說明底下（手機沒有 title 可看）。能按的「餵」照舊寫用哪一種素材。"""
+    m, x = views
+    spare = _mount_row(id="騎:2", name="青驄駒", feed=False, feed_note="", wield_ok=False, wield_note="在路上")
+    x["gear"] = _mount_gear(_mount_row(feed=False, feed_note="在路上，停下來再餵"), [spare])
+    block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert '<button class="btn small" data-act="feed" disabled title="在路上，停下來再餵">餵</button>' in block
+    assert '<button class="btn small" data-act="wield" data-id="騎:2" disabled title="在路上">換上</button>' in block
+    assert "餵（" not in block and "換上（" not in block
+    assert block.count('class="rwhy"') == 2  # 原因寫在列上：身上那匹一句、裝備庫那匹一句
+    assert "在路上，停下來再餵</small>" in block and "在路上</small>" in block
+    # 原因跳脫；能按的鈕沒有 title、沒有說明那一行
+    x["gear"] = _mount_gear(_mount_row(feed=False, feed_note="<i>怪</i>"), [_mount_row(id="騎:2", feed=False, feed_note="")])
+    odd = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "&lt;i&gt;怪&lt;/i&gt;" in odd and "<i>怪</i>" not in odd
+    x["gear"] = _mount_gear(_mount_row(), [_mount_row(id="騎:2", feed=False, feed_note="")])
+    fine = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert '<button class="btn small" data-act="feed">餵（精鐵砂×1）</button>' in fine
+    assert 'class="rwhy"' not in fine and "title=" not in fine
 
 
 _FEED_CLICK = """return (async () => {

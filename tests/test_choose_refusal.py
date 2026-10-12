@@ -41,7 +41,7 @@ const fns = new Function(
   "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION", "SENSE_DRAW", "SAY_OPTION",
   `let lastAction = 0;${busyKit()}${slice("async function choose(")}\nreturn { choose };`,
 )(S, document, renderPage,
-  async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: "" }; },
+  async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: input.message || "" }; },
   () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw", "talk:say");  // applyMain 也是整頁重畫
 finish((async () => {
   const mk = (cls, inOptions, label) => { const el = cell(cls, inOptions, label); el.orig = label; els.push(el); return el; };
@@ -50,7 +50,7 @@ finish((async () => {
   await fns.choose(target, input.id);
   return {
     renders, applied: calls.applied, busy: target.classList.contains("busy"), label: target.label(),
-    others: els.slice(1).map((el) => el.disabled),
+    others: els.slice(1).map((el) => el.disabled), toasts: calls.toasts,
   };
 })());
 """
@@ -90,3 +90,15 @@ def test_a_press_while_the_last_action_is_still_waiting_leaves_its_busy_mark_alo
     got = run(cls="act-ink busy", inOptions=False, id="act:rest", already=True, refuse=False)
     assert got["renders"] == 0 and got["applied"] == 0
     assert got["busy"] is True  # 上一顆的「處理中」還在
+
+
+def test_a_reply_message_from_a_choose_shows_as_a_toast():
+    """FB-162：伺服器對不在選單上的懸賞選項回一句 message（不寫江湖紀錄），網頁照決戰選項的做法把它跳成提示；沒有 message 的選項什麼都不跳。"""
+    said = "這一張你已經交過了。"
+    got = run(cls="btn", inOptions=True, id="bounty:give:b1:兵:3", options=[], refuse=False, message=said)
+    assert got["toasts"] == [said] and got["applied"] == 1
+    assert run(cls="btn", inOptions=True, id="act:explore", options=[], refuse=False)["toasts"] == []
+    long = "這一張要的是江湖上新合出來的功夫；基礎武學、師門傳下來的配方都不收，請換一門別的功夫再來交一次看看，不要再按這一顆了。"
+    assert run(cls="btn", inOptions=True, id="bounty:give:b1:x", options=[], refuse=False, message=long)["toasts"] == [long]  # 懸賞的拒絕句整句留著
+    cut = run(cls="btn", inOptions=True, id="battle:act:safe", options=[], refuse=False, message=long)["toasts"]
+    assert cut == [long[:40] + "……（戰況見場景）"]  # 決戰回合的整段敘事照舊截短、指去場景

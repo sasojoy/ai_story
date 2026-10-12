@@ -181,6 +181,14 @@ HEARD_TITLE = "聽聞"
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
 FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
+
+
+class Refused(list):
+    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）。沒做事、沒寫江湖紀錄，
+    所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
+    不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
+
+
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
@@ -1199,11 +1207,14 @@ class Game:
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
-        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
+        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。拜入陣營名下的門派、而且手上有新陣營接不了的懸賞時，
+        最後多一個括號講會作廢幾張（bounties.join_note，FB-159）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
-            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
-        return choice_label(choice, self.state, self.content, self.world)
+            label = f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
+        else:
+            label = choice_label(choice, self.state, self.content, self.world)
+        return label + bounties.join_note(self.state, self.content, choice)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)
@@ -1414,6 +1425,10 @@ class Game:
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        if option is None and option_id.startswith("bounty:"):
+            # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
+            # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
+            return Refused(self._log([bounties.stale_line(self.state, self.content, self.world, option_id.partition(":")[2])]))
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
@@ -1488,19 +1503,22 @@ class Game:
             self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
-            # 會全部併進上一爐那一則。懸賞榜的挑一件、回到懸賞榜、交出同理併成一則「懸賞榜」（懸賞榜設計 4.8）：打開榜那一則的標題是
-            # 「懸賞榜・此地」，每次來都另起一則，不會併進上一次來的；揭下、放棄、返回照舊各一則
+            # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
+            # 只有那一句回話時不寫紀錄（bounties.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
+            # 連交幾張時各寫各的得失）
             entry = self._draft.entry(self.state.world.time, msgs)
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
+            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
+                              and all(bounties.is_browse_line(line) for line in entry.lines))
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
                 # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
                 # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smithing.is_step_line）：
                 # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
                 forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
-                journal.add_entry(self.state, entry, merge=(kind == "smith" and smithing.is_forge_step(arg) and arg != "forge") or (
-                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS), fold=smithing.is_step_line if forged else False)
+                journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge",
+                                  fold=smithing.is_step_line if forged else False)
         finally:
             self._draft = None
             self._fight = None
@@ -1547,7 +1565,7 @@ class Game:
             annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對" + ("，成了。" if success else "，沒成。"),
                         3 if event.once or event.qiyu else 1, quote=request.text)
             effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
-            msgs += self._apply(effect)
+            msgs += self._apply(effect, once=event.once)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
@@ -4757,6 +4775,7 @@ class Game:
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
             # 遊歷打贏（有風險）與決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，傳進來的已經是整數點數。
+            # 一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，rules.apply_effect 判斷）照原本的量（FB-166）。
             scale = self.season_scale() if source == "event" else 1.0
             if scale < 1 and is_revealed(w, c, trend_id):
                 whole = self._carry(trend_id, delta * scale)
@@ -5204,10 +5223,10 @@ class Game:
             self._outcome(tag, line)
             if rare:
                 annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
-            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c)) + self._tale_clue(event)
+            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
         if rare:
             annals.note(s, c, annals.DEED, what + "。", 3)
-        return msgs + self._apply(choice.effect) + self._tale_clue(event)
+        return msgs + self._apply(choice.effect, once=event.once) + self._tale_clue(event)
 
     def _tale_clue(self, event: Event) -> list[str]:
         """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次
@@ -5277,7 +5296,7 @@ class Game:
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else failed(choice.fail_effect, c)  # 打輸另扣的體力減半，同檢定失敗（企劃者裁決 E6）
-        story = apply_effect(effect, s, c, self.world, push=self.push_trend)
+        story = apply_effect(effect, s, c, self.world, push=self.push_trend, once=event.once)
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
@@ -5287,8 +5306,9 @@ class Game:
             msgs += self._present(c.events[effect.next_event])
         return msgs
 
-    def _apply(self, effect: Effect) -> list[str]:
-        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend)
+    def _apply(self, effect: Effect, once: bool = False) -> list[str]:
+        """套用事件選項的效果；once＝事件標了 once（推大勢不照季長縮放，FB-166，rules.apply_effect）。"""
+        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend, once=once)
         if effect.text and prologue_rules.active(self.state, self.content):
             for msg in msgs:  # 草廬四景的結果文字已經寫了「你悟到了「…之意境」」，引擎的「你悟得了「…」的意境」是同一件事：紀錄只留前一句
                 if msg.startswith("你悟得了「"):
@@ -6017,10 +6037,11 @@ class Game:
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。
-        每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；raid_targets 與 raid_refusal 都先問這裡。"""
+        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、這一季還沒收、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞
+        （散人、同陣營的人也行）。每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；休季（這一季收了）不畫，跟通緝鈕、懸賞榜一樣
+        （FB-163：以前還畫著灰的，原因寫成「城裡耳目眾多」「你此刻正忙」）；raid_targets 與 raid_refusal 都先問這裡。"""
         mine, theirs = self.state.player.faction, other.state.player.faction
-        if not self.content.config.raid.enabled:
+        if not self.content.config.raid.enabled or self.state.world.ended:
             return False
         if mine is not None and theirs is not None and mine != theirs:
             return True

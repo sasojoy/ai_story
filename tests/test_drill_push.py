@@ -139,3 +139,49 @@ def test_event_pushes_in_the_weekend_season_are_unchanged():
     before = game.state.world.trends["yingru"]
     _sight(game, {"front": 2})
     assert game.state.world.trends["yingru"] == before + 2
+
+
+def test_a_once_a_season_event_pushes_its_full_amount_in_a_fourteen_day_season():
+    """FB-166（PM 2026-10-13）：規則關著的季，一季只會發生一次的事件不照季長縮放——季再長也不會多發生一次。照內容判斷：效果這一下
+    新立世界旗標（例：擊敗波才立 bocai_defeated，-25 以前被縮成 -4）、或事件標了 once，照原本的量推；其餘照舊縮放。
+    旗標早就立了的再立一次不算（那不是這一季的第一次）。"""
+    from tianxia.models import Effect
+    from tianxia.rules import apply_effect
+
+    content = _content()
+    game = _camp(content)
+    game.state.player.location = "yingchuan"
+    w = game.state.world
+    w.trends["huangjin"] = 60
+    boss = content.events["kou_boss"].choices[0].effect
+    assert boss.trend == {"front": -25} and boss.world_flags_add == ["bocai_defeated"]
+    apply_effect(boss, game.state, content, game.world, push=game.push_trend)
+    assert world_trend_value(w, content, "huangjin") == 35 and "bocai_defeated" in w.flags  # 照推 -25，不是 -4
+    again = Effect(trend={"front": 2}, world_flags_add=["bocai_defeated"])  # 旗標已經立了：照舊縮放（0.357，不到一點）
+    apply_effect(again, game.state, content, game.world, push=game.push_trend)
+    assert world_trend_value(w, content, "huangjin") == 35
+    apply_effect(Effect(trend={"front": 2}), game.state, content, game.world, push=game.push_trend, once=True)  # 事件標了 once
+    assert world_trend_value(w, content, "huangjin") == 37
+    _sight(game, {"front": 2})  # 一般可重複的事件照舊縮放
+    assert world_trend_value(w, content, "huangjin") == 37
+
+
+def test_once_events_reach_the_effect_unscaled_through_the_game():
+    """Game 選事件那一條路把事件的 once 帶給 apply_effect（_choose、劇情戰、隨口應對都是）：一次性事件的選項照原本的量推。"""
+    content = _content()
+    once = next(e for e in content.events.values() if e.once and any(
+        ch.effect.trend and not ch.check and not ch.combat and not ch.effect.world_flags_add for ch in e.choices))
+    index = next(i for i, ch in enumerate(once.choices)
+                 if ch.effect.trend and not ch.check and not ch.combat and not ch.effect.world_flags_add)
+    from tianxia.rules import resolve_trends
+
+    game = _camp(content)
+    w = game.state.world
+    for t in list(w.trends):
+        w.trends[t] = 50  # 離兩頭都遠，照原本的量推不會被夾
+    want = {t: d for t, d in resolve_trends(content, w, once.choices[index].effect.trend, game.state.player.location).items() if d}
+    before = dict(w.trends)
+    game.state.pending_event = once.id
+    game._choose(index)
+    pushed = {t: v - before.get(t, 0) for t, v in w.trends.items() if v != before.get(t, 0)}
+    assert pushed == want, (once.id, pushed, want)  # 照原本的量，不是乘 2.5／14
