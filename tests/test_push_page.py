@@ -27,7 +27,7 @@ const parts = [
   src.match(/^  const POLL_MS = .*;$/m)[0],
   src.slice(a, b),
   src.match(/^  let pollInFlight = .*;$/m)[0],
-  slice("function setMain("), slice("async function busy("), slice("async function poll("), slice("function watchQueue("),
+  slice("function setMain("), busyKit(), slice("async function poll("), slice("function watchQueue("),
 ].join("\n");
 
 // ── 假的時鐘與計時器：advance(毫秒) 照時間先後把到期的計時器一個一個跑（含 setInterval），每一步之間讓 await 的東西跑完 ──

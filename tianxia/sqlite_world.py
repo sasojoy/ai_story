@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import json
 import random
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -28,7 +29,7 @@ from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
-from .state import Rumor, WeaponRecipe, WorldState
+from .state import GearFind, Rumor, WeaponRecipe, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
     jade_seal_summary, stamp_season,
@@ -251,7 +252,7 @@ class SqliteWorldStore:
             )
             return insight, True
 
-    # ── 兵器配方（兵器設計 4.4；第 4 版）──────────────────────
+    # ── 兵器配方（兵器設計 4.4；第 4 版）：打造隱藏配方第一批起不再新增 ──────────────────────
 
     def lookup_weapon_recipe(self, key: str) -> WeaponRecipe | None:
         with self.db.snapshot() as conn:
@@ -271,6 +272,64 @@ class SqliteWorldStore:
                 (season, key, name, recipe.creator, recipe.model_dump_json()),
             )
             return recipe, True
+
+    # ── 隱藏配方的發現（打造隱藏配方設計 7.1；第 4 版的 gear_recipes，不升版）──────
+
+    def lookup_gear_find(self, key: str) -> GearFind | None:
+        with self.db.snapshot() as conn:
+            return _gear_find(conn, self._season_number(conn), key)
+
+    def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
+        if not key.startswith("鑄|"):
+            raise ValueError(f"隱藏配方的鍵要是「鑄|配方 id」：{key}")
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            existing = _gear_find(conn, season, key)
+            if existing is not None:
+                return existing, False
+            conn.execute(  # 名字欄寫鍵本身：一定不是合法的名字，不佔名字空間（_name_taken 查得到它，但沒人能取這個名字）
+                "INSERT INTO gear_recipes (season, key, name, creator, data) VALUES (?, ?, ?, ?, ?)",
+                (season, key, key, find.creator, find.model_dump_json()),
+            )
+            return find, True
+
+    def add_copy(self, key: str) -> None:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            find = _gear_find(conn, season, key)
+            if find is None:
+                return
+            find.copies += 1
+            conn.execute(
+                "UPDATE gear_recipes SET data = ? WHERE season = ? AND key = ?", (find.model_dump_json(), season, key),
+            )
+
+    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+        name = name.strip()
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            find = _gear_find(conn, season, key)
+            if find is None or not find.divine:
+                return "gone"
+            if find.owner != owner:
+                return "owner"
+            if find.divine_name is not None:
+                return "named"
+            if _name_taken(conn, season, name):
+                return "taken"
+            find.divine_name = name
+            conn.execute(  # 名字欄從鍵本身改成定的名字：之後 _name_taken 查得到它（gear_recipes_by_name 也擋同一季重名）
+                "UPDATE gear_recipes SET name = ?, data = ? WHERE season = ? AND key = ?", (name, find.model_dump_json(), season, key),
+            )
+            return None
+
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT season, data FROM gear_recipes WHERE key LIKE '鑄|%' ORDER BY season, key",
+            ).fetchall()
+        finds = [(row["season"], GearFind.model_validate_json(row["data"])) for row in rows]
+        return [(season, find) for season, find in finds if find.divine and find.owner]
 
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
@@ -365,6 +424,78 @@ class SqliteWorldStore:
                 "SELECT name, creator FROM insight_firsts WHERE season = ? AND key = ?", (self._season_number(conn), key),
             ).fetchone()
         return None if row is None else (row["name"], row["creator"] or "")
+
+    # ── 玩家傳 ────────────────────────────────────────────
+
+    def save_annals(self, season: int, name: str, annals: list[dict], profile: dict) -> None:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO biographies (season, key, name, annals, profile) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (season, key) DO UPDATE SET annals = excluded.annals, profile = excluded.profile, name = excluded.name "
+                "WHERE biographies.text IS NULL",
+                (season, name_key(name), name, json.dumps(annals, ensure_ascii=False), json.dumps(profile, ensure_ascii=False)),
+            )
+
+    def add_saved_annal(self, season: int, name: str, entry: dict) -> None:
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT annals FROM biographies WHERE season = ? AND key = ?", (season, name_key(name)),
+            ).fetchone()
+            if row is None:
+                return
+            annals = json.loads(row["annals"]) + [entry]
+            conn.execute(
+                "UPDATE biographies SET annals = ? WHERE season = ? AND key = ?",
+                (json.dumps(annals, ensure_ascii=False), season, name_key(name)),
+            )
+
+    @staticmethod
+    def _biography_row(row: Row) -> dict:
+        out = dict(row)
+        out["annals"] = json.loads(out["annals"])
+        out["profile"] = json.loads(out["profile"])
+        out["public"] = bool(out["public"])
+        return out
+
+    def biography(self, season: int, name: str) -> dict | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT * FROM biographies WHERE season = ? AND key = ?", (season, name_key(name))).fetchone()
+        return None if row is None else self._biography_row(row)
+
+    def biographies_of(self, name: str) -> list[dict]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT * FROM biographies WHERE key = ? ORDER BY season DESC", (name_key(name),)).fetchall()
+        return [self._biography_row(row) for row in rows]
+
+    def store_biography(self, season: int, name: str, text: str, written_by: str, written_at: float, rewrite: bool) -> bool:
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE biographies SET text = ?, written_by = ?, written_at = ?, rewrites = rewrites + ? "
+                "WHERE season = ? AND key = ? AND (? OR text IS NULL)",
+                (text, written_by, written_at, int(rewrite), season, name_key(name), int(rewrite)),
+            )
+            return cursor.rowcount == 1
+
+    def share_biography(self, season: int, name: str, public: bool, code: str) -> str | None:
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT share_code FROM biographies WHERE season = ? AND key = ? AND text IS NOT NULL", (season, name_key(name)),
+            ).fetchone()
+            if row is None:
+                return None
+            code = row["share_code"] or code
+            conn.execute(
+                "UPDATE biographies SET public = ?, share_code = ? WHERE season = ? AND key = ?",
+                (int(public), code, season, name_key(name)),
+            )
+            return code
+
+    def biography_by_code(self, code: str) -> dict | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT * FROM biographies WHERE share_code = ? AND public = 1 AND text IS NOT NULL", (code,),
+            ).fetchone()
+        return None if row is None else self._biography_row(row)
 
     # ── 同伴性情漂移 ──────────────────────────────────────
 
@@ -483,6 +614,7 @@ class SqliteWorldStore:
             if not state.season.storyline or state.season_opened:
                 return
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
+            state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             state.season_opened = True
             state.season_last_real = now
             state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
@@ -508,6 +640,7 @@ class SqliteWorldStore:
             state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
+            state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             self._save(conn, state)
             return True
@@ -684,7 +817,8 @@ class SqliteWorldStore:
 
 
 def _name_taken(conn: Connection, season: int, name: str) -> bool:
-    """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境、兵器配方都算。"""
+    """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境、gear_recipes 都算（上線前的兵器配方；隱藏配方那幾列的名字欄
+    是鍵本身，不會撞到合法的名字）。定了名的神器原品那一列名字欄是定的名字，照樣算（打造隱藏配方設計 7.3）。"""
     return any(
         conn.execute(f"SELECT 1 FROM {table} WHERE season = ? AND name = ?", (season, name)).fetchone()
         for table in ("skills", "skill_aliases", "insights", "gear_recipes")
@@ -724,6 +858,11 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 def _gear_recipe(conn: Connection, season: int, key: str) -> WeaponRecipe | None:
     row = conn.execute("SELECT data FROM gear_recipes WHERE season = ? AND key = ?", (season, key)).fetchone()
     return None if row is None else WeaponRecipe.model_validate_json(row["data"])
+
+
+def _gear_find(conn: Connection, season: int, key: str) -> GearFind | None:
+    row = conn.execute("SELECT data FROM gear_recipes WHERE season = ? AND key = ?", (season, key)).fetchone()
+    return None if row is None else GearFind.model_validate_json(row["data"])
 
 
 def _season_firsts_lines(conn: Connection, season: int) -> list[str]:

@@ -125,6 +125,9 @@ class Effect(_Strict):
     donate_grain: dict[str, int] = Field(default_factory=dict)  # 捐糧：據點 id → 基準量（照 foreshadow.need 換算）；同護糧送到，記捐獻與一次推動的貢獻
     fs_fragments: list[str] = Field(default_factory=list)  # 直接給一則伏筆片段：「鏈 id:片段序號」（0 起）；做得了那條鏈的人才給、聽過的不再給
     runic: int = Field(default=0, ge=0)  # 符文殘片幾片（基準量，PlayerState.runic_pieces；玉璽大勢任務讀它，plan 玉璽碎片-2 用同一個名字）
+    # 奇遇給的寶物或良駒（裝備四欄 6.4）：content/gear.json 掉落池的 id，或 GOOD_HORSE（一匹良駒）；名將贈禮與名駒不准
+    # （content.check_effect），隨口應對不准（check_free_text），路上見聞只准屬性與素材
+    gear: str | None = None
 
 
 class Material(_Strict):
@@ -144,14 +147,20 @@ class CraftNames(_Strict):
 
     用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
     而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
+
+    兵器、防具的一般組合不照雜湊挑：字首照主料、中間字照輔料在素材表的位置取（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條），
+    所以 prefixes、weapon、armor 的前「素材數」個字不能重複；新素材加在 materials.json 最後，不然後面幾種素材的字會位移。
     """
 
     prefixes: list[str]
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
-    # 兵器配方的退路中間字（兵器設計 4.4、附帶決定 c）：字首＋這一個字＋兵器字；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
+    # 兵器一般組合的中間字（打造隱藏配方設計 4.1）：照輔料在素材表的位置取；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
     weapon: list[str] = Field(default_factory=lambda: list("霜霆雷星月嵐濤岳燼鳴影紋芒魄痕翎"))
+    # 防具一般組合的中間字（四欄設計 4.7、打造隱藏配方設計 4.1）：字首＋這一個字（照輔料在素材表的位置取）＋防具字（armor.FORGE_NOUNS）。
+    # 不能放兵器字、防具字（content.validate 用 armor.word_problem 驗）；前「素材數」個字不能重複（待 joy 潤）
+    armor: list[str] = Field(default_factory=lambda: list("鱗錦雲紋羽絮岩霜嵐濤影翎霞綾磐蟬"))
 
 
 class CombatLines(_Strict):
@@ -892,6 +901,31 @@ class SecretRecipe(_Strict):
     clues: list[str] = Field(min_length=3, max_length=3)
 
 
+class ForgeSide(_Strict):
+    """隱藏配方的一樣料（打造隱藏配方設計 3.1）：認屬性＋階，不認素材 id（joy 之後多加一種「三階剛」的素材，舊配方照樣認得、口訣照樣對）。
+    主料一定寫死階（tier，定這一件的階與工錢）；輔料可以改寫 min_tier（不低於幾階）。"""
+
+    attribute: str
+    tier: int | None = Field(default=None, ge=1, le=3)
+    min_tier: int | None = Field(default=None, ge=1, le=3)
+
+
+class ForgeSecret(_Strict):
+    """打造的隱藏配方（content/forge_secrets.json；打造隱藏配方設計 3.1）：某種兵器（或防具）＋主料＋輔料（主輔不交換），打中了出有專名的
+    名器（tianxia/forge_secrets.py）。divine 是神器配方（打造第二批：一爐必出神器，第一把原品、之後仿品；name 是譜名）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
+    這一條，單看一句只能縮小範圍（3.5）。"""
+
+    id: str
+    slot: Literal["weapon", "armor"]
+    kind: str | None = None  # 兵器種類（WEAPON_KINDS）；防具不寫
+    main: ForgeSide
+    aux: ForgeSide
+    divine: bool = False
+    name: str  # 名器的專名（神器配方是「譜名」，第二批）
+    note: str = ""  # 打出來那一句下面的一句說明
+    clues: list[str] = Field(min_length=3, max_length=3)
+
+
 class PresetRecipe(_Strict):
     """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
     第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
@@ -1492,18 +1526,22 @@ class WeaponRules(_Strict):
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
+    named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
+    copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
+    original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
 
 
 class ArmorRules(_Strict):
     """防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節）。數字都是【預設】（企劃者 2026-10-10「全部照預設」），
     量表（scripts/measure_gear.py）校準後可以改。減損＝（階＋品質＋淬煉＋對上內功）夾在 0 以上
     ×（edge_floor＋（1－edge_floor）×耐久度／100）；本人一場仗扣的氣血乘（1－min(total_cap, 化勁＋減損)），截殺輸的一方只乘防具。
-    不掛第一季開關（2.6，同兵器）。"""
+    不掛第一季開關（2.6，同兵器）。打造與淬煉（四欄設計 4.7；打造隱藏配方設計第九節）的數字照兵器，各欄自己一組（2.6、3.4），
+    天時地利正式值在 config.json。"""
 
     enabled: bool = True
     tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
     quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
-    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（防具打造那一批才淬得了，4.7）
+    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（4.1）
     match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
     edge_floor: float = Field(default=0.5, ge=0, le=1)  # 全壞時剩幾成減損（4.5：不會壞掉消失）
     total_cap: float = Field(default=0.6, ge=0, le=1)  # 跟化勁合計最多減幾成（4.3）
@@ -1511,6 +1549,13 @@ class ArmorRules(_Strict):
     shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
     repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（同兵器 4.2）：照主料的階
+    quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
+    temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
+    named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
+    copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
+    original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
 
 
 class MountRules(_Strict):
@@ -1530,6 +1575,66 @@ class MountRules(_Strict):
     hunger: dict[str, int] = Field(default_factory=lambda: {"walk": 5, "hurry": 5, "dash": 10})  # 每抵達新的一站扣的飽足度（5.4）
     shop_price: int = Field(default=100, ge=0)  # 馬市一匹駑馬下品的價錢（5.5）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 飽足低到這裡以下時江湖紀錄提醒一次（5.4）
+
+
+# 寶物的八種效果（裝備四欄 6.2）：win_material、legend 是企劃者 2026-10-11 換掉招募、氣血回復的兩種
+TREASURE_EFFECTS = ("cultivate", "insight", "win_xinde_pct", "win_exp_pct", "seclusion", "audience", "win_material", "legend")
+TreasureEffect = Literal["cultivate", "insight", "win_xinde_pct", "win_exp_pct", "seclusion", "audience", "win_material", "legend"]
+GOOD_HORSE = "good_horse"  # Effect.gear 寫這個是給一匹良駒（裝備四欄 5.7）；寶物表與名駒的 id 不能叫這個
+
+
+class TreasureRules(_Strict):
+    """寶物與好馬的來源（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第六節、5.7；裝備三）。數字都是【預設】（企劃者 2026-10-10
+    「全部照預設」），量表（scripts/measure_treasures.py）校準後可以改。效果的數字放這裡，內容（content/gear.json）只寫名字與效果種類；
+    同一種效果的寶物數字一樣（名將的贈禮也不另外強）。乘的效果（cultivate、insight、legend）寫倍數，加的寫加多少：win_xinde_pct、
+    win_exp_pct、seclusion 是比例，audience 是點數，win_material 是機率。不掛第一季開關（2.6，同兵器、防具、坐騎）；良駒、名駒的數字照 Config.mounts。"""
+
+    enabled: bool = True
+    effects: dict[str, float] = Field(default_factory=lambda: {
+        "cultivate": 1.2, "insight": 1.5, "win_xinde_pct": 0.2, "win_exp_pct": 0.15,
+        "seclusion": 0.25, "audience": 3, "win_material": 0.25, "legend": 2.0,
+    })
+    bounty_treasure_chance: float = Field(default=0.15, ge=0, le=1)  # 每週一掛單時每一邊擲一次：掛一件寶物（6.4）
+    bounty_horse_chance: float = Field(default=0.10, ge=0, le=1)  # 同上、分開擲：掛一匹良駒（5.7、6.4）
+    horse_quality: dict[str, float] = Field(default_factory=lambda: {"下品": 0.5, "中品": 0.3, "上品": 0.2})  # 懸賞與奇遇給的良駒品質的權重（5.7）
+    challenge_chance: float = Field(default=0.20, ge=0, le=1)  # 打贏大勢人物本人掉一件掉落池的寶物（6.4）
+    gift_affinity: int = Field(default=60, ge=0, le=100)  # 名將贈禮的情誼門檻（6.4；在本命武學 signature_affinity 70 之前）
+    dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
+
+
+class TreasureDef(_Strict):
+    """寶物表的一件（content/gear.json，裝備四欄 6.3）。名字原創、暫名交 joy 潤；效果是八種之一，數字在 Config.treasures.effects。
+    pool：掉落池（懸賞的重賞、挑戰本人、奇遇）；False 是名將的贈禮（只從 gifts 送出，事件不准給）。"""
+
+    id: str
+    name: str
+    effect: TreasureEffect
+    pool: bool = True
+
+
+class SteedDef(_Strict):
+    """名駒（content/gear.json，5.7）：三階、專名，只從名將贈禮來（事件與懸賞不給）。"""
+
+    id: str
+    name: str
+    quality: Literal["下品", "中品", "上品"] = "上品"
+
+
+class GiftDef(_Strict):
+    """名將贈禮（6.3、6.4）：情誼到 Config.treasures.gift_affinity 時送；每位名將每季全服只送一人。"""
+
+    character: str  # 人物 id（content/characters.json）
+    gear: str  # treasures（pool 為 false）或 steeds 的 id
+    line: str = ""  # 送禮那一句（{general}、{gift} 換成人物與贈禮的名字）；空的照 treasures.GIFT_LINE（待 joy 潤）
+
+
+class GearBook(_Strict):
+    """content/gear.json：寶物表、名駒、名將贈禮（裝備四欄 6.3）。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
+    防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
+
+    treasures: dict[str, TreasureDef] = Field(default_factory=dict)
+    steeds: dict[str, SteedDef] = Field(default_factory=dict)
+    gifts: list[GiftDef] = Field(default_factory=list)
 
 
 class Secrets(_Strict):
@@ -1553,6 +1658,36 @@ class Secrets(_Strict):
     chronicle: str = "{who}參透口訣，首創{thing}。"
 
 
+class ForgeSecretRules(_Strict):
+    """打造的隱藏配方與鑄器的口訣（打造隱藏配方設計第三、六、七節；tianxia/forge_secrets.py）。預設全關（測試內容沒有配方池），
+    正式值在 config.json。"""
+
+    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，打造第二批起照挑）
+    per_season: dict[str, int] = Field(default_factory=dict)
+    tale_chance: float = Field(default=0, ge=0, le=1)  # 說書事件（Config.secrets.tale_events）了結時，另擲一次多一句說書版鑄器口訣
+    smith_chance: float = Field(default=0, ge=0, le=1)  # 在鐵匠鋪花了銀兩或素材之後，鐵匠順口說出這家知道的那一句（鐵匠版）
+    scrap_chance: float = Field(default=0, ge=0, le=1)  # 探索最後撿到半張鑄譜（殘譜版）
+    # 寫給玩家看的字（待 joy 潤；{clue} 換成口訣、{who} 換成名號、{name} 換成名器的名字）
+    tale_frame: str = "說書先生又扯到一段兵器的掌故：「{clue}」"
+    smith_frame: str = "鐵匠一邊收錢一邊嘀咕：「{clue}」"
+    scrap_frame: str = "你在灰堆裡扒出半張燒焦的鑄譜，只認得出一句：「{clue}」"
+    first_line: str = "這是失傳的鑄法，江湖上你是第一個摸出來的。"
+    mine_line: str = "照你摸出來的鑄法，又打了一件。"
+    follow_line: str = "這門鑄法由{who}先摸出來，你也打成了。"
+    rumor: str = "{who}在鐵匠鋪摸出了一門失傳的鑄法，打出了【{name}】。"
+    # 神器（打造第二批；待 joy 潤；{who} 換成名號）
+    divine_line: str = "這是一把神器，這門鑄法這一季只出這一把原品——到修練頁的裝備庫替它定名。"
+    copy_line: str = "這門鑄法的原品在{who}手上，你打出的是仿品。"
+    copy_mine_line: str = "原品已經在你手上，這一爐打出的是仿品。"
+    divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
+    named_rumor: str = "{who}替手上的神器定了名，叫【{name}】。"  # 定名時的傳聞（7.2：帶名字的那一句）
+    named_chronicle: str = "{who}打出一把神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」）
+    # 三階素材的新來源（兵器設計 4.9；打造第二批，PM 決定第 7 條）：預設全關，正式值在 config.json。擲骰都用自己的亂數（Game._tier3）
+    challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
+    tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）
+    big_tier3: float = Field(default=0, ge=0, le=1)  # 大場面對手（不是本人那支隊伍）打贏，另擲一次三階素材；正式 0.25
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1560,6 +1695,39 @@ class FirstEcho(_Strict):
 
     fame_per: int = Field(default=1, ge=0)
     cap: int = Field(default=5, ge=1)
+
+
+class Biography(_Strict):
+    """玩家傳（企劃者 2026-10-12：「記錄玩家在大戰的行動還有一些值得紀錄的日常活動尤其跟每個歷史人物的對話互動，然後最後賽季結束時
+    凝結成一個某某傳」）。第一批只記行狀（tianxia/annals.py，PlayerState.annals）；每季都有，不掛第一季開關。"""
+
+    enabled: bool = True
+    # 行狀一季最多留幾則：超過就先丟份量最輕的、同份量丟最早的（annals.trim）。一季一百多個小時，決戰三場、人物十來位、
+    # 日常的大事幾十件；150 則夠一篇一兩千字的傳挑，存檔也只多十幾 KB
+    cap: int = Field(default=150, ge=10)
+    level_every: int = Field(default=5, ge=1)  # 等級每到這個倍數記一筆（第 5、10、15……級）
+    affinity_marks: list[int] = Field(default_factory=lambda: [20, 40, 60, 80])  # 跟人物的情誼往上跨過這幾格各記一筆
+    affinity_drop: int = Field(default=10, ge=1)  # 一個動作裡情誼掉這麼多就記一筆（交惡）
+    talk_swing: int = Field(default=5, ge=1)  # 對話一輪情誼動這麼多才記那一句（自己說的話不看這個，一律記）
+    # 第二批（季末寫成傳）：寫一篇最多等模型幾秒（鎖外、背景做，網頁每幾秒問一次寫好了沒，不受 trycloudflare 一個請求約 100 秒的限制）；
+    # 一篇一千多字，gemma4:26b 約一兩分鐘
+    budget_seconds: int = Field(default=240, ge=0)
+    rewrites: int = Field(default=1, ge=0)  # 寫成之後還能請史官重寫幾次（模型版、規則版都算）
+    # 分享網址的開頭（「https://tianxia.example.com」，不含結尾的斜線）。空字串＝照這次請求的網址組（trycloudflare 每次重開都換，
+    # 要長期分享得換具名 Tunnel 的固定網域，再把它寫在這裡；換網域不必改程式）
+    public_url: str = ""
+
+
+class FollowerTuning(_Strict):
+    """部下（PM 2026-10-12 派工：企劃者問「部下現在是不是沒有作用」）：武學成數跟著本人的等級長、全服決戰的份量。"""
+
+    # 部下的武學成數＝max(模板寫的成數, 本人等級 ÷ levels_per_cheng)，最多十成。跟著等級、不跟著晉升階：階只有 2～4 三格，
+    # 第 4 階還是每週輪替的席次（掉下來就回第 3 階），部下會忽強忽弱；等級一季從 1 長到二三十，跟玩家花的時間一起走。
+    # 3：開局第 1～8 級是模板的三成（拿到部下時大多已經在這一帶），第 9 級起每 3 級一成，第 30 級十成
+    levels_per_cheng: int = Field(default=3, ge=1)
+    # 全服決戰：每帶一名部下，強攻、奇襲的份量多幾成（加入時快照，跟職位、騎兵疊乘；固守不加——部下衝殺不守）。
+    # 0.05：兩名（第 2 階）+10%，跟一匹駑馬的騎兵（5%～15%）同一個量級；四名（第 4 階）+20%
+    battle_per: float = Field(default=0.05, ge=0)
 
 
 class Config(_Strict):
@@ -1596,7 +1764,7 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
-    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
+    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
     # 鎖內才取名的開爐）最多等幾秒：鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候照 ollama_timeout 的 120 秒會讓整台
     # 伺服器凍結好幾分鐘，試玩走的 trycloudflare 也會在約 100 秒切斷請求。Game._quick_client 給鎖內呼叫端這個逾時的複本
     # （引擎不讀時鐘，靠 HTTP 的逾時，跟 naming.propose 同一個做法）；逾時或失敗都退回固定的文字。這是硬上限：鎖內的呼叫
@@ -1616,6 +1784,7 @@ class Config(_Strict):
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
+    forge_secrets: ForgeSecretRules = Field(default_factory=ForgeSecretRules)  # 打造的隱藏配方（見 ForgeSecretRules）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
@@ -1623,7 +1792,10 @@ class Config(_Strict):
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
+    follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
+    treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
+    biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人
@@ -2698,6 +2870,7 @@ class Content(_Strict):
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
     duels: dict[str, DuelBoss] = Field(default_factory=dict)  # 單人頭目戰（content/duels.json）；沒有這個檔就是空的
+    gear: GearBook = Field(default_factory=GearBook)  # 寶物表、名駒、名將贈禮（content/gear.json，裝備三）；沒有這個檔就是空的
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）
@@ -2706,6 +2879,7 @@ class Content(_Strict):
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
+    forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示

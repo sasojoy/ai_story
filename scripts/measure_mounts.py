@@ -1,5 +1,5 @@
 """坐騎量表（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第十節第 2 項；裝備二）：整季機器人跑幾個種子，比開坐騎與關坐騎。
-只量不改；武器、防具照設定開著（兩邊一樣）。
+只量不改；武器、防具照設定開著（兩邊一樣）；寶物固定關著。
 
 每個種子、坐騎開關各一行：一季走了幾段（步行、趕路、疾行各幾段；包住 mounts.hunger，Game._arrivals 每換一段叫一次，
 坐騎關著也叫）；步行、趕路花的遊戲時間與「沒騎馬要花多少」（出發那一刻照 atlas.travel_seconds 與 mounts.pace 算）；趕路、疾行花的
@@ -82,6 +82,7 @@ def _steer(game, options, rng) -> str | None:
 def run(seed: int, profile: str | None, mounts_on: bool, steer: bool, gait: str, season_one: bool) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.mounts.enabled = mounts_on
+    content.config.treasures.enabled = False  # 只比這一欄：寶物固定關著，數字才跟前幾批量的對得上（寶物看 measure_treasures）
     if season_one:
         content.config.season_one = True
     gaits = random.Random(f"gait|{seed}")

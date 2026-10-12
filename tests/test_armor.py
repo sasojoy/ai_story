@@ -258,7 +258,7 @@ def test_rows_and_card_line(content, world):
     assert armor.card_line(s, content, ng) == "防具　【試甲】屬虛・一階下品・耐久度 80，一場少扣 8% 氣血（跟你的內功同屬性）"
     data = armor.rows(s, content, ng)
     assert data["worn"]["cut"] == "8%" and data["worn"]["confirm"] == "" and data["worn"]["grade"] == "一階下品"
-    assert data["worn"]["wear_word"] == equipment.WEAR_WORDS["armor"] == "耐久度" and "recipe" not in data["worn"]  # 配方等防具打造那一批
+    assert data["worn"]["wear_word"] == equipment.WEAR_WORDS["armor"] == "耐久度" and data["worn"]["recipe"] is None  # 不是自己打的：沒有配方
     assert [r["id"] for r in data["rack"]] == ["甲:2"]  # 裝備庫裡的兵器不列在防具那一段
     assert data["rack"][0]["fit"] == armor.CLASH_NOTE and data["rack"][0]["cut"] == "11%"  # 12＋2－3
     assert data["rack"][0]["confirm"] == "把【鐵葉甲】（二階中品）拆成玄鋼骨×1？拆掉就沒了。"
@@ -429,19 +429,22 @@ def test_with_both_on_the_smith_opens_on_the_weapon_page_and_switches(content, w
     assert len(game.state.journal) == entries  # 切頁不寫紀錄
     ids = list(_ids(game))
     assert ids[:4] == [f"{armor.BUY}{a}" for a in armor.SHOP_ATTRIBUTES] and ids[-2:] == ["smith:page:weapon", "smith:back"]
-    assert not any(i.startswith("smith:buy:") for i in ids) and smithing.OPEN not in ids  # 打造兵器…只在兵器頁
+    assert not any(i.startswith(("smith:buy:", smithing.KIND)) for i in ids)
+    assert _ids(game)[smithing.OPEN].label.startswith("打造防具…")  # 兩頁各有自己的打造入口（防具打造）
     game.choose("smith:page:weapon")
     assert p.smith_page == "weapon" and "smith:buy:劍" in _ids(game)
 
 
 def test_with_only_armor_on_the_smith_opens_on_the_armor_page_and_closes_away_from_town(content, world):
+    from tianxia import smithing
     game = _town(content, world)  # 武器關、防具開（測試內容的武器本來就關著）
     p = game.state.player
     assert "act:smith" in _ids(game)
     game.choose("act:smith")
     ids = list(_ids(game))
     assert p.smith_page == "armor" and ids[-1] == "smith:back"
-    assert not any(i.startswith(("smith:buy:", "smith:page:", "smith:forge")) for i in ids)  # 沒有灰掉的兵器鈕、沒有切頁
+    assert not any(i.startswith(("smith:buy:", "smith:page:", smithing.KIND)) for i in ids)  # 沒有灰掉的兵器鈕、沒有切頁
+    assert _ids(game)[smithing.OPEN].label.startswith("打造防具…")  # 只開防具：打造入口是防具的
     p.location = "lake"
     game.sync(1.0)
     assert not p.picking_smith and "act:smith" not in _ids(game)
@@ -516,6 +519,7 @@ def test_a_button_from_the_other_page_does_nothing(content, world):
 def test_a_forging_draft_is_dropped_when_weapons_close_and_the_armor_page_stays(content, world):
     """打造單子挑到一半時武器被關（內容改版、管理者改設定）、防具還開著：鐵匠鋪照開（只剩防具頁），單子要清掉——
     _smith_options 先看單子、後看停在哪一頁，不清的話畫出來的還是灰掉的兵器單子、沒有切頁鈕，只能按「不打了」。"""
+    from tianxia import smithing
     from tianxia.state import SmithDraft
     game = _town(content, world, weapons_on=True)
     p = game.state.player
@@ -526,7 +530,8 @@ def test_a_forging_draft_is_dropped_when_weapons_close_and_the_armor_page_stays(
     assert p.picking_smith and p.smith_draft is None
     ids = list(_ids(game))
     assert ids[:4] == [f"{armor.BUY}{a}" for a in armor.SHOP_ATTRIBUTES] and ids[-1] == "smith:back"
-    assert not any(i.startswith(("smith:forge", "smith:page:")) for i in ids)
+    assert not any(i.startswith((smithing.KIND, smithing.MAIN, "smith:page:")) for i in ids)  # 兵器的單子清掉了
+    assert _ids(game)[smithing.OPEN].label.startswith("打造防具…")
     p.smith_draft = SmithDraft(kind="劍")
     game._drop_stale_references()  # 存檔修補也清
     assert p.picking_smith and p.smith_draft is None

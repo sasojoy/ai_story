@@ -21,22 +21,22 @@ class Slot:
     """一欄（裝備四欄設計 3.1、3.2）。"""
 
     rules: str  # Config 上那一組設定的名字：它的 enabled 就是這一欄開著沒（2.6）
-    warned: str  # PlayerState 上這一欄「磨損低了提醒過」的旗標；換一件、修好時重設
+    warned: str  # PlayerState 上這一欄「磨損低了提醒過」的旗標；換一件、修好時重設；沒有磨損的欄位（寶物）是空字串
     prefix: str  # 新的一件的 id 開頭（「兵:N」「甲:N」，共用 PlayerState.weapon_serial）
     label: str  # 修練頁「裝備」那一段的名字
     put_on: str  # 拿到新東西、這一欄身上空著時那一句
     road_locked: bool = False  # 路上不能換（裝備四欄 2.3：坐騎的快慢出發時就算進抵達時刻，路上換了也不會變快）
 
 
-# 武器、防具（裝備一）、坐騎（裝備二）；寶物（寶）在裝備三加一列（PlayerState 同時加那一欄）。表外的欄位（裝備庫裡混進來的寶物）
-# 一律當關著：不列、不能換、不能拆（3.3）
+# 武器、防具（裝備一）、坐騎（裝備二）、寶物（裝備三）。表外的欄位一律當關著：不列、不能換、不能拆（3.3）
 SLOTS: dict[str, Slot] = {
     "weapon": Slot(rules="weapons", warned="edge_warned", prefix="兵", label="武器", put_on="你把【{name}】拿在手上。"),
     "armor": Slot(rules="armor", warned="armor_warned", prefix="甲", label="防具", put_on="你穿上了【{name}】。"),  # 待 joy 潤
     "mount": Slot(rules="mounts", warned="hunger_warned", prefix="騎", label="坐騎", put_on="你騎上了【{name}】。", road_locked=True),  # 待 joy 潤
+    "treasure": Slot(rules="treasures", warned="", prefix="寶", label="寶物", put_on="你把【{name}】帶在身上。"),  # 待 joy 潤；隨時能換（2.3）
 }
 WEAR_WORDS = {"weapon": "鋒利度", "armor": "耐久度", "mount": "飽足度"}  # 待 joy 潤：Equipment.edge 在各欄叫什麼（3.1、2.5）；防具這一側都讀這裡（armor.WEAR_WORD），武器那一側的舊字這一批不動
-WIELDABLE = ("weapon", "armor", "mount")  # 修練頁「換上」收哪幾欄（2.3：武器、防具隨時能換；坐騎路上不能換〔Slot.road_locked〕；寶物的限制等裝備三）
+WIELDABLE = ("weapon", "armor", "mount", "treasure")  # 修練頁「換上」收哪幾欄（2.3：武器、防具、寶物隨時能換〔寶物不設限制，企劃者 2026-10-11〕；坐騎路上不能換〔Slot.road_locked〕）
 ROAD_LOCKED = "在路上不能換{label}。"  # 待 joy 潤
 DISMANTLABLE = ("weapon", "armor")  # 拆得了的（4.8：坐騎、寶物沒有屬性，也不該拆成素材）
 
@@ -50,12 +50,18 @@ WIELD_MISSING = "裝備庫上沒有這一件。"  # 待 joy 潤（原本 weapons
 WIELDED = "你換上了【{name}】。"  # Game.wield_weapon 照開頭「你換上了」寫修練紀錄
 NOT_NOW = "（此刻無法這麼做。）"
 TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
+NAMED_MARK = "・名器"  # 待 joy 潤：照隱藏配方打出來的那一件，階品後面多這一段（打造隱藏配方設計 4.2）
+DIVINE_MARK = "・神器"  # 待 joy 潤：神器原品，階品後面多這一段（打造隱藏配方設計 5.3）
+COPY_MARK = "・仿品"  # 待 joy 潤：神器仿品
 DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
 DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
+WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
 DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
+ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
+ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
 
 
 def on(content: Content, slot: str) -> bool:
@@ -98,7 +104,8 @@ def store(state: GameState, item: Equipment) -> str:
     entry = SLOTS[item.slot]
     if worn(p, item.slot) is None:
         setattr(p, item.slot, item)
-        setattr(p, entry.warned, False)
+        if entry.warned:
+            setattr(p, entry.warned, False)  # 寶物沒有磨損、沒有提醒旗標（warned 是空字串）
         return entry.put_on.format(name=item.name)
     p.rack.append(item)
     return STORED.format(name=item.name)
@@ -110,8 +117,8 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
 
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
-    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
-    開著的欄位裡找不到是 WIELD_MISSING（表外的寶物也是找不到）。"""
+    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼（寶物也是，2.3【定】）。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
+    開著的欄位裡找不到是 WIELD_MISSING（表外的欄位也是找不到）。"""
     p = state.player
     chosen = _find(p, item_id, slots)
     if chosen is None:
@@ -125,13 +132,29 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
     if current is not None:
         p.rack.append(current)
     setattr(p, chosen.slot, chosen)
-    setattr(p, SLOTS[chosen.slot].warned, False)  # 換上來的是另一件：磨損低了要有它自己的提醒
+    if SLOTS[chosen.slot].warned:
+        setattr(p, SLOTS[chosen.slot].warned, False)  # 換上來的是另一件：磨損低了要有它自己的提醒（寶物沒有磨損）
     return [WIELDED.format(name=chosen.name)]
 
 
 def grade(item: Equipment) -> str:
-    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）。"""
-    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}"
+    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接一段（打造隱藏配方設計 4.2、5.3；只看存檔的欄位，
+    不查內容）：神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
+    if item.original:
+        mark = DIVINE_MARK
+    elif item.copy_of is not None:
+        mark = COPY_MARK
+    elif item.secret is not None:
+        mark = NAMED_MARK
+    else:
+        mark = ""
+    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}{mark}"
+
+
+def named(content: Content, item: Equipment | None) -> bool:
+    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
+    return (item is not None and item.secret is not None and item.secret in content.forge_secrets
+            and item.copy_of is None and not item.original)
 
 
 def grade_line(item: Equipment) -> str:
@@ -171,6 +194,8 @@ def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str
         return [DISMANTLE_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW]
     if not on(content, chosen.slot):
         return [NOT_NOW]
+    if chosen.original:
+        return [ORIGINAL_KEPT_LINE]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
     material = dismantle_material(content, chosen)
     p.rack.remove(chosen)
     p.materials[material.id] = p.materials.get(material.id, 0) + 1

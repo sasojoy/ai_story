@@ -16,5 +16,7 @@
   "showdown_pay": {"silver": 0, "exp": 0, "contrib_push": 0, "win_contrib_push": {}},
   "weapons": {"enabled": false},
   "armor": {"enabled": false},
-  "mounts": {"enabled": false}
+  "mounts": {"enabled": false},
+  "treasures": {"enabled": false},
+  "biography": {"enabled": false}
 }

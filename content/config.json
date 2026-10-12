@@ -72,6 +72,14 @@
       "setting_good": "爐火正旺，鐵匠說這一爐的火候對得出奇。"
     }
   },
+  "armor": {
+    "quality": {
+      "terrain": 10,
+      "battlefield": 10,
+      "calm": 8,
+      "setting_good": "爐火正旺，鐵匠說這一爐的火候對得出奇。"
+    }
+  },
   "secrets": {
     "quality_points": 30,
     "insight_points": 10,
@@ -79,5 +87,14 @@
     "tale_chance": 0.8,
     "scrap_chance": 0.06,
     "talk_affinity": 20
+  },
+  "forge_secrets": {
+    "per_season": {"weapon:1": 2, "weapon:2": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:divine": 1},
+    "tale_chance": 0.5,
+    "smith_chance": 0.25,
+    "scrap_chance": 0.04,
+    "challenge_tier3": 1,
+    "tier3_per_figure": 2,
+    "big_tier3": 0.25
   }
 }

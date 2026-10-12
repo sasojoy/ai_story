@@ -31,7 +31,7 @@ const document = {
   querySelectorAll: (sel) => els.filter((el) => matches(el, sel)),
 };
 let renders = 0;
-const S = { busy: false, answering: false, wheelSel: null, main: { options: input.options } };
+const S = { busy: !!input.already, answering: false, wheelSel: null, main: { options: input.options } };
 const calls = { applied: 0, toasts: [] };
 const redraw = () => { // 重畫：全部元素換成新的（沒有 busy、字回到原本）
   for (const el of els) { el.classList.remove("busy"); el.disabled = false; el.lastElementChild.textContent = el.orig; }
@@ -39,7 +39,7 @@ const redraw = () => { // 重畫：全部元素換成新的（沒有 busy、字�
 const renderPage = () => { renders += 1; redraw(); };
 const fns = new Function(
   "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION", "SENSE_DRAW", "SAY_OPTION",
-  `let lastAction = 0;${slice("async function busy(")}${slice("async function choose(")}\nreturn { choose };`,
+  `let lastAction = 0;${busyKit()}${slice("async function choose(")}\nreturn { choose };`,
 )(S, document, renderPage,
   async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: "" }; },
   () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw", "talk:say");  // applyMain 也是整頁重畫
@@ -82,3 +82,11 @@ def test_a_request_that_went_through_is_left_to_the_normal_render():
     """成功的路徑不由 choose 重畫（applyMain 會畫），也不多畫一次。"""
     got = run(cls="act-ink", inOptions=False, id="act:socialize", refuse=False)
     assert got["renders"] == 0 and got["applied"] == 1
+
+
+def test_a_press_while_the_last_action_is_still_waiting_leaves_its_busy_mark_alone():
+    """上一個動作還在等（S.busy）時又按了別的：這一下沒送出去，不能當成「失敗了」去重畫——那會把上一顆還在等的「處理中」抹掉
+    （截圖時按了探索再按打坐，探索那一格的等待樣子不見了）。"""
+    got = run(cls="act-ink busy", inOptions=False, id="act:rest", already=True, refuse=False)
+    assert got["renders"] == 0 and got["applied"] == 0
+    assert got["busy"] is True  # 上一顆的「處理中」還在

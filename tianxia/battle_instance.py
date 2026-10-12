@@ -24,7 +24,7 @@ from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
-from . import encounter, zh
+from . import encounter, gender, zh
 from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
 from .ollama_client import OllamaClient
 
@@ -58,6 +58,21 @@ def shove(side: str, delta: int) -> str:
 
 DEFAULT_FREE_TEXT_SUCCESS_RATE = 40  # LLM 評估失敗/無 client 時的保底值——明顯偏低（放手一搏預設不利），
 # 不是 50/50，呼應「不會全程 LLM 自由發展」的框架精神：評不出來就當作風險自負，不讓機制因為評估失敗而意外變得穩賺不賠。
+
+
+GAMBLES_KEPT = 6  # 每個參戰者記幾次放手一搏給行狀（一幕最多搏 per_act 次，三幕的仗夠用）
+
+
+class GambleMoment(BaseModel):
+    """一次放手一搏（收場時挑「最有戲」的那一次寫進傳聞，試玩回饋 2026-10-08）。"""
+
+    name: str
+    faction: str
+    text: str
+    story: str = ""  # 播出來的那一版劇情；模型沒寫是空的
+    rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
+    won: bool
+    target: str = ""  # 點名的那個人（find_target）；沒點名是空的（玩家傳的行狀寫；舊資料沒有）
 
 
 class BattleParticipant(BaseModel):
@@ -104,17 +119,10 @@ class BattleParticipant(BaseModel):
     # 以下是裝備二（坐騎）加的（舊資料沒有這兩欄就是預設值）
     mount: str = ""  # 加入時騎的馬名（裝備四欄 5.9：決戰畫面、戰報寫）；沒騎馬是空的
     cavalry: float = 0.0  # 加入時的騎兵加成（強攻、奇襲的份量已經乘過，這裡只給畫面寫幾成）
-
-
-class GambleMoment(BaseModel):
-    """一次放手一搏（收場時挑「最有戲」的那一次寫進傳聞，試玩回饋 2026-10-08）。"""
-
-    name: str
-    faction: str
-    text: str
-    story: str = ""  # 播出來的那一版劇情；模型沒寫是空的
-    rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
-    won: bool
+    # 部下上陣（PM 2026-10-12）：舊資料沒有這兩欄就是沒帶部下
+    troops: str = ""  # 加入時帶的部下（team.troop_names：「兩名持矛鄉勇」）；沒帶是空的
+    gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
+    troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
 
 
 def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
@@ -295,9 +303,11 @@ def strength(tuning: BattleTuning, power: float) -> float:
 
 def move_scores(
     tuning: BattleTuning, power: float, outer: str | None, inner: str | None, role: str = "", cavalry: float = 0.0,
+    troops: float = 0.0,
 ) -> dict[str, float]:
     """這個人每一招的份量（還沒乘氣血狀態，戰鬥系統 3.4）：實力 × 適性 ÷ 100，職位拿手的那一招再乘（1＋role_move_bonus），
-    騎著馬時強攻、奇襲再乘（1＋cavalry）（裝備四欄 5.9：跟職位疊乘；cavalry 是 mounts.cavalry，已經乘過飽足係數）。
+    騎著馬時強攻、奇襲再乘（1＋cavalry）（裝備四欄 5.9：跟職位疊乘；cavalry 是 mounts.cavalry，已經乘過飽足係數）；
+    帶著部下時強攻、奇襲再乘（1＋troops）（PM 2026-10-12：每名部下 Config.follower.battle_per，跟職位、騎兵疊乘）。
     實力見 strength；適性 ＝ 75 ± 武學（招式）屬性 15 ± 內功屬性 10，夾在 50～100。
     outer／inner 是武學與內功的屬性（沒學是 None，不加減）。加入戰局時由那個玩家自己的 Game 算好快照進來。
     最後只 round 一次：沒騎馬時乘的是 1，數字跟以前一模一樣。"""
@@ -309,7 +319,7 @@ def move_scores(
             good, bad = tuning.affinity.get(attribute, (None, None)) if attribute else (None, None)
             fit += step if move == good else -step if move == bad else 0.0
         bonus = 1 + tuning.role_move_bonus if ROLE_MOVES.get(role) == move else 1.0
-        ride = 1 + cavalry if move in CAVALRY_MOVES else 1.0
+        ride = (1 + cavalry) * (1 + troops) if move in CAVALRY_MOVES else 1.0
         scores[move] = round(base * max(50.0, min(100.0, fit)) / 100 * bonus * ride, 1)
     return scores
 
@@ -317,15 +327,17 @@ def move_scores(
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
+    troops: str = "", troop_bonus: float = 0.0,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
-    mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。"""
+    mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
+        troops=troops, troop_bonus=troop_bonus,
     )
 
 
@@ -348,10 +360,10 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
 def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
-    attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
+    attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores、mount、cavalry 同 join_faction。"""
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores、mount、cavalry、troops、troop_bonus 同 join_faction。"""
     if faction not in sides(definition):
         armies = [f.id for f in definition.factions]
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
@@ -359,6 +371,7 @@ def auto_assign_latecomer(
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
+        troops=troops, troop_bonus=troop_bonus,
     )
 
 
@@ -744,8 +757,10 @@ def resolve_round(
             if custom_text:
                 moment = GambleMoment(
                     name=name, faction=p.faction, text=custom_text, story=win_story if succeeded else lose_story,
-                    rate=assessed, won=succeeded,
+                    rate=assessed, won=succeeded, target=target.name if target is not None else "",
                 )
+                if len(p.gambles) < GAMBLES_KEPT:
+                    p.gambles.append(moment)
                 if more_dramatic(moment, instance.highlight):
                     instance.highlight = moment
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
@@ -1304,7 +1319,7 @@ def assess_action_success_rate(
 
 def assess_gamble(
     client: OllamaClient | None, act: BattleAct, faction_name: str, text: str, name: str = "",
-    setting: str = "漢末兩軍交戰的戰場", place: str = "戰場", target: str = "",
+    setting: str = "漢末兩軍交戰的戰場", place: str = "戰場", target: str = "", sex: str = "男",
 ) -> GambleVerdict:
     """請 LLM 評估這段自訂行動聽起來有多可能成功（0~100）——只評機率，不評「成不成功」
     本身（那是 resolve_round 擲骰決定的），也不會被拿去當作任何數值直接套用，只是擲骰
@@ -1312,10 +1327,11 @@ def assess_gamble(
     不會讓整個行動失敗——這類評估本來就是錦上添花，寧可給一個偏低的保守值，也不要卡住
     玩家的回合。
     act 只讀 title 與 text（單人頭目戰傳 duel 的 Scene）；setting、place 換掉提示裡的「漢末兩軍交戰的戰場」與「戰場」。
-    target 是玩家點名的對手（target_line，引擎認的）：多給模型一行，成功率要反映打的是誰。"""
+    target 是玩家點名的對手（target_line，引擎認的）：多給模型一行，成功率要反映打的是誰。
+    sex 是玩家的性別（gender）：女的提示多一行，劇情裡的稱呼跟著換（PM 2026-10-12）。"""
     if client is None:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
-    who = name or "這位少俠"
+    who = name or "這位" + gender.hero(sex)
     messages = [
         {"role": "system", "content": (
             f"你是{setting}判定系統，也是說書人。第一件事：評估玩家描述的行動在{place}上合理的成功機率，"
@@ -1323,6 +1339,7 @@ def assess_gamble(
             "第二件事：替這個行動寫兩版結果，win 是成功的那一版、lose 是失敗的那一版，各一句、40 字以內、繁體中文，"
             f"以「{who}」開頭。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
             "不要寫任何數字、不要寫戰局推進多少或扣多少氣血，也不要替玩家決定最後的勝負以外的事。"
+            + gender.prompt_line(sex)
         )},
         {"role": "user", "content": (
             f"{place}情境：【{act.title}】{act.text}\n玩家所屬：{faction_name}\n"

@@ -41,7 +41,7 @@ def per_post_seconds(client, left: float) -> float | None:
 @dataclass(frozen=True)
 class NamingRequest:
     """A 段（行動鎖內、很快）開的單子：這一爐要模型取名或挑一個時，B 段需要的全部東西。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。
-    kind 是 "fuse"（武學＋意境）、"merge"（意境＋意境）或 "blend"（武學＋武學）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）；兵器（kind "weapon"）是兵器種類。
+    kind 是 "fuse"（武學＋意境）、"merge"（意境＋意境）或 "blend"（武學＋武學）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）。
     choices 不是空的：這一爐合到舊的（武學與成長設計 12.2），模型只能從這幾個名字裡挑一個（naming.pick），不取新名字。"""
 
     kind: str
@@ -49,8 +49,6 @@ class NamingRequest:
     name_kind: str
     messages: list[dict[str, str]]
     choices: tuple[str, ...] = ()
-    # 名字另外要過的檢查（兵器：要帶這一種兵器的字、不能有別種的字，weapons.kind_problem）；None＝沒有。B 段的 propose 與 C 段的 recheck 都跑
-    check: Callable[[str], str | None] | None = None
 
 
 SYSTEM_PROMPT = (
@@ -82,12 +80,16 @@ def clean_name(raw: str) -> str:
 PersonCheck = Callable[[str], bool]  # 這個名字是不是江湖上某個角色的名號（WorldStateStore.is_character_name）
 PERSON_CLASH = "跟江湖上的人物同名"  # 真人、假人都回這一句：看不出那個名號是不是假人（FB-069）
 PRESET_CLASH = "跟師門傳下來的武學同名"  # 師門配方（content/preset_recipes.json，新手引導計畫一）的名字：模型、玩家取的名字不能撞它（name_problem）
+GEAR_CLASH = "跟江湖上的寶物、名駒同名"  # 待 joy 潤：content/gear.json 的寶物與名駒（裝備三；防具打造計畫 PM 決定第 4 條留下的）
+FORGE_CLASH = "跟失傳的鑄法同名"  # 待 joy 潤：隱藏配方（content/forge_secrets.json）的名器名（打造隱藏配方設計 3.1）
 
 
 def name_problem(name: str, content: Content, person: PersonCheck | None = None) -> str | None:
     """名字過不了過濾的原因；None＝可以用。全服重名不在這裡查（那要看資料庫，見 world.is_skill_name_taken）。
     person 給了就也擋角色的名號（FB-069：玩家定名、模型取名、鎖內重驗都給 world.is_character_name；
-    內容的驗證與退路字表只看內容、不給）。排在字數之後、字元之前，所以換了大小寫的英文名號也回同一句話。"""
+    內容的驗證與退路字表只看內容、不給）。排在字數之後、字元之前，所以換了大小寫的英文名號也回同一句話。
+    寶物、名駒、隱藏配方的名器名也擋（打造隱藏配方設計 3.1）：寶物排在隱藏配方前面，隱藏配方驗自己的名字時收 FORGE_CLASH，
+    跟寶物同名的話先回 GEAR_CLASH，載入時才擋得到。"""
     if not (NAME_MIN_CHARS <= len(name) <= NAME_MAX_CHARS):
         return f"長度要 {NAME_MIN_CHARS}~{NAME_MAX_CHARS} 個字"
     if person is not None and person(name):
@@ -107,6 +109,10 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
         return "跟意境同名"
     if any(name == recipe.name for recipe in content.preset_recipes):
         return PRESET_CLASH  # 師門配方的名字留給那一筆配方（新手引導計畫一）
+    if any(name == item.name for item in [*content.gear.treasures.values(), *content.gear.steeds.values()]):
+        return GEAR_CLASH
+    if any(name == recipe.name for recipe in content.forge_secrets.values()):
+        return FORGE_CLASH  # 名器的名字留給那一條隱藏配方：模型替武學、意境取名，玩家替絕學（之後神器）定名都取不到
     return None
 
 
@@ -148,7 +154,7 @@ def _ask(
 
 def propose(
     client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
-    person: PersonCheck | None = None, check: Callable[[str], str | None] | None = None,
+    person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
     """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
     client 是 None（鎖內的 Game 沒有 client：伺服器假人的 Game，bot_runner 把 game.client 設成 None）時不叫模型；
@@ -163,7 +169,7 @@ def propose(
 
     def accept(reply: NameReply) -> tuple[str, str] | None:
         name = clean_name(reply.name)
-        if name_problem(name, content, person) is not None or (check is not None and check(name) is not None):
+        if name_problem(name, content, person) is not None:
             return None
         return name, zh.to_traditional((reply.description or "").strip())
 
@@ -195,12 +201,11 @@ def generate(
     person 是角色名號的查詢（server 與假人程式都給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
     if request.choices:
         return pick(client, request.messages, request.choices, budget=budget)
-    return propose(client, content, request.messages, budget=budget, person=person, check=request.check)
+    return propose(client, content, request.messages, budget=budget, person=person)
 
 
 def recheck(
     content: Content, proposed: tuple[str | None, str], person: PersonCheck | None = None,
-    check: Callable[[str], str | None] | None = None,
 ) -> tuple[str | None, str]:
     """C 段（鎖內）登記之前，把鎖外拿到的名字再過一次完整的過濾：整理包裝、轉繁體（含異體字表）、長度與字、禁用詞、
     跟素材／人物／內容武學／意境同名，給了 person 也擋角色的名號（FB-069）。過不了就是 (None, "")，呼叫端走退路字表。
@@ -210,7 +215,7 @@ def recheck(
     if name is None:
         return None, ""
     name = clean_name(name)
-    if name_problem(name, content, person) is not None or (check is not None and check(name) is not None):
+    if name_problem(name, content, person) is not None:
         return None, ""
     return name, zh.to_traditional((note or "").strip())
 

@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import glyph, insight_llm, insights, mounts, naming
+from . import gender, glyph, insight_llm, insights, mounts, naming
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -278,6 +278,7 @@ def request(
     facts = {
         "place": loc.name, "scene": scene.title, "text": scene.text.replace("{痕跡}", "").strip(),
         "method": method.text, "mood": mood or "（沒有畫）", "attribute": attribute,
+        "him": gender.pronoun(state),  # 提示裡稱玩家他／她（PM 2026-10-12）
     }
     return SenseRequest(
         serial=s.serial, location=loc.id, method=s.method or "", drawn=drawn, attribute=attribute, base=base, mood=mood,

@@ -252,3 +252,111 @@ def test_the_feed_button_calls_the_feed_action(views):
     x["gear"] = _mount_gear(_mount_row())
     reply = {"/api/menxia/feed": {"menxia": x, "message": "", "main": m}}
     assert run(m, _FEED_CLICK, menxia=x, responses=reply) == ["/api/menxia/feed"]
+
+
+def _treasure_gear(worn=None, rack=(), held_note=""):
+    """修練頁「裝備」只有寶物那一段（server.menxia_view 的 gear，skillview.gear_rows）。"""
+    return {"cap": 100, "used": len(rack), "held_note": held_note, "slots": [{
+        "slot": "treasure", "label": "寶物", "empty": "身上沒有寶物。", "note": "寶物買不到、打不出。",
+        "worn": worn, "rack": list(rack),
+    }]}
+
+
+def _treasure_row(**over):
+    return {"id": "寶:1", "name": "烏木名刺", "effect": "audience", "effect_text": "求見門檻 −3", **over}
+
+
+def test_the_treasure_slot_draws_the_effect_and_only_wield(views):
+    """寶物那一段（裝備四欄 2.5、第六節）：身上那件寫效果，裝備庫裡的只有「換上」，而且永遠按得下（寶物隨時能換，2.3【定】）；
+    寶物不能拆（4.8）。字都跳脫。"""
+    m, x = views
+    spare = _treasure_row(id="寶:2", name="<i>拾遺囊</i>", effect="win_material", effect_text="打贏時有 25% 的機會多掉一個素材")
+    x["gear"] = _treasure_gear(_treasure_row(), [spare])
+    block = _slot_block(run(m, "return H.pagePractice();", menxia=x), "treasure")
+    assert "【烏木名刺】" in block and "求見門檻 −3" in block and "打贏時有 25% 的機會多掉一個素材" in block
+    assert 'data-act="wield" data-id="寶:2">' in block and block.count('data-act="wield"') == 1
+    assert 'data-act="dismantle"' not in block and " disabled" not in block
+    assert "&lt;i&gt;拾遺囊&lt;/i&gt;" in block and "<i>拾遺囊</i>" not in block
+
+
+def test_held_gear_is_mentioned_under_the_gear_block(views):
+    m, x = views
+    x["gear"] = _treasure_gear(None, [], held_note="寄放著：【叩關玉】")
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert "寄放著：【叩關玉】" in page  # 身上與裝備庫都空著，寄放的那一行照樣畫（不然玩家以為東西作廢了）
+
+def test_armor_rows_show_tempers_and_the_recipe(views):
+    """防具打造：防具列跟武器列一樣，淬過的寫「淬煉 N/M」，自己打的寫配方；沒淬過、買的不寫。"""
+    m, x = views
+    x["gear"] = _gear(armor={"worn": _armor_row(grade="一階中品", tempers=2, temper_max=5, recipe="精鐵砂＋驚羽"), "rack": []})
+    block = _slot_block(run(m, "return H.pagePractice();", menxia=x), "armor")
+    assert "淬煉 2/5" in block and "配方 精鐵砂＋驚羽" in block and "一階中品" in block
+    x["gear"]["slots"][0]["worn"] = _armor_row(tempers=0, temper_max=5, recipe=None)
+    plain = _slot_block(run(m, "return H.pagePractice();", menxia=x), "armor")
+    assert "淬煉 0" not in plain and "配方 " not in plain
+
+
+def test_an_unnamed_original_shows_a_naming_form_and_a_greyed_dismantle(views):
+    """打造隱藏配方設計 5.2、5.4：還沒定名的原品那一列底下一張定名表單（自己打、或「沿用譜名【…】」），身上那把也有；
+    原品的拆解鈕灰掉寫原因。字都跳脫。"""
+    m, x = views
+    pending = {"pattern": "<b>墜星劍</b>"}
+    x["gear"] = _gear(weapon={
+        "worn": _row(name="無名神器", grade="三階上品・神器", confirm="", keep="原品不能拆", divine=pending),
+        "rack": [_row(id="兵:2", name="無名神器", grade="三階上品・神器", confirm="", keep="原品不能拆", divine={"pattern": "鎮星刀"}),
+                 _row(id="兵:3", name="仿・斬月", grade="三階上品・仿品", confirm="問", keep="", divine=None)],
+    })
+    block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    assert block.count('data-op="name-divine"') == 2 and 'data-act="divine-keep" data-id="兵:2"' in block
+    assert "沿用譜名【鎮星刀】" in block and "&lt;b&gt;墜星劍&lt;/b&gt;" in block and "<b>墜星劍</b>" not in block
+    assert 'data-act="dismantle" data-id="兵:2"' not in block and "原品不能拆" in block  # 原品的拆解灰掉
+    assert 'data-act="dismantle" data-id="兵:3"' in block  # 仿品照拆
+
+
+_DIVINE_SUBMIT = """return (async () => {
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };  // 假瀏覽器沒有 FormData：表單的欄位直接給
+  const note = { textContent: "", classList: { toggle() {} } };
+  const form = { id: "name-divine-兵:2", dataset: { op: "name-divine", id: "兵:2" }, data: { name: " 斬月 " },
+                 querySelector: (sel) => (sel === ".form-msg" ? note : null) };
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  await click({ act: "divine-keep", id: "兵:2" });
+  return T.calls.map((c) => [c[0], c[1]]);
+})();"""
+
+
+def test_naming_an_original_posts_the_name_or_keep(views):
+    m, x = views
+    x["gear"] = _gear(weapon={"worn": None, "rack": [_row(id="兵:2", keep="原品不能拆", divine={"pattern": "墜星劍"})]})
+    reply = {"/api/menxia/name_divine": {"menxia": x, "message": "", "main": m}}
+    calls = run(m, _DIVINE_SUBMIT, menxia=x, responses=reply)
+    posts = [c[1] for c in calls if c[0] == "/api/menxia/name_divine"]
+    # mx 每一次都另帶 person、kind（S.person 是 null 也照送），只比這三個鍵
+    assert [(b.get("weapon"), b.get("name"), b.get("keep")) for b in posts] == [("兵:2", "斬月", None), ("兵:2", None, True)]
+
+
+_DIVINE_REFUSED = """return (async () => {
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };
+  const input = { value: "" };
+  const wanted = (id) => id === "name-divine-兵:2";
+  const real = T.ctx.document.getElementById;
+  // 被拒了：伺服器回來重畫的表單還在（假瀏覽器沒有真的 DOM，這裡替它放一張）；定成了的那一列不再畫表單，getElementById 找不到
+  let still = true;
+  T.ctx.document.getElementById = (id) => (wanted(id) && still ? { querySelector: (sel) => (sel === 'input[name="name"]' ? input : null) } : real(id));
+  const form = { id: "name-divine-兵:2", dataset: { op: "name-divine", id: "兵:2" }, data: { name: "斬月刀" }, querySelector: () => null };
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const kept = input.value;
+  still = false;
+  input.value = "";
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  return [kept, input.value];
+})();"""
+
+
+def test_a_refused_divine_name_stays_in_the_box_like_the_art_naming_form(views):
+    """終審 M4：定名被伺服器拒絕（名字不合格、有人用了），重畫出來的表單是空的——把剛打的字放回去，不用重打（同絕學定名那張）。
+    定成了那一列不再畫表單（找不到就什麼都不放）。表單 id 帶冒號，用 getElementById 找，不走選擇器。"""
+    m, x = views
+    x["gear"] = _gear(weapon={"worn": None, "rack": [_row(id="兵:2", keep="原品不能拆", divine={"pattern": "墜星劍"})]})
+    reply = {"/api/menxia/name_divine": {"menxia": x, "message": "這個名字不行。", "main": m}}
+    assert run(m, _DIVINE_REFUSED, menxia=x, responses=reply) == ["斬月刀", ""]

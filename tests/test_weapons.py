@@ -883,9 +883,9 @@ def test_a_rack_with_all_four_slots_only_shows_each_slot_its_own(content, world)
     for item_id in ("甲:3", "騎:4", "寶:5"):
         assert weapons.wield(game.state, content, item_id) == [equipment.WIELD_MISSING]
         assert weapons.dismantle(game.state, content, item_id) == [equipment.DISMANTLE_MISSING]
-    # 修練頁的換上收武器、防具、坐騎（equipment.WIELDABLE，裝備二）：坐騎關著時找到了也是 NOT_NOW；寶物不在表裡，找不到
+    # 修練頁的換上收武器、防具、坐騎、寶物（equipment.WIELDABLE，裝備二、三）：坐騎、寶物關著時找到了也是 NOT_NOW
     assert game.wield_weapon("騎:4") == [equipment.NOT_NOW]
-    assert game.wield_weapon("寶:5") == [equipment.WIELD_MISSING]
+    assert game.wield_weapon("寶:5") == [equipment.NOT_NOW]  # 修練頁的換上收寶物（裝備三）：寶物關著時找到了也是 NOT_NOW
     for item_id in ("騎:4", "寶:5"):
         assert game.dismantle_weapon(item_id) == [equipment.DISMANTLE_MISSING]
     assert p.weapon is None and len(p.rack) == 4 and p.materials == {}

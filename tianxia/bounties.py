@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, library, materials, ranger, roster, team, weapons
+from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Content, Location
@@ -61,6 +61,8 @@ UNNAMED = "先替它定名，再談交出去。"  # 待 joy 潤
 NO_DATA = "找不到它的資料。"  # 待 joy 潤
 WANT_ART = "這一張要屬{attribute}的。"  # 待 joy 潤
 NO_WEAPON = "裝備庫裡沒有這一件。"  # 待 joy 潤
+ORIGINAL_KEPT = "神器的原品交不得"  # 待 joy 潤（打造隱藏配方設計 5.4：手上那把也不收）
+ONLY_ORIGINAL = "（你身上對得上的只有神器的原品，原品交不得）"  # 待 joy 潤：灰掉那一行裡、只有原品對得上的那一張後面（FB-145）
 WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
@@ -141,7 +143,7 @@ def how(content: Content, b: Bounty) -> str:
         return f"在城鎮的懸賞榜交出一門屬{b.attribute}、合成出來的武學或內功（交了就沒了）"
     if b.kind == "arms":  # 待 joy 潤；手上那把也收（企劃者 2026-10-10，懸賞榜設計 14.1 丙）
         return f"在城鎮的懸賞榜交出一把屬{b.attribute}的{_noun(b)}（裝備庫裡、手上的都行，什麼品質都收，交了就沒了）"
-    return f"找到{b.target}，在他的玩家卡上截殺並打贏他"
+    return f"找到{b.target}，在對方的玩家卡上截殺並打贏"
 
 
 def _enemy_name(content: Content, b: Bounty) -> str:
@@ -291,6 +293,8 @@ def reward_text(state: GameState, content: Content, b: Bounty) -> str:
     text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") + (f"・俠名 +{deeds}" if deeds else "")
     if b.kind == "art":
         text += ART_GIFTS if content.config.weapons.enabled else "・素材"
+    if b.prize and not b.done_by and treasures.prize_on(content, b.prize):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
+        text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
     return text
 
 
@@ -336,9 +340,10 @@ def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
 
 
 def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bounty, silver: int | None = None) -> list[str]:
-    """交差：記進 done_by、拿掉 takers，發銀兩（silver 是求兵照那一把傳進來的底數，交給 _silver 乘加成）、經驗、散人的俠名。"""
+    """交差：記進 done_by、拿掉 takers，發銀兩（silver 是求兵照那一把傳進來的底數，交給 _silver 乘加成）、經驗、散人的俠名；這一張有重賞、你是第一個交差的，另給重賞（treasures.bounty_prize）。"""
     p = state.player
     name = name_key(p.name)
+    first = not b.done_by  # 重賞只給第一個交差的人（裝備四欄 6.4）：記進 done_by 之前看
     b.takers = [t for t in b.takers if name_key(t) != name]
     b.done_by.append(p.name)
     silver = _silver(state, content, b, base=silver)
@@ -352,6 +357,8 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     deeds = ranger.add_deeds(state, content, b.deeds)
     if deeds:
         msgs.insert(2, f"俠名 +{deeds}")
+    if b.prize and first:  # 哪一件到這一刻才定（季數＋名號＋懸賞 id 的亂數）；裝備庫滿了寄放
+        msgs += treasures.bounty_prize(state, content, world.get_season_number(), b.id, b.prize, issuer(content, b))
     return msgs
 
 
@@ -431,6 +438,8 @@ def fit_problem(
         w = _weapon(state, item_id)
         if w is None:
             return NO_WEAPON
+        if w.original:
+            return ORIGINAL_KEPT  # 5.4：一季全服只有一把，交了就上不了神器譜；仿品照一般兵器收（_arms_base 照三階上品）
         if w.kind != b.weapon_kind or w.attribute != b.attribute:
             return WANT_ARMS.format(attribute=b.attribute, noun=_noun(b))
         return None
@@ -503,9 +512,21 @@ def pick_label(state: GameState, content: Content, b: Bounty, count: int) -> str
             f"{due_line(state, content, b)}）")
 
 
-def stuck_label(content: Content, asks: list[Bounty]) -> str:
-    """懸賞榜第二層，交不出的求藝、求兵收成的那一行灰掉的（設計 4.3 第 3 點）：選單才不會長到手機第一屏放不下（FB-128）。"""
-    return STUCK.format(titles="、".join(f"{issuer(content, b)}・{title(content, b)}" for b in asks))
+def only_original(state: GameState, b: Bounty) -> bool:
+    """這一張求兵，身上（手上那把或裝備庫）有種類與屬性都對得上的、可是是神器原品（fit_problem 回 ORIGINAL_KEPT）：交不出的原因
+    不是「沒有對得上的兵器」（FB-145）。只在交不出的那幾張上問（engine 的懸賞榜第二層），所以「只有原品」由呼叫端保證。"""
+    if b.kind != "arms":
+        return False
+    p = state.player
+    held = ([p.weapon] if p.weapon is not None else []) + equipment.in_slot(p, "weapon")
+    return any(w.original and w.kind == b.weapon_kind and w.attribute == b.attribute for w in held)
+
+
+def stuck_label(content: Content, asks: list[Bounty], kept: frozenset[str] | set[str] = frozenset()) -> str:
+    """懸賞榜第二層，交不出的求藝、求兵收成的那一行灰掉的（設計 4.3 第 3 點）：選單才不會長到手機第一屏放不下（FB-128）。
+    kept：身上只有神器原品對得上的那幾張（only_original）的 id，那一張後面照實寫 ONLY_ORIGINAL（FB-145）。"""
+    return STUCK.format(titles="、".join(
+        f"{issuer(content, b)}・{title(content, b)}" + (ONLY_ORIGINAL if b.id in kept else "") for b in asks))
 
 
 def pick_line(content: Content, b: Bounty) -> str:
@@ -680,7 +701,7 @@ def post_problem(state: GameState, content: Content, target_state: GameState, am
     if p.faction is None or t.faction is None or p.faction == t.faction:
         return "只能通緝敵對陣營的人。"
     if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
-        return f"{t.name}初入江湖，還在新手期，通緝不了他。"  # 待 joy 潤
+        return f"{t.name}初入江湖，還在新手期，通緝不了{gender.pronoun(t)}。"  # 待 joy 潤
     me = name_key(p.name)
     if any(b.kind == "wanted" and b.poster and name_key(b.poster) == me and not past_due(b, content, state.world) and _left(b) > 0
            for b in state.world.bounties):
@@ -759,6 +780,26 @@ def deliver_lapses(state: GameState, content: Content) -> list[str]:
 # ── 每週一自動掛單 ──────────────────────────────
 
 
+def prize_rolls(tianji: int, week: int, faction: str, content: Content) -> tuple[bool, bool]:
+    """這一邊這一週有沒有重賞（裝備四欄 6.4）：寶物、良駒各擲一次、分開擲。自己一份亂數（天機＋週次＋陣營；天機是開季時蓋進季裡的
+    WorldState.tianji，不然每一季同一週的重賞都一樣）：不碰掛單那一份（bounty|…，同時挑討伐、打探、護送的地點），插進去擲的話
+    之後每一張單的地點都會位移。兩個都照抽、不管開關開不開（開關只決定掛不掛上去）。"""
+    cfg = content.config.treasures
+    rng = random.Random(f"bounty-prize|{tianji}|{week}|{faction}")
+    return rng.random() < cfg.bounty_treasure_chance, rng.random() < cfg.bounty_horse_chance
+
+
+def _hang_prizes(w: WorldState, content: Content, week: int) -> None:
+    """重賞掛上去（6.4）：官軍、黃巾這一週新掛的討伐，寶物掛第一張、良駒掛第二張（只中一個就掛第一張；討伐不夠就少掛）。
+    那一欄關著的不掛。issue 一週只跑一次，所以「這一週、這一邊的討伐」就是這一批剛掛的。"""
+    for faction in ENEMY:
+        strikes = [b for b in w.bounties if b.week == week and b.faction == faction and b.kind == "strike"]
+        treasure, horse = prize_rolls(w.tianji, week, faction, content)
+        prizes = [prize for prize, hit in (("treasure", treasure), ("horse", horse)) if hit and treasures.prize_on(content, prize)]
+        for b, prize in zip(strikes, prizes):
+            b.prize = prize
+
+
 def tick(state: GameState, content: Content) -> list[str]:
     """第一季規則關著的季的週初掛單（world.advance_world_state 每一步、world.settle_season_start 開季那一刻）：季曆跨進新的一週
     就掛這一週的（只掛這一週，以前的週不補掛；同一週只掛一次，見 issue 的兩道擋）。每一步最多一小時，所以最多晚一小時掛，
@@ -813,7 +854,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
     （只挑已開放的地點〔_opened，FB-150：南華觀要等 xi_open 立起來〕，避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，
     不管是哪一週掛的：討伐看同一個陣營、打探不分陣營、護送不重複終點；濾完沒地方可挑就跳過那一張），劇本的每個陣營再各掛
-    give_kinds 裡的每一種（求藝、求兵）。不回傳訊息。
+    give_kinds 裡的每一種（求藝、求兵）；討伐另外擲重賞（寶物、良駒，_hang_prizes）。不回傳訊息。
     rng 不用（介面跟其他週初掛鉤一樣）。
     兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
     這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
@@ -822,7 +863,9 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
         return []
     w.bounty_week = week
     # 自己一份亂數（週次、流水號、此刻的戰況）：不動季的 rng，排在後面的大事擲骰不會因為多了懸賞榜而位移
-    rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}")
+    # 天機（開季時蓋進季裡）：每一季同一週的單不一樣；天機是 0（測試、量表、功能上線前開的季）時種子一字不差，基準不位移（計畫「要 PM 定的」第 1 條）
+    salt = f"|{w.tianji}" if w.tianji else ""
+    rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}{salt}")
     w.bounties = [
         b for b in w.bounties
         if not past_due(b, content, w)
@@ -868,8 +911,8 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
             ))
     # 求藝、求兵（懸賞榜設計 4.1）：劇本的每個陣營（含地方豪強，照劇本的順序）各掛 give_kinds 裡的每一種；屬性從 give_attributes 挑，
     # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
-    # 後面每一張討伐、打探、護送的地點都會位移。已知的代價：種子沒有天機，每一季第 1 週的屬性一樣（設計 14.2 第 7 條）
-    give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}")
+    # 後面每一張討伐、打探、護送的地點都會位移。種子帶天機（天機是 0 時照舊），每一季第 1 週的屬性不再一樣（設計 14.2 第 7 條，裝備三一起做）
+    give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}{salt}")
     factions = [f.id for f in content.scenario.factions]
     asks: dict[str, list[tuple[str, str | None]]] = {}
     for kind in cfg.give_kinds:
@@ -885,6 +928,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
                 id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, expires=expires, silver=cfg.silver.get(kind, 0),
                 deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute, weapon_kind=weapon_kind,
             ))
+    _hang_prizes(w, content, week)  # 重賞（裝備四欄 6.4）：另一份亂數，上面掛出來的單一張都不動
     return []
 
 

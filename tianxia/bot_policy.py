@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, bounties, cultivation, duel, invites, library, naming, orders, rules, sensing, server_bots, social, team
+from . import atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -50,6 +50,10 @@ RAID_ODDS = CHALLENGE_ODDS
 BOUNTY_SCORE = 8.0
 BOUNTY_MOVE_SCORE = 6.0
 SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力
+# 人在城鎮、身上湊得出一爐又付得起（bot.forge_ready）時「進鐵匠鋪」再多這麼多（FB-144，PM 2026-10-13）：不加的話假人路過城鎮那幾輪
+# 多半挑了遊歷、趕路，一整季一爐都沒打。照 SMITH_SCORE 再加一份（合起來 16）：高過一般的遊歷、往軍令與懸賞走的那一步，
+# 低過軍令本身（ORDER_SCORE 30：替軍令遊歷、接糧車）——不然手上帶著糧草的假人會先把糧草下爐，不去接糧車
+FORGE_SCORE = SMITH_SCORE
 MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
@@ -61,6 +65,7 @@ TRAVEL_ACCEPT_SHARE = 0.4  # 結伴邀請：答應的比例
 TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
+DIVINE_NAME_CHANCE = 0.3  # 打出神器原品之後，每一輪按「沿用譜名」的機會（不在打出來那一下就定，照人的步調，同 answer_call）【預設】
 MASTER_TRIES = 5  # 定名時模型的名字用不了，字表最多另組幾個
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：鎖內一定不叫模型（同 server.NO_NAME）
 
@@ -262,13 +267,14 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；馬餓了就餵；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
+    """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；馬餓了就餵；裝備庫裡有更好的寶物、更快的馬就換上；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
     合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
     bot.feed_mount(game)  # 馬餓了就餵（不受強度旋鈕影響，不擲亂數）
+    bot.wear_better(game)  # 換上更好的寶物、更快的馬（不受強度旋鈕影響，不擲亂數）
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
@@ -278,13 +284,14 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
     """假人的武學（修練頁與煉製頁上的事），每一輪主要行動之前做；只走 Game 的公開行動，跟真人按按鈕一樣：
     1. 練成絕學、輪到自己定名：請模型另取新名字（企劃者 2026-10-06：不沿用原名），輪得到就開單交給假人程式、這一輪到此為止；
        輪不到先不定（見 _master）；
+    1b. 手上有還沒定名的神器原品：每一輪 DIVINE_NAME_CHANCE 的機會按「沿用譜名」（見 _name_originals）；
     2. 這裡教、自己同一種還沒有這個屬性的，學一門（見 _learn_here）；
     3. 庫滿了熔最弱的一門；
     4. 有東西可合、體力有餘時，FORGE_CHANCE 的機會合一爐（挑法同整季機器人，武學＋武學的份額低一點；
        首創的要叫模型，見 _forge）；
     5. 功法庫裡有更強的就改練；
     6. 體力有餘、有東西可修時，CULTIVATE_CHANCE 的機會修練一次（衝絕學、手上有破境丹就服）。
-    亂數只在真的有事可做時才擲（有東西可合才擲合成的機會、有東西可修才擲修練的機會）：什麼武學都沒有的假人一次都不擲。
+    亂數只在真的有事可做時才擲（有東西可合才擲合成的機會、有東西可修才擲修練的機會、有神器原品等著定名才擲定名的機會）：什麼武學都沒有的假人一次都不擲。
     注意：正式內容開局送兩門基礎武學，所以真的假人從第一輪起就有東西可合、每一輪都擲一次合成的機會
     （假人程式共用的亂數順序因此跟加這個之前不一樣）。"""
     state, content, world = game.state, game.content, game.world
@@ -294,6 +301,7 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
         _master(game, slot)
         if slot is not None and slot.job is not None:
             return msgs  # 這個名在等模型：別的等定完名再說
+    msgs += _name_originals(game, rng)
     msgs += _learn_here(game)
     if library.full(state, content):
         bot.melt_the_weakest(game)
@@ -313,6 +321,16 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
         ]
         if ready and rng.random() < CULTIVATE_CHANCE:
             msgs += game.cultivate(ready[0], use_legend=bot.takes_the_pill(game, ready[0]))
+    return msgs
+
+
+def _name_originals(game: Game, rng: random.Random) -> list[str]:
+    """神器原品定名（打造第二批，PM 2026-10-12 決定第 3 條）：一律「沿用譜名」（Game.name_divine(keep=True)，跟真人按那一顆一樣），
+    每一把每一輪 DIVINE_NAME_CHANCE 的機會。亂數只在手上真的有等著定名的原品時才擲（沒有的假人一次都不擲，假人程式共用的亂數順序不變）。"""
+    msgs: list[str] = []
+    for item_id in forge_secrets.unnamed_originals(game.state, game.world):
+        if rng.random() < DIVINE_NAME_CHANCE:
+            msgs += game.name_divine(item_id, keep=True)
     return msgs
 
 
@@ -483,7 +501,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             wanted = None if move is None else f"bounty:pick:{move[0]}" if verb == "pick" else f"bounty:give:{move[0]}:{move[1]}"
             return BOUNTY_SCORE if option.id == wanted else None
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
-    if kind == "smith":  # 鐵匠鋪上：照 bot.smith_want 按那一顆（含切到另一頁），沒事就離開；不打造、不淬煉、不拆（附帶決定 e），萬一停在單子上只按「不打了」
+    if kind == "smith":  # 鐵匠鋪上：照 _smith_want 按那一顆（換買修、打造與換上打出來的那把，含切頁），沒事就離開；不淬煉、不拆，萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
@@ -508,8 +526,10 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return None
         if arg == "bounties":  # 懸賞榜：有揭得下的才打開（不然只是開了又返回）
             return BOUNTY_SCORE if _takeable(game) else None
-        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修的才進去（不然只是開了又離開）
-            return SMITH_SCORE if _smith_want(game) else None
+        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修、要打的才進去（不然只是開了又離開）；湊得出一爐又付得起再多 FORGE_SCORE
+            if not _smith_want(game):
+                return None
+            return SMITH_SCORE + (FORGE_SCORE if bot.forge_ready(game) else 0.0)
         if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
             return MARKET_SCORE if bot.market_want(game) else None
         if arg == "explore" and _bounty_here(game, "scout"):
@@ -700,8 +720,11 @@ def _takeable(game: Game) -> bool:
 
 
 def _smith_want(game: Game) -> str | None:
-    """此刻在鐵匠鋪最該按的那一顆（bot.smith_want：兵器、防具兩頁，這一頁的事先做、沒事才切頁），沒事是 None。"""
-    return bot.smith_want(game)
+    """此刻在鐵匠鋪最該按的那一顆：單子開著時只照 bot.forge_step（下一步或「不打了」）；不然先照 bot.smith_want（換、買、修，兵器防具兩頁），
+    沒事再照 bot.forge_step（打造與換上打出來的那把，打造第二批 PM 決定第 3 條）。都沒事是 None。不淬煉、不拆。"""
+    if game.state.player.smith_draft is not None:
+        return bot.forge_step(game)
+    return bot.smith_want(game) or bot.forge_step(game)
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

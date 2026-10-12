@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, weapons
+from . import armor, bounties, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -344,7 +344,8 @@ def smith_want(game: Game) -> str | None:
     """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用；兵器設計第六節、裝備四欄設計第九節）：兵器頁照 weapons.wanted（換、買、修），
     防具頁照 armor.wanted（換、買、修）。停在的那一頁有事先做；這一頁沒事、另一頁有事才回切頁那一顆（smith:page:<頁>），
     下一輪再回真正的動作——不會來回切。還沒進門時照進門會停的那一頁算（equipment.first_page）。打造、淬煉、拆解不在這裡
-    （假人不打造不淬煉不拆；整季機器人的打造與淬煉在 visit_smith 另外做）。都沒事是 None。"""
+    （伺服器假人的打造與換上打出來的那把在 forge_step，bot_policy._smith_want 接在這之後；整季機器人的打造與淬煉在 visit_smith
+    另外做；淬煉、拆解假人都不做）。都沒事是 None。"""
     s, c, w = game.state, game.content, game.world
     member = s.player.member
     moves = {
@@ -356,6 +357,75 @@ def smith_want(game: Game) -> str | None:
         return moves[here]
     other = next((slot for slot, move in moves.items() if move is not None), None)
     return None if other is None else f"smith:page:{other}"
+
+
+# 伺服器假人打一爐之後至少留幾兩（療傷、修）。PM 2026-10-13（FB-144）從 30 降到 10：假人到鐵匠鋪時身上多半只有幾十兩，留 30 兩
+# 一整季一爐都打不成
+FORGE_SILVER_RESERVE = 10
+
+
+def forge_step(game: Game) -> str | None:
+    """伺服器假人在鐵匠鋪打造的下一顆（打造第二批，PM 2026-10-12 決定第 3 條）：照整季機器人的 forge_plan／armor_plan 挑這一爐
+    （一般組合、名器、偶然碰上的神器配方都照打；不讀口訣），回單子的下一步——打開 → 種類 → 主料 → 輔料 → 開爐（防具沒有種類）；
+    單子跟這一爐對不上（存檔留下的、計畫變了）回「不打了」。沒有要打的時候，兵器頁上裝備庫裡有比手上更好的那把就換上
+    （smithing.better_in_rack；防具的換上 armor.wanted 本來就會）；這一頁沒事、另一頁有一爐要打回切頁那一顆（同 smith_want）。
+    工錢付了之後剩不到 FORGE_SILVER_RESERVE 兩的那一爐不打。不淬煉、不拆。沒事是 None。"""
+    s, c, w = game.state, game.content, game.world
+    p = s.player
+    art = team.player_art(s, c, w, p.member.wugong_id)
+    plans = _forge_plans(game)
+    d = p.smith_draft
+    if d is not None:
+        plan = plans.get(smithing.slot_of(d.kind))
+        if plan is None:
+            return smithing.CANCEL
+        kind, main, aux = plan
+        if d.kind not in (None, kind) or d.main not in (None, main) or d.aux not in (None, aux):
+            return smithing.CANCEL
+        if d.kind is None:
+            return f"{smithing.KIND}{kind}"
+        if d.main is None:
+            return f"{smithing.MAIN}{main}"
+        if d.aux is None:
+            return f"{smithing.AUX}{aux}"
+        return f"{smithing.GO}{kind}:{main}:{aux}"
+    here = equipment.page(p, c) if p.picking_smith else equipment.first_page(c)
+    if plans.get(here) is not None:
+        return smithing.OPEN
+    better = smithing.better_in_rack(s, c, w, art) if here == "weapon" else None
+    if better is not None:
+        return f"smith:wield:{better.id}"
+    other = next((slot for slot, plan in plans.items() if plan is not None and slot != here), None)
+    return None if other is None else f"smith:page:{other}"
+
+
+def _forge_plans(game: Game) -> dict[str, tuple[str, str, str] | None]:
+    """這一刻兵器、防具各要打的那一爐（smithing.forge_plan／armor_plan），工錢付了之後剩不到 FORGE_SILVER_RESERVE 兩的當沒有。
+    兩樣都要人在有鐵匠鋪的城鎮（forge_plan、armor_plan 自己會問）。"""
+    s, c, w = game.state, game.content, game.world
+    p = s.player
+
+    def affordable(plan):
+        if plan is None:
+            return None
+        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]))
+        return plan if p.stats.get("silver", 0) - cost >= FORGE_SILVER_RESERVE else None
+
+    return {
+        "weapon": affordable(smithing.forge_plan(s, c, w, team.player_art(s, c, w, p.member.wugong_id))),
+        "armor": affordable(smithing.armor_plan(s, c, w, team.player_art(s, c, w, p.member.neigong_id))),
+    }
+
+
+def forge_ready(game: Game) -> bool:
+    """人在城鎮的鐵匠鋪、身上湊得出一爐又付得起（留得下 FORGE_SILVER_RESERVE）：bot_policy 給「進鐵匠鋪」多加 FORGE_SCORE（FB-144）。"""
+    return any(plan is not None for plan in _forge_plans(game).values())
+
+
+def keep_book_names(game: Game) -> None:
+    """整季機器人打出神器原品：一律按「沿用譜名」（Game.name_divine(keep=True)；設計第十一節：整季機器人不上線，不用擔心看得出來）。"""
+    for item_id in forge_secrets.unnamed_originals(game.state, game.world):
+        game.name_divine(item_id, keep=True)
 
 
 def market_want(game: Game) -> str | None:
@@ -395,10 +465,23 @@ def feed_mount(game: Game) -> None:
         game.feed_mount()
 
 
+def wear_better(game: Game) -> None:
+    """裝備庫裡有更好的寶物或更快的馬就換上（裝備四欄設計第九節；整季機器人每一步看一次，假人在 bot_policy.look_after 看）：
+    寶物照 treasures.wanted（固定順序；寶物不設限制，身上已經是最前面的就不換），馬照 mounts.better_mount（吃飽的腳力，同馬市的
+    wanted；路上不換，2.3）。走 Game.wield_weapon（修練頁的「換上」），跟真人一樣。拿到新的、那一欄空著時本來就自動穿上，這裡只管換；不叫模型。"""
+    s, c = game.state, game.content
+    tid = treasures.wanted(s, c)
+    if tid is not None:
+        game.wield_weapon(tid)
+    if s.player.journey is None and (horse := mounts.better_mount(s, c)) is not None:
+        game.wield_weapon(horse)
+
+
 def visit_smith(game: Game) -> None:
-    """城裡有鐵匠鋪就看一眼（兵器設計第六節、裝備四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
-    打一把、把裝備庫裡更好的換上、淬煉手上那把（打造與淬煉的鈕只在兵器頁，所以兵器的事先做完）、收掉打造的單子；再切到防具頁照
-    armor.wanted 換、買、修；最後離開。每一頁最多按四下（換、買、買了再換上、修）。不花體力。假人不走這裡（bot_policy 照 smith_want）。"""
+    """城裡有鐵匠鋪就看一眼（兵器設計第六節、四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
+    打一把、把裝備庫裡更好的換上、淬煉手上那把、收掉打造的單子；再切到防具頁照 armor.wanted 換、買、修，照 smithing.armor_plan 打一件
+    （打出來比身上那件好就換上：armor.wanted 先看裝備庫）、淬煉身上那件、收掉單子；最後離開。兵器的事先做完才切防具頁
+    （打造與淬煉的鈕各在各頁）。每一頁換買修最多按四下。不花體力。假人不走這裡（bot_policy 照 smith_want 與 forge_step，打造但不淬煉）。"""
     s, c, w = game.state, game.content, game.world
 
     def art():
@@ -417,9 +500,13 @@ def visit_smith(game: Game) -> None:
                 break
             game.choose(move)
 
+    def finish_draft() -> None:
+        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
+            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕、沒有離開）
+
     if s.pending_event or not equipment.smith_open(s, c):
         return
-    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()):
+    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()) and not smithing.armor_errand(s, c, w, inner()):
         return
     if "act:smith" not in enabled():
         return
@@ -439,12 +526,24 @@ def visit_smith(game: Game) -> None:
             if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
                 break
             game.choose(smithing.TEMPER)
-        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
-            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕）
-        if armor.wanted(s, c, inner()) is not None and "smith:page:armor" in enabled():
+        finish_draft()
+        if (armor.wanted(s, c, inner()) is not None or smithing.armor_errand(s, c, w, inner())) and "smith:page:armor" in enabled():
             game.choose("smith:page:armor")  # 防具的事在另一頁：兵器的事（含打造、淬煉）做完才切過去
     if equipment.page(s.player, c) == "armor":
         press(lambda: armor.wanted(s, c, inner()))
+        plan = smithing.armor_plan(s, c, w, inner())
+        if plan is not None:
+            for oid in smithing.wizard_steps(*plan):
+                if oid not in enabled():
+                    break
+                game.choose(oid)
+            finish_draft()
+            press(lambda: armor.wanted(s, c, inner()))  # 打出來進了裝備庫、比身上那件好：換上
+        for _ in range(c.config.armor.temper_max):
+            if not smithing.armor_temper_wanted(s, c, w, inner()) or smithing.ARMOR_TEMPER not in enabled():
+                break
+            game.choose(smithing.ARMOR_TEMPER)
+        finish_draft()
     if s.player.picking_smith:
         game.choose("smith:back")
 
@@ -486,8 +585,10 @@ def play_season(
                 forge_and_cultivate(game, rng)
             take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
             visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
+            keep_book_names(game)  # 打出神器原品就沿用譜名（打造第二批）
             visit_market(game)  # 路過馬市就看一眼（沒事要買要換要餵的時候什麼都不做）
             feed_mount(game)  # 馬餓了就餵（閒著時哪裡都能餵）
+            wear_better(game)  # 裝備庫裡有更好的寶物、更快的馬就換上
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:

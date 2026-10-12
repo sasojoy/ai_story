@@ -255,7 +255,7 @@
           "flags_add": [
             "huangjin_traitor"
           ],
-          "rumor": "{name}在劫船時倒戈，放走了一整船糧食，黃巾營寨揚言要他的命。"
+          "rumor": "{name}在劫船時倒戈，放走了一整船糧食，黃巾營寨揚言要{him}的命。"
         }
       },
       {

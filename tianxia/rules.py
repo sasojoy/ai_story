@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, front_lines, gender, insights, library, materials, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -17,15 +17,15 @@ DAY = 86400
 
 
 def display_name(state: GameState) -> str:
-    """地方傳聞裡的單獨事件寫的名字：選了「匿名行走」的人是「某位少俠」（傳聞分層第七節）。只有那裡看匿名——天下大事、
+    """地方傳聞裡的單獨事件寫的名字：選了「匿名行走」的人是「某位少俠」（女的是「某位女俠」，gender.anon；傳聞分層第七節）。只有那裡看匿名——天下大事、
     陣營軍情、江湖史、排行榜一律寫名號（state.player.name），不要拿這個去寫那些（企劃者 2026-10-06）。"""
-    return "某位少俠" if state.player.anonymous else state.player.name
+    return gender.anon(state) if state.player.anonymous else state.player.name  # 某位少俠／某位女俠
 
 
 def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
     此刻的階（ranks.rank_of）每比第 1 階高一階抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。敵對陣營，
-    以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）。最低 0。
+    以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）；寶物另扣 treasures.amount 的 audience。最低 0。
     第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
     rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
     from . import ranger, ranks  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
@@ -36,6 +36,7 @@ def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     if figure is not None and p.faction is not None and p.faction == figure.faction:
         bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
     bar -= ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵一點，對所有人物都算（陣營的人是 0）
+    bar -= round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣，最低 0
     return max(0, bar)
 
 
@@ -280,7 +281,9 @@ def fuzzy_count(n: int) -> str:
 
 
 def fill_marks(text: str, state: GameState) -> str:
-    """把文字裡的 {marks:地點:痕跡} 換成這個痕跡目前的模糊人數。"""
+    """把文字裡的 {marks:地點:痕跡} 換成這個痕跡目前的模糊人數；寫給這個人看的稱呼照性別換（gender.address：女的「少俠」→「女俠」）。
+    事件的本文與結果都經過這裡（也只寫給這個人看），所以內容裡寫死給玩家的稱呼在這裡換一次就好。"""
+    text = gender.address(text, state)
     if "{marks:" not in text:
         return text
     return _MARKS_TOKEN.sub(lambda m: fuzzy_count(state.world.marks.get(m.group(1), 0)), text)
@@ -846,6 +849,8 @@ def apply_effect(
             msgs.append(line)
     for insight_id in effect.insights:
         msgs += insights.learn(state, content, world, insight_id)
+    if effect.gear is not None:  # 奇遇給的寶物或良駒（裝備四欄 6.4）：自己一份亂數，不碰 Game.rng
+        msgs += treasures.grant_effect(state, content, effect.gear, world.get_season_number())
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
@@ -923,7 +928,7 @@ def apply_effect(
         msgs += foreshadow.grant(state, content, effect.clue_items, effect.fs_counters)
     name = state.player.name  # 江湖史與玉璽碎片（天下大事）一律寫名號；只有下面的地方傳聞看匿名（傳聞分層設計第七節）
     if effect.rumor:
-        text = effect.rumor.format(name=display_name(state))
+        text = effect.rumor.format(name=display_name(state), him=gender.pronoun(state))  # {him}：寫傳聞主角的他／她
         add_rumor(  # 玩家觸發的傳聞記在當時所在地：地方傳聞的單獨事件，觸發者可以選匿名（傳聞分層設計第七節）
             state, text, state.player.location, content=content, layer="local", named=not state.player.anonymous,
         )

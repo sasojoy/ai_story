@@ -639,22 +639,44 @@ def test_locked_figures_use_talk_at_instead_of_recruit_at_for_dialogue(content, 
     assert "act:recruit" not in ids(game)  # 鎖定人物不會因為 talk_at 而冒出招募選項
 
 
-# ── 重複內容的潤色（還要改進第 3 點）─────────────────────────
+# ── 重複內容不在行動鎖裡叫模型（2026-10-12：點綴句看不到、卻讓全服等）─────────
 
 
-def test_revisiting_a_location_no_longer_calls_the_model(game):
-    """重遊的點綴句以前在行動鎖裡叫模型（flavor.polish_revisit），模型慢的時候要等滿 in_lock_model_timeout，
-    那段時間全服的行動都在排隊（joy 2026-10-12 回報「點完探索有時候伺服器沒有立即反應」）；而且那一句
-    沒有任何玩家看得到（場景每次從 content 重組，msgs 又不回給前端）。2026-10-12 拿掉，見 flavor.py 開頭。"""
+class _CountingClient:
+    timeout = 15
+
+    def __init__(self):
+        self.calls = 0
+
+    def chat_text(self, *a, **k):
+        self.calls += 1
+        return "風又吹起了。"
+
+    def chat_structured(self, *a, **k):
+        self.calls += 1
+        raise RuntimeError("不該叫")
+
+
+def test_a_repeated_event_does_not_call_the_model(game):
+    """探索幾乎每次都撞到看過的事件：以前每次都在行動鎖裡等模型補一句點綴（最多 15 秒，全服跟著等），那句卻只進 GameState.log。"""
+    event = next(iter(game.content.events.values()))
+    game._present(event)
+    game.client = _CountingClient()
+    head, text = game._present(event)
+    assert game.client.calls == 0
+    assert text == rules.fill_marks(event.text, game.state)
+
+
+def test_revisiting_a_location_does_not_call_the_model(game):
     walk_to(game, "lake")
-    with mock.patch.object(flavor, "polish_revisit") as polish:
-        msgs = game.travel("town", "dash")  # 疾行：在這次行動裡抵達終點；小鎮開局就去過，是重遊
-    polish.assert_not_called()
-    assert game.location_text() in msgs  # 場景就是地點描寫，後面不再附加一句
+    game.client = _CountingClient()
+    msgs = game.travel("town", "dash")  # 疾行：在這次行動裡抵達；小鎮開局就去過，是重遊
+    assert game.client.calls == 0
+    assert game.location_text() in msgs
 
 
 def test_a_timed_arrival_never_calls_the_model(game):
-    """計時器的 sync 拿著全服行動鎖：路上抵達不叫模型（江湖大事的潤色也不叫）。"""
+    """計時器的 sync 拿著全服行動鎖：路上抵達不叫模型（江湖大事潤色也不叫）。"""
     walk_to(game, "lake")
     with mock.patch.object(flavor, "polish_world_event") as news:
         game.choose("move:town")  # 小鎮開局就去過：重遊
@@ -662,25 +684,6 @@ def test_a_timed_arrival_never_calls_the_model(game):
         game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
     assert "blocked" in game.state.world.flags  # 門檻照樣觸發，只是沒潤色
     news.assert_not_called()
-
-
-def test_a_repeated_event_reads_exactly_like_the_first_time(game):
-    """同一個事件再出現時不再多一句點綴（同上）：文字跟第一次一模一樣。"""
-    event = next(iter(game.content.events.values()))
-    _, first = game._present(event)
-    with mock.patch.object(flavor, "polish_event_repeat") as polish:
-        _, again = game._present(event)
-    polish.assert_not_called()
-    assert again == first
-
-
-def test_presenting_an_event_makes_no_model_call_inside_the_action_lock(game):
-    """這一條是防線：_present 在行動鎖裡跑，不准再有裝飾性的模型呼叫（鎖內的呼叫一律走 _quick_client）。"""
-    event = next(iter(game.content.events.values()))
-    game._present(event)  # 先出現一次，下一次就是「重複」
-    with mock.patch.object(game, "_quick_client") as quick:
-        game._present(event)
-    quick.assert_not_called()
 
 
 # ── 練功、療傷 ───────────────────────────────────────────

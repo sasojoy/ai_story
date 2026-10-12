@@ -6,11 +6,11 @@
 （kind train／wild），大勝與險勝算贏。修幾次：同一把兵器的鋒利度比上一步高就是修了一次（鋒利度只有鐵匠修得上去；換一把、
 買新的不算，因為兵器 id 變了）。平均鋒利度是身上有兵器的每一步取平均。
 
-第二批：季末手上（身上＋裝備庫）自己打的幾把與品質分布、淬了幾次、這個機器人首創了幾個配方（一個機器人獨佔一個資料庫，
-`gear_recipes` 的列數就是它的首創數），以及銀兩花在鐵匠鋪的比例（設計第七節第 5 項）：鐵匠鋪花掉的是包住買、修、打造、
+第二批：季末手上（身上＋裝備庫）自己打的幾把與品質分布、淬了幾次、這個機器人摸出了幾條隱藏配方（打造第一批起一般組合不登記；
+一個機器人獨佔一個資料庫，`gear_recipes` 裡「鑄|」開頭的列數就是它摸出的數）、季末手上幾把名器，以及銀兩花在鐵匠鋪的比例（設計第七節第 5 項）：鐵匠鋪花掉的是包住買、修、打造、
 淬煉四個函式、記呼叫前後銀兩少了多少；全季收入是每一步不算鐵匠鋪的銀兩淨增加（只加正的）——同一步裡別的花費（療傷等）
 會先抵掉收入，所以收入略少算、比例略高估。週末設定一季只走約 350 步（FB-129），量打造與淬煉要用預設的 14 天（不給 `--profile`）。
-兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）；坐騎也固定關著（坐騎開著的整季看 measure_mounts）。
+兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）；坐騎也固定關著（坐騎開著的整季看 measure_mounts）；寶物也固定關著（寶物開著的整季看 measure_treasures）。
 
 用法：.venv/Scripts/python.exe scripts/measure_weapons.py --seeds 1 2 3 [--profile weekend]
 """
@@ -53,6 +53,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
     content.config.weapons.enabled = weapons_on
     content.config.armor.enabled = False  # 兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）
     content.config.mounts.enabled = False  # 兵器量表只比兵器：坐騎也固定關著（坐騎開著的整季看 measure_mounts）
+    content.config.treasures.enabled = False  # 只比這一欄：寶物固定關著，數字才跟前幾批量的對得上（寶物看 measure_treasures）
     seen: set[int] = set()
     count = {"fights": 0, "wins": 0, "repairs": 0, "smith_silver": 0, "income": 0}
     edges: list[int] = []
@@ -111,14 +112,14 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
     owned = [w for w in [p.weapon, *p.rack] if w is not None and w.slot == "weapon"]  # 裝備四欄 3.3：只算武器
     forged = [w for w in owned if w.recipe]
     with game.world.db.snapshot() as conn:
-        firsts = conn.execute("SELECT COUNT(*) FROM gear_recipes").fetchone()[0]
+        firsts = conn.execute("SELECT COUNT(*) FROM gear_recipes WHERE key LIKE '鑄|%'").fetchone()[0]  # 摸出的隱藏配方（打造第一批：一般組合不登記）
     return {
         "hours": hours, "ending": season.ending_id or "—", "per_day": count["fights"] / days if days else 0.0,
         "level": p.member.level, "win": count["wins"] / count["fights"] if count["fights"] else 0.0,
         "fights": count["fights"], "repairs": count["repairs"],
         "edge_avg": sum(edges) / len(edges) if edges else None,
         "weapon": p.weapon.name if p.weapon else "—", "mats": tiers, "silver": p.stats.get("silver", 0),
-        "forged": len(forged), "grades": Counter(w.quality for w in forged), "tempers": sum(w.tempers for w in owned), "firsts": firsts,
+        "forged": len(forged), "grades": Counter(w.quality for w in forged), "named": sum(w.secret is not None and not w.original and w.copy_of is None for w in forged), "tempers": sum(w.tempers for w in owned), "firsts": firsts,
         "smith_silver": count["smith_silver"], "income": count["income"],
     }
 
@@ -139,7 +140,7 @@ def main() -> None:
                   f"季末兵器 {r['weapon']}、素材 {r['mats']}、銀兩 {r['silver']}、"
                   f"季長 {r['hours']:.1f} 小時（世界時間）、結局 {r['ending']}、每遊戲日 {r['per_day']:.1f} 場"
                   f"、打造 {r['forged']} 把（下 {r['grades']['下品']}／中 {r['grades']['中品']}／上 {r['grades']['上品']}）"
-                  f"、淬煉 {r['tempers']} 次、首創配方 {r['firsts']} 個"
+                  f"、名器 {r['named']} 把、淬煉 {r['tempers']} 次、摸出隱藏配方 {r['firsts']} 條"
                   f"、鐵匠鋪花掉 {r['smith_silver']} 兩（全季收入 {r['income']} 兩的 {share}）", flush=True)
 
 

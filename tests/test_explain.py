@@ -314,6 +314,8 @@ def test_no_player_visible_old_words_in_code():
         for line, text in _code_strings(path) if OLD_WORDS.search(text)
     ]
     for path in sorted((ROOT / "web").iterdir()):
+        if path.suffix not in (".js", ".css", ".html"):  # 圖檔（web/zhuan-og.png）沒有字串
+            continue
         source = path.read_text(encoding="utf-8")
         source = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)  # 區塊註解（css、js）
         source = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)  # html 註解

@@ -41,13 +41,18 @@ def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[st
 # ── 建立紀錄 ──────────────────────────────────────────
 
 
+AID_KINDS = ("train", "wild", "event")  # 部下上陣的仗（team.fight 的陣容含部下）：戰報寫部下助陣那一句
+
+
 def new_record(
     state: GameState, content: Content, world: WorldStateStore, squad: Squad, result: EncounterResult,
     kind: str, event: str = "",
 ) -> BattleRecord:
     """剛打完、還沒發獎懲時呼叫。獲得與損失（exp、xinde、silver、notes）由 engine 發完獎懲後填入，
-    再交給 add_record。"""
+    再交給 add_record。部下上陣的仗（遊歷、野怪、劇情戰與挑戰本人：team.fight 把部下算進威力的那幾種）在結果那一段
+    多一句部下助陣多了幾成（team.aid_line，PM 2026-10-12）；切磋、截殺、頭目戰只算本人，不寫。"""
     p = state.player
+    aid = team.aid_line(state, content, world, squad) if kind in AID_KINDS else ""
     keys = team.team_keys(state)
     names = [team.member_name(state, content, key) for key in keys]
     levels = [p.member.level] + [world.get_companion(k).level for k in state.player.team]
@@ -62,7 +67,7 @@ def new_record(
         tier=result.tier,
         our_power=result.our_power,
         difficulty=result.difficulty,
-        notes=[DODGE_NOTE] if result.dodged else [],
+        notes=([DODGE_NOTE] if result.dodged else []) + ([aid] if aid else []),
         guarded=result.guarded,  # 護命的那一句演出由 Game._play_rounds 補進 notes 最前面（跟閃避的那一句同一個位置）
     )
 

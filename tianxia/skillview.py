@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, cultivation, encounter, equipment, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, weapons
+from . import armor, atlas, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -466,8 +466,9 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
             return ""
         return "\n".join([
             f"### {follower.name}",
-            "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。",
-            f"武學　{_art_label(content, world, follower.wugong, follower.wugong_level)}",
+            "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。武學跟著你的等級長進。",
+            f"武學　{_art_label(content, world, follower.wugong, team.follower_level(state, content, follower))}",
+            f"威力　{round(team.follower_power(state, content, world, follower))}",
         ])
     if key == PLAYER:
         member = state.player.member
@@ -489,15 +490,19 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(worn_armor)  # 防具（裝備四欄設計 2.5）：沒穿或開關關著不寫；對上的是內功（武器看武學、防具看內功）
     if key == PLAYER and (horse := mounts.card_line(state, content)):
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
+    if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
+        lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)
 
 
 def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎；寶物等
-    裝備三加一段），每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
-    格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。"""
+    """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），
+    每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
+    格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
+    武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名}（修練頁那一列底下畫定名表單），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
+    held_note：寄放著哪幾件（6.5），沒有是空字串。"""
     member = state.player.member
     slots = []
     if equipment.on(content, "weapon"):
@@ -511,7 +516,19 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     if equipment.on(content, "mount"):
         slots.append({"slot": "mount", "label": equipment.SLOTS["mount"].label, "empty": mounts.EMPTY, "note": mounts.RACK_NOTE,
                       **mounts.rows(state, content)})
-    return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots}
+    if equipment.on(content, "treasure"):  # 玉璽一要把這一擋改成「寶物或玉璽開著」（見計畫「範圍與取捨」玉璽那一段第 5 點）
+        slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
+                      "note": treasures.RACK_NOTE, **treasures.rows(state, content)})
+    pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
+    for block in slots:
+        if block["slot"] in ("weapon", "armor"):
+            for row in [block["worn"], *block["rack"]]:
+                if row is not None:
+                    row["divine"] = {"pattern": pending[row["id"]]} if row["id"] in pending else None
+            # 等著定名的原品排在裝備庫最前面（終審 I1）：手上已經有一把時原品放在最後一格，網頁只預設列前 8 件，表單會被「再列 N 件」藏起來；
+            # 照有沒有 divine 排（穩定排序，其餘維持放進去的先後），定了名就回到原位
+            block["rack"].sort(key=lambda row: row["divine"] is None)
+    return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots, "held_note": treasures.held_note(state)}
 
 
 def _pct(ratio: float) -> str:

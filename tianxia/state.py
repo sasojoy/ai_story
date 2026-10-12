@@ -130,24 +130,30 @@ class Tagalong(BaseModel):
 
 class Equipment(BaseModel):
     """一件裝備（裝備四欄設計 3.1；原本的 Weapon，兵器設計 2.1）。slot 是哪一欄：武器、防具（裝備一），坐騎、寶物（裝備二、三）。
-    id 是「兵:N」「甲:N」（之後「騎:N」「寶:N」），共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
+    id 是「兵:N」「甲:N」「騎:N」「寶:N」，共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
     （拆解照 id 的 sha256 挑素材）。舊存檔沒有 slot：預設 weapon（兵器第一、二批的裝備庫裡都是武器）。
     edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
     不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
-    recipe／copy_of／original 是打造、仿品、神兵原品用的（兵器第二、三批；之後防具打造也用 recipe、tempers）。"""
+    recipe 是自己打的那一件的組合鍵（兵器「兵|」、防具「鎧|」）；secret 是照隱藏配方打出來的名器（打造隱藏配方設計 4.2）；
+    copy_of／original 是神器的仿品與原品（打造第二批）。"""
 
     slot: Literal["weapon", "armor", "mount", "treasure"] = "weapon"
     id: str
     name: str
     kind: str = ""  # 武器：models.WEAPON_KINDS；其餘是空字串
     attribute: str = ""  # 陰陽剛柔快慢虛實（武器、防具）
-    tier: int  # 1～3
-    quality: str  # 下品、中品、上品
+    tier: int = 0  # 1～3（武器、防具、坐騎）；寶物不分階品，是 0（玉璽碎片的抄本也是，玉璽碎片設計 7.4）
+    quality: str = ""  # 下品、中品、上品；寶物是空字串
     edge: int = 100  # 0～100：武器的鋒利度、防具的耐久度（equipment.WEAR_WORDS）
     tempers: int = 0  # 淬煉次數（兵器第二批；防具打造那一批）
     recipe: str | None = None
     copy_of: str | None = None
     original: bool = False
+    # 內容裡的 id（裝備四欄 3.1）：寶物照 content/gear.json 的寶物表、名將贈禮的名駒照 steeds；馬市與懸賞的馬、武器、防具是 None。
+    # 名字照它從內容讀：treasures.refresh_names 在讀檔時把 name 改成內容的名字（joy 改名不動存檔）；內容拿掉了就留著 name 當備份、效果不算
+    template: str | None = None
+    # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
+    secret: str | None = None
 
 
 Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
@@ -174,8 +180,48 @@ class WeaponRecipe(BaseModel):
         return self.name
 
 
+DIVINE_UNNAMED = "無名神器"  # 待 joy 潤：神器原品還沒定名時的名字（打造隱藏配方設計 5.2）；仿品寫「仿・無名神器」
+COPY_NAME = "仿・{name}"  # 待 joy 潤：仿品的名字（5.3）；{name} 是原品的名字，還沒定名是 DIVINE_UNNAMED
+
+
+class GearFind(BaseModel):
+    """全服登記的隱藏配方發現（打造隱藏配方設計 7.1；gear_recipes 表裡鍵「鑄|配方 id」那幾列）：這一季第一個打出這條隱藏配方的人。
+    表的名字欄寫鍵本身（不佔名字空間），名器的名字照內容。fusion.echo 讀 id、name、creator、co_creator、creator_shown。
+    神器配方那一列另記原品主人、定的名字、仿品數（打造第二批；舊列沒有這幾欄，讀成名器那一筆）。"""
+
+    secret: str  # 隱藏配方 id（ForgeSecret.id）
+    slot: Literal["weapon", "armor"]
+    kind: str = ""  # 兵器種類；防具是空字串
+    attribute: str
+    tier: int
+    title: str  # 打出來的名字（名器照內容的 name，登記當下記下；傳聞與首創名望回饋照它寫）
+    creator: str | None = None  # 首位發現者的名號（身分）
+    creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下）
+    co_creator: str | None = None  # fusion.echo 讀；打造沒有論武，一律 None
+    # 神器（打造第二批；企劃者選 14.1 甲：神器配方一爐必出神器）。照甲首位發現者就是原品主人：forge_secrets.new_find 在登記的那一筆裡
+    # 一起記下（claim_gear_find 同一筆交易，誰先寫進去誰拿原品），不另開 claim_divine
+    divine: bool = False  # 這一條是神器配方
+    owner: str | None = None  # 原品主人的名號（身分）
+    master_shown: str | None = None  # 寫給別人看的原品主人名號（打出那一刻記下；同 MartialArt.master_shown）
+    divine_name: str | None = None  # 原品定的名字（world.name_divine）；還沒定是 None
+    copies: int = 0  # 這一季照這個配方打出的仿品幾把（world.add_copy；神器譜寫「仿品 N 把」，不列人名）
+
+    @property
+    def id(self) -> str:
+        return f"鑄|{self.secret}"  # 同 forge_secrets.PREFIX：首創名望回饋照它記，不會跟武學 id 或舊的兵器配方名字撞
+
+    @property
+    def name(self) -> str:
+        """寫給人看的名字（傳聞、首創名望回饋 fusion.echo）：名器是內容的名字（title，登記當下記下）；神器是原品定的名字，
+        還沒定名是「無名神器」（7.1）。"""
+        if self.divine:
+            return self.divine_name or DIVINE_UNNAMED
+        return self.title
+
+
 class SmithDraft(BaseModel):
-    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+    """鐵匠鋪「打造兵器…／打造防具…」挑到哪一步（smithing.draft_options）：兵器是種類 → 主料 → 輔料；防具沒有種類，打開時 kind 就是
+    smithing.ARMOR_KIND（「防具」），從主料挑起。三樣都有了就是開爐那一步。"""
 
     kind: str | None = None
     main: str | None = None
@@ -184,11 +230,12 @@ class SmithDraft(BaseModel):
 
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
-    對不上就當空的。"""
+    對不上就當空的。鑄譜（PlayerState.forge_manual）用同一個型別，多記 made。"""
 
     tianji: int = 0
     heard: dict[str, list[int]] = Field(default_factory=dict)  # 秘方 id → 聽過第幾句口訣（0 說書、1 人物、2 殘譜）
     solved: list[str] = Field(default_factory=list)  # 合中過的秘方 id，照先後
+    made: dict[str, str] = Field(default_factory=dict)  # 鑄譜用：隱藏配方 id → 打中的那一爐的組合鍵（鑄譜寫配方）；武學譜不用
 
 
 class DuelState(BaseModel):
@@ -208,6 +255,21 @@ class DuelState(BaseModel):
     move: str = ""
     tell: str = ""
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
+
+
+class AnnalEntry(BaseModel):
+    """行狀的一則（玩家傳，tianxia/annals.py）：季末寫《某某傳》的材料。只記事實，不記數值以外的推測；字是當下寫好的
+    （時刻照 calendar.stamp_text、地點與人物照名字），季末不必再查這一季的狀態。"""
+
+    kind: str  # annals.KINDS：showdown 決戰、figure 跟歷史人物、fight 單挑（頭目、挑戰本人、截殺）、deed 日常的大事
+    time: float  # 世界秒
+    when: str  # 寫的當下的時刻（calendar.stamp_text）
+    place: str = ""  # 地點的名字
+    figure: str = ""  # 人物 id（content.characters）；跟人物無關是空字串
+    text: str  # 一句事實，80 字以內
+    quote: str = ""  # 你說的那一句（自己說、放手一搏、隨口應對的原句）
+    reply: str = ""  # 人物回的那一句，或放手一搏播出的那一版劇情
+    weight: int = 1  # 份量 1～5：行狀滿了先丟輕的
 
 
 class PlayerState(BaseModel):
@@ -259,8 +321,13 @@ class PlayerState(BaseModel):
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
-    forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
-    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
+    treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
+    treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
+    tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
+    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
+    held_gear: list[Equipment] = Field(default_factory=list)
+    forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
@@ -289,10 +356,15 @@ class PlayerState(BaseModel):
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
     anonymous: bool = False
+    # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
+    # 舊角色沒這欄是男、gender_chosen 是 False：設定頁給一次改的機會（Game.set_gender，改完記 True）；建角色時選過的直接是 True
+    gender: str = "男"
+    gender_chosen: bool = False
     busy_until: float | None = None  # 閉關結束的遊戲時間
     seclusion_start: float = 0.0
     seclusion_done: float | None = None  # 上一次出關的遊戲時間（天時地利的「心靜」）；沒閉關過是 None
     manual: Manual = Field(default_factory=Manual)  # 武學譜（口訣與秘方）
+    forge_manual: Manual = Field(default_factory=Manual)  # 鑄譜（打造的隱藏配方：聽過的口訣、打中過的；tianxia/forge_secrets.py）
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
     # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；
@@ -343,6 +415,12 @@ class PlayerState(BaseModel):
     # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
     # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
     renames_told: list[str] = Field(default_factory=list)
+    # 行狀（玩家傳，tianxia/annals.py）：這一季值得寫進傳裡的事，照份量留最多 Config.biography.cap 則。角色每季重來，換季前存進
+    # biographies 表（Game._reset_player_for_new_season）
+    annals: list[AnnalEntry] = Field(default_factory=list)
+    # 上一次看過的幾樣狀態（陣營、門派、階、等級、名號、同伴、寶物、情誼……，annals.watch）：每個動作結束時拿現在的跟它比，變了的記一筆。
+    # None＝還沒看過（新角色、這一版之前的存檔）：第一次只記下來、不補記以前的事
+    annals_mark: dict | None = None
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     # 遊俠名號（ranger.py；散人的成長階梯）：散人時攢的善名、惡名（只算加的）與懸賞的功績；投靠了陣營就不再記（凍結）
@@ -520,6 +598,8 @@ class Bounty(BaseModel):
     takers: list[str] = Field(default_factory=list)  # 接了、還沒完成的名號
     done_by: list[str] = Field(default_factory=list)
     refunded: bool = False  # 通緝下榜時押金退過了
+    # 重賞（裝備四欄 6.4）：週一掛單時擲中的「寶物一件」或「良駒一匹」，只給第一個交差的人；哪一件到交差時才定（treasures.bounty_prize）
+    prize: Literal["treasure", "horse"] | None = None
 
 
 class Invite(BaseModel):
@@ -615,6 +695,13 @@ class WorldState(BaseModel):
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──
     seat_ledger: dict[str, dict[str, dict[int, int]]] = Field(default_factory=dict)  # 陣營 id → 名號 → {季曆週：那一週的貢獻}
     seats: dict[str, list[str]] = Field(default_factory=dict)  # 陣營 id → 這一週在任的名號
+    # ── 裝備三（裝備四欄設計第六節）──
+    # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift）、
+    # 玩家之間的贈物無關，所以不叫 gifts
+    general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
+    # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
+    tianji: int = 0
 
 
 class Fighter(BaseModel):

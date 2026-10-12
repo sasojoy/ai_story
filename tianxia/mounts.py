@@ -35,10 +35,10 @@ EMPTY = "身上沒有坐騎。"  # 待 joy 潤：修練頁坐騎那一段身上�
 RACK_NOTE = "城裡的馬市買得到駑馬；一個一階素材就餵得飽。"  # 待 joy 潤：修練頁坐騎那一段底下
 CAVALRY_LINE = "你騎著{name}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（5.9）：決戰畫面，接在「你的職位」那一行後面
 CAVALRY_REPORT = "你騎著{name}出陣"  # 待 joy 潤（5.9）：決戰的戰報與江湖紀錄
-RAID_FLEE_ASK = "他的馬比你快，{odds}會被他跑掉。"  # 待 joy 潤（5.10）：截殺鈕的確認句後面
+RAID_FLEE_ASK = "{him}的馬比你快，{odds}會被{him}跑掉。"  # 待 joy 潤（5.10）：截殺鈕的確認句後面
 RAID_FLED = "{rival}一夾{horse}的馬腹跑了，你追之不及。"  # 待 joy 潤：發起的人那一則
 RAID_ESCAPED = "{rival}半路攔你，你一夾{horse}的馬腹，策馬脫身。"  # 待 joy 潤：被截殺的人那一則
-RAID_FLED_TAG = "他策馬跑了"  # 待 joy 潤
+RAID_FLED_TAG = "{him}策馬跑了"  # {him}：他／她（gender.pronoun）  # 待 joy 潤
 RAID_ESCAPED_TAG = "策馬脫身"  # 待 joy 潤
 ESCAPED_LOSS = "你策馬脫身，銀兩沒丟。"  # 待 joy 潤（5.11）：落敗時保住那一成銀兩，戰報與紀錄各一句
 ON_ROAD = "在路上"  # 待 joy 潤：修練頁裝備庫那一列「換上」灰掉時的原因（2.3：路上不能換坐騎）
@@ -281,16 +281,25 @@ def wield(state: GameState, content: Content, item_id: str) -> list[str]:
 
 # ---- 機器人（設計第九節）：整季機器人（bot.visit_market）與伺服器假人（bot_policy.MARKET_SCORE）共用 ----
 
+def better_mount(state: GameState, content: Content) -> str | None:
+    """裝備庫裡比身上那匹快的（比吃飽的腳力 fresh_power，餓了的好馬不吃虧）最快那一匹的 id（同樣快照 id）；沒有是 None。
+    馬市的 wanted 與整季機器人、假人在修練頁換馬（bot.wear_better，裝備三）共用這一份比法，改比法只改這裡。坐騎關著時腳力都是 0，回 None。"""
+    p = state.player
+    best = max(equipment.in_slot(p, "mount"), key=lambda m: (fresh_power(content, m), m.id), default=None)
+    if best is None or fresh_power(content, best) <= fresh_power(content, p.mount) + 1e-9:
+        return None
+    return best.id
+
+
 def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
     """在馬市最該按的那一顆（整季機器人與伺服器假人共用）：裝備庫裡有比身上快的（比吃飽的腳力，餓了的好馬不吃虧）就換上；
     身上沒有坐騎、付得起馬價＋reserve 就買（馬市只賣駑馬：身上有馬就不買第二匹）；飽足低於 FEED_AT、餵得了就餵。不在馬市是 None。"""
     if not market_here(state, content):
         return None
     p = state.player
-    now = fresh_power(content, p.mount)
-    best = max(equipment.in_slot(p, "mount"), key=lambda m: (fresh_power(content, m), m.id), default=None)
-    if best is not None and fresh_power(content, best) > now + 1e-9:
-        return f"{WIELD}{best.id}"
+    better = better_mount(state, content)  # 裝備庫裡有比身上快的就換上（比法同 bot.wear_better）
+    if better is not None:
+        return f"{WIELD}{better}"
     if p.mount is None and buy_problem(state, content) is None and \
             p.stats.get("silver", 0) >= content.config.mounts.shop_price + reserve:
         return BUY

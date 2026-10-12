@@ -36,6 +36,7 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
+import os
 import re
 import secrets
 import shutil
@@ -56,10 +57,11 @@ from markdown_it import MarkdownIt
 from starlette.concurrency import run_in_threadpool
 
 import server_push
+import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, smithing, social, team, timetable,
+    battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
+    server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -657,9 +659,6 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
-    if smithing.is_go(option_id):  # 鐵匠鋪開爐：首創配方要模型取名，取名在鎖外（prepare_smith_forge），鎖裡從不叫模型
-        proposed = prepare_smith_forge(game, option_id)
-        return act(game, lambda g: g.choose(option_id, proposed=proposed))
     if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
         return act(game, lambda g: g.choose(option_id, prepared=prepared))
@@ -700,22 +699,6 @@ def prepare_forge(
     def name_it():
         budget = max(0.0, total - (_monotonic() - started))
         # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
-        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
-
-    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
-
-
-def prepare_smith_forge(game: Game, option_id: str) -> tuple[str | None, str]:
-    """鐵匠鋪開爐的首創取名在行動鎖外（兵器設計 4.4，跟 prepare_forge 同一套三段）：A 鎖內 Game.smith_forge_request 開單，
-    B 鎖外 naming.generate（預算 Config.naming_budget_seconds 扣掉 A 段與排隊花掉的），C 由呼叫端交給 Game.choose(..., proposed=...)。
-    不必叫模型（配方已經有人打過、打不成、這顆鈕不在選單上）是 NO_NAME；同一個人已經有一件在等模型時丟 GameError（BUSY_FORGE），不走 C 段。"""
-    started, request = _open_request(game, lambda: game.smith_forge_request(option_id))
-    if request is None:
-        return NO_NAME
-    total = game.content.config.naming_budget_seconds
-
-    def name_it():
-        budget = max(0.0, total - (_monotonic() - started))
         return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
@@ -844,7 +827,7 @@ def battle_text(game: Game, text: str) -> list[str]:
             return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
         # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
         return battle_instance.assess_gamble(
-            client, act_, request.faction_name, request.text, request.name, target=request.target,
+            client, act_, request.faction_name, request.text, request.name, target=request.target, sex=request.sex,
         )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
@@ -867,6 +850,7 @@ def duel_text(game: Game, text: str) -> list[str]:
             return fallback
         return battle_instance.assess_gamble(
             client, scene, request.faction_name, request.text, request.name, setting=duel.SETTING, place=duel.PLACE,
+            sex=request.sex,
         )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
@@ -948,6 +932,9 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
+    zhuan = game.biography_entry()  # 休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀是 None
+    if zhuan is not None:
+        view["zhuan"] = zhuan
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
         view["season_result"] = {
@@ -1172,8 +1159,9 @@ def register(login_name: str, password: str, again: str) -> str:
     return normalize(login_name)
 
 
-def create_character(account_key: str, name: str) -> Game:
-    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。"""
+def create_character(account_key: str, name: str, sex: str | None = None) -> Game:
+    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。
+    sex：建角色畫面選的性別（PM 2026-10-12）；只認「男」「女」，別的當沒選（男、設定頁還能選一次）。"""
     name = unicodedata.normalize("NFKC", name or "").strip()  # 全形英數字當成一般英數字：不能用「Ｒａｙａｌ」冒充「Rayal」
     if not name:
         raise GameError("請先輸入你的名號。")
@@ -1189,7 +1177,7 @@ def create_character(account_key: str, name: str) -> Game:
         else:
             if name_taken(name):
                 raise GameError(NAME_TAKEN)
-            game = Game.new(CONTENT, name, prologue=True)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
+            game = Game.new(CONTENT, name, prologue=True, sex=sex if sex in gender.GENDERS else None)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
             open_characters().save(game.state)
             store.bind_character(account_key, name)
     return game_for(name)
@@ -1339,7 +1327,7 @@ def api_register(response: Response, body: dict = Body(...)):
 @app.post("/api/character")
 def api_character(request: Request, body: dict = Body(...)):
     key = _account(request)
-    create_character(key, body.get("name", ""))
+    create_character(key, body.get("name", ""), body.get("gender"))
     return _entry(key)
 
 
@@ -1362,6 +1350,7 @@ def api_main(request: Request):
 MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
+    "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
@@ -1373,7 +1362,7 @@ MAIN_ACTIONS = {
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
-PAUSE_OK_ACTIONS = frozenset({"anonymous", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
@@ -1482,9 +1471,11 @@ MENXIA_ACTIONS = {
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
+    # 神器原品定名（打造隱藏配方設計 5.2）：自己打的名字，或 keep 是「沿用譜名」；keep 只認真正的布林 true（同 use_legend）
+    "name_divine": lambda g, b: g.name_divine(str(b.get("weapon") or ""), str(b.get("name") or ""), keep=b.get("keep") is True),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
-    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎都走這裡，網頁照舊送 weapon 這個鍵
+    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
     "feed": lambda g, b: g.feed_mount(),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }
@@ -1552,12 +1543,16 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
     msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
+    made = op == "forge" and game.forged  # 開爐真的合成了：煉製頁把爐子清空；被拒絕（只回一句話）的東西留在爐裡（Joy 2026-10-12）
     _tell_tabs(game)
-    return {
+    out = {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+    if op == "forge":
+        out["made"] = made
+    return out
 
 
 @app.get("/api/prologue")
@@ -1616,6 +1611,126 @@ def api_forge_line(request: Request, body: dict = Body(default={})):
 def api_reports(request: Request, id: int | None = None):
     game = _game(request)
     return look(game, lambda g: reports_view(g, id))
+
+
+@app.get("/api/annals")
+def api_annals(request: Request):
+    """見聞的「行狀」：這一季至今記下的事（玩家傳第一批；不叫模型）。"""
+    game = _game(request)
+    return look(game, lambda g: g.annals_view())
+
+
+# ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──
+# 寫一篇要一兩分鐘，一個請求在 trycloudflare 約 100 秒就被切斷：按「寫」只開一個背景執行緒做三段式，網頁每幾秒問一次寫好了沒。
+# 伺服器重開時寫到一半的那一篇就沒了（沒存進去），網頁問的時候照「還沒寫」再按一次。
+
+ZHUAN_JOBS: dict[tuple[str, int], float] = {}  # （名號 casefold, 季）→ 開始寫的時間
+ZHUAN_LOCK = threading.Lock()
+PUBLIC_URL_ENV = "TIANXIA_PUBLIC_URL"  # 分享網址的開頭；沒設就照設定的 Config.biography.public_url，再沒有就照這次請求的網址
+
+
+def _zhuan_key(game: Game, season: int) -> tuple[str, int]:
+    return game.state.player.name.casefold(), season
+
+
+def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
+    """開一個背景執行緒寫那一季的傳：A 鎖內開單 → B 鎖外請模型寫（model_call，佇列開著要排隊；預算 Config.biography.budget_seconds）
+    → C 鎖內重驗再存（Game.write_biography；模型寫不出來就照規則拼）。同一篇已經在寫就不再開；開了回 True。"""
+    key = _zhuan_key(game, season)
+    with ZHUAN_LOCK:
+        if key in ZHUAN_JOBS:
+            return False
+        ZHUAN_JOBS[key] = time.monotonic()
+
+    def zhuan_job() -> None:
+        try:
+            with _locked(game):
+                request = game.biography_request(season, rewrite)
+            if request is None:
+                return
+            budget = game.content.config.biography.budget_seconds
+            started = time.monotonic()
+
+            def ask() -> str | None:
+                return biography.write(game.client, request, budget - (time.monotonic() - started))
+
+            text = model_call(game, ask, fallback=None, left=budget)
+            with _locked(game):
+                game.write_biography(request, text, time.time())
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，網頁問的時候照「還沒寫」
+            traceback.print_exc()
+        finally:
+            with ZHUAN_LOCK:
+                ZHUAN_JOBS.pop(key, None)
+
+    threading.Thread(target=zhuan_job, name=f"zhuan-{season}", daemon=True).start()
+    return True
+
+
+def public_base(request: Request) -> str:
+    """分享網址的開頭（不含結尾的斜線）：環境變數 > 設定 > 這次請求的網址（走 cloudflared 時照 X-Forwarded-Proto 認 https）。"""
+    fixed = os.environ.get(PUBLIC_URL_ENV) or CONTENT.config.biography.public_url
+    if fixed:
+        return fixed.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return f"{proto}://{request.headers.get('host') or request.url.netloc}"
+
+
+def zhuan_view(game: Game, season: int, request: Request) -> dict:
+    view = game.biography_view(season)
+    if view is None:
+        raise GameError("這一季沒有你的傳。")
+    view["writing"] = _zhuan_key(game, season) in ZHUAN_JOBS
+    if view.get("code"):
+        view["url"] = f"{public_base(request)}/zhuan/{view['code']}"
+    return view
+
+
+def _season_arg(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise GameError("哪一季？") from None
+
+
+@app.get("/api/zhuan")
+def api_zhuan(request: Request, season: int):
+    """那一季的傳（還沒寫成時 written 是 False、can_write 說寫不寫得了；正在寫時 writing 是 True）。"""
+    game = _game(request)
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.post("/api/zhuan/write")
+def api_zhuan_write(request: Request, body: dict = Body(default={})):
+    """請史官寫（或重寫一次）那一季的傳：在背景寫，馬上回目前的樣子（writing 是 True）。寫不了丟 GameError。"""
+    game = _game(request)
+    season, rewrite = _season_arg(body.get("season")), body.get("rewrite") is True
+    if look(game, lambda g: g.biography_request(season, rewrite)) is None:
+        raise GameError("這一篇現在不能再寫了。" if rewrite else "這一季還不能寫傳。")
+    write_zhuan(game, season, rewrite)
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.post("/api/zhuan/share")
+def api_zhuan_share(request: Request, body: dict = Body(default={})):
+    """公開或收回那一季的傳：公開時回分享網址（不用登入的唯讀頁 /zhuan/<代碼>）。"""
+    game = _game(request)
+    season, public = _season_arg(body.get("season")), body.get("public") is True
+    code = look(game, lambda g: g.share_biography(season, public, secrets.token_urlsafe(6)))
+    if code is None:
+        raise GameError("傳還沒寫成，不能分享。")
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.get("/zhuan/{code}")
+def zhuan_page(code: str, request: Request):
+    """公開的傳（不用登入、唯讀）：只認公開中的分享代碼，其餘一律 404（不說是沒有、還是收回了）。
+    帶 Open Graph，LINE、FB 貼上去有預覽（題簽圖是 web/zhuan-og.png，所有的傳共用一張）。"""
+    row = open_world().biography_by_code(code)
+    if row is None:
+        return HTMLResponse(zhuan_html.missing(), status_code=404)
+    base = public_base(request)
+    return HTMLResponse(zhuan_html.page(row, CONTENT.scenario.name, f"{base}/zhuan/{code}", f"{base}/static/zhuan-og.png"))
 
 
 @app.get("/api/map")

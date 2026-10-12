@@ -170,7 +170,7 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
     assert "種子 1 兵器開：" in out and "種子 1 兵器關：" in out
     assert out.count("遊歷勝率") == 2
     assert out.count("小時（世界時間）") == 2 and out.count("結局 ") == 2 and out.count("每遊戲日") == 2  # 季長、結局、每日場數
-    assert out.count("、打造 ") == 2 and out.count("淬煉 ") == 2 and out.count("首創配方 ") == 2  # 第二批：打造、淬煉、首創
+    assert out.count("、打造 ") == 2 and out.count("淬煉 ") == 2 and out.count("摸出隱藏配方 ") == 2 and out.count("、名器 ") == 2  # 打造第一批：一般組合不登記，數摸出的隱藏配方與名器
     assert out.count("鐵匠鋪花掉 ") == 2 and out.count("全季收入 ") == 2  # 設計第七節第 5 項：銀兩花在鐵匠鋪的比例
 
 
@@ -185,6 +185,7 @@ def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(caps
     assert out.count("穿著防具 ") == 2  # 防具開那一行的硬仗與勝率只算穿著防具的仗，要看得出算了幾場
     assert out.count("一條氣血撐 ") == 2 and out.count("硬仗之後再打的勝率 ") == 2 and out.count("修防具 ") == 2
     assert out.count("一階素材 ") == 2 and out.count("結局 ") == 2
+    assert out.count("打造防具 ") == 2 and out.count("淬防具 ") == 2 and out.count("防具名器 ") == 2  # 打造第一批：防具打造
 
 
 def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(capsys, monkeypatch):
@@ -197,6 +198,19 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
     assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("趕路疾行體力 ") == 2
     assert out.count("買馬 ") == 2 and out.count("、餵 ") == 2 and out.count("策馬脫身 ") == 2
     assert out.count("決戰騎著馬 ") == 2 and out.count("一階素材 ") == 2 and out.count("結局 ") == 2
+
+
+def test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures(capsys, monkeypatch):
+    """寶物量表（裝備四欄設計第十節第 3 項）：--seeds 1 跑一次週末設定、照手上的事走，寶物開、關各印一行（只量不改，不驗數字）。"""
+    measure = _load("measure_treasures")
+    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "weekend", "--steer"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert "種子 1 寶物開：" in out and "種子 1 寶物關：" in out
+    assert out.count("件（懸賞 ") == 2 and out.count("良駒 ") == 2 and out.count("名駒 ") == 2 and out.count("換成銀兩 ") == 2
+    assert out.count("寄放 ") == 2 and out.count("補發 ") == 2 and out.count("換寶物 ") == 2
+    assert out.count("升品 ") == 2 and out.count("多掉素材 ") == 2 and out.count("破境丹 ") == 2
+    assert out.count("勝場心得 ") == 2 and out.count("勝場經驗 ") == 2 and out.count("結局 ") == 2
 
 
 def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off(capsys, monkeypatch):
@@ -254,3 +268,32 @@ def test_the_server_bot_simulation_tallies_bounties_and_raids():
     assert report["被截最多"] == {"次數": 4, "銀兩": 12, "氣血": 40}
     tally.see(3, [b("b5", "art", 2)])  # 第 2 週的單分兩輪冒出來：兩批
     assert tally.report()["每週最多幾批"] == 2
+
+
+def test_the_server_bot_simulation_reports_smithing():
+    """打造第二批：假人整季打了幾爐、幾個假人打過、手上的名器、原品、仿品各幾件（smith_report）。"""
+    from types import SimpleNamespace as NS
+    from tianxia.state import Weapon
+    sim = _load("sim_server_bots")
+    smith = NS(player=NS(
+        forge_counts={"兵|劍|gang_1+gang_1": 2, "鎧|gang_1+gang_1": 1},
+        weapon=Weapon(id="兵:1", name="甲", kind="劍", secret="t", original=True), armor=None,
+        rack=[Weapon(id="兵:2", name="乙", kind="劍", secret="t", copy_of="鑄|t"), Weapon(id="兵:3", name="丙", kind="劍", secret="u")],
+    ))
+    idle = NS(player=NS(forge_counts={}, weapon=None, armor=None, rack=[]))
+    assert sim.smith_report([smith, idle]) == {"打造": 3, "打過的假人": 1, "名器": 1, "原品": 1, "仿品": 1}
+
+
+def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypatch):
+    """口訣與秘方量表多一段鑄器（打造隱藏配方設計第十二節第 1、2、4 項）：--seeds 1 跑一次週末設定，三種機器人各一行鑄器、
+    三邊合起來一行、三行平均（只量不改，不驗數字）。"""
+    measure = _load("measure_secrets")
+    monkeypatch.setattr(sys, "argv", ["measure_secrets.py", "--seeds", "1"])
+    measure.main()
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    # 平均那三行（「隨機平均 鑄器：摸到 …」）也含「鑄器：摸到 」，所以每個種子的那三行照開頭數
+    assert sum(line.startswith("種子 1 ") and "鑄器：摸到 " in line for line in lines) == 3
+    assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
+    assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
+    assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個

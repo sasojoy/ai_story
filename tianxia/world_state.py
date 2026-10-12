@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
-from .state import Rumor, WeaponRecipe, WorldState
+from .state import GearFind, Rumor, WeaponRecipe, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -203,7 +203,7 @@ class WorldStateStore(Protocol):
         """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
         ...
 
-    # ── 兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes；這一季）──
+    # ── 兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes；這一季）：打造隱藏配方第一批起不再新增，上線那一季讀舊名字用 ──
     def lookup_weapon_recipe(self, key: str) -> WeaponRecipe | None:
         """這個兵器配方這一季有沒有人打過；有就回登記在案的那一筆（全服看到同一個名字）。"""
         ...
@@ -211,6 +211,31 @@ class WorldStateStore(Protocol):
     def claim_weapon_recipe(self, key: str, recipe: WeaponRecipe) -> tuple[WeaponRecipe | None, bool]:
         """跟 claim_recipe 同一套，原子判斷：配方有了 → (登記在案的, False)；名字被任何功法、改過的名字、意境、兵器配方用掉
         → (None, False)，呼叫端換名字再試；否則登記、回 (recipe, True)。"""
+        ...
+
+    # ── 隱藏配方的發現（打造隱藏配方設計 7.1；gear_recipes 裡鍵「鑄|配方 id」那幾列；這一季）──
+    def lookup_gear_find(self, key: str) -> GearFind | None:
+        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。"""
+        ...
+
+    def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
+        """原子判斷誰先：已經有了 → (登記在案的, False)；否則登記、回 (find, True)。名字欄寫鍵本身，不佔名字空間；
+        鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
+        ...
+
+    def add_copy(self, key: str) -> None:
+        """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
+        ...
+
+    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+        """神器原品定名（打造隱藏配方設計 5.2、7.1、7.3；鎖內原子，同 rename_skill）：這一季這條神器配方那一列的原品主人是 owner、還沒定名、
+        名字沒被佔（_name_taken：武學、改過的名字、意境、gear_recipes），才把名字欄與 data 一起改掉（定的名字佔名字空間）。
+        回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
+        ...
+
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        """神器譜（打造隱藏配方設計 5.5）：歷來每一季的神器原品——gear_recipes 裡「鑄|」開頭、神器配方、有原品主人的列，
+        照季、再照鍵排，跨季讀（換季不刪）。回（季數, 那一列）。"""
         ...
 
     # ── 合到舊的（武學與成長設計 12.2；這一季）──
@@ -249,6 +274,39 @@ class WorldStateStore(Protocol):
 
     def insight_first(self, key: str) -> tuple[str, str] | None:
         """這一季這個鍵的首悟紀錄：（意境名, 名號）；沒有人悟過是 None。"""
+        ...
+
+    # ── 玩家傳（資料庫第 5 版 biographies）：每個角色每季一篇，跨季保留 ──
+
+    def save_annals(self, season: int, name: str, annals: list[dict], profile: dict) -> None:
+        """換季前把這個角色那一季的行狀與身家存起來（Game._reset_player_for_new_season）。已經存過的那一季：傳還沒寫成就換成這一份，
+        寫成了就不動（寫的是當時那份行狀）。"""
+        ...
+
+    def add_saved_annal(self, season: int, name: str, entry: dict) -> None:
+        """那一季的行狀已經存起來之後才補到的一則（上一季收場的決戰，下一季才回來補）：接在存著的那份後面。那一季沒存過就不記。"""
+        ...
+
+    def biography(self, season: int, name: str) -> dict | None:
+        """那一季這個角色的那一篇（欄位照 biographies 表；annals、profile 已經解開成 Python 的資料）；沒有是 None。"""
+        ...
+
+    def biographies_of(self, name: str) -> list[dict]:
+        """這個角色歷季存著的每一篇（同 biography），照季別由新到舊。"""
+        ...
+
+    def store_biography(self, season: int, name: str, text: str, written_by: str, written_at: float, rewrite: bool) -> bool:
+        """寫成的傳存進那一季那一篇（save_annals 要先存過）：rewrite 是 False 時只在還沒寫過時存（同時兩個請求只存先到的那一篇），
+        是 True 時蓋掉舊的、重寫次數加一。存了回 True。"""
+        ...
+
+    def share_biography(self, season: int, name: str, public: bool, code: str) -> str | None:
+        """公開或收回那一篇（寫成了才行）：公開時沒有分享代碼就用 code（呼叫端產生的亂碼），有了就沿用舊的（取消再公開網址不變）。
+        回傳那一篇的分享代碼；那一篇不在或還沒寫成回 None。"""
+        ...
+
+    def biography_by_code(self, code: str) -> dict | None:
+        """公開頁照分享代碼查（不用登入）：只回公開中、寫成了的那一篇；其餘一律 None。"""
         ...
 
     # ── 同伴性情漂移 ──
