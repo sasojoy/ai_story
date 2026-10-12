@@ -912,7 +912,7 @@ class ForgeSide(_Strict):
 
 class ForgeSecret(_Strict):
     """打造的隱藏配方（content/forge_secrets.json；打造隱藏配方設計 3.1）：某種兵器（或防具）＋主料＋輔料（主輔不交換），打中了出有專名的
-    名器（tianxia/forge_secrets.py）。divine 是神器配方（第二批才挑）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
+    名器（tianxia/forge_secrets.py）。divine 是神器配方（打造第二批：一爐必出神器，第一把原品、之後仿品；name 是譜名）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
     這一條，單看一句只能縮小範圍（3.5）。"""
 
     id: str
@@ -1527,6 +1527,8 @@ class WeaponRules(_Strict):
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
+    copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
+    original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
 
 
 class ArmorRules(_Strict):
@@ -1552,6 +1554,8 @@ class ArmorRules(_Strict):
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
+    copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
+    original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
 
 
 class MountRules(_Strict):
@@ -1658,7 +1662,7 @@ class ForgeSecretRules(_Strict):
     """打造的隱藏配方與鑄器的口訣（打造隱藏配方設計第三、六、七節；tianxia/forge_secrets.py）。預設全關（測試內容沒有配方池），
     正式值在 config.json。"""
 
-    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，第二批才開，第一批載入時擋成 0）
+    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，打造第二批起照挑）
     per_season: dict[str, int] = Field(default_factory=dict)
     tale_chance: float = Field(default=0, ge=0, le=1)  # 說書事件（Config.secrets.tale_events）了結時，另擲一次多一句說書版鑄器口訣
     smith_chance: float = Field(default=0, ge=0, le=1)  # 在鐵匠鋪花了銀兩或素材之後，鐵匠順口說出這家知道的那一句（鐵匠版）
@@ -1671,6 +1675,17 @@ class ForgeSecretRules(_Strict):
     mine_line: str = "照你摸出來的鑄法，又打了一件。"
     follow_line: str = "這門鑄法由{who}先摸出來，你也打成了。"
     rumor: str = "{who}在鐵匠鋪摸出了一門失傳的鑄法，打出了【{name}】。"
+    # 神器（打造第二批；待 joy 潤；{who} 換成名號）
+    divine_line: str = "這是一把神器，這門鑄法這一季只出這一把原品——到修練頁的裝備庫替它定名。"
+    copy_line: str = "這門鑄法的原品在{who}手上，你打出的是仿品。"
+    copy_mine_line: str = "原品已經在你手上，這一爐打出的是仿品。"
+    divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
+    named_rumor: str = "{who}替手上的神器定了名，叫【{name}】。"  # 定名時的傳聞（7.2：帶名字的那一句）
+    named_chronicle: str = "{who}打出一把神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」）
+    # 三階素材的新來源（兵器設計 4.9；打造第二批，PM 決定第 7 條）：預設全關，正式值在 config.json。擲骰都用自己的亂數（Game._tier3）
+    challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
+    tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）
+    big_tier3: float = Field(default=0, ge=0, le=1)  # 大場面對手（不是本人那支隊伍）打贏，另擲一次三階素材；正式 0.25
 
 
 class FirstEcho(_Strict):

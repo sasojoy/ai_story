@@ -293,6 +293,44 @@ class SqliteWorldStore:
             )
             return find, True
 
+    def add_copy(self, key: str) -> None:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            find = _gear_find(conn, season, key)
+            if find is None:
+                return
+            find.copies += 1
+            conn.execute(
+                "UPDATE gear_recipes SET data = ? WHERE season = ? AND key = ?", (find.model_dump_json(), season, key),
+            )
+
+    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+        name = name.strip()
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            find = _gear_find(conn, season, key)
+            if find is None or not find.divine:
+                return "gone"
+            if find.owner != owner:
+                return "owner"
+            if find.divine_name is not None:
+                return "named"
+            if _name_taken(conn, season, name):
+                return "taken"
+            find.divine_name = name
+            conn.execute(  # 名字欄從鍵本身改成定的名字：之後 _name_taken 查得到它（gear_recipes_by_name 也擋同一季重名）
+                "UPDATE gear_recipes SET name = ?, data = ? WHERE season = ? AND key = ?", (name, find.model_dump_json(), season, key),
+            )
+            return None
+
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT season, data FROM gear_recipes WHERE key LIKE '鑄|%' ORDER BY season, key",
+            ).fetchall()
+        finds = [(row["season"], GearFind.model_validate_json(row["data"])) for row in rows]
+        return [(season, find) for season, find in finds if find.divine and find.owner]
+
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
     def fused_arts(self) -> list[MartialArt]:
@@ -780,7 +818,7 @@ class SqliteWorldStore:
 
 def _name_taken(conn: Connection, season: int, name: str) -> bool:
     """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境、gear_recipes 都算（上線前的兵器配方；隱藏配方那幾列的名字欄
-    是鍵本身，不會撞到合法的名字）。"""
+    是鍵本身，不會撞到合法的名字）。定了名的神器原品那一列名字欄是定的名字，照樣算（打造隱藏配方設計 7.3）。"""
     return any(
         conn.execute(f"SELECT 1 FROM {table} WHERE season = ? AND name = ?", (season, name)).fetchone()
         for table in ("skills", "skill_aliases", "insights", "gear_recipes")

@@ -1468,6 +1468,8 @@ MENXIA_ACTIONS = {
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
+    # 神器原品定名（打造隱藏配方設計 5.2）：自己打的名字，或 keep 是「沿用譜名」；keep 只認真正的布林 true（同 use_legend）
+    "name_divine": lambda g, b: g.name_divine(str(b.get("weapon") or ""), str(b.get("name") or ""), keep=b.get("keep") is True),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵

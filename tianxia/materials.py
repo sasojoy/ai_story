@@ -9,10 +9,11 @@
 """
 from __future__ import annotations
 
+import hashlib
 import math
-
 import random
 
+from .insights import PAIR_ATTRIBUTES
 from .models import Content, Material, Squad
 from .state import GameState
 
@@ -166,6 +167,19 @@ def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list
         if pool:
             out.append((rng.choice(pool).id, 1))
     return out
+
+
+def tier3_pick(content: Content, attribute: str | None, seed: str) -> str | None:
+    """三階素材的新來源（兵器設計 4.9；打造第二批）挑哪一個：剛柔快慢直接對；陰陽虛實是兩個屬性合出來的（insights.PAIR_ATTRIBUTES），
+    照種子的 sha256 從兩個來源挑一個（同 equipment.dismantle_material）；沒寫屬性、該屬性沒有三階素材時在全部三階裡照種子挑。
+    決定性、不擲 Game.rng。沒有三階素材是 None。"""
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
+    if sources is not None:
+        attribute = sources[digest[0] % 2]
+    tier3 = [m for m in content.materials.values() if m.tier == 3]
+    pool = [m for m in tier3 if m.attribute == attribute] or tier3
+    return pool[digest[1] % len(pool)].id if pool else None
 
 
 def bag_contents(state: GameState, content: Content) -> list[tuple[Material, int]]:

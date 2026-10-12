@@ -461,6 +461,15 @@ def echo(
         add_rumor(state, template.format(who=shown_creator(thing) or thing.creator, thing=shown), None, content=content, named=True)
 
 
+def rename_echo(state: GameState, thing_id: str, name: str) -> None:
+    """神器原品定名之後（打造隱藏配方設計 5.2；smithing.name_divine）：echo 在原品還叫「無名神器」時記下的那一筆（Echo.name）改成新的名字，
+    寫法同 echo（隱藏配方的首位發現者用【】），之後主人收到的回饋與湊滿人數的傳聞才寫得出是哪一把。沒有那一筆就什麼都不做；
+    呼叫端最後的 _save_season 把它存回共用賽季。"""
+    entry = state.world.echoes.get(thing_id)
+    if entry is not None:
+        entry.name = f"【{name}】"
+
+
 def can_forge(state: GameState, content: Content) -> bool:
     """現在有沒有可能拿意境開爐：持有沒滿、有意境，而且付得起一次武學＋意境（還要有武學）或一次合併（設計 12.1：
     兩種都花心得與體力）。只看結構、不查全服配方表（那要打資料庫；狀態列每次輪詢都會算這個），所以「合出來的你已經有了」

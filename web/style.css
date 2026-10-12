@@ -611,6 +611,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .naming p { margin: 4px 0 8px; font-size: 14px; }
 .naming .input { flex: 1 1 auto; min-width: 0; }
 .naming .btn { flex: none; }
+.naming.divine { margin-top: 6px; } /* 神器原品定名：接在裝備庫那一列底下 */
 /* 療傷、閉關兩格：閉關那一格是表單，底下一個時數選單 */
 .tune { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
 .tune .btn, .acts .btn { flex-direction: column; gap: 0; min-height: 50px; padding: 6px 8px; }

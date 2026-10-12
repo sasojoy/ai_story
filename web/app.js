@@ -2105,19 +2105,31 @@
     // 格數四欄合算（gear.used／gear.cap）。字都是伺服器給的資料，一律 esc。這一版畫不出的欄位（新伺服器多了一欄）整段略過。
     // FB-125（兵器第二批 Task 1）：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
     const gear = x.gear;
-    const rowButtons = (w) => `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button><button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}" data-confirm="${esc(w.confirm || "")}">拆解</button></div>`;
+    // 神器原品不能拆（打造隱藏配方設計 5.4）：伺服器給 keep（原因），拆解鈕灰掉寫它，不送、不問
+    const rowButtons = (w) => `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(w.id)}">換上</button>${w.keep
+      ? `<button class="btn small ghost" disabled>${esc(w.keep)}</button>`
+      : `<button class="btn small ghost" data-act="dismantle" data-id="${esc(w.id)}" data-confirm="${esc(w.confirm || "")}">拆解</button>`}</div>`;
+    // 神器原品定名（打造隱藏配方設計 5.2）：還沒定名的原品那一列底下一張表單——自己打一個名字，或「沿用譜名【…】」。
+    // 一個人可以同時有好幾把，表單照裝備 id 各一張（data-op 認，id 不重複）。名字合不合格由伺服器驗；字一律 esc。整段待 joy 潤
+    // 表單接在 .wrow 的外面、緊貼著它底下（.wrow 是橫排的 flex，放進去會被擠到鈕的右邊）
+    const divineForm = (w) => `<form class="naming divine" id="name-divine-${esc(w.id)}" data-op="name-divine" data-id="${esc(w.id)}">
+        <small>你打出了神器</small>
+        <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
+        <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
+        <button class="btn small ghost" type="button" data-act="divine-keep" data-id="${esc(w.id)}">沿用譜名【${esc(w.divine.pattern)}】</button>
+      </form>`;
     // 武器：淬過的寫「淬煉 N/5」，自己打的寫配方（兵器第二批 Task 8）
     // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
         <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}</div>
         ${wornNow ? "" : rowButtons(w)}
-      </div>`;
+      </div>${w.divine ? divineForm(w) : ""}`;
     // 防具：不分種類、沒有「配不上」；寫耐久度與這件一場少扣幾成氣血、對不對得上你的內功（裝備四欄設計 4.1、4.2）。
     // 磨損的叫法照伺服器給的 wear_word（equipment.WEAR_WORDS，2.5、3.1），不寫死。這一行的寫法待 joy 潤；淬過的寫「淬煉 N/M」、自己打的寫配方（防具打造，同武器列）
     const armorRow = (a, wornNow) => `<div class="wrow">
         <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}/${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}</div>
         ${wornNow ? "" : rowButtons(a)}
-      </div>`;
+      </div>${a.divine ? divineForm(a) : ""}`;
     // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、趕路疾行省幾成體力、路上快幾成、
     // 決戰強攻奇襲多幾成、落敗脫身的機會（2.5：後三項寫在修練頁這一列，不擠進角色卡）。
     // 身上那匹一顆「餵」（餵不了的灰掉、寫為什麼；餵得了寫用哪一種素材），裝備庫裡的只有「換上」：坐騎不能拆（4.8），不用 rowButtons；
@@ -2936,7 +2948,7 @@
       // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
       end_season: ["立刻收季：這一季馬上結束、算出結局與武學榜，全服進入休季（之後再按「開啟下一季」）；沒打完的決戰直接收掉、不算結果，確定？", "確定收季"],
       // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
-      next_season: [`開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、武學與意境的名字全部釋出（絕學定的名也是）、合成與合併的配方清空、鐵匠鋪的隱藏鑄法換一批、鑄譜重來、天機 +1，沒打完的決戰清掉。${
+      next_season: [`開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、武學與意境的名字全部釋出（絕學定的名也是）、合成與合併的配方清空、鐵匠鋪的隱藏鑄法換一批、鑄譜與神器重來（神器譜留著）、天機 +1，沒打完的決戰清掉。${
         S.admin && S.admin.next_has_timetable ? "記得排三場大戲與季末的時間（預設在第 6、9、11 週中、第 12 週末）。" : ""}確定？`, "確定開啟下一季"],  // FB-050
       fast_forward: [`時間快轉現實 ${body.hours} 小時的份（全服一起，季曆會跳得更多），確定？`, `快轉 ${body.hours} 小時`],
       // 公告停機時賽季時鐘暫停（Game.admin_pause_clock／admin_resume_clock）；問句待 S1／joy 潤
@@ -3732,6 +3744,7 @@
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
         case "feed": await mx("feed"); break; // 身上那匹餵一個一階素材（裝備四欄 5.4）
+        case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
         case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
           ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
           break;
@@ -3915,6 +3928,14 @@
         // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
         const again = document.querySelector('#name-art input[name="name"]');
         if (again && S.menxia && S.menxia.naming) again.value = data.name;
+      } else if (form.dataset && form.dataset.op === "name-divine") {
+        // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打（同絕學定名那張）。
+        // 表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；定成了那一列不再畫表單，找不到就什麼都不放
+        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
         // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。

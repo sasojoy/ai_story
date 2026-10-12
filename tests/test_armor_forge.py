@@ -258,7 +258,9 @@ def test_the_armor_wizard_skips_the_kind_and_walks_main_aux_go(content, world):
     assert smithing.OPEN in _ids(game)  # 打完回到防具頁的選單
     forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
     assert len(forged) == 1 and any(p.armor.name in line for line in forged[0].lines)  # 一爐一則紀錄
-    assert "主料：精鐵砂。" in forged[0].lines and "輔料：驚羽。" in forged[0].lines
+    lines = forged[0].lines  # FB-141：開爐成了那一則只留結果、結果句排第一；挑主料、輔料的回報收掉（結果句寫了放哪兩樣）
+    assert lines[0].startswith(f"鐵匠把精鐵砂與驚羽下爐，打出一件【{p.armor.name}】（防具・屬陽・一階")
+    assert "主料：精鐵砂。" not in lines and "輔料：驚羽。" not in lines and smithing.ARMOR_ASK_AUX not in lines
 
 
 def test_aux_marks_the_attribute_that_matches_the_inner_art(content, world, monkeypatch):
@@ -514,15 +516,26 @@ def test_visit_smith_never_leaves_an_armor_draft_open(content, world, monkeypatc
     assert not game.state.player.picking_smith and game.state.player.smith_draft is None
 
 
-def test_server_bots_never_forge_or_temper_armor(content, world):
+def test_server_bots_forge_armor_step_by_step_and_never_temper_it(content, world):
+    """打造第二批（PM 2026-10-12 決定第 3 條）：防具也照整季機器人的 armor_plan 一步一步打（防具沒有挑種類那一步：
+    打開 → 主料 → 輔料 → 開爐）；淬煉永遠不按。"""
     from tianxia import bot_policy
     from tianxia.state import BotProfile
     game = _armor_smith(content, world)
-    game.state.player.armor = _jacket()
+    p = game.state.player
+    p.armor = _jacket()  # 一階、買的、屬虛（對上靜心訣）：架上那件不比它好，不會先去買
     profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
-    assert scored[smithing.OPEN] is None and scored[smithing.ARMOR_TEMPER] is None
-    game.choose(smithing.OPEN)
-    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
-    assert scored[smithing.CANCEL] == 0.0  # 萬一停在單子上，只會按「不打了」
-    assert all(v is None for k, v in scored.items() if k != smithing.CANCEL)
+    plan = smithing.armor_plan(game.state, content, world, team.player_art(game.state, content, world, p.member.neigong_id))
+    assert plan is not None and plan[0] == smithing.ARMOR_KIND
+    pressed = []
+    for _ in range(10):
+        want = bot_policy._smith_want(game)
+        scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+        assert scored.get(smithing.ARMOR_TEMPER) is None  # 不淬煉
+        if want is None:
+            break
+        assert scored[want] == bot_policy.SMITH_SCORE
+        pressed.append(want)
+        game.choose(want)
+    assert pressed[:4] == smithing.wizard_steps(*plan) and p.smith_draft is None  # 之後可能多一顆「換上」打出來的那件
+    assert smithing.recipe_key(*plan) in {a.recipe for a in [p.armor, *p.rack] if a is not None and a.slot == "armor"}

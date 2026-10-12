@@ -119,7 +119,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
         "fights": count["fights"], "repairs": count["repairs"],
         "edge_avg": sum(edges) / len(edges) if edges else None,
         "weapon": p.weapon.name if p.weapon else "—", "mats": tiers, "silver": p.stats.get("silver", 0),
-        "forged": len(forged), "grades": Counter(w.quality for w in forged), "named": sum(w.secret is not None for w in forged), "tempers": sum(w.tempers for w in owned), "firsts": firsts,
+        "forged": len(forged), "grades": Counter(w.quality for w in forged), "named": sum(w.secret is not None and not w.original and w.copy_of is None for w in forged), "tempers": sum(w.tempers for w in owned), "firsts": firsts,
         "smith_silver": count["smith_silver"], "income": count["income"],
     }
 

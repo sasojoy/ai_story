@@ -67,17 +67,22 @@ def test_match_reads_the_shape_kind_slot_and_main_aux_order(forge_content):
     assert m("weapon", "劍", "gang_1", "kuai_1") is None  # 這一季沒挑到的不算
 
 
-def test_the_real_pool_has_twenty_two_named_recipes_and_validates():
+def test_the_real_pool_has_thirty_one_named_recipes_and_validates():
     rc = real_content()  # 載入時已經跑過 _validate_forge_secrets
-    assert len(rc.forge_secrets) == 22 and not any(r.divine for r in rc.forge_secrets.values())  # 神器那 9 條等第二批（3.4）
+    assert len(rc.forge_secrets) == 31 and sum(r.divine for r in rc.forge_secrets.values()) == 9  # 3.4：兵器 22、防具 9，神器 9
     groups = Counter(forge_secrets.group_of(r) for r in rc.forge_secrets.values())
-    assert groups == {"weapon:1": 8, "weapon:2": 8, "armor:1": 3, "armor:2": 3}
-    assert rc.config.forge_secrets.per_season == {"weapon:1": 2, "weapon:2": 2, "armor:1": 1, "armor:2": 1}
+    assert groups == {"weapon:1": 8, "weapon:2": 8, "weapon:divine": 6, "armor:1": 3, "armor:2": 3, "armor:divine": 3}
+    assert rc.config.forge_secrets.per_season == {
+        "weapon:1": 2, "weapon:2": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:divine": 1}
     cfg = rc.config.forge_secrets
     assert (cfg.tale_chance, cfg.smith_chance, cfg.scrap_chance) == (0.5, 0.25, 0.04)  # 設計 6.2（PM 決定第 6 條照預設）
-    assert {"柳影劍", "纏絲護手", "負山袍", "霧隱袍"} <= {r.name for r in rc.forge_secrets.values()}
+    names = {r.name for r in rc.forge_secrets.values()}
+    assert {"柳影劍", "纏絲護手", "負山袍", "霧隱袍", "玄晶劍", "隕星刀", "寒淵拳套", "嶽峙鎧", "掠影衫"} <= names
+    for r in rc.forge_secrets.values():
+        if r.divine:
+            assert r.main.tier == 3 and r.aux.tier == 3  # 神器配方兩樣都三階（5.1）
     for tianji in range(5):
-        assert len(forge_secrets.active(rc, tianji)) == 6  # 第一批一季 6 條（兵器 4、防具 2，3.2）
+        assert len(forge_secrets.active(rc, tianji)) == 9  # 一季 9 條（兵器 6、防具 3，3.2）
     for r in rc.forge_secrets.values():
         assert naming.name_problem(r.name, rc) == naming.FORGE_CLASH  # 撞到自己：表示別人（模型、玩家）取不到這個名字
 
@@ -103,7 +108,8 @@ def test_forge_names_and_gear_names_are_kept_off_other_names(forge_content):
     (lambda c: c.forge_secrets.__setitem__("t_dup", c.forge_secrets["t_blade"].model_copy(update={"id": "t_dup", "name": "穿雲劍"})),
      "跟隱藏配方 t_blade 認同一個組合"),
     (lambda c: c.config.forge_secrets.per_season.__setitem__("weapon:1", 3), "weapon:1 只有 1 條，不夠挑 3 條"),
-    (lambda c: c.config.forge_secrets.per_season.__setitem__("weapon:divine", 1), "要等打造第二批"),
+    (lambda c: c.config.forge_secrets.per_season.__setitem__("weapon:divine", 1), "weapon:divine 只有 0 條，不夠挑 1 條"),
+    (lambda c: setattr(c.forge_secrets["t_cleaver"], "divine", True), "神器配方的主料、輔料都要三階"),
     (lambda c: c.config.forge_secrets.per_season.__setitem__("shield:1", 1), "per_season 只能有"),
 ])
 def test_a_bad_forge_pool_is_refused_at_load(forge_content, change, message):
