@@ -3030,6 +3030,25 @@ def test_an_ordinary_option_does_not_come_back_with_a_message(client):
     assert "message" not in out
 
 
+def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client):
+    """FB-162：兩個分頁搶同一張，慢的那一頁按下去的選項已經不在選單上——跟決戰選項一樣回一句 message（網頁跳提示），
+    原因是引擎的拒絕（bounties.give_problem：這一件不在功法庫裡）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
+    from tianxia import bounties
+    from tianxia.state import Bounty
+
+    _player(client)
+    # 開季時已經掛了第 1 週的那一批（b1…），這一張另取名字，免得 give_problem 找到的是別張
+    open_world().mutate_season(lambda s: s.bounties.append(
+        Bounty(id="b-race", kind="art", faction="guan", silver=20, deeds=2, quota=3, attribute="剛", week=1, expires=1e12)))
+    before = _journal_titles()
+    out = client.post("/api/choose", json={"id": "bounty:give:b-race:疾風拳"}).json()
+    assert bounties.NO_ART in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
+    assert bounties.GONE in client.post("/api/choose", json={"id": "bounty:pick:b99"}).json()["message"]
+    assert bounties.STALE in client.post("/api/choose", json={"id": "bounty:unpick"}).json()["message"]  # 榜根本沒開著
+    assert _journal_titles() == before
+    assert "message" not in client.post("/api/choose", json={"id": "act:nonsense"}).json()
+
+
 def test_a_showdown_option_that_is_no_longer_there_still_says_so(client):
     _a_showdown_fighter(client)
     out = client.post("/api/choose", json={"id": "battle:act:safe"}).json()

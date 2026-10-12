@@ -33,6 +33,7 @@ FULL_PAY = ("wanted", "art", "arms")  # 陣營的人也拿全額的（通緝是�
 NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
 NOT_NOW = "（此刻無法這麼做。）"
 GONE = "這張懸賞已經下榜了。"  # 待 joy 潤
+STALE = "榜上的情形變了，這一下沒有作用；照現在的畫面再選一次。"  # 待 joy 潤（FB-162：兩個分頁搶同一張，慢的那一頁按下去的懸賞選項已經不在選單上，又沒有更具體的原因可說）
 ONLY_FUSED = "這一張要的是江湖上新合出來的功夫；基礎武學、師門傳下來的配方都不收。"  # 待 joy 潤（FB-158：師門配方也是自己在火爐合的，只寫「合成出來」會讓人以為合用）
 GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
@@ -222,6 +223,22 @@ def stranded(state: GameState, content: Content, faction_id: str | None) -> list
         if me in (name_key(t) for t in b.takers) and me not in (name_key(t) for t in b.done_by)
         and not _takeable(p.name, faction_id, b)
     ]
+
+
+def stale_line(state: GameState, content: Content, world: WorldStateStore, arg: str) -> str:
+    """懸賞選項（Game.choose 的 bounty:<arg>）已經不在選單上時回給玩家的一句（FB-162：兩個分頁搶同一張、慢的那一頁按下去）。
+    arg 是 bounty: 後面那一段（take／drop／pick／give:懸賞 id:東西 id…）。找不到那一張了是 GONE；交出的先看引擎自己的拒絕
+    （give_problem：交過了、東西不在了、名額滿了……，跟照舊的 give 同一套話）；都沒有更具體的原因就是 STALE。
+    只讀，不改狀態、不寫紀錄。"""
+    verb, _, rest = arg.partition(":")
+    bounty_id, _, item = rest.partition(":")
+    if verb in ("take", "drop", "pick", "give"):
+        b = next((x for x in state.world.bounties if x.id == bounty_id), None)
+        if b is None:
+            return GONE
+        if verb == "give":
+            return give_problem(state, content, world, b, item) or STALE
+    return STALE
 
 
 def join_note(state: GameState, content: Content, choice: Choice) -> str:

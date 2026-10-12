@@ -181,6 +181,14 @@ HEARD_TITLE = "聽聞"
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
 FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
+
+
+class Refused(list):
+    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）。沒做事、沒寫江湖紀錄，
+    所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
+    不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
+
+
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
@@ -1380,6 +1388,10 @@ class Game:
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        if option is None and option_id.startswith("bounty:"):
+            # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
+            # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
+            return Refused(self._log([bounties.stale_line(self.state, self.content, self.world, option_id.partition(":")[2])]))
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
