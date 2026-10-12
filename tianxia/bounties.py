@@ -33,7 +33,7 @@ FULL_PAY = ("wanted", "art", "arms")  # 陣營的人也拿全額的（通緝是�
 NO_TAKE = "這一張不用揭，在懸賞榜上直接交。"  # 待 joy 潤
 NOT_NOW = "（此刻無法這麼做。）"
 GONE = "這張懸賞已經下榜了。"  # 待 joy 潤
-ONLY_FUSED = "這一張只收合成出來的功夫。"  # 待 joy 潤
+ONLY_FUSED = "這一張要的是江湖上新合出來的功夫；基礎武學、師門傳下來的配方都不收。"  # 待 joy 潤（FB-158：師門配方也是自己在火爐合的，只寫「合成出來」會讓人以為合用）
 GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
 EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
@@ -41,7 +41,7 @@ RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # �
 HAND_IN_VERBS = ("pick", "unpick", "give")  # 挑一件、回到懸賞榜、交出：江湖紀錄併成一則（Game.choose，懸賞榜設計 4.8）
 UNITS = {"art": "門", "arms": "把"}
 GIVE_YES = "交出"  # 待 joy 潤：確認層上那一顆（Option.confirm_yes）
-STUCK = "這幾張你現在交不出：{titles}（求藝要合成出來、不在身上練的功夫；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
+STUCK = "這幾張你現在交不出：{titles}（求藝要江湖上新合出來的功夫、師門配方不算、不能是身上正在練的；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
 MORE = {  # 待 joy 潤：第三層只列最不值錢的 give_list 件（設計 4.4），多的收成這一行
     "art": "還有 {n} 門合用的沒列出來（列的是熔掉最不值錢的；要交別的，先把前面這幾門熔掉、改練或交掉）",
     "arms": "還有 {n} 把合用的沒列出來（列的是最不值錢的；要交別的，先把前面這幾把拆掉或交掉）",
