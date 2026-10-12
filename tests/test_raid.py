@@ -116,6 +116,27 @@ def test_the_raid_switch_off_has_no_raids(pair):
     assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == []
 
 
+@pytest.mark.parametrize("fixture", ["pair", "beta_pair"])
+def test_the_raid_button_is_not_drawn_in_the_off_season_fb163(request, fixture):
+    """FB-163：休季（這一季收了）卡上不畫「截殺」，跟通緝鈕、懸賞榜一樣（以前還畫著灰的，城裡寫「城裡耳目眾多」、城外寫「你此刻正忙」，
+    原因都不對）。按了（直接打 API）也打不了、不扣體力不失銀兩；假人（raid_targets）沒有對象。下一季開了，同樣的兩個人又看得到。
+    第一季規則開著的季與關著的季都一樣。"""
+    content, world = request.getfixturevalue(fixture)
+    assert [b["enabled"] for b in _raid_buttons(content, world, "甲", "乙")] == [True]  # 季還在跑
+    world.mutate_season(lambda s: setattr(s, "ended", True))
+    card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
+    assert [b["action"] for b in card["actions"] if b["action"] in ("raid", "wanted")] == []  # 通緝鈕本來就收了，截殺鈕現在一樣
+    state = _load(world, "甲")
+    stamina, silver = state.player.stamina, state.player.stats["silver"]
+    msgs, game = _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))
+    assert msgs == ["（此刻無法這麼做。）"] and game.raid_shown(_do(content, world, "乙", lambda g: g)[1]) is False
+    assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == []
+    after = _load(world, "甲")
+    assert after.player.stamina >= stamina and after.player.stats["silver"] == silver and not after.battles
+    world.mutate_season(lambda s: setattr(s, "ended", False))
+    assert [b["enabled"] for b in _raid_buttons(content, world, "甲", "乙")] == [True]
+
+
 def test_not_in_a_town_and_not_on_newcomers(pair):
     content, world = pair
     for name in ("甲", "乙"):

@@ -5918,10 +5918,11 @@ class Game:
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞（散人、同陣營的人也行）。
-        每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；raid_targets 與 raid_refusal 都先問這裡。"""
+        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、這一季還沒收、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞
+        （散人、同陣營的人也行）。每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；休季（這一季收了）不畫，跟通緝鈕、懸賞榜一樣
+        （FB-163：以前還畫著灰的，原因寫成「城裡耳目眾多」「你此刻正忙」）；raid_targets 與 raid_refusal 都先問這裡。"""
         mine, theirs = self.state.player.faction, other.state.player.faction
-        if not self.content.config.raid.enabled:
+        if not self.content.config.raid.enabled or self.state.world.ended:
             return False
         if mine is not None and theirs is not None and mine != theirs:
             return True
