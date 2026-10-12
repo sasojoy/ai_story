@@ -199,6 +199,19 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
     assert out.count("決戰騎著馬 ") == 2 and out.count("一階素材 ") == 2 and out.count("結局 ") == 2
 
 
+def test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures(capsys, monkeypatch):
+    """寶物量表（裝備四欄設計第十節第 3 項）：--seeds 1 跑一次週末設定、照手上的事走，寶物開、關各印一行（只量不改，不驗數字）。"""
+    measure = _load("measure_treasures")
+    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "weekend", "--steer"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert "種子 1 寶物開：" in out and "種子 1 寶物關：" in out
+    assert out.count("件（懸賞 ") == 2 and out.count("良駒 ") == 2 and out.count("名駒 ") == 2 and out.count("換成銀兩 ") == 2
+    assert out.count("寄放 ") == 2 and out.count("補發 ") == 2 and out.count("換寶物 ") == 2
+    assert out.count("升品 ") == 2 and out.count("多掉素材 ") == 2 and out.count("破境丹 ") == 2
+    assert out.count("勝場心得 ") == 2 and out.count("勝場經驗 ") == 2 and out.count("結局 ") == 2
+
+
 def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off(capsys, monkeypatch):
     """散人量表（懸賞榜設計 11.1）：--profile none 不套設定覆寫檔，量的是預設設定（14 天、第一季規則關著）的季；
     開頭印一行設定，散人、陣營各一行，再各一行中位數（只量不改，不驗數字）。"""
