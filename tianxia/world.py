@@ -489,7 +489,12 @@ def _open_claimed(
     if not claimed:
         return []
     definition, start = claimed[0]
-    return _open_battle(world, definition, now, trend_start=start)
+    msgs = _open_battle(world, definition, now, trend_start=start)
+    if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
+        from . import seal  # noqa: PLC0415  seal → world_state：在函式裡 import，同這個模組其他延後 import
+
+        msgs += seal.on_muster(world, content, definition, now)
+    return msgs
 
 
 def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:

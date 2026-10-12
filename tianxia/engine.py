@@ -3110,6 +3110,10 @@ class Game:
         troops, bonus = self._battle_troops()
         return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus}
 
+    def _battle_marks(self) -> dict:
+        """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照）。"""
+        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content)}
+
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
         if not season_one(self.content, self.state.world):
@@ -3388,9 +3392,63 @@ class Game:
             b.outcome_world_flags = []
 
         self.world.mutate_battle(_relabel)
+        self._seal_settle(battle, definition, result)  # 玉璽碎片：先挑挑戰者、再挑現世的得主（3.3、4.5）；只寫登記、天下大事、江湖史，接著讀回的賽季看得到
         self.state.world = self.world.get_season()
         self._deliver_big_events()
         self._deliver_battle_results()
+
+    def _seal_settle(self, battle: battle_instance.BattleInstance, definition: BattleDef, result: dict) -> None:
+        """時刻表決戰收場時的玉璽碎片（_settle_showdown 呼叫；result 是算進伏筆鎖定的官方結果，不讀 battle.outcome_side，3.3）：
+        璽動那一場決定要不要開奪璽單挑（Task 8），再從勝方挑現世的得主；後挑的排除前面挑中的人。
+        只寫全服登記、單挑、天下大事、江湖史（一次 world.mutate），戰報那一行寫進這一場（mutate_battle 的 seal_notes）；
+        兩人的存檔等各自同步時補（_deliver_seal_results，5.9）。可能跑在 Game.for_world（玩家是空白的），不碰 self.state.player。
+        亂數全是 seal.dice，不碰 self.rng。"""
+        c = self.content
+        if not seal.on(c):
+            return
+        cfg = c.config.seal
+        view = self.world.seal_state()
+        reg = seal.filled(view.registry, c)
+        winner, margin = str(result.get("side") or ""), str(result.get("margin") or "")
+        need = seal.threshold(battle, cfg)
+        held = seal.holders(reg)
+        picked: set[str] = set()
+        notes: list[str] = []
+        # 保底收場（end_without_fighters：兩軍都沒人還能打）：不打單挑、現世落空（設計 4.5 邊界 3、3.3）；小伺服器的旁觀散人也不補
+        armies = {f.id for f in definition.factions}
+        deserted = not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+        # （Task 8 在這裡挑挑戰者、開單挑，picked 加上挑戰者）
+        found = None
+        emerge = reg.shards.get(battle.seal_emerge or "")
+        if emerge is not None and emerge.state == "hidden" and not deserted:
+            rows = seal.emerge_rows(battle, c, winner, need, held, picked)
+            found = seal.weighted_pick(rows, seal.dice(reg.salt, view.tianji, "seal-emerge", battle.record_id), cfg.challenger_pool)
+        shard_name = c.seal[battle.seal_emerge].name if battle.seal_emerge in c.seal else ""
+        emerged = {"ok": False}
+
+        def _apply(shared) -> None:
+            reg_ = seal.filled(shared.seal, c)
+            reg_.last_showdown, reg_.last_showdown_dueled, reg_.last_showdown_where = battle.record_id, False, definition.name
+            if battle.seal_emerge is None:
+                return
+            shard = reg_.shards[battle.seal_emerge]
+            if found is None or shard.state != "hidden" or seal.key(found) in seal.holders(reg_):  # 落空：照舊未現世，只寫天下大事
+                seal.rumor(shared.season, seal.EMERGE_LOST.format(battle=definition.name))
+                return
+            season = shared.season_number
+            shard.state, shard.holder, shard.since_season, shard.emerged_round = "held", found, season, reg_.round
+            reg_.emerge_season = season
+            text = seal.EMERGE_GOT.format(name=found, battle=definition.name, shard=shard_name)
+            seal.log(reg_, season, "emerge", shard=shard.id, holder=found, record=battle.record_id, text=text)
+            seal.rumor(shared.season, text)
+            seal.chronicle(shared.season, text)
+            emerged["ok"] = True
+
+        self.world.mutate(_apply)
+        if emerged["ok"]:  # 寫入時重驗沒過（落空）就不寫戰報那一行
+            notes.append(seal.EMERGE_NOTE.format(name=found))
+        if notes:
+            self.world.mutate_battle(lambda b: b.seal_notes.extend(notes) if b.record_id == battle.record_id else None)
 
     def _open_waiting_showdown(self) -> None:
         """時間到了、在等前一場打完的時刻表決戰，前一場一收場就開（Review Focus 2：開不成時留著記號，等它收場立刻開）。
@@ -4130,11 +4188,11 @@ class Game:
                 return ["（你只能站在自己陣營這一邊。）"]
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
-            gear = self._battle_gear()
+            gear, marks = self._battle_gear(), self._battle_marks()
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                    role=self._battle_role(), **gear,
+                    role=self._battle_role(), **gear, **marks,
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -4146,11 +4204,11 @@ class Game:
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()
-            gear = self._battle_gear()
+            gear, marks = self._battle_gear(), self._battle_marks()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear,
+                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear, **marks,
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -4175,11 +4233,11 @@ class Game:
         stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
-        gear = self._battle_gear()
+        gear, marks = self._battle_gear(), self._battle_marks()
         if battle.phase == "muster":
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
-                    b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear,
+                    b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear, **marks,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
@@ -4187,7 +4245,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
-                    **gear,
+                    **gear, **marks,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]

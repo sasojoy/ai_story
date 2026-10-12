@@ -374,3 +374,144 @@ def test_with_the_shards_on_the_old_chain_no_longer_records_a_fragment(real, wor
     game.state.world.flags.discard(flag)
     rules.apply_effect(Effect(world_flags_add=[flag]), game.state, real, world)
     assert len(world.get_jade_seal_fragments()) == 1
+
+
+# ── Task 5：參戰快照、挑人、現世 ──
+
+def _registry(content, **held):
+    """一份補齊七片、有密鹽的登記；held 是 片 id → 持有者（since_season 0）。"""
+    from tianxia import seal
+    from tianxia.world_state import SealRegistry
+
+    reg = seal.filled(SealRegistry(salt=SALT), content)
+    for shard_id, name in held.items():
+        reg.shards[shard_id].state, reg.shards[shard_id].holder, reg.shards[shard_id].since_season = "held", name, 0
+    return reg
+
+
+def _ended(battle_id, rows, rounds=9, record=7, **seal_fields):
+    """收場的決戰：rows 是（名號, 陣營, 自己出手幾回合, 帶頭佔上風幾回合）；戰功照 Joy 的 merit_points（出手 2、帶頭 3）。"""
+    from tianxia.battle_instance import BattleInstance, BattleParticipant
+
+    parts = {
+        name: BattleParticipant(name=name, faction=side, neili=300.0, neili_cap=300.0, power=60.0, acted_rounds=acted,
+                                led_rounds=led, scores={"強攻": 50.0, "固守": 50.0, "奇襲": 50.0})
+        for name, side, acted, led in rows
+    }
+    return BattleInstance(battle_id=battle_id, phase="ended", participants=parts, round_number=rounds, record_id=record, **seal_fields)
+
+
+def test_joining_snapshots_turncoat_and_newbie(sealed, world):
+    """參戰者加入時快照「這一季叛投過」與「新手期」（4.6），挑挑戰者只讀快照。"""
+    from tianxia import battle_instance
+    from tianxia.battle_instance import BattleInstance
+    from tianxia.engine import Game
+
+    game = Game.new(sealed, "甲", rng=random.Random(0), world=world)
+    game.state.player.defected = True
+    marks = game._battle_marks()
+    assert marks == {"turncoat": True, "newbie": True}  # 新角色還在新手期
+    b = BattleInstance(battle_id="changshe_fire")
+    battle_instance.join_faction(b, "甲", "guan", 300.0, **marks)
+    assert (b.participants["甲"].turncoat, b.participants["甲"].newbie) == (True, True)
+    battle_instance.join_faction(b, "乙", "guan", 300.0)
+    assert (b.participants["乙"].turncoat, b.participants["乙"].newbie) == (False, False)  # 舊的呼叫法照舊
+
+
+def test_emergence_rolls_its_own_dice_once_a_season(sealed):
+    """3.2：一季最多一片；照密鹽＋天機＋季別擲 35%，挑還沒現世過的；管理者強制現世略過機率。"""
+    from tianxia import seal
+
+    reg = _registry(sealed)
+    hits = [s for s in range(1, 200) if seal.roll_emerge(reg, sealed, s, 0) is not None]
+    assert 0.25 < len(hits) / 199 < 0.45
+    reg.emerge_season = hits[0]
+    assert seal.roll_emerge(reg, sealed, hits[0], 0) is None
+    reg.force_emerge = "*"
+    assert seal.roll_emerge(reg, sealed, 999, 0) is not None
+    for shard in reg.shards.values():
+        shard.state = "held"
+    assert seal.roll_emerge(reg, sealed, 1000, 0) is None  # 這一輪都現世過了
+
+
+def test_the_round_threshold_relaxes_on_a_small_battle(sealed):
+    """min(3, 實打回合)；參戰名單不到 10 人時放寬到 1 回合（PM 癸）。"""
+    from tianxia import seal
+
+    cfg = sealed.config.seal
+    twelve = [(f"人{i}", "guan", 1, 0) for i in range(12)]
+    assert seal.threshold(_ended("wancheng_jia", twelve, rounds=2), cfg) == 2
+    assert seal.threshold(_ended("wancheng_jia", twelve, rounds=9), cfg) == 3
+    assert seal.threshold(_ended("wancheng_jia", [("甲", "guan", 1, 0)], rounds=9), cfg) == 1
+
+
+def test_the_pick_takes_the_top_three_by_merit_and_prefers_the_former_holder_only_inside():
+    from tianxia import seal
+
+    rows = [("甲", 30), ("乙", 20), ("丙", 10), ("丁", 5)]
+    assert {seal.weighted_pick(rows, random.Random(i), 3) for i in range(200)} == {"甲", "乙", "丙"}
+    assert seal.weighted_pick(rows, random.Random(0), 3, prefer="乙") == "乙"
+    assert seal.weighted_pick(rows, random.Random(0), 3, prefer="丁") in {"甲", "乙", "丙"}  # 前主不在前三名：不插隊
+    assert seal.weighted_pick([("甲", 0), ("乙", 0)], random.Random(0), 3) in {"甲", "乙"}  # 戰功都是 0：平均抽
+    assert seal.weighted_pick([], random.Random(0), 3) is None
+
+
+def test_wancheng_raises_a_shard_at_muster_when_the_dice_say_so(sealed, world):
+    """宛城（標 emerge）開集結：擲中就記在這一場（seal_emerge），天下大事多一句異光。"""
+    from tianxia import seal
+    from tianxia import world as world_rules
+
+    world.seed_first_season(sealed)
+    world.mutate(lambda st: setattr(seal.filled(st.seal, sealed), "force_emerge", "yunzhuan"))
+    msgs = world_rules.open_showdown(world, sealed, "wancheng", 0.0)
+    battle = world.get_battle()
+    assert battle.seal_emerge == "yunzhuan" and battle.battle_id.startswith("wancheng")
+    assert any("集結號角" in m for m in msgs)
+    assert any("異光" in r.text for r in world.get_season().rumors if r.layer == "world")
+    assert world.seal_state().registry.force_emerge is None  # 強制現世用掉了
+
+
+def test_a_winner_of_the_emergence_is_drawn_from_the_winning_side_by_merit(sealed, world):
+    """3.3：勝方、自己出手滿門檻、手上沒有碎片的人裡照戰功前三名抽；登記寫上他、這一季有新主保護；天下大事與江湖史各一句；
+    不碰 Game.rng（誰觸發收場結果都一樣）。"""
+    from tianxia.engine import Game
+
+    world.mutate(lambda st: setattr(st, "seal", _registry(sealed, chishou="懷璽")))
+    game = Game.new(sealed, "旁人", rng=random.Random(0), world=world)
+    battle = _ended("wancheng_jia", [("甲", "guan", 9, 3), ("乙", "guan", 9, 0), ("懷璽", "guan", 9, 9), ("丙", "huang", 9, 9)],
+                    seal_emerge="yunzhuan")
+    before = game.rng.getstate()
+    game._seal_settle(battle, sealed.battles["wancheng_jia"], {"side": "guan", "margin": "險勝"})
+    assert game.rng.getstate() == before
+    view = world.seal_state()
+    shard = view.registry.shards["yunzhuan"]
+    assert shard.state == "held" and shard.holder in {"甲", "乙"} and shard.since_season == view.season
+    assert view.registry.emerge_season == view.season and view.registry.history[-1].kind == "emerge"
+    season = world.get_season()
+    assert any(shard.holder in r.text and "雲篆" in r.text for r in season.rumors if r.layer == "world")
+    assert any("雲篆" in r.text for r in season.chronicle)
+
+
+def test_nobody_eligible_lets_the_shard_sink_back(sealed, world):
+    """落空（沒有合格的人、保底收場）：這一季不算現世，那一片照舊未現世；只寫天下大事。"""
+    from tianxia.engine import Game
+
+    world.mutate(lambda st: setattr(st, "seal", _registry(sealed)))
+    game = Game.new(sealed, "旁人", rng=random.Random(0), world=world)
+    battle = _ended("wancheng_jia", [("甲", "guan", 0, 0)], rounds=1, seal_emerge="yunzhuan")
+    game._seal_settle(battle, sealed.battles["wancheng_jia"], {"side": "guan", "margin": "大勝"})
+    reg = world.seal_state().registry
+    assert reg.shards["yunzhuan"].state == "hidden" and reg.emerge_season is None
+    assert any("沉入了地底" in r.text for r in world.get_season().rumors)
+
+
+def test_a_battle_nobody_could_fight_to_the_end_raises_nothing(sealed, world):
+    """保底收場（兩軍都沒人還能打，end_without_fighters）：出手夠的人也不給，現世落空（設計 3.3、4.5 邊界 3）。"""
+    from tianxia.engine import Game
+
+    world.mutate(lambda st: setattr(st, "seal", _registry(sealed)))
+    game = Game.new(sealed, "旁人", rng=random.Random(0), world=world)
+    battle = _ended("wancheng_jia", [("甲", "guan", 3, 0)], seal_emerge="yunzhuan")
+    battle.participants["甲"].eliminated = True
+    game._seal_settle(battle, sealed.battles["wancheng_jia"], {"side": "guan", "margin": "大勝"})
+    assert world.seal_state().registry.shards["yunzhuan"].state == "hidden"
