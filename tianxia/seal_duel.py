@@ -43,6 +43,9 @@ UNSETTLED = "{challenger}與{holder}爭『{shard}』的單挑沒有打完，碎�
 GAMBLE_WON, GAMBLE_LOST = "{name}放手一搏——成了！", "{name}放手一搏——沒成，反倒露了破綻。"
 SETTING = "兩人陣前單挑、爭奪玉璽碎片的"  # 給 battle_instance.assess_gamble
 PLACE = "單挑"
+PROMPT = "寫下你陣前的一手（20 字內）"
+GAMBLE_NOTE = "放手一搏一場最多兩次；寫得越險，成了推得越多、搏輸了傷的是你自己。"
+RESEND = "這一手跟剛才送出的對不上（是不是開了兩個分頁？），請再送一次。"
 
 
 class TextRequest(NamedTuple):
@@ -57,6 +60,7 @@ class TextRequest(NamedTuple):
     title: str
     scene: str
     target: str
+    sex: str = "男"  # 模型寫劇情時的性別（Joy 的 gender：assess_gamble(sex=)）
 
 
 def other(who: str) -> str:

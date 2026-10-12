@@ -61,7 +61,7 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
-    seal, server_bots, social, team, timetable, treasures,
+    seal, seal_duel, server_bots, social, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -862,6 +862,30 @@ def duel_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
 
 
+def seal_text(game: Game, text: str) -> list[str]:
+    """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
+    B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
+    回合對不上直接回「這一回合已經結算」，不在鎖內重評。"""
+    started, request = _open_request(game, lambda: game.seal_text_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    scene = duel.Scene(request.title, request.scene)
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return fallback
+        return battle_instance.assess_gamble(
+            client, scene, request.faction_name, request.text, request.name,
+            setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
+        )
+
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.seal_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
+
+
 # ── 畫面資料 ──────────────────────────────────────────
 
 
@@ -888,9 +912,11 @@ def _main_view_body(game: Game) -> dict:
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
-        "free_text": game.battle_free_text_prompt() or game.duel_free_text_prompt(),
-        "free_text_note": game.battle_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
-        "free_op": "battle_text" if game.battle_free_text_prompt() is not None else "duel_text",  # 輸入框送到哪裡（決戰或頭目戰）
+        "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt(),
+        "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
+        # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
+        "free_op": "battle_text" if game.battle_free_text_prompt() is not None
+        else "seal_text" if game.seal_free_text_prompt() is not None else "duel_text",
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
@@ -1439,6 +1465,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
+    elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）
+        msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:

@@ -6423,6 +6423,98 @@ class Game:
             title=here.title, scene=here.text, sex=gender.of(s),
         )
 
+    def seal_free_text_prompt(self) -> str | None:
+        """奪璽單挑的放手一搏輸入框（5.7）：自己是一方、這一回合在場、還沒出手、這一場還沒搏滿兩次才有。"""
+        duel, who = self._my_seal_duel()
+        if duel is None or who is None or seal_duel.submit_problem(duel, who, self.content.config.seal, text=True):
+            return None
+        return seal_duel.PROMPT
+
+    def seal_free_text_note(self) -> str | None:
+        return seal_duel.GAMBLE_NOTE if self.seal_free_text_prompt() is not None else None
+
+    def seal_text_request(self, text: str) -> seal_duel.TextRequest | list[str]:
+        """奪璽放手一搏的 A 段（鎖內、只讀，5.7）：驗證他是這場單挑的一方、這一回合開始時判他在場、還沒送出、還能搏、文字 20 字以內，
+        開單子（單挑 id、回合、哪一邊、文字、名號、場景、對手那一行）。判成不在場的這一回合不開單。"""
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        duel, who = self._my_seal_duel()
+        if duel is None or who is None:
+            return ["（此刻無法這麼做。）"]
+        problem = seal_duel.submit_problem(duel, who, self.content.config.seal, text=True)
+        if problem:
+            return [f"（{problem}）"]
+        text = text.strip()[:FREE_TEXT_MAX]
+        if not text:
+            return ["（請先輸入你想做的事。）"]
+        me, foe = getattr(duel, who), getattr(duel, seal_duel.other(who))
+        title, scene_text = seal_duel.scene(duel, who, self.content)
+        return seal_duel.TextRequest(
+            duel=duel.id, round=duel.round, side=who, text=text, name=me.name, faction_name=self._duel_side(),
+            title=title, scene=scene_text, target=seal_duel.foe_line(me, foe, self.content), sex=gender.of(self.state),
+        )
+
+    def seal_gamble(
+        self, text: str, rate: int | None = None, stories: tuple[str, str] | None = None,
+        request: seal_duel.TextRequest | None = None,
+    ) -> list[str]:
+        """奪璽放手一搏的 C 段（5.7）：鎖內重驗，同一場、同一回合、同一邊、同一句才採用，記進 pending（送出不等於結算，湊齊而且滿 20 秒才算）。
+        回合對不上直接回「這一回合已經結算」，不重評、不套用（不照抄 duel_gamble 的鎖內重評：會把第 r 回合寫的那一句套到第 r＋1 回合）。
+        沒給 request（腳本、測試）就在這裡開單；沒給分數就用 _quick_client 在鎖內評，評不到是 40。"""
+        if request is None:
+            request = self.seal_text_request(text)
+            if isinstance(request, list):
+                return self._log(request)
+        if rate is None:
+            verdict = battle_instance.assess_gamble(
+                self._quick_client(), duel_rules.Scene(request.title, request.scene), request.faction_name, request.text, request.name,
+                setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
+            )
+            rate, stories = verdict.rate, (verdict.win, verdict.lose)
+        checked = text.strip()[:FREE_TEXT_MAX]
+        me, cfg = self.state.player.name, self.content.config.seal
+        out: list[str] = []
+
+        def _apply(shared) -> None:
+            duel = shared.seal_duels[0] if shared.seal_duels else None
+            if duel is None or duel.id != request.duel or duel.round != request.round or duel.phase != "active":
+                out.append(f"（{seal_duel.GONE}）")
+                return
+            who = seal_duel.side_of(duel, me)
+            if who != request.side or checked != request.text:
+                out.append(f"（{seal_duel.RESEND}）")
+                return
+            problem = seal_duel.submit_problem(duel, who, cfg, text=True)
+            if problem:
+                out.append(f"（{problem}）")
+                return
+            seal_duel.submit(duel, who, text=checked, rate=rate, stories=stories)
+            seal_duel.note_seen(duel, who, self.now, cfg)
+            out.append(f"你放手一搏：「{checked}」")
+            out.extend(seal_duel.advance(shared, self.content, self.now))
+
+        self.world.mutate(_apply)
+        return self._log(out)
+
+    def seal_duel_card(self) -> dict | None:
+        """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
+        duels = self.world.seal_state().duels if seal.on(self.content) else []
+        return seal_duel.card(duels[0], self.state.player.name or None, self.now, self.content) if duels else None
+
+    def seal_watch(self) -> bool:
+        """網頁在背景也要輪詢（5.5）：自己是單挑的一方；或此刻有一場被璽動、還沒收場的決戰，自己是那一片的持有者或那一場的參戰者
+        （挑戰者要到收場才確定）。"""
+        if not seal.on(self.content):
+            return False
+        _, who = self._my_seal_duel()
+        if who is not None:
+            return True
+        status = self._battle_status(tick=False)
+        if status is None or not status[0].seal_shard:
+            return False
+        battle, me = status[0], self.state.player.name
+        return seal.key(battle.seal_holder) == seal.key(me) or me in battle.participants
+
     def _duel_side(self) -> str:
         faction = self.state.player.faction
         return self.content.scenario.faction_name(faction, faction) if faction else "散人"
@@ -7766,6 +7858,8 @@ class Game:
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
+            "seal_duel": self.seal_duel_card(),  # 奪璽卡（玉璽碎片設計 5.10）：全服看得到；沒有單挑是 None
+            "seal_watch": self.seal_watch(),  # 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
             "anonymous": p.anonymous,

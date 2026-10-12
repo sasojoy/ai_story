@@ -254,3 +254,79 @@ def test_ending_the_season_leaves_the_duel_unsettled(sealed, world):
     view = world.seal_state()
     assert view.duels == [] and view.registry.history[-1].kind == "unsettled"
     assert view.registry.shards["chishou"].holder == "懷璽"
+
+
+# ── Task 9：放手一搏三段式、伺服器 ──
+
+def _active_with_me(content, world):
+    """開打了、挑戰者在場（回合 1 剛開）的單挑；回挑戰者的 Game（own_request）。"""
+    _open_duel(content, world)
+    me = _player(content, world, world.seal_state().duels[0].challenger.name)
+    me.mark_seen(170.0)
+    with at(me, 170.0):
+        me.options()
+    with at(me, 180.0):
+        me.options()
+    return me
+
+
+def test_the_a_step_only_reads_and_carries_the_foe_line(sealed, world):
+    """5.7 A 段：鎖內、只讀；單子帶單挑 id、回合、哪一邊、文字、場景與對手的身手那一行（只寫比較，不寫數字）。"""
+    me = _active_with_me(sealed, world)
+    before = world.seal_state()
+    with at(me, 181.0):
+        request = me.seal_text_request("  踢起沙土迷他的眼  ")
+    assert isinstance(request, seal_duel.TextRequest)
+    assert (request.round, request.side, request.text) == (0, "challenger", "踢起沙土迷他的眼")
+    assert "懷璽" in request.target and not any(ch.isdigit() for ch in request.target)
+    assert world.seal_state().duels == before.duels
+
+
+def test_an_absent_side_cannot_open_a_request(sealed, world):
+    _active_with_me(sealed, world)
+    holder = _player(sealed, world, "懷璽")
+    holder.mark_seen(181.0)
+    with at(holder, 181.0):
+        assert holder.seal_text_request("拚了") == [f"（{seal_duel.LATE}）"]
+
+
+def test_the_c_step_applies_only_to_the_same_round_side_and_text(sealed, world):
+    """5.7 C 段：同一場、同一回合、同一邊、同一句才採用；回合對不上回「這一回合已經結算」、不重評；送出不等於結算。"""
+    me = _active_with_me(sealed, world)
+    with at(me, 181.0):
+        request = me.seal_text_request("踢起沙土")
+        stale = request._replace(round=request.round - 1)
+        assert me.seal_gamble("踢起沙土", 70, ("甲踢起沙土。", "甲踢空了。"), request=stale) == [f"（{seal_duel.GONE}）"]
+        assert me.seal_gamble("換一句", 70, ("", ""), request=request) == [f"（{seal_duel.RESEND}）"]
+        me.seal_gamble("踢起沙土", 70, ("甲踢起沙土。", "甲踢空了。"), request=request)
+    duel = world.seal_state().duels[0]
+    assert duel.pending == {"challenger": seal_duel.TEXT} and duel.rates == {"challenger": 70} and duel.round == 0
+
+
+def test_a_side_gets_no_input_box_after_two_gambles(sealed, world):
+    me = _active_with_me(sealed, world)
+    world.mutate(lambda st: setattr(st.seal_duels[0].challenger, "gambles", 2))
+    with at(me, 181.0):
+        assert me.seal_free_text_prompt() is None
+        assert me.seal_text_request("再來") == [f"（{seal_duel.NO_MORE_GAMBLE}）"]
+
+
+def test_the_input_box_goes_to_the_seal_duel_before_the_boss_duel(sealed, world):
+    """5.7 最後一條：輸入框三選一，「正在打的決戰 > 奪璽單挑 > 頭目戰」。"""
+    import server
+
+    me = _active_with_me(sealed, world)
+    with at(me, 181.0):
+        view = server.main_view(me)
+    assert view["free_op"] == "seal_text" and view["free_text"] == seal_duel.PROMPT
+
+
+def test_everyone_sees_the_seal_card_and_the_parties_are_watched(sealed, world):
+    """5.10：奪璽卡全服看得到；seal_watch 在單挑雙方與被璽動那一場的參戰者、持有者為真（網頁在背景也輪詢，5.5）。"""
+    _open_duel(sealed, world)
+    crowd = _player(sealed, world, "路人")
+    card = crowd.status_data()["seal_duel"]
+    assert card["holder"] == "懷璽" and card["shard"] == "螭首" and not card["mine"]
+    assert crowd.status_data()["seal_watch"] is False
+    side = _player(sealed, world, world.seal_state().duels[0].challenger.name)
+    assert side.status_data()["seal_watch"] is True

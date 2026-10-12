@@ -53,6 +53,7 @@
   const PHONE = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
 
   const S = {
+    baseTitle: document.title || "天下大勢", // 原本的分頁標題：輪到奪璽出招時改掉、之後改回（玉璽碎片設計 5.5）
     stage: "boot",
     gateMode: "login",
     main: null,
@@ -343,7 +344,33 @@
         </button>`).join("")}</div></nav>`;
   }
 
+  // 奪璽卡（玉璽碎片設計 5.10，status.seal_duel）：全服看得到、可以摺疊，排在懸賞卡下面（不擠 375×812 的第一屏）。
+  // 雙方、哪一片、第幾回合、氣勢的字（持有者看的是倒過來的，伺服器算好）、最近兩三行、已出招幾手與倒數；代打那一邊的架勢只在對手的卡上（伺服器只給他）。
+  // 字待 joy 潤
+  function sealDuelHtml(d) {
+    const left = `${Math.floor(d.left / 60)} 分 ${d.left % 60} 秒`;
+    const when = d.phase === "muster" ? `${left}後開打` : `第 ${d.round | 0}／${d.rounds | 0} 回合・已出招 ${d.sent | 0}／2，最遲 ${left}後結算`;
+    return `<details class="card seal-duel" open><summary>奪璽・『${esc(d.shard)}』</summary>
+      <p><b>${esc(d.challenger)}</b> 對 懷璽的 <b>${esc(d.holder)}</b>　${esc(when)}</p>
+      ${d.phase === "active" ? `<p>${esc(d.edge)}</p>` : ""}
+      ${d.tell ? `<p class="tell">對手的架勢：${esc(d.tell)}</p>` : ""}
+      ${d.turn ? `<p class="turn">輪到你出招。</p>` : ""}
+      ${(d.lines || []).map((l) => `<p class="muted">${esc(l)}</p>`).join("")}
+      <p class="muted">${esc(d.note)}</p></details>`;
+  }
+  // 背景分頁不輪詢；奪璽的雙方、被璽動那一場的持有者與參戰者例外（status.seal_watch，5.5），在背景也照 10 秒輪詢
+  function pollBlocked() {
+    const watch = !!(S.main && S.main.status && S.main.status.seal_watch);
+    return pollInFlight || S.stage !== "game" || S.busy || (document.hidden && !watch);
+  }
+  // 輪到你出招時改分頁標題，之後改回原本的（5.5）
+  function sealTitle() {
+    const d = S.main && S.main.status && S.main.status.seal_duel;
+    return d && d.turn ? "【奪璽】輪到你出招" : S.baseTitle;
+  }
+
   function renderTop() {
+    document.title = sealTitle(); // 輪到奪璽出招時改分頁標題（玉璽碎片設計 5.5）；放在提早 return 之前，序章換頁時也改得回來
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
     if (!el) return;
@@ -1729,6 +1756,7 @@
     const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 懸賞卡跟軍令卡排在一起（散人沒有軍令，這張就是他的）：手上沒揭、也沒有合用的求藝求兵可以交時就不畫（status.bounties 兩種都收）
     const bountyCard = m.status && m.status.bounties && m.status.bounties.length && shown("orders") ? bountiesHtml(m.status.bounties, m.options) : "";
+    const sealCard = m.status && m.status.seal_duel && shown("orders") ? sealDuelHtml(m.status.seal_duel) : "";
     // 序章第一步（還沒遇到師父）：選項底下一行「略過序章」，不想走序章的人直接站到起點（設計 7.3）
     const skip = pro() && pro().skip ? '<button class="linkish skip-prologue" data-act="do" data-op="skip_tutorial">略過序章</button>' : "";
     // 劇情文字在上、行動在下（企劃者 2026-10-04）。行動列只有一排，375×812 上「剛剛」、場景與整排行動都在第一屏。
@@ -1737,8 +1765,8 @@
     const guide = guideHtml(m.guide, m.on_road);
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${fronts}${tail}`;
-    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealCard}${fronts}${tail}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。
@@ -3967,7 +3995,7 @@
         await sayLine(form, data.text.trim());
       } else if (form.id === "free-form") {
         if (!data.text.trim()) return;
-        await doMain(form.dataset.op === "duel_text" ? "duel_text" : "battle_text", { text: data.text }); // 決戰或頭目戰的放手一搏
+        await doMain(["duel_text", "seal_text"].includes(form.dataset.op) ? form.dataset.op : "battle_text", { text: data.text }); // 決戰、奪璽或頭目戰的放手一搏
       } else if (form.id === "name-art") {
         // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
         if (!data.name.trim()) { toast("先取個名字。"); return; }
@@ -4065,7 +4093,7 @@
   // 卡住的 /api/main 不能每 10 秒再疊一個，把伺服器的執行緒池用光
   let pollInFlight = false;
   async function poll() {
-    if (pollInFlight || S.stage !== "game" || S.busy || document.hidden) return;
+    if (pollBlocked()) return;
     pollInFlight = true;
     lastPoll = Date.now();
     const was = S.main;
