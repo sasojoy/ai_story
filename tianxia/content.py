@@ -2227,7 +2227,7 @@ def _validate_secrets(c: Content, need) -> None:
 
 
 def _validate_forge_secrets(c: Content, need) -> None:
-    """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑、神器組這一批是 0；
+    """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑（神器組從打造第二批起照挑）；
     每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣三階、名字（命名過濾、
     種類字或防具字、不重複、不跟武學秘方同名；跟寶物名駒、對照表同名由 name_problem 與字表那一圈擋）、口訣（1～20 字、不寫數字、
     不寫「配方」「秘方」），同一個組合只能有一條（min_tier 算它涵蓋的每一階）。"""
@@ -2236,7 +2236,6 @@ def _validate_forge_secrets(c: Content, need) -> None:
     need(not unknown, f"Config.forge_secrets.per_season 只能有 {'、'.join(forge_rules.GROUPS)}：{unknown}")
     for group, count in cfg.per_season.items():
         need(count >= 0, f"Config.forge_secrets.per_season：{group} 不能是負的")
-        need(not group.endswith(":divine") or count == 0, f"Config.forge_secrets.per_season：{group} 是神器配方，要等打造第二批才能挑")
         pool = sum(1 for r in c.forge_secrets.values() if forge_rules.group_of(r) == group)
         need(pool >= count, f"Config.forge_secrets.per_season：{group} 只有 {pool} 條，不夠挑 {count} 條")
     attributes = {m.attribute for m in c.materials.values()}

@@ -912,7 +912,7 @@ class ForgeSide(_Strict):
 
 class ForgeSecret(_Strict):
     """打造的隱藏配方（content/forge_secrets.json；打造隱藏配方設計 3.1）：某種兵器（或防具）＋主料＋輔料（主輔不交換），打中了出有專名的
-    名器（tianxia/forge_secrets.py）。divine 是神器配方（第二批才挑）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
+    名器（tianxia/forge_secrets.py）。divine 是神器配方（打造第二批：一爐必出神器，第一把原品、之後仿品；name 是譜名）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
     這一條，單看一句只能縮小範圍（3.5）。"""
 
     id: str
@@ -1658,7 +1658,7 @@ class ForgeSecretRules(_Strict):
     """打造的隱藏配方與鑄器的口訣（打造隱藏配方設計第三、六、七節；tianxia/forge_secrets.py）。預設全關（測試內容沒有配方池），
     正式值在 config.json。"""
 
-    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，第二批才開，第一批載入時擋成 0）
+    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，打造第二批起照挑）
     per_season: dict[str, int] = Field(default_factory=dict)
     tale_chance: float = Field(default=0, ge=0, le=1)  # 說書事件（Config.secrets.tale_events）了結時，另擲一次多一句說書版鑄器口訣
     smith_chance: float = Field(default=0, ge=0, le=1)  # 在鐵匠鋪花了銀兩或素材之後，鐵匠順口說出這家知道的那一句（鐵匠版）
