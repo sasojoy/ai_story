@@ -1,0 +1,205 @@
+/* 玩家傳（第二批）的樣子：遊戲裡讀傳（web/app.js 的 zhuanHtml）與公開頁（zhuan_html.py）共用這一份。
+   企劃者 2026-10-12：「圖片跟現在的武學譜重複了」——傳不用武學譜那本線裝書（--bk-*），自己一組配色與字體。
+   三個方向並排給企劃者挑（.zh-bamboo 竹簡、.zh-scroll 手卷、.zh-stele 碑拓），挑定之後只留一個。
+   標記兩邊一樣：.zh > .zh-head（.zh-orn 裝飾、.zh-label > .zh-title 篇名、.zh-sub）、.zh-tools、.zh-body > .zh-text（p，評曰是 p.ping）、.zh-seals */
+@import url("https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Chiron+Sung+HK:wght@400;700&family=Noto+Serif+TC:wght@900&display=swap");
+
+.zh { color: var(--zh-ink); background: var(--zh-page); font-family: var(--zh-font); }
+.zh-head { position: relative; height: 240px; overflow: hidden; }
+.zh-orn i { display: none; }
+.zh-label { position: absolute; z-index: 1; }
+.zh-title {
+  margin: 0; writing-mode: vertical-rl; font-family: var(--zh-title-font, var(--zh-font)); font-weight: 700;
+  font-size: var(--slip-size, 30px); line-height: 1; letter-spacing: calc(var(--slip-size, 30px) * 0.3);
+}
+.zh-sub { position: absolute; z-index: 1; left: 16px; bottom: 12px; margin: 0; font-size: 13px; letter-spacing: 0.12em; color: var(--zh-sub); }
+.zh-tools { display: flex; gap: 8px; justify-content: flex-end; max-width: 640px; margin: 0 auto; padding: 12px 16px 0; }
+.zh-tools button {
+  font: 600 14px var(--zh-font); color: var(--zh-btn-ink); background: var(--zh-btn); border: 1px solid var(--zh-line);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.zh-tools button[aria-pressed="true"] { background: var(--zh-btn-ink); color: var(--zh-btn); }
+.zh-body { max-width: 640px; margin: 12px auto 0; padding: 0 16px; }
+.zh-text { font-size: 18px; line-height: 2.1; letter-spacing: 0.06em; text-align: justify; }
+.zh-text p { margin: 0 0 1em; text-indent: 2em; }
+.zh-text p:last-child { margin-bottom: 0; }
+.zh-text.vertical {
+  writing-mode: vertical-rl; width: 100%; height: 70vh; min-height: 420px; max-height: 640px;
+  overflow-x: auto; overflow-y: hidden; background-attachment: local;
+}
+.zh-text.vertical p { margin: 0 0 0 1em; }
+.zh-seals { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 14px 4px 0; }
+.zh-seal { width: 58px; height: 58px; transform: rotate(-4deg); }
+.zh-seal rect, .zh-seal circle { fill: var(--zh-seal); }
+.zh-seal .rim { fill: none; stroke: var(--zh-seal-ink); stroke-width: 1.2; opacity: 0.85; }
+.zh-seal text { fill: var(--zh-seal-ink); font-family: "Noto Serif TC", serif; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+
+/* ── 竹簡：一行一片簡，麻繩上下兩道橫過去；漆木的底，楷書（霞鶩文楷） ── */
+.zh-bamboo {
+  --zh-page: #2a1f17; --zh-ink: #2a1c0e; --zh-sub: #e3c88f; --zh-font: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "STKaiti", serif;
+  --zh-btn: #e3c88f; --zh-btn-ink: #2a1c0e; --zh-line: #8b6a3a; --zh-seal: #a9281f; --zh-seal-ink: #f6e7c8;
+  --zh-slip: 2.2em; --zh-cord: #6e4f29;
+  --zh-c1: #c49d5c; --zh-c2: #e4c98f; --zh-c3: #cda768; --zh-gap: #20170f;
+}
+.zh-bamboo .zh-head { background: radial-gradient(ellipse at 50% 30%, #3b2b1e 0%, #1c140d 75%); }
+.zh-bamboo .zh-orn { position: absolute; inset: 18px 0 40px; display: flex; justify-content: center; gap: 4px; }
+.zh-bamboo .zh-orn i { display: block; width: 30px; border-radius: 3px; background: linear-gradient(90deg, #c49d5c, #e4c98f 30%, #e4c98f 70%, #cda768); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+.zh-bamboo .zh-orn i:nth-child(3) { margin-right: 68px; }
+.zh-bamboo .zh-orn i:nth-child(n + 4) { opacity: 0.92; }
+.zh-bamboo .zh-orn::before, .zh-bamboo .zh-orn::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 4px; z-index: 2;
+  background: repeating-linear-gradient(90deg, #7d5b31 0 7px, #4f3819 7px 10px);
+}
+.zh-bamboo .zh-orn::before { top: 26px; }
+.zh-bamboo .zh-orn::after { bottom: 26px; }
+.zh-bamboo .zh-label {
+  top: 14px; bottom: 36px; left: 50%; transform: translateX(-50%); width: 60px; padding-top: 16px; display: flex; justify-content: center;
+  border-radius: 3px; background: linear-gradient(90deg, #a98447, #d7b77a 30%, #d7b77a 70%, #b18c50); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+.zh-bamboo .zh-title { color: #22160a; }
+.zh-bamboo .zh-text { padding: 0; color: var(--zh-ink); line-height: var(--zh-slip); font-size: 19px; text-align: start; }
+.zh-bamboo .zh-text p { text-indent: 0; margin: 0; }
+.zh-bamboo .zh-text:not(.vertical) {
+  padding: 0 30px; border-radius: 4px;
+  background: linear-gradient(90deg, transparent 12px, var(--zh-cord) 12px 16px, transparent 16px calc(100% - 16px), var(--zh-cord) calc(100% - 16px) calc(100% - 12px), transparent calc(100% - 12px)),
+    repeating-linear-gradient(to bottom, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
+  background-attachment: local;
+}
+.zh-bamboo .zh-text:not(.vertical) p + p { margin-top: var(--zh-slip); }
+.zh-bamboo .zh-text.vertical {
+  padding: 52px 0; border-radius: 4px;
+  background: linear-gradient(to bottom, transparent 30px, var(--zh-cord) 30px 34px, transparent 34px calc(100% - 34px), var(--zh-cord) calc(100% - 34px) calc(100% - 30px), transparent calc(100% - 30px)),
+    repeating-linear-gradient(to left, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
+  background-attachment: local;
+}
+.zh-bamboo .zh-text.vertical p + p { margin-right: var(--zh-slip); }
+.zh-bamboo .zh-text p.ping { color: #5a2a14; }
+
+/* ── 手卷：卷首織錦、簽條、隔水，絹本朱絲欄，卷尾題跋換一個人的手（評曰）與藏書印；宋體（昭源宋體） ── */
+.zh-scroll {
+  --zh-page: #ddd3c0; --zh-ink: #2b2420; --zh-sub: #e9cf8e; --zh-font: "Chiron Sung HK", "Songti TC", "PMingLiU", serif;
+  --zh-btn: #f4ecdc; --zh-btn-ink: #3b2b22; --zh-line: #a08a66; --zh-seal: #b23a2a; --zh-seal-ink: #fbefe0;
+  --zh-silk: #f1e8d4; --zh-geshui: #b6c3bf; --zh-mount: #d3c19c; --zh-link: #7a2a21;
+}
+@media (prefers-color-scheme: dark) {
+  .zh-scroll { --zh-page: #1c1916; --zh-btn: #2c2620; --zh-btn-ink: #efe3c8; --zh-line: #6f5f48; --zh-link: #e9cf8e; }
+}
+.zh-scroll .zh-head {
+  height: 240px; border-bottom: 12px solid var(--zh-geshui);
+  background:
+    radial-gradient(circle at 12px 12px, rgba(214, 178, 96, 0.55) 0 2.2px, transparent 2.6px) 0 0 / 24px 24px,
+    radial-gradient(circle at 0 0, rgba(214, 178, 96, 0.35) 0 1.4px, transparent 1.8px) 0 0 / 24px 24px,
+    linear-gradient(180deg, #5b1f19, #7a2a21 60%, #6a241c);
+}
+.zh-scroll .zh-orn i:first-child {
+  display: block; position: absolute; right: 22px; top: -6px; bottom: -6px; width: 20px; border-radius: 8px;
+  background: linear-gradient(90deg, #3d2615, #8a5c33 45%, #4a2e19); box-shadow: -3px 0 8px rgba(0, 0, 0, 0.4);
+}
+.zh-scroll .zh-label {
+  top: 20px; right: 70px; padding: 12px 9px; background: #f6efe0;
+  border: 1px solid #2f2a24; box-shadow: inset 0 0 0 3px #f6efe0, inset 0 0 0 4px #b9a780, 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+.zh-scroll .zh-title { color: #231c17; font-weight: 400; }
+.zh-scroll .zh-text {
+  padding: 18px 16px; color: var(--zh-ink); font-size: 18px; line-height: 2.2;
+  background: radial-gradient(ellipse at 20% 30%, rgba(160, 130, 80, 0.10), transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(160, 130, 80, 0.12), transparent 55%), var(--zh-silk);
+  border-top: 14px solid var(--zh-mount); border-bottom: 14px solid var(--zh-mount); box-shadow: 0 4px 14px rgba(40, 25, 10, 0.22);
+}
+.zh-scroll .zh-text.vertical {
+  padding: 22px 0;
+  background:
+    repeating-linear-gradient(to left, transparent 0 calc(2.2em - 1px), rgba(178, 58, 42, 0.30) calc(2.2em - 1px) 2.2em),
+    radial-gradient(ellipse at 20% 30%, rgba(160, 130, 80, 0.10), transparent 60%), var(--zh-silk);
+  background-attachment: local;
+}
+.zh-scroll .zh-text p.ping {
+  font-family: "LXGW WenKai TC", "Kaiti TC", serif; font-size: 16px; text-indent: 0; color: #3d3026;
+  margin: 1.6em -16px 0; padding: 1.2em 16px 0; border-top: 10px solid var(--zh-geshui); background: #ebe0c8;
+}
+.zh-scroll .zh-text.vertical p.ping { margin: 0 0 0 0; margin-right: 1.6em; padding: 0 1.1em 0 0; border-top: 0; border-right: 10px solid var(--zh-geshui); }
+
+/* ── 碑拓：墨底白字、界格，碑首圓額雙鉤篇名；粗宋（思源宋體 Black） ── */
+.zh-stele {
+  --zh-page: #e6e1d5; --zh-ink: #ebe6da; --zh-sub: #4a463f; --zh-font: "Noto Serif TC", "Songti TC", serif;
+  --zh-btn: #1b1a19; --zh-btn-ink: #ebe6da; --zh-line: #57524a; --zh-seal: #b1271d; --zh-seal-ink: #f6ece0; --zh-link: #4a463f;
+  --zh-stone: #161514; --zh-cell: 1.6em;
+  --zh-rub:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.05) 0 8%, transparent 9%),
+    radial-gradient(circle at 72% 64%, rgba(255, 255, 255, 0.04) 0 11%, transparent 12%),
+    radial-gradient(circle at 40% 85%, rgba(0, 0, 0, 0.35) 0 14%, transparent 15%),
+    radial-gradient(ellipse at 50% 40%, #232220 0%, var(--zh-stone) 70%);
+}
+@media (prefers-color-scheme: dark) {
+  .zh-stele { --zh-page: #2a2824; --zh-sub: #b4ad9f; --zh-btn: #e6e1d5; --zh-btn-ink: #161514; --zh-line: #8a8478; --zh-link: #b4ad9f; }
+}
+.zh-stele .zh-head { height: 250px; }
+.zh-stele .zh-label {
+  left: 50%; top: 14px; bottom: 34px; transform: translateX(-50%); width: 190px; display: flex; justify-content: center; padding-top: 38px;
+  border-radius: 95px 95px 0 0; background: var(--zh-rub); box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.05), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.zh-stele .zh-label::before {
+  content: ""; position: absolute; left: 50%; top: 26px; transform: translateX(-50%); width: 76px; bottom: 14px;
+  border: 1.5px solid rgba(235, 230, 218, 0.45); box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.25);
+}
+.zh-stele .zh-title { position: relative; color: transparent; -webkit-text-stroke: 1.3px #ebe6da; font-weight: 900; }
+.zh-stele .zh-sub { left: 0; right: 0; bottom: 10px; text-align: center; color: var(--zh-sub); }
+.zh-stele .zh-head::after { content: ""; position: absolute; left: calc(50% - 110px); width: 220px; bottom: 30px; height: 8px; background: #3a3732; border-radius: 2px; }
+.zh-stele .zh-text {
+  padding: 18px 14px; color: var(--zh-ink); font-weight: 900; font-size: 18px; line-height: var(--zh-cell); letter-spacing: 0.6em;
+  text-shadow: 0 0 1px rgba(235, 230, 218, 0.5); background: var(--zh-rub); border-radius: 2px;
+  box-shadow: 0 0 0 10px var(--zh-stone), 0 6px 20px rgba(0, 0, 0, 0.35); margin: 10px;
+}
+.zh-stele .zh-text:not(.vertical) {
+  background: repeating-linear-gradient(to bottom, transparent 0 calc(var(--zh-cell) - 1px), rgba(235, 230, 218, 0.10) calc(var(--zh-cell) - 1px) var(--zh-cell)) 0 18px / 100% calc(100% - 36px) no-repeat, var(--zh-rub);
+}
+.zh-stele .zh-text.vertical {
+  padding: 18px 0; width: calc(100% - 20px);
+  background: repeating-linear-gradient(to left, transparent 0 calc(var(--zh-cell) - 1px), rgba(235, 230, 218, 0.10) calc(var(--zh-cell) - 1px) var(--zh-cell)), var(--zh-rub);
+  background-attachment: local;
+}
+.zh-stele .zh-text p.ping { color: #b8b2a5; font-size: 16px; text-indent: 0; }
+.zh-stele .zh-text.vertical p.ping { margin-right: var(--zh-cell); }
+.zh-stele .zh-text:not(.vertical) p.ping { margin-top: var(--zh-cell); }
+
+/* ── 遊戲裡（web/app.js）：疊在整個畫面上的那一層、上面的返回列、分享、等史官落筆；入口卡（江湖頁、歷季列傳） ── */
+.zhuan-layer {
+  position: fixed; inset: 0; z-index: 42; overflow-y: auto; overscroll-behavior: contain; animation: fade 0.2s;
+  padding-bottom: calc(24px + var(--bottom, 0px));
+}
+.zh-bar {
+  position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: calc(8px + var(--top, 0px)) 12px 8px;
+  background: rgba(20, 16, 12, 0.88); color: #efe3c8; backdrop-filter: blur(4px);
+}
+.zh-bar button { border: 0; background: transparent; color: inherit; font: 600 16px var(--sans, sans-serif); padding: 6px 8px; cursor: pointer; }
+.zh-bar span { font-family: var(--zh-font); letter-spacing: 0.3em; opacity: 0.85; }
+.zh-panel {
+  display: flex; flex-direction: column; gap: 8px; max-width: 640px; margin: 18px auto 0; padding: 14px 16px; border-radius: 12px;
+  background: var(--zh-btn); color: var(--zh-btn-ink); border: 1px solid var(--zh-line);
+}
+.zh-panel p { margin: 0; }
+.zh-panel .muted { opacity: 0.75; font-size: 13px; color: inherit; }
+.zh-panel .row { display: flex; gap: 8px; }
+.zh-panel .row .btn { flex: 1; }
+.zh-url { padding: 8px 10px; border: 1px dashed var(--zh-line); font: 13px/1.5 ui-monospace, monospace; word-break: break-all; user-select: all; }
+.zh-again { display: block; margin: 14px auto 0; color: var(--zh-link, var(--zh-sub)); background: none; border: 0; font: 14px var(--zh-font); text-decoration: underline; cursor: pointer; }
+.zh-wait { align-items: center; text-align: center; padding: 26px 18px; font-size: 16px; line-height: 1.8; }
+.zh-ink { display: flex; gap: 8px; }
+.zh-ink i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; animation: zh-drip 1.2s infinite ease-in-out; }
+.zh-ink i:nth-child(2) { animation-delay: 0.2s; }
+.zh-ink i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes zh-drip { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); } 40% { opacity: 1; transform: scale(1); } }
+
+.zh-entry {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; border-radius: var(--radius, 12px); cursor: pointer; text-align: left;
+  font: inherit; color: var(--zh-entry-ink); background: var(--zh-entry-bg); border: 1px solid var(--zh-line); box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.12));
+}
+.zh-entry > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.zh-entry b { font-family: var(--zh-font); font-size: 19px; letter-spacing: 0.25em; }
+.zh-entry small { opacity: 0.75; font-size: 13px; }
+.zh-entry .go { font-style: normal; font-weight: 600; white-space: nowrap; color: var(--zh-seal); }
+.zh-entry svg { width: 42px; height: 46px; flex: none; }
+.zh-bamboo.zh-entry { --zh-entry-bg: linear-gradient(135deg, #3a2a1c, #22180f); --zh-entry-ink: #efdcae; --zh-seal: #e7a25a; }
+.zh-scroll.zh-entry { --zh-entry-bg: linear-gradient(135deg, #f3ead7, #e4d6b8); --zh-entry-ink: #2b2420; }
+.zh-stele.zh-entry { --zh-entry-bg: var(--zh-rub); --zh-entry-ink: #ebe6da; --zh-seal: #e0675b; }
+.zh-books { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
+.zh-books h3 { margin: 4px 2px 0; letter-spacing: 0.1em; font-size: 15px; }

@@ -2251,9 +2251,11 @@
     </div>`;
   }
 
-  // ── 玩家傳（第二批）：季末的《某某傳》，跟武學譜同一本書的樣子，疊在整個畫面上（S.zhuan = { season, view }）──
+  // ── 玩家傳（第二批）：季末的《某某傳》，疊在整個畫面上（S.zhuan = { season, view }）──
   // view 是 /api/zhuan 回的（Game.biography_view＋writing、url）。還沒寫成：一顆「請史官落筆」；正在寫：每幾秒問一次（zhuanPoll）。
-  // 寫成了：段落（評曰那一段另起）、直書切換（記在這個瀏覽器，跟公開頁同一個鍵）、公開分享的開關與網址、重寫一次。字一律跳脫
+  // 寫成了：段落（評曰那一段另起）、直書切換（記在這個瀏覽器，跟公開頁同一個鍵）、公開分享的開關與網址、重寫一次。字一律跳脫。
+  // 樣子在 web/zhuan.css（跟公開頁 zhuan_html.py 共用標記），不用武學譜那本書（企劃者 2026-10-12）；ZHUAN_LOOK 跟 zhuan_html.LOOK 同一個
+  const ZHUAN_LOOK = "bamboo";
   const ZHUAN_VERTICAL = "tx-zhuan-vertical";
   const ZHUAN_POLL_MS = 4000;
   function zhuanVertical() {
@@ -2262,50 +2264,71 @@
     }
     return S.zhuanVertical;
   }
+  // 篇名那一塊（公開頁 zhuan_html.head 同一份標記）：裝飾、直書的篇名、底下一行季數
+  function zhuanHead(title, sub) {
+    return `<header class="zh-head"><div class="zh-orn" aria-hidden="true">${"<i></i>".repeat(6)}</div>
+      <div class="zh-label" style="--slip-size:${slipSize(title)}px"><h1 class="zh-title">${esc(title)}</h1></div>
+      <p class="zh-sub">${esc(sub)}</p></header>`;
+  }
+  // 名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。手卷的卷尾另蓋一顆圓的「天下大勢」藏印。zhuan_html.seals 同一條算法
+  function zhuanSeal(name) {
+    const chars = [...name].slice(0, 6);
+    const n = chars.length, cols = n >= 4 ? 2 : 1, rows = Math.ceil(n / cols), cell = 40 / Math.max(rows, cols);
+    const glyphs = chars.map((ch, k) => {
+      const col = Math.floor(k / rows), row = k % rows;
+      return `<text x="${(46 - (col + 0.5) * (40 / cols)).toFixed(1)}" y="${(6 + (row + 0.5) * (40 / rows)).toFixed(1)}" font-size="${(cell * 0.86).toFixed(1)}">${esc(ch)}</text>`;
+    }).join("");
+    return `<svg class="zh-seal" viewBox="0 0 52 52" role="img" aria-label="${esc(name)}"><rect x="2" y="2" width="48" height="48" rx="3"/><rect class="rim" x="5" y="5" width="42" height="42" rx="1.5"/>${glyphs}</svg>`;
+  }
+  function zhuanHouseSeal() {
+    return '<svg class="zh-seal round" viewBox="0 0 52 52" role="img" aria-label="天下大勢"><circle cx="26" cy="26" r="24"/><circle class="rim" cx="26" cy="26" r="20.5"/>'
+      + '<text x="34" y="18" font-size="13">天</text><text x="34" y="34" font-size="13">下</text><text x="18" y="18" font-size="13">大</text><text x="18" y="34" font-size="13">勢</text></svg>';
+  }
+  function zhuanSeals(name) { return `<div class="zh-seals">${ZHUAN_LOOK === "scroll" ? zhuanHouseSeal() : ""}${zhuanSeal(name)}</div>`; }
   function zhuanHtml(z) {
     const v = z.view;
     const head = v ? v.title : "列傳";
+    const wait = (inner) => `<div class="zh-body"><section class="zh-panel zh-wait">${inner}</section></div>`;
     let body;
-    if (!v) body = '<article class="leaf zhuan-wait"><p>翻開史冊…</p></article>';
+    if (!v) body = wait("<p>翻開史冊…</p>");
     else if (!v.written) {
-      body = v.writing
-        ? '<article class="leaf zhuan-wait"><p class="zhuan-ink" aria-hidden="true"><i></i><i></i><i></i></p><p>史官正在落筆，照你這一季的行狀寫一篇列傳。</p><p class="muted">大約一兩分鐘；可以先去別處，回來再翻。</p></article>'
+      body = wait(v.writing
+        ? '<p class="zh-ink" aria-hidden="true"><i></i><i></i><i></i></p><p>史官正在落筆，照你這一季的行狀寫一篇列傳。</p><p class="muted">大約一兩分鐘；可以先去別處，回來再翻。</p>'
         : v.can_write
-          ? '<article class="leaf zhuan-wait"><p>這一季的行狀已經收進史館。</p><button class="btn primary zhuan-go" data-act="zhuan-write">請史官落筆</button></article>'
-          : '<article class="leaf zhuan-wait"><p>這一季還不能寫傳。</p></article>';
+          ? '<p>這一季的行狀已經收進史館。</p><button class="btn primary zhuan-go" data-act="zhuan-write">請史官落筆</button>'
+          : "<p>這一季還不能寫傳。</p>");
     } else {
       const vertical = zhuanVertical();
       const paras = v.paragraphs.map((p) => `<p${p.startsWith("評曰") ? ' class="ping"' : ""}>${esc(p)}</p>`).join("");
       const share = v.public
-        ? `<p class="zhuan-url"><span>${esc(v.url || "")}</span></p>
+        ? `<p class="zh-url"><span>${esc(v.url || "")}</span></p>
            <div class="row"><button class="btn primary" data-act="zhuan-send">分享給朋友</button><button class="btn" data-act="zhuan-share" data-public="0">收回</button></div>
            <p class="muted">拿到網址的人不用登入就能讀；收回之後網址就失效。</p>`
         : `<button class="btn" data-act="zhuan-share" data-public="1">公開分享</button>
            <p class="muted">預設只有你看得到。公開之後會有一個網址，可以貼到 LINE、FB，隨時能收回。</p>`;
-      body = `<div class="zhuan-tools"><button class="zhuan-toggle" data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
-        <article class="leaf zhuan-text${vertical ? " vertical" : ""}">${paras}${sealSvg(head.replace(/傳$/, ""))}</article>
-        <section class="zhuan-share">${share}</section>
-        ${v.can_rewrite ? '<button class="linkish zhuan-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}`;
+      body = `<div class="zh-tools"><button data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
+        <div class="zh-body"><article class="zh-text${vertical ? " vertical" : ""}">${paras}</article>${zhuanSeals(head.replace(/傳$/, ""))}
+        <section class="zh-panel">${share}</section>
+        ${v.can_rewrite ? '<button class="zh-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}</div>`;
     }
-    return `<div class="book-layer zhuan-layer" role="dialog" aria-label="${esc(head)}">
-      <header class="book-bar"><button class="book-back" data-act="zhuan-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">列傳</span></header>
-      <div class="book-cover">
-        <svg class="book-hills" viewBox="0 0 375 120" preserveAspectRatio="none" aria-hidden="true">
-          <path class="hill far" d="M0 86 C40 58 70 64 104 46 C134 30 160 52 190 40 C226 26 258 48 292 36 C326 24 352 40 375 34 V120 H0Z"/>
-          <path class="hill near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>
-        </svg>
-        <i class="book-moon" aria-hidden="true"></i>
-        <div class="book-title" style="--slip-size:${slipSize(head)}px"><span>${esc(head)}</span></div>
-        <p class="book-sub">第 ${Number(z.season)} 季${v && v.scenario ? `・${esc(v.scenario)}` : ""}</p>
-      </div>
-      <div class="leaves">${body}</div>
+    return `<div class="zhuan-layer zh zh-${ZHUAN_LOOK}" role="dialog" aria-label="${esc(head)}">
+      <div class="zh-bar"><button data-act="zhuan-close" aria-label="返回">‹ 返回</button><span>列傳</span></div>
+      ${zhuanHead(head, `第 ${Number(z.season)} 季${v && v.scenario ? `・${esc(v.scenario)}` : ""}`)}
+      ${body}
     </div>`;
   }
-  // 題簽的字照篇名的字數縮：名號最長十來個字，一律直書排進一條題簽（四字以內照武學譜的 30px）。zhuan_html.slip_size 同一條算法
+  // 篇名的字照字數縮：名號最長十來個字，一律直書排進一條（四字以內 30px）。zhuan_html.slip_size 同一條算法
   const slipSize = (title) => Math.min(30, Math.floor(176 / [...title].length / 1.3));
-  // 入口（江湖頁休季的那一張、行狀頁的歷季列傳）：同武學譜的入口
+  // 入口（江湖頁休季的那一張、行狀頁的歷季列傳）的小圖：一捆竹簡、一軸手卷、一方碑
+  function zhuanIcon(look) {
+    return {
+      bamboo: '<svg viewBox="0 0 42 46" aria-hidden="true"><g fill="#d9b878" stroke="#6e4f29" stroke-width=".8">' + [4, 11, 18, 25, 32].map((x) => `<rect x="${x}" y="3" width="6" height="40" rx="1.5"/>`).join("") + '</g><path d="M1 12h40M1 34h40" stroke="#5a3e1d" stroke-width="2.2"/></svg>',
+      scroll: '<svg viewBox="0 0 42 46" aria-hidden="true"><rect x="7" y="8" width="28" height="30" fill="#f3ead7" stroke="#8a6a3a"/><rect x="7" y="8" width="9" height="30" fill="#7a2a21"/><rect x="21" y="13" width="8" height="20" fill="#fbf5e8" stroke="#3b2b22" stroke-width=".7"/><rect x="33" y="4" width="6" height="38" rx="3" fill="#5a3a20"/></svg>',
+      stele: '<svg viewBox="0 0 42 46" aria-hidden="true"><path d="M6 44V16a15 13 0 0 1 30 0v28z" fill="#4a4743" stroke="#ebe6da" stroke-width=".8"/><rect x="16" y="10" width="10" height="12" fill="none" stroke="#ebe6da" stroke-width=".9"/><path d="M11 27h20M11 32h20M11 37h20" stroke="#ebe6da" stroke-width="1.2" opacity=".65"/></svg>',
+    }[look];
+  }
   function zhuanEntry(b, sub, go = b.written === false ? "立傳" : "翻閱") {
-    return `<button class="manual-entry" data-act="zhuan-open" data-season="${Number(b.season)}">${bookIcon()}<span><b>${esc(b.title)}</b><small>${esc(sub)}</small></span><i class="go">${go} ›</i></button>`;
+    return `<button class="zh-entry zh-${ZHUAN_LOOK}" data-act="zhuan-open" data-season="${Number(b.season)}">${zhuanIcon(ZHUAN_LOOK)}<span><b>${esc(b.title)}</b><small>${esc(sub)}</small></span><i class="go">${go} ›</i></button>`;
   }
   let zhuanTimer = 0;
   async function loadZhuan() {
@@ -2333,7 +2356,7 @@
       return;
     }
     try { await navigator.clipboard.writeText(v.url); toast("網址已複製"); return; } catch (e) { /* 退回選取 */ }
-    const span = document.querySelector(".zhuan-url span");
+    const span = document.querySelector(".zh-url span");
     if (span) { const r = document.createRange(); r.selectNodeContents(span); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
     toast("長按網址複製");
   }
@@ -2637,7 +2660,7 @@
     if (!a.on) return '<div class="card"><p class="muted">這一季不記行狀。</p></div>';
     const head = `<div class="card annals-head"><h3>${esc(a.name)}・行狀</h3><p class="muted">這一季值得寫進傳裡的事。季末收季時，會照這些寫成一篇《${esc(a.name)}傳》。</p></div>`;
     // 歷季列傳（第二批）：存著的每一季一本，排在這一季的行狀上面
-    const books = (a.books || []).length ? `<div class="zhuan-books"><h3>歷季列傳</h3>${a.books.map((b) =>
+    const books = (a.books || []).length ? `<div class="zh-books"><h3>歷季列傳</h3>${a.books.map((b) =>
       zhuanEntry(b, `第 ${Number(b.season)} 季・${b.written ? (b.public ? "已公開" : "已成篇") : "尚未成篇"}`)).join("")}</div>` : "";
     if (!a.rows.length) return head + books + '<div class="card"><p class="muted">還沒有記下什麼。上陣打一場大戰、跟英雄人物說幾句話，這裡就會有了。</p></div>';
     const row = (r) => `<li class="annal${r.weight >= 4 ? " heavy" : ""}">

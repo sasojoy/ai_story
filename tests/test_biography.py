@@ -320,7 +320,7 @@ def test_the_share_image_is_a_1200_by_630_png():
 
 DRIVER = r"""
 const S = { zhuanVertical: !!input.vertical };
-const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("bookIcon"), fn("sealSvg"), fn("zhuanVertical"), fn("zhuanHtml"), fn("zhuanEntry"),
+const parts = [konst("esc"), konst("ZHUAN_LOOK"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("zhuanHouseSeal"), fn("zhuanIcon"), fn("zhuanVertical"), fn("zhuanHead"), fn("zhuanSeal"), fn("zhuanSeals"), fn("zhuanHtml"), fn("zhuanEntry"),
   "return { zhuanHtml, zhuanEntry };"];
 const H = new Function("S", parts.join("\n"))(S);
 finish(input.entry ? H.zhuanEntry(input.entry, "副題") : H.zhuanHtml(input.z));
@@ -338,10 +338,10 @@ def test_the_reader_draws_each_state():
     html = _web(z={"season": 1, "view": written})
     assert "沈&lt;浪&gt;傳" in html and "&lt;i&gt;x" in html and '<p class="ping">評曰：好。</p>' in html
     assert 'data-act="zhuan-share" data-public="1"' in html and 'data-act="zhuan-rewrite"' in html and "第 1 季・黃巾之亂" in html
-    assert 'aria-pressed="false"' in html and "zhuan-text vertical" not in html
+    assert 'aria-pressed="false"' in html and "zh-text vertical" not in html
     shared = _web(z={"season": 1, "view": {**written, "public": True, "url": "https://x/zhuan/<a>", "can_rewrite": False}}, vertical=True)
     assert "https://x/zhuan/&lt;a&gt;" in shared and 'data-act="zhuan-send"' in shared and 'data-public="0"' in shared
-    assert 'data-act="zhuan-rewrite"' not in shared and "zhuan-text vertical" in shared
+    assert 'data-act="zhuan-rewrite"' not in shared and "zh-text vertical" in shared
     waiting = _web(z={"season": 1, "view": {"season": 1, "title": "沈浪傳", "written": False, "can_write": True, "writing": True}})
     assert "史官正在落筆" in waiting and 'data-act="zhuan-write"' not in waiting
     ready = _web(z={"season": 1, "view": {"season": 1, "title": "沈浪傳", "written": False, "can_write": True}})

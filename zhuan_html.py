@@ -1,8 +1,9 @@
 """公開的傳（玩家傳第二批，/zhuan/<代碼>）：不用登入的唯讀頁，伺服器直接吐一整頁 HTML（不經過 web/app.js）。
 
-LINE、FB 只讀伺服器回的 HTML 抓預覽，所以標題、摘要、題簽圖都寫在 <head> 的 Open Graph 裡。文字一律跳脫；版面是武學譜那本書的配色
-（--bk-*，暗色時換成燈下的舊紙），預設橫排，右上角可以切直書（記在這個瀏覽器的 localStorage）。手機上「分享」叫系統的分享選單
-（Web Share API），沒有就複製網址。只 import 標準函式庫與 tianxia.biography。
+LINE、FB 只讀伺服器回的 HTML 抓預覽，所以標題、摘要、題簽圖都寫在 <head> 的 Open Graph 裡。文字一律跳脫；樣子跟遊戲裡讀傳共用
+web/zhuan.css（同一份標記，LOOK 跟 app.js 的 ZHUAN_LOOK 同一個；不用武學譜那本書，企劃者 2026-10-12），預設橫排，右上角可以切直書
+（記在這個瀏覽器的 localStorage，跟遊戲裡同一個鍵）。手機上「分享」叫系統的分享選單（Web Share API），沒有就複製網址。
+只 import 標準函式庫與 tianxia.biography。
 """
 from __future__ import annotations
 
@@ -10,51 +11,25 @@ from html import escape
 
 from tianxia import biography
 
-FONT = "https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap"
+LOOK = "bamboo"  # bamboo 竹簡、scroll 手卷、stele 碑拓（web/zhuan.css）
 
+# 這一頁自己的版面：分享鈕、頁尾、提示；顏色照 zhuan.css 那一個樣子的變數
 CSS = """
-:root{--paper:#f2e5c6;--paper2:#e8d6ad;--ink:#241a11;--ink2:#6d5a43;--rule:#a9814b;--cover:#2f4a5c;--cover2:#1d3140;--slip:#f6edd8;--seal:#b3261e;--seal-ink:#fbf3e2;
---serif:"Noto Serif TC","Noto Serif CJK TC","Source Han Serif TC","Songti TC","PMingLiU",serif;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--paper:#2b241b;--paper2:#221c15;--ink:#efe1c3;--ink2:#b39e7f;--rule:#8a6a3e;--cover:#23394a;--cover2:#142431;--slip:#e9dcc0;--seal:#c4372c;color-scheme:dark}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--paper2);color:var(--ink)}
-body{font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
-.cover{position:relative;height:240px;overflow:hidden;background:linear-gradient(180deg,var(--cover2) 0%,var(--cover) 72%)}
-.cover svg{position:absolute;left:0;right:0;bottom:0;width:100%;height:120px}
-.cover .far{fill:rgba(233,220,192,.16)}.cover .near{fill:rgba(63,125,92,.45)}
-.moon{position:absolute;top:42px;left:46px;width:34px;height:34px;border-radius:50%;background:rgba(246,237,216,.6);box-shadow:0 0 24px 6px rgba(246,237,216,.18)}
-.slip{position:absolute;top:22px;right:32px;padding:16px 10px;writing-mode:vertical-rl;background:var(--slip);border:2px solid var(--seal);
-box-shadow:inset 0 0 0 3px var(--slip),inset 0 0 0 4px var(--seal),0 4px 12px rgba(0,0,0,.25)}
-.slip h1{margin:0;font:700 var(--slip-size,30px)/1 var(--serif);letter-spacing:calc(var(--slip-size,30px)*.3);color:#241a11}
-.sub{position:absolute;left:18px;bottom:14px;margin:0;color:var(--slip);font-size:13px;letter-spacing:1px;text-shadow:0 1px 3px rgba(0,0,0,.5)}
-.bar{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px 0;max-width:640px;margin:0 auto}
-.bar button{font:600 14px var(--serif);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:999px;padding:6px 14px;cursor:pointer}
-.bar button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
-.leaf{max-width:640px;margin:12px auto 0;padding:0 16px}
-.text{padding:22px 20px;border:2px solid var(--rule);background:var(--paper);
-box-shadow:inset 0 0 0 4px var(--paper),inset 0 0 0 5px var(--rule),0 3px 10px rgba(60,40,20,.18);
-font:17px/2.05 var(--serif);letter-spacing:.04em;text-align:justify}
-.text p{margin:0 0 1em;text-indent:2em}
-.text p.ping{margin-top:1.4em;padding-top:1em;border-top:1px solid var(--rule);text-indent:0}
-.text p:last-child{margin-bottom:0}
-.vertical .text{writing-mode:vertical-rl;width:100%;height:72vh;min-height:420px;overflow-x:auto;overflow-y:hidden;line-height:2.2;
-background:repeating-linear-gradient(to left,transparent 0 calc(2.2em - 1px),rgba(169,129,75,.3) calc(2.2em - 1px) 2.2em) var(--paper)}
-.vertical .text p{margin:0 0 0 1.1em;text-indent:2em}
-.vertical .text p.ping{border-top:0;border-right:1px solid var(--rule);padding:0 1em 0 0;margin:0 1.4em 0 0;text-indent:0}
-.seal{display:block;width:64px;height:64px;margin:18px 6px 0 auto;transform:rotate(-5deg)}
-.seal rect{fill:var(--seal)}.seal text{fill:var(--seal-ink);font:700 22px var(--serif);text-anchor:middle;dominant-baseline:central}
-footer{max-width:640px;margin:22px auto 40px;padding:0 16px;color:var(--ink2);font:14px/1.7 var(--serif);text-align:center}
-footer a{color:var(--seal);font-weight:700;text-decoration:none}
-.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:var(--ink);color:var(--paper);
+html,body{margin:0}
+body{font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);min-height:100vh}
+footer{max-width:640px;margin:26px auto 0;padding:0 16px 40px;color:var(--zh-link,var(--zh-sub));font:14px/1.7 var(--zh-font);text-align:center}
+footer a{color:inherit;font-weight:700;text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:var(--zh-btn-ink);color:var(--zh-btn);
 padding:8px 16px;border-radius:999px;font-size:14px}
 """
 
 SCRIPT = """
 (function(){
-  var KEY="tx-zhuan-vertical",root=document.documentElement,btn=document.getElementById("vert");
-  function set(on){root.classList.toggle("vertical",on);btn.setAttribute("aria-pressed",on?"true":"false");}
+  var KEY="tx-zhuan-vertical",text=document.querySelector(".zh-text"),btn=document.getElementById("vert");
+  function set(on){text.classList.toggle("vertical",on);btn.setAttribute("aria-pressed",on?"true":"false");}
   try{set(localStorage.getItem(KEY)==="1");}catch(e){}
-  btn.addEventListener("click",function(){var on=!root.classList.contains("vertical");set(on);try{localStorage.setItem(KEY,on?"1":"0");}catch(e){}});
+  btn.addEventListener("click",function(){var on=!text.classList.contains("vertical");set(on);try{localStorage.setItem(KEY,on?"1":"0");}catch(e){}});
   function toast(msg){var d=document.createElement("div");d.className="toast";d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove();},2200);}
   document.getElementById("share").addEventListener("click",function(){
     var url=location.href.split("#")[0],title=document.title;
@@ -65,14 +40,31 @@ SCRIPT = """
 })();
 """
 
-HILLS = (
-    '<svg viewBox="0 0 375 120" preserveAspectRatio="none" aria-hidden="true">'
-    '<path class="far" d="M0 86 C40 58 70 64 104 46 C134 30 160 52 190 40 C226 26 258 48 292 36 C326 24 352 40 375 34 V120 H0Z"/>'
-    '<path class="near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>'
-    "</svg>"
-)
-SEAL = '<svg class="seal" viewBox="0 0 64 64" aria-label="天下大勢"><rect x="2" y="2" width="60" height="60" rx="6"/>' \
-       '<text x="44" y="20">天</text><text x="44" y="44">下</text><text x="20" y="20">大</text><text x="20" y="44">勢</text></svg>'
+HOUSE_SEAL = ('<svg class="zh-seal round" viewBox="0 0 52 52" role="img" aria-label="天下大勢"><circle cx="26" cy="26" r="24"/>'
+              '<circle class="rim" cx="26" cy="26" r="20.5"/><text x="34" y="18" font-size="13">天</text><text x="34" y="34" font-size="13">下</text>'
+              '<text x="18" y="18" font-size="13">大</text><text x="18" y="34" font-size="13">勢</text></svg>')
+
+
+def seal(name: str) -> str:
+    """名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。web/app.js 的 zhuanSeal 同一條算法。"""
+    chars = list(name)[:6]
+    n = len(chars)
+    cols = 2 if n >= 4 else 1
+    rows = -(-n // cols)
+    cell = 40 / max(rows, cols)
+    glyphs = "".join(
+        f'<text x="{46 - (k // rows + 0.5) * (40 / cols):.1f}" y="{6 + (k % rows + 0.5) * (40 / rows):.1f}" font-size="{cell * 0.86:.1f}">{escape(ch)}</text>'
+        for k, ch in enumerate(chars)
+    )
+    return (f'<svg class="zh-seal" viewBox="0 0 52 52" role="img" aria-label="{escape(name)}"><rect x="2" y="2" width="48" height="48" rx="3"/>'
+            f'<rect class="rim" x="5" y="5" width="42" height="42" rx="1.5"/>{glyphs}</svg>')
+
+
+def head(title: str, sub: str) -> str:
+    """篇名那一塊（web/app.js 的 zhuanHead 同一份標記）。"""
+    return (f'<header class="zh-head"><div class="zh-orn" aria-hidden="true">{"<i></i>" * 6}</div>'
+            f'<div class="zh-label" style="--slip-size:{slip_size(title)}px"><h1 class="zh-title">{escape(title)}</h1></div>'
+            f'<p class="zh-sub">{escape(sub)}</p></header>')
 
 
 def slip_size(title: str) -> int:
@@ -83,7 +75,7 @@ def slip_size(title: str) -> int:
 def page(row: dict, scenario: str, url: str, image: str) -> str:
     """一篇公開的傳。row 是 biographies 的一列（WorldStateStore.biography_by_code）；url 是這一頁的網址，image 是題簽圖的網址。"""
     name = row["name"]
-    head = biography.title(name)
+    title = biography.title(name)
     paras = [p for p in row["text"].split("\n\n") if p.strip()]
     lead = biography.lead(row["text"])
     body = "".join(
@@ -92,18 +84,18 @@ def page(row: dict, scenario: str, url: str, image: str) -> str:
     sub = f"天下大勢・第 {row['season']} 季・{scenario}"
     meta = "".join(
         f'<meta property="{k}" content="{escape(v)}">'
-        for k, v in (("og:type", "article"), ("og:site_name", "天下大勢"), ("og:title", head), ("og:description", lead),
+        for k, v in (("og:type", "article"), ("og:site_name", "天下大勢"), ("og:title", title), ("og:description", lead),
                      ("og:url", url), ("og:image", image), ("og:image:width", "1200"), ("og:image:height", "630"))
     )
+    seals = (HOUSE_SEAL if LOOK == "scroll" else "") + seal(name)
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{escape(head)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
+<title>{escape(title)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
 {meta}<meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="{FONT}"><style>{CSS}</style></head>
-<body><header class="cover">{HILLS}<i class="moon" aria-hidden="true"></i><div class="slip" style="--slip-size:{slip_size(head)}px"><h1>{escape(head)}</h1></div>
-<p class="sub">{escape(sub)}</p></header>
-<div class="bar"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
-<main class="leaf"><article class="text">{body}</article>{SEAL}</main>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="/static/zhuan.css"><style>{CSS}</style></head>
+<body class="zh zh-{LOOK}">{head(title, sub)}
+<div class="zh-tools"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
+<main class="zh-body"><article class="zh-text">{body}</article><div class="zh-seals">{seals}</div></main>
 <footer>這是《天下大勢》裡一位江湖人物的列傳。<br><a href="/">也去江湖走一遭 ›</a></footer>
 <script>{SCRIPT}</script></body></html>"""
 
@@ -111,6 +103,6 @@ def page(row: dict, scenario: str, url: str, image: str) -> str:
 def missing() -> str:
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>查無此傳・天下大勢</title><meta name="robots" content="noindex"><style>{CSS}</style></head>
-<body><main class="leaf" style="padding-top:20vh"><article class="text"><p>史館裡查無此傳——也許作者已經收回，或是網址抄錯了。</p></article></main>
+<title>查無此傳・天下大勢</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/static/zhuan.css"><style>{CSS}</style></head>
+<body class="zh zh-{LOOK}"><main class="zh-body" style="padding-top:20vh"><article class="zh-text"><p>史館裡查無此傳——也許作者已經收回，或是網址抄錯了。</p></article></main>
 <footer><a href="/">回到江湖 ›</a></footer></body></html>"""
