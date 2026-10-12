@@ -281,16 +281,25 @@ def wield(state: GameState, content: Content, item_id: str) -> list[str]:
 
 # ---- 機器人（設計第九節）：整季機器人（bot.visit_market）與伺服器假人（bot_policy.MARKET_SCORE）共用 ----
 
+def better_mount(state: GameState, content: Content) -> str | None:
+    """裝備庫裡比身上那匹快的（比吃飽的腳力 fresh_power，餓了的好馬不吃虧）最快那一匹的 id（同樣快照 id）；沒有是 None。
+    馬市的 wanted 與整季機器人、假人在修練頁換馬（bot.wear_better，裝備三）共用這一份比法，改比法只改這裡。坐騎關著時腳力都是 0，回 None。"""
+    p = state.player
+    best = max(equipment.in_slot(p, "mount"), key=lambda m: (fresh_power(content, m), m.id), default=None)
+    if best is None or fresh_power(content, best) <= fresh_power(content, p.mount) + 1e-9:
+        return None
+    return best.id
+
+
 def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
     """在馬市最該按的那一顆（整季機器人與伺服器假人共用）：裝備庫裡有比身上快的（比吃飽的腳力，餓了的好馬不吃虧）就換上；
     身上沒有坐騎、付得起馬價＋reserve 就買（馬市只賣駑馬：身上有馬就不買第二匹）；飽足低於 FEED_AT、餵得了就餵。不在馬市是 None。"""
     if not market_here(state, content):
         return None
     p = state.player
-    now = fresh_power(content, p.mount)
-    best = max(equipment.in_slot(p, "mount"), key=lambda m: (fresh_power(content, m), m.id), default=None)
-    if best is not None and fresh_power(content, best) > now + 1e-9:
-        return f"{WIELD}{best.id}"
+    better = better_mount(state, content)  # 裝備庫裡有比身上快的就換上（比法同 bot.wear_better）
+    if better is not None:
+        return f"{WIELD}{better}"
     if p.mount is None and buy_problem(state, content) is None and \
             p.stats.get("silver", 0) >= content.config.mounts.shop_price + reserve:
         return BUY

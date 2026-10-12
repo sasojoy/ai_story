@@ -835,3 +835,65 @@ def test_the_treasure_drop_does_not_touch_the_game_dice(tmp_path):
         assert (game.state.player.treasure is not None) == on
         states.append(game.rng.getstate())
     assert states[0] == states[1]
+
+
+# ── Task 8：機器人與假人 ──
+
+def test_bots_put_on_the_better_treasure_by_a_fixed_order(content, world):
+    """設計第九節：有好幾件時照固定順序挑一件，不每步換。寶物不設限制，同一天也照換（2.3【定】）。"""
+    from tianxia import bot
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.treasure = _item("seclusion")  # 機器人不閉關：排最後
+    p.rack = [_item("audience", "寶:2")]
+    bot.wear_better(game)
+    assert p.treasure.id == "寶:2"
+    p.rack.append(_item("win_exp_pct", "寶:3"))
+    bot.wear_better(game)
+    assert p.treasure.id == "寶:3"  # 打贏經驗排第一：同一個遊戲日也照換
+    p.rack.append(_item("cultivate", "寶:4"))
+    assert treasures.wanted(game.state, content) is None
+    bot.wear_better(game)
+    assert p.treasure.id == "寶:3"  # 身上已經是排第一的：不每步換
+
+
+def test_better_mount_is_the_one_comparison_the_market_and_the_bots_share(content, world):
+    """馬照吃飽的腳力比（餓了的好馬不吃虧）：mounts.better_mount 是馬市 wanted 的前半，也是 bot.wear_better 用的那一份。"""
+    from tianxia import mounts
+    content.config.mounts.enabled = True
+    game = _game(content, world)
+    p = game.state.player
+    p.mount = Equipment(id="騎:1", slot="mount", name="棗騮馬", tier=1, quality="下品", edge=100)
+    p.rack = [Equipment(id="騎:2", slot="mount", name="青驄駒", tier=2, quality="下品", edge=0)]  # 餓到底的良駒
+    assert mounts.better_mount(game.state, content) == "騎:2"
+    p.mount, p.rack = p.rack[0], [p.mount]
+    assert mounts.better_mount(game.state, content) is None  # 身上已經是快的
+    content.config.mounts.enabled = False
+    p.mount, p.rack = p.rack[0], [p.mount]
+    assert mounts.better_mount(game.state, content) is None  # 坐騎關著：腳力都是 0
+
+
+def test_bots_ride_the_faster_horse_but_not_on_the_road(content, world):
+    from tianxia import bot
+    _book(content)
+    content.config.mounts.enabled = True
+    game = _game(content, world)
+    p = game.state.player
+    p.mount = Equipment(id="騎:1", slot="mount", name="棗騮馬", tier=1, quality="下品")
+    p.rack = [Equipment(id="騎:2", slot="mount", name="青驄駒", tier=2, quality="下品")]
+    game.choose("move:lake")
+    bot.wear_better(game)
+    assert p.mount.id == "騎:1"  # 路上不換坐騎（2.3）
+    p.journey = None
+    bot.wear_better(game)
+    assert p.mount.id == "騎:2"
+
+
+def test_server_bots_put_on_a_better_treasure_while_looking_after_themselves(content, world):
+    from tianxia import bot_policy
+    _book(content)
+    game = _game(content, world)
+    game.state.player.rack = [_item("win_exp_pct", "寶:3")]
+    bot_policy.look_after(game, random.Random(0))
+    assert game.state.player.treasure.id == "寶:3"

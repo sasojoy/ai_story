@@ -341,3 +341,27 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
         return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))
     item = new_treasure(state, content, tid)
     return item, [DROP_LINE.format(name=item.name), *deliver(state, content, item)]
+
+
+# ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----
+
+# 挑寶物的固定順序：打仗拿得多的先（打贏經驗、心得，再來修練、悟意境、打贏多掉素材、破境丹）；機器人不閉關，閉關排最後
+# （裝備四欄第九節「有好幾件時照固定順序挑一件，不每步換」）
+BOT_ORDER = ("win_exp_pct", "win_xinde_pct", "cultivate", "insight", "win_material", "legend", "audience", "seclusion")
+
+
+def wanted(state: GameState, content: Content) -> str | None:
+    """裝備庫裡有照 BOT_ORDER 比身上排得前面的寶物就回它的 id（同一順位照 id），不然 None；寶物關著也是 None。寶物不設限制
+    （2.3【定】），不看日界、不看閉關：身上已經是排最前面的就回 None，所以不會每步換。效果認不出來的（內容拿掉了）排最後。"""
+    p = state.player
+    if not on(content):
+        return None
+
+    def rank(item: Equipment) -> int:
+        key = effect_of(content, item)
+        return BOT_ORDER.index(key) if key in BOT_ORDER else len(BOT_ORDER)
+
+    best = min(equipment.in_slot(p, "treasure"), key=lambda t: (rank(t), t.id), default=None)
+    if best is None or (p.treasure is not None and rank(best) >= rank(p.treasure)):
+        return None
+    return best.id
