@@ -1805,6 +1805,10 @@ class Config(_Strict):
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
     drill_reward_share: float = Field(default=0.3, ge=0, le=1)  # 跟自己人操練只給對手獎勵的幾成（戰鬥系統第八節：沒風險就拿得少）
+    # 操練推大勢的基準季長（遊戲日；FB-165，企劃者 2026-10-12「操練給的聲勢要隨著賽季長度而調整」）：每次操練推
+    # train_trend × min(1, 這個 ÷ 這一季蓋章的季長)。取週末設定的季長 2.5 天——操練的推力是照那一季調的，週末設定的倍數
+    # 是 1、一個字都不變；14 天的季約 0.18（不然那種季沒有推力緩衝與上限，黃巾的人在自己營寨點三十下操練就收掉一整季）。
+    drill_push_base_days: float = Field(default=2.5, gt=0)
     time_scale: float = 1.0
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
