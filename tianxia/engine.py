@@ -1565,7 +1565,7 @@ class Game:
             annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對" + ("，成了。" if success else "，沒成。"),
                         3 if event.once or event.qiyu else 1, quote=request.text)
             effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
-            msgs += self._apply(effect)
+            msgs += self._apply(effect, once=event.once)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
@@ -4775,6 +4775,7 @@ class Game:
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
             # 遊歷打贏（有風險）與決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，傳進來的已經是整數點數。
+            # 一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，rules.apply_effect 判斷）照原本的量（FB-166）。
             scale = self.season_scale() if source == "event" else 1.0
             if scale < 1 and is_revealed(w, c, trend_id):
                 whole = self._carry(trend_id, delta * scale)
@@ -5222,10 +5223,10 @@ class Game:
             self._outcome(tag, line)
             if rare:
                 annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
-            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c)) + self._tale_clue(event)
+            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
         if rare:
             annals.note(s, c, annals.DEED, what + "。", 3)
-        return msgs + self._apply(choice.effect) + self._tale_clue(event)
+        return msgs + self._apply(choice.effect, once=event.once) + self._tale_clue(event)
 
     def _tale_clue(self, event: Event) -> list[str]:
         """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次
@@ -5295,7 +5296,7 @@ class Game:
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won else []
         effect = choice.effect if won else failed(choice.fail_effect, c)  # 打輸另扣的體力減半，同檢定失敗（企劃者裁決 E6）
-        story = apply_effect(effect, s, c, self.world, push=self.push_trend)
+        story = apply_effect(effect, s, c, self.world, push=self.push_trend, once=event.once)
         changes, notes = battlelog.split_changes(story, for_record=True)
         record.changes += changes
         record.notes += notes
@@ -5305,8 +5306,9 @@ class Game:
             msgs += self._present(c.events[effect.next_event])
         return msgs
 
-    def _apply(self, effect: Effect) -> list[str]:
-        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend)
+    def _apply(self, effect: Effect, once: bool = False) -> list[str]:
+        """套用事件選項的效果；once＝事件標了 once（推大勢不照季長縮放，FB-166，rules.apply_effect）。"""
+        msgs = apply_effect(effect, self.state, self.content, self.world, push=self.push_trend, once=once)
         if effect.text and prologue_rules.active(self.state, self.content):
             for msg in msgs:  # 草廬四景的結果文字已經寫了「你悟到了「…之意境」」，引擎的「你悟得了「…」的意境」是同一件事：紀錄只留前一句
                 if msg.startswith("你悟得了「"):
