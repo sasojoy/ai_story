@@ -3626,6 +3626,7 @@ class Game:
             journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
             return
         lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
+        lines += battle.seal_notes  # 玉璽碎片：下戰書、現世的得主（5.9 最後一條、3.3）
         role = battle_instance.role_name(c.config.battle, me.role)
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.mount:
@@ -3936,6 +3937,8 @@ class Game:
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
+        if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
+            header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -4022,6 +4025,8 @@ class Game:
             out.append("這一幕你已經放手一搏過了，下一幕才能再搏。")
         if battle.marked.get(p.name) == battle.act_index:
             out.append("你在這一幕太顯眼了，對面的強攻會往你身上招呼。")
+        if battle.seal_shard and p.name in seal.hint_names(battle, self.content, seal.holders(self.world.seal_state().registry)):
+            out.append(seal.MERIT_HINT)  # 璽動那一場戰功居前（4.3）：不露數字、不露名次
         return out
 
     def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:

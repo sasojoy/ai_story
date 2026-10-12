@@ -515,3 +515,89 @@ def test_a_battle_nobody_could_fight_to_the_end_raises_nothing(sealed, world):
     battle.participants["甲"].eliminated = True
     game._seal_settle(battle, sealed.battles["wancheng_jia"], {"side": "guan", "margin": "大勝"})
     assert world.seal_state().registry.shards["yunzhuan"].state == "hidden"
+
+
+# ── Task 6：璽動 ──
+
+def test_stirring_skips_protected_shards_and_stops_at_the_season_cap(sealed):
+    """4.1、4.2：每片各擲 7%（照密鹽＋天機＋event_id＋片），一場最多一片；新主保護、每片每季一次、全服一季兩次；管理者強制璽動略過。"""
+    from tianxia import seal
+
+    reg = _registry(sealed, chishou="甲", xuanniu="乙")
+    rolls = [seal.roll_stir(reg, sealed, 5, t, "changshe_fire") for t in range(400)]
+    assert 0.09 < sum(r is not None for r in rolls) / 400 < 0.19  # 兩片各 7%：1 − 0.93² ≈ 13.5%
+    reg.shards["chishou"].since_season = 5  # 這一季才到手
+    assert all(seal.roll_stir(reg, sealed, 5, t, "changshe_fire") in (None, "xuanniu") for t in range(200))
+    reg.shards["xuanniu"].stirred_season = 5  # 這一季動過了
+    assert all(seal.roll_stir(reg, sealed, 5, t, "changshe_fire") is None for t in range(200))
+    reg = _registry(sealed, chishou="甲")
+    seal.log(reg, 6, "stir", shard="xuanniu")
+    seal.log(reg, 6, "stir", shard="yunzhuan")
+    assert all(seal.roll_stir(reg, sealed, 6, t, "guangzong") is None for t in range(200))  # 全服這一季已經兩次
+    reg.force_stir = "chishou"
+    assert seal.roll_stir(reg, sealed, 6, 0, "guangzong") == "chishou"
+
+
+def test_the_four_tiers_from_the_holder_side():
+    from tianxia import seal
+
+    assert seal.tier_for("guan", "guan", "大勝") == "大勝" and seal.tier_for("guan", "guan", "險勝") == "險勝"
+    assert seal.tier_for("guan", "huang", "險勝") == "險敗" and seal.tier_for("guan", "huang", "大勝") == "大敗"
+    assert seal.tier_for(None, "huang", "大勝") == "旁觀"
+
+
+def test_a_stir_snapshots_the_holder_and_his_faction_at_muster(sealed, world):
+    """4.3：擲中時登記記 stirred_season、天下大事一句（具名）；這一場快照 seal_shard、seal_holder、seal_holder_faction（投靠名冊，
+    不讀存檔）、seal_holder_side（是交戰兩方之一才記）。"""
+    from tianxia import world as world_rules
+
+    world.seed_first_season(sealed)
+    reg = _registry(sealed, chishou="懷璽")
+    reg.force_stir = "chishou"
+    world.mutate(lambda st: setattr(st, "seal", reg))
+    world.record_faction("懷璽", "huang")
+    world_rules.open_showdown(world, sealed, "changshe_fire", 0.0)
+    b = world.get_battle()
+    assert (b.seal_shard, b.seal_holder, b.seal_holder_faction, b.seal_holder_side) == ("chishou", "懷璽", "huang", "huang")
+    view = world.seal_state()
+    assert view.registry.shards["chishou"].stirred_season == view.season and view.registry.force_stir is None
+    assert any("懷璽" in r.text and "螭首" in r.text for r in world.get_season().rumors if r.layer == "world")
+
+
+def test_a_free_or_absent_holder_is_snapshotted_as_a_bystander(sealed, world):
+    """散人、這一季還沒上線過（名冊上沒有他）：陣營快照 None、算旁觀，不讀存檔裡上一季的 p.faction（4.2 第 4 條）。"""
+    from tianxia import world as world_rules
+
+    world.seed_first_season(sealed)
+    reg = _registry(sealed, chishou="懷璽")
+    reg.force_stir = "chishou"
+    world.mutate(lambda st: setattr(st, "seal", reg))
+    world_rules.open_showdown(world, sealed, "changshe_fire", 0.0)
+    b = world.get_battle()
+    assert (b.seal_holder_faction, b.seal_holder_side) == (None, None)
+
+
+def test_the_top_merit_on_both_sides_hear_they_may_be_pushed_forward(sealed):
+    """4.3 最後一條：被璽動的那一場，兩邊合格的前三名各收到一句（持有者本人與快照陣營相同的人不收）。"""
+    from tianxia import seal
+
+    battle = _ended("changshe_fire", [("甲", "guan", 3, 2), ("乙", "guan", 3, 0), ("懷璽", "guan", 3, 3), ("丙", "huang", 3, 0)],
+                    rounds=3, seal_shard="chishou", seal_holder="懷璽", seal_holder_faction="guan", seal_holder_side="guan")
+    battle.phase = "active"
+    assert seal.hint_names(battle, sealed, set()) == {"丙"}
+    battle.seal_holder_faction = battle.seal_holder_side = None  # 持有者是散人：兩邊都提示（他自己不收）
+    assert seal.hint_names(battle, sealed, set()) == {"甲", "乙", "丙"}
+
+
+def test_the_battle_scene_and_report_mention_the_stir(sealed, world):
+    from tianxia import seal
+    from tianxia.engine import Game
+
+    game = Game.new(sealed, "旁觀者", rng=random.Random(0), world=world)
+    battle = _ended("changshe_fire", [("旁觀者", "guan", 3, 0)], rounds=3, seal_shard="chishou", seal_holder="懷璽")
+    battle.phase = "muster"
+    text = game._battle_scene_text(battle, sealed.battles["changshe_fire"])
+    assert seal.STIR_SCENE.format(holder="懷璽", shard="螭首") in text
+    battle.phase, battle.seal_notes = "ended", ["璽動：丙將與懷璽的懷璽陣前單挑。"]
+    game._file_showdown(battle, battle.participants["旁觀者"], None)
+    assert "璽動：丙將與懷璽的懷璽陣前單挑。" in game.state.battles[0].notes

@@ -160,13 +160,68 @@ def chronicle(season, text: str) -> None:
     season.chronicle.append(Rumor(time=season.time, text=text))
 
 
+STIR = "此役牽動{holder}懷中的『{shard}』。"  # 待 joy 潤：天下大事、集結公告（4.3）
+STIR_SCENE = "此役牽動{holder}懷中的『{shard}』：懷璽之人那一方若沒能大勝，打完之後陣前單挑。"  # 待 joy 潤：決戰畫面
+STIR_MINE = "此役牽動你懷中的『{shard}』。"  # 待 joy 潤：持有者的碎片卡（Task 10）
+MERIT_HINT = "你此役戰功居前；懷璽之人那一方若沒能大勝，你可能被推上陣前。"  # 待 joy 潤（4.3）
+
+
+def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str) -> str | None:
+    """標了 seal 的決戰開集結時擲璽動（4.1、4.2）：有主、不是這一季才到手、這一季還沒動過的每一片各擲 stir_chance
+    （seal-stir|event_id|片，各取一次）；全服這一季已經動了 season_stir_cap 次就不擲；擲中好幾片時用 seal-stir|event_id 挑一片。
+    管理者的強制璽動（force_stir）略過機率、新主保護與次數上限（那一片要有主）。"""
+    cfg = content.config.seal
+    forced = reg.shards.get(reg.force_stir or "")
+    if forced is not None and forced.state == "held":
+        return forced.id
+    if sum(1 for e in reg.history if e.kind == "stir" and e.season == season) >= cfg.season_stir_cap:
+        return None
+    hit = [
+        s.id for s in sorted(reg.shards.values(), key=lambda s: s.id)
+        if s.state == "held" and s.since_season != season and s.stirred_season != season
+        and dice(reg.salt, tianji, "seal-stir", event_id, s.id).random() < cfg.stir_chance
+    ]
+    if len(hit) <= 1:
+        return hit[0] if hit else None
+    return dice(reg.salt, tianji, "seal-stir", event_id).choice(hit)
+
+
+def tier_for(holder_side: str | None, winner: str, margin: str) -> str:
+    """持有者那一方打得怎樣（4.5）：自己這方贏是大勝或險勝，對方贏是險敗（對方險勝）或大敗（對方大勝）；快照不在交戰兩方是旁觀。"""
+    if holder_side is None:
+        return "旁觀"
+    if winner == holder_side:
+        return "大勝" if margin == "大勝" else "險勝"
+    return "大敗" if margin == "大勝" else "險敗"
+
+
+def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[str]:
+    """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——自己出手滿門檻、手上沒有碎片、不是持有者本人、
+    陣營不跟持有者的快照相同（快照是 None 就不擋）。只給畫面那一句用，不決定誰上陣（那要看收場時誰贏）。"""
+    definition = content.battles.get(battle.battle_id)
+    if battle.seal_shard is None or definition is None:
+        return set()
+    tuning, cfg = content.config.battle, content.config.seal
+    need = threshold(battle, cfg)
+    out: set[str] = set()
+    for side in (f.id for f in definition.factions):
+        if battle.seal_holder_faction is not None and side == battle.seal_holder_faction:
+            continue
+        rows = [
+            (p.name, battle_instance.merit(tuning, p)) for p in battle.participants.values()
+            if p.faction == side and p.acted_rounds >= need and not p.is_bot and key(p.name) not in held and key(p.name) != key(battle.seal_holder)
+        ]
+        out |= {name for name, _ in sorted(rows, key=lambda r: (-r[1], r[0]))[: cfg.challenger_pool]}
+    return out
+
+
 def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, now: float) -> list[str]:
     """時刻表決戰剛開集結（world._open_claimed，不在任何 mutate 裡）：標 emerge 的擲現世、標了 seal 的擲璽動（Task 6）。
     一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。"""
     mark = mark_of(content, definition) if on(content) else None
     if mark is None:
         return []
-    got: dict[str, str | None] = {"emerge": None}
+    got: dict[str, str | None] = {"emerge": None, "stir": None, "holder": None, "faction": None}
     msgs: list[str] = []
 
     def _apply(shared) -> None:
@@ -178,14 +233,31 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
             text = EMERGE_OMEN.format(battle=definition.name)
             rumor(shared.season, text)
             msgs.append(f"🏺 【天下大事】{text}")
+        stir = roll_stir(reg, content, shared.season_number, shared.tianji, definition.timetable_event)
+        if stir is not None and stir == reg.force_stir:
+            reg.force_stir = None
+        if stir is not None:
+            shard = reg.shards[stir]
+            shard.stirred_season = shared.season_number
+            holder = shard.holder or ""
+            faction = world.faction_of(holder)  # 投靠名冊（這一季），不讀存檔裡的 p.faction（4.3）；mutate 裡也讀得到（同 faction_counts）
+            got.update(stir=stir, holder=holder, faction=faction)
+            log(reg, shared.season_number, "stir", shard=stir, holder=holder)
+            text = STIR.format(holder=holder, shard=content.seal[stir].name)
+            rumor(shared.season, text)
+            msgs.append(f"🏺 【天下大事】{text}")
 
     world.mutate(_apply)
-    if got["emerge"] is None:
+    if got["emerge"] is None and got["stir"] is None:
         return msgs
 
     def _snap(b) -> None:
         if b.battle_id == definition.id and b.phase == "muster":
             b.seal_emerge = got["emerge"]
+            if got["stir"] is not None:
+                armies = {f.id for f in definition.factions}
+                b.seal_shard, b.seal_holder, b.seal_holder_faction = got["stir"], got["holder"], got["faction"]
+                b.seal_holder_side = got["faction"] if got["faction"] in armies else None
 
     world.mutate_battle(_snap)
     return msgs
