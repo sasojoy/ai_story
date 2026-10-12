@@ -818,10 +818,12 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
 
 def apply_effect(
     effect: Effect, state: GameState, content: Content, world: WorldStateStore,
-    push: Callable[..., list[str]] | None = None,
+    push: Callable[..., list[str]] | None = None, once: bool = False,
 ) -> list[str]:
     """套用一則效果。push 是玩家造成的大勢推動要交給誰處理（Game.push_trend：人數緩衝、每曆日上限、貢獻帳，
-    呼叫時帶 source="event"）；沒給就照舊直接 change_trend（管理者、引導獎勵等沒有「玩家個人推動」的呼叫端）。"""
+    呼叫時帶 source="event"）；沒給就照舊直接 change_trend（管理者、引導獎勵等沒有「玩家個人推動」的呼叫端）。
+    once：這一則出自標了 once 的事件。它、或這一則效果這一下新立世界旗標（例：擊敗波才立 bocai_defeated），算一季只會發生一次的事，
+    推大勢時帶 source="event_once"：規則關著的季不照季長縮放（FB-166，PM 2026-10-13；季再長也不會多發生一次）。"""
     p = state.player
     names = content.config.stat_names
     msgs: list[str] = []
@@ -904,7 +906,7 @@ def apply_effect(
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        owner = next((f for f in content.scenario.factions if sect.id in f.sects), None)
+        owner = content.scenario.sect_owner(sect.id)
         if owner is not None and p.faction is None:
             p.faction = owner.id
             msgs.append(f"你從此是{owner.name}的人了。")
@@ -914,9 +916,11 @@ def apply_effect(
         p.sect = None
     if effect.recruit:
         msgs += roster.recruit(state, content, world, effect.recruit)
+    single = once or any(flag not in state.world.flags for flag in effect.world_flags_add)  # 旗標在下面才立：這裡看的是立之前
     for trend_id, delta in resolve_trends(content, state.world, effect.trend, state.player.location).items():
         # front 與戰線先照這一季的規則換成真的要推的線，再照舊交給 push（Game.push_trend，T3）或 change_trend
-        msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source="event")
+        source = "event_once" if single else "event"
+        msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source=source)
     jade_seal_flag = content.scenario.jade_seal_flag
     seal_on = content.config.seal.enabled and bool(content.seal)  # 玉璽碎片開著：舊鏈不再寫跨季紀錄（玉璽碎片設計 11.2 第 2 條）
     newly_found_shard = (

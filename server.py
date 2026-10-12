@@ -67,7 +67,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_MAX, SAY_OPTION, Game
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_MAX, SAY_OPTION, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -1441,9 +1441,10 @@ def api_choose(request: Request, body: dict = Body(...)):
     msgs = choose(game, option_id)
     _tell_tabs(game)
     out = {"main": look(game, main_view)}
-    if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES):
+    if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES) or isinstance(msgs, Refused):
         # 決戰選項（加入、趕到、每回合的出招）：按下去發生了什麼只有這句回話（FB-030），前端拿它跳一句提示。
         # 大場面等判讀的時候選項沒了（「你離開了，這一仗沒打成。」）：這一仗沒打、不寫江湖紀錄，也只有這句回話。
+        # 兩個分頁搶同一張懸賞，慢的那一頁按下去的懸賞選項已經不在選單上（FB-162）：同樣沒寫江湖紀錄，只有這句回話。
         # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
         out["message"] = joined(msgs)
     return out

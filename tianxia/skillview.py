@@ -513,23 +513,25 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
     格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
     武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名}（修練頁那一列底下畫定名表單），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
-    held_note：寄放著哪幾件（6.5），沒有是空字串。"""
+    held_note：寄放著哪幾件（6.5），沒有是空字串。
+    where（FB-138）：每一段「哪裡買得到、哪裡得來」那一句（equipment.smith_where、mounts.where、treasures.WHERE），讀內容的地點標籤；
+    網頁在每一段身上與裝備庫都空著、也沒有寄放時畫精簡的一塊，每段一行寫 empty 加 where。內容裡沒有那種地點時是空字串。"""
     member = state.player.member
     slots = []
     if equipment.on(content, "weapon"):
         art = team.player_art(state, content, world, member.wugong_id)
         slots.append({"slot": "weapon", "label": equipment.SLOTS["weapon"].label, "empty": weapons.EMPTY, "note": weapons.RACK_NOTE,
-                      **weapons.rows(state, content, world, art)})
+                      "where": equipment.smith_where(state, content), **weapons.rows(state, content, world, art)})
     if equipment.on(content, "armor"):
         neigong = team.player_art(state, content, world, member.neigong_id)
         slots.append({"slot": "armor", "label": equipment.SLOTS["armor"].label, "empty": armor.EMPTY, "note": armor.RACK_NOTE,
-                      **armor.rows(state, content, neigong)})
+                      "where": equipment.smith_where(state, content), **armor.rows(state, content, neigong)})
     if equipment.on(content, "mount"):
         slots.append({"slot": "mount", "label": equipment.SLOTS["mount"].label, "empty": mounts.EMPTY, "note": mounts.RACK_NOTE,
-                      **mounts.rows(state, content)})
+                      "where": mounts.where(state, content), **mounts.rows(state, content)})
     if equipment.on(content, "treasure") or (seal.on(content) and state.player.heirloom is not None):
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
-                      "note": treasures.RACK_NOTE, **treasures.rows(state, content)})
+                      "note": treasures.RACK_NOTE, "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
     for block in slots:
         if block["slot"] in ("weapon", "armor"):

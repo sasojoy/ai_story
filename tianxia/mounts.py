@@ -33,6 +33,7 @@ FED = "你拿{material}把【{name}】餵飽了。"  # 待 joy 潤；Game.feed_m
 FED_PREFIX = "你拿"
 EMPTY = "身上沒有坐騎。"  # 待 joy 潤：修練頁坐騎那一段身上空著
 RACK_NOTE = "城裡的馬市買得到駑馬；一個一階素材就餵得飽。"  # 待 joy 潤：修練頁坐騎那一段底下
+MARKET_WHERE = "馬市買得到駑馬：{names}。"  # 待 joy 潤（FB-138）：身上什麼裝備都沒有時，修練頁坐騎那一行寫哪裡買得到；{names} 是帶「馬市」標籤的地點名字
 CAVALRY_LINE = "你騎著{name}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（5.9）：決戰畫面，接在「你的職位」那一行後面
 CAVALRY_REPORT = "你騎著{name}出陣"  # 待 joy 潤（5.9）：決戰的戰報與江湖紀錄
 RAID_FLEE_ASK = "{him}的馬比你快，{odds}會被{him}跑掉。"  # 待 joy 潤（5.10）：截殺鈕的確認句後面
@@ -236,6 +237,19 @@ def market_here(state: GameState, content: Content) -> bool:
     if not on(content) or state.player.journey is not None:
         return False
     return MARKET_TAG in (content.locations[state.player.location].tags or [])
+
+
+def market_names(content: Content) -> list[str]:
+    """帶「馬市」標籤的地點名字（內容裡的先後）；不寫死地名，內容換了跟著換。"""
+    return [loc.name for loc in content.locations.values() if MARKET_TAG in (loc.tags or [])]
+
+
+def where(state: GameState, content: Content) -> str:
+    """修練頁坐騎那一段「哪裡買得到」（FB-138）：列出每一處馬市的名字；人正站在馬市多接一句「此地就有」；內容裡沒有馬市就不寫。"""
+    names = market_names(content)
+    if not names:
+        return ""
+    return MARKET_WHERE.format(names="、".join(names)) + (equipment.WHERE_HERE if market_here(state, content) else "")
 
 
 def shop_item(state: GameState, content: Content) -> Equipment:
