@@ -399,6 +399,22 @@ def test_without_a_failure_every_in_lock_call_goes_out(game, monkeypatch):
     assert any("山風捲過旌旗。" in m for m in msgs)
 
 
+def test_a_successful_in_lock_call_does_not_use_up_the_budget(game, monkeypatch):
+    """同一次拿鎖裡後面不叫模型的原因是前面**失敗過**（額度用完），不是「一次拿鎖只准叫一次」：
+    成功的呼叫不扣額度，第二處照樣拿得到 client、照樣用鎖內的短逾時。
+    （失敗那一半見 test_a_new_lock_hold_gets_a_fresh_budget。）"""
+    spy = ModelSpy(monkeypatch, ok=True)
+    game.client.timeout = PRODUCTION_TIMEOUT
+    game.reset_model_budget()
+    first = game._quick_client()
+    assert first is not None and first.chat_text([]) == "山風捲過旌旗。"
+    second = game._quick_client()
+    assert second is not None  # 成功不扣額度
+    assert second.chat_text([]) == "山風捲過旌旗。"
+    quick = game.content.config.in_lock_model_timeout
+    assert spy.timeouts == [quick, quick]
+
+
 def test_a_new_lock_hold_gets_a_fresh_budget(slow, spy):
     quick = slow._quick_client()
     with pytest.raises(requests.exceptions.ReadTimeout):

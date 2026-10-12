@@ -37,7 +37,7 @@
    ]},
   {"id": "trend_zhuo_volunteers", "title": "南下的鄉勇", "locations": ["zhuo_county"],
    "condition": {"trend_min": {"huangjin": 40}},
-   "text": "冀州的黃巾越打越兇，涿縣縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「好漢，一起去吧！」",
+   "text": "冀州的黃巾越打越兇，涿縣縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「少俠，一起去吧！」",
    "choices": [
      {"text": "替他們把隊伍操練出個樣子再走", "condition": {"factions_none": ["huang"]}, "check": {"stat": "wis", "difficulty": 4},
       "effect": {"text": "你教他們排成三列、聽鼓進退，半天下來總算像支隊伍。帶隊的硬塞了一串錢給你。", "stats": {"fame": 1, "silver": 15}, "trend": {"front": -1}},

@@ -1182,3 +1182,35 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .hero-ft-row .btn small { margin-left: 4px; font-size: 11px; font-weight: 400; opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) { .hero-halo, .hero-node .pulse { animation: none; } }
 .acard[data-worn], .gear-slot { scroll-margin-top: 130px; } /* 人物面板的「看這一門／看這件」捲過去時不被頂上的狀態列蓋住 */
+
+/* 設定頁的性別（PM 2026-10-12）：還沒選過的舊角色選一次 */
+.gender-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.gender-row > span { flex: 1 1 auto; }
+.gender-row.card { flex-direction: column; align-items: stretch; padding: 10px 12px; }
+.gender-row.card p { margin: 0; }
+.gender-row .row { display: flex; gap: 8px; }
+
+/* 建角色畫面選性別（PM 2026-10-12）：兩張剪影的小牌，選中的那張描紅 */
+.sex-pick { border: 0; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sex-pick legend { padding: 0; margin-bottom: 8px; font-size: 14px; color: var(--ink-2, inherit); }
+.sex-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 8px;
+  border: 1.5px solid var(--line, #d8ccb8); border-radius: 12px; background: #efe7d8; cursor: pointer; }
+.sex-tile input { position: absolute; opacity: 0; pointer-events: none; }
+.sex-tile img { height: 112px; width: auto; max-width: 100%; object-fit: contain; }
+.sex-tile span { font-weight: 700; color: #2a241d; }
+.sex-tile small { margin-left: 6px; font-weight: 400; color: #6b6155; }
+.sex-tile:has(input:checked) { border-color: var(--accent, #b22d15); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #b22d15) 25%, transparent); }
+.sex-tile:has(input:focus-visible) { outline: 2px solid var(--accent, #b22d15); outline-offset: 2px; }
+
+/* 登入頁的宣傳影片（企劃者 2026-10-12）：貼齊頂端與兩側的主視覺，登入框在它下面；375×812 第一屏看得到登入框的開頭 */
+.gate.has-promo { padding-top: var(--top); }
+.gate.has-promo .brand { margin: 14px 0 18px; }
+.gate.has-promo .brand h1 { font-size: 32px; }
+.promo { position: relative; margin: 0 -20px; aspect-ratio: 864 / 496; max-width: calc(100% + 40px); background: #e9e2d3; overflow: hidden; }
+.promo video, .promo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.promo::after { content: ""; position: absolute; inset: auto 0 0; height: 28%; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--paper)); }
+.promo-sound { position: absolute; right: 10px; bottom: 10px; z-index: 1; border: 0; border-radius: 999px; padding: 6px 12px;
+  background: rgba(26, 22, 18, 0.62); color: #fff; font: 13px var(--sans); cursor: pointer; }
+.promo-sound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (min-width: 461px) { .promo { margin: 16px 0 0; max-width: 100%; border-radius: var(--radius); } }

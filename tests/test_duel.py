@@ -171,7 +171,7 @@ def test_a_stale_rating_is_thrown_away(setup, monkeypatch):
     game.choose("duel:固守")
     seen = []
 
-    def rate(client, act, faction, text, name, setting, place):
+    def rate(client, act, faction, text, name, setting, place, sex="男"):
         seen.append((act.title, faction, text, setting))
         return battle_instance.GambleVerdict(40)
 

@@ -60,7 +60,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
+    battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
     server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -827,7 +827,7 @@ def battle_text(game: Game, text: str) -> list[str]:
             return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
         # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
         return battle_instance.assess_gamble(
-            client, act_, request.faction_name, request.text, request.name, target=request.target,
+            client, act_, request.faction_name, request.text, request.name, target=request.target, sex=request.sex,
         )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
@@ -850,6 +850,7 @@ def duel_text(game: Game, text: str) -> list[str]:
             return fallback
         return battle_instance.assess_gamble(
             client, scene, request.faction_name, request.text, request.name, setting=duel.SETTING, place=duel.PLACE,
+            sex=request.sex,
         )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
@@ -1158,8 +1159,9 @@ def register(login_name: str, password: str, again: str) -> str:
     return normalize(login_name)
 
 
-def create_character(account_key: str, name: str) -> Game:
-    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。"""
+def create_character(account_key: str, name: str, sex: str | None = None) -> Game:
+    """建立角色：檢查名號沒人用 → 建存檔 → 綁到帳號，三步在同一筆交易裡做完（不跟假人程式取名撞在一起）。
+    sex：建角色畫面選的性別（PM 2026-10-12）；只認「男」「女」，別的當沒選（男、設定頁還能選一次）。"""
     name = unicodedata.normalize("NFKC", name or "").strip()  # 全形英數字當成一般英數字：不能用「Ｒａｙａｌ」冒充「Rayal」
     if not name:
         raise GameError("請先輸入你的名號。")
@@ -1175,7 +1177,7 @@ def create_character(account_key: str, name: str) -> Game:
         else:
             if name_taken(name):
                 raise GameError(NAME_TAKEN)
-            game = Game.new(CONTENT, name, prologue=True)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
+            game = Game.new(CONTENT, name, prologue=True, sex=sex if sex in gender.GENDERS else None)  # 網頁上建的新角色走序章（新手引導計畫一）；假人與腳本不走
             open_characters().save(game.state)
             store.bind_character(account_key, name)
     return game_for(name)
@@ -1325,7 +1327,7 @@ def api_register(response: Response, body: dict = Body(...)):
 @app.post("/api/character")
 def api_character(request: Request, body: dict = Body(...)):
     key = _account(request)
-    create_character(key, body.get("name", ""))
+    create_character(key, body.get("name", ""), body.get("gender"))
     return _entry(key)
 
 
@@ -1348,6 +1350,7 @@ def api_main(request: Request):
 MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
+    "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),
@@ -1359,7 +1362,7 @@ MAIN_ACTIONS = {
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
-PAUSE_OK_ACTIONS = frozenset({"anonymous", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),

@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import zh
+from . import gender, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -186,7 +186,7 @@ def build_system_prompt(
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
-        f"【玩家】{p.name}，目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
+        f"【玩家】{p.name}（{gender.who_line(p)}），目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
         f"不是你決定的）。你與玩家目前的關係現況：{my_note}\n"
         f"【已經說過的話（避免重複）】{used_str}\n\n"
         "【寫作要求】\n"

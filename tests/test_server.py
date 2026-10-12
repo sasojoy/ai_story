@@ -2917,7 +2917,7 @@ def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
         assert view["free_text_note"] == game.DUEL_GAMBLE_NOTE
         seen = []
 
-        def rate(client, act_, faction_name, text, name, setting, place):
+        def rate(client, act_, faction_name, text, name, setting, place, sex="男"):
             seen.append((open_world().db.writing(), act_.title, faction_name, text, name, place))
             return battle_instance.GambleVerdict(100, "測試一把撒出石灰。", "測試踩到自己的衣角。")
 
@@ -3004,7 +3004,7 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     client.post("/api/choose", json={"id": "battle:join_late"})
     seen = []
 
-    def rate(c, act, faction_name, text, name, target=""):
+    def rate(c, act, faction_name, text, name, target="", sex="男"):
         seen.append((open_world().db.writing(), faction_name, text, name))
         return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
 

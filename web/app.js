@@ -861,11 +861,34 @@
   }
 
   // ── 登入與取名號 ──
+  // 登入頁最上面的宣傳影片（企劃者 2026-10-12「我要在我們登入頁面加這個主要宣傳影片」）：手機擋有聲自動播放，所以靜音、
+  // 自動播放、循環、playsinline，右下角一顆開聲音；首格 promo-poster.jpg 在影片載入前先顯示，偏好減少動態效果的人只看首格。
+  // 只在登入頁：登入、註冊兩頁切換時（renderGate 重畫）把同一支影片搬回去，不會從頭播、聲音開著的也不會被關掉
+  const PROMO_POSTER = "/static/promo-poster.jpg";
+  const promoCalm = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function promoHtml() {
+    if (promoCalm()) return `<figure class="promo"><img src="${PROMO_POSTER}" alt="天下大勢宣傳影片的首格"></figure>`;
+    return `<figure class="promo">
+      <video src="/static/promo.mp4" poster="${PROMO_POSTER}" muted autoplay loop playsinline preload="auto" aria-label="天下大勢宣傳影片"></video>
+      <button class="promo-sound" type="button" data-act="promo-sound" aria-pressed="false">🔇 開聲音</button>
+    </figure>`;
+  }
+  function promoSound(el) {
+    const v = el.closest(".promo") && el.closest(".promo").querySelector("video");
+    if (!v) return;
+    v.muted = !v.muted;
+    if (!v.muted && v.paused) v.play().catch(() => {});
+    el.setAttribute("aria-pressed", String(!v.muted));
+    el.textContent = v.muted ? "🔇 開聲音" : "🔊 關聲音";
+  }
+
   function renderGate() {
     const reg = S.gateMode === "register";
+    const playing = $app.querySelector(".gate .promo");
     $app.innerHTML = `
-      <div class="gate">
-        <div class="brand"><div class="seal">勢</div><h1>天下大勢</h1><p>亂世江湖，從潁川城門口開始</p></div>
+      <div class="gate has-promo">
+        ${promoHtml()}
+        <div class="brand"><h1>天下大勢</h1><p>亂世江湖，從潁川城門口開始</p></div>
         <div class="seg">
           <button class="${reg ? "" : "on"}" data-act="gate" data-mode="login">登入</button>
           <button class="${reg ? "on" : ""}" data-act="gate" data-mode="register">註冊</button>
@@ -878,6 +901,7 @@
           <button class="btn primary" type="submit">${reg ? "註冊" : "登入"}</button>
         </form>
       </div>`;
+    if (playing) $app.querySelector(".gate .promo").replaceWith(playing);
   }
 
   function renderCreate() {
@@ -886,6 +910,11 @@
         <div class="brand"><div class="seal">勢</div><h1>天下大勢</h1><p>這個帳號還沒有角色</p></div>
         <form id="create-form" class="card">
           <label class="field"><span>取一個名號，踏入江湖</span><input class="input" name="name" maxlength="16" placeholder="例如：沈青衫" required></label>
+          <fieldset class="sex-pick"><legend>以什麼身分行走江湖（建了就不能改）</legend>
+            ${[["男", "少俠", HERO_FIGURES.男.src], ["女", "女俠", HERO_FIGURES.女.src]].map(([v, hero, src], i) => `
+            <label class="sex-tile"><input type="radio" name="gender" value="${v}" ${i ? "" : "checked"}>
+              <img src="${src}" alt="" aria-hidden="true"><span>${hero}<small>${v}</small></span></label>`).join("")}
+          </fieldset>
           <p class="form-msg" role="alert"></p>
           <button class="btn primary" type="submit">建立角色</button>
         </form>
@@ -1748,7 +1777,7 @@
     const P = S.peer;
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
-      : !c ? `<p>${esc(P.gone || "他已經不在這裡了。")}</p>`
+      : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>`
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
@@ -2816,6 +2845,18 @@
   }
 
   // ── 設定抽屜 ──
+  // 性別（PM 2026-10-12）：建角色時選過的寫一行；還沒選過的舊角色選一次，先問一次（S.genderPick），選了就定了
+  function genderRow(s) {
+    if (s.gender_chosen) return `<p class="gender-row muted">性別：${esc(s.gender)}</p>`;
+    if (S.genderPick) {
+      const hero = S.genderPick === "女" ? "女俠" : "少俠";
+      return `<div class="gender-row card"><p>往後以${hero}行走江湖？性別只能選這一次。</p>
+        <div class="row"><button class="btn small" data-act="gender-go" data-value="${esc(S.genderPick)}">確定</button><button class="btn small ghost" data-act="gender-pick" data-value="">再想想</button></div></div>`;
+    }
+    return `<div class="gender-row"><span>性別（只能選一次）</span>
+      <button class="btn small" data-act="gender-pick" data-value="男">男</button><button class="btn small" data-act="gender-pick" data-value="女">女</button></div>`;
+  }
+
   function sheetHtml() {
     const s = S.main.status;
     const a = S.admin;
@@ -2826,6 +2867,7 @@
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
+        ${genderRow(s)}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
@@ -3585,6 +3627,7 @@
     try {
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
+        case "promo-sound": promoSound(el); break;
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
@@ -3688,6 +3731,8 @@
         case "hero-jump": heroJump(el); break; // 面板底下「看這一門／看這件」：捲到下面那張卡
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
+        case "gender-pick": S.genderPick = el.dataset.value || null; render(); break;
+        case "gender-go": S.genderPick = null; await doMain("gender", { value: el.dataset.value }); break;
         case "admin": {
           const op = el.dataset.op;
           const body = { hours: Number(el.dataset.hours || 1) };

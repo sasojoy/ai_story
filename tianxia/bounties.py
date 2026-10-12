@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, library, materials, ranger, roster, team, treasures, weapons
+from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Content, Location
@@ -145,7 +145,7 @@ def how(content: Content, b: Bounty) -> str:
         return f"在城鎮的懸賞榜交出一門屬{b.attribute}、合成出來的武學或內功（交了就沒了）"
     if b.kind == "arms":  # 待 joy 潤；手上那把也收（企劃者 2026-10-10，懸賞榜設計 14.1 丙）
         return f"在城鎮的懸賞榜交出一把屬{b.attribute}的{_noun(b)}（裝備庫裡、手上的都行，什麼品質都收，交了就沒了）"
-    return f"找到{b.target}，在他的玩家卡上截殺並打贏他"
+    return f"找到{b.target}，在對方的玩家卡上截殺並打贏"
 
 
 def _enemy_name(content: Content, b: Bounty) -> str:
@@ -708,7 +708,7 @@ def post_problem(state: GameState, content: Content, target_state: GameState, am
     if p.faction is None or t.faction is None or p.faction == t.faction:
         return "只能通緝敵對陣營的人。"
     if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
-        return f"{t.name}初入江湖，還在新手期，通緝不了他。"  # 待 joy 潤
+        return f"{t.name}初入江湖，還在新手期，通緝不了{gender.pronoun(t)}。"  # 待 joy 潤
     me = name_key(p.name)
     if any(b.kind == "wanted" and b.poster and name_key(b.poster) == me and not past_due(b, content, state.world) and _left(b) > 0
            for b in state.world.bounties):
