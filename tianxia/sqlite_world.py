@@ -707,6 +707,13 @@ class SqliteWorldStore:
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:
                 shift_deadlines(state.active_battle, span)
+            for duel in state.seal_duels:  # 奪璽單挑的時間一起挪（5.4）：不挪的話一繼續兩邊都過了在場窗口，全由代打打完
+                duel.starts_real += span
+                if duel.opened_real is not None:
+                    duel.opened_real += span
+                for side in (duel.challenger, duel.holder):
+                    if side.last_seen is not None:
+                        side.last_seen += span
             result["span"] = span
 
         self.mutate(_apply)

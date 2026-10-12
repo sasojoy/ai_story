@@ -215,6 +215,10 @@ def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[
     return out
 
 
+DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決戰的戰報那一行（5.9 最後一條）
+NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
+
+
 def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, now: float) -> list[str]:
     """時刻表決戰剛開集結（world._open_claimed，不在任何 mutate 裡）：標 emerge 的擲現世、標了 seal 的擲璽動（Task 6）。
     一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。"""

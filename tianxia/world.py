@@ -555,6 +555,9 @@ def advance_world_state(
     # 在 advance_season 的 mutate_season 裡也查得到（交易裡的快照直接用同一條連線，不是 mutate，不撞「不能巢狀」）。
     # 沒傳 store（純函式的呼叫，例如測試）就不知道人數：None＝割據照設計的速度漲，不縮放
     players = sum(world.faction_counts().values()) if cal_hour is not None and world is not None else None
+    # 有沒打完的奪璽單挑時，那一個曆時先不提前收季（玉璽碎片設計 5.11，最多約 13 分鐘）：一次推進只查一次；在 advance_season 的
+    # mutate_season 裡也查得到（同上面的名冊）。沒傳 store（純函式的呼叫）照舊
+    seal_open = cal_hour is not None and world is not None and bool(content.seal) and world.seal_duel_open()
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False
@@ -571,7 +574,7 @@ def advance_world_state(
             msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
-            decisive = None if season.ended else decisive_ending(vehicle, content)
+            decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)
             if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)
         if not season.ended and _season_due(season, content):

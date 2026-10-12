@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
-    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
 )
@@ -65,7 +65,7 @@ from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
-from .world_state import WorldStateStore, season_length_days
+from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -642,6 +642,7 @@ class Game:
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
         self._battle_status(tick=True)
+        self._seal_tick()
         return msgs
 
     def sync(self, now: float) -> list[str]:
@@ -827,6 +828,8 @@ class Game:
     def options(self, odds: bool = True, tick: bool = True) -> list[Option]:
         """tick 照 _battle_status 的規則往下傳：預設 True，這個呼叫順便把全服戰鬥追趕到現實時間；
         只想讀選單、不該推進戰鬥的呼叫端（dialogue_request）傳 False——一次請求只能推進一次。"""
+        if tick:
+            self._seal_tick()  # 奪璽單挑跟決戰一樣：誰輪詢誰推（5.4）
         battle_status = self._battle_for_me(tick=tick)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停（線上架構 8.3「擋住所有動作」）：選單只剩一顆灰的
             return [Option(id="season:paused", label=PAUSED_TEXT, enabled=False)]
@@ -836,14 +839,14 @@ class Game:
                 # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
                 # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場。
                 # 開打了還沒投效的散人也一樣：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
-                return self._battle_options(battle, definition) + self._everyday_options(odds)
+                return self._seal_options() + self._battle_options(battle, definition) + self._everyday_options(odds)
             battle_menu = self._battle_options(battle, definition)
             if self.state.player.resting_since is not None:
                 battle_menu.append(self._stand_option())  # 戰鬥選單取代整份選單，隨時可以起身這條規則不能因此掉了
             if self.state.player.pending_defect:  # 同理：開著的叛投確認畫面不能因為開打就卡到整場打完（最終審查 Minor 1）
                 battle_menu.append(Option(id="defect:cancel", label="再想想"))
             return battle_menu
-        return self._everyday_options(odds)
+        return self._seal_options() + self._everyday_options(odds)
 
     def _everyday_options(self, odds: bool) -> list[Option]:
         """平常的選單（沒有要親身參與、已經開打的決戰時；集結時接在加入的按鈕後面）：籌備或休季、事件、對話、
@@ -1409,6 +1412,8 @@ class Game:
         kind, _, arg = option_id.partition(":")
         if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
             return self._log(self._battle_choose(arg))
+        if kind == "seal":  # 奪璽單挑：每回合的出招不寫紀錄，收場由 _deliver_seal_results 補一份戰報與一則紀錄（5.9）
+            return self._log(self._seal_act(arg))
         if kind == "duel":  # 頭目戰同決戰：每回合的出招不寫紀錄，分出勝負那一下由 _duel_finish 寫一則、一份戰報
             return self._log(self._duel_act(arg))
         if option_id == FREE_TEXT_OPTION:
@@ -3417,7 +3422,14 @@ class Game:
         # 保底收場（end_without_fighters：兩軍都沒人還能打）：不打單挑、現世落空（設計 4.5 邊界 3、3.3）；小伺服器的旁觀散人也不補
         armies = {f.id for f in definition.factions}
         deserted = not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
-        # （Task 8 在這裡挑挑戰者、開單挑，picked 加上挑戰者）
+        duel = None
+        shard_now = reg.shards.get(battle.seal_shard or "")
+        if (not deserted and shard_now is not None and battle.seal_holder
+                and seal.key(shard_now.holder) == seal.key(battle.seal_holder)):
+            duel = self._seal_challenge(battle, definition, reg, view.tianji, winner, margin, need, held)
+            if duel is not None:
+                picked.add(seal.key(duel.challenger.name))
+                notes.append(seal.DUEL_NOTE.format(challenger=duel.challenger.name, holder=duel.holder.name))
         found = None
         emerge = reg.shards.get(battle.seal_emerge or "")
         if emerge is not None and emerge.state == "hidden" and not deserted:
@@ -3429,6 +3441,15 @@ class Game:
         def _apply(shared) -> None:
             reg_ = seal.filled(shared.seal, c)
             reg_.last_showdown, reg_.last_showdown_dueled, reg_.last_showdown_where = battle.record_id, False, definition.name
+            if battle.seal_shard is not None and battle.seal_shard in c.seal:
+                shard_label = c.seal[battle.seal_shard].name
+                if duel is not None:
+                    shared.seal_duels.append(duel)
+                    reg_.last_showdown_dueled = True
+                    call = seal_duel.CALL if duel.challenger.name in battle.participants else seal_duel.CALL_QA  # 旁觀散人沒有「戰功居前」
+                    seal.rumor(shared.season, call.format(challenger=duel.challenger.name, holder=duel.holder.name, shard=shard_label))
+                elif battle.seal_holder:
+                    seal.rumor(shared.season, seal.NO_DUEL.format(holder=battle.seal_holder, shard=shard_label))
             if battle.seal_emerge is None:
                 return
             shard = reg_.shards[battle.seal_emerge]
@@ -3449,6 +3470,162 @@ class Game:
             notes.append(seal.EMERGE_NOTE.format(name=found))
         if notes:
             self.world.mutate_battle(lambda b: b.seal_notes.extend(notes) if b.record_id == battle.record_id else None)
+
+    def _seal_challenge(
+        self, battle, definition: BattleDef, reg, tianji: int, winner: str, margin: str, need: int, held: set[str],
+    ) -> SealDuel | None:
+        """璽動那一場收場：持有者那一方打得怎樣（照璽動那一刻的快照，4.5）；不是大勝就挑挑戰者（4.6）、照 5.3 抓雙方的快照、開一場
+        下戰書的單挑（還沒寫進去，呼叫端的 world.mutate 寫）。挑不出人回 None（懷璽不失、算動過）。"""
+        cfg = self.content.config.seal
+        holder = battle.seal_holder
+        snap = battle.seal_holder_side
+        moved = snap is not None and self.world.faction_of(holder) != battle.seal_holder_faction  # 璽動之後陣營變了：算旁觀、不套過濾
+        side = None if moved else snap
+        tier = seal.tier_for(side, winner, margin)
+        if tier == "大勝" or not winner:
+            return None
+        armies = [f.id for f in definition.factions]
+        foe = winner if side is None else next((f for f in armies if f != side), winner)
+        blocked = None if side is None else battle.seal_holder_faction  # 只在快照陣營沒變時擋「自己人合演轉手」
+        rows = self._seal_challengers(battle, foe, need, holder, blocked, held)
+        if len(battle.participants) < cfg.small_battle:
+            rows += self._seal_spectators(definition, battle, held)
+        shard = reg.shards[battle.seal_shard]
+        name = seal.weighted_pick([(n, m) for n, m, _ in rows], seal.dice(reg.salt, tianji, "seal-duel", battle.record_id),
+                                  cfg.challenger_pool, prefer=shard.former)
+        if name is None:
+            return None
+        challenger = next(s for n, _, s in rows if n == name)
+        me = battle.participants.get(holder)
+        guarded = me is not None and me.acted_rounds >= need  # 護璽：自己出手滿門檻（臨時投效的散人也算，只多這一條，4.5）
+        keeper = seal_duel.side_from_participant(me, battle.seal_holder_faction) if me is not None else self._seal_side_of(holder)
+        cap = min(cfg.cap, cfg.cap * cfg.side_factor.get(tier, 0.0) * (cfg.guard if guarded else 1.0))
+        return seal_duel.open_duel(
+            f"{battle.record_id}:{shard.id}", shard.id, battle.record_id, definition.timetable_event, definition.name, tier, cap,
+            challenger, keeper, self.now, cfg,
+        )
+
+    def _seal_challengers(self, battle, side: str, need: int, holder: str, blocked: str | None, held: set[str]) -> list:
+        """挑戰者的候選（4.6）：那一邊（交戰兩軍之一）的參戰者、自己出手滿 need 回合、不是持有者、手上沒有碎片、這一季沒叛投過與
+        不在新手期（加入時的快照）、此刻名冊上的陣營不跟持有者的快照陣營相同（blocked；None 不擋）。回（名號, 戰功, 快照）；不看假人。"""
+        tuning = self.content.config.battle
+        out = []
+        for p in battle.participants.values():
+            if p.faction != side or p.acted_rounds < need or p.turncoat or p.newbie or p.is_bot:  # is_bot 是決戰補位的機器人（不是角色）
+                continue
+            if seal.key(p.name) == seal.key(holder) or seal.key(p.name) in held:
+                continue
+            now_faction = self.world.faction_of(p.name)
+            if blocked is not None and now_faction == blocked:
+                continue
+            out.append((p.name, battle_instance.merit(tuning, p), seal_duel.side_from_participant(p, now_faction)))
+        return out
+
+    def _seal_spectators(self, definition: BattleDef, battle, held: set[str]) -> list:
+        """小伺服器的退路（PM 癸；計畫「要 PM 定的」第 2 條）：收場那一刻人在決戰的大區、presence_seconds 內同步過、不在路上、名冊上
+        是散人、不是參戰者也不是持有者、不在新手期與序章、這一季沒叛投過、手上沒有碎片的人。戰功當 0；身手照他的存檔算（不存回去）。"""
+        if not hasattr(self.world, "db") or definition.region is None:
+            return []
+        store = CharacterStore(self.world.db)
+        since = self.now - self.content.config.presence_seconds
+        region = definition.region
+        here = [loc for loc in self.content.locations if (r := atlas.region_of(self.content, loc)) is not None and r.id == region]
+        out = []
+        for loc in here:
+            for state in store.present(loc, since):
+                name = state.player.name
+                if (name in battle.participants or seal.key(name) == seal.key(battle.seal_holder) or seal.key(name) in held
+                        or state.player.journey is not None or state.player.defected or self.world.faction_of(name) is not None):
+                    continue
+                kin = self._kin(state)
+                if roster.newbie(kin.state, self.content) or prologue_rules.active(kin.state, self.content):
+                    continue
+                out.append((name, 0, seal_duel.side_from(
+                    name, None, kin._battle_power(), kin._battle_scores(mounted=False), kin._battle_role(), kin._battle_neili_cap(),
+                )))
+        return out
+
+    def _seal_side_of(self, name: str) -> SealSide:
+        """沒參戰的持有者的快照（5.3）：觸發結算的人就是他用 self；否則讀他的存檔建一份不叫模型的 Game（不 sync、不存回、不記 last_seen），
+        讀不到（沒有資料庫）就照新角色。這一季沒上線過（seen_real，舊存檔退回 last_real，早於 opened_real；opened_real 是 None 一律當
+        上線過）記成 fresh、身手照新角色。"""
+        opened = self.world.seal_state().registry.opened_real
+        game = self if seal.key(self.state.player.name) == seal.key(name) else (self._load_kin(name) or self._kin(new_game_state(self.content, name)))
+        seen = game.state.player.seen_real if game.state.player.seen_real is not None else game.state.last_real
+        fresh = opened is not None and (seen is None or seen < opened)
+        if fresh and game is not self:
+            game = self._kin(new_game_state(self.content, name))
+        return seal_duel.side_from(
+            name, self.world.faction_of(name), game._battle_power(), game._battle_scores(mounted=False), game._battle_role(),
+            game._battle_neili_cap(), fresh=fresh,
+        )
+
+    def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
+        """排第一的那一場奪璽單挑，與自己是哪一邊（不在裡面是 None）。"""
+        duels = self.world.seal_state().duels if seal.on(self.content) else []
+        if not duels:
+            return None, None
+        return duels[0], seal_duel.side_of(duels[0], self.state.player.name)
+
+    def _seal_tick(self) -> None:
+        """把奪璽單挑推到現在（5.4）：options(tick=True) 與 world_tick 叫，一次最多結算一回合。自己的請求（own_request）而且自己是一方時
+        順便記 last_seen（15 秒最多寫一次）。先讀一次 world 那一列，沒事做就不開 mutate（每 10 秒的輪詢不寫）。季、角色都不動；
+        自己是一方就順便補給自己（_deliver_seal_results，Task 10）。"""
+        if not seal.on(self.content):
+            return
+        view = self.world.seal_state()
+        if not view.duels or view.paused:
+            return
+        duel = view.duels[0]
+        me = self.state.player.name
+        who = seal_duel.side_of(duel, me) if me else None
+        cfg = self.content.config.seal
+        if not seal_duel.needs_write(duel, who, self.now, cfg, own=self.own_request, ended=self.state.world.ended):
+            return
+
+        def _apply(shared) -> None:
+            if self.own_request and who is not None and shared.seal_duels and shared.seal_duels[0].id == duel.id:
+                seal_duel.note_seen(shared.seal_duels[0], who, self.now, cfg)
+            seal_duel.advance(shared, self.content, self.now)
+
+        self.world.mutate(_apply)
+
+    def _seal_options(self) -> list[Option]:
+        """單挑的一方、這一場開打了：三招（寫剋哪一招）擺在選單最前面；送過了換成一顆灰的「已出招」；這一回合判成不在場的三招灰掉、
+        寫中性的字（5.5，不寫代打）。放手一搏走輸入框（seal_free_text_prompt，Task 9），選單上沒有。"""
+        duel, who = self._my_seal_duel()
+        if duel is None or who is None or duel.phase != "active":
+            return []
+        cfg = self.content.config.seal
+        problem = seal_duel.submit_problem(duel, who, cfg)
+        if problem == seal_duel.SENT:
+            left = max(0, int((duel.opened_real or self.now) + cfg.round_seconds - self.now))
+            label = f"（{seal_duel.SENT}：已出招 {seal_duel.sent(duel)}／2，最遲 {left // 60} 分 {left % 60} 秒）"
+            return [Option(id="seal:waiting", label=label, enabled=False)]
+        late = f"（{problem}）" if problem else ""
+        return [Option(id=f"seal:{m}", label=duel_rules.move_label(m) + late, enabled=problem is None) for m in MOVES]
+
+    def _seal_act(self, move: str) -> list[str]:
+        """選單上的一招（seal:<招>）：在一次 world.mutate 裡重驗、記下這一手，然後推一步（湊齊了而且滿 20 秒才結算）。"""
+        if move not in MOVES:
+            return ["（此刻無法這麼做。）"]
+        out: list[str] = []
+        me, cfg = self.state.player.name, self.content.config.seal
+
+        def _apply(shared) -> None:
+            duel = shared.seal_duels[0] if shared.seal_duels else None
+            who = seal_duel.side_of(duel, me) if duel is not None else None
+            problem = seal_duel.GONE if who is None else seal_duel.submit_problem(duel, who, cfg)
+            if problem:
+                out.append(f"（{problem}）")
+                return
+            seal_duel.submit(duel, who, move=move)
+            seal_duel.note_seen(duel, who, self.now, cfg)
+            out.append(f"你出了{move}。")
+            out.extend(seal_duel.advance(shared, self.content, self.now))
+
+        self.world.mutate(_apply)
+        return out
 
     def _open_waiting_showdown(self) -> None:
         """時間到了、在等前一場打完的時刻表決戰，前一場一收場就開（Review Focus 2：開不成時留著記號，等它收場立刻開）。
