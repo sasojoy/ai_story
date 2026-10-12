@@ -4367,7 +4367,8 @@ class Game:
     def _challenge(self, fid: str) -> list[str]:
         """挑戰本人（軍令文件 4.5，企劃者 2026-10-04 改定）：跟他本人打一場單次判定，花遊歷的體力。打贏他敗走（_rout），
         拿那支隊伍的獎勵；落敗失落一成銀兩；不論勝負都照結果扣氣血（同遊歷）。可以重複打，只是打贏的人要等他消氣。
-        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。"""
+        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。
+        打贏另有機會掉一件寶物（_figure_treasure）。"""
         s, c = self.state, self.content
         fig = c.figures[fid]
         squad = figures.squad_of(s, c, fid)
@@ -4385,6 +4386,7 @@ class Game:
             record.changes += changes
             record.notes += notes
             msgs += extra
+            msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier)
@@ -4420,6 +4422,14 @@ class Game:
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
         return msgs
+
+    def _figure_treasure(self, fid: str, record) -> list[str]:
+        """挑戰本人打贏掉寶物（裝備四欄 6.4；treasures.challenge_drop）：掉出來的那一件寫進這一場戰報的「得失」（record.materials），
+        江湖紀錄寫撿到的那一句與放哪。不寫進 _battle_rewards：挑戰本人的戰報 kind 是 event，劇情戰也走那裡。"""
+        item, lines = treasures.challenge_drop(self.state, self.content, fid, self.world.get_season_number(), record.id)
+        if item is not None:
+            record.materials.append(treasures.GAIN_LINE.format(name=item.name))
+        return lines
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和

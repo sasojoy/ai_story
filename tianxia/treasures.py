@@ -53,6 +53,8 @@ PRIZE_WORDS = {"treasure": "寶物一件", "horse": "良駒一匹"}  # 待 joy �
 PRIZE_NOTE = "・另有重賞：{what}"  # 待 joy 潤：懸賞榜、懸賞卡、揭下的回話，接在賞的那一段後面
 PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
 GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）
+GAIN_LINE = "寶物【{name}】"  # 待 joy 潤：戰報「得失」那一格（同 weapons.GAIN_LINE：素材寫「精鐵砂 ×1」，寶物寫「寶物【烏木名刺】」）
+DROP_LINE = "對手敗走時落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人）
 
 
 def on(content: Content) -> bool:
@@ -318,3 +320,24 @@ def gifts_due(state: GameState, content: Content) -> list[str]:
         lines.append((gift.line or GIFT_LINE).format(general=general, gift=item.name))
         lines += deliver(state, content, item, hold=True)
     return lines
+
+
+# ---- 挑戰本人掉落（6.4）----
+
+def challenge_drop(state: GameState, content: Content, figure: str, season: int, record_id: int) -> tuple[Equipment | None, list[str]]:
+    """打贏大勢人物本人（Game._challenge 打贏那一支、_rout 之後）：challenge_chance 掉一件掉落池裡你還沒有的寶物（都有了改給銀兩）。
+    同一位人物對同一個人每季只掉一次（treasure_drops）；寶物關著、掉過、裝備庫滿了（寶物欄有東西、裝備庫也滿）都不擲，也不記
+    「掉過」——騰出空位之後再打贏還有機會。自己一份亂數（季數＋名號＋戰報流水號；流水號每季從 1 起，所以要有季數），不碰 Game.rng。
+    回（掉出來的那一件, 江湖紀錄的話）；換成銀兩時那一件是 None。"""
+    p, cfg = state.player, content.config.treasures
+    if not on(content) or figure in p.treasure_drops or not room_for(state, content, "treasure"):
+        return None, []
+    rng = random.Random(f"寶|{season}|{p.name}|{record_id}")
+    if rng.random() >= cfg.challenge_chance:
+        return None, []
+    p.treasure_drops.add(figure)
+    tid = pick_pool(state, content, rng)
+    if tid is None:
+        return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))
+    item = new_treasure(state, content, tid)
+    return item, [DROP_LINE.format(name=item.name), *deliver(state, content, item)]

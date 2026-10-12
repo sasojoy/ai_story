@@ -749,3 +749,89 @@ def test_a_gift_with_no_room_is_held(content, world):
     msgs = game.choose("act:rest")
     assert [i.template for i in p.held_gear] == ["caoxie"] and treasures.HELD.format(name="舊草鞋") in msgs
     assert world.get_season().general_gifts == {"mate": "寶客"}  # 寄放了也算送出去了
+
+
+# ── Task 7：挑戰本人掉落 ──
+
+def _challenger(world, *, treasures_on=True, chance=1.0):
+    """正式內容、第一季開著：官軍的人站在黃巾營，挑戰得到波才（同 test_armor 的挑戰本人那一支）。"""
+    c = real_content()
+    c.config.season_one = True
+    c.config.auto_open_first_season = True
+    c.config.treasures.enabled = treasures_on
+    c.config.treasures.challenge_chance = chance
+    game = Game.new(c, "官甲", rng=random.Random(0), world=world)
+    game.client = None
+    p = game.state.player
+    p.faction, p.location = "guan", "huangjin_camp"
+    p.tutorial_step = len(c.tutorial.steps)
+    p.visited.add("huangjin_camp")
+    p.stamina = 250.0
+    game.now = 1000.0
+    return game
+
+
+def _won():
+    from tianxia.encounter import EncounterResult
+    return EncounterResult(tier="險勝", margin=20, our_power=200, difficulty=120)
+
+
+def test_beating_a_great_figure_drops_a_pool_treasure_once_a_season(world):
+    from tianxia import team
+    game = _challenger(world)
+    with mock.patch.object(team, "fight", return_value=_won()):
+        msgs = game.choose("act:challenge:bocai")
+    p = game.state.player
+    assert p.treasure is not None and game.content.gear.treasures[p.treasure.template].pool
+    assert p.treasure_drops == {"bocai"} and treasures.DROP_LINE.format(name=p.treasure.name) in msgs
+    record = game.state.battles[0]
+    assert treasures.GAIN_LINE.format(name=p.treasure.name) in record.materials  # 戰報「得失」那一格（同兵器掉落）
+    assert not any(p.treasure.name in note for note in record.notes)  # 不重複進戰報的敘事
+    assert treasures.challenge_drop(game.state, game.content, "bocai", world.get_season_number(), 99) == (None, [])  # 同一位每季只掉一次
+
+
+def test_a_full_rack_means_no_roll_and_no_mark(world):
+    game = _challenger(world)
+    c, p = game.content, game.state.player
+    c.config.weapons.rack_cap = 0
+    p.treasure = Equipment(id="寶:9", slot="treasure", name="叩關玉", template="kouguan_yu")
+    assert treasures.challenge_drop(game.state, c, "bocai", 1, 7) == (None, [])
+    assert p.treasure_drops == set()  # 沒擲就不記「掉過」：騰出空位之後再打贏還有機會（6.4）
+    c.config.weapons.rack_cap = 10
+    item, _ = treasures.challenge_drop(game.state, c, "bocai", 1, 7)
+    assert item is not None and item.template != "kouguan_yu" and p.treasure_drops == {"bocai"}
+
+
+def test_the_drop_rolls_on_season_name_and_record(world):
+    game = _challenger(world, chance=0.2)
+    hits = [random.Random(f"寶|3|官甲|{rid}").random() < 0.2 for rid in range(1, 30)]
+    got = []
+    for rid in range(1, 30):
+        game.state.player.treasure_drops = set()
+        game.state.player.treasure, game.state.player.rack = None, []
+        got.append(treasures.challenge_drop(game.state, game.content, "bocai", 3, rid)[0] is not None)
+    assert got == hits and any(hits) and not all(hits)
+
+
+def test_all_pool_treasures_owned_turns_the_drop_into_silver(world):
+    game = _challenger(world)
+    c, p = game.content, game.state.player
+    p.rack = [Equipment(id=f"寶:{i}", slot="treasure", name=t.name, template=t.id)
+              for i, t in enumerate(t for t in c.gear.treasures.values() if t.pool)]
+    silver = p.stats["silver"]
+    item, lines = treasures.challenge_drop(game.state, c, "bocai", 1, 7)
+    assert item is None and lines == [treasures.ALL_OWNED.format(silver=c.config.treasures.dup_silver), f"銀兩 +{c.config.treasures.dup_silver}"]
+    assert p.stats["silver"] == silver + c.config.treasures.dup_silver and p.treasure_drops == {"bocai"}
+
+
+def test_the_treasure_drop_does_not_touch_the_game_dice(tmp_path):
+    from tianxia import team
+    from tianxia.sqlite_world import open_world
+    states = []
+    for on in (True, False):
+        game = _challenger(open_world(tmp_path / f"{on}.db"), treasures_on=on)
+        with mock.patch.object(team, "fight", return_value=_won()):
+            game.choose("act:challenge:bocai")
+        assert (game.state.player.treasure is not None) == on
+        states.append(game.rng.getstate())
+    assert states[0] == states[1]
