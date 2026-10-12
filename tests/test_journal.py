@@ -1076,7 +1076,7 @@ def test_a_folded_merge_keeps_only_the_new_story_and_adds_up_the_changes(content
     s.journal = []
     journal.add_entry(s, JournalEntry(time=1.0, title="打造", lines=["要打哪一種兵器？"]))
     journal.add_entry(s, JournalEntry(time=2.0, title="打造", lines=["兵器：劍。", "挑主料。"]), merge=True)
-    result = "鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。"
+    result = "打出一把【玄玄劍】（劍・屬剛・一階下品）：鐵匠把兩份精鐵砂下爐。"
     journal.add_entry(s, JournalEntry(time=3.0, title="打造", lines=[result], changes=["銀兩 -20"]), merge=True, fold=True)
     assert len(s.journal) == 1
     assert (s.journal[0].lines, s.journal[0].changes, s.journal[0].time) == ([result], ["銀兩 -20"], 3.0)
@@ -1094,7 +1094,7 @@ def test_a_fold_callable_drops_only_the_head_lines_it_recognises_and_keeps_the_r
     news = "宮裡的風向變了。"
     journal.add_entry(s, JournalEntry(time=1.0, title="打造", lines=["要打哪一種兵器？"]))
     journal.add_entry(s, JournalEntry(time=2.0, title="打造", lines=["兵器：劍。", news, "挑主料。"], changes=["銀兩 -1"]), merge=True)
-    result = "鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。"
+    result = "打出一把【玄玄劍】（劍・屬剛・一階下品）：鐵匠把兩份精鐵砂下爐。"
     journal.add_entry(s, JournalEntry(time=3.0, title="打造", lines=[result], changes=["銀兩 -20"]), merge=True, fold=lambda line: line in steps)
     assert len(s.journal) == 1
     assert s.journal[0].lines == [result, news]  # 結果句第一，別的話接在後面，單子自己的回話沒了

@@ -416,7 +416,7 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     lines = forged[0].lines
     # FB-141：開爐成了那一則只留結果，結果句排第一（375 寬「剛剛」收著時看得到）；放了哪兩樣、哪一種，結果句本身寫了
     # （終審 F1 要的「放了什麼」由它帶），挑種類、主料、輔料的回報與問話收掉
-    assert lines[0].startswith(f"鐵匠把精鐵砂與驚羽下爐，打出一把【{p.weapon.name}】（劍・屬陽・一階")
+    assert lines[0].startswith(f"打出一把【{p.weapon.name}】（劍・屬陽・一階") and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
     steps = ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。", smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.READY)
     assert not any(line in steps for line in lines)
 
@@ -433,7 +433,7 @@ def test_a_folded_forge_keeps_an_unrelated_line_an_earlier_step_carried(content,
     for oid in (f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
         game.choose(oid)
     [entry] = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
-    assert entry.lines[0].startswith("鐵匠把精鐵砂與驚羽下爐，打出一把【")  # 結果句還是第一
+    assert entry.lines[0].startswith("打出一把【") and "：鐵匠把精鐵砂與驚羽下爐。" in entry.lines[0]  # 結果句還是第一
     assert entry.lines.index(news) > 0 and entry.lines[-1] == news  # 那句別的話接在這一爐自己的敘事後面
     assert not any(smithing.is_step_line(line) for line in entry.lines)  # 單子自己的回話（挑了什麼、問下一步）都收掉
 
@@ -453,7 +453,7 @@ def test_is_step_line_recognises_exactly_the_wizards_own_replies(content, world)
     assert said and all(smithing.is_step_line(line) for line in said), [line for line in said if not smithing.is_step_line(line)]
     assert {smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.ARMOR_ASK_MAIN, smithing.ARMOR_ASK_AUX,
             smithing.READY, smithing.CANCELLED} <= set(said)  # 每一句問話都真的走過一遍
-    for other in ("鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。", "（還差 15 兩。）", "洛陽傳來消息：宮裡的風向變了。",
+    for other in ("打出一把【玄玄劍】（劍・屬剛・一階下品）：鐵匠把兩份精鐵砂下爐。", "（還差 15 兩。）", "洛陽傳來消息：宮裡的風向變了。",
                   "兵器：劍", "兵器：。", "主料：", smithing.NOT_ENOUGH, ""):
         assert not smithing.is_step_line(other), other
 
