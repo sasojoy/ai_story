@@ -17,10 +17,11 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import armor, equipment, fusion, team, weapons
+from . import armor, equipment, forge_secrets, fusion, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
+from .rules import add_rumor
 from .state import Equipment, GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
@@ -164,18 +165,27 @@ def general_name(content: Content, world: WorldStateStore, kind: str, main: str,
 def forge(
     state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str, rng: random.Random | None = None,
 ) -> tuple[Equipment | None, list[str]]:
-    """打一件（兵器 4.2、4.3；防具 4.7 照同一套，kind 是 ARMOR_KIND；打造隱藏配方設計 4.1）：一次拿鎖做完，不叫模型、不登記、沒有首創。
-    回（那一件, 訊息）；打不成回 (None, [原因])，什麼都不收。名字照 general_name；品質照 forge_odds 擲（rng 由呼叫端給：兵器 Game.rng、
-    防具 own_rng；沒給是下品）；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。"""
+    """打一件（兵器 4.2、4.3；防具 4.7 照同一套，kind 是 ARMOR_KIND；打造隱藏配方設計 4.1、4.2、7.2）：一次拿鎖做完，不叫模型。
+    回（那一件, 訊息）；打不成回 (None, [原因])，什麼都不收。先比這一季的隱藏配方（forge_secrets.match，不擲骰）：打中了是名器，
+    名字照內容，全服第一個打出的人登記成首位發現者（world.claim_gear_find，原子）、江湖上傳一句，別人照著打記首創名望回饋；
+    沒打中照 general_name（上線前登記的舊名字 → 對照表），什麼都不登記。品質照 forge_odds 擲（隱藏配方不改機率；rng 由呼叫端給：
+    兵器 Game.rng、防具 own_rng；沒給是下品），名器也只擲這一次；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。"""
     problem = forge_problem(state, content, kind, main, aux)
     if problem is not None:
         return None, [f"（{problem}。）"]
     key, slot = recipe_key(kind, main, aux), slot_of(kind)
     tier = tier_of(content, main)
-    attribute = attribute_of(world, content, kind, main, aux)
+    tianji = world.read().tianji
+    attribute = attribute_with(content, tianji, kind, main, aux)
     odds = forge_odds(state, content, world, kind, main, aux)
     setting = setting_points(state, content, attribute, slot)
-    name = general_name(content, world, kind, main, aux, attribute)
+    secret = forge_secrets.match(content, tianji, slot, kind, main, aux)  # 隱藏配方優先於上線前登記的舊名字（10.1）
+    find, first = None, False
+    if secret is not None:
+        find, first = world.claim_gear_find(forge_secrets.key(secret), forge_secrets.new_find(state, secret, kind, attribute, tier))
+        name = secret.name
+    else:
+        name = general_name(content, world, kind, main, aux, attribute)
     quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
     p = state.player
     used = Counter([main, aux])
@@ -188,17 +198,25 @@ def forge(
     p.forge_counts[key] = p.forge_counts.get(key, 0) + 1
     m, a = content.materials[main], content.materials[aux]
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
+    secret_id = secret.id if secret is not None else None
     if slot == "armor":
-        item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key)
+        item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
         head = ARMOR_FORGED.format(what=what, name=name, attribute=attribute, grade=equipment.grade(item))
     else:
-        item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key)
+        item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
         head = FORGED.format(what=what, name=name, kind=kind, attribute=attribute, grade=equipment.grade(item))
-    msgs = [head]
+    lines = forge_secrets.arrival(state, content, secret, find, first) if secret is not None else []
+    msgs = ["\n".join([head, *lines])]
     msgs += setting_line(content, setting, slot)
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
     msgs.append(equipment.store(state, item))
+    if secret is not None:
+        forge_secrets.solve(state, tianji, secret, key)
+        if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；江湖史不記名器，只記神器（第二批）
+            add_rumor(state, content.config.forge_secrets.rumor.format(who=state.player.name, name=secret.name), None,
+                      content=content, named=True)
+        fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
     return item, msgs
 
 

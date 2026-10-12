@@ -70,6 +70,8 @@ def bonus(weapon: Weapon | None, art: MartialArt | None, content: Content, world
     rule = content.config.weapons
     base = rule.tier_bonus.get(str(weapon.tier), 0.0) + rule.quality_bonus.get(weapon.quality, 0.0)
     base += rule.temper_step * weapon.tempers
+    if equipment.named(content, weapon):
+        base += rule.named_bonus  # 名器多一截（打造隱藏配方設計 4.2）
     if weapon.attribute == art.attribute:
         base += rule.match
     elif counters(weapon.attribute, art.attribute) or counters(art.attribute, weapon.attribute):
@@ -210,10 +212,11 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
+    secret: str | None = None,
 ) -> Weapon:
-    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
+    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器的隱藏配方 id。"""
     return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
-                  recipe=recipe)
+                  recipe=recipe, secret=secret)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

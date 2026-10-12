@@ -54,6 +54,8 @@ def cut(item: Equipment | None, neigong: MartialArt | None, content: Content) ->
         return 0.0
     base = rule.tier_cut.get(str(item.tier), 0.0) + rule.quality_cut.get(item.quality, 0.0) + rule.temper_step * item.tempers
     base += rule.match * _match(item.attribute, neigong)
+    if equipment.named(content, item):
+        base += rule.named_cut  # 名器多一截（打造隱藏配方設計 4.2）
     return max(0.0, base) * edge_factor(content, item)
 
 
@@ -92,10 +94,12 @@ def shop_item(attribute: str) -> Equipment:
     return Equipment(id=f"架:{attribute}", slot="armor", name=SHOP_NAMES[attribute], attribute=attribute, tier=1, quality="下品")
 
 
-def new_armor(state: GameState, *, name: str, attribute: str, tier: int, quality: str, recipe: str | None = None) -> Equipment:
-    """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有。"""
+def new_armor(
+    state: GameState, *, name: str, attribute: str, tier: int, quality: str, recipe: str | None = None, secret: str | None = None,
+) -> Equipment:
+    """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有；secret 是名器的隱藏配方 id。"""
     return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality,
-                     recipe=recipe)
+                     recipe=recipe, secret=secret)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

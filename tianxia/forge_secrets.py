@@ -16,6 +16,7 @@ import hashlib
 
 from . import equipment
 from .models import Content, ForgeSecret, ForgeSide, Material
+from .state import GameState, GearFind, Manual, PlayerState
 
 PREFIX = "鑄|"  # gear_recipes 裡隱藏配方那幾列的鍵開頭（7.1）：不跟「融|」「合|」「兼|」「秘|」「兵|」「鎧|」撞；state.GearFind.id 用同一個字
 GROUPS = tuple(f"{slot}:{group}" for slot in ("weapon", "armor") for group in ("1", "2", "3", "divine"))
@@ -66,3 +67,51 @@ def match(content: Content, tianji: int, slot: str, kind: str | None, main: str,
     m, a = content.materials[main], content.materials[aux]
     want = kind if slot == "weapon" else None
     return next((r for r in active(content, tianji) if r.slot == slot and r.kind == want and fits(r.main, m) and fits(r.aux, a)), None)
+
+
+# ── 名器與首位發現者（4.2、7.1、7.2）──────────────────────────
+
+
+def manual(state: GameState, tianji: int) -> Manual:
+    """這一季的鑄譜（PlayerState.forge_manual；同 secret_recipes.manual）：記的是別一季的就換一本新的（隱藏配方每季換一批）。"""
+    if state.player.forge_manual.tianji != tianji:
+        state.player.forge_manual = Manual(tianji=tianji)
+    return state.player.forge_manual
+
+
+def solve(state: GameState, tianji: int, recipe: ForgeSecret, combo: str) -> None:
+    """打中了（6.3「打中過」＝自己打出過這條的東西，不看是不是全服第一個）：記進鑄譜，連同打中的那一爐的組合鍵（鑄譜寫配方用）。"""
+    book = manual(state, tianji)
+    if recipe.id not in book.solved:
+        book.solved.append(recipe.id)
+    book.made.setdefault(recipe.id, combo)
+
+
+def new_find(state: GameState, recipe: ForgeSecret, kind: str | None, attribute: str, tier: int) -> GearFind:
+    """首位發現者那一筆（7.1）：登記當下記下名器的名字與寫給別人看的名號（同 fusion._secret_lines 用名號）。"""
+    return GearFind(secret=recipe.id, slot=recipe.slot, kind=kind if recipe.slot == "weapon" else "", attribute=attribute, tier=tier,
+                    title=recipe.name, creator=state.player.name, creator_shown=state.player.name)
+
+
+def arrival(state: GameState, content: Content, recipe: ForgeSecret, find: GearFind, first: bool) -> list[str]:
+    """名器打出來那一句的下面（4.2、7.2）：一句說明（note），再一句——全服第一個摸出來的、自己又打一件、或照別人摸出來的打成了。"""
+    rule = content.config.forge_secrets
+    lines = [recipe.note] if recipe.note else []
+    if first:
+        lines.append(rule.first_line)
+    elif find.creator == state.player.name:
+        lines.append(rule.mine_line)
+    else:
+        lines.append(rule.follow_line.format(who=find.creator_shown or find.creator or "不知名的前人"))
+    return [line for line in lines if line]
+
+
+def refresh_names(p: PlayerState, content: Content) -> None:
+    """讀檔時照內容重寫名器的名字（4.2：joy 改名不動存檔，name 只當備份；同 treasures.refresh_names）：身上的兵器與防具、裝備庫、
+    寄放的每一件有 secret 的；內容拿掉了那一條就留著舊名字。Game._drop_stale_references 每次建 Game 都叫。仿品、原品是第二批，不碰。"""
+    for item in (p.weapon, p.armor, *p.rack, *p.held_gear):
+        if item is None or item.secret is None or item.copy_of is not None or item.original:
+            continue
+        recipe = content.forge_secrets.get(item.secret)
+        if recipe is not None:
+            item.name = recipe.name

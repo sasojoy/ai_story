@@ -2,14 +2,16 @@
 計畫 docs/superpowers/plans/2026-10-12-打造-1-隱藏配方與防具.md Task 6～9）。"""
 from __future__ import annotations
 
+import random
 from collections import Counter
 
 import pytest
 
 from conftest import real_content
-from tianxia import forge_secrets, naming, secret_recipes, weapons
+from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, secret_recipes, smithing, team, weapons
 from tianxia.content import ContentError, validate
 from tianxia.models import ForgeSecret, ForgeSide
+from tianxia.state import Equipment, GearFind, Manual, Weapon, WeaponRecipe, new_game_state
 
 # 測試內容的素材只有精鐵砂（剛一）、玄鋼骨（剛二）、隕鐵膽（剛三）、驚羽（快一）
 BLADE = ForgeSecret(
@@ -109,3 +111,128 @@ def test_a_bad_forge_pool_is_refused_at_load(forge_content, change, message):
     change(forge_content)
     with pytest.raises(ContentError, match=message):
         validate(forge_content)
+
+
+# ── Task 7：名器、首位發現者、回饋與傳聞 ──
+
+def _smith(content, world, name="試鑄", silver=300):
+    """站在測試內容的城鎮（town），悟性 5；背包：精鐵砂 ×6、玄鋼骨 ×2、驚羽 ×4。"""
+    from tianxia.engine import Game
+    game = Game.new(content, name, rng=random.Random(0), world=world)
+    game.client = None
+    p = game.state.player
+    p.location, p.stamina, p.stats["silver"], p.stats["wis"] = "town", 100.0, silver, 5
+    p.materials = {"gang_1": 6, "gang_2": 2, "kuai_1": 4}
+    game.sync(0.0)
+    return game
+
+
+def test_hitting_a_hidden_recipe_makes_a_named_piece_and_the_first_finder_is_told(forge_content, world, monkeypatch):
+    monkeypatch.setattr(fusion, "season_one", lambda *a, **k: True)  # 首創名望回饋只在第一季規則開著時有
+    cfg = forge_content.config.forge_secrets
+    game = _smith(forge_content, world, name="甲")
+    item, msgs = smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert (item.name, item.secret, item.recipe) == ("穿霞劍", "t_blade", "兵|劍|gang_1+kuai_1")
+    assert equipment.named(forge_content, item) and equipment.grade(item).endswith(equipment.NAMED_MARK)
+    assert BLADE.note in msgs[0] and cfg.first_line in msgs[0] and equipment.NAMED_MARK in msgs[0]
+    find = world.lookup_gear_find("鑄|t_blade")
+    assert (find.creator, find.title, find.id) == ("甲", "穿霞劍", forge_secrets.key(BLADE))
+    rumor = cfg.rumor.format(who="甲", name="穿霞劍")
+    assert [r.text for r in game.state.world.rumors].count(rumor) == 1
+    book = game.state.player.forge_manual
+    assert book.solved == ["t_blade"] and book.made == {"t_blade": "兵|劍|gang_1+kuai_1"}
+    again, msgs = smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(1))
+    assert again.name == "穿霞劍" and cfg.mine_line in msgs[0] and cfg.first_line not in msgs[0]
+    assert [r.text for r in game.state.world.rumors].count(rumor) == 1  # 傳聞只在第一次
+    other = _smith(forge_content, world, name="乙")
+    third, msgs = smithing.forge(other.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(2))
+    assert third.name == "穿霞劍" and cfg.follow_line.format(who="甲") in msgs[0]
+    entry = other.state.world.echoes["鑄|t_blade"]  # 照「鑄|配方 id」記，不會跟武學 id 或舊的兵器配方名字撞
+    assert entry.creator == "甲" and entry.followers == ["乙"] and entry.name == "【穿霞劍】" and entry.made == "打"
+
+
+def test_armor_hits_its_hidden_recipe_too(forge_content, world):
+    game = _smith(forge_content, world)
+    item, msgs = smithing.forge(game.state, forge_content, world, smithing.ARMOR_KIND, "gang_1", "kuai_1",
+                                rng=smithing.own_rng(game.state, "鎧|gang_1+kuai_1"))
+    assert (item.slot, item.name, item.secret, item.recipe) == ("armor", "赤霞鎧", "t_jacket", "鎧|gang_1+kuai_1")
+    assert JACKET.note in msgs[0] and world.lookup_gear_find("鑄|t_jacket").slot == "armor"
+
+
+def test_a_named_piece_adds_two_points_to_the_weapon_bonus_and_the_armor_cut(forge_content, world):
+    c = forge_content
+    assert c.config.weapons.named_bonus == 0.02 and c.config.armor.named_cut == 0.02  # 設計 4.2【預設】、PM 決定第 5 條
+    game = _smith(c, world)
+    rules.learn_skill(game.state, c, "sword")
+    game.state.player.member.wugong_id = "sword"
+    art = team.player_art(game.state, c, world, "sword")
+    plain = Weapon(id="兵:1", name="甲劍", kind="劍", attribute="陽", tier=1, quality="下品")
+    named = plain.model_copy(update={"secret": "t_blade", "name": "穿霞劍"})
+    assert weapons.bonus(named, art, c, world) == pytest.approx(weapons.bonus(plain, art, c, world) + 0.02)
+    gone = plain.model_copy(update={"secret": "removed"})
+    assert weapons.bonus(gone, art, c, world) == pytest.approx(weapons.bonus(plain, art, c, world))  # 內容拿掉了那一條：照一般的算
+    coat = Equipment(id="甲:2", slot="armor", name="甲衣", attribute="陽", tier=1, quality="下品")
+    assert armor.cut(coat.model_copy(update={"secret": "t_jacket"}), None, c) == pytest.approx(armor.cut(coat, None, c) + 0.02)
+
+
+def test_named_names_follow_the_content_on_load(forge_content, world):
+    game = _smith(forge_content, world)
+    p = game.state.player
+    p.weapon = Weapon(id="兵:1", name="舊名", kind="劍", attribute="陽", tier=1, quality="下品", secret="t_blade")
+    p.rack = [Equipment(id="甲:2", slot="armor", name="舊甲", attribute="陽", tier=1, quality="下品", secret="gone")]
+    game._drop_stale_references()
+    assert p.weapon.name == "穿霞劍"  # joy 改名不動存檔：讀檔時照內容重寫（同寶物 refresh_names）
+    assert p.rack[0].name == "舊甲"  # 內容拿掉了：留著舊名字當備份
+
+
+def test_secrets_win_over_old_names_and_general_combos_stay_plain(forge_content, world):
+    old = WeaponRecipe(name="寒星劍", key="兵|劍|gang_1+kuai_1", kind="劍", attribute="陽", tier=1, main="gang_1", aux="kuai_1",
+                       creator="甲", creator_shown="甲")
+    world.claim_weapon_recipe(old.key, old)
+    game = _smith(forge_content, world)
+    item, _ = smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert item.name == "穿霞劍"  # 上線前登記過、剛好是這一季的隱藏配方：隱藏配方優先（10.1）
+    plain, msgs = smithing.forge(game.state, forge_content, world, "槍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert plain.secret is None and plain.name == weapons.table_name(forge_content, "槍", "gang_1", "kuai_1")
+    assert not equipment.grade(plain).endswith(equipment.NAMED_MARK) and not any("失傳" in m for m in msgs)
+    with world.db.snapshot() as conn:
+        keys = sorted(row["key"] for row in conn.execute("SELECT key FROM gear_recipes"))
+    assert keys == ["兵|劍|gang_1+kuai_1", "鑄|t_blade"]  # 一般組合什麼都不記（7.2）：只有上線前那一列與名器那一列
+
+
+def test_hidden_recipes_do_not_change_the_odds_or_the_dice(forge_content, world, monkeypatch):
+    game = _smith(forge_content, world)
+    before = smithing.forge_odds(game.state, forge_content, world, "劍", "gang_1", "kuai_1")
+    saved, forge_content.forge_secrets = forge_content.forge_secrets, {}
+    assert smithing.forge_odds(game.state, forge_content, world, "劍", "gang_1", "kuai_1") == before  # 機率只看組成（6.4）
+    forge_content.forge_secrets = saved
+    seen, real = [], fusion.roll_quality
+    monkeypatch.setattr(fusion, "roll_quality", lambda odds, rng: seen.append(rng) or real(odds, rng))
+    rng = random.Random(5)
+    smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=rng)
+    assert seen == [rng]  # 名器照樣只擲一次品質、用呼叫端給的那一份（兵器是 Game.rng：序列不位移）
+
+
+def test_gear_finds_are_one_per_season_and_take_no_name(tmp_path, content):
+    from tianxia.sqlite_world import open_world
+    store = open_world(tmp_path / "w.db")
+    content.config.auto_open_first_season = True
+    store.seed_first_season(content)
+    find = GearFind(secret="t_blade", slot="weapon", kind="劍", attribute="陽", tier=1, title="穿霞劍", creator="甲", creator_shown="甲")
+    assert store.claim_gear_find("鑄|t_blade", find) == (find, True)
+    late = find.model_copy(update={"creator": "乙", "creator_shown": "乙"})
+    assert store.claim_gear_find("鑄|t_blade", late) == (find, False)  # 誰先寫進去誰是首位發現者
+    assert store.lookup_gear_find("鑄|t_blade") == find and store.lookup_gear_find("鑄|t_other") is None
+    assert not store.is_skill_name_taken("穿霞劍")  # 名字欄寫鍵本身，不佔名字空間（7.1）
+    with pytest.raises(ValueError):
+        store.claim_gear_find("兵|劍|gang_1+kuai_1", find)
+    store.mutate_season(lambda season: setattr(season, "ended", True))
+    assert store.next_season(content, now=1.0)
+    assert store.lookup_gear_find("鑄|t_blade") is None  # 換季：新的一季沒有首位發現者（照季分，舊的列不刪）
+
+
+def test_old_saves_read_with_empty_forge_fields(content):
+    old = '{"id": "兵:1", "name": "寒星劍", "kind": "劍", "attribute": "陽", "tier": 1, "quality": "中品"}'
+    assert Equipment.model_validate_json(old).secret is None
+    assert Manual.model_validate_json('{"tianji": 2, "heard": {}, "solved": []}').made == {}
+    assert new_game_state(content, "甲").player.forge_manual == Manual()
