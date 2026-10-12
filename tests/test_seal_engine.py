@@ -512,3 +512,53 @@ def test_server_bots_never_press_a_seal_move_and_are_never_present(sealed, world
     with at(bot, 20.0):
         bot.options()
     assert world.seal_state().duels[0].challenger.last_seen is None
+
+
+# ── 最終審查的修正 ──
+
+def test_the_holder_report_is_written_from_the_holder_side(sealed, world):
+    """最終審查 I-2：持有者那一份照挑戰者的翻過來寫（5.9）：挑戰者落敗時持有者是勝；兩份都不寫「我方威力 0／對手難度 0」、
+    沒有空的「我方」那一行，類型那一格寫「奪璽：『螭首』」而不是「奪璽：奪璽・『螭首』」。"""
+    from tianxia import battlelog
+
+    challenger = _finished(sealed, world, taken=False, won=False)  # 挑戰者的池子只剩 1：落敗
+    holder = _player(sealed, world, "懷璽", now=600.0)
+    them = _player(sealed, world, challenger, now=600.0)
+    mine, theirs = holder.state.battles[0], them.state.battles[0]
+    assert theirs.tier == "落敗" and mine.tier in ("大勝", "險勝")
+    for record in (mine, theirs):
+        text = battlelog.detail_text(record)
+        assert "威力 0" not in text and "難度 0" not in text and "**我方**" not in text
+        assert "奪璽：『螭首』" in text and "奪璽・" not in text
+        battlelog.outcome_text(record)  # 照四種結果字查表：不會 KeyError
+
+
+def test_a_challenger_win_reads_as_a_win_and_the_holder_as_a_loss(sealed, world):
+    challenger = _finished(sealed, world, taken=True, won=True)  # 持有者的池子只剩 1：挑戰者大勝（或提前大勝）
+    holder = _player(sealed, world, "懷璽", now=600.0)
+    them = _player(sealed, world, challenger, now=600.0)
+    assert them.state.battles[0].tier == "大勝" and holder.state.battles[0].tier == "落敗"
+
+
+def test_the_emergency_switch_does_not_hold_the_season_open(sealed, world, monkeypatch):
+    """最終審查 I-3：主機關掉碎片（seal.enabled = false）時，沒打完的單挑不再擋提前收季（它也推不動了）。"""
+    from tianxia import calendar
+    from tianxia import world as world_rules
+
+    _open_duel(sealed, world)
+    sealed.config.seal.enabled = False
+    monkeypatch.setattr(world_rules, "decisive_ending", lambda vehicle, content: content.scenario.endings[0])
+    season = world.get_season()
+    world_rules.advance_world_state(season, sealed, calendar.cal_hour_seconds(sealed, season), random.Random(0), world)
+    assert season.ended
+
+
+def test_next_season_clears_a_duel_left_open_by_the_emergency_switch(sealed, world):
+    """最終審查 I-3：開關關著時換季照樣清掉沒打完的單挑、記成未分勝負（兩人補得到），不帶進下一季。"""
+    from conftest import next_season
+
+    game = _open_duel(sealed, world)
+    sealed.config.seal.enabled = False
+    next_season(sealed, world, game)
+    view = world.seal_state()
+    assert view.duels == [] and view.registry.history[-1].kind == "unsettled"

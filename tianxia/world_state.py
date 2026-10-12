@@ -70,6 +70,7 @@ class SealEvent(BaseModel):
     fresh: bool = False  # 持有者是照新角色算的（只寫進他自己的戰報，5.9）
     proxied: list[str] = Field(default_factory=list)  # 被代打過的那一邊（challenger／holder；只寫進那個人自己的戰報）
     lines: list[str] = Field(default_factory=list)  # 單挑每回合一句（挑戰者的角度），補戰報用
+    edge: float | None = None  # 單挑收場時的氣勢（挑戰者的角度）：持有者那份戰報照它分大勝、險勝；舊資料沒有＝None
     text: str = ""  # 江湖史那一句（沒有是空的）
 
 

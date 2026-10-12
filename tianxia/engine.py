@@ -3510,8 +3510,9 @@ class Game:
             changes.append(f"名望 +{fame}")
         label = "" if same else f"第 {e.season} 季・"
         record = BattleRecord(
-            id=s.battle_seq + 1, time=s.world.time, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"奪璽・『{shard}』",
-            opponent=other, ours=[], tier=e.result or "", our_power=0.0, difficulty=0.0, notes=notes, changes=list(changes),
+            id=s.battle_seq + 1, time=s.world.time, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
+            opponent=other, ours=[], tier=seal_duel.side_tier(e.result, e.edge, mine, c.config.duel), our_power=0.0, difficulty=0.0,
+            notes=notes, changes=list(changes),
             rounds=list(e.lines),
         )
         battlelog.add_record(s, record)

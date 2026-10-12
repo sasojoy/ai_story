@@ -252,6 +252,21 @@ def verdict(duel: SealDuel, tuning: DuelTuning) -> str | None:
     return duel_rules.verdict_at(duel.edge, duel.challenger.hp, duel.round, duel.rounds, tuning)
 
 
+def side_tier(result: str | None, edge: float | None, who: str, tuning: DuelTuning) -> str:
+    """戰報那一格的結果字（battlelog.TIER_WORDS 認得的四種），照這一方寫（5.9：持有者那份照挑戰者的翻過來）。
+    挑戰者：提前大勝寫大勝，其餘照寫。持有者：挑戰者勝（提前大勝、大勝、險勝）是落敗、僵持是僵持；挑戰者落敗時照收場的氣勢分，
+    持有者那一邊的氣勢（100 − edge）到 big 寫大勝、否則險勝（舊資料沒有 edge 寫險勝）。沒打成（result 是 None）寫僵持。"""
+    if result is None:
+        return "僵持"
+    if who == "challenger":
+        return "大勝" if result == "提前大勝" else result
+    if result in WIN_VERDICTS:
+        return "落敗"
+    if result == "僵持":
+        return "僵持"
+    return "大勝" if edge is not None and 100 - edge >= tuning.big else "險勝"
+
+
 def take_chance(duel: SealDuel, result: str, cfg: SealTuning) -> float:
     """這一場易手的機率（5.8）：cap（已乘局勢與護璽）× 單挑係數，最多 Config.seal.cap。"""
     return min(cfg.cap, duel.cap * cfg.take_share.get(result, 0.0))
@@ -273,7 +288,7 @@ def finish(shared: SharedWorldState, duel: SealDuel, content: Content, result: s
     c, h = duel.challenger, duel.holder
     shard_name = content.seal[duel.shard].name if duel.shard in content.seal else duel.shard
     words = {"challenger": c.name, "holder": h.name, "shard": shard_name, "where": duel.where or "江湖"}
-    common = dict(shard=duel.shard, record=duel.record, where=duel.where, lines=list(duel.lines), fresh=h.fresh,
+    common = dict(shard=duel.shard, record=duel.record, where=duel.where, lines=list(duel.lines), fresh=h.fresh, edge=round(duel.edge, 1),
                   proxied=[w for w in SIDES if getattr(duel, w).proxied])
     shared.seal_duels = [d for d in shared.seal_duels if d.id != duel.id]
     if shared.seal_duels:

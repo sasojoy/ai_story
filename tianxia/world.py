@@ -579,7 +579,9 @@ def advance_world_state(
     players = sum(world.faction_counts().values()) if cal_hour is not None and world is not None else None
     # 有沒打完的奪璽單挑時，那一個曆時先不提前收季（玉璽碎片設計 5.11，最多約 13 分鐘）：一次推進只查一次；在 advance_season 的
     # mutate_season 裡也查得到（同上面的名冊）。沒傳 store（純函式的呼叫）照舊
-    seal_open = cal_hour is not None and world is not None and bool(content.seal) and world.seal_duel_open()
+    # 主機關掉碎片（Config.seal.enabled）時單挑推不動了，也就不擋（不然關著的那段時間每一季都收不了季）
+    seal_open = (cal_hour is not None and world is not None and content.config.seal.enabled and bool(content.seal)
+                 and world.seal_duel_open())
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False

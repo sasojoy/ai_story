@@ -120,6 +120,8 @@ def _when(record: BattleRecord, when: Callable[[float], str]) -> str:
 def _result_line(record: BattleRecord) -> str:
     if record.kind == "showdown":  # 全服決戰沒有我方威力與對手難度：寫結果與自己站的那一邊
         return f"**{record.tier}**　你站在{record.side}"
+    if record.kind == "seal":  # 奪璽單挑（玉璽碎片設計 5.9）：雙方都是快照，沒有我方威力與對手難度；待 joy 潤
+        return f"**{record.tier}**　陣前單挑"
     rival = "對手威力" if record.kind in ("spar", "raid") else "對手難度"  # 切磋、截殺的對手是另一個玩家：寫他的威力
     return f"**{record.tier}**　我方威力 {record.our_power:.0f}　{rival} {record.difficulty:.0f}"
 
@@ -295,7 +297,7 @@ def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text)
     return "\n\n".join([
         _title(record),
         f"{_when(record, when)}　第 {record.id} 場",
-        *([] if record.kind == "showdown" else [f"**我方**　{_ours_line(record)}"]),
+        *([] if record.kind in ("showdown", "seal") else [f"**我方**　{_ours_line(record)}"]),  # 決戰、奪璽單挑不列陣容
         _result_line(record),
         *_rounds_block(record),
         *_story_block(record),

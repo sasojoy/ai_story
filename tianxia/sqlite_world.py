@@ -645,18 +645,20 @@ class SqliteWorldStore:
                 return False
             lines = _season_firsts_lines(conn, state.season_number)
             sunk = False
-            if content.config.seal.enabled and content.seal:  # 玉璽碎片（7.6、5.11）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
+            if content.seal:  # 玉璽碎片（7.6、5.11）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
                 from . import seal  # noqa: PLC0415
 
                 reg = seal.filled(state.seal, content)
-                seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
-                for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
-                    state.season.chronicle.append(Rumor(time=state.season.time, text=seal.SINK.format(holder=name, shard=content.seal[shard.id].name)))
-                    sunk = True
-                for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到
+                if content.config.seal.enabled:  # 主機關掉碎片時不判隱沒（登記照留）
+                    seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
+                    for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
+                        text = seal.SINK.format(holder=name, shard=content.seal[shard.id].name)
+                        state.season.chronicle.append(Rumor(time=state.season.time, text=text))
+                        sunk = True
+                for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
                     seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
                              record=duel.record, where=duel.where, lines=list(duel.lines))
-                state.seal_duels = []
+            state.seal_duels = []
             for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
             if lines or sunk:

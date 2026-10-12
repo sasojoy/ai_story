@@ -137,3 +137,17 @@ def test_seal_admin_buttons_ask_then_post_to_their_routes(m):
                                   "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
     assert "取消" in out["asked"][0] and "現世" in out["asked"][1]
     assert [c[0] for c in out["calls"] if c[0].startswith("/api/do/")] == ["/api/do/seal_cancel", "/api/do/seal_emerge"]
+
+
+def test_the_seal_moves_sit_above_the_action_bar_not_in_the_fold(m):
+    """最終審查 I-1：閒著的時候（選單上有打坐）奪璽三招不掉進收起來的「此地還能做」，畫在行動列上面（5.5「選單最前面」）。"""
+    assert any(o["id"] == "act:rest" for o in m["options"])
+    base = next(o for o in m["options"] if o["id"] == "act:rest")
+    moves = [{**base, "id": f"seal:{move}", "label": f"{move}（剋{beat}）", "enabled": True}
+             for move, beat in (("強攻", "奇襲"), ("固守", "強攻"), ("奇襲", "固守"))]
+    m["options"] = moves + m["options"]
+    page = run(m, "return H.pageJianghu();")
+    at = page.index('data-id="seal:強攻"')
+    assert at < page.index('class="act-bar"')
+    fold = page.find('class="fold here"')
+    assert fold == -1 or at < fold or 'data-id="seal:' not in page[fold:]

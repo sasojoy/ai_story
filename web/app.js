@@ -1322,6 +1322,12 @@
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
+    // 奪璽單挑的三招（或灰的「已出招」「來不及了」）：自己是一方時伺服器排在選單最前面（玉璽碎片設計 5.5），
+    // 畫在行動列上面一排，不掉進收起來的「此地還能做」（同 FB-105 的集結鈕）
+    const sealMoves = m.options.filter((o) => o.id.startsWith("seal:"));
+    sealMoves.forEach((o) => used.add(o.id));
+    const sealRow = sealMoves.length ? `<div class="options seal-moves" role="group" aria-label="奪璽">${sealMoves.map((o) => `
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : "";
     const open = S.wheelSel === "move";
     if (shown("act:move")) {
       cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
@@ -1342,7 +1348,7 @@
     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
     // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
     const notes = open || hotHere ? "" : actNotesHtml(m, noted);
-    return `${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${notes}${moveCard}${here}`;
+    return `${sealRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動">${drawn.join("")}</div>` : ""}${notes}${moveCard}${here}`;
   }
 
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
