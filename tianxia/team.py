@@ -146,10 +146,69 @@ def follower_rows(state: GameState, content: Content) -> list[tuple[str, Followe
             if fid in content.followers]
 
 
+def follower_level(state: GameState, content: Content, follower: FollowerDef) -> int:
+    """部下的武學成數：跟著本人的等級長（Config.follower.levels_per_cheng），不低於模板寫的、最多十成。"""
+    grown = state.player.member.level // content.config.follower.levels_per_cheng
+    return min(MAX_LEVEL, max(follower.wugong_level, grown))
+
+
 def follower_units(state: GameState, content: Content) -> list[Member]:
-    """部下照模板建成跟 Member 同形狀的威力貢獻者（武學照模板、沒有內功）。只算威力：不在 team_keys 裡，
+    """部下照模板建成跟 Member 同形狀的威力貢獻者（武學照模板、成數照 follower_level、沒有內功）。只算威力：不在 team_keys 裡，
     所以不擋檢定、不扣氣血（take_encounter_toll）、不吃經驗；氣血係數一律 1.0。"""
-    return [Member(wugong_id=f.wugong, wugong_level=f.wugong_level) for _, f in follower_rows(state, content)]
+    return [Member(wugong_id=f.wugong, wugong_level=follower_level(state, content, f)) for _, f in follower_rows(state, content)]
+
+
+def follower_power(state: GameState, content: Content, world: WorldStateStore, follower: FollowerDef) -> float:
+    """一名部下此刻的威力（不看對手：沒有相剋、沒有路數；角色卡寫它）。"""
+    unit = Member(wugong_id=follower.wugong, wugong_level=follower_level(state, content, follower))
+    return encounter.member_power(unit, team_arts(state, content, world), None, 1.0, follower_boost(content, follower))
+
+
+CN_DIGITS = "零一兩三四五六七八九十"
+
+
+def follower_share(state: GameState, content: Content, world: WorldStateStore, squad: Squad) -> tuple[float, float]:
+    """這一場（照對手算：相剋、路數都在，同 fight）部下的威力合計與其餘的人（本人、同伴）的威力合計。沒有部下是 (0, 全隊)。"""
+    rows = follower_rows(state, content)
+    arts = team_arts(state, content, world)
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad)
+    powers = [encounter.member_power(m, arts, squad.attribute, c, b) for m, c, b in zip(members, conditions, boosts, strict=True)]
+    theirs = sum(powers[len(powers) - len(rows):]) if rows else 0.0
+    return theirs, sum(powers) - theirs
+
+
+def aid_line(state: GameState, content: Content, world: WorldStateStore, squad: Squad) -> str:
+    """戰報那一句「持矛鄉勇、弩手鄉勇助陣，威力多了兩成。」：部下讓全隊威力比不帶他們多了幾成（follower_share）。
+    沒有部下、或部下一點威力都沒有是空字串。只寫一句話、帶一個數字，不寫成數字標籤（PM 2026-10-12）。"""
+    rows = follower_rows(state, content)
+    if not rows:
+        return ""
+    theirs, ours = follower_share(state, content, world, squad)
+    if theirs <= 0:
+        return ""
+    return f"{troop_names([f for _, f in rows])}助陣，威力{_more(theirs / ours if ours > 0 else None)}。"
+
+
+def troop_names(followers: list[FollowerDef]) -> str:
+    """部下的名字照模板併在一起：「兩名持矛鄉勇、弩手鄉勇」（照第一次出現的順序；一名的不寫數量）。"""
+    counts: dict[str, int] = {}
+    for f in followers:
+        counts[f.name] = counts.get(f.name, 0) + 1
+    return "、".join(name if n == 1 else f"{CN_DIGITS[n] if n <= 10 else n}名{name}" for name, n in counts.items())
+
+
+def _more(ratio: float | None) -> str:
+    """多了幾成的說法：不到半成「多了一點」、一成到九成「多了N成」、一倍以上「翻了N倍」（一位小數四捨五入成整倍）；
+    本人一點威力都沒有（ratio 是 None）時「全靠他們撐著」。"""
+    if ratio is None:
+        return "全靠他們撐著"
+    tenths = math.floor(ratio * 10 + 0.5)
+    if tenths < 1:
+        return "多了一點"
+    if tenths < 10:
+        return f"多了{CN_DIGITS[tenths]}成"
+    times = math.floor(ratio + 0.5)
+    return f"翻了{CN_DIGITS[times]}倍" if times <= 10 else f"翻了{times}倍"
 
 
 def _fighters(

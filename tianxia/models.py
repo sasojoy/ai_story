@@ -1625,6 +1625,18 @@ class FirstEcho(_Strict):
     cap: int = Field(default=5, ge=1)
 
 
+class FollowerTuning(_Strict):
+    """部下（PM 2026-10-12 派工：企劃者問「部下現在是不是沒有作用」）：武學成數跟著本人的等級長、全服決戰的份量。"""
+
+    # 部下的武學成數＝max(模板寫的成數, 本人等級 ÷ levels_per_cheng)，最多十成。跟著等級、不跟著晉升階：階只有 2～4 三格，
+    # 第 4 階還是每週輪替的席次（掉下來就回第 3 階），部下會忽強忽弱；等級一季從 1 長到二三十，跟玩家花的時間一起走。
+    # 3：開局第 1～8 級是模板的三成（拿到部下時大多已經在這一帶），第 9 級起每 3 級一成，第 30 級十成
+    levels_per_cheng: int = Field(default=3, ge=1)
+    # 全服決戰：每帶一名部下，強攻、奇襲的份量多幾成（加入時快照，跟職位、騎兵疊乘；固守不加——部下衝殺不守）。
+    # 0.05：兩名（第 2 階）+10%，跟一匹駑馬的騎兵（5%～15%）同一個量級；四名（第 4 階）+20%
+    battle_per: float = Field(default=0.05, ge=0)
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1686,6 +1698,7 @@ class Config(_Strict):
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
+    follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力

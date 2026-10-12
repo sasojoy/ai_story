@@ -147,6 +147,8 @@ def say_text(text: str | None) -> str | None:
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
+TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 PAUSE_LINE = (  # 待 S1／joy 潤
@@ -2978,8 +2980,8 @@ class Game:
 
     def _battle_scores(self, mounted: bool = True) -> dict[str, float]:
         """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性；
-        騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount）。mounted=False 不算馬：單人頭目戰用同一份份量，
-        騎兵只在全服決戰（設計 2.1）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
+        騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount），帶著部下再乘（1＋部下）（_battle_troops）。
+        mounted=False 不算馬也不算部下：單人頭目戰用同一份份量，騎兵與部下只在全服決戰（設計 2.1；PM 2026-10-12）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
         不能在 world_tick 裡呼叫）。"""
         p = self.state.player
         outer = team.player_art(self.state, self.content, self.world, p.member.wugong_id)
@@ -2987,7 +2989,7 @@ class Game:
         return battle_instance.move_scores(
             self.content.config.battle, self._battle_power(),
             outer.attribute if outer else None, inner.attribute if inner else None, role=self._battle_role(),
-            cavalry=self._battle_mount()[1] if mounted else 0.0,
+            cavalry=self._battle_mount()[1] if mounted else 0.0, troops=self._battle_troops()[1] if mounted else 0.0,
         )
 
     def _battle_role(self) -> str:
@@ -3001,6 +3003,20 @@ class Game:
         item = mounts.riding(self.state, self.content)
         bonus = mounts.cavalry(self.state, self.content)
         return (mounts.name_of(item), bonus) if item is not None and bonus > 0 else ("", 0.0)
+
+    def _battle_troops(self) -> tuple[str, float]:
+        """加入決戰那一刻帶的部下（PM 2026-10-12）：（「兩名持矛鄉勇」, 每名 Config.follower.battle_per 加起來）；沒有部下
+        （第一季關著、還沒晉升）是 ("", 0.0)。跟份量一起快照進 BattleParticipant（troops、troop_bonus）。"""
+        rows = team.follower_rows(self.state, self.content)
+        if not rows:
+            return "", 0.0
+        return team.troop_names([f for _, f in rows]), len(rows) * self.content.config.follower.battle_per
+
+    def _battle_gear(self) -> dict:
+        """快照進 BattleParticipant 的坐騎與部下（join_faction／auto_assign_latecomer 的 mount、cavalry、troops、troop_bonus）。"""
+        horse, cavalry = self._battle_mount()
+        troops, bonus = self._battle_troops()
+        return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus}
 
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
@@ -3022,7 +3038,7 @@ class Game:
         if me is None or me.scores or me.eliminated:
             return
         scores, road, role = self._battle_scores(), self._battle_road(), self._battle_role()
-        horse, cavalry = self._battle_mount()
+        gear = self._battle_gear()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
@@ -3030,7 +3046,8 @@ class Game:
                 mine.scores = dict(scores)
                 mine.attribute = mine.attribute or road
                 mine.role = mine.role or role
-                mine.mount, mine.cavalry = mine.mount or horse, mine.cavalry or cavalry
+                mine.mount, mine.cavalry = mine.mount or gear["mount"], mine.cavalry or gear["cavalry"]
+                mine.troops, mine.troop_bonus = mine.troops or gear["troops"], mine.troop_bonus or gear["troop_bonus"]
 
         self.world.mutate_battle(_fill)
 
@@ -3454,6 +3471,8 @@ class Game:
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
         if me.mount:
             lines.append(mounts.CAVALRY_REPORT.format(name=me.mount))  # 騎著馬出陣（裝備四欄 5.9）；原句「你以…出陣」不動
+        if me.troops:
+            lines.append(TROOPS_REPORT.format(names=me.troops))  # 帶著部下出陣（PM 2026-10-12）
         if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
             lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
         if me.hurt_dealt >= 0.5:
@@ -3734,6 +3753,7 @@ class Game:
                 role = battle_instance.role_text(self.content.config.battle, me.role)
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
+                ride += TROOPS_LINE.format(names=me.troops, pct=mounts.pct(me.troop_bonus)) + "。" if me.troops else ""  # 帶著部下
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent():
                 return f"{header}\n\n集結中，還剩現實 {left}。你是散人，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
@@ -3749,6 +3769,8 @@ class Game:
             lines.append(f"你的職位：{role}")
         if p is not None and p.mount:
             lines.append(mounts.CAVALRY_LINE.format(name=p.mount, pct=mounts.pct(p.cavalry)))  # 騎著馬上陣（裝備四欄 5.9，加入時的快照）
+        if p is not None and p.troops:
+            lines.append(TROOPS_LINE.format(names=p.troops, pct=mounts.pct(p.troop_bonus)))  # 帶著部下上陣（加入時的快照）
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             if battle_instance.is_third(definition, p):  # 第三方：兩軍各一行，再加膠著程度（戰鬥系統第六節；全是公開的戰局）
@@ -3967,11 +3989,11 @@ class Game:
                 return ["（你只能站在自己陣營這一邊。）"]
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
-            horse, cavalry = self._battle_mount()
+            gear = self._battle_gear()
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                    role=self._battle_role(), mount=horse, cavalry=cavalry,
+                    role=self._battle_role(), **gear,
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -3983,11 +4005,11 @@ class Game:
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()
-            horse, cavalry = self._battle_mount()
+            gear = self._battle_gear()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), mount=horse, cavalry=cavalry,
+                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear,
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -4012,11 +4034,11 @@ class Game:
         stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
-        horse, cavalry = self._battle_mount()
+        gear = self._battle_gear()
         if battle.phase == "muster":
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
-                    b, name, side, cap, power, scores=scores, attribute=road, role=role, mount=horse, cavalry=cavalry,
+                    b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
@@ -4024,7 +4046,7 @@ class Game:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
-                    mount=horse, cavalry=cavalry,
+                    **gear,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
