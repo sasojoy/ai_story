@@ -56,3 +56,13 @@ def test_a_picked_node_stays_picked_and_gear_nodes_follow_the_open_slots(views):
     assert "&lt;i&gt;試刃&lt;/i&gt;" in foot and "<i>試刃</i>" not in foot  # 名字跳脫
     assert 'data-act="hero-jump" data-to="gear" data-kind="weapon"' in foot
     assert 'data-slot="weapon"' in page  # 「看這件」捲得到的那一段在
+
+
+def test_a_woman_gets_the_female_figure_and_its_own_node_spots(views):
+    m, x = views
+    man = _panel(run(m, "return H.pagePractice();", menxia=x))
+    m["status"]["gender"] = "女"  # 創角色選性別之後由伺服器給（企劃者 2026-10-12）；還沒有這個鍵的角色照男版
+    woman = _panel(run(m, "return H.pagePractice();", menxia=x))
+    assert "/static/hero.webp" in man and "/static/hero-f.webp" in woman
+    spot = lambda page: page.split('data-key="內功"')[0].rsplit("<button", 1)[1]
+    assert spot(man) != spot(woman)  # 光點照各自那張圖的位置

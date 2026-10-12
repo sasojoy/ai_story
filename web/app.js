@@ -85,7 +85,7 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
-    heroNode: null, // 修練頁人物面板點著的那個光點（HERO_NODES 的 key）；沒點過是內功
+    heroNode: null, // 修練頁人物面板點著的那個光點（HERO_FIGURES 的 key）；沒點過是內功
     artInfo: null, // 修練頁哪一門攤開了「詳情」（完整的功法卡）
     libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
@@ -1912,17 +1912,30 @@
   }
 
   // ── 修練頁最上面的人物面板（企劃者 2026-10-12：照她給的人物剪影與版面改一版）──
-  // 剪影（web/hero.webp，去背過的）身上的光點各對上一樣真的東西：身上的兩門、四欄裝備（屬性不放上去，企劃者 2026-10-12「亂七八糟的」，
+  // 剪影（web/hero.webp、hero-f.webp，去背過的）身上的光點各對上一樣真的東西：身上的兩門、四欄裝備（屬性不放上去，企劃者 2026-10-12「亂七八糟的」，
   // 配點照舊在狀態列）。座標是剪影圖的百分比（照圖上的光點量的），side 是名字標在點的哪一邊。點了底下那一格寫它現在是什麼，
   // 多一顆「看這一門／看這件」捲到下面那張卡。點哪一個記在 S.heroNode（只是看的方式，輪詢重畫不跳回去）
-  const HERO_NODES = [
-    { key: "weapon", kind: "gear", x: 52.4, y: 15.4, side: "r" },
-    { key: "treasure", kind: "gear", x: 20.7, y: 20.8, side: "l" },
-    { key: "armor", kind: "gear", x: 47.9, y: 24.1, side: "r" },
-    { key: "內功", kind: "art", x: 27.1, y: 38.4, side: "r" },
-    { key: "武學", kind: "art", x: 50.6, y: 48.0, side: "r" },
-    { key: "mount", kind: "gear", x: 52.1, y: 95.7, side: "r" },
-  ];
+  // 男女各一張剪影（企劃者 2026-10-12：之後創角色要選性別），光點各照自己那張圖量；status.gender 是「女」就用女版，其餘（還沒有性別的角色）男版。
+  // 兩張的光點對上同樣六樣東西，只是位置不同；女版的寶物是腰間的佩飾、武學在手肘
+  const HERO_FIGURES = {
+    男: { src: "/static/hero.webp", ratio: "674 / 900", nodes: [
+      { key: "weapon", kind: "gear", x: 52.0, y: 15.1, side: "r" },
+      { key: "treasure", kind: "gear", x: 20.3, y: 21.4, side: "l" },
+      { key: "armor", kind: "gear", x: 47.7, y: 24.2, side: "r" },
+      { key: "內功", kind: "art", x: 26.4, y: 38.7, side: "r" },
+      { key: "武學", kind: "art", x: 50.0, y: 48.6, side: "r" },
+      { key: "mount", kind: "gear", x: 51.8, y: 96.7, side: "r" },
+    ] },
+    女: { src: "/static/hero-f.webp", ratio: "693 / 900", nodes: [
+      { key: "weapon", kind: "gear", x: 47.0, y: 17.5, side: "r" },
+      { key: "armor", kind: "gear", x: 42.6, y: 23.6, side: "r" },
+      { key: "武學", kind: "art", x: 47.2, y: 33.8, side: "r" },
+      { key: "內功", kind: "art", x: 25.0, y: 38.1, side: "l" },
+      { key: "treasure", kind: "gear", x: 35.8, y: 45.3, side: "r" },
+      { key: "mount", kind: "gear", x: 50.1, y: 96.9, side: "r" },
+    ] },
+  };
+  const heroFigure = (s) => HERO_FIGURES[s && s.gender === "女" ? "女" : "男"];
   const HERO_GEAR_NAMES = { weapon: "武器", armor: "防具", mount: "坐騎", treasure: "寶物" };
   // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
   function heroInfo(n, x, s) {
@@ -1957,7 +1970,8 @@
       <div class="hero-ft-row"><p>${esc(info.desc)}</p>${info.button}</div>`;
   }
   function heroPanel(x, s) {
-    const nodes = HERO_NODES.map((n) => [n, heroInfo(n, x, s)]).filter(([, info]) => info);
+    const fig = heroFigure(s);
+    const nodes = fig.nodes.map((n) => [n, heroInfo(n, x, s)]).filter(([, info]) => info);
     if (!nodes.length) return "";
     const pick = nodes.find(([n]) => n.key === S.heroNode) || nodes.find(([n]) => n.key === "內功") || nodes[0];
     return `<section class="hero" aria-label="人物">
@@ -1967,8 +1981,8 @@
       </div>
       <div class="hero-stage">
         <div class="hero-halo" aria-hidden="true"></div>
-        <div class="hero-fig">
-          <img src="/static/hero.webp" alt="" draggable="false">
+        <div class="hero-fig" style="aspect-ratio:${fig.ratio}">
+          <img src="${fig.src}" alt="" draggable="false">
           ${nodes.map(([n, info]) => `<button class="hero-node${n === pick[0] ? " on" : ""}${info.lit ? "" : " dim"} ${n.side}" style="left:${n.x}%;top:${n.y}%" data-act="hero-node" data-key="${esc(n.key)}" aria-label="${esc(info.label)}"><i class="pulse"></i><i class="dot"></i><span>${esc(info.label)}</span></button>`).join("")}
         </div>
       </div>
@@ -1978,7 +1992,7 @@
   // 點光點：只換點的樣子與底下那一格、在點上散一圈朱砂（不重畫整頁，水墨的動畫才不會斷）
   function heroTap(el) {
     const key = el.dataset.key;
-    const n = HERO_NODES.find((h) => h.key === key);
+    const n = S.main && heroFigure(S.main.status).nodes.find((h) => h.key === key);
     const info = n && S.menxia && S.main && heroInfo(n, S.menxia, S.main.status);
     if (!info) return;
     S.heroNode = key;
