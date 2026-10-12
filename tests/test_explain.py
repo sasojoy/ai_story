@@ -532,8 +532,8 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
 
     content = load_content(server.ROOT / "content", profile=profile)
     content.config.auto_open_first_season = True
+    content.config.beta_free_refill = refill  # 週末設定 2026-10-12 起不開了，開關照舊管用
     monkeypatch.setattr(server, "CONTENT", content)
-    assert content.config.beta_free_refill is refill
     client = TestClient(server.app)
     client.post("/api/register", json={"login": f"gift_{profile}", "password": "secret-pw", "again": "secret-pw"})
     client.post("/api/character", json={"name": "贈禮人"})

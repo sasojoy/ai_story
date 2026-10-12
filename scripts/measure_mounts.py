@@ -1,14 +1,14 @@
 """坐騎量表（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第十節第 2 項；裝備二）：整季機器人跑幾個種子，比開坐騎與關坐騎。
 只量不改；武器、防具照設定開著（兩邊一樣）；寶物固定關著。
 
-每個種子、坐騎開關各一行：一季走了幾段（步行、趕路、疾行各幾段；包住 mounts.hunger，Game._arrivals 每換一段叫一次，
-坐騎關著也叫）；步行、趕路花的遊戲時間與「沒騎馬要花多少」（出發那一刻照 atlas.travel_seconds 與 mounts.pace 算）；趕路、疾行花的
+每個種子、坐騎開關各一行：一季走了幾段（步行、疾行各幾段；包住 mounts.hunger，Game._arrivals 每換一段叫一次，
+坐騎關著也叫）；步行花的遊戲時間與「沒騎馬要花多少」（出發那一刻照 atlas.travel_seconds 與 mounts.pace 算）；疾行花的
 體力與「沒騎馬要花多少」（出發那一刻照 atlas.route_stamina／route_foot_stamina 算）；買了幾匹、花多少銀兩（包住 mounts.buy）；
 餵了幾次（包住 mounts.feed，一次吃一個一階素材）；落敗幾場、策馬脫身幾場、保住多少銀兩（包住 Game._lose_silver）；決戰騎著馬上陣
 幾場、騎兵平均多幾成（參戰者快照的 cavalry）；季末坐騎與飽足度、一階素材、銀兩、季長、結局。
 截殺被跑掉幾次看 scripts/sim_season_one.py 的截殺那一行（整季機器人一個人玩，沒有人截殺他）。
 
-整季機器人平常只步行（Game.move_mode 預設 walk、不存檔）：--gait mix 讓機器人每一步照種子擲一次走法（步行、趕路、疾行各三分之一，
+整季機器人平常只步行（Game.move_mode 預設 walk、不存檔）：--gait mix 讓機器人每一步照種子擲一次走法（步行、疾行各一半；企劃者 2026-10-12 拿掉趕路，
 自己一份亂數，不動 Game.rng 與 bot.pick 的那一份；體力不夠的鈕本來就灰掉、bot.pick 不會挑），才量得到省下的體力（設計 5.2 的依據缺口）。
 兩組（第十節）：14 天設定（不給 --profile）種子 1～5，加 --season-one 量決戰騎兵；週末設定（--profile weekend --steer）種子 1～5——
 週末的機器人一季只走 81～90 段（FB-129），--steer 照 measure_gear 的 _steer 一半的時候照手上的懸賞、軍令走。模型一律不連。
@@ -43,7 +43,7 @@ from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 STEER = 0.5  # 同 measure_gear、measure_sanren：一半的時候照手上的事走
-GAITS = ("walk", "hurry", "dash")
+GAITS = ("walk", "dash")
 _RUNS = itertools.count()  # 每跑一次一個新的資料庫檔：同一個行程裡同種子跑兩次，第二次不會接著上一次收了季的世界跑成空的
 
 
@@ -181,7 +181,7 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     parser.add_argument("--profile", default=None)
     parser.add_argument("--steer", action="store_true", help="一半的時候照手上的懸賞、軍令走（週末那一組用，同 measure_gear）")
-    parser.add_argument("--gait", choices=("walk", "mix"), default="walk", help="mix：每一步照種子擲一次走法（步行、趕路、疾行）")
+    parser.add_argument("--gait", choices=("walk", "mix"), default="walk", help="mix：每一步照種子擲一次走法（步行、疾行）")
     parser.add_argument("--season-one", action="store_true", help="打開第一季開關（14 天設定量決戰騎兵用）")
     args = parser.parse_args()
     content = load_content(ROOT / "content", profile=args.profile)
@@ -193,9 +193,9 @@ def main() -> None:
             r = run(seed, args.profile, on, args.steer, args.gait, args.season_one)
             legs = r["legs"]
             cav = "—" if r["cavalry"] is None else "+" + mounts.pct(r["cavalry"])
-            print(f"種子 {seed} 坐騎{'開' if on else '關'}：走了 {sum(legs.values())} 段（步行 {legs['walk']}、趕路 {legs['hurry']}、"
+            print(f"種子 {seed} 坐騎{'開' if on else '關'}：走了 {sum(legs.values())} 段（步行 {legs['walk']}、"
                   f"疾行 {legs['dash']}）、走路花 {r['walk_h']:.1f} 小時（沒騎馬要 {r['foot_h']:.1f}，省 {_saved(r['walk_h'], r['foot_h'])}）、"
-                  f"趕路疾行體力 {r['paid']}（沒騎馬要 {r['foot']}，省 {_saved(r['paid'], r['foot'])}）、"
+                  f"疾行體力 {r['paid']}（沒騎馬要 {r['foot']}，省 {_saved(r['paid'], r['foot'])}）、"
                   f"買馬 {r['bought']} 匹（{r['spent']} 兩）、餵 {r['fed']} 次、落敗 {r['losses']} 場（策馬脫身 {r['escaped']} 場、"
                   f"保住 {r['kept']} 兩）、決戰騎著馬 {r['rode']}／{r['fought']} 場（騎兵平均 {cav}）、季末坐騎 {r['mount']}、"
                   f"一階素材 {r['tier1']}、銀兩 {r['silver']}、季長 {r['hours']:.1f} 小時（世界時間）、結局 {r['ending']}", flush=True)

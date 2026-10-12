@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     signature_arms, skillview, smithing,
@@ -265,7 +265,7 @@ class Game:
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
-        # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
+        # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
         self.move_mode: TravelMode = "walk"
@@ -304,7 +304,9 @@ class Game:
         行動走一遍（_graduate）。內容沒有序章（正式內容現在就是）什麼都不做，連亂數都不多用一次。
         sex：建角色時選的性別（「男」／「女」，gender.GENDERS）：給了就定了（gender_chosen）；沒給是男、設定頁還能選一次。
         假人由 bot_runner 照比例給（gender.for_bot）。"""
-        game = cls(content, new_game_state(content, name), rng, world)
+        state = new_game_state(content, name)
+        state.player.pills_topped_to = content.config.beta_gift_stamina_pills if content.config.beta_gift else 0  # 新角色照下面的贈送拿，不另補
+        game = cls(content, state, rng, world)
         if sex in gender.GENDERS:
             game.state.player.gender, game.state.player.gender_chosen = sex, True
         if prologue:
@@ -340,6 +342,20 @@ class Game:
             entries[0] = entries[0].model_copy(update={"lines": [*entries[0].lines, line]})
         else:
             self._write(self.content.scenario.name, [line], tag=journal.SEASON_START)
+
+    def _top_up_pills(self) -> None:
+        """拿掉一鍵補滿之後補回體丹（企劃者 2026-10-12；見 PlayerState.pills_topped_to）：讀檔那一刻，贈送的數比上次補到的多，
+        手上不到那個數就補到那個數、江湖紀錄寫一行。真人、假人、整季機器人一樣（假人看不出來）。"""
+        cfg, p = self.content.config, self.state.player
+        target = cfg.beta_gift_stamina_pills if cfg.beta_gift else 0
+        if target <= p.pills_topped_to:
+            return
+        p.pills_topped_to = target
+        if p.stamina_pills >= target:
+            return
+        added = target - p.stamina_pills
+        p.stamina_pills = target
+        self._write(cfg.stamina_pill_name, [howto.top_up_line(self.content, added)])
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
 
@@ -491,6 +507,7 @@ class Game:
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
         fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
+        fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
@@ -511,6 +528,7 @@ class Game:
             p.stats.setdefault(key, c.config.start_stats.get(key, team.BASE_STAT))
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
+        self._top_up_pills()
         sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
@@ -967,8 +985,26 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
+        heal = self._heal_option()
+        if heal is not None:
+            opts.append(heal)
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
+
+    def _heal_option(self) -> Option | None:
+        """醫館裡、有內傷時的「醫館療傷」（企劃者 2026-10-12；跟修練頁的療傷鈕同一個動作、同一個價錢）；
+        銀兩不夠灰掉寫原因。開關關著（哪裡都能療傷）、不在醫館、沒有內傷都不畫。不花體力。"""
+        s, c = self.state, self.content
+        member = s.player.member
+        if not clinic.on(c) or not clinic.here(s, c) or int(member.injury) < 1:
+            return None
+        problem = team.heal_problem(s, c, member)
+        note = f"內傷 {int(member.injury)}・{team.heal_cost(c, member)} 兩"
+        return Option(id="act:heal", label=f"{clinic.HEAL}（{note if problem is None else problem.rstrip('。')}）",
+                      enabled=problem is None)
+
+    def _heal_msgs(self) -> list[str]:
+        return team.heal(self.state, self.content, self.state.player.member, clinic.problem(self.state, self.content))
 
     @staticmethod
     def _stand_option() -> Option:
@@ -1682,6 +1718,7 @@ class Game:
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
             "market": f"{mounts.MARKET}・{here}",
+            "heal": f"療傷・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -2000,6 +2037,8 @@ class Game:
         if what == "market":
             self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
             return [mounts.ENTERED]
+        if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
+            return self._heal_msgs()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -2739,7 +2778,7 @@ class Game:
         note = problem or f"{c.config.mounts.shop_price} 兩"
         # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
         opts = [Option(id=mounts.BUY, enabled=problem is None,
-                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・趕路疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
+                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
         if p.mount is not None:
             opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
                                label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
@@ -4968,16 +5007,16 @@ class Game:
             origin=route.origin, share=route.share, pace=pace,
         )
         if self._draft is not None:
-            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode, pace=pace)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODE_NAMES[mode] + atlas.mode_when(minutes, mode, pace=pace)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
         verb = "改道" if rerouting else "動身"
-        told = f"{s.player.name}{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
+        told = f"{s.player.name}{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
         party = parted + self._lead(start, foot, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層），體力各付各的
         if mode == "dash" or at_once:
             return party + self._arrivals()
         left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
-        msg = f"你{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
+        msg = f"你{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
         self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
         self._sync_battle_presence()
         return [msg] + party
@@ -5096,7 +5135,7 @@ class Game:
         s, c = self.state, self.content
         j = s.player.journey
         left = self._real_minutes(j.arrive_at[j.last] - s.world.time)
-        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODES[j.mode]}），現實約 {left} 分鐘後抵達"
+        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODE_NAMES[j.mode]}），現實約 {left} 分鐘後抵達"
         if j.reached < j.last:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
@@ -5108,7 +5147,7 @@ class Game:
         j.stop_at = j.reached
         msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
         if j.mode == "hurry":
-            msgs.append("（趕路已經花掉的體力不退。）")
+            msgs.append("（趕路已經花掉的體力不退。）")  # 拿掉趕路之前出發、還在路上的那一趟
         msgs += self._lead(None, 0, f"{s.player.name}喊停，到了{c.locations[j.path[j.reached]].name}就停下來。")
         self._sync_battle_presence()  # 這一趟縮短了：最後一站落在決戰的大區內，就不再算離開
         return msgs
@@ -5541,8 +5580,9 @@ class Game:
 
     @_not_while_preparing
     def heal(self) -> list[str]:
+        """修練頁的療傷鈕：只在醫館做得了（clinic.py；不在醫館回「這裡沒有醫館，最近的在…」，什麼都不動）。"""
         xinde = self._xinde()
-        msgs = self._log(team.heal(self.state, self.content, self.state.player.member))
+        msgs = self._log(self._heal_msgs())
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 

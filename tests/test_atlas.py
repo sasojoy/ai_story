@@ -258,18 +258,16 @@ def test_routes_break_remaining_ties_by_id(state, content):
 # ── 安排前往 ──────────────────────────────────────────
 
 
-def test_travel_options_offer_walking_hurrying_and_dashing(state, content):
+def test_travel_options_offer_walking_and_dashing(state, content):
+    """企劃者 2026-10-12 拿掉趕路：只剩步行、疾行。"""
     assert travel_options(state, content, "town") is None  # 所在地
     assert travel_options(state, content, "cave") is None  # 未開放
     assert travel_options(state, content, "lake") == [
         TravelOption("walk", "步行（約 3 分鐘）", True),
-        TravelOption("hurry", "趕路（約 2 分鐘・體力 3）", True),
         TravelOption("dash", "疾行（立刻到・體力 6）", True),
     ]
     state.player.stamina = 4
-    assert travel_options(state, content, "lake")[2] == TravelOption("dash", "疾行（體力不足，要 6）", False)
-    state.player.stamina = 2
-    assert travel_options(state, content, "lake")[1] == TravelOption("hurry", "趕路（體力不足，要 3）", False)
+    assert travel_options(state, content, "lake")[1] == TravelOption("dash", "疾行（體力不足，要 6）", False)
     assert travel_options(state, content, "lake")[0].enabled  # 步行不花體力
     content.config.vision_base = 0
     assert travel_options(state, content, "lake") is None  # 沒摸清
@@ -368,7 +366,7 @@ def test_detail_lists_situation_enemies_story_and_route(state, content):
     assert "**敵情**　水寇小隊 穩勝" in text
     assert "★ 這一幕主線的目標：壓制寇亂" in text
     assert "✦ 最近 3 天的大事與傳聞：\n- 第1天 00:00　翻江龍又劫了一艘船。" in text
-    assert text.endswith("**路線**　步行約 3 分鐘、趕路約 2 分鐘・體力 3、疾行立刻到・體力 6")
+    assert text.endswith("**路線**　步行約 3 分鐘、疾行立刻到・體力 6")
     here = detail_text(state, content, "town", no_odds)  # 沒有敵人：不算勝算
     assert here.startswith("### 小鎮（所在地）　危險 ★")
     assert "沒有龍頭人物在此出沒" in here and "沒有人在這裡滋事" in here
@@ -516,7 +514,7 @@ def test_detail_of_an_unknown_place_still_says_nothing_about_leaders(state, cont
 def test_detail_names_the_places_on_the_way(state, content):
     state.world.flags.add("cave_open")
     assert detail_text(state, content, "cave", no_odds).endswith(
-        "**路線**　步行約 8 分鐘、趕路約 4 分鐘・體力 8、疾行立刻到・體力 15，途經 湖邊"
+        "**路線**　步行約 8 分鐘、疾行立刻到・體力 15，途經 湖邊"
     )
 
 
@@ -566,7 +564,6 @@ def test_on_the_road_you_can_arrange_travel_from_where_you_are(state, content):
     assert way_to(state, content, "town") == Route(("town",), (pytest.approx(1.0),), origin="lake", share=pytest.approx(2 / 3))
     assert travel_options(state, content, "town") == [  # 剛離開的那一站：就是折返
         TravelOption("walk", "步行（約 1 分鐘）", True),
-        TravelOption("hurry", "趕路（約 1 分鐘・體力 1）", True),
         TravelOption("dash", "疾行（立刻到・體力 2）", True),
     ]
     assert travel_options(state, content, "lake")[0] == TravelOption("walk", "步行（約 2 分鐘）", True)

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -230,12 +230,14 @@ def forge_picks(
 def heal_button(state: GameState, content: Content) -> dict:
     """修練頁「療傷」鈕要的資料（FB-082）：ok 是按不按得下去，why 是按不下去的原因（跟 team.heal 回的是同一句）。
     鈕上的字（內傷與價錢）是卷軸卡自己寫的：內傷讀狀態列、價錢讀 menxia 的 heal_cost（team.heal_cost，每 2 點內傷 1 兩，
-    真的收的就是這個數），所以這裡不送字（review-ap3 M4）。內傷不到 1 點狀態列不寫（int），鈕也不亮。"""
+    真的收的就是這個數），所以這裡不送字（review-ap3 M4）。內傷不到 1 點狀態列不寫（int），鈕也不亮。
+    醫館（企劃者 2026-10-12）：不在醫館時灰掉，clinic 是「這裡沒有醫館，最近的在…」那一句，網頁照它寫在鈕上；在醫館是 None。"""
     member = state.player.member
     if int(member.injury) < 1:
-        return {"ok": False, "why": "氣血無恙，不用療傷。"}
-    problem = team.heal_problem(state, content, member)
-    return {"ok": problem is None, "why": problem}
+        return {"ok": False, "why": "氣血無恙，不用療傷。", "clinic": None}
+    where = clinic.problem(state, content)
+    problem = team.heal_problem(state, content, member, where)
+    return {"ok": problem is None, "why": problem, "clinic": where}
 
 
 def _nearest_town(state: GameState, content: Content) -> tuple[str | None, bool]:

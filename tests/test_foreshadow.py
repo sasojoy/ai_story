@@ -135,7 +135,7 @@ def test_fragment_never_repeats_and_writes_journal_not_rumor(fs, world):
 
 
 def test_fragment_rolls_exactly_once_after_every_stamina_spending_action(fs, world, monkeypatch):
-    """每一個花體力的行動之後抽「剛好一次」：探索、遊歷、交友、求見、對話、招募、選單的趕路、折返、輿圖的安排前往；
+    """每一個花體力的行動之後抽「剛好一次」：探索、遊歷、交友、求見、對話、招募、選單的疾行、折返、輿圖的安排前往；
     不花體力的（打坐、起身、步行、遞名帖、收回名帖、對話的片段選項）一次都不抽。用 spy 數呼叫次數，不靠抽中與否。"""
     monkeypatch.setattr(team, "fight", lambda *a, **k: EncounterResult(tier="大勝", margin=50, our_power=60, difficulty=1))
     monkeypatch.setattr(companion_agent, "start_dialogue", lambda *a, **k: ["你們寒暄了幾句。"])
@@ -175,13 +175,16 @@ def test_fragment_rolls_exactly_once_after_every_stamina_spending_action(fs, wor
     assert calls_after(lambda: walk_to_town(game)) == 0  # 步行不花體力
     assert calls_after(lambda: game.choose("act:socialize")) == 1  # 小鎮只有波才一位：交友直接找他
     assert calls_after(lambda: game.choose("act:recruit")) == 1
-    game.set_move_mode("hurry")
-    assert calls_after(lambda: game.choose("move:lake:hurry")) == 1  # 選單的趕路
-    game.advance(60)  # 走了一段（趕路 3 分鐘的路要 90 秒）
-    assert calls_after(lambda: game.choose("road:back:hurry")) == 1  # 折返也是趕路
-    game.advance(600)
+    game.set_move_mode("dash")
+    assert calls_after(lambda: game.choose("move:lake:dash")) == 1  # 選單的疾行（趕路 2026-10-12 拿掉）
+    game.set_move_mode("walk")
+    game.choose("move:town")
+    game.advance(60)  # 走了一段（步行 3 分鐘的路要 180 秒）
+    game.set_move_mode("dash")
+    assert calls_after(lambda: game.choose("road:back:dash")) == 1  # 折返也是疾行
+    game.choose("move:town:dash")
     assert p.journey is None and p.location == "town"
-    assert calls_after(lambda: game.travel("lake", "hurry")) == 1  # 輿圖的安排前往
+    assert calls_after(lambda: game.travel("lake", "dash")) == 1  # 輿圖的安排前往
     assert calls == ["north"]  # 抽的是出發那一站的大區
 
 

@@ -135,8 +135,8 @@ def rate(state: GameState, content: Content, loc: Location) -> int:
 
 def place_tags(scene: InsightScene, loc: Location) -> str:
     """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。
-    設施的標籤（馬市，裝備四欄 5.5）不是地形，不寫。"""
-    tags = [tag for tag in loc.tags if tag != mounts.MARKET_TAG]
+    設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG）不是地形，不寫。"""
+    tags = [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館")]
     return "" if scene.prologue or not tags else f"（{'、'.join(tags)}）"
 
 

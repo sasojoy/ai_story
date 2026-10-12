@@ -8,7 +8,7 @@ from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
-TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）
+TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）；趕路 2026-10-12 拿掉，只留給拿掉之前出發、還在路上的那一趟
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
 CompanionKind = Literal["locked", "recruitable"]
@@ -813,6 +813,7 @@ ALLOW_FIXED = frozenset({
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
+    "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1568,8 +1569,8 @@ class MountRules(_Strict):
     階：1 駑馬、2 良駒、3 名駒；查表用 str(tier)（同 WeaponRules.tier_bonus）。不掛第一季開關（2.6，同兵器、防具）。"""
 
     enabled: bool = True
-    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 趕路、疾行的體力省幾成（5.1）
-    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行、趕路的時間快幾成（5.1）
+    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 疾行的體力省幾成（5.1）
+    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行的時間快幾成（5.1）
     quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.03, "上品": 0.05})  # 只加在上面兩列
     cavalry: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})  # 決戰強攻、奇襲的份量多幾成（5.9）
     escape: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.50, "3": 0.70})  # 落敗策馬脫身、保住銀兩的機會（5.11）
@@ -1994,6 +1995,8 @@ class Config(_Strict):
     injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
+    # 療傷只在醫館（帶「醫館」標籤的地點，tianxia/clinic.py；企劃者 2026-10-12「不能隨地療傷」）。關著時哪裡都能療傷（測試內容關著）
+    heal_at_clinic: bool = True
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
     practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
