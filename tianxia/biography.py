@@ -148,6 +148,13 @@ def _plain(text: str) -> str:
     return re.sub(r"\s*([+-]?)(\d+)\s*", lambda m: sign[m.group(1)] + _cn(int(m.group(2))), text)
 
 
+def _end(text: str) -> str:
+    """句子收尾：已經有句末標點（含引號收尾）就不再補「。」，免得「？。」「」。」。"""
+    text = text.rstrip()
+    done = text[-1:] in ("。", "！", "？") or (text.endswith("」") and text[-2:-1] in ("。", "！", "？"))
+    return text if not text or done else text + "。"
+
+
 def _when(when: str) -> str:
     """行狀的時刻只留到週或日：「第 3 週・週二 21:40」→「第三週」，「第2天 14:05」→「第二日」。"""
     m = re.match(r"第\s*(\d+)\s*週", when)
@@ -171,12 +178,12 @@ def rule_text(req: BiographyRequest) -> str:
     if battles:
         lines = []
         for e in battles[:6]:
-            line = _strip(e["text"], name)
+            line = _end(_strip(e["text"], name))
             if e.get("quote"):
-                line += f"。{name}曰：「{e['quote']}」"
+                line += f"{name}曰：「{e['quote']}」"
                 if e.get("reply"):
-                    line += "；" + _strip(e["reply"])
-            lines.append(line + "。")
+                    line += "於是" + _end(_strip(e["reply"]))
+            lines.append(_end(line))
         paras.append("其臨陣也，" + "".join(lines))
     else:
         paras.append(f"{name}未嘗與於天下大戰。")
@@ -184,12 +191,12 @@ def rule_text(req: BiographyRequest) -> str:
     if figures:
         lines = []
         for e in figures[:8]:
-            line = _strip(e["text"], name)
+            line = _end(_strip(e["text"], name))
             if e.get("quote"):
-                line += f"。{name}曰：「{e['quote']}」"
+                line += f"{name}問曰：「{e['quote']}」"
             if e.get("reply"):
-                line += f"。{_strip(e['reply'])}"
-            lines.append(line + "。")
+                line += f"對曰：「{e['reply']}」"
+            lines.append(_end(line))
         paras.append("其與當世英雄交也，" + "".join(lines))
     fights = groups["fight"][:4]
     end = "".join(f"{_strip(e['text'], name)}。" for e in fights)

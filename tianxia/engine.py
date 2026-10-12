@@ -7719,7 +7719,10 @@ class Game:
             ready = self.biography_request(season) is not None
             if row is None and not ready:
                 return None
-            return {"season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": []}
+            return {
+                "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
+                "scenario": self.content.scenario.name,
+            }
         return {
             "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
             "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,

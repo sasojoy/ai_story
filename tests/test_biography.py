@@ -70,6 +70,8 @@ def test_the_rule_text_reads_like_a_biography_with_no_arabic_digits_and_no_you()
     assert "出手四回合" in text and "在十二人中排第三" in text and "沈浪曰：「點火燒糧」" in text
     assert not any(ch.isdigit() for ch in text if ch.isascii()) and "你" not in text
     assert "行事近俠" in text and "至第十二級" in text
+    assert "沈浪問曰：「久仰」對曰：「好說。」" in text and "？。" not in text and "。。" not in text
+    assert biography._end("贈「踏霜駒」") == "贈「踏霜駒」。" and biography._end("曰：「好。」") == "曰：「好。」"
     assert biography.clean(text, _request()) == text  # 規則版自己也過得了清理的檢查
 
 
@@ -318,7 +320,7 @@ def test_the_share_image_is_a_1200_by_630_png():
 
 DRIVER = r"""
 const S = { zhuanVertical: !!input.vertical };
-const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), fn("bookIcon"), fn("sealSvg"), fn("zhuanVertical"), fn("zhuanHtml"), fn("zhuanEntry"),
+const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("bookIcon"), fn("sealSvg"), fn("zhuanVertical"), fn("zhuanHtml"), fn("zhuanEntry"),
   "return { zhuanHtml, zhuanEntry };"];
 const H = new Function("S", parts.join("\n"))(S);
 finish(input.entry ? H.zhuanEntry(input.entry, "副題") : H.zhuanHtml(input.z));

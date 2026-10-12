@@ -2295,12 +2295,14 @@
           <path class="hill near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>
         </svg>
         <i class="book-moon" aria-hidden="true"></i>
-        <div class="book-title"><span>${esc(head)}</span></div>
+        <div class="book-title" style="--slip-size:${slipSize(head)}px"><span>${esc(head)}</span></div>
         <p class="book-sub">第 ${Number(z.season)} 季${v && v.scenario ? `・${esc(v.scenario)}` : ""}</p>
       </div>
       <div class="leaves">${body}</div>
     </div>`;
   }
+  // 題簽的字照篇名的字數縮：名號最長十來個字，一律直書排進一條題簽（四字以內照武學譜的 30px）。zhuan_html.slip_size 同一條算法
+  const slipSize = (title) => Math.min(30, Math.floor(176 / [...title].length / 1.3));
   // 入口（江湖頁休季的那一張、行狀頁的歷季列傳）：同武學譜的入口
   function zhuanEntry(b, sub, go = b.written === false ? "立傳" : "翻閱") {
     return `<button class="manual-entry" data-act="zhuan-open" data-season="${Number(b.season)}">${bookIcon()}<span><b>${esc(b.title)}</b><small>${esc(sub)}</small></span><i class="go">${go} ›</i></button>`;

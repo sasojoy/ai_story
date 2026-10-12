@@ -19,13 +19,13 @@ CSS = """
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--paper2);color:var(--ink)}
 body{font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
-.cover{position:relative;height:220px;overflow:hidden;background:linear-gradient(180deg,var(--cover2) 0%,var(--cover) 72%)}
+.cover{position:relative;height:240px;overflow:hidden;background:linear-gradient(180deg,var(--cover2) 0%,var(--cover) 72%)}
 .cover svg{position:absolute;left:0;right:0;bottom:0;width:100%;height:120px}
 .cover .far{fill:rgba(233,220,192,.16)}.cover .near{fill:rgba(63,125,92,.45)}
 .moon{position:absolute;top:42px;left:46px;width:34px;height:34px;border-radius:50%;background:rgba(246,237,216,.6);box-shadow:0 0 24px 6px rgba(246,237,216,.18)}
 .slip{position:absolute;top:22px;right:32px;padding:16px 10px;writing-mode:vertical-rl;background:var(--slip);border:2px solid var(--seal);
 box-shadow:inset 0 0 0 3px var(--slip),inset 0 0 0 4px var(--seal),0 4px 12px rgba(0,0,0,.25)}
-.slip h1{margin:0;font:700 30px/1 var(--serif);letter-spacing:10px;color:#241a11}
+.slip h1{margin:0;font:700 var(--slip-size,30px)/1 var(--serif);letter-spacing:calc(var(--slip-size,30px)*.3);color:#241a11}
 .sub{position:absolute;left:18px;bottom:14px;margin:0;color:var(--slip);font-size:13px;letter-spacing:1px;text-shadow:0 1px 3px rgba(0,0,0,.5)}
 .bar{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px 0;max-width:640px;margin:0 auto}
 .bar button{font:600 14px var(--serif);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:999px;padding:6px 14px;cursor:pointer}
@@ -37,7 +37,7 @@ font:17px/2.05 var(--serif);letter-spacing:.04em;text-align:justify}
 .text p{margin:0 0 1em;text-indent:2em}
 .text p.ping{margin-top:1.4em;padding-top:1em;border-top:1px solid var(--rule);text-indent:0}
 .text p:last-child{margin-bottom:0}
-.vertical .text{writing-mode:vertical-rl;height:72vh;min-height:420px;overflow-x:auto;overflow-y:hidden;line-height:2.2;
+.vertical .text{writing-mode:vertical-rl;width:100%;height:72vh;min-height:420px;overflow-x:auto;overflow-y:hidden;line-height:2.2;
 background:repeating-linear-gradient(to left,transparent 0 calc(2.2em - 1px),rgba(169,129,75,.3) calc(2.2em - 1px) 2.2em) var(--paper)}
 .vertical .text p{margin:0 0 0 1.1em;text-indent:2em}
 .vertical .text p.ping{border-top:0;border-right:1px solid var(--rule);padding:0 1em 0 0;margin:0 1.4em 0 0;text-indent:0}
@@ -52,8 +52,7 @@ padding:8px 16px;border-radius:999px;font-size:14px}
 SCRIPT = """
 (function(){
   var KEY="tx-zhuan-vertical",root=document.documentElement,btn=document.getElementById("vert");
-  function set(on){root.classList.toggle("vertical",on);btn.setAttribute("aria-pressed",on?"true":"false");
-    if(on){var t=document.querySelector(".text");t.scrollLeft=t.scrollWidth;}}
+  function set(on){root.classList.toggle("vertical",on);btn.setAttribute("aria-pressed",on?"true":"false");}
   try{set(localStorage.getItem(KEY)==="1");}catch(e){}
   btn.addEventListener("click",function(){var on=!root.classList.contains("vertical");set(on);try{localStorage.setItem(KEY,on?"1":"0");}catch(e){}});
   function toast(msg){var d=document.createElement("div");d.className="toast";d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove();},2200);}
@@ -73,7 +72,12 @@ HILLS = (
     "</svg>"
 )
 SEAL = '<svg class="seal" viewBox="0 0 64 64" aria-label="天下大勢"><rect x="2" y="2" width="60" height="60" rx="6"/>' \
-       '<text x="20" y="20">天</text><text x="44" y="20">大</text><text x="20" y="44">下</text><text x="44" y="44">勢</text></svg>'
+       '<text x="44" y="20">天</text><text x="44" y="44">下</text><text x="20" y="20">大</text><text x="20" y="44">勢</text></svg>'
+
+
+def slip_size(title: str) -> int:
+    """題簽的字級：篇名的字數越多字越小，一律排進一條直書的題簽（四字以內 30px）。web/app.js 的 slipSize 同一條算法。"""
+    return min(30, int(176 / len(title) / 1.3))
 
 
 def page(row: dict, scenario: str, url: str, image: str) -> str:
@@ -96,7 +100,7 @@ def page(row: dict, scenario: str, url: str, image: str) -> str:
 <title>{escape(head)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
 {meta}<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="{FONT}"><style>{CSS}</style></head>
-<body><header class="cover">{HILLS}<i class="moon" aria-hidden="true"></i><div class="slip"><h1>{escape(head)}</h1></div>
+<body><header class="cover">{HILLS}<i class="moon" aria-hidden="true"></i><div class="slip" style="--slip-size:{slip_size(head)}px"><h1>{escape(head)}</h1></div>
 <p class="sub">{escape(sub)}</p></header>
 <div class="bar"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
 <main class="leaf"><article class="text">{body}</article>{SEAL}</main>

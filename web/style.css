@@ -1103,6 +1103,8 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 
 /* 玩家傳（第二批，zhuanHtml）：跟武學譜同一本書（.book-layer、.book-cover、.leaf），內文是橫排的史書段落，可以切直書；
    評曰那一段上面一道界線、不縮排；最後蓋上名號的朱印。公開分享的網址可以選取（複製不了時長按） */
+.zhuan-layer .book-cover { height: 240px; }
+.zhuan-layer .book-title span { font-size: var(--slip-size, 30px); letter-spacing: calc(var(--slip-size, 30px) * 0.3); }
 .zhuan-tools { display: flex; justify-content: flex-end; margin-bottom: -10px; }
 .zhuan-toggle {
   font: 600 14px var(--bk-serif); color: var(--bk-ink); background: var(--bk-paper); border: 1px solid var(--bk-rule);
@@ -1114,7 +1116,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .zhuan-text p.ping { margin-top: 1.4em; padding-top: 1em; border-top: 1px solid var(--bk-rule); text-indent: 0; }
 .zhuan-text .seal { display: block; margin: 14px 0 0 auto; }
 .zhuan-text.vertical {
-  writing-mode: vertical-rl; height: 68vh; min-height: 400px; overflow-x: auto; overflow-y: hidden; line-height: 2.2;
+  writing-mode: vertical-rl; width: 100%; height: 68vh; min-height: 400px; overflow-x: auto; overflow-y: hidden; line-height: 2.2;
   background: repeating-linear-gradient(to left, transparent 0 calc(2.2em - 1px), rgba(169, 129, 75, 0.3) calc(2.2em - 1px) 2.2em) var(--bk-paper);
 }
 .zhuan-text.vertical p { margin: 0 0 0 1.1em; }
