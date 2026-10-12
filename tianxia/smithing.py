@@ -1,24 +1,22 @@
-"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批：自己打造）。
+"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批；打造隱藏配方設計第八節：不再叫模型取名）。
 
 | 誰 | 做什麼 |
 |---|---|
-| 模型 | 只替這一季第一次打出來的配方取名字＋一句說明（三段式），一個數字都不碰 |
-| 引擎 | 配方鍵、屬性、階、工錢、品質擲骰、全服登記、淬煉 |
+| 引擎 | 配方鍵、屬性、階、工錢、品質擲骰、名字（一般組合照對照表）、淬煉 |
+| 模型 | 不碰打造 |
 
 這個模組 import team 與 fusion（品質的推法、悟性、天時地利）；team 會 import weapons，所以 weapons 不能 import 這裡。
 鐵匠鋪的選單項（Option）在 engine 裡，回選單的函式延後 import（同 foreshadow.talk_options）。"""
 from __future__ import annotations
 
-import functools
 import random
 from collections import Counter
 
-from . import equipment, fusion, naming, team, weapons
+from . import equipment, fusion, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
-from .ollama_client import OllamaClient
-from .state import GameState, SmithDraft, Weapon, WeaponRecipe
+from .state import GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
 NOT_ENOUGH = "身上的素材不到兩個"  # 待 joy 潤
@@ -104,77 +102,22 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
     return fusion.odds_from_points(scored, rule, rule.odds)
 
 
-SYSTEM = (
-    "你是武俠小說裡替兵器取名的鑄劍師。你只負責取名字、寫一句話的說明，"
-    "**絕對不要提到任何數字、品質、等級或威力**。全程使用繁體中文。"
-)
 FORGED = "鐵匠把{what}下爐，打出一把【{name}】（{kind}・屬{attribute}・{grade}）。"  # 待 joy 潤
-FIRST_LINE = "這是江湖上第一次有人打出這把兵器——這個配方從此就叫這個名字。"  # 待 joy 潤
-MINE_LINE = "這是你首創的配方，又打了一把。"  # 待 joy 潤
-FOLLOW_LINE = "這個配方由{who}首創，你照著打出了同一把。"  # 待 joy 潤
-FIZZLE = "爐火熄了，這一次什麼也沒打成（名字都被用掉了，再試一次）。"  # 待 joy 潤
 
 
-def _messages(content: Content, kind: str, main: str, aux: str, attribute: str, tier: int) -> list[dict[str, str]]:
-    """取名的提示（附帶決定 c）：寫明兵器種類與要帶的字，不寫任何數字。"""
-    m, a = content.materials[main], content.materials[aux]
-    noun = weapons.NOUNS[kind]
-    words = "、".join(f"「{w}」" for w in weapons.WEAPON_WORDS[kind])
-    return [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": (
-            f"鐵匠拿{m.name}（屬{m.attribute}）當主料、{a.name}（屬{a.attribute}）當輔料，打出一把{noun}："
-            f"屬{attribute}、{weapons.TIER_WORDS[tier]}。\n"
-            f"名字裡要有 {words} 其中一個，看得出是{noun}；不要用別種兵器的字。\n{naming.FORMAT_RULES}"
-        )},
-    ]
-
-
-def forge_request(
-    state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str,
-) -> naming.NamingRequest | None:
-    """A 段（行動鎖內、很快；Game.smith_forge_request 的本體）：這一爐是這一季沒人打過的配方，就開一張取名的單子給 B 段
-    （naming.generate）；打不成（forge_problem）、配方已經有人登記（查表就好）是 None。只讀。"""
-    if forge_problem(state, content, kind, main, aux) is not None:
-        return None
-    key = weapons.recipe_key(kind, main, aux)
-    if world.lookup_weapon_recipe(key) is not None:
-        return None
-    tier = tier_of(content, main)
-    return naming.NamingRequest(
-        "weapon", key, kind, _messages(content, kind, main, aux, attribute_of(world, content, kind, main, aux), tier),
-        check=functools.partial(weapons.kind_problem, kind),
-    )
-
-
-def _candidates(content: Content, world: WorldStateStore, key: str, kind: str, tianji: int, name: str | None):
-    """登記時依序試的名字：先試模型取的（有的話），再試退路字表（種子是配方鍵＋天機、鹽從 0 起；同 fusion._candidates），
-    組出來剛好是某個角色名號的跳過（FB-069）。"""
-    if name is not None:
-        yield name
-    for salt in range(naming.CLAIM_ATTEMPTS):
-        fallback = weapons.fallback_name(content, key, kind, salt=salt, tianji=tianji)
-        if not world.is_character_name(fallback):
-            yield fallback
-
-
-def _arrival(state: GameState, recipe: WeaponRecipe, first: bool) -> str:
-    tail = f"\n{recipe.note}" if recipe.note else ""
-    if first:
-        return tail + "\n" + FIRST_LINE
-    if recipe.creator == state.player.name:
-        return tail + "\n" + MINE_LINE
-    return tail + "\n" + FOLLOW_LINE.format(who=recipe.creator_shown or recipe.creator or "不知名的前人")
+def general_name(content: Content, world: WorldStateStore, kind: str, main: str, aux: str) -> str:
+    """一般組合的名字（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條）：上線前這一季登記過的「兵|」配方照登記的名字（10.1：只讀、
+    不再新增，同一季同一個組合前後才不會兩個名字；下一季起表裡沒有），其餘照對照表（weapons.table_name）。不叫模型、不登記。"""
+    old = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
+    return old.name if old is not None else weapons.table_name(content, kind, main, aux)
 
 
 def forge(
-    state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    kind: str, main: str, aux: str, proposed: tuple[str | None, str] | None = None, rng: random.Random | None = None,
+    state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str, rng: random.Random | None = None,
 ) -> tuple[Weapon | None, list[str]]:
-    """C 段（鎖內）：打一把（4.2～4.4）。回（那一把, 訊息）；打不成回 (None, [原因])，什麼都不收、不登記。
-    配方這一季沒人打過：proposed 是鎖外先取好的（名字, 說明），再過一次 naming.recheck 與 kind_problem；沒給（整季機器人、腳本、測試）
-    才在這裡叫模型（client 是 Game._quick_client 的複本）；過不了走退路字表，claim_weapon_recipe 原子登記，名字撞到就換下一個。
-    品質照 forge_odds 擲（熟手照這一爐之前打過幾次）；收工錢與兩樣素材、熟手 +1、放進手上或裝備庫，別人首創的記首創名望回饋。"""
+    """打一把（兵器設計 4.2、4.3；打造隱藏配方設計 4.1）：一次拿鎖做完，不叫模型、不登記、沒有首創。回（那一把, 訊息）；打不成回
+    (None, [原因])，什麼都不收。名字照 general_name；品質照 forge_odds 擲（rng 由呼叫端給：兵器是 Game.rng；沒給是下品）；
+    收工錢與兩樣素材、熟手 +1、放進手上或裝備庫。"""
     problem = forge_problem(state, content, kind, main, aux)
     if problem is not None:
         return None, [f"（{problem}。）"]
@@ -183,27 +126,8 @@ def forge(
     attribute = attribute_of(world, content, kind, main, aux)
     odds = forge_odds(state, content, world, kind, main, aux)
     setting = setting_points(state, content, attribute)
-    recipe, first = world.lookup_weapon_recipe(key), False
-    if recipe is None:
-        tianji, _ = fusion.recipe_seed(world, key)
-        check = functools.partial(weapons.kind_problem, kind)
-        if proposed is not None:
-            name, note = naming.recheck(content, proposed, person=world.is_character_name, check=check)
-        else:
-            name, note = naming.propose(
-                client, content, _messages(content, kind, main, aux, attribute, tier), person=world.is_character_name, check=check,
-            )
-        for candidate in _candidates(content, world, key, kind, tianji, name):
-            draft = WeaponRecipe(
-                name=candidate, key=key, kind=kind, attribute=attribute, tier=tier, main=main, aux=aux,
-                creator=state.player.name, creator_shown=state.player.name, note=note if candidate == name else "",
-            )
-            recipe, first = world.claim_weapon_recipe(key, draft)
-            if recipe is not None:
-                break
-        if recipe is None:
-            return None, [FIZZLE]
-    quality = fusion.roll_quality(odds, rng)
+    name = general_name(content, world, kind, main, aux)
+    quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
     p = state.player
     used = Counter([main, aux])
     for mid, n in used.items():
@@ -213,16 +137,14 @@ def forge(
     cost = price(content, tier)
     p.stats["silver"] -= cost
     p.forge_counts[key] = p.forge_counts.get(key, 0) + 1
-    weapon = weapons.new_weapon(state, name=recipe.name, kind=kind, attribute=recipe.attribute, tier=tier, quality=quality, recipe=key)
+    weapon = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key)
     m, a = content.materials[main], content.materials[aux]
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
-    msgs = [FORGED.format(what=what, name=recipe.name, kind=kind, attribute=recipe.attribute, grade=weapons.grade(weapon))
-            + _arrival(state, recipe, first)]
+    msgs = [FORGED.format(what=what, name=name, kind=kind, attribute=attribute, grade=weapons.grade(weapon))]
     msgs += setting_line(content, setting)
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
     msgs.append(weapons.store(state, content, weapon))
-    fusion.echo(state, content, recipe, first, made="打")
     return weapon, msgs
 
 
@@ -238,7 +160,6 @@ CANCEL = "smith:forge-cancel"
 GO_VERB = "forge-go"
 STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "forge-cancel", "temper")
 FORGE_TITLE = "打造"
-FORGE_WAIT = "鐵匠掂著料，想給它取個名字……"  # 待 joy 潤：首創配方等模型取名時按鈕上的字（Option.wait）
 ASK_KIND = "要打哪一種兵器？"  # 待 joy 潤
 ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"  # 待 joy 潤
 ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"  # 待 joy 潤
@@ -247,10 +168,8 @@ PICKED_KIND = "兵器：{what}。"  # 待 joy 潤：每挑一樣，這一步的�
 PICKED_MAIN = "主料：{what}。"  # 待 joy 潤
 PICKED_AUX = "輔料：{what}。"  # 待 joy 潤
 CANCELLED = "你把素材收了回去，這回先不打。"  # 待 joy 潤
-NEW_RECIPE = "這個配方還沒人打過"  # 待 joy 潤
-KNOWN_RECIPE = "照【{name}】的配方打"  # 待 joy 潤
 ATTR_MARK = "・跟你的武學同屬性"  # 待 joy 潤
-GO_LABEL = "開爐：{what} → {head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料
+GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD（Task 8）
 
 
 def is_go(option_id: str) -> bool:
@@ -351,24 +270,21 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
 
 
 def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
-    """開爐那一顆：先寫放進爐裡的主料＋輔料，再寫配方名（有人打過）或「還沒人打過」、種類屬性階、工錢與三個品質的機率（不寫品級）；
-    打不成灰掉寫原因。沒人打過的要等模型取名，帶 wait。"""
+    """開爐那一顆（打造隱藏配方設計 6.4）：寫放進爐裡的主料＋輔料、種類、屬性、階、工錢與三個品質的機率（不寫品級）；不寫名字、
+    不帶 wait（不再等模型）。打不成灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
-    known = world.lookup_weapon_recipe(weapons.recipe_key(kind, main, aux))
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)
-    head = KNOWN_RECIPE.format(name=known.name) if known else NEW_RECIPE
     odds = fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))
     note = problem or f"工錢 {price(content, tier)} 兩；{odds}"
-    attribute = attribute_of(world, content, kind, main, aux)
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",
         label=GO_LABEL.format(
-            what=f"{content.materials[main].name}＋{content.materials[aux].name}", head=head, kind=weapons.NOUNS[kind],
-            attribute=attribute, tier=weapons.TIER_WORDS[tier], note=note,
+            what=f"{content.materials[main].name}＋{content.materials[aux].name}", head="", kind=weapons.NOUNS[kind],
+            attribute=attribute_of(world, content, kind, main, aux), tier=weapons.TIER_WORDS[tier], note=note,
         ),
-        enabled=problem is None, wait="" if known else FORGE_WAIT,
+        enabled=problem is None,
     )
 
 

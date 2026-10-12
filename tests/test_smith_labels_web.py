@@ -25,7 +25,7 @@ ROOT = Path(__file__).parent.parent
 
 # FB-132 回報的那一爐（375×812 折四行）：主料＋輔料、還沒人打過、拳套・屬陰・三階、工錢與三個機率、一句原因
 GO = smithing.GO_LABEL.format(
-    what="鎮山鐵＋化水晶", head=smithing.NEW_RECIPE, kind="拳套", attribute="陰", tier="三階",
+    what="鎮山鐵＋化水晶", head="", kind="拳套", attribute="陰", tier="三階",
     note="工錢 150 兩；下品 46%、中品 32%、上品 22%（輔料壓得住主料）",
 )
 MAIN = "主料：掣電鱗（快・三階・剩 1・工錢 150 兩）"
@@ -69,12 +69,10 @@ def test_the_forge_go_label_is_cut_into_unbroken_chunks_without_changing_a_word(
     chunks, text = _chunks(page, oid)
     assert "".join(_pieces(page, oid)) == GO == text.strip()  # 字一個都沒多沒少，只是多包了幾層
     # FB-132 被拆開的詞，每個都完整躺在某一段裡
-    for whole in ("下品 46%、", "中品 32%、", "上品 22%", "這個配方還沒人打過", "工錢 150 兩；", "（拳套・", "屬陰・", "化水晶 →"):
+    for whole in ("下品 46%、", "中品 32%、", "上品 22%", "工錢 150 兩；", "（拳套・", "屬陰・", "化水晶"):
         assert whole in chunks, whole
     assert any("壓得住" in c for c in chunks) and all(len(c) <= 16 for c in chunks)
     assert not any(c.startswith(("、", "；", "・", "）", "→")) for c in chunks)  # 沒有以標點開頭的行頭
-    # 「→」後面的空白在 span 外面：行內區塊尾巴上的空白會被吃掉，畫面就變成「化水晶 →這個配方」
-    assert '<span class="nb">化水晶 →</span> <span class="nb">這個配方還沒人打過</span>' in page
     assert not any(c != c.rstrip() for c in chunks) and "  " not in text.strip()  # 也沒有多出第二個空白
 
 

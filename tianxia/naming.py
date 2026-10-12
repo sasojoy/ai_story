@@ -41,7 +41,7 @@ def per_post_seconds(client, left: float) -> float | None:
 @dataclass(frozen=True)
 class NamingRequest:
     """A 段（行動鎖內、很快）開的單子：這一爐要模型取名或挑一個時，B 段需要的全部東西。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。
-    kind 是 "fuse"（武學＋意境）、"merge"（意境＋意境）或 "blend"（武學＋武學）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）；兵器（kind "weapon"）是兵器種類。
+    kind 是 "fuse"（武學＋意境）、"merge"（意境＋意境）或 "blend"（武學＋武學）；key 是配方鍵；name_kind 是退路字表的種類（內功、武學、意境）。
     choices 不是空的：這一爐合到舊的（武學與成長設計 12.2），模型只能從這幾個名字裡挑一個（naming.pick），不取新名字。"""
 
     kind: str
@@ -49,8 +49,6 @@ class NamingRequest:
     name_kind: str
     messages: list[dict[str, str]]
     choices: tuple[str, ...] = ()
-    # 名字另外要過的檢查（兵器：要帶這一種兵器的字、不能有別種的字，weapons.kind_problem）；None＝沒有。B 段的 propose 與 C 段的 recheck 都跑
-    check: Callable[[str], str | None] | None = None
 
 
 SYSTEM_PROMPT = (
@@ -148,7 +146,7 @@ def _ask(
 
 def propose(
     client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
-    person: PersonCheck | None = None, check: Callable[[str], str | None] | None = None,
+    person: PersonCheck | None = None,
 ) -> tuple[str | None, str]:
     """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
     client 是 None（鎖內的 Game 沒有 client：伺服器假人的 Game，bot_runner 把 game.client 設成 None）時不叫模型；
@@ -163,7 +161,7 @@ def propose(
 
     def accept(reply: NameReply) -> tuple[str, str] | None:
         name = clean_name(reply.name)
-        if name_problem(name, content, person) is not None or (check is not None and check(name) is not None):
+        if name_problem(name, content, person) is not None:
             return None
         return name, zh.to_traditional((reply.description or "").strip())
 
@@ -195,12 +193,11 @@ def generate(
     person 是角色名號的查詢（server 與假人程式都給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
     if request.choices:
         return pick(client, request.messages, request.choices, budget=budget)
-    return propose(client, content, request.messages, budget=budget, person=person, check=request.check)
+    return propose(client, content, request.messages, budget=budget, person=person)
 
 
 def recheck(
     content: Content, proposed: tuple[str | None, str], person: PersonCheck | None = None,
-    check: Callable[[str], str | None] | None = None,
 ) -> tuple[str | None, str]:
     """C 段（鎖內）登記之前，把鎖外拿到的名字再過一次完整的過濾：整理包裝、轉繁體（含異體字表）、長度與字、禁用詞、
     跟素材／人物／內容武學／意境同名，給了 person 也擋角色的名號（FB-069）。過不了就是 (None, "")，呼叫端走退路字表。
@@ -210,7 +207,7 @@ def recheck(
     if name is None:
         return None, ""
     name = clean_name(name)
-    if name_problem(name, content, person) is not None or (check is not None and check(name) is not None):
+    if name_problem(name, content, person) is not None:
         return None, ""
     return name, zh.to_traditional((note or "").strip())
 

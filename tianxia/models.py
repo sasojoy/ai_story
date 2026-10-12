@@ -147,13 +147,16 @@ class CraftNames(_Strict):
 
     用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
     而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
+
+    兵器、防具的一般組合不照雜湊挑：字首照主料、中間字照輔料在素材表的位置取（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條），
+    所以 prefixes 與 weapon（之後 armor）的前「素材數」個字不能重複；新素材加在 materials.json 最後，不然後面幾種素材的字會位移。
     """
 
     prefixes: list[str]
     wugong: list[str]  # 武學的字尾
     neigong: list[str]  # 內功的字尾
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
-    # 兵器配方的退路中間字（兵器設計 4.4、附帶決定 c）：字首＋這一個字＋兵器字；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
+    # 兵器一般組合的中間字（打造隱藏配方設計 4.1）：照輔料在素材表的位置取；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
     weapon: list[str] = Field(default_factory=lambda: list("霜霆雷星月嵐濤岳燼鳴影紋芒魄痕翎"))
 
 

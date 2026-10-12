@@ -1556,6 +1556,11 @@ def validate(c: Content) -> None:
             reason = name_problem(prefix + suffix, c)
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     need(bool(names.weapon), "craft_names.weapon 不能是空的")
+    count = len(c.materials)  # 一般組合的名字照素材的位置取字（打造隱藏配方設計 4.1）：前 count 個字要夠、不能重複，名字才不會撞
+    for field in ("prefixes", "weapon"):
+        chars = getattr(names, field)[:count]
+        need(len(chars) == count and len(set(chars)) == count,
+             f"craft_names.{field} 至少要 {count} 個不重複的字（一般組合的名字照素材的位置取字；新素材加在 materials.json 最後）")
     for prefix in names.prefixes:
         for middle in names.weapon:
             for kind, noun in WEAPON_NOUNS.items():
