@@ -63,12 +63,69 @@ def test_the_wield_button_sends_the_weapon_id(views):
 
 
 def test_nothing_is_drawn_without_gear(views):
+    """四欄都關著（slots 空）、或舊的伺服器沒有 gear 這一欄：整塊不畫。開著但身上什麼都沒有的樣子見下面 FB-138 那幾個。"""
     m, x = views
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)  # 測試內容把武器、防具都關著
-    x["gear"] = _gear(weapon={"worn": None, "rack": []}, armor={"worn": None, "rack": []})
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)  # 開著但什麼都沒有
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)  # 測試內容把武器、防具都關著
+    x["gear"] = _gear()
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)
     del x["gear"]  # 舊的伺服器沒有這一欄
-    assert 'class="gear"' not in run(m, "return H.pagePractice();", menxia=x)
+    assert 'class="gear' not in run(m, "return H.pagePractice();", menxia=x)
+
+
+def _where_gear():
+    """身上什麼裝備都沒有的新角色：四欄都開著、都空著（server.menxia_view 的 gear，每一段多 where：skillview.gear_rows）。"""
+    return {"cap": 100, "used": 0, "held_note": "", "slots": [
+        {"slot": "weapon", "label": "武器", "empty": "手上沒有兵器。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
+        {"slot": "armor", "label": "防具", "empty": "身上沒有防具。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
+        {"slot": "mount", "label": "坐騎", "empty": "身上沒有坐騎。", "note": "", "where": "馬市買得到駑馬：涿郡、汝南集市、宛城、下曲陽。", "worn": None, "rack": []},
+        {"slot": "treasure", "label": "寶物", "empty": "身上沒有寶物。", "note": "", "where": "買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來。", "worn": None, "rack": []},
+    ]}
+
+
+def test_a_player_with_no_gear_still_gets_a_compact_gear_block_saying_where_to_get_each(views):
+    """FB-138：四欄都開著卻都空著，也畫「裝備」塊——每一欄一行：欄名、空著的那一句、哪裡買得到；沒有鈕、沒有裝備庫的格數。
+    馬市的地名、鐵匠鋪在哪都是伺服器照內容給的 where，網頁不寫死。"""
+    m, x = views
+    x["gear"] = _where_gear()
+    page = run(m, "return H.pagePractice();", menxia=x)
+    block = page.split('class="gear gear-empty"')[1].split("功法庫")[0]  # 這一塊後面接的是「功法庫」那一段
+    assert "裝備" in block
+    for slot, label, empty in (("weapon", "武器", "手上沒有兵器。"), ("armor", "防具", "身上沒有防具。"), ("mount", "坐騎", "身上沒有坐騎。"), ("treasure", "寶物", "身上沒有寶物。")):
+        line = block.split(f'data-empty="{slot}"')[1].split("</p>")[0]
+        assert label in line and empty in line
+    assert "馬市買得到駑馬：涿郡、汝南集市、宛城、下曲陽。" in block and block.count("城鎮裡的鐵匠鋪買得到。此地就有。") == 2
+    assert "只從懸賞、名將、奇遇與打敗大勢人物得來" in block
+    assert "<button" not in block and "裝備庫" not in block  # 沒有東西可換、沒有格數可講
+    assert 'class="gear"' not in page and 'data-slot=' not in page  # 完整的那一塊（每段有身上與裝備庫）這時候不畫
+
+
+def test_the_compact_gear_block_skips_unknown_slots_and_escapes_the_text(views):
+    m, x = views
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][2]["where"] = "<b>馬市</b>在<i>這裡</i>"
+    x["gear"]["slots"][3]["where"] = ""  # 內容裡沒有那種地點：只有空著的那一句
+    x["gear"]["slots"].append({"slot": "future", "label": "未來", "empty": "什麼都沒有。", "note": "", "where": "某處", "worn": None, "rack": []})
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert 'data-empty="future"' not in page and "什麼都沒有" not in page
+    assert "&lt;b&gt;馬市&lt;/b&gt;在&lt;i&gt;這裡&lt;/i&gt;" in page and "<b>馬市</b>在" not in page
+    treasure = page.split('data-empty="treasure"')[1].split("</p>")[0]
+    assert "身上沒有寶物。" in treasure and "undefined" not in treasure
+
+
+def test_the_full_gear_block_comes_back_once_anything_is_worn_or_held(views):
+    """身上有任何一件、裝備庫裡有任何一件、或有寄放的，就是原本完整的那一塊（每段身上與裝備庫、「換上」鈕），不是精簡的。"""
+    m, x = views
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][0]["worn"] = _row()
+    full = run(m, "return H.pagePractice();", menxia=x)
+    assert 'class="gear"' in full and "gear-empty" not in full and 'data-slot="weapon"' in full and "【試刃】" in full
+    x["gear"] = _where_gear()
+    x["gear"]["slots"][1]["rack"] = [_armor_row()]
+    assert "gear-empty" not in run(m, "return H.pagePractice();", menxia=x)
+    x["gear"] = _where_gear()
+    x["gear"]["held_note"] = "寄放著：【叩關玉】"
+    held = run(m, "return H.pagePractice();", menxia=x)
+    assert "gear-empty" not in held and "寄放著：【叩關玉】" in held
 
 
 def test_a_long_rack_lists_eight_and_then_a_more_button(views):

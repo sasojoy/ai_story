@@ -2196,9 +2196,15 @@
     // 寄放著的東西（裝備四欄 6.5：懸賞的重賞、名將贈禮在裝備庫滿了時先寄放）寫在塊底下一行灰字；身上、裝備庫都空著也照樣畫這一塊
     const heldLine = gear && gear.held_note ? `<p class="muted">${esc(gear.held_note)}</p>` : "";
     // 塊名由「兵器」改成「裝備」（待 joy 潤）；段名（武器、防具）是伺服器給的 label
-    const gearBlock = gear && (heldLine || gear.slots.some((g) => g.worn || g.rack.length)) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
+    const hasGear = gear && (heldLine || gear.slots.some((g) => g.worn || g.rack.length));
+    // FB-138：開著的欄位都空著、也沒有寄放的（新角色）也畫一塊精簡的：每欄一行，欄名、空著的那一句、哪裡買得到（where，伺服器照內容的地點標籤給；
+    // 內容裡沒有那種地點時是空字串，只寫空著的那一句）。沒有按鈕、沒有格數。這一版畫不出的欄位略過；四欄都關著（slots 空）整塊不畫。待 joy 潤
+    const emptyLines = gear && !hasGear ? gear.slots.filter((g) => GEAR_ROWS[g.slot]).map((g) => `<p data-empty="${esc(g.slot)}"><b>${esc(g.label)}</b>　${esc(g.empty)}${g.where ? esc(g.where) : ""}</p>`) : [];
+    const gearBlock = hasGear ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
         ${gear.slots.map(slotBlock).join("")}
         ${heldLine}
+      </div>` : emptyLines.length ? `<div class="gear gear-empty"><div class="label">裝備 <small class="muted">身上還沒有任何裝備</small></div>
+        ${emptyLines.join("")}
       </div>` : "";
     return `
       ${proGuide()}

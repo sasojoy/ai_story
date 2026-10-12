@@ -43,6 +43,8 @@ DISMANTLABLE = ("weapon", "armor")  # 拆得了的（4.8：坐騎、寶物沒有
 SMITH = "鐵匠鋪"
 TOWN_TAG = "城鎮"
 NOT_HERE = "這裡沒有鐵匠鋪"
+SMITH_WHERE = "城鎮裡的鐵匠鋪買得到。"  # 待 joy 潤（FB-138）：修練頁「裝備」塊武器、防具空著時，每一行寫哪裡買得到
+WHERE_HERE = "此地就有。"  # 待 joy 潤（FB-138）：人正站在那種地方（鐵匠鋪看是不是城鎮、馬市看有沒有馬市標籤）時，接在後面
 RACK_FULL = "裝備庫滿了"  # 程式裡的 rack、rack_cap、rack_full 就是玩家看到的「裝備庫」（企劃者 2026-10-10 由「兵器架」改名）
 NO_REPAIR_MATERIAL = "沒有一階素材"
 STORED = "【{name}】放上了裝備庫。"
@@ -85,6 +87,14 @@ def in_town(state: GameState, content: Content) -> bool:
     if state.player.journey is not None:
         return False
     return TOWN_TAG in (content.locations[state.player.location].tags or [])
+
+
+def smith_where(state: GameState, content: Content) -> str:
+    """修練頁武器、防具那一段「哪裡買得到」（FB-138；網頁在身上什麼裝備都沒有時畫精簡的一塊）：鐵匠鋪在帶「城鎮」標籤的地點
+    （地點資料讀內容，不寫死地名；內容裡一處城鎮都沒有就不寫）；人正站在城鎮（in_town）多接一句「此地就有」。"""
+    if not any(TOWN_TAG in (loc.tags or []) for loc in content.locations.values()):
+        return ""
+    return SMITH_WHERE + (WHERE_HERE if in_town(state, content) else "")
 
 
 def rack_full(state: GameState, content: Content, slot: str) -> bool:
