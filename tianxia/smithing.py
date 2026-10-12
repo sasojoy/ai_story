@@ -244,7 +244,8 @@ ATTR_MARK = "・跟你的武學同屬性"  # 待 joy 潤
 ARMOR_ASK_MAIN = "挑主料：主料定這件防具的階，也定工錢。"  # 待 joy 潤（防具沒有挑種類那一步，打開就從主料挑起）
 ARMOR_ASK_AUX = "挑輔料：主料與輔料合起來定這件防具的屬性。"  # 待 joy 潤
 ARMOR_ATTR_MARK = "・跟你的內功同屬性"  # 待 joy 潤（防具看內功，四欄設計 4.2）
-GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD（Task 8）
+GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD
+SOLVED_HEAD = " → 照鑄譜上的【{name}】打"  # 待 joy 潤：這一爐在自己的鑄譜上打中過才寫（打造隱藏配方設計 6.4）；別人打中的、沒打中過的都不寫
 
 
 def is_go(option_id: str) -> bool:
@@ -359,10 +360,12 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
 
 
 def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
-    """開爐那一顆（打造隱藏配方設計 6.4）：寫放進爐裡的主料＋輔料、種類、屬性、階、工錢與三個品質的機率（不寫品級）；不寫名字、
-    不帶 wait（不再等模型）。防具的種類那一格寫「防具」（noun_label）。打不成灰掉寫原因。"""
+    """開爐那一顆（打造隱藏配方設計 6.4）：寫放進爐裡的主料＋輔料、種類（防具寫「防具」，noun_label）、屬性、階、工錢與三個品質的
+    機率（不寫品級）；不帶 wait（不再等模型）。不露隱藏配方：只有這一爐在**自己的**鑄譜上打中過，才在兩樣後面接 SOLVED_HEAD
+    （別人打中的、沒打中過的都不寫）。打不成灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
+    known = forge_secrets.solved_name(state, content, world.read().tianji, slot_of(kind), kind, main, aux)
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)
     odds = fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))
@@ -370,7 +373,8 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",
         label=GO_LABEL.format(
-            what=f"{content.materials[main].name}＋{content.materials[aux].name}", head="", kind=noun_label(kind),
+            what=f"{content.materials[main].name}＋{content.materials[aux].name}",
+            head=SOLVED_HEAD.format(name=known) if known else "", kind=noun_label(kind),
             attribute=attribute_of(world, content, kind, main, aux), tier=weapons.TIER_WORDS[tier], note=note,
         ),
         enabled=problem is None,

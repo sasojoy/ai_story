@@ -2732,8 +2732,18 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def _smith(self, arg: str) -> list[str]:
-        """鐵匠鋪上的選擇：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子與停在哪一頁）。
-        做完選單還開著，可以接著挑。"""
+        """鐵匠鋪上的選擇（_smith_act）；這一下花了銀兩或素材（買、修、淬煉、開爐；拆解拿到素材不算），再擲一次鐵匠順口（_smith_clue；
+        打造隱藏配方設計 6.2、計畫「要 PM 定的」第 3 條）。"""
+        p = self.state.player
+        silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
+        msgs = self._smith_act(arg)
+        if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
+            msgs = msgs + self._smith_clue()
+        return msgs
+
+    def _smith_act(self, arg: str) -> list[str]:
+        """鐵匠鋪上的一下（_smith 包著它）：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子
+        與停在哪一頁）。做完選單還開著，可以接著挑。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
@@ -4935,23 +4945,51 @@ class Game:
         return msgs + self._apply(choice.effect) + self._tale_clue(event)
 
     def _tale_clue(self, event: Event) -> list[str]:
-        """說書的事件了結時，偶爾多一句說書版的口訣（Config.secrets，tianxia/secret_recipes.py），記進武學譜。
-        擲骰用自己的亂數，不動 self.rng。"""
+        """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次
+        （Config.forge_secrets，打造隱藏配方設計 6.2，兩句都中兩句都寫）。擲骰用自己的亂數，不動 self.rng。"""
         s, cfg = self.state, self.content.config.secrets
-        seed = f"說書|{s.player.name}|{s.world.time}|{event.id}"
-        if event.id not in cfg.tale_events or not secret_recipes.roll(cfg.tale_chance, seed):
+        if event.id not in cfg.tale_events:
             return []
-        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.TALE, seed)
-        return [cfg.tale_frame.format(clue=clue)] if clue else []
+        out = []
+        seed = f"說書|{s.player.name}|{s.world.time}|{event.id}"
+        if secret_recipes.roll(cfg.tale_chance, seed):
+            clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.TALE, seed)
+            if clue:
+                out.append(cfg.tale_frame.format(clue=clue))
+        return out + self._forge_clue(forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
 
     def _scrap_find(self) -> list[str]:
-        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；同 _tale_clue 用自己的亂數。"""
+        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；再擲一次半張鑄譜（打造隱藏配方設計 6.2），記進鑄譜。
+        同 _tale_clue 用自己的亂數。"""
         s, cfg = self.state, self.content.config.secrets
+        out = []
         seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
-        if not secret_recipes.roll(cfg.scrap_chance, seed):
+        if secret_recipes.roll(cfg.scrap_chance, seed):
+            clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
+            if clue:
+                out.append(cfg.scrap_frame.format(clue=clue))
+        return out + self._forge_clue(forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
+
+    def _forge_clue(self, source: int, seed: str) -> list[str]:
+        """說書與殘譜的鑄器口訣（打造隱藏配方設計 6.2）：擲 tale_chance／scrap_chance（自己的亂數），中了照 forge_secrets.hear 挑一句、
+        記進鑄譜。"""
+        rule = self.content.config.forge_secrets
+        chance, frame = (rule.tale_chance, rule.tale_frame) if source == forge_secrets.TALE else (rule.scrap_chance, rule.scrap_frame)
+        if not secret_recipes.roll(chance, seed):
             return []
-        clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
-        return [cfg.scrap_frame.format(clue=clue)] if clue else []
+        clue = forge_secrets.hear(self.state, self.content, secret_recipes.tianji_of(self.world), source, seed)
+        return [frame.format(clue=clue)] if clue else []
+
+    def _smith_clue(self) -> list[str]:
+        """鐵匠順口（打造隱藏配方設計 6.2；計畫「要 PM 定的」第 3 條）：鐵匠鋪的動作不花時間，種子多帶這一下之後的銀兩與素材數，
+        同一刻連按也各擲各的；中了說出這家知道的那一句（已經聽過不再說）。自己的亂數，不動 self.rng。"""
+        s, rule = self.state, self.content.config.forge_secrets
+        p = s.player
+        seed = f"鐵匠|{p.name}|{s.world.time}|{p.location}|{p.stats.get('silver', 0)}|{sum(p.materials.values())}"
+        if not secret_recipes.roll(rule.smith_chance, seed):
+            return []
+        clue = forge_secrets.hear_smith(s, self.content, secret_recipes.tianji_of(self.world))
+        return [rule.smith_frame.format(clue=clue)] if clue else []
 
     def _overhear(self, companion_id: str, msgs: list[str]) -> list[str]:
         """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
@@ -7280,6 +7318,8 @@ class Game:
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
+            # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
+            "forge_manual": forge_secrets.view(s, c, self.world),
             "anonymous": p.anonymous,
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,

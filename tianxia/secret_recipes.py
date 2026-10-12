@@ -147,8 +147,8 @@ def solve(state: GameState, tianji: int, recipe: SecretRecipe) -> None:
         book.solved.append(recipe.id)
 
 
-def _note(book: Manual, recipe: SecretRecipe, source: int) -> bool:
-    """記下聽到這一句；本來就聽過回 False。"""
+def note(book: Manual, recipe: SecretRecipe, source: int) -> bool:
+    """記下聽到這一句（武學譜與鑄譜共用，recipe 只要有 id）；本來就聽過回 False。"""
     heard = book.heard.setdefault(recipe.id, [])
     if source in heard:
         return False
@@ -157,22 +157,28 @@ def _note(book: Manual, recipe: SecretRecipe, source: int) -> bool:
     return True
 
 
-def hear(state: GameState, content: Content, tianji: int, source: int, seed: str) -> str | None:
-    """說書與殘譜：挑這一季一條秘方的那一版口訣，記進武學譜，回那一句。先挑還沒合中、這一版還沒聽過的
-    （聽得最少的優先）；都聽過了就重說一句聽過的（不記）。這一季沒有秘方回 None。"""
-    recipes = active(content, tianji)
+def hear_from(recipes: list, book: Manual, source: int, seed: str) -> str | None:
+    """說書與殘譜的挑法（武學譜與鑄譜共用；打造隱藏配方設計 6.1）：先挑還沒合中（打中）、這一版還沒聽過的（聽得最少的優先），
+    記進那一本譜；都聽過了就重說一句聽過的（不記）。池子空的回 None。recipes 的每一條要有 id 與三句 clues。"""
     if not recipes:
         return None
-    book = manual(state, tianji)
     rng = random.Random(seed)
     fresh = [r for r in recipes if r.id not in book.solved and source not in book.heard.get(r.id, [])]
     if fresh:
         fewest = min(len(book.heard.get(r.id, [])) for r in fresh)
         recipe = rng.choice([r for r in fresh if len(book.heard.get(r.id, [])) == fewest])
-        _note(book, recipe, source)
+        note(book, recipe, source)
     else:
         recipe = rng.choice(recipes)
     return recipe.clues[source]
+
+
+def hear(state: GameState, content: Content, tianji: int, source: int, seed: str) -> str | None:
+    """說書與殘譜：挑這一季一條秘方的那一版口訣，記進武學譜，回那一句（挑法見 hear_from）。這一季沒有秘方回 None。"""
+    recipes = active(content, tianji)
+    if not recipes:
+        return None
+    return hear_from(recipes, manual(state, tianji), source, seed)
 
 
 def roll(chance: float, seed: str) -> bool:
@@ -216,7 +222,7 @@ def overheard(state: GameState, content: Content, world: WorldStateStore, compan
     recipe = talk_clue(content, tianji, companion_id)
     if recipe is None or _plain(recipe.clues[TALK]) not in _plain(text):
         return False
-    return _note(manual(state, tianji), recipe, TALK)
+    return note(manual(state, tianji), recipe, TALK)
 
 
 def view(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:

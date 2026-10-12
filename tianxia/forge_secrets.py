@@ -14,13 +14,15 @@ from __future__ import annotations
 
 import hashlib
 
-from . import equipment
+from . import armor, equipment, secret_recipes, weapons
 from .models import Content, ForgeSecret, ForgeSide, Material
 from .state import GameState, GearFind, Manual, PlayerState
+from .world_state import WorldStateStore
 
 PREFIX = "鑄|"  # gear_recipes 裡隱藏配方那幾列的鍵開頭（7.1）：不跟「融|」「合|」「兼|」「秘|」「兵|」「鎧|」撞；state.GearFind.id 用同一個字
 GROUPS = tuple(f"{slot}:{group}" for slot in ("weapon", "armor") for group in ("1", "2", "3", "divine"))
 SEED_PAIRS = ({"剛", "柔"}, {"快", "慢"})  # insights.merged_attribute 照種子挑的兩對：每季可能不同，隱藏配方不收（3.1）
+TALE, SMITH, SCRAP = 0, 1, 2  # 口訣的三個版本（ForgeSecret.clues 的位置；設計 6.1：武學的人物順口換成鐵匠順口）
 
 
 def _rank(tianji: int, recipe_id: str) -> bytes:
@@ -115,3 +117,71 @@ def refresh_names(p: PlayerState, content: Content) -> None:
         recipe = content.forge_secrets.get(item.secret)
         if recipe is not None:
             item.name = recipe.name
+
+
+# ── 線索與鑄譜（第六節）──────────────────────────────────
+
+
+def hear(state: GameState, content: Content, tianji: int, source: int, seed: str) -> str | None:
+    """說書與殘譜：照 secret_recipes.hear_from 挑這一季一條隱藏配方的那一版口訣，記進鑄譜，回那一句；這一季沒有隱藏配方回 None。"""
+    recipes = active(content, tianji)
+    if not recipes:
+        return None
+    return secret_recipes.hear_from(recipes, manual(state, tianji), source, seed)
+
+
+def towns(content: Content) -> list[str]:
+    """有鐵匠鋪的地方（標籤「城鎮」，同 equipment.in_town）。"""
+    return [lid for lid, loc in content.locations.items() if equipment.TOWN_TAG in (loc.tags or [])]
+
+
+def smith_clue(content: Content, tianji: int, location: str) -> ForgeSecret | None:
+    """這家鐵匠鋪這一季知道哪一條（6.2）：城鎮與這一季的隱藏配方各自照「天機|id」雜湊排好，第 i 家知道第 i mod 條數條；城鎮比條數多時
+    每一條至少有一家知道，想聽別條就要換一家。不是城鎮、這一季沒有隱藏配方是 None。"""
+    recipes = sorted(active(content, tianji), key=lambda r: _rank(tianji, r.id))
+    places = sorted(towns(content), key=lambda lid: hashlib.sha256(f"{tianji}|{lid}|鐵匠".encode("utf-8")).digest())
+    if not recipes or location not in places:
+        return None
+    return recipes[places.index(location) % len(recipes)]
+
+
+def hear_smith(state: GameState, content: Content, tianji: int) -> str | None:
+    """鐵匠順口（6.2）：這家知道的那一句（鐵匠版）直接記進鑄譜（不走 hear 的挑法，同人物順口）；已經聽過那一句就不再說，回 None。"""
+    recipe = smith_clue(content, tianji, state.player.location)
+    if recipe is None or not secret_recipes.note(manual(state, tianji), recipe, SMITH):
+        return None
+    return recipe.clues[SMITH]
+
+
+def recipe_text(content: Content, combo: str | None) -> str | None:
+    """鑄譜上寫的配方（6.3）：「劍：柳絲綿＋驚羽」「防具：流雲絮＋沉淵石」；認不得的鍵是 None。"""
+    parts = weapons.recipe_parts(combo)
+    if parts is not None:
+        return f"{weapons.NOUNS.get(parts[0], parts[0])}：{weapons.recipe_text(content, combo)}"
+    if armor.recipe_parts(combo) is not None:
+        return f"防具：{armor.recipe_text(content, combo)}"
+    return None
+
+
+def view(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
+    """鑄譜給畫面的資料（status_data["forge_manual"]，形狀同 secret_recipes.view 多一個 recipe）：這一季聽過口訣或打中過的隱藏配方，
+    一條一筆——聽過的那幾句（照版本的先後）、打中了寫名字與配方（照自己打中的那一爐）；沒聽過也沒打過的不露。"""
+    tianji = world.read().tianji
+    book = state.player.forge_manual if state.player.forge_manual.tianji == tianji else Manual(tianji=tianji)
+    rows = []
+    for recipe in active(content, tianji):
+        heard = book.heard.get(recipe.id, [])
+        solved = recipe.id in book.solved
+        if heard or solved:
+            rows.append({"clues": [recipe.clues[i] for i in heard], "solved": recipe.name if solved else None,
+                         "recipe": recipe_text(content, book.made.get(recipe.id)) if solved else None})
+    return rows
+
+
+def solved_name(state: GameState, content: Content, tianji: int, slot: str, kind: str | None, main: str, aux: str) -> str | None:
+    """開爐鈕上寫不寫名字（6.4）：這一爐合得上這一季的隱藏配方、而且**自己的**鑄譜上打中過它，才回它的名字；其餘 None（不露）。"""
+    recipe = match(content, tianji, slot, kind, main, aux)
+    book = state.player.forge_manual
+    if recipe is None or book.tianji != tianji or recipe.id not in book.solved:
+        return None
+    return recipe.name

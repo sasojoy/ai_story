@@ -236,3 +236,85 @@ def test_old_saves_read_with_empty_forge_fields(content):
     assert Equipment.model_validate_json(old).secret is None
     assert Manual.model_validate_json('{"tianji": 2, "heard": {}, "solved": []}').made == {}
     assert new_game_state(content, "甲").player.forge_manual == Manual()
+
+
+# ── Task 8：三種線索與鑄譜（引擎）──
+
+def test_tales_and_scraps_also_roll_forge_clues_on_their_own_dice(forge_content, world):
+    game = _smith(forge_content, world)
+    event = forge_content.events["drunk"]
+    rule = forge_content.config.forge_secrets
+    forge_content.config.secrets.tale_events = ["drunk"]  # 武學那一擲照舊用這張清單；測試內容沒有武學秘方，那一擲不會有字
+    assert game._tale_clue(event) == [] and game._scrap_find() == []  # 機率是 0：不擲
+    rule.tale_chance, rule.scrap_chance = 1.0, 1.0
+    before = game.rng.getstate()
+    tale = game._tale_clue(event)
+    scrap = game._scrap_find()
+    assert game.rng.getstate() == before  # 自己的亂數，不動 Game.rng
+    assert len(tale) == 1 and tale[0].startswith(rule.tale_frame.split("{clue}")[0])
+    assert len(scrap) == 1 and scrap[0].startswith(rule.scrap_frame.split("{clue}")[0])
+    book = game.state.player.forge_manual
+    assert {i for idx in book.heard.values() for i in idx} == {forge_secrets.TALE, forge_secrets.SCRAP}
+    assert game.state.player.manual.heard == {}  # 鑄器的口訣進鑄譜，不進武學譜
+    rows = game.status_data()["forge_manual"]
+    assert len(rows) == len(book.heard) and all(r["solved"] is None and r["recipe"] is None for r in rows)
+
+
+def test_each_smithy_knows_one_clue_and_tells_it_after_you_spend(forge_content, world):
+    game = _smith(forge_content, world)
+    rule = forge_content.config.forge_secrets
+    rule.smith_chance = 1.0
+    tianji = world.read().tianji
+    recipe = forge_secrets.smith_clue(forge_content, tianji, "town")
+    assert recipe is not None and forge_secrets.smith_clue(forge_content, tianji, "lake") is None  # 不是城鎮的地方沒有鐵匠
+    assert forge_secrets.smith_clue(forge_content, tianji, "town") is recipe  # 同一家這一季一直是同一條
+    said = rule.smith_frame.format(clue=recipe.clues[forge_secrets.SMITH])
+    game.choose("act:smith")
+    game.state.player.rack = [Weapon(id="兵:9", name="廢刃", kind="刀", attribute="剛", tier=1, quality="下品")]
+    assert said not in game.choose("smith:dismantle:兵:9")  # 拆解拿到素材、沒花錢：不擲
+    assert said in game.choose("smith:buy:劍")  # 花了銀兩：鐵匠順口說出這家知道的那一句
+    assert forge_secrets.SMITH in game.state.player.forge_manual.heard[recipe.id]
+    assert said not in game.choose("smith:buy:刀")  # 已經聽過那一句就不再說（免得洗版）
+    before = game.rng.getstate()
+    game._smith_clue()
+    assert game.rng.getstate() == before
+
+
+def test_the_smith_clue_rolls_again_after_each_spend_at_the_same_moment(forge_content, world, monkeypatch):
+    """「要 PM 定的」第 3 條：鐵匠鋪的動作不花時間，種子多帶這一下之後的銀兩與素材數，同一刻連按每一下都各擲各的。"""
+    game = _smith(forge_content, world)
+    forge_content.config.forge_secrets.smith_chance = 0.25
+    seeds = []
+    monkeypatch.setattr(secret_recipes, "roll", lambda chance, seed: seeds.append(seed) or False)
+    game.choose("act:smith")
+    game.choose("smith:buy:劍")
+    game.choose("smith:buy:刀")
+    smith_seeds = [x for x in seeds if x.startswith("鐵匠|")]
+    assert len(smith_seeds) == 2 and smith_seeds[0] != smith_seeds[1]
+
+
+def test_the_forge_book_shows_heard_clues_and_solved_recipes_with_their_mix(forge_content, world):
+    game = _smith(forge_content, world)
+    tianji = world.read().tianji
+    secret_recipes.note(forge_secrets.manual(game.state, tianji), JACKET, forge_secrets.SMITH)
+    smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    rows = game.status_data()["forge_manual"]
+    assert {"clues": [], "solved": "穿霞劍", "recipe": "劍：精鐵砂＋驚羽"} in rows  # 打中過：名字與配方（6.3）
+    assert {"clues": ["甲二句。"], "solved": None, "recipe": None} in rows  # 只聽過鐵匠那一句：不寫配方
+    assert len(rows) == 2  # 沒聽過也沒打過的（斷嶂刀）不露
+    smithing.forge(game.state, forge_content, world, smithing.ARMOR_KIND, "gang_1", "kuai_1", rng=random.Random(0))
+    assert {"clues": ["甲二句。"], "solved": "赤霞鎧", "recipe": "防具：精鐵砂＋驚羽"} in game.status_data()["forge_manual"]
+    game.state.player.forge_manual = Manual(tianji=tianji + 1)  # 別一季的譜
+    assert game.status_data()["forge_manual"] == []
+
+
+def test_the_go_button_names_only_what_your_own_book_has_solved(forge_content, world):
+    game = _smith(forge_content, world, name="甲")
+    go = lambda g: smithing.go_option(g.state, forge_content, world, "劍", "gang_1", "kuai_1")  # noqa: E731
+    assert "穿霞劍" not in go(game).label and "鑄譜" not in go(game).label  # 沒打中過：不露（6.4）
+    other = _smith(forge_content, world, name="乙")
+    smithing.forge(other.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))
+    assert "穿霞劍" not in go(game).label  # 別人打中了也不露（不然點一遍就知道別人摸到了哪幾條）
+    label = go(other).label
+    assert label.startswith("開爐：精鐵砂＋驚羽" + smithing.SOLVED_HEAD.format(name="穿霞劍") + "（劍・屬陽・一階・")
+    assert go(other).wait == ""
