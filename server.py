@@ -59,7 +59,7 @@ import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, smithing, social, team, timetable,
+    server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -657,9 +657,6 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
-    if smithing.is_go(option_id):  # 鐵匠鋪開爐：首創配方要模型取名，取名在鎖外（prepare_smith_forge），鎖裡從不叫模型
-        proposed = prepare_smith_forge(game, option_id)
-        return act(game, lambda g: g.choose(option_id, proposed=proposed))
     if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
         return act(game, lambda g: g.choose(option_id, prepared=prepared))
@@ -700,22 +697,6 @@ def prepare_forge(
     def name_it():
         budget = max(0.0, total - (_monotonic() - started))
         # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
-        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
-
-    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
-
-
-def prepare_smith_forge(game: Game, option_id: str) -> tuple[str | None, str]:
-    """鐵匠鋪開爐的首創取名在行動鎖外（兵器設計 4.4，跟 prepare_forge 同一套三段）：A 鎖內 Game.smith_forge_request 開單，
-    B 鎖外 naming.generate（預算 Config.naming_budget_seconds 扣掉 A 段與排隊花掉的），C 由呼叫端交給 Game.choose(..., proposed=...)。
-    不必叫模型（配方已經有人打過、打不成、這顆鈕不在選單上）是 NO_NAME；同一個人已經有一件在等模型時丟 GameError（BUSY_FORGE），不走 C 段。"""
-    started, request = _open_request(game, lambda: game.smith_forge_request(option_id))
-    if request is None:
-        return NO_NAME
-    total = game.content.config.naming_budget_seconds
-
-    def name_it():
-        budget = max(0.0, total - (_monotonic() - started))
         return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)

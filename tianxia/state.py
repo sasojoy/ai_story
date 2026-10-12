@@ -134,7 +134,8 @@ class Equipment(BaseModel):
     （拆解照 id 的 sha256 挑素材）。舊存檔沒有 slot：預設 weapon（兵器第一、二批的裝備庫裡都是武器）。
     edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
     不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
-    recipe／copy_of／original 是打造、仿品、神兵原品用的（兵器第二、三批；之後防具打造也用 recipe、tempers）。"""
+    recipe 是自己打的那一件的組合鍵（兵器「兵|」、防具「鎧|」）；secret 是照隱藏配方打出來的名器（打造隱藏配方設計 4.2）；
+    copy_of／original 是神器的仿品與原品（打造第二批）。"""
 
     slot: Literal["weapon", "armor", "mount", "treasure"] = "weapon"
     id: str
@@ -151,6 +152,8 @@ class Equipment(BaseModel):
     # 內容裡的 id（裝備四欄 3.1）：寶物照 content/gear.json 的寶物表、名將贈禮的名駒照 steeds；馬市與懸賞的馬、武器、防具是 None。
     # 名字照它從內容讀：treasures.refresh_names 在讀檔時把 name 改成內容的名字（joy 改名不動存檔）；內容拿掉了就留著 name 當備份、效果不算
     template: str | None = None
+    # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
+    secret: str | None = None
 
 
 Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
@@ -177,8 +180,33 @@ class WeaponRecipe(BaseModel):
         return self.name
 
 
+class GearFind(BaseModel):
+    """全服登記的隱藏配方發現（打造隱藏配方設計 7.1；gear_recipes 表裡鍵「鑄|配方 id」那幾列）：這一季第一個打出這條隱藏配方的人。
+    表的名字欄寫鍵本身（不佔名字空間），名器的名字照內容。fusion.echo 讀 id、name、creator、co_creator、creator_shown。
+    神器的原品主人、定名、仿品數是第二批（之後加欄位，都給預設值）。"""
+
+    secret: str  # 隱藏配方 id（ForgeSecret.id）
+    slot: Literal["weapon", "armor"]
+    kind: str = ""  # 兵器種類；防具是空字串
+    attribute: str
+    tier: int
+    title: str  # 打出來的名字（名器照內容的 name，登記當下記下；傳聞與首創名望回饋照它寫）
+    creator: str | None = None  # 首位發現者的名號（身分）
+    creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下）
+    co_creator: str | None = None  # fusion.echo 讀；打造沒有論武，一律 None
+
+    @property
+    def id(self) -> str:
+        return f"鑄|{self.secret}"  # 同 forge_secrets.PREFIX：首創名望回饋照它記，不會跟武學 id 或舊的兵器配方名字撞
+
+    @property
+    def name(self) -> str:
+        return self.title
+
+
 class SmithDraft(BaseModel):
-    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+    """鐵匠鋪「打造兵器…／打造防具…」挑到哪一步（smithing.draft_options）：兵器是種類 → 主料 → 輔料；防具沒有種類，打開時 kind 就是
+    smithing.ARMOR_KIND（「防具」），從主料挑起。三樣都有了就是開爐那一步。"""
 
     kind: str | None = None
     main: str | None = None
@@ -187,11 +215,12 @@ class SmithDraft(BaseModel):
 
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
-    對不上就當空的。"""
+    對不上就當空的。鑄譜（PlayerState.forge_manual）用同一個型別，多記 made。"""
 
     tianji: int = 0
     heard: dict[str, list[int]] = Field(default_factory=dict)  # 秘方 id → 聽過第幾句口訣（0 說書、1 人物、2 殘譜）
     solved: list[str] = Field(default_factory=list)  # 合中過的秘方 id，照先後
+    made: dict[str, str] = Field(default_factory=dict)  # 鑄譜用：隱藏配方 id → 打中的那一爐的組合鍵（鑄譜寫配方）；武學譜不用
 
 
 class DuelState(BaseModel):
@@ -266,8 +295,8 @@ class PlayerState(BaseModel):
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
-    forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
-    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
+    forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──
@@ -300,6 +329,7 @@ class PlayerState(BaseModel):
     seclusion_start: float = 0.0
     seclusion_done: float | None = None  # 上一次出關的遊戲時間（天時地利的「心靜」）；沒閉關過是 None
     manual: Manual = Field(default_factory=Manual)  # 武學譜（口訣與秘方）
+    forge_manual: Manual = Field(default_factory=Manual)  # 鑄譜（打造的隱藏配方：聽過的口訣、打中過的；tianxia/forge_secrets.py）
     resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
     # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；

@@ -70,6 +70,8 @@ def bonus(weapon: Weapon | None, art: MartialArt | None, content: Content, world
     rule = content.config.weapons
     base = rule.tier_bonus.get(str(weapon.tier), 0.0) + rule.quality_bonus.get(weapon.quality, 0.0)
     base += rule.temper_step * weapon.tempers
+    if equipment.named(content, weapon):
+        base += rule.named_bonus  # 名器多一截（打造隱藏配方設計 4.2）
     if weapon.attribute == art.attribute:
         base += rule.match
     elif counters(weapon.attribute, art.attribute) or counters(art.attribute, weapon.attribute):
@@ -134,7 +136,7 @@ SHOP_CLASH = "跟鐵匠鋪架上的兵器同名"  # 待 joy 潤
 
 
 def kind_problem(kind: str, name: str) -> str | None:
-    """兵器配方的名字對不對得上種類（附帶決定 c；naming.NamingRequest.check 跑它）：要有這一種的字、不能有別種的字、
+    """兵器配方的名字對不對得上種類（附帶決定 c；content.validate 驗對照表與隱藏配方的名字時跑它，第二批的神器定名也用擋別種兵器的那一段）：要有這一種的字、不能有別種的字、
     不能跟架上的現成兵器（shop_name）同名——不然買的跟打的分不出來。None＝可以。"""
     if not any(word in name for word in WEAPON_WORDS.get(kind, ())):
         return KIND_MISSING
@@ -145,13 +147,13 @@ def kind_problem(kind: str, name: str) -> str | None:
     return None
 
 
-def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: int = 0) -> str:
-    """兵器配方的退路名字（模型叫不動、取壞了）：字首＋craft_names.weapon 的一個字＋兵器字（NOUNS），一定帶兵器的字。
-    種子同 naming.fallback_name（配方鍵＋這一季的天機，加鹽），同一個配方同一季永遠組出同一個名字。"""
+def table_name(content: Content, kind: str, main: str, aux: str) -> str:
+    """一般組合的兵器名（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條）：字首照主料、中間字照輔料在素材表（content.materials，
+    就是 materials.json 的順序）的位置取，最後接兵器字（NOUNS）。不叫模型、不登記；同一個組合每季一樣，同一種兵器的每個組合名字都不同
+    （content.validate 驗過字表的前「素材數」個字夠、不重複）。主輔不交換：對調是另一個名字。"""
+    order = list(content.materials)
     names = content.craft_names
-    seed = key if tianji == 0 else f"{tianji}|{key}"
-    digest = hashlib.sha256(f"{seed}#{salt}".encode()).digest()
-    return names.prefixes[digest[0] % len(names.prefixes)] + names.weapon[digest[1] % len(names.weapon)] + NOUNS[kind]
+    return names.prefixes[order.index(main)] + names.weapon[order.index(aux)] + NOUNS[kind]
 
 
 def smith_here(state: GameState, content: Content) -> bool:
@@ -210,10 +212,11 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
+    secret: str | None = None,
 ) -> Weapon:
-    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有。"""
+    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器的隱藏配方 id。"""
     return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
-                  recipe=recipe)
+                  recipe=recipe, secret=secret)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

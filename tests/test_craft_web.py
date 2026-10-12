@@ -130,3 +130,44 @@ def test_changing_tab_closes_the_book(made):
     out = run(server.main_view(game), "return (async () => { await H.goTab(\"practice\"); return H.S.book; })();",
               S={"tab": "craft", "book": True}, menxia=server.menxia_view(game))
     assert out is False
+
+
+def test_the_forge_book_sits_beside_the_arts_book_and_shows_the_mix_once_solved(made):
+    """鑄譜（status.forge_manual；打造隱藏配方設計 6.3）：入口擺在武學譜旁邊，點了開同一本線裝書（S.book 記開哪一本）；打中過的蓋朱印、
+    寫名字，另外寫出配方；只聽過口訣的不寫配方。"""
+    game, art = made
+    main = server.main_view(game)
+    main["status"]["forge_manual"] = [
+        {"clues": ["那劍客的劍軟如柳條，一閃比燕子還快。"], "solved": "柳影劍", "recipe": "劍：柳絲綿＋驚羽"},
+        {"clues": ["刀要沉，精鐵砂是少不了的。"], "solved": None, "recipe": None},
+    ]
+    out = run(main, """return (async () => {
+      H.S.tab = "craft"; H.render();
+      const page = H.pageCraft();
+      const open = { dataset: { act: "book-open", book: "forge" }, classList: { contains: () => false } };
+      await T.docListeners.click[0]({ target: { closest: () => open } });
+      return { page, opened: T.els.app.innerHTML, book: H.S.book };
+    })();""", menxia=server.menxia_view(game))
+    page = out["page"]
+    assert page.count('data-act="book-open"') == 2 and 'data-book="forge"' in page and "收錄鑄訣 2 則・已參透 1" in page
+    assert page.index("武學譜") < page.index("鑄譜") < page.index("背包")
+    book = out["opened"]
+    assert out["book"] == "forge" and 'aria-label="鑄譜"' in book and "本季所聞鑄訣 2 則・已參透 1 則" in book
+    assert "打出<b>【柳影劍】</b>" in book and '<p class="leaf-recipe">劍：柳絲綿＋驚羽</p>' in book
+    assert book.count('class="leaf-recipe"') == 1 and "尚待參悟" in book  # 沒打中的不寫配方
+    assert "<span>那劍客的劍軟如柳條，</span><span>一閃比燕子還快。</span>" in book  # 口訣照標點斷成一欄一段（同武學譜）
+
+
+def test_an_empty_forge_book_hints_at_smiths_and_tales_only(made):
+    game, art = made
+    main = server.main_view(game)
+    assert main["status"]["forge_manual"] == []  # 測試內容沒有隱藏配方
+    out = run(main, 'H.S.book = "forge"; return H.bookHtml();', S={"tab": "craft"}, menxia=server.menxia_view(game))
+    assert "卷中尚無一字" in out and "失傳的鑄法" in out and "合成的門道" not in out and "seal" not in out
+
+
+def test_the_next_season_question_says_the_forge_secrets_change():
+    """打造隱藏配方設計 10.3（FB-133 提過）：「開啟下一季」的問句提一句鑄法換一批、鑄譜重來（第一批沒有神器那半句）。"""
+    js = (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    question = js.split("next_season: [", 1)[1].split('"確定開啟下一季"', 1)[0]
+    assert "鐵匠鋪的隱藏鑄法換一批、鑄譜重來" in question

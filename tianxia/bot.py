@@ -408,9 +408,10 @@ def wear_better(game: Game) -> None:
 
 
 def visit_smith(game: Game) -> None:
-    """城裡有鐵匠鋪就看一眼（兵器設計第六節、裝備四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
-    打一把、把裝備庫裡更好的換上、淬煉手上那把（打造與淬煉的鈕只在兵器頁，所以兵器的事先做完）、收掉打造的單子；再切到防具頁照
-    armor.wanted 換、買、修；最後離開。每一頁最多按四下（換、買、買了再換上、修）。不花體力。假人不走這裡（bot_policy 照 smith_want）。"""
+    """城裡有鐵匠鋪就看一眼（兵器設計第六節、四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
+    打一把、把裝備庫裡更好的換上、淬煉手上那把、收掉打造的單子；再切到防具頁照 armor.wanted 換、買、修，照 smithing.armor_plan 打一件
+    （打出來比身上那件好就換上：armor.wanted 先看裝備庫）、淬煉身上那件、收掉單子；最後離開。兵器的事先做完才切防具頁
+    （打造與淬煉的鈕各在各頁）。每一頁換買修最多按四下。不花體力。假人不走這裡（bot_policy 照 smith_want，不打造不淬煉）。"""
     s, c, w = game.state, game.content, game.world
 
     def art():
@@ -429,9 +430,13 @@ def visit_smith(game: Game) -> None:
                 break
             game.choose(move)
 
+    def finish_draft() -> None:
+        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
+            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕、沒有離開）
+
     if s.pending_event or not equipment.smith_open(s, c):
         return
-    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()):
+    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()) and not smithing.armor_errand(s, c, w, inner()):
         return
     if "act:smith" not in enabled():
         return
@@ -451,12 +456,24 @@ def visit_smith(game: Game) -> None:
             if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
                 break
             game.choose(smithing.TEMPER)
-        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
-            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕）
-        if armor.wanted(s, c, inner()) is not None and "smith:page:armor" in enabled():
+        finish_draft()
+        if (armor.wanted(s, c, inner()) is not None or smithing.armor_errand(s, c, w, inner())) and "smith:page:armor" in enabled():
             game.choose("smith:page:armor")  # 防具的事在另一頁：兵器的事（含打造、淬煉）做完才切過去
     if equipment.page(s.player, c) == "armor":
         press(lambda: armor.wanted(s, c, inner()))
+        plan = smithing.armor_plan(s, c, w, inner())
+        if plan is not None:
+            for oid in smithing.wizard_steps(*plan):
+                if oid not in enabled():
+                    break
+                game.choose(oid)
+            finish_draft()
+            press(lambda: armor.wanted(s, c, inner()))  # 打出來進了裝備庫、比身上那件好：換上
+        for _ in range(c.config.armor.temper_max):
+            if not smithing.armor_temper_wanted(s, c, w, inner()) or smithing.ARMOR_TEMPER not in enabled():
+                break
+            game.choose(smithing.ARMOR_TEMPER)
+        finish_draft()
     if s.player.picking_smith:
         game.choose("smith:back")
 

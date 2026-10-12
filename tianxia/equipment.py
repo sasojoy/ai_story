@@ -50,10 +50,12 @@ WIELD_MISSING = "裝備庫上沒有這一件。"  # 待 joy 潤（原本 weapons
 WIELDED = "你換上了【{name}】。"  # Game.wield_weapon 照開頭「你換上了」寫修練紀錄
 NOT_NOW = "（此刻無法這麼做。）"
 TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
+NAMED_MARK = "・名器"  # 待 joy 潤：照隱藏配方打出來的那一件，階品後面多這一段（打造隱藏配方設計 4.2）
 DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
 DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
+WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
 DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 
@@ -132,8 +134,16 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
 
 
 def grade(item: Equipment) -> str:
-    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）。"""
-    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}"
+    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接「・名器」（打造隱藏配方設計 4.2；只看 secret，
+    不查內容：內容拿掉了那一條，加成照一般的算〔named〕、這一段照寫）。"""
+    mark = NAMED_MARK if item.secret is not None and item.copy_of is None and not item.original else ""
+    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}{mark}"
+
+
+def named(content: Content, item: Equipment | None) -> bool:
+    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品是第二批。"""
+    return (item is not None and item.secret is not None and item.secret in content.forge_secrets
+            and item.copy_of is None and not item.original)
 
 
 def grade_line(item: Equipment) -> str:

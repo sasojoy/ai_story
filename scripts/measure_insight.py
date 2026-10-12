@@ -6,7 +6,7 @@
 
 模型一律不連。「模型呼叫」數的是決定點：insight_llm.name（悟到自己的意境要取名）與 naming.propose 裡合併到私有意境的
 那幾次（有私有意境的合併每次都要取名），換成只記一筆、回「沒取到」的替身（跟真的連不上時一樣：走退路字表）。真人送圖：
-看圖沒取到時同一次會再問一次文字（最多兩趟），畫布出現時另有一個暖機請求（不取名，不算在這裡）。兵器配方的取名（`naming.propose` 帶 `check`）不算在這裡。
+看圖沒取到時同一次會再問一次文字（最多兩趟），畫布出現時另有一個暖機請求（不取名，不算在這裡）。打造從 2026-10-12 起不叫模型（打造隱藏配方設計第八節）。
 --old 把有所感的場景拿掉，量舊的做法（探索悟意境那一支直接悟到基本意境）當對照。
 
 用法：.venv/Scripts/python.exe scripts/measure_insight.py --seeds 1 2 3 4 5 [--profile weekend] [--old]
@@ -84,9 +84,8 @@ def measure(seed: int, profile: str | None, old: bool) -> Counter:
     def name(client, content, facts, image="", budget=None, person=None):
         return None, "", ""
 
-    def propose(client, content, messages, budget=None, person=None, check=None):
-        if check is None:  # 帶 check 的是兵器配方的取名（smithing.forge，兵器第二批），不算進「取名・合成」
-            n["取名・合成"] += 1  # 首創配方與有私有意境的合併：都是真的會送給模型的
+    def propose(client, content, messages, budget=None, person=None):
+        n["取名・合成"] += 1  # 首創配方與有私有意境的合併：都是真的會送給模型的
         return None, ""
 
     def refuse(*args, **kwargs):

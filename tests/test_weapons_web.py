@@ -284,3 +284,13 @@ def test_held_gear_is_mentioned_under_the_gear_block(views):
     x["gear"] = _treasure_gear(None, [], held_note="寄放著：【叩關玉】")
     page = run(m, "return H.pagePractice();", menxia=x)
     assert "寄放著：【叩關玉】" in page  # 身上與裝備庫都空著，寄放的那一行照樣畫（不然玩家以為東西作廢了）
+
+def test_armor_rows_show_tempers_and_the_recipe(views):
+    """防具打造：防具列跟武器列一樣，淬過的寫「淬煉 N/M」，自己打的寫配方；沒淬過、買的不寫。"""
+    m, x = views
+    x["gear"] = _gear(armor={"worn": _armor_row(grade="一階中品", tempers=2, temper_max=5, recipe="精鐵砂＋驚羽"), "rack": []})
+    block = _slot_block(run(m, "return H.pagePractice();", menxia=x), "armor")
+    assert "淬煉 2/5" in block and "配方 精鐵砂＋驚羽" in block and "一階中品" in block
+    x["gear"]["slots"][0]["worn"] = _armor_row(tempers=0, temper_max=5, recipe=None)
+    plain = _slot_block(run(m, "return H.pagePractice();", menxia=x), "armor")
+    assert "淬煉 0" not in plain and "配方 " not in plain

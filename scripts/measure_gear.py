@@ -9,6 +9,9 @@
 （硬仗那一刻的氣血上限合計 ÷ 硬仗掉的氣血合計）；硬仗之後緊接著再打的那一場的勝率（連續硬仗：防具少扣的氣血讓氣血係數維持得
 比較高，設計 2.1、4.1）；修了幾次防具、鐵匠鋪花在防具上的銀兩（包住 armor.buy、armor.repair）；季末身上的防具、一階素材、銀兩、
 季長與結局。
+防具打造（打造第一批）：打了幾件防具與品質分布（包住 smithing.forge，只算打出來是防具的）、其中幾件名器、淬了幾次防具（包住
+smithing.temper，只算 slot 是 armor、淬煉次數真的多了的）；「防具花」含打造與淬煉的銀兩。從打造第一批起整季機器人兵器的事做完會打
+防具、淬防具，防具開那一行的數字跟裝備一量的不能直接比。
 **防具開那一行的硬仗、一條氣血撐幾場、硬仗之後的勝率只算穿著防具的仗**（toll 包裝在開打那一刻記下身上有沒有防具）：整季機器人
 先在兵器頁花 40 兩買兵器（開局 50 兩），防具要晚很多才買得起；買之前打的仗混進來的話，硬仗打在買防具之前時開、關兩行會一模一樣，
 量不到「有防具時」的差別。防具關那一行全算。這幾項都從 toll 包裝算（遊歷、探索野怪、挑戰本人每一場都走 take_encounter_toll），
@@ -29,6 +32,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from unittest import mock
 
@@ -38,7 +42,7 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_gear_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import armor, bot, bot_policy, bounties, database, naming, orders, team  # noqa: E402
+from tianxia import armor, bot, bot_policy, bounties, database, naming, orders, smithing, team  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -87,10 +91,12 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
     content.config.treasures.enabled = False  # 只比這一欄：寶物固定關著，數字才跟前幾批量的對得上（寶物看 measure_treasures）
     seen: set[int] = set()
     count = dict.fromkeys(("fights", "wins", "armored", "armored_hard", "hard", "after_hard", "after_hard_wins",
-                           "repairs", "armor_silver", "heal_silver"), 0)
+                           "repairs", "armor_silver", "heal_silver", "forged", "named", "tempered"), 0)
+    grades: Counter = Counter()
     sums = {"hp": 0.0, "injury": 0.0, "hard_hp": 0.0, "hard_cap": 0.0}
     last: dict = {"hard": False}  # 上一場（算進來的）是不是硬仗
     real_toll, real_heal, real_buy, real_repair, original_pick = team.take_encounter_toll, team.heal, armor.buy, armor.repair, bot.pick
+    real_forge, real_temper = smithing.forge, smithing.temper
 
     def toll(state, content_, world, tier, *, wild=False):
         """包住 team.take_encounter_toll：本人這一場掉了多少氣血、多了多少內傷、開打時身上有沒有防具。
@@ -142,6 +148,27 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
             count["armor_silver"] += cost
         return out
 
+    def forge(state, content_, world, kind, main, aux, *args, **kwargs):
+        """包住 smithing.forge：打出來是防具的才算（兵器打造看 measure_weapons），工錢記進防具花。"""
+        before = state.player.stats.get("silver", 0)
+        item, msgs = real_forge(state, content_, world, kind, main, aux, *args, **kwargs)
+        if item is not None and item.slot == "armor":
+            count["forged"] += 1
+            count["named"] += item.secret is not None
+            grades[item.quality] += 1
+            count["armor_silver"] += paid(state, before)
+        return item, msgs
+
+    def temper(state, content_, slot="weapon"):
+        """包住 smithing.temper：淬的是防具、淬煉次數真的多了才算，工錢記進防具花。"""
+        before, worn = state.player.stats.get("silver", 0), state.player.armor
+        tempers = worn.tempers if worn is not None else 0
+        out = real_temper(state, content_, slot)
+        if slot == "armor" and worn is not None and worn.tempers > tempers:
+            count["tempered"] += 1
+            count["armor_silver"] += paid(state, before)
+        return out
+
     def pick(game, options, rng):
         steered = _steer(game, options, rng) if steer else None
         return steered if steered is not None else original_pick(game, options, rng)
@@ -165,6 +192,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
             mock.patch.object(team, "take_encounter_toll", toll), mock.patch.object(team, "heal", heal), \
             mock.patch.object(armor, "buy", buy), mock.patch.object(armor, "repair", repair), \
+            mock.patch.object(smithing, "forge", forge), mock.patch.object(smithing, "temper", temper), \
             mock.patch.object(bot, "pick", pick):
         game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(armor_on)}.db"), observe=observe)
     p = game.state.player
@@ -177,6 +205,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
         "after_hard": count["after_hard"],
         "after_hard_win": count["after_hard_wins"] / count["after_hard"] if count["after_hard"] else None,
         "repairs": count["repairs"], "armor_silver": count["armor_silver"],
+        "forged": count["forged"], "named": count["named"], "grades": grades, "tempered": count["tempered"],
         "armor": p.armor.name if p.armor else "—",
         "tier1": sum(n for mid, n in p.materials.items() if content.materials[mid].tier == 1),
         "silver": p.stats.get("silver", 0), "hours": season.time / 3600, "ending": season.ending_id or "—",
@@ -205,6 +234,8 @@ def main() -> None:
                   f"掉氣血 {r['hp']}、內傷 {r['injury']}、療傷 {r['heal_silver']} 兩、"
                   f"穿著防具 {r['armored']} 場（其中硬仗 {r['armored_hard']} 場）、"
                   f"硬仗 {r['hard']} 場（一條氣血撐 {lasts} 場）、硬仗之後再打的勝率 {after}（{r['after_hard']} 場）、"
+                  f"打造防具 {r['forged']} 件（下 {r['grades']['下品']}／中 {r['grades']['中品']}／上 {r['grades']['上品']}）、"
+                  f"防具名器 {r['named']} 件、淬防具 {r['tempered']} 次、"
                   f"修防具 {r['repairs']} 次、防具花 {r['armor_silver']} 兩、季末防具 {r['armor']}、"
                   f"一階素材 {r['tier1']}、銀兩 {r['silver']}、季長 {r['hours']:.1f} 小時（世界時間）、結局 {r['ending']}", flush=True)
 

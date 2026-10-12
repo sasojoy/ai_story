@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
-from .state import Rumor, WeaponRecipe, WorldState
+from .state import GearFind, Rumor, WeaponRecipe, WorldState
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -203,7 +203,7 @@ class WorldStateStore(Protocol):
         """跟 claim_recipe 同一套：配方有了回 (登記在案的, False)；名字被占用回 (None, False)；否則登記、回 (insight, True)。"""
         ...
 
-    # ── 兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes；這一季）──
+    # ── 兵器配方（兵器設計 4.4；資料庫第 4 版的 gear_recipes；這一季）：打造隱藏配方第一批起不再新增，上線那一季讀舊名字用 ──
     def lookup_weapon_recipe(self, key: str) -> WeaponRecipe | None:
         """這個兵器配方這一季有沒有人打過；有就回登記在案的那一筆（全服看到同一個名字）。"""
         ...
@@ -211,6 +211,16 @@ class WorldStateStore(Protocol):
     def claim_weapon_recipe(self, key: str, recipe: WeaponRecipe) -> tuple[WeaponRecipe | None, bool]:
         """跟 claim_recipe 同一套，原子判斷：配方有了 → (登記在案的, False)；名字被任何功法、改過的名字、意境、兵器配方用掉
         → (None, False)，呼叫端換名字再試；否則登記、回 (recipe, True)。"""
+        ...
+
+    # ── 隱藏配方的發現（打造隱藏配方設計 7.1；gear_recipes 裡鍵「鑄|配方 id」那幾列；這一季）──
+    def lookup_gear_find(self, key: str) -> GearFind | None:
+        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。"""
+        ...
+
+    def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
+        """原子判斷誰先：已經有了 → (登記在案的, False)；否則登記、回 (find, True)。名字欄寫鍵本身，不佔名字空間；
+        鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
     # ── 合到舊的（武學與成長設計 12.2；這一季）──
