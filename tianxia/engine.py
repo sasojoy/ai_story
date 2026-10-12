@@ -2571,7 +2571,8 @@ class Game:
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
         if stuck:
-            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck), enabled=False))
+            kept = {b.id for b in stuck if bounties.only_original(s, b)}  # 只有神器原品對得上的那幾張照實寫（FB-145）
+            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck, kept), enabled=False))
         if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
             opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
         return ready + opts + [Option(id="bounty:back", label="返回")]
