@@ -4316,9 +4316,47 @@ class Game:
         """這支隊伍是自己陣營的：遇上了不打，改成一起操練（見 _drill）。"""
         return squad.faction is not None and squad.faction == self.state.player.faction
 
+    def season_scale(self) -> float:
+        """季長倍數（FB-165，企劃者 2026-10-12「要隨著賽季長度而調整」）：min(1, Config.drill_push_base_days ÷ 這一季的季長)。
+        季長照開季時蓋的章（world_state.season_length_days，季曆用的同一個），不讀電腦時鐘：週末設定（2.5 天）是 1，14 天約 0.18，
+        季越長越小。規則關著的季事件的大勢效果照它縮放（push_trend）；操練另見 drill_scale。"""
+        days = season_length_days(self.state.world, self.content)
+        return min(1.0, self.content.config.drill_push_base_days / days) if days > 0 else 1.0
+
+    def drill_scale(self) -> float:
+        """操練推大勢的倍數：季長倍數；季長倍數小於 1 時再乘 Config.drill_long_season_share（0.5，PM 2026-10-12：操練給的聲勢
+        不該佔那麼大）——14 天的季約 0.09；週末設定照舊 1。"""
+        scale = self.season_scale()
+        return scale * self.content.config.drill_long_season_share if scale < 1 else scale
+
+    def _carry(self, trend_id: str, amount: float) -> int:
+        """把縮放後的推力 amount 加進這一季這條線的零頭（WorldState.trend_accum，同一條線一個值、正負抵銷），回傳滿了的整數點數。
+        決定性，不擲骰、不動 Game.rng。"""
+        w = self.state.world
+        whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), amount)
+        if rest:
+            w.trend_accum[trend_id] = rest
+        else:
+            w.trend_accum.pop(trend_id, None)
+        return whole
+
+    def _drill_push(self, trend_id: str, delta: int) -> list[str]:
+        """操練推一條線：照 drill_scale 縮放。倍數是 1（週末設定）時照舊交給 push_trend，一個字都不變；
+        第一季的規則開著時縮放後的量照舊經過 push_trend 的人數緩衝、每人每曆日上限與零頭累積；規則關著的季零頭記在這一季的
+        trend_accum（_carry），滿一點才真的推、才回推動那一行，沒推到整點的這一下什麼都不寫。"""
+        scale = self.drill_scale()
+        if scale >= 1:
+            return self.push_trend(trend_id, delta, source="drill")
+        amount = delta * scale
+        if calendar.season_one_on(self.state.world, self.content):
+            return self.push_trend(trend_id, amount, source="drill")
+        whole = self._carry(trend_id, amount)
+        return self.push_trend(trend_id, whole, source="drill") if whole else []
+
     def _drill(self, squad: Squad) -> list[str]:
         """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
-        給經驗與心得，但只給對手的三成（Config.drill_reward_share，戰鬥系統第八節）；不給銀兩、不掉素材（不搶自己人）；地點的大勢推動往自己陣營有利的方向推。"""
+        給經驗與心得，但只給對手的三成（Config.drill_reward_share，戰鬥系統第八節）；不給銀兩、不掉素材（不搶自己人）；
+        地點的大勢推動往自己陣營有利的方向推，推的量照季長縮放（_drill_push，FB-165）。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -4339,7 +4377,7 @@ class Game:
         if self._draft is not None and exp > 0:
             self._draft.changes.append(f"經驗 +{exp}（每人）")
         for trend_id, delta in self.train_trend_push(loc.id).items():
-            msgs += self.push_trend(trend_id, delta, source="drill")
+            msgs += self._drill_push(trend_id, delta)
         return msgs
 
     def _lose_silver(self, record) -> list[str]:
@@ -4677,6 +4715,13 @@ class Game:
         s, c = self.state, self.content
         w, p = s.world, s.player
         if not calendar.season_one_on(w, c):
+            # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
+            # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
+            # 遊歷打贏（有風險）與決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，傳進來的已經是整數點數。
+            scale = self.season_scale() if source == "event" else 1.0
+            if scale < 1 and is_revealed(w, c, trend_id):
+                whole = self._carry(trend_id, delta * scale)
+                return change_trend(s, c, trend_id, whole) if whole else []
             return change_trend(s, c, trend_id, delta)
         if delta == 0 or (delta < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
             return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍

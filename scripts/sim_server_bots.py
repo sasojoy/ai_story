@@ -23,7 +23,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, bounties, database, library, naming, server_bots  # noqa: E402
+from tianxia import bot, bounties, database, insight_llm, library, naming, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import name_key, open_characters  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
@@ -195,7 +195,7 @@ def run_season(
     sides: Counter = Counter()
     battle_started_day = None
     tally = ForgeTally()
-    real_forge, real_generate = Game.forge, naming.generate
+    real_forge, real_generate, real_sense = Game.forge, naming.generate, insight_llm.name
 
     def counted_forge(self, art_id, insight_ids, proposed=None, other_art=None):
         kind = "blend" if other_art else "fuse" if art_id else "merge"
@@ -212,6 +212,14 @@ def run_season(
             return request.choices[0], ""
         salt = tally.mastered if request.kind == "master" else tally.named
         return naming.fallback_name(content_, f"模擬|{request.key}", request.name_kind, salt=salt), ""
+
+    def counted_sense(client, content_, facts, image="", budget=None, person=None):
+        """假人「有所感」替意境取名的 B 段（insight_llm.name）：記一次呼叫；不是真的模型時照沒有模型的路走（回沒取到，
+        C 段照 bot_policy.apply_job 的退路），不然假的 client（object()）會在 ollama_client.capped 丟 AttributeError（FB-130）。"""
+        tally.named += 1
+        if real_model:
+            return real_sense(client, content_, facts, image=image, budget=budget, person=person)
+        return None, "", ""
 
     count_new, count_landed = _counting(tally, "new"), _counting(tally, "landed")
     bounty_tally = BountyTally()
@@ -244,6 +252,7 @@ def run_season(
             mock.patch.object(SqliteWorldStore, "link_recipe", count_landed(SqliteWorldStore.link_recipe)), \
             mock.patch.object(SqliteWorldStore, "link_insight_recipe", count_landed(SqliteWorldStore.link_insight_recipe)), \
             mock.patch.object(Game, "forge", counted_forge), mock.patch.object(naming, "generate", counted_generate), \
+            mock.patch.object(insight_llm, "name", counted_sense), \
             mock.patch.object(bounties, "take", counted_take), mock.patch.object(bounties, "_complete", counted_complete), \
             mock.patch.object(Game, "_raid_record", counted_record):
         world.seed_first_season(content)
