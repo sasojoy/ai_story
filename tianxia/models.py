@@ -1682,6 +1682,10 @@ class ForgeSecretRules(_Strict):
     divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
     named_rumor: str = "{who}替手上的神器定了名，叫【{name}】。"  # 定名時的傳聞（7.2：帶名字的那一句）
     named_chronicle: str = "{who}打出一把神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」）
+    # 三階素材的新來源（兵器設計 4.9；打造第二批，PM 決定第 7 條）：預設全關，正式值在 config.json。擲骰都用自己的亂數（Game._tier3）
+    challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
+    tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）
+    big_tier3: float = Field(default=0, ge=0, le=1)  # 大場面對手（不是本人那支隊伍）打贏，另擲一次三階素材；正式 0.25
 
 
 class FirstEcho(_Strict):

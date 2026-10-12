@@ -4436,6 +4436,7 @@ class Game:
             record.notes += notes
             msgs += extra
             msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
+            msgs += self._figure_tier3(fid, squad, record)  # 打贏本人掉一個三階（兵器設計 4.9）：戰報「得失」與江湖紀錄
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier)
@@ -4479,6 +4480,33 @@ class Game:
         if item is not None:
             record.materials.append(treasures.GAIN_LINE.format(name=item.name))
         return lines
+
+    def _tier3(self, squad: Squad, record, chance: float, tag: str) -> list[str]:
+        """三階素材的新來源（兵器設計 4.9；打造第二批）：擲 chance，中了照對手隊伍的屬性給一個三階素材（materials.tier3_pick），
+        寫進這一場戰報的「得失」與江湖紀錄。自己一份亂數（「三階|季數|名號|戰報流水號|tag」；流水號每季從 1 起所以要季數，同
+        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。"""
+        if chance <= 0 or prologue_rules.active(self.state, self.content):
+            return []
+        seed = f"三階|{self.world.get_season_number()}|{self.state.player.name}|{record.id}|{tag}"
+        if random.Random(seed).random() >= chance:
+            return []
+        mid = materials.tier3_pick(self.content, squad.attribute, seed)
+        line = materials.grant(self.state, self.content, mid) if mid is not None else None
+        if not line:
+            return []
+        record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+        return [line]
+
+    def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
+        """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
+        PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）。"""
+        rule, p = self.content.config.forge_secrets, self.state.player
+        if rule.tier3_per_figure and p.tier3_drops.get(fid, 0) >= rule.tier3_per_figure:
+            return []
+        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
+        if got:
+            p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
+        return got
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
@@ -4591,6 +4619,11 @@ class Game:
                     got.append(material_id)
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
+            # 大場面對手的掉落表加三階（兵器設計 4.9）：另擲一次 big_tier3（自己的亂數）；大勢人物本人那支隊伍的那一個在 _challenge，不重複擲；
+            # 探索野怪不算大場面（同大場面判讀：_squad_encounter 對野怪不問模型；CLAUDE.md「大場面」那一條）
+            figure_squads = {fig.squad for fig in self.content.figures.values()}
+            if record.kind != "wild" and self.is_big(squad) and squad.id not in figure_squads:
+                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面")
             if record.kind in ("train", "wild"):  # 兵器掉落與寶物多掉的素材（兵器設計 4.8、裝備四欄 6.2）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
                 extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)  # 自己的亂數
                 line = materials.grant(self.state, self.content, extra) if extra is not None else None

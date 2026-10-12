@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from unittest import mock
 
 import pytest
 
 from conftest import real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
-from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, skillview, smithing, team, weapons
+from test_treasures import _challenger, _won
+from tianxia import armor, battlelog, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
 from tianxia.content import validate
 from tianxia.models import ForgeSecret, ForgeSide
+from tianxia.sqlite_world import open_world
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
 
 # 測試內容的三階素材只有隕鐵膽（剛三）：神器配方兩樣都是它（剛＋剛＝剛，不在剛柔、快慢那兩對裡）。
@@ -292,3 +295,73 @@ def test_gear_rows_mark_the_unnamed_original_with_its_book_name(divine_content, 
     smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)
     row = worn()
     assert row["divine"] is None and row["name"] == "墜星劍"  # 定了名：表單不再畫
+
+
+# ── Task 7：三階素材的新來源（兵器設計 4.9）──
+
+def test_tier3_pick_follows_the_attribute_and_splits_paired_ones_by_seed():
+    rc = real_content()
+    assert materials.tier3_pick(rc, "剛", "種子") == "gang_3" and materials.tier3_pick(rc, "慢", "x") == "man_3"
+    picks = {materials.tier3_pick(rc, "實", f"種子{i}") for i in range(40)}
+    assert picks == {"gang_3", "man_3"}  # 實＝剛＋慢：照種子挑一個來源（同拆解）
+    assert materials.tier3_pick(rc, "實", "同一個") == materials.tier3_pick(rc, "實", "同一個")  # 決定性
+    assert materials.tier3_pick(rc, None, "x") in {"gang_3", "rou_3", "kuai_3", "man_3"}
+
+
+def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_up_to_twice_a_season(world):
+    from tianxia.engine import Game
+    game = _challenger(world, treasures_on=False)
+    rule = game.content.config.forge_secrets
+    assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (1.0, 2, 0.25)  # 「要 PM 定的」第 2 條
+    p = game.state.player
+    got = []
+    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(materials, "roll_squad_drops", return_value=[]),             mock.patch.object(Game, "_rout", return_value=[]):  # 不讓他敗走退場：同一位連打三場
+        for _ in range(3):
+            p.snubbed_until.clear()
+            p.stamina = 250.0
+            before = p.materials.get("gang_3", 0)
+            game.choose("act:challenge:bocai")
+            got.append(p.materials.get("gang_3", 0) - before)
+    assert got == [1, 1, 0] and p.tier3_drops == {"bocai": 2}  # 波才的隊伍屬剛：隕鐵膽；每季最多 2 次
+    assert game.state.battles[-1].materials == ["隕鐵膽 ×1"]  # 第一場的戰報「得失」那一格
+
+
+def test_the_tier_three_drop_never_touches_the_game_rng(world, tmp_path):
+    draws = []
+    for chance, store in ((1.0, world), (0.0, open_world(tmp_path / "off.db"))):
+        game = _challenger(store, treasures_on=False)
+        game.content.config.forge_secrets.challenge_tier3 = chance
+        with mock.patch.object(team, "fight", return_value=_won()):
+            game.choose("act:challenge:bocai")
+        draws.append(game.rng.random())
+    assert draws[0] == draws[1]  # 自己的亂數（FB-129）：掉不掉，Game.rng 接下來的序列都一樣
+
+
+def test_big_fights_roll_once_more_but_the_figure_squad_and_small_fights_do_not(world):
+    game = _challenger(world, treasures_on=False)  # 站在黃巾營、引導走完：不在序章（序章不掉素材）
+    c = game.content
+    c.config.forge_secrets.big_tier3 = 1.0
+
+    def tier3():
+        return sum(n for mid, n in game.state.player.materials.items() if c.materials[mid].tier == 3)
+
+    def rewards(squad_id, kind="event"):
+        squad = c.squads[squad_id]
+        record = battlelog.new_record(game.state, c, world, squad, _won(), kind)
+        before = tier3()
+        with mock.patch.object(materials, "roll_squad_drops", return_value=[]):  # 只看這一擲：掉落表照舊用 Game.rng，另測
+            msgs = game._battle_rewards(squad, record)
+        return msgs, record, tier3() - before
+
+    msgs, record, gained = rewards("fanjianglong")  # 難度 150（≥ big_fight_difficulty）、屬剛：大場面
+    assert gained == 1 and materials.grant_line("隕鐵膽 ×1") in msgs and record.materials == ["隕鐵膽 ×1"]
+    assert rewards("fanjianglong", "train")[2] == 1  # 遊歷撞上的大場面也擲
+    assert rewards("fanjianglong", "wild")[2] == 0  # 探索野怪不算大場面：不擲
+    assert rewards("figure_bocai")[2] == 0  # 大勢人物本人那支隊伍：那一個在 _challenge，這裡不重複擲
+    small = next(s.id for s in c.squads.values() if not game.is_big(s))
+    assert rewards(small)[2] == 0  # 不是大場面：不擲
+
+
+def test_tier_three_knobs_are_off_in_the_fixture(content):
+    rule = content.config.forge_secrets
+    assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (0, 0, 0)  # 預設全關（舊測試一個字都不變）
