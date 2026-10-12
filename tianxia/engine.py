@@ -21,7 +21,7 @@ from . import (
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
-    social, styles, team, timetable, traits, weapons, zh,
+    social, styles, team, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
@@ -516,6 +516,7 @@ class Game:
             p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
+        treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在

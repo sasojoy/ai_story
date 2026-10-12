@@ -25,10 +25,11 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
-    Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
-    TimetableEvent, TraitBook, Tutorial, allow_known,
+    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, GearBook,
+    GiftDef, Hints, InsightDef, Location, OppDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef,
+    SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
@@ -110,6 +111,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "secret_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
+        gear=_gear(root / "gear.json"),
         insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
         if (root / "insight_scenes.json").exists() else {},
         events=events,
@@ -206,6 +208,22 @@ def _with_local_admins(admins: list[str]) -> list[str]:
 
 def _read(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _gear(path: Path) -> GearBook:
+    """content/gear.json（裝備三）：寶物表、名駒、名將贈禮。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
+    只能有 treasures、steeds、gifts 三個鍵（拼錯在載入當下就報錯）。"""
+    if not path.exists():
+        return GearBook()
+    raw = _read(path)
+    extra = set(raw) - {"treasures", "steeds", "gifts"}
+    if extra:
+        raise ContentError(f"content/gear.json 只能有 treasures、steeds、gifts：{sorted(extra)}")
+    return GearBook(
+        treasures=_index(TreasureDef, raw.get("treasures", [])),
+        steeds=_index(SteedDef, raw.get("steeds", [])),
+        gifts=[_build(GiftDef, item) for item in raw.get("gifts", [])],
+    )
 
 
 def _foreshadows(path: Path) -> Foreshadows:
@@ -1231,6 +1249,50 @@ def check_duels(c: Content, need, known) -> None:
             need(any(foe.side != faction for foe in boss.foes), f"{where}：{faction} 的人挑不到一個不是自己人的面貌")
 
 
+def check_gear(c: Content, need, known) -> None:
+    """寶物表、名駒、名將贈禮（content/gear.json，裝備四欄 6.3、5.7）與 Config.treasures：效果的數字剛好八種；良駒的品質權重只寫
+    三個品質、不是負的、加起來大於 0。有表時：掉落池至少一件；名字不重複、過得了命名過濾、id 不叫 good_horse、寶物與名駒的 id 不重複；
+    贈禮的人物存在、一位只寫一次、送的是名駒或 pool 為 false 的寶物，送禮那一句是繁體、只用 {general}、{gift}；
+    pool 為 false 的寶物與名駒都要有人送（不然永遠拿不到）。沒有 gear.json（測試內容）就只查設定。"""
+    cfg, book = c.config.treasures, c.gear
+    need(set(cfg.effects) == set(TREASURE_EFFECTS), f"Config.treasures.effects 要剛好寫八種效果：{sorted(cfg.effects)}")
+    need(
+        set(cfg.horse_quality) <= {"下品", "中品", "上品"} and all(v >= 0 for v in cfg.horse_quality.values())
+        and sum(cfg.horse_quality.values()) > 0,
+        f"Config.treasures.horse_quality 只能寫下品、中品、上品，權重不能是負的、加起來要大於 0：{cfg.horse_quality}",
+    )
+    if not (book.treasures or book.steeds or book.gifts):
+        return
+    need(any(t.pool for t in book.treasures.values()), "content/gear.json：掉落池（pool 為 true 的寶物）至少要一件")
+    clash = sorted(set(book.treasures) & set(book.steeds))
+    need(not clash, f"content/gear.json：寶物與名駒的 id 重複：{clash}")
+    names: set[str] = set()
+    for item in [*book.treasures.values(), *book.steeds.values()]:
+        where = f"裝備表 {item.id}"
+        need(item.id != GOOD_HORSE, f"{where}：id 不能叫 {GOOD_HORSE}（事件給良駒用的字）")
+        need(item.name not in names, f"{where}：名字 {item.name} 重複")
+        names.add(item.name)
+        problem = name_problem(item.name, c)
+        need(problem is None, f"{where}：名字 {item.name} 過不了命名過濾（{problem}）")
+    given: set[str] = set()
+    for gift in book.gifts:
+        where = f"名將贈禮 {gift.character}"
+        known(where, [gift.character], c.characters, "人物")
+        need(gift.character not in given, f"{where}：同一位人物寫了兩次")
+        given.add(gift.character)
+        tdef = book.treasures.get(gift.gear)
+        need(gift.gear in book.steeds or (tdef is not None and not tdef.pool), f"{where}：贈禮 {gift.gear} 要是名駒或 pool 為 false 的寶物")
+        if gift.line:
+            need(to_traditional(gift.line) == gift.line, f"{where}：送禮那一句只能用繁體中文")
+            try:
+                gift.line.format(general="甲", gift="乙")
+            except (KeyError, IndexError, ValueError):
+                need(False, f"{where}：送禮那一句只能用 {{general}}、{{gift}}")
+    sent = {gift.gear for gift in book.gifts}
+    for item_id in [t.id for t in book.treasures.values() if not t.pool] + list(book.steeds):
+        need(item_id in sent, f"裝備表 {item_id}：沒有人送（pool 為 false 的寶物與名駒只從名將贈禮來）")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
@@ -2040,6 +2102,7 @@ def validate(c: Content) -> None:
     check_promotions(c, need, known)
     check_opportunities(c, need, known, front_ids)
     check_duels(c, need, known)
+    check_gear(c, need, known)
     check_bounties(c, need)
 
     for key, where in sorted(marks_written.items()):
