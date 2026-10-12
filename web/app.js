@@ -861,11 +861,34 @@
   }
 
   // ── 登入與取名號 ──
+  // 登入頁最上面的宣傳影片（企劃者 2026-10-12「我要在我們登入頁面加這個主要宣傳影片」）：手機擋有聲自動播放，所以靜音、
+  // 自動播放、循環、playsinline，右下角一顆開聲音；首格 promo-poster.jpg 在影片載入前先顯示，偏好減少動態效果的人只看首格。
+  // 只在登入頁：登入、註冊兩頁切換時（renderGate 重畫）把同一支影片搬回去，不會從頭播、聲音開著的也不會被關掉
+  const PROMO_POSTER = "/static/promo-poster.jpg";
+  const promoCalm = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function promoHtml() {
+    if (promoCalm()) return `<figure class="promo"><img src="${PROMO_POSTER}" alt="天下大勢宣傳影片的首格"></figure>`;
+    return `<figure class="promo">
+      <video src="/static/promo.mp4" poster="${PROMO_POSTER}" muted autoplay loop playsinline preload="auto" aria-label="天下大勢宣傳影片"></video>
+      <button class="promo-sound" type="button" data-act="promo-sound" aria-pressed="false">🔇 開聲音</button>
+    </figure>`;
+  }
+  function promoSound(el) {
+    const v = el.closest(".promo") && el.closest(".promo").querySelector("video");
+    if (!v) return;
+    v.muted = !v.muted;
+    if (!v.muted && v.paused) v.play().catch(() => {});
+    el.setAttribute("aria-pressed", String(!v.muted));
+    el.textContent = v.muted ? "🔇 開聲音" : "🔊 關聲音";
+  }
+
   function renderGate() {
     const reg = S.gateMode === "register";
+    const playing = $app.querySelector(".gate .promo");
     $app.innerHTML = `
-      <div class="gate">
-        <div class="brand"><div class="seal">勢</div><h1>天下大勢</h1><p>亂世江湖，從潁川城門口開始</p></div>
+      <div class="gate has-promo">
+        ${promoHtml()}
+        <div class="brand"><h1>天下大勢</h1><p>亂世江湖，從潁川城門口開始</p></div>
         <div class="seg">
           <button class="${reg ? "" : "on"}" data-act="gate" data-mode="login">登入</button>
           <button class="${reg ? "on" : ""}" data-act="gate" data-mode="register">註冊</button>
@@ -878,6 +901,7 @@
           <button class="btn primary" type="submit">${reg ? "註冊" : "登入"}</button>
         </form>
       </div>`;
+    if (playing) $app.querySelector(".gate .promo").replaceWith(playing);
   }
 
   function renderCreate() {
@@ -3603,6 +3627,7 @@
     try {
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
+        case "promo-sound": promoSound(el); break;
         case "tab": await goTab(el.dataset.tab); break;
         case "choose": await choose(el, el.dataset.id); break;
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
