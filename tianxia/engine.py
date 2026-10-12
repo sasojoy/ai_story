@@ -1439,8 +1439,12 @@ class Game:
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             if not quiet:
+                # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
+                # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「鐵匠把…下爐，打出一把【…】（種類・屬…）」
+                # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面
+                forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
                 journal.add_entry(self.state, entry, merge=(kind == "smith" and smithing.is_forge_step(arg) and arg != "forge") or (
-                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS))
+                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS), fold=forged)
         finally:
             self._draft = None
             self._fight = None

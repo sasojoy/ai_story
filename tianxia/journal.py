@@ -205,12 +205,14 @@ def _merged(head: JournalEntry, entry: JournalEntry, lines: list[str], battle_id
     )
 
 
-def add_entry(state: GameState, entry: JournalEntry, merge: bool = False) -> None:
+def add_entry(state: GameState, entry: JournalEntry, merge: bool = False, fold: bool = False) -> None:
     """最新的放最前面，只留最近 MAX_ENTRIES 則。
-    merge=True 且最新一則是同一類（同標題）時併進那一則：敘事依序接上、數值變化加總、時間與結果標記用新的。"""
+    merge=True 且最新一則是同一類（同標題）時併進那一則：敘事依序接上、數值變化加總、時間與結果標記用新的。
+    fold=True（跟 merge 一起給）時併進去的敘事只留 entry 的：打造開爐成了那一下（FB-141），挑種類、主料、輔料那幾步的回報收掉、
+    結果句排第一（375 寬「剛剛」收著時看得到）；數值變化、引導照樣加總。併不進去（標題不同）時 fold 不起作用。"""
     head = _mergeable_head(state, entry) if merge else None
     if head is not None:
-        state.journal[0] = _merged(head, entry, _story(head) + _story(entry))
+        state.journal[0] = _merged(head, entry, _story(entry) if fold else _story(head) + _story(entry))
         return
     state.journal.insert(0, entry)
     del state.journal[MAX_ENTRIES:]

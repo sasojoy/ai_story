@@ -412,11 +412,13 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     assert p.weapon is not None and p.weapon.recipe == KEY_SWORD_YANG
     assert p.smith_draft is None and p.picking_smith and smithing.OPEN in _ids(game)  # 打完回到鐵匠鋪的選單
     forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
-    assert len(forged) == 1 and any(p.weapon.name in line for line in forged[0].lines)  # 一爐一則紀錄
+    assert len(forged) == 1  # 一爐一則紀錄
     lines = forged[0].lines
-    # 每一步挑了什麼都回報在同一則紀錄裡（終審 F1）：種類、主料、輔料各一行，順序跟著步驟走
-    picked = [i for i, line in enumerate(lines) if line in ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。")]
-    assert [lines[i] for i in picked] == ["兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。"]
+    # FB-141：開爐成了那一則只留結果，結果句排第一（375 寬「剛剛」收著時看得到）；放了哪兩樣、哪一種，結果句本身寫了
+    # （終審 F1 要的「放了什麼」由它帶），挑種類、主料、輔料的回報與問話收掉
+    assert lines[0].startswith(f"鐵匠把精鐵砂與驚羽下爐，打出一把【{p.weapon.name}】（劍・屬陽・一階")
+    steps = ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。", smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.READY)
+    assert not any(line in steps for line in lines)
 
 
 def test_each_forge_gets_its_own_entry_and_a_cancel_does_not_join_the_last_forge(content, world):

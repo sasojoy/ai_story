@@ -1066,3 +1066,19 @@ def test_game_html_helpers(game):
     game.practice("武學")
     assert not game.shows_battle_card()  # 之後在門下做了事：「剛剛」改顯示那一則
     assert game.battle_card() is not None
+
+
+def test_a_folded_merge_keeps_only_the_new_story_and_adds_up_the_changes(content, world):
+    """FB-141：打造開爐成了那一下（fold），併進「打造」那一則時只留結果——挑種類、主料、輔料的回報收掉，結果句排第一
+    （375 寬「剛剛」收著時看得到）；數值變化、時間照樣併。標題不同照舊另起一則。"""
+    game = Game.new(content, "測", world=world)
+    s = game.state
+    s.journal = []
+    journal.add_entry(s, JournalEntry(time=1.0, title="打造", lines=["要打哪一種兵器？"]))
+    journal.add_entry(s, JournalEntry(time=2.0, title="打造", lines=["兵器：劍。", "挑主料。"]), merge=True)
+    result = "鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。"
+    journal.add_entry(s, JournalEntry(time=3.0, title="打造", lines=[result], changes=["銀兩 -20"]), merge=True, fold=True)
+    assert len(s.journal) == 1
+    assert (s.journal[0].lines, s.journal[0].changes, s.journal[0].time) == ([result], ["銀兩 -20"], 3.0)
+    journal.add_entry(s, JournalEntry(time=4.0, title="淬煉", lines=["淬了一回。"]), merge=True, fold=True)
+    assert len(s.journal) == 2  # fold 只管併進去時留哪些敘事；併不進去照舊另起一則
