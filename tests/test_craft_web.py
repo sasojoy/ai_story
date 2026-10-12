@@ -167,7 +167,7 @@ def test_an_empty_forge_book_hints_at_smiths_and_tales_only(made):
 
 
 def test_the_next_season_question_says_the_forge_secrets_change():
-    """打造隱藏配方設計 10.3（FB-133 提過）：「開啟下一季」的問句提一句鑄法換一批、鑄譜重來（第一批沒有神器那半句）。"""
+    """打造隱藏配方設計 10.3：「開啟下一季」的問句提一句鑄法換一批、鑄譜與神器重來、神器譜留著。"""
     js = (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
     question = js.split("next_season: [", 1)[1].split('"確定開啟下一季"', 1)[0]
-    assert "鐵匠鋪的隱藏鑄法換一批、鑄譜重來" in question
+    assert "鐵匠鋪的隱藏鑄法換一批、鑄譜與神器重來（神器譜留著）" in question

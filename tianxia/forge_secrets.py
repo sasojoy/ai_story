@@ -1,4 +1,4 @@
-"""打造的隱藏配方（docs/superpowers/specs/2026-10-12-打造隱藏配方-design.md；第一批：名器、首位發現者、線索與鑄譜；神器是第二批）。
+"""打造的隱藏配方（docs/superpowers/specs/2026-10-12-打造隱藏配方-design.md；第一批：名器、首位發現者、線索與鑄譜；第二批：神器原品與仿品、定名的檢查、神器譜）。
 
 | 誰 | 做什麼 |
 |---|---|
@@ -15,8 +15,8 @@ from __future__ import annotations
 import hashlib
 
 from . import armor, equipment, secret_recipes, weapons
-from .models import Content, ForgeSecret, ForgeSide, Material
-from .state import GameState, GearFind, Manual, PlayerState
+from .models import WEAPON_KINDS, Content, ForgeSecret, ForgeSide, Material
+from .state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, GearFind, Manual, PlayerState
 from .world_state import WorldStateStore
 
 PREFIX = "鑄|"  # gear_recipes 裡隱藏配方那幾列的鍵開頭（7.1）：不跟「融|」「合|」「兼|」「秘|」「兵|」「鎧|」撞；state.GearFind.id 用同一個字
@@ -62,6 +62,16 @@ def key(recipe: ForgeSecret) -> str:
     return PREFIX + recipe.id
 
 
+def key_for(secret_id: str) -> str:
+    """配方 id 換成 gear_recipes 的鍵（同 key，給只有 Equipment.secret 的地方用）。"""
+    return PREFIX + secret_id
+
+
+def owned_gear(p: PlayerState) -> list[Equipment]:
+    """身上的兵器與防具、裝備庫、寄放的每一件（名器與神器的名字重寫、找原品都照這一份）。"""
+    return [item for item in (p.weapon, p.armor, *p.rack, *p.held_gear) if item is not None]
+
+
 def match(content: Content, tianji: int, slot: str, kind: str | None, main: str, aux: str) -> ForgeSecret | None:
     """這一爐合得上這一季的哪一條隱藏配方（3.1）：欄位、兵器種類（防具不看）、主料、輔料各自對得上形狀；主輔不交換。不擲骰。"""
     if not content.forge_secrets or main not in content.materials or aux not in content.materials:
@@ -90,33 +100,123 @@ def solve(state: GameState, tianji: int, recipe: ForgeSecret, combo: str) -> Non
 
 
 def new_find(state: GameState, recipe: ForgeSecret, kind: str | None, attribute: str, tier: int) -> GearFind:
-    """首位發現者那一筆（7.1）：登記當下記下名器的名字與寫給別人看的名號（同 fusion._secret_lines 用名號）。"""
+    """首位發現者那一筆（7.1）：登記當下記下名器的名字（神器配方是譜名）與寫給別人看的名號（同 fusion._secret_lines 用名號）。
+    神器配方（照 14.1 甲）首位發現者就是原品主人：同一筆一起記，claim_gear_find 那一筆交易誰先寫進去誰拿原品。"""
+    me = state.player.name
     return GearFind(secret=recipe.id, slot=recipe.slot, kind=kind if recipe.slot == "weapon" else "", attribute=attribute, tier=tier,
-                    title=recipe.name, creator=state.player.name, creator_shown=state.player.name)
+                    title=recipe.name, creator=me, creator_shown=me, divine=recipe.divine,
+                    owner=me if recipe.divine else None, master_shown=me if recipe.divine else None)
 
 
 def arrival(state: GameState, content: Content, recipe: ForgeSecret, find: GearFind, first: bool) -> list[str]:
-    """名器打出來那一句的下面（4.2、7.2）：一句說明（note），再一句——全服第一個摸出來的、自己又打一件、或照別人摸出來的打成了。"""
+    """名器或神器打出來那一句的下面（4.2、5.2、5.3、7.2）：一句說明（note），再一句——
+    名器：全服第一個摸出來的、自己又打一件、或照別人摸出來的打成了；
+    神器：原品（叫你去定名）、仿品而原品在自己手上、仿品而原品在別人手上。"""
     rule = content.config.forge_secrets
     lines = [recipe.note] if recipe.note else []
-    if first:
+    me = state.player.name
+    if recipe.divine:
+        if first:
+            lines.append(rule.divine_line)
+        elif find.owner == me:
+            lines.append(rule.copy_mine_line)
+        else:
+            lines.append(rule.copy_line.format(who=find.master_shown or find.owner or "不知名的前人"))
+    elif first:
         lines.append(rule.first_line)
-    elif find.creator == state.player.name:
+    elif find.creator == me:
         lines.append(rule.mine_line)
     else:
         lines.append(rule.follow_line.format(who=find.creator_shown or find.creator or "不知名的前人"))
     return [line for line in lines if line]
 
 
-def refresh_names(p: PlayerState, content: Content) -> None:
-    """讀檔時照內容重寫名器的名字（4.2：joy 改名不動存檔，name 只當備份；同 treasures.refresh_names）：身上的兵器與防具、裝備庫、
-    寄放的每一件有 secret 的；內容拿掉了那一條就留著舊名字。Game._drop_stale_references 每次建 Game 都叫。仿品、原品是第二批，不碰。"""
-    for item in (p.weapon, p.armor, *p.rack, *p.held_gear):
-        if item is None or item.secret is None or item.copy_of is not None or item.original:
+def refresh_names(p: PlayerState, content: Content, world: WorldStateStore | None = None) -> None:
+    """讀檔時重寫名器與神器的名字（name 只當備份）：Game._drop_stale_references 每次建 Game 都叫。
+    名器照內容（4.2：joy 改名不動存檔；同 treasures.refresh_names），內容拿掉了那一條就留著舊名字。
+    神器照全服那一列（5.2、5.3）：原品是定的名字（還沒定是「無名神器」），仿品是「仿・」接原品的名字——原品定名之後，別人手上的仿品
+    下一次讀檔跟著改；這一季沒有那一列（別一季打的、資料不在）或沒給 world 就留著。只有 original／copy_of 的那幾件才查資料庫。"""
+    for item in owned_gear(p):
+        if item.secret is None:
+            continue
+        if item.original or item.copy_of is not None:
+            find = world.lookup_gear_find(item.copy_of or key_for(item.secret)) if world is not None else None
+            if find is not None and find.divine:
+                item.name = find.name if item.original else COPY_NAME.format(name=find.name)
             continue
         recipe = content.forge_secrets.get(item.secret)
         if recipe is not None:
             item.name = recipe.name
+
+
+# ── 神器原品定名的檢查（5.2；訊息、江湖史、傳聞在 smithing.name_divine）──────────
+
+TABLE_CLASH = "跟鐵匠鋪尋常打得出的名字同名"  # 待 joy 潤：神器定的名字跟一般組合字表組得出的名字撞了
+
+
+def what_text(slot: str, kind: str) -> str:
+    """寫給人看的「哪一種」：兵器寫兵器字（weapons.NOUNS：劍、拳套），防具寫「防具」。"""
+    return weapons.NOUNS.get(kind, kind) if slot == "weapon" else "防具"
+
+
+def table_names(content: Content) -> set[str]:
+    """一般組合的字表組得出來的每一個名字（5.2）：兵器 字首×兵器中間字×兵器字、防具 字首×防具中間字×甲鎧袍衫。用整張字表（不只前
+    「素材數」個字），joy 之後在素材表後面加素材也擋得住。約三千個字串，只在定名時現算，不快取。"""
+    names = content.craft_names
+    made = {p + m + n for p in names.prefixes for m in names.weapon for n in weapons.NOUNS.values()}
+    return made | {p + m + n for p in names.prefixes for m in names.armor for n in armor.FORGE_WORDS}
+
+
+def divine_name_problem(content: Content, slot: str, kind: str, name: str) -> str | None:
+    """神器原品定的名字還要過的（5.2；name_problem 另外過）：兵器不能有**別種**兵器的字（不要求帶自己這一種的字，例「斬月」）、
+    不能跟架上的現成兵器同名；防具不能有兵器的字、不能跟架上的防具同名；都不能跟一般組合的字表組得出的名字同名
+    （不然「仿・X」跟一般組合的「X」並存）。None＝可以。"""
+    if slot == "weapon":
+        if any(word in name for other, words in weapons.WEAPON_WORDS.items() if other != kind for word in words):
+            return weapons.KIND_CLASH
+        if name in {weapons.shop_name(k, a) for k in WEAPON_KINDS for a in weapons.ATTR_WORDS}:
+            return weapons.SHOP_CLASH
+    else:
+        if any(word in name for words in weapons.WEAPON_WORDS.values() for word in words):
+            return armor.WORD_CLASH
+        if name in armor.SHOP_NAMES.values():
+            return armor.SHOP_CLASH
+    if name in table_names(content):
+        return TABLE_CLASH
+    return None
+
+
+def unnamed_originals(state: GameState, world: WorldStateStore) -> dict[str, str]:
+    """身上、裝備庫、寄放的神器原品裡還等著你定名的（5.2）：裝備 id → 譜名（「沿用譜名」那一顆寫的字，登記當下記的 GearFind.title）。
+    只查有 original 的那幾件（一個人頂多幾件）；全服那一列的主人是你、還沒定名才算。一個人可以同時有好幾把（5.2：不能像絕學那樣擋）。"""
+    p = state.player
+    out: dict[str, str] = {}
+    for item in owned_gear(p):
+        if not item.original or item.secret is None:
+            continue
+        find = world.lookup_gear_find(key_for(item.secret))
+        if find is not None and find.divine and find.owner == p.name and find.divine_name is None:
+            out[item.id] = find.title
+    return out
+
+
+# ── 神器譜（5.5：見聞→江湖史底下，跨季保留）──────────────────
+
+DIVINE_BOOK = "### 神器譜"  # 待 joy 潤：江湖史那一頁另起的一段標題
+
+
+def divine_book(records: list[tuple[int, GearFind]]) -> str:
+    """神器譜那一段的 Markdown（Game.chronicle_text 接在江湖史後面）：一把一行——第幾季、名字（還沒定名寫「無名神器（劍）」）、
+    種類或防具、屬性、原品在誰手上（打出那一刻記下的 master_shown）、仿品幾把（不列人名）。沒有神器是空字串。整行待 joy 潤。"""
+    if not records:
+        return ""
+    lines = []
+    for season, find in records:
+        what = what_text(find.slot, find.kind)
+        name = f"【{find.divine_name}】" if find.divine_name else f"{DIVINE_UNNAMED}（{what}）"
+        copies = f"，仿品 {find.copies} 把" if find.copies else ""
+        lines.append(f"- 第 {season} 季　{name}　{what}・屬{find.attribute}　原品在{find.master_shown or find.owner}手上{copies}")
+    return f"{DIVINE_BOOK}\n\n" + "\n".join(lines)
 
 
 # ── 線索與鑄譜（第六節）──────────────────────────────────

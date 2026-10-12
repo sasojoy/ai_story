@@ -240,6 +240,22 @@ def test_armor_is_never_offered_to_an_arms_bounty(beta_setup):
     assert _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, arms))[0] == ["兵:1", "兵:2"]
 
 
+def test_a_divine_original_is_never_offered_to_an_arms_bounty(beta_setup):
+    """打造隱藏配方設計 5.4：神器原品不能交求兵（手上那把也不收：一季全服只有一把，交了就上不了神器譜）；仿品照一般兵器收。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    arms = _arms(world, attribute="剛")
+
+    def armed(p):
+        p.weapon = _blade("兵:1", attribute="剛", tier=3, quality="上品", original=True, secret="t_star")
+        p.rack = [_blade("兵:2", attribute="剛", tier=3, quality="上品", copy_of="鑄|t_star", secret="t_star")]
+
+    _edit(world, "丙", armed)
+    problems = _do(content, world, "丙", lambda g: [bounties.fit_problem(g.state, g.content, g.world, arms, i) for i in ("兵:1", "兵:2")])[0]
+    assert problems == [bounties.ORIGINAL_KEPT, None]
+    assert _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, arms))[0] == ["兵:2"]
+
+
 def test_fitting_lists_the_art_that_melts_for_least_first(beta_setup):
     """設計 4.4：合用的照「最不值錢的先」排——求藝照熔煉值（library.melt_value）、再照名字。"""
     content, world = beta_setup

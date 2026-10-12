@@ -14,6 +14,7 @@
 聽到幾句鑄器口訣（說書／鐵匠／殘譜）、這一季打了幾爐（兵器加防具）、其中幾件名器。解口訣與全知兩邊照鑄譜去湊那一爐（聽過那一條的
 任何一句、或一開季就知道，手上湊得出就打；包住 `smithing.forge_plan`／`armor_plan`），隨機那一邊照舊。每個種子三邊印完再印一行
 『三邊合起來』（每個機器人獨佔一個資料庫，合起來當全服的粗估）。
+打造第二批起另印神器原品、仿品幾把，與一季拿到幾個三階（新來源另計）。
 
 用法：.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile weekend]
 """
@@ -38,14 +39,17 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_secrets_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, forge_secrets, fusion, insights, library, naming, secret_recipes, smithing, team  # noqa: E402
+from tianxia import bot, database, forge_secrets, fusion, insights, library, materials, naming, secret_recipes, smithing, team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 SIDES = ("隨機", "解口訣", "全知")
 SETTING_KEYS = ("terrain", "night_match", "night_clash", "battlefield", "calm")
-GROUP_WORDS = {"weapon:1": "兵一階", "weapon:2": "兵二階", "weapon:3": "兵三階", "armor:1": "甲一階", "armor:2": "甲二階", "armor:3": "甲三階"}
+GROUP_WORDS = {
+    "weapon:1": "兵一階", "weapon:2": "兵二階", "weapon:3": "兵三階", "armor:1": "甲一階", "armor:2": "甲二階", "armor:3": "甲三階",
+    "weapon:divine": "兵神器", "armor:divine": "甲神器",
+}
 
 
 def _forge_order(state, content, recipe):
@@ -137,7 +141,8 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
     tally = Tally()
     original_pick_forge, fuse_odds, blend_odds, roll_quality = bot.pick_forge, fusion.fuse_odds, fusion.blend_odds, fusion.roll_quality
     rule = content.config.fuse_quality
-    forged = {"爐": 0, "名器": 0}
+    forged = {"爐": 0, "名器": 0, "原品": 0, "仿品": 0}
+    tier3 = {"全部": 0, "新來源": 0}
     original_forge_plan, original_armor_plan, original_forge = smithing.forge_plan, smithing.armor_plan, smithing.forge
 
     def steer(slot, original):
@@ -159,8 +164,25 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         item, msgs = original_forge(*args, **kwargs)
         if item is not None:
             forged["爐"] += 1
-            forged["名器"] += item.secret is not None
+            forged["名器"] += item.secret is not None and not item.original and item.copy_of is None
+            forged["原品"] += item.original
+            forged["仿品"] += item.copy_of is not None
         return item, msgs
+
+    real_grant, real_pick = materials.grant, materials.tier3_pick
+
+    def counted_grant(state, content_, material_id, count=1):
+        """一季拿到幾個三階（不論來源：掉落表、新來源、事件、路上）。"""
+        line = real_grant(state, content_, material_id, count)
+        if line and content_.materials[material_id].tier == 3:
+            tier3["全部"] += count
+        return line
+
+    def counted_pick(*args, **kwargs):
+        """三階的新來源（Game._tier3 擲中了才挑）：挑戰本人與大場面另擲的那幾個。"""
+        mid = real_pick(*args, **kwargs)
+        tier3["新來源"] += mid is not None
+        return mid
 
     def bare(fn, *args, **kwargs):
         saved = {k: getattr(rule, k) for k in SETTING_KEYS}
@@ -213,7 +235,8 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
             mock.patch.object(fusion, "fuse_odds", stash(fuse_odds)), mock.patch.object(fusion, "blend_odds", stash(blend_odds)), \
             mock.patch.object(fusion, "roll_quality", rolled), \
             mock.patch.object(smithing, "forge_plan", steer("weapon", original_forge_plan)), \
-            mock.patch.object(smithing, "armor_plan", steer("armor", original_armor_plan)), mock.patch.object(smithing, "forge", counted_forge):
+            mock.patch.object(smithing, "armor_plan", steer("armor", original_armor_plan)), mock.patch.object(smithing, "forge", counted_forge), \
+            mock.patch.object(materials, "grant", counted_grant), mock.patch.object(materials, "tier3_pick", counted_pick):
         game = bot.play_season(content, seed, world=world)
     tianji = secret_recipes.tianji_of(game.world)
     book = secret_recipes.manual(game.state, tianji)
@@ -235,6 +258,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         "鑄器組": Counter(forge_secrets.group_of(content.forge_secrets[rid]) for rid in fbook.solved),
         "鑄說書": fheard.count(forge_secrets.TALE), "鑄鐵匠": fheard.count(forge_secrets.SMITH), "鑄殘譜": fheard.count(forge_secrets.SCRAP),
         "打造": forged["爐"], "名器": forged["名器"], "鑄器哪幾條": set(fbook.solved),
+        "原品": forged["原品"], "仿品": forged["仿品"], "三階": tier3["全部"], "三階新": tier3["新來源"],
     }
 
 
@@ -251,7 +275,8 @@ def _fmt_forge(row: dict) -> str:
     groups = "・".join(f"{GROUP_WORDS.get(g, g)} {n}" for g, n in sorted(row["鑄器組"].items())) or "—"
     share = f"{row['名器'] / row['打造'] * 100:.0f}%" if row["打造"] else "—"
     return (f"鑄器：摸到 {row['鑄器摸到']}/{row['鑄器這一季']}（{groups}）　口訣 說書 {row['鑄說書']}・鐵匠 {row['鑄鐵匠']}・殘譜 {row['鑄殘譜']}"
-            f"　打造 {row['打造']} 爐、名器 {row['名器']}（{share}）")
+            f"　打造 {row['打造']} 爐、名器 {row['名器']}（{share}）　神器 原品 {row['原品']}・仿品 {row['仿品']}"
+            f"　三階 {row['三階']}（新來源 {row['三階新']}）")
 
 
 def main() -> None:
@@ -283,6 +308,7 @@ def main() -> None:
         print(
             f"{side}平均 鑄器：摸到 {mean('鑄器摸到'):.1f}/{mean('鑄器這一季'):.0f}　口訣 說書 {mean('鑄說書'):.1f}・鐵匠 {mean('鑄鐵匠'):.1f}"
             f"・殘譜 {mean('鑄殘譜'):.1f}　打造 {mean('打造'):.1f} 爐、名器 {mean('名器'):.1f}"
+            f"　神器 原品 {mean('原品'):.1f}・仿品 {mean('仿品'):.1f}　三階 {mean('三階'):.1f}（新來源 {mean('三階新'):.1f}）"
         )
 
 

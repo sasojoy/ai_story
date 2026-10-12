@@ -2,7 +2,7 @@
 用假時鐘跑完一整季，印出有沒有開戰、兩邊參戰人數、各陣營人數、結局，以及假人合成的量測（「合成」那一行：
 開爐的種類、首創與合到舊的、模型呼叫數、輪不到取名的次數、庫存最多幾門；假人取名預設用字表組的假名字、只數次數，
 `--real-model` 才真的叫模型），與懸賞、截殺的量測（「懸賞」那一行，懸賞榜設計 11.2：每一種懸賞掛出、揭下、交差幾張，
-求藝交出幾門、求兵交出幾把，截殺幾場，被截殺最多的那個人一季被截幾次、丟了多少銀兩與氣血，每一週最多冒出幾批〔應該是 1〕）。
+求藝交出幾門、求兵交出幾把，截殺幾場，被截殺最多的那個人一季被截幾次、丟了多少銀兩與氣血，每一週最多冒出幾批〔應該是 1〕）；打造第二批起多一行「打造」（假人整季打了幾爐、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件）。
 
 執行：.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 --time-scale 6 --tick 60
 （加 --pause-at 4 --pause-hours 3：開季後第 4 個現實鐘頭讓賽季時鐘停 3 個鐘頭；結果的 pause 一欄寫停的那一段季走了多少，應該是 0）
@@ -153,6 +153,18 @@ def _pause_step(world, content, now: float, pause: tuple[float, float], frozen: 
             resume_season_clock(world, content, now, random.Random(0), "停了 {minutes} 分鐘")
 
 
+def smith_report(states) -> dict:
+    """假人整季的打造（打造第二批，PM 決定第 3 條）：打了幾爐（forge_counts 加總）、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件。"""
+    items = [i for s in states for i in (s.player.weapon, s.player.armor, *s.player.rack) if i is not None]
+    return {
+        "打造": sum(sum(s.player.forge_counts.values()) for s in states),
+        "打過的假人": sum(1 for s in states if s.player.forge_counts),
+        "名器": sum(1 for i in items if i.secret and not i.original and i.copy_of is None),
+        "原品": sum(1 for i in items if i.original),
+        "仿品": sum(1 for i in items if i.copy_of),
+    }
+
+
 def run_season(
     content, workdir: Path, seed: int, tick: float, real_model: bool = False,
     pause: tuple[float, float] | None = None,
@@ -276,6 +288,7 @@ def run_season(
         "tempers": dict(Counter(s.player.bot.personality for s in bots)),
         "forge": tally.report([len(library.owned_arts(s)) for s in bots]),
         "bounties": bounty_tally.report(),
+        "smith": smith_report(bots),
         "late_joiners": late,  # 季中才加入（joined_at > 0）的角色數：新手福利從他們自己加入那天起算
         "pause": pause_log,
     }
@@ -303,11 +316,14 @@ def main() -> None:
             finally:
                 database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾（這一季出錯時也一樣）
         forge, bounty = result.get("forge"), result.get("bounties")
-        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k not in ('forge', 'bounties')} }", flush=True)
+        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k not in ('forge', 'bounties', 'smith')} }", flush=True)
         if forge is not None:
             print(f"　合成：{forge}", flush=True)
         if bounty is not None:
             print(f"　懸賞：{bounty}", flush=True)
+        smith = result.get("smith")
+        if smith is not None:
+            print(f"　打造：{smith}", flush=True)
 
 
 if __name__ == "__main__":

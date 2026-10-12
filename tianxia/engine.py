@@ -524,7 +524,7 @@ class Game:
         if p.picking_market and not mounts.market_here(s, c):
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
-        forge_secrets.refresh_names(p, c)  # 名器的名字照內容讀（打造隱藏配方設計 4.2）：joy 改了名字，存檔裡的跟著改；拿掉了留著舊名字
+        forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -1444,8 +1444,13 @@ class Game:
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             if not quiet:
+                # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
+                # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「鐵匠把…下爐，打出一把【…】（種類・屬…）」
+                # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smithing.is_step_line）：
+                # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
+                forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
                 journal.add_entry(self.state, entry, merge=(kind == "smith" and smithing.is_forge_step(arg) and arg != "forge") or (
-                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS))
+                    kind == "bounty" and arg.partition(":")[0] in bounties.HAND_IN_VERBS), fold=smithing.is_step_line if forged else False)
         finally:
             self._draft = None
             self._fight = None
@@ -2652,6 +2657,8 @@ class Game:
             return []
         breakable = sorted(equipment.in_slot(self.state.player, slot), key=equipment.dismantle_order)
         opts = [
+            Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{equipment.ORIGINAL_KEPT}）", enabled=False)  # 5.4：灰掉寫原因
+            if w.original else
             Option(id=f"smith:dismantle:{w.id}",
                    label=f"拆解【{w.name}】（{equipment.grade_line(w)}）→ {equipment.dismantle_material(c, w).name}×1",
                    confirm=equipment.dismantle_confirm(c, w), confirm_yes=equipment.DISMANTLE_YES)  # FB-125：先問一次
@@ -4505,6 +4512,7 @@ class Game:
             record.notes += notes
             msgs += extra
             msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
+            msgs += self._figure_tier3(fid, squad, record)  # 打贏本人掉一個三階（兵器設計 4.9）：戰報「得失」與江湖紀錄
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier)
@@ -4551,6 +4559,33 @@ class Game:
         if item is not None:
             record.materials.append(treasures.GAIN_LINE.format(name=item.name))
         return lines
+
+    def _tier3(self, squad: Squad, record, chance: float, tag: str) -> list[str]:
+        """三階素材的新來源（兵器設計 4.9；打造第二批）：擲 chance，中了照對手隊伍的屬性給一個三階素材（materials.tier3_pick），
+        寫進這一場戰報的「得失」與江湖紀錄。自己一份亂數（「三階|季數|名號|戰報流水號|tag」；流水號每季從 1 起所以要季數，同
+        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。"""
+        if chance <= 0 or prologue_rules.active(self.state, self.content):
+            return []
+        seed = f"三階|{self.world.get_season_number()}|{self.state.player.name}|{record.id}|{tag}"
+        if random.Random(seed).random() >= chance:
+            return []
+        mid = materials.tier3_pick(self.content, squad.attribute, seed)
+        line = materials.grant(self.state, self.content, mid) if mid is not None else None
+        if not line:
+            return []
+        record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+        return [line]
+
+    def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
+        """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
+        PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）。"""
+        rule, p = self.content.config.forge_secrets, self.state.player
+        if rule.tier3_per_figure and p.tier3_drops.get(fid, 0) >= rule.tier3_per_figure:
+            return []
+        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
+        if got:
+            p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
+        return got
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
@@ -4663,6 +4698,11 @@ class Game:
                     got.append(material_id)
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
+            # 大場面對手的掉落表加三階（兵器設計 4.9）：另擲一次 big_tier3（自己的亂數）；大勢人物本人那支隊伍的那一個在 _challenge，不重複擲；
+            # 探索野怪不算大場面（同大場面判讀：_squad_encounter 對野怪不問模型；CLAUDE.md「大場面」那一條）
+            figure_squads = {fig.squad for fig in self.content.figures.values()}
+            if record.kind != "wild" and self.is_big(squad) and squad.id not in figure_squads:
+                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面")
             if record.kind in ("train", "wild"):  # 兵器掉落與寶物多掉的素材（兵器設計 4.8、裝備四欄 6.2）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
                 extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)  # 自己的亂數
                 line = materials.grant(self.state, self.content, extra) if extra is not None else None
@@ -5340,6 +5380,18 @@ class Game:
             self._save_season()
             shown = self._art_name(pending)
             annals.note(self.state, self.content, annals.DEED, f"江湖上第一個把【{pending}】練成絕學的人，定名【{shown}】。", 5)
+        return msgs
+
+    @_not_while_preparing
+    def name_divine(self, item_id: str, name: str = "", keep: bool = False) -> list[str]:
+        """神器原品定名（smithing.name_divine；修練頁裝備庫那一列的表單，或「沿用譜名」那一顆）：定成了才寫江湖紀錄，
+        江湖史與傳聞寫進共用賽季所以要存回（不合格、被用掉、不是你的都只回一句話）。"""
+        xinde = self._xinde()
+        ok, msgs = smithing.name_divine(self.state, self.content, self.world, item_id, name, keep=keep)
+        msgs = self._log(msgs)
+        if ok:
+            self._menxia_entry(msgs[0], xinde)
+            self._save_season()
         return msgs
 
     @_not_while_preparing
@@ -7709,12 +7761,15 @@ class Game:
         return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
-        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
+        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是神器譜（有才寫），最後是玉璽碎片。"""
         number = self.world.get_season_number()
         current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
         parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
+        book = forge_secrets.divine_book(self.world.divine_records())  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露
+        if book:
+            parts.append(book)
         parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
 

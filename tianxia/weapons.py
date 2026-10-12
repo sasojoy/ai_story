@@ -68,8 +68,13 @@ def bonus(weapon: Weapon | None, art: MartialArt | None, content: Content, world
     if not usable(weapon, art, content, world):
         return 0.0
     rule = content.config.weapons
-    base = rule.tier_bonus.get(str(weapon.tier), 0.0) + rule.quality_bonus.get(weapon.quality, 0.0)
-    base += rule.temper_step * weapon.tempers
+    if weapon.original:  # 神器原品、仿品（打造隱藏配方設計 4.3）：基本值取代階那一格；品質存上品、照查表 +4；不看內容、不另加名器的 2%
+        base = rule.original_base
+    elif weapon.copy_of is not None:
+        base = rule.copy_base
+    else:
+        base = rule.tier_bonus.get(str(weapon.tier), 0.0)
+    base += rule.quality_bonus.get(weapon.quality, 0.0) + rule.temper_step * weapon.tempers
     if equipment.named(content, weapon):
         base += rule.named_bonus  # 名器多一截（打造隱藏配方設計 4.2）
     if weapon.attribute == art.attribute:
@@ -212,11 +217,12 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
-    secret: str | None = None,
+    secret: str | None = None, original: bool = False, copy_of: str | None = None,
 ) -> Weapon:
-    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器的隱藏配方 id。"""
+    """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器或神器的隱藏配方 id；
+    original／copy_of 是神器的原品與仿品（copy_of 記「鑄|配方 id」，打造隱藏配方設計 5.3）。"""
     return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
-                  recipe=recipe, secret=secret)
+                  recipe=recipe, secret=secret, original=original, copy_of=copy_of)
 
 
 def rack_full(state: GameState, content: Content) -> bool:
@@ -371,7 +377,8 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
         "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
         "grade": grade(w),
-        "confirm": "" if worn else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）
+        "confirm": "" if worn or w.original else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）；原品也拆不得（5.4）
+        "keep": equipment.ORIGINAL_KEPT if w.original else "",  # 網頁照它把拆解鈕灰掉寫原因
         "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
         "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
     }

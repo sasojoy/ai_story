@@ -223,6 +223,21 @@ class WorldStateStore(Protocol):
         鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
+    def add_copy(self, key: str) -> None:
+        """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
+        ...
+
+    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+        """神器原品定名（打造隱藏配方設計 5.2、7.1、7.3；鎖內原子，同 rename_skill）：這一季這條神器配方那一列的原品主人是 owner、還沒定名、
+        名字沒被佔（_name_taken：武學、改過的名字、意境、gear_recipes），才把名字欄與 data 一起改掉（定的名字佔名字空間）。
+        回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
+        ...
+
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        """神器譜（打造隱藏配方設計 5.5）：歷來每一季的神器原品——gear_recipes 裡「鑄|」開頭、神器配方、有原品主人的列，
+        照季、再照鍵排，跨季讀（換季不刪）。回（季數, 那一列）。"""
+        ...
+
     # ── 合到舊的（武學與成長設計 12.2；這一季）──
     def fused_arts(self) -> list[MartialArt]:
         """這一季靠合成登記的功法（origin 是 fused），照登記的先後；「合到舊的」從這裡找候選。"""
