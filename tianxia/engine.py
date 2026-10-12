@@ -4163,12 +4163,13 @@ class Game:
 
     def _lose_silver(self, record) -> list[str]:
         """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
-        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|名號|戰報流水號」，同回合演出的做法），不動 Game.rng，
-        整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
+        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|季數|名號|戰報流水號」：戰報流水號每季從頭算，少了季數
+        每一季第 N 場的結果都一樣），不動 Game.rng，整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
         p = self.state.player
         loss = p.stats["silver"] // 10
         chance = mounts.escape(self.state, self.content)
-        if loss and chance > 0 and random.Random(f"脫身|{p.name}|{record.id}").random() < chance:
+        seed = f"脫身|{self.world.get_season_number()}|{p.name}|{record.id}"
+        if loss and chance > 0 and random.Random(seed).random() < chance:
             record.notes.append(mounts.ESCAPED_LOSS)
             return [mounts.ESCAPED_LOSS]
         p.stats["silver"] -= loss
