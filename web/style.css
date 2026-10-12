@@ -628,6 +628,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .gear .wrow { display: flex; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
 .gear .wrow .winfo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 6px; }
 .gear .wrow .wbtns { flex: none; display: flex; gap: 6px; }
+/* FB-137：灰掉的「餵」「換上」的原因，單獨一行寫在那一列的說明底下（鈕上只留動詞） */
+.gear .wrow .winfo .rwhy { flex: 0 0 100%; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
 .gear p { margin: 4px 2px; }
 .acard .hd { display: flex; gap: 10px; align-items: center; }
 .acard .hd > div { min-width: 0; }

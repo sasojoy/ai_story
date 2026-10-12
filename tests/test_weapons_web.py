@@ -240,6 +240,28 @@ def test_wield_is_greyed_on_the_road_with_the_reason(views):
     assert 'data-act="wield" data-id="騎:2" disabled' in block and "在路上" in block
 
 
+def test_a_greyed_button_is_only_the_verb_and_the_reason_sits_in_the_title_and_on_the_row(views):
+    """FB-137：灰掉的「餵」「換上」鈕上只寫動詞（原因塞在鈕裡會把左邊的說明擠成一行六、七個字，那一列變 4～6 行）；
+    原因放在鈕的 title，也寫在那一列自己的說明底下（手機沒有 title 可看）。能按的「餵」照舊寫用哪一種素材。"""
+    m, x = views
+    spare = _mount_row(id="騎:2", name="青驄駒", feed=False, feed_note="", wield_ok=False, wield_note="在路上")
+    x["gear"] = _mount_gear(_mount_row(feed=False, feed_note="在路上，停下來再餵"), [spare])
+    block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert '<button class="btn small" data-act="feed" disabled title="在路上，停下來再餵">餵</button>' in block
+    assert '<button class="btn small" data-act="wield" data-id="騎:2" disabled title="在路上">換上</button>' in block
+    assert "餵（" not in block and "換上（" not in block
+    assert block.count('class="rwhy"') == 2  # 原因寫在列上：身上那匹一句、裝備庫那匹一句
+    assert "在路上，停下來再餵</small>" in block and "在路上</small>" in block
+    # 原因跳脫；能按的鈕沒有 title、沒有說明那一行
+    x["gear"] = _mount_gear(_mount_row(feed=False, feed_note="<i>怪</i>"), [_mount_row(id="騎:2", feed=False, feed_note="")])
+    odd = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "&lt;i&gt;怪&lt;/i&gt;" in odd and "<i>怪</i>" not in odd
+    x["gear"] = _mount_gear(_mount_row(), [_mount_row(id="騎:2", feed=False, feed_note="")])
+    fine = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert '<button class="btn small" data-act="feed">餵（精鐵砂×1）</button>' in fine
+    assert 'class="rwhy"' not in fine and "title=" not in fine
+
+
 _FEED_CLICK = """return (async () => {
   const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } }) } });
   await click({ act: "feed" });

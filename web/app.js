@@ -2163,13 +2163,18 @@
     // 決戰強攻奇襲多幾成、落敗脫身的機會（2.5：後三項寫在修練頁這一列，不擠進角色卡）。
     // 身上那匹一顆「餵」（餵不了的灰掉、寫為什麼；餵得了寫用哪一種素材），裝備庫裡的只有「換上」：坐騎不能拆（4.8），不用 rowButtons；
     // 路上不能換坐騎（2.3），「換上」照伺服器給的 wield_ok 灰掉、寫 wield_note（同「餵」的灰掉做法）。
+    // FB-137：灰掉的鈕上只寫動詞（原因寫在鈕上，會把左邊的說明擠成一行六、七個字、那一列變 4～6 行）；原因放鈕的 title，
+    // 也寫在這一列自己的說明底下（.rwhy；手機沒有 title 可看）。能按的「餵」照舊寫用哪一種素材（短）。
     // 這一行的寫法待 joy 潤
-    const mountRow = (h, wornNow) => `<div class="wrow">
-        <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・趕路疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span></div>
+    const mountRow = (h, wornNow) => {
+      const why = wornNow ? (h.feed ? "" : h.feed_note || "") : (h.wield_ok ? "" : h.wield_note || "");
+      return `<div class="wrow">
+        <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・趕路疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span>${why ? `<small class="rwhy">${esc(why)}</small>` : ""}</div>
         <div class="wbtns">${wornNow
-          ? `<button class="btn small" data-act="feed"${h.feed ? "" : " disabled"}>餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>`
-          : `<button class="btn small" data-act="wield" data-id="${esc(h.id)}"${h.wield_ok ? "" : " disabled"}>換上${h.wield_ok ? "" : `（${esc(h.wield_note)}）`}</button>`}</div>
+          ? (h.feed ? `<button class="btn small" data-act="feed">餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>` : `<button class="btn small" data-act="feed" disabled${why ? ` title="${esc(why)}"` : ""}>餵</button>`)
+          : `<button class="btn small" data-act="wield" data-id="${esc(h.id)}"${h.wield_ok ? "" : ` disabled${why ? ` title="${esc(why)}"` : ""}`}>換上</button>`}</div>
       </div>`;
+    };
     // 寶物（裝備四欄設計第六節）：一件一種效果、不分階品、不磨損；身上那件寫效果，裝備庫裡的只有「換上」（寶物不能拆，4.8，不用 rowButtons）。
     // 寶物隨時能換（2.3【定】，企劃者 2026-10-11），「換上」不灰掉。這一行的寫法待 joy 潤
     const treasureRow = (t, wornNow) => `<div class="wrow">
