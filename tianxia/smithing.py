@@ -1,9 +1,13 @@
-"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批；打造隱藏配方設計第八節：不再叫模型取名）。
+"""打造與淬煉（docs/superpowers/specs/2026-10-09-兵器-design.md 4.2～4.4、4.7；兵器第二批；四欄設計 4.7：防具照同一套；
+打造隱藏配方設計第八、九節：不再叫模型取名）。
 
 | 誰 | 做什麼 |
 |---|---|
 | 引擎 | 配方鍵、屬性、階、工錢、品質擲骰、名字（一般組合照對照表）、淬煉 |
 | 模型 | 不碰打造 |
+
+防具沒有種類：單子與開爐鈕上用 ARMOR_KIND（「防具」）佔種類那一格（smith:forge-go:防具:<主料>:<輔料>），照它分派欄位、組合鍵、開關、
+設定（slot_of、recipe_key、here、rules_of）。防具的字、組合鍵、名字對照表在 armor.py。
 
 這個模組 import team 與 fusion（品質的推法、悟性、天時地利）；team 會 import weapons，所以 weapons 不能 import 這裡。
 鐵匠鋪的選單項（Option）在 engine 裡，回選單的函式延後 import（同 foreshadow.talk_options）。"""
@@ -12,7 +16,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 
-from . import equipment, fusion, team, weapons
+from . import armor, equipment, fusion, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -20,6 +24,32 @@ from .state import GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
 NOT_ENOUGH = "身上的素材不到兩個"  # 待 joy 潤
+ARMOR_KIND = "防具"  # 單子（SmithDraft.kind）與開爐鈕 id 上代表防具的那一格（防具沒有種類，四欄設計 4.7）
+
+
+def is_armor(kind: str | None) -> bool:
+    """這一爐（單子、開爐鈕、forge 的 kind）打的是防具。"""
+    return kind == ARMOR_KIND
+
+
+def slot_of(kind: str | None) -> str:
+    """這一爐打出來放哪一欄：防具 armor，其餘（兵器的種類、還沒挑種類的兵器單子）weapon。"""
+    return "armor" if kind == ARMOR_KIND else "weapon"
+
+
+def rules_of(content: Content, slot: str):
+    """打造與淬煉照哪一組設定（工錢、品質、淬煉）：防具 Config.armor，兵器 Config.weapons（四欄設計 2.6、3.4：各欄自己的設定）。"""
+    return content.config.armor if slot == "armor" else content.config.weapons
+
+
+def recipe_key(kind: str, main: str, aux: str) -> str:
+    """這一爐的組合鍵：兵器「兵|種類|主料+輔料」（weapons.recipe_key），防具「鎧|主料+輔料」（armor.recipe_key）。"""
+    return armor.recipe_key(main, aux) if kind == ARMOR_KIND else weapons.recipe_key(kind, main, aux)
+
+
+def here(state: GameState, content: Content, kind: str | None) -> bool:
+    """這一爐在這裡打得了：防具看防具的開關、其餘看武器的開關，人都要在城鎮（armor.smith_here、weapons.smith_here）。"""
+    return (armor.smith_here if kind == ARMOR_KIND else weapons.smith_here)(state, content)
 
 
 def tier_of(content: Content, main: str) -> int:
@@ -27,16 +57,17 @@ def tier_of(content: Content, main: str) -> int:
     return content.materials[main].tier
 
 
-def price(content: Content, tier: int) -> int:
-    """打一把這一階的工錢（4.2，Config.weapons.forge_silver）。"""
-    return content.config.weapons.forge_silver.get(str(tier), 0)
+def price(content: Content, tier: int, slot: str = "weapon") -> int:
+    """打一件這一階的工錢（兵器 4.2；防具照同一張表，Config.armor.forge_silver）。"""
+    return rules_of(content, slot).forge_silver.get(str(tier), 0)
 
 
 def attribute_with(content: Content, tianji: int, kind: str, main: str, aux: str) -> str:
-    """打出來的屬性（4.2）：照 insights.merged_attribute，種子是「天機|配方鍵」（同 fusion.recipe_seed），所以同一季同一個配方一樣。
+    """打出來的屬性（4.2）：照 insights.merged_attribute，種子是「天機|配方鍵」（同 fusion.recipe_seed），所以同一季同一個配方一樣；
+    防具的組合鍵是「鎧|主料+輔料」。
     同屬性與四對（剛快、柔慢、快柔、剛慢）合出來的跟主輔順序無關；其餘組合（剛柔、快慢）照種子的雜湊挑兩者之一，配方鍵分主輔，
     主輔對調是另一個配方，挑到的屬性可能不同（4.4：主輔不交換）。選單一次要算好幾個時先讀一次天機，用這一個。"""
-    seed = f"{tianji}|{weapons.recipe_key(kind, main, aux)}"
+    seed = f"{tianji}|{recipe_key(kind, main, aux)}"
     return merged_attribute(content.materials[main], content.materials[aux], seed)
 
 
@@ -45,11 +76,11 @@ def attribute_of(world: WorldStateStore, content: Content, kind: str, main: str,
 
 
 def forge_problem(state: GameState, content: Content, kind: str, main: str, aux: str) -> str | None:
-    """打不成的原因；None＝打得成。順序：不在鐵匠鋪、種類、素材認不得、素材不夠（主輔同一種要兩個）、裝備庫滿、銀兩不夠。
-    鐵匠鋪的鈕灰掉時寫它，C 段（forge）也再驗一次。"""
-    if not weapons.smith_here(state, content):
+    """打不成的原因；None＝打得成。順序：不在鐵匠鋪（這一欄關著）、種類、素材認不得、素材不夠（主輔同一種要兩個）、裝備庫滿、銀兩不夠。
+    kind 是兵器種類或 ARMOR_KIND。鐵匠鋪的鈕灰掉時寫它，forge 也再驗一次。"""
+    if not here(state, content, kind):
         return weapons.NOT_HERE
-    if kind not in WEAPON_KINDS:
+    if kind not in WEAPON_KINDS and kind != ARMOR_KIND:
         return "沒有這種兵器"
     if main not in content.materials or aux not in content.materials:
         return "沒有這種素材"
@@ -57,16 +88,16 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
     for mid, need in Counter([main, aux]).items():
         if held.get(mid, 0) < need:
             return f"{content.materials[mid].name}不夠（要 {need} 個）"
-    if weapons.rack_full(state, content):
+    if equipment.rack_full(state, content, slot_of(kind)):
         return weapons.RACK_FULL
-    short = price(content, tier_of(content, main)) - state.player.stats.get("silver", 0)
+    short = price(content, tier_of(content, main), slot_of(kind)) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def setting_points(state: GameState, content: Content, attribute: str) -> list[tuple[str, float]]:
+def setting_points(state: GameState, content: Content, attribute: str, slot: str = "weapon") -> list[tuple[str, float]]:
     """打造的天時地利（附帶決定 b）：地利、戰場、心靜都同合成（地利看此地探索悟得到同屬性的意境）。最多 setting_max 條。
-    兵器沒有正邪，所以合成的「晝夜」這裡沒有。"""
-    rule = content.config.weapons.quality
+    兵器沒有正邪，所以合成的「晝夜」這裡沒有；防具照 Config.armor.quality（同一套規則）。"""
+    rule = rules_of(content, slot).quality
     out: list[tuple[str, float]] = []
     if rule.terrain and fusion.terrain_here(state, content, attribute):
         out.append(("terrain", rule.terrain))
@@ -78,9 +109,9 @@ def setting_points(state: GameState, content: Content, attribute: str) -> list[t
     return out[: rule.setting_max]
 
 
-def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]:
+def setting_line(content: Content, scored: list[tuple[str, float]], slot: str = "weapon") -> list[str]:
     """結果多一句含蓄的話：天時地利合起來加分寫 setting_good、扣分寫 setting_bad；沒有、或那句是空的就不寫。"""
-    rule = content.config.weapons.quality
+    rule = rules_of(content, slot).quality
     total = sum(points for _, points in scored)
     line = rule.setting_good if total > 0 else rule.setting_bad if total < 0 else ""
     return [line] if line else []
@@ -88,17 +119,18 @@ def setting_line(content: Content, scored: list[tuple[str, float]]) -> list[str]
 
 def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str) -> QualityOdds:
     """這一爐的品質機率（4.3）：輔料的階（比主料高幾階）、悟性、熟手（這個配方這一季打過幾次，有上限）、天時地利，
-    從 Config.weapons.quality.odds 推（fusion.odds_from_points）。只看這一爐的組成，配方有沒有人打過都一樣。"""
-    rule = content.config.weapons.quality
+    從這一欄的 quality.odds（兵器 Config.weapons、防具 Config.armor）推（fusion.odds_from_points）。只看這一爐的組成，
+    配方有沒有人打過都一樣。"""
+    rule = rules_of(content, slot_of(kind)).quality
     m, a = content.materials[main], content.materials[aux]
     wis = state.player.stats.get("wis", team.BASE_STAT)
-    done = state.player.forge_counts.get(weapons.recipe_key(kind, main, aux), 0)
+    done = state.player.forge_counts.get(recipe_key(kind, main, aux), 0)
     scored = [
         ("aux", rule.aux_tier.get(str(a.tier - m.tier), 0.0)),
         ("wis", (team.stat_factor(content, wis) - 1) * 100 * rule.wis_weight),
         ("practice", min(rule.practice_cap, rule.practice_point * done)),
     ]
-    scored += setting_points(state, content, attribute_of(world, content, kind, main, aux))
+    scored += setting_points(state, content, attribute_of(world, content, kind, main, aux), slot_of(kind))
     return fusion.odds_from_points(scored, rule, rule.odds)
 
 

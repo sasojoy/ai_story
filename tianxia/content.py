@@ -33,6 +33,7 @@ from .models import (
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
+from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
 from .weapons import NOUNS as WEAPON_NOUNS, kind_problem as weapon_kind_problem
 from .zh import to_traditional
 
@@ -1556,8 +1557,9 @@ def validate(c: Content) -> None:
             reason = name_problem(prefix + suffix, c)
             need(reason is None, f"craft_names 組出的名字「{prefix + suffix}」過不了命名過濾：{reason}")
     need(bool(names.weapon), "craft_names.weapon 不能是空的")
+    need(bool(names.armor), "craft_names.armor 不能是空的")
     count = len(c.materials)  # 一般組合的名字照素材的位置取字（打造隱藏配方設計 4.1）：前 count 個字要夠、不能重複，名字才不會撞
-    for field in ("prefixes", "weapon"):
+    for field in ("prefixes", "weapon", "armor"):
         chars = getattr(names, field)[:count]
         need(len(chars) == count and len(set(chars)) == count,
              f"craft_names.{field} 至少要 {count} 個不重複的字（一般組合的名字照素材的位置取字；新素材加在 materials.json 最後）")
@@ -1567,6 +1569,12 @@ def validate(c: Content) -> None:
                 weapon_name = prefix + middle + noun
                 reason = name_problem(weapon_name, c) or weapon_kind_problem(kind, weapon_name)
                 need(reason is None, f"craft_names.weapon 組出的兵器名「{weapon_name}」過不了命名過濾：{reason}")
+    for prefix in names.prefixes:
+        for middle in names.armor:
+            for noun in sorted(set(ARMOR_FORGE_NOUNS.values())):
+                armor_name = prefix + middle + noun
+                reason = name_problem(armor_name, c) or armor_word_problem(armor_name)
+                need(reason is None, f"craft_names.armor 組出的防具名「{armor_name}」過不了命名過濾：{reason}")
     for word in c.banned_names:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)

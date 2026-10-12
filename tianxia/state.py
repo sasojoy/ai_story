@@ -178,7 +178,8 @@ class WeaponRecipe(BaseModel):
 
 
 class SmithDraft(BaseModel):
-    """鐵匠鋪「打造兵器…」挑到哪一步（smithing.draft_options）：種類 → 主料 → 輔料，三樣都有了就是開爐那一步。"""
+    """鐵匠鋪「打造兵器…／打造防具…」挑到哪一步（smithing.draft_options）：兵器是種類 → 主料 → 輔料；防具沒有種類，打開時 kind 就是
+    smithing.ARMOR_KIND（「防具」），從主料挑起。三樣都有了就是開爐那一步。"""
 
     kind: str | None = None
     main: str | None = None
@@ -266,8 +267,8 @@ class PlayerState(BaseModel):
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
-    forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
-    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
+    forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
+    smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
     # ── 武學與成長（設計第三、四節）──

@@ -72,6 +72,14 @@
       "setting_good": "爐火正旺，鐵匠說這一爐的火候對得出奇。"
     }
   },
+  "armor": {
+    "quality": {
+      "terrain": 10,
+      "battlefield": 10,
+      "calm": 8,
+      "setting_good": "爐火正旺，鐵匠說這一爐的火候對得出奇。"
+    }
+  },
   "secrets": {
     "quality_points": 30,
     "insight_points": 10,

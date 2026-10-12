@@ -1,13 +1,15 @@
 """防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節；裝備一）：一場仗少扣的氣血與內傷、耐久、鐵匠鋪架上四件、
 修、換、拆、機器人該按哪一顆、修練頁每一列與角色卡那一行。
 
-只 import models、state、martial_arts、equipment；team 反過來呼叫它（take_encounter_toll、toll_saved、Game._raid_spoils 都經
+只 import models、state、martial_arts、equipment、weapons（兵器的字表：防具的名字不能有兵器的字；weapons 不 import 這裡）；
+team 反過來呼叫它（take_encounter_toll、toll_saved、Game._raid_spoils 都經
 team.armor_cut），所以這裡不 import team 或 rules——身上那門內功由呼叫端解好（team.player_art）再傳進來，同 weapons 拿武學的做法。
-防具不從打仗掉（4.9）；打造與淬煉是之後的「防具打造」那一批（tempers 先算進減損，那一批不必回頭改 cut）。
+防具不從打仗掉（4.9）。打造與淬煉（四欄設計 4.7、打造隱藏配方設計第九節）：配方鍵、防具字、名字對照表在這裡，打造的流程在
+smithing（照兵器那一套）。
 """
 from __future__ import annotations
 
-from . import equipment
+from . import equipment, weapons
 from .equipment import NO_REPAIR_MATERIAL, NOT_HERE, RACK_FULL, grade, repair_material
 from .martial_arts import MartialArt, counters
 from .models import Content
@@ -90,9 +92,10 @@ def shop_item(attribute: str) -> Equipment:
     return Equipment(id=f"架:{attribute}", slot="armor", name=SHOP_NAMES[attribute], attribute=attribute, tier=1, quality="下品")
 
 
-def new_armor(state: GameState, *, name: str, attribute: str, tier: int, quality: str) -> Equipment:
-    """新的一件（四欄共用的流水號 +1，id「甲:N」）。"""
-    return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality)
+def new_armor(state: GameState, *, name: str, attribute: str, tier: int, quality: str, recipe: str | None = None) -> Equipment:
+    """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有。"""
+    return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality,
+                     recipe=recipe)
 
 
 def rack_full(state: GameState, content: Content) -> bool:
@@ -228,3 +231,61 @@ def card_line(state: GameState, content: Content, neigong: MartialArt | None) ->
     note = fit_note(item, neigong)
     line = f"防具　【{item.name}】屬{item.attribute}・{grade(item)}・{WEAR_WORD} {item.edge}，一場少扣 {pct(cut(item, neigong, content))} 氣血"
     return line + (f"（{note}）" if note else "")
+
+
+# ---- 打造的配方鍵與名字（四欄設計 4.7；打造隱藏配方設計 4.1、第九節）----
+
+FORGE_PREFIX = "鎧|"  # 防具組合鍵的開頭：前綴就是欄位（兵器是「兵|」）；不用「甲|」（「甲:N」是防具的 id 開頭，3.1）
+FORGE_WORDS = ("甲", "鎧", "袍", "衫")  # 防具的名字一定帶其中一個字（4.7）
+# 一般組合最後接的字，照這一件的屬性（架上四件就是這個對法：鐵葉甲、軟皮甲、輕綃衫、厚氈袍）。待 joy 潤
+FORGE_NOUNS = {"剛": "甲", "柔": "甲", "快": "衫", "虛": "衫", "慢": "袍", "陰": "袍", "陽": "鎧", "實": "鎧"}
+WORD_MISSING = "名字看不出是防具"  # 待 joy 潤
+WORD_CLASH = "名字像是兵器"  # 待 joy 潤
+SHOP_CLASH = "跟鐵匠鋪架上的防具同名"  # 待 joy 潤
+
+
+def recipe_key(main: str, aux: str) -> str:
+    """防具的組合鍵（4.7）：「鎧|主料+輔料」。沒有種類；主輔不交換（同兵器 4.4）。"""
+    return f"{FORGE_PREFIX}{main}+{aux}"
+
+
+def recipe_parts(key: str | None) -> tuple[str, str] | None:
+    """recipe_key 拆回（主料, 輔料）；不是防具欄的鍵（兵器的「兵|」、隱藏配方的「鑄|」、None）回 None。"""
+    if not key or not key.startswith(FORGE_PREFIX):
+        return None
+    main, plus, aux = key[len(FORGE_PREFIX):].partition("+")
+    return (main, aux) if plus and main and aux else None
+
+
+def recipe_text(content: Content, key: str | None) -> str | None:
+    """配方寫給玩家看（修練頁的裝備庫、鑄譜）：「精鐵砂＋驚羽」（主料在前）；不是自己打的（買的）是 None。"""
+    parts = recipe_parts(key)
+    if parts is None:
+        return None
+    name = lambda mid: content.materials[mid].name if mid in content.materials else mid  # noqa: E731
+    return f"{name(parts[0])}＋{name(parts[1])}"
+
+
+def noun_for(attribute: str) -> str:
+    """一般組合的防具名最後那個字：照這一件的屬性查 FORGE_NOUNS；認不得的屬性接「甲」。"""
+    return FORGE_NOUNS.get(attribute, "甲")
+
+
+def word_problem(name: str) -> str | None:
+    """防具的名字對不對（4.7；content.validate 驗對照表與隱藏配方的名字，第二批的神器定名也用）：要帶防具的字（甲、鎧、袍、衫之一）、
+    不能有任何兵器的字（weapons.WEAPON_WORDS：「避刀甲」會讓人以為是刀）、不能跟架上的防具同名。None＝可以。"""
+    if not any(word in name for word in FORGE_WORDS):
+        return WORD_MISSING
+    if any(word in name for words in weapons.WEAPON_WORDS.values() for word in words):
+        return WORD_CLASH
+    if name in SHOP_NAMES.values():
+        return SHOP_CLASH
+    return None
+
+
+def table_name(content: Content, main: str, aux: str, attribute: str) -> str:
+    """一般組合的防具名（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條；同 weapons.table_name）：字首照主料、中間字（craft_names.armor）
+    照輔料在素材表的位置取，最後接照屬性挑的防具字（noun_for）。前兩個字只看組合；屬性照天機挑的組合（快＋慢）最後那個字跟著屬性換。"""
+    order = list(content.materials)
+    names = content.craft_names
+    return names.prefixes[order.index(main)] + names.armor[order.index(aux)] + noun_for(attribute)

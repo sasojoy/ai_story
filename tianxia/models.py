@@ -149,7 +149,7 @@ class CraftNames(_Strict):
     而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
 
     兵器、防具的一般組合不照雜湊挑：字首照主料、中間字照輔料在素材表的位置取（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條），
-    所以 prefixes 與 weapon（之後 armor）的前「素材數」個字不能重複；新素材加在 materials.json 最後，不然後面幾種素材的字會位移。
+    所以 prefixes、weapon、armor 的前「素材數」個字不能重複；新素材加在 materials.json 最後，不然後面幾種素材的字會位移。
     """
 
     prefixes: list[str]
@@ -158,6 +158,9 @@ class CraftNames(_Strict):
     insight: list[str] = Field(default_factory=lambda: ["意", "勢", "韻", "境"])  # 意境的退路字尾（武學與成長設計 3.2）
     # 兵器一般組合的中間字（打造隱藏配方設計 4.1）：照輔料在素材表的位置取；不能放兵器字、不能放「鐵」（「沉鐵劍」會撞架上的名字）
     weapon: list[str] = Field(default_factory=lambda: list("霜霆雷星月嵐濤岳燼鳴影紋芒魄痕翎"))
+    # 防具一般組合的中間字（四欄設計 4.7、打造隱藏配方設計 4.1）：字首＋這一個字（照輔料在素材表的位置取）＋防具字（armor.FORGE_NOUNS）。
+    # 不能放兵器字、防具字（content.validate 用 armor.word_problem 驗）；前「素材數」個字不能重複（待 joy 潤）
+    armor: list[str] = Field(default_factory=lambda: list("鱗錦雲紋羽絮岩霜嵐濤影翎霞綾磐蟬"))
 
 
 class CombatLines(_Strict):
@@ -1504,12 +1507,13 @@ class ArmorRules(_Strict):
     """防具（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第四節）。數字都是【預設】（企劃者 2026-10-10「全部照預設」），
     量表（scripts/measure_gear.py）校準後可以改。減損＝（階＋品質＋淬煉＋對上內功）夾在 0 以上
     ×（edge_floor＋（1－edge_floor）×耐久度／100）；本人一場仗扣的氣血乘（1－min(total_cap, 化勁＋減損)），截殺輸的一方只乘防具。
-    不掛第一季開關（2.6，同兵器）。"""
+    不掛第一季開關（2.6，同兵器）。打造與淬煉（四欄設計 4.7；打造隱藏配方設計第九節）的數字照兵器，各欄自己一組（2.6、3.4），
+    天時地利正式值在 config.json。"""
 
     enabled: bool = True
     tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
     quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
-    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（防具打造那一批才淬得了，4.7）
+    temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（4.1）
     match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
     edge_floor: float = Field(default=0.5, ge=0, le=1)  # 全壞時剩幾成減損（4.5：不會壞掉消失）
     total_cap: float = Field(default=0.6, ge=0, le=1)  # 跟化勁合計最多減幾成（4.3）
@@ -1517,6 +1521,10 @@ class ArmorRules(_Strict):
     shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
     repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（同兵器 4.2）：照主料的階
+    quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
+    temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
 
 
 class MountRules(_Strict):
