@@ -71,7 +71,7 @@
 - `tianxia/calendar.py`：季曆（一季壓成 `season_weeks` 週）、夜裡、週次；玩家看得到的時刻只有一個寫法 `point_text`（「第 3 週・週二 21:40」）。
 - `tianxia/timetable.py`：時刻表（第一季 12 件大事）：什麼時候、怎麼結算、公告怎麼寫。
 - `tianxia/figures.py`：大勢人物：讀（`state_of`、主將、難度、此刻站在哪、`can_challenge`）、推（`tick`，季的事每曆時一次）、改（`apply` 是時刻表的人物結局與接位鏈，`defeat` 是挑戰打贏）；人物表在 `content/figures.json`，開季蓋章時種進 `WorldState.figures`；讀的函式不看開關，呼叫端要用 `rules.season_one` 擋。
-- `tianxia/orders.py`：陣營軍令（每週一發令、個人記功、陣營湊滿額度套效果）。`tianxia/ranks.py`：陣營裡的階級（頭銜、召見、晉升、部下）。`tianxia/push.py`：推力規則（人數緩衝、每人每曆日上限、貢獻）。`tianxia/factions.py`：陣營規模照伺服器人數上限換算。
+- `tianxia/orders.py`：陣營軍令（每週一發令、個人記功、陣營湊滿額度套效果）。`tianxia/ranks.py`：陣營裡的階級（頭銜、召見、晉升、部下；不看開關，劇本有陣營就有，關著的季只到第 2 階，見「晉升」）。`tianxia/push.py`：推力規則（人數緩衝、每人每曆日上限、貢獻）。`tianxia/factions.py`：陣營規模照伺服器人數上限換算。
 - `tianxia/defection.py`：叛投（第一季正式版甲；不看第一季開關，劇本有陣營就有）：能不能叛投（`can_defect`）、確認畫面只列真的會失去的東西、`clear_progress` 是之後幾份計畫加「個人進度清除項目」的唯一地方；世界那邊的清理（軍情、地方傳聞）寫在 `Game.defect()`。
 - `tianxia/foreshadow.py`：關鍵伏筆（片段、最後一步、暗中鎖定、豪強第三方、官銀），鎖定不能露出來。
 - `tianxia/front_lines.py`：戰況變化的說法：機器可讀的寫法 `大勢@<線> ±N`、三段變動大小 `BANDS`、雜湊挑句（句子在 `content/front_lines.json`）；純文字、不看內容模型。
@@ -136,6 +136,7 @@
 - 秘方與天時地利量表：`.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile weekend|none]`——隨機、解口訣、全知三種機器人一季合中幾條秘方、聽到幾句口訣、天時地利讓上品機率多幾點；只量不改。
 - 合成量表：`.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile weekend] [--reserve N]`——一季裡三種合成第一次的組合數、合到舊的比例、模型呼叫數、`bot.FORGE_RESERVE` 夠不夠；只量不改。一個機器人獨佔一個資料庫，合到舊的一定合到它自己已經有的，所以那個比例是全服的下限。
 - 同伴加成量表：`.venv/Scripts/python.exe scripts/measure_companions.py`（只量不改）
+- 晉升量表（第一季規則關著的季）：`.venv/Scripts/python.exe scripts/measure_promotion.py --seeds 1 2 3 4 5 [--style 勤|隨]`——三個陣營各一個機器人，第幾天投靠、到門檻、升第 2 階（拿到部下）；只量不改。
 - 裝備量表：`.venv/Scripts/python.exe scripts/measure_gear.py --seeds 1 2 3 4 5 [--profile weekend --steer]`（防具開關對照：掉的氣血、內傷、療傷、穿著防具幾場、一條氣血撐幾場硬仗與硬仗之後的勝率〔防具開只算穿著防具的仗〕、修幾次，開頭一行照設計 4.1 照表算的對照；週末要加 `--steer`；只量不改）
 - 坐騎量表：`.venv/Scripts/python.exe scripts/measure_mounts.py --seeds 1 2 3 4 5 [--gait mix] [--season-one] [--profile weekend --steer]`（坐騎開關對照：走了幾段、路上時間與趕路疾行的體力各省幾成、買馬、餵、落敗脫身、決戰騎兵；`--gait mix` 讓機器人趕路疾行；截殺被跑掉幾次看 `sim_season_one.py`；只量不改）
 - 寶物量表：`.venv/Scripts/python.exe scripts/measure_treasures.py --seeds 1 2 3 4 5 [--season-one] [--profile weekend --steer]`（寶物開關對照：各來源拿到幾件、良駒名駒、寄放與補發、換寶物幾次、升品幾次、多掉幾個素材、撿到幾枚破境丹、打贏的心得經驗；閉關心得與求見量不到；只量不改）
@@ -234,7 +235,7 @@
 - **三條戰線**：潁川汝南、南陽、冀州（0 官軍穩控、100 黃巾控制）；黃巾聲勢由三條加權而來；豪強割據：有戰線在亂局（35～65，`chaos_low`～`chaos_high`）時每條每曆日漲 `geju_chaos_per_day`×min(1, 投靠名冊人數÷`geju_full_players` 15)，三條都穩時每曆日落 `geju_calm_per_day`。決定性勝利（聲勢 ≥85 或 ≤15、割據 ≥85）第 `decisive_from_week`（10）週起才提前收季。江湖頁有戰況圖卡（亂局帶、亂局標）與三方態勢那一行（`status_data` 的 `fronts`、`chaos_band`、`stances`、`stance_notes`，開關關著時這幾個鍵都沒有）。
 - **推力**（`Game.push_trend`）：陣營人數緩衝、每人每曆日每條線上限 `daily_push_cap`、貢獻記帳（推 1 點記 `contrib_per_push`）。
 - **軍令**（`content/orders.json`）：每週一發令，五種：攻城、守城、截糧、護糧、打擊大勢人物；個人照做一次記一次，全陣營湊滿額度那一刻套一次效果。打擊軍令的卡寫怎麼打、在哪（所在沒摸清只寫大區），輿圖局勢層在目標標 ◎（沒摸清標大區）；「他現在挑戰得了嗎」只問 `figures.can_challenge`（挑戰鈕、軍令卡、輿圖共用）。
-- **晉升**：貢獻到 `rank2_contrib` 發召見 → 在召見的地點應召走晉升奇遇；頭銜寫在狀態列；部下見上面。
+- **晉升**：貢獻到 `rank2_contrib` 發召見 → 在召見的地點應召走晉升奇遇；頭銜寫在狀態列；部下見上面。**頭銜、召見、晉升與部下不看第一季開關**（企劃者 2026-10-12「部下現在是不是沒有作用」，同叛投；`ranks.on`＝劇本有陣營）：開關關著的季只升到第 2 階（`ranks.top_rank`，第 3、4 階要的機緣、席次、出面的人物只在第一季跑），第 2 階的彙整軍情不發（彙整只在 `season_hour` 發）。那種季的貢獻走 `Game._beta_contribution`：大勢照 `change_trend` 推、一個字不變，往自己陣營目標推的照推力全記 contrib_per_push ×｜推力｜（沒有緩衝、沒有每日上限）；陣營對這條線沒有目標的（豪強：割據換不到線）只有遊歷打贏、操練記；軍餉與截殺的貢獻也不再看開關。量表（`scripts/measure_promotion.py`，預設設定 14 天、5 個種子）：一半時間遊歷的「勤」第 1～2 天升第 2 階（官軍、黃巾中位第 1 天、豪強第 2.2 天）；全隨機的「隨」官軍第 4.3 天、黃巾第 3.1 天（只有一個機器人一路推黃巾，季常在第 5 天前後以黃巾得勢提前收掉，5 個種子有 2 個沒升上）、豪強第 7.9 天。
 - **大勢人物**：選單上「挑戰本人」（`act:challenge:<id>`，難度跟著聲威）；打贏扣他的聲威與情誼，`snub_hours` 現實小時內閉門不見。
 - **伏筆**：片段（行動後偷聽、對話裡的片段選項）、準備事件、最後一步；鎖定只在大事揭曉時露出來，先完成與搶輸的敘事一模一樣。
 - **叛投**（不看第一季開關，企劃者 2026-10-08「我現在需要先把轉陣營的功能開給正在運行中的伺服器」：開關打開之前就開的那一季、beta 那一季也能叛投；`defection.can_defect` 只問劇本有沒有陣營）：一季一次（`PlayerState.defected`，換季時角色重來自然清掉），在別陣營的投靠點（「此地還能做」裡的「叛投X」，要再按一次確認，可以「再想想」）。身份歸零：晉升、召見、部下、本季貢獻、押著的糧車、手上舊陣營掛的懸賞作廢，舊陣營的門派一起離開、這一季拜不回去；屬性、武學、同伴、銀兩、素材、紀錄都不動。新舊陣營各一則軍情（寫本名），當地一則地方傳聞（照匿名規則）。名字還在沒打完的決戰陣上不能叛投；假人與整季機器人不叛投。

@@ -3557,7 +3557,7 @@ class Game:
         if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share)
-            if contrib and season_one(c, s.world):
+            if contrib:  # 晉升不看第一季的開關（ranks.on），軍餉的貢獻也照記
                 push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
                 changes.append(f"貢獻 +{contrib}")
         if changes:
@@ -4478,11 +4478,13 @@ class Game:
         4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
         緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳 change_trend 的訊息
         （第一季規則開著時戰線是機器可讀的戰況變化，畫面上換成一句話，見 front_lines；開關關著是既有的「（黃巾聲勢 +2）」），
-        只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔。"""
+        只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔；開關關著的季拿它分貢獻（_beta_contribution）。"""
         s, c = self.state, self.content
         w, p = s.world, s.player
         if not calendar.season_one_on(w, c):
-            return change_trend(s, c, trend_id, delta)
+            msgs = change_trend(s, c, trend_id, delta)
+            self._beta_contribution(trend_id, delta, source)
+            return msgs
         if delta == 0 or (delta < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
             return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
         cfg = c.config
@@ -4515,6 +4517,19 @@ class Game:
             w.active_pushers.setdefault(p.faction, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs
+
+    def _beta_contribution(self, trend_id: str, delta: int, source: str) -> None:
+        """第一季規則關著的季也記本季貢獻（企劃者 2026-10-12：晉升與部下不看開關，ranks.on）：大勢照 change_trend 推，一個字都不變，
+        只多記貢獻。投靠了陣營、往自己陣營的目標方向推的，記 contrib_per_push × 推力（那種季沒有人數緩衝與每日上限，所以照推力全記）；
+        自己陣營對這條線沒有目標的（豪強：目標是第一季才有的割據，關著的季換不到線）只有遊歷打贏、操練記。逆著推、散人都不記；
+        change_trend 也不會動的推動（倒退一條還沒浮現的線）不記。"""
+        s, c = self.state, self.content
+        p, w = s.player, s.world
+        if p.faction is None or delta == 0 or not ranks.on(c) or (delta < 0 and not is_revealed(w, c, trend_id)):
+            return
+        goal = self._goals().get(trend_id, 0)
+        if (goal and (goal > 0) == (delta > 0)) or (not goal and source in ("train", "drill")):
+            push.add_contribution(p, calendar.point(w.time, c, w).week, c.config.contrib_per_push * abs(delta))
 
     def _battle_rewards(self, squad: Squad, record) -> list[str]:
         p = self.state.player
@@ -5834,8 +5849,8 @@ class Game:
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
         hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
-        # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
-        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
+        # 散人（揭了通緝）不記貢獻（懸賞榜設計 2.2 第 4 點）；晉升不看第一季的開關（ranks.on），寫法同軍餉 _showdown_pay
+        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
@@ -7073,7 +7088,7 @@ class Game:
         if p.qualified:
             return f"（{p.name}已經取得第 {ranks.SEAT_RANK} 階的資格了。）", None
         promo = ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1)
-        if promo is None:
+        if promo is None or promo.rank > ranks.top_rank(c, s):
             return f"（{p.name}已經升到頂了。）", None
         if promo.legs and ranks.current_cast(s, c, promo, 0, None) is None:
             line = ranks.NO_PRESENTER.get(p.faction, ranks.NO_PRESENTER["guan"])
@@ -7086,7 +7101,7 @@ class Game:
         refusal = self._admin_refusal("發召見")
         if refusal:
             return self._log(refusal)
-        if not season_one(self.content, self.state.world):
+        if not ranks.on(self.content):
             return self._log(["（這一季沒有陣營的階級，發不了召見。）"])
         target = self._admin_target(name)
         if target is None:

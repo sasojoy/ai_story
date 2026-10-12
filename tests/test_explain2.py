@@ -179,12 +179,12 @@ def test_the_howto_page_has_the_new_sections_in_season_one(on):
 
 
 def test_the_beta_page_leaves_out_what_only_season_one_has(real):
-    """開關關著（beta）：沒有戰線、軍令、晉升、三方的不同；名望、投靠、修練與煉製照寫。"""
+    """開關關著（beta）：沒有戰線、軍令、三方的不同；名望、投靠、修練與煉製照寫。晉升不看開關（企劃者 2026-10-12），照寫。"""
     text = _war(real).howto_text()
     titles = _titles(text)
     assert "這一季在打什麼" not in titles and "三方有什麼不同" not in titles
     assert {"名望", "投靠與軍令", "修練與煉製"} <= set(titles)
-    assert "**投靠**" in text and "**軍令**" not in text and "**晉升**" not in text and "首創的武學或意境" not in text
+    assert "**投靠**" in text and "**軍令**" not in text and "**晉升**" in text and "首創的武學或意境" not in text
 
 
 def test_the_season_section_is_the_war_explanations_and_the_closing_rule(on):

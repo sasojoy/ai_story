@@ -376,7 +376,8 @@ def test_apply_effect_hands_trend_pushes_to_the_callback(s1, world):
 
 
 def test_push_off_switch_is_plain_change_trend(s1, world):
-    """開關關著（beta 那一季）：遊歷打贏、事件效果推大勢的結果與訊息跟改之前一樣，沒有緩衝、沒有上限、沒有貢獻。"""
+    """開關關著（beta 那一季）：遊歷打贏、事件效果推大勢的結果與訊息跟改之前一樣，沒有緩衝、沒有上限；
+    往自己陣營目標推的照推力全記貢獻（晉升不看開關，企劃者 2026-10-12；Game._beta_contribution）。"""
     s1.config.season_one = False
     s1.events["push_test"] = Event(
         id="push_test", title="市集鬧事", text="兩邊都在拉人。", actions=[],
@@ -396,7 +397,7 @@ def test_push_off_switch_is_plain_change_trend(s1, world):
     assert game.push_trend("kou", 50, source="test") == ["（寇亂 +50）"]  # 沒有每日上限
     assert trend(game) == 84
     p = game.state.player
-    assert (p.contrib, p.contrib_weeks, p.pushed) == (0, {}, {})
+    assert p.contrib == s1.config.contrib_per_push * (1 + 3 + 50) and p.pushed == {}
     assert game.state.world.trend_accum == {}
     assert set(game.state.world.active_pushers["huang"]) == {"甲", "乙", "丙"}  # 他自己沒被記進去
 

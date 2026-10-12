@@ -386,11 +386,15 @@ def test_summon_refusals(on, monkeypatch):
     assert admin.admin_summon("戊") == [PAUSED_REFUSAL]
 
 
-def test_summon_refused_with_the_switch_off(real):
+def test_summon_with_the_switch_off_reaches_only_rank_two(real):
+    """晉升不看第一季的開關（企劃者 2026-10-12）：關著的季也發得出第 2 階的召見；已經第 2 階的人到頂了（第 3、4 階要第一季才有的機緣與席次）。"""
     admin = _game(real)
     _member(real, "乙")
-    assert admin.admin_summon("乙") == ["（這一季沒有陣營的階級，發不了召見。）"]
-    assert open_characters().load("乙").player.summons is None
+    admin.admin_summon("乙")
+    assert open_characters().load("乙").player.summons.rank == 2
+    _member(real, "丙", rank=2)
+    assert admin.admin_summon("丙") == ["（丙已經升到頂了。）"]
+    assert open_characters().load("丙").player.summons is None
 
 
 def test_the_target_is_caught_up_before_the_admin_acts(on):
