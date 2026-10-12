@@ -277,6 +277,7 @@
     // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
     const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
     S.main = main;
+    document.title = sealTitle(); // 輪到奪璽出招時改分頁標題（玉璽碎片設計 5.5）：輪詢的、動作回來的畫面都走這裡
     if (wasStats && !(main.prologue && main.prologue.glow.includes("stats"))) S.showMore = false;
     S.mainKey = key;
     lastPoll = Date.now(); // 剛拿到一份新的畫面（輪詢的、動作回來的都走這裡）：連著推送時，下一次慢速輪詢從這一刻起算
@@ -358,19 +359,8 @@
       ${(d.lines || []).map((l) => `<p class="muted">${esc(l)}</p>`).join("")}
       <p class="muted">${esc(d.note)}</p></details>`;
   }
-  // 背景分頁不輪詢；奪璽的雙方、被璽動那一場的持有者與參戰者例外（status.seal_watch，5.5），在背景也照 10 秒輪詢
-  function pollBlocked() {
-    const watch = !!(S.main && S.main.status && S.main.status.seal_watch);
-    return pollInFlight || S.stage !== "game" || S.busy || (document.hidden && !watch);
-  }
-  // 輪到你出招時改分頁標題，之後改回原本的（5.5）
-  function sealTitle() {
-    const d = S.main && S.main.status && S.main.status.seal_duel;
-    return d && d.turn ? "【奪璽】輪到你出招" : S.baseTitle;
-  }
 
   function renderTop() {
-    document.title = sealTitle(); // 輪到奪璽出招時改分頁標題（玉璽碎片設計 5.5）；放在提早 return 之前，序章換頁時也改得回來
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
     if (!el) return;
@@ -4093,7 +4083,7 @@
   // 卡住的 /api/main 不能每 10 秒再疊一個，把伺服器的執行緒池用光
   let pollInFlight = false;
   async function poll() {
-    if (pollBlocked()) return;
+    if (pollInFlight || S.stage !== "game" || S.busy || (document.hidden && !sealWatched())) return; // 背景分頁不輪詢，奪璽例外（sealWatched）
     pollInFlight = true;
     lastPoll = Date.now();
     const was = S.main;
@@ -4237,6 +4227,16 @@
   let lastAction = 0; // 上一次動作做完的時刻
   let worldTimer = 0; // 已經排好的「世界變了」重抓
   let pushDown = false; // 連線斷過、還沒補抓：連回來時補抓一次（斷的這段時間可能漏了通知）
+
+  // 奪璽（玉璽碎片設計 5.5）：背景分頁不輪詢，單挑的雙方、被璽動那一場的持有者與參戰者例外（status.seal_watch），在背景也照輪詢（poll 讀它）；
+  // 輪到你出招時改分頁標題、之後改回原本的（setMain 每拿到一份畫面就照它改）。放在這一段裡：poll、setMain 的測試照這一段切程式
+  function sealWatched() {
+    return !!(S.main && S.main.status && S.main.status.seal_watch);
+  }
+  function sealTitle() {
+    const d = S.main && S.main.status && S.main.status.seal_duel;
+    return d && d.turn ? "【奪璽】輪到你出招" : S.baseTitle;
+  }
 
   function connectEvents() {
     if (events || !window.EventSource || S.stage !== "game" || !S.main || !S.main.push || document.hidden) return;

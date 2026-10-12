@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # 不然整支載不起來）。這裡多交奪璽要直接叫的三個；碎片卡 sealHtml 只經過 pageJianghu，不必列
 NAMES_START = 'wholeApp(["S", '  # 名單的開頭（結尾那幾個名字別的計畫會加，開頭比較穩）
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "pollBlocked", "sealTitle", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", ')
 
 
 def run(m, script):
@@ -62,13 +62,28 @@ def test_the_input_box_posts_to_seal_text(m):
     assert 'data-op="seal_text"' in page
 
 
-def test_a_watched_tab_keeps_polling_in_the_background_and_flags_your_turn(m):
-    """5.5：seal_watch 為真時分頁在背景也照 10 秒輪詢；輪到你出招時分頁標題改成「【奪璽】輪到你出招」，之後改回原本的標題。"""
+def test_a_watched_tab_flags_your_turn_in_the_tab_title(m):
+    """5.5：seal_watch 為真時 sealWatched 為真（poll 讀它）；輪到你出招時分頁標題改成「【奪璽】輪到你出招」，之後改回原本的標題。"""
     m["status"]["seal_watch"] = True
     m["status"]["seal_duel"] = _card(mine=True, turn=True)
-    out = run(m, "T.ctx.document.hidden = true; return [H.pollBlocked(), H.sealTitle()].join('|');")
-    assert out == "false|【奪璽】輪到你出招"
+    out = run(m, "return [H.sealWatched(), H.sealTitle()].join('|');")
+    assert out == "true|【奪璽】輪到你出招"
     m["status"]["seal_watch"] = False
     m["status"]["seal_duel"] = None
-    out = run(m, "T.ctx.document.hidden = true; return [H.pollBlocked(), H.sealTitle() === H.S.baseTitle].join('|');")
-    assert out == "true|true"
+    out = run(m, "return [H.sealWatched(), H.sealTitle() === H.S.baseTitle].join('|');")
+    assert out == "false|true"
+
+
+def test_a_hidden_tab_polls_only_while_the_seal_is_watched():
+    """5.5：背景分頁平常不輪詢；seal_watch 為真時照樣打 /api/main。用 test_push_page 的假頁面跑真的 poll（它切 poll、setMain 與推送那一段）。"""
+    from test_push_page import page, start
+
+    out = page(start(False) + """
+    S.main.status = { seal_watch: true };
+    document.hidden = true;
+    await poll();
+    const watched = at("/api/main").length;
+    await poll();  // 上一次輪詢拿回來的畫面沒有 seal_watch：背景分頁照舊不打
+    return [watched, at("/api/main").length, document.title === undefined];
+    """)
+    assert out == [1, 1, True]  # 假頁面的 S 沒有 baseTitle：setMain 照 sealTitle 改標題
