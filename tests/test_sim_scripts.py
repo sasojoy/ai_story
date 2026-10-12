@@ -187,6 +187,18 @@ def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(caps
     assert out.count("一階素材 ") == 2 and out.count("結局 ") == 2
 
 
+def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(capsys, monkeypatch):
+    """坐騎量表（裝備四欄設計第十節第 2 項）：--seeds 1 跑一次週末設定、照手上的事走、走法混著用，坐騎開、關各印一行（只量不改，不驗數字）。"""
+    measure = _load("measure_mounts")
+    monkeypatch.setattr(sys, "argv", ["measure_mounts.py", "--seeds", "1", "--profile", "weekend", "--steer", "--gait", "mix"])
+    measure.main()
+    out = capsys.readouterr().out
+    assert "種子 1 坐騎開：" in out and "種子 1 坐騎關：" in out
+    assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("趕路疾行體力 ") == 2
+    assert out.count("買馬 ") == 2 and out.count("、餵 ") == 2 and out.count("策馬脫身 ") == 2
+    assert out.count("決戰騎著馬 ") == 2 and out.count("一階素材 ") == 2 and out.count("結局 ") == 2
+
+
 def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off(capsys, monkeypatch):
     """散人量表（懸賞榜設計 11.1）：--profile none 不套設定覆寫檔，量的是預設設定（14 天、第一季規則關著）的季；
     開頭印一行設定，散人、陣營各一行，再各一行中位數（只量不改，不驗數字）。"""

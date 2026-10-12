@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import social
+from . import mounts, social
 
 if TYPE_CHECKING:
     from .engine import Game
@@ -22,10 +22,11 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
         return [social.CardButton(action=KIND, label="截殺", note=problem, enabled=False)]
     cost = game.content.config.raid.stamina
     name = other.state.player.name
-    return [social.CardButton(
-        action=KIND, label="截殺", note=f"體力 {cost}・勝算 {game.raid_odds(other)}",
-        confirm=f"真的要對{name}下手？輸了要丟銀兩、掉氣血。",
-    )]
+    confirm = f"真的要對{name}下手？輸了要丟銀兩、掉氣血。"
+    flee = game.raid_flee_odds(other)
+    if flee > 0:  # 他的馬比你快（裝備四欄 5.10）：人就在眼前，看得到他騎什麼；幾成跟 raid() 擲的同一個數
+        confirm += mounts.RAID_FLEE_ASK.format(odds=mounts.odds_text(flee))
+    return [social.CardButton(action=KIND, label="截殺", note=f"體力 {cost}・勝算 {game.raid_odds(other)}", confirm=confirm)]
 
 
 def run(game: Game, other: Game, params: dict) -> list[str]:

@@ -183,7 +183,72 @@ def test_the_armor_slot_draws_its_own_rows_with_durability_and_cut(views):
 def test_an_empty_armor_slot_says_so_and_an_unknown_slot_is_skipped(views):
     m, x = views
     x["gear"] = _gear(weapon={"worn": _row(), "rack": []}, armor={"worn": None, "rack": []})
-    x["gear"]["slots"].append({"slot": "mount", "label": "坐騎", "empty": "", "note": "", "worn": {"id": "騎:1"}, "rack": []})
+    x["gear"]["slots"].append({"slot": "future", "label": "未來", "empty": "", "note": "", "worn": {"id": "騎:1"}, "rack": []})
     page = run(m, "return H.pagePractice();", menxia=x)
     assert "身上沒有防具。" in _slot_block(page, "armor")
-    assert 'data-slot="mount"' not in page  # 這一版畫不出的欄位（新伺服器多了一欄）整段略過
+    assert 'data-slot="future"' not in page  # 這一版畫不出的欄位（新伺服器多了一欄）整段略過
+
+
+def _mount_gear(worn=None, rack=()):
+    """修練頁「裝備」只有坐騎那一段（server.menxia_view 的 gear，skillview.gear_rows）。"""
+    return {"cap": 100, "used": len(rack), "slots": [{
+        "slot": "mount", "label": "坐騎", "empty": "身上沒有坐騎。", "note": "城裡的馬市買得到駑馬；一個一階素材就餵得飽。",
+        "worn": worn, "rack": list(rack),
+    }]}
+
+
+def _mount_row(**over):
+    return {"id": "騎:1", "name": "棗騮馬", "tier": 1, "quality": "下品", "grade": "駑馬・下品", "edge": 60, "wear_word": "飽足度",
+            "save": "20%", "speed": "24%", "cavalry": "4%", "escape": "24%", "feed": True, "feed_note": "精鐵砂×1",
+            "wield_ok": True, "wield_note": "", **over}
+
+
+def _mount_block(page):
+    return page.split('data-slot="mount"')[1].split("</section>")[0]
+
+
+def test_the_mount_slot_draws_feed_on_the_worn_horse_and_only_wield_in_the_rack(views):
+    """坐騎那一段（裝備四欄 2.5、5.4）：身上那匹一顆「餵」（寫用哪一種素材），裝備庫裡的只有「換上」，坐騎不能拆（4.8）。
+    每一列寫省體力、路上快、決戰騎兵、落敗脫身（2.5：後三項寫在修練頁這一列，不擠進角色卡）。這一行的字待 joy 潤，只鎖伺服器給的數字。"""
+    m, x = views
+    spare = _mount_row(id="騎:2", name="<i>青驄駒</i>", grade="良駒・中品", save="43%", speed="48%", cavalry="10%", escape="50%",
+                       feed=False, feed_note="")
+    x["gear"] = _mount_gear(_mount_row(), [spare])
+    block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert "【棗騮馬】" in block and "駑馬・下品" in block and "飽足度 60" in block and "20%" in block
+    assert block.count("24%") == 2 and "+4%" in block  # 駑馬路上快、脫身都是三成×0.8；騎兵寫成「+4%」
+    assert "43%" in block and "48%" in block and "+10%" in block and "50%" in block
+    assert block.count('data-act="feed"') == 1 and "精鐵砂×1" in block
+    assert 'data-act="wield" data-id="騎:2">' in block and 'data-act="dismantle"' not in block
+    assert "&lt;i&gt;青驄駒&lt;/i&gt;" in block and "<i>青驄駒</i>" not in block
+    other = _mount_block(run(m, "return H.pagePractice();", menxia={**x, "gear": _mount_gear(_mount_row(wear_word="草料"))}))
+    assert "草料 60" in other  # 磨損的叫法照伺服器給的 wear_word（equipment.WEAR_WORDS），網頁不寫死
+
+
+def test_a_feed_that_cannot_happen_is_greyed_with_the_reason(views):
+    m, x = views
+    x["gear"] = _mount_gear(_mount_row(feed=False, feed_note="還不餓"))
+    block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert 'data-act="feed" disabled' in block and "還不餓" in block
+
+
+def test_wield_is_greyed_on_the_road_with_the_reason(views):
+    """設計 2.3：路上不能換坐騎——裝備庫那一列的「換上」灰掉、寫伺服器給的原因（mounts.ON_ROAD），同「餵」的灰掉做法。"""
+    m, x = views
+    x["gear"] = _mount_gear(_mount_row(), [_mount_row(id="騎:2", feed=False, feed_note="", wield_ok=False, wield_note="在路上")])
+    block = _mount_block(run(m, "return H.pagePractice();", menxia=x))
+    assert 'data-act="wield" data-id="騎:2" disabled' in block and "在路上" in block
+
+
+_FEED_CLICK = """return (async () => {
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  await click({ act: "feed" });
+  return T.calls.map((c) => c[0]);
+})();"""
+
+
+def test_the_feed_button_calls_the_feed_action(views):
+    m, x = views
+    x["gear"] = _mount_gear(_mount_row())
+    reply = {"/api/menxia/feed": {"menxia": x, "message": "", "main": m}}
+    assert run(m, _FEED_CLICK, menxia=x, responses=reply) == ["/api/menxia/feed"]

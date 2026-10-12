@@ -1,5 +1,5 @@
 """裝備量表（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第十節；裝備一：防具那一項）：整季機器人跑幾個種子，
-比開防具與關防具。只量不改；武器照設定開著（兩邊一樣）。
+比開防具與關防具。只量不改；武器照設定開著（兩邊一樣），坐騎固定關著。
 
 開頭先印一行對照：照設計 4.1 的算法（一場扣上限的 Config.encounter_neili_loss 那幾成，不含身法與回血），一階下品對上內功
 那件防具讓一條氣血從撐幾場變成幾場。
@@ -83,6 +83,7 @@ def _steer(game, options, rng) -> str | None:
 def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.armor.enabled = armor_on
+    content.config.mounts.enabled = False  # 防具那一項只比防具：坐騎固定關著，數字才跟裝備一量的對得上（坐騎看 measure_mounts）
     seen: set[int] = set()
     count = dict.fromkeys(("fights", "wins", "armored", "armored_hard", "hard", "after_hard", "after_hard_wins",
                            "repairs", "armor_silver", "heal_silver"), 0)

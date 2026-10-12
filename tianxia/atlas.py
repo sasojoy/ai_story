@@ -11,7 +11,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, orders, prologue
+from . import figures, insights, mounts, orders, prologue
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -417,27 +417,41 @@ def whole_minutes(minutes: float) -> int:
     return max(1, math.floor(minutes + 0.5))
 
 
-def travel_seconds(minutes: float, mode: TravelMode) -> float:
-    """走完 minutes 分鐘的路程要幾秒（遊戲時間）：步行全程、趕路一半、疾行立刻到。"""
-    return minutes * 60 * TIME_SHARE[mode]
+def travel_seconds(minutes: float, mode: TravelMode, *, pace: float) -> float:
+    """走完 minutes 分鐘的路程要幾秒（遊戲時間）：步行全程、趕路一半、疾行立刻到；再乘 pace（出發時騎的馬，裝備四欄 5.3：
+    1＝沒騎馬）。pace 必填、不給預設：漏改的呼叫處直接丟 TypeError，不會悄悄照沒騎馬算。"""
+    return minutes * 60 * TIME_SHARE[mode] * pace
 
 
-def travel_stamina(content: Content, minutes: float, mode: TravelMode) -> int:
-    """這種走法出發時一次扣的體力：步行 0；趕路、疾行照每分鐘路程的點數算，四捨五入（.5 進位）、至少 1 點。"""
+def foot_stamina(content: Content, minutes: float, mode: TravelMode) -> int:
+    """不騎馬時這種走法出發要扣的體力：步行 0；趕路、疾行照每分鐘路程的點數算，四捨五入（.5 進位）、至少 1 點。"""
     cfg = content.config
     rate = {"walk": 0.0, "hurry": cfg.hurry_stamina_per_minute, "dash": cfg.dash_stamina_per_minute}[mode]
     return 0 if rate <= 0 else max(1, math.floor(minutes * rate + 0.5))
 
 
-def mode_when(minutes: float, mode: TravelMode) -> str:
-    """這種走法要花多久：「約 5 分鐘」「立刻到」。"""
-    return "立刻到" if mode == "dash" else f"約 {whole_minutes(minutes * TIME_SHARE[mode])} 分鐘"
+def ride_stamina(foot: int, saving: float) -> int:
+    """騎馬省下之後的體力（裝備四欄 5.2，企劃者 2026-10-10 選丙：照比例算、不設保底）：四捨五入（原本的體力 ×（1－腳力）），
+    .5 一律進位（mounts.half_up：不用 round，Python 的 round 把 .5 捨到偶數，4.5 會變 4；也補一個浮點誤差，
+    30×(1－0.55)＝13.499999999999998 要算 14），剩下的至少 1 點；原本就是 0（步行）照舊 0。
+    結伴同行時跟著的人拿帶頭的人的 foot 照自己的腳力算（Game._lead）。"""
+    return 0 if foot <= 0 else max(1, mounts.half_up(foot * (1 - saving)))
 
 
-def mode_text(content: Content, minutes: float, mode: TravelMode) -> str:
-    """「步行約 9 分鐘」「趕路約 5 分鐘・體力 9」「疾行立刻到・體力 18」：選單與詳情欄用。"""
-    stamina = travel_stamina(content, minutes, mode)
-    return MODES[mode] + mode_when(minutes, mode) + (f"・體力 {stamina}" if stamina else "")
+def travel_stamina(content: Content, minutes: float, mode: TravelMode, *, saving: float) -> int:
+    """這種走法出發時一次扣的體力：原本的（foot_stamina）再照腳力省（ride_stamina）。saving 必填（同 travel_seconds 的 pace）。"""
+    return ride_stamina(foot_stamina(content, minutes, mode), saving)
+
+
+def mode_when(minutes: float, mode: TravelMode, *, pace: float) -> str:
+    """這種走法要花多久：「約 5 分鐘」「立刻到」；時間乘步調（5.3）。"""
+    return "立刻到" if mode == "dash" else f"約 {whole_minutes(minutes * TIME_SHARE[mode] * pace)} 分鐘"
+
+
+def mode_text(content: Content, minutes: float, mode: TravelMode, *, pace: float, saving: float) -> str:
+    """「步行約 9 分鐘」「趕路約 5 分鐘・體力 9」「疾行立刻到・體力 18」：選單與詳情欄用。騎著馬時呼叫端傳步調與腳力（5.3）。"""
+    stamina = travel_stamina(content, minutes, mode, saving=saving)
+    return MODES[mode] + mode_when(minutes, mode, pace=pace) + (f"・體力 {stamina}" if stamina else "")
 
 
 @dataclass(frozen=True)
@@ -510,7 +524,7 @@ def road_spot(state: GameState, content: Content) -> RoadSpot | None:
     behind = j.origin if first else state.player.location
     share = j.share if first else 0.0
     minutes = leg_minutes(content, behind, ahead)
-    span = travel_seconds(minutes * (1 - share), j.mode)  # 這一段這一趟要走幾秒
+    span = travel_seconds(minutes * (1 - share), j.mode, pace=j.pace)  # 這一段這一趟要走幾秒：照出發時快照的步調（5.3），跟排好的抵達時刻同一個數
     left = j.arrive_at[j.reached] - state.world.time
     walked = 1.0 if span <= 0 else min(1.0, max(0.0, 1 - left / span))
     return RoadSpot(behind, ahead, share + (1 - share) * walked, minutes)
@@ -551,13 +565,23 @@ def returns_at_once(state: GameState, content: Content, route: Route) -> bool:
 
 
 def route_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
-    """照這條路、這種走法出發要扣的體力；剛出發就折返不扣（見 returns_at_once）。"""
-    return 0 if returns_at_once(state, content, route) else travel_stamina(content, route.minutes, mode)
+    """照這條路、這種走法出發要扣的體力（騎著馬照腳力省，mounts.saving，裝備四欄 5.2）；剛出發就折返不扣（見 returns_at_once）。
+    選單、輿圖的鈕、輿圖的拒絕話與 Game._depart 實際扣的都走這裡。"""
+    if returns_at_once(state, content, route):
+        return 0
+    return travel_stamina(content, route.minutes, mode, saving=mounts.saving(state, content))
+
+
+def route_foot_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
+    """同 route_stamina，但不算坐騎：結伴同行時交給跟著的人，各自照自己的坐騎再省（Game._lead，裝備四欄 5.8）。"""
+    return 0 if returns_at_once(state, content, route) else foot_stamina(content, route.minutes, mode)
 
 
 def route_text(state: GameState, content: Content, route: Route, mode: TravelMode) -> str:
-    """選單「前往／折返」括號裡的字（見 mode_text）；剛出發就折返是「立刻到」。"""
-    return "立刻到" if returns_at_once(state, content, route) else mode_text(content, route.minutes, mode)
+    """選單「前往／折返」括號裡的字（見 mode_text，步調與腳力照身上那匹）；剛出發就折返是「立刻到」。"""
+    if returns_at_once(state, content, route):
+        return "立刻到"
+    return mode_text(content, route.minutes, mode, pace=mounts.pace(state, content), saving=mounts.saving(state, content))
 
 
 @dataclass(frozen=True)
@@ -602,6 +626,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("懸賞榜還開著，先離開才能安排前往", to_jianghu=True)
     if p.picking_smith:
         return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
+    if p.picking_market:
+        return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 為了騎馬的步調與省體力 import mounts，這句就近讀它）
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if p.pending_defect:
@@ -643,13 +669,14 @@ def travel_options(state: GameState, content: Content, loc_id: str) -> list[Trav
         return [TravelOption("walk", block.reason, False, to_jianghu=block.to_jianghu)]
     out: list[TravelOption] = []
     at_once = returns_at_once(state, content, route)
+    pace = mounts.pace(state, content)  # 騎著馬步行、趕路比較快（5.3）
     for mode in MODES:
         cost = route_stamina(state, content, route, mode)
         if state.player.stamina < cost:
             out.append(TravelOption(mode, f"{MODES[mode]}（體力不足，要 {cost}）", False))
         else:
             price = f"・體力 {cost}" if cost else ""
-            when = "立刻到" if at_once else mode_when(route.minutes, mode)
+            when = "立刻到" if at_once else mode_when(route.minutes, mode, pace=pace)
             out.append(TravelOption(mode, f"{MODES[mode]}（{when}{price}）", True))
     return out
 
@@ -666,12 +693,12 @@ def path_legs(content: Content, start: str, path: list[str]) -> list[float]:
     return [leg_minutes(content, a, b) for a, b in zip(stops, stops[1:])]
 
 
-def arrival_times(now: float, legs: list[float], mode: TravelMode) -> list[float]:
-    """now 出發、照這種走法，每一站的抵達時間（遊戲秒）；疾行全都是 now。"""
+def arrival_times(now: float, legs: list[float], mode: TravelMode, *, pace: float) -> list[float]:
+    """now 出發、照這種走法與步調（出發時騎的馬，5.3），每一站的抵達時間（遊戲秒）；疾行全都是 now。"""
     times: list[float] = []
     t = now
     for leg in legs:
-        t += travel_seconds(leg, mode)
+        t += travel_seconds(leg, mode, pace=pace)
         times.append(t)
     return times
 
@@ -750,7 +777,8 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     elif returns_at_once(state, content, route):
         way = "剛出發，折返立刻到"
     else:
-        way = "、".join(mode_text(content, route.minutes, mode) for mode in MODES)
+        pace, saving = mounts.pace(state, content), mounts.saving(state, content)  # 騎著馬照坐騎寫（5.3）
+        way = "、".join(mode_text(content, route.minutes, mode, pace=pace, saving=saving) for mode in MODES)
         way += f"，途經 {_names(content, route.via)}" if route.via else ""
     parts.append("**路線**　" + way)
     return "\n\n".join(parts)

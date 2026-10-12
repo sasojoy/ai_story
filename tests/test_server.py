@@ -2865,7 +2865,7 @@ def test_travel_dashes_when_asked(client):
     _player(client)
     game = server.game_for("沈青衫")
     minutes = atlas.routes(game.state, game.content)["yingshui"].minutes
-    cost = atlas.travel_stamina(game.content, minutes, "dash")
+    cost = atlas.travel_stamina(game.content, minutes, "dash", saving=0.0)  # 新角色沒騎馬
     assert client.post("/api/travel", json={"place": "yingshui", "mode": "dash"}).json()["arrived"] is True
     assert game.state.player.location == "yingshui"
     assert game.state.player.stamina == game.content.config.stamina_max - cost
@@ -3956,7 +3956,7 @@ def test_a_hurried_move_departs_only_from_the_hurry_menu(client):
     minutes = atlas.leg_minutes(game.content, start, "yingshui")
     client.post("/api/choose", json={"id": "move:yingshui:hurry"}, headers=HURRY)
     assert game.state.player.journey.mode == "hurry" and game.state.player.journey.path == ["yingshui"]
-    cost = atlas.travel_stamina(game.content, minutes, "hurry")
+    cost = atlas.travel_stamina(game.content, minutes, "hurry", saving=0.0)  # 新角色沒騎馬
     assert game.state.player.stamina == game.content.config.stamina_max - cost
 
 

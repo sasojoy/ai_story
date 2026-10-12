@@ -196,13 +196,13 @@ def test_leg_minutes_follow_distance_and_road(content):
 
 
 def test_travel_math_for_the_three_ways():
-    assert (travel_seconds(9, "walk"), travel_seconds(9, "hurry"), travel_seconds(9, "dash")) == (540, 270, 0)
+    assert (travel_seconds(9, "walk", pace=1.0), travel_seconds(9, "hurry", pace=1.0), travel_seconds(9, "dash", pace=1.0)) == (540, 270, 0)
     assert (whole_minutes(0.2), whole_minutes(2.5), whole_minutes(4.49)) == (1, 3, 4)
 
 
 def test_travel_stamina_follows_the_route_minutes(content):
-    assert [travel_stamina(content, 9, mode) for mode in ("walk", "hurry", "dash")] == [0, 9, 18]
-    assert travel_stamina(content, 0.2, "hurry") == 1  # 至少 1 點
+    assert [travel_stamina(content, 9, mode, saving=0.0) for mode in ("walk", "hurry", "dash")] == [0, 9, 18]
+    assert travel_stamina(content, 0.2, "hurry", saving=0.0) == 1  # 至少 1 點
 
 
 def test_routes_take_the_quickest_way(state, content):

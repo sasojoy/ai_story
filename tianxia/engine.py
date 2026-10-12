@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
-    materials, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, weapons, zh,
 )
@@ -142,8 +142,10 @@ def say_text(text: str | None) -> str | None:
     if not text or len(text) > SAY_MAX:
         return None
     return zh.to_traditional(text)
-# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事
+# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事。
+# 騎著馬時改用 TRAIN_CONFIRM_RIDING（裝備四欄 5.11），TRAIN_CONFIRM 本身不動（三個測試檔拿它比全等）
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
+TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -512,6 +514,8 @@ class Game:
             not p.picking_smith or not weapons.smith_here(s, c) or smithing.draft_stale(c, p.smith_draft)
         ):
             p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
+        if p.picking_market and not mounts.market_here(s, c):
+            p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -639,6 +643,8 @@ class Game:
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
         if self.state.player.smith_draft is not None and not weapons.smith_here(self.state, self.content):
             self.state.player.smith_draft = None  # 武器關了、防具還開著：鐵匠鋪照開（防具頁），兵器的單子清掉
+        if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
+            self.state.player.picking_market = False  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -850,6 +856,8 @@ class Game:
             return self._bounty_options()
         if s.player.picking_smith:
             return self._smith_options()
+        if s.player.picking_market:
+            return self._market_options()
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -935,6 +943,8 @@ class Game:
             opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
         if equipment.smith_open(s, c):  # 鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
+        if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
+            opts.append(Option(id="act:market", label=mounts.MARKET))
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
@@ -945,15 +955,17 @@ class Game:
     def _move_option(self, here: str, dest_id: str) -> Option:
         """選單上的「前往 相鄰地點」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、
         寫明原因（跟大地圖的「安排前往」按鈕同一個說法）。步行的 id 維持 move:<地點>（機器人、假人與舊的呼叫端
-        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。"""
+        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。
+        時間與體力走 atlas.route_text／route_stamina，跟 _move 出發時 _depart 實際扣的是同一條路（騎著馬照腳力省、步調照坐騎，
+        裝備四欄 5.3；閒著時不在路上，不會是剛出發就折返）。"""
         c, mode = self.content, self.move_mode
         dest = c.locations[dest_id]
-        minutes = atlas.leg_minutes(c, here, dest_id)
+        route = atlas.Route((dest_id,), (atlas.leg_minutes(c, here, dest_id),))
         option_id = f"move:{dest_id}" if mode == "walk" else f"move:{dest_id}:{mode}"
-        cost = atlas.travel_stamina(c, minutes, mode)
+        cost = atlas.route_stamina(self.state, c, route, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.mode_text(c, minutes, mode)}）")
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
 
     def _back_way(self) -> atlas.Route:
         """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
@@ -1039,7 +1051,8 @@ class Game:
             note += "・或與自己人操練"
         option = self._cost_option("act:train", "遊歷", cost, note=note)
         if "必敗" in note.split("・"):  # FB-095：剛出師的人疾行到敵營按遊歷，三場就掉三分之一的銀兩
-            option.confirm = TRAIN_CONFIRM
+            ride = mounts.escape(self.state, self.content)  # 騎著馬策馬脫身的機會（5.11）：_lose_silver 擲的就是它
+            option.confirm = TRAIN_CONFIRM_RIDING.format(odds=mounts.odds_text(ride)) if ride > 0 else TRAIN_CONFIRM
         pick = self._train_pick(loc)
         if (pick is not None and not self._drills_with(pick) and self.is_big(pick)
                 and prologue_rules.fight_tier(self.state, self.content) is None):  # 寫好的那一場不等模型
@@ -1394,6 +1407,8 @@ class Game:
                 msgs = self._bounty(arg)
             elif kind == "smith":
                 msgs = self._smith(arg, proposed)
+            elif kind == "market":
+                msgs = self._market(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1608,6 +1623,8 @@ class Game:
             return bounties.BOARD
         if kind == "smith":
             return smithing.title(arg)
+        if kind == "market":
+            return mounts.MARKET
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1631,6 +1648,7 @@ class Game:
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
+            "market": f"{mounts.MARKET}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1946,6 +1964,9 @@ class Game:
         if what == "smith":
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
+        if what == "market":
+            self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
+            return [mounts.ENTERED]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -2657,6 +2678,40 @@ class Game:
         tail = [Option(id=f"smith:page:{other}", label=equipment.PAGE_LABELS[other])] if other is not None else []
         return tail + [Option(id="smith:back", label="離開鐵匠鋪")]
 
+    def _market_options(self) -> list[Option]:
+        """馬市的第二層選單（裝備四欄設計 5.5）：一顆「買」（駑馬下品，寫省幾成體力與價錢；買不了的灰掉寫為什麼），
+        身上有馬時一顆「餵」（寫用哪一種素材；不餓、沒素材灰掉寫為什麼），裝備庫裡每一匹一顆「換上」，最後「離開」。都不花體力。"""
+        s, c, p = self.state, self.content, self.state.player
+        item = mounts.shop_item(s, c)
+        problem = mounts.buy_problem(s, c)
+        note = problem or f"{c.config.mounts.shop_price} 兩"
+        # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
+        opts = [Option(id=mounts.BUY, enabled=problem is None,
+                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・趕路疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
+        if p.mount is not None:
+            opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
+                               label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
+        for m in equipment.in_slot(p, "mount"):
+            opts.append(Option(id=f"{mounts.WIELD}{m.id}",
+                               label=f"換上【{mounts.name_of(m)}】（{mounts.grade(m)}・{mounts.WEAR_WORD} {m.edge}）"))
+        opts.append(Option(id=mounts.BACK, label=mounts.LEAVE))
+        return opts
+
+    def _market(self, arg: str) -> list[str]:
+        """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+        s, c = self.state, self.content
+        verb, _, rest = arg.partition(":")
+        if verb == "back":
+            s.player.picking_market = False
+            return [mounts.LEFT]
+        if verb == "buy":
+            return mounts.buy(s, c)
+        if verb == "feed":
+            return mounts.feed(s, c)
+        if verb == "wield":
+            return mounts.wield(s, c, rest)
+        return ["（此刻無法這麼做。）"]
+
     def _smith(self, arg: str, proposed: tuple[str | None, str] | None = None) -> list[str]:
         """鐵匠鋪上的選擇：切頁、買、修、換上、拆解（兵器頁或防具頁）、打造與淬煉的每一步，或離開（收起選單、打造的單子與停在哪一頁）。
         做完選單還開著，可以接著挑。"""
@@ -2694,10 +2749,19 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def wield_weapon(self, item_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中）、不花體力，換進那一件自己的欄位；
-        寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）也走它。"""
+        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中），坐騎路上不能換（equipment.wield 擋）、
+        不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）、
+        坐騎的 id（騎:N）也走它。"""
         msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
         if msgs and msgs[0].startswith("你換上了"):
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
+    def feed_mount(self) -> list[str]:
+        """修練頁坐騎那一列的「餵」（裝備四欄 5.4，MENXIA_ACTIONS["feed"]）：閒著時哪裡都能餵（不在路上、不在閉關），
+        一個一階素材餵滿、不花銀兩；寫一則修練紀錄。整季機器人與假人也走這裡（bot.feed_mount）。"""
+        msgs = self._log(mounts.feed(self.state, self.content))
+        if msgs and msgs[0].startswith(mounts.FED_PREFIX):
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
@@ -2903,21 +2967,31 @@ class Game:
             self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
         )
 
-    def _battle_scores(self) -> dict[str, float]:
-        """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性。
-        只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，不能在 world_tick 裡呼叫）。"""
+    def _battle_scores(self, mounted: bool = True) -> dict[str, float]:
+        """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性；
+        騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount）。mounted=False 不算馬：單人頭目戰用同一份份量，
+        騎兵只在全服決戰（設計 2.1）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
+        不能在 world_tick 裡呼叫）。"""
         p = self.state.player
         outer = team.player_art(self.state, self.content, self.world, p.member.wugong_id)
         inner = team.player_art(self.state, self.content, self.world, p.member.neigong_id)
         return battle_instance.move_scores(
             self.content.config.battle, self._battle_power(),
             outer.attribute if outer else None, inner.attribute if inner else None, role=self._battle_role(),
+            cavalry=self._battle_mount()[1] if mounted else 0.0,
         )
 
     def _battle_role(self) -> str:
         """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
         stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
         return battle_instance.role_for(stats, team.COMBAT_STATS)
+
+    def _battle_mount(self) -> tuple[str, float]:
+        """加入決戰那一刻騎的馬（裝備四欄 5.9）：（馬名, 騎兵加成）；沒騎馬、坐騎關著是 ("", 0.0)。跟份量一起快照進
+        BattleParticipant（mount、cavalry），之後換馬、馬餓了都不影響這一場。只在玩家自己的路徑呼叫（同 _battle_scores）。"""
+        item = mounts.riding(self.state, self.content)
+        bonus = mounts.cavalry(self.state, self.content)
+        return (mounts.name_of(item), bonus) if item is not None and bonus > 0 else ("", 0.0)
 
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
@@ -2939,6 +3013,7 @@ class Game:
         if me is None or me.scores or me.eliminated:
             return
         scores, road, role = self._battle_scores(), self._battle_road(), self._battle_role()
+        horse, cavalry = self._battle_mount()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
@@ -2946,6 +3021,7 @@ class Game:
                 mine.scores = dict(scores)
                 mine.attribute = mine.attribute or road
                 mine.role = mine.role or role
+                mine.mount, mine.cavalry = mine.mount or horse, mine.cavalry or cavalry
 
         self.world.mutate_battle(_fill)
 
@@ -3353,6 +3429,8 @@ class Game:
         lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
         role = battle_instance.role_name(c.config.battle, me.role)
         lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
+        if me.mount:
+            lines.append(mounts.CAVALRY_REPORT.format(name=me.mount))  # 騎著馬出陣（裝備四欄 5.9）；原句「你以…出陣」不動
         if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
             lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
         if me.hurt_dealt >= 0.5:
@@ -3632,7 +3710,8 @@ class Game:
                 joined = "臨時投效" if self._free_agent() else "加入"
                 role = battle_instance.role_text(self.content.config.battle, me.role)
                 role = f"你的職位：{role}。" if role else ""
-                return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}集結結束就開打，在那之前照常行動{leaving}。"
+                ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
+                return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent():
                 return f"{header}\n\n集結中，還剩現實 {left}。你是散人，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
@@ -3645,6 +3724,8 @@ class Game:
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
+        if p is not None and p.mount:
+            lines.append(mounts.CAVALRY_LINE.format(name=p.mount, pct=mounts.pct(p.cavalry)))  # 騎著馬上陣（裝備四欄 5.9，加入時的快照）
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             if battle_instance.is_third(definition, p):  # 第三方：兩軍各一行，再加膠著程度（戰鬥系統第六節；全是公開的戰局）
@@ -3863,10 +3944,11 @@ class Game:
                 return ["（你只能站在自己陣營這一邊。）"]
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
+            horse, cavalry = self._battle_mount()
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                    role=self._battle_role(),
+                    role=self._battle_role(), mount=horse, cavalry=cavalry,
                 )
             )
             msgs = stood + ["你加入了這場戰局。"]
@@ -3878,10 +3960,11 @@ class Game:
             own = self.state.player.faction if self.content.scenario.factions else None
             stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()
+            horse, cavalry = self._battle_mount()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(), role=self._battle_role(),
+                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), mount=horse, cavalry=cavalry,
                 )
             )
             msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
@@ -3906,15 +3989,19 @@ class Game:
         stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
+        horse, cavalry = self._battle_mount()
         if battle.phase == "muster":
             self.world.mutate_battle(
-                lambda b: battle_instance.join_faction(b, name, side, cap, power, scores=scores, attribute=road, role=role)
+                lambda b: battle_instance.join_faction(
+                    b, name, side, cap, power, scores=scores, attribute=road, role=role, mount=horse, cavalry=cavalry,
+                )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
         else:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
+                    mount=horse, cavalry=cavalry,
                 )
             )
             msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
@@ -4075,9 +4162,15 @@ class Game:
         return msgs
 
     def _lose_silver(self, record) -> list[str]:
-        """落敗失落一成銀兩（遊歷與挑戰本人共用），記在戰報上。"""
+        """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
+        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|名號|戰報流水號」，同回合演出的做法），不動 Game.rng，
+        整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
         p = self.state.player
         loss = p.stats["silver"] // 10
+        chance = mounts.escape(self.state, self.content)
+        if loss and chance > 0 and random.Random(f"脫身|{p.name}|{record.id}").random() < chance:
+            record.notes.append(mounts.ESCAPED_LOSS)
+            return [mounts.ESCAPED_LOSS]
         p.stats["silver"] -= loss
         record.silver = -loss
         return [f"銀兩 -{loss}"] if loss else []
@@ -4565,29 +4658,33 @@ class Game:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
         疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
         在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
-        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。"""
+        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
+        騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
         s, c = self.state, self.content
         s.player.picking_bounty = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
+        s.player.picking_market = False  # 馬市也收起來（裝備四欄 5.5）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
         minutes = route.minutes
         at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
+        pace = mounts.pace(s, c)  # 出發這一刻的步調（裝備四欄 5.3）：寫進 Journey、排抵達時刻、紀錄的標籤都用這一個數；路上餓了、換了馬都不回頭改
         cost = atlas.route_stamina(s, c, route, mode)
+        foot = atlas.route_foot_stamina(s, c, route, mode)  # 不算坐騎的那一份：結伴同行時跟著的人照自己的坐騎再省（_lead，5.8）
         s.player.stamina -= cost
         legs = [0.0] if at_once else list(route.legs)
         s.player.journey = Journey(
-            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode),
-            origin=route.origin, share=route.share,
+            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode, pace=pace),
+            origin=route.origin, share=route.share, pace=pace,
         )
         if self._draft is not None:
-            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode)
+            self._draft.tag = "立刻折返" if at_once else atlas.MODES[mode] + atlas.mode_when(minutes, mode, pace=pace)
             if cost:
                 self._draft.changes.append(f"體力 -{cost}")
         verb = "改道" if rerouting else "動身"
         told = f"{s.player.name}{verb}{atlas.MODES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
-        party = parted + self._lead(start, cost, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層）
+        party = parted + self._lead(start, foot, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層），體力各付各的
         if mode == "dash" or at_once:
             return party + self._arrivals()
         left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
@@ -4627,6 +4724,8 @@ class Game:
                 if new_leg:
                     s.player.leg_actions = set()
                 msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                if new_leg:
+                    msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
                 if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
                     msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
             done = j.reached > j.last or s.world.ended
@@ -4877,6 +4976,7 @@ class Game:
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
             and s.player.duel is None  # 單人頭目戰打到一半：同上
+            and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
         )
 
     def seclusion_refusal(self) -> str | None:
@@ -5607,7 +5707,7 @@ class Game:
     def raid(self, other: Game) -> list[str]:
         """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
         與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
-        雙方各一份戰報與一則江湖紀錄。"""
+        雙方各一份戰報與一則江湖紀錄。被截殺的人騎的馬比較快時，開打之前先擲策馬脫身（raid_flee_odds、_raid_fled）。"""
         problem = self.raid_refusal(other)
         if problem is not None:
             return [problem]
@@ -5616,6 +5716,10 @@ class Game:
         me.stamina -= cfg.stamina
         s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
         s.world.raided[name_key(them.name)] = s.world.time
+        # 策馬脫身（裝備四欄 5.10）：付完體力、記完冷卻才擲（跑掉了冷卻照算，不然可以一直按到追上），用自己的亂數、不動 Game.rng
+        flee = self.raid_flee_odds(other)
+        if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
+            return self._raid_fled(other)
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(ours, theirs, self.rng)
         mirrored = self._spar_mirror(result, theirs)
@@ -5633,6 +5737,26 @@ class Game:
             msgs += self._raid_bounty(them.name)
         # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
         # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
+        self._save_season()
+        return msgs
+
+    def raid_flee_odds(self, other: Game) -> float:
+        """被截殺的 other 策馬脫身的機會（裝備四欄 5.10）：他的腳力減你的腳力，夾在 0～raid_escape_cap；坐騎關著是 0。
+        截殺鈕的確認句（raid.buttons）與 raid() 真正擲的都讀這一個。"""
+        return mounts.raid_flee(self.content, self.state, other.state)
+
+    def _raid_fled(self, other: Game) -> list[str]:
+        """截殺時被截殺的人策馬脫身（裝備四欄 5.10）：不打、誰都不失銀兩與氣血、不寫戰報、不磨兵器防具、不扣飽足；發起的人的體力
+        已經付了、冷卻已經記了（raid 在擲之前做完）。雙方各一則江湖紀錄。冷卻在共用賽季，最後存一次（FB-119：玩家卡走 peer_act、
+        server.act 都只存角色）。scripts/sim_season_one.py 照這個函式數跑掉幾次。"""
+        s, c = self.state, self.content
+        me, them = s.player, other.state.player
+        horse = mounts.name_of(them.mount)
+        self.touched.add(them.name)
+        other._write(f"遭{me.name}截殺", [mounts.RAID_ESCAPED.format(rival=me.name, horse=horse)], tag=mounts.RAID_ESCAPED_TAG)
+        msgs = [f"體力 -{c.config.raid.stamina}", mounts.RAID_FLED.format(rival=them.name, horse=horse)]
+        if self._draft is None:
+            self._write(f"截殺・{them.name}", msgs, tag=mounts.RAID_FLED_TAG)
         self._save_season()
         return msgs
 
@@ -5720,7 +5844,8 @@ class Game:
         now, cap = self._player_hp_and_cap()
         duel = DuelState(
             boss=boss.id, foe=duel_rules.foe_index(boss, p.faction), edge=cfg.start, hp=now, hp_cap=cap, hp_start=now,
-            power=self._battle_power(), scores=self._battle_scores(), role=self._battle_role(),
+            power=self._battle_power(), scores=self._battle_scores(mounted=False), role=self._battle_role(),
+            # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
         )
         key = duel_rules.season_key(s, boss.id)
         p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
@@ -6764,8 +6889,10 @@ class Game:
             self.touched.add(tag.leader)
         return [f"你與{tag.leader}分道揚鑣。"]
 
-    def _lead(self, start: str | None, cost: int, told: str) -> list[str]:
-        """結伴同行：帶頭的你出發、改道、喊停之後，跟著的人照抄這一趟（同樣的路、同樣的抵達時間），趕路、疾行的體力各付各的。
+    def _lead(self, start: str | None, foot: int, told: str) -> list[str]:
+        """結伴同行：帶頭的你出發、改道、喊停之後，跟著的人照抄這一趟（同樣的路、同樣的抵達時間，連步調 Journey.pace 一起抄：
+        整隊照帶頭的人的坐騎走，_partners 才認得出同行）。趕路、疾行的體力各付各的（裝備四欄 5.8）：foot 是不算坐騎的體力
+        （atlas.route_foot_stamina；喊停是 0），每個跟著的人照自己的坐騎再省（atlas.ride_stamina、mounts.saving）。
         start 是你動身的地點（從路上改道、喊停時是 None）。跟不上的人（體力不夠、手上有事、已經不在這裡）就散了，兩邊各記一句。
         回傳寫給你的幾句。told 是寫進跟著的人紀錄的那一句。"""
         me = self.state.player
@@ -6773,6 +6900,7 @@ class Game:
         lines: list[str] = []
         for other in self._party(catch_up=True):
             o = other.state.player
+            cost = atlas.ride_stamina(foot, mounts.saving(other.state, self.content))  # 這個人自己騎的馬省下之後要付的
             # 路是帶頭的人認得的路，跟著的人不必自己認得（所以不問 travel_refusal），只看他手上有沒有事、體力夠不夠
             block = atlas.travel_block(other.state, self.content)
             if start is not None and (o.journey is not None or o.location != start):

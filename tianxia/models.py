@@ -803,6 +803,7 @@ ALLOW_FIXED = frozenset({
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
+    "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1512,6 +1513,25 @@ class ArmorRules(_Strict):
     edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
 
 
+class MountRules(_Strict):
+    """坐騎（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第五節；裝備二）。數字都是【預設】（企劃者 2026-10-10「全部照預設」），
+    量表（scripts/measure_mounts.py）校準後可以改。省體力（趕路、疾行）與路上快（步行、趕路）照階查表、再加品質；騎兵、脫身只照階；
+    全部乘飽足係數（edge_floor＋（1－edge_floor）×飽足度／100）。腳力＝省體力（含品質）×飽足係數，截殺追逃比的是兩邊的腳力。
+    階：1 駑馬、2 良駒、3 名駒；查表用 str(tier)（同 WeaponRules.tier_bonus）。不掛第一季開關（2.6，同兵器、防具）。"""
+
+    enabled: bool = True
+    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 趕路、疾行的體力省幾成（5.1）
+    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行、趕路的時間快幾成（5.1）
+    quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.03, "上品": 0.05})  # 只加在上面兩列
+    cavalry: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})  # 決戰強攻、奇襲的份量多幾成（5.9）
+    escape: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.50, "3": 0.70})  # 落敗策馬脫身、保住銀兩的機會（5.11）
+    raid_escape_cap: float = Field(default=0.4, ge=0, le=1)  # 截殺追逃：守方腳力－攻方腳力最多算幾成（5.10）
+    edge_floor: float = Field(default=0.5, ge=0, le=1)  # 飽足係數：餓到底剩幾成（5.4：不會餓死、不會跑掉）
+    hunger: dict[str, int] = Field(default_factory=lambda: {"walk": 5, "hurry": 5, "dash": 10})  # 每抵達新的一站扣的飽足度（5.4）
+    shop_price: int = Field(default=100, ge=0)  # 馬市一匹駑馬下品的價錢（5.5）
+    edge_warn: int = Field(default=30, ge=0, le=100)  # 飽足低到這裡以下時江湖紀錄提醒一次（5.4）
+
+
 class Secrets(_Strict):
     """口訣與秘方（tianxia/secrets.py；PM 2026-10-10 派工，企劃者選「甲乙都做」的甲）。預設全關（測試內容沒有秘方池），
     正式值在 config.json。"""
@@ -1602,6 +1622,7 @@ class Config(_Strict):
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
+    mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——

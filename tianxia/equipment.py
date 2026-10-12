@@ -1,6 +1,6 @@
 """裝備四欄的共用部分（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第二、三節；裝備一）。
 
-身上每欄一件（PlayerState.weapon、armor；坐騎、寶物等裝備二、三），其餘放四欄共用的裝備庫（PlayerState.rack，
+身上每欄一件（PlayerState.weapon、armor、mount〔坐騎，裝備二〕；寶物是裝備三），其餘放四欄共用的裝備庫（PlayerState.rack，
 Config.weapons.rack_cap 格）。這裡只放不看欄位內容的部分：欄位表、各欄開著沒、裝備庫裡某一欄的、滿了沒、拿到新東西放哪、換上、
 拆解的共用流程與問句、階品寫法、鐵匠鋪的字。要看欄位內容的（加成、減損、架上、每一列的字）在各欄自己的模組（weapons、armor），
 它們反過來 import 這裡；這裡不 import weapons、armor，也不 import team、rules（team 會呼叫 weapons、armor，rules 會 import team）。
@@ -25,16 +25,19 @@ class Slot:
     prefix: str  # 新的一件的 id 開頭（「兵:N」「甲:N」，共用 PlayerState.weapon_serial）
     label: str  # 修練頁「裝備」那一段的名字
     put_on: str  # 拿到新東西、這一欄身上空著時那一句
+    road_locked: bool = False  # 路上不能換（裝備四欄 2.3：坐騎的快慢出發時就算進抵達時刻，路上換了也不會變快）
 
 
-# 這一批只有武器、防具；坐騎（騎）、寶物（寶）在裝備二、三各加一列（PlayerState 同時加那一欄）。表外的欄位（裝備庫裡混進來的
-# 坐騎、寶物）一律當關著：不列、不能換、不能拆（3.3）
+# 武器、防具（裝備一）、坐騎（裝備二）；寶物（寶）在裝備三加一列（PlayerState 同時加那一欄）。表外的欄位（裝備庫裡混進來的寶物）
+# 一律當關著：不列、不能換、不能拆（3.3）
 SLOTS: dict[str, Slot] = {
     "weapon": Slot(rules="weapons", warned="edge_warned", prefix="兵", label="武器", put_on="你把【{name}】拿在手上。"),
     "armor": Slot(rules="armor", warned="armor_warned", prefix="甲", label="防具", put_on="你穿上了【{name}】。"),  # 待 joy 潤
+    "mount": Slot(rules="mounts", warned="hunger_warned", prefix="騎", label="坐騎", put_on="你騎上了【{name}】。", road_locked=True),  # 待 joy 潤
 }
 WEAR_WORDS = {"weapon": "鋒利度", "armor": "耐久度", "mount": "飽足度"}  # 待 joy 潤：Equipment.edge 在各欄叫什麼（3.1、2.5）；防具這一側都讀這裡（armor.WEAR_WORD），武器那一側的舊字這一批不動
-WIELDABLE = ("weapon", "armor")  # 修練頁「換上」收哪幾欄（2.3：武器、防具隨時能換；寶物、坐騎的限制等各自那一批）
+WIELDABLE = ("weapon", "armor", "mount")  # 修練頁「換上」收哪幾欄（2.3：武器、防具隨時能換；坐騎路上不能換〔Slot.road_locked〕；寶物的限制等裝備三）
+ROAD_LOCKED = "在路上不能換{label}。"  # 待 joy 潤
 DISMANTLABLE = ("weapon", "armor")  # 拆得了的（4.8：坐騎、寶物沒有屬性，也不該拆成素材）
 
 SMITH = "鐵匠鋪"
@@ -107,14 +110,16 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
 
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
-    不花體力、不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
-    開著的欄位裡找不到是 WIELD_MISSING（表外的坐騎、寶物也是找不到）。"""
+    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
+    開著的欄位裡找不到是 WIELD_MISSING（表外的寶物也是找不到）。"""
     p = state.player
     chosen = _find(p, item_id, slots)
     if chosen is None:
         return [WIELD_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW]
     if not on(content, chosen.slot):
         return [NOT_NOW]
+    if SLOTS[chosen.slot].road_locked and p.journey is not None:
+        return [ROAD_LOCKED.format(label=SLOTS[chosen.slot].label)]  # 坐騎（2.3）：閉關中照樣能換，只擋路上
     p.rack.remove(chosen)
     current = worn(p, chosen.slot)
     if current is not None:

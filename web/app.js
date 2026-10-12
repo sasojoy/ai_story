@@ -1055,8 +1055,8 @@
   }
   // 「→ 」後面那個空白放在 span 外面：行內區塊尾巴上的空白會被瀏覽器吃掉（「→這個配方」貼在一起），放外面它是普通空白，既看得到、也是一個換行機會，落在行尾或行頭時自己消失
   const nbHtml = (text) => nbChunks(text).map((t) => (t.length <= NB_MAX ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
-  // 一行寫完：tests/test_battle_buttons.py、test_peek_row.py 的假瀏覽器照名字把這一行切出去（konst），smith: 才會用到 nbHtml
-  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") ? nbHtml(o.label) : esc(o.label)}</span>`; };
+  // 一行寫完：tests/test_battle_buttons.py、test_peek_row.py 的假瀏覽器照名字把這一行切出去（konst），smith:、market:（馬市的鈕一樣長，裝備四欄 5.5）才會用到 nbHtml
+  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") || o.id.startsWith("market:") ? nbHtml(o.label) : esc(o.label)}</span>`; };
   // 前四顆對到選單上哪一顆、沒有時寫什麼；第五顆是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
@@ -1976,7 +1976,7 @@
     const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
-    // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（這一批武器、防具；坐騎、寶物等各自那一批），每段先列身上那件、再列裝備庫裡同一欄的。
+    // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎；寶物等裝備三），每段先列身上那件、再列裝備庫裡同一欄的。
     // 格數四欄合算（gear.used／gear.cap）。字都是伺服器給的資料，一律 esc。這一版畫不出的欄位（新伺服器多了一欄）整段略過。
     // FB-125（兵器第二批 Task 1）：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
     const gear = x.gear;
@@ -1993,7 +1993,18 @@
         <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}・${esc(a.wear_word)} ${a.edge | 0}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span></div>
         ${wornNow ? "" : rowButtons(a)}
       </div>`;
-    const GEAR_ROWS = { weapon: weaponRow, armor: armorRow };
+    // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、趕路疾行省幾成體力、路上快幾成、
+    // 決戰強攻奇襲多幾成、落敗脫身的機會（2.5：後三項寫在修練頁這一列，不擠進角色卡）。
+    // 身上那匹一顆「餵」（餵不了的灰掉、寫為什麼；餵得了寫用哪一種素材），裝備庫裡的只有「換上」：坐騎不能拆（4.8），不用 rowButtons；
+    // 路上不能換坐騎（2.3），「換上」照伺服器給的 wield_ok 灰掉、寫 wield_note（同「餵」的灰掉做法）。
+    // 這一行的寫法待 joy 潤
+    const mountRow = (h, wornNow) => `<div class="wrow">
+        <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・趕路疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span></div>
+        <div class="wbtns">${wornNow
+          ? `<button class="btn small" data-act="feed"${h.feed ? "" : " disabled"}>餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>`
+          : `<button class="btn small" data-act="wield" data-id="${esc(h.id)}"${h.wield_ok ? "" : " disabled"}>換上${h.wield_ok ? "" : `（${esc(h.wield_note)}）`}</button>`}</div>
+      </div>`;
+    const GEAR_ROWS = { weapon: weaponRow, armor: armorRow, mount: mountRow };
     const slotBlock = (g) => {
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
@@ -3360,6 +3371,7 @@
           await loadMenxia();
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
+        case "feed": await mx("feed"); break; // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
           ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
           break;

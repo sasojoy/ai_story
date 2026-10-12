@@ -171,7 +171,8 @@
     "y": 1137,
     "important": true,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "馬市"
     ],
     "insights": [
       "huo"
@@ -627,7 +628,8 @@
     "x": 694,
     "y": 1230,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "馬市"
     ],
     "materials": [
       "gang_1",
@@ -763,7 +765,8 @@
     "y": 118,
     "important": true,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "馬市"
     ],
     "insights": [
       "huo"
@@ -1025,7 +1028,8 @@
     "y": 445,
     "important": true,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "馬市"
     ],
     "danger": 2,
     "enemies": [

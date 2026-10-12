@@ -5,6 +5,7 @@
 - 每週末三條戰況與割據；十二件大事的結果與有沒有人鎖定；三場決戰的結果；
 - 每陣營每週達成幾道軍令；升第 2 階的人數；
 - 結局、收季時間、有沒有卡住（時間用完還沒收季）；
+- 截殺的場數照結果分（守方勝、平手、攻方勝、策馬脫身〔裝備四欄 5.10：被截殺的人騎的馬比較快，跑掉了不打〕）；
 - 驗收（總計畫 T11）：第 6 週以前沒有決定性勝利；三條戰線的週末中位數在 20～80。
 
 執行：.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60
@@ -92,7 +93,7 @@ def run_season(
     raided: Counter = Counter()  # 截殺（Config.raid）：被截殺的次數、輸的次數、失的銀兩與氣血，照名號（輸出不列名號）
     raid_losses: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])  # 名號 → [輸幾場, 失銀, 失氣血]
     raid_tiers: Counter = Counter()
-    real_record, real_spoils = Game._raid_record, Game._raid_spoils
+    real_record, real_spoils, real_fled = Game._raid_record, Game._raid_spoils, Game._raid_fled
     duels: Counter = Counter()  # 單人頭目戰（Config.duel）：照結果數場數（抽身退走記「抽身」）
     real_finish = Game._duel_finish
 
@@ -112,8 +113,14 @@ def run_season(
         row[0], row[1], row[2] = row[0] + 1, row[1] + spoils.lost, row[2] + spoils.hp
         return spoils
 
+    def count_fled(self, other):
+        raided[other.state.player.name] += 1  # 跑掉了也算被截殺過一次（冷卻照記）
+        raid_tiers["策馬脫身"] += 1
+        return real_fled(self, other)
+
     with mock.patch.dict(os.environ, {database.ENV_VAR: str(db_path)}), \
             mock.patch.object(Game, "_raid_record", count_record), mock.patch.object(Game, "_raid_spoils", count_spoils), \
+            mock.patch.object(Game, "_raid_fled", count_fled), \
             mock.patch.object(Game, "_duel_finish", count_finish):
         world, characters = open_world(db_path), open_characters(db_path)
         world.seed_first_season(content)
