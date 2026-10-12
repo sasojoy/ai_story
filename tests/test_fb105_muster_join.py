@@ -102,7 +102,7 @@ ROW_ATTRS = 'role="group" aria-label="參戰" aria-describedby="muster-note"'
 @node
 def test_the_join_button_sits_by_the_battles_name_and_leaves_the_fold(on):
     m = server.main_view(_muster(on, "guan"))
-    assert any(o["id"] == "battle:join:guan" and o["enabled"] for o in m["options"]) and "act:rest" in [o["id"] for o in m["options"]]
+    assert any(o["id"] == "battle:join:guan" and o["enabled"] for o in m["options"]) and "act:explore" in [o["id"] for o in m["options"]]
     page = _page(m)
     scene = _scene(page)
     head = re.search(r'<div class="muster-head">(.*?</div>)</div>', scene, re.S).group(1)
@@ -194,7 +194,7 @@ def test_with_an_event_open_the_join_button_still_sits_by_the_name_and_only_once
     game = _muster(on, "guan")
     game.state.pending_event = "jz_gz_forge"
     m = server.main_view(game)
-    assert [o["id"] for o in m["options"]][0] == "battle:join:guan" and "act:rest" not in [o["id"] for o in m["options"]]
+    assert [o["id"] for o in m["options"]][0] == "battle:join:guan" and "act:explore" not in [o["id"] for o in m["options"]]
     page = _page(m)
     assert page.count('data-id="battle:join:guan"') == 1 and "muster-join" in _scene(page)
     assert 'data-id="choice:0"' in page

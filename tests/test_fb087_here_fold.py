@@ -67,7 +67,7 @@ def test_a_fold_nobody_touched_stays_shut_and_no_fold_is_drawn_without_extras(qu
     out = run(quiet, _script("""
       H.renderPage();
       const shut = fold();
-      H.S.main = { ...H.S.main, options: H.S.main.options.filter((o) => ["act:explore", "act:train", "act:rest", "act:socialize"].includes(o.id)) };
+      H.S.main = { ...H.S.main, options: H.S.main.options.filter((o) => ["act:explore", "act:train", "act:socialize"].includes(o.id)) };
       return { shut, none: redraw() };"""))
     assert out == {"shut": False, "none": None}
 

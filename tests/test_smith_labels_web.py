@@ -88,10 +88,10 @@ def test_main_and_aux_material_labels_keep_the_price_and_the_attribute_whole(men
 
 def test_every_smith_button_gets_the_chunks_and_other_buttons_do_not(menu):
     page = menu(("smith:repair", "修【試刃】（鋒利度 40・精鐵砂×1＋5 兩）・這把配不上你的武學，加成用不上"),
-                ("smith:back", "離開鐵匠鋪"), ("act:explore", "探索（體力 6・也許有收穫）"))
+                ("smith:back", "離開鐵匠鋪"), ("talk:leave", "告辭（體力 6・也許有收穫）"))
     assert _chunks(page, "smith:repair")[0] == ["修【試刃】", "（鋒利度 40・", "精鐵砂×1＋", "5 兩）・", "這把配不上你的武學，", "加成用不上"]
     assert _chunks(page, "smith:back")[0] == ["離開鐵匠鋪"]
-    assert _chunks(page, "act:explore")[0] == []  # 別的選單不動
+    assert _chunks(page, "talk:leave")[0] == []  # 別的選單不動（不放探索：有探索的選單是閒著的行動列）
 
 
 def test_the_dismantle_label_keeps_the_space_after_the_arrow(menu):

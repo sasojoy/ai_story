@@ -102,7 +102,7 @@ def test_a_spectator_sees_the_running_battle_as_one_line(battle):
     watcher, _ = battle
     m = server.main_view(watcher)
     battle_part, own = m["scene"].split("<hr />", 1)
-    assert "回合" in battle_part and "這場決戰在南陽" in battle_part and "act:rest" in [o["id"] for o in m["options"]]
+    assert "回合" in battle_part and "這場決戰在南陽" in battle_part and "act:explore" in [o["id"] for o in m["options"]]
     scene = _scene(run(m, "return H.pageJianghu();"))
     assert scene.startswith(_folded(m) + "\n<hr />")  # 戰場那一塊只剩一行，分隔線之後照舊
     assert own in scene  # 自己眼前的事（所在地）一個字不動

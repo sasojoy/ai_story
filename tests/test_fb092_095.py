@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 
 import pytest
+
+from conftest import idle_step
 from test_prologue_web import run
 from tests.test_orders import _game, _order
 
@@ -110,7 +112,7 @@ def test_fb094_patrolling_under_a_defence_order_credits_it_once_and_finishes_the
 
 def test_fb094_other_actions_do_not_finish_it(on):
     game = _enlisted(on, "guan")
-    game.choose("act:rest")
+    idle_step(game)
     assert not enlist_done(game.state, on)
 
 

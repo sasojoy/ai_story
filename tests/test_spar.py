@@ -165,15 +165,15 @@ def test_an_invite_runs_out(pair):
     assert invites.incoming(season, "乙") == []
 
 
-@pytest.mark.parametrize("why", ["away", "resting", "tired", "nobody", "self"])
+@pytest.mark.parametrize("why", ["away", "secluded", "tired", "nobody", "self"])
 def test_refusals(pair, why):
     content, world = pair
     target = "乙"
     other = _load(world, "乙")
     if why == "away":
         other.player.location = next(l for l in content.locations if l != other.player.location)
-    elif why == "resting":
-        other.player.resting_since = 0.0
+    elif why == "secluded":
+        other.player.busy_until = 1e9  # 閉關中（以前這一格測打坐，2026-10-12 拿掉了）
     elif why == "tired":
         other.player.stamina = 0.0
     elif why == "nobody":
@@ -184,7 +184,7 @@ def test_refusals(pair, why):
     msgs, _ = _do(content, world, "甲", lambda g: g.peer_act(target, "spar", {"arg": "invite"}))
     assert world.get_season().invites == []
     gone = social.GONE
-    assert {"away": gone, "resting": "正忙", "tired": "體力不夠", "nobody": gone, "self": gone}[why] in msgs[-1]
+    assert {"away": gone, "secluded": "正忙", "tired": "體力不夠", "nobody": gone, "self": gone}[why] in msgs[-1]
 
 
 def test_leaving_before_the_answer_calls_it_off(pair):

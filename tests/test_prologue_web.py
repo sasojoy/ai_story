@@ -196,10 +196,10 @@ def test_each_step_lights_up_the_next_thing(hut):
     assert [s["tabs"] for s in seen[:5]] == [[], ["jianghu", "practice"], ["jianghu", "practice"], ["jianghu", "practice", "craft"], ["jianghu", "practice", "craft"]]
     assert seen[1]["vitals"] == ["xinde"] and seen[2]["vitals"] == ["stamina", "xinde"]
     assert seen[2]["cells"] == ["explore"] and seen[6]["cells"] == ["explore", "rest"]
-    assert seen[7]["cells"] == ["explore", "train", "rest"] and seen[7]["vitals"] == ["stamina", "hp", "xinde"]
+    assert seen[7]["cells"] == ["explore", "train"] and seen[7]["vitals"] == ["stamina", "hp", "xinde"]
     assert [s["toggle"] for s in seen] == [False] * 8 + [True] * 3  # 屬性（配點）從第 9 步才點得開
-    for before, after in zip(seen, seen[1:]):  # 亮起來的不會再暗回去
-        assert set(before["tabs"]) <= set(after["tabs"]) and set(before["cells"]) <= set(after["cells"])
+    for before, after in zip(seen, seen[1:]):  # 亮起來的不會再暗回去（調息那一格例外：只有第 7 步有，打坐 2026-10-12 拿掉了）
+        assert set(before["tabs"]) <= set(after["tabs"]) and set(before["cells"]) - {"rest"} <= set(after["cells"])
 
 
 def test_the_farewell_step_lights_everything_and_the_menu_is_only_the_walk(hut):
@@ -207,7 +207,7 @@ def test_the_farewell_step_lights_everything_and_the_menu_is_only_the_walk(hut):
     out = run(m, "return { tabs: H.tabsHtml(), page: H.pageJianghu(), top: H.topHtml() };")
     assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "craft", "map", "news"]
     cells = {key: cls for cls, key in re.findall(r'class="act-ink([^"]*)" data-key="(\w+)"', out["page"])}
-    assert sorted(cells) == ["explore", "move", "rest", "social", "train"]
+    assert sorted(cells) == ["explore", "move", "social", "train"]  # 打坐 2026-10-12 拿掉了：出師之後是四格
     assert " off" in cells["explore"] and " off" not in cells["move"]  # 只有走出草廬按得下去
     assert 'data-glow="act:move"' in out["page"] and "<em>銀</em>" in out["top"]
 
@@ -291,8 +291,8 @@ def test_no_cell_lit_and_nothing_extra_draws_no_bar(hut):
     (True, ["sense:0", "sense:1"], False, False),  # 草廬四景的做法：一排按鈕（悟意境）
     (True, ["sense:draw", "sense:let"], False, False),  # 感悟狀態：畫下來、順其自然
     (True, ["act:on_road", "road:back"], True, False),  # 出師那段路上：路上的選單
-    (False, ["act:explore"], False, False),  # 序章外沒有打坐的選單不是閒著（對話、事件、決戰）
-    (False, ["act:explore", "act:rest"], False, True),
+    (False, ["talk:0", "talk:leave"], False, False),  # 序章外沒有探索的選單不是閒著（對話、事件、決戰）
+    (False, ["act:explore"], False, True),  # 有探索就是閒著（以前認打坐，2026-10-12 拿掉了）
 ])
 def test_the_idle_bar_is_drawn_for_the_prologue_menus_too(hut, prologue, options, on_road, expected):
     m = main_at(hut, 2)

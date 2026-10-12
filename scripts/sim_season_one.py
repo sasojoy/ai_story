@@ -7,7 +7,7 @@
 - 結局、收季時間、有沒有卡住（時間用完還沒收季）；
 - 截殺的場數照結果分（守方勝、平手、攻方勝、策馬脫身〔裝備四欄 5.10：被截殺的人騎的馬比較快，跑掉了不打〕）；
 - 傷與體力（企劃者 2026-10-12 療傷只在醫館）：每陣營假人一季平均的內傷（佔氣血上限的幾成，每現實小時取樣）、
-  療傷幾次與銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動花掉多少體力、季末等級中位數；
+  療傷幾次與銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動花掉多少體力、季末等級中位數、在線時體力見底（連一次探索都不夠）的比例；
 - 驗收（總計畫 T11）：第 6 週以前沒有決定性勝利；三條戰線的週末中位數在 20～80。
 
 執行：.venv/Scripts/python.exe scripts/sim_season_one.py --seeds 1 2 3 --factions 5 5 5 --hours 60
@@ -188,6 +188,9 @@ def run_season(
                     cap = team.neili_cap(content, member.level, con)
                     care[state.player.faction]["樣本"] += 1
                     care[state.player.faction]["內傷千分"] += round(1000 * member.injury / cap)
+                    if state.last_real is not None and state.last_real >= now[0] - 2 * tick:  # 見底%：只看在線的（離線的體力是上次存的，不準）
+                        care[state.player.faction]["在線樣本"] += 1
+                        care[state.player.faction]["見底"] += state.player.stamina < content.config.action_cost["explore"]
             if season.ended:
                 break
             now[0] += tick
@@ -233,6 +236,7 @@ def run_season(
     result["care"] = {
         side: {"內傷%": round(care[side]["內傷千分"] / max(1, care[side]["樣本"]) / 10, 1),
                **{k: care[side][k] for k in ("療傷", "療傷銀", "繞路", "吃丹", "花體力")},
+               "見底%": round(100 * care[side]["見底"] / max(1, care[side]["在線樣本"]), 1),
                "等級": statistics.median(levels[side]) if levels[side] else 0}
         for side in SIDES
     }
@@ -267,8 +271,8 @@ def summary(seed: int, r: dict) -> str:
     lines.append(f"  截殺：共 {raids['total']} 場（" + "、".join(f"{k} {v}" for k, v in sorted(raids["tiers"].items()))
                  + f"）；被截殺過的 {raids['victims']} 人，每人中位數 {raids['median']} 次")
     lines.append(f"    被截殺最多的人：{victim(raids['top'])}；失銀最多的人：{victim(raids['worst'])}")
-    lines.append("  傷與體力（平均內傷%／療傷次／療傷銀／繞路段／吃丹／花體力／季末等級中位數；次數與體力是全陣營合計）：" + "　".join(
-        f"{SIDE_NAMES[s]} {v['內傷%']}%/{v['療傷']}/{v['療傷銀']}/{v['繞路']}/{v['吃丹']}/{v['花體力']}/{v['等級']:g}" for s, v in r["care"].items()))
+    lines.append("  傷與體力（平均內傷%／療傷次／療傷銀／繞路段／吃丹／花體力／季末等級中位數／在線時體力見底%；次數與體力是全陣營合計）：" + "　".join(
+        f"{SIDE_NAMES[s]} {v['內傷%']}%/{v['療傷']}/{v['療傷銀']}/{v['繞路']}/{v['吃丹']}/{v['花體力']}/{v['等級']:g}/{v['見底%']}%" for s, v in r["care"].items()))
     lines.append("  頭目戰：" + ("、".join(f"{k} {v}" for k, v in sorted(r["duels"].items())) or "沒遇上"))
     c = r["checks"]
     medians = "、".join(f"{FRONT_NAMES[f]} {m}" for f, m in c["medians"].items())

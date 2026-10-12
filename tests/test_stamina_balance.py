@@ -78,11 +78,7 @@ def test_newbie_stamina_regen_triples_for_newbie_stamina_days(content, world):
         p.stamina = 0.0
         game._advance_player_local(1800)
         gained.append(p.stamina)
-    assert gained == [pytest.approx(30.0), pytest.approx(10.0)]  # 半小時：平常 10 點，新手期 30 點
-    game.state.world.time = p.joined_at
-    p.stamina, p.resting_since = 0.0, p.joined_at
-    game._advance_player_local(1800)
-    assert p.stamina == pytest.approx(60.0)  # 打坐 ×2 再乘新手 ×3
+    assert gained == [pytest.approx(30.0), pytest.approx(10.0)]  # 半小時：平常 10 點，新手期 30 點（打坐 2026-10-12 拿掉了）
 
 
 def test_the_newbie_period_is_about_thirteen_hours_on_a_weekend_season(content):

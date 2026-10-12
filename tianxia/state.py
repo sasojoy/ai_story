@@ -353,6 +353,10 @@ class PlayerState(BaseModel):
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
     # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。
     pills_topped_to: int = 0
+    # 一天最多服幾顆（Config.stamina_pills_per_day，企劃者 2026-10-12）：上次服丹是哪一天（現實時間照 pill_day_utc_offset_hours 換日，
+    # 從 1970-01-01 起算的第幾天；-1 是沒服過）與那一天服了幾顆。跨季保留（換季不能多吃一輪）
+    pill_day: int = -1
+    pills_today: int = 0
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -372,7 +376,7 @@ class PlayerState(BaseModel):
     seclusion_done: float | None = None  # 上一次出關的遊戲時間（天時地利的「心靜」）；沒閉關過是 None
     manual: Manual = Field(default_factory=Manual)  # 武學譜（口訣與秘方）
     forge_manual: Manual = Field(default_factory=Manual)  # 鑄譜（打造的隱藏配方：聽過的口訣、打中過的；tianxia/forge_secrets.py）
-    resting_since: float | None = None  # 打坐坐下時的賽季時間（遊戲秒）；None＝沒在打坐（地圖擴充設計第二節，跟閉關同一種做法）
+    resting_since: float | None = None  # 打坐 2026-10-12 拿掉了：只留著讓舊存檔讀得進來，讀檔就清掉（Game._drop_stale_references）
     journey: Journey | None = None  # 在路上；None＝人在某個地點（location）
     # 路上小事（路上設計第四節）：這一段路上已經做過的（road: 選項的 id 後半，例如 think）。到了另一站就清空；
     # 掉頭回到剛離開的那一站不算換段，所以不跟著那一趟 Journey 走，記在玩家身上（不然折返一下就能重做）。

@@ -2,6 +2,7 @@
 跟 test_orders 同一份）。"""
 import pytest
 
+from conftest import idle_step
 from tests.test_orders import _game, _order, _win
 from tianxia import enlist, guide
 from tianxia.state import ONBOARDING_VERSION
@@ -530,7 +531,7 @@ def test_a_joined_character_of_this_version_is_not_pulled_in_by_having_a_faction
     assert game.state.player.enlist_step is None and game.state.player.onboarding == ONBOARDING_VERSION
     again = Game(enlisting, game.state, world=world)
     assert again.state.player.enlist_step is None and again.guide_box() is None
-    again.choose("act:rest")  # 之後做任何行動，也不會因為「有陣營、入伍段還沒開始」就被拖進入伍段
+    idle_step(again)  # 之後做任何行動，也不會因為「有陣營、入伍段還沒開始」就被拖進入伍段
     assert again.state.player.enlist_step is None and again.guide_box() is None
     again.view_orders()
     assert again.state.player.enlist_step is None and not enlist.active(again.state, enlisting)

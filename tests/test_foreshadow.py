@@ -9,7 +9,7 @@ import random
 import pytest
 
 import server
-from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, FixedRandom, install_foreshadows
+from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, FixedRandom, idle_step, install_foreshadows
 from tianxia import bot, bot_policy, calendar, companion_agent, foreshadow, rules, skillview, team, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -169,8 +169,7 @@ def test_fragment_rolls_exactly_once_after_every_stamina_spending_action(fs, wor
     assert calls_after(lambda: game.choose("talk:clue:fs_fire_guan:2")) == 0  # 片段選項不花體力
     assert calls_after(lambda: game.choose("talk:0")) == 1  # 對話一輪
     game.choose("talk:leave")
-    assert calls_after(lambda: game.choose("act:rest")) == 0
-    assert calls_after(lambda: game.choose("act:stand")) == 0
+    assert calls_after(lambda: idle_step(game)) == 0
     game.set_move_mode("walk")
     assert calls_after(lambda: walk_to_town(game)) == 0  # 步行不花體力
     assert calls_after(lambda: game.choose("act:socialize")) == 1  # 小鎮只有波才一位：交友直接找他
