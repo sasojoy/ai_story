@@ -54,6 +54,7 @@ DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
 DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
+WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
 DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 

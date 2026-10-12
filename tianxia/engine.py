@@ -511,9 +511,9 @@ class Game:
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
-            not p.picking_smith or not weapons.smith_here(s, c) or smithing.draft_stale(c, p.smith_draft)
+            not p.picking_smith or not smithing.draft_here(s, c, p.smith_draft) or smithing.draft_stale(c, p.smith_draft)
         ):
-            p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
+            p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
@@ -642,8 +642,8 @@ class Game:
             msgs += self._advance_player_local(elapsed)
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
-        if self.state.player.smith_draft is not None and not weapons.smith_here(self.state, self.content):
-            self.state.player.smith_draft = None  # 武器關了、防具還開著：鐵匠鋪照開（防具頁），兵器的單子清掉
+        if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
+            self.state.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
             self.state.player.picking_market = False  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
@@ -2590,7 +2590,7 @@ class Game:
 
     def _smith_options(self) -> list[Option]:
         """鐵匠鋪的第二層選單（兵器設計 4.1；裝備四欄設計 4.6）：分兵器、防具兩頁（equipment.page；兩欄都開著時預設兵器頁，
-        「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…挑到一半（smith_draft）時整份換成那一步。
+        「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…／打造防具…挑到一半（smith_draft）時整份換成那一步。
         兵器頁：架上六把各一顆「買」（買不了的灰掉、寫為什麼；種類對得上身上武學的那一把標出來），手上那把一顆「修」（寫明用掉哪一種素材）
         與「淬煉」（身上那把配不上身上的武學時，按得下去的「修」「淬煉」多一句提醒：白花料與銀兩，加成用不上），
         裝備庫裡配得上身上武學的每把一顆「換上」（配不上的到修練頁換），「打造兵器…」（排在換上與拆解中間：FB-125），
@@ -2599,7 +2599,8 @@ class Game:
         art = team.player_art(s, c, self.world, s.player.member.wugong_id)
         fit_kind = weapons.art_weapon(art.id, c, self.world) if art is not None else None
         if s.player.smith_draft is not None:
-            return smithing.draft_options(s, c, self.world, art)  # 打造兵器…挑到一半：只畫這一步
+            neigong = team.player_art(s, c, self.world, s.player.member.neigong_id)  # 防具的單子標跟內功同屬性的輔料
+            return smithing.draft_options(s, c, self.world, art, neigong)  # 打造兵器…／打造防具…挑到一半：只畫這一步
         if equipment.page(s.player, c) == "armor":
             return self._armor_options()  # 防具頁（裝備四欄 4.6）
         opts = []
@@ -2652,8 +2653,9 @@ class Game:
 
     def _armor_options(self) -> list[Option]:
         """鐵匠鋪的防具頁（裝備四欄設計 4.6）：架上剛柔快慢四件各一顆「買」（一階下品；寫這件給你少扣幾成氣血、對不對得上你的內功，
-        買不了的灰掉寫為什麼），身上那件一顆「修」（寫明用掉哪一種素材），裝備庫裡每件防具一顆「換上」，拆解，兵器也開著時一顆切到兵器頁，
-        最後「離開」。都不花體力。FB-125：這一頁沒有打造入口隔開換上與拆解，靠拆解先問一次（confirm／confirm_yes）擋誤按。"""
+        買不了的灰掉寫為什麼），身上那件一顆「修」（寫明用掉哪一種素材），裝備庫裡的防具「換上」（最多 DISMANTLE_LIST 件、最好的先，
+        FB-134），「打造防具…」，拆解，兵器也開著時一顆切到兵器頁，最後「離開」。都不花體力。FB-125：打造入口隔開換上與拆解（同兵器頁），
+        拆解另外先問一次（confirm／confirm_yes）擋誤按。"""
         s, c, p = self.state, self.content, self.state.player
         neigong = team.player_art(s, c, self.world, p.member.neigong_id)
         rule = c.config.armor
@@ -2674,8 +2676,15 @@ class Game:
             use = f"{c.materials[material].name}×1" if material is not None else "一個一階素材"
             note = problem or f"{use}＋{rule.repair_silver} 兩"
             opts.append(Option(id=armor.REPAIR, label=f"修【{p.armor.name}】（{armor.WEAR_WORD} {p.armor.edge}・{note}）", enabled=problem is None))
-        for a in equipment.in_slot(p, "armor"):
-            opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade(a)}・{armor.WEAR_WORD} {a.edge}）"))
+        # FB-134：「換上」最多 DISMANTLE_LIST 件，修好之後減損高的先、同分 id 大的先——跟 armor.wanted 挑換上的鍵一樣，整季機器人與假人
+        # 要按的那一顆一定列得出來；多的一行灰掉的說明指到修練頁（同拆解）。淬過的寫「・淬煉 N」（equipment.grade_line）
+        spares = sorted(equipment.in_slot(p, "armor"), key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
+        for a in spares[:equipment.DISMANTLE_LIST]:
+            opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade_line(a)}・{armor.WEAR_WORD} {a.edge}）"))
+        if len(spares) > equipment.DISMANTLE_LIST:
+            opts.append(Option(id="smith:wield-more", enabled=False,
+                               label=equipment.WIELD_MORE.format(n=len(spares) - equipment.DISMANTLE_LIST)))
+        opts.append(smithing.forge_door(s, c, "armor"))  # 打造防具…（排在換上與拆解中間：FB-125，同兵器頁）
         return opts + self._dismantle_options("armor") + self._smith_tail()
 
     def _smith_tail(self) -> list[Option]:
@@ -2732,8 +2741,10 @@ class Game:
             return []
         if verb == smithing.GO_VERB:
             kind, main, aux = smithing.parse_go(f"smith:{arg}")
-            weapon, msgs = smithing.forge(s, c, self.world, kind, main, aux, rng=self.rng)  # 不叫模型、一次做完（打造隱藏配方設計第八節）
-            if weapon is not None:
+            # 防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方設計 9.3），兵器照舊用 Game.rng
+            rng = smithing.own_rng(s, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else self.rng
+            item, msgs = smithing.forge(s, c, self.world, kind, main, aux, rng=rng)  # 不叫模型、一次做完（打造隱藏配方設計第八節）
+            if item is not None:
                 s.player.smith_draft = None  # 打完收起單子：同一顆連按兩下、兩個分頁，第二下已經不在選單上（Review Focus 1）
             return msgs
         if verb in smithing.STEP_VERBS:

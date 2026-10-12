@@ -195,3 +195,171 @@ def test_armor_setting_uses_the_armor_rule(content, world, monkeypatch):
     content.config.armor.quality.setting_good = "爐火正旺。"
     assert smithing.setting_line(content, [("terrain", 10)], "armor") == ["爐火正旺。"]
     assert smithing.setting_line(content, [("terrain", 10)]) == []  # 兵器那一句是空的
+
+
+# ── Task 3：防具頁的打造單子與開爐 ──
+
+def _armor_smith(content, world, **kw):
+    game = _smithy(content, world, **kw)
+    game.choose("act:smith")
+    return game
+
+
+def _at_armor_go(content, world, **kw):
+    game = _armor_smith(content, world, **kw)
+    for oid in (smithing.OPEN, f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1"):
+        game.choose(oid)
+    return game
+
+
+def test_own_rng_is_fixed_by_season_name_serial_and_key(content, world):
+    game = _smithy(content, world)
+    s = game.state
+    first = smithing.own_rng(s, KEY_YANG).random()
+    assert smithing.own_rng(s, KEY_YANG).random() == first  # 同一個人同一季同一件：一樣
+    assert smithing.own_rng(s, "鎧|gang_1+gang_1").random() != first
+    s.player.weapon_serial += 1
+    assert smithing.own_rng(s, KEY_YANG).random() != first  # 下一件：不一樣
+
+
+def test_the_armor_page_has_a_forge_door_between_wield_and_dismantle(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.armor = _jacket()
+    p.rack = [_jacket(aid="甲:7", name="鐵葉甲", attribute="剛")]
+    game.choose("act:smith")
+    opts = _ids(game)
+    door = opts[smithing.OPEN]
+    assert door.enabled and door.label.startswith("打造防具…") and "挑主料、輔料" in door.label
+    ids = list(opts)
+    assert ids.index("smith:wield:甲:7") < ids.index(smithing.OPEN) < ids.index("smith:dismantle:甲:7")  # FB-125：換上與拆解不相鄰
+    p.materials = {"gang_1": 1}
+    door = _ids(game)[smithing.OPEN]
+    assert not door.enabled and smithing.NOT_ENOUGH in door.label
+
+
+def test_the_armor_wizard_skips_the_kind_and_walks_main_aux_go(content, world):
+    game = _armor_smith(content, world)
+    msgs = game.choose(smithing.OPEN)
+    assert smithing.ARMOR_ASK_MAIN in msgs
+    ids = list(_ids(game))
+    assert not any(i.startswith(smithing.KIND) for i in ids) and ids[0] == f"{smithing.MAIN}gang_2"  # 沒有挑種類；高階的排前面
+    assert smithing.UNDO not in ids and ids[-1] == smithing.CANCEL  # 第一步：沒有「上一步」
+    game.choose(f"{smithing.MAIN}gang_1")
+    aux = _ids(game)[f"{smithing.AUX}kuai_1"]
+    assert "→ 屬陽" in aux.label
+    game.choose(aux.id)
+    go = _ids(game)[GO_YANG]
+    assert go.enabled and go.label.startswith("開爐：精鐵砂＋驚羽（防具・屬陽・一階・工錢 20 兩；下品 46%") and go.wait == ""
+    game.choose(go.id)
+    p = game.state.player
+    assert p.armor is not None and p.armor.recipe == KEY_YANG and p.smith_draft is None and p.picking_smith
+    assert p.armor.name == armor.table_name(content, "gang_1", "kuai_1", "陽")  # 一般組合照對照表（不叫模型）
+    assert smithing.OPEN in _ids(game)  # 打完回到防具頁的選單
+    forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
+    assert len(forged) == 1 and any(p.armor.name in line for line in forged[0].lines)  # 一爐一則紀錄
+    assert "主料：精鐵砂。" in forged[0].lines and "輔料：驚羽。" in forged[0].lines
+
+
+def test_aux_marks_the_attribute_that_matches_the_inner_art(content, world, monkeypatch):
+    game = _armor_smith(content, world)  # 靜心訣：屬虛
+    monkeypatch.setattr(smithing, "attribute_with", lambda content, tianji, kind, main, aux: "虛" if aux == "kuai_1" else "剛")
+    for oid in (smithing.OPEN, f"{smithing.MAIN}gang_1"):
+        game.choose(oid)
+    opts = _ids(game)
+    assert opts[f"{smithing.AUX}kuai_1"].label.endswith(smithing.ARMOR_ATTR_MARK)
+    assert smithing.ARMOR_ATTR_MARK not in opts[f"{smithing.AUX}gang_1"].label
+
+
+def test_undo_on_the_armor_wizard_never_asks_for_a_kind(content, world):
+    game = _at_armor_go(content, world)
+    game.choose(smithing.UNDO)
+    game.choose(smithing.UNDO)
+    d = game.state.player.smith_draft
+    assert d.kind == smithing.ARMOR_KIND and d.main is None and d.aux is None
+    assert not any(i.startswith(smithing.KIND) for i in _ids(game))
+    game.choose(smithing.CANCEL)
+    assert game.state.player.smith_draft is None and "smith:back" in _ids(game)
+
+
+def test_a_second_press_of_the_armor_go_does_nothing(content, world):
+    game = _at_armor_go(content, world)
+    game.choose(GO_YANG)
+    p = game.state.player
+    before = (p.stats["silver"], dict(p.materials), len(p.rack) + (p.armor is not None))
+    assert game.choose(GO_YANG) == ["（此刻無法這麼做。）"]
+    assert (p.stats["silver"], p.materials, len(p.rack) + (p.armor is not None)) == before
+
+
+def test_armor_quality_rolls_on_its_own_dice(content, world, monkeypatch):
+    from tianxia import fusion
+    game = _at_armor_go(content, world)
+    odds = smithing.forge_odds(game.state, content, world, smithing.ARMOR_KIND, "gang_1", "kuai_1")
+    expected = fusion.roll_quality(odds, smithing.own_rng(game.state, KEY_YANG))
+    seen, real = [], fusion.roll_quality
+    monkeypatch.setattr(fusion, "roll_quality", lambda o, rng: seen.append(rng) or real(o, rng))
+    game.choose(GO_YANG)
+    assert len(seen) == 1 and seen[0] is not game.rng and isinstance(seen[0], random.Random)  # 不碰 Game.rng（設計 9.3）
+    assert game.state.player.armor.quality == expected
+
+
+def test_an_armor_draft_follows_the_armor_switch_not_the_weapon_one(content, world):
+    game = _armor_smith(content, world, weapons_on=True)
+    p = game.state.player
+    game.choose("smith:page:armor")
+    game.choose(smithing.OPEN)
+    assert p.smith_draft == SmithDraft(kind=smithing.ARMOR_KIND)
+    content.config.weapons.enabled = False
+    game.sync(1.0)
+    assert p.smith_draft == SmithDraft(kind=smithing.ARMOR_KIND)  # 兵器關了不關防具的事
+    content.config.weapons.enabled, content.config.armor.enabled = True, False
+    game.sync(2.0)
+    assert p.smith_draft is None and p.picking_smith  # 防具關了、兵器還開著：鐵匠鋪照開（兵器頁），防具的單子清掉
+    content.config.armor.enabled = True
+    p.smith_draft = SmithDraft(kind=smithing.ARMOR_KIND, main="gone_material")
+    game._drop_stale_references()
+    assert p.smith_draft is None  # 內容改版拿掉了單子上的素材：從頭來
+    p.smith_draft = SmithDraft(kind=smithing.ARMOR_KIND)
+    p.location = "lake"
+    game.sync(3.0)
+    assert not p.picking_smith and p.smith_draft is None  # 人不在城鎮：鐵匠鋪收起來，單子一起清
+
+
+def test_a_weapon_draft_still_opens_on_the_weapon_page(content, world):
+    game = _armor_smith(content, world, weapons_on=True)  # 兩欄都開著：進門停在兵器頁
+    assert _ids(game)[smithing.OPEN].label.startswith("打造兵器…")
+    msgs = game.choose(smithing.OPEN)
+    assert smithing.ASK_KIND in msgs and game.state.player.smith_draft == SmithDraft()  # 兵器的單子照舊從挑種類起
+    assert any(i.startswith(smithing.KIND) for i in _ids(game))
+
+
+def test_the_shared_forge_door_opens_the_draft_of_the_page_the_server_is_on(content, world):
+    """兩頁共用 smith:forge（「範圍與取捨」記的取捨，鎖住現在的行為）：舊分頁停在兵器頁、另一個分頁已經切到防具頁時，舊分頁按
+    「打造兵器…」開的是防具的單子；什麼都不收，按「不打了」回到防具頁。"""
+    game = _armor_smith(content, world, weapons_on=True)
+    p = game.state.player
+    before = (p.stats["silver"], dict(p.materials))
+    game.choose("smith:page:armor")  # 另一個分頁切到防具頁
+    msgs = game.choose(smithing.OPEN)  # 舊分頁照兵器頁按「打造兵器…」：同一個 id
+    assert smithing.ARMOR_ASK_MAIN in msgs and p.smith_draft == SmithDraft(kind=smithing.ARMOR_KIND)
+    game.choose(smithing.CANCEL)
+    assert p.smith_draft is None and p.smith_page == "armor" and (p.stats["silver"], p.materials) == before
+    assert _ids(game)[smithing.OPEN].label.startswith("打造防具…")
+
+
+def test_the_armor_page_lists_at_most_eight_to_wield_best_first(content, world):
+    """FB-134：防具頁的「換上」最多 equipment.DISMANTLE_LIST 件，修好之後減損高的先（同 armor.wanted 的鍵：整季機器人與假人要按的那一顆
+    一定在上面），多的一行灰掉的說明指到修練頁，打造入口跟著上移。"""
+    game = _smithy(content, world)  # 靜心訣（虛）
+    p = game.state.player
+    p.armor = _jacket(attribute="快", aid="甲:1")
+    p.rack = [_jacket(attribute="剛", aid=f"甲:{i}", name="鐵葉甲") for i in range(2, 12)]  # 十件一樣的
+    p.rack.append(_jacket(attribute="虛", tier=2, aid="甲:12", name="雲紋衫"))  # 最好的那一件（跟內功同屬性、二階）
+    game.choose("act:smith")
+    ids = list(_ids(game))
+    wields = [i for i in ids if i.startswith("smith:wield:")]
+    assert len(wields) == equipment.DISMANTLE_LIST and wields[0] == "smith:wield:甲:12"
+    assert armor.wanted(game.state, content, _inner(game, content, world)) == wields[0]  # 機器人要按的就是第一顆
+    more = _ids(game)["smith:wield-more"]
+    assert not more.enabled and more.label == equipment.WIELD_MORE.format(n=3)
+    assert ids.index(wields[-1]) < ids.index("smith:wield-more") < ids.index(smithing.OPEN)
