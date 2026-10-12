@@ -178,8 +178,9 @@
   // 動作請求多久算逾時、逾時與沒送出去時講的話（見 api()、busy；待 joy 潤）
   // 取名、大場面判讀最多 60 秒加上等鎖；trycloudflare 約 100 秒切斷一個請求
   const ACTION_TIMEOUT_MS = 90000;
-  const TIMEOUT_TEXT = "伺服器太久沒回應，這一下可能沒做成。畫面已重新整理，再按一次就好。";
-  const UNSENT_TEXT = "沒送出去：連不上伺服器，請再按一次。";
+  // 逾時與沒送出去同一句（PM 2026-10-12 轉 Joy「弄個符合我們世界觀的句子」）
+  const TIMEOUT_TEXT = "鴻雁折返，訊息未達——再試一次";
+  const UNSENT_TEXT = "鴻雁折返，訊息未達——再試一次";
 
   let toastTimer = 0;
   function toast(text) {
@@ -2834,11 +2835,27 @@
   // 按下去的那一顆馬上標「送出中」（.sending：掃光、不能再按）；過了 WAIT_HINT_MS 還沒回來，畫面底下浮一行「已送出，等候回應…」，
   // 再久改寫「伺服器還在處理」；回來了就收掉。上一個指令還沒回來時再按別的：以前一聲不響地丟掉（玩家以為按了沒反應），現在浮同一行講一聲。
   // 失敗（伺服器擋下來、連不上、逾時）由 api() 用提示泡泡講，按鈕還原、可以再按。
-  const WAIT_HINT_MS = 1500; // 過了這麼久還沒回來，浮一行「已送出，等候回應…」
-  const SLOW_HINT_MS = 12000; // 再久改寫「伺服器還在處理」
-  const SENT_WAITING = "已送出，等候回應…"; // 這三句待 joy 潤
-  const SLOW_WAITING = "指令已送出，伺服器還在處理，請稍候…";
-  const STILL_WAITING = "上一個指令還在等回應，稍候再按。";
+  const WAIT_HINT_MS = 1500; // 過了這麼久還沒回來，浮一行等候的話（照行動換句，waitLineFor）
+  const SLOW_HINT_MS = 12000; // 再久改寫 SLOW_WAITING
+  // 等候的話照行動換（PM 2026-10-12 轉 Joy「弄個符合我們世界觀的句子」，字照抄）
+  const WAIT_LINES = {
+    explore: "四下探看，尚無動靜……", train: "循著蹤跡尋敵……", rest: "調息入定……", meet: "遣人通報，候他回話……",
+    move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
+  };
+  const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
+  const SLOW_WAITING = "路遠消息遲，再等片刻……";
+  const STILL_WAITING = "前一道號令尚未回音";
+  // 選項 id → 等候的話
+  function waitLineFor(id) {
+    const key = String(id || "");
+    if (key === "act:explore") return WAIT_LINES.explore;
+    if (key === "act:train") return WAIT_LINES.train;
+    if (key === "act:rest") return WAIT_LINES.rest;
+    if (key === "act:socialize" || key.startsWith("call:") || key.startsWith("talk:")) return WAIT_LINES.meet;
+    if (key.startsWith("move:") || key.startsWith("road:")) return WAIT_LINES.move;
+    if (key.startsWith("battle:")) return WAIT_LINES.battle;
+    return SENT_WAITING;
+  }
   let pressed = null; // 最近一次點到的 [data-act]（點擊的處理器記下，busy 拿它標「送出中」）：{ el, at }
 
   // 那一行只是提示：畫不出來（測試的假 document 沒有這些）也不能讓動作本身失敗
@@ -2852,13 +2869,13 @@
     } catch (e) { /* 見上 */ }
   }
 
-  async function busy(fn) {
+  async function busy(fn, line = SENT_WAITING) {
     if (S.busy) { sendingLine(STILL_WAITING); return false; } // 回傳 false：這一下沒送（呼叫端別拿「失敗了」的還原去動上一個還在等的按鈕）
     S.busy = true;
     // 這一下是點哪一顆送出的（點擊的處理器記在 pressed；隔太久的不算，例如確認框問過才送的那一下，原本那顆早就重畫掉了）
     const btn = pressed && Date.now() - pressed.at < 1000 && pressed.el.isConnected ? pressed.el : null;
     if (btn) { btn.classList.add("sending"); btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
-    const hint = setTimeout(() => sendingLine(SENT_WAITING), WAIT_HINT_MS);
+    const hint = setTimeout(() => sendingLine(line), WAIT_HINT_MS);
     const slow = setTimeout(() => sendingLine(SLOW_WAITING), SLOW_HINT_MS);
     let timedOut = false;
     try { await fn(); } catch (e) { timedOut = !!(e && e.timedOut); /* api() 已經提示過 */ } finally {
@@ -3085,7 +3102,7 @@
         // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
         if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
-    });
+    }, waitLineFor(id));
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
     // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
@@ -3187,7 +3204,7 @@
       applyMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (text) toast(text);
-    });
+    }, op === "battle_text" || op === "duel_text" ? WAIT_LINES.battle : SENT_WAITING);
   }
 
   // 放東西、輪詢都會問說明，回應可能晚到：只用最後一次請求的回應，而且爐子要還是問的那一爐
@@ -3252,7 +3269,7 @@
         // 爐裡放的東西不動；api() 已經用提示泡泡講過一次，結果那一格再留一份
         S.forgeResult = { html: esc(failText(e)) };
       } finally { stop(); }
-    });
+    }, WAIT_LINES.forge);
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
     if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else keepPlace(() => renderPage());
     updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
@@ -3271,7 +3288,7 @@
         S.mapNotice = `沒能出發：${esc(r.reason)}`;
         render();
       }
-    });
+    }, WAIT_LINES.move);
   }
 
   // ── 事件 ──

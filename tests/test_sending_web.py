@@ -65,7 +65,7 @@ const kit = new Function(
   ${konst("UNSENT_TEXT")}
   ${busyKit()}
   ${slice("async function api(")}
-  return { busy, api, press: (el) => { pressed = { el, at: Date.now() }; }, consts: { SENT_WAITING, SLOW_WAITING, STILL_WAITING, TIMEOUT_TEXT, UNSENT_TEXT, ACTION_TIMEOUT_MS } };`,
+  return { busy, api, waitLineFor, press: (el) => { pressed = { el, at: Date.now() }; }, consts: { SENT_WAITING, SLOW_WAITING, STILL_WAITING, TIMEOUT_TEXT, UNSENT_TEXT, ACTION_TIMEOUT_MS } };`,
 )(S, document, Date, setTimeout, clearTimeout, toast, poll, esc, setOffline, render, fetch, AbortController);
 const H = { kit, tick, S, toasts, button, get line() { return line; }, get polled() { return polled; }, setFetch: (f) => { fetchImpl = f; } };
 finish((async () => { return await (async () => { INPUT_SCRIPT })(); })());
@@ -97,7 +97,7 @@ def test_the_pressed_button_shows_it_is_sending_and_a_line_appears_while_the_ser
     """)
     assert out["at0"] == {"sending": True, "disabled": True, "line": None}  # 一按下去就標「送出中」、不能再按
     assert out["at1"] is None  # 很快回來的動作不浮那一行
-    assert out["at15"] == out["c"]["SENT_WAITING"] == "已送出，等候回應…"
+    assert out["at15"] == out["c"]["SENT_WAITING"] == "墨跡未乾，江湖尚未回音……"  # 沒指定行動：通用句
     assert out["at12"] == out["c"]["SLOW_WAITING"]
     assert out["after"] == {"line": None, "sending": False, "disabled": False, "busy": False}  # 回來了：收掉、按鈕還原
 
@@ -211,3 +211,29 @@ def test_a_poll_waits_for_the_finger_to_lift_before_redrawing_the_page(game):
       return { held, lifted, free: page.innerHTML.includes("新的場景") };
     })();""", S={"tab": "jianghu", "stage": "game"})
     assert out == {"held": "舊畫面", "lifted": True, "free": True}
+
+
+def test_each_action_has_its_own_waiting_line():
+    """等候的話照行動換（PM 2026-10-12 轉 Joy「弄個符合我們世界觀的句子」）。"""
+    out = run("""
+      const { kit, tick } = H;
+      const lines = Object.fromEntries(["act:explore", "act:train", "act:rest", "act:socialize", "call:zhangliang", "talk:0",
+        "move:yingchuan:dash", "road:back", "battle:attack", "act:smith"].map((id) => [id, kit.waitLineFor(id)]));
+      let resolve;
+      const done = kit.busy(() => new Promise((r) => { resolve = r; }), kit.waitLineFor("act:explore"));
+      await tick(1500);
+      const shown = H.line;
+      await tick(10500);
+      const slow = H.line;
+      resolve();
+      await done;
+      return { lines, shown, slow };
+    """)
+    lines = out["lines"]
+    assert lines["act:explore"] == out["shown"] == "四下探看，尚無動靜……"
+    assert lines["act:train"] == "循著蹤跡尋敵……" and lines["act:rest"] == "調息入定……"
+    assert lines["act:socialize"] == lines["call:zhangliang"] == lines["talk:0"] == "遣人通報，候他回話……"
+    assert lines["move:yingchuan:dash"] == lines["road:back"] == "整頓行裝……"
+    assert lines["battle:attack"] == "軍令已發，靜候陣前回報……"
+    assert lines["act:smith"] == "墨跡未乾，江湖尚未回音……"
+    assert out["slow"] == "路遠消息遲，再等片刻……"
