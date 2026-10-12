@@ -52,6 +52,7 @@ PRIZE_SLOTS = {"treasure": "treasure", "horse": "mount"}  # 重賞（Bounty.priz
 PRIZE_WORDS = {"treasure": "寶物一件", "horse": "良駒一匹"}  # 待 joy 潤（6.4：掛單時只記「寶物一件」或「良駒一匹」）
 PRIZE_NOTE = "・另有重賞：{what}"  # 待 joy 潤：懸賞榜、懸賞卡、揭下的回話，接在賞的那一段後面
 PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
+GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）
 
 
 def on(content: Content) -> bool:
@@ -294,3 +295,26 @@ def bounty_prize(state: GameState, content: Content, season: int, bounty_id: str
     if prize == "horse":
         return head + _give_horse(state, content, rng, hold=True)
     return head + _give_pool(state, content, rng, hold=True)
+
+
+# ---- 名將贈禮（6.4）----
+
+def gifts_due(state: GameState, content: Content) -> list[str]:
+    """名將贈禮（6.4）：跟哪一位名將的情誼到了 gift_affinity、這一季他還沒送過人（WorldState.general_gifts），就把贈禮交給你，記下給了誰
+    （呼叫端那一下動作最後 _save_season 存回去）。贈禮是名駒時看坐騎的開關、是寶物時看寶物的開關；那一欄關著不送也不記（開了之後
+    照樣送得出去）。裝備庫滿了寄放。名將贈禮與名駒本來就一人一件（6.5），不用查重複。Game.choose／answer_event 最後各叫一次：
+    情誼從對話、事件、隨口應對來都走得到。"""
+    p, w, cfg = state.player, state.world, content.config.treasures
+    lines: list[str] = []
+    for gift in content.gear.gifts:
+        if gift.character in w.general_gifts or p.affinities.get(gift.character, 0) < cfg.gift_affinity:
+            continue
+        steed = content.gear.steeds.get(gift.gear)
+        if not equipment.on(content, "mount" if steed is not None else "treasure"):
+            continue
+        w.general_gifts[gift.character] = p.name
+        item = new_steed(state, steed) if steed is not None else new_treasure(state, content, gift.gear)
+        general = content.characters[gift.character].name
+        lines.append((gift.line or GIFT_LINE).format(general=general, gift=item.name))
+        lines += deliver(state, content, item, hold=True)
+    return lines

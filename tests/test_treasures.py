@@ -697,3 +697,55 @@ def test_the_weekly_seeds_are_byte_identical_at_tianji_zero_and_carry_it_after()
     assert len(zero) == len(three) == 2 and all(not s.endswith("|0") for s in zero)
     assert zero[0].startswith("bounty|1|0|") and zero[1].startswith("bounty-give|1|")
     assert [s + "|3" for s in zero] == three
+
+
+# ── Task 6：名將贈禮 ──
+
+def test_a_general_gives_his_gift_once_a_season_to_the_first_who_gets_close(content, world):
+    """設計 6.4：情誼到 gift_affinity（60）時送；每位名將每季全服只送一人（WorldState.general_gifts，動作最後存季）。"""
+    _book(content)
+    first, second = _game(content, world, "甲客"), _game(content, world, "乙客")
+    first.state.player.affinities["mate"] = 60
+    msgs = first.choose("act:rest")
+    assert first.state.player.treasure.template == "caoxie"
+    assert treasures.GIFT_LINE.format(general="韓鐵", gift="舊草鞋") in msgs
+    assert world.get_season().general_gifts == {"mate": "甲客"}
+    second.sync(1.0)
+    second.state.player.affinities["mate"] = 80
+    second.choose("act:rest")
+    assert second.state.player.treasure is None
+
+
+def test_affinity_from_an_event_also_brings_the_gift(content, world):
+    """情誼從事件（Effect.affinity）來也送（設計 6.4：以前跨門檻只在對話裡偵測）。"""
+    _book(content)
+    game = _game(content, world)
+    content.events["drunk"].choices[1].effect.affinity = {"mate": 1}
+    game.state.player.affinities["mate"] = 59
+    game.state.pending_event = "drunk"
+    game.choose("choice:1")
+    assert game.state.player.treasure.template == "caoxie"
+
+
+def test_a_steed_gift_waits_while_mounts_are_off(content, world):
+    _book(content)
+    game = _game(content, world)
+    game.state.player.affinities["pupil"] = 60
+    game.choose("act:rest")
+    assert game.state.player.mount is None and "pupil" not in world.get_season().general_gifts  # 坐騎關著：不送也不佔名額
+    content.config.mounts.enabled = True
+    game.choose("act:stand")  # 打坐中選單只剩「起身」：按了照樣走到 choose 最後的贈禮檢查
+    horse = game.state.player.mount
+    assert (horse.name, horse.tier, horse.quality, horse.template) == ("踏霜駒", 3, "上品", "tashuang")
+
+
+def test_a_gift_with_no_room_is_held(content, world):
+    _book(content)
+    content.config.weapons.rack_cap = 0
+    game = _game(content, world)
+    p = game.state.player
+    p.treasure = _item("audience")
+    p.affinities["mate"] = 60
+    msgs = game.choose("act:rest")
+    assert [i.template for i in p.held_gear] == ["caoxie"] and treasures.HELD.format(name="舊草鞋") in msgs
+    assert world.get_season().general_gifts == {"mate": "寶客"}  # 寄放了也算送出去了
