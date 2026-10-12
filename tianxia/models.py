@@ -901,6 +901,31 @@ class SecretRecipe(_Strict):
     clues: list[str] = Field(min_length=3, max_length=3)
 
 
+class ForgeSide(_Strict):
+    """隱藏配方的一樣料（打造隱藏配方設計 3.1）：認屬性＋階，不認素材 id（joy 之後多加一種「三階剛」的素材，舊配方照樣認得、口訣照樣對）。
+    主料一定寫死階（tier，定這一件的階與工錢）；輔料可以改寫 min_tier（不低於幾階）。"""
+
+    attribute: str
+    tier: int | None = Field(default=None, ge=1, le=3)
+    min_tier: int | None = Field(default=None, ge=1, le=3)
+
+
+class ForgeSecret(_Strict):
+    """打造的隱藏配方（content/forge_secrets.json；打造隱藏配方設計 3.1）：某種兵器（或防具）＋主料＋輔料（主輔不交換），打中了出有專名的
+    名器（tianxia/forge_secrets.py）。divine 是神器配方（第二批才挑）。clues 三句口訣：0 說書版、1 鐵匠版、2 殘譜版，三句合起來定得出
+    這一條，單看一句只能縮小範圍（3.5）。"""
+
+    id: str
+    slot: Literal["weapon", "armor"]
+    kind: str | None = None  # 兵器種類（WEAPON_KINDS）；防具不寫
+    main: ForgeSide
+    aux: ForgeSide
+    divine: bool = False
+    name: str  # 名器的專名（神器配方是「譜名」，第二批）
+    note: str = ""  # 打出來那一句下面的一句說明
+    clues: list[str] = Field(min_length=3, max_length=3)
+
+
 class PresetRecipe(_Strict):
     """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
     第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
@@ -1627,6 +1652,25 @@ class Secrets(_Strict):
     chronicle: str = "{who}參透口訣，首創{thing}。"
 
 
+class ForgeSecretRules(_Strict):
+    """打造的隱藏配方與鑄器的口訣（打造隱藏配方設計第三、六、七節；tianxia/forge_secrets.py）。預設全關（測試內容沒有配方池），
+    正式值在 config.json。"""
+
+    # 每季照天機挑幾條：「欄位:組」→ 條數；組是主料的階（1、2、3）或 divine（神器配方，第二批才開，第一批載入時擋成 0）
+    per_season: dict[str, int] = Field(default_factory=dict)
+    tale_chance: float = Field(default=0, ge=0, le=1)  # 說書事件（Config.secrets.tale_events）了結時，另擲一次多一句說書版鑄器口訣
+    smith_chance: float = Field(default=0, ge=0, le=1)  # 在鐵匠鋪花了銀兩或素材之後，鐵匠順口說出這家知道的那一句（鐵匠版）
+    scrap_chance: float = Field(default=0, ge=0, le=1)  # 探索最後撿到半張鑄譜（殘譜版）
+    # 寫給玩家看的字（待 joy 潤；{clue} 換成口訣、{who} 換成名號、{name} 換成名器的名字）
+    tale_frame: str = "說書先生又扯到一段兵器的掌故：「{clue}」"
+    smith_frame: str = "鐵匠一邊收錢一邊嘀咕：「{clue}」"
+    scrap_frame: str = "你在灰堆裡扒出半張燒焦的鑄譜，只認得出一句：「{clue}」"
+    first_line: str = "這是失傳的鑄法，江湖上你是第一個摸出來的。"
+    mine_line: str = "照你摸出來的鑄法，又打了一件。"
+    follow_line: str = "這門鑄法由{who}先摸出來，你也打成了。"
+    rumor: str = "{who}在鐵匠鋪摸出了一門失傳的鑄法，打出了【{name}】。"
+
+
 class FirstEcho(_Strict):
     """首創名望回饋（企劃者 2026-10-07 選甲時一起要的「乙的首創回饋」）：別人照著你首創的配方合出同一門（武學或意境），
     每多一個不同的人，你下一次上線時名望 +fame_per；一門最多算 cap 個人（擋灌名望）。湊滿 cap 那一下江湖上傳一句。
@@ -1690,6 +1734,7 @@ class Config(_Strict):
     styles: StyleRule = Field(default_factory=StyleRule)  # 大場面對手的路數（一門打不遍，見 StyleRule）
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
+    forge_secrets: ForgeSecretRules = Field(default_factory=ForgeSecretRules)  # 打造的隱藏配方（見 ForgeSecretRules）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
@@ -2782,6 +2827,7 @@ class Content(_Strict):
     followers: dict[str, FollowerDef] = Field(default_factory=dict)  # 部下模板（content/followers.json，計畫 T5）
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
+    forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
