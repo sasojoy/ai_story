@@ -29,7 +29,7 @@ from .characters import name_key
 from .database import Database, open_database
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
-from .state import GearFind, Rumor, WeaponRecipe, WorldState
+from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
     jade_seal_summary, stamp_season,
@@ -330,6 +330,18 @@ class SqliteWorldStore:
             ).fetchall()
         finds = [(row["season"], GearFind.model_validate_json(row["data"])) for row in rows]
         return [(season, find) for season, find in finds if find.divine and find.owner]
+
+    def signature_records(self) -> list[tuple[int, dict[str, SignatureClaim]]]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT number, json_extract(data, '$.signature_arms') AS arms FROM seasons ORDER BY number",
+            ).fetchall()
+        records = []
+        for row in rows:
+            raw = json.loads(row["arms"]) if row["arms"] else {}
+            if raw:
+                records.append((row["number"], {cid: SignatureClaim.model_validate(claim) for cid, claim in raw.items()}))
+        return records
 
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
