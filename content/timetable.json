@@ -74,6 +74,7 @@
     "front": "yingru",
     "title": "長社火攻",
     "kind": "showdown",
+    "seal": "stir",
     "preface": "史書上，皇甫嵩趁夜縱火，大破波才於長社。",
     "third_party_text": "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：{name} 的糧車。",
     "third_party_trends": {"geju": 10},
@@ -211,6 +212,7 @@
     "front": "nanyang",
     "title": "宛城之戰",
     "kind": "showdown",
+    "seal": "emerge",
     "version_from": "zhangmancheng_wan",
     "versions": {"成": "甲", "不成": "乙"},
     "third_party_text": "宛城殺聲震天的時候，新野縣衙的冊子換了主人：{name} 開倉放糧，縣裡的人自己把冊子捧了出來。",
@@ -316,6 +318,7 @@
     "front": "jizhou",
     "title": "廣宗決戰",
     "kind": "showdown",
+    "seal": "stir",
     "outcomes": {
       "guan:大勝": {
         "text": "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗，斬了{人物:zhangliang}。",
