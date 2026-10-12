@@ -176,6 +176,13 @@
   const failText = (e) => (S.offline ? "連不上伺服器，請稍後再試。"
     : e && e.constructor === Error && e.message ? e.message : "出了點問題，請再試一次。");
 
+  // 動作請求多久算逾時、逾時與沒送出去時講的話（見 api()、busy；待 joy 潤）
+  // 取名、大場面判讀最多 60 秒加上等鎖；trycloudflare 約 100 秒切斷一個請求
+  const ACTION_TIMEOUT_MS = 90000;
+  // 逾時與沒送出去同一句（PM 2026-10-12 轉 Joy「弄個符合我們世界觀的句子」）
+  const TIMEOUT_TEXT = "鴻雁折返，訊息未達——再試一次";
+  const UNSENT_TEXT = "鴻雁折返，訊息未達——再試一次";
+
   let toastTimer = 0;
   function toast(text) {
     $toast.textContent = text;
@@ -189,13 +196,24 @@
     const opts = body === undefined
       ? { credentials: "same-origin", headers }
       : { method: "POST", credentials: "same-origin", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    // 動作（POST）最多等 ACTION_TIMEOUT_MS：伺服器卡住時不讓按鈕永遠轉，說清楚、讓人可以再按一次（Joy 2026-10-12）。
+    // 輪詢與分頁的 GET 不設：上一次沒回來就不再打（pollInFlight），連不上時照舊標離線
+    const ctl = body !== undefined && typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), ACTION_TIMEOUT_MS) : 0;
     let res;
     try {
-      res = await fetch(path, opts);
+      res = await fetch(path, ctl ? { ...opts, signal: ctl.signal } : opts);
     } catch (e) {
+      if (ctl && ctl.signal.aborted) { // 逾時：伺服器還連得上（不標離線），只是這一下沒等到回應
+        toast(TIMEOUT_TEXT);
+        const err = new Error(TIMEOUT_TEXT);
+        err.timedOut = true;
+        throw err;
+      }
       setOffline(true);
+      if (body !== undefined) toast(UNSENT_TEXT); // 動作沒送出去：照實講，按鈕會還原、可以再按
       throw e;
-    }
+    } finally { clearTimeout(timer); }
     setOffline(false);
     if (res.status === 401) {
       S.stage = "gate";
@@ -286,7 +304,8 @@
       </div>
       ${tabsHtml()}
       ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
-      ${S.book ? bookHtml() : ""}`;
+      ${S.book ? bookHtml() : ""}
+      ${S.zhuan ? zhuanHtml(S.zhuan) : ""}`;
     renderPage();
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
@@ -1674,7 +1693,8 @@
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
     // 點圖卡在底下攤開說明（explain-2，frontsBlock）
     const fronts = m.fronts && shown("fronts") ? frontsBlock(m) : "";
-    const resultCard = m.season_result ? resultHtml(m.season_result) : "";  // 休季的結算卡排在最上面（計畫 T9）
+    // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
+    const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], week, m.convoy) : "";
     // 懸賞卡跟軍令卡排在一起（散人沒有軍令，這張就是他的）：手上沒揭、也沒有合用的求藝求兵可以交時就不畫（status.bounties 兩種都收）
@@ -2261,6 +2281,106 @@
     </div>`;
   }
 
+  // ── 玩家傳（第二批）：季末的《某某傳》，疊在整個畫面上（S.zhuan = { season, view }）──
+  // view 是 /api/zhuan 回的（Game.biography_view＋writing、url）。還沒寫成：一顆「請史官落筆」；正在寫：每幾秒問一次（zhuanPoll）。
+  // 寫成了：段落（評曰那一段另起）、直書切換（記在這個瀏覽器，跟公開頁同一個鍵）、公開分享的開關與網址、重寫一次。字一律跳脫。
+  // 樣子是竹簡，在 web/zhuan.css（跟公開頁 zhuan_html.py 共用標記），不用武學譜那本書（企劃者 2026-10-12）
+  const ZHUAN_VERTICAL = "tx-zhuan-vertical";
+  const ZHUAN_POLL_MS = 4000;
+  function zhuanVertical() {
+    if (S.zhuanVertical === undefined) {
+      try { S.zhuanVertical = localStorage.getItem(ZHUAN_VERTICAL) === "1"; } catch (e) { S.zhuanVertical = false; }
+    }
+    return S.zhuanVertical;
+  }
+  // 篇名那一塊（公開頁 zhuan_html.head 同一份標記）：裝飾、直書的篇名、底下一行季數
+  function zhuanHead(title, sub) {
+    return `<header class="zh-head"><div class="zh-orn" aria-hidden="true">${"<i></i>".repeat(6)}</div>
+      <div class="zh-label" style="--slip-size:${slipSize(title)}px"><h1 class="zh-title">${esc(title)}</h1></div>
+      <p class="zh-sub">${esc(sub)}</p></header>`;
+  }
+  // 名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。zhuan_html.seal 同一條算法
+  function zhuanSeal(name) {
+    const chars = [...name].slice(0, 6);
+    const n = chars.length, cols = n >= 4 ? 2 : 1, rows = Math.ceil(n / cols), cell = 40 / Math.max(rows, cols);
+    const glyphs = chars.map((ch, k) => {
+      const col = Math.floor(k / rows), row = k % rows;
+      return `<text x="${(46 - (col + 0.5) * (40 / cols)).toFixed(1)}" y="${(6 + (row + 0.5) * (40 / rows)).toFixed(1)}" font-size="${(cell * 0.86).toFixed(1)}">${esc(ch)}</text>`;
+    }).join("");
+    return `<svg class="zh-seal" viewBox="0 0 52 52" role="img" aria-label="${esc(name)}"><rect x="2" y="2" width="48" height="48" rx="3"/><rect class="rim" x="5" y="5" width="42" height="42" rx="1.5"/>${glyphs}</svg>`;
+  }
+  function zhuanHtml(z) {
+    const v = z.view;
+    const head = v ? v.title : "列傳";
+    const wait = (inner) => `<div class="zh-body"><section class="zh-panel zh-wait">${inner}</section></div>`;
+    let body;
+    if (!v) body = wait("<p>翻開史冊…</p>");
+    else if (!v.written) {
+      body = wait(v.writing
+        ? '<p class="zh-ink" aria-hidden="true"><i></i><i></i><i></i></p><p>史官正在落筆，照你這一季的行狀寫一篇列傳。</p><p class="muted">大約一兩分鐘；可以先去別處，回來再翻。</p>'
+        : v.can_write
+          ? '<p>這一季的行狀已經收進史館。</p><button class="btn primary zhuan-go" data-act="zhuan-write">請史官落筆</button>'
+          : "<p>這一季還不能寫傳。</p>");
+    } else {
+      const vertical = zhuanVertical();
+      const paras = v.paragraphs.map((p) => `<p${p.startsWith("評曰") ? ' class="ping"' : ""}>${esc(p)}</p>`).join("");
+      const share = v.public
+        ? `<p class="zh-url"><span>${esc(v.url || "")}</span></p>
+           <div class="row"><button class="btn primary" data-act="zhuan-send">分享給朋友</button><button class="btn" data-act="zhuan-share" data-public="0">收回</button></div>
+           <p class="muted">拿到網址的人不用登入就能讀；收回之後網址就失效。</p>`
+        : `<button class="btn" data-act="zhuan-share" data-public="1">公開分享</button>
+           <p class="muted">預設只有你看得到。公開之後會有一個網址，可以貼到 LINE、FB，隨時能收回。</p>`;
+      body = `<div class="zh-tools"><button data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
+        <div class="zh-body"><article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
+        <section class="zh-panel">${share}</section>
+        ${v.can_rewrite ? '<button class="zh-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}</div>`;
+    }
+    return `<div class="zhuan-layer zh zh-bamboo" role="dialog" aria-label="${esc(head)}">
+      <div class="zh-bar"><button data-act="zhuan-close" aria-label="返回">‹ 返回</button><span>列傳</span></div>
+      ${zhuanHead(head, `第 ${Number(z.season)} 季${v && v.scenario ? `・${esc(v.scenario)}` : ""}`)}
+      ${body}
+    </div>`;
+  }
+  // 篇名的字照字數縮：名號最長十來個字，一律直書排進一條（四字以內 30px）。zhuan_html.slip_size 同一條算法
+  const slipSize = (title) => Math.min(30, Math.floor(176 / [...title].length / 1.3));
+  // 入口（江湖頁休季的那一張、行狀頁的歷季列傳）的小圖：一捆竹簡
+  function zhuanIcon() {
+    return '<svg viewBox="0 0 42 46" aria-hidden="true"><g fill="#d9b878" stroke="#6e4f29" stroke-width=".8">' + [4, 11, 18, 25, 32].map((x) => `<rect x="${x}" y="3" width="6" height="40" rx="1.5"/>`).join("") + '</g><path d="M1 12h40M1 34h40" stroke="#5a3e1d" stroke-width="2.2"/></svg>';
+  }
+  function zhuanEntry(b, sub, go = b.written === false ? "立傳" : "翻閱") {
+    return `<button class="zh-entry zh-bamboo" data-act="zhuan-open" data-season="${Number(b.season)}">${zhuanIcon()}<span><b>${esc(b.title)}</b><small>${esc(sub)}</small></span><i class="go">${go} ›</i></button>`;
+  }
+  let zhuanTimer = 0;
+  async function loadZhuan() {
+    const z = S.zhuan;
+    if (!z) return;
+    clearTimeout(zhuanTimer);
+    try { z.view = await api(`/api/zhuan?season=${Number(z.season)}`); } catch (e) { return; }
+    if (S.zhuan !== z) return; // 等的時候闔上了、換了一季
+    render();
+    if (z.view.writing) zhuanTimer = setTimeout(loadZhuan, ZHUAN_POLL_MS);
+  }
+  async function zhuanPost(path, body) {
+    const z = S.zhuan;
+    try { z.view = await api(path, { season: z.season, ...body }); } catch (e) { return; }
+    if (S.zhuan !== z) return;
+    render();
+    if (z.view.writing) { clearTimeout(zhuanTimer); zhuanTimer = setTimeout(loadZhuan, ZHUAN_POLL_MS); }
+  }
+  // 分享：手機上叫系統的分享選單，沒有就複製網址，再不行就選起來讓人自己複製
+  async function zhuanSend() {
+    const v = S.zhuan && S.zhuan.view;
+    if (!v || !v.url) return;
+    if (navigator.share) {
+      try { await navigator.share({ title: v.title, url: v.url }); } catch (e) { /* 取消了 */ }
+      return;
+    }
+    try { await navigator.clipboard.writeText(v.url); toast("網址已複製"); return; } catch (e) { /* 退回選取 */ }
+    const span = document.querySelector(".zh-url span");
+    if (span) { const r = document.createRange(); r.selectNodeContents(span); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+    toast("長按網址複製");
+  }
+
   // ── 輿圖 ──
   function pageMap() {
     const m = S.map;
@@ -2559,14 +2679,17 @@
     if (!a) return '<p class="muted">載入中…</p>';
     if (!a.on) return '<div class="card"><p class="muted">這一季不記行狀。</p></div>';
     const head = `<div class="card annals-head"><h3>${esc(a.name)}・行狀</h3><p class="muted">這一季值得寫進傳裡的事。季末收季時，會照這些寫成一篇《${esc(a.name)}傳》。</p></div>`;
-    if (!a.rows.length) return head + '<div class="card"><p class="muted">還沒有記下什麼。上陣打一場大戰、跟英雄人物說幾句話，這裡就會有了。</p></div>';
+    // 歷季列傳（第二批）：存著的每一季一本，排在這一季的行狀上面
+    const books = (a.books || []).length ? `<div class="zh-books"><h3>歷季列傳</h3>${a.books.map((b) =>
+      zhuanEntry(b, `第 ${Number(b.season)} 季・${b.written ? (b.public ? "已公開" : "已成篇") : "尚未成篇"}`)).join("")}</div>` : "";
+    if (!a.rows.length) return head + books + '<div class="card"><p class="muted">還沒有記下什麼。上陣打一場大戰、跟英雄人物說幾句話，這裡就會有了。</p></div>';
     const row = (r) => `<li class="annal${r.weight >= 4 ? " heavy" : ""}">
         <div class="annal-meta"><span class="annal-kind">${esc(r.kind)}</span><span>${esc(r.when)}${r.place ? `・${esc(r.place)}` : ""}</span></div>
         <p class="annal-text">${esc(r.text)}</p>
         ${r.quote ? `<p class="annal-quote">你：「${esc(r.quote)}」</p>` : ""}
         ${r.reply ? `<p class="annal-reply">${r.figure ? `<b>${esc(r.figure)}</b>：` : ""}${esc(r.reply)}</p>` : ""}
       </li>`;
-    return head + `<ol class="annals card">${a.rows.slice().reverse().map(row).join("")}</ol>`;
+    return head + books + `<ol class="annals card">${a.rows.slice().reverse().map(row).join("")}</ol>`;
   }
 
   function pageNews() {
@@ -2829,6 +2952,7 @@
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
+    S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
     S.mapNotice = "";
     if (tab === "news") S.unseen = false;
     render();
@@ -2854,11 +2978,67 @@
   }
 
   // ── 動作 ──
-  async function busy(fn) {
-    if (S.busy) return;
-    S.busy = true;
-    try { await fn(); } catch (e) { /* api() 已經提示過 */ } finally { S.busy = false; lastAction = Date.now(); }
+  // ── 送出指令的回饋 ──
+  // Joy 2026-10-12「要有機制讓玩家知道指令有送出，只是在等伺服器回應」）：每一個走 busy() 的動作都一樣——
+  // 按下去的那一顆馬上標「送出中」（.sending：掃光、不能再按）；過了 WAIT_HINT_MS 還沒回來，畫面底下浮一行「已送出，等候回應…」，
+  // 再久改寫「伺服器還在處理」；回來了就收掉。上一個指令還沒回來時再按別的：以前一聲不響地丟掉（玩家以為按了沒反應），現在浮同一行講一聲。
+  // 失敗（伺服器擋下來、連不上、逾時）由 api() 用提示泡泡講，按鈕還原、可以再按。
+  const WAIT_HINT_MS = 1500; // 過了這麼久還沒回來，浮一行等候的話（照行動換句，waitLineFor）
+  const SLOW_HINT_MS = 12000; // 再久改寫 SLOW_WAITING
+  // 等候的話照行動換（PM 2026-10-12 轉 Joy「弄個符合我們世界觀的句子」，字照抄）
+  const WAIT_LINES = {
+    explore: "四下探看，尚無動靜……", train: "循著蹤跡尋敵……", rest: "調息入定……", meet: "遣人通報，候他回話……",
+    move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
+  };
+  const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
+  const SLOW_WAITING = "路遠消息遲，再等片刻……";
+  const STILL_WAITING = "前一道號令尚未回音";
+  // 選項 id → 等候的話
+  function waitLineFor(id) {
+    const key = String(id || "");
+    if (key === "act:explore") return WAIT_LINES.explore;
+    if (key === "act:train") return WAIT_LINES.train;
+    if (key === "act:rest") return WAIT_LINES.rest;
+    if (key === "act:socialize" || key.startsWith("call:") || key.startsWith("talk:")) return WAIT_LINES.meet;
+    if (key.startsWith("move:") || key.startsWith("road:")) return WAIT_LINES.move;
+    if (key.startsWith("battle:")) return WAIT_LINES.battle;
+    return SENT_WAITING;
   }
+  let pressed = null; // 最近一次點到的 [data-act]（點擊的處理器記下，busy 拿它標「送出中」）：{ el, at }
+
+  // 那一行只是提示：畫不出來（測試的假 document 沒有這些）也不能讓動作本身失敗
+  function sendingLine(text) {
+    try {
+      const el = document.getElementById("sending");
+      if (!text) { if (el) el.remove(); return; }
+      if (el) { el.lastElementChild.textContent = text; return; }
+      document.body.insertAdjacentHTML("beforeend",
+        `<div id="sending" class="sending-line" role="status" aria-live="polite"><i></i><span>${esc(text)}</span></div>`);
+    } catch (e) { /* 見上 */ }
+  }
+
+  async function busy(fn, line = SENT_WAITING) {
+    if (S.busy) { sendingLine(STILL_WAITING); return false; } // 回傳 false：這一下沒送（呼叫端別拿「失敗了」的還原去動上一個還在等的按鈕）
+    S.busy = true;
+    // 這一下是點哪一顆送出的（點擊的處理器記在 pressed；隔太久的不算，例如確認框問過才送的那一下，原本那顆早就重畫掉了）
+    const btn = pressed && Date.now() - pressed.at < 1000 && pressed.el.isConnected ? pressed.el : null;
+    if (btn) { btn.classList.add("sending"); btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
+    const hint = setTimeout(() => sendingLine(line), WAIT_HINT_MS);
+    const slow = setTimeout(() => sendingLine(SLOW_WAITING), SLOW_HINT_MS);
+    let timedOut = false;
+    try { await fn(); } catch (e) { timedOut = !!(e && e.timedOut); /* api() 已經提示過 */ } finally {
+      clearTimeout(hint);
+      clearTimeout(slow);
+      sendingLine(null);
+      // 沒被重畫掉（動作失敗、或這個動作不重畫那一塊）：還原成按得下去
+      if (btn && btn.isConnected) { btn.classList.remove("sending"); btn.disabled = false; btn.removeAttribute("aria-busy"); }
+      S.busy = false;
+      lastAction = Date.now();
+    }
+    if (timedOut) setTimeout(poll, 0); // 逾時：伺服器那邊可能其實做完了，重抓一次畫面，玩家看到的才是現在的樣子
+    return true;
+  }
+  // ── 送出指令的回饋（完）──
 
   // 等模型的時候（對話、大場面、開爐、隨口應對）每 2 秒問一次佇列，按鈕上補「前面還有 N 件」。佇列關著時伺服器回 null，什麼都不多顯示
   function watchQueue(el, base) {
@@ -3001,7 +3181,7 @@
     S.sensePts.forEach(([x, y], i) => (i ? sx.lineTo(x, y) : sx.moveTo(x, y)));
     sx.stroke();
     const png = small.toDataURL("image/png").split(",")[1] || "";
-    await busy(async () => {
+    const sent = await busy(async () => {
       pad.classList.add("brewing"); // 等模型取名：整塊畫布微微晃（同煉製的爐子）
       pad.querySelectorAll("button").forEach((b) => { b.disabled = true; });
       const send = pad.querySelector('[data-act="sense-send"]');
@@ -3014,7 +3194,7 @@
         window.scrollTo({ top: 0, behavior: "smooth" });
       } finally { stop(); }
     });
-    if (document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
+    if (sent && document.querySelector("#sense-pad.brewing")) renderPage(); // 失敗了（伺服器擋下來、連不上）：畫布還原，那一筆留著
   }
 
   async function choose(btn, id, sure = false) {
@@ -3045,7 +3225,7 @@
       if (input) input.focus();
       return;
     }
-    await busy(async () => {
+    const sent = await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
       // 跟 server.py 的 may_generate_dialogue 同一個判斷：這些選項要等模型回話
@@ -3070,10 +3250,11 @@
         // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景
         if (text) toast(text.length > 40 ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
-    });
+    }, waitLineFor(id));
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
-    if (document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
+    // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
+    if (sent && document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
   }
 
   // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
@@ -3171,7 +3352,7 @@
       applyMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (text) toast(text);
-    });
+    }, op === "battle_text" || op === "duel_text" ? WAIT_LINES.battle : SENT_WAITING);
   }
 
   // 放東西、輪詢都會問說明，回應可能晚到：只用最後一次請求的回應，而且爐子要還是問的那一爐
@@ -3203,7 +3384,7 @@
     if (before !== undefined && after !== undefined && after !== before) window.scrollBy({ top: after - before, left: 0, behavior: "instant" });
   }
 
-  // 開爐：結果寫在「開爐」底下，頁面不捲；爐裡的東西留著，拿掉一格換一樣就能再合（企劃者 2026-10-10）
+  // 開爐：結果寫在「開爐」底下，頁面不捲（企劃者 2026-10-10）；合成了爐子清空，被拒絕的東西留著（Joy 2026-10-12）
   async function forge() {
     const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
@@ -3222,7 +3403,10 @@
         S.menxia = r.menxia;
         S.message = "";
         S.forgeResult = { html: r.message };
-        trimForgeSel(); // 爐裡的東西留著（合成、合併都不會用掉），只拿掉已經不在手上的
+        // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
+        // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
+        if (r.made) S.forgeSel = [];
+        else trimForgeSel();
         S.forgeLine = "";
         S.forgePicks = null;
         setMain(r.main);
@@ -3233,7 +3417,7 @@
         // 爐裡放的東西不動；api() 已經用提示泡泡講過一次，結果那一格再留一份
         S.forgeResult = { html: esc(failText(e)) };
       } finally { stop(); }
-    });
+    }, WAIT_LINES.forge);
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
     if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else keepPlace(() => renderPage());
     updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
@@ -3252,7 +3436,7 @@
         S.mapNotice = `沒能出發：${esc(r.reason)}`;
         render();
       }
-    });
+    }, WAIT_LINES.move);
   }
 
   // ── 事件 ──
@@ -3270,9 +3454,23 @@
     setTimeout(() => drop.remove(), 650);
   }
 
+  let pointerHeld = false; // 手指（滑鼠）正按著：輪詢先不重畫江湖頁（見 refreshPage）
+  let redrawHeld = false; // 按著的時候輪詢帶來了新畫面：放開之後補畫
+  document.addEventListener("pointerdown", () => { pointerHeld = true; }, true);
+  const releasePointer = () => {
+    pointerHeld = false;
+    if (!redrawHeld) return;
+    redrawHeld = false;
+    // 放開之後 click 才送出：等它處理完再補畫；它開始了一個動作的話，動作回來會自己畫
+    setTimeout(() => { if (!S.busy && S.stage === "game" && S.tab === "jianghu") renderPage(); }, 0);
+  };
+  document.addEventListener("pointerup", releasePointer, true);
+  document.addEventListener("pointercancel", releasePointer, true);
+
   document.addEventListener("click", async (ev) => {
     const el = ev.target.closest("[data-act]");
     if (!el) return;
+    pressed = { el, at: Date.now() };
     const act = el.dataset.act;
     if (el.classList.contains("act-ink")) {
       const [key, x, y] = [el.dataset.key, ev.clientX, ev.clientY];
@@ -3327,6 +3525,22 @@
         case "party-leave": await leaveParty(); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
+        case "zhuan-open":
+          S.bookFrom = window.scrollY; S.zhuan = { season: Number(el.dataset.season), view: null }; render();
+          await loadZhuan();
+          break;
+        case "zhuan-close": S.zhuan = null; clearTimeout(zhuanTimer); render(); window.scrollTo(0, S.bookFrom || 0); break;
+        case "zhuan-write": await zhuanPost("/api/zhuan/write", { rewrite: false }); break;
+        case "zhuan-rewrite":
+          ask("請史官重寫一次：只能重寫一次，寫好之後換掉現在這一篇（公開的網址不變），確定？", "重寫", () => zhuanPost("/api/zhuan/write", { rewrite: true }));
+          break;
+        case "zhuan-share": await zhuanPost("/api/zhuan/share", { public: el.dataset.public === "1" }); break;
+        case "zhuan-send": await zhuanSend(); break;
+        case "zhuan-vertical":
+          S.zhuanVertical = !zhuanVertical();
+          try { localStorage.setItem(ZHUAN_VERTICAL, S.zhuanVertical ? "1" : "0"); } catch (e) { /* 存不了：只在這一頁有效 */ }
+          render();
+          break;
         case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
@@ -3718,7 +3932,11 @@
   async function refreshPage(old) {
     const tab = S.tab;
     if (tab === "jianghu") {
-      if (pageKey(old) !== pageKey(S.main)) renderPage(); // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+      if (pageKey(old) !== pageKey(S.main)) { // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
+        // 手指正按在畫面上：這時整頁換掉，按下去的那一顆就不在了，放開時 click 落空（按了沒反應）。等放開再畫
+        if (pointerHeld) redrawHeld = true;
+        else renderPage();
+      }
       return;
     }
     if (tab === "news") {

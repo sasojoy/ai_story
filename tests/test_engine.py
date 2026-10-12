@@ -639,72 +639,51 @@ def test_locked_figures_use_talk_at_instead_of_recruit_at_for_dialogue(content, 
     assert "act:recruit" not in ids(game)  # 鎖定人物不會因為 talk_at 而冒出招募選項
 
 
-# ── 重複內容的潤色（還要改進第 3 點）─────────────────────────
+# ── 重複內容不在行動鎖裡叫模型（2026-10-12：點綴句看不到、卻讓全服等）─────────
 
 
-def test_first_visit_to_a_location_does_not_call_flavor(game):
-    with mock.patch.object(flavor, "polish_revisit") as polish:
-        walk_to(game, "lake")  # 第一次去湖邊，不是重遊
-    polish.assert_not_called()
+class _CountingClient:
+    timeout = 15
+
+    def __init__(self):
+        self.calls = 0
+
+    def chat_text(self, *a, **k):
+        self.calls += 1
+        return "風又吹起了。"
+
+    def chat_structured(self, *a, **k):
+        self.calls += 1
+        raise RuntimeError("不該叫")
 
 
-def test_revisiting_a_location_appends_the_flavor_sentence(game):
+def test_a_repeated_event_does_not_call_the_model(game):
+    """探索幾乎每次都撞到看過的事件：以前每次都在行動鎖裡等模型補一句點綴（最多 15 秒，全服跟著等），那句卻只進 GameState.log。"""
+    event = next(iter(game.content.events.values()))
+    game._present(event)
+    game.client = _CountingClient()
+    head, text = game._present(event)
+    assert game.client.calls == 0
+    assert text == rules.fill_marks(event.text, game.state)
+
+
+def test_revisiting_a_location_does_not_call_the_model(game):
     walk_to(game, "lake")
-    with mock.patch.object(flavor, "polish_revisit", return_value="風又吹起了。"):
-        msgs = game.travel("town", "dash")  # 疾行：在這次行動裡抵達終點；小鎮開局就去過，是重遊，補一句
-    assert f"{game.location_text()}\n\n風又吹起了。" in msgs
+    game.client = _CountingClient()
+    msgs = game.travel("town", "dash")  # 疾行：在這次行動裡抵達；小鎮開局就去過，是重遊
+    assert game.client.calls == 0
+    assert game.location_text() in msgs
 
 
 def test_a_timed_arrival_never_calls_the_model(game):
-    """計時器的 sync 拿著全服行動鎖：路上抵達不叫模型（重遊點綴句、江湖大事潤色都不叫）。"""
+    """計時器的 sync 拿著全服行動鎖：路上抵達不叫模型（江湖大事潤色也不叫）。"""
     walk_to(game, "lake")
-    with mock.patch.object(flavor, "polish_revisit") as revisit, \
-            mock.patch.object(flavor, "polish_world_event") as news:
+    with mock.patch.object(flavor, "polish_world_event") as news:
         game.choose("move:town")  # 小鎮開局就去過：重遊
         game.state.world.trends["kou"] = 50  # 抵達時才跨過「水寇封江」
         game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
     assert "blocked" in game.state.world.flags  # 門檻照樣觸發，只是沒潤色
-    revisit.assert_not_called()
     news.assert_not_called()
-
-
-def test_revisiting_an_important_location_skips_flavor(content, game):
-    content.locations["town"].important = True
-    walk_to(game, "lake")
-    with mock.patch.object(flavor, "polish_revisit") as polish:
-        game.travel("town", "dash")
-    polish.assert_not_called()
-
-
-def test_revisiting_skips_the_sentence_when_flavor_comes_back_empty(game):
-    walk_to(game, "lake")
-    with mock.patch.object(flavor, "polish_revisit", return_value=""):
-        msgs = game.travel("town", "dash")
-    assert game.location_text() in msgs  # 失敗就整句省略，不多附加任何東西
-
-
-def test_only_the_last_stop_of_a_trip_gets_the_flavor_sentence(game):
-    game.state.world.flags.add("cave_open")
-    game.state.player.visited |= {"lake", "cave"}
-    with mock.patch.object(flavor, "polish_revisit", return_value="風又吹起了。") as polish:
-        game.travel("cave", "dash")
-    polish.assert_called_once()
-    assert polish.call_args.args[1] == "寶洞"
-
-
-def test_presenting_an_event_for_the_first_time_does_not_call_flavor(game):
-    event = next(iter(game.content.events.values()))
-    with mock.patch.object(flavor, "polish_event_repeat") as polish:
-        game._present(event)
-    polish.assert_not_called()
-
-
-def test_presenting_a_repeated_event_appends_the_flavor_sentence(game):
-    event = next(iter(game.content.events.values()))
-    game._present(event)
-    with mock.patch.object(flavor, "polish_event_repeat", return_value="巷口又傳來同樣的吆喝聲。"):
-        head, text = game._present(event)
-    assert text.endswith("\n\n巷口又傳來同樣的吆喝聲。")
 
 
 # ── 練功、療傷 ───────────────────────────────────────────

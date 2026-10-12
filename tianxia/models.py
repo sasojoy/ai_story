@@ -1709,6 +1709,13 @@ class Biography(_Strict):
     affinity_marks: list[int] = Field(default_factory=lambda: [20, 40, 60, 80])  # 跟人物的情誼往上跨過這幾格各記一筆
     affinity_drop: int = Field(default=10, ge=1)  # 一個動作裡情誼掉這麼多就記一筆（交惡）
     talk_swing: int = Field(default=5, ge=1)  # 對話一輪情誼動這麼多才記那一句（自己說的話不看這個，一律記）
+    # 第二批（季末寫成傳）：寫一篇最多等模型幾秒（鎖外、背景做，網頁每幾秒問一次寫好了沒，不受 trycloudflare 一個請求約 100 秒的限制）；
+    # 一篇一千多字，gemma4:26b 約一兩分鐘
+    budget_seconds: int = Field(default=240, ge=0)
+    rewrites: int = Field(default=1, ge=0)  # 寫成之後還能請史官重寫幾次（模型版、規則版都算）
+    # 分享網址的開頭（「https://tianxia.example.com」，不含結尾的斜線）。空字串＝照這次請求的網址組（trycloudflare 每次重開都換，
+    # 要長期分享得換具名 Tunnel 的固定網域，再把它寫在這裡；換網域不必改程式）
+    public_url: str = ""
 
 
 class FollowerTuning(_Strict):
@@ -1757,7 +1764,7 @@ class Config(_Strict):
     ollama_url: str = "http://localhost:11434"  # companion_agent.py 深度對話用；連不上時那輪對話取消
     ollama_model: str = "qwen2.5:14b"
     ollama_timeout: int = 120
-    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、重複事件與重遊的點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
+    # 行動鎖內的模型呼叫（大事與決戰回合的潤色、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、
     # 鎖內才取名的開爐）最多等幾秒：鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候照 ollama_timeout 的 120 秒會讓整台
     # 伺服器凍結好幾分鐘，試玩走的 trycloudflare 也會在約 100 秒切斷請求。Game._quick_client 給鎖內呼叫端這個逾時的複本
     # （引擎不讀時鐘，靠 HTTP 的逾時，跟 naming.propose 同一個做法）；逾時或失敗都退回固定的文字。這是硬上限：鎖內的呼叫

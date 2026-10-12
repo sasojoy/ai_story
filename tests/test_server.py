@@ -1655,6 +1655,7 @@ def test_the_forge_fuses_an_art_with_an_insight(client):
     _a_player_with_insights(client)
     out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
     assert out.status_code == 200 and "衍生出" in out.json()["message"]
+    assert out.json()["made"] is True  # 煉製頁照它把爐子清空（Joy 2026-10-12）
     saved = open_characters().load("沈青衫").player
     key = fusion.fuse_key("jichu_quanjiao", "feng")
     art = open_world().lookup_recipe(key)
@@ -1681,8 +1682,11 @@ def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
                  {"art": "jichu_quanjiao", "insights": ["huo"]}, {"art": "jichu_quanjiao", "insights": []}):
         out = client.post("/api/menxia/forge", json=body)
         assert out.status_code == 200 and out.json()["message"], body
+        assert out.json()["made"] is False, body  # 沒合成：煉製頁把東西留在爐裡
     saved = open_characters().load("沈青衫").player
     assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 2
+    other = client.post("/api/menxia/heal", json={})
+    assert "made" not in other.json()  # 只有開爐帶這個鍵
 
 
 def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
@@ -5357,6 +5361,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("model_call") == {
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
+        "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5663,7 +5668,7 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
 def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     """審查 M-2：開爐被擋下來（另一個分頁的上一爐還沒出爐，伺服器回 400）之後，煉製頁上方不能還寫著「爐火正旺。……請稍候」：
     重畫之前結果那一格（S.forgeResult，2026-10-10 起寫在開爐旁邊）要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），
-    爐裡放的東西留著；成功的路訊息換成結果、爐裡的東西留著（2026-10-10，換一格就能再合）。頁面不捲到最上面。在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
+    爐裡放的東西留著；成功的路訊息換成結果、爐子清空（Joy 2026-10-12），伺服器回「沒合成」的拒絕話時東西留著。頁面不捲到最上面。在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
     import json
 
     if webharness.NODE is None:
@@ -5674,7 +5679,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
         re.search(r"(?m)^  const FORGE_WAIT = .*;$", js).group(0),
         re.search(r"(?ms)^  const failText = .*?\);$", js).group(0),
         _js_function(js, "function watchQueue(") + "\n  }",
-        _js_function(js, "async function busy(") + "\n  }",
+        js[js.index("\n  // ── 送出指令的回饋 ──"):js.index("\n  // ── 送出指令的回饋（完）──")],
         _js_function(js, "async function forge(") + "\n  }",
         _js_function(js, "function trimForgeSel(") + "\n  }",
     ]
@@ -5700,9 +5705,10 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     };
     (async () => {
       const refused = await run(async () => { throw new Error("上一爐還沒出爐。"); });
-      const done = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>煉成了。</p>", main: {} }));
+      const done = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>煉成了。</p>", main: {}, made: true }));
+      const declined = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>你已經有了。</p>", main: {}, made: false }));
       const offline = await run(async () => { S.offline = true; throw new Error("fetch failed"); });
-      console.log(JSON.stringify({ refused, done, offline }));
+      console.log(JSON.stringify({ refused, done, declined, offline }));
     })();
     """
     done = webharness.node(script)
@@ -5712,7 +5718,8 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
     assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句
     assert refused["sel"] == 2 and refused["line"] == "舊說明" and refused["busy"] is False  # 爐裡的東西留著、可以再按
-    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 2 and out["done"]["line"] == ""  # 爐裡的東西留著，換一格就能再合
+    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 0 and out["done"]["line"] == ""  # 合成了：爐子清空（Joy 2026-10-12）
+    assert out["declined"]["renderedWith"] == ["<p>你已經有了。</p>"] and out["declined"]["sel"] == 2  # 被拒絕、沒合成：東西留在爐裡
     assert "爐火正旺" not in out["offline"]["message"]  # 別的錯（例如斷線）也不再停在「爐火正旺」
     assert out["done"]["scrolled"] == 0  # 開爐之後不捲到最上面（企劃者 2026-10-10「點完又會跳到畫面最上面」）
 

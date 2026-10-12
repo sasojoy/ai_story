@@ -212,6 +212,25 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   background-size: 50% 100%; background-repeat: no-repeat; animation: sweep 1.1s linear infinite;
 }
 @keyframes sweep { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+/* 送出中（app.js 的 busy）：按下去的那一顆不變灰、掃光，等回應的時候不能再按 */
+.sending { cursor: progress; }
+.btn.sending:disabled { opacity: 1; position: relative; overflow: hidden; }
+.btn.sending::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  background-size: 50% 100%; background-repeat: no-repeat; animation: sweep 1.1s linear infinite;
+}
+/* 等了一下還沒回來：畫面底下（分頁列上面、提示泡泡的位置）浮一行「已送出，等候回應…」，前面一顆墨點在暈開 */
+.sending-line {
+  position: fixed; left: 50%; bottom: calc(84px + var(--bottom)); transform: translateX(-50%); z-index: 55;
+  display: flex; align-items: center; gap: 8px; max-width: min(90vw, 520px); white-space: nowrap;
+  background: color-mix(in srgb, var(--ink) 88%, transparent); color: var(--paper);
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; pointer-events: none;
+  animation: sending-in 0.2s ease-out;
+}
+.sending-line i { width: 9px; height: 9px; border-radius: 50%; background: var(--gold, #c9a45c); flex: none; animation: ink-spread 1.2s ease-in-out infinite; }
+@keyframes sending-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes ink-spread { 0% { transform: scale(0.6); opacity: 1; } 70% { transform: scale(1.5); opacity: 0.35; } 100% { transform: scale(0.6); opacity: 1; } }
 .row { display: flex; gap: 8px; }
 .row > * { flex: 1; }
 .stack > * + * { margin-top: 8px; }
@@ -880,14 +899,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-ink small.ink-note.even { color: #e3c77d; }
 .act-ink small.ink-note.bad { color: #ec8a78; }
 /* 選到的（展開的移動、按下去等結果的那一顆）往上浮 4px、金邊 */
-.act-ink.on, .act-ink.busy { background: #171310; border-color: var(--gold); transform: translateY(-4px);
+.act-ink.on, .act-ink.busy, .act-ink.sending { background: #171310; border-color: var(--gold); transform: translateY(-4px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--gold) 15%, transparent); }
-.act-ink.on::after, .act-ink.busy::after { opacity: 1; }
-.act-ink.on .ink-icon, .act-ink.busy .ink-icon { stroke: #f5d77f; transform: scale(1.15); }
-.act-ink.on b, .act-ink.busy b { color: #f5d77f; }
-.act-ink.on small, .act-ink.busy small { color: var(--gold); font-weight: 600; }
+.act-ink.on::after, .act-ink.busy::after, .act-ink.sending::after { opacity: 1; }
+.act-ink.on .ink-icon, .act-ink.busy .ink-icon, .act-ink.sending .ink-icon { stroke: #f5d77f; transform: scale(1.15); }
+.act-ink.on b, .act-ink.busy b, .act-ink.sending b { color: #f5d77f; }
+.act-ink.on small, .act-ink.busy small, .act-ink.sending small { color: var(--gold); font-weight: 600; }
 .act-ink:active:not(:disabled) { transform: translateY(-1px) scale(0.95); }
 /* 不能用的：灰掉 */
+.act-ink.sending:disabled { opacity: 1; filter: none; border-color: var(--gold); cursor: progress; animation: ink-wait 1.2s ease-in-out infinite; }
+@keyframes ink-wait { 50% { box-shadow: 0 4px 18px color-mix(in srgb, var(--gold) 45%, transparent), inset 0 0 16px color-mix(in srgb, var(--gold) 25%, transparent); } }
 .act-ink:disabled { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; border-color: rgba(255, 255, 255, 0.06); }
 .act-ink:disabled .ink-icon { stroke: #666; }
 /* 點下去的水墨漣漪 */

@@ -1,6 +1,6 @@
-"""重複內容的 LLM 潤色（設計文件 8.2 第 4 點）：一般地點重複造訪、事件重複觸發，固定
-文字後面加一小段即時生成的裝飾句；世界事件傳聞則是全服只潤色一次、所有玩家共用同一份
+"""重複內容的 LLM 潤色（設計文件 8.2 第 4 點）：世界事件傳聞全服只潤色一次、所有玩家共用同一份
 結果（快取在共用世界狀態，見 world_state.py::get_event_flavor/set_event_flavor）。
+重遊地點、重複事件的點綴句 2026-10-12 拿掉了：在全服行動鎖裡等模型，寫出來卻只進 GameState.log、畫面上看不到。
 
 優先度最低（設計文件 8.2：「其餘做完再回頭補」），所以這裡刻意極簡：固定一次呼叫、
 不重試、失敗或沒有 client 就直接回傳空字串讓呼叫端整句省略，絕不讓這種錦上添花的潤色
@@ -30,16 +30,6 @@ def _ask(client: OllamaClient | None, prompt: str) -> str:
     except Exception:
         return ""
     return zh.to_traditional(text.strip().strip('「」"'))
-
-
-def polish_revisit(client: OllamaClient | None, loc_name: str, loc_desc: str) -> str:
-    """重遊一個已經去過、沒有手寫特殊內容的地點時，補一句此刻的小細節。"""
-    return _ask(client, f"玩家這次又重新造訪了「{loc_name}」。這個地方原本的描述是：{loc_desc}")
-
-
-def polish_event_repeat(client: OllamaClient | None, event_title: str, event_text: str) -> str:
-    """同一個事件又被觸發一次時，補一句跟上次不盡相同的小細節，避免讀起來像複製貼上。"""
-    return _ask(client, f"玩家又遇上了「{event_title}」這件事。事件原文是：{event_text}")
 
 
 def polish_world_event(client: OllamaClient | None, text: str) -> str:

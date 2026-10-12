@@ -36,6 +36,7 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
+import os
 import re
 import secrets
 import shutil
@@ -56,9 +57,10 @@ from markdown_it import MarkdownIt
 from starlette.concurrency import run_in_threadpool
 
 import server_push
+import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
+    battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, glyph, insight_llm, naming, ollama_client, rules,
     server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -929,6 +931,9 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
+    zhuan = game.biography_entry()  # 休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀是 None
+    if zhuan is not None:
+        view["zhuan"] = zhuan
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
         view["season_result"] = {
@@ -1535,12 +1540,16 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     # 開爐：首次合出來的配方要模型取名，在行動鎖外取（見 prepare_forge）；其他動作照舊一把鎖做完
     msgs = forge(game, *forge_args(body)) if op == "forge" else act(game, run)
+    made = op == "forge" and game.forged  # 開爐真的合成了：煉製頁把爐子清空；被拒絕（只回一句話）的東西留在爐裡（Joy 2026-10-12）
     _tell_tabs(game)
-    return {
+    out = {
         "menxia": look(game, lambda g: menxia_view(g, person)),
         "main": look(game, main_view),
         "message": joined(msgs),
     }
+    if op == "forge":
+        out["made"] = made
+    return out
 
 
 @app.get("/api/prologue")
@@ -1606,6 +1615,119 @@ def api_annals(request: Request):
     """見聞的「行狀」：這一季至今記下的事（玩家傳第一批；不叫模型）。"""
     game = _game(request)
     return look(game, lambda g: g.annals_view())
+
+
+# ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──
+# 寫一篇要一兩分鐘，一個請求在 trycloudflare 約 100 秒就被切斷：按「寫」只開一個背景執行緒做三段式，網頁每幾秒問一次寫好了沒。
+# 伺服器重開時寫到一半的那一篇就沒了（沒存進去），網頁問的時候照「還沒寫」再按一次。
+
+ZHUAN_JOBS: dict[tuple[str, int], float] = {}  # （名號 casefold, 季）→ 開始寫的時間
+ZHUAN_LOCK = threading.Lock()
+PUBLIC_URL_ENV = "TIANXIA_PUBLIC_URL"  # 分享網址的開頭；沒設就照設定的 Config.biography.public_url，再沒有就照這次請求的網址
+
+
+def _zhuan_key(game: Game, season: int) -> tuple[str, int]:
+    return game.state.player.name.casefold(), season
+
+
+def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
+    """開一個背景執行緒寫那一季的傳：A 鎖內開單 → B 鎖外請模型寫（model_call，佇列開著要排隊；預算 Config.biography.budget_seconds）
+    → C 鎖內重驗再存（Game.write_biography；模型寫不出來就照規則拼）。同一篇已經在寫就不再開；開了回 True。"""
+    key = _zhuan_key(game, season)
+    with ZHUAN_LOCK:
+        if key in ZHUAN_JOBS:
+            return False
+        ZHUAN_JOBS[key] = time.monotonic()
+
+    def zhuan_job() -> None:
+        try:
+            with _locked(game):
+                request = game.biography_request(season, rewrite)
+            if request is None:
+                return
+            budget = game.content.config.biography.budget_seconds
+            started = time.monotonic()
+
+            def ask() -> str | None:
+                return biography.write(game.client, request, budget - (time.monotonic() - started))
+
+            text = model_call(game, ask, fallback=None, left=budget)
+            with _locked(game):
+                game.write_biography(request, text, time.time())
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，網頁問的時候照「還沒寫」
+            traceback.print_exc()
+        finally:
+            with ZHUAN_LOCK:
+                ZHUAN_JOBS.pop(key, None)
+
+    threading.Thread(target=zhuan_job, name=f"zhuan-{season}", daemon=True).start()
+    return True
+
+
+def public_base(request: Request) -> str:
+    """分享網址的開頭（不含結尾的斜線）：環境變數 > 設定 > 這次請求的網址（走 cloudflared 時照 X-Forwarded-Proto 認 https）。"""
+    fixed = os.environ.get(PUBLIC_URL_ENV) or CONTENT.config.biography.public_url
+    if fixed:
+        return fixed.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return f"{proto}://{request.headers.get('host') or request.url.netloc}"
+
+
+def zhuan_view(game: Game, season: int, request: Request) -> dict:
+    view = game.biography_view(season)
+    if view is None:
+        raise GameError("這一季沒有你的傳。")
+    view["writing"] = _zhuan_key(game, season) in ZHUAN_JOBS
+    if view.get("code"):
+        view["url"] = f"{public_base(request)}/zhuan/{view['code']}"
+    return view
+
+
+def _season_arg(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise GameError("哪一季？") from None
+
+
+@app.get("/api/zhuan")
+def api_zhuan(request: Request, season: int):
+    """那一季的傳（還沒寫成時 written 是 False、can_write 說寫不寫得了；正在寫時 writing 是 True）。"""
+    game = _game(request)
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.post("/api/zhuan/write")
+def api_zhuan_write(request: Request, body: dict = Body(default={})):
+    """請史官寫（或重寫一次）那一季的傳：在背景寫，馬上回目前的樣子（writing 是 True）。寫不了丟 GameError。"""
+    game = _game(request)
+    season, rewrite = _season_arg(body.get("season")), body.get("rewrite") is True
+    if look(game, lambda g: g.biography_request(season, rewrite)) is None:
+        raise GameError("這一篇現在不能再寫了。" if rewrite else "這一季還不能寫傳。")
+    write_zhuan(game, season, rewrite)
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.post("/api/zhuan/share")
+def api_zhuan_share(request: Request, body: dict = Body(default={})):
+    """公開或收回那一季的傳：公開時回分享網址（不用登入的唯讀頁 /zhuan/<代碼>）。"""
+    game = _game(request)
+    season, public = _season_arg(body.get("season")), body.get("public") is True
+    code = look(game, lambda g: g.share_biography(season, public, secrets.token_urlsafe(6)))
+    if code is None:
+        raise GameError("傳還沒寫成，不能分享。")
+    return look(game, lambda g: zhuan_view(g, season, request))
+
+
+@app.get("/zhuan/{code}")
+def zhuan_page(code: str, request: Request):
+    """公開的傳（不用登入、唯讀）：只認公開中的分享代碼，其餘一律 404（不說是沒有、還是收回了）。
+    帶 Open Graph，LINE、FB 貼上去有預覽（題簽圖是 web/zhuan-og.png，所有的傳共用一張）。"""
+    row = open_world().biography_by_code(code)
+    if row is None:
+        return HTMLResponse(zhuan_html.missing(), status_code=404)
+    base = public_base(request)
+    return HTMLResponse(zhuan_html.page(row, CONTENT.scenario.name, f"{base}/zhuan/{code}", f"{base}/static/zhuan-og.png"))
 
 
 @app.get("/api/map")

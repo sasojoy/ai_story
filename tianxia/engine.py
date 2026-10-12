@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
-    fight_llm, figures, flavor, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
@@ -260,6 +260,7 @@ class Game:
         self._fight: fight_llm.PreparedFight | None = None
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
+        self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         # 主畫面「走法」切換選的走法（步行／趕路／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -272,8 +273,8 @@ class Game:
     def _quick_client(self) -> OllamaClient | None:
         """行動鎖裡叫模型用的 client：self.client 的複本，HTTP 逾時最多 Config.in_lock_model_timeout 秒（預設 15）、不重問
         （retry=False），所以鎖內任何一步模型呼叫最多佔住鎖那麼久。行動鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候
-        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、重複事件與重遊的
-        點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
+        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、
+        決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
         引擎不讀時鐘，上限靠 HTTP 的逾時（見 ollama_client.quick_client）。
         一次拿鎖期間只容忍一次失敗：有一次鎖內的模型呼叫逾時或失敗之後（_model_budget.gave_up），這裡回 None，同一次行動裡
         後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 與 bot_runner._bot_game 每次拿到鎖先歸零（reset_model_budget）；
@@ -4212,18 +4213,15 @@ class Game:
 
     def _present(self, event: Event, action: str | None = None) -> list[str]:
         """把事件端到玩家眼前。action 是抽中它的行動（探索、交友、遊歷）：這時才記進 joy 的防重複輪替
-        （events.note_round；pick_event 本身不改狀態，預覽怎麼抽都不算）。next_event 串接、晉升召見不是從池子抽的，不給 action。"""
+        （events.note_round；pick_event 本身不改狀態，預覽怎麼抽都不算）。next_event 串接、晉升召見不是從池子抽的，不給 action。
+        重複的事件不請模型補點綴句（2026-10-12 拿掉）：那句在行動鎖裡等模型最多 15 秒、全服跟著等，探索幾乎每次都撞到重複的事件，
+        寫出來卻只進 GameState.log（事件文字在紀錄裡是藏起來的、場景照內容原文畫），畫面上從來看不到。"""
         if action is not None:
             event_rules.note_round(self.state, self.content, event, action)
-        is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         text = fill_marks(event.text, self.state)
-        if is_repeat:
-            flourish = flavor.polish_event_repeat(self._quick_client(), event.title, event.text)
-            if flourish:
-                text = f"{text}\n\n{flourish}"
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
@@ -4928,7 +4926,7 @@ class Game:
                 new_leg = stop != s.player.location
                 if new_leg:
                     s.player.leg_actions = set()
-                msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                msgs += self._arrive(stop, client=client)
                 if new_leg:
                     msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
                 if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
@@ -4952,21 +4950,15 @@ class Game:
         self._sync_battle_presence()
         return msgs
 
-    def _arrive(self, loc_id: str, final: bool, client: OllamaClient | None = None) -> list[str]:
-        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。終點是重遊的一般地點時才多請模型
-        補一句此刻的小細節（中途的站不補，省得一趟路叫好幾次模型）。client 是這次抵達可以用的模型：
-        None（計時器的抵達）就完全不叫模型，重遊點綴句與江湖大事的潤色都省掉；門檻照樣觸發。"""
+    def _arrive(self, loc_id: str, client: OllamaClient | None = None) -> list[str]:
+        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。client 是這次抵達可以用的模型（只給江湖大事潤色）：
+        None（計時器的抵達）就完全不叫模型；門檻照樣觸發。以前重遊的終點還在鎖內請模型補一句點綴，那句只進 GameState.log、
+        畫面上看不到，卻佔著全服的行動鎖（2026-10-12 拿掉，見 _present）。"""
         s, c = self.state, self.content
-        dest = c.locations[loc_id]
-        is_revisit = loc_id in s.player.visited
         before = s.player.tutorial_step
         s.player.location = loc_id
         s.player.visited.add(loc_id)
         text = self.location_text()
-        if final and is_revisit and not dest.important and client is not None:
-            flourish = flavor.polish_revisit(client, dest.name, dest.describe(s.world.flags))
-            if flourish:
-                text = f"{text}\n\n{flourish}"
         self._hide(text)
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
@@ -5289,6 +5281,7 @@ class Game:
         首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
         三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
+        self.forged = False
         refusal = prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
@@ -5316,6 +5309,7 @@ class Game:
         else:
             return self._log(["放一門武學和一個意境、或放兩門武學（合成），或放兩個意境（合併）。"])
         out = self._log(msgs)
+        self.forged = tag is not None
         if tag is not None:
             self._save_season()  # 第一次合出帶特別功效的武學會記一則傳聞（fusion._special_rumor，13.4）；傳聞在共用賽季裡，要存回去
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
@@ -7679,9 +7673,113 @@ class Game:
         }
 
     def annals_view(self) -> dict:
-        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。"""
+        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
+        books 是歷季列傳（第二批）：存著的每一季（這一季收了、還沒換季的也算），新的在前。"""
         on = annals.on(self.content)
-        return {"on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else []}
+        return {
+            "on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else [],
+            "books": self.biography_list() if on else [],
+        }
+
+    # ── 玩家傳第二批：季末寫成《某某傳》、公開分享 ──
+
+    def _season_closed(self) -> bool:
+        """這一季收了（休季）：這一季的傳寫得了。"""
+        return self.world.season_phase() == "resting"
+
+    def biography_entry(self) -> dict | None:
+        """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
+        輪詢每次都問：季還在跑時不讀資料庫。"""
+        p = self.state.player
+        if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
+            return None
+        if not p.annals and self.world.biography(p.season_number, p.name) is None:
+            return None
+        return {"season": p.season_number, "title": biography.title(p.name)}
+
+    def biography_list(self) -> list[dict]:
+        """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
+        p = self.state.player
+        rows = {b["season"]: b for b in self.world.biographies_of(p.name)}
+        out = []
+        if self._season_closed() and p.annals and p.season_number not in rows:
+            out.append({"season": p.season_number, "title": biography.title(p.name), "written": False, "public": False})
+        out += [
+            {"season": n, "title": biography.title(b["name"]), "written": b["text"] is not None, "public": b["public"]}
+            for n, b in sorted(rows.items(), reverse=True)
+        ]
+        return out
+
+    def biography_request(self, season: int, rewrite: bool = False) -> biography.BiographyRequest | None:
+        """A 段（鎖內、只讀）：那一季那一篇要寫（或重寫）的單子。寫不了回 None：開關關著、假人、這一季還沒收、那一季沒有行狀、
+        已經寫過而不是重寫、重寫的次數用完了。這一季收了、還沒換季時，行狀與身家照角色身上的；以前的季照存起來的。"""
+        c, p = self.content, self.state.player
+        if not annals.on(c) or p.bot is not None:
+            return None
+        row = self.world.biography(season, p.name)
+        if row is None:
+            if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
+                return None
+            entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+            profile = annals.profile(self.state, c)
+        else:
+            if season == p.season_number and not self._season_closed():
+                return None
+            entries = tuple(sorted(row["annals"], key=lambda e: e.get("time", 0.0)))
+            profile = row["profile"]
+            if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
+                entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
+                profile = annals.profile(self.state, c)
+            written = row["text"] is not None
+            if written != rewrite or (rewrite and row["rewrites"] >= c.config.biography.rewrites):
+                return None
+        if not entries:
+            return None
+        chronicle = dict(self.world.chronicle_before(season + 1)).get(season, [])
+        era = [r.text for r in chronicle][: biography.ERA_MAX]
+        return biography.BiographyRequest(
+            season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
+            annals=entries, era=tuple(era), rewrite=rewrite,
+        )
+
+    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+        """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        current = self.biography_request(request.season, request.rewrite)
+        if current is None or current.annals != request.annals:
+            return False
+        p = self.state.player
+        if request.season == p.season_number and p.annals:
+            self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
+        by = biography.MODEL if text else biography.RULE
+        return self.world.store_biography(
+            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
+        )
+
+    def biography_view(self, season: int) -> dict | None:
+        """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
+        那一季沒有（沒有行狀、還沒收季）回 None。"""
+        p, cfg = self.state.player, self.content.config.biography
+        row = self.world.biography(season, p.name)
+        if row is None or row["text"] is None:
+            ready = self.biography_request(season) is not None
+            if row is None and not ready:
+                return None
+            return {
+                "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
+                "scenario": self.content.scenario.name,
+            }
+        return {
+            "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
+            "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
+            "can_rewrite": row["rewrites"] < cfg.rewrites, "scenario": self.content.scenario.name,
+        }
+
+    def share_biography(self, season: int, public: bool, code: str) -> str | None:
+        """公開或收回那一季的傳（寫成了才行）；回傳分享代碼（收回時也回，網頁不用它）。code 是伺服器產生的亂碼，已經有代碼就沿用。"""
+        if not annals.on(self.content) or self.state.player.bot is not None:
+            return None
+        return self.world.share_biography(season, self.state.player.name, public, code)
 
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""

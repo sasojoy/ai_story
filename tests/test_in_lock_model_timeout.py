@@ -2,8 +2,8 @@
 
 每個玩家的行動都在 WorldStateStore.action_lock() 裡做（SQLite 的 BEGIN IMMEDIATE），鎖拿著的時候全服玩家與假人都在等。
 鎖外的路徑（對話備料、開爐取名、隨口應對的評分與潤色）有自己的做法，鎖內還有幾處會叫模型：
-大事潤色、重複事件與重遊的點綴句、決戰自訂行動的評分（網頁走鎖外，見 server.battle_text；直接呼叫才在鎖內評）、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
-（決戰回合的敘事 2026-10-08 起不叫模型。）它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
+大事潤色、決戰自訂行動的評分（網頁走鎖外，見 server.battle_text；直接呼叫才在鎖內評）、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
+（決戰回合的敘事 2026-10-08 起不叫模型；重複事件與重遊的點綴句 2026-10-12 拿掉了。）它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
 每一處都退回固定的文字，不丟例外。
 
 這裡把 OllamaClient 的兩個呼叫換成「記下當下那個 client 的 timeout、然後丟逾時」，一條路徑一條路徑地跑，
@@ -126,17 +126,12 @@ def _a_custom_battle_action(game):
         assert game.battle_free_text_prompt() is None  # 評不到成功率也照樣送出去了
 
 
-def _a_repeated_event(game):
-    event = game.content.events["scroll"]
-    _, first = game._present(event)[:2]
-    _, again = game._present(event)[:2]
-    assert again == first  # 重複事件的點綴句沒生出來，整句省略
-
-
-def _a_revisit_by_dashing(game):
+def _a_threshold_reached_by_dashing(game):
+    """疾行在這次行動裡抵達、抵達時才跨過門檻：大事潤色在鎖內叫（重遊的點綴句 2026-10-12 拿掉了，見 test_engine）。"""
     walk_to(game, "lake")
-    msgs = game.travel("town", "dash")  # 疾行在這次行動裡抵達；小鎮開局就去過，是重遊
-    assert game.location_text() in msgs
+    game.state.world.trends["kou"] = 50
+    msgs = game.travel("town", "dash")
+    assert game.location_text() in msgs and "【江湖大事】水寇封江！" in msgs
 
 
 def _a_dialogue_that_is_first_generated_in_the_lock(game):
@@ -182,8 +177,7 @@ SCENARIOS = {
     "大事潤色（隨口應對）": _a_threshold_through_a_free_text_answer,
     "隨口應對的鎖內評分": _an_unrated_free_text_answer,
     "決戰自訂行動的評分": _a_custom_battle_action,
-    "重複事件的點綴句": _a_repeated_event,
-    "疾行重遊的點綴句與大事潤色": _a_revisit_by_dashing,
+    "疾行抵達時的大事潤色": _a_threshold_reached_by_dashing,
     "鎖內現生成的對話": _a_dialogue_that_is_first_generated_in_the_lock,
     "記憶整理與性情漂移": _a_dialogue_turn_that_consolidates_memory_and_drift,
     "鎖內取名的開爐": _a_forge_named_in_the_lock,
@@ -384,8 +378,9 @@ def test_the_out_of_lock_naming_budget_keeps_its_attempts(content):
     assert len(calls) == naming.NAME_ATTEMPTS
 
 
-def test_a_failed_first_call_makes_later_calls_in_the_same_action_skip_the_model(slow, spy):
-    """疾行重遊：先叫模型補一句點綴，逾時了；同一次行動接著跨過的大事門檻，潤色就不再叫模型（直接用原文），門檻照樣觸發。"""
+def test_a_timed_out_threshold_polish_falls_back_to_the_plain_text(slow, spy):
+    """疾行抵達時跨過大事門檻：潤色在鎖內叫模型、逾時了，直接用原文，門檻照樣觸發，只送那一趟。
+    （同一次拿鎖裡第一次失敗之後別處都不叫，見 test_a_new_lock_hold_gets_a_fresh_budget。）"""
     walk_to(slow, "lake")
     slow.state.world.trends["kou"] = 50
     msgs = slow.travel("town", "dash")
@@ -394,13 +389,13 @@ def test_a_failed_first_call_makes_later_calls_in_the_same_action_skip_the_model
 
 
 def test_without_a_failure_every_in_lock_call_goes_out(game, monkeypatch):
-    """對照：模型回得出來，同一次行動裡兩處都叫（逾時的旗子才是後面不叫的原因，不是「一次行動只准一次」）。"""
+    """對照：模型回得出來時鎖內的呼叫照常送出、用上模型的字（逾時的旗子才是後面不叫的原因）。"""
     spy = ModelSpy(monkeypatch, ok=True)
     game.client.timeout = PRODUCTION_TIMEOUT
     walk_to(game, "lake")
     game.state.world.trends["kou"] = 50
     msgs = game.travel("town", "dash")
-    assert [kind for kind, _ in spy.calls] == ["chat_text", "chat_text"]  # 重遊的點綴句＋大事潤色
+    assert [kind for kind, _ in spy.calls] == ["chat_text"]  # 大事潤色（重遊的點綴句 2026-10-12 拿掉了）
     assert any("山風捲過旌旗。" in m for m in msgs)
 
 

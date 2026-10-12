@@ -467,6 +467,36 @@ class SqliteWorldStore:
             rows = conn.execute("SELECT * FROM biographies WHERE key = ? ORDER BY season DESC", (name_key(name),)).fetchall()
         return [self._biography_row(row) for row in rows]
 
+    def store_biography(self, season: int, name: str, text: str, written_by: str, written_at: float, rewrite: bool) -> bool:
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE biographies SET text = ?, written_by = ?, written_at = ?, rewrites = rewrites + ? "
+                "WHERE season = ? AND key = ? AND (? OR text IS NULL)",
+                (text, written_by, written_at, int(rewrite), season, name_key(name), int(rewrite)),
+            )
+            return cursor.rowcount == 1
+
+    def share_biography(self, season: int, name: str, public: bool, code: str) -> str | None:
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT share_code FROM biographies WHERE season = ? AND key = ? AND text IS NOT NULL", (season, name_key(name)),
+            ).fetchone()
+            if row is None:
+                return None
+            code = row["share_code"] or code
+            conn.execute(
+                "UPDATE biographies SET public = ?, share_code = ? WHERE season = ? AND key = ?",
+                (int(public), code, season, name_key(name)),
+            )
+            return code
+
+    def biography_by_code(self, code: str) -> dict | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT * FROM biographies WHERE share_code = ? AND public = 1 AND text IS NOT NULL", (code,),
+            ).fetchone()
+        return None if row is None else self._biography_row(row)
+
     # ── 同伴性情漂移 ──────────────────────────────────────
 
     def record_companion_tag(self, companion_id: str, tag: str) -> None:
