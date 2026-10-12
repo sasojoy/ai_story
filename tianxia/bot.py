@@ -36,6 +36,7 @@ TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品
 
 
 CLINIC_AT = 0.15  # 內傷到氣血上限的這麼多（約兩三場落敗）就繞去醫館（企劃者 2026-10-12 療傷只在醫館）；整季機器人與假人共用
+CLINIC_URGENT = 0.25  # 到這麼多就先去醫館、排在軍令前面（PM 2026-10-12：假人被軍令拉走、帶著三四成內傷打一整季）；整季機器人在 CLINIC_AT 就一律先去
 
 
 def wants_heal(game: Game) -> bool:
@@ -43,6 +44,13 @@ def wants_heal(game: Game) -> bool:
     付不起時去療傷只會寫一筆「銀兩不足」；不在醫館按了只會寫「這裡沒有醫館」。"""
     cost = team.heal_cost(game.content, game.state.player.member)
     return 0 < cost <= game.state.player.stats.get("silver", 0) and clinic.here(game.state, game.content)
+
+
+def injury_share(game: Game) -> float:
+    """本人的內傷佔氣血上限的幾成（醫館的兩道門檻 CLINIC_AT、CLINIC_URGENT 都跟它比）。"""
+    s, c = game.state, game.content
+    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER))
+    return s.player.member.injury / cap if cap > 0 else 0.0
 
 
 def clinic_hop(game: Game) -> str | None:
@@ -54,8 +62,7 @@ def clinic_hop(game: Game) -> str | None:
     cost = team.heal_cost(c, member)
     if cost <= 0 or cost > s.player.stats.get("silver", 0):
         return None
-    _, cap = team.member_neili(c, member, team.con_of(s, c, game.world, PLAYER))
-    if member.injury < CLINIC_AT * cap:
+    if injury_share(game) < CLINIC_AT:
         return None
     route = clinic.nearest(s, c)
     return None if route is None else route.path[0]
