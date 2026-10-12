@@ -1,7 +1,7 @@
 """公開的傳（玩家傳第二批，/zhuan/<代碼>）：不用登入的唯讀頁，伺服器直接吐一整頁 HTML（不經過 web/app.js）。
 
 LINE、FB 只讀伺服器回的 HTML 抓預覽，所以標題、摘要、題簽圖都寫在 <head> 的 Open Graph 裡。文字一律跳脫；樣子跟遊戲裡讀傳共用
-web/zhuan.css（同一份標記，LOOK 跟 app.js 的 ZHUAN_LOOK 同一個；不用武學譜那本書，企劃者 2026-10-12），預設橫排，右上角可以切直書
+web/zhuan.css（同一份標記；竹簡，不用武學譜那本書，企劃者 2026-10-12），預設橫排，右上角可以切直書
 （記在這個瀏覽器的 localStorage，跟遊戲裡同一個鍵）。手機上「分享」叫系統的分享選單（Web Share API），沒有就複製網址。
 只 import 標準函式庫與 tianxia.biography。
 """
@@ -11,14 +11,12 @@ from html import escape
 
 from tianxia import biography
 
-LOOK = "bamboo"  # bamboo 竹簡、scroll 手卷、stele 碑拓（web/zhuan.css）
-
-# 這一頁自己的版面：分享鈕、頁尾、提示；顏色照 zhuan.css 那一個樣子的變數
+# 這一頁自己的版面：頁尾、提示；顏色照 zhuan.css 竹簡的變數
 CSS = """
 *{box-sizing:border-box}
 html,body{margin:0}
 body{font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);min-height:100vh}
-footer{max-width:640px;margin:26px auto 0;padding:0 16px 40px;color:var(--zh-link,var(--zh-sub));font:14px/1.7 var(--zh-font);text-align:center}
+footer{max-width:640px;margin:26px auto 0;padding:0 16px 40px;color:var(--zh-sub);font:14px/1.7 var(--zh-font);text-align:center}
 footer a{color:inherit;font-weight:700;text-decoration:underline}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:var(--zh-btn-ink);color:var(--zh-btn);
 padding:8px 16px;border-radius:999px;font-size:14px}
@@ -39,11 +37,6 @@ SCRIPT = """
   });
 })();
 """
-
-HOUSE_SEAL = ('<svg class="zh-seal round" viewBox="0 0 52 52" role="img" aria-label="天下大勢"><circle cx="26" cy="26" r="24"/>'
-              '<circle class="rim" cx="26" cy="26" r="20.5"/><text x="34" y="18" font-size="13">天</text><text x="34" y="34" font-size="13">下</text>'
-              '<text x="18" y="18" font-size="13">大</text><text x="18" y="34" font-size="13">勢</text></svg>')
-
 
 def seal(name: str) -> str:
     """名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。web/app.js 的 zhuanSeal 同一條算法。"""
@@ -87,15 +80,14 @@ def page(row: dict, scenario: str, url: str, image: str) -> str:
         for k, v in (("og:type", "article"), ("og:site_name", "天下大勢"), ("og:title", title), ("og:description", lead),
                      ("og:url", url), ("og:image", image), ("og:image:width", "1200"), ("og:image:height", "630"))
     )
-    seals = (HOUSE_SEAL if LOOK == "scroll" else "") + seal(name)
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{escape(title)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
 {meta}<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="/static/zhuan.css"><style>{CSS}</style></head>
-<body class="zh zh-{LOOK}">{head(title, sub)}
+<body class="zh zh-bamboo">{head(title, sub)}
 <div class="zh-tools"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
-<main class="zh-body"><article class="zh-text">{body}</article><div class="zh-seals">{seals}</div></main>
+<main class="zh-body"><article class="zh-text">{body}</article><div class="zh-seals">{seal(name)}</div></main>
 <footer>這是《天下大勢》裡一位江湖人物的列傳。<br><a href="/">也去江湖走一遭 ›</a></footer>
 <script>{SCRIPT}</script></body></html>"""
 
@@ -104,5 +96,5 @@ def missing() -> str:
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>查無此傳・天下大勢</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/static/zhuan.css"><style>{CSS}</style></head>
-<body class="zh zh-{LOOK}"><main class="zh-body" style="padding-top:20vh"><article class="zh-text"><p>史館裡查無此傳——也許作者已經收回，或是網址抄錯了。</p></article></main>
+<body class="zh zh-bamboo"><main class="zh-body" style="padding-top:20vh"><article class="zh-text"><p>史館裡查無此傳——也許作者已經收回，或是網址抄錯了。</p></article></main>
 <footer><a href="/">回到江湖 ›</a></footer></body></html>"""

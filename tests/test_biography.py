@@ -320,7 +320,7 @@ def test_the_share_image_is_a_1200_by_630_png():
 
 DRIVER = r"""
 const S = { zhuanVertical: !!input.vertical };
-const parts = [konst("esc"), konst("ZHUAN_LOOK"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("zhuanHouseSeal"), fn("zhuanIcon"), fn("zhuanVertical"), fn("zhuanHead"), fn("zhuanSeal"), fn("zhuanSeals"), fn("zhuanHtml"), fn("zhuanEntry"),
+const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("zhuanIcon"), fn("zhuanVertical"), fn("zhuanHead"), fn("zhuanSeal"), fn("zhuanHtml"), fn("zhuanEntry"),
   "return { zhuanHtml, zhuanEntry };"];
 const H = new Function("S", parts.join("\n"))(S);
 finish(input.entry ? H.zhuanEntry(input.entry, "副題") : H.zhuanHtml(input.z));
