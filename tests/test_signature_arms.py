@@ -372,3 +372,21 @@ def test_the_book_sorts_by_season_with_divine_items_first_and_skips_arms_the_con
     assert [line.split("　")[0] for line in lines] == ["- 第 2 季", "- 第 2 季", "- 第 3 季", "- 第 4 季"]
     assert "流星" in lines[0] and "鐵脊長刀" in lines[1] and "鐵脊長刀" in lines[3]  # 同一季：神器在前，本命兵器在後
     assert forge_secrets.divine_book([], rows).startswith(forge_secrets.DIVINE_BOOK)  # 只有本命兵器也有這一段
+
+
+def test_only_the_beaten_generals_arm_goes_into_that_fights_report_and_its_annal_comes_after_the_fight(world):
+    """終審（minor）：同一下動作裡另一位名將的情誼也到了，兩把都給，可是只有被打敗的孫堅那一把寫進這一場戰報的「得失」；
+    行狀照時間先後：先「挑戰孫堅本人」那一筆，再「奪走了他的本命兵器」。"""
+    game = _sun_challenger(world)
+    game.content.config.biography.enabled = True
+    p = game.state.player
+    _beat_sun(game, 2)
+    p.affinities["caocao"] = 80
+    _beat_sun(game, 1)
+    assert sorted(arm.name for arm in signature_arms.owned(p)) == sorted(["江潮槍", "梟風槍"])
+    gains = [m for m in game.state.battles[0].materials if m.startswith("本命兵器")]
+    assert gains == [signature_arms.GAIN_LINE.format(name="江潮槍")]
+    texts = [e.text for e in p.annals]
+    fight = max(i for i, t in enumerate(texts) if t.startswith("挑戰孫堅本人"))
+    seized = texts.index(signature_arms.ANNAL_SEIZED.format(general="孫堅", arm="江潮槍"))
+    assert fight < seized

@@ -3455,18 +3455,24 @@ class Game:
                 annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
         return msgs
 
-    def _signature_arms(self, record=None, beaten: str | None = None) -> list[str]:
+    def _signature_arms(self, record=None, beaten: str | None = None, later: list | None = None) -> list[str]:
         """名將本命兵器（兵器設計 4.10；打造第三批，signature_arms.due）：情誼到 signature_affinity 他送你，打贏他本人 signature_wins 次
         他讓你奪走；每位名將每季全服一人（WorldState.signature_arms，這一下動作最後的 _save_season 存回去，同名將贈禮）。choose 與
         answer_event 最後各叫一次（情誼從對話、事件、隨口應對來都走得到）；_challenge 打贏時帶 record、beaten 先叫一次，那一把寫進
-        這一場戰報的「得失」（同寶物掉落）。行狀記一筆（人物）。不擲骰：不碰 Game.rng。"""
+        這一場戰報的「得失」（同寶物掉落）——只寫被打敗的那一位的那一把：同一下動作裡別位名將的情誼也到了、一起給的，不寫進這一場
+        （終審 minor）。行狀記一筆（人物）；later 給了（_challenge）就先放進去，等那一場自己的行狀記完再記，行狀才照時間先後。
+        不擲骰：不碰 Game.rng。"""
         s, c = self.state, self.content
         items, msgs = signature_arms.due(s, c, beaten=beaten)
         for item in items:
-            if record is not None:
+            arm = next((a for a in c.gear.signature_arms if a.character == item.signature), None)
+            if record is not None and beaten is not None and arm is not None and arm.figure == beaten:
                 record.materials.append(signature_arms.GAIN_LINE.format(name=item.name))
-            annals.note(s, c, annals.FIGURE, signature_arms.annal_line(c, item, s.world.signature_arms[item.signature].via), 4,
-                        figure=item.signature)
+            note = (signature_arms.annal_line(c, item, s.world.signature_arms[item.signature].via), item.signature)
+            if later is None:
+                annals.note(s, c, annals.FIGURE, note[0], 4, figure=note[1])
+            else:
+                later.append(note)
         return msgs
 
     def _deliver_renames(self) -> None:
@@ -4521,6 +4527,7 @@ class Game:
         record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
         msgs: list[str] = []
+        arm_annals: list[tuple[str, str]] = []  # 本命兵器那一筆行狀：等這一場的行狀記完再記（照時間先後）
         if result.tier in team.WIN_TIERS:
             s.player.figure_wins[fid] = s.player.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
             msgs += self._battle_rewards(squad, record)
@@ -4531,7 +4538,7 @@ class Game:
             msgs += extra
             msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
             msgs += self._figure_tier3(fid, squad, record)  # 打贏本人掉一個三階（兵器設計 4.9）：戰報「得失」與江湖紀錄
-            msgs += self._signature_arms(record, beaten=fid)  # 第三次打贏那一刻他讓你奪走（寫進這一場戰報的「得失」）；_rout 把他打到重創的這一場照給
+            msgs += self._signature_arms(record, beaten=fid, later=arm_annals)  # 第三次打贏那一刻他讓你奪走（寫進這一場戰報的「得失」）；_rout 把他打到重創的這一場照給
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier)
@@ -4543,6 +4550,8 @@ class Game:
         won = result.tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
                     figure=fig.character or "")
+        for text, who in arm_annals:
+            annals.note(s, c, annals.FIGURE, text, 4, figure=who)
         return msgs
 
     def _rout(self, fid: str) -> list[str]:
