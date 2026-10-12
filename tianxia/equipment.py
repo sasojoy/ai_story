@@ -60,6 +60,8 @@ DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
 WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
 DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
+ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
+ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
 
 
 def on(content: Content, slot: str) -> bool:
@@ -192,6 +194,8 @@ def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str
         return [DISMANTLE_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW]
     if not on(content, chosen.slot):
         return [NOT_NOW]
+    if chosen.original:
+        return [ORIGINAL_KEPT_LINE]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
     material = dismantle_material(content, chosen)
     p.rack.remove(chosen)
     p.materials[material.id] = p.materials.get(material.id, 0) + 1

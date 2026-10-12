@@ -2648,6 +2648,8 @@ class Game:
             return []
         breakable = sorted(equipment.in_slot(self.state.player, slot), key=equipment.dismantle_order)
         opts = [
+            Option(id=f"smith:dismantle:{w.id}", label=f"拆解【{w.name}】（{equipment.ORIGINAL_KEPT}）", enabled=False)  # 5.4：灰掉寫原因
+            if w.original else
             Option(id=f"smith:dismantle:{w.id}",
                    label=f"拆解【{w.name}】（{equipment.grade_line(w)}）→ {equipment.dismantle_material(c, w).name}×1",
                    confirm=equipment.dismantle_confirm(c, w), confirm_yes=equipment.DISMANTLE_YES)  # FB-125：先問一次
@@ -7630,12 +7632,15 @@ class Game:
         return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
-        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），最後是玉璽碎片。"""
+        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是神器譜（有才寫），最後是玉璽碎片。"""
         number = self.world.get_season_number()
         current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
         parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
+        book = forge_secrets.divine_book(self.world.divine_records())  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露
+        if book:
+            parts.append(book)
         parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
 

@@ -226,7 +226,8 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
         "cut": pct(cut(item, neigong, content)), "fit": fit_note(item, neigong),
         "tempers": item.tempers, "temper_max": content.config.armor.temper_max,  # 網頁寫「淬煉 N/M」（防具打造）
         "recipe": recipe_text(content, item.recipe),  # 自己打的那一件寫配方（主料＋輔料），買的是 None
-        "confirm": "" if worn else equipment.dismantle_confirm(content, item),  # 身上那件不能拆，沒有問句（FB-125）
+        "confirm": "" if worn or item.original else equipment.dismantle_confirm(content, item),  # 身上那件、原品（5.4）不能拆，沒有問句
+        "keep": equipment.ORIGINAL_KEPT if item.original else "",
     }
 
 

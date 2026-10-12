@@ -377,7 +377,8 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
         "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
         "grade": grade(w),
-        "confirm": "" if worn else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）
+        "confirm": "" if worn or w.original else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）；原品也拆不得（5.4）
+        "keep": equipment.ORIGINAL_KEPT if w.original else "",  # 網頁照它把拆解鈕灰掉寫原因
         "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
         "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
     }

@@ -233,6 +233,11 @@ class WorldStateStore(Protocol):
         回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
         ...
 
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        """神器譜（打造隱藏配方設計 5.5）：歷來每一季的神器原品——gear_recipes 裡「鑄|」開頭、神器配方、有原品主人的列，
+        照季、再照鍵排，跨季讀（換季不刪）。回（季數, 那一列）。"""
+        ...
+
     # ── 合到舊的（武學與成長設計 12.2；這一季）──
     def fused_arts(self) -> list[MartialArt]:
         """這一季靠合成登記的功法（origin 是 fused），照登記的先後；「合到舊的」從這裡找候選。"""

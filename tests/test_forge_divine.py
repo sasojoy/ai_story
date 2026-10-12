@@ -228,3 +228,54 @@ def test_naming_goes_through_the_game_and_only_a_true_keep_counts(divine_content
     msgs = server.MENXIA_ACTIONS["name_divine"](game, {"weapon": original.id, "keep": True})
     assert original.name == "墜星劍" and msgs[0] == smithing.DIVINE_NAMED.format(name="墜星劍")
     assert game.state.journal[0].tag == msgs[0]  # 修練紀錄（同絕學定名 _menxia_entry）
+
+
+# ── Task 5：神器譜；原品不能拆、不能交 ──
+
+def test_the_divine_book_sits_under_the_chronicle_across_seasons(divine_content, world):
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    smithing.forge(owner.state, divine_content, world, "劍", "gang_1", "kuai_1")  # 名器不上神器譜
+    smithing.forge(_forger(divine_content, world, name="乙").state, divine_content, world, "劍", "gang_3", "gang_3")
+    season = world.get_season_number()
+    old = GearFind(secret="t_old", slot="armor", attribute="剛", tier=3, title="舊甲", creator="丙", creator_shown="丙",
+                   divine=True, owner="丙", master_shown="丙", divine_name="鎮岳甲", copies=3)
+    with world.db.transaction() as conn:  # 上一季的原品：換季不刪，跨季保留（5.5）
+        conn.execute("INSERT INTO gear_recipes (season, key, name, creator, data) VALUES (?, ?, ?, ?, ?)",
+                     (season - 1, "鑄|t_old", "鎮岳甲", "丙", old.model_dump_json()))
+    assert [(s, f.secret) for s, f in world.divine_records()] == [(season - 1, "t_old"), (season, "t_star")]
+    book = owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
+    assert f"{DIVINE_UNNAMED}（劍）" in book and "仿品 1 把" in book and "【鎮岳甲】" in book and "仿品 3 把" in book
+    assert "乙" not in book and "穿霞劍" not in book  # 不列打仿品的人；名器不上
+    smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")
+    assert "【斬月】" in owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
+
+
+def test_an_original_cannot_be_dismantled_but_a_copy_can(divine_content, world):
+    game = _forger(divine_content, world)
+    p = game.state.player
+    original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")  # 拿在手上
+    first, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")  # 仿品進裝備庫
+    second, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    weapons.wield(game.state, divine_content, first.id)  # 原品換下來、進裝備庫
+    assert original in p.rack
+    assert weapons.dismantle(game.state, divine_content, original.id) == [equipment.ORIGINAL_KEPT_LINE] and original in p.rack
+    row = weapons._row(original, None, divine_content, world)
+    assert (row["keep"], row["confirm"]) == (equipment.ORIGINAL_KEPT, "")  # 5.4：鈕灰掉寫原因、沒有問句
+    assert weapons._row(second, None, divine_content, world)["keep"] == ""
+    assert weapons.dismantle(game.state, divine_content, second.id)[0].startswith(equipment.DISMANTLE_PREFIX)
+    assert p.materials == {"gang_3": 1, "gang_1": 4, "kuai_1": 2}  # 仿品照一般兵器拆：拆成一個三階（打一把要兩個，拆了不會賺）
+    game.choose("act:smith")
+    menu = {o.id: o for o in game.options(odds=False)}
+    kept = menu[f"smith:dismantle:{original.id}"]
+    assert not kept.enabled and equipment.ORIGINAL_KEPT in kept.label  # 鐵匠鋪那一顆照樣列出、灰掉寫原因
+
+
+def test_an_armor_original_is_kept_too(divine_content, world):
+    game = _forger(divine_content, world)
+    key = "鎧|gang_3+gang_3"
+    coat, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3", rng=smithing.own_rng(game.state, key))
+    spare, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3", rng=smithing.own_rng(game.state, key))
+    armor.wield(game.state, divine_content, spare.id)  # 原品進裝備庫
+    assert armor.dismantle(game.state, divine_content, coat.id) == [equipment.ORIGINAL_KEPT_LINE]
+    assert armor._row(coat, None, divine_content)["keep"] == equipment.ORIGINAL_KEPT

@@ -322,6 +322,14 @@ class SqliteWorldStore:
             )
             return None
 
+    def divine_records(self) -> list[tuple[int, GearFind]]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT season, data FROM gear_recipes WHERE key LIKE '鑄|%' ORDER BY season, key",
+            ).fetchall()
+        finds = [(row["season"], GearFind.model_validate_json(row["data"])) for row in rows]
+        return [(season, find) for season, find in finds if find.divine and find.owner]
+
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
     def fused_arts(self) -> list[MartialArt]:

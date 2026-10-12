@@ -61,6 +61,7 @@ UNNAMED = "先替它定名，再談交出去。"  # 待 joy 潤
 NO_DATA = "找不到它的資料。"  # 待 joy 潤
 WANT_ART = "這一張要屬{attribute}的。"  # 待 joy 潤
 NO_WEAPON = "裝備庫裡沒有這一件。"  # 待 joy 潤
+ORIGINAL_KEPT = "神器的原品交不得"  # 待 joy 潤（打造隱藏配方設計 5.4：手上那把也不收）
 WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
@@ -436,6 +437,8 @@ def fit_problem(
         w = _weapon(state, item_id)
         if w is None:
             return NO_WEAPON
+        if w.original:
+            return ORIGINAL_KEPT  # 5.4：一季全服只有一把，交了就上不了神器譜；仿品照一般兵器收（_arms_base 照三階上品）
         if w.kind != b.weapon_kind or w.attribute != b.attribute:
             return WANT_ARMS.format(attribute=b.attribute, noun=_noun(b))
         return None
