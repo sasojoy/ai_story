@@ -416,7 +416,7 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     lines = forged[0].lines
     # FB-141：開爐成了那一則只留結果，結果句排第一（375 寬「剛剛」收著時看得到）；放了哪兩樣、哪一種，結果句本身寫了
     # （終審 F1 要的「放了什麼」由它帶），挑種類、主料、輔料的回報與問話收掉
-    assert lines[0].startswith(f"鐵匠把精鐵砂與驚羽下爐，打出一把【{p.weapon.name}】（劍・屬陽・一階")
+    assert lines[0].startswith(f"打出一把【{p.weapon.name}】（劍・屬陽・一階") and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
     steps = ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。", smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.READY)
     assert not any(line in steps for line in lines)
 
@@ -433,7 +433,7 @@ def test_a_folded_forge_keeps_an_unrelated_line_an_earlier_step_carried(content,
     for oid in (f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
         game.choose(oid)
     [entry] = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
-    assert entry.lines[0].startswith("鐵匠把精鐵砂與驚羽下爐，打出一把【")  # 結果句還是第一
+    assert entry.lines[0].startswith("打出一把【") and "：鐵匠把精鐵砂與驚羽下爐。" in entry.lines[0]  # 結果句還是第一
     assert entry.lines.index(news) > 0 and entry.lines[-1] == news  # 那句別的話接在這一爐自己的敘事後面
     assert not any(smithing.is_step_line(line) for line in entry.lines)  # 單子自己的回話（挑了什麼、問下一步）都收掉
 
@@ -453,7 +453,7 @@ def test_is_step_line_recognises_exactly_the_wizards_own_replies(content, world)
     assert said and all(smithing.is_step_line(line) for line in said), [line for line in said if not smithing.is_step_line(line)]
     assert {smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.ARMOR_ASK_MAIN, smithing.ARMOR_ASK_AUX,
             smithing.READY, smithing.CANCELLED} <= set(said)  # 每一句問話都真的走過一遍
-    for other in ("鐵匠把兩份精鐵砂下爐，打出一把【玄玄劍】（劍・屬剛・一階下品）。", "（還差 15 兩。）", "洛陽傳來消息：宮裡的風向變了。",
+    for other in ("打出一把【玄玄劍】（劍・屬剛・一階下品）：鐵匠把兩份精鐵砂下爐。", "（還差 15 兩。）", "洛陽傳來消息：宮裡的風向變了。",
                   "兵器：劍", "兵器：。", "主料：", smithing.NOT_ENOUGH, ""):
         assert not smithing.is_step_line(other), other
 
@@ -747,11 +747,32 @@ def test_a_server_bot_cancels_a_draft_that_no_longer_matches_its_plan(content, w
 
 
 def test_server_bots_keep_silver_for_healing_after_a_forge(content, world):
+    """FB-144（PM 2026-10-13）：一爐之後留的錢從 30 兩降到 10 兩——二階 60 兩，身上 70 兩打得起（剛好留 10），65 兩不打。"""
     from tianxia import bot
-    game = _smithy(content, world, silver=80)  # 二階 60 兩：打完只剩 20，不到 FORGE_SILVER_RESERVE（30）
+    assert bot.FORGE_SILVER_RESERVE == 10
+    for silver, forges in ((65, False), (70, True)):
+        game = _smithy(content, world, silver=silver, name=f"留{silver}")
+        game.state.player.weapon = _blade()
+        game.state.player.materials = {"gang_2": 2}
+        assert (bot.forge_step(game) is not None) is forges
+        assert bot.forge_ready(game) is forges
+
+
+def test_a_server_bot_in_town_with_a_forge_ready_heads_for_the_smith(content, world):
+    """FB-144：人在城鎮、身上湊得出一爐又付得起時，「進鐵匠鋪」那顆照 SMITH_SCORE 那一套多加 FORGE_SCORE，不然假人路過城鎮
+    那幾輪多半挑了遊歷、趕路，一爐都沒打；只有換買修的事照舊 SMITH_SCORE。合起來高過往軍令走的那一步、低過軍令本身
+    （帶著糧草的假人照舊先接糧車，test_orders.test_bot_takes_a_cart_when_it_has_grain）。"""
+    from tianxia import bot, bot_policy
+    from tianxia.state import BotProfile
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    game = _forger(content, world)
     game.state.player.weapon = _blade()
-    game.state.player.materials = {"gang_2": 2}
-    assert bot.forge_step(game) is None
+    door = next(o for o in game.options(odds=False) if o.id == "act:smith")
+    assert bot.forge_ready(game) and bot_policy.score(game, door, profile) == bot_policy.SMITH_SCORE + bot_policy.FORGE_SCORE
+    assert bot_policy.ORDER_MOVE_SCORE < bot_policy.SMITH_SCORE + bot_policy.FORGE_SCORE < bot_policy.ORDER_SCORE
+    game.state.player.materials = {}
+    door = next((o for o in game.options(odds=False) if o.id == "act:smith"), None)
+    assert not bot.forge_ready(game) and (door is None or bot_policy.score(game, door, profile) in (None, bot_policy.SMITH_SCORE))
 
 
 # ── 打造隱藏配方第一批 Task 1：不叫模型，一般組合照對照表（設計第八節、4.1；PM 2026-10-12 決定第 1 條）──

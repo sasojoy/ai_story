@@ -50,6 +50,10 @@ RAID_ODDS = CHALLENGE_ODDS
 BOUNTY_SCORE = 8.0
 BOUNTY_MOVE_SCORE = 6.0
 SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力
+# 人在城鎮、身上湊得出一爐又付得起（bot.forge_ready）時「進鐵匠鋪」再多這麼多（FB-144，PM 2026-10-13）：不加的話假人路過城鎮那幾輪
+# 多半挑了遊歷、趕路，一整季一爐都沒打。照 SMITH_SCORE 再加一份（合起來 16）：高過一般的遊歷、往軍令與懸賞走的那一步，
+# 低過軍令本身（ORDER_SCORE 30：替軍令遊歷、接糧車）——不然手上帶著糧草的假人會先把糧草下爐，不去接糧車
+FORGE_SCORE = SMITH_SCORE
 MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
@@ -522,8 +526,10 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return None
         if arg == "bounties":  # 懸賞榜：有揭得下的才打開（不然只是開了又返回）
             return BOUNTY_SCORE if _takeable(game) else None
-        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修、要打的才進去（不然只是開了又離開）
-            return SMITH_SCORE if _smith_want(game) else None
+        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修、要打的才進去（不然只是開了又離開）；湊得出一爐又付得起再多 FORGE_SCORE
+            if not _smith_want(game):
+                return None
+            return SMITH_SCORE + (FORGE_SCORE if bot.forge_ready(game) else 0.0)
         if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
             return MARKET_SCORE if bot.market_want(game) else None
         if arg == "explore" and _bounty_here(game, "scout"):

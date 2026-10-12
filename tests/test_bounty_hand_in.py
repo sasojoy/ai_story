@@ -501,6 +501,27 @@ def _open(content, world, name, *picks):
     return _ids(content, world, name)
 
 
+def test_the_greyed_line_says_when_only_a_divine_original_fits(beta_setup):
+    """FB-145：身上只有神器原品對得上某張求兵時（拿在手上、放在裝備庫都一樣），灰掉那一行在那一張後面照實寫原品交不得，
+    不是只有一句籠統的「求兵要種類與屬性都對得上的兵器」；別張照舊。打了一把仿品之後那一張就交得出、不在灰的那一行裡。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    arms = _arms(world, attribute="快", weapon_kind="弓弩", faction="haoqiang")
+    other = _arms(world, attribute="柔", weapon_kind="槍", faction="haoqiang")
+    original = _blade("兵:1", kind="弓弩", attribute="快", tier=3, quality="上品", original=True, secret="wd_chase_lightning")
+    for place in ("rack", "weapon"):
+        _edit(world, "丁", lambda p: (setattr(p, "weapon", original), setattr(p, "rack", [])) if place == "weapon"
+              else (setattr(p, "weapon", None), setattr(p, "rack", [original])))
+        label = _open(content, world, "丁")["bounty:none"].label
+        kept = f"{bounties.issuer(content, arms)}・{bounties.title(content, arms)}{bounties.ONLY_ORIGINAL}"
+        assert kept in label, label
+        assert f"{bounties.issuer(content, other)}・{bounties.title(content, other)}{bounties.ONLY_ORIGINAL}" not in label
+        _do(content, world, "丁", lambda g: g.choose("bounty:back"))
+    _edit(world, "丁", lambda p: p.rack.append(_blade("兵:2", kind="弓弩", attribute="快", tier=3, quality="上品",
+                                                       copy_of="鑄|wd_chase_lightning", secret="wd_chase_lightning")))
+    menu = _open(content, world, "丁")
+    assert f"bounty:pick:{arms.id}" in menu and bounties.ONLY_ORIGINAL not in menu["bounty:none"].label
+
 def test_the_board_lists_hand_ins_first_then_takes_then_one_greyed_line(beta_setup):
     """設計 4.3：交得出的求藝、求兵每張一顆「交出…」排最前面（寫賞、你有幾件合用、期限與名額），再來原本的揭下，交不出的收成一行灰掉的，
     最後「返回」。「懸賞榜（N 張）」的 N 等於列出的張數（灰掉那一行照它包含幾張算）；陣營的人只算自己陣營的，豪強也有自己的可做。"""
