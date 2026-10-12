@@ -2,7 +2,7 @@
 用假時鐘跑完一整季，印出有沒有開戰、兩邊參戰人數、各陣營人數、結局，以及假人合成的量測（「合成」那一行：
 開爐的種類、首創與合到舊的、模型呼叫數、輪不到取名的次數、庫存最多幾門；假人取名預設用字表組的假名字、只數次數，
 `--real-model` 才真的叫模型），與懸賞、截殺的量測（「懸賞」那一行，懸賞榜設計 11.2：每一種懸賞掛出、揭下、交差幾張，
-求藝交出幾門、求兵交出幾把，截殺幾場，被截殺最多的那個人一季被截幾次、丟了多少銀兩與氣血，每一週最多冒出幾批〔應該是 1〕）；打造第二批起多一行「打造」（假人整季打了幾爐、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件）。
+求藝交出幾門、求兵交出幾把，截殺幾場，被截殺最多的那個人一季被截幾次、丟了多少銀兩與氣血，每一週最多冒出幾批〔應該是 1〕）；打造第二批起多一行「打造」（假人整季打了幾爐、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件）；打造第三批起再多一行「本命」（這一季哪幾位名將的本命兵器被拿走了、送還是奪，假人裡打贏孫堅本人最多幾次；「打造」那一行的「本命」是假人身上與裝備庫裡本命兵器的件數）。
 
 執行：.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 --time-scale 6 --tick 60
 （加 --pause-at 4 --pause-hours 3：開季後第 4 個現實鐘頭讓賽季時鐘停 3 個鐘頭；結果的 pause 一欄寫停的那一段季走了多少，應該是 0）
@@ -23,7 +23,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, bounties, database, library, naming, server_bots  # noqa: E402
+from tianxia import bot, bounties, database, insight_llm, library, naming, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import name_key, open_characters  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
@@ -154,14 +154,25 @@ def _pause_step(world, content, now: float, pause: tuple[float, float], frozen: 
 
 
 def smith_report(states) -> dict:
-    """假人整季的打造（打造第二批，PM 決定第 3 條）：打了幾爐（forge_counts 加總）、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件。"""
+    """假人整季的打造（打造第二批，PM 決定第 3 條）：打了幾爐（forge_counts 加總）、幾個假人打過、身上與裝備庫裡的名器、神器原品、仿品各幾件。
+    「原品」只數打出來的；名將的本命兵器（打造第三批，也是 original）另外數成「本命」。"""
     items = [i for s in states for i in (s.player.weapon, s.player.armor, *s.player.rack) if i is not None]
     return {
         "打造": sum(sum(s.player.forge_counts.values()) for s in states),
         "打過的假人": sum(1 for s in states if s.player.forge_counts),
         "名器": sum(1 for i in items if i.secret and not i.original and i.copy_of is None),
-        "原品": sum(1 for i in items if i.original),
+        "原品": sum(1 for i in items if i.original and i.signature is None),
         "仿品": sum(1 for i in items if i.copy_of),
+        "本命": sum(1 for i in items if i.signature is not None),
+    }
+
+
+def signature_report(season, states) -> dict:
+    """名將本命兵器（打造第三批）：這一季哪幾位的被拿走了、怎麼拿的（gift 送、seized 奪），假人裡打贏孫堅本人最多幾次
+    （figure_wins；挑戰本人只在第一季規則開著時有，14 天的季一定是 0）。"""
+    return {
+        "拿走": {cid: claim.via for cid, claim in season.signature_arms.items()},
+        "打贏孫堅最多": max((s.player.figure_wins.get("sunjian", 0) for s in states), default=0),
     }
 
 
@@ -184,7 +195,7 @@ def run_season(
     sides: Counter = Counter()
     battle_started_day = None
     tally = ForgeTally()
-    real_forge, real_generate = Game.forge, naming.generate
+    real_forge, real_generate, real_sense = Game.forge, naming.generate, insight_llm.name
 
     def counted_forge(self, art_id, insight_ids, proposed=None, other_art=None):
         kind = "blend" if other_art else "fuse" if art_id else "merge"
@@ -201,6 +212,14 @@ def run_season(
             return request.choices[0], ""
         salt = tally.mastered if request.kind == "master" else tally.named
         return naming.fallback_name(content_, f"模擬|{request.key}", request.name_kind, salt=salt), ""
+
+    def counted_sense(client, content_, facts, image="", budget=None, person=None):
+        """假人「有所感」替意境取名的 B 段（insight_llm.name）：記一次呼叫；不是真的模型時照沒有模型的路走（回沒取到，
+        C 段照 bot_policy.apply_job 的退路），不然假的 client（object()）會在 ollama_client.capped 丟 AttributeError（FB-130）。"""
+        tally.named += 1
+        if real_model:
+            return real_sense(client, content_, facts, image=image, budget=budget, person=person)
+        return None, "", ""
 
     count_new, count_landed = _counting(tally, "new"), _counting(tally, "landed")
     bounty_tally = BountyTally()
@@ -233,6 +252,7 @@ def run_season(
             mock.patch.object(SqliteWorldStore, "link_recipe", count_landed(SqliteWorldStore.link_recipe)), \
             mock.patch.object(SqliteWorldStore, "link_insight_recipe", count_landed(SqliteWorldStore.link_insight_recipe)), \
             mock.patch.object(Game, "forge", counted_forge), mock.patch.object(naming, "generate", counted_generate), \
+            mock.patch.object(insight_llm, "name", counted_sense), \
             mock.patch.object(bounties, "take", counted_take), mock.patch.object(bounties, "_complete", counted_complete), \
             mock.patch.object(Game, "_raid_record", counted_record):
         world.seed_first_season(content)
@@ -289,6 +309,7 @@ def run_season(
         "forge": tally.report([len(library.owned_arts(s)) for s in bots]),
         "bounties": bounty_tally.report(),
         "smith": smith_report(bots),
+        "signature": signature_report(season, bots),
         "late_joiners": late,  # 季中才加入（joined_at > 0）的角色數：新手福利從他們自己加入那天起算
         "pause": pause_log,
     }
@@ -316,7 +337,7 @@ def main() -> None:
             finally:
                 database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾（這一季出錯時也一樣）
         forge, bounty = result.get("forge"), result.get("bounties")
-        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k not in ('forge', 'bounties', 'smith')} }", flush=True)
+        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k not in ('forge', 'bounties', 'smith', 'signature')} }", flush=True)
         if forge is not None:
             print(f"　合成：{forge}", flush=True)
         if bounty is not None:
@@ -324,6 +345,9 @@ def main() -> None:
         smith = result.get("smith")
         if smith is not None:
             print(f"　打造：{smith}", flush=True)
+        signature = result.get("signature")
+        if signature is not None:
+            print(f"　本命：{signature}", flush=True)
 
 
 if __name__ == "__main__":

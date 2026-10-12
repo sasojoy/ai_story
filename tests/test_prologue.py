@@ -1000,12 +1000,12 @@ def test_the_hut_gives_no_road_sight_and_the_farewell_line_comes_once(fresh):
     assert all(not o.id.startswith("move:hut") for o in fresh.options())
 
 
-@pytest.mark.parametrize("mode", ["walk", "hurry", "dash"])
+@pytest.mark.parametrize("mode", ["walk", "dash"])
 def test_leaving_the_hut_fills_the_stamina_whatever_the_way(fresh, mode):
     """出師那一步的獎勵是人走出草廬時唯一能補體力的地方（略過的人由 finish 補）：不管怎麼走、走之前剩多少，抵達潁川都是滿的，
     跟略過序章的人一樣。"""
     _to_step(fresh, 10)
-    fresh.state.player.stamina = 40.0  # 趕路、疾行要花體力：夠付、又離滿很遠
+    fresh.state.player.stamina = 40.0  # 疾行要花體力：夠付、又離滿很遠
     fresh.set_move_mode(mode)
     fresh.choose("move:town" if mode == "walk" else f"move:town:{mode}")
     assert fresh.state.player.stamina < fresh.content.config.stamina_max or fresh.state.player.journey is None

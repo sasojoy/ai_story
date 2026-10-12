@@ -83,9 +83,39 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 伺服器重開後**每個人都要重新登入一次**。帳號、角色、進度都還在。
 - 有網址的人都能進來註冊，所以網址只私下給，不要貼在公開的地方。
 
-## 換成自己的網域（Cloudflare 具名 Tunnel）
+## 固定網域（Cloudflare 具名 Tunnel）——2026-10-13 已經做好了
 
-封測要用固定的網址：LINE、Google 登入只認事先登記好的網址；trycloudflare 每次重開都換，不能用（線上架構帳號計畫開頭的清單第 1、2 項）。下面是企劃者自己做一次的步驟。指令裡的 `tianxia-game.com` 換成你買的網域，`tianxia` 是隧道的名字，照用就好。
+**網址是 https://tianxiadashi.com**（`www.tianxiadashi.com` 指同一條），隧道叫 `tianxia`。重開伺服器網址不會變，所以 LINE、Google 登入登記的回傳網址、分享出去的連結都可以寫死它。
+
+- **伺服器從此不要加 `--share`**。`--share` 是開 trycloudflare 臨時網址用的，每次重開都換一組；兩個一起開只是多一條沒人用的網址。
+- 隧道是**獨立的行程**，跟伺服器各自開關：伺服器重開不必動隧道。
+- 設定在 `C:\Users\User\.cloudflared\config.yml`（隧道 id、憑證檔、兩個 hostname 都指 `http://127.0.0.1:7861`）。`cert.pem` 與 `<UUID>.json` 是密鑰：**不要進 git、不要貼進任何對話或頻道**。
+- **分享的「傳」要用這個網址**：啟動伺服器前設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`，不然公開的傳會照「這次請求的網址」組，trycloudflare 時代那些連結過幾天就死了。
+
+怎麼開隧道（Claude session 用 WMI 分離啟動，跟伺服器同一套做法）：
+
+```powershell
+$cf  = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+$log = "C:\Users\User\.cloudflared\tunnel.log"
+$cmd = "cmd.exe /c `"`"$cf`" tunnel run tianxia > `"$log`" 2>&1`""
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $cmd; CurrentDirectory = "C:\Users\User\.cloudflared"}
+```
+
+`tunnel.log` 出現四行 `Registered tunnel connection`（實測是 tpe01／khh01，台北與高雄的邊緣節點）就通了。要停：挑 `cloudflared.exe` 跑 `tunnel run tianxia` 的行程砍掉。
+
+怎麼驗（**先看 HTTP，不要只看 HTTPS**）：
+
+```powershell
+curl -o /dev/null -w "%{http_code}`n" http://tianxiadashi.com/
+```
+
+- **200**＝伺服器也開著，整條路都通。
+- **502**＝隧道通、DNS 對，只是遊戲伺服器沒開。這是伺服器停著時的正常回應，不是故障。
+- 連不上、`000`＝DNS 或隧道的問題，看 `tunnel.log`。
+- **新網域剛接上時 HTTPS 會先失敗**（TLS handshake 被拒）：Cloudflare 的 Universal SSL 還沒簽發，等 15 分鐘到幾小時。HTTP 已經回 502 或 200 就表示 DNS 與隧道都對了，只差憑證。一直不好就看 Cloudflare 後台 SSL/TLS → Edge Certificates 是不是 Active。**憑證還沒好之前不要把網址發給玩家**，他們只會看到連不上。
+- 登入 cookie 不受影響：`server.py` 的 `tx_session` 只有 `httponly` 與 `samesite=lax`，沒有綁 scheme。
+
+下面是當初建起來的步驟，留著備查（換網域、或要在另一台機器重建時照它做一次）。指令裡的 `tianxia-game.com` 換成你的網域。
 
 > 這台電腦已經裝好 cloudflared（2026.9.3），下面的指令都是它內建說明裡有的。哪一步出了沒寫到的訊息，截圖給 PM。
 
@@ -325,6 +355,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **打造第二批（神器）上線之後要退回舊程式**：這一批沒改資料庫結構（維持第 5 版；第 5 版是玩家傳第一批升的，要退到那一批之前看那一段），退回打造第二批之前的程式打得開檔、不會壞檔：神器原品的主人、定的名字、仿品數記在 `gear_recipes` 裡「鑄|」那幾列的 `data`，舊程式讀成名器那一筆、不認得神器；定了名的那一列名字欄是定的名字，舊程式照樣當它被佔，不會撞名。手上的原品、仿品照存檔的名字照用，只是加成變回一般三階上品，原品也拆得掉、交得了（舊程式不認 `original`）。三階素材的新來源跟著沒了，已經拿到的照留。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨，不還原也不會丟玩家的東西。
 
+**打造第三批（名將本命兵器）上線之後要退回舊程式**：這一批沒改資料庫結構（維持第 5 版），退回打造第二批的程式打得開檔、不會壞檔：本命兵器變成沒有 `secret` 的神器原品（舊程式不認 `Equipment.signature`，讀檔時略過），手上的那一把加成、「・神器」的階品、拆不得、交不得照舊（舊程式的 `original` 那幾支），名字照存檔寫的（舊程式不重寫它，joy 之後改的名字跟不上）；舊程式的 `forge_secrets.unnamed_originals`、`refresh_names` 都先看 `secret`，本命兵器沒有 `secret`，所以不會出現在「等著定名」裡、名字也不會被神器那一列改掉。本命兵器的歸屬（`WorldState.signature_arms`）與這一季打贏名將的次數（`PlayerState.figure_wins`）舊程式不認得，下一次存季、存角色就丟了：這一季那位名將可能再給一次，已經收了的季（`seasons` 表裡舊的那幾列）不受影響，只是神器譜上本命兵器那幾行（舊程式不讀）看不到。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨，不還原也不會丟玩家手上的東西。
+
 **玉璽一（玉璽碎片）上線之後要退回舊程式**：資料庫版本沒變（第 5 版），舊程式打得開檔，但**會丟碎片**：舊程式讀 world 那一列時略過不認得的 `seal`、`seal_duels`，下一次寫入就整個沒了（誰持有哪一片、密鹽、單挑都不在了）；角色身上的 `heirloom`、`seal_seen`、`seen_real` 也一樣。所以退版一定要停伺服器和假人、拿上線前的備份還原；不還原的話，再升回新程式時七片全部回到未現世。
 
 ## 換成第一季濃縮版的那一天
@@ -385,12 +417,14 @@ Claude session 不能開互動視窗，改用 `Start-Process` 在背景啟動，
 ```powershell
 cd C:\Ray\專案\天下大勢
 $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
-$srv = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","server.py","--port","7861","--share" -RedirectStandardOutput server_out.log -RedirectStandardError server_err.log -WindowStyle Hidden -PassThru
+$env:TIANXIA_PUBLIC_URL = "https://tianxiadashi.com"   # 分享的「傳」用固定網域
+$srv = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","server.py","--port","7861" -RedirectStandardOutput server_out.log -RedirectStandardError server_err.log -WindowStyle Hidden -PassThru
 $bots = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" -RedirectStandardOutput bots_out.log -RedirectStandardError bots_err.log -WindowStyle Hidden -PassThru
 "server $($srv.Id)  bots $($bots.Id)"
 ```
 
-- 公開網址印在 `server_out.log`，大約 7 秒後出現。用 `Get-Content server_out.log -Encoding UTF8` 讀，不加 `-Encoding UTF8` 中文會變亂碼。
+- **2026-10-13 起不加 `--share`**：網址是固定的 https://tianxiadashi.com（見上面「固定網域」），隧道另外開一個行程，伺服器重開網址不變、不必再等 log 印網址、也不必重新發給玩家。還要臨時網址時才加 `--share`（公開網址印在 `server_out.log`，大約 7 秒後出現；用 `Get-Content server_out.log -Encoding UTF8` 讀，不加 `-Encoding UTF8` 中文會變亂碼）。
+- 啟動訊息還是要對：`server_out.log` 與 `bots_out.log` 的「資料庫：…」「設定：…」兩行要一樣。
 - `-u` 一定要加。沒加的話，Python 寫檔時會先存在緩衝裡，伺服器其實已經開好了，log 卻一直是空的。
 - **停的時候用 `/T` 關整棵**：`taskkill /PID <server 的 PID> /T /F`，假人也一樣。實測這樣會連 cloudflared 一起關掉。
 - **不要只關「正在聽 7861 的那個 PID」**：`.venv` 的 python.exe 會再開一個真正的 python，cloudflared 是那個 python 開出來的。只關它的話，cloudflared 會留著、繼續連 7861，**重開後舊網址照樣進得到新伺服器**（FB-021）。

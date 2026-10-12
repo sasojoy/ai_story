@@ -256,6 +256,17 @@ def test_a_divine_original_is_never_offered_to_an_arms_bounty(beta_setup):
     assert _do(content, world, "丙", lambda g: bounties.fitting(g.state, g.content, g.world, arms))[0] == ["兵:2"]
 
 
+def test_a_signature_arm_is_never_offered_to_an_arms_bounty(beta_setup):
+    """打造第三批：名將本命兵器同神器原品，交不得求兵（手上那把也不收），原因寫它自己的。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    arms = _arms(world, attribute="快", weapon_kind="槍")
+    _edit(world, "丙", lambda p: setattr(p, "weapon", _blade("兵:1", kind="槍", attribute="快", tier=3, quality="上品",
+                                                              original=True, signature="sunjian")))
+    problems = _do(content, world, "丙", lambda g: [bounties.fit_problem(g.state, g.content, g.world, arms, "兵:1")])[0]
+    assert problems == [bounties.SIGNATURE_KEPT]
+
+
 def test_fitting_lists_the_art_that_melts_for_least_first(beta_setup):
     """設計 4.4：合用的照「最不值錢的先」排——求藝照熔煉值（library.melt_value）、再照名字。"""
     content, world = beta_setup
@@ -521,6 +532,30 @@ def test_the_greyed_line_says_when_only_a_divine_original_fits(beta_setup):
                                                        copy_of="鑄|wd_chase_lightning", secret="wd_chase_lightning")))
     menu = _open(content, world, "丁")
     assert f"bounty:pick:{arms.id}" in menu and bounties.ONLY_ORIGINAL not in menu["bounty:none"].label
+
+def test_the_greyed_line_names_a_signature_arm_when_it_is_all_that_fits(beta_setup):
+    """打造第三批：身上對得上某張求兵的只有名將的本命兵器時，灰掉那一行寫本命兵器交不得（不是神器原品那一句）；
+    同時還有一把神器原品對得上，就說原品（兩樣都交不得，原品是比較常見的那一種原因）。"""
+    content, world = beta_setup
+    content.config.weapons.enabled = True
+    arms = _arms(world, attribute="快", weapon_kind="槍", faction="haoqiang")
+    signature = _blade("兵:1", kind="槍", attribute="快", tier=3, quality="上品", original=True, signature="sunjian")
+    _edit(world, "丁", lambda p: (setattr(p, "weapon", signature), setattr(p, "rack", [])))
+    tail = f"{bounties.issuer(content, arms)}・{bounties.title(content, arms)}"
+    label = _open(content, world, "丁")["bounty:none"].label
+    assert tail + bounties.ONLY_SIGNATURE in label and bounties.ONLY_ORIGINAL not in label
+    assert _do(content, world, "丁", lambda g: [bounties.only_original(g.state, arms)])[0] == [bounties.ONLY_SIGNATURE]
+    _do(content, world, "丁", lambda g: g.choose("bounty:back"))
+    _edit(world, "丁", lambda p: p.rack.append(_blade("兵:2", kind="槍", attribute="快", tier=3, quality="上品",
+                                                       original=True, secret="wd_chase_lightning")))
+    label = _open(content, world, "丁")["bounty:none"].label
+    assert tail + bounties.ONLY_ORIGINAL in label and bounties.ONLY_SIGNATURE not in label
+    assert _do(content, world, "丁", lambda g: [bounties.only_original(g.state, arms)])[0] == [bounties.ONLY_ORIGINAL]
+    _edit(world, "丁", lambda p: setattr(p, "weapon", _blade("兵:3", kind="劍", attribute="柔")))  # 手上換成配不上的，庫裡的神器原品還在
+    assert _do(content, world, "丁", lambda g: [bounties.only_original(g.state, arms)])[0] == [bounties.ONLY_ORIGINAL]
+    _edit(world, "丁", lambda p: setattr(p, "rack", []))
+    assert _do(content, world, "丁", lambda g: [bounties.only_original(g.state, arms)])[0] == [""]  # 都沒有對得上的：不是這一種原因
+
 
 def test_the_board_lists_hand_ins_first_then_takes_then_one_greyed_line(beta_setup):
     """設計 4.3：交得出的求藝、求兵每張一顆「交出…」排最前面（寫賞、你有幾件合用、期限與名額），再來原本的揭下，交不出的收成一行灰掉的，

@@ -245,8 +245,8 @@ def test_a_follower_who_cannot_keep_up_is_left_behind(content):
     b.state.player.tagalong = Tagalong(leader="甲", since=NOW)
     b.state.player.stamina = 0
     _done(b)
-    a.set_move_mode("hurry")
-    msgs = a.choose("move:lake:hurry")
+    a.set_move_mode("dash")
+    msgs = a.choose("move:lake:dash")
     assert "乙沒能跟上，你們就此分開。" in msgs
     stored = CharacterStore(a.world.db).load("乙")
     assert stored.player.tagalong is None and stored.player.journey is None

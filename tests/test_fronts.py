@@ -92,18 +92,21 @@ def test_switch_on_reads_fronts_as_themselves(on):
     assert [rules.pushable(on, w, t) for t in ("huangjin", "yingru", "geju")] == [False, True, True]
 
 
-@pytest.mark.parametrize("faction, delta", [(None, -1), ("guan", -1), ("huang", 1), ("haoqiang", -1)])
-def test_switch_off_training_at_changshe_moves_huangjin_as_before(real, faction, delta):
-    """開關關著：在長社遊歷打贏（黃巾的人遇上黃巾的隊伍是操練），黃巾聲勢的變化跟 T1 之前一模一樣——
-    長社原本寫 huangjin -1：散人、官軍、豪強 -1，黃巾 +1；也不會冒出別的線。"""
+@pytest.mark.parametrize("faction, delta, moved", [(None, -1, -1), ("guan", -1, -1), ("huang", 1, 0), ("haoqiang", -1, -1)])
+def test_switch_off_training_at_changshe_moves_huangjin_as_before(real, faction, delta, moved):
+    """開關關著：在長社遊歷打贏，黃巾聲勢的變化跟 T1 之前一樣——長社原本寫 huangjin -1：散人、官軍、豪強 -1；也不會冒出別的線。
+    黃巾的人遇上黃巾的隊伍是操練：方向照舊是 +1（train_trend_push），推的量照季長縮放（FB-165：14 天的季 ×2.5／14），
+    這一下推不到一點，零頭記在 trend_accum、不寫推動那一行。"""
     game = _game(real)
     game.state.player.faction = faction
     game.state.player.location = "changshe"
     assert game.train_trend_push() == {"huangjin": delta}
     with _win():
         msgs = game._squad_encounter("louluo")  # 黃巾嘍囉是黃巾的隊伍
-    assert game.state.world.trends == {"huangjin": 25 + delta, "yuxi": 0}
-    assert f"（黃巾聲勢 {delta:+d}）" in msgs
+    assert game.state.world.trends == {"huangjin": 25 + moved, "yuxi": 0}
+    assert (f"（黃巾聲勢 {delta:+d}）" in msgs) is bool(moved)
+    if not moved:
+        assert game.state.world.trend_accum["huangjin"] == pytest.approx(delta * game.drill_scale(), abs=1e-6)
 
 
 def test_switch_off_effect_front_pushes_huangjin_anywhere(real):

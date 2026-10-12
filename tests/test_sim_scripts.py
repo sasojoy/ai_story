@@ -195,7 +195,7 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 坐騎開：" in out and "種子 1 坐騎關：" in out
-    assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("趕路疾行體力 ") == 2
+    assert out.count("走了 ") == 2 and out.count("走路花 ") == 2 and out.count("疾行體力 ") == 2
     assert out.count("買馬 ") == 2 and out.count("、餵 ") == 2 and out.count("策馬脫身 ") == 2
     assert out.count("決戰騎著馬 ") == 2 and out.count("一階素材 ") == 2 and out.count("結局 ") == 2
 
@@ -281,7 +281,23 @@ def test_the_server_bot_simulation_reports_smithing():
         rack=[Weapon(id="兵:2", name="乙", kind="劍", secret="t", copy_of="鑄|t"), Weapon(id="兵:3", name="丙", kind="劍", secret="u")],
     ))
     idle = NS(player=NS(forge_counts={}, weapon=None, armor=None, rack=[]))
-    assert sim.smith_report([smith, idle]) == {"打造": 3, "打過的假人": 1, "名器": 1, "原品": 1, "仿品": 1}
+    assert sim.smith_report([smith, idle]) == {"打造": 3, "打過的假人": 1, "名器": 1, "原品": 1, "仿品": 1, "本命": 0}
+
+
+def test_the_server_bot_simulation_reports_signature_arms():
+    """打造第三批：這一季哪幾位名將的本命兵器被拿走了、怎麼拿的，假人裡打贏孫堅本人最多幾次（signature_report）。
+    本命兵器是神器原品的一種，但「原品」只數打出來的，本命兵器另外數（smith_report 的「本命」）。"""
+    from types import SimpleNamespace as NS
+    from tianxia.state import SignatureClaim, Weapon
+    sim = _load("sim_server_bots")
+    season = NS(signature_arms={"sunjian": SignatureClaim(owner="甲", via="seized")})
+    bots = [NS(player=NS(figure_wins={"sunjian": 3})), NS(player=NS(figure_wins={}))]
+    assert sim.signature_report(season, bots) == {"拿走": {"sunjian": "seized"}, "打贏孫堅最多": 3}
+    assert sim.signature_report(NS(signature_arms={}), []) == {"拿走": {}, "打贏孫堅最多": 0}
+    holder = NS(player=NS(
+        forge_counts={}, weapon=Weapon(id="兵:1", name="江潮槍", kind="槍", original=True, signature="sunjian"), armor=None, rack=[],
+    ))
+    assert sim.smith_report([holder]) == {"打造": 0, "打過的假人": 0, "名器": 0, "原品": 0, "仿品": 0, "本命": 1}
 
 
 def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypatch):

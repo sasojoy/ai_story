@@ -242,17 +242,20 @@ def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(con
 
     member, p = state.player.member, state.player
     # 卷軸卡的療傷鈕自己寫字（內傷與 heal_cost）；伺服器只說按不按得下去與原因，不再送 label（review-ap3 M4：沒有人讀它）
-    assert skillview.heal_button(state, content) == {"ok": False, "why": "氣血無恙，不用療傷。"}
+    assert skillview.heal_button(state, content) == {"ok": False, "why": "氣血無恙，不用療傷。", "clinic": None, "note": None}
     member.injury, p.stats["silver"] = 35.0, 100
-    assert skillview.heal_button(state, content) == {"ok": True, "why": None}
+    assert skillview.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "內傷 35・18 兩"}
     assert team.heal_cost(content, member) == 18  # 每 2 點內傷 1 兩，進位：頁面上寫的價錢是 server 的 heal_cost
     team.heal(state, content, member)
     assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 寫的價錢就是真的收的價錢
 
 
-def test_heal_button_is_greyed_out_with_the_reason_when_the_silver_is_short(content, state):
+def test_heal_button_is_greyed_out_with_the_reason_when_there_is_no_silver(content, state):
+    """銀兩不夠全治時治一部分（team.heal_plan，PM 2026-10-12）；一兩都沒有才灰掉。"""
     state.player.member.injury, state.player.stats["silver"] = 35.0, 5
-    assert skillview.heal_button(state, content) == {"ok": False, "why": "銀兩不足：療傷需要 18 兩。"}
+    assert skillview.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "治 10 點・5 兩（還剩 25 點）"}
+    state.player.stats["silver"] = 0
+    assert skillview.heal_button(state, content) == {"ok": False, "why": "銀兩不足：療傷需要 18 兩。", "clinic": None, "note": None}
     from tianxia import team
 
     assert team.heal(state, content, state.player.member) == ["銀兩不足：療傷需要 18 兩。"]  # 按下去（舊版畫面）回的是同一句
@@ -268,14 +271,14 @@ def test_the_menxia_view_carries_the_heal_button(real):
     import server
 
     game = _real_game(real)
-    assert server.menxia_view(game)["heal"] == {"ok": False, "why": "氣血無恙，不用療傷。"} and server.menxia_view(game)["heal_cost"] == 0
+    assert server.menxia_view(game)["heal"] == {"ok": False, "why": "氣血無恙，不用療傷。", "clinic": None, "note": None} and server.menxia_view(game)["heal_cost"] == 0
     game.state.player.member.injury, game.state.player.stats["silver"] = 20.0, 50
-    assert server.menxia_view(game)["heal"] == {"ok": True, "why": None} and server.menxia_view(game)["heal_cost"] == 10
-    game.state.player.stats["silver"] = 4
+    assert server.menxia_view(game)["heal"] == {"ok": True, "why": None, "clinic": None, "note": "內傷 20・10 兩"} and server.menxia_view(game)["heal_cost"] == 10
+    game.state.player.stats["silver"] = 0
     view = server.menxia_view(game)["heal"]
     assert not view["ok"] and "銀兩不足" in view["why"] and "label" not in view
-    game.heal()  # 錢不夠：不收、不寫紀錄，內傷還在
-    assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 4
+    game.heal()  # 一兩都沒有：不收、不寫紀錄，內傷還在
+    assert game.state.player.member.injury == 20.0 and game.state.player.stats["silver"] == 0
 
 
 # ── FB-083：絕學被定名，手上有那一門的人下次同步補一則紀錄 ─────────────────

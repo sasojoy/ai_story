@@ -57,16 +57,14 @@ def test_creates_the_character_when_it_does_not_exist_yet(tmp_path, capsys):
 
 
 def test_a_character_it_creates_gets_the_same_profile_as_the_server(tmp_path, capsys, monkeypatch):
-    """設定照伺服器那一份（TIANXIA_PROFILE，content.env_profile）：週末設定下建的角色，開場那一則的贈禮那一行是週末設定的
-    （測試期一鍵補滿）；沒設就是預設的那一行。以前這支腳本不看 TIANXIA_PROFILE，一律拿預設設定建角色。"""
+    """設定照伺服器那一份（TIANXIA_PROFILE，content.env_profile）：週末設定下建角色，印的設定那一行是週末設定的；
+    沒設就是預設的那一行。以前這支腳本不看 TIANXIA_PROFILE，一律拿預設設定建角色。"""
     weekend, plain = real_content("weekend"), real_content()
-    assert weekend.config.beta_free_refill and not plain.config.beta_free_refill
-    assert howto.gift_line(weekend) != howto.gift_line(plain)
+    assert profile_line(weekend, "weekend") != profile_line(plain, None)
     monkeypatch.setenv("TIANXIA_PROFILE", "weekend")
     assert _run(tmp_path, "Rayal", "--character", "Rayal") == 0
     assert profile_line(weekend, "weekend") in capsys.readouterr().out  # 跟伺服器啟動時印的同一行
-    lines = CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
-    assert howto.gift_line(weekend) in lines and howto.gift_line(plain) not in lines
+    assert howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
     monkeypatch.delenv("TIANXIA_PROFILE")
     assert _run(tmp_path, "other", "--character", "沈青衫") == 0
     assert howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines

@@ -53,6 +53,9 @@ TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
 NAMED_MARK = "・名器"  # 待 joy 潤：照隱藏配方打出來的那一件，階品後面多這一段（打造隱藏配方設計 4.2）
 DIVINE_MARK = "・神器"  # 待 joy 潤：神器原品，階品後面多這一段（打造隱藏配方設計 5.3）
 COPY_MARK = "・仿品"  # 待 joy 潤：神器仿品
+SIGNATURE_MARK = "・本命"  # 待 joy 潤：名將本命兵器，階品後面多這一段（打造第三批；同時也是原品，但寫這一段不寫「・神器」）
+SIGNATURE_KEPT = "本命兵器不能拆"  # 待 joy 潤：本命兵器那一列的拆解鈕灰掉時寫的原因
+SIGNATURE_KEPT_LINE = "這是名將的本命兵器，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆本命兵器時回的那一句
 DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
@@ -62,6 +65,13 @@ DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒�
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
 ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
+
+
+def kept(item: Equipment) -> str:
+    """拆不得的原因（修練頁那一列灰掉的拆解鈕、鐵匠鋪那一顆）：本命兵器、神器原品（打造隱藏配方設計 5.4）；其餘是空字串。"""
+    if item.signature is not None:
+        return SIGNATURE_KEPT
+    return ORIGINAL_KEPT if item.original else ""
 
 
 def on(content: Content, slot: str) -> bool:
@@ -139,8 +149,10 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
 
 def grade(item: Equipment) -> str:
     """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接一段（打造隱藏配方設計 4.2、5.3；只看存檔的欄位，
-    不查內容）：神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
-    if item.original:
+    不查內容）：本命兵器「・本命」、神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
+    if item.signature is not None:
+        mark = SIGNATURE_MARK
+    elif item.original:
         mark = DIVINE_MARK
     elif item.copy_of is not None:
         mark = COPY_MARK
@@ -194,6 +206,8 @@ def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str
         return [DISMANTLE_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW]
     if not on(content, chosen.slot):
         return [NOT_NOW]
+    if chosen.signature is not None:
+        return [SIGNATURE_KEPT_LINE]  # 本命兵器：一季全服只有一把，拆了就沒了、上不了神器譜
     if chosen.original:
         return [ORIGINAL_KEPT_LINE]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
     material = dismantle_material(content, chosen)

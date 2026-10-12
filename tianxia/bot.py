@@ -11,11 +11,12 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import armor, bounties, clinic, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
+from .state import PLAYER
 from .sqlite_world import open_world
 from .world_state import WorldStateStore
 
@@ -34,11 +35,39 @@ MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_p
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
+CLINIC_AT = 0.15  # 內傷到氣血上限的這麼多（約兩三場落敗）就繞去醫館（企劃者 2026-10-12 療傷只在醫館）；整季機器人與假人共用
+CLINIC_MIN_SILVER = 20  # 付不起全治時（team.heal_plan 治一部分）手上至少這麼多才去、才療：不然每賺一兩就進醫館花掉
+CLINIC_URGENT = 0.25  # 到這麼多就先去醫館、排在軍令前面（PM 2026-10-12：假人被軍令拉走、帶著三四成內傷打一整季）；整季機器人在 CLINIC_AT 就一律先去
+
+
 def wants_heal(game: Game) -> bool:
-    """有內傷、而且付得起才療傷：療傷照內傷計價（見 team.heal_cost）。氣血低但沒有內傷時會自己回，
-    付不起時去療傷只會寫一筆「銀兩不足」。"""
+    """人在醫館、有內傷、付得起（can_pay_clinic）才療傷：療傷照內傷計價（見 team.heal_cost），付不起全治時治一部分。
+    氣血低但沒有內傷時會自己回；不在醫館按了只會寫「這裡沒有醫館」。"""
+    return can_pay_clinic(game) and clinic.here(game.state, game.content)
+
+
+def can_pay_clinic(game: Game) -> bool:
+    """有內傷，而且付得起全治、或手上至少 CLINIC_MIN_SILVER 兩（治一部分，team.heal_plan）。"""
     cost = team.heal_cost(game.content, game.state.player.member)
-    return 0 < cost <= game.state.player.stats.get("silver", 0)
+    return cost > 0 and game.state.player.stats.get("silver", 0) >= min(cost, CLINIC_MIN_SILVER)
+
+
+def injury_share(game: Game) -> float:
+    """本人的內傷佔氣血上限的幾成（醫館的兩道門檻 CLINIC_AT、CLINIC_URGENT 都跟它比）。"""
+    s, c = game.state, game.content
+    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER))
+    return s.player.member.injury / cap if cap > 0 else 0.0
+
+
+def clinic_hop(game: Game) -> str | None:
+    """內傷到 CLINIC_AT、付得起（can_pay_clinic）、人不在醫館也不在路上：往最近的醫館走的下一站（clinic.nearest）；不必去、走不到是 None。"""
+    s, c = game.state, game.content
+    if not clinic.on(c) or s.player.journey is not None or clinic.here(s, c):
+        return None
+    if not can_pay_clinic(game) or injury_share(game) < CLINIC_AT:
+        return None
+    route = clinic.nearest(s, c)
+    return None if route is None else route.path[0]
 
 
 def can_practise(game: Game, kind: str) -> bool:
@@ -291,7 +320,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", DUEL_FLEE)
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", DUEL_FLEE)
         and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:"))
     ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
@@ -573,7 +602,9 @@ def play_season(
             break
         take_pill(game)
         options = [o for o in game.options(odds=False) if o.enabled]
-        choice = pick(game, options, rng) if options else None
+        hop = clinic_hop(game)  # 內傷重了先繞去醫館（排在 pick 前面：量表包住 pick 的引導也不會把它蓋掉）
+        choice = f"move:{hop}" if hop is not None and f"move:{hop}" in {o.id for o in options} else (
+            pick(game, options, rng) if options else None)
         if choice is not None:
             if choice == sensing.DRAW:
                 sense_draw(game, rng)
@@ -583,6 +614,8 @@ def play_season(
                 allocate_points(game, rng)
                 spend_xinde(game, rng)
                 forge_and_cultivate(game, rng)
+            if wants_heal(game):  # 走進醫館就療傷（不等 spend_xinde 那一步：機器人不會在醫館裡久待）
+                game.heal()
             take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
             visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
             keep_book_names(game)  # 打出神器原品就沿用譜名（打造第二批）

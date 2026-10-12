@@ -17,7 +17,7 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import companion_agent, fusion, team
+from tianxia import calendar, companion_agent, fusion, team
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -2009,6 +2009,9 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     check_thresholds(game.state, beta, game.world, now=0.0)
     assert "huangjin_crushed" in w.flags
     _push_huangjin_to(game, 80)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert not w.ended and "huangjin_80" not in w.fired_thresholds  # 第 10 週以前先不收季（FB-165）
+    w.time = calendar.week_start(beta.config.decisive_from_week, beta, w)
     check_thresholds(game.state, beta, game.world, now=0.0)
     assert w.ended and "huangjin_win" in w.flags
 

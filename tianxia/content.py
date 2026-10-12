@@ -30,12 +30,12 @@ from .models import (
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
-    SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
+    SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
-from .weapons import NOUNS as WEAPON_NOUNS, kind_problem as weapon_kind_problem
+from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
@@ -215,18 +215,19 @@ def _read(path: Path):
 
 
 def _gear(path: Path) -> GearBook:
-    """content/gear.json（裝備三）：寶物表、名駒、名將贈禮。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
-    只能有 treasures、steeds、gifts 三個鍵（拼錯在載入當下就報錯）。"""
+    """content/gear.json（裝備三）：寶物表、名駒、名將贈禮、名將本命兵器（打造第三批）。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
+    只能有 treasures、steeds、gifts、signature_arms 四個鍵（拼錯在載入當下就報錯）。"""
     if not path.exists():
         return GearBook()
     raw = _read(path)
-    extra = set(raw) - {"treasures", "steeds", "gifts"}
+    extra = set(raw) - {"treasures", "steeds", "gifts", "signature_arms"}
     if extra:
-        raise ContentError(f"content/gear.json 只能有 treasures、steeds、gifts：{sorted(extra)}")
+        raise ContentError(f"content/gear.json 只能有 treasures、steeds、gifts、signature_arms：{sorted(extra)}")
     return GearBook(
         treasures=_index(TreasureDef, raw.get("treasures", [])),
         steeds=_index(SteedDef, raw.get("steeds", [])),
         gifts=[_build(GiftDef, item) for item in raw.get("gifts", [])],
+        signature_arms=[_build(SignatureArmDef, item) for item in raw.get("signature_arms", [])],
     )
 
 
@@ -1323,6 +1324,43 @@ def check_gear(c: Content, need, known) -> None:
         need(item_id in sent, f"裝備表 {item_id}：沒有人送（pool 為 false 的寶物與名駒只從名將贈禮來）")
 
 
+def check_signature_arms(c: Content, need, known) -> None:
+    """名將本命兵器（content/gear.json 的 signature_arms，兵器設計 4.10）：人物存在、一位只寫一把；種類、屬性合法；名字跟寶物、名駒、
+    隱藏配方的名器、別把本命兵器不重複（name_problem 對寶物表與本命兵器回同一句 GEAR_CLASH，蓋過 FORGE_CLASH，所以這裡另查），
+    過得了命名過濾（自己的名字收 GEAR_CLASH），不能帶別種兵器的字、不能跟架上的現成兵器同名（一般組合字表組得出它的話，驗字表那一段
+    的 name_problem 會擋下來，不必另查）；figure 是人物表上的大勢人物、而且就是這一位；兩句話是繁體、只用 {general}、{arm}。"""
+    book = c.gear
+    names = {item.name for item in [*book.treasures.values(), *book.steeds.values(), *c.forge_secrets.values()]}
+    shop = {weapon_shop_name(k, a) for k in WEAPON_KINDS for a in WEAPON_ATTR_WORDS}
+    seen: set[str] = set()
+    for arm in book.signature_arms:
+        where = f"本命兵器 {arm.character}"
+        known(where, [arm.character], c.characters, "人物")
+        need(arm.character not in seen, f"{where}：同一位人物寫了兩次")
+        seen.add(arm.character)
+        need(arm.kind in WEAPON_KINDS, f"{where}：種類 {arm.kind} 不是兵器種類")
+        need(arm.attribute in ATTRIBUTES, f"{where}：屬性 {arm.attribute} 不認得")
+        need(arm.name not in names, f"{where}：名字 {arm.name} 重複")
+        names.add(arm.name)
+        problem = name_problem(arm.name, c)
+        need(problem in (None, GEAR_CLASH), f"{where}：名字 {arm.name} 過不了命名過濾（{problem}）")
+        others = [word for kind, words in WEAPON_WORDS.items() if kind != arm.kind for word in words]
+        need(not any(word in arm.name for word in others), f"{where}：名字 {arm.name} 帶了別種兵器的字")
+        need(arm.name not in shop, f"{where}：名字 {arm.name} 跟架上的現成兵器同名")
+        if arm.figure is not None:
+            known(where, [arm.figure], c.figures, "大勢人物")
+            fig = c.figures.get(arm.figure)
+            need(fig is None or fig.character == arm.character, f"{where}：大勢人物 {arm.figure} 不是這一位")
+        for label, line in (("送兵器那一句", arm.gift_line), ("奪兵器那一句", arm.seize_line)):
+            if not line:
+                continue
+            need(to_traditional(line) == line, f"{where}：{label}只能用繁體中文")
+            try:
+                line.format(general="甲", arm="乙")
+            except (KeyError, IndexError, ValueError):
+                need(False, f"{where}：{label}只能用 {{general}}、{{arm}}")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
@@ -1346,6 +1384,10 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    need(  # 療傷只在醫館（clinic.py）：開著時至少要有一家，不然內傷一輩子治不好
+        not c.config.heal_at_clinic or any("醫館" in (loc.tags or []) for loc in c.locations.values()),
+        "config.heal_at_clinic 開著，可是沒有地點帶「醫館」標籤：內傷治不好",
+    )
     odds = c.config.fuse_quality_odds  # 合成擲品質：只擲得到下品～上品（絕學要修練），權重不能是負的、也不能全是 0
     need(
         set(odds) <= {"下品", "中品", "上品"} and all(w >= 0 for w in odds.values()) and sum(odds.values()) > 0,
@@ -2176,6 +2218,7 @@ def validate(c: Content) -> None:
     check_opportunities(c, need, known, front_ids)
     check_duels(c, need, known)
     check_gear(c, need, known)
+    check_signature_arms(c, need, known)
     check_bounties(c, need)
 
     for key, where in sorted(marks_written.items()):

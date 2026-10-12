@@ -404,7 +404,10 @@ def worst_foe(content: Content, loc: Location, odds: Odds, faction: str | None =
 
 # ── 路線與安排前往 ────────────────────────────────────
 
-MODES: dict[str, str] = {"walk": "步行", "hurry": "趕路", "dash": "疾行"}  # 三種走法（地圖擴充設計 3.2），依序是詳情欄按鈕的順序
+# 走法（地圖擴充設計 3.2）：企劃者 2026-10-12 拿掉趕路（「毫無存在的意義」），出發只剩步行、疾行，依序是詳情欄按鈕的順序。
+# 趕路還留在 MODE_NAMES、TIME_SHARE 與 TravelMode 裡：拿掉之前以趕路出發、還在路上的那一趟照原本的步調走完，畫面照舊寫得出名字。
+MODES: dict[str, str] = {"walk": "步行", "dash": "疾行"}
+MODE_NAMES: dict[str, str] = {"walk": "步行", "hurry": "趕路", "dash": "疾行"}  # 寫給玩家看的走法名字（含舊的趕路）
 TIME_SHARE: dict[str, float] = {"walk": 1.0, "hurry": 0.5, "dash": 0.0}  # 各花全程的幾成時間
 
 
@@ -453,9 +456,9 @@ def mode_when(minutes: float, mode: TravelMode, *, pace: float) -> str:
 
 
 def mode_text(content: Content, minutes: float, mode: TravelMode, *, pace: float, saving: float) -> str:
-    """「步行約 9 分鐘」「趕路約 5 分鐘・體力 9」「疾行立刻到・體力 18」：選單與詳情欄用。騎著馬時呼叫端傳步調與腳力（5.3）。"""
+    """「步行約 9 分鐘」「疾行立刻到・體力 18」：選單與詳情欄用。騎著馬時呼叫端傳步調與腳力（5.3）。"""
     stamina = travel_stamina(content, minutes, mode, saving=saving)
-    return MODES[mode] + mode_when(minutes, mode, pace=pace) + (f"・體力 {stamina}" if stamina else "")
+    return MODE_NAMES[mode] + mode_when(minutes, mode, pace=pace) + (f"・體力 {stamina}" if stamina else "")
 
 
 @dataclass(frozen=True)
@@ -657,12 +660,12 @@ def travel_refusal(state: GameState, content: Content, loc_id: str, mode: Travel
         return block.reason
     cost = route_stamina(state, content, route, mode)
     if state.player.stamina < cost:
-        return f"體力不足，{MODES[mode]}要 {cost} 體力"
+        return f"體力不足，{MODE_NAMES[mode]}要 {cost} 體力"
     return None
 
 
 def travel_options(state: GameState, content: Content, loc_id: str) -> list[TravelOption] | None:
-    """詳情欄底下的按鈕：步行、趕路、疾行各一個，寫時間與體力，體力不夠的按不下去（地圖擴充設計 3.2）。
+    """詳情欄底下的按鈕：步行、疾行各一個，寫時間與體力，體力不夠的按不下去（地圖擴充設計 3.2）。
     所在地、沒摸清或未開放的地點不顯示按鈕（None）；現在不能安排前往時只有一個按不下去的按鈕，寫原因。
     在路上時照改道的走法算時間與體力（見 way_to），剛離開的那一站也有按鈕（就是折返）。"""
     route = way_to(state, content, loc_id)
@@ -673,7 +676,7 @@ def travel_options(state: GameState, content: Content, loc_id: str) -> list[Trav
         return [TravelOption("walk", block.reason, False, to_jianghu=block.to_jianghu)]
     out: list[TravelOption] = []
     at_once = returns_at_once(state, content, route)
-    pace = mounts.pace(state, content)  # 騎著馬步行、趕路比較快（5.3）
+    pace = mounts.pace(state, content)  # 騎著馬步行比較快（5.3）
     for mode in MODES:
         cost = route_stamina(state, content, route, mode)
         if state.player.stamina < cost:

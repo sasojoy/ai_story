@@ -2809,12 +2809,11 @@ def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
     assert game.state.player.journey.path == [nearby[0]]  # 步行：在路上
 
 
-def test_the_map_offers_walking_hurrying_and_dashing(game):
+def test_the_map_offers_walking_and_dashing(game):
     view = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))
-    walk, hurry, dash = view["travel"]
-    assert [walk["mode"], hurry["mode"], dash["mode"]] == list(atlas.MODES)
+    walk, dash = view["travel"]  # 趕路拿掉了（企劃者 2026-10-12）
+    assert [walk["mode"], dash["mode"]] == list(atlas.MODES)
     assert walk["label"].startswith("步行（約 ") and walk["enabled"] is True
-    assert hurry["label"].startswith("趕路（約 ") and "體力" in hurry["label"]
     assert dash["label"].startswith("疾行（立刻到・體力 ")
     here = server.look(game, lambda g: server.map_view(g, "situation", g.state.player.location))
     assert here["travel"] is None
@@ -2830,8 +2829,8 @@ def test_a_pending_event_blocks_the_map_travel_button_and_flags_the_way_back(gam
     assert blocked["enabled"] is False and blocked["label"] == f"先回江湖頁處理「{pending.title}」"
     assert blocked["to_jianghu"] is True
     game.state.pending_event = None
-    walk, hurry, dash = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
-    assert [o["to_jianghu"] for o in (walk, hurry, dash)] == [False, False, False]
+    walk, dash = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
+    assert [o["to_jianghu"] for o in (walk, dash)] == [False, False]
     game.state.player.busy_until = game.state.world.time + 3600  # 閉關中：也不能出發，但那不是回江湖頁的事
     (resting,) = server.look(game, lambda g: server.map_view(g, "situation", "yingshui"))["travel"]
     assert resting["enabled"] is False and resting["to_jianghu"] is False
@@ -3922,10 +3921,11 @@ def test_start_tunnel_without_cloudflared_says_so_and_starts_nothing(capsys, mon
     assert "找不到 cloudflared" in capsys.readouterr().out
 
 
-# ── 主畫面的走法切換（步行／趕路／疾行）──────────────────────
+# ── 主畫面的走法切換（步行／疾行）──────────────────────
 # 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
 
-HURRY = {"X-Move-Mode": "hurry"}
+DASH = {"X-Move-Mode": "dash"}
+HURRY = {"X-Move-Mode": "hurry"}  # 拿掉的走法：當成步行
 
 
 def _moves(options):
@@ -3935,11 +3935,13 @@ def _moves(options):
 def test_the_move_mode_header_switches_the_travel_options(client):
     _player(client)
     walking = client.get("/api/main").json()["options"]
-    hurrying = client.get("/api/main", headers=HURRY).json()["options"]
-    assert len(hurrying) == len(walking)  # 只換「前往」的走法，按鈕數不變
-    moves = _moves(hurrying)
-    assert moves and all(o["id"].count(":") == 2 and o["id"].endswith(":hurry") for o in moves)
-    assert all("趕路" in o["label"] for o in moves)
+    dashing = client.get("/api/main", headers=DASH).json()["options"]
+    assert len(dashing) == len(walking)  # 只換「前往」的走法，按鈕數不變
+    moves = _moves(dashing)
+    assert moves and all(o["id"].count(":") == 2 and o["id"].endswith(":dash") for o in moves)
+    assert all("疾行" in o["label"] for o in moves)
+    hurrying = _moves(client.get("/api/main", headers=HURRY).json()["options"])
+    assert [o["id"] for o in hurrying] == [o["id"] for o in _moves(walking)]  # 趕路拿掉了：當成步行
 
 
 def test_the_move_mode_lasts_one_request_like_two_tabs(client):
@@ -3951,17 +3953,19 @@ def test_the_move_mode_lasts_one_request_like_two_tabs(client):
     assert [o["id"] for o in unknown] == [o["id"] for o in moves]  # 不認得的走法當成步行
 
 
-def test_a_hurried_move_departs_only_from_the_hurry_menu(client):
+def test_a_dash_departs_only_from_the_dash_menu(client):
     _player(client)
     game = server.game_for("沈青衫")
     start = game.state.player.location
-    assert "move:yingshui:hurry" in [o["id"] for o in client.get("/api/main", headers=HURRY).json()["options"]]
-    client.post("/api/choose", json={"id": "move:yingshui:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+    assert "move:yingshui:dash" in [o["id"] for o in client.get("/api/main", headers=DASH).json()["options"]]
+    client.post("/api/choose", json={"id": "move:yingshui:dash"})  # 沒帶走法：步行的選單上沒有這個 id
+    assert game.state.player.location == start and game.state.player.journey is None
+    client.post("/api/choose", json={"id": "move:yingshui:hurry"}, headers=HURRY)  # 拿掉的走法：哪個選單上都沒有
     assert game.state.player.location == start and game.state.player.journey is None
     minutes = atlas.leg_minutes(game.content, start, "yingshui")
-    client.post("/api/choose", json={"id": "move:yingshui:hurry"}, headers=HURRY)
-    assert game.state.player.journey.mode == "hurry" and game.state.player.journey.path == ["yingshui"]
-    cost = atlas.travel_stamina(game.content, minutes, "hurry", saving=0.0)  # 新角色沒騎馬
+    client.post("/api/choose", json={"id": "move:yingshui:dash"}, headers=DASH)
+    assert game.state.player.location == "yingshui" and game.state.player.journey is None  # 疾行立刻到
+    cost = atlas.travel_stamina(game.content, minutes, "dash", saving=0.0)  # 新角色沒騎馬
     assert game.state.player.stamina == game.content.config.stamina_max - cost
 
 
@@ -4017,13 +4021,12 @@ def test_turning_back_follows_the_move_mode_header(client):
     with mock.patch("server.time.time", return_value=t0):
         client.post("/api/choose", json={"id": "move:yingshui"})
     with mock.patch("server.time.time", return_value=t0 + 60):  # 走了一分鐘才掉頭：不是剛出發就折返（那種立刻回原地，FB-025）
-        back = [o for o in client.get("/api/main", headers=HURRY).json()["options"] if o["id"].startswith("road:back")]
-        assert [o["id"] for o in back] == ["road:back:hurry"] and "趕路" in back[0]["label"]
-        client.post("/api/choose", json={"id": "road:back:hurry"})  # 沒帶走法：步行的選單上沒有這個 id
+        back = [o for o in client.get("/api/main", headers=DASH).json()["options"] if o["id"].startswith("road:back")]
+        assert [o["id"] for o in back] == ["road:back:dash"] and "疾行" in back[0]["label"]
+        client.post("/api/choose", json={"id": "road:back:dash"})  # 沒帶走法：步行的選單上沒有這個 id
         assert game.state.player.journey.path == ["yingshui"]
-        client.post("/api/choose", json={"id": "road:back:hurry"}, headers=HURRY)
-    j = game.state.player.journey
-    assert (j.mode, j.path) == ("hurry", [start])
+        client.post("/api/choose", json={"id": "road:back:dash"}, headers=DASH)
+    assert game.state.player.journey is None and game.state.player.location == start
 
 
 def test_the_map_arranges_travel_while_on_the_road(client):
@@ -6132,6 +6135,7 @@ NOT_IN_THE_FINGERPRINT = {
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
         "general_gifts": "名將贈禮給了誰，只寫在拿到的人自己的江湖紀錄裡（裝備四欄 6.4）",
+        "signature_arms": "名將本命兵器給了誰，只寫在拿到的人自己的江湖紀錄裡；江湖史與天下大事傳聞進 chronicle、rumors，那一下指紋就變了（兵器設計 4.10）",
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
     },
     "BattleInstance": {

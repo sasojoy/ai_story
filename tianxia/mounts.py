@@ -1,4 +1,4 @@
-"""坐騎（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第五節；裝備二）：移動以省體力為主（趕路、疾行的體力，步行、趕路的時間），
+"""坐騎（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第五節；裝備二）：移動以省體力為主（疾行的體力，步行的時間；企劃者 2026-10-12 拿掉趕路），
 另有三個用途——決戰騎兵（5.9）、截殺追逃（5.10）、落敗策馬脫身（5.11）；飽足度與餵、馬市、馬的名字與階、修練頁每一列與角色卡那一行。
 
 數字全部乘飽足係數（edge_floor＋（1－edge_floor）×飽足度／100，5.4）；腳力＝省體力那一列（含品質）×飽足係數（5.1）。
@@ -97,12 +97,12 @@ def fresh_power(content: Content, item: Equipment | None) -> float:
 
 
 def saving(state: GameState, content: Content) -> float:
-    """身上那匹省幾成趕路、疾行的體力（腳力，5.1）；沒騎馬是 0。atlas.route_stamina、截殺追逃都讀它。"""
+    """身上那匹省幾成疾行的體力（腳力，5.1）；沒騎馬是 0。atlas.route_stamina、截殺追逃都讀它。"""
     return leg_power(content, riding(state, content))
 
 
 def pace(state: GameState, content: Content) -> float:
-    """步調（5.3）：步行、趕路的時間乘它＝1－路上快（含品質）×飽足係數；沒騎馬是 1。出發時快照進 Journey.pace。"""
+    """步調（5.3）：步行的時間乘它（拿掉趕路之前出發的趕路也是）＝1－路上快（含品質）×飽足係數；沒騎馬是 1。出發時快照進 Journey.pace。"""
     item = riding(state, content)
     return 1.0 if item is None else 1 - speed_of(content, item)
 
@@ -311,7 +311,7 @@ def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
 # ---- 看得到（2.5）：修練頁每一列、角色卡那一行 ----
 
 def _row(state: GameState, content: Content, item: Equipment, worn: bool) -> dict:
-    """修練頁坐騎那一段的一列：階品、飽足度（wear_word）、趕路疾行省幾成（save）、路上快幾成（speed）、決戰強攻奇襲多幾成（cavalry）、
+    """修練頁坐騎那一段的一列：階品、飽足度（wear_word）、疾行省幾成（save）、路上快幾成（speed）、決戰強攻奇襲多幾成（cavalry）、
     落敗脫身的機會（escape）——設計 2.5：路上快、騎兵、脫身寫在修練頁這一列，不擠進角色卡；每一項都照這一匹自己的階、品質與飽足算
     （同 cavalry()／escape() 的公式，只是不看身上騎的是不是牠）。身上那匹另給「餵」鈕的能不能按（feed）與那一段字（feed_note：
     用哪一種素材，或為什麼不行）。每一列給「換上」能不能按（wield_ok）與原因（wield_note）：路上不能換坐騎（2.3），網頁照它把裝備庫
@@ -348,4 +348,4 @@ def card_line(state: GameState, content: Content) -> str:
     item = riding(state, content)
     if item is None:
         return ""
-    return f"坐騎　【{name_of(item)}】{grade(item)}・{WEAR_WORD} {item.edge}，趕路疾行省 {pct(leg_power(content, item))} 體力"
+    return f"坐騎　【{name_of(item)}】{grade(item)}・{WEAR_WORD} {item.edge}，疾行省 {pct(leg_power(content, item))} 體力"
