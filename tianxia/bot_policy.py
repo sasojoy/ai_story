@@ -60,6 +60,12 @@ CLINIC_MOVE_SCORE = 20.0  # 內傷重了往醫館走（bot.clinic_hop）：高�
 CLINIC_URGENT_SCORE = 100.0
 
 
+def _crippled(game: Game) -> bool:
+    """內傷到 bot.CLINIC_URGENT 以上、卻湊不出錢去醫館：不遊歷、不挑戰本人（氣血只剩一成上下，打一場輸一場、
+    輸了又掉銀兩，越打越窮；PM 2026-10-12 量到的那個一季都治不了的假人），改去探索、做事件攢錢。"""
+    return bot.injury_share(game) >= bot.CLINIC_URGENT and not bot.can_pay_clinic(game)
+
+
 def _clinic_score(game: Game) -> float:
     return CLINIC_URGENT_SCORE if bot.injury_share(game) >= bot.CLINIC_URGENT else CLINIC_MOVE_SCORE
 MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
@@ -525,6 +531,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
         return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg.startswith("challenge:") and _crippled(game):
+            return None
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
             odds = game.challenge_odds(fid)
@@ -548,6 +556,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
         if arg == "train":
+            if _crippled(game):
+                return None
             s = game.state
             bonus = ORDER_SCORE if orders.win_counts(s, game.content, s.player.faction, s.player.location) else 0.0
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0

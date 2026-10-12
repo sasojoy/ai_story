@@ -482,6 +482,19 @@ def heal_cost(content: Content, member) -> int:
     return math.ceil(injury / max(1.0, content.config.heal_neili_per_silver))
 
 
+def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int]:
+    """這一次療傷治多少：（治幾點, 收幾兩, 還剩幾點）。銀兩夠就全治（收 heal_cost）；不夠時能治多少治多少
+    （PM 2026-10-12：療傷只在醫館之後，窮的人內傷越疊越多、一次付不起就永遠治不了），每一兩治 heal_neili_per_silver 點。"""
+    rate = max(1.0, content.config.heal_neili_per_silver)
+    injury = max(0.0, getattr(member, "injury", 0.0))
+    silver = max(0, state.player.stats.get("silver", 0))
+    full = heal_cost(content, member)
+    if silver >= full:
+        return round(injury), full, 0
+    points = min(injury, silver * rate)
+    return int(points), silver, max(0, round(injury - points))
+
+
 def heal_problem(state: GameState, content: Content, member, where: str | None = None) -> str | None:
     """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
     where 是呼叫端問過 clinic.problem 的那一句（不在醫館；None＝在醫館或開關關著），排在「氣血無恙」之後、銀兩之前。"""
@@ -490,7 +503,7 @@ def heal_problem(state: GameState, content: Content, member, where: str | None =
         return "氣血無恙，不用療傷。"
     if where is not None:
         return where
-    if state.player.stats.get("silver", 0) < cost:
+    if state.player.stats.get("silver", 0) < 1:  # 不夠全治時治一部分（heal_plan），一兩都沒有才做不了
         return f"銀兩不足：療傷需要 {cost} 兩。"
     return None
 
@@ -499,12 +512,15 @@ def heal(state: GameState, content: Content, member, where: str | None = None) -
     problem = heal_problem(state, content, member, where)
     if problem is not None:
         return [problem]
-    cost = heal_cost(content, member)
+    points, cost, left = heal_plan(state, content, member)
     p = state.player
     p.stats["silver"] -= cost
+    member.neili = None
+    if left > 0:
+        member.injury = max(0.0, member.injury - points)
+        return [f"銀兩只夠治一部分：內傷 -{points}，還剩 {left} 點（銀兩 -{cost}）。"]
     healed = member.injury
     member.injury = 0.0
-    member.neili = None
     return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（銀兩 -{cost}）。"]
 
 
