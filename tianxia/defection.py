@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import opportunities, ranks, seats
+from . import bounties, opportunities, ranks, seats
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
@@ -63,9 +63,9 @@ def _sect_left(p: PlayerState, old: FactionDef, content: Content) -> Sect | None
 
 
 def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str) -> str:
-    """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、要離開的門派、功勞）、一季一次，
+    """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、要離開的門派、功勞、手上揭著的舊陣營懸賞）、一季一次，
     接上三方目前的人數。只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下、
-    門派、功勞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
+    門派、功勞、懸賞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
     p = state.player
     old = content.scenario.faction(p.faction)
     lost = []
@@ -85,6 +85,9 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
         lost.append(f"離開{sect.name}、這一季拜不回去")
     if p.contrib > 0:
         lost.append(f"這一季替{old.name}記下的功勞全部作廢")
+    held = bounties.stranded(state, content, target.id)
+    if held:  # 手上揭著的懸賞（FB-151）：新陣營的人接不了舊陣營掛的單，確定的那一下 defect() 拿掉名字
+        lost.append(bounties.STRANDED_LOST.format(n=len(held), faction=old.name))
     head = f"叛投{target.name}之後，" + "，".join(lost) if lost else f"叛投{target.name}沒有什麼進度要作廢"
     return f"{head}；一季只能叛投一次。{counts_text}。確定叛投{target.name}？"
 
@@ -113,7 +116,7 @@ def clear_progress(p: PlayerState) -> None:
 
 def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
     """真的叛投：離開舊陣營的門派、讓出舊陣營的第四階席次（帳與這一週的名單，seats.leave）、清掉舊陣營的進度、改投、
-    記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞。
+    記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞，手上新陣營接不了的懸賞拿掉名字（bounties.drop_stranded，FB-151）。
     呼叫端（Game._defect_step）先確認過還在投靠點、還能叛投。"""
     p, w = state.player, state.world
     old = content.scenario.faction(p.faction)
@@ -141,4 +144,5 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
     add_rumor(state, f"{display_name(state)}在{here}改投了{target.name}。", p.location, content=content, layer="local",
               named=not p.anonymous)
     msgs.append(f"你叛出{old.name}，投了{target.name}。")
+    msgs += bounties.drop_stranded(state, content, target.id)  # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
     return msgs

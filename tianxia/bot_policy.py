@@ -476,7 +476,11 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return 0.0 if arg == "leave" else None
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
         verb = arg.partition(":")[0]
-        return BOUNTY_SCORE if verb == "take" else 0.0 if verb == "back" else None
+        if verb in ("pick", "give"):  # 求藝、求兵：只交 bounties.give_choice 指的那一張、那一件（不隨機，懸賞榜設計 9.3）
+            move = bounties.give_choice(game.state, game.content, game.world)
+            wanted = None if move is None else f"bounty:pick:{move[0]}" if verb == "pick" else f"bounty:give:{move[0]}:{move[1]}"
+            return BOUNTY_SCORE if option.id == wanted else None
+        return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
     if kind == "smith":  # 鐵匠鋪上：照 bot.smith_want 按那一顆（含切到另一頁），沒事就離開；不打造、不淬煉、不拆（附帶決定 e），萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "call":
@@ -681,9 +685,12 @@ def _summons_hop(game: Game) -> str | None:
 
 
 def _takeable(game: Game) -> bool:
-    """此地的懸賞榜上有揭得下的。"""
+    """此地的懸賞榜上有揭得下的，或有交得出的求藝、求兵（bounties.give_choice）：假人為了交東西也會打開榜（懸賞榜設計 9.3）。
+    假人不為了交東西繞路（bounties.targets 不列求藝、求兵）。"""
     s, c = game.state, game.content
-    return any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c))
+    if any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
+        return True
+    return bounties.give_choice(s, c, game.world) is not None
 
 
 def _smith_want(game: Game) -> str | None:

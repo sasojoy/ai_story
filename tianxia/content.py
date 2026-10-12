@@ -1180,6 +1180,36 @@ def check_foreshadows(
         need(False, f"伏筆計數 {key}：有鏈讀它，卻沒有任何效果（或官銀的規則）寫它")
 
 
+def check_bounties(c: Content, need) -> None:
+    """懸賞榜的設定（Config.bounties，懸賞榜設計 4.1 末段）：種類只能是認得的（不認得的 bounties.issue 會默默跳過）；求藝、求兵挑屬性的
+    範圍至少一個、而且是認得的屬性；求兵的價錢剛好寫三個品質與三個階（少一個，交那種兵器時會 KeyError）。
+    give_kinds、give_attributes 不能重複：kinds 寫兩次 strike 是「掛兩張」，give_kinds 寫兩次 art 卻只會掛一張（issue 照種類各掛一張），
+    照 kinds 的習慣寫會被默默吃掉；give_attributes 重複會讓三方抽到同一個屬性。
+    賞的字典（silver、exp、deeds、xinde）：設定覆寫檔寫了就是整張換掉，少寫 give_kinds 裡某一種的那一項，掛得出來、交得了，領到的卻默默是 0
+    （bounties.py 都是 .get(種類, 0)）。所以預設有寫的項目，掛出去的每一種都要留著（預設 silver 沒有 arms：求兵的銀兩走 arms_silver × arms_tier）。"""
+    cfg = c.config.bounties
+    need(set(cfg.kinds) <= {"strike", "scout", "escort"}, f"Config.bounties.kinds 只能有 strike、scout、escort：{cfg.kinds}")
+    need(
+        set(cfg.give_kinds) <= {"art", "arms"} and len(set(cfg.give_kinds)) == len(cfg.give_kinds),
+        f"Config.bounties.give_kinds 只能有 art、arms，各最多寫一次：{cfg.give_kinds}",
+    )
+    need(
+        bool(cfg.give_attributes) and set(cfg.give_attributes) <= set(ATTRIBUTES)
+        and len(set(cfg.give_attributes)) == len(cfg.give_attributes),
+        f"Config.bounties.give_attributes 至少一個、不重複，而且只能是 {'、'.join(ATTRIBUTES)}：{cfg.give_attributes}",
+    )
+    need(set(cfg.arms_silver) == {"下品", "中品", "上品"}, f"Config.bounties.arms_silver 要剛好寫下品、中品、上品：{sorted(cfg.arms_silver)}")
+    need(set(cfg.arms_tier) == {"1", "2", "3"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3：{sorted(cfg.arms_tier)}")
+    defaults = type(cfg)()  # 預設長什麼樣，就是「該寫哪幾項」的依據
+    for field in ("silver", "exp", "deeds", "xinde"):
+        given = getattr(cfg, field)
+        missing = [kind for kind in cfg.give_kinds if kind in getattr(defaults, field) and kind not in given]
+        need(
+            not missing,
+            f"Config.bounties.{field} 少了 {'、'.join(missing)} 的賞（整張字典換掉時，give_kinds 裡每一種都要寫，少了會默默給 0）：{sorted(given)}",
+        )
+
+
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -2010,6 +2040,7 @@ def validate(c: Content) -> None:
     check_promotions(c, need, known)
     check_opportunities(c, need, known, front_ids)
     check_duels(c, need, known)
+    check_bounties(c, need)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

@@ -1252,7 +1252,8 @@ class Ranger(_Strict):
 
 class Bounties(_Strict):
     """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
-    官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
+    官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；劇本的每個陣營（官軍、黃巾、地方豪強）每週一另各掛
+    give_kinds 裡的每一種（求藝、求兵，懸賞榜設計第四節）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
     散人兩邊的都能接（通緝也是），陣營的人只能接自己陣營的；接了才算數，一個人同時最多接 max_taken 張。
 
     數字的依據：
@@ -1265,13 +1266,33 @@ class Bounties(_Strict):
     - faction_share：陣營的人做自己陣營的懸賞，銀兩與經驗只拿幾成（他們另有軍令、貢獻、晉升與部下；懸賞榜主要是給散人的）。
     - auto_weeks：陣營的懸賞掛幾週（地點散在整張地圖上，走過去常常要大半週；只掛一週的話整季機器人揭了五十張只做成三張）。
     - quota：一張陣營懸賞前幾個完成的人有賞（照伺服器人數上限換算：100 人的量 3 張，最少 quota_min）。
-    - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。"""
+    - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。
+    - 求藝（art）、求兵（arms）：不用揭，在城鎮的懸賞榜上直接交（交了就沒了），名額 give_quota、一張一人一次，陣營的人也拿全額
+      （企劃者 2026-10-10）。give_attributes 是挑屬性的範圍（同一期同一種三方不重複），give_list 是交出那一層最多列幾件（同拆解）。
+      求藝的賞（企劃者「比平時歷練的還好一些」；正式內容 19 支遊歷對手打贏的中位數是銀兩 10、經驗 20、心得 16）：silver／exp／
+      xinde／deeds 的 "art"；另給這張屬性的一階素材 art_materials 個，art_material2_chance 再一個同屬性二階，art_weapon_chance 一把
+      一階兵器（上品 art_weapon_top_chance、其餘中品；裝備庫滿了照 arms_silver 折銀兩）。
+      求兵的銀兩照交的那一把：arms_silver[品質] × arms_tier[階]（照兵器第二批的打造工錢算；三階 ×4 不是 ×3，手上多出來的三階上品
+      交了才不虧工錢，懸賞榜設計 4.7 的期望值表），淬煉不加錢；經驗、心得、俠名是 exp／xinde／deeds 的 "arms"。"""
 
     enabled: bool = True  # 懸賞榜的開關（主機要整個關掉時用）；開著也要劇本有陣營才有（bounties.active）
     kinds: list[str] = Field(default_factory=lambda: ["strike", "strike", "scout", "escort"])
-    silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15})
-    deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4})
-    exp: dict[str, int] = Field(default_factory=lambda: {"strike": 15, "scout": 10, "escort": 12, "wanted": 15})
+    give_kinds: list[str] = Field(default_factory=lambda: ["art", "arms"])  # 另立一欄、不塞進 kinds：官軍、黃巾那一圈一個字都不動；每種最多一次
+    give_attributes: list[str] = Field(default_factory=lambda: ["剛", "柔", "快", "慢"])
+    give_quota: int = Field(default=3, ge=1)  # 不走 quota()：它在 30 人的正式設定與週末設定都算出 1
+    give_list: int = Field(default=8, ge=1)
+    silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15, "art": 20})
+    deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4, "art": 2, "arms": 2})
+    exp: dict[str, int] = Field(
+        default_factory=lambda: {"strike": 15, "scout": 10, "escort": 12, "wanted": 15, "art": 30, "arms": 30},
+    )
+    xinde: dict[str, int] = Field(default_factory=lambda: {"art": 20, "arms": 10})
+    arms_silver: dict[str, int] = Field(default_factory=lambda: {"下品": 20, "中品": 35, "上品": 50})
+    arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4})
+    art_materials: int = Field(default=2, ge=0)
+    art_material2_chance: float = Field(default=0.3, ge=0, le=1)
+    art_weapon_chance: float = Field(default=0.2, ge=0, le=1)
+    art_weapon_top_chance: float = Field(default=0.3, ge=0, le=1)
     quota_base: int = Field(default=3, ge=1)
     quota_min: int = Field(default=1, ge=1)
     max_taken: int = Field(default=3, ge=1)

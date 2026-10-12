@@ -6,13 +6,18 @@
 兩邊都是「有目標的玩家」：一半的時候照手上的懸賞與軍令走、到了就做（_steer），另一半照整季機器人隨機玩；
 城裡的懸賞榜兩邊都會去揭（bot.take_bounties）。模型一律不連（同 measure_forge）。
 
-印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數，
-散人另印俠名與名號的階、懸賞完成幾張；陣營另印階與貢獻。最後一行是兩邊的中位數。
+印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數、心得，
+散人另印俠名與名號的階、懸賞完成幾張；陣營另印陣營、階與貢獻。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
+bounties._complete 數），以及求藝、求兵各拿到多少（銀兩、經驗、心得、素材、求藝送的兵器；交出去的武學幾門〔其中幾門是交了再
+照同一個配方合的〕、兵器幾把〔其中幾把是自己打的〕；包住 bounties.give 數）。最後兩行是兩邊的中位數。
+一個種子一個資料庫、只有一個機器人，碰不到別人，截殺一場都不會有：截殺的量看 scripts/sim_server_bots.py（設計 11.2）。
 
-用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend|none] [--bare]
+用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend|none] [--faction guan|huang|haoqiang] [--no-give] [--bare]
 （--profile 預設 weekend：第一季規則開著的週末設定；none 是不套設定覆寫檔，量預設設定〔14 天、第一季規則關著〕的季——
 懸賞榜、名號、截殺每季都有之後，那種季也有懸賞可揭〔懸賞榜設計 11.1〕。不用空字串：PowerShell 5.1 會把它吞掉。
---bare 是對照組：拿掉懸賞榜與名號的經驗加成，看這一版之前散人跟陣營差多少）
+--faction 指定陣營那一邊投靠誰：還沒投靠時一路往那個陣營的投靠點走、只投它（不給就照舊投選單上第一個出現的，量不到豪強）；
+--no-give 只拿掉求藝、求兵（有懸賞榜第一批、沒有第二批：豪強的基準，跟 --faction haoqiang 比）；
+--bare 是對照組：拿掉懸賞榜〔含求藝、求兵〕與名號的經驗加成，看這一版之前散人跟陣營差多少）
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ import shutil
 import statistics
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from unittest import mock
 
@@ -39,7 +45,64 @@ from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 STEER = 0.5  # 有目標的玩家：一半的時候照手上的懸賞、軍令走
-COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下")
+COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得")
+KINDS = ("strike", "scout", "escort", "wanted", "art", "arms")
+GOT = ("銀兩", "經驗", "心得", "一階素材", "二階素材", "三階素材", "兵器")
+TIER_WORDS = {1: "一階素材", 2: "二階素材", 3: "三階素材"}
+
+
+class Tally:
+    """一季的懸賞帳（懸賞榜設計 11.1）：每一種交差幾張（包住 bounties._complete），求藝、求兵各拿到多少（包住 bounties.give，交成了才記）。"""
+
+    def __init__(self) -> None:
+        self.done: Counter = Counter()
+        self.got: dict[str, Counter] = {"art": Counter(), "arms": Counter()}
+        self.arts: list[str] = []  # 交出去的武學 id：同一個 id 第二次出現＝交了之後照同一個配方再合出來的那一門
+        self.weapons = 0
+        self.forged = 0  # 交出去的兵器裡自己打的（Weapon.recipe 不是 None）
+
+    def complete(self, real):
+        def counted(state, content, world, b, *args, **kwargs):
+            self.done[b.kind] += 1
+            return real(state, content, world, b, *args, **kwargs)
+        return counted
+
+    def give(self, real):
+        def counted(state, content, world, bounty_id, item_id):
+            p = state.player
+            b = next((x for x in state.world.bounties if x.id == bounty_id), None)
+            w = bounties._weapon(state, item_id)
+            silver, xinde, bag = p.stats.get("silver", 0), p.stats.get("xinde", 0), dict(p.materials)
+            held = {x.id for x in (p.weapon, *p.rack) if x is not None}
+            msgs = real(state, content, world, bounty_id, item_id)
+            if b is None or not msgs[0].startswith(bounties.GIVEN_PREFIX):
+                return msgs
+            got = self.got[b.kind]
+            got["銀兩"] += p.stats.get("silver", 0) - silver
+            got["心得"] += p.stats.get("xinde", 0) - xinde
+            got["經驗"] += sum(int(m.partition("+")[2]) for m in msgs if m.startswith("經驗 +"))
+            for mid, n in p.materials.items():
+                if n > bag.get(mid, 0):
+                    got[TIER_WORDS.get(content.materials[mid].tier, "素材")] += n - bag.get(mid, 0)
+            got["兵器"] += len({x.id for x in (p.weapon, *p.rack) if x is not None} - held)
+            if b.kind == "art":
+                self.arts.append(item_id)
+            else:
+                self.weapons += 1
+                self.forged += int(w is not None and w.recipe is not None)
+            return msgs
+        return counted
+
+    def lines(self) -> list[str]:
+        def got(kind: str) -> str:
+            return "・".join(f"{k} {self.got[kind][k]}" for k in GOT if self.got[kind][k]) or "什麼都沒拿到"
+
+        again = len(self.arts) - len(set(self.arts))
+        return [
+            "　交差：" + "・".join(f"{bounties.KIND_NAMES[k]} {self.done[k]}" for k in KINDS),
+            f"　求藝：交 {len(self.arts)} 門（同一配方再交 {again} 門），{got('art')}；"
+            f"求兵：交 {self.weapons} 把（自己打的 {self.forged} 把），{got('arms')}",
+        ]
 
 
 def _cleanup() -> None:
@@ -93,24 +156,48 @@ def _power(game) -> tuple[float, float]:
     return powers[0], sum(powers)
 
 
-def measure(seed: int, profile: str | None, side: str, bare: bool = False) -> dict:
-    content = load_content(ROOT / "content", profile=profile)
-    if bare:  # 對照組：沒有懸賞榜、名號沒有經驗加成（這一版之前的散人）
+def _join(game, options, faction: str | None) -> tuple[str | None, list]:
+    """陣營那一邊還沒投靠：（這一步要按的, 剩下可以挑的選項）。faction 是 None 時投選單上第一個出現的；指定了就只投它，
+    還沒走到它的投靠點就一路往那裡走（別的陣營不投、別陣營名下的門派不拜）。"""
+    ids = [o.id for o in options]
+    if "faction:confirm" in ids:
+        return "faction:confirm", options
+    if faction is None:
+        return next((i for i in ids if i.startswith("faction:") and i != "faction:cancel"), None), options
+    if f"faction:{faction}" in ids:
+        return f"faction:{faction}", options
+    options = [o for o in options if not _joins_faction(game, o.id)]
+    hop = bot_policy.next_hop(game, list(game.content.scenario.faction(faction).join_at))
+    move = next((o.id for o in options if o.id.startswith("move:") and o.id.partition(":")[2].partition(":")[0] == hop), None)
+    return move, options
+
+
+def _strip(content, bare: bool, no_give: bool) -> None:
+    """對照組：no_give 只拿掉求藝、求兵（懸賞榜第一批還在：豪強在第二批之前的基準）；bare 拿掉整個懸賞榜（含求藝、求兵）
+    與名號的經驗加成（這一版之前的散人）。"""
+    if bare or no_give:
+        content.config.bounties.give_kinds = []
+    if bare:
         content.config.bounties.kinds = []
         content.config.ranger.exp_per_tier = 0.0
+
+
+def measure(
+    seed: int, profile: str | None, side: str, bare: bool = False, faction: str | None = None, no_give: bool = False,
+) -> dict:
+    content = load_content(ROOT / "content", profile=profile)
+    _strip(content, bare, no_give)
     world = open_world(TMP / f"{side}{seed}.db")
     original_pick = bot.pick
+    tally = Tally()
 
     def pick(game, options, rng):
         if side == "散人":
             options = [o for o in options if not _joins_faction(game, o.id)]
         elif game.state.player.faction is None:
-            ids = [o.id for o in options]
-            if "faction:confirm" in ids:
-                return "faction:confirm"
-            join = next((i for i in ids if i.startswith("faction:") and i != "faction:cancel"), None)
-            if join is not None:
-                return join
+            move, options = _join(game, options, faction)
+            if move is not None:
+                return move
         steered = _steer(game, options, rng)
         return steered if steered is not None else original_pick(game, options, rng)
 
@@ -121,15 +208,17 @@ def measure(seed: int, profile: str | None, side: str, bare: bool = False) -> di
             mock.patch.object(naming, "pick", lambda *a, **k: (None, "")), \
             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse), \
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
-            mock.patch.object(bot, "pick", pick):
+            mock.patch.object(bot, "pick", pick), \
+            mock.patch.object(bounties, "_complete", tally.complete(bounties._complete)), \
+            mock.patch.object(bounties, "give", tally.give(bounties.give)):
         game = bot.play_season(content, seed, world=world)
     s, c = game.state, game.content
     p = s.player
     mine, whole = _power(game)
     row = {
         "等級": p.member.level, "本人威力": round(mine), "全隊威力": round(whole), "銀兩": p.stats.get("silver", 0),
-        "名望": p.stats.get("fame", 0), "同伴": len(p.team), "部下": len(p.followers),
-        "faction": p.faction,
+        "名望": p.stats.get("fame", 0), "同伴": len(p.team), "部下": len(p.followers), "心得": p.stats.get("xinde", 0),
+        "faction": p.faction, "tally": tally,
     }
     if p.faction is None:
         row["俠名"] = ranger.points(s)
@@ -146,18 +235,25 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--profile", default="weekend",
                         help="設定覆寫檔（content/profiles/<名字>.json）；none＝不套，量預設設定（14 天、第一季規則關著）的季")
-    parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜與名號的經驗加成")
+    parser.add_argument("--faction", default=None, help="陣營那一邊投靠誰（劇本的陣營 id，例如 guan、huang、haoqiang）；不給就投第一個碰到的")
+    parser.add_argument("--no-give", action="store_true", help="對照組：只拿掉求藝、求兵（豪強的基準）")
+    parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜（含求藝、求兵）與名號的經驗加成")
     args = parser.parse_args()
     profile = None if args.profile == "none" else args.profile
-    print(profile_line(load_content(ROOT / "content", profile=profile), profile), flush=True)
+    content = load_content(ROOT / "content", profile=profile)
+    if args.faction is not None and args.faction not in {f.id for f in content.scenario.factions}:
+        parser.error(f"劇本沒有陣營 {args.faction}：{'、'.join(f.id for f in content.scenario.factions)}")
+    print(profile_line(content, profile), flush=True)
     rows: dict[str, list[dict]] = {"散人": [], "陣營": []}
     for seed in args.seeds:
         for side in rows:
-            row = measure(seed, profile, side, bare=args.bare)
+            row = measure(seed, profile, side, bare=args.bare, faction=args.faction, no_give=args.no_give)
             rows[side].append(row)
-            extra = (f"俠名 {row['俠名']}（第 {row['名號']} 階）懸賞 {row['懸賞']}" if side == "散人"
+            extra = (f"俠名 {row['俠名']}（第 {row['名號']} 階）懸賞 {row['懸賞']}" if row["faction"] is None
                      else f"{row['faction']} 第 {row['階']} 階 貢獻 {row['貢獻']}")
             print(f"種子 {seed} {side}：" + "　".join(f"{k} {row[k]}" for k in COLUMNS) + f"　{extra}", flush=True)
+            for line in row["tally"].lines():
+                print(line, flush=True)
     for side, side_rows in rows.items():
         print(f"{side}中位數：" + "　".join(f"{k} {statistics.median(r[k] for r in side_rows):g}" for k in COLUMNS))
 

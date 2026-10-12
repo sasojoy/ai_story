@@ -1,7 +1,8 @@
 """伺服器假人的整季模擬（伺服器假人設計第八節第 6 項）：正式內容、2 個「真人」機器人＋假人程式，
 用假時鐘跑完一整季，印出有沒有開戰、兩邊參戰人數、各陣營人數、結局，以及假人合成的量測（「合成」那一行：
 開爐的種類、首創與合到舊的、模型呼叫數、輪不到取名的次數、庫存最多幾門；假人取名預設用字表組的假名字、只數次數，
-`--real-model` 才真的叫模型）。
+`--real-model` 才真的叫模型），與懸賞、截殺的量測（「懸賞」那一行，懸賞榜設計 11.2：每一種懸賞掛出、揭下、交差幾張，
+求藝交出幾門、求兵交出幾把，截殺幾場，被截殺最多的那個人一季被截幾次、丟了多少銀兩與氣血，每一週最多冒出幾批〔應該是 1〕）。
 
 執行：.venv/Scripts/python.exe scripts/sim_server_bots.py --seasons 2 --time-scale 6 --tick 60
 （加 --pause-at 4 --pause-hours 3：開季後第 4 個現實鐘頭讓賽季時鐘停 3 個鐘頭；結果的 pause 一欄寫停的那一段季走了多少，應該是 0）
@@ -22,9 +23,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, database, library, naming, server_bots  # noqa: E402
+from tianxia import bot, bounties, database, library, naming, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
-from tianxia.characters import open_characters  # noqa: E402
+from tianxia.characters import name_key, open_characters  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -60,6 +61,48 @@ class ForgeTally:
             "武學＋武學佔": round(self.forged[FORGE_KINDS["blend"]] / forged, 2) if forged else 0.0,
             "取名呼叫": self.named, "挑選呼叫": self.picked, "定名呼叫": self.mastered, "輪不到取名": self.skipped,
             "庫存最多": most, "最多可配對": most * (most - 1) // 2,
+        }
+
+
+class BountyTally:
+    """一季的懸賞與截殺（懸賞榜設計 11.2）。被截幾次、被截時丟了多少都照被截的那個人記（defended：_raid_record 的守方那一側；
+    他自己去截別人輸掉的不算，設計要的是「被截殺最多的人一季因為被截丟了多少」）；名號只拿來分人，報告只寫數字。"""
+
+    def __init__(self) -> None:
+        self.posted: Counter = Counter()  # 每一種掛出幾張（每一輪掃一次榜，第一次看到才算）
+        self.taken: Counter = Counter()
+        self.done: Counter = Counter()
+        self.raids = 0
+        self.raided: Counter = Counter()
+        self.lost_silver: Counter = Counter()
+        self.lost_hp: Counter = Counter()
+        self.first_seen: dict[str, tuple[int, int, str]] = {}  # 懸賞 id →（第一次看到它的那一輪, 第幾週掛的, 種類）
+
+    def see(self, step: int, board) -> None:
+        for b in board:
+            if b.id not in self.first_seen:
+                self.first_seen[b.id] = (step, b.week, b.kind)
+                self.posted[b.kind] += 1
+
+    def defended(self, name: str, spoils) -> None:
+        """name 被截了一次（守方）；輸了（spoils 的贏家不是他）才記他丟的銀兩與氣血。平手 spoils 是 None。"""
+        self.raided[name] += 1
+        if spoils is not None and name_key(spoils.winner) != name_key(name):
+            self.lost_silver[name] += spoils.lost
+            self.lost_hp[name] += spoils.hp
+
+    def report(self) -> dict:
+        batches: dict[int, set[int]] = {}
+        for step, week, kind in self.first_seen.values():
+            if kind != "wanted":  # 通緝是玩家隨時掛的，不算週初那一批
+                batches.setdefault(week, set()).add(step)
+        most = self.raided.most_common(1)
+        name = most[0][0] if most else None
+        return {
+            "掛出": dict(self.posted), "揭下": dict(self.taken), "交差": dict(self.done),
+            "求藝交出": self.done["art"], "求兵交出": self.done["arms"], "截殺": self.raids,
+            "被截最多": {"次數": self.raided[name], "銀兩": self.lost_silver[name], "氣血": self.lost_hp[name]} if name else None,
+            "每週最多幾批": max((len(steps) for steps in batches.values()), default=0),
         }
 
 
@@ -148,6 +191,27 @@ def run_season(
         return naming.fallback_name(content_, f"模擬|{request.key}", request.name_kind, salt=salt), ""
 
     count_new, count_landed = _counting(tally, "new"), _counting(tally, "landed")
+    bounty_tally = BountyTally()
+    real_take, real_complete = bounties.take, bounties._complete
+    real_record = Game._raid_record
+
+    def counted_take(state, content_, bounty_id):
+        msgs = real_take(state, content_, bounty_id)
+        b = next((x for x in state.world.bounties if x.id == bounty_id), None)
+        if b is not None and msgs[0].startswith("你揭下了"):
+            bounty_tally.taken[b.kind] += 1
+        return msgs
+
+    def counted_complete(state, content_, world_, b, *args, **kwargs):
+        bounty_tally.done[b.kind] += 1
+        return real_complete(state, content_, world_, b, *args, **kwargs)
+
+    def counted_record(self, result, rival, rival_power, rival_game, spoils, *, attacker):
+        if attacker:
+            bounty_tally.raids += 1
+        else:
+            bounty_tally.defended(self.state.player.name, spoils)  # 守方那一側：被截一次，輸了才記丟了多少
+        return real_record(self, result, rival, rival_power, rival_game, spoils, attacker=attacker)
     battle_hour = None  # 第一場決戰開集結是開季後第幾個現實鐘頭（暫停之後決戰要照原本的現實時間開）
     # 季末結算榜單時沒指定資料庫就開預設的那個；用環境變數指到這次的暫存檔，不碰真資料。
     # 引擎已經不讀電腦時鐘（假人程式用 clock，「真人」sync 時傳 now），不用再 mock time.time。
@@ -156,7 +220,9 @@ def run_season(
             mock.patch.object(SqliteWorldStore, "claim_insight_recipe", count_new(SqliteWorldStore.claim_insight_recipe)), \
             mock.patch.object(SqliteWorldStore, "link_recipe", count_landed(SqliteWorldStore.link_recipe)), \
             mock.patch.object(SqliteWorldStore, "link_insight_recipe", count_landed(SqliteWorldStore.link_insight_recipe)), \
-            mock.patch.object(Game, "forge", counted_forge), mock.patch.object(naming, "generate", counted_generate):
+            mock.patch.object(Game, "forge", counted_forge), mock.patch.object(naming, "generate", counted_generate), \
+            mock.patch.object(bounties, "take", counted_take), mock.patch.object(bounties, "_complete", counted_complete), \
+            mock.patch.object(Game, "_raid_record", counted_record):
         world.seed_first_season(content)
         world.open_season(content, now[0])
         humans = [Game.new(content, name, rng=random.Random(seed + 2000 + i), world=world) for i, name in enumerate(HUMANS)]
@@ -164,6 +230,7 @@ def run_season(
             game.client = None
         client = OllamaClient.from_config(content.config) if real_model else object()  # 假的取名用不到 client，只要不是 None
         runner = BotRunner(content, world, characters, random.Random(seed + 1000), clock=lambda: now[0], client=client)
+        step = 0
         while not world.get_season().ended and now[0] - START < MAX_REAL_DAYS * 86400:
             if pause is not None:
                 _pause_step(world, content, now[0], pause, frozen, pause_log)
@@ -189,6 +256,8 @@ def run_season(
                     battle_started_day = world.get_season().time / 86400
                     battle_hour = (now[0] - START) / 3600
                 sides = Counter(p.faction for p in battle.participants.values())
+            step += 1
+            bounty_tally.see(step, world.get_season().bounties)
             now[0] += tick
         season = world.get_season()
         bots = characters.all(bots_only=True)
@@ -206,6 +275,7 @@ def run_season(
         "bots": len(bots),
         "tempers": dict(Counter(s.player.bot.personality for s in bots)),
         "forge": tally.report([len(library.owned_arts(s)) for s in bots]),
+        "bounties": bounty_tally.report(),
         "late_joiners": late,  # 季中才加入（joined_at > 0）的角色數：新手福利從他們自己加入那天起算
         "pause": pause_log,
     }
@@ -232,10 +302,12 @@ def main() -> None:
                 result = run_season(content, Path(tmp), seed=i, tick=args.tick, real_model=args.real_model, pause=pause)
             finally:
                 database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾（這一季出錯時也一樣）
-        forge = result.get("forge")
-        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k != 'forge'} }", flush=True)
+        forge, bounty = result.get("forge"), result.get("bounties")
+        print(f"第 {i + 1} 季：{ {k: v for k, v in result.items() if k not in ('forge', 'bounties')} }", flush=True)
         if forge is not None:
             print(f"　合成：{forge}", flush=True)
+        if bounty is not None:
+            print(f"　懸賞：{bounty}", flush=True)
 
 
 if __name__ == "__main__":

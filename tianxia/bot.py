@@ -305,18 +305,35 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
 
 
 def take_bounties(game: Game) -> None:
-    """城裡的懸賞榜上有揭得下的就揭（打開、揭、返回，走 Game 的選單；不花體力）。做不做得成看之後隨機走到哪裡。"""
+    """城裡的懸賞榜上有揭得下的就揭、有交得出的求藝求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
+    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求藝、求兵不揭（take_problem 擋）。
+    揭的做不做得成看之後隨機走到哪裡。"""
     s, c = game.state, game.content
+
+    def enabled() -> set[str]:
+        return {o.id for o in game.options(odds=False) if o.enabled}
+
     if s.pending_event or not bounties.board_here(s, c):
         return
-    if not any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
-        return
-    if "act:bounties" not in {o.id for o in game.options(odds=False) if o.enabled}:
+    takeable = any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c))
+    if not takeable and bounties.give_choice(s, c, game.world) is None:
+        return  # 沒得揭，也沒得交
+    if "act:bounties" not in enabled():
         return
     game.choose("act:bounties")
     for option in game.options(odds=False):
         if option.enabled and option.id.startswith("bounty:take:"):
             game.choose(option.id)
+    for _ in range(c.config.bounties.give_list):  # 交到沒得交為止（一張一人一次：每交一張就少一張）
+        move = bounties.give_choice(s, c, game.world)
+        if move is None or f"bounty:pick:{move[0]}" not in enabled():
+            break
+        game.choose(f"bounty:pick:{move[0]}")
+        give = f"bounty:give:{move[0]}:{move[1]}"
+        if give not in enabled():
+            game.choose("bounty:unpick")
+            break
+        game.choose(give)
     if s.player.picking_bounty:
         game.choose("bounty:back")
 

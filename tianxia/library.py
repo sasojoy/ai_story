@@ -211,6 +211,15 @@ def melt_confirm(name: str, value: int, relearn: str | None = None) -> str:
     return f"把【{name}】熔掉？這門熔了沒有心得，只空出一格。{relearn or ''}"
 
 
+def remove_art(state: GameState, art_id: str) -> None:
+    """功法庫拿掉一門，連同 PlayerState 以功法 id 為鍵的全部私有紀錄（成、自己那一份的品質、熟練度、擲到的品質）。
+    熔煉（melt_art）與交出懸賞（bounties.give，懸賞榜設計 4.6）共用；呼叫端先擋（身上的、等著定名的）。全服登記的那一門不動。"""
+    p = state.player
+    p.arts.remove(art_id)
+    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
+        record.pop(art_id, None)
+
+
 def melt_art(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, only: str | None = None,
 ) -> list[str]:
@@ -220,9 +229,7 @@ def melt_art(
     if problem is not None:
         return [problem]
     refund = melt_value(state, content, world, art_id)
-    p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
-        record.pop(art_id, None)
+    remove_art(state, art_id)
     p.stats["xinde"] = p.stats.get("xinde", 0) + refund
     name = art.name if art else art_id
     if refund <= 0:  # 退 0 心得（第一成的內容武學）：不寫「熔成了心得。心得 +0」，只說空出一格（W9，待 joy 潤）
