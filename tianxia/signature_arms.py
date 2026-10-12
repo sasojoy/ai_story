@@ -12,9 +12,10 @@
 """
 from __future__ import annotations
 
-from . import weapons
+from . import figures, treasures, weapons
 from .models import Content, SignatureArmDef
-from .state import Equipment, GameState, PlayerState
+from .rules import add_chronicle, add_rumor
+from .state import Equipment, GameState, PlayerState, SignatureClaim
 
 # 待 joy 潤：{general} 是名將的名字、{arm} 是兵器的名字、{who} 是拿到的人的名號。內容的 gift_line／seize_line 有寫就照內容
 GIFT_LINE = "{general}解下【{arm}】遞給你：『這把跟了我多年，往後交給你了。』"  # 兵器設計 4.10 的暫用句
@@ -48,3 +49,43 @@ def refresh_names(p: PlayerState, content: Content) -> None:
         arm = table.get(item.signature)
         if arm is not None:
             item.name = arm.name
+
+
+def due(state: GameState, content: Content, *, beaten: str | None = None) -> tuple[list[Equipment], list[str]]:
+    """該給的本命兵器給出去（兵器設計 4.10）：這一季還沒給過人的每一位名將，情誼到 signature_affinity 是他送的（gift），
+    不然內容寫了 figure、你這一季打贏他本人 signature_wins 次是你奪走的（seized）。記下歸屬（WorldState.signature_arms，呼叫端那一下
+    動作最後 _save_season 存回去）、交到你手上（裝備庫滿了寄放，treasures.deliver hold=True）、江湖史一行、天下大事傳聞一句（具名）。
+    兵器關著不給也不記（開了之後照樣給得出去）。寫了 figure 的那一位這一季退場或重創就不給——beaten 是他（把他打到重創的這一場）例外。
+    回（給出去的那幾把, 江湖紀錄的話）。不擲骰。"""
+    p, w, cfg = state.player, state.world, content.config.weapons
+    if not cfg.enabled:
+        return [], []
+    items: list[Equipment] = []
+    lines: list[str] = []
+    for arm in content.gear.signature_arms:
+        if arm.character in w.signature_arms:
+            continue
+        if arm.figure is not None and arm.figure != beaten and figures.is_out(state, arm.figure):
+            continue  # 退場、重創：這一季不再出現，本命兵器也跟著沒了（挑戰每季都有設計 3.5、5.4）
+        if p.affinities.get(arm.character, 0) >= cfg.signature_affinity:
+            via = "gift"
+        elif arm.figure is not None and p.figure_wins.get(arm.figure, 0) >= cfg.signature_wins:
+            via = "seized"
+        else:
+            continue
+        w.signature_arms[arm.character] = SignatureClaim(owner=p.name, via=via)
+        item = new_arm(state, arm)
+        words = {"general": content.characters[arm.character].name, "arm": item.name}
+        line = (arm.gift_line or GIFT_LINE) if via == "gift" else (arm.seize_line or SEIZE_LINE)
+        lines.append(line.format(**words))
+        lines += treasures.deliver(state, content, item, hold=True)
+        add_chronicle(state, (CHRONICLE_GIFT if via == "gift" else CHRONICLE_SEIZED).format(who=p.name, **words))
+        add_rumor(state, (RUMOR_GIFT if via == "gift" else RUMOR_SEIZED).format(who=p.name, **words), None, content=content, named=True)
+        items.append(item)
+    return items, lines
+
+
+def annal_line(content: Content, item: Equipment, via: str) -> str:
+    """行狀那一句（人物）：誰把哪一把交給你、或你奪走了誰的。"""
+    general = content.characters[item.signature].name if item.signature in content.characters else item.signature
+    return (ANNAL_GIFT if via == "gift" else ANNAL_SEIZED).format(general=general, arm=item.name)

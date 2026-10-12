@@ -1433,6 +1433,7 @@ class Game:
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             msgs += self._general_gifts()  # 名將贈禮（裝備四欄 6.4）：這一下的情誼（對話、事件）到了門檻就送；進這一則紀錄
+            msgs += self._signature_arms()  # 名將本命兵器（打造第三批）：情誼到了、或這一下打贏他本人第三次
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
@@ -1503,6 +1504,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
+            msgs += self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
@@ -3451,6 +3453,20 @@ class Game:
         for cid, who in self.state.world.general_gifts.items():
             if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
                 annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
+        return msgs
+
+    def _signature_arms(self, record=None, beaten: str | None = None) -> list[str]:
+        """名將本命兵器（兵器設計 4.10；打造第三批，signature_arms.due）：情誼到 signature_affinity 他送你，打贏他本人 signature_wins 次
+        他讓你奪走；每位名將每季全服一人（WorldState.signature_arms，這一下動作最後的 _save_season 存回去，同名將贈禮）。choose 與
+        answer_event 最後各叫一次（情誼從對話、事件、隨口應對來都走得到）；_challenge 打贏時帶 record、beaten 先叫一次，那一把寫進
+        這一場戰報的「得失」（同寶物掉落）。行狀記一筆（人物）。不擲骰：不碰 Game.rng。"""
+        s, c = self.state, self.content
+        items, msgs = signature_arms.due(s, c, beaten=beaten)
+        for item in items:
+            if record is not None:
+                record.materials.append(signature_arms.GAIN_LINE.format(name=item.name))
+            annals.note(s, c, annals.FIGURE, signature_arms.annal_line(c, item, s.world.signature_arms[item.signature].via), 4,
+                        figure=item.signature)
         return msgs
 
     def _deliver_renames(self) -> None:
