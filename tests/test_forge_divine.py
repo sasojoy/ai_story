@@ -9,7 +9,7 @@ import pytest
 
 from conftest import real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
-from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, smithing, team, weapons
+from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, skillview, smithing, team, weapons
 from tianxia.content import validate
 from tianxia.models import ForgeSecret, ForgeSide
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
@@ -279,3 +279,16 @@ def test_an_armor_original_is_kept_too(divine_content, world):
     armor.wield(game.state, divine_content, spare.id)  # 原品進裝備庫
     assert armor.dismantle(game.state, divine_content, coat.id) == [equipment.ORIGINAL_KEPT_LINE]
     assert armor._row(coat, None, divine_content)["keep"] == equipment.ORIGINAL_KEPT
+
+
+# ── Task 6：畫面要的資料 ──
+
+def test_gear_rows_mark_the_unnamed_original_with_its_book_name(divine_content, world):
+    game = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    worn = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["worn"]  # noqa: E731
+    row = worn()
+    assert row["divine"] == {"pattern": "墜星劍"} and row["grade"].endswith(equipment.DIVINE_MARK)
+    smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)
+    row = worn()
+    assert row["divine"] is None and row["name"] == "墜星劍"  # 定了名：表單不再畫
