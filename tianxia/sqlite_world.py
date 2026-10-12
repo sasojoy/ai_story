@@ -292,6 +292,17 @@ class SqliteWorldStore:
             )
             return find, True
 
+    def add_copy(self, key: str) -> None:
+        with self.db.transaction() as conn:
+            season = self._season_number(conn)
+            find = _gear_find(conn, season, key)
+            if find is None:
+                return
+            find.copies += 1
+            conn.execute(
+                "UPDATE gear_recipes SET data = ? WHERE season = ? AND key = ?", (find.model_dump_json(), season, key),
+            )
+
     # ── 合到舊的（武學與成長設計 12.2）──────────────────────
 
     def fused_arts(self) -> list[MartialArt]:

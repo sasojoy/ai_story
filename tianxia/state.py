@@ -180,10 +180,14 @@ class WeaponRecipe(BaseModel):
         return self.name
 
 
+DIVINE_UNNAMED = "無名神器"  # 待 joy 潤：神器原品還沒定名時的名字（打造隱藏配方設計 5.2）；仿品寫「仿・無名神器」
+COPY_NAME = "仿・{name}"  # 待 joy 潤：仿品的名字（5.3）；{name} 是原品的名字，還沒定名是 DIVINE_UNNAMED
+
+
 class GearFind(BaseModel):
     """全服登記的隱藏配方發現（打造隱藏配方設計 7.1；gear_recipes 表裡鍵「鑄|配方 id」那幾列）：這一季第一個打出這條隱藏配方的人。
     表的名字欄寫鍵本身（不佔名字空間），名器的名字照內容。fusion.echo 讀 id、name、creator、co_creator、creator_shown。
-    神器的原品主人、定名、仿品數是第二批（之後加欄位，都給預設值）。"""
+    神器配方那一列另記原品主人、定的名字、仿品數（打造第二批；舊列沒有這幾欄，讀成名器那一筆）。"""
 
     secret: str  # 隱藏配方 id（ForgeSecret.id）
     slot: Literal["weapon", "armor"]
@@ -194,6 +198,13 @@ class GearFind(BaseModel):
     creator: str | None = None  # 首位發現者的名號（身分）
     creator_shown: str | None = None  # 寫給別人看的名號（登記當下記下）
     co_creator: str | None = None  # fusion.echo 讀；打造沒有論武，一律 None
+    # 神器（打造第二批；企劃者選 14.1 甲：神器配方一爐必出神器）。照甲首位發現者就是原品主人：forge_secrets.new_find 在登記的那一筆裡
+    # 一起記下（claim_gear_find 同一筆交易，誰先寫進去誰拿原品），不另開 claim_divine
+    divine: bool = False  # 這一條是神器配方
+    owner: str | None = None  # 原品主人的名號（身分）
+    master_shown: str | None = None  # 寫給別人看的原品主人名號（打出那一刻記下；同 MartialArt.master_shown）
+    divine_name: str | None = None  # 原品定的名字（world.name_divine）；還沒定是 None
+    copies: int = 0  # 這一季照這個配方打出的仿品幾把（world.add_copy；神器譜寫「仿品 N 把」，不列人名）
 
     @property
     def id(self) -> str:
@@ -201,6 +212,10 @@ class GearFind(BaseModel):
 
     @property
     def name(self) -> str:
+        """寫給人看的名字（傳聞、首創名望回饋 fusion.echo）：名器是內容的名字（title，登記當下記下）；神器是原品定的名字，
+        還沒定名是「無名神器」（7.1）。"""
+        if self.divine:
+            return self.divine_name or DIVINE_UNNAMED
         return self.title
 
 

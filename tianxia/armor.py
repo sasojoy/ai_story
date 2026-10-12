@@ -52,7 +52,13 @@ def cut(item: Equipment | None, neigong: MartialArt | None, content: Content) ->
     rule = content.config.armor
     if not rule.enabled or item is None or item.slot != "armor":
         return 0.0
-    base = rule.tier_cut.get(str(item.tier), 0.0) + rule.quality_cut.get(item.quality, 0.0) + rule.temper_step * item.tempers
+    if item.original:  # 神器原品、仿品（打造隱藏配方設計 4.3、5.6）：基本值取代階那一格；不看內容、不另加名器的 2%
+        base = rule.original_cut
+    elif item.copy_of is not None:
+        base = rule.copy_cut
+    else:
+        base = rule.tier_cut.get(str(item.tier), 0.0)
+    base += rule.quality_cut.get(item.quality, 0.0) + rule.temper_step * item.tempers
     base += rule.match * _match(item.attribute, neigong)
     if equipment.named(content, item):
         base += rule.named_cut  # 名器多一截（打造隱藏配方設計 4.2）
@@ -96,10 +102,12 @@ def shop_item(attribute: str) -> Equipment:
 
 def new_armor(
     state: GameState, *, name: str, attribute: str, tier: int, quality: str, recipe: str | None = None, secret: str | None = None,
+    original: bool = False, copy_of: str | None = None,
 ) -> Equipment:
-    """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有；secret 是名器的隱藏配方 id。"""
+    """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有；secret 是名器或神器的
+    隱藏配方 id；original／copy_of 是神器的原品與仿品（打造隱藏配方設計 5.3、5.6）。"""
     return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality,
-                     recipe=recipe, secret=secret)
+                     recipe=recipe, secret=secret, original=original, copy_of=copy_of)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

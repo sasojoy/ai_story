@@ -22,7 +22,7 @@ from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
 from .rules import add_rumor
-from .state import Equipment, GameState, SmithDraft, Weapon
+from .state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
 NOT_ENOUGH = "身上的素材不到兩個"  # 待 joy 潤
@@ -169,7 +169,8 @@ def forge(
     回（那一件, 訊息）；打不成回 (None, [原因])，什麼都不收。先比這一季的隱藏配方（forge_secrets.match，不擲骰）：打中了是名器，
     名字照內容，全服第一個打出的人登記成首位發現者（world.claim_gear_find，原子）、江湖上傳一句，別人照著打記首創名望回饋；
     沒打中照 general_name（上線前登記的舊名字 → 對照表），什麼都不登記。品質照 forge_odds 擲（隱藏配方不改機率；rng 由呼叫端給：
-    兵器 Game.rng、防具 own_rng；沒給是下品），名器也只擲這一次；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。"""
+    兵器 Game.rng、防具 own_rng；沒給是下品），名器也只擲這一次；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。
+    神器配方（5.1 甲）一爐必出神器、不擲品質（不碰亂數）：這一季第一把是原品（首位發現者就是原品主人），之後每一把是仿品，仿品數 +1。"""
     problem = forge_problem(state, content, kind, main, aux)
     if problem is not None:
         return None, [f"（{problem}。）"]
@@ -186,7 +187,16 @@ def forge(
         name = secret.name
     else:
         name = general_name(content, world, kind, main, aux, attribute)
-    quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
+    divine = secret is not None and secret.divine
+    if divine:
+        # 神器配方（打造隱藏配方設計 5.1 甲）：一爐必出神器、不擲品質（不碰亂數）。第一把是原品（claim_gear_find 那一筆交易裡記下原品主人＝
+        # 首位發現者，見 forge_secrets.new_find），之後每一把是仿品（打的人是原品主人自己也一樣，5.3），仿品數 +1
+        quality = "上品"
+        name = DIVINE_UNNAMED if first else COPY_NAME.format(name=find.name)
+        if not first:
+            world.add_copy(forge_secrets.key(secret))
+    else:
+        quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
     p = state.player
     used = Counter([main, aux])
     for mid, n in used.items():
@@ -199,23 +209,26 @@ def forge(
     m, a = content.materials[main], content.materials[aux]
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
     secret_id = secret.id if secret is not None else None
+    gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None}
     if slot == "armor":
-        item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
+        item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id, **gear)
         head = ARMOR_FORGED.format(what=what, name=name, attribute=attribute, grade=equipment.grade(item))
     else:
-        item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id)
+        item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id,
+                                  **gear)
         head = FORGED.format(what=what, name=name, kind=kind, attribute=attribute, grade=equipment.grade(item))
     lines = forge_secrets.arrival(state, content, secret, find, first) if secret is not None else []
     msgs = ["\n".join([head, *lines])]
-    msgs += setting_line(content, setting, slot)
+    msgs += [] if divine else setting_line(content, setting, slot)  # 神器那一爐不擲品質：天時地利那一句不寫
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
     msgs.append(equipment.store(state, item))
     if secret is not None:
         forge_secrets.solve(state, tianji, secret, key)
-        if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；江湖史不記名器，只記神器（第二批）
-            add_rumor(state, content.config.forge_secrets.rumor.format(who=state.player.name, name=secret.name), None,
-                      content=content, named=True)
+        if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；神器那一句不帶名字（還沒定名），定名時另傳（name_divine）
+            rule = content.config.forge_secrets
+            text = rule.divine_rumor.format(who=state.player.name) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
+            add_rumor(state, text, None, content=content, named=True)
         fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
     return item, msgs
 
@@ -246,6 +259,7 @@ ARMOR_ASK_AUX = "挑輔料：主料與輔料合起來定這件防具的屬性。
 ARMOR_ATTR_MARK = "・跟你的內功同屬性"  # 待 joy 潤（防具看內功，四欄設計 4.2）
 GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD
 SOLVED_HEAD = " → 照鑄譜上的【{name}】打"  # 待 joy 潤：這一爐在自己的鑄譜上打中過才寫（打造隱藏配方設計 6.4）；別人打中的、沒打中過的都不寫
+DIVINE_HEAD = " → 照鑄譜上的【{name}】打：必出神器（仿品）"  # 待 joy 潤：自己的鑄譜上打中過的神器配方（6.4、5.1 甲）；{name} 是譜名
 
 
 def is_go(option_id: str) -> bool:
@@ -362,19 +376,23 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
 def go_option(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str):
     """開爐那一顆（打造隱藏配方設計 6.4）：寫放進爐裡的主料＋輔料、種類（防具寫「防具」，noun_label）、屬性、階、工錢與三個品質的
     機率（不寫品級）；不帶 wait（不再等模型）。不露隱藏配方：只有這一爐在**自己的**鑄譜上打中過，才在兩樣後面接 SOLVED_HEAD
-    （別人打中的、沒打中過的都不寫）。打不成灰掉寫原因。"""
+    （神器配方接 DIVINE_HEAD，不寫機率：一定是上品的仿品）；別人打中的、沒打中過的都不寫。打不成灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
-    known = forge_secrets.solved_name(state, content, world.read().tianji, slot_of(kind), kind, main, aux)
+    tianji, slot = world.read().tianji, slot_of(kind)
+    known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
+    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
+    divine = recipe is not None and recipe.divine
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)
-    odds = fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))
-    note = problem or f"工錢 {price(content, tier, slot_of(kind))} 兩；{odds}"
+    cost = f"工錢 {price(content, tier, slot)} 兩"
+    note = problem or (cost if divine else f"{cost}；{fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))}")
+    head = (DIVINE_HEAD if divine else SOLVED_HEAD).format(name=known) if known else ""
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",
         label=GO_LABEL.format(
             what=f"{content.materials[main].name}＋{content.materials[aux].name}",
-            head=SOLVED_HEAD.format(name=known) if known else "", kind=noun_label(kind),
+            head=head, kind=noun_label(kind),
             attribute=attribute_of(world, content, kind, main, aux), tier=weapons.TIER_WORDS[tier], note=note,
         ),
         enabled=problem is None,

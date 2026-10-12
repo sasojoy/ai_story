@@ -223,6 +223,10 @@ class WorldStateStore(Protocol):
         鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
+    def add_copy(self, key: str) -> None:
+        """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
+        ...
+
     # ── 合到舊的（武學與成長設計 12.2；這一季）──
     def fused_arts(self) -> list[MartialArt]:
         """這一季靠合成登記的功法（origin 是 fused），照登記的先後；「合到舊的」從這裡找候選。"""

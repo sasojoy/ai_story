@@ -51,6 +51,8 @@ WIELDED = "你換上了【{name}】。"  # Game.wield_weapon 照開頭「你換�
 NOT_NOW = "（此刻無法這麼做。）"
 TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
 NAMED_MARK = "・名器"  # 待 joy 潤：照隱藏配方打出來的那一件，階品後面多這一段（打造隱藏配方設計 4.2）
+DIVINE_MARK = "・神器"  # 待 joy 潤：神器原品，階品後面多這一段（打造隱藏配方設計 5.3）
+COPY_MARK = "・仿品"  # 待 joy 潤：神器仿品
 DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
@@ -134,14 +136,21 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
 
 
 def grade(item: Equipment) -> str:
-    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接「・名器」（打造隱藏配方設計 4.2；只看 secret，
-    不查內容：內容拿掉了那一條，加成照一般的算〔named〕、這一段照寫）。"""
-    mark = NAMED_MARK if item.secret is not None and item.copy_of is None and not item.original else ""
+    """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接一段（打造隱藏配方設計 4.2、5.3；只看存檔的欄位，
+    不查內容）：神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
+    if item.original:
+        mark = DIVINE_MARK
+    elif item.copy_of is not None:
+        mark = COPY_MARK
+    elif item.secret is not None:
+        mark = NAMED_MARK
+    else:
+        mark = ""
     return f"{TIER_WORDS.get(item.tier, '')}{item.quality}{mark}"
 
 
 def named(content: Content, item: Equipment | None) -> bool:
-    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品是第二批。"""
+    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
     return (item is not None and item.secret is not None and item.secret in content.forge_secrets
             and item.copy_of is None and not item.original)
 

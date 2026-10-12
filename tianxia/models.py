@@ -1527,6 +1527,8 @@ class WeaponRules(_Strict):
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
+    copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
+    original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
 
 
 class ArmorRules(_Strict):
@@ -1552,6 +1554,8 @@ class ArmorRules(_Strict):
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
+    copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
+    original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
 
 
 class MountRules(_Strict):
@@ -1671,6 +1675,11 @@ class ForgeSecretRules(_Strict):
     mine_line: str = "照你摸出來的鑄法，又打了一件。"
     follow_line: str = "這門鑄法由{who}先摸出來，你也打成了。"
     rumor: str = "{who}在鐵匠鋪摸出了一門失傳的鑄法，打出了【{name}】。"
+    # 神器（打造第二批；待 joy 潤；{who} 換成名號）
+    divine_line: str = "這是一把神器，這門鑄法這一季只出這一把原品——到修練頁的裝備庫替它定名。"
+    copy_line: str = "這門鑄法的原品在{who}手上，你打出的是仿品。"
+    copy_mine_line: str = "原品已經在你手上，這一爐打出的是仿品。"
+    divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
 
 
 class FirstEcho(_Strict):
