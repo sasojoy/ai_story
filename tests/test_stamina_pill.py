@@ -103,3 +103,51 @@ def test_the_web_button_takes_a_pill(monkeypatch):
     assert r["main"]["status"]["pills"]["count"] == 19, r["message"]
     saved = open_characters().load("服丹人").player
     assert saved.stamina_pills == 19 and saved.stamina >= 105
+
+
+# ── 拿掉一鍵補滿之後補回體丹（企劃者 2026-10-12；PlayerState.pills_topped_to）──
+
+def _reload(game):
+    return Game(game.content, game.state, random.Random(0), game.world)
+
+
+def test_an_old_character_short_of_pills_is_topped_up_once(game):
+    p = game.state.player
+    p.stamina_pills, p.pills_topped_to = 5, 0  # 拿掉之前的舊角色：吃掉了大半
+    again = _reload(game)
+    n = game.content.config.beta_gift_stamina_pills
+    assert again.state.player.stamina_pills == n and again.state.player.pills_topped_to == n
+    entry = again.state.journal[0]
+    assert entry.title == "回體丹" and entry.lines == [
+        f"體力條上的「補滿」收起來了；補給你回體丹 {n - 5} 顆，手上一共 {n} 顆，一顆回 {game.content.config.stamina_pill_restore} 點體力，"
+        "按體力條右端的「丹」服下。"]
+    again.state.player.stamina_pills = 1
+    assert _reload(again).state.player.stamina_pills == 1  # 一個數只補一次
+
+
+def test_a_character_holding_enough_is_left_alone_but_marked(game):
+    p = game.state.player
+    p.stamina_pills, p.pills_topped_to = 50, 0
+    entries = len(game.state.journal)
+    again = _reload(game)
+    assert again.state.player.stamina_pills == 50 and again.state.player.pills_topped_to == 20
+    assert len(again.state.journal) == entries
+
+
+def test_new_characters_are_not_topped_up_on_top_of_the_gift(game):
+    assert game.state.player.pills_topped_to == 20 and game.state.player.stamina_pills == 20
+    assert all(e.title != "回體丹" for e in game.state.journal)
+
+
+def test_raising_the_gift_tops_up_again(game):
+    game.state.player.stamina_pills = 3
+    game.content.config.beta_gift_stamina_pills = 30
+    assert _reload(game).state.player.stamina_pills == 30
+
+
+def test_the_weekend_profile_no_longer_refills_for_free():
+    from pathlib import Path
+
+    from tianxia.content import load_content
+    real = load_content(Path(__file__).parent.parent / "content", profile="weekend")
+    assert real.config.beta_free_refill is False

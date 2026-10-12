@@ -304,7 +304,9 @@ class Game:
         行動走一遍（_graduate）。內容沒有序章（正式內容現在就是）什麼都不做，連亂數都不多用一次。
         sex：建角色時選的性別（「男」／「女」，gender.GENDERS）：給了就定了（gender_chosen）；沒給是男、設定頁還能選一次。
         假人由 bot_runner 照比例給（gender.for_bot）。"""
-        game = cls(content, new_game_state(content, name), rng, world)
+        state = new_game_state(content, name)
+        state.player.pills_topped_to = content.config.beta_gift_stamina_pills if content.config.beta_gift else 0  # 新角色照下面的贈送拿，不另補
+        game = cls(content, state, rng, world)
         if sex in gender.GENDERS:
             game.state.player.gender, game.state.player.gender_chosen = sex, True
         if prologue:
@@ -340,6 +342,20 @@ class Game:
             entries[0] = entries[0].model_copy(update={"lines": [*entries[0].lines, line]})
         else:
             self._write(self.content.scenario.name, [line], tag=journal.SEASON_START)
+
+    def _top_up_pills(self) -> None:
+        """拿掉一鍵補滿之後補回體丹（企劃者 2026-10-12；見 PlayerState.pills_topped_to）：讀檔那一刻，贈送的數比上次補到的多，
+        手上不到那個數就補到那個數、江湖紀錄寫一行。真人、假人、整季機器人一樣（假人看不出來）。"""
+        cfg, p = self.content.config, self.state.player
+        target = cfg.beta_gift_stamina_pills if cfg.beta_gift else 0
+        if target <= p.pills_topped_to:
+            return
+        p.pills_topped_to = target
+        if p.stamina_pills >= target:
+            return
+        added = target - p.stamina_pills
+        p.stamina_pills = target
+        self._write(cfg.stamina_pill_name, [howto.top_up_line(self.content, added)])
 
     GRADUATE_TRIES = 12  # _graduate 每一步最多試幾次；照著走卻一直前進不了（內容改版、賽季籌備中）就放棄、直接出師
 
@@ -511,6 +527,7 @@ class Game:
             p.stats.setdefault(key, c.config.start_stats.get(key, team.BASE_STAT))
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
+        self._top_up_pills()
         sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None

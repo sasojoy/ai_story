@@ -40,10 +40,11 @@ def cap(game: Game) -> int:
 # ── 開關 ──────────────────────────────────────────────
 
 
-def test_the_switch_is_off_by_default_and_only_the_weekend_profile_turns_it_on():
+def test_the_switch_is_off_by_default_and_no_profile_turns_it_on():
+    """企劃者 2026-10-12 拿掉「補滿」鈕：週末設定也不開了（欄位留著，預設關）。"""
     assert Config().beta_free_refill is False and Config().beta_free_refill_label == LABEL
     assert real_content().config.beta_free_refill is False  # content/config.json 不寫它
-    assert real_content("weekend").config.beta_free_refill is True
+    assert real_content("weekend").config.beta_free_refill is False
 
 
 def test_the_button_label_cannot_be_empty():
@@ -371,8 +372,8 @@ def test_the_pill_route_refills_to_the_top_under_the_weekend_profile(monkeypatch
 
     weekend = load_content(server.ROOT / "content", profile="weekend")
     weekend.config.auto_open_first_season = True
+    weekend.config.beta_free_refill = True  # 週末設定不再開它（2026-10-12）；開關照舊管用
     monkeypatch.setattr(server, "CONTENT", weekend)
-    assert weekend.config.beta_free_refill is True
     client = TestClient(server.app)
     client.post("/api/register", json={"login": "refill_01", "password": "secret-pw", "again": "secret-pw"})
     client.post("/api/character", json={"name": "補滿人"})
