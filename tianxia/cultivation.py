@@ -19,7 +19,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from . import insights, library, naming, team
+from . import insights, library, naming, team, treasures
 from .martial_arts import next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -66,10 +66,10 @@ def heat_mode(content: Content, target_quality: str | None) -> bool:
 
 def chance(
     content: Content, target_quality: str, failures: int, boost: int = 0, *, wis: float = team.BASE_STAT,
-    fit: float = 1.0,
+    fit: float = 1.0, treasure: float = 1.0,
 ) -> int:
     """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，乘上悟性的加成（×（1＋3%×（悟性−5）），
-    武學與成長設計 6.1）與這一回的搭配（fit，見 fit()），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
+    武學與成長設計 6.1）與這一回的搭配（fit，見 fit()）、寶物的倍數（treasure：treasures.amount 的 cultivate，同樣在上限之內），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
     （破境丹，見 boost_for），總和最多 100。悟性在上限之內、丹在上限之上（計畫二 G2）：上限是企劃者訂的天花板，
     丹才是越過它的那一招。寫明會必成的那一次（沒乘悟性就到 100、這一階也沒有上限）悟性再低照樣必成。
     Config.cultivate_sure_by 寫了第幾次必成的那一階（預設只有下品→中品，第 3 次），那一次起直接 100%，蓋過悟性與上限（W8）。"""
@@ -82,7 +82,7 @@ def chance(
     if raw >= 100 and cap >= 100:
         base = 100
     else:
-        base = min(cap, round(raw * team.stat_factor(content, wis) * fit))
+        base = min(cap, round(raw * team.stat_factor(content, wis) * fit * treasure))  # 寶物「修練升品」跟悟性、搭配並列乘進 raw（裝備四欄 6.2）
     return min(100, base + boost)
 
 
@@ -111,7 +111,12 @@ def odds_for(
     factor = 1.0
     if world is not None and art_id is not None and target_quality not in content.config.cultivate_sure_by:
         factor = fit(state, content, world, art_id).factor
-    return chance(content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT), fit=factor)
+    # 寶物在 cultivate_sure_by 的判斷之外另外傳（裝備四欄 6.2）：併進 factor 的話衝中品（寫在 cultivate_sure_by 裡）時寶物永遠不起作用；
+    # 也不乘進 fit()：那樣頓悟（seize）與服丹衝關（force_odds）也會跟著放大，絕學要的是契機
+    return chance(
+        content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT), fit=factor,
+        treasure=treasures.amount(state, content, "cultivate"),
+    )
 
 
 def boost_for(state: GameState, content: Content, target_quality: str, use_legend: bool = False) -> int:

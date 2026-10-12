@@ -21,7 +21,7 @@ from . import (
     fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
-    social, styles, team, timetable, traits, weapons, zh,
+    social, styles, team, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
@@ -516,6 +516,7 @@ class Game:
             p.smith_draft = None  # 單子只在鐵匠鋪開著、武器也開著時有意義（武器關了防具還開著：鐵匠鋪照開，單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
+        treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -656,6 +657,7 @@ class Game:
         self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
+        self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
             self._write(bounties.BOARD, refunds)
@@ -740,6 +742,7 @@ class Game:
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()
+        self._deliver_held_gear()  # 同 sync：快轉（與只 advance 的整季機器人）也補寄放的東西
         return self._log(msgs + arrived)
 
     def _stamp_join(self) -> None:
@@ -1422,6 +1425,7 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
+            msgs += self._general_gifts()  # 名將贈禮（裝備四欄 6.4）：這一下的情誼（對話、事件）到了門檻就送；進這一則紀錄
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
@@ -1483,6 +1487,7 @@ class Game:
             msgs += self._apply(effect)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
+            msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
@@ -2074,11 +2079,14 @@ class Game:
         return self._explore_outcome() + self._legend_find() + self._scrap_find() + scouted
 
     def _legend_find(self) -> list[str]:
-        """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會）。
+        """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會；帶著「探索撿破境丹」的寶物時門檻 ×2）。
         機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
         兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。"""
         cfg = self.content.config
-        if cfg.explore_legend_chance <= 0 or self.rng.random() >= cfg.explore_legend_chance:
+        # 寶物「探索撿破境丹」（裝備四欄 6.2）：只放大門檻（夾在 1 以下），擲的還是同一顆 self.rng.random()——帶不帶都只擲一次，
+        # 序列不位移；基本機率是 0 照舊不擲（測試內容）
+        chance = min(1.0, cfg.explore_legend_chance * treasures.amount(self.state, self.content, "legend"))
+        if cfg.explore_legend_chance <= 0 or self.rng.random() >= chance:
             return []
         self.state.player.legend_items += 1
         return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
@@ -2113,13 +2121,14 @@ class Game:
 
     def _explore_weights(self, loc: Location) -> list[tuple[ExploreBranch, float]]:
         """探索三選一此刻在這裡的候選與比重（探索三選一設計第三節）：照地點類型（Config.explore_mix），比例是 0 的與做不了的
-        （_explore_can）拿掉；悟意境那一支的比重 ×（1＋3%×（悟性−5）），另外兩支不動（武學與成長設計 6.1）。
+        （_explore_can）拿掉；悟意境那一支的比重 ×（1＋3%×（悟性−5））× 寶物（treasures.amount 的 insight，裝備四欄 6.2），另外兩支不動（武學與成長設計 6.1）。
         探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
         s, c = self.state, self.content
         mix = c.config.explore_mix_of(loc.tags).weights
         wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
         return [
-            (b, mix[b] * (wis if b == "insight" else 1))
+            (b, mix[b] * (sharp if b == "insight" else 1))
             for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)
         ]
 
@@ -2749,9 +2758,9 @@ class Game:
         return ["（此刻無法這麼做。）"]
 
     def wield_weapon(self, item_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具哪裡都能換（含路上、閉關中），坐騎路上不能換（equipment.wield 擋）、
-        不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵（MENXIA_ACTIONS["wield"]），防具的 id（甲:N）、
-        坐騎的 id（騎:N）也走它。"""
+        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
+        坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵
+        （MENXIA_ACTIONS["wield"]），防具（甲:N）、坐騎（騎:N）、寶物（寶:N）的 id 也走它。"""
         msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
         if msgs and msgs[0].startswith("你換上了"):
             self._menxia_entry(msgs[0], self._xinde())
@@ -3346,6 +3355,20 @@ class Game:
         p.stats["fame"] = p.stats.get("fame", 0) + gained
         self._write(journal.ECHO, lines + ([f"名望 +{gained}"] if gained else []))
         self._save_season()  # 補到第幾個人記在共用賽季裡
+
+    def _deliver_held_gear(self) -> None:
+        """寄放的東西補發（裝備四欄 6.5）：懸賞的重賞、名將贈禮在裝備庫滿了時寄放在 PlayerState.held_gear；同步與快轉時那一欄開著、
+        身上空著或裝備庫有空位就補，一次補到裝備庫滿為止，補不完的留著（treasures.deliver_held）。閉關中也補（寶物閉關中本來就能換，
+        2.3【定】）。整季機器人只 advance、不 sync，所以 advance 也叫，不然整季模擬裡寄放的東西永遠補不回來。補了就寫一則江湖紀錄。"""
+        lines = treasures.deliver_held(self.state, self.content)
+        if lines:
+            self._write(treasures.HELD_TITLE, lines)
+
+    def _general_gifts(self) -> list[str]:
+        """名將贈禮（裝備四欄 6.4）：情誼到 gift_affinity 的人物把贈禮交給你，每位名將每季全服只送一人（treasures.gifts_due 記進
+        WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
+        事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
+        return treasures.gifts_due(self.state, self.content)
 
     def _deliver_renames(self) -> None:
         """手上（身上或功法庫）的武學被全服第一個練成絕學的人定了正式的名字，每個人下一次同步補一則江湖紀錄（FB-083）：
@@ -4163,12 +4186,13 @@ class Game:
 
     def _lose_silver(self, record) -> list[str]:
         """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
-        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|名號|戰報流水號」，同回合演出的做法），不動 Game.rng，
-        整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
+        只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|季數|名號|戰報流水號」：戰報流水號每季從頭算，少了季數
+        每一季第 N 場的結果都一樣），不動 Game.rng，整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
         p = self.state.player
         loss = p.stats["silver"] // 10
         chance = mounts.escape(self.state, self.content)
-        if loss and chance > 0 and random.Random(f"脫身|{p.name}|{record.id}").random() < chance:
+        seed = f"脫身|{self.world.get_season_number()}|{p.name}|{record.id}"
+        if loss and chance > 0 and random.Random(seed).random() < chance:
             record.notes.append(mounts.ESCAPED_LOSS)
             return [mounts.ESCAPED_LOSS]
         p.stats["silver"] -= loss
@@ -4343,7 +4367,8 @@ class Game:
     def _challenge(self, fid: str) -> list[str]:
         """挑戰本人（軍令文件 4.5，企劃者 2026-10-04 改定）：跟他本人打一場單次判定，花遊歷的體力。打贏他敗走（_rout），
         拿那支隊伍的獎勵；落敗失落一成銀兩；不論勝負都照結果扣氣血（同遊歷）。可以重複打，只是打贏的人要等他消氣。
-        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。"""
+        不推戰線（推戰線的是遊歷；打擊人物削的是聲威），也不擲官銀（那是遊歷打贏官軍隊伍才有）。
+        打贏另有機會掉一件寶物（_figure_treasure）。"""
         s, c = self.state, self.content
         fig = c.figures[fid]
         squad = figures.squad_of(s, c, fid)
@@ -4361,6 +4386,7 @@ class Game:
             record.changes += changes
             record.notes += notes
             msgs += extra
+            msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier)
@@ -4396,6 +4422,14 @@ class Game:
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
         return msgs
+
+    def _figure_treasure(self, fid: str, record) -> list[str]:
+        """挑戰本人打贏掉寶物（裝備四欄 6.4；treasures.challenge_drop）：掉出來的那一件寫進這一場戰報的「得失」（record.materials），
+        江湖紀錄寫撿到的那一句與放哪。不寫進 _battle_rewards：挑戰本人的戰報 kind 是 event，劇情戰也走那裡。"""
+        item, lines = treasures.challenge_drop(self.state, self.content, fid, self.world.get_season_number(), record.id)
+        if item is not None:
+            record.materials.append(treasures.GAIN_LINE.format(name=item.name))
+        return lines
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
@@ -4490,26 +4524,36 @@ class Game:
             record.silver = squad.reward_silver
             msgs.append(f"銀兩 +{squad.reward_silver}")
         lo = traits.loadout(self.state, self.content, self.world)
-        more = 1 + traits.amount(self.content, lo, "win_reward")  # 乘勝（13.2）：心得與經驗一起多拿
+        streak = traits.amount(self.content, lo, "win_reward")  # 乘勝（13.2）：心得與經驗一起多拿
+        # 寶物「打贏的心得／經驗」跟乘勝相加、不疊乘（裝備四欄 6.2）；兩種數字不同，拆成兩個倍數
+        more_xinde = 1 + streak + treasures.amount(self.state, self.content, "win_xinde_pct")
+        more_exp = 1 + streak + treasures.amount(self.state, self.content, "win_exp_pct")
         insight = lo.specials.get("win_xinde")  # 悟招（13.4）：再多固定的心得
-        xinde = round(squad.reward_xinde * more) + (int(insight.amount) if insight is not None else 0)
+        xinde = round(squad.reward_xinde * more_xinde) + (int(insight.amount) if insight is not None else 0)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
         if not prologue_rules.active(self.state, self.content):  # 序章不掉素材（新手引導計畫一）
+            got: list[str] = []  # 這一場掉到的素材（寶物「多掉一個素材」從這裡挑）
             for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
+                    got.append(material_id)
                     record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
                     msgs.append(line)
-            if record.kind in ("train", "wild"):  # 兵器掉落（兵器設計 4.8）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
-                weapon, dropped = weapons.drop(self.state, self.content, self.rng)
+            if record.kind in ("train", "wild"):  # 兵器掉落與寶物多掉的素材（兵器設計 4.8、裝備四欄 6.2）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
+                extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)  # 自己的亂數
+                line = materials.grant(self.state, self.content, extra) if extra is not None else None
+                if line:  # 照實多寫那一個：戰報的得失、江湖紀錄（設計 6.2）
+                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+                    msgs.append(line)
+                weapon, dropped_lines = weapons.drop(self.state, self.content, self.rng)
                 if weapon is not None:
                     record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
-                    msgs += dropped
-        # 經驗本來就是每人拿一樣多（FB-002），乘勝整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
-        exp = round(squad.exp * more * ranger.exp_factor(self.state, self.content))
+                    msgs += dropped_lines
+        # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
+        exp = round(squad.exp * more_exp * ranger.exp_factor(self.state, self.content))
         record.exp = exp
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
@@ -5004,7 +5048,9 @@ class Game:
     def _finish_seclusion(self, end_time: float) -> list[str]:
         p, cfg = self.state.player, self.content.config
         hours = (end_time - p.seclusion_start) / HOUR
-        amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20))
+        # 寶物「閉關心得」（裝備四欄 6.2）：照出關那一刻身上那件算——寶物隨時能換（2.3【定】，企劃者 2026-10-11），閉關到一半換上也算
+        bonus = 1 + treasures.amount(self.state, self.content, "seclusion")
+        amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20) * bonus)
         p.busy_until = None
         p.seclusion_done = end_time  # 天時地利的「心靜」：出關之後一陣子開爐（fusion.setting_points）
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount

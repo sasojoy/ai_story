@@ -873,15 +873,38 @@ def test_a_lost_fight_on_horseback_may_keep_the_silver(game, monkeypatch):
 
 
 def test_riding_away_from_a_loss_is_rolled_on_its_own_seed(game):
-    """random.Random(f"脫身|{名號}|{戰報流水號}")，不動 Game.rng（整季測試與量表的基準不位移）。"""
+    """random.Random(f"脫身|{季數}|{名號}|{戰報流水號}")，不動 Game.rng（整季測試與量表的基準不位移）。"""
     from conftest import FixedRandom
     _hopeless(game, _horse(tier=3, quality="上品"))
     p = game.state.player
     game.rng = FixedRandom(0.0)
     game.choose("act:train")
     record = game.state.battles[0]
-    kept = random.Random(f"脫身|{p.name}|{record.id}").random() < mounts.escape(game.state, game.content)
+    seed = f"脫身|{game.world.get_season_number()}|{p.name}|{record.id}"
+    kept = random.Random(seed).random() < mounts.escape(game.state, game.content)
     assert record.tier == "落敗" and (record.silver == 0) is kept and (p.stats["silver"] == 50) is kept
+
+
+def test_the_loss_escape_seed_carries_the_season_number(game, monkeypatch):
+    """QA（裝備二）：戰報流水號每季從 1 算起，種子少了季數，每一季第 N 場落敗的脫身結果都一樣。種子要帶季數：
+    把真的拿去擲的那個種子攔下來看（換了季數，同一個名號、同一個流水號擲的是不同的種子）。"""
+    from conftest import FixedRandom
+    from tianxia import engine as engine_module
+    seeds = []
+    real = engine_module.random.Random
+
+    def recording(seed=None):
+        if isinstance(seed, str) and seed.startswith("脫身|"):
+            seeds.append(seed)
+        return real(seed)
+
+    monkeypatch.setattr(engine_module.random, "Random", recording)
+    _hopeless(game, _horse(tier=3, quality="上品"))
+    monkeypatch.setattr(game.world, "get_season_number", lambda: 7)
+    game.rng = FixedRandom(0.0)
+    game.choose("act:train")
+    record = game.state.battles[0]
+    assert seeds == [f"脫身|7|{game.state.player.name}|{record.id}"]
 
 
 def test_riding_away_from_a_loss_takes_nothing_from_the_games_dice(game):

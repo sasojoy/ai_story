@@ -125,6 +125,9 @@ class Effect(_Strict):
     donate_grain: dict[str, int] = Field(default_factory=dict)  # 捐糧：據點 id → 基準量（照 foreshadow.need 換算）；同護糧送到，記捐獻與一次推動的貢獻
     fs_fragments: list[str] = Field(default_factory=list)  # 直接給一則伏筆片段：「鏈 id:片段序號」（0 起）；做得了那條鏈的人才給、聽過的不再給
     runic: int = Field(default=0, ge=0)  # 符文殘片幾片（基準量，PlayerState.runic_pieces；玉璽大勢任務讀它，plan 玉璽碎片-2 用同一個名字）
+    # 奇遇給的寶物或良駒（裝備四欄 6.4）：content/gear.json 掉落池的 id，或 GOOD_HORSE（一匹良駒）；名將贈禮與名駒不准
+    # （content.check_effect），隨口應對不准（check_free_text），路上見聞只准屬性與素材
+    gear: str | None = None
 
 
 class Material(_Strict):
@@ -1532,6 +1535,66 @@ class MountRules(_Strict):
     edge_warn: int = Field(default=30, ge=0, le=100)  # 飽足低到這裡以下時江湖紀錄提醒一次（5.4）
 
 
+# 寶物的八種效果（裝備四欄 6.2）：win_material、legend 是企劃者 2026-10-11 換掉招募、氣血回復的兩種
+TREASURE_EFFECTS = ("cultivate", "insight", "win_xinde_pct", "win_exp_pct", "seclusion", "audience", "win_material", "legend")
+TreasureEffect = Literal["cultivate", "insight", "win_xinde_pct", "win_exp_pct", "seclusion", "audience", "win_material", "legend"]
+GOOD_HORSE = "good_horse"  # Effect.gear 寫這個是給一匹良駒（裝備四欄 5.7）；寶物表與名駒的 id 不能叫這個
+
+
+class TreasureRules(_Strict):
+    """寶物與好馬的來源（docs/superpowers/specs/2026-10-10-裝備四欄-design.md 第六節、5.7；裝備三）。數字都是【預設】（企劃者 2026-10-10
+    「全部照預設」），量表（scripts/measure_treasures.py）校準後可以改。效果的數字放這裡，內容（content/gear.json）只寫名字與效果種類；
+    同一種效果的寶物數字一樣（名將的贈禮也不另外強）。乘的效果（cultivate、insight、legend）寫倍數，加的寫加多少：win_xinde_pct、
+    win_exp_pct、seclusion 是比例，audience 是點數，win_material 是機率。不掛第一季開關（2.6，同兵器、防具、坐騎）；良駒、名駒的數字照 Config.mounts。"""
+
+    enabled: bool = True
+    effects: dict[str, float] = Field(default_factory=lambda: {
+        "cultivate": 1.2, "insight": 1.5, "win_xinde_pct": 0.2, "win_exp_pct": 0.15,
+        "seclusion": 0.25, "audience": 3, "win_material": 0.25, "legend": 2.0,
+    })
+    bounty_treasure_chance: float = Field(default=0.15, ge=0, le=1)  # 每週一掛單時每一邊擲一次：掛一件寶物（6.4）
+    bounty_horse_chance: float = Field(default=0.10, ge=0, le=1)  # 同上、分開擲：掛一匹良駒（5.7、6.4）
+    horse_quality: dict[str, float] = Field(default_factory=lambda: {"下品": 0.5, "中品": 0.3, "上品": 0.2})  # 懸賞與奇遇給的良駒品質的權重（5.7）
+    challenge_chance: float = Field(default=0.20, ge=0, le=1)  # 打贏大勢人物本人掉一件掉落池的寶物（6.4）
+    gift_affinity: int = Field(default=60, ge=0, le=100)  # 名將贈禮的情誼門檻（6.4；在本命武學 signature_affinity 70 之前）
+    dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
+
+
+class TreasureDef(_Strict):
+    """寶物表的一件（content/gear.json，裝備四欄 6.3）。名字原創、暫名交 joy 潤；效果是八種之一，數字在 Config.treasures.effects。
+    pool：掉落池（懸賞的重賞、挑戰本人、奇遇）；False 是名將的贈禮（只從 gifts 送出，事件不准給）。"""
+
+    id: str
+    name: str
+    effect: TreasureEffect
+    pool: bool = True
+
+
+class SteedDef(_Strict):
+    """名駒（content/gear.json，5.7）：三階、專名，只從名將贈禮來（事件與懸賞不給）。"""
+
+    id: str
+    name: str
+    quality: Literal["下品", "中品", "上品"] = "上品"
+
+
+class GiftDef(_Strict):
+    """名將贈禮（6.3、6.4）：情誼到 Config.treasures.gift_affinity 時送；每位名將每季全服只送一人。"""
+
+    character: str  # 人物 id（content/characters.json）
+    gear: str  # treasures（pool 為 false）或 steeds 的 id
+    line: str = ""  # 送禮那一句（{general}、{gift} 換成人物與贈禮的名字）；空的照 treasures.GIFT_LINE（待 joy 潤）
+
+
+class GearBook(_Strict):
+    """content/gear.json：寶物表、名駒、名將贈禮（裝備四欄 6.3）。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
+    防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
+
+    treasures: dict[str, TreasureDef] = Field(default_factory=dict)
+    steeds: dict[str, SteedDef] = Field(default_factory=dict)
+    gifts: list[GiftDef] = Field(default_factory=list)
+
+
 class Secrets(_Strict):
     """口訣與秘方（tianxia/secrets.py；PM 2026-10-10 派工，企劃者選「甲乙都做」的甲）。預設全關（測試內容沒有秘方池），
     正式值在 config.json。"""
@@ -1623,6 +1686,7 @@ class Config(_Strict):
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
+    treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
@@ -2698,6 +2762,7 @@ class Content(_Strict):
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
     duels: dict[str, DuelBoss] = Field(default_factory=dict)  # 單人頭目戰（content/duels.json）；沒有這個檔就是空的
+    gear: GearBook = Field(default_factory=GearBook)  # 寶物表、名駒、名將贈禮（content/gear.json，裝備三）；沒有這個檔就是空的
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的
     foreshadows: Foreshadows = Field(default_factory=Foreshadows)  # 關鍵伏筆（content/foreshadows.json，計畫 T7）
     orders: OrdersContent = Field(default_factory=OrdersContent)  # 陣營軍令（content/orders.json，計畫 T6）

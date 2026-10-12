@@ -25,10 +25,11 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, GLOW_KEYS, MOVES, REVEAL_KEYS, ROADS, STATS, Attribute, BattleDef, CharacterDef, CheckVoice, CombatLines, Condition, Config,
-    Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, Hints, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef, Squad,
-    TimetableEvent, TraitBook, Tutorial, allow_known,
+    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, Foreshadows, FrontLines, GearBook,
+    GiftDef, Hints, InsightDef, Location, OppDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef,
+    SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import PRESET_CLASH, name_problem
@@ -110,6 +111,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "secret_recipes.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
+        gear=_gear(root / "gear.json"),
         insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
         if (root / "insight_scenes.json").exists() else {},
         events=events,
@@ -206,6 +208,22 @@ def _with_local_admins(admins: list[str]) -> list[str]:
 
 def _read(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _gear(path: Path) -> GearBook:
+    """content/gear.json（裝備三）：寶物表、名駒、名將贈禮。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
+    只能有 treasures、steeds、gifts 三個鍵（拼錯在載入當下就報錯）。"""
+    if not path.exists():
+        return GearBook()
+    raw = _read(path)
+    extra = set(raw) - {"treasures", "steeds", "gifts"}
+    if extra:
+        raise ContentError(f"content/gear.json 只能有 treasures、steeds、gifts：{sorted(extra)}")
+    return GearBook(
+        treasures=_index(TreasureDef, raw.get("treasures", [])),
+        steeds=_index(SteedDef, raw.get("steeds", [])),
+        gifts=[_build(GiftDef, item) for item in raw.get("gifts", [])],
+    )
 
 
 def _foreshadows(path: Path) -> Foreshadows:
@@ -1231,6 +1249,50 @@ def check_duels(c: Content, need, known) -> None:
             need(any(foe.side != faction for foe in boss.foes), f"{where}：{faction} 的人挑不到一個不是自己人的面貌")
 
 
+def check_gear(c: Content, need, known) -> None:
+    """寶物表、名駒、名將贈禮（content/gear.json，裝備四欄 6.3、5.7）與 Config.treasures：效果的數字剛好八種；良駒的品質權重只寫
+    三個品質、不是負的、加起來大於 0。有表時：掉落池至少一件；名字不重複、過得了命名過濾、id 不叫 good_horse、寶物與名駒的 id 不重複；
+    贈禮的人物存在、一位只寫一次、送的是名駒或 pool 為 false 的寶物，送禮那一句是繁體、只用 {general}、{gift}；
+    pool 為 false 的寶物與名駒都要有人送（不然永遠拿不到）。沒有 gear.json（測試內容）就只查設定。"""
+    cfg, book = c.config.treasures, c.gear
+    need(set(cfg.effects) == set(TREASURE_EFFECTS), f"Config.treasures.effects 要剛好寫八種效果：{sorted(cfg.effects)}")
+    need(
+        set(cfg.horse_quality) <= {"下品", "中品", "上品"} and all(v >= 0 for v in cfg.horse_quality.values())
+        and sum(cfg.horse_quality.values()) > 0,
+        f"Config.treasures.horse_quality 只能寫下品、中品、上品，權重不能是負的、加起來要大於 0：{cfg.horse_quality}",
+    )
+    if not (book.treasures or book.steeds or book.gifts):
+        return
+    need(any(t.pool for t in book.treasures.values()), "content/gear.json：掉落池（pool 為 true 的寶物）至少要一件")
+    clash = sorted(set(book.treasures) & set(book.steeds))
+    need(not clash, f"content/gear.json：寶物與名駒的 id 重複：{clash}")
+    names: set[str] = set()
+    for item in [*book.treasures.values(), *book.steeds.values()]:
+        where = f"裝備表 {item.id}"
+        need(item.id != GOOD_HORSE, f"{where}：id 不能叫 {GOOD_HORSE}（事件給良駒用的字）")
+        need(item.name not in names, f"{where}：名字 {item.name} 重複")
+        names.add(item.name)
+        problem = name_problem(item.name, c)
+        need(problem is None, f"{where}：名字 {item.name} 過不了命名過濾（{problem}）")
+    given: set[str] = set()
+    for gift in book.gifts:
+        where = f"名將贈禮 {gift.character}"
+        known(where, [gift.character], c.characters, "人物")
+        need(gift.character not in given, f"{where}：同一位人物寫了兩次")
+        given.add(gift.character)
+        tdef = book.treasures.get(gift.gear)
+        need(gift.gear in book.steeds or (tdef is not None and not tdef.pool), f"{where}：贈禮 {gift.gear} 要是名駒或 pool 為 false 的寶物")
+        if gift.line:
+            need(to_traditional(gift.line) == gift.line, f"{where}：送禮那一句只能用繁體中文")
+            try:
+                gift.line.format(general="甲", gift="乙")
+            except (KeyError, IndexError, ValueError):
+                need(False, f"{where}：送禮那一句只能用 {{general}}、{{gift}}")
+    sent = {gift.gear for gift in book.gifts}
+    for item_id in [t.id for t in book.treasures.values() if not t.pool] + list(book.steeds):
+        need(item_id in sent, f"裝備表 {item_id}：沒有人送（pool 為 false 的寶物與名駒只從名將贈禮來）")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
@@ -1371,6 +1433,10 @@ def validate(c: Content) -> None:
             known(where, [eff.recruit], c.characters, "人物")
             if eff.recruit in c.characters:
                 need(c.characters[eff.recruit].kind == "recruitable", f"{where}：結識的 {eff.recruit} 不是可招募的同伴")
+        if eff.gear is not None:  # 奇遇給的寶物或良駒（裝備四欄 6.4）：掉落池的寶物、或一匹良駒；名將贈禮與名駒不能從事件給
+            tdef = c.gear.treasures.get(eff.gear)
+            need(eff.gear == GOOD_HORSE or (tdef is not None and tdef.pool),
+                 f"{where}：gear {eff.gear} 要是 content/gear.json 掉落池的寶物或 {GOOD_HORSE}（名將贈禮、名駒不能從事件給）")
 
     def check_free_text(where: str, ev: Event) -> None:
         """隨口應對（§8.1）：賣的是好玩不是划算，獎勵不能比同一則事件裡最好的檢定選項高；
@@ -1405,6 +1471,8 @@ def validate(c: Content) -> None:
                     ("event_mods", eff.event_mods), ("patron", eff.patron),
                     # 黃巾奇遇的捐糧、給片段、記殘片（正式版丙二）：同樣只准寫在手寫的選項上，不是隨口一句話換得到的
                     ("donate_grain", eff.donate_grain), ("fs_fragments", eff.fs_fragments), ("runic", eff.runic),
+                    # 寶物、良駒（裝備四欄 6.4）：隨口一句就換一件寶物，等於繞過稀有
+                    ("gear", eff.gear),
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
@@ -1522,6 +1590,10 @@ def validate(c: Content) -> None:
             check_condition(cw, ch.condition)
             check_effect(cw, ch.effect)
             check_effect(cw, ch.fail_effect)
+            # 奇遇給寶物、良駒（裝備四欄 6.4）只准一次性的事件：可以重複遇到的事件寫了，等於每遇一次送一件、或每遇一次換 dup_silver 兩
+            # （涿郡「馬市試騎」sc_zhuo_horse 就是這種；沒標 once 的奇遇看過也照樣留著，所以看 once、不看 qiyu）。計畫「要 PM 定的」第 5 條
+            need(ev.once or (ch.effect.gear is None and ch.fail_effect.gear is None),
+                 f"{cw}：gear 只能寫在一次性的事件（once: true）——可以重複遇到的事件寫了，等於每遇一次送一件")
             if ch.combat:
                 known(cw, [ch.combat], c.squads, "敵方隊伍")
             if ch.check:
@@ -1545,6 +1617,23 @@ def validate(c: Content) -> None:
                     ch.check is None and ch.combat is None,
                     f"{where} 選項{i}：福緣事件的選項不能有檢定或戰鬥（福緣自己送上門時直接套用第一個選項的效果）",
                 )
+    # 串接（next_event）不看 once：Game._present 照樣叫出看過的事件（只標 is_repeat），所以一次性的事件只要從可以重複遇到的事件
+    # 串得到（中間隔幾層都算），寫了 gear 一樣每遇一次送一件、或換一次 dup_silver 兩（裝備三終審）
+    chains = {
+        ev.id: [eff.next_event for ch in ev.choices for eff in (ch.effect, ch.fail_effect) if eff.next_event]
+        for ev in c.events.values()
+    }
+    reach = [target for ev in c.events.values() if not ev.once for target in chains[ev.id]]
+    chained: set[str] = set()
+    while reach:
+        eid = reach.pop()
+        if eid in chained or eid not in c.events:
+            continue
+        chained.add(eid)
+        reach += chains[eid]
+    for eid in sorted(chained):
+        need(all(ch.effect.gear is None and ch.fail_effect.gear is None for ch in c.events[eid].choices),
+             f"事件 {eid}：gear 不能寫在從可以重複遇到的事件用 next_event 串得到的事件（串接不看 once，每遇一次照樣送一件）")
 
     for trend in c.scenario.trends:
         need(
@@ -2040,6 +2129,7 @@ def validate(c: Content) -> None:
     check_promotions(c, need, known)
     check_opportunities(c, need, known, front_ids)
     check_duels(c, need, known)
+    check_gear(c, need, known)
     check_bounties(c, need)
 
     for key, where in sorted(marks_written.items()):

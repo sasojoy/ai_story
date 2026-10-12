@@ -21,22 +21,22 @@ class Slot:
     """一欄（裝備四欄設計 3.1、3.2）。"""
 
     rules: str  # Config 上那一組設定的名字：它的 enabled 就是這一欄開著沒（2.6）
-    warned: str  # PlayerState 上這一欄「磨損低了提醒過」的旗標；換一件、修好時重設
+    warned: str  # PlayerState 上這一欄「磨損低了提醒過」的旗標；換一件、修好時重設；沒有磨損的欄位（寶物）是空字串
     prefix: str  # 新的一件的 id 開頭（「兵:N」「甲:N」，共用 PlayerState.weapon_serial）
     label: str  # 修練頁「裝備」那一段的名字
     put_on: str  # 拿到新東西、這一欄身上空著時那一句
     road_locked: bool = False  # 路上不能換（裝備四欄 2.3：坐騎的快慢出發時就算進抵達時刻，路上換了也不會變快）
 
 
-# 武器、防具（裝備一）、坐騎（裝備二）；寶物（寶）在裝備三加一列（PlayerState 同時加那一欄）。表外的欄位（裝備庫裡混進來的寶物）
-# 一律當關著：不列、不能換、不能拆（3.3）
+# 武器、防具（裝備一）、坐騎（裝備二）、寶物（裝備三）。表外的欄位一律當關著：不列、不能換、不能拆（3.3）
 SLOTS: dict[str, Slot] = {
     "weapon": Slot(rules="weapons", warned="edge_warned", prefix="兵", label="武器", put_on="你把【{name}】拿在手上。"),
     "armor": Slot(rules="armor", warned="armor_warned", prefix="甲", label="防具", put_on="你穿上了【{name}】。"),  # 待 joy 潤
     "mount": Slot(rules="mounts", warned="hunger_warned", prefix="騎", label="坐騎", put_on="你騎上了【{name}】。", road_locked=True),  # 待 joy 潤
+    "treasure": Slot(rules="treasures", warned="", prefix="寶", label="寶物", put_on="你把【{name}】帶在身上。"),  # 待 joy 潤；隨時能換（2.3）
 }
 WEAR_WORDS = {"weapon": "鋒利度", "armor": "耐久度", "mount": "飽足度"}  # 待 joy 潤：Equipment.edge 在各欄叫什麼（3.1、2.5）；防具這一側都讀這裡（armor.WEAR_WORD），武器那一側的舊字這一批不動
-WIELDABLE = ("weapon", "armor", "mount")  # 修練頁「換上」收哪幾欄（2.3：武器、防具隨時能換；坐騎路上不能換〔Slot.road_locked〕；寶物的限制等裝備三）
+WIELDABLE = ("weapon", "armor", "mount", "treasure")  # 修練頁「換上」收哪幾欄（2.3：武器、防具、寶物隨時能換〔寶物不設限制，企劃者 2026-10-11〕；坐騎路上不能換〔Slot.road_locked〕）
 ROAD_LOCKED = "在路上不能換{label}。"  # 待 joy 潤
 DISMANTLABLE = ("weapon", "armor")  # 拆得了的（4.8：坐騎、寶物沒有屬性，也不該拆成素材）
 
@@ -98,7 +98,8 @@ def store(state: GameState, item: Equipment) -> str:
     entry = SLOTS[item.slot]
     if worn(p, item.slot) is None:
         setattr(p, item.slot, item)
-        setattr(p, entry.warned, False)
+        if entry.warned:
+            setattr(p, entry.warned, False)  # 寶物沒有磨損、沒有提醒旗標（warned 是空字串）
         return entry.put_on.format(name=item.name)
     p.rack.append(item)
     return STORED.format(name=item.name)
@@ -110,8 +111,8 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
 
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
-    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
-    開著的欄位裡找不到是 WIELD_MISSING（表外的寶物也是找不到）。"""
+    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼（寶物也是，2.3【定】）。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
+    開著的欄位裡找不到是 WIELD_MISSING（表外的欄位也是找不到）。"""
     p = state.player
     chosen = _find(p, item_id, slots)
     if chosen is None:
@@ -125,7 +126,8 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
     if current is not None:
         p.rack.append(current)
     setattr(p, chosen.slot, chosen)
-    setattr(p, SLOTS[chosen.slot].warned, False)  # 換上來的是另一件：磨損低了要有它自己的提醒
+    if SLOTS[chosen.slot].warned:
+        setattr(p, SLOTS[chosen.slot].warned, False)  # 換上來的是另一件：磨損低了要有它自己的提醒（寶物沒有磨損）
     return [WIELDED.format(name=chosen.name)]
 
 

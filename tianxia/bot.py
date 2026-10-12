@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, weapons
+from . import armor, bounties, cultivation, equipment, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -395,6 +395,18 @@ def feed_mount(game: Game) -> None:
         game.feed_mount()
 
 
+def wear_better(game: Game) -> None:
+    """裝備庫裡有更好的寶物或更快的馬就換上（裝備四欄設計第九節；整季機器人每一步看一次，假人在 bot_policy.look_after 看）：
+    寶物照 treasures.wanted（固定順序；寶物不設限制，身上已經是最前面的就不換），馬照 mounts.better_mount（吃飽的腳力，同馬市的
+    wanted；路上不換，2.3）。走 Game.wield_weapon（修練頁的「換上」），跟真人一樣。拿到新的、那一欄空著時本來就自動穿上，這裡只管換；不叫模型。"""
+    s, c = game.state, game.content
+    tid = treasures.wanted(s, c)
+    if tid is not None:
+        game.wield_weapon(tid)
+    if s.player.journey is None and (horse := mounts.better_mount(s, c)) is not None:
+        game.wield_weapon(horse)
+
+
 def visit_smith(game: Game) -> None:
     """城裡有鐵匠鋪就看一眼（兵器設計第六節、裝備四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
     打一把、把裝備庫裡更好的換上、淬煉手上那把（打造與淬煉的鈕只在兵器頁，所以兵器的事先做完）、收掉打造的單子；再切到防具頁照
@@ -488,6 +500,7 @@ def play_season(
             visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
             visit_market(game)  # 路過馬市就看一眼（沒事要買要換要餵的時候什麼都不做）
             feed_mount(game)  # 馬餓了就餵（閒著時哪裡都能餵）
+            wear_better(game)  # 裝備庫裡有更好的寶物、更快的馬就換上
         if choice is None or step % 4 == 0:
             game.advance(HALF_HOUR)
         if observe is not None:

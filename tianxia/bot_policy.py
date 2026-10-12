@@ -262,13 +262,14 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
 
 
 def look_after(game: Game, rng: random.Random) -> None:
-    """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；馬餓了就餵；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
+    """照顧動作（不受強度旋鈕影響）：升級的屬性點先配掉（只走 Game.allocate_stat，跟真人一樣）；有內傷先療傷；馬餓了就餵；裝備庫裡有更好的寶物、更快的馬就換上；身上的兩門（開局送的基礎武學）偶爾練成一成，付得起心得才練。
     合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
     bot.feed_mount(game)  # 馬餓了就餵（不受強度旋鈕影響，不擲亂數）
+    bot.wear_better(game)  # 換上更好的寶物、更快的馬（不受強度旋鈕影響，不擲亂數）
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)

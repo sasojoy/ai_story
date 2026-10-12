@@ -130,7 +130,7 @@ class Tagalong(BaseModel):
 
 class Equipment(BaseModel):
     """一件裝備（裝備四欄設計 3.1；原本的 Weapon，兵器設計 2.1）。slot 是哪一欄：武器、防具（裝備一），坐騎、寶物（裝備二、三）。
-    id 是「兵:N」「甲:N」（之後「騎:N」「寶:N」），共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
+    id 是「兵:N」「甲:N」「騎:N」「寶:N」，共用 PlayerState.weapon_serial 流水號，只在這個角色身上唯一；舊的「兵:N」不能改
     （拆解照 id 的 sha256 挑素材）。舊存檔沒有 slot：預設 weapon（兵器第一、二批的裝備庫裡都是武器）。
     edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
     不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
@@ -141,13 +141,16 @@ class Equipment(BaseModel):
     name: str
     kind: str = ""  # 武器：models.WEAPON_KINDS；其餘是空字串
     attribute: str = ""  # 陰陽剛柔快慢虛實（武器、防具）
-    tier: int  # 1～3
-    quality: str  # 下品、中品、上品
+    tier: int = 0  # 1～3（武器、防具、坐騎）；寶物不分階品，是 0（玉璽碎片的抄本也是，玉璽碎片設計 7.4）
+    quality: str = ""  # 下品、中品、上品；寶物是空字串
     edge: int = 100  # 0～100：武器的鋒利度、防具的耐久度（equipment.WEAR_WORDS）
     tempers: int = 0  # 淬煉次數（兵器第二批；防具打造那一批）
     recipe: str | None = None
     copy_of: str | None = None
     original: bool = False
+    # 內容裡的 id（裝備四欄 3.1）：寶物照 content/gear.json 的寶物表、名將贈禮的名駒照 steeds；馬市與懸賞的馬、武器、防具是 None。
+    # 名字照它從內容讀：treasures.refresh_names 在讀檔時把 name 改成內容的名字（joy 改名不動存檔）；內容拿掉了就留著 name 當備份、效果不算
+    template: str | None = None
 
 
 Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
@@ -259,6 +262,10 @@ class PlayerState(BaseModel):
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
+    treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
+    treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
+    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
+    held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 兵器配方鍵 → 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
@@ -520,6 +527,8 @@ class Bounty(BaseModel):
     takers: list[str] = Field(default_factory=list)  # 接了、還沒完成的名號
     done_by: list[str] = Field(default_factory=list)
     refunded: bool = False  # 通緝下榜時押金退過了
+    # 重賞（裝備四欄 6.4）：週一掛單時擲中的「寶物一件」或「良駒一匹」，只給第一個交差的人；哪一件到交差時才定（treasures.bounty_prize）
+    prize: Literal["treasure", "horse"] | None = None
 
 
 class Invite(BaseModel):
@@ -615,6 +624,13 @@ class WorldState(BaseModel):
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──
     seat_ledger: dict[str, dict[str, dict[int, int]]] = Field(default_factory=dict)  # 陣營 id → 名號 → {季曆週：那一週的貢獻}
     seats: dict[str, list[str]] = Field(default_factory=dict)  # 陣營 id → 這一週在任的名號
+    # ── 裝備三（裝備四欄設計第六節）──
+    # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift）、
+    # 玩家之間的贈物無關，所以不叫 gifts
+    general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
+    # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
+    tianji: int = 0
 
 
 class Fighter(BaseModel):

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, cultivation, encounter, equipment, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, weapons
+from . import armor, atlas, cultivation, encounter, equipment, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -489,15 +489,18 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(worn_armor)  # 防具（裝備四欄設計 2.5）：沒穿或開關關著不寫；對上的是內功（武器看武學、防具看內功）
     if key == PLAYER and (horse := mounts.card_line(state, content)):
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
+    if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
+        lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)
 
 
 def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎；寶物等
-    裝備三加一段），每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
-    格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。"""
+    """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），
+    每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
+    格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
+    held_note：寄放著哪幾件（6.5），沒有是空字串。"""
     member = state.player.member
     slots = []
     if equipment.on(content, "weapon"):
@@ -511,7 +514,10 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     if equipment.on(content, "mount"):
         slots.append({"slot": "mount", "label": equipment.SLOTS["mount"].label, "empty": mounts.EMPTY, "note": mounts.RACK_NOTE,
                       **mounts.rows(state, content)})
-    return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots}
+    if equipment.on(content, "treasure"):  # 玉璽一要把這一擋改成「寶物或玉璽開著」（見計畫「範圍與取捨」玉璽那一段第 5 點）
+        slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
+                      "note": treasures.RACK_NOTE, **treasures.rows(state, content)})
+    return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots, "held_note": treasures.held_note(state)}
 
 
 def _pct(ratio: float) -> str:

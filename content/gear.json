@@ -1,0 +1,30 @@
+{
+  "treasures": [
+    {"id": "ningshen_xiangnang", "name": "凝神香囊", "effect": "cultivate"},
+    {"id": "guanshan_shi", "name": "觀山石", "effect": "insight"},
+    {"id": "zhanji_canjian", "name": "戰記殘簡", "effect": "win_xinde_pct"},
+    {"id": "baizhan_hufu", "name": "百戰護符", "effect": "win_exp_pct"},
+    {"id": "ruding_putuan", "name": "入定蒲團", "effect": "seclusion"},
+    {"id": "wumu_mingci", "name": "烏木名刺", "effect": "audience"},
+    {"id": "shiyi_nang", "name": "拾遺囊", "effect": "win_material"},
+    {"id": "kouguan_yu", "name": "叩關玉", "effect": "legend"},
+    {"id": "jiu_caoxie", "name": "舊草鞋", "effect": "win_material", "pool": false},
+    {"id": "yedu_zhujian", "name": "夜讀竹簡", "effect": "seclusion", "pool": false},
+    {"id": "yandi_jiunang", "name": "燕地酒囊", "effect": "legend", "pool": false},
+    {"id": "mendi_mingtie", "name": "門第名帖", "effect": "audience", "pool": false},
+    {"id": "tanmu_nianzhu", "name": "檀木念珠", "effect": "cultivate", "pool": false}
+  ],
+  "steeds": [
+    {"id": "tashuang_ju", "name": "踏霜駒"},
+    {"id": "polang_ju", "name": "破浪駒"}
+  ],
+  "gifts": [
+    {"character": "caocao", "gear": "tashuang_ju"},
+    {"character": "sunjian", "gear": "polang_ju"},
+    {"character": "liubei", "gear": "jiu_caoxie"},
+    {"character": "guanyu", "gear": "yedu_zhujian"},
+    {"character": "zhangfei", "gear": "yandi_jiunang"},
+    {"character": "yuanshao", "gear": "mendi_mingtie"},
+    {"character": "taoqian", "gear": "tanmu_nianzhu"}
+  ]
+}
