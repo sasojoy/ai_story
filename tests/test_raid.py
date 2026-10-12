@@ -93,8 +93,8 @@ def test_the_button_shows_only_between_enemy_factions(pair):
         assert _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))[0] == ["（此刻無法這麼做。）"]
 
 
-def test_raids_happen_with_the_season_one_switch_off_without_contribution(beta_pair, monkeypatch):
-    """截殺每季都有（企劃者 2026-10-10）；第一季規則關著的季沒有晉升，打贏不記貢獻，戰報與紀錄都不寫「貢獻」（懸賞榜設計 6.1）。"""
+def test_raids_happen_with_the_season_one_switch_off_with_contribution(beta_pair, monkeypatch):
+    """截殺每季都有（企劃者 2026-10-10）；晉升也不看第一季的開關（企劃者 2026-10-12），規則關著的季打贏一樣記貢獻。"""
     content, world = beta_pair
     assert not world.get_season().season_one
     [button] = _raid_buttons(content, world, "甲", "乙")
@@ -102,8 +102,7 @@ def test_raids_happen_with_the_season_one_switch_off_without_contribution(beta_p
     assert [name for name, _ in _do(content, world, "甲", lambda g: g.raid_targets())[0]] == ["乙"]  # 假人也看得到（真人假人一樣）
     msgs, _ = _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
     me, them = _load(world, "甲"), _load(world, "乙")
-    assert me.player.contrib == 0 and not any("貢獻" in m for m in msgs)
-    assert not any("貢獻" in line for line in me.battles[0].changes)
+    assert me.player.contrib == content.config.contrib_per_push * content.config.raid.win_contrib_push
     assert them.player.stats["silver"] < 200 and me.player.stats["silver"] > 200  # 輸贏照舊
 
 

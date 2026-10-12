@@ -437,7 +437,11 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
     if not calendar.season_one_on(season, content):
-        return lines
+        # 晉升不看第一季的開關（ranks.on）；關著的季只升到第 2 階、貢獻照 Game._beta_contribution 記
+        return lines + [
+            f"**晉升**：替陣營出力記貢獻（往自己陣營那一邊推 1 點大勢記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，"
+            f"去應召就晉升、帶上部下；自己陣營的大勢人物，你晉升之後求見他的門檻低 {cfg.audience_rank_discount}。",
+        ]
     from . import orders  # noqa: PLC0415  orders → timetable、figures：只有第一季的這幾行用到
 
     kinds = "、".join(orders.KIND_NAMES.values())

@@ -1,6 +1,8 @@
 """陣營裡的階級（計畫 T5、第一季設計 5.2、5.3）：頭銜、召見、晉升、部下、每日彙整。
 
-只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。"""
+頭銜、召見、第 2 階晉升與部下不看第一季的開關，劇本有陣營就有（企劃者 2026-10-12「部下現在是不是沒有作用」：
+開關打開之前就開的那一季也要能升，同 defection.can_defect）。第 3、4 階要機緣（opportunities）、席次（seats）、大勢人物
+（figures）出面，那些只在第一季才跑，所以開關關著的季只升到第 2 階（top_rank）。"""
 from __future__ import annotations
 
 from . import calendar, figures, seats
@@ -19,6 +21,7 @@ NO_PRESENTER: dict[str, str] = {
     "haoqiang": "各家眼下都顧不上你，沒人能替你牽線，等局勢變了再說。",
 }
 
+BETA_TOP_RANK = 2  # 第一季規則關著的季升得到的最高階：第 3、4 階的機緣、席次、出面的人物都只在第一季才有
 SEAT_RANK = seats.SEAT_RANK  # 有資格而且這一週在任（seats.seated）的人此刻的階：rank_of 回這個，存檔的 rank 不動（正式版丁）；階號只在 seats 寫一次
 HIGHEST_RANK = SEAT_RANK - 1  # PlayerState.rank 最高到這裡：第 4 階只是資格（qualified，候缺）加上這一週的席次；求見門檻照 rank_of，只有在任的算第 4 階（裁決 E4）
 
@@ -28,6 +31,16 @@ TITLES: dict[str, list[str]] = {
     "huang": ["", "信眾", "小帥", "小方渠帥", "大方渠帥"],
     "haoqiang": ["", "鄉里子弟", "宗族頭人", "地方豪強", "一方之主"],
 }
+
+
+def on(content: Content) -> bool:
+    """有沒有陣營的階級：劇本有陣營就有（不看第一季的開關，同 defection.can_defect）。"""
+    return bool(content.scenario.factions)
+
+
+def top_rank(content: Content, state: GameState) -> int:
+    """這一季升得到的最高階：第一季規則開著時到第 4 階（資格加席次），關著時只到第 2 階（BETA_TOP_RANK）。"""
+    return SEAT_RANK if season_one(content, state.world) else BETA_TOP_RANK
 
 
 def rank_of(state: GameState) -> int:
@@ -42,8 +55,8 @@ def rank_of(state: GameState) -> int:
 
 
 def title(content: Content, state: GameState) -> str | None:
-    """狀態列陣營後面的頭銜；第一季的規則沒開、散人、或陣營沒有頭銜表時是 None。"""
-    if not season_one(content, state.world):
+    """狀態列陣營後面的頭銜；劇本沒有陣營、散人、或陣營沒有頭銜表時是 None。"""
+    if not on(content):
         return None
     titles = TITLES.get(state.player.faction or "")
     if not titles:
@@ -62,7 +75,7 @@ def next_rank_up(state: GameState, content: Content) -> int | None:
     """下一次晉升真的會升階（PlayerState.rank 加一）的那一階；沒有的是 None：下一階沒有定義、或下一階只是資格（第 4 階，
     rank 停在 3；門檻要等在任才降，席次是每週照貢獻輪替、不是被召去的晉升，裁決 E4）。被打發時的「或在某某再升一階」只許諾這種晉升。"""
     rank = rank_of(state) + 1
-    if rank > HIGHEST_RANK or promotion_for(content, state.player.faction, rank) is None:
+    if rank > min(HIGHEST_RANK, top_rank(content, state)) or promotion_for(content, state.player.faction, rank) is None:
         return None
     return rank
 
@@ -214,17 +227,19 @@ def _told_line(content: Content, promo: PromotionDef, s: Summons) -> str | None:
 
 
 def check_summons(state: GameState, content: Content) -> list[str]:
-    """該不該發召見（每次行動、同步的最後檢查，所以貢獻從哪裡來都接得到）：第一季、有陣營、這一季還沒落幕、還沒拿到第 4 階
-    資格。手上有多段召見的，照當下重挑版本（_refresh）。沒有召見時看下一階：本季貢獻到 threshold；第 3、4 階還要完成過那一階
+    """該不該發召見（每次行動、同步的最後檢查，所以貢獻從哪裡來都接得到）：劇本有陣營、有投靠、這一季還沒落幕、還沒拿到第 4 階
+    資格、下一階不超過這一季升得到的（top_rank：第一季規則關著時只到第 2 階）。手上有多段召見的，照當下重挑版本（_refresh）。沒有召見時看下一階：本季貢獻到 threshold；第 3、4 階還要完成過那一階
     的一種機緣——貢獻到了、機緣還沒有，那一階說一次 HINT。第 3、4 階挑得到版本才發（沒有人能出面就先不發）。
     同一階只發一次（召見沒有期限，演完晉升才清掉）。"""
     p, w = state.player, state.world
-    if not season_one(content, w) or p.faction is None or w.ended or p.qualified:
+    if not on(content) or p.faction is None or w.ended or p.qualified:
         return []
     if p.summons is not None:
         promo = _pending(state, content)
         return _refresh(state, content, promo) if promo is not None and promo.legs else []
     rank = rank_of(state) + 1
+    if rank > top_rank(content, state):
+        return []
     promo = promotion_for(content, p.faction, rank)
     if promo is None or p.contrib < threshold(content, rank):
         return []
@@ -311,7 +326,7 @@ def summons_event(state: GameState, content: Content) -> str | None:
 
 def _pending(state: GameState, content: Content) -> PromotionDef | None:
     p = state.player
-    if p.summons is None or not season_one(content, state.world):
+    if p.summons is None or not on(content):
         return None
     return promotion_for(content, p.faction, p.summons.rank)
 
@@ -320,10 +335,12 @@ def promote(state: GameState, content: Content, rank: int) -> list[str]:
     """晉升奇遇選項的 promote（rules.apply_effect 呼叫）：清掉召見；第 2、3 階升到 rank，第 4 階是資格（qualified，rank 停在 3，
     候缺）。接「你升為X。」（第 4 階「你取得X的資格，候缺。」）、結尾那一句、豪強第 4 階看靠山的那一句。
     第 2 階記進當天的彙整（flush_news）；第 3 階與第 4 階資格當下發一則具名的陣營軍情（傳聞分層 4.1）。
-    陣營軍情一律寫本名（傳聞分層第七節）：匿名的人也一樣，不用 display_name。開關關著、散人什麼都不做。
+    陣營軍情一律寫本名（傳聞分層第七節）：匿名的人也一樣，不用 display_name。劇本沒有陣營、散人、超過這一季升得到的階
+    （top_rank）什麼都不做。
+    第 2 階的彙整只在第一季記（發彙整的 season_hour 只在第一季跑，關著的季記了也發不出去）。
     「你取得X的資格，候缺。」與兩則陣營軍情「{名號}升為X。」「{名號}取得X的資格，候缺。」是新寫的初稿，待 joy 潤。"""
     p, w = state.player, state.world
-    if not season_one(content, w) or p.faction is None:
+    if not on(content) or p.faction is None or rank > top_rank(content, state):
         return []
     p.summons = None
     titles = TITLES.get(p.faction)
@@ -345,18 +362,18 @@ def promote(state: GameState, content: Content, rank: int) -> list[str]:
 
         # 這個效果只有 text 與 affinity：apply_effect 照這兩樣走的那幾行不碰 world，所以傳 None（promote 的簽名沒有 world）
         msgs += apply_effect(Effect(text=line.text, affinity=line.affinity), state, content, None)
-    if rank == 2:
+    if rank == 2 and season_one(content, w):
         day = calendar.point(w.time, content, w).cal_day
         w.promoted_today.setdefault(f"{day}:{p.faction}:{rank}", []).append(p.name)  # 陣營軍情一律具名（傳聞分層第七節）
-    elif titles:
+    elif rank > 2 and titles:
         text = f"{p.name}取得{name}的資格，候缺。" if rank > HIGHEST_RANK else f"{p.name}升為{name}。"  # 新寫，待 joy 潤；寫本名
         add_rumor(state, text, content=content, layer="faction", faction=p.faction)
     return msgs
 
 
 def add_followers(state: GameState, content: Content, follower_ids: list[str]) -> list[str]:
-    """晉升奇遇給的部下（部下模板 id）：加進 PlayerState.followers，回傳「獲得部下：X、Y」。開關關著什麼都不做。"""
-    if not follower_ids or not season_one(content, state.world):
+    """晉升奇遇給的部下（部下模板 id）：加進 PlayerState.followers，回傳「獲得部下：X、Y」。劇本沒有陣營什麼都不做。"""
+    if not follower_ids or not on(content):
         return []
     state.player.followers += follower_ids
     return ["獲得部下：" + "、".join(content.followers[f].name for f in follower_ids)]

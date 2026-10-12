@@ -308,7 +308,8 @@ def test_a_wanted_runs_end_to_end_with_the_season_one_switch_off(beta_setup, mon
     assert p.ranger_deeds == content.config.bounties.deeds["wanted"] and p.contrib == 0
     world.mutate_season(lambda s: s.raided.clear())  # 乙剛被截殺過的保護時間：清掉，換甲截殺他
     msgs, game = _do(content, world, "甲", lambda g: g.peer_act("乙", "raid"))
-    assert game.state.player.contrib == 0 and not any("貢獻" in m for m in msgs)  # 敵對陣營互截：規則關著的季不記貢獻
+    # 敵對陣營互截：晉升不看第一季的開關（企劃者 2026-10-12），規則關著的季也記貢獻
+    assert game.state.player.contrib == content.config.contrib_per_push * content.config.raid.win_contrib_push
 
 
 def test_with_raids_switched_off_a_wanted_is_not_an_undeliverable_bounty(setup):

@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import armor, calendar, encounter, rounds, styles, traits, weapons
+from . import armor, encounter, rounds, styles, traits, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -139,8 +139,8 @@ FOLLOWER_KEY = "follower:"  # 名冊裡部下的 key：follower:<在 PlayerState
 
 
 def follower_rows(state: GameState, content: Content) -> list[tuple[str, FollowerDef]]:
-    """部下（計畫 T5）：(名冊的 key, 模板)。第一季才有，開關關著時是空的。"""
-    if not state.player.followers or not calendar.season_one_on(state.world, content):  # 同 rules.season_one（rules 會 import team）
+    """部下（計畫 T5）：(名冊的 key, 模板)。劇本有陣營就有（同 ranks.on，不看第一季的開關；ranks 會 import team 的上游）。"""
+    if not state.player.followers or not content.scenario.factions:
         return []
     return [(f"{FOLLOWER_KEY}{i}", content.followers[fid]) for i, fid in enumerate(state.player.followers)
             if fid in content.followers]

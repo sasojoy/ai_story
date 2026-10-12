@@ -116,13 +116,13 @@ def test_join_shows_rank_one_title(on):
     assert "潁川書院・官軍・屯長" in game.status_text().splitlines()[0]
 
 
-def test_switch_off_affiliation_unchanged(real):
-    """開關關著（beta 那一季）：沒有頭銜，狀態列照舊「陣營」「門派・陣營」。"""
+def test_switch_off_affiliation_has_the_title(real):
+    """開關關著（beta 那一季）：頭銜不看開關（企劃者 2026-10-12），狀態列一樣寫「陣營・頭銜」「門派・陣營・頭銜」。"""
     game = _game(real, faction="guan")
-    assert ranks.title(real, game.state) is None and game.status_data()["affiliation"] == "官軍"
+    assert ranks.title(real, game.state) == "鄉勇" and game.status_data()["affiliation"] == "官軍・鄉勇"
     game.state.player.sect = "yingchuan_academy"
-    game.state.player.rank = 2  # 就算存檔裡有階，beta 也不顯示
-    assert game.status_data()["affiliation"] == "潁川書院・官軍"
+    game.state.player.rank = 2
+    assert game.status_data()["affiliation"] == "潁川書院・官軍・屯長"
 
 
 def test_new_season_resets_rank_summons_and_followers(on):
@@ -316,15 +316,17 @@ def test_rank_two_news_is_one_line_per_day(on):
     assert "今日升為屯長的有：丙。" in [r.text for r in news(late)]
 
 
-def test_switch_off_no_summons(real):
-    """開關關著：貢獻再多也不發召見，沒有「應召」，召見地點也端不出奇遇。"""
+def test_switch_off_summons_up_to_rank_two(real):
+    """開關關著（晉升不看開關，企劃者 2026-10-12）：貢獻到了照發第 2 階的召見、召見地點端得出奇遇；升了第 2 階，貢獻再多也不發第 3 階。"""
     game = _game(real, faction="guan", at="changshe")
     game.state.player.contrib = 900
     game.choose("act:rest")
-    assert game.state.player.summons is None
+    assert game.state.player.summons.rank == 2
     game.choose("act:stand")
-    _summoned(game)
-    assert "act:summons" not in _ids(game) and ranks.summons_event(game.state, real) is None
+    assert ranks.summons_event(game.state, real) is not None
+    game.state.player.summons, game.state.player.rank = None, 2
+    game.choose("act:rest")
+    assert game.state.player.summons is None
 
 
 # ── Task 4：部下 ─────────────────────────────────
@@ -360,13 +362,13 @@ def test_followers_add_power_and_take_no_toll(on):
     assert sum(m.startswith("氣血 -") for m in msgs) == 1
 
 
-def test_switch_off_followers_do_not_fight(real):
-    """開關關著：存檔裡就算有部下，也不算威力、不進名冊。"""
+def test_switch_off_followers_fight(real):
+    """開關關著（部下不看開關，企劃者 2026-10-12「部下現在是不是沒有作用」）：部下照樣算威力、進名冊。"""
     alone = _game(real, "甲", faction="guan", at="runan_wilds")
     led = _game(real, "乙", faction="guan", at="runan_wilds")
     led.state.player.followers = list(GUAN_FOLLOWERS)
-    assert _spied_power(lambda: led.choose("act:train"))[0] == _spied_power(lambda: alone.choose("act:train"))[0]
-    assert [key for _, key in led.roster_lines()] == ["player"]
+    assert _spied_power(lambda: led.choose("act:train"))[0] > _spied_power(lambda: alone.choose("act:train"))[0]
+    assert [key for _, key in led.roster_lines()] == ["player", "follower:0", "follower:1"]
 
 
 def test_followers_listed_in_roster_without_dialogue(on):
@@ -449,3 +451,49 @@ def test_follower_arts_are_upper_grade(real):
     art = team.resolve_art("xingwu_qiang", real, None)
     power = encounter.member_power(Member(wugong_id="xingwu_qiang", wugong_level=3), {"xingwu_qiang": art})
     assert 35 <= power <= 40
+
+
+# ── 晉升與部下不看第一季的開關（企劃者 2026-10-12「部下現在是不是沒有作用」）─────────────
+
+
+def _beta_total(content):
+    """開關關著時三條戰線合成的那一條（黃巾聲勢）：beta 那一季陣營目標換到的線。"""
+    return next(t.id for t in content.scenario.trends if t.derived)
+
+
+def test_switch_off_promotion_runs_end_to_end(real):
+    """開關關著的季：替陣營推大勢記貢獻 → 過門檻發召見 → 應召演晉升奇遇 → 升第 2 階、帶上兩名部下，狀態列寫頭銜。"""
+    game = _game(real, faction="guan", at="changshe")
+    assert not calendar.season_one_on(game.state.world, real)
+    p = game.state.player
+    p.contrib = real.config.rank2_contrib - real.config.contrib_per_push
+    game.push_trend(_beta_total(real), -1, source="event")  # 官軍往壓黃巾的方向推一點
+    assert p.contrib == real.config.rank2_contrib
+    game.choose("act:rest")
+    assert p.summons is not None and p.summons.rank == 2
+    game.choose("act:stand")
+    game.choose("act:summons")
+    assert game.state.pending_event is not None
+    game.choose("choice:0")
+    assert p.rank == 2 and p.summons is None and p.followers == GUAN_FOLLOWERS
+    assert game.status_data()["affiliation"] == "官軍・屯長"
+    assert [key for _, key in game.roster_lines()][1:] == ["follower:0", "follower:1"]
+
+
+def test_switch_off_contribution_only_for_your_own_side(real):
+    """開關關著的季的貢獻（Game._beta_contribution）：往自己陣營目標推的照推力全記；逆著推、散人不記；
+    陣營對這條線沒有目標（豪強：割據關著的季換不到線）時只有遊歷打贏、操練記。"""
+    total, per = _beta_total(real), real.config.contrib_per_push
+    guan = _game(real, "甲", faction="guan")
+    guan.push_trend(total, -2, source="event")
+    guan.push_trend(total, 3, source="train")  # 逆著自己陣營推
+    assert guan.state.player.contrib == 2 * per
+    drifter = _game(real, "乙")
+    drifter.push_trend(total, 2, source="train")
+    assert drifter.state.player.contrib == 0
+    gentry = _game(real, "丙", faction="haoqiang")
+    gentry.push_trend(total, 2, source="event")
+    assert gentry.state.player.contrib == 0
+    gentry.push_trend(total, -1, source="train")
+    gentry.push_trend(total, 1, source="drill")
+    assert gentry.state.player.contrib == 2 * per

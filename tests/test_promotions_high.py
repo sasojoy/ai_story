@@ -491,14 +491,15 @@ def test_threshold_by_rank(on):
     assert ranks.threshold(on, 3) == 5
 
 
-def test_nothing_happens_with_the_switch_off(real):
+def test_nothing_past_rank_two_with_the_switch_off(real):
+    """開關關著的季只升到第 2 階（ranks.top_rank）：第 3、4 階要的機緣、席次、出面的人物都只在第一季才有。頭銜照第 2 階寫。"""
     _test_rank3(real)
     game = _game(real, faction="guan", at="changshe")
     _ready(game)
     assert ranks.check_summons(game.state, real) == [] and game.state.player.summons is None
     assert ranks.promote(game.state, real, 3) == [] and game.state.player.rank == 2
     assert ranks.promote(game.state, real, 4) == [] and not game.state.player.qualified
-    assert ranks.title(real, game.state) is None
+    assert ranks.title(real, game.state) == ranks.TITLES["guan"][2]
 
 
 def test_the_hint_is_said_once_per_rank_and_the_next_rank_gets_its_own(on):
