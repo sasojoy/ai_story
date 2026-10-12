@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, rules, timetable
+from . import calendar, rules, seal, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -342,7 +342,8 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
 
 # ── 名望怎麼來（explain-2 第二項，FB-100「名望不知道怎麼來」）──────────────────────────
 # 引擎裡真的給名望的只有四條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（Game._deliver_echoes，
-# Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）、打贏頭目（Game._duel_finish，DuelBoss.fame）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
+# Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）、打贏頭目（Game._duel_finish，DuelBoss.fame）、
+# 奪璽單挑（Game._file_seal，Config.seal.fame；玉璽碎片設計 5.9）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
 
 FameRange = tuple[int, int]
 
@@ -405,6 +406,9 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     duel_fame = sorted(boss.fame for boss in content.duels.values() if boss.fame > 0)
     if duel_fame:  # 單人頭目戰打贏（Game._duel_finish）
         lines.append(f"探索時遇上攔路的頭目、打贏了：{_plus((duel_fame[0], duel_fame[-1]))}。")
+    if seal.on(content):  # 奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）；待 joy 潤
+        fame = cfg.seal.fame
+        lines.append(f"奪璽單挑：懷璽的人守住了 +{fame['keep']}、被奪走 +{fame['lose']}；挑戰的人打贏了單挑、碎片卻沒易手 +{fame['near']}。")
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:
