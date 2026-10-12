@@ -135,7 +135,7 @@ class Equipment(BaseModel):
     edge 各欄共用、叫法不同（equipment.WEAR_WORDS：鋒利度、耐久度、飽足度）。kind 只有武器有（models.WEAPON_KINDS），其餘是空字串；
     不在讀檔時驗（一件壞資料不該讓整個角色讀不進來），建構的地方（weapons.new_weapon、stock、armor.new_armor）自己給對。
     recipe 是自己打的那一件的組合鍵（兵器「兵|」、防具「鎧|」）；secret 是照隱藏配方打出來的名器（打造隱藏配方設計 4.2）；
-    copy_of／original 是神器的仿品與原品（打造第二批）。"""
+    copy_of／original 是神器的仿品與原品（打造第二批）；signature 是名將本命兵器（打造第三批）。"""
 
     slot: Literal["weapon", "armor", "mount", "treasure"] = "weapon"
     id: str
@@ -154,6 +154,9 @@ class Equipment(BaseModel):
     template: str | None = None
     # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
     secret: str | None = None
+    # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
+    # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
+    signature: str | None = None
 
 
 Weapon = Equipment  # 舊名：兵器第一、二批的程式與測試寫 Weapon(...)，照用（slot 預設 weapon）
@@ -324,6 +327,7 @@ class PlayerState(BaseModel):
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
+    figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
     # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
@@ -346,6 +350,9 @@ class PlayerState(BaseModel):
     art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
+    # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
+    # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。
+    pills_topped_to: int = 0
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -628,6 +635,14 @@ class Echo(BaseModel):
     made: str = "練"  # 照著做出來的動詞：武學、意境是「練」，兵器配方是「打」（smithing.forge）
 
 
+class SignatureClaim(BaseModel):
+    """一把名將本命兵器這一季給了誰（兵器設計 4.10；WorldState.signature_arms）：owner 是名號（身分，也是寫給人看的名字），
+    via 是怎麼拿到的：gift 情誼到了他送的、seized 打贏他本人幾次他讓你奪走的。"""
+
+    owner: str
+    via: Literal["gift", "seized"]
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -699,6 +714,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 名將本命兵器給了誰：人物 id → SignatureClaim（兵器設計 4.10：每位名將每季全服一人；換季整個重來）。神器譜跨季讀 seasons 表
+    # 的這一欄（WorldStateStore.signature_records），所以舊季的也留著
+    signature_arms: dict[str, SignatureClaim] = Field(default_factory=dict)
     # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
     # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
     tianji: int = 0

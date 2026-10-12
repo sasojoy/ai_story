@@ -266,6 +266,7 @@ def test_time_passing_writes_no_entry(game):
 
 
 def test_world_news_while_time_passes_is_written_and_merged(game):
+    game.content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     game.advance(20 * HOUR)  # 翻江龍每小時把寇亂推高 1：到 50 時水寇封江
     entry = latest(game)
     assert (entry.title, entry.tag, entry.lines) == ("江湖大事", "水寇封江！", [])

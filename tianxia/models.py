@@ -8,7 +8,7 @@ from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
-TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）
+TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）；趕路 2026-10-12 拿掉，只留給拿掉之前出發、還在路上的那一趟
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
 CompanionKind = Literal["locked", "recruitable"]
@@ -813,6 +813,7 @@ ALLOW_FIXED = frozenset({
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
+    "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1533,6 +1534,9 @@ class WeaponRules(_Strict):
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
+    # 名將本命兵器（兵器設計 4.10；打造第三批）。跟頂層的 Config.signature_affinity（70，本命武學）不是同一個數
+    signature_affinity: int = Field(default=80, ge=0, le=100)  # 情誼到這裡，名將把本命兵器送你
+    signature_wins: int = Field(default=3, ge=1)  # 這一季打贏他本人幾次（大勝、險勝），他讓你奪走（只有內容寫了 figure 的那幾位）
 
 
 class ArmorRules(_Strict):
@@ -1569,8 +1573,8 @@ class MountRules(_Strict):
     階：1 駑馬、2 良駒、3 名駒；查表用 str(tier)（同 WeaponRules.tier_bonus）。不掛第一季開關（2.6，同兵器、防具）。"""
 
     enabled: bool = True
-    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 趕路、疾行的體力省幾成（5.1）
-    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行、趕路的時間快幾成（5.1）
+    stamina_save: dict[str, float] = Field(default_factory=lambda: {"1": 0.25, "2": 0.40, "3": 0.55})  # 疾行的體力省幾成（5.1）
+    speed: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.45, "3": 0.60})  # 步行的時間快幾成（5.1）
     quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.03, "上品": 0.05})  # 只加在上面兩列
     cavalry: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})  # 決戰強攻、奇襲的份量多幾成（5.9）
     escape: dict[str, float] = Field(default_factory=lambda: {"1": 0.30, "2": 0.50, "3": 0.70})  # 落敗策馬脫身、保住銀兩的機會（5.11）
@@ -1632,13 +1636,29 @@ class GiftDef(_Strict):
     line: str = ""  # 送禮那一句（{general}、{gift} 換成人物與贈禮的名字）；空的照 treasures.GIFT_LINE（待 joy 潤）
 
 
+class SignatureArmDef(_Strict):
+    """名將本命兵器（兵器設計 4.10；打造第三批）：content/gear.json 的 signature_arms，一位名將一把。名字原創、暫名待 joy 潤（換名只改
+    內容檔：手上的那一把讀檔時照這裡重寫，signature_arms.refresh_names）。種類・屬性照他的本命武學寫（載入不比對，正式內容的測試鎖）。
+    情誼到 Config.weapons.signature_affinity 他送你；figure 有寫的，這一季打贏那位大勢人物本人 signature_wins 次他讓你奪走（現在只有孫堅）。
+    每位名將每季全服一人（WorldState.signature_arms）。拿到的那一把算神器原品的加成（signature_arms.new_arm）。"""
+
+    character: str  # 人物 id（content/characters.json）
+    name: str
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # martial_arts.ATTRIBUTES
+    figure: str | None = None  # 大勢人物 id（content/figures.json），他的 character 要是同一位；沒寫就只有情誼那條路
+    gift_line: str = ""  # 情誼那條路送你的那一句（{general}、{arm}）；空的照 signature_arms.GIFT_LINE（待 joy 潤）
+    seize_line: str = ""  # 打贏那條路讓你奪走的那一句（{general}、{arm}）；空的照 signature_arms.SEIZE_LINE（待 joy 潤）
+
+
 class GearBook(_Strict):
-    """content/gear.json：寶物表、名駒、名將贈禮（裝備四欄 6.3）。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
-    防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
+    """content/gear.json：寶物表、名駒、名將贈禮、名將本命兵器（裝備四欄 6.3；兵器設計 4.10）。沒有這個檔就是空的（測試內容）：寶物沒有來源、
+    名將不送禮。防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
 
     treasures: dict[str, TreasureDef] = Field(default_factory=dict)
     steeds: dict[str, SteedDef] = Field(default_factory=dict)
     gifts: list[GiftDef] = Field(default_factory=list)
+    signature_arms: list[SignatureArmDef] = Field(default_factory=list)  # 名將本命兵器（打造第三批）
 
 
 class Secrets(_Strict):
@@ -1831,6 +1851,14 @@ class Config(_Strict):
         default_factory=lambda: {"explore": 10, "train": 10, "socialize": 5}
     )
     drill_reward_share: float = Field(default=0.3, ge=0, le=1)  # 跟自己人操練只給對手獎勵的幾成（戰鬥系統第八節：沒風險就拿得少）
+    # 操練推大勢的基準季長（遊戲日；FB-165，企劃者 2026-10-12「操練給的聲勢要隨著賽季長度而調整」）：每次操練推
+    # train_trend × min(1, 這個 ÷ 這一季蓋章的季長)。取週末設定的季長 2.5 天——操練的推力是照那一季調的，週末設定的倍數
+    # 是 1、一個字都不變；14 天的季約 0.18（不然那種季沒有推力緩衝與上限，黃巾的人在自己營寨點三十下操練就收掉一整季）。
+    drill_push_base_days: float = Field(default=2.5, gt=0)
+    # 季長倍數小於 1（季比基準長）時，操練推的量再乘這個（PM 2026-10-12：企劃者「操練給的聲勢就不該那麼大佔比」）：14 天的季
+    # 只照季長縮放時操練仍佔黃巾聲勢漲幅的六到十成，再打五折是 2.5／14 × 0.5 ≈ 0.09。週末設定倍數是 1、不乘。
+    # 事件的大勢效果只照季長縮放、不乘這個（Game.season_scale）。
+    drill_long_season_share: float = Field(default=0.5, gt=0, le=1)
     time_scale: float = 1.0
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
@@ -1971,6 +1999,8 @@ class Config(_Strict):
     injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
+    # 療傷只在醫館（帶「醫館」標籤的地點，tianxia/clinic.py；企劃者 2026-10-12「不能隨地療傷」）。關著時哪裡都能療傷（測試內容關著）
+    heal_at_clinic: bool = True
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
     practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次

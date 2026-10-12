@@ -165,7 +165,7 @@ def _reload(game: Game) -> None:
     game._drop_stale_references()
 
 
-# 這次請求的頁面選的走法（主畫面的「走法」切換：步行／趕路／疾行）。走法歸頁面管：頁面自己記著、每個請求都帶上
+# 這次請求的頁面選的走法（主畫面的「走法」切換：步行／疾行）。走法歸頁面管：頁面自己記著、每個請求都帶上
 # （X-Move-Mode，見 _game），這裡在行動鎖裡套到 Game 上再排選單（見 _locked）。所以重新整理頁面就回到步行，
 # 同一個角色開兩個分頁也各走各的、不會互相蓋掉——GAMES 裡一個角色只有一份 Game，走法只記在那份物件上就做不到。
 # FastAPI 的同步端點各自在複製出來的 context 裡跑，設了只在這次請求裡有效；不經過 _game 的（登入、/api/me）就是步行。
@@ -1015,7 +1015,7 @@ def map_view(game: Game, layer: str, selected: str | None) -> dict:
         "selected": selected,
         "here": game.state.player.location,
         "detail": md(game.place_detail(selected)),
-        # 步行、趕路、疾行三個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None。被待處理的事件擋著時只有一顆灰的、
+        # 步行、疾行兩個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None。被待處理的事件擋著時只有一顆灰的、
         # label 寫是哪一則，to_jianghu 為真：頁面在旁邊多給一顆「回江湖」（FB-063）
         "travel": [
             {"mode": o.mode, "label": o.label, "enabled": o.enabled, "to_jianghu": o.to_jianghu}
@@ -1742,7 +1742,7 @@ def api_map(request: Request, layer: str = DEFAULT_LAYER, place: str | None = No
 
 @app.post("/api/travel")
 def api_travel(request: Request, body: dict = Body(...)):
-    """「安排前往」（步行、趕路、疾行）：出發了就回 {main, arrived: true}，畫面回江湖、場景寫路上或抵達的地點；
+    """「安排前往」（步行、疾行）：出發了就回 {main, arrived: true}，畫面回江湖、場景寫路上或抵達的地點；
     按鈕是舊的而走不成時（例如打開輿圖之後才冒出事件）回 {arrived: false, map, reason}，留在輿圖、寫出原因。"""
     game = _game(request)
     target = str(body.get("place", ""))
