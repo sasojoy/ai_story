@@ -8,10 +8,10 @@ from unittest import mock
 
 import pytest
 
-from conftest import real_content
+from conftest import FixedRandom, real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
-from tianxia import armor, battlelog, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
+from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
 from tianxia.content import validate
 from tianxia.models import ForgeSecret, ForgeSide
 from tianxia.sqlite_world import open_world
@@ -365,3 +365,24 @@ def test_big_fights_roll_once_more_but_the_figure_squad_and_small_fights_do_not(
 def test_tier_three_knobs_are_off_in_the_fixture(content):
     rule = content.config.forge_secrets
     assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (0, 0, 0)  # 預設全關（舊測試一個字都不變）
+
+
+# ── Task 8：假人與機器人沿用譜名 ──
+
+def test_server_bots_keep_the_book_name_on_a_later_turn(divine_content, world):
+    """PM 決定第 3 條：打中神器配方的假人用「沿用譜名」（Game.name_divine(keep=True)，跟真人按那一顆一樣），
+    不在打出來那一下就定：每一輪 DIVINE_NAME_CHANCE 的機會。"""
+    game = _forger(divine_content, world, name="假甲")
+    original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert bot_policy._name_originals(game, FixedRandom(0.9)) == [] and original.name == DIVINE_UNNAMED  # 這一輪沒擲中
+    bot_policy._name_originals(game, FixedRandom(0.1))
+    assert original.name == "墜星劍" and world.lookup_gear_find("鑄|t_star").divine_name == "墜星劍"
+    assert bot_policy._name_originals(game, FixedRandom(0.1)) == []  # 定過了：沒有等著定名的，連亂數都不擲
+
+
+def test_season_bots_keep_the_book_name_right_away(divine_content, world):
+    game = _forger(divine_content, world)
+    original, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3",
+                                 rng=smithing.own_rng(game.state, "鎧|gang_3+gang_3"))
+    bot.keep_book_names(game)
+    assert original.name == "鎮星甲"  # 整季機器人不上線，打出原品一律馬上沿用譜名（設計第十一節）

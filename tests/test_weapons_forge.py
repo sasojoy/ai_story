@@ -675,18 +675,46 @@ def test_visit_smith_never_leaves_a_draft_open(content, world, monkeypatch):
     assert not game.state.player.picking_smith and game.state.player.smith_draft is None
 
 
-def test_server_bots_never_open_the_forge_or_temper(content, world):
+def test_server_bots_forge_step_by_step_and_never_temper(content, world):
+    """打造第二批（PM 2026-10-12 決定第 3 條）：伺服器假人照整季機器人的挑法一步一步打一爐（打開 → 種類 → 主料 → 輔料 → 開爐），
+    打完裝備庫裡沒有比手上更好的；淬煉永遠不按。"""
     from tianxia import bot_policy
     from tianxia.state import BotProfile
     game = _smithy(content, world)
-    game.state.player.weapon = _blade()
+    p = game.state.player
+    p.weapon = _blade()  # 一階、買的：背包有玄鋼骨 ×2，打得起一爐二階（60 兩，打完還留 140）
     profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
-    assert scored[smithing.OPEN] is None and scored[smithing.TEMPER] is None
-    game.choose(smithing.OPEN)
-    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
-    assert scored[smithing.CANCEL] == 0.0  # 萬一停在單子上，只會按「不打了」
-    assert all(v is None for k, v in scored.items() if k != smithing.CANCEL)
+    pressed = []
+    for _ in range(10):
+        want = bot_policy._smith_want(game)
+        scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+        assert scored.get(smithing.TEMPER) is None  # 不淬煉
+        if want is None:
+            break
+        assert scored[want] == bot_policy.SMITH_SCORE
+        pressed.append(want)
+        game.choose(want)
+    assert pressed[:5] == smithing.wizard_steps("劍", "gang_2", "gang_2")
+    made = [w for w in [p.weapon, *p.rack] if w.recipe]
+    assert [w.recipe for w in made] == [weapons.recipe_key("劍", "gang_2", "gang_2")] and p.smith_draft is None
+    assert smithing.better_in_rack(game.state, content, world, _art(game, content, world)) is None  # 更好的已經換上（或本來就不更好）
+
+
+def test_a_server_bot_cancels_a_draft_that_no_longer_matches_its_plan(content, world):
+    from tianxia import bot_policy
+    game = _smithy(content, world)
+    game.state.player.weapon = _blade()
+    for oid in (smithing.OPEN, f"{smithing.KIND}刀"):  # 存檔留下的單子：種類跟這一爐對不上
+        game.choose(oid)
+    assert bot_policy._smith_want(game) == smithing.CANCEL
+
+
+def test_server_bots_keep_silver_for_healing_after_a_forge(content, world):
+    from tianxia import bot
+    game = _smithy(content, world, silver=80)  # 二階 60 兩：打完只剩 20，不到 FORGE_SILVER_RESERVE（30）
+    game.state.player.weapon = _blade()
+    game.state.player.materials = {"gang_2": 2}
+    assert bot.forge_step(game) is None
 
 
 # ── 打造隱藏配方第一批 Task 1：不叫模型，一般組合照對照表（設計第八節、4.1；PM 2026-10-12 決定第 1 條）──
