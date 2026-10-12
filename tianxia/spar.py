@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import invites, social
+from . import gender, invites, social
 from .characters import name_key
 from .rules import season_one
 
@@ -31,7 +31,7 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
             social.CardButton(action=KIND, arg="no", label="婉拒"),
         ]
     if inv is not None:
-        return [social.CardButton(action=KIND, arg="cancel", label="收回切磋邀請", note="等他回覆")]
+        return [social.CardButton(action=KIND, arg="cancel", label="收回切磋邀請", note=f"等{gender.pronoun(other.state)}回覆")]
     problem = game.spar_refusal(other)
     return [social.CardButton(
         action=KIND, arg="invite", label="切磋", note=f"體力 {cost}" if problem is None else problem, enabled=problem is None,

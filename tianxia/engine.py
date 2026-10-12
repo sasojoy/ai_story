@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
-    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
+    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
@@ -73,6 +73,8 @@ BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
+GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
+GENDER_LOCKED = "性別已經定了，改不了。"
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -213,6 +215,7 @@ class BattleTextRequest(BaseModel):
     faction_name: str
     text: str
     name: str = ""  # 送出的人的名號：劇情以他開頭（試玩回饋 2026-10-08）
+    sex: str = "男"  # 送出的人的性別（gender）：模型寫劇情時的稱呼
     target: str = ""  # 點名的對手與身手（battle_instance.target_line，Joy 2026-10-10）：給模型多一行；沒點名是空的
 
 
@@ -225,6 +228,7 @@ class DuelTextRequest(BaseModel):
     faction_name: str
     title: str
     scene: str
+    sex: str = "男"  # 性別（gender）：模型寫劇情時的稱呼
 
 
 class FreeTextOutcome(BaseModel):
@@ -291,14 +295,18 @@ class Game:
     @classmethod
     def new(
         cls, content: Content, name: str, rng: random.Random | None = None, world: WorldStateStore | None = None,
-        prologue: bool = False, graduated: bool = False,
+        prologue: bool = False, graduated: bool = False, sex: str | None = None,
     ) -> Game:
         """prologue：走序章（新手引導計畫一）。只有網頁上建立角色（server.create_character）傳 True；假人、整季機器人、
         腳本與測試不傳，直接站在起點、序章算走過（沒有序章的內容兩種都一樣）。
         graduated：假人與整季機器人傳 True（bot_runner、bot.play_season）：不進草廬，但離開起點時的樣子要跟走完草廬的真人一樣
         （等級、一門師門功夫、盤纏、一點內傷：不然新人頭一個鐘頭就看得出誰是假人）——內容有序章才有作用，做法是把序章用真的
-        行動走一遍（_graduate）。內容沒有序章（正式內容現在就是）什麼都不做，連亂數都不多用一次。"""
+        行動走一遍（_graduate）。內容沒有序章（正式內容現在就是）什麼都不做，連亂數都不多用一次。
+        sex：建角色時選的性別（「男」／「女」，gender.GENDERS）：給了就定了（gender_chosen）；沒給是男、設定頁還能選一次。
+        假人由 bot_runner 照比例給（gender.for_bot）。"""
         game = cls(content, new_game_state(content, name), rng, world)
+        if sex in gender.GENDERS:
+            game.state.player.gender, game.state.player.gender_chosen = sex, True
         if prologue:
             prologue_rules.begin(game.state, content)
         elif graduated and prologue_rules.has(content):
@@ -481,6 +489,7 @@ class Game:
         fresh.player.used_dialogue_options = old.player.used_dialogue_options
         fresh.player.turns_since_consolidation = old.player.turns_since_consolidation
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
+        fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
@@ -1303,7 +1312,9 @@ class Game:
         return fight_llm.FightRequest(
             option_id=option_id, squad_id=squad.id, location=s.player.location, battle_seq=s.battle_seq,
             event=s.pending_event,
-            ours=[fight_llm.member_line(name, arts) for name, *arts in team.lineup(s, self.content, self.world)],
+            # 本人那一行名號後面寫性別（女的寫「（女子）」，模型寫過程時稱呼跟著換；PM 2026-10-12），同伴照舊
+            ours=[fight_llm.member_line(name + ("（女子）" if i == 0 and gender.female(s) else ""), arts)
+                  for i, (name, *arts) in enumerate(team.lineup(s, self.content, self.world))],
             theirs=theirs + (f"：{squad.desc}" if squad.desc else ""),  # 有來歷的對手多一句描述（設計 8.3「對手的描述」）
         )
 
@@ -4039,7 +4050,7 @@ class Game:
         battle = self.world.get_battle()
         return BattleTextRequest(
             battle_id=definition.id, act_index=battle.act_index, faction_name=faction_name, text=text,
-            name=self.state.player.name,
+            name=self.state.player.name, sex=gender.of(self.state),
             target=battle_instance.target_line(battle, definition, self.state.player.name, text, self.content.config.battle),
         )
 
@@ -4065,7 +4076,7 @@ class Game:
             act = battle_instance.current_act(battle, definition)
             target = battle_instance.target_line(battle, definition, self.state.player.name, text, self.content.config.battle)
             verdict = battle_instance.assess_gamble(
-                self._quick_client(), act, faction_name, text, self.state.player.name, target=target,
+                self._quick_client(), act, faction_name, text, self.state.player.name, target=target, sex=gender.of(self.state),
             )
             llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
         return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate, stories)
@@ -5586,7 +5597,8 @@ class Game:
         invites.send(s.world, self.content, "spar", s.player.name, name, s.player.location)
         self._save_season()
         self.touched.add(name)  # 他的選單、他看你的那張卡要多出答應、婉拒
-        return [f"你向{name}抱拳，邀他過幾招；等他回覆。"]
+        him = gender.pronoun(other.state)
+        return [f"你向{name}抱拳，邀{him}過幾招；等{him}回覆。"]
 
     def _invite_options(self) -> list[Option]:
         """閒著的時候：別人發給你、而且就在你這個地點的邀請（答應、婉拒），你發出去還在等的（收回）。逾時的不列。"""
@@ -5604,7 +5616,7 @@ class Game:
             if inv.kind == "travel":  # 結伴同行：答應不花體力（趕路、疾行的體力出發時各付各的）
                 opts.append(Option(id=f"invite:yes:{inv.id}", label=f"答應{inv.sender}的{what}"))
             elif inv.kind == "discuss":  # 論武要挑自己出哪一樣：在他的玩家卡上答（discuss_buttons）；選單上只提醒、只能婉拒
-                opts.append(Option(id=f"invite:yes:{inv.id}", enabled=False, label=f"答應{inv.sender}的{what}（在他的玩家卡上挑你要出的）"))
+                opts.append(Option(id=f"invite:yes:{inv.id}", enabled=False, label=f"答應{inv.sender}的{what}（在對方的玩家卡上挑你要出的）"))
             else:
                 opts.append(self._cost_option(f"invite:yes:{inv.id}", f"答應{inv.sender}的{what}", c.config.action_cost["train"]))
             opts.append(Option(id=f"invite:no:{inv.id}", label=f"婉拒{inv.sender}的{what}"))
@@ -5672,8 +5684,8 @@ class Game:
         if refusal is not None:
             return [f"（{refusal}。）"]
         p.tagalong = Tagalong(leader=inv.sender, since=self.now)
-        other._write(f"結伴同行・{p.name}", [f"{p.name}答應與你結伴同行：由你定去哪、怎麼走，出發時他跟著走。"])
-        return [f"你答應與{inv.sender}結伴同行，等他動身。"]
+        other._write(f"結伴同行・{p.name}", [f"{p.name}答應與你結伴同行：由你定去哪、怎麼走，出發時{gender.pronoun(p)}跟著走。"])
+        return [f"你答應與{inv.sender}結伴同行，等{gender.pronoun(other.state)}動身。"]
 
     def _spar(self, inv, other: Game) -> list[str]:
         """答應一場切磋：重驗（還在發邀請的那個地點、兩個人都閒著、體力付得起、今天這一對還沒打滿），雙方各花一次遊歷的體力，
@@ -5753,7 +5765,7 @@ class Game:
         invites.send(s.world, self.content, "discuss", s.player.name, name, s.player.location, {"item": item})
         self._save_season()
         self.touched.add(name)
-        return [f"你拿出{label}，邀{name}一起論武；等他回覆。"]
+        return [f"你拿出{label}，邀{name}一起論武；等{gender.pronoun(other.state)}回覆。"]
 
     @staticmethod
     def _discuss_args(mine: str, theirs: str) -> tuple[str | None, list[str], str | None, str]:
@@ -5814,7 +5826,7 @@ class Game:
         if problem is None and item not in dict(self.discuss_items()):
             problem = "你身上沒有這一樣。"
         if problem is None and theirs not in dict(other.discuss_items()):
-            problem = f"{them.name}身上已經沒有他要出的那一樣了。"
+            problem = f"{them.name}身上已經沒有{gender.pronoun(them)}要出的那一樣了。"
         if problem is None and item == theirs:
             problem = "兩個人出的是同一樣，論不出新東西。"
         if problem is None:
@@ -5997,7 +6009,7 @@ class Game:
         other._write(f"遭{me.name}截殺", [mounts.RAID_ESCAPED.format(rival=me.name, horse=horse)], tag=mounts.RAID_ESCAPED_TAG)
         msgs = [f"體力 -{c.config.raid.stamina}", mounts.RAID_FLED.format(rival=them.name, horse=horse)]
         if self._draft is None:
-            self._write(f"截殺・{them.name}", msgs, tag=mounts.RAID_FLED_TAG)
+            self._write(f"截殺・{them.name}", msgs, tag=mounts.RAID_FLED_TAG.format(him=gender.pronoun(them)))
         self._save_season()
         return msgs
 
@@ -6064,7 +6076,7 @@ class Game:
             hp_lost = spoils.hp
             if spoils.hp > 0:
                 record.changes.append(f"氣血 -{spoils.hp}")
-            story = f"你攔下{rival}動手，卻不是他的對手，只得丟下銀兩脫身。" if attacker else \
+            story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
         annals.note(s, c, annals.FIGHT, story, 3 if won else 2)  # 行狀：截殺與被截殺（兩邊各記自己的）
@@ -6142,7 +6154,7 @@ class Game:
         here = duel_rules.scene(c, duel)
         return DuelTextRequest(
             boss=duel.boss, round=duel.round, text=checked, name=s.player.name, faction_name=self._duel_side(),
-            title=here.title, scene=here.text,
+            title=here.title, scene=here.text, sex=gender.of(s),
         )
 
     def _duel_side(self) -> str:
@@ -6166,7 +6178,7 @@ class Game:
         if llm_rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), duel_rules.scene(c, duel), self._duel_side(), checked, s.player.name,
-                setting=duel_rules.SETTING, place=duel_rules.PLACE,
+                setting=duel_rules.SETTING, place=duel_rules.PLACE, sex=gender.of(s),
             )
             llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
         s.battle_card = None
@@ -6422,6 +6434,17 @@ class Game:
 
     def set_anonymous(self, value: bool) -> None:
         self.state.player.anonymous = bool(value)
+
+    def set_gender(self, value: str) -> list[str]:
+        """設定頁的「性別」：還沒選過的角色（舊角色，PM 2026-10-12）改一次，改完就定了；建角色時選過的、選過一次的不能再改。
+        不影響任何數值；不寫江湖紀錄（設定頁的事），回一句給網頁跳提示。"""
+        p = self.state.player
+        if value not in gender.GENDERS:
+            return ["沒有這個選項。"]
+        if p.gender_chosen:
+            return [GENDER_LOCKED]
+        p.gender, p.gender_chosen = value, True
+        return [GENDER_SET.format(word=value)]
 
     def skip_tutorial(self) -> list[str]:
         steps = len(tutorial_steps(self.state, self.content))
@@ -7103,7 +7126,7 @@ class Game:
         """場景底下結伴同行的那一行：跟著誰（可以分道揚鑣），或誰跟著你。都沒有是 None。"""
         p = self.state.player
         if p.tagalong is not None:
-            return {"lead": False, "names": [p.tagalong.leader], "text": f"你跟著{p.tagalong.leader}結伴同行，由他定去哪、怎麼走。"}
+            return {"lead": False, "names": [p.tagalong.leader], "text": f"你跟著{p.tagalong.leader}結伴同行，由對方定去哪、怎麼走。"}
         names = [g.state.player.name for g in self._party()]
         if not names:
             return None
@@ -7264,7 +7287,7 @@ class Game:
         （企劃者裁決 E3 那一句的情況），都不發。"""
         s, c, p = target.state, self.content, target.state.player
         if p.faction is None:
-            return f"（{p.name}是散人，沒有陣營可以召見他。）", None
+            return f"（{p.name}是散人，沒有陣營可以召見{gender.pronoun(p)}。）", None
         if p.summons is not None:
             return f"（{p.name}手上已經有一張第 {p.summons.rank} 階的召見了。）", None
         if p.qualified:
@@ -7479,6 +7502,8 @@ class Game:
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
             "anonymous": p.anonymous,
+            "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
+            "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
             "location": c.locations[p.location].name,
@@ -7739,7 +7764,7 @@ class Game:
         era = [r.text for r in chronicle][: biography.ERA_MAX]
         return biography.BiographyRequest(
             season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
-            annals=entries, era=tuple(era), rewrite=rewrite,
+            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p),
         )
 
     def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:

@@ -66,3 +66,16 @@ def test_a_woman_gets_the_female_figure_and_its_own_node_spots(views):
     assert "/static/hero.webp" in man and "/static/hero-f.webp" in woman
     spot = lambda page: page.split('data-key="內功"')[0].rsplit("<button", 1)[1]
     assert spot(man) != spot(woman)  # 光點照各自那張圖的位置
+
+
+def test_settings_offer_old_characters_one_gender_pick(views):
+    """設定頁的性別（PM 2026-10-12）：沒選過的舊角色兩顆鈕、先問一次；選過的只寫一行。"""
+    m, _ = views
+    m["status"].update(gender="男", gender_chosen=False)
+    sheet = run(m, "return H.sheetHtml();")
+    assert 'data-act="gender-pick" data-value="女"' in sheet and "只能選一次" in sheet
+    asked = run(m, "H.S.genderPick = '女'; return H.sheetHtml();")
+    assert "往後以女俠行走江湖" in asked and 'data-act="gender-go" data-value="女"' in asked
+    m["status"].update(gender="女", gender_chosen=True)
+    done = run(m, "return H.sheetHtml();")
+    assert "性別：女" in done and "gender-pick" not in done

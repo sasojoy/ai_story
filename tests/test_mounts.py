@@ -798,7 +798,7 @@ def test_a_faster_horse_rides_away_from_a_raid_and_the_cooldowns_still_stick(rid
     assert a.player.stamina == 90.0 and a.player.stats["silver"] == 200 == b.player.stats["silver"]
     assert a.battles == [] and b.battles == [] and b.player.mount.edge == 100
     assert [(s.player.weapon.edge, s.player.armor.edge) for s in (a, b)] == [(100, 100), (100, 100)]
-    assert (a.journal[0].title, a.journal[0].tag) == ("截殺・乙", mounts.RAID_FLED_TAG)
+    assert (a.journal[0].title, a.journal[0].tag) == ("截殺・乙", mounts.RAID_FLED_TAG.format(him="他"))
     assert (b.journal[0].title, b.journal[0].tag) == ("遭甲截殺", mounts.RAID_ESCAPED_TAG)
     season = world.get_season()
     assert season.raids and season.raided  # 冷卻在共用賽季：_raid_fled 自己存了
@@ -815,7 +815,7 @@ def test_the_raid_button_says_how_likely_the_target_rides_away(riders):
 
     plain = button()["confirm"]  # 誰都沒騎馬：原本那一句（Joy 的，不動）
     _ride(world, "乙", _horse())  # 守方吃飽的駑馬 25%、攻方沒馬
-    assert button()["confirm"] == plain + mounts.RAID_FLEE_ASK.format(odds="約 3 成")  # 待 joy 潤的那一句從常數組，只鎖「約 3 成」
+    assert button()["confirm"] == plain + mounts.RAID_FLEE_ASK.format(odds="約 3 成", him="他")  # 待 joy 潤的那一句從常數組，只鎖「約 3 成」
     game = _loaded(content, world, "甲")
     assert game.raid_flee_odds(game._load_kin("乙")) == pytest.approx(0.25)  # 確認句與 raid() 讀同一個數
     _ride(world, "甲", _horse(tier=2))  # 攻方良駒 40% 比較快：跑不掉
@@ -840,11 +840,11 @@ def test_whether_he_rides_away_is_rolled_on_its_own_seed(riders, monkeypatch, fl
     flee_text = mounts.RAID_FLED.format(rival="乙", horse="棗騮馬")
     if fled:
         assert flee_text in msgs and a.battles == [] and b.battles == []
-        assert (a.journal[0].tag, b.journal[0].tag) == (mounts.RAID_FLED_TAG, mounts.RAID_ESCAPED_TAG)
+        assert (a.journal[0].tag, b.journal[0].tag) == (mounts.RAID_FLED_TAG.format(him="他"), mounts.RAID_ESCAPED_TAG)
     else:
         assert flee_text not in msgs and "體力 -10" in msgs
         assert len(a.battles) == 1 == len(b.battles) and a.battles[0].kind == b.battles[0].kind == "raid"
-        assert {a.journal[0].tag, b.journal[0].tag}.isdisjoint({mounts.RAID_FLED_TAG, mounts.RAID_ESCAPED_TAG})
+        assert {a.journal[0].tag, b.journal[0].tag}.isdisjoint({mounts.RAID_FLED_TAG.format(him="他"), mounts.RAID_ESCAPED_TAG})
         assert (a.journal[0].title, b.journal[0].title) == ("截殺・乙", "遭甲截殺")
 
 

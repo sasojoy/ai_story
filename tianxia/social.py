@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import invites, ranger, ranks, team
+from . import gender, invites, ranger, ranks, team
 from .characters import CharacterStore
 from .state import GameState
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .engine import Game
     from .models import Content
 
-GONE = "他已經不在這裡了。"  # 對方離開了、下線太久、或根本沒有這個人：一律這一句（不讓人試出名號在不在）
+GONE = "對方已經不在這裡了。"  # 對方離開了、下線太久、或根本沒有這個人：一律這一句（不讓人試出名號在不在）
 
 
 @dataclass
@@ -176,7 +176,7 @@ def invite_text(invite) -> str:
     if gesture is not None:
         return f"{invite.sender}{gesture.got}。"
     if invite.kind == "travel":
-        return f"{invite.sender}邀你結伴同行（答應了由他定去哪、怎麼走）。"
+        return f"{invite.sender}邀你結伴同行（答應了由對方定去哪、怎麼走）。"
     return f"{invite.sender}邀你{invites.kind_name(invite.kind)}。"
 
 
@@ -300,16 +300,16 @@ def _travel_note(game: Game, other: Game) -> str | None:
     if me.tagalong is not None:
         return f"你正跟著{me.tagalong.leader}同行"
     if them.tagalong is not None:
-        return "他已經跟別人結伴了"
+        return f"{gender.pronoun(them)}已經跟別人結伴了"
     if _waiting(game, other, "travel") is not None:
-        return "等他回應"
+        return f"等{gender.pronoun(them)}回應"
     return None
 
 
 def _travel_buttons(game: Game, other: Game) -> list[CardButton]:
-    note = _travel_note(game, other)
+    note, him = _travel_note(game, other), gender.pronoun(other.state)
     return [CardButton(
-        action="travel", label="邀他結伴同行", enabled=note is None, note=note or "他答應了，由你定去哪、怎麼走",
+        action="travel", label=f"邀{him}結伴同行", enabled=note is None, note=note or f"{him}答應了，由你定去哪、怎麼走",
     )]
 
 
@@ -318,7 +318,7 @@ def _travel(game: Game, other: Game, params: dict) -> list[str]:
     if note is not None:
         return [f"（{note}。）"]
     _send(game, other, "travel")
-    return [f"你邀{other.state.player.name}結伴同行，等他回應。"]
+    return [f"你邀{other.state.player.name}結伴同行，等{gender.pronoun(other.state)}回應。"]
 
 
 register(CardAction(id="greet", buttons=_greet_buttons, run=_greet, order=10))

@@ -18,7 +18,7 @@ SYSTEM_PROMPT = (
 # 「意境之形厚重」）。舊版要求「一定要寫出線條形狀」：本機實測不寫那句時命名會被地點景色蓋過去，所以這裡照樣要求從那一筆來，
 # 只是要化成意象。
 IMAGERY_RULE = (
-    "說明用一句話寫這份領悟的意象與質感，從他畫的那個形來（例如「帶著熊熊烈火之感」「意境之形厚重，如山壓頂」），"
+    "說明用一句話寫這份領悟的意象與質感，從畫下的那個形來（例如「帶著熊熊烈火之感」「意境之形厚重，如山壓頂」），"
     "不要只寫地點的景色。**不要描寫筆畫本身**：不要寫折角、圓轉、直線、線條、一筆、畫得快或慢、往上往下這類字眼。"
 )
 # 模型偶爾還是會寫出筆畫的幾何：說明裡有這些字就不用那句說明（名字照用），改用規則讀到的意象（sensing.finish）
@@ -32,13 +32,14 @@ def messages(facts: dict[str, str], image: str = "") -> list[dict]:
     """取名的提示詞。facts：place（地點）、scene（場景標題）、text（場景）、method（玩家選的做法）、mood（規則從那一筆讀到的意象，
     glyph.Glyph.mood）、attribute（結合出來的屬性）。image 是 base64 的 PNG：給了就附在 user 那一則（Ollama 的 images 欄位），
     沒給就只看文字。"""
+    him = facts.get("him", "他")  # 玩家的他／她（sensing 照性別給；舊單子沒有是他）
     user = {
         "role": "user",
         "content": (
             f"地點：{facts['place']}\n"
             f"場景：「{facts['scene']}」{facts['text']}\n"
-            f"他的做法：{facts['method']}\n"
-            f"他心中有一個形，一筆畫了下來（{'圖附在這裡' if image else '看不到圖'}）。那個形給人的感覺：{facts['mood']}\n"
+            f"{him}的做法：{facts['method']}\n"
+            f"{him}心中有一個形，一筆畫了下來（{'圖附在這裡' if image else '看不到圖'}）。那個形給人的感覺：{facts['mood']}\n"
             f"這份領悟的屬性：{facts['attribute']}\n"
             "替這份領悟取名。名字要像一種境界或天地之象，不是招式名。\n"
             f"{IMAGERY_RULE}\n{naming.FORMAT_RULES}"

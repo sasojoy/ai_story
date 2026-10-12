@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import battle_instance, bot_policy, insight_llm, naming, server_bots
+from . import battle_instance, bot_policy, gender, insight_llm, naming, server_bots
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -32,6 +32,7 @@ from .state import BotProfile, GameState
 from .world_state import WorldStateStore
 
 LOCK_WAIT = 2.0  # 假人等行動鎖最多幾秒；等不到就跳過這一輪
+FEMALE_SAMPLE = 5  # 真人選過性別的不到這麼多個，假人的女性比例照 gender.BOT_FEMALE_SHARE（太少的樣本照抄會整批偏一邊）
 
 log = logging.getLogger(__name__)
 
@@ -245,6 +246,14 @@ class BotRunner:
             self.last_added[faction.id] = now
             report.added += 1
 
+    def _female_share(self) -> float:
+        """真人裡選了女的比例（建角色或設定頁選過的才算）；選過的真人不到 FEMALE_SAMPLE 個時用 gender.BOT_FEMALE_SHARE。
+        假人跟著真人的比例走，才看不出誰是假人（伺服器假人設計）。"""
+        chosen = [st.player for st in self.characters.all() if st.player.bot is None and st.player.gender_chosen]
+        if len(chosen) < FEMALE_SAMPLE:
+            return gender.BOT_FEMALE_SHARE
+        return sum(gender.female(p) for p in chosen) / len(chosen)
+
     def _add_bot(self, faction_id: str, season: int, bots: list[GameState], now: float) -> list[GameState]:
         """先叫醒一位退隱的假人（沿用名號，像老玩家回鍋），沒有才新建一位；回傳更新後的假人清單。"""
         retired = [s for s in bots if s.player.bot is not None and not server_bots.active(s.player.bot, season)]
@@ -259,6 +268,10 @@ class BotRunner:
             game.state.player.bot = BotProfile(
                 personality=server_bots.pick_personality(self.rng), seed=self.rng.randrange(2**31),
             )
+            # 性別建立時就定好（PM 2026-10-12）：照真人選的比例、照名號雜湊擲（不動 self.rng，後面的擲骰不位移）；
+            # 跟建角色時選過的真人一樣記成選過了，設定頁不會冒出「選一次」
+            game.state.player.gender = gender.for_bot(name, self._female_share())
+            game.state.player.gender_chosen = True
         game.client = None
         bot = game.state.player.bot
         bot.faction, bot.season_number = faction_id, season

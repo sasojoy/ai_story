@@ -13,7 +13,7 @@ import copy
 import re
 from dataclasses import dataclass, field
 
-from . import zh
+from . import gender, zh
 
 MODEL, RULE = "model", "rule"
 TITLE = "{name}傳"
@@ -33,6 +33,7 @@ class BiographyRequest:
     annals: tuple[dict, ...] = ()  # AnnalEntry.model_dump()，照時間先後
     era: tuple[str, ...] = ()  # 那一季的大事（時刻表的公告，沒有就江湖史），最多 ERA_MAX 件
     rewrite: bool = False  # 已經寫過、這是重寫
+    sex: str = "男"  # 性別（gender）：傳裡稱他還是她（PM 2026-10-12）
 
 
 ERA_MAX = 6
@@ -86,11 +87,11 @@ def outline(req: BiographyRequest) -> str:
 SYSTEM = (
     "你是史官，替一位江湖人物寫列傳。文體仿《三國志》列傳的半文言：文雅、簡潔、讀得懂，不要太艱澀。\n"
     "規矩：\n"
-    "1. 開頭第一句寫「{name}者，」，全篇稱他為「{name}」。\n"
+    "1. 開頭第一句寫「{name}者，」，全篇稱{him}為「{name}」。{name}是{word}。\n"
     "2. 分四段：出身與投靠、大戰、與英雄交往、結局；最後另起一段，以「評曰：」開頭，寫兩三句評語。段與段之間空一行。\n"
     "3. 只能寫事實清單裡有的事。不得杜撰事件、人名、地名、官職、數目；清單裡沒有的就略過不寫。\n"
     "4. 數目一律用中文數字寫（例如「三回合」），不得用阿拉伯數字；清單裡沒有的數目不寫。\n"
-    "5. 他說過的話可以照原句引用，寫成「{name}曰：「……」」；人物回的話也可以引。\n"
+    "5. {him}說過的話可以照原句引用，寫成「{name}曰：「……」」；人物回的話也可以引。\n"
     "6. 字數視事實多寡，四百到一千五百字。不寫標題、不用任何標記符號、不分點列。只用繁體中文。"
 )
 
@@ -99,7 +100,7 @@ def messages(req: BiographyRequest) -> list[dict[str, str]]:
     ask = f"請替「{req.name}」寫列傳。以下是事實清單：\n\n{outline(req)}"
     if req.rewrite:
         ask += "\n\n（這是重寫：換一種起筆與剪裁。）"
-    return [{"role": "system", "content": SYSTEM.format(name=req.name)}, {"role": "user", "content": ask}]
+    return [{"role": "system", "content": SYSTEM.format(name=req.name, him=gender.pronoun(req.sex), word=gender.word(req.sex))}, {"role": "user", "content": ask}]
 
 
 def clean(raw: str | None, req: BiographyRequest) -> str | None:

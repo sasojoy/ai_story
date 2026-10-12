@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import invites, social
+from . import gender, invites, social
 from .characters import name_key
 from .rules import season_one
 
@@ -33,14 +33,14 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
     items = game.discuss_items()
     if inv is not None and name_key(inv.target) == name_key(game.state.player.name):
         theirs = dict(other.discuss_items()).get(inv.payload.get("item", ""), "那一樣")
-        note = f"他出{theirs}・{_price_note(game)}"
+        note = f"{gender.pronoun(other.state)}出{theirs}・{_price_note(game)}"
         return [
             *(social.CardButton(action=KIND, arg=f"yes:{key}", label=f"以{label}應之", note=note, group="以此應之", pick=label)
               for key, label in items),
             social.CardButton(action=KIND, arg="no", label="婉拒論武"),
         ]
     if inv is not None:
-        return [social.CardButton(action=KIND, arg="cancel", label="收回論武邀請", note="等他回覆")]
+        return [social.CardButton(action=KIND, arg="cancel", label="收回論武邀請", note=f"等{gender.pronoun(other.state)}回覆")]
     problem = game.discuss_refusal(other)
     if problem is not None or not items:
         return [social.CardButton(action=KIND, arg="invite", label="論武", note=problem or "你身上沒有東西可出", enabled=False)]

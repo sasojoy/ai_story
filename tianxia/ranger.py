@@ -11,6 +11,7 @@
 不看第一季開關（先例是叛投 defection.can_defect）。不 import engine。"""
 from __future__ import annotations
 
+from . import gender
 from .models import Content
 from .state import GameState
 
@@ -20,6 +21,11 @@ TITLES: dict[str, list[str]] = {
     "俠": ["無名小卒", "江湖遊俠", "一方豪俠", "州郡大俠", "天下名俠"],
     "寇": ["無名小卒", "綠林好漢", "江湖巨寇", "州郡大盜", "天下大盜"],
 }
+FEMALE_TITLES = {"綠林好漢": "綠林女傑"}  # 女的名號換字（PM 2026-10-12）：只換寫死是男子的那幾個，其餘不分男女
+
+
+def _named(name: str, state: GameState) -> str:
+    return FEMALE_TITLES.get(name, name) if gender.female(state) else name
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -68,7 +74,7 @@ def tier(state: GameState, content: Content) -> int:
 def title(content: Content, state: GameState) -> str | None:
     """狀態列寫在名號後面的那一段（「江湖遊俠」）；第 0 階、陣營的人、劇本沒有陣營是 None。"""
     t = tier(state, content)
-    return TITLES[path(state)][t] if t > 0 else None
+    return _named(TITLES[path(state)][t], state) if t > 0 else None
 
 
 def audience_discount(state: GameState, content: Content) -> int:
@@ -116,11 +122,11 @@ def status(state: GameState, content: Content) -> dict | None:
     value, t, way = points(state), tier(state, content), path(state)
     upcoming = cfg.thresholds[t] if t < len(cfg.thresholds) else None
     return {
-        "title": TITLES[way][t],
+        "title": _named(TITLES[way][t], state),
         "tier": t,
         "path": way,
         "points": value,
         "next": upcoming,
-        "next_title": TITLES[way][t + 1] if upcoming is not None else None,
+        "next_title": _named(TITLES[way][t + 1], state) if upcoming is not None else None,
         "perks": unlocks(content)[t - 1] if t > 0 else "",
     }
