@@ -466,8 +466,9 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
             return ""
         return "\n".join([
             f"### {follower.name}",
-            "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。",
-            f"武學　{_art_label(content, world, follower.wugong, follower.wugong_level)}",
+            "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。武學跟著你的等級長進。",
+            f"武學　{_art_label(content, world, follower.wugong, team.follower_level(state, content, follower))}",
+            f"威力　{round(team.follower_power(state, content, world, follower))}",
         ])
     if key == PLAYER:
         member = state.player.member
