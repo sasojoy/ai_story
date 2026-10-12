@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import random
+from unittest import mock
 
 import pytest
 
 from conftest import next_season, real_content
-from test_treasures import _game, _gear_root
-from tianxia import equipment, naming, rules, signature_arms, smithing, team, treasures, weapons
+from test_treasures import _game, _gear_root, _won
+from tianxia import equipment, figures, naming, rules, signature_arms, smithing, team, treasures, weapons
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, load_content
+from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import GearBook, SignatureArmDef
-from tianxia.state import GameState, SignatureClaim, Weapon
+from tianxia.state import FigureState, GameState, SignatureClaim, Weapon
 
 # 測試內容用的一把：韓鐵（mate）的刀。四個字、只帶「刀」：測試內容的兵器字表組出來的刀名都是三個字，撞不到
 ARM = {"character": "mate", "name": "鐵脊長刀", "kind": "刀", "attribute": "剛"}
@@ -219,3 +221,111 @@ def test_with_no_room_the_arm_is_held_and_still_counts_as_given(content, world):
     msgs = game.choose("act:rest")
     assert [i.signature for i in p.held_gear] == ["mate"] and treasures.HELD.format(name="鐵脊長刀") in msgs
     assert "mate" in world.get_season().signature_arms  # 寄放了也算給出去了（「要 PM 定的」第 6 條）
+
+
+# ── Task 4：打贏三次那條路 ──
+
+def _sun_challenger(world, name="黃甲"):
+    """正式內容、第一季開著：黃巾的人站在宛城，挑戰得到孫堅（照 test_treasures._challenger，換成黃巾、宛城）。寶物關著，免得多一筆掉落。"""
+    c = real_content()
+    c.config.season_one = True
+    c.config.auto_open_first_season = True
+    c.config.treasures.enabled = False
+    game = Game.new(c, name, rng=random.Random(0), world=world)
+    game.client = None
+    p = game.state.player
+    p.faction, p.location = "huang", "wan_city"
+    p.tutorial_step = len(c.tutorial.steps)
+    p.visited.add("wan_city")
+    p.stamina = 250.0
+    game.now = 1000.0
+    return game
+
+
+def _beat_sun(game, times):
+    """連打孫堅 times 場、場場險勝；不讓他敗走（_rout 回空的：不扣聲威、不閉門不見），同一位連打得下去。回最後一場的話。"""
+    p = game.state.player
+    msgs = []
+    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(Game, "_rout", return_value=[]):
+        for _ in range(times):
+            p.snubbed_until.clear()
+            p.stamina = 250.0
+            msgs = game.choose("act:challenge:sunjian")
+    return msgs
+
+
+def test_the_third_win_over_sun_jian_lets_you_seize_his_spear(world):
+    game = _sun_challenger(world)
+    p = game.state.player
+    assert "act:challenge:sunjian" in {o.id for o in game.options(odds=False) if o.enabled}
+    _beat_sun(game, 2)
+    assert p.figure_wins == {"sunjian": 2} and signature_arms.owned(p) == []
+    msgs = _beat_sun(game, 1)
+    [arm] = signature_arms.owned(p)
+    assert (arm.name, arm.kind, arm.signature) == ("江潮槍", "槍", "sunjian")
+    assert signature_arms.SEIZE_LINE.format(general="孫堅", arm="江潮槍") in msgs
+    assert signature_arms.GAIN_LINE.format(name="江潮槍") in game.state.battles[0].materials  # 這一場戰報的「得失」
+    assert world.get_season().signature_arms == {"sunjian": SignatureClaim(owner="黃甲", via="seized")}
+
+
+def test_losses_do_not_count_and_a_later_winner_gets_nothing(world):
+    first = _sun_challenger(world, "黃甲")
+    lost = EncounterResult(tier="落敗", margin=-80, our_power=50, difficulty=120)
+    with mock.patch.object(team, "fight", return_value=lost):
+        first.choose("act:challenge:sunjian")
+    assert first.state.player.figure_wins == {}  # 只算大勝、險勝
+    _beat_sun(first, 3)
+    second = _sun_challenger(world, "黃乙")
+    _beat_sun(second, 3)
+    assert second.state.player.figure_wins == {"sunjian": 3} and signature_arms.owned(second.state.player) == []  # 每季全服一人
+
+
+def test_a_crippled_figure_gives_nothing_unless_this_fight_put_him_out(world):
+    """孫堅退場或重創，兩條路都沒了（「要 PM 定的」第 3 條）；把他打到重創的那一場（beaten）例外照給。"""
+    game = _sun_challenger(world)
+    s, c = game.state, game.content
+    s.player.figure_wins["sunjian"] = 3
+    s.world.figures["sunjian"] = FigureState(status="crippled")
+    assert signature_arms.due(s, c) == ([], []) and s.world.signature_arms == {}
+    items, _ = signature_arms.due(s, c, beaten="sunjian")
+    assert [i.signature for i in items] == ["sunjian"] and s.world.signature_arms["sunjian"].via == "seized"
+
+
+def test_the_signature_arm_rolls_no_dice(world, tmp_path):
+    from tianxia.sqlite_world import open_world
+    draws = []
+    for table, store in ((True, world), (False, open_world(tmp_path / "off.db"))):
+        game = _sun_challenger(store)
+        if not table:
+            game.content.gear.signature_arms = []
+        _beat_sun(game, 3)
+        assert bool(signature_arms.owned(game.state.player)) == table
+        draws.append(game.rng.random())
+    assert draws[0] == draws[1]  # 不擲骰（FB-129）：給不給，Game.rng 接下來的序列都一樣
+
+
+def test_the_win_path_only_exists_where_challenges_do(world):
+    """挑戰本人現在只在第一季規則開著、自己有陣營時才有（《挑戰大勢人物每季都有》還在等企劃者）：散人、開關關著都沒有挑戰鈕，
+    也就走不到打贏三次。那一份合進來之後挑戰每季都有，計數在 _challenge，不必再改。"""
+    game = _sun_challenger(world)
+    game.state.player.faction = None
+    assert not any(o.id.startswith("act:challenge:") for o in game.options(odds=False))
+    game.state.player.faction = "huang"
+    game.content.config.season_one = False
+    assert not any(o.id.startswith("act:challenge:") for o in game.options(odds=False))
+
+
+def test_the_fight_that_cripples_him_still_hands_over_the_spear(world):
+    """真的走 _rout：第三次打贏把他的聲威打到 0 重創了，這一場照給（beaten）。"""
+    game = _sun_challenger(world)
+    s, p = game.state, game.state.player
+    p.figure_wins["sunjian"] = 2
+    figures_now = figures.state_of(s, game.content, "sunjian")
+    s.world.figures["sunjian"] = figures_now
+    figures_now.prestige = 1
+    with mock.patch.object(team, "fight", return_value=_won()):
+        msgs = game.choose("act:challenge:sunjian")
+    assert figures.is_out(s, "sunjian")  # 他真的被打到重創了
+    assert [a.signature for a in signature_arms.owned(p)] == ["sunjian"] and p.figure_wins["sunjian"] == 3
+    assert signature_arms.SEIZE_LINE.format(general="孫堅", arm="江潮槍") in msgs
+    assert world.get_season().signature_arms["sunjian"].via == "seized"
