@@ -1147,7 +1147,6 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .hero-name { font: 900 18px/1.3 var(--serif); letter-spacing: 1px; }
 .hero-tag { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--hero-gold-light); background: var(--disk); padding: 2px 8px; border-radius: 4px; }
 .hero-sub { text-align: right; font-size: 11px; line-height: 1.6; color: var(--ink-2); white-space: nowrap; }
-.hero-pts { color: var(--accent); font-weight: 700; }
 .hero-stage { position: relative; height: 380px; border-radius: 12px; overflow: hidden; border: 1px solid var(--hero-edge);
   background: radial-gradient(circle at 45% 38%, var(--hero-paper) 0%, var(--hero-paper) 35%, var(--hero-paper-2) 100%); }
 .hero-halo { position: absolute; width: 300px; height: 300px; top: 30px; left: calc(50% - 150px); border-radius: 50%;

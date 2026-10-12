@@ -85,7 +85,7 @@
     person: null,
     kind: "武學",
     artOpen: null, // 修練頁武學清單裡點開的那一門（id）；切分頁、改練成功之後收起
-    heroNode: null, // 修練頁人物面板點著的那個光點（HERO_NODES 的 key）；沒點過是根骨
+    heroNode: null, // 修練頁人物面板點著的那個光點（HERO_NODES 的 key）；沒點過是內功
     artInfo: null, // 修練頁哪一門攤開了「詳情」（完整的功法卡）
     libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
@@ -1912,38 +1912,20 @@
   }
 
   // ── 修練頁最上面的人物面板（企劃者 2026-10-12：照她給的人物剪影與版面改一版）──
-  // 剪影（web/hero.webp，去背過的）身上的光點各對上一樣真的東西：五屬性、身上的兩門、四欄裝備。座標是剪影圖的百分比（照圖上的光點量的），
-  // side 是名字標在點的哪一邊。點了底下那一格寫它現在的數字與用處：屬性有點可配時多一顆「＋」（同狀態列的配點鈕），
-  // 武學與裝備多一顆「看這一門／看這件」捲到下面那張卡。點哪一個記在 S.heroNode（只是看的方式，輪詢重畫不跳回去）
+  // 剪影（web/hero.webp，去背過的）身上的光點各對上一樣真的東西：身上的兩門、四欄裝備（屬性不放上去，企劃者 2026-10-12「亂七八糟的」，
+  // 配點照舊在狀態列）。座標是剪影圖的百分比（照圖上的光點量的），side 是名字標在點的哪一邊。點了底下那一格寫它現在是什麼，
+  // 多一顆「看這一門／看這件」捲到下面那張卡。點哪一個記在 S.heroNode（只是看的方式，輪詢重畫不跳回去）
   const HERO_NODES = [
-    { key: "wis", kind: "stat", x: 29.4, y: 3.0, side: "r" },
-    { key: "lore", kind: "stat", x: 31.2, y: 10.0, side: "r" },
     { key: "weapon", kind: "gear", x: 52.4, y: 15.4, side: "r" },
     { key: "treasure", kind: "gear", x: 20.7, y: 20.8, side: "l" },
     { key: "armor", kind: "gear", x: 47.9, y: 24.1, side: "r" },
-    { key: "con", kind: "stat", x: 27.9, y: 24.9, side: "r" },
-    { key: "str", kind: "stat", x: 17.7, y: 34.3, side: "l" },
     { key: "內功", kind: "art", x: 27.1, y: 38.4, side: "r" },
     { key: "武學", kind: "art", x: 50.6, y: 48.0, side: "r" },
-    { key: "agi", kind: "stat", x: 41.9, y: 63.7, side: "r" },
     { key: "mount", kind: "gear", x: 52.1, y: 95.7, side: "r" },
   ];
   const HERO_GEAR_NAMES = { weapon: "武器", armor: "防具", mount: "坐騎", treasure: "寶物" };
   // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
   function heroInfo(n, x, s) {
-    if (n.kind === "stat") {
-      const i = (s.attrs || []).findIndex((a) => a[2] === n.key);
-      if (i < 0) return null;
-      const [name, value] = s.attrs[i];
-      const use = (s.stat_uses || [])[i];
-      const can = s.stat_points > 0 && value < s.stat_cap;
-      return {
-        label: `${name} ${value}`, lit: true,
-        title: `${name} ${value}<small>／${s.stat_cap | 0}</small>`,
-        desc: use ? use[1] : "",
-        button: can ? `<button class="btn small primary" data-act="allocate" data-stat="${esc(n.key)}">＋${esc(name)}<small>可配 ${s.stat_points | 0} 點</small></button>` : "",
-      };
-    }
     if (n.kind === "art") {
       const a = x.owned_arts.find((r) => r.worn && r.kind === n.key);
       if (!a) return { label: n.key, lit: false, title: n.key, desc: `你身上還沒有${n.key}。`, button: "" };
@@ -1977,11 +1959,11 @@
   function heroPanel(x, s) {
     const nodes = HERO_NODES.map((n) => [n, heroInfo(n, x, s)]).filter(([, info]) => info);
     if (!nodes.length) return "";
-    const pick = nodes.find(([n]) => n.key === S.heroNode) || nodes.find(([n]) => n.key === "con") || nodes[0];
+    const pick = nodes.find(([n]) => n.key === S.heroNode) || nodes.find(([n]) => n.key === "內功") || nodes[0];
     return `<section class="hero" aria-label="人物">
       <div class="hero-hd">
         <div><div class="hero-name">${esc(s.name)}</div><div class="hero-tag">${esc(s.affiliation)}</div></div>
-        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${s.stat_points ? `<div class="hero-pts">可配 ${s.stat_points | 0} 點</div>` : ""}</div>
+        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div></div>
       </div>
       <div class="hero-stage">
         <div class="hero-halo" aria-hidden="true"></div>
