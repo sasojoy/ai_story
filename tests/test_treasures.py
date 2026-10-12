@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import install_season_one, next_season, real_content
+from conftest import idle_step, install_season_one, next_season, real_content
 from test_content import copy_fixture, edit_json
 from tianxia import equipment, rules, treasures
 from tianxia.characters import CharacterStore
@@ -726,13 +726,13 @@ def test_a_general_gives_his_gift_once_a_season_to_the_first_who_gets_close(cont
     _book(content)
     first, second = _game(content, world, "甲客"), _game(content, world, "乙客")
     first.state.player.affinities["mate"] = 60
-    msgs = first.choose("act:rest")
+    msgs = idle_step(first)
     assert first.state.player.treasure.template == "caoxie"
     assert treasures.GIFT_LINE.format(general="韓鐵", gift="舊草鞋") in msgs
     assert world.get_season().general_gifts == {"mate": "甲客"}
     second.sync(1.0)
     second.state.player.affinities["mate"] = 80
-    second.choose("act:rest")
+    idle_step(second)
     assert second.state.player.treasure is None
 
 
@@ -751,10 +751,10 @@ def test_a_steed_gift_waits_while_mounts_are_off(content, world):
     _book(content)
     game = _game(content, world)
     game.state.player.affinities["pupil"] = 60
-    game.choose("act:rest")
+    idle_step(game)
     assert game.state.player.mount is None and "pupil" not in world.get_season().general_gifts  # 坐騎關著：不送也不佔名額
     content.config.mounts.enabled = True
-    game.choose("act:stand")  # 打坐中選單只剩「起身」：按了照樣走到 choose 最後的贈禮檢查
+    idle_step(game)  # 照樣走到 choose 最後的贈禮檢查
     horse = game.state.player.mount
     assert (horse.name, horse.tier, horse.quality, horse.template) == ("踏霜駒", 3, "上品", "tashuang")
 
@@ -766,7 +766,7 @@ def test_a_gift_with_no_room_is_held(content, world):
     p = game.state.player
     p.treasure = _item("audience")
     p.affinities["mate"] = 60
-    msgs = game.choose("act:rest")
+    msgs = idle_step(game)
     assert [i.template for i in p.held_gear] == ["caoxie"] and treasures.HELD.format(name="舊草鞋") in msgs
     assert world.get_season().general_gifts == {"mate": "寶客"}  # 寄放了也算送出去了
 

@@ -15,7 +15,7 @@ from unittest import mock
 import pytest
 import requests
 
-from conftest import at, walk_to
+from conftest import at, idle_step, walk_to
 from test_engine import _install_battle_def, _install_battle_def_with_free_text, _join_and_open
 from tianxia import battle_instance, companion_agent, fusion, naming
 from tianxia.engine import FreeTextRequest, Game
@@ -79,7 +79,7 @@ def slow(game, spy):
 
 def _a_threshold_through_a_choice(game):
     game.state.world.trends["kou"] = 50  # 跨過「水寇封江」
-    msgs = game.choose("act:rest")
+    msgs = idle_step(game)
     assert "blocked" in game.state.world.flags
     assert [m for m in msgs if "水寇封江" in m] == ["【江湖大事】水寇封江！"]  # 沒有潤色句，原文照給
 

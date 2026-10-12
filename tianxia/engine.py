@@ -196,6 +196,19 @@ PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
 REFILL_FULL = "體力是滿的，用不著補。"  # 體力本來就是滿的：跟丹的「這時候服丹是糟蹋」一樣，只回一句話、不寫紀錄
+# 閒著的選單（在地點上、沒有事件、對話、路上、閉關、開打的決戰）一定有這一顆，拿它認「此刻閒著」（切磋、論武、假人答論武）。
+# 以前認「打坐」（永遠按得下去），打坐 2026-10-12 拿掉之後改認探索：_everyday_options 第一顆，體力不夠也在（灰的）
+IDLE_MARK = "act:explore"
+PROLOGUE_REST = "調息（照師父教的吐納，把體力調回來）"  # 序章教體力那一步（打坐 2026-10-12 拿掉，只留這一下）
+NO_REST = "（打坐已經拿掉了：體力會隨時辰自己回來，急用就服回體丹。）"  # 舊分頁按到 act:rest
+PILL_DAY_FULL = "今天已服{n}顆，明日 00:00 後再服。"  # 回體丹一天的上限（企劃者 2026-10-12）
+CN_COUNTS = {1: "一", 2: "兩", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九", 10: "十"}
+
+
+def _cn_count(n: int) -> str:
+    return CN_COUNTS.get(n, str(n))
+
+
 REFILL_HUT = "草廬裡先照師父說的做，體力等出了草廬再補。"  # 序章裡不能補（序章的體力是照步驟算好的），跟丹的「出了草廬再吃」同一個道理
 
 
@@ -280,6 +293,9 @@ class Game:
         # 現在的現實時間（秒）：由 sync(now) 傳進來，引擎自己不讀電腦時鐘（線上架構設計第四節）。
         # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
         self.now: float = state.last_real if state.last_real is not None else 0.0
+        # advance（快轉、整季機器人）推過的現實秒數：只給回體丹換日用（pill_now）。整季機器人的 now 開季後就不動，
+        # 不加這一截的話一整季都算同一天
+        self.advanced_real: float = 0.0
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
@@ -516,6 +532,7 @@ class Game:
         fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
         fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
+        fresh.player.pill_day, fresh.player.pills_today = old.player.pill_day, old.player.pills_today  # 換季不能多吃一輪
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.season_number = season_number
         self.state = fresh
@@ -537,6 +554,7 @@ class Game:
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
         self._top_up_pills()
+        s.player.resting_since = None  # 打坐 2026-10-12 拿掉了：存檔時坐著的人讀檔就起身（只是不再回得比較快，沒有別的帳要算）
         sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
@@ -779,6 +797,7 @@ class Game:
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
         msgs += self._advance_player_local(seconds)
+        self.advanced_real += seconds / self.content.config.time_scale
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
@@ -798,14 +817,12 @@ class Game:
             p.joined_at = self.state.world.time
 
     def _advance_player_local(self, seconds: float) -> list[str]:
-        """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
+        """玩家自己的部分：體力／氣血回復、閉關出關、新立門戶福緣——
         這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
         cfg, p, w = self.content.config, self.state.player, self.state.world
         regen = seconds / cfg.stamina_regen_seconds
-        if p.resting_since is not None:
-            regen *= cfg.rest_regen_multiplier  # 打坐中回復加倍
         if roster.newbie(self.state, self.content, cfg.newbie_stamina_days):
-            regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快，跟打坐疊乘（體力平衡提案第〇節）
+            regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快（體力平衡提案第〇節）
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -817,8 +834,6 @@ class Game:
             con = team.con_of(self.state, self.content, self.world, cid)  # 同伴回到他自己的上限（人物資質設計 14.3）
             self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con))
         msgs: list[str] = []
-        if p.resting_since is not None and p.stamina >= cfg.stamina_max:
-            msgs += self._stand_up(full=True)
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
         if roster.fortune_overdue(self.state, self.content):
@@ -841,8 +856,6 @@ class Game:
                 # 開打了還沒投效的散人也一樣：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
                 return self._battle_options(battle, definition) + self._everyday_options(odds)
             battle_menu = self._battle_options(battle, definition)
-            if self.state.player.resting_since is not None:
-                battle_menu.append(self._stand_option())  # 戰鬥選單取代整份選單，隨時可以起身這條規則不能因此掉了
             if self.state.player.pending_defect:  # 同理：開著的叛投確認畫面不能因為開打就卡到整場打完（最終審查 Minor 1）
                 battle_menu.append(Option(id="defect:cancel", label="再想想"))
             return battle_menu
@@ -850,7 +863,7 @@ class Game:
 
     def _everyday_options(self, odds: bool) -> list[Option]:
         """平常的選單（沒有要親身參與、已經開打的決戰時；集結時接在加入的按鈕後面）：籌備或休季、事件、對話、
-        投靠確認、求見名單、閉關、在路上、打坐，都不是就是在地點上能做的事。"""
+        投靠確認、求見名單、閉關、在路上，都不是就是在地點上能做的事。"""
         s, c = self.state, self.content
         if self._preparing():
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
@@ -921,8 +934,6 @@ class Game:
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
             return opts + self._road_task_options(j)
-        if s.player.resting_since is not None:
-            return [self._stand_option()]
         loc = c.locations[s.player.location]
         cost = self._action_costs()
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
@@ -996,7 +1007,8 @@ class Game:
         heal = self._heal_option()
         if heal is not None:
             opts.append(heal)
-        opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
+        if prologue_rules.instant_rest(s, c):  # 打坐 2026-10-12 拿掉了（企劃者）；只剩序章教體力那一步的調息，一下回滿
+            opts.append(Option(id="act:rest", label=PROLOGUE_REST))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
 
     def _heal_option(self) -> Option | None:
@@ -1013,10 +1025,6 @@ class Game:
 
     def _heal_msgs(self) -> list[str]:
         return team.heal(self.state, self.content, self.state.player.member, clinic.problem(self.state, self.content))
-
-    @staticmethod
-    def _stand_option() -> Option:
-        return Option(id="act:stand", label="起身")
 
     def _move_option(self, here: str, dest_id: str) -> Option:
         """選單上的「前往 相鄰地點」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、
@@ -1730,7 +1738,7 @@ class Game:
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"打坐・{here}", "summons": f"應召・{here}", "stand": "起身", "halt": "喊停", "part": "分道揚鑣",
+            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "halt": "喊停", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
@@ -2026,8 +2034,6 @@ class Game:
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
-        if what == "stand":
-            return self._stand_up()
         if what == "halt":
             return self._halt()
         if what == "part":
@@ -2462,34 +2468,13 @@ class Game:
         return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
     def _rest(self) -> list[str]:
-        """坐下來打坐（地圖擴充設計第二節）：進入「打坐中」，之後時間過去時體力回復是平常的
-        rest_regen_multiplier 倍；期間不能做別的事，隨時可以起身。跟閉關同一種做法：狀態記在玩家身上，
-        回復由 _advance_player_local 照經過的時間算，不碰共用賽季時鐘。原本按一下立刻補一個時辰的回復、
-        又不延後自然回復，連按就能無限回體力。選單上永遠有這個選項、不受體力門檻限制——實機 playtest
-        發現過體力歸零後整排按鈕都按不下去、新玩家卡死的情況。"""
+        """序章教體力那一步的調息（新手引導設計 3.1）：一下回滿。打坐本身 2026-10-12 拿掉了（企劃者「打坐也拿掉」：體力只靠時間
+        與一天兩顆回體丹），選單上只在這一步有這顆（_everyday_options）；不在這一步按到（舊分頁）只回一句。"""
         line = prologue_rules.instant_rest(self.state, self.content)
-        if line:  # 序章第 7 步：一坐就回滿，不用等（新手引導設計 3.1）
-            self.state.player.stamina = float(self.content.config.stamina_max)
-            return [line]
-        self.state.player.resting_since = self.state.world.time
-        multiplier = self.content.config.rest_regen_multiplier
-        return [f"你就地坐下打坐，體力回復是平常的 {multiplier:g} 倍；隨時可以起身。"]
-
-    def _stand_up(self, full: bool = False) -> list[str]:
-        """起身：打坐結束，體力回復恢復平常的速度。按「起身」時寫在這次行動的紀錄裡；體力回滿自己起身
-        （sync／advance 裡，沒有進行中的行動）或加入戰局時起身，另寫一則「起身」。"""
-        p = self.state.player
-        minutes = max(0, round((self.state.world.time - p.resting_since) / 60))
-        p.resting_since = None
-        if full:
-            msg = "體力已經回滿，你收功起身。"
-        elif minutes < 1:  # 剛坐下就起身：不寫「打坐了約 0 分鐘」（FB-049）
-            msg = "你收功起身。"
-        else:
-            msg = f"你收功起身（打坐了約 {minutes} 分鐘）。"
-        if self._draft is None:
-            self._write("起身", [msg])
-        return [msg]
+        if not line:
+            return [NO_REST]
+        self.state.player.stamina = float(self.content.config.stamina_max)
+        return [line]
 
     def _figures_here(self) -> list[str]:
         """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
@@ -4183,7 +4168,6 @@ class Game:
         if kind == "join":
             if self.content.scenario.factions and rest != self.state.player.faction:
                 return ["（你只能站在自己陣營這一邊。）"]
-            stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             gear = self._battle_gear()
             self.world.mutate_battle(
@@ -4192,14 +4176,13 @@ class Game:
                     role=self._battle_role(), **gear,
                 )
             )
-            msgs = stood + ["你加入了這場戰局。"]
+            msgs = ["你加入了這場戰局。"]
             side = self._sides(definition).get(rest, rest)
             # 待 joy 潤：「…・加入地方豪強」是用劇本陣營的名字組出來的（兩軍照舊「…・加入官軍」）
             self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
             return msgs
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
-            stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
             scores = self._battle_scores()
             gear = self._battle_gear()
             self.world.mutate_battle(
@@ -4208,7 +4191,7 @@ class Game:
                     scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear,
                 )
             )
-            msgs = stood + ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
+            msgs = ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
             self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
             return msgs
         if kind == "act":
@@ -4227,7 +4210,6 @@ class Game:
             return ["（此刻無法這麼做。）"]
         if changing_sides and battle.phase != "muster":
             return ["（開打之後就不能改投了。）"]
-        stood = self._stand_up() if self.state.player.resting_since is not None else []  # 加入戰局就起身
         scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
         gear = self._battle_gear()
@@ -4237,7 +4219,7 @@ class Game:
                     b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear,
                 )
             )
-            msgs = stood + [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
+            msgs = [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是散人。"]
         else:
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
@@ -4245,7 +4227,7 @@ class Game:
                     **gear,
                 )
             )
-            msgs = stood + [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
+            msgs = [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是散人。"]
         self._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
         return msgs
 
@@ -5349,7 +5331,7 @@ class Game:
         s = self.state
         return (
             not self._preparing() and not s.world.ended and s.pending_event is None and s.player.busy_until is None
-            and s.player.resting_since is None and s.player.journey is None and not s.player.picking_audience
+            and s.player.journey is None and not s.player.picking_audience
             and not s.player.picking_bounty and not s.player.picking_smith  # 懸賞榜、鐵匠鋪開著：選單卡在第二層，先離開（FB-121 第 4 件）
             and s.player.fs_asking is None  # 伏筆的最後一步正在答題：跟事件待處理一樣，先答完或作罷
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
@@ -5609,8 +5591,8 @@ class Game:
     @_not_while_preparing
     def take_stamina_pill(self, *, pill_only: bool = False) -> list[str]:
         """服一顆回體丹（企劃者 2026-10-07）：體力回 stamina_pill_restore，夾在上限。沒有丹、體力是滿的、還在草廬序章裡
-        （序章的體力是照步驟算好的：探索、合成、修練剛好用完，接著才教打坐，prologue.start_stamina）都只回一句話、不收丹。
-        吃了才寫江湖紀錄（數值變化寫體力與丹）。打坐中也能吃：只是多回一截，打坐照舊。
+        （序章的體力是照步驟算好的：探索、合成、修練剛好用完，接著才教調息，prologue.start_stamina）、今天已經服滿
+        （stamina_pills_per_day，pills_left_today）都只回一句話、不收丹。吃了才寫江湖紀錄（數值變化寫體力與丹）。
         測試期間 Config.beta_free_refill 打開時，同一個入口改成免費補滿（_refill_stamina），不收丹。pill_only 是給假人與
         整季機器人的：他們照舊只吃丹（bot.take_pill），不吃這份測試期間的免費補滿；開關關著時 pill_only 沒有作用。"""
         p, cfg = self.state.player, self.content.config
@@ -5621,11 +5603,16 @@ class Game:
             return self._log([f"你身上沒有{name}了。"])
         if prologue_rules.active(self.state, self.content):
             return self._log([f"草廬裡先照師父說的做，{name}留著出了草廬再吃。"])
+        if self.pills_left_today() == 0:
+            return self._log([PILL_DAY_FULL.format(n=_cn_count(cfg.stamina_pills_per_day))])
         if p.stamina >= cfg.stamina_max:
             return self._log(["體力是滿的，這時候服丹是糟蹋。"])
         before = p.stamina
         p.stamina = min(float(cfg.stamina_max), p.stamina + cfg.stamina_pill_restore)
         p.stamina_pills -= 1
+        today = self._pill_day()
+        p.pills_today = (p.pills_today if p.pill_day == today else 0) + 1
+        p.pill_day = today
         msgs = [f"你服下一顆{name}，一股暖意自丹田散開，精神為之一振。"]
         journal.add_entry(self.state, JournalEntry(
             time=self.state.world.time, title=f"服下{name}", lines=msgs,
@@ -5633,12 +5620,27 @@ class Game:
         ))
         return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"])
 
+    def pill_now(self) -> float:
+        """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
+        return self.now + self.advanced_real
+
+    def _pill_day(self) -> int:
+        """現在是第幾天（Config.pill_day_utc_offset_hours 的時區、00:00 換日；從 1970-01-01 起算）。"""
+        return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
+
+    def pills_left_today(self) -> int | None:
+        """今天還能服幾顆回體丹（Config.stamina_pills_per_day）；不限是 None。不看手上有幾顆。"""
+        cap = self.content.config.stamina_pills_per_day
+        if cap <= 0:
+            return None
+        p = self.state.player
+        return max(0, cap - (p.pills_today if p.pill_day == self._pill_day() else 0))
+
     def _refill_stamina(self) -> list[str]:
         """測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07；take_stamina_pill 在開關打開時走這裡）：
         補到 stamina_max（狀態列顯示的那個上限），不收丹、不收銀兩、不限次數。規矩跟丹一模一樣：還在草廬序章裡、體力已經是滿的
-        都只回一句話（不寫紀錄、不動東西）；籌備中由 take_stamina_pill 的 _not_while_preparing 擋；其餘不看——打坐中、閉關中、
-        在路上都照補、不動那個狀態（丹也不看 resting_since、busy_until、journey）。打坐中補滿：下一次同步看到體力滿了才收功起身
-        （_advance_player_local），跟丹把體力吃到頂一樣。補成了寫一則江湖紀錄（數值變化只寫體力，沒有丹的那一項）。"""
+        都只回一句話（不寫紀錄、不動東西）；籌備中由 take_stamina_pill 的 _not_while_preparing 擋；其餘不看——閉關中、
+        在路上都照補、不動那個狀態（丹也不看 busy_until、journey）。補成了寫一則江湖紀錄（數值變化只寫體力，沒有丹的那一項）。"""
         p, cfg = self.state.player, self.content.config
         if prologue_rules.active(self.state, self.content):
             return self._log([REFILL_HUT])
@@ -5682,13 +5684,13 @@ class Game:
     # 「是假人」不影響任何一句話。
 
     def _spar_problem(self, who: Game, *, me: bool, what: str = "切磋", cost: int | None = None) -> str | None:
-        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（選單上有打坐：
-        不在事件、路上、閉關、打坐、決戰裡）、體力付得起（cost 沒給是一次遊歷）。me 是說話的人自己（「你」），不然寫對方的名號。"""
+        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（選單上有探索，IDLE_MARK：
+        不在事件、路上、閉關、決戰裡）、體力付得起（cost 沒給是一次遊歷）。me 是說話的人自己（「你」），不然寫對方的名號。"""
         s, c = who.state, self.content
         name = "你" if me else s.player.name
         if prologue_rules.active(s, c):
             return f"{name}還在草廬學藝，下山之後才能{what}。"
-        if "act:rest" not in {o.id for o in who.options(odds=False, tick=False)}:
+        if IDLE_MARK not in {o.id for o in who.options(odds=False, tick=False)}:
             return f"{name}此刻正忙，騰不出手來{what}。"
         cost = c.config.action_cost["train"] if cost is None else cost
         if s.player.stamina < cost:
@@ -7655,6 +7657,8 @@ class Game:
             "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or prologue_rules.active(s, c) else {
                 "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
                 "full": p.stamina >= c.config.stamina_max,
+                # 今天還能服幾顆（一天的上限，台灣時間 00:00 換日，企劃者 2026-10-12）；不限（stamina_pills_per_day 0）時沒有這個鍵
+                **({"today": self.pills_left_today()} if c.config.stamina_pills_per_day > 0 else {}),
                 **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill else {}),
             },
             "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
@@ -7673,13 +7677,14 @@ class Game:
             "hint": None if self._preparing() else skillview.practice_hint(s, c),
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
-            "resting": None if p.resting_since is None else c.config.rest_regen_multiplier,  # 打坐時體力回復的倍數
             "journey": None if p.journey is None else self._journey_line(),
             **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
         }
-        # 點體力條看的說明（explain-1）：怎麼回、新手期、打坐、回體丹或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
+        # 點體力條看的說明（explain-1）：怎麼回、新手期、回體丹（一天的上限）或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
         newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
-        data["stamina_help"] = howto.stamina_lines(c, w, newbie, p.stamina_pills, button=data["pills"] is not None)
+        data["stamina_help"] = howto.stamina_lines(
+            c, w, newbie, p.stamina_pills, button=data["pills"] is not None, today=self.pills_left_today(),
+        )
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆
         data["howto_entry"] = newbie and not prologue_rules.active(s, c)
@@ -7982,8 +7987,6 @@ class Game:
             lines.append(f"🧍 {mate['name']}　第{mate['level']}級　氣血 {mate['hp']}/{mate['hp_max']}")
         if d["busy_hours"] is not None:
             lines.append(f"🧘 閉關中，現實約 {d['busy_hours']:.1f} 小時後出關")
-        if d["resting"] is not None:
-            lines.append(f"🧘 打坐中：體力回復是平常的 {d['resting']:g} 倍，隨時可以起身")
         if d["journey"] is not None:
             lines.append(f"🧭 在路上：{d['journey']}")
         return "\n\n".join(lines)

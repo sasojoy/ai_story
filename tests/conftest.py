@@ -28,6 +28,19 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 # 別的測試。正式內容（real_content）、測試內容（fixture content）、序章內容（prologue_content）都走這裡。
 # 直接測載入的測試（設定覆寫檔、test_real_content_loads、改了內容再 validate 的）照舊直接呼叫 load_content。
 
+IDLE_LINE = "（測試：做一個什麼都不改的行動。）"
+
+
+def idle_step(game) -> list[str]:
+    """做一個幾乎什麼都不改的行動，讓 Game.choose 前後的檢查跑一次（名將贈禮、召見、作罷的那一句、存回賽季……）。
+    以前測試按打坐（act:rest），打坐 2026-10-12 拿掉了，act:rest 只剩序章教體力那一步的調息（一下回滿）：這裡讓那一下
+    照序章的調息走——體力回滿、回 IDLE_LINE，此外什麼都不動。"""
+    from unittest import mock
+
+    with mock.patch("tianxia.prologue.instant_rest", return_value=IDLE_LINE):
+        return game.choose("act:rest")
+
+
 _MASTERS: dict[tuple, tuple[Content, bytes]] = {}  # 快取的鍵 → （母本, 母本的 pickle 位元組；複本都從這份位元組做）
 
 

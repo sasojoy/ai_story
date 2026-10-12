@@ -600,14 +600,14 @@ class TravelOption:
 @dataclass(frozen=True)
 class TravelBlock:
     """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結才解得開（待處理的事件、交談中、
-    求見中、投靠或叛投待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、打坐、賽季結束不是。"""
+    求見中、投靠或叛投待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、賽季結束不是。"""
 
     reason: str
     to_jianghu: bool = False
 
 
 def travel_block(state: GameState, content: Content) -> TravelBlock | None:
-    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠或叛投待確認、閉關中、打坐中）；可以時為 None。
+    """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠或叛投待確認、閉關中）；可以時為 None。
     有事件待處理時寫出是哪一則、去哪裡了結（FB-063）：多段的事件（next_event）是現在待處理的那一段。
     在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
     if state.world.ended:
@@ -641,8 +641,6 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock(f"跟著{p.tagalong.leader}同行，要改道先分道揚鑣", to_jianghu=True)
     if p.busy_until is not None:
         return TravelBlock("閉關中，不能安排前往")
-    if p.resting_since is not None:
-        return TravelBlock("打坐中，先起身才能安排前往")
     return None
 
 

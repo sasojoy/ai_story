@@ -78,7 +78,6 @@ def finish(state: GameState, content: Content, world: WorldStateStore, *, purse:
     if p.location == t.location:
         p.location = content.scenario.start_location
         p.journey = None
-        p.resting_since = None
     p.visited.add(p.location)
     if state.pending_event in _prologue_events(content):
         state.pending_event = None

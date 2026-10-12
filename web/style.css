@@ -138,6 +138,8 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   font-weight: 700; cursor: pointer;
 }
 .bar.stam > .pill-btn:disabled { opacity: 0.45; cursor: default; }
+/* 一天的上限（企劃者 2026-10-12）：「丹28」後面小一號寫今天還能服幾顆（今2），服滿了寫「明日」 */
+.bar.stam > .pill-btn small { font-size: 9px; font-weight: 600; margin-left: 2px; }
 /* 點體力條攤開體力怎麼回（explain-1）：整條是按鈕（丹的鈕自己另外一顆，點它照樣是服丹／補滿）；說明排在數字那一列底下，小字一行一句 */
 .bar.stam[data-act="stam-help"] { cursor: pointer; }
 .bar.stam[data-act="stam-help"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -887,7 +889,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 
 /* ── 江湖頁的行動列：一排五顆「水墨氣勁」（企劃者 2026-10-04 給的樣式），黑底金邊、圖示、底下一行消耗 ── */
-.act-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 8px 4px; margin-bottom: 12px;
+.act-bar { display: grid; grid-template-columns: repeat(var(--cells, 4), 1fr); gap: 6px; padding: 8px 4px; margin-bottom: 12px;
   background: color-mix(in srgb, var(--disk) 5%, transparent); border: 1px dashed var(--line); border-radius: 12px; }
 .act-ink { position: relative; overflow: hidden; min-height: 72px; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--disk); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; cursor: pointer; color: #ede2d3;

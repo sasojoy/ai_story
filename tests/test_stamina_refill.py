@@ -172,18 +172,17 @@ def test_nothing_is_refilled_while_the_season_is_preparing(content, world):
     assert game.state.player.stamina == 5
 
 
-# ── 打坐、閉關、在路上：跟丹一模一樣 ──────────────────────
+# ── 閉關、在路上：跟丹一模一樣（打坐 2026-10-12 拿掉了） ──────────────────────
 
 SITUATIONS = {
-    "resting": lambda g: g.choose("act:rest"),
     "seclusion": lambda g: g.seclude(2),
     "on the road": lambda g: g.choose("move:lake"),
 }
 
 
-def marks(game: Game) -> tuple[bool, bool, bool]:
+def marks(game: Game) -> tuple[bool, bool]:
     p = game.state.player
-    return p.resting_since is not None, p.busy_until is not None, p.journey is not None
+    return p.busy_until is not None, p.journey is not None
 
 
 def press_in(content, situation: str, free: bool):
@@ -200,7 +199,7 @@ def press_in(content, situation: str, free: bool):
 
 @pytest.mark.parametrize("situation", list(SITUATIONS))
 def test_the_refill_allows_and_refuses_exactly_what_the_pill_does(content, situation):
-    """丹在打坐、閉關、在路上都吃得了、只加體力、不動那個狀態；補滿一樣：照做、不動狀態（不多拒絕、也不多放行）。"""
+    """丹在閉關、在路上都吃得了、只加體力、不動那個狀態；補滿一樣：照做、不動狀態（不多拒絕、也不多放行）。"""
     pill_game, pill_before, _ = press_in(content, situation, free=False)
     free_game, free_before, _ = press_in(content, situation, free=True)
     restore = pill_game.content.config.stamina_pill_restore
@@ -208,20 +207,6 @@ def test_the_refill_allows_and_refuses_exactly_what_the_pill_does(content, situa
     assert free_game.state.player.stamina == cap(free_game)  # 補滿：照做
     assert marks(pill_game) == pill_before and marks(free_game) == free_before == pill_before  # 狀態都沒被動
     assert pill_game.state.player.stamina_pills == 19 and free_game.state.player.stamina_pills == 20
-
-
-def test_resting_ends_at_the_next_sync_once_stamina_is_full(content):
-    """打坐中補滿：跟丹把體力補到頂一樣，不當場起身；下一次同步（輪詢每 10 秒一次）看到體力滿了才收功起身。"""
-    content = copy.deepcopy(content)
-    content.config.beta_free_refill = True
-    game = Game.new(content, "甲", rng=random.Random(0))
-    game.sync(1000.0)
-    game.choose("act:rest")
-    game.state.player.stamina = 20.0
-    game.take_stamina_pill()
-    assert game.state.player.resting_since is not None
-    game.sync(1001.0)
-    assert game.state.player.resting_since is None and game.state.player.stamina == cap(game)
 
 
 # ── 開關關著：joy 的丹一個字不變 ────────────────────────

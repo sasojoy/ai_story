@@ -225,17 +225,8 @@ def test_the_xinde_hint_steps_aside_while_a_choice_card_is_up():
     assert "road-hint" in run(road, "return H.topHtml();")
 
 
-def test_the_xinde_hint_shows_while_resting_or_in_seclusion():
-    """審查 I2：打坐（選單只剩「起身」）與閉關（只剩「提前出關」）是最長的空檔，修練、煉製照樣做得了，也沒有選項會被擠下去：提示照畫。"""
-    content = real_content("weekend")
-    content.config.auto_open_first_season = True
-    game = Game.new(content, "沈浪", rng=random.Random(0))
-    game.client = None
-    game.state.player.stats["xinde"] = 20
-    game.choose("act:rest")
-    resting = server.main_view(game)
-    assert [o["id"] for o in resting["options"]] == ["act:stand"] and resting["status"]["hint"]
-    assert resting["status"]["hint"] in run(resting, "return H.topHtml();")
+def test_the_xinde_hint_shows_while_in_seclusion():
+    """審查 I2：閉關（只剩「提前出關」）是最長的空檔，修練、煉製照樣做得了，也沒有選項會被擠下去：提示照畫（打坐 2026-10-12 拿掉了）。"""
     secluded = _season_one()
     secluded["status"]["hint"] = "💡 你已攢下 20 點心得。去「修練」練成內功、武學。"
     secluded["options"] = [{"id": "act:break", "label": "提前出關", "enabled": True}]
@@ -260,7 +251,7 @@ def test_one_piece_of_guidance_at_a_time_the_box_before_the_hint():
     game = _hinted_game()
     m = server.main_view(game)
     assert m["guide"] and m["guide"].get("hint") and m["status"]["hint"]
-    assert any(o["id"] == "act:rest" for o in m["options"])  # 平常閒著的行動列
+    assert any(o["id"] == "act:explore" for o in m["options"])  # 平常閒著的行動列
     assert m["status"]["hint"] not in run(m, "return H.topHtml();")
     m["guide"] = None
     assert m["status"]["hint"] in run(m, "return H.topHtml();")

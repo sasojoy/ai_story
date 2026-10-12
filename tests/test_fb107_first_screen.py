@@ -470,7 +470,7 @@ def test_an_opened_step_box_stays_open_while_the_countdown_ticks_and_folds_when_
 
 
 HINT_DRIVER = r"""
-const S = Object.assign({ hintOpen: false, hintTight: false, tab: "jianghu", main: { guide: null, options: [{ id: "act:rest" }] } }, input.S);
+const S = Object.assign({ hintOpen: false, hintTight: false, tab: "jianghu", main: { guide: null, options: [{ id: "act:explore" }] } }, input.S);
 const H = new Function("S", [konst("esc"), konst("WAITING"), konst("waitingMenu"), "const idleMenu = () => true;", fn("hintHtml"),
   "return { hintHtml };"].join("\n"))(S);
 finish({ html: H.hintHtml({ hint: "💡 你已攢下 45 點心得。", journey: null }), open: S.hintOpen });

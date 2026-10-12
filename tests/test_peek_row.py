@@ -78,7 +78,7 @@ def _status(content):
 
 
 EVENTS = ["<p><strong>甲事</strong></p>\n<p>甲事的公告。</p>", "<p><strong>乙事</strong></p>\n<p>乙事的公告。</p>"]
-IDLE = ["act:explore", "act:train", "act:rest", "act:call", "move:luoyang"]
+IDLE = ["act:explore", "act:train", "act:call", "move:luoyang"]
 
 
 def _opts(*ids):
@@ -374,7 +374,7 @@ def test_everything_still_works_when_storage_throws(on):
 MENUS = {
     "idle": IDLE, "event": ["choice:0", "choice:1", "choice:free"], "dialogue": ["talk:0", "talk:1", "talk:leave"],
     "battle": ["battle:guan", "battle:huang"], "audience": ["call:luzhi", "call:cancel"],
-    "faction-confirm": ["faction:confirm", "faction:cancel"], "resting": ["act:stand"],
+    "faction-confirm": ["faction:confirm", "faction:cancel"], "secluded": ["act:break"],
 }
 
 
@@ -405,7 +405,7 @@ def test_the_battle_menu_puts_each_moves_score_on_the_right_of_its_button(on):
 
 @pytest.mark.parametrize("options, marker", [
     (["road:back", "road:task:ask", "road:task:think"], 'class="options"'),
-    (["act:rest", "road:back"], 'class="actbar"'),  # 就算選單上剛好有打坐，在路上照舊排在選項底下
+    (["act:explore", "road:back"], 'class="actbar"'),  # 就算選單上剛好有探索（閒著的記號），在路上照舊排在選項底下
 ])
 def test_on_the_road_the_row_goes_below_the_options(on, options, marker):
     html = run(view(_status(on), options=options, on_road=True), "return H.pageJianghu();")
