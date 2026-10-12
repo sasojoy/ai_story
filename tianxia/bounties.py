@@ -62,6 +62,7 @@ NO_DATA = "找不到它的資料。"  # 待 joy 潤
 WANT_ART = "這一張要屬{attribute}的。"  # 待 joy 潤
 NO_WEAPON = "裝備庫裡沒有這一件。"  # 待 joy 潤
 ORIGINAL_KEPT = "神器的原品交不得"  # 待 joy 潤（打造隱藏配方設計 5.4：手上那把也不收）
+ONLY_ORIGINAL = "（你身上對得上的只有神器的原品，原品交不得）"  # 待 joy 潤：灰掉那一行裡、只有原品對得上的那一張後面（FB-145）
 WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
@@ -511,9 +512,21 @@ def pick_label(state: GameState, content: Content, b: Bounty, count: int) -> str
             f"{due_line(state, content, b)}）")
 
 
-def stuck_label(content: Content, asks: list[Bounty]) -> str:
-    """懸賞榜第二層，交不出的求藝、求兵收成的那一行灰掉的（設計 4.3 第 3 點）：選單才不會長到手機第一屏放不下（FB-128）。"""
-    return STUCK.format(titles="、".join(f"{issuer(content, b)}・{title(content, b)}" for b in asks))
+def only_original(state: GameState, b: Bounty) -> bool:
+    """這一張求兵，身上（手上那把或裝備庫）有種類與屬性都對得上的、可是是神器原品（fit_problem 回 ORIGINAL_KEPT）：交不出的原因
+    不是「沒有對得上的兵器」（FB-145）。只在交不出的那幾張上問（engine 的懸賞榜第二層），所以「只有原品」由呼叫端保證。"""
+    if b.kind != "arms":
+        return False
+    p = state.player
+    held = ([p.weapon] if p.weapon is not None else []) + equipment.in_slot(p, "weapon")
+    return any(w.original and w.kind == b.weapon_kind and w.attribute == b.attribute for w in held)
+
+
+def stuck_label(content: Content, asks: list[Bounty], kept: frozenset[str] | set[str] = frozenset()) -> str:
+    """懸賞榜第二層，交不出的求藝、求兵收成的那一行灰掉的（設計 4.3 第 3 點）：選單才不會長到手機第一屏放不下（FB-128）。
+    kept：身上只有神器原品對得上的那幾張（only_original）的 id，那一張後面照實寫 ONLY_ORIGINAL（FB-145）。"""
+    return STUCK.format(titles="、".join(
+        f"{issuer(content, b)}・{title(content, b)}" + (ONLY_ORIGINAL if b.id in kept else "") for b in asks))
 
 
 def pick_line(content: Content, b: Bounty) -> str:

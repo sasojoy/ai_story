@@ -136,8 +136,9 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
     return fusion.odds_from_points(scored, rule, rule.odds)
 
 
-FORGED = "鐵匠把{what}下爐，打出一把【{name}】（{kind}・屬{attribute}・{grade}）。"  # 待 joy 潤
-ARMOR_FORGED = "鐵匠把{what}下爐，打出一件【{name}】（防具・屬{attribute}・{grade}）。"  # 待 joy 潤
+# 開爐的結果句（待 joy 潤）：打出的東西寫在最前面（FB-143：375 寬鐵匠鋪選單長時「剛剛」收成一行，只露開頭十幾個字），「鐵匠把…下爐」接在後面
+FORGED = "打出一把【{name}】（{kind}・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤
+ARMOR_FORGED = "打出一件【{name}】（防具・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤
 
 
 def noun_label(kind: str) -> str:

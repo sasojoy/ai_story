@@ -1457,7 +1457,7 @@ class Game:
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
-                # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「鐵匠把…下爐，打出一把【…】（種類・屬…）」
+                # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
                 # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smithing.is_step_line）：
                 # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
                 forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
@@ -2582,7 +2582,8 @@ class Game:
             opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                                enabled=problem is None))
         if stuck:
-            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck), enabled=False))
+            kept = {b.id for b in stuck if bounties.only_original(s, b)}  # 只有神器原品對得上的那幾張照實寫（FB-145）
+            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck, kept), enabled=False))
         if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
             opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
         return ready + opts + [Option(id="bounty:back", label="返回")]

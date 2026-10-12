@@ -85,7 +85,7 @@ def test_the_first_divine_forge_is_the_unnamed_original_and_rolls_no_quality(div
     assert rolled == []  # 照甲（5.1）：一爐必出神器，不擲品質，不碰亂數
     assert (item.name, item.original, item.copy_of, item.secret, item.tier, item.quality) == (DIVINE_UNNAMED, True, None, "t_star", 3, "上品")
     assert equipment.grade(item) == "三階上品" + equipment.DIVINE_MARK and not equipment.named(divine_content, item)
-    assert msgs[0].startswith(f"鐵匠把兩份隕鐵膽下爐，打出一把【{DIVINE_UNNAMED}】") and STAR.note in msgs[0] and cfg.divine_line in msgs[0]
+    assert msgs[0].startswith(f"打出一把【{DIVINE_UNNAMED}】（劍・屬剛・三階上品{equipment.DIVINE_MARK}）：鐵匠把兩份隕鐵膽下爐。") and STAR.note in msgs[0] and cfg.divine_line in msgs[0]
     find = world.lookup_gear_find("鑄|t_star")
     assert (find.divine, find.owner, find.master_shown, find.divine_name, find.copies, find.name) == (True, "甲", "甲", None, 0, DIVINE_UNNAMED)
     rumors = [r.text for r in game.state.world.rumors]
@@ -471,3 +471,23 @@ def test_season_bots_keep_the_book_name_right_away(divine_content, world):
                                  rng=smithing.own_rng(game.state, "鎧|gang_3+gang_3"))
     bot.keep_book_names(game)
     assert original.name == "鎮星甲"  # 整季機器人不上線，打出原品一律馬上沿用譜名（設計第十一節）
+
+
+# ── forge-fix：FB-143 ──
+
+def test_the_forge_result_names_the_piece_first_so_a_one_line_card_shows_it(divine_content, world):
+    """FB-143：375 寬鐵匠鋪選單長時「剛剛」收成一行，只露結果句開頭十幾個字——打出的東西（名字、種類、屬性、階品）寫在最前面，
+    「鐵匠把…下爐」接在後面。一般組合、名器、神器原品與仿品、防具都一樣。"""
+    game = _forger(divine_content, world)
+    game.state.player.materials.update({"gang_1": 6, "kuai_1": 2})
+    s, c = game.state, divine_content
+    weapon_forges = [("刀", "gang_1", "gang_1"), ("劍", "gang_1", "kuai_1"), ("劍", "gang_3", "gang_3"), ("劍", "gang_3", "gang_3")]
+    armor_forges = [("gang_1", "gang_1"), ("gang_1", "kuai_1"), ("gang_3", "gang_3")]
+    made = [smithing.forge(s, c, world, kind, main, aux) for kind, main, aux in weapon_forges]
+    made += [smithing.forge(s, c, world, smithing.ARMOR_KIND, main, aux, rng=smithing.own_rng(s, f"鎧|{main}+{aux}")) for main, aux in armor_forges]
+    names = [item.name for item, _ in made]
+    assert names[1] == "穿霞劍" and names[2] == DIVINE_UNNAMED and names[3] == COPY_NAME.format(name=DIVINE_UNNAMED)  # 名器、原品、仿品都有
+    assert names[5] == "赤霞鎧" and made[6][0].original  # 防具的名器、神器原品
+    for (item, msgs), noun in zip(made, ["把"] * 4 + ["件"] * 3):
+        first = msgs[0].split("\n")[0]
+        assert first.startswith(f"打出一{noun}【{item.name}】（") and "：鐵匠把" in first, first
