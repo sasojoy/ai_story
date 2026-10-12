@@ -99,10 +99,11 @@ def test_the_web_button_takes_a_pill(monkeypatch):
     game = server.game_for("服丹人")
     game.state.player.stamina = 5.0
     open_characters().save(game.state)
+    left = server.CONTENT.config.beta_gift_stamina_pills - 1
     r = client.post("/api/do/pill", json={}).json()
-    assert r["main"]["status"]["pills"]["count"] == 19, r["message"]
+    assert r["main"]["status"]["pills"]["count"] == left, r["message"]
     saved = open_characters().load("服丹人").player
-    assert saved.stamina_pills == 19 and saved.stamina >= 105
+    assert saved.stamina_pills == left and saved.stamina >= 105
 
 
 # ── 拿掉一鍵補滿之後補回體丹（企劃者 2026-10-12；PlayerState.pills_topped_to）──
