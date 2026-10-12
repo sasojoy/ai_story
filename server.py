@@ -61,7 +61,7 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
-    seal, server_bots, social, team, timetable,
+    seal, server_bots, social, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -255,7 +255,9 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
     回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。
     賽季時鐘暫停中，只有 paused_ok 的照做（計時器的同步、管理者的動作、畫面上的設定），其他回「賽季暫停中」（_refuse_while_paused）。"""
     with _locked(game):
-        game.sync(time.time())
+        now = time.time()
+        game.sync(now)
+        game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
         if not paused_ok:
             _refuse_while_paused(game)
         msgs = action(game)
@@ -280,7 +282,9 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
     下一次輪詢看到「早就收場了」就不再套，那場決戰的結果整個服永遠丟了。"""
     failure: Exception | None = None
     with _locked(game):
-        game.sync(time.time())
+        now = time.time()
+        game.sync(now)
+        game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
         msgs = action(game)
         open_characters().save(game.state)
         try:
@@ -981,7 +985,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
              # 序章裡這一欄現在不能練的原因（Game.practice_refusal）；平常是 None。練成鈕灰掉、寫它
              "blocked": game.practice_refusal(k),
              # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
-             "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
+             "price": team.practice_price(game.content, level[k], treasures.amount(game.state, game.content, "practice")) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
         # 療傷要多少銀兩（修練頁的療傷鈕上寫）：照內傷計價，沒有內傷是 0

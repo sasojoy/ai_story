@@ -13,9 +13,14 @@ from __future__ import annotations
 import random
 import secrets
 
+from . import treasures
 from .characters import name_key
 from .models import Content
+from .state import Equipment, GameState
 from .world_state import SealEvent, SealRegistry, SealShard
+
+HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
+HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
 
 
 def on(content: Content) -> bool:
@@ -64,3 +69,22 @@ def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
     event = SealEvent(seq=reg.seq, season=season, kind=kind, **fields)
     reg.history.append(event)
     return event
+
+
+def effect_text(content: Content, effect: str) -> str:
+    """「練成的心得 ×0.9」（字在 treasures.SEAL_EFFECT_TEXT：treasures 不 import seal，字只留一份）。"""
+    return treasures.seal_effect_text(content, effect)
+
+
+def copy_heirloom(state: GameState, content: Content, reg: SealRegistry | None) -> None:
+    """抄本照登記重抄（7.4）：登記說是你的就寫上，不是（或碎片關著、reg 是 None）就清掉；重抄幾次結果都一樣。順便設本人氣血上限的
+    倍數（螭首）。碎片關著時呼叫端傳 None、不讀資料庫（Game._copy_heirloom）。"""
+    p = state.player
+    shard = shard_of(reg, p.name) if reg is not None and on(content) else None
+    if shard is None or shard.id not in content.seal:
+        p.heirloom = None
+    else:
+        p.heirloom = Equipment(
+            slot="treasure", id=HEIRLOOM_PREFIX + shard.id, name=content.seal[shard.id].name, template=shard.id, heirloom=True,
+        )
+    p.member.cap_scale = treasures.amount(state, content, "hp_cap")

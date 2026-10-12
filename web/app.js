@@ -2181,8 +2181,10 @@
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
       const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
+      // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前，沒有鈕；寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
       return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>
-        ${g.worn ? row(g.worn, true) : `<p class="muted">${esc(g.empty)}</p>`}
+        ${g.heirloom ? `<div class="wrow heirloom"><div class="winfo"><b>【${esc(g.heirloom.name)}】</b><span>傳承・${esc(g.heirloom.effect_text)}</span></div></div>` : ""}
+        ${g.worn ? row(g.worn, true) : g.heirloom && !g.rack.length ? "" : `<p class="muted">${esc(g.empty)}</p>`}
         ${shown.map((w) => row(w, false)).join("")}
         ${shown.length < g.rack.length ? `<button class="btn ghost lib-more" data-act="rack-all">再列 ${g.rack.length - shown.length} 件</button>` : ""}
         <p class="muted">${esc(g.note)}</p>
@@ -2191,7 +2193,7 @@
     // 寄放著的東西（裝備四欄 6.5：懸賞的重賞、名將贈禮在裝備庫滿了時先寄放）寫在塊底下一行灰字；身上、裝備庫都空著也照樣畫這一塊
     const heldLine = gear && gear.held_note ? `<p class="muted">${esc(gear.held_note)}</p>` : "";
     // 塊名由「兵器」改成「裝備」（待 joy 潤）；段名（武器、防具）是伺服器給的 label
-    const gearBlock = gear && (heldLine || gear.slots.some((g) => g.worn || g.rack.length)) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
+    const gearBlock = gear && (heldLine || gear.slots.some((g) => g.worn || g.heirloom || g.rack.length)) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
         ${gear.slots.map(slotBlock).join("")}
         ${heldLine}
       </div>` : "";

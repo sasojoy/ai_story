@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
-    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
 )
@@ -272,6 +272,7 @@ class Game:
         # 現在的現實時間（秒）：由 sync(now) 傳進來，引擎自己不讀電腦時鐘（線上架構設計第四節）。
         # 讀進來的存檔先用上次同步的時間；開戰的集結截止、回合逾時都看它。
         self.now: float = state.last_real if state.last_real is not None else 0.0
+        self.own_request = False  # 這一份 Game 是不是那個人自己的請求（伺服器的 act／act_look 由 mark_seen 設）：奪璽單挑的 last_seen 只看它
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
@@ -492,6 +493,9 @@ class Game:
         fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
+        fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
+        fresh.player.seal_seen = old.player.seal_seen
+        fresh.player.seen_real = old.player.seen_real
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
@@ -535,6 +539,7 @@ class Game:
             p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
+        self._copy_heirloom()  # 玉璽碎片的抄本照登記重抄（7.4）：建 Game（含 _kin、_load_kin）就對
         j = p.journey
         if j is not None and (
             lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
@@ -652,6 +657,7 @@ class Game:
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._record_faction()
+        self._copy_heirloom()  # 排在 _advance_player_local 之前：承露照整段離線時間算體力回復（7.4）
         if self.state.last_real is None:
             self.state.last_real = now
         else:
@@ -770,6 +776,23 @@ class Game:
         if p.joined_at is None:
             p.joined_at = self.state.world.time
 
+    def mark_seen(self, now: float) -> None:
+        """這是那個人自己的請求（伺服器的 act／act_look、假人程式自己那一輪寫 seen_real 另見 bot_runner）：記他自己上線的現實時間
+        （PlayerState.seen_real，「這一季上線過」與隱沒看它，玉璽碎片設計 5.3），這一份 Game 之後推奪璽單挑時才記 last_seen。
+        Game.sync 不寫，所以管理者的 _admin_target、_kin、_load_kin、peer_act 建的 Game 都碰不到它。"""
+        self.state.player.seen_real = now
+        self.own_request = True
+
+    def _copy_heirloom(self) -> None:
+        """抄本照全服登記重抄（玉璽碎片設計 7.4）：只讀 world 那一列，不讀季。sync 與 _drop_stale_references 都叫，所以 _kin 也重抄。
+        碎片關著（測試內容、主機關了開關）不讀資料庫：每次建 Game 都會走到這裡。"""
+        reg = self.world.seal_state().registry if seal.on(self.content) else None
+        seal.copy_heirloom(self.state, self.content, reg)
+
+    def _talk_cap(self) -> int:
+        """跟每位人物每個遊戲日能談的輪數：talk_turns_per_day ＋ 玄紐（玉璽碎片設計 7.1）。"""
+        return self.content.config.talk_turns_per_day + round(treasures.amount(self.state, self.content, "talk_turns"))
+
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力（打坐中加倍）／氣血回復、打坐回滿起身、閉關出關、新立門戶福緣——
         這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
@@ -779,6 +802,7 @@ class Game:
             regen *= cfg.rest_regen_multiplier  # 打坐中回復加倍
         if roster.newbie(self.state, self.content, cfg.newbie_stamina_days):
             regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快，跟打坐疊乘（體力平衡提案第〇節）
+        regen *= treasures.amount(self.state, self.content, "stamina_regen")  # 承露（玉璽碎片設計 7.1）：跟打坐、新手期疊乘
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -2488,7 +2512,7 @@ class Game:
 
     def _talks_left(self, companion_id: str) -> int:
         """這個遊戲日還能跟這位人物聊幾輪。"""
-        return max(0, self.content.config.talk_turns_per_day - self._talks_used(companion_id))
+        return max(0, self._talk_cap() - self._talks_used(companion_id))
 
     def _talks_reopen(self) -> tuple[str, str | None]:
         """談滿了的人物什麼時候再見得到：此刻所在的遊戲日結束的那一刻，照季的時間寫法（rules.day_turn）；None＝這一季之內
@@ -2533,7 +2557,7 @@ class Game:
         （談滿的寫換日的那一刻）；每個遊戲日的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
         c = self.content
         cost = c.config.action_cost["socialize"]
-        per_day = c.config.talk_turns_per_day
+        per_day = self._talk_cap()
         opts = []
         for companion_id in self._figures_here():
             ch = c.characters[companion_id]
@@ -2837,12 +2861,12 @@ class Game:
         ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。開頭一律是「已經談滿」：網頁行動列的格子認它，只寫「已談滿」（審查 I1）。"""
         kind, moment = self._talks_reopen()
         when = f"{moment} 之後再來" if moment else "過一陣子再來" if kind == "later" else "這一季之內不能再來"  # 「過一陣子」：FB-102
-        return f"已經談滿 {self.content.config.talk_turns_per_day} 輪，{when}"
+        return f"已經談滿 {self._talk_cap()} 輪，{when}"
 
     def _audience_intro(self) -> str:
         """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物各算各的，一個遊戲日最多談幾輪、什麼時候重新算起。"""
         here = self.content.locations[self.state.player.location].name
-        per_day = self.content.config.talk_turns_per_day
+        per_day = self._talk_cap()
         # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
         kind, moment = self._talks_reopen()
@@ -3120,8 +3144,9 @@ class Game:
         self.world.mutate_battle(_fill)
 
     def _battle_neili_cap(self) -> float:
+        """決戰的氣血池上限：決戰的池子不吃螭首（玉璽碎片設計 7.1：決戰一個字都不改）。"""
         _, cap = team.member_neili(
-            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER), plain=True,
         )
         return cap
 

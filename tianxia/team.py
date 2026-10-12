@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import armor, calendar, encounter, rounds, styles, traits, weapons
+from . import armor, calendar, encounter, rounds, styles, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
@@ -390,10 +390,12 @@ def compare_with_worn(state: GameState, content: Content, world: WorldStateStore
     return line
 
 
-def practice_price(content: Content, level: int) -> int:
+def practice_price(content: Content, level: int, scale: float = 1.0) -> int:
     """練成的價錢：第 level 成升 level+1 成要幾點心得（武學與成長設計 4.2）。只看第幾成、不看品質：
-    升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練，價錢就被繞過去。"""
-    return content.config.practice_xinde_per_level * level
+    升品時成不變，品質越高越貴的話，玩家會先趁下品把成練滿再修練，價錢就被繞過去。
+    scale 是雲篆的折扣（treasures.amount(..., "practice")，玉璽碎片設計 7.1）：照 round(原價 × scale)、最少 1；熔煉照原價退，不傳。"""
+    base = content.config.practice_xinde_per_level * level
+    return base if scale == 1.0 else max(1, round(base * scale))
 
 
 def can_practise(state: GameState, content: Content, kind: str) -> bool:
@@ -404,7 +406,7 @@ def can_practise(state: GameState, content: Content, kind: str) -> bool:
     level = getattr(member, level_slot)
     return (
         getattr(member, slot) is not None and level < MAX_LEVEL
-        and state.player.stats.get("xinde", 0) >= practice_price(content, level)
+        and state.player.stats.get("xinde", 0) >= practice_price(content, level, treasures.amount(state, content, "practice"))
     )
 
 
@@ -424,7 +426,7 @@ def practice(
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
-    price = practice_price(content, level)
+    price = practice_price(content, level, treasures.amount(state, content, "practice"))
     xinde = state.player.stats.get("xinde", 0)
     if xinde < price:
         return [
@@ -442,32 +444,40 @@ def practice(
     return msgs
 
 
-def neili_cap(content: Content, level: int, con: float = BASE_STAT) -> float:
+def neili_cap(content: Content, level: int, con: float = BASE_STAT, scale: float = 1.0) -> float:
     """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））），
     四捨五入成整數——每個呼叫端拿到的、狀態列與角色卡寫出來的都是同一個數（根骨 6：329.6 → 330）。
-    con 是根骨，從 con_of 讀（本人照存檔、同伴照他自己的，人物資質設計 14.3）；不傳就是基準。"""
+    con 是根骨，從 con_of 讀（本人照存檔、同伴照他自己的，人物資質設計 14.3）；不傳就是基準。
+    scale 是本人帶螭首時的倍數（Member.cap_scale，玉璽碎片設計 7.1），在四捨五入之前乘。"""
     cfg = content.config
-    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con)))
+    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con) * scale))
+
+
+def _cap_of(content: Content, member, con: float, plain: bool) -> float:
+    """這個人的氣血上限：本人帶螭首時乘 Member.cap_scale（同伴是 CompanionProgress，沒有這一欄、不吃）；plain 時不乘（決戰的池子）。"""
+    return neili_cap(content, member.level, con, 1.0 if plain else getattr(member, "cap_scale", 1.0))
 
 
 MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於上限的一成（氣血設計 §1.3：再低也照樣能出戰）
 
 
-def neili_ceiling(content: Content, member, con: float = BASE_STAT) -> float:
-    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，從 con_of 讀。"""
-    cap = neili_cap(content, member.level, con)
+def neili_ceiling(content: Content, member, con: float = BASE_STAT, plain: bool = False) -> float:
+    """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，從 con_of 讀。
+    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）；plain 不乘。"""
+    cap = _cap_of(content, member, con, plain)
     return max(cap * MIN_CEILING_RATIO, cap - getattr(member, "injury", 0.0))
 
 
-def member_neili(content: Content, member, con: float = BASE_STAT) -> tuple[float, float]:
+def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool = False) -> tuple[float, float]:
     """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。
-    con 是根骨，從 con_of 讀。
+    con 是根骨，從 con_of 讀。本人帶螭首時上限乘 Member.cap_scale（同伴是 CompanionProgress，沒有這一欄、不吃）；
+    plain 不乘（決戰的池子，Game._battle_neili_cap）。
 
     `neili is None` 代表「回滿了」——有內傷時的「滿」是上蓋（上限 − 內傷），不是上限本身。
     所以根骨變高時：沒滿血的人目前氣血不變、上限變大；本來就滿的人照舊是滿的（跟升級一樣）。
     """
-    cap = neili_cap(content, member.level, con)
-    ceiling = neili_ceiling(content, member, con)
+    cap = _cap_of(content, member, con, plain)
+    ceiling = neili_ceiling(content, member, con, plain)
     now = ceiling if member.neili is None else min(member.neili, ceiling)
     return now, cap
 
@@ -542,13 +552,14 @@ def grant_team_exp(
         p.stat_points += gained * content.config.stat_points_per_level
         msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         ups.you, ups.points = p.member.level, p.stat_points
+    mate = treasures.amount(state, content, "mate_exp")  # 歸心：同伴拿到的經驗 ×1.1（玉璽碎片設計 7.1）
     for companion_id in state.player.team:
         name = content.characters[companion_id].name
         levels: list[str] = []
 
         def gain(progress, name=name, levels=levels) -> None:
             was = progress.level
-            levels.extend(add_exp(content, progress, amount, name))
+            levels.extend(add_exp(content, progress, round(amount * mate), name))
             if progress.level > was:
                 ups.mates.append((name, progress.level))
 
@@ -563,12 +574,13 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
     return grant_team_exp(state, content, world, amount)[0]
 
 
-def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT) -> None:
-    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，從 con_of 讀。"""
+def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT, plain: bool = False) -> None:
+    """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，從 con_of 讀。
+    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）。"""
     if member.neili is None:
         return
-    cap = neili_cap(content, member.level, con)
-    ceiling = neili_ceiling(content, member, con)
+    cap = _cap_of(content, member, con, plain)
+    ceiling = neili_ceiling(content, member, con, plain)
     member.neili += cap * fraction  # 回復速度照上限算，所以內傷不會讓回復變慢
     if member.neili >= ceiling:
         member.neili = None
@@ -693,9 +705,10 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> l
 
 
 def dodge_chance(state: GameState, content: Content) -> float:
-    """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。"""
+    """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
+    金角 +3 個百分點（玉璽碎片設計 7.1）。"""
     agi = float(state.player.stats.get("agi", BASE_STAT))
-    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point))
+    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point + treasures.amount(state, content, "dodge")))
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:

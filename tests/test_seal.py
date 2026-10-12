@@ -157,3 +157,163 @@ def test_shard_of_matches_names_without_case(sealed, world):
     reg.shards["yunzhuan"].state, reg.shards["yunzhuan"].holder = "held", "Rayal"
     assert seal.shard_of(reg, "rayal").id == "yunzhuan" and seal.holders(reg) == {seal.key("Rayal")}
     assert seal.shard_of(reg, "別人") is None
+
+
+# ── Task 3：傳承那一格與七個效果 ──
+
+def _holding(content, world, shard="chishou", name="懷璽"):
+    """把 shard 記在 name 名下（since_season 0：不是這一季到手的），回傳那個人的 Game（同步過，抄本已經照登記抄好）。"""
+    from tianxia import seal
+    from tianxia.engine import Game
+
+    def _give(st):
+        reg = seal.filled(st.seal, content)
+        reg.shards[shard].state, reg.shards[shard].holder, reg.shards[shard].since_season = "held", name, 0
+
+    world.mutate(_give)
+    game = Game.new(content, name, rng=random.Random(0), world=world)
+    game.sync(0.0)
+    return game
+
+
+def test_the_registry_copies_the_heirloom_onto_its_holder_and_off_everyone_else(content, world):
+    """抄本照登記重抄（7.4）：是你的就寫上（id 固定「璽:片」、不吃流水號），不是就清掉；碎片關著也清掉。"""
+    from tianxia import seal
+
+    put_shards(content)
+    game = _holding(content, world, "yunzhuan")
+    item = game.state.player.heirloom
+    assert (item.id, item.name, item.template, item.heirloom, item.slot) == ("璽:yunzhuan", "雲篆", "yunzhuan", True, "treasure")
+    world.mutate(lambda st: setattr(st.seal.shards["yunzhuan"], "holder", "別人"))
+    game.sync(1.0)
+    assert game.state.player.heirloom is None
+    world.mutate(lambda st: setattr(st.seal.shards["yunzhuan"], "holder", "懷璽"))
+    content.config.seal.enabled = False
+    game.sync(2.0)
+    assert game.state.player.heirloom is None and not seal.on(content)
+
+
+def test_the_heirloom_slot_works_with_the_treasures_switched_off(content, world):
+    """傳承那一格只看 Config.seal.enabled 與內容的七片，不看寶物的開關（7.2）；跟一般寶物不同鍵，不會疊。"""
+    from tianxia import treasures
+
+    put_shards(content)
+    content.config.treasures.enabled = False
+    game = _holding(content, world, "chenglu")
+    assert treasures.amount(game.state, content, "stamina_regen") == pytest.approx(1.1)
+    assert treasures.amount(game.state, content, "dodge") == 0.0 and treasures.amount(game.state, content, "practice") == 1.0
+
+
+def test_chishou_raises_only_your_own_hp_cap_and_not_the_battle_pool(content, world):
+    """螭首：本人氣血上限 ×1.06（要 PM 定的第 7 條：Member.cap_scale），同伴不吃；決戰的池子（_battle_neili_cap）不吃。"""
+    from tianxia import team
+    from tianxia.state import PLAYER
+
+    from tianxia.engine import Game
+
+    put_shards(content)
+    plain = Game.new(content, "平人", rng=random.Random(0), world=world)._battle_neili_cap()
+    game = _holding(content, world, "chishou")
+    con = team.con_of(game.state, content, world, PLAYER)
+    _, cap = team.member_neili(content, game.state.player.member, con)
+    assert cap == pytest.approx(plain * 1.06, abs=1)
+    assert game._battle_neili_cap() == plain
+    assert "cap_scale" not in game.state.player.member.model_dump()  # 不進存檔
+
+
+def test_yunzhuan_discounts_practice_but_not_the_melt_refund(content, world):
+    """雲篆：練成的心得 ×0.9、取整最少 1（練滿十成 90 → 81）；熔煉照原價退（library 照舊呼叫 practice_price(content, n)、不傳折扣），
+    沒有「練、熔、再練」的迴圈。"""
+    from tianxia import team, treasures
+
+    put_shards(content)
+    content.config.practice_xinde_per_level = 2  # 正式值（測試內容是 1）：練滿十成 90
+    game = _holding(content, world, "yunzhuan")
+    scale = treasures.amount(game.state, content, "practice")
+    assert sum(team.practice_price(content, n, scale) for n in range(1, 10)) == 81
+    assert sum(team.practice_price(content, n) for n in range(1, 10)) == 90
+    assert team.practice_price(content, 1, 0.1) == 1
+
+
+def test_xuanniu_adds_a_talk_turn_and_jinjiao_adds_dodge(content, world):
+    from tianxia import team
+
+    put_shards(content)
+    game = _holding(content, world, "xuanniu")
+    assert game._talk_cap() == content.config.talk_turns_per_day + 1
+    other = _holding(content, world, "jinjiao", name="金角客")
+    other.state.player.stats["agi"] = 5
+    assert team.dodge_chance(other.state, content) == pytest.approx(0.03)
+
+
+def test_chizhang_adds_fusion_points_and_guixin_grows_companions(content, world):
+    """赤璋：合成的造化分 +5（照實算進合成前的說明）；歸心：同伴拿到的經驗 ×1.1、取整，本人那一份不變。"""
+    from unittest import mock
+
+    from tianxia import fusion, team, treasures
+    from tianxia.martial_arts import content_art
+
+    put_shards(content)
+    game = _holding(content, world, "chizhang")
+    assert treasures.amount(game.state, content, "fuse_points") == 5
+    scored = []
+    real = fusion._points  # noqa: SLF001
+
+    def spy(content_, points):
+        scored.extend(points)
+        return real(content_, points)
+
+    base = content.skills["basic_fist"]  # 測試內容沒有 starter_skills（預設是空的），直接拿基礎拳腳
+    art = content_art(base.id, base.name, base.kind, base.attribute, base.quality)
+    with mock.patch.object(fusion, "_points", spy):
+        fusion.blend_odds(game.state, content, base.id, art, base.id, art)
+    assert ("seal", 5) in scored
+    guixin = _holding(content, world, "guixin", name="歸心客")
+    guixin.state.player.team = ["mate"]  # 測試內容的人物 mate 帶在身邊（grant_team_exp 只讀 team 與 content.characters）
+    seen = []
+    with mock.patch.object(team, "add_exp", lambda content_, who, amount, name: seen.append(amount) or []):
+        team.grant_team_exp(guixin.state, content, world, 10)
+    assert seen == [10, 11]  # 本人照舊 10、同伴 round(10 × 1.1)
+
+
+def test_the_heirloom_is_recopied_before_stamina_regen_and_on_kin_games(content, world):
+    """承露照整段離線時間算體力回復：抄本要排在 _advance_player_local 之前（7.4）；別人算你（_kin）時也重抄。
+    跟一個同時加入的人比（新手期的倍數兩邊一樣），回的體力剛好多一成。"""
+    from tianxia.engine import Game
+
+    put_shards(content)
+    plain = Game.new(content, "平人", rng=random.Random(0), world=world)
+    plain.sync(0.0)
+    game = _holding(content, world, "chenglu")
+    plain.state.player.stamina = game.state.player.stamina = 0.0
+    game.state.player.heirloom = None  # 模擬抄本還沒抄上（例如剛換季重來的角色）
+    later = content.config.stamina_regen_seconds * 10 / content.config.time_scale
+    plain.sync(later)
+    game.sync(later)
+    assert game.state.player.stamina == pytest.approx(plain.state.player.stamina * 1.1)
+    copy = game.state.model_copy(deep=True)
+    copy.player.heirloom = None  # 存檔裡的抄本過期了：別人建他的 Game（_kin）時照登記重抄
+    assert game._kin(copy).state.player.heirloom is not None
+
+
+def test_the_heirloom_is_not_in_the_rack_and_cannot_be_dismantled(content, world):
+    """7.3：傳承那一格不進裝備庫、拆不了（照前綴或照 rack 找東西的函式都碰不到它）。"""
+    put_shards(content)
+    game = _holding(content, world, "jinjiao")
+    assert all(item.id != "璽:jinjiao" for item in game.state.player.rack)
+    game.dismantle_weapon("璽:jinjiao")
+    assert game.state.player.heirloom is not None and game.state.player.heirloom.id == "璽:jinjiao"
+
+
+def test_seen_real_is_written_only_by_your_own_request(content, world):
+    """「這一季上線過」看 seen_real（5.3）：只有自己的請求（mark_seen）寫，Game.sync 不寫；換季帶著走。"""
+    from conftest import next_season
+    from tianxia.engine import Game
+
+    game = Game.new(content, "自己", rng=random.Random(0), world=world)
+    game.sync(50.0)
+    assert game.state.player.seen_real is None and not game.own_request
+    game.mark_seen(60.0)
+    assert game.state.player.seen_real == 60.0 and game.own_request
+    next_season(content, world, game)
+    assert game.state.player.seen_real == 60.0

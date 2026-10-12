@@ -143,6 +143,7 @@ class BotRunner:
             return False
         game = self._bot_game(state)
         game.sync(now)
+        game.state.player.seen_real = now  # 假人自己上線（隱沒看它）；不設 own_request：假人在奪璽單挑裡永遠不在場（14.1）
         if game.state.world.ended:
             self.characters.save(game.state)
             return False
@@ -276,6 +277,7 @@ class BotRunner:
         bot = game.state.player.bot
         bot.faction, bot.season_number = faction_id, season
         game.sync(now)
+        game.state.player.seen_real = now  # 假人自己上線（隱沒看它）；不設 own_request：假人在奪璽單挑裡永遠不在場（14.1）
         self.characters.save(game.state)
         name = game.state.player.name
         return [s for s in bots if s.player.name != name] + [game.state]
