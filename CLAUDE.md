@@ -88,7 +88,7 @@
 **模型與文字**
 - `tianxia/ollama_client.py`：本機 Ollama 的 client（JSON schema 約束、截斷修復、必填欄位缺了才重問——`0` 與 `False` 不算缺）；`quick_client` 是行動鎖內用的短逾時、不重問的複本。
 - `tianxia/zh.py`：模型產出的文字轉成繁體（`to_traditional`，見「模型呼叫」）。
-- `tianxia/event_llm.py`：事件的隨口應對（評成功率、擲骰後潤色）。`tianxia/flavor.py`：重複事件與重遊的點綴句、世界事件傳聞的全服潤色。
+- `tianxia/event_llm.py`：事件的隨口應對（評成功率、擲骰後潤色）。`tianxia/flavor.py`：世界事件傳聞的全服潤色（`polish_world_event`）。重複事件與重遊的點綴句（`polish_revisit`、`polish_event_repeat`）2026-10-12 起沒有人呼叫——它們在行動鎖內，而那一句其實沒有任何玩家看得到，見該檔開頭。
 
 **假人與機器人**
 - `tianxia/server_bots.py`：伺服器假人的名號、個性、作息（純函式，不碰檔案也不 import 引擎）。
@@ -266,7 +266,7 @@
 ### 模型呼叫
 - 本機 Ollama，模型 `gemma4:26b`（`content/config.json` 的 `ollama_model`；`ollama_think: false`、`ollama_keep_alive: 12h`）。實測（模型已常駐）：隨口應對評分 4～5 秒、人物對話一輪約 9～13 秒、合成取名約 4 秒；冷啟動第一次載入約 32 秒。trycloudflare 約 100 秒就切斷一個請求。
 - **三段式**（照人物對話 `server.prepare_dialogue` 的做法）：A 鎖內很快地開單（`Game.dialogue_request`、`Game.forge_request`、`Game.fight_request`、`Game.free_text_request`，只讀）→ B 鎖外叫模型（`companion_agent.prepare_turn`、`naming.generate`、`fight_llm.judge`、`event_llm.assess_event_success_rate`；不碰狀態、不拿鎖）→ C 鎖內整個重驗再套用（`Game.choose(prepared=…)`、`Game.forge(…, proposed=…)`、`Game.choose(fight=…)`、`Game.answer_event`），對不上就丟掉、照沒有模型的路走。鐵匠鋪開爐（`Game.smith_forge_request` → `naming.generate` → `Game.choose(..., proposed=…)`，鎖外那段是 `server.prepare_smith_forge`）也是這一套。開爐取名的 B 段預算是 `naming_budget_seconds`（60）扣掉 A 段等鎖的時間，`naming.propose(…, budget=)` 照給出去的逾時扣、用 client 的複本；伺服器的開爐一律給 `proposed`（不必叫模型時是 `NO_NAME`），所以鎖裡從不取名。C 段的名字再過 `naming.recheck`，重名在登記時原子判斷，過不了走退路字表（種子是配方鍵＋這一季的天機，不看誰先到）。之後的模型佇列只會換掉 B 段。
-- **還留在鎖內的模型呼叫**：大事潤色（`world.check_thresholds`／`fire_by_id`）、重複事件與重遊的點綴句（`flavor`）、沒給分數的放手一搏（腳本、測試）、鎖內才備料的對話與每隔一陣子的記憶整理／性情漂移、沒給 `proposed` 的開爐與沒給分數的隨口應對、沒給 `proposed` 的打造（整季機器人、腳本、測試）。**一律拿 `Game._quick_client()`，不要直接用 `self.client`**：逾時 `in_lock_model_timeout`（15 秒，這是每一步的上限）、不重問；一次拿鎖期間第一次失敗之後，後面的鎖內呼叫都不叫（`_model_budget`；`server._locked` 每次拿到鎖先 `reset_model_budget()`）。**全服斷路器**：任何一次拿鎖裡鎖內的模型呼叫失敗或逾時，`server.py` 打開 `MODEL_BREAKER_SECONDS`（180 秒），這段時間每一次拿鎖一開始額度就用完、直接用固定文字；時間到之後的第一次照常叫，又失敗再打開；開、關各印一行（不寫是誰）。鎖外的路徑不歸它管。
+- **還留在鎖內的模型呼叫**：大事潤色（`world.check_thresholds`／`fire_by_id`）、沒給分數的放手一搏（腳本、測試）、鎖內才備料的對話與每隔一陣子的記憶整理／性情漂移、沒給 `proposed` 的開爐與沒給分數的隨口應對、沒給 `proposed` 的打造（整季機器人、腳本、測試）。**一律拿 `Game._quick_client()`，不要直接用 `self.client`**：逾時 `in_lock_model_timeout`（15 秒，這是每一步的上限）、不重問；一次拿鎖期間第一次失敗之後，後面的鎖內呼叫都不叫（`_model_budget`；`server._locked` 每次拿到鎖先 `reset_model_budget()`）。**全服斷路器**：任何一次拿鎖裡鎖內的模型呼叫失敗或逾時，`server.py` 打開 `MODEL_BREAKER_SECONDS`（180 秒），這段時間每一次拿鎖一開始額度就用完、直接用固定文字；時間到之後的第一次照常叫，又失敗再打開；開、關各印一行（不寫是誰）。鎖外的路徑不歸它管。**不要把裝飾性的模型呼叫放進鎖裡**：重複事件與重遊的點綴句就是這樣，每次探索、每次抵達都可能讓全服多等 15 秒，而生成的那一句還被丟掉（joy 2026-10-12 回報「點完探索有時候沒反應」，已拿掉）。
 - **繁體**：模型產出的文字（對話、敘事、選項、標籤、名字、點綴）一律過 `zh.to_traditional`：純 Python 的 `opencc-python-reimplemented`、`s2tw` 模式（只轉字、不換詞——`s2twp` 會把「的士卒」換成「計程車卒」，FB-014），繁體輸入原樣通過（FB-018，「里、斗、了」不會被改錯），之後再套一張異體字表 `VARIANTS`（OpenCC 放過日式新字體「鉄」）；import 失敗退回手寫對照表。**要「保證繁體」只靠 OpenCC 不夠。**
 - **保底值會把「模型壞了」偽裝成「模型給了中庸的答案」**：成功率評不到退回 40，可是模型對爛寫法正常會評 0～5；曾經因為 `ollama_client` 把 `0` 當成缺值，所有灌水的寫法都被抬到 40（2026-10-05 已修，`tests/test_ollama_client.py`）。驗模型的機率評估要先看有沒有保底警告（`scripts/try_event_llm.py` 會印）。LLM 相關的東西定案前要用真模型跑一次。
 - **匿名**：首創者、第一個練成絕學的人寫給別人看的名號在登記當下記下（`MartialArt.creator_shown`／`master_shown`、`Insight.creator_shown`；匿名是「某位少俠」），之後照它寫；名號本身照舊存著當身分。

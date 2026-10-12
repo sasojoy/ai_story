@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     armor, atlas, battle_instance, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
-    fight_llm, figures, flavor, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
+    fight_llm, figures, foreshadow, front_lines, fusion, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
     social, styles, team, timetable, traits, weapons, zh,
@@ -270,8 +270,10 @@ class Game:
     def _quick_client(self) -> OllamaClient | None:
         """行動鎖裡叫模型用的 client：self.client 的複本，HTTP 逾時最多 Config.in_lock_model_timeout 秒（預設 15）、不重問
         （retry=False），所以鎖內任何一步模型呼叫最多佔住鎖那麼久。行動鎖拿著的時候全服玩家與假人都在等，模型慢或冷的時候
-        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事與決戰回合的潤色、重複事件與重遊的
-        點綴句、決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
+        照 ollama_timeout（120 秒）會凍住整台伺服器。所有在鎖內叫模型的地方都用它（大事的潤色、
+        決戰自訂行動的評分、鎖內才備料的對話與記憶整理、鎖內才取名的開爐）；逾時或失敗各處本來就退回固定的文字。
+        重複事件與重遊的點綴句以前也在這裡，2026-10-12 拿掉了（見 flavor.py 開頭）：它們是裝飾性的，卻會讓每次探索、
+        每次抵達多佔住全服的鎖最多 15 秒。**不要再把裝飾性的模型呼叫放進鎖裡。**
         引擎不讀時鐘，上限靠 HTTP 的逾時（見 ollama_client.quick_client）。
         一次拿鎖期間只容忍一次失敗：有一次鎖內的模型呼叫逾時或失敗之後（_model_budget.gave_up），這裡回 None，同一次行動裡
         後面的鎖內呼叫都不叫模型、直接用固定文字。旗子由 server._locked 與 bot_runner._bot_game 每次拿到鎖先歸零（reset_model_budget）；
@@ -4067,15 +4069,11 @@ class Game:
         （events.note_round；pick_event 本身不改狀態，預覽怎麼抽都不算）。next_event 串接、晉升召見不是從池子抽的，不給 action。"""
         if action is not None:
             event_rules.note_round(self.state, self.content, event, action)
-        is_repeat = event.id in self.state.player.seen_events
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
         text = fill_marks(event.text, self.state)
-        if is_repeat:
-            flourish = flavor.polish_event_repeat(self._quick_client(), event.title, event.text)
-            if flourish:
-                text = f"{text}\n\n{flourish}"
+        # 重複事件的點綴句以前在這裡叫模型（flavor.polish_event_repeat），2026-10-12 拿掉：見 flavor.py 開頭
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
@@ -4723,7 +4721,7 @@ class Game:
                 new_leg = stop != s.player.location
                 if new_leg:
                     s.player.leg_actions = set()
-                msgs += self._arrive(stop, final=j.reached > j.last, client=client)
+                msgs += self._arrive(stop, client=client)
                 if new_leg:
                     msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
                 if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
@@ -4747,21 +4745,15 @@ class Game:
         self._sync_battle_presence()
         return msgs
 
-    def _arrive(self, loc_id: str, final: bool, client: OllamaClient | None = None) -> list[str]:
-        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。終點是重遊的一般地點時才多請模型
-        補一句此刻的小細節（中途的站不補，省得一趟路叫好幾次模型）。client 是這次抵達可以用的模型：
-        None（計時器的抵達）就完全不叫模型，重遊點綴句與江湖大事的潤色都省掉；門檻照樣觸發。"""
+    def _arrive(self, loc_id: str, client: OllamaClient | None = None) -> list[str]:
+        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。client 是這次抵達可以用的模型：
+        None（計時器的抵達）就不叫模型，江湖大事的潤色省掉；門檻照樣觸發。
+        重遊的點綴句以前也在這裡叫模型（見 flavor.py 開頭，2026-10-12 拿掉）。"""
         s, c = self.state, self.content
-        dest = c.locations[loc_id]
-        is_revisit = loc_id in s.player.visited
         before = s.player.tutorial_step
         s.player.location = loc_id
         s.player.visited.add(loc_id)
         text = self.location_text()
-        if final and is_revisit and not dest.important and client is not None:
-            flourish = flavor.polish_revisit(client, dest.name, dest.describe(s.world.flags))
-            if flourish:
-                text = f"{text}\n\n{flourish}"
         self._hide(text)
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
