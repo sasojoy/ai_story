@@ -41,7 +41,7 @@ def test_away_from_a_clinic_healing_is_refused_and_names_the_nearest(real):
     assert game.heal() == ["這裡沒有醫館，最近的在潁川郡（陽翟）。"]
     assert (p.member.injury, p.stats["silver"]) == (40.0, 100)
     assert skillview.heal_button(game.state, real) == {
-        "ok": False, "why": "這裡沒有醫館，最近的在潁川郡（陽翟）。", "clinic": "這裡沒有醫館，最近的在潁川郡（陽翟）。",
+        "ok": False, "why": "這裡沒有醫館，最近的在潁川郡（陽翟）。", "clinic": "這裡沒有醫館，最近的在潁川郡（陽翟）。", "note": None,
     }
     assert "act:heal" not in [o.id for o in game.options(odds=False)]
 
@@ -63,7 +63,7 @@ def test_at_a_clinic_the_place_offers_healing_at_the_same_price(real):
     p = game.state.player
     (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
     assert option.enabled and option.label == f"{clinic.HEAL}（內傷 40・{team.heal_cost(real, p.member)} 兩）"
-    assert skillview.heal_button(game.state, real) == {"ok": True, "why": None, "clinic": None}
+    assert skillview.heal_button(game.state, real) == {"ok": True, "why": None, "clinic": None, "note": "內傷 40・20 兩"}
     stamina = p.stamina
     msgs = game.choose("act:heal")
     assert "療傷完畢，內傷 -40、氣血回滿（銀兩 -20）。" in msgs
@@ -72,10 +72,30 @@ def test_at_a_clinic_the_place_offers_healing_at_the_same_price(real):
     assert "act:heal" not in [o.id for o in game.options(odds=False)]  # 沒有內傷就不畫
 
 
-def test_too_poor_to_heal_greys_the_option(real):
-    game = _game(real, silver=3)
+def test_penniless_greys_the_option(real):
+    game = _game(real, silver=0)
     (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
     assert not option.enabled and "銀兩不足" in option.label
+
+
+def test_short_of_silver_heals_what_it_can(real):
+    """PM 2026-10-12：銀兩不夠全治時能治多少治多少（每一兩治 2 點），鈕上寫治幾點、還剩幾點。"""
+    game = _game(real, injury=40.0, silver=12)
+    p = game.state.player
+    (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
+    assert option.enabled and option.label == f"{clinic.HEAL}（治 24 點・12 兩（還剩 16 點））"
+    assert skillview.heal_button(game.state, real)["note"] == "治 24 點・12 兩（還剩 16 點）"
+    assert game.choose("act:heal")[0] == "銀兩只夠治一部分：內傷 -24，還剩 16 點（銀兩 -12）。"
+    assert (p.member.injury, p.stats["silver"]) == (16.0, 0)
+    (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
+    assert not option.enabled
+
+
+def test_poor_bots_still_go_when_they_can_heal_a_useful_part(real):
+    game = _game(real, where="yingshui", injury=1000.0, silver=bot.CLINIC_MIN_SILVER)
+    assert bot.clinic_hop(game) == "yingchuan"
+    game.state.player.stats["silver"] = bot.CLINIC_MIN_SILVER - 1
+    assert bot.clinic_hop(game) is None
 
 
 def test_time_and_meditation_never_cure_the_injury(real):
@@ -107,6 +127,31 @@ def test_bots_detour_to_the_nearest_clinic_when_the_injury_is_heavy(real):
     game.state.player.member.injury = 100.0
     assert bot.clinic_hop(game) == "yingchuan"
     game.state.player.stats["silver"] = 0
-    assert bot.clinic_hop(game) is None  # 付不起：去了也白去
+    assert bot.clinic_hop(game) is None  # 一兩都沒有：去了也白去
     game = _game(real, injury=100.0)
     assert bot.clinic_hop(game) is None and bot.wants_heal(game)  # 已經在醫館：就地療傷
+
+
+def test_heavy_injury_puts_the_clinic_ahead_of_orders(real):
+    from tianxia import bot_policy  # noqa: PLC0415
+
+    game = _game(real, where="yingshui", injury=0.0)
+    _, cap = team.member_neili(real, game.state.player.member, team.con_of(game.state, real, game.world, "player"))
+    game.state.player.member.injury = 0.2 * cap
+    assert bot_policy._clinic_score(game) == bot_policy.CLINIC_MOVE_SCORE < bot_policy.ORDER_SCORE
+    game.state.player.member.injury = 0.3 * cap
+    assert bot_policy._clinic_score(game) == bot_policy.CLINIC_URGENT_SCORE > bot_policy.SUMMONS_SCORE
+    assert bot.injury_share(game) == pytest.approx(0.3)
+
+
+def test_a_crippled_bot_that_cannot_pay_stops_fighting(real):
+    from tianxia import bot_policy  # noqa: PLC0415
+
+    game = _game(real, where="yingshui", injury=0.0, silver=0)
+    _, cap = team.member_neili(real, game.state.player.member, team.con_of(game.state, real, game.world, "player"))
+    game.state.player.member.injury = 0.3 * cap
+    assert bot_policy._crippled(game)
+    game.state.player.stats["silver"] = bot.CLINIC_MIN_SILVER
+    assert not bot_policy._crippled(game)  # 湊得出錢：先去醫館
+    game.state.player.member.injury, game.state.player.stats["silver"] = 0.2 * cap, 0
+    assert not bot_policy._crippled(game)  # 傷還不重：照打

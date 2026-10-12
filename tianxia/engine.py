@@ -999,7 +999,7 @@ class Game:
         if not clinic.on(c) or not clinic.here(s, c) or int(member.injury) < 1:
             return None
         problem = team.heal_problem(s, c, member)
-        note = f"內傷 {int(member.injury)}・{team.heal_cost(c, member)} 兩"
+        note = skillview.heal_note(s, c)
         return Option(id="act:heal", label=f"{clinic.HEAL}（{note if problem is None else problem.rstrip('。')}）",
                       enabled=problem is None)
 
