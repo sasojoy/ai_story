@@ -20,7 +20,7 @@ SHOP_NAMES = {"剛": "鐵葉甲", "柔": "軟皮甲", "快": "輕綃衫", "慢":
 WEAR_WORD = equipment.WEAR_WORDS["armor"]  # 「耐久度」：角色卡、修練頁每一列（_row 的 wear_word）、鐵匠鋪修與換上兩顆鈕都讀這個，不寫死（3.1、2.5）
 WORN_WARNING = "你的{name}破了好幾處，找間鐵匠鋪補一補。"  # 待 joy 潤（4.5）
 EMPTY = "身上沒有防具。"  # 待 joy 潤：修練頁防具那一段身上空著
-RACK_NOTE = "城裡的鐵匠鋪買得到、修得好；用不上的拆了換素材。"  # 待 joy 潤：修練頁防具那一段底下
+RACK_NOTE = "城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。"  # 待 joy 潤：修練頁防具那一段底下（防具打造之後同兵器那一句）
 NO_ARMOR = "身上沒有防具"  # 待 joy 潤：修鈕灰掉時的原因
 NO_SUCH = "沒有這一件"  # 待 joy 潤：買架上沒有的屬性（舊分頁、手改的 id）
 INTACT = "還很完好"  # 待 joy 潤：耐久滿的不用修
@@ -207,7 +207,8 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
         "id": item.id, "name": item.name, "attribute": item.attribute, "tier": item.tier, "quality": item.quality,
         "grade": grade(item), "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「耐久度 N」（3.1 的字表，不在網頁寫死）
         "cut": pct(cut(item, neigong, content)), "fit": fit_note(item, neigong),
-        "tempers": item.tempers,  # 這一批一直是 0、網頁不畫；「淬煉 N/5」與 recipe 欄等防具打造那一批再接
+        "tempers": item.tempers, "temper_max": content.config.armor.temper_max,  # 網頁寫「淬煉 N/M」（防具打造）
+        "recipe": recipe_text(content, item.recipe),  # 自己打的那一件寫配方（主料＋輔料），買的是 None
         "confirm": "" if worn else equipment.dismantle_confirm(content, item),  # 身上那件不能拆，沒有問句（FB-125）
     }
 
@@ -224,12 +225,14 @@ def rows(state: GameState, content: Content, neigong: MartialArt | None) -> dict
 
 
 def card_line(state: GameState, content: Content, neigong: MartialArt | None) -> str:
-    """本人卡上的「防具」那一行（2.5，待 joy 潤）：沒穿或開關關著是空字串。"""
+    """本人卡上的「防具」那一行（2.5，待 joy 潤）：沒穿或開關關著是空字串。淬過的寫「・淬煉 N 次」（同兵器 weapons._describe）。"""
     item = state.player.armor
     if not equipment.on(content, "armor") or item is None:
         return ""
     note = fit_note(item, neigong)
-    line = f"防具　【{item.name}】屬{item.attribute}・{grade(item)}・{WEAR_WORD} {item.edge}，一場少扣 {pct(cut(item, neigong, content))} 氣血"
+    tempered = f"・淬煉 {item.tempers} 次" if item.tempers else ""  # 待 joy 潤
+    line = (f"防具　【{item.name}】屬{item.attribute}・{grade(item)}{tempered}・{WEAR_WORD} {item.edge}，"
+            f"一場少扣 {pct(cut(item, neigong, content))} 氣血")
     return line + (f"（{note}）" if note else "")
 
 

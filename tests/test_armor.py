@@ -258,7 +258,7 @@ def test_rows_and_card_line(content, world):
     assert armor.card_line(s, content, ng) == "防具　【試甲】屬虛・一階下品・耐久度 80，一場少扣 8% 氣血（跟你的內功同屬性）"
     data = armor.rows(s, content, ng)
     assert data["worn"]["cut"] == "8%" and data["worn"]["confirm"] == "" and data["worn"]["grade"] == "一階下品"
-    assert data["worn"]["wear_word"] == equipment.WEAR_WORDS["armor"] == "耐久度" and "recipe" not in data["worn"]  # 配方等防具打造那一批
+    assert data["worn"]["wear_word"] == equipment.WEAR_WORDS["armor"] == "耐久度" and data["worn"]["recipe"] is None  # 不是自己打的：沒有配方
     assert [r["id"] for r in data["rack"]] == ["甲:2"]  # 裝備庫裡的兵器不列在防具那一段
     assert data["rack"][0]["fit"] == armor.CLASH_NOTE and data["rack"][0]["cut"] == "11%"  # 12＋2－3
     assert data["rack"][0]["confirm"] == "把【鐵葉甲】（二階中品）拆成玄鋼骨×1？拆掉就沒了。"

@@ -363,3 +363,67 @@ def test_the_armor_page_lists_at_most_eight_to_wield_best_first(content, world):
     more = _ids(game)["smith:wield-more"]
     assert not more.enabled and more.label == equipment.WIELD_MORE.format(n=3)
     assert ids.index(wields[-1]) < ids.index("smith:wield-more") < ids.index(smithing.OPEN)
+
+# ── Task 4：淬煉防具、防具列與角色卡 ──
+
+def test_armor_temper_uses_the_cheapest_material_at_or_above_its_tier(content, world):
+    game = _armor_smith(content, world)
+    p = game.state.player
+    p.armor, p.materials = _jacket(tier=2), {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    assert smithing.temper_material(game.state, content, "armor") == "gang_2"  # 一階不夠格；二階比三階便宜
+    opt = _ids(game)[smithing.ARMOR_TEMPER]
+    assert opt.enabled and opt.label == "淬煉【試甲】（第 1/5 次・玄鋼骨×1＋30 兩）"
+    ng = _inner(game, content, world)
+    before = armor.cut(p.armor, ng, content)
+    game.choose(smithing.ARMOR_TEMPER)
+    assert p.armor.tempers == 1 and p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
+    assert armor.cut(p.armor, ng, content) == pytest.approx(before + content.config.armor.temper_step)  # 減損每次 +1%（4.1）
+    assert game.state.journal[0].title == smithing.TEMPER_TITLE
+
+
+def test_armor_temper_stops_at_five_and_refuses_without_material_silver_or_armor(content, world):
+    game = _armor_smith(content, world)
+    p = game.state.player
+    p.armor, p.materials = _jacket(tempers=5), {"gang_1": 3}
+    opt = _ids(game)[smithing.ARMOR_TEMPER]
+    assert not opt.enabled and smithing.FULL in opt.label
+    assert smithing.temper(game.state, content, "armor") == [f"（{smithing.FULL}。）"] and p.materials == {"gang_1": 3}
+    p.armor = _jacket(tier=3)
+    assert smithing.temper_problem(game.state, content, "armor") == "沒有三階以上的素材"
+    p.armor, p.materials, p.stats["silver"] = _jacket(tier=2), {"gang_2": 1}, 10
+    assert smithing.temper_problem(game.state, content, "armor") == "還差 20 兩"
+    p.armor = None
+    assert smithing.ARMOR_TEMPER not in _ids(game) and smithing.temper_problem(game.state, content, "armor") == armor.NO_ARMOR
+    p.armor, p.location = _jacket(), "lake"
+    assert smithing.temper_problem(game.state, content, "armor") == weapons.NOT_HERE
+
+
+def test_armor_temper_sits_after_repair_and_the_weapon_temper_is_untouched(content, world):
+    game = _smithy(content, world, weapons_on=True)
+    p = game.state.player
+    rules.learn_skill(game.state, content, "sword")
+    p.member.wugong_id = "sword"
+    p.weapon = Weapon(id="兵:1", name="試刃", kind="劍", attribute="柔", tier=1, quality="下品")
+    p.armor = _jacket(edge=40)
+    game.choose("act:smith")
+    weapon_page = list(_ids(game))
+    assert smithing.TEMPER in weapon_page and smithing.ARMOR_TEMPER not in weapon_page
+    game.choose("smith:page:armor")
+    ids = list(_ids(game))
+    assert smithing.TEMPER not in ids and ids.index(armor.REPAIR) < ids.index(smithing.ARMOR_TEMPER) < ids.index(smithing.OPEN)
+    game.choose(smithing.ARMOR_TEMPER)
+    assert p.armor.tempers == 1 and p.weapon.tempers == 0
+
+
+def test_armor_rows_and_card_carry_tempers_and_the_recipe(content, world):
+    game = _smithy(content, world)
+    smithing.forge(game.state, content, world, smithing.ARMOR_KIND, "gang_1", "kuai_1", rng=random.Random(0))
+    p = game.state.player
+    p.armor.tempers = 2
+    ng = _inner(game, content, world)
+    row = armor.rows(game.state, content, ng)["worn"]
+    assert row["tempers"] == 2 and row["temper_max"] == 5 and row["recipe"] == "精鐵砂＋驚羽"
+    assert "・淬煉 2 次・" in armor.card_line(game.state, content, ng)
+    p.armor = _jacket()
+    row = armor.rows(game.state, content, ng)["worn"]
+    assert row["recipe"] is None and row["tempers"] == 0 and "淬煉" not in armor.card_line(game.state, content, ng)
