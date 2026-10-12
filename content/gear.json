@@ -26,5 +26,14 @@
     {"character": "zhangfei", "gear": "yandi_jiunang"},
     {"character": "yuanshao", "gear": "mendi_mingtie"},
     {"character": "taoqian", "gear": "tanmu_nianzhu"}
+  ],
+  "signature_arms": [
+    {"character": "caocao", "name": "梟風槍", "kind": "槍", "attribute": "快"},
+    {"character": "liubei", "name": "雲紋雙鋒", "kind": "劍", "attribute": "柔"},
+    {"character": "guanyu", "name": "赤魄長刀", "kind": "刀", "attribute": "剛"},
+    {"character": "zhangfei", "name": "裂雷矛", "kind": "槍", "attribute": "剛"},
+    {"character": "sunjian", "name": "江潮槍", "kind": "槍", "attribute": "快", "figure": "sunjian"},
+    {"character": "yuanshao", "name": "冠冕劍", "kind": "劍", "attribute": "虛"},
+    {"character": "taoqian", "name": "厚德杖", "kind": "棍", "attribute": "柔"}
   ]
 }

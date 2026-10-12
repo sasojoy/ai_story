@@ -1529,6 +1529,9 @@ class WeaponRules(_Strict):
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
+    # 名將本命兵器（兵器設計 4.10；打造第三批）。跟頂層的 Config.signature_affinity（70，本命武學）不是同一個數
+    signature_affinity: int = Field(default=80, ge=0, le=100)  # 情誼到這裡，名將把本命兵器送你
+    signature_wins: int = Field(default=3, ge=1)  # 這一季打贏他本人幾次（大勝、險勝），他讓你奪走（只有內容寫了 figure 的那幾位）
 
 
 class ArmorRules(_Strict):
@@ -1628,13 +1631,29 @@ class GiftDef(_Strict):
     line: str = ""  # 送禮那一句（{general}、{gift} 換成人物與贈禮的名字）；空的照 treasures.GIFT_LINE（待 joy 潤）
 
 
+class SignatureArmDef(_Strict):
+    """名將本命兵器（兵器設計 4.10；打造第三批）：content/gear.json 的 signature_arms，一位名將一把。名字原創、暫名待 joy 潤（換名只改
+    內容檔：手上的那一把讀檔時照這裡重寫，signature_arms.refresh_names）。種類・屬性照他的本命武學寫（載入不比對，正式內容的測試鎖）。
+    情誼到 Config.weapons.signature_affinity 他送你；figure 有寫的，這一季打贏那位大勢人物本人 signature_wins 次他讓你奪走（現在只有孫堅）。
+    每位名將每季全服一人（WorldState.signature_arms）。拿到的那一把算神器原品的加成（signature_arms.new_arm）。"""
+
+    character: str  # 人物 id（content/characters.json）
+    name: str
+    kind: str  # models.WEAPON_KINDS
+    attribute: str  # martial_arts.ATTRIBUTES
+    figure: str | None = None  # 大勢人物 id（content/figures.json），他的 character 要是同一位；沒寫就只有情誼那條路
+    gift_line: str = ""  # 情誼那條路送你的那一句（{general}、{arm}）；空的照 signature_arms.GIFT_LINE（待 joy 潤）
+    seize_line: str = ""  # 打贏那條路讓你奪走的那一句（{general}、{arm}）；空的照 signature_arms.SEIZE_LINE（待 joy 潤）
+
+
 class GearBook(_Strict):
-    """content/gear.json：寶物表、名駒、名將贈禮（裝備四欄 6.3）。沒有這個檔就是空的（測試內容）：寶物沒有來源、名將不送禮。
-    防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
+    """content/gear.json：寶物表、名駒、名將贈禮、名將本命兵器（裝備四欄 6.3；兵器設計 4.10）。沒有這個檔就是空的（測試內容）：寶物沒有來源、
+    名將不送禮。防具架上的名字（armor.SHOP_NAMES）與馬的毛色（mounts.COATS）照舊是程式常數（計畫「要 PM 定的」第 2 條）。"""
 
     treasures: dict[str, TreasureDef] = Field(default_factory=dict)
     steeds: dict[str, SteedDef] = Field(default_factory=dict)
     gifts: list[GiftDef] = Field(default_factory=list)
+    signature_arms: list[SignatureArmDef] = Field(default_factory=list)  # 名將本命兵器（打造第三批）
 
 
 class Secrets(_Strict):
