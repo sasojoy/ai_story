@@ -58,6 +58,43 @@ def effect_text(content: Content, key: str) -> str:
     )
 
 
+def _cells(state: GameState, content: Content) -> list[tuple[str, float]]:
+    """身上每一格寶物的（效果鍵, 數字）。這一批只有一般那一格（PlayerState.treasure：看 Config.treasures.enabled、查
+    Config.treasures.effects）；玉璽一在這裡多加傳承那一格（PlayerState.heirloom：只看 Config.seal.enabled、不看寶物的開關，
+    查 Config.seal.effects），其他掛點都不用動（玉璽碎片設計 7.2）。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。"""
+    cells: list[tuple[str, float]] = []
+    key = effect_of(content, state.player.treasure) if on(content) else None
+    if key is not None:
+        cells.append((key, content.config.treasures.effects.get(key, 1.0 if key in MULTIPLY else 0.0)))
+    return cells
+
+
+def amount(state: GameState, content: Content, effect: str) -> float:
+    """這個效果此刻的數字（設計 6.1：所有掛點都經過這裡）：乘的效果是倍數（沒有是 1）、加的是加多少（沒有是 0）；
+    好幾格都是同一個鍵時乘的相乘、加的相加（玉璽碎片設計 7.2）。沒帶、開關關著、效果對不上都回中性值。"""
+    multiply = effect in MULTIPLY
+    total = 1.0 if multiply else 0.0
+    for key, value in _cells(state, content):
+        if key == effect:
+            total = total * value if multiply else total + value
+    return total
+
+
+def extra_drop(state: GameState, content: Content, dropped: list[str], season: int, record_id: int) -> str | None:
+    """寶物「打贏多掉一個素材」（設計 6.2）：這一場掉了素材時，win_material 的機率從這一場**實際掉到的**素材裡挑一種、多給一個
+    （計畫「要 PM 定的」第 3 條甲）；回那一種的 id，沒中、沒帶、開關關著、這一場沒掉素材都是 None（不擲）。只在遊歷、探索野怪、
+    序章外由 Game._battle_rewards 叫（挑戰本人、劇情戰不吃）。發素材是 engine 的事（treasures 不 import materials）。
+    自己一份亂數（寶|素材|季數|名號|戰報流水號；流水號每季從 1 算起，所以要有季數；開頭的「素材」跟挑戰本人掉寶物那一份分開），
+    不碰 Game.rng（FB-129）。"""
+    chance = amount(state, content, "win_material")
+    if chance <= 0 or not dropped:
+        return None
+    rng = random.Random(f"寶|素材|{season}|{state.player.name}|{record_id}")
+    if rng.random() >= chance:
+        return None
+    return rng.choice(list(dict.fromkeys(dropped)))  # 照掉落的順序去重：同一種掉兩筆不加重
+
+
 def owned_templates(p: PlayerState) -> set[str]:
     """手上已經有的（6.5：身上的寶物與坐騎、裝備庫、寄放的都算，照 template 認）。"""
     items = [p.treasure, p.mount, *p.rack, *p.held_gear]

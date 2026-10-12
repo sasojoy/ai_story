@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, insights, library, materials, roster, team  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, front_lines, insights, library, materials, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -25,7 +25,7 @@ def display_name(state: GameState) -> str:
 def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     """這位人物此刻對你的求見門檻（武學與成長設計 9.1）：名望門檻（CharacterDef.audience_fame），投靠了他的陣營的人
     此刻的階（ranks.rank_of）每比第 1 階高一階抵 audience_rank_discount 點；投靠了但還沒晉升過的人一點都不抵。敵對陣營，
-    以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）。最低 0。
+    以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）；寶物另扣 treasures.amount 的 audience。最低 0。
     第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
     rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
     from . import ranger, ranks  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
@@ -36,6 +36,7 @@ def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     if figure is not None and p.faction is not None and p.faction == figure.faction:
         bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
     bar -= ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵一點，對所有人物都算（陣營的人是 0）
+    bar -= round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣，最低 0
     return max(0, bar)
 
 

@@ -188,3 +188,168 @@ def test_loading_a_save_refreshes_treasure_and_steed_names(content, world):
     loaded = Game(content, CharacterStore(world.db).load("寶客"), random.Random(0), world)
     assert loaded.state.player.treasure.name == "烏木名刺" and loaded.state.player.held_gear[0].name == "踏霜駒"
     assert treasures.owned_templates(loaded.state.player) == {"audience", "tashuang"}
+
+
+# ── Task 2：八個掛點 ──
+
+def _record(kind="event"):
+    return BattleRecord(id=1, time=0.0, location="湖邊", kind=kind, opponent="誰", ours=[], tier="大勝", our_power=1.0, difficulty=1.0)
+
+
+def test_amount_is_neutral_unless_worn_and_switched_on(content, state):
+    _book(content)
+    assert treasures.amount(state, content, "cultivate") == 1.0 and treasures.amount(state, content, "audience") == 0.0
+    state.player.treasure = _item("audience")
+    assert treasures.amount(state, content, "audience") == 3 and treasures.amount(state, content, "cultivate") == 1.0
+    content.config.treasures.enabled = False  # 開關關著：帶著也當沒帶
+    assert treasures.amount(state, content, "audience") == 0.0
+    content.config.treasures.enabled = True
+    state.player.treasure.template = "gone"  # 內容拿掉了這一件
+    assert treasures.amount(state, content, "audience") == 0.0
+    state.player.treasure = None
+    state.player.rack = [_item("audience")]  # 放在裝備庫裡的不算
+    assert treasures.amount(state, content, "audience") == 0.0
+
+
+def test_cultivate_treasure_multiplies_the_odds_within_the_cap_but_not_the_sure_try_or_forcing(content, state, world):
+    """設計 6.2：中品第一次 40→48、上品第一次 6→7、中品第三次照舊 100（寫明必成那一次直接回 100）。中品寫在 cultivate_sure_by 裡，
+    odds_for 照樣算寶物（不併進搭配）；服丹衝關（force_odds）與頓悟不吃寶物。"""
+    from tianxia import cultivation
+    content.config.cultivate_odds = {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
+    content.config.cultivate_sure_by = {"中品": 3}
+    assert cultivation.chance(content, "中品", 0, treasure=1.2) == 48
+    assert cultivation.chance(content, "上品", 0, treasure=1.2) == 7
+    assert cultivation.chance(content, "中品", 2, treasure=1.2) == 100
+    _book(content)
+    forcing = cultivation.force_odds(state, content, world, "nope")
+    assert cultivation.odds_for(state, content, "中品", 0) == 40
+    state.player.treasure = _item("cultivate")
+    assert cultivation.odds_for(state, content, "中品", 0) == 48
+    assert cultivation.force_odds(state, content, world, "nope") == forcing
+
+
+def test_insight_treasure_weighs_only_the_insight_branch(content, world):
+    _book(content)
+    game = _game(content, world)
+    loc = content.locations["lake"]
+    with mock.patch.object(Game, "_explore_can", lambda self, branch, place: True):
+        plain = dict(game._explore_weights(loc))
+        game.state.player.treasure = _item("insight")
+        worn = dict(game._explore_weights(loc))
+    assert worn["insight"] == pytest.approx(plain["insight"] * 1.5)
+    assert {k: v for k, v in worn.items() if k != "insight"} == {k: v for k, v in plain.items() if k != "insight"}
+
+
+def test_win_treasures_add_to_the_streak_bonus_on_train_wild_challenge_and_story_wins(content, world):
+    """設計 6.2：打贏的心得、經驗掛在 _battle_rewards，跟乘勝相加不疊乘。遊歷（train）、探索野怪（wild）、挑戰本人與劇情戰
+    （都是 kind=event）打贏都走 _battle_rewards，都吃（設計沒有排除，跟乘勝、遊俠名號的經驗加成同一個範圍）。"""
+    from tianxia import traits
+    _book(content)
+    game = _game(content, world)
+    squad = content.squads["thug"].model_copy(update={"reward_silver": 0, "reward_xinde": 10, "exp": 20})
+
+    def won(kind="event"):
+        record = _record(kind)
+        game._battle_rewards(squad, record)
+        return record.xinde, record.exp
+
+    assert won() == (10, 20)
+    game.state.player.treasure = _item("win_xinde_pct")
+    assert [won(kind) for kind in ("train", "wild", "event")] == [(12, 20)] * 3
+    game.state.player.treasure = _item("win_exp_pct")
+    assert [won(kind) for kind in ("train", "wild", "event")] == [(10, 23)] * 3  # round(20 × 1.15)
+    game.state.player.treasure = _item("win_xinde_pct")
+    with mock.patch.object(traits, "amount", lambda content_, lo, hook: 0.5 if hook == "win_reward" else 0.0):
+        assert won()[0] == 17  # 乘勝 +50% 與寶物 +20% 相加：10 × 1.7；疊乘會是 18
+
+
+def test_seclusion_treasure_adds_a_quarter_to_the_xinde(content, world):
+    """設計 6.2：閉關心得照出關那一刻身上那件算（寶物隨時能換；閉關中換上也算，Task 4 另驗）。"""
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    base = 4 * content.config.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20)
+
+    def secluded():
+        p.seclusion_start, p.busy_until = 0.0, 4 * 3600.0
+        before = p.stats.get("xinde", 0)
+        game._finish_seclusion(4 * 3600.0)
+        return p.stats["xinde"] - before
+
+    assert secluded() == round(base)
+    p.treasure = _item("seclusion")
+    assert secluded() == round(base * 1.25)
+
+
+def test_audience_treasure_lowers_the_bar_but_not_below_zero(content, state):
+    _book(content)
+    content.characters["mate"].audience_fame = 10
+    assert rules.audience_bar(state, content, "mate") == 10
+    state.player.treasure = _item("audience")
+    assert rules.audience_bar(state, content, "mate") == 7
+    content.characters["mate"].audience_fame = 2
+    assert rules.audience_bar(state, content, "mate") == 0
+
+
+def test_win_material_treasure_adds_one_more_only_on_train_and_wild_wins_that_dropped(content, world):
+    """設計 6.2：打贏、這一場掉了素材時多掉一個——只有遊歷（train）、探索野怪（wild）；挑戰本人與劇情戰（kind=event，也走
+    _battle_rewards）不吃，沒掉素材不擲（序章本來就不掉素材）。多的那一個是這一場掉到的那一種（要 PM 定的第 3 條），寫進戰報的得失；
+    用自己的亂數，Game.rng 跟沒帶時一模一樣（FB-129）。"""
+    from tianxia.models import Drop
+    _book(content)
+    content.config.treasures.effects["win_material"] = 1.0  # 一定中：這一支只驗掛點與範圍（25% 的擲法另一支驗）
+    game = _game(content, world)
+    p = game.state.player
+    dropping = content.squads["thug"].model_copy(update={"reward_silver": 0, "drops": [Drop(material="gang_1")]})
+    barren = dropping.model_copy(update={"drops": [Drop(material="gang_1", chance=0.0)]})
+
+    def won(kind, squad, worn):
+        p.treasure = _item("win_material") if worn else None
+        game.rng = random.Random(5)
+        before = p.materials.get("gang_1", 0)
+        record = _record(kind)
+        game._battle_rewards(squad, record)
+        return p.materials.get("gang_1", 0) - before, len(record.materials), game.rng.getstate()
+
+    for kind in ("train", "wild"):
+        plain, worn = won(kind, dropping, False), won(kind, dropping, True)
+        assert (plain[0], worn[0], worn[1]) == (1, 2, plain[1] + 1)  # 多一個、戰報的得失多一行
+        assert worn[2] == plain[2]  # Game.rng 一顆都沒多吃
+    assert won("event", dropping, True)[0] == 1  # 挑戰本人、劇情戰不吃
+    assert won("train", barren, True)[0] == 0  # 這一場沒掉素材：不擲、不給
+
+
+def test_the_extra_material_rolls_a_quarter_on_season_name_and_record(content, state):
+    """多掉的那一個用自己一份亂數（寶|素材|季數|名號|戰報流水號；戰報流水號每季從 1 算起，所以要有季數），擲 win_material（25%）。"""
+    _book(content)
+    name = state.player.name
+    state.player.treasure = _item("win_material")
+    hits = [random.Random(f"寶|素材|3|{name}|{rid}").random() < 0.25 for rid in range(1, 40)]
+    got = [treasures.extra_drop(state, content, ["gang_1"], 3, rid) == "gang_1" for rid in range(1, 40)]
+    assert got == hits and any(hits) and not all(hits)
+    assert treasures.extra_drop(state, content, [], 3, 1) is None  # 這一場沒掉素材
+    state.player.treasure = None
+    assert all(treasures.extra_drop(state, content, ["gang_1"], 3, rid) is None for rid in range(1, 40))  # 沒帶
+
+
+def test_legend_treasure_doubles_the_pill_chance_on_the_same_die(content, world):
+    """設計 6.2：探索撿破境丹的門檻 ×2（夾在 1 以下），擲的還是同一顆 self.rng.random()：帶不帶都只擲一次，亂數序列不位移；
+    基本機率是 0（測試內容）時照舊不擲。"""
+    _book(content)
+    game = _game(content, world)
+    roll = random.Random(7).random()
+    content.config.explore_legend_chance = roll * 0.75  # 沒帶：roll ≥ 門檻、撿不到；帶了：門檻 1.5×roll > roll、撿到
+
+    def found():
+        game.rng = random.Random(7)
+        got = game._legend_find()
+        return bool(got), game.rng.getstate()
+
+    plain, plain_dice = found()
+    game.state.player.treasure = _item("legend")
+    worn, worn_dice = found()
+    assert not plain and worn and plain_dice == worn_dice
+    content.config.explore_legend_chance = 0.0
+    game.rng = random.Random(7)
+    dice = game.rng.getstate()
+    assert game._legend_find() == [] and game.rng.getstate() == dice  # 基本機率 0：帶著也不擲
