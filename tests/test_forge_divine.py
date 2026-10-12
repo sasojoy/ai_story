@@ -9,7 +9,7 @@ import pytest
 
 from conftest import real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
-from tianxia import armor, equipment, forge_secrets, fusion, rules, smithing, team, weapons
+from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, smithing, team, weapons
 from tianxia.content import validate
 from tianxia.models import ForgeSecret, ForgeSide
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
@@ -155,3 +155,76 @@ def test_old_gear_finds_read_as_named_pieces_and_divine_items_keep_names_without
     p.rack = [Weapon(id="兵:9", name="仿・舊神器", kind="劍", attribute="剛", tier=3, quality="上品", secret="t_star", copy_of="鑄|t_star")]
     game._drop_stale_references()
     assert p.rack[0].name == "仿・舊神器"  # 這一季那一列不在（別一季打的、資料不在）：留著存檔裡的名字
+
+
+# ── Task 4：原品定名 ──
+
+def test_the_owner_names_the_original_once_and_the_name_takes_the_namespace(divine_content, world):
+    cfg = divine_content.config.forge_secrets
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert forge_secrets.unnamed_originals(owner.state, world) == {original.id: "墜星劍"}
+    other = _forger(divine_content, world, name="乙")
+    assert smithing.name_divine(other.state, divine_content, world, original.id, "斬月") == (False, [smithing.NAME_GONE])  # 不是他的
+    ok, msgs = smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")  # 不必帶劍字（5.2）
+    assert ok and msgs == [smithing.DIVINE_NAMED.format(name="斬月")] and original.name == "斬月"
+    find = world.lookup_gear_find("鑄|t_star")
+    assert (find.divine_name, find.name) == ("斬月", "斬月") and world.is_skill_name_taken("斬月")  # 佔名字空間（7.3）
+    assert forge_secrets.unnamed_originals(owner.state, world) == {}
+    assert smithing.name_divine(owner.state, divine_content, world, original.id, "別名") == (False, [smithing.NAME_GONE])  # 只定一次
+    assert cfg.named_chronicle.format(who="甲", name="斬月", what="劍") in [r.text for r in owner.state.world.chronicle]
+    assert cfg.named_rumor.format(who="甲", name="斬月") in [r.text for r in owner.state.world.rumors]
+
+
+@pytest.mark.parametrize("slot, pick, problem", [
+    ("weapon", lambda c: "斬月刀", weapons.KIND_CLASH),  # 劍的原品不能有別種兵器的字
+    ("weapon", lambda c: weapons.shop_name("劍", "剛"), weapons.SHOP_CLASH),
+    ("weapon", lambda c: weapons.table_name(c, "劍", "gang_1", "kuai_1"), forge_secrets.TABLE_CLASH),  # 不然「仿・X」跟一般組合的 X 並存
+    ("weapon", lambda c: "穿霞劍", naming.FORGE_CLASH),  # 別條隱藏配方的名字（name_problem）
+    ("armor", lambda c: "斬月劍", armor.WORD_CLASH),
+    ("armor", lambda c: armor.SHOP_NAMES["剛"], armor.SHOP_CLASH),
+    ("armor", lambda c: armor.table_name(c, "gang_1", "kuai_1", "陽"), forge_secrets.TABLE_CLASH),
+])
+def test_a_divine_name_is_checked_like_mastery_plus_kind_shop_and_table(divine_content, world, slot, pick, problem):
+    game = _forger(divine_content, world)
+    kind = "劍" if slot == "weapon" else smithing.ARMOR_KIND
+    original, _ = smithing.forge(game.state, divine_content, world, kind, "gang_3", "gang_3")
+    ok, msgs = smithing.name_divine(game.state, divine_content, world, original.id, pick(divine_content))
+    assert not ok and msgs == [smithing.NAME_BAD.format(problem=problem)] and original.name == DIVINE_UNNAMED
+    assert world.lookup_gear_find(forge_secrets.key_for(original.secret)).divine_name is None  # 什麼都沒動，定名的權利還在
+
+
+def test_keep_takes_the_book_name_and_copies_follow_on_load(divine_content, world):
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    other = _forger(divine_content, world, name="乙")
+    early, _ = smithing.forge(other.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert early.name == COPY_NAME.format(name=DIVINE_UNNAMED)
+    ok, _ = smithing.name_divine(owner.state, divine_content, world, original.id, "", keep=True)
+    assert ok and original.name == "墜星劍"  # 沿用譜名（5.2）：不過 name_problem（譜名撞到自己會回 FORGE_CLASH）
+    later, _ = smithing.forge(other.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert later.name == "仿・墜星劍"
+    other._drop_stale_references()
+    assert early.name == "仿・墜星劍"  # 定名之前打的仿品：下一次讀檔照全服那一列重寫（5.3）
+
+
+def test_two_originals_cannot_share_a_name(divine_content, world):
+    a = _forger(divine_content, world, name="甲")
+    sword, _ = smithing.forge(a.state, divine_content, world, "劍", "gang_3", "gang_3")
+    b = _forger(divine_content, world, name="乙")
+    coat, _ = smithing.forge(b.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3",
+                             rng=smithing.own_rng(b.state, "鎧|gang_3+gang_3"))
+    assert smithing.name_divine(a.state, divine_content, world, sword.id, "斬月")[0]
+    assert smithing.name_divine(b.state, divine_content, world, coat.id, "斬月") == (False, [smithing.NAME_TAKEN.format(name="斬月")])
+    assert coat.name == DIVINE_UNNAMED  # 原子：全服不重名，後到的換一個
+
+
+def test_naming_goes_through_the_game_and_only_a_true_keep_counts(divine_content, world):
+    import server
+    game = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    msgs = server.MENXIA_ACTIONS["name_divine"](game, {"weapon": original.id, "keep": "true"})  # 只認布林 true（同 use_legend）
+    assert original.name == DIVINE_UNNAMED and msgs[0].startswith("這個名字不行")
+    msgs = server.MENXIA_ACTIONS["name_divine"](game, {"weapon": original.id, "keep": True})
+    assert original.name == "墜星劍" and msgs[0] == smithing.DIVINE_NAMED.format(name="墜星劍")
+    assert game.state.journal[0].tag == msgs[0]  # 修練紀錄（同絕學定名 _menxia_entry）

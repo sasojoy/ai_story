@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 
 from . import armor, equipment, secret_recipes, weapons
-from .models import Content, ForgeSecret, ForgeSide, Material
+from .models import WEAPON_KINDS, Content, ForgeSecret, ForgeSide, Material
 from .state import COPY_NAME, Equipment, GameState, GearFind, Manual, PlayerState
 from .world_state import WorldStateStore
 
@@ -147,6 +147,57 @@ def refresh_names(p: PlayerState, content: Content, world: WorldStateStore | Non
         recipe = content.forge_secrets.get(item.secret)
         if recipe is not None:
             item.name = recipe.name
+
+
+# ── 神器原品定名的檢查（5.2；訊息、江湖史、傳聞在 smithing.name_divine）──────────
+
+TABLE_CLASH = "跟鐵匠鋪尋常打得出的名字同名"  # 待 joy 潤：神器定的名字跟一般組合字表組得出的名字撞了
+
+
+def what_text(slot: str, kind: str) -> str:
+    """寫給人看的「哪一種」：兵器寫兵器字（weapons.NOUNS：劍、拳套），防具寫「防具」。"""
+    return weapons.NOUNS.get(kind, kind) if slot == "weapon" else "防具"
+
+
+def table_names(content: Content) -> set[str]:
+    """一般組合的字表組得出來的每一個名字（5.2）：兵器 字首×兵器中間字×兵器字、防具 字首×防具中間字×甲鎧袍衫。用整張字表（不只前
+    「素材數」個字），joy 之後在素材表後面加素材也擋得住。約三千個字串，只在定名時現算，不快取。"""
+    names = content.craft_names
+    made = {p + m + n for p in names.prefixes for m in names.weapon for n in weapons.NOUNS.values()}
+    return made | {p + m + n for p in names.prefixes for m in names.armor for n in armor.FORGE_WORDS}
+
+
+def divine_name_problem(content: Content, slot: str, kind: str, name: str) -> str | None:
+    """神器原品定的名字還要過的（5.2；name_problem 另外過）：兵器不能有**別種**兵器的字（不要求帶自己這一種的字，例「斬月」）、
+    不能跟架上的現成兵器同名；防具不能有兵器的字、不能跟架上的防具同名；都不能跟一般組合的字表組得出的名字同名
+    （不然「仿・X」跟一般組合的「X」並存）。None＝可以。"""
+    if slot == "weapon":
+        if any(word in name for other, words in weapons.WEAPON_WORDS.items() if other != kind for word in words):
+            return weapons.KIND_CLASH
+        if name in {weapons.shop_name(k, a) for k in WEAPON_KINDS for a in weapons.ATTR_WORDS}:
+            return weapons.SHOP_CLASH
+    else:
+        if any(word in name for words in weapons.WEAPON_WORDS.values() for word in words):
+            return armor.WORD_CLASH
+        if name in armor.SHOP_NAMES.values():
+            return armor.SHOP_CLASH
+    if name in table_names(content):
+        return TABLE_CLASH
+    return None
+
+
+def unnamed_originals(state: GameState, world: WorldStateStore) -> dict[str, str]:
+    """身上、裝備庫、寄放的神器原品裡還等著你定名的（5.2）：裝備 id → 譜名（「沿用譜名」那一顆寫的字，登記當下記的 GearFind.title）。
+    只查有 original 的那幾件（一個人頂多幾件）；全服那一列的主人是你、還沒定名才算。一個人可以同時有好幾把（5.2：不能像絕學那樣擋）。"""
+    p = state.player
+    out: dict[str, str] = {}
+    for item in owned_gear(p):
+        if not item.original or item.secret is None:
+            continue
+        find = world.lookup_gear_find(key_for(item.secret))
+        if find is not None and find.divine and find.owner == p.name and find.divine_name is None:
+            out[item.id] = find.title
+    return out
 
 
 # ── 線索與鑄譜（第六節）──────────────────────────────────

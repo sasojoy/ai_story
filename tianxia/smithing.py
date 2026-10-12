@@ -17,11 +17,11 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import armor, equipment, forge_secrets, fusion, team, weapons
+from . import armor, equipment, forge_secrets, fusion, naming, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
-from .rules import add_rumor
+from .rules import add_chronicle, add_rumor
 from .state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, SmithDraft, Weapon
 from .world_state import WorldStateStore
 
@@ -231,6 +231,46 @@ def forge(
             add_rumor(state, text, None, content=content, named=True)
         fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
     return item, msgs
+
+
+# ---- 神器原品定名（打造隱藏配方設計 5.2；同 cultivation.name_mastered）----
+
+DIVINE_NAMED = "從今以後，江湖上這把神器就叫【{name}】。"  # 待 joy 潤（同絕學定名那一句）
+NAME_GONE = "（沒有等著你定名的神器。）"  # 待 joy 潤
+NAME_BAD = "這個名字不行：{problem}。"  # 待 joy 潤（同 cultivation.name_mastered）
+NAME_TAKEN = "【{name}】已經有人用了，換一個吧。"  # 待 joy 潤（同 cultivation.name_mastered）
+
+
+def name_divine(
+    state: GameState, content: Content, world: WorldStateStore, item_id: str, name: str, keep: bool = False,
+) -> tuple[bool, list[str]]:
+    """替手上的神器原品定名：回（定成了沒, 訊息）。只有原品主人、這一把還沒定名（forge_secrets.unnamed_originals）才行。
+    自己取的名字過 naming.name_problem（帶 world.is_character_name，同絕學定名）與 forge_secrets.divine_name_problem；
+    keep＝「沿用譜名」：直接用登記當下記的譜名，不過命名過濾（譜名由內容驗過；name_problem 會回 FORGE_CLASH 擋它自己）。
+    全服不重名由 world.name_divine 原子判斷。定成了：手上那把當下改名（別人的仿品下次讀檔跟著改）、江湖史一行（寫名號）、
+    江湖上傳一句（具名）；神器譜照全服那一列。不合格、被搶先、不是你的都什麼都不動，定名的權利還在。"""
+    pending = forge_secrets.unnamed_originals(state, world)
+    if item_id not in pending:
+        return False, [NAME_GONE]
+    item = next(i for i in forge_secrets.owned_gear(state.player) if i.id == item_id)
+    if keep:
+        name = pending[item_id]
+    else:
+        name = naming.clean_name(name)
+        problem = naming.name_problem(name, content, world.is_character_name) or forge_secrets.divine_name_problem(
+            content, item.slot, item.kind, name)
+        if problem is not None:
+            return False, [NAME_BAD.format(problem=problem)]
+    reason = world.name_divine(forge_secrets.key_for(item.secret), state.player.name, name)
+    if reason == "taken":
+        return False, [NAME_TAKEN.format(name=name)]
+    if reason is not None:
+        return False, [NAME_GONE]
+    item.name = name
+    rule, who = content.config.forge_secrets, state.player.name
+    add_chronicle(state, rule.named_chronicle.format(who=who, name=name, what=forge_secrets.what_text(item.slot, item.kind)))
+    add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
+    return True, [DIVINE_NAMED.format(name=name)]
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----

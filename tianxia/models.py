@@ -1680,6 +1680,8 @@ class ForgeSecretRules(_Strict):
     copy_line: str = "這門鑄法的原品在{who}手上，你打出的是仿品。"
     copy_mine_line: str = "原品已經在你手上，這一爐打出的是仿品。"
     divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
+    named_rumor: str = "{who}替手上的神器定了名，叫【{name}】。"  # 定名時的傳聞（7.2：帶名字的那一句）
+    named_chronicle: str = "{who}打出一把神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」）
 
 
 class FirstEcho(_Strict):

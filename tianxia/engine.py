@@ -5259,6 +5259,18 @@ class Game:
         return msgs
 
     @_not_while_preparing
+    def name_divine(self, item_id: str, name: str = "", keep: bool = False) -> list[str]:
+        """神器原品定名（smithing.name_divine；修練頁裝備庫那一列的表單，或「沿用譜名」那一顆）：定成了才寫江湖紀錄，
+        江湖史與傳聞寫進共用賽季所以要存回（不合格、被用掉、不是你的都只回一句話）。"""
+        xinde = self._xinde()
+        ok, msgs = smithing.name_divine(self.state, self.content, self.world, item_id, name, keep=keep)
+        msgs = self._log(msgs)
+        if ok:
+            self._menxia_entry(msgs[0], xinde)
+            self._save_season()
+        return msgs
+
+    @_not_while_preparing
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
         xinde = self._xinde()
