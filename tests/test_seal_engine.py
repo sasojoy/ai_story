@@ -436,3 +436,79 @@ def test_a_retired_bot_holding_a_shard_may_come_back_regardless_of_gaps(sealed, 
     assert woken.player.bot.season_number == world.seal_state().season and report.added == 1
     runner._wake_seal_bots(110.0, report)
     assert report.added == 1  # 這一季擲過了
+
+
+# ── Task 11：管理者、假人 ──
+
+def _admin(content, world):
+    content.config.admins = ["管理者"]
+    return _player(content, world, "管理者")
+
+
+def test_assigning_a_shard_only_touches_the_registry(sealed, world):
+    """第十二節：指定持有者只改登記，不讀、不建他的存檔（_admin_target(sync=False) 也不用）；一人一片照擋；公告不寫管理者。"""
+    _setup(sealed, world)
+    admin = _admin(sealed, world)
+    admin.admin_seal_assign("yunzhuan", "不在線的人", "held")
+    view = world.seal_state()
+    shard = view.registry.shards["yunzhuan"]
+    assert (shard.state, shard.holder, shard.since_season) == ("held", "不在線的人", view.season)  # 管理者指定的也有新主保護
+    assert CharacterStore(world.db).load("不在線的人") is None
+    assert "管理者" not in " ".join(r.text for r in world.get_season().rumors)
+    admin.admin_seal_assign("xuanniu", "懷璽", "held")  # 懷璽已經有螭首：一人一片
+    assert world.seal_state().registry.shards["xuanniu"].holder is None
+    admin.admin_seal_assign("yunzhuan", "", "sunk")
+    assert world.seal_state().registry.shards["yunzhuan"].state == "sunk"
+
+
+def test_a_forced_duel_hangs_on_the_last_showdown_unless_the_qa_tools_are_on(sealed, world):
+    """第十二節：正式伺服器的強制開單挑只能掛在最近一場剛收場、還沒開過單挑的時刻表決戰上（公告照那一場寫）；qa_tools 開著才能不必有決戰。"""
+    _setup(sealed, world)
+    admin = _admin(sealed, world)
+    _player(sealed, world, "挑戰者", "huang")
+    admin.admin_seal_duel("chishou", "挑戰者", 1.0, 0.0)
+    assert world.seal_state().duels == []
+    world.mutate(lambda st: (setattr(st.seal, "last_showdown", 9), setattr(st.seal, "last_showdown_where", "長社火攻")))
+    admin.admin_seal_duel("chishou", "挑戰者", 1.0, 0.0)
+    duel = world.seal_state().duels[0]
+    assert (duel.id, duel.where, duel.cap, duel.phase) == ("9:chishou", "長社火攻", 0.25, "muster")
+    world.mutate(lambda st: setattr(st, "seal_duels", []))
+    admin.admin_seal_duel("chishou", "挑戰者", 1.0, 0.0)
+    assert world.seal_state().duels == []  # 那一場已經掛過單挑
+    sealed.config.seal.qa_tools = True
+    admin.admin_seal_duel("chishou", "挑戰者", 0.5, 0.0)
+    duel = world.seal_state().duels[0]
+    assert duel.id.startswith("qa") and duel.cap == 0.125 and duel.where == ""
+
+
+def test_fix_and_cancel_a_running_duel(sealed, world):
+    _open_duel(sealed, world)
+    admin = _admin(sealed, world)
+    admin.admin_seal_fix(True)
+    assert world.seal_state().duels[0].fixed is True
+    admin.admin_seal_cancel()
+    view = world.seal_state()
+    assert view.duels == [] and view.registry.history[-1].kind == "unsettled" and view.registry.shards["chishou"].holder == "懷璽"
+
+
+def test_the_sink_check_only_reports(sealed, world):
+    _setup(sealed, world, holder="久未上線")
+    world.mutate(lambda st: (setattr(st.seal, "opened_real", 0.0), setattr(st.seal.shards["chishou"], "absent", 2)))
+    lines = _admin(sealed, world).admin_seal_sink_check(100 * 86400.0)
+    assert any("螭首" in line for line in lines) and world.seal_state().registry.shards["chishou"].state == "held"
+
+
+def test_server_bots_never_press_a_seal_move_and_are_never_present(sealed, world):
+    """14.1：假人在單挑裡一律被代打——bot_policy 不按 seal:，假人程式的 Game 不記 last_seen。"""
+    from tianxia import bot_policy
+    from tianxia.bot_runner import BotRunner
+    from tianxia.engine import Option
+
+    _open_duel(sealed, world)
+    name = world.seal_state().duels[0].challenger.name
+    state = _player(sealed, world, name).state
+    bot = BotRunner(sealed, world, CharacterStore(world.db), random.Random(0), clock=lambda: 20.0)._bot_game(state)
+    assert bot_policy.score(bot, Option(id="seal:強攻", label="強攻（剋奇襲）"), None) is None
+    with at(bot, 20.0):
+        bot.options()
+    assert world.seal_state().duels[0].challenger.last_seen is None

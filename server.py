@@ -1086,6 +1086,7 @@ def admin_choices(game: Game) -> dict:
         ],
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
+        "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
@@ -1421,6 +1422,14 @@ ADMIN_ACTIONS = {
     "summon": lambda g, b: g.admin_summon(str(b.get("name", ""))),
     "give_opportunity": lambda g, b: g.admin_give_opportunity(str(b.get("name", "")), str(b.get("id", ""))),
     "give_fragment": lambda g, b: g.admin_give_fragment(str(b.get("name", "")), str(b.get("id", ""))),
+    # 玉璽碎片（玉璽碎片設計第十二節）：效果跟自然發生一樣，公告不寫管理者
+    "seal_emerge": lambda g, b: g.admin_seal_emerge(str(b.get("id", ""))),
+    "seal_stir": lambda g, b: g.admin_seal_stir(str(b.get("id", ""))),
+    "seal_assign": lambda g, b: g.admin_seal_assign(str(b.get("id", "")), str(b.get("name", "")), str(b.get("state", "held"))),
+    "seal_duel": lambda g, b: g.admin_seal_duel(str(b.get("id", "")), str(b.get("name", "")), _float(b.get("factor"), 1.0), time.time()),
+    "seal_fix": lambda g, b: g.admin_seal_fix(b.get("take") is True),
+    "seal_cancel": lambda g, b: g.admin_seal_cancel(),
+    "seal_sink_check": lambda g, b: g.admin_seal_sink_check(time.time()),
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment"})  # 動到別人的存檔：做完也叫他的分頁刷新
 

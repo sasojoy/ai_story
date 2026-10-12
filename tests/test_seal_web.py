@@ -94,3 +94,46 @@ def test_the_holder_card_is_drawn(m):
                            "dates": ["第 6 週・週四 20:00", "第 11 週・週四 20:00"]}
     page = run(m, "return H.pageJianghu();")
     assert "『雲篆』" in page and "練成的心得 ×0.9" in page and "新得之季" in page and "第 6 週・週四 20:00" in page
+
+
+# ── Task 11：管理者「玉璽」一組 ──
+
+def _seal_admin(hung=False, duel=False, qa=False):
+    """admin_choices 的那一份（只放設定頁畫得到的幾樣；seal 是 Game.admin_seal_choices 的形狀）。"""
+    shards = [{"id": "chishou", "name": "螭首", "state": "held", "holder": "懷璽"}] + [
+        {"id": f"s{i}", "name": f"碎片{i}", "state": "hidden", "holder": ""} for i in range(6)
+    ]
+    return {"battles": [], "events": [], "trends": [], "season_one": False, "showdowns": [], "timetable": [], "results": [],
+            "locks": [], "seal": {"shards": shards, "duel": duel, "hung": hung, "where": "長社火攻" if hung else "", "qa": qa}}
+
+
+def _sheet(m, admin):
+    return webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": "return H.sheetHtml();", "S": {"admin": admin},
+                                   "menxia": None, "stored": {}, "responses": {}})
+
+
+def test_the_admin_sheet_draws_the_seal_group(m):
+    """第十二節：碎片開著時管理者區多一組「玉璽」：七片與各自的狀態、強制現世、強制璽動、指定持有者、強制開單挑、定結果、取消單挑、隱沒判斷。"""
+    sheet = _sheet(m, _seal_admin())
+    assert "玉璽" in sheet and "螭首（懷璽懷中）" in sheet and sheet.count("（未現世）") == 6
+    for op in ("seal_emerge", "seal_stir", "seal_assign", "seal_cancel", "seal_sink_check"):
+        assert f'data-op="{op}"' in sheet, op
+    assert 'data-op="seal_duel" disabled' in sheet and "沒有剛收場的決戰可掛" in sheet  # 沒掛得上、也不是 QA
+    assert 'data-op="seal_fix" data-take="1" disabled' in sheet  # 沒有單挑在打
+    live = _sheet(m, _seal_admin(hung=True, duel=True))
+    assert 'data-op="seal_duel" disabled' not in live and 'data-op="seal_fix" data-take="1" disabled' not in live
+    assert "長社火攻" in live
+    plain = _sheet(m, {**_seal_admin(), "seal": None})
+    assert "seal_emerge" not in plain  # 碎片關著（admin_seal_choices 是 None）：不畫
+
+
+def test_seal_admin_buttons_ask_then_post_to_their_routes(m):
+    from test_admin_triggers_web import CLICK
+
+    import json
+
+    script = CLICK.replace("input.clicks", json.dumps([{"act": "admin", "op": "seal_cancel"}, {"act": "admin", "op": "seal_emerge"}]))
+    out = webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": script, "S": {"admin": _seal_admin(duel=True), "sheet": True},
+                                  "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
+    assert "取消" in out["asked"][0] and "現世" in out["asked"][1]
+    assert [c[0] for c in out["calls"] if c[0].startswith("/api/do/")] == ["/api/do/seal_cancel", "/api/do/seal_emerge"]

@@ -485,6 +485,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
         return _battle_score(game, arg)
+    if kind == "seal":
+        return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
     if kind == "duel":
         return None  # 頭目戰在 take_turn 前面就出招了（duel_move）
     if kind == "choice":

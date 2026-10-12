@@ -7359,6 +7359,150 @@ class Game:
     # ── 管理者：每週的事（管理者觸發鈕第 1 組，企劃者 2026-10-07）────────────
     # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
 
+    # ── 管理者：玉璽碎片（玉璽碎片設計第十二節；公告不寫管理者，效果跟自然發生一樣）──────────
+
+    def admin_seal_emerge(self, shard_id: str = "") -> list[str]:
+        """下一場標 emerge 的時刻表決戰必定現世（略過 35%）；可以指定哪一片（還沒現世的），空的照亂數挑。給誰照 3.3 從勝方抽。"""
+        refusal = self._admin_refusal("強制現世")
+        if refusal:
+            return self._log(refusal)
+        if shard_id and shard_id not in self.content.seal:
+            return self._log(["（沒有這一片。）"])
+        self.world.mutate(lambda st: setattr(seal.filled(st.seal, self.content), "force_emerge", shard_id or "*"))
+        self._write("強制現世", ["下一場標了現世的決戰，碎片必定現世。"], tag="管理者")
+        return self._log(["（下一場標了現世的決戰，碎片必定現世。）"])
+
+    def admin_seal_stir(self, shard_id: str) -> list[str]:
+        """下一場標了 seal 的決戰必定牽動這一片（略過 7%、新主保護與次數上限；那一片要有主）。"""
+        refusal = self._admin_refusal("強制璽動")
+        if refusal:
+            return self._log(refusal)
+        shard = self.world.seal_state().registry.shards.get(shard_id)
+        if shard is None or shard.state != "held":
+            return self._log(["（這一片現在沒有主人，牽動不了。）"])
+        self.world.mutate(lambda st: setattr(st.seal, "force_stir", shard_id))
+        self._write("強制璽動", [f"下一場標了璽動的決戰，必定牽動『{self.content.seal[shard_id].name}』。"], tag="管理者")
+        return self._log(["（下一場標了璽動的決戰，必定牽動這一片。）"])
+
+    def admin_seal_assign(self, shard_id: str, name: str, state: str = "held") -> list[str]:
+        """把一片直接記到某個名號名下（held，一人一片照擋、這一季有新主保護），或收回成未現世（hidden）、改成隱沒（sunk）。
+        只改登記，不讀、不存他的存檔（「這一季上線過」看 seen_real，管理者工具碰不到它）；抄本與紀錄等他同步時補（登記記一筆 assign）。"""
+        refusal = self._admin_refusal("指定持有者")
+        if refusal:
+            return self._log(refusal)
+        if shard_id not in self.content.seal or state not in ("held", "hidden", "sunk") or (state == "held" and not name.strip()):
+            return self._log(["（看不懂要怎麼改。）"])
+        out: list[str] = []
+
+        def _apply(shared) -> None:
+            reg = seal.filled(shared.seal, self.content)
+            shard = reg.shards[shard_id]
+            if state == "held":
+                other = seal.shard_of(reg, name)
+                if other is not None and other.id != shard_id:
+                    out.append(f"（{name}手上已經有『{self.content.seal[other.id].name}』了：一人一片。）")
+                    return
+            before = shard.holder
+            shard.state, shard.holder = state, (name.strip() if state == "held" else None)
+            shard.since_season = shared.season_number if state == "held" else shard.since_season
+            if state == "held":
+                shard.emerged_round = shard.emerged_round or reg.round
+            seal.log(reg, shared.season_number, "assign", shard=shard_id, holder=shard.holder, other=before)
+            out.append(f"（『{self.content.seal[shard_id].name}』改成{seal.BOOK_STATES[state].format(holder=shard.holder or '')}。）")
+
+        self.world.mutate(_apply)
+        self._write("指定持有者", out, tag="管理者")
+        return self._log(out)
+
+    def admin_seal_duel(self, shard_id: str, challenger: str, factor: float, now: float) -> list[str]:
+        """立刻對這一片開一場奪璽單挑，指定挑戰者，局勢係數可選（預設 1.0，上限照舊 25%）。正式伺服器只能掛在最近一場剛收場、
+        還沒開過單挑的時刻表決戰上（SealRegistry.last_showdown，公告照那一場寫）；Config.seal.qa_tools 開著時不必有決戰。
+        雙方的快照照 5.3「沒參戰」那一列（_seal_side_of）；挑戰者也要過一人一片。"""
+        refusal = self._admin_refusal("強制開單挑")
+        if refusal:
+            return self._log(refusal)
+        c, cfg = self.content, self.content.config.seal
+        view = self.world.seal_state()
+        reg = seal.filled(view.registry, c)
+        shard = reg.shards.get(shard_id)
+        if shard is None or shard.state != "held" or not challenger.strip() or seal.key(challenger) in seal.holders(reg):
+            return self._log(["（這一片沒有主人，或挑戰者手上已經有碎片。）"])
+        hung = reg.last_showdown is not None and not reg.last_showdown_dueled
+        if not hung and not cfg.qa_tools:
+            return self._log(["（正式伺服器的奪璽單挑只能掛在剛收場的時刻表決戰上；那一場不在、或已經開過單挑。）"])
+        if view.duels:
+            return self._log(["（已經有一場奪璽單挑在打。）"])
+        self.now = now
+        cap = min(cfg.cap, cfg.cap * max(0.0, min(1.0, factor)))
+        duel_id = f"{reg.last_showdown}:{shard_id}" if hung else f"qa{reg.seq + 1}:{shard_id}"
+        duel = seal_duel.open_duel(
+            duel_id, shard_id, reg.last_showdown if hung else None, None, reg.last_showdown_where if hung else "", "旁觀", cap,
+            self._seal_side_of(challenger), self._seal_side_of(shard.holder), now, cfg,
+        )
+        line = (seal_duel.CALL if hung else seal_duel.CALL_QA).format(
+            challenger=duel.challenger.name, holder=duel.holder.name, shard=c.seal[shard_id].name)
+
+        def _apply(shared) -> None:
+            shared.seal_duels.append(duel)
+            seal.filled(shared.seal, c).last_showdown_dueled = True
+            seal.rumor(shared.season, line)
+
+        self.world.mutate(_apply)
+        self._write("強制開單挑", [line], tag="管理者")
+        return self._log([line])
+
+    def admin_seal_fix(self, take: bool) -> list[str]:
+        """正在打的那一場，指定再擲中或不中（QA 用，同時刻表的「定結果」）；公告照常。"""
+        refusal = self._admin_refusal("定單挑的結果")
+        if refusal:
+            return self._log(refusal)
+        if not self.world.seal_state().duels:
+            return self._log(["（沒有奪璽單挑在打。）"])
+        self.world.mutate(lambda st: setattr(st.seal_duels[0], "fixed", bool(take)))
+        return self._log([f"（這一場收場時{'易主' if take else '懷璽不失'}。）"])
+
+    def admin_seal_cancel(self) -> list[str]:
+        """取消正在打（或下戰書中）的那一場：記成未分勝負，碎片留在原主；只寫天下大事。"""
+        refusal = self._admin_refusal("取消單挑")
+        if refusal:
+            return self._log(refusal)
+        if not self.world.seal_state().duels:
+            return self._log(["（沒有奪璽單挑在打。）"])
+        out: list[str] = []
+        self.world.mutate(lambda st: out.append(seal_duel.finish(st, st.seal_duels[0], self.content, None, self.now).text))
+        self._deliver_seal_results()
+        self._write("取消單挑", out, tag="管理者")
+        return self._log(out)
+
+    def admin_seal_sink_check(self, now: float) -> list[str]:
+        """照 7.6 的條件現在判一次（下一次換季會沉哪幾片），只印結果、不改。"""
+        refusal = self._admin_refusal("隱沒判斷")
+        if refusal:
+            return self._log(refusal)
+        reg = seal.filled(self.world.seal_state().registry.model_copy(deep=True), self.content)
+        store = CharacterStore(self.world.db) if hasattr(self.world, "db") else None
+        seen = {}
+        for s in reg.shards.values():
+            if s.state == "held" and s.holder:
+                state = store.load(s.holder) if store is not None else None
+                seen[s.holder] = None if state is None else (state.player.seen_real if state.player.seen_real is not None else state.last_real)
+        sunk = seal.sink(reg, self.world.get_season_number(), seen, now, self.content.config.seal)
+        lines = [f"（下一次換季會隱沒：{seal.SINK.format(holder=name, shard=self.content.seal[s.id].name)}）" for s, name in sunk]
+        return self._log(lines or ["（下一次換季沒有碎片會隱沒。）"])
+
+    def admin_seal_choices(self) -> dict | None:
+        """設定頁「玉璽」一組要的：七片與狀態、有沒有單挑在打、剛收場的決戰還能不能掛單挑、qa_tools。碎片關著是 None。"""
+        c = self.content
+        if not seal.on(c):
+            return None
+        view = self.world.seal_state()
+        reg = seal.filled(view.registry, c)
+        return {
+            "shards": [{"id": s, "name": c.seal[s].name, "state": reg.shards[s].state, "holder": reg.shards[s].holder or ""} for s in c.seal],
+            "duel": bool(view.duels), "hung": reg.last_showdown is not None and not reg.last_showdown_dueled,
+            "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
+        }
+
     def admin_issue_orders(self) -> list[str]:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
         各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id

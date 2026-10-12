@@ -2950,6 +2950,7 @@
               ${a.results.length ? `<div class="row ad-row"><span class="ad-tag">結果</span><select class="input" id="ad-result" aria-label="定結果">${a.results.map((x) => `<option value="${esc(x.value)}">${esc(x.label)}</option>`).join("")}</select><button class="btn small" data-act="admin" data-op="resolve_event">定結果</button></div>` : ""}
               ${a.locks.length ? `<div class="row ad-row"><span class="ad-tag">鎖定</span><select class="input" id="ad-lock" aria-label="清鎖定">${opts(a.locks)}</select><button class="btn small" data-act="admin" data-op="clear_lock">清鎖定</button></div>` : ""}
               <div class="row"><button class="btn warn" data-act="admin" data-op="cancel_battle">⚠ 取消決戰</button></div>
+              ${a.seal ? sealAdminHtml(a.seal) : ""}
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
           </section>` : ""}
@@ -2958,6 +2959,22 @@
 
   // 管理者區「玩家個人劇情」查到的那個人（/api/admin/player，Game.admin_player_choices）：他是誰、召見（發不了的灰掉、寫為什麼）、
   // 能給他的機緣與伏筆片段（沒有就寫一句）。按了照舊先問一次，送的是查到的那個名號（不是欄位裡後來改過的字）
+  // 管理者「玉璽」一組（玉璽碎片設計第十二節，admin_choices.seal；碎片關著是 null，不畫）：七片與狀態、強制現世與璽動（下一場）、
+  // 指定持有者、強制開單挑（正式伺服器只能掛在剛收場的時刻表決戰上，QA 開關開著才不必）、定結果、取消、隱沒判斷。按了照舊先問一次。字待 joy 潤
+  const SEAL_STATES = { held: "懷中", hidden: "未現世", sunk: "不知所蹤" };
+  function sealAdminHtml(s) {
+    const label = (x) => (x.state === "held" ? `${x.name}（${x.holder}懷中）` : `${x.name}（${SEAL_STATES[x.state] || x.state}）`);
+    const canDuel = s.hung || s.qa;
+    const off = s.duel ? "" : " disabled";
+    return `<p class="muted">玉璽（效果跟自然發生一樣，公告不寫管理者）</p>
+      <div class="row ad-row"><span class="ad-tag">碎片</span><select class="input" id="ad-seal" aria-label="碎片">${s.shards.map((x) => `<option value="${esc(x.id)}">${esc(label(x))}</option>`).join("")}</select></div>
+      <div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_emerge">強制現世（下一場）</button><button class="btn small" data-act="admin" data-op="seal_stir">強制璽動（下一場）</button></div>
+      <div class="row ad-row"><span class="ad-tag">名號</span><input class="input" id="ad-seal-name" placeholder="名號" aria-label="持有者名號"><select class="input" id="ad-seal-state" aria-label="狀態"><option value="held">有主</option><option value="hidden">未現世</option><option value="sunk">隱沒</option></select><button class="btn small" data-act="admin" data-op="seal_assign">指定持有者</button></div>
+      <div class="row ad-row"><span class="ad-tag">單挑</span><input class="input" id="ad-seal-factor" type="number" value="1" step="0.1" min="0" max="1" aria-label="局勢係數" style="max-width:76px"><button class="btn small" data-act="admin" data-op="seal_duel"${canDuel ? "" : " disabled"}>強制開單挑</button>${
+        !canDuel ? '<span class="muted ad-note">沒有剛收場的決戰可掛</span>' : s.hung ? `<span class="muted ad-note">掛在「${esc(s.where)}」</span>` : ""}</div>
+      <div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_fix" data-take="1"${off}>定結果：易主</button><button class="btn small" data-act="admin" data-op="seal_fix" data-take="0"${off}>定結果：不易主</button><button class="btn warn small" data-act="admin" data-op="seal_cancel"${off}>⚠ 取消單挑</button><button class="btn small" data-act="admin" data-op="seal_sink_check">隱沒判斷</button></div>`;
+  }
+
   function adminPlayerHtml(p) {
     const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
     return `
@@ -3044,6 +3061,14 @@
       give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了。${
         body.note ? `${body.note}。` : ""}確定？`, "確定給他"],
       give_fragment: [`給 ${body.name} 伏筆片段「${picked("ad-frag")}」：跟自然聽到一樣，記進他的個人線索，確定？`, "確定給他"],
+      // 玉璽碎片（玉璽碎片設計第十二節；照 Game.admin_seal_* 實際做的事寫，待 joy 潤）
+      seal_emerge: ["下一場標了現世的決戰，碎片必定現世（選的那一片還沒現世就是它，否則照亂數挑；得主照常從勝方抽），確定？", "確定"],
+      seal_stir: [`下一場標了璽動的決戰，必定牽動「${picked("ad-seal")}」（略過機率、新主保護與次數上限；那一片要有主），確定？`, "確定"],
+      seal_assign: [`把「${picked("ad-seal")}」改成${body.state === "held" ? `${body.name}懷中（這一季有新主保護）` : body.state === "sunk" ? "隱沒" : "未現世"}：只改登記，他回來同步時補給他，確定？`, "確定指定"],
+      seal_duel: [`立刻對「${picked("ad-seal")}」開一場奪璽單挑，挑戰者 ${body.name}、局勢係數 ${body.factor}（上限照舊）：三分鐘後開打，確定？`, "確定開單挑"],
+      seal_fix: [`正在打的奪璽單挑收場時${body.take ? "易主" : "懷璽不失"}（公告照常），確定？`, "確定"],
+      seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
+      seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
     }[op] || ["確定要這麼做？", "確定"];
   }
 
@@ -3782,6 +3807,14 @@
           if (op === "start_showdown") {
             body.id = el.dataset.id;
             body.title = ((S.admin && S.admin.showdowns) || []).find((s) => s.id === body.id)?.label || body.id;
+          }
+          if (op.startsWith("seal_")) { // 玉璽一組：碎片、名號、狀態、局勢係數照欄位讀（假瀏覽器沒有這些欄位時是空的）
+            const val = (id) => (document.getElementById(id) || {}).value || "";
+            body.id = val("ad-seal");
+            body.name = val("ad-seal-name").trim();
+            body.state = val("ad-seal-state") || "held";
+            body.factor = Number(val("ad-seal-factor") || 1);
+            body.take = el.dataset.take === "1";
           }
           if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
             body.name = (S.adPlayer && S.adPlayer.name) || "";
