@@ -126,7 +126,7 @@
 
 ## 指令
 
-- 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：加 `--share`（cloudflared 開 trycloudflare 臨時公開網址，每次重開都換）；要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
+- 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：**固定網域 https://tianxiadashi.com**（2026-10-13 起，Cloudflare 具名 Tunnel `tianxia`，隧道是獨立行程、伺服器重開網址不變；做法與驗法在 `docs/superpowers/feedback/beta-主機端操作.md` 的「固定網域」，啟動時一併設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`）——**所以不要再加 `--share`**，那是 trycloudflare 的臨時網址、每次重開都換。要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
 - 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
 - 測試（2026-10-07）：開發用的依賴在 `requirements-dev.txt`（`-r requirements.txt` 加 `pytest-xdist`；伺服器不用裝），裝好之後加 `-n auto`（或 `-n 8`）平行跑；這台 16 核整套約 1 分鐘，單一行程約 3 分 40 秒。venv 路徑有中文時 worker 要 `PYTHONIOENCODING=utf-8`，`tests/conftest.py` 在開 worker 前已經補上。網頁測試預設每個行程一個常駐 node，`TIANXIA_WEB_HARNESS=process` 改回每次各開一個。三種跑法：
   - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
@@ -158,9 +158,9 @@
 ### 開發伺服器的啟動方式（這台機器上的慣例）
 
 完整步驟（含給網址、換季、備份、具名 Tunnel）見 `docs/superpowers/feedback/beta-主機端操作.md`。要點：
-- 不要用 Bash 工具背景執行 `server.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process` 完全分離啟動，輸出導到 `server_out.log`／`server_err.log`，**記下回傳的 PID**，再輪詢 log 等 `公開網址：https://…trycloudflare.com`（約 7 秒；讀 log 要 `Get-Content server_out.log -Encoding UTF8`）。
-- **引數一定要加 `-u`**（`python.exe -u server.py --share`）：stdout 導到檔案時 Python 會緩衝，沒有 `-u` 的話服務其實已經在聽 port、log 卻一直是空的。
-- `--share` 要先 `winget install Cloudflare.cloudflared`（裝在 `C:\Program Files (x86)\cloudflared`）；裝之前就開著的終端機找不到它，啟動前補 `$env:Path += ";C:\Program Files (x86)\cloudflared"`。
+- 不要用 Bash 工具背景執行 `server.py`（會被背景任務追蹤器砍掉）。用 PowerShell `Start-Process`（或 `Invoke-CimMethod` 建 Win32_Process，工作階段結束也不會被收掉）完全分離啟動，輸出導到 `server_out.log`／`server_err.log`，**記下回傳的 PID**。網址是固定網域、不必等 log 印網址；驗證改成 `curl http://tianxiadashi.com/`（伺服器開著 200、沒開 502），隧道沒在跑就照「固定網域」那一節開起來。
+- **引數一定要加 `-u`**（`python.exe -u server.py`）：stdout 導到檔案時 Python 會緩衝，沒有 `-u` 的話服務其實已經在聽 port、log 卻一直是空的。
+- cloudflared（具名 Tunnel 與 `--share` 都要）裝在 `C:\Program Files (x86)\cloudflared`（`winget install Cloudflare.cloudflared`）；裝之前就開著的終端機找不到它，啟動前補 `$env:Path += ";C:\Program Files (x86)\cloudflared"`。
 - **停的時候用 `/T` 關整棵**：`taskkill /PID <Start-Process 回傳的 PID> /T /F`（或在主控台 Ctrl+C）。只關「正在聽 7861 的那個 PID」會留下 cloudflared，重開後舊網址照樣進得到新伺服器（FB-021）。不確定有沒有殘留時，先停伺服器，再清掉連到 7861 的 cloudflared，最後才重開（指令在主機端操作文件）。
 - `server.py` 與 `run_bots.py` 要開同一個資料庫、同一份設定：要用 `saves/tianxia.db` 以外的檔，兩個程式啟動前設同一個 `TIANXIA_DB`（兩個程式啟動時都會印出資料庫路徑與設定，設錯一眼看得出來）。
 
