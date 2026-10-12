@@ -1081,5 +1081,7 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .seal .seal-bg { fill: var(--bk-seal); }
 .seal .seal-rim { fill: none; stroke: var(--bk-seal-ink); stroke-width: 1.2; opacity: 0.85; }
 .seal .seal-ink text { fill: var(--bk-seal-ink); font-family: var(--bk-serif); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.leaf-foot { flex-wrap: wrap; } /* 鑄譜打中過的那一頁：配方獨佔一行，放在朱印與名號底下 */
+.leaf-recipe { flex-basis: 100%; margin: 6px 0 0; font-family: var(--bk-serif); font-size: 14px; color: var(--bk-ink-2); letter-spacing: 1px; }
 .leaf.empty .leaf-text { height: 180px; color: var(--bk-ink-2); }
 .leaf-hint { margin: 10px 4px 0; color: var(--bk-ink-2); font: 14px var(--bk-serif); }

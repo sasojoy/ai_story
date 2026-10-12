@@ -131,3 +131,17 @@ def test_market_buttons_are_cut_into_chunks_like_the_smith(menu):
     assert _chunks(page, "market:feed")[0] == ["餵【棗騮馬】", "（飽足度 40・", "精鐵砂×1）"]
     assert _chunks(page, "market:wield:騎:2")[0] == ["換上【青驄駒】", "（良駒・", "下品・", "飽足度 100）"]
     assert _chunks(page, "market:back")[0] == ["離開馬市"]
+
+
+def test_a_solved_go_label_keeps_the_book_name_in_one_chunk(menu):
+    """打造隱藏配方設計 6.4：自己的鑄譜上打中過才多「 → 照鑄譜上的【某某】打」；這一段不在字中間斷行，「→ 」後面的空白在 span 外面。"""
+    text = smithing.GO_LABEL.format(
+        what="鎮山鐵＋化水晶", head=smithing.SOLVED_HEAD.format(name="寒淵拳套"), kind="拳套", attribute="陰", tier="三階",
+        note="工錢 150 兩；下品 46%、中品 32%、上品 22%（輔料壓得住主料）",
+    )
+    oid = smithing.GO + "拳套:gang_3:kuai_3"
+    page = menu((oid, text))
+    chunks, joined = _chunks(page, oid)
+    assert "".join(_pieces(page, oid)) == text == joined.strip()
+    assert "照鑄譜上的【寒淵拳套】打" in chunks
+    assert '<span class="nb">化水晶 →</span> <span class="nb">照鑄譜上的【寒淵拳套】打</span>' in page
