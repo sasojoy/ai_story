@@ -903,7 +903,7 @@ def apply_effect(
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        owner = next((f for f in content.scenario.factions if sect.id in f.sects), None)
+        owner = content.scenario.sect_owner(sect.id)
         if owner is not None and p.faction is None:
             p.faction = owner.id
             msgs.append(f"你從此是{owner.name}的人了。")

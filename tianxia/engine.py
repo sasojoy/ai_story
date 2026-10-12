@@ -1162,11 +1162,14 @@ class Game:
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
-        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。"""
+        有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。拜入陣營名下的門派、而且手上有新陣營接不了的懸賞時，
+        最後多一個括號講會作廢幾張（bounties.join_note，FB-159）。"""
         if choice.combat and odds:
             squad = self.content.squads[choice.combat]
-            return f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
-        return choice_label(choice, self.state, self.content, self.world)
+            label = f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
+        else:
+            label = choice_label(choice, self.state, self.content, self.world)
+        return label + bounties.join_note(self.state, self.content, choice)
 
     def odds(self, squad_id: str) -> str:
         return team.estimate(self.state, self.content, self.world, squad_id)

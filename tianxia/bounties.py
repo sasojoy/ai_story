@@ -23,7 +23,7 @@ from typing import NamedTuple
 from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
-from .models import WEAPON_KINDS, Content, Location
+from .models import WEAPON_KINDS, Choice, Content, Location
 from .state import Bounty, GameState, Weapon, WorldState
 from .world_state import WorldStateStore, season_length_days
 
@@ -222,6 +222,21 @@ def stranded(state: GameState, content: Content, faction_id: str | None) -> list
         if me in (name_key(t) for t in b.takers) and me not in (name_key(t) for t in b.done_by)
         and not _takeable(p.name, faction_id, b)
     ]
+
+
+def join_note(state: GameState, content: Content, choice: Choice) -> str:
+    """事件選項會拜入陣營名下的門派（Effect.join_sect）、因而投靠那個陣營時，手上有新陣營接不了的懸賞：選項那一行後面多一個括號，
+    寫跟投靠的確認畫面同一句（STRANDED_JOIN，張數照 stranded 數；FB-159，原本只有選下去之後才補作廢的句子）。
+    已經有陣營的人拜入不換陣營（rules.apply_effect），門派不歸任何陣營的也不會，這兩種都沒有；成功與失敗的效果都看（先成功）。
+    沒有要警告的是空字串。"""
+    if state.player.faction is not None:
+        return ""
+    for effect in (choice.effect, choice.fail_effect):
+        owner = content.scenario.sect_owner(effect.join_sect) if effect.join_sect else None
+        held = stranded(state, content, owner.id) if owner is not None else []
+        if held:
+            return f"（{STRANDED_JOIN.format(n=len(held))}）"
+    return ""
 
 
 def drop_stranded(state: GameState, content: Content, faction_id: str | None) -> list[str]:

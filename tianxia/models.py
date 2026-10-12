@@ -1054,6 +1054,10 @@ class Scenario(_Strict):
         """id 對得上的那個陣營；沒有就是 None（散人、不屬於任何陣營的人物）。"""
         return next((f for f in self.factions if f.id == faction_id), None)
 
+    def sect_owner(self, sect_id: str) -> FactionDef | None:
+        """這個門派歸哪個陣營（拜入它算投靠那個陣營：rules.apply_effect、bounties.join_note 共用）；不歸任何陣營是 None。"""
+        return next((f for f in self.factions if sect_id in f.sects), None)
+
     def faction_name(self, faction_id: str | None, default: str | None = None) -> str | None:
         """那個陣營的名字；劇本裡沒有這個陣營就是 default。"""
         faction = self.find_faction(faction_id)
