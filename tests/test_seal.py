@@ -317,3 +317,60 @@ def test_seen_real_is_written_only_by_your_own_request(content, world):
     assert game.state.player.seen_real == 60.0 and game.own_request
     next_season(content, world, game)
     assert game.state.player.seen_real == 60.0
+
+
+# ── Task 4：舊玉璽鏈 ──
+
+YUXI_EVENTS = {"yuxi_scroll", "yuxi_antique", "yuxi_dig", "yuxi_rival", "yuxi_scholar", "yuxi_guardian"}
+
+
+def test_season_one_switches_off_the_old_jade_chain(on):
+    """11.2 第 1 條：第一季開著時舊鏈的門檻、支線、六則事件、目標、董卓奪璽都關掉；南華觀第一季直接開（黃巾伏筆的丹爐灰在那裡）。"""
+    off = on.scenario.season_one_off
+    assert {"yuxi_50", "yuxi_100"} <= set(off.thresholds) and "yuxi_line" in off.storylines
+    assert YUXI_EVENTS <= set(off.events) and "take_shard" in off.milestones
+    assert off.world_events == ["dongzhuo_takes_shard"] and off.unlocks == ["jade_cave"]
+
+
+def test_a_switched_off_world_event_never_fires_in_season_one(on, world):
+    """董卓奪璽（xi_open 滿 48 小時）第一季不觸發，管理者也觸發不了、清單不列。"""
+    from tianxia import world as world_rules
+    from tianxia.engine import Game
+
+    on.config.admins = ["管理者"]
+    game = Game.new(on, "管理者", rng=random.Random(0), world=world)
+    w = game.state.world
+    w.flags.add("xi_open")
+    w.flag_times["xi_open"] = 0.0
+    w.time = 49 * 3600.0
+    world_rules.check_thresholds(game.state, on, world)
+    assert "dongzhuo_takes_shard" not in w.fired_thresholds
+    assert world_rules.fire_by_id(game.state, on, "dongzhuo_takes_shard", world) is None
+    assert "dongzhuo_takes_shard" not in {f.id for f in game.admin_fires()}
+
+
+def test_jade_cave_opens_in_season_one_without_the_old_flag(on, world):
+    from tianxia import atlas
+    from tianxia.engine import Game
+
+    game = Game.new(on, "甲", rng=random.Random(0), world=world)
+    cave = on.locations["jade_cave"]
+    assert "xi_open" not in game.state.world.flags
+    assert atlas.is_unlocked(cave, game.state, on)
+    assert not atlas.is_unlocked(cave, game.state)  # 沒給內容：照舊只看旗標
+
+
+def test_with_the_shards_on_the_old_chain_no_longer_records_a_fragment(real, world):
+    """11.2 第 2 條：碎片開著（正式內容有七片）時，打贏看守者不寫舊的跨季紀錄、不回「第 N 塊碎片」；碎片關著照舊記（舊測試就是這樣）。"""
+    from tianxia import rules
+    from tianxia.engine import Game
+    from tianxia.models import Effect
+
+    flag = real.scenario.jade_seal_flag
+    game = Game.new(real, "甲", rng=random.Random(0), world=world)
+    msgs = rules.apply_effect(Effect(world_flags_add=[flag]), game.state, real, world)
+    assert world.get_jade_seal_fragments() == [] and not any("塊碎片" in m for m in msgs)
+    real.seal = {}
+    game.state.world.flags.discard(flag)
+    rules.apply_effect(Effect(world_flags_add=[flag]), game.state, real, world)
+    assert len(world.get_jade_seal_fragments()) == 1

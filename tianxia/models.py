@@ -1015,13 +1015,17 @@ class SeasonOneOff(_Strict):
     - storylines：主線不推進，「主線與目標」不顯示那條主線；
     - battles：大勢門檻的 starts_battle 不開，管理者「立刻開戰」的選單不列；
     - events：探索的事件抽選跳過（T4 做；這裡只定欄位，id 一樣在載入時檢查）；
-    - milestones：「主線與目標」的個人目標不列（做不到的 beta 目標，例如擊敗波才、平定黃巾）。"""
+    - milestones：「主線與目標」的個人目標不列（做不到的 beta 目標，例如擊敗波才、平定黃巾）；
+    - world_events：世界事件不觸發（管理者也觸發不了）；
+    - unlocks：地點第一季直接開放（不看 unlock_flag；玉璽碎片設計 11.2 第 3 條）。"""
 
     thresholds: list[str] = Field(default_factory=list)
     storylines: list[str] = Field(default_factory=list)
     battles: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
     milestones: list[str] = Field(default_factory=list)
+    world_events: list[str] = Field(default_factory=list)
+    unlocks: list[str] = Field(default_factory=list)
 
 
 class Scenario(_Strict):

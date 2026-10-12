@@ -276,7 +276,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
 
 def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
     """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
-    beta 那場決戰與四個黃巾聲勢門檻不列；開關關著照舊。"""
+    beta 那場決戰、四個黃巾聲勢門檻與舊玉璽鏈不列；開關關著照舊。"""
     def listed(kind):
         return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
 
@@ -285,7 +285,8 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
     assert listed("battles") == ["changshe_fire", "guangzong"]  # 三場大戲；宛城要等第 3 週結算才知道開哪一版，先不列（PM 2026-10-05）
     assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
-    assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
+    # 玉璽一：舊玉璽鏈的門檻與董卓奪璽第一季也關掉（玉璽碎片設計 11.2 第 1 條），開關關著時照舊列（上面第一行）
+    assert not {"yuxi_50", "yuxi_100", "dongzhuo_takes_shard"} & set(listed("events"))
 
 
 def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):

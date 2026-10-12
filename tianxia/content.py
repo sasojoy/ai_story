@@ -1831,6 +1831,8 @@ def validate(c: Content) -> None:
         ("battles", off.battles, c.battles, "戰鬥"),
         ("events", off.events, c.events, "事件"),
         ("milestones", off.milestones, {m.id for m in c.scenario.milestones}, "個人目標"),
+        ("world_events", off.world_events, {e.id for e in c.scenario.world_events}, "世界事件"),
+        ("unlocks", off.unlocks, c.locations, "地點"),
     ):
         known(f"第一季不觸發的 {kind}", ids, valid, label)
 

@@ -62,7 +62,8 @@ def check_thresholds(
         if w.ended:
             return msgs
     for event in content.scenario.world_events:
-        if event.id in w.fired_thresholds or not check_condition(event.condition, state):
+        if (event.id in w.fired_thresholds or event.id in season_one_off(content, w, "world_events")
+                or not check_condition(event.condition, state)):
             continue
         msgs += _fire(
             state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.starts_battle,
@@ -111,7 +112,8 @@ def fire_by_id(
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
     開戰、結束賽季都一樣），再更新主線。已經發生過、找不到這個 id、或是第一季不觸發的 beta 門檻，回傳 None。"""
-    if fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds"):
+    if (fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds")
+            or fire_id in season_one_off(content, state.world, "world_events")):
         return None
     source = next((th for th in content.scenario.thresholds if th.id == fire_id), None)
     if source is None:

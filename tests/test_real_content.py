@@ -1970,11 +1970,12 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
 
     c = load_content(CONTENT_DIR, profile="weekend")
     off = c.scenario.season_one_off
-    assert (off.thresholds, off.storylines, off.battles) == (
-        ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"], ["huangjin_line"], ["huangjin_showdown"],
+    # 玉璽一把舊玉璽鏈的門檻與支線也關掉（玉璽碎片設計 11.2 第 1 條；整份清單在 test_seal 鎖）
+    assert (off.thresholds[:4], off.storylines[0], off.battles) == (
+        ["huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"], "huangjin_line", ["huangjin_showdown"],
     )
     # 個人目標裡那四個也做不到了（波才的舊事件、平定門檻、beta 那場決戰都關了）：不列（PM：主線與目標不顯示做不到的目標）
-    assert off.milestones == ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"]
+    assert off.milestones[:4] == ["beat_bocai", "crush_huangjin", "showdown_win", "showdown_loss"]
     game = _beta_season(c, tmp_path, "on")
     w = game.state.world
     assert w.season_one

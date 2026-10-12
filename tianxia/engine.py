@@ -965,7 +965,7 @@ class Game:
                 note=f"成功率約 {chance * 100:.0f}%",
             ))
         for dest_id in loc.connections:
-            if not atlas.is_unlocked(c.locations[dest_id], s):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
+            if not atlas.is_unlocked(c.locations[dest_id], s, c):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
                 continue
             opts.append(self._move_option(loc.id, dest_id))
         for skill, problem in library.lessons_here(s, c):  # 拜師學藝（武學與成長設計附錄 B）：不花體力
@@ -6701,8 +6701,9 @@ class Game:
         return [b for b in self.content.battles.values() if b.id not in off and (b.timetable_event is None or b.id in openable)]
 
     def admin_fires(self) -> list[Threshold | WorldEvent]:
-        """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻不列（計畫 T8）。"""
-        off = season_one_off(self.content, self.state.world, "thresholds")
+        """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻與世界事件不列（計畫 T8；玉璽碎片設計 11.2）。"""
+        w = self.state.world
+        off = season_one_off(self.content, w, "thresholds") | season_one_off(self.content, w, "world_events")
         return [x for x in [*self.content.scenario.thresholds, *self.content.scenario.world_events] if x.id not in off]
 
     def admin_start_battle(self, battle_id: str, now: float) -> list[str]:
