@@ -6,7 +6,7 @@ from .martial_arts import QUALITIES
 from .models import Content, TutorialGoal, TutorialStep
 from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from .state import GameState
-from .world import current_act, current_storyline, season_endings, storyline_off
+from .world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off
 from .world_state import WorldStateStore
 
 # 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）：九成到還沒滿
@@ -175,7 +175,11 @@ def quest_text(state: GameState, content: Content, world: WorldStateStore | None
         lines = (None, line.id)
     endings = [e for e in season_endings(state, content) if e.storyline in lines and e.hint]  # 第一季列第一季的六種（計畫 T9）
     if endings:
-        parts.append("**可能的結局**\n\n" + "\n".join(f"- {e.title}：{e.hint}" for e in endings))
+        # 由收季門檻造成的結局（黃巾稱霸）：規則關著的季決定性那一週以前，照實補一句最早什麼時候才會提前收季（FB-165，待 joy 潤）
+        note, early = early_end_note(state, content), early_end_flags(content)
+        parts.append("**可能的結局**\n\n" + "\n".join(
+            f"- {e.title}：{e.hint}{note if set(e.condition.world_flags_all) & early else ''}" for e in endings
+        ))
     hidden = season_one_off(content, w, "milestones")  # 第一季做不到的 beta 個人目標不列（計畫 T8）
     milestones = [m for m in content.scenario.milestones if m.id not in hidden]
     if milestones:

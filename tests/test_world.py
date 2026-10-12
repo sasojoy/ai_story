@@ -120,11 +120,63 @@ def test_threshold_skips_the_flourish_when_the_llm_call_fails(state, content, wo
 
 
 def test_ending_threshold_ends_season(state, content):
+    """收季的大勢門檻：規則關著的季照第一季決定性勝利那一條（FB-165，PM 2026-10-12），季曆第 decisive_from_week 週以前先不觸發
+    （不記成觸發過，之後還會再看）；到了那一週還在門檻上就照規則收季。"""
+    from tianxia import calendar
+
     state.world.trends["kou"] = 80
+    check_thresholds(state, content)  # 封江（kou50，不收季）照常觸發
+    assert not state.world.ended and "kou80" not in state.world.fired_thresholds and "kou_win" not in state.world.flags
+    state.world.time = calendar.week_start(content.config.decisive_from_week, content, state.world)
     msgs = check_thresholds(state, content)
     assert state.world.ended
     assert state.world.ending_title == "水寇稱霸"
     assert any("賽季落幕" in m for m in msgs)
+
+
+def test_an_ending_threshold_dropped_before_the_decisive_week_never_fires(state, content):
+    """規則關著的季：門檻在決定性那一週以前推到過、到那一週又掉回門檻下，就不收季（照規則看的是那一刻還在不在門檻上）。"""
+    from tianxia import calendar
+
+    state.world.trends["kou"] = 85
+    check_thresholds(state, content)
+    state.world.trends["kou"] = 70
+    state.world.time = calendar.week_start(content.config.decisive_from_week, content, state.world)
+    check_thresholds(state, content)
+    assert not state.world.ended and "kou80" not in state.world.fired_thresholds
+
+
+def test_ending_threshold_in_season_one_ends_at_once_as_before(content):
+    """第一季的規則開著：收季的大勢門檻照舊一推到就收（一個字都不變；第一季自己的提前收季另有 decisive_ending）。"""
+    from conftest import install_season_one
+    from tianxia.state import new_game_state
+
+    install_season_one(content)
+    state = new_game_state(content, "沈浪")
+    state.world.season_one = True
+    state.world.trends["kou"] = 80
+    check_thresholds(state, content)
+    assert state.world.ended and state.world.ending_title == "水寇稱霸"
+
+
+def test_the_huangjin_win_waits_for_the_decisive_week_in_a_fourteen_day_season():
+    """正式內容、14 天的季：黃巾聲勢推過 80 在第 10 週以前不收季（決戰照開），第 10 週起還在 80 以上才「黃巾稱霸」。"""
+    from conftest import real_content
+    from tianxia import calendar
+    from tianxia.state import new_game_state
+    from tianxia.world_state import fresh_season
+
+    content = real_content()
+    state = new_game_state(content, "沈浪")
+    state.world = fresh_season(content)
+    state.world.trends["huangjin"] = 85
+    state.world.time = calendar.week_start(3, content, state.world)
+    msgs = check_thresholds(state, content)
+    assert not state.world.ended and {"huangjin_50", "huangjin_60"} <= state.world.fired_thresholds
+    assert "huangjin_80" not in state.world.fired_thresholds and any("【江湖大事】" in m for m in msgs)
+    state.world.time = calendar.week_start(10, content, state.world)
+    check_thresholds(state, content)
+    assert state.world.ended and state.world.ending_title == "黃巾稱霸"
 
 
 def test_evaluate_ending_falls_back(state, content):
@@ -382,6 +434,7 @@ def test_season_one_off_thresholds_never_fire_even_by_the_admin(state, content):
     assert not ({"kou50", "kou80"} & w.fired_thresholds) and not ({"blocked", "kou_win"} & w.flags) and not w.ended
     assert fire_by_id(state, content, "kou80") is None and not w.ended  # 管理者也觸發不了
     content.config.season_one = False  # 開關關著：照舊
+    content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     check_thresholds(state, content)
     assert {"blocked", "kou_win"} <= w.flags and w.ended
 
@@ -593,3 +646,23 @@ def test_a_skipped_showdown_is_settled_before_later_events(content, monkeypatch)
     assert bonus_at_roll["luzhi_siege"] == -0.1
     assert w.timeline["changshe_fire"].time <= w.timeline["luzhi_siege"].time
     assert w.showdowns_waiting == [] and w.showdowns_opened == {}
+
+
+def test_the_possible_endings_say_when_the_huangjin_win_can_first_end_the_season():
+    """「可能的結局」裡黃巾稱霸那一條，規則關著的季在決定性那一週以前多一句最早什麼時候才會提前收季（照季曆時刻寫，玩家看不到週）；
+    到了那一週就不寫。其他結局不寫。"""
+    from conftest import real_content
+    from tianxia import calendar
+    from tianxia.guide import quest_text
+    from tianxia.state import new_game_state
+    from tianxia.world_state import fresh_season
+
+    content = real_content()
+    state = new_game_state(content, "沈浪")
+    state.world = fresh_season(content)
+    when = calendar.stamp_text(calendar.week_start(10, content, state.world), content, state.world)
+    text = quest_text(state, content)
+    assert f"黃巾稱霸：黃巾聲勢達到 80，潁川陷落。（{when}以前不會提前收季）" in text
+    assert text.count("以前不會提前收季") == 1
+    state.world.time = calendar.week_start(10, content, state.world)
+    assert "以前不會提前收季" not in quest_text(state, content)

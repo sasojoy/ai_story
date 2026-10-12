@@ -1130,6 +1130,7 @@ def test_one_players_trend_push_is_invisible_to_another_until_they_sync(content,
 
 
 def test_one_players_action_ending_the_season_propagates_to_another_on_sync(content, world):
+    content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     a = Game.new(content, "甲", rng=random.Random(1), world=world)
     b = Game.new(content, "乙", rng=random.Random(2), world=world)
     a.state.world.trends["kou"] = 80
@@ -1583,6 +1584,7 @@ def test_dash_arrives_at_once_and_writes_one_entry(game):
 
 
 def test_dash_stops_when_the_season_ends_on_the_way(game):
+    game.content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     game.state.world.flags.add("cave_open")
     game.state.world.trends["kou"] = 80  # 一走到湖邊就觸發「水寇稱霸」，賽季落幕
     game.travel("cave", "dash")
@@ -1704,6 +1706,7 @@ def test_departing_is_not_arriving_for_the_tutorial(game):
 
 
 def test_a_threshold_crossed_on_arrival_reaches_the_shared_season(game):
+    game.content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     game.sync(1000.0)
     game.choose("move:lake")
     # sync 會先換成共用賽季的那一份，所以改共用的；追趕那 200 秒不滿一小時，世界本身不檢查門檻
@@ -3110,6 +3113,7 @@ def test_an_offline_fighter_gets_the_showdown_on_the_next_sync_without_the_timed
 
 def _showdown_ends_the_season(content, game):
     """寇亂 30 → 80 跨過收季的門檻：決戰收場、季的時鐘再走一個鐘頭，季就收了。乙加入之後就下線。回傳那時的時間。"""
+    content.config.decisive_from_week = 1  # 這一支不是在測收季門檻要等到決定性那一週（FB-165，test_world 另測）：關掉那一道
     definition = _three_round_showdown(content, trend_delta={"kou": 50})
     game.state.player.faction = "guan"
     away = _fighter(content, game, "乙", "huang")

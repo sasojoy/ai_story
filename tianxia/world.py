@@ -49,8 +49,9 @@ def check_thresholds(
     if w.ended:
         return msgs
     off = season_one_off(content, w, "thresholds")  # 第一季不觸發的 beta 門檻（計畫 T8）
+    held = early_end_held(state, content)
     for th in content.scenario.thresholds:
-        if th.id in w.fired_thresholds or th.id in off:
+        if th.id in w.fired_thresholds or th.id in off or (th.ends_season and held):
             continue
         value = trend_value(state, content, th.trend)  # 開關開著時黃巾聲勢是三條戰線的加權
         if not (value >= th.value if th.op == ">=" else value <= th.value):
@@ -233,6 +234,27 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
         if check_condition(ending.condition, state) and (not ending.season_one or stance_holds(ending, standing)):
             return ending
     return endings[-1]
+
+
+def early_end_held(state: GameState, content: Content) -> bool:
+    """規則關著的季，大勢門檻觸發的提前收季（黃巾稱霸）此刻先不收：照第一季決定性勝利同一條（decisive_from_week，FB-165，
+    PM 2026-10-12）——季曆第 decisive_from_week 週以前不觸發收季的門檻（不記成觸發過，大勢照推、決戰照開照打），到了那一週
+    還在門檻上就照規則收季。季曆照這一季蓋的章（calendar.point），不讀電腦時鐘。第一季一律 False（一個字都不變）。"""
+    w = state.world
+    return not season_one(content, w) and calendar.point(w.time, content, w).week < content.config.decisive_from_week
+
+
+def early_end_note(state: GameState, content: Content) -> str:
+    """「可能的結局」裡由收季門檻造成的結局後面接的那一句（待 joy 潤）：還在 early_end_held 時寫最早什麼時候才會提前收季。"""
+    if not early_end_held(state, content):
+        return ""
+    w = state.world
+    return f"（{calendar.stamp_text(calendar.week_start(content.config.decisive_from_week, content, w), content, w)}以前不會提前收季）"
+
+
+def early_end_flags(content: Content) -> set[str]:
+    """收季的大勢門檻會立起的旗標（結局條件看這些旗標的，就是由大勢推到門檻而結束的結局）。"""
+    return {flag for th in content.scenario.thresholds if th.ends_season for flag in th.world_flags_add}
 
 
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
