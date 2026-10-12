@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from collections.abc import Callable
 
 from . import armor, equipment, fusion, team, weapons
 from .fusion import QualityOdds
@@ -483,37 +484,72 @@ def temper_option(state: GameState, content: Content, slot: str = "weapon"):
     return Option(id=oid, label=f"淬煉【{item.name}】（第 {item.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)
 
 
-# ---- 整季機器人用的（兵器設計第六節：量平衡要用到打造與淬煉；伺服器假人這一批不打造，附帶決定 e）----
+# ---- 整季機器人用的（兵器設計第六節、四欄設計第九節：量平衡要用到打造與淬煉；伺服器假人不打造不淬煉，打造隱藏配方 PM 決定第 3 條）----
 
 
 def wizard_steps(kind: str, main: str, aux: str) -> list[str]:
-    """照單子打一把要按的五顆（打開、種類、主料、輔料、開爐）。"""
-    return [OPEN, f"{KIND}{kind}", f"{MAIN}{main}", f"{AUX}{aux}", f"{GO}{kind}:{main}:{aux}"]
+    """照單子打一件要按的幾顆：兵器五顆（打開、種類、主料、輔料、開爐），防具沒有種類那一顆（四顆）。"""
+    steps = [OPEN, f"{MAIN}{main}", f"{AUX}{aux}", f"{GO}{kind}:{main}:{aux}"]
+    return steps if kind == ARMOR_KIND else [OPEN, f"{KIND}{kind}", *steps[1:]]
 
 
-def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) -> tuple[str, str, str] | None:
-    """整季機器人要打哪一把：身上那門武學配得上的種類；主料挑背包裡最高階的（同階先挑跟武學同屬性的、再挑最多的、再照 id）；
-    輔料先挑同一種（夠兩個時），不然挑跟主料最近一階、數量最多的。手上或裝備庫已經有一把配得上、階比主料高、或同階而且是自己打的，
-    就不打（不然每次路過都打一把）。打不成（forge_problem）是 None。"""
-    if art is None or not weapons.smith_here(state, content):
-        return None
-    kind = weapons.art_weapon(art.id, content, world)
-    if kind is None:
-        return None
+def _pick_pair(
+    state: GameState, content: Content, prefer: str | None, mine: list[Equipment],
+    ok: Callable[[str, str], bool] | None = None,
+) -> tuple[str, str] | None:
+    """整季機器人一爐挑哪兩樣（兵器、防具共用）：主料挑背包裡最高階的（同階先挑屬性是 prefer 的、再挑最多的、再照 id）；輔料先挑同一種
+    （夠兩個時），不然挑跟主料最近一階、數量最多的。素材不到兩個、或 mine（身上與裝備庫裡算數的那幾件）裡已經有一件階比主料高、
+    或同階而且是自己打的，是 None（不然每次路過都打一件）。ok 給了就跳過它說不行的組合（防具：合出來會被內功剋的），照同樣的順序
+    試下一個輔料、再試同階的下一個主料，都不行是 None；沒給（兵器）就是第一個組合，跟抽出來之前的 forge_plan 一模一樣。"""
     mats = content.materials
     held = {mid: n for mid, n in state.player.materials.items() if n > 0 and mid in mats}
     if sum(held.values()) < 2:
         return None
     top = max(mats[mid].tier for mid in held)
-    mine = [w for w in [state.player.weapon, *equipment.in_slot(state.player, "weapon")] if weapons.usable(w, art, content, world)]  # 裝備四欄 3.3
-    if any(w.tier > top or (w.tier == top and w.recipe is not None) for w in mine):
+    if any(item.tier > top or (item.tier == top and item.recipe is not None) for item in mine):
         return None
-    main = min((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != art.attribute, -held[mid], mid))
-    if held[main] >= 2:
-        aux = main
-    else:
-        aux = min((mid for mid in held if mid != main), key=lambda mid: (top - mats[mid].tier, -held[mid], mid))
+    mains = sorted((mid for mid in held if mats[mid].tier == top), key=lambda mid: (mats[mid].attribute != prefer, -held[mid], mid))
+    for main in mains:
+        auxes = ([main] if held[main] >= 2 else []) + sorted(
+            (mid for mid in held if mid != main), key=lambda mid: (top - mats[mid].tier, -held[mid], mid))
+        for aux in auxes:
+            if ok is None or ok(main, aux):
+                return main, aux
+    return None
+
+
+def forge_plan(state: GameState, content: Content, world: WorldStateStore, art) -> tuple[str, str, str] | None:
+    """整季機器人要打哪一把：身上那門武學配得上的種類；主料、輔料照 _pick_pair（同階先挑跟武學同屬性的）。手上或裝備庫已經有一把
+    配得上、階比主料高、或同階而且是自己打的，就不打。打不成（forge_problem）是 None。兵器不看相剋（跟抽出 _pick_pair 之前一樣）。"""
+    if art is None or not weapons.smith_here(state, content):
+        return None
+    kind = weapons.art_weapon(art.id, content, world)
+    if kind is None:
+        return None
+    mine = [w for w in [state.player.weapon, *equipment.in_slot(state.player, "weapon")] if weapons.usable(w, art, content, world)]  # 裝備四欄 3.3
+    pair = _pick_pair(state, content, art.attribute, mine)
+    if pair is None:
+        return None
+    main, aux = pair
     return (kind, main, aux) if forge_problem(state, content, kind, main, aux) is None else None
+
+
+def armor_plan(state: GameState, content: Content, world: WorldStateStore, neigong) -> tuple[str, str, str] | None:
+    """整季機器人要打哪一件防具（照兵器的 forge_plan）：主料、輔料照 _pick_pair（同階先挑跟身上內功同屬性的：防具對上內功，四欄設計 4.2），
+    跳過合出來會被內功剋的組合（attribute_of 照天機算）。身上或裝備庫已經有一件不被內功剋的防具階比主料高、或同階而且是自己打的，
+    就不打（被內功剋的那幾件不算：不然打出一件相剋的就再也不打那一階）。防具關著、打不成是 None。"""
+    if not armor.smith_here(state, content):
+        return None
+    mine = [a for a in [state.player.armor, *equipment.in_slot(state.player, "armor")]
+            if a is not None and not armor.clashes(a.attribute, neigong)]
+    pair = _pick_pair(
+        state, content, neigong.attribute if neigong is not None else None, mine,
+        ok=lambda main, aux: not armor.clashes(attribute_of(world, content, ARMOR_KIND, main, aux), neigong),
+    )
+    if pair is None:
+        return None
+    main, aux = pair
+    return (ARMOR_KIND, main, aux) if forge_problem(state, content, ARMOR_KIND, main, aux) is None else None
 
 
 def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
@@ -536,3 +572,16 @@ def has_errand(state: GameState, content: Content, world: WorldStateStore, art) 
         forge_plan(state, content, world, art) is not None or better_in_rack(state, content, world, art) is not None
         or temper_wanted(state, content, world, art)
     )
+
+
+def armor_temper_wanted(state: GameState, content: Content, world: WorldStateStore, neigong) -> bool:
+    """身上有防具、淬得了、而且沒有更高的一件要打（素材先留給打新的）。"""
+    return (
+        state.player.armor is not None and temper_problem(state, content, "armor") is None
+        and armor_plan(state, content, world, neigong) is None
+    )
+
+
+def armor_errand(state: GameState, content: Content, world: WorldStateStore, neigong) -> bool:
+    """防具頁有打造或淬煉的事（換、買、修看 armor.wanted，bot.smith_want 已經算了）。"""
+    return armor_plan(state, content, world, neigong) is not None or armor_temper_wanted(state, content, world, neigong)

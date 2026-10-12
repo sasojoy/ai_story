@@ -427,3 +427,102 @@ def test_armor_rows_and_card_carry_tempers_and_the_recipe(content, world):
     p.armor = _jacket()
     row = armor.rows(game.state, content, ng)["worn"]
     assert row["recipe"] is None and row["tempers"] == 0 and "淬煉" not in armor.card_line(game.state, content, ng)
+
+
+# ── Task 5：整季機器人打防具、淬防具；假人不打 ──
+
+def test_wizard_steps_for_armor_have_no_kind():
+    assert smithing.wizard_steps(smithing.ARMOR_KIND, "gang_1", "kuai_1") == [
+        smithing.OPEN, f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_YANG]
+    assert smithing.wizard_steps("劍", "gang_1", "kuai_1")[1] == f"{smithing.KIND}劍"  # 兵器照舊五顆
+
+
+def test_armor_plan_reaches_for_the_highest_tier_and_stops_once_it_has_one(content, world):
+    game = _smithy(content, world)
+    s, p = game.state, game.state.player
+    ng = _inner(game, content, world)  # 靜心訣（虛）：沒有同屬性的料，同階照數量；剛、陽都不剋虛
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_2", "gang_2")  # 最高階、夠兩個就主輔同一種
+    p.materials = {"gang_2": 1, "gang_1": 2, "kuai_1": 3}
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_2", "kuai_1")  # 輔料挑低一階數量最多的
+    p.rack = [_jacket(tier=2, aid="甲:3", recipe=armor.recipe_key("gang_2", "gang_2"))]
+    assert smithing.armor_plan(s, content, world, ng) is None  # 已經有一件同階、自己打的
+    p.rack = []
+    p.stats["silver"] = 10
+    assert smithing.armor_plan(s, content, world, ng) is None  # 打不起
+    content.config.armor.enabled = False
+    p.stats["silver"] = 200
+    assert smithing.armor_plan(s, content, world, ng) is None and not smithing.armor_errand(s, content, world, ng)
+
+
+def test_armor_plan_skips_pairs_the_inner_art_counters(content, world):
+    """合出來會被內功剋的組合不打；被內功剋的那幾件不算「已經有了」。"""
+    game = _smithy(content, world, inner="basic_breath")  # 粗淺吐納：屬柔，剛剋柔
+    s, p = game.state, game.state.player
+    ng = _inner(game, content, world)
+    p.materials = {"gang_1": 2, "kuai_1": 1}
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "kuai_1")  # 剛＋剛＝剛剋柔：改配驚羽（陽）
+    p.materials = {"gang_1": 2}
+    assert smithing.armor_plan(s, content, world, ng) is None  # 只合得出剛：不打
+    p.materials = {"gang_1": 2, "kuai_1": 1}
+    p.rack = [_jacket(attribute="剛", aid="甲:3", recipe=armor.recipe_key("gang_1", "gang_1"))]  # 同階、自己打的，可是被內功剋
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "kuai_1")
+    assert armor.clashes("剛", ng) and not armor.clashes("陽", ng) and not armor.clashes("剛", None)
+
+
+def test_forge_plan_for_weapons_is_unchanged_by_the_shared_picker(content, world):
+    """兵器的 forge_plan 改走共用的 _pick_pair 之後一模一樣（這裡再鎖一次主料偏好武學屬性）。"""
+    game = _smithy(content, world, weapons_on=True)
+    s, p = game.state, game.state.player
+    rules.learn_skill(s, content, "fist")  # 長拳：剛・拳腳
+    p.member.wugong_id = "fist"
+    art = team.player_art(s, content, world, "fist")
+    p.materials = {"gang_1": 1, "kuai_1": 3}
+    assert smithing.forge_plan(s, content, world, art) == ("拳腳", "gang_1", "kuai_1")  # 同階先挑跟武學同屬性的（剛），不是最多的
+
+
+def test_visit_smith_forges_and_tempers_armor_then_leaves(content, world):
+    from tianxia import bot
+    game = _smithy(content, world, silver=30)  # 只開防具：架上 40 兩買不起，一爐一階 20 兩打得起
+    p = game.state.player
+    p.materials = {"gang_1": 6}
+    bot.visit_smith(game)
+    assert p.armor is not None and p.armor.recipe == armor.recipe_key("gang_1", "gang_1")
+    assert p.armor.tempers == 4 and p.materials == {} and p.stats["silver"] == 10  # 打一件用兩個，剩四個全拿去淬（一階不收錢）
+    assert not p.picking_smith and p.smith_draft is None
+
+
+def test_visit_smith_does_weapons_first_then_forges_armor(content, world):
+    from tianxia import bot
+    game = _smithy(content, world, weapons_on=True)
+    p = game.state.player
+    rules.learn_skill(game.state, content, "sword")
+    p.member.wugong_id = "sword"
+    p.weapon = Weapon(id="兵:1", name="試刃", kind="劍", attribute="柔", tier=3, quality="上品", tempers=5)  # 兵器沒事要做
+    p.armor = _jacket(attribute="剛", aid="甲:2")  # 架上那件買過了
+    p.materials = {"gang_1": 2}
+    bot.visit_smith(game)
+    forged = [a for a in [p.armor, *p.rack] if a is not None and a.recipe == armor.recipe_key("gang_1", "gang_1")]
+    assert len(forged) == 1 and p.stats["silver"] == 180 and p.materials == {}
+    assert not p.picking_smith and p.smith_draft is None and p.smith_page == "weapon"
+
+
+def test_visit_smith_never_leaves_an_armor_draft_open(content, world, monkeypatch):
+    from tianxia import bot
+    game = _smithy(content, world)
+    monkeypatch.setattr(smithing, "wizard_steps", lambda kind, main, aux: [smithing.OPEN, f"{smithing.MAIN}{main}"])  # 走到一半就停
+    bot.visit_smith(game)
+    assert not game.state.player.picking_smith and game.state.player.smith_draft is None
+
+
+def test_server_bots_never_forge_or_temper_armor(content, world):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+    game = _armor_smith(content, world)
+    game.state.player.armor = _jacket()
+    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored[smithing.OPEN] is None and scored[smithing.ARMOR_TEMPER] is None
+    game.choose(smithing.OPEN)
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored[smithing.CANCEL] == 0.0  # 萬一停在單子上，只會按「不打了」
+    assert all(v is None for k, v in scored.items() if k != smithing.CANCEL)

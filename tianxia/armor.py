@@ -196,6 +196,11 @@ def pct(ratio: float) -> str:
     return f"{ratio:.0%}"
 
 
+def clashes(attribute: str, neigong: MartialArt | None) -> bool:
+    """這個屬性跟身上的內功相剋（兩個方向都算，同 _match 的 −1）；沒有內功不算。整季機器人挑打造的配對時用（smithing.armor_plan）。"""
+    return _match(attribute, neigong) < 0
+
+
 def fit_note(item: Equipment, neigong: MartialArt | None) -> str:
     """對上內功那一句：同屬性、相剋各一句，其餘是空字串。"""
     m = _match(item.attribute, neigong)
