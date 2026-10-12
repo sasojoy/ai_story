@@ -36,7 +36,7 @@ SLOTS: dict[str, Slot] = {
     "treasure": Slot(rules="treasures", warned="", prefix="寶", label="寶物", put_on="你把【{name}】帶在身上。"),  # 待 joy 潤；隨時能換（2.3）
 }
 WEAR_WORDS = {"weapon": "鋒利度", "armor": "耐久度", "mount": "飽足度"}  # 待 joy 潤：Equipment.edge 在各欄叫什麼（3.1、2.5）；防具這一側都讀這裡（armor.WEAR_WORD），武器那一側的舊字這一批不動
-WIELDABLE = ("weapon", "armor", "mount")  # 修練頁「換上」收哪幾欄（2.3：武器、防具隨時能換；坐騎路上不能換〔Slot.road_locked〕；寶物的限制等裝備三）
+WIELDABLE = ("weapon", "armor", "mount", "treasure")  # 修練頁「換上」收哪幾欄（2.3：武器、防具、寶物隨時能換〔寶物不設限制，企劃者 2026-10-11〕；坐騎路上不能換〔Slot.road_locked〕）
 ROAD_LOCKED = "在路上不能換{label}。"  # 待 joy 潤
 DISMANTLABLE = ("weapon", "armor")  # 拆得了的（4.8：坐騎、寶物沒有屬性，也不該拆成素材）
 
@@ -111,8 +111,8 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
 
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
-    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
-    開著的欄位裡找不到是 WIELD_MISSING（表外的寶物也是找不到）。"""
+    不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼（寶物也是，2.3【定】）。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
+    開著的欄位裡找不到是 WIELD_MISSING（表外的欄位也是找不到）。"""
     p = state.player
     chosen = _find(p, item_id, slots)
     if chosen is None:

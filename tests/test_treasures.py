@@ -486,3 +486,66 @@ def test_free_text_and_road_sights_cannot_give_gear(tmp_path):
     edit_json(root / "road_sights.json", lambda d: d[0].setdefault("effect", {}).update(gear="mingci"))
     with pytest.raises(ContentError, match="小收穫只能用"):
         load_content(root)
+
+
+# ── Task 4：換上寶物、修練頁、角色卡 ──
+
+def test_a_treasure_can_be_swapped_any_time_even_in_seclusion(content, world):
+    """設計 2.3【定】（企劃者 2026-10-11「不需要限制隨時可以換」）：同一個遊戲日可以連換、閉關中也能換；閉關心得照出關那一刻
+    身上那件算——閉關到一半換上閉關的寶物也拿得到 +25%。寶物不能拆（4.8）。"""
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.rack = [_item("audience", "寶:1"), _item("seclusion", "寶:2")]
+    assert game.wield_weapon("寶:1") == [equipment.WIELDED.format(name="烏木名刺")] and p.treasure.id == "寶:1"
+    assert game.wield_weapon("寶:2") == [equipment.WIELDED.format(name="入定蒲團")] and [t.id for t in p.rack] == ["寶:1"]  # 同一天連換
+    assert game.wield_weapon("寶:1") == [equipment.WIELDED.format(name="烏木名刺")] and [t.id for t in p.rack] == ["寶:2"]
+    base = 4 * content.config.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20)
+    p.seclusion_start, p.busy_until = 0.0, 4 * 3600.0  # 閉關中
+    assert game.wield_weapon("寶:2") == [equipment.WIELDED.format(name="入定蒲團")]  # 閉關中照樣換得上
+    before = p.stats.get("xinde", 0)
+    game._finish_seclusion(4 * 3600.0)
+    assert p.stats["xinde"] - before == round(base * 1.25)  # 照出關那一刻身上那件
+    # 寶物不能拆（4.8）：DISMANTLABLE 只有武器、防具，寶物一開頭就濾掉。測試內容武器、防具關著，回的是 NOT_NOW（開著時是
+    # DISMANTLE_MISSING），所以不鎖哪一句，只鎖「沒拆、還在裝備庫」
+    assert not game.dismantle_weapon("寶:1")[0].startswith(equipment.DISMANTLE_PREFIX) and [t.id for t in p.rack] == ["寶:1"]
+
+
+def test_gear_rows_have_a_treasure_slot_with_effects(content, world):
+    from tianxia import skillview
+    _book(content)
+    game = _game(content, world)
+    p = game.state.player
+    p.treasure, p.rack = _item("audience", "寶:1"), [_item("win_material", "寶:2")]
+    gear = skillview.gear_rows(game.state, content, world)
+    [slot] = gear["slots"]  # 測試內容其他三欄關著：只有寶物那一段
+    assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("treasure", "寶物", treasures.EMPTY, treasures.RACK_NOTE)
+    assert slot["worn"]["effect_text"] == treasures.effect_text(content, "audience")
+    assert [(r["id"], r["effect"]) for r in slot["rack"]] == [("寶:2", "win_material")]
+    assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）
+    assert gear["held_note"] == ""
+    p.held_gear = [_item("seclusion", "寶:3")]
+    assert "【入定蒲團】" in skillview.gear_rows(game.state, content, world)["held_note"]
+    content.config.treasures.enabled = False
+    assert skillview.gear_rows(game.state, content, world)["slots"] == []
+
+
+def test_player_card_has_the_treasure_line(content, world):
+    from tianxia import skillview
+    _book(content)
+    game = _game(content, world)
+    assert "寶物" not in skillview.member_card(game.state, content, world, "player")
+    game.state.player.treasure = _item("audience")
+    line = treasures.card_line(game.state, content)  # 整行待 joy 潤：只鎖名字與效果
+    assert "【烏木名刺】" in line and treasures.effect_text(content, "audience") in line
+    assert line in skillview.member_card(game.state, content, world, "player").splitlines()
+
+
+def test_the_practice_page_wield_action_puts_a_treasure_on(content, world):
+    import server
+    _book(content)
+    game = _game(content, world)
+    game.state.player.rack = [_item("audience", "寶:1")]
+    server.MENXIA_ACTIONS["wield"](game, {"weapon": "寶:1"})
+    assert game.state.player.treasure.id == "寶:1"
+    assert server.menxia_view(game)["gear"]["slots"][0]["worn"]["name"] == "烏木名刺"

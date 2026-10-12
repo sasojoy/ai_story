@@ -44,6 +44,10 @@ NO_ROOM = "裝備庫滿了，【{name}】帶不走。"  # 待 joy 潤（6.5：�
 HELD = "裝備庫滿了，【{name}】先寄放著；拆掉幾件用不上的兵器或防具，騰出空位之後回來就補給你。"  # 待 joy 潤（6.5；2.2 的「拆掉幾件」提醒）
 HELD_TITLE = "寄放"  # 待 joy 潤：補發那一則江湖紀錄的標題
 HELD_ARRIVED = "寄放的【{name}】送到了。"  # 待 joy 潤
+EMPTY = "身上沒有寶物。"  # 待 joy 潤：修練頁寶物那一段身上空著
+RACK_NOTE = "寶物買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來；隨時能換。"  # 待 joy 潤：修練頁寶物那一段底下
+LOST = "這件寶物的來歷已經失傳"  # 待 joy 潤：內容拿掉了這一件（template 查不到，效果不算）
+HELD_NOTE = "寄放著：{names}——裝備庫騰出空位，下次回來就補給你。"  # 待 joy 潤：修練頁「裝備」塊底下
 
 
 def on(content: Content) -> bool:
@@ -229,3 +233,40 @@ def grant_effect(state: GameState, content: Content, gear_id: str, season: int) 
         return [NO_ROOM.format(name=tdef.name)]
     item = new_treasure(state, content, gear_id)
     return [GOT.format(name=item.name, effect=effect_text(content, tdef.effect)), *deliver(state, content, item)]
+
+
+# ---- 看得到（2.5）：修練頁每一列、角色卡那一行、寄放著哪幾件 ----
+
+def _row(content: Content, item: Equipment) -> dict:
+    """修練頁寶物那一段的一列：名字、效果（effect 是鍵、effect_text 是給人看的那一句）。寶物隨時能換（2.3【定】），沒有「能不能換」
+    的旗標；寶物不能拆，沒有拆解。"""
+    key = effect_of(content, item)
+    return {"id": item.id, "name": item.name, "effect": key or "", "effect_text": effect_text(content, key) if key else LOST}
+
+
+def rows(state: GameState, content: Content) -> dict:
+    """修練頁的寶物那一段（skillview.gear_rows）：身上那件、裝備庫裡的寶物。開關關著時 worn 是 None、rack 是空的
+    （玉璽一要讓傳承那一列照 Config.seal.enabled 另外畫，見計畫「範圍與取捨」玉璽那一段第 5 點）。"""
+    p = state.player
+    if not on(content):
+        return {"worn": None, "rack": []}
+    return {
+        "worn": _row(content, p.treasure) if p.treasure is not None else None,
+        "rack": [_row(content, t) for t in equipment.in_slot(p, "treasure")],
+    }
+
+
+def card_line(state: GameState, content: Content) -> str:
+    """本人卡上的「寶物」那一行（2.5，待 joy 潤）：「寶物　【烏木名刺】求見門檻 −3」；沒帶或開關關著是空字串
+    （玉璽一的「傳承」那一行照 Config.seal.enabled 另寫，不經過這裡的開關）。"""
+    item = state.player.treasure
+    if item is None or not on(content):
+        return ""
+    key = effect_of(content, item)
+    return f"寶物　【{item.name}】{effect_text(content, key) if key else LOST}"
+
+
+def held_note(state: GameState) -> str:
+    """修練頁「裝備」塊底下那一行（寄放著哪幾件，6.5）；沒有寄放的是空字串。"""
+    held = state.player.held_gear
+    return HELD_NOTE.format(names="、".join(f"【{item.name}】" for item in held)) if held else ""

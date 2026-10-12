@@ -252,3 +252,35 @@ def test_the_feed_button_calls_the_feed_action(views):
     x["gear"] = _mount_gear(_mount_row())
     reply = {"/api/menxia/feed": {"menxia": x, "message": "", "main": m}}
     assert run(m, _FEED_CLICK, menxia=x, responses=reply) == ["/api/menxia/feed"]
+
+
+def _treasure_gear(worn=None, rack=(), held_note=""):
+    """修練頁「裝備」只有寶物那一段（server.menxia_view 的 gear，skillview.gear_rows）。"""
+    return {"cap": 100, "used": len(rack), "held_note": held_note, "slots": [{
+        "slot": "treasure", "label": "寶物", "empty": "身上沒有寶物。", "note": "寶物買不到、打不出。",
+        "worn": worn, "rack": list(rack),
+    }]}
+
+
+def _treasure_row(**over):
+    return {"id": "寶:1", "name": "烏木名刺", "effect": "audience", "effect_text": "求見門檻 −3", **over}
+
+
+def test_the_treasure_slot_draws_the_effect_and_only_wield(views):
+    """寶物那一段（裝備四欄 2.5、第六節）：身上那件寫效果，裝備庫裡的只有「換上」，而且永遠按得下（寶物隨時能換，2.3【定】）；
+    寶物不能拆（4.8）。字都跳脫。"""
+    m, x = views
+    spare = _treasure_row(id="寶:2", name="<i>拾遺囊</i>", effect="win_material", effect_text="打贏時有 25% 的機會多掉一個素材")
+    x["gear"] = _treasure_gear(_treasure_row(), [spare])
+    block = _slot_block(run(m, "return H.pagePractice();", menxia=x), "treasure")
+    assert "【烏木名刺】" in block and "求見門檻 −3" in block and "打贏時有 25% 的機會多掉一個素材" in block
+    assert 'data-act="wield" data-id="寶:2">' in block and block.count('data-act="wield"') == 1
+    assert 'data-act="dismantle"' not in block and " disabled" not in block
+    assert "&lt;i&gt;拾遺囊&lt;/i&gt;" in block and "<i>拾遺囊</i>" not in block
+
+
+def test_held_gear_is_mentioned_under_the_gear_block(views):
+    m, x = views
+    x["gear"] = _treasure_gear(None, [], held_note="寄放著：【叩關玉】")
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert "寄放著：【叩關玉】" in page  # 身上與裝備庫都空著，寄放的那一行照樣畫（不然玩家以為東西作廢了）

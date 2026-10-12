@@ -1976,7 +1976,7 @@
     const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
-    // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎；寶物等裝備三），每段先列身上那件、再列裝備庫裡同一欄的。
+    // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），每段先列身上那件、再列裝備庫裡同一欄的。
     // 格數四欄合算（gear.used／gear.cap）。字都是伺服器給的資料，一律 esc。這一版畫不出的欄位（新伺服器多了一欄）整段略過。
     // FB-125（兵器第二批 Task 1）：名字與說明在左邊（.winfo，塞不下自己折行），「換上」「拆解」包在右邊一個不折行的 .wbtns 裡；拆解按了先問一次（data-confirm）
     const gear = x.gear;
@@ -2004,7 +2004,13 @@
           ? `<button class="btn small" data-act="feed"${h.feed ? "" : " disabled"}>餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>`
           : `<button class="btn small" data-act="wield" data-id="${esc(h.id)}"${h.wield_ok ? "" : " disabled"}>換上${h.wield_ok ? "" : `（${esc(h.wield_note)}）`}</button>`}</div>
       </div>`;
-    const GEAR_ROWS = { weapon: weaponRow, armor: armorRow, mount: mountRow };
+    // 寶物（裝備四欄設計第六節）：一件一種效果、不分階品、不磨損；身上那件寫效果，裝備庫裡的只有「換上」（寶物不能拆，4.8，不用 rowButtons）。
+    // 寶物隨時能換（2.3【定】，企劃者 2026-10-11），「換上」不灰掉。這一行的寫法待 joy 潤
+    const treasureRow = (t, wornNow) => `<div class="wrow">
+        <div class="winfo"><b>【${esc(t.name)}】</b><span>${esc(t.effect_text)}</span></div>
+        ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(t.id)}">換上</button></div>`}
+      </div>`;
+    const GEAR_ROWS = { weapon: weaponRow, armor: armorRow, mount: mountRow, treasure: treasureRow };
     const slotBlock = (g) => {
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
@@ -2016,9 +2022,12 @@
         <p class="muted">${esc(g.note)}</p>
       </section>`;
     };
+    // 寄放著的東西（裝備四欄 6.5：懸賞的重賞、名將贈禮在裝備庫滿了時先寄放）寫在塊底下一行灰字；身上、裝備庫都空著也照樣畫這一塊
+    const heldLine = gear && gear.held_note ? `<p class="muted">${esc(gear.held_note)}</p>` : "";
     // 塊名由「兵器」改成「裝備」（待 joy 潤）；段名（武器、防具）是伺服器給的 label
-    const gearBlock = gear && gear.slots.some((g) => g.worn || g.rack.length) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
+    const gearBlock = gear && (heldLine || gear.slots.some((g) => g.worn || g.rack.length)) ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
         ${gear.slots.map(slotBlock).join("")}
+        ${heldLine}
       </div>` : "";
     return `
       ${proGuide()}
