@@ -25,7 +25,7 @@
 - `run_bots.py`：伺服器假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著、開同一個資料庫與同一份設定。
 
 **存檔與全服狀態**
-- `tianxia/database.py`：SQLite（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉，直接丟 `RuntimeError`）。結構版本記在 `PRAGMA user_version`（目前第 4 版：第 4 版加 `gear_recipes`，全服兵器配方）；改結構時新增一組句子、接進 `SCHEMA`、`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一，舊檔打開時在同一筆交易裡一版一版就地升級（中途出錯整個撤回、檔還是舊版；沒有遷移路徑就丟 `RuntimeError`）。**改結構前先跟 PM 對版本號。**
+- `tianxia/database.py`：SQLite（預設 `saves/tianxia.db`，環境變數 `TIANXIA_DB` 可改；線上版與開發版各用各的）：連線、資料表、交易。一個動作＝一筆交易（`BEGIN IMMEDIATE`，出錯整個撤回），同一個執行緒可以巢狀（交易可以巢狀；`WorldStateStore.mutate` 不行，內層寫的會被外層蓋掉，直接丟 `RuntimeError`）。結構版本記在 `PRAGMA user_version`（目前第 5 版：第 4 版加 `gear_recipes`，全服兵器配方；第 5 版加 `biographies`，玩家傳）；改結構時新增一組句子、接進 `SCHEMA`、`MIGRATIONS[舊版]` 指向它、`SCHEMA_VERSION` 加一，舊檔打開時在同一筆交易裡一版一版就地升級（中途出錯整個撤回、檔還是舊版；沒有遷移路徑就丟 `RuntimeError`）。**改結構前先跟 PM 對版本號。**
 - `tianxia/world_state.py`：全服狀態的資料模型與存取介面 `WorldStateStore`（Protocol）；實作是 `tianxia/sqlite_world.py::SqliteWorldStore`（`open_world()`）。小的整份覆寫，會長大的（傳聞、江湖史、全服登記的武學、配方、兵器配方、改過的名字、合併出來的意境、第一個練成絕學的人、投靠名冊、決戰回合）一筆一筆加、照季分；換季不刪資料，江湖史跨季保留。武學、改過的名字、意境、兵器配方共用一個名字空間（`sqlite_world._name_taken`）；登記都是鎖內原子（`claim_recipe`、`claim_insight_recipe`、`claim_weapon_recipe`、`link_recipe`、`link_insight_recipe`、`rename_skill`、`claim_master`）；`fused_arts`／`merged_insights` 是合到舊的找候選用的。
 - `tianxia/characters.py`：角色存檔（`CharacterStore`、`open_characters()`），一個角色一列，**不含賽季**（`GameState.world` 只在記憶體）；名號比對不分大小寫。
 - `tianxia/accounts.py`：帳號與密碼（`accounts`、`logins` 表），見「原則」的登入那條。
@@ -35,6 +35,7 @@
 - `tianxia/rules.py`：條件、效果（`apply_effect`）、事件檢定（`check_outlook`）、大勢推動（`change_trend`）、第一季的亂局與割據（`chaos_fronts`、`geju_per_day`、`chaos_note`）、戰況變化換成一句話（`front_chip`、`humanize`）、求見門檻（`audience_bar`、`can_meet`）。
 - `tianxia/events.py`：事件抽選（同一個池子看過的先不抽，`rotation_pool`）與選項那一行的寫法（`choice_label`）。
 - `tianxia/world.py`：大勢門檻、世界事件、分幕主線、虛擬玩家、賽季結局、每週掛勾（`WEEK_HOOKS`）；第一季規則關著的季，`advance_world_state` 每一步呼叫 `bounties.tick`（季曆跨進新的一週就掛這一週的懸賞），`settle_season_start` 開季那一刻也掛第 1 週。
+- `tianxia/annals.py`：行狀（玩家傳第一批，企劃者 2026-10-12；`Config.biography`，正式開、測試內容關，不掛第一季開關）：這一季值得寫進傳裡的事記在 `PlayerState.annals`（`AnnalEntry`：種類、時刻、地點、人物、一句事實、你說的與他回的那一句、份量 1～5），超過 `cap`（150）先丟輕的。兩種記法：有話可說的地方直接 `note`（決戰收場 `Game._annal_showdown`〔每一次放手一搏另一則，`BattleParticipant.gambles`〕、對話 `Game._annal_talk`〔自己說的一律記〕、挑戰本人、頭目戰、截殺、首創〔`fusion`、`smithing`〕、絕學定名、一次性事件與奇遇的選擇與隨口應對、伏筆揭曉、名將贈禮）；其餘每個動作結束時 `Game._log` 叫 `watch`，拿 `PlayerState.annals_mark` 比（投靠、叛投、拜師、晉升、等級每 5 級、遊俠名號、同伴、寶物名駒名器、情誼跨 20／40／60／80 或一下掉 10、第一次說上話、本命武學、練成絕學）。只記不改數值、不碰 `Game.rng`；假人照樣記。換季時 `_reset_player_for_new_season` 先把行狀與身家（`annals.profile`）存進 `biographies`（`WorldStateStore.save_annals`；上一季收場、下一季才補的決戰走 `add_saved_annal`）。見聞的「行狀」分頁讀 `/api/annals`（`Game.annals_view`）。
 - `tianxia/journal.py`：江湖紀錄（一次行動一則）與「剛剛」卡片、紀錄列的 HTML；拿到新東西那一行會掃光（`_NEW_THING`，照訊息原文錨在開頭）。
 - `tianxia/guide.py`：新手引導、個人目標與任務區塊。`tianxia/leaderboard.py`：天下武學榜／內功榜。
 - `tianxia/roster.py`：同伴招募（每位歷史人物全服唯一）。`tianxia/companion_agent.py`：跟歷史人物的對話（模型生成，好感度照 tag 查表）。
@@ -279,7 +280,7 @@
 - **匿名**：首創者、第一個練成絕學的人寫給別人看的名號在登記當下記下（`MartialArt.creator_shown`／`master_shown`、`Insight.creator_shown`；匿名是「某位少俠」），之後照它寫；名號本身照舊存著當身分。
 
 ### 介面（`web/`）
-- 伺服器只給資料、畫面自己做：沒有建置步驟的原生 JavaScript（`web/app.js` 一個檔）。底部五個分頁 **江湖／修練／煉製／輿圖／見聞**（見聞＝戰報、大勢、傳聞、江湖史、紀錄），設定與管理者工具收在右上角齒輪。頂上狀態列（體力、氣血兩條＋銀兩、心得；點名號展開：名號獨佔一行、頭銜第二行〔一段一個 `.who-seg`，不能叫 `seg`〕、屬性、「可配 N 點」與五顆＋鈕、隊伍）。
+- 伺服器只給資料、畫面自己做：沒有建置步驟的原生 JavaScript（`web/app.js` 一個檔）。底部五個分頁 **江湖／修練／煉製／輿圖／見聞**（見聞＝戰報、大勢、傳聞、江湖史、紀錄、行狀），設定與管理者工具收在右上角齒輪。頂上狀態列（體力、氣血兩條＋銀兩、心得；點名號展開：名號獨佔一行、頭銜第二行〔一段一個 `.who-seg`，不能叫 `seg`〕、屬性、「可配 N 點」與五顆＋鈕、隊伍）。
 - 登入狀態是 cookie（`tx_session`），伺服器記憶體裡對應帳號；**重開伺服器要重新登入**。前端每 10 秒打 `/api/main`，分頁在背景時不打、上一次還沒回來不打、內容沒變不重畫。
 - **江湖頁**：劇情文字在上、行動在下；375×812 上「剛剛」、場景與整排行動都在第一屏（企劃者要的是按完不用捲就看得到結果）。平常閒著時（選單上有「打坐」）行動是一排五顆「水墨氣勁」按鈕：探索、遊歷、打坐、交友（沒有時是求見）、移動（點了在下面展開走法與「前往」）；其他只在此地才有的行動收在「此地還能做 N 件事」。事件、對話、路上、決戰的選單照舊是一排按鈕。鐵匠鋪（`smith:`）與馬市（`market:`）的選項標籤很長，網頁（`nbChunks`／`.nb`）把它切成不折行的小段，切在「・；、，＋→」後面與「（」前面、一段超過 16 字就不包，標籤的字一個不改，免得 375px 上「下品 46%」「沒人」「屬實」這類詞在字中間斷行（FB-132）。第一季另有公告卡、本週軍令卡、戰況圖卡。
 - **修練頁**（`pagePractice`）：身上的功法卡、練成鈕（寫價錢）；每一門武學一列（`owned_arts`：品質、熟練度、融的意境）可修練（含「服下破境丹」）、改練、熔煉；意境可化成心得；等著取名的絕學多一張定名表單；名冊與人物卡；「裝備」一塊（`gearBlock`，讀 `gear`：開著的欄位一段一段〔`data-slot`〕（坐騎那一段每一列寫省體力、路上快、決戰騎兵、落敗脫身；身上那匹一顆「餵」、裝備庫裡的只有「換上」〔路上灰掉〕，沒有拆解）（寶物那一段寫效果，裝備庫裡的只有「換上」，永遠按得下；「裝備」塊底下一行寫寄放著哪幾件）、每段身上那件與裝備庫裡同一欄的、格數四欄合算，8 件之後「再列 N 件」；FB-125 的兩顆鈕包在一起、拆解先問一次）。

@@ -1599,6 +1599,13 @@ def api_reports(request: Request, id: int | None = None):
     return look(game, lambda g: reports_view(g, id))
 
 
+@app.get("/api/annals")
+def api_annals(request: Request):
+    """見聞的「行狀」：這一季至今記下的事（玩家傳第一批；不叫模型）。"""
+    game = _game(request)
+    return look(game, lambda g: g.annals_view())
+
+
 @app.get("/api/map")
 def api_map(request: Request, layer: str = DEFAULT_LAYER, place: str | None = None):
     game = _game(request)

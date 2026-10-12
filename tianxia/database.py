@@ -206,9 +206,30 @@ SCHEMA_V4_TABLES: tuple[str, ...] = (
     "CREATE UNIQUE INDEX gear_recipes_by_name ON gear_recipes (season, name)",
 )
 
-SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES  # 新檔一次建好
-MIGRATIONS: dict[int, tuple[str, ...]] = {1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES}  # 第 n 版 → 第 n+1 版要跑的句子
-SCHEMA_VERSION = 4
+# 第 5 版（玩家傳，企劃者 2026-10-12；PM 核准第 5 版）：每個角色每季一篇傳。角色每季重來，行狀（PlayerState.annals）在換季前存進來；
+# 傳本身跨季留著，季末寫成之後填 text，公開分享時產生 share_code（不用登入的唯讀網址 /zhuan/<代碼>）。key 是名號的 casefold（同 characters.key）。
+SCHEMA_V5_TABLES: tuple[str, ...] = (
+    """CREATE TABLE biographies (
+        season INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        annals TEXT NOT NULL,
+        profile TEXT NOT NULL DEFAULT '{}',
+        text TEXT,
+        written_by TEXT,
+        written_at REAL,
+        rewrites INTEGER NOT NULL DEFAULT 0,
+        share_code TEXT UNIQUE,
+        public INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (season, key)
+    )""",
+)
+
+SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES  # 新檔一次建好
+MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
+    1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES,
+}
+SCHEMA_VERSION = 5
 
 
 def default_path() -> Path:

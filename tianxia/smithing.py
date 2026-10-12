@@ -17,7 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import armor, equipment, forge_secrets, fusion, team, weapons
+from . import annals, armor, equipment, forge_secrets, fusion, team, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -214,6 +214,7 @@ def forge(
     if secret is not None:
         forge_secrets.solve(state, tianji, secret, key)
         if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；江湖史不記名器，只記神器（第二批）
+            annals.note(state, content, annals.DEED, f"江湖上第一個打出名器【{secret.name}】。", 4)  # 行狀（玩家傳）：首創
             add_rumor(state, content.config.forge_secrets.rumor.format(who=state.player.name, name=secret.name), None,
                       content=content, named=True)
         fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）

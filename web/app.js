@@ -24,6 +24,7 @@
     { id: "rumors", name: "傳聞" },
     { id: "chronicle", name: "江湖史" },
     { id: "journal", name: "紀錄" },
+    { id: "annals", name: "行狀" }, // 玩家傳第一批：這一季值得寫進傳裡的事（/api/annals）
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
@@ -2541,6 +2542,21 @@
     return layers.map((l) => `<div class="card rumor-layer" data-layer="${esc(l.id)}"><h3>${esc(l.title)}</h3>${l.body}</div>`).join("");
   }
 
+  // 見聞的「行狀」（玩家傳第一批，Game.annals_view）：新的在上；字都是伺服器存的原文，這裡跳脫。份量 4 以上的加一點朱紅
+  function annalsHtml(a) {
+    if (!a) return '<p class="muted">載入中…</p>';
+    if (!a.on) return '<div class="card"><p class="muted">這一季不記行狀。</p></div>';
+    const head = `<div class="card annals-head"><h3>${esc(a.name)}・行狀</h3><p class="muted">這一季值得寫進傳裡的事。季末收季時，會照這些寫成一篇《${esc(a.name)}傳》。</p></div>`;
+    if (!a.rows.length) return head + '<div class="card"><p class="muted">還沒有記下什麼。上陣打一場大戰、跟英雄人物說幾句話，這裡就會有了。</p></div>';
+    const row = (r) => `<li class="annal${r.weight >= 4 ? " heavy" : ""}">
+        <div class="annal-meta"><span class="annal-kind">${esc(r.kind)}</span><span>${esc(r.when)}${r.place ? `・${esc(r.place)}` : ""}</span></div>
+        <p class="annal-text">${esc(r.text)}</p>
+        ${r.quote ? `<p class="annal-quote">你：「${esc(r.quote)}」</p>` : ""}
+        ${r.reply ? `<p class="annal-reply">${r.figure ? `<b>${esc(r.figure)}</b>：` : ""}${esc(r.reply)}</p>` : ""}
+      </li>`;
+    return head + `<ol class="annals card">${a.rows.slice().reverse().map(row).join("")}</ol>`;
+  }
+
   function pageNews() {
     const seg = `<div class="seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
@@ -2554,6 +2570,7 @@
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
     else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
+    else if (S.news === "annals") body = annalsHtml(S.annals);
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
@@ -2781,6 +2798,11 @@
     if (S.sheet) renderKeepingSheet();
   }
 
+  async function loadAnnals() {
+    S.annals = await api("/api/annals");
+    if (S.tab === "news") renderPage();
+  }
+
   async function loadReports(id) {
     S.reports = await api(`/api/reports${id != null ? `?id=${id}` : ""}`);
     if (S.tab === "news") renderPage();
@@ -2815,6 +2837,7 @@
         await loadMap(null);
       }
       if (tab === "news" && S.news === "reports") await loadReports(null);
+      if (tab === "news" && S.news === "annals") await loadAnnals();
     } catch (e) { /* api() 已經提示過 */ }
   }
 
@@ -3439,6 +3462,7 @@
           if (S.tab !== "news") { await goTab("news"); break; }
           renderPage();
           if (S.news === "reports") await loadReports(null);
+          if (S.news === "annals") await loadAnnals();
           break;
         case "report":
           S.news = "reports";

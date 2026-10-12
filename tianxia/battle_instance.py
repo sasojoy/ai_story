@@ -60,6 +60,21 @@ DEFAULT_FREE_TEXT_SUCCESS_RATE = 40  # LLM 評估失敗/無 client 時的保底�
 # 不是 50/50，呼應「不會全程 LLM 自由發展」的框架精神：評不出來就當作風險自負，不讓機制因為評估失敗而意外變得穩賺不賠。
 
 
+GAMBLES_KEPT = 6  # 每個參戰者記幾次放手一搏給行狀（一幕最多搏 per_act 次，三幕的仗夠用）
+
+
+class GambleMoment(BaseModel):
+    """一次放手一搏（收場時挑「最有戲」的那一次寫進傳聞，試玩回饋 2026-10-08）。"""
+
+    name: str
+    faction: str
+    text: str
+    story: str = ""  # 播出來的那一版劇情；模型沒寫是空的
+    rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
+    won: bool
+    target: str = ""  # 點名的那個人（find_target）；沒點名是空的（玩家傳的行狀寫；舊資料沒有）
+
+
 class BattleParticipant(BaseModel):
     name: str
     faction: str
@@ -106,18 +121,8 @@ class BattleParticipant(BaseModel):
     cavalry: float = 0.0  # 加入時的騎兵加成（強攻、奇襲的份量已經乘過，這裡只給畫面寫幾成）
     # 部下上陣（PM 2026-10-12）：舊資料沒有這兩欄就是沒帶部下
     troops: str = ""  # 加入時帶的部下（team.troop_names：「兩名持矛鄉勇」）；沒帶是空的
+    gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
-
-
-class GambleMoment(BaseModel):
-    """一次放手一搏（收場時挑「最有戲」的那一次寫進傳聞，試玩回饋 2026-10-08）。"""
-
-    name: str
-    faction: str
-    text: str
-    story: str = ""  # 播出來的那一版劇情；模型沒寫是空的
-    rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
-    won: bool
 
 
 def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
@@ -752,8 +757,10 @@ def resolve_round(
             if custom_text:
                 moment = GambleMoment(
                     name=name, faction=p.faction, text=custom_text, story=win_story if succeeded else lose_story,
-                    rate=assessed, won=succeeded,
+                    rate=assessed, won=succeeded, target=target.name if target is not None else "",
                 )
+                if len(p.gambles) < GAMBLES_KEPT:
+                    p.gambles.append(moment)
                 if more_dramatic(moment, instance.highlight):
                     instance.highlight = moment
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
