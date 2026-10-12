@@ -111,3 +111,49 @@ def test_no_shards_means_the_marks_and_the_emerge_skill_are_not_checked(content)
         event.seal = "stir" if event.kind == "showdown" else None
     assert content.config.seal.emerge_skill == "hunyuan" and "hunyuan" not in content.skills
     assert seal_problems(content) == []
+
+
+# ── Task 2：全服登記、密鹽、亂數 ──
+
+def test_the_registry_lives_on_the_shared_world_and_survives_a_new_season(sealed, world):
+    """登記在 world 那一列（不分季）：換季不清；開季、換季寫 opened_real（「這一季上線過」與隱沒都看它，5.3）。"""
+    from conftest import next_season
+    from tianxia import seal
+    from tianxia.engine import Game
+
+    world.mutate(lambda st: seal.log(seal.filled(st.seal, sealed), st.season_number, "emerge", shard="chishou", holder="甲"))
+    game = Game.new(sealed, "甲", rng=random.Random(0), world=world)
+    before = world.seal_state().registry.opened_real
+    next_season(sealed, world, game)
+    view = world.seal_state()
+    assert [e.kind for e in view.registry.history] == ["emerge"] and set(view.registry.shards) == {s for s, _, _ in SHARDS}
+    assert view.registry.opened_real == 300.0 and view.registry.opened_real != before and view.season == 2
+
+
+def test_the_salt_is_made_once_and_never_shown(sealed, world):
+    from tianxia import seal
+
+    reg = world.seal_state().registry
+    assert reg.salt == ""
+    assert seal.ensure_salt(reg) and len(reg.salt) == 32
+    first = reg.salt
+    assert not seal.ensure_salt(reg) and reg.salt == first
+
+
+def test_the_dice_are_seeded_by_salt_tianji_and_purpose():
+    from tianxia import seal
+
+    a = seal.dice(SALT, 3, "seal-stir", "changshe_fire", "chishou").random()
+    assert a == seal.dice(SALT, 3, "seal-stir", "changshe_fire", "chishou").random()
+    assert a != seal.dice("別的鹽", 3, "seal-stir", "changshe_fire", "chishou").random()
+    assert a != seal.dice(SALT, 4, "seal-stir", "changshe_fire", "chishou").random()
+
+
+def test_shard_of_matches_names_without_case(sealed, world):
+    from tianxia import seal
+    from tianxia.world_state import SealRegistry
+
+    reg = seal.filled(SealRegistry(), sealed)
+    reg.shards["yunzhuan"].state, reg.shards["yunzhuan"].holder = "held", "Rayal"
+    assert seal.shard_of(reg, "rayal").id == "yunzhuan" and seal.holders(reg) == {seal.key("Rayal")}
+    assert seal.shard_of(reg, "別人") is None

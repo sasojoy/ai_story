@@ -209,6 +209,13 @@ class BattleInstance(BaseModel):
     third_gain: float = 0.0  # 第三方整場的收穫加總（÷100 之前，戰鬥系統第六節）；舊資料沒有這一欄＝0（只存在 data 的 JSON 裡，不動資料表）
     third_push: int = 0  # 收場時算好的第三方大勢線推動（settle_third）；engine 收場時推，季終沒打完收起來的不推
     record_id: int | None = None  # 資料庫裡這一場的流水號；None＝還沒寫進資料庫（見 sqlite_world）
+    # 玉璽碎片（玉璽碎片設計 3.2、4.3）：集結那一刻擲中的現世與璽動，持有者的陣營在那一刻快照；舊資料沒有＝沒有
+    seal_emerge: str | None = None  # 這一場現世哪一片（收場時從勝方抽得主）
+    seal_shard: str | None = None  # 這一場牽動哪一片
+    seal_holder: str | None = None  # 那一片的持有者（名號）
+    seal_holder_faction: str | None = None  # 持有者那一刻在投靠名冊上的陣營（散人、這一季還沒上線過是 None）
+    seal_holder_side: str | None = None  # 上一欄是交戰兩方之一就記那一方，否則 None（旁觀）
+    seal_notes: list[str] = Field(default_factory=list)  # 收場時寫進每個參戰者戰報的那一兩行（下戰書、現世的得主）
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
 
 

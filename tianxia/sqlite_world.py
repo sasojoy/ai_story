@@ -31,7 +31,8 @@ from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import GearFind, Rumor, WeaponRecipe, WorldState
 from .world_state import (
-    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
+    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase, SharedWorldState,
+    fresh_season,
     jade_seal_summary, stamp_season,
 )
 
@@ -617,6 +618,7 @@ class SqliteWorldStore:
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             state.season_opened = True
             state.season_last_real = now
+            state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
             state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
             result["ok"] = True
 
@@ -637,6 +639,7 @@ class SqliteWorldStore:
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
             state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
@@ -734,6 +737,24 @@ class SqliteWorldStore:
                 (self._season_number(conn),),
             ).fetchall()
         return {row["faction"]: row["n"] for row in rows}
+
+    def seal_state(self) -> SealView:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT json_extract(data, '$.seal') AS seal, json_extract(data, '$.seal_duels') AS duels, "
+                "json_extract(data, '$.season_number') AS season, json_extract(data, '$.tianji') AS tianji, "
+                "json_extract(data, '$.paused_at') AS paused FROM world WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            return SealView(SealRegistry(), [], 1, 0, False)
+        registry = SealRegistry.model_validate_json(row["seal"]) if row["seal"] else SealRegistry()
+        duels = [SealDuel.model_validate(d) for d in json.loads(row["duels"])] if row["duels"] else []
+        return SealView(registry, duels, int(row["season"] or 1), int(row["tianji"] or 0), row["paused"] is not None)
+
+    def seal_duel_open(self) -> bool:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_array_length(data, '$.seal_duels') AS n FROM world WHERE id = 1").fetchone()
+        return row is not None and bool(row["n"])
 
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 

@@ -61,7 +61,7 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, social, team, timetable,
+    seal, server_bots, social, team, timetable,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -433,6 +433,7 @@ def current_fingerprint() -> str:
     return server_push.world_fingerprint(
         shared.season_number, shared.season_phase(), shared.season, battle,
         rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None, progress=progress,
+        seal=shared.seal_duels,
     )
 
 
@@ -1897,6 +1898,7 @@ def main(argv: list[str] | None = None) -> None:
         start_tunnel(args.port)  # cloudflared 連的是 http://127.0.0.1:{port}，只聽本機也照常運作
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：正式伺服器啟動時沒有就產生一次；測試與量表腳本不經過這裡，同樣的種子跑出同樣的結果
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
     QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
     print(queue_line(CONTENT.config), flush=True)
