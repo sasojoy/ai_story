@@ -110,3 +110,15 @@ def test_bots_detour_to_the_nearest_clinic_when_the_injury_is_heavy(real):
     assert bot.clinic_hop(game) is None  # 付不起：去了也白去
     game = _game(real, injury=100.0)
     assert bot.clinic_hop(game) is None and bot.wants_heal(game)  # 已經在醫館：就地療傷
+
+
+def test_heavy_injury_puts_the_clinic_ahead_of_orders(real):
+    from tianxia import bot_policy  # noqa: PLC0415
+
+    game = _game(real, where="yingshui", injury=0.0)
+    _, cap = team.member_neili(real, game.state.player.member, team.con_of(game.state, real, game.world, "player"))
+    game.state.player.member.injury = 0.2 * cap
+    assert bot_policy._clinic_score(game) == bot_policy.CLINIC_MOVE_SCORE < bot_policy.ORDER_SCORE
+    game.state.player.member.injury = 0.3 * cap
+    assert bot_policy._clinic_score(game) == bot_policy.CLINIC_URGENT_SCORE > bot_policy.SUMMONS_SCORE
+    assert bot.injury_share(game) == pytest.approx(0.3)
