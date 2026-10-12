@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seats, secret_recipes, sensing,
     skillview, smithing,
@@ -966,8 +966,26 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
+        heal = self._heal_option()
+        if heal is not None:
+            opts.append(heal)
         opts.append(Option(id="act:rest", label="打坐（坐下來回體力，隨時可以起身）"))
         return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
+
+    def _heal_option(self) -> Option | None:
+        """醫館裡、有內傷時的「醫館療傷」（企劃者 2026-10-12；跟修練頁的療傷鈕同一個動作、同一個價錢）；
+        銀兩不夠灰掉寫原因。開關關著（哪裡都能療傷）、不在醫館、沒有內傷都不畫。不花體力。"""
+        s, c = self.state, self.content
+        member = s.player.member
+        if not clinic.on(c) or not clinic.here(s, c) or int(member.injury) < 1:
+            return None
+        problem = team.heal_problem(s, c, member)
+        note = f"內傷 {int(member.injury)}・{team.heal_cost(c, member)} 兩"
+        return Option(id="act:heal", label=f"{clinic.HEAL}（{note if problem is None else problem.rstrip('。')}）",
+                      enabled=problem is None)
+
+    def _heal_msgs(self) -> list[str]:
+        return team.heal(self.state, self.content, self.state.player.member, clinic.problem(self.state, self.content))
 
     @staticmethod
     def _stand_option() -> Option:
@@ -1679,6 +1697,7 @@ class Game:
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
             "market": f"{mounts.MARKET}・{here}",
+            "heal": f"療傷・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -1997,6 +2016,8 @@ class Game:
         if what == "market":
             self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
             return [mounts.ENTERED]
+        if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
+            return self._heal_msgs()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -5467,8 +5488,9 @@ class Game:
 
     @_not_while_preparing
     def heal(self) -> list[str]:
+        """修練頁的療傷鈕：只在醫館做得了（clinic.py；不在醫館回「這裡沒有醫館，最近的在…」，什麼都不動）。"""
         xinde = self._xinde()
-        msgs = self._log(team.heal(self.state, self.content, self.state.player.member))
+        msgs = self._log(self._heal_msgs())
         self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
         return msgs
 

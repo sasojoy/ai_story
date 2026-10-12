@@ -54,6 +54,7 @@ SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不�
 # 多半挑了遊歷、趕路，一整季一爐都沒打。照 SMITH_SCORE 再加一份（合起來 16）：高過一般的遊歷、往軍令與懸賞走的那一步，
 # 低過軍令本身（ORDER_SCORE 30：替軍令遊歷、接糧車）——不然手上帶著糧草的假人會先把糧草下爐，不去接糧車
 FORGE_SCORE = SMITH_SCORE
+CLINIC_MOVE_SCORE = 20.0  # 內傷重了往醫館走（bot.clinic_hop）：高過軍令、召見、懸賞的那一步，傷好了才有力氣做事
 MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 # 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
@@ -514,7 +515,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
         summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
         bounty_hop = BOUNTY_MOVE_SCORE if arg.partition(":")[0] == _bounty_hop(game) else 0.0  # 往懸賞要去的地方
-        return base + order_hop + summons_hop + bounty_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        clinic_hop = CLINIC_MOVE_SCORE if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
+        return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
@@ -532,6 +534,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return SMITH_SCORE + (FORGE_SCORE if bot.forge_ready(game) else 0.0)
         if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
             return MARKET_SCORE if bot.market_want(game) else None
+        if arg == "heal":  # 醫館療傷：look_after 已經先療了，萬一還在選單上（照顧動作沒輪到）付得起就按
+            return CLINIC_MOVE_SCORE if wants_heal(game) else None
         if arg == "explore" and _bounty_here(game, "scout"):
             return BOUNTY_SCORE
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):

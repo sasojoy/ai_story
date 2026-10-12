@@ -1332,6 +1332,10 @@ def validate(c: Content) -> None:
         for key in keys:
             need(key in valid, f"{where}：未知的{kind} {key}")
 
+    need(  # 療傷只在醫館（clinic.py）：開著時至少要有一家，不然內傷一輩子治不好
+        not c.config.heal_at_clinic or any("醫館" in (loc.tags or []) for loc in c.locations.values()),
+        "config.heal_at_clinic 開著，可是沒有地點帶「醫館」標籤：內傷治不好",
+    )
     odds = c.config.fuse_quality_odds  # 合成擲品質：只擲得到下品～上品（絕學要修練），權重不能是負的、也不能全是 0
     need(
         set(odds) <= {"下品", "中品", "上品"} and all(w >= 0 for w in odds.values()) and sum(odds.values()) > 0,

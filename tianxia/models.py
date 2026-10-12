@@ -813,6 +813,7 @@ ALLOW_FIXED = frozenset({
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
+    "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1967,6 +1968,8 @@ class Config(_Strict):
     injury_share: float = 0.2  # 損失的氣血有幾成變成內傷（其餘是輕傷，自己會回）
     practice_injury_amount: float = 15.0  # 受傷時扣的氣血（累積為內傷，需療傷才能回到滿上限）
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
+    # 療傷只在醫館（帶「醫館」標籤的地點，tianxia/clinic.py；企劃者 2026-10-12「不能隨地療傷」）。關著時哪裡都能療傷（測試內容關著）
+    heal_at_clinic: bool = True
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
     practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次

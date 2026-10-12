@@ -1917,7 +1917,8 @@
   // title 與 aria-label）；價錢是 x.heal_cost（team.heal_cost），網頁不自己算。伺服器沒給 heal（舊版）就照內傷數畫
   function healButton(x, injury) {
     const h = x.heal, hurt = injury >= 1, cost = x.heal_cost || 0;
-    const sub = !hurt ? "沒有內傷" : `內傷 ${Math.round(injury)}・銀 ${cost}${h && !h.ok ? " 不夠" : ""}`;
+    // 不在醫館（企劃者 2026-10-12）：鈕灰掉，第二行寫伺服器給的那一句（「這裡沒有醫館，最近的在…」）
+    const sub = !hurt ? "沒有內傷" : h && h.clinic ? h.clinic : `內傷 ${Math.round(injury)}・銀 ${cost}${h && !h.ok ? " 不夠" : ""}`;
     const why = h && h.why ? ` title="${esc(h.why)}" aria-label="療傷：${esc(h.why)}"` : "";
     return `<button class="btn" data-act="mx" data-op="heal" ${(h ? h.ok : hurt) ? "" : "disabled"}${why}>療傷<small>${esc(sub)}</small></button>`;
   }
