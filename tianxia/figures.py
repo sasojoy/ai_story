@@ -1,7 +1,9 @@
 """大勢人物（計畫 T4；T2 先放了只改欄位的最小版）。
 
 人物表（content/figures.json，濃縮版內容表 1.1）上每一位這一季的聲威、狀態、戰線、所在，存在 WorldState.figures；
-開關開著時，開季那一刻照人物表種好（world_state.stamp_season 呼叫 seed）。
+第一季開季那一刻照人物表種好（world_state.stamp_season 呼叫 seed），其他季第一次被打贏才寫（_ensure）。
+挑戰本人每季都有（挑戰大勢人物每季都有設計）：challenge_on 是開關，untimed 是「有挑戰本人但不是第一季」（沒有時刻表的季，
+才有 recover、defeat 的一天上限、leader_out）。推戰線（tick）與時刻表的人物結局（apply）只在第一季。
 - 讀：state_of（沒種過的照人物表的起始值，不寫回存檔）、present_at／placed_characters（誰在哪裡）、commander
   （那條戰線那一方的主將）、difficulty／squad_of（挑戰本人的難度）。
 - 改：apply（時刻表的人物結局與接手）、defeat（挑戰本人打贏扣聲威）。

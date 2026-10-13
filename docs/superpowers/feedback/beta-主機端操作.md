@@ -396,6 +396,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **玉璽二（天命之爭）上線之後要退回舊程式**：資料庫版本沒變（第 5 版），但舊程式會丟天命之季的章（`mandate`、`mandate_result`、登記的 `mandate_season`、`mandate_pending`）：正在跑的天命之季會變回一般季（提前收季、璽動照 7%、天命之爭從時刻表消失）。退版一定要停伺服器和假人、拿上線前的備份還原。
 
+**挑戰大勢人物每季都有上線之後要退回舊程式**：先試緊急開關——`content/config.json` 加一行 `"figure_challenge_every_season": false`，兩個程式重開：第一季以外的季沒有挑戰鈕、不閉門、求見照 `talk_at`、聲威不回、虛擬玩家照常出手、輿圖跟以前一樣（已經記下的 `bocai_defeated` 留著）。真的要退版：資料庫結構沒變（第 5 版），舊程式打得開檔；`PlayerState.figure_rare_drops`、`trend_accum` 的 `regen:`、`lost:` 鍵、14 天的季寫進去的 `WorldState.figures` 舊程式都不讀或略過；退版前先把 `content/config.json` 裡這一批新的設定（`figure_challenge_every_season`、`figure_prestige_regen`、`figure_daily_loss_cap`、`figure_rare_cap`、`figure_treasure_cap`）拿掉，`content/figures.json` 的 `out_flag` 跟著程式一起退——舊程式的 `Config`、`FigureDef` 不認得這些欄位，讀設定就會報錯。`tier3_per_figure` 退回 2 照舊程式的值。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨。
+
 ## 換成第一季濃縮版的那一天
 
 企劃者定了「換季重來、不開新資料庫」：帳號和江湖史留著，beta 這一季收掉，開新的一季。順序照下面走（PM 2026-10-04 定）。
