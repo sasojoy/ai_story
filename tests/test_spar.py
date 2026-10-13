@@ -209,6 +209,25 @@ def test_nothing_while_the_switch_is_off(content, world):
     assert not any(b["action"] == "spar" for b in game.peer_card("乙")["actions"])
 
 
+
+def test_no_spar_or_discuss_on_the_card_in_the_off_season_fb169(pair):
+    """FB-169：休季（這一季收了）玩家卡上不畫「切磋」「論武」（同 FB-163 的截殺、通緝；以前畫成灰的、寫「你此刻正忙」）；
+    直接打 API 也發不了邀請（回同一句「此刻無法這麼做」）；下一季開了，同樣的兩個人又看得到。"""
+    content, world = pair
+
+    def card():
+        return {b["action"] for b in _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]["actions"]}
+
+    assert {"spar", "discuss"} <= card()
+    world.mutate_season(lambda s: setattr(s, "ended", True))
+    assert not {"spar", "discuss"} & card()
+    for action, arg in (("spar", "invite"), ("discuss", "invite:art:fist")):
+        msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", action, {"arg": arg}))
+        assert msgs == ["（此刻無法這麼做。）"] and world.get_season().invites == []
+    world.mutate_season(lambda s: setattr(s, "ended", False))
+    assert {"spar", "discuss"} <= card()
+
+
 def test_the_other_side_is_told(pair, monkeypatch):
     """伺服器做完動作，被邀的人（答應、婉拒時是發邀請的人）開著的分頁也刷新（server._tell_tabs 讀 Game.touched）。"""
     import server

@@ -27,7 +27,7 @@ def _price_note(game: Game) -> str:
 
 
 def buttons(game: Game, other: Game) -> list[social.CardButton]:
-    if not season_one(game.content, game.state.world):
+    if not season_one(game.content, game.state.world) or game.state.world.ended:  # 休季不畫（FB-169，同 FB-163 的截殺）
         return []
     inv = _pending(game, other)
     items = game.discuss_items()

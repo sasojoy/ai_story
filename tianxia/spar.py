@@ -20,7 +20,7 @@ def _pending(game: Game, other: Game):
 
 
 def buttons(game: Game, other: Game) -> list[social.CardButton]:
-    if not season_one(game.content, game.state.world):
+    if not season_one(game.content, game.state.world) or game.state.world.ended:  # 休季不畫（FB-169，同 FB-163 的截殺）
         return []
     cost = game.content.config.action_cost["train"]
     inv = _pending(game, other)

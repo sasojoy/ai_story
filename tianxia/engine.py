@@ -6153,9 +6153,9 @@ class Game:
 
     def spar_refusal(self, other: Game) -> str | None:
         """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
-        之間沒有一張還在等的邀請。"""
+        之間沒有一張還在等的邀請。休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
         s, c = self.state, self.content
-        if not season_one(c, s.world):
+        if not season_one(c, s.world) or s.world.ended:
             return "（此刻無法這麼做。）"
         for who, me in ((self, True), (other, False)):
             problem = self._spar_problem(who, me=me)
@@ -6319,9 +6319,10 @@ class Game:
         return fusion.half_price(cfg.fuse_xinde, cfg.fuse_stamina)
 
     def discuss_refusal(self, other: Game) -> str | None:
-        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。"""
+        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。
+        休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
         s, c = self.state, self.content
-        if not season_one(c, s.world):
+        if not season_one(c, s.world) or s.world.ended:
             return "（此刻無法這麼做。）"
         cost = self._discuss_cost()[1]
         for who, me in ((self, True), (other, False)):
