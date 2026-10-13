@@ -1029,6 +1029,9 @@ def _main_view_body(game: Game) -> dict:
         "push": HUB is not None,
         "push_spread": game.content.config.push_world_min_seconds,
     }
+    shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
+    if shop is not None:
+        view["shop"] = shop
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -1460,6 +1463,8 @@ def api_main(request: Request):
 # 只有不寫紀錄的動作（例如管理者的操作）才用得到，前端拿它跳一句提示。
 MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
+    # 店面的直接開爐（店面獨立介面設計 6.3）：打的是同一個 smithing.forge；出爐卡在 game.smith_result，api_do 一起回
+    "smith_forge": lambda g, b: g.smith_forge(str(b.get("kind", "")), str(b.get("main", "")), str(b.get("aux", ""))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
@@ -1564,7 +1569,10 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     else:
         raise HTTPException(404)
     _tell_tabs(game, str(body.get("name", "")) if op in PLAYER_ADMIN_ACTIONS else "")
-    return {"main": look(game, main_view), "message": joined(msgs)}
+    out = {"main": look(game, main_view), "message": joined(msgs)}
+    if op == "smith_forge":
+        out["forged"] = game.smith_result  # 店面的出爐卡（麻布的光、點開的卡）；被拒絕是 None
+    return out
 
 
 def forge_args(body: dict) -> tuple[str | None, list[str], str | None]:
@@ -1728,6 +1736,14 @@ def api_forge_line(request: Request, body: dict = Body(default={})):
     game = _game(request)
     art, picked, other = forge_args(body)
     return look(game, lambda g: {"line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other)})
+
+
+@app.post("/api/smith_line")
+def api_smith_line(request: Request, body: dict = Body(default={})):
+    """店面打造那一頁：爐裡放了什麼就問這一爐會怎樣（不算行動、不存檔；店面獨立介面設計 6.3）。參數是客戶端寫的，一律轉成字串。"""
+    game = _game(request)
+    kind, main, aux = (str(body.get(key) or "") for key in ("kind", "main", "aux"))
+    return look(game, lambda g: g.smith_line(kind, main or None, aux or None))
 
 
 @app.get("/api/reports")
