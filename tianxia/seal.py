@@ -267,8 +267,15 @@ def tier_for(holder_side: str | None, winner: str, margin: str) -> str:
     return "大敗" if margin == "大勝" else "險敗"
 
 
+def challenger_ok(p, need: int, held: set[str], holder: str | None) -> bool:
+    """挑戰者與畫面那一句共用的條件（4.6；FB-177：挑人與畫面照同一條）：自己出手滿 need 回合、這一季沒叛投過、不在新手期
+    （加入時的快照）、不是決戰補位的機器人、不是持有者本人、手上沒有碎片。倒下的不擋（挑人本來就不看倒下）。"""
+    return (p.acted_rounds >= need and not p.turncoat and not p.newbie and not p.is_bot
+            and key(p.name) not in held and key(p.name) != key(holder))
+
+
 def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[str]:
-    """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——自己出手滿門檻、手上沒有碎片、不是持有者本人、
+    """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——合格照 challenger_ok（同挑挑戰者），
     陣營不跟持有者的快照相同（快照是 None 就不擋）。只給畫面那一句用，不決定誰上陣（那要看收場時誰贏）。"""
     definition = content.battles.get(battle.battle_id)
     if battle.seal_shard is None or definition is None:
@@ -281,7 +288,7 @@ def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[
             continue
         rows = [
             (p.name, battle_instance.merit(tuning, p)) for p in battle.participants.values()
-            if p.faction == side and p.acted_rounds >= need and not p.is_bot and key(p.name) not in held and key(p.name) != key(battle.seal_holder)
+            if p.faction == side and challenger_ok(p, need, held, battle.seal_holder)
         ]
         out |= {name for name, _ in sorted(rows, key=lambda r: (-r[1], r[0]))[: cfg.challenger_pool]}
     return out
