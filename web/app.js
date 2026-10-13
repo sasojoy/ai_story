@@ -2546,11 +2546,15 @@
       ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}`;
   }
 
-  // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫
-  function renderShop() {
+  // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫。店裡捲到哪裡照放回去（往下捲去點素材格，
+  // 放進爐裡不能跳回頂上）；換頁（keep 為假）從頂上開始
+  function renderShop(keep = true) {
     const layer = document.querySelector(".shop-layer");
     if (!layer || !S.main || !S.main.shop) { render(); return; }
+    const top = keep ? (layer.querySelector?.(".shop-body")?.scrollTop || 0) : 0;
     layer.outerHTML = shopHtml(S.main.shop);
+    const body = top ? document.querySelector(".shop-layer .shop-body") : null;
+    if (body) body.scrollTop = top;
   }
 
   // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，
@@ -4171,7 +4175,7 @@
         case "feed": await mx("feed"); break; // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
-        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(); break;
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;

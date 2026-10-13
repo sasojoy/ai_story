@@ -241,3 +241,17 @@ def test_the_fire_runs_without_reduced_motion(m):
         return seen;
       })();""", responses={"/api/do/smith_forge": {"main": m, "message": "", "forged": FORGED}})
     assert out == [True, False]
+
+
+def test_a_redraw_keeps_the_shop_scrolled_where_it_was(m):
+    """放一格素材、輪詢都把整層換掉：店裡捲到哪裡照放回去；換頁才回到頂上（實機看 375 寬時發現的）。"""
+    out = run(m, """
+      H.S.shopTab = "forge"; H.render();
+      const fresh = { scrollTop: 0 };
+      const layer = { outerHTML: "", querySelector: () => ({ scrollTop: 240 }) };
+      T.qs[".shop-layer"] = layer; T.qs[".shop-layer .shop-body"] = fresh;
+      H.renderShop();
+      const kept = fresh.scrollTop;
+      fresh.scrollTop = 0; H.renderShop(false);
+      return { kept, reset: fresh.scrollTop };""")
+    assert out == {"kept": 240, "reset": 0}

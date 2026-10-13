@@ -1229,7 +1229,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer {
   position: fixed; inset: 0; z-index: 41; display: flex; flex-direction: column; overflow: hidden;
   color: #f2e5c6; background: radial-gradient(ellipse at 50% 22%, #4a2a18 0%, #24170f 62%, #160e09 100%);
-  padding-top: var(--top); animation: fade 0.2s;
+  padding-top: var(--top); /* 不淡入：輪詢、換頁、放料都把整層換掉（renderShop），淡入會每次重播、底下的頁面跟著閃 */
 }
 .shop-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 8px 12px 4px; }
 .shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
@@ -1271,7 +1271,9 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-row .wbtns { display: flex; gap: 6px; flex: none; }
 .shop-more { margin-top: 8px; }
 .shop-layer .naming.divine { color: var(--ink); }
-@media (prefers-reduced-motion: reduce) { .shop-layer { animation: none; } }
+.shop-layer .btn.ghost { color: #e8d6ad; border-color: #6b4a2e; background: transparent; } /* 暗底上的淡框鈕（鑄譜、拆解、再列 N 件） */
+.shop-layer .btn.ghost:disabled { color: #a08a6a; }
+.shop-layer .forge-card .btn.ghost { color: var(--ink); border-color: var(--line, #d8ccb8); } /* 出爐卡是紙底 */
 /* 打造頁（2.2）：種類一排、爐子兩格、這一爐的機率條、素材格 */
 .shop-kinds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 6px; }
 .shop-kinds .kind { position: relative; border: 1px solid #6b4a2e; background: transparent; color: #e8d6ad; border-radius: 14px; padding: 4px 12px; font: 14px var(--serif); }
@@ -1300,7 +1302,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-gorow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
 .shop-go { padding: 12px 8px; font: 600 16px var(--serif); letter-spacing: 2px; }
 .shop-layer .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.shop-layer .cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px 6px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12px var(--serif); }
+.shop-layer .cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 14px 2px 6px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12px var(--serif); }
 .shop-layer .cell .n { position: absolute; top: 3px; right: 6px; font: 600 10px var(--sans); color: #f2c46a; }
 .shop-layer .cell .nm { display: flex; align-items: center; }
 .cell small { font: 10.5px var(--sans); color: #c9b28a; }
@@ -1314,7 +1316,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .dot.man { background: var(--man); }
 @media (prefers-reduced-motion: reduce) { .shop-layer .furnace.firing .flame svg { animation: none; } }
 /* 開爐與出爐（2.3）：麻布的光色、出爐卡、首位發現的朱印；減少動態效果的人不震動 */
-.reveal-layer { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: rgba(12, 8, 5, 0.72); animation: fade 0.2s; }
+.reveal-layer { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: rgba(12, 8, 5, 0.72); }
 .bundle { width: 180px; height: 150px; border-radius: 40% 40% 30% 30%; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
   color: #3a2a1e; font: 600 16px var(--serif); background: repeating-linear-gradient(45deg, #cdb894 0 6px, #c2ab84 6px 12px); }
 .bundle small { font: 12px var(--sans); }
@@ -1339,4 +1341,4 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .forge-card .naming.divine { text-align: left; }
 .first-seal { position: absolute; top: -12px; right: -8px; transform: rotate(8deg); padding: 6px 8px; border: 2px solid var(--accent); border-radius: 6px; color: var(--accent);
   background: var(--paper); font: 600 14px var(--serif); letter-spacing: 2px; }
-@media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } .reveal-layer { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } }
