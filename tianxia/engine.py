@@ -2693,7 +2693,7 @@ class Game:
             return ["你離開了懸賞榜。"]
         if verb == "take":
             b = next((x for x in bounties.open_bounties(s, c) if x.id == rest), None)
-            self._shop_say(shopview.board_key(bounties.take_problem(s, c, b) if b is not None else bounties.GONE, "take"))  # 1.4
+            self._shop_after(bounties.take_problem(s, c, b) if b is not None else bounties.GONE, "take", shopview.board_key)  # 1.4
             return bounties.take(s, c, rest)
         if verb == "drop":
             msgs = bounties.drop(s, c, rest)
@@ -2858,10 +2858,10 @@ class Game:
             mounts.close_market(s.player)
             return [mounts.LEFT]
         if verb == "buy":
-            self._shop_say(shopview.problem_key(mounts.buy_problem(s, c), "buy"))
+            self._shop_after(mounts.buy_problem(s, c), "buy")
             return mounts.buy(s, c)
         if verb == "feed":
-            self._shop_say(shopview.problem_key(mounts.feed_problem(s, c), "feed"))
+            self._shop_after(mounts.feed_problem(s, c), "feed")
             return mounts.feed(s, c)
         if verb == "wield":
             msgs = mounts.wield(s, c, rest)
@@ -2900,19 +2900,19 @@ class Game:
             return self._smith_forge_once(kind, main, aux)[1]
         if verb in smithing.STEP_VERBS:
             if verb in ("temper", "armor-temper"):  # 店面上掌櫃那一句（1.4）：照淬煉之前的擋法
-                self._shop_say(shopview.problem_key(smithing.temper_problem(s, c, "armor" if verb == "armor-temper" else "weapon"), "temper"))
+                self._shop_after(smithing.temper_problem(s, c, "armor" if verb == "armor-temper" else "weapon"), "temper")
             return smithing.step(s, c, verb, rest)
         if verb == "buy":
-            self._shop_say(shopview.problem_key(weapons.buy_problem(s, c, rest), "buy"))
+            self._shop_after(weapons.buy_problem(s, c, rest), "buy")
             return weapons.buy(s, c, rest)
         if verb == "repair":
-            self._shop_say(shopview.problem_key(weapons.repair_problem(s, c), "repair"))
+            self._shop_after(weapons.repair_problem(s, c), "repair")
             return weapons.repair(s, c)
         if verb == "armor-buy":
-            self._shop_say(shopview.problem_key(armor.buy_problem(s, c, rest), "buy"))
+            self._shop_after(armor.buy_problem(s, c, rest), "buy")
             return armor.buy(s, c, rest)
         if verb == "armor-repair":
-            self._shop_say(shopview.problem_key(armor.repair_problem(s, c), "repair"))
+            self._shop_after(armor.repair_problem(s, c), "repair")
             return armor.repair(s, c)
         # 換上與拆解兩頁共用 id 開頭（兵:N、甲:N 本來就全角色唯一），照停在哪一頁限定欄位
         if verb == "wield":
@@ -2921,10 +2921,16 @@ class Game:
             return (armor.dismantle if equipment.page(s.player, c) == "armor" else weapons.dismantle)(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
-    def _shop_say(self, key: str) -> None:
-        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵，與挑句子的種子（這一刻的季的時間）。"""
+    def _shop_say(self, key: str, problem: str | None = None) -> None:
+        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
+        撐到什麼時候（shopview.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
         p = self.state.player
         p.shop_line, p.shop_line_seed = key, int(self.state.world.time)
+        p.shop_hold = shopview.hold_for(self.state, self.content, key, problem)
+
+    def _shop_after(self, problem: str | None, done: str, keyer=None) -> None:
+        """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shopview.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
+        self._shop_say((keyer or shopview.problem_key)(problem, done), problem)
 
     def _smith_forge_once(self, kind: str, main: str, aux: str) -> tuple[Equipment | None, list[str], dict]:
         """開爐一次（一步一步單子的 forge-go 與店面的直接開爐共用）：防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方
@@ -2939,7 +2945,7 @@ class Game:
             s.player.smith_draft = None
             self._shop_say(shopview.forged_key(item))
         else:
-            self._shop_say(shopview.problem_key(problem, "refused"))
+            self._shop_after(problem, "refused")
         return item, msgs, report
 
     def _shop_open(self) -> str | None:

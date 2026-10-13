@@ -246,7 +246,7 @@ def close_market(p: PlayerState) -> None:
     """收起馬市：選單與店面上馬販那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_market 設成 False 的地方都走這裡
     （離開、讀檔修補、同步時人不在馬市、出發），同 equipment.close_smith。"""
     p.picking_market = False
-    p.shop_line, p.shop_clue = "", ""
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
 def market_here(state: GameState, content: Content) -> bool:

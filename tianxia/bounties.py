@@ -108,7 +108,7 @@ def close_board(p: PlayerState) -> None:
     """收起懸賞榜：選單、第三層挑到哪一張、店面上榜吏那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_bounty 設成 False 的地方
     都走這裡（離開、讀檔修補、出發），同 equipment.close_smith。"""
     p.picking_bounty, p.bounty_pick = False, None
-    p.shop_line, p.shop_clue = "", ""
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
 def week_seconds(state: GameState, content: Content) -> float:

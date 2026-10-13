@@ -1,11 +1,13 @@
-"""店面的畫面資料（docs/superpowers/specs/2026-10-13-店面獨立介面-design.md 第六節；第一批：共用店面＋鐵匠鋪）。
+"""店面的畫面資料（docs/superpowers/specs/2026-10-13-店面獨立介面-design.md 第六節；第一批：共用店面＋鐵匠鋪；第二批：馬市、懸賞榜）。
 
 只讀：不改數值、不碰亂數、不 import engine。每一個「做不了」的原因都從現在的規則函式拿（smithing.forge_problem、temper_problem、
 weapons.buy_problem、repair_problem……），網頁不自己判斷規則。掌櫃的話照 PlayerState.shop_line（店裡最後一件事的情況鍵，引擎記）
-從 content/shop_lines.json 挑一句（1.4）；鐵匠順口那一句（shop_clue）蓋過它。"""
+從 content/shop_lines.json 挑一句（1.4）；鐵匠順口那一句（shop_clue）蓋過它；被拒的那一句只撐到被拒的原因還成立（shop_hold，FB-192）。"""
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 
 from . import armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
 from .models import WEAPON_KINDS, Content
@@ -45,6 +47,48 @@ def board_key(problem: str | None, done: str) -> str:
     return "held_full" if problem.startswith(_HELD_HEAD) else "refused"
 
 
+# 被拒的情況（FB-192）：那一句只撐到被拒的原因還成立的時候，原因不成立了就換回平常那一句（進門那一組）——錢補夠了、裝備庫騰出位子了、
+# 手上那一張作廢了；其餘的擋法（素材不夠、吃飽了、下榜了……）看不出原因，照「錢、素材、身上與裝備庫的東西都沒變」算還成立
+REFUSALS = ("short_silver", "rack_full", "held_full", "refused")
+
+
+def _mark(state: GameState) -> str:
+    """被拒那一下的狀態指紋：銀兩、背包、身上與裝備庫每一件的 id 與磨損、淬煉。"""
+    p = state.player
+    gear = [(e.id, e.edge, e.tempers) for e in (p.weapon, p.armor, p.mount, p.treasure, *p.rack) if e is not None]
+    raw = json.dumps([p.stats.get("silver", 0), sorted(p.materials.items()), gear], ensure_ascii=False)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def hold_for(state: GameState, content: Content, key: str, problem: str | None) -> str:
+    """這一下的那一句要撐到什麼時候（PlayerState.shop_hold）：錢不夠（「還差 N 兩」）記要的銀兩、裝備庫滿了記 rack、手上揭滿了記 held，
+    其餘被拒的記狀態指紋；做成了的是空字串。"""
+    if key == "short_silver":
+        digits = re.search(r"\d+", problem or "")
+        if digits:
+            return f"silver:{state.player.stats.get('silver', 0) + int(digits.group())}"
+    if key == "rack_full":
+        return "rack"
+    if key == "held_full":
+        return "held"
+    return f"same:{_mark(state)}" if key in REFUSALS else ""
+
+
+def still_holds(state: GameState, content: Content, hold: str) -> bool:
+    """被拒的原因還成立嗎（hold_for 記的）：沒記的（舊存檔、做成了的情況）算成立。"""
+    p = state.player
+    kind, _, arg = hold.partition(":")
+    if kind == "silver":
+        return p.stats.get("silver", 0) < int(arg)
+    if kind == "rack":
+        return len(p.rack) >= content.config.weapons.rack_cap
+    if kind == "held":
+        return len(bounties.mine(state, content)) >= content.config.bounties.max_taken
+    if kind == "same":
+        return _mark(state) == arg
+    return True
+
+
 def forged_key(item: Equipment) -> str:
     """打完一爐那一句照什麼分（1.4）：神器（原品、仿品）＞名器＞品質。"""
     if item.original or item.copy_of is not None:
@@ -56,12 +100,15 @@ def forged_key(item: Equipment) -> str:
 
 def line_text(state: GameState, content: Content, shop: str) -> str:
     """招牌底下那一句：鐵匠順口說了口訣就是那一句；不然照情況鍵（沒有、或內容沒寫那一種就用進門那一組）挑一句，
-    照「名號｜情況｜那一下的時間」的雜湊挑（不碰 Game.rng；輪詢時同一句不換）。內容沒寫是空字串。"""
+    照「名號｜情況｜那一下的時間」的雜湊挑（不碰 Game.rng；輪詢時同一句不換）。內容沒寫是空字串。被拒的那一句（REFUSALS）只撐到被拒的原因
+    還成立（still_holds）：錢補夠了……就換回進門那一組，不必等下一個動作（FB-192）。"""
     p = state.player
     if p.shop_clue:
         return p.shop_clue
     pool = content.shop_lines.get(shop, {})
     key = p.shop_line if pool.get(p.shop_line) else "enter"
+    if key in REFUSALS and not still_holds(state, content, p.shop_hold):
+        key = "enter"
     lines = pool.get(key) or []
     if not lines:
         return ""

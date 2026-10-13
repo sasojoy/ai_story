@@ -269,4 +269,4 @@ def close_smith(p: PlayerState) -> None:
     """收起鐵匠鋪：選單、打造的單子、停在哪一頁、店面上掌櫃那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_smith 設成 False 的地方
     都走這裡（離開、存檔修補、同步時人不在城鎮、出發），存檔裡不留舊的單子或舊的頁（裝備四欄設計 3.2）。"""
     p.picking_smith, p.smith_draft, p.smith_page = False, None, SMITH_PAGES[0]
-    p.shop_line, p.shop_clue = "", ""
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""

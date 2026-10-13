@@ -364,3 +364,61 @@ def test_the_switch_off_leaves_the_old_board_menu(content, world):
     view_on = server.main_view(on)
     assert "shop" not in view_off and view_on["shop"]["shop"] == "board"
     assert [(o["id"], o["label"], o["enabled"]) for o in view_on["options"]] == [(o["id"], o["label"], o["enabled"]) for o in view_off["options"]]
+
+
+# ── Task 8：FB-192 被拒的那一句照眼前的狀態 ──
+
+
+def test_a_short_of_silver_line_gives_way_once_the_silver_is_there(content, world):
+    """FB-192：錢不夠被拒之後，錢補夠了，掌櫃那一句就換回平常那一句（不必等下一個動作）；還是不夠就照舊。"""
+    from test_shop import _smith
+
+    game = _smith(content, world, name="補錢")
+    p = game.state.player
+    p.stats["silver"] = 10
+    game._smith("buy:劍")  # 灰掉的鈕：直接叫，等於兩個分頁搶
+    lines = content.shop_lines["smith"]
+    assert p.shop_line == "short_silver" and shopview.line_text(game.state, content, "smith") in lines["short_silver"]
+    p.stats["silver"] = content.config.weapons.shop_price - 1
+    assert shopview.line_text(game.state, content, "smith") in lines["short_silver"]
+    p.stats["silver"] = 300
+    assert shopview.line_text(game.state, content, "smith") in lines["enter"]
+
+
+def test_a_full_rack_line_gives_way_once_there_is_room(content, world):
+    game = _market(content, world, silver=300, horse=_horse())
+    content.config.weapons.rack_cap = 1
+    p = game.state.player
+    p.rack = [_horse("騎:2", "黑鬃馬", 1, "上品")]
+    game._market("buy")
+    assert p.shop_line == "rack_full" and shopview.line_text(game.state, content, "market") in LINES["market"]["rack_full"]
+    p.rack = []
+    assert shopview.line_text(game.state, content, "market") in LINES["market"]["enter"]
+
+
+def test_a_plain_refusal_gives_way_once_anything_changes(content, world):
+    game = _market(content, world, horse=_horse())  # 吃飽的馬：餵被拒
+    p = game.state.player
+    game._market("feed")
+    assert shopview.line_text(game.state, content, "market") in LINES["market"]["refused"]
+    p.mount.edge = 40  # 走了一段路，餓了：被拒的原因不成立了
+    assert shopview.line_text(game.state, content, "market") in LINES["market"]["enter"]
+
+
+def test_a_held_full_line_gives_way_once_a_slot_frees(content, world):
+    content.config.bounties.max_taken = 1
+    game = _board(content, world, [SCOUT, dict(SCOUT, location="cave")])
+    first, second = _ids(game)
+    game.choose(f"bounty:take:{first}")
+    game._bounty(f"take:{second}")
+    assert shopview.line_text(game.state, content, "board") in LINES["board"]["held_full"]
+    game.state.world.bounties[0].takers = []  # 手上那一張作廢了（過期、被交滿）
+    assert shopview.line_text(game.state, content, "board") in LINES["board"]["enter"]
+
+
+def test_closing_a_shop_clears_the_hold(content, world):
+    game = _market(content, world, horse=_horse())
+    game._market("feed")
+    assert game.state.player.shop_hold.startswith("same:")
+    game.choose(mounts.BACK)
+    assert game.state.player.shop_hold == ""
