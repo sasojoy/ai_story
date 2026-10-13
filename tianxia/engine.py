@@ -3717,9 +3717,7 @@ class Game:
         tuning = self.content.config.battle
         out = []
         for p in battle.participants.values():
-            if p.faction != side or p.acted_rounds < need or p.turncoat or p.newbie or p.is_bot:  # is_bot 是決戰補位的機器人（不是角色）
-                continue
-            if seal.key(p.name) == seal.key(holder) or seal.key(p.name) in held:
+            if p.faction != side or not seal.challenger_ok(p, need, held, holder):  # 同畫面那一句（hint_names，FB-177）
                 continue
             now_faction = self.world.faction_of(p.name)
             if blocked is not None and now_faction == blocked:
@@ -4359,7 +4357,10 @@ class Game:
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
-            header += "\n\n" + seal.MANDATE_SCENE.format(lean=seal.lean_text(battle.seal_lean, definition))
+            shift = seal.lean_shift(battle.seal_lean, definition, self.content.config.seal)  # 同集結那一刻的算法（FB-186）
+            header += "\n\n" + seal.MANDATE_SCENE.format(
+                lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition),
+            )
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -4432,9 +4433,13 @@ class Game:
     def _battle_spotlight(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
     ) -> list[str]:
-        """點名與顯眼（Joy 2026-10-10）：上一回合誰盯上了你、你被牽制了沒有、這一幕還能不能放手一搏、你是不是顯眼的人。"""
-        if p.eliminated or battle.phase != "active":
+        """點名與顯眼（Joy 2026-10-10）：上一回合誰盯上了你、你被牽制了沒有、這一幕還能不能放手一搏、你是不是顯眼的人；倒下的人只剩
+        璽動那一場「戰功居前」那一句（FB-177：挑挑戰者不看倒下，畫面照同一條），其餘跟倒下無關的不寫。"""
+        if battle.phase != "active":
             return []
+        merit = battle.seal_shard and p.name in seal.hint_names(battle, self.content, seal.holders(self.world.seal_state().registry))
+        if p.eliminated:
+            return [seal.MERIT_HINT] if merit else []
         out = []
         hunters = battle.last_targets.get(p.name)
         if hunters:
@@ -4446,7 +4451,7 @@ class Game:
             out.append("這一幕你已經放手一搏過了，下一幕才能再搏。")
         if battle.marked.get(p.name) == battle.act_index:
             out.append("你在這一幕太顯眼了，對面的強攻會往你身上招呼。")
-        if battle.seal_shard and p.name in seal.hint_names(battle, self.content, seal.holders(self.world.seal_state().registry)):
+        if merit:
             out.append(seal.MERIT_HINT)  # 璽動那一場戰功居前（4.3）：不露數字、不露名次
         return out
 
@@ -6153,9 +6158,9 @@ class Game:
 
     def spar_refusal(self, other: Game) -> str | None:
         """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
-        之間沒有一張還在等的邀請。"""
+        之間沒有一張還在等的邀請。休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
         s, c = self.state, self.content
-        if not season_one(c, s.world):
+        if not season_one(c, s.world) or s.world.ended:
             return "（此刻無法這麼做。）"
         for who, me in ((self, True), (other, False)):
             problem = self._spar_problem(who, me=me)
@@ -6319,9 +6324,10 @@ class Game:
         return fusion.half_price(cfg.fuse_xinde, cfg.fuse_stamina)
 
     def discuss_refusal(self, other: Game) -> str | None:
-        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。"""
+        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。
+        休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
         s, c = self.state, self.content
-        if not season_one(c, s.world):
+        if not season_one(c, s.world) or s.world.ended:
             return "（此刻無法這麼做。）"
         cost = self._discuss_cost()[1]
         for who, me in ((self, True), (other, False)):

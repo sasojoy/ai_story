@@ -163,6 +163,7 @@ def chronicle(season, text: str) -> None:
 # ── 天命之季與天命之爭（玉璽二；設計第八節）──────────────────────
 
 MANDATE_OPEN = "七片玉璽都已現世過了。天命之季到來：這一季的大戰都會牽動玉璽碎片，季末之前，{battle}要爭一個天命。"  # 待 joy 潤
+MANDATE_OPEN_EARLY = "天命之季到來：季末之前，{battle}要爭一個天命。"  # 待 joy 潤：七片這一輪沒有都現世過（管理者蓋的章，FB-187；不提現世，也不說每場都牽動碎片——沒人懷璽就牽動不了）
 SCATTER = "天命之季過去，七片玉璽再度散落天下。"  # 待 joy 潤：江湖史（8.4）
 SCATTER_MINE = "你懷中的『{shard}』化光而去：七片玉璽再度散落天下。"  # 待 joy 潤：補送的紀錄
 BOOK_ROUND = "### 傳國玉璽（第 {round} 輪）"  # 待 joy 潤：第二輪起江湖史七格的標題
@@ -200,15 +201,17 @@ def mandate_due(reg: SealRegistry, content: Content) -> bool:
 
 def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
     """把 shared.season 蓋成天命之季（8.1）：WorldState.mandate、天命之爭排在 at（世界秒；呼叫端照 timetable.default_time 算）、
-    登記記下季別、清掉延後的記號；天下大事與江湖史各一句。只改傳進來的 shared（next_season 手動 _load／_save、管理者在 world.mutate 裡），
-    呼叫端先確認 mandate_event 不是 None。回那一句。"""
+    登記記下季別、清掉延後的記號；天下大事與江湖史各一句：七片這一輪都現世過寫 MANDATE_OPEN，沒有（管理者「這一季」「下一季」蓋的章）
+    寫 MANDATE_OPEN_EARLY，不提現世，跟江湖史七格對得上（FB-187；公告照舊不寫管理者）。只改傳進來的 shared（next_season 手動
+    _load／_save、管理者在 world.mutate 裡），呼叫端先確認 mandate_event 不是 None。回那一句。"""
     event, battle = mandate_event(content), mandate_battle(content)
     reg = filled(shared.seal, content)
     season = shared.season
     season.mandate, season.mandate_result = True, None
     season.schedule[event.id] = at
+    emerged = bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
     reg.mandate_season, reg.mandate_pending = shared.season_number, False
-    text = MANDATE_OPEN.format(battle=battle.name if battle is not None else event.title)
+    text = (MANDATE_OPEN if emerged else MANDATE_OPEN_EARLY).format(battle=battle.name if battle is not None else event.title)
     rumor(season, text)
     chronicle(season, text)
     return text
@@ -267,8 +270,15 @@ def tier_for(holder_side: str | None, winner: str, margin: str) -> str:
     return "大敗" if margin == "大勝" else "險敗"
 
 
+def challenger_ok(p, need: int, held: set[str], holder: str | None) -> bool:
+    """挑戰者與畫面那一句共用的條件（4.6；FB-177：挑人與畫面照同一條）：自己出手滿 need 回合、這一季沒叛投過、不在新手期
+    （加入時的快照）、不是決戰補位的機器人、不是持有者本人、手上沒有碎片。倒下的不擋（挑人本來就不看倒下）。"""
+    return (p.acted_rounds >= need and not p.turncoat and not p.newbie and not p.is_bot
+            and key(p.name) not in held and key(p.name) != key(holder))
+
+
 def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[str]:
-    """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——自己出手滿門檻、手上沒有碎片、不是持有者本人、
+    """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——合格照 challenger_ok（同挑挑戰者），
     陣營不跟持有者的快照相同（快照是 None 就不擋）。只給畫面那一句用，不決定誰上陣（那要看收場時誰贏）。"""
     definition = content.battles.get(battle.battle_id)
     if battle.seal_shard is None or definition is None:
@@ -281,7 +291,7 @@ def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[
             continue
         rows = [
             (p.name, battle_instance.merit(tuning, p)) for p in battle.participants.values()
-            if p.faction == side and p.acted_rounds >= need and not p.is_bot and key(p.name) not in held and key(p.name) != key(battle.seal_holder)
+            if p.faction == side and challenger_ok(p, need, held, battle.seal_holder)
         ]
         out |= {name for name, _ in sorted(rows, key=lambda r: (-r[1], r[0]))[: cfg.challenger_pool]}
     return out
@@ -291,10 +301,13 @@ DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決
 NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
 
 
-MANDATE_MUSTER = "{battle}集結：{lean}。"  # 待 joy 潤：天下大事、集結公告（8.3）
-MANDATE_SCENE = "天命之爭：{lean}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
+MANDATE_MUSTER = "{battle}集結：{lean}，{shift}。"  # 待 joy 潤：天下大事、集結公告（8.3）
+MANDATE_SCENE = "天命之爭：{lean}，{shift}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
 LEAN_PART = "{side}握著{n}片"  # 待 joy 潤
 LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
+LEAN_SHIFT = "戰局起點往{side}偏了 {n} 點"  # 待 joy 潤（FB-186）
+LEAN_EVEN = "兩軍持璽相當，戰局起點不偏"  # 待 joy 潤：兩軍各有碎片、片數一樣
+LEAN_STILL = "戰局起點不偏"  # 待 joy 潤：兩軍手上都沒有碎片
 
 
 def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
@@ -324,12 +337,21 @@ def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
     return "、".join(parts) or LEAN_NONE
 
 
+def shift_text(shift: int, lean: dict[str, int], definition: BattleDef) -> str:
+    """起點偏了幾點、往哪一軍偏（FB-186：以前只寫各握幾片，看不出戰局條動了沒）：正的往第一軍、負的往第二軍（同 lean_shift）。
+    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。"""
+    first, second = definition.factions[0], definition.factions[1]
+    if shift:
+        return LEAN_SHIFT.format(side=(first if shift > 0 else second).name, n=abs(shift))
+    return LEAN_EVEN if lean.get(first.id) or lean.get(second.id) else LEAN_STILL
+
+
 def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
     """天命之爭剛開集結：數兩軍各握幾片、照它把起點（trend 與 trend_start）偏過去、快照進這一場（seal_lean），天下大事一句。
     天命之爭本身不璽動、不現世（8.3）。"""
     lean = mandate_lean(world, content, definition)
     shift = lean_shift(lean, definition, content.config.seal)
-    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition))
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition), shift=shift_text(shift, lean, definition))
     world.mutate(lambda shared: rumor(shared.season, text))
 
     def _snap(b) -> None:
@@ -358,7 +380,7 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
         mandate = shared.season.mandate
-        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2），管理者的強制現世記號留到下一個一般季
+        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2）；管理者的強制現世記號這一季照留，天命之季過後散去時一起清掉（scatter）
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:

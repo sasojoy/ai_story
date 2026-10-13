@@ -589,6 +589,39 @@ def test_the_top_merit_on_both_sides_hear_they_may_be_pushed_forward(sealed):
     assert seal.hint_names(battle, sealed, set()) == {"甲", "乙", "丙"}
 
 
+
+def test_the_hint_and_the_pick_use_one_rule_fb177(sealed):
+    """FB-177：畫面那一句（hint_names）與挑挑戰者（Game._seal_challengers）照同一個條件 seal.challenger_ok：倒下的照樣在內
+    （挑人本來就不看倒下）；叛投過、新手期、補位的機器人兩邊都不算（以前畫面那一句沒擋叛投與新手，會跟挑人對不上）。"""
+    from tianxia import seal
+
+    battle = _ended("changshe_fire", [("甲", "huang", 3, 2), ("乙", "huang", 3, 1), ("丙", "huang", 3, 0), ("懷璽", "guan", 3, 3)],
+                    rounds=3, seal_shard="chishou", seal_holder="懷璽", seal_holder_faction="guan", seal_holder_side="guan")
+    battle.phase = "active"
+    battle.participants["甲"].eliminated = True
+    battle.participants["乙"].turncoat = True
+    assert seal.hint_names(battle, sealed, set()) == {"甲", "丙"}
+    need = seal.threshold(battle, sealed.config.seal)
+    assert [seal.challenger_ok(p, need, set(), "懷璽") for p in battle.participants.values()] == [True, False, True, False]
+
+
+def test_a_fallen_fighter_still_hears_the_merit_hint_fb177(sealed, world):
+    """FB-177：倒下的人照樣可能被挑上陣前，畫面也寫「你此役戰功居前…」；跟倒下無關的那幾句（盯上你、牽制、放手一搏、顯眼）倒下了不寫。"""
+    from tianxia import seal
+    from tianxia.engine import Game
+
+    game = Game.new(sealed, "甲", rng=random.Random(0), world=world)
+    battle = _ended("changshe_fire", [("甲", "huang", 3, 2), ("懷璽", "guan", 3, 3)], rounds=3, seal_shard="chishou",
+                    seal_holder="懷璽", seal_holder_faction="guan", seal_holder_side="guan")
+    battle.phase = "active"
+    p = battle.participants["甲"]
+    p.eliminated = True
+    battle.last_targets["甲"] = ["懷璽"]
+    assert game._battle_spotlight(battle, sealed.battles["changshe_fire"], p) == [seal.MERIT_HINT]
+    p.eliminated = False
+    assert game._battle_spotlight(battle, sealed.battles["changshe_fire"], p)[0] == "懷璽盯上了你。"
+
+
 def test_the_battle_scene_and_report_mention_the_stir(sealed, world):
     from tianxia import seal
     from tianxia.engine import Game
