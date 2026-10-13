@@ -1969,6 +1969,7 @@ def test_one_model_call_rates_the_gamble_and_writes_both_stories():
     prompt = client.chat_structured.call_args.args[0][0]["content"]
     assert "不要寫任何數字" in prompt and "以「彩加」開頭" in prompt
     assert "第三人稱" in prompt and "不用「你」" in prompt  # FB-183
+    assert "用名號稱呼雙方" in prompt and "「散人」" in prompt  # FB-185：身分不當代名詞（玩家所屬寫「散人」時模型拿它當人稱）
     client.chat_structured.side_effect = RuntimeError("down")
     assert bi.assess_gamble(client, act, "官軍", "衝", "彩加") == (bi.DEFAULT_FREE_TEXT_SUCCESS_RATE, "", "")
 
