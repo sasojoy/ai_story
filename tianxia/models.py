@@ -2079,6 +2079,9 @@ class Config(_Strict):
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # 療傷只在醫館（帶「醫館」標籤的地點，tianxia/clinic.py；企劃者 2026-10-12「不能隨地療傷」）。關著時哪裡都能療傷（測試內容關著）
     heal_at_clinic: bool = True
+    # 鐵匠鋪、馬市、懸賞榜的獨立介面（店面獨立介面設計 6.4；第一批：鐵匠鋪）：關著時 main_view 不給 shop，網頁照現在把店裡的選項
+    # 畫成一串按鈕（現在的選單本來就留著，所以不用退版）。主機在 config.json 寫 false、兩個程式重開
+    shop_screens: bool = True
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
     practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
     fuse_xinde: int = 5  # 合成（武學＋意境）一次
@@ -2999,6 +3002,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     map: MapLayout
     tutorial: Tutorial

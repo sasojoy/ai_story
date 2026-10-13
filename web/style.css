@@ -1224,3 +1224,123 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
   background: rgba(26, 22, 18, 0.62); color: #fff; font: 13px var(--sans); cursor: pointer; }
 .promo-sound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (min-width: 461px) { .promo { margin: 16px 0 0; max-width: 100%; border-radius: var(--radius); } }
+
+/* ── 店面（店面獨立介面設計第五節）：鐵匠鋪是爐火的暖色底；三間店共用招牌、掌櫃話、出店那一套 ── */
+.shop-layer {
+  position: fixed; inset: 0; z-index: 41; display: flex; flex-direction: column; overflow: hidden;
+  color: #f2e5c6; background: radial-gradient(ellipse at 50% 22%, #4a2a18 0%, #24170f 62%, #160e09 100%);
+  padding-top: var(--top); /* 不淡入：輪詢、換頁、放料都把整層換掉（renderShop），淡入會每次重播、底下的頁面跟著閃 */
+}
+.shop-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 8px 12px 4px; }
+.shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
+.shop-sign { justify-self: center; padding: 4px 14px; border: 2px solid #b7862b; border-radius: 4px; background: #2b1a10; color: #f2c46a; font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
+.shop-silver { font: 600 13px var(--sans); color: #f2c46a; }
+.shop-line { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 13px/1.6 var(--serif); color: #e8d6ad; min-height: 2.4em; }
+.shop-pages { display: flex; gap: 6px; justify-content: center; margin: 4px 0; }
+.shop-page { border: 1px solid #6b4a2e; background: transparent; color: #c9b28a; border-radius: 14px; padding: 3px 14px; font: 13px var(--sans); }
+.shop-page.on { background: #b7862b; color: #1e1510; border-color: #b7862b; opacity: 1; }
+.shop-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 12px 12px; }
+.shop-tabs { display: flex; border-top: 1px solid #5a4030; padding-bottom: var(--bottom); background: rgba(0, 0, 0, 0.25); }
+.shop-tab { flex: 1; border: 0; background: transparent; color: #c9b28a; padding: 11px 0; font: 13px var(--sans); }
+.shop-tab.on { color: #f2c46a; box-shadow: inset 0 2px 0 #f2c46a; background: rgba(242, 196, 106, 0.08); }
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shop-item { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: inherit; font: 12px/1.45 var(--sans); }
+.shop-item b { font: 600 14px var(--serif); color: #f2e5c6; }
+.shop-item.fit { border-color: #f2c46a; }
+.shop-item .fit-note { color: #f2c46a; }
+.shop-item .price { margin-top: 2px; color: #f2c46a; }
+.shop-item:disabled { opacity: 0.55; }
+.shop-item:disabled .price { color: #e0a08a; }
+.shop-worn { padding: 10px 12px; border-radius: 12px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); display: grid; gap: 6px; }
+.shop-worn b { font: 600 16px var(--serif); }
+.shop-wear { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; font-size: 12px; }
+.wear-bar { height: 8px; border-radius: 4px; background: #3a2a1e; overflow: hidden; }
+.wear-bar i { display: block; height: 100%; background: linear-gradient(90deg, #b7862b, #f2c46a); }
+.tempers { display: flex; gap: 4px; align-items: center; font-size: 12px; }
+.tempers i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #b7862b; }
+.tempers i.on { background: #f2c46a; }
+.shop-bigs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.shop-big { display: flex; flex-direction: column; gap: 4px; padding: 14px 8px; }
+.shop-big b { font: 600 18px var(--serif); }
+.shop-big small { font-size: 12px; opacity: 0.85; }
+.shop-note, .shop-empty, .shop-cap { font-size: 12.5px; color: #c9b28a; margin: 8px 2px; }
+.shop-warn { font-size: 12.5px; color: #e0a08a; margin: 6px 2px; }
+.shop-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid #3a2a1e; }
+.shop-row .winfo { display: grid; gap: 2px; font-size: 12px; }
+.shop-row .winfo b { font: 600 14px var(--serif); }
+.shop-row .wbtns { display: flex; gap: 6px; flex: none; }
+.shop-more { margin-top: 8px; }
+.shop-layer .naming.divine { color: var(--ink); }
+.shop-layer .btn.ghost { color: #e8d6ad; border-color: #6b4a2e; background: transparent; } /* 暗底上的淡框鈕（鑄譜、拆解、再列 N 件） */
+.shop-layer .btn.ghost:disabled { color: #a08a6a; }
+.shop-layer .forge-card .btn.ghost { color: var(--ink); border-color: var(--line, #d8ccb8); } /* 出爐卡是紙底 */
+.shop-layer .naming .btn.ghost { color: var(--ink); border-color: var(--line); } /* 定名表單（裝備庫那一頁、出爐卡）也是紙底 */
+/* 打造頁（2.2）：種類一排、爐子兩格、這一爐的機率條、素材格 */
+.shop-kinds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 6px; }
+.shop-kinds .kind { position: relative; border: 1px solid #6b4a2e; background: transparent; color: #e8d6ad; border-radius: 14px; padding: 4px 12px; font: 14px var(--serif); }
+.shop-kinds .kind.on { background: #b7862b; color: #1e1510; border-color: #b7862b; }
+.shop-kinds .kind sup { font-size: 10px; color: #f2c46a; margin-left: 2px; }
+.shop-kinds .kind.on sup { color: #1e1510; }
+.shop-layer .furnace { position: relative; display: grid; grid-template-columns: 1fr 72px 1fr; align-items: center; gap: 8px; margin: 6px 0; padding: 12px 10px;
+  border-radius: 50% 50% 14px 14px / 30% 30% 14px 14px; background: radial-gradient(circle at 50% 75%, #8a3a14 0%, #3a1e10 55%, #24170f 100%); }
+.pot-slot { min-height: 74px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1.5px dashed #b7862b; border-radius: 10px; background: rgba(0, 0, 0, 0.25); color: #e8d6ad; font: 12px var(--sans); }
+.pot-slot b { font: 600 14px var(--serif); color: #f2e5c6; }
+.pot-slot:disabled { opacity: 1; }
+.flame svg { width: 64px; height: 64px; display: block; margin: 0 auto; }
+.flame .fl-out { fill: #e0642a; }
+.flame .fl-in { fill: #ffb347; }
+.shop-layer .furnace.firing .flame svg { animation: roar 0.9s ease-in-out; }
+@keyframes roar { 0% { transform: scale(1); } 40% { transform: scale(1.5) translateY(-6px); filter: brightness(1.4); } 100% { transform: scale(1); } }
+.pot-out { display: grid; gap: 4px; padding: 6px 4px; font-size: 12.5px; }
+.pot-out b { font: 600 14px var(--serif); color: #f2c46a; }
+.pot-head { color: #f2c46a; font-size: 12.5px; margin: 0; }
+.pot-why { color: #c9b28a; font-size: 12px; margin: 0; }
+.shop-layer .odds { display: flex; height: 18px; border-radius: 9px; overflow: hidden; font-size: 11px; gap: 0; margin-top: 0; }
+.shop-layer .odds span { color: inherit; margin: 0; } /* 煉製頁的 .odds span 是 --ink-2 色、深色主題下等於下品那一格的底色 */
+.shop-layer .odds i { display: flex; align-items: center; justify-content: center; font-style: normal; white-space: nowrap; overflow: hidden; color: #1e1510; }
+.shop-layer .odds .q-下品 { background: #a89b88; }
+.shop-layer .odds .q-中品 { background: #6fb7c4; }
+.shop-layer .odds .q-上品 { background: #f2c46a; }
+.shop-gorow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
+.shop-go { padding: 12px 8px; font: 600 16px var(--serif); letter-spacing: 2px; }
+.shop-layer .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shop-layer .cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 14px 2px 6px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12px var(--serif); }
+.shop-layer .cell .n { position: absolute; top: 3px; right: 6px; font: 600 10px var(--sans); color: #f2c46a; }
+.shop-layer .cell .nm { display: flex; align-items: center; }
+.cell small { font: 10.5px var(--sans); color: #c9b28a; }
+.shop-layer .cell.used { border-color: #f2c46a; box-shadow: 0 0 0 1px #f2c46a inset; }
+.shop-layer .cell.off { opacity: 0.55; }
+.shop-layer .cell .why { font: 10px var(--sans); color: #e0a08a; line-height: 1.2; text-align: center; }
+.shop-layer .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; background: #c9b28a; flex: none; }
+.shop-layer .dot.gang { background: var(--gang); }
+.shop-layer .dot.kuai { background: var(--kuai); }
+.shop-layer .dot.rou { background: var(--rou); }
+.shop-layer .dot.man { background: var(--man); }
+@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.firing .flame svg { animation: none; } }
+/* 開爐與出爐（2.3）：麻布的光色、出爐卡、首位發現的朱印；減少動態效果的人不震動 */
+.reveal-layer { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: rgba(12, 8, 5, 0.72); }
+.bundle { width: 180px; height: 150px; border-radius: 40% 40% 30% 30%; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  color: #3a2a1e; font: 600 16px var(--serif); background: repeating-linear-gradient(45deg, #cdb894 0 6px, #c2ab84 6px 12px); }
+.bundle small { font: 12px var(--sans); }
+.bundle.g-cyan { box-shadow: 0 0 26px 8px rgba(80, 200, 220, 0.75); }
+.bundle.g-gold { box-shadow: 0 0 30px 10px rgba(242, 196, 106, 0.85); }
+.bundle.g-purple { box-shadow: 0 0 30px 10px rgba(170, 110, 230, 0.85); }
+.bundle.g-red { box-shadow: 0 0 30px 10px rgba(220, 70, 50, 0.85); }
+.bundle.g-redgold { box-shadow: 0 0 36px 14px rgba(240, 120, 40, 0.9), 0 0 10px 2px rgba(255, 220, 120, 0.9) inset; animation: shiver 0.35s ease-in-out infinite; }
+@keyframes shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-1deg); } 75% { transform: translateX(2px) rotate(1deg); } }
+.tapme { color: #e8d6ad; font-size: 13px; margin: 0; }
+.forge-card { position: relative; width: min(320px, 100%); padding: 18px 16px 14px; border-radius: 14px; background: var(--paper); color: var(--ink); text-align: center; display: grid; gap: 6px; }
+.forge-card.g-cyan { box-shadow: 0 0 18px 3px rgba(80, 200, 220, 0.6); }
+.forge-card.g-gold { box-shadow: 0 0 22px 4px rgba(242, 196, 106, 0.7); }
+.forge-card.g-purple { box-shadow: 0 0 22px 4px rgba(170, 110, 230, 0.7); }
+.forge-card.g-red, .forge-card.g-redgold { box-shadow: 0 0 24px 5px rgba(230, 100, 50, 0.75); }
+.forge-card .q { font-size: 12px; color: var(--accent); letter-spacing: 2px; }
+.forge-card h4 { margin: 0; font: 600 22px var(--serif); letter-spacing: 3px; }
+.forge-card .meta, .forge-card .fit { font-size: 13px; color: var(--ink-2); margin: 0; }
+.forge-card .stat { font: 600 15px var(--sans); margin: 0; }
+.forge-card .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.forge-card .btns.one { grid-template-columns: 1fr; }
+.forge-card .naming.divine { text-align: left; }
+.first-seal { position: absolute; top: -12px; right: -8px; transform: rotate(8deg); padding: 6px 8px; border: 2px solid var(--accent); border-radius: 6px; color: var(--accent);
+  background: var(--paper); font: 600 14px var(--serif); letter-spacing: 2px; }
+@media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } }

@@ -113,6 +113,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
+        shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
@@ -537,6 +538,22 @@ def check_front_lines(c: Content, need) -> None:
     for key, pool in lines.geju.items():
         need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
         check_pool(f"front_lines.geju.{key}", pool)
+
+
+def check_shop_lines(c: Content, need) -> None:
+    """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
+    只用繁體中文、不寫數字；店面開關開著、鐵匠鋪開門（兵器或防具開著）時鐵匠那一組每一種情況都要有句子。"""
+    from .shopview import SITUATIONS  # noqa: PLC0415  shopview → smithing → …：在函式裡 import
+
+    for shop, pool in c.shop_lines.items():
+        need(shop in SITUATIONS, f"shop_lines：不認得的店 {shop}")
+        for key, lines in pool.items():
+            need(key in SITUATIONS.get(shop, ()), f"shop_lines.{shop}：不認得的情況 {key}")
+            for text in lines:
+                _check_line(need, f"shop_lines.{shop}.{key}", text)
+    if c.config.shop_screens and (c.config.weapons.enabled or c.config.armor.enabled):
+        for key in SITUATIONS["smith"]:
+            need(bool(c.shop_lines.get("smith", {}).get(key)), f"shop_lines.smith 缺少情況 {key}（鐵匠鋪開著時每一種情況至少一句）")
 
 
 def check_combat_lines(c: Content, need) -> None:
@@ -1685,6 +1702,7 @@ def validate(c: Content) -> None:
     check_faction_choices(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
+    check_shop_lines(c, need)
     check_traits(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
