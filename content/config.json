@@ -12,7 +12,7 @@
   "stamina_pills_per_day": 5,
   "event_fail_stamina_scale": 0.5,
   "newbie_stamina_multiplier": 3,
-  "ollama_model": "gemma4:26b",
+  "ollama_model": "gemma4:12b",
   "ollama_think": false,
   "ollama_keep_alive": "12h",
   "ollama_repeat_penalty": 1.0,

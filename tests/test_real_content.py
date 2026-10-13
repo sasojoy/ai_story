@@ -1355,9 +1355,15 @@ def test_every_figure_has_an_audience_threshold(content):
 
 
 def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties(content):
-    """2026-10-03 實測：gemma4:26b 內容最好；重複懲罰會讓它夾英文、關掉思考才不會每輪多等。"""
+    """2026-10-03 實測：gemma4 這一家內容最好；重複懲罰會讓它夾英文、關掉思考才不會每輪多等。
+
+    2026-10-13 從 26b 換成 12b（企劃者決定，量法見 docs/superpowers/feedback/2026-10-13-模型評選-12b.md）：
+    **挑模型的第一條是「裝得進顯卡」**。26b 是 17.4 GiB、這台的卡只有 12 GiB，固定 24% 的層跑在 CPU，
+    一輪對話 13~15 秒而且顯卡一次只服務一件——20 個人裡只要 3 個同時對話，第 3 個之後就撞逾時被取消。
+    12b 是 7.2 GiB、100% GPU，一輪 6~9 秒。代價是分辨機智與平庸退了一截，靠 event_llm 的分數檔位補大半。
+    這一條鎖的是「決定」而不是「數字」：真要換模型，連 event_llm.SYSTEM_PROMPT 的錨點一起評估過再改。"""
     cfg = content.config
-    assert cfg.ollama_model == "gemma4:26b"
+    assert cfg.ollama_model == "gemma4:12b"
     assert cfg.ollama_think is False
     assert cfg.ollama_repeat_penalty == 1.0 and cfg.ollama_presence_penalty == 0.0 and cfg.ollama_frequency_penalty == 0.0
 

@@ -41,6 +41,39 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 兩個程式啟動時都會印一行「資料庫：…」，**兩行要一樣**。不一樣就是設錯了，假人會跑在另一個世界。
 - 假人照作息只在晚上（19～24 點）和中午前後（11:30～13:00 開始）上線，其他時間沒動靜是正常的。
 
+## 重啟 Ollama：一定要連 `llama-server.exe` 一起砍
+
+2026-10-13 踩過一次，造成線上的對話、取名中斷約 25 分鐘。
+
+砍掉 `ollama app` 與 `ollama` **不會**帶走它開出來的 runner `llama-server.exe`。留著的那一個繼續佔著顯卡與模型檔，之後每一次載入模型都失敗，而 API 回的錯誤完全看不出原因：
+
+```
+llama_init_from_model: failed to initialize the context: Gemma4Assistant requires ctx_other to be set
+error loading model: vector
+```
+
+真正的原因要看 `%LOCALAPPDATA%\Ollama\server.log`：
+
+```
+common_speculative_init_result: failed to load draft model, '...blobs\sha256-491f38...'
+srv  llama_server: exiting due to model loading error
+```
+
+`gemma4` 這一家是用 speculative decoding 的，本體之外還要載一個 draft model；殘留的 runner 一卡住那個檔，整個模型就起不來（API 回 500、`ollama ps` 是空的、每個請求卡快 30 秒才失敗）。
+
+正確的重啟順序：
+
+```powershell
+Get-Process -Name "ollama app","ollama","llama-server" -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.Id -Force }
+Start-Sleep -Seconds 5
+Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
+```
+
+- 砍乾淨之後 `nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader` 只剩 1 GiB 左右。
+- 接著**暖機**：帶 `num_ctx` 8192（跟遊戲一樣，不然遊戲第一次呼叫會整個重載）。`ollama ps` 要列出模型、`PROCESSOR` 寫 `100% GPU`。
+- **改 `OLLAMA_*` 環境變數之後要另開一次 PowerShell 再重啟 Ollama**：`SetEnvironmentVariable(...,"User")` 不會改到當下這個 PowerShell 自己的環境區塊，同一次呼叫裡 `Start-Process` 起來的 Ollama 繼承的還是舊值。
+
 ## 伺服器自己的排程（預設關）
 
 打開之後，伺服器每隔幾秒自己推一次全服的事：世界時間、時刻表的大事、時間到了開決戰、決戰的集結與回合逾時、季末。沒有人開著網頁時也照樣跑。關著的時候跟以前一樣，要有人連線（或假人程式在跑）世界才會動。

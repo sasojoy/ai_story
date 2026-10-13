@@ -56,6 +56,9 @@ def test_assess_prompt_carries_the_scene_and_guards_against_claimed_success(even
     eg.assess_event_success_rate(client, event, "把酒罈砸在地上大喊官兵來了然後趁亂溜走順便拿走錢袋")
     system, user = (m["content"] for m in client.chat_structured.call_args.args[0])
     assert "必定成功" in system and "要求高分" in system
+    # 分數檔位要寫出數字（2026-10-13 為 gemma4:12b 校準）：只寫「給中間的分數」時 12b 把平庸的做法給到 35，
+    # 機智與平庸只差 1.3 倍。拿掉這幾檔就會回到那個狀態，原因見 event_llm.SYSTEM_PROMPT 的註解。
+    assert "60~80" in system and "5~20" in system and "0~5" in system
     assert "酒樓鬥毆" in user and "掀了桌子" in user
     assert "{marks:" not in user
     assert "「把酒罈砸在地上大喊官兵來了然後趁亂溜走" in user and "錢袋" not in user
