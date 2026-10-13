@@ -2500,7 +2500,7 @@ class Game:
 
     def _rest(self) -> list[str]:
         """序章教體力那一步的調息（新手引導設計 3.1）：一下回滿。打坐本身 2026-10-12 拿掉了（企劃者「打坐也拿掉」：體力只靠時間
-        與一天兩顆回體丹），選單上只在這一步有這顆（_everyday_options）；不在這一步按到（舊分頁）只回一句。"""
+        與一天有上限的回體丹），選單上只在這一步有這顆（_everyday_options）；不在這一步按到（舊分頁）只回一句。"""
         line = prologue_rules.instant_rest(self.state, self.content)
         if not line:
             return [NO_REST]
