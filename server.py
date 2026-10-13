@@ -61,7 +61,7 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, biography, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
-    server_bots, social, team, timetable,
+    seal, seal_duel, server_bots, social, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -255,7 +255,9 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
     回傳動作的訊息。動作之後一律存檔：同步寫進江湖紀錄的江湖大事，不能因為動作本身沒改東西就被下一次重讀丟掉。
     賽季時鐘暫停中，只有 paused_ok 的照做（計時器的同步、管理者的動作、畫面上的設定），其他回「賽季暫停中」（_refuse_while_paused）。"""
     with _locked(game):
-        game.sync(time.time())
+        now = time.time()
+        game.sync(now)
+        game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
         if not paused_ok:
             _refuse_while_paused(game)
         msgs = action(game)
@@ -280,7 +282,9 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
     下一次輪詢看到「早就收場了」就不再套，那場決戰的結果整個服永遠丟了。"""
     failure: Exception | None = None
     with _locked(game):
-        game.sync(time.time())
+        now = time.time()
+        game.sync(now)
+        game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
         msgs = action(game)
         open_characters().save(game.state)
         try:
@@ -433,6 +437,7 @@ def current_fingerprint() -> str:
     return server_push.world_fingerprint(
         shared.season_number, shared.season_phase(), shared.season, battle,
         rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None, progress=progress,
+        seal=shared.seal_duels,
     )
 
 
@@ -857,6 +862,30 @@ def duel_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
 
 
+def seal_text(game: Game, text: str) -> list[str]:
+    """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
+    B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
+    回合對不上直接回「這一回合已經結算」，不在鎖內重評。"""
+    started, request = _open_request(game, lambda: game.seal_text_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    scene = duel.Scene(request.title, request.scene)
+
+    def score():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        if client is None and game.client is not None:
+            return fallback
+        return battle_instance.assess_gamble(
+            client, scene, request.faction_name, request.text, request.name,
+            setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
+        )
+
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.seal_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
+
+
 # ── 畫面資料 ──────────────────────────────────────────
 
 
@@ -883,9 +912,11 @@ def _main_view_body(game: Game) -> dict:
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
-        "free_text": game.battle_free_text_prompt() or game.duel_free_text_prompt(),
-        "free_text_note": game.battle_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
-        "free_op": "battle_text" if game.battle_free_text_prompt() is not None else "duel_text",  # 輸入框送到哪裡（決戰或頭目戰）
+        "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt(),
+        "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
+        # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
+        "free_op": "battle_text" if game.battle_free_text_prompt() is not None
+        else "seal_text" if game.seal_free_text_prompt() is not None else "duel_text",
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
@@ -980,7 +1011,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
              # 序章裡這一欄現在不能練的原因（Game.practice_refusal）；平常是 None。練成鈕灰掉、寫它
              "blocked": game.practice_refusal(k),
              # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
-             "price": team.practice_price(game.content, level[k]) if learned[k] and level[k] < team.MAX_LEVEL else None}
+             "price": team.practice_price(game.content, level[k], treasures.amount(game.state, game.content, "practice")) if learned[k] and level[k] < team.MAX_LEVEL else None}
             for k in KINDS
         ],
         # 療傷要多少銀兩（修練頁的療傷鈕上寫）：照內傷計價，沒有內傷是 0
@@ -1055,6 +1086,7 @@ def admin_choices(game: Game) -> dict:
         ],
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
+        "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
@@ -1390,6 +1422,14 @@ ADMIN_ACTIONS = {
     "summon": lambda g, b: g.admin_summon(str(b.get("name", ""))),
     "give_opportunity": lambda g, b: g.admin_give_opportunity(str(b.get("name", "")), str(b.get("id", ""))),
     "give_fragment": lambda g, b: g.admin_give_fragment(str(b.get("name", "")), str(b.get("id", ""))),
+    # 玉璽碎片（玉璽碎片設計第十二節）：效果跟自然發生一樣，公告不寫管理者
+    "seal_emerge": lambda g, b: g.admin_seal_emerge(str(b.get("id", ""))),
+    "seal_stir": lambda g, b: g.admin_seal_stir(str(b.get("id", ""))),
+    "seal_assign": lambda g, b: g.admin_seal_assign(str(b.get("id", "")), str(b.get("name", "")), str(b.get("state", "held"))),
+    "seal_duel": lambda g, b: g.admin_seal_duel(str(b.get("id", "")), str(b.get("name", "")), _float(b.get("factor"), 1.0), time.time()),
+    "seal_fix": lambda g, b: g.admin_seal_fix(b.get("take") is True),
+    "seal_cancel": lambda g, b: g.admin_seal_cancel(),
+    "seal_sink_check": lambda g, b: g.admin_seal_sink_check(time.time()),
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
@@ -1435,6 +1475,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
+    elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）
+        msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
@@ -1898,6 +1940,7 @@ def main(argv: list[str] | None = None) -> None:
         start_tunnel(args.port)  # cloudflared 連的是 http://127.0.0.1:{port}，只聽本機也照常運作
     print(f"天下大勢：http://127.0.0.1:{args.port}", flush=True)
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：正式伺服器啟動時沒有就產生一次；測試與量表腳本不經過這裡，同樣的種子跑出同樣的結果
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
     QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
     print(queue_line(CONTENT.config), flush=True)

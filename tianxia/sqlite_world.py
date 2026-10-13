@@ -27,11 +27,13 @@ from sqlite3 import Connection, Row
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
+from .characters import name_key
 from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .world_state import (
-    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SeasonPhase, SharedWorldState, fresh_season,
+    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase, SharedWorldState,
+    fresh_season,
     jade_seal_summary, stamp_season,
 )
 
@@ -629,6 +631,7 @@ class SqliteWorldStore:
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             state.season_opened = True
             state.season_last_real = now
+            state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
             state.paused_at = None  # 新開的季時鐘是走著的：暫停不會漏進來
             result["ok"] = True
 
@@ -641,14 +644,30 @@ class SqliteWorldStore:
             if state.season_phase() != "resting":
                 return False
             lines = _season_firsts_lines(conn, state.season_number)
+            sunk = False
+            if content.seal:  # 玉璽碎片（7.6、5.11）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
+                from . import seal  # noqa: PLC0415
+
+                reg = seal.filled(state.seal, content)
+                if content.config.seal.enabled:  # 主機關掉碎片時不判隱沒（登記照留）
+                    seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
+                    for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
+                        text = seal.SINK.format(holder=name, shard=content.seal[shard.id].name)
+                        state.season.chronicle.append(Rumor(time=state.season.time, text=text))
+                        sunk = True
+                for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
+                    seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
+                             record=duel.record, where=duel.where, lines=list(duel.lines))
+            state.seal_duels = []
             for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
-            if lines:
+            if lines or sunk:
                 self._save_season(conn, state.season_number, state.season)
             state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
+            state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
             state.paused_at = None  # 暫停不會漏進下一季
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
@@ -716,6 +735,13 @@ class SqliteWorldStore:
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:
                 shift_deadlines(state.active_battle, span)
+            for duel in state.seal_duels:  # 奪璽單挑的時間一起挪（5.4）：不挪的話一繼續兩邊都過了在場窗口，全由代打打完
+                duel.starts_real += span
+                if duel.opened_real is not None:
+                    duel.opened_real += span
+                for side in (duel.challenger, duel.holder):
+                    if side.last_seen is not None:
+                        side.last_seen += span
             result["span"] = span
 
         self.mutate(_apply)
@@ -746,6 +772,24 @@ class SqliteWorldStore:
                 (self._season_number(conn),),
             ).fetchall()
         return {row["faction"]: row["n"] for row in rows}
+
+    def seal_state(self) -> SealView:
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT json_extract(data, '$.seal') AS seal, json_extract(data, '$.seal_duels') AS duels, "
+                "json_extract(data, '$.season_number') AS season, json_extract(data, '$.tianji') AS tianji, "
+                "json_extract(data, '$.paused_at') AS paused FROM world WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            return SealView(SealRegistry(), [], 1, 0, False)
+        registry = SealRegistry.model_validate_json(row["seal"]) if row["seal"] else SealRegistry()
+        duels = [SealDuel.model_validate(d) for d in json.loads(row["duels"])] if row["duels"] else []
+        return SealView(registry, duels, int(row["season"] or 1), int(row["tianji"] or 0), row["paused"] is not None)
+
+    def seal_duel_open(self) -> bool:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_array_length(data, '$.seal_duels') AS n FROM world WHERE id = 1").fetchone()
+        return row is not None and bool(row["n"])
 
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 
@@ -933,3 +977,15 @@ def _rumor(row: Row) -> Rumor:
 
 def _chronicle_entry(row: Row) -> Rumor:
     return Rumor(id=row["id"], time=row["time"], text=row["text"], location=row["location"])
+
+
+def _seen_real(conn: Connection, name: str) -> float | None:
+    """持有者最後一次自己上線的現實秒（玉璽碎片設計 7.6）：存檔的 seen_real，舊存檔退回 last_real；查不到那一列是 None。"""
+    row = conn.execute(
+        "SELECT json_extract(data, '$.player.seen_real') AS seen, json_extract(data, '$.last_real') AS last FROM characters WHERE key = ?",
+        (name_key(name),),
+    ).fetchone()
+    if row is None:
+        return None
+    value = row["seen"] if row["seen"] is not None else row["last"]
+    return None if value is None else float(value)

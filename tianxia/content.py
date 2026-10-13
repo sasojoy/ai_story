@@ -29,11 +29,11 @@ from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, SimRumor, SkillDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
-from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, name_problem
+from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
@@ -112,6 +112,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
+        seal=_shards(root / "seal.json"),
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -240,6 +241,19 @@ def _forge_secrets(path: Path) -> dict[str, ForgeSecret]:
         if recipe.id in out:
             raise ContentError(f"content/forge_secrets.json：id {recipe.id} 重複")
         out[recipe.id] = recipe
+    return out
+
+
+def _shards(path: Path) -> dict[str, ShardDef]:
+    """content/seal.json（玉璽碎片）：一片一筆的清單，照 id 收；沒有這個檔就是空的（測試內容：碎片關著）。id 重複在這裡就擋。"""
+    if not path.exists():
+        return {}
+    out: dict[str, ShardDef] = {}
+    for raw in _read(path):
+        shard = _build(ShardDef, raw)
+        if shard.id in out:
+            raise ContentError(f"content/seal.json：id {shard.id} 重複")
+        out[shard.id] = shard
     return out
 
 
@@ -1859,6 +1873,8 @@ def validate(c: Content) -> None:
         ("battles", off.battles, c.battles, "戰鬥"),
         ("events", off.events, c.events, "事件"),
         ("milestones", off.milestones, {m.id for m in c.scenario.milestones}, "個人目標"),
+        ("world_events", off.world_events, {e.id for e in c.scenario.world_events}, "世界事件"),
+        ("unlocks", off.unlocks, c.locations, "地點"),
     ):
         known(f"第一季不觸發的 {kind}", ids, valid, label)
 
@@ -2132,6 +2148,7 @@ def validate(c: Content) -> None:
 
     _validate_secrets(c, need)
     _validate_forge_secrets(c, need)
+    _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
     for insight in c.insights.values():
@@ -2318,3 +2335,26 @@ def _validate_forge_secrets(c: Content, need) -> None:
             combo = (r.slot, r.kind, r.main.attribute, r.main.tier, r.aux.attribute, tier)
             other = combos.setdefault(combo, r.id)
             need(other == r.id, f"{where}：跟隱藏配方 {other} 認同一個組合")
+
+
+def _validate_seal(c: Content, need) -> None:
+    """玉璽碎片（玉璽碎片設計 13.4、8.5）：係數都不超過 1（一場最多 cap）；沒有 content/seal.json 可以（碎片關著：時刻表的標記與
+    emerge_skill 都不檢查——測試內容沒有混元一氣，預設的 emerge_skill 不能讓它載入失敗）；有就 emerge_skill 認得、剛好七片、名字不重複、
+    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。"""
+    cfg = c.config.seal
+    for label, table in (("side_factor", cfg.side_factor), ("take_share", cfg.take_share)):
+        need(all(0 <= v <= 1 for v in table.values()), f"Config.seal.{label}：係數不能超過 1（一場被奪最多 cap）")
+    if not c.seal:
+        return
+    need(cfg.emerge_skill is None or cfg.emerge_skill in c.skills, f"Config.seal.emerge_skill：{cfg.emerge_skill} 不是內容裡的武學")
+    need(len(c.seal) == 7, f"content/seal.json：要剛好七片，現在 {len(c.seal)} 片")
+    need(len({s.name for s in c.seal.values()}) == len(c.seal), "content/seal.json：七片的名字要不重複")
+    for shard in c.seal.values():
+        need(shard.effect in cfg.effects, f"content/seal.json：{shard.id} 的效果 {shard.effect} 不在 Config.seal.effects")
+        problem = name_problem(shard.name, c)
+        need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
+    if not c.timetable:
+        return
+    marked = [e for e in c.timetable if e.seal is not None]
+    need(all(e.kind == "showdown" for e in marked), "時刻表：seal 只能標在決戰（kind 是 showdown）")
+    need(sum(1 for e in marked if e.seal == "emerge") == 1, "時刻表：標 seal: emerge 的決戰要剛好一件")

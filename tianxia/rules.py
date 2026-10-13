@@ -428,11 +428,12 @@ def season_one(content: Content, world: WorldState) -> bool:
     return calendar.season_one_on(world, content)
 
 
-OffKind = Literal["thresholds", "storylines", "battles", "events", "milestones"]
+OffKind = Literal["thresholds", "storylines", "battles", "events", "milestones", "world_events", "unlocks"]
 
 
 def season_one_off(content: Content, world: WorldState, kind: OffKind) -> frozenset[str]:
-    """第一季不觸發的那一種 beta 內容（Scenario.season_one_off 的 thresholds／storylines／battles／events／milestones）的 id。
+    """第一季不觸發的那一種 beta 內容（Scenario.season_one_off 的 thresholds／storylines／battles／events／milestones／
+    world_events，與第一季直接開放的地點 unlocks）的 id。
     只在 season_one 成立時有東西：開關關著、或這一季開季時沒開（beta 那一季），一律是空的，beta 照舊。"""
     if not season_one(content, world):
         return frozenset()
@@ -921,8 +922,10 @@ def apply_effect(
         source = "event_once" if single else "event"
         msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source=source)
     jade_seal_flag = content.scenario.jade_seal_flag
+    seal_on = content.config.seal.enabled and bool(content.seal)  # 玉璽碎片開著：舊鏈不再寫跨季紀錄（玉璽碎片設計 11.2 第 2 條）
     newly_found_shard = (
-        jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add and jade_seal_flag not in state.world.flags
+        not seal_on and jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add
+        and jade_seal_flag not in state.world.flags
     )
     add_world_flags(state, effect.world_flags_add)
     add_marks(effect.marks, state, content)

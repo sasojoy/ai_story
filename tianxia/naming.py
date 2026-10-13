@@ -82,6 +82,7 @@ PERSON_CLASH = "跟江湖上的人物同名"  # 真人、假人都回這一句�
 PRESET_CLASH = "跟師門傳下來的武學同名"  # 師門配方（content/preset_recipes.json，新手引導計畫一）的名字：模型、玩家取的名字不能撞它（name_problem）
 GEAR_CLASH = "跟江湖上的寶物、名駒、名將的兵器同名"  # 待 joy 潤：content/gear.json 的寶物與名駒（裝備三；防具打造計畫 PM 決定第 4 條留下的）、名將本命兵器（signature_arms，打造第三批）
 FORGE_CLASH = "跟失傳的鑄法同名"  # 待 joy 潤：隱藏配方（content/forge_secrets.json）的名器名（打造隱藏配方設計 3.1）
+SEAL_CLASH = "跟傳國玉璽的碎片同名"  # 待 joy 潤：content/seal.json 的七片（玉璽碎片設計 7.1）
 
 
 def name_problem(name: str, content: Content, person: PersonCheck | None = None) -> str | None:
@@ -113,6 +114,8 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
         return GEAR_CLASH
     if any(name == recipe.name for recipe in content.forge_secrets.values()):
         return FORGE_CLASH  # 名器的名字留給那一條隱藏配方：模型替武學、意境取名，玩家替絕學（之後神器）定名都取不到
+    if any(name == shard.name for shard in content.seal.values()):
+        return SEAL_CLASH  # 七片的名字留給碎片：模型替武學、意境取名，玩家替絕學定名都取不到
     return None
 
 

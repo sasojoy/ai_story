@@ -569,6 +569,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 第一季的本週軍令（計畫 T6） */
 .orders .order, .bounties .order { padding: 8px 0; border-top: 1px solid var(--line); }
 .orders .order:first-child, .bounties .order:first-child { border-top: 0; padding-top: 0; }
+/* 奪璽卡（玉璽碎片設計 5.10）：對手的架勢、輪到你出招 */
+.seal-duel .tell { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
+.seal-duel .turn { margin: 4px 0; font-weight: 600; color: var(--accent); }
 .order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }

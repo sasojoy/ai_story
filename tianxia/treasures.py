@@ -12,9 +12,9 @@
 
 擲骰一律用自己的 random.Random(種子)，不碰 Game.rng（FB-129：整季測試與量表的基準不位移）。
 只 import models、state、equipment、mounts；不 import team、rules、cultivation、bounties、materials（它們反過來呼叫這裡）。
-玉璽碎片（玉璽碎片設計 7.2～7.4）之後在寶物欄多一格「傳承」（PlayerState.heirloom，不進裝備庫、不換）：_cells 多加那一格（只看
+玉璽碎片（玉璽碎片設計 7.2～7.4）在寶物欄多一格「傳承」（PlayerState.heirloom，不進裝備庫、不換）：_cells 多加那一格（只看
 Config.seal.enabled、不看寶物的開關，查 Config.seal.effects）、MULTIPLY 加碎片的乘法鍵，八個掛點都不用動；不重複照 template，
-不假設「換季全清」。rows、card_line 現在照寶物的開關回空，玉璽一要改成照兩格各自的開關（玉璽碎片設計第十節）。
+不假設「換季全清」。rows、card_line 照兩格各自的開關（玉璽碎片設計第十節）；碎片的七句字也在這裡（seal 轉呼叫，字只留一份）。
 """
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ from . import equipment, mounts
 from .models import GOOD_HORSE, Content, SteedDef
 from .state import Equipment, GameState, PlayerState
 
-MULTIPLY = frozenset({"cultivate", "insight", "legend"})  # 乘的效果（中性值 1）；其餘是加的（中性值 0）。玉璽一把碎片的乘法鍵加進來
+# 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的
+MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp"})
 EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（數字照 Config.treasures.effects；{item} 是破境丹的名字 Config.legend_item_name）
     "cultivate": "修練升品的機會 ×{x}",
     "insight": "探索悟得意境的機會 ×{x}",
@@ -36,6 +37,12 @@ EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（�
     "win_material": "打贏時有 {pct} 的機會多掉一個素材",
     "legend": "探索撿到{item}的機會 ×{x}",
 }
+SEAL_EFFECT_TEXT = {  # 待 joy 潤：玉璽碎片的七種效果（數字照 Config.seal.effects；seal.effect_text 轉呼叫這裡，字只留一份）
+    "hp_cap": "氣血上限 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "practice": "練成的心得 ×{x}",
+    "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "合成的造化 +{n}",
+    "mate_exp": "同伴拿到的經驗 ×{x}",
+}
+HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭
 GOT = "你得到了寶物【{name}】（{effect}）。"  # 待 joy 潤
 GOT_HORSE = "你得到一匹{grade}的【{name}】。"  # 待 joy 潤（grade 是 mounts.grade：「良駒・中品」）
 DUP = "你已經有一件【{name}】了，換成銀兩 {silver}。"  # 待 joy 潤（6.5：奇遇給的那一件已經有了）
@@ -46,6 +53,7 @@ HELD_TITLE = "寄放"  # 待 joy 潤：補發那一則江湖紀錄的標題
 HELD_ARRIVED = "寄放的【{name}】送到了。"  # 待 joy 潤
 EMPTY = "身上沒有寶物。"  # 待 joy 潤：修練頁寶物那一段身上空著
 RACK_NOTE = "寶物買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來；隨時能換。"  # 待 joy 潤：修練頁寶物那一段底下
+HEIRLOOM_NOTE = "傳承那一件是玉璽碎片，跟著你走，不能換下。"  # 待 joy 潤（FB-180）：有傳承時寶物段底下多這一句；寶物關著時只寫這一句
 WHERE = "買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來。"  # 待 joy 潤（FB-138）：身上什麼裝備都沒有時，修練頁寶物那一行寫哪裡得來
 LOST = "這件寶物的來歷已經失傳"  # 待 joy 潤：內容拿掉了這一件（template 查不到，效果不算）
 HELD_NOTE = "寄放著：{names}——裝備庫騰出空位，下次回來就補給你。"  # 待 joy 潤：修練頁「裝備」塊底下
@@ -78,14 +86,24 @@ def effect_text(content: Content, key: str) -> str:
     )
 
 
+def seal_effect_text(content: Content, key: str) -> str:
+    """碎片那一句（「練成的心得 ×0.9」）：數字照 Config.seal.effects。"""
+    value = content.config.seal.effects.get(key, 0.0)
+    return SEAL_EFFECT_TEXT.get(key, "").format(x=f"{value:g}", n=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%")
+
+
 def _cells(state: GameState, content: Content) -> list[tuple[str, float]]:
-    """身上每一格寶物的（效果鍵, 數字）。這一批只有一般那一格（PlayerState.treasure：看 Config.treasures.enabled、查
-    Config.treasures.effects）；玉璽一在這裡多加傳承那一格（PlayerState.heirloom：只看 Config.seal.enabled、不看寶物的開關，
-    查 Config.seal.effects），其他掛點都不用動（玉璽碎片設計 7.2）。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。"""
+    """身上每一格寶物的（效果鍵, 數字）：一般那一格看寶物的開關（PlayerState.treasure：Config.treasures.enabled、查
+    Config.treasures.effects）；傳承那一格只看 Config.seal.enabled 與 content/seal.json（PlayerState.heirloom，查 Config.seal.effects，
+    玉璽碎片設計 7.2），其他掛點都不用動。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。"""
     cells: list[tuple[str, float]] = []
     key = effect_of(content, state.player.treasure) if on(content) else None
     if key is not None:
         cells.append((key, content.config.treasures.effects.get(key, 1.0 if key in MULTIPLY else 0.0)))
+    heir = state.player.heirloom  # 傳承那一格（玉璽碎片設計 7.2）：只看 Config.seal.enabled 與內容的七片，不看寶物的開關
+    shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
+    if shard is not None:
+        cells.append((shard.effect, content.config.seal.effects.get(shard.effect, 1.0 if shard.effect in MULTIPLY else 0.0)))
     return cells
 
 
@@ -253,25 +271,43 @@ def _row(content: Content, item: Equipment) -> dict:
 
 
 def rows(state: GameState, content: Content) -> dict:
-    """修練頁的寶物那一段（skillview.gear_rows）：身上那件、裝備庫裡的寶物。開關關著時 worn 是 None、rack 是空的
-    （玉璽一要讓傳承那一列照 Config.seal.enabled 另外畫，見計畫「範圍與取捨」玉璽那一段第 5 點）。"""
+    """修練頁的寶物那一段（skillview.gear_rows）：身上那件、裝備庫裡的寶物（寶物的開關關著時 worn 是 None、rack 是空的），
+    加上傳承那一列 heirloom（玉璽碎片的抄本，只看 Config.seal.enabled；不能換下、沒有鈕）。"""
     p = state.player
+    heir = p.heirloom if content.config.seal.enabled and p.heirloom is not None and p.heirloom.template in content.seal else None
+    out = {"worn": None, "rack": [], "heirloom": None}
+    if heir is not None:
+        shard = content.seal[heir.template]
+        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": seal_effect_text(content, shard.effect)}
+    if on(content):
+        out["worn"] = _row(content, p.treasure) if p.treasure is not None else None
+        out["rack"] = [_row(content, t) for t in equipment.in_slot(p, "treasure")]
+    return out
+
+
+def rack_note(state: GameState, content: Content) -> str:
+    """修練頁寶物那一段底下那一行（FB-180）：寶物開著照舊寫 RACK_NOTE；身上有傳承時多 HEIRLOOM_NOTE（「隨時能換」不包括它）；
+    寶物關著、只有傳承那一列時只寫 HEIRLOOM_NOTE。"""
+    heir = rows(state, content)["heirloom"] is not None
     if not on(content):
-        return {"worn": None, "rack": []}
-    return {
-        "worn": _row(content, p.treasure) if p.treasure is not None else None,
-        "rack": [_row(content, t) for t in equipment.in_slot(p, "treasure")],
-    }
+        return HEIRLOOM_NOTE if heir else ""
+    return RACK_NOTE + (HEIRLOOM_NOTE if heir else "")
 
 
 def card_line(state: GameState, content: Content) -> str:
-    """本人卡上的「寶物」那一行（2.5，待 joy 潤）：「寶物　【烏木名刺】求見門檻 −3」；沒帶或開關關著是空字串
-    （玉璽一的「傳承」那一行照 Config.seal.enabled 另寫，不經過這裡的開關）。"""
+    """本人卡上的「寶物」那一行（2.5，待 joy 潤）：「寶物　【烏木名刺】求見門檻 −3」，沒帶或開關關著不寫；加上傳承那一行
+    「傳承　【雲篆】練成的心得 ×0.9」（玉璽碎片設計第十節：只看 Config.seal.enabled 與 content/seal.json，不看寶物的開關）。
+    兩行都有時用換行接；都沒有是空字串。"""
+    lines = []
     item = state.player.treasure
-    if item is None or not on(content):
-        return ""
-    key = effect_of(content, item)
-    return f"寶物　【{item.name}】{effect_text(content, key) if key else LOST}"
+    if item is not None and on(content):
+        key = effect_of(content, item)
+        lines.append(f"寶物　【{item.name}】{effect_text(content, key) if key else LOST}")
+    heir = state.player.heirloom
+    shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
+    if shard is not None:
+        lines.append(f"{HEIRLOOM_LABEL}　【{heir.name}】{seal_effect_text(content, shard.effect)}")
+    return "\n".join(lines)
 
 
 def held_note(state: GameState) -> str:

@@ -63,7 +63,8 @@ def check_thresholds(
         if w.ended:
             return msgs
     for event in content.scenario.world_events:
-        if event.id in w.fired_thresholds or not check_condition(event.condition, state):
+        if (event.id in w.fired_thresholds or event.id in season_one_off(content, w, "world_events")
+                or not check_condition(event.condition, state)):
             continue
         msgs += _fire(
             state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.starts_battle,
@@ -112,7 +113,8 @@ def fire_by_id(
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
     開戰、結束賽季都一樣），再更新主線。已經發生過、找不到這個 id、或是第一季不觸發的 beta 門檻，回傳 None。"""
-    if fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds"):
+    if (fire_id in state.world.fired_thresholds or fire_id in season_one_off(content, state.world, "thresholds")
+            or fire_id in season_one_off(content, state.world, "world_events")):
         return None
     source = next((th for th in content.scenario.thresholds if th.id == fire_id), None)
     if source is None:
@@ -509,7 +511,12 @@ def _open_claimed(
     if not claimed:
         return []
     definition, start = claimed[0]
-    return _open_battle(world, definition, now, trend_start=start)
+    msgs = _open_battle(world, definition, now, trend_start=start)
+    if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
+        from . import seal  # noqa: PLC0415  seal → world_state：在函式裡 import，同這個模組其他延後 import
+
+        msgs += seal.on_muster(world, content, definition, now)
+    return msgs
 
 
 def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:
@@ -570,6 +577,11 @@ def advance_world_state(
     # 在 advance_season 的 mutate_season 裡也查得到（交易裡的快照直接用同一條連線，不是 mutate，不撞「不能巢狀」）。
     # 沒傳 store（純函式的呼叫，例如測試）就不知道人數：None＝割據照設計的速度漲，不縮放
     players = sum(world.faction_counts().values()) if cal_hour is not None and world is not None else None
+    # 有沒打完的奪璽單挑時，那一個曆時先不提前收季（玉璽碎片設計 5.11，最多約 13 分鐘）：一次推進只查一次；在 advance_season 的
+    # mutate_season 裡也查得到（同上面的名冊）。沒傳 store（純函式的呼叫）照舊
+    # 主機關掉碎片（Config.seal.enabled）時單挑推不動了，也就不擋（不然關著的那段時間每一季都收不了季）
+    seal_open = (cal_hour is not None and world is not None and content.config.seal.enabled and bool(content.seal)
+                 and world.seal_duel_open())
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False
@@ -586,7 +598,7 @@ def advance_world_state(
             msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
-            decisive = None if season.ended else decisive_ending(vehicle, content)
+            decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)
             if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)
         if not season.ended and _season_due(season, content):

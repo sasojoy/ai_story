@@ -276,7 +276,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
 
 def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
     """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
-    beta 那場決戰與四個黃巾聲勢門檻不列；開關關著照舊。"""
+    beta 那場決戰、四個黃巾聲勢門檻與舊玉璽鏈不列；開關關著照舊。"""
     def listed(kind):
         return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
 
@@ -285,7 +285,8 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
     assert listed("battles") == ["changshe_fire", "guangzong"]  # 三場大戲；宛城要等第 3 週結算才知道開哪一版，先不列（PM 2026-10-05）
     assert not {"huangjin_50", "huangjin_60", "huangjin_80", "huangjin_10"} & set(listed("events"))
-    assert {"yuxi_50", "yuxi_100"} <= set(listed("events"))
+    # 玉璽一：舊玉璽鏈的門檻與董卓奪璽第一季也關掉（玉璽碎片設計 11.2 第 1 條），開關關著時照舊列（上面第一行）
+    assert not {"yuxi_50", "yuxi_100", "dongzhuo_takes_shard"} & set(listed("events"))
 
 
 def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
@@ -5383,6 +5384,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "prepare_dialogue", "prepare_fight", "prepare_forge", "answer_event", "sense_draw", "battle_text", "duel_text",
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
         "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
+        "seal_text",  # 奪璽單挑的放手一搏（玉璽碎片設計 5.7）：三段同 duel_text
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6070,6 +6072,8 @@ FINGERPRINTED = {
         "paused_at": lambda st: setattr(st, "paused_at", 1000.0),
         "season": _SEASON,
         "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
+        # 奪璽單挑（玉璽碎片設計 5.10、13.3）：全服觀戰，回合推進、出招，開著的分頁要更新
+        "seal_duels": lambda st: st.seal_duels.append(_seal_duel()),
     },
     "WorldState": {
         "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
@@ -6107,6 +6111,7 @@ NOT_IN_THE_FINGERPRINT = {
         "jade_seal_fragments": "玉璽碎片的歸屬，只在持有者的畫面",
         "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
         "tianji": "換季才加一，同時 season_number 也變了",
+        "seal": "碎片的歸屬：現世、易手、隱沒都寫天下大事（傳聞流水號已在指紋裡）；密鹽不能讓人看出來（13.3）",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
@@ -6176,8 +6181,23 @@ NOT_IN_THE_FINGERPRINT = {
         "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
         "outcome_margin": "收場時跟 phase 一起寫入",
         "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
+        "seal_emerge": "現世擲中了：集結那一刻另寫天下大事（3.4），指紋本來就變了",
+        "seal_shard": "璽動牽動哪一片：另寫天下大事（4.3）",
+        "seal_holder": "同上",
+        "seal_holder_faction": "同上（快照，畫面上看不到）",
+        "seal_holder_side": "同上",
+        "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
     },
 }
+
+
+def _seal_duel():
+    from tianxia.world_state import SealDuel, SealSide
+
+    side = SealSide(name="甲", power=50.0, hp=100.0, hp_cap=100.0)
+    return SealDuel(id="1:chishou", shard="chishou", phase="active", starts_real=0.0, challenger=side, holder=side.model_copy(update={"name": "乙"}))
+
+
 WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
 
 
@@ -6629,3 +6649,20 @@ def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
     assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
     left = other.post("/api/party/leave", json={}).json()
     assert "沒有跟著誰" in left["message"]
+
+
+def test_the_fingerprint_follows_the_seal_duel_but_not_who_was_seen():
+    """奪璽單挑：回合 +1、親自出了一手，指紋變；last_seen（每 15 秒就可能動一次）變了不算（5.10）。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+    world.mutate(lambda st: st.seal_duels.append(_seal_duel()))
+    before = server.current_fingerprint()
+    world.mutate(lambda st: setattr(st.seal_duels[0].challenger, "last_seen", 1234.0))
+    assert server.current_fingerprint() == before
+    world.mutate(lambda st: st.seal_duels[0].pending.__setitem__("challenger", "強攻"))
+    sent = server.current_fingerprint()
+    assert sent != before
+    world.mutate(lambda st: setattr(st.seal_duels[0], "round", 1))
+    assert server.current_fingerprint() != sent

@@ -1,0 +1,310 @@
+"""玉璽碎片的量表（docs/superpowers/specs/2026-10-11-玉璽碎片-design.md 15.2；計畫 2026-10-12-玉璽-1-核心.md Task 12）：只量不改。
+
+跑真的程式（包住 scripts/sim_season_one.py::run_season，攔下 seal.on_muster、Game._seal_settle、seal_duel.finish 記數字），印：
+- 每季：現世沒有、哪一片、得主的戰功名次；
+- 每次璽動：持有者那一方四檔、挑得出幾個合格的挑戰者、單挑每回合氣勢、結果、單挑係數、再擲中沒中；
+- 一季易手幾次、隱沒幾片；新角色快照的份量比；季末碎片在真人、假人手上各幾片；持有者所在陣營的大勝比例；
+- 一季被捲進璽動幾成、一季易手幾成，與照一輪（7 ÷ 現世率 季）換算的全服單挑場數與易手次數。
+參數：--decisive-week（改提前收季的週次）、--force-stir（每場都璽動：stir_chance 1、一季上限拿掉，量「一次璽動之後」的條件分布）、
+--holders N（假人一建好就把前 N 片記到前 N 個假人名下，since_season 0：不然第一季沒有人持有、量不到璽動）。
+--duel-mc：只跑單挑，掃份量比 0.5～3、在場與代打四種組合、放手一搏（成功率 30～70；不搏、每回合搏、一場最多兩次），報 E[g]（單挑係數的期望）。
+每個種子給一份量表用的密鹽（「measure-種子」）：沒有密鹽時碎片的擲骰只看天機與季別，每個種子擲出一樣的結果。
+數字照實報，不為了量表調參數。天命之季（--mandate）是玉璽二。
+
+執行：.venv/Scripts/python.exe scripts/measure_seal.py --seeds 1 2 3 [--factions 5 5 5] [--force-stir --holders 7] [--duel-mc]
+輸出只有數字與陣營，不列名號。
+"""
+from __future__ import annotations
+
+import argparse
+import io
+import statistics
+import sys
+import tempfile
+from pathlib import Path
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from tianxia import battle_instance, database, seal, seal_duel  # noqa: E402
+from tianxia.bot_runner import BotRunner  # noqa: E402
+from tianxia.characters import open_characters  # noqa: E402
+from tianxia.content import load_content as _load_content  # noqa: E402
+from tianxia.content import profile_line  # noqa: E402
+from tianxia.engine import Game  # noqa: E402
+from tianxia.models import MOVES, Content  # noqa: E402
+from tianxia.sqlite_world import open_world  # noqa: E402
+from tianxia.world_state import SealDuel, SealSide  # noqa: E402
+
+import sim_season_one  # noqa: E402
+
+PRESENCES = ("both", "challenger", "holder", "none")  # 誰在場（另一邊交給代打）
+PRESENT = {"both": ("challenger", "holder"), "challenger": ("challenger",), "holder": ("holder",), "none": ()}
+MODES = ("none", "every", "cap2")  # 在場那一邊：不搏（出份量最高的招）、每回合搏（不管一場兩次的上限）、照上限前兩回合搏
+HOLDER_SCORES = {"強攻": 60.0, "固守": 50.0, "奇襲": 40.0}  # 持有者固定的份量；挑戰者乘份量比
+HOLDER_POWER = 100.0
+SALT = "measure"
+ROUND_SECONDS = 20.0
+
+
+def load_content(root: Path, profile: str | None = "weekend") -> Content:
+    """照 sim_season_one 的載法：週末設定（"none" 是不帶設定覆寫檔的十四天季）、第一季開著（run_season 自己再設一次）。"""
+    content = _load_content(root, profile=None if profile in (None, "none") else profile)
+    content.config.season_one = True
+    return content
+
+
+def _side(name: str, scale: float) -> SealSide:
+    return SealSide(name=name, power=HOLDER_POWER * scale, scores={m: v * scale for m, v in HOLDER_SCORES.items()},
+                    hp=300.0, hp_cap=300.0)
+
+
+def _best(side: SealSide) -> str:
+    return max(MOVES, key=lambda m: (side.scores.get(m, 0.0), -MOVES.index(m)))
+
+
+def one_duel(content: Content, n: int, ratio: float, presence: str, rate: int, mode: str) -> str:
+    """跑一場單挑到收場，回挑戰者角度的結果（verdict）。不碰 Game、不碰資料庫；種子照流水號 n。"""
+    cfg = content.config.seal
+    d = SealDuel(id=f"mc{n}:chishou", shard="chishou", phase="active", starts_real=0.0, challenger=_side("挑戰者", ratio),
+                 holder=_side("懷璽", 1.0), cap=cfg.cap, rounds=cfg.rounds)
+    t = 0.0
+    result = None
+    while result is None:
+        for who in PRESENT[presence]:
+            getattr(d, who).last_seen = t  # 在場：這一回合開始前剛推過
+        seal_duel.open_round(d, t, content, SALT, 0)
+        for who in PRESENT[presence]:
+            side = getattr(d, who)
+            gamble = mode == "every" or (mode == "cap2" and side.gambles < cfg.gamble_cap)
+            if gamble:
+                seal_duel.submit(d, who, text="放手一搏", rate=rate)
+            else:
+                seal_duel.submit(d, who, move=_best(side))
+        seal_duel.resolve(d, content, SALT, 0)
+        result = seal_duel.verdict(d, content.config.duel)
+        t += ROUND_SECONDS
+    return result
+
+
+def duel_mc(content: Content, ratios, trials: int, rates, modes, presences=PRESENCES) -> list[dict]:
+    """每個（份量比, 在場組合, 成功率, 模式）跑 trials 場單挑；eg＝單挑係數（Config.seal.take_share[結果]）的平均。同樣的參數結果一樣。"""
+    share = content.config.seal.take_share
+    rows = []
+    n = 0
+    for ratio in ratios:
+        for presence in presences:
+            for rate in rates:
+                for mode in modes:
+                    total = 0.0
+                    for _ in range(trials):
+                        n += 1
+                        total += share.get(one_duel(content, n, ratio, presence, rate, mode), 0.0)
+                    rows.append({"ratio": ratio, "presence": presence, "rate": rate, "mode": mode, "eg": total / trials})
+    return rows
+
+
+PRESENCE_WORDS = {"both": "都在場", "challenger": "只有挑戰者", "holder": "只有持有者", "none": "都代打"}
+MODE_WORDS = {"none": "不搏", "every": "每回合搏", "cap2": "最多兩次"}
+
+
+def print_mc(rows: list[dict]) -> None:
+    print("份量比\t在場\t成功率\t放手一搏\tE[g]")
+    for r in rows:
+        print(f"{r['ratio']:g}\t{PRESENCE_WORDS.get(r['presence'], r['presence'])}\t{r['rate']}\t"
+              f"{MODE_WORDS.get(r['mode'], r['mode'])}\t{r['eg']:.3f}")
+
+
+def measure_season(content: Content, seed: int, factions, hours: float, force_stir: bool, holders: int, tick: float = 60.0) -> dict:
+    """包 sim_season_one.run_season 跑一季，攔下現世、璽動、單挑的數字。回 summary 用的那幾個鍵。"""
+    cfg = content.config.seal
+    if force_stir:
+        cfg.stir_chance, cfg.season_stir_cap = 1.0, 99
+    row: dict = {"emerged": None, "emerge_rank": None, "emerge_rolled": 0, "stirs": [], "duels": [], "takes": 0, "sunk": 0,
+                 "holders": {"真人": 0, "假人": 0}, "fresh_ratio": [], "holder_big_wins": []}
+    current: dict = {"tier": None, "eligible": 0}
+    edges: dict[str, list[float]] = {}
+    assigned: list[str] = []
+    real_settle, real_tier, real_finish, real_resolve = Game._seal_settle, seal.tier_for, seal_duel.finish, seal_duel.resolve
+    real_challengers, real_spectators, real_add = Game._seal_challengers, Game._seal_spectators, BotRunner._add_bot
+    tuning = content.config.battle
+
+    def tier_for(holder_side, winner, margin):
+        current["tier"] = real_tier(holder_side, winner, margin)
+        return current["tier"]
+
+    def challengers(self, *args, **kwargs):
+        rows = real_challengers(self, *args, **kwargs)
+        current["eligible"] += len(rows)
+        return rows
+
+    def spectators(self, *args, **kwargs):
+        rows = real_spectators(self, *args, **kwargs)
+        current["eligible"] += len(rows)
+        return rows
+
+    def settle(self, battle, definition, result):
+        current["tier"], current["eligible"] = None, 0
+        armies = {f.id for f in definition.factions}
+        # 沒走到挑挑戰者的原因（同 Game._seal_settle 的兩道擋）：兩軍都沒人還能打（保底），或那一片此刻已經不在持有者手上
+        deserted = not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+        holder_now = self.world.seal_state().registry.shards.get(battle.seal_shard or "")
+        real_settle(self, battle, definition, result)
+        if battle.seal_shard:
+            moved = holder_now is None or seal.key(holder_now.holder) != seal.key(battle.seal_holder)
+            tier = current["tier"] or ("保底" if deserted else "易主過" if moved else "未判")
+            row["stirs"].append({"tier": tier, "eligible": current["eligible"]})
+            row["holder_big_wins"].append(1 if tier == "大勝" else 0)
+        if battle.seal_emerge:
+            row["emerge_rolled"] += 1
+            reg = self.world.seal_state().registry
+            got = next((e for e in reg.history if e.kind == "emerge" and e.record == battle.record_id), None)
+            if got is not None:
+                side = str(result.get("side") or "")
+                names = [p.name for p, _ in battle_instance.merit_ranking(battle, tuning, side)]
+                row["emerged"] = content.seal[got.shard].name
+                row["emerge_rank"] = names.index(got.holder) + 1 if got.holder in names else None
+
+    def resolve(duel, *args, **kwargs):
+        line = real_resolve(duel, *args, **kwargs)
+        edges.setdefault(duel.id, [50.0]).append(round(duel.edge, 1))
+        return line
+
+    def finish(shared, duel, content_, result, now):
+        event = real_finish(shared, duel, content_, result, now)
+        taken = event.kind == "take"
+        row["duels"].append({"verdict": result or "沒打完", "share": cfg.take_share.get(result or "", 0.0), "taken": taken,
+                             "edges": edges.get(duel.id, [50.0])})
+        row["takes"] += 1 if taken else 0
+        if duel.holder.fresh:
+            mine = battle_instance.strength(tuning, duel.holder.power)
+            row["fresh_ratio"].append(round(battle_instance.strength(tuning, duel.challenger.power) / max(1.0, mine), 2))
+        return event
+
+    def add_bot(self, faction_id, season, bots, now, state=None):
+        out = real_add(self, faction_id, season, bots, now, state=state)
+        if len(assigned) < holders and out:
+            name = out[-1].player.name
+            shard_id = sorted(content.seal)[len(assigned)]
+            assigned.append(name)
+
+            def _give(st):
+                reg = seal.filled(st.seal, content)
+                reg.shards[shard_id].state, reg.shards[shard_id].holder, reg.shards[shard_id].since_season = "held", name, 0
+
+            self.world.mutate(_give)
+        return out
+
+    targets = dict(zip(sim_season_one.SIDES, factions))
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp) / "seal.db"
+        try:
+            # 每個種子一份量表用的密鹽：沒有密鹽時碎片的擲骰只看天機與季別，五個種子擲出一模一樣的現世與璽動；照種子給就各自不同、重跑一樣
+            open_world(db_path).mutate(lambda st: setattr(st.seal, "salt", f"measure-{seed}"))
+            with mock.patch.object(seal, "tier_for", tier_for), mock.patch.object(Game, "_seal_settle", settle), \
+                    mock.patch.object(Game, "_seal_challengers", challengers), mock.patch.object(Game, "_seal_spectators", spectators), \
+                    mock.patch.object(seal_duel, "finish", finish), mock.patch.object(seal_duel, "resolve", resolve), \
+                    mock.patch.object(BotRunner, "_add_bot", add_bot):
+                result = sim_season_one.run_season(content, db_path, seed, targets, hours, tick)
+            world, characters = open_world(db_path), open_characters(db_path)
+            view = world.seal_state()
+            for shard in view.registry.shards.values():
+                if shard.state == "held" and shard.holder:
+                    state = characters.load(shard.holder)
+                    row["holders"]["假人" if state is not None and state.player.bot is not None else "真人"] += 1
+            row["sunk"] = sum(1 for e in view.registry.history if e.kind == "sink")
+            row["ending"] = result["ending"]
+        finally:
+            database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾
+    return row
+
+
+def summary(seed: int, row: dict) -> str:
+    """一個種子一行：「種子 1：現世 雲篆（戰功第 2）　璽動 1（大敗×1，合格 3）　單挑 1（險勝，係數 0.6，未易手）　易手 0　隱沒 0
+    真人 1／假人 0　新角色份量比 3.1　持有者那一方大勝 1／2」。"""
+    emerged = row.get("emerged")
+    rank = row.get("emerge_rank")
+    head = f"現世 {emerged}（戰功第 {rank}）" if emerged and rank else f"現世 {emerged}" if emerged else "現世 無"
+    stirs = row.get("stirs", [])
+    tiers: dict[str, int] = {}
+    for s in stirs:
+        tiers[s["tier"]] = tiers.get(s["tier"], 0) + 1
+    stir = f"璽動 {len(stirs)}"
+    if stirs:
+        stir += f"（{'、'.join(f'{t}×{n}' for t, n in tiers.items())}，合格 {'、'.join(str(s['eligible']) for s in stirs)}）"
+    duels = row.get("duels", [])
+    duel = f"單挑 {len(duels)}"
+    if duels:
+        duel += "（" + "；".join(f"{d['verdict']}，係數 {d['share']:g}，{'易手' if d['taken'] else '未易手'}" for d in duels) + "）"
+    fresh = row.get("fresh_ratio") or []
+    fresh_text = f"新角色份量比 {'、'.join(f'{x:g}' for x in fresh)}" if fresh else "新角色份量比 無"
+    wins = row.get("holder_big_wins") or []
+    hold = row.get("holders", {})
+    return (f"種子 {seed}：{head}　{stir}　{duel}　易手 {row.get('takes', 0)}　隱沒 {row.get('sunk', 0)}　"
+            f"真人 {hold.get('真人', 0)}／假人 {hold.get('假人', 0)}　{fresh_text}　持有者那一方大勝 {sum(wins)}／{len(wins)}")
+
+
+def round_up(rows: list[dict], content: Content, emerge_default: float = 0.35) -> list[str]:
+    """平均與換算（照實寫算式）：現世率、璽動之後開單挑的比例、單挑之後易手的比例；換成正式的 stir_chance 時一片一季被捲進幾成、
+    易手幾成；一輪（7 ÷ 現世率 季）全服單挑幾場、易手幾次（每季被捲進的次數照全服上限 season_stir_cap 夾）。
+    content 要給沒被 --force-stir 改過的那一份（換算照正式的機率與上限）。"""
+    cfg = content.config.seal
+    seasons = len(rows)
+    emerged = sum(1 for r in rows if r.get("emerged"))
+    rolled = sum(r.get("emerge_rolled", 0) for r in rows)
+    stirs = sum(len(r["stirs"]) for r in rows)
+    duels = sum(len(r["duels"]) for r in rows)
+    takes = sum(r["takes"] for r in rows)
+    marked = sum(1 for e in content.timetable if e.seal)
+    emerge_rate = emerged / seasons if seasons and emerged else emerge_default
+    p_duel = duels / stirs if stirs else 0.0
+    p_take = takes / duels if duels else 0.0
+    involve = 1 - (1 - cfg.stir_chance) ** marked  # 一片一季（標了 seal 的決戰 marked 場，每場 stir_chance）
+    per_round = round(7 / emerge_rate) if emerge_rate else 0
+    held_avg = 3.5  # 一輪裡平均有幾片有主（從 0 片長到 7 片，取一半；假設）
+    season_stirs = min(cfg.season_stir_cap, held_avg * involve)
+    lines = [
+        f"季數 {seasons}：現世 {emerged} 季（標 emerge 的決戰擲中現世 {rolled} 場）；璽動 {stirs} 次、開單挑 {duels} 場、易手 {takes} 次",
+        f"璽動之後開單挑的比例 {p_duel:.2f}；單挑之後易手的比例 {p_take:.2f}",
+        f"換成 {cfg.stir_chance:.0%}：一片一季被捲進 {involve:.1%}、易手 {involve * p_duel * p_take:.1%}（標了 seal 的決戰 {marked} 場）",
+        f"一輪 {per_round} 季（7 ÷ 現世率 {emerge_rate:.2f}）：每季約 {season_stirs:.2f} 次璽動（平均 {held_avg:g} 片有主、上限 {cfg.season_stir_cap}），"
+        f"全服單挑約 {per_round * season_stirs * p_duel:.1f} 場、易手約 {per_round * season_stirs * p_duel * p_take:.1f} 次",
+    ]
+    return lines
+
+
+def main() -> None:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
+    parser.add_argument("--factions", type=int, nargs=3, default=[5, 5, 5], metavar=("GUAN", "HUANG", "HAOQIANG"))
+    parser.add_argument("--hours", type=float, default=60.0)
+    parser.add_argument("--tick", type=float, default=60.0)
+    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--decisive-week", type=int, default=None)
+    parser.add_argument("--force-stir", action="store_true")
+    parser.add_argument("--holders", type=int, default=0)
+    parser.add_argument("--duel-mc", action="store_true")
+    parser.add_argument("--trials", type=int, default=400)
+    args = parser.parse_args()
+    content = load_content(ROOT / "content", args.profile)
+    print(profile_line(content, None if args.profile == "none" else args.profile), flush=True)
+    if args.duel_mc:
+        print_mc(duel_mc(content, ratios=[0.5, 1.0, 1.5, 2.0, 3.0], trials=args.trials, rates=[30, 50, 70], modes=list(MODES)))
+        return
+    rows = []
+    for seed in args.seeds:
+        content = load_content(ROOT / "content", args.profile)
+        if args.decisive_week is not None:
+            content.config.decisive_from_week = args.decisive_week
+        row = measure_season(content, seed, args.factions, args.hours, args.force_stir, args.holders, args.tick)
+        rows.append(row)
+        print(summary(seed, row), flush=True)
+    for line in round_up(rows, load_content(ROOT / "content", args.profile)):  # 換算照正式的機率與上限（不吃 --force-stir）
+        print(line, flush=True)
+
+
+if __name__ == "__main__":
+    main()
