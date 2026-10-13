@@ -19,5 +19,6 @@
   "armor": {"enabled": false},
   "mounts": {"enabled": false},
   "treasures": {"enabled": false},
-  "biography": {"enabled": false}
+  "biography": {"enabled": false},
+  "battle_from_week": 1
 }

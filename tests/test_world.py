@@ -160,7 +160,8 @@ def test_ending_threshold_in_season_one_ends_at_once_as_before(content):
 
 
 def test_the_huangjin_win_waits_for_the_decisive_week_in_a_fourteen_day_season():
-    """正式內容、14 天的季：黃巾聲勢推過 80 在第 10 週以前不收季（決戰照開），第 10 週起還在 80 以上才「黃巾稱霸」。"""
+    """正式內容、14 天的季：黃巾聲勢推過 80 在第 10 週以前不收季，第 10 週起還在 80 以上才「黃巾稱霸」。開決戰的 huangjin_60
+    第 5 週起才開（企劃者 2026-10-13「季中，第 5 週起才開」，FB-168）：第 3 週只有不開決戰的 huangjin_50 觸發。"""
     from conftest import real_content
     from tianxia import calendar
     from tianxia.state import new_game_state
@@ -172,8 +173,12 @@ def test_the_huangjin_win_waits_for_the_decisive_week_in_a_fourteen_day_season()
     state.world.trends["huangjin"] = 85
     state.world.time = calendar.week_start(3, content, state.world)
     msgs = check_thresholds(state, content)
-    assert not state.world.ended and {"huangjin_50", "huangjin_60"} <= state.world.fired_thresholds
+    assert not state.world.ended and "huangjin_50" in state.world.fired_thresholds
+    assert "huangjin_60" not in state.world.fired_thresholds  # 第 5 週前不開決戰、不記成觸發過
     assert "huangjin_80" not in state.world.fired_thresholds and any("【江湖大事】" in m for m in msgs)
+    state.world.time = calendar.week_start(5, content, state.world)
+    check_thresholds(state, content)
+    assert not state.world.ended and "huangjin_60" in state.world.fired_thresholds  # 第 5 週還在門檻上：開
     state.world.time = calendar.week_start(10, content, state.world)
     check_thresholds(state, content)
     assert state.world.ended and state.world.ending_title == "黃巾稱霸"
@@ -666,3 +671,32 @@ def test_the_possible_endings_say_when_the_huangjin_win_can_first_end_the_season
     assert text.count("以前不會提前收季") == 1
     state.world.time = calendar.week_start(10, content, state.world)
     assert "以前不會提前收季" not in quest_text(state, content)
+
+
+def test_a_battle_threshold_waits_until_week_five_when_the_season_one_rules_are_off(state, content, world):
+    """企劃者 2026-10-13「季中，第 5 週起才開」（FB-168）：規則關著的季，開決戰的大勢門檻（starts_battle）季曆第 battle_from_week 週
+    以前推過了也不開集結、不記成觸發過；到了那一週還在門檻上就開。第一季照時刻表（beta 的決戰門檻本來就由 season_one_off 關掉），
+    這一條不管：第一季開著時第 1 週照舊開。"""
+    from tianxia import calendar
+
+    content.config.battle_from_week = 5
+    content.scenario.thresholds[0].starts_battle = "b1"
+    _install_battle_def(content)
+    th = content.scenario.thresholds[0].id
+    state.world.trends["kou"] = 50
+    state.world.time = calendar.week_start(5, content, state.world) - 1.0
+    check_thresholds(state, content, world, now=0.0)
+    assert world.get_battle() is None and th not in state.world.fired_thresholds
+    state.world.time = calendar.week_start(5, content, state.world)
+    check_thresholds(state, content, world, now=0.0)
+    assert world.get_battle() is not None and th in state.world.fired_thresholds
+
+
+def test_the_week_five_battle_gate_leaves_the_season_one_rules_alone(state, content, world):
+    content.config.battle_from_week = 5
+    content.scenario.thresholds[0].starts_battle = "b1"
+    _install_battle_def(content)
+    state.world.trends["kou"] = 50
+    with mock.patch("tianxia.world.season_one", return_value=True):
+        check_thresholds(state, content, world, now=0.0)
+    assert world.get_battle() is not None

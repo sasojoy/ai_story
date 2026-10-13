@@ -2003,7 +2003,11 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert all(t in quest_text(game.state, beta) for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
     _push_huangjin_to(game, 60)
     check_thresholds(game.state, beta, game.world, now=0.0)
-    assert {"huangjin_50", "huangjin_60"} <= w.fired_thresholds and "road_blocked" in w.flags
+    assert "huangjin_50" in w.fired_thresholds and "road_blocked" in w.flags
+    assert "huangjin_60" not in w.fired_thresholds and game.world.get_battle() is None  # 第 5 週前不開決戰（FB-168）
+    w.time = calendar.week_start(beta.config.battle_from_week, beta, w)
+    check_thresholds(game.state, beta, game.world, now=0.0)
+    assert "huangjin_60" in w.fired_thresholds
     assert game.world.get_battle().battle_id == "huangjin_showdown"
     assert "huangjin_showdown" in [b.id for b in game.admin_battles()]
     _push_huangjin_to(game, 10)

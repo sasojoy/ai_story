@@ -5109,9 +5109,11 @@ class Game:
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
-            # 遊歷打贏（有風險）與決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，傳進來的已經是整數點數。
-            # 一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，rules.apply_effect 判斷）照原本的量（FB-166）。
-            scale = self.season_scale() if source == "event" else 1.0
+            # 遊歷打贏（source="train"）也照季長縮放（企劃者 2026-10-13，FB-168：不縮放的話兩天裡兩邊的遊歷就能把黃巾聲勢從 25
+            # 推到 60 或砸到 0，決戰「要嘛第一天開、要嘛整季不開」）。決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，
+            # 傳進來的已經是整數點數。一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，
+            # rules.apply_effect 判斷）照原本的量（FB-166）。
+            scale = self.season_scale() if source in ("event", "train") else 1.0
             if scale < 1 and is_revealed(w, c, trend_id):
                 whole = self._carry(trend_id, delta * scale)
                 return change_trend(s, c, trend_id, whole) if whole else []
