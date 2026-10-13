@@ -278,7 +278,9 @@ def test_who_stands_where(on):
     placed = figures.placed_characters(s, on)
     assert placed["luzhi"] is None and placed["dongzhuo"] == "mengjin_ford" and "pengtuo" not in placed
     assert figures.of_character(on, "luzhi") == "luzhi" and figures.of_character(on, "caocao") is None
-    on.config.season_one = False  # 規則沒開（開關關了，這一季的章也不算數）：大家照 talk_at
+    on.config.season_one = False  # 規則沒開：沒有時刻表的季也有挑戰本人（挑戰每季都有設計 3.3），人物照存檔（季中種好的那一份）站
+    assert figures.placed_characters(s, on) == placed
+    on.config.figure_challenge_every_season = False  # 緊急開關關著：大家照 talk_at
     assert figures.placed_characters(s, on) == {}
 
 
@@ -395,10 +397,15 @@ def test_the_map_shows_the_figures_where_they_stand(on):
 
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
+    """規則關著的季照舊標虛擬玩家（龍頭人物）。挑戰每季都有（設計 3.8）：緊急開關關著時，給了地點也不寫聲威；開著時人物此刻
+    就站在這裡才寫（黃巾別部營寨的波才寫、潁川的皇甫嵩不寫——他站在長社）。"""
     s = _season(real)
     assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
     assert atlas.haunters(s, real, "mengjin_ford") == []
-    assert "聲威" not in atlas.leader_text(s, real, "波才")
+    assert "聲威" in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in atlas.leader_text(s, real, "皇甫嵩", "yingchuan")
+    real.config.figure_challenge_every_season = False
+    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp")
 
 
 # ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────
@@ -575,7 +582,7 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
 def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real):
     """戰線空著的人物不接受挑戰（PM 2026-10-05 定 (A)）：黃巾在孟津渡看得到「挑戰董卓」但按不下去、寫明原因，求見照常；
     官軍在南陽黃巾營，趙弘（沒戰線）同樣按不下去，張曼成照打；何進（人物表標了 challenge_off_front）沒有戰線也照打；
-    重挫退出戰線的波才也不受挑戰。開關關著照舊沒有挑戰。"""
+    重挫退出戰線的波才也不受挑戰。沒有時刻表的季（挑戰每季都有設計 3.2）戰線空著的人不畫鈕、何進照打；緊急開關關著沒有挑戰。"""
     off_front = "沒在戰線上領兵，不受挑戰"
     huang = _player(on, world, "黃甲", "huang", "mengjin_ford")
     assert (_option(huang, "act:challenge:dongzhuo").enabled, _option(huang, "act:challenge:dongzhuo").label) == (
@@ -592,8 +599,12 @@ def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real)
     assert _option(guan, "act:challenge:bocai").enabled
     figures.apply(guan.state, on, "bocai", FigureChange(fate="重挫", location="huangjin_camp"))
     assert not _option(guan, "act:challenge:bocai").enabled
-    on.config.season_one = False
-    assert _option(_player(on, world, "黃戊", "huang", "mengjin_ford"), "act:challenge:dongzhuo") is None
+    on.config.season_one = False  # 沒有時刻表的季：季中種好的人物照存檔讀
+    assert _option(_player(on, world, "黃戊", "huang", "mengjin_ford"), "act:challenge:dongzhuo") is None  # 戰線空著：不畫
+    assert _option(guan, "act:challenge:bocai") is None  # 重挫退出戰線的波才：不畫
+    assert _option(_player(on, world, "黃己", "huang", "dajiangjun_fu"), "act:challenge:hejin").enabled
+    on.config.figure_challenge_every_season = False  # 緊急開關關著：任何人物都沒有挑戰鈕
+    assert _option(_player(on, world, "黃庚", "huang", "dajiangjun_fu"), "act:challenge:hejin") is None
 
 
 @pytest.mark.parametrize("faction, spot, figure", [
@@ -815,7 +826,9 @@ def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(o
 
 def test_nothing_changes_with_the_switch_off(real, world):
     """Review Focus 5：開關關著（beta 那一季）：沒有挑戰的選項、人物照 characters.json 的 talk_at 站（下獄也看不到）、
-    存檔沒有人物，交友照舊找波才。"""
+    存檔沒有人物，交友照舊找波才。現在「開關關著」是挑戰每季都有的緊急開關（Config.figure_challenge_every_season）：14 天的季
+    預設有挑戰本人，見 tests/test_challenge_season.py。"""
+    real.config.figure_challenge_every_season = False
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     game.state.player.stats["fame"] = 50
     assert not any(o.id.startswith("act:challenge:") for o in game.options())

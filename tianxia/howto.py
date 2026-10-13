@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, rules, seal, timetable
+from . import calendar, figures, rules, seal, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -558,6 +558,34 @@ def _section(title: str, lines: Sequence[str]) -> list[str]:
     return [f"#### {title}", *[f"- {line}" for line in lines], ""] if lines else []
 
 
+# 挑戰大勢人物（挑戰每季都有設計 3.9，待 joy 潤）：沒有時刻表的季多寫的幾句；數字從 Config 讀，回復、上限是 0 時不寫那半句
+CHALLENGE_UNTIMED = (
+    "- 打贏一次他的聲威掉 {n}；沒人去打，聲威會慢慢回來。",
+    "- 每位人物一天最多被打掉 {cap} 點聲威。",
+    "- 聲威掉到 0 就退場，這一季不再出現。",
+    "- {names}退場之後，不再替自己那一方出力。",
+)
+
+
+def _challenge_lines(content: Content, season: WorldState) -> list[str]:
+    """挑戰大勢人物本人的那幾句：有挑戰本人的季寫情誼會掉；沒有時刻表的季多寫聲威怎麼掉、怎麼回、一天上限、退場與龍頭人物停手。"""
+    cfg = content.config
+    if not figures.challenge_on(content, season):
+        return []
+    lines = [f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。"]
+    if not figures.untimed(content, season):
+        return lines
+    first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)
+    lines.append(first if cfg.figure_prestige_regen > 0 else first.partition("；")[0] + "。")
+    if cfg.figure_daily_loss_cap:
+        lines.append(CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap))
+    lines.append(CHALLENGE_UNTIMED[2])
+    leaders = list(dict.fromkeys(sim.name for sim in content.scenario.sim_players if figures.by_name(content, sim.name)))
+    if leaders:
+        lines.append(CHALLENGE_UNTIMED[3].format(names="、".join(leaders)))
+    return lines
+
+
 def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
     """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、四個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
     情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
@@ -577,8 +605,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
-    if first:  # 挑戰大勢人物本人只有第一季才有（Game._challenge）
-        bond.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
+    bond += _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on）
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),

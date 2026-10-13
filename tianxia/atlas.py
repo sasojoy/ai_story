@@ -194,7 +194,10 @@ def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
     （figures.present_at；虛擬玩家那時不出手，也不再標）。不檢查視野：呼叫端要先用 is_known 把關。"""
     if season_one(content, state.world):
         return [content.figures[fid].name for fid in figures.present_at(state, content, loc_id)]
-    names = [sim.name for sim in content.scenario.sim_players if loc_id in sim.haunts and sim_shown(sim, state)]
+    names = [  # 沒有時刻表的季退場的龍頭人物不再標（丙 (c)，figures.leader_out）
+        sim.name for sim in content.scenario.sim_players
+        if loc_id in sim.haunts and sim_shown(sim, state) and not figures.leader_out(state, content, sim.name)
+    ]
     return list(dict.fromkeys(names))
 
 
@@ -207,7 +210,7 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     trend_names = {t.id: t.name for t in content.scenario.trends}
     doing = []
     for sim in content.scenario.sim_players:
-        if sim.name != name or not sim_active(sim, state):
+        if sim.name != name or not sim_active(sim, state, content):
             continue
         moves = resolve_trends(content, state.world, sim.trend)  # 開關關著時戰線都算黃巾聲勢
         ups = [trend_names[t] for t, delta in moves.items() if delta > 0 and is_revealed(state.world, content, t)]
@@ -217,14 +220,10 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     return "；".join(doing) or LEADER_QUIET
 
 
-def _figure_id(content: Content, name: str) -> str | None:
-    return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
-
-
 def _figure_activity(state: GameState, content: Content, name: str) -> str:
     """第一季：大勢人物在做什麼（figures.tick 的規則）——「每天約出手 N 次，讓某戰線上升／下降」，還沒到出兵那一週時
     後面接「（第 N 週起）」；不推的（沒有戰線、何進）寫「眼下沒有動靜」。"""
-    fid = _figure_id(content, name)
+    fid = figures.by_name(content, name)
     goal = figures.push_goal(state, content, fid) if fid is not None else 0
     if not goal:
         return LEADER_QUIET
@@ -243,13 +242,40 @@ def leader_news(state: GameState, content: Content, name: str) -> list[Rumor]:
     return [r for r in reversed(state.world.rumors) if name in r.text and audible(r, ears)][:LEADER_NEWS]
 
 
-def leader_text(state: GameState, content: Content, name: str) -> str:
+HERE_TITLE = "**此地的大勢人物**"  # 待 joy 潤：沒有時刻表的季，此刻站在這裡、不是常出沒龍頭人物的大勢人物（挑戰每季都有設計 3.8）
+REGEN_NOTE = "沒人去打，他的聲威會慢慢回來"  # 待 joy 潤（甲 (b)）
+IDLE_NOTE = "按兵不動，不出營應戰"  # 待 joy 潤：戰線空著、挑戰不了的人物（董卓、趙弘）
+
+
+def _regen_note(state: GameState, content: Content) -> str:
+    """聲威那一行後面接的「沒人去打……慢慢回來」：沒有時刻表的季、回復開著才有。"""
+    return f"；{REGEN_NOTE}" if figures.untimed(content, state.world) and content.config.figure_prestige_regen > 0 else ""
+
+
+def _here_text(state: GameState, content: Content, fid: str) -> str:
+    """「此地的大勢人物」一行：名字、聲威、情誼（有對話人物才有）、聲威會回、戰線空著的寫按兵不動。"""
+    line = f"- {figures.name_of(content, fid)}　聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）"
+    cid = content.figures[fid].character
+    if cid is not None:
+        line += f"；你跟他的情誼 {state.player.affinities.get(cid, 0)}"
+    line += _regen_note(state, content)
+    if not figures.can_challenge(state, content, fid):
+        line += f"；{IDLE_NOTE}"
+    return line + "。"
+
+
+def leader_text(state: GameState, content: Content, name: str, loc_id: str | None = None) -> str:
     """詳情欄裡一位常出沒在此的龍頭人物：他是誰、現在在做什麼、最近的傳聞（沒有就不寫）。
-    和 haunters 一樣不檢查視野與是否該露面：呼叫端要先把關。"""
+    和 haunters 一樣不檢查視野與是否該露面：呼叫端要先把關。聲威、情誼兩行：第一季照寫；沒有時刻表的季只有人物此刻就站在
+    loc_id 才寫（挑戰每季都有設計 3.8：皇甫嵩站在長社，潁川那一段不寫，黃巾的人不會以為在潁川打得到他）。"""
     lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。"]
-    fid = _figure_id(content, name) if season_one(content, state.world) else None
-    if fid is not None:  # 第一季：聲威寫出來，挑戰本人之前看得到好不好打
-        lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）。")
+    fid = figures.by_name(content, name)
+    w = state.world
+    if fid is not None and not (season_one(content, w) or (
+            figures.untimed(content, w) and loc_id is not None and fid in figures.present_at(state, content, loc_id))):
+        fid = None
+    if fid is not None:  # 聲威寫出來，挑戰本人之前看得到好不好打
+        lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）{_regen_note(state, content)}。")
         cid = content.figures[fid].character
         if cid is not None:  # 談得上話的人物：你跟他的情誼（explain-1；沒有對話人物的彭脫、韓忠沒有情誼）
             lines.append(f"- 你跟他的情誼 {state.player.affinities.get(cid, 0)}（談得投機會漲）。")
@@ -748,11 +774,16 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
     people = haunters(state, content, loc_id)
-    if not people:
+    standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
+        fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people
+    ] if figures.untimed(content, state.world) else []
+    if not people and not standing:
         situation.append("沒有龍頭人物在此出沒")
     if situation:
         parts.append("**局勢**　" + "　｜　".join(situation))
-    parts += [leader_text(state, content, name) for name in people]  # 常出沒的人物併在這裡說明，不另外列名字
+    parts += [leader_text(state, content, name, loc_id) for name in people]  # 常出沒的人物併在這裡說明，不另外列名字
+    if standing:
+        parts.append("\n".join([HERE_TITLE, *(_here_text(state, content, fid) for fid in standing)]))
 
     listed = foes(content, loc, odds, state.player.faction)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))

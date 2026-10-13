@@ -1,7 +1,9 @@
 """大勢人物（計畫 T4；T2 先放了只改欄位的最小版）。
 
 人物表（content/figures.json，濃縮版內容表 1.1）上每一位這一季的聲威、狀態、戰線、所在，存在 WorldState.figures；
-開關開著時，開季那一刻照人物表種好（world_state.stamp_season 呼叫 seed）。
+第一季開季那一刻照人物表種好（world_state.stamp_season 呼叫 seed），其他季第一次被打贏才寫（_ensure）。
+挑戰本人每季都有（挑戰大勢人物每季都有設計）：challenge_on 是開關，untimed 是「有挑戰本人但不是第一季」（沒有時刻表的季，
+才有 recover、defeat 的一天上限、leader_out）。推戰線（tick）與時刻表的人物結局（apply）只在第一季。
 - 讀：state_of（沒種過的照人物表的起始值，不寫回存檔）、present_at／placed_characters（誰在哪裡）、commander
   （那條戰線那一方的主將）、difficulty／squad_of（挑戰本人的難度）。
 - 改：apply（時刻表的人物結局與接手）、defeat（挑戰本人打贏扣聲威）。
@@ -11,6 +13,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 from __future__ import annotations
 
 from . import calendar
+from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_value
 from .state import FigureState, GameState, WorldState
@@ -81,6 +84,31 @@ def of_character(content: Content, character_id: str) -> str | None:
     return next((fid for fid, fig in content.figures.items() if fig.character == character_id), None)
 
 
+def challenge_on(content: Content, world: WorldState) -> bool:
+    """這一季有沒有「挑戰大勢人物本人」（挑戰每季都有設計 3.1）：人物表有人、劇本有陣營才有；第一季的規則開著一定有（打擊軍令
+    靠它交差），其他季看 Config.figure_challenge_every_season（主機的退路：關掉就回到「只有第一季」）。"""
+    if not content.figures or not content.scenario.factions:
+        return False
+    return season_one(content, world) or content.config.figure_challenge_every_season
+
+
+def untimed(content: Content, world: WorldState) -> bool:
+    """沒有時刻表的季：有挑戰本人、但不是第一季（14 天的預設設定）。聲威回復、一天上限、龍頭人物退場停手、out_flag 只在這種季。"""
+    return challenge_on(content, world) and not season_one(content, world)
+
+
+def by_name(content: Content, name: str) -> str | None:
+    """名字是這個的大勢人物 id（龍頭人物〔虛擬玩家〕照名字對人物表；atlas 與 world 共用）。"""
+    return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
+
+
+def leader_out(state: GameState, content: Content, name: str) -> bool:
+    """這位龍頭人物（虛擬玩家，照名字）在沒有時刻表的季已經退場或重創（丙 (c)：不再出手、輿圖不再標他）。緊急開關關著、第一季、
+    人物表沒有同名的人，一律是假（虛擬玩家照舊）。"""
+    fid = by_name(content, name)
+    return fid is not None and untimed(content, state.world) and is_out(state, fid)
+
+
 def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
     """此刻在這個地點、在場（active）的人物（人物表的順序）。下獄、退場、重創、還沒出場的都不算。"""
     return [
@@ -90,9 +118,10 @@ def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
 
 
 def placed_characters(state: GameState, content: Content) -> dict[str, str | None]:
-    """第一季的規則開著時，人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
-    None（求見、交友都沒有他）。規則沒開（beta）時是空的：大家照 characters.json 的 talk_at，一個字都不變。"""
-    if not season_one(content, state.world):
+    """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
+    None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
+    14 天的季沒人退場時跟 talk_at 一模一樣（content.check_figures 驗開季地點等於 talk_at）。"""
+    if not challenge_on(content, state.world):
         return {}
     out: dict[str, str | None] = {}
     for fid, fig in content.figures.items():
@@ -122,6 +151,14 @@ def difficulty(state: GameState, content: Content, fid: str) -> int:
     floor = content.config.figure_difficulty_floor
     prestige = state_of(state, content, fid).prestige
     value = content.squads[fig.squad].difficulty * (floor + (1 - floor) * prestige / 100)
+    return int(round(value, 6) + 0.5)
+
+
+def start_difficulty(content: Content, fid: str) -> int:
+    """這位人物開季時（人物表的 start_prestige）的挑戰難度：戊 (b) 獎勵打折的分母。寫法同 difficulty。"""
+    fig = content.figures[fid]
+    floor = content.config.figure_difficulty_floor
+    value = content.squads[fig.squad].difficulty * (floor + (1 - floor) * fig.start_prestige / 100)
     return int(round(value, 6) + 0.5)
 
 
@@ -249,14 +286,28 @@ def _front_name(content: Content, front: str) -> str:
     return next((t.name for t in content.scenario.trends if t.id == front), front)
 
 
-def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[str]:
+HELD_LINE = "{name}今天已經敗了好幾陣，部眾死守不退。"  # 待 joy 潤：沒有時刻表的季，這位人物今天被打掉的聲威到了上限（甲 (d)）
+
+
+def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int | None = None) -> list[str]:
     """挑戰本人打贏（計畫 T4、軍令文件 4.5）：他敗走，聲威扣 amount（人數緩衝之後的量，可能有小數；不足一點的記在
     trend_accum["prestige:<id>"]，滿一點才扣）。扣到 0 時照退場（天命人物重創）處理、由接位的人接下戰線，退場與接手
-    合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。"""
+    合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。
+    cap（沒有時刻表的季才給，甲 (d)）：這一位這個遊戲日最多被打掉幾點；今天被打掉的量記在 trend_accum["lost:<id>:<遊戲日>"]
+    （舊日子的順手刪掉），到了上限聲威不動、回 HELD_LINE。"""
     figure = _ensure(state, content, fid)
     if figure.status in OUT or amount <= 0:
         return []
     w = state.world
+    if cap:
+        day_key = f"lost:{fid}:{int(w.time // DAY)}"
+        for old in [k for k in w.trend_accum if k.startswith(f"lost:{fid}:") and k != day_key]:
+            del w.trend_accum[old]
+        left = cap - w.trend_accum.get(day_key, 0.0)
+        if left <= 1e-9:
+            return [HELD_LINE.format(name=name_of(content, fid))]
+        amount = min(amount, left)
+        w.trend_accum[day_key] = w.trend_accum.get(day_key, 0.0) + amount
     key = f"prestige:{fid}"
     pending = w.trend_accum.get(key, 0.0) + amount
     whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
@@ -279,6 +330,32 @@ def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[
         add_rumor(state, "".join(news), content=content, layer="world")
         lines += news
     return lines
+
+
+def recover(state: GameState, content: Content, cal_hours: float) -> None:
+    """沒有時刻表的季（甲 (b)）：存檔裡有寫的人物（沒被打過的本來就是開季值），在場、聲威低於人物表的開季值時，每個季曆天回
+    figure_prestige_regen 點（累積在 trend_accum["regen:<id>"]，滿一點加一點），回到開季值為止；退場、重創、不在場的不回，
+    累積拿掉；人物表已經沒有的 id 跳過。決定性的，不擲骰，不發傳聞。由 world.advance_world_state 每一步呼叫。"""
+    w = state.world
+    rate = content.config.figure_prestige_regen
+    if not untimed(content, w) or rate <= 0:
+        return
+    for fid, now in w.figures.items():
+        fig = content.figures.get(fid)
+        if fig is None:
+            continue
+        key = f"regen:{fid}"
+        if now.status != "active" or now.prestige >= fig.start_prestige:
+            w.trend_accum.pop(key, None)
+            continue
+        pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
+        whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
+        now.prestige = min(fig.start_prestige, now.prestige + whole)
+        rest = max(0.0, pending - whole)
+        if rest and now.prestige < fig.start_prestige:
+            w.trend_accum[key] = rest
+        else:
+            w.trend_accum.pop(key, None)
 
 
 def holds(state: GameState, content: Content, change: FigureChange) -> bool:

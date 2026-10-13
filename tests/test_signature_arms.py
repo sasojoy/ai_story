@@ -305,13 +305,15 @@ def test_the_signature_arm_rolls_no_dice(world, tmp_path):
 
 
 def test_the_win_path_only_exists_where_challenges_do(world):
-    """挑戰本人現在只在第一季規則開著、自己有陣營時才有（《挑戰大勢人物每季都有》還在等企劃者）：散人、開關關著都沒有挑戰鈕，
-    也就走不到打贏三次。那一份合進來之後挑戰每季都有，計數在 _challenge，不必再改。"""
+    """挑戰本人每季都有（《挑戰大勢人物每季都有》，figures.challenge_on）：散人沒有挑戰鈕，也就走不到打贏三次；第一季規則關著的季
+    （14 天）也有孫堅的挑戰鈕；主機的緊急開關（figure_challenge_every_season）關著時，第一季以外沒有。計數在 _challenge。"""
     game = _sun_challenger(world)
     game.state.player.faction = None
     assert not any(o.id.startswith("act:challenge:") for o in game.options(odds=False))
     game.state.player.faction = "huang"
     game.content.config.season_one = False
+    assert "act:challenge:sunjian" in [o.id for o in game.options(odds=False)]
+    game.content.config.figure_challenge_every_season = False
     assert not any(o.id.startswith("act:challenge:") for o in game.options(odds=False))
 
 

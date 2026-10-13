@@ -22,6 +22,7 @@ from .sqlite_world import open_world
 from .world_state import WorldStateStore
 
 HALF_HOUR = 1800
+CHALLENGE_ODDS = ("穩勝", "有把握")  # 挑戰本人只挑這兩種勝算（整季機器人與伺服器假人共用；bot_policy 從這裡拿，挑戰每季都有設計第九節）
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 FORESHADOW_OPTIONS = ("fs:", "talk:clue:", "opp:", "talk:opp:")  # 伏筆的最後一步、對話的片段與機緣（正式版乙一）：機器人不做
 
@@ -347,7 +348,12 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         o for o in options
         if not (o.id.startswith("call:") and o.id != "call:back" and not game.can_meet_figure(o.id.partition(":")[2]))
     ]
-    if awaits_chance(game):  # 火候滿了、等契機：有挑戰本人可打就去打一場硬仗（打不贏、閉門不見的按不下去，本來就不在這裡）
+    # 挑戰本人照勝算挑（挑戰每季都有設計第九節）：隨機挑選時只留「穩勝」「有把握」的（同假人）；火候滿了等契機時五五波以上都打。
+    # 勝算只對此地按得下去的挑戰鈕算（一個地點最多兩位，一次 40 場模擬），其他步驟不多算
+    chance = awaits_chance(game)
+    keep = CHALLENGE_ODDS + (("五五波",) if chance else ())
+    options = [o for o in options if not o.id.startswith("act:challenge:") or game.challenge_odds(o.id.rpartition(":")[2]) in keep]
+    if chance:  # 火候滿了、等契機：有挑戰本人可打就去打一場硬仗（打不贏、閉門不見的按不下去，本來就不在這裡）
         hard = [o for o in options if o.id.startswith("act:challenge:")]
         if hard:
             return rng.choice(hard).id

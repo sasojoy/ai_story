@@ -49,7 +49,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
     day_turn, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -986,7 +986,7 @@ class Game:
             # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
             # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
             opts.append(self._train_option(loc, cost["train"], odds))
-        opts += self._challenge_options(odds)  # 挑戰本人（T4）：第一季、有陣營、這裡站著敵方的大勢人物時才有
+        opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
@@ -2520,8 +2520,9 @@ class Game:
 
     def _figures_here(self) -> list[str]:
         """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
-        「還要改進」第 5 點）。第一季的規則開著時，人物表上的人照他此刻的所在與狀態（figures.placed_characters，T4）：
-        轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方。規則沒開時一個字都不變。"""
+        「還要改進」第 5 點）。有挑戰本人的季（figures.challenge_on，每季都有），人物表上的人照他此刻的所在與狀態
+        （figures.placed_characters，T4）：轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方；14 天的季沒人退場時
+        跟 talk_at 一樣。緊急開關關著（figure_challenge_every_season）時照 talk_at，一個字都不變。"""
         s, c = self.state, self.content
         here = s.player.location
         placed = figures.placed_characters(s, c)
@@ -5015,8 +5016,8 @@ class Game:
     def _snubbed(self, fid: str) -> bool:
         """這位人物剛被你打敗、還在閉門不見（snub_hours 個現實小時內）。看的是現實時間（self.now，sync 傳進來的），
         不是賽季時鐘：管理者快轉、補算時間都不會讓他提早見你；紀錄存在角色存檔，伺服器重開也照樣記得。
-        第一季的規則沒開（beta 那一季）就沒有閉門不見這回事。"""
-        return season_one(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
+        沒有挑戰本人的季（figures.challenge_on 是假）就沒有閉門不見這回事。"""
+        return figures.challenge_on(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
 
     def _snubbed_character(self, character_id: str) -> bool:
         """這個對話人物（求見、交友用的 id）是不是剛被你打敗、還在閉門不見的大勢人物。"""
@@ -5024,12 +5025,12 @@ class Game:
         return fid is not None and self._snubbed(fid)
 
     def _challenge_options(self, odds: bool) -> list[Option]:
-        """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
-        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位，以及戰線空著的人物（人物表標了 challenge_off_front 的何進除外），
-        按不下去、寫明原因；求見、交友照常。散人沒有；同陣營的人不打。"""
+        """挑戰本人：有挑戰本人的季（figures.challenge_on，每季都有）、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項
+        （體力照遊歷；odds 時寫勝算，難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因；戰線空著的人物（人物表
+        標了 challenge_off_front 的何進除外）第一季也是灰鈕寫原因，沒有時刻表的季不畫。求見、交友照常。散人沒有；同陣營的人不打。"""
         s, c = self.state, self.content
         p = s.player
-        if p.faction is None or not season_one(c, s.world):
+        if p.faction is None or not figures.challenge_on(c, s.world):
             return []
         cost = self._action_costs()["train"]
         opts = []
@@ -5039,6 +5040,8 @@ class Game:
                 continue
             option_id = f"act:challenge:{fid}"
             if not figures.can_challenge(s, c, fid):
+                if figures.untimed(c, s.world):  # 沒有時刻表的季戰線空著的人不畫鈕：看不到戰線，整季掛著一顆按不下去的鈕（設計 3.2）
+                    continue
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
             elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
@@ -5072,8 +5075,16 @@ class Game:
         msgs: list[str] = []
         arm_annals: list[tuple[str, str]] = []  # 本命兵器那一筆行狀：等這一場的行狀記完再記（照時間先後）
         if result.tier in team.WIN_TIERS:
-            s.player.figure_wins[fid] = s.player.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
-            msgs += self._battle_rewards(squad, record)
+            p, cfg = s.player, c.config
+            first = p.figure_wins.get(fid, 0) == 0  # 丁 (c)：這一季第一次打贏他才有三階（預設表照擲；之後照擲、擲中不給）
+            capped = bool(cfg.figure_rare_cap) and p.figure_rare_drops >= cfg.figure_rare_cap  # 一人一季上限，叛投不清
+            p.figure_wins[fid] = p.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
+            ratio = min(1.0, squad.difficulty / figures.start_difficulty(c, fid))  # 戊 (b)：被打弱的人物，心得、經驗照難度比例少給
+            reward = squad.model_copy(update={
+                "reward_xinde": int(squad.reward_xinde * ratio + 0.5), "exp": int(squad.exp * ratio + 0.5)})
+            held = self._held_tier3()
+            msgs += self._battle_rewards(reward, record, max_tier=None if first and not capped else 2)
+            p.figure_rare_drops += self._held_tier3() - held
             extra = self._rout(fid)
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
@@ -5103,21 +5114,26 @@ class Game:
            扣到 0 退場或重創、由接位的人接手（figures.defeat）；
         2. 打贏的人跟他的情誼扣 figure_defeat_affinity（沒有對話人物的彭脫、韓忠沒有情誼）；
         3. snub_hours 個現實小時內他不見你、也不跟你交手（其他人照常）；
-        4. 記貢獻：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），記在這一週。"""
+        4. 記貢獻（只在第一季：其他季沒有晉升，同截殺）：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），
+           記在這一週。"""
         s, c = self.state, self.content
         p, w, cfg = s.player, s.world, c.config
         fig = c.figures[fid]
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         n = push.active_count(s, p.faction, w.time, window)
         msgs = [f"{fig.name}敗走。"]
-        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n))
+        cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
+        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
+        if fig.out_flag and figures.untimed(c, w) and figures.is_out(s, fid):  # 丙 (c)：沒有時刻表的季打退波才＝擊敗波才（第一季不記）
+            add_world_flags(s, [fig.out_flag])
         if fig.character is not None:
             before = p.affinities.get(fig.character, 0)
             p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)
             if p.affinities[fig.character] != before:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
-        push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+        if season_one(c, w):
+            push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
         msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
@@ -5149,14 +5165,23 @@ class Game:
 
     def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
         """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
-        PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）。"""
-        rule, p = self.content.config.forge_secrets, self.state.player
+        正式值 1：這一季第一次打贏才有，挑戰每季都有設計丁 (c)；PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）；
+        挑戰本人掉的三階（連預設表那一條）一人一季最多 figure_rare_cap 個（figure_rare_drops）。"""
+        rule, p, cap = self.content.config.forge_secrets, self.state.player, self.content.config.figure_rare_cap
         if rule.tier3_per_figure and p.tier3_drops.get(fid, 0) >= rule.tier3_per_figure:
+            return []
+        if cap and p.figure_rare_drops >= cap:
             return []
         got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
         if got:
             p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
+            p.figure_rare_drops += 1
         return got
+
+    def _held_tier3(self) -> int:
+        """背包裡的三階素材合計（_challenge 照它算挑戰本人這一場的預設表掉了幾個三階，記進 figure_rare_drops）。"""
+        mats = self.content.materials
+        return sum(n for mid, n in self.state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier == 3)
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
@@ -5253,7 +5278,7 @@ class Game:
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs
 
-    def _battle_rewards(self, squad: Squad, record) -> list[str]:
+    def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
         p = self.state.player
         msgs = []
         if squad.reward_silver:
@@ -5273,7 +5298,7 @@ class Game:
             msgs.append(f"心得 +{xinde}")
         if not prologue_rules.active(self.state, self.content):  # 序章不掉素材（新手引導計畫一）
             got: list[str] = []  # 這一場掉到的素材（寶物「多掉一個素材」從這裡挑）
-            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng, max_tier=max_tier):  # 挑戰本人丁 (c) 才給 max_tier
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
                     got.append(material_id)

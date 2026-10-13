@@ -1968,13 +1968,22 @@ class Config(_Strict):
     fate_prestige: dict[Literal["重挫", "聲威大減", "受挫"], int] = Field(
         default_factory=lambda: {"重挫": -30, "聲威大減": -30, "受挫": -15}
     )
-    # 大勢人物（計畫 T4、總計畫第五節；掛在 season_one 後面，開關關著時沒人讀）
+    # 大勢人物（計畫 T4、總計畫第五節）：挑戰本人每季都有（figures.challenge_on）；推戰線、反應規則只在第一季
     figure_reaction_lean: int = Field(default=15, ge=0)  # 戰線偏向對方這麼多時，人物推得更勤（反應規則，第一季設計 8.2）
     figure_reaction_mult: float = Field(default=2.0, ge=1)  # 推得更勤的倍數
     figure_defeat_prestige: int = Field(default=5, ge=0)  # 挑戰本人打贏一次扣幾點聲威（照陣營人數緩衝）
     figure_defeat_affinity: int = Field(default=5, ge=0)  # 打贏的人跟他的情誼扣多少（軍令文件 4.5）
     snub_hours: float = Field(default=2, ge=0)  # 打贏之後幾個「現實」小時內他不見你、也不跟你交手（軍令文件 4.5）
     figure_difficulty_floor: float = Field(default=0.5, ge=0, le=1)  # 挑戰本人的難度：聲威 0 時是隊伍難度的幾成（100 時原值，中間線性）
+    # 挑戰大勢人物每季都有（挑戰每季都有設計 3.1）：第一季以外的季也有挑戰本人；關掉就回到「只有第一季」（主機的退路，第一季不看它）
+    figure_challenge_every_season: bool = True
+    # 甲 (b)＋(d)，企劃者 2026-10-13：沒有時刻表的季，被打下來的聲威每個季曆天回幾點（14 天的季一個季曆天是現實 4 小時；0＝不回）、
+    # 每位人物每個遊戲日最多被打掉幾點（0＝不設）。目標「十來個人合力連打好幾天才打得退，一季頂多一兩位」
+    figure_prestige_regen: float = Field(default=1, ge=0)
+    figure_daily_loss_cap: int = Field(default=15, ge=0)
+    # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算
+    figure_rare_cap: int = Field(default=6, ge=0)
+    figure_treasure_cap: int = Field(default=2, ge=0)
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成
@@ -2380,6 +2389,8 @@ class FigureDef(_Strict):
     active_from_week: int = Field(default=1, ge=1)  # 第幾週起才推（官軍三將與孫堅是第 2 週「朝廷出兵」之後）
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
+    # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
+    out_flag: str | None = None
 
 
 class TimetableOutcome(_Strict):

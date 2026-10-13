@@ -333,6 +333,7 @@ class PlayerState(BaseModel):
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
+    figure_rare_drops: int = 0  # 這一季挑戰本人掉了幾個三階（兩條來源合算：預設表、保證的那一個；丁 (c) 的一人一季上限 figure_rare_cap；換季跟著新角色歸零）
     # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
@@ -697,13 +698,13 @@ class WorldState(BaseModel):
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
-    figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4 開季時種）
+    figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4：第一季開季時種；其他季第一次被打贏才寫，沒被打過的照人物表讀）
     orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
     plots: list[Plot] = Field(default_factory=list)  # 集體密謀（正式版乙二）：發起的、做完的、作罷的都留著到季末（編號是雜湊，見 Plot.id）
     # 升第 2 階的每日彙整（計畫 T5）：「曆日:陣營:階」→ 名號（陣營軍情一律具名）；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
     promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──
-    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
+    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
