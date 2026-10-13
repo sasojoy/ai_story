@@ -1272,3 +1272,44 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-more { margin-top: 8px; }
 .shop-layer .naming.divine { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .shop-layer { animation: none; } }
+/* 打造頁（2.2）：種類一排、爐子兩格、這一爐的機率條、素材格 */
+.shop-kinds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 6px; }
+.shop-kinds .kind { position: relative; border: 1px solid #6b4a2e; background: transparent; color: #e8d6ad; border-radius: 14px; padding: 4px 12px; font: 14px var(--serif); }
+.shop-kinds .kind.on { background: #b7862b; color: #1e1510; border-color: #b7862b; }
+.shop-kinds .kind sup { font-size: 10px; color: #f2c46a; margin-left: 2px; }
+.shop-kinds .kind.on sup { color: #1e1510; }
+.shop-layer .furnace { position: relative; display: grid; grid-template-columns: 1fr 72px 1fr; align-items: center; gap: 8px; margin: 6px 0; padding: 12px 10px;
+  border-radius: 50% 50% 14px 14px / 30% 30% 14px 14px; background: radial-gradient(circle at 50% 75%, #8a3a14 0%, #3a1e10 55%, #24170f 100%); }
+.pot-slot { min-height: 74px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1.5px dashed #b7862b; border-radius: 10px; background: rgba(0, 0, 0, 0.25); color: #e8d6ad; font: 12px var(--sans); }
+.pot-slot b { font: 600 14px var(--serif); color: #f2e5c6; }
+.pot-slot:disabled { opacity: 1; }
+.flame svg { width: 64px; height: 64px; display: block; margin: 0 auto; }
+.flame .fl-out { fill: #e0642a; }
+.flame .fl-in { fill: #ffb347; }
+.shop-layer .furnace.firing .flame svg { animation: roar 0.9s ease-in-out; }
+@keyframes roar { 0% { transform: scale(1); } 40% { transform: scale(1.5) translateY(-6px); filter: brightness(1.4); } 100% { transform: scale(1); } }
+.pot-out { display: grid; gap: 4px; padding: 6px 4px; font-size: 12.5px; }
+.pot-out b { font: 600 14px var(--serif); color: #f2c46a; }
+.pot-head { color: #f2c46a; font-size: 12.5px; margin: 0; }
+.pot-why { color: #c9b28a; font-size: 12px; margin: 0; }
+.shop-layer .odds { display: flex; height: 18px; border-radius: 9px; overflow: hidden; font-size: 11px; }
+.shop-layer .odds i { display: flex; align-items: center; justify-content: center; font-style: normal; white-space: nowrap; overflow: hidden; color: #1e1510; }
+.shop-layer .odds .q-下品 { background: #a89b88; }
+.shop-layer .odds .q-中品 { background: #6fb7c4; }
+.shop-layer .odds .q-上品 { background: #f2c46a; }
+.shop-gorow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
+.shop-go { padding: 12px 8px; font: 600 16px var(--serif); letter-spacing: 2px; }
+.shop-layer .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shop-layer .cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px 6px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12px var(--serif); }
+.shop-layer .cell .n { position: absolute; top: 3px; right: 6px; font: 600 10px var(--sans); color: #f2c46a; }
+.shop-layer .cell .nm { display: flex; align-items: center; }
+.cell small { font: 10.5px var(--sans); color: #c9b28a; }
+.shop-layer .cell.used { border-color: #f2c46a; box-shadow: 0 0 0 1px #f2c46a inset; }
+.shop-layer .cell.off { opacity: 0.55; }
+.shop-layer .cell .why { font: 10px var(--sans); color: #e0a08a; line-height: 1.2; text-align: center; }
+.shop-layer .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; background: #c9b28a; flex: none; }
+.shop-layer .dot.gang { background: var(--gang); }
+.shop-layer .dot.kuai { background: var(--kuai); }
+.shop-layer .dot.rou { background: var(--rou); }
+.shop-layer .dot.man { background: var(--man); }
+@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.firing .flame svg { animation: none; } }

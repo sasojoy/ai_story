@@ -103,3 +103,67 @@ def test_rack_rows_wield_and_dismantle_through_menxia(content, world):
     m = server.main_view(game)
     out = run(m, 'H.S.shopTab = "rack"; H.render(); return T.els.app.innerHTML;')
     assert out.count('data-act="shop-wield"') == 8 and "再列 2 件" in out and 'data-act="shop-dismantle"' in out
+
+
+# ── Task 6：打造頁 ──
+
+
+def _forge_page(m, script, responses=None, S=None):
+    return run(m, 'H.S.shopTab = "forge";' + script, responses=responses, S=S)
+
+
+def _click(dataset):
+    """送一次點擊給 app.js 的 click 處理器：點到的元素帶 dataset。"""
+    return ("await T.docListeners.click[0]({ target: { closest: () => ({ dataset: " + dataset
+            + ", classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });")
+
+
+def test_the_forge_page_has_kinds_a_two_slot_furnace_and_material_cells(m):
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    assert 'data-act="shop-kind" data-kind="劍"' in html and "<sup>配</sup>" in html  # 配得上身上武學的那一種
+    assert html.count('data-act="shop-slot"') == 2 and html.count('data-act="shop-cell"') == len(m["shop"]["forge"]["materials"])
+    assert html.index("furnace") < html.index("shop-go") < html.index('class="cells"')  # 375×812：爐子、開爐鈕在素材格前面
+
+
+def test_placing_a_material_asks_the_smith_line(m):
+    line = json.loads(json.dumps(m["shop"]["forge"]["line"]))
+    line["main"] = "gang_1"
+    out = _forge_page(m, """
+      return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-cell", id: "gang_1", why: "" }') + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { calls: T.calls.filter((c) => c[0] === "/api/smith_line").map((c) => c[1]), pot: H.S.shopPot };
+      })();""", responses={"/api/smith_line": line})
+    assert out["calls"][-1] == {"kind": "劍", "main": "gang_1", "aux": None} and out["pot"]["main"] == "gang_1"
+
+
+def test_a_blocked_cell_only_says_why(m):
+    out = _forge_page(m, """
+      return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-cell", id: "gang_2", why: "工錢不夠，還差 30 兩" }') + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { calls: T.calls.filter((c) => c[0] === "/api/smith_line").length, toast: T.els.toast.textContent, pot: H.S.shopPot };
+      })();""")
+    assert out["calls"] == 0 and "還差 30 兩" in out["toast"] and out["pot"] is None
+
+
+def test_taking_the_main_out_empties_both_slots(m):
+    out = _forge_page(m, """
+      return (async () => {
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_1", aux: "kuai_1" };
+        H.render();
+        """ + _click('{ act: "shop-slot", role: "main" }') + """
+        return H.S.shopPot;
+      })();""", responses={"/api/smith_line": m["shop"]["forge"]["line"]})
+    assert (out["main"], out["aux"]) == (None, None)
+
+
+def test_a_ready_pot_shows_the_odds_the_head_and_a_live_go_button(content, world):
+    game = _smith(content, world)
+    m = server.main_view(game)
+    line = game.smith_line("劍", "gang_1", "kuai_1")
+    html = _forge_page(m, "H.S.shopPot = { slot: 'weapon', kind: '劍', main: 'gang_1', aux: 'kuai_1' }; H.S.shopLine = H.S.next; H.render(); return T.els.app.innerHTML;",
+                       S={"next": line})
+    assert line["go"] in html and 'class="odds"' in html and 'data-act="shop-go"' in html and 'data-act="shop-go" disabled' not in html

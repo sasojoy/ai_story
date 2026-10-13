@@ -2590,10 +2590,85 @@
       </form>`;
   }
 
-  // 打造頁、開爐與出爐（Task 6、7 換成正式的）
-  function forgePageHtml(shop) { return `<div class="cells">${(shop.forge.line.cells || []).map((c) => `<button class="cell" data-act="shop-cell" data-id="${esc(c.id)}"></button>`).join("")}</div><button class="btn primary shop-go" data-act="shop-go" disabled>開爐</button><button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button>`; }
+  // 爐裡的東西（2.2）：換了兵器防具那一頁、或還沒放過，就從空爐、預設的種類開始
+  function shopPotNow(shop) {
+    const pot = S.shopPot;
+    return pot && pot.slot === shop.page ? pot : { slot: shop.page, kind: shop.forge.kind, main: null, aux: null };
+  }
+  // 這一爐的說法：爐裡的東西問過伺服器了用那一份（同一頁、同一種類），不然是空爐那一份（shop.forge.line）
+  function shopLineNow(shop, pot) {
+    const line = S.shopLine;
+    return line && line.kind === pot.kind && pot.slot === shop.page ? line : shop.forge.line;
+  }
+  // 爐子中間的火（內嵌 SVG，水墨暖色；Joy 之後有正式的圖可以換）
+  const FLAME_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><path class="fl-out" d="M30 4 C40 18 50 26 46 40 C43 52 34 56 30 56 C24 56 14 50 14 38 C14 28 22 22 26 12 C28 20 31 24 34 26 C34 18 32 10 30 4Z"/><path class="fl-in" d="M30 24 C36 32 40 38 37 46 C35 51 32 52 30 52 C26 52 22 48 23 42 C24 36 28 32 30 24Z"/></svg>';
+
+  // 打造頁（2.2）：上面一排種類（防具頁換成一行說明），中間爐子左右兩格（主料、輔料；點有東西的那一格拿出來），
+  // 兩格放好時底下寫這一爐會怎樣（種類、屬性、階、工錢、三個機率、最多兩句原因、鑄譜上打中過的那一句）與開爐鈕，最底下是素材格。
+  // 這一段的變數不用單字母 x（見 shelfHtml）
+  function forgePageHtml(shop) {
+    const f = shop.forge, pot = shopPotNow(shop), line = shopLineNow(shop, pot);
+    const mats = new Map(f.materials.map((mat) => [mat.id, mat]));
+    const slot = (role, id) => {
+      const mat = id && mats.get(id);
+      return `<button class="pot-slot ${role}" data-act="shop-slot" data-role="${role}" ${mat ? "" : "disabled"}><small>${role === "main" ? "主料" : "輔料"}</small>${mat
+        ? `<b><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</b><small>${esc(mat.tier_word)}</small>` : "<span>點素材放進來</span>"}</button>`;
+    };
+    const kinds = f.kinds.length
+      ? `<div class="shop-kinds">${f.kinds.map((k) => `<button class="kind${k.kind === pot.kind ? " on" : ""}${k.fit ? " fit" : ""}" data-act="shop-kind" data-kind="${esc(k.kind)}">${esc(k.label)}${k.fit ? "<sup>配</sup>" : ""}</button>`).join("")}</div>`
+      : `<p class="shop-note">${esc(f.note)}</p>`;
+    const out = line.ready ? `<div class="pot-out"><b>${esc(line.kind_label)}・屬${esc(line.attribute)}・${esc(line.tier)}</b><span>工錢 ${line.price | 0} 兩</span>
+        ${line.head ? `<p class="pot-head">${esc(line.head)}</p>` : ""}
+        ${line.odds ? `<div class="odds">${line.odds.filter((o) => o.pct > 0).map((o) => `<i class="q-${esc(o.q)}" style="width:${o.pct | 0}%"><span>${esc(o.q.slice(0, 1))} ${o.pct | 0}%</span></i>`).join("")}</div>` : ""}
+        ${line.reasons.length ? `<p class="pot-why">${line.reasons.map(esc).join("、")}</p>` : ""}</div>` : "";
+    const can = line.ready && !line.problem;
+    const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}>${esc(line.ready ? line.problem || line.go : "開爐")}</button>`;
+    const cells = (line.cells || []).map((c) => {
+      const mat = mats.get(c.id);
+      if (!mat) return "";
+      return `<button class="cell${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
+        <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
+    }).join("");
+    return `${kinds}
+      <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
+      ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
+      ${line.rack_full ? `<p class="shop-warn">${esc(line.rack_full)}</p>` : ""}
+      <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
+  }
+
+  // 爐裡換了東西：先照放的畫一次，再問這一爐會怎樣（/api/smith_line；只用最後一次請求的回應）
+  async function setPot(change) {
+    const shop = S.main && S.main.shop;
+    if (!shop) return;
+    S.shopPot = { ...shopPotNow(shop), ...change, slot: shop.page };
+    renderShop();
+    await updateSmithLine();
+  }
+  // 點一格素材（2.2）：灰掉的只說原因（不放進去）；能放的照伺服器說的去處（主料格空著先放主料，否則放輔料；兩格都滿了換掉輔料）
+  function shopCell(id, why) {
+    if (why) { toast(why); return; }
+    const shop = S.main && S.main.shop;
+    if (!shop) return;
+    const pot = shopPotNow(shop);
+    const cell = (shopLineNow(shop, pot).cells || []).find((c) => c.id === id);
+    if (cell) setPot(cell.to === "main" ? { main: id } : { aux: id });
+  }
+  let smithLineSeq = 0;
+  async function updateSmithLine() {
+    const seq = ++smithLineSeq;
+    const shop = S.main && S.main.shop;
+    if (!shop) return;
+    const pot = shopPotNow(shop);
+    try {
+      const r = await api("/api/smith_line", { kind: pot.kind, main: pot.main, aux: pot.aux });
+      if (seq !== smithLineSeq || !S.main || !S.main.shop) return;
+      S.shopLine = r;
+      S.shopPot = { ...pot, main: r.main, aux: r.aux }; // 伺服器照現在的背包把放不下的拿掉（例：料在另一個分頁用掉了）
+      renderShop();
+    } catch (e) { /* api() 提示過 */ }
+  }
+  // 開爐與出爐（Task 7 換成正式的）
   function revealHtml() { return ""; }
-  async function updateSmithLine() {}
   async function smithForge() {}
 
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
@@ -4047,6 +4122,10 @@
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "shop-kind": setPot({ kind: el.dataset.kind }); break;
+        case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
+        case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
+        case "shop-go": await smithForge(); break;
         case "shop-wield":
           await shopMx("wield", { weapon: el.dataset.id });
           if (S.shopReveal && S.shopReveal.id === el.dataset.id) { S.shopReveal = null; S.shopOpened = false; renderShop(); } // 出爐卡上的「換上」：換好了卡收起
