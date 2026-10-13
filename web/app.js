@@ -2661,7 +2661,7 @@
       ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
       : `${r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`);
     return `<p class="shop-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => `<div class="shop-row">
-        <div class="winfo"><b>【${esc(r.name)}】</b><span>${esc(line(r))}</span></div>
+        <div class="winfo"><b>【${esc(r.name)}】</b><span>${nbHtml(line(r))}</span></div>
         <div class="wbtns"><button class="btn small" data-act="shop-wield" data-id="${esc(r.id)}">換上</button>${r.keep
           ? `<button class="btn small ghost" disabled>${esc(r.keep)}</button>`
           : `<button class="btn small ghost" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}">拆解</button>`}</div>

@@ -205,3 +205,21 @@ def test_the_stamp_and_notes_respect_reduced_motion():
 
     css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
     assert "@media (prefers-reduced-motion: reduce) { .board-stamp { animation: none; } }" in css
+
+
+# ── Task 7：FB-191 ──
+
+
+def test_rack_rows_do_not_break_inside_a_word(content, world):
+    """FB-191：店面「裝備庫」頁每一件那一行（「刀・屬剛・一階中品・鋒利度 100・用不上」）照 FB-132 的 nbChunks 切成不折行的小段，
+    375 寬折行時不把「用不上」拆成「用不」「上」。"""
+    from test_shop import _smith
+
+    from tianxia.state import Weapon
+
+    game = _smith(content, world, name="庫客")
+    p = game.state.player
+    p.weapon = Weapon(id="兵:9", name="手上刃", kind="劍", attribute="柔", tier=1, quality="下品")
+    p.rack = [Weapon(id="兵:1", name="庫刃", kind="刀", attribute="剛", tier=1, quality="中品")]
+    html = run(server.main_view(game), 'H.S.shopTab = "rack"; H.render(); return T.els.app.innerHTML;')
+    assert '<span class="nb">用不上</span>' in html and '<span class="nb">一階中品・</span>' in html
