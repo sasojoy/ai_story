@@ -519,11 +519,15 @@ def submit_action(
             instance.round.stories[name] = [str(stories[0]), str(stories[1])]
 
 
-def round_is_complete(instance: BattleInstance) -> bool:
+def round_is_complete(instance: BattleInstance, timed_out: bool = False) -> bool:
     """所有還在場上、沒在掛機的人都送出行動了（陣亡的人不用等；掛機的人也不等，結算前由 fill_idle_actions 代選）。
-    場上全是掛機的人時照舊等這一回合逾時。"""
-    awaited = [p for p in _active_participants(instance) if not idle(p)]
-    return bool(awaited) and all(p.name in instance.round.pending_actions for p in awaited)
+    場上全是掛機的人時照舊等這一回合逾時；timed_out（這一回合已經逾時，呼叫端剛照逾時代選完）時就算齊了，照代選的結算
+    （FB-173：以前沒有要等的人就一直回假，掛機的人鈕又是灰的，整場卡死）。場上沒人（全倒下、全走開）不算，那是 end_without_fighters 的事。"""
+    active = _active_participants(instance)
+    awaited = [p for p in active if not idle(p)]
+    if not awaited:
+        return timed_out and bool(active) and all(p.name in instance.round.pending_actions for p in active)
+    return all(p.name in instance.round.pending_actions for p in awaited)
 
 
 def round_progress(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> tuple[int, int]:
