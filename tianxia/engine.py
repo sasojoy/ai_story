@@ -58,7 +58,8 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, WorldState,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
+    WorldState,
     new_game_state,
 )
 from .world import (
@@ -3420,6 +3421,7 @@ class Game:
         跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
         event = timetable.find(self.content, definition.timetable_event) if definition.timetable_event else None  # 天命之爭也找得到（玉璽二）
         result: dict[str, object] = {}
+        unsettled = seal.is_mandate_battle(self.content, definition) and seal.deserted(battle, definition)  # 天命未定（玉璽二）
 
         def _resolve(season: WorldState) -> None:
             lock = season.locks.get(definition.timetable_event)
@@ -3432,6 +3434,10 @@ class Game:
                 battle, definition, lock.side if lock is not None else None, definition.defender or definition.factions[0].id,
             )
             if event is None:
+                return
+            if unsettled:  # 天命之爭保底收場：天命未定（8.3；要 PM 定的第 4 條），時間軸記成跳過，不公告哪一軍勝、沒有勝方加給
+                season.timeline[event.id] = TimelineResult(key=timetable.SKIPPED, time=season.time)
+                result.update(title=seal.MANDATE_UNSETTLED_TITLE, side="", margin="", reason="", text="", trends={})
                 return
             key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
             timetable.resolve(_season_vehicle(self.content, season), self.content, event, self.rng, key=key)
@@ -3476,6 +3482,14 @@ class Game:
         p.seal_seen = max(e.seq for e in fresh)
         current, me = self.world.get_season_number(), seal.key(p.name)
         for e in fresh:
+            if e.kind == "mandate":  # 天命之爭定下來（8.3）：那一刻手上有碎片的人以合璽之人留名；天命未定不寫
+                mine = next((sid for sid, name in e.holders.items() if seal.key(name) == me and sid in c.seal), None)
+                if mine is not None and e.result:
+                    line = seal.MANDATE_MINE.format(shard=c.seal[mine].name)
+                    self._write(seal.SEAL_TITLE, [line] + ([e.text] if e.text else []), tag=f"『{c.seal[mine].name}』")
+                    if e.season == current:
+                        annals.note(self.state, c, annals.DEED, line, 5, place=e.where)
+                continue
             if me not in (seal.key(e.holder), seal.key(e.other)) or e.shard not in c.seal:
                 continue
             shard = c.seal[e.shard].name
@@ -3541,14 +3555,46 @@ class Game:
         if same:
             annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
 
+    def _mandate_settle(self, winner: str, record: int | None, battle_name: str) -> None:
+        """天命之爭定下來（8.3）：winner 是得天命的那一軍，"" 是天命未定（保底收場）。一次 world.mutate：這一季記下 mandate_result（季末
+        的結局看它）、登記記一筆 mandate（這一刻每一片在誰手上＝合璽之人）、天下大事與江湖史各一句。不是天命之季、或已經定過，什麼都不做。
+        _seal_settle 與管理者「定結果」叫它；可能跑在 Game.for_world，不碰 self.state.player。"""
+        c = self.content
+        if not seal.on(c):  # 主機中途關掉碎片：天命不定（季末照 world.end_season 寫天命未定），管理者「定結果」也一樣
+            return
+        names = {f.id: f.name for f in c.scenario.factions}
+
+        def _apply(shared) -> None:
+            season = shared.season
+            if not season.mandate or season.mandate_result is not None:
+                return
+            reg = seal.filled(shared.seal, c)
+            holders = {s.id: s.holder for s in reg.shards.values() if s.state == "held" and s.holder and s.id in c.seal}
+            season.mandate_result = winner
+            if winner:
+                text = seal.MANDATE_WON.format(side=names.get(winner, winner))
+                if holders:
+                    text += seal.MANDATE_NAMES.format(names="、".join(holders[s] for s in c.seal if s in holders))
+            else:
+                text = seal.MANDATE_UNSETTLED.format(battle=battle_name)
+            seal.log(reg, shared.season_number, "mandate", result=winner, holders=holders, record=record, where=battle_name, text=text)
+            seal.rumor(season, text)
+            seal.chronicle(season, text)
+
+        self.world.mutate(_apply)
+
     def _seal_settle(self, battle: battle_instance.BattleInstance, definition: BattleDef, result: dict) -> None:
         """時刻表決戰收場時的玉璽碎片（_settle_showdown 呼叫；result 是算進伏筆鎖定的官方結果，不讀 battle.outcome_side，3.3）：
         璽動那一場決定要不要開奪璽單挑（Task 8），再從勝方挑現世的得主；後挑的排除前面挑中的人。
         只寫全服登記、單挑、天下大事、江湖史（一次 world.mutate），戰報那一行寫進這一場（mutate_battle 的 seal_notes）；
         兩人的存檔等各自同步時補（_deliver_seal_results，5.9）。可能跑在 Game.for_world（玩家是空白的），不碰 self.state.player。
-        天命之季標了 seal 的前兩場另外喚回一片（8.2）。亂數全是 seal.dice，不碰 self.rng。"""
+        天命之季標了 seal 的前兩場另外喚回一片（8.2）；天命之爭只定天命（_mandate_settle）。亂數全是 seal.dice，不碰 self.rng。"""
         c = self.content
         if not seal.on(c):
+            return
+        if seal.is_mandate_battle(c, definition):  # 天命之爭（8.3）：不璽動、不現世、不喚回、不掛單挑，只定天命
+            winner = "" if seal.deserted(battle, definition) else str(result.get("side") or "")
+            self._mandate_settle(winner, battle.record_id, definition.name)
             return
         cfg = c.config.seal
         view = self.world.seal_state()
@@ -4108,6 +4154,7 @@ class Game:
     ) -> list[str]:
         """決戰的軍餉（Config.showdown_pay）：照個人戰功發銀兩與經驗（最多 share_cap 倍），贏的一方另加；投靠了陣營、替自己陣營出戰的人另記本季貢獻
         （照推大勢的帳）。回傳要寫在「得失」的那幾樣（「銀兩 +N」的慣例），升級的話照 add_exp 的訊息接在 lines 後面。
+        天命之爭得天命的那一軍：銀兩與經驗 × Config.seal.mandate.pay_scale、名望 +fame（貢獻不加倍，玉璽二）。
         序章裡的人不發（FB-113）：修好之前在序章裡投效、出手的新人，以前 1 級大勝拿 120 經驗、序章中途升到 5 級（FB-122）。"""
         c, s = self.content, self.state
         if prologue_rules.active(s, c):
@@ -4117,9 +4164,14 @@ class Game:
         share = max(pay.idle_share, min(pay.share_cap, battle_instance.merit(c.config.battle, me) / full))
         won = bool(battle.outcome_side) and me.faction == battle.outcome_side
         bonus = pay.win_bonus.get(battle.outcome_margin, 0.0) if won else 0.0
-        silver = round(pay.silver * share * (1 + bonus))
-        exp = round(pay.exp * share * (1 + bonus))
+        destiny = won and seal.on(c) and seal.is_mandate_battle(c, c.battles.get(battle.battle_id))  # 得天命的那一軍（8.3；要 PM 定的第 3 條；碎片關著時天命不定，不加給）
+        scale = c.config.seal.mandate.pay_scale if destiny else 1
+        silver = round(pay.silver * share * (1 + bonus)) * scale
+        exp = round(pay.exp * share * (1 + bonus)) * scale
         changes = []
+        if destiny and c.config.seal.mandate.fame:
+            p.stats["fame"] = p.stats.get("fame", 0) + c.config.seal.mandate.fame
+            changes.append(f"名望 +{c.config.seal.mandate.fame}")
         if silver:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
@@ -7498,6 +7550,11 @@ class Game:
             return self._log([f"（{event.title}沒有「{key}」這個結果。）"])
         msgs = timetable.resolve(s, c, event, self.rng, key=key)
         self._save_season()
+        mandate = seal.mandate_event(c)
+        if mandate is not None and event.id == mandate.id:  # 管理者替天命之爭定結果：也定天命（8.3）
+            battle = seal.mandate_battle(c)
+            self._mandate_settle(key.split(":")[0], None, battle.name if battle is not None else event.title)
+            self.state.world = self.world.get_season()
         self._deliver_big_events()
         return self._log(msgs)
 

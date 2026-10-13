@@ -414,3 +414,98 @@ def test_the_mandate_battle_scene_names_who_holds_the_shards(mandated, world):
     _destiny_open(mandated, world, chishou="官一")
     game.sync(10.0)
     assert seal.MANDATE_SCENE.format(lean="官軍握著1片") in game.scene_text()
+
+
+# ── Task 6：天命 ──────────────────────────────
+
+
+def test_winning_the_mandate_battle_rewrites_the_ending(mandated, world):
+    """8.3：天命之爭打完，勝方得天命——這一季記下 mandate_result、登記記一筆 mandate（那一刻每一片在誰手上＝合璽之人）、
+    天下大事與江湖史；季末的結局是 mandate_endings 那一個；合璽之人同步時補一句。"""
+    from conftest import at
+    from test_engine import _play_showdown
+
+    _opened(mandated, world)
+    game = _player(mandated, world, "沈浪", "guan")
+    _destiny_open(mandated, world, chishou="沈浪")
+    game.sync(10.0)
+    _play_showdown(game, "guan_strong")
+    with at(game, game.now + 1):
+        game.options()
+    season = world.get_season()
+    assert season.mandate_result == "guan" and "tianming" in season.timeline
+    event = next(e for e in world.seal_state().registry.history if e.kind == "mandate")
+    assert event.result == "guan" and event.holders == {"chishou": "沈浪"}
+    text = seal.MANDATE_WON.format(side="官軍") + seal.MANDATE_NAMES.format(names="沈浪")
+    assert event.text == text and text in [r.text for r in season.chronicle]
+    assert any(seal.MANDATE_MINE.format(shard="螭首") in e.lines for e in game.state.journal)
+    _admin(mandated, world).admin_end_season(now=900.0)
+    assert world.get_season().ending_id == "s1_tianming_guan"
+
+
+def test_the_mandate_winners_get_double_pay_and_ten_fame(mandated, world):
+    """8.3（要 PM 定的第 3 條）：得天命那一方的參戰者軍餉（銀兩、經驗）× pay_scale、名望 +fame；輸的一方照常。"""
+    from tianxia.models import ShowdownPay
+
+    mandated.config.showdown_pay = ShowdownPay()
+    _opened(mandated, world)
+    game = _player(mandated, world, "官甲", "guan")
+    rows = [("官甲", "guan", 6, 0)]
+
+    def paid(battle_id, side):
+        battle = _ended(battle_id, rows, outcome_side=side, outcome_margin="大勝")
+        before = dict(game.state.player.stats)
+        changes = game._showdown_pay(battle, battle.participants["官甲"], [])
+        after = game.state.player.stats
+        return after.get("silver", 0) - before.get("silver", 0), after.get("fame", 0) - before.get("fame", 0), changes
+
+    plain, _, _ = paid("changshe_fire", "guan")
+    double, fame, changes = paid("tianming", "guan")
+    assert double == 2 * plain and fame == 10 and "名望 +10" in changes
+    lost, lost_fame, _ = paid("tianming", "huang")
+    assert lost == paid("changshe_fire", "huang")[0] and lost_fame == 0
+
+
+def test_a_mandate_battle_nobody_fights_leaves_the_mandate_unsettled(mandated, world):
+    """8.3（要 PM 定的第 4 條）：保底收場是天命未定——時間軸記成跳過（不公告哪一方勝）、戰報標題寫天命未定、江湖史一句；結局照三方態勢。"""
+    from test_engine import _settle_without_fighters
+    from tianxia import timetable
+
+    _opened(mandated, world)
+    game = _player(mandated, world, "旁人")
+    _destiny_open(mandated, world)
+    _settle_without_fighters(game, mandated.battles["tianming"])
+    season = world.get_season()
+    assert season.timeline["tianming"].key == timetable.SKIPPED and season.mandate_result == ""
+    assert world.get_battle().outcome_title == seal.MANDATE_UNSETTLED_TITLE
+    assert seal.MANDATE_UNSETTLED.format(battle="天命之爭") in [r.text for r in season.chronicle]
+    _admin(mandated, world).admin_end_season(now=900.0)
+    season = world.get_season()
+    assert not season.ending_id.startswith("s1_tianming")
+    assert [r.text for r in season.chronicle].count(seal.MANDATE_UNSETTLED_END) == 0  # 已經寫過一次，季末不再寫
+
+
+def test_a_mandate_battle_never_fought_is_unsettled_at_the_season_end(mandated, world):
+    _opened(mandated, world)
+    _mandate_now(world)
+    _admin(mandated, world).admin_end_season(now=900.0)
+    season = world.get_season()
+    assert season.mandate_result == "" and seal.MANDATE_UNSETTLED_END in [r.text for r in season.chronicle]
+    assert not season.ending_id.startswith("s1_tianming")
+
+
+def test_the_admin_result_for_tianming_also_settles_the_mandate(mandated, world):
+    _opened(mandated, world)
+    _mandate_now(world)
+    admin = _admin(mandated, world)
+    admin.admin_resolve_event("tianming", "huang:險勝")
+    assert world.get_season().mandate_result == "huang"
+
+
+def test_a_normal_season_never_picks_a_mandate_ending(mandated, world):
+    """沒蓋章的季就算 mandate_result 被寫了東西，結局也照舊（天命結局只在天命之季）。"""
+    from tianxia import world as world_rules
+
+    game = _player(mandated, world, "路人")
+    game.state.world.mandate_result = "guan"
+    assert not world_rules.evaluate_ending(game.state, mandated).mandate

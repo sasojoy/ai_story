@@ -439,6 +439,12 @@ def roll_recall(reg: SealRegistry, tianji: int, event_id: str, rows: list[tuple[
     return (shard, name) if name is not None else None
 
 
+MANDATE_WON = "天命歸於{side}。"  # 待 joy 潤：天下大事、江湖史（8.3）
+MANDATE_NAMES = "合璽之人：{names}。"  # 待 joy 潤：接在上一句後面（那一刻手上有碎片的人，照 content/seal.json 的順序）
+MANDATE_UNSETTLED = "天命未定：{battle}沒有分出天命。"  # 待 joy 潤：保底收場
+MANDATE_UNSETTLED_END = "天命未定：天命之爭沒有打成，這一季沒有分出天命。"  # 待 joy 潤：沒開成、取消，季末那一句
+MANDATE_UNSETTLED_TITLE = "天命未定"  # 待 joy 潤：戰報標題
+MANDATE_MINE = "天命之爭那一刻，『{shard}』在你懷中：你以合璽之人留名。"  # 待 joy 潤：補送的紀錄
 CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
 
 

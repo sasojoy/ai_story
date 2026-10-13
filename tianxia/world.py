@@ -228,7 +228,17 @@ def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
 
 
 def evaluate_ending(state: GameState, content: Content) -> Ending:
-    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。"""
+    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。
+    天命之季有一軍得天命時是那一軍的天命結局（玉璽二）。"""
+    w = state.world
+    if w.mandate and w.mandate_result:  # 天命之季、天命之爭有一軍得天命：結局改寫成那一軍的天命結局（玉璽碎片設計 8.3）
+        from .seal import mandate_event  # noqa: PLC0415
+
+        event = mandate_event(content)
+        won = event.mandate_endings.get(w.mandate_result) if event is not None else None
+        ending = next((e for e in content.scenario.endings if e.id == won), None)
+        if ending is not None:
+            return ending
     endings = season_endings(state, content)
     standing = stances(state, content) if season_one(content, state.world) else {}
     for ending in endings:
@@ -299,6 +309,11 @@ def end_season(
         # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
         early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
         ranks.flush_news(state, content, None)  # T5：還沒發的晉升彙整一起發掉
+        if w.mandate and w.mandate_result is None:  # 天命之爭沒定下來（沒開成、管理者取消）：天命未定（8.3），江湖史只記這一次
+            from .seal import MANDATE_UNSETTLED_END  # noqa: PLC0415
+
+            w.mandate_result = ""
+            add_chronicle(state, MANDATE_UNSETTLED_END)
         text = _finale(state, content, ending, early)
         w.ending_text = text or ending.text
         if not any(e.kind == "finale" and e.ending_chronicle for e in content.timetable):
@@ -417,6 +432,9 @@ def settle_waiting_showdowns(
             continue  # 排在 before 之後的照舊等著開
         w.showdowns_waiting.remove(event_id)
         if event is None or event_id in w.timeline or event_id in w.showdowns_opened:
+            continue
+        if event.mandate_only:  # 天命之爭到季末都沒開成：天命未定（8.3），不照起點判
+            w.timeline[event_id] = TimelineResult(key=timetable.SKIPPED, time=w.time)
             continue
         definition = showdown_battle(state, content, event)
         if definition is None:
