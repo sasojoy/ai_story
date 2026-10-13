@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 
-from . import armor, equipment, forge_secrets, skillview, smithing, team, weapons
+from . import armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
 from .models import WEAPON_KINDS, Content
 from .state import Equipment, GameState
 from .world_state import WorldStateStore
@@ -17,7 +17,14 @@ SMITH_SITUATIONS = (
     "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
     "short_silver", "rack_full", "refused",
 )
-SITUATIONS = {"smith": SMITH_SITUATIONS}  # 店 → 情況（第二批加 market、board）；content.check_shop_lines 照它驗
+# 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
+# 多半只在兩個分頁搶的時候出現
+MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
+BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
+SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
+# 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
+BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID)}
+_HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
 
@@ -29,6 +36,13 @@ def problem_key(problem: str | None, done: str) -> str:
     if problem.startswith("還差"):
         return "short_silver"
     return "rack_full" if problem == RACK_FULL else "refused"
+
+
+def board_key(problem: str | None, done: str) -> str:
+    """懸賞榜這一下的情況鍵：做成了是 done；手上揭滿了（bounties.HELD_FULL，寫的是手上真的有幾張）一種；其餘的擋法一律 refused。"""
+    if problem is None:
+        return done
+    return "held_full" if problem.startswith(_HELD_HEAD) else "refused"
 
 
 def forged_key(item: Equipment) -> str:

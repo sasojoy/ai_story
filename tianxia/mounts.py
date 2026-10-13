@@ -16,7 +16,7 @@ import math
 from . import equipment
 from .equipment import NO_REPAIR_MATERIAL, RACK_FULL, repair_material
 from .models import Content
-from .state import Equipment, GameState
+from .state import Equipment, GameState, PlayerState
 
 MARKET = "馬市"  # 選單上那一顆、紀錄的標題（待 joy 潤）
 MARKET_TAG = "馬市"  # 地點標籤（content/locations.json：涿郡、汝南集市、宛城、下曲陽，5.5）；不寫死地點 id
@@ -231,6 +231,13 @@ def feed(state: GameState, content: Content) -> list[str]:
 
 
 # ---- 馬市（5.5）：買、餵、換、離開 ----
+
+def close_market(p: PlayerState) -> None:
+    """收起馬市：選單與店面上馬販那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_market 設成 False 的地方都走這裡
+    （離開、讀檔修補、同步時人不在馬市、出發），同 equipment.close_smith。"""
+    p.picking_market = False
+    p.shop_line, p.shop_clue = "", ""
+
 
 def market_here(state: GameState, content: Content) -> bool:
     """這裡有開著的馬市：坐騎開著、人不在路上、地點有「馬市」標籤。"""

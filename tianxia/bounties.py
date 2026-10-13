@@ -24,7 +24,7 @@ from . import calendar, equipment, gender, library, materials, ranger, roster, t
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
-from .state import Bounty, GameState, Weapon, WorldState
+from .state import Bounty, GameState, PlayerState, Weapon, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "art": "求藝", "arms": "求兵"}
@@ -83,6 +83,8 @@ STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-
 WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
 HELD_FULL = "你手上已經有 {count} 張了，先交了差再說。"  # 待 joy 潤（FB-155：count 是手上真的有幾張，不是上限；截殺關了又開時可以超過上限）
 BOARD_EMPTY = "榜上的懸賞都有人交了。"  # 待 joy 潤（FB-156：榜開著、看得到的單被別人交光，第二層只剩「返回」時灰掉的那一行；Game._bounty_options 的 bounty:empty）
+NOT_HELD = "你手上沒有這一張。"  # 待 joy 潤：放棄一張手上沒有的（drop）；Game._bounty 照它記掌櫃的情況
+UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（shopview.BACKS）
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -100,6 +102,13 @@ def is_town(content: Content, loc_id: str) -> bool:
 def board_here(state: GameState, content: Content) -> bool:
     """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點。"""
     return active(state, content) and is_town(content, state.player.location)
+
+
+def close_board(p: PlayerState) -> None:
+    """收起懸賞榜：選單、第三層挑到哪一張、店面上榜吏那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_bounty 設成 False 的地方
+    都走這裡（離開、讀檔修補、出發），同 equipment.close_smith。"""
+    p.picking_bounty, p.bounty_pick = False, None
+    p.shop_line, p.shop_clue = "", ""
 
 
 def week_seconds(state: GameState, content: Content) -> float:
@@ -373,7 +382,7 @@ def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
         if b.id == bounty_id and name in (name_key(t) for t in b.takers):
             b.takers = [t for t in b.takers if name_key(t) != name]
             return [f"你把「{title(content, b)}」放回了榜上。"]
-    return ["你手上沒有這一張。"]
+    return [NOT_HELD]
 
 
 def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bounty, silver: int | None = None) -> list[str]:
@@ -626,7 +635,7 @@ def hand_in_options(
                 continue  # 本來就不合用的不列
             note = WORN_NOTE if art_id in worn else NAMING_NOTE
             opts.append(Option(id=f"bounty:give:{b.id}:{art_id}", label=note.format(name=art.name), enabled=False))
-    opts.append(Option(id="bounty:unpick", label=UNPICK))
+    opts.append(Option(id=UNPICK_ID, label=UNPICK))
     return opts
 
 
