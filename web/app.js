@@ -2599,10 +2599,12 @@
     const pot = S.shopPot;
     return pot && pot.slot === shop.page ? pot : { slot: shop.page, kind: shop.forge.kind, main: null, aux: null };
   }
-  // 這一爐的說法：爐裡的東西問過伺服器了用那一份（同一頁、同一種類），不然是空爐那一份（shop.forge.line）
+  // 這一爐的說法：爐裡的東西問過伺服器了用那一份（同一頁、同一種類），不然是空爐那一份（shop.forge.line）。
+  // 回應還沒回來（爐裡剛換了一樣）時手上那一份說的是上一爐：素材格照舊畫它的，「這一爐會怎樣」與開爐鈕當作還沒放好
   function shopLineNow(shop, pot) {
     const line = S.shopLine;
-    return line && line.kind === pot.kind && pot.slot === shop.page ? line : shop.forge.line;
+    const got = line && line.kind === pot.kind && pot.slot === shop.page ? line : shop.forge.line;
+    return got.ready && (got.main !== pot.main || got.aux !== pot.aux) ? { ...got, ready: false } : got;
   }
   // 爐子中間的火（內嵌 SVG，水墨暖色；Joy 之後有正式的圖可以換）
   const FLAME_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><path class="fl-out" d="M30 4 C40 18 50 26 46 40 C43 52 34 56 30 56 C24 56 14 50 14 38 C14 28 22 22 26 12 C28 20 31 24 34 26 C34 18 32 10 30 4Z"/><path class="fl-in" d="M30 24 C36 32 40 38 37 46 C35 51 32 52 30 52 C26 52 22 48 23 42 C24 36 28 32 30 24Z"/></svg>';
@@ -2654,8 +2656,8 @@
     const shop = S.main && S.main.shop;
     if (!shop) return;
     const pot = shopPotNow(shop);
-    const cell = (shopLineNow(shop, pot).cells || []).find((c) => c.id === id);
-    if (cell) setPot(cell.to === "main" ? { main: id } : { aux: id });
+    // 放到哪一格照爐裡現在的樣子（主料空著先放主料），不照手上那一份說法：連點兩格時回應還沒回來，那一份還寫著「放主料」
+    if ((shopLineNow(shop, pot).cells || []).some((c) => c.id === id)) setPot(pot.main ? { aux: id } : { main: id });
   }
   let smithLineSeq = 0;
   async function updateSmithLine() {

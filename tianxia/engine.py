@@ -2925,12 +2925,22 @@ class Game:
             self._shop_say(shopview.problem_key(problem, "refused"))
         return item, msgs, report
 
-    def shop_view(self) -> dict | None:
-        """店面（店面獨立介面設計 6.1）：開關開著、鐵匠鋪開著（picking_smith，人在城鎮）才有；一步一步的單子還開著（開關關著時開的、
-        舊存檔）就照舊畫那一串按鈕，不給店面（店面上的鈕在單子那一步不在選單上）。"""
+    def _shop_live(self, option_ids=None) -> bool:
+        """鐵匠鋪那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有「出店」（smith:back），而且前面沒有決戰、奪璽單挑的鈕。
+        決戰開打、休季時選單換成三招或「休季中」，鐵匠鋪那一串根本不在上面（picking_smith 卻還是真的）：這時給店面，出店會被拒絕、
+        人就困在店裡，休季還開得了爐（終審 Critical 1）。集結時決戰的鈕排在鐵匠鋪那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
+        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
+        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
+        return "smith:back" in ids and not any(i.startswith(("battle:", "seal:")) for i in ids)
+
+    def shop_view(self, option_ids=None) -> dict | None:
+        """店面（店面獨立介面設計 6.1）：開關開著、鐵匠鋪開著（picking_smith，人在城鎮）、鐵匠鋪那一串是眼前的選單（_shop_live）才有；
+        一步一步的單子還開著（開關關著時開的、舊存檔）就照舊畫那一串按鈕，不給店面（店面上的鈕在單子那一步不在選單上）。"""
         s, c = self.state, self.content
         p = s.player
         if not c.config.shop_screens or not p.picking_smith or p.smith_draft is not None or not equipment.smith_open(s, c):
+            return None
+        if not self._shop_live(option_ids):
             return None
         return shopview.smith_view(s, c, self.world)
 
@@ -2947,8 +2957,8 @@ class Game:
         s, c = self.state, self.content
         p = s.player
         self.smith_result = None
-        if not p.picking_smith or not equipment.smith_open(s, c):
-            return self._log([equipment.NOT_NOW])
+        if not p.picking_smith or not equipment.smith_open(s, c) or not self._shop_live():
+            return self._log([equipment.NOT_NOW])  # 鐵匠鋪那一串不在眼前的選單上（決戰開打、休季）：同一步一步的開爐，按不下去
         p.shop_clue = ""
         silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
         item, msgs, report = self._smith_forge_once(str(kind), str(main), str(aux))

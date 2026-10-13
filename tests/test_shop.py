@@ -373,3 +373,48 @@ def test_the_routes_answer_the_forge_page(monkeypatch):
     finally:
         for store in stores:
             store.clear()
+
+
+# ── 終審 Critical 1：店面只在鐵匠鋪那一串真的是眼前的選單時才有（決戰、休季、奪璽單挑排在前面時不蓋住它們）──
+
+
+def test_a_battle_takes_the_screen_back_from_the_shop(on):
+    """宛城之戰：官軍的甲在宛城加入集結、走進鐵匠鋪，開打之後選單是三招：店面不能再蓋住決戰（出店會被拒絕，人就困在店裡），
+    也不能直接開爐。集結時選單前面多了決戰的鈕：也照舊畫那一串按鈕，免得加入、趕到的鈕被蓋住。"""
+    import server
+    from tianxia.engine import Game
+
+    on.config.weapons.enabled = on.config.armor.enabled = True
+    game = Game.new(on, "甲", rng=random.Random(0))
+    game.client = None
+    game.set_hints_off(True)
+    p = game.state.player
+    p.faction, p.location, p.stats["silver"] = "guan", "wan_city", 300
+    p.materials = {"gang_1": 4, "kuai_1": 2}
+    game.world.start_battle(on.battles["wancheng_jia"], now=game.now)
+    game.choose("battle:join:guan")
+    game.choose("act:smith")
+    assert p.picking_smith and any(o.id.startswith("battle:") for o in game.options(odds=False))
+    assert game.shop_view() is None and "shop" not in server.main_view(game)  # 集結：決戰的鈕還在選單上
+    game.world.mutate_battle(lambda x: setattr(x, "muster_deadline_real", -1.0))
+    ids = [o.id for o in game.options(odds=False)]
+    assert ids and all(i.startswith("battle:") for i in ids)  # 開打了：選單只剩三招
+    assert game.shop_view() is None and "shop" not in server.main_view(game)
+    before = (p.stats["silver"], dict(p.materials))
+    assert game.smith_forge("劍", "gang_1", "kuai_1") == [equipment.NOT_NOW]
+    assert (p.stats["silver"], dict(p.materials)) == before and game.smith_result is None
+
+
+def test_no_shop_and_no_forging_in_the_rest_season(content, world):
+    """休季：選單只有「休季中」，什麼都不能做。人在鐵匠鋪裡收季（存檔裡 picking_smith 還是真的）也不給店面、不能直接開爐。"""
+    import server
+
+    content.config.admins = ["試鋪"]
+    game = _smith(content, world)
+    game.admin_end_season(now=100.0)
+    assert [o.id for o in game.options(odds=False)] == ["season:resting"] and game.state.player.picking_smith
+    assert game.shop_view() is None and "shop" not in server.main_view(game)
+    p = game.state.player
+    before = (p.stats["silver"], dict(p.materials))
+    assert game.smith_forge("劍", "gang_1", "kuai_1") == [equipment.NOT_NOW]
+    assert (p.stats["silver"], dict(p.materials)) == before

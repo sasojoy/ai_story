@@ -1029,7 +1029,7 @@ def _main_view_body(game: Game) -> dict:
         "push": HUB is not None,
         "push_spread": game.content.config.push_world_min_seconds,
     }
-    shop = game.shop_view()  # 店面（店面獨立介面設計 6.1）：開關開著、店開著才有；選單在上面已經讀過（會收起不在城鎮的店）
+    shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開

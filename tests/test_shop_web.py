@@ -255,3 +255,40 @@ def test_a_redraw_keeps_the_shop_scrolled_where_it_was(m):
       fresh.scrollTop = 0; H.renderShop(false);
       return { kept, reset: fresh.scrollTop };""")
     assert out == {"kept": 240, "reset": 0}
+
+
+# ── 終審 Important：煉製頁的 .odds 不能滲進店面；店裡紙底表單上的淡框鈕要看得見 ──
+
+
+def test_the_craft_page_odds_rules_do_not_bleed_into_the_shop():
+    """煉製頁的 .odds span 是 --ink-2 色，深色主題下剛好等於店面下品那一格的底色（看不見）；.odds 的 gap、margin 也會滲進來。
+    店面上的「沿用譜名」在紙底的定名表單裡，不能用暗底那一套淡色字。"""
+    import re
+
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.shop-layer \.odds span \{[^}]*color: inherit[^}]*margin: 0", css)
+    assert re.search(r"\.shop-layer \.odds \{[^}]*gap: 0[^}]*margin-top: 0", css)
+    assert re.search(r"\.shop-layer \.naming \.btn\.ghost \{[^}]*color: var\(--ink\)", css)
+
+
+def test_a_second_quick_tap_goes_to_the_aux_slot(m):
+    """點了主料、回應還沒回來又點第二格（手上的這一爐說法還是空爐那一份，格子寫著放主料）：第二格照爐裡現在的樣子放進輔料，
+    不是把主料換掉。"""
+    out = _forge_page(m, """
+      return (async () => {
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_1", aux: null };
+        H.render();
+        """ + _click('{ act: "shop-cell", id: "kuai_1", why: "" }') + """
+        return H.S.shopPot;
+      })();""", responses={"/api/smith_line": {"kind": "劍", "main": "gang_1", "aux": "kuai_1", "cells": [], "ready": False}})
+    assert (out["main"], out["aux"]) == ("gang_1", "kuai_1")
+
+
+def test_a_line_for_another_pot_is_not_shown_as_ready(content, world):
+    """爐裡換了一樣、回應還沒回來：手上那一份說的是上一爐，不能拿它的機率與亮著的開爐鈕。"""
+    game = _smith(content, world)
+    m = server.main_view(game)
+    old = game.smith_line("劍", "gang_1", "rou_1") if "rou_1" in game.state.player.materials else game.smith_line("劍", "gang_1", "gang_1")
+    html = _forge_page(m, "H.S.shopPot = { slot: 'weapon', kind: '劍', main: 'gang_1', aux: 'kuai_1' }; H.S.shopLine = H.S.next; H.render(); return T.els.app.innerHTML;",
+                       S={"next": old})
+    assert old["ready"] and 'class="odds"' not in html and 'data-act="shop-go" disabled' in html
