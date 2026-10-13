@@ -257,3 +257,10 @@ def test_the_held_row_and_a_held_note_do_not_share_a_class(board):
     assert 'class="held-row"' in html and 'class="note k-scout held"' in html
     css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
     assert ".shop-board .held {" not in css and ".shop-board .held-row {" in css
+
+
+def test_the_horse_card_rows_do_not_reuse_the_status_bar_class(market):
+    """實機看到的：馬的卡上四項本事那幾行叫 .bar，撞到狀態列體力、氣血條的 .bar（高度、底色、span 的內距），每一行多一條藥丸底。改叫 abil。"""
+    html = run(market, "H.render(); return T.els.app.innerHTML;")
+    card = html[html.index('class="horse-card"'):]
+    assert card.count('class="abil"') == 4 and 'class="bar"' not in card

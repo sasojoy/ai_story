@@ -1373,7 +1373,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .horse-card h4 { margin: 0; font: 600 15px var(--serif); }
 .horse-card h4 small { font: 11px var(--sans); color: var(--ink-2); }
 .horse-card .cmp { margin: 0; color: var(--accent); }
-.horse-card .bar, .horse-card .fed { display: grid; grid-template-columns: 58px 1fr 38px; gap: 6px; align-items: center; font-size: 11px; }
+.horse-card .abil, .horse-card .fed { display: grid; grid-template-columns: 58px 1fr 38px; gap: 6px; align-items: center; font-size: 11px; }
 .horse-card .l { color: var(--ink-2); }
 .horse-card .n { text-align: right; }
 .horse-card .v { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
