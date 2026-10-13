@@ -90,3 +90,118 @@ def test_a_market_poll_redraws_only_the_shop(market):
       const was = H.S.main; H.setMain(H.S.next); H.shopPolled(was);
       return { page: T.els.page.innerHTML, layer: layer.outerHTML };""", S={"next": richer})
     assert out["page"] == "OLD" and "銀 999" in out["layer"]
+
+
+# ── Task 5：懸賞榜 ──
+
+
+@pytest.fixture
+def board(content, world):
+    game = _board(content, world, [SCOUT, ARMS])
+    game.state.player.rack = [Equipment(**SWORD)]
+    return game
+
+
+def test_the_board_draws_the_held_row_and_pinned_notes(board):
+    m = server.main_view(board)
+    html = run(m, "H.render(); return T.els.app.innerHTML;")
+    shop = m["shop"]
+    assert 'class="shop-layer shop-board"' in html and shop["held"]["head"] in html and shop["held"]["left_text"] in html
+    assert html.count('data-act="board-zoom"') == 2 and "k-scout" in html and "k-arms" in html  # 手上沒有揭著的：只有兩張告示點得開
+    assert shop["notes"][0]["have"] in html  # 交得出的求藝求兵排在前面（沒揭著的）
+    assert 'data-act="choose" data-id="bounty:back"' in html
+
+
+def test_tapping_a_note_opens_the_paper_with_take_and_put_back(board):
+    m = server.main_view(board)
+    scout, _arms = _ids(board)
+    out = run(m, "return (async () => { H.render(); " + _click('{ act: "board-zoom", id: "' + scout + '" }') + " return T.els.app.innerHTML; })();")
+    assert f'data-act="choose" data-id="bounty:take:{scout}"' in out and 'data-act="board-close"' in out and "放回去" in out
+    note = next(n for n in m["shop"]["notes"] if n["id"] == scout)
+    assert note["reward"] in out and note["due"] in out
+
+
+def test_a_greyed_take_shows_its_reason_on_the_paper(content, world):
+    from test_shop2 import _board as board_of
+
+    game = board_of(content, world, [dict(kind="escort", faction="guan", silver=15, deeds=2, location="lake", end="cave")])
+    (escort,) = _ids(game)
+    m = server.main_view(game)
+    html = run(m, f'H.S.boardZoom = "{escort}"; H.render(); return T.els.app.innerHTML;')
+    assert f"要在{content.locations['lake'].name}接。" in html and "disabled" in html
+
+
+def test_dropping_asks_first(board):
+    scout, _arms = _ids(board)
+    board.choose(f"bounty:take:{scout}")
+    m = server.main_view(board)
+    out = run(m, """return (async () => {
+      T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+      H.S.boardZoom = "%s"; H.render();
+      %s
+      return { asked: T.bodyHtml.join(""), calls: T.calls.map((c) => c[0]), html: T.els.app.innerHTML };
+    })();""" % (scout, _click('{ act: "shop-ask", id: "bounty:drop:' + scout + '", confirm: "要放回去嗎", yes: "放棄" }')))
+    assert "要放回去嗎" in out["asked"] and "/api/choose" not in out["calls"]
+    assert "已揭" in out["html"]
+
+
+def test_picking_a_hand_in_shows_the_list(board):
+    _scout, arms = _ids(board)
+    board.choose(f"bounty:pick:{arms}")
+    m = server.main_view(board)
+    html = run(m, "H.render(); return T.els.app.innerHTML;")
+    assert f'data-act="choose" data-id="bounty:give:{arms}:兵:1"' in html  # 伺服器說 picked：自己放大那一張、列出合用的
+    assert 'data-act="shop-leave"' in html  # 第三層：出店先回到懸賞榜
+
+
+def test_closing_the_hand_in_list_unpicks_first(board):
+    _scout, arms = _ids(board)
+    board.choose(f"bounty:pick:{arms}")
+    m = server.main_view(board)
+    board.choose("bounty:unpick")
+    after = server.main_view(board)
+    out = run(m, "return (async () => { H.render(); " + _click('{ act: "board-close" }') + " return { calls: T.calls.map((c) => [c[0], c[1]]), zoom: H.S.boardZoom }; })();",
+              responses={"/api/choose": {"main": after}})
+    assert ["/api/choose", {"id": "bounty:unpick"}] in out["calls"] and out["zoom"] is None
+
+
+def test_leaving_from_the_third_layer_goes_back_to_the_board_first(board):
+    _scout, arms = _ids(board)
+    board.choose(f"bounty:pick:{arms}")
+    m = server.main_view(board)
+    board.choose("bounty:unpick")
+    after = server.main_view(board)
+    out = run(m, "return (async () => { H.render(); " + _click('{ act: "shop-leave" }') + " return T.calls.filter((c) => c[0] === '/api/choose').map((c) => c[1].id); })();",
+              responses={"/api/choose": {"main": after}})
+    assert out == ["bounty:unpick", "bounty:back"]
+
+
+def test_a_hand_in_stamps_the_note_done(board):
+    _scout, arms = _ids(board)
+    board.choose(f"bounty:pick:{arms}")
+    before = server.main_view(board)
+    board.choose(f"bounty:give:{arms}:兵:1")
+    after = server.main_view(board)
+    out = run(before, """
+      H.render(); const was = H.S.main.shop; H.setMain(H.S.next);
+      H.boardHanded("bounty:give:%s:兵:1", was);
+      return { stamp: H.S.boardStamp, html: T.els.app.innerHTML };""" % arms, S={"next": after})
+    assert out["stamp"]["id"] == arms and "交差" in out["html"]
+
+
+def test_a_refused_hand_in_does_not_stamp(board):
+    _scout, arms = _ids(board)
+    board.choose(f"bounty:pick:{arms}")
+    before = server.main_view(board)
+    out = run(before, """
+      H.render(); const was = H.S.main.shop; H.setMain(H.S.next);
+      H.boardHanded("bounty:give:%s:兵:1", was);
+      return H.S.boardStamp;""" % arms, S={"next": before})
+    assert out is None
+
+
+def test_the_stamp_and_notes_respect_reduced_motion():
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
+    assert "@media (prefers-reduced-motion: reduce) { .board-stamp { animation: none; } }" in css

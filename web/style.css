@@ -1385,3 +1385,47 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
   .shop-layer.shop-market { background: linear-gradient(180deg, #4a3a26 0%, #3a2c1c 55%, #24190f 100%); color: #f2e5c6; }
   .shop-market .shop-back, .shop-market .shop-silver { color: #e8d6ad; }
 }
+/* 懸賞榜（第四節）：木紋底；手上那一排、告示（釘子、微微歪著）、已揭與交差的朱印、放大的紙 */
+.shop-layer.shop-board { background: repeating-linear-gradient(90deg, #6b4a2a 0 22px, #5e4024 22px 24px, #74512e 24px 46px); color: #f2e5c6; }
+.shop-board .held { padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.25); font-size: 12px; }
+.shop-board .held p { margin: 0 0 4px; }
+.shop-board .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.shop-board .slot { display: grid; gap: 2px; min-width: 0; text-align: left; padding: 6px; border: 1px solid #b7862b; border-radius: 6px; background: var(--paper); color: var(--ink); font: 11px var(--sans); }
+.shop-board .slot b { font: 600 12px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-board .slot.empty { display: flex; align-items: center; justify-content: center; background: transparent; color: #e8d6ad; border-style: dashed; }
+.board { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 12px; }
+.note { position: relative; display: grid; gap: 2px; text-align: left; padding: 10px 8px 8px; border: 0; border-top: 4px solid #8a6a42; border-radius: 2px;
+  background: var(--paper); color: var(--ink); font: 11px/1.45 var(--sans); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+.note:nth-child(4n+1) { transform: rotate(-2deg); }
+.note:nth-child(4n+2) { transform: rotate(1.5deg); }
+.note:nth-child(4n+3) { transform: rotate(1deg); }
+.note:nth-child(4n) { transform: rotate(-1deg); }
+.note::before { content: ""; position: absolute; top: -7px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #3a2618; } /* 釘子 */
+.note b { font: 600 14px var(--serif); }
+.note .k, .note .due { font-size: 10.5px; color: var(--ink-2); }
+.note .prize { color: var(--accent); }
+.note.k-strike, .paper.k-strike { border-top-color: var(--gang); }
+.note.k-scout, .paper.k-scout { border-top-color: var(--kuai); }
+.note.k-escort, .paper.k-escort { border-top-color: var(--rou); }
+.note.k-art, .note.k-arms, .paper.k-art, .paper.k-arms { border: 2px solid #c9a03a; border-top-width: 4px; }
+.note.k-wanted, .paper.k-wanted { border-top-color: #1e1a16; }
+.note.dim { opacity: 0.6; }
+.stamp { position: absolute; top: 6px; right: 6px; transform: rotate(10deg); padding: 2px 5px; border: 2px solid var(--accent); border-radius: 4px;
+  color: var(--accent); background: var(--paper); font: 600 12px var(--serif); font-style: normal; }
+.board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
+.board-zoom .paper { position: relative; width: min(340px, 100%); display: grid; gap: 6px; padding: 16px 14px 12px; border-top: 6px solid #8a6a42; border-radius: 4px;
+  background: var(--paper); color: var(--ink); font-size: 13px; }
+.paper h4 { margin: 0; font: 600 18px var(--serif); }
+.paper .k, .paper .due, .paper .why { font-size: 12px; color: var(--ink-2); }
+.paper .have { color: var(--accent); }
+.paper p { margin: 0; }
+.paper .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.paper .btns.one { grid-template-columns: 1fr; }
+.paper .hand-in { display: grid; gap: 6px; }
+.paper .hand-in .btn { text-align: left; }
+.shop-layer .paper .btn.ghost { color: var(--ink); border-color: var(--line); } /* 紙底（第一批的淡框鈕是暗底的顏色） */
+.board-stamp { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  pointer-events: none; color: #f2e5c6; animation: stampfade 1.4s ease-out forwards; }
+.stamp.big { position: static; transform: rotate(-8deg); padding: 6px 14px; border-width: 4px; font-size: 34px; }
+@keyframes stampfade { 0% { opacity: 0; transform: scale(1.4); } 20% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .board-stamp { animation: none; } }
