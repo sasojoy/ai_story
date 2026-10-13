@@ -379,7 +379,7 @@ def test_the_mandate_battle_leans_toward_the_army_holding_shards(mandated, world
     assert battle.battle_id == "tianming" and battle.seal_lean == {"guan": 2, "huang": 1}
     assert battle.trend == battle.trend_start == base + 3
     assert battle.seal_shard is None and battle.seal_emerge is None
-    text = seal.MANDATE_MUSTER.format(battle="天命之爭", lean="官軍握著2片、黃巾軍握著1片")
+    text = seal.MANDATE_MUSTER.format(battle="天命之爭", lean="官軍握著2片、黃巾軍握著1片", shift="戰局起點往官軍偏了 3 點")  # FB-186
     assert any(text in m for m in msgs) and any(r.text == text for r in world.get_season().rumors)
 
 
@@ -390,6 +390,16 @@ def test_the_lean_is_capped_at_twelve_points(mandated):
     assert seal.lean_shift({"huang": 3}, battle, cfg) == -9
     assert seal.lean_shift({"haoqiang": 7}, battle, cfg) == 0
     assert seal.lean_text({}, battle) == seal.LEAN_NONE
+
+
+def test_the_lean_says_how_far_the_start_moved_fb186(mandated):
+    """FB-186：起點偏了幾點、往哪一軍偏，公告與畫面都寫；偏 0 也寫一句（兩軍各有碎片就說持璽相當），不寫成「從正中開打」——
+    偏移之前的起點照戰況，不一定在正中。"""
+    battle = mandated.battles["tianming"]
+    assert seal.shift_text(3, {"guan": 2, "huang": 1}, battle) == seal.LEAN_SHIFT.format(side="官軍", n=3) == "戰局起點往官軍偏了 3 點"
+    assert seal.shift_text(-9, {"huang": 3}, battle) == seal.LEAN_SHIFT.format(side="黃巾軍", n=9)
+    assert seal.shift_text(0, {"guan": 1, "huang": 1}, battle) == seal.LEAN_EVEN
+    assert seal.shift_text(0, {"haoqiang": 2}, battle) == seal.shift_text(0, {}, battle) == seal.LEAN_STILL
 
 
 def test_a_holder_joining_the_mandate_battle_weighs_more(mandated, world):
@@ -413,7 +423,7 @@ def test_the_mandate_battle_scene_names_who_holds_the_shards(mandated, world):
     game = _player(mandated, world, "官一", "guan")
     _destiny_open(mandated, world, chishou="官一")
     game.sync(10.0)
-    assert seal.MANDATE_SCENE.format(lean="官軍握著1片") in game.scene_text()
+    assert seal.MANDATE_SCENE.format(lean="官軍握著1片", shift="戰局起點往官軍偏了 3 點") in game.scene_text()  # FB-186
 
 
 # ── Task 6：天命 ──────────────────────────────

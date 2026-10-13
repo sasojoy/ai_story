@@ -298,10 +298,13 @@ DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決
 NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
 
 
-MANDATE_MUSTER = "{battle}集結：{lean}。"  # 待 joy 潤：天下大事、集結公告（8.3）
-MANDATE_SCENE = "天命之爭：{lean}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
+MANDATE_MUSTER = "{battle}集結：{lean}，{shift}。"  # 待 joy 潤：天下大事、集結公告（8.3）
+MANDATE_SCENE = "天命之爭：{lean}，{shift}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
 LEAN_PART = "{side}握著{n}片"  # 待 joy 潤
 LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
+LEAN_SHIFT = "戰局起點往{side}偏了 {n} 點"  # 待 joy 潤（FB-186）
+LEAN_EVEN = "兩軍持璽相當，戰局起點不偏"  # 待 joy 潤：兩軍各有碎片、片數一樣
+LEAN_STILL = "戰局起點不偏"  # 待 joy 潤：兩軍手上都沒有碎片
 
 
 def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
@@ -331,12 +334,21 @@ def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
     return "、".join(parts) or LEAN_NONE
 
 
+def shift_text(shift: int, lean: dict[str, int], definition: BattleDef) -> str:
+    """起點偏了幾點、往哪一軍偏（FB-186：以前只寫各握幾片，看不出戰局條動了沒）：正的往第一軍、負的往第二軍（同 lean_shift）。
+    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。"""
+    first, second = definition.factions[0], definition.factions[1]
+    if shift:
+        return LEAN_SHIFT.format(side=(first if shift > 0 else second).name, n=abs(shift))
+    return LEAN_EVEN if lean.get(first.id) or lean.get(second.id) else LEAN_STILL
+
+
 def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
     """天命之爭剛開集結：數兩軍各握幾片、照它把起點（trend 與 trend_start）偏過去、快照進這一場（seal_lean），天下大事一句。
     天命之爭本身不璽動、不現世（8.3）。"""
     lean = mandate_lean(world, content, definition)
     shift = lean_shift(lean, definition, content.config.seal)
-    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition))
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition), shift=shift_text(shift, lean, definition))
     world.mutate(lambda shared: rumor(shared.season, text))
 
     def _snap(b) -> None:
