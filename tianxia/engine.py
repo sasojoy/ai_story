@@ -3255,9 +3255,10 @@ class Game:
         if ended:
             battle.end_time = self.state.world.time  # 收場時的賽季時間：參戰者的戰報用（FB-027）
             return ended
-        if now - battle.round.opened_real >= definition.round_seconds and not battle_instance.round_is_complete(battle):
+        timed_out = now - battle.round.opened_real >= definition.round_seconds
+        if timed_out and not battle_instance.round_is_complete(battle):
             battle_instance.fill_timed_out_actions(battle, definition, tuning=tuning)
-        if not battle_instance.round_is_complete(battle):
+        if not battle_instance.round_is_complete(battle, timed_out=timed_out):  # 只剩掛機的人：逾時代選完就結算（FB-173）
             return []
         battle_instance.fill_idle_actions(battle, definition, tuning=tuning)  # 不等掛機的人：其他人送齊了，替他們代選
         msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
