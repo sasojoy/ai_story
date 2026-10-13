@@ -333,3 +333,26 @@ def test_the_seal_measure_script_summarises_a_season():
         "holders": {"真人": 1, "假人": 0}, "fresh_ratio": [3.1], "holder_big_wins": [0, 1],
     })
     assert "現世 雲篆（戰功第 2）" in line and "璽動 1" in line and "易手 0" in line
+
+
+def test_the_seal_measure_script_counts_seasons_to_the_mandate(capsys):
+    """玉璽二：--mandate-mc 數七片湊齊要幾季（每季最多現世一片、機率 emerge_rate）；同樣的參數結果一樣。"""
+    measure = _load("measure_seal")
+    row = measure.mandate_mc(0.35, trials=2000, seed=1)
+    assert 17 < row["mean"] < 23 and row["p10"] <= row["p50"] <= row["p90"] and row["cycle"] == round(row["mean"] + 1, 1)
+    assert row == measure.mandate_mc(0.35, trials=2000, seed=1)
+    measure.print_mandate_mc([row])
+    assert "天命之季" in capsys.readouterr().out
+
+
+def test_the_seal_measure_script_summarises_a_mandate_season():
+    measure = _load("measure_seal")
+    line = measure.summary(2, {
+        "emerged": None, "stirs": [{"tier": "險敗", "eligible": 2}] * 3, "duels": [], "takes": 0, "sunk": 0,
+        "holders": {"真人": 0, "假人": 5}, "fresh_ratio": [], "holder_big_wins": [0, 0, 0],
+        "mandate": {"result": "官軍大勝", "shift": 6, "lean": "官軍握著3片、黃巾軍握著1片", "recalls": 2, "ending": "漢室重光"},
+    })
+    assert "天命之爭 官軍大勝（起點偏 +6" in line and "喚回 2" in line and "結局 漢室重光" in line
+    lines = measure.mandate_lines([{"mandate": {"result": "官軍大勝", "ending": "漢室重光", "recalls": 2}, "stirs": [{}] * 3,
+                                    "duels": [{}], "takes": 0}])
+    assert any("官軍大勝 1" in x for x in lines)

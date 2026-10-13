@@ -9,15 +9,20 @@
 --holders N（假人一建好就把前 N 片記到前 N 個假人名下，since_season 0：不然第一季沒有人持有、量不到璽動）。
 --duel-mc：只跑單挑，掃份量比 0.5～3、在場與代打四種組合、放手一搏（成功率 30～70；不搏、每回合搏、一場最多兩次），報 E[g]（單挑係數的期望）。
 每個種子給一份量表用的密鹽（「measure-種子」）：沒有密鹽時碎片的擲骰只看天機與季別，每個種子擲出一樣的結果。
-數字照實報，不為了量表調參數。天命之季（--mandate）是玉璽二。
+數字照實報，不為了量表調參數。
+玉璽二：--mandate-mc 數七片湊齊要幾季（純蒙地卡羅，照 --emerge-rate）；--mandate 把每一季直接蓋成天命之季（開季那一刻；--holders N 片記到
+假人名下、--sunk M 片隱沒），量三場必定璽動、單挑、易手、喚回、天命之爭的起點與結果、結局。
 
 執行：.venv/Scripts/python.exe scripts/measure_seal.py --seeds 1 2 3 [--factions 5 5 5] [--force-stir --holders 7] [--duel-mc]
+      [--mandate --holders 5 --sunk 2] [--mandate-mc --emerge-rate 0.35 0.2]
 輸出只有數字與陣營，不列名號。
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
+import random
 import statistics
 import sys
 import tempfile
@@ -28,14 +33,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from tianxia import battle_instance, database, seal, seal_duel  # noqa: E402
+from tianxia import battle_instance, database, seal, seal_duel, timetable  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content as _load_content  # noqa: E402
 from tianxia.content import profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.models import MOVES, Content  # noqa: E402
-from tianxia.sqlite_world import open_world  # noqa: E402
+from tianxia.sqlite_world import SqliteWorldStore, open_world  # noqa: E402
 from tianxia.world_state import SealDuel, SealSide  # noqa: E402
 
 import sim_season_one  # noqa: E402
@@ -117,8 +122,55 @@ def print_mc(rows: list[dict]) -> None:
               f"{MODE_WORDS.get(r['mode'], r['mode'])}\t{r['eg']:.3f}")
 
 
-def measure_season(content: Content, seed: int, factions, hours: float, force_stir: bool, holders: int, tick: float = 60.0) -> dict:
-    """包 sim_season_one.run_season 跑一季，攔下現世、璽動、單挑的數字。回 summary 用的那幾個鍵。"""
+def mandate_mc(emerge_rate: float, trials: int = 4000, seed: int = 0) -> dict:
+    """天命之季多久來一次（玉璽二）：每季最多現世一片、機率 emerge_rate，數到七片都現世過要幾季（下一季就是天命之季）。
+    只用 random.Random(seed)：同樣的參數結果一樣。回 rate、mean、p10、p50、p90（季）與 cycle（一輪＝湊齊＋天命之季一季）。"""
+    rng = random.Random(seed)
+    counts = []
+    for _ in range(trials):
+        seasons = got = 0
+        while got < 7:
+            seasons += 1
+            got += rng.random() < emerge_rate
+        counts.append(seasons)
+    counts.sort()
+    mean = round(sum(counts) / len(counts), 1)
+
+    def pick(q: float) -> int:
+        return counts[min(len(counts) - 1, int(q * len(counts)))]
+
+    return {"rate": emerge_rate, "mean": mean, "p10": pick(0.1), "p50": pick(0.5), "p90": pick(0.9), "cycle": round(mean + 1, 1)}
+
+
+def print_mandate_mc(rows: list[dict]) -> None:
+    print("天命之季多久來一次（每季現世率 → 七片湊齊要幾季；一輪＝湊齊＋天命之季一季）")
+    for r in rows:
+        print(f"  現世率 {r['rate']:.2f}：平均 {r['mean']} 季（p10 {r['p10']}、中位 {r['p50']}、p90 {r['p90']}），一輪約 {r['cycle']} 季")
+
+
+def mandate_lines(rows: list[dict]) -> list[str]:
+    """天命之季那幾季的分布：天命之爭的結果（「官軍大勝」……「天命未定」「沒開成」）、結局、平均璽動／單挑／易手／喚回。"""
+    got = [r["mandate"] for r in rows if r.get("mandate")]
+    if not got:
+        return []
+    results: dict[str, int] = {}
+    endings: dict[str, int] = {}
+    for m in got:
+        results[m.get("result") or "沒開成"] = results.get(m.get("result") or "沒開成", 0) + 1
+        endings[m.get("ending") or "—"] = endings.get(m.get("ending") or "—", 0) + 1
+    n = len(got)
+    return [
+        f"天命之季 {n} 季：天命之爭 {'、'.join(f'{k} {v}' for k, v in results.items())}；結局 {'、'.join(f'{k} {v}' for k, v in endings.items())}",
+        f"平均每季璽動 {sum(len(r['stirs']) for r in rows) / n:.1f}、單挑 {sum(len(r['duels']) for r in rows) / n:.1f}、"
+        f"易手 {sum(r['takes'] for r in rows) / n:.2f}、喚回 {sum(m.get('recalls', 0) for m in got) / n:.1f}",
+    ]
+
+
+def measure_season(content: Content, seed: int, factions, hours: float, force_stir: bool, holders: int, tick: float = 60.0,
+                   mandate: bool = False, sunk: int = 0) -> dict:
+    """包 sim_season_one.run_season 跑一季，攔下現世、璽動、單挑的數字。回 summary 用的那幾個鍵。
+    mandate：開季那一刻把這一季蓋成天命之季（玉璽二；sorted(content.seal) 第 holders 片起的 sunk 片先改成隱沒），另外記天命之爭的
+    起點偏移、各方握幾片、結果、喚回幾片、結局（row["mandate"]）。"""
     cfg = content.config.seal
     if force_stir:
         cfg.stir_chance, cfg.season_stir_cap = 1.0, 99
@@ -129,7 +181,9 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
     assigned: list[str] = []
     real_settle, real_tier, real_finish, real_resolve = Game._seal_settle, seal.tier_for, seal_duel.finish, seal_duel.resolve
     real_challengers, real_spectators, real_add = Game._seal_challengers, Game._seal_spectators, BotRunner._add_bot
+    real_open, real_shift, real_mandate = SqliteWorldStore.open_season, seal.lean_shift, Game._mandate_settle
     tuning = content.config.battle
+    info: dict = {}
 
     def tier_for(holder_side, winner, margin):
         current["tier"] = real_tier(holder_side, winner, margin)
@@ -147,9 +201,8 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
 
     def settle(self, battle, definition, result):
         current["tier"], current["eligible"] = None, 0
-        armies = {f.id for f in definition.factions}
         # 沒走到挑挑戰者的原因（同 Game._seal_settle 的兩道擋）：兩軍都沒人還能打（保底），或那一片此刻已經不在持有者手上
-        deserted = not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+        deserted = seal.deserted(battle, definition)
         holder_now = self.world.seal_state().registry.shards.get(battle.seal_shard or "")
         real_settle(self, battle, definition, result)
         if battle.seal_shard:
@@ -197,16 +250,46 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
             self.world.mutate(_give)
         return out
 
+    def open_season(self, content_, now):
+        ok = real_open(self, content_, now)
+        if ok:
+            def _stamp(st):
+                reg = seal.filled(st.seal, content)
+                for shard_id in sorted(content.seal)[holders:holders + sunk]:
+                    reg.shards[shard_id].state, reg.shards[shard_id].emerged_round = "sunk", reg.round
+                seal.stamp_mandate(st, content, timetable.default_time(seal.mandate_event(content), content, st.season))
+
+            self.mutate(_stamp)
+        return ok
+
+    def lean_shift(lean, definition, cfg_):
+        info["shift"] = real_shift(lean, definition, cfg_)
+        info["lean"] = seal.lean_text(lean, definition)
+        return info["shift"]
+
+    def mandate_settle(self, winner, record, battle_name):
+        real_mandate(self, winner, record, battle_name)
+        battle = self.world.get_battle()
+        margin = battle.outcome_margin if battle is not None else ""
+        info["result"] = f"{timetable.SIDE_NAMES.get(winner, winner)}{margin}" if winner else "天命未定"
+
     targets = dict(zip(sim_season_one.SIDES, factions))
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "seal.db"
         try:
             # 每個種子一份量表用的密鹽：沒有密鹽時碎片的擲骰只看天機與季別，五個種子擲出一模一樣的現世與璽動；照種子給就各自不同、重跑一樣
             open_world(db_path).mutate(lambda st: setattr(st.seal, "salt", f"measure-{seed}"))
-            with mock.patch.object(seal, "tier_for", tier_for), mock.patch.object(Game, "_seal_settle", settle), \
-                    mock.patch.object(Game, "_seal_challengers", challengers), mock.patch.object(Game, "_seal_spectators", spectators), \
-                    mock.patch.object(seal_duel, "finish", finish), mock.patch.object(seal_duel, "resolve", resolve), \
-                    mock.patch.object(BotRunner, "_add_bot", add_bot):
+            with contextlib.ExitStack() as stack:
+                for target, name, value in (
+                    (seal, "tier_for", tier_for), (Game, "_seal_settle", settle), (Game, "_seal_challengers", challengers),
+                    (Game, "_seal_spectators", spectators), (seal_duel, "finish", finish), (seal_duel, "resolve", resolve),
+                    (BotRunner, "_add_bot", add_bot),
+                ):
+                    stack.enter_context(mock.patch.object(target, name, value))
+                if mandate:  # 天命之季（玉璽二）：開季那一刻蓋章，攔起點偏移與定天命
+                    stack.enter_context(mock.patch.object(SqliteWorldStore, "open_season", open_season))
+                    stack.enter_context(mock.patch.object(seal, "lean_shift", lean_shift))
+                    stack.enter_context(mock.patch.object(Game, "_mandate_settle", mandate_settle))
                 result = sim_season_one.run_season(content, db_path, seed, targets, hours, tick)
             world, characters = open_world(db_path), open_characters(db_path)
             view = world.seal_state()
@@ -216,6 +299,10 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
                     row["holders"]["假人" if state is not None and state.player.bot is not None else "真人"] += 1
             row["sunk"] = sum(1 for e in view.registry.history if e.kind == "sink")
             row["ending"] = result["ending"]
+            if mandate:
+                info["recalls"] = sum(1 for e in view.registry.history if e.kind == "recall")
+                info["ending"] = result["ending"]
+                row["mandate"] = info
         finally:
             database.close_all()  # 不先關連線，Windows 刪不掉暫存資料夾
     return row
@@ -242,8 +329,13 @@ def summary(seed: int, row: dict) -> str:
     fresh_text = f"新角色份量比 {'、'.join(f'{x:g}' for x in fresh)}" if fresh else "新角色份量比 無"
     wins = row.get("holder_big_wins") or []
     hold = row.get("holders", {})
-    return (f"種子 {seed}：{head}　{stir}　{duel}　易手 {row.get('takes', 0)}　隱沒 {row.get('sunk', 0)}　"
+    text = (f"種子 {seed}：{head}　{stir}　{duel}　易手 {row.get('takes', 0)}　隱沒 {row.get('sunk', 0)}　"
             f"真人 {hold.get('真人', 0)}／假人 {hold.get('假人', 0)}　{fresh_text}　持有者那一方大勝 {sum(wins)}／{len(wins)}")
+    m = row.get("mandate")
+    if m:
+        text += (f"　天命之爭 {m.get('result') or '沒開成'}（起點偏 {m.get('shift', 0):+d}，{m.get('lean', '—')}）"
+                 f"　喚回 {m.get('recalls', 0)}　結局 {m.get('ending') or '—'}")
+    return text
 
 
 def round_up(rows: list[dict], content: Content, emerge_default: float = 0.35) -> list[str]:
@@ -288,21 +380,31 @@ def main() -> None:
     parser.add_argument("--holders", type=int, default=0)
     parser.add_argument("--duel-mc", action="store_true")
     parser.add_argument("--trials", type=int, default=400)
+    parser.add_argument("--mandate", action="store_true")
+    parser.add_argument("--sunk", type=int, default=0)
+    parser.add_argument("--mandate-mc", action="store_true")
+    parser.add_argument("--emerge-rate", type=float, nargs="+", default=[0.35, 0.2])
     args = parser.parse_args()
     content = load_content(ROOT / "content", args.profile)
     print(profile_line(content, None if args.profile == "none" else args.profile), flush=True)
     if args.duel_mc:
         print_mc(duel_mc(content, ratios=[0.5, 1.0, 1.5, 2.0, 3.0], trials=args.trials, rates=[30, 50, 70], modes=list(MODES)))
         return
+    if args.mandate_mc:  # 天命之季多久來一次（玉璽二）
+        print_mandate_mc([mandate_mc(r) for r in args.emerge_rate])
+        return
     rows = []
     for seed in args.seeds:
         content = load_content(ROOT / "content", args.profile)
         if args.decisive_week is not None:
             content.config.decisive_from_week = args.decisive_week
-        row = measure_season(content, seed, args.factions, args.hours, args.force_stir, args.holders, args.tick)
+        row = measure_season(content, seed, args.factions, args.hours, args.force_stir, args.holders, args.tick,
+                             mandate=args.mandate, sunk=args.sunk)
         rows.append(row)
         print(summary(seed, row), flush=True)
     for line in round_up(rows, load_content(ROOT / "content", args.profile)):  # 換算照正式的機率與上限（不吃 --force-stir）
+        print(line, flush=True)
+    for line in mandate_lines(rows):  # 天命之季那幾季（--mandate，玉璽二）
         print(line, flush=True)
 
 
