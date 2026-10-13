@@ -164,7 +164,61 @@ def _forge(state: GameState, content: Content, world: WorldStateStore, slot: str
          "tier_word": equipment.TIER_WORDS[mats[mid].tier], "count": n}
         for mid, n in smithing.held(state, content)
     ]
-    return {"kinds": kinds, "kind": kind, "note": note, "materials": materials}
+    return {"kinds": kinds, "kind": kind, "note": note, "materials": materials, "line": smith_line(state, content, world, kind)}
+
+
+SHORT_CELL = "工錢不夠，還差 {n} 兩"  # 待 joy 潤（2.2：主料格灰掉寫的）
+ONLY_ONE = "只剩一個，已當主料"  # 待 joy 潤
+GO_TEXT = "開爐・工錢 {price} 兩"  # 待 joy 潤（2.2：開爐鈕）
+
+
+def smith_line(state: GameState, content: Content, world: WorldStateStore, kind: str, main: str | None = None,
+               aux: str | None = None) -> dict:
+    """這一爐會怎樣（2.2、6.3）：素材格每一格放不放得進去（點一下放的是主料還是輔料：主料空著先放主料，否則放輔料；兩格都滿了換掉輔料）、
+    不行的原因；兩格都放好時寫種類、屬性、階、工錢、三個機率（smithing.forge_odds，同開爐鈕）、最多兩句原因、自己鑄譜上打中過的那一句
+    （SOLVED_HEAD／DIVINE_HEAD；別人打中的、沒打中過的都不寫）、打得成沒有。客戶端送的 main、aux 照現在的背包修正（手上沒有的、
+    同一種只剩一個的拿掉）。只讀。"""
+    if kind not in WEAPON_KINDS and kind != smithing.ARMOR_KIND:
+        return {"kind": kind, "main": None, "aux": None, "rack_full": None, "cells": [], "ready": False}
+    held = smithing.held(state, content)
+    counts = dict(held)
+    main = main if main in counts else None
+    aux = aux if main is not None and aux in counts and (aux != main or counts[aux] >= 2) else None
+    slot = smithing.slot_of(kind)
+    full = equipment.rack_full(state, content, slot)
+    silver = state.player.stats.get("silver", 0)
+    cells = []
+    for mid, n in held:
+        to = "main" if main is None else "aux"
+        if full:
+            why = equipment.RACK_FULL
+        elif to == "main":
+            short = smithing.price(content, content.materials[mid].tier, slot) - silver
+            why = SHORT_CELL.format(n=short) if short > 0 else None
+        elif mid == main and n < 2:
+            why = ONLY_ONE
+        else:
+            why = smithing.forge_problem(state, content, kind, main, mid)
+        cells.append({"id": mid, "to": to, "ok": why is None, "why": why, "main": mid == main, "aux": mid == aux})
+    out = {"kind": kind, "main": main, "aux": aux, "rack_full": equipment.RACK_FULL if full else None, "cells": cells, "ready": False}
+    if main is None or aux is None:
+        return out
+    tianji = world.read().tianji
+    tier = smithing.tier_of(content, main)
+    known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
+    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
+    divine = recipe is not None and recipe.divine
+    odds = None if divine else smithing.forge_odds(state, content, world, kind, main, aux)
+    price = smithing.price(content, tier, slot)
+    head = (smithing.DIVINE_HEAD if divine else smithing.SOLVED_HEAD).format(name=known).removeprefix(" → ") if known else ""
+    out.update(
+        ready=True, kind_label=smithing.noun_label(kind), attribute=smithing.attribute_with(content, tianji, kind, main, aux),
+        tier=equipment.TIER_WORDS[tier], price=price, divine=divine,
+        odds=[{"q": q, "pct": round(w)} for q, w in odds.odds.items()] if odds is not None else None,
+        reasons=list(odds.reasons) if odds is not None else [], head=head,
+        problem=smithing.forge_problem(state, content, kind, main, aux), go=GO_TEXT.format(price=price),
+    )
+    return out
 
 
 def smith_view(state: GameState, content: Content, world: WorldStateStore) -> dict:

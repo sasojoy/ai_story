@@ -191,3 +191,61 @@ def test_the_switch_off_leaves_the_old_menu(content, world):
     view_on = server.main_view(on)
     assert "shop" not in view_off and "shop" in view_on
     assert [o["id"] for o in view_on["options"]] == [o["id"] for o in view_off["options"]]
+
+
+# ── Task 3：這一爐會怎樣 ──
+
+
+def test_cells_say_why_a_material_cannot_go_in(content, world):
+    game = _smith(content, world, silver=30)
+    line = game.smith_line("劍")
+    cells = {c["id"]: c for c in line["cells"]}
+    assert cells["gang_1"]["ok"] and cells["gang_1"]["to"] == "main"
+    assert not cells["gang_2"]["ok"] and cells["gang_2"]["why"] == shopview.SHORT_CELL.format(n=30)  # 二階工錢 60
+    game.state.player.materials["kuai_1"] = 1
+    line = game.smith_line("劍", "kuai_1")
+    cells = {c["id"]: c for c in line["cells"]}
+    assert cells["kuai_1"]["main"] and not cells["kuai_1"]["ok"] and cells["kuai_1"]["why"] == shopview.ONLY_ONE
+    assert cells["gang_1"]["ok"] and cells["gang_1"]["to"] == "aux"
+
+
+def test_a_ready_pot_shows_the_same_odds_as_the_go_button(content, world):
+    from tianxia import fusion
+
+    game = _smith(content, world)
+    line = game.smith_line("劍", "gang_1", "kuai_1")
+    assert line["ready"] and line["problem"] is None and line["price"] == 20 and line["tier"] == "一階"
+    odds = smithing.forge_odds(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert "、".join(f"{o['q']} {o['pct']}%" for o in line["odds"] if o["pct"] > 0) in fusion.quality_odds_text(odds)
+    option = smithing.go_option(game.state, content, world, "劍", "gang_1", "kuai_1")
+    assert fusion.quality_odds_text(odds) in option.label and line["head"] == ""
+
+
+def test_the_line_never_names_a_secret_your_book_has_not_solved(content, world):
+    from test_forge_secrets import BLADE
+
+    content.forge_secrets = {BLADE.id: BLADE.model_copy(deep=True)}
+    content.config.forge_secrets.per_season = {"weapon:1": 1}
+    game = _smith(content, world)
+    assert game.smith_line("劍", "gang_1", "kuai_1")["head"] == ""
+    smithing.forge(game.state, content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))  # 打中一次：記進自己的鑄譜
+    assert game.smith_line("劍", "gang_1", "kuai_1")["head"] == smithing.SOLVED_HEAD.format(name=BLADE.name).removeprefix(" → ")
+
+
+def test_a_full_rack_blocks_every_cell_and_says_so_once(content, world):
+    from tianxia.state import Weapon
+
+    game = _smith(content, world)
+    p = game.state.player
+    p.weapon = Weapon(id="兵:99", name="手上刃", kind="劍", attribute="柔", tier=1, quality="下品")
+    p.rack = [Weapon(id=f"兵:{i}", name=f"庫刃{i}", kind="刀", attribute="剛", tier=1, quality="下品") for i in range(content.config.weapons.rack_cap)]
+    line = game.smith_line("劍")
+    assert line["rack_full"] == equipment.RACK_FULL and not any(c["ok"] for c in line["cells"])
+
+
+def test_bad_input_is_trimmed_to_what_you_hold(content, world):
+    game = _smith(content, world)
+    line = game.smith_line("劍", "nope", "kuai_1")
+    assert (line["main"], line["aux"], line["ready"]) == (None, None, False)
+    assert game.smith_line("不是兵器")["cells"] == []
+    assert game.shop_view()["forge"]["line"] == game.smith_line(game.shop_view()["forge"]["kind"])

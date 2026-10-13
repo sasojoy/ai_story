@@ -2934,6 +2934,10 @@ class Game:
             return None
         return shopview.smith_view(s, c, self.world)
 
+    def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
+        """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
+        return shopview.smith_line(self.state, self.content, self.world, str(kind), main or None, aux or None)
+
     def wield_weapon(self, item_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
         坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵

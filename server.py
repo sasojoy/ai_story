@@ -1733,6 +1733,14 @@ def api_forge_line(request: Request, body: dict = Body(default={})):
     return look(game, lambda g: {"line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other)})
 
 
+@app.post("/api/smith_line")
+def api_smith_line(request: Request, body: dict = Body(default={})):
+    """店面打造那一頁：爐裡放了什麼就問這一爐會怎樣（不算行動、不存檔；店面獨立介面設計 6.3）。參數是客戶端寫的，一律轉成字串。"""
+    game = _game(request)
+    kind, main, aux = (str(body.get(key) or "") for key in ("kind", "main", "aux"))
+    return look(game, lambda g: g.smith_line(kind, main or None, aux or None))
+
+
 @app.get("/api/reports")
 def api_reports(request: Request, id: int | None = None):
     game = _game(request)
