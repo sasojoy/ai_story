@@ -1318,11 +1318,16 @@ _DIGITS = re.compile(r"[0-9０-９]")
 
 def clean_story(raw: str, name: str) -> str:
     """模型寫的一版劇情整理成能播的一句：轉繁體、去掉換行與 markdown、引號；有阿拉伯數字（數字只能是引擎的）、太長、
-    空的都不用（回空字串）。不是以名號開頭的補上名號，句尾補句號。"""
+    空的都不用（回空字串）。用「你」「妳」的也不用（FB-183：進天下大事與雙方的戰報，要第三人稱；名號裡本來就有的不算）。
+    不是以名號開頭的補上名號，名號後面接冒號的換成逗號，句尾補句號。"""
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
     if not text or len(text) > STORY_LIMIT or _DIGITS.search(text):
         return ""
+    if any(ch in (text.replace(name, "") if name else text) for ch in "你妳"):
+        return ""
+    if name and text.startswith(name) and text[len(name):len(name) + 1] in ("：", ":"):
+        text = name + "，" + text[len(name) + 1:]
     if not text.startswith(name):
         text = name + text
     return text if text[-1] in "。！？…" else text + "。"
@@ -1355,7 +1360,7 @@ def assess_gamble(
             f"你是{setting}判定系統，也是說書人。第一件事：評估玩家描述的行動在{place}上合理的成功機率，"
             "給出 0~100 的整數 success_rate 與一句話 reasoning（只根據行動本身的合理性，荒唐的行動就給低分）。"
             "第二件事：替這個行動寫兩版結果，win 是成功的那一版、lose 是失敗的那一版，各一句、40 字以內、繁體中文，"
-            f"以「{who}」開頭。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
+            f"以「{who}」開頭、用第三人稱寫（不用「你」，名號後面不接冒號）。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
             "不要寫任何數字、不要寫戰局推進多少或扣多少氣血，也不要替玩家決定最後的勝負以外的事。"
             + gender.prompt_line(sex)
         )},
