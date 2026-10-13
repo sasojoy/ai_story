@@ -1313,3 +1313,30 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .dot.rou { background: var(--rou); }
 .shop-layer .dot.man { background: var(--man); }
 @media (prefers-reduced-motion: reduce) { .shop-layer .furnace.firing .flame svg { animation: none; } }
+/* 開爐與出爐（2.3）：麻布的光色、出爐卡、首位發現的朱印；減少動態效果的人不震動 */
+.reveal-layer { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: rgba(12, 8, 5, 0.72); animation: fade 0.2s; }
+.bundle { width: 180px; height: 150px; border-radius: 40% 40% 30% 30%; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  color: #3a2a1e; font: 600 16px var(--serif); background: repeating-linear-gradient(45deg, #cdb894 0 6px, #c2ab84 6px 12px); }
+.bundle small { font: 12px var(--sans); }
+.bundle.g-cyan { box-shadow: 0 0 26px 8px rgba(80, 200, 220, 0.75); }
+.bundle.g-gold { box-shadow: 0 0 30px 10px rgba(242, 196, 106, 0.85); }
+.bundle.g-purple { box-shadow: 0 0 30px 10px rgba(170, 110, 230, 0.85); }
+.bundle.g-red { box-shadow: 0 0 30px 10px rgba(220, 70, 50, 0.85); }
+.bundle.g-redgold { box-shadow: 0 0 36px 14px rgba(240, 120, 40, 0.9), 0 0 10px 2px rgba(255, 220, 120, 0.9) inset; animation: shiver 0.35s ease-in-out infinite; }
+@keyframes shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-1deg); } 75% { transform: translateX(2px) rotate(1deg); } }
+.tapme { color: #e8d6ad; font-size: 13px; margin: 0; }
+.forge-card { position: relative; width: min(320px, 100%); padding: 18px 16px 14px; border-radius: 14px; background: var(--paper); color: var(--ink); text-align: center; display: grid; gap: 6px; }
+.forge-card.g-cyan { box-shadow: 0 0 18px 3px rgba(80, 200, 220, 0.6); }
+.forge-card.g-gold { box-shadow: 0 0 22px 4px rgba(242, 196, 106, 0.7); }
+.forge-card.g-purple { box-shadow: 0 0 22px 4px rgba(170, 110, 230, 0.7); }
+.forge-card.g-red, .forge-card.g-redgold { box-shadow: 0 0 24px 5px rgba(230, 100, 50, 0.75); }
+.forge-card .q { font-size: 12px; color: var(--accent); letter-spacing: 2px; }
+.forge-card h4 { margin: 0; font: 600 22px var(--serif); letter-spacing: 3px; }
+.forge-card .meta, .forge-card .fit { font-size: 13px; color: var(--ink-2); margin: 0; }
+.forge-card .stat { font: 600 15px var(--sans); margin: 0; }
+.forge-card .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.forge-card .btns.one { grid-template-columns: 1fr; }
+.forge-card .naming.divine { text-align: left; }
+.first-seal { position: absolute; top: -12px; right: -8px; transform: rotate(8deg); padding: 6px 8px; border: 2px solid var(--accent); border-radius: 6px; color: var(--accent);
+  background: var(--paper); font: 600 14px var(--serif); letter-spacing: 2px; }
+@media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } .reveal-layer { animation: none; } }

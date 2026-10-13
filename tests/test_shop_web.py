@@ -167,3 +167,77 @@ def test_a_ready_pot_shows_the_odds_the_head_and_a_live_go_button(content, world
     html = _forge_page(m, "H.S.shopPot = { slot: 'weapon', kind: '劍', main: 'gang_1', aux: 'kuai_1' }; H.S.shopLine = H.S.next; H.render(); return T.els.app.innerHTML;",
                        S={"next": line})
     assert line["go"] in html and 'class="odds"' in html and 'data-act="shop-go"' in html and 'data-act="shop-go" disabled' not in html
+
+
+# ── Task 7：開爐與出爐 ──
+
+FORGED = {"id": "兵:1", "slot": "weapon", "name": "試鍛劍", "grade": "一階上品", "kind": "劍", "attribute": "陽", "value": "加成 +9%",
+          "fit": "配得上你的武學", "glow": "gold", "first": False, "where": "worn", "divine": None}
+
+
+def test_forging_posts_the_pot_and_wraps_the_result_in_cloth(m):
+    out = _forge_page(m, """
+      return (async () => {
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_1", aux: "kuai_1" };
+        await H.smithForge();
+        return { call: T.calls.find((c) => c[0] === "/api/do/smith_forge"), html: T.els.app.innerHTML, pot: H.S.shopPot };
+      })();""", responses={"/api/do/smith_forge": {"main": m, "message": "", "forged": FORGED}})
+    assert out["call"][1] == {"kind": "劍", "main": "gang_1", "aux": "kuai_1"}
+    assert 'class="bundle g-gold"' in out["html"] and "試鍛劍" not in out["html"]  # 先包著：點開才看到名字
+    assert (out["pot"]["main"], out["pot"]["aux"]) == (None, None)
+
+
+@pytest.mark.parametrize("glow", ["none", "cyan", "gold", "purple", "red", "redgold"])
+def test_each_result_has_its_own_light(m, glow):
+    html = run(m, "H.S.shopReveal = H.S.next; H.render(); return T.els.app.innerHTML;", S={"next": {**FORGED, "glow": glow}})
+    assert f'class="bundle g-{glow}"' in html
+
+
+def test_unwrapping_shows_the_card_with_its_buttons(m):
+    html = run(m, "H.S.shopReveal = H.S.next; H.S.shopOpened = true; H.render(); return T.els.app.innerHTML;", S={"next": FORGED})
+    assert "試鍛劍" in html and "一階上品" in html and "加成 +9%" in html and 'data-act="shop-keep"' in html and "收下" in html
+    stored = run(m, "H.S.shopReveal = H.S.next; H.S.shopOpened = true; H.render(); return T.els.app.innerHTML;",
+                 S={"next": {**FORGED, "where": "rack"}})
+    assert 'data-act="shop-wield" data-id="兵:1"' in stored and "留在裝備庫" in stored
+
+
+def test_a_first_find_carries_the_seal_and_an_original_carries_the_naming_form(m):
+    shop = json.loads(json.dumps(m["shop"]))
+    shop["pending"] = {"兵:1": "墜星劍"}
+    html = run({**m, "shop": shop}, "H.S.shopReveal = H.S.next; H.S.shopOpened = true; H.render(); return T.els.app.innerHTML;",
+               S={"next": {**FORGED, "first": True, "glow": "redgold", "divine": "墜星劍"}})
+    assert "首位發現" in html and 'id="shop-name-divine-兵:1"' in html and "沿用譜名【墜星劍】" in html
+
+
+def test_a_refused_forge_keeps_the_pot(m):
+    out = _forge_page(m, """
+      return (async () => {
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_2", aux: "gang_2" };
+        await H.smithForge();
+        return { reveal: H.S.shopReveal, pot: H.S.shopPot, toast: T.els.toast.textContent };
+      })();""", responses={"/api/do/smith_forge": {"main": m, "message": "（玄鋼骨不夠（要 2 個）。）", "forged": None},
+                           "/api/smith_line": m["shop"]["forge"]["line"]})
+    assert out["reveal"] is None and out["pot"]["kind"] == "劍" and "玄鋼骨不夠" in out["toast"]
+
+
+def test_reduced_motion_skips_the_fire(m):
+    out = _forge_page(m, """
+      return (async () => {
+        T.ctx.window.matchMedia = () => ({ matches: true });
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_1", aux: "kuai_1" };
+        const seen = [];
+        const p = H.smithForge(); seen.push(H.S.shopFiring); await p;
+        return seen;
+      })();""", responses={"/api/do/smith_forge": {"main": m, "message": "", "forged": FORGED}})
+    assert out == [False]
+
+
+def test_the_fire_runs_without_reduced_motion(m):
+    out = _forge_page(m, """
+      return (async () => {
+        H.S.shopPot = { slot: "weapon", kind: "劍", main: "gang_1", aux: "kuai_1" };
+        const seen = [];
+        const p = H.smithForge(); seen.push(H.S.shopFiring); await p; seen.push(H.S.shopFiring);
+        return seen;
+      })();""", responses={"/api/do/smith_forge": {"main": m, "message": "", "forged": FORGED}})
+    assert out == [True, False]

@@ -2667,9 +2667,60 @@
       renderShop();
     } catch (e) { /* api() 提示過 */ }
   }
-  // 開爐與出爐（Task 7 換成正式的）
-  function revealHtml() { return ""; }
-  async function smithForge() {}
+  // ── 開爐與出爐（2.3）：品質在按下開爐那一刻由規則擲好，爐火與光只是演出 ──
+  const FIRE_MS = 900; // 爐火竄一下的長度（等回應的同時跑；減少動態效果的人不等）
+  const reduceMotion = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const GLOW_HINT = { none: "布縫裡沒透出光", cyan: "布縫裡透出青光", gold: "布縫裡透出金光", purple: "布縫裡透出紫光", red: "布縫裡透出紅光", redgold: "布縫裡透出赤金光" }; // 待 joy 潤
+
+  async function smithForge() {
+    const shop = S.main && S.main.shop;
+    if (!shop) return;
+    const pot = shopPotNow(shop);
+    if (!pot.main || !pot.aux) return;
+    await busy(async () => {
+      S.shopFiring = !reduceMotion();
+      if (S.shopFiring) renderShop();
+      const fire = S.shopFiring ? new Promise((ok) => setTimeout(ok, FIRE_MS)) : null;
+      try {
+        const r = await api("/api/do/smith_forge", { kind: pot.kind, main: pot.main, aux: pot.aux });
+        if (fire) await fire;
+        if (r.forged) {
+          S.shopReveal = r.forged; S.shopOpened = false; // 鐵匠遞出一包麻布（掌櫃那一句在伺服器換成遞布那一句）
+          S.shopPot = { ...pot, main: null, aux: null }; S.shopLine = null;
+        }
+        S.shopFiring = false;
+        setMain(r.main);
+        render();
+        if (!r.forged) { // 被拒絕（2.3）：不遞布，原因用提示泡泡講，兩格照放著，再問一次這一爐（料可能在另一個分頁用掉了）
+          const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          if (text) toast(text);
+          updateSmithLine();
+        }
+      } finally { S.shopFiring = false; }
+    }, WAIT_LINES.forge);
+  }
+
+  // 麻布與出爐卡（2.3）：先包著（光色照結果），點開是卡——名字、階品、種類屬性、加成或減損、配不配得上；首位發現多一個朱印；
+  // 還等著定名的原品多一張定名表單（同修練頁那一張）；底下的鈕照那件去了哪裡：進了裝備庫是「換上」與「留在裝備庫」，在手上只有「收下」。
+  // 名字照店面那一份（定了名之後是新名字）。這一段的變數不用單字母 x（見 shelfHtml）
+  function revealHtml(card, shop) {
+    if (!S.shopOpened) {
+      return `<div class="reveal-layer"><button class="bundle g-${esc(card.glow)}" data-act="shop-unwrap" aria-label="點開麻布"><span>裹著麻布</span><small>${esc(GLOW_HINT[card.glow] || "")}</small></button><p class="tapme">點開看看</p></div>`;
+    }
+    const rows = [...(shop.rack.rows || []), ...(shop.worn.item ? [shop.worn.item] : [])];
+    const now = rows.find((row) => row.id === card.id);
+    const pending = (shop.pending || {})[card.id];
+    const btns = card.where === "rack"
+      ? `<button class="btn primary" data-act="shop-wield" data-id="${esc(card.id)}">換上</button><button class="btn" data-act="shop-keep">留在裝備庫</button>`
+      : '<button class="btn primary" data-act="shop-keep">收下</button>';
+    return `<div class="reveal-layer"><article class="forge-card g-${esc(card.glow)}">
+        ${card.first ? '<span class="first-seal">首位發現</span>' : ""}
+        <span class="q">${esc(card.grade)}</span><h4>${esc((now && now.name) || card.name)}</h4>
+        <p class="meta">${esc(card.kind)}・屬${esc(card.attribute)}</p>
+        ${card.value ? `<p class="stat">${esc(card.value)}</p>` : ""}${card.fit ? `<p class="fit">${esc(card.fit)}</p>` : ""}
+        ${pending ? divineFormHtml(card.id, pending, true) : ""}
+        <div class="btns${card.where === "rack" ? "" : " one"}">${btns}</div></article></div>`;
+  }
 
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
     const rows = manualRows(which), b = BOOKS[which];
@@ -4126,6 +4177,8 @@
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
         case "shop-go": await smithForge(); break;
+        case "shop-unwrap": S.shopOpened = true; renderShop(); break; // 點開麻布（2.3）
+        case "shop-keep": S.shopReveal = null; S.shopOpened = false; renderShop(); break; // 收下、留在裝備庫：收起出爐卡
         case "shop-wield":
           await shopMx("wield", { weapon: el.dataset.id });
           if (S.shopReveal && S.shopReveal.id === el.dataset.id) { S.shopReveal = null; S.shopOpened = false; renderShop(); } // 出爐卡上的「換上」：換好了卡收起
