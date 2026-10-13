@@ -57,10 +57,23 @@ def _tags(battle, definition, name):
     return [o.tag for o in bi.options_for(battle, definition, name)]
 
 
-# ── 一幕只搏一次 ──────────────────────────────────────────
+# ── 放手一搏的次數上限（per_act；預設 0 ＝ 不限）──────────────
+
+
+def test_no_cooldown_by_default_so_a_fighter_can_gamble_every_round(gamble):
+    """joy 2026-10-13「放手一搏取消冷卻，每回合都可以用」，推翻 2026-10-10 的一幕一次。
+    預設 FreeTextGamble.per_act 是 0（不限），所以同一幕的下一回合照舊搏得了。"""
+    assert gamble.free_text_gamble.per_act == 0
+    battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
+    _round(battle, gamble, {"甲": ("夜襲敵營", 50), "乙": "固守"})
+    assert battle.act_index == 0  # 還在同一幕（一幕兩回合）
+    assert "guan_reckless" in _tags(battle, gamble, "甲")
+    _round(battle, gamble, {"甲": ("再劫糧道", 50), "乙": "固守"})
+    assert len(battle.participants["甲"].gambles) == 2  # 同一幕連搏兩回合
 
 
 def test_one_gamble_per_act_then_only_the_three_moves_until_the_next_act(gamble):
+    gamble.free_text_gamble.per_act = 1  # 明寫上限才有冷卻（預設是不限）
     battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
     assert "guan_reckless" in _tags(battle, gamble, "甲")
     _round(battle, gamble, {"甲": ("夜襲敵營", 50), "乙": "固守"})

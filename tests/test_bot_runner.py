@@ -7,7 +7,7 @@ import pytest
 import run_bots
 from test_bot import armed
 from tianxia import bot_policy, bot_runner, database, fusion, library, naming, server_bots, team
-from tianxia.battle_instance import BattleParticipant
+from tianxia.battle_instance import BattleParticipant, BattleRound
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game
@@ -489,6 +489,53 @@ def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_d
     content.battles["t1"].third = ThirdParty(faction="haoqiang", trend="kou")
     world.start_battle(content.battles["t1"], clock[0])
     assert _tick_cleanly(runner).online == 3  # 有第三方：豪強的假人也趕來
+
+
+def test_a_bot_the_round_is_waiting_for_acts_on_this_very_tick(runner, world, content, clock, monkeypatch):
+    """決戰的回合在等名單上的假人時，這一輪一定讓他出手，不照平常的步調擲骰。
+
+    joy 2026-10-13 回報「玩家都已經選擇完行動，卻還是要等滿五分鐘」：回合要每個還在場的人都送出才結算
+    （battle_instance.round_is_complete），而假人平常一輪只有 act_chance（約 0.18）的機率動一下，
+    所以回合一定拖到 round_seconds 逾時才由 fill_timed_out_actions 代選。招式照舊由 bot_policy 挑。"""
+    monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
+    monkeypatch.setattr(server_bots, "act_chance", lambda profile, config: 0.0)  # 平常這一輪絕對不會動
+    turns: list[str] = []
+    monkeypatch.setattr(
+        bot_policy, "take_turn",
+        lambda game, profile, rng, slot=None: turns.append(game.state.player.name),
+    )
+    content.config.bots_min_per_faction = 1
+    _tick_cleanly(runner)
+    characters = open_characters()
+    for state in characters.all(bots_only=True):
+        state.player.faction = state.player.bot.faction
+        characters.save(state)
+    turns.clear()
+    _tick_cleanly(runner)
+    assert turns == []  # 沒有戰鬥、act_chance 0：誰都不動
+
+    world.start_battle(content.battles["t1"], clock[0])
+    bots = [(s.player.name, s.player.bot.faction) for s in _bots()]
+
+    def seat(battle):
+        battle.phase = "active"
+        battle.round = BattleRound(opened_real=clock[0])
+        for name, faction in bots:
+            battle.participants[name] = BattleParticipant(name=name, faction=faction, neili=10, neili_cap=10)
+
+    world.mutate_battle(seat)
+    turns.clear()
+    _tick_cleanly(runner)
+    assert sorted(turns) == sorted(name for name, _ in bots)  # 回合在等他們：兩個都插隊出手
+
+    def already_sent(battle):
+        for name, faction in bots:
+            battle.round.pending_actions[name] = f"{faction}_hold"
+
+    world.mutate_battle(already_sent)
+    turns.clear()
+    _tick_cleanly(runner)
+    assert turns == []  # 送出過了就回到平常的步調
 
 
 def test_run_bots_keeps_going_after_a_bad_tick_and_prints_no_names(monkeypatch, capsys, caplog):

@@ -92,6 +92,7 @@ class BotRunner:
             report.failed += 1
         season = self.world.get_season_number()
         battle = self._battle_sides()
+        owes = self._battle_owes()
         for state in self.characters.all(bots_only=True):
             profile = state.player.bot
             if profile is None or not server_bots.active(profile, season):
@@ -99,7 +100,14 @@ class BotRunner:
             if not self._online(profile, state, now, battle):
                 continue
             report.online += 1
-            if self.rng.random() >= server_bots.act_chance(profile, self.content.config):
+            # 決戰的回合正在等這個假人：這一輪一定讓他出手，不照平常的步調擲骰。
+            # 平常每個在線假人一輪只有 act_chance（20÷60～20÷180，約 0.18）的機率動一下，七個在線假人每 20 秒
+            # 總共才動一個；而回合要名單上每個還在場的人都送出才結算（battle_instance.round_is_complete），
+            # 所以回合實務上一定拖到 round_seconds（300 秒）逾時才由 fill_timed_out_actions 代選。真人看到的是
+            # 「大家都選完了卻還要等滿五分鐘」（joy 2026-10-13；10-08 那場五個回合全部剛好 300 秒也是這個原因）。
+            # 招式照舊由 bot_policy 挑（設計：伺服器假人是一般參戰者，不走 battle_instance.bot_choose_action）。
+            owes_round = state.player.name in owes
+            if not owes_round and self.rng.random() >= server_bots.act_chance(profile, self.content.config):
                 continue
             slot = bot_policy.NamingSlot(open=self._naming_open())
             try:
@@ -272,6 +280,17 @@ class BotRunner:
         return (
             state.player.faction in sides and state.player.name not in out
             and server_bots.attends_battle(profile, key)
+        )
+
+    def _battle_owes(self) -> frozenset[str]:
+        """進行中的全服戰鬥這一回合還在等誰出手：還在場（沒出局、沒離開大區）而且還沒送出行動的參戰者名號。
+        集結中、已經收場、沒有戰鬥時是空的。只用來決定「這一輪要不要讓這個假人動」，不改任何狀態。"""
+        battle = self.world.get_battle()
+        if battle is None or battle.phase != "active":
+            return frozenset()
+        return frozenset(
+            p.name for p in battle.participants.values()
+            if not p.eliminated and not p.away and p.name not in battle.round.pending_actions
         )
 
     def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:

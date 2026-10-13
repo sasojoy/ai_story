@@ -2312,8 +2312,9 @@ class FreeTextGamble(_Strict):
     failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
     side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少（正式內容 content/battles.json 2026-10-10 從 5 調成 4，見 BattleTuning.push_max）
     # 放手一搏不再「誰手快誰刷」（Joy 2026-10-10 決戰試玩回饋第 3 點：「跟從預設選項的玩家現在毫無存在感」）：
-    # 一個人每一幕最多放手一搏 per_act 次（一場三幕最多三次），其餘回合出固定招
-    per_act: int = Field(default=1, ge=1)
+    # 一個人每一幕最多放手一搏 per_act 次；**0 ＝ 不限，每回合都能搏**（joy 2026-10-13「放手一搏取消冷卻」，
+    # 推翻 2026-10-10 的一幕一次；留著這個欄位是為了之後想再上限制時不用改程式）
+    per_act: int = Field(default=0, ge=0)
 
 
 class ThirdParty(_Strict):

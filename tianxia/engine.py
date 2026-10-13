@@ -4061,7 +4061,7 @@ class Game:
             s.player.showdowns += 1
             if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
                 fame += tuning.highlight_fame
-                lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
+                lines.append("你那一搏成了這一仗最令人印象深刻的一幕，江湖上傳開了。")
             top = battle_instance.top_merit(battle, tuning, me.faction) if me.faction in sides else None
             if top is not None and top.name == me.name:  # 這一邊的首功
                 s.player.top_merits += 1

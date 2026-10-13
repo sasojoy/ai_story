@@ -7696,7 +7696,7 @@ def test_the_most_dramatic_gamble_of_a_battle_goes_round_the_world_and_earns_fam
     top = content.config.battle.top_fame  # 官軍只有他一個，也是首功（個人戰功）：名望合起來寫一筆
     assert game.state.player.stats["fame"] == fame + 1 + top
     entry = next(e for e in game.state.journal if e.title.startswith("測試決戰・"))
-    assert f"名望 +{1 + top}" in entry.changes and "你那一搏成了這一仗最有戲的一幕，江湖上傳開了。" in entry.lines
+    assert f"名望 +{1 + top}" in entry.changes and "你那一搏成了這一仗最令人印象深刻的一幕，江湖上傳開了。" in entry.lines
 
 
 def _paid_showdown(content, game, foe_rounds=3):
@@ -7784,6 +7784,7 @@ def test_a_gamble_naming_an_enemy_tells_the_model_who_it_is(content, game):
 
 def test_the_battle_scene_says_who_is_after_you_and_what_you_can_do(content, game):
     definition = _install_battle_def_with_gamble(content)
+    definition.free_text_gamble.per_act = 1  # 「下一幕才能再搏」只在真的有上限時才寫（預設 0 ＝ 不限）
     after_muster = _join_and_open(content, game, definition)
 
     def spot(b):

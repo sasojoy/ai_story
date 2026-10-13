@@ -408,7 +408,7 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     if calendar.season_one_on(season, content) and echo.fame_per > 0:
         lines.append(f"你首創的武學或意境，別人照著合出同一門：每多一個人 +{echo.fame_per}，一門最多算 {echo.cap} 個人。")
     if cfg.battle.highlight_fame > 0:
-        lines.append(f"決戰裡放手一搏，成了、而且是那一仗最有戲的一幕：+{cfg.battle.highlight_fame}。")
+        lines.append(f"決戰裡放手一搏，成了、而且是那一仗最令人印象深刻的一幕：+{cfg.battle.highlight_fame}。")
     duel_fame = sorted(boss.fame for boss in content.duels.values() if boss.fame > 0)
     if duel_fame:  # 單人頭目戰打贏（Game._duel_finish）
         lines.append(f"探索時遇上攔路的頭目、打贏了：{_plus((duel_fame[0], duel_fame[-1]))}。")

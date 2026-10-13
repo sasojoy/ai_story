@@ -60,7 +60,7 @@ DEFAULT_FREE_TEXT_SUCCESS_RATE = 40  # LLM 評估失敗/無 client 時的保底�
 # 不是 50/50，呼應「不會全程 LLM 自由發展」的框架精神：評不出來就當作風險自負，不讓機制因為評估失敗而意外變得穩賺不賠。
 
 
-GAMBLES_KEPT = 6  # 每個參戰者記幾次放手一搏給行狀（一幕最多搏 per_act 次，三幕的仗夠用）
+GAMBLES_KEPT = 6  # 每個參戰者記幾次放手一搏給行狀（per_act 不限之後，九回合的仗最多九次，行狀只留最近六次）
 
 
 class GambleMoment(BaseModel):
@@ -456,8 +456,10 @@ def pinned(instance: BattleInstance, p: BattleParticipant) -> bool:
 
 
 def can_gamble(instance: BattleInstance, definition: BattleDef, p: BattleParticipant) -> bool:
-    """這一幕還能不能放手一搏（FreeTextGamble.per_act）。"""
-    limit = definition.free_text_gamble.per_act if definition.free_text_gamble is not None else 1
+    """這一幕還能不能放手一搏（FreeTextGamble.per_act；0 ＝ 不限，每回合都能搏）。"""
+    limit = definition.free_text_gamble.per_act if definition.free_text_gamble is not None else 0
+    if limit <= 0:
+        return True
     return p.gambled_act != instance.act_index or p.gambles_this_act < limit
 
 
