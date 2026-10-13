@@ -633,16 +633,27 @@ def hand_in_options(
         opts.append(Option(id=f"bounty:give:{b.id}:{item}", label=label, confirm=ask, confirm_yes=GIVE_YES))
     if len(items) > cfg.give_list:
         opts.append(Option(id="bounty:more", label=MORE[b.kind].format(n=len(items) - cfg.give_list), enabled=False))
-    if b.kind == "art":
-        worn = (p.member.neigong_id, p.member.wugong_id)
-        for art_id in dict.fromkeys(a for a in (*worn, p.naming) if a):
-            art = _art_of(art_id, content, world, memo)
-            if art is None or art_id in content.skills or art.origin != "fused" or art.preset or art.attribute != b.attribute:
-                continue  # 本來就不合用的不列
-            note = WORN_NOTE if art_id in worn else NAMING_NOTE
-            opts.append(Option(id=f"bounty:give:{b.id}:{art_id}", label=note.format(name=art.name), enabled=False))
+    for art_id, note in blocked_arts(state, content, world, b, memo):
+        opts.append(Option(id=f"bounty:give:{b.id}:{art_id}", label=note, enabled=False))
     opts.append(Option(id=UNPICK_ID, label=UNPICK))
     return opts
+
+
+def blocked_arts(state: GameState, content: Content, world: WorldStateStore, b: Bounty, memo: dict | None = None) -> list[tuple[str, str]]:
+    """這一張求藝，身上正在練、等著定名而對得上的那幾門：（武學 id, 灰掉的原因 WORN_NOTE／NAMING_NOTE）。第三層灰掉的那幾行
+    （hand_in_options）與店面告示上交不出的原因（shopview.board_view）共用；本來就不合用的不列。求兵是空的。"""
+    if b.kind != "art":
+        return []
+    memo = {} if memo is None else memo
+    p = state.player
+    worn = (p.member.neigong_id, p.member.wugong_id)
+    out = []
+    for art_id in dict.fromkeys(a for a in (*worn, p.naming) if a):
+        art = _art_of(art_id, content, world, memo)
+        if art is None or art_id in content.skills or art.origin != "fused" or art.preset or art.attribute != b.attribute:
+            continue  # 本來就不合用的不列
+        out.append((art_id, (WORN_NOTE if art_id in worn else NAMING_NOTE).format(name=art.name)))
+    return out
 
 
 def give_choice(state: GameState, content: Content, world: WorldStateStore) -> tuple[str, str] | None:

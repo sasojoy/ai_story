@@ -456,7 +456,9 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
             items = bounties.fitting(state, content, world, b, memo)
             if items:
                 rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.UNITS[b.kind])
-            why = None if items else (bounties.only_original(state, b).strip("（）") or NO_FIT)
+            # 交不出的原因照規則：只有神器原品或本命兵器對得上、只有身上正在練或等著定名的那門對得上（同第三層灰掉那幾行），都不是才寫 NO_FIT
+            blocked = bounties.blocked_arts(state, content, world, b, memo)
+            why = None if items else (bounties.only_original(state, b).strip("（）") or (blocked[0][1] if blocked else NO_FIT))
             note["action"] = {"id": f"bounty:pick:{b.id}", "verb": "pick", "enabled": bool(items), "why": why}
         else:
             problem = bounties.take_problem(state, content, b)
