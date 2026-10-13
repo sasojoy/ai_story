@@ -15,6 +15,7 @@ from tianxia import biography
 CSS = """
 *{box-sizing:border-box}
 html,body{margin:0}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);min-height:100vh}
 footer{max-width:640px;margin:26px auto 0;padding:0 16px 40px;color:var(--zh-sub);font:14px/1.7 var(--zh-font);text-align:center}
 footer a{color:inherit;font-weight:700;text-decoration:underline}
