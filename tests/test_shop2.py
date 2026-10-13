@@ -245,3 +245,122 @@ def test_the_switch_off_leaves_the_old_market_menu(content, world):
     view_on = server.main_view(on)
     assert "shop" not in view_off and view_on["shop"]["shop"] == "market"
     assert [(o["id"], o["label"], o["enabled"]) for o in view_on["options"]] == [(o["id"], o["label"], o["enabled"]) for o in view_off["options"]]
+
+
+# ── Task 3：board_view ──
+
+
+def test_held_notes_come_first_with_drop_and_fill_the_held_row(content, world):
+    game = _board(content, world, [SCOUT, STRIKE])
+    scout, strike = _ids(game)
+    game.choose(f"bounty:take:{strike}")
+    view = game.shop_view()
+    cap = content.config.bounties.max_taken
+    assert (view["shop"], view["back"], view["unpick"]) == ("board", "bounty:back", bounties.UNPICK_ID)
+    assert view["sign"] == f"{content.locations['town'].name}{bounties.BOARD}"
+    assert [n["id"] for n in view["notes"]] == [strike, scout]
+    held = view["notes"][0]
+    assert held["held"] and held["action"]["verb"] == "drop" and held["action"]["id"] == f"bounty:drop:{strike}"
+    assert held["action"]["confirm"] == shopview.DROP_ASK.format(title=held["title"])
+    assert [r["id"] for r in view["held"]["rows"]] == [strike]
+    assert view["held"]["head"] == shopview.HELD_HEAD.format(n=1, cap=cap) and view["held"]["left_text"] == shopview.SLOT_LEFT.format(n=cap - 1)
+    note = view["notes"][1]
+    b = game.state.world.bounties[0]
+    assert note["head"] == content.locations["lake"].name and note["kind_name"] == "打探" and note["issuer"] == "官軍"
+    assert note["action"] == {"id": f"bounty:take:{scout}", "verb": "take", "enabled": True, "why": None}
+    assert (note["due"], note["reward"], note["how"]) == (bounties.due_line(game.state, content, b), bounties.reward_text(game.state, content, b), bounties.how(content, b))
+
+
+def test_take_reasons_come_from_the_rules(content, world):
+    game = _board(content, world, [dict(kind="escort", faction="guan", silver=15, deeds=2, location="lake", end="cave"), SCOUT])
+    escort, _scout = _ids(game)
+    notes = {n["id"]: n for n in game.shop_view()["notes"]}
+    assert notes[escort]["action"]["why"] == f"要在{content.locations['lake'].name}接。"
+    content.config.bounties.max_taken = 1
+    game = _board(content, world, [SCOUT, dict(SCOUT, location="cave")], name="揭滿")
+    first, second = _ids(game)
+    game.choose(f"bounty:take:{first}")
+    notes = {n["id"]: n for n in game.shop_view()["notes"]}
+    assert not notes[second]["action"]["enabled"] and notes[second]["action"]["why"] == bounties.HELD_FULL.format(count=1)
+    assert game.shop_view()["held"]["left_text"] == ""
+
+
+def test_hand_ins_say_how_many_fit_and_open_the_third_layer(content, world):
+    game = _board(content, world, [ARMS])
+    (arms,) = _ids(game)
+    p = game.state.player
+    p.rack = [Equipment(**SWORD)]
+    note = game.shop_view()["notes"][0]
+    assert note["have"] == shopview.HAVE_NOTE.format(n=1, unit=bounties.UNITS["arms"])
+    assert note["action"] == {"id": f"bounty:pick:{arms}", "verb": "pick", "enabled": True, "why": None}
+    p.rack = []
+    note = game.shop_view()["notes"][0]
+    assert note["have"] == "" and not note["action"]["enabled"] and note["action"]["why"] == shopview.NO_FIT
+    p.rack = [Equipment(**SWORD, original=True)]
+    assert game.shop_view()["notes"][0]["action"]["why"] == bounties.ONLY_ORIGINAL.strip("（）")
+
+
+def test_the_third_layer_is_still_the_board_shop(content, world):
+    game = _board(content, world, [ARMS, SCOUT])
+    arms, _scout = _ids(game)
+    p = game.state.player
+    p.rack = [Equipment(**SWORD)]
+    game.choose(f"bounty:pick:{arms}")
+    ids = [o.id for o in game.options(odds=False)]
+    assert "bounty:back" not in ids and bounties.UNPICK_ID in ids  # 第三層的選單
+    view = game.shop_view()
+    assert view is not None and view["picked"] == arms
+    assert [o["id"] for o in view["hand_in"]] == [f"bounty:give:{arms}:兵:1"] and view["hand_in"][0]["label"].startswith("交出【試劍】")
+    p.rack = [Equipment(**SWORD, original=True)]  # 交不出了：同 _bounty_options，那一張當它不存在、回到第二層
+    view = game.shop_view()
+    assert view["picked"] is None and view["hand_in"] == []
+
+
+def test_an_emptied_board_says_so(content, world):
+    game = _board(content, world, [SCOUT])
+    b = game.state.world.bounties[0]
+    b.done_by = ["別人"]  # 名額被別人交滿了
+    view = game.shop_view()
+    assert view is not None and view["notes"] == [] and view["empty"] == bounties.BOARD_EMPTY
+
+
+def test_a_prized_note_says_so_until_someone_hands_it_in(content, world):
+    content.config.treasures.enabled = True
+    game = _board(content, world, [dict(STRIKE, prize="treasure")])
+    assert game.shop_view()["notes"][0]["prize"] == shopview.PRIZE_SHORT
+    game.state.world.bounties[0].done_by = ["別人"]
+    game.state.world.bounties[0].quota = 2
+    assert game.shop_view()["notes"][0]["prize"] == ""
+
+
+def test_a_wanted_note_never_names_who_posted_it(content, world):
+    content.config.raid.enabled = True
+    game = _board(content, world, [dict(kind="wanted", faction="huang", silver=80, deeds=3, poster="掛單的人", target="被通緝的人")])
+    text = json.dumps(game.shop_view(), ensure_ascii=False)
+    assert "被通緝的人" in text and "掛單的人" not in text
+
+
+def test_no_board_shop_when_switched_off_left_or_in_a_battle(content, world):
+    import server
+
+    game = _board(content, world, [SCOUT])
+    assert server.main_view(game)["shop"]["shop"] == "board"
+    assert game.shop_view(["bounty:back", "battle:join:x"]) is None
+    content.config.shop_screens = False
+    assert "shop" not in server.main_view(game)
+    content.config.shop_screens = True
+    game.choose("bounty:back")
+    assert game.shop_view() is None
+
+
+def test_the_switch_off_leaves_the_old_board_menu(content, world):
+    import server
+
+    on = _board(content, world, [SCOUT, STRIKE, ARMS], name="開")
+    content.config.shop_screens = False
+    off = _board(content, world, name="關")  # 同一季：照「開」貼好的那幾張
+    view_off = server.main_view(off)
+    content.config.shop_screens = True
+    view_on = server.main_view(on)
+    assert "shop" not in view_off and view_on["shop"]["shop"] == "board"
+    assert [(o["id"], o["label"], o["enabled"]) for o in view_on["options"]] == [(o["id"], o["label"], o["enabled"]) for o in view_off["options"]]

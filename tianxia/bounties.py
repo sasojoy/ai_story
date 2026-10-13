@@ -323,6 +323,12 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
     return None
 
 
+def has_prize(content: Content, b: Bounty) -> bool:
+    """這一張還掛著重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫；那一欄的裝備關著也不寫。reward_text 與店面告示上的
+    「另有重賞」共用。"""
+    return bool(b.prize) and not b.done_by and treasures.prize_on(content, b.prize)
+
+
 def reward_text(state: GameState, content: Content, b: Bounty) -> str:
     """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。俠名只有散人看得到（ranger.active）。
     求藝多寫心得與「素材，偶有兵器」；求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）。"""
@@ -339,7 +345,7 @@ def reward_text(state: GameState, content: Content, b: Bounty) -> str:
     text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") + (f"・俠名 +{deeds}" if deeds else "")
     if b.kind == "art":
         text += ART_GIFTS if content.config.weapons.enabled else "・素材"
-    if b.prize and not b.done_by and treasures.prize_on(content, b.prize):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
+    if has_prize(content, b):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
         text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
     return text
 

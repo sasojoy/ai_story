@@ -362,6 +362,78 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
     }
 
 
-def board_view(state: GameState, content: Content, world: WorldStateStore) -> dict | None:
-    """懸賞榜的店面：Task 3 換成真的。這一步先回 None（Game.shop_view 照舊不給懸賞榜的 shop，網頁照舊畫那一串按鈕）。"""
-    return None
+# ── 懸賞榜（第四節）──
+HELD_HEAD = "你手上揭著的（{n}／{cap}）"  # 待 joy 潤：最上面那一排的標題
+SLOT_LEFT = "還能揭 {n} 張"  # 待 joy 潤：那一排最後的空格
+HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求藝、求兵的告示上
+NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求藝、求兵交不出時，放大的紙上「交出…」灰掉的原因
+PRIZE_SHORT = "另有重賞"  # 待 joy 潤：告示上（放大的紙上，賞那一段照 reward_text 寫是哪一種）
+DROP_ASK = "把「{title}」放回榜上？放回去就不算你的了。"  # 待 joy 潤：放棄先問一次（選單上的 bounty:drop 沒有問句，問在網頁那一層）
+
+
+def _headline(title: str) -> str:
+    """告示上那一行大字：短標題「・」後面那一段（「打探・湖邊」→「湖邊」）。"""
+    return title.partition("・")[2] or title
+
+
+def board_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
+    """懸賞榜的店面（第四節）：最上面一排手上揭著的（bounties.mine）；木板上是看得到的告示（bounties.visible，同選單的第二層），
+    揭著的在前、交得出的求藝求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（due_line）、重賞、求藝求兵
+    你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求藝求兵「交出…」（bounty:pick，
+    交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
+    同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
+    不寫：照現在的選單寫陣營，畫面不露出誰是假人（設計 6.6）。"""
+    p = state.player
+    shown = bounties.visible(state, content)
+    mine = bounties.mine(state, content)
+    mine_ids = {b.id for b in mine}
+    memo: dict = {}
+    picked = next((b for b in shown if b.id == p.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
+    picked_items = bounties.fitting(state, content, world, picked, memo) if picked is not None else []
+    if not picked_items:
+        picked = None  # 那一張下榜了、交不出了就當它不存在（同 _bounty_options）
+    ranked = []
+    for order, b in enumerate(shown):
+        title = bounties.title(content, b)
+        note = {
+            "id": b.id, "kind": b.kind, "kind_name": bounties.KIND_NAMES.get(b.kind, b.kind), "issuer": bounties.issuer(content, b),
+            "title": title, "head": _headline(title), "how": bounties.how(content, b), "reward": bounties.reward_text(state, content, b),
+            "due": bounties.due_line(state, content, b), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
+            "held": b.id in mine_ids, "have": "",
+        }
+        rank = 2
+        if b.id in mine_ids:
+            rank = 0
+            note["action"] = {"id": f"bounty:drop:{b.id}", "verb": "drop", "enabled": True, "why": None, "confirm": DROP_ASK.format(title=title)}
+        elif b.kind in bounties.GIVE_KINDS:
+            items = bounties.fitting(state, content, world, b, memo)
+            if items:
+                rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.UNITS[b.kind])
+            why = None if items else (bounties.only_original(state, b).strip("（）") or NO_FIT)
+            note["action"] = {"id": f"bounty:pick:{b.id}", "verb": "pick", "enabled": bool(items), "why": why}
+        else:
+            problem = bounties.take_problem(state, content, b)
+            note["action"] = {"id": f"bounty:take:{b.id}", "verb": "take", "enabled": problem is None, "why": problem}
+        ranked.append((rank, order, note))
+    hand_in = []
+    if picked is not None:
+        hand_in = [
+            {"id": o.id, "label": o.label, "enabled": o.enabled}
+            for o in bounties.hand_in_options(state, content, world, picked, picked_items, memo) if o.id != bounties.UNPICK_ID
+        ]
+    cap = content.config.bounties.max_taken
+    held = [{"id": b.id, "title": bounties.title(content, b), "due": bounties.due_text(b, content, state.world)} for b in mine]
+    left = max(0, cap - len(held))  # 截殺關了又開時手上可以超過上限（FB-155）：照實列，空格是 0
+    return {
+        "shop": "board",
+        "sign": f"{content.locations[p.location].name}{bounties.BOARD}",
+        "silver": p.stats.get("silver", 0),
+        "line": line_text(state, content, "board"),
+        "back": "bounty:back",
+        "unpick": bounties.UNPICK_ID,
+        "held": {"rows": held, "head": HELD_HEAD.format(n=len(held), cap=cap), "left": left, "left_text": SLOT_LEFT.format(n=left) if left else ""},
+        "notes": [note for _rank, _order, note in sorted(ranked, key=lambda r: (r[0], r[1]))],
+        "empty": "" if shown else bounties.BOARD_EMPTY,
+        "picked": picked.id if picked is not None else None,
+        "hand_in": hand_in,
+    }
