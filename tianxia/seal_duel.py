@@ -48,13 +48,17 @@ SCENE_RULE = "（這一手只爭一回合的氣勢：碎片要到單挑收場再
 PROMPT = "寫下你陣前的一手（20 字內）"
 GAMBLE_NOTE = "放手一搏一場最多兩次；寫得越險，成了推得越多、搏輸了傷的是你自己。"
 RESEND = "這一手跟剛才送出的對不上（是不是開了兩個分頁？），請再送一次。"
-_SEIZE = re.compile(r"(奪|搶|取|拿|摘|攫)[下得走到回]?[^。！？，、；]{0,6}?(碎片|印|璽)")  # FB-176：「奪下玉璽碎片」「反手奪下印模」
+_SHARD_WORDS = re.compile(r"碎片|印|璽")
+_SEIZE_WORDS = re.compile(r"奪|搶|攫|摘|抓起|拿到|拿下|取走|取下|收入懷|入懷|到手")
+_SENTENCE = re.compile(r"[。！？!?]")
 
 
 def claims_shard(story: str) -> bool:
-    """這一版劇情寫了把碎片拿到手（「奪下／奪得／搶下……碎片、印、璽」，FB-176）：碎片要到單挑收場再擲才定歸屬，這一版不用、
-    改播固定句（GAMBLE_WON／GAMBLE_LOST）。場景裡的 SCENE_RULE 擋不住玩家自己寫「奪印」的情形，所以引擎再擋一次。"""
-    return bool(_SEIZE.search(story or ""))
+    """這一版劇情寫了把碎片拿到手：同一句裡有「碎片／印／璽」，也有「奪／搶／抓起／收入懷中／到手」這類字，前後順序不拘
+    （FB-176 認「奪下玉璽碎片」；FB-188：真模型也寫「將…玉璽碎片奪入懷中」，碎片在前、動詞在後）。「沒奪到」「未能奪下」這類
+    否定的照樣算——寧可多擋，代價只是改播固定句；分在兩句裡的不算。碎片要到單挑收場再擲才定歸屬，這一版不用、改播固定句
+    （GAMBLE_WON／GAMBLE_LOST）。場景裡的 SCENE_RULE 擋不住玩家自己寫「奪印」的情形，所以引擎再擋一次。"""
+    return any(_SHARD_WORDS.search(part) and _SEIZE_WORDS.search(part) for part in _SENTENCE.split(story or ""))
 
 
 class TextRequest(NamedTuple):

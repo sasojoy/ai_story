@@ -90,6 +90,30 @@ def test_a_story_that_takes_the_shard_falls_back_to_the_plain_line(content):
     assert "奪下" not in line and seal_duel.GAMBLE_WON.format(name="挑戰者").rstrip("。") in line
 
 
+
+def test_a_shard_word_and_a_seizing_word_in_one_sentence_are_enough_fb188():
+    """FB-188（fb-cleanup-2 的 FB-185 真模型實測）：「碎片／印／璽」跟「奪／搶／收入懷中／到手」這類字同一句就算寫了碎片到手，
+    前後順序不拘（以前只認動詞在前，「將…玉璽碎片奪入懷中」擋不到）；「沒奪到」「未能奪下」這類否定的照樣擋（寧可多擋，代價只是
+    改播固定句）；分在兩句裡的不算。"""
+    for story in (
+        "驗收官佯攻後順勢反手一勾，成功將陸乙手中的玉璽碎片奪入懷中。",  # 真模型寫的兩句
+        "驗收官佯攻後迅猛回身，趁陸乙出招空隙，順勢將玉璽碎片奪入掌中。",
+        "陸乙一把抓起碎片，轉身就走。",  # 審查提的兩種
+        "陸乙趁亂把印收入懷中。",
+        "那片玉璽轉眼就到了陸乙手上——到手了！",
+        "陸乙撲了個空，沒奪到印。",  # 否定的也擋
+        "陸乙未能奪下玉璽碎片，反被逼退三步。",
+    ):
+        assert seal_duel.claims_shard(story), story
+    for story in (
+        "陸乙踏碎青磚，揚起塵土迷了韓甲的眼。",
+        "陸乙搶下先手，逼得韓甲連退三步。",
+        "陸乙奪下先手。韓甲護住懷中的玉璽，退了一步。",  # 分在兩句
+        "",
+    ):
+        assert not seal_duel.claims_shard(story), story
+
+
 def test_both_gambles_add_up(content):
     put_shards(content)
     d = _duel()
