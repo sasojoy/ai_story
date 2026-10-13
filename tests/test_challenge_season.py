@@ -361,3 +361,18 @@ def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):
     assert "波才、皇甫嵩、董卓" in page
     cfg.figure_challenge_every_season = False
     assert "打贏大勢人物本人" not in howto.page(real, world.get_season(), recruitable=True)
+
+
+def test_season_bots_pick_a_challenge_by_its_odds(real, world):
+    """第九節：整季機器人隨機挑選時，挑戰鈕只在勝算「穩勝」「有把握」時留著（同假人）；火候滿了等契機時五五波以上也打。"""
+    from tianxia import bot
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    options = [o for o in game.options(odds=False) if o.enabled]
+    assert "act:challenge:bocai" in [o.id for o in options]
+    with mock.patch.object(Game, "challenge_odds", return_value="五五波"):
+        assert "act:challenge:bocai" not in [bot.pick(game, options, random.Random(i)) for i in range(80)]
+        with mock.patch.object(bot, "awaits_chance", return_value=True):
+            assert bot.pick(game, options, random.Random(0)) == "act:challenge:bocai"
+    with mock.patch.object(Game, "challenge_odds", return_value="有把握"):
+        assert "act:challenge:bocai" in [bot.pick(game, options, random.Random(i)) for i in range(80)]
+    assert bot.CHALLENGE_ODDS == ("穩勝", "有把握")
