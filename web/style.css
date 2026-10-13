@@ -1224,3 +1224,51 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
   background: rgba(26, 22, 18, 0.62); color: #fff; font: 13px var(--sans); cursor: pointer; }
 .promo-sound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (min-width: 461px) { .promo { margin: 16px 0 0; max-width: 100%; border-radius: var(--radius); } }
+
+/* ── 店面（店面獨立介面設計第五節）：鐵匠鋪是爐火的暖色底；三間店共用招牌、掌櫃話、出店那一套 ── */
+.shop-layer {
+  position: fixed; inset: 0; z-index: 41; display: flex; flex-direction: column; overflow: hidden;
+  color: #f2e5c6; background: radial-gradient(ellipse at 50% 22%, #4a2a18 0%, #24170f 62%, #160e09 100%);
+  padding-top: var(--top); animation: fade 0.2s;
+}
+.shop-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 8px 12px 4px; }
+.shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
+.shop-sign { justify-self: center; padding: 4px 14px; border: 2px solid #b7862b; border-radius: 4px; background: #2b1a10; color: #f2c46a; font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
+.shop-silver { font: 600 13px var(--sans); color: #f2c46a; }
+.shop-line { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 13px/1.6 var(--serif); color: #e8d6ad; min-height: 2.4em; }
+.shop-pages { display: flex; gap: 6px; justify-content: center; margin: 4px 0; }
+.shop-page { border: 1px solid #6b4a2e; background: transparent; color: #c9b28a; border-radius: 14px; padding: 3px 14px; font: 13px var(--sans); }
+.shop-page.on { background: #b7862b; color: #1e1510; border-color: #b7862b; opacity: 1; }
+.shop-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 12px 12px; }
+.shop-tabs { display: flex; border-top: 1px solid #5a4030; padding-bottom: var(--bottom); background: rgba(0, 0, 0, 0.25); }
+.shop-tab { flex: 1; border: 0; background: transparent; color: #c9b28a; padding: 11px 0; font: 13px var(--sans); }
+.shop-tab.on { color: #f2c46a; box-shadow: inset 0 2px 0 #f2c46a; background: rgba(242, 196, 106, 0.08); }
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shop-item { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: inherit; font: 12px/1.45 var(--sans); }
+.shop-item b { font: 600 14px var(--serif); color: #f2e5c6; }
+.shop-item.fit { border-color: #f2c46a; }
+.shop-item .fit-note { color: #f2c46a; }
+.shop-item .price { margin-top: 2px; color: #f2c46a; }
+.shop-item:disabled { opacity: 0.55; }
+.shop-item:disabled .price { color: #e0a08a; }
+.shop-worn { padding: 10px 12px; border-radius: 12px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); display: grid; gap: 6px; }
+.shop-worn b { font: 600 16px var(--serif); }
+.shop-wear { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; font-size: 12px; }
+.wear-bar { height: 8px; border-radius: 4px; background: #3a2a1e; overflow: hidden; }
+.wear-bar i { display: block; height: 100%; background: linear-gradient(90deg, #b7862b, #f2c46a); }
+.tempers { display: flex; gap: 4px; align-items: center; font-size: 12px; }
+.tempers i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #b7862b; }
+.tempers i.on { background: #f2c46a; }
+.shop-bigs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.shop-big { display: flex; flex-direction: column; gap: 4px; padding: 14px 8px; }
+.shop-big b { font: 600 18px var(--serif); }
+.shop-big small { font-size: 12px; opacity: 0.85; }
+.shop-note, .shop-empty, .shop-cap { font-size: 12.5px; color: #c9b28a; margin: 8px 2px; }
+.shop-warn { font-size: 12.5px; color: #e0a08a; margin: 6px 2px; }
+.shop-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid #3a2a1e; }
+.shop-row .winfo { display: grid; gap: 2px; font-size: 12px; }
+.shop-row .winfo b { font: 600 14px var(--serif); }
+.shop-row .wbtns { display: flex; gap: 6px; flex: none; }
+.shop-more { margin-top: 8px; }
+.shop-layer .naming.divine { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .shop-layer { animation: none; } }

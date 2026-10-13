@@ -74,6 +74,13 @@
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     bountyShut: null, // 江湖頁「懸賞」卡收起來時手上那幾張的 id（逗號接起來）；揭了新的或交了差就重新展開
+    shopTab: "shelf", // 店面（店面獨立介面設計第二節）：鐵匠鋪停在哪一頁（shelf 架上／forge 打造／temper 淬煉與修／rack 裝備庫）；進門停在架上
+    shopPot: null, // 打造頁爐裡放了什麼：{ slot, kind, main, aux }（素材 id 或 null）；換了兵器防具那一頁從頭來，開爐成了清掉主輔料
+    shopLine: null, // 這一爐會怎樣（/api/smith_line 回的那一份）；null 時照 shop.forge.line（空爐）
+    shopReveal: null, // 剛出爐的那一件（/api/do/smith_forge 回的 forged）：麻布包著，點開才看；關掉出爐卡清掉
+    shopOpened: false, // 出爐卡打開了沒（點了麻布）
+    shopFiring: false, // 開爐等回應的那一下爐火竄高（減少動態效果的人不跑）
+    shopMore: false, // 裝備庫頁按了「再列 N 件」
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
@@ -280,6 +287,11 @@
     const changed = key !== S.mainKey;
     // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
     const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
+    // 店面開了或收了（店面獨立介面設計 1.1）：從架上那一頁、空爐重新來；收起店時出爐卡一起收（只動 S 的欄位：setMain 會被單獨切出去測）
+    if (!!main.shop !== !!(S.main && S.main.shop)) {
+      S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
+      if (!main.shop) { S.shopReveal = null; S.shopOpened = false; }
+    }
     S.main = main;
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
     S.dueAt = main.battle_gauge && main.battle_gauge.due != null ? Date.now() + main.battle_gauge.due * 1000 : null;
@@ -318,6 +330,7 @@
       </div>
       ${tabsHtml()}
       ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
+      ${S.main && S.main.shop ? shopHtml(S.main.shop) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}`;
     renderPage();
@@ -2215,12 +2228,7 @@
     // 神器原品定名（打造隱藏配方設計 5.2）：還沒定名的原品那一列底下一張表單——自己打一個名字，或「沿用譜名【…】」。
     // 一個人可以同時有好幾把，表單照裝備 id 各一張（data-op 認，id 不重複）。名字合不合格由伺服器驗；字一律 esc。整段待 joy 潤
     // 表單接在 .wrow 的外面、緊貼著它底下（.wrow 是橫排的 flex，放進去會被擠到鈕的右邊）
-    const divineForm = (w) => `<form class="naming divine" id="name-divine-${esc(w.id)}" data-op="name-divine" data-id="${esc(w.id)}">
-        <small>你打出了神器</small>
-        <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
-        <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
-        <button class="btn small ghost" type="button" data-act="divine-keep" data-id="${esc(w.id)}">沿用譜名【${esc(w.divine.pattern)}】</button>
-      </form>`;
+    const divineForm = (w) => divineFormHtml(w.id, w.divine.pattern); // 店面的出爐卡與裝備庫共用同一張（divineFormHtml）
     // 武器：淬過的寫「淬煉 N/5」，自己打的寫配方（兵器第二批 Task 8）
     // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
@@ -2477,6 +2485,116 @@
     return `<svg class="seal" viewBox="0 0 52 52" role="img" aria-label="${esc(name)}"><rect x="2" y="2" width="48" height="48" rx="3" class="seal-bg"/>
       <rect x="5" y="5" width="42" height="42" rx="1.5" class="seal-rim"/><g class="seal-ink">${glyphs}</g></svg>`;
   }
+  // ── 店面（店面獨立介面設計第一、二節；第一批：鐵匠鋪）──
+  // 伺服器在店開著、開關開著時給 main.shop（shopview.smith_view）：蓋住整個畫面（同武學譜那本書的蓋法），左上「出店」送現在的離開，
+  // 兵器／防具切換、買、修、淬煉送現在的選項 id（choose），換上、拆解走修練頁的動作（shopMx），開爐是 /api/do/smith_forge。字待 joy 潤
+  const SHOP_TABS = [["shelf", "架上"], ["forge", "打造"], ["temper", "淬煉與修"], ["rack", "裝備庫"]];
+  const SHOP_ATTR = { 剛: "gang", 快: "kuai", 柔: "rou", 慢: "man" };
+  const SHOP_RACK_LIST = 8;
+
+  function shopHtml(shop) {
+    const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
+    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[S.shopTab] || shelfHtml;
+    return `<div class="shop-layer shop-smith" role="dialog" aria-label="${esc(shop.sign)}">
+      <header class="shop-bar"><button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button><span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
+      <p class="shop-line">${esc(shop.line)}</p>
+      ${pages}
+      <div class="shop-body">${body(shop)}</div>
+      <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
+      ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}
+    </div>`;
+  }
+
+  // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
+  function shelfHtml(shop) {
+    return `<div class="shop-grid">${shop.shelf.map((x) => `<button class="shop-item${x.fit ? " fit" : ""}" data-act="choose" data-id="${esc(x.id)}" ${x.enabled ? "" : "disabled"}>
+        <b>${esc(x.name)}</b><span>${esc(x.kind)}・屬${esc(x.attribute)}・${esc(x.tier)}</span>${x.value ? `<span>${esc(x.value)}</span>` : ""}
+        ${x.note ? `<span class="fit-note">${esc(x.note)}</span>` : ""}<span class="price">${x.enabled ? `${x.price | 0} 兩` : esc(x.why)}</span></button>`).join("")}</div>`;
+  }
+
+  // 淬煉與修（2.4）：身上那件的卡（鋒利度或耐久度的長條、淬煉五格），兩顆大鈕；做不了照伺服器的原因寫
+  function temperHtml(shop) {
+    const w = shop.worn;
+    if (!w.item) return `<p class="shop-empty">${esc(w.empty)}</p>`;
+    const it = w.item;
+    const pips = Array.from({ length: it.temper_max | 0 }, (_, i) => `<i class="${i < it.tempers ? "on" : ""}"></i>`).join("");
+    const big = (b, name) => `<button class="btn shop-big" data-act="choose" data-id="${esc(b.id)}" ${b.enabled ? "" : "disabled"}><b>${name}</b><small>${esc(b.enabled ? b.use : b.why)}</small></button>`;
+    return `<div class="shop-worn"><b>【${esc(it.name)}】</b><span>${esc(it.grade)}</span>
+        <div class="shop-wear"><span>${esc(it.wear_word)} ${it.wear | 0}</span><div class="wear-bar"><i style="width:${Math.max(0, Math.min(100, it.wear | 0))}%"></i></div></div>
+        <div class="tempers"><span>淬煉</span>${pips}</div></div>
+      <div class="shop-bigs">${big(w.repair, "修")}${big(w.temper, "淬煉")}</div>
+      ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}`;
+  }
+
+  // 裝備庫（2.5）：每件一列「換上」「拆解」（走修練頁的動作，不受店裡選單只列 8 顆的限制）；原品、本命兵器的拆解灰掉寫原因；
+  // 等著定名的原品那一列底下一張定名表單；先列 8 件，其餘按「再列 N 件」
+  function rackHtml(shop) {
+    const rows = shop.rack.rows;
+    if (!rows.length) return '<p class="shop-empty">裝備庫裡沒有這一欄的東西。</p>'; // 待 joy 潤
+    const shown = S.shopMore ? rows : rows.slice(0, SHOP_RACK_LIST);
+    const more = rows.length - shown.length;
+    const line = (r) => (shop.page === "armor"
+      ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
+      : `${r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`);
+    return `<p class="shop-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => `<div class="shop-row">
+        <div class="winfo"><b>【${esc(r.name)}】</b><span>${esc(line(r))}</span></div>
+        <div class="wbtns"><button class="btn small" data-act="shop-wield" data-id="${esc(r.id)}">換上</button>${r.keep
+          ? `<button class="btn small ghost" disabled>${esc(r.keep)}</button>`
+          : `<button class="btn small ghost" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}">拆解</button>`}</div>
+      </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true) : ""}`).join("")}
+      ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}`;
+  }
+
+  // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫
+  function renderShop() {
+    const layer = document.querySelector(".shop-layer");
+    if (!layer || !S.main || !S.main.shop) { render(); return; }
+    layer.outerHTML = shopHtml(S.main.shop);
+  }
+
+  // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，
+  // 同江湖頁的規則）。回 true：店面開著，底下的頁面被蓋住、不必再畫
+  function shopPolled(old) {
+    const was = !!(old && old.shop), now = !!(S.main && S.main.shop);
+    if (was !== now) { render(); return true; }
+    if (!now) return false;
+    if (JSON.stringify(old.shop) !== JSON.stringify(S.main.shop)) {
+      if (pointerHeld) redrawHeld = true;
+      else { renderShop(); if (S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
+    }
+    return true;
+  }
+
+  // 店裡的換上、拆解、神器定名：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講
+  async function shopMx(op, body) {
+    await busy(async () => {
+      const r = await api(`/api/menxia/${op}`, body);
+      if (r.menxia) S.menxia = r.menxia;
+      setMain(r.main);
+      render();
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+    });
+  }
+
+  // 神器原品定名的表單（打造隱藏配方設計 5.2）：修練頁那一列底下、店面的出爐卡與裝備庫都用這一張。shop 為真時表單送店面的那一條
+  // （data-op shop-name-divine、沿用譜名 shop-divine-keep），id 也分開，免得同一個畫面兩張撞 id。字待 joy 潤
+  function divineFormHtml(id, pattern, shop = false) {
+    const op = shop ? "shop-name-divine" : "name-divine";
+    return `<form class="naming divine" id="${op}-${esc(id)}" data-op="${op}" data-id="${esc(id)}">
+        <small>你打出了神器</small>
+        <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
+        <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
+        <button class="btn small ghost" type="button" data-act="${shop ? "shop-divine-keep" : "divine-keep"}" data-id="${esc(id)}">沿用譜名【${esc(pattern)}】</button>
+      </form>`;
+  }
+
+  // 打造頁、開爐與出爐（Task 6、7 換成正式的）
+  function forgePageHtml(shop) { return `<div class="cells">${(shop.forge.line.cells || []).map((c) => `<button class="cell" data-act="shop-cell" data-id="${esc(c.id)}"></button>`).join("")}</div><button class="btn primary shop-go" data-act="shop-go" disabled>開爐</button><button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button>`; }
+  function revealHtml() { return ""; }
+  async function updateSmithLine() {}
+  async function smithForge() {}
+
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
     const rows = manualRows(which), b = BOOKS[which];
     const solved = rows.filter((r) => r.solved).length;
@@ -3731,7 +3849,11 @@
     if (!redrawHeld) return;
     redrawHeld = false;
     // 放開之後 click 才送出：等它處理完再補畫；它開始了一個動作的話，動作回來會自己畫
-    setTimeout(() => { if (!S.busy && S.stage === "game" && S.tab === "jianghu") renderPage(); }, 0);
+    setTimeout(() => {
+      if (S.busy || S.stage !== "game") return;
+      if (S.main && S.main.shop) renderShop(); // 店面開著：補畫的是店面（店面獨立介面設計 1.3）
+      else if (S.tab === "jianghu") renderPage();
+    }, 0);
   };
   document.addEventListener("pointerup", releasePointer, true);
   document.addEventListener("pointercancel", releasePointer, true);
@@ -3921,6 +4043,15 @@
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
         case "feed": await mx("feed"); break; // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
+        // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(); break;
+        case "shop-more": S.shopMore = true; renderShop(); break;
+        case "shop-wield":
+          await shopMx("wield", { weapon: el.dataset.id });
+          if (S.shopReveal && S.shopReveal.id === el.dataset.id) { S.shopReveal = null; S.shopOpened = false; renderShop(); } // 出爐卡上的「換上」：換好了卡收起
+          break;
+        case "shop-dismantle": ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => shopMx("dismantle", { weapon: el.dataset.id })); break;
+        case "shop-divine-keep": await shopMx("name_divine", { weapon: el.dataset.id, keep: true }); break;
         case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
           ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
           break;
@@ -4112,6 +4243,12 @@
         // 表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；定成了那一列不再畫表單，找不到就什麼都不放
         const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
+      } else if (form.dataset && form.dataset.op === "shop-name-divine") {
+        // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
       } else if (form.id === "seclude") {
         // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
         // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
@@ -4213,6 +4350,7 @@
   // 輪詢拿到有變的 main 之後，照目前的分頁補上（QA L1）。江湖、見聞從 S.main 畫；修練、煉製、輿圖重抓自己那一份。
   // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
   async function refreshPage(old) {
+    if (shopPolled(old)) return; // 店面開著（或剛開、剛收）：只管店面那一層（店面獨立介面設計 1.3）
     const tab = S.tab;
     if (tab === "jianghu") {
       if (pageKey(old) !== pageKey(S.main)) { // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過
