@@ -518,3 +518,33 @@ def test_the_howto_fame_section_names_the_mandate_winners():
     c = real_content()
     c.config.seal.enabled = True
     assert seal.MANDATE_FAME.format(fame=c.config.seal.mandate.fame) in _fame_section(_war(c))
+
+
+# ── Task 7：管理者 ──────────────────────────────
+
+
+def test_the_admin_can_stamp_the_next_season_without_seven_shards(mandated, world):
+    """第十二節「蓋天命之季」：「下一季」不看七片現世過沒；公告照自然發生寫。天命之季裡不能再按「下一季」。"""
+    from conftest import next_season
+
+    _opened(mandated, world)
+    admin = _admin(mandated, world)
+    admin.admin_seal_mandate("next")
+    assert world.seal_state().registry.mandate_pending and admin.admin_seal_choices()["mandate"] == "next"
+    next_season(mandated, world)
+    assert world.get_season().mandate
+    admin.sync(500.0)
+    assert any("天命之季" in line for line in admin.admin_seal_mandate("next"))
+    assert not world.seal_state().registry.mandate_pending
+
+
+def test_the_admin_can_stamp_this_season_and_open_tianming(mandated, world):
+    _opened(mandated, world)
+    admin = _admin(mandated, world)
+    admin.admin_seal_mandate("now")
+    season = world.get_season()
+    assert season.mandate and "tianming" in season.schedule and admin.state.world.mandate
+    assert "tianming" in [b.id for b in admin.admin_battles()]
+    admin.admin_start_battle("tianming", 50.0)
+    assert world.get_battle().battle_id == "tianming"
+    assert any("已經是天命之季" in line for line in admin.admin_seal_mandate("now"))

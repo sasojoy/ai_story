@@ -174,3 +174,30 @@ def test_the_page_key_follows_the_seal_cards(m):
       return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d)].join("|");
     """)
     assert out == "false|true|false"  # 倒數、碎片卡變了要重畫；status 的其他欄位照舊不算
+
+
+def test_the_admin_sheet_offers_to_stamp_the_mandate(m):
+    """玉璽二：管理者「玉璽」一組多「蓋天命之季（下一季）」與「這一季立刻蓋章」；劇本沒有天命之爭不畫；這一季已經是天命之季時「這一季」灰掉。"""
+    admin = _seal_admin()
+    admin["seal"].update(mandate="", mandate_ok=True)
+    sheet = _sheet(m, admin)
+    assert 'data-op="seal_mandate" data-when="next"' in sheet and 'data-op="seal_mandate" data-when="now"' in sheet
+    admin["seal"].update(mandate="now")
+    assert 'data-when="now" disabled' in _sheet(m, admin)
+    admin["seal"].update(mandate_ok=False)
+    assert "seal_mandate" not in _sheet(m, admin)
+
+
+def test_the_mandate_buttons_ask_then_post_when(m):
+    from test_admin_triggers_web import CLICK
+
+    import json
+
+    admin = _seal_admin()
+    admin["seal"].update(mandate="", mandate_ok=True)
+    script = CLICK.replace("input.clicks", json.dumps([{"act": "admin", "op": "seal_mandate", "when": "next"}]))
+    out = webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": script, "S": {"admin": admin, "sheet": True},
+                                  "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
+    assert "天命之季" in out["asked"][0]
+    call = next(c for c in out["calls"] if c[0] == "/api/do/seal_mandate")
+    assert call[1]["when"] == "next"

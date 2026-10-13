@@ -7728,8 +7728,36 @@ class Game:
         lines = [f"（下一次換季會隱沒：{seal.SINK.format(holder=name, shard=self.content.seal[s.id].name)}）" for s, name in sunk]
         return self._log(lines or ["（下一次換季沒有碎片會隱沒。）"])
 
+    def admin_seal_mandate(self, when: str) -> list[str]:
+        """蓋天命之季（第十二節；玉璽二）：when 是 "next"（下一季蓋章，不看七片現世過沒）或 "now"（這一季立刻蓋：還沒打的標了 seal 的
+        決戰照天命之季的規則璽動，天命之爭排在預設時刻——已經過了就馬上到期——也可以用「立刻開戰」）。公告照自然發生寫、不寫管理者。"""
+        refusal = self._admin_refusal("蓋天命之季")
+        if refusal:
+            return self._log(refusal)
+        c = self.content
+        event = seal.mandate_event(c)
+        if not seal.on(c) or event is None or seal.mandate_battle(c) is None:
+            return self._log(["（這個劇本沒有天命之爭。）"])
+        season = self.state.world  # 每個動作開頭的 sync 剛讀過（不用 get_season：它會把整季的傳聞與江湖史讀回來）
+        if season.mandate:
+            return self._log(["（這一季已經是天命之季；收季之後七片散去。）"])
+        if when == "next":
+            self.world.mutate(lambda st: setattr(seal.filled(st.seal, c), "mandate_pending", True))
+            msg = "下一季蓋天命之季的章。"
+        elif when == "now":
+            if season.ended or not season_one(c, season):
+                return self._log(["（這一季沒有時刻表，蓋不了天命之季。）"])
+            self.world.mutate(lambda st: seal.stamp_mandate(st, c, timetable.default_time(event, c, st.season)))
+            self.state.world = self.world.get_season()
+            msg = "這一季蓋上天命之季的章。"
+        else:
+            return self._log(["（看不懂要怎麼蓋。）"])
+        self._write("蓋天命之季", [msg], tag="管理者")
+        return self._log([f"（{msg}）"])
+
     def admin_seal_choices(self) -> dict | None:
-        """設定頁「玉璽」一組要的：七片與狀態、有沒有單挑在打、剛收場的決戰還能不能掛單挑、qa_tools。碎片關著是 None。"""
+        """設定頁「玉璽」一組要的：七片與狀態、有沒有單挑在打、剛收場的決戰還能不能掛單挑、qa_tools、天命之季蓋了沒（mandate：
+        "now" 這一季、"next" 下一季、"" 沒有）與劇本有沒有天命之爭（mandate_ok，玉璽二）。碎片關著是 None。"""
         c = self.content
         if not seal.on(c):
             return None
@@ -7739,6 +7767,8 @@ class Game:
             "shards": [{"id": s, "name": c.seal[s].name, "state": reg.shards[s].state, "holder": reg.shards[s].holder or ""} for s in c.seal],
             "duel": bool(view.duels), "hung": reg.last_showdown is not None and not reg.last_showdown_dueled,
             "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
+            "mandate": "now" if seal.mandate_now(reg, view.season) else "next" if reg.mandate_pending else "",  # 兩個章一起蓋，讀登記那一份（不必 get_season）
+            "mandate_ok": seal.mandate_event(c) is not None and seal.mandate_battle(c) is not None,
         }
 
     def admin_issue_orders(self) -> list[str]:
