@@ -1893,6 +1893,9 @@ class Config(_Strict):
     # 以前這幾件只有 ollama_timeout（120 秒），重問一次最壞要 240 秒
     dialogue_budget_seconds: int = Field(default=60, ge=0)
     free_text_budget_seconds: int = Field(default=60, ge=0)
+    # 決戰放手一搏的劇情（Joy 2026-10-13「應該要做到能承受」）：評分只回成功率，劇情等回合結算後一整回合批給模型寫一次
+    # （server.narrate_battle，背景執行緒、在佇列裡排在真人的評分後面）；這是那一趟的總預算，用完就照固定句
+    battle_tale_budget_seconds: int = Field(default=120, ge=0)
     # LLM 佇列（線上架構設計 5.2，第 2 期）：行動鎖外的模型呼叫先排隊（server.model_call）。llm_queue_slots＝顯卡同時處理幾件，
     # 0＝不建佇列（預設；照舊直接叫）；假人在排加在跑最多 llm_queue_bot_cap 件（滿了拿退路）；排超過 llm_queue_wait_seconds 秒
     # 還沒輪到的那一件不叫模型、被擋下來、不拿退路（PM 2026-10-06，跟第二件一樣）：評分、開爐、大場面、對話回一句話、什麼都不套用

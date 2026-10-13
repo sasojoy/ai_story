@@ -241,6 +241,17 @@ class BattleTextRequest(BaseModel):
     target: str = ""  # 點名的對手與身手（battle_instance.target_line，Joy 2026-10-10）：給模型多一行；沒點名是空的
 
 
+class BattleTaleRequest(BaseModel):
+    """回合結算後補放手一搏劇情的單子（server.narrate_battle 的 A 段拿到、B 段一整批送模型寫、C 段交回 apply_battle_tales
+    重驗同一場才補）。done 是這一批的（回合, 名號）：寫到沒寫到，C 段都從等著補的單子拿掉。"""
+    battle_id: str
+    record_id: int | None
+    opened: float  # 這一場集結截止的時間：跟 battle_id、record_id 一起認同一場
+    act_index: int
+    items: list[battle_instance.TaleItem]
+    done: list[tuple[int, str]]
+
+
 class DuelTextRequest(BaseModel):
     """頭目戰放手一搏鎖外評估的單子（server.duel_text 的 A 段拿到、B 段送模型、C 段交回 duel_gamble 重驗：同一隻、同一回合、同一句才用）。"""
     boss: str
@@ -4555,7 +4566,42 @@ class Game:
                 self._quick_client(), act, faction_name, text, self.state.player.name, target=target, sex=gender.of(self.state),
             )
             llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
-        return self._submit_battle_action(self.state.player.name, definition, tag, text, llm_rate, stories)
+        return self._submit_battle_action(
+            self.state.player.name, definition, tag, text, llm_rate, stories, sex=gender.of(self.state),
+        )
+
+    def battle_tale_request(self) -> BattleTaleRequest | None:
+        """回合結算後補放手一搏劇情的 A 段（server.narrate_battle 在行動鎖內、很快地呼叫）：這一場有等著補劇情的放手一搏，
+        回傳最早那一回合的一批（battle_instance.tales_due）；沒有回 None。只讀。"""
+        battle = self.world.get_battle()
+        if battle is None or not battle.tales or battle.battle_id not in self.content.battles:
+            return None
+        definition = self.content.battles[battle.battle_id]
+        due = battle_instance.tales_due(battle)
+        names = {f.id: f.name for f in definition.factions}
+        return BattleTaleRequest(
+            battle_id=battle.battle_id, record_id=battle.record_id, opened=battle.muster_deadline_real,
+            act_index=min(due[0].act_index, len(definition.acts) - 1),
+            items=[battle_instance.TaleItem(
+                name=t.name, faction_name=names.get(t.faction, t.faction), text=t.text, won=t.won, target=t.target, sex=t.sex,
+            ) for t in due],
+            done=[(t.round, t.name) for t in due],
+        )
+
+    def apply_battle_tales(self, request: BattleTaleRequest, stories: dict[str, str]) -> int:
+        """補劇情的 C 段：還是同一場才補（battle_instance.apply_tales）；回傳補了幾句。換了一場（收場後開了下一場）什麼都不動。"""
+        battle = self.world.get_battle()
+        if battle is None or (battle.battle_id, battle.record_id, battle.muster_deadline_real) != (
+            request.battle_id, request.record_id, request.opened,
+        ):
+            return 0
+        patched = {"n": 0}
+
+        def _apply(b: battle_instance.BattleInstance) -> None:
+            patched["n"] = battle_instance.apply_tales(b, request.done, stories)
+
+        self.world.mutate_battle(_apply)
+        return patched["n"]
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
@@ -4642,7 +4688,7 @@ class Game:
 
     def _submit_battle_action(
         self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,
-        stories: tuple[str, str] | None = None,
+        stories: tuple[str, str] | None = None, sex: str | None = None,
     ) -> list[str]:
         """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項，連同 LLM 先評好
         的成功率）並嘗試結算這回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡
@@ -4651,7 +4697,7 @@ class Game:
         captured: dict[str, list[str]] = {"msgs": []}
 
         def _apply(b: battle_instance.BattleInstance) -> None:
-            battle_instance.submit_action(b, name, tag, text, success_rate, stories)
+            battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
             captured["msgs"] = self._advance_battle_round(b, definition)
 
         battle = self.world.mutate_battle(_apply)

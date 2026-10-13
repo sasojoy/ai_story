@@ -103,7 +103,10 @@ def world_fingerprint(
         "figures": {k: v.model_dump() for k, v in sorted(season.figures.items())},
         "rumor": rumor_id,
         "chronicle": chronicle_count,
-        "battle": None if battle is None else [battle.battle_id, battle.phase, battle.round_number, battle.trend, progress],
+        # tales：等著補劇情的放手一搏有幾筆（Joy 2026-10-13：劇情回合結算後才寫好，補上的那一下場景的字變了，開著的分頁要更新）
+        "battle": None if battle is None else [
+            battle.battle_id, battle.phase, battle.round_number, battle.trend, progress, len(battle.tales),
+        ],
         # 奪璽單挑（玉璽碎片設計 5.10）：全服觀戰。只算 id、階段、回合、氣勢與親自送出了幾手；last_seen 不算（每 15 秒就可能動一次）
         "seal": [[d.id, d.phase, d.round, round(d.edge, 1), sorted(d.pending)] for d in seal] if seal else None,
     }

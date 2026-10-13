@@ -262,7 +262,19 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
             _refuse_while_paused(game)
         msgs = action(game)
         open_characters().save(game.state)
-        return msgs
+        tales = _tales_waiting(game)
+    if tales:
+        narrate_battle(game)
+    return msgs
+
+
+def _tales_waiting(game: Game) -> bool:
+    """這一場有等著補劇情的放手一搏、模型叫得到、還沒有一條在寫（narrate_battle）。行動鎖內叫：回合可能在任何人的動作、
+    假人程式、逾時的追趕裡結算，所以每一個動作與輪詢之後都看一眼。"""
+    if not TALE_THREADS or game.client is None or TALE_RUNNING:
+        return False
+    battle = game.world.get_battle()
+    return battle is not None and bool(battle.tales)
 
 
 def look(game: Game, view):
@@ -292,8 +304,11 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
                 shown = view(game)
         except Exception as exc:  # 見上：畫面自己的寫入已經撤回，先讓鎖放掉，再丟出去
             failure = exc
+        tales = failure is None and _tales_waiting(game)
     if failure is not None:
         raise failure
+    if tales:
+        narrate_battle(game)
     return msgs, shown
 
 
@@ -519,7 +534,9 @@ BUSY_DIALOGUE = "對方還沒答話，稍等。"  # 待 joy 潤（FB-077：同�
 BUSY_QUEUE_TIMEOUT = "這會兒人多，沒輪到你，稍後再試一次。"  # 待 joy 潤
 
 
-def model_call(game: Game, job, *, fallback, left: float | None = None, busy: str | None = None):
+def model_call(
+    game: Game, job, *, fallback, left: float | None = None, busy: str | None = None, max_wait: float | None = None,
+):
     """行動鎖外叫模型一律走這裡：佇列開著就用這個角色的名號排隊（真人先、假人有上限〔滿了拿 fallback〕、一人一件、排太久被擋下來，
     見 llm_queue.LlmQueue），關著就直接叫。呼叫端不能握著行動鎖：排隊最久要等 llm_queue_wait_seconds 秒，握著鎖等就是全服一起等；
     在鎖裡被叫到直接丟 RuntimeError（跟 _model_guard 一樣，用 RuntimeError 不用 assert：python -O 也照樣擋），開關開著關著都一樣。
@@ -527,6 +544,8 @@ def model_call(game: Game, job, *, fallback, left: float | None = None, busy: st
     left 是呼叫端那一件的總預算還剩幾秒（有總預算的四種呼叫都給）：排隊最久只等 min(llm_queue_wait_seconds, left)，
     一個請求不會排過自己的總預算（審查 M1）；剩下 0 秒就是 0：位子正好空著照常進場（job 自己發現預算用完、不叫模型），
     要排的話馬上被擋下來（QueueTimeout，見下）。沒給（None）就只受 llm_queue_wait_seconds 管。
+    max_wait 換掉 llm_queue_wait_seconds 那個上限（決戰的放手一搏：二十人同一回合各搏一次，排在後面的要等前面的評完，
+    照 llm_queue_wait_seconds 的 20 秒會被擋掉一半，Joy 2026-10-13；仍受 left 夾）。
     同一個人已經有一件在排或在跑（佇列對這一件丟 Busy，審查 M2），或排超過等候的時間還沒輪到（佇列丟 QueueTimeout，PM 2026-10-06，
     跟 Busy 一樣處理）：給了 busy（一句話）就丟 GameError、不叫 job、不套用任何東西，呼叫端不能繼續往下走——重複的那一件丟 busy
     那句，排太久丟 BUSY_QUEUE_TIMEOUT；沒給 busy 就拿 fallback（潤色：不插句子，本來就無害）。
@@ -537,7 +556,7 @@ def model_call(game: Game, job, *, fallback, left: float | None = None, busy: st
     if queue is None:
         return job()
     p = game.state.player
-    wait = game.content.config.llm_queue_wait_seconds
+    wait = game.content.config.llm_queue_wait_seconds if max_wait is None else max_wait
     if left is not None:
         wait = max(0.0, min(wait, left))
     try:
@@ -824,19 +843,79 @@ def battle_text(game: Game, text: str) -> list[str]:
     act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
     total = game.content.config.free_text_budget_seconds
 
-    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    fallback = battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE
 
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
             return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
-        # 同一次呼叫評成功率、寫成功與失敗兩版劇情（試玩回饋 2026-10-08）
-        return battle_instance.assess_gamble(
+        # 只評成功率（Joy 2026-10-13：二十人同一回合各搏一次也要每一個都評到）；劇情等回合結算後 narrate_battle 一整批寫
+        return battle_instance.score_gamble(
             client, act_, request.faction_name, request.text, request.name, target=request.target, sex=request.sex,
         )
 
-    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
+    left = total - (_monotonic() - started)
+    rate = model_call(game, score, fallback=fallback, left=left, busy=BUSY_FREE_TEXT, max_wait=left)
+    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
+
+
+# 決戰放手一搏的劇情（Joy 2026-10-13「應該要做到能承受」）：評分只回成功率，劇情等回合結算後一整回合批給模型寫一次。
+# 全服同時只有一條在寫（TALE_RUNNING）；佇列開著時排在真人的評分後面（當成假人排，名號是 TALE_OWNER，不是任何一個角色）。
+TALE_LOCK = threading.Lock()
+TALE_RUNNING = False
+TALE_OWNER = "§說書"
+TALE_THREADS = False  # main() 打開：伺服器真的在跑才開背景執行緒寫劇情（測試直接叫 narrate_once，不留執行緒在背景碰資料庫）
+
+
+def narrate_battle(game: Game) -> bool:
+    """這一場有等著補劇情的放手一搏、而且還沒有一條在寫：開一個背景執行緒寫最早那一回合的一批。開了回 True。
+    A 鎖內開單（Game.battle_tale_request）→ B 鎖外一整批請模型寫（battle_instance.write_tales，預算 battle_tale_budget_seconds）
+    → C 鎖內重驗同一場才補（Game.apply_battle_tales；寫不出來的照固定句、不重寫）。呼叫端不能握著行動鎖。"""
+    global TALE_RUNNING
+    with TALE_LOCK:
+        if TALE_RUNNING:
+            return False
+        TALE_RUNNING = True
+
+    def tale_job() -> None:
+        global TALE_RUNNING
+        try:
+            while narrate_once(game) is not None:  # 一批寫完還有（下一回合也結算了）就接著寫
+                pass
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那幾搏照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                TALE_RUNNING = False
+
+    threading.Thread(target=tale_job, name="battle-tales", daemon=True).start()
+    return True
+
+
+def narrate_once(game: Game) -> int | None:
+    """寫一批（narrate_battle 的一圈）：沒有等著補的回 None，寫了回補上幾句。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        request = game.battle_tale_request()
+    if request is None:
+        return None
+    definition = CONTENT.battles.get(request.battle_id) or game.content.battles.get(request.battle_id)
+    act_ = definition.acts[request.act_index]
+    budget = game.content.config.battle_tale_budget_seconds
+    started = _monotonic()
+
+    def ask() -> dict[str, str]:
+        client = within_budget(game.client, budget - (_monotonic() - started))
+        return battle_instance.write_tales(client, act_, request.items)
+
+    if QUEUE is None:
+        stories = ask()
+    else:
+        try:  # 排在真人的評分後面（當成假人排）；排不到就照固定句
+            stories = QUEUE.run(TALE_OWNER, ask, fallback={}, bot=True, wait=min(budget, 120))
+        except Busy:
+            stories = {}
+    with _locked(game):  # 補上了，等著補的單子就少了：推送的指紋跟著變，開著的分頁會更新
+        return game.apply_battle_tales(request, stories)
 
 
 def duel_text(game: Game, text: str) -> list[str]:
@@ -1928,7 +2007,7 @@ def start_tunnel(port: int) -> threading.Thread | None:
 def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
-    global QUEUE
+    global QUEUE, TALE_THREADS
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--share", action="store_true", help="用 cloudflared 開一個臨時的公開網址")
@@ -1944,6 +2023,7 @@ def main(argv: list[str] | None = None) -> None:
     open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：正式伺服器啟動時沒有就產生一次；測試與量表腳本不經過這裡，同樣的種子跑出同樣的結果
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
     QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
+    TALE_THREADS = True  # 放手一搏的劇情回合結算後在背景補（narrate_battle）
     print(queue_line(CONTENT.config), flush=True)
     interval = CONTENT.config.world_tick_seconds
     print(scheduler_line(interval), flush=True)

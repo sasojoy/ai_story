@@ -3005,19 +3005,20 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
 
     def rate(c, act, faction_name, text, name, target="", sex="男"):
         seen.append((open_world().db.writing(), faction_name, text, name))
-        return battle_instance.GambleVerdict(73, "沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。")
+        return 73
 
-    monkeypatch.setattr(battle_instance, "assess_gamble", rate)
+    monkeypatch.setattr(battle_instance, "score_gamble", rate)
     client.post("/api/do/battle_text", json={"text": "火燒糧草"})
     assert seen == [(False, "官軍", "火燒糧草", "沈青衫")]
     battle = open_world().get_battle()
     assert battle.round.success_rates == {"沈青衫": 73}
-    assert battle.round.stories == {"沈青衫": ["沈青衫一把火燒了糧倉。", "沈青衫火摺子受潮，點了半天沒點著。"]}  # 同一次呼叫寫的兩版劇情
+    # 只評成功率（Joy 2026-10-13）：劇情等回合結算後一整批寫（narrate_battle），送出時沒有劇情
+    assert battle.round.stories == {} and battle.round.sexes == {"沈青衫": "男"}
 
 
 def test_the_free_text_action_does_not_ask_the_model_when_it_cannot_be_sent(client, monkeypatch):
     _a_showdown_fighter(client, started=True)  # 還沒加入戰局：送不出去
-    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a: pytest.fail("不該評"))
+    monkeypatch.setattr(battle_instance, "score_gamble", lambda *a, **k: pytest.fail("不該評"))
     out = client.post("/api/do/battle_text", json={"text": "火燒糧草"}).json()
     assert "（此刻無法這麼做。）" in out["message"]
 
@@ -5388,7 +5389,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
-    assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices"}
+    # narrate_once：決戰放手一搏的劇情（Joy 2026-10-13），回合結算後在背景一整批寫，排在真人後面、名號不是任何一個角色，所以不走 model_call
+    assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once"}
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -6099,6 +6101,10 @@ FINGERPRINTED = {
             st.active_battle.participants.__setitem__("甲", battle_instance.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1)),
             st.active_battle.round.pending_actions.__setitem__("甲", "guan_hold"),
         ),
+        # 放手一搏的劇情回合結算後才補上（Joy 2026-10-13）：補上的那一下場景的字變了
+        "tales": lambda st: st.active_battle.tales.append(battle_instance.GambleTale(
+            round=1, act_index=0, name="甲", faction="guan", text="火攻", won=True, fixed="x", numbers="y",
+        )),
     },
 }
 NOT_IN_THE_FINGERPRINT = {

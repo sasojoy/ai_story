@@ -70,6 +70,23 @@ class GambleMoment(BaseModel):
     rate: int  # 評估的成功率（加職位之前，傳聞照玩家看到的那個數）
     won: bool
     target: str = ""  # 點名的那個人（find_target）；沒點名是空的（玩家傳的行狀寫；舊資料沒有）
+    round: int = 0  # 整場的第幾回合（回合結算後補劇情時認這一筆，apply_tales）；舊資料沒有是 0
+
+
+class GambleTale(BaseModel):
+    """一次放手一搏等著補劇情（Joy 2026-10-13「應該要做到能承受」：評分只回成功率，劇情等回合結算後一整回合批給模型一次寫）。
+    結算當下先播固定句 fixed；寫好了把場景記錄裡的 fixed 換成「劇情（numbers）」（apply_tales）。數字照引擎算的，模型不碰。"""
+
+    round: int  # 整場的第幾回合（1 起算）
+    act_index: int  # 那一回合是第幾幕：劇情照這一幕的情境寫
+    name: str
+    faction: str  # 陣營 id
+    text: str  # 玩家寫的那一句
+    won: bool
+    target: str = ""  # 點名的那個人；沒點名是空的
+    sex: str = "男"  # 送出的人的性別（gender）：模型寫劇情時的稱呼
+    fixed: str  # 先播的固定句（場景記錄裡要換掉的那一段）
+    numbers: str  # 換上劇情時括號裡的數字（引擎算的）
 
 
 class BattleParticipant(BaseModel):
@@ -145,6 +162,7 @@ class BattleRound(BaseModel):
     # 模型呼叫寫的，試玩回饋 2026-10-08）；擲骰後播對應的那一版，空字串或沒有就用固定句
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
+    sexes: dict[str, str] = Field(default_factory=dict)  # 名號 → 放手一搏的人的性別（回合結算後補劇情用，GambleTale.sex）
 
 
 class BattleRoundRecord(BaseModel):
@@ -189,6 +207,7 @@ class BattleInstance(BaseModel):
     narrative_log: list[str] = Field(default_factory=list)
     outcome_title: str | None = None
     outcome_text: str | None = None
+    tales: list[GambleTale] = Field(default_factory=list)  # 等著補劇情的放手一搏（伺服器一回合批一次給模型寫，apply_tales 補完拿掉）
     highlight: GambleMoment | None = None  # 這一場到目前最有戲的放手一搏（more_dramatic）；收場時寫進傳聞，成功的人加名望
     outcome_side: str = ""  # 贏的那一方（陣營 id）；保底的「膠著」、沒分勝負、舊資料是空的（軍餉的獲勝加給看它）
     outcome_margin: str = ""  # 「大勝」或「險勝」；outcome_side 是空的時候也是空的
@@ -471,7 +490,7 @@ def fixed_options(instance: BattleInstance, definition: BattleDef, name: str) ->
 
 def submit_action(
     instance: BattleInstance, name: str, tag: str, text: str | None = None, success_rate: int | None = None,
-    stories: tuple[str, str] | list[str] | None = None,
+    stories: tuple[str, str] | list[str] | None = None, sex: str | None = None,
 ) -> None:
     """記錄一個人這回合選的行動；已經陣亡或不在這場戰鬥裡的人送出無效。text/success_rate
     是 free_text 選項才有（見 BattleOption.free_text）——success_rate 是呼叫端（engine.py
@@ -489,6 +508,8 @@ def submit_action(
         instance.round.custom_texts[name] = text
     if success_rate is not None:
         instance.round.success_rates[name] = max(0, min(100, success_rate))
+        if sex:
+            instance.round.sexes[name] = sex
         if stories:
             instance.round.stories[name] = [str(stories[0]), str(stories[1])]
 
@@ -637,6 +658,14 @@ def resolve_round(
     hits: list[_Hit] = []  # 點名的放手一搏成了：對被點名的人的傷害等這一圈結算完才一起扣（誰先誰後不影響這一回合的力量）
     targets_now: dict[str, list[str]] = {}  # 這一回合被點名的人 → 點名他的人
     trend_before = instance.trend
+    rnd_no = instance.round_number + 1  # 這是整場的第幾回合（round_number 結算完才加一）
+
+    def tale(name: str, p: BattleParticipant, text: str, won: bool, target: str, fixed: str, numbers: str) -> None:
+        """沒有現成劇情的放手一搏：先播固定句，記一筆等著回合結算後補（GambleTale）。"""
+        instance.tales.append(GambleTale(
+            round=rnd_no, act_index=act_index, name=name, faction=p.faction, text=text, won=won, target=target,
+            sex=instance.round.sexes.get(name, "男"), fixed=fixed, numbers=numbers,
+        ))
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
         if p is None or p.eliminated:
@@ -681,12 +710,18 @@ def resolve_round(
                 if target is not None:  # 點名：推進打折，其餘化成對他的傷害（等這一圈結算完才扣，訊息到時候再寫）
                     delta = max(1, round(delta * tuning.target_push_share))
                     want = target.neili_cap * min(tuning.target_hit_max, tuning.target_hit_base + risk * tuning.target_hit_per_risk)
-                    hits.append(_Hit(len(msgs), name, target.name, want, success_rate <= tuning.pin_rate, win_story, side_name, delta, damage))
+                    hits.append(_Hit(
+                        len(msgs), name, target.name, want, success_rate <= tuning.pin_rate, win_story, side_name, delta, damage,
+                        custom_text or "",
+                    ))
                     msgs.append("")
                 elif win_story:  # 模型寫的劇情，數字照引擎算的另外附在後面
                     msgs.append(f"{win_story}（{shove(side_name, delta)}，自己氣血 -{round(damage)}）")
                 else:
-                    msgs.append(f"{name}這一搏成功了！{shove(side_name, delta)}，自己氣血 -{round(damage)}。")
+                    numbers = f"{shove(side_name, delta)}，自己氣血 -{round(damage)}"
+                    msgs.append(f"{name}這一搏成功了！{numbers}。")
+                    if custom_text:
+                        tale(name, p, custom_text, True, "", msgs[-1], numbers)
             else:
                 delta = -min(gamble.failure_trend_cap, round(risk * gamble.failure_trend_per_risk))
                 damage = p.neili_cap * min(1.0, gamble.failure_neili_share_base + risk * gamble.failure_neili_share_per_risk)
@@ -696,10 +731,13 @@ def resolve_round(
                     msgs.append(f"{lose_story}（{cost}自己氣血 -{round(damage)}）")
                 else:
                     msgs.append(f"{name}這一搏失敗了，付出了慘痛代價：{cost}自己氣血 -{round(damage)}。")
+                    if custom_text:
+                        tale(name, p, custom_text, False, target.name if target is not None else "", msgs[-1],
+                             f"{cost}自己氣血 -{round(damage)}")
             if custom_text:
                 moment = GambleMoment(
                     name=name, faction=p.faction, text=custom_text, story=win_story if succeeded else lose_story,
-                    rate=assessed, won=succeeded, target=target.name if target is not None else "",
+                    rate=assessed, won=succeeded, target=target.name if target is not None else "", round=rnd_no,
                 )
                 if len(p.gambles) < GAMBLES_KEPT:
                     p.gambles.append(moment)
@@ -730,7 +768,9 @@ def resolve_round(
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
     harmed: dict[str, float] = {}  # 這一回合每個人被別人打掉多少（點名＋集火，target_round_cap）
     for hit in hits:
-        msgs[hit.index] = _land_hit(instance, tuning, hit, harmed, msgs)
+        msgs[hit.index], fixed, numbers = _land_hit(instance, tuning, hit, harmed, msgs)
+        if fixed and hit.text:
+            tale(hit.attacker, instance.participants[hit.attacker], hit.text, True, hit.target, fixed, numbers)
     msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
     for hurt_name, amount in harmed.items():  # 被盯上打掉了氣血、回合結束還站著：戰功（撐住）
         q = instance.participants.get(hurt_name)
@@ -794,8 +834,12 @@ def resolve_round(
         actions=dict(instance.round.pending_actions), custom_texts=dict(instance.round.custom_texts),
         success_rates=dict(instance.round.success_rates), messages=list(msgs), trend_after=instance.trend,
     ))
+    del instance.tales[:-TALES_KEPT]  # 沒有伺服器補劇情（假人程式、測試、腳本）時不會一直長
     instance.round = BattleRound(opened_real=now)
     return msgs
+
+
+TALES_KEPT = 60  # 等著補劇情的放手一搏最多留幾筆（一回合二十人搏也留得下三回合）
 
 
 class _Hit(NamedTuple):
@@ -810,6 +854,7 @@ class _Hit(NamedTuple):
     side_name: str
     delta: int
     damage: float
+    text: str = ""  # 玩家寫的那一句（沒有現成劇情時記一筆等著補，GambleTale）
 
 
 def _harm(tuning: BattleTuning, q: BattleParticipant, want: float, harmed: dict[str, float]) -> float:
@@ -831,8 +876,9 @@ def _fell(instance: BattleInstance, q: BattleParticipant, msgs: list[str]) -> No
 
 def _land_hit(
     instance: BattleInstance, tuning: BattleTuning, hit: _Hit, harmed: dict[str, float], msgs: list[str],
-) -> str:
-    """點名的放手一搏成了：扣被點名的人、記帳；險招成了他下一回合被牽制。回傳那一搏的訊息（劇情＋括號裡的數字）。"""
+) -> tuple[str, str, str]:
+    """點名的放手一搏成了：扣被點名的人、記帳；險招成了他下一回合被牽制。回傳那一搏的訊息（劇情＋括號裡的數字），
+    加上沒有現成劇情時先播的固定句與括號裡的數字（等著補劇情，GambleTale；有劇情時兩個都是空字串）。"""
     q, me = instance.participants[hit.target], instance.participants[hit.attacker]
     dealt = _harm(tuning, q, hit.want, harmed)
     me.hurt_dealt += dealt
@@ -842,11 +888,12 @@ def _land_hit(
     if pinned_now:
         q.pinned_round = instance.round_number + 2  # 這一回合是第 round_number＋1 回合，牽制的是下一回合
     numbers = f"{shove(hit.side_name, hit.delta)}，{q.name}氣血 -{round(dealt)}，自己氣血 -{round(hit.damage)}"
-    line = f"{hit.story}（{numbers}）" if hit.story else f"{hit.attacker}這一搏成功了，正中{q.name}！{numbers}。"
+    fixed = "" if hit.story else f"{hit.attacker}這一搏成功了，正中{q.name}！{numbers}。"
+    line = f"{hit.story}（{numbers}）" if hit.story else fixed
     if pinned_now:
         line += f"{q.name}被牽制住了，下一回合只能固守。"
     _fell(instance, q, msgs)
-    return line
+    return line, fixed, numbers if fixed else ""
 
 
 def _focus_fire(
@@ -1298,6 +1345,144 @@ def assess_gamble(
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     rate = max(0, min(100, int(result.success_rate)))
     return GambleVerdict(rate, clean_story(result.win, who), clean_story(result.lose, who))
+
+
+class GambleScore(BaseModel):
+    success_rate: int = DEFAULT_FREE_TEXT_SUCCESS_RATE
+
+
+SCORE_PREDICT = 24  # 只評成功率的那一次最多生幾個 token：{"success_rate": 35} 十個上下，多留一點不被截斷
+
+
+def score_gamble(
+    client: OllamaClient | None, act: BattleAct, faction_name: str, text: str, name: str = "",
+    target: str = "", sex: str = "男",
+) -> int:
+    """決戰的放手一搏只評成功率（Joy 2026-10-13「這是我們效能問題，我們應該要做到能承受」：二十人同一回合各搏一次，
+    每一個都要在回合結算前評到）：提示短、只要一個整數、num_predict 只給 SCORE_PREDICT，劇情等回合結算後一整回合批給
+    write_tales 寫。跟 assess_gamble 同一套評法（只評行動本身合不合理，荒唐的給低分）；評不到回保底值。"""
+    if client is None:
+        return DEFAULT_FREE_TEXT_SUCCESS_RATE
+    who = name or "這位" + gender.hero(sex)
+    messages = [
+        {"role": "system", "content": (
+            "你是漢末兩軍交戰的戰場判定系統。評估玩家描述的行動在戰場上合理的成功機率，只回 0~100 的整數 success_rate："
+            "只根據行動本身的合理性，荒唐、灌水、亂寫的行動給低分。"
+        )},
+        {"role": "user", "content": (
+            f"戰場情境：【{act.title}】{act.text}\n玩家：{who}（所屬：{faction_name}）\n"
+            + (f"玩家點名攻擊的對手：{target}\n" if target else "")
+            + f"玩家的行動：「{text}」"
+        )},
+    ]
+    try:
+        result = client.chat_structured(
+            messages, GambleScore, temperature=0.3, num_predict=SCORE_PREDICT, required_fields=["success_rate"],
+        )
+    except Exception:
+        return DEFAULT_FREE_TEXT_SUCCESS_RATE
+    return max(0, min(100, int(result.success_rate)))
+
+
+class TaleItem(BaseModel):
+    """寫劇情的單子上的一搏（GambleTale 拿掉場景記錄用的欄位，加上陣營的名字）。"""
+
+    name: str
+    faction_name: str
+    text: str
+    won: bool
+    target: str = ""
+    sex: str = "男"
+
+
+class TaleLine(BaseModel):
+    name: str = ""
+    story: str = ""
+
+
+class TaleBatch(BaseModel):
+    lines: list[TaleLine] = Field(default_factory=list)
+
+
+TALE_PREDICT_EACH = 90  # 一搏一句四十字上下，加上 JSON 的名號與括號
+TALE_BATCH = 20  # 一次最多寫幾搏（一回合二十人都搏時一次寫完；再多下一次再寫）
+
+
+def write_tales(
+    client: OllamaClient | None, act: BattleAct, items: list[TaleItem], setting: str = "漢末兩軍交戰的戰場",
+) -> dict[str, str]:
+    """回合結算後，把這一回合等著補劇情的放手一搏一次批給模型寫（Joy 2026-10-13：評分與劇情拆開，二十人同時搏也撐得住）：
+    成敗已經擲好了，一搏一句、照成敗寫，以名號開頭、第三人稱，不寫數字。回傳 名號 → 整理過的一句（clean_story）；
+    寫壞的、名單外的、沒寫到的不在裡面（那一搏照舊播固定句）。模型失敗回空的。"""
+    if client is None or not items:
+        return {}
+    women = {item.name for item in items if item.sex == "女"}
+    listing = "\n".join(
+        f"{i}. {item.name}（{item.faction_name}{'，女子' if item.name in women else ''}）："
+        f"「{item.text}」——{'成功' if item.won else '失敗'}"
+        + (f"，點名攻擊的對手是{item.target}" if item.target else "")
+        for i, item in enumerate(items, 1)
+    )
+    messages = [
+        {"role": "system", "content": (
+            f"你是{setting}的說書人。下面每一位玩家這一回合都放手一搏，成敗已經定了。替每一位各寫一句結果：40 字以內、繁體中文，"
+            "以那位玩家的名號開頭、用第三人稱寫（不用「你」，名號後面不接冒號）；名號就是出手的那個人，不是在一旁看的人；"
+            "用名號稱呼雙方，不要拿「散人」「官軍」「黃巾」這類身分當代名詞。要具體接住玩家寫的內容，照成敗寫：成功就寫成了，"
+            "失敗就寫出糗、被識破、反被追打，可以荒謬、好笑。不要寫任何數字、不要寫戰局推進多少或扣多少氣血。"
+            "標了女子的玩家用「她」稱呼。回傳 lines：每一位一筆，name 照抄名號，story 是那一句。"
+        )},
+        {"role": "user", "content": f"戰場情境：【{act.title}】{act.text}\n這一回合的放手一搏：\n{listing}"},
+    ]
+    try:
+        result = client.chat_structured(
+            messages, TaleBatch, temperature=0.7, num_predict=64 + TALE_PREDICT_EACH * len(items), required_fields=["lines"],
+        )
+    except Exception:
+        return {}
+    wanted = {item.name for item in items}
+    out: dict[str, str] = {}
+    for line in result.lines:
+        name = str(line.name or "").strip()
+        if name in wanted and name not in out:
+            story = clean_story(line.story, name)
+            if story:
+                out[name] = story
+    return out
+
+
+def tales_due(instance: BattleInstance) -> list[GambleTale]:
+    """下一批要寫的：等著補劇情的最早那一回合的放手一搏（最多 TALE_BATCH 筆）。"""
+    if not instance.tales:
+        return []
+    first = min(t.round for t in instance.tales)
+    return [t for t in instance.tales if t.round == first][:TALE_BATCH]
+
+
+def apply_tales(instance: BattleInstance, done: list[tuple[int, str]], stories: dict[str, str]) -> int:
+    """寫好的劇情補回去：場景記錄（narrative_log）裡那一搏的固定句換成「劇情（數字）」，這個人那一回合的放手一搏（GambleMoment，
+    戰報、行狀、最有戲的一幕都讀它）記下劇情。done 是這一批的（回合, 名號）：寫到沒寫到都從等著補的單子拿掉（寫不出來就照固定句，
+    不重寫）。回傳補了幾句。"""
+    keys = set(done)
+    patched = 0
+    for tale in [t for t in instance.tales if (t.round, t.name) in keys]:
+        story = stories.get(tale.name)
+        if not story:
+            continue
+        line = f"{story}（{tale.numbers}）"
+        # 一回合一段：往後的回合（同一個人、同樣的數字可能寫出一模一樣的固定句）不碰，從那一回合那一段往前找
+        start = min(len(instance.narrative_log) - 1, len(instance.narrative_log) - 1 - (instance.round_number - tale.round))
+        for i in range(start, -1, -1):
+            if tale.fixed in instance.narrative_log[i]:
+                instance.narrative_log[i] = instance.narrative_log[i].replace(tale.fixed, line, 1)
+                patched += 1
+                break
+        p = instance.participants.get(tale.name)
+        moments = (p.gambles if p is not None else []) + ([instance.highlight] if instance.highlight is not None else [])
+        for moment in moments:
+            if moment.name == tale.name and moment.round == tale.round and not moment.story:
+                moment.story = story
+    instance.tales = [t for t in instance.tales if (t.round, t.name) not in keys]
+    return patched
 
 
 def without_mix_line(instance: BattleInstance, msgs: list[str]) -> list[str]:
