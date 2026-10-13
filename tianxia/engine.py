@@ -2925,6 +2925,15 @@ class Game:
             self._shop_say(shopview.problem_key(problem, "refused"))
         return item, msgs, report
 
+    def shop_view(self) -> dict | None:
+        """店面（店面獨立介面設計 6.1）：開關開著、鐵匠鋪開著（picking_smith，人在城鎮）才有；一步一步的單子還開著（開關關著時開的、
+        舊存檔）就照舊畫那一串按鈕，不給店面（店面上的鈕在單子那一步不在選單上）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not c.config.shop_screens or not p.picking_smith or p.smith_draft is not None or not equipment.smith_open(s, c):
+            return None
+        return shopview.smith_view(s, c, self.world)
+
     def wield_weapon(self, item_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
         坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵
