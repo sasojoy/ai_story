@@ -165,13 +165,15 @@ def general_name(content: Content, world: WorldStateStore, kind: str, main: str,
 
 def forge(
     state: GameState, content: Content, world: WorldStateStore, kind: str, main: str, aux: str, rng: random.Random | None = None,
+    report: dict | None = None,
 ) -> tuple[Equipment | None, list[str]]:
     """打一件（兵器 4.2、4.3；防具 4.7 照同一套，kind 是 ARMOR_KIND；打造隱藏配方設計 4.1、4.2、7.2）：一次拿鎖做完，不叫模型。
     回（那一件, 訊息）；打不成回 (None, [原因])，什麼都不收。先比這一季的隱藏配方（forge_secrets.match，不擲骰）：打中了是名器，
     名字照內容，全服第一個打出的人登記成首位發現者（world.claim_gear_find，原子）、江湖上傳一句，別人照著打記首創名望回饋；
     沒打中照 general_name（上線前登記的舊名字 → 對照表），什麼都不登記。品質照 forge_odds 擲（隱藏配方不改機率；rng 由呼叫端給：
     兵器 Game.rng、防具 own_rng；沒給是下品），名器也只擲這一次；收工錢與兩樣素材、熟手 +1、放進身上或裝備庫。
-    神器配方（5.1 甲）一爐必出神器、不擲品質（不碰亂數）：這一季第一把是原品（首位發現者就是原品主人），之後每一把是仿品，仿品數 +1。"""
+    神器配方（5.1 甲）一爐必出神器、不擲品質（不碰亂數）：這一季第一把是原品（首位發現者就是原品主人），之後每一把是仿品，仿品數 +1。
+    report 給了就填這一爐的首位發現（first）、隱藏配方 id（secret）、神器（divine）：店面的出爐卡用（店面獨立介面設計 2.3）。"""
     problem = forge_problem(state, content, kind, main, aux)
     if problem is not None:
         return None, [f"（{problem}。）"]
@@ -189,6 +191,8 @@ def forge(
     else:
         name = general_name(content, world, kind, main, aux, attribute)
     divine = secret is not None and secret.divine
+    if report is not None:
+        report.update(first=first, secret=secret.id if secret is not None else None, divine=divine)
     if divine:
         # 神器配方（打造隱藏配方設計 5.1 甲）：一爐必出神器、不擲品質（不碰亂數）。第一把是原品（claim_gear_find 那一筆交易裡記下原品主人＝
         # 首位發現者，見 forge_secrets.new_find），之後每一把是仿品（打的人是原品主人自己也一樣，5.3），仿品數 +1
@@ -355,6 +359,11 @@ def _held(state: GameState, content: Content) -> list[tuple[str, int]]:
         ((mid, n) for mid, n in state.player.materials.items() if n > 0 and mid in mats),
         key=lambda pair: (-mats[pair[0]].tier, -pair[1], pair[0]),
     )
+
+
+def held(state: GameState, content: Content) -> list[tuple[str, int]]:
+    """背包裡打得了的素材（店面的素材格照這個順序排，同一步一步選單的主料、輔料）：高階的先、同階數量多的先、再照 id。"""
+    return _held(state, content)
 
 
 def draft_stale(content: Content, draft: SmithDraft) -> bool:

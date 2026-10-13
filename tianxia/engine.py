@@ -20,7 +20,7 @@ from . import (
     annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
-    signature_arms, skillview, smithing,
+    shopview, signature_arms, skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -58,7 +58,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
     WorldState,
     new_game_state,
 )
@@ -297,6 +297,7 @@ class Game:
         self._fight: fight_llm.PreparedFight | None = None
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
+        self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
@@ -2099,6 +2100,8 @@ class Game:
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "smith":
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
+            self.state.player.shop_clue = ""
+            self._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "market":
             self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
@@ -2851,12 +2854,16 @@ class Game:
 
     def _smith(self, arg: str) -> list[str]:
         """鐵匠鋪上的選擇（_smith_act）；這一下花了銀兩或素材（買、修、淬煉、開爐；拆解拿到素材不算），再擲一次鐵匠順口（_smith_clue；
-        打造隱藏配方設計 6.2、計畫「要 PM 定的」第 3 條）。"""
+        打造隱藏配方設計 6.2、計畫「要 PM 定的」第 3 條）。順口說出的那一句記成店面上這一下的話（shop_clue，店面獨立介面設計 1.4）。"""
         p = self.state.player
+        p.shop_clue = ""
         silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
         msgs = self._smith_act(arg)
         if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
-            msgs = msgs + self._smith_clue()
+            clue = self._smith_clue()
+            if clue:
+                p.shop_clue = clue[0]
+            msgs = msgs + clue
         return msgs
 
     def _smith_act(self, arg: str) -> list[str]:
@@ -2873,21 +2880,22 @@ class Game:
             return []
         if verb == smithing.GO_VERB:
             kind, main, aux = smithing.parse_go(f"smith:{arg}")
-            # 防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方設計 9.3），兵器照舊用 Game.rng
-            rng = smithing.own_rng(s, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else self.rng
-            item, msgs = smithing.forge(s, c, self.world, kind, main, aux, rng=rng)  # 不叫模型、一次做完（打造隱藏配方設計第八節）
-            if item is not None:
-                s.player.smith_draft = None  # 打完收起單子：同一顆連按兩下、兩個分頁，第二下已經不在選單上（Review Focus 1）
-            return msgs
+            return self._smith_forge_once(kind, main, aux)[1]
         if verb in smithing.STEP_VERBS:
+            if verb in ("temper", "armor-temper"):  # 店面上掌櫃那一句（1.4）：照淬煉之前的擋法
+                self._shop_say(shopview.problem_key(smithing.temper_problem(s, c, "armor" if verb == "armor-temper" else "weapon"), "temper"))
             return smithing.step(s, c, verb, rest)
         if verb == "buy":
+            self._shop_say(shopview.problem_key(weapons.buy_problem(s, c, rest), "buy"))
             return weapons.buy(s, c, rest)
         if verb == "repair":
+            self._shop_say(shopview.problem_key(weapons.repair_problem(s, c), "repair"))
             return weapons.repair(s, c)
         if verb == "armor-buy":
+            self._shop_say(shopview.problem_key(armor.buy_problem(s, c, rest), "buy"))
             return armor.buy(s, c, rest)
         if verb == "armor-repair":
+            self._shop_say(shopview.problem_key(armor.repair_problem(s, c), "repair"))
             return armor.repair(s, c)
         # 換上與拆解兩頁共用 id 開頭（兵:N、甲:N 本來就全角色唯一），照停在哪一頁限定欄位
         if verb == "wield":
@@ -2895,6 +2903,27 @@ class Game:
         if verb == "dismantle":
             return (armor.dismantle if equipment.page(s.player, c) == "armor" else weapons.dismantle)(s, c, rest)
         return ["（此刻無法這麼做。）"]
+
+    def _shop_say(self, key: str) -> None:
+        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵，與挑句子的種子（這一刻的季的時間）。"""
+        p = self.state.player
+        p.shop_line, p.shop_line_seed = key, int(self.state.world.time)
+
+    def _smith_forge_once(self, kind: str, main: str, aux: str) -> tuple[Equipment | None, list[str], dict]:
+        """開爐一次（一步一步單子的 forge-go 與店面的直接開爐共用）：防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方
+        設計 9.3），兵器照舊用 Game.rng；不叫模型、一次做完（打造隱藏配方設計第八節）。打成了收起單子（同一顆連按兩下、兩個分頁，第二下
+        已經不在選單上：Review Focus 1），掌櫃那一句照打出來的（品質、名器、神器）；被拒絕照原因。回（那一件, 訊息, report）。"""
+        s, c = self.state, self.content
+        problem = smithing.forge_problem(s, c, kind, main, aux)
+        rng = smithing.own_rng(s, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else self.rng
+        report: dict = {}
+        item, msgs = smithing.forge(s, c, self.world, kind, main, aux, rng=rng, report=report)
+        if item is not None:
+            s.player.smith_draft = None
+            self._shop_say(shopview.forged_key(item))
+        else:
+            self._shop_say(shopview.problem_key(problem, "refused"))
+        return item, msgs, report
 
     def wield_weapon(self, item_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
