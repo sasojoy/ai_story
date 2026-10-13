@@ -186,3 +186,79 @@ def test_season_one_keeps_no_cap_and_no_recovery(real, world):
     figures.defeat(s, real, "bocai", 10)
     figures.recover(s, real, 24 * 30)
     assert figures.state_of(s, real, "bocai").prestige == 50
+
+
+def _retire(game, fid):
+    figures.defeat(game.state, game.content, fid, 100)
+    game.world.mutate_season(lambda w: w.figures.update(game.state.world.figures))
+
+
+def test_beating_bocai_out_marks_him_defeated_and_stops_his_sim_player(real, world):
+    """丙 (c)：波才退場（14 天的季）記 bocai_defeated，kou_boss 不再是候選，波才虛擬玩家不再推黃巾聲勢；第一季打到退場不記。"""
+    from tianxia.world import sim_active
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    real.config.figure_daily_loss_cap = 0
+    real.config.snub_hours = 0
+    with _won():
+        for _ in range(12):
+            game.choose("act:challenge:bocai")
+    s = game.state
+    assert figures.is_out(s, "bocai") and "bocai_defeated" in s.world.flags
+    bocai = next(sim for sim in real.scenario.sim_players if sim.name == "波才")
+    assert not sim_active(bocai, s, real)
+
+
+def test_huangfusong_out_stops_his_pushes_and_leaves_the_map(real, world):
+    from tianxia import atlas
+    from tianxia.world import sim_active
+    game = _player(real, world, "黃甲", "huang", "changshe")
+    figures.defeat(game.state, real, "huangfusong", 100)
+    s = game.state
+    hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
+    assert not sim_active(hfs, s, real) and sim_active(hfs, s)  # 不給 content 的舊呼叫照舊
+    assert "皇甫嵩" not in atlas.haunters(s, real, "changshe") and "皇甫嵩" not in atlas.haunters(s, real, "yingchuan")
+    assert "act:challenge:zhujun" in _ids(_player(real, world, "黃乙", "huang", "changshe"))
+
+
+def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, world):
+    from tianxia import atlas
+    from tianxia.world import sim_active
+    game = _player(real, world, "黃甲", "huang", "changshe")
+    figures.defeat(game.state, real, "huangfusong", 100)
+    real.config.figure_challenge_every_season = False
+    s = game.state
+    hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
+    assert sim_active(hfs, s, real) and "皇甫嵩" in atlas.haunters(s, real, "changshe")
+    assert figures.placed_characters(s, real) == {}
+
+
+def test_season_one_records_no_out_flag(real, world):
+    real.config.season_one = True
+    world.mutate_season(lambda w: setattr(w, "season_one", True))  # 這一季蓋第一季的章
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    real.config.snub_hours = 0
+    with _won():
+        for _ in range(40):
+            if figures.is_out(game.state, "bocai"):
+                break
+            game.choose("act:challenge:bocai")
+    assert "bocai_defeated" not in game.state.world.flags
+
+
+def test_a_new_season_brings_the_retired_back(real, world):
+    from conftest import next_season
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    real.config.figure_daily_loss_cap = 0
+    real.config.snub_hours = 0
+    with _won():
+        for _ in range(12):
+            game.choose("act:challenge:bocai")
+    next_season(real, world)
+    w = world.get_season()
+    assert w.figures == {} and "bocai_defeated" not in w.flags
+
+
+def test_an_out_flag_nobody_reads_is_refused(real):
+    real.figures["bocai"] = real.figures["bocai"].model_copy(update={"out_flag": "no_such_flag"})
+    with pytest.raises(ContentError, match="out_flag"):
+        validate(real)

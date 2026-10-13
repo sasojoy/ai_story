@@ -95,6 +95,18 @@ def untimed(content: Content, world: WorldState) -> bool:
     return challenge_on(content, world) and not season_one(content, world)
 
 
+def by_name(content: Content, name: str) -> str | None:
+    """名字是這個的大勢人物 id（龍頭人物〔虛擬玩家〕照名字對人物表；atlas 與 world 共用）。"""
+    return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
+
+
+def leader_out(state: GameState, content: Content, name: str) -> bool:
+    """這位龍頭人物（虛擬玩家，照名字）在沒有時刻表的季已經退場或重創（丙 (c)：不再出手、輿圖不再標他）。緊急開關關著、第一季、
+    人物表沒有同名的人，一律是假（虛擬玩家照舊）。"""
+    fid = by_name(content, name)
+    return fid is not None and untimed(content, state.world) and is_out(state, fid)
+
+
 def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
     """此刻在這個地點、在場（active）的人物（人物表的順序）。下獄、退場、重創、還沒出場的都不算。"""
     return [

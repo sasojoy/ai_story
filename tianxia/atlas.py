@@ -194,7 +194,10 @@ def haunters(state: GameState, content: Content, loc_id: str) -> list[str]:
     （figures.present_at；虛擬玩家那時不出手，也不再標）。不檢查視野：呼叫端要先用 is_known 把關。"""
     if season_one(content, state.world):
         return [content.figures[fid].name for fid in figures.present_at(state, content, loc_id)]
-    names = [sim.name for sim in content.scenario.sim_players if loc_id in sim.haunts and sim_shown(sim, state)]
+    names = [  # 沒有時刻表的季退場的龍頭人物不再標（丙 (c)，figures.leader_out）
+        sim.name for sim in content.scenario.sim_players
+        if loc_id in sim.haunts and sim_shown(sim, state) and not figures.leader_out(state, content, sim.name)
+    ]
     return list(dict.fromkeys(names))
 
 
@@ -207,7 +210,7 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     trend_names = {t.id: t.name for t in content.scenario.trends}
     doing = []
     for sim in content.scenario.sim_players:
-        if sim.name != name or not sim_active(sim, state):
+        if sim.name != name or not sim_active(sim, state, content):
             continue
         moves = resolve_trends(content, state.world, sim.trend)  # 開關關著時戰線都算黃巾聲勢
         ups = [trend_names[t] for t, delta in moves.items() if delta > 0 and is_revealed(state.world, content, t)]
@@ -217,14 +220,10 @@ def leader_activity(state: GameState, content: Content, name: str) -> str:
     return "；".join(doing) or LEADER_QUIET
 
 
-def _figure_id(content: Content, name: str) -> str | None:
-    return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
-
-
 def _figure_activity(state: GameState, content: Content, name: str) -> str:
     """第一季：大勢人物在做什麼（figures.tick 的規則）——「每天約出手 N 次，讓某戰線上升／下降」，還沒到出兵那一週時
     後面接「（第 N 週起）」；不推的（沒有戰線、何進）寫「眼下沒有動靜」。"""
-    fid = _figure_id(content, name)
+    fid = figures.by_name(content, name)
     goal = figures.push_goal(state, content, fid) if fid is not None else 0
     if not goal:
         return LEADER_QUIET
@@ -247,7 +246,7 @@ def leader_text(state: GameState, content: Content, name: str) -> str:
     """詳情欄裡一位常出沒在此的龍頭人物：他是誰、現在在做什麼、最近的傳聞（沒有就不寫）。
     和 haunters 一樣不檢查視野與是否該露面：呼叫端要先把關。"""
     lines = [f"**龍頭人物**　{name}（常出沒在此）", f"- {LEADER_WHO}。"]
-    fid = _figure_id(content, name) if season_one(content, state.world) else None
+    fid = figures.by_name(content, name) if season_one(content, state.world) else None
     if fid is not None:  # 第一季：聲威寫出來，挑戰本人之前看得到好不好打
         lines.append(f"- 聲威 {figures.state_of(state, content, fid).prestige}（越高越難打）。")
         cid = content.figures[fid].character

@@ -49,7 +49,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
     day_turn, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -5115,6 +5115,8 @@ class Game:
         msgs = [f"{fig.name}敗走。"]
         cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
         msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
+        if fig.out_flag and figures.untimed(c, w) and figures.is_out(s, fid):  # 丙 (c)：沒有時刻表的季打退波才＝擊敗波才（第一季不記）
+            add_world_flags(s, [fig.out_flag])
         if fig.character is not None:
             before = p.affinities.get(fig.character, 0)
             p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)

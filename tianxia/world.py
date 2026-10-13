@@ -171,8 +171,11 @@ def update_storyline(state: GameState, content: Content) -> list[str]:
     return msgs
 
 
-def sim_active(sim: SimPlayer, state: GameState) -> bool:
-    """虛擬玩家的這一條設定現在會不會行動：它需要的隱藏大勢已浮現，而且條件成立。世界模擬與大地圖詳情共用。"""
+def sim_active(sim: SimPlayer, state: GameState, content: Content | None = None) -> bool:
+    """虛擬玩家的這一條設定現在會不會行動：它需要的隱藏大勢已浮現，而且條件成立。世界模擬與大地圖詳情共用。
+    給了 content 才看退場：同名的大勢人物在沒有時刻表的季退場了就不出手（丙 (c)，figures.leader_out）。"""
+    if content is not None and figures.leader_out(state, content, sim.name):
+        return False
     if sim.requires_revealed and sim.requires_revealed not in state.world.revealed:
         return False
     return check_condition(sim.condition, state)
@@ -185,7 +188,7 @@ def sim_tick(state: GameState, content: Content, hours: int, rng: random.Random)
     sims = [] if season_one(content, state.world) else content.scenario.sim_players
     for _ in range(hours):
         for sim in sims:
-            if not sim_active(sim, state):
+            if not sim_active(sim, state, content):  # 退場的龍頭人物整個跳過、不擲亂數（同 bocai_defeated 讓波才停手，丙 (c)）
                 continue
             if rng.random() >= sim.actions_per_day / 24:
                 continue
