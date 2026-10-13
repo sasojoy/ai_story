@@ -350,3 +350,67 @@ def test_the_holder_card_says_it_is_the_season_of_the_mandate(mandated, world):
     _mandate_now(world)
     card = _player(mandated, world, "甲").seal_view()
     assert card["state"] == seal.CARD_MANDATE and len(card["dates"]) == 3  # 長社、宛城、天命之爭
+
+
+# ── Task 5：天命之爭開集結 ──────────────────────────────
+
+
+def _destiny_open(content, world, **held):
+    """七片都現世過（held 有主、其餘隱沒），這一季當天命之季，開天命之爭的集結。回集結公告。"""
+    from tianxia import world as world_rules
+
+    _opened(content, world)
+    _all_emerged(content, world, **held)
+    _mandate_now(world)
+    return world_rules.open_showdown(world, content, "tianming", 0.0)
+
+
+def test_the_mandate_battle_leans_toward_the_army_holding_shards(mandated, world):
+    """8.3：開集結那一刻碎片在哪一軍（投靠名冊）戰局起點就往哪一軍偏，每片 3 點；豪強、散人、隱沒的不推；起點同時寫進 trend 與
+    trend_start；天命之爭本身不璽動、不現世。"""
+    from tianxia import world as world_rules
+
+    _opened(mandated, world)  # 先開季再建角色（同 test_seal_engine._setup），投靠名冊記在這一季
+    for name, faction in (("官一", "guan"), ("官二", "guan"), ("黃一", "huang"), ("豪一", "haoqiang"), ("散一", None)):
+        _player(mandated, world, name, faction)
+    base = world_rules.showdown_start(world_rules._season_vehicle(mandated, world.get_season()), mandated, mandated.battles["tianming"])
+    msgs = _destiny_open(mandated, world, chishou="官一", xuanniu="官二", yunzhuan="黃一", jinjiao="豪一", chenglu="散一")
+    battle = world.get_battle()
+    assert battle.battle_id == "tianming" and battle.seal_lean == {"guan": 2, "huang": 1}
+    assert battle.trend == battle.trend_start == base + 3
+    assert battle.seal_shard is None and battle.seal_emerge is None
+    text = seal.MANDATE_MUSTER.format(battle="天命之爭", lean="官軍握著2片、黃巾軍握著1片")
+    assert any(text in m for m in msgs) and any(r.text == text for r in world.get_season().rumors)
+
+
+def test_the_lean_is_capped_at_twelve_points(mandated):
+    battle = mandated.battles["tianming"]
+    cfg = mandated.config.seal
+    assert seal.lean_shift({"guan": 6, "huang": 1}, battle, cfg) == 12
+    assert seal.lean_shift({"huang": 3}, battle, cfg) == -9
+    assert seal.lean_shift({"haoqiang": 7}, battle, cfg) == 0
+    assert seal.lean_text({}, battle) == seal.LEAN_NONE
+
+
+def test_a_holder_joining_the_mandate_battle_weighs_more(mandated, world):
+    """8.3：手上有碎片的人到場，份量 ×1.2（加入時算進快照；只在天命之爭）；沒有碎片的照舊。"""
+    _opened(mandated, world)
+    one = _player(mandated, world, "官一", "guan")
+    two = _player(mandated, world, "官二", "guan")
+    _destiny_open(mandated, world, chishou="官一")
+    for game in (one, two):
+        game.sync(10.0)
+    plain_one, plain_two = one._battle_scores(), two._battle_scores()
+    one.choose("battle:join:guan")
+    two.choose("battle:join:guan")
+    people = world.get_battle().participants
+    assert people["官一"].scores == {k: round(v * 1.2, 1) for k, v in plain_one.items()}
+    assert people["官二"].scores == plain_two
+
+
+def test_the_mandate_battle_scene_names_who_holds_the_shards(mandated, world):
+    _opened(mandated, world)
+    game = _player(mandated, world, "官一", "guan")
+    _destiny_open(mandated, world, chishou="官一")
+    game.sync(10.0)
+    assert seal.MANDATE_SCENE.format(lean="官軍握著1片") in game.scene_text()

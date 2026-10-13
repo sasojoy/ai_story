@@ -291,10 +291,65 @@ DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決
 NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
 
 
+MANDATE_MUSTER = "{battle}集結：{lean}。"  # 待 joy 潤：天下大事、集結公告（8.3）
+MANDATE_SCENE = "天命之爭：{lean}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
+LEAN_PART = "{side}握著{n}片"  # 待 joy 潤
+LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
+
+
+def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
+    """天命之爭開集結那一刻：能站的每一方各握幾片（持有者照這一季的投靠名冊，不讀存檔；散人、隱沒的不算）。第三方也數（畫面與
+    之後的「群雄得璽」用；起點只看兩軍，lean_shift）。"""
+    sides = battle_instance.sides(definition)
+    out: dict[str, int] = {}
+    for shard in world.seal_state().registry.shards.values():
+        if shard.state == "held" and shard.holder and shard.id in content.seal:
+            side = world.faction_of(shard.holder)
+            if side in sides:
+                out[side] = out.get(side, 0) + 1
+    return out
+
+
+def lean_shift(lean: dict[str, int], definition: BattleDef, cfg: SealTuning) -> int:
+    """起點往握碎片的那一軍偏（8.3；PM 戊）：（第一軍 − 第二軍）× start_shift，夾在 ±start_shift_cap；第一軍（官軍）是正向
+    （同 BattleDef.factions[0] 的約定）；豪強不推。"""
+    first, second = definition.factions[0].id, definition.factions[1].id
+    raw = (lean.get(first, 0) - lean.get(second, 0)) * cfg.mandate.start_shift
+    return max(-cfg.mandate.start_shift_cap, min(cfg.mandate.start_shift_cap, raw))
+
+
+def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
+    """「官軍握著2片、黃巾軍握著1片」（只寫兩軍，照 BattleDef 的名字）；都沒有寫 LEAN_NONE。"""
+    parts = [LEAN_PART.format(side=f.name, n=lean[f.id]) for f in definition.factions if lean.get(f.id)]
+    return "、".join(parts) or LEAN_NONE
+
+
+def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
+    """天命之爭剛開集結：數兩軍各握幾片、照它把起點（trend 與 trend_start）偏過去、快照進這一場（seal_lean），天下大事一句。
+    天命之爭本身不璽動、不現世（8.3）。"""
+    lean = mandate_lean(world, content, definition)
+    shift = lean_shift(lean, definition, content.config.seal)
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition))
+    world.mutate(lambda shared: rumor(shared.season, text))
+
+    def _snap(b) -> None:
+        if b.battle_id == definition.id and b.phase == "muster":
+            b.seal_lean = dict(lean)
+            b.trend = b.trend_start = max(0, min(100, b.trend + shift))
+
+    world.mutate_battle(_snap)
+    return [f"🏺 【天下大事】{text}"]
+
+
 def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, now: float) -> list[str]:
     """時刻表決戰剛開集結（world._open_claimed，不在任何 mutate 裡）：標 emerge 的擲現世、標了 seal 的擲璽動（Task 6）。
-    一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。"""
-    mark = mark_of(content, definition) if on(content) else None
+    一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。
+    天命之爭（玉璽二）另走 _mandate_muster。"""
+    if not on(content):
+        return []
+    if is_mandate_battle(content, definition):  # 天命之爭（8.3）
+        return _mandate_muster(world, content, definition)
+    mark = mark_of(content, definition)
     if mark is None:
         return []
     got: dict[str, str | None] = {"emerge": None, "stir": None, "holder": None, "faction": None}

@@ -3165,6 +3165,17 @@ class Game:
         """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照）。"""
         return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content)}
 
+    def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
+        """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
+        真人、假人、臨時投效的散人都走這裡（_battle_choose、_enlist、_backfill_battle_scores）。"""
+        c = self.content
+        if not seal.on(c) or not seal.is_mandate_battle(c, definition):
+            return scores
+        if seal.shard_of(self.world.seal_state().registry, self.state.player.name) is None:
+            return scores
+        w = c.config.seal.mandate.holder_weight
+        return {move: round(value * w, 1) for move, value in scores.items()}
+
     def _battle_road(self) -> str:
         """加入戰局時快照的武學屬性（決戰的隊伍多樣性，一門打不遍）：只有第一季開著時才記，關著時是空的、不算一路。"""
         if not season_one(self.content, self.state.world):
@@ -3179,12 +3190,12 @@ class Game:
         status = self._battle_status(tick=False)
         if status is None:
             return
-        battle, _ = status
+        battle, definition = status
         name = self.state.player.name
         me = battle.participants.get(name)
         if me is None or me.scores or me.eliminated:
             return
-        scores, road, role = self._battle_scores(), self._battle_road(), self._battle_role()
+        scores, road, role = self._mandate_weight(definition, self._battle_scores()), self._battle_road(), self._battle_role()
         gear = self._battle_gear()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
@@ -4285,6 +4296,8 @@ class Game:
         header = f"**{definition.name}**"
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
+        if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
+            header += "\n\n" + seal.MANDATE_SCENE.format(lean=seal.lean_text(battle.seal_lean, definition))
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -4537,7 +4550,7 @@ class Game:
         if kind == "join":
             if self.content.scenario.factions and rest != self.state.player.faction:
                 return ["（你只能站在自己陣營這一邊。）"]
-            scores = self._battle_scores()  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
+            scores = self._mandate_weight(definition, self._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             gear, marks = self._battle_gear(), self._battle_marks()
             self.world.mutate_battle(
                 lambda b: battle_instance.join_faction(
@@ -4552,7 +4565,7 @@ class Game:
             return msgs
         if kind == "join_late":
             own = self.state.player.faction if self.content.scenario.factions else None
-            scores = self._battle_scores()
+            scores = self._mandate_weight(definition, self._battle_scores())
             gear, marks = self._battle_gear(), self._battle_marks()
             self.world.mutate_battle(
                 lambda b: battle_instance.auto_assign_latecomer(
@@ -4579,7 +4592,7 @@ class Game:
             return ["（此刻無法這麼做。）"]
         if changing_sides and battle.phase != "muster":
             return ["（開打之後就不能改投了。）"]
-        scores, cap, power, road = self._battle_scores(), self._battle_neili_cap(), self._battle_power(), self._battle_road()
+        scores, cap, power, road = self._mandate_weight(definition, self._battle_scores()), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
         gear, marks = self._battle_gear(), self._battle_marks()
         if battle.phase == "muster":
