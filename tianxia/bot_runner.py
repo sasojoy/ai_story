@@ -32,6 +32,8 @@ from .state import BotProfile, GameState
 from .world_state import WorldStateStore
 
 LOCK_WAIT = 2.0  # 假人等行動鎖最多幾秒；等不到就跳過這一輪
+BATTLE_TICK_SECONDS = 2.0  # 決戰開打時 run_bots 多久看一次在場的假人出招了沒（battle_tick）
+BATTLE_DELAY = (3.0, 12.0)  # 回合開了幾秒假人才出招：每個假人每回合擲一次，跟真人看完場景再按差不多；真人都送出了就不再等
 FEMALE_SAMPLE = 5  # 真人選過性別的不到這麼多個，假人的女性比例照 gender.BOT_FEMALE_SHARE（太少的樣本照抄會整批偏一邊）
 
 log = logging.getLogger(__name__)
@@ -115,6 +117,65 @@ class BotRunner:
                 log_failure(exc)
                 report.failed += 1
         return report
+
+    def battle_tick(self) -> TickReport:
+        """決戰回合裡，在場還沒出招的假人第一時間出招（Joy 2026-10-13：「機器人是不是都不會第一時間選擇行動，這樣很拖時間」）。
+        平常的 tick 隔 bot_tick_seconds 才巡一輪、在線的假人還要擲 act_chance，回合常常等到逾時；run_bots 在決戰開打時
+        每 BATTLE_TICK_SECONDS 叫這裡一次。還沒出招的假人等回合開了 BATTLE_DELAY 那幾秒（每個假人每回合擲一次）才出手；
+        場上沒在掛機的真人都送出了就不再等，馬上出手，回合不必等逾時。只出決戰的招（bot_policy.battle_move），別的事照舊歸 tick。"""
+        report = TickReport()
+        if self.world.season_phase() != "running" or self.world.paused_at() is not None:
+            return report
+        battle = self.world.get_battle()
+        if battle is None or battle.phase != "active" or battle.battle_id not in self.content.battles:
+            return report
+        bots = {state.player.name: state.player.bot for state in self.characters.all(bots_only=True)}
+        present = [p for p in battle.participants.values() if not p.eliminated and not p.away]
+        pending = [p for p in present if p.name not in battle.round.pending_actions]
+        humans_done = not any(p.name not in bots and not p.is_bot and not battle_instance.idle(p) for p in pending)
+        now = self.clock()
+        for p in pending:
+            profile = bots.get(p.name)
+            if profile is None:
+                continue
+            delay = random.Random(f"{profile.seed}|{battle.battle_id}|{battle.round_number}|{battle.round.opened_real}").uniform(*BATTLE_DELAY)
+            if not humans_done and now - battle.round.opened_real < delay:
+                continue
+            report.online += 1
+            try:
+                with self.world.action_lock(timeout=LOCK_WAIT):
+                    if self._battle_turn(p.name, self.clock()):
+                        report.acted += 1
+            except TimeoutError:
+                report.skipped += 1
+            except Exception as exc:
+                log_failure(exc)
+                report.failed += 1
+        return report
+
+    def _battle_turn(self, name: str, now: float) -> bool:
+        """在寫入交易裡替一個假人出決戰的一招（battle_tick）；季不在跑、暫停中、不是這一季的假人就什麼都不做。"""
+        state = self.characters.load(name)
+        shared = self.world.read()
+        if state is None or shared.season_phase() != "running" or shared.paused_at is not None:
+            return False
+        profile = state.player.bot
+        if profile is None or not server_bots.active(profile, shared.season_number):
+            return False
+        game = self._bot_game(state)
+        game.sync(now)
+        game.state.player.seen_real = now
+        if game.state.world.ended:
+            self.characters.save(game.state)
+            return False
+        acted = bool(bot_policy.battle_move(game, profile, self.rng))
+        self.characters.save(game.state)
+        return acted
+
+    def battle_on(self) -> bool:
+        """有一場決戰正在開打（run_bots 照它決定要不要每 BATTLE_TICK_SECONDS 叫 battle_tick）。"""
+        battle = self.world.get_battle()
+        return battle is not None and battle.phase == "active"
 
     def _naming_open(self) -> bool:
         """這一輪輪不輪得到請模型取名：有 client、設定開著、離上一次夠久（一次一件，PM 10/5）。"""

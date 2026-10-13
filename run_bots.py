@@ -7,11 +7,12 @@
 """
 from __future__ import annotations
 
+import math
 import time
 from pathlib import Path
 
 from tianxia import database, seal
-from tianxia.bot_runner import BotRunner, TickReport, log_failure
+from tianxia.bot_runner import BATTLE_TICK_SECONDS, BotRunner, TickReport, log_failure
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import open_world
@@ -46,9 +47,21 @@ def main(ticks: int | None = None) -> None:
                     flush=True,
                 )
             done += 1
-            time.sleep(content.config.bot_tick_seconds)
+            _wait(runner, content.config.bot_tick_seconds)
     except KeyboardInterrupt:
         print("伺服器假人程式結束", flush=True)
+
+
+def _wait(runner: BotRunner, seconds: float) -> None:
+    """等下一輪平常的巡邏；中間有決戰開打時，每 BATTLE_TICK_SECONDS 讓在場的假人出招（Joy 2026-10-13：假人不第一時間出招很拖時間）。"""
+    steps = max(1, math.ceil(seconds / BATTLE_TICK_SECONDS))
+    for _ in range(steps):
+        time.sleep(seconds / steps)
+        try:
+            if runner.battle_on():
+                runner.battle_tick()
+        except Exception as exc:
+            log_failure(exc)
 
 
 if __name__ == "__main__":

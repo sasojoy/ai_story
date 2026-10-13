@@ -140,7 +140,7 @@ def test_with_push_off_the_page_polls_every_ten_seconds_and_never_opens_a_stream
     return { streams: FakeES.all.length, intervals, ticks, afterVisible: at("/api/main").length, live: S.pushLive };
     """)
     assert out["streams"] == 0 and out["live"] is False
-    assert out["intervals"] == [10000]
+    assert out["intervals"] == [10000, 1000]  # 1 秒那一個是決戰倒數（tickDue）：只改字、沒有決戰時什麼都不做，不輪詢
     assert out["ticks"] == [10000, 20000, 30000, 40000, 50000, 60000]
     assert out["afterVisible"] == 7  # 看得到了：照舊補抓一次
 

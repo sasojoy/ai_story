@@ -529,17 +529,17 @@ def round_is_complete(instance: BattleInstance, timed_out: bool = False) -> bool
     return all(p.name in instance.round.pending_actions for p in awaited)
 
 
-def round_progress(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> tuple[int, int]:
-    """這一回合（已送出, 在場）的人數：在場是還沒倒下、沒離開大區的人，已送出是其中選好行動的。
+def round_progress(instance: BattleInstance, definition: BattleDef) -> tuple[int, int]:
+    """這一回合（已送出, 在場）的人數：在場是還沒倒下、沒離開大區、沒在掛機的人，已送出是其中選好行動的。
     畫面寫「已送出 X／在場 Y」，讓人知道是在等人、不是壞了（試玩回饋 2026-10-08）。
-    第三方（地方豪強）有幾個人，兩軍不該知道（戰鬥系統第六節），所以只有 with_third（看的人自己站第三方）才算進去。"""
-    active = [p for p in _active_participants(instance) if (with_third or not is_third(definition, p)) and not idle(p)]
+    跟 round_is_complete 等的是同一批人，豪強也算（Joy 2026-10-13：以前兩軍看不到豪強，全員送出了倒數還在跳）。"""
+    active = [p for p in _active_participants(instance) if not idle(p)]
     return sum(1 for p in active if p.name in instance.round.pending_actions), len(active)
 
 
-def idle_count(instance: BattleInstance, definition: BattleDef, with_third: bool = False) -> int:
+def idle_count(instance: BattleInstance, definition: BattleDef) -> int:
     """掛機中的人數（round_progress 的「在場」不算他們；畫面另寫「掛機 N 人」）。"""
-    return sum(1 for p in _active_participants(instance) if idle(p) and (with_third or not is_third(definition, p)))
+    return sum(1 for p in _active_participants(instance) if idle(p))
 
 
 def counter_coefficient(tuning: BattleTuning, move: str, enemy_mix: dict[str, float]) -> float:
@@ -1091,10 +1091,15 @@ def top_merit(instance: BattleInstance, tuning: BattleTuning, side: str) -> Batt
     return next((p for p, m in merit_ranking(instance, tuning, side) if m > 0 and p.acted_rounds > 0), None)
 
 
-def merit_board(instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None) -> dict:
-    """戰局條旁的「本場戰功」：兩邊各列前 MERIT_TOP 名（戰功 0 的不列）、看的人自己在自己那一邊排第幾、戰功怎麼來的。"""
-    board: dict = {"me": None}
-    for key, side in (("left", left), ("right", right)):
+def merit_board(
+    instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None, third: str | None = None,
+) -> dict:
+    """戰局條旁的「本場戰功」：兩邊各列前 MERIT_TOP 名（戰功 0 的不列）、看的人自己在自己那一邊排第幾、戰功怎麼來的。
+    third 是這場的第三方（地方豪強）：也列一欄（Joy 2026-10-13「地方豪強的戰功在陣營中的玩家看不到」）；沒有第三方就是空的。"""
+    board: dict = {"me": None, "third": []}
+    for key, side in (("left", left), ("right", right), ("third", third)):
+        if side is None:
+            continue
         ranking = merit_ranking(instance, tuning, side)
         board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer} for p, m in ranking[:MERIT_TOP] if m > 0]
         for rank, (p, m) in enumerate(ranking, 1):
@@ -1105,16 +1110,17 @@ def merit_board(instance: BattleInstance, tuning: BattleTuning, left: str, right
 
 def gauge(
     instance: BattleInstance, definition: BattleDef, viewer_side: str | None, timetable: bool,
-    tuning: BattleTuning | None = None, viewer: str | None = None,
+    tuning: BattleTuning | None = None, viewer: str | None = None, third_name: str | None = None,
 ) -> dict:
     """決戰畫面的即時戰局條（Joy 2026-10-10 轉玩家反饋：「有辦法看即時戰局？」）：拔河，兩軍各佔一頭，數字只畫在這裡。
 
     左邊是看的人那一邊（兩軍以外的人看第一方在左）；lean 是「往左邊那一方偏多少」（0～100，100 是左邊大獲全勝），
     網頁把旗子畫在 100−lean：誰佔上風，旗子就被拉到誰那一頭。zones 是分勝負的那一截（時刻表決戰是偏離中線 BIG_WIN_MARGIN
     的大勝，其餘照 outcomes 的門檻），decisive 是偏離中線多少當場收場。rounds 是每一回合從哪裡到哪裡、誰佔上風。
-    merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）。"""
+    merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）；third 是第三方（地方豪強，名字照劇本 third_name），沒有就是 None。"""
     first, second = definition.factions[0].id, definition.factions[1].id
     names = {f.id: f.name for f in definition.factions}
+    third = definition.third.faction if definition.third is not None else None
     left = viewer_side if viewer_side in (first, second) else first
     right = second if left == first else first
 
@@ -1162,7 +1168,8 @@ def gauge(
         "right": {"id": right, "name": names[right], "mine": viewer_side == right},
         "lean": now, "start": lean(start), "decisive": definition.decisive_margin, "zones": zones, "rounds": rounds,
         "caption": caption,
-        "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer),
+        "third": None if third is None else {"id": third, "name": third_name or third, "mine": viewer_side == third},
+        "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer, third),
     }
 
 

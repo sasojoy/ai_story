@@ -82,8 +82,8 @@ def world_fingerprint(
     paused 是賽季時鐘有沒有暫停（SharedWorldState.paused_at 是不是 None）：暫停中每個人的選單都只剩一顆灰的，這是全服看得到的
     變化，要算；停了幾分鐘不算（畫面上的分鐘數每分鐘都在變，不能每分鐘叫醒一次全服）。
     決戰只看階段、第幾回合與戰局（每個人的畫面都不一樣的那幾樣），加上 progress：兩軍這一回合（已送出, 在場）的人數
-    （battle_instance.round_progress，呼叫端照內容算好給；畫面寫「已送出 X／在場 Y」，試玩回饋 2026-10-08）。豪強不算在裡面：
-    他們出手叫醒全服，兩軍就看得出豪強有動靜。
+    （battle_instance.round_progress，呼叫端照內容算好給；畫面寫「已送出 X／在場 Y」，試玩回饋 2026-10-08）。豪強也算在裡面
+    （Joy 2026-10-13：以前兩軍的數字不算豪強，全員送出了還在等豪強，倒數一直跳）。
     rumor_id（最大的天下大事傳聞流水號）與 chronicle_count（江湖史則數）不給就從 season.rumors、season.chronicle 算；
     伺服器的看守給資料庫數好的（SqliteWorldStore.fingerprint_parts），不必把每一則讀回來。兩種給法算出同一個指紋。
     seal 是 SharedWorldState.seal_duels（奪璽單挑，玉璽碎片設計 5.10）；空的清單跟 None 算同一個指紋。"""

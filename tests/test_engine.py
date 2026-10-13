@@ -2404,12 +2404,15 @@ def _two_showdown_rounds(content, db_path, warlords):
 
 
 def test_the_armies_never_hear_anything_about_the_warlords(content, tmp_path):
-    """豪強選了什麼、有幾個，官軍與黃巾都不該知道：同樣的兩回合，場上有沒有豪強，官軍的人看到的回覆、場景的記錄、給模型的
-    判定（模型寫的敘事會進場景）與他的場景都一個字不差。只比整份是否相同、不挑招名字串，所以換個說法的洩漏
-    （人數、收穫、「地方上有人蠢蠢欲動」）也會讓這裡失敗。豪強的紀錄只留在回合紀錄（戰報底稿）裡。"""
+    """豪強選了什麼，官軍與黃巾都不該知道：同樣的兩回合，場上有沒有豪強，官軍的人看到的回覆、場景的記錄、給模型的
+    判定（模型寫的敘事會進場景）與他的場景都一個字不差，只差「已送出／在場」那個人數——結算要等豪強出手，數字就得算他們，
+    不然全員送出了倒數還在跳（Joy 2026-10-13；戰功也照列，見 test_battle_pace）。只比整份是否相同、不挑招名字串，
+    所以換個說法的洩漏（收穫、「地方上有人蠢蠢欲動」）也會讓這裡失敗。豪強的紀錄只留在回合紀錄（戰報底稿）裡。"""
     alone = _two_showdown_rounds(content, tmp_path / "alone.db", 0)
     crowded = _two_showdown_rounds(content, tmp_path / "crowded.db", 2)
     assert crowded["prompts"] == [] == alone["prompts"]  # 回合結算不叫模型（試玩回饋 2026-10-08）
+    assert "已送出 0／在場 4" in crowded["scene"] and "已送出 0／在場 2" in alone["scene"]
+    crowded["scene"] = crowded["scene"].replace("已送出 0／在場 4", "已送出 0／在場 2")
     for what in ("replies", "prompts", "narrative_log", "scene"):
         assert crowded[what] == alone[what], what
     assert [r.messages[-1] for r in crowded["records"]] == ["趁亂搶地盤 1 人、保存實力 1 人。"] * 2  # 回合紀錄才留著
@@ -7816,3 +7819,16 @@ def test_the_showdown_report_says_who_you_hurt_and_who_hunted_you(content, game)
     lines = _showdown_entries(game)[0].lines
     assert "你的放手一搏點名打傷了對手，打掉他們氣血 120" in lines
     assert "甲、乙在陣上點名要對付你，你被打掉氣血 80" in lines
+
+
+def test_the_warlords_have_a_first_merit_and_a_rank_too(game):
+    """Joy 2026-10-13「地方豪強的戰功在陣營中的玩家看不到?」：論功那一則也列豪強的首功，戰局條有豪強那一欄。"""
+    battle, definition = _warlord_in_battle(game)
+    me = game.state.player.name
+    game.world.mutate_battle(lambda b: setattr(b.participants[me], "acted_rounds", 2))
+    battle = game.world.get_battle()
+    sides = game._sides(definition)
+    assert game._merit_line(battle, definition).endswith(f"{sides['haoqiang']}首功{me}。")
+    g = game.battle_gauge()
+    assert g["third"]["name"] == sides["haoqiang"] and g["merit"]["third"][0]["name"] == me
+    assert g["merit"]["me"]["rank"] == 1 and "due" in g
