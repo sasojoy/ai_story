@@ -380,7 +380,7 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
         mandate = shared.season.mandate
-        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2），管理者的強制現世記號留到下一個一般季
+        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2）；管理者的強制現世記號這一季照留，天命之季過後散去時一起清掉（scatter）
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:
