@@ -195,3 +195,69 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
         if "mandate_timetable" in line and p.relative_to(root).as_posix() not in allowed
     ]
     assert hits == []
+
+
+# ── Task 3：蓋章與散去 ──────────────────────────────
+
+
+def test_a_season_after_all_seven_emerged_is_stamped_the_season_of_the_mandate(mandated, world):
+    """8.1（PM 己）：七片這一輪都現世過（有主的、隱沒的都算），換季時新的一季蓋上天命之季的章：WorldState.mandate、登記記下季別、
+    天命之爭排在第 12 週週一 20:00；天下大事與江湖史各一句。"""
+    from conftest import next_season
+    from tianxia import calendar
+
+    _opened(mandated, world)
+    _all_emerged(mandated, world, chishou="甲", xuanniu="乙")
+    next_season(mandated, world)
+    season, view = world.get_season(), world.seal_state()
+    assert season.mandate and season.mandate_result is None
+    assert view.registry.mandate_season == view.season and not view.registry.mandate_pending
+    assert calendar.point_text(calendar.point(season.schedule["tianming"] + 1, mandated, season)) == "第 12 週・週一 20:00"
+    text = seal.MANDATE_OPEN.format(battle="天命之爭")
+    assert any(r.text == text for r in season.rumors if r.layer == "world") and any(r.text == text for r in season.chronicle)
+
+
+def test_one_shard_never_seen_keeps_the_mandate_away(mandated, world):
+    from conftest import next_season
+
+    _opened(mandated, world)
+    reg = _all_emerged(mandated, world, chishou="甲")
+    reg.shards["guixin"].state, reg.shards["guixin"].emerged_round = "hidden", None
+    world.mutate(lambda st: setattr(st, "seal", reg))
+    next_season(mandated, world)
+    assert not world.get_season().mandate and not world.seal_state().registry.mandate_pending
+
+
+def test_a_season_without_the_season_one_stamp_defers_the_mandate(mandated, world):
+    """8.1：新的一季沒蓋第一季規則的章（沒有時刻表決戰），天命之季延到下一個有蓋章的季（mandate_pending）。"""
+    from conftest import next_season
+
+    _opened(mandated, world)
+    _all_emerged(mandated, world, chishou="甲")
+    mandated.config.season_one = False
+    next_season(mandated, world)
+    assert not world.get_season().mandate and world.seal_state().registry.mandate_pending
+    mandated.config.season_one = True
+    next_season(mandated, world)
+    assert world.get_season().mandate and not world.seal_state().registry.mandate_pending
+
+
+def test_the_season_after_the_mandate_scatters_all_seven(mandated, world):
+    """8.4：天命之季之後的換季，七片全部回到未現世（不判隱沒）、round +1；舊持有者同步時補一句、抄本清掉；江湖史七格只列這一輪。"""
+    from conftest import next_season
+
+    _opened(mandated, world)
+    holder = _player(mandated, world, "甲")
+    _all_emerged(mandated, world, chishou="甲")
+    next_season(mandated, world)  # 第 2 季：天命之季
+    next_season(mandated, world)  # 第 3 季：七片散去
+    view = world.seal_state()
+    assert view.registry.round == 2 and not world.get_season().mandate
+    assert all(s.state == "hidden" and s.holder is None and s.emerged_round is None for s in view.registry.shards.values())
+    assert any(e.kind == "scatter" and e.other == "甲" for e in view.registry.history)
+    assert not any(e.kind == "sink" for e in view.registry.history)
+    holder.sync(500.0)
+    assert holder.state.player.heirloom is None
+    assert any(seal.SCATTER_MINE.format(shard="螭首") in e.lines for e in holder.state.journal)
+    block = seal.chronicle_block(mandated, view.registry)
+    assert block.startswith(seal.BOOK_ROUND.format(round=2)) and "甲懷中" not in block and "不知所蹤" not in block

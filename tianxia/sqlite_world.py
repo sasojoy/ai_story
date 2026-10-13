@@ -644,24 +644,29 @@ class SqliteWorldStore:
             if state.season_phase() != "resting":
                 return False
             lines = _season_firsts_lines(conn, state.season_number)
-            sunk = False
-            if content.seal:  # 玉璽碎片（7.6、5.11）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
+            wrote = False
+            if content.seal:  # 玉璽碎片（7.6、5.11、8.4）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
                 from . import seal  # noqa: PLC0415
 
                 reg = seal.filled(state.seal, content)
-                if content.config.seal.enabled:  # 主機關掉碎片時不判隱沒（登記照留）
+                mandate = state.season.mandate  # 剛結束的是天命之季：這一次不判隱沒、最後七片散去（8.4）
+                if content.config.seal.enabled and not mandate:  # 主機關掉碎片時不判隱沒（登記照留）
                     seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
                     for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
                         text = seal.SINK.format(holder=name, shard=content.seal[shard.id].name)
                         state.season.chronicle.append(Rumor(time=state.season.time, text=text))
-                        sunk = True
+                        wrote = True
                 for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
                     seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
                              record=duel.record, where=duel.where, lines=list(duel.lines))
+                if mandate:  # 散去不看 seal.enabled：季的章已經蓋了，下一輪照樣要從頭來
+                    seal.scatter(reg, state.season_number)
+                    state.season.chronicle.append(Rumor(time=state.season.time, text=seal.SCATTER))
+                    wrote = True
             state.seal_duels = []
             for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
-            if lines or sunk:
+            if lines or wrote:
                 self._save_season(conn, state.season_number, state.season)
             state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
             state.season_number += 1
@@ -672,9 +677,27 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
+            if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
+                self._stamp_mandate(state, content)
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             self._save(conn, state)
             return True
+
+    @staticmethod
+    def _stamp_mandate(state: SharedWorldState, content: Content) -> None:
+        """next_season 換好新的一季之後：該蓋天命之季（seal.mandate_due）就蓋（seal.stamp_mandate，天命之爭的時刻照這一季的章算）；
+        這一季打不了天命之爭（沒蓋第一季規則的章、劇本沒標或沒有那一場決戰）就記 mandate_pending，延到下一個能打的季（8.1、8.5）。
+        直接改 state（同一筆交易、不巢狀 mutate）。"""
+        from . import seal, timetable  # noqa: PLC0415
+
+        reg = seal.filled(state.seal, content)
+        if not seal.mandate_due(reg, content):
+            return
+        event = seal.mandate_event(content)
+        if event is None or seal.mandate_battle(content) is None or not state.season.season_one:
+            reg.mandate_pending = True
+            return
+        seal.stamp_mandate(state, content, timetable.default_time(event, content, state.season))
 
     def catch_up_season(self, content: Content, now: float, rng: random.Random) -> list[str]:
         """整段在同一筆交易裡：對時鐘與推進賽季一起成功或一起撤回。實際「推進 N 秒會發生什麼事」在

@@ -3484,6 +3484,8 @@ class Game:
                 self._write(seal.SEAL_TITLE, [seal.UNSETTLED_MINE.format(other=other, shard=shard)], tag=f"『{shard}』")
             elif e.kind == "sink" and seal.key(e.other) == me:
                 self._write(seal.SEAL_TITLE, [seal.SUNK_MINE.format(shard=shard)], tag=f"『{shard}』")
+            elif e.kind == "scatter" and seal.key(e.other) == me:  # 天命之季之後七片散去（8.4）：抄本在最後的 _copy_heirloom 照登記清掉
+                self._write(seal.SEAL_TITLE, [seal.SCATTER_MINE.format(shard=shard)], tag=f"『{shard}』")
             elif e.kind == "assign" and seal.key(e.holder) == me:  # 管理者指定給你（公告不寫管理者，紀錄寫成拿到）
                 self._write(seal.SEAL_TITLE, [seal.GOT.format(shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))], tag=f"『{shard}』")
         self._copy_heirloom()
@@ -8645,8 +8647,9 @@ class Game:
         if book:
             parts.append(book)
         if seal.on(self.content):  # 七格玉璽排在江湖史最上面（第十節）；舊的碎片紀錄只當前史一行（11.5）
-            old = self.world.get_jade_seal_fragments()
-            parts.insert(0, seal.chronicle_block(self.content, self.world.seal_state().registry, self.world.jade_seal_summary() if old else ""))
+            old, view = self.world.get_jade_seal_fragments(), self.world.seal_state()
+            parts.insert(0, seal.chronicle_block(self.content, view.registry, self.world.jade_seal_summary() if old else "",
+                                                 mandate=seal.mandate_now(view.registry, view.season)))  # 天命之季多一句（玉璽二）
         else:
             parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
