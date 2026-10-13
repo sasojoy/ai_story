@@ -775,6 +775,11 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        meet = c.characters.get(fig.character) if fig.character is not None else None
+        if meet is not None and fig.start_status == "active":  # 挑戰每季都有設計 3.3：14 天的季沒人退場時求見的地方跟現在一樣
+            spot = meet.talk_at or meet.recruit_at
+            need(spot == fig.location,
+                 f"{where}：開季在場、有對話人物的人物，開季地點（{fig.location}）要等於 {fig.character} 的 talk_at（{spot}）")
         if fig.successor is None:
             continue
         known(where, [fig.successor], c.figures, "大勢人物")

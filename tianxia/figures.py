@@ -81,6 +81,19 @@ def of_character(content: Content, character_id: str) -> str | None:
     return next((fid for fid, fig in content.figures.items() if fig.character == character_id), None)
 
 
+def challenge_on(content: Content, world: WorldState) -> bool:
+    """這一季有沒有「挑戰大勢人物本人」（挑戰每季都有設計 3.1）：人物表有人、劇本有陣營才有；第一季的規則開著一定有（打擊軍令
+    靠它交差），其他季看 Config.figure_challenge_every_season（主機的退路：關掉就回到「只有第一季」）。"""
+    if not content.figures or not content.scenario.factions:
+        return False
+    return season_one(content, world) or content.config.figure_challenge_every_season
+
+
+def untimed(content: Content, world: WorldState) -> bool:
+    """沒有時刻表的季：有挑戰本人、但不是第一季（14 天的預設設定）。聲威回復、一天上限、龍頭人物退場停手、out_flag 只在這種季。"""
+    return challenge_on(content, world) and not season_one(content, world)
+
+
 def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
     """此刻在這個地點、在場（active）的人物（人物表的順序）。下獄、退場、重創、還沒出場的都不算。"""
     return [
@@ -90,9 +103,10 @@ def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
 
 
 def placed_characters(state: GameState, content: Content) -> dict[str, str | None]:
-    """第一季的規則開著時，人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
-    None（求見、交友都沒有他）。規則沒開（beta）時是空的：大家照 characters.json 的 talk_at，一個字都不變。"""
-    if not season_one(content, state.world):
+    """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
+    None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
+    14 天的季沒人退場時跟 talk_at 一模一樣（content.check_figures 驗開季地點等於 talk_at）。"""
+    if not challenge_on(content, state.world):
         return {}
     out: dict[str, str | None] = {}
     for fid, fig in content.figures.items():

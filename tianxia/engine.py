@@ -5015,8 +5015,8 @@ class Game:
     def _snubbed(self, fid: str) -> bool:
         """這位人物剛被你打敗、還在閉門不見（snub_hours 個現實小時內）。看的是現實時間（self.now，sync 傳進來的），
         不是賽季時鐘：管理者快轉、補算時間都不會讓他提早見你；紀錄存在角色存檔，伺服器重開也照樣記得。
-        第一季的規則沒開（beta 那一季）就沒有閉門不見這回事。"""
-        return season_one(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
+        沒有挑戰本人的季（figures.challenge_on 是假）就沒有閉門不見這回事。"""
+        return figures.challenge_on(self.content, self.state.world) and self.now < self.state.player.snubbed_until.get(fid, 0.0)
 
     def _snubbed_character(self, character_id: str) -> bool:
         """這個對話人物（求見、交友用的 id）是不是剛被你打敗、還在閉門不見的大勢人物。"""
@@ -5024,12 +5024,12 @@ class Game:
         return fid is not None and self._snubbed(fid)
 
     def _challenge_options(self, odds: bool) -> list[Option]:
-        """挑戰本人：第一季的規則開著、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項（體力照遊歷；odds 時寫勝算，
-        難度跟著聲威走）。剛被你打敗、閉門不見的那幾位，以及戰線空著的人物（人物表標了 challenge_off_front 的何進除外），
-        按不下去、寫明原因；求見、交友照常。散人沒有；同陣營的人不打。"""
+        """挑戰本人：有挑戰本人的季（figures.challenge_on，每季都有）、自己有陣營時，這裡每一位在場的敵方大勢人物一個選項
+        （體力照遊歷；odds 時寫勝算，難度跟著聲威走）。剛被你打敗、閉門不見的那幾位按不下去、寫明原因；戰線空著的人物（人物表
+        標了 challenge_off_front 的何進除外）第一季也是灰鈕寫原因，沒有時刻表的季不畫。求見、交友照常。散人沒有；同陣營的人不打。"""
         s, c = self.state, self.content
         p = s.player
-        if p.faction is None or not season_one(c, s.world):
+        if p.faction is None or not figures.challenge_on(c, s.world):
             return []
         cost = self._action_costs()["train"]
         opts = []
@@ -5039,6 +5039,8 @@ class Game:
                 continue
             option_id = f"act:challenge:{fid}"
             if not figures.can_challenge(s, c, fid):
+                if figures.untimed(c, s.world):  # 沒有時刻表的季戰線空著的人不畫鈕：看不到戰線，整季掛著一顆按不下去的鈕（設計 3.2）
+                    continue
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{OFF_FRONT_NOTE}）", enabled=False))
             elif self._snubbed(fid):
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
@@ -5103,7 +5105,8 @@ class Game:
            扣到 0 退場或重創、由接位的人接手（figures.defeat）；
         2. 打贏的人跟他的情誼扣 figure_defeat_affinity（沒有對話人物的彭脫、韓忠沒有情誼）；
         3. snub_hours 個現實小時內他不見你、也不跟你交手（其他人照常）；
-        4. 記貢獻：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），記在這一週。"""
+        4. 記貢獻（只在第一季：其他季沒有晉升，同截殺）：照推 figure_defeat_prestige 點大勢算（contrib_per_push，不打人數緩衝的折），
+           記在這一週。"""
         s, c = self.state, self.content
         p, w, cfg = s.player, s.world, c.config
         fig = c.figures[fid]
@@ -5117,7 +5120,8 @@ class Game:
             if p.affinities[fig.character] != before:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
-        push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+        if season_one(c, w):
+            push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
         msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
