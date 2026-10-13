@@ -1403,7 +1403,7 @@ def test_real_timetable_matches_settlement_doc():
 
 def test_real_endings_valid(content):
     """第一季的六種結局（第一季設計 13.1，不含玉璽）照順序；beta 的保底照舊；季末大事的三種句子（時刻表結算第 12 週）。"""
-    s1 = [e for e in content.scenario.endings if e.season_one]
+    s1 = [e for e in content.scenario.endings if e.season_one and not e.mandate]  # 天命結局（玉璽二）另外驗
     assert [e.title for e in s1] == ["黃天當立（無璽）", "黃巾平定", "群雄並起", "黃巾坐地", "黃巾敗退", "豪強坐大"]
     assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
     assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
@@ -1425,6 +1425,7 @@ def test_real_endings_valid(content):
     assert finale.early_preface == "戰事提前收束。"
     assert finale.out_lines == {"dongzhuo": "董卓兵敗，涼州軍元氣大傷。"}
     assert finale.ending_chronicle == "甲子年冬，第一季黃巾之亂落幕：{結局}。"
+    assert [e.title for e in content.scenario.endings if e.mandate] == ["漢室重光", "黃天當立"]  # 天命結局（玉璽二）
 
 
 def test_wancheng_after_a_government_win_reads_that_the_turbans_withdrew(content):
@@ -2053,7 +2054,8 @@ def test_real_battles_three_showdowns(content):
     """真實內容有四筆時刻表決戰（宛城分甲乙兩筆）：大區、守方、時刻表大事、版本、戰線照計畫 T8 的表；三幕照戰鬥系統附錄 A；
     推力、放手一搏、時間、提前收場跟 beta 那場一模一樣；結果只留一筆保底（實際效果走時刻表）。"""
     beta = content.battles["huangjin_showdown"]
-    showdowns = {bid: b for bid, b in content.battles.items() if b.timetable_event is not None}
+    mandate = {e.id for e in content.mandate_timetable}  # 天命之爭（玉璽二）另外驗，見 test_seal_mandate
+    showdowns = {bid: b for bid, b in content.battles.items() if b.timetable_event is not None and b.timetable_event not in mandate}
     assert set(showdowns) == set(SHOWDOWN_TABLE)
     for bid, (region, defender, event_id, version, front) in SHOWDOWN_TABLE.items():
         b = showdowns[bid]
@@ -2079,6 +2081,11 @@ def test_real_battles_three_showdowns(content):
     assert sorted((b.timetable_event, b.version or "") for b in showdowns.values()) == sorted([
         ("changshe_fire", ""), ("guangzong", ""), ("wancheng", "甲"), ("wancheng", "乙"),
     ])
+    tianming, guangzong = content.battles["tianming"], content.battles["guangzong"]
+    same = ("region", "defender", "front", "third", "trend_start", "rounds_per_act", "decisive_margin", "muster_seconds", "round_seconds",
+            "action_tags", "free_text_gamble")
+    assert all(getattr(tianming, k) == getattr(guangzong, k) for k in same)
+    assert [sorted(o.tag for o in a.options) for a in tianming.acts] == [sorted(o.tag for o in a.options) for a in guangzong.acts]
 
 
 ALL_BATTLES = ["huangjin_showdown", "changshe_fire", "wancheng_jia", "wancheng_yi", "guangzong"]

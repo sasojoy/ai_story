@@ -183,6 +183,7 @@ class BattleInstance(BaseModel):
     participants: dict[str, BattleParticipant] = Field(default_factory=dict)
     trend: int = 50
     trend_start: int | None = None  # 開打時的戰局（時刻表決戰照戰況算，不一定是 50）；舊資料沒有是 None
+    seal_lean: dict[str, int] = Field(default_factory=dict)  # 天命之爭開集結那一刻各方握幾片（玉璽碎片設計 8.3；起點已經照兩軍的數偏過）
     act_index: int = 0
     round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)

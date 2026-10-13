@@ -663,6 +663,7 @@ class Ending(_Strict):
     stance_min: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至少（決定性勝利：季中一到就收季）
     stance_max: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至多（同上）
     stance_top: StanceSide | None = None  # 季末比態勢：這一方最高（平手時照清單順序，排前面的先成立）
+    mandate: bool = False  # 天命結局（玉璽二）：只在天命之爭有一方得天命時由 world.evaluate_ending 照時刻表的 mandate_endings 挑，不進一般的清單與保底
 
 
 class MapLabel(_Strict):
@@ -1624,6 +1625,18 @@ class ShardDef(_Strict):
     note: str = ""
 
 
+class MandateTuning(_Strict):
+    """天命之季與天命之爭（玉璽碎片設計第八節；玉璽二）。全部是【預設】。"""
+
+    start_shift: int = Field(default=3, ge=0)  # 天命之爭的起點：每片往握著它的那一軍偏幾點（8.3）
+    start_shift_cap: int = Field(default=12, ge=0)  # 偏移合計最多幾點
+    holder_weight: float = Field(default=1.2, ge=1)  # 手上有碎片的人到場，份量的倍數（只在天命之爭；碎片本身不加威力）
+    fame: int = Field(default=10, ge=0)  # 得天命那一方的參戰者名望
+    pay_scale: int = Field(default=2, ge=1)  # 得天命那一方的軍餉（銀兩、經驗）倍數：只寫在這裡，Game._showdown_pay 讀
+    decisive_from_week: int = Field(default=13, ge=1)  # 天命之季從第幾週起才提前收季（13：等於不提前收，8.2）
+    recall_battles: int = Field(default=2, ge=0)  # 天命之季，時刻表上標了 seal 的前幾場收場時各喚回一片（8.2）
+
+
 class SealTuning(_Strict):
     """玉璽碎片（docs/superpowers/specs/2026-10-11-玉璽碎片-design.md；玉璽一）。數字照設計與 19.1「PM 2026-10-11 的決定」：
     - 現世 emerge_chance（3.2，PM 甲綁標 emerge 的那一場）；璽動每場、每片各擲 stir_chance（4.1，PM 乙），全服一季最多 season_stir_cap 次。
@@ -1635,7 +1648,8 @@ class SealTuning(_Strict):
     - 小伺服器（PM 癸）：決戰參戰名單不到 small_battle 人時出手門檻放寬到 1 回合，旁觀的散人也能被挑上陣前。
     - emerge_skill：現世的得主同一季補送時學會的武學（11.2 第 4 條；舊鏈看守者給的混元一氣改給這裡）。
     - qa_tools：管理者「不必有決戰」的強制開單挑（第十二節），正式伺服器關著。
-    內容沒有 content/seal.json 時整個碎片系統等於關著（seal.on）。"""
+    內容沒有 content/seal.json 時整個碎片系統等於關著（seal.on）。
+    - mandate：天命之季與天命之爭（玉璽二，見 MandateTuning）。"""
 
     enabled: bool = True
     emerge_chance: float = Field(default=0.35, ge=0, le=1)
@@ -1664,6 +1678,7 @@ class SealTuning(_Strict):
         "hp_cap": 1.06, "talk_turns": 1, "practice": 0.9, "dodge": 0.03, "stamina_regen": 1.1, "fuse_points": 5, "mate_exp": 1.1,
     })
     qa_tools: bool = False
+    mandate: MandateTuning = Field(default_factory=MandateTuning)
 
 
 class TreasureDef(_Strict):
@@ -2427,6 +2442,12 @@ class TimetableEvent(_Strict):
     # 玉璽碎片（玉璽碎片設計 8.5）：這一件決戰開集結時擲不擲碎片。emerge＝現世那一場（也算璽動）、stir＝只璽動；
     # 不寫死黃巾之亂的 id，每個劇本自己標。只能標在 kind 是 showdown 的那幾件（載入時檢查）
     seal: Literal["emerge", "stir"] | None = None
+    # ── 天命之爭（玉璽二；玉璽碎片設計 8.3、8.5）：只能標在 kind 是 showdown 的那一件、最多一件；載入時分到 Content.mandate_timetable，
+    # 只有蓋了天命之季章的季看得到（timetable.events）。不寫死黃巾之亂的 id，每個劇本自己標 ──
+    mandate_only: bool = False
+    mandate_endings: dict[str, str] = Field(default_factory=dict)  # 得天命的那一軍 → 結局 id（劇本裡標 mandate 的第一季結局）
+    weekday: int | None = Field(default=None, ge=0, le=6)  # 決戰的預設時刻：週幾（0 是週一）；None 照 timetable.SHOWDOWN_WEEKDAY
+    hour: int | None = Field(default=None, ge=0, le=23)  # 同上，幾點；None 照 timetable.SHOWDOWN_HOUR
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
@@ -2967,6 +2988,7 @@ class Content(_Strict):
     battles: dict[str, BattleDef] = Field(default_factory=dict)  # 內容尚未撰寫，先留介面（見設計討論，骨架做完再回頭寫黃巾決戰）
     road_sights: dict[str, RoadSight] = Field(default_factory=dict)  # 路上見聞（content/road_sights.json，路上設計第五節）
     timetable: list[TimetableEvent] = Field(default_factory=list)  # 第一季的時刻表（content/timetable.json，計畫 T2）
+    mandate_timetable: list[TimetableEvent] = Field(default_factory=list)  # 天命之爭（timetable.json 裡標 mandate_only 的；玉璽二）：只准 timetable.events／find、seal、content 讀
     duels: dict[str, DuelBoss] = Field(default_factory=dict)  # 單人頭目戰（content/duels.json）；沒有這個檔就是空的
     gear: GearBook = Field(default_factory=GearBook)  # 寶物表、名駒、名將贈禮（content/gear.json，裝備三）；沒有這個檔就是空的
     figures: dict[str, FigureDef] = Field(default_factory=dict)  # 大勢人物（content/figures.json，計畫 T4）；沒有這個檔就是空的

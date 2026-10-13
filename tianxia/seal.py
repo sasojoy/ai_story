@@ -65,9 +65,9 @@ def holders(reg: SealRegistry) -> set[str]:
 
 
 def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
-    """登記記一筆（全服流水號 +1）。"""
+    """登記記一筆（全服流水號 +1）；記上這一輪（round）。"""
     reg.seq += 1
-    event = SealEvent(seq=reg.seq, season=season, kind=kind, **fields)
+    event = SealEvent(seq=reg.seq, season=season, kind=kind, round=reg.round, **fields)
     reg.history.append(event)
     return event
 

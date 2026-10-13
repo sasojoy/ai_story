@@ -211,10 +211,11 @@ def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None
 
 def season_endings(state: GameState, content: Content) -> list[Ending]:
     """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
-    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。"""
+    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。
+    天命結局（mandate）不在這裡，由 evaluate_ending 照天命之爭的結果挑（玉璽二）。"""
     on = season_one(content, state.world)
-    chosen = [e for e in content.scenario.endings if e.season_one == on]
-    return chosen or [e for e in content.scenario.endings if not e.season_one]
+    chosen = [e for e in content.scenario.endings if e.season_one == on and not e.mandate]
+    return chosen or [e for e in content.scenario.endings if not e.season_one and not e.mandate]
 
 
 def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
