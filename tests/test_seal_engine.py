@@ -562,3 +562,44 @@ def test_next_season_clears_a_duel_left_open_by_the_emergency_switch(sealed, wor
     next_season(sealed, world, game)
     view = world.seal_state()
     assert view.duels == [] and view.registry.history[-1].kind == "unsettled"
+
+# ── QA 玉璽一（qa-seal-1）的單 ──
+
+def test_the_gamble_scene_tells_the_model_the_shard_is_not_won_yet(sealed, world):
+    """FB-176：放手一搏只爭一回合的氣勢，碎片要到收場再擲；給模型的場景寫明不寫「奪下碎片」。"""
+    me = _active_with_me(sealed, world)
+    with at(me, 181.0):
+        request = me.seal_text_request("虛晃一槍反手奪印")
+    assert seal_duel.SCENE_RULE in request.scene
+
+
+def test_the_sink_check_also_runs_while_the_season_rests(sealed, world):
+    """FB-178：「隱沒判斷」只印不改，換季前的休季正是要看的時候。"""
+    _setup(sealed, world, holder="久未上線")
+    admin = _admin(sealed, world)
+    admin.admin_end_season(now=50.0)
+    lines = admin.admin_seal_sink_check(100.0)
+    assert lines and "無法觸發" not in lines[0]
+    assert world.seal_state().registry.shards["chishou"].state == "held"
+
+
+def test_the_card_countdown_stops_while_the_clock_is_paused(sealed, world):
+    """FB-179：暫停賽季時鐘時奪璽卡的倒數停在按下暫停的那一刻（同決戰那一格）。"""
+    game = _open_duel(sealed, world)  # 180 秒後開打
+    world.pause_clock(100.0)
+    game.now = 150.0
+    assert game.seal_duel_card()["left"] == 80
+
+
+def test_the_heirloom_row_is_not_called_swappable(sealed, world):
+    """FB-180：寶物段的說明寫「隨時能換」，傳承那一件不能換下：有傳承時說明多一句；寶物關著、只有傳承時不寫寶物那一套。"""
+    from tianxia import skillview
+
+    _setup(sealed, world)
+    holder = _player(sealed, world, "懷璽")
+    sealed.config.treasures.enabled = True
+    block = next(b for b in skillview.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
+    assert "不能換下" in block["note"]
+    sealed.config.treasures.enabled = False
+    block = next(b for b in skillview.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
+    assert "不能換下" in block["note"] and "隨時能換" not in block["note"]

@@ -53,6 +53,7 @@ HELD_TITLE = "寄放"  # 待 joy 潤：補發那一則江湖紀錄的標題
 HELD_ARRIVED = "寄放的【{name}】送到了。"  # 待 joy 潤
 EMPTY = "身上沒有寶物。"  # 待 joy 潤：修練頁寶物那一段身上空著
 RACK_NOTE = "寶物買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來；隨時能換。"  # 待 joy 潤：修練頁寶物那一段底下
+HEIRLOOM_NOTE = "傳承那一件是玉璽碎片，跟著你走，不能換下。"  # 待 joy 潤（FB-180）：有傳承時寶物段底下多這一句；寶物關著時只寫這一句
 WHERE = "買不到、打不出，只從懸賞、名將、奇遇與打敗大勢人物得來。"  # 待 joy 潤（FB-138）：身上什麼裝備都沒有時，修練頁寶物那一行寫哪裡得來
 LOST = "這件寶物的來歷已經失傳"  # 待 joy 潤：內容拿掉了這一件（template 查不到，效果不算）
 HELD_NOTE = "寄放著：{names}——裝備庫騰出空位，下次回來就補給你。"  # 待 joy 潤：修練頁「裝備」塊底下
@@ -282,6 +283,15 @@ def rows(state: GameState, content: Content) -> dict:
         out["worn"] = _row(content, p.treasure) if p.treasure is not None else None
         out["rack"] = [_row(content, t) for t in equipment.in_slot(p, "treasure")]
     return out
+
+
+def rack_note(state: GameState, content: Content) -> str:
+    """修練頁寶物那一段底下那一行（FB-180）：寶物開著照舊寫 RACK_NOTE；身上有傳承時多 HEIRLOOM_NOTE（「隨時能換」不包括它）；
+    寶物關著、只有傳承那一列時只寫 HEIRLOOM_NOTE。"""
+    heir = rows(state, content)["heirloom"] is not None
+    if not on(content):
+        return HEIRLOOM_NOTE if heir else ""
+    return RACK_NOTE + (HEIRLOOM_NOTE if heir else "")
 
 
 def card_line(state: GameState, content: Content) -> str:

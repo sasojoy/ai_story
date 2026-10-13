@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # 不然整支載不起來）。這裡多交奪璽要直接叫的三個；碎片卡 sealHtml 只經過 pageJianghu，不必列
 NAMES_START = 'wholeApp(["S", '  # 名單的開頭（結尾那幾個名字別的計畫會加，開頭比較穩）
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", ')
 
 
 def run(m, script):
@@ -151,3 +151,25 @@ def test_the_seal_moves_sit_above_the_action_bar_not_in_the_fold(m):
     assert at < page.index('class="act-bar"')
     fold = page.find('class="fold here"')
     assert fold == -1 or at < fold or 'data-id="seal:' not in page[fold:]
+
+# ── QA 玉璽一（qa-seal-1）的單 ──
+
+def test_the_holder_card_does_not_reuse_the_seal_class(m):
+    """FB-171：碎片卡的 class 不能是 seal（style.css 的登入頁印章、武學譜朱印都叫 .seal，真的瀏覽器把卡縮成 65×65 的紅方塊）。"""
+    import re
+
+    html = run(m, 'return H.sealHtml({name: "金角", effect_text: "落敗閃成僵持的機會 +3%", state: "新得之季，此季不動", stir: "", dates: []});')
+    classes = {c for attr in re.findall(r'class="([^"]*)"', html) for c in attr.split()}
+    assert "seal" not in classes and "seal-card" in classes
+
+
+def test_the_page_key_follows_the_seal_cards(m):
+    """FB-172：江湖頁的重畫照 pageKey 判斷（不看 status）；奪璽卡、碎片卡的資料在 status 裡，單獨變了也要重畫。"""
+    out = run(m, """
+      const a = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: null}};
+      const b = {x: 1, status: {gold: 1, seal_duel: {left: 9, round: 1}, seal: null}};
+      const c = {x: 1, status: {gold: 2, seal_duel: {left: 10, round: 1}, seal: null}};
+      const d = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: {state: "此季已動過"}}};
+      return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d)].join("|");
+    """)
+    assert out == "false|true|false"  # 倒數、碎片卡變了要重畫；status 的其他欄位照舊不算

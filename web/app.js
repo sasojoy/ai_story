@@ -159,7 +159,9 @@
     return h > 0 ? `現實約 ${h} 小時 ${m} 分後` : `現實約 ${m} 分後`;
   };
   // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
-  const pageKey = (m) => JSON.stringify({ ...m, status: null });
+  // 狀態列另外畫（renderTop），江湖頁不必跟著它重畫；奪璽卡與碎片卡的資料也在 status 裡（倒數、回合、氣勢、已出招、架勢），
+  // 那兩張變了要重畫（FB-172）
+  const pageKey = (m) => JSON.stringify({ ...m, status: null, sealCards: m.status ? [m.status.seal_duel || null, m.status.seal || null] : null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   // 勾選框不算：勾完它還留著焦點，要是算打字，輪詢會一直等到玩家點別處才補畫（修練頁的「服下破境丹」）
   const typing = () => S.stroking || (!!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
@@ -361,7 +363,7 @@
 
   // 持有者的碎片卡（玉璽碎片設計第十節，status.seal）：哪一片與效果、這一季動過沒、此刻被牽動時那一句、這一季幾個險關的時刻；不寫機率。字待 joy 潤
   function sealHtml(s) {
-    return `<details class="card seal" open><summary>傳承・『${esc(s.name)}』</summary>
+    return `<details class="card seal-card" open><summary>傳承・『${esc(s.name)}』</summary>
       <p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
       ${s.stir ? `<p class="turn">${esc(s.stir)}</p>` : ""}
       ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}</details>`;

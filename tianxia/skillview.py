@@ -531,7 +531,7 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
                       "where": mounts.where(state, content), **mounts.rows(state, content)})
     if equipment.on(content, "treasure") or (seal.on(content) and state.player.heirloom is not None):
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
-                      "note": treasures.RACK_NOTE, "where": treasures.WHERE, **treasures.rows(state, content)})
+                      "note": treasures.rack_note(state, content), "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
     for block in slots:
         if block["slot"] in ("weapon", "armor"):

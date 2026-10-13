@@ -43,6 +43,7 @@ UNSETTLED = "{challenger}與{holder}爭『{shard}』的單挑沒有打完，碎�
 GAMBLE_WON, GAMBLE_LOST = "{name}放手一搏——成了！", "{name}放手一搏——沒成，反倒露了破綻。"
 SETTING = "兩人陣前單挑、爭奪玉璽碎片的"  # 給 battle_instance.assess_gamble
 PLACE = "單挑"
+SCENE_RULE = "（這一手只爭一回合的氣勢：碎片要到單挑收場再擲才定歸屬，劇情不寫奪下碎片、不寫勝負已分。）"  # FB-176：給模型的場景多這一句
 PROMPT = "寫下你陣前的一手（20 字內）"
 GAMBLE_NOTE = "放手一搏一場最多兩次；寫得越險，成了推得越多、搏輸了傷的是你自己。"
 RESEND = "這一手跟剛才送出的對不上（是不是開了兩個分頁？），請再送一次。"
@@ -385,4 +386,5 @@ def scene(duel: SealDuel, who: str, content: Content) -> tuple[str, str]:
     """assess_gamble 讀的 title 與 text（duel.Scene 的兩欄）。"""
     shard = content.seal[duel.shard].name if duel.shard in content.seal else duel.shard
     tell = duel.tell.get(other(who), "")
-    return f"奪璽單挑・『{shard}』", f"第 {duel.round + 1}／{duel.rounds} 回合，{edge_words(duel, getattr(duel, who).name)}。{tell}"
+    text = f"第 {duel.round + 1}／{duel.rounds} 回合，{edge_words(duel, getattr(duel, who).name)}。{tell}{SCENE_RULE}"
+    return f"奪璽單挑・『{shard}』", text

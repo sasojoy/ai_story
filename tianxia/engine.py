@@ -6736,7 +6736,10 @@ class Game:
     def seal_duel_card(self) -> dict | None:
         """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
         duels = self.world.seal_state().duels if seal.on(self.content) else []
-        return seal_duel.card(duels[0], self.state.player.name or None, self.now, self.content) if duels else None
+        if not duels:
+            return None
+        paused = self.world.paused_at()  # 暫停中倒數停在按下暫停的那一刻（同決戰那一格，FB-179）
+        return seal_duel.card(duels[0], self.state.player.name or None, self.now if paused is None else paused, self.content)
 
     def seal_watch(self) -> bool:
         """網頁在背景也要輪詢（5.5）：自己是單挑的一方；或此刻有一場被璽動、還沒收場的決戰，自己是那一片的持有者或那一場的參戰者
@@ -7611,10 +7614,9 @@ class Game:
         return self._log(out)
 
     def admin_seal_sink_check(self, now: float) -> list[str]:
-        """照 7.6 的條件現在判一次（下一次換季會沉哪幾片），只印結果、不改。"""
-        refusal = self._admin_refusal("隱沒判斷")
-        if refusal:
-            return self._log(refusal)
+        """照 7.6 的條件現在判一次（下一次換季會沉哪幾片），只印結果、不改。只要是管理者就能按：休季（換季之前）、暫停中照樣看得到（FB-178）。"""
+        if not self.is_admin():
+            return self._log(["（只有管理者能隱沒判斷。）"])
         reg = seal.filled(self.world.seal_state().registry.model_copy(deep=True), self.content)
         store = CharacterStore(self.world.db) if hasattr(self.world, "db") else None
         seen = {}
