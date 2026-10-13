@@ -1140,12 +1140,12 @@ def timetable_choices(game: Game) -> dict:
         })
     results = [
         {"value": f"{e.id}|{key}", "label": f"{e.title}：{_result_label(key)}"}
-        for e in CONTENT.timetable if e.id not in world.timeline
+        for e in timetable.events(world, CONTENT) if e.id not in world.timeline
         for key in timetable.result_keys(state, CONTENT, e)
     ]
     locks = [
         {"id": event_id, "label": f"{e.title}（{lock.name}）"}
-        for event_id, lock in world.locks.items() if (e := next((x for x in CONTENT.timetable if x.id == event_id), None))
+        for event_id, lock in world.locks.items() if (e := timetable.find(CONTENT, event_id))
     ]
     return {"timetable": rows, "results": results, "locks": locks}
 

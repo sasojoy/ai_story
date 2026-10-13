@@ -404,14 +404,15 @@ def settle_waiting_showdowns(
     if not calendar.season_one_on(w, content):
         return []
     _note_due_showdowns(state, content)  # 剛好停在決戰時刻、還沒跑到季的事的那一件也算
-    order = {e.id: i for i, e in enumerate(content.timetable)}
+    order = {e.id: i for i, e in enumerate(timetable.events(w, content))}  # 天命之季含天命之爭（玉璽二）
 
     def place(event: TimetableEvent) -> tuple[float, int]:
         return timetable.when(state, content, event), order[event.id]
 
     msgs: list[str] = []
     for event_id in list(w.showdowns_waiting):
-        event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+        event = timetable.find(content, event_id)
+        event = event if event is not None and event.kind == "showdown" else None
         if event is not None and before is not None and place(event) >= place(before):
             continue  # 排在 before 之後的照舊等著開
         w.showdowns_waiting.remove(event_id)
@@ -460,7 +461,7 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
         w.showdowns_waiting.remove(event_id)
     if w.ended or event_id in w.timeline or event_id in w.showdowns_opened:
         return None
-    event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+    event = next((e for e in timetable.events(w, content) if e.id == event_id and e.kind == "showdown"), None)  # 一般季開不了天命之爭（玉璽二）
     definition = showdown_battle(state, content, event) if event is not None else None
     if definition is None:
         return None
@@ -636,7 +637,7 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
     shift = skipped * content.config.time_scale
     cal_hour = calendar.cal_hour_seconds(content, season)
     regular = [e for e in timetable._pending(vehicle, content) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
-    for event in content.timetable:
+    for event in timetable.events(season, content):  # 天命之季含天命之爭（玉璽二）
         if event.kind != "showdown" or event.id in season.timeline or event.id in season.showdowns_opened:
             continue
         if event.id in season.showdowns_waiting:

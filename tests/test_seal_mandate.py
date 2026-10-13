@@ -126,3 +126,72 @@ def test_mandate_endings_stay_out_of_the_normal_list(mandated, world):
     state = Game.new(mandated, "路人", rng=random.Random(0), world=world).state
     assert all(not e.mandate for e in world_rules.season_endings(state, mandated))
     assert not world_rules.evaluate_ending(state, mandated).mandate
+
+
+# ── Task 2：時刻表 ──────────────────────────────
+
+
+def test_tianming_shows_up_only_in_a_mandate_season(mandated):
+    """要 PM 定的第 1 條：timetable.events 在蓋了章的季才排進天命之爭（同一週排在季末之前）；find 照 id 兩份都找。"""
+    from tianxia import timetable
+    from tianxia.state import WorldState
+
+    assert timetable.events(WorldState(), mandated) is mandated.timetable
+    ids = [e.id for e in timetable.events(WorldState(mandate=True), mandated)]
+    assert ids[-2:] == ["tianming", "xiaquyang"] and ids.index("tianming") > ids.index("wancheng")
+    assert timetable.find(mandated, "tianming").mandate_only and timetable.find(mandated, "wancheng").kind == "showdown"
+
+
+def test_tianming_defaults_to_monday_eight_pm_of_week_twelve(mandated):
+    from tianxia import calendar, timetable
+    from tianxia.state import WorldState
+    from tianxia.world_state import stamp_season
+
+    season = WorldState(storyline=mandated.scenario.storylines[0].id)
+    stamp_season(season, mandated)
+    at = timetable.default_time(timetable.find(mandated, "tianming"), mandated, season)
+    assert calendar.point_text(calendar.point(at + 1, mandated, season)) == "第 12 週・週一 20:00"  # +1：避開浮點落在 19:59
+    assert "tianming" not in season.schedule  # 一般季的預設排程不排它（蓋章時才排）
+
+
+def test_tianming_comes_due_and_lists_only_in_a_mandate_season(mandated, world):
+    """到期（due_showdowns → 開集結）、管理者「立刻開戰」與「三場大戲」、時刻表那幾列，都只在天命之季看得到天命之爭。"""
+    from tianxia import timetable
+    from tianxia import world as world_rules
+    from tianxia.world import _season_vehicle
+
+    _opened(mandated, world)
+    admin = _admin(mandated, world)
+
+    def _late(st):
+        st.season.time = timetable.default_time(timetable.find(mandated, "tianming"), mandated, st.season) + 1
+
+    world.mutate(_late)
+    admin.state.world = world.get_season()  # 不 sync：sync 會補算季、把到期的大事都結算掉，這裡只看清單
+    vehicle = _season_vehicle(mandated, world.get_season())
+    assert "tianming" not in [e.id for e in timetable.due_showdowns(vehicle, mandated)]
+    assert "tianming" not in [b.id for b in admin.admin_battles()]
+    assert "tianming" not in [r["id"] for r in timetable.status_rows(vehicle, mandated)]
+    assert any("沒有這件大事" in m for m in admin.admin_resolve_event("tianming", "guan:大勝"))  # 一般季直接送 id 也定不了
+    assert world_rules.open_showdown(world, mandated, "tianming", 0.0) == [] and world.get_battle() is None  # 也開不了
+    _mandate_now(world)
+    admin.state.world = world.get_season()
+    vehicle = _season_vehicle(mandated, world.get_season())
+    assert "tianming" in [e.id for e in timetable.due_showdowns(vehicle, mandated)]
+    assert "tianming" in [r["id"] for r in timetable.status_rows(vehicle, mandated)]
+    assert "tianming" in [e.id for e, _ in admin.admin_showdowns()]
+
+
+def test_only_the_gatekeepers_read_the_mandate_timetable():
+    """要 PM 定的第 1 條的守門：content.mandate_timetable 只准 timetable.py、seal.py、content.py、models.py 讀；
+    其他地方要看得到天命之爭一律走 timetable.events（照這一季的章）或 timetable.find。"""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py"}
+    hits = [
+        f"{p.relative_to(root).as_posix()}:{n}" for p in [*root.glob("tianxia/*.py"), root / "server.py"]
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if "mandate_timetable" in line and p.relative_to(root).as_posix() not in allowed
+    ]
+    assert hits == []

@@ -3407,7 +3407,7 @@ class Game:
         resolve 改的是資料庫裡的那一份賽季（mutate_season），手上的 self.state.world 跟著讀回來：結算發生在 options() 的
         推進裡，接下來 choose() 收尾的 _save_season 會把手上那一份整份寫回去，不讀回來就把結果蓋掉了。這一刻手上那一份
         跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
-        event = next((e for e in self.content.timetable if e.id == definition.timetable_event), None)
+        event = timetable.find(self.content, definition.timetable_event) if definition.timetable_event else None  # 天命之爭也找得到（玉璽二）
         result: dict[str, object] = {}
 
         def _resolve(season: WorldState) -> None:
@@ -6729,8 +6729,8 @@ class Game:
         stir = seal.STIR_MINE.format(shard=c.seal[shard.id].name) if status is not None and status[0].seal_shard == shard.id else ""
         w = self.state.world
         dates = [
-            self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in c.timetable
-            if e.seal and e.id not in w.timeline and e.id not in w.showdowns_opened
+            self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
+            if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
         ] if season_one(c, w) else []
         return {"name": c.seal[shard.id].name, "effect_text": seal.effect_text(c, c.seal[shard.id].effect), "state": state,
                 "stir": stir, "dates": dates}
@@ -7267,7 +7267,7 @@ class Game:
         w = self.state.world
         off = season_one_off(self.content, w, "battles")
         showdowns = [
-            showdown_battle(self.state, self.content, e) for e in self.content.timetable
+            showdown_battle(self.state, self.content, e) for e in timetable.events(w, self.content)
             if season_one(self.content, w) and e.kind == "showdown" and e.id not in w.timeline and e.id not in w.showdowns_opened
             and (e.version_from is None or e.version_from in w.timeline)  # 宛城：第 3 週結算前不知道是哪一版，不列（PM 2026-10-05）
         ]
@@ -7341,7 +7341,8 @@ class Game:
         return None
 
     def _timetable_event(self, event_id: str) -> TimetableEvent | None:
-        return next((e for e in self.content.timetable if e.id == event_id), None)
+        """管理者定結果、清鎖定、開戰、排時間與伏筆鏈的查表入口：照這一季的時刻表（一般季送天命之爭的 id 也是「沒有這件大事」，玉璽二）。"""
+        return next((e for e in timetable.events(self.state.world, self.content) if e.id == event_id), None)
 
     def admin_schedule(self, item: str, at_real: float, now: float) -> list[str]:
         """把三場決戰或季末排在現實時間 at_real：換成世界秒（world.time ＋ (at_real − now) × time_scale）寫進 schedule。
@@ -7351,7 +7352,7 @@ class Game:
             return self._log(refusal)
         s, c = self.state, self.content
         w = s.world
-        items = timetable.schedulable(c)
+        items = timetable.schedulable(c, w)
         event = next((e for e in items if e.id == item), None)
         if event is None:
             return self._log(["（只有三場決戰與季末能排時間。）"])
@@ -7700,7 +7701,7 @@ class Game:
         """三場大戲那三顆鈕：時刻表上的每一件決戰，與此刻按下去會被拒絕的原因（開得了是 None）。這一季沒有時刻表時是空的。"""
         if not season_one(self.content, self.state.world):
             return []
-        return [(e, self._showdown_refusal(e)) for e in self.content.timetable if e.kind == "showdown"]
+        return [(e, self._showdown_refusal(e)) for e in timetable.events(self.state.world, self.content) if e.kind == "showdown"]
 
     def _showdown_refusal(self, event: TimetableEvent) -> str | None:
         """這一件決戰此刻開不開得了：已經結算、已經開過（時刻表那一份記號，開過就不再開）、要看別的大事定版本而那件還沒結算
@@ -8364,7 +8365,7 @@ class Game:
         if not calendar.season_one_on(w, c) or w.ended:
             return []
         start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
-        titles = {e.id: e.title for e in c.timetable}
+        titles = {e.id: e.title for e in timetable.events(w, c)}
         done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
         done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
         return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
@@ -8423,7 +8424,7 @@ class Game:
         standing = {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": geju}
         names = {f.id: f.name for f in c.scenario.factions}
         timeline = []
-        for event in c.timetable:
+        for event in timetable.events(w, c):  # 天命之季含天命之爭（玉璽二）
             result = w.timeline.get(event.id)
             if result is None:
                 text = "（季已落幕，沒有發生。）"
