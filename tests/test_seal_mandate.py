@@ -598,3 +598,14 @@ def test_an_admin_stamp_without_seven_emerged_announces_another_line_fb187(manda
     next_season(mandated, world)
     texts = [r.text for r in world.get_season().rumors]
     assert early in texts and plain not in texts
+
+
+def test_the_mandate_texts_stay_true_when_the_admin_stamps_early_fb187():
+    """FB-187（審查 I1）：管理者提前蓋章時，這一輪七片可能一片都沒現世、沒人懷璽：公告不說每場大戰都會牽動碎片（沒人懷璽就牽動
+    不了），時刻表前言與天命之爭的幾幕也不寫「七片玉璽都在江湖上」——照規則蓋章與提前蓋章都讀得通。"""
+    c = real_content()
+    assert "牽動" not in seal.MANDATE_OPEN_EARLY and "現世" not in seal.MANDATE_OPEN_EARLY
+    (event,) = c.mandate_timetable
+    acts = c.battles["tianming"].acts
+    texts = [event.preface or "", *(a.text for a in acts), *(line for a in acts for line in a.text_by_lead.values())]
+    assert texts[0] and not any("七片" in line for line in texts)

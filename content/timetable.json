@@ -356,7 +356,7 @@
     "kind": "showdown",
     "mandate_only": true,
     "mandate_endings": {"guan": "s1_tianming_guan", "huang": "s1_tianming_huang"},
-    "preface": "史書上，下曲陽是黃巾最後的一座城。這一次，七片玉璽都在江湖上……",
+    "preface": "史書上，下曲陽是黃巾最後的一座城。這一次，城下爭的是天命……",
     "outcomes": {
       "guan:大勝": {"text": "下曲陽城頭換上了漢家的旗號，懷璽的人一個個走到官軍的陣前。", "chronicle": "天命之爭，官軍大勝。"},
       "guan:險勝": {"text": "官軍踏進下曲陽時已經折了大半人馬，可天命終究落在漢家這一邊。", "chronicle": "天命之爭，官軍險勝。"},
