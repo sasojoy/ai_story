@@ -220,7 +220,7 @@ def test_choosing_something_else_mid_duel_does_not_roll_the_round_back(sealed, w
     with at(game, 180.0):
         game.options()
     with at(game, 200.0):
-        game.choose("act:rest")
+        game.choose("act:explore")  # 別的動作（收尾 _save_season 整份存回賽季）
     with at(game, 201.0):
         game.options()
     texts = [r.text for r in world.get_season().rumors if r.text.startswith("奪璽第")]

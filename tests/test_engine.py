@@ -8,14 +8,14 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, at, install_season_one, walk_to
+from conftest import FixedRandom, at, idle_step, install_season_one, walk_to
 from tianxia import (
     atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, flavor, front_lines, guide,
     library, rules, skillview, team, traits,
 )
 from tianxia.characters import open_characters
 from tianxia.content import load_content
-from tianxia.engine import Game, Option
+from tianxia.engine import NO_REST, Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import Condition, Effect, FigureDef, Location, PromotionDef, ThirdParty
 from tianxia.models import ExploreMix
@@ -215,7 +215,7 @@ def test_loading_leaves_an_empty_slot_empty_when_the_content_has_no_starter_arts
 
 def test_town_options(game):
     # 小鎮有事件可交友（拜師）、有可招募的人（韓鐵），沒有敵人所以不能遊歷
-    assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
+    assert ids(game) == ["act:explore", "act:socialize", "act:recruit", "move:lake"]
 
 
 def test_locked_location_hidden_until_flag(game):
@@ -274,72 +274,32 @@ def test_insufficient_stamina_disables_actions(game):
     assert game.state.player.stamina == 4
 
 
-def test_rest_is_always_available_and_never_locks_the_player_out(game):
-    """實機 playtest 發現的卡死情境：體力見底時過去完全沒有選項可點，新玩家只能乾等。
-    act:rest（打坐）必須永遠是 enabled，坐下來之後時間過去就真的會回體力。"""
+def test_stamina_comes_back_with_time_alone(game):
+    """體力見底時沒有按鈕要按：時間過去就回（打坐 2026-10-12 拿掉了，企劃者「打坐也拿掉」）。"""
+    cfg = game.content.config
     game.state.player.stamina = 0
-    rest = next(o for o in game.options() if o.id == "act:rest")
-    assert rest.enabled
-    game.choose("act:rest")
-    game.advance(HOUR)
-    assert game.state.player.stamina > 0
+    game.advance(1800)
+    assert game.state.player.stamina == pytest.approx(1800 / cfg.stamina_regen_seconds)
 
 
-# ── 打坐 ──────────────────────────────────────────────
+# ── 打坐拿掉了 ──────────────────────────────────────────────
 
 
-def test_sitting_down_is_a_state_you_stand_up_from(game):
-    game.choose("act:rest")
-    assert game.state.player.resting_since == game.state.world.time
-    assert ids(game) == ["act:stand"]
-    assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
-    assert game.seclude(4) == ["你現在無法閉關。"]
-    assert "打坐中" in game.status_text()
-    game.choose("act:stand")
+def test_there_is_no_sitting_down_any_more(game):
+    """閒著的選單沒有打坐、也沒有起身；舊分頁按到 act:rest 只回一句，不坐下、不動體力。"""
+    assert "act:rest" not in ids(game) and "act:stand" not in ids(game)
+    game.state.player.stamina = 3
+    assert game.choose("act:rest") == ["（此刻無法這麼做。）"]
+    assert game.state.player.resting_since is None and game.state.player.stamina == 3
+    assert game._act("rest") == [NO_REST]
+
+
+def test_a_save_made_while_sitting_stands_up_on_load(game):
+    """存檔時坐著的人（打坐拿掉之前）讀檔就起身：選單是平常閒著的那一份，體力照平常的速度回。"""
+    game.state.player.resting_since = 0.0
+    game._drop_stale_references()
     assert game.state.player.resting_since is None
     assert "act:explore" in ids(game)
-    assert game.state.journal[0].title == "起身"
-
-
-def test_standing_up_right_away_does_not_count_zero_minutes(game):
-    """FB-049：剛坐下就起身，不寫「打坐了約 0 分鐘」；坐滿一分鐘以上照舊寫幾分鐘。"""
-    game.choose("act:rest")
-    assert game.choose("act:stand") == ["你收功起身。"]
-    game.state.player.stamina = 0  # 不然體力早就滿了，一推進時間就自己起身
-    game.choose("act:rest")
-    game.advance(600)
-    assert game.choose("act:stand") == ["你收功起身（打坐了約 10 分鐘）。"]
-
-
-def test_sitting_doubles_the_natural_regen(game):
-    cfg = game.content.config
-    game.state.player.stamina = 0
-    game.choose("act:rest")
-    game.advance(1800)
-    sitting = 1800 / cfg.stamina_regen_seconds * cfg.rest_regen_multiplier
-    assert game.state.player.stamina == pytest.approx(sitting)
-    game.choose("act:stand")
-    game.advance(1800)
-    assert game.state.player.stamina == pytest.approx(sitting + 1800 / cfg.stamina_regen_seconds)
-
-
-def test_sitting_counts_real_time_between_syncs(game):
-    cfg = game.content.config
-    game.sync(1000.0)
-    game.state.player.stamina = 0
-    game.choose("act:rest")
-    game.sync(1000.0 + 1800)
-    assert game.state.player.stamina == pytest.approx(1800 / cfg.stamina_regen_seconds * cfg.rest_regen_multiplier)
-
-
-def test_sitting_ends_by_itself_once_stamina_is_full(game):
-    game.state.player.stamina = game.content.config.stamina_max - 1
-    game.choose("act:rest")
-    game.advance(HOUR)
-    assert game.state.player.resting_since is None
-    assert game.state.player.stamina == game.content.config.stamina_max
-    entry = game.state.journal[0]
-    assert entry.title == "起身" and "回滿" in entry.lines[0]
 
 
 # ── 事件與檢定 ────────────────────────────────────────────
@@ -618,7 +578,7 @@ def test_continuing_and_leaving_a_dialogue(content, game):
     assert msgs == ["你結束了這段交談，先行告辭。"]
     assert game.state.player.pending_companion is None
     # 小鎮只有他一位大勢人物：交友之外，直接多一顆求見他（名望門檻 0，見得到）
-    assert ids(game) == ["act:explore", "act:socialize", "call:mate", "act:recruit", "move:lake", "act:rest"]
+    assert ids(game) == ["act:explore", "act:socialize", "call:mate", "act:recruit", "move:lake"]
 
 
 def test_socializing_without_a_deep_interaction_companion_falls_through_to_events(game):
@@ -2620,13 +2580,13 @@ def test_an_active_muster_shows_faction_join_options(content, game):
 
 
 def test_the_muster_keeps_the_everyday_menu_under_the_join_buttons(content, game):
-    """集結那段時間（企劃者 2026-10-03 決定，FB-009）：人在戰場的人照常探索、移動、打坐，另外多加入的按鈕；
+    """集結那段時間（企劃者 2026-10-03 決定，FB-009）：人在戰場的人照常探索、移動，另外多加入的按鈕；
     場景上戰場底下接著自己所在的地點。"""
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
         assert ids(game) == ["battle:join:guan", "battle:join:huang"] + [
-            "act:explore", "act:socialize", "act:recruit", "move:lake", "act:rest"]
+            "act:explore", "act:socialize", "act:recruit", "move:lake"]
         scene = game.scene_text()
         assert "測試決戰" in scene and "選擇陣營" in scene and "小鎮" in scene
         game.choose("act:explore")  # 集結中照常探索，不會被擋
@@ -3399,45 +3359,6 @@ def test_walking_out_of_the_battles_region_is_away_from_the_start_only_when_it_h
     game.travel("cave", "walk")
     assert game.state.player.journey is not None
     assert game.world.get_battle().participants["沈浪"].away is away
-
-
-def test_joining_a_battle_stands_you_up(content, game):
-    definition = _install_battle_def(content)
-    game.choose("act:rest")
-    game.world.start_battle(definition, now=1000.0)
-    with at(game, 1000.0):
-        game.choose("battle:join:guan")
-    assert game.state.player.resting_since is None
-    assert "沈浪" in game.world.get_battle().participants
-
-
-def test_a_sitter_can_still_stand_up_while_the_muster_menu_is_showing(content, game):
-    """打坐中碰上集結：加入的按鈕旁邊一定還有起身（集結時平常的選單接在後面，打坐中就是起身）——
-    不然人坐著出不去，只能硬加入戰局。規則是隨時可以起身。"""
-    definition = _install_battle_def(content)
-    definition.region = "north"
-    game.choose("act:rest")
-    game.world.start_battle(definition, now=1000.0)
-    with at(game, 1000.0):
-        assert "act:stand" in ids(game)
-        assert next(o for o in game.options() if o.id == "act:stand").label == "起身"
-        game.choose("act:stand")
-        assert game.state.player.resting_since is None
-        assert ids(game)[:2] == ["battle:join:guan", "battle:join:huang"]  # 起身不等於加入，加入的按鈕還在
-        assert "沈浪" not in game.world.get_battle().participants
-
-
-def test_a_sitter_can_stand_up_while_the_late_join_menu_is_showing(content, game):
-    definition = _install_battle_def(content)
-    definition.region = "north"
-    game.choose("act:rest")
-    game.world.start_battle(definition, now=0.0)
-    with at(game, definition.muster_seconds + 1):
-        assert game._battle_status()[0].phase == "active"
-        assert ids(game) == ["battle:join_late", "act:stand"]
-        game.choose("act:stand")
-        assert game.state.player.resting_since is None
-        assert ids(game) == ["battle:join_late"]
 
 
 def test_a_standing_player_gets_no_stand_option_on_the_battle_menu(content, game):
@@ -5678,7 +5599,7 @@ def _labels(game):
 
 def test_a_place_with_two_figures_offers_one_audience_option(content, game):
     _hall(content, game)
-    assert ids(game) == ["act:explore", "act:socialize", "act:call", "act:recruit", "move:lake", "act:rest"]
+    assert ids(game) == ["act:explore", "act:socialize", "act:call", "act:recruit", "move:lake"]
     assert _labels(game)["act:call"] == ("求見", True)
 
 
@@ -7158,11 +7079,11 @@ def test_the_models_push_in_a_big_fight_is_the_same_points_with_or_without_roll_
 
 
 def test_actions_that_cost_nothing_do_not_build_the_cost_table(game):
-    """不花體力的行動（打坐、起身……）不必算各行動的體力（要翻武學的資料）；要花體力的才算、而且只算一次。"""
+    """不花體力的行動（序章的調息、分道揚鑣……）不必算各行動的體力（要翻武學的資料）；要花體力的才算、而且只算一次。"""
     spy = mock.Mock(wraps=game._action_costs)
     game._action_costs = spy
     game._act("rest")
-    game._act("stand")
+    game._act("part")
     assert spy.call_count == 0
     game._act("explore")
     assert spy.call_count == 1
@@ -7767,7 +7688,7 @@ def test_the_most_dramatic_gamble_of_a_battle_goes_round_the_world_and_earns_fam
     assert game.world.get_battle().phase == "ended"
     line = f"測試決戰上，{me}放手一搏：「扮成絕世美女色誘對面主將」——成算不到1成，竟然成了。{me}一扭腰，對面主將看傻了眼。"
     with at(game, start + 5):
-        game.choose("act:rest")  # 再存一次賽季：傳聞不會被記憶體那份蓋掉
+        idle_step(game)  # 再存一次賽季：傳聞不會被記憶體那份蓋掉
     assert [r.text for r in game.world.get_season().rumors].count(line) == 1
     top = content.config.battle.top_fame  # 官軍只有他一個，也是首功（個人戰功）：名望合起來寫一筆
     assert game.state.player.stats["fame"] == fame + 1 + top

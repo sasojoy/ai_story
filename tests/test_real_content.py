@@ -107,10 +107,11 @@ def test_the_road_sights_are_the_thirty_written_for_season_one(content):
 
 
 def test_the_mentor_explains_travel_and_sitting_down(content):
-    """步行、趕路、疾行與打坐現在由師父講：出師那一步（第 11 步）講走法與體力，打坐那一步（第 7 步）講打坐。"""
+    """步行、趕路、疾行與體力現在由師父講：出師那一步（第 11 步）講走法與體力，體力見底那一步（第 7 步）講體力怎麼回來
+    （打坐 2026-10-12 拿掉了：講時辰與一天兩顆回體丹，這一步只教一下調息）。"""
     texts = {step.id: step.text for step in content.tutorial.steps}
     assert all(word in texts["p11_farewell"] for word in ("步行", "趕路", "疾行", "體力"))
-    assert "打坐" in texts["p7_rest"]
+    assert all(word in texts["p7_rest"] for word in ("回體丹", "調息")) and "打坐" not in texts["p7_rest"]
 
 
 INSIGHT_OF = {"快": "feng", "慢": "shan", "柔": "shui", "剛": "huo"}  # 草廬四景的四個做法（有所感）各悟到哪一個基本意境
@@ -2200,7 +2201,7 @@ def test_real_showdowns_start_from_the_opening_fronts():
 @pytest.mark.slow
 @pytest.mark.parametrize("season_one", [False, True])
 def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
-    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「打坐」；
+    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「探索」；
     決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。"""
     from tianxia.models import allow_known
     from tianxia.sqlite_world import open_world
@@ -2211,10 +2212,10 @@ def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_pa
 
     def observe(game):
         ids = [o.id for o in game.options(odds=False, tick=False)]
-        if "act:rest" in ids:
+        if "act:explore" in ids:  # 閒著的選單（engine.IDLE_MARK；以前認打坐，2026-10-12 拿掉了）
             seen.update(oid for oid in ids if not oid.startswith("battle:"))
 
     play_season(real, 2, max_steps=700, observe=observe, world=open_world(tmp_path / f"idle-{season_one}.db"))
-    assert {"act:explore", "act:rest"} <= seen and any(oid.startswith("move:") for oid in seen)
+    assert "act:explore" in seen and any(oid.startswith("move:") for oid in seen)
     stray = {oid for oid in seen if not allow_known(oid)}
     assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"

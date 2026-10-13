@@ -11,7 +11,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import real_content
+from conftest import idle_step, real_content
 from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules, team
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
@@ -930,8 +930,8 @@ def test_one_person_does_it_all_at_weekend_size(on):
 def test_the_leader_can_lead_again_after_it_failed(on):
     game, plot = _lead(on)
     game.state.world.time = plot.deadline + 1
-    assert "三路並進沒能在時限內湊齊，這一回作罷。" in game.choose("act:rest")  # 下一步行動收到作罷的那一句
-    game.choose("act:stand")
+    assert "三路並進沒能在時限內湊齊，這一回作罷。" in idle_step(game)  # 下一步行動收到作罷的那一句
+    idle_step(game)
     assert plot.status == "failed" and "opp:plot:guan_three_roads" in _ids(game)
 
 
@@ -941,10 +941,10 @@ def test_settlement_is_delivered_on_the_next_choose_and_sync(on):
     helper.choose(f"opp:join:{plot.id}")
     plot.parts["nanyang"] = "乙"  # 至少辦成一處才拿獎勵
     plot.status = "done"
-    msgs = helper.choose("act:rest")
+    msgs = idle_step(helper)
     assert "三路並進成了，你那一路也記了一功。" in msgs and helper.state.player.contrib == on.config.plot_contrib
-    helper.choose("act:stand")
-    assert "三路並進成了，你那一路也記了一功。" not in helper.choose("act:rest")  # 只一次
+    idle_step(helper)
+    assert "三路並進成了，你那一路也記了一功。" not in idle_step(helper)  # 只一次
 
 
 def test_sync_settles_a_plot_that_ended_while_offline(on):

@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import real_content
+from conftest import idle_step, real_content
 from tianxia import bot_policy, calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -165,8 +165,7 @@ def test_summons_when_contribution_crosses_threshold(on):
     game = _game(on, faction="guan", at="changshe")
     p = game.state.player
     p.contrib = 290
-    game.choose("act:rest")
-    game.choose("act:stand")
+    idle_step(game)
     assert p.summons is None
     p.contrib = 295
     msgs = game.choose("act:duty")
@@ -198,9 +197,9 @@ def test_summons_goes_to_successor_when_figure_gone(on):
     game = _game(on, faction="guan", at="changshe")
     figures.apply(game.state, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="luzhi_camp"))
     game.state.player.contrib = 300
-    assert "朱儁召你到長社營中。" in game.choose("act:rest")
+    assert "朱儁召你到長社營中。" in idle_step(game)
     assert game.state.player.summons.figure == "zhujun"
-    game.choose("act:stand")
+    idle_step(game)
     game.choose("act:summons")
     assert game.state.pending_event == "promo_guan_2_handoff"
 
@@ -222,21 +221,18 @@ def test_haoqiang_summons_nearest_base(on):
                                       ("乙", "zhuo_county", "zhuo_militia_hall", "鄉里結社")):
         game = _game(on, name=name, faction="haoqiang", at=at)
         game.state.player.contrib = 300
-        assert f"中山的馬商張世平、蘇雙到了{base_name}，指名要見你。" in game.choose("act:rest"), at
+        assert f"中山的馬商張世平、蘇雙到了{base_name}，指名要見你。" in idle_step(game), at
         assert (game.state.player.summons.location, game.state.player.summons.figure) == (base, None)
 
 
 def test_summons_option_only_when_idle_at_the_place(on):
-    """RF3：有召見、人在召見的地點、閒著時才有「應召」（不花體力）；不在那裡、在打坐、在路上都沒有；
+    """RF3：有召見、人在召見的地點、閒著時才有「應召」（不花體力）；不在那裡、在路上都沒有；
     演到一半季結束，晉升不發生。"""
     game = _summoned(_game(on, faction="guan", at="luzhi_camp"))
     assert "act:summons" not in _ids(game)
     game.state.player.location = "changshe"
     summons = next(o for o in game.options() if o.id == "act:summons")
     assert summons.enabled and summons.label == "應召"
-    game.choose("act:rest")
-    assert _ids(game) == ["act:stand"]
-    game.choose("act:stand")
     road = next(o.id for o in game.options() if o.id.startswith("move:"))
     game.choose(road)
     assert game.state.player.journey is not None and "act:summons" not in _ids(game)
@@ -320,9 +316,9 @@ def test_switch_off_no_summons(real):
     """開關關著：貢獻再多也不發召見，沒有「應召」，召見地點也端不出奇遇。"""
     game = _game(real, faction="guan", at="changshe")
     game.state.player.contrib = 900
-    game.choose("act:rest")
+    idle_step(game)
     assert game.state.player.summons is None
-    game.choose("act:stand")
+    idle_step(game)
     _summoned(game)
     assert "act:summons" not in _ids(game) and ranks.summons_event(game.state, real) is None
 
@@ -392,10 +388,10 @@ def test_bot_answers_summons(on):
     """有召見的假人往召見的地點走（長社 → 黃巾別部營寨），到了選「應召」，演完晉升（選哪個選項都晉升）。"""
     game = _summoned(_game(on, faction="huang", at="changshe"), figure="bocai", at="huangjin_camp")
     profile = _bot(on, game, "huang")
-    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    options = [o for o in game.options(odds=False) if o.enabled]
     assert bot_policy.pick(game, options, profile, random.Random(0)).startswith("move:huangjin_camp")
     game.state.player.location = "huangjin_camp"
-    options = [o for o in game.options(odds=False) if o.enabled and o.id != "act:rest"]
+    options = [o for o in game.options(odds=False) if o.enabled]
     assert bot_policy.pick(game, options, profile, random.Random(0)) == "act:summons"
     bot_policy.take_turn(game, profile, random.Random(0))
     assert game.state.pending_event == "promo_huang_2"

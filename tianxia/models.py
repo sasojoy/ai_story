@@ -1813,7 +1813,7 @@ class FollowerTuning(_Strict):
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
-    rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐中體力回復是平常的幾倍
+    rest_regen_multiplier: float = Field(default=2, ge=1)  # 打坐 2026-10-12 拿掉了（企劃者），沒有地方讀它；留著是舊設定檔讀得進來
     # 地方痕跡的門檻倍數（Condition.marks_min/max 的數字乘上它、無條件進位）：開發期 1，正式伺服器依人數調大
     mark_threshold_scale: float = Field(default=1.0, gt=0)
     # 熟練加成（Check.practice）：名聲 → 每幾點加 1、最多加幾。惡名的估算見 CLAUDE.md「惡名的熟練加成」。
@@ -2113,6 +2113,10 @@ class Config(_Strict):
     # 舊角色不補送，換季不再送（剩下的跟著帶到下一季）
     beta_gift: bool = True
     beta_gift_stamina_pills: int = Field(default=20, ge=0)
+    # 一天最多服幾顆（企劃者 2026-10-12「體力丹一天最多吃兩顆每天00:00重新計算」）：0 是不限（測試內容）。「一天」看現實時間
+    # （Game.pill_now），照 pill_day_utc_offset_hours 的時區 00:00 換日（台灣 UTC+8）；真人、假人、整季機器人一樣
+    stamina_pills_per_day: int = Field(default=0, ge=0)
+    pill_day_utc_offset_hours: float = Field(default=8, ge=-12, le=14)
     # 測試期間一鍵補滿體力（企劃者 2026-10-07，緊急）：「體力在這個遊戲是很重要的資源，現在的回復以及消耗完全不成正比，探索偶爾
     # 還順便扣一堆體力，新人玩家體驗不到樂趣。另外現在還在測試版，請直接讓玩家能直接補滿體力。」打開時，狀態列體力條上 joy 的
     # 「丹」鈕（同一個入口 Game.take_stamina_pill、同一條路由 pill）變成「補滿」：按一下直接補到 stamina_max，不花丹、不花銀兩、

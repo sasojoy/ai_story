@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import next_season, real_content
+from conftest import idle_step, next_season, real_content
 from test_treasures import _game, _gear_root, _won
 from tianxia import equipment, figures, forge_secrets, naming, rules, signature_arms, smithing, team, treasures, weapons
 from tianxia.characters import CharacterStore
@@ -162,16 +162,16 @@ def test_a_general_hands_over_his_arm_at_eighty_once_a_season(content, world):
     _arms(content)
     first, second = _game(content, world, "甲客"), _game(content, world, "乙客")
     first.state.player.affinities["mate"] = 79
-    first.choose("act:rest")
+    idle_step(first)
     assert signature_arms.owned(first.state.player) == []
     first.state.player.affinities["mate"] = 80
-    msgs = first.choose("act:stand")  # 打坐中選單只剩「起身」：照樣走到 choose 最後的檢查
+    msgs = idle_step(first)  # 照樣走到 choose 最後的檢查
     [arm] = signature_arms.owned(first.state.player)
     assert arm.name == "鐵脊長刀" and signature_arms.GIFT_LINE.format(general="韓鐵", arm="鐵脊長刀") in msgs
     assert world.get_season().signature_arms == {"mate": SignatureClaim(owner="甲客", via="gift")}
     second.sync(1.0)
     second.state.player.affinities["mate"] = 100
-    second.choose("act:rest")
+    idle_step(second)
     assert signature_arms.owned(second.state.player) == []  # 每位名將每季全服一人
 
 
@@ -191,7 +191,7 @@ def test_the_gift_goes_into_the_chronicle_the_rumors_and_the_annals(content, wor
     content.config.biography.enabled = True  # 行狀（測試內容關著：annals.note 什麼都不記）
     game = _game(content, world, "甲客")
     game.state.player.affinities["mate"] = 80
-    game.choose("act:rest")
+    idle_step(game)
     season = world.get_season()
     words = {"who": "甲客", "general": "韓鐵", "arm": "鐵脊長刀"}
     assert signature_arms.CHRONICLE_GIFT.format(**words) in [r.text for r in season.chronicle]
@@ -204,10 +204,10 @@ def test_with_weapons_off_nothing_is_given_or_claimed(content, world):
     content.config.weapons.enabled = False
     game = _game(content, world)
     game.state.player.affinities["mate"] = 90
-    game.choose("act:rest")
+    idle_step(game)
     assert signature_arms.owned(game.state.player) == [] and world.get_season().signature_arms == {}  # 不給也不佔名額
     content.config.weapons.enabled = True
-    game.choose("act:stand")
+    idle_step(game)
     assert len(signature_arms.owned(game.state.player)) == 1  # 開了之後照樣給得出去
 
 
@@ -218,7 +218,7 @@ def test_with_no_room_the_arm_is_held_and_still_counts_as_given(content, world):
     p = game.state.player
     p.weapon = Weapon(id="兵:90", name="甲刀", kind="刀", attribute="剛", tier=1, quality="下品")
     p.affinities["mate"] = 80
-    msgs = game.choose("act:rest")
+    msgs = idle_step(game)
     assert [i.signature for i in p.held_gear] == ["mate"] and treasures.HELD.format(name="鐵脊長刀") in msgs
     assert "mate" in world.get_season().signature_arms  # 寄放了也算給出去了（「要 PM 定的」第 6 條）
 
@@ -342,7 +342,7 @@ def test_signature_arms_join_the_divine_book_across_seasons(content, world):
         conn.execute("INSERT INTO seasons (number, data) VALUES (?, ?)", (season - 1, old.model_dump_json()))
     assert world.signature_records() == [(season - 1, {"mate": SignatureClaim(owner="丙", via="seized")})]  # 這一季還沒給，不列
     game.state.player.affinities["mate"] = 80
-    game.choose("act:rest")
+    idle_step(game)
     assert [n for n, _ in world.signature_records()] == [season - 1, season]
     book = game.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
     lines = [line for line in book.splitlines() if "鐵脊長刀" in line]

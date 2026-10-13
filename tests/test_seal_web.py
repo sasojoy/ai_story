@@ -140,9 +140,10 @@ def test_seal_admin_buttons_ask_then_post_to_their_routes(m):
 
 
 def test_the_seal_moves_sit_above_the_action_bar_not_in_the_fold(m):
-    """最終審查 I-1：閒著的時候（選單上有打坐）奪璽三招不掉進收起來的「此地還能做」，畫在行動列上面（5.5「選單最前面」）。"""
-    assert any(o["id"] == "act:rest" for o in m["options"])
-    base = next(o for o in m["options"] if o["id"] == "act:rest")
+    """最終審查 I-1：閒著的時候（選單上有探索；Joy 的 PR #55 拿掉打坐之前是打坐）奪璽三招不掉進收起來的「此地還能做」，
+    畫在行動列上面（5.5「選單最前面」）。"""
+    assert any(o["id"] == "act:explore" for o in m["options"])
+    base = next(o for o in m["options"] if o["id"] == "act:explore")
     moves = [{**base, "id": f"seal:{move}", "label": f"{move}（剋{beat}）", "enabled": True}
              for move, beat in (("強攻", "奇襲"), ("固守", "強攻"), ("奇襲", "固守"))]
     m["options"] = moves + m["options"]

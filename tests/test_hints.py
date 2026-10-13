@@ -9,7 +9,7 @@ import random
 from pathlib import Path
 
 import pytest
-from conftest import FixedRandom, next_season
+from conftest import FixedRandom, idle_step, next_season
 from test_cultivation import kicker_art
 from test_practice_hardening import harden
 from tests.test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
@@ -921,7 +921,7 @@ def test_a_request_never_queues_two_state_hints(game):
     p.member.injury = 5
     game.sync(1000.0)
     assert _queued(game) == ["h_merge"]
-    game.choose("act:rest")
+    idle_step(game)
     assert _queued(game) == ["h_merge"]  # 動作做完的那次檢查也不再排
     game.guide_ack()
     game.sync(1010.0)
@@ -1145,7 +1145,7 @@ def test_only_the_hints_the_book_has_are_worked_out(game, monkeypatch):
 def test_choose_notices_what_the_action_made_true(game):
     game.skip_tutorial()
     game.state.player.insights = ["feng", "huo"]
-    game.choose("act:rest")
+    idle_step(game)
     assert _key(game) == "h_merge"
     assert f"【{MENTOR}】意境可以合。" in game.state.journal[0].guide  # 記在這一次行動那一則
 

@@ -83,7 +83,7 @@ def take_pill(game: Game) -> None:
     pill_only=True：測試期間 Config.beta_free_refill 打開時，真人按同一顆鈕是免費補滿；機器人與假人不吃那個，照舊只吃丹
     （沒有丹就不補），整季模擬與平衡量表不因為測試期間的免費補滿而變。開關關著時 pill_only 沒有作用。"""
     p = game.state.player
-    if p.stamina_pills > 0 and p.stamina < PILL_BELOW:
+    if p.stamina_pills > 0 and p.stamina < PILL_BELOW and game.pills_left_today() != 0:  # 一天的上限照真人（今天服滿了就等明天）
         game.take_stamina_pill(pill_only=True)
 
 
@@ -288,8 +288,8 @@ def sense_draw(game: Game, rng: random.Random) -> list[str]:
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
-    故意排除 act:rest：那是修給真人玩家的保底（體力見底時選單不會整排 disabled），
-    機器人不需要、也不該選——act:rest 永遠 enabled，機器人要是跟其他選項一樣隨機挑，
+    故意排除 act:rest：以前是打坐（真人玩家體力見底時的保底，2026-10-12 拿掉），現在只剩序章那一下調息；
+    留著這條排除是同一個道理——永遠按得下去的選項，機器人要是跟其他選項一樣隨機挑，
     「沒有其他選項可選」這個訊號就永遠不會成立，下面 play_season() 用這個訊號決定要不要
     呼叫 game.advance() 推進遊戲時間的節奏會被打亂（體力耗盡的頻率大幅降低，時間推進
     跟著變少，一整季要跑完所需的步數暴增到頂到 max_steps 才停，拖垮整個測試套件）。

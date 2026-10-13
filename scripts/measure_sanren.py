@@ -8,7 +8,7 @@
 
 印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數、心得，
 散人另印俠名與名號的階、懸賞完成幾張；陣營另印陣營、階與貢獻。每一邊另印傷與體力（企劃者 2026-10-12 療傷只在醫館）：
-一季平均的內傷（佔氣血上限的幾成，每一步取樣）、療傷幾次、花多少銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動一共花掉多少體力。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
+一季平均的內傷（佔氣血上限的幾成，每一步取樣）、療傷幾次、花多少銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動一共花掉多少體力、體力連一次探索都不夠的時間佔一季的幾成（見底%，照賽季時間加權）。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
 bounties._complete 數），以及求藝、求兵各拿到多少（銀兩、經驗、心得、素材、求藝送的兵器；交出去的武學幾門〔其中幾門是交了再
 照同一個配方合的〕、兵器幾把〔其中幾把是自己打的〕；包住 bounties.give 數）。最後兩行是兩邊的中位數。
 一個種子一個資料庫、只有一個機器人，碰不到別人，截殺一場都不會有：截殺的量看 scripts/sim_server_bots.py（設計 11.2）。
@@ -48,7 +48,7 @@ from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 STEER = 0.5  # 有目標的玩家：一半的時候照手上的懸賞、軍令走
-COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得", "內傷%", "療傷", "療傷銀", "繞路", "吃丹", "花體力")
+COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得", "內傷%", "療傷", "療傷銀", "繞路", "吃丹", "花體力", "見底%")
 KINDS = ("strike", "scout", "escort", "wanted", "art", "arms")
 GOT = ("銀兩", "經驗", "心得", "一階素材", "二階素材", "三階素材", "兵器")
 TIER_WORDS = {1: "一階素材", 2: "二階素材", 3: "三階素材"}
@@ -233,7 +233,14 @@ def measure(
         care["花體力"] += max(0, round(stamina - self.state.player.stamina))
         return msgs
 
+    last = {}  # 見底%：上一次取樣的賽季時間與那時體力見不見底（照經過的賽季時間加權：沒事做時一步就是一大段時間）
+
     def observe(game):
+        now, empty = game.state.world.time, game.state.player.stamina < game.content.config.action_cost["explore"]
+        if last:
+            care["見底秒"] += (now - last["t"]) if last["empty"] else 0
+            care["總秒"] += now - last["t"]
+        last.update(t=now, empty=empty)
         member = game.state.player.member
         _, cap = team.member_neili(game.content, member, team.con_of(game.state, game.content, game.world, PLAYER))
         care["樣本"] += 1
@@ -258,6 +265,7 @@ def measure(
         "faction": p.faction, "tally": tally,
         "內傷%": round(care["內傷千分"] / max(1, care["樣本"]) / 10, 1),
         **{k: care[k] for k in ("療傷", "療傷銀", "繞路", "吃丹", "花體力")},
+        "見底%": round(100 * care["見底秒"] / max(1, care["總秒"]), 1),  # 體力連一次探索都不夠的時間佔一季的幾成
     }
     if p.faction is None:
         row["俠名"] = ranger.points(s)

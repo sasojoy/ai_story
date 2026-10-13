@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from . import atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
-from .engine import FREE_TEXT_OPTION, Game, Option
+from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
 
@@ -261,7 +261,7 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
     這一輪沒有取名的名額就先放著（邀請還在，下一輪再答）、照常做別的事（回 None）。沒有論武邀請也是 None。"""
     p = game.state.player
     pending = [i for i in invites.incoming(game.state.world, p.name) if i.kind == "discuss" and i.location == p.location]
-    if not pending or "act:rest" not in {o.id for o in game.options(odds=False, tick=False)}:
+    if not pending or IDLE_MARK not in {o.id for o in game.options(odds=False, tick=False)}:
         return None
     inv = pending[0]
     theirs = inv.payload.get("item", "")

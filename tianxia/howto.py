@@ -135,33 +135,32 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
     return f"新手期：{since}的{gap}{span}內，體力回復 ×{cfg.newbie_stamina_multiplier:g}{tail}。"
 
 
-def rest_line(content: Content) -> str:
-    """打坐（Game._advance_player_local：打坐中回復乘 rest_regen_multiplier，跟新手期疊乘）。"""
-    cfg = content.config
-    stack = "，跟新手期疊乘" if cfg.newbie_stamina_multiplier > 1 else ""
-    return f"打坐時體力回復 ×{cfg.rest_regen_multiplier:g}{stack}；坐著不能做別的，隨時可以起身。"
-
-
-def pill_line(content: Content, count: int | None = None) -> str:
+def pill_line(content: Content, count: int | None = None, today: int | None = None) -> str:
     """體力條右端那顆鈕：測試期間一鍵補滿打開時（Config.beta_free_refill）是「補滿」，不花丹；關著時是回體丹，一顆回多少
-    （count 給了就寫還有幾顆，0 顆沒有這一行；None 是玩法說明那種不看個人的說法）。"""
+    （count 給了就寫還有幾顆，0 顆沒有這一行；None 是玩法說明那種不看個人的說法）。一天有上限時（stamina_pills_per_day）
+    多一句上限與換日，today 給了再寫今天還能服幾顆。"""
     cfg = content.config
     if cfg.beta_free_refill:
         return f"測試期間按體力條上的「{cfg.beta_free_refill_label}」直接補滿，不花{cfg.stamina_pill_name}。"
     if count is not None and count <= 0:
         return ""
     have = "" if count is None else f"（還有 {count} 顆）"
-    return f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
+    line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
+    if cfg.stamina_pills_per_day > 0:
+        left = "" if today is None else f"（今天還能服 {today} 顆）"
+        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆，每天 00:00（台灣時間）重新計算{left}。"
+    return line
 
 
 def stamina_lines(
     content: Content, season: WorldState, newbie: bool | None = None, pills: int | None = None, button: bool = True,
+    today: int | None = None,
 ) -> list[str]:
-    """體力條點開的說明（也是玩法說明「體力」那一節）：回復、新手期、打坐、回體丹或補滿。button：體力條上有沒有那顆鈕
-    （序章裡沒有，就不提）。空的行不列。"""
-    lines = [regen_line(content), newbie_line(content, season, newbie), rest_line(content)]
+    """體力條點開的說明（也是玩法說明「體力」那一節）：回復、新手期、回體丹或補滿。button：體力條上有沒有那顆鈕
+    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。空的行不列。打坐 2026-10-12 拿掉了。"""
+    lines = [regen_line(content), newbie_line(content, season, newbie)]
     if button:
-        lines.append(pill_line(content, pills))
+        lines.append(pill_line(content, pills, today))
     return [line for line in lines if line]
 
 
@@ -557,7 +556,7 @@ def _section(title: str, lines: Sequence[str]) -> list[str]:
 
 
 def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
-    """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、五個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
+    """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、四個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
     情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
     不看個人狀態（新手期還在不在、還有幾顆丹寫在體力條點開的說明），網頁每次攤開問一次。
     season：這一季（第一季才有的事只在第一季說；新手期照這一季蓋的季長換成現實時間）。recruitable：內容裡有沒有能招募的人物
@@ -587,7 +586,6 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "可能掉素材；每一場都會扣些氣血，輸了還會掉銀兩。遇上自己陣營的隊伍是操練：不打、不會輸，"
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
-        f"- **打坐**：坐下來體力回復 ×{cfg.rest_regen_multiplier:g}，期間不能做別的；隨時起身，回滿了自己起身。",
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"

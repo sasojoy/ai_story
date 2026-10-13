@@ -9,6 +9,7 @@
   "action_cost": {"explore": 6, "train": 6, "socialize": 3},
   "stamina_pill_restore": 150,
   "beta_gift_stamina_pills": 30,
+  "stamina_pills_per_day": 2,
   "event_fail_stamina_scale": 0.5,
   "newbie_stamina_multiplier": 3,
   "ollama_model": "gemma4:26b",

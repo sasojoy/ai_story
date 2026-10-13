@@ -458,20 +458,21 @@ def _help(game):
 def test_the_stamina_help_reads_the_config(game):
     cfg = game.content.config
     cfg.time_scale, cfg.stamina_regen_seconds, cfg.stamina_max = 1.0, 180, 150
-    cfg.newbie_stamina_multiplier, cfg.rest_regen_multiplier = 1, 2
+    cfg.newbie_stamina_multiplier = 1
     cfg.beta_free_refill, cfg.stamina_pill_restore = False, 100
     assert _help(game) == [
         "體力每 3 分鐘回 1 點，滿 150 就不再回。",
-        "打坐時體力回復 ×2；坐著不能做別的，隨時可以起身。",
         f"回體丹一顆回 100 點（還有 {game.state.player.stamina_pills} 顆），按體力條右端的「丹」服下。",
-    ]
-    cfg.stamina_regen_seconds, cfg.stamina_max, cfg.rest_regen_multiplier, cfg.stamina_pill_restore = 120, 250, 3, 150
+    ]  # 打坐 2026-10-12 拿掉了，沒有那一行
+    cfg.stamina_regen_seconds, cfg.stamina_max, cfg.stamina_pill_restore = 120, 250, 150
     cfg.newbie_stamina_multiplier = 3
     help_now = _help(game)
     assert help_now[0] == "體力每 2 分鐘回 1 點，滿 250 就不再回。"
     assert help_now[1].startswith("新手期：開季後的") and help_now[1].endswith("內，體力回復 ×3（你還在新手期）。")
-    assert help_now[2].startswith("打坐時體力回復 ×3，跟新手期疊乘")
-    assert "一顆回 150 點" in help_now[3]
+    assert "一顆回 150 點" in help_now[2]
+    cfg.stamina_pills_per_day = 2  # 一天的上限（企劃者 2026-10-12）：說上限、換日與今天還能服幾顆
+    assert _help(game)[2].endswith("一天最多服 2 顆，每天 00:00（台灣時間）重新計算（今天還能服 2 顆）。")
+    cfg.stamina_pills_per_day = 0
     cfg.time_scale = 2.0  # 遊戲時間跑得比現實快：現實裡每 1 分鐘就回 1 點
     assert _help(game)[0].startswith("體力每 1 分鐘回 1 點")
     cfg.beta_free_refill, cfg.beta_free_refill_label = True, "補滿"
@@ -573,7 +574,7 @@ def test_the_full_stamina_note_shows_when_nearly_full_and_not_below(game):
 def _odd_numbers(cfg):
     """把頁面會寫到的數字都換成不常見、彼此不同的值：頁面上每一個數都要是其中之一（不是寫死在句子裡的）。"""
     cfg.action_cost = {"explore": 7, "train": 8, "socialize": 4}
-    cfg.talk_stamina, cfg.talk_turns_per_day, cfg.rest_regen_multiplier = 6, 9, 2.5
+    cfg.talk_stamina, cfg.talk_turns_per_day = 6, 9
     cfg.drill_reward_share, cfg.signature_affinity, cfg.affinity_carry_ratio = 0.4, 66, 0.2
     cfg.figure_defeat_affinity, cfg.practice_xinde_per_level, cfg.fuse_xinde, cfg.fuse_stamina = 11, 12, 13, 14
     cfg.merge_xinde, cfg.merge_stamina, cfg.seclusion_xinde_per_hour, cfg.road_think_xinde = 16, 17, 19, 21
@@ -581,7 +582,7 @@ def _odd_numbers(cfg):
     cfg.stamina_regen_seconds, cfg.time_scale, cfg.stamina_max, cfg.newbie_stamina_multiplier = 300, 1.0, 222, 3.5
     cfg.stamina_pill_restore, cfg.beta_free_refill = 133, False
     # 2：換季帶 0.2 → 2 成（操練 0.4 → 4 成已在上面）；5：每 300 秒＝5 分鐘；1：「回 1 點」是 stamina_regen_seconds 的定義（每幾秒回一點）
-    return {"7", "8", "4", "6", "9", "2.5", "66", "11", "12", "13", "14", "16", "17", "19", "21", "23", "27",
+    return {"7", "8", "4", "6", "9", "66", "11", "12", "13", "14", "16", "17", "19", "21", "23", "27",
             "5", "222", "3.5", "133", "2", "1"}
 
 
@@ -590,10 +591,11 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     text = game.howto_text()
     for title in ("#### 行動", "#### 體力", "#### 情誼", "#### 心得", "#### 意境", "#### 背包"):
         assert title in text
-    for action in ("探索", "遊歷", "打坐", "交友", "移動"):
+    for action in ("探索", "遊歷", "交友", "移動"):
         assert f"- **{action}**" in text
+    assert "打坐" not in text  # 2026-10-12 拿掉了
     assert "（體力 7）" in text and "（體力 8）" in text and "（體力 4）" in text and "每輪體力 6" in text and "最多 9 輪" in text
-    assert "×2.5" in text and "對手 4 成" in text and "情誼到 66" in text and "只帶 2 成" in text
+    assert "對手 4 成" in text and "情誼到 66" in text and "只帶 2 成" in text
     assert "N×12" in text and "合成（13 心得、14 體力）" in text and "合併（16 心得、17 體力）" in text
     assert "每小時至少 19" in text and "邊走邊想（21）" in text and "化成 23 心得" in text
     assert "體力每 5 分鐘回 1 點，滿 222 就不再回。" in text and "回體丹一顆回 133 點，" in text
