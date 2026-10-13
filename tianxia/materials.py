@@ -147,17 +147,22 @@ def may_drop(squad: Squad, content: Content) -> bool:
     return any(chance > 0 and by_tier(content, tier, squad.attribute) for tier, chance in _default_rolls(squad))
 
 
-def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list[tuple[str, int]]:
+def roll_squad_drops(squad: Squad, content: Content, rng: random.Random, max_tier: int | None = None) -> list[tuple[str, int]]:
     """打贏這支隊伍掉什麼：`Squad.drops` 寫了就照它，沒寫就走依難度的預設表。
 
     預設表挑的素材屬性跟著對手的屬性（`Squad.attribute`），沒填屬性就在同階裡隨機——
     「打剛的對手會掉剛的素材」讓玩家挑對手時有一點方向感。
+    max_tier（挑戰本人不是這一季第一次打贏、或掉滿上限時是 2，挑戰每季都有設計丁 (c)）：階比它高的照擲、擲中不給，
+    亂數用掉的次數跟沒給 max_tier 一樣（Game.rng 的序列不動）。
     """
+    def allowed(mid: str) -> bool:
+        return max_tier is None or content.materials[mid].tier <= max_tier
+
     if squad.drops:
         return [
             (drop.material, drop.count)
             for drop in squad.drops
-            if drop.material in content.materials and rng.random() < drop.chance
+            if drop.material in content.materials and rng.random() < drop.chance and allowed(drop.material)
         ]
     out: list[tuple[str, int]] = []
     for tier, chance in _default_rolls(squad):
@@ -165,7 +170,9 @@ def roll_squad_drops(squad: Squad, content: Content, rng: random.Random) -> list
             continue
         pool = by_tier(content, tier, squad.attribute)
         if pool:
-            out.append((rng.choice(pool).id, 1))
+            pick = rng.choice(pool).id
+            if allowed(pick):
+                out.append((pick, 1))
     return out
 
 

@@ -1981,6 +1981,9 @@ class Config(_Strict):
     # 每位人物每個遊戲日最多被打掉幾點（0＝不設）。目標「十來個人合力連打好幾天才打得退，一季頂多一兩位」
     figure_prestige_regen: float = Field(default=1, ge=0)
     figure_daily_loss_cap: int = Field(default=15, ge=0)
+    # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算
+    figure_rare_cap: int = Field(default=6, ge=0)
+    figure_treasure_cap: int = Field(default=2, ge=0)
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成

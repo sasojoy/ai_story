@@ -5074,8 +5074,16 @@ class Game:
         msgs: list[str] = []
         arm_annals: list[tuple[str, str]] = []  # 本命兵器那一筆行狀：等這一場的行狀記完再記（照時間先後）
         if result.tier in team.WIN_TIERS:
-            s.player.figure_wins[fid] = s.player.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
-            msgs += self._battle_rewards(squad, record)
+            p, cfg = s.player, c.config
+            first = p.figure_wins.get(fid, 0) == 0  # 丁 (c)：這一季第一次打贏他才有三階（預設表照擲；之後照擲、擲中不給）
+            capped = bool(cfg.figure_rare_cap) and p.figure_rare_drops >= cfg.figure_rare_cap  # 一人一季上限，叛投不清
+            p.figure_wins[fid] = p.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
+            ratio = min(1.0, squad.difficulty / figures.start_difficulty(c, fid))  # 戊 (b)：被打弱的人物，心得、經驗照難度比例少給
+            reward = squad.model_copy(update={
+                "reward_xinde": int(squad.reward_xinde * ratio + 0.5), "exp": int(squad.exp * ratio + 0.5)})
+            held = self._held_tier3()
+            msgs += self._battle_rewards(reward, record, max_tier=None if first and not capped else 2)
+            p.figure_rare_drops += self._held_tier3() - held
             extra = self._rout(fid)
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
@@ -5156,14 +5164,23 @@ class Game:
 
     def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
         """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
-        PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）。"""
-        rule, p = self.content.config.forge_secrets, self.state.player
+        正式值 1：這一季第一次打贏才有，挑戰每季都有設計丁 (c)；PlayerState.tier3_drops，角色每季重來自然清掉，同 treasure_drops）；
+        挑戰本人掉的三階（連預設表那一條）一人一季最多 figure_rare_cap 個（figure_rare_drops）。"""
+        rule, p, cap = self.content.config.forge_secrets, self.state.player, self.content.config.figure_rare_cap
         if rule.tier3_per_figure and p.tier3_drops.get(fid, 0) >= rule.tier3_per_figure:
+            return []
+        if cap and p.figure_rare_drops >= cap:
             return []
         got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
         if got:
             p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
+            p.figure_rare_drops += 1
         return got
+
+    def _held_tier3(self) -> int:
+        """背包裡的三階素材合計（_challenge 照它算挑戰本人這一場的預設表掉了幾個三階，記進 figure_rare_drops）。"""
+        mats = self.content.materials
+        return sum(n for mid, n in self.state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier == 3)
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
@@ -5260,7 +5277,7 @@ class Game:
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs
 
-    def _battle_rewards(self, squad: Squad, record) -> list[str]:
+    def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
         p = self.state.player
         msgs = []
         if squad.reward_silver:
@@ -5280,7 +5297,7 @@ class Game:
             msgs.append(f"心得 +{xinde}")
         if not prologue_rules.active(self.state, self.content):  # 序章不掉素材（新手引導計畫一）
             got: list[str] = []  # 這一場掉到的素材（寶物「多掉一個素材」從這裡挑）
-            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng, max_tier=max_tier):  # 挑戰本人丁 (c) 才給 max_tier
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
                     got.append(material_id)

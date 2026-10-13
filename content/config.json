@@ -96,7 +96,7 @@
     "smith_chance": 0.25,
     "scrap_chance": 0.04,
     "challenge_tier3": 1,
-    "tier3_per_figure": 2,
+    "tier3_per_figure": 1,
     "big_tier3": 0.25
   }
 }

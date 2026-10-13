@@ -262,3 +262,65 @@ def test_an_out_flag_nobody_reads_is_refused(real):
     real.figures["bocai"] = real.figures["bocai"].model_copy(update={"out_flag": "no_such_flag"})
     with pytest.raises(ContentError, match="out_flag"):
         validate(real)
+
+
+def _tier3_count(state, content):
+    return sum(n for mid, n in state.player.materials.items() if mid in content.materials and content.materials[mid].tier == 3)
+
+
+def test_only_the_first_win_over_a_figure_gives_tier_three(real, world):
+    """丁 (c)：這一季第一次打贏某位人物，保證一個三階（打造第二批的 _figure_tier3）＋預設表照擲；之後再打贏，預設表的三階那一擲
+    照擲、擲中不給（Game.rng 的序列跟以前一樣），保證那一個也不給。"""
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    real.config.snub_hours = 0
+    real.config.figure_daily_loss_cap = 0
+    with _won():
+        game.choose("act:challenge:bocai")
+    first = _tier3_count(game.state, real)
+    assert first >= 1 and game.state.player.figure_rare_drops == first
+    with _won(), mock.patch("tianxia.materials._default_rolls", return_value=[(3, 1.0)]):
+        game.choose("act:challenge:bocai")
+    assert _tier3_count(game.state, real) == first
+
+
+def test_the_capped_tier_three_roll_still_uses_the_game_dice(real):
+    from tianxia import materials
+    squad = real.squads[real.figures["bocai"].squad]
+    a, b = random.Random(5), random.Random(5)
+    materials.roll_squad_drops(squad, real, a)
+    materials.roll_squad_drops(squad, real, b, max_tier=2)
+    assert a.getstate() == b.getstate()
+
+
+def test_the_rare_cap_counts_across_a_defection(real, world):
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game.state.player.figure_rare_drops = real.config.figure_rare_cap
+    with _won():
+        game.choose("act:challenge:bocai")
+    assert _tier3_count(game.state, real) == 0  # 到上限：第一次打贏也不給
+    game.state.player.faction = "huang"  # 叛投不清
+    game.state.player.location = "changshe"
+    with _won():
+        game.choose("act:challenge:huangfusong")
+    assert _tier3_count(game.state, real) == 0
+
+
+def test_a_weakened_figure_pays_less_xinde_and_exp(real, world):
+    """戊 (b)：心得、經驗乘「此刻難度 ÷ 開季難度」（夾在 1 以下）：波才聲威 0 時難度 75，80 × 75 ÷ 120 四捨五入是 50。"""
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    s = game.state
+    figures._ensure(s, real, "bocai").prestige = 0
+    xinde = s.player.stats.get("xinde", 0)
+    with _won(), mock.patch.object(figures, "defeat", return_value=[]):
+        game.choose("act:challenge:bocai")
+    assert s.player.stats["xinde"] - xinde == 50
+    assert figures.start_difficulty(real, "bocai") == 120
+
+
+def test_challenge_treasures_stop_at_two_a_season(real, world):
+    from tianxia import treasures
+    real.config.treasures.enabled = True
+    real.config.treasures.challenge_chance = 1.0
+    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s.player.treasure_drops = {"zhangjiao", "zhangbao"}
+    assert treasures.challenge_drop(s, real, "bocai", 1, 99) == (None, [])

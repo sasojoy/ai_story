@@ -393,11 +393,13 @@ def test_tier3_pick_follows_the_attribute_and_splits_paired_ones_by_seed():
     assert materials.tier3_pick(rc, None, "x") in {"gang_3", "rou_3", "kuai_3", "man_3"}
 
 
-def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_up_to_twice_a_season(world):
+def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_on_the_first_win_only(world):
+    """挑戰大勢人物每季都有設計丁 (c)（企劃者 2026-10-13）：保證的那一個三階只在這一季第一次打贏某位人物時給（tier3_per_figure 1；
+    打造第二批原本是每位每季 2 次）。"""
     from tianxia.engine import Game
     game = _challenger(world, treasures_on=False)
     rule = game.content.config.forge_secrets
-    assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (1.0, 2, 0.25)  # 「要 PM 定的」第 2 條
+    assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (1.0, 1, 0.25)  # 「要 PM 定的」第 2 條；每位一次是丁 (c)
     p = game.state.player
     got = []
     with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(materials, "roll_squad_drops", return_value=[]),             mock.patch.object(Game, "_rout", return_value=[]):  # 不讓他敗走退場：同一位連打三場
@@ -407,7 +409,7 @@ def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_up_to_twice_
             before = p.materials.get("gang_3", 0)
             game.choose("act:challenge:bocai")
             got.append(p.materials.get("gang_3", 0) - before)
-    assert got == [1, 1, 0] and p.tier3_drops == {"bocai": 2}  # 波才的隊伍屬剛：隕鐵膽；每季最多 2 次
+    assert got == [1, 0, 0] and p.tier3_drops == {"bocai": 1}  # 波才的隊伍屬剛：隕鐵膽；這一季第一次打贏才有
     assert game.state.battles[-1].materials == ["隕鐵膽 ×1"]  # 第一場的戰報「得失」那一格
 
 

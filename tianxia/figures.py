@@ -152,6 +152,14 @@ def difficulty(state: GameState, content: Content, fid: str) -> int:
     return int(round(value, 6) + 0.5)
 
 
+def start_difficulty(content: Content, fid: str) -> int:
+    """這位人物開季時（人物表的 start_prestige）的挑戰難度：戊 (b) 獎勵打折的分母。寫法同 difficulty。"""
+    fig = content.figures[fid]
+    floor = content.config.figure_difficulty_floor
+    value = content.squads[fig.squad].difficulty * (floor + (1 - floor) * fig.start_prestige / 100)
+    return int(round(value, 6) + 0.5)
+
+
 def squad_of(state: GameState, content: Content, fid: str) -> Squad:
     """挑戰本人時的對手：代表本人的隊伍，難度換成照聲威算的那一個（勝算、戰報、掉落都看它）。"""
     return content.squads[content.figures[fid].squad].model_copy(update={"difficulty": difficulty(state, content, fid)})
