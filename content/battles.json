@@ -443,5 +443,90 @@
     "outcomes": [
       {"faction": "huang", "title": "廣宗戰罷", "text": "廣宗城下的廝殺停了下來，勝負即將傳遍天下。"}
     ]
+  },
+  {
+    "id": "tianming",
+    "name": "天命之爭",
+    "region": "jizhou",
+    "timetable_event": "tianming",
+    "defender": "huang",
+    "front": "jizhou",
+    "third": {"faction": "haoqiang", "trend": "geju"},
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 300,
+    "rounds_per_act": 3,
+    "decisive_margin": 40,
+    "action_tags": {},
+    "free_text_gamble": {
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.0025,
+      "side_trend_cap": 4
+    },
+    "acts": [
+      {
+        "id": "tianming_1",
+        "title": "玉璽在望",
+        "text": "官軍的大營紮到了下曲陽城外。這一回，七片玉璽都在江湖上，城裡城外的人都知道，今天爭的不只是一座城。",
+        "goal": "站穩腳跟，別讓對方先拉開差距",
+        "text_by_lead": {"guan": "官軍的雲梯立到了城下，懷璽的人站在陣前最顯眼的地方。", "huang": "城頭的黃旗越插越密，官軍的陣腳被逼得往後挪。"},
+        "options": [
+          {"text": "架起雲梯，強攻城牆", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "築圍挖塹，步步緊逼", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "夜遣輕兵，探城中虛實", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "開門出擊，衝散圍塹", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "閉門堅守，以逸待勞", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "縋城夜出，燒毀官軍器械", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "tianming_2",
+        "title": "兩軍搶城",
+        "text": "城牆下來回拉鋸，誰也沒能壓倒誰。陣中有人懷著玉璽，兩邊都盯著那幾個人。",
+        "goal": "撐過這一輪消耗",
+        "text_by_lead": {"guan": "城牆被打出好幾道缺口，下曲陽的守軍開始不安。", "huang": "攻城的兵一波波退下來，官軍營裡有人說天命不在漢家。"},
+        "options": [
+          {"text": "晝夜不停，輪番攻城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "閉營休兵，佯示退意", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "佯退設伏，誘敵出城", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "開門追擊，掩殺官軍", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "輪班上城，保存氣力", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "趁官軍疲憊，夜襲大營", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      },
+      {
+        "id": "tianming_3",
+        "title": "天命所歸",
+        "text": "天色將明，下曲陽城外鼓聲大作。天命落在哪一邊，就看這一個早上。",
+        "goal": "分出最終勝負",
+        "text_by_lead": {"guan": "鼓聲裡，官軍攻上了外城，漢家的旗號在晨風裡揚起。", "huang": "鼓聲裡，黃巾一次次把官軍推下城牆，黃天的旗號還在城頭。"},
+        "options": [
+          {"text": "雞鳴而發，全軍撲城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "穩住陣線，堵死各門", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "挑選死士，夜攀城角", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "傾城而出，決一死戰", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "死守內城，寸土不讓", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "死士出城，直撲中軍", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "huang", "title": "天命之爭戰罷", "text": "下曲陽城下的廝殺停了下來。"}
+    ]
   }
 ]

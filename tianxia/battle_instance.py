@@ -183,6 +183,7 @@ class BattleInstance(BaseModel):
     participants: dict[str, BattleParticipant] = Field(default_factory=dict)
     trend: int = 50
     trend_start: int | None = None  # 開打時的戰局（時刻表決戰照戰況算，不一定是 50）；舊資料沒有是 None
+    seal_lean: dict[str, int] = Field(default_factory=dict)  # 天命之爭開集結那一刻各方握幾片（玉璽碎片設計 8.3；起點已經照兩軍的數偏過）
     act_index: int = 0
     round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)
@@ -966,13 +967,17 @@ def _leads(
     tuning: BattleTuning, push: float, armies: tuple[str, str],
 ) -> dict[str, tuple[str, str, int]]:
     """每一邊這一回合帶頭出固定招的人：出得最多的那一招裡力量最大的那一個（名號, 招, 出這一招的人數）。
-    推力往哪邊，那一邊帶頭的人記一個 led_rounds（戰報寫）。"""
+    推力往哪邊，那一邊帶頭的人記一個 led_rounds（戰報寫）。帶頭只從自己下令的人裡挑、人數也只算他們：逾時被代為固守的
+    （round.auto_picked）照記固守的基本戰功，但不算帶頭、回合原因與勝負的關鍵都不寫他；這一招都是代選的就沒有帶頭的人（FB-181）。"""
     out: dict[str, tuple[str, str, int]] = {}
+    auto = set(instance.round.auto_picked)
     for side in armies:
         if not shares[side]:
             continue
         move = _main_move(mixes[side])
-        crew = [row for row in shares[side] if row[2] == move]
+        crew = [row for row in shares[side] if row[2] == move and row[1] not in auto]
+        if not crew:
+            continue
         _, lead, _ = max(crew, key=lambda row: (row[0], row[1]))
         out[side] = (lead, move, len(crew))
     shift = round(push)
@@ -1324,11 +1329,16 @@ _DIGITS = re.compile(r"[0-9０-９]")
 
 def clean_story(raw: str, name: str) -> str:
     """模型寫的一版劇情整理成能播的一句：轉繁體、去掉換行與 markdown、引號；有阿拉伯數字（數字只能是引擎的）、太長、
-    空的都不用（回空字串）。不是以名號開頭的補上名號，句尾補句號。"""
+    空的都不用（回空字串）。用「你」「妳」的也不用（FB-183：進天下大事與雙方的戰報，要第三人稱；名號裡本來就有的不算）。
+    不是以名號開頭的補上名號，名號後面接冒號的換成逗號，句尾補句號。"""
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
     if not text or len(text) > STORY_LIMIT or _DIGITS.search(text):
         return ""
+    if any(ch in (text.replace(name, "") if name else text) for ch in "你妳"):
+        return ""
+    if name and text.startswith(name) and text[len(name):len(name) + 1] in ("：", ":"):
+        text = name + "，" + text[len(name) + 1:]
     if not text.startswith(name):
         text = name + text
     return text if text[-1] in "。！？…" else text + "。"
@@ -1361,7 +1371,7 @@ def assess_gamble(
             f"你是{setting}判定系統，也是說書人。第一件事：評估玩家描述的行動在{place}上合理的成功機率，"
             "給出 0~100 的整數 success_rate 與一句話 reasoning（只根據行動本身的合理性，荒唐的行動就給低分）。"
             "第二件事：替這個行動寫兩版結果，win 是成功的那一版、lose 是失敗的那一版，各一句、40 字以內、繁體中文，"
-            f"以「{who}」開頭。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
+            f"以「{who}」開頭、用第三人稱寫（不用「你」，名號後面不接冒號）。要具體接住玩家寫的內容，可以荒謬、好笑，失敗也要有戲（出糗、被識破、反被追打都行），"
             "不要寫任何數字、不要寫戰局推進多少或扣多少氣血，也不要替玩家決定最後的勝負以外的事。"
             + gender.prompt_line(sex)
         )},

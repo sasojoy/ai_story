@@ -4,6 +4,7 @@
 import random
 
 from test_battle_gauge import showdown  # noqa: F401（fixture）
+from test_battle_instance import three, with_third  # noqa: F401（fixture）
 from test_battle_targeting import CODES, _battle, gamble  # noqa: F401（fixture）
 
 from tianxia import battle_instance as bi
@@ -85,6 +86,43 @@ def test_idle_rounds_still_earn_merit(gamble):
     assert bi.merit(BattleTuning(), b) == bi.merit(BattleTuning(), battle.participants["甲"]) - (
         BattleTuning().merit_points["led"] * battle.participants["甲"].led_rounds)
     assert bi.merit_parts(b) == ["代為固守 1 回合"]
+
+
+
+def test_an_auto_held_round_earns_merit_but_never_leads(gamble):
+    """FB-181（PM 2026-10-13）：被代為固守的回合照記固守的基本戰功（held_rounds），但不算「帶頭佔上風」——帶頭照自己下令的人挑，
+    回合原因與勝負的關鍵都不寫他；這一邊都是代選的就沒有帶頭的人。玉璽的現世得主、挑戰者照戰功挑，跟著變對。"""
+    battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
+    _timeout_round(battle, gamble, {"甲": "強攻"})  # 乙逾時被代為固守：固守剋強攻，黃巾佔上風
+    b = battle.participants["乙"]
+    assert battle.trend < 50 and (b.held_rounds, b.led_rounds) == (1, 0)
+    assert bi.merit_parts(b) == ["代為固守 1 回合"]
+    assert "乙" not in battle.swings[-1].causes and "乙" not in bi.outcome_reason(battle, gamble)
+    mixed = _battle(gamble, [("甲", "guan"), ("乙", "huang"), ("丙", "huang")])
+    mixed.participants["乙"].scores = {m: 90.0 for m in CODES}  # 代選的那個力量最大，也不輪到他帶頭
+    _timeout_round(mixed, gamble, {"甲": "強攻", "丙": "固守"})
+    assert mixed.participants["乙"].led_rounds == 0 and mixed.participants["丙"].led_rounds == 1
+    assert "丙一馬當先" in mixed.swings[-1].causes and "乙" not in mixed.swings[-1].causes
+
+
+
+def test_an_auto_held_warlord_earns_the_same_merit_and_never_leads(with_third):
+    """FB-181 跟 Joy 的 PR #56（豪強的戰功也列一欄）合起來：豪強逾時被代選照記固守的基本戰功（held_rounds）、從不算帶頭，
+    在戰局條的豪強那一欄照同一個 merit 列出來。"""
+    battle = bi.start_muster(with_third, now=0)
+    for name, side in (("甲", "guan"), ("乙", "huang"), ("丙", "hao")):
+        bi.join_faction(battle, name, side, neili_cap=1000)
+    bi.close_muster(battle, with_third, random.Random(0), now=0)
+    bi.submit_action(battle, "甲", "guan_hold")
+    bi.submit_action(battle, "乙", "huang_hold")
+    bi.fill_timed_out_actions(battle, with_third)  # 丙沒出手：逾時代選
+    assert "丙" in battle.round.auto_picked
+    bi.resolve_round(battle, with_third, random.Random(0), now=1, tuning=BattleTuning())
+    c = battle.participants["丙"]
+    assert (c.acted_rounds, c.held_rounds, c.led_rounds) == (0, 1, 0)
+    board = bi.merit_board(battle, BattleTuning(), "guan", "huang", None, "hao")
+    assert board["third"] == [{"name": "丙", "merit": BattleTuning().merit_points["held"], "mine": False}]
+    assert "丙" not in battle.swings[-1].causes
 
 
 def test_old_participants_read_as_not_idle():

@@ -10,7 +10,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
+    decisive_week, resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -211,10 +211,11 @@ def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None
 
 def season_endings(state: GameState, content: Content) -> list[Ending]:
     """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
-    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。"""
+    最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。
+    天命結局（mandate）不在這裡，由 evaluate_ending 照天命之爭的結果挑（玉璽二）。"""
     on = season_one(content, state.world)
-    chosen = [e for e in content.scenario.endings if e.season_one == on]
-    return chosen or [e for e in content.scenario.endings if not e.season_one]
+    chosen = [e for e in content.scenario.endings if e.season_one == on and not e.mandate]
+    return chosen or [e for e in content.scenario.endings if not e.season_one and not e.mandate]
 
 
 def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
@@ -227,7 +228,17 @@ def stance_holds(ending: Ending, standing: dict[str, int]) -> bool:
 
 
 def evaluate_ending(state: GameState, content: Content) -> Ending:
-    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。"""
+    """照清單順序第一個成立的結局；都不成立就是這一季清單的最後一筆（保底）。第一季另外看三方態勢（rules.stances）。
+    天命之季有一軍得天命時是那一軍的天命結局（玉璽二）。"""
+    w = state.world
+    if w.mandate and w.mandate_result:  # 天命之季、天命之爭有一軍得天命：結局改寫成那一軍的天命結局（玉璽碎片設計 8.3）
+        from .seal import mandate_event  # noqa: PLC0415
+
+        event = mandate_event(content)
+        won = event.mandate_endings.get(w.mandate_result) if event is not None else None
+        ending = next((e for e in content.scenario.endings if e.id == won), None)
+        if ending is not None:
+            return ending
     endings = season_endings(state, content)
     standing = stances(state, content) if season_one(content, state.world) else {}
     for ending in endings:
@@ -269,10 +280,10 @@ def early_end_flags(content: Content) -> set[str]:
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
     """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。
     季曆第 decisive_from_week 週（預設 10）以前一律 None：割據開季後幾週就會頂到門檻，太早收季三場大戲就打不完
-    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收。"""
+    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收；天命之季從第 13 週起（等於不提前收，玉璽二）。"""
     if not season_one(content, state.world):
         return None
-    if calendar.point(state.world.time, content, state.world).week < content.config.decisive_from_week:
+    if calendar.point(state.world.time, content, state.world).week < decisive_week(state.world, content):
         return None
     standing = stances(state, content)
     return next(
@@ -305,6 +316,11 @@ def end_season(
         # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
         early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
         ranks.flush_news(state, content, None)  # T5：還沒發的晉升彙整一起發掉
+        if w.mandate and w.mandate_result is None:  # 天命之爭沒定下來（沒開成、管理者取消）：天命未定（8.3），江湖史只記這一次
+            from .seal import MANDATE_UNSETTLED_END  # noqa: PLC0415
+
+            w.mandate_result = ""
+            add_chronicle(state, MANDATE_UNSETTLED_END)
         text = _finale(state, content, ending, early)
         w.ending_text = text or ending.text
         if not any(e.kind == "finale" and e.ending_chronicle for e in content.timetable):
@@ -410,18 +426,22 @@ def settle_waiting_showdowns(
     if not calendar.season_one_on(w, content):
         return []
     _note_due_showdowns(state, content)  # 剛好停在決戰時刻、還沒跑到季的事的那一件也算
-    order = {e.id: i for i, e in enumerate(content.timetable)}
+    order = {e.id: i for i, e in enumerate(timetable.events(w, content))}  # 天命之季含天命之爭（玉璽二）
 
     def place(event: TimetableEvent) -> tuple[float, int]:
         return timetable.when(state, content, event), order[event.id]
 
     msgs: list[str] = []
     for event_id in list(w.showdowns_waiting):
-        event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+        event = timetable.find(content, event_id)
+        event = event if event is not None and event.kind == "showdown" else None
         if event is not None and before is not None and place(event) >= place(before):
             continue  # 排在 before 之後的照舊等著開
         w.showdowns_waiting.remove(event_id)
         if event is None or event_id in w.timeline or event_id in w.showdowns_opened:
+            continue
+        if event.mandate_only:  # 天命之爭到季末都沒開成：天命未定（8.3），不照起點判
+            w.timeline[event_id] = TimelineResult(key=timetable.SKIPPED, time=w.time)
             continue
         definition = showdown_battle(state, content, event)
         if definition is None:
@@ -466,7 +486,7 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
         w.showdowns_waiting.remove(event_id)
     if w.ended or event_id in w.timeline or event_id in w.showdowns_opened:
         return None
-    event = next((e for e in content.timetable if e.id == event_id and e.kind == "showdown"), None)
+    event = next((e for e in timetable.events(w, content) if e.id == event_id and e.kind == "showdown"), None)  # 一般季開不了天命之爭（玉璽二）
     definition = showdown_battle(state, content, event) if event is not None else None
     if definition is None:
         return None
@@ -642,7 +662,7 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
     shift = skipped * content.config.time_scale
     cal_hour = calendar.cal_hour_seconds(content, season)
     regular = [e for e in timetable._pending(vehicle, content) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
-    for event in content.timetable:
+    for event in timetable.events(season, content):  # 天命之季含天命之爭（玉璽二）
         if event.kind != "showdown" or event.id in season.timeline or event.id in season.showdowns_opened:
             continue
         if event.id in season.showdowns_waiting:

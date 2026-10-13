@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # 不然整支載不起來）。這裡多交奪璽要直接叫的三個；碎片卡 sealHtml 只經過 pageJianghu，不必列
 NAMES_START = 'wholeApp(["S", '  # 名單的開頭（結尾那幾個名字別的計畫會加，開頭比較穩）
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", "tickDue", ')
 
 
 def run(m, script):
@@ -165,12 +165,118 @@ def test_the_holder_card_does_not_reuse_the_seal_class(m):
 
 
 def test_the_page_key_follows_the_seal_cards(m):
-    """FB-172：江湖頁的重畫照 pageKey 判斷（不看 status）；奪璽卡、碎片卡的資料在 status 裡，單獨變了也要重畫。"""
+    """FB-172：江湖頁的重畫照 pageKey 判斷（不看 status）；奪璽卡、碎片卡的資料在 status 裡，單獨變了也要重畫。
+    FB-182：每秒在變的倒數（left）不算——單挑期間全服的江湖頁不再每 10 秒整頁重畫。"""
     out = run(m, """
       const a = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: null}};
       const b = {x: 1, status: {gold: 1, seal_duel: {left: 9, round: 1}, seal: null}};
       const c = {x: 1, status: {gold: 2, seal_duel: {left: 10, round: 1}, seal: null}};
       const d = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: {state: "此季已動過"}}};
-      return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d)].join("|");
+      const e = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 2}, seal: null}};
+      return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d), H.pageKey(a) === H.pageKey(e)].join("|");
     """)
-    assert out == "false|true|false"  # 倒數、碎片卡變了要重畫；status 的其他欄位照舊不算
+    assert out == "true|true|false|false"  # 倒數不算；回合、碎片卡變了要重畫；status 的其他欄位照舊不算
+
+
+def test_a_poll_that_only_moves_the_countdown_rewrites_that_line_in_place(m):
+    """FB-182：輪詢回來只有倒數變了：江湖頁不整頁重畫（「剛剛」不重播浮現），只換奪璽卡那一行時間的字（照 renderTop 另外畫的做法）。"""
+    first, second = {**m, "status": {**m["status"], "seal_duel": _card()}}, {**m, "status": {**m["status"], "seal_duel": _card(left=65)}}
+    out = webharness.run(DRIVER, {"m": first, "S": {"next": second, "tab": "jianghu"}, "menxia": None, "stored": {}, "responses": {}, "script": """
+      return (async () => {
+        H.renderPage(); const drawn = T.els.page.innerHTML; T.els.page.innerHTML = "OLD";
+        T.qs[".seal-duel .seal-when"] = { textContent: "舊的" };
+        const was = H.S.main; H.setMain(H.S.next); await H.refreshPage(was);
+        return { drawn, page: T.els.page.innerHTML, when: T.qs[".seal-duel .seal-when"].textContent };
+      })();"""})
+    assert '<span class="seal-when">第 2／5 回合・已出招 1／2，最遲 1 分 15 秒後結算</span>' in out["drawn"]
+    assert out["page"] == "OLD" and out["when"] == "第 2／5 回合・已出招 1／2，最遲 1 分 5 秒後結算"
+
+
+
+def test_the_seal_countdown_ticks_every_second_with_the_showdown_one(m):
+    """FB-182 與 Joy 的每秒倒數（PR #56，tickDue）合成一套：奪璽卡那一行也每秒自己倒數（照 setMain 記下的期限，只換字、不重畫），
+    倒數到零補問一次；決戰的倒數照它的期限改頁面上的字，奪璽卡裡同樣寫法的那一行不歸它管。"""
+    out = webharness.run(DRIVER, {"m": {**m, "status": {**m["status"], "seal_duel": _card()}}, "S": {}, "menxia": None, "stored": {},
+                                  "responses": {}, "script": """
+      const when = { textContent: "舊的" };
+      T.qs[".seal-duel .seal-when"] = when;
+      H.S.sealDueAt = Date.now() + 30000; H.tickDue(); const ticked = when.textContent;
+      H.S.sealDueAt = Date.now() - 1; H.tickDue(); H.tickDue(); const zero = when.textContent;
+      const polls = T.calls.filter((c) => c[0] === "/api/main").length;
+      T.ctx.NodeFilter = { SHOW_TEXT: 4 };
+      const mine = { nodeValue: "最遲 1 分 15 秒後結算", parentNode: { closest: (sel) => (sel === ".seal-duel" ? {} : null) } };
+      const field = { nodeValue: "已送出 1／在場 2，最遲 1 分 15 秒後結算", parentNode: { closest: () => null } };
+      T.ctx.document.createTreeWalker = () => { const list = [mine, field]; return { nextNode: () => list.shift() || null }; };
+      H.S.sealDueAt = null; H.S.dueAt = Date.now() + 40000; H.tickDue();
+      return { ticked, zero, polls, mine: mine.nodeValue, field: field.nodeValue };
+    })();""".replace("})();", "")})
+    assert out["ticked"] == "第 2／5 回合・已出招 1／2，最遲 0 分 30 秒後結算"
+    assert out["zero"] == "第 2／5 回合・已出招 1／2，最遲 0 分 0 秒後結算" and out["polls"] == 1  # 到零補問一次，不連問
+    assert out["mine"] == "最遲 1 分 15 秒後結算" and out["field"] == "已送出 1／在場 2，最遲 0 分 40 秒後結算"
+
+
+def test_the_seal_cards_stay_folded_once_folded(m):
+    """FB-182：兩張玉璽卡照懸賞卡記住收起來的狀態——奪璽卡照那一場（id）、碎片卡照哪一片與此刻牽不牽動；換了一場、被牽動了重新展開。"""
+    out = run(m, """
+      const toggle = (cls, key, open) => T.docListeners.toggle[0]({ target: Object.assign(Object.create(T.Element.prototype),
+        { matches: (sel) => sel === "details." + cls, open, dataset: { key } }) });
+      const card = (over) => Object.assign({id: "7:chishou", shard: "螭首", challenger: "黃甲", holder: "懷璽", phase: "active", round: 2, rounds: 5,
+        edge: "", lines: [], sent: 1, left: 75, note: "", tell: "", turn: false}, over);
+      const shard = (over) => Object.assign({name: "金角", effect_text: "", state: "此季可能被牽動", stir: "", dates: []}, over);
+      const before = [H.sealDuelHtml(card({})), H.sealHtml(shard({}))];
+      toggle("seal-duel", "7:chishou", false);
+      toggle("seal-card", "金角|", false);
+      const folded = [H.sealDuelHtml(card({left: 30})), H.sealHtml(shard({}))];
+      const fresh = [H.sealDuelHtml(card({id: "9:chishou"})), H.sealHtml(shard({stir: "此役牽動你懷中的『金角』。"}))];
+      return { before, folded, fresh };
+    """)
+    opened = lambda html: html.split(">", 1)[0].endswith(" open")
+    assert all(opened(h) for h in out["before"]) and not any(opened(h) for h in out["folded"]) and all(opened(h) for h in out["fresh"])
+
+
+def test_the_admin_sheet_offers_to_stamp_the_mandate(m):
+    """玉璽二：管理者「玉璽」一組多「蓋天命之季（下一季）」與「這一季立刻蓋章」；劇本沒有天命之爭不畫；這一季已經是天命之季時「這一季」灰掉。"""
+    admin = _seal_admin()
+    admin["seal"].update(mandate="", mandate_ok=True)
+    sheet = _sheet(m, admin)
+    assert 'data-op="seal_mandate" data-when="next"' in sheet and 'data-op="seal_mandate" data-when="now"' in sheet
+    admin["seal"].update(mandate="now")
+    assert 'data-when="now" disabled' in _sheet(m, admin)
+    admin["seal"].update(mandate_ok=False)
+    assert "seal_mandate" not in _sheet(m, admin)
+
+
+def test_the_mandate_buttons_ask_then_post_when(m):
+    from test_admin_triggers_web import CLICK
+
+    import json
+
+    admin = _seal_admin()
+    admin["seal"].update(mandate="", mandate_ok=True)
+    script = CLICK.replace("input.clicks", json.dumps([{"act": "admin", "op": "seal_mandate", "when": "next"}]))
+    out = webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": script, "S": {"admin": admin, "sheet": True},
+                                  "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
+    assert "天命之季" in out["asked"][0]
+    call = next(c for c in out["calls"] if c[0] == "/api/do/seal_mandate")
+    assert call[1]["when"] == "next"
+
+
+def test_the_mandate_buttons_warn_of_the_scatter_and_a_pending_stamp_can_be_taken_back(m):
+    """審查 I2：兩顆蓋章鈕的問句寫明蓋了之後再換季七片全部散去、持有者都失去碎片；下一季已經要蓋時多一顆「收回」。"""
+    from test_admin_triggers_web import CLICK
+
+    import json
+
+    admin = _seal_admin()
+    admin["seal"].update(mandate="next", mandate_ok=True)
+    assert 'data-op="seal_mandate" data-when="cancel"' in _sheet(m, admin)
+    admin["seal"].update(mandate="")
+    assert 'data-when="cancel"' not in _sheet(m, admin)
+    clicks = [{"act": "admin", "op": "seal_mandate", "when": w} for w in ("next", "now", "cancel")]
+    script = CLICK.replace("input.clicks", json.dumps(clicks))
+    out = webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": script, "S": {"admin": admin, "sheet": True},
+                                  "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
+    nxt, now, cancel = out["asked"]
+    assert "散去" in nxt and "失去" in nxt and "散去" in now and "收不回" in now
+    assert "收回" in cancel and "照樣" in cancel
+    assert [c[1]["when"] for c in out["calls"] if c[0] == "/api/do/seal_mandate"] == ["next", "now", "cancel"]

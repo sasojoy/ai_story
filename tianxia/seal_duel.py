@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import random
+import re
 from typing import NamedTuple
 
 from . import battle_instance, seal
@@ -47,6 +48,13 @@ SCENE_RULE = "（這一手只爭一回合的氣勢：碎片要到單挑收場再
 PROMPT = "寫下你陣前的一手（20 字內）"
 GAMBLE_NOTE = "放手一搏一場最多兩次；寫得越險，成了推得越多、搏輸了傷的是你自己。"
 RESEND = "這一手跟剛才送出的對不上（是不是開了兩個分頁？），請再送一次。"
+_SEIZE = re.compile(r"(奪|搶|取|拿|摘|攫)[下得走到回]?[^。！？，、；]{0,6}?(碎片|印|璽)")  # FB-176：「奪下玉璽碎片」「反手奪下印模」
+
+
+def claims_shard(story: str) -> bool:
+    """這一版劇情寫了把碎片拿到手（「奪下／奪得／搶下……碎片、印、璽」，FB-176）：碎片要到單挑收場再擲才定歸屬，這一版不用、
+    改播固定句（GAMBLE_WON／GAMBLE_LOST）。場景裡的 SCENE_RULE 擋不住玩家自己寫「奪印」的情形，所以引擎再擋一次。"""
+    return bool(_SEIZE.search(story or ""))
 
 
 class TextRequest(NamedTuple):
@@ -162,8 +170,8 @@ def submit(duel: SealDuel, who: str, move: str | None = None, text: str | None =
         return
     duel.pending[who], duel.texts[who] = TEXT, text
     duel.rates[who] = max(0, min(100, int(DEFAULT_FREE_TEXT_SUCCESS_RATE if rate is None else rate)))
-    if stories:
-        duel.stories[who] = [str(stories[0]), str(stories[1])]
+    if stories:  # 寫了奪下碎片的那一版不用（FB-176）；兩版各自判
+        duel.stories[who] = ["" if claims_shard(str(s)) else str(s) for s in stories[:2]]
 
 
 def sent(duel: SealDuel) -> int:

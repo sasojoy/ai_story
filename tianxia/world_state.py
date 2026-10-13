@@ -60,7 +60,7 @@ class SealEvent(BaseModel):
 
     seq: int
     season: int
-    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign"]
+    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate"]
     shard: str | None = None
     holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
     other: str | None = None  # 對手（take 的失主、keep 的挑戰者）
@@ -71,6 +71,8 @@ class SealEvent(BaseModel):
     proxied: list[str] = Field(default_factory=list)  # 被代打過的那一邊（challenger／holder；只寫進那個人自己的戰報）
     lines: list[str] = Field(default_factory=list)  # 單挑每回合一句（挑戰者的角度），補戰報用
     edge: float | None = None  # 單挑收場時的氣勢（挑戰者的角度）：持有者那份戰報照它分大勝、險勝；舊資料沒有＝None
+    round: int | None = None  # 這一筆是第幾輪的（seal.log 寫；舊資料沒有＝第 1 輪）：江湖史七格只列這一輪
+    holders: dict[str, str] = Field(default_factory=dict)  # mandate：天命之爭定下來那一刻每一片在誰手上（合璽之人）
     text: str = ""  # 江湖史那一句（沒有是空的）
 
 
@@ -99,6 +101,8 @@ class SealRegistry(BaseModel):
     last_showdown: int | None = None  # 這一季最近一場收場的時刻表決戰（戰報流水號）：管理者的強制開單挑只能掛在它上面
     last_showdown_dueled: bool = False  # 上面那一場已經開過單挑
     last_showdown_where: str = ""  # 上面那一場的名字（BattleDef.name）：管理者開的單挑公告照它寫
+    mandate_season: int | None = None  # 最近一次蓋上天命之季的季別（seal.mandate_now 看它；WorldState.mandate 同時蓋）
+    mandate_pending: bool = False  # 下一個能打天命之爭的季要蓋章（上一次延後、或管理者「下一季」）
     history: list[SealEvent] = Field(default_factory=list)
 
 

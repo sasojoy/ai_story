@@ -347,6 +347,24 @@
     }
   },
   {
+    "id": "tianming",
+    "week": 12,
+    "weekday": 0,
+    "hour": 20,
+    "front": "jizhou",
+    "title": "天命之爭",
+    "kind": "showdown",
+    "mandate_only": true,
+    "mandate_endings": {"guan": "s1_tianming_guan", "huang": "s1_tianming_huang"},
+    "preface": "史書上，下曲陽是黃巾最後的一座城。這一次，七片玉璽都在江湖上……",
+    "outcomes": {
+      "guan:大勝": {"text": "下曲陽城頭換上了漢家的旗號，懷璽的人一個個走到官軍的陣前。", "chronicle": "天命之爭，官軍大勝。"},
+      "guan:險勝": {"text": "官軍踏進下曲陽時已經折了大半人馬，可天命終究落在漢家這一邊。", "chronicle": "天命之爭，官軍險勝。"},
+      "huang:大勝": {"text": "黃巾的死士衝垮了官軍的陣腳，黃旗插滿了下曲陽的城頭。", "chronicle": "天命之爭，黃巾大勝。"},
+      "huang:險勝": {"text": "下曲陽守住了，城下的官軍一直退到了河邊。", "chronicle": "天命之爭，黃巾險勝。"}
+    }
+  },
+  {
     "id": "xiaquyang",
     "week": 12,
     "front": "jizhou",

@@ -6155,6 +6155,8 @@ NOT_IN_THE_FINGERPRINT = {
         "general_gifts": "名將贈禮給了誰，只寫在拿到的人自己的江湖紀錄裡（裝備四欄 6.4）",
         "signature_arms": "名將本命兵器給了誰，只寫在拿到的人自己的江湖紀錄裡；江湖史與天下大事傳聞進 chronicle、rumors，那一下指紋就變了（兵器設計 4.10）",
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
+        "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
+        "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
@@ -6187,6 +6189,7 @@ NOT_IN_THE_FINGERPRINT = {
         "seal_holder_faction": "同上（快照，畫面上看不到）",
         "seal_holder_side": "同上",
         "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
+        "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
     },
 }
 

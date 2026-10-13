@@ -71,6 +71,25 @@ def test_a_round_with_one_gamble_ignores_the_other_move(content):
     assert "挑戰者點燃糧車" in line and line.startswith("奪璽第 1 回合")
 
 
+
+def test_a_story_that_takes_the_shard_falls_back_to_the_plain_line(content):
+    """FB-176（引擎擋）：劇情寫「奪下／奪得／搶下……碎片、印、璽」那一版不用，改播固定句——碎片要到收場再擲才定歸屬。
+    沒寫奪璽的照播；兩邊各一版、各自判。"""
+    assert seal_duel.claims_shard("陸乙使出誘敵之計，趁韓甲出招空檔，順勢奪下玉璽碎片。")
+    assert seal_duel.claims_shard("陸乙虛晃一槍誘使韓甲出招，趁其重心不穩，反手奪下印模勢如破竹。")
+    assert seal_duel.claims_shard("陸乙一把搶下了韓甲懷裡的璽。") and seal_duel.claims_shard("陸乙奪得碎片。")
+    assert not seal_duel.claims_shard("陸乙踏碎青磚，揚起塵土迷了韓甲的眼。")
+    assert not seal_duel.claims_shard("陸乙搶下先手，逼得韓甲連退三步。")
+    put_shards(content)
+    d = _duel()
+    d.challenger.present = True
+    seal_duel.submit(d, "challenger", text="反手奪印", rate=100, stories=("挑戰者順勢奪下玉璽碎片。", "挑戰者撲了個空。"))
+    assert d.stories["challenger"] == ["", "挑戰者撲了個空。"]
+    d.proxy_move["holder"] = "強攻"
+    line = seal_duel.resolve(d, content, SALT, 2)
+    assert "奪下" not in line and seal_duel.GAMBLE_WON.format(name="挑戰者").rstrip("。") in line
+
+
 def test_both_gambles_add_up(content):
     put_shards(content)
     d = _duel()

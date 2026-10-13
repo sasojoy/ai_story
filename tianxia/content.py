@@ -78,6 +78,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
             if event.id in events:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
+    timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
     content = Content(
         config=_config(root, profile),
         scenario=Scenario(**_read(root / "scenario.json")),
@@ -97,8 +98,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         squads=_index(Squad, _read(root / "squads.json")),
         battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
         road_sights=_index(RoadSight, _read(root / "road_sights.json")),
-        timetable=[_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")]
-        if (root / "timetable.json").exists() else [],
+        timetable=[e for e in timetable_events if not e.mandate_only],
+        mandate_timetable=[e for e in timetable_events if e.mandate_only],  # 天命之爭（玉璽二）：只有蓋了章的季看得到（timetable.events）
         foreshadows=_foreshadows(root / "foreshadows.json"),
         orders=_orders(root / "orders.json"),
         promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
@@ -638,14 +639,15 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     人物欄位（{人物:<id>}、@人物:<id>，FB-042）只認人物表：找人要看他的陣營與戰線。"""
     from .timetable import PERSON_KEY, PERSON_SLOT  # noqa: PLC0415  延後 import（同 validate 的 atlas）
 
+    table = [*c.timetable, *c.mandate_timetable]  # 天命之爭也照一般的大事查（玉璽二）
     figure_ids = c.figures or c.characters
-    ids = [e.id for e in c.timetable]
+    ids = [e.id for e in table]
     duplicated = sorted({eid for eid in ids if ids.count(eid) > 1})
     need(not duplicated, f"時刻表 id 重複：{'、'.join(duplicated)}")
     trends = trend_ids - {t.id for t in c.scenario.trends if t.derived}  # 衍生線（黃巾聲勢）由三條戰線合成，時刻表不能直接推
     earlier: dict[str, TimetableEvent] = {}
-    order = {e.id: i for i, e in enumerate(c.timetable)}
-    rolled = {e.id for e in c.timetable if e.roll_side is not None}
+    order = {e.id: i for i, e in enumerate(table)}
+    rolled = {e.id for e in table if e.roll_side is not None}
 
     check_text = functools.partial(_check_traditional, need)
 
@@ -681,7 +683,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
-    for ev in c.timetable:
+    for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
         if ev.front is not None:
@@ -1889,7 +1891,7 @@ def validate(c: Content) -> None:
         need(to_traditional(faction.defect_text) == faction.defect_text,
              f"陣營 {faction.id}：defect_text 只能用繁體中文（「{faction.defect_text[:12]}」）")
 
-    showdown_events = {e.id: e for e in c.timetable if e.kind == "showdown"}
+    showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
 
     def check_showdown_battle(battle: BattleDef, where: str) -> None:
@@ -1973,7 +1975,7 @@ def validate(c: Content) -> None:
             check_showdown_battle(battle, where)
 
     for season_one in (False, True):  # beta 季與第一季各自的保底：那一季清單裡的最後一筆（world.evaluate_ending，計畫 T9）
-        endings = [e for e in c.scenario.endings if e.season_one == season_one]
+        endings = [e for e in c.scenario.endings if e.season_one == season_one and not e.mandate]  # 天命結局不當保底（玉璽二）
         if season_one and not endings:
             continue
         last = endings[-1] if endings else None
@@ -2340,7 +2342,8 @@ def _validate_forge_secrets(c: Content, need) -> None:
 def _validate_seal(c: Content, need) -> None:
     """玉璽碎片（玉璽碎片設計 13.4、8.5）：係數都不超過 1（一場最多 cap）；沒有 content/seal.json 可以（碎片關著：時刻表的標記與
     emerge_skill 都不檢查——測試內容沒有混元一氣，預設的 emerge_skill 不能讓它載入失敗）；有就 emerge_skill 認得、剛好七片、名字不重複、
-    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。"""
+    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
+    天命之爭（玉璽二）：最多一件、是決戰、沒標 seal、有它的戰鬥、mandate_endings 指到交戰兩軍與標了 mandate 的結局；標了 mandate 的結局都有人指。"""
     cfg = c.config.seal
     for label, table in (("side_factor", cfg.side_factor), ("take_share", cfg.take_share)):
         need(all(0 <= v <= 1 for v in table.values()), f"Config.seal.{label}：係數不能超過 1（一場被奪最多 cap）")
@@ -2353,6 +2356,25 @@ def _validate_seal(c: Content, need) -> None:
         need(shard.effect in cfg.effects, f"content/seal.json：{shard.id} 的效果 {shard.effect} 不在 Config.seal.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
+    mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）
+    need(len(mandates) <= 1, "時刻表：標 mandate_only 的天命之爭最多一件")
+    endings = {e.id: e for e in c.scenario.endings}
+    for event in mandates:
+        where = f"時刻表 {event.id}（天命之爭）"
+        need(event.kind == "showdown" and event.seal is None, f"{where}：天命之爭要是決戰、不能標 seal（它本身不璽動）")
+        battle = next((b for b in c.battles.values() if b.timetable_event == event.id), None)
+        need(battle is not None, f"{where}：battles.json 要有一筆 timetable_event 是 {event.id} 的戰鬥")
+        armies = {f.id for f in battle.factions} if battle is not None else set()
+        need(bool(event.mandate_endings) and set(event.mandate_endings) <= armies, f"{where}：mandate_endings 的鍵要是交戰兩軍")
+        for side, ending_id in event.mandate_endings.items():
+            ending = endings.get(ending_id)
+            need(ending is not None and ending.mandate and ending.season_one,
+                 f"{where}：{side} 的結局 {ending_id} 要是劇本裡標了 mandate 的第一季結局")
+    for ending in c.scenario.endings:
+        if ending.mandate:
+            need(any(ending.id in e.mandate_endings.values() for e in mandates), f"結局 {ending.id}：標了 mandate 卻沒有天命之爭指到它")
+            need(ending.condition == Condition() and not (ending.stance_min or ending.stance_max or ending.stance_top),
+                 f"結局 {ending.id}：天命結局不寫條件與態勢（照天命之爭的結果挑）")
     if not c.timetable:
         return
     marked = [e for e in c.timetable if e.seal is not None]

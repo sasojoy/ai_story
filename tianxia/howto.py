@@ -415,6 +415,8 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     if seal.on(content):  # 奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）；待 joy 潤
         fame = cfg.seal.fame
         lines.append(f"奪璽單挑：懷璽的人守住了 +{fame['keep']}、被奪走 +{fame['lose']}；挑戰的人打贏了單挑、碎片卻沒易手 +{fame['near']}。")
+        if seal.mandate_event(content) is not None and cfg.seal.mandate.fame > 0:  # 得天命的那一軍（Game._showdown_pay，玉璽二）
+            lines.append(seal.MANDATE_FAME.format(fame=cfg.seal.mandate.fame))
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:

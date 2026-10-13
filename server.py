@@ -1140,12 +1140,12 @@ def timetable_choices(game: Game) -> dict:
         })
     results = [
         {"value": f"{e.id}|{key}", "label": f"{e.title}：{_result_label(key)}"}
-        for e in CONTENT.timetable if e.id not in world.timeline
+        for e in timetable.events(world, CONTENT) if e.id not in world.timeline
         for key in timetable.result_keys(state, CONTENT, e)
     ]
     locks = [
         {"id": event_id, "label": f"{e.title}（{lock.name}）"}
-        for event_id, lock in world.locks.items() if (e := next((x for x in CONTENT.timetable if x.id == event_id), None))
+        for event_id, lock in world.locks.items() if (e := timetable.find(CONTENT, event_id))
     ]
     return {"timetable": rows, "results": results, "locks": locks}
 
@@ -1430,6 +1430,7 @@ ADMIN_ACTIONS = {
     "seal_fix": lambda g, b: g.admin_seal_fix(b.get("take") is True),
     "seal_cancel": lambda g, b: g.admin_seal_cancel(),
     "seal_sink_check": lambda g, b: g.admin_seal_sink_check(time.time()),
+    "seal_mandate": lambda g, b: g.admin_seal_mandate(str(b.get("when", ""))),
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment"})  # 動到別人的存檔：做完也叫他的分頁刷新
 

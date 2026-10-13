@@ -1948,6 +1948,12 @@ def test_a_story_is_cleaned_before_it_can_be_played():
     assert bi.clean_story("彩加帶著3萬分身殺過去。", "彩加") == ""  # 數字只能是引擎的
     assert bi.clean_story("彩加" + "很" * 70, "彩加") == ""  # 太長的整段不用
     assert bi.clean_story("", "彩加") == ""
+    # FB-183：劇情要第三人稱——用「你」「妳」的整段不用（改播固定句）；名號裡本來就有「你」的不算；名號後面的冒號換成逗號
+    assert bi.clean_story("陸乙：塵土瞬間迷了韓甲視線，你趁勢一記重擊，逼得他踉蹌後退。", "陸乙") == ""
+    assert bi.clean_story("你趁勢一記重擊，逼得韓甲踉蹌後退。", "陸乙") == ""
+    assert bi.clean_story("沈青：韓甲早看穿妳的小伎倆。", "沈青") == ""
+    assert bi.clean_story("你好一刀劈開塵土。", "你好") == "你好一刀劈開塵土。"
+    assert bi.clean_story("陸乙：塵土迷了韓甲的眼。", "陸乙") == "陸乙，塵土迷了韓甲的眼。"
 
 
 def test_one_model_call_rates_the_gamble_and_writes_both_stories():
@@ -1962,6 +1968,7 @@ def test_one_model_call_rates_the_gamble_and_writes_both_stories():
     assert client.chat_structured.call_count == 1
     prompt = client.chat_structured.call_args.args[0][0]["content"]
     assert "不要寫任何數字" in prompt and "以「彩加」開頭" in prompt
+    assert "第三人稱" in prompt and "不用「你」" in prompt  # FB-183
     client.chat_structured.side_effect = RuntimeError("down")
     assert bi.assess_gamble(client, act, "官軍", "衝", "彩加") == (bi.DEFAULT_FREE_TEXT_SUCCESS_RATE, "", "")
 

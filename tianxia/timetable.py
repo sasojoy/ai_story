@@ -41,8 +41,36 @@ SHOWDOWN_WEEKDAY = 3
 
 
 def _showdown_default(event: TimetableEvent, content: Content, season: WorldState | None) -> float:
-    offset = (SHOWDOWN_WEEKDAY * DAY + SHOWDOWN_HOUR * HOUR) / calendar.cal_scale(content, season)
+    weekday = SHOWDOWN_WEEKDAY if event.weekday is None else event.weekday  # 天命之爭寫週一（玉璽二）；其他照週四
+    hour = SHOWDOWN_HOUR if event.hour is None else event.hour
+    offset = (weekday * DAY + hour * HOUR) / calendar.cal_scale(content, season)
     return calendar.week_start(event.week, content, season) + offset
+
+
+def default_time(event: TimetableEvent, content: Content, season: WorldState | None) -> float:
+    """這件決戰的預設時刻（世界秒，照這一季的章）：蓋天命之季的章時排天命之爭用（玉璽二；seal.stamp_mandate 的呼叫端算好傳進去）。"""
+    return _showdown_default(event, content, season)
+
+
+def events(season: WorldState | None, content: Content) -> list[TimetableEvent]:
+    """這一季的時刻表：內容的那一份；蓋了天命之季的章（WorldState.mandate）時再把標 mandate_only 的那一件插進去（玉璽碎片設計 8.3；
+    要 PM 定的第 1 條：選擇加入）：插在第一件週次比它晚、或同一週的季末之前（管理者排時間照這個順序檢查前後）。內容那 12 件的
+    順序一件都不動（不重新排序）。沒蓋章時回 content.timetable 本身。"""
+    extra = content.mandate_timetable if season is not None and season.mandate else []
+    if not extra:
+        return content.timetable
+    out = list(content.timetable)
+    for event in extra:
+        at = next((i for i, e in enumerate(out) if e.week > event.week or (e.week == event.week and e.kind == "finale")), len(out))
+        out.insert(at, event)
+    return out
+
+
+def find(content: Content, event_id: str) -> TimetableEvent | None:
+    """照 id 找一件大事，天命之爭也找得到、不看這一季的章：只給「已經開出來、正在收場或補結算」的路徑用（_settle_showdown、
+    settle_waiting_showdowns、_event〔軍令的 add_mod〕、server 的鎖定列）。會「開」或「定」一件大事的入口（_claim_showdown、
+    Game._timetable_event）一律走 events，一般季碰不到天命之爭。"""
+    return next((e for e in (*content.timetable, *content.mandate_timetable) if e.id == event_id), None)
 
 
 def default_schedule(content: Content, season: WorldState | None = None) -> dict[str, float]:
@@ -66,8 +94,8 @@ def when(state: GameState, content: Content, event: TimetableEvent) -> float:
 
 def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
     """還沒結算的大事，照時間排（同一刻照 timetable.json 的順序）。"""
-    events = [e for e in content.timetable if e.id not in state.world.timeline]
-    return sorted(events, key=lambda e: when(state, content, e))
+    pending = [e for e in events(state.world, content) if e.id not in state.world.timeline]  # 天命之季多天命之爭（玉璽二）
+    return sorted(pending, key=lambda e: when(state, content, e))
 
 
 def due(state: GameState, content: Content) -> list[TimetableEvent]:
@@ -136,7 +164,7 @@ def add_mod(state: GameState, content: Content, event_id: str, side: Literal["gu
 
 
 def _event(content: Content, event_id: str) -> TimetableEvent:
-    found = next((e for e in content.timetable if e.id == event_id), None)
+    found = find(content, event_id)  # 天命之爭也找得到（玉璽二）
     if found is None:
         raise KeyError(f"時刻表沒有這件大事：{event_id}")
     return found
@@ -331,9 +359,9 @@ def _chronicle(
 FINALE_KEY = "finale"  # WorldState.schedule 裡季末的鍵（三場決戰用大事 id）
 
 
-def schedulable(content: Content) -> list[TimetableEvent]:
-    """管理者能排時間的大事：三場決戰與季末，照時刻表的順序。"""
-    return [e for e in content.timetable if e.kind in NOT_BY_SEASON_HOUR]
+def schedulable(content: Content, season: WorldState | None = None) -> list[TimetableEvent]:
+    """管理者能排時間的大事：三場決戰與季末，照時刻表的順序（天命之季多天命之爭，玉璽二）。"""
+    return [e for e in events(season, content) if e.kind in NOT_BY_SEASON_HOUR]
 
 
 def clear_of_events(state: GameState, content: Content, mark: float) -> tuple[float, str | None]:
@@ -371,7 +399,7 @@ def status_rows(state: GameState, content: Content, cancelled: Collection[str] =
     結果鍵（含版本）、能不能排時間（決戰與季末，還沒結算也還沒開過）。"""
     w = state.world
     rows = []
-    for event in content.timetable:
+    for event in events(state.world, content):  # 天命之季多天命之爭（玉璽二）
         at = when(state, content, event)
         done = w.timeline.get(event.id)
         opened = event.id in w.showdowns_opened

@@ -16,9 +16,9 @@ import secrets
 from . import battle_instance, treasures
 from .battle_instance import BattleInstance
 from .characters import name_key
-from .models import BattleDef, Content, SealTuning
+from .models import BattleDef, Content, SealTuning, TimetableEvent
 from .state import Equipment, GameState, Rumor
-from .world_state import SealEvent, SealRegistry, SealShard, WorldStateStore
+from .world_state import SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
 
 HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
 HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
@@ -65,9 +65,9 @@ def holders(reg: SealRegistry) -> set[str]:
 
 
 def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
-    """登記記一筆（全服流水號 +1）。"""
+    """登記記一筆（全服流水號 +1）；記上這一輪（round）。"""
     reg.seq += 1
-    event = SealEvent(seq=reg.seq, season=season, kind=kind, **fields)
+    event = SealEvent(seq=reg.seq, season=season, kind=kind, round=reg.round, **fields)
     reg.history.append(event)
     return event
 
@@ -160,20 +160,92 @@ def chronicle(season, text: str) -> None:
     season.chronicle.append(Rumor(time=season.time, text=text))
 
 
+# ── 天命之季與天命之爭（玉璽二；設計第八節）──────────────────────
+
+MANDATE_OPEN = "七片玉璽都已現世過了。天命之季到來：這一季的大戰都會牽動玉璽碎片，季末之前，{battle}要爭一個天命。"  # 待 joy 潤
+SCATTER = "天命之季過去，七片玉璽再度散落天下。"  # 待 joy 潤：江湖史（8.4）
+SCATTER_MINE = "你懷中的『{shard}』化光而去：七片玉璽再度散落天下。"  # 待 joy 潤：補送的紀錄
+BOOK_ROUND = "### 傳國玉璽（第 {round} 輪）"  # 待 joy 潤：第二輪起江湖史七格的標題
+BOOK_MANDATE = "這一季是天命之季。"  # 待 joy 潤
+
+
+def mandate_event(content: Content) -> TimetableEvent | None:
+    """這個劇本的天命之爭（時刻表上標 mandate_only 的那一件，8.5）；沒有是 None。"""
+    return content.mandate_timetable[0] if content.mandate_timetable else None
+
+
+def mandate_battle(content: Content) -> BattleDef | None:
+    """天命之爭那一場決戰（battles.json 裡 timetable_event 指到它的那一筆）；沒有是 None。"""
+    event = mandate_event(content)
+    return next((b for b in content.battles.values() if event is not None and b.timetable_event == event.id), None)
+
+
+def is_mandate_battle(content: Content, definition: BattleDef | None) -> bool:
+    event = mandate_event(content)
+    return event is not None and definition is not None and definition.timetable_event == event.id
+
+
+def mandate_now(reg: SealRegistry, season: int) -> bool:
+    """這一季是不是天命之季（登記那一份；季的規則看 WorldState.mandate，兩個由 stamp_mandate 一起蓋）。"""
+    return reg.mandate_season is not None and reg.mandate_season == season
+
+
+def mandate_due(reg: SealRegistry, content: Content) -> bool:
+    """下一季該不該蓋天命之季的章（8.1；PM 己：七片這一輪都現世過——有主的、隱沒的都算）；上一次延後的、管理者「下一季」的
+    （mandate_pending）也算。reg 要先 filled。"""
+    if reg.mandate_pending:
+        return True
+    return bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
+
+
+def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
+    """把 shared.season 蓋成天命之季（8.1）：WorldState.mandate、天命之爭排在 at（世界秒；呼叫端照 timetable.default_time 算）、
+    登記記下季別、清掉延後的記號；天下大事與江湖史各一句。只改傳進來的 shared（next_season 手動 _load／_save、管理者在 world.mutate 裡），
+    呼叫端先確認 mandate_event 不是 None。回那一句。"""
+    event, battle = mandate_event(content), mandate_battle(content)
+    reg = filled(shared.seal, content)
+    season = shared.season
+    season.mandate, season.mandate_result = True, None
+    season.schedule[event.id] = at
+    reg.mandate_season, reg.mandate_pending = shared.season_number, False
+    text = MANDATE_OPEN.format(battle=battle.name if battle is not None else event.title)
+    rumor(season, text)
+    chronicle(season, text)
+    return text
+
+
+def scatter(reg: SealRegistry, season: int) -> list[str]:
+    """天命之季之後的換季：七片全部回到未現世（8.4）——持有者、新主保護、動過、現世過、追璽、缺席都清掉，round +1，強制現世／璽動
+    與延後的記號也清掉。手上有碎片的人各記一筆 scatter（同步時補一句、抄本照登記清掉）。回原本的持有者。"""
+    former = []
+    for shard in sorted(reg.shards.values(), key=lambda s: s.id):
+        if shard.state == "held" and shard.holder:
+            former.append(shard.holder)
+            log(reg, season, "scatter", shard=shard.id, other=shard.holder)
+        shard.state, shard.holder, shard.since_season, shard.stirred_season = "hidden", None, None, None
+        shard.emerged_round, shard.former, shard.absent = None, None, 0
+    reg.round += 1
+    reg.emerge_season, reg.force_emerge, reg.force_stir, reg.mandate_pending = None, None, None, False
+    return former
+
+
 STIR = "此役牽動{holder}懷中的『{shard}』。"  # 待 joy 潤：天下大事、集結公告（4.3）
 STIR_SCENE = "此役牽動{holder}懷中的『{shard}』：懷璽之人那一方若沒能大勝，打完之後陣前單挑。"  # 待 joy 潤：決戰畫面
 STIR_MINE = "此役牽動你懷中的『{shard}』。"  # 待 joy 潤：持有者的碎片卡（Task 10）
 MERIT_HINT = "你此役戰功居前；懷璽之人那一方若沒能大勝，你可能被推上陣前。"  # 待 joy 潤（4.3）
 
 
-def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str) -> str | None:
+def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str, mandate: bool = False) -> str | None:
     """標了 seal 的決戰開集結時擲璽動（4.1、4.2）：有主、不是這一季才到手、這一季還沒動過的每一片各擲 stir_chance
     （seal-stir|event_id|片，各取一次）；全服這一季已經動了 season_stir_cap 次就不擲；擲中好幾片時用 seal-stir|event_id 挑一片。
-    管理者的強制璽動（force_stir）略過機率、新主保護與次數上限（那一片要有主）。"""
+    管理者的強制璽動（force_stir）略過機率、新主保護與次數上限（那一片要有主）。mandate：天命之季，見下（玉璽二）。"""
     cfg = content.config.seal
     forced = reg.shards.get(reg.force_stir or "")
     if forced is not None and forced.state == "held":
         return forced.id
+    if mandate:  # 天命之季（8.2；PM 丙）：每場必定牽動一片——不擲 stir_chance、沒有新主保護、沒有全服上限；每片每季照舊最多一次
+        pool = sorted(s.id for s in reg.shards.values() if s.state == "held" and s.stirred_season != season)
+        return dice(reg.salt, tianji, "seal-mandate", event_id).choice(pool) if pool else None
     if sum(1 for e in reg.history if e.kind == "stir" and e.season == season) >= cfg.season_stir_cap:
         return None
     hit = [
@@ -219,10 +291,65 @@ DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決
 NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
 
 
+MANDATE_MUSTER = "{battle}集結：{lean}。"  # 待 joy 潤：天下大事、集結公告（8.3）
+MANDATE_SCENE = "天命之爭：{lean}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
+LEAN_PART = "{side}握著{n}片"  # 待 joy 潤
+LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
+
+
+def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
+    """天命之爭開集結那一刻：能站的每一方各握幾片（持有者照這一季的投靠名冊，不讀存檔；散人、隱沒的不算）。第三方也數（畫面與
+    之後的「群雄得璽」用；起點只看兩軍，lean_shift）。"""
+    sides = battle_instance.sides(definition)
+    out: dict[str, int] = {}
+    for shard in world.seal_state().registry.shards.values():
+        if shard.state == "held" and shard.holder and shard.id in content.seal:
+            side = world.faction_of(shard.holder)
+            if side in sides:
+                out[side] = out.get(side, 0) + 1
+    return out
+
+
+def lean_shift(lean: dict[str, int], definition: BattleDef, cfg: SealTuning) -> int:
+    """起點往握碎片的那一軍偏（8.3；PM 戊）：（第一軍 − 第二軍）× start_shift，夾在 ±start_shift_cap；第一軍（官軍）是正向
+    （同 BattleDef.factions[0] 的約定）；豪強不推。"""
+    first, second = definition.factions[0].id, definition.factions[1].id
+    raw = (lean.get(first, 0) - lean.get(second, 0)) * cfg.mandate.start_shift
+    return max(-cfg.mandate.start_shift_cap, min(cfg.mandate.start_shift_cap, raw))
+
+
+def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
+    """「官軍握著2片、黃巾軍握著1片」（只寫兩軍，照 BattleDef 的名字）；都沒有寫 LEAN_NONE。"""
+    parts = [LEAN_PART.format(side=f.name, n=lean[f.id]) for f in definition.factions if lean.get(f.id)]
+    return "、".join(parts) or LEAN_NONE
+
+
+def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
+    """天命之爭剛開集結：數兩軍各握幾片、照它把起點（trend 與 trend_start）偏過去、快照進這一場（seal_lean），天下大事一句。
+    天命之爭本身不璽動、不現世（8.3）。"""
+    lean = mandate_lean(world, content, definition)
+    shift = lean_shift(lean, definition, content.config.seal)
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition))
+    world.mutate(lambda shared: rumor(shared.season, text))
+
+    def _snap(b) -> None:
+        if b.battle_id == definition.id and b.phase == "muster":
+            b.seal_lean = dict(lean)
+            b.trend = b.trend_start = max(0, min(100, b.trend + shift))
+
+    world.mutate_battle(_snap)
+    return [f"🏺 【天下大事】{text}"]
+
+
 def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, now: float) -> list[str]:
     """時刻表決戰剛開集結（world._open_claimed，不在任何 mutate 裡）：標 emerge 的擲現世、標了 seal 的擲璽動（Task 6）。
-    一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。"""
-    mark = mark_of(content, definition) if on(content) else None
+    一次 world.mutate 寫登記與天下大事，一次 mutate_battle 把結果快照進這一場；什麼都沒擲中就什麼都不寫。回傳集結公告要多的那幾句。
+    天命之爭（玉璽二）另走 _mandate_muster。"""
+    if not on(content):
+        return []
+    if is_mandate_battle(content, definition):  # 天命之爭（8.3）
+        return _mandate_muster(world, content, definition)
+    mark = mark_of(content, definition)
     if mark is None:
         return []
     got: dict[str, str | None] = {"emerge": None, "stir": None, "holder": None, "faction": None}
@@ -230,14 +357,15 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
 
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
-        if mark == "emerge":
+        mandate = shared.season.mandate
+        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2），管理者的強制現世記號留到下一個一般季
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:
             text = EMERGE_OMEN.format(battle=definition.name)
             rumor(shared.season, text)
             msgs.append(f"🏺 【天下大事】{text}")
-        stir = roll_stir(reg, content, shared.season_number, shared.tianji, definition.timetable_event)
+        stir = roll_stir(reg, content, shared.season_number, shared.tianji, definition.timetable_event, mandate=mandate)
         if stir is not None and stir == reg.force_stir:
             reg.force_stir = None
         if stir is not None:
@@ -283,6 +411,41 @@ UNSETTLED_MINE = "你與{other}爭『{shard}』的單挑沒有打完，不分勝
 SUNK_MINE = "你懷中的『{shard}』不知所蹤了。"
 PROXY_LINE = "你未及趕到，由你平日的路數應對。"
 FRESH_LINE = "你這一季還沒現身江湖，身手生疏。"
+RECALL = "{name}在{battle}陣前尋回了不知所蹤的『{shard}』。"  # 待 joy 潤：天下大事、江湖史（8.2）
+RECALLED_MINE = "你在{where}陣前尋回了『{shard}』（{effect}）。"  # 待 joy 潤：補送的紀錄
+CARD_MANDATE = "天命之季：此季每場大戰都可能牽動碎片"  # 待 joy 潤：持有者的碎片卡
+
+
+def deserted(battle: BattleInstance, definition: BattleDef) -> bool:
+    """保底收場（end_without_fighters：兩軍都沒人還能打）：不打單挑、現世與喚回落空（4.5 邊界 3、3.3）；天命之爭是天命未定（8.3）。"""
+    armies = {f.id for f in definition.factions}
+    return not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+
+
+def recall_events(content: Content) -> list[str]:
+    """喚回的那幾場（8.2、8.5）：時刻表上標了 seal 的決戰照順序取前 recall_battles 場（不寫死 id；天命之爭本身沒標 seal）。"""
+    return [e.id for e in content.timetable if e.seal is not None][: content.config.seal.mandate.recall_battles]
+
+
+def roll_recall(reg: SealRegistry, tianji: int, event_id: str, rows: list[tuple[str, int]], pool: int) -> tuple[str, str] | None:
+    """喚回哪一片、給誰（8.2）：隱沒的照 id 排序挑一片，再照現世的抽法（weighted_pick）從 rows 抽一人；亂數 seal-recall|event_id，
+    先挑片、再抽人。沒有隱沒的、或沒有合格的人是 None（留著隱沒）。"""
+    sunk = sorted(s.id for s in reg.shards.values() if s.state == "sunk")
+    if not sunk:
+        return None
+    rng = dice(reg.salt, tianji, "seal-recall", event_id)
+    shard = rng.choice(sunk)
+    name = weighted_pick(rows, rng, pool)
+    return (shard, name) if name is not None else None
+
+
+MANDATE_WON = "天命歸於{side}。"  # 待 joy 潤：天下大事、江湖史（8.3）
+MANDATE_NAMES = "合璽之人：{names}。"  # 待 joy 潤：接在上一句後面（那一刻手上有碎片的人，照 content/seal.json 的順序）
+MANDATE_UNSETTLED = "天命未定：{battle}沒有分出天命。"  # 待 joy 潤：保底收場
+MANDATE_UNSETTLED_END = "天命未定：天命之爭沒有打成，這一季沒有分出天命。"  # 待 joy 潤：沒開成、取消，季末那一句
+MANDATE_UNSETTLED_TITLE = "天命未定"  # 待 joy 潤：戰報標題
+MANDATE_MINE = "天命之爭那一刻，『{shard}』在你懷中：你以合璽之人留名。"  # 待 joy 潤：補送的紀錄
+MANDATE_FAME = "天命之爭：得天命的那一軍出陣的人 +{fame}。"  # 待 joy 潤：玩法說明「名望」那一節（howto）
 CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
 
 
@@ -304,14 +467,17 @@ def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: flo
     return out
 
 
-def chronicle_block(content: Content, reg: SealRegistry, before: str = "") -> str:
-    """見聞→江湖史最上面那一段（第十節）：七格玉璽（未現世、某某懷中、不知所蹤），這一輪的大事（現世、易主、隱沒，照登記的 text），
-    最後一行前史（舊的 jade_seal_fragments，11.5；沒有就不寫）。Markdown。"""
+def chronicle_block(content: Content, reg: SealRegistry, before: str = "", mandate: bool = False) -> str:
+    """見聞→江湖史最上面那一段（第十節）：七格玉璽（未現世、某某懷中、不知所蹤），這一輪的大事（現世、易主、守住、喚回、天命、隱沒，
+    照登記的 text；舊資料沒有 round 當第 1 輪），最後一行前史（舊的 jade_seal_fragments，11.5；沒有就不寫）。第二輪起標題寫第幾輪；
+    天命之季多一句（mandate）。Markdown。"""
     reg = filled(reg.model_copy(deep=True), content)
+    now = [e for e in reg.history if (e.round or 1) == reg.round]
     cells = [f"- {content.seal[s].name}：{BOOK_STATES[reg.shards[s].state].format(holder=reg.shards[s].holder or '')}" for s in content.seal]
-    events = [e.text for e in reg.history if e.text and e.kind in ("emerge", "take", "keep")][-10:]
-    sunk = [SINK.format(holder=e.other, shard=content.seal[e.shard].name) for e in reg.history if e.kind == "sink" and e.shard in content.seal]
-    parts = [BOOK_TITLE, "\n".join(cells)]
+    events = [e.text for e in now if e.text and e.kind in ("emerge", "take", "keep", "recall", "mandate")][-10:]
+    sunk = [SINK.format(holder=e.other, shard=content.seal[e.shard].name) for e in now if e.kind == "sink" and e.shard in content.seal]
+    parts = [BOOK_TITLE if reg.round == 1 else BOOK_ROUND.format(round=reg.round)] + ([BOOK_MANDATE] if mandate else [])
+    parts.append("\n".join(cells))
     if events or sunk:
         parts.append(BOOK_EVENTS + "\n" + "\n".join(f"- {t}" for t in events + sunk))
     if before:
