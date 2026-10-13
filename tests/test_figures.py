@@ -369,7 +369,8 @@ def test_figures_do_not_push_with_the_switch_off(real):
 
 
 def test_sim_players_stand_down_in_season_one(on):
-    """第一季：大勢人物取代虛擬玩家，虛擬玩家不推大勢、不發傳聞；門檻照舊每小時檢查（玉璽線索到 50 照樣觸發；黃巾聲勢的舊門檻第一季由 T8 關掉）。"""
+    """第一季：大勢人物取代虛擬玩家，虛擬玩家不推大勢、不發傳聞；黃巾聲勢的舊門檻第一季由 T8 關掉，舊玉璽鏈的門檻（玉璽線索到 50）
+    玉璽一也關掉了（玉璽碎片設計 11.2 第 1 條），第一季沒有任何 beta 門檻觸發。"""
     on.figures = {}
     s = _season(on)
     before = dict(s.world.trends)
@@ -377,7 +378,7 @@ def test_sim_players_stand_down_in_season_one(on):
     assert s.world.trends == before and s.world.rumors == []
     s.world.trends["yuxi"] = 50
     world.sim_tick(s, on, 1, FixedRandom(0.0))
-    assert "yuxi_50" in s.world.fired_thresholds
+    assert "yuxi_50" not in s.world.fired_thresholds
 
 
 def test_the_map_shows_the_figures_where_they_stand(on):
@@ -849,7 +850,7 @@ def test_bot_challenges_target_figure(on, world):
 def test_kou_boss_does_not_fire_in_season_one(on, world):
     """beta 的「波才」事件（kou_boss，一季一次的挑戰波才）在第一季的規則開著時抽不到——挑戰本人取代它；開關關著時照舊
     抽得到（PM 2026-10-04）。清單在 scenario.json 的 season_one_off.events（格式是 T8 定的）。"""
-    assert on.scenario.season_one_off.events == ["kou_boss"]
+    assert on.scenario.season_one_off.events[0] == "kou_boss"  # 其餘是舊玉璽鏈的六則（玉璽碎片設計 11.2，test_seal 鎖）
     assert "beat_bocai" in on.scenario.season_one_off.milestones  # 挑戰本人不寫 bocai_defeated，擊敗波才照樣做不到
     game = _player(on, world, "官甲", "guan", "huangjin_camp")
     game.state.player.stats["fame"] = 10

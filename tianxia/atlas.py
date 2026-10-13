@@ -16,7 +16,7 @@ from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
     audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
-    trend_name, trend_value,
+    season_one_off, trend_name, trend_value,
 )
 from .state import GameState, Order, Rumor
 from .world import current_act, sim_active, storyline_off
@@ -44,10 +44,14 @@ def vision_range(state: GameState, content: Content) -> int:
     return cfg.vision_base + (1 if bonus else 0)
 
 
-def is_unlocked(loc: Location, state: GameState) -> bool:
-    """這個地點開放了沒：世界旗標（unlock_flag），加上序章的草廬只給站在那裡的人（新手引導計畫一）。"""
+def is_unlocked(loc: Location, state: GameState, content: Content | None = None) -> bool:
+    """這個地點開放了沒：世界旗標（unlock_flag），加上序章的草廬只給站在那裡的人（新手引導計畫一）。
+    給了 content 時，第一季開著、地點在 season_one_off.unlocks 裡的直接開放（南華觀：舊玉璽鏈關掉之後黃巾伏筆的丹爐灰要拿得到，
+    玉璽碎片設計 11.2 第 3 條）。"""
     if loc.prologue_only and state.player.location != loc.id:
         return False
+    if content is not None and loc.id in season_one_off(content, state.world, "unlocks"):
+        return True
     return not loc.unlock_flag or loc.unlock_flag in state.world.flags
 
 
@@ -59,7 +63,7 @@ def road_hops(state: GameState, content: Content, limit: int) -> dict[str, int]:
         nxt = []
         for loc_id in frontier:
             for dest in content.locations[loc_id].connections:
-                if dest not in hops and is_unlocked(content.locations[dest], state):
+                if dest not in hops and is_unlocked(content.locations[dest], state, content):
                     hops[dest] = step
                     nxt.append(dest)
         frontier = nxt
@@ -72,7 +76,7 @@ def visible_locations(state: GameState, content: Content) -> set[str]:
 
 def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:
     loc = content.locations[loc_id]
-    if not is_unlocked(loc, state):
+    if not is_unlocked(loc, state, content):
         return "hidden"
     if loc_id == state.player.location and state.player.journey is None:
         return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
@@ -481,7 +485,7 @@ def shortest_routes(
     """從 start（None＝所在地）出發、只走 allowed 裡的地點（None＝所有已開放的地點），到每個地點路程最短（步行分鐘最少）
     的走法（地圖擴充設計 3.2）。一樣近取站數少的，再一樣時比地點 id 的順序，結果固定。"""
     if allowed is None:
-        allowed = {loc_id for loc_id, loc in content.locations.items() if is_unlocked(loc, state)}
+        allowed = {loc_id for loc_id, loc in content.locations.items() if is_unlocked(loc, state, content)}
     begin = state.player.location if start is None else start
     best: dict[str, Route] = {}
     heap: list[tuple[float, int, tuple[str, ...], tuple[float, ...], str]] = [(0.0, 0, (), (), begin)]

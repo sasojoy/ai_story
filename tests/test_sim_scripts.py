@@ -313,3 +313,23 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
     assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
     assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個
+
+
+def test_the_seal_measure_script_runs_its_duel_monte_carlo(capsys):
+    """玉璽碎片 15.2：--duel-mc 只跑單挑，掃份量比、在場與代打、放手一搏（不搏、每回合搏、最多兩次），報單挑係數的期望 E[g]。"""
+    measure = _load("measure_seal")
+    rows = measure.duel_mc(measure.load_content(ROOT / "content"), ratios=[1.0, 3.0], trials=40, rates=[50], modes=["none", "cap2"])
+    assert len(rows) == 2 * 4 * 2 and all(0.0 <= row["eg"] <= 1.0 for row in rows)
+    assert rows == measure.duel_mc(measure.load_content(ROOT / "content"), ratios=[1.0, 3.0], trials=40, rates=[50], modes=["none", "cap2"])
+    measure.print_mc(rows)
+    assert "E[g]" in capsys.readouterr().out
+
+
+def test_the_seal_measure_script_summarises_a_season():
+    measure = _load("measure_seal")
+    line = measure.summary(1, {
+        "emerged": "雲篆", "emerge_rank": 2, "stirs": [{"tier": "大敗", "eligible": 3}], "duels": [
+            {"verdict": "險勝", "share": 0.6, "taken": False, "edges": [50, 58, 61]}], "takes": 0, "sunk": 0,
+        "holders": {"真人": 1, "假人": 0}, "fresh_ratio": [3.1], "holder_big_wins": [0, 1],
+    })
+    assert "現世 雲篆（戰功第 2）" in line and "璽動 1" in line and "易手 0" in line

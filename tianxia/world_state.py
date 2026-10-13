@@ -17,7 +17,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import Literal, Protocol
+from typing import Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +55,108 @@ class CompanionProgress(BaseModel):
     owner: str | None = None  # 目前招募他的玩家名號；None＝自由之身，誰都能嘗試招募
 
 
+class SealEvent(BaseModel):
+    """全服登記的一筆（玉璽碎片設計 13.2）：全服流水號 seq；補送（Game._deliver_seal_results）與江湖史都讀它。"""
+
+    seq: int
+    season: int
+    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign"]
+    shard: str | None = None
+    holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
+    other: str | None = None  # 對手（take 的失主、keep 的挑戰者）
+    record: int | None = None  # 決戰的戰報流水號（BattleInstance.record_id）
+    where: str = ""  # 哪一場決戰的陣前（SealDuel.where）：補戰報寫地點
+    result: str | None = None  # 單挑的結果（挑戰者的角度）；沒打成是 None
+    fresh: bool = False  # 持有者是照新角色算的（只寫進他自己的戰報，5.9）
+    proxied: list[str] = Field(default_factory=list)  # 被代打過的那一邊（challenger／holder；只寫進那個人自己的戰報）
+    lines: list[str] = Field(default_factory=list)  # 單挑每回合一句（挑戰者的角度），補戰報用
+    edge: float | None = None  # 單挑收場時的氣勢（挑戰者的角度）：持有者那份戰報照它分大勝、險勝；舊資料沒有＝None
+    text: str = ""  # 江湖史那一句（沒有是空的）
+
+
+class SealShard(BaseModel):
+    id: str
+    state: Literal["hidden", "held", "sunk"] = "hidden"  # 未現世／有主／隱沒
+    holder: str | None = None  # 名號；比對用 characters.name_key（seal.key）
+    since_season: int | None = None  # 到手的季（新主保護）
+    stirred_season: int | None = None  # 最近一次璽動的季（每片每季最多一次）
+    emerged_round: int | None = None  # 這一輪現世過沒（天命的觸發看它，玉璽二）
+    former: str | None = None  # 上一個從這一片被奪走的人（追璽）
+    absent: int = 0  # 持有者連續幾季沒上線（換季時數，PM 庚；隱沒看它）
+
+
+class SealRegistry(BaseModel):
+    """碎片歸屬的正本（玉璽碎片設計 7.4、13.2）：world 那一列的 JSON，不分季、跨季保存。"""
+
+    shards: dict[str, SealShard] = Field(default_factory=dict)  # 內容的七片；登記沒有的由 seal.filled 補上
+    round: int = 1
+    seq: int = 0
+    opened_real: float | None = None  # 這一季開季的現實時間（「這一季上線過」、隱沒）；None 一律當上線過
+    salt: str = ""  # 亂數的密鹽（5.13）；伺服器與假人程式啟動時產生（測試與腳本是空的），不顯示、不進指紋
+    emerge_season: int | None = None  # 這一季已經現世過（一季最多一片）
+    force_emerge: str | None = None  # 管理者：下一場標 emerge 的決戰必定現世（"*" 照亂數挑，或指定哪一片）
+    force_stir: str | None = None  # 管理者：下一場標了 seal 的決戰必定牽動這一片（略過 7%、新主保護與次數上限）
+    last_showdown: int | None = None  # 這一季最近一場收場的時刻表決戰（戰報流水號）：管理者的強制開單挑只能掛在它上面
+    last_showdown_dueled: bool = False  # 上面那一場已經開過單挑
+    last_showdown_where: str = ""  # 上面那一場的名字（BattleDef.name）：管理者開的單挑公告照它寫
+    history: list[SealEvent] = Field(default_factory=list)
+
+
+class SealSide(BaseModel):
+    """奪璽單挑的一方：身手全是快照（5.3），不回頭讀存檔。"""
+
+    name: str
+    faction: str | None = None
+    power: float = 0.0
+    scores: dict[str, float] = Field(default_factory=dict)  # 三招的份量（拿掉了騎兵與部下，要 PM 定的第 4 條）
+    role: str = ""
+    hp: float
+    hp_cap: float
+    last_seen: float | None = None  # 現實秒：最近一次自己推這場單挑（真人自己的請求才記、每 seen_write_seconds 秒最多寫一次；假人不記）
+    present: bool = False  # 這一回合開始時判他在場沒（判成不在場，這一回合的鈕灰掉）
+    fresh: bool = False  # 照新角色算的（只寫進他自己的戰報）
+    gambles: int = 0  # 這一場放手一搏了幾次（Config.seal.gamble_cap）
+    proxied: bool = False  # 這一場被代打過
+
+
+class SealDuel(BaseModel):
+    """一場奪璽單挑（玉璽碎片設計第五節）：存在 SharedWorldState.seal_duels（全服、不在季裡，5.12）。氣勢一律是挑戰者的角度。"""
+
+    id: str  # f"{決戰戰報流水號}:{碎片 id}"；管理者不掛決戰開的是 f"qa{seq}:{碎片 id}"
+    shard: str
+    record: int | None = None
+    event_id: str | None = None
+    where: str = ""  # 哪一場決戰的陣前（BattleDef.name；公告與戰報寫「在長社火攻陣前」）；管理者不掛決戰開的是空的
+    tier: str = "旁觀"  # 持有者那一方打得怎樣（seal.tier_for）
+    phase: Literal["muster", "active"] = "muster"  # 收場的不留在清單裡（記進 history）
+    starts_real: float
+    challenger: SealSide
+    holder: SealSide
+    edge: float = 50.0
+    round: int = 0  # 已經結算了幾回合
+    rounds: int = 5
+    cap: float = 0.25  # cap × 局勢 × 護璽（開打時算好）
+    pending: dict[str, str] = Field(default_factory=dict)  # 這一回合誰出了什麼：招，或 "text"（放手一搏）
+    rates: dict[str, int] = Field(default_factory=dict)
+    texts: dict[str, str] = Field(default_factory=dict)
+    stories: dict[str, list[str]] = Field(default_factory=dict)  # 邊 → ［成功版, 失敗版］
+    proxy_move: dict[str, str] = Field(default_factory=dict)  # 回合開始時替不在場的那一邊預擲的招
+    tell: dict[str, str] = Field(default_factory=dict)  # 代打那一邊給對手看的架勢
+    opened_real: float | None = None  # 這一回合開始的現實秒
+    lines: list[str] = Field(default_factory=list)
+    fixed: bool | None = None  # 管理者「定這一場結果」：再擲中（True）或不中（False）；None 照擲
+
+
+class SealView(NamedTuple):
+    """seal_state() 讀回來的一份（只讀 world 那一列的 JSON，不讀季）。"""
+
+    registry: SealRegistry
+    duels: list[SealDuel]
+    season: int
+    tianji: int
+    paused: bool
+
+
 class SharedWorldState(BaseModel):
     companion_tag_counts: dict[str, dict[str, int]] = Field(default_factory=dict)  # 人物 id -> {tag: 次數}
     companion_drift_note: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 目前漂移後的一句話性情
@@ -79,6 +181,9 @@ class SharedWorldState(BaseModel):
     # 所以停的這一段不算進賽季。舊資料沒有這一欄＝沒有暫停
     paused_at: float | None = None
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
+    # ── 玉璽碎片（玉璽碎片設計 7.4、5.12）：全服、不分季，跟 season 一樣存在 world 那一列的 JSON 裡 ──
+    seal: SealRegistry = Field(default_factory=SealRegistry)
+    seal_duels: list[SealDuel] = Field(default_factory=list)  # 還沒收場的奪璽單挑，第一場在打、其餘排隊（玉璽一一次最多一場）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
@@ -418,6 +523,14 @@ class WorldStateStore(Protocol):
 
     def faction_counts(self) -> dict[str, int]:
         """這一季各陣營投靠了幾人（只列有人的陣營）。"""
+        ...
+
+    def seal_state(self) -> SealView:
+        """玉璽碎片的登記與奪璽單挑（加上季別、天機、暫停沒）：只讀 world 那一列，不讀季，每次輪詢都讀得起。"""
+        ...
+
+    def seal_duel_open(self) -> bool:
+        """有沒有還沒收場的奪璽單挑（提前收季要等它，5.11）。在 mutate 裡也查得到（同 faction_counts）。"""
         ...
 
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:

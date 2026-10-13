@@ -30,7 +30,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import annals, calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits
+from . import annals, calendar, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits, treasures
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
@@ -218,6 +218,9 @@ def fuse_odds(
     scored.append(("insight", insight_points(state, content, insight)))
     scored.append(("attribute", _attribute_points(content, base.attribute, insight.attribute)))
     scored += setting_points(state, content, insight.attribute, insight.lean, insight)
+    seal_points = treasures.amount(state, content, "fuse_points")  # 赤璋（玉璽碎片設計 7.1）：照實算進合成前的說明
+    if seal_points:
+        scored.append(("seal", seal_points))
     if secret:
         scored.append(("secret", content.config.secrets.quality_points))
     return _points(content, scored)
@@ -233,6 +236,9 @@ def blend_odds(
     scored.append(("attribute", _attribute_points(content, art_a.attribute, art_b.attribute)))
     if shape is not None:
         scored += setting_points(state, content, shape.attribute, shape.lean)
+    seal_points = treasures.amount(state, content, "fuse_points")  # 赤璋（玉璽碎片設計 7.1）：照實算進合成前的說明
+    if seal_points:
+        scored.append(("seal", seal_points))
     if secret:
         scored.append(("secret", content.config.secrets.quality_points))
     return _points(content, scored)

@@ -1016,13 +1016,17 @@ class SeasonOneOff(_Strict):
     - storylines：主線不推進，「主線與目標」不顯示那條主線；
     - battles：大勢門檻的 starts_battle 不開，管理者「立刻開戰」的選單不列；
     - events：探索的事件抽選跳過（T4 做；這裡只定欄位，id 一樣在載入時檢查）；
-    - milestones：「主線與目標」的個人目標不列（做不到的 beta 目標，例如擊敗波才、平定黃巾）。"""
+    - milestones：「主線與目標」的個人目標不列（做不到的 beta 目標，例如擊敗波才、平定黃巾）；
+    - world_events：世界事件不觸發（管理者也觸發不了）；
+    - unlocks：地點第一季直接開放（不看 unlock_flag；玉璽碎片設計 11.2 第 3 條）。"""
 
     thresholds: list[str] = Field(default_factory=list)
     storylines: list[str] = Field(default_factory=list)
     battles: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
     milestones: list[str] = Field(default_factory=list)
+    world_events: list[str] = Field(default_factory=list)
+    unlocks: list[str] = Field(default_factory=list)
 
 
 class Scenario(_Strict):
@@ -1610,6 +1614,58 @@ class TreasureRules(_Strict):
     dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
 
 
+class ShardDef(_Strict):
+    """一片傳國玉璽的碎片（content/seal.json，玉璽碎片設計 7.1）：名字與一句說明交 joy 潤，數字在 Config.seal.effects。"""
+
+    id: str
+    name: str
+    part: str  # 取自玉璽的哪一部分
+    effect: str  # Config.seal.effects 的鍵
+    note: str = ""
+
+
+class SealTuning(_Strict):
+    """玉璽碎片（docs/superpowers/specs/2026-10-11-玉璽碎片-design.md；玉璽一）。數字照設計與 19.1「PM 2026-10-11 的決定」：
+    - 現世 emerge_chance（3.2，PM 甲綁標 emerge 的那一場）；璽動每場、每片各擲 stir_chance（4.1，PM 乙），全服一季最多 season_stir_cap 次。
+    - 易手機率＝cap ×局勢係數（side_factor，大勝不打單挑）×護璽（guard，持有者自己出手滿門檻）×單挑係數（take_share，照挑戰者的結果）；
+      四個都不超過 1（載入時檢查），一場最多 cap（5.8）。PM 乙採 9.4 甲＋乙：局勢全 1.0、單挑 1.0／1.0／0.6；一場每一邊最多搏 gamble_cap 次。
+    - 單挑節奏（5.4、5.5）：下戰書 muster_seconds、rounds 回合、在場的人每回合最多等 round_seconds、每回合最早 pace_seconds 後結算、
+      最近 presence_window 秒推過這場才算在場、last_seen 每 seen_write_seconds 秒最多寫一次；代打的招照份量的 proxy_power 次方加權（5.6）。
+    - 名望（5.9；near 是 PM 丁）、隱沒（7.6；PM 庚：連續 sink_seasons 季沒上線、而且滿 sink_days 天）、持碎片的退隱假人每季回來的機率（7.6）。
+    - 小伺服器（PM 癸）：決戰參戰名單不到 small_battle 人時出手門檻放寬到 1 回合，旁觀的散人也能被挑上陣前。
+    - emerge_skill：現世的得主同一季補送時學會的武學（11.2 第 4 條；舊鏈看守者給的混元一氣改給這裡）。
+    - qa_tools：管理者「不必有決戰」的強制開單挑（第十二節），正式伺服器關著。
+    內容沒有 content/seal.json 時整個碎片系統等於關著（seal.on）。"""
+
+    enabled: bool = True
+    emerge_chance: float = Field(default=0.35, ge=0, le=1)
+    stir_chance: float = Field(default=0.07, ge=0, le=1)
+    season_stir_cap: int = Field(default=2, ge=0)
+    cap: float = Field(default=0.25, ge=0, le=1)
+    side_factor: dict[str, float] = Field(default_factory=lambda: {"險勝": 1.0, "險敗": 1.0, "大敗": 1.0, "旁觀": 1.0})
+    guard: float = Field(default=0.7, ge=0, le=1)
+    take_share: dict[str, float] = Field(default_factory=lambda: {"提前大勝": 1.0, "大勝": 1.0, "險勝": 0.6})
+    gamble_cap: int = Field(default=2, ge=0)
+    challenger_pool: int = Field(default=3, ge=1)
+    small_battle: int = Field(default=10, ge=0)
+    muster_seconds: float = Field(default=180, ge=0)
+    rounds: int = Field(default=5, ge=1)
+    round_seconds: float = Field(default=120, ge=0)
+    pace_seconds: float = Field(default=20, ge=0)
+    presence_window: float = Field(default=45, ge=0)
+    seen_write_seconds: float = Field(default=15, ge=0)
+    proxy_power: float = Field(default=4, ge=0)
+    fame: dict[str, int] = Field(default_factory=lambda: {"keep": 3, "lose": 5, "near": 1})
+    sink_seasons: int = Field(default=3, ge=1)
+    sink_days: float = Field(default=28, ge=0)
+    bot_return_chance: float = Field(default=0.7, ge=0, le=1)
+    emerge_skill: str | None = "hunyuan"
+    effects: dict[str, float] = Field(default_factory=lambda: {
+        "hp_cap": 1.06, "talk_turns": 1, "practice": 0.9, "dodge": 0.03, "stamina_regen": 1.1, "fuse_points": 5, "mate_exp": 1.1,
+    })
+    qa_tools: bool = False
+
+
 class TreasureDef(_Strict):
     """寶物表的一件（content/gear.json，裝備四欄 6.3）。名字原創、暫名交 joy 潤；效果是八種之一，數字在 Config.treasures.effects。
     pool：掉落池（懸賞的重賞、挑戰本人、奇遇）；False 是名將的贈禮（只從 gifts 送出，事件不准給）。"""
@@ -1809,6 +1865,7 @@ class Config(_Strict):
     first_echo: FirstEcho = Field(default_factory=FirstEcho)  # 首創名望回饋（見 FirstEcho）
     secrets: Secrets = Field(default_factory=Secrets)  # 口訣與秘方（見 Secrets）
     forge_secrets: ForgeSecretRules = Field(default_factory=ForgeSecretRules)  # 打造的隱藏配方（見 ForgeSecretRules）
+    seal: SealTuning = Field(default_factory=SealTuning)  # 玉璽碎片（見 SealTuning；內容在 content/seal.json）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
@@ -2371,6 +2428,9 @@ class TimetableEvent(_Strict):
     early_preface: str = ""  # 季中就收季（決定性勝利、管理者提早收季）時取代 preface 的開頭
     out_lines: dict[str, str] = Field(default_factory=dict)  # 人物 id → 那位人物退場或重創時接在最後的一句（董卓兵敗）
     ending_chronicle: str = ""  # 江湖史那一行，{結局} 換成結局標題
+    # 玉璽碎片（玉璽碎片設計 8.5）：這一件決戰開集結時擲不擲碎片。emerge＝現世那一場（也算璽動）、stir＝只璽動；
+    # 不寫死黃巾之亂的 id，每個劇本自己標。只能標在 kind 是 showdown 的那幾件（載入時檢查）
+    seal: Literal["emerge", "stir"] | None = None
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
@@ -2922,6 +2982,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示

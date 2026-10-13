@@ -123,6 +123,9 @@ class BattleParticipant(BaseModel):
     troops: str = ""  # 加入時帶的部下（team.troop_names：「兩名持矛鄉勇」）；沒帶是空的
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
+    # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
+    turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
+    newbie: bool = False  # 還在新手期（roster.newbie）
 
 
 def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
@@ -209,6 +212,13 @@ class BattleInstance(BaseModel):
     third_gain: float = 0.0  # 第三方整場的收穫加總（÷100 之前，戰鬥系統第六節）；舊資料沒有這一欄＝0（只存在 data 的 JSON 裡，不動資料表）
     third_push: int = 0  # 收場時算好的第三方大勢線推動（settle_third）；engine 收場時推，季終沒打完收起來的不推
     record_id: int | None = None  # 資料庫裡這一場的流水號；None＝還沒寫進資料庫（見 sqlite_world）
+    # 玉璽碎片（玉璽碎片設計 3.2、4.3）：集結那一刻擲中的現世與璽動，持有者的陣營在那一刻快照；舊資料沒有＝沒有
+    seal_emerge: str | None = None  # 這一場現世哪一片（收場時從勝方抽得主）
+    seal_shard: str | None = None  # 這一場牽動哪一片
+    seal_holder: str | None = None  # 那一片的持有者（名號）
+    seal_holder_faction: str | None = None  # 持有者那一刻在投靠名冊上的陣營（散人、這一季還沒上線過是 None）
+    seal_holder_side: str | None = None  # 上一欄是交戰兩方之一就記那一方，否則 None（旁觀）
+    seal_notes: list[str] = Field(default_factory=list)  # 收場時寫進每個參戰者戰報的那一兩行（下戰書、現世的得主）
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
 
 
@@ -327,17 +337,18 @@ def move_scores(
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
-    troops: str = "", troop_bonus: float = 0.0,
+    troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
-    mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。"""
+    mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。
+    turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus,
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie,
     )
 
 
@@ -361,9 +372,11 @@ def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
+    turncoat: bool = False, newbie: bool = False,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores、mount、cavalry、troops、troop_bonus 同 join_faction。"""
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie
+    同 join_faction。"""
     if faction not in sides(definition):
         armies = [f.id for f in definition.factions]
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
@@ -371,7 +384,7 @@ def auto_assign_latecomer(
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus,
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie,
     )
 
 

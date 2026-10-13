@@ -10,10 +10,11 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from tianxia import database
+from tianxia import database, seal
 from tianxia.bot_runner import BotRunner, TickReport, log_failure
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.ollama_client import OllamaClient
+from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 
@@ -28,6 +29,7 @@ def main(ticks: int | None = None) -> None:
     runner = BotRunner(content, client=client)
     print(f"伺服器假人程式啟動：每 {content.config.bot_tick_seconds:g} 秒巡一輪（Ctrl+C 結束）", flush=True)
     print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
+    open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：兩個程式誰先啟動誰產生，另一個看到已經有了就不動
     print(profile_line(content, profile), flush=True)
     done = 0
     try:

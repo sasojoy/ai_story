@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -529,9 +529,9 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     if equipment.on(content, "mount"):
         slots.append({"slot": "mount", "label": equipment.SLOTS["mount"].label, "empty": mounts.EMPTY, "note": mounts.RACK_NOTE,
                       "where": mounts.where(state, content), **mounts.rows(state, content)})
-    if equipment.on(content, "treasure"):  # 玉璽一要把這一擋改成「寶物或玉璽開著」（見計畫「範圍與取捨」玉璽那一段第 5 點）
+    if equipment.on(content, "treasure") or (seal.on(content) and state.player.heirloom is not None):
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
-                      "note": treasures.RACK_NOTE, "where": treasures.WHERE, **treasures.rows(state, content)})
+                      "note": treasures.rack_note(state, content), "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
     for block in slots:
         if block["slot"] in ("weapon", "armor"):
