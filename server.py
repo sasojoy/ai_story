@@ -835,11 +835,7 @@ def battle_text(game: Game, text: str) -> list[str]:
             client, act_, request.faction_name, request.text, request.name, target=request.target, sex=request.sex,
         )
 
-    try:
-        verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    except BaseException:  # 排隊排太久、同一個人上一句還在評：沒走到 C 段，A 段佔的放手一搏名額放掉，不讓慢的模型卡住別人
-        act(game, lambda g: g.release_battle_gamble(), paused_ok=True)
-        raise
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
     return act(game, lambda g: g.submit_battle_custom_action(request.text, verdict.rate, (verdict.win, verdict.lose)))
 
 
@@ -918,7 +914,6 @@ def _main_view_body(game: Game) -> dict:
         "on_road": any(o.id == "act:on_road" for o in options),
         "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt(),
         "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
-        "free_text_full": game.battle_free_text_full(),  # 這一回合自己這一邊的放手一搏名額滿了：輸入框灰掉寫這一句（BattleTuning.gamble_per_side）
         # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
         "free_op": "battle_text" if game.battle_free_text_prompt() is not None
         else "seal_text" if game.seal_free_text_prompt() is not None else "duel_text",

@@ -1173,11 +1173,6 @@ class BattleTuning(_Strict):
     target_hit_per_risk: float = Field(default=0.0015, ge=0)
     target_hit_max: float = Field(default=0.25, ge=0, le=1)
     pin_rate: int = Field(default=15, ge=0, le=100)
-    # 同一邊（官軍、黃巾）一回合最多幾個人放手一搏（Joy 2026-10-13 的效能評估：顯卡一次只評一件、一件 13～20 秒，放手一搏取消冷卻之後
-    # 二十人的決戰一回合塞不進 300 秒，排不到的人悄悄拿保底 40、沒有劇情）。先到先得：開單（server 的 A 段）那一下就佔一格；
-    # 模型失敗沒送出、或佔了太久（free_text_budget_seconds＋GAMBLE_HOLD_SLACK 秒）沒送出，那一格就空出來。0 ＝ 不限。
-    # 不是冷卻：每一回合大家重新搶，搶到的人下一回合照樣能再搏
-    gamble_per_side: int = Field(default=3, ge=0)
     # 引人注目：這一幕被點名過、或自己放手一搏成過的人是「顯眼」的，對面這一回合每一個出強攻的人，另外有 focus_per_attacker 的傷害
     # 平分到這一邊顯眼的人身上（每人最多他上限的 focus_cap）。一個人一回合被別人打掉的（點名＋集火）合起來最多他上限的 target_round_cap
     focus_per_attacker: float = Field(default=15.0, ge=0)

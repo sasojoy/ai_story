@@ -4485,41 +4485,7 @@ class Game:
         if battle.phase != "active" or p is None or p.eliminated or p.away or name in battle.round.pending_actions:
             return None
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
-        if option is None or self._gamble_full(battle):
-            return None
-        return option.text
-
-    GAMBLE_HOLD_SLACK = 15  # 放手一搏的名額佔多久沒送出就空出來：評分的預算（free_text_budget_seconds）再多這幾秒
-
-    def _gamble_hold_seconds(self) -> float:
-        return self.content.config.free_text_budget_seconds + self.GAMBLE_HOLD_SLACK
-
-    def _gamble_full(self, battle: battle_instance.BattleInstance) -> bool:
-        """這一回合自己這一邊的放手一搏名額滿了、自己又沒佔著（BattleTuning.gamble_per_side）。"""
-        return battle_instance.gamble_full(
-            battle, self.state.player.name, self.content.config.battle, self.now, self._gamble_hold_seconds(),
-        )
-
-    def battle_free_text_full(self) -> str | None:
-        """本來能放手一搏、只是這一回合自己這一邊的名額滿了：回輸入框灰掉時寫的那一句；不是這種情況是 None。"""
-        status = self._battle_for_me(tick=False)
-        if status is None:
-            return None
-        battle, definition = status
-        name = self.state.player.name
-        p = battle.participants.get(name)
-        if battle.phase != "active" or p is None or p.eliminated or p.away or name in battle.round.pending_actions:
-            return None
-        if not any(o.free_text for o in battle_instance.options_for(battle, definition, name)) or not self._gamble_full(battle):
-            return None
-        return battle_instance.gamble_full_line(self.content.config.battle.gamble_per_side)
-
-    def release_battle_gamble(self) -> list[str]:
-        """放掉自己這一回合還沒送出的放手一搏名額（server.battle_text 的 B 段失敗、沒走到 C 段時叫）：不讓慢的模型把名額卡住。"""
-        name = self.state.player.name
-        if self.world.get_battle() is not None:
-            self.world.mutate_battle(lambda b: battle_instance.release_gamble(b, name))
-        return []
+        return option.text if option else None
 
     # 放手一搏輸入框旁邊那一句（試玩回饋 2026-10-08）：成功率照舊不事前顯示（賭局的感覺），只講清楚賭的是什麼
     BATTLE_GAMBLE_NOTE = "寫得越險，成了戰果越大；失手時大局只會小小倒退，重傷的是你自己，氣血見底就倒下出局。"
@@ -4544,8 +4510,6 @@ class Game:
         option = next((o for o in battle_instance.options_for(battle, definition, name) if o.free_text), None)
         if option is None:
             return ["（此刻無法這麼做。）"]
-        if self._gamble_full(battle):  # 這一邊這一回合的名額滿了（先到先得，BattleTuning.gamble_per_side）
-            return [f"（{battle_instance.gamble_full_line(self.content.config.battle.gamble_per_side)}）"]
         text = text.strip()[:20]
         if not text:
             return ["（請先輸入你想做的事。）"]
@@ -4554,14 +4518,12 @@ class Game:
 
     def battle_text_request(self, text: str) -> BattleTextRequest | list[str]:
         """放手一搏的階段 A（server.py 在行動鎖內、很快地呼叫）：送得出去就回傳要在鎖外送模型評成功率的單子，不行回傳那一句話。
-        不推進戰鬥（同 free_text_request）；只佔一格這一回合的放手一搏名額（先到先得，BattleTuning.gamble_per_side）——
-        B 段失敗由 server 叫 release_battle_gamble 放掉，沒放掉的佔太久也會空出來（battle_instance.gamble_holders）。"""
+        只讀，不推進戰鬥（同 free_text_request）。"""
         checked = self._battle_text_check(text, tick=False)
         if isinstance(checked, list):
             return checked
         definition, _, text, faction_name = checked
-        name, now = self.state.player.name, self.now
-        battle = self.world.mutate_battle(lambda b: battle_instance.claim_gamble(b, name, now))
+        battle = self.world.get_battle()
         return BattleTextRequest(
             battle_id=definition.id, act_index=battle.act_index, faction_name=faction_name, text=text,
             name=self.state.player.name, sex=gender.of(self.state),
@@ -4583,7 +4545,6 @@ class Game:
         stories 是同一次模型呼叫寫好的（成功版, 失敗版）劇情（battle_instance.assess_gamble）；擲骰後播對應的那一版。"""
         checked = self._battle_text_check(text, tick=True)
         if isinstance(checked, list):
-            self.release_battle_gamble()  # 送不出去（換了回合、倒下、名額被搶光）：A 段佔的那一格不留著
             return checked
         definition, tag, text, faction_name = checked
         if llm_rate is None:
