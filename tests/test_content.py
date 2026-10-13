@@ -1211,7 +1211,10 @@ BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-
 def test_weekend_profile_overrides_the_season_settings_and_the_test_period_switch_only():
     base = load_content(CONTENT_DIR).config
     weekend = load_content(CONTENT_DIR, profile="weekend").config
-    assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 2)
+    # 人數上限 2026-10-14 從 2 改成 20（企劃者，20 名內測玩家進來那一天）：軍令陣營額度（全部 4 → 4/6/8）
+    # 與伏筆需求量照它換算。10 是伏筆分檔的交界（foreshadow_tiers 第一檔是「未滿 10 → 0.2」），所以 10 跟 20
+    # 的伏筆係數都是 0.3、需求量 ×1.5、片段機率剩 0.67 倍，但 10 拿不到放大的軍令額度——要維持 0.2 得寫 9 以下。
+    assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 20)
     assert (base.season_one, base.season_days, base.server_max_players) == (False, 14, 30)  # 不給 profile 時照 config.json
     assert (weekend.beta_free_refill, base.beta_free_refill) == (False, False)
     assert weekend.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS) == base.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS)  # 其他設定一個都不動
@@ -1233,7 +1236,7 @@ def test_a_profile_that_does_not_exist_fails_to_load(tmp_path):
 def test_the_profile_line_says_what_the_profile_turns_on():
     assert profile_line(load_content(CONTENT_DIR), None) == "設定：預設"
     assert profile_line(load_content(CONTENT_DIR, profile="weekend"), "weekend") == (
-        "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）"
+        "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 20）"
     )
 
 

@@ -4,7 +4,9 @@
 content/foreshadows.json 與 content/events/foreshadow_*.json 照內容表轉對了、每一條都做得完。
 
 下面的表是照內容表 4.1～4.5 逐項抄的（不是從 content 反推）。數字都是 1000 人以上那一檔的基準量；
-用週末設定（2 人，係數 0.2）跑，所以物品、情誼、糧草的量要過 foreshadow.need 換算。
+用週末設定跑、人數上限在每個 fixture 裡釘成 2（係數 0.2），所以物品、情誼、糧草的量要過 foreshadow.need 換算。
+**釘住是刻意的**：2026-10-14 線上的人數上限改成 20（係數 0.3，需求量 ×1.5、片段機率剩 0.67 倍），而這個檔驗的是
+「內容表轉對了、每一條做得完」，不是驗部署用幾人；部署的那個值由 tests/test_content.py 驗。
 """
 from __future__ import annotations
 
@@ -99,6 +101,7 @@ ALL_EVENTS: dict = {}  # meet 會把 content.events 換成只剩一則（測完�
 @pytest.fixture(scope="module")
 def fs_content():
     c = load_content(CONTENT_DIR, profile="weekend")
+    c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True  # 這一組測的是開打後的內容
     ALL_EVENTS.update(c.events)
     return c
@@ -244,6 +247,7 @@ def test_front_must_be_a_front_not_just_a_region(where):
     from tianxia.models import FigureChange
 
     c = load_content(CONTENT_DIR, profile="weekend")
+    c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     validate(c)  # 原樣是對的
     if where == "chain":
         c.foreshadows.chains[0].front = "youzhou"
@@ -921,6 +925,7 @@ def test_end_to_end_one_chain(world):
     黃巾也答對他那條 → 官軍鎖定、黃巾搶輸，鎖定那一刻不發傳聞。管理者再快轉到決戰排定的時間，第 6 週長社決戰收場（官軍大勝）：
     公告寫出官軍的名字與黃巾搶輸的一筆，江湖史有一筆「（名號改寫）」，之後每個人同步都收到那則公告。"""
     c = load_content(CONTENT_DIR, profile="weekend")
+    c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True
     c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     jia = Game.new(c, "趙甲", rng=random.Random(1), world=world)

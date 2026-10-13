@@ -3752,7 +3752,7 @@ def test_server_prints_the_profile_at_startup(capsys, monkeypatch):
     monkeypatch.setattr(server, "PROFILE", "weekend")
     monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="weekend"))
     server.main([])
-    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）" in capsys.readouterr().out
+    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 20）" in capsys.readouterr().out
 
 
 def _host_passed_to_uvicorn(monkeypatch, argv):
