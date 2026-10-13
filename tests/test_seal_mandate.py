@@ -509,3 +509,12 @@ def test_a_normal_season_never_picks_a_mandate_ending(mandated, world):
     game = _player(mandated, world, "路人")
     game.state.world.mandate_result = "guan"
     assert not world_rules.evaluate_ending(game.state, mandated).mandate
+
+
+def test_the_howto_fame_section_names_the_mandate_winners():
+    """名望多了一條來源（得天命那一軍 +fame，玉璽二）：玩法說明「名望」那一節照 Config.seal.mandate.fame 寫（test_explain2 的守門要求）。"""
+    from test_explain2 import _fame_section, _war
+
+    c = real_content()
+    c.config.seal.enabled = True
+    assert seal.MANDATE_FAME.format(fame=c.config.seal.mandate.fame) in _fame_section(_war(c))
