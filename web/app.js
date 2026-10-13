@@ -74,6 +74,7 @@
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     bountyShut: null, // 江湖頁「懸賞」卡收起來時手上那幾張的 id（逗號接起來）；揭了新的或交了差就重新展開
+    sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -159,9 +160,11 @@
     return h > 0 ? `現實約 ${h} 小時 ${m} 分後` : `現實約 ${m} 分後`;
   };
   // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
-  // 狀態列另外畫（renderTop），江湖頁不必跟著它重畫；奪璽卡與碎片卡的資料也在 status 裡（倒數、回合、氣勢、已出招、架勢），
-  // 那兩張變了要重畫（FB-172）
-  const pageKey = (m) => JSON.stringify({ ...m, status: null, sealCards: m.status ? [m.status.seal_duel || null, m.status.seal || null] : null });
+  // 狀態列另外畫（renderTop），江湖頁不必跟著它重畫；奪璽卡與碎片卡的資料也在 status 裡（回合、氣勢、已出招、架勢），
+  // 那兩張變了要重畫（FB-172）。奪璽卡的倒數（left）每秒都在變，不算進來（FB-182：單挑期間全服的江湖頁每 10 秒整頁重畫）：
+  // 輪詢時只換那一行的字（refreshPage → paintSealWhen，照 renderTop 另外畫的做法）
+  const pageKey = (m) => JSON.stringify({ ...m, status: null, sealCards: m.status
+    ? [m.status.seal_duel ? { ...m.status.seal_duel, left: null } : null, m.status.seal || null] : null });
   // 焦點在輸入框、下拉選單：玩家正在填東西，輪詢不動畫面
   // 勾選框不算：勾完它還留著焦點，要是算打字，輪詢會一直等到玩家點別處才補畫（修練頁的「服下破境丹」）
   const typing = () => S.stroking || (!!document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
@@ -349,11 +352,10 @@
   // 奪璽卡（玉璽碎片設計 5.10，status.seal_duel）：全服看得到、可以摺疊，排在懸賞卡下面（不擠 375×812 的第一屏）。
   // 雙方、哪一片、第幾回合、氣勢的字（持有者看的是倒過來的，伺服器算好）、最近兩三行、已出招幾手與倒數；代打那一邊的架勢只在對手的卡上（伺服器只給他）。
   // 字待 joy 潤
+  // 收起來照那一場記住（S.sealShut.duel，FB-182）；時間那一行包在 .seal-when 裡，輪詢只換它的字（paintSealWhen）
   function sealDuelHtml(d) {
-    const left = `${Math.floor(d.left / 60)} 分 ${d.left % 60} 秒`;
-    const when = d.phase === "muster" ? `${left}後開打` : `第 ${d.round | 0}／${d.rounds | 0} 回合・已出招 ${d.sent | 0}／2，最遲 ${left}後結算`;
-    return `<details class="card seal-duel" open><summary>奪璽・『${esc(d.shard)}』</summary>
-      <p><b>${esc(d.challenger)}</b> 對 懷璽的 <b>${esc(d.holder)}</b>　${esc(when)}</p>
+    return `<details class="card seal-duel" data-key="${esc(d.id)}" ${S.sealShut.duel === d.id ? "" : "open"}><summary>奪璽・『${esc(d.shard)}』</summary>
+      <p><b>${esc(d.challenger)}</b> 對 懷璽的 <b>${esc(d.holder)}</b>　<span class="seal-when">${esc(sealWhen(d))}</span></p>
       ${d.phase === "active" ? `<p>${esc(d.edge)}</p>` : ""}
       ${d.tell ? `<p class="tell">對手的架勢：${esc(d.tell)}</p>` : ""}
       ${d.turn ? `<p class="turn">輪到你出招。</p>` : ""}
@@ -361,9 +363,26 @@
       <p class="muted">${esc(d.note)}</p></details>`;
   }
 
+  // 奪璽卡那一行時間：下戰書的倒數、回合的最遲結算（現實秒，伺服器算好的 left）
+  function sealWhen(d) {
+    const left = `${Math.floor(d.left / 60)} 分 ${d.left % 60} 秒`;
+    return d.phase === "muster" ? `${left}後開打` : `第 ${d.round | 0}／${d.rounds | 0} 回合・已出招 ${d.sent | 0}／2，最遲 ${left}後結算`;
+  }
+
+  // 輪詢回來江湖頁不必重畫（pageKey 沒變）時：奪璽卡的倒數照樣走（FB-182）
+  function paintSealWhen() {
+    const d = S.main && S.main.status && S.main.status.seal_duel;
+    const el = document.querySelector(".seal-duel .seal-when");
+    if (d && el) el.textContent = sealWhen(d);
+  }
+
+  // 碎片卡收起來照「哪一片、此刻牽不牽動」記住（S.sealShut.card，FB-182）：換了一片、被牽動了重新展開
+  const sealCardKey = (s) => `${s.name}|${s.stir || ""}`;
+
   // 持有者的碎片卡（玉璽碎片設計第十節，status.seal）：哪一片與效果、這一季動過沒、此刻被牽動時那一句、這一季幾個險關的時刻；不寫機率。字待 joy 潤
   function sealHtml(s) {
-    return `<details class="card seal-card" open><summary>傳承・『${esc(s.name)}』</summary>
+    const key = sealCardKey(s);
+    return `<details class="card seal-card" data-key="${esc(key)}" ${S.sealShut.card === key ? "" : "open"}><summary>傳承・『${esc(s.name)}』</summary>
       <p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
       ${s.stir ? `<p class="turn">${esc(s.stir)}</p>` : ""}
       ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}</details>`;
@@ -4181,7 +4200,7 @@
         // 手指正按在畫面上：這時整頁換掉，按下去的那一顆就不在了，放開時 click 落空（按了沒反應）。等放開再畫
         if (pointerHeld) redrawHeld = true;
         else renderPage();
-      }
+      } else paintSealWhen(); // 只有奪璽卡的倒數在走：換那一行的字就好（FB-182）
       return;
     }
     if (tab === "news") {
@@ -4383,6 +4402,8 @@
   document.addEventListener("toggle", (ev) => {
     const box = ev.target;
     if (box instanceof Element && box.matches("details.bounties")) S.bountyShut = box.open ? null : box.dataset.key;
+    else if (box instanceof Element && box.matches("details.seal-duel")) S.sealShut.duel = box.open ? null : box.dataset.key; // FB-182
+    else if (box instanceof Element && box.matches("details.seal-card")) S.sealShut.card = box.open ? null : box.dataset.key;
     else if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };

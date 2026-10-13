@@ -165,15 +165,50 @@ def test_the_holder_card_does_not_reuse_the_seal_class(m):
 
 
 def test_the_page_key_follows_the_seal_cards(m):
-    """FB-172：江湖頁的重畫照 pageKey 判斷（不看 status）；奪璽卡、碎片卡的資料在 status 裡，單獨變了也要重畫。"""
+    """FB-172：江湖頁的重畫照 pageKey 判斷（不看 status）；奪璽卡、碎片卡的資料在 status 裡，單獨變了也要重畫。
+    FB-182：每秒在變的倒數（left）不算——單挑期間全服的江湖頁不再每 10 秒整頁重畫。"""
     out = run(m, """
       const a = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: null}};
       const b = {x: 1, status: {gold: 1, seal_duel: {left: 9, round: 1}, seal: null}};
       const c = {x: 1, status: {gold: 2, seal_duel: {left: 10, round: 1}, seal: null}};
       const d = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 1}, seal: {state: "此季已動過"}}};
-      return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d)].join("|");
+      const e = {x: 1, status: {gold: 1, seal_duel: {left: 10, round: 2}, seal: null}};
+      return [H.pageKey(a) === H.pageKey(b), H.pageKey(a) === H.pageKey(c), H.pageKey(a) === H.pageKey(d), H.pageKey(a) === H.pageKey(e)].join("|");
     """)
-    assert out == "false|true|false"  # 倒數、碎片卡變了要重畫；status 的其他欄位照舊不算
+    assert out == "true|true|false|false"  # 倒數不算；回合、碎片卡變了要重畫；status 的其他欄位照舊不算
+
+
+def test_a_poll_that_only_moves_the_countdown_rewrites_that_line_in_place(m):
+    """FB-182：輪詢回來只有倒數變了：江湖頁不整頁重畫（「剛剛」不重播浮現），只換奪璽卡那一行時間的字（照 renderTop 另外畫的做法）。"""
+    first, second = {**m, "status": {**m["status"], "seal_duel": _card()}}, {**m, "status": {**m["status"], "seal_duel": _card(left=65)}}
+    out = webharness.run(DRIVER, {"m": first, "S": {"next": second, "tab": "jianghu"}, "menxia": None, "stored": {}, "responses": {}, "script": """
+      return (async () => {
+        H.renderPage(); const drawn = T.els.page.innerHTML; T.els.page.innerHTML = "OLD";
+        T.qs[".seal-duel .seal-when"] = { textContent: "舊的" };
+        const was = H.S.main; H.setMain(H.S.next); await H.refreshPage(was);
+        return { drawn, page: T.els.page.innerHTML, when: T.qs[".seal-duel .seal-when"].textContent };
+      })();"""})
+    assert '<span class="seal-when">第 2／5 回合・已出招 1／2，最遲 1 分 15 秒後結算</span>' in out["drawn"]
+    assert out["page"] == "OLD" and out["when"] == "第 2／5 回合・已出招 1／2，最遲 1 分 5 秒後結算"
+
+
+def test_the_seal_cards_stay_folded_once_folded(m):
+    """FB-182：兩張玉璽卡照懸賞卡記住收起來的狀態——奪璽卡照那一場（id）、碎片卡照哪一片與此刻牽不牽動；換了一場、被牽動了重新展開。"""
+    out = run(m, """
+      const toggle = (cls, key, open) => T.docListeners.toggle[0]({ target: Object.assign(Object.create(T.Element.prototype),
+        { matches: (sel) => sel === "details." + cls, open, dataset: { key } }) });
+      const card = (over) => Object.assign({id: "7:chishou", shard: "螭首", challenger: "黃甲", holder: "懷璽", phase: "active", round: 2, rounds: 5,
+        edge: "", lines: [], sent: 1, left: 75, note: "", tell: "", turn: false}, over);
+      const shard = (over) => Object.assign({name: "金角", effect_text: "", state: "此季可能被牽動", stir: "", dates: []}, over);
+      const before = [H.sealDuelHtml(card({})), H.sealHtml(shard({}))];
+      toggle("seal-duel", "7:chishou", false);
+      toggle("seal-card", "金角|", false);
+      const folded = [H.sealDuelHtml(card({left: 30})), H.sealHtml(shard({}))];
+      const fresh = [H.sealDuelHtml(card({id: "9:chishou"})), H.sealHtml(shard({stir: "此役牽動你懷中的『金角』。"}))];
+      return { before, folded, fresh };
+    """)
+    opened = lambda html: html.split(">", 1)[0].endswith(" open")
+    assert all(opened(h) for h in out["before"]) and not any(opened(h) for h in out["folded"]) and all(opened(h) for h in out["fresh"])
 
 
 def test_the_admin_sheet_offers_to_stamp_the_mandate(m):
