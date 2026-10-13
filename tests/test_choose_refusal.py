@@ -38,11 +38,12 @@ const redraw = () => { // 重畫：全部元素換成新的（沒有 busy、字�
 };
 const renderPage = () => { renders += 1; redraw(); };
 const fns = new Function(
-  "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION", "SENSE_DRAW", "SAY_OPTION",
+  "S", "document", "renderPage", "api", "watchQueue", "applyMain", "toast", "window", "FREE_TEXT_OPTION", "SENSE_DRAW", "SAY_OPTION", "boardHanded",
   `let lastAction = 0;${busyKit()}${slice("async function choose(")}\nreturn { choose };`,
 )(S, document, renderPage,
   async () => { if (input.refuse) throw new Error("refused"); return { main: {}, message: input.message || "" }; },
-  () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw", "talk:say");  // applyMain 也是整頁重畫
+  () => () => {}, () => { calls.applied += 1; redraw(); }, (t) => calls.toasts.push(t), { scrollTo() {} }, "choice:free", "sense:draw", "talk:say",
+  () => {});  // applyMain 也是整頁重畫；boardHanded（店面懸賞榜交差的朱印）這裡用不到
 finish((async () => {
   const mk = (cls, inOptions, label) => { const el = cell(cls, inOptions, label); el.orig = label; els.push(el); return el; };
   const target = mk(input.cls, input.inOptions, "名字");

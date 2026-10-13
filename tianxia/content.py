@@ -542,7 +542,8 @@ def check_front_lines(c: Content, need) -> None:
 
 def check_shop_lines(c: Content, need) -> None:
     """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
-    只用繁體中文、不寫數字；店面開關開著、鐵匠鋪開門（兵器或防具開著）時鐵匠那一組每一種情況都要有句子。"""
+    只用繁體中文、不寫數字；店面開關開著時，開門的店那一組每一種情況都要有句子：鐵匠鋪（兵器或防具開著）、馬市（坐騎開著）、
+    懸賞榜（開著而且劇本有陣營）。"""
     from .shopview import SITUATIONS  # noqa: PLC0415  shopview → smithing → …：在函式裡 import
 
     for shop, pool in c.shop_lines.items():
@@ -551,9 +552,15 @@ def check_shop_lines(c: Content, need) -> None:
             need(key in SITUATIONS.get(shop, ()), f"shop_lines.{shop}：不認得的情況 {key}")
             for text in lines:
                 _check_line(need, f"shop_lines.{shop}.{key}", text)
-    if c.config.shop_screens and (c.config.weapons.enabled or c.config.armor.enabled):
-        for key in SITUATIONS["smith"]:
-            need(bool(c.shop_lines.get("smith", {}).get(key)), f"shop_lines.smith 缺少情況 {key}（鐵匠鋪開著時每一種情況至少一句）")
+    opened = {
+        "smith": c.config.weapons.enabled or c.config.armor.enabled,
+        "market": c.config.mounts.enabled,
+        "board": c.config.bounties.enabled and bool(c.scenario.factions),
+    }
+    for shop, on in opened.items():
+        if c.config.shop_screens and on:
+            for key in SITUATIONS[shop]:
+                need(bool(c.shop_lines.get(shop, {}).get(key)), f"shop_lines.{shop} 缺少情況 {key}（這間店開著時每一種情況至少一句）")
 
 
 def check_combat_lines(c: Content, need) -> None:

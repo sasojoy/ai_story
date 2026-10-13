@@ -1275,6 +1275,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .btn.ghost:disabled { color: #a08a6a; }
 .shop-layer .forge-card .btn.ghost { color: var(--ink); border-color: var(--line, #d8ccb8); } /* 出爐卡是紙底 */
 .shop-layer .naming .btn.ghost { color: var(--ink); border-color: var(--line); } /* 定名表單（裝備庫那一頁、出爐卡）也是紙底 */
+.naming .form-why { margin: 4px 0 0; color: var(--accent); font-size: 12px; } /* 神器定名被拒的原因（FB-193） */
 /* 打造頁（2.2）：種類一排、爐子兩格、這一爐的機率條、素材格 */
 .shop-kinds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 6px; }
 .shop-kinds .kind { position: relative; border: 1px solid #6b4a2e; background: transparent; color: #e8d6ad; border-radius: 14px; padding: 4px 12px; font: 14px var(--serif); }
@@ -1344,3 +1345,90 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .first-seal { position: absolute; top: -12px; right: -8px; transform: rotate(8deg); padding: 6px 8px; border: 2px solid var(--accent); border-radius: 6px; color: var(--accent);
   background: var(--paper); font: 600 14px var(--serif); letter-spacing: 2px; }
 @media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } }
+/* 馬市（第三節）：土黃底；馬廄一排（超過三間左右滑、邊上露半間）、點著那一匹的卡。馬是示意（Joy 之後有正式的圖可以換） */
+.shop-layer.shop-market { color: var(--ink); background: linear-gradient(180deg, #d9c39a 0%, #c9ad7c 55%, #8a6a42 100%); }
+.shop-market .shop-back, .shop-market .shop-silver { color: #3a2618; }
+.shop-market .shop-sign { background: #f6edd8; border-color: #6b4a2a; color: #6b2a1a; }
+.shop-market .shop-line { background: rgba(246, 237, 216, 0.85); border-left-color: #6b4a2a; color: #2a241d; }
+.shop-market .stalls { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 4px 2px 6px; }
+.shop-market .stall { flex: 0 0 calc((100% - 12px) / 3); scroll-snap-align: start; position: relative; min-height: 118px; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; gap: 1px; padding: 26px 4px 6px; border-radius: 6px 6px 2px 2px; border: 1px solid #6b4a2a;
+  background: linear-gradient(180deg, #6b4a2a 0 10px, #e8d6ad 10px); color: #2a241d; font: 10.5px var(--sans); }
+.shop-market .stalls.many .stall { flex-basis: 38%; }
+.shop-market .stall .who { position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 9.5px; color: #6b2a1a; }
+.shop-market .stall b { font: 600 12px var(--serif); }
+.shop-market .stall.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.shop-market .stall.empty { opacity: 0.75; }
+.shop-market .horse { width: 54px; height: 40px; margin: 4px auto; border-radius: 40% 50% 30% 30%; position: relative; background: #8a6a42; }
+.shop-market .horse::before { content: ""; position: absolute; right: -10px; top: -12px; width: 16px; height: 26px; border-radius: 40%; background: inherit; transform: rotate(25deg); }
+.shop-market .stall.empty .horse { background: none; border: 1.5px dashed #8a6a42; }
+.shop-market .stall.empty .horse::before { display: none; }
+.shop-market .horse.c0 { background: #8a4a2a; } /* 棗騮（mounts.COATS 的順序） */
+.shop-market .horse.c1 { background: #4a5a6a; } /* 青驄 */
+.shop-market .horse.c2 { background: #2a2420; } /* 黑鬃 */
+.shop-market .horse.c3 { background: #cfc4b2; } /* 白蹄 */
+.shop-market .horse.c4 { background: repeating-linear-gradient(60deg, #6b4a2a 0 6px, #e8d6ad 6px 10px); } /* 花斑 */
+.shop-market .horse.c5 { background: #b58a4a; } /* 黃棕 */
+.shop-market .horse-card { margin: 8px 2px 0; padding: 8px 10px; display: grid; gap: 4px; border: 2px solid #6b4a2a; border-radius: 10px; background: var(--paper); color: var(--ink); font-size: 12px; }
+.shop-market .horse-card h4 { margin: 0; font: 600 15px var(--serif); }
+.shop-market .horse-card h4 small { font: 11px var(--sans); color: var(--ink-2); }
+.shop-market .horse-card .cmp { margin: 0; color: var(--accent); }
+.shop-market .horse-card .abil, .shop-market .horse-card .fed { display: grid; grid-template-columns: 58px 1fr 38px; gap: 6px; align-items: center; font-size: 11px; }
+.shop-market .horse-card .l { color: var(--ink-2); }
+.shop-market .horse-card .n { text-align: right; }
+.shop-market .horse-card .v { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.shop-market .horse-card .v i { display: block; height: 100%; background: var(--accent); }
+.shop-market .horse-card .fed .v i { background: var(--rou); }
+.shop-market .horse-card .fed small { grid-column: 1 / -1; color: var(--ink-2); }
+.shop-market .horse-act { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.shop-market .horse-act small { font-size: 11px; opacity: 0.85; }
+@media (prefers-color-scheme: dark) {
+  .shop-layer.shop-market { background: linear-gradient(180deg, #4a3a26 0%, #3a2c1c 55%, #24190f 100%); color: #f2e5c6; }
+  .shop-market .shop-back, .shop-market .shop-silver { color: #e8d6ad; }
+}
+/* 懸賞榜（第四節）：木紋底；手上那一排、告示（釘子、微微歪著）、已揭與交差的朱印、放大的紙 */
+.shop-layer.shop-board { background: repeating-linear-gradient(90deg, #6b4a2a 0 22px, #5e4024 22px 24px, #74512e 24px 46px); color: #f2e5c6; }
+.shop-board .held-row { padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.25); font-size: 12px; }
+.shop-board .held-row p { margin: 0 0 4px; } /* 手上那一排的外框不叫 .held：揭著的告示是 .note.held */
+.shop-board .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.shop-board .slot { display: grid; gap: 2px; min-width: 0; text-align: left; padding: 6px; border: 1px solid #b7862b; border-radius: 6px; background: var(--paper); color: var(--ink); font: 11px var(--sans); }
+.shop-board .slot b { font: 600 12px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-board .slot.empty { display: flex; align-items: center; justify-content: center; background: transparent; color: #e8d6ad; border-style: dashed; }
+.shop-board .board { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 12px; }
+.shop-board .note { position: relative; display: grid; gap: 2px; text-align: left; padding: 10px 8px 8px; border: 0; border-top: 4px solid #8a6a42; border-radius: 2px;
+  background: var(--paper); color: var(--ink); font: 11px/1.45 var(--sans); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+.shop-board .note:nth-child(4n+1) { transform: rotate(-2deg); }
+.shop-board .note:nth-child(4n+2) { transform: rotate(1.5deg); }
+.shop-board .note:nth-child(4n+3) { transform: rotate(1deg); }
+.shop-board .note:nth-child(4n) { transform: rotate(-1deg); }
+.shop-board .note::before { content: ""; position: absolute; top: -7px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #3a2618; } /* 釘子 */
+.shop-board .note b { font: 600 14px var(--serif); }
+.shop-board .note .k, .shop-board .note .due { font-size: 10.5px; color: var(--ink-2); }
+.shop-board .note .prize { color: var(--accent); }
+.shop-board .note.k-strike, .shop-board .paper.k-strike { border-top-color: var(--gang); }
+.shop-board .note.k-scout, .shop-board .paper.k-scout { border-top-color: var(--kuai); }
+.shop-board .note.k-escort, .shop-board .paper.k-escort { border-top-color: var(--rou); }
+.shop-board .note.k-art, .shop-board .note.k-arms, .shop-board .paper.k-art, .shop-board .paper.k-arms { border: 2px solid #c9a03a; border-top-width: 4px; }
+.shop-board .note.k-wanted, .shop-board .paper.k-wanted { border-top-color: #1e1a16; }
+.shop-board .note.dim { opacity: 0.6; }
+.shop-board .stamp { position: absolute; top: 6px; right: 6px; transform: rotate(10deg); padding: 2px 5px; border: 2px solid var(--accent); border-radius: 4px;
+  color: var(--accent); background: var(--paper); font: 600 12px var(--serif); font-style: normal; }
+.shop-board .board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
+.shop-board .board-zoom { overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding-top: calc(var(--top, 0px) + 56px); } /* 交出的清單很長時紙比畫面高：可以捲，短的照舊置中（紙的上下 margin auto）（終審 I2） */
+.shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列疊在放大的紙上面：出店按得到（終審 I3）；實心底，捲動的紙不從底下透出來 */
+.shop-board .board-zoom .paper { position: relative; width: min(340px, 100%); display: grid; gap: 6px; padding: 16px 14px 12px; border-top: 6px solid #8a6a42; border-radius: 4px;
+  background: var(--paper); color: var(--ink); font-size: 13px; flex-shrink: 0; margin: auto 0; }
+.shop-board .paper h4 { margin: 0; font: 600 18px var(--serif); }
+.shop-board .paper .k, .shop-board .paper .due, .shop-board .paper .why { font-size: 12px; color: var(--ink-2); }
+.shop-board .paper .have { color: var(--accent); }
+.shop-board .paper p { margin: 0; }
+.shop-board .paper .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.shop-board .paper .btns.one { grid-template-columns: 1fr; }
+.shop-board .paper .hand-in { display: grid; gap: 6px; }
+.shop-board .paper .hand-in .btn { text-align: left; }
+.shop-layer .paper .btn.ghost { color: var(--ink); border-color: var(--line); } /* 紙底（第一批的淡框鈕是暗底的顏色） */
+.shop-board .board-stamp { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  pointer-events: none; color: #f2e5c6; animation: stampfade 1.4s ease-out forwards; }
+.shop-board .stamp.big { position: static; transform: rotate(-8deg); padding: 6px 14px; border-width: 4px; font-size: 34px; }
+@keyframes stampfade { 0% { opacity: 0; transform: scale(1.4); } 20% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .shop-board .board-stamp { animation: none; } }

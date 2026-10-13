@@ -81,6 +81,10 @@
     shopOpened: false, // 出爐卡打開了沒（點了麻布）
     shopFiring: false, // 開爐等回應的那一下爐火竄高（減少動態效果的人不跑）
     shopMore: false, // 裝備庫頁按了「再列 N 件」
+    shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
+    boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
+    boardStamp: null, // 剛交差的那一張：{ id, title }，蓋「交差」朱印、淡出之後清掉（boardHanded）
+    divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
@@ -287,10 +291,13 @@
     const changed = key !== S.mainKey;
     // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
     const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
-    // 店面開了或收了（店面獨立介面設計 1.1）：從架上那一頁、空爐重新來；收起店時出爐卡一起收（只動 S 的欄位：setMain 會被單獨切出去測）
-    if (!!main.shop !== !!(S.main && S.main.shop)) {
+    // 店面開了、收了或換了一間（店面獨立介面設計 1.1）：從頭來——鐵匠鋪從架上那一頁、空爐，馬市點著你騎的，懸賞榜不放大；
+    // 離開鐵匠鋪時出爐卡一起收（只動 S 的欄位：setMain 會被單獨切出去測）。比的是哪一間店（main.shop.shop），不是有沒有店：出了鐵匠鋪、兩次輪詢之間又走進馬市，有沒有店都是「有」，鐵匠鋪那幾個欄位卻得清掉
+    const shopKind = (v) => (v && v.shop ? v.shop.shop : null);
+    if (shopKind(main) !== shopKind(S.main)) {
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
-      if (!main.shop) { S.shopReveal = null; S.shopOpened = false; }
+      S.shopHorse = null; S.boardZoom = null; S.boardStamp = null;
+      if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
@@ -2492,17 +2499,134 @@
   const SHOP_ATTR = { 剛: "gang", 快: "kuai", 柔: "rou", 慢: "man" };
   const SHOP_RACK_LIST = 8;
 
+  // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求藝、求兵挑東西）
+  // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）
   function shopHtml(shop) {
+    const kind = shop.shop || "smith";
+    const back = shop.picked
+      ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
+      : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
+    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : smithHtml(shop);
+    return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
+      <header class="shop-bar">${back}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
+      <p class="shop-line">${esc(shop.line)}</p>
+      ${body}
+    </div>`;
+  }
+
+  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡
+  function smithHtml(shop) {
     const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
     const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[S.shopTab] || shelfHtml;
-    return `<div class="shop-layer shop-smith" role="dialog" aria-label="${esc(shop.sign)}">
-      <header class="shop-bar"><button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button><span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
-      <p class="shop-line">${esc(shop.line)}</p>
-      ${pages}
+    return `${pages}
       <div class="shop-body">${body(shop)}</div>
       <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
-      ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}
-    </div>`;
+      ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
+  }
+
+  // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
+  // （market:feed、market:buy、market:wield:<id>）。字待 joy 潤 ──
+  function marketHtml(shop) {
+    const live = shop.stalls.filter((h) => !h.empty);
+    const pick = live.find((h) => h.id === S.shopHorse) || live.find((h) => h.id === shop.focus) || live[0];
+    const stall = (h) => (h.empty
+      ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
+      : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
+          <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${esc(h.sub)}</small></button>`);
+    return `<div class="shop-body"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
+      ${pick ? horseCard(pick) : ""}</div>`;
+  }
+
+  // 點著那一匹的卡：名字、階品、跟你騎的比、四項本事的長條、你騎的那匹多飽足長條；底下一顆照伺服器給的（做不了寫原因）
+  function horseCard(h) {
+    const width = (v) => Math.max(0, Math.min(100, v | 0));
+    const bars = h.bars.map((b) => `<div class="abil"><span class="l">${esc(b.label)}</span><span class="v"><i style="width:${width(b.value)}%"></i></span><span class="n">${esc(b.text)}</span></div>`).join("");
+    const fed = h.fed ? `<div class="fed"><span class="l">${esc(h.fed.word)} ${h.fed.value | 0}</span><span class="v"><i style="width:${width(h.fed.value)}%"></i></span>${h.fed.note ? `<small>${esc(h.fed.note)}</small>` : ""}</div>` : "";
+    const a = h.action;
+    const sub = a.enabled ? a.use : a.why;
+    return `<article class="horse-card"><h4>${esc(h.name)} <small>${esc(h.grade)}</small></h4>
+        ${h.compare ? `<p class="cmp">${esc(h.compare)}</p>` : ""}<div class="bars">${bars}</div>${fed}
+        <button class="btn primary horse-act" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}><b>${esc(a.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</button>
+      </article>`;
+  }
+
+  // ── 懸賞榜（第四節）：上面一排手上揭著的格子，木板上釘告示（顏色分種類：討伐紅、打探藍、護送綠、求藝求兵金邊、通緝黑；
+  // 揭了的蓋「已揭」），點一張放大成一張紙。揭下、交出…送現在的選項 id；放棄先問一次（shop-ask）。字待 joy 潤 ──
+  function boardHtml(shop) {
+    const zoomId = shop.picked || S.boardZoom; // 第三層開著（伺服器的 picked）：放大的一定是那一張
+    const zoom = zoomId ? shop.notes.find((n) => n.id === zoomId) : null; // 被拿走了的告示跟著收
+    const held = shop.held;
+    const slots = held.rows.map((r) => `<button class="slot" data-act="board-zoom" data-id="${esc(r.id)}"><b>${esc(r.title)}</b><small>${esc(r.due)}</small></button>`).join("")
+      + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
+    const note = (n) => `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
+        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b><span class="how">${esc(n.how)}</span>
+        ${n.prize ? `<span class="prize">${esc(n.prize)}</span>` : ""}${n.have ? `<span class="prize">${esc(n.have)}</span>` : ""}
+        <span class="due">${esc(n.due)}</span>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
+    const board = shop.notes.length ? `<div class="board">${shop.notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
+    return `<div class="shop-body"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
+      ${zoom ? paperHtml(zoom, shop) : ""}${S.boardStamp ? stampHtml(S.boardStamp) : ""}`;
+  }
+
+  // 放大的那一張紙：完整的要求、賞、期限與名額，底下的鈕照那一張（第三層開著：合用的東西一件一顆，每顆照選單上的 confirm 先問一次）
+  function paperHtml(n, shop) {
+    const a = n.action;
+    let btns;
+    if (shop.picked === n.id) {
+      btns = `<div class="hand-in">${shop.hand_in.map((o) => `<button class="btn${o.enabled ? "" : " ghost"}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`).join("")}</div>
+        <div class="btns one"><button class="btn" data-act="board-close">收起</button></div>`;
+    } else if (a.verb === "drop") {
+      btns = `<div class="btns"><button class="btn danger" data-act="shop-ask" data-id="${esc(a.id)}" data-confirm="${esc(a.confirm)}" data-yes="放棄">放棄</button><button class="btn" data-act="board-close">收起</button></div>`;
+    } else {
+      btns = `${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}<div class="btns"><button class="btn primary" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}>${a.verb === "pick" ? "交出…" : "揭下"}</button><button class="btn" data-act="board-close">放回去</button></div>`;
+    }
+    return `<div class="reveal-layer board-zoom"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
+        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
+        <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}<p class="reward">賞：${esc(n.reward)}</p><p class="due">${esc(n.due)}</p>
+        ${btns}</article></div>`;
+  }
+
+  function stampHtml(stamp) {
+    return `<div class="board-stamp" aria-live="polite"><i class="stamp big">交差</i><small>${esc(stamp.title)}</small></div>`;
+  }
+
+  // 第三層（替一張求藝、求兵挑東西）開著時選單上只有那一張的交出鈕與「回到懸賞榜」：放大別張、收起、出店之前先送 bounty:unpick
+  // （不然按下去會被 Game.choose 擋成「榜上的情形變了」）
+  async function boardUnpick(el) {
+    const shop = S.main && S.main.shop;
+    if (shop && shop.shop === "board" && shop.picked) await choose(el, shop.unpick);
+  }
+  async function boardZoom(el, id) {
+    const shop = S.main && S.main.shop;
+    if (shop && shop.picked && shop.picked !== id) await boardUnpick(el);
+    S.boardZoom = id;
+    renderShop();
+  }
+  async function boardClose(el) {
+    S.boardZoom = null;
+    await boardUnpick(el);
+    renderShop();
+  }
+  async function boardLeave(el) {
+    await boardUnpick(el);
+    const shop = S.main && S.main.shop;
+    if (shop && shop.shop === "board") await choose(el, shop.back);
+  }
+  // 交差之後（第四節）：送了 bounty:give:<懸賞>:…、回來的木板上沒有那一張了（自己交過的不再列），蓋「交差」朱印再淡出
+  // （減少動態效果的人不跑淡出，時間到照樣收掉）。被拒絕的（那一張還在）不蓋
+  const STAMP_MS = 1400;
+  function boardHanded(id, before) {
+    const shop = S.main && S.main.shop;
+    const bid = id.split(":")[2];
+    const was = before && before.shop === "board" ? before.notes.find((n) => n.id === bid) : null;
+    if (!was || !shop || shop.shop !== "board" || shop.notes.some((n) => n.id === bid)) return;
+    S.boardStamp = { id: bid, title: was.title };
+    S.boardZoom = null;
+    renderShop();
+    setTimeout(() => {
+      if (!S.boardStamp || S.boardStamp.id !== bid) return;
+      S.boardStamp = null;
+      if (S.main && S.main.shop) renderShop();
+    }, STAMP_MS);
   }
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
@@ -2538,7 +2662,7 @@
       ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
       : `${r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`);
     return `<p class="shop-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => `<div class="shop-row">
-        <div class="winfo"><b>【${esc(r.name)}】</b><span>${esc(line(r))}</span></div>
+        <div class="winfo"><b>【${esc(r.name)}】</b><span>${nbHtml(line(r))}</span></div>
         <div class="wbtns"><button class="btn small" data-act="shop-wield" data-id="${esc(r.id)}">換上</button>${r.keep
           ? `<button class="btn small ghost" disabled>${esc(r.keep)}</button>`
           : `<button class="btn small ghost" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}">拆解</button>`}</div>
@@ -2552,34 +2676,39 @@
     const layer = document.querySelector(".shop-layer");
     if (!layer || !S.main || !S.main.shop) { render(); return; }
     const top = keep ? (layer.querySelector?.(".shop-body")?.scrollTop || 0) : 0;
+    const left = keep ? (layer.querySelector?.(".stalls")?.scrollLeft || 0) : 0; // 馬廄那一排左右滑到哪（第三節）
     layer.outerHTML = shopHtml(S.main.shop);
     const body = top ? document.querySelector(".shop-layer .shop-body") : null;
     if (body) body.scrollTop = top;
+    const stalls = left ? document.querySelector(".shop-layer .stalls") : null;
+    if (stalls) stalls.scrollLeft = left;
   }
 
   // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，
   // 同江湖頁的規則）。回 true：店面開著，底下的頁面被蓋住、不必再畫
   function shopPolled(old) {
-    const was = !!(old && old.shop), now = !!(S.main && S.main.shop);
-    if (was !== now) { render(); return true; }
+    const was = old && old.shop ? old.shop.shop : null, now = S.main && S.main.shop ? S.main.shop.shop : null;
+    if (was !== now) { render(); return true; } // 開了、收了、換了一間：整個重畫
     if (!now) return false;
     if (JSON.stringify(old.shop) !== JSON.stringify(S.main.shop)) {
       if (pointerHeld) redrawHeld = true;
-      else { renderShop(); if (S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
+      else { renderShop(); if (now === "smith" && S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
     }
     return true;
   }
 
   // 店裡的換上、拆解、神器定名：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講
   async function shopMx(op, body) {
+    let said = "";
     await busy(async () => {
       const r = await api(`/api/menxia/${op}`, body);
       if (r.menxia) S.menxia = r.menxia;
       setMain(r.main);
       render();
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (text) toast(text);
+      said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (said) toast(said);
     });
+    return said; // 店面上定名被拒時，表單裡留這一句（FB-193）
   }
 
   // 神器原品定名的表單（打造隱藏配方設計 5.2）：修練頁那一列底下、店面的出爐卡與裝備庫都用這一張。shop 為真時表單送店面的那一條
@@ -2590,6 +2719,7 @@
         <small>你打出了神器</small>
         <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
         <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
+        ${S.divineWhy[id] ? `<p class="form-why">${esc(S.divineWhy[id])}</p>` : ""}
         <button class="btn small ghost" type="button" data-act="${shop ? "shop-divine-keep" : "divine-keep"}" data-id="${esc(id)}">沿用譜名【${esc(pattern)}】</button>
       </form>`;
   }
@@ -3757,11 +3887,13 @@
       const label = btn.lastElementChild || btn;
       const stop = (talking || (opt && opt.wait)) ? watchQueue(label, label.textContent) : () => {};
       try {
+        const shopBefore = S.main && S.main.shop; // 懸賞榜交出之前的木板（boardHanded 比）
         const r = await api("/api/choose", { id });
         S.answering = false;
         S.saying = false;
         S.wheelSel = null; // 收起展開的移動
         applyMain(r.main);
+        if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
         window.scrollTo({ top: 0, behavior: "smooth" });
         // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
         // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
@@ -4179,6 +4311,11 @@
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "shop-horse": S.shopHorse = el.dataset.id; renderShop(); break; // 馬市點一匹（第三節）：只換底下那張卡
+        case "board-zoom": await boardZoom(el, el.dataset.id); break; // 懸賞榜點一張告示（第四節）：放大成一張紙
+        case "board-close": await boardClose(el); break; // 放回去、收起
+        case "shop-ask": ask(el.dataset.confirm, el.dataset.yes || "照做", () => choose(el, el.dataset.id, true)); break; // 選單上沒有問句的，問在這一層（放棄）
+        case "shop-leave": await boardLeave(el); break; // 第三層開著時出店
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
@@ -4378,14 +4515,20 @@
         // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
         if (!data.name.trim()) { toast("先取個名字。"); return; }
         await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
-        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打（同絕學定名那張）。
-        // 表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；定成了那一列不再畫表單，找不到就什麼都不放
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
+        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
+        // 定成了那一列不再畫表單，找不到就什麼都不放
+        if (document.getElementById("name-divine-" + form.dataset.id)) {
+          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          renderPage();
+        }
         const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
       } else if (form.dataset && form.dataset.op === "shop-name-divine") {
         // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）
         if (!data.name.trim()) { toast("先取個名字。"); return; }
-        await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        const said = await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        if (document.getElementById("shop-name-divine-" + form.dataset.id)) { S.divineWhy[form.dataset.id] = said; renderShop(); } // 被拒的原因留在表單裡（FB-193）
         const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
       } else if (form.id === "seclude") {

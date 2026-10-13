@@ -1,13 +1,15 @@
-"""店面的畫面資料（docs/superpowers/specs/2026-10-13-店面獨立介面-design.md 第六節；第一批：共用店面＋鐵匠鋪）。
+"""店面的畫面資料（docs/superpowers/specs/2026-10-13-店面獨立介面-design.md 第六節；第一批：共用店面＋鐵匠鋪；第二批：馬市、懸賞榜）。
 
 只讀：不改數值、不碰亂數、不 import engine。每一個「做不了」的原因都從現在的規則函式拿（smithing.forge_problem、temper_problem、
 weapons.buy_problem、repair_problem……），網頁不自己判斷規則。掌櫃的話照 PlayerState.shop_line（店裡最後一件事的情況鍵，引擎記）
-從 content/shop_lines.json 挑一句（1.4）；鐵匠順口那一句（shop_clue）蓋過它。"""
+從 content/shop_lines.json 挑一句（1.4）；鐵匠順口那一句（shop_clue）蓋過它；被拒的那一句只撐到被拒的原因還成立（shop_hold，FB-192）。"""
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 
-from . import armor, equipment, forge_secrets, skillview, smithing, team, weapons
+from . import armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
 from .models import WEAPON_KINDS, Content
 from .state import Equipment, GameState
 from .world_state import WorldStateStore
@@ -17,7 +19,14 @@ SMITH_SITUATIONS = (
     "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
     "short_silver", "rack_full", "refused",
 )
-SITUATIONS = {"smith": SMITH_SITUATIONS}  # 店 → 情況（第二批加 market、board）；content.check_shop_lines 照它驗
+# 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
+# 多半只在兩個分頁搶的時候出現
+MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
+BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
+SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
+# 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
+BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID)}
+_HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
 
@@ -31,6 +40,55 @@ def problem_key(problem: str | None, done: str) -> str:
     return "rack_full" if problem == RACK_FULL else "refused"
 
 
+def board_key(problem: str | None, done: str) -> str:
+    """懸賞榜這一下的情況鍵：做成了是 done；手上揭滿了（bounties.HELD_FULL，寫的是手上真的有幾張）一種；其餘的擋法一律 refused。"""
+    if problem is None:
+        return done
+    return "held_full" if problem.startswith(_HELD_HEAD) else "refused"
+
+
+# 被拒的情況（FB-192）：那一句只撐到被拒的原因還成立的時候，原因不成立了就換回平常那一句（進門那一組）——錢補夠了、裝備庫騰出位子了、
+# 手上那一張作廢了；其餘的擋法（素材不夠、吃飽了、下榜了……）看不出原因，照「錢、素材、身上與裝備庫的東西都沒變」算還成立
+REFUSALS = ("short_silver", "rack_full", "held_full", "refused")
+
+
+def _mark(state: GameState) -> str:
+    """被拒那一下的狀態指紋：銀兩、背包、身上與裝備庫每一件的 id 與磨損、淬煉。"""
+    p = state.player
+    gear = [(e.id, e.edge, e.tempers) for e in (p.weapon, p.armor, p.mount, p.treasure, *p.rack) if e is not None]
+    raw = json.dumps([p.stats.get("silver", 0), sorted(p.materials.items()), gear], ensure_ascii=False)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def hold_for(state: GameState, content: Content, key: str, problem: str | None) -> str:
+    """這一下的那一句要撐到什麼時候（PlayerState.shop_hold）：錢不夠（「還差 N 兩」）記要的銀兩、裝備庫滿了記 rack、手上揭滿了記 held，
+    其餘被拒的記狀態指紋；做成了的是空字串。"""
+    if key == "short_silver":
+        digits = re.search(r"\d+", problem or "")
+        if digits:
+            return f"silver:{state.player.stats.get('silver', 0) + int(digits.group())}"
+    if key == "rack_full":
+        return "rack"
+    if key == "held_full":
+        return "held"
+    return f"same:{_mark(state)}" if key in REFUSALS else ""
+
+
+def still_holds(state: GameState, content: Content, hold: str) -> bool:
+    """被拒的原因還成立嗎（hold_for 記的）：沒記的（舊存檔、做成了的情況）算成立。"""
+    p = state.player
+    kind, _, arg = hold.partition(":")
+    if kind == "silver":
+        return p.stats.get("silver", 0) < int(arg)
+    if kind == "rack":
+        return len(p.rack) >= content.config.weapons.rack_cap
+    if kind == "held":
+        return len(bounties.mine(state, content)) >= content.config.bounties.max_taken
+    if kind == "same":
+        return _mark(state) == arg
+    return True
+
+
 def forged_key(item: Equipment) -> str:
     """打完一爐那一句照什麼分（1.4）：神器（原品、仿品）＞名器＞品質。"""
     if item.original or item.copy_of is not None:
@@ -42,12 +100,15 @@ def forged_key(item: Equipment) -> str:
 
 def line_text(state: GameState, content: Content, shop: str) -> str:
     """招牌底下那一句：鐵匠順口說了口訣就是那一句；不然照情況鍵（沒有、或內容沒寫那一種就用進門那一組）挑一句，
-    照「名號｜情況｜那一下的時間」的雜湊挑（不碰 Game.rng；輪詢時同一句不換）。內容沒寫是空字串。"""
+    照「名號｜情況｜那一下的時間」的雜湊挑（不碰 Game.rng；輪詢時同一句不換）。內容沒寫是空字串。被拒的那一句（REFUSALS）只撐到被拒的原因
+    還成立（still_holds）：錢補夠了……就換回進門那一組，不必等下一個動作（FB-192）。"""
     p = state.player
     if p.shop_clue:
         return p.shop_clue
     pool = content.shop_lines.get(shop, {})
     key = p.shop_line if pool.get(p.shop_line) else "enter"
+    if key in REFUSALS and not still_holds(state, content, p.shop_hold):
+        key = "enter"
     lines = pool.get(key) or []
     if not lines:
         return ""
@@ -276,4 +337,152 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         "first": bool(report.get("first")) and item.secret is not None,
         "where": "worn" if worn is not None and worn.id == item.id else "rack",
         "divine": forge_secrets.unnamed_originals(state, world).get(item.id),
+    }
+
+
+# ── 馬市（第三節）──
+NO_HORSE = "還沒有馬"  # 待 joy 潤：沒有馬時「你騎的」那一間
+STALL_WHO = {"worn": "你騎的", "sale": "待售", "rack": "裝備庫"}  # 待 joy 潤：馬廄上那一行
+ABILITY_NAMES = (("save", "省體力"), ("speed", "路上快"), ("cavalry", "決戰騎兵"), ("escape", "落敗脫身"))  # 同修練頁坐騎那一列（待 joy 潤）
+FASTER, SLOWER, SAME = "比你騎的快", "比你騎的慢", "跟你騎的一樣快"  # 待 joy 潤：照 mounts.better_mount 的比法（吃飽的腳力）
+HUNGRY_NOTE = "沒吃飽，四項本事都跟著打了折"  # 待 joy 潤：你騎的那匹飽足不到 100 時，飽足長條底下
+BUY_TEXT = "買下 {price} 兩"  # 待 joy 潤
+FEED_TEXT, WIELD_TEXT = "餵", "換上"  # 待 joy 潤
+
+
+def _coat(item: Equipment) -> int:
+    """馬廄裡那匹的毛色（畫法用）：名字開頭對上 mounts.COATS 的第幾個；名駒、名將贈禮的專名對不上是 -1（網頁畫成預設色）。"""
+    return next((i for i, coat in enumerate(mounts.COATS) if item.name.startswith(coat)), -1)
+
+
+def _bars(content: Content, item: Equipment) -> list[dict]:
+    """四項本事的長條（第三節）：數字同修練頁那一列（mounts.abilities），value 是長條的寬（整數百分比，.5 進位同 mounts.pct）。"""
+    got = mounts.abilities(content, item)
+    return [{"key": key, "label": label, "value": mounts.half_up(got[key] * 100), "text": mounts.pct(got[key])} for key, label in ABILITY_NAMES]
+
+
+def _stall(content: Content, item: Equipment, role: str, sub: str, action: dict) -> dict:
+    return {
+        "id": item.id, "role": role, "who": STALL_WHO[role], "empty": False, "name": mounts.name_of(item), "grade": mounts.grade(item),
+        "sub": sub, "coat": _coat(item), "bars": _bars(content, item), "fed": None, "compare": "", "action": action,
+    }
+
+
+def market_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
+    """馬市的店面（第三節）：一排馬廄——你騎的（沒有馬是一間空的）、馬販待售的那匹（mounts.shop_item）、裝備庫裡的馬一匹一間。
+    每一間：名字、階品、四項本事的長條；你騎的那匹多飽足長條。卡上那一顆照現在的選項 id：你騎的「餵」（market:feed，做不了照
+    mounts.feed_problem）、待售的「買下」（market:buy，mounts.buy_problem）、裝備庫裡的「換上」（market:wield:<id>，選單本來就每一匹
+    各列一顆）與「比你騎的快／慢」。focus：進門預設點著的那一間（你騎的，沒有馬就待售的）。world 沒用到（三間店同一個呼叫法）。"""
+    p = state.player
+    stalls: list[dict] = []
+    if p.mount is not None:
+        problem = mounts.feed_problem(state, content)
+        worn = _stall(content, p.mount, "worn", mounts.grade(p.mount), {
+            "id": mounts.FEED, "label": FEED_TEXT, "use": mounts.feed_note(state, content) if problem is None else "",
+            "enabled": problem is None, "why": problem,
+        })
+        worn["fed"] = {"word": mounts.WEAR_WORD, "value": p.mount.edge, "note": HUNGRY_NOTE if p.mount.edge < 100 else ""}
+        stalls.append(worn)
+    else:
+        stalls.append({"id": "", "role": "worn", "who": STALL_WHO["worn"], "empty": True, "name": NO_HORSE})
+    sale, price = mounts.shop_item(state, content), content.config.mounts.shop_price
+    problem = mounts.buy_problem(state, content)
+    stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
+        "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
+    }))
+    ridden = mounts.fresh_power(content, p.mount) if p.mount is not None else None
+    for item in equipment.in_slot(p, "mount"):
+        stall = _stall(content, item, "rack", mounts.grade(item),
+                       {"id": f"{mounts.WIELD}{item.id}", "label": WIELD_TEXT, "use": "", "enabled": True, "why": None})
+        if ridden is not None:
+            mine = mounts.fresh_power(content, item)
+            stall["compare"] = FASTER if mine > ridden + 1e-9 else SLOWER if mine < ridden - 1e-9 else SAME
+        stalls.append(stall)
+    return {
+        "shop": "market",
+        "sign": f"{content.locations[p.location].name}{mounts.MARKET}",
+        "silver": p.stats.get("silver", 0),
+        "line": line_text(state, content, "market"),
+        "back": mounts.BACK,
+        "stalls": stalls,
+        "focus": p.mount.id if p.mount is not None else sale.id,
+    }
+
+
+# ── 懸賞榜（第四節）──
+HELD_HEAD = "你手上揭著的（{n}／{cap}）"  # 待 joy 潤：最上面那一排的標題
+SLOT_LEFT = "還能揭 {n} 張"  # 待 joy 潤：那一排最後的空格
+HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求藝、求兵的告示上
+NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求藝、求兵交不出時，放大的紙上「交出…」灰掉的原因
+PRIZE_SHORT = "另有重賞"  # 待 joy 潤：告示上（放大的紙上，賞那一段照 reward_text 寫是哪一種）
+DROP_ASK = "把「{title}」放回榜上？放回去就不算你的了。"  # 待 joy 潤：放棄先問一次（選單上的 bounty:drop 沒有問句，問在網頁那一層）
+
+
+def _headline(title: str) -> str:
+    """告示上那一行大字：短標題「・」後面那一段（「打探・湖邊」→「湖邊」）。"""
+    return title.partition("・")[2] or title
+
+
+def board_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
+    """懸賞榜的店面（第四節）：最上面一排手上揭著的（bounties.mine）；木板上是看得到的告示（bounties.visible，同選單的第二層），
+    揭著的在前、交得出的求藝求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（due_line）、重賞、求藝求兵
+    你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求藝求兵「交出…」（bounty:pick，
+    交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
+    同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
+    不寫：照現在的選單寫陣營，畫面不露出誰是假人（設計 6.6）。"""
+    p = state.player
+    shown = bounties.visible(state, content)
+    mine = bounties.mine(state, content)
+    mine_ids = {b.id for b in mine}
+    memo: dict = {}
+    picked = next((b for b in shown if b.id == p.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
+    picked_items = bounties.fitting(state, content, world, picked, memo) if picked is not None else []
+    if not picked_items:
+        picked = None  # 那一張下榜了、交不出了就當它不存在（同 _bounty_options）
+    ranked = []
+    for order, b in enumerate(shown):
+        title = bounties.title(content, b)
+        note = {
+            "id": b.id, "kind": b.kind, "kind_name": bounties.KIND_NAMES.get(b.kind, b.kind), "issuer": bounties.issuer(content, b),
+            "title": title, "head": _headline(title), "how": bounties.how(content, b), "reward": bounties.reward_text(state, content, b),
+            "due": bounties.due_line(state, content, b), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
+            "held": b.id in mine_ids, "have": "",
+        }
+        rank = 2
+        if b.id in mine_ids:
+            rank = 0
+            note["action"] = {"id": f"bounty:drop:{b.id}", "verb": "drop", "enabled": True, "why": None, "confirm": DROP_ASK.format(title=title)}
+        elif b.kind in bounties.GIVE_KINDS:
+            items = bounties.fitting(state, content, world, b, memo)
+            if items:
+                rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.UNITS[b.kind])
+            # 交不出的原因照規則：只有神器原品或本命兵器對得上、只有身上正在練或等著定名的那門對得上（同第三層灰掉那幾行），都不是才寫 NO_FIT
+            blocked = bounties.blocked_arts(state, content, world, b, memo)
+            why = None if items else (bounties.only_original(state, b).strip("（）") or (blocked[0][1] if blocked else NO_FIT))
+            note["action"] = {"id": f"bounty:pick:{b.id}", "verb": "pick", "enabled": bool(items), "why": why}
+        else:
+            problem = bounties.take_problem(state, content, b)
+            note["action"] = {"id": f"bounty:take:{b.id}", "verb": "take", "enabled": problem is None, "why": problem}
+        ranked.append((rank, order, note))
+    hand_in = []
+    if picked is not None:
+        hand_in = [
+            {"id": o.id, "label": o.label, "enabled": o.enabled}
+            for o in bounties.hand_in_options(state, content, world, picked, picked_items, memo) if o.id != bounties.UNPICK_ID
+        ]
+    cap = content.config.bounties.max_taken
+    held = [{"id": b.id, "title": bounties.title(content, b), "due": bounties.due_text(b, content, state.world)} for b in mine]
+    left = max(0, cap - len(held))  # 截殺關了又開時手上可以超過上限（FB-155）：照實列，空格是 0
+    return {
+        "shop": "board",
+        "sign": f"{content.locations[p.location].name}{bounties.BOARD}",
+        "silver": p.stats.get("silver", 0),
+        "line": line_text(state, content, "board"),
+        "back": "bounty:back",
+        "unpick": bounties.UNPICK_ID,
+        "held": {"rows": held, "head": HELD_HEAD.format(n=len(held), cap=cap), "left": left, "left_text": SLOT_LEFT.format(n=left) if left else ""},
+        "notes": [note for _rank, _order, note in sorted(ranked, key=lambda r: (r[0], r[1]))],
+        "empty": "" if shown else bounties.BOARD_EMPTY,
+        "picked": picked.id if picked is not None else None,
+        "hand_in": hand_in,
     }

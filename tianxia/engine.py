@@ -585,7 +585,7 @@ class Game:
         if p.picking_audience and not self._audience_hall():
             p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.picking_bounty and not bounties.board_here(s, c):
-            p.picking_bounty = False  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜
+            bounties.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
@@ -593,7 +593,7 @@ class Game:
         ):
             p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
-            p.picking_market = False  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5）
+            mounts.close_market(p)  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5），馬販那一句一併清掉
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -728,7 +728,7 @@ class Game:
         if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
             self.state.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
-            self.state.player.picking_market = False  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
+            mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -2095,8 +2095,10 @@ class Game:
         if what == "convoy":
             return self._take_convoy()
         if what == "bounties":
-            self.state.player.picking_bounty = True  # 打開懸賞榜（見 _bounty_options），不花體力
-            self.state.player.bounty_pick = None  # 每次打開都從第二層開始（第三層是替一張求藝、求兵挑東西）
+            p = self.state.player
+            # 打開懸賞榜（見 _bounty_options），不花體力；每次打開都從第二層開始（第三層是替一張求藝、求兵挑東西）
+            p.picking_bounty, p.bounty_pick, p.shop_clue = True, None, ""
+            self._shop_say("enter")  # 店面上榜吏那一句（店面獨立介面設計 1.4）
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         if what == "smith":
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
@@ -2104,7 +2106,9 @@ class Game:
             self._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "market":
-            self.state.player.picking_market = True  # 打開馬市（見 _market_options），不花體力
+            p = self.state.player
+            p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 _market_options），不花體力
+            self._shop_say("enter")  # 店面上馬販那一句（1.4）
             return [mounts.ENTERED]
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
@@ -2685,17 +2689,23 @@ class Game:
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
-            s.player.picking_bounty, s.player.bounty_pick = False, None
+            bounties.close_board(s.player)
             return ["你離開了懸賞榜。"]
         if verb == "take":
+            b = next((x for x in bounties.open_bounties(s, c) if x.id == rest), None)
+            self._shop_after(bounties.take_problem(s, c, b) if b is not None else bounties.GONE, "take", shopview.board_key)  # 1.4
             return bounties.take(s, c, rest)
         if verb == "drop":
-            return bounties.drop(s, c, rest)
+            msgs = bounties.drop(s, c, rest)
+            self._shop_say("refused" if msgs == [bounties.NOT_HELD] else "drop")
+            return msgs
         if verb == "pick":
             b = next((x for x in s.world.bounties if x.id == rest), None)
             if b is None:
+                self._shop_say("refused")
                 return [bounties.GONE]
             s.player.bounty_pick = rest
+            self._shop_say("pick")
             return [bounties.pick_line(c, b)]
         if verb == "unpick":
             s.player.bounty_pick = None
@@ -2705,6 +2715,9 @@ class Game:
             msgs = bounties.give(s, c, self.world, bounty_id, item)
             if msgs[0].startswith(bounties.GIVEN_PREFIX):
                 s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
+                self._shop_say("give")
+            else:
+                self._shop_say("refused")
             return msgs
         return ["（此刻無法這麼做。）"]
 
@@ -2838,18 +2851,22 @@ class Game:
         return opts
 
     def _market(self, arg: str) -> list[str]:
-        """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。"""
+        """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。店面上馬販那一句照這一下的擋法記（1.4）。"""
         s, c = self.state, self.content
         verb, _, rest = arg.partition(":")
         if verb == "back":
-            s.player.picking_market = False
+            mounts.close_market(s.player)
             return [mounts.LEFT]
         if verb == "buy":
+            self._shop_after(mounts.buy_problem(s, c), "buy")
             return mounts.buy(s, c)
         if verb == "feed":
+            self._shop_after(mounts.feed_problem(s, c), "feed")
             return mounts.feed(s, c)
         if verb == "wield":
-            return mounts.wield(s, c, rest)
+            msgs = mounts.wield(s, c, rest)
+            self._shop_say("wield" if msgs[0].startswith(equipment.WIELDED.partition("{")[0]) else "refused")
+            return msgs
         return ["（此刻無法這麼做。）"]
 
     def _smith(self, arg: str) -> list[str]:
@@ -2883,19 +2900,19 @@ class Game:
             return self._smith_forge_once(kind, main, aux)[1]
         if verb in smithing.STEP_VERBS:
             if verb in ("temper", "armor-temper"):  # 店面上掌櫃那一句（1.4）：照淬煉之前的擋法
-                self._shop_say(shopview.problem_key(smithing.temper_problem(s, c, "armor" if verb == "armor-temper" else "weapon"), "temper"))
+                self._shop_after(smithing.temper_problem(s, c, "armor" if verb == "armor-temper" else "weapon"), "temper")
             return smithing.step(s, c, verb, rest)
         if verb == "buy":
-            self._shop_say(shopview.problem_key(weapons.buy_problem(s, c, rest), "buy"))
+            self._shop_after(weapons.buy_problem(s, c, rest), "buy")
             return weapons.buy(s, c, rest)
         if verb == "repair":
-            self._shop_say(shopview.problem_key(weapons.repair_problem(s, c), "repair"))
+            self._shop_after(weapons.repair_problem(s, c), "repair")
             return weapons.repair(s, c)
         if verb == "armor-buy":
-            self._shop_say(shopview.problem_key(armor.buy_problem(s, c, rest), "buy"))
+            self._shop_after(armor.buy_problem(s, c, rest), "buy")
             return armor.buy(s, c, rest)
         if verb == "armor-repair":
-            self._shop_say(shopview.problem_key(armor.repair_problem(s, c), "repair"))
+            self._shop_after(armor.repair_problem(s, c), "repair")
             return armor.repair(s, c)
         # 換上與拆解兩頁共用 id 開頭（兵:N、甲:N 本來就全角色唯一），照停在哪一頁限定欄位
         if verb == "wield":
@@ -2904,10 +2921,16 @@ class Game:
             return (armor.dismantle if equipment.page(s.player, c) == "armor" else weapons.dismantle)(s, c, rest)
         return ["（此刻無法這麼做。）"]
 
-    def _shop_say(self, key: str) -> None:
-        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵，與挑句子的種子（這一刻的季的時間）。"""
+    def _shop_say(self, key: str, problem: str | None = None) -> None:
+        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
+        撐到什麼時候（shopview.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
         p = self.state.player
         p.shop_line, p.shop_line_seed = key, int(self.state.world.time)
+        p.shop_hold = shopview.hold_for(self.state, self.content, key, problem)
+
+    def _shop_after(self, problem: str | None, done: str, keyer=None) -> None:
+        """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shopview.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
+        self._shop_say((keyer or shopview.problem_key)(problem, done), problem)
 
     def _smith_forge_once(self, kind: str, main: str, aux: str) -> tuple[Equipment | None, list[str], dict]:
         """開爐一次（一步一步單子的 forge-go 與店面的直接開爐共用）：防具的品質擲骰用自己的亂數（不動 Game.rng，FB-129；打造隱藏配方
@@ -2922,27 +2945,42 @@ class Game:
             s.player.smith_draft = None
             self._shop_say(shopview.forged_key(item))
         else:
-            self._shop_say(shopview.problem_key(problem, "refused"))
+            self._shop_after(problem, "refused")
         return item, msgs, report
 
-    def _shop_live(self, option_ids=None) -> bool:
-        """鐵匠鋪那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有「出店」（smith:back），而且前面沒有決戰、奪璽單挑的鈕。
-        決戰開打、休季時選單換成三招或「休季中」，鐵匠鋪那一串根本不在上面（picking_smith 卻還是真的）：這時給店面，出店會被拒絕、
-        人就困在店裡，休季還開得了爐（終審 Critical 1）。集結時決戰的鈕排在鐵匠鋪那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
-        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
-        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
-        return "smith:back" in ids and not any(i.startswith(("battle:", "seal:")) for i in ids)
-
-    def shop_view(self, option_ids=None) -> dict | None:
-        """店面（店面獨立介面設計 6.1）：開關開著、鐵匠鋪開著（picking_smith，人在城鎮）、鐵匠鋪那一串是眼前的選單（_shop_live）才有；
-        一步一步的單子還開著（開關關著時開的、舊存檔）就照舊畫那一串按鈕，不給店面（店面上的鈕在單子那一步不在選單上）。"""
+    def _shop_open(self) -> str | None:
+        """哪一間店開著（店面獨立介面設計 1.1；同 options() 的先後：懸賞榜、鐵匠鋪、馬市）。那個地方已經不開門了（同步之前）是 None；
+        鐵匠鋪的一步一步單子還開著（開關關著時開的、舊存檔）也是 None，照舊畫那一串按鈕（店面上的鈕在單子那一步不在選單上）。"""
         s, c = self.state, self.content
         p = s.player
-        if not c.config.shop_screens or not p.picking_smith or p.smith_draft is not None or not equipment.smith_open(s, c):
+        if p.picking_bounty:
+            return "board" if bounties.board_here(s, c) else None
+        if p.picking_smith:
+            return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else None
+        if p.picking_market:
+            return "market" if mounts.market_here(s, c) else None
+        return None
+
+    def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
+        """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
+        馬市 market:back、懸賞榜 bounty:back 或第三層的 bounty:unpick），而且前面沒有決戰、奪璽單挑的鈕。決戰開打、休季時選單換成三招
+        或「休季中」，店裡那一串根本不在上面（picking_* 卻還是真的）：這時給店面，出店會被拒絕、人就困在店裡，休季還開得了爐
+        （第一批終審 Critical 1）。集結時決戰的鈕排在店裡那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
+        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
+        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
+        return any(back in ids for back in shopview.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
+
+    def shop_view(self, option_ids=None) -> dict | None:
+        """店面（店面獨立介面設計 6.1）：開關開著、有一間店開著（_shop_open）、那間店那一串是眼前的選單（_shop_live）才有；
+        照哪一間店給 shopview 的 smith_view、market_view 或 board_view。"""
+        s, c = self.state, self.content
+        if not c.config.shop_screens:
             return None
-        if not self._shop_live(option_ids):
+        shop = self._shop_open()
+        if shop is None or not self._shop_live(option_ids, shop):
             return None
-        return shopview.smith_view(s, c, self.world)
+        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop]
+        return view(s, c, self.world)
 
     def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
@@ -5550,9 +5588,9 @@ class Game:
         新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
         騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
         s, c = self.state, self.content
-        s.player.picking_bounty = False  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
+        bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
-        s.player.picking_market = False  # 馬市也收起來（裝備四欄 5.5）
+        mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
