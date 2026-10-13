@@ -261,3 +261,92 @@ def test_the_season_after_the_mandate_scatters_all_seven(mandated, world):
     assert any(seal.SCATTER_MINE.format(shard="螭首") in e.lines for e in holder.state.journal)
     block = seal.chronicle_block(mandated, view.registry)
     assert block.startswith(seal.BOOK_ROUND.format(round=2)) and "甲懷中" not in block and "不知所蹤" not in block
+
+
+# ── Task 4：天命之季的規則 ──────────────────────────────
+
+
+def test_the_mandate_season_never_ends_early():
+    """8.2：天命之季的提前收季從第 13 週起算（等於不提前收）；一般季照 decisive_from_week。態勢卡那一句換成天命之季的寫法。"""
+    from tianxia import calendar, rules
+    from tianxia import world as world_rules
+    from tianxia.state import WorldState
+    from tianxia.world_state import stamp_season
+
+    c = real_content("weekend")
+    season = WorldState(storyline=c.scenario.storylines[0].id)
+    stamp_season(season, c)
+    season.trends["geju"] = 95
+    season.time = calendar.week_start(12, c, season) + 1
+    assert world_rules.decisive_ending(world_rules._season_vehicle(c, season), c) is not None  # 一般季：第 12 週割據 95，當場收季
+    season.mandate = True
+    vehicle = world_rules._season_vehicle(c, season)
+    assert rules.decisive_week(season, c) == 13 > c.config.season_weeks
+    assert world_rules.decisive_ending(vehicle, c) is None
+    assert rules.stance_rule_note(vehicle, c) == rules.MANDATE_RULE
+
+
+def test_the_mandate_season_stirs_one_shard_every_marked_battle(sealed):
+    """8.2（PM 丙）：天命之季每場標了 seal 的決戰必定牽動一片——不擲 7%、沒有新主保護、沒有全服兩次的上限；每片每季照舊最多一次；
+    亂數 seal-mandate|event_id。"""
+    reg = _registry(sealed, chishou="甲", xuanniu="乙", yunzhuan="丙")
+    for shard in reg.shards.values():
+        shard.since_season = 5  # 這一季才到手：一般季有新主保護
+    assert seal.roll_stir(reg, sealed, 5, 0, "changshe_fire") is None
+    assert seal.roll_stir(reg, sealed, 5, 0, "changshe_fire", mandate=True) == seal.roll_stir(reg, sealed, 5, 0, "changshe_fire", mandate=True)
+    got = []
+    for event in ("changshe_fire", "wancheng", "guangzong"):
+        shard = seal.roll_stir(reg, sealed, 5, 0, event, mandate=True)
+        reg.shards[shard].stirred_season = 5
+        seal.log(reg, 5, "stir", shard=shard)
+        got.append(shard)
+    assert sorted(got) == ["chishou", "xuanniu", "yunzhuan"]  # 三場三片；第三場照樣動（全服兩次的上限拿掉）
+    assert seal.roll_stir(reg, sealed, 5, 0, "again", mandate=True) is None  # 都動過了
+
+
+def test_a_mandate_season_muster_stirs_a_new_holder_and_raises_nothing(mandated, world):
+    """8.2、3.2：天命之季開集結——剛到手的那一片照樣被牽動；標 emerge 的那一場不擲現世（管理者的強制現世也不擲，記號留著）。"""
+    from tianxia import world as world_rules
+
+    _opened(mandated, world)
+    reg = _all_emerged(mandated, world, chishou="甲")
+    reg.shards["guixin"].state, reg.shards["guixin"].emerged_round = "hidden", None
+    reg.force_emerge = "guixin"
+    world.mutate(lambda st: (setattr(st, "seal", reg), setattr(st.seal.shards["chishou"], "since_season", st.season_number)))
+    _mandate_now(world)
+    world_rules.open_showdown(world, mandated, "wancheng", 0.0)
+    battle = world.get_battle()
+    assert battle.seal_shard == "chishou" and battle.seal_emerge is None
+    assert world.seal_state().registry.force_emerge == "guixin"
+
+
+def test_a_sunk_shard_is_recalled_at_the_first_two_marked_battles(mandated, world):
+    """8.2 喚回（PM 辛）：天命之季標了 seal 的前兩場收場時，從隱沒的碎片裡喚回一片給勝方戰功前三名抽到的人；不算現世（emerged_round、
+    emerge_season 不動）；亂數 seal-recall，不碰 Game.rng。"""
+    _opened(mandated, world)
+    _all_emerged(mandated, world, chishou="甲")
+    _mandate_now(world)
+    game = _player(mandated, world, "旁人")
+    before = game.rng.getstate()
+    battle = _ended("changshe_fire", [("官甲", "guan", 3, 3), ("黃甲", "huang", 3, 0)], record=11)
+    game._seal_settle(battle, mandated.battles["changshe_fire"], {"side": "guan", "margin": "大勝"})
+    view = world.seal_state()
+    back = [s for s in view.registry.shards.values() if s.holder == "官甲"]
+    assert len(back) == 1 and back[0].state == "held" and back[0].emerged_round == view.registry.round
+    assert view.registry.emerge_season is None and game.rng.getstate() == before
+    event = next(e for e in view.registry.history if e.kind == "recall")
+    assert event.holder == "官甲" and event.text in [r.text for r in world.get_season().chronicle]
+    winner = _player(mandated, world, "官甲", "guan")
+    assert winner.state.player.heirloom is not None and any("尋回" in line for e in winner.state.journal for line in e.lines)
+
+
+def test_recall_takes_the_first_two_marked_battles_of_the_real_timetable():
+    assert seal.recall_events(real_content()) == ["changshe_fire", "wancheng"]
+
+
+def test_the_holder_card_says_it_is_the_season_of_the_mandate(mandated, world):
+    _opened(mandated, world)
+    _all_emerged(mandated, world, chishou="甲")
+    _mandate_now(world)
+    card = _player(mandated, world, "甲").seal_view()
+    assert card["state"] == seal.CARD_MANDATE and len(card["dates"]) == 3  # 長社、宛城、天命之爭

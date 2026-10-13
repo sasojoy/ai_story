@@ -609,6 +609,15 @@ STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
 _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
 
 
+MANDATE_RULE = "天命之季不提前收季：天命之爭得勝的一方得天命；沒有分出天命，就到季末比高低。"  # 待 joy 潤：態勢卡底下那一句
+
+
+def decisive_week(season: WorldState, content: Content) -> int:
+    """這一季從第幾週起才會提前收季：天命之季照 Config.seal.mandate.decisive_from_week（13，等於不提前收，玉璽碎片設計 8.2）；
+    其餘照 decisive_from_week。不改 Config.decisive_from_week，一般季的節奏不變。"""
+    return content.config.seal.mandate.decisive_from_week if season.mandate else content.config.decisive_from_week
+
+
 def stance_rule_note(state: GameState, content: Content) -> str:
     """態勢卡底下那一句收季規則（第一季設計 4.4；正式版辛）：門檻從第一季結局算，不寫死。
     每一個決定性結局（有 stance_min／stance_max 的）換成「哪一方到幾分」：stance_min 的那一方到那個值；stance_max 的黃巾 ≤ 15
@@ -642,8 +651,10 @@ def stance_rule_note(state: GameState, content: Content) -> str:
         rule = f"哪一方的態勢一到 {min(reach.values())}，{ending}"
     else:
         rule = "、".join(f"{STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach) + f"，{ending}"
+    start = decisive_week(state.world, content)
+    if start > content.config.season_weeks:  # 天命之季：整季都不提前收（8.2）
+        return MANDATE_RULE
     week = calendar.point(state.world.time, content, state.world).week
-    start = content.config.decisive_from_week
     return f"第 {start} 週起，{rule}" if week < start else rule
 
 

@@ -10,7 +10,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
+    decisive_week, resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -263,10 +263,10 @@ def early_end_flags(content: Content) -> set[str]:
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
     """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。
     季曆第 decisive_from_week 週（預設 10）以前一律 None：割據開季後幾週就會頂到門檻，太早收季三場大戲就打不完
-    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收。"""
+    （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收；天命之季從第 13 週起（等於不提前收，玉璽二）。"""
     if not season_one(content, state.world):
         return None
-    if calendar.point(state.world.time, content, state.world).week < content.config.decisive_from_week:
+    if calendar.point(state.world.time, content, state.world).week < decisive_week(state.world, content):
         return None
     standing = stances(state, content)
     return next(

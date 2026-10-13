@@ -3484,6 +3484,9 @@ class Game:
                 self._write(seal.SEAL_TITLE, [seal.UNSETTLED_MINE.format(other=other, shard=shard)], tag=f"『{shard}』")
             elif e.kind == "sink" and seal.key(e.other) == me:
                 self._write(seal.SEAL_TITLE, [seal.SUNK_MINE.format(shard=shard)], tag=f"『{shard}』")
+            elif e.kind == "recall" and seal.key(e.holder) == me:  # 喚回（8.2）：只拿碎片，不學 emerge_skill（要 PM 定的第 5 條）
+                line = seal.RECALLED_MINE.format(where=e.where or "", shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))
+                self._write(seal.SEAL_TITLE, [line], tag=f"『{shard}』")
             elif e.kind == "scatter" and seal.key(e.other) == me:  # 天命之季之後七片散去（8.4）：抄本在最後的 _copy_heirloom 照登記清掉
                 self._write(seal.SEAL_TITLE, [seal.SCATTER_MINE.format(shard=shard)], tag=f"『{shard}』")
             elif e.kind == "assign" and seal.key(e.holder) == me:  # 管理者指定給你（公告不寫管理者，紀錄寫成拿到）
@@ -3532,7 +3535,7 @@ class Game:
         璽動那一場決定要不要開奪璽單挑（Task 8），再從勝方挑現世的得主；後挑的排除前面挑中的人。
         只寫全服登記、單挑、天下大事、江湖史（一次 world.mutate），戰報那一行寫進這一場（mutate_battle 的 seal_notes）；
         兩人的存檔等各自同步時補（_deliver_seal_results，5.9）。可能跑在 Game.for_world（玩家是空白的），不碰 self.state.player。
-        亂數全是 seal.dice，不碰 self.rng。"""
+        天命之季標了 seal 的前兩場另外喚回一片（8.2）。亂數全是 seal.dice，不碰 self.rng。"""
         c = self.content
         if not seal.on(c):
             return
@@ -3545,8 +3548,7 @@ class Game:
         picked: set[str] = set()
         notes: list[str] = []
         # 保底收場（end_without_fighters：兩軍都沒人還能打）：不打單挑、現世落空（設計 4.5 邊界 3、3.3）；小伺服器的旁觀散人也不補
-        armies = {f.id for f in definition.factions}
-        deserted = not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+        deserted = seal.deserted(battle, definition)
         duel = None
         shard_now = reg.shards.get(battle.seal_shard or "")
         if (not deserted and shard_now is not None and battle.seal_holder
@@ -3560,6 +3562,10 @@ class Game:
         if emerge is not None and emerge.state == "hidden" and not deserted:
             rows = seal.emerge_rows(battle, c, winner, need, held, picked)
             found = seal.weighted_pick(rows, seal.dice(reg.salt, view.tianji, "seal-emerge", battle.record_id), cfg.challenger_pool)
+        recalled = None  # 喚回（8.2；PM 辛）：天命之季、標了 seal 的前兩場；排在挑戰者之後、排除剛挑去單挑的人；不算現世
+        if seal.mandate_now(reg, view.season) and not deserted and definition.timetable_event in seal.recall_events(c):
+            rows = seal.emerge_rows(battle, c, winner, need, held, picked)
+            recalled = seal.roll_recall(reg, view.tianji, definition.timetable_event, rows, cfg.challenger_pool)
         shard_name = c.seal[battle.seal_emerge].name if battle.seal_emerge in c.seal else ""
         emerged = {"ok": False}
 
@@ -3591,6 +3597,22 @@ class Game:
             emerged["ok"] = True
 
         self.world.mutate(_apply)
+        if recalled is not None:
+            shard_id, name = recalled
+
+            def _recall(shared) -> None:
+                reg_ = seal.filled(shared.seal, c)
+                shard = reg_.shards[shard_id]
+                if shard.state != "sunk" or seal.key(name) in seal.holders(reg_):  # 寫入時重驗：這一刻已經不是隱沒、或他已經有一片
+                    return
+                shard.state, shard.holder, shard.since_season, shard.absent = "held", name, shared.season_number, 0  # emerged_round 不動
+                text = seal.RECALL.format(name=name, battle=definition.name, shard=c.seal[shard_id].name)
+                seal.log(reg_, shared.season_number, "recall", shard=shard_id, holder=name, record=battle.record_id, where=definition.name,
+                         text=text)
+                seal.rumor(shared.season, text)
+                seal.chronicle(shared.season, text)
+
+            self.world.mutate(_recall)
         if emerged["ok"]:  # 寫入時重驗沒過（落空）就不寫戰報那一行
             notes.append(seal.EMERGE_NOTE.format(name=found))
         if notes:
@@ -6726,7 +6748,10 @@ class Game:
         shard = seal.shard_of(view.registry, self.state.player.name)
         if shard is None or shard.id not in c.seal:
             return None
-        state = seal.CARD_NEW if shard.since_season == view.season else seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_CALM
+        if seal.mandate_now(view.registry, view.season):  # 天命之季沒有新主保護（8.2）
+            state = seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_MANDATE
+        else:
+            state = seal.CARD_NEW if shard.since_season == view.season else seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_CALM
         status = self._battle_status(tick=False)
         stir = seal.STIR_MINE.format(shard=c.seal[shard.id].name) if status is not None and status[0].seal_shard == shard.id else ""
         w = self.state.world

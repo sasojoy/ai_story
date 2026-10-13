@@ -235,14 +235,17 @@ STIR_MINE = "此役牽動你懷中的『{shard}』。"  # 待 joy 潤：持有�
 MERIT_HINT = "你此役戰功居前；懷璽之人那一方若沒能大勝，你可能被推上陣前。"  # 待 joy 潤（4.3）
 
 
-def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str) -> str | None:
+def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str, mandate: bool = False) -> str | None:
     """標了 seal 的決戰開集結時擲璽動（4.1、4.2）：有主、不是這一季才到手、這一季還沒動過的每一片各擲 stir_chance
     （seal-stir|event_id|片，各取一次）；全服這一季已經動了 season_stir_cap 次就不擲；擲中好幾片時用 seal-stir|event_id 挑一片。
-    管理者的強制璽動（force_stir）略過機率、新主保護與次數上限（那一片要有主）。"""
+    管理者的強制璽動（force_stir）略過機率、新主保護與次數上限（那一片要有主）。mandate：天命之季，見下（玉璽二）。"""
     cfg = content.config.seal
     forced = reg.shards.get(reg.force_stir or "")
     if forced is not None and forced.state == "held":
         return forced.id
+    if mandate:  # 天命之季（8.2；PM 丙）：每場必定牽動一片——不擲 stir_chance、沒有新主保護、沒有全服上限；每片每季照舊最多一次
+        pool = sorted(s.id for s in reg.shards.values() if s.state == "held" and s.stirred_season != season)
+        return dice(reg.salt, tianji, "seal-mandate", event_id).choice(pool) if pool else None
     if sum(1 for e in reg.history if e.kind == "stir" and e.season == season) >= cfg.season_stir_cap:
         return None
     hit = [
@@ -299,14 +302,15 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
 
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
-        if mark == "emerge":
+        mandate = shared.season.mandate
+        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2），管理者的強制現世記號留到下一個一般季
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:
             text = EMERGE_OMEN.format(battle=definition.name)
             rumor(shared.season, text)
             msgs.append(f"🏺 【天下大事】{text}")
-        stir = roll_stir(reg, content, shared.season_number, shared.tianji, definition.timetable_event)
+        stir = roll_stir(reg, content, shared.season_number, shared.tianji, definition.timetable_event, mandate=mandate)
         if stir is not None and stir == reg.force_stir:
             reg.force_stir = None
         if stir is not None:
@@ -352,6 +356,34 @@ UNSETTLED_MINE = "你與{other}爭『{shard}』的單挑沒有打完，不分勝
 SUNK_MINE = "你懷中的『{shard}』不知所蹤了。"
 PROXY_LINE = "你未及趕到，由你平日的路數應對。"
 FRESH_LINE = "你這一季還沒現身江湖，身手生疏。"
+RECALL = "{name}在{battle}陣前尋回了不知所蹤的『{shard}』。"  # 待 joy 潤：天下大事、江湖史（8.2）
+RECALLED_MINE = "你在{where}陣前尋回了『{shard}』（{effect}）。"  # 待 joy 潤：補送的紀錄
+CARD_MANDATE = "天命之季：此季每場大戰都可能牽動碎片"  # 待 joy 潤：持有者的碎片卡
+
+
+def deserted(battle: BattleInstance, definition: BattleDef) -> bool:
+    """保底收場（end_without_fighters：兩軍都沒人還能打）：不打單挑、現世與喚回落空（4.5 邊界 3、3.3）；天命之爭是天命未定（8.3）。"""
+    armies = {f.id for f in definition.factions}
+    return not any(p.faction in armies and not p.eliminated and not p.away for p in battle.participants.values())
+
+
+def recall_events(content: Content) -> list[str]:
+    """喚回的那幾場（8.2、8.5）：時刻表上標了 seal 的決戰照順序取前 recall_battles 場（不寫死 id；天命之爭本身沒標 seal）。"""
+    return [e.id for e in content.timetable if e.seal is not None][: content.config.seal.mandate.recall_battles]
+
+
+def roll_recall(reg: SealRegistry, tianji: int, event_id: str, rows: list[tuple[str, int]], pool: int) -> tuple[str, str] | None:
+    """喚回哪一片、給誰（8.2）：隱沒的照 id 排序挑一片，再照現世的抽法（weighted_pick）從 rows 抽一人；亂數 seal-recall|event_id，
+    先挑片、再抽人。沒有隱沒的、或沒有合格的人是 None（留著隱沒）。"""
+    sunk = sorted(s.id for s in reg.shards.values() if s.state == "sunk")
+    if not sunk:
+        return None
+    rng = dice(reg.salt, tianji, "seal-recall", event_id)
+    shard = rng.choice(sunk)
+    name = weighted_pick(rows, rng, pool)
+    return (shard, name) if name is not None else None
+
+
 CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
 
 
