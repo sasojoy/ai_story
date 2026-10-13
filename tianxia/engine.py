@@ -2938,6 +2938,32 @@ class Game:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
         return shopview.smith_line(self.state, self.content, self.world, str(kind), main or None, aux or None)
 
+    def smith_forge(self, kind: str, main: str, aux: str) -> list[str]:
+        """店面的直接開爐（店面獨立介面設計 2.3、6.3；MAIN_ACTIONS["smith_forge"]）：店開著（picking_smith、人在鐵匠鋪），
+        smithing.forge_problem 整個重驗才打——打的是同一個 smithing.forge（隱藏配方、神器原品與仿品、首位發現、名望回饋、熟手次數都照現在），
+        跟一步一步單子的開爐同一條（_smith_forge_once：防具自己的亂數、兵器 Game.rng），打完收起單子；鐵匠順口照擲（同 _smith）。
+        一爐一則「打造」江湖紀錄（不併進上一則）；被拒絕的不收錢、不收料、不寫紀錄，掌櫃那一句換成原因。
+        出爐卡給網頁：self.smith_result（shopview.forged_card；被拒絕是 None）。"""
+        s, c = self.state, self.content
+        p = s.player
+        self.smith_result = None
+        if not p.picking_smith or not equipment.smith_open(s, c):
+            return self._log([equipment.NOT_NOW])
+        p.shop_clue = ""
+        silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
+        item, msgs, report = self._smith_forge_once(str(kind), str(main), str(aux))
+        if item is None:
+            return self._log(msgs)
+        if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
+            clue = self._smith_clue()
+            if clue:
+                p.shop_clue = clue[0]
+            msgs = msgs + clue
+        journal.add_entry(s, Draft(smithing.FORGE_TITLE).entry(s.world.time, msgs))
+        self.smith_result = shopview.forged_card(s, c, self.world, item, report)
+        self._save_season()
+        return self._log(msgs)
+
     def wield_weapon(self, item_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
         坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵

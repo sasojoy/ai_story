@@ -1463,6 +1463,8 @@ def api_main(request: Request):
 # 只有不寫紀錄的動作（例如管理者的操作）才用得到，前端拿它跳一句提示。
 MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
+    # 店面的直接開爐（店面獨立介面設計 6.3）：打的是同一個 smithing.forge；出爐卡在 game.smith_result，api_do 一起回
+    "smith_forge": lambda g, b: g.smith_forge(str(b.get("kind", "")), str(b.get("main", "")), str(b.get("aux", ""))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
@@ -1567,7 +1569,10 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     else:
         raise HTTPException(404)
     _tell_tabs(game, str(body.get("name", "")) if op in PLAYER_ADMIN_ACTIONS else "")
-    return {"main": look(game, main_view), "message": joined(msgs)}
+    out = {"main": look(game, main_view), "message": joined(msgs)}
+    if op == "smith_forge":
+        out["forged"] = game.smith_result  # 店面的出爐卡（麻布的光、點開的卡）；被拒絕是 None
+    return out
 
 
 def forge_args(body: dict) -> tuple[str | None, list[str], str | None]:

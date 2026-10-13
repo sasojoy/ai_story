@@ -249,3 +249,127 @@ def test_bad_input_is_trimmed_to_what_you_hold(content, world):
     assert (line["main"], line["aux"], line["ready"]) == (None, None, False)
     assert game.smith_line("不是兵器")["cells"] == []
     assert game.shop_view()["forge"]["line"] == game.smith_line(game.shop_view()["forge"]["kind"])
+
+
+# ── Task 4：直接開爐 ──
+
+
+def _both(content, world, kind, main, aux, seed=7):
+    """同一個名號、同一個種子各打一爐：一個照一步一步的單子（smith:forge → 種類 → 主料 → 輔料 → 開爐），一個直接開爐。
+    回（單子那一件, 直接那一件, 兩個 game）。防具的亂數照名號，所以兩邊同名。"""
+    step = _smith(content, world, name="同名")
+    if smithing.is_armor(kind):
+        step.choose("smith:page:armor")
+    step.rng = random.Random(seed)
+    for option in smithing.wizard_steps(kind, main, aux):
+        step.choose(option)
+    direct = _smith(content, world, name="同名")
+    direct.rng = random.Random(seed)
+    direct.smith_forge(kind, main, aux)
+    slot = smithing.slot_of(kind)
+    return equipment.worn(step.state.player, slot), equipment.worn(direct.state.player, slot), step, direct
+
+
+@pytest.mark.parametrize("kind", ["劍", smithing.ARMOR_KIND])
+def test_direct_forging_matches_the_step_by_step_forge(content, world, kind):
+    a, b, step, direct = _both(content, world, kind, "gang_1", "kuai_1")
+    same = lambda i: (i.name, i.attribute, i.tier, i.quality, i.recipe)  # noqa: E731
+    assert a is not None and same(a) == same(b)
+    sp, dp = step.state.player, direct.state.player
+    assert (sp.materials, sp.stats["silver"], sp.forge_counts) == (dp.materials, dp.stats["silver"], dp.forge_counts)
+    top, old = direct.state.journal[0], step.state.journal[0]
+    assert top.title == smithing.FORGE_TITLE and (top.lines, top.changes) == (old.lines, old.changes)
+    assert dp.smith_draft is None and dp.shop_line == shopview.forged_key(b)
+
+
+def test_two_direct_forges_make_two_journal_entries(content, world):
+    game = _smith(content, world)
+    game.smith_forge("劍", "gang_1", "kuai_1")
+    game.smith_forge("刀", "gang_1", "gang_1")
+    assert [e.title for e in game.state.journal[:2]] == [smithing.FORGE_TITLE, smithing.FORGE_TITLE]
+
+
+def test_a_stale_pot_is_refused_without_cost(content, world):
+    game = _smith(content, world)
+    p = game.state.player
+    before = (dict(p.materials), p.stats["silver"], len(game.state.journal), p.weapon_serial)
+    msgs = game.smith_forge("劍", "gang_2", "gang_2")  # 玄鋼骨只剩一個：主輔同一種要兩個
+    assert msgs == ["（玄鋼骨不夠（要 2 個）。）"] and game.smith_result is None
+    assert (dict(p.materials), p.stats["silver"], len(game.state.journal), p.weapon_serial) == before
+    assert p.shop_line == "refused"
+    p.stats["silver"] = 5
+    assert game.smith_forge("劍", "gang_1", "kuai_1") == ["（還差 15 兩。）"] and p.shop_line == "short_silver"
+    game.choose("smith:back")
+    assert game.smith_forge("劍", "gang_1", "kuai_1") == [equipment.NOT_NOW]
+
+
+def test_the_forged_card_says_where_it_went_and_glows_by_quality(content, world):
+    game = _smith(content, world)
+    game.smith_forge("劍", "gang_1", "kuai_1")
+    card = game.smith_result
+    item = game.state.player.weapon
+    assert card["id"] == item.id and card["where"] == "worn" and card["grade"] == equipment.grade(item)
+    assert card["glow"] == {"下品": "none", "中品": "cyan", "上品": "gold"}[item.quality] and card["first"] is False
+    game.smith_forge("劍", "gang_1", "kuai_1")
+    assert game.smith_result["where"] == "rack"
+
+
+def test_a_first_find_and_a_divine_original_show_on_the_card(content, world):
+    from test_forge_divine import STAR
+    from test_forge_secrets import BLADE
+
+    content.forge_secrets = {r.id: r.model_copy(deep=True) for r in (BLADE, STAR)}
+    content.config.forge_secrets.per_season = {"weapon:1": 1, "weapon:divine": 1}
+    game = _smith(content, world, silver=1000)
+    game.state.player.materials.update({"gang_3": 4})
+    game.smith_forge("劍", "gang_1", "kuai_1")
+    assert game.smith_result["first"] and game.smith_result["glow"] == "purple"
+    game.smith_forge("劍", "gang_3", "gang_3")
+    card = game.smith_result
+    assert card["glow"] == "redgold" and card["first"] and card["divine"] == STAR.name and card["where"] == "rack"
+
+
+def test_the_server_returns_the_forged_card(content, world):
+    import server
+
+    game = _smith(content, world)
+    msgs = server.MAIN_ACTIONS["smith_forge"](game, {"kind": "劍", "main": "gang_1", "aux": "kuai_1"})
+    assert msgs and game.smith_result["id"] == game.state.player.weapon.id
+
+
+def test_the_routes_answer_the_forge_page(monkeypatch):
+    """/api/smith_line 與 /api/do/smith_forge 走真的伺服器（週末設定的正式內容）：店開著時 main 有 shop，問一爐、開一爐、拿到出爐卡。"""
+    from fastapi.testclient import TestClient
+
+    import server
+    from tianxia import accounts
+    from tianxia.characters import open_characters
+
+    content = real_content("weekend")
+    content.config.auto_open_first_season = True
+    monkeypatch.setattr(server, "CONTENT", content)
+    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
+    monkeypatch.setattr(server, "_breaker_until", None, raising=False)
+    stores = (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES)
+    for store in stores:
+        store.clear()
+    try:
+        client = TestClient(server.app)
+        client.post("/api/register", json={"login": "smith_01", "password": "secret-pw", "again": "secret-pw"})
+        client.post("/api/character", json={"name": "鐵匠客"})
+        client.post("/api/do/skip_tutorial", json={})
+        game = server.game_for("鐵匠客")
+        p = game.state.player
+        p.location, p.stats["silver"], p.materials = "yingchuan", 300, {"gang_1": 3, "kuai_1": 2}
+        equipment.open_smith(p, content)
+        open_characters().save(game.state)
+        assert client.get("/api/main").json()["shop"]["shop"] == "smith"
+        line = client.post("/api/smith_line", json={"kind": "劍", "main": "gang_1", "aux": "kuai_1"}).json()
+        assert line["ready"] and line["problem"] is None
+        out = client.post("/api/do/smith_forge", json={"kind": "劍", "main": "gang_1", "aux": "kuai_1"}).json()
+        assert out["forged"]["slot"] == "weapon" and out["main"]["shop"]["silver"] == 280
+        refused = client.post("/api/do/smith_forge", json={"kind": "劍", "main": "gang_1", "aux": "nope"}).json()
+        assert refused["forged"] is None and "沒有這種素材" in refused["message"]
+    finally:
+        for store in stores:
+            store.clear()

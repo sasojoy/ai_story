@@ -240,3 +240,40 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "pending": forge_secrets.unnamed_originals(state, world),
         "forge": _forge(state, content, world, page, art),
     }
+
+
+# ── 出爐卡（2.3）──
+GLOWS = {"下品": "none", "中品": "cyan", "上品": "gold"}
+FITS = weapons.FITS_MARK.lstrip("・")
+UNFITS = "配不上你的武學"  # 待 joy 潤：出爐卡上配不上那一句（同修練頁「用不上」的意思）
+
+
+def glow_of(item: Equipment) -> str:
+    """麻布透出的光（2.3）：原品赤金＞仿品紅＞名器紫＞品質（下品沒光、中品青、上品金）。"""
+    if item.original:
+        return "redgold"
+    if item.copy_of is not None:
+        return "red"
+    if item.secret is not None:
+        return "purple"
+    return GLOWS.get(item.quality, "none")
+
+
+def forged_card(state: GameState, content: Content, world: WorldStateStore, item: Equipment, report: dict) -> dict:
+    """出爐卡（2.3）：名字、階品（equipment.grade）、種類與屬性、兵器的加成或防具的減損（同修練頁那一列）、配不配得上（防具：對不對得上
+    內功）、光色、首位發現（打中隱藏配方而且是全服第一個）、去了手上還是裝備庫、還等著定名的原品的譜名。"""
+    art, neigong = _arts(state, content, world)
+    if item.slot == "armor":
+        value, fit, kind = f"少扣 {armor.pct(armor.cut(item, neigong, content))} 氣血", armor.fit_note(item, neigong), smithing.ARMOR_KIND
+    else:
+        usable = weapons.usable(item, art, content, world)
+        value = f"加成 {_pct(weapons.bonus(item, art, content, world))}" if usable else None
+        fit, kind = (FITS if usable else UNFITS), weapons.NOUNS.get(item.kind, item.kind)
+    worn = equipment.worn(state.player, item.slot)
+    return {
+        "id": item.id, "slot": item.slot, "name": item.name, "grade": equipment.grade(item), "kind": kind,
+        "attribute": item.attribute, "value": value, "fit": fit, "glow": glow_of(item),
+        "first": bool(report.get("first")) and item.secret is not None,
+        "where": "worn" if worn is not None and worn.id == item.id else "rack",
+        "divine": forge_secrets.unnamed_originals(state, world).get(item.id),
+    }
