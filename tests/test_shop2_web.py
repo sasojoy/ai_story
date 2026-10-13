@@ -245,3 +245,15 @@ def test_a_refused_divine_name_on_the_forged_card_keeps_its_reason(content, worl
         S={"shopReveal": card, "shopOpened": True}, responses=reply)
     assert out["kept"] == "斬月刀" and out["why"] == why
     assert f'<p class="form-why">{why}</p>' in out["form"] and f'<p class="form-why">{why}</p>' in out["plain"]
+
+
+def test_the_held_row_and_a_held_note_do_not_share_a_class(board):
+    """實機看到的：手上那一排的外框（.shop-board .held）跟揭著的告示（.note.held）撞名，揭著的那一張被蓋上那一排的暗底。外框另取 held-row。"""
+    from pathlib import Path
+
+    scout, _arms = _ids(board)
+    board.choose(f"bounty:take:{scout}")
+    html = run(server.main_view(board), "H.render(); return T.els.app.innerHTML;")
+    assert 'class="held-row"' in html and 'class="note k-scout held"' in html
+    css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
+    assert ".shop-board .held {" not in css and ".shop-board .held-row {" in css

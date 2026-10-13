@@ -2563,7 +2563,7 @@
         ${n.prize ? `<span class="prize">${esc(n.prize)}</span>` : ""}${n.have ? `<span class="prize">${esc(n.have)}</span>` : ""}
         <span class="due">${esc(n.due)}</span>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
     const board = shop.notes.length ? `<div class="board">${shop.notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
-    return `<div class="shop-body"><div class="held"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
+    return `<div class="shop-body"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
       ${zoom ? paperHtml(zoom, shop) : ""}${S.boardStamp ? stampHtml(S.boardStamp) : ""}`;
   }
 
