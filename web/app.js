@@ -1717,7 +1717,9 @@
       : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form" data-op="${esc(m.free_op || "battle_text")}"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>${m.free_text_note ? `<p class="free-note">${esc(m.free_text_note)}</p>` : ""}`
-      : "";
+      : m.free_text_full  // 這一回合我方的放手一搏名額滿了（先到先得）：輸入框還在、灰掉，只能出三招
+        ? `<form class="free full" id="free-form" data-op="battle_text"><input class="input" name="text" disabled placeholder="放手一搏名額已滿"><button class="btn primary small" type="submit" disabled>送出</button></form><p class="free-note">${esc(m.free_text_full)}</p>`
+        : "";
     // 路上那顆灰的「（在路上，幾時抵達）」不畫：往哪、幾時到狀態列已經寫著（FB-046），少一顆也讓路上的捷徑回到第一屏（FB-048）。
     // 決戰集結時還沒參戰的加入鈕畫在場景卡戰場名字那一行（FB-105，musterScene）：事件、對話開著時也是，選項列不再列一次
     const joined = new Set(musterJoins(m).map((o) => o.id));

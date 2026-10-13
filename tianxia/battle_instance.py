@@ -145,6 +145,8 @@ class BattleRound(BaseModel):
     # 模型呼叫寫的，試玩回饋 2026-10-08）；擲骰後播對應的那一版，空字串或沒有就用固定句
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
+    gamble_slots: dict[str, float] = Field(default_factory=dict)  # 名號 → 佔下放手一搏名額的現實時間（BattleTuning.gamble_per_side；
+    # 換回合就清空）；舊資料沒有＝沒人佔
 
 
 class BattleRoundRecord(BaseModel):
@@ -491,6 +493,48 @@ def submit_action(
         instance.round.success_rates[name] = max(0, min(100, success_rate))
         if stories:
             instance.round.stories[name] = [str(stories[0]), str(stories[1])]
+
+
+GAMBLE_FULL = "這一回合我方已有{n}人放手一搏，只能出三招。"  # 名額滿了：輸入框灰掉寫這一句，硬送也回這一句
+
+
+def gamble_full_line(n: int) -> str:
+    """名額滿了那一句，人數十以內寫國字（「已有三人」）。"""
+    return GAMBLE_FULL.format(n="零一二三四五六七八九十"[n] if 0 <= n <= 10 else n)
+
+
+def gamble_holders(instance: BattleInstance, side: str, now: float, hold_seconds: float) -> set[str]:
+    """這一回合 side 這一邊佔著放手一搏名額的人：已經送出放手一搏的，加上佔了名額、還沒送出任何行動、佔不到 hold_seconds 的
+    （模型還在評）。佔了名額卻改出三招的、佔太久沒送出的（模型卡住、連線斷了）不算，那一格空出來。"""
+    rnd = instance.round
+    out = {n for n in rnd.success_rates if (p := instance.participants.get(n)) is not None and p.faction == side}
+    for name, since in rnd.gamble_slots.items():
+        p = instance.participants.get(name)
+        if p is not None and p.faction == side and name not in rnd.pending_actions and now - since < hold_seconds:
+            out.add(name)
+    return out
+
+
+def gamble_full(
+    instance: BattleInstance, name: str, tuning: BattleTuning, now: float, hold_seconds: float,
+) -> bool:
+    """name 這一回合還搶不搶得到放手一搏的名額：自己已經佔著就搶得到；這一邊佔滿了 gamble_per_side 就搶不到（0 ＝ 不限）。"""
+    p = instance.participants.get(name)
+    if p is None or tuning.gamble_per_side <= 0:
+        return False
+    holders = gamble_holders(instance, p.faction, now, hold_seconds)
+    return name not in holders and len(holders) >= tuning.gamble_per_side
+
+
+def claim_gamble(instance: BattleInstance, name: str, now: float) -> None:
+    """佔一格放手一搏的名額（呼叫端先問過 gamble_full）；已經佔著的不重記時間。"""
+    instance.round.gamble_slots.setdefault(name, now)
+
+
+def release_gamble(instance: BattleInstance, name: str) -> None:
+    """還沒送出就放掉名額（模型失敗、單子作廢）；已經送出的放手一搏照算，這裡不動。"""
+    if name not in instance.round.success_rates:
+        instance.round.gamble_slots.pop(name, None)
 
 
 def round_is_complete(instance: BattleInstance, timed_out: bool = False) -> bool:

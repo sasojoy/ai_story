@@ -2903,6 +2903,31 @@ def test_battle_free_text_shows_and_submits(game):
     assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
 
 
+def test_a_gamble_whose_model_call_fails_gives_its_slot_back(game, monkeypatch):
+    """放手一搏的名額 A 段就佔（BattleTuning.gamble_per_side）；B 段失敗沒走到 C 段時放掉，不讓慢的模型卡住別人。"""
+    definition = server.CONTENT.battles["huangjin_showdown"]
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=0.0)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.world.mutate_battle(
+            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=320.0, is_bot=True)
+        )
+    after_muster = definition.muster_seconds + 1
+    seen = []
+
+    def boom(game_, call, **kwargs):
+        seen.append(dict(game_.world.get_battle().round.gamble_slots))
+        raise server.HTTPException(503, "busy")
+
+    monkeypatch.setattr(server, "model_call", boom)
+    with at(game, after_muster), mock.patch("server.time.time", return_value=after_muster):
+        with pytest.raises(server.HTTPException):
+            server.battle_text(game, "直取波才首級")
+    assert seen and game.state.player.name in seen[0]
+    assert game.world.get_battle().round.gamble_slots == {}
+
+
 def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
     """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
     from tianxia import duel
