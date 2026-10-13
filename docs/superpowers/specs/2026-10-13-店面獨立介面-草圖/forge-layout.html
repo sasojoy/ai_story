@@ -1,0 +1,123 @@
+<style>
+  .phones { display:flex; gap:26px; flex-wrap:wrap; justify-content:center; margin-top:14px; }
+  .pcol { width:310px; }
+  .phone { width:310px; height:640px; border-radius:26px; border:8px solid #2a241d; overflow:hidden; position:relative;
+           font-family:"Noto Serif TC","PMingLiU",serif; box-shadow:0 6px 18px rgba(0,0,0,.18);
+           background:radial-gradient(ellipse at 50% 22%, #4a2a18 0%, #1e1510 72%); color:#f2e5c6; }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:9px 10px 0; font-size:11.5px; color:#e8d6ad; }
+  .sign { padding:3px 14px; border:2px solid #b7862b; border-radius:4px; background:#2b1a10; letter-spacing:5px; font-size:14px; color:#f2c46a; }
+  .silver { color:#f2c46a; }
+  .kinds { display:flex; gap:4px; justify-content:center; margin:9px 6px 0; flex-wrap:wrap; }
+  .k { font-size:11px; padding:3px 7px; border-radius:12px; border:1px solid #6b5038; color:#d8c08e; }
+  .k.on { background:#b7862b; color:#1e1510; border-color:#b7862b; }
+  .k.fit::after { content:"・配"; color:#f2c46a; font-size:9.5px; }
+  .k.on.fit::after { color:#1e1510; }
+  .furnace { margin:10px auto 0; width:280px; height:150px; position:relative; }
+  .fire { position:absolute; left:95px; top:6px; width:90px; height:78px; border-radius:50% 50% 14px 14px;
+          background:radial-gradient(circle at 50% 72%, #ffcf6a 0%, #f07a2c 38%, #6a2c14 74%); box-shadow:0 0 26px rgba(240,122,44,.55); }
+  .slot { position:absolute; top:22px; width:74px; height:74px; border-radius:12px; border:1.5px solid #b7862b; background:rgba(0,0,0,.35);
+          display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:11px; text-align:center; line-height:1.35; }
+  .slot.l { left:8px; } .slot.r { right:8px; }
+  .slot b { font-size:13px; }
+  .slot small { color:#c9b28a; font-size:9.5px; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:2px; vertical-align:middle; }
+  .g { background:#d2574a; } .q { background:#4a7cae; } .r { background:#55a079; } .m { background:#b98634; }
+  .preview { position:absolute; left:0; right:0; top:100px; text-align:center; font-size:12px; color:#f2e5c6; }
+  .preview b { color:#f2c46a; }
+  .odds { margin:2px 22px 0; height:12px; border-radius:6px; overflow:hidden; display:flex; font-size:8.5px; line-height:12px; color:#1e1510; text-align:center; }
+  .odds div:nth-child(1){ background:#a99b86; } .odds div:nth-child(2){ background:#7fb0d8; } .odds div:nth-child(3){ background:#f2c46a; }
+  .oddsnote { text-align:center; font-size:10.5px; color:#c9b28a; margin-top:3px; }
+  .go { margin:8px auto 0; width:180px; text-align:center; padding:8px 0; border-radius:22px; background:linear-gradient(180deg,#d2574a,#8e2a22);
+        color:#fff; font-size:14px; letter-spacing:6px; box-shadow:0 0 14px rgba(210,87,74,.45); }
+  .bag { position:absolute; left:0; right:0; bottom:0; background:#2b1a10; border-top:1px solid #6b5038; padding:7px 8px 10px; border-radius:14px 14px 0 0; }
+  .bag h4 { margin:0 0 5px; font-size:11px; color:#c9b28a; font-weight:normal; display:flex; justify-content:space-between; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+  .t { position:relative; border-radius:8px; padding:5px 2px 4px; background:#3a2618; border:1px solid #5a4030; text-align:center; font-size:10.5px; line-height:1.3; }
+  .t .n { position:absolute; right:3px; top:2px; font-size:9px; color:#c9b28a; }
+  .t .tier { font-size:8.5px; color:#d8c08e; letter-spacing:1px; }
+  .t.used { outline:2px solid #f2c46a; }
+  .t.off { opacity:.42; }
+  .t .why { display:block; font-size:8.5px; color:#e06a5c; }
+  .note { font-size:12.5px; line-height:1.6; color:#5f5e5a; }
+  /* B */
+  .steps { display:flex; justify-content:center; gap:6px; margin:10px 0 0; font-size:10.5px; color:#8a7058; }
+  .steps span { padding:2px 6px; border-radius:10px; }
+  .steps span.done { color:#f2c46a; }
+  .steps span.now { background:#b7862b; color:#1e1510; }
+  .chosen { display:flex; gap:6px; justify-content:center; margin:8px 0 0; }
+  .chip { font-size:11px; padding:3px 9px; border-radius:12px; background:rgba(242,196,106,.15); border:1px solid #b7862b; color:#f2e5c6; }
+  .askline { margin:10px 14px 0; font-size:12px; line-height:1.6; color:#e8d6ad; background:rgba(0,0,0,.25); border-left:3px solid #b7862b; padding:6px 8px; }
+  .big { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 10px 0; }
+  .bt { border-radius:10px; padding:8px 8px; background:#3a2618; border:1px solid #5a4030; font-size:11.5px; line-height:1.45; }
+  .bt b { font-size:13px; }
+  .bt small { display:block; color:#c9b28a; font-size:10px; }
+  .bt.off { opacity:.45; }
+  .bt.off small.why { color:#e06a5c; }
+  .nav { position:absolute; bottom:12px; left:12px; right:12px; display:flex; justify-content:space-between; font-size:12px; color:#c9b28a; }
+</style>
+
+<h2>打造這一步長什麼樣子？</h2>
+<p class="subtitle">店面照你選的 A（整個畫面換成店裡）。這裡畫「打造」那一頁的兩種擺法，例子是「劍，主料隕鐵膽（三階剛）＋輔料風隼翎（二階快）」。開爐之後怎麼演出（打鐵、出爐）下一張再畫。</p>
+
+<div class="phones">
+  <div class="pcol">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="top"><span>‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">銀 186</span></div>
+        <div class="kinds"><span class="k on fit">劍</span><span class="k">刀</span><span class="k">槍</span><span class="k">棍</span><span class="k">弓</span><span class="k">弩</span><span class="k">拳套</span><span class="k">腳</span><span class="k">防具</span></div>
+        <div class="furnace">
+          <div class="slot l"><small>主料</small><b><span class="dot g"></span>隕鐵膽</b><small>三階・定工錢</small></div>
+          <div class="fire"></div>
+          <div class="slot r"><small>輔料</small><b><span class="dot q"></span>風隼翎</b><small>二階</small></div>
+          <div class="preview">出爐：<b>劍・屬陽・三階</b>　工錢 150 兩</div>
+          <div style="position:absolute;left:0;right:0;top:122px">
+            <div class="odds"><div style="width:46%">下 46</div><div style="width:32%">中 32</div><div style="width:22%">上 22</div></div>
+            <div class="oddsnote">輔料低一階，火候差一些</div>
+          </div>
+        </div>
+        <div class="go">開　爐</div>
+        <div class="bag">
+          <h4><span>背包的素材（點一下放進爐裡）</span><span>屬性・階</span></h4>
+          <div class="grid">
+            <div class="t"><span class="n">3</span><span class="dot g"></span>精鐵砂<div class="tier">一階</div></div>
+            <div class="t"><span class="n">5</span><span class="dot q"></span>驚羽<div class="tier">一階</div></div>
+            <div class="t"><span class="n">2</span><span class="dot r"></span>柳絲綿<div class="tier">一階</div></div>
+            <div class="t"><span class="n">4</span><span class="dot m"></span>沉淵石<div class="tier">一階</div></div>
+            <div class="t"><span class="n">1</span><span class="dot g"></span>玄鋼骨<div class="tier">二階</div></div>
+            <div class="t used"><span class="n">2</span><span class="dot q"></span>風隼翎<div class="tier">二階</div></div>
+            <div class="t used"><span class="n">1</span><span class="dot g"></span>隕鐵膽<div class="tier">三階</div></div>
+            <div class="t off"><span class="n">1</span><span class="dot r"></span>化水晶<div class="tier">三階</div><span class="why">只剩一個</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>A．爐台＋素材格</h3>
+        <p class="note">上面挑種類，中間是爐子左右兩格（主料、輔料），下面是背包的素材格，點一下就放進爐裡，再點一下拿出來（同煉製頁的太極火爐）。放好了，爐子底下直接寫出爐的種類、屬性、階、工錢與三個品質的機率條。放不進去的素材灰掉，寫為什麼（例：只剩一個、工錢不夠還差幾兩）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcol">
+    <div class="option" data-choice="b" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="top"><span>‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">銀 186</span></div>
+        <div class="steps"><span class="done">種類 ✓</span>›<span class="done">主料 ✓</span>›<span class="now">輔料</span>›<span>開爐</span></div>
+        <div class="chosen"><span class="chip">劍（配得上）</span><span class="chip"><span class="dot g"></span>隕鐵膽・三階</span></div>
+        <div class="askline">鐵匠掂了掂隕鐵膽：「好料。再配一樣進去，看要偏哪一路。」</div>
+        <div class="big">
+          <div class="bt"><b><span class="dot q"></span>風隼翎</b><small>二階・剩 2</small><small>→ 合出來屬陽</small></div>
+          <div class="bt"><b><span class="dot g"></span>精鐵砂</b><small>一階・剩 3</small><small>→ 合出來屬剛・配你的武學</small></div>
+          <div class="bt"><b><span class="dot q"></span>驚羽</b><small>一階・剩 5</small><small>→ 合出來屬陽</small></div>
+          <div class="bt"><b><span class="dot r"></span>柳絲綿</b><small>一階・剩 2</small><small>→ 合出來屬柔</small></div>
+          <div class="bt"><b><span class="dot m"></span>沉淵石</b><small>一階・剩 4</small><small>→ 合出來屬實</small></div>
+          <div class="bt off"><b><span class="dot g"></span>隕鐵膽</b><small class="why">只剩一個，已當主料</small></div>
+        </div>
+        <div class="nav"><span>‹ 上一步</span><span>不打了</span></div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>B．一步一張大卡</h3>
+        <p class="note">跟現在一樣照順序走（種類 → 主料 → 輔料 → 開爐），但每一步是一張大卡：上面一排進度、挑過的變成小標籤、鐵匠每一步回一句話，選項是大格子、寫清楚挑了之後會怎樣。比 A 好上手，可是看不到全局，想換主料要退回去。</p>
+      </div>
+    </div>
+  </div>
+</div>

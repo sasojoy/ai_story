@@ -1,0 +1,86 @@
+<style>
+  .row { display:flex; gap:10px; align-items:flex-start; justify-content:center; flex-wrap:wrap; margin:6px 0 2px; }
+  .fr { width:168px; height:290px; border-radius:16px; border:6px solid #2a241d; overflow:hidden; position:relative;
+        font-family:"Noto Serif TC","PMingLiU",serif; background:radial-gradient(ellipse at 50% 35%, #4a2a18 0%, #1e1510 72%); color:#f2e5c6; }
+  .cap { text-align:center; font-size:11px; color:#8a7a62; margin-top:4px; width:168px; }
+  .arrow { align-self:center; font-size:20px; color:#b7862b; }
+  .fire { position:absolute; left:44px; top:52px; width:80px; height:70px; border-radius:50% 50% 12px 12px;
+          background:radial-gradient(circle at 50% 72%, #ffcf6a 0%, #f07a2c 38%, #6a2c14 74%); box-shadow:0 0 22px rgba(240,122,44,.55); }
+  .fire.big { left:24px; top:30px; width:120px; height:110px; box-shadow:0 0 50px rgba(255,160,60,.9); }
+  .anvil { position:absolute; left:34px; top:170px; width:100px; height:18px; background:#3a3530; border-radius:4px 4px 10px 10px; box-shadow:inset 0 2px 0 #6b625a; }
+  .blade { position:absolute; left:48px; top:160px; width:72px; height:8px; border-radius:2px 8px 8px 2px; background:linear-gradient(90deg,#ff9a3c,#ffd27a); box-shadow:0 0 10px #ff9a3c; }
+  .hammer { position:absolute; left:92px; top:112px; width:12px; height:46px; background:#6b4a2a; transform:rotate(-30deg); }
+  .hammer::before { content:""; position:absolute; left:-10px; top:-6px; width:32px; height:16px; background:#4a4540; border-radius:3px; }
+  .spark { position:absolute; width:4px; height:4px; border-radius:50%; background:#ffd27a; box-shadow:0 0 6px #ffb347; }
+  .steam { position:absolute; left:30px; top:110px; width:110px; height:60px; border-radius:50%; background:radial-gradient(circle, rgba(240,235,225,.75), rgba(240,235,225,0) 70%); }
+  .line { position:absolute; left:8px; right:8px; bottom:10px; font-size:10.5px; line-height:1.5; color:#e8d6ad; background:rgba(0,0,0,.3); border-left:2px solid #b7862b; padding:4px 6px; }
+  .tapme { position:absolute; left:0; right:0; top:206px; text-align:center; font-size:11px; color:#f2c46a; }
+  .count { position:absolute; left:0; right:0; top:10px; text-align:center; font-size:11px; color:#f2c46a; letter-spacing:4px; }
+  .skip { position:absolute; right:8px; top:8px; font-size:10px; color:#c9b28a; }
+  .bundle { position:absolute; left:34px; top:80px; width:100px; height:100px; border-radius:14px; background:#6a4a2e; border:2px solid #3a2618;
+            box-shadow:0 0 30px 8px rgba(242,196,106,.75); display:flex; align-items:center; justify-content:center; font-size:11px; color:#f2e5c6; text-align:center; }
+  .bundle.blue { box-shadow:0 0 30px 8px rgba(127,176,216,.7); }
+  /* result card */
+  .res { position:absolute; left:10px; right:10px; top:26px; bottom:10px; border-radius:12px; background:#f6edd8; color:#2a241d; padding:9px 9px 7px; border:2px solid #b7862b; }
+  .res .q { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; background:#f2c46a; color:#2a241d; }
+  .res h4 { margin:5px 0 2px; font-size:15px; letter-spacing:1px; }
+  .res .meta { font-size:10.5px; color:#6d5a43; line-height:1.5; }
+  .res .stat { margin-top:5px; font-size:11px; line-height:1.55; }
+  .res .stat b { color:#a8322a; }
+  .res .btns { position:absolute; left:8px; right:8px; bottom:8px; display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .res .btns div { text-align:center; font-size:10.5px; padding:5px 0; border-radius:8px; border:1px solid #c9b28a; }
+  .res .btns div.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+  .shine { position:absolute; inset:0; background:radial-gradient(circle at 50% 35%, rgba(242,196,106,.55), rgba(242,196,106,0) 60%); }
+  .note { font-size:12.5px; line-height:1.6; color:#5f5e5a; max-width:640px; margin:4px auto 0; }
+  .block { margin:16px 0 22px; }
+  .block h3 { text-align:center; margin:0 0 2px; }
+</style>
+
+<h2>按下「開爐」之後怎麼演出？</h2>
+<p class="subtitle">先講清楚一件事：品質在你按下「開爐」那一刻就由規則擲好了，演出只是把結果演出來，<b>敲得快慢、什麼時候點都不會改變結果</b>。三種演出結尾都是同一張「出爐」卡（最右邊那格）。點一個選，也可以混搭。</p>
+
+<div class="options" style="display:block">
+<div class="option block" data-choice="a" onclick="toggleSelect(this)" style="display:block">
+  <h3>A．自動演出（約 3 秒，點一下跳過）</h3>
+  <div class="row">
+    <div><div class="fr"><div class="skip">跳過 ›</div><div class="fire big"></div><div class="line">鐵匠把隕鐵膽、風隼翎推進爐心。</div></div><div class="cap">爐火轟地竄高</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="skip">跳過 ›</div><div class="fire"></div><div class="anvil"></div><div class="blade"></div><div class="hammer"></div>
+      <div class="spark" style="left:96px;top:150px"></div><div class="spark" style="left:110px;top:140px"></div><div class="spark" style="left:84px;top:142px"></div>
+      <div class="line">噹、噹、噹——火星四濺。</div></div><div class="cap">鐵匠落錘三下</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="skip">跳過 ›</div><div class="anvil"></div><div class="blade" style="background:linear-gradient(90deg,#9aa3a8,#e6eef2);box-shadow:none"></div><div class="steam"></div><div class="line">嗤——淬進水裡，白煙騰起。</div></div><div class="cap">淬火、白煙</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="shine"></div><div class="res"><span class="q">上品</span><h4>隕羽劍</h4><div class="meta">劍・屬陽・三階</div><div class="stat">配得上你的武學<br>兵器加成 <b>+19%</b></div><div class="btns"><div class="red">換上</div><div>放進裝備庫</div></div></div></div><div class="cap">出爐卡（上品帶金光）</div></div>
+  </div>
+  <p class="note">最省事：按了就看，三步演完跳出結果。常打的人可以點一下直接跳到結果。</p>
+</div>
+
+<div class="option block" data-choice="b" onclick="toggleSelect(this)" style="display:block">
+  <h3>B．自己掄錘敲三下（儀式，不影響結果）</h3>
+  <div class="row">
+    <div><div class="fr"><div class="count">◯ ◯ ◯</div><div class="fire"></div><div class="anvil"></div><div class="blade"></div><div class="tapme">點鐵砧，敲第一錘</div><div class="line">鐵匠把錘子遞給你：「客官親手來？」</div></div><div class="cap">錘子交到你手上</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="count">● ● ◯</div><div class="fire"></div><div class="anvil"></div><div class="blade"></div><div class="hammer"></div>
+      <div class="spark" style="left:96px;top:150px"></div><div class="spark" style="left:112px;top:138px"></div><div class="spark" style="left:80px;top:144px"></div><div class="spark" style="left:104px;top:128px"></div>
+      <div class="tapme">再一錘</div><div class="line">噹！火星濺上你的袖口。</div></div><div class="cap">每點一下一錘、火星</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="anvil"></div><div class="blade" style="background:linear-gradient(90deg,#9aa3a8,#e6eef2);box-shadow:none"></div><div class="steam"></div><div class="line">第三錘落下，鐵匠接過去淬火。</div></div><div class="cap">第三錘後自動淬火</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="shine"></div><div class="res"><span class="q">上品</span><h4>隕羽劍</h4><div class="meta">劍・屬陽・三階</div><div class="stat">配得上你的武學<br>兵器加成 <b>+19%</b></div><div class="btns"><div class="red">換上</div><div>放進裝備庫</div></div></div></div><div class="cap">同一張出爐卡</div></div>
+  </div>
+  <p class="note">最有「親手打」的感覺。要小心的是玩家會以為敲得好就出好東西，所以畫面上不放節奏條、不計時，鐵匠那句話也不暗示手藝；三錘只是儀式。</p>
+</div>
+
+<div class="option block" data-choice="c" onclick="toggleSelect(this)" style="display:block">
+  <h3>C．出爐先包著，光色預告、點開揭曉</h3>
+  <div class="row">
+    <div><div class="fr"><div class="fire big"></div><div class="line">爐火轟地竄高……</div></div><div class="cap">短短一下爐火</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="bundle">裹著麻布<br>透出金光</div><div class="tapme" style="top:200px">點開看看</div><div class="line">鐵匠用麻布裹著遞過來，布縫裡透出光。</div></div><div class="cap">金光＝上品（中品青光、下品沒光）</div></div>
+    <div class="arrow">›</div>
+    <div><div class="fr"><div class="shine"></div><div class="res"><span class="q">上品</span><h4>隕羽劍</h4><div class="meta">劍・屬陽・三階</div><div class="stat">配得上你的武學<br>兵器加成 <b>+19%</b></div><div class="btns"><div class="red">換上</div><div>放進裝備庫</div></div></div></div><div class="cap">同一張出爐卡</div></div>
+  </div>
+  <p class="note">借三國志戰略版「結果隨機」那種開獎的期待感：光色先透露品質，點開才看到名字與數字。名器、神器另有自己的光（例：名器紫光、神器紅金光、還要定名）。</p>
+</div>
+</div>

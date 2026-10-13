@@ -1,0 +1,95 @@
+<style>
+  .phones { display:flex; gap:26px; flex-wrap:wrap; justify-content:center; margin-top:14px; }
+  .pcol { width:310px; }
+  .phone { width:310px; height:640px; border-radius:26px; border:8px solid #2a241d; overflow:hidden; position:relative;
+           font-family:"Noto Serif TC","PMingLiU",serif; box-shadow:0 6px 18px rgba(0,0,0,.18); color:#2a241d; }
+  .wood { background:repeating-linear-gradient(90deg,#7a5232 0 38px,#6e4a2c 38px 40px,#82593a 40px 78px,#6a4529 78px 80px); }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:9px 10px 0; font-size:11.5px; color:#f2e5c6; }
+  .sign { padding:3px 14px; border:2px solid #3a2618; border-radius:4px; background:#f6edd8; letter-spacing:5px; font-size:14px; color:#6b2a1a; }
+  .held { margin:8px 8px 0; background:rgba(30,20,10,.45); border-radius:10px; padding:6px 8px; color:#f2e5c6; font-size:10.5px; }
+  .held .slots { display:flex; gap:5px; margin-top:4px; }
+  .held .s { flex:1; height:30px; border-radius:6px; background:#f6edd8; color:#2a241d; font-size:9.5px; line-height:1.25; padding:2px 4px; position:relative; }
+  .held .s.empty { background:none; border:1px dashed #c9ad7c; color:#c9ad7c; display:flex; align-items:center; justify-content:center; }
+  .board { position:relative; height:400px; margin:6px 0 0; }
+  .n { position:absolute; width:118px; background:#f6edd8; border-radius:2px; box-shadow:2px 3px 6px rgba(0,0,0,.35); padding:14px 7px 6px; font-size:10px; line-height:1.4; }
+  .n::before { content:""; position:absolute; left:50%; top:4px; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:#8e2a22; box-shadow:0 1px 1px rgba(0,0,0,.4); }
+  .n h5 { margin:0 0 2px; font-size:13px; letter-spacing:2px; }
+  .n .k { display:inline-block; font-size:9px; padding:0 4px; border-radius:3px; color:#fff; margin-bottom:2px; }
+  .k.red { background:#a8322a; } .k.blue { background:#2f5d8a; } .k.green { background:#3f7d5c; } .k.gold { background:#9a6a2a; } .k.black { background:#2a241d; }
+  .n .due { color:#6d5a43; font-size:9px; }
+  .n .prize { color:#a8322a; font-size:9.5px; }
+  .n.seal::after { content:"已揭"; position:absolute; right:4px; bottom:6px; width:30px; height:30px; border:2px solid #b3261e; color:#b3261e; border-radius:4px; font-size:10px; display:flex; align-items:center; justify-content:center; transform:rotate(-14deg); opacity:.85; }
+  .n.give { background:#fbf1d0; border:1px solid #c9a24a; }
+  .n.dim { opacity:.55; }
+  .zoom { position:absolute; left:16px; right:16px; bottom:14px; background:#f6edd8; border:2px solid #6b4a2a; border-radius:8px; padding:9px 10px; font-size:11px; line-height:1.55; box-shadow:0 6px 16px rgba(0,0,0,.45); }
+  .zoom h4 { margin:0 0 3px; font-size:15px; letter-spacing:2px; }
+  .zoom .btns { display:grid; grid-template-columns:2fr 1fr; gap:6px; margin-top:6px; }
+  .zoom .btns div { text-align:center; padding:6px 0; border-radius:8px; border:1px solid #8a6a42; font-size:11.5px; background:#fbf7ef; }
+  .zoom .btns div.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+  .note { font-size:12.5px; line-height:1.6; color:#5f5e5a; }
+  /* B */
+  .paper { background:#efe3c8; }
+  .topB { display:flex; align-items:center; justify-content:space-between; padding:9px 10px 0; font-size:11.5px; color:#3a2618; }
+  .tabsB { display:flex; margin:9px 8px 0; border-bottom:1px solid #c9ad7c; font-size:11.5px; }
+  .tabsB div { flex:1; text-align:center; padding:6px 0; color:#6d5a43; }
+  .tabsB div.on { color:#a8322a; border-bottom:2px solid #a8322a; }
+  .strip { margin:7px 8px 0; background:#fbf7ef; border:1px solid #d8c49c; border-left:5px solid #a8322a; border-radius:6px; padding:6px 8px; font-size:11px; line-height:1.45; display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .strip small { display:block; color:#6d5a43; font-size:9.8px; }
+  .strip .b { flex:none; padding:5px 9px; border-radius:8px; border:1px solid #8a6a42; font-size:11px; }
+  .strip .b.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+  .strip.blue { border-left-color:#2f5d8a; } .strip.green { border-left-color:#3f7d5c; } .strip.gold { border-left-color:#9a6a2a; background:#fbf1d0; } .strip.black { border-left-color:#2a241d; }
+  .sec { margin:10px 12px 0; font-size:10.5px; color:#6d5a43; }
+</style>
+
+<h2>懸賞榜長什麼樣子？</h2>
+<p class="subtitle">店面照 A（整個畫面換成懸賞榜）。榜上有六種：討伐、打探、護送（要揭下）、求藝、求兵（不用揭，直接交）、通緝；一人手上最多揭 3 張。地名、獎勵是示意。點一個選。</p>
+
+<div class="phones">
+  <div class="pcol">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone wood">
+        <div class="top"><span>‹ 離開</span><span class="sign">宛城懸賞榜</span><span>銀 186</span></div>
+        <div class="held">你手上揭著的（2／3）
+          <div class="slots"><div class="s">討伐・長社<br><span style="color:#6d5a43">期限 第 6 週</span></div><div class="s">護送・往涿郡<br><span style="color:#6d5a43">名額剩 1</span></div><div class="s empty">還能揭 1 張</div></div>
+        </div>
+        <div class="board">
+          <div class="n" style="left:12px;top:8px;transform:rotate(-3deg)"><span class="k red">討伐・官軍</span><h5>長社</h5>打贏一場黃巾隊伍<div class="prize">另有重賞</div><div class="due">期限 第 6 週・剩 2</div></div>
+          <div class="n seal" style="left:160px;top:4px;transform:rotate(2deg)"><span class="k green">護送・黃巾</span><h5>往涿郡</h5>從此地走到涿郡<div class="due">期限 第 6 週・剩 1</div></div>
+          <div class="n" style="left:150px;top:118px;transform:rotate(-2deg)"><span class="k blue">打探・官軍</span><h5>汝南荒野</h5>到那裡探索一次<div class="due">期限 第 5 週・剩 3</div></div>
+          <div class="n give" style="left:10px;top:128px;transform:rotate(3deg)"><span class="k gold">求兵・豪強</span><h5>快・劍</h5>交一把屬快的劍<div class="prize">你有 1 件合用</div><div class="due">到季末・剩 3</div></div>
+          <div class="n dim" style="left:84px;top:236px;transform:rotate(-1deg)"><span class="k black">通緝・黃巾</span><h5>陸乙</h5>截殺打贏他<div class="due">押金 80 兩</div></div>
+        </div>
+        <div class="zoom">
+          <h4>討伐・長社 <span style="font-size:10.5px;color:#6d5a43;letter-spacing:0">官軍掛的</span></h4>
+          到長社遊歷，打贏一場黃巾的隊伍。<br>賞：銀 30・經驗 40・俠名 2　<span style="color:#a8322a">另有重賞（寶物或良駒，第一個交差的人拿）</span><br><span style="color:#6d5a43">期限 第 6 週・週一 00:00・名額還剩 2</span>
+          <div class="btns"><div class="red">揭下這張</div><div>放回去</div></div>
+        </div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>A．木板上釘告示</h3>
+        <p class="note">一塊木板釘著一張張告示，顏色分種類（討伐紅、打探藍、護送綠、求藝求兵金邊、通緝黑），揭了的蓋「已揭」朱印；最上面一排是你手上的三格。點一張告示放大看，揭下、交出、放棄都在放大那一張上。最有「站在榜前挑單」的感覺；張數多時板子要捲動。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcol">
+    <div class="option" data-choice="b" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone paper">
+        <div class="topB"><span>‹ 離開</span><span class="sign">宛城懸賞榜</span><span>銀 186</span></div>
+        <div class="tabsB"><div class="on">手上的 2／3</div><div>可揭 5</div><div>可交 1</div></div>
+        <div class="sec">你揭著的</div>
+        <div class="strip"><div>討伐・長社　<span style="color:#a8322a">另有重賞</span><small>到長社打贏一場黃巾隊伍・期限 第 6 週・剩 2</small></div><span class="b">放棄</span></div>
+        <div class="strip green"><div>護送・往涿郡<small>走到涿郡就交差・期限 第 6 週・剩 1</small></div><span class="b">放棄</span></div>
+        <div class="sec">你身上交得出的</div>
+        <div class="strip gold"><div>求兵・豪強：快・劍<small>你有 1 件合用：青鋒劍（一階中品）・到季末・剩 3</small></div><span class="b red">交出…</span></div>
+        <div class="sec">這裡還能揭的（切到「可揭」看全部）</div>
+        <div class="strip blue"><div>打探・汝南荒野<small>到那裡探索一次・期限 第 5 週・剩 3</small></div><span class="b red">揭下</span></div>
+        <div class="strip black"><div>通緝・陸乙<small>截殺打贏他・押金 80 兩</small></div><span class="b red">揭下</span></div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>B．分頁卷宗</h3>
+        <p class="note">三個分頁：手上的、可揭的、可交的（求藝求兵）。每張是一條橫條，左邊色條分種類，右邊直接一顆鈕。找單、交差最快，張數多也好讀；比較像清單，少了「站在榜前」的感覺。</p>
+      </div>
+    </div>
+  </div>
+</div>

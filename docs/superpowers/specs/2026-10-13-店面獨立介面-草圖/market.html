@@ -1,0 +1,101 @@
+<style>
+  .phones { display:flex; gap:26px; flex-wrap:wrap; justify-content:center; margin-top:14px; }
+  .pcol { width:310px; }
+  .phone { width:310px; height:620px; border-radius:26px; border:8px solid #2a241d; overflow:hidden; position:relative;
+           font-family:"Noto Serif TC","PMingLiU",serif; box-shadow:0 6px 18px rgba(0,0,0,.18);
+           background:linear-gradient(180deg,#d9c39a 0%, #c9ad7c 55%, #8a6a42 100%); color:#2a241d; }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:9px 10px 0; font-size:11.5px; color:#3a2618; }
+  .sign { padding:3px 14px; border:2px solid #6b4a2a; border-radius:4px; background:#f6edd8; letter-spacing:5px; font-size:14px; color:#6b2a1a; }
+  .line { margin:9px 12px 0; font-size:12px; line-height:1.6; background:rgba(246,237,216,.85); border-left:3px solid #6b4a2a; padding:6px 8px; }
+  .stalls { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:10px 8px 0; }
+  .stall { height:118px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#6b4a2a 0 10px, #e8d6ad 10px); border:1px solid #6b4a2a; position:relative; text-align:center; font-size:10.5px; }
+  .stall .tag { position:absolute; left:0; right:0; bottom:4px; line-height:1.35; }
+  .stall .tag b { font-size:11.5px; }
+  .horse { width:54px; height:40px; margin:20px auto 0; border-radius:40% 50% 30% 30%; position:relative; }
+  .horse::before { content:""; position:absolute; right:-10px; top:-12px; width:16px; height:26px; border-radius:40%; background:inherit; transform:rotate(25deg); }
+  .h1 { background:#8a4a2a; } .h2 { background:#4a5a6a; } .h3 { background:#2a2420; } .empty { background:none; border:1.5px dashed #8a6a42; }
+  .stall.on { outline:2px solid #a8322a; }
+  .stall .who { position:absolute; left:0; right:0; top:12px; font-size:9.5px; color:#6b2a1a; }
+  .detail { margin:10px 8px 0; background:#f6edd8; border:2px solid #6b4a2a; border-radius:10px; padding:8px 10px; font-size:11.5px; line-height:1.55; }
+  .detail h4 { margin:0 0 3px; font-size:14px; }
+  .bars div { display:flex; align-items:center; gap:6px; font-size:10.5px; }
+  .bars span.l { width:52px; color:#6d5a43; }
+  .bars span.v { flex:1; height:7px; border-radius:4px; background:#e0d0b0; position:relative; overflow:hidden; }
+  .bars span.v i { position:absolute; left:0; top:0; bottom:0; background:#a8322a; }
+  .bars span.n { width:32px; text-align:right; }
+  .feed { margin-top:5px; font-size:10.5px; color:#6d5a43; }
+  .feed i { display:inline-block; width:90px; height:7px; border-radius:4px; background:linear-gradient(90deg,#3f7d5c 40%,#e0d0b0 40%); vertical-align:middle; }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:7px; }
+  .btns div { text-align:center; padding:6px 0; border-radius:8px; border:1px solid #8a6a42; font-size:11.5px; background:#fbf7ef; }
+  .btns div.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+  .btns div.off { opacity:.45; }
+  .note { font-size:12.5px; line-height:1.6; color:#5f5e5a; }
+  /* B */
+  .mine { margin:10px 8px 0; background:#f6edd8; border:2px solid #6b4a2a; border-radius:12px; padding:8px 10px; display:flex; gap:10px; align-items:center; }
+  .mine .horse { margin:0; width:60px; height:44px; flex:none; }
+  .mine .t { font-size:11px; line-height:1.5; }
+  .mine .t b { font-size:13px; }
+  .trough { margin:8px 8px 0; background:rgba(246,237,216,.85); border-radius:10px; padding:7px 10px; font-size:11px; display:flex; justify-content:space-between; align-items:center; }
+  .trough .b { padding:4px 10px; border-radius:8px; background:#3f7d5c; color:#fff; }
+  .list h5 { margin:10px 12px 4px; font-size:11px; color:#3a2618; font-weight:normal; }
+  .rowh { margin:0 8px 5px; background:#fbf7ef; border:1px solid #c9ad7c; border-radius:9px; padding:6px 8px; display:flex; justify-content:space-between; align-items:center; font-size:11px; }
+  .rowh small { color:#6d5a43; display:block; font-size:10px; }
+  .rowh .b { padding:4px 9px; border-radius:8px; border:1px solid #8a6a42; font-size:11px; }
+  .rowh .b.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+</style>
+
+<h2>馬市長什麼樣子？</h2>
+<p class="subtitle">店面照 A（整個畫面換成馬市）。馬市做的事：買馬（這裡只賣駑馬，100 兩）、餵你騎的那匹、把裝備庫裡的馬換上。兩種擺法，點一個選。</p>
+
+<div class="phones">
+  <div class="pcol">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="top"><span>‹ 出市</span><span class="sign">涿郡馬市</span><span>銀 186</span></div>
+        <div class="line">馬販拍著馬脖子：「這匹棗騮腳程穩，一百兩牽走。」</div>
+        <div class="stalls">
+          <div class="stall on"><div class="who">你騎的</div><div class="horse h2"></div><div class="tag"><b>青驄駒</b><br>良駒・中品</div></div>
+          <div class="stall"><div class="who">待售</div><div class="horse h1"></div><div class="tag"><b>棗騮馬</b><br>駑馬・100 兩</div></div>
+          <div class="stall"><div class="who">裝備庫</div><div class="horse h3"></div><div class="tag"><b>黑鬃馬</b><br>駑馬・上品</div></div>
+        </div>
+        <div class="detail">
+          <h4>青驄駒 <small style="font-size:10.5px;color:#6d5a43">良駒・中品・你騎著</small></h4>
+          <div class="bars">
+            <div><span class="l">省體力</span><span class="v"><i style="width:43%"></i></span><span class="n">43%</span></div>
+            <div><span class="l">路上快</span><span class="v"><i style="width:48%"></i></span><span class="n">48%</span></div>
+            <div><span class="l">決戰騎兵</span><span class="v"><i style="width:10%"></i></span><span class="n">+10%</span></div>
+            <div><span class="l">落敗脫身</span><span class="v"><i style="width:50%"></i></span><span class="n">50%</span></div>
+          </div>
+          <div class="feed">飽足 <i></i> 40　餓了腳程打折</div>
+          <div class="btns"><div class="red">餵（一階素材）</div><div class="off">已騎著</div></div>
+        </div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>A．一排馬廄</h3>
+        <p class="note">一間一匹馬：你騎的、馬販待售的、裝備庫裡的並排在馬廄裡，點一匹看牠的四項本事與飽足，底下是對牠能做的事（餵、換上、買）。好認、有逛馬市的感覺；裝備庫的馬多了要左右滑。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcol">
+    <div class="option" data-choice="b" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="top"><span>‹ 出市</span><span class="sign">涿郡馬市</span><span>銀 186</span></div>
+        <div class="line">馬販拍著馬脖子：「這匹棗騮腳程穩，一百兩牽走。」</div>
+        <div class="mine"><div class="horse h2"></div><div class="t"><b>青驄駒</b>　良駒・中品<br>省體力 43%・路上快 48%<br>騎兵 +10%・脫身 50%</div></div>
+        <div class="trough"><span>飽足 40／100　餓了腳程打折</span><span class="b">餵一把料</span></div>
+        <div class="list">
+          <h5>馬販待售</h5>
+          <div class="rowh"><div>棗騮馬　駑馬・下品<small>省體力 25%・路上快 30%</small></div><span class="b red">100 兩買下</span></div>
+          <h5>你裝備庫裡的馬</h5>
+          <div class="rowh"><div>黑鬃馬　駑馬・上品<small>省體力 30%・路上快 35%・比你騎的慢</small></div><span class="b">換上</span></div>
+          <div class="rowh"><div>白蹄駒　良駒・下品<small>省體力 40%・路上快 45%・比你騎的慢</small></div><span class="b">換上</span></div>
+        </div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>B．你的馬在上、清單在下</h3>
+        <p class="note">上面一張大卡是你騎的那匹與飼料槽（一鍵餵），底下兩段清單：馬販待售、你裝備庫裡的馬，每列直接寫本事與按鈕。資訊一次看完、按的次數少；比較像清單，逛的感覺弱一點。</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,110 @@
+<style>
+  .phones { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; margin-top:14px; }
+  .pcol { width:300px; }
+  .phone { width:300px; height:580px; border-radius:26px; border:8px solid #2a241d; background:#f4ede0; color:#2a241d;
+           overflow:hidden; position:relative; font-family:"Noto Serif TC","PMingLiU",serif; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .bar { height:34px; background:#fbf7ef; border-bottom:1px solid #ddd1bc; display:flex; align-items:center; gap:6px; padding:0 8px; font-size:11px; }
+  .pill { height:7px; border-radius:4px; flex:1; background:linear-gradient(90deg,#c08a1e 70%,#e8dcc4 70%); }
+  .pill.hp { background:linear-gradient(90deg,#b23a2b 85%,#e8dcc4 85%); }
+  .tabs { position:absolute; bottom:0; left:0; right:0; height:40px; background:#fbf7ef; border-top:1px solid #ddd1bc;
+          display:flex; justify-content:space-around; align-items:center; font-size:11px; color:#7a6a55; }
+  .tabs b { color:#a8322a; }
+  .muted { color:#8a7a62; font-size:11px; }
+  .card { background:#fbf7ef; border:1px solid #ddd1bc; border-radius:10px; padding:8px 10px; margin:8px; font-size:12px; line-height:1.5; }
+  .btnrow { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:8px; }
+  .b { background:#fbf7ef; border:1px solid #ddd1bc; border-radius:9px; padding:7px 4px; font-size:11.5px; text-align:center; }
+  .b.red { background:#a8322a; color:#fff; border-color:#a8322a; }
+  /* A full-screen */
+  .shop { position:absolute; inset:0; background:radial-gradient(ellipse at 50% 30%, #4a2a18 0%, #1e1510 70%); color:#f2e5c6; }
+  .sign { margin:10px auto 0; width:150px; text-align:center; padding:6px 0; border:2px solid #b7862b; border-radius:4px;
+          background:#2b1a10; letter-spacing:6px; font-size:16px; color:#f2c46a; }
+  .back { position:absolute; left:10px; top:12px; font-size:12px; color:#e8d6ad; }
+  .forge { margin:18px auto 6px; width:170px; height:120px; border-radius:50% 50% 12px 12px; background:radial-gradient(circle at 50% 70%, #ffb347 0%, #e0642a 35%, #5a2a14 70%); position:relative; }
+  .anvil { margin:0 auto; width:120px; height:22px; background:#3a3530; border-radius:4px 4px 10px 10px; box-shadow:inset 0 2px 0 #6b625a; }
+  .smith-line { margin:10px 14px; font-size:12px; line-height:1.6; color:#e8d6ad; background:rgba(0,0,0,.25); border-left:3px solid #b7862b; padding:6px 8px; }
+  .shoptabs { position:absolute; bottom:0; left:0; right:0; display:flex; border-top:1px solid #5a4030; }
+  .shoptabs div { flex:1; text-align:center; padding:10px 0; font-size:12px; color:#c9b28a; }
+  .shoptabs div.on { color:#f2c46a; border-top:2px solid #f2c46a; background:rgba(242,196,106,.08); }
+  .slotrow { display:flex; justify-content:center; gap:10px; margin:6px 0; }
+  .slot { width:62px; height:62px; border:1.5px dashed #b7862b; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#d8c08e; text-align:center; }
+  /* B in-page scene */
+  .scene { margin:8px; height:150px; border-radius:12px; background:linear-gradient(180deg,#3a2416,#1e1510); color:#f2e5c6; position:relative; overflow:hidden; }
+  .scene .forge { width:110px; height:78px; margin:16px auto 4px; }
+  .scene .anvil { width:80px; height:14px; }
+  .scene .cap { position:absolute; left:10px; top:8px; font-size:13px; letter-spacing:3px; color:#f2c46a; }
+  .icons { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:8px; }
+  .ic { background:#fbf7ef; border:1px solid #ddd1bc; border-radius:10px; padding:8px 0 6px; text-align:center; font-size:11px; }
+  .ic i { display:block; font-style:normal; font-size:18px; margin-bottom:2px; }
+  /* C sheet */
+  .dim { position:absolute; inset:34px 0 0 0; background:rgba(30,20,10,.35); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; height:62%; background:#2b1a10; color:#f2e5c6; border-radius:18px 18px 0 0; box-shadow:0 -6px 18px rgba(0,0,0,.3); }
+  .grab { width:40px; height:4px; border-radius:2px; background:#8a6a4a; margin:8px auto 4px; }
+  .note { font-size:12.5px; line-height:1.6; margin-top:8px; color:#5f5e5a; }
+</style>
+
+<h2>三間店要用哪一種「店面」？</h2>
+<p class="subtitle">鐵匠鋪、馬市、懸賞榜用同一種方式打開，這裡先拿鐵匠鋪畫。三張都是 375 寬手機的比例；爐子、鐵砧只是示意，之後真的做會換成跟遊戲同一種水墨畫風。點一張選，也可以在對話裡說「A 的店面＋B 的按鈕」這種混搭。</p>
+
+<div class="phones">
+  <div class="pcol">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="shop">
+          <div class="back">‹ 出店</div>
+          <div class="sign">鐵匠鋪</div>
+          <div class="forge"></div>
+          <div class="anvil"></div>
+          <div class="smith-line">鐵匠擦了把汗：「客官要打點什麼？爐火正旺。」</div>
+          <div class="slotrow"><div class="slot">主料<br>點此放</div><div class="slot">輔料<br>點此放</div></div>
+          <div class="shoptabs"><div>買・修</div><div class="on">打造</div><div>淬煉</div><div>裝備庫</div></div>
+        </div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>A．整個畫面換成店裡</h3>
+        <p class="note">像武學譜那本書一樣蓋住整個畫面：店的招牌、爐火、鐵匠的一句話，底下是店裡自己的分頁。進門就是「走進一間店」，最有沉浸感；看不到狀態列與江湖頁，要按「出店」才回去。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcol">
+    <div class="option" data-choice="b" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="bar">體力<div class="pill"></div>氣血<div class="pill hp"></div><span>銀 186</span></div>
+        <div class="scene"><div class="cap">鐵匠鋪・宛城</div><div class="forge"></div><div class="anvil"></div></div>
+        <div class="card">鐵匠擦了把汗：「客官要打點什麼？爐火正旺。」</div>
+        <div class="icons">
+          <div class="ic"><i>⚒</i>打造</div><div class="ic"><i>🔥</i>淬煉</div><div class="ic"><i>🛠</i>修</div><div class="ic"><i>🗡</i>買</div>
+          <div class="ic"><i>⇄</i>換上</div><div class="ic"><i>✂</i>拆解</div><div class="ic"><i>🛡</i>防具</div><div class="ic"><i>‹</i>離開</div>
+        </div>
+        <div class="tabs"><b>江湖</b><span>修練</span><span>煉製</span><span>輿圖</span><span>見聞</span></div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>B．江湖頁裡換成店面場景</h3>
+        <p class="note">還在江湖頁：場景那一塊換成店裡的畫面，一長串按鈕換成一格一格的圖示。狀態列與底部分頁都還在；改動最小，但「店」的感覺比 A 弱，打造那一步仍要另開一層。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcol">
+    <div class="option" data-choice="c" onclick="toggleSelect(this)" style="display:block;padding:0;border:none;background:none">
+      <div class="phone">
+        <div class="bar">體力<div class="pill"></div>氣血<div class="pill hp"></div><span>銀 186</span></div>
+        <div class="card"><span class="muted">剛剛</span><br>你走進宛城的鐵匠鋪，爐火映得半邊牆通紅。</div>
+        <div class="card" style="height:70px">宛城・城鎮</div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div style="text-align:center;letter-spacing:5px;color:#f2c46a;font-size:14px">鐵匠鋪</div>
+          <div class="slotrow" style="margin-top:12px"><div class="slot">主料</div><div class="slot">輔料</div></div>
+          <div class="smith-line" style="margin:10px">「三階的料子，工錢要一百五十兩。」</div>
+          <div class="shoptabs"><div>買・修</div><div class="on">打造</div><div>淬煉</div><div>裝備庫</div></div>
+        </div>
+        <div class="tabs" style="display:none"></div>
+      </div>
+      <div class="content" style="margin-top:8px">
+        <h3>C．從底下拉出櫃檯</h3>
+        <p class="note">店裡的東西從畫面底下拉上來，佔大半個畫面，上面還看得到「剛剛」與場景、狀態列的銀兩。比 A 輕、比 B 像一間店；可往上拉滿、往下拉收起。</p>
+      </div>
+    </div>
+  </div>
+</div>
