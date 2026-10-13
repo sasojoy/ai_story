@@ -165,3 +165,83 @@ def test_walking_off_or_reloading_clears_the_shop_line(content, world):
     game.state.player.location = "lake"  # 湖邊不是城鎮：讀檔修補時收起懸賞榜
     again = Game(content, game.state, random.Random(0), world)
     assert (again.state.player.picking_bounty, again.state.player.shop_line) == (False, "")
+
+
+# ── Task 2：market_view 與 shop_view 的分派 ──
+
+
+def test_the_abilities_match_the_practice_page_row(content, world):
+    content.config.mounts.enabled = True
+    horse = _horse(edge=40)
+    got = mounts.abilities(content, horse)
+    game = _market(content, world, horse=horse)
+    row = mounts.rows(game.state, content)["worn"]
+    assert (row["save"], row["speed"], row["cavalry"], row["escape"]) == tuple(mounts.pct(got[k]) for k in ("save", "speed", "cavalry", "escape"))
+    assert got["save"] == mounts.leg_power(content, horse) and got["speed"] == mounts.speed_of(content, horse)
+
+
+def test_no_horse_has_an_empty_stall_and_focuses_the_sale(content, world):
+    game = _market(content, world)
+    view = game.shop_view()
+    price = content.config.mounts.shop_price
+    assert (view["shop"], view["back"], view["sign"]) == ("market", mounts.BACK, f"{content.locations['town'].name}{mounts.MARKET}")
+    empty, sale = view["stalls"]
+    assert empty["empty"] and empty["name"] == shopview.NO_HORSE and empty["who"] == shopview.STALL_WHO["worn"]
+    assert sale["role"] == "sale" and sale["id"] == "架:馬" and view["focus"] == "架:馬"
+    assert sale["action"] == {"id": mounts.BUY, "label": shopview.BUY_TEXT.format(price=price), "use": "", "enabled": True, "why": None}
+    assert [b["label"] for b in sale["bars"]] == ["省體力", "路上快", "決戰騎兵", "落敗脫身"] and sale["fed"] is None
+    fresh = mounts.fresh_power(content, mounts.shop_item(game.state, content))
+    assert sale["bars"][0]["text"] == mounts.pct(fresh) and sale["bars"][0]["value"] == mounts.half_up(fresh * 100)
+    assert sale["coat"] == mounts.COATS.index(mounts.coat_for("town")) and sale["sub"].endswith(f"{price} 兩")
+
+
+def test_the_ridden_horse_feeds_and_the_rack_compares(content, world):
+    ride = _horse(edge=40)
+    game = _market(content, world, horse=ride)
+    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "上品"), _horse("騎:3", "白蹄駒", 3, "下品")]
+    view = game.shop_view()
+    worn, _sale, slow, fast = view["stalls"]
+    assert worn["id"] == "騎:1" and view["focus"] == "騎:1"
+    assert worn["fed"] == {"word": mounts.WEAR_WORD, "value": 40, "note": shopview.HUNGRY_NOTE}
+    assert worn["action"]["id"] == mounts.FEED and worn["action"]["enabled"] and "精鐵砂×1" in worn["action"]["use"]
+    assert (slow["compare"], fast["compare"]) == (shopview.SLOWER, shopview.FASTER)
+    assert fast["action"] == {"id": f"{mounts.WIELD}騎:3", "label": shopview.WIELD_TEXT, "use": "", "enabled": True, "why": None}
+    ride.edge = 100
+    worn = game.shop_view()["stalls"][0]
+    assert not worn["action"]["enabled"] and worn["action"]["why"] == mounts.NOT_HUNGRY and worn["fed"]["note"] == ""
+
+
+def test_buying_is_greyed_with_the_rule_reason(content, world):
+    game = _market(content, world, silver=50)
+    assert game.shop_view()["stalls"][1]["action"]["why"] == f"還差 {content.config.mounts.shop_price - 50} 兩"
+    game = _market(content, world, name="滿", horse=_horse())
+    content.config.weapons.rack_cap = 1
+    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "上品")]
+    sale = game.shop_view()["stalls"][1]
+    assert not sale["action"]["enabled"] and sale["action"]["why"] == equipment.RACK_FULL
+
+
+def test_no_market_shop_when_switched_off_left_or_in_a_battle(content, world):
+    import server
+
+    game = _market(content, world)
+    assert server.main_view(game)["shop"]["shop"] == "market"
+    assert game.shop_view([mounts.BACK, "battle:join:x"]) is None  # 決戰的鈕在前面：照舊畫那一串（同第一批的 _shop_live）
+    content.config.shop_screens = False
+    assert game.shop_view() is None and "shop" not in server.main_view(game)
+    content.config.shop_screens = True
+    game.choose(mounts.BACK)
+    assert game.shop_view() is None
+
+
+def test_the_switch_off_leaves_the_old_market_menu(content, world):
+    import server
+
+    on = _market(content, world, name="開", horse=_horse(edge=40))
+    content.config.shop_screens = False
+    off = _market(content, world, name="關", horse=_horse(edge=40))
+    view_off = server.main_view(off)
+    content.config.shop_screens = True
+    view_on = server.main_view(on)
+    assert "shop" not in view_off and view_on["shop"]["shop"] == "market"
+    assert [(o["id"], o["label"], o["enabled"]) for o in view_on["options"]] == [(o["id"], o["label"], o["enabled"]) for o in view_off["options"]]

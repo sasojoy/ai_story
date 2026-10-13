@@ -126,6 +126,16 @@ def raid_flee(content: Content, attacker: GameState, target: GameState) -> float
     return max(0.0, min(content.config.mounts.raid_escape_cap, gap))
 
 
+def abilities(content: Content, item: Equipment) -> dict[str, float]:
+    """這一匹的四項本事（修練頁坐騎那一列與店面的馬廄共用；5.1）：疾行省幾成體力（腳力，save）、步行快幾成（speed）、決戰強攻奇襲多幾成
+    （cavalry）、落敗脫身的機會（escape）——都照這一匹自己的階、品質與飽足算（同 cavalry()／escape() 的公式，只是不看身上騎的是不是牠）。"""
+    rule, fed = content.config.mounts, fed_factor(content, item)
+    return {
+        "save": leg_power(content, item), "speed": speed_of(content, item),
+        "cavalry": _cell(rule.cavalry, item) * fed, "escape": _cell(rule.escape, item) * fed,
+    }
+
+
 # ---- 字 ----
 
 def half_up(x: float) -> int:
@@ -337,13 +347,12 @@ def _row(state: GameState, content: Content, item: Equipment, worn: bool) -> dic
     （同 cavalry()／escape() 的公式，只是不看身上騎的是不是牠）。身上那匹另給「餵」鈕的能不能按（feed）與那一段字（feed_note：
     用哪一種素材，或為什麼不行）。每一列給「換上」能不能按（wield_ok）與原因（wield_note）：路上不能換坐騎（2.3），網頁照它把裝備庫
     那一列的「換上」灰掉，不必按了才知道。裝備庫裡的沒有「餵」，也沒有拆解（4.8）。"""
-    rule, fed = content.config.mounts, fed_factor(content, item)
+    got = abilities(content, item)
     on_road = state.player.journey is not None
     row = {
         "id": item.id, "name": name_of(item), "tier": item.tier, "quality": item.quality, "grade": grade(item),
         "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「飽足度 N」（3.1 的字表，不在網頁寫死）
-        "save": pct(leg_power(content, item)), "speed": pct(speed_of(content, item)),
-        "cavalry": pct(_cell(rule.cavalry, item) * fed), "escape": pct(_cell(rule.escape, item) * fed),
+        "save": pct(got["save"]), "speed": pct(got["speed"]), "cavalry": pct(got["cavalry"]), "escape": pct(got["escape"]),
         "feed": False, "feed_note": "", "wield_ok": not on_road, "wield_note": ON_ROAD if on_road else "",
     }
     if worn:

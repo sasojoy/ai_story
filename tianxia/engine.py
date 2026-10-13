@@ -2942,24 +2942,39 @@ class Game:
             self._shop_say(shopview.problem_key(problem, "refused"))
         return item, msgs, report
 
-    def _shop_live(self, option_ids=None) -> bool:
-        """鐵匠鋪那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有「出店」（smith:back），而且前面沒有決戰、奪璽單挑的鈕。
-        決戰開打、休季時選單換成三招或「休季中」，鐵匠鋪那一串根本不在上面（picking_smith 卻還是真的）：這時給店面，出店會被拒絕、
-        人就困在店裡，休季還開得了爐（終審 Critical 1）。集結時決戰的鈕排在鐵匠鋪那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
-        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
-        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
-        return "smith:back" in ids and not any(i.startswith(("battle:", "seal:")) for i in ids)
-
-    def shop_view(self, option_ids=None) -> dict | None:
-        """店面（店面獨立介面設計 6.1）：開關開著、鐵匠鋪開著（picking_smith，人在城鎮）、鐵匠鋪那一串是眼前的選單（_shop_live）才有；
-        一步一步的單子還開著（開關關著時開的、舊存檔）就照舊畫那一串按鈕，不給店面（店面上的鈕在單子那一步不在選單上）。"""
+    def _shop_open(self) -> str | None:
+        """哪一間店開著（店面獨立介面設計 1.1；同 options() 的先後：懸賞榜、鐵匠鋪、馬市）。那個地方已經不開門了（同步之前）是 None；
+        鐵匠鋪的一步一步單子還開著（開關關著時開的、舊存檔）也是 None，照舊畫那一串按鈕（店面上的鈕在單子那一步不在選單上）。"""
         s, c = self.state, self.content
         p = s.player
-        if not c.config.shop_screens or not p.picking_smith or p.smith_draft is not None or not equipment.smith_open(s, c):
+        if p.picking_bounty:
+            return "board" if bounties.board_here(s, c) else None
+        if p.picking_smith:
+            return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else None
+        if p.picking_market:
+            return "market" if mounts.market_here(s, c) else None
+        return None
+
+    def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
+        """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
+        馬市 market:back、懸賞榜 bounty:back 或第三層的 bounty:unpick），而且前面沒有決戰、奪璽單挑的鈕。決戰開打、休季時選單換成三招
+        或「休季中」，店裡那一串根本不在上面（picking_* 卻還是真的）：這時給店面，出店會被拒絕、人就困在店裡，休季還開得了爐
+        （第一批終審 Critical 1）。集結時決戰的鈕排在店裡那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
+        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
+        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
+        return any(back in ids for back in shopview.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
+
+    def shop_view(self, option_ids=None) -> dict | None:
+        """店面（店面獨立介面設計 6.1）：開關開著、有一間店開著（_shop_open）、那間店那一串是眼前的選單（_shop_live）才有；
+        照哪一間店給 shopview 的 smith_view、market_view 或 board_view。"""
+        s, c = self.state, self.content
+        if not c.config.shop_screens:
             return None
-        if not self._shop_live(option_ids):
+        shop = self._shop_open()
+        if shop is None or not self._shop_live(option_ids, shop):
             return None
-        return shopview.smith_view(s, c, self.world)
+        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop]
+        return view(s, c, self.world)
 
     def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
