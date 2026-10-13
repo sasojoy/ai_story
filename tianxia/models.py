@@ -1977,6 +1977,10 @@ class Config(_Strict):
     figure_difficulty_floor: float = Field(default=0.5, ge=0, le=1)  # 挑戰本人的難度：聲威 0 時是隊伍難度的幾成（100 時原值，中間線性）
     # 挑戰大勢人物每季都有（挑戰每季都有設計 3.1）：第一季以外的季也有挑戰本人；關掉就回到「只有第一季」（主機的退路，第一季不看它）
     figure_challenge_every_season: bool = True
+    # 甲 (b)＋(d)，企劃者 2026-10-13：沒有時刻表的季，被打下來的聲威每個季曆天回幾點（14 天的季一個季曆天是現實 4 小時；0＝不回）、
+    # 每位人物每個遊戲日最多被打掉幾點（0＝不設）。目標「十來個人合力連打好幾天才打得退，一季頂多一兩位」
+    figure_prestige_regen: float = Field(default=1, ge=0)
+    figure_daily_loss_cap: int = Field(default=15, ge=0)
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成

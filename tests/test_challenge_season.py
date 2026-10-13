@@ -112,3 +112,77 @@ def test_figures_on_stage_must_start_where_they_are_met(real):
     real.figures["bocai"] = real.figures["bocai"].model_copy(update={"location": "changshe"})
     with pytest.raises(ContentError, match="talk_at"):
         validate(real)
+
+
+def test_a_figure_loses_at_most_fifteen_a_game_day_but_the_win_still_pays(real, world):
+    """甲 (d)：沒有時刻表的季每位人物每個遊戲日最多被打掉 figure_daily_loss_cap 點；額度用完之後打贏照拿獎勵、情誼照扣、照樣閉門不見，
+    只是聲威不動，回話寫「部眾死守不退」；隔天額度回來，舊日子的 lost: 鍵清掉。"""
+    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    for _ in range(3):
+        figures.defeat(s, real, "bocai", 5, cap=15)
+    assert figures.state_of(s, real, "bocai").prestige == 45
+    assert figures.defeat(s, real, "bocai", 5, cap=15) == [figures.HELD_LINE.format(name="波才")]
+    assert figures.state_of(s, real, "bocai").prestige == 45
+    s.world.time += 86400
+    figures.defeat(s, real, "bocai", 5, cap=15)
+    assert figures.state_of(s, real, "bocai").prestige == 40
+    assert [k for k in s.world.trend_accum if k.startswith("lost:bocai:")] == [f"lost:bocai:{int(s.world.time // 86400)}"]
+
+
+def test_the_engine_passes_the_cap_only_without_a_timetable(real, world):
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    real.config.snub_hours = 0
+    with _won():
+        for _ in range(4):
+            game.choose("act:challenge:bocai")
+    assert figures.state_of(game.state, real, "bocai").prestige == 45
+    assert any(figures.HELD_LINE.format(name="波才") in line for e in game.state.journal for line in e.lines)
+
+
+def test_prestige_creeps_back_one_point_a_calendar_day_up_to_the_start(real, world):
+    """甲 (b)：沒有時刻表的季，被打下來的聲威每個季曆天回 figure_prestige_regen 點，回到開季值為止；退場的不回、
+    沒被打過的不寫存檔、人物表沒有的 id 跳過；第一季不回。"""
+    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    figures.defeat(s, real, "bocai", 10)
+    s.world.figures["ghost"] = figures.FigureState(prestige=1, status="active")
+    figures.recover(s, real, 12)
+    assert figures.state_of(s, real, "bocai").prestige == 50
+    figures.recover(s, real, 12)
+    assert figures.state_of(s, real, "bocai").prestige == 51
+    figures.recover(s, real, 24 * 30)
+    assert figures.state_of(s, real, "bocai").prestige == real.figures["bocai"].start_prestige
+    assert set(s.world.figures) == {"bocai", "ghost"} and s.world.figures["ghost"].prestige == 1
+    figures.defeat(s, real, "zhangliang", 60)
+    figures.recover(s, real, 24 * 30)
+    assert figures.state_of(s, real, "zhangliang").prestige == 0
+
+
+def test_recovery_over_one_long_step_matches_many_short_ones(real, world):
+    a = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    b = a.model_copy(deep=True)
+    for s in (a, b):
+        figures.defeat(s, real, "bocai", 20)
+    figures.recover(a, real, 24 * 5)
+    for _ in range(24 * 5):
+        figures.recover(b, real, 1)
+    assert figures.state_of(a, real, "bocai").prestige == figures.state_of(b, real, "bocai").prestige == 45
+
+
+def test_the_world_clock_drives_the_recovery_without_touching_the_game_dice(real, world):
+    from tianxia.world import advance_world_state
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    figures.defeat(game.state, real, "bocai", 10)
+    world.mutate_season(lambda w: w.figures.update(game.state.world.figures))
+    before = game.rng.getstate()
+    season = world.get_season()
+    advance_world_state(season, real, 4 * 3600, random.Random(1), world)  # 14 天的季：一個季曆天是現實 4 小時
+    assert season.figures["bocai"].prestige == 51 and game.rng.getstate() == before
+
+
+def test_season_one_keeps_no_cap_and_no_recovery(real, world):
+    real.config.season_one = True
+    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s.world.season_one = True
+    figures.defeat(s, real, "bocai", 10)
+    figures.recover(s, real, 24 * 30)
+    assert figures.state_of(s, real, "bocai").prestige == 50

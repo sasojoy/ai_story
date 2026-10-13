@@ -703,7 +703,7 @@ class WorldState(BaseModel):
     # 升第 2 階的每日彙整（計畫 T5）：「曆日:陣營:階」→ 名號（陣營軍情一律具名）；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
     promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──
-    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）
+    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號

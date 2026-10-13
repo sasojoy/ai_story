@@ -5113,7 +5113,8 @@ class Game:
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         n = push.active_count(s, p.faction, w.time, window)
         msgs = [f"{fig.name}敗走。"]
-        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n))
+        cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
+        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
         if fig.character is not None:
             before = p.affinities.get(fig.character, 0)
             p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)

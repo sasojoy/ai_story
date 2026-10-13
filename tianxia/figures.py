@@ -11,6 +11,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 from __future__ import annotations
 
 from . import calendar
+from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_value
 from .state import FigureState, GameState, WorldState
@@ -263,14 +264,28 @@ def _front_name(content: Content, front: str) -> str:
     return next((t.name for t in content.scenario.trends if t.id == front), front)
 
 
-def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[str]:
+HELD_LINE = "{name}今天已經敗了好幾陣，部眾死守不退。"  # 待 joy 潤：沒有時刻表的季，這位人物今天被打掉的聲威到了上限（甲 (d)）
+
+
+def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int | None = None) -> list[str]:
     """挑戰本人打贏（計畫 T4、軍令文件 4.5）：他敗走，聲威扣 amount（人數緩衝之後的量，可能有小數；不足一點的記在
     trend_accum["prestige:<id>"]，滿一點才扣）。扣到 0 時照退場（天命人物重創）處理、由接位的人接下戰線，退場與接手
-    合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。"""
+    合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。
+    cap（沒有時刻表的季才給，甲 (d)）：這一位這個遊戲日最多被打掉幾點；今天被打掉的量記在 trend_accum["lost:<id>:<遊戲日>"]
+    （舊日子的順手刪掉），到了上限聲威不動、回 HELD_LINE。"""
     figure = _ensure(state, content, fid)
     if figure.status in OUT or amount <= 0:
         return []
     w = state.world
+    if cap:
+        day_key = f"lost:{fid}:{int(w.time // DAY)}"
+        for old in [k for k in w.trend_accum if k.startswith(f"lost:{fid}:") and k != day_key]:
+            del w.trend_accum[old]
+        left = cap - w.trend_accum.get(day_key, 0.0)
+        if left <= 1e-9:
+            return [HELD_LINE.format(name=name_of(content, fid))]
+        amount = min(amount, left)
+        w.trend_accum[day_key] = w.trend_accum.get(day_key, 0.0) + amount
     key = f"prestige:{fid}"
     pending = w.trend_accum.get(key, 0.0) + amount
     whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
@@ -293,6 +308,32 @@ def defeat(state: GameState, content: Content, fid: str, amount: float) -> list[
         add_rumor(state, "".join(news), content=content, layer="world")
         lines += news
     return lines
+
+
+def recover(state: GameState, content: Content, cal_hours: float) -> None:
+    """沒有時刻表的季（甲 (b)）：存檔裡有寫的人物（沒被打過的本來就是開季值），在場、聲威低於人物表的開季值時，每個季曆天回
+    figure_prestige_regen 點（累積在 trend_accum["regen:<id>"]，滿一點加一點），回到開季值為止；退場、重創、不在場的不回，
+    累積拿掉；人物表已經沒有的 id 跳過。決定性的，不擲骰，不發傳聞。由 world.advance_world_state 每一步呼叫。"""
+    w = state.world
+    rate = content.config.figure_prestige_regen
+    if not untimed(content, w) or rate <= 0:
+        return
+    for fid, now in w.figures.items():
+        fig = content.figures.get(fid)
+        if fig is None:
+            continue
+        key = f"regen:{fid}"
+        if now.status != "active" or now.prestige >= fig.start_prestige:
+            w.trend_accum.pop(key, None)
+            continue
+        pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
+        whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
+        now.prestige = min(fig.start_prestige, now.prestige + whole)
+        rest = max(0.0, pending - whole)
+        if rest and now.prestige < fig.start_prestige:
+            w.trend_accum[key] = rest
+        else:
+            w.trend_accum.pop(key, None)
 
 
 def holds(state: GameState, content: Content, change: FigureChange) -> bool:
