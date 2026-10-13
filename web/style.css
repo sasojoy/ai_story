@@ -1344,3 +1344,44 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .first-seal { position: absolute; top: -12px; right: -8px; transform: rotate(8deg); padding: 6px 8px; border: 2px solid var(--accent); border-radius: 6px; color: var(--accent);
   background: var(--paper); font: 600 14px var(--serif); letter-spacing: 2px; }
 @media (prefers-reduced-motion: reduce) { .bundle.g-redgold { animation: none; } }
+/* 馬市（第三節）：土黃底；馬廄一排（超過三間左右滑、邊上露半間）、點著那一匹的卡。馬是示意（Joy 之後有正式的圖可以換） */
+.shop-layer.shop-market { color: var(--ink); background: linear-gradient(180deg, #d9c39a 0%, #c9ad7c 55%, #8a6a42 100%); }
+.shop-market .shop-back, .shop-market .shop-silver { color: #3a2618; }
+.shop-market .shop-sign { background: #f6edd8; border-color: #6b4a2a; color: #6b2a1a; }
+.shop-market .shop-line { background: rgba(246, 237, 216, 0.85); border-left-color: #6b4a2a; color: #2a241d; }
+.stalls { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 4px 2px 6px; }
+.stall { flex: 0 0 calc((100% - 12px) / 3); scroll-snap-align: start; position: relative; min-height: 118px; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; gap: 1px; padding: 26px 4px 6px; border-radius: 6px 6px 2px 2px; border: 1px solid #6b4a2a;
+  background: linear-gradient(180deg, #6b4a2a 0 10px, #e8d6ad 10px); color: #2a241d; font: 10.5px var(--sans); }
+.stalls.many .stall { flex-basis: 38%; }
+.stall .who { position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 9.5px; color: #6b2a1a; }
+.stall b { font: 600 12px var(--serif); }
+.stall.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.stall.empty { opacity: 0.75; }
+.horse { width: 54px; height: 40px; margin: 4px auto; border-radius: 40% 50% 30% 30%; position: relative; background: #8a6a42; }
+.horse::before { content: ""; position: absolute; right: -10px; top: -12px; width: 16px; height: 26px; border-radius: 40%; background: inherit; transform: rotate(25deg); }
+.stall.empty .horse { background: none; border: 1.5px dashed #8a6a42; }
+.stall.empty .horse::before { display: none; }
+.horse.c0 { background: #8a4a2a; } /* 棗騮（mounts.COATS 的順序） */
+.horse.c1 { background: #4a5a6a; } /* 青驄 */
+.horse.c2 { background: #2a2420; } /* 黑鬃 */
+.horse.c3 { background: #cfc4b2; } /* 白蹄 */
+.horse.c4 { background: repeating-linear-gradient(60deg, #6b4a2a 0 6px, #e8d6ad 6px 10px); } /* 花斑 */
+.horse.c5 { background: #b58a4a; } /* 黃棕 */
+.horse-card { margin: 8px 2px 0; padding: 8px 10px; display: grid; gap: 4px; border: 2px solid #6b4a2a; border-radius: 10px; background: var(--paper); color: var(--ink); font-size: 12px; }
+.horse-card h4 { margin: 0; font: 600 15px var(--serif); }
+.horse-card h4 small { font: 11px var(--sans); color: var(--ink-2); }
+.horse-card .cmp { margin: 0; color: var(--accent); }
+.horse-card .bar, .horse-card .fed { display: grid; grid-template-columns: 58px 1fr 38px; gap: 6px; align-items: center; font-size: 11px; }
+.horse-card .l { color: var(--ink-2); }
+.horse-card .n { text-align: right; }
+.horse-card .v { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.horse-card .v i { display: block; height: 100%; background: var(--accent); }
+.horse-card .fed .v i { background: var(--rou); }
+.horse-card .fed small { grid-column: 1 / -1; color: var(--ink-2); }
+.horse-act { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.horse-act small { font-size: 11px; opacity: 0.85; }
+@media (prefers-color-scheme: dark) {
+  .shop-layer.shop-market { background: linear-gradient(180deg, #4a3a26 0%, #3a2c1c 55%, #24190f 100%); color: #f2e5c6; }
+  .shop-market .shop-back, .shop-market .shop-silver { color: #e8d6ad; }
+}

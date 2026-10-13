@@ -81,6 +81,9 @@
     shopOpened: false, // 出爐卡打開了沒（點了麻布）
     shopFiring: false, // 開爐等回應的那一下爐火竄高（減少動態效果的人不跑）
     shopMore: false, // 裝備庫頁按了「再列 N 件」
+    shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
+    boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
+    boardStamp: null, // 剛交差的那一張：{ id, title }，蓋「交差」朱印、淡出之後清掉（boardHanded）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
@@ -287,10 +290,13 @@
     const changed = key !== S.mainKey;
     // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
     const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
-    // 店面開了或收了（店面獨立介面設計 1.1）：從架上那一頁、空爐重新來；收起店時出爐卡一起收（只動 S 的欄位：setMain 會被單獨切出去測）
-    if (!!main.shop !== !!(S.main && S.main.shop)) {
+    // 店面開了、收了或換了一間（店面獨立介面設計 1.1）：從頭來——鐵匠鋪從架上那一頁、空爐，馬市點著你騎的，懸賞榜不放大；
+    // 離開鐵匠鋪時出爐卡一起收（只動 S 的欄位：setMain 會被單獨切出去測）。比的是哪一間店（main.shop.shop），不是有沒有店：出了鐵匠鋪、兩次輪詢之間又走進馬市，有沒有店都是「有」，鐵匠鋪那幾個欄位卻得清掉
+    const shopKind = (v) => (v && v.shop ? v.shop.shop : null);
+    if (shopKind(main) !== shopKind(S.main)) {
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
-      if (!main.shop) { S.shopReveal = null; S.shopOpened = false; }
+      S.shopHorse = null; S.boardZoom = null; S.boardStamp = null;
+      if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
@@ -2492,18 +2498,60 @@
   const SHOP_ATTR = { 剛: "gang", 快: "kuai", 柔: "rou", 慢: "man" };
   const SHOP_RACK_LIST = 8;
 
+  // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求藝、求兵挑東西）
+  // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）
   function shopHtml(shop) {
-    const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
-    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[S.shopTab] || shelfHtml;
-    return `<div class="shop-layer shop-smith" role="dialog" aria-label="${esc(shop.sign)}">
-      <header class="shop-bar"><button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button><span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
+    const kind = shop.shop || "smith";
+    const back = shop.picked
+      ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
+      : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
+    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : smithHtml(shop);
+    return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
+      <header class="shop-bar">${back}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
       <p class="shop-line">${esc(shop.line)}</p>
-      ${pages}
-      <div class="shop-body">${body(shop)}</div>
-      <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
-      ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}
+      ${body}
     </div>`;
   }
+
+  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡
+  function smithHtml(shop) {
+    const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
+    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[S.shopTab] || shelfHtml;
+    return `${pages}
+      <div class="shop-body">${body(shop)}</div>
+      <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
+      ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
+  }
+
+  // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
+  // （market:feed、market:buy、market:wield:<id>）。字待 joy 潤 ──
+  function marketHtml(shop) {
+    const live = shop.stalls.filter((h) => !h.empty);
+    const pick = live.find((h) => h.id === S.shopHorse) || live.find((h) => h.id === shop.focus) || live[0];
+    const stall = (h) => (h.empty
+      ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
+      : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
+          <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${esc(h.sub)}</small></button>`);
+    return `<div class="shop-body"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
+      ${pick ? horseCard(pick) : ""}</div>`;
+  }
+
+  // 點著那一匹的卡：名字、階品、跟你騎的比、四項本事的長條、你騎的那匹多飽足長條；底下一顆照伺服器給的（做不了寫原因）
+  function horseCard(h) {
+    const width = (v) => Math.max(0, Math.min(100, v | 0));
+    const bars = h.bars.map((b) => `<div class="bar"><span class="l">${esc(b.label)}</span><span class="v"><i style="width:${width(b.value)}%"></i></span><span class="n">${esc(b.text)}</span></div>`).join("");
+    const fed = h.fed ? `<div class="fed"><span class="l">${esc(h.fed.word)} ${h.fed.value | 0}</span><span class="v"><i style="width:${width(h.fed.value)}%"></i></span>${h.fed.note ? `<small>${esc(h.fed.note)}</small>` : ""}</div>` : "";
+    const a = h.action;
+    const sub = a.enabled ? a.use : a.why;
+    return `<article class="horse-card"><h4>${esc(h.name)} <small>${esc(h.grade)}</small></h4>
+        ${h.compare ? `<p class="cmp">${esc(h.compare)}</p>` : ""}<div class="bars">${bars}</div>${fed}
+        <button class="btn primary horse-act" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}><b>${esc(a.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</button>
+      </article>`;
+  }
+
+  // 懸賞榜：Task 5 換成真的（這一步先畫空的身子）
+  function boardHtml() { return '<div class="shop-body"></div>'; }
+  function boardHanded() {}
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
   function shelfHtml(shop) {
@@ -2552,20 +2600,23 @@
     const layer = document.querySelector(".shop-layer");
     if (!layer || !S.main || !S.main.shop) { render(); return; }
     const top = keep ? (layer.querySelector?.(".shop-body")?.scrollTop || 0) : 0;
+    const left = keep ? (layer.querySelector?.(".stalls")?.scrollLeft || 0) : 0; // 馬廄那一排左右滑到哪（第三節）
     layer.outerHTML = shopHtml(S.main.shop);
     const body = top ? document.querySelector(".shop-layer .shop-body") : null;
     if (body) body.scrollTop = top;
+    const stalls = left ? document.querySelector(".shop-layer .stalls") : null;
+    if (stalls) stalls.scrollLeft = left;
   }
 
   // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，
   // 同江湖頁的規則）。回 true：店面開著，底下的頁面被蓋住、不必再畫
   function shopPolled(old) {
-    const was = !!(old && old.shop), now = !!(S.main && S.main.shop);
-    if (was !== now) { render(); return true; }
+    const was = old && old.shop ? old.shop.shop : null, now = S.main && S.main.shop ? S.main.shop.shop : null;
+    if (was !== now) { render(); return true; } // 開了、收了、換了一間：整個重畫
     if (!now) return false;
     if (JSON.stringify(old.shop) !== JSON.stringify(S.main.shop)) {
       if (pointerHeld) redrawHeld = true;
-      else { renderShop(); if (S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
+      else { renderShop(); if (now === "smith" && S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
     }
     return true;
   }
@@ -4179,6 +4230,7 @@
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "shop-horse": S.shopHorse = el.dataset.id; renderShop(); break; // 馬市點一匹（第三節）：只換底下那張卡
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
