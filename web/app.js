@@ -2507,9 +2507,10 @@
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
   function shelfHtml(shop) {
-    return `<div class="shop-grid">${shop.shelf.map((x) => `<button class="shop-item${x.fit ? " fit" : ""}" data-act="choose" data-id="${esc(x.id)}" ${x.enabled ? "" : "disabled"}>
-        <b>${esc(x.name)}</b><span>${esc(x.kind)}・屬${esc(x.attribute)}・${esc(x.tier)}</span>${x.value ? `<span>${esc(x.value)}</span>` : ""}
-        ${x.note ? `<span class="fit-note">${esc(x.note)}</span>` : ""}<span class="price">${x.enabled ? `${x.price | 0} 兩` : esc(x.why)}</span></button>`).join("")}</div>`;
+    // 這一段的變數不用單字母 x：tests/test_server.py 把修練頁到輿圖之間那個變數讀的欄位都當成 menxia_view 的欄位查
+    return `<div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
+        <b>${esc(ware.name)}</b><span>${esc(ware.kind)}・屬${esc(ware.attribute)}・${esc(ware.tier)}</span>${ware.value ? `<span>${esc(ware.value)}</span>` : ""}
+        ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}<span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span></button>`).join("")}</div>`;
   }
 
   // 淬煉與修（2.4）：身上那件的卡（鋒利度或耐久度的長條、淬煉五格），兩顆大鈕；做不了照伺服器的原因寫
