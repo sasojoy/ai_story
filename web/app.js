@@ -1300,14 +1300,12 @@
   // 集結中、還沒有人出手時不畫
   function meritHtml(g, tint) {
     const b = g.merit;
-    if (!b || g.phase === "muster" || (!b.left.length && !b.right.length && !(b.third || []).length && !(b.me && b.me.merit))) return "";
+    if (!b || g.phase === "muster" || (!b.left.length && !b.right.length && !(b.me && b.me.merit))) return "";
     const col = (w, rows) => `<div class="g-mcol ${tint(w)}"><b class="g-mside">${esc(w.name)}</b>${rows.length
       ? `<ol>${rows.map((r, i) => `<li${r.mine ? ' class="mine"' : ""}><i>${i + 1}</i><span>${esc(r.name)}</span><b>${r.merit}</b></li>`).join("")}</ol>`
       : '<p class="muted">還沒有人立功</p>'}</div>`;
-    const third = g.third && b.third && b.third.length  // 地方豪強也列一欄（Joy 2026-10-13），有人立功才畫
-      ? `<div class="g-mcols g-mthird">${col(g.third, b.third)}</div>` : "";
     const me = b.me ? `<p class="g-me">你排第 ${b.me.rank}／${b.me.of}・戰功 ${b.me.merit}${b.me.parts.length ? `：${esc(b.me.parts.join("、"))}` : "（還沒出手）"}</p>` : "";
-    return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${third}${me}</div>`;
+    return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${me}</div>`;
   }
   // 場景卡裡把戰局條放在戰場名字那一行底下（集結時名字那一行連著投效的鈕，見 musterScene）；收成一行的觀戰（battleScene）不放
   function withGauge(html, g) {

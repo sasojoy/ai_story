@@ -109,7 +109,6 @@
     "timetable_event": "changshe_fire",
     "defender": "guan",
     "front": "yingru",
-    "third": {"faction": "haoqiang", "trend": "geju"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -195,7 +194,6 @@
     "version": "甲",
     "defender": "huang",
     "front": "nanyang",
-    "third": {"faction": "haoqiang", "trend": "geju"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -281,7 +279,6 @@
     "version": "乙",
     "defender": "guan",
     "front": "nanyang",
-    "third": {"faction": "haoqiang", "trend": "geju"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -366,7 +363,6 @@
     "timetable_event": "guangzong",
     "defender": "huang",
     "front": "jizhou",
-    "third": {"faction": "haoqiang", "trend": "geju"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -451,7 +447,6 @@
     "timetable_event": "tianming",
     "defender": "huang",
     "front": "jizhou",
-    "third": {"faction": "haoqiang", "trend": "geju"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}

@@ -33,9 +33,6 @@ Phase = Literal["muster", "active", "ended"]
 UNFINISHED_TITLE = "未分勝負"  # 季終收兵的決戰：結果標題與江湖紀錄標題的尾巴（FB-035）
 UNFINISHED_TEXT = "季終了，這場決戰沒打完就各自收兵，不算勝負。"
 
-THIRD_GRAB = "third_grab"  # 第三方的兩招（戰鬥系統第六節）：不在幕的選項裡，由 third_options 給
-THIRD_KEEP = "third_keep"
-
 CENTER = 50  # 戰局的中線：提前收場看偏離它多少（戰鬥系統 5.3），時刻表決戰的勝負也以它為界（4.1、4.2）
 BIG_WIN_MARGIN = 15  # 時刻表決戰：戰局偏離中線達到這麼多是大勝，否則險勝（戰鬥系統 4.1【預設】）
 
@@ -210,8 +207,6 @@ class BattleInstance(BaseModel):
     unfinished: bool = False  # 季終時還沒打完就收起來的決戰（FB-035，見 Game._shelve_unfinished_battle）：phase 是 ended、
     # 這樣 ended_battles 才讀得到、參戰者才補得到一則交代，但沒有結果——不套任何大勢或旗標、不寫江湖史、不加戰報。
     # 舊資料沒有這一欄＝False
-    third_gain: float = 0.0  # 第三方整場的收穫加總（÷100 之前，戰鬥系統第六節）；舊資料沒有這一欄＝0（只存在 data 的 JSON 裡，不動資料表）
-    third_push: int = 0  # 收場時算好的第三方大勢線推動（settle_third）；engine 收場時推，季終沒打完收起來的不推
     record_id: int | None = None  # 資料庫裡這一場的流水號；None＝還沒寫進資料庫（見 sqlite_world）
     # 玉璽碎片（玉璽碎片設計 3.2、4.3）：集結那一刻擲中的現世與璽動，持有者的陣營在那一刻快照；舊資料沒有＝沒有
     seal_emerge: str | None = None  # 這一場現世哪一片（收場時從勝方抽得主）
@@ -251,28 +246,9 @@ def start_from_front(front_value: int) -> int:
 
 
 def sides(definition: BattleDef) -> list[str]:
-    """這場決戰能站的每一方：交戰的兩軍，加上第三方（有的話，戰鬥系統第六節）。"""
-    ids = [f.id for f in definition.factions]
-    return ids + [definition.third.faction] if definition.third is not None else ids
-
-
-def is_third(definition: BattleDef, p: BattleParticipant) -> bool:
-    """這個人站在第三方（地方豪強）那一邊：不推戰局、不進兩軍的出招比例，結算見 _third_round。"""
-    return definition.third is not None and p.faction == definition.third.faction
-
-
-def third_options(definition: BattleDef) -> list[BattleOption]:
-    """第三方的兩招：趁亂搶地盤（奇襲的份量）、保存實力（固守的份量，收穫一半）。不看幕的選項。"""
-    third = definition.third
-    return [
-        BattleOption(text=third.grab, tag=THIRD_GRAB, faction=third.faction, move="奇襲"),
-        BattleOption(text=third.keep, tag=THIRD_KEEP, faction=third.faction, move="固守"),
-    ]
-
-
-def stalemate(trend: int) -> float:
-    """膠著程度（戰鬥系統第六節）：戰局停在 50 是 1，偏到 0 或 100 是 0。"""
-    return max(0.0, 1 - abs(trend - CENTER) / CENTER)
+    """這場決戰能站的每一方：交戰的兩軍（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」：
+    沒有第三方了，豪強跟散人一樣臨時投效兩軍之一）。"""
+    return [f.id for f in definition.factions]
 
 
 ROLE_MOVES: dict[str, str] = {"str": "強攻", "agi": "奇襲", "con": "固守"}  # 職位拿手的那一招（份量多 role_move_bonus）
@@ -359,10 +335,9 @@ def close_muster(instance: BattleInstance, definition: BattleDef, rng: random.Ra
     隨機分配」，呼叫端自己決定要不要把從沒選過的在線玩家也塞進 participants。"""
     if instance.phase != "muster":
         return
-    armies = [f.id for f in definition.factions]  # 沒選邊的只分到兩軍，不會被分去第三方
-    standing = sides(definition)
+    armies = sides(definition)  # 沒選邊的分到兩軍之一
     for p in instance.participants.values():
-        if p.faction not in standing:
+        if p.faction not in armies:
             p.faction = rng.choice(armies)
     instance.phase = "active"
     instance.round = BattleRound(opened_real=now)
@@ -375,11 +350,11 @@ def auto_assign_latecomer(
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False,
 ) -> None:
-    """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家；第三方的人也站自己那一方）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡（不會補去第三方）。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie
+    """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie
     同 join_faction。"""
     if faction not in sides(definition):
-        armies = [f.id for f in definition.factions]
+        armies = sides(definition)
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
     instance.participants[name] = BattleParticipant(
@@ -432,13 +407,10 @@ def total_rounds(definition: BattleDef) -> int:
 
 
 def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> list[BattleOption]:
-    """這個人這回合能選的選項：框架給的選項，依陣營篩選（faction=None 的選項雙方都能選）；第三方固定是他們自己的兩招，
-    不看幕的選項（third_options）。"""
+    """這個人這回合能選的選項：框架給的選項，依陣營篩選（faction=None 的選項雙方都能選）。"""
     p = instance.participants.get(name)
     if p is None:
         return []
-    if is_third(definition, p):
-        return third_options(definition)
     act = current_act(instance, definition)
     options = [o for o in act.options if o.faction in (None, p.faction)]
     if pinned(instance, p):  # 被險招牽制住：這一回合只能固守
@@ -465,7 +437,7 @@ def can_gamble(instance: BattleInstance, definition: BattleDef, p: BattlePartici
 
 def find_target(instance: BattleInstance, definition: BattleDef, name: str, text: str) -> BattleParticipant | None:
     """放手一搏的文字裡點名的對面參戰者：名號 2 字以上、在文字裡最先出現的那一個（一樣早取長的）。只認交戰兩軍裡對面那一邊、
-    還沒倒下的人；第三方（地方豪強）兩軍打不到。由引擎認，不靠模型。"""
+    還沒倒下的人。由引擎認，不靠模型。"""
     me = instance.participants.get(name)
     armies = {f.id for f in definition.factions}
     if me is None or me.faction not in armies:
@@ -535,7 +507,7 @@ def round_is_complete(instance: BattleInstance, timed_out: bool = False) -> bool
 def round_progress(instance: BattleInstance, definition: BattleDef) -> tuple[int, int]:
     """這一回合（已送出, 在場）的人數：在場是還沒倒下、沒離開大區、沒在掛機的人，已送出是其中選好行動的。
     畫面寫「已送出 X／在場 Y」，讓人知道是在等人、不是壞了（試玩回饋 2026-10-08）。
-    跟 round_is_complete 等的是同一批人，豪強也算（Joy 2026-10-13：以前兩軍看不到豪強，全員送出了倒數還在跳）。"""
+    跟 round_is_complete 等的是同一批人（Joy 2026-10-13：以前全員送出了倒數還在跳）。"""
     active = [p for p in _active_participants(instance) if not idle(p)]
     return sum(1 for p in active if p.name in instance.round.pending_actions), len(active)
 
@@ -593,61 +565,16 @@ def fill_timed_out_actions(
 ) -> None:
     """逾時：還沒送出行動的在場者（沒倒下、沒離開大區），系統代選他自己陣營最保守的固定選項（三招時是固守）；
     這一幕他沒有固定選項（驗過的內容每邊每幕都有三招，走不到這裡）就跳過他。
-    代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。
-    第三方（戰鬥系統第六節）沒有作戰方針與 AI 代挑：先於一切判斷，逾時一律代出「保存實力」。"""
+    代選的人記進 round.auto_picked：這一回合不算他自己出手（FB-027）。"""
     for p in _active_participants(instance):
         if only_idle and not idle(p):
             continue
         if p.name not in instance.round.pending_actions:
-            if is_third(definition, p):
-                instance.round.pending_actions[p.name] = THIRD_KEEP
-                instance.round.auto_picked.append(p.name)
-                continue
             tag = safest_option_tag(instance, definition, p.name, tuning)
             if tag is None:
                 continue
             instance.round.pending_actions[p.name] = tag
             instance.round.auto_picked.append(p.name)
-
-
-def _third_round(
-    instance: BattleInstance, definition: BattleDef, tuning: BattleTuning, msgs: list[str],
-) -> tuple[float, int, int]:
-    """第三方這一回合（戰鬥系統第六節）：照兩招算份量、扣氣血、記出手；不推戰局、不進出招比例，兩軍也打不到他們。
-    回傳（Σ份量 ÷ √出手人數、搶地盤人數、保存實力人數）。膠著程度要等戰局更新完才乘，見 resolve_round。
-    出手回合數在這裡數（resolve_round 的主迴圈要跳過第三方，不然豪強被數兩次）；逾時代出的不算他自己出手。"""
-    total, grabs, keeps = 0.0, 0, 0
-    for name, tag in instance.round.pending_actions.items():
-        p = instance.participants.get(name)
-        if p is None or p.eliminated or not is_third(definition, p):
-            continue
-        if name not in instance.round.auto_picked:
-            p.acted_rounds += 1
-        else:
-            p.idle_streak += 1
-            p.held_rounds += 1
-        grab = tag == THIRD_GRAB
-        move = "奇襲" if grab else "固守"
-        total += p.scores.get(move, 0.0) * condition(p) * (1.0 if grab else tuning.third_keep_share)  # 份量在扣血之前算
-        grabs, keeps = grabs + grab, keeps + (not grab)
-        p.neili = max(0.0, p.neili - (tuning.third_grab_damage if grab else tuning.third_keep_damage))
-        p.last_result = definition.third.grab if grab else definition.third.keep
-        if p.neili <= 0 and not p.eliminated:
-            p.eliminated = True
-            p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
-            msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
-    count = grabs + keeps
-    return (total / math.sqrt(count) if count else 0.0), grabs, keeps
-
-
-def settle_third(instance: BattleInstance, definition: BattleDef, tuning: BattleTuning) -> list[str]:
-    """收場：第三方整場的收穫 ÷ 100、四捨五入、最多 third_cap，記進 third_push（套到賽季是 engine 的事）。
-    回傳要給大家看的那一句（只在真的推了割據時有；不寫數字，FB-064）。"""
-    if definition.third is None:
-        return []
-    instance.third_push = min(tuning.third_cap, int(instance.third_gain / 100 + 0.5))  # 四捨五入（round 是銀行家進位）
-    # 待 joy 潤：收場那一句（割據本來就是公開的大勢，寫給所有人看）
-    return ["兩軍相持之際，地方上有人趁亂坐大。"] if instance.third_push > 0 else []
 
 
 def diversity(instance: BattleInstance, moves: dict[str, str], side: str, tuning: BattleTuning) -> float:
@@ -669,9 +596,6 @@ def resolve_round(
     放手一搏照舊走賭局公式、推動加在三招合成之後（決戰改版三再改）。
     沒有 scores（舊資料、沒走 Game 加入的人）份量算 0：照常出招、扣血、出局，只是推不動戰局。
     氣血歸零的人出局；一開頭先把所有人的 last_result 清空，只有這一回合出了固定招的人才寫上新的。
-    第三方（地方豪強，戰鬥系統第六節）不走上面這一套：先由 _third_round 另外結算，戰局更新完再照膠著程度累積整場的收穫
-    （instance.third_gain；這一回合兩軍都沒人出手就沒有）、收場時 settle_third 換成推動。他們選了什麼只寫進回合紀錄，
-    不進回傳的訊息（場景的記錄與給模型的判定都吃它）。
     回合數加一之後照戰鬥系統設計 3.2 決定接下來怎麼走（只有兩個時機判結果）：
     - 戰局偏離中線 50 到 decisive_margin（壓倒性，戰局到 90 或 10）：當回合收場，不再換幕——剛好是該換幕的那一回合
       也一樣。看的是 50、不是這一場的起點（戰鬥系統 5.3：時刻表決戰的起點照戰況走，看起點會不對稱）；
@@ -693,8 +617,6 @@ def resolve_round(
     first, second = definition.factions[0].id, definition.factions[1].id  # first 是戰局的正向方
     for p in instance.participants.values():
         p.last_result = ""  # 沒出固定招的人（放手一搏、離開大區、倒下、沒出手）不留上一回合的字
-    # 第三方另外結算（要在清 last_result 之後：它自己寫這一回合的字）：不進下面兩軍的出招比例與推力
-    third_force, grabs, keeps = _third_round(instance, definition, tuning, msgs)
     # 這一回合出固定招的人：名號 → 哪一招（放手一搏的人不算進比例；不在交戰雙方的陣營這一份不算）
     factions = {name: p.faction for name, p in instance.participants.items()}
     moves: dict[str, str] = {}
@@ -717,7 +639,7 @@ def resolve_round(
     trend_before = instance.trend
     for name, tag in list(instance.round.pending_actions.items()):
         p = instance.participants.get(name)
-        if p is None or p.eliminated or is_third(definition, p):  # 第三方已經在 _third_round 結算（出手也在那裡數）
+        if p is None or p.eliminated:
             continue
         if name not in instance.round.auto_picked:
             p.acted_rounds += 1
@@ -844,13 +766,6 @@ def resolve_round(
         moved = f"三招交鋒，戰線往{leader}那邊推了{shove_size(round(push))}" if round(push) else "三招交鋒，兩軍持平"
         msgs.insert(0, f"{sides}（{moved}）")
     instance.trend = max(0, min(100, instance.trend + round(push) + gamble_delta))
-    third_lines: list[str] = []  # 只寫進回合紀錄：豪強選了什麼，兩軍（場景、回覆、給模型的判定）都不該知道
-    if definition.third is not None and grabs + keeps:
-        armies_acted = counts[first] or counts[second]  # 這一回合兩軍都沒人出手，就沒有亂可趁
-        if armies_acted:
-            instance.third_gain += third_force * stalemate(instance.trend)  # 膠著程度照這一回合結算完的戰局
-        # 待 joy 潤：回合紀錄那一句（玩家看不到）
-        third_lines.append(f"{definition.third.grab} {grabs} 人、{definition.third.keep} {keeps} 人。")
     instance.last_mix = mixes
     instance.round_number += 1
     # 這一回合為什麼往哪邊推（試玩回饋 2026-10-08：全是官軍卻輸了，卻看不出為什麼）：放在場景上看得到的第一行
@@ -867,7 +782,6 @@ def resolve_round(
         instance.outcome_reason = outcome_reason(instance, definition)
         if instance.outcome_reason:
             msgs.append(instance.outcome_reason)
-        msgs += settle_third(instance, definition, tuning)
     else:
         # 只往後換：回合上限之前就開打的舊資料，round_number 從 0 數起，不能把幕倒退回去
         next_act = min(instance.round_number // definition.rounds_per_act, len(definition.acts) - 1)
@@ -878,7 +792,7 @@ def resolve_round(
     instance.rounds.append(BattleRoundRecord(
         act_index=act_index, round_number=instance.round_number, resolved_real=now,
         actions=dict(instance.round.pending_actions), custom_texts=dict(instance.round.custom_texts),
-        success_rates=dict(instance.round.success_rates), messages=list(msgs) + third_lines, trend_after=instance.trend,
+        success_rates=dict(instance.round.success_rates), messages=list(msgs), trend_after=instance.trend,
     ))
     instance.round = BattleRound(opened_real=now)
     return msgs
@@ -1099,14 +1013,11 @@ def top_merit(instance: BattleInstance, tuning: BattleTuning, side: str) -> Batt
 
 
 def merit_board(
-    instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None, third: str | None = None,
+    instance: BattleInstance, tuning: BattleTuning, left: str, right: str, viewer: str | None,
 ) -> dict:
-    """戰局條旁的「本場戰功」：兩邊各列前 MERIT_TOP 名（戰功 0 的不列）、看的人自己在自己那一邊排第幾、戰功怎麼來的。
-    third 是這場的第三方（地方豪強）：也列一欄（Joy 2026-10-13「地方豪強的戰功在陣營中的玩家看不到」）；沒有第三方就是空的。"""
-    board: dict = {"me": None, "third": []}
-    for key, side in (("left", left), ("right", right), ("third", third)):
-        if side is None:
-            continue
+    """戰局條旁的「本場戰功」：兩邊各列前 MERIT_TOP 名（戰功 0 的不列）、看的人自己在自己那一邊排第幾、戰功怎麼來的。"""
+    board: dict = {"me": None}
+    for key, side in (("left", left), ("right", right)):
         ranking = merit_ranking(instance, tuning, side)
         board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer} for p, m in ranking[:MERIT_TOP] if m > 0]
         for rank, (p, m) in enumerate(ranking, 1):
@@ -1117,17 +1028,16 @@ def merit_board(
 
 def gauge(
     instance: BattleInstance, definition: BattleDef, viewer_side: str | None, timetable: bool,
-    tuning: BattleTuning | None = None, viewer: str | None = None, third_name: str | None = None,
+    tuning: BattleTuning | None = None, viewer: str | None = None,
 ) -> dict:
     """決戰畫面的即時戰局條（Joy 2026-10-10 轉玩家反饋：「有辦法看即時戰局？」）：拔河，兩軍各佔一頭，數字只畫在這裡。
 
     左邊是看的人那一邊（兩軍以外的人看第一方在左）；lean 是「往左邊那一方偏多少」（0～100，100 是左邊大獲全勝），
     網頁把旗子畫在 100−lean：誰佔上風，旗子就被拉到誰那一頭。zones 是分勝負的那一截（時刻表決戰是偏離中線 BIG_WIN_MARGIN
     的大勝，其餘照 outcomes 的門檻），decisive 是偏離中線多少當場收場。rounds 是每一回合從哪裡到哪裡、誰佔上風。
-    merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）；third 是第三方（地方豪強，名字照劇本 third_name），沒有就是 None。"""
+    merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）。"""
     first, second = definition.factions[0].id, definition.factions[1].id
     names = {f.id: f.name for f in definition.factions}
-    third = definition.third.faction if definition.third is not None else None
     left = viewer_side if viewer_side in (first, second) else first
     right = second if left == first else first
 
@@ -1175,8 +1085,7 @@ def gauge(
         "right": {"id": right, "name": names[right], "mine": viewer_side == right},
         "lean": now, "start": lean(start), "decisive": definition.decisive_margin, "zones": zones, "rounds": rounds,
         "caption": caption,
-        "third": None if third is None else {"id": third, "name": third_name or third, "mine": viewer_side == third},
-        "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer, third),
+        "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer),
     }
 
 
@@ -1231,16 +1140,13 @@ def end_without_fighters(
     沒有人能送出行動，round_is_complete 永遠不會成立，這場戰鬥就會永遠卡著——這時直接用
     內容最後那個無條件的保底結果（definition.outcomes[-1]，content.py::validate 保證它
     沒有門檻）收場，記錄方式跟 resolve_round 分出勝負時一樣。這裡沒有 LLM 潤色，收場的
-    幾句話直接寫進 narrative_log。還有人在場、還在集結、或回合還沒逾時，什麼都不做、回傳空清單。
-    「沒人能打」只看兩軍（戰鬥系統第六節）：場上只剩第三方時照樣逾時收場，不讓豪強在沒有兩軍的戰場上一直刷收穫；
-    之前累積的收穫照 tuning 換成推動（settle_third）。"""
+    幾句話直接寫進 narrative_log。還有人在場、還在集結、或回合還沒逾時，什麼都不做、回傳空清單。"""
     armies = {f.id for f in definition.factions}
     if instance.phase != "active" or any(p.faction in armies for p in _active_participants(instance)):
         return []
     if now - instance.round.opened_real < definition.round_seconds:
         return []
     msgs = ["戰場上已經沒有人還能出手，這場戰鬥就此收場。"] + _record_outcome(instance, definition.outcomes[-1])
-    msgs += settle_third(instance, definition, tuning or BattleTuning())
     instance.narrative_log.append("\n".join(msgs))
     instance.round_number += 1  # 這一回合逾時過去了，也算一回合
     instance.rounds.append(BattleRoundRecord(

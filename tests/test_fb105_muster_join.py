@@ -178,10 +178,9 @@ def test_once_you_joined_the_page_is_what_it_was(on):
 
 @node
 def test_someone_who_cannot_join_sees_no_change(on):
-    """不是交戰的一方（黃巾決戰沒有第三方：豪強只能觀戰）、不在決戰的大區：選單上沒有加入，場景卡照伺服器給的。"""
-    off_side = _muster(on, "haoqiang", place="yingchuan", battle="huangjin_showdown")
+    """不在決戰的大區：選單上沒有加入，場景卡照伺服器給的。（豪強以前在這裡一旁觀戰；Joy 2026-10-13 起跟散人一樣臨時投效。）"""
     elsewhere = _muster(on, "guan", place="luzhi_camp", battle=None, name="乙")  # 黃巾決戰在潁川汝南，人在冀州
-    for game in (off_side, elsewhere):
+    for game in (elsewhere,):
         m = server.main_view(game)
         assert not any(o["id"].startswith("battle:") for o in m["options"])
         page = _page(m)

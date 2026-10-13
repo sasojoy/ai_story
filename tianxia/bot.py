@@ -7,6 +7,7 @@ Ollama）；只有「結識」一定接受；心得攢夠一定步數就拿去�
 """
 from __future__ import annotations
 
+import hashlib
 import random
 from collections.abc import Callable
 from typing import NamedTuple
@@ -285,6 +286,21 @@ def sense_draw(game: Game, rng: random.Random) -> list[str]:
     return game.sense_draw(req)
 
 
+def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
+    """投靠了陣營、卻不是交戰兩軍的機器人（地方豪強）怎麼臨時投效（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營」）：
+    投人少的那一軍，一樣多照名號＋這一場的雜湊挑（不碰亂數）。散人不走這裡（散人的假人不投效）；選單上沒有投效鈕是 None。"""
+    battle = game.world.get_battle()
+    sides = [i for i in option_ids if i.startswith("battle:enlist:")]
+    if battle is None or not sides or game.state.player.faction is None:
+        return None
+    counts = {i: sum(1 for p in battle.participants.values() if p.faction == i.removeprefix("battle:enlist:")) for i in sides}
+
+    def tie(option_id: str) -> str:
+        return hashlib.sha256(f"{game.state.player.name}|{battle.battle_id}|{option_id}".encode()).hexdigest()
+
+    return min(sides, key=lambda i: (counts[i], tie(i)))
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
@@ -305,6 +321,9 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         for option in options:  # 集結時選單照常有別的事可做（FB-009）；還沒參戰就先加入，跟以前選單只剩加入時一樣
             if option.id.startswith("battle:join"):
                 return option.id
+        enlist = enlist_pick(game, [o.id for o in options])
+        if enlist is not None:
+            return enlist
     options = [o for o in options if o.id not in (FREE_TEXT_OPTION, SAY_OPTION)]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
     # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
     options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]

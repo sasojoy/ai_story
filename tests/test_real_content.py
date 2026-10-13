@@ -613,7 +613,7 @@ def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
 # 每一句都是一句白話，待 joy 潤——JSON 沒地方寫記號，所以記在這裡與 task 報告）：
 #   h_cap（師父）：原文「最多五十樣」，上限其實是 50 起跳、隨等級與博聞往上加 → 「有個上限」
 #   h_showdown（老石、青禾）：原文「穩守、猛攻」，現在的招是強攻、固守、奇襲（決戰改版一）
-#   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強是第三方、可以下場（趁亂搶地盤、保存實力，決戰改版五）
+#   h_showdown（季伯平）：原文「這一仗咱們不下場」，現在豪強臨時投效兩軍之一下場（Joy 2026-10-13；決戰改版五的第三方拿掉了）
 #   h_showdown（三個陣營）：FB-105 多一句「先按戰場名字旁的『加入』報名」（以前沒說按哪裡，加入收在摺疊裡）
 # 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
@@ -673,22 +673,22 @@ def test_the_lines_that_followed_the_game_say_what_the_game_does(content):
     # FB-105：集結時要先按加入（網頁畫在場景卡戰場名字旁，web/app.js 的 musterScene）；三個陣營的那一則都點名那一顆鈕（待 joy 潤）。
     # 鈕上的字照引擎集結時給的標籤（「加入【官軍】」的「【」之前那一段），不在這裡另寫一份：joy 潤字只要還點名那顆鈕就不必改測試
     join = _muster_join_word(content)
-    for faction in ("guan", "huang", "haoqiang"):
+    for faction in ("guan", "huang"):
         assert f"『{join}』" in showdown[faction], faction
-    third = next(b.third for b in content.battles.values() if b.third is not None)
-    assert third.grab in showdown["haoqiang"] and third.keep in showdown["haoqiang"]  # 豪強兩招的名字照決戰的設定
+    assert f"『{_muster_join_word(content, 'haoqiang')}』" in showdown["haoqiang"]  # 豪強按的是臨時投效（Joy 2026-10-13）
+    assert "趁亂搶地盤" not in showdown["haoqiang"] and "保存實力" not in showdown["haoqiang"]  # 第三方的兩招拿掉了
     assert all(_hint_cells(content).get(key) for key in PLACEHOLDER_LINES)  # 標成待潤的四句真的在書裡（上一版這裡拿它跟自己的字面比，永遠成立）
 
 
-def _muster_join_word(content):
-    """集結時自己陣營那一顆加入鈕上的字（「加入【官軍】」→「加入」）：開一場真的決戰、讀引擎給的選單。"""
+def _muster_join_word(content, faction="guan"):
+    """集結時那一顆加入鈕上的字（「加入【官軍】」→「加入」；豪強是「臨時投效【官軍】」→「臨時投效」）：開一場真的決戰、讀引擎給的選單。"""
     battle = next(b for b in content.battles.values() if b.region is not None and "guan" in {f.id for f in b.factions})
     spot = next(loc for loc in content.locations if (r := region_of(content, loc)) is not None and r.id == battle.region)
     game = Game.new(content, "甲", rng=random.Random(0))
     game.client = None
-    game.state.player.faction, game.state.player.location = "guan", spot
+    game.state.player.faction, game.state.player.location = faction, spot
     game.world.start_battle(battle, now=game.now)
-    [label] = [o.label for o in game.options() if o.id == "battle:join:guan"]
+    [label] = [o.label for o in game.options() if o.id in ("battle:join:guan", "battle:enlist:guan")]
     return label.split("【")[0]
 
 
@@ -2086,7 +2086,7 @@ def test_real_battles_three_showdowns(content):
         ("changshe_fire", ""), ("guangzong", ""), ("wancheng", "甲"), ("wancheng", "乙"),
     ])
     tianming, guangzong = content.battles["tianming"], content.battles["guangzong"]
-    same = ("region", "defender", "front", "third", "trend_start", "rounds_per_act", "decisive_margin", "muster_seconds", "round_seconds",
+    same = ("region", "defender", "front", "trend_start", "rounds_per_act", "decisive_margin", "muster_seconds", "round_seconds",
             "action_tags", "free_text_gamble")
     assert all(getattr(tianming, k) == getattr(guangzong, k) for k in same)
     assert [sorted(o.tag for o in a.options) for a in tianming.acts] == [sorted(o.tag for o in a.options) for a in guangzong.acts]

@@ -77,7 +77,7 @@ def test_the_real_content_keeps_tianming_out_of_the_twelve():
     (event,) = c.mandate_timetable
     assert (event.id, event.week, event.weekday, event.hour, event.kind, event.seal) == ("tianming", 12, 0, 20, "showdown", None)
     battle = c.battles["tianming"]
-    assert battle.timetable_event == "tianming" and battle.region == "jizhou" and battle.third.faction == "haoqiang"
+    assert battle.timetable_event == "tianming" and battle.region == "jizhou" and "third" not in battle.model_fields_set
     endings = {e.id: e for e in c.scenario.endings}
     assert {endings[i].title for i in event.mandate_endings.values()} == {"漢室重光", "黃天當立"}
     assert all(endings[i].mandate and endings[i].season_one for i in event.mandate_endings.values())

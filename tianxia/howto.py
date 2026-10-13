@@ -441,11 +441,12 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     cfg = content.config
     if not content.scenario.factions:
         return []
-    # FB-112：推線只說有些地方；散人可以在決戰的大區臨時投效兩軍之一，只算那一場（Game._free_agent、_enlist_options；
-    # 不進投靠名冊、不算叛投、不能投第三方）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
+    # FB-112：推線只說有些地方；散人與不是交戰兩軍的陣營（地方豪強，Joy 2026-10-13）可以在決戰的大區臨時投效兩軍之一，
+    # 只算那一場（Game._free_agent、_enlist_options；不進投靠名冊、不算叛投）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{SOME_PLACES}，推向你那一邊，遇上自己陣營的隊伍是操練；全服決戰只能替自己的陣營出戰。"
+        f"{SOME_PLACES}，推向你那一邊，遇上自己陣營的隊伍是操練；全服決戰替自己的陣營出戰，"
+        "陣營不是交戰的兩軍時，跟散人一樣臨時投效。"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
     if not calendar.season_one_on(season, content):

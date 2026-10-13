@@ -168,16 +168,18 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:", "battle:enlist:", "invite:"))  # 叛投：假人不換陣營（計畫甲）；散人的假人不臨時投效
+        and not o.id.startswith(("road:", "defect:", "invite:"))  # 叛投：假人不換陣營（計畫甲）
         # 邀請由上面的 _answer_invite 答，不交給打分數亂按
     ]
-    if not options:
+    enlist = [o for o in options if o.id.startswith("battle:enlist:")]
+    options = [o for o in options if not o.id.startswith("battle:enlist:")]  # 臨時投效只照 bot.enlist_pick，不交給打分數（散人的假人不投效）
+    if not options and not enlist:
         return msgs
     ids = [o.id for o in options]
     battle = game.world.get_battle()
     if battle is not None and s.player.name not in battle.participants:
-        join = next((i for i in ids if i.startswith("battle:join")), None)
-        if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣
+        join = next((i for i in ids if i.startswith("battle:join")), None) or bot.enlist_pick(game, [o.id for o in enlist])
+        if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣；豪強投效人少的一軍
             return msgs + game.choose(join)
     elif battle is not None and battle.phase == "muster":
         # 已經參戰：不換邊（不分陣營的劇本集結時還看得到另一邊的加入），也不走出決戰的大區
@@ -662,9 +664,8 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
 
 def _battle_score(game: Game, arg: str) -> float | None:
     """集結或晚到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照自己每招的份量（乘這一場的氣血狀態）打分數，
-    扣血相對剩下的氣血越重扣分越多（決戰改版一）；豪強的兩招同理（決戰改版五）：趁亂搶地盤用奇襲的份量、扣 35，保存實力用
-    固守的份量的一半、扣 10，所以血多時搶地盤、血少了保存實力。沒有招的選項一律 0。
-    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守（豪強是保存實力）分數最高。"""
+    扣血相對剩下的氣血越重扣分越多（決戰改版一）。沒有招的選項一律 0。
+    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守分數最高。"""
     kind, _, tag = arg.partition(":")
     if kind in ("join", "join_late"):
         return JOIN_BATTLE_SCORE
@@ -677,13 +678,6 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return 0.0
     tuning = game.content.config.battle
     hp = max(me.neili, 1.0)
-    if tag in (battle_instance.THIRD_GRAB, battle_instance.THIRD_KEEP):  # 豪強的兩招：只有站第三方的人才有（官軍黃巾的選單上沒有）
-        if not battle_instance.is_third(definition, me):
-            return 0.0
-        grab = tag == battle_instance.THIRD_GRAB
-        move = "奇襲" if grab else "固守"
-        gain = me.scores.get(move, 0.0) * battle_instance.condition(me) * (1.0 if grab else tuning.third_keep_share)
-        return gain / 100 - (tuning.third_grab_damage if grab else tuning.third_keep_damage) / hp
     option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
     if option is None or option.move is None:  # 放手一搏等沒有招的：假人不選（free_text 本來就排除）
         return 0.0

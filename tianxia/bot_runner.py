@@ -294,7 +294,7 @@ class BotRunner:
         )
 
     def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 能站的陣營＝兩軍加第三方, 已經出局的參戰者名號）；
+        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 會趕來的陣營, 已經出局的參戰者名號）；
         沒有或已經結束回傳 None。"""
         battle = self.world.get_battle()
         if battle is None or battle.phase == "ended":
@@ -303,7 +303,9 @@ class BotRunner:
         if definition is None:
             return None
         out = {p.name for p in battle.participants.values() if p.eliminated}
-        return battle.muster_deadline_real, set(battle_instance.sides(definition)), out  # 兩軍加第三方：豪強的假人也擲趕來參戰
+        # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick）；散人不趕來
+        sides = set(battle_instance.sides(definition)) | {f.id for f in self.content.scenario.factions}
+        return battle.muster_deadline_real, sides, out
 
     def _fill(self, now: float, report: TickReport) -> None:
         """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。

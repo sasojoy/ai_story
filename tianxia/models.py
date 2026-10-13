@@ -1159,10 +1159,6 @@ class BattleTuning(_Strict):
     push_max: float = 10.0
     damage: dict[Move, float] = Field(default_factory=lambda: {"強攻": 60.0, "奇襲": 35.0, "固守": 15.0})
     strong_mitigation_cap: float = 0.6  # 強攻的損耗，自己的武學威力最多抵銷這麼多（同原本的猛攻）
-    third_grab_damage: float = 35.0  # 第三方「趁亂搶地盤」扣的氣血（同奇襲的損耗，戰鬥系統第六節；獨立的欄位：調奇襲不連動）
-    third_keep_damage: float = 10.0  # 第三方「保存實力」扣的氣血
-    third_keep_share: float = 0.5  # 「保存實力」的份量與收穫算幾成（固守的份量乘它）
-    third_cap: int = 10  # 一場最多推第三方的大勢線幾點
     # 隊伍的路數多樣（一門打不遍，2026-10-07 企劃者選甲）：這一回合出固定招的同一邊，身上武學的屬性每多一種，這一邊的力量
     # 多乘 diversity_per，最多 diversity_cap。屬性在加入戰局時快照（BattleParticipant.attribute），只有第一季開著時才快照
     diversity_per: float = Field(default=0.05, ge=0)
@@ -1196,8 +1192,7 @@ class BattleTuning(_Strict):
     def _numbers_that_keep_the_resolution_working(self) -> BattleTuning:
         """企劃者測完要調數字：寫壞的值在載入設定時就擋下（伺服器開不起來、改的人馬上看到），不是等第一場決戰的第一回合
         才在行動鎖裡丟 KeyError、把整場卡住。三招的損耗要寫齊、每個屬性的擅長與不擅長是兩招不同的招、威力與推力的數字要大於 0；
-        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。
-        第三方（決戰改版 5）：兩種扣血大於 0，保存實力的折數在 0～1，一場的上限不能是負的（0 是豪強不推）。"""
+        適性的加減、剋制係數、強攻的抵銷可以是 0（＝不起作用），剋制係數與抵銷不超過 1。"""
         if set(self.damage) != set(MOVES):
             raise ValueError(f"damage 三招（{'、'.join(MOVES)}）都要寫，現在是 {'、'.join(self.damage) or '空的'}")
         for move, amount in self.damage.items():
@@ -1212,14 +1207,9 @@ class BattleTuning(_Strict):
         for name in ("affinity_outer", "affinity_inner"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 不能是負的（現在是 {getattr(self, name)}）")
-        for name in ("counter", "strong_mitigation_cap", "third_keep_share"):
+        for name in ("counter", "strong_mitigation_cap"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} 要在 0～1 之間（現在是 {getattr(self, name)}）")
-        for name in ("third_grab_damage", "third_keep_damage"):  # 第三方的扣血：寫成 0 或負的，豪強就扣不了血、永遠倒不下
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} 要大於 0（現在是 {getattr(self, name)}）")
-        if self.third_cap < 0:  # 負的上限會把割據往下推；0 是合法的（豪強不推）
-            raise ValueError(f"third_cap 不能是負的（現在是 {self.third_cap}）")
         return self
 
 
@@ -2317,16 +2307,6 @@ class FreeTextGamble(_Strict):
     per_act: int = Field(default=0, ge=0)
 
 
-class ThirdParty(_Strict):
-    """決戰的第三方（戰鬥系統第六節）：自成一方，不推這一場的戰局，只推自己那條大勢線；兩軍打得越膠著，收穫越多。
-    第一季是地方豪強推豪強割據。兩招的名字可以改，份量與扣血看 BattleTuning 的 third_*。"""
-
-    faction: str  # 劇本的陣營 id，不能是這一場交戰的兩軍之一
-    trend: str  # 收場時推的大勢線（不能是衍生線）
-    grab: str = "趁亂搶地盤"  # 用奇襲的份量；名字出自戰鬥系統第六節（待 joy 潤）
-    keep: str = "保存實力"  # 用固守的份量，收穫算一半；名字出自戰鬥系統第六節（待 joy 潤）
-
-
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
     選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
@@ -2361,7 +2341,7 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
-    third: ThirdParty | None = None  # 第三方（戰鬥系統第六節）；沒有就是只有兩軍
+    # 沒有第三方（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）：不是交戰兩軍的人臨時投效其中一軍
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節

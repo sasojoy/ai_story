@@ -311,8 +311,8 @@ LEAN_STILL = "戰局起點不偏"  # 待 joy 潤：兩軍手上都沒有碎片
 
 
 def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
-    """天命之爭開集結那一刻：能站的每一方各握幾片（持有者照這一季的投靠名冊，不讀存檔；散人、隱沒的不算）。第三方也數（畫面與
-    之後的「群雄得璽」用；起點只看兩軍，lean_shift）。"""
+    """天命之爭開集結那一刻：能站的每一方各握幾片（持有者照這一季的投靠名冊，不讀存檔；散人、豪強、隱沒的不算：
+    豪強在決戰裡跟散人一樣臨時投效，Joy 2026-10-13）。"""
     sides = battle_instance.sides(definition)
     out: dict[str, int] = {}
     for shard in world.seal_state().registry.shards.values():
@@ -325,7 +325,7 @@ def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef
 
 def lean_shift(lean: dict[str, int], definition: BattleDef, cfg: SealTuning) -> int:
     """起點往握碎片的那一軍偏（8.3；PM 戊）：（第一軍 − 第二軍）× start_shift，夾在 ±start_shift_cap；第一軍（官軍）是正向
-    （同 BattleDef.factions[0] 的約定）；豪強不推。"""
+    （同 BattleDef.factions[0] 的約定）。"""
     first, second = definition.factions[0].id, definition.factions[1].id
     raw = (lean.get(first, 0) - lean.get(second, 0)) * cfg.mandate.start_shift
     return max(-cfg.mandate.start_shift_cap, min(cfg.mandate.start_shift_cap, raw))

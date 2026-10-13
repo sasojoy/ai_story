@@ -130,19 +130,6 @@ def test_the_companion_measure_script_removes_its_temp_folder(tmp_path):
     assert list(tmp_path.glob("measure_companions_*")) == []
 
 
-def test_the_third_party_measure_script_plays_a_whole_battle_and_stays_within_the_cap():
-    """決戰改版 5：量測腳本只量不改；一場打完回傳的是割據推動（0 到 third_cap），同一個種子結果一樣，沒有豪強就是 0。
-    小人數跑一場就好（整個量測要幾秒）。"""
-    measure = _load("measure_third_party")
-    content = measure.load_content(ROOT / "content")
-    definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
-    tuning = content.config.battle
-    pushes = [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
-    assert all(isinstance(p, int) and 0 <= p <= tuning.third_cap for p in pushes)
-    assert pushes == [measure.run(definition, tuning, 6, 6, 4, seed) for seed in range(3)]
-    assert measure.run(definition, tuning, 6, 6, 0, 0) == 0
-
-
 def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path, monkeypatch):
     """--pause-at：模擬中途讓賽季時鐘停一段——停著的時候「真人」照樣刷新（同步）、假人程式照樣巡，季的時間一秒都不動、
     假人一個動作都沒做；繼續之後照常跑到收季。測試內容的季壓到幾分鐘（time_scale 400），「真人」整天在線。"""

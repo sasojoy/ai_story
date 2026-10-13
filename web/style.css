@@ -559,7 +559,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .g-mcol li b { font-variant-numeric: tabular-nums; }
 .g-mcol li.mine span { font-weight: 700; color: var(--c, var(--ink)); }
 .g-mcol .muted { margin: 0; }
-.g-mthird { margin-top: 4px; }
 .g-me { margin: 4px 0 0; color: var(--ink); }
 .war > .fronts-help { margin: 2px 4px 0; }
 .fronts[data-act="fronts-help"] { cursor: pointer; }

@@ -17,9 +17,8 @@ from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import NO_REST, Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
-from tianxia.models import Condition, Effect, FigureDef, Location, PromotionDef, ThirdParty
+from tianxia.models import Condition, Effect, FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
-from tianxia.rules import world_trend_value
 from tianxia.state import BotProfile, FigureState, GameState, Journey, Rumor, new_game_state
 from tianxia.sqlite_world import open_world
 from tianxia.world_state import season_length_days
@@ -2098,16 +2097,17 @@ def test_with_factions_joining_the_other_side_directly_is_refused(content, game)
     assert game.world.get_battle().participants == {}
 
 
-def test_with_factions_an_outside_faction_watches_and_keeps_playing(content, game):
+def test_with_factions_an_outside_faction_enlists_and_keeps_playing(content, game):
+    """不是交戰兩軍的陣營（地方豪強）不再一旁觀戰（Joy 2026-10-13）：跟散人一樣看到兩顆臨時投效，集結時照常遊玩。"""
     _install_factions(content)
     definition = _install_battle_def(content)
     game.world.start_battle(definition, now=1000.0)
     with at(game, 1000.0):
         game.state.player.faction = "haoqiang"
         assert "act:explore" in ids(game)
-        assert not any(i.startswith("battle:") for i in ids(game))
+        assert [i for i in ids(game) if i.startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
         scene = game.scene_text()
-        assert "測試決戰" in scene and "觀戰" in scene and "選擇陣營" not in scene
+        assert "測試決戰" in scene and "臨時投效" in scene and "觀戰" not in scene
 
 
 def test_with_factions_a_free_agent_can_enlist_with_either_army_for_this_battle_only(content, game):
@@ -2241,302 +2241,91 @@ def test_with_factions_a_latecomer_joins_their_own_side(content, game):
     assert game.world.get_battle().participants["沈浪"].faction == "huang"
 
 
-# ── 決戰改版 5：地方豪強第三方（戰鬥系統第六節）──────────────────────────
+# ── 地方豪強在決戰臨時投效兩軍之一（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）──
 
 
 def _as_warlord(game):
-    """本人是地方豪強；那一場三招決戰掛上豪強這個第三方（推第一條大勢線）。"""
+    """本人是地方豪強；開一場三招決戰（只有官軍、黃巾兩軍）。"""
     _install_factions(game.content)
     game.state.player.faction = "haoqiang"
-    definition = _install_three_move_battle(game.content)
-    definition.third = ThirdParty(faction="haoqiang", trend=game.content.scenario.trends[0].id)
-    return definition
+    return _install_three_move_battle(game.content)
 
 
-def _warlord_in_battle(game):
-    """豪強本人加入、集結撥到過去、開打；回傳 (這一場, 定義)。"""
+def _warlord_in_battle(game, side="guan"):
+    """豪強本人臨時投效 side、集結撥到過去、開打；回傳 (這一場, 定義)。"""
     definition = _as_warlord(game)
     game.content.config.admins = [game.state.player.name]
     game.now = 0.0
     game.admin_start_battle(definition.id, now=0.0)
-    game._battle_choose("join:haoqiang")
+    game._battle_choose(f"enlist:{side}")
     game.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
     game._run_battle_tick(definition)
     return game.world.get_battle(), definition
 
 
-def test_a_warlord_can_join_a_battle_with_a_third_party(game):
+def test_a_warlord_enlists_with_either_army_for_this_battle_only(game):
+    """豪強集結時跟散人一樣看到兩軍各一顆臨時投效；投效了只算這一場：參戰名單記投效的那一軍，自己照樣是地方豪強。"""
     definition = _as_warlord(game)
     game.content.config.admins = [game.state.player.name]
     game.now = 0.0
     game.admin_start_battle(definition.id, now=0.0)
     battle = game.world.get_battle()
-    assert not game._off_side(definition)
+    assert [o.id for o in game._battle_options(battle, definition)] == ["battle:enlist:guan", "battle:enlist:huang"]
+    assert "你是地方豪強的人，不是交戰的兩軍，可以臨時投效其中一方" in game._battle_scene_text(battle, definition)
+    msgs = game._battle_choose("enlist:huang")
+    assert msgs == ["你臨時投效了黃巾，只算這一場：打完你照樣是地方豪強的人。"]
+    assert game.world.get_battle().participants[game.state.player.name].faction == "huang"
+    assert game.state.player.faction == "haoqiang"
+    assert game.state.journal[0].title == "三招決戰・臨時投效黃巾"
+    assert "你已臨時投效【黃巾】" in game._battle_scene_text(game.world.get_battle(), definition)
+
+
+def test_a_warlord_fights_with_the_army_it_enlisted_with(game):
+    """開打之後豪強的招就是投效那一軍的三招，戰局條也站那一邊；沒有第三方的招，也沒有豪強那一欄戰功。"""
+    battle, definition = _warlord_in_battle(game, "huang")
     ids = [o.id for o in game._battle_options(battle, definition)]
-    assert ids == ["battle:join:haoqiang"]
-    game._battle_choose("join:haoqiang")
-    assert game.world.get_battle().participants[game.state.player.name].faction == "haoqiang"
-    assert game.state.journal[0].title == "三招決戰・加入地方豪強"  # 加入寫的是這一方的名字（劇本陣營的名字）
-    assert "你已加入【地方豪強】" in game._battle_scene_text(game.world.get_battle(), definition)
+    assert ids and all(i.startswith("battle:act:huang_") for i in ids)
+    g = game.battle_gauge()
+    assert g["left"]["id"] == "huang" and "third" not in g and set(g["merit"]) == {"me", "left", "right"}
 
 
-def test_a_warlord_only_watches_a_battle_without_a_third_party(game):
-    definition = _as_warlord(game)
-    definition.third = None
-    assert game._off_side(definition)
-
-
-def test_without_factions_nobody_is_off_side(game):
-    """劇本不分陣營時沒有「陣營不在場」這回事（_off_side 的 factions 前提）：沒有第三方的決戰照舊人人能加入。"""
-    definition = _install_three_move_battle(game.content)
-    assert not game.content.scenario.factions and not game._off_side(definition)
-
-
-def test_a_warlord_only_sees_and_joins_its_own_side(game):
-    """豪強的集結按鈕只有自己這一方；官軍的人看到的也只有自己這一方，看不到豪強。"""
+def test_a_warlord_can_enlist_late_once_the_battle_has_started(game):
     definition = _as_warlord(game)
     game.content.config.admins = [game.state.player.name]
     game.now = 0.0
     game.admin_start_battle(definition.id, now=0.0)
-    assert game._battle_choose("join:guan") == ["（你只能站在自己陣營這一邊。）"]
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙", "huang", neili_cap=100.0))
+    game.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
+    game._run_battle_tick(definition)
+    battle = game.world.get_battle()
+    assert battle.phase == "active"
+    assert [o.id for o in game._battle_options(battle, definition)] == ["battle:enlist:guan", "battle:enlist:huang"]
+    assert "這一回合就能出手" in game._battle_choose("enlist:guan")[0]
+    assert game.world.get_battle().participants[game.state.player.name].faction == "guan"
+
+
+def test_an_army_member_cannot_enlist(game):
+    """投效只給不是交戰兩軍的人：官軍的人送投效被擋回。"""
+    definition = _as_warlord(game)
+    game.state.player.faction = "guan"
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    assert game._battle_choose("enlist:huang") == ["（此刻無法這麼做。）"]
     assert game.world.get_battle().participants == {}
-    game.state.player.faction = "guan"
-    assert [o.id for o in game._battle_options(game.world.get_battle(), definition)] == ["battle:join:guan"]
 
 
-def test_a_warlord_sees_the_two_moves_with_scores(game):
-    battle, definition = _warlord_in_battle(game)
-    me = battle.participants[game.state.player.name]
-    labels = [o.label for o in game._battle_options(battle, definition)]
-    grab = round(me.scores["奇襲"] * battle_instance.condition(me))
-    keep = round(me.scores["固守"] * battle_instance.condition(me) * 0.5)
-    assert labels[:2] == [f"趁亂搶地盤（奇襲・{grab} 分）", f"保存實力（固守・{keep} 分）"]
-    assert len(labels) == 2  # 沒有作戰方針、也沒有放手一搏
-
-
-def test_the_warlords_scene_shows_both_armies_last_round_and_how_stalemated_it_is(game):
-    """豪強看到兩軍各自上一回合的比例，加一行膠著程度（照公開的戰局算）；那幾行跟「你上一回合」併在同一段小字引用裡。"""
-    battle, definition = _warlord_in_battle(game)
-    battle.last_mix = {"guan": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}, "huang": {"強攻": 0.2, "固守": 0.5, "奇襲": 0.3}}
-    battle.trend = 75
-    battle.participants[game.state.player.name].last_result = "趁亂搶地盤"
-    text = game._battle_scene_text(battle, definition)
-    assert (
-        "> 官軍上一回合：強攻 100%・固守 0%・奇襲 0%\n> 黃巾上一回合：強攻 20%・固守 50%・奇襲 30%\n"
-        "> 兩軍相持：膠著 5 成（越膠著，你趁亂收穫越多）\n> 你上一回合：趁亂搶地盤"
-    ) in text
-    assert "對面上一回合" not in text and "亂局" not in text  # 亂局是第一季戰線的說法，別撞名
-
-
-def test_the_armies_scene_has_no_third_party_lines(game):
-    battle, definition = _open_three_move_battle(game)
-    definition.third = ThirdParty(faction="haoqiang", trend=game.content.scenario.trends[0].id)
-    battle.last_mix = {"guan": {"強攻": 1.0, "固守": 0.0, "奇襲": 0.0}, "huang": {"強攻": 0.2, "固守": 0.5, "奇襲": 0.3}}
-    text = game._battle_scene_text(battle, definition)
-    assert "對面上一回合（黃巾）" in text and "膠著" not in text and "兩軍相持" not in text
-
-
-def test_the_third_party_never_shows_up_as_the_armies_foe_in_the_reports(content, game):
-    """每個參戰者的戰報：官軍的人對手寫黃巾（不寫豪強）；豪強站「地方豪強」、對手是兩軍。"""
-    definition = _three_round_showdown(content)
-    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)
-    game.state.player.faction = "guan"
-    warlord = _fighter(content, game, "丙", "haoqiang")
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0), at(warlord, 0.0):
-        game.choose("battle:join:guan")
-        warlord.choose("battle:join:haoqiang")
-    start = definition.muster_seconds + 1
-    for i in range(3):
-        with at(game, start + i), at(warlord, start + i):
-            game.choose("battle:act:guan_hold")
-            warlord.choose("battle:act:third_keep")
-    assert game.world.get_battle().phase == "ended"
-    game.sync(start + 10)
-    warlord.sync(start + 10)
-    mine, theirs = game.state.battles[0], warlord.state.battles[0]
-    assert (mine.opponent, mine.side) == ("黃巾", "官軍")
-    assert (theirs.opponent, theirs.side) == ("官軍、黃巾", "地方豪強")
-    assert game.state.journal[0].tag == "你站在官軍" and warlord.state.journal[0].tag == "你站在地方豪強"
-
-
-def _two_showdown_rounds(content, db_path, warlords):
-    """官軍（沈浪）與黃巾（乙）打兩回合，場上另有 warlords 位豪強（兩位時一位搶地盤、一位保存實力，第二回合對調）。每個人都用
-    自己的一份 Game（client 一律是 None：不叫模型；第 1 回合另外裝一個假的 client 來收 prompt），每回合沈浪最後一個出招，
-    所以回合結算那一刻的回覆是他看到的。回傳他看到的一切：兩回合的回覆、第 1 回合給模型的 prompt、共用的場景記錄、他的場景，
-    與回合紀錄。"""
-    world = open_world(db_path)
-    definition = _three_round_showdown(content)
-    definition.third = ThirdParty(faction="haoqiang", trend=content.scenario.trends[0].id)  # 兩邊都掛第三方，只差場上有沒有豪強
-    definition.rounds_per_act = 6  # 打兩回合不收場
-    me = Game.new(content, "沈浪", rng=random.Random(0), world=world)
-    me.state.player.faction = "guan"
-    foe = _fighter(content, me, "乙", "huang")
-    crowd = [_fighter(content, me, name, "haoqiang") for name in ("丙", "丁", "戊")[:warlords]]
-    fighters = [(me, "guan"), (foe, "huang")] + [(g, "haoqiang") for g in crowd]
-    for g, _ in fighters:
-        g.client = None
-    world.start_battle(definition, now=0.0)
-    for g, side in fighters:
-        with at(g, 0.0):
-            g.choose(f"battle:join:{side}")
-    start = definition.muster_seconds + 1
-    replies, prompts = [], []
-    client = mock.Mock()
-    client.chat_text.return_value = "戰場上煙塵四起。"
-    for i in range(2):  # 第 1 回合有（假的）模型，第 2 回合沒有：潤色退回系統訊息本身
-        with mock.patch.object(Game, "_quick_client", return_value=client if i == 0 else None):
-            with at(foe, start + i):
-                foe.choose("battle:act:huang_hold")
-            for n, g in enumerate(crowd):
-                with at(g, start + i):
-                    g.choose("battle:act:third_grab" if (n + i) % 2 == 0 else "battle:act:third_keep")
-            with at(me, start + i):
-                replies.append(me.choose("battle:act:guan_hold"))
-        if i == 0:
-            prompts = [call.args[0][1]["content"] for call in client.chat_text.call_args_list]
-    battle = world.get_battle()
-    assert battle.round_number == 2 and battle.phase == "active"
-    return {
-        "replies": replies, "prompts": prompts, "narrative_log": list(battle.narrative_log),
-        "scene": me._battle_scene_text(battle, definition), "records": world.battle_rounds(battle.record_id),
-    }
-
-
-def test_the_armies_never_hear_anything_about_the_warlords(content, tmp_path):
-    """豪強選了什麼，官軍與黃巾都不該知道：同樣的兩回合，場上有沒有豪強，官軍的人看到的回覆、場景的記錄、給模型的
-    判定（模型寫的敘事會進場景）與他的場景都一個字不差，只差「已送出／在場」那個人數——結算要等豪強出手，數字就得算他們，
-    不然全員送出了倒數還在跳（Joy 2026-10-13；戰功也照列，見 test_battle_pace）。只比整份是否相同、不挑招名字串，
-    所以換個說法的洩漏（收穫、「地方上有人蠢蠢欲動」）也會讓這裡失敗。豪強的紀錄只留在回合紀錄（戰報底稿）裡。"""
-    alone = _two_showdown_rounds(content, tmp_path / "alone.db", 0)
-    crowded = _two_showdown_rounds(content, tmp_path / "crowded.db", 2)
-    assert crowded["prompts"] == [] == alone["prompts"]  # 回合結算不叫模型（試玩回饋 2026-10-08）
-    assert "已送出 0／在場 4" in crowded["scene"] and "已送出 0／在場 2" in alone["scene"]
-    crowded["scene"] = crowded["scene"].replace("已送出 0／在場 4", "已送出 0／在場 2")
-    for what in ("replies", "prompts", "narrative_log", "scene"):
-        assert crowded[what] == alone[what], what
-    assert [r.messages[-1] for r in crowded["records"]] == ["趁亂搶地盤 1 人、保存實力 1 人。"] * 2  # 回合紀錄才留著
-    assert not any("趁亂搶地盤" in m for r in alone["records"] for m in r.messages)
-
-
-def test_only_warlords_left_in_the_field_end_the_battle_with_the_configured_cap(content, game):
-    """場上只剩豪強、回合逾時：照保底收場（兩軍沒人，Review Focus 3），累積的收穫照 Config.battle 的 third_cap 換成推動
-    （收場那一步要把引擎手上的 tuning 傳進去，不是用預設的 10）。"""
-    content.config.battle.third_cap = 4
-    battle, definition = _warlord_in_battle(game)
-    game.world.mutate_battle(lambda b: setattr(b, "third_gain", 5000.0))
-    game.now = definition.round_seconds + 1
-    ended, msgs = game._run_battle_tick(definition)
-    assert ended.phase == "ended" and ended.third_push == 4
-    assert "兩軍相持之際，地方上有人趁亂坐大。" in msgs
-
-
-def _ended_with_push(game, definition, push, unfinished=False):
-    """收場的一場決戰（沒有真的打）：third_push 是收場時算好的豪強推動。"""
-    battle = battle_instance.start_muster(definition, now=0.0)
-    battle.phase, battle.third_push, battle.unfinished = "ended", push, unfinished
-    battle.outcome_title, battle.outcome_text = "收場", "戰罷。"
-    return battle
-
-
-@pytest.mark.parametrize("timetable_showdown", [False, True], ids=["beta", "timetable-showdown"])
-def test_the_warlord_push_lands_on_the_season(content, game, timetable_showdown):
-    """豪強那一份推到這一季的大勢上（自己手上那一份也跟著）。第一季的時刻表決戰走 _settle_showdown、不套保底的大勢變化，
-    豪強那一份要另外推：時刻表找不到那一格時 _settle_showdown 只換標題。"""
+def test_a_warlord_rallies_to_the_battle_but_a_drifter_does_not(game):
+    """假人照 rally_region 趕路：豪強要趕去臨時投效，散人不為了投效趕過去。"""
     definition = _as_warlord(game)
-    if timetable_showdown:
-        definition.timetable_event, definition.defender = "no_such_event", "guan"
-        _season_one_on(content, game)
-    trend = definition.third.trend
-    before = world_trend_value(game.world.get_season(), game.content, trend)
-    game._apply_battle_outcome(_ended_with_push(game, definition, 3))
-    assert game.world.get_season().trends[trend] == min(100, before + 3)
-    assert game.state.world.trends[trend] == min(100, before + 3)  # 自己手上那一份也跟著（收尾的存檔不會蓋掉）
-
-
-def test_the_warlord_push_stops_at_one_hundred(game):
-    definition = _as_warlord(game)
-    trend = definition.third.trend
-    game.world.mutate_season(lambda season: season.trends.__setitem__(trend, 97))
-    game.state.world = game.world.get_season()
-    game._apply_battle_outcome(_ended_with_push(game, definition, 10))
-    assert game.world.get_season().trends[trend] == 100 and game.state.world.trends[trend] == 100
-
-
-def test_an_unfinished_battle_pushes_no_warlords(game):
-    """Review Focus 5：季終沒打完收起來的決戰不推割據。"""
-    definition = _as_warlord(game)
-    trend = definition.third.trend
-    before = world_trend_value(game.world.get_season(), game.content, trend)
-    game._apply_battle_outcome(_ended_with_push(game, definition, 3, unfinished=True))
-    assert world_trend_value(game.world.get_season(), game.content, trend) == before
-
-
-def test_a_battle_without_a_third_side_or_without_a_push_leaves_the_warlord_trend_alone(game):
-    definition = _as_warlord(game)
-    trend = definition.third.trend
-    before = world_trend_value(game.world.get_season(), game.content, trend)
-    game._apply_battle_outcome(_ended_with_push(game, definition, 0))  # 豪強這一場沒有收穫
-    definition.third = None
-    game._apply_battle_outcome(_ended_with_push(game, definition, 3))  # 沒有第三方的決戰，third_push 本來就沒有意義
-    assert world_trend_value(game.world.get_season(), game.content, trend) == before
-
-
-def test_the_warlord_push_shows_in_every_fighters_report(game):
-    """戰報的大勢變化列出割據的增減（第一季開關關著時是帶正負號的數字）；兩軍與豪強的人都看得到這一場讓割據動了。"""
-    definition = _as_warlord(game)
-    me = battle_instance.BattleParticipant(name=game.state.player.name, faction="haoqiang", neili=100.0, neili_cap=100.0)
-    game._file_showdown(_ended_with_push(game, definition, 3), me, None)
-    assert game.state.journal[0].changes == ["寇亂 +3"] and game.state.battles[0].changes == ["寇亂 +3"]
-    foe = battle_instance.BattleParticipant(name=game.state.player.name, faction="guan", neili=100.0, neili_cap=100.0)
-    game._file_showdown(_ended_with_push(game, definition, 3), foe, None)
-    assert game.state.journal[0].changes == ["寇亂 +3"]
-
-
-def test_a_battle_with_no_push_adds_nothing_to_the_report(game):
-    definition = _as_warlord(game)
-    me = battle_instance.BattleParticipant(name=game.state.player.name, faction="haoqiang", neili=100.0, neili_cap=100.0)
-    game._file_showdown(_ended_with_push(game, definition, 0), me, None)
-    assert game.state.journal[0].changes == []
-
-
-def test_a_real_timetable_showdown_with_a_warlord_pushes_geju_and_says_so_in_words(content, world):
-    """第一季整條路：長社火攻照時刻表開、官軍與一位豪強參戰打滿三回合，收場時割據照豪強的收穫推上去，兩邊的戰報都不寫數字
-    （FB-064：機器可讀的標籤，畫出來才換成一句話）。"""
-    game = _showdown_game(content, world)
-    definition = content.battles["changshe_fire"]
-    definition.third = ThirdParty(faction="haoqiang", trend="geju")
-    _to_showdown(game, "changshe_fire")
-    warlord = _fighter(content, game, "丙", "haoqiang")
-    before = world_trend_value(world.get_season(), content, "geju")
-    now = game.now
-    with at(game, now), at(warlord, now):
-        game.choose("battle:join:guan")
-        warlord.choose("battle:join:haoqiang")
-    world.mutate_battle(lambda b: b.participants["丙"].scores.update({"奇襲": 300.0, "固守": 300.0}))  # 收穫夠大，不會四捨五入成 0
-    now = world.get_battle().muster_deadline_real
-    for _ in range(100):
-        if world.get_battle().phase == "ended":
-            break
-        with at(game, now), at(warlord, now):
-            game.choose("battle:act:guan_hold")
-            warlord.choose("battle:act:third_grab")
-        now += 1
-    else:
-        raise AssertionError("打了 100 回合還沒收場")
-    (_, ended), = world.ended_battles()
-    push = ended.third_push
-    assert push >= 1
-    assert world.get_season().trends["geju"] == min(100, before + push)
-    for fighter in (game, warlord):
-        fighter.sync(now + 10)
-        report = next(e for e in fighter.state.journal if e.battle_id is not None)
-        assert front_lines.mark("geju", push) in report.changes
-        assert not any(str(push) in c and "割據" in c for c in report.changes)  # 不寫「豪強割據 +N」
-        record = fighter.state.battles[0]  # 戰報頁：第一季不收割據的標籤、也不寫數字（FB-064）；這個夾具沒宣告戰線，潁川汝南照舊是數字
-        assert record.id == report.battle_id and "潁川汝南 -15" in record.changes
-        assert not any("割據" in c for c in record.changes) and not any("割據" in note for note in record.notes)
-
+    here = atlas.region_of(game.content, game.state.player.location)
+    definition.region = next(r.id for r in game.content.map.regions if here is None or r.id != here.id)
+    game.content.config.admins = [game.state.player.name]
+    game.now = 0.0
+    game.admin_start_battle(definition.id, now=0.0)
+    assert game.rally_region() == definition.region
+    game.state.player.faction = None
+    assert game.rally_region() is None
 
 def test_a_battle_with_no_fighters_ends_with_its_fallback_outcome_once_the_round_times_out(content, game):
     _install_factions(content)
@@ -3381,7 +3170,9 @@ def test_rally_region_names_a_battle_you_should_head_for(content, game):
     game.world.start_battle(definition, now=time.time())
     assert game.rally_region() == "south"
     game.state.player.faction = "haoqiang"
-    assert game.rally_region() is None  # 打不了這場
+    assert game.rally_region() == "south"  # 豪強趕去臨時投效（Joy 2026-10-13）
+    game.state.player.faction = None
+    assert game.rally_region() is None  # 散人不為了投效趕過去
     game.state.player.faction = "guan"
     game.state.player.location = "cave"
     assert game.rally_region() is None  # 已經在南區
@@ -7822,14 +7613,13 @@ def test_the_showdown_report_says_who_you_hurt_and_who_hunted_you(content, game)
     assert "甲、乙在陣上點名要對付你，你被打掉氣血 80" in lines
 
 
-def test_the_warlords_have_a_first_merit_and_a_rank_too(game):
-    """Joy 2026-10-13「地方豪強的戰功在陣營中的玩家看不到?」：論功那一則也列豪強的首功，戰局條有豪強那一欄。"""
-    battle, definition = _warlord_in_battle(game)
+def test_an_enlisted_warlord_ranks_and_takes_first_merit_with_the_army_it_joined(game):
+    """臨時投效的豪強算在投效的那一軍：論功那一則寫那一軍的首功，戰局條的戰功也排在那一軍。"""
+    battle, definition = _warlord_in_battle(game, "guan")
     me = game.state.player.name
     game.world.mutate_battle(lambda b: setattr(b.participants[me], "acted_rounds", 2))
     battle = game.world.get_battle()
-    sides = game._sides(definition)
-    assert game._merit_line(battle, definition).endswith(f"{sides['haoqiang']}首功{me}。")
+    assert game._merit_line(battle, definition) == f"{definition.name}論功：官軍首功{me}。"
     g = game.battle_gauge()
-    assert g["third"]["name"] == sides["haoqiang"] and g["merit"]["third"][0]["name"] == me
+    assert g["merit"]["left"][0]["name"] == me and "third" not in g["merit"]
     assert g["merit"]["me"]["rank"] == 1 and "due" in g

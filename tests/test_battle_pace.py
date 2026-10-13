@@ -1,12 +1,11 @@
 """決戰的節奏（Joy 2026-10-13 試玩：「大決戰的倒數秒數包含送出行動，十秒才跳一次，全部人都送出也還在跳最遲1分x秒後結算」
-「機器人是不是都不會第一時間選擇行動，這樣很拖時間」「地方豪強的戰功在陣營中的玩家看不到?」）：
-「已送出／在場」跟結算等的是同一批人（豪強也算）、在場的假人第一時間出招、豪強的戰功列在戰局條與論功裡。"""
+「機器人是不是都不會第一時間選擇行動，這樣很拖時間」）：「已送出／在場」跟結算等的是同一批人、在場的假人第一時間出招。
+（豪強那一欄戰功跟著第三方一起拿掉：豪強臨時投效兩軍之一，戰功記在投效的那一軍。）"""
 import random
 
 import pytest
-from test_battle_instance import three, with_third  # noqa: F401（fixture）
+from test_battle_instance import three  # noqa: F401（fixture）
 from test_bot_runner import _install, _tick_cleanly, clock, runner, world  # noqa: F401（fixture）
-from test_peek_row import run
 
 import server
 import webharness
@@ -26,40 +25,24 @@ def _fight(definition, people):
     return battle
 
 
-def test_the_count_waits_for_the_same_people_the_round_does(with_third):
-    """以前兩軍看到的「在場」不算豪強，豪強還沒出手時兩軍全員送出了，回合照樣在等、倒數一直跳。"""
-    battle = _fight(with_third, [("甲", "guan"), ("乙", "huang"), ("丙", "hao")])
+def test_the_count_waits_for_the_same_people_the_round_does(three):
+    """「已送出／在場」跟回合結算等的是同一批人：還有人沒出手，數字看得出來在等誰。"""
+    battle = _fight(three, [("甲", "guan"), ("乙", "huang"), ("丙", "huang")])
     bi.submit_action(battle, "甲", "guan_hold")
     bi.submit_action(battle, "乙", "huang_hold")
     assert not bi.round_is_complete(battle)
-    assert bi.round_progress(battle, with_third) == (2, 3)  # 還差豪強一個：數字看得出來在等誰
-    bi.submit_action(battle, "丙", bi.THIRD_KEEP)
-    assert bi.round_is_complete(battle) and bi.round_progress(battle, with_third) == (3, 3)
+    assert bi.round_progress(battle, three) == (2, 3)
+    bi.submit_action(battle, "丙", "huang_hold")
+    assert bi.round_is_complete(battle) and bi.round_progress(battle, three) == (3, 3)
 
 
-def test_the_warlords_get_their_own_merit_column(with_third):
-    battle = _fight(with_third, [("甲", "guan"), ("乙", "huang"), ("丙", "hao")])
-    battle.participants["丙"].acted_rounds = 2
-    g = bi.gauge(battle, with_third, "guan", timetable=False, tuning=BattleTuning(), viewer="甲", third_name="地方豪強")
-    assert g["third"] == {"id": "hao", "name": "地方豪強", "mine": False}
-    assert g["merit"]["third"] == [{"name": "丙", "merit": 4, "mine": False}]
-    me = bi.gauge(battle, with_third, "hao", timetable=False, tuning=BattleTuning(), viewer="丙")
-    assert me["merit"]["me"] == {"rank": 1, "of": 1, "merit": 4, "parts": ["出手 2 回合"]}
-    assert bi.gauge(battle, three_of(with_third), "guan", timetable=False)["third"] is None
-
-
-def three_of(definition):
-    return definition.model_copy(update={"third": None})
-
-
-@node
-def test_the_page_draws_the_warlord_column(with_third):
-    battle = _fight(with_third, [("甲", "guan"), ("乙", "huang"), ("丙", "hao")])
-    battle.participants["丙"].acted_rounds = 1
-    battle.participants["甲"].acted_rounds = 1
-    g = bi.gauge(battle, with_third, "guan", timetable=False, tuning=BattleTuning(), viewer="甲", third_name="地方豪強")
-    out = run({}, "return H.gaugeHtml(G);".replace("G", __import__("json").dumps(g, ensure_ascii=False)))
-    assert 'class="g-mcols g-mthird"' in out and "地方豪強" in out and "<span>丙</span>" in out
+def test_the_merit_board_has_only_the_two_armies(three):
+    """豪強不再是第三方（Joy 2026-10-13）：戰局條的戰功只有兩軍兩欄。"""
+    battle = _fight(three, [("甲", "guan"), ("乙", "huang")])
+    battle.participants["乙"].acted_rounds = 2
+    g = bi.gauge(battle, three, "guan", timetable=False, tuning=BattleTuning(), viewer="甲")
+    assert "third" not in g and set(g["merit"]) == {"me", "left", "right"}
+    assert g["merit"]["right"] == [{"name": "乙", "merit": 4, "mine": False}]
 
 
 # ── 假人第一時間出招 ─────────────────────────────

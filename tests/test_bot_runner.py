@@ -13,7 +13,7 @@ from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.models import (
     BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
-    FactionDef, ThirdParty,
+    FactionDef,
 )
 from tianxia.database import Database
 from tianxia.sqlite_world import SqliteWorldStore, open_world
@@ -466,11 +466,8 @@ def test_a_bot_that_turned_up_for_a_battle_goes_offline_once_it_is_eliminated(
     assert _tick_cleanly(runner).online == 0  # 戰鬥結束，大家都回到自己的作息
 
 
-def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_do(
-    runner, world, content, clock, monkeypatch,
-):
-    """決戰改版 5（假人的對等）：能站的每一方都算（兩軍加第三方），豪強的假人也擲「趕來參戰」；
-    沒有第三方的決戰照舊只有兩軍的假人趕來。看不出誰是假人：兩邊的假人行為要一樣。"""
+def test_a_warlord_bot_turns_up_for_a_battle_like_the_armies_do(runner, world, content, clock, monkeypatch):
+    """豪強在決戰臨時投效兩軍之一（Joy 2026-10-13）：豪強的假人也擲「趕來參戰」，跟兩軍的假人一樣；看不出誰是假人。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)  # 都不在作息時段
     monkeypatch.setattr(server_bots, "attends_battle", lambda profile, key: True)  # 但都擲中趕來參戰
     monkeypatch.setattr(bot_policy, "take_turn", lambda game, profile, rng, slot=None: None)  # 只看誰算在線
@@ -484,11 +481,7 @@ def test_a_warlord_bot_turns_up_for_a_battle_with_a_third_side_like_the_armies_d
         characters.save(state)
     assert sorted(s.player.faction for s in _bots()) == ["guan", "haoqiang", "huang"]
     world.start_battle(content.battles["t1"], clock[0])
-    assert _tick_cleanly(runner).online == 2  # 這一場只有兩軍：豪強的假人不趕來
-    world.clear_battle()
-    content.battles["t1"].third = ThirdParty(faction="haoqiang", trend="kou")
-    world.start_battle(content.battles["t1"], clock[0])
-    assert _tick_cleanly(runner).online == 3  # 有第三方：豪強的假人也趕來
+    assert _tick_cleanly(runner).online == 3  # 豪強的假人也趕來（到了臨時投效人少的一軍）
 
 
 def test_a_bot_the_round_is_waiting_for_acts_on_this_very_tick(runner, world, content, clock, monkeypatch):

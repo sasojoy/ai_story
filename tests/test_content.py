@@ -9,8 +9,8 @@ from conftest import FIXTURE
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
-    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning, Condition, Config, FactionDef,
-    SpecialTrait, ThirdParty, Threshold, Trend,
+    MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
+    SpecialTrait, Threshold, Trend,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -635,73 +635,10 @@ def test_lead_texts_must_name_a_side_of_the_battle(content):
         validate(content)
 
 
-def test_a_third_party_must_be_another_scenario_faction_and_push_a_real_trend(content):
-    """決戰改版 5：第三方要是劇本的陣營、不能是交戰的兩軍之一；推的大勢線要存在。"""
-    content.battles["t1"] = battle = _battle({})
-    battle.third = ThirdParty(faction=battle.factions[0].id, trend=content.scenario.trends[0].id)
-    with pytest.raises(ContentError, match="第三方"):
-        validate(content)
-    battle.third = ThirdParty(faction="沒有這個陣營", trend=content.scenario.trends[0].id)
-    with pytest.raises(ContentError, match="第三方"):
-        validate(content)
-    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
-    battle.third = ThirdParty(faction="hao", trend="沒有這條線")
-    with pytest.raises(ContentError, match="第三方推的大勢線 沒有這條線 不存在"):
-        validate(content)
-
-
-def test_a_third_party_cannot_be_one_of_the_two_armies(content):
-    """劇本有這三個陣營，所以「要是劇本的陣營」那一條過得了，只剩「不是交戰的兩軍」擋得住（上面那個測試的第一個斷言是劇本沒有
-    陣營時跑的，會被前一條先擋掉，看不出這一條有沒有在）。"""
-    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
-    content.battles["t1"] = battle = _battle({})
-    for army in ("guan", "huang"):
-        battle.third = ThirdParty(faction=army, trend=content.scenario.trends[0].id)
-        with pytest.raises(ContentError, match=f"第三方 {army} 要是劇本的陣營，而且不是交戰的兩軍"):
-            validate(content)
-
-
-def test_a_third_party_that_is_a_scenario_faction_pushing_a_real_trend_is_valid(content):
-    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
-    content.battles["t1"] = battle = _battle({})
-    battle.third = ThirdParty(faction="hao", trend=content.scenario.trends[0].id)
-    validate(content)
-
-
-def test_a_third_party_cannot_push_a_derived_trend(content):
-    """衍生線（黃巾聲勢）推了會被下一次重算蓋回去：跟決戰結果的 trend_delta 一樣擋掉，要推就推它的來源線。"""
-    content = _with_fronts(content)
-    content.scenario.factions = [FactionDef(id=f, name=f) for f in ("guan", "huang", "hao")]
-    content.battles["t1"] = battle = _battle({})
-    battle.third = ThirdParty(faction="hao", trend="east")
-    validate(content)
-    battle.third = ThirdParty(faction="hao", trend="total")
-    with pytest.raises(ContentError, match="第三方 不能推衍生線 total"):
-        validate(content)
-
-
-@pytest.mark.parametrize("field, bad", [
-    ("third_grab_damage", 0), ("third_grab_damage", -35), ("third_keep_damage", 0), ("third_keep_damage", -1),
-    ("third_keep_share", -0.1), ("third_keep_share", 1.5), ("third_cap", -1),
-])
-def test_a_bad_third_party_number_in_the_battle_tuning_is_refused(field, bad):
-    """決戰改版 5：第三方的四個數字寫壞了（扣血寫成 0 或負的、保存實力的折數超出 0～1、上限是負的）在載入設定時就擋下，
-    不是讓豪強變成扣不了血、收穫倒扣、或把割據往下推。"""
-    with pytest.raises(ValidationError, match=field):
-        BattleTuning(**{field: bad})
-
-
-def test_the_third_party_numbers_may_sit_on_their_edges():
-    """折數 0（保存實力不算收穫）與 1（跟搶地盤一樣）、上限 0（豪強不推割據）都是合法的調法。"""
-    BattleTuning(third_keep_share=0.0, third_cap=0)
-    BattleTuning(third_keep_share=1.0, third_cap=100)
-
-
-def test_a_bad_third_party_number_in_config_json_stops_the_load(tmp_path):
-    root = copy_fixture(tmp_path)
-    edit_json(root / "config.json", lambda d: d.update(battle={"third_keep_share": 2}))
-    with pytest.raises(ValidationError, match="third_keep_share"):
-        load_content(root)
+def test_a_battle_with_a_third_party_is_refused(content):
+    """豪強不再是決戰的第三方（Joy 2026-10-13）：舊內容寫了 third 在讀檔時就擋下，不會悄悄沒有作用。"""
+    with pytest.raises(ValidationError, match="third"):
+        BattleDef.model_validate({**_battle({}).model_dump(), "third": {"faction": "hao", "trend": "kou"}})
 
 
 def test_a_bad_battle_tuning_in_config_json_stops_the_load(tmp_path):
