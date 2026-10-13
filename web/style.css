@@ -1414,8 +1414,10 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .stamp { position: absolute; top: 6px; right: 6px; transform: rotate(10deg); padding: 2px 5px; border: 2px solid var(--accent); border-radius: 4px;
   color: var(--accent); background: var(--paper); font: 600 12px var(--serif); font-style: normal; }
 .shop-board .board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
+.shop-board .board-zoom { overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding-top: calc(var(--top, 0px) + 56px); } /* 交出的清單很長時紙比畫面高：可以捲，短的照舊置中（紙的上下 margin auto）（終審 I2） */
+.shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列疊在放大的紙上面：出店按得到（終審 I3）；實心底，捲動的紙不從底下透出來 */
 .shop-board .board-zoom .paper { position: relative; width: min(340px, 100%); display: grid; gap: 6px; padding: 16px 14px 12px; border-top: 6px solid #8a6a42; border-radius: 4px;
-  background: var(--paper); color: var(--ink); font-size: 13px; }
+  background: var(--paper); color: var(--ink); font-size: 13px; flex-shrink: 0; margin: auto 0; }
 .shop-board .paper h4 { margin: 0; font: 600 18px var(--serif); }
 .shop-board .paper .k, .shop-board .paper .due, .shop-board .paper .why { font-size: 12px; color: var(--ink-2); }
 .shop-board .paper .have { color: var(--accent); }
