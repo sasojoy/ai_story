@@ -52,7 +52,7 @@ const parts = [
    const fightCard = () => '<div class="fight-card"></div>', actionBar = () => '<div class="actbar"></div>';
    const MOVE_MODES = [], ROAD_LINKS = [], ROAD_TASKS = /^road:task/, FREE_TEXT_OPTION = "choice:free", SAY_OPTION = "talk:say";
    const guideHtml = () => "", frontsBlock = () => '<div class="fronts-block"></div>', ordersHtml = () => "", resultHtml = () => '<section class="result"></section>';`,
-  "return { pageJianghu, peekBlock, peekTap, peekParts, peekHtml };",
+  "return { pageJianghu, peekBlock, peekTap, peekParts, peekHtml, gaugeHtml };",
 ];
 const H = new Function("S", parts.join("\n"))(S);
 H.S = S; H.dom = dom; H.store = store;

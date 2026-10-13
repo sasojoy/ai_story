@@ -194,6 +194,16 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     return msgs + game.choose(choice) if choice else msgs
 
 
+def battle_move(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
+    """決戰這一回合出一招（bot_runner.battle_tick 用；Joy 2026-10-13「機器人是不是都不會第一時間選擇行動」）：只看選單上的
+    battle:act:，照 pick 一樣打分數挑（不寫放手一搏）。這一回合已經出過、或選單上沒有可出的招，就什麼都不做。"""
+    options = [o for o in game.options(odds=False) if o.enabled and o.id.startswith("battle:act:")]
+    if not options:
+        return []
+    choice = pick(game, options, profile, rng)
+    return game.choose(choice) if choice else []
+
+
 def _answer_invite(game: Game, rng: random.Random) -> str | None:
     """有人在這裡邀假人切磋（玩家互動第二層）：跟真人一樣在自己這一輪看到才答——付得起體力時 INVITE_YES 的機會答應，
     其餘婉拒（真人也會婉拒，假人不能每一張都答應，不然看得出來）。一次只答一張，最早的那張。沒有邀請是 None。"""
