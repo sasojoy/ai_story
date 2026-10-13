@@ -2132,7 +2132,7 @@ class Config(_Strict):
     # 舊角色不補送，換季不再送（剩下的跟著帶到下一季）
     beta_gift: bool = True
     beta_gift_stamina_pills: int = Field(default=20, ge=0)
-    # 一天最多服幾顆（企劃者 2026-10-12「體力丹一天最多吃兩顆每天00:00重新計算」）：0 是不限（測試內容）。「一天」看現實時間
+    # 一天最多服幾顆（企劃者 2026-10-12「體力丹一天最多吃兩顆每天00:00重新計算」，2026-10-13 改五顆）：0 是不限（測試內容）。「一天」看現實時間
     # （Game.pill_now），照 pill_day_utc_offset_hours 的時區 00:00 換日（台灣 UTC+8）；真人、假人、整季機器人一樣
     stamina_pills_per_day: int = Field(default=0, ge=0)
     pill_day_utc_offset_hours: float = Field(default=8, ge=-12, le=14)

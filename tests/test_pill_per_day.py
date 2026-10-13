@@ -1,8 +1,10 @@
-"""回體丹一天最多兩顆（企劃者 2026-10-12「體力丹一天最多吃兩顆每天00:00重新計算」）：Config.stamina_pills_per_day，
+"""回體丹一天有上限（企劃者 2026-10-12「體力丹一天最多吃兩顆每天00:00重新計算」，2026-10-13 改五顆）：Config.stamina_pills_per_day，
 「一天」看現實時間（Game.pill_now），照 pill_day_utc_offset_hours（台灣 UTC+8）00:00 換日。測試內容不限（0），這裡自己打開。"""
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
 
 import pytest
 from conftest import next_season, real_content
@@ -13,6 +15,7 @@ from tianxia import bot
 from tianxia.engine import HOUR, PILL_DAY_FULL, Game
 from tianxia.sqlite_world import open_world
 
+ROOT = Path(__file__).resolve().parent.parent
 DAY = 24 * HOUR
 # 1970-01-02 00:00（台灣時間）＝ 1970-01-01 16:00 UTC：換日那一刻
 MIDNIGHT_TW = DAY - 8 * HOUR
@@ -106,9 +109,18 @@ def test_the_status_bar_says_how_many_are_left_today(capped):
     assert "一天最多服 2 顆，每天 00:00（台灣時間）重新計算（今天還能服 0 顆）。" in help_line
 
 
-def test_the_real_content_caps_at_two_a_day():
-    assert real_content().config.stamina_pills_per_day == 2
-    assert real_content("weekend").config.stamina_pills_per_day == 2
+def test_the_real_content_caps_at_five_a_day():
+    # 企劃者 2026-10-13「體力丹改成一天最多可以吃五顆」（10-12 是兩顆）
+    assert real_content().config.stamina_pills_per_day == 5
+    assert real_content("weekend").config.stamina_pills_per_day == 5
+
+
+def test_the_tutorial_names_the_real_cap():
+    """序章師父那句話寫死了一天幾顆（內容讀不到 Config）：改上限時要一起改，這裡鎖住兩邊對得上。"""
+    from tianxia.engine import _cn_count
+    content = real_content()
+    text = json.dumps(json.load(open(ROOT / "content" / "tutorial.json", encoding="utf-8")), ensure_ascii=False)
+    assert f"回體丹一天能服{_cn_count(content.config.stamina_pills_per_day)}顆" in text
 
 
 def _button(today, full=False):

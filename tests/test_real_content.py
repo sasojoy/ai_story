@@ -108,7 +108,7 @@ def test_the_road_sights_are_the_thirty_written_for_season_one(content):
 
 def test_the_mentor_explains_travel_and_sitting_down(content):
     """步行、趕路、疾行與體力現在由師父講：出師那一步（第 11 步）講走法與體力，體力見底那一步（第 7 步）講體力怎麼回來
-    （打坐 2026-10-12 拿掉了：講時辰與一天兩顆回體丹，這一步只教一下調息）。"""
+    （打坐 2026-10-12 拿掉了：講時辰與一天能服幾顆回體丹，這一步只教一下調息）。"""
     texts = {step.id: step.text for step in content.tutorial.steps}
     assert all(word in texts["p11_farewell"] for word in ("步行", "趕路", "疾行", "體力"))
     assert all(word in texts["p7_rest"] for word in ("回體丹", "調息")) and "打坐" not in texts["p7_rest"]
