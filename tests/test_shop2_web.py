@@ -204,7 +204,7 @@ def test_the_stamp_and_notes_respect_reduced_motion():
     from pathlib import Path
 
     css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
-    assert "@media (prefers-reduced-motion: reduce) { .board-stamp { animation: none; } }" in css
+    assert "@media (prefers-reduced-motion: reduce) { .shop-board .board-stamp { animation: none; } }" in css
 
 
 # ── Task 7：FB-191 ──
@@ -264,3 +264,52 @@ def test_the_horse_card_rows_do_not_reuse_the_status_bar_class(market):
     html = run(market, "H.render(); return T.els.app.innerHTML;")
     card = html[html.index('class="horse-card"'):]
     assert card.count('class="abil"') == 4 and 'class="bar"' not in card
+
+
+# ── 終審修正 ──
+
+
+def _css():
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
+
+
+def _rule(css: str, selector: str) -> str:
+    """一條規則的內容（selector 照原字找，回大括號裡那一段）。"""
+    start = css.index(selector + " {") + len(selector) + 2
+    return css[start:css.index("}", start)]
+
+
+def test_the_market_and_board_css_stays_inside_its_shop():
+    """終審 I1：懸賞榜的 .board 規則沒限定在店裡，撞到江湖頁「大事」那一顆（.peek-chip.board）與它的面板，兩個都被排成兩欄。
+    馬市、懸賞榜那兩段的每一條規則都要掛在 .shop-layer／.shop-market／.shop-board 底下。"""
+    css = _css()
+    block = css[css.index("/* 馬市（第三節）"):css.index("@keyframes stampfade")]
+    loose = []
+    for line in block.splitlines():
+        text = line.strip()
+        if not text.startswith(".") or "{" not in text:
+            continue
+        for selector in text.split("{", 1)[0].split(","):
+            if not selector.strip().startswith((".shop-layer", ".shop-market", ".shop-board")):
+                loose.append(selector.strip())
+    assert loose == []
+    assert "\n.board {" not in css and "\n.note {" not in css
+
+
+def test_the_board_paper_scrolls_when_the_hand_in_list_is_long():
+    """終審 I2：交出的清單很長時，放大的那一張紙比畫面高；原本置中、不能捲，「收起」掉到畫面外、出店被蓋住，只能交掉一件才出得來。"""
+    css = _css()
+    zoom = _rule(css, ".shop-board .board-zoom")
+    assert "overflow-y: auto" in zoom and "justify-content: flex-start" in zoom
+    paper = _rule(css, ".shop-board .board-zoom .paper")
+    assert "margin: auto 0" in paper and "flex-shrink: 0" in paper
+
+
+def test_the_sign_bar_stays_above_the_paper():
+    """終審 I3：放大的紙蓋住整個店面（含招牌那一列），出店按不到；第三層的出店（先回到懸賞榜再出店）實際上走不到。招牌那一列疊在紙上面。"""
+    css = _css()
+    bar = _rule(css, ".shop-board .shop-bar")
+    assert "position: relative" in bar and "z-index: 3" in bar
+    assert "z-index: 2" in _rule(css, ".reveal-layer")
