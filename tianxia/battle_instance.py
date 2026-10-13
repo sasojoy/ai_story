@@ -967,13 +967,17 @@ def _leads(
     tuning: BattleTuning, push: float, armies: tuple[str, str],
 ) -> dict[str, tuple[str, str, int]]:
     """每一邊這一回合帶頭出固定招的人：出得最多的那一招裡力量最大的那一個（名號, 招, 出這一招的人數）。
-    推力往哪邊，那一邊帶頭的人記一個 led_rounds（戰報寫）。"""
+    推力往哪邊，那一邊帶頭的人記一個 led_rounds（戰報寫）。帶頭只從自己下令的人裡挑、人數也只算他們：逾時被代為固守的
+    （round.auto_picked）照記固守的基本戰功，但不算帶頭、回合原因與勝負的關鍵都不寫他；這一招都是代選的就沒有帶頭的人（FB-181）。"""
     out: dict[str, tuple[str, str, int]] = {}
+    auto = set(instance.round.auto_picked)
     for side in armies:
         if not shares[side]:
             continue
         move = _main_move(mixes[side])
-        crew = [row for row in shares[side] if row[2] == move]
+        crew = [row for row in shares[side] if row[2] == move and row[1] not in auto]
+        if not crew:
+            continue
         _, lead, _ = max(crew, key=lambda row: (row[0], row[1]))
         out[side] = (lead, move, len(crew))
     shift = round(push)

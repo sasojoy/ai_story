@@ -87,6 +87,23 @@ def test_idle_rounds_still_earn_merit(gamble):
     assert bi.merit_parts(b) == ["代為固守 1 回合"]
 
 
+
+def test_an_auto_held_round_earns_merit_but_never_leads(gamble):
+    """FB-181（PM 2026-10-13）：被代為固守的回合照記固守的基本戰功（held_rounds），但不算「帶頭佔上風」——帶頭照自己下令的人挑，
+    回合原因與勝負的關鍵都不寫他；這一邊都是代選的就沒有帶頭的人。玉璽的現世得主、挑戰者照戰功挑，跟著變對。"""
+    battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
+    _timeout_round(battle, gamble, {"甲": "強攻"})  # 乙逾時被代為固守：固守剋強攻，黃巾佔上風
+    b = battle.participants["乙"]
+    assert battle.trend < 50 and (b.held_rounds, b.led_rounds) == (1, 0)
+    assert bi.merit_parts(b) == ["代為固守 1 回合"]
+    assert "乙" not in battle.swings[-1].causes and "乙" not in bi.outcome_reason(battle, gamble)
+    mixed = _battle(gamble, [("甲", "guan"), ("乙", "huang"), ("丙", "huang")])
+    mixed.participants["乙"].scores = {m: 90.0 for m in CODES}  # 代選的那個力量最大，也不輪到他帶頭
+    _timeout_round(mixed, gamble, {"甲": "強攻", "丙": "固守"})
+    assert mixed.participants["乙"].led_rounds == 0 and mixed.participants["丙"].led_rounds == 1
+    assert "丙一馬當先" in mixed.swings[-1].causes and "乙" not in mixed.swings[-1].causes
+
+
 def test_old_participants_read_as_not_idle():
     p = bi.BattleParticipant.model_validate({"name": "甲", "faction": "guan", "neili": 1, "neili_cap": 1})
     assert (p.idle_streak, p.held_rounds) == (0, 0)
