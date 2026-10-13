@@ -12,7 +12,7 @@
   margin: 0; writing-mode: vertical-rl; font-family: var(--zh-title-font, var(--zh-font)); font-weight: 700;
   font-size: var(--slip-size, 30px); line-height: 1; letter-spacing: calc(var(--slip-size, 30px) * 0.3);
 }
-.zh-sub { position: absolute; z-index: 1; left: 16px; bottom: 12px; margin: 0; font-size: 13px; letter-spacing: 0.12em; color: var(--zh-sub); }
+.zh-sub { position: absolute; z-index: 1; left: max(16px, calc(50% - 304px)); bottom: 12px; margin: 0; font-size: 13px; letter-spacing: 0.12em; color: var(--zh-sub); }
 .zh-tools { display: flex; gap: 8px; justify-content: flex-end; max-width: 640px; margin: 0 auto; padding: 12px 16px 0; }
 .zh-tools button {
   font: 600 14px var(--zh-font); color: var(--zh-btn-ink); background: var(--zh-btn); border: 1px solid var(--zh-line);
@@ -38,7 +38,7 @@
 .zh-bamboo {
   --zh-page: #2a1f17; --zh-ink: #2a1c0e; --zh-sub: #e3c88f; --zh-font: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "STKaiti", serif;
   --zh-btn: #e3c88f; --zh-btn-ink: #2a1c0e; --zh-line: #8b6a3a; --zh-seal: #a9281f; --zh-seal-ink: #f6e7c8;
-  --zh-slip: 2.2em; --zh-cord: #6e4f29;
+  --zh-slip: 42px; --zh-cord: #6e4f29;
   --zh-c1: #c49d5c; --zh-c2: #e4c98f; --zh-c3: #cda768; --zh-gap: #20170f;
 }
 .zh-bamboo .zh-head { background: radial-gradient(ellipse at 50% 30%, #3b2b1e 0%, #1c140d 75%); }
@@ -57,22 +57,24 @@
   border-radius: 3px; background: linear-gradient(90deg, #a98447, #d7b77a 30%, #d7b77a 70%, #b18c50); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
 }
 .zh-bamboo .zh-title { color: #22160a; }
-.zh-bamboo .zh-text { padding: 0; color: var(--zh-ink); line-height: var(--zh-slip); font-size: 19px; text-align: start; }
+/* 簡片畫在每一段自己身上（段與段之間空的那一片是 p + p 的 padding），容器只墊同一張底給段落外面空出來的地方：
+   段落一段一段重新對齊，不靠 background-attachment，行高與簡片也一定同一個整數 px——
+   WebKit（iPhone 的 Safari、LINE）把 2.2em＝41.8px 的行高取整，條紋卻照 41.8 畫，越往下字越壓到簡片的縫上。 */
+.zh-bamboo .zh-text { padding: 0; color: var(--zh-ink); line-height: var(--zh-slip); font-size: 19px; text-align: start; border-radius: 4px; }
 .zh-bamboo .zh-text p { text-indent: 0; margin: 0; }
-.zh-bamboo .zh-text:not(.vertical) {
-  padding: 0 30px; border-radius: 4px;
+.zh-bamboo .zh-text:not(.vertical), .zh-bamboo .zh-text:not(.vertical) p {
   background: linear-gradient(90deg, transparent 12px, var(--zh-cord) 12px 16px, transparent 16px calc(100% - 16px), var(--zh-cord) calc(100% - 16px) calc(100% - 12px), transparent calc(100% - 12px)),
     repeating-linear-gradient(to bottom, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
-  background-attachment: local;
 }
-.zh-bamboo .zh-text:not(.vertical) p + p { margin-top: var(--zh-slip); }
-.zh-bamboo .zh-text.vertical {
-  padding: 52px 0; border-radius: 4px;
+.zh-bamboo .zh-text:not(.vertical) p { padding: 0 30px; }
+.zh-bamboo .zh-text:not(.vertical) p + p { padding-top: var(--zh-slip); }
+.zh-bamboo .zh-text.vertical, .zh-bamboo .zh-text.vertical p {
   background: linear-gradient(to bottom, transparent 30px, var(--zh-cord) 30px 34px, transparent 34px calc(100% - 34px), var(--zh-cord) calc(100% - 34px) calc(100% - 30px), transparent calc(100% - 30px)),
     repeating-linear-gradient(to left, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
-  background-attachment: local;
 }
-.zh-bamboo .zh-text.vertical p + p { margin-right: var(--zh-slip); }
+.zh-bamboo .zh-text.vertical { background-attachment: local; }
+.zh-bamboo .zh-text.vertical p { padding: 52px 0; }
+.zh-bamboo .zh-text.vertical p + p { padding-right: var(--zh-slip); }
 .zh-bamboo .zh-text p.ping { color: #5a2a14; }
 
 /* ── 遊戲裡（web/app.js）：疊在整個畫面上的那一層、上面的返回列、分享、等史官落筆；入口卡（江湖頁、歷季列傳） ── */
