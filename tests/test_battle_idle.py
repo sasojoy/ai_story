@@ -124,3 +124,31 @@ def test_an_idler_who_never_acted_is_not_the_first_merit(gamble):
     assert bi.top_merit(battle, tuning, "huang") is c
     c.acted_rounds = 0
     assert bi.top_merit(battle, tuning, "huang") is None  # 這一邊全員都沒按過：從缺
+
+
+# ── FB-173：場上只剩掛機的人時，回合照逾時代選結算（不卡死） ─────────────────
+
+
+def test_a_field_of_idlers_settles_once_the_round_times_out(gamble):
+    """FB-173：還沒倒下的人全在掛機時，逾時之前照舊等（上面那一支），逾時之後代選完就算齊了。"""
+    battle = _battle(gamble, [("甲", "guan"), ("乙", "huang")])
+    _timeout_round(battle, gamble, {})
+    assert not bi.round_is_complete(battle) and not bi.round_is_complete(battle, timed_out=False)
+    bi.fill_timed_out_actions(battle, gamble)
+    assert bi.round_is_complete(battle, timed_out=True)
+
+
+def test_a_showdown_with_only_idlers_left_keeps_settling_and_ends(showdown):
+    """FB-173 實機：兩邊都掛機（第一回合逾時之後誰都不按）時，每一回合逾時就照代為固守結算，打到收場，不卡在「時間到了，即將結算」。"""
+    on, a, _ = showdown
+    definition = on.battles["wancheng_jia"]
+    a.world.mutate_battle(lambda x: setattr(x, "muster_deadline_real", -1.0))
+    a.options()
+    rounds = definition.rounds_per_act * len(definition.acts)
+    for _ in range(rounds + 2):
+        a.now += definition.round_seconds + 1
+        a.options()
+        if a.world.get_battle() is None or a.world.get_battle().phase == "ended":
+            break
+    battle = a.world.get_battle()
+    assert battle is None or battle.phase == "ended"
