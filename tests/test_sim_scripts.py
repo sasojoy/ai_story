@@ -343,3 +343,38 @@ def test_the_seal_measure_script_summarises_a_mandate_season():
     lines = measure.mandate_lines([{"mandate": {"result": "官軍大勝", "ending": "漢室重光", "recalls": 2}, "stirs": [{}] * 3,
                                     "duels": [{}], "takes": 0}])
     assert any("官軍大勝 1" in x for x in lines)
+
+
+def test_the_challenge_measure_script_summarises_a_season():
+    """挑戰每季都有設計第十一節的量表：一季的紀錄照陣營分（打贏、心得經驗、三階照來源、寶物）、退場第幾天、聲威最低、挑戰佔打仗收入、
+    強弱人物場數、頓悟。"""
+    from conftest import real_content
+    mc = _load("measure_challenge")
+    content = real_content()
+    t = mc.ChallengeTally()
+    t.fight(1.0, "bocai", "guan", "大勝", 80, 80, True)
+    t.fight(2.0, "bocai", "haoqiang", "僵持", 0, 0, False)
+    t.tier3[("guan", "guaranteed")] += 1
+    t.treasures["guan"] += 1
+    t.retired["bocai"] = 9.5
+    t.prestige = {0: {"bocai": 60}, 1: {"bocai": 55}}
+    t.seizes.append((3.0, "挑戰本人"))
+    t.battle_income[("guan", "xinde")] += 160
+    t.battle_income[("guan", "exp")] += 160
+    r = t.report(content)
+    assert (r["挑戰"], r["打贏"], r["僵持"]) == (2, 1, 1)
+    guan = r["分陣營"]["官軍"]
+    assert (guan["打贏"], guan["心得"], guan["三階・保證"], guan["寶物"]) == (1, 80, 1, 1)
+    assert r["退場"] == {"波才": 9.5} and r["聲威最低"] == {"波才": 55}
+    assert r["挑戰佔打仗收入"] == {"心得": 0.5, "經驗": 0.5} and r["強弱人物場數"] == {"強": 1, "弱": 1}
+    assert r["頓悟"] == [(3.0, "挑戰本人")]
+
+
+def test_the_challenge_measure_script_prints_each_seed_and_the_switches(capsys, monkeypatch):
+    mc = _load("measure_challenge")
+    row = {"挑戰": 3, "打贏": 2, "僵持": 1, "退場": {"波才": 9.0}, "頓悟": []}
+    monkeypatch.setattr(mc, "run_server", lambda args, seed: row)
+    mc.main(["--seeds", "1", "2", "--regen", "0", "--cap", "0", "--outcome", "a", "--no-huangjin-end"])
+    out = capsys.readouterr().out
+    assert "regen 0" in out and "cap 0" in out and "丙 (a)" in out and "拿掉了黃巾聲勢 80 收季" in out
+    assert out.count("種子 ") == 2 and "平均：挑戰 3.0" in out
