@@ -324,3 +324,40 @@ def test_challenge_treasures_stop_at_two_a_season(real, world):
     s = _player(real, world, "官甲", "guan", "huangjin_camp").state
     s.player.treasure_drops = {"zhangjiao", "zhangbao"}
     assert treasures.challenge_drop(s, real, "bocai", 1, 99) == (None, [])
+
+
+def _detail(game, loc):
+    from tianxia import atlas
+    game.state.player.visited.add(loc)
+    return atlas.detail_text(game.state, game.content, loc, lambda squad_id: "")
+
+
+def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
+    """設計 3.8：沒有時刻表的季，龍頭人物那一段只有人物此刻就站在這裡才寫聲威、情誼；其餘站在這裡的大勢人物列在
+    「此地的大勢人物」，戰線空著的寫「按兵不動」，聲威會回時寫「沒人去打……慢慢回來」。緊急開關關著時一個字都不變。"""
+    from tianxia import atlas
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    camp = _detail(game, "huangjin_camp")
+    assert "聲威 60" in camp and atlas.REGEN_NOTE in camp and atlas.HERE_TITLE not in camp  # 波才併在龍頭人物那一段
+    nanyang = _detail(game, "nanyang_huangjin_camp")
+    assert atlas.HERE_TITLE in nanyang and "張曼成" in nanyang and "趙弘" in nanyang and atlas.IDLE_NOTE in nanyang
+    assert "沒有龍頭人物在此出沒" not in nanyang
+    ford = _detail(game, "mengjin_ford")
+    assert "董卓" in ford and atlas.IDLE_NOTE in ford and "沒有龍頭人物在此出沒" not in ford
+    assert "聲威" not in atlas.leader_text(game.state, real, "皇甫嵩", "yingchuan")  # 人物站在長社，潁川那一段不寫聲威
+    assert "聲威" in atlas.leader_text(game.state, real, "皇甫嵩", "changshe")
+    real.config.figure_challenge_every_season = False
+    off = _detail(game, "nanyang_huangjin_camp")
+    assert atlas.HERE_TITLE not in off and "聲威" not in _detail(game, "huangjin_camp")
+
+
+def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):
+    from tianxia import howto
+    cfg = real.config
+    page = howto.page(real, world.get_season(), recruitable=True)
+    assert f"打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}" in page
+    assert howto.CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige) in page
+    assert howto.CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap) in page
+    assert "波才、皇甫嵩、董卓" in page
+    cfg.figure_challenge_every_season = False
+    assert "打贏大勢人物本人" not in howto.page(real, world.get_season(), recruitable=True)

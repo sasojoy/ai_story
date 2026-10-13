@@ -397,10 +397,15 @@ def test_the_map_shows_the_figures_where_they_stand(on):
 
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
+    """規則關著的季照舊標虛擬玩家（龍頭人物）。挑戰每季都有（設計 3.8）：緊急開關關著時，給了地點也不寫聲威；開著時人物此刻
+    就站在這裡才寫（黃巾別部營寨的波才寫、潁川的皇甫嵩不寫——他站在長社）。"""
     s = _season(real)
     assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
     assert atlas.haunters(s, real, "mengjin_ford") == []
-    assert "聲威" not in atlas.leader_text(s, real, "波才")
+    assert "聲威" in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in atlas.leader_text(s, real, "皇甫嵩", "yingchuan")
+    real.config.figure_challenge_every_season = False
+    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp")
 
 
 # ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────
