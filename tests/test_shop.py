@@ -418,3 +418,128 @@ def test_no_shop_and_no_forging_in_the_rest_season(content, world):
     before = (p.stats["silver"], dict(p.materials))
     assert game.smith_forge("劍", "gang_1", "kuai_1") == [equipment.NOT_NOW]
     assert (p.stats["silver"], dict(p.materials)) == before
+
+
+# ── 設計第七節補測（PM 2026-10-13）：直接開爐與一步一步打出來一樣（隱藏配方、首位發現、神器原品、仿品、首創名望回饋）──
+
+SECRET_STEPS = [  # (種類, 主料, 輔料, 有沒有人先打過)：先打過的那一位是「先手」
+    pytest.param("劍", "gang_1", "kuai_1", False, id="weapon-named-first-find"),
+    pytest.param("劍", "gang_1", "kuai_1", True, id="weapon-named-follower-echo"),
+    pytest.param(smithing.ARMOR_KIND, "gang_1", "kuai_1", False, id="armor-named-first-find"),
+    pytest.param(smithing.ARMOR_KIND, "gang_1", "kuai_1", True, id="armor-named-follower-echo"),
+    pytest.param("劍", "gang_3", "gang_3", False, id="weapon-divine-original"),
+    pytest.param("劍", "gang_3", "gang_3", True, id="weapon-divine-copy-echo"),
+    pytest.param(smithing.ARMOR_KIND, "gang_3", "gang_3", False, id="armor-divine-original"),
+    pytest.param(smithing.ARMOR_KIND, "gang_3", "gang_3", True, id="armor-divine-copy-echo"),
+]
+
+
+def _secret_content(content):
+    from test_forge_divine import STAR, WARD
+    from test_forge_secrets import BLADE, JACKET
+
+    content.forge_secrets = {r.id: r.model_copy(deep=True) for r in (BLADE, JACKET, STAR, WARD)}
+    content.config.forge_secrets.per_season = {"weapon:1": 1, "armor:1": 1, "weapon:divine": 1, "armor:divine": 1}
+    return content
+
+
+def _shop_in(content, world, name):
+    game = _smith(content, world, silver=1000, name=name)
+    game.state.player.materials.update({"gang_3": 4})
+    return game
+
+
+def _one_path(content, world, kind, main, aux, prior, direct, seed=7):
+    """一個世界裡：先手（要的話）照同一個種子先打一爐，再由「同名」用一步一步的單子（direct 為假）或直接開爐打同一爐。"""
+    if prior:
+        first = _shop_in(content, world, "先手")
+        rng = smithing.own_rng(first.state, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else random.Random(0)
+        assert smithing.forge(first.state, content, world, kind, main, aux, rng=rng)[0] is not None
+    game = _shop_in(content, world, "同名")
+    game.rng = random.Random(seed)
+    if direct:
+        game.smith_forge(kind, main, aux)
+    else:
+        if smithing.is_armor(kind):
+            game.choose("smith:page:armor")
+        for option in smithing.wizard_steps(kind, main, aux):
+            game.choose(option)
+    return game
+
+
+def _outcome(game, world, kind, main, aux):
+    """拿來比的東西：打出來的那一件、身上的錢與料與熟手次數、鑄譜、全服那一列、首創名望回饋、傳聞、最上面那一則紀錄。"""
+    from tianxia import forge_secrets
+
+    p = game.state.player
+    slot = smithing.slot_of(kind)
+    item = next(i for i in [equipment.worn(p, slot), *equipment.in_slot(p, slot)] if i is not None and i.recipe == smithing.recipe_key(kind, main, aux))
+    secret = forge_secrets.match(game.content, world.read().tianji, slot, kind, main, aux)
+    find = world.lookup_gear_find(forge_secrets.key(secret))
+    echo = game.state.world.echoes.get(forge_secrets.key(secret))
+    top = game.state.journal[0]
+    return {
+        "item": item.model_dump(exclude={"id"}),
+        "purse": (p.stats["silver"], dict(p.materials), dict(p.forge_counts)),
+        "book": (list(p.forge_manual.solved), dict(p.forge_manual.made)),
+        "find": None if find is None else (find.creator, find.owner, find.divine, find.copies, find.name),
+        "echo": None if echo is None else (echo.creator, list(echo.followers), echo.name, echo.made),
+        "rumors": [r.text for r in game.state.world.rumors],
+        "journal": (top.title, top.lines, top.changes),
+    }
+
+
+@pytest.mark.parametrize(("kind", "main", "aux", "prior"), SECRET_STEPS)
+def test_direct_forging_matches_the_step_by_step_forge_for_hidden_and_divine_recipes(content, world, tmp_path, monkeypatch, kind, main, aux, prior):
+    from tianxia import fusion
+    from tianxia.sqlite_world import open_world
+
+    monkeypatch.setattr(fusion, "season_one", lambda *a, **k: True)  # 首創名望回饋只在第一季規則開著時有
+    _secret_content(content)
+    other = open_world(tmp_path / "direct.db")  # 兩條路各在自己的世界打：先手、首位發現、仿品數都一樣地從零開始
+    step = _one_path(content, world, kind, main, aux, prior, direct=False)
+    direct = _one_path(content, other, kind, main, aux, prior, direct=True)
+    a, b = _outcome(step, world, kind, main, aux), _outcome(direct, other, kind, main, aux)
+    assert a == b
+    item = a["item"]
+    assert item["secret"] is not None  # 真的打中了隱藏配方（名器或神器）
+    if main == "gang_3":
+        assert item["original"] is not prior and (item["copy_of"] is not None) is prior
+    if prior:
+        assert a["echo"][0] == "先手" and a["echo"][1] == ["同名"]  # 首創名望回饋記給先手
+    else:
+        assert a["find"][0] == "同名" and direct.smith_result["first"]  # 首位發現
+
+
+# ── 設計第七節補測：smith_line（/api/smith_line 回的就是它）與 smith_view 不露別人打中的隱藏配方 ──
+
+
+@pytest.mark.parametrize(("kind", "main", "aux", "name"), [
+    pytest.param("劍", "gang_1", "kuai_1", "穿霞劍", id="weapon-named"),
+    pytest.param(smithing.ARMOR_KIND, "gang_1", "kuai_1", "赤霞鎧", id="armor-named"),
+    pytest.param("劍", "gang_3", "gang_3", "墜星劍", id="weapon-divine"),
+    pytest.param(smithing.ARMOR_KIND, "gang_3", "gang_3", "鎮星甲", id="armor-divine"),
+])
+def test_another_players_find_never_shows_on_your_forge_page(content, world, kind, main, aux, name):
+    """先手打中了（首位發現、神器原品），他的鑄譜記著；同名自己沒打中過：這一爐的說法不寫「照鑄譜上的【…】打」、不寫譜名、
+    不說必出神器（照樣寫三個機率），店面整份也找不到那個名字。自己打中過一次之後才寫（對照組）。"""
+    import json
+
+    import server
+
+    _secret_content(content)
+    first = _shop_in(content, world, "先手")
+    rng = smithing.own_rng(first.state, smithing.recipe_key(kind, main, aux)) if smithing.is_armor(kind) else random.Random(0)
+    assert smithing.forge(first.state, content, world, kind, main, aux, rng=rng)[0].secret is not None
+    assert first.smith_line(kind, main, aux)["head"]  # 先手自己看得到
+    game = _shop_in(content, world, "同名")
+    if smithing.is_armor(kind):
+        game.choose("smith:page:armor")
+    line = server.look(game, lambda g: g.smith_line(kind, main, aux))  # /api/smith_line 的那一份
+    assert line["ready"] and line["head"] == "" and line["divine"] is False and line["odds"]
+    shop = server.main_view(game)["shop"]
+    for text in (json.dumps(line, ensure_ascii=False), json.dumps(shop, ensure_ascii=False)):
+        assert name not in text and "照鑄譜" not in text and "必出神器" not in text
+    assert shop["pending"] == {}
+    game.smith_forge(kind, main, aux)  # 對照組：自己打中過一次，鑄譜記下了才寫
+    assert game.smith_line(kind, main, aux)["head"].startswith("照鑄譜上的")

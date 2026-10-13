@@ -292,3 +292,38 @@ def test_a_line_for_another_pot_is_not_shown_as_ready(content, world):
     html = _forge_page(m, "H.S.shopPot = { slot: 'weapon', kind: '劍', main: 'gang_1', aux: 'kuai_1' }; H.S.shopLine = H.S.next; H.render(); return T.els.app.innerHTML;",
                        S={"next": old})
     assert old["ready"] and 'class="odds"' not in html and 'data-act="shop-go" disabled' in html
+
+
+# ── 設計第七節補測：店面上定名被拒絕，剛打的字留在框裡（同修練頁那一張，tests/test_weapons_web.py）──
+
+_SHOP_DIVINE_REFUSED = """return (async () => {
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };  // 假瀏覽器沒有 FormData：表單的欄位直接給
+  const input = { value: "" };
+  const real = T.ctx.document.getElementById;
+  // 被拒了：伺服器回來重畫的出爐卡上表單還在（假瀏覽器沒有真的 DOM，這裡替它放一張）；定成了表單就不再畫，getElementById 找不到
+  let still = true;
+  T.ctx.document.getElementById = (id) => (id === "shop-name-divine-兵:1" && still ? { querySelector: (sel) => (sel === 'input[name="name"]' ? input : null) } : real(id));
+  const form = { id: "shop-name-divine-兵:1", dataset: { op: "shop-name-divine", id: "兵:1" }, data: { name: "斬月刀" }, querySelector: () => null };
+  H.render();
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const kept = input.value;
+  const toast = T.els.toast.textContent;
+  still = false;
+  input.value = "";
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const posts = T.calls.filter((c) => c[0] === "/api/menxia/name_divine").map((c) => c[1]);
+  return { kept, posts, toast, after: input.value };
+})();"""
+
+
+def test_a_refused_divine_name_on_the_forged_card_stays_in_the_box(m):
+    """出爐卡（與裝備庫那一頁）上的定名表單：送 /api/menxia/name_divine，伺服器拒絕時提示泡泡講原因、重畫出來的表單放回剛打的字，
+    不用重打；定成了表單不再畫，什麼都不放。"""
+    reply = {"/api/menxia/name_divine": {"menxia": None, "main": m, "message": "這個名字不行：跟鐵匠鋪尋常打得出的名字同名。"}}
+    out = run(m, _SHOP_DIVINE_REFUSED, S={"shopReveal": {"id": "兵:1", "slot": "weapon", "name": "無名神器", "grade": "三階上品・神器",
+                                             "kind": "劍", "attribute": "剛", "value": None, "fit": "", "glow": "redgold",
+                                             "first": True, "where": "rack", "divine": "墜星劍"}, "shopOpened": True},
+              responses=reply)
+    assert out["kept"] == "斬月刀" and "同名" in out["toast"]
+    assert [(p.get("weapon"), p.get("name")) for p in out["posts"]] == [("兵:1", "斬月刀"), ("兵:1", "斬月刀")]
+    assert out["after"] == ""
