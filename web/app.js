@@ -284,6 +284,10 @@
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
     S.dueAt = main.battle_gauge && main.battle_gauge.due != null ? Date.now() + main.battle_gauge.due * 1000 : null;
     S.duePolled = false;
+    // 奪璽卡的倒數同一套（FB-182）：left 是還剩幾秒，tickDue 照它每秒換 .seal-when 那一行的字
+    const sealDuel = main.status && main.status.seal_duel;
+    S.sealDueAt = sealDuel && sealDuel.left != null ? Date.now() + sealDuel.left * 1000 : null;
+    S.sealDuePolled = false;
     document.title = sealTitle(); // 輪到奪璽出招時改分頁標題（玉璽碎片設計 5.5）：輪詢的、動作回來的畫面都走這裡
     if (wasStats && !(main.prologue && main.prologue.glow.includes("stats"))) S.showMore = false;
     S.mainKey = key;
@@ -372,11 +376,19 @@
     return d.phase === "muster" ? `${left}後開打` : `第 ${d.round | 0}／${d.rounds | 0} 回合・已出招 ${d.sent | 0}／2，最遲 ${left}後結算`;
   }
 
-  // 輪詢回來江湖頁不必重畫（pageKey 沒變）時：奪璽卡的倒數照樣走（FB-182）
+  // 奪璽卡那一行時間照 setMain 記下的期限（S.sealDueAt）重寫：輪詢回來江湖頁不必重畫（pageKey 沒變）時、與每秒的 tickDue 都走這裡（FB-182）
   function paintSealWhen() {
     const d = S.main && S.main.status && S.main.status.seal_duel;
     const el = document.querySelector(".seal-duel .seal-when");
-    if (d && el) el.textContent = sealWhen(d);
+    if (!d || !el) return;
+    const left = S.sealDueAt == null ? d.left : Math.max(0, Math.ceil((S.sealDueAt - Date.now()) / 1000));
+    el.textContent = sealWhen({ ...d, left });
+  }
+
+  // tickDue 每秒叫：奪璽卡倒數一秒；到零補問一次（下戰書到期開打、回合逾時結算，換上新的那一回合）
+  function tickSeal() {
+    paintSealWhen();
+    if (!S.sealDuePolled && Date.now() >= S.sealDueAt) { S.sealDuePolled = true; poll(); }
   }
 
   // 碎片卡收起來照「哪一片、此刻牽不牽動」記住（S.sealShut.card，FB-182）：換了一片、被牽動了重新展開
@@ -4396,18 +4408,22 @@
   setInterval(pollTick, POLL_MS);
 
   // 決戰的「最遲 M 分 S 秒後結算」每秒自己倒數（Joy 2026-10-13：以前十秒一次的輪詢才跳一下）：只改頁面上那幾個字，不重畫；
-  // 倒數到零補問一次，回合逾時結算了就換上新的一回合
+  // 倒數到零補問一次，回合逾時結算了就換上新的一回合。奪璽卡的倒數走同一個計時器、照它自己的期限（tickSeal，FB-182）：
+  // 那一行跟決戰寫法一樣，所以決戰這一段跳過奪璽卡裡的字
   const DUE_TEXT = /最遲 \d+ 分 \d+ 秒後結算|時間到了，即將結算/;
   function dueText(left) {
     return left ? `最遲 ${Math.floor(left / 60)} 分 ${left % 60} 秒後結算` : "時間到了，即將結算";
   }
   function tickDue() {
-    if (S.dueAt == null || S.stage !== "game") return;
+    if (S.stage !== "game") return;
+    if (S.sealDueAt != null) tickSeal();
+    if (S.dueAt == null) return;
     const page = document.getElementById("page");
     if (!page) return;
     const left = Math.max(0, Math.ceil((S.dueAt - Date.now()) / 1000));
     const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.parentNode && n.parentNode.closest && n.parentNode.closest(".seal-duel")) continue; // 奪璽卡歸 tickSeal
       if (DUE_TEXT.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(DUE_TEXT, dueText(left));
     }
     if (!left && !S.duePolled) { S.duePolled = true; poll(); }

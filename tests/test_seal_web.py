@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # 不然整支載不起來）。這裡多交奪璽要直接叫的三個；碎片卡 sealHtml 只經過 pageJianghu，不必列
 NAMES_START = 'wholeApp(["S", '  # 名單的開頭（結尾那幾個名字別的計畫會加，開頭比較穩）
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", "tickDue", ')
 
 
 def run(m, script):
@@ -190,6 +190,29 @@ def test_a_poll_that_only_moves_the_countdown_rewrites_that_line_in_place(m):
       })();"""})
     assert '<span class="seal-when">第 2／5 回合・已出招 1／2，最遲 1 分 15 秒後結算</span>' in out["drawn"]
     assert out["page"] == "OLD" and out["when"] == "第 2／5 回合・已出招 1／2，最遲 1 分 5 秒後結算"
+
+
+
+def test_the_seal_countdown_ticks_every_second_with_the_showdown_one(m):
+    """FB-182 與 Joy 的每秒倒數（PR #56，tickDue）合成一套：奪璽卡那一行也每秒自己倒數（照 setMain 記下的期限，只換字、不重畫），
+    倒數到零補問一次；決戰的倒數照它的期限改頁面上的字，奪璽卡裡同樣寫法的那一行不歸它管。"""
+    out = webharness.run(DRIVER, {"m": {**m, "status": {**m["status"], "seal_duel": _card()}}, "S": {}, "menxia": None, "stored": {},
+                                  "responses": {}, "script": """
+      const when = { textContent: "舊的" };
+      T.qs[".seal-duel .seal-when"] = when;
+      H.S.sealDueAt = Date.now() + 30000; H.tickDue(); const ticked = when.textContent;
+      H.S.sealDueAt = Date.now() - 1; H.tickDue(); H.tickDue(); const zero = when.textContent;
+      const polls = T.calls.filter((c) => c[0] === "/api/main").length;
+      T.ctx.NodeFilter = { SHOW_TEXT: 4 };
+      const mine = { nodeValue: "最遲 1 分 15 秒後結算", parentNode: { closest: (sel) => (sel === ".seal-duel" ? {} : null) } };
+      const field = { nodeValue: "已送出 1／在場 2，最遲 1 分 15 秒後結算", parentNode: { closest: () => null } };
+      T.ctx.document.createTreeWalker = () => { const list = [mine, field]; return { nextNode: () => list.shift() || null }; };
+      H.S.sealDueAt = null; H.S.dueAt = Date.now() + 40000; H.tickDue();
+      return { ticked, zero, polls, mine: mine.nodeValue, field: field.nodeValue };
+    })();""".replace("})();", "")})
+    assert out["ticked"] == "第 2／5 回合・已出招 1／2，最遲 0 分 30 秒後結算"
+    assert out["zero"] == "第 2／5 回合・已出招 1／2，最遲 0 分 0 秒後結算" and out["polls"] == 1  # 到零補問一次，不連問
+    assert out["mine"] == "最遲 1 分 15 秒後結算" and out["field"] == "已送出 1／在場 2，最遲 0 分 40 秒後結算"
 
 
 def test_the_seal_cards_stay_folded_once_folded(m):
