@@ -3377,13 +3377,14 @@ class Game:
         self._open_waiting_showdown()
 
     def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
-        """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit）；兩邊都沒人出過手就不寫。"""
+        """收場時的論功那一則：兩軍（與第三方的地方豪強，Joy 2026-10-13）各自戰功最高的人（battle_instance.top_merit）；
+        都沒人出過手就不寫。"""
         if definition is None:
             return ""
         tuning = self.content.config.battle
         heads = [
-            (f.name, top) for f in definition.factions[:2]
-            if (top := battle_instance.top_merit(battle, tuning, f.id)) is not None
+            (side, top) for fid, side in self._sides(definition).items()
+            if (top := battle_instance.top_merit(battle, tuning, fid)) is not None
         ]
         if not heads:
             return ""
@@ -4050,7 +4051,7 @@ class Game:
             lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
         tuning = c.config.battle
         mine = battle_instance.merit(tuning, me)
-        ranking = battle_instance.merit_ranking(battle, tuning, me.faction) if me.faction in armies else []
+        ranking = battle_instance.merit_ranking(battle, tuning, me.faction) if me.faction in sides else []  # 豪強也排（Joy 2026-10-13）
         rank = next((i for i, (q, _) in enumerate(ranking, 1) if q.name == me.name), None)
         if rank is not None:  # 個人戰功（Joy 2026-10-10）：自己這一邊排第幾、怎麼來的
             parts = "、".join(battle_instance.merit_parts(me))
@@ -4063,7 +4064,7 @@ class Game:
             if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
                 fame += tuning.highlight_fame
                 lines.append("你那一搏成了這一仗最有戲的一幕，江湖上傳開了。")
-            top = battle_instance.top_merit(battle, tuning, me.faction) if me.faction in armies else None
+            top = battle_instance.top_merit(battle, tuning, me.faction) if me.faction in sides else None
             if top is not None and top.name == me.name:  # 這一邊的首功
                 s.player.top_merits += 1
                 fame += tuning.top_fame
@@ -4320,7 +4321,10 @@ class Game:
     def _gauge_of(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
         """battle_instance.gauge 的參數：時刻表決戰（第一季開著）照偏離中線分大勝，其餘照 outcomes 的門檻。"""
         timetable = definition.timetable_event is not None and season_one(self.content, self.state.world)
-        return battle_instance.gauge(battle, definition, side, timetable, self.content.config.battle, self.state.player.name)
+        third = self._sides(definition).get(definition.third.faction) if definition.third is not None else None
+        return battle_instance.gauge(
+            battle, definition, side, timetable, self.content.config.battle, self.state.player.name, third_name=third,
+        )
 
     def battle_gauge(self) -> dict | None:
         """場景裡畫著的這場決戰（集結、開打）的戰局條（Joy 2026-10-10）；沒有、序章裡是 None。只讀，不推進戰鬥。
@@ -4331,7 +4335,12 @@ class Game:
         battle, definition = status
         p = battle.participants.get(self.state.player.name)
         side = p.faction if p is not None else self.state.player.faction
-        return self._gauge_of(battle, definition, side)
+        g = self._gauge_of(battle, definition, side)
+        # 這一回合還剩幾秒逾時（同 _round_wait）：網頁每秒自己倒數「最遲 M 分 S 秒後結算」，不等十秒一次的輪詢（Joy 2026-10-13）。
+        # 暫停中、集結中是 None（不倒數）
+        if battle.phase == "active" and self.world.paused_at() is None:
+            g["due"] = max(0, int(battle.round.opened_real + definition.round_seconds - self.now))
+        return g
 
     def record_gauge(self, record_id: int | None) -> dict | None:
         """戰報頁那一筆是決戰時收場那一刻的戰局條；不是決戰、找不到是 None。"""
@@ -4443,10 +4452,8 @@ class Game:
 
     def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         """「已送出 X／在場 Y，最遲 M 分 S 秒後結算」：在場的人都送出就提早結算，不然等這一回合逾時（暫停中停在按下暫停那一刻）。"""
-        me = battle.participants.get(self.state.player.name)
-        third = me is not None and battle_instance.is_third(definition, me)  # 兩軍的人不算豪強（他們不該知道有幾個）
-        sent, present = battle_instance.round_progress(battle, definition, with_third=third)
-        idlers = battle_instance.idle_count(battle, definition, with_third=third)  # 掛機的不等（Joy 2026-10-10），另外寫
+        sent, present = battle_instance.round_progress(battle, definition)  # 豪強也算（Joy 2026-10-13）：跟結算等的是同一批人
+        idlers = battle_instance.idle_count(battle, definition)  # 掛機的不等（Joy 2026-10-10），另外寫
         paused = self.world.paused_at()
         left = max(0, int(battle.round.opened_real + definition.round_seconds - (self.now if paused is None else paused)))
         due = f"最遲 {left // 60} 分 {left % 60} 秒後結算" if left else "時間到了，即將結算"
@@ -5191,9 +5198,11 @@ class Game:
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
-            # 遊歷打贏（有風險）與決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，傳進來的已經是整數點數。
-            # 一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，rules.apply_effect 判斷）照原本的量（FB-166）。
-            scale = self.season_scale() if source == "event" else 1.0
+            # 遊歷打贏（source="train"）也照季長縮放（企劃者 2026-10-13，FB-168：不縮放的話兩天裡兩邊的遊歷就能把黃巾聲勢從 25
+            # 推到 60 或砸到 0，決戰「要嘛第一天開、要嘛整季不開」）。決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，
+            # 傳進來的已經是整數點數。一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，
+            # rules.apply_effect 判斷）照原本的量（FB-166）。
+            scale = self.season_scale() if source in ("event", "train") else 1.0
             if scale < 1 and is_revealed(w, c, trend_id):
                 whole = self._carry(trend_id, delta * scale)
                 return change_trend(s, c, trend_id, whole) if whole else []

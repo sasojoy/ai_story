@@ -281,6 +281,9 @@
     // 序章：配屬性點那一步（glow 有 stats）做完，點開的屬性面板收起來——留著的話它一路撐到出師，「前往」被擠到分頁列底下（T7 走查 W-D）
     const wasStats = !!(S.main && S.main.prologue && S.main.prologue.glow.includes("stats"));
     S.main = main;
+    // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
+    S.dueAt = main.battle_gauge && main.battle_gauge.due != null ? Date.now() + main.battle_gauge.due * 1000 : null;
+    S.duePolled = false;
     document.title = sealTitle(); // 輪到奪璽出招時改分頁標題（玉璽碎片設計 5.5）：輪詢的、動作回來的畫面都走這裡
     if (wasStats && !(main.prologue && main.prologue.glow.includes("stats"))) S.showMore = false;
     S.mainKey = key;
@@ -1285,12 +1288,14 @@
   // 集結中、還沒有人出手時不畫
   function meritHtml(g, tint) {
     const b = g.merit;
-    if (!b || g.phase === "muster" || (!b.left.length && !b.right.length && !(b.me && b.me.merit))) return "";
+    if (!b || g.phase === "muster" || (!b.left.length && !b.right.length && !(b.third || []).length && !(b.me && b.me.merit))) return "";
     const col = (w, rows) => `<div class="g-mcol ${tint(w)}"><b class="g-mside">${esc(w.name)}</b>${rows.length
       ? `<ol>${rows.map((r, i) => `<li${r.mine ? ' class="mine"' : ""}><i>${i + 1}</i><span>${esc(r.name)}</span><b>${r.merit}</b></li>`).join("")}</ol>`
       : '<p class="muted">還沒有人立功</p>'}</div>`;
+    const third = g.third && b.third && b.third.length  // 地方豪強也列一欄（Joy 2026-10-13），有人立功才畫
+      ? `<div class="g-mcols g-mthird">${col(g.third, b.third)}</div>` : "";
     const me = b.me ? `<p class="g-me">你排第 ${b.me.rank}／${b.me.of}・戰功 ${b.me.merit}${b.me.parts.length ? `：${esc(b.me.parts.join("、"))}` : "（還沒出手）"}</p>` : "";
-    return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${me}</div>`;
+    return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${third}${me}</div>`;
   }
   // 場景卡裡把戰局條放在戰場名字那一行底下（集結時名字那一行連著投效的鈕，見 musterScene）；收成一行的觀戰（battleScene）不放
   function withGauge(html, g) {
@@ -4389,6 +4394,25 @@
   }
 
   setInterval(pollTick, POLL_MS);
+
+  // 決戰的「最遲 M 分 S 秒後結算」每秒自己倒數（Joy 2026-10-13：以前十秒一次的輪詢才跳一下）：只改頁面上那幾個字，不重畫；
+  // 倒數到零補問一次，回合逾時結算了就換上新的一回合
+  const DUE_TEXT = /最遲 \d+ 分 \d+ 秒後結算|時間到了，即將結算/;
+  function dueText(left) {
+    return left ? `最遲 ${Math.floor(left / 60)} 分 ${left % 60} 秒後結算` : "時間到了，即將結算";
+  }
+  function tickDue() {
+    if (S.dueAt == null || S.stage !== "game") return;
+    const page = document.getElementById("page");
+    if (!page) return;
+    const left = Math.max(0, Math.ceil((S.dueAt - Date.now()) / 1000));
+    const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (DUE_TEXT.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(DUE_TEXT, dueText(left));
+    }
+    if (!left && !S.duePolled) { S.duePolled = true; poll(); }
+  }
+  setInterval(tickDue, 1000);
   // 看不到的分頁：關掉連線（不佔一條連線，也不重抓）；看得到了：連回來、補抓一次（推送沒開時只有補抓，跟以前一樣）
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { closeEvents(); return; }

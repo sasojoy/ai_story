@@ -49,9 +49,9 @@ def check_thresholds(
     if w.ended:
         return msgs
     off = season_one_off(content, w, "thresholds")  # 第一季不觸發的 beta 門檻（計畫 T8）
-    held = early_end_held(state, content)
+    held, battle_wait = early_end_held(state, content), battle_held(state, content)
     for th in content.scenario.thresholds:
-        if th.id in w.fired_thresholds or th.id in off or (th.ends_season and held):
+        if th.id in w.fired_thresholds or th.id in off or (th.ends_season and held) or (th.starts_battle and battle_wait):
             continue
         value = trend_value(state, content, th.trend)  # 開關開著時黃巾聲勢是三條戰線的加權
         if not (value >= th.value if th.op == ">=" else value <= th.value):
@@ -255,6 +255,13 @@ def early_end_held(state: GameState, content: Content) -> bool:
     還在門檻上就照規則收季。季曆照這一季蓋的章（calendar.point），不讀電腦時鐘。第一季一律 False（一個字都不變）。"""
     w = state.world
     return not season_one(content, w) and calendar.point(w.time, content, w).week < content.config.decisive_from_week
+
+
+def battle_held(state: GameState, content: Content) -> bool:
+    """規則關著的季，開決戰的大勢門檻（starts_battle）此刻先不開：季曆第 battle_from_week 週以前（企劃者 2026-10-13「季中，第 5 週起
+    才開」，FB-168）不開集結、不記成觸發過，大勢照推，到了那一週還在門檻上就開。寫法同 early_end_held；第一季一律 False（照時刻表）。"""
+    w = state.world
+    return not season_one(content, w) and calendar.point(w.time, content, w).week < content.config.battle_from_week
 
 
 def early_end_note(state: GameState, content: Content) -> str:

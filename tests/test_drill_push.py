@@ -185,3 +185,26 @@ def test_once_events_reach_the_effect_unscaled_through_the_game():
     game._choose(index)
     pushed = {t: v - before.get(t, 0) for t, v in w.trends.items() if v != before.get(t, 0)}
     assert pushed == want, (once.id, pushed, want)  # 照原本的量，不是乘 2.5／14
+
+
+def test_train_wins_in_a_fourteen_day_season_follow_the_season_scale():
+    """企劃者 2026-10-13（FB-168）：遊歷打贏推的大勢在長季也照季長縮放（同 season_scale，零頭記在同一個 trend_accum），不然兩天裡
+    兩邊的遊歷就能把黃巾聲勢從 25 推到 60 或砸到 0（量表：-110～+56）。每一下 -2 × 2.5／14 ≈ -0.357，十下動 3 點。"""
+    content = _content()
+    game = _camp(content)
+    w = game.state.world
+    w.trends["huangjin"] = 50
+    for _ in range(10):
+        game.push_trend("huangjin", -2, source="train")
+    assert world_trend_value(w, content, "huangjin") == 47
+    assert w.trend_accum["huangjin"] == pytest.approx(-(10 * 2 * 2.5 / 14 - 3), abs=1e-6)
+
+
+def test_train_wins_in_the_weekend_season_are_unchanged():
+    """第一季規則開著（週末設定）：遊歷打贏推的大勢一個字都不變（推力緩衝與上限照舊、沒有季長倍數）。"""
+    content = _content("weekend")
+    game = _camp(content)
+    game.state.player.location = "yingchuan"
+    before = game.state.world.trends["yingru"]
+    game.push_trend("yingru", 2, source="train")
+    assert game.state.world.trends["yingru"] == before + 2
