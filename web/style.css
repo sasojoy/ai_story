@@ -1275,6 +1275,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .btn.ghost:disabled { color: #a08a6a; }
 .shop-layer .forge-card .btn.ghost { color: var(--ink); border-color: var(--line, #d8ccb8); } /* 出爐卡是紙底 */
 .shop-layer .naming .btn.ghost { color: var(--ink); border-color: var(--line); } /* 定名表單（裝備庫那一頁、出爐卡）也是紙底 */
+.naming .form-why { margin: 4px 0 0; color: var(--accent); font-size: 12px; } /* 神器定名被拒的原因（FB-193） */
 /* 打造頁（2.2）：種類一排、爐子兩格、這一爐的機率條、素材格 */
 .shop-kinds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 6px; }
 .shop-kinds .kind { position: relative; border: 1px solid #6b4a2e; background: transparent; color: #e8d6ad; border-radius: 14px; padding: 4px 12px; font: 14px var(--serif); }

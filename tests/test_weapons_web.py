@@ -439,3 +439,12 @@ def test_a_refused_divine_name_stays_in_the_box_like_the_art_naming_form(views):
     x["gear"] = _gear(weapon={"worn": None, "rack": [_row(id="兵:2", keep="原品不能拆", divine={"pattern": "墜星劍"})]})
     reply = {"/api/menxia/name_divine": {"menxia": x, "message": "這個名字不行。", "main": m}}
     assert run(m, _DIVINE_REFUSED, menxia=x, responses=reply) == ["斬月刀", ""]
+
+
+def test_a_refused_divine_name_keeps_its_reason_on_the_practice_page(views):
+    """FB-193：修練頁那一張定名被拒，原因記下來（S.divineWhy），重畫的表單裡留一行，改字時看得到（同店面的出爐卡）。"""
+    m, x = views
+    x["gear"] = _gear(weapon={"worn": None, "rack": [_row(id="兵:2", keep="原品不能拆", divine={"pattern": "墜星劍"})]})
+    reply = {"/api/menxia/name_divine": {"menxia": x, "message": "這個名字不行：名字像是另一種兵器。", "main": m}}
+    script = _DIVINE_REFUSED.replace("return [kept, input.value];", "return [kept, H.S.divineWhy['兵:2']];")
+    assert run(m, script, menxia=x, responses=reply) == ["斬月刀", "這個名字不行：名字像是另一種兵器。"]

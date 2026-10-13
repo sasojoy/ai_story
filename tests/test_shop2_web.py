@@ -223,3 +223,25 @@ def test_rack_rows_do_not_break_inside_a_word(content, world):
     p.rack = [Weapon(id="兵:1", name="庫刃", kind="刀", attribute="剛", tier=1, quality="中品")]
     html = run(server.main_view(game), 'H.S.shopTab = "rack"; H.render(); return T.els.app.innerHTML;')
     assert '<span class="nb">用不上</span>' in html and '<span class="nb">一階中品・</span>' in html
+
+
+# ── Task 9：FB-193 ──
+
+
+def test_a_refused_divine_name_on_the_forged_card_keeps_its_reason(content, world):
+    """FB-193：出爐卡（與店面裝備庫那一頁）上定名被拒，原因寫在表單裡一行，改字時還看得到；修練頁那一張共用同一個寫法。"""
+    from test_shop import _smith
+    from test_shop_web import _SHOP_DIVINE_REFUSED
+
+    m = server.main_view(_smith(content, world, name="定名"))
+    m["shop"]["pending"] = {"兵:1": "墜星劍"}
+    why = "這個名字不行：名字像是另一種兵器。"
+    reply = {"/api/menxia/name_divine": {"menxia": None, "main": m, "message": why}}
+    card = {"id": "兵:1", "slot": "weapon", "name": "無名神器", "grade": "三階上品・神器", "kind": "劍", "attribute": "剛", "value": None,
+            "fit": "", "glow": "redgold", "first": True, "where": "rack", "divine": "墜星劍"}
+    out = run(m, _SHOP_DIVINE_REFUSED.replace(
+        "return { kept, posts, toast, after: input.value };",
+        "return { kept, why: H.S.divineWhy['兵:1'], form: H.divineFormHtml('兵:1', '墜星劍', true), plain: H.divineFormHtml('兵:1', '墜星劍') };"),
+        S={"shopReveal": card, "shopOpened": True}, responses=reply)
+    assert out["kept"] == "斬月刀" and out["why"] == why
+    assert f'<p class="form-why">{why}</p>' in out["form"] and f'<p class="form-why">{why}</p>' in out["plain"]

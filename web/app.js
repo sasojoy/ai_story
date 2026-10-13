@@ -84,6 +84,7 @@
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     boardStamp: null, // 剛交差的那一張：{ id, title }，蓋「交差」朱印、淡出之後清掉（boardHanded）
+    divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
@@ -2698,14 +2699,16 @@
 
   // 店裡的換上、拆解、神器定名：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講
   async function shopMx(op, body) {
+    let said = "";
     await busy(async () => {
       const r = await api(`/api/menxia/${op}`, body);
       if (r.menxia) S.menxia = r.menxia;
       setMain(r.main);
       render();
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (text) toast(text);
+      said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (said) toast(said);
     });
+    return said; // 店面上定名被拒時，表單裡留這一句（FB-193）
   }
 
   // 神器原品定名的表單（打造隱藏配方設計 5.2）：修練頁那一列底下、店面的出爐卡與裝備庫都用這一張。shop 為真時表單送店面的那一條
@@ -2716,6 +2719,7 @@
         <small>你打出了神器</small>
         <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
         <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
+        ${S.divineWhy[id] ? `<p class="form-why">${esc(S.divineWhy[id])}</p>` : ""}
         <button class="btn small ghost" type="button" data-act="${shop ? "shop-divine-keep" : "divine-keep"}" data-id="${esc(id)}">沿用譜名【${esc(pattern)}】</button>
       </form>`;
   }
@@ -4511,14 +4515,20 @@
         // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
         if (!data.name.trim()) { toast("先取個名字。"); return; }
         await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
-        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打（同絕學定名那張）。
-        // 表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；定成了那一列不再畫表單，找不到就什麼都不放
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
+        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
+        // 定成了那一列不再畫表單，找不到就什麼都不放
+        if (document.getElementById("name-divine-" + form.dataset.id)) {
+          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          renderPage();
+        }
         const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
       } else if (form.dataset && form.dataset.op === "shop-name-divine") {
         // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）
         if (!data.name.trim()) { toast("先取個名字。"); return; }
-        await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        const said = await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        if (document.getElementById("shop-name-divine-" + form.dataset.id)) { S.divineWhy[form.dataset.id] = said; renderShop(); } // 被拒的原因留在表單裡（FB-193）
         const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
       } else if (form.id === "seclude") {
