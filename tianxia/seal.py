@@ -163,6 +163,7 @@ def chronicle(season, text: str) -> None:
 # ── 天命之季與天命之爭（玉璽二；設計第八節）──────────────────────
 
 MANDATE_OPEN = "七片玉璽都已現世過了。天命之季到來：這一季的大戰都會牽動玉璽碎片，季末之前，{battle}要爭一個天命。"  # 待 joy 潤
+MANDATE_OPEN_EARLY = "天命之季到來：這一季的大戰都會牽動玉璽碎片，季末之前，{battle}要爭一個天命。"  # 待 joy 潤：七片這一輪沒有都現世過（管理者蓋的章，FB-187）
 SCATTER = "天命之季過去，七片玉璽再度散落天下。"  # 待 joy 潤：江湖史（8.4）
 SCATTER_MINE = "你懷中的『{shard}』化光而去：七片玉璽再度散落天下。"  # 待 joy 潤：補送的紀錄
 BOOK_ROUND = "### 傳國玉璽（第 {round} 輪）"  # 待 joy 潤：第二輪起江湖史七格的標題
@@ -200,15 +201,17 @@ def mandate_due(reg: SealRegistry, content: Content) -> bool:
 
 def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
     """把 shared.season 蓋成天命之季（8.1）：WorldState.mandate、天命之爭排在 at（世界秒；呼叫端照 timetable.default_time 算）、
-    登記記下季別、清掉延後的記號；天下大事與江湖史各一句。只改傳進來的 shared（next_season 手動 _load／_save、管理者在 world.mutate 裡），
-    呼叫端先確認 mandate_event 不是 None。回那一句。"""
+    登記記下季別、清掉延後的記號；天下大事與江湖史各一句：七片這一輪都現世過寫 MANDATE_OPEN，沒有（管理者「這一季」「下一季」蓋的章）
+    寫 MANDATE_OPEN_EARLY，不提現世，跟江湖史七格對得上（FB-187；公告照舊不寫管理者）。只改傳進來的 shared（next_season 手動
+    _load／_save、管理者在 world.mutate 裡），呼叫端先確認 mandate_event 不是 None。回那一句。"""
     event, battle = mandate_event(content), mandate_battle(content)
     reg = filled(shared.seal, content)
     season = shared.season
     season.mandate, season.mandate_result = True, None
     season.schedule[event.id] = at
+    emerged = bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
     reg.mandate_season, reg.mandate_pending = shared.season_number, False
-    text = MANDATE_OPEN.format(battle=battle.name if battle is not None else event.title)
+    text = (MANDATE_OPEN if emerged else MANDATE_OPEN_EARLY).format(battle=battle.name if battle is not None else event.title)
     rumor(season, text)
     chronicle(season, text)
     return text

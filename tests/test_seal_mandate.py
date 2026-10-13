@@ -577,3 +577,24 @@ def test_the_admin_can_take_back_a_pending_stamp_and_stamp_during_the_rest(manda
     assert world.seal_state().registry.mandate_pending
     next_season(mandated, world)
     assert world.get_season().mandate
+
+
+def test_an_admin_stamp_without_seven_emerged_announces_another_line_fb187(mandated, world):
+    """FB-187：管理者蓋章（「這一季立刻蓋章」「下一季」）時七片這一輪沒有都現世過，天下大事與江湖史換 MANDATE_OPEN_EARLY
+    （不寫「七片玉璽都已現世過了」，跟江湖史七格對得上；公告照舊不寫管理者）；照規則蓋的照舊 MANDATE_OPEN。"""
+    from conftest import next_season
+
+    _opened(mandated, world)
+    admin = _admin(mandated, world)
+    admin.admin_seal_mandate("now")
+    early, plain = seal.MANDATE_OPEN_EARLY.format(battle="天命之爭"), seal.MANDATE_OPEN.format(battle="天命之爭")
+    season = world.get_season()
+    assert any(r.text == early for r in season.rumors) and any(r.text == early for r in season.chronicle)
+    assert not any(r.text == plain for r in [*season.rumors, *season.chronicle]) and "七片" not in early
+    admin.admin_end_season(now=900.0)
+    next_season(mandated, world)  # 天命之季過後：散去
+    admin.sync(1000.0)
+    admin.admin_seal_mandate("next")
+    next_season(mandated, world)
+    texts = [r.text for r in world.get_season().rumors]
+    assert early in texts and plain not in texts
