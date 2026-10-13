@@ -7739,9 +7739,11 @@ class Game:
         return self._log(lines or ["（下一次換季沒有碎片會隱沒。）"])
 
     def admin_seal_mandate(self, when: str) -> list[str]:
-        """蓋天命之季（第十二節；玉璽二）：when 是 "next"（下一季蓋章，不看七片現世過沒）或 "now"（這一季立刻蓋：還沒打的標了 seal 的
-        決戰照天命之季的規則璽動，天命之爭排在預設時刻——已經過了就馬上到期——也可以用「立刻開戰」）。公告照自然發生寫、不寫管理者。"""
-        refusal = self._admin_refusal("蓋天命之季")
+        """蓋天命之季（第十二節；玉璽二）：when 是 "next"（下一季蓋章，不看七片現世過沒）、"cancel"（收回「下一季」：只清延後的記號，
+        七片這一輪都現世過的話換季照樣蓋；審查 I2）或 "now"（這一季立刻蓋：還沒打的標了 seal 的決戰照天命之季的規則璽動，天命之爭排在
+        預設時刻——已經過了就馬上到期——也可以用「立刻開戰」）。「下一季」與收回只要是管理者就按得了（休季正是要決定下一季的時候，同
+        FB-178）；「這一季」要季在跑。公告照自然發生寫、不寫管理者。"""
+        refusal = self._admin_refusal("蓋天命之季") if when == "now" else None if self.is_admin() else ["（只有管理者能蓋天命之季。）"]
         if refusal:
             return self._log(refusal)
         c = self.content
@@ -7754,6 +7756,11 @@ class Game:
         if when == "next":
             self.world.mutate(lambda st: setattr(seal.filled(st.seal, c), "mandate_pending", True))
             msg = "下一季蓋天命之季的章。"
+        elif when == "cancel":
+            if not seal.filled(self.world.seal_state().registry, c).mandate_pending:
+                return self._log(["（下一季沒有要蓋天命之季的章。）"])
+            self.world.mutate(lambda st: setattr(seal.filled(st.seal, c), "mandate_pending", False))
+            msg = "收回下一季的天命之季章（七片這一輪都現世過的話，換季時照樣會蓋）。"
         elif when == "now":
             if season.ended or not season_one(c, season):
                 return self._log(["（這一季沒有時刻表，蓋不了天命之季。）"])

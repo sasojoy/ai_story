@@ -259,3 +259,24 @@ def test_the_mandate_buttons_ask_then_post_when(m):
     assert "天命之季" in out["asked"][0]
     call = next(c for c in out["calls"] if c[0] == "/api/do/seal_mandate")
     assert call[1]["when"] == "next"
+
+
+def test_the_mandate_buttons_warn_of_the_scatter_and_a_pending_stamp_can_be_taken_back(m):
+    """審查 I2：兩顆蓋章鈕的問句寫明蓋了之後再換季七片全部散去、持有者都失去碎片；下一季已經要蓋時多一顆「收回」。"""
+    from test_admin_triggers_web import CLICK
+
+    import json
+
+    admin = _seal_admin()
+    admin["seal"].update(mandate="next", mandate_ok=True)
+    assert 'data-op="seal_mandate" data-when="cancel"' in _sheet(m, admin)
+    admin["seal"].update(mandate="")
+    assert 'data-when="cancel"' not in _sheet(m, admin)
+    clicks = [{"act": "admin", "op": "seal_mandate", "when": w} for w in ("next", "now", "cancel")]
+    script = CLICK.replace("input.clicks", json.dumps(clicks))
+    out = webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": script, "S": {"admin": admin, "sheet": True},
+                                  "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}}})
+    nxt, now, cancel = out["asked"]
+    assert "散去" in nxt and "失去" in nxt and "散去" in now and "收不回" in now
+    assert "收回" in cancel and "照樣" in cancel
+    assert [c[1]["when"] for c in out["calls"] if c[0] == "/api/do/seal_mandate"] == ["next", "now", "cancel"]

@@ -3033,7 +3033,8 @@
       <div class="row ad-row"><span class="ad-tag">單挑</span><input class="input" id="ad-seal-factor" type="number" value="1" step="0.1" min="0" max="1" aria-label="局勢係數" style="max-width:76px"><button class="btn small" data-act="admin" data-op="seal_duel"${canDuel ? "" : " disabled"}>強制開單挑</button>${
         !canDuel ? '<span class="muted ad-note">沒有剛收場的決戰可掛</span>' : s.hung ? `<span class="muted ad-note">掛在「${esc(s.where)}」</span>` : ""}</div>
       <div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_fix" data-take="1"${off}>定結果：易主</button><button class="btn small" data-act="admin" data-op="seal_fix" data-take="0"${off}>定結果：不易主</button><button class="btn warn small" data-act="admin" data-op="seal_cancel"${off}>⚠ 取消單挑</button><button class="btn small" data-act="admin" data-op="seal_sink_check">隱沒判斷</button></div>
-      ${s.mandate_ok ? `<div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_mandate" data-when="next"${s.mandate ? " disabled" : ""}>蓋天命之季（下一季）</button><button class="btn warn small" data-act="admin" data-op="seal_mandate" data-when="now"${s.mandate === "now" ? " disabled" : ""}>⚠ 這一季立刻蓋章</button>${
+      ${s.mandate_ok ? `<div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_mandate" data-when="next"${s.mandate ? " disabled" : ""}>蓋天命之季（下一季）</button><button class="btn warn small" data-act="admin" data-op="seal_mandate" data-when="now"${s.mandate === "now" ? " disabled" : ""}>⚠ 這一季立刻蓋章</button>${s.mandate === "next"
+        ? '<button class="btn small" data-act="admin" data-op="seal_mandate" data-when="cancel">收回下一季的章</button>' : ""}${
         s.mandate === "now" ? '<span class="muted ad-note">這一季是天命之季</span>' : s.mandate === "next" ? '<span class="muted ad-note">下一季蓋章</span>' : ""}</div>` : ""}`;
   }
 
@@ -3131,9 +3132,12 @@
       seal_fix: [`正在打的奪璽單挑收場時${body.take ? "易主" : "懷璽不失"}（公告照常），確定？`, "確定"],
       seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
       seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
-      seal_mandate: [body.when === "now"
-        ? "這一季立刻蓋上天命之季的章：還沒打的標了璽動的決戰必定牽動碎片、不提前收季，天命之爭排在第 12 週週一 20:00（已經過了就馬上開集結），確定？"
-        : "下一季蓋天命之季的章（不看七片現世過沒），確定？", "確定蓋章"],
+      // 蓋章的後果要寫明（審查 I2）：天命之季過後再換季，七片全部散去、每一位持有者都失去碎片
+      seal_mandate: body.when === "cancel"
+        ? ["收回下一季的天命之季章：七片這一輪都現世過的話，換季時照樣會蓋，確定？", "確定收回"]
+        : [body.when === "now"
+          ? "這一季立刻蓋上天命之季的章：還沒打的標了璽動的決戰必定牽動碎片、不提前收季，天命之爭排在第 12 週週一 20:00（已經過了就馬上開集結）。這一季的章蓋了就收不回：收季之後再換季，七片全部散去、每一位持有者都失去碎片，確定？"
+          : "下一季蓋天命之季的章（不看七片現世過沒）。那一季過後再換季，七片全部散去、每一位持有者都失去碎片；換季之前還收得回，確定？", "確定蓋章"],
     }[op] || ["確定要這麼做？", "確定"];
   }
 

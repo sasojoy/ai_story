@@ -548,3 +548,22 @@ def test_the_admin_can_stamp_this_season_and_open_tianming(mandated, world):
     admin.admin_start_battle("tianming", 50.0)
     assert world.get_battle().battle_id == "tianming"
     assert any("已經是天命之季" in line for line in admin.admin_seal_mandate("now"))
+
+
+def test_the_admin_can_take_back_a_pending_stamp_and_stamp_during_the_rest(mandated, world):
+    """審查 I2：「下一季」按了收得回（cancel 只清延後的記號；七片這一輪都現世過的話換季照樣蓋）；休季也按得了「下一季」與收回
+    （同 FB-178：休季正是要決定下一季的時候）；「這一季立刻蓋章」照舊要季在跑。"""
+    from conftest import next_season
+
+    _opened(mandated, world)
+    admin = _admin(mandated, world)
+    assert any("沒有要蓋" in line for line in admin.admin_seal_mandate("cancel"))
+    admin.admin_seal_mandate("next")
+    admin.admin_seal_mandate("cancel")
+    assert not world.seal_state().registry.mandate_pending and admin.admin_seal_choices()["mandate"] == ""
+    admin.admin_end_season(now=900.0)
+    assert any("沒有在進行" in line for line in admin.admin_seal_mandate("now"))
+    admin.admin_seal_mandate("next")
+    assert world.seal_state().registry.mandate_pending
+    next_season(mandated, world)
+    assert world.get_season().mandate
