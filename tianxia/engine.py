@@ -2931,7 +2931,7 @@ class Game:
             return smithing.step(s, c, verb, rest)
         if verb == "buy":
             self._shop_after(weapons.buy_problem(s, c, rest), "buy")
-            return weapons.buy(s, c, rest)
+            return weapons.buy(s, c, rest, team.player_art(s, c, self.world, s.player.member.wugong_id), self.world)  # 配得上就直接換上（FB-128）
         if verb == "repair":
             self._shop_after(weapons.repair_problem(s, c), "repair")
             return weapons.repair(s, c)

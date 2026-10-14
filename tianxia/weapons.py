@@ -284,7 +284,12 @@ def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def buy(state: GameState, content: Content, kind: str) -> list[str]:
+SWAPPED = "你換上了【{name}】，原本那{unit}【{old}】放上了裝備庫。"  # 待 joy 潤（FB-128：買下配得上的就直接換上）
+
+
+def buy(state: GameState, content: Content, kind: str, art: MartialArt | None = None, world: WorldStateStore | None = None) -> list[str]:
+    """買一把架上的（4.5）：空手就拿在手上，不然進裝備庫——手上那把配不上身上的武學、買下的這把配得上時直接換上，舊的進裝備庫
+    （FB-128，PM 2026-10-14；配得上卻相剋的不算配不上，照舊進裝備庫）。art、world 沒給（舊的呼叫）照舊不換。"""
     problem = buy_problem(state, content, kind)
     if problem is not None:
         return [f"（{problem}。）"]
@@ -292,7 +297,13 @@ def buy(state: GameState, content: Content, kind: str) -> list[str]:
     price = content.config.weapons.shop_price
     state.player.stats["silver"] -= price
     weapon = new_weapon(state, name=item.name, kind=kind, attribute=item.attribute, tier=1, quality="下品")
-    return [f"你花 {price} 兩買下一{unit(kind)}【{weapon.name}】。", store(state, content, weapon)]
+    head = f"你花 {price} 兩買下一{unit(kind)}【{weapon.name}】。"
+    old = state.player.weapon
+    if old is not None and world is not None and not usable(old, art, content, world) and usable(weapon, art, content, world):
+        state.player.rack.append(weapon)
+        equipment.wield(state, content, weapon.id, ("weapon",))
+        return [head, SWAPPED.format(name=weapon.name, unit=unit(old.kind), old=old.name)]
+    return [head, store(state, content, weapon)]
 
 
 def repair_problem(state: GameState, content: Content) -> str | None:

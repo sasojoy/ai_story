@@ -439,3 +439,45 @@ def test_final_f2_a_gift_from_someone_you_just_dealt_with_is_handed_over(content
     game.choose("choice:1")
     [entry] = _gift_entries(game)
     assert treasures.GIFT_LINE.format(general="韓鐵", gift="舊草鞋") in [entry.tag, *entry.lines]
+
+
+# ── 甲批之二（PM 2026-10-14）：FB-128 還開著的兩件、F4、F8 ──
+
+
+def _art_kind(game, content, world):
+    art = team.player_art(game.state, content, world, game.state.player.member.wugong_id)
+    return art, weapons.art_weapon(art.id, content, world)
+
+
+def test_fb128_buying_a_fitting_weapon_while_holding_an_unfit_one_wields_it(content, world):
+    """PM 定：手上拿著配不上身上武學的兵器時，買下一把配得上的就直接換上，舊的進裝備庫（以前要再按一次換上）。"""
+    game = _town(content, world)
+    art, fit = _art_kind(game, content, world)
+    other = next(k for k in ("劍", "刀", "槍", "棍", "弓弩", "拳腳") if k != fit)
+    game.state.player.weapon = _blade(kind=other)
+    game.choose("act:smith")
+    msgs = game.choose(f"smith:buy:{fit}")
+    p = game.state.player
+    assert p.weapon.kind == fit and [w.kind for w in p.rack] == [other]
+    assert weapons.SWAPPED.format(name=p.weapon.name, unit=weapons.unit(other), old="試刃") in msgs
+
+
+def test_fb128_a_fitting_but_clashing_weapon_in_hand_is_kept(content, world):
+    """配得上卻相剋的不算配不上：買下的照舊進裝備庫。手上配得上的、空手的也照舊。"""
+    game = _town(content, world)
+    art, fit = _art_kind(game, content, world)
+    clash = next(a for a in ATTRS if weapons.counters(a, art.attribute) or weapons.counters(art.attribute, a))
+    game.state.player.weapon = _blade(kind=fit, attribute=clash)
+    game.choose("act:smith")
+    game.choose(f"smith:buy:{fit}")
+    p = game.state.player
+    assert p.weapon.name == "試刃" and len(p.rack) == 1
+
+
+def test_fb128_an_unfit_pickup_still_goes_into_an_empty_hand(content, world):
+    """PM 定：空手撿到配不上的照舊拿在手上（配不上的加成是 0，跟空手一樣，不吃虧）。"""
+    _on(content)
+    state = _new_state(content, world, "撿刀")
+    assert state.player.weapon is None
+    weapons.store(state, content, _blade(kind="刀"))
+    assert state.player.weapon is not None and state.player.weapon.kind == "刀"
