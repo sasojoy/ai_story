@@ -1,8 +1,8 @@
 """追風步的品質（PM 2026-10-14，企劃者「城內可以直接免費學到絕學追風步？」）：content/skills.json 的 zhuifeng 沒寫 quality，
 照 SkillDef 的預設成了絕學——潁川「汝南商行」付四十兩、山林「瀑布怪客」過一個悟性檢定就拿得到。改成下品；
 混元一氣（玉璽碎片的獎勵）照舊是絕學。玩家拿得到的內容武學品質都要明寫（content.validate 擋）。
-舊角色手上的追風步不另外搬：內容武學的品質每次照內容讀（team.resolve_art），沒修練過（追風步沒融意境、修不了）
-就沒有 art_quality 那一筆，讀檔就是下品；絕學定名、江湖史只記修練上去的絕學，碰不到它。"""
+已經學到的不退回（企劃者 2026-10-14「追風步這算是我們的bug，已經學到的不可以退回，新學的的才是下品」）：
+讀檔核對一次（Game._keep_old_zhuifeng），把絕學記進自己那一份（art_quality、art_rolled）；新角色、換季之後學的照內容是下品。"""
 from __future__ import annotations
 
 import random
@@ -40,12 +40,53 @@ def test_an_event_teaching_an_art_without_a_quality_is_rejected(tmp_path):
         load_content(root)
 
 
-def test_an_old_character_holding_zhuifeng_reads_it_as_low_grade():
+def _old_save_with_zhuifeng():
+    """改之前的存檔：追風步在功法庫、自己那一份沒有品質的紀錄、還沒核對過。"""
     content = real_content()
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     apply_effect(Effect(learn_skills=["zhuifeng"]), game.state, content, game.world)
-    p = game.state.player
-    assert "zhuifeng" in library.owned_arts(game.state) and "zhuifeng" not in p.art_quality  # 舊存檔就是這個樣子
-    assert team.player_art(game.state, content, game.world, "zhuifeng").quality == "下品"
-    p.art_quality["zhuifeng"] = "中品"  # 萬一有自己修練上去的紀錄：照紀錄算，不往下拉
-    assert team.player_art(game.state, content, game.world, "zhuifeng").quality == "中品"
+    game.state.player.art_quality.pop("zhuifeng", None)
+    game.state.player.zhuifeng_kept = False
+    return content, game
+
+
+def test_an_old_character_keeps_the_peerless_zhuifeng_on_load():
+    content, game = _old_save_with_zhuifeng()
+    loaded = Game(content, game.state, random.Random(0), game.world)
+    p = loaded.state.player
+    assert team.player_art(loaded.state, content, loaded.world, "zhuifeng").quality == "絕學"
+    assert p.art_rolled["zhuifeng"] == "絕學" and p.zhuifeng_kept  # 熔的時候跟以前一樣：絕學是登記時就有的，不算修練加給
+    again = Game(content, loaded.state, random.Random(0), loaded.world)  # 核對過就不再動
+    assert team.player_art(again.state, content, again.world, "zhuifeng").quality == "絕學"
+
+
+def test_a_new_character_learns_the_low_grade_zhuifeng():
+    content = real_content()
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    assert game.state.player.zhuifeng_kept  # 新角色建立時就核對過了：之後學到的不會被當成舊的
+    apply_effect(Effect(learn_skills=["zhuifeng"]), game.state, content, game.world)
+    reloaded = Game(content, game.state, random.Random(0), game.world)
+    assert team.player_art(reloaded.state, content, reloaded.world, "zhuifeng").quality == "下品"
+    assert "zhuifeng" not in reloaded.state.player.art_quality
+
+
+def test_melting_the_kept_one_and_learning_again_gives_the_low_grade():
+    content, game = _old_save_with_zhuifeng()
+    loaded = Game(content, game.state, random.Random(0), game.world)
+    library.remove_art(loaded.state, "zhuifeng")  # 熔煉與交出懸賞共用的拿掉
+    apply_effect(Effect(learn_skills=["zhuifeng"]), loaded.state, content, loaded.world)
+    assert team.player_art(loaded.state, content, loaded.world, "zhuifeng").quality == "下品"
+
+
+def test_a_new_season_counts_as_checked(content):
+    """換季武學歸零：核對的記號一起記成核對過，新的一季學到的追風步不會被當成改之前學的。"""
+    from conftest import next_season
+    from tianxia.sqlite_world import open_world
+
+    content.config.auto_open_first_season = True
+    world = open_world()
+    game = Game.new(content, "沈浪", rng=random.Random(0), world=world)
+    game.sync(100.0)
+    game.state.player.zhuifeng_kept = False
+    next_season(content, world, game)
+    assert game.state.player.zhuifeng_kept
