@@ -1359,11 +1359,12 @@
   // ── 決戰的戰況一回合一段（Joy 2026-10-14「大決戰因為很多人，戰況文字沒有分回合，擠在一起玩家很難閱讀」）──
   // 引擎（engine._round_blocks）把最近五段戰況寫成「##### 第 N 回合」加一行一條的清單、新的在上。這裡把最新那一回合包成一塊整段攤開，
   // 舊的幾回合各收成一行（<details>：回合數＋那一回合誰佔上風那一句，點了攤開）；攤開了哪幾回合記在 S.roundsOpen，輪詢重畫照樣開著
-  const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
   // 每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：引擎在開頭寫「〔官軍〕」（engine.SIDE_TAG），這裡換成那一軍顏色的
-  // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著
-  const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
+  // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著。
+  // 兩個式子寫在函式裡：測試的假瀏覽器照名字只抽函式出來
   function roundBlocks(html, g) {
+    const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
+    const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
     let newest = true;
     const open = S.roundsOpen || (S.roundsOpen = new Set());
     const sides = {};
@@ -1383,13 +1384,6 @@
       return `<details class="b-round" data-round="${n}"${open.has(n) ? " open" : ""}><summary><b>第 ${n} 回合</b>${gist ? `<span>${gist}</span>` : ""}</summary>${list}</details>\n`;
     });
   }
-  // 攤開、收起舊的回合不重畫（<details> 自己開關）：只記下來，下一次輪詢重畫照樣
-  document.addEventListener("toggle", (ev) => {
-    const el = ev.target;
-    if (!(el instanceof HTMLDetailsElement) || !el.classList.contains("b-round")) return;
-    const open = S.roundsOpen || (S.roundsOpen = new Set());
-    if (el.open) open.add(el.dataset.round); else open.delete(el.dataset.round);
-  }, true);
 
   // ── 決戰的即時戰局條（Joy 2026-10-10 轉玩家反饋：「有辦法看即時戰局？那個推進多少我都不知道是啥意思」）──
   // 資料是引擎的 battle_instance.gauge：拔河，左邊是看的人那一邊；lean 是往左邊那一方偏多少（0～100）。旗子畫在 100−lean：
@@ -5223,6 +5217,11 @@
     else if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
+    // 決戰攤開、收起舊的回合（roundBlocks）：只記下來，下一次輪詢重畫照樣
+    else if (box instanceof Element && box.matches("details.b-round")) {
+      const open = S.roundsOpen || (S.roundsOpen = new Set());
+      if (box.open) open.add(box.dataset.round); else open.delete(box.dataset.round);
+    }
     // 摺疊開了或收了：發光的鈕在裡面的話，光在鈕與標題列之間換邊（glowTarget）
     if (S.stage === "game") applyGlow();
   }, true);
