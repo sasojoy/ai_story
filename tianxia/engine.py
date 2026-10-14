@@ -545,7 +545,6 @@ class Game:
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
         fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
-        fresh.player.zhuifeng_kept = True  # 換季武學歸零：新的一季學到的追風步照內容是下品
         fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
         fresh.player.pill_day, fresh.player.pills_today = old.player.pill_day, old.player.pills_today  # 換季不能多吃一輪
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
@@ -560,16 +559,15 @@ class Game:
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
 
-    def _keep_old_zhuifeng(self) -> None:
-        """追風步（企劃者 2026-10-14）：內容以前沒寫品質、照 SkillDef 的預設成了絕學，現在是下品。這是我們的錯，
-        已經學到的不退回：讀檔核對一次，手上有追風步、自己那一份又沒有紀錄的，把絕學記成自己那一份的品質，也記成擲到的
-        （art_rolled：熔的時候跟以前一樣不算修練上去的加給）。核對過就不再看，之後熔掉再學、或新學的照內容是下品。"""
+    def _drop_old_zhuifeng(self) -> None:
+        """追風步（PM 2026-10-14；企劃者跟玩家談過，玩家同意退回下品）：內容以前沒寫品質、照 SkillDef 的預設成了絕學，現在是下品。
+        舊角色讀檔時照內容讀就是下品（沒有自己那一份的紀錄）；中間有一版（7f993d2）把絕學寫進了自己那一份
+        （art_quality、art_rolled），這裡拿掉。追風步沒融意境、修練不了，自己那一份記成絕學只可能是那一版寫的，
+        不會碰到自己修練上去的紀錄；絕學定名、江湖史只記修練上去的絕學，也碰不到它。"""
         p = self.state.player
-        if p.zhuifeng_kept:
-            return
-        p.zhuifeng_kept = True
-        if "zhuifeng" in library.owned_arts(self.state) and "zhuifeng" not in p.art_quality:
-            p.art_quality["zhuifeng"] = p.art_rolled["zhuifeng"] = "絕學"
+        for record in (p.art_quality, p.art_rolled):
+            if record.get("zhuifeng") == "絕學":
+                del record["zhuifeng"]
 
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
@@ -583,7 +581,7 @@ class Game:
         if s.pending_event and s.pending_event not in c.events:
             s.pending_event = None
         self._top_up_pills()
-        self._keep_old_zhuifeng()
+        self._drop_old_zhuifeng()
         s.player.resting_since = None  # 打坐 2026-10-12 拿掉了：存檔時坐著的人讀檔就起身（只是不再回得比較快，沒有別的帳要算）
         sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
         if p.pending_companion and p.pending_companion not in c.characters:
