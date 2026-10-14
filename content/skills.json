@@ -107,6 +107,7 @@
   {
     "id": "zhuifeng",
     "name": "追風步",
+    "quality": "下品",
     "kind": "武學",
     "attribute": "快",
     "desc": "江湖上流傳的輕身步法，講究腳下快。",
@@ -115,6 +116,7 @@
   {
     "id": "hunyuan",
     "name": "混元一氣",
+    "quality": "絕學",
     "kind": "內功",
     "attribute": "陽",
     "desc": "南華觀藏著的失傳內功，渾厚無比，只有取得傳國玉璽碎片才能習得。"
