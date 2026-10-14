@@ -23,7 +23,7 @@ needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # test_prologue_web 的假瀏覽器，多交出這一份要測的名字
 DRIVER = BASE_DRIVER.replace(
     '"bookHtml", "peerHtml"]',
-    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers"]',
+    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers", "peerAct"]',
 )
 assert DRIVER != BASE_DRIVER
 
@@ -288,3 +288,48 @@ def test_declining_his_travel_invite_on_the_card(pair):
     assert world.get_season().invites == [] and _load(world, "乙").player.tagalong is None
     assert "乙拱手婉拒了你的邀請。" in _load(world, "甲").journal[0].lines
     assert _load(world, "乙").journal[0].title == "婉拒結伴同行"
+
+
+# ── 第四件：論武取名等模型時的等候話；等的時候關了卡、換了人，回應回來不把舊卡彈出來 ──
+
+HOLD = """
+  // fetch 拿住不回，等 release()；setTimeout 只讓「等候的話」那一個（1500 毫秒）馬上跑
+  let release;
+  T.ctx.fetch = (url, opts) => { T.calls.push([url, opts && opts.body ? JSON.parse(opts.body) : null]);
+    return new Promise((res) => { release = (data) => res({ ok: true, status: 200, json: () => Promise.resolve(data) }); }); };
+  const real = T.ctx.setTimeout;
+  T.ctx.setTimeout = (fn, ms) => (ms === 1500 ? (fn(), 0) : real(fn, ms));
+"""
+
+
+@needs_node
+def test_answering_a_discussion_shows_its_own_waiting_line(twins):
+    content, world = twins
+    _invite(content, world)
+    card = _card(content, world, "乙", "甲")
+    i = next(n for n, b in enumerate(card["actions"]) if b["arg"] == "yes:insight:huo")
+    script = HOLD + f"""
+      H.S.peer = {{ name: "甲", card: {json.dumps(card, ensure_ascii=False)} }};
+      const p = H.peerAct({i});
+      const waiting = T.bodyHtml.join("");
+      release({{ card: null, gone: "", main: null, message: "<p>好了</p>" }});
+      return p.then(() => ({{ waiting, sent: T.calls[0] }}));"""
+    out = run(_main(content, world, "乙"), script)
+    assert "兩人各陳所學，推敲新招……" in out["waiting"]
+    assert out["sent"][1]["arg"] == "yes:insight:huo"
+
+
+@needs_node
+def test_a_reply_after_the_card_was_closed_does_not_reopen_it(twins):
+    content, world = twins
+    _invite(content, world)
+    card = _card(content, world, "乙", "甲")
+    i = next(n for n, b in enumerate(card["actions"]) if b["arg"] == "yes:insight:huo")
+    script = HOLD + f"""
+      H.S.peer = {{ name: "甲", card: {json.dumps(card, ensure_ascii=False)} }};
+      const p = H.peerAct({i});
+      H.S.peer = {{ name: "丙", card: null, gone: "x" }};  // 等的時候關了卡、點開了丙
+      release({{ card: {json.dumps(card, ensure_ascii=False)}, gone: "", main: null, message: "<p>你以【粗淺拳腳】融入「火」</p>" }});
+      return p.then(() => ({{ peer: H.S.peer.name, toast: T.els.toast.textContent }}));"""
+    out = run(_main(content, world, "乙"), script)
+    assert out == {"peer": "丙", "toast": "你以【粗淺拳腳】融入「火」"}

@@ -1988,18 +1988,22 @@
     el.scrollIntoView({ block: "nearest", behavior: promoCalm() ? "auto" : "smooth" }); // promoCalm：偏好減少動態效果
   }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
+  // 等回應的時候（論武答應時首創要等模型取名，FB-117）：照送出指令的回饋那一套（busy），論武答應另有一句等候的話（WAIT_LINES.discuss）。
+  // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一聲（江湖紀錄裡也有）
   async function peerAct(i, sure = false, amount = 0, choice = "") {
     const P = S.peer;
     const b = P && P.card && P.card.actions[i];
     if (!b) return;
     if (b.amount > 0 && !amount) { S.peer.amountFor = i; render(); return; }
     if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount, choice)); return; }
+    const line = b.action === "discuss" && /^yes:/.test(b.arg || "") ? WAIT_LINES.discuss : SENT_WAITING;
     await busy(async () => {
       const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice });
       if (r.main) setMain(r.main);
-      S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      if (S.peer && S.peer.name === P.name) S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      else if (r.message) toast(r.message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
       render();
-    });
+    }, line);
   }
 
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫。
@@ -3764,6 +3768,7 @@
   const WAIT_LINES = {
     explore: "四下探看，尚無動靜……", train: "循著蹤跡尋敵……", rest: "調息入定……", meet: "遣人通報，候他回話……",
     move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
+    discuss: "兩人各陳所學，推敲新招……", // 論武答應、等首創取名（FB-117；待 joy 潤）
   };
   const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
   const SLOW_WAITING = "路遠消息遲，再等片刻……";
