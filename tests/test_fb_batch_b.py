@@ -4,9 +4,12 @@ from __future__ import annotations
 import random
 
 from test_discuss import pair  # noqa: F401（fixture）
+from test_fb120_battle_fold import battle, node  # noqa: F401（fixture）
+from test_prologue_web import run
 from test_seal import sealed  # noqa: F401（fixture）
 from test_seal_mandate import mandated  # noqa: F401（fixture）
 
+import server
 from tianxia import atlas, fusion, seal, social
 from tianxia.engine import Game
 from tianxia.rules import game_day
@@ -271,3 +274,33 @@ def test_fb190_challenges_get_their_own_section_after_the_bond(real, world):
     assert howto.CHALLENGE_UNTIMED[2] in fight  # 14 天的季：聲威掉到 0 退場那幾句也在這一段
     cfg.figure_challenge_every_season = False
     assert f"#### {howto.CHALLENGE_TITLE}" not in howto.page(real, world.get_season(), recruitable=False)
+
+
+# ── FB-136：決戰開打那一刻看不到三招的鈕 → 輪到出招的回合，三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面 ──
+# 在 d2827139 上重現（14 天、官軍、騎著馬上陣、老石「要打大仗了」的框還在，375×812）：框 608～738、輸入框與底下那句 746～843、
+# 三招 855～999，分頁列頂 756——第一屏一顆都看不到（QA 那時是 733 起）。照在路上的排法（FB-055）：輪到你按的排前面。
+# node 裡沒有版面，這裡只比先後；量到的位置寫在試玩回饋那一列
+
+SHOWDOWN_BOX = {"speaker": "老石", "key": "h_showdown", "scene": "", "text": "「要打大仗了。」", "line": "", "done": [], "end": True,
+                "pending": False, "full": True, "hint": True}
+
+
+@node
+def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(battle):
+    _, fighter = battle
+    m = {**server.main_view(fighter), "guide": SHOWDOWN_BOX}
+    assert m["free_text"] is not None and [o["id"] for o in m["options"] if o["id"].startswith("battle:act:")]
+    page = run(m, "return H.pageJianghu();")
+    scene, moves = page.index('<section class="card scene">'), page.index('<div class="options">')
+    free, box = page.index('<form class="free"'), page.index('<section class="card guide"')
+    assert scene < moves < free < box
+    assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（選單那一塊裡）
+
+
+@node
+def test_fb136_outside_a_battle_round_the_box_stays_above_the_actions(battle):
+    """不是輪到出招（只能觀戰、平常閒著）：說書人的框照企劃者 10/5 的決定留在行動列上面。"""
+    watcher, _ = battle
+    m = {**server.main_view(watcher), "guide": SHOWDOWN_BOX}
+    page = run(m, "return H.pageJianghu();")
+    assert page.index('<section class="card guide"') < page.index('class="act-bar')

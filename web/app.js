@@ -1830,6 +1830,11 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
+    // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
+    if (opts.some((o) => o.id.startsWith("battle:act:"))) {
+      return `${resultCard}${peek}${now}${scene}${links}${menu}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    }
     return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
   }
 
