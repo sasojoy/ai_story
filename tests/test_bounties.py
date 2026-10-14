@@ -655,8 +655,9 @@ def test_issue_keeps_an_expired_bounty_until_its_takers_hear_of_it():
 
 @pytest.mark.slow
 def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
-    """正式內容、預設設定（14 天、第一季規則關著）讓整季機器人玩一季（懸賞榜設計 10.2 的 slow）：12 週每週剛好一批
-    （同一週的單在同一步一起出現），bounty_week 最後是 12、hooked_week 一直是 0。"""
+    """正式內容、預設設定（14 天、第一季規則關著）讓整季機器人玩一季（懸賞榜設計 10.2 的 slow）：一直到收季那一週，每週剛好一批
+    （同一週的單在同一步一起出現），bounty_week 最後是收季那一週、hooked_week 一直是 0。大勢門檻可能讓季提早收
+    （黃巾稱霸，最早第 decisive_from_week 週；FB-184 多了官軍大營之後，種子 1 這一季在第 11 週收），所以不寫死 12 週。"""
     content = real_content()
     assert not content.config.season_one and content.config.bounties.enabled
     seen: dict[str, tuple[int, int]] = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
@@ -673,11 +674,13 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     batches: dict[int, set[int]] = {}
     for at, week in seen.values():
         batches.setdefault(week, set()).add(at)
-    assert season.ended and sorted(batches) == list(range(1, 13))
+    last = max(batches)
+    assert season.ended and sorted(batches) == list(range(1, last + 1))
+    assert content.config.decisive_from_week <= last <= content.config.season_weeks
     assert all(len(steps) == 1 for steps in batches.values())
-    sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, 13)]
+    sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, last + 1)]
     assert all(0 < n <= _batch(content) for n in sizes)
-    assert season.bounty_week == 12 and season.hooked_week == 0
+    assert season.bounty_week == last and season.hooked_week == 0
 
 
 def test_the_board_count_only_counts_what_you_can_see(beta_setup):
