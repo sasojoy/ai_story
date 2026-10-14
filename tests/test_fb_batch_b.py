@@ -167,3 +167,13 @@ def test_fb167_the_early_end_time_is_one_unbreakable_block_like_the_status_bar()
     nbsp = "\u00a0"
     assert early_end_note(state, content) == f"（第{nbsp}11{nbsp}天{nbsp}12:00 以前不會提前收季）"  # 只在「以前」前面斷得開
     assert "第11天" not in quest_text(state, content)
+
+
+# ── FB-170：打贏波才之後主線寫「波才若未除」 → 第 3 幕那一句不管怎麼進來的都通 ──
+
+
+def test_fb170_act_three_reads_true_however_it_was_reached(real):
+    act = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_3")
+    ways = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_2").advance_when.any_of
+    assert any(c.world_flags_all == ["bocai_defeated"] for c in ways)  # 打贏波才也會進第 3 幕
+    assert "波才" not in act.text  # 不寫他還在不在：打贏他、聲勢到 70、第 10 天，三條路進來的都讀得通
