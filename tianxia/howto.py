@@ -574,6 +574,9 @@ CHALLENGE_BOTH = "，{names}兩邊的人物都能挑戰"
 CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見：挑戰、求見、交友都不行。"
 
 
+CHALLENGE_RISE = "- 你的隊伍越強，大勢人物越拚命：他照你們的身手出全力，這一季每被你打贏一次，下一次就更難打。鈕上的勝算照這個算。"
+
+
 def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     """挑戰大勢人物本人那一段（FB-190 另起一段）：誰能挑戰（有陣營、打敵方的人物，自己陣營沒有人物的〔地方豪強〕兩邊都打，散人不行；
     同 Game._challenge_options）、閉門不見、情誼會掉；沒有時刻表的季多寫聲威怎麼掉、怎麼回、一天上限、退場與龍頭人物停手。"""
@@ -586,6 +589,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     if cfg.snub_hours > 0:
         lines.append(CHALLENGE_SNUB.format(hours=cfg.snub_hours))
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
+    if cfg.rise.enabled:
+        lines.append(CHALLENGE_RISE)
     if not figures.untimed(content, season):
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)

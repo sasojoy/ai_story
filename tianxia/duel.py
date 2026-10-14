@@ -66,9 +66,14 @@ def roll_next(duel: DuelState, foe: DuelFoe, tuning: DuelTuning, rng: random.Ran
     duel.tell = rng.choice(TELLS[shown])
 
 
-def foe_strength(battle: BattleTuning, tuning: DuelTuning, boss: DuelBoss) -> float:
-    """他的份量：照決戰的實力算他的難度，乘適性的基準（foe_fit）。"""
-    return battle_instance.strength(battle, boss.difficulty) * tuning.foe_fit
+def foe_difficulty(duel: DuelState, boss: DuelBoss) -> float:
+    """這一場他的難度：開打時快照的（江湖水漲浮上來的，rise.duel）；舊存檔沒有快照照內容寫的。"""
+    return boss.difficulty if duel.difficulty is None else duel.difficulty
+
+
+def foe_strength(battle: BattleTuning, tuning: DuelTuning, boss: DuelBoss, difficulty: float | None = None) -> float:
+    """他的份量：照決戰的實力算他的難度（difficulty 給了就用它，沒給照內容寫的），乘適性的基準（foe_fit）。"""
+    return battle_instance.strength(battle, boss.difficulty if difficulty is None else difficulty) * tuning.foe_fit
 
 
 def counter(mine: str, his: str) -> int:
@@ -138,7 +143,7 @@ def exchange(
     """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。
     推力與挨的打照 push_of、harm_of（奪璽單挑共用）；運氣照舊在這裡用 rng 擲一次。"""
     mine = duel.scores.get(move) or battle_instance.strength(battle, duel.power) * tuning.foe_fit
-    theirs = foe_strength(battle, tuning, boss)
+    theirs = foe_strength(battle, tuning, boss, foe_difficulty(duel, boss))
     beat = counter(move, duel.move)
     delta = push_of(mine, theirs, beat, duel.role, tuning, battle, rng.uniform(-tuning.luck, tuning.luck))
     hp = min(duel.hp, harm_of(duel.hp_cap, mine, theirs, beat, tuning))

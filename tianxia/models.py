@@ -1837,6 +1837,35 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class RiseTuning(_Strict):
+    """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
+    tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
+    可是招到兩位同伴的隊伍第 10 級全隊威力就 300 多（同伴第一級就 135～146），單次判定威力過難度的 1.45 倍就必勝——
+    第 10 級起打誰都 100%；沒有同伴的人第 30 級本人威力 150～220，第 40 級 300 多，也一樣全贏。事件檢定難度 3～8、屬性最高 15，
+    第 30 級起平均成功率 88～94%、九成以上的檢定 ≥90%。
+
+    - 大場面（挑戰大勢人物本人、劇情戰裡難度到 big_fight_difficulty 的對手）：難度取「內容寫的」與「你此刻對他的全隊威力 × 倍數」
+      的大者。倍數 big_scale 起、你這一季每打贏他一次多 per_win、最多 max_scale——強的隊伍頭一場有把握、越打越難；
+      沒那麼強的照舊打內容寫的難度（新手第一場不會因為這條變難）。獎勵照舊照內容寫的那一份（挑戰本人照聲威打折），浮上去的難度不多給。
+    - 頭目戰：他的難度取「內容寫的」與「你的武學威力 × duel_scale」的大者（頭目戰只算本人；同一隻這一季第二次遇上再多 duel_per_meet）。
+    - 事件檢定：本人第 event_from_level 級起，每 event_per_levels 級檢定難度 +1、最多 +event_cap（rules.check_outlook，
+      選項的心裡話、擲骰都照它）。內容寫的難度不動（DIFFICULTY_BANDS 照鎖），加深的是執行期的那一格。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時三樣都照內容寫的
+    # 威力過難度多少倍才贏（單次判定：贏的那一線是難度的 1.15 倍，運氣 ±0.3 倍）：倍數 0.75 → 威力是難度的 1.33 倍，贏面約八成（有把握）；
+    # 0.85 → 約五成五（五五波）；0.95 → 約三成五（凶險）；1.05 → 約一成五
+    big_scale: float = Field(default=0.75, gt=0)
+    per_win: float = Field(default=0.10, ge=0)  # 這一季每打贏同一位人物一次，倍數再加多少（只算大勢人物本人：figure_wins）
+    max_scale: float = Field(default=1.05, gt=0)
+    # 頭目戰（推氣勢，不是單次判定）：他的份量照「難度」換算（duel.foe_strength），1.0 是跟你同一個難度。量出來（measure_difficulty.py，
+    # 招一半看架勢一半亂出、不放手一搏）：見 CLAUDE.md「江湖水漲」
+    duel_scale: float = Field(default=1.0, gt=0)
+    duel_per_meet: float = Field(default=0.15, ge=0)  # 同一隻這一季第二次遇上（per_boss_season 2）再多這麼多
+    event_from_level: int = Field(default=15, ge=1)
+    event_per_levels: int = Field(default=6, ge=1)
+    event_cap: int = Field(default=4, ge=0)
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1902,6 +1931,7 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）

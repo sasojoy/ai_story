@@ -41,6 +41,7 @@
 - `tianxia/journal.py`：江湖紀錄（一次行動一則）與「剛剛」卡片、紀錄列的 HTML；拿到新東西那一行會掃光（`_NEW_THING`，照訊息原文錨在開頭）；`add_entry(..., merge=True, fold=True)` 併進同一類最新一則時只留新的敘事（打造開爐成了那一下用，FB-141：結果句排第一〔結果句本身也是打出的東西寫在最前面「打出一把【X】（…）：鐵匠把…下爐。」，`smithing.FORGED`／`ARMOR_FORGED`，FB-143：375 寬「剛剛」收成一行時只露開頭十幾個字〕，挑種類、主料、輔料的回報收掉；`fold` 也收一個判斷的函式〔line → 要不要收〕，打造傳 `smithing.is_step_line`，只收單子自己的回話、前幾步順便帶來的別的話接在結果句後面留著，journal 不認識打造）。
 - `tianxia/guide.py`：新手引導、個人目標與任務區塊。`tianxia/leaderboard.py`：天下武學榜／內功榜。
 - `tianxia/clinic.py`：醫館（療傷只在帶「醫館」標籤的地點）：在不在醫館（`here`，在路上不算）、最近的一家（`nearest`）、不在醫館那一句（`problem`）；`Game.heal`、`act:heal`、`skillview.heal_button` 與機器人的繞路都問它。只 import models、state、atlas。
+- `tianxia/rise.py`：江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰」；`Config.rise`，見「規則速查」的「江湖水漲」）：大場面的倍數與難度（`scale`、`big`）、頭目的難度（`duel`）、事件檢定加深幾點（`event_bump`）。純數字，威力由 `Game._figure_squad`／`_story_squad`／`_duel_start` 算好傳進來（`team.power_vs(fresh=True)`）。只 import models、state。
 - `tianxia/chuangong.py`：傳功門下（企劃者 2026-10-14「心得大量溢出」；`Config.chuangong`）：用心得替名冊上的同伴、部下練武學、加屬性（`lessons`：一個人的傳功鈕〔價錢、效果、按不下去的原因〕；`teach`：傳一下；`cheapest`：機器人挑最便宜的一項）。`Game.chuangong`／`chuangong_lessons`、`MENXIA_ACTIONS["chuangong"]`、`menxia_view` 的 `lessons`。只 import models、state、world_state、martial_arts、team。
 - `tianxia/roster.py`：同伴招募（每位歷史人物全服唯一）。`tianxia/companion_agent.py`：跟歷史人物的對話（模型生成，好感度照 tag 查表）。
 
@@ -150,6 +151,7 @@
 - 秘方與天時地利量表：`.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile weekend|none]`——隨機、解口訣、全知三種機器人一季合中幾條秘方、聽到幾句口訣、天時地利讓上品機率多幾點；只量不改；另印一段鑄器（打造第一批：三種機器人一季聽到幾句鑄器口訣〔說書、鐵匠、殘譜〕、摸到幾條隱藏配方〔照階分〕、三邊合起來幾條、名器佔打造幾成）；打造第二批起另印神器原品、仿品幾把與一季三階幾個（新來源另計）。
 - 合成量表：`.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile weekend] [--reserve N]`——一季裡三種合成第一次的組合數、合到舊的比例、模型呼叫數、`bot.FORGE_RESERVE` 夠不夠；只量不改。一個機器人獨佔一個資料庫，合到舊的一定合到它自己已經有的，所以那個比例是全服的下限。
 - 同伴加成量表：`.venv/Scripts/python.exe scripts/measure_companions.py`（只量不改）
+- 變強之後的挑戰量表：`.venv/Scripts/python.exe scripts/measure_difficulty.py --seeds 1 2 [--profile weekend] [--kinds solo team taught] [--rise on|off]`（沒有同伴／兩位同伴兩名部下／再加傳功，練到 10、15、20、30、40 級各量一次：大勢人物本人〔頭一場、打贏兩次後〕、大場面、最難的遊歷對手、最難的頭目、事件檢定的成功率；`--rise off` 是修前；只量不改）
 - 傳功量表：`.venv/Scripts/python.exe scripts/measure_chuangong.py --seeds 1 2 [--profile weekend] [--online 24] [--only on|off]`（傳功開關對照：心得攢多少花多少、本人／同伴／部下／全隊威力、決戰份量；只量不改）
 - 裝備量表：`.venv/Scripts/python.exe scripts/measure_gear.py --seeds 1 2 3 4 5 [--profile weekend --steer]`（防具開關對照：掉的氣血、內傷、療傷、穿著防具幾場、一條氣血撐幾場硬仗與硬仗之後的勝率〔防具開只算穿著防具的仗〕、修幾次、打造防具幾件與品質、防具名器幾件、淬防具幾次〔防具花含打造與淬煉〕，開頭一行照設計 4.1 照表算的對照；週末要加 `--steer`；只量不改）
 - 坐騎量表：`.venv/Scripts/python.exe scripts/measure_mounts.py --seeds 1 2 3 4 5 [--gait mix] [--season-one] [--profile weekend --steer]`（坐騎開關對照：走了幾段、路上時間與疾行的體力各省幾成、買馬、餵、落敗脫身、決戰騎兵；`--gait mix` 讓機器人一半疾行；截殺被跑掉幾次看 `sim_season_one.py`；只量不改）
