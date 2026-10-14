@@ -220,12 +220,19 @@ def standing(world: WorldState, name: str, cfg: ArenaTuning) -> list[str]:
 
 def roll_day(world: WorldState, cfg: ArenaTuning, today: int) -> bool:
     """換日（現實時間，同回體丹）：第一次看到新的一天，前 len(wages) 名、打過至少一場的各記一筆俸（[天, 名次]），本人同步時領。
-    第一次（arena_day 是 -1）只記今天、不發。季收了不發。動了 WorldState 是 True。"""
-    if world.ended or world.arena_day == today or not world.arena:  # 擂台上沒人：不記天（同步什麼都沒有時不存季）
+    第一次（arena_day 是 -1）只記今天、不發。季收了不發。動了 WorldState 是 True。
+
+    **這個日子只准往前走**（2026-10-14 線上：擂台的俸無限發放）。「今天」是每個 Game 各算各的
+    （Game._pill_day 讀 pill_now＝now＋advanced_real，而 advanced_real 只有管理者的「時間快轉」會加，
+    加完留在那個 Game 物件上直到伺服器重開）。於是快轉過的那個人認為今天是 20741、其他人是 20740，
+    舊的寫法無條件把 arena_day 設成自己的今天，兩邊輪流同步就讓它在 20740／20741 之間來回跳，
+    每跳回來一次就再記一輪俸——線上一個人累積到 144 筆（4320 銀、144 名望）。
+    往回的那一下現在直接當沒事（回 False），同一天也不再記第二筆。"""
+    if world.ended or world.arena_day >= today or not world.arena:  # 擂台上沒人：不記天（同步什麼都沒有時不存季）
         return False
     if 0 <= world.arena_day < today:
         for e in ladder(world)[:len(cfg.wages)]:
-            if e.bouts:
+            if e.bouts and not any(day == today for day, _ in e.wages):  # 同一天只記一筆（再保險一層）
                 e.wages.append([today, e.rank])
     world.arena_day = today
     return True

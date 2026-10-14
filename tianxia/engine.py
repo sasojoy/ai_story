@@ -983,7 +983,7 @@ class Game:
             if menu:
                 return [Option(id=option_id, label=label) for option_id, label in menu]
         if s.player.pending_companion:
-            dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
+            dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
@@ -1355,10 +1355,10 @@ class Game:
             companion_id = self.state.player.pending_companion
             if companion_id is None or not arg.isdecimal():
                 return None
-            offered, _ = self.state.player.last_offered_dialogue.get(companion_id, [[], []])
-            if int(arg) >= len(offered):
+            shown, _ = companion_agent.offered(self.state, companion_id)
+            if int(arg) >= len(shown):
                 return None
-            player_action = offered[int(arg)]
+            player_action = shown[int(arg)]
         elif option_id == "act:socialize":
             if roster.fortune_due(self.state, self.content) or ranks.summons_event(self.state, self.content) is not None:
                 return None  # 福緣先發；在召見的地點交友端出晉升奇遇（計畫 T5，審查 I1）——都不開口對話
