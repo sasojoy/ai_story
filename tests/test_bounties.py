@@ -569,21 +569,39 @@ def test_due_text_follows_the_season_and_says_season_end_past_the_last_day():
     assert [_due(weekend, season, week) for week in (1, 10, 11, 12)] == ["第 3 週・週一 00:00", "第 12 週・週一 00:00", "到季末", "到季末"]
 
 
+def _short(content, season, expires, done=()):
+    b = Bounty(id="b1", kind="scout", faction="guan", week=1, silver=10, deeds=2, quota=3, done_by=list(done), expires=expires)
+    return bounties.due_short(b, content, season)
+
+
 def test_the_notice_gets_a_short_due_line_that_cannot_wrap_fb196():
-    """FB-196：店面的告示寫短的（草圖「期限 第 6 週・剩 2」）——第一季只寫週次、規則關著只寫第幾天，名額寫「剩 N」，
-    到季末寫「到季末・剩 N」；完整的時刻與「名額還剩 N」（due_line）留在點開的紙上。"""
-    def short(content, season, week, done=()):
-        b = Bounty(id="b1", kind="scout", faction="guan", week=week, silver=10, deeds=2, quota=3, done_by=list(done),
-                   expires=calendar.week_start(week + content.config.bounties.auto_weeks, content, season))
-        return bounties.due_short(b, content, season)
+    """FB-196：店面的告示寫短的（草圖「期限 第 6 週・剩 2」）——第一季寫週次、規則關著只寫第幾天，名額寫「剩 N」，
+    到季末寫「到季末・剩 N」；完整的時刻與「名額還剩 N」（due_line）留在點開的紙上。自動掛的單都在第 N 週週一 00:00 到期，
+    第 N 週一開始就過了：寫最後還有效的那一週「到第 N−1 週」（PM 2026-10-14，不然玩家讀成「做到第 N 週為止」白跑一趟）。"""
+    def auto(content, season, week):
+        return calendar.week_start(week + content.config.bounties.auto_weeks, content, season)
 
     beta = real_content()
     season = _beta_season(beta)
-    assert [short(beta, season, week) for week in (1, 10, 11)] == ["期限 第3天・剩 3", "期限 第13天・剩 3", "到季末・剩 3"]
+    assert [_short(beta, season, auto(beta, season, week)) for week in (1, 10, 11)] == ["期限 第3天・剩 3", "期限 第13天・剩 3", "到季末・剩 3"]
     weekend = real_content("weekend")
     season = fresh_season(weekend)
-    assert [short(weekend, season, week) for week in (1, 10, 12)] == ["期限 第 3 週・剩 3", "期限 第 12 週・剩 3", "到季末・剩 3"]
-    assert short(weekend, season, 1, done=("甲", "乙")) == "期限 第 3 週・剩 1"
+    assert [_short(weekend, season, auto(weekend, season, week)) for week in (1, 10, 12)] == ["到第 2 週・剩 3", "到第 11 週・剩 3", "到季末・剩 3"]
+    assert _short(weekend, season, auto(weekend, season, 1), done=("甲", "乙")) == "到第 2 週・剩 1"
+
+
+def test_a_notice_due_off_the_monday_midnight_names_the_week_it_falls_in():
+    """到期不剛好在週一 00:00（管理者改過、或照實際時刻的）：寫到期那一刻所在的週「期限 第 N 週」。
+    跨到第 1 週的邊界：第 2 週週一 00:00 到期寫「到第 1 週」，第 1 週週一 00:00 不會寫出不存在的「第 0 週」。"""
+    weekend = real_content("weekend")
+    season = fresh_season(weekend)
+    week = lambda n: calendar.week_start(n, weekend, season)
+    day = calendar.DAY / calendar.cal_scale(weekend, season)  # 季曆一天的世界秒
+    assert _short(weekend, season, week(4) + 1.5 * day) == "期限 第 4 週・剩 3"  # 第 4 週週二 12:00
+    assert _short(weekend, season, week(4) + 60 / calendar.cal_scale(weekend, season)) == "期限 第 4 週・剩 3"  # 週一 00:01
+    assert _short(weekend, season, week(4) - 60 / calendar.cal_scale(weekend, season)) == "期限 第 3 週・剩 3"  # 第 3 週週日 23:59
+    assert _short(weekend, season, week(2)) == "到第 1 週・剩 3"
+    assert _short(weekend, season, week(1)) == "期限 第 1 週・剩 3"
 
 
 def test_board_lines_card_rows_and_the_take_reply_show_the_due_time_and_places_left(setup):
