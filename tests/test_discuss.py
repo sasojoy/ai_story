@@ -317,16 +317,19 @@ def test_fb245_a_lapsed_invitation_is_refused_without_the_model(pair, no_ollama,
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛")) is None
 
 
-@pytest.mark.parametrize("why", ["same", "their_side"])
+@pytest.mark.parametrize("why", ["same", "same_insight", "their_side"])
 def test_fb245_a_pick_that_cannot_fit_is_refused_without_the_model(content, world, no_ollama, monkeypatch, why):
-    """你挑的那一樣合不成（跟他出的是同一樣、他那邊合不成）：一樣不開單、不叫模型，回原本那一句，邀請留著換一樣再答。"""
+    """你挑的那一樣合不成（跟他出的是同一樣、他那邊合不成）：一樣不開單、不叫模型，回原本那一句，邀請留著換一樣再答。
+    同一個意境兩邊各出一個：一個人合併同一個意境是可以的（fusion.merge_problem 不擋），以前會先開單取名才回「同一樣」。"""
     install_season_one(content)
     content.config.auto_open_first_season = True
     _make(content, world, "甲", insights=("feng",))
-    _make(content, world, "乙", insights=("huo",))  # 兩個人都有【粗淺拳腳】
-    _invite(content, world)  # 甲出【粗淺拳腳】
+    _make(content, world, "乙", insights=("huo", "feng"))  # 兩個人都有【粗淺拳腳】、「風」
+    _invite(content, world, "insight:feng" if why == "same_insight" else "art:basic_fist")
     if why == "same":
         item, line = "art:basic_fist", engine.DISCUSS_SAME
+    elif why == "same_insight":
+        item, line = "insight:feng", engine.DISCUSS_SAME
     else:
         _change(world, "甲", lambda p: p.stats.__setitem__("xinde", 0))
         item, line = "insight:huo", "甲那邊合不成：他的心得不夠。"
