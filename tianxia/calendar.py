@@ -45,8 +45,9 @@ PROFILE_MISMATCH = "⚠ 這一季開季時第一季規則是開著的，這個�
 
 def profile_warning(content: Content, season: WorldState | None) -> str | None:
     """啟動時設定對不上的那一行（FB-157；server.main、run_bots.main 印）：這一季蓋了第一季的章、這個程式卻沒開第一季規則（換版時
-    其中一個程式沒帶 TIANXIA_PROFILE=weekend）。反過來（開關剛打開、還在跑的季開季時是關的）是正常的換季過渡，不印。沒有季是 None。"""
-    if season is None or not season.season_one or content.config.season_one:
+    其中一個程式沒帶 TIANXIA_PROFILE=weekend）。反過來（開關剛打開、還在跑的季開季時是關的）是正常的換季過渡，不印。沒有季是 None。
+    季收了（休季）也不印：週末的季收了、主機故意不帶設定重開好開 14 天的下一季，這時印「要帶同一份設定」會叫人帶錯（審查）。"""
+    if season is None or season.ended or not season.season_one or content.config.season_one:
         return None
     return PROFILE_MISMATCH
 

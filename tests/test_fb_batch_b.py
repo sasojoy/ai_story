@@ -151,6 +151,8 @@ def test_fb157_a_program_without_the_profile_warns_at_start():
     assert calendar.profile_warning(weekend, stamped) is None  # 設定對得上
     assert calendar.profile_warning(weekend, fresh_season(plain)) is None  # 開關剛打開、還在跑的舊季照舊用 beta 的規則：正常
     assert calendar.profile_warning(plain, None) is None  # 還沒有季
+    stamped.ended = True  # 審查：週末的季收了、主機故意不帶設定重開，好開 14 天的下一季——不是設定帶錯，不印
+    assert calendar.profile_warning(plain, stamped) is None
 
 
 # ── FB-167：「以前不會提前收季」那一句的斷行與時刻寫法 → 時刻寫成跟狀態列一樣的「第 11 天」、整塊不斷行 ──
@@ -182,6 +184,7 @@ def test_fb170_act_three_reads_true_however_it_was_reached(real):
     ways = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_2").advance_when.any_of
     assert any(c.world_flags_all == ["bocai_defeated"] for c in ways)  # 打贏波才也會進第 3 幕
     assert "波才" not in act.text  # 不寫他還在不在：打贏他、聲勢到 70、第 10 天，三條路進來的都讀得通
+    assert "最後" not in act.text  # 審查：14 天的季打贏波才（kou_boss）可能第 2、3 天就進第 3 幕，不寫還剩多少時間
 
 
 # ── FB-174：「你未及趕到」只寫給整場都沒自己出手的人；FB-175：兩份奪璽戰報的時刻照單挑收場那一刻 ──

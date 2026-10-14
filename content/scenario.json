@@ -52,7 +52,7 @@
       {"id": "huangjin_2", "title": "風聲鶴唳", "text": "黃巾勢大，官道一帶風聲鶴唳，商旅人人自危。",
        "goal": "別讓聲勢到 50（官道會被切斷）；名望達 3 以上，可以去黃巾別部營寨挑戰波才。", "places": ["huangjin_camp"],
        "advance_when": {"any_of": [{"world_flags_all": ["bocai_defeated"]}, {"trend_min": {"huangjin": 70}}, {"day_min": 10}]}},
-      {"id": "huangjin_3", "title": "潁川決戰", "text": "決戰將至：黃巾各部正往潁川聚攏，守不守得住潁川，就看最後這幾天。",
+      {"id": "huangjin_3", "title": "潁川決戰", "text": "決戰將至：黃巾各部正往潁川聚攏，守不守得住潁川，就看這一場決戰。",
        "goal": "守住潁川直到季末（聲勢不到 80），或把聲勢壓到 10 以下，徹底平定黃巾。", "places": ["yingchuan"]}
     ]},
     {"id": "yuxi_line", "name": "傳國玉璽", "intro": "南華老仙留下的符文線索現世，董卓分兵尋訪，天下的局勢從此改寫。",
