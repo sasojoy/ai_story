@@ -2087,7 +2087,8 @@
   }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
   // 等回應的時候（論武答應時首創要等模型取名，FB-117）：照送出指令的回饋那一套（busy），論武答應另有一句等候的話（WAIT_LINES.discuss）。
-  // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一聲（江湖紀錄裡也有）
+  // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一句短的（伺服器給的 brief：論武合成了是
+  // 「論武有結果了：合出【某某】。詳見江湖紀錄。」，其餘是回話的第一句；完整的在江湖紀錄，FB-242）
   async function peerAct(i, sure = false, amount = 0, choice = "") {
     const P = S.peer;
     const b = P && P.card && P.card.actions[i];
@@ -2099,7 +2100,7 @@
       const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice });
       if (r.main) setMain(r.main);
       if (S.peer && S.peer.name === P.name) S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
-      else if (r.message) toast(r.message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+      else if (r.brief || r.message) toast(r.brief || r.message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
       render();
     }, line);
   }

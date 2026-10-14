@@ -318,6 +318,8 @@ class Game:
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
+        self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
@@ -6743,8 +6745,8 @@ class Game:
         art_id, insight_ids, other_art, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art, partner=partner)
 
-    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed) -> tuple[bool, list[str]]:
-        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合成了沒有, 訊息）。"""
+    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed):
+        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合出來的那一門或那個意境, 訊息）；沒合成是 None。"""
         art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name)
         client, rng = self._quick_client(), self.rng
         if other_art is not None:
@@ -6753,7 +6755,7 @@ class Game:
             thing, msgs = fusion.fuse(self.state, self.content, self.world, client, art_id, insight_ids[0], proposed, rng, partner)
         else:
             thing, msgs = fusion.merge(self.state, self.content, self.world, client, *insight_ids, proposed, partner)
-        return thing is not None, msgs
+        return thing, msgs
 
     def discuss_problem(self, mine: str, theirs: str, other_name: str) -> str | None:
         """這一邊合不合得成（拒絕的話；fusion 的 *_problem，對方那一樣當作借來的、價錢是一半）。只讀；假人挑要出哪一樣也問它。"""
@@ -6813,9 +6815,10 @@ class Game:
             self._tell_sender(inv, other, self.discuss_invite_problem(inv, other, for_sender=True))
             return [problem]
         made, msgs = self._discuss_forge(item, theirs, them.name, proposed)
-        if not made:
+        if made is None:
             self._tell_sender(inv, other)
             return msgs
+        self.peer_brief = social.DISCUSS_BRIEF.format(thing=social.thing_label(made))
         _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""))  # 配方剛登記：他照查表合出同一門，不取名
         self._pair_tick(self.state.world.discuss_tally, them.name)
         self._save_season()
@@ -8635,6 +8638,7 @@ class Game:
     def peer_act(self, name: str, action: str, params: dict | None = None) -> list[str]:
         """按了玩家卡上的一顆鈕：對方還在這裡、這一種互動有登記，才交給它做（social.CardAction.run），做完存回對方的存檔。
         按的人的江湖紀錄由各個互動自己寫（拒絕的話只回給按的人，不記）。"""
+        self.peer_brief = None
         other = self._peer(name)
         if other is None:
             return self._log([social.GONE])

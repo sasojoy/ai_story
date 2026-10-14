@@ -18,6 +18,7 @@ import webharness
 from tianxia import discuss, engine, social
 from tianxia.characters import CharacterStore
 
+NOW = 1000.0  # 同 test_discuss
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 # test_prologue_web 的假瀏覽器，多交出這一份要測的名字
@@ -329,10 +330,11 @@ def test_a_reply_after_the_card_was_closed_does_not_reopen_it(twins):
       H.S.peer = {{ name: "甲", card: {json.dumps(card, ensure_ascii=False)} }};
       const p = H.peerAct({i});
       H.S.peer = {{ name: "丙", card: null, gone: "x" }};  // 等的時候關了卡、點開了丙
-      release({{ card: {json.dumps(card, ensure_ascii=False)}, gone: "", main: null, message: "<p>你以【粗淺拳腳】融入「火」</p>" }});
+      release({{ card: {json.dumps(card, ensure_ascii=False)}, gone: "", main: null, message: "<p>你以【粗淺拳腳】融入「火」……很長的一段</p>",
+                 brief: "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。" }});
       return p.then(() => ({{ peer: H.S.peer.name, toast: T.els.toast.textContent }}));"""
     out = run(_main(content, world, "乙"), script)
-    assert out == {"peer": "丙", "toast": "你以【粗淺拳腳】融入「火」"}
+    assert out == {"peer": "丙", "toast": "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。"}  # 只講一句（FB-242）
 
 
 # ── 第五件：玩家卡跟著輪詢更新 ──
@@ -614,3 +616,38 @@ def test_both_sides_of_a_spar_get_the_result_line(pair):
     for name, rival in (("甲", "乙"), ("乙", "甲")):
         head = _load(world, name).journal[0]
         assert head.title == f"切磋・{rival}" and head.lines and head.lines[0].startswith("⚔") and rival in head.lines[0]
+
+
+# ── FB-242：論武等候中換了卡，提示泡泡只講一句 ──
+
+
+def test_fb242_the_server_gives_a_brief_line_for_the_toast(pair, monkeypatch):
+    """/api/peer/act 多回 brief：論武合成了是「論武有結果了：合出【某某】。詳見江湖紀錄。」，其餘是回話的第一句。"""
+    from fastapi.testclient import TestClient
+
+    content, world = pair
+    _invite(content, world)
+    state = CharacterStore(world.db).load("乙")
+    game = engine.Game(content, state, __import__("random").Random(0), world)
+    game.client = None
+    game.sync(NOW)
+    # 只驗這個端點怎麼組回應：拿鎖、同步、存檔那一套（act、look）換成直接做，不碰伺服器的資料庫
+    monkeypatch.setattr(server, "_game", lambda request: game)
+    monkeypatch.setattr(server, "act", lambda g, action, **k: action(g))
+    monkeypatch.setattr(server, "look", lambda g, view: view(g) if view is not server.main_view else None)
+    monkeypatch.setattr(server, "prepare_peer", lambda *a, **k: ("烈焰拳", "拳勢裹著火氣。"))
+    monkeypatch.setattr(server, "_tell_tabs", lambda g: None)
+    client = TestClient(server.app)
+    r = client.post("/api/peer/act", json={"name": "甲", "action": "discuss", "arg": "yes:insight:huo"}).json()
+    assert r["brief"] == "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。" and len(r["message"]) > len(r["brief"])
+    r = client.post("/api/peer/act", json={"name": "甲", "action": "greet", "arg": "bow"}).json()
+    assert r["brief"] == "你向甲抱拳見禮。"
+
+
+def test_fb242_brief_is_the_first_sentence_cut_short():
+    assert social.brief(["甲身上已經沒有他要出的那一樣了。後面還有。", "第二則"]) == "甲身上已經沒有他要出的那一樣了。"
+    assert social.brief(["一" * 60]) == "一" * social.BRIEF_MAX + "……"
+    assert social.brief([]) == "" and social.brief(None) == ""
+    from tianxia.martial_arts import Insight
+
+    assert social.thing_label(Insight(id="x", name="風火境", attribute="快")) == "「風火境」"

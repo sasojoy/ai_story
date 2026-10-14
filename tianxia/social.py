@@ -26,6 +26,23 @@ if TYPE_CHECKING:
     from .models import Content
 
 GONE = "對方已經不在這裡了。"  # 對方離開了、下線太久、或根本沒有這個人：一律這一句（不讓人試出名號在不在）
+# 玩家卡動作回來時，網頁的卡已經關了或換了人（等論武取名的時候）：提示泡泡只講一句短的，完整的在江湖紀錄（FB-242；待 joy 潤）
+DISCUSS_BRIEF = "論武有結果了：合出{thing}。詳見江湖紀錄。"
+BRIEF_MAX = 40  # 沒有專門那一句時，泡泡寫回話的第一句，最多幾個字
+
+
+def thing_label(thing) -> str:
+    """合出來的那一樣寫給人看：武學【】、意境「」（意境沒有 kind 這一欄）。"""
+    return f"【{thing.name}】" if hasattr(thing, "kind") else f"「{thing.name}」"
+
+
+def brief(msgs: list[str] | None) -> str:
+    """一串回話的第一句（第一則的第一行、到第一個句號或驚嘆號為止），太長截到 BRIEF_MAX 字加「……」：提示泡泡用（FB-242）。"""
+    first = (msgs or [""])[0].strip().split("\n")[0]
+    for mark in ("。", "！"):
+        if mark in first:
+            first = first[: first.index(mark) + 1]
+    return first if len(first) <= BRIEF_MAX else first[:BRIEF_MAX] + "……"
 
 
 @dataclass
