@@ -30,6 +30,14 @@ class Member(BaseModel):
     cap_scale: float = Field(default=1.0, exclude=True)  # 本人氣血上限的倍數（螭首，玉璽一要 PM 定的第 7 條）：重抄抄本時設，不進存檔
 
 
+class FollowerDrill(BaseModel):
+    """傳功給一名部下的（Config.chuangong）：cheng 是在照等級長的那條線之上多練的成數（team.follower_level 加上去、最多十成），
+    arm 是傳給他的臂力點數（加在模板上，最多 stat_cap）。"""
+
+    cheng: int = 0
+    arm: int = 0
+
+
 MAX_TEAM_COMPANIONS = 4  # 設計文件四.4：每位玩家最多帶 4 個夥伴，只有一支隊伍，沒有多隊派遣
 
 Personality = Literal["積極", "普通", "懶散"]
@@ -464,6 +472,8 @@ class PlayerState(BaseModel):
     rank: int = 0  # 晉升過的階；0 是還沒晉升過（有陣營時算第 1 階，見 ranks.rank_of）
     summons: Summons | None = None  # 還沒去的召見
     followers: list[str] = Field(default_factory=list)  # 部下（followers.json 的模板 id）
+    # 傳功給每名部下的（Config.chuangong）：跟 followers 同一個位置一一對應（短了當沒傳過，team.drill_of）；叛投時跟部下一起清掉
+    follower_drill: list[FollowerDrill] = Field(default_factory=list)
     runic_pieces: int = 0  # 符文殘片（伏筆文件第七節；基準量，黃巾第 4 階的密令給的；玉璽大勢任務讀它）；角色每季重來
     qualified: bool = False  # 第 4 階的資格（候缺，正式版丙一）：rank 停在 3、沒在任時頭銜寫「…（…候缺）」；上任與席次見 seats.py（正式版丁）
     rank_hinted: list[int] = Field(default_factory=list)  # 說過「只缺一個機會」那一句的階（每階一次；跟新手引導的 hints_seen 無關）

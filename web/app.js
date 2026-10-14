@@ -2372,8 +2372,16 @@
       ${mates && x.person ? `<div class="card">${tenCells(x.person_card)}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
-          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}</div>` : ""}
+          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
+        ${lessonsHtml(x.lessons)}</div>` : ""}
       <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>`;
+  }
+
+  // 傳功門下（Config.chuangong）：人物卡底下一排鈕，鈕上寫要練什麼與心得，底下一行寫效果；按不下去的灰掉、原因寫在效果那一行
+  function lessonsHtml(rows) {
+    if (!rows || !rows.length) return "";
+    return `<div class="label">傳功</div><div class="lessons">${rows.map((r) =>
+      `<button class="btn small" data-act="teach" data-what="${esc(r.what)}" ${r.problem ? "disabled" : ""}${r.problem ? ` title="${esc(r.problem)}"` : ""}>${esc(r.label)}<small>${esc(r.problem || r.effect)}</small></button>`).join("")}</div>`;
   }
 
   // ── 煉製 ──
@@ -4060,6 +4068,7 @@
       // 不捲上去玩家看不到。比的是步驟，不特別認序章，所以以後任何被修練做完的引導步驟都一樣
       const guideMoved = guideKey(r.main && r.main.guide) !== step;
       const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
+      if (op === "chuangong") return; // 傳功常常連按好幾下：留在人物卡那裡，不捲回頂上
       if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
@@ -4373,7 +4382,8 @@
           await loadMenxia();
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
-        case "feed": await mx("feed"); break; // 身上那匹餵一個一階素材（裝備四欄 5.4）
+        case "feed": await mx("feed"); break;
+        case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
@@ -4763,7 +4773,7 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "heal", "gear"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
+    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "lessons", "heal", "gear"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 

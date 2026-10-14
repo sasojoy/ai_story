@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
@@ -7280,6 +7280,23 @@ class Game:
         if companion_id.startswith(team.FOLLOWER_KEY):
             return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
+
+    @_not_while_preparing
+    def chuangong(self, key: str, what: str) -> list[str]:
+        """傳功門下（Config.chuangong）：用心得替名冊上的同伴或部下練武學、加屬性（chuangong.teach）。
+        傳成了寫進江湖紀錄（併進「修練」那一則）；傳不了只回那一句話，不寫紀錄。"""
+        xinde = self._xinde()
+        msgs = self._log(chuangong.teach(self.state, self.content, self.world, str(key), str(what)))
+        if self._xinde() == xinde:  # 沒花到心得：被拒絕了
+            return msgs
+        return msgs + self._menxia_entry(msgs[0], xinde)
+
+    def chuangong_lessons(self, key: str | None) -> list[dict]:
+        """修練頁人物卡底下的傳功鈕（server.menxia_view 的 lessons）：每一項的 what、鈕上的字、效果、按不下去的原因。"""
+        return [
+            {"what": row.what, "label": row.label, "effect": row.effect, "problem": row.problem}
+            for row in chuangong.lessons(self.state, self.content, self.world, key)
+        ]
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
 

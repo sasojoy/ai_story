@@ -1816,6 +1816,27 @@ class FollowerTuning(_Strict):
     battle_per: float = Field(default=0.05, ge=0)
 
 
+class ChuangongTuning(_Strict):
+    """傳功門下（企劃者 2026-10-14「心得大量溢出，需要想個可以大量消耗的地方」，在決策卡選「傳功門下」）：用心得替同伴、部下
+    練武學、加屬性，隊伍變強，本人的威力一點都不動。價錢越後越貴：心得多的人有地方一直花，少的人先花在自己身上划算。
+    量到的（週末設定、一直在線打仗的機器人，2026-10-14）：一季攢 1.2 萬～1.8 萬心得，練滿自己兩門只要 180，其餘全部堆著。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時修練頁不畫傳功、按了也只回一句
+    # 同伴的武學、內功從第 N 成練到 N+1 成要 mate_art_xinde × N 心得（練滿一門 45 倍＝900）。本人自己的是 2 × N（練滿 90）：
+    # 同伴的本命武學都是絕學（第一成 50、第十成 120，本人開局的基礎武學是下品 8～24），練一成長的威力是本人的好幾倍，所以貴十倍
+    mate_art_xinde: int = Field(default=20, ge=1)
+    # 同伴的臂力、身法、根骨：傳給他的第 k 點要 mate_stat_xinde × k 心得（k 算他身上三項合計已經傳了幾點，不分哪一項）。
+    # 三項各傳滿 mate_stat_max 點（45 點）合計 15 ×（1＋…＋45）＝15525——一個同伴就吃得下最拚的人大半季的心得
+    mate_stat_xinde: int = Field(default=15, ge=1)
+    # 每一項最多傳幾點。照 stat_cap（15）：同伴自己每級會長屬性、高等時本來就超過 15，上限只能算在「傳了幾點」，不然高等的同伴傳不進去
+    mate_stat_max: int = Field(default=15, ge=0)
+    # 部下的武學：在照等級長的那條線（team.follower_level）之上再多練一成，第 k 成要 follower_cheng_xinde × k；線＋多練的最多十成。
+    # 線在第 30 級就到十成，所以多練的成數只在前半季有用（之後線追上來、多練的那幾成就沒有空間了）——便宜一點
+    follower_cheng_xinde: int = Field(default=25, ge=1)
+    # 部下的臂力：第 k 點要 follower_str_xinde × k，臂力最高 stat_cap。模板 4～7，一名最多傳 8～11 點（約 1300～2600）
+    follower_str_xinde: int = Field(default=20, ge=1)
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1880,6 +1901,7 @@ class Config(_Strict):
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
+    chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）

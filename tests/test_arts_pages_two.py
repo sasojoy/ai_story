@@ -870,3 +870,24 @@ def test_the_melt_question_is_the_servers_sentence_and_an_old_server_gets_the_ol
         consts=["meltAskText"],
     )
     assert out == ["SERVER", "把【旋風腿】熔成心得？熔掉就沒了。"]
+
+
+@needs_node
+def test_the_person_card_has_chuangong_buttons_with_price_effect_and_reason():
+    """傳功門下：名冊點一位同伴，人物卡底下一排傳功鈕；按不下去的灰掉、原因寫在第二行（Config.chuangong）。"""
+    lessons = [
+        {"what": "wugong", "label": "練武學・20 心得", "effect": "【掌法】第1成→第2成，威力 +7.8", "problem": None},
+        {"what": "neigong", "label": "練內功", "effect": "", "problem": "他還沒有內功，沒東西可練。"},
+    ]
+    html = run(
+        "return H.pagePractice();",
+        S={"menxia": _menxia(roster=[{"label": "本人", "key": "player"}, {"label": "同伴", "key": "mate"}], person="mate",
+                             person_card="<p>同伴卡</p>", lessons=lessons), "main": {"status": {"injury": 0}}},
+        fns=["pagePractice", "lessonsHtml"], stubs=PRACTICE_STUBS,
+    )
+    assert 'data-act="teach" data-what="wugong" >練武學・20 心得<small>【掌法】第1成→第2成，威力 +7.8</small>' in html
+    assert 'data-what="neigong" disabled title="他還沒有內功，沒東西可練。">練內功<small>他還沒有內功，沒東西可練。</small>' in html
+    none = run("return H.pagePractice();", S={"menxia": _menxia(roster=[{"label": "本人", "key": "player"}, {"label": "同伴", "key": "mate"}],
+               person="player", person_card="<p>本人</p>", lessons=[]), "main": {"status": {"injury": 0}}},
+               fns=["pagePractice", "lessonsHtml"], stubs=PRACTICE_STUBS)
+    assert "傳功" not in none
