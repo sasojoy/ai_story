@@ -185,7 +185,7 @@ FIGHT_GONE_LINES = (FIGHT_LEFT, FIGHT_CHANGED)
 
 
 class Refused(list):
-    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）。沒做事、沒寫江湖紀錄，
+    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）、馬市的鈕已經灰掉（FB-195）。沒做事、沒寫江湖紀錄，
     所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
     不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
 
@@ -1478,6 +1478,13 @@ class Game:
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
             return Refused(self._log([bounties.stale_line(self.state, self.content, self.world, option_id.partition(":")[2])]))
+        if (option is None or not option.enabled) and option_id.startswith("market:"):
+            # FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：同懸賞榜 FB-162，回為什麼不成的那一句
+            # （Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄
+            problem = mounts.stale_problem(self.state, self.content, option_id.partition(":")[2])
+            if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
+                self._shop_after(problem, "refused")
+            return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）

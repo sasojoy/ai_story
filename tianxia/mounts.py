@@ -48,6 +48,7 @@ BOUGHT = "你花 {price} 兩買下一匹【{name}】。"  # 待 joy 潤
 ENTERED = "你走進馬市，馬嘶聲此起彼落。"  # 待 joy 潤：打開馬市（Game._act）
 LEAVE = "離開馬市"  # 待 joy 潤：馬市選單最後那一顆
 LEFT = "你離開了馬市。"  # 待 joy 潤
+STALE = "馬市的情形變了，這一下沒有作用；照現在的畫面再選一次。"  # 待 joy 潤（FB-195：兩個分頁搶，同懸賞榜 FB-162 的 bounties.STALE）
 TRAVEL_BLOCKED = "馬市還開著，先離開才能安排前往"  # 待 joy 潤：atlas.travel_block（同鐵匠鋪那一句）
 BUY = "market:buy"
 FEED = "market:feed"
@@ -303,6 +304,20 @@ def buy(state: GameState, content: Content) -> list[str]:
     shop = shop_item(state, content)
     item = new_mount(state, name=shop.name, tier=shop.tier, quality=shop.quality)
     return [BOUGHT.format(price=price, name=name_of(item)), equipment.store(state, item)]
+
+
+def stale_problem(state: GameState, content: Content, arg: str) -> str:
+    """馬市的選項按下去時已經不在選單上、或灰掉了（兩個分頁搶，FB-195）：這一下為什麼不成。arg 是 market: 後面那一段。
+    買照 buy_problem、餵照 feed_problem、換上照裝備庫裡還有沒有那一匹；都沒有更具體的原因就是 STALE。只讀。"""
+    verb, _, rest = arg.partition(":")
+    problem = None
+    if verb == "buy":
+        problem = buy_problem(state, content)
+    elif verb == "feed":
+        problem = feed_problem(state, content)
+    elif verb == "wield" and not any(m.id == rest for m in equipment.in_slot(state.player, "mount")):
+        problem = equipment.WIELD_MISSING.rstrip("。")
+    return problem or STALE
 
 
 def wield(state: GameState, content: Content, item_id: str) -> list[str]:

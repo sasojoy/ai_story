@@ -210,9 +210,24 @@ def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str,
     return {"rows": rows, "used": gear["used"], "cap": gear["cap"]}
 
 
+ATTRIBUTE_ROWS = ("剛", "柔", "快", "慢")  # 打造頁素材格一屬性一排的順序（企劃者 2026-10-14 微調）；其餘屬性（陰陽虛實）排在後面
+
+
+def attribute_rank(attribute: str) -> tuple[int, str]:
+    """素材格排第幾排：剛、柔、快、慢，其餘照字排在後面。"""
+    return (ATTRIBUTE_ROWS.index(attribute), "") if attribute in ATTRIBUTE_ROWS else (len(ATTRIBUTE_ROWS), attribute)
+
+
+def _held_rows(state: GameState, content: Content) -> list[tuple[str, int]]:
+    """店面素材格的順序（企劃者 2026-10-14 微調）：背包裡打得了的素材（smithing.held）照屬性一排一排（剛柔快慢，其餘在後），每排一階到三階。
+    一步一步的選單照舊用 smithing.held（高階先）。"""
+    mats = content.materials
+    return sorted(smithing.held(state, content), key=lambda pair: (attribute_rank(mats[pair[0]].attribute), mats[pair[0]].tier, pair[0]))
+
+
 def _forge(state: GameState, content: Content, world: WorldStateStore, slot: str, art) -> dict:
     """打造那一頁的骨架（2.2）：兵器頁一排種類（配得上身上武學的那一種標「配」、預設點著它，沒有就第一個），防具頁換成一行說明；
-    素材格照 smithing.held 的順序。"""
+    素材格照屬性再照階排（_held_rows）。"""
     if slot == "armor":
         kinds, kind, note = [], smithing.ARMOR_KIND, ARMOR_FORGE_NOTE
     else:
@@ -223,7 +238,7 @@ def _forge(state: GameState, content: Content, world: WorldStateStore, slot: str
     materials = [
         {"id": mid, "name": mats[mid].name, "attribute": mats[mid].attribute, "tier": mats[mid].tier,
          "tier_word": equipment.TIER_WORDS[mats[mid].tier], "count": n}
-        for mid, n in smithing.held(state, content)
+        for mid, n in _held_rows(state, content)
     ]
     return {"kinds": kinds, "kind": kind, "note": note, "materials": materials, "line": smith_line(state, content, world, kind)}
 
@@ -241,7 +256,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     同一種只剩一個的拿掉）。只讀。"""
     if kind not in WEAPON_KINDS and kind != smithing.ARMOR_KIND:
         return {"kind": kind, "main": None, "aux": None, "rack_full": None, "cells": [], "ready": False}
-    held = smithing.held(state, content)
+    held = _held_rows(state, content)
     counts = dict(held)
     main = main if main in counts else None
     aux = aux if main is not None and aux in counts and (aux != main or counts[aux] >= 2) else None
@@ -344,7 +359,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
 NO_HORSE = "還沒有馬"  # 待 joy 潤：沒有馬時「你騎的」那一間
 STALL_WHO = {"worn": "你騎的", "sale": "待售", "rack": "裝備庫"}  # 待 joy 潤：馬廄上那一行
 ABILITY_NAMES = (("save", "省體力"), ("speed", "路上快"), ("cavalry", "決戰騎兵"), ("escape", "落敗脫身"))  # 同修練頁坐騎那一列（待 joy 潤）
-FASTER, SLOWER, SAME = "比你騎的快", "比你騎的慢", "跟你騎的一樣快"  # 待 joy 潤：照 mounts.better_mount 的比法（吃飽的腳力）
+FASTER, SLOWER, SAME = "比你騎的快", "比你騎的慢", "跟你騎的一樣快"  # 待 joy 潤：照卡上「路上快」那一條比（含飽足，FB-194）
 HUNGRY_NOTE = "沒吃飽，四項本事都跟著打了折"  # 待 joy 潤：你騎的那匹飽足不到 100 時，飽足長條底下
 BUY_TEXT = "買下 {price} 兩"  # 待 joy 潤
 FEED_TEXT, WIELD_TEXT = "餵", "換上"  # 待 joy 潤
@@ -361,6 +376,11 @@ def _bars(content: Content, item: Equipment) -> list[dict]:
     return [{"key": key, "label": label, "value": mounts.half_up(got[key] * 100), "text": mounts.pct(got[key])} for key, label in ABILITY_NAMES]
 
 
+def _speed_shown(content: Content, item: Equipment) -> int:
+    """卡上「路上快」那一條寫的數（整數百分比，含飽足）：「比你騎的快／慢」照它比（FB-194）。"""
+    return mounts.half_up(mounts.abilities(content, item)["speed"] * 100)
+
+
 def _stall(content: Content, item: Equipment, role: str, sub: str, action: dict) -> dict:
     return {
         "id": item.id, "role": role, "who": STALL_WHO[role], "empty": False, "name": mounts.name_of(item), "grade": mounts.grade(item),
@@ -372,7 +392,8 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
     """馬市的店面（第三節）：一排馬廄——你騎的（沒有馬是一間空的）、馬販待售的那匹（mounts.shop_item）、裝備庫裡的馬一匹一間。
     每一間：名字、階品、四項本事的長條；你騎的那匹多飽足長條。卡上那一顆照現在的選項 id：你騎的「餵」（market:feed，做不了照
     mounts.feed_problem）、待售的「買下」（market:buy，mounts.buy_problem）、裝備庫裡的「換上」（market:wield:<id>，選單本來就每一匹
-    各列一顆）與「比你騎的快／慢」。focus：進門預設點著的那一間（你騎的，沒有馬就待售的）。world 沒用到（三間店同一個呼叫法）。"""
+    各列一顆）與「比你騎的快／慢」（照卡上「路上快」那一條的數字比：乘了飽足、畫面上的整數百分比，卡上的數字與那一句對得上，FB-194；
+    機器人換馬照舊比吃飽的腳力 mounts.better_mount）。focus：進門預設點著的那一間（你騎的，沒有馬就待售的）。world 沒用到（三間店同一個呼叫法）。"""
     p = state.player
     stalls: list[dict] = []
     if p.mount is not None:
@@ -390,13 +411,13 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
     stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
         "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
     }))
-    ridden = mounts.fresh_power(content, p.mount) if p.mount is not None else None
+    ridden = _speed_shown(content, p.mount) if p.mount is not None else None
     for item in equipment.in_slot(p, "mount"):
         stall = _stall(content, item, "rack", mounts.grade(item),
                        {"id": f"{mounts.WIELD}{item.id}", "label": WIELD_TEXT, "use": "", "enabled": True, "why": None})
         if ridden is not None:
-            mine = mounts.fresh_power(content, item)
-            stall["compare"] = FASTER if mine > ridden + 1e-9 else SLOWER if mine < ridden - 1e-9 else SAME
+            mine = _speed_shown(content, item)
+            stall["compare"] = FASTER if mine > ridden else SLOWER if mine < ridden else SAME
         stalls.append(stall)
     return {
         "shop": "market",

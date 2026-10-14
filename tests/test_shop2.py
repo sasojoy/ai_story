@@ -198,7 +198,7 @@ def test_no_horse_has_an_empty_stall_and_focuses_the_sale(content, world):
 def test_the_ridden_horse_feeds_and_the_rack_compares(content, world):
     ride = _horse(edge=40)
     game = _market(content, world, horse=ride)
-    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "上品"), _horse("騎:3", "白蹄駒", 3, "下品")]
+    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "下品"), _horse("騎:3", "白蹄駒", 3, "下品")]  # FB-194 之後照卡上的路上快（含飽足）比
     view = game.shop_view()
     worn, _sale, slow, fast = view["stalls"]
     assert worn["id"] == "騎:1" and view["focus"] == "騎:1"

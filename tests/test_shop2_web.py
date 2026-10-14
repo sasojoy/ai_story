@@ -33,7 +33,7 @@ def _click(dataset: str) -> str:
 @pytest.fixture
 def market(content, world):
     game = _market(content, world, horse=_horse(edge=40))
-    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "上品")]
+    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "下品")]  # 路上快 30%，比餓了的青驄駒（34%）慢（FB-194 照卡上的數比）
     return server.main_view(game)
 
 
@@ -186,7 +186,7 @@ def test_a_hand_in_stamps_the_note_done(board):
       H.render(); const was = H.S.main.shop; H.setMain(H.S.next);
       H.boardHanded("bounty:give:%s:兵:1", was);
       return { stamp: H.S.boardStamp, html: T.els.app.innerHTML };""" % arms, S={"next": after})
-    assert out["stamp"]["id"] == arms and "交差" in out["html"]
+    assert out["stamp"]["id"] == arms and '<i class="stamp">交差</i>' in out["html"]  # 2026-10-14 微調：蓋在那張告示上
 
 
 def test_a_refused_hand_in_does_not_stamp(board):
@@ -204,7 +204,7 @@ def test_the_stamp_and_notes_respect_reduced_motion():
     from pathlib import Path
 
     css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
-    assert "@media (prefers-reduced-motion: reduce) { .shop-board .board-stamp { animation: none; } }" in css
+    assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css  # 2026-10-14 微調
 
 
 # ── Task 7：FB-191 ──
@@ -285,7 +285,7 @@ def test_the_market_and_board_css_stays_inside_its_shop():
     """終審 I1：懸賞榜的 .board 規則沒限定在店裡，撞到江湖頁「大事」那一顆（.peek-chip.board）與它的面板，兩個都被排成兩欄。
     馬市、懸賞榜那兩段的每一條規則都要掛在 .shop-layer／.shop-market／.shop-board 底下。"""
     css = _css()
-    block = css[css.index("/* 馬市（第三節）"):css.index("@keyframes stampfade")]
+    block = css[css.index("/* 馬市（第三節）"):css.index("@keyframes notedone")]
     loose = []
     for line in block.splitlines():
         text = line.strip()
@@ -301,10 +301,8 @@ def test_the_market_and_board_css_stays_inside_its_shop():
 def test_the_board_paper_scrolls_when_the_hand_in_list_is_long():
     """終審 I2：交出的清單很長時，放大的那一張紙比畫面高；原本置中、不能捲，「收起」掉到畫面外、出店被蓋住，只能交掉一件才出得來。"""
     css = _css()
-    zoom = _rule(css, ".shop-board .board-zoom")
-    assert "overflow-y: auto" in zoom and "justify-content: flex-start" in zoom
-    paper = _rule(css, ".shop-board .board-zoom .paper")
-    assert "margin: auto 0" in paper and "flex-shrink: 0" in paper
+    sheet = _rule(css, ".shop-board .board-sheet")  # 2026-10-14 微調之後紙貼在畫面下緣（.board-sheet），太長自己捲
+    assert "overflow-y: auto" in sheet and "max-height:" in sheet
 
 
 def test_the_sign_bar_stays_above_the_paper():
@@ -312,4 +310,4 @@ def test_the_sign_bar_stays_above_the_paper():
     css = _css()
     bar = _rule(css, ".shop-board .shop-bar")
     assert "position: relative" in bar and "z-index: 3" in bar
-    assert "z-index: 2" in _rule(css, ".reveal-layer")
+    assert "z-index: 2" in _rule(css, ".shop-board .board-sheet")  # 2026-10-14 微調之後紙是貼在下緣的 .board-sheet（終審 M5）

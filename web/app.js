@@ -83,7 +83,7 @@
     shopMore: false, // 裝備庫頁按了「再列 N 件」
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
-    boardStamp: null, // 剛交差的那一張：{ id, title }，蓋「交差」朱印、淡出之後清掉（boardHanded）
+    boardStamp: null, // 剛交差的那一張：{ id, note, at }（交出之前那一份告示與它排第幾），照原本的位置蓋「交差」、淡出之後清掉（boardHanded）
     divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
@@ -2558,13 +2558,22 @@
     const held = shop.held;
     const slots = held.rows.map((r) => `<button class="slot" data-act="board-zoom" data-id="${esc(r.id)}"><b>${esc(r.title)}</b><small>${esc(r.due)}</small></button>`).join("")
       + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
-    const note = (n) => `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
-        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b><span class="how">${esc(n.how)}</span>
-        ${n.prize ? `<span class="prize">${esc(n.prize)}</span>` : ""}${n.have ? `<span class="prize">${esc(n.have)}</span>` : ""}
-        <span class="due">${esc(n.due)}</span>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
-    const board = shop.notes.length ? `<div class="board">${shop.notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
-    return `<div class="shop-body"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
-      ${zoom ? paperHtml(zoom, shop) : ""}${S.boardStamp ? stampHtml(S.boardStamp) : ""}`;
+    // 告示照草圖寫得很短（企劃者 2026-10-14 微調）：種類・哪一方（色塊小標籤）、目標、期限與名額，重賞、你有幾件合用各一個小字；
+    // 要做什麼與賞寫在點開的紙上
+    const face = (n) => `<span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
+        ${n.prize ? `<small class="prize">${esc(n.prize)}</small>` : ""}${n.have ? `<small class="prize">${esc(n.have)}</small>` : ""}
+        <small class="due">${esc(n.due)}</small>`;
+    const note = (n) => (n.done
+      ? `<div class="note k-${esc(n.kind)} done">${face(n)}<i class="stamp">交差</i></div>`
+      : `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
+        ${face(n)}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`);
+    // 剛交差的那一張（boardHanded）：伺服器那一份已經沒有它，照原本的位置再畫一下、蓋「交差」，跟著淡出（企劃者 2026-10-14 微調）
+    const notes = shop.notes.slice();
+    const done = S.boardStamp && !notes.some((n) => n.id === S.boardStamp.id) ? S.boardStamp : null;
+    if (done) notes.splice(Math.min(done.at, notes.length), 0, { ...done.note, done: true });
+    const board = notes.length ? `<div class="board">${notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
+    return `<div class="shop-body${zoom ? " zooming" : ""}"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
+      ${zoom ? paperHtml(zoom, shop) : ""}`;
   }
 
   // 放大的那一張紙：完整的要求、賞、期限與名額，底下的鈕照那一張（第三層開著：合用的東西一件一顆，每顆照選單上的 confirm 先問一次）
@@ -2579,14 +2588,11 @@
     } else {
       btns = `${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}<div class="btns"><button class="btn primary" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}>${a.verb === "pick" ? "交出…" : "揭下"}</button><button class="btn" data-act="board-close">放回去</button></div>`;
     }
-    return `<div class="reveal-layer board-zoom"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
-        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
+    // 紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣），不蓋住木板與招牌；紙太長（第三層交出清單）自己捲
+    return `<div class="board-sheet"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
+        <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
         <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}<p class="reward">賞：${esc(n.reward)}</p><p class="due">${esc(n.due)}</p>
         ${btns}</article></div>`;
-  }
-
-  function stampHtml(stamp) {
-    return `<div class="board-stamp" aria-live="polite"><i class="stamp big">交差</i><small>${esc(stamp.title)}</small></div>`;
   }
 
   // 第三層（替一張求藝、求兵挑東西）開著時選單上只有那一張的交出鈕與「回到懸賞榜」：放大別張、收起、出店之前先送 bounty:unpick
@@ -2611,15 +2617,15 @@
     const shop = S.main && S.main.shop;
     if (shop && shop.shop === "board") await choose(el, shop.back);
   }
-  // 交差之後（第四節）：送了 bounty:give:<懸賞>:…、回來的木板上沒有那一張了（自己交過的不再列），蓋「交差」朱印再淡出
-  // （減少動態效果的人不跑淡出，時間到照樣收掉）。被拒絕的（那一張還在）不蓋
+  // 交差之後（第四節；企劃者 2026-10-14 微調）：送了 bounty:give:<懸賞>:…、回來的木板上沒有那一張了（自己交過的不再列），
+  // 那張告示照原本的位置再畫一下、本身蓋「交差」，停一下跟著淡出（減少動態效果的人不淡出，時間到直接拿掉）。被拒絕的（那一張還在）不蓋
   const STAMP_MS = 1400;
   function boardHanded(id, before) {
     const shop = S.main && S.main.shop;
     const bid = id.split(":")[2];
-    const was = before && before.shop === "board" ? before.notes.find((n) => n.id === bid) : null;
-    if (!was || !shop || shop.shop !== "board" || shop.notes.some((n) => n.id === bid)) return;
-    S.boardStamp = { id: bid, title: was.title };
+    const at = before && before.shop === "board" ? before.notes.findIndex((n) => n.id === bid) : -1;
+    if (at < 0 || !shop || shop.shop !== "board" || shop.notes.some((n) => n.id === bid)) return;
+    S.boardStamp = { id: bid, note: before.notes[at], at };
     S.boardZoom = null;
     renderShop();
     setTimeout(() => {
@@ -2630,9 +2636,22 @@
   }
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
+  // 架上那一頁上半的爐火與鐵砧（企劃者 2026-10-14 微調，草圖 container.html 的 A）：內嵌 SVG、水墨暖色；Joy 之後有正式的圖可以換
+  const SMITH_HERO_SVG = `<svg viewBox="0 0 240 132" aria-hidden="true">
+      <defs><radialGradient id="smith-hero-glow" cx="50%" cy="78%" r="62%"><stop offset="0" stop-color="#ffd27a"/><stop offset=".3" stop-color="#e0642a"/><stop offset=".7" stop-color="#5a2a14"/><stop offset="1" stop-color="#2b1a10"/></radialGradient></defs>
+      <ellipse cx="120" cy="100" rx="108" ry="26" fill="#e0642a" opacity=".16"/>
+      <path d="M112 18 V4 h16 V18" fill="#3a2a1e"/>
+      <path d="M58 98 Q58 22 120 16 Q182 22 182 98 Z" fill="url(#smith-hero-glow)" stroke="#2b1a10" stroke-width="3"/>
+      <path d="M64 92 Q64 30 120 22 Q176 30 176 92" fill="none" stroke="#7a4a2a" stroke-width="1.5" stroke-dasharray="10 6" opacity=".6"/>
+      <path d="M92 98 Q94 66 120 62 Q146 66 148 98 Z" fill="#1e1510"/>
+      <g class="fire"><path class="fl-out" d="M120 64 C130 76 138 82 134 92 C131 98 125 99 120 99 C113 99 106 96 106 88 C106 80 112 76 114 68 C116 74 119 78 122 79 C122 74 121 69 120 64Z"/>
+        <path class="fl-in" d="M120 78 C125 84 128 88 126 94 C124 97 122 98 120 98 C117 98 114 96 115 92 C116 88 119 85 120 78Z"/></g>
+      <path d="M78 106 h84 c-4 6 -14 9 -26 9 v6 h10 v6 h-52 v-6 h10 v-6 c-12 0 -22 -3 -26 -9z" fill="#3a3530" stroke="#6b625a" stroke-width="1.5"/>
+    </svg>`;
+
   function shelfHtml(shop) {
     // 這一段的變數不用單字母 x：tests/test_server.py 把修練頁到輿圖之間那個變數讀的欄位都當成 menxia_view 的欄位查
-    return `<div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
+    return `<div class="smith-hero">${SMITH_HERO_SVG}</div><div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
         <b>${esc(ware.name)}</b><span>${esc(ware.kind)}・屬${esc(ware.attribute)}・${esc(ware.tier)}</span>${ware.value ? `<span>${esc(ware.value)}</span>` : ""}
         ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}<span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span></button>`).join("")}</div>`;
   }
@@ -2759,12 +2778,18 @@
         ${line.reasons.length ? `<p class="pot-why">${line.reasons.map(esc).join("、")}</p>` : ""}</div>` : "";
     const can = line.ready && !line.problem;
     const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}>${esc(line.ready ? line.problem || line.go : "開爐")}</button>`;
-    const cells = (line.cells || []).map((c) => {
+    // 素材格一屬性一排（企劃者 2026-10-14 微調）：伺服器已經照剛柔快慢、再照階排好，這裡只照屬性分排、排頭寫屬性
+    const rows = [];
+    for (const c of line.cells || []) {
       const mat = mats.get(c.id);
-      if (!mat) return "";
-      return `<button class="cell${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
+      if (!mat) continue;
+      const cell = `<button class="cell t${mat.tier | 0}${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
         <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
-    }).join("");
+      const last = rows[rows.length - 1];
+      if (last && last.attribute === mat.attribute) last.cells.push(cell);
+      else rows.push({ attribute: mat.attribute, cells: [cell] });
+    }
+    const cells = rows.map((r) => `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[r.attribute] || ""}">${esc(r.attribute)}</span>${r.cells.join("")}</div>`).join("");
     return `${kinds}
       <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
       ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
