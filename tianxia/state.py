@@ -759,6 +759,14 @@ class SignatureClaim(BaseModel):
     via: Literal["gift", "seized"]
 
 
+class TerritoryWeek(BaseModel):
+    """地盤某一週的樣子（輿圖升級設計第九節）：那一週最後一次重算時的控制方、每條戰線拔河看的值、割據（沒有這條線是 None）。"""
+
+    control: dict[str, str] = Field(default_factory=dict)
+    fronts: dict[str, int] = Field(default_factory=dict)
+    geju: int | None = None
+
+
 class TerritoryState(BaseModel):
     """這一季的地盤（tianxia/territory.py）：WorldState.territory；None＝這一季還沒算過（開季、舊存檔、中途上線）。"""
 
@@ -766,6 +774,9 @@ class TerritoryState(BaseModel):
     tug: dict[str, str] = Field(default_factory=dict)  # 可易手的地點 → 拔河算出的那一方（±band 不動看它）
     geju: list[str] = Field(default_factory=list)  # 豪強割據佔著的地點，照佔下的先後
     pinned: dict[str, str] = Field(default_factory=dict)  # 大事指定的地點 → 指定那一刻規則算出的控制方（規則改變那一刻才回到規則）
+    # 週次 → 那一週的樣子（territory._snapshot：每次重算蓋掉這一週那一格，所以一週結束時就是週末的樣子）；沒記到的週照前一週補
+    # （territory.week_at）；新的一季是新的 WorldState，自然是空的（輿圖升級設計第九節）
+    weeks: dict[int, TerritoryWeek] = Field(default_factory=dict)
 
 
 class WorldState(BaseModel):

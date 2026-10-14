@@ -12,9 +12,9 @@
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
 from __future__ import annotations
 
-from . import rules
+from . import calendar, rules
 from .models import FRONT_KEY, Content
-from .state import Rumor, TerritoryState, WorldState
+from .state import Rumor, TerritoryState, TerritoryWeek, WorldState
 
 FLIP_LINE = "{place}落入{side}之手。"  # 待 joy 潤：易手那一刻的天下大事與江湖史（設計 4.3 第 2 點）
 CONTROL_LINE = "此刻由{side}控制"  # 待 joy 潤：輿圖詳情欄局勢那一行
@@ -139,6 +139,7 @@ def update(world: WorldState, content: Content) -> None:
     world.territory = t
     if not first:
         _announce(world, content, before, t.control)
+    _snapshot(world, content, t)
 
 
 def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
@@ -158,6 +159,25 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
             t.pinned[loc_id] = haoqiang if haoqiang is not None and loc_id in t.geju else t.tug[loc_id]
         t.control[loc_id] = side
     _announce(world, content, before, t.control)
+    _snapshot(world, content, t)
+
+
+def _snapshot(world: WorldState, content: Content, t: TerritoryState) -> None:
+    """把「這一週」那一格蓋成此刻的樣子（輿圖升級設計第九節）：控制方、每條戰線拔河看的值（line_value）、割據（沒有這條線是 None）。"""
+    week = calendar.point(world.time, content, world).week
+    geju = rules.world_trend_value(world, content, rules.GEJU) if rules.trend_shown(content, world, rules.GEJU) else None
+    t.weeks[week] = TerritoryWeek(
+        control=dict(t.control), fronts={line: line_value(world, content, line) for line in content.scenario.territory.lines}, geju=geju,
+    )
+
+
+def week_at(world: WorldState, week: int) -> TerritoryWeek | None:
+    """第 week 週的地盤：記到的最後一筆不晚於 week 的（沒記到的週照前一週補）；那之前什麼都沒記、或這一季還沒算過是 None。"""
+    t = world.territory
+    if t is None:
+        return None
+    known = [w for w in t.weeks if w <= week]
+    return t.weeks[max(known)] if known else None
 
 
 def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
