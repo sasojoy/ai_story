@@ -1304,7 +1304,12 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .odds .q-上品 { background: #f2c46a; }
 .shop-gorow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
 .shop-go { padding: 12px 8px; font: 600 16px var(--serif); letter-spacing: 2px; }
-.shop-layer .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shop-layer .cells { display: grid; gap: 6px; }
+/* 一屬性一排（企劃者 2026-10-14 微調）：排頭一個屬性字，後面一階到三階 */
+.shop-layer .cell-row { display: grid; grid-template-columns: 1.6em repeat(3, 1fr); gap: 6px; align-items: stretch; }
+.shop-layer .row-attr { display: flex; align-items: center; justify-content: center; font: 600 14px var(--serif); color: #c9b28a; }
+.shop-layer .row-attr.gang { color: var(--gang); } .shop-layer .row-attr.kuai { color: var(--kuai); }
+.shop-layer .row-attr.rou { color: var(--rou); } .shop-layer .row-attr.man { color: var(--man); }
 .shop-layer .cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 14px 2px 6px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12px var(--serif); }
 .shop-layer .cell .n { position: absolute; top: 3px; right: 6px; font: 600 10px var(--sans); color: #f2c46a; }
 .shop-layer .cell .nm { display: flex; align-items: center; }

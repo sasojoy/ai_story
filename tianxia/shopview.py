@@ -210,9 +210,24 @@ def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str,
     return {"rows": rows, "used": gear["used"], "cap": gear["cap"]}
 
 
+ATTRIBUTE_ROWS = ("剛", "柔", "快", "慢")  # 打造頁素材格一屬性一排的順序（企劃者 2026-10-14 微調）；其餘屬性（陰陽虛實）排在後面
+
+
+def attribute_rank(attribute: str) -> tuple[int, str]:
+    """素材格排第幾排：剛、柔、快、慢，其餘照字排在後面。"""
+    return (ATTRIBUTE_ROWS.index(attribute), "") if attribute in ATTRIBUTE_ROWS else (len(ATTRIBUTE_ROWS), attribute)
+
+
+def _held_rows(state: GameState, content: Content) -> list[tuple[str, int]]:
+    """店面素材格的順序（企劃者 2026-10-14 微調）：背包裡打得了的素材（smithing.held）照屬性一排一排（剛柔快慢，其餘在後），每排一階到三階。
+    一步一步的選單照舊用 smithing.held（高階先）。"""
+    mats = content.materials
+    return sorted(smithing.held(state, content), key=lambda pair: (attribute_rank(mats[pair[0]].attribute), mats[pair[0]].tier, pair[0]))
+
+
 def _forge(state: GameState, content: Content, world: WorldStateStore, slot: str, art) -> dict:
     """打造那一頁的骨架（2.2）：兵器頁一排種類（配得上身上武學的那一種標「配」、預設點著它，沒有就第一個），防具頁換成一行說明；
-    素材格照 smithing.held 的順序。"""
+    素材格照屬性再照階排（_held_rows）。"""
     if slot == "armor":
         kinds, kind, note = [], smithing.ARMOR_KIND, ARMOR_FORGE_NOTE
     else:
@@ -223,7 +238,7 @@ def _forge(state: GameState, content: Content, world: WorldStateStore, slot: str
     materials = [
         {"id": mid, "name": mats[mid].name, "attribute": mats[mid].attribute, "tier": mats[mid].tier,
          "tier_word": equipment.TIER_WORDS[mats[mid].tier], "count": n}
-        for mid, n in smithing.held(state, content)
+        for mid, n in _held_rows(state, content)
     ]
     return {"kinds": kinds, "kind": kind, "note": note, "materials": materials, "line": smith_line(state, content, world, kind)}
 
@@ -241,7 +256,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     同一種只剩一個的拿掉）。只讀。"""
     if kind not in WEAPON_KINDS and kind != smithing.ARMOR_KIND:
         return {"kind": kind, "main": None, "aux": None, "rack_full": None, "cells": [], "ready": False}
-    held = smithing.held(state, content)
+    held = _held_rows(state, content)
     counts = dict(held)
     main = main if main in counts else None
     aux = aux if main is not None and aux in counts and (aux != main or counts[aux] >= 2) else None

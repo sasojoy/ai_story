@@ -2759,12 +2759,18 @@
         ${line.reasons.length ? `<p class="pot-why">${line.reasons.map(esc).join("、")}</p>` : ""}</div>` : "";
     const can = line.ready && !line.problem;
     const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}>${esc(line.ready ? line.problem || line.go : "開爐")}</button>`;
-    const cells = (line.cells || []).map((c) => {
+    // 素材格一屬性一排（企劃者 2026-10-14 微調）：伺服器已經照剛柔快慢、再照階排好，這裡只照屬性分排、排頭寫屬性
+    const rows = [];
+    for (const c of line.cells || []) {
       const mat = mats.get(c.id);
-      if (!mat) return "";
-      return `<button class="cell${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
+      if (!mat) continue;
+      const cell = `<button class="cell${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
         <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
-    }).join("");
+      const last = rows[rows.length - 1];
+      if (last && last.attribute === mat.attribute) last.cells.push(cell);
+      else rows.push({ attribute: mat.attribute, cells: [cell] });
+    }
+    const cells = rows.map((r) => `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[r.attribute] || ""}">${esc(r.attribute)}</span>${r.cells.join("")}</div>`).join("");
     return `${kinds}
       <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
       ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
