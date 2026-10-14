@@ -1314,6 +1314,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-layer .cells { display: grid; gap: 6px; }
 /* 一屬性一排（企劃者 2026-10-14 微調）：排頭一個屬性字，後面一階到三階 */
 .shop-layer .cell-row { display: grid; grid-template-columns: 1.6em repeat(3, 1fr); gap: 6px; align-items: stretch; }
+.shop-layer .cell-row .t1 { grid-column: 2; } .shop-layer .cell-row .t2 { grid-column: 3; } .shop-layer .cell-row .t3 { grid-column: 4; } /* 一階、二階、三階各一欄對齊 */
 .shop-layer .row-attr { display: flex; align-items: center; justify-content: center; font: 600 14px var(--serif); color: #c9b28a; }
 .shop-layer .row-attr.gang { color: var(--gang); } .shop-layer .row-attr.kuai { color: var(--kuai); }
 .shop-layer .row-attr.rou { color: var(--rou); } .shop-layer .row-attr.man { color: var(--man); }

@@ -38,6 +38,8 @@ def test_the_forge_page_draws_one_row_per_attribute(content, world):
     cells = html[html.index('class="cells"'):]
     assert cells.count('class="cell-row"') == 2 and '<span class="row-attr gang">剛</span>' in cells and '<span class="row-attr kuai">快</span>' in cells
     assert cells.index('data-id="gang_1"') < cells.index('data-id="gang_3"') < cells.index('data-id="kuai_1"')
+    # 每格照階擺在自己那一欄（一階、二階、三階對齊；少了的那一階空著，不畫格子）
+    assert 'class="cell t3"' in cells[cells.index('<span class="row-attr gang">'):cells.index('<span class="row-attr kuai">')]
 
 
 # ── 1：鐵匠鋪「架上」頁上半一塊爐火加鐵砧 ──

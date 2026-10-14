@@ -2783,7 +2783,7 @@
     for (const c of line.cells || []) {
       const mat = mats.get(c.id);
       if (!mat) continue;
-      const cell = `<button class="cell${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
+      const cell = `<button class="cell t${mat.tier | 0}${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
         <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
       const last = rows[rows.length - 1];
       if (last && last.attribute === mat.attribute) last.cells.push(cell);
