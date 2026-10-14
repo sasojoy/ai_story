@@ -1431,6 +1431,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .note.dim { opacity: 0.55; }
 .shop-board .stamp { position: absolute; right: 4px; bottom: 6px; transform: rotate(-14deg); padding: 2px 4px; border: 2px solid #b3261e; border-radius: 4px;
   color: #b3261e; background: rgba(246, 237, 216, 0.85); font: 600 11px var(--serif); font-style: normal; }
+.shop-board .note.held .stamp { top: 3px; right: 5px; bottom: auto; transform: rotate(8deg); padding: 1px 3px; font-size: 10px; pointer-events: none; } /* 揭著的那張：「已揭」在右上角、標籤那一行的右邊，不壓期限那一行（QA 2026-10-14）；點不到它，點告示照樣放大 */
 .shop-board .board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
 .shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列永遠在最上面：出店按得到（終審 I3）；實心底 */
 /* 放大的紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣）：不蓋住木板與招牌；第三層交出清單長的時候自己捲 */

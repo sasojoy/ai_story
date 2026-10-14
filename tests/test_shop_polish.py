@@ -266,3 +266,17 @@ def test_a_stale_market_click_leaves_another_shops_keeper_alone(content, world):
     assert p.picking_smith and p.shop_line == "enter"
     msgs = game.choose(mounts.BUY)
     assert isinstance(msgs, Refused) and p.shop_line == "enter" and p.shop_hold == ""
+
+
+# ── 店面微調之二（QA 2026-10-14） ──
+
+
+def test_the_held_stamp_on_a_notice_sits_beside_the_tag_not_on_the_due_line():
+    """QA 2026-10-14：揭著的那張告示，「已揭」印蓋在期限那一行上面，把字蓋掉一部分。印挪到右上角、標籤那一行的右邊，點不到它
+    （點告示照樣放大）；交差那一張的大印照舊在右下角（那一張正在淡出，蓋字無妨）。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    held = _rule(css, ".shop-board .note.held .stamp")
+    assert "top: " in held and "bottom: auto" in held and "pointer-events: none" in held
+    assert "bottom: 6px" in _rule(css, ".shop-board .stamp")  # 交差的那一張照舊
