@@ -818,6 +818,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .sheet .grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 10px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
+.sheet.still, .sheet-bg.still { animation: none; } /* 玩家卡跟著輪詢換一張（FB-117）：不再滑上來一次 */
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
 /* 管理者工具（G3）：排在一般設定之後、虛線框加淡金底，一眼看得出是另一塊；「開啟下一季」用警示樣式 */
@@ -1036,6 +1037,8 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .calls { display: grid; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; }
 .call, .party { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .call > span, .party > span { flex: 1 1 100%; }
+.calls-more { justify-self: start; font-size: 13px; }
+.call.fit-hide { display: none; } /* 第一屏放不下時收掉的那幾份（app.js FIT_STEPS 的 calls，FB-117） */
 .peer-amount { flex-wrap: wrap; }
 .peer-amount select { flex: 1 1 100%; }
 .peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }

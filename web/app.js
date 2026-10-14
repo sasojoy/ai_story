@@ -686,8 +686,8 @@
   // 這裡畫好之後量一次：行動列（事件、有所感這種一組選項時是最後一顆）的下緣離分頁列不到 FIT_MARGIN，就照 FIT_STEPS 的順序一步一步收，
   // 收到放得下就停——放得下的畫面一點都不動。先收不少任何字的（間距、框的行高），再收 💡 與看一眼就夠的（對手的描述、第一回合、
   // 剛剛的後半、決戰時所在地的描述、集結那一句的後半），每一樣都點得開、看得到全文；得失與結果那幾行（數字）、框裡的話都不收。
-  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結又有框的時候：場景裡「此地還有」、結伴那幾行不歸這裡收）
-  // 就是放不下，不再藏別的
+  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結又有框的時候：場景裡「此地還有」、結伴那一行不歸這裡收；
+  // 別人遞來的邀請歸 6b 收，FB-117）就是放不下，不再藏別的
   // 量的是畫面本身（字體、寬度、狀態列幾行都算進去），所以手機高一點、字少一點就少收或不收。重畫、轉向、拉視窗之後重量（先全部還原）
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
@@ -768,6 +768,27 @@
       if (body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits"); // 三行就放得下：不要淡出與「展開全文」
       return true;
     } },
+    // 6b. 場景底下別人遞來的邀請（FB-117：最多畫兩份，socialHtml）：還放不下就從最後一份往前收，收到放得下為止，
+    //     收掉的併進「還有 N 份邀請 ▾」那一行（沒有那一行就補一行），點了全部攤開（S.callsOpen，攤開的不再收）
+    { key: "calls", run: () => {
+      const box = document.querySelector("#page > .card.scene .calls");
+      if (!box || S.callsOpen) return false;
+      const rows = [...box.querySelectorAll(":scope > .call")];
+      let hidden = 0;
+      while (fitOver() > 0 && hidden < rows.length) {
+        rows[rows.length - 1 - hidden].classList.add("fit-hide");
+        hidden += 1;
+      }
+      if (!hidden) return false;
+      let more = box.querySelector(":scope > .calls-more");
+      if (!more) {
+        box.insertAdjacentHTML("beforeend", '<button class="linkish calls-more" data-act="calls-more" data-fit="1"></button>');
+        more = box.querySelector(":scope > .calls-more");
+      } else if (more.dataset.text == null) more.dataset.text = more.textContent;
+      const total = Number(box.dataset.total) || rows.length;
+      more.textContent = callsMoreText(total - (rows.length - hidden), hidden === rows.length);
+      return true;
+    } },
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
@@ -816,6 +837,11 @@
       delete el.dataset.fitWas;
     });
     page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster"));
+    page.querySelectorAll(".call.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 6b：收掉的邀請攤回來
+    page.querySelectorAll(".calls-more").forEach((el) => {
+      if (el.dataset.fit) el.remove();
+      else if (el.dataset.text != null) { el.textContent = el.dataset.text; delete el.dataset.text; }
+    });
     fitUnclip(page);
     page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
   }
@@ -1904,11 +1930,21 @@
     (m.calls || []).forEach((c) => c.options.forEach((o) => { if (o.peer) out[o.id] = o.peer; }));
     return out;
   }
+  // 別人遞來的邀請最多畫 CALLS_SHOW 列（FB-117：以前沒上限，一個人同時發四種就把整排行動擠出第一屏），其餘收成一行
+  // 「還有 N 份邀請」、點了才攤開（S.callsOpen；邀請少回 CALLS_SHOW 份以內就收回去）。舊的在前（伺服器排的，先逾時的先畫）
+  // 第一屏還放不下時，畫好之後再從最後一份往前收（FIT_STEPS 的 calls），收掉的也併進那一行
+  const CALLS_SHOW = 2;
+  const callsMoreText = (n, all) => (all ? `有 ${n} 份邀請等你回應 ▾` : `還有 ${n} 份邀請 ▾`); // 待 joy 潤
   function socialHtml(m) {
-    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map(callButton).join("")}</div>`).join("");
+    const all = m.calls || [];
+    if (all.length <= CALLS_SHOW) S.callsOpen = false;
+    const list = S.callsOpen ? all : all.slice(0, CALLS_SHOW);
+    const more = all.length - list.length;
+    const calls = list.map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map(callButton).join("")}</div>`).join("")
+      + (more ? `<button class="linkish calls-more" data-act="calls-more">${callsMoreText(more, false)}</button>` : "");
     const party = m.party ? `<div class="party"><span>${esc(m.party.text)}</span>${m.party.lead ? ""
       : '<button class="btn small ghost" data-act="party-leave">分道揚鑣</button>'}</div>` : "";
-    return `<div class="calls">${calls}${party}</div>`;
+    return `<div class="calls" data-total="${all.length}">${calls}${party}</div>`;
   }
   async function leaveParty() {
     await busy(async () => {
@@ -1920,8 +1956,10 @@
 
   // 玩家卡（第一層）：點「此地還有」的名字疊上來的抽屜。名號、門派・陣營・頭銜、等級、身上兩門（名字與品質），底下是卡上的動作鈕
   // （伺服器照 social.ACTIONS 給，第二層的贈物、結伴、打招呼、切磋、論武都掛在這裡）。人走了（card 是 null）寫伺服器給的那一句
-  function peerHtml() {
+  // still：輪詢換卡（applyPeer）時畫的那一張不再播一次滑上來、淡入（style.css 的 .still）
+  function peerHtml(still = false) {
     const P = S.peer;
+    const quiet = still ? " still" : "";
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
       : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
@@ -1929,8 +1967,8 @@
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
-    return `<div class="sheet-bg" data-act="peer-close"></div>
-      <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
+    return `<div class="sheet-bg${quiet}" data-act="peer-close"></div>
+      <div class="sheet peer-card${quiet}" role="dialog" aria-label="${esc(P.name)}">
         <div class="grip"></div>
         ${P.msg ? `<div class="peer-msg">${P.msg}</div>` : ""}
         ${body}
@@ -2008,14 +2046,14 @@
   function applyPeer(P, r) {
     peerNext = null;
     if (S.peer !== P || S.busy || P.amountFor != null || typing() || document.querySelector(".ask-layer")) return;
-    S.peer = { name: P.name, card: r.card, gone: r.gone, focus: P.focus };
+    S.peer = { name: P.name, card: r.card, gone: r.gone, focus: P.focus, msg: P.msg }; // 上一個動作回的那一句照留
     const old = document.querySelector(".peer-card");
     if (!old) return;
     // 下拉清單挑的那一樣（照它的 arg 認：新卡上的索引可能不一樣）
     const picked = new Set([...old.querySelectorAll(".peer-pick select")].map((x) => (P.card && P.card.actions[Number(x.value)] || {}).arg));
     const top = old.scrollTop;
     const bg = old.previousElementSibling;
-    old.insertAdjacentHTML("afterend", peerHtml());
+    old.insertAdjacentHTML("afterend", peerHtml(true));
     old.remove();
     if (bg && bg.classList.contains("sheet-bg")) bg.remove();
     const now = document.querySelector(".peer-card");
@@ -4356,6 +4394,7 @@
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
+        case "calls-more": S.callsOpen = true; renderPage(); break; // 場景底下收起來的邀請（FB-117）
         case "party-leave": await leaveParty(); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;

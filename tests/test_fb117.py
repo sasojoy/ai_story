@@ -345,7 +345,8 @@ FAKE_CARD = """
   const old = {
     scrollTop: 40, previousElementSibling: { classList: { contains: (c) => c === "sheet-bg" }, remove: () => log.push("bg") },
     querySelectorAll: () => [], remove: () => log.push("old"),
-    insertAdjacentHTML: (pos, html) => { log.push(pos); T.qs[".peer-card"] = now; log.push(html.includes("以此應之") ? "answer" : "plain"); },
+    insertAdjacentHTML: (pos, html) => { log.push(pos); T.qs[".peer-card"] = now; log.push(html.includes("以此應之") ? "answer" : "plain");
+      log.push(html.includes('class="sheet peer-card still"') ? "still" : "moving"); },
   };
   T.qs[".peer-card"] = old;
 """
@@ -370,7 +371,7 @@ def test_an_open_card_follows_the_poll(twins):
     after = _card(content, world, "乙", "甲")
     out = run(_main(content, world, "乙"), _refresh_script(before, after), responses={"/api/peer": {"card": after, "gone": social.GONE}})
     assert out["asked"] == ["/api/peer?name=%E7%94%B2"]
-    assert out["log"] == ["afterend", "answer", "old", "bg"] and out["card"] == len(after["actions"]) and out["top"] == 40
+    assert out["log"] == ["afterend", "answer", "still", "old", "bg"] and out["card"] == len(after["actions"]) and out["top"] == 40
 
 
 @needs_node
@@ -400,7 +401,7 @@ def test_a_held_finger_waits_for_release(twins):
       }})();"""
     out = run(_main(content, world, "乙"), script, responses={"/api/peer": {"card": after, "gone": social.GONE}})
     assert out["during"] == [0, len(before["actions"])]
-    assert out["after"] == [4, len(after["actions"])]
+    assert out["after"] == [5, len(after["actions"])]
 
 
 @needs_node
@@ -412,3 +413,58 @@ def test_no_swap_while_a_confirm_or_amount_is_open(twins):
     out = run(_main(content, world, "乙"), _refresh_script(before, after, "H.S.peer.amountFor = 5;"),
               responses={"/api/peer": {"card": after, "gone": social.GONE}})
     assert out["log"] == [] and out["card"] == len(before["actions"])
+
+
+# ── 第六件：場景底下最多畫兩份邀請，其餘收成一行 ──
+
+
+@needs_node
+def test_at_most_two_invitations_under_the_scene(pair):
+    content, world = pair
+    for kind, arg in (("greet", "bow"), ("travel", ""), ("spar", "invite"), ("discuss", "invite:art:basic_fist")):
+        _do(content, world, "甲", lambda g, k=kind, a=arg: g.peer_act("乙", k, {"arg": a}))
+    m = _main(content, world, "乙")
+    assert len(m["calls"]) == 4
+    out = run(m, "const shut = H.socialHtml(m); H.S.callsOpen = true; const open = H.socialHtml(m);"
+                 "m.calls = m.calls.slice(0, 2); const few = H.socialHtml(m); return { shut, open, few, after: H.S.callsOpen };")
+    assert out["shut"].count('<div class="call">') == 2 and "還有 2 份邀請 ▾" in out["shut"]
+    assert out["shut"].index("甲向你抱拳見禮。") < out["shut"].index("還有 2 份邀請")  # 舊的在前
+    assert out["open"].count('<div class="call">') == 4 and "還有" not in out["open"]
+    assert out["few"].count('<div class="call">') == 2 and "還有" not in out["few"] and out["after"] is False
+
+
+# 第一屏還放不下（例：師父的框在）：FB-107 的收法多一步（6b），從最後一份往前收、併進「還有 N 份邀請」那一行
+CALLS = {"bottom": 830, "actbar": True, "scene": True, "calls": 2, "callsTotal": 4, "callsMore": "還有 2 份邀請 ▾"}
+
+
+@needs_node
+def test_the_fit_folds_invitations_from_the_last_one():
+    from test_fb107_first_screen import run as fit_run
+
+    out = fit_run(CALLS)  # 830 − 間距 30 = 800，還差 60：收掉第二份（70）就夠
+    assert out["fitted"] == ["space", "calls"] and out["calls"] == [False, True] and out["more"] == ["還有 3 份邀請 ▾", ""]
+    out = fit_run({**CALLS, "bottom": 900})  # 兩份都收掉
+    assert out["calls"] == [True, True] and out["more"] == ["有 4 份邀請等你回應 ▾", ""]
+
+
+@needs_node
+def test_the_fit_adds_the_line_when_there_was_none_and_takes_it_back():
+    from test_fb107_first_screen import run as fit_run
+
+    layout = {**CALLS, "callsTotal": 2, "callsMore": ""}
+    out = fit_run(layout)
+    assert out["calls"] == [False, True] and out["more"] == ["還有 1 份邀請 ▾", "1"]
+    script = "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();"  # 放得下了：攤回來、補的那一行拿掉
+    out = fit_run(layout, script)
+    assert out["fitted"] == [] and out["calls"] == [False, False] and out["more"] is None
+    script = "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();"
+    out = fit_run(CALLS, script)  # 原本就有的那一行：字換回來
+    assert out["more"] == ["還有 2 份邀請 ▾", ""]
+
+
+@needs_node
+def test_opened_invitations_are_not_folded_again():
+    from test_fb107_first_screen import run as fit_run
+
+    out = fit_run(CALLS, S={"callsOpen": True})
+    assert "calls" not in out["fitted"] and out["calls"] == [False, False]
