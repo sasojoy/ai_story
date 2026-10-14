@@ -50,7 +50,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
-    day_turn, ears_of, failed, fill_marks, free_text_rate, game_day, here_regions,
+    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -130,6 +130,7 @@ LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣�
 
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
 FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
+EVIL_ANNAL = "，行了一件惡事，成了。"  # 行狀：隨口應對判成惡行而且成了（FB-223），接在「遇上【某事】，隨口應對」後面。待 joy 潤
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
@@ -278,6 +279,7 @@ class FreeTextOutcome(BaseModel):
     effect_text: str
     time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
     title: str
+    evil: bool = False  # 判成惡行而且成了（FB-223）：effect_text 是 rules.EVIL_DONE，潤色照惡行寫、寫成了換掉那一句
 
 
 class Game:
@@ -1635,11 +1637,14 @@ class Game:
             return None
         return FreeTextRequest(event_id=event_id, text=text)
 
-    def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None) -> list[str]:
+    def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None) -> list[str]:
         """隨口應對的階段 C（鎖內）：重驗還停在同一則事件、寫的是同一句話，才算成功率、擲骰、套用效果。
-        llm_rate 是鎖外評好的 0～100；沒給（直接呼叫的測試、腳本）就在這裡評（行動鎖內，用 _quick_client 的短逾時複本），
-        評不到一樣退回 40。
-        成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。"""
+        llm_rate 是鎖外評好的 0～100、moral 是同一次評出來的善惡（event_llm.MORALS）；llm_rate 沒給（直接呼叫的測試、腳本）
+        就在這裡評（行動鎖內，用 _quick_client 的短逾時複本），評不到一樣退回 40、善惡當「中」。
+        成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。
+        善惡再驗一次（event_llm.moral_of：不是那三個字當「中」）。判成「惡」而且擲中了（FB-223）：成功效果換成惡行的版本
+        （rules.evil_success：善名換惡名、扣惡名與加情誼拿掉、結果句換成 rules.EVIL_DONE），潤色照惡行寫（FreeTextOutcome.evil）；
+        「善」「中」、或「惡」沒擲中，一個字都不變。"""
         s, c = self.state, self.content
         self.last_gamble = None
         current = self.free_text_request(request.text)
@@ -1648,7 +1653,11 @@ class Game:
         event = c.events[request.event_id]
         choice = event.free_text
         if llm_rate is None:
-            llm_rate = event_llm.assess_event_success_rate(self._quick_client(), event, request.text)
+            # 判善惡那一次照 _quick_client 的額度：評分失敗用掉了額度就不叫、當「中」
+            verdict = event_llm.judge_event_gamble(self._quick_client(), event, request.text, moral_client=self._quick_client)
+            llm_rate = verdict.rate
+            moral = verdict.moral if moral is None else moral
+        moral = event_llm.moral_of(moral)
         self.state.battle_card = None
         faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
@@ -1657,13 +1666,18 @@ class Game:
             s.pending_event = None
             rate = free_text_rate(llm_rate, choice, s, c, self.world)
             success = self.rng.random() * 100 < rate
+            evil = success and moral == event_llm.MORAL_EVIL  # 惡行而且成了（FB-223）；善惡不碰 rng
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
             msgs = [f"你：「{request.text}」（{rate_words(rate)}）", line]
             self._outcome(tag, line)
-            # 行狀：隨口應對是自己的話，一律記；一次性的事、奇遇份量重一些
-            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對" + ("，成了。" if success else "，沒成。"),
+            # 行狀：隨口應對是自己的話，一律記；一次性的事、奇遇份量重一些。惡行成了照實寫（EVIL_ANNAL）
+            done = EVIL_ANNAL if evil else "，成了。" if success else "，沒成。"
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對{done}",
                         3 if event.once or event.qiyu else 1, quote=request.text)
-            effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
+            if evil:
+                effect = evil_success(choice.effect)
+            else:
+                effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect, once=event.once)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
@@ -1676,7 +1690,7 @@ class Game:
             msgs += gifts
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
-                time=s.world.time, title=self._draft.title,
+                time=s.world.time, title=self._draft.title, evil=evil,
             )
         finally:
             self._draft = None
@@ -1689,7 +1703,10 @@ class Game:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
         認不到那一則（紀錄已經被後來的事併掉或擠到後面）就不插，潤色本來就是錦上添花。
         潤色那一段已經把結果句整句寫進去了（空白、標點不算，event_llm.tells_the_outcome）就拿掉後面引擎那一行結果句，
-        不寫兩次（FB-124）；模型那一段不切（結果句常常接在它自己的半句後面，切了會留下斷掉的逗號）。"""
+        不寫兩次（FB-124）；這時模型那一段不切（結果句常常接在它自己的半句後面，切了會留下斷掉的逗號）。
+        只寫到結果句的頭半句、收在那一段的尾巴上（FB-222）：把尾巴重疊的那一截切掉（event_llm.trim_echo），結果句照接整句；
+        整段都是重疊的就不插。
+        惡行成了（FB-223，outcome.evil）：潤色那一段就是結果，換掉 rules.EVIL_DONE 那一句固定的話（那一句只在潤色沒寫成時收尾）。"""
         journal_entries = self.state.journal
         if not narration or not journal_entries:
             return
@@ -1699,8 +1716,20 @@ class Game:
         lines = list(entry.lines)
         said = next((i for i, line in enumerate(lines) if line.startswith(f"你：「{outcome.text}」")), None)
         at = 0 if said is None else said + 1
+        if outcome.evil:
+            fixed = next((i for i in range(at, len(lines)) if lines[i] == outcome.effect_text), None)
+            if fixed is not None:
+                del lines[fixed]
+            lines.insert(at, narration)
+            journal_entries[0] = entry.model_copy(update={"lines": lines})
+            return
+        told = event_llm.tells_the_outcome(narration, outcome.effect_text)
+        if not told:
+            narration = event_llm.trim_echo(narration, outcome.effect_text)
+            if not narration:
+                return
         lines.insert(at, narration)
-        if event_llm.tells_the_outcome(narration, outcome.effect_text):
+        if told:
             echo = next((i for i in range(at + 1, len(lines)) if lines[i] == outcome.effect_text), None)
             if echo is not None:
                 del lines[echo]

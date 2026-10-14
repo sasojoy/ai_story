@@ -1575,6 +1575,31 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
   color: #b3261e; font: 600 16px var(--serif); font-style: normal; }
 .shop-arena .ring-result.draw .stamp { color: #6d5a43; border-color: #6d5a43; }
 .shop-arena .ring-result.lose .stamp { color: #2f5d8a; border-color: #2f5d8a; }
+/* ── 電腦上的店面與武學譜那本書（FB-225，企劃者 2026-10-14「最主要是寬度的設計沒有照著 UI 框架延續」）：遊戲本體在電腦上是一欄 640px
+   （.shell、.tabs-inner），店面與書也照這一欄。圖層照舊蓋滿畫面（擋住底下的頁面），可是底色（爐火、土黃、木紋、書頁）只畫在中間那一欄
+   （背景圖照欄寬、置中、不重複），欄外是遊戲本來的頁面底色 --paper：從江湖頁進店、出店，欄的左右邊不跳，欄外也不變色。
+   欄裡的東西照欄排：不捲的（招牌那一列、掌櫃話、店內分頁、出爐的麻布與卡、放大的紙）用 50% − 320px 算出欄邊（50% 是圖層寬的一半）；
+   會捲的那一層（.shop-body、書那一層）照舊整片寬，滑鼠在欄外滾輪也捲得動、捲軸在畫面最右邊（同遊戲本體）；兩邊各留一條捲軸寬的溝
+   （scrollbar-gutter: stable both-edges），內容才正好在中間、跟 .shell 對齊，換到不必捲的那一頁也不左右跳。店裡捲的內容包在 .shop-col，
+   照手機的版面左右各留 12px（640 − 24）。窄於 641px（手機）這一段整段不生效，一個像素都不變 ── */
+@media (min-width: 641px) {
+  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board {
+    background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
+  }
+  .shop-layer > .shop-bar, .shop-layer > .shop-tabs { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
+  .shop-layer > .shop-line { margin-left: max(14px, calc(50% - 306px)); margin-right: max(14px, calc(50% - 306px)); }
+  .shop-layer > .shop-body { scrollbar-gutter: stable both-edges; }
+  .shop-layer .shop-col { max-width: 616px; margin: 0 auto; }
+  .shop-layer > .reveal-layer { left: max(0px, calc(50% - 320px)); right: max(0px, calc(50% - 320px)); }
+  .shop-board .board-sheet { left: max(12px, calc(50% - 308px)); right: max(12px, calc(50% - 308px)); }
+  .book-layer {
+    scrollbar-gutter: stable both-edges;
+    background: radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.10), transparent 60%) 50% 0 / min(100%, 640px) 100% no-repeat,
+      linear-gradient(var(--bk-paper-2), var(--bk-paper-2)) 50% 0 / min(100%, 640px) 100% no-repeat, var(--paper);
+  }
+  .book-bar, .book-cover { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
+}
+
 /* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
 .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
 .lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }

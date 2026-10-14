@@ -312,6 +312,26 @@ def failed(effect: Effect, content: Content) -> Effect:
     return effect if stamina == effect.stamina else effect.model_copy(update={"stamina": stamina})
 
 
+# 隨口應對判成惡行而且成了（FB-223）：潤色沒寫成時的收尾（潤色寫成了就換成潤色那一段，Game.add_gamble_narration）。待 joy 潤
+EVIL_DONE = "事情照你的意思成了，只是這件事，你不會想讓人知道。"
+
+
+def evil_success(effect: Effect) -> Effect:
+    """隨口應對的做法被判成惡行、而且擲中了（FB-223，企劃者 2026-10-14）：內容寫好的成功效果是照善果寫的，換成惡行的版本——
+    加的善名換成加同樣多的惡名（照舊走 apply_effect：遊俠名號照實際動了多少記帳，散人走寇那一條照常）、扣惡名的拿掉、
+    情誼只留扣的（對人家做了惡事，不會因此更親近）；結果句換成 EVIL_DONE，傳聞與江湖史（照善果寫的）拿掉。
+    其他（銀兩、經驗、心得、名望、素材、地方痕跡……）照給；扣善名的照扣。"""
+    stats: dict[str, int] = {}
+    for key, delta in effect.stats.items():  # 照原本的順序：江湖紀錄的得失照這個順序寫
+        if key == "good" and delta > 0:
+            key = "evil"
+        elif key == "evil" and delta < 0:
+            continue
+        stats[key] = stats.get(key, 0) + delta
+    affinity = {who: delta for who, delta in effect.affinity.items() if delta < 0}
+    return effect.model_copy(update={"text": EVIL_DONE, "stats": stats, "affinity": affinity, "rumor": "", "chronicle": ""})
+
+
 def check_result_line(success: bool) -> tuple[str, str]:
     """檢定的結果：（江湖紀錄的標記, 敘事裡的那一行）。一律是本人出手，所以不寫誰（企劃者 2026-10-05），
     只寫「成功」「失敗」——事件選項、隨口應對、伏筆的最後一步都用這一個。"""

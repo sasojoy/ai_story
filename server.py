@@ -792,7 +792,8 @@ def sense_draw(game: Game, points, png: str = "") -> list[str] | None:
 def answer_event(game: Game, text: str) -> list[str] | None:
     """事件的隨口應對（探索的多人與 LLM 玩法 §8.1），跟 prepare_dialogue 一樣分三段：
       A（鎖內、很快）同步時間，問引擎這句話現在能不能送；能就拿到單子（事件 id＋這句話），同步的結果照樣存起來；
-      B（鎖外、很慢）請模型評這個做法的成功率（model_call：佇列開著要排隊），模型失敗、太慢一律 40；排太久沒輪到被擋下來
+      B（鎖外、很慢）請模型評這個做法的成功率，評完再另外很短地判一次善惡（FB-223，event_llm.judge_event_gamble；兩次在同一件
+        model_call 裡，佇列開著要排隊），模型失敗、太慢一律 40、善惡當「中」（善惡那一次失敗只是「中」，成功率照用）；排太久沒輪到被擋下來
         （BUSY_QUEUE_TIMEOUT，PM 2026-10-06，跟同一個人的第二件一樣）：丟 GameError、不擲骰、不套用任何東西，不是 40；預算是
         Config.free_text_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間（見 within_budget）；
       C（鎖內、很快）Game.answer_event 重驗還停在同一則事件、同一句話，才擲骰套用（對不上就不套用）；
@@ -806,24 +807,28 @@ def answer_event(game: Game, text: str) -> list[str] | None:
     event = CONTENT.events[request.event_id]
     total = game.content.config.free_text_budget_seconds
 
+    fallback = event_llm.EventVerdict(event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
-            return event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE  # 等鎖、排隊把整份預算用完了：不叫模型，保底值
-        return event_llm.assess_event_success_rate(client, event, request.text)
+            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值（善惡當「中」）
+        # 評分之後另外很短地判善惡（FB-223）：用評分剩下來的預算再切一份；不夠一趟就不叫、當「中」，成功率照用
+        return event_llm.judge_event_gamble(
+            client, event, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
+        )
 
-    rate = model_call(
-        game, score, fallback=event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE, left=total - (_monotonic() - started),
-        busy=BUSY_FREE_TEXT,
-    )
-    msgs = act(game, lambda g: g.answer_event(request, rate))
+    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral))  # 善惡在 C 段再驗一次（FB-223）
     outcome = game.last_gamble
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
         def narrate():
             client = within_budget(game.client, total - (_monotonic() - started))  # 評分剩下來的預算，不是重新算一份
             if client is None and game.client is not None:
                 return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子
-            return event_llm.narrate_event_gamble(client, event, outcome.text, outcome.success, outcome.effect_text)
+            return event_llm.narrate_event_gamble(
+                client, event, outcome.text, outcome.success, outcome.effect_text, evil=outcome.evil,
+            )
 
         narration = model_call(game, narrate, fallback=None, left=total - (_monotonic() - started))
         if narration:
