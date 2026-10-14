@@ -9,7 +9,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, classic_rules, real_content
 from tianxia import atlas, bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -19,7 +19,7 @@ from tianxia.state import PlayerState, Summons, TimelineResult
 
 @pytest.fixture
 def real():
-    c = real_content()
+    c = classic_rules(real_content())  # 晉升奇遇的推力照出陣探索與地盤之前的規則量（事件推戰線不打五折、不打盡頭阻力）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

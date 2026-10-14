@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, classic_rules, real_content
 from tianxia import atlas, battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
@@ -23,8 +23,8 @@ FRONTS = ["yingru", "nanyang", "jizhou"]
 
 @pytest.fixture
 def real():
-    """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
+    """真實內容，開關關著（beta 那一季的樣子）。測的是三條戰線與推力的舊規則：出陣探索與地盤的四個開關關掉。"""
+    c = classic_rules(real_content())
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，大勢的變化才寫得死
     return c

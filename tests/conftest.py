@@ -77,6 +77,14 @@ def real_content(profile=None) -> Content:
     return cached_content(REAL_CONTENT, profile)
 
 
+def classic_rules(content: Content) -> Content:
+    """出陣探索與地盤（2026-10-14）之前的規則：出陣、探索三選一、地盤、盡頭阻力四個開關都關掉，回傳同一份內容。
+    測的是舊規則本身、或只是拿遊歷／探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
+    cfg = content.config
+    cfg.sortie.enabled = cfg.explore_modes.enabled = cfg.territory.enabled = cfg.push_resistance.enabled = False
+    return content
+
+
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。

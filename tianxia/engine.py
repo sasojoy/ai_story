@@ -2542,7 +2542,7 @@ class Game:
         if not calendar.season_one_on(s.world, c):
             return math.inf
         day = calendar.point(s.world.time, c, s.world).cal_day
-        return push.room(s.player.pushed, day, trend_id, c.config.daily_push_cap)
+        return push.room(s.player.pushed, day, trend_id, self.daily_push_cap())
 
     def _rank_action(self, action_id: str) -> list[str]:
         """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（黃巾推所在戰線往己方，
@@ -5080,6 +5080,35 @@ class Game:
         days = season_length_days(self.state.world, self.content)
         return min(1.0, self.content.config.drill_push_base_days / days) if days > 0 else 1.0
 
+    def daily_push_cap(self) -> float:
+        """每人每曆日每條線推得動多少（第一季，push.split_by_cap 的上限）：Config.daily_push_cap；盡頭阻力開著時再乘季長倍數
+        （設計 5.2：週末設定 1，7 天的季約 0.36）。push_trend 與 _push_room 都讀它。"""
+        cfg = self.content.config
+        return cfg.daily_push_cap * (self.season_scale() if cfg.push_resistance.enabled else 1.0)
+
+    def _resisted_lines(self) -> set[str]:
+        """盡頭阻力與事件五折只管戰線（設計 5.1、3.2）：三條戰線照這一季的規則換成真的會動的線——第一季是三條戰線本身，
+        規則關著的季是它們合成的那一條（黃巾聲勢）。豪強割據、玉璽線索不算。"""
+        c, w = self.content, self.state.world
+        return {line for front in front_ids(c) if (line := resolve_trend(c, w, front)) is not None}
+
+    def _shaped(self, trend_id: str, delta: float, source: str) -> tuple[float, bool]:
+        """玩家這一下真的要推多少（設計 3.2、5.1、5.2）：可重複的事件推戰線打 event_trend_share；第一季的出陣乘季長倍數（規則關著的季
+        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。"""
+        c, w = self.content, self.state.world
+        cfg = c.config
+        amount = float(delta)
+        if trend_id not in self._resisted_lines():
+            return amount, False
+        if source == "event" and cfg.explore_modes.enabled:
+            amount *= cfg.explore_modes.event_trend_share
+        if not cfg.push_resistance.enabled:
+            return amount, False
+        if source == "sortie" and calendar.season_one_on(w, c):
+            amount *= self.season_scale()
+        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, cfg.push_resistance)
+        return amount * share, share < 1
+
     def drill_scale(self) -> float:
         """操練推大勢的倍數：季長倍數；季長倍數小於 1 時再乘 Config.drill_long_season_share（0.5，PM 2026-10-12：操練給的聲勢
         不該佔那麼大）——14 天的季約 0.09；週末設定照舊 1。"""
@@ -5505,8 +5534,8 @@ class Game:
             and trend_id not in goals and GEJU in goals
         )
 
-    def push_trend(self, trend_id: str, delta: int, *, source: str) -> list[str]:
-        """玩家自己造成的大勢推動一律走這裡（遊歷、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
+    def push_trend(self, trend_id: str, delta: float, *, source: str) -> list[str]:
+        """玩家自己造成的大勢推動一律走這裡（遊歷、出陣、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
         第一季設計第七節的規則，掛在第一季開關後面——開關關著（或這一季開季時是關的）就是 change_trend，一個字都不變：
         1. 陣營人數緩衝：推力 ÷ √n，n＝自己陣營 active_window_days 個曆日內推過大勢的成員（含自己這一次、含假人，最少 1）；
         2. 每人每曆日對每條線的上限（緩衝後算）：超過的部分不推大勢；
@@ -5514,37 +5543,43 @@ class Game:
         4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
         緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳 change_trend 的訊息
         （第一季規則開著時戰線是機器可讀的戰況變化，畫面上換成一句話，見 front_lines；開關關著是既有的「（黃巾聲勢 +2）」），
-        只有整數真的動了才有。source 先只當註記（"train"、"drill"、"event"），不存檔。"""
+        只有整數真的動了才有。
+        出陣探索與地盤（2026-10-14）：推之前先照 _shaped 打事件五折、第一季出陣的季長倍數、盡頭阻力（三個開關都關著時一個字都不變），
+        打了阻力的那一下後面多一句 push.RESISTED_LINE；每人每曆日上限讀 daily_push_cap；貢獻照收到的 delta（名目量）全額記。
+        source 是註記（"train"、"sortie"、"drill"、"event"、"event_once"……），不存檔。"""
         s, c = self.state, self.content
         w, p = s.world, s.player
+        amount, resisted = self._shaped(trend_id, delta, source)
+        tail = [push.RESISTED_LINE] if resisted else []
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
             # 遊歷打贏（source="train"）也照季長縮放（企劃者 2026-10-13，FB-168：不縮放的話兩天裡兩邊的遊歷就能把黃巾聲勢從 25
             # 推到 60 或砸到 0，決戰「要嘛第一天開、要嘛整季不開」）。決戰收場不走這裡、不縮放；操練的縮放在 _drill_push 先算好，
             # 傳進來的已經是整數點數。一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，
-            # rules.apply_effect 判斷）照原本的量（FB-166）。
-            scale = self.season_scale() if source in ("event", "train") else 1.0
-            if scale < 1 and is_revealed(w, c, trend_id):
-                whole = self._carry(trend_id, delta * scale)
-                return change_trend(s, c, trend_id, whole) if whole else []
-            return change_trend(s, c, trend_id, delta)
-        if delta == 0 or (delta < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
+            # rules.apply_effect 判斷）照原本的量（FB-166）。出陣（source="sortie"）跟遊歷打贏一樣照季長縮放；打過折
+            # （事件五折、盡頭阻力）的量有零頭，一律記進 trend_accum。
+            scale = self.season_scale() if source in ("event", "train", "sortie") else 1.0
+            if (scale < 1 or amount != int(amount)) and is_revealed(w, c, trend_id):
+                whole = self._carry(trend_id, amount * scale)
+                return (change_trend(s, c, trend_id, whole) if whole else []) + tail
+            return change_trend(s, c, trend_id, int(amount)) + tail
+        if amount == 0 or (amount < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
             return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
         cfg = c.config
         now = w.time
         at = calendar.point(now, c, w)
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         key = f"{at.cal_day}:{trend_id}"
-        pushed = push.buffered(abs(delta), push.active_count(s, p.faction, now, window))
+        pushed = push.buffered(abs(amount), push.active_count(s, p.faction, now, window))
         used = push.used_today(p.pushed, at.cal_day, trend_id)
-        moved, _ = push.split_by_cap(pushed, used, cfg.daily_push_cap)  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
+        moved, _ = push.split_by_cap(pushed, used, self.daily_push_cap())  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
         p.pushed = push.recent_days(p.pushed, at.cal_day)
         p.pushed[key] = used + moved
 
         msgs: list[str] = []
         if moved > 0:
-            whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), moved if delta > 0 else -moved)
+            whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), moved if amount > 0 else -moved)
             if rest:
                 w.trend_accum[trend_id] = rest
             else:
@@ -5555,12 +5590,12 @@ class Game:
         if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
             faction = c.scenario.find_faction(p.faction)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
-            if goal and (goal > 0) == (delta > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
+            if goal and (goal > 0) == (amount > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 push.add_contribution(p, at.week, gained)
             w.active_pushers.setdefault(p.faction, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
-        return msgs
+        return msgs + tail
 
     def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
         p = self.state.player

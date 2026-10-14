@@ -1897,6 +1897,49 @@ class RiseTuning(_Strict):
     event_cap: int = Field(default=4, ge=0)
 
 
+class SortieRules(_Strict):
+    """出陣（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第二節；遊歷改版）。enabled 關掉回到舊的遊歷與操練。
+    不看第一季開關：劇本有陣營就有（sortie.on）。"""
+
+    enabled: bool = True
+    per_day: int = Field(default=5, ge=1)  # 每人每天幾次（攻、守、攪局共用；照 pill_day_utc_offset_hours 的 00:00 換日，同回體丹）
+    hold_share: float = Field(default=0.5, gt=0, le=1)  # 守、攪局推的量是攻的幾成
+
+
+class ExploreModes(_Strict):
+    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix），
+    事件推戰線也不再打折。"""
+
+    enabled: bool = True
+    encounter_chance: float = Field(default=0.35, ge=0, le=1)  # 找素材撞上怪（城鎮不撞）
+    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})  # 照危險度：再一個二階的機會
+    town_chance: float = Field(default=0.5, ge=0, le=1)  # 城鎮找素材撿到一個一階的機會
+    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額）
+    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
+
+
+class TerritoryRules(_Strict):
+    """地盤易手（設計第四節；tianxia/territory.py）。enabled 關掉：沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
+
+    enabled: bool = True
+    band: int = Field(default=5, ge=0)  # 拔河門檻上下各幾點不動（免得在門檻上來回翻）
+    geju_one: int = Field(default=60, ge=0, le=100)  # 豪強割據到這裡，每條線一處歸豪強
+    geju_two: int = Field(default=80, ge=0, le=100)  # 到這裡每條線兩處
+    geju_release: int = Field(default=50, ge=0, le=100)  # 降到這裡以下，豪強佔的交還給拔河
+    own_price: float = Field(default=0.9, gt=0)  # 在自己陣營控制的地方療傷、打造工錢、買馬
+    enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
+
+
+class PushResistance(_Strict):
+    """盡頭阻力與季長縮放（設計第五節）。enabled 關掉：推力不打盡頭的折、每人每曆日上限與出陣推的量不乘季長倍數。"""
+
+    enabled: bool = True
+    full_within: int = Field(default=15, ge=0, le=50)  # 推之前離 50 在這以內（35～65，亂局帶）全額
+    half_within: int = Field(default=35, ge=0, le=50)  # 在這以內（15～35、65～85）打 mid_share
+    mid_share: float = Field(default=0.5, gt=0, le=1)
+    far_share: float = Field(default=0.2, gt=0, le=1)  # 再外面（0～15、85～100）
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1958,6 +2001,10 @@ class Config(_Strict):
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
+    sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
+    explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

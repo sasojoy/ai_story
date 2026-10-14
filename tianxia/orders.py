@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, figures, rules, timetable
+from . import calendar, figures, push, rules, timetable
 from .models import Content, OrderTemplate
 from .state import GameState, Order
 
@@ -343,29 +343,41 @@ def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
         rumor.region = o.front
 
 
+def front_push(state: GameState, content: Content, front: str, amount: int) -> tuple[int, list[str]]:
+    """軍令達成推戰線 amount 點（帶正負號）：盡頭阻力開著時照推之前的戰線打折（push.resistance，出陣探索與地盤設計 5.1），
+    四捨五入成整點（push.round_half_away）。回傳（真的推的整點, change_trend 的訊息）。時刻表、決戰、管理者不走這裡。"""
+    tuning = content.config.push_resistance
+    moved = amount
+    if tuning.enabled and amount:
+        moved = push.round_half_away(push.resistance(rules.trend_value(state, content, front), amount, tuning))
+    return moved, rules.change_trend(state, content, front, moved)
+
+
 def _complete(state: GameState, content: Content, o: Order) -> list[str]:
-    """湊滿額度：效果只套一次（濃縮版內容表 3.1），發陣營軍情（列前三名）與地方外洩。"""
+    """湊滿額度：效果只套一次（濃縮版內容表 3.1），發陣營軍情（列前三名）與地方外洩。
+    推戰線走 front_push（盡頭阻力）；o.applied 記真的推了幾點（阻力關著、或沒有方向〔SIGN 沒有這個陣營〕時照寫好的量記，同以前）。"""
     o.done, o.done_time = True, state.world.time
     t = template_of(content, o)
     effect, sign = t.effect, SIGN.get(o.faction, 0)
     msgs: list[str] = []
+
+    def apply(nominal: int) -> int:
+        moved, lines = front_push(state, content, o.front, sign * nominal)
+        msgs.extend(lines)
+        return abs(moved) if sign else nominal
+
     if o.template == "siege":
         defend = _enemy_order(state, o, "defend")
         halved = defend is not None and template_of(content, defend).effect.halve_enemy_siege
-        o.applied = effect.trend // 2 if halved else effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        o.applied = apply(effect.trend // 2 if halved else effect.trend)
     elif o.template == "defend":
         siege = _enemy_order(state, o, "siege") if effect.halve_enemy_siege else None
-        if siege is not None:  # 敵方已經攻下：收回一半
-            back = siege.applied - siege.applied // 2
-            siege.applied -= back
-            o.applied = back
-        else:  # 敵方這週還沒攻下：往己方 3（之後敵方才攻下，只得一半，見上面）
-            o.applied = effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        # 敵方已經攻下：收回一半；敵方這週還沒攻下：往己方 3（之後敵方才攻下，只得一半，見上面）
+        o.applied = apply(siege.applied - siege.applied // 2 if siege is not None else effect.trend)
+        if siege is not None:  # 真的收回多少，就從對方那一筆扣多少
+            siege.applied -= o.applied
     elif o.template in ("intercept", "escort"):
-        o.applied = effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        o.applied = apply(effect.trend)
         event = timetable.next_event_on(state, content, o.front)
         if event is not None and o.faction in SIGN:
             timetable.add_mod(state, content, event.id, o.faction, effect.event_mod)  # 沒有 roll_side 的大事 add_mod 自己略過

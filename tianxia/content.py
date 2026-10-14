@@ -1315,6 +1315,18 @@ def check_bounties(c: Content, need) -> None:
         )
 
 
+def check_core_loop(c: Content, need) -> None:
+    """出陣探索與地盤的設定（Config.territory、push_resistance、explore_modes）：割據的三個門檻照大小排、阻力的兩段照大小排、
+    二階素材的機會只寫危險度 1～3。"""
+    t, r = c.config.territory, c.config.push_resistance
+    need(t.geju_release <= t.geju_one <= t.geju_two,
+         f"Config.territory：geju_release ≤ geju_one ≤ geju_two（{t.geju_release}、{t.geju_one}、{t.geju_two}）")
+    need(r.full_within <= r.half_within,
+         f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
+    need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
+         f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
+
+
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -2273,6 +2285,7 @@ def validate(c: Content) -> None:
     check_gear(c, need, known)
     check_signature_arms(c, need, known)
     check_bounties(c, need)
+    check_core_loop(c, need)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
