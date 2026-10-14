@@ -9,7 +9,9 @@ import math
 import zlib
 from dataclasses import dataclass
 
-from .models import Content, Location, MapRiver, Terrain
+from html import escape
+
+from .models import Content, Location, MapRegion, MapRiver, Terrain
 
 Point = tuple[float, float]
 
@@ -105,6 +107,32 @@ def region_shape(points: list[list[int]], fill: str, base: str) -> str:
     )
 
 
+BORDER_DASH = "12 4 2 4"  # 輿圖升級的州界：長、空、點、空（設計第二節）
+BORDER_INK = "#A88F62"  # 州界的顏色
+REGION_WASH = 0.55  # 大區底色的濃淡（網頁照「這一區多半歸誰」換顏色時也照這個濃淡）
+
+
+def region_base(region: MapRegion) -> str:
+    """輿圖升級底圖的一塊大區：削角的淡色塊（data-region，網頁照這一區多半歸誰換 fill），描一道點劃線的州界。"""
+    return (
+        f'<path data-region="{region.id}" d="{path_d(chaikin(region.points), closed=True)}" fill="{region.fill}" '
+        f'fill-opacity="{REGION_WASH}" stroke="{BORDER_INK}" stroke-width="2.2" stroke-dasharray="{BORDER_DASH}" '
+        'stroke-linejoin="round"/>'
+    )
+
+
+REGION_NAME_SIZE = 30  # 寫在地圖上的大區名（跟著縮放）
+REGION_NAME_INK = "#7A6A55"
+
+
+def region_name(region: MapRegion) -> str:
+    """大區名寫在地圖本身：大字、拉開字距、半透明，跟著縮放；不接點擊。"""
+    return (
+        f'<text x="{region.label_x}" y="{region.label_y}" font-size="{REGION_NAME_SIZE}" font-weight="700" letter-spacing="10" '
+        f'fill="{REGION_NAME_INK}" opacity="0.45" pointer-events="none" style="font-family:serif">{escape(region.name)}</text>'
+    )
+
+
 def river_line(river: MapRiver) -> list[Point]:
     """河的平滑中線，從上游到下游。"""
     return catmull_rom(river.points, RIVER_STEPS)
@@ -142,6 +170,19 @@ ROAD_STYLE = {  # 路的種類：顏色、粗細、虛線
     "山路": ("#86704F", 1.9, "1.5 4"),
 }
 FAINT_ROAD = ("#C2B394", 1.4, "1.5 4")  # 兩頭都沒摸清的路
+ROAD_CORE = "#F1E7CF"  # 輿圖升級：官道雙線中間那一道（紙色）
+
+
+def road(a: Location, b: Location, kind: str, control: Point) -> str:
+    """輿圖升級底圖的一條路（二次曲線，control 是 road_control）：官道畫雙線（褐色外框、紙色內芯），其他照 ROAD_STYLE。"""
+    color, width, dash = ROAD_STYLE[kind]
+    d = f"M{a.x},{a.y} Q{fmt(control[0])},{fmt(control[1])} {b.x},{b.y}"
+    if kind == "官道":
+        return (
+            f'<path d="{d}" fill="none" stroke="{color}" stroke-width="5.2" stroke-opacity="0.75" stroke-linecap="round"/>'
+            f'<path d="{d}" fill="none" stroke="{ROAD_CORE}" stroke-width="2.2" stroke-linecap="round"/>'
+        )
+    return f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{fmt(width)}" stroke-dasharray="{dash}" stroke-linecap="round"/>'
 
 
 # ── 地形（純裝飾：只跟內容有關，同一份內容只算一次）─────────────
@@ -383,6 +424,22 @@ COMPASS_RADIUS = 22  # 指北針的圓
 COMPASS_NEEDLE = 30  # 指針從中心往上下各伸多長
 NORTH_RISE = 36  # 「北」字的基線在中心上方多遠
 NORTH_SIZE = 13
+
+
+SILK_ID = "tx-silk"  # 輿圖升級底圖的絹紋（設計第二節）
+VIGNETTE_ID = "tx-vignette"  # 四角壓暗
+
+
+def paper_defs() -> str:
+    """底圖的紙：絹紋（細雜訊，淡淡的褐色）與四角壓暗（徑向漸層）。"""
+    return (
+        f'<defs><filter id="{SILK_ID}" x="0" y="0" width="100%" height="100%">'
+        '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7"/>'
+        '<feColorMatrix values="0 0 0 0 0.42  0 0 0 0 0.34  0 0 0 0 0.22  0 0 0 0.1 0"/></filter>'
+        f'<radialGradient id="{VIGNETTE_ID}" cx="0.5" cy="0.5" r="0.75">'
+        '<stop offset="0.65" stop-color="#5A4632" stop-opacity="0"/>'
+        '<stop offset="1" stop-color="#5A4632" stop-opacity="0.22"/></radialGradient></defs>'
+    )
 
 
 def frame(width: int, height: int) -> str:

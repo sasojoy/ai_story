@@ -643,6 +643,55 @@ def _edge_spots(start: Point, end: Location, text: str, size: int, bounds: Box) 
     return [(x, y + size * (ASCENT - 0.5), "middle") for x, y in centres]
 
 
+GLYPHS = {"town": "城", "camp": "營", "roof": "寺", "ferry": "渡", "peak": "山", "flag": "野"}  # 輿圖升級：地點圓盤裡的一個字（待 joy 潤）
+
+
+def open_places(state: GameState, content: Content) -> list[str]:
+    """這一季畫得出來的地點（全圖開放之後只剩劇情還沒開放的不畫），照內容的順序；也是底圖的快取鍵（mapdata.base_key）。"""
+    views = atlas.views(state, content)
+    return [loc_id for loc_id in content.locations if views[loc_id] != "hidden"]
+
+
+def you_point(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
+    """路上的「你」在哪裡、往哪個方向（輿圖升級的疊層用；同 _you）。"""
+    return _you(content, spot)
+
+
+def render_base(state: GameState, content: Content) -> str:
+    """輿圖升級的底圖（設計第二、九節）：紙（絹紋、四角壓暗）、大區（data-region、點劃線州界）、河、山與樹、外框、大區名、河名、
+    路（官道雙線；兩頭都開放才畫）、指北針、山名。不畫地點、名字、你：網頁照疊層畫在 <g id="mk">。只跟內容與開放的地點有關。"""
+    m = content.map
+    shown = set(open_places(state, content))
+    out = [
+        f'<svg viewBox="0 0 {m.width} {m.height}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:{m.width}px;height:{m.height}px;max-width:none;font-family:sans-serif">',
+        mapart.paper_defs(),
+        f'<rect x="0" y="0" width="{m.width}" height="{m.height}" rx="12" fill="{m.background}"/>',
+        f'<rect x="0" y="0" width="{m.width}" height="{m.height}" rx="12" filter="url(#{mapart.SILK_ID})"/>',
+    ]
+    out += [mapart.region_base(region) for region in m.regions]
+    out += _rivers(m)
+    out += [piece.svg for piece in mapart.terrain(content)]
+    out.append(mapart.frame(m.width, m.height))
+    out += [mapart.region_name(region) for region in m.regions]
+    taken: list[Taken] = []
+    for label in m.labels:
+        text, box = _river_label(label)
+        out.append(text)
+        taken.append((box, TEXT_WEIGHT))
+    for a_id, a in content.locations.items():
+        for b_id in a.connections:
+            if a_id < b_id and a_id in shown and b_id in shown:
+                out.append(mapart.road(a, content.locations[b_id], a.road_to(b_id), mapart.road_control(content, a_id, b_id)))
+    out.append(_compass(m, taken))
+    out += _terrain_names(m, taken)
+    out.append(
+        f'<rect x="0" y="0" width="{m.width}" height="{m.height}" rx="12" fill="url(#{mapart.VIGNETTE_ID})" pointer-events="none"/>'
+    )
+    out.append("</svg>")
+    return "".join(out)
+
+
 def render_minimap(state: GameState, content: Content) -> str:
     """場景旁的小地圖：以所在地為中心，從大地圖截一塊 content.map.mini_window 大的視窗（超出地圖的地方填底色），
     畫法同大地圖：大區底色（照原色，不依大勢變紅）、河、碰到視窗的山頭與樹（地形算一次就快取，每次重畫只挑出來，
