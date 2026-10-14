@@ -481,6 +481,17 @@ def test_opened_invitations_are_not_folded_again():
     assert "calls" in out["fitted"]
 
 
+@needs_node
+def test_the_fit_counts_the_line_it_adds():
+    """6b 補上的「還有 N 份邀請」那一行也佔高度：先放好那一行再量。以前收完才補，收一份就停，補上之後行動列又掉回分頁列底下
+    （實機 375×812、兩份、師父的框在：行動列 679～777）。"""
+    from test_fb107_first_screen import run as fit_run
+
+    # 830 − 間距 30 = 800；收一份（−70）＋那一行（+35）是 765，還差，再收一份
+    out = fit_run({**CALLS, "callsTotal": 2, "callsMore": ""}, save={"moreLine": 35})
+    assert out["calls"] == [True, True] and out["more"] == ["有 2 份邀請等你回應 ▾", "1"] and out["bottom"] <= 740
+
+
 # ── FB-241：只有一、兩份邀請被第一屏收成一行時，點了攤不開 ──
 
 

@@ -98,7 +98,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22, call: 70 }, input.save || {});
+const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22, call: 70, moreLine: 0 }, input.save || {});
 const bodyHeight = () => (now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
 const bottom = () => {
   let b = L.bottom;
@@ -113,6 +113,7 @@ const bottom = () => {
   if (musterLines.some((p) => has(p, "fit-clip"))) b -= SAVE.muster;
   if (menu && has(menu, "fit-tight")) b -= SAVE.options;
   callRows.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.call; });
+  if (callsMore && callsMore.dataset.fit) b += SAVE.moreLine; // 收法 6b 補上的「還有 N 份」那一行自己也佔高度
   return b;
 };
 const target = actbar || last;

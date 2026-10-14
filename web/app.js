@@ -776,19 +776,21 @@
       const box = document.querySelector("#page > .card.scene .calls");
       if (!box || callsOpened((S.main && S.main.calls) || [])) return false;
       const rows = [...box.querySelectorAll(":scope > .call")];
-      let hidden = 0;
-      while (fitOver() > 0 && hidden < rows.length) {
-        rows[rows.length - 1 - hidden].classList.add("fit-hide");
-        hidden += 1;
-      }
-      if (!hidden) return false;
+      if (!rows.length) return false;
+      // 「還有 N 份」那一行先放好、每收一份就換字，再量：以前收完才補那一行，量的時候少算了它的高度，補上之後行動列又掉回分頁列底下
+      // （375×812、兩份、師父的框在：只收了一份，行動列 679～777）
       let more = box.querySelector(":scope > .calls-more");
       if (!more) {
         box.insertAdjacentHTML("beforeend", '<button class="linkish calls-more" data-act="calls-more" data-fit="1"></button>');
         more = box.querySelector(":scope > .calls-more");
       } else if (more.dataset.text == null) more.dataset.text = more.textContent;
       const total = Number(box.dataset.total) || rows.length;
-      more.textContent = callsMoreText(total - (rows.length - hidden), hidden === rows.length);
+      let hidden = 0;
+      do {
+        rows[rows.length - 1 - hidden].classList.add("fit-hide");
+        hidden += 1;
+        more.textContent = callsMoreText(total - (rows.length - hidden), hidden === rows.length);
+      } while (fitOver() > 0 && hidden < rows.length);
       return true;
     } },
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
