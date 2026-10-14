@@ -818,7 +818,52 @@ def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reaso
 @needs_node
 def test_the_library_keeps_its_title_and_the_chips_sit_under_it():
     html = _practice(_library_of_ten())
-    assert re.search(r'<div class="label">功法庫 <small class="muted">武學與意境 0/50</small></div>\s*<div class="lib-filter">', html)
+    assert re.search(
+        r'<div class="label">功法庫 <small class="muted">武學與意境 0/50</small>'
+        r'<button class="linkish melt-mode" data-act="melt-mode">批量熔煉</button></div>\s*<div class="lib-filter">', html,
+    )
+
+
+# ── 批量熔煉（企劃者 2026-10-14「合成越來越多，需要能快速熔煉的機制」）──────────────────
+
+
+def _melt_rows():
+    rows = _library_of_ten()
+    rows[2]["melt"]["value"] = 3
+    rows[3].update(quality="中品", melt={"ok": True, "note": "退回心得 5", "confirm": "", "value": 5})
+    rows[4]["melt"] = {"ok": False, "note": "先替它定名", "confirm": ""}
+    return rows
+
+
+@needs_node
+def test_batch_melt_mode_lists_every_art_with_a_tick_and_sums_what_is_ticked():
+    html = _practice(_melt_rows(), "H.S.meltSel = { arts: ['w2', 'w3', 'w4', 'gone'], ins: ['feng'] };")
+    assert html.count('data-act="melt-pick"') == 10  # 不分頁：十門都列，身上的兩門不在
+    assert re.search(r'data-act="melt-pick" data-id="w4" disabled', html)  # 熔不掉的勾不了
+    assert "已勾 <b>3</b> 樣<small>心得 +18</small>" in html  # w2 3＋w3 5＋風 10；熔不掉的、已經不在的不算
+    assert 'data-act="melt-pick-ins" data-id="feng" aria-pressed="true"' in html
+    assert 'data-act="melt-quality" data-q="中品"' in html and "收起" in html
+
+
+@needs_node
+def test_batch_melt_is_not_offered_in_the_hut():
+    rows = _library_of_ten()
+    rows[2]["glow"] = ["melt"]
+    assert 'data-act="melt-mode"' not in _practice(rows)
+
+
+@needs_node
+def test_batch_melt_ticks_a_whole_grade_and_asks_before_melting():
+    out = run(
+        "H.S.menxia = { owned_arts: input_rows, insights: [] }; H.S.meltSel = { arts: [], ins: ['huo'] };"
+        "H.meltQuality('下品'); const ticked = [...H.S.meltSel.arts];"
+        "H.askMeltMany({ dataset: { v: '42' } }); const asked = H.calls[0].ask; await H.calls[0].go();"
+        "return { ticked, asked, sent: H.calls.filter((c) => c.mx), sel: H.S.meltSel };".replace("input_rows", json.dumps(_melt_rows())),
+        fns=["meltQuality", "askMeltMany", "pagePractice"], stubs=MELT_STUBS + "const renderPage = () => {};",
+    )
+    assert out["ticked"] == ["w2", "w5", "w6", "w7", "n2", "n3", "n4", "n5"]  # 下品、熔得掉的（w3 中品、w4 熔不掉）
+    assert out["asked"].startswith("把勾的 8 門武學、1 個意境一起熔掉？心得 +42。") and "不能再修練" in out["asked"]
+    assert out["sent"] == [{"mx": "melt_many", "body": {"arts": out["ticked"], "insights": ["huo"]}}] and out["sel"] is None
 
 
 MELT_STUBS = (

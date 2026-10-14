@@ -390,3 +390,58 @@ def test_a_content_art_gets_no_minimum_so_learning_and_melting_is_no_loop(state,
     assert library.melt_value(state, content, world, "lake_kick") == 0
     library.melt_art(state, content, world, "lake_kick")
     assert state.player.stats["xinde"] == 0
+
+
+# ── 批量熔煉（企劃者 2026-10-14「合成越來越多，需要能快速熔煉的機制」）──────────────────
+
+
+def test_melting_many_pays_the_same_as_melting_one_by_one(state, content, world):
+    """一次熔完的心得跟一門一門熔的加起來一樣：武學照 melt_value，意境照 melt_insight_xinde。"""
+    _fused(world, "旋風腿")
+    state.player.arts = ["旋風腿", "lake_kick"]
+    state.player.art_levels.update({"旋風腿": 5, "lake_kick": 5})
+    state.player.insights = ["huo"]
+    state.player.stats["xinde"] = 0
+    expected = sum(library.melt_value(state, content, world, a) for a in state.player.arts) + content.config.melt_insight_xinde
+    msgs = library.melt_many(state, content, world, ["旋風腿", "lake_kick"], ["huo"])
+    assert state.player.arts == [] and state.player.insights == [] and state.player.stats["xinde"] == expected
+    assert msgs[0] == "你一口氣熔掉了 2 門武學、1 個意境：【旋風腿】【湖邊腿法】「火」。"
+    assert msgs[1] == f"心得 +{expected}"
+    assert not ({"旋風腿", "lake_kick"} & set(state.player.art_levels))  # 私有紀錄一起拿掉
+
+
+def test_melting_many_skips_what_cannot_be_melted_and_says_why(state, content, world):
+    _fused(world, "旋風腿")
+    state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["旋風腿"]
+    msgs = library.melt_many(state, content, world, ["basic_fist", "旋風腿", "旋風腿"], [])  # 重複的只算一次
+    assert state.player.member.wugong_id == "basic_fist" and state.player.arts == []
+    assert any("沒熔" in m and "先改練" in m for m in msgs)
+    assert msgs[0].startswith("你一口氣熔掉了 1 門武學")
+
+
+def test_melting_many_with_nothing_to_melt_changes_nothing(state, content, world):
+    state.player.stats["xinde"] = 0
+    assert library.melt_many(state, content, world, [], []) == [library.MELT_MANY_NONE]
+    state.player.member.wugong_id = "basic_fist"
+    msgs = library.melt_many(state, content, world, ["basic_fist"], ["feng"])
+    assert msgs[0] == library.MELT_MANY_NOTHING and state.player.stats["xinde"] == 0
+
+
+def test_melting_many_warns_about_arts_that_lose_their_cultivation_insight(state, content, world):
+    _fused(world, "旋風腿")
+    state.player.arts = ["旋風腿"]
+    state.player.insights = ["feng"]
+    msgs = library.melt_many(state, content, world, [], ["feng"])
+    assert any("旋風腿" in m and "不能再修練" in m for m in msgs)
+    # 那一門同一次也熔掉了，就不必再警告
+    state.player.insights = ["feng"]
+    state.player.arts = ["旋風腿"]
+    msgs = library.melt_many(state, content, world, ["旋風腿"], ["feng"])
+    assert not any("不能再修練" in m for m in msgs)
+
+
+def test_melting_many_lists_at_most_a_few_names(state, content, world):
+    state.player.insights = [f"x{i}" for i in range(9)]
+    msgs = library.melt_many(state, content, world, [], list(state.player.insights))
+    assert msgs[0].endswith(f"等 9 樣。") and state.player.insights == []

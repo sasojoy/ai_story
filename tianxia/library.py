@@ -237,6 +237,70 @@ def melt_art(
     return [f"你把【{name}】熔成了心得。", f"心得 +{refund}"]
 
 
+MELT_MANY_MAX = 120  # 一次最多熔幾樣（持有上限一季最多 88 格，留一點餘地；多送的當沒送）
+MELT_MANY_NONE = "沒有勾選要熔的功法。"
+MELT_MANY_NOTHING = "一樣都沒熔成。"
+MELT_MANY_SHOWN = 6  # 結果那一句最多點幾個名字，其餘寫「等 N 樣」
+MELT_MANY_SKIPS = 3  # 熔不掉的最多列幾句原因
+
+
+def melt_many(
+    state: GameState, content: Content, world: WorldStateStore, art_ids: list[str], insight_ids: list[str],
+) -> list[str]:
+    """批量熔煉（企劃者 2026-10-14「合成越來越多，需要能快速熔煉的機制」）：功法庫裡勾的武學與意境一次熔完。
+    每一門照 melt_problem／melt_value 跟一門一門熔一樣算（擋的、退的心得一模一樣），意境照 melt_insight 的價錢；
+    熔不掉的跳過、寫原因。結果合成一則：熔了幾樣、點名、心得合計、熔掉意境之後不能再修練的那幾門。
+    序章由呼叫端擋（Game.melt_many），這裡不看。"""
+    p = state.player
+    arts = list(dict.fromkeys(a for a in art_ids if a))[:MELT_MANY_MAX]
+    ins = list(dict.fromkeys(i for i in insight_ids if i))[: max(0, MELT_MANY_MAX - len(arts))]
+    if not arts and not ins:
+        return [MELT_MANY_NONE]
+    melted: list[str] = []
+    skipped: list[str] = []
+    refund = 0
+    art_count = 0
+    for art_id in arts:
+        art = team.player_art(state, content, world, art_id)
+        name = art.name if art else art_id
+        problem = melt_problem(state, art_id, name)
+        if problem is not None:
+            skipped.append(f"【{name}】沒熔：{problem}")
+            continue
+        refund += melt_value(state, content, world, art_id)
+        remove_art(state, art_id)
+        melted.append(f"【{name}】")
+        art_count += 1
+    # 熔意境之前記下哪幾門還找得到修練用的意境，熔完再比（同 melt_insight 那一句）
+    kept = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
+    leaned = {art.id for art in kept if insights.for_cultivation(state, content, world, art) is not None}
+    insight_count = 0
+    for insight_id in ins:
+        if insight_id not in p.insights:
+            skipped.append(f"「{insight_id}」沒熔：你沒有這個意境。")
+            continue
+        insight = insights.resolve(insight_id, content, world, state)
+        p.insights.remove(insight_id)
+        refund += content.config.melt_insight_xinde
+        melted.append(f"「{insight.name if insight else insight_id}」")
+        insight_count += 1
+    if not melted:
+        return [MELT_MANY_NOTHING, *skipped[:MELT_MANY_SKIPS]]
+    p.stats["xinde"] = p.stats.get("xinde", 0) + refund
+    parts = [f"{art_count} 門武學" if art_count else "", f"{insight_count} 個意境" if insight_count else ""]
+    names = "".join(melted[:MELT_MANY_SHOWN]) + (f"等 {len(melted)} 樣" if len(melted) > MELT_MANY_SHOWN else "")
+    msgs = [f"你一口氣熔掉了 {'、'.join(x for x in parts if x)}：{names}。"]
+    if refund > 0:
+        msgs.append(f"心得 +{refund}")
+    msgs += skipped[:MELT_MANY_SKIPS]
+    if len(skipped) > MELT_MANY_SKIPS:
+        msgs.append(f"還有 {len(skipped) - MELT_MANY_SKIPS} 樣沒熔。")
+    needing = [art.name for art in kept if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
+    if needing:
+        msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用的意境熔掉了）。")
+    return msgs
+
+
 def melt_insight(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[str]:
     p = state.player
     if insight_id not in p.insights:
