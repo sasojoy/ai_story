@@ -408,13 +408,30 @@ def _picked(
     return name
 
 
-def _arrival(art: MartialArt, first: bool, landed: bool) -> str:
-    """新武學那一則訊息的後半：模型寫的說明（有的話），再接首創、照著合、或合到舊的那一句。"""
+OWN_FIRST = "\n這一門是你首創的。"  # 自己首創、熔掉之後照配方又合了一次（FB-117；待 joy 潤）
+CO_FIRST = "\n這是江湖上第一次有人合出這一門——你與{other}一起首創的。"  # 論武共同首創、接著照配方合出同一門的那一方（FB-117；待 joy 潤）
+OWN_FIRST_INSIGHT = "\n這個意境是你首悟的。"  # 同上，意境（待 joy 潤）
+CO_FIRST_INSIGHT = "\n這是江湖上第一次有人悟出這個意境——你與{other}一起首悟的。"  # 同上，意境（待 joy 潤）
+
+
+def _partner_of(thing: MartialArt | Insight, me: str) -> str | None:
+    """這一門（這個意境）的首創者裡有你：回另一位共同首創者（論武，co_creator）；只有你自己是空字串；首創者裡沒有你是 None。"""
+    if not me or me not in (thing.creator, thing.co_creator):
+        return None
+    return (thing.co_creator if me == thing.creator else thing.creator) or ""
+
+
+def _arrival(art: MartialArt, first: bool, landed: bool, me: str = "") -> str:
+    """新武學那一則訊息的後半：模型寫的說明（有的話），再接首創、照著合、或合到舊的那一句。me 是開爐的人：
+    首創者裡有他（論武的另一方剛照配方合出同一門、或自己首創的熔掉又合）時不寫「你照著合出了同一門」（FB-117）。"""
     tail = f"\n{art.note}" if art.note else ""
     if art.preset:  # 師門功夫沒有首創者：老手的另一個配方合到它，也寫師門傳下來的（不是「不知名的前人」）
         return tail + "\n這是師門傳下來的路數。"
     if first:
         return tail + "\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。"
+    other = _partner_of(art, me)
+    if other is not None:
+        return tail + (CO_FIRST.format(other=other) if other else OWN_FIRST)
     by = shown_creator(art) or "不知名的前人"
     return tail + (f"\n這一門由{by}首創。" if landed else f"\n這一門由{by}首創，你照著合出了同一門。")
 
@@ -435,7 +452,7 @@ def _special_rumor(state: GameState, content: Content, art: MartialArt, first: b
     special = traits.special(content, art.special) if first else None
     if special is None:
         return []
-    line = f"江湖上傳開了：{state.player.name}合出一門帶〔{special.name}〕的【{art.name}】。"
+    line = f"江湖上傳開了：{_makers_shown(state, art)}合出一門帶〔{special.name}〕的【{art.name}】。"
     add_rumor(state, line, None, content=content, named=True)
     return [line]
 
@@ -725,8 +742,8 @@ def fuse(
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     # 新武學自己那一份的品質照這一爐的搭配擲（fuse_odds；序章 rng 是 None，固定下品），從擲到的那一品接著修
     quality = roll_quality(fuse_odds(state, content, art_id, base, insight, secret=secret is not None), rng)
-    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None, quality=quality)]
-    msgs += _secret_lines(state, content, world, secret, f"【{art.name}】", first)
+    msgs = [_fuse_line(base, insight, art, first, landed, preset=preset is not None, quality=quality, me=state.player.name)]
+    msgs += _secret_lines(state, content, world, secret, f"【{art.name}】", first, art)
     msgs += setting_line(content, setting_points(state, content, insight.attribute, insight.lean, insight))
     msgs += _charge(state, *_price(content, partner, "fuse"))
     if secret is None:  # 秘方那一門的傳聞由 _secret_lines 傳（不再另傳一句特別功效的）
@@ -757,17 +774,23 @@ def _claim_secret_art(
     return None, False
 
 
+def _makers_shown(state: GameState, thing: MartialArt | Insight) -> str:
+    """首創的傳聞與江湖史寫誰：登記時記下的名號（論武共同首創是「甲、乙」，FB-117：以前只寫開爐的那一個人）；沒記的照開爐的人。"""
+    return thing.creator_shown or state.player.name
+
+
 def _secret_lines(
-    state: GameState, content: Content, world: WorldStateStore, secret, thing: str, first: bool,
+    state: GameState, content: Content, world: WorldStateStore, secret, thing: str, first: bool, made=None,
 ) -> list[str]:
-    """合中秘方：結果多一句「暗合口訣」，記進武學譜；這一季第一個合中的，江湖上傳一句（具名，同 _special_rumor）、寫進江湖史。"""
+    """合中秘方：結果多一句「暗合口訣」，記進武學譜；這一季第一個合中的，江湖上傳一句（具名，同 _special_rumor）、寫進江湖史。
+    made 是合出來的那一門（那個意境）：寫首創者照它登記的名號（論武是兩個人）。"""
     if secret is None:
         return []
     cfg = content.config.secrets
     secret_recipes.solve(state, secret_recipes.tianji_of(world), secret)
     lines = [cfg.hit_line] if cfg.hit_line else []
     if first:
-        who = state.player.name
+        who = _makers_shown(state, made) if made is not None else state.player.name
         rumor = cfg.rumor.format(who=who, thing=thing)
         add_rumor(state, rumor, None, content=content, named=True)
         add_chronicle(state, cfg.chronicle.format(who=who, thing=thing))
@@ -796,7 +819,7 @@ def _new_road(result: str, road: str, ingredients: str) -> str:
 
 def _fuse_line(
     base: MartialArt, insight: Insight, art: MartialArt, first: bool, landed: bool = False, preset: bool = False,
-    quality: str | None = None,
+    quality: str | None = None, me: str = "",
 ) -> str:
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
     head = (
@@ -805,7 +828,7 @@ def _fuse_line(
     )
     if preset:  # 師門配方：每個新人合的都是師門傳下來的同一門，不寫成「由先到的那個新人首創」
         return head + (f"\n{art.note}" if art.note else "") + "\n這是師門傳下來的路數。"
-    return head + _arrival(art, first, landed)
+    return head + _arrival(art, first, landed, me)
 
 
 def merge_problem(
@@ -921,12 +944,18 @@ def merge(
     head = f"「{ia.name}」與「{ib.name}」在你心中交融，{verb}「{result.name}」（屬{result.attribute}）！"
     if result.note:
         head += f"\n{result.note}"
-    head += "\n這是江湖上第一次有人悟出這個意境。" if first else f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
+    other = None if first else _partner_of(result, state.player.name)  # 首悟者裡有你（論武的另一方、自己的又合一次）：FB-117
+    if first:
+        head += "\n這是江湖上第一次有人悟出這個意境。"
+    elif other is not None:
+        head += CO_FIRST_INSIGHT.format(other=other) if other else OWN_FIRST_INSIGHT
+    else:
+        head += f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     echo(state, content, result, first)
     if first:
         annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)  # 行狀（玩家傳）：首創
     # 真的合成了才扣：被拒絕、名字都被用掉的都不收體力，跟心得同一個點
-    extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first)
+    extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first, result)
     return result, [head] + extra + _charge(state, *_price(content, partner, "merge"))
 
 
@@ -1058,7 +1087,7 @@ def blend(
         f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"
         f"（{quality}・屬{art.attribute}）！"
     )
-    msgs = [head + _arrival(art, first, landed)] + _secret_lines(state, content, world, secret, f"【{art.name}】", first)
+    msgs = [head + _arrival(art, first, landed, state.player.name)] + _secret_lines(state, content, world, secret, f"【{art.name}】", first, art)
     msgs += setting_line(content, setting_points(state, content, shape.attribute, shape.lean))
     msgs += _charge(state, *_price(content, partner, "fuse"))
     if secret is None:

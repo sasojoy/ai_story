@@ -487,3 +487,50 @@ def test_on_your_battle_turn_the_people_here_come_after_the_three_moves(pair):
     scene_end = turn.index("</section>", turn.index('<section class="card scene">'))
     assert '<div class="here">' not in turn[:scene_end]
     assert turn.index('data-id="battle:act:guan_raid"') < turn.index('<section class="card people-after"><div class="here">')
+
+
+# ── 第八件：論武共同首創的那一方 ──
+
+
+def test_the_inviter_is_told_they_co_founded_it(pair):
+    from tianxia import fusion
+
+    content, world = pair
+    _invite(content, world)  # 甲出【粗淺拳腳】，乙出「火」
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰拳", "")}))
+    mine = " ".join(_load(world, "乙").journal[0].lines)
+    theirs = " ".join(_load(world, "甲").journal[0].lines)
+    assert "這是江湖上第一次有人合出這一門" in mine
+    assert fusion.CO_FIRST.format(other="乙").strip() in theirs and "照著合出了同一門" not in theirs
+
+
+def test_the_inviter_is_told_they_co_founded_the_insight(pair):
+    from tianxia import fusion
+
+    content, world = pair
+    _invite(content, world, "insight:feng")
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("風火境", "")}))
+    theirs = " ".join(_load(world, "甲").journal[0].lines)
+    assert fusion.CO_FIRST_INSIGHT.format(other="乙").strip() in theirs and "首悟。" not in theirs
+
+
+def test_someone_else_following_the_recipe_still_reads_who_founded_it(pair):
+    content, world = pair
+    _invite(content, world)
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰拳", "")}))
+    third = _make(content, world, "丙", insights=("huo",))
+    lines = " ".join(third.forge("basic_fist", ["huo"], proposed=(None, "")))
+    assert "這一門由乙、甲首創，你照著合出了同一門。" in lines
+
+
+def test_a_first_special_rumor_names_both(pair):
+    from tianxia import fusion
+    from tianxia.martial_arts import MartialArt
+
+    content, world = pair
+    special = content.traits.special[0]
+    state = _load(world, "乙")
+    art = MartialArt(id="x", name="烈焰拳", kind="武學", attribute="剛", quality="下品", base_power=1, top_power=2,
+                     creator="乙", co_creator="甲", creator_shown="乙、甲", special=special.id)
+    [line] = fusion._special_rumor(state, content, art, True)
+    assert line.startswith("江湖上傳開了：乙、甲合出一門")
