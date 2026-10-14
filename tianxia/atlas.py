@@ -678,6 +678,10 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     p = state.player
     if p.duel is not None:  # 單人頭目戰打到一半（tianxia/duel.py）
         return TravelBlock("正跟人交手，先分出勝負或抽身退走", to_jianghu=True)
+    if p.arena is not None:  # 擂台打到一半（tianxia/arena.py）
+        return TravelBlock("正在擂台上，先分出勝負或認輸下台", to_jianghu=True)
+    if p.picking_arena:
+        return TravelBlock("還在擂台邊，先返回才能安排前往", to_jianghu=True)
     if p.pending_companion:
         return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
     if p.picking_audience:

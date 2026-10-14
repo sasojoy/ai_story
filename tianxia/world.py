@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
+from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -350,6 +350,11 @@ def end_season(
         w.ending_text = ending.text
         add_chronicle(state, f"賽季落幕：{ending.title}")
         msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    if arena.on(content):  # 擂台：前三名記名次（休季時同步補獎勵），江湖史與天下大事各一句
+        top = arena.close_season(w, content.config.arena)
+        if top:
+            add_chronicle(state, top)
+            add_rumor(state, top, content=content, layer="world")
     if world is not None:
         board = leaderboard.compute_leaderboard(content, world)
         msgs += leaderboard.format_lines(board)

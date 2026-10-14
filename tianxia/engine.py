@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
@@ -58,7 +58,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaSide, BattleRecord, Convoy, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
     WorldState,
     new_game_state,
 )
@@ -133,6 +133,7 @@ FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只�
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
+ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）
 SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
 
 
@@ -262,6 +263,11 @@ class DuelTextRequest(BaseModel):
     title: str
     scene: str
     sex: str = "男"  # 性別（gender）：模型寫劇情時的稱呼
+    # 擂台（tianxia/arena.py）也走這張單子：boss 寫「arena:場次」，多帶對手那一行與擂台的場合（assess_gamble 的 target、setting、place）；
+    # 頭目戰空著，server.duel_text 照舊用 duel.SETTING、duel.PLACE
+    target: str = ""
+    setting: str = ""
+    place: str = ""
 
 
 class FreeTextOutcome(BaseModel):
@@ -606,6 +612,8 @@ class Game:
             p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
             mounts.close_market(p)  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5），馬販那一句一併清掉
+        if p.picking_arena and not arena.here(s, c):
+            p.picking_arena = False  # 擂台關了、人不在城鎮了、季收了：收起擂台
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -741,6 +749,8 @@ class Game:
             self.state.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
             mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
+        if self.state.player.picking_arena and not arena.here(self.state, self.content):
+            self.state.player.picking_arena = False  # 擂台關了、人不在城鎮了、季收了：收起擂台
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
             self._save_season()  # 抵達時觸發的大勢門檻改了共用賽季
@@ -753,6 +763,7 @@ class Game:
         self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
+        self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -938,6 +949,10 @@ class Game:
             return [Option(id=f"duel:{move}", label=duel_rules.move_label(move)) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
+        if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
+            return [Option(id=f"arena:{move}", label=duel_rules.move_label(move)) for move in MOVES] + [
+                Option(id=ARENA_YIELD, label=arena.YIELD),
+            ]
         if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
             menu = sensing.menu(s, c)
             if menu:
@@ -972,6 +987,8 @@ class Game:
             return self._smith_options()
         if s.player.picking_market:
             return self._market_options()
+        if s.player.picking_arena:
+            return self._arena_options()
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -1057,6 +1074,8 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
+        if arena.here(s, c):  # 擂台（城鎮，同懸賞榜那一種）：只是打開第二層選單，不花體力
+            opts.append(Option(id="act:arena", label=arena.ARENA))
         heal = self._heal_option()
         if heal is not None:
             opts.append(heal)
@@ -1509,6 +1528,8 @@ class Game:
             return self._log(self._seal_act(arg))
         if kind == "duel":  # 頭目戰同決戰：每回合的出招不寫紀錄，分出勝負那一下由 _duel_finish 寫一則、一份戰報
             return self._log(self._duel_act(arg))
+        if kind == "arena" and (arg in MOVES or option_id == ARENA_YIELD):  # 擂台同頭目戰：收場那一下由 _arena_finish 寫一則、一份戰報
+            return self._log(self._arena_act(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         if option_id == sensing.DRAW:
@@ -1552,6 +1573,8 @@ class Game:
                 msgs = self._smith(arg)
             elif kind == "market":
                 msgs = self._market(arg)
+            elif kind == "arena":
+                msgs = self._arena(arg)
             else:
                 msgs = self._choose(int(arg))
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -1790,6 +1813,9 @@ class Game:
             return smithing.title(arg)
         if kind == "market":
             return mounts.MARKET
+        if kind == "arena":
+            foe = arena.entry_of(s.world, arg.partition(":")[2]) if arg.startswith("fight:") else None
+            return f"{arena.ARENA}・{foe.name}" if foe is not None else arena.ARENA
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -1814,6 +1840,7 @@ class Game:
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
             "market": f"{mounts.MARKET}・{here}",
+            "arena": f"{arena.ARENA}・{here}",
             "heal": f"療傷・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -2138,6 +2165,9 @@ class Game:
             p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 _market_options），不花體力
             self._shop_say("enter")  # 店面上馬販那一句（1.4）
             return [mounts.ENTERED]
+        if what == "arena":
+            self.state.player.picking_arena = True  # 打開擂台（見 _arena_options），不花體力
+            return arena.standing(self.state.world, self.state.player.name)
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
         if what == "call":
@@ -5644,6 +5674,7 @@ class Game:
         bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
+        s.player.picking_arena = False  # 擂台也收起來
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -5989,6 +6020,7 @@ class Game:
             and s.player.sensing is None  # 有所感、還沒了結：跟事件待處理一樣
             and s.player.duel is None  # 單人頭目戰打到一半：同上
             and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
+            and not s.player.picking_arena and s.player.arena is None  # 擂台開著、打到一半：同上
         )
 
     def seclusion_refusal(self) -> str | None:
@@ -6938,17 +6970,19 @@ class Game:
 
     def duel_free_text_prompt(self) -> str | None:
         """頭目戰打到一半時輸入框的提示語，否則 None（server.py 照它決定輸入框，送出走 duel_text）。"""
+        if self.state.player.arena is not None:
+            return arena.PROMPT
         return "放手一搏：寫下你要怎麼對付他（20 字以內）" if self.state.player.duel is not None else None
 
     DUEL_GAMBLE_NOTE = "寫得越險，成了越能扭轉局面；失手時氣勢倒退，重傷的是你自己。這一回合他的招不算。"
 
     def duel_free_text_note(self) -> str | None:
-        return self.DUEL_GAMBLE_NOTE if self.state.player.duel is not None else None
+        return self.DUEL_GAMBLE_NOTE if self.state.player.duel is not None or self.state.player.arena is not None else None
 
     def _duel_text_check(self, text: str) -> str | list[str]:
         if self.world.paused_at() is not None:
             return [f"（{PAUSED_TEXT}。）"]
-        if self.state.player.duel is None:
+        if self.state.player.duel is None and self.state.player.arena is None:
             return ["（此刻無法這麼做。）"]
         text = text.strip()[:FREE_TEXT_MAX]
         if not text:
@@ -6961,6 +6995,14 @@ class Game:
         if isinstance(checked, list):
             return checked
         s, c = self.state, self.content
+        fight = s.player.arena
+        if fight is not None:  # 擂台：對手那一行寫分身的身手（同奪璽單挑），場合寫擂台
+            here = arena.scene(fight)
+            return DuelTextRequest(
+                boss=f"arena:{fight.id}", round=fight.round, text=checked, name=s.player.name, faction_name=self._duel_side(),
+                title=here.title, scene=here.text, sex=gender.of(s), target=arena.foe_line(fight.me, fight.foe, c),
+                setting=arena.SETTING, place=arena.PLACE,
+            )
         duel = s.player.duel
         here = duel_rules.scene(c, duel)
         return DuelTextRequest(
@@ -7103,6 +7145,8 @@ class Game:
         if isinstance(checked, list):
             return self._log(checked)
         s, c = self.state, self.content
+        if s.player.arena is not None:
+            return self._log(self._arena_gamble(checked, llm_rate, stories, request))
         duel = s.player.duel
         if request is not None and (request.boss, request.round, request.text) != (duel.boss, duel.round, checked):
             llm_rate, stories = None, None
@@ -7218,6 +7262,260 @@ class Game:
         self._write(title, msgs, tag=battlelog.outcome_text(record))
         annals.note(s, c, annals.FIGHT, f"獨力對上{foe.title}{foe.name}，{tier}。", 3 if won else 2)
         return msgs
+
+    # ── 擂台（tianxia/arena.py；Joy 2026-10-14 選「隨時挑擂」：報名留分身，別人隨時來挑，照積分排名，只算本季）──
+
+    def _arena_side(self) -> ArenaSide:
+        """此刻的身手（同頭目戰的快照：威力、不算騎兵與部下的份量、職位）；池子從滿的開始。"""
+        _, cap = self._player_hp_and_cap()
+        return ArenaSide(
+            name=self.state.player.name, power=self._battle_power(), scores=self._battle_scores(mounted=False),
+            role=self._battle_role(), hp=cap, hp_cap=cap,
+        )
+
+    def _arena_arts(self) -> list[str]:
+        s, c, m = self.state, self.content, self.state.player.member
+        arts = (team.player_art(s, c, self.world, m.wugong_id), team.player_art(s, c, self.world, m.neigong_id))
+        return [a.name for a in arts if a is not None]
+
+    def arena_board(self) -> list[dict]:
+        """擂台榜（見聞「榜單」分頁的一張；arena.board）：這一季打過至少一場的人照積分排，前 board_size 名。擂台關著是空的。"""
+        return arena.board(self.state.world, self.content.config.arena) if arena.on(self.content) else []
+
+    def arena_power(self) -> float:
+        """此刻上擂台的威力（假人照它決定報名、更新分身；bot_policy._arena）。"""
+        return self._battle_power()
+
+    def _arena_options(self) -> list[Option]:
+        """擂台的第二層選單：報名（報過了是更新分身）、其他守擂的人一人一顆（積分高的先，最多 list_max；挑不了的灰掉寫為什麼）、返回。
+        都不花體力，只有挑擂花 stamina。"""
+        s, c, p = self.state, self.content, self.state.player
+        cfg = c.config.arena
+        mine = arena.entry_of(s.world, p.name)
+        opts = [Option(id="arena:join", label=arena.UPDATE if mine is not None else arena.JOIN,
+                       enabled=self._battle_power() > 0)]
+        others = [e for e in sorted(s.world.arena.values(), key=lambda e: (-e.rating, e.joined)) if name_key(e.name) != name_key(p.name)]
+        power = self._battle_power()
+        for e in others[:cfg.list_max]:
+            problem = arena.challenge_problem(s.world, p.name, e, cfg)
+            if problem is None and p.stamina < cfg.stamina:
+                problem = arena.TIRED
+            note = problem or f"體力 -{cfg.stamina}"
+            label = f"挑{e.name}（積分 {round(e.rating)}・{arena.record_text(e)}・身手{arena.strength_words(c, power, e.power)}・{note}）"
+            opts.append(Option(id=f"arena:fight:{name_key(e.name)}", label=label, enabled=problem is None))
+        if len(others) > cfg.list_max:
+            opts.append(Option(id="arena:more", label=arena.MORE.format(n=len(others) - cfg.list_max), enabled=False))
+        if not others:
+            opts.append(Option(id="arena:none", label=arena.NOBODY, enabled=False))
+        opts.append(Option(id="arena:back", label=arena.BACK))
+        return opts
+
+    def _arena(self, arg: str) -> list[str]:
+        """擂台第二層的選擇：報名或更新分身、挑一個人（開打）、返回（收起選單）。"""
+        verb, _, rest = arg.partition(":")
+        if verb == "back":
+            self.state.player.picking_arena = False
+            return ["你離開了擂台。"]
+        if verb == "join":
+            return self._arena_join()
+        if verb == "fight":
+            return self._arena_start(rest)
+        return ["（此刻無法這麼做。）"]
+
+    def _arena_join(self) -> list[str]:
+        s, p = self.state, self.state.player
+        side = self._arena_side()
+        if side.power <= 0:
+            return [arena.NO_ARTS]
+        arts = self._arena_arts()
+        text = "、".join(arts)
+        entry = arena.entry_of(s.world, p.name)
+        if entry is not None:
+            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts = (
+                p.name, side.power, side.scores, side.role, side.hp_cap, arts)
+            return [arena.UPDATED.format(arts=text)]
+        s.world.arena[name_key(p.name)] = ArenaEntry(
+            name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts,
+            joined=s.world.time, rating=self.content.config.arena.start_rating,
+        )
+        return [arena.JOINED.format(arts=text)]
+
+    def _arena_start(self, key: str) -> list[str]:
+        """挑一個守擂的人：付體力、記冷卻與他今天被挑了幾場，快照兩邊，擲分身第一回合的招。"""
+        s, c, p = self.state, self.content, self.state.player
+        cfg = c.config.arena
+        foe = s.world.arena.get(key)
+        if foe is None or name_key(foe.name) == name_key(p.name):
+            return ["（此刻無法這麼做。）"]
+        problem = arena.challenge_problem(s.world, p.name, foe, cfg)
+        if problem is None and p.stamina < cfg.stamina:
+            problem = arena.TIRED
+        if problem is not None:
+            return [f"（{problem}。）"]
+        p.stamina -= cfg.stamina
+        arena.note_challenge(s.world, p.name, foe)
+        s.world.arena_seq += 1
+        fight = ArenaFight(
+            id=s.world.arena_seq, foe_key=key, me=self._arena_side(), rounds=cfg.rounds,
+            foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap),
+            edge=c.config.duel.start,
+        )
+        arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
+        p.arena = fight
+        p.picking_arena = False
+        lines = [f"體力 -{cfg.stamina}", arena.OPENING.format(foe=foe.name)]
+        if foe.arts:
+            lines.append(arena.FOE_ARTS.format(arts="、".join(foe.arts)))
+        return lines
+
+    def _arena_scene(self) -> str:
+        fight = self.state.player.arena
+        lines = [
+            f"**{arena.ARENA}・{fight.foe.name}的分身**（第 {fight.round + 1}／{fight.rounds} 回合）",
+            arena.OPENING.format(foe=fight.foe.name) if fight.round == 0 else fight.lines[-1],
+            f"氣勢：{duel_rules.edge_words(fight.edge)}（{fight.edge:.0f}／100）　"
+            f"你的氣血：{fight.me.hp:.0f}／{fight.me.hp_cap:.0f}　他：{fight.foe.hp:.0f}／{fight.foe.hp_cap:.0f}",
+            f"{fight.tell}{arena.TELL_NOTE}",
+            arena.HOWTO,
+        ]
+        return "\n\n".join(lines)
+
+    def _arena_act(self, arg: str) -> list[str]:
+        """擂台上的一招，或認輸。"""
+        s, c, p = self.state, self.content, self.state.player
+        fight = p.arena
+        if fight is None:
+            return ["（此刻無法這麼做。）"]
+        if arg == "yield":
+            return self._arena_finish("落敗", arena.YIELDED)
+        if arg not in MOVES:
+            return ["（此刻無法這麼做。）"]
+        his = fight.move
+        delta, mine, theirs, beat = arena.exchange(fight, arg, c, arena.rng_for(p.season_number, p.name, fight, "交手"))
+        line = (
+            f"第 {fight.round + 1} 回合：你{arg}，他{his}——{duel_rules.COUNTER_WORDS[beat]}。"
+            f"（氣勢 {delta:+d}，你氣血 -{mine}，他氣血 -{theirs}）"
+        )
+        return self._arena_after(line)
+
+    def _arena_gamble(
+        self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None,
+    ) -> list[str]:
+        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就在鎖內重評（同頭目戰）。"""
+        s, c, p = self.state, self.content, self.state.player
+        fight = p.arena
+        if request is not None and (request.boss, request.round, request.text) != (f"arena:{fight.id}", fight.round, text):
+            rate, stories = None, None
+        if rate is None:
+            verdict = battle_instance.assess_gamble(
+                self._quick_client(), arena.scene(fight), self._duel_side(), text, p.name,
+                setting=arena.SETTING, place=arena.PLACE, target=arena.foe_line(fight.me, fight.foe, c), sex=gender.of(s),
+            )
+            rate, stories = verdict.rate, (verdict.win, verdict.lose)
+        s.battle_card = None
+        p.guide_done = []
+        won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"))
+        story = (stories or ("", ""))[0 if won else 1]
+        moment = battle_instance.GambleMoment(name=p.name, faction=self._duel_side(), text=text, story=story, rate=int(rate), won=won)
+        old = (battle_instance.GambleMoment(name=p.name, faction="", text=fight.best_text, rate=fight.best_rate, won=fight.best_won)
+               if fight.best_set else None)
+        if battle_instance.more_dramatic(moment, old):
+            fight.best_text, fight.best_story, fight.best_rate, fight.best_won, fight.best_set = text, story, int(rate), won, True
+        if not story:
+            story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
+        line = f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 -{hp}）"
+        return self._arena_after(line)
+
+    def _arena_after(self, line: str) -> list[str]:
+        """出完一招（或放手一搏）之後：記這一回合，分出勝負就收場，否則擲分身下一回合的招。"""
+        s, c, p = self.state, self.content, self.state.player
+        fight = p.arena
+        fight.lines.append(line)
+        fight.round += 1
+        tier = arena.verdict(fight, c.config.duel)
+        if tier is not None:
+            return self._arena_finish(tier, line)
+        arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), c.config.arena, c.config.duel)
+        return [line]
+
+    def _arena_finish(self, tier: str, line: str) -> list[str]:
+        """收場：兩邊的積分與戰績、留給守的人一筆（他下次同步補戰報）、挑的人的戰報與一則江湖紀錄、天下大事（爆冷、連勝、最精彩的一搏）。
+        不扣氣血、不磨兵器防具（池子是快照）。"""
+        s, c, p = self.state, self.content, self.state.player
+        cfg, w = c.config.arena, s.world
+        fight = p.arena
+        p.arena = None
+        mine, foe = arena.entry_of(w, p.name), w.arena.get(fight.foe_key)
+        score = arena.SCORES[tier]
+        squad = Squad(id=f"arena:{fight.foe_key}", name=f"{fight.foe.name}的分身", difficulty=fight.foe.power)
+        result = encounter.EncounterResult(tier=tier, margin=fight.edge - c.config.duel.start, our_power=fight.me.power,
+                                           difficulty=fight.foe.power)
+        title = f"{arena.ARENA}・{fight.foe.name}"
+        record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
+        record.ours = record.ours[:1]
+        record.rounds = list(fight.lines)
+        news: list[str] = []
+        if mine is not None and foe is not None:
+            expect = arena.expected(mine.rating, foe.rating)
+            before_me, before_foe = round(mine.rating), round(foe.rating)
+            mine.rating, foe.rating = arena.rated(mine.rating, foe.rating, score, cfg.k)
+            arena.note_result(mine, score)
+            arena.note_result(foe, 1 - score)
+            gained = round(mine.rating) - before_me
+            record.changes.append(f"擂台積分 {gained:+d}（{round(mine.rating)}）")
+            foe.inbox.append(ArenaReport(
+                challenger=p.name, tier=arena.defender_tier(tier, fight.edge, c.config.duel), time=w.time,
+                rating=round(foe.rating), delta=round(foe.rating) - before_foe, power=fight.me.power,
+            ))
+            if score >= 1 and expect <= cfg.upset_expect:
+                news.append(arena.UPSET.format(winner=p.name, loser=foe.name))
+            for who in (mine, foe):
+                if who.streak and who.streak % cfg.streak_news == 0 and (who is mine) == (score >= 1):
+                    news.append(arena.STREAK.format(name=who.name, n=who.streak))
+        if fight.best_set and fight.best_won and fight.best_rate <= cfg.highlight_rate:
+            news.append(arena.HIGHLIGHT.format(name=p.name, text=fight.best_text))
+            p.stats["fame"] = p.stats.get("fame", 0) + cfg.highlight_fame
+            record.changes.append(f"名望 +{cfg.highlight_fame}")
+        for text in news:
+            add_rumor(s, text, content=c, layer="world")
+        summary = self._file_battle(record, wear=False, armor_wear=False)
+        msgs = [line, summary, *battlelog.gains_list(record)]
+        self._write(title, msgs, tag=battlelog.outcome_text(record))
+        won = tier in team.WIN_TIERS
+        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1)
+        self._save_season()  # 積分、戰績、留給守的人那一筆都在這一季的 WorldState
+        return msgs
+
+    def _deliver_arena(self) -> None:
+        """同步時補擂台的事：季收了還沒打完的那一場作廢；被挑了的每一場一份戰報與一則「守擂・挑的人」；休季時季末前三名的獎勵。"""
+        s, c, p = self.state, self.content, self.state.player
+        w = s.world
+        if p.arena is not None and w.ended:
+            p.arena = None
+            self._write(arena.ARENA, [arena.UNSETTLED])
+        entry = arena.entry_of(w, p.name)
+        if entry is None or not (entry.inbox or (w.ended and entry.place and not entry.prized)):
+            return
+        for report in entry.inbox:
+            squad = Squad(id=f"arena:{name_key(report.challenger)}", name=report.challenger, difficulty=report.power)
+            result = encounter.EncounterResult(tier=report.tier, margin=0.0, our_power=entry.power, difficulty=report.power)
+            title = f"守擂・{report.challenger}"
+            record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
+            record.time = report.time
+            record.ours = record.ours[:1]
+            record.notes.append(arena.DEFENDED.format(name=report.challenger))
+            record.changes.append(f"擂台積分 {report.delta:+d}（{report.rating}）")
+            battlelog.add_record(s, record)
+            self._write(title, [arena.DEFENDED.format(name=report.challenger), battlelog.summary_line(record),
+                                *battlelog.gains_list(record)], tag=battlelog.outcome_text(record))
+        entry.inbox = []
+        if w.ended and entry.place and not entry.prized:
+            entry.prized = True
+            fame, pills = c.config.arena.prizes[entry.place - 1]
+            p.stats["fame"] = p.stats.get("fame", 0) + fame
+            p.stamina_pills += pills
+            self._write(arena.ARENA, [arena.PRIZE.format(place=entry.place, fame=fame, pill=c.config.stamina_pill_name, pills=pills)])
+        self._save_season()
 
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
@@ -8567,6 +8865,8 @@ class Game:
             return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
         if s.player.duel is not None:
             return self._duel_scene()
+        if s.player.arena is not None:
+            return self._arena_scene()
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
         if sense_card:
             return sense_card

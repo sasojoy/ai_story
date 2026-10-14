@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, team
+from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -146,6 +146,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         return msgs + _sense(game, rng, slot)
     if s.player.duel is not None:
         return msgs + game.choose(f"duel:{duel_move(game, rng)}")
+    if s.player.arena is not None:
+        return msgs + game.choose(f"arena:{duel_move(game, rng, s.player.arena)}")
     if s.player.pending_companion:
         return msgs + game.choose("talk:leave")
     discussed = _answer_discuss(game, rng, slot)
@@ -165,6 +167,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     raided = _raid(game, rng)
     if raided is not None:
         return msgs + raided
+    staged = _arena(game, rng)
+    if staged is not None:
+        return msgs + staged
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
@@ -229,6 +234,40 @@ def _raid(game: Game, rng: random.Random) -> list[str] | None:
     if not targets or rng.random() >= RAID_CHANCE:
         return None
     return game.peer_act(targets[0], "raid")
+
+
+# 擂台（tianxia/arena.py）：在城鎮、還沒報名、有武學就報名；分身比此刻弱了 ARENA_REFRESH 以上就更新；體力夠時每一輪 ARENA_CHANCE 的機會
+# 挑一場，挑挑得了的人裡積分跟自己最近的。挑擂花的體力之外留 ARENA_RESERVE。
+ARENA_CHANCE = 0.05
+ARENA_REFRESH = 0.15
+ARENA_RESERVE = 20
+
+
+def _arena(game: Game, rng: random.Random) -> list[str] | None:
+    """擂台的事（報名、更新分身、挑一場），走真人同一串選單：打開擂台、按那一顆、還開著就返回。這一輪不做是 None。
+    不在城鎮（選單上沒有「擂台」）時不擲骰。"""
+    s, cfg = game.state, game.content.config.arena
+    if "act:arena" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
+        return None
+    power = game.arena_power()
+    if power <= 0:
+        return None
+    mine = arena.entry_of(s.world, s.player.name)
+    refresh = mine is None or power > mine.power * (1 + ARENA_REFRESH)
+    if not refresh and (s.player.stamina < cfg.stamina + ARENA_RESERVE or rng.random() >= ARENA_CHANCE):
+        return None
+    msgs = game.choose("act:arena")
+    if refresh:
+        msgs += game.choose("arena:join")
+    else:
+        rating = mine.rating
+        fights = [o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith("arena:fight:")]
+        if fights:
+            pick = min(fights, key=lambda oid: (abs(s.world.arena[oid.removeprefix("arena:fight:")].rating - rating), oid))
+            msgs += game.choose(pick)
+    if s.player.picking_arena:
+        msgs += game.choose("arena:back")
+    return msgs
 
 
 def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
@@ -496,9 +535,9 @@ def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Ran
 DUEL_READ = 0.6
 
 
-def duel_move(game: Game, rng: random.Random) -> str:
-    """頭目戰的一招：不寫放手一搏（假人不寫自由文字）、不抽身。整季機器人（bot.pick）是隨機挑選單上的招。"""
-    answer = duel.answer_to(game.state.player.duel)
+def duel_move(game: Game, rng: random.Random, fight=None) -> str:
+    """頭目戰（或擂台，fight 給 ArenaFight）的一招：不寫放手一搏（假人不寫自由文字）、不抽身、不認輸。整季機器人（bot.pick）是隨機挑選單上的招。"""
+    answer = duel.answer_to(fight if fight is not None else game.state.player.duel)
     return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
 
 
@@ -531,6 +570,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
     if kind == "smith":  # 鐵匠鋪上：照 _smith_want 按那一顆（換買修、打造與換上打出來的那把，含切頁），沒事就離開；不淬煉、不拆，萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
+    if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
+        return 0.0 if arg == "back" else None
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
@@ -561,6 +602,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             if not _smith_want(game):
                 return None
             return SMITH_SCORE + (FORGE_SCORE if bot.forge_ready(game) else 0.0)
+        if arg == "arena":  # 擂台：由 _arena 決定（不交給打分數，不然開了又返回）
+            return None
         if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
             return MARKET_SCORE if bot.market_want(game) else None
         if arg == "heal":  # 醫館療傷：look_after 已經先療了，萬一還在選單上（照顧動作沒輪到）付得起就按
