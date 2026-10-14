@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import classic_rules, real_content
+from conftest import classic_rules, closed_map, real_content
 
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
@@ -294,6 +294,7 @@ def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
 
 
 def test_what_fame_is_for_follows_the_content(on):
+    closed_map(on)  # 名望多看一站是全圖開放之前的視野；全圖開放的那一句見 tests/test_open_map.py
     game = _war(on)
     bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)

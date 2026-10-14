@@ -354,10 +354,12 @@ def test_map_view_selects_your_location_by_default(game):
     assert 'data-loc="' in view["svg"]
 
 
-def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
+def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game, monkeypatch):
     """圖例不畫進 SVG（企劃者 10/4：放大時也要看得到）：跟 svg 並排給網頁，由網頁疊在地圖框角落。
     送的是正在看的那一層的說明（認不得的圖層退回預設那一層），不是四層全給。"""
     from tianxia import mapview
+
+    monkeypatch.setattr(server.CONTENT.config, "open_map", False)  # 舊的圖例那一句（同 closed_map）；全圖開放的見 tests/test_open_map.py
 
     legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
     assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6

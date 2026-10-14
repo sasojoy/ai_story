@@ -1171,7 +1171,7 @@ class Game:
         return Option(id=option_id, label=f"折返 {name}（{atlas.route_text(self.state, c, way, mode)}）")
 
     def _road_task_options(self, j: Journey) -> list[Option]:
-        """路上小事（路上設計第四節）：步行、趕路時四樣各一顆，不花體力；這一段路做過的灰掉、寫「這段路已經……」。
+        """路上小事（路上設計第四節）：步行、趕路時每樣一顆（四樣；全圖開放時沒有留意地形，三樣），不花體力；這一段路做過的灰掉、寫「這段路已經……」。
         疾行一站一站立刻抵達，沒有。這個遊戲日的收穫拿滿了（每天上限，遊戲日跟著季長縮）的邊走邊想、路邊採集照樣按得下去，
         補充改寫「收穫拿滿了」（待 joy 潤）。鈕上不寫換日的那一刻：375 px 上 2×2 格子一格的小字只有約 143 px，時刻本身就約 118 px，
         再加字就折成兩行、整個格子變高（day-scale 審查 M1）；時刻寫在按下去的那一句（_road_think、_road_gather）。"""
@@ -1191,6 +1191,7 @@ class Game:
             Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
             else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
             for what, (name, did) in ROAD_TASKS.items()
+            if not (what == "survey" and self.content.config.open_map)  # 全圖開放：沒有沒摸清的地方，「留意地形」拿掉（剩三樣）
         ]
 
     def set_move_mode(self, mode: str) -> None:
@@ -6083,7 +6084,7 @@ class Game:
 
     def _road_survey(self) -> list[str]:
         """留意地形：這段路兩頭一站以內、還沒摸清（也已開放）的地點，標成摸清（PlayerState.surveyed，大地圖上跟去過一樣
-        算記得）。沒有可標的就寫一句，仍算做過。"""
+        算記得）。沒有可標的就寫一句，仍算做過。全圖開放（Config.open_map）時選單上沒有這一顆（_road_task_options）。"""
         s, c = self.state, self.content
         views = atlas.views(s, c)
         found: list[str] = []

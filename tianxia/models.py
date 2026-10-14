@@ -2182,8 +2182,11 @@ class Config(_Strict):
             "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望", "xinde": "心得",
         }
     )
-    vision_base: int = 2  # 從所在地沿道路看得見幾步
-    vision_fame: int = 10  # 名望達到這個值，視野 +1
+    vision_base: int = 2  # 從所在地沿道路看得見幾步（open_map 關著才有視野）
+    vision_fame: int = 10  # 名望達到這個值，視野 +1（open_map 關著才有）
+    # 全圖開放（企劃者 2026-10-15「未來不再限制有沒有去過的地點~都可以直接移動過去」）：已開放的地點全部算摸清（atlas.location_view），
+    # 沒有視野、名望不多看一站、路上沒有「留意地形」；劇情還沒開放的地點（unlock_flag、序章專屬）照舊不畫。關掉回到舊的摸清規則
+    open_map: bool = True
     max_log: int = 200
     neili_base: float = 300
     neili_per_level: float = 20
