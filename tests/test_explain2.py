@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import classic_rules, real_content
 
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
@@ -602,6 +602,7 @@ def test_one_branch_left_is_not_mostly(on):
     """只剩一支走得了（例：潁川選錯了做法，悟意境那一支到換日都沒了）：不寫「多半」，寫「會」。正式內容每一處都照這條。"""
     from tianxia.rules import game_day
 
+    classic_rules(on)  # 測的是照比例自動抽的舊探索那一行（出陣探索與地盤之前）；三選一開著的那一行見 tests/test_explore_modes.py
     game = _war(on)
     s = game.state
     s.player.sense_misses[s.player.location] = game_day(on, s.world)

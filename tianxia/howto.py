@@ -47,6 +47,17 @@ def explore_line(
     return head + (f"；偶得{legend}" if legend else "") + tail
 
 
+EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
+EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
+EXPLORE_CALM = "（這裡不會撞上怪）"
+EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
+
+
+def explore_modes_line(fight: bool, sense: bool) -> str:
+    """探索三選一開著時行動列底下探索那一行（Game.action_notes）：找素材會不會撞上怪、靜心感悟悟不悟得出。"""
+    return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
+
+
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練
