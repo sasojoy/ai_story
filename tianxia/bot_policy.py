@@ -238,17 +238,16 @@ def _raid(game: Game, rng: random.Random) -> list[str] | None:
     return game.peer_act(targets[0], "raid")
 
 
-# 擂台（tianxia/arena.py）：在城鎮、還沒報名、有武學就報名；分身比此刻弱了 ARENA_REFRESH 以上就更新；體力夠時每一輪 ARENA_CHANCE 的機會
-# 挑一場，挑挑得了的人裡積分跟自己最近的。挑擂花的體力之外留 ARENA_RESERVE。
+# 擂台（tianxia/arena.py）：還沒報名、有武學就報名；分身比此刻弱了 ARENA_REFRESH 以上就更新；今天還有次數時每一輪 ARENA_CHANCE 的機會
+# 挑一場，挑挑得了的人裡身手最弱的（同樣弱挑名次高的）。挑擂不花體力，哪裡都能挑。
 ARENA_CHANCE = 0.05
 ARENA_REFRESH = 0.15
-ARENA_RESERVE = 20
 
 
 def _arena(game: Game, rng: random.Random) -> list[str] | None:
     """擂台的事（報名、更新分身、挑一場），走真人同一串選單：打開擂台、按那一顆、還開著就返回。這一輪不做是 None。
-    不在城鎮（選單上沒有「擂台」）時不擲骰。"""
-    s, cfg = game.state, game.content.config.arena
+    選單上沒有「擂台」（擂台關著、序章、手上有事）時不擲骰。"""
+    s = game.state
     if "act:arena" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
         return None
     power = game.arena_power()
@@ -256,16 +255,16 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
         return None
     mine = arena.entry_of(s.world, s.player.name)
     refresh = mine is None or power > mine.power * (1 + ARENA_REFRESH)
-    if not refresh and (s.player.stamina < cfg.stamina + ARENA_RESERVE or rng.random() >= ARENA_CHANCE):
+    if not refresh and (game.arena_left() <= 0 or rng.random() >= ARENA_CHANCE):
         return None
     msgs = game.choose("act:arena")
     if refresh:
         msgs += game.choose("arena:join")
     else:
-        rating = mine.rating
         fights = [o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith("arena:fight:")]
         if fights:
-            pick = min(fights, key=lambda oid: (abs(s.world.arena[oid.removeprefix("arena:fight:")].rating - rating), oid))
+            pick = min(fights, key=lambda oid: (s.world.arena[oid.removeprefix("arena:fight:")].power,
+                                                s.world.arena[oid.removeprefix("arena:fight:")].rank))
             msgs += game.choose(pick)
     if s.player.picking_arena:
         msgs += game.choose("arena:back")

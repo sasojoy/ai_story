@@ -1387,34 +1387,33 @@ class DuelTuning(_Strict):
 
 
 class ArenaTuning(_Strict):
-    """擂台賽（隨時挑擂；docs/superpowers/specs/2026-10-14-擂台賽-design.md，Joy 2026-10-14 選「隨時挑擂」）：報名的人留下一份守擂的分身，
-    別人隨時來挑，對的是分身，照積分排名，只算本季。規則在 tianxia/arena.py。一場照頭目戰的純函式（duel.push_of、harm_of、gamble_roll），
-    推力、挨打、放手一搏的數字都讀 DuelTuning；這裡只放擂台自己的。全部【預設】，試玩後再調。
+    """擂台賽（隨時挑擂；docs/superpowers/specs/2026-10-14-擂台賽-design.md，Joy 2026-10-14 選「隨時挑擂」，同一天 PM 轉述的配套改成
+    名次制）：報名的人留下一份守擂的分身，別人隨時來挑，對的是分身，只算本季。規則在 tianxia/arena.py。一場照頭目戰的純函式
+    （duel.push_of、harm_of、gamble_roll），推力、挨打、放手一搏的數字都讀 DuelTuning；這裡只放擂台自己的。全部【預設】，試玩後再調。
 
-    - stamina：挑一場的體力（比照截殺 Raid.stamina）。pair_cooldown_seconds：同一個人挑同一個人的冷卻（世界秒，比照截殺）。
-    - defend_per_day：一個人一個遊戲日最多被挑幾場（守擂的保護上限）。
+    - reach：只能挑排在自己前面幾名以內的人（Joy「距離自己三名內」）。per_day：一個人一天挑幾次（不花體力；現實時間換日，同回體丹）。
+    - pair_cooldown_seconds：同一個人挑同一個人的冷卻（世界秒，比照截殺）。defend_per_day：一個人一個遊戲日最多被挑幾場（守擂的保護）。
     - rounds：一場幾回合（同奪璽單挑）。proxy_power：分身出招照三招份量的這個次方加權（同奪璽單挑的代打）。
-    - start_rating、k：Elo 的起始積分與 K 值。挑的人贏 1、僵持 0.5、輸 0。
-    - upset_expect：挑的人贏、照積分算的勝率不超過這個數就上天下大事（爆冷門）。streak_news：連勝到這個數的倍數上天下大事。
+    - streak_news：連勝到這個數的倍數上天下大事。
     - highlight_rate：一場裡最有戲的放手一搏成了、成功率不超過這個數就上天下大事，那個人名望 +highlight_fame（同決戰）。
-    - list_max：擂台選單一次列幾個守擂的人。board_size：擂台榜列幾名。
-    - prizes：季末前三名的獎勵（名望, 回體丹）；回體丹換季帶著走。"""
+    - board_size：擂台榜列幾名。
+    - wages：每天換日那一刻照名次發的俸（銀兩, 名望），第 1 名起一名一格，格數以外沒有；要打過至少一場。
+    - prizes：季末前三名的名望；prize_treasure 開著時另給一件寶物（掉落池裡你還沒有的，都有了換銀兩；寶物關著不給）。"""
 
     enabled: bool = True
-    stamina: int = Field(default=10, ge=0)
+    reach: int = Field(default=3, ge=1)
+    per_day: int = Field(default=10, ge=1)
     pair_cooldown_seconds: float = Field(default=10800, ge=0)
     defend_per_day: int = Field(default=6, ge=1)
     rounds: int = Field(default=5, ge=1)
     proxy_power: float = Field(default=4, ge=0)
-    start_rating: float = 1000.0
-    k: float = Field(default=32, ge=0)
-    upset_expect: float = Field(default=0.25, ge=0, le=1)
     streak_news: int = Field(default=5, ge=1)
     highlight_rate: int = Field(default=30, ge=0, le=100)
     highlight_fame: int = Field(default=1, ge=0)
-    list_max: int = Field(default=8, ge=1)
     board_size: int = Field(default=10, ge=1)
-    prizes: list[tuple[int, int]] = Field(default_factory=lambda: [(30, 3), (20, 2), (10, 1)])
+    wages: list[tuple[int, int]] = Field(default_factory=lambda: [(100, 5), (60, 3), (60, 3)] + [(30, 1)] * 7)
+    prizes: list[int] = Field(default_factory=lambda: [30, 20, 10])
+    prize_treasure: bool = True
 
 
 class DuelFoe(_Strict):

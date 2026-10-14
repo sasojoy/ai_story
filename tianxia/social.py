@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import gender, invites, ranger, ranks, team
+from . import arena, gender, invites, ranger, ranks, team
 from .characters import CharacterStore
 from .state import GameState
 
@@ -97,15 +97,18 @@ def side(state: GameState, content: Content) -> str:
 
 
 def affiliation(state: GameState, content: Content) -> str:
-    """門派・陣營・頭銜（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
+    """門派・陣營・頭銜・擂台稱號（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
     狀態列（Game.status_data）與玩家卡都用這一個。"""
     p = state.player
     sect = content.sects[p.sect].name if p.sect else None
     faction = content.scenario.faction_name(p.faction)
     named = ranger.title(content, state)
+    ring = arena.title_of(state.world, p.name) if arena.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
     if faction is None and named is not None:
-        return f"{sect or '散人'}・{named}"
-    return "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
+        base = f"{sect or '散人'}・{named}"
+    else:
+        base = "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
+    return f"{base}・{ring}" if ring else base
 
 
 def arts(other: Game) -> list[dict]:

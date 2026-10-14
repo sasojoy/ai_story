@@ -9,8 +9,10 @@ import hashlib
 import json
 import re
 
-from . import armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
-from .models import WEAPON_KINDS, Content
+from . import arena, armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
+from . import duel as duel_rules
+from .characters import name_key
+from .models import MOVES, WEAPON_KINDS, Content
 from .state import Equipment, GameState
 from .world_state import WorldStateStore
 
@@ -25,7 +27,7 @@ MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full
 BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
 SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
 # 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
-BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID)}
+BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
@@ -508,4 +510,98 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "empty": "" if shown else bounties.BOARD_EMPTY,
         "picked": picked.id if picked is not None else None,
         "hand_in": hand_in,
+    }
+
+
+# ── 擂台（擂台賽設計；Joy 2026-10-14「擂台應該要是獨立的一頁，你這樣太混雜了」）：跟三間店同一層，台下、擂台榜兩頁，打到一半整頁是這一場 ──
+ARENA_SIGN = "江湖擂台"  # 待 joy 潤：招牌（擂台哪裡都上得了，不寫地名）
+ARENA_LINES = {  # 待 joy 潤：主事那一句（照你此刻的情形，不擲骰）
+    "new": "擂台主事拱手：「報上名號、留個分身守擂，排到榜尾；往前三名內的人，你都挑得。」",
+    "joined": "擂台主事拱手：「台上的人都留了分身。贏了，名次跟他換。」",
+    "top": "擂台主事拱手：「天下第一，就等著別人來挑了。」",
+    "fight": "台下圍了一圈人，等著看這一場。",
+    "won": "台下一陣喝采。",
+    "lost": "台下有人搖頭，也有人替你可惜。",
+    "drew": "台下議論紛紛，分不出高下。",
+}
+YIELD_ASK = "認輸下台？這一場算你落敗。"  # 待 joy 潤：認輸先問一次
+NO_ENTRY = "你還沒報名守擂。報了名排到榜尾，挑得了排在你前面三名內的人，旁人也挑得到你的分身。"  # 待 joy 潤
+JOIN_NOTE = "報名、更新分身、挑擂都不花體力，一天挑 {n} 次；分身照此刻的身手，名次與戰績不動。"  # 待 joy 潤
+NOBODY_YET = "擂台榜上還沒有人。"  # 待 joy 潤
+WAGES_NOTE = "每天 00:00 照名次發俸：第一名銀兩 {silver}、名望 {fame}；前 {n} 名都有。"  # 待 joy 潤：擂台榜底下
+
+
+def _fight_view(state: GameState, content: Content) -> dict:
+    fight = state.player.arena
+    log = list(fight.lines)
+    return {
+        "foe": fight.foe.name,
+        "arts": list((state.world.arena.get(fight.foe_key).arts if state.world.arena.get(fight.foe_key) else [])),
+        "round": fight.round + 1,
+        "rounds": fight.rounds,
+        "edge": round(fight.edge),
+        "edge_words": duel_rules.edge_words(fight.edge),
+        "me": {"name": state.player.name, "hp": round(fight.me.hp), "cap": round(fight.me.hp_cap)},
+        "foe_hp": {"name": fight.foe.name, "hp": round(fight.foe.hp), "cap": round(fight.foe.hp_cap)},
+        "tell": fight.tell,
+        "tell_note": arena.TELL_NOTE.strip("（）"),
+        "howto": arena.HOWTO,
+        "log": log,
+        "moves": [{"id": f"arena:{m}", "move": m, "label": duel_rules.move_label(m)} for m in MOVES],
+        "yield": {"id": arena.YIELD_ID, "label": "認輸", "confirm": YIELD_ASK},
+        "gamble": {"op": "duel_text", "prompt": arena.PROMPT_SHORT, "note": arena.GAMBLE_NOTE},
+    }
+
+
+def arena_view(state: GameState, content: Content, world: WorldStateStore, power: float, left: int) -> dict:
+    """擂台那一頁：打到一半是這一場（fight）；不然是台下（自己的名次、稱號與分身，報名鈕，挑得到的人各一張、挑擂鈕）與擂台榜（board），
+    剛打完的那一場有收場卡（result，PlayerState.arena_last）。鈕都是現在的選項 id（arena:join、arena:fight:<名號鍵>、arena:<招>、
+    arena:yield、arena:back），挑不挑得了照 arena.challengers（同選單）。left 是今天還能挑幾次。只讀。"""
+    p, w, cfg = state.player, state.world, content.config.arena
+    mine = arena.entry_of(w, p.name)
+    result = p.arena_last
+    if p.arena is not None:
+        mood = "fight"
+    elif result is not None:
+        mood = "won" if result.tier in arena.WIN_TIERS else "drew" if result.tier == "僵持" else "lost"
+    else:
+        mood = "new" if mine is None else "top" if mine.rank == 1 else "joined"
+    me = {
+        "joined": mine is not None,
+        "rank": mine.rank if mine is not None else None,
+        "title": arena.title_for(mine.rank) if mine is not None else None,
+        "record": arena.record_text(mine) if mine is not None else "",
+        "arts": list(mine.arts) if mine is not None else [],
+        "note": JOIN_NOTE.format(n=cfg.per_day) if mine is not None else NO_ENTRY,
+        "join": {"id": arena.JOIN_ID, "label": "更新分身" if mine is not None else "報名守擂", "enabled": power > 0,
+                 "why": None if power > 0 else arena.NO_ARTS},
+    }
+    foes = []
+    for e, problem in arena.challengers(w, content, p.name, left):
+        foes.append({
+            "id": f"arena:fight:{name_key(e.name)}", "name": e.name, "rank": e.rank, "title": arena.title_for(e.rank),
+            "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power, e.power),
+            "enabled": problem is None, "why": problem,
+        })
+    nobody = ""
+    if mine is not None and not foes:
+        nobody = arena.NOBODY if mine.rank == 1 else arena.NOBODY_AHEAD
+    rows = [dict(row, me=name_key(row["name"]) == name_key(p.name)) for row in arena.board(w, cfg)]
+    top_silver, top_fame = cfg.wages[0] if cfg.wages else (0, 0)
+    return {
+        "shop": "arena",
+        "sign": ARENA_SIGN,
+        "silver": p.stats.get("silver", 0),
+        "purse": f"今天還能挑 {left} 次",
+        "line": ARENA_LINES[mood],
+        "back": arena.BACK_ID,
+        "me": me,
+        "foes": foes,
+        "nobody": nobody,
+        "board": rows,
+        "board_empty": "" if rows else NOBODY_YET,
+        "wages": WAGES_NOTE.format(silver=top_silver, fame=top_fame, n=len(cfg.wages)) if cfg.wages else "",
+        "fight": _fight_view(state, content) if p.arena is not None else None,
+        "result": {"id": result.id, "foe": result.foe, "tier": result.tier, "lines": list(result.lines),
+                   "changes": list(result.changes)} if result is not None and p.arena is None else None,
     }
