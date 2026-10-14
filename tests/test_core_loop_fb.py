@@ -66,6 +66,25 @@ def test_fb248_the_intercept_card_names_only_the_place():
     assert "附近" not in atlas.order_how(game.state, game.content, order)
 
 
+def _strike_bounty():
+    from tianxia.state import Bounty
+
+    return Bounty(id="b1", kind="strike", faction="guan", week=1, expires=1e12, silver=20, deeds=1, location="yanshan_foot", squad="louluo")
+
+
+def test_fb249_the_strike_bounty_says_sortie_or_gathering():
+    from tianxia import bounties
+
+    c = real_content("weekend")
+    line = bounties.how(c, _strike_bounty())
+    assert "遊歷" not in line and "燕山腳" in line and "黃巾" in line
+    assert bounties.STRIKE_SORTIE in line and bounties.STRIKE_GATHER in line
+    c.config.explore_modes.enabled = False
+    assert bounties.STRIKE_GATHER not in bounties.how(c, _strike_bounty())
+    old = classic_rules(real_content("weekend"))
+    assert bounties.how(old, _strike_bounty()) == "到燕山腳遊歷，打贏一場黃巾軍的隊伍"
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
