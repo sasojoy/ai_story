@@ -169,7 +169,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         return msgs + raided
     staged = _arena(game, rng)
     if staged is not None:
-        return msgs + staged
+        msgs = msgs + staged
+        if s.player.arena is not None:  # 開打了：這一輪就是這一場；只報名、更新分身不花體力，照常做別的
+            return msgs
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
