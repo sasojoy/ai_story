@@ -701,6 +701,18 @@ def geju_per_day(state: GameState, content: Content, players: int | None = None)
     return chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
 
 
+def geju_resisted(state: GameState, content: Content, delta: float) -> float:
+    """割據往上漲打盡頭阻力（FB-254，企劃者 2026-10-15「割據也套越近盡頭越難推」）：跟戰線同一套分段（push.resistance_share：
+    推之前 65 以下全額、65～85 一半、85 以上兩成）；割據只有往 100 那一頭有盡頭，往下落一律全額。開關同 Config.push_resistance。
+    自然漲落（geju_tick）、玩家推的（Game._shaped）、機緣交付（opportunities）都走它；時刻表、決戰、管理者不打折（同戰線）。"""
+    from .push import resistance_share  # noqa: PLC0415  只引這個函式：apply_effect 有一個參數叫 push
+
+    tuning = content.config.push_resistance
+    if not tuning.enabled or delta <= 0:
+        return delta
+    return delta * resistance_share(trend_value(state, content, GEJU), delta, tuning)
+
+
 def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
     """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
     （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
@@ -711,6 +723,7 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
     per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
+    per_day = geju_resisted(state, content, per_day)  # 漲的時候照此刻的割據打盡頭阻力（FB-254；方向不變，畫面那一句照舊）
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
     whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1

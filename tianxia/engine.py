@@ -50,7 +50,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
-    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, here_regions,
+    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -5312,10 +5312,13 @@ class Game:
 
     def _shaped(self, trend_id: str, delta: float, source: str) -> tuple[float, bool]:
         """玩家這一下真的要推多少（設計 3.2、5.1、5.2）：可重複的事件推戰線打 event_trend_share；第一季的出陣乘季長倍數（規則關著的季
-        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。"""
+        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。
+        豪強割據往上漲也打盡頭阻力（FB-254，rules.geju_resisted）；推動那一行不接「深入敵境」那一句（說的是戰線）。"""
         c, w = self.content, self.state.world
         cfg = c.config
         amount = float(delta)
+        if trend_id == GEJU:
+            return geju_resisted(self.state, c, amount), False
         if trend_id not in self._resisted_lines():
             return amount, False
         if source == "event" and cfg.explore_modes.enabled:

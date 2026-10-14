@@ -168,6 +168,67 @@ def test_fb253_a_stir_on_a_line_at_fifty_is_greyed_and_costs_nothing():
     assert _sortie(game).enabled
 
 
+def test_fb254_separatism_rises_slower_near_the_top_and_falls_in_full():
+    """企劃者 2026-10-15：割據往上漲跟戰線同一套分段（65 以下全額、65～85 一半、85 以上兩成），往下落全額；開關同 push_resistance。"""
+    from tianxia import rules
+
+    game = _game("haoqiang", "runan_wilds")
+    for value, share in ((40, 1.0), (60, 1.0), (70, 0.5), (90, 0.2)):
+        game.state.world.trends[rules.GEJU] = value
+        assert rules.geju_resisted(game.state, game.content, 2.0) == 2.0 * share, value
+        assert rules.geju_resisted(game.state, game.content, -2.0) == -2.0, value  # 往下落全額
+    game.content.config.push_resistance.enabled = False
+    assert rules.geju_resisted(game.state, game.content, 2.0) == 2.0
+
+
+def test_fb254_the_natural_rise_is_resisted():
+    """三條戰線都在亂局：割據 90 時一個曆日只漲平常的兩成；60 時照平常。"""
+    from tianxia import rules
+
+    game = _game("haoqiang", "runan_wilds")
+    s, c, w = game.state, game.content, game.state.world
+    for front in rules.front_ids(c):
+        w.trends[front] = 50
+    full = rules.geju_per_day(s, c)
+    assert full > 0
+    w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 90, 0.0
+    rules.geju_tick(s, c, 24 * 10)
+    assert w.trends[rules.GEJU] == 90 + int(full * 10 * 0.2 + 1e-9)
+    w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 30, 0.0
+    rules.geju_tick(s, c, 24)
+    assert w.trends[rules.GEJU] == 30 + int(full + 1e-9)
+
+
+def test_fb254_a_gentry_push_near_the_top_is_resisted():
+    """豪強在亂局的戰線上保境安民推割據 1 點：割據 90 時只推兩成（零頭記著），60 時推滿一點。"""
+    from tianxia import rules
+
+    game = _game("haoqiang", "runan_wilds")
+    w = game.state.world
+    w.trends["yingru"] = 50
+    w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 90, 0.0
+    game.choose("act:duty")
+    assert w.trends[rules.GEJU] == 90 and w.trend_accum[rules.GEJU] < 1
+    w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 60, 0.0
+    game.choose("act:duty")
+    assert w.trends[rules.GEJU] == 61
+
+
+def test_fb254_an_opportunity_push_on_separatism_is_resisted_too():
+    """機緣交付推割據（豪強的收容流民，推 1 點）：割據 90 時打兩成、四捨五入成 0；60 時推滿。"""
+    from tianxia import opportunities, rules
+
+    game = _game("haoqiang", "runan_wilds")
+    opp = next(o for o in game.content.opportunities if o.id == "hao_refugees")
+    w = game.state.world
+    w.trends[rules.GEJU] = 90
+    opportunities._trend_on_done(game.state, game.content, opp, "runan_wilds")
+    assert w.trends[rules.GEJU] == 90
+    w.trends[rules.GEJU] = 60
+    opportunities._trend_on_done(game.state, game.content, opp, "runan_wilds")
+    assert w.trends[rules.GEJU] == 60 + opp.accumulate.trend
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
