@@ -390,3 +390,43 @@ def test_the_ring_board_is_one_of_the_season_boards(ring):
     assert [r["rank"] for r in rows] == [1, 2] and rows[0]["text"].startswith("天下第一") and rows[1]["you"]
     content.config.arena.enabled = False
     assert leaderboard.compute_boards(content, world)["擂台"] == []
+
+
+def test_roll_day_never_walks_the_day_backwards():
+    """2026-10-14 線上：擂台的俸無限發放。
+
+    「今天」是每個 Game 各算各的（Game._pill_day 讀 pill_now＝now＋advanced_real，而 advanced_real 只有管理者的
+    「時間快轉」會加，加完留在那個 Game 物件上直到伺服器重開）。快轉過的那個人認為今天是第 20741 天、其他人還是
+    20740，舊的寫法無條件把 world.arena_day 設成自己的今天，兩邊輪流同步就讓它在兩個日子之間來回跳，每跳回來一次
+    就再記一輪俸：線上一個人累積到 144 筆（4320 銀、144 名望），九個人的江湖紀錄被俸洗滿。"""
+    from tianxia.models import ArenaTuning
+    from tianxia.world_state import WorldState
+
+    cfg = ArenaTuning()
+    world = WorldState()
+    world.arena = {"jia": ArenaEntry(name="甲", power=300.0, hp_cap=1000.0, rank=1, wins=3)}
+    world.arena_day = 20740
+
+    assert arena.roll_day(world, cfg, 20741) is True  # 快轉過的那個人：記一筆
+    assert len(world.arena["jia"].wages) == 1
+    assert arena.roll_day(world, cfg, 20740) is False  # 一般玩家：不能把日子推回去
+    assert world.arena_day == 20741
+    for _ in range(5):  # 兩邊再怎麼輪流同步，也只有那一筆
+        arena.roll_day(world, cfg, 20741)
+        arena.roll_day(world, cfg, 20740)
+    assert len(world.arena["jia"].wages) == 1
+
+
+def test_roll_day_records_one_wage_per_day():
+    """同一天只記一筆：就算日子真的往前走了，也不會重複記。"""
+    from tianxia.models import ArenaTuning
+    from tianxia.world_state import WorldState
+
+    cfg = ArenaTuning()
+    world = WorldState()
+    world.arena = {"jia": ArenaEntry(name="甲", power=300.0, hp_cap=1000.0, rank=1, wins=3)}
+    world.arena_day = 20740
+    arena.roll_day(world, cfg, 20741)
+    world.arena_day = 20740  # 假裝舊存檔留下來的壞資料
+    arena.roll_day(world, cfg, 20741)
+    assert [d for d, _ in world.arena["jia"].wages] == [20741]
