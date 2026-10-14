@@ -776,7 +776,7 @@ def _claim_secret_art(
 
 def _makers_shown(state: GameState, thing: MartialArt | Insight) -> str:
     """首創的傳聞與江湖史寫誰：登記時記下的名號（論武共同首創是「甲、乙」，FB-117：以前只寫開爐的那一個人）；沒記的照開爐的人。"""
-    return thing.creator_shown or state.player.name
+    return getattr(thing, "creator_shown", None) or state.player.name
 
 
 def _secret_lines(
