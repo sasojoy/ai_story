@@ -172,6 +172,9 @@ def say_text(text: str | None) -> str | None:
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算一段）
+GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法
+ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -4635,7 +4638,7 @@ class Game:
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
-        lines += battle.narrative_log[-5:]
+        lines += self._round_blocks(battle)
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
@@ -4660,6 +4663,28 @@ class Game:
         elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」
             lines.append(watch_line)
         return "\n\n".join(lines)
+
+    def _round_blocks(self, battle: battle_instance.BattleInstance) -> list[str]:
+        """場景上最近五段戰況，一回合一段、新的在上（Joy 2026-10-14「大決戰因為很多人，戰況文字沒有分回合，擠在一起玩家很難閱讀」）：
+        每一段是「##### 第 N 回合」加一行一條的清單，網頁照標題把舊的幾回合收成一行（app.js 的 roundBlocks）。
+        narrative_log 開打那一句之後一回合一筆（apply_battle_tales 也照這個算），所以倒數第 k 筆是第（round_number − k）回合；
+        開打那一句（第 0 筆）照舊一段話。"""
+        log = battle.narrative_log
+        out = []
+        for k, entry in enumerate(reversed(log[-ROUND_BLOCKS:])):
+            n = battle.round_number - k
+            rows = [line for line in entry.split("\n") if line.strip()]
+            if n <= 0 or not rows:
+                out.append(entry)
+                continue
+            items: list[str] = []
+            for line in rows:  # 誰放手一搏寫了什麼、接著那一句成敗，併成同一條（人多時一眼看得出哪一句是誰的）
+                if items and GAMBLE_SAID in items[-1] and "\n" not in items[-1] and GAMBLE_SAID not in line:
+                    items[-1] += f"\n  {line}"
+                else:
+                    items.append(line)
+            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join(f"- {item}" for item in items))
+        return out
 
     def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
         """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""
