@@ -61,6 +61,7 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
+    controlled_by: list[str] = Field(default_factory=list)  # 這裡此刻歸誰控制（territory.controller）在裡面才成立；空的＝不限（出陣探索與地盤設計 4.3 第 4 點）
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None

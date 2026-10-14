@@ -50,7 +50,7 @@ def wants_heal(game: Game) -> bool:
 
 def can_pay_clinic(game: Game) -> bool:
     """有內傷，而且付得起全治、或手上至少 CLINIC_MIN_SILVER 兩（治一部分，team.heal_plan）。"""
-    cost = team.heal_cost(game.content, game.state.player.member)
+    cost = team.heal_cost(game.content, game.state.player.member, game.state)
     return cost > 0 and game.state.player.stats.get("silver", 0) >= min(cost, CLINIC_MIN_SILVER)
 
 
@@ -480,7 +480,7 @@ def _forge_plans(game: Game) -> dict[str, tuple[str, str, str] | None]:
     def affordable(plan):
         if plan is None:
             return None
-        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]))
+        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]), s)
         return plan if p.stats.get("silver", 0) - cost >= FORGE_SILVER_RESERVE else None
 
     return {

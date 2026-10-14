@@ -2954,7 +2954,7 @@ class Game:
         s, c, p = self.state, self.content, self.state.player
         item = mounts.shop_item(s, c)
         problem = mounts.buy_problem(s, c)
-        note = problem or f"{c.config.mounts.shop_price} 兩"
+        note = problem or f"{mounts.price(s, c)} 兩"
         # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
         opts = [Option(id=mounts.BUY, enabled=problem is None,
                        label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]

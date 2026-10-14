@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas, mapart, mounts
+from . import atlas, mapart, mounts, territory
 from .atlas import KNOWN, Odds
 from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
@@ -19,6 +19,7 @@ LOOKS = {"current": "full", "visible": "full", "remembered": "faded", "outline":
 CURRENT_RING = 17  # 所在地的紅圈
 DANGER_RING = {1: "#639922", 2: "#BA7517", 3: "#A32D2D"}
 ENEMY_DISC = 0.5  # 敵情層：圓盤是危險色往圓盤原色淡幾成
+CONTROL_DISC = {"guan": "#CFDCEA", "huang": "#F1DC9E", "haoqiang": "#D6E2C8"}  # 局勢層：地點底下的圓盤照控制方（待 joy 對顏色）
 TEXT_DARK = "#2C2C2A"
 TEXT_MUTED = "#8A8577"
 NOTE_FILL = "#8C3B2A"  # 名字底下那行小字（常出沒、最險、體力）
@@ -51,6 +52,7 @@ TREND_TEXT = "#A32D2D"
 LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
+LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
 LEGEND_STORY = "★ 這一幕主線的目標　✦ 最近 {days:g} 天的大事與傳聞"  # 天數照傳聞板的長度（legend_data 照內容填）
 LEGEND_LAYERS = {
@@ -218,7 +220,8 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
         "states": LEGEND_STATES,
         "ring": LEGEND_RING,
-        "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else LEGEND_LAYERS.get(layer, ""),
+        "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
+            LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")),
         "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
     }
 
@@ -240,6 +243,9 @@ def _layer_marks(
                 notes[loc_id] = f"⚑ {'、'.join(people)} 常出沒"
             if loc_id in strike_places:
                 prefixes[loc_id] = f"{atlas.STRIKE_MARK} "
+            side = territory.controller(state.world, content, loc_id)
+            if side in CONTROL_DISC:  # 地盤易手（設計 4.3 第 2 點；完整的勢力版圖是第 7 塊）
+                discs[loc_id] = CONTROL_DISC[side]
     elif layer == "enemies":
         for loc_id in known:
             loc = content.locations[loc_id]

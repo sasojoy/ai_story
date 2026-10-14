@@ -285,12 +285,21 @@ def rack_full(state: GameState, content: Content) -> bool:
     return equipment.rack_full(state, content, "mount")
 
 
+def price(state: GameState, content: Content) -> int:
+    """馬市一匹駑馬下品的價錢（5.5）：Config.mounts.shop_price，照所在地的地盤福利（出陣探索與地盤設計 4.3），四捨五入。
+    mounts 只 import models、state、equipment：territory 延後 import。"""
+    from . import territory  # noqa: PLC0415
+
+    factor = territory.price_factor(state.world, content, state.player.faction, state.player.location)
+    return int(content.config.mounts.shop_price * factor + 0.5)
+
+
 def buy_problem(state: GameState, content: Content) -> str | None:
     if not market_here(state, content):
         return NOT_MARKET  # 選單關了、人走了：引擎層自己也再驗一次
     if rack_full(state, content):
         return RACK_FULL
-    short = content.config.mounts.shop_price - state.player.stats.get("silver", 0)
+    short = price(state, content) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
@@ -299,11 +308,11 @@ def buy(state: GameState, content: Content) -> list[str]:
     problem = buy_problem(state, content)
     if problem is not None:
         return [f"（{problem}。）"]
-    price = content.config.mounts.shop_price
-    state.player.stats["silver"] -= price
+    cost = price(state, content)
+    state.player.stats["silver"] -= cost
     shop = shop_item(state, content)
     item = new_mount(state, name=shop.name, tier=shop.tier, quality=shop.quality)
-    return [BOUGHT.format(price=price, name=name_of(item)), equipment.store(state, item)]
+    return [BOUGHT.format(price=cost, name=name_of(item)), equipment.store(state, item)]
 
 
 def stale_problem(state: GameState, content: Content, arg: str) -> str:
@@ -347,7 +356,7 @@ def wanted(state: GameState, content: Content, reserve: int = 0) -> str | None:
     if better is not None:
         return f"{WIELD}{better}"
     if p.mount is None and buy_problem(state, content) is None and \
-            p.stats.get("silver", 0) >= content.config.mounts.shop_price + reserve:
+            p.stats.get("silver", 0) >= price(state, content) + reserve:
         return BUY
     if p.mount is not None and p.mount.edge < FEED_AT and feed_problem(state, content) is None:
         return FEED

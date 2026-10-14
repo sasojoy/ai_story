@@ -271,7 +271,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
         if full:
             why = equipment.RACK_FULL
         elif to == "main":
-            short = smithing.price(content, content.materials[mid].tier, slot) - silver
+            short = smithing.price(content, content.materials[mid].tier, slot, state) - silver
             why = SHORT_CELL.format(n=short) if short > 0 else None
         elif mid == main and n < 2:
             why = ONLY_ONE
@@ -287,7 +287,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
     divine = recipe is not None and recipe.divine
     odds = None if divine else smithing.forge_odds(state, content, world, kind, main, aux)
-    price = smithing.price(content, tier, slot)
+    price = smithing.price(content, tier, slot, state)
     head = (smithing.DIVINE_HEAD if divine else smithing.SOLVED_HEAD).format(name=known).removeprefix(" → ") if known else ""
     out.update(
         ready=True, kind_label=smithing.noun_label(kind), attribute=smithing.attribute_with(content, tianji, kind, main, aux),
@@ -410,7 +410,7 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
         stalls.append(worn)
     else:
         stalls.append({"id": "", "role": "worn", "who": STALL_WHO["worn"], "empty": True, "name": NO_HORSE})
-    sale, price = mounts.shop_item(state, content), content.config.mounts.shop_price
+    sale, price = mounts.shop_item(state, content), mounts.price(state, content)
     problem = mounts.buy_problem(state, content)
     stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
         "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
