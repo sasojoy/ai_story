@@ -341,6 +341,7 @@
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}`;
     renderPage();
+    fitBars(); // 狀態列的「體力」「氣血」放不放得下（FB-198）
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
 
@@ -431,8 +432,34 @@
     const html = topHtml();
     el.innerHTML = html;
     el.hidden = !html;
+    fitBars();
     applyGlow();
     fitTopMoved(before);
+  }
+
+  // 狀態列體力條、氣血條上的「體力」「氣血」兩個字（FB-135、FB-198，PM 2026-10-14「數字放得下就寫全，放不下才讓開」）：
+  // 畫好之後量一次，條上那一行字的字尾碰不碰得到右邊的「傷 N」（氣血條）或丹的鈕（體力條）。碰到了先收一號（.snug：字小一號、
+  // 內距收一點，兩個字照寫），還碰到才拿掉兩個字（.tight；條上的 title 照舊寫）。topHtml 從不帶這兩個 class：每次畫狀態列
+  // （render、renderTop）、視窗換寬度、字型載入完都從寫全量起。瀏覽器量不了、條還沒排版（寬是 0）就不動（照寫全）
+  function fitBars() {
+    if (typeof document.createRange !== "function") return;
+    const top = document.getElementById("top");
+    if (!top || !top.querySelectorAll) return;
+    const gap = 3; // 字尾離丹的鈕至少幾 px（「傷 N」自己左右有內距，不另留）
+    for (const bar of top.querySelectorAll(".bar.hp, .bar.stam")) {
+      bar.classList.remove("snug", "tight");
+      const text = bar.querySelector(":scope > span:not(.inj)");
+      const tag = bar.querySelector(":scope > .inj, :scope > .pill-btn");
+      if (!text || !tag || !bar.clientWidth) continue;
+      const hits = () => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        return range.getBoundingClientRect().right + (tag.classList.contains("pill-btn") ? gap : 0) > tag.getBoundingClientRect().left;
+      };
+      if (!hits()) continue;
+      bar.classList.add("snug");
+      if (hits()) bar.classList.add("tight");
+    }
   }
 
   function topHtml() {
@@ -1894,14 +1921,15 @@
     const groups = {};
     actions.forEach((b, i) => { if (b.group && b.enabled) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
     const done = new Set();
-    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    // 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下自己換到下一行再折（style.css 的 .peer-acts，FB-220）
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
     const html = actions.map((b, i) => {
       const members = b.group && b.enabled ? groups[`${b.action}|${b.group}`] : null;
       if (!members || members.length < 2) return one(b, i);
       if (done.has(members)) return "";
       done.add(members);
       return `<div class="peer-pick"><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}">${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
-        + `<button class="btn" data-act="peer-pick">${esc(b.group)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
+        + `<button class="btn" data-act="peer-pick"><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
     }).join("");
     return `<div class="peer-acts">${html}</div>`;
   }
@@ -2241,7 +2269,7 @@
     // 神器原品定名（打造隱藏配方設計 5.2）：還沒定名的原品那一列底下一張表單——自己打一個名字，或「沿用譜名【…】」。
     // 一個人可以同時有好幾把，表單照裝備 id 各一張（data-op 認，id 不重複）。名字合不合格由伺服器驗；字一律 esc。整段待 joy 潤
     // 表單接在 .wrow 的外面、緊貼著它底下（.wrow 是橫排的 flex，放進去會被擠到鈕的右邊）
-    const divineForm = (w) => divineFormHtml(w.id, w.divine.pattern); // 店面的出爐卡與裝備庫共用同一張（divineFormHtml）
+    const divineForm = (w) => divineFormHtml(w.id, w.divine.pattern, false, w.divine.unit); // 店面的出爐卡與裝備庫共用同一張（divineFormHtml）；量詞照伺服器給的（FB-197）
     // 武器：淬過的寫「淬煉 N/5」，自己打的寫配方（兵器第二批 Task 8）
     // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
@@ -2689,7 +2717,7 @@
         <div class="wbtns"><button class="btn small" data-act="shop-wield" data-id="${esc(r.id)}">換上</button>${r.keep
           ? `<button class="btn small ghost" disabled>${esc(r.keep)}</button>`
           : `<button class="btn small ghost" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}">拆解</button>`}</div>
-      </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true) : ""}`).join("")}
+      </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true, r.divine.unit) : ""}`).join("")}
       ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}`;
   }
 
@@ -2736,11 +2764,13 @@
 
   // 神器原品定名的表單（打造隱藏配方設計 5.2）：修練頁那一列底下、店面的出爐卡與裝備庫都用這一張。shop 為真時表單送店面的那一條
   // （data-op shop-name-divine、沿用譜名 shop-divine-keep），id 也分開，免得同一個畫面兩張撞 id。字待 joy 潤
-  function divineFormHtml(id, pattern, shop = false) {
+  // unit：「這把／件／副神器」的量詞（FB-197），伺服器照 equipment.unit_for 給（修練頁與店面裝備庫那一列的 divine.unit、出爐卡的 unit），
+  // 這裡不另寫一份對照；沒帶（舊的資料）照原本寫「把」
+  function divineFormHtml(id, pattern, shop = false, unit = "") {
     const op = shop ? "shop-name-divine" : "name-divine";
     return `<form class="naming divine" id="${op}-${esc(id)}" data-op="${op}" data-id="${esc(id)}">
         <small>你打出了神器</small>
-        <p>你是江湖上第一個打出這把神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
+        <p>你是江湖上第一個打出這${esc(unit || "把")}神器的人，替它定一個名字（2～6 個字，全服不能重名）。</p>
         <div class="row"><input class="input" name="name" maxlength="6" placeholder="神器的名字"><button class="btn primary small" type="submit">定名</button></div>
         ${S.divineWhy[id] ? `<p class="form-why">${esc(S.divineWhy[id])}</p>` : ""}
         <button class="btn small ghost" type="button" data-act="${shop ? "shop-divine-keep" : "divine-keep"}" data-id="${esc(id)}">沿用譜名【${esc(pattern)}】</button>
@@ -2883,7 +2913,7 @@
         <span class="q">${esc(card.grade)}</span><h4>${esc((now && now.name) || card.name)}</h4>
         <p class="meta">${esc(card.kind)}・屬${esc(card.attribute)}</p>
         ${card.value ? `<p class="stat">${esc(card.value)}</p>` : ""}${card.fit ? `<p class="fit">${esc(card.fit)}</p>` : ""}
-        ${pending ? divineFormHtml(card.id, pending, true) : ""}
+        ${pending ? divineFormHtml(card.id, pending, true, card.unit) : ""}
         <div class="btns${card.where === "rack" ? "" : " one"}">${btns}</div></article></div>`;
   }
 
@@ -4905,6 +4935,7 @@
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
   let cueTimer = 0;
   window.addEventListener("resize", () => {
+    if (S.stage === "game") fitBars(); // 條的寬度跟著變：「體力」「氣血」兩個字放不放得下重量（FB-198）
     if (S.stage === "game" && S.tab === "map") applyMapView();
     if (S.stage === "game" && S.tab === "jianghu") { fitFirstRound(); fitOnResize(); } // 寬度變了，第一回合佔幾行、第一屏放不放得下也跟著變（只有高度變了不重量，見 fitOnResize）
     // 序章裡師父框上的「在下面 ↓」只在畫面重畫時算；視窗大小變了（轉向、拉視窗）目標離第一屏多遠也跟著變，去抖後重算、不重畫（T7 走查 W-F）
@@ -4914,6 +4945,8 @@
   // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
   const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };
   if (PHONE) { if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else PHONE.addListener(onPhoneChange); }
+  // 字型載入完，字寬跟著變：狀態列那兩個字放不放得下重量一次（FB-198）
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (S.stage === "game") fitBars(); });
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();

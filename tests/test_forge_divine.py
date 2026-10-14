@@ -340,7 +340,7 @@ def test_gear_rows_mark_the_unnamed_original_with_its_book_name(divine_content, 
     original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
     worn = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["worn"]  # noqa: E731
     row = worn()
-    assert row["divine"] == {"pattern": "墜星劍"} and row["grade"].endswith(equipment.DIVINE_MARK)
+    assert row["divine"] == {"pattern": "墜星劍", "unit": "把"} and row["grade"].endswith(equipment.DIVINE_MARK)
     smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)
     row = worn()
     assert row["divine"] is None and row["name"] == "墜星劍"  # 定了名：表單不再畫
@@ -363,7 +363,7 @@ def test_gear_rows_put_the_unnamed_original_first_in_a_long_rack(divine_content,
     game, original = _crowded_rack(divine_content, world)
     rack = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["rack"]  # noqa: E731
     rows = rack()
-    assert rows[0]["id"] == original.id and rows[0]["divine"] == {"pattern": "墜星劍"}
+    assert rows[0]["id"] == original.id and rows[0]["divine"] == {"pattern": "墜星劍", "unit": "把"}
     assert [r["name"] for r in rows[1:]] == [f"備刃{i}" for i in range(9)]  # 其餘照原來的先後
     assert all(r["divine"] is None for r in rows[1:])
     assert smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)[0]

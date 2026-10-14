@@ -512,7 +512,8 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     """修練頁「裝備」那一塊（server.menxia_view 的 gear；裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），
     每段是身上那件與裝備庫裡同一欄的（各欄模組的 rows）、段名、空著時那一句、底下那一句。
     格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
-    武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名}（修練頁那一列底下畫定名表單），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
+    武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名, "unit": 量詞}（修練頁那一列底下畫定名表單；量詞照
+    equipment.unit_for：防具一件、拳套一副、其他兵器一把，FB-197），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
     held_note：寄放著哪幾件（6.5），沒有是空字串。
     where（FB-138）：每一段「哪裡買得到、哪裡得來」那一句（equipment.smith_where、mounts.where、treasures.WHERE），讀內容的地點標籤；
     網頁在每一段身上與裝備庫都空著、也沒有寄放時畫精簡的一塊，每段一行寫 empty 加 where。內容裡沒有那種地點時是空字串。"""
@@ -536,8 +537,9 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     for block in slots:
         if block["slot"] in ("weapon", "armor"):
             for row in [block["worn"], *block["rack"]]:
-                if row is not None:
-                    row["divine"] = {"pattern": pending[row["id"]]} if row["id"] in pending else None
+                if row is not None:  # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
+                    row["divine"] = ({"pattern": pending[row["id"]], "unit": equipment.unit_for(block["slot"], row.get("kind", ""))}
+                                     if row["id"] in pending else None)
             # 等著定名的原品排在裝備庫最前面（終審 I1）：手上已經有一把時原品放在最後一格，網頁只預設列前 8 件，表單會被「再列 N 件」藏起來；
             # 照有沒有 divine 排（穩定排序，其餘維持放進去的先後），定了名就回到原位
             block["rack"].sort(key=lambda row: row["divine"] is None)

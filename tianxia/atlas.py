@@ -327,17 +327,44 @@ def strike_how(state: GameState, content: Content, order: Order) -> str:
     return f"到{name}所在的地方挑戰他本人，打贏記一次（{where}）。"
 
 
+SIEGE_NAMED_MAX = 2  # 攻城記得了次數的地點（orders.siege_places）只有這麼幾處時，軍令卡寫出地名（FB-221，PM 2026-10-14）；更多照舊寫「一帶」
+SIEGE_AT = "到{where}遊歷，打贏一場{enemy}記一次{note}。"  # 待 joy 潤（FB-221）
+SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得了次數的地方都還沒摸清，只寫大區
+SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
+
+
+def siege_how(state: GameState, content: Content, order: Order) -> str:
+    """軍令卡上攻城那道多寫的一行（FB-221）：記得了次數的地點（orders.siege_places：這條戰線上有敵方陣營隊伍的地方）只有一兩處時
+    寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
+    沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。"""
+    front = trend_name(content, order.front) if order.front else "戰線"
+    places = orders.siege_places(content, order.faction, order.front) if order.front else []
+    if not places or len(places) > SIEGE_NAMED_MAX:
+        return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
+    known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
+    hidden: list[str] = []
+    for loc_id in places:
+        if not is_known(state, content, loc_id):
+            region = region_of(content, loc_id)
+            area = f"{region.name if region is not None else front}一帶"
+            if area not in hidden:
+                hidden.append(area)
+    note = "" if not hidden else SIEGE_SOME_UNSEEN if known else SIEGE_UNSEEN
+    enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
+    return SIEGE_AT.format(where="或".join(known + hidden), enemy=enemy, note=note)
+
+
 def order_how(state: GameState, content: Content, order: Order) -> str:
-    """軍令卡上多寫的一行：這道軍令怎麼出力（FB-093：以前要等做完一次，引薦人的結語才說）。打擊照 strike_how；
-    守城寫陣營自己的守勢行動（巡哨、傳道、保境安民），那一顆收在「此地還能做」裡。地點都是軍令本身就寫出來的，不多洩漏。"""
+    """軍令卡上多寫的一行：這道軍令怎麼出力（FB-093：以前要等做完一次，引薦人的結語才說）。打擊照 strike_how、攻城照 siege_how；
+    守城寫陣營自己的守勢行動（巡哨、傳道、保境安民），那一顆收在「此地還能做」裡。截糧、護糧的地點都是軍令本身就寫出來的，不多洩漏。"""
     if order.template == "strike":
         return strike_how(state, content, order)
+    if order.template == "siege":
+        return siege_how(state, content, order)
     def place(loc_id: str | None) -> str:
         return content.locations[loc_id].name if loc_id in content.locations else "那裡"
 
     front = trend_name(content, order.front) if order.front else "戰線"
-    if order.template == "siege":
-        return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
         return f"在{front}一帶按「{duty.name if duty else '守勢'}」（收在「此地還能做」裡），做一次記一次。"

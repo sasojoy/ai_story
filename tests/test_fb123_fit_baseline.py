@@ -127,8 +127,9 @@ Object.defineProperty(top, "innerHTML", { get() { return this._html; }, set(v) {
 globalThis.document = { getElementById: (id) => (id === "top" ? top : null) };
 const S = { prologueKey: "k" };
 const seen = [];
-const H = new Function("S", "prologueKey", "topHtml", "applyGlow", "render", "fitTopMoved", code + "\nreturn { renderTop };")(
-  S, () => "k", () => input.html, () => {}, () => {}, (before) => seen.push([before, top.offsetHeight]));
+// fitBars（FB-198）：狀態列畫好之後量「體力」「氣血」兩個字放不放得下——要在新的內容寫進去之後叫
+const H = new Function("S", "prologueKey", "topHtml", "applyGlow", "render", "fitTopMoved", "fitBars", code + "\nreturn { renderTop };")(
+  S, () => "k", () => input.html, () => {}, () => {}, (before) => seen.push([before, top.offsetHeight]), () => seen.push(["fitBars", top.offsetHeight]));
 H.renderTop();
 finish(seen);
 """
@@ -136,4 +137,4 @@ finish(seen);
 
 @node
 def test_render_top_hands_the_height_before_the_redraw_to_fit_top_moved():
-    assert webharness.run(RENDER_TOP, {"html": "<div>展開的名號</div>"}) == [[120, 300]]
+    assert webharness.run(RENDER_TOP, {"html": "<div>展開的名號</div>"}) == [["fitBars", 300], [120, 300]]
