@@ -1904,10 +1904,15 @@ class Game:
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
-    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None, merge: bool = False) -> None:
-        """寫一則江湖紀錄。merge：最新一則同標題就併進去（journal.add_entry 的 merge；連著收同一個人的禮，FB-116）。"""
+    def _write(
+        self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None, merge: bool = False,
+        battle_id: int | None = None,
+    ) -> None:
+        """寫一則江湖紀錄。merge：最新一則同標題就併進去（journal.add_entry 的 merge；連著收同一個人的禮，FB-116）。
+        battle_id：這一則連到哪一份戰報（替對方記的切磋，FB-244）。"""
         draft = Draft(title, tag)
         draft.guide = list(guide or [])
+        draft.battle_id = battle_id
         journal.add_entry(self.state, draft.entry(self.state.world.time, msgs), merge=merge)
 
     def _note_guide(self, notes: list[str]) -> None:
@@ -5615,13 +5620,14 @@ class Game:
         record.notes += msgs
         return msgs
 
-    def _file_battle(self, record, wear: bool | None = None, armor_wear: bool | None = None) -> str:
+    def _file_battle(self, record, wear: bool | None = None, armor_wear: bool | None = None, team_exp: bool = True) -> str:
         """歸檔一場戰報。wear：這一場要不要磨兵器（兵器設計 3.4）；None＝照戰報類型，劇情戰（kind=event）不磨，
         挑戰本人雖然也是 event，由 _challenge 明說要磨。armor_wear：要不要磨防具（裝備四欄設計 4.5）；None＝照 armor.wears
         （遊歷、探索野怪、截殺自己這一邊落敗才磨；切磋、頭目戰、劇情戰不磨），挑戰本人由 _challenge 明說要磨。全服決戰不走這裡。
         兩樣的提醒合在 _last_wear（兵器先、防具後），進戰鬥卡片也進江湖紀錄（防具照兵器的做法；設計第九節「戰報不寫防具」指的是
         不每一場寫一句省了多少，這一句只在低於 edge_warn 時出現一次）。截殺輸的一方先扣血（_raid_spoils）、後磨，
-        所以那一場用的是磨之前的耐久（同兵器的時序）。"""
+        所以那一場用的是磨之前的耐久（同兵器的時序）。team_exp：草稿的得失補「經驗 +N（每人）」（整隊拿經驗的仗）；
+        切磋只有本人拿、經驗自己寫在訊息裡（FB-244），不補。"""
         self._last_wear = []
         if (record.kind != "event") if wear is None else wear:
             self._last_wear += weapons.wear(self.state, self.content, record.tier)
@@ -5635,7 +5641,7 @@ class Game:
             self._draft.outcome(battlelog.outcome_text(record), line)
             self._draft.battle_id = record.id
             self._draft.notes += self._last_wear
-            if record.exp:
+            if record.exp and team_exp:
                 self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
 
@@ -6886,10 +6892,11 @@ class Game:
         record.exp = cfg.exp
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
-        line = self._file_battle(record)
-        msgs = [line, f"心得 +{xinde}"] + ups + self._last_wear
-        if self._draft is None:  # 對方那一邊：不是他自己按的，替他記一則
-            self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record))
+        line = self._file_battle(record, team_exp=False)
+        # 兩邊對稱（FB-244）：各寫各自拿到的經驗與心得（只有本人拿，不寫「（每人）」）、各連自己的戰報
+        msgs = [line] + ([f"經驗 +{cfg.exp}"] if cfg.exp else []) + [f"心得 +{xinde}"] + ups + self._last_wear
+        if self._draft is None:  # 對方那一邊（或從玩家卡答應、沒有草稿）：替他記一則，連到這一份戰報
+            self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record), battle_id=record.id)
         else:  # 答應的那一方（自己按的，這次行動的草稿寫這一則）：結果那一句照樣寫進敘事，跟發邀請的那一方一樣（FB-117）
             self._draft.keep(line)
         return msgs

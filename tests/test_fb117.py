@@ -707,3 +707,28 @@ def test_fb243_their_side_refusal_is_written_from_your_side(twins):
     assert line == "甲那邊合不成：合出來的那一樣他已經有了。" and line.short == "他那邊已經有了"
     unknown = SimpleNamespace(state=peer.state, discuss_problem=lambda *args: "找不到它的資料。")  # 沒有兩三個字的那幾句
     assert game.discuss_item_problem(world.get_season().invites[0], unknown, "insight:huo") == "甲那邊合不成。"
+
+
+# ── FB-244：切磋兩邊的江湖紀錄對稱 ──
+
+
+@pytest.mark.parametrize("via", ["scene", "card"])
+def test_fb244_both_spar_entries_show_their_exp_and_link_their_report(pair, via):
+    """發邀請的那一方以前只寫「心得 +N」、沒連戰報；答應的那一方寫「經驗 +N（每人）」。現在兩邊各寫各自拿到的經驗與心得、
+    各連自己那一份戰報，不寫「（每人）」。從場景底下答應（選單）、從玩家卡答應都一樣。"""
+    content, world = pair
+    exp = content.config.spar.exp
+    before = {n: _load(world, n).player.member.exp for n in ("甲", "乙")}
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "spar", {"arg": "invite"}))
+    if via == "scene":
+        iid = world.get_season().invites[0].id
+        _do(content, world, "乙", lambda g: g.choose(f"invite:yes:{iid}"))
+    else:
+        _do(content, world, "乙", lambda g: g.peer_act("甲", "spar", {"arg": "yes"}))
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        head = state.journal[0]
+        assert f"經驗 +{exp}" in head.changes and not any("每人" in c for c in head.changes), head.changes
+        assert any(c.startswith("心得 +") for c in head.changes)
+        assert head.battle_id is not None and head.battle_id == state.battles[-1].id
+        assert state.player.member.exp != before[name] or state.player.member.level > 1  # 經驗真的加了
