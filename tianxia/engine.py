@@ -1666,7 +1666,9 @@ class Game:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
         認不到那一則（紀錄已經被後來的事併掉或擠到後面）就不插，潤色本來就是錦上添花。
         潤色那一段已經把結果句整句寫進去了（空白、標點不算，event_llm.tells_the_outcome）就拿掉後面引擎那一行結果句，
-        不寫兩次（FB-124）；模型那一段不切（結果句常常接在它自己的半句後面，切了會留下斷掉的逗號）。"""
+        不寫兩次（FB-124）；這時模型那一段不切（結果句常常接在它自己的半句後面，切了會留下斷掉的逗號）。
+        只寫到結果句的頭半句、收在那一段的尾巴上（FB-222）：把尾巴重疊的那一截切掉（event_llm.trim_echo），結果句照接整句；
+        整段都是重疊的就不插。"""
         journal_entries = self.state.journal
         if not narration or not journal_entries:
             return
@@ -1676,8 +1678,13 @@ class Game:
         lines = list(entry.lines)
         said = next((i for i, line in enumerate(lines) if line.startswith(f"你：「{outcome.text}」")), None)
         at = 0 if said is None else said + 1
+        told = event_llm.tells_the_outcome(narration, outcome.effect_text)
+        if not told:
+            narration = event_llm.trim_echo(narration, outcome.effect_text)
+            if not narration:
+                return
         lines.insert(at, narration)
-        if event_llm.tells_the_outcome(narration, outcome.effect_text):
+        if told:
             echo = next((i for i in range(at + 1, len(lines)) if lines[i] == outcome.effect_text), None)
             if echo is not None:
                 del lines[echo]

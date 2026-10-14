@@ -57,6 +57,7 @@ _NARRATE_SYSTEM_PROMPT = (
 
 
 _NOT_WORDS = re.compile(r"[\W_]+")  # 空白與標點（中英文、全形半形都算）：比對結果句時拿掉，只比字
+_WORD = re.compile(r"[^\W_]")  # 一個字（不是空白、標點）
 
 
 def tells_the_outcome(narration: str, effect_text: str) -> bool:
@@ -64,6 +65,35 @@ def tells_the_outcome(narration: str, effect_text: str) -> bool:
     只寫了一部分不算（引擎照舊接整句，後半段才不會不見）；結果文字是空的（effect 沒寫字）也不算。"""
     outcome = _NOT_WORDS.sub("", effect_text)
     return bool(outcome) and outcome in _NOT_WORDS.sub("", narration)
+
+
+ECHO_MIN = 4  # 潤色的結尾跟結果句的開頭至少重疊幾個字才算「起了結果句的頭」：一兩個字的巧合（「你」「軍侯」）不算
+ECHO_SURE = 8  # 重疊到這麼長，就算沒收在結果句的子句尾巴也算（模型寫到一半停在子句中間）
+_TAIL_MARKS = "，、；：,;:「『（(—－-"  # 切掉重疊那一截之後，留在尾巴上的這些標點跟著拿掉，再補句號
+
+
+def trim_echo(narration: str, effect_text: str) -> str:
+    """FB-222：潤色那一段的結尾已經起了結果句的頭（例：「……化解嚴峻的氣氛，軍侯聽完你說的，」接「軍侯聽完你說的，臉色鬆了些……」），
+    引擎照接整句，那半句就寫了兩次。把潤色尾巴跟結果句開頭重疊的那一截切掉，結果句照接整句（一個字都不少）。
+    重疊照字比（空白、標點不算），至少 ECHO_MIN 個字，而且重疊的那一截在結果句裡收在一個子句的尾巴（後面是標點或句尾）；
+    到 ECHO_SURE 個字就不看子句。「遞給那郡兵」接「那郡兵總算有了著落」這種主詞巧合（收在子句中間、又短）不切。
+    整句都寫進去了是 tells_the_outcome 的事（拿掉引擎那一行），這裡不管。切完尾巴留下的逗號、頓號這類拿掉補句號；
+    整段都是重疊的回空字串（呼叫端就不插）。沒有重疊回原文。"""
+    places = [i for i, ch in enumerate(narration) if _WORD.match(ch)]
+    said = "".join(narration[i] for i in places)
+    outcome_places = [i for i, ch in enumerate(effect_text) if _WORD.match(ch)]
+    outcome = "".join(effect_text[i] for i in outcome_places)
+    for size in range(min(len(said), len(outcome) - 1), ECHO_MIN - 1, -1):
+        if said[-size:] != outcome[:size]:
+            continue
+        after = outcome_places[size - 1] + 1  # 結果句原文裡，重疊那一截的下一個字
+        if size < ECHO_SURE and after < len(effect_text) and _WORD.match(effect_text[after]):
+            continue  # 收在子句中間：可能只是巧合
+        kept = narration[:places[-size]].rstrip().rstrip(_TAIL_MARKS).rstrip()
+        if kept and _WORD.match(kept[-1]):
+            kept += "。"
+        return kept
+    return narration
 
 
 def _scene(event: Event) -> str:

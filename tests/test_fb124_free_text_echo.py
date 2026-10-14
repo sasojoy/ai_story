@@ -108,9 +108,11 @@ def test_a_paragraph_without_the_outcome_is_followed_by_it_as_before(failed_gamb
     "你剛扛起擔子，巡夜的兵卒發現了你，你在霧裡狂奔了半夜。",  # 只差最後「才甩掉追兵」
 ], ids=["half", "all-but-the-end"])
 def test_part_of_the_outcome_is_not_enough_to_drop_it(failed_gamble, model, paragraph):
-    """只寫了結果句的一部分：引擎那一行照接，沒寫到的那一截（甩掉追兵）才不會不見。"""
-    narration, lines = _polish(failed_gamble, model, paragraph)
-    assert OUTCOME in lines and lines.index(narration) == lines.index(OUTCOME) - 1
+    """只寫了結果句的一部分：引擎那一行照接，沒寫到的那一截（甩掉追兵）才不會不見。寫到的那一截收在潤色的尾巴上，
+    那一截從潤色切掉（FB-222，tests/test_fb222_free_text_half_echo.py），不寫兩次。"""
+    _, lines = _polish(failed_gamble, model, paragraph)
+    assert OUTCOME in lines and lines[lines.index(OUTCOME) - 1] == "你剛扛起擔子。"
+    assert _bare("".join(lines)).count(_bare("巡夜的兵卒發現了你")) == 1
 
 
 def test_the_success_side_is_guarded_the_same_way(game, model):
