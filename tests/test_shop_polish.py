@@ -196,3 +196,13 @@ def test_a_market_feed_or_swap_lost_to_another_tab_says_why(content, world):
     p.rack = []  # 那一匹在另一個分頁換走了
     msgs = game.choose(f"{mounts.WIELD}騎:2")
     assert isinstance(msgs, Refused) and list(msgs) == [f"（{equipment.WIELD_MISSING.rstrip('。')}。）"]
+
+
+def test_the_paper_and_held_slots_stay_light_paper_in_dark_mode():
+    """實機看到的（深色主題）：紙是固定淺色，紙上一般的鈕（放回去、收起）與手上那一排的格子卻跟著深色主題變黑。一起固定成紙色。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    assert "#f6edd8" in _rule(css, ".shop-board .slot")
+    plain = _rule(css, ".shop-board .paper .btn:not(.primary):not(.danger)")
+    assert "#fbf7ef" in plain and "#2a241d" in plain

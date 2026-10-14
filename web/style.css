@@ -1404,7 +1404,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .held-row { padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.25); font-size: 12px; }
 .shop-board .held-row p { margin: 0 0 4px; } /* 手上那一排的外框不叫 .held：揭著的告示是 .note.held */
 .shop-board .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.shop-board .slot { display: grid; gap: 2px; min-width: 0; text-align: left; padding: 6px; border: 1px solid #b7862b; border-radius: 6px; background: var(--paper); color: var(--ink); font: 11px var(--sans); }
+.shop-board .slot { display: grid; gap: 2px; min-width: 0; text-align: left; padding: 6px; border: 1px solid #b7862b; border-radius: 6px; background: #f6edd8; color: #2a241d; font: 11px var(--sans); } /* 紙色（深色主題也一樣） */
 .shop-board .slot b { font: 600 12px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-board .slot.empty { display: flex; align-items: center; justify-content: center; background: transparent; color: #e8d6ad; border-style: dashed; }
 .shop-board .board { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 12px; }
@@ -1447,6 +1447,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .paper .hand-in { display: grid; gap: 6px; }
 .shop-board .paper .hand-in .btn { text-align: left; }
 .shop-layer .paper .btn.ghost { color: #2a241d; border-color: #c9ad7c; } /* 紙底（第一批的淡框鈕是暗底的顏色） */
+.shop-board .paper .btn:not(.primary):not(.danger) { background: #fbf7ef; color: #2a241d; border-color: #c9ad7c; } /* 紙上一般的鈕（放回去、收起、交出的每一件）：深色主題也是紙色 */
 /* 交差（企劃者 2026-10-14 微調）：被交掉的那張告示本身蓋「交差」，停一下再跟著告示淡出；減少動態效果不淡出，時間到直接拿掉 */
 .shop-board .note.done { animation: notedone 1.4s ease-in forwards; }
 .shop-board .note.done .stamp { padding: 3px 6px; border-width: 3px; font-size: 15px; }
