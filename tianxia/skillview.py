@@ -475,12 +475,18 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         follower = dict(team.follower_rows(state, content)).get(key)
         if follower is None:
             return ""
-        return "\n".join([
+        drill = team.drill_of(state, key)
+        lines = [
             f"### {follower.name}",
             "部下：一直跟著你出戰，只算威力、不扣氣血；不能對話，也不能散功。武學跟著你的等級長進。",
-            f"武學　{_art_label(content, world, follower.wugong, team.follower_level(state, content, follower))}",
-            f"威力　{round(team.follower_power(state, content, world, follower))}",
-        ])
+            f"武學　{_art_label(content, world, follower.wugong, team.follower_level(state, content, follower, key))}",
+            f"威力　{round(team.follower_power(state, content, world, follower, key))}",
+        ]
+        if drill.cheng or drill.arm:  # 傳功（Config.chuangong）：多練的成數、傳的臂力
+            parts = ([f"武學多練 {drill.cheng} 成"] if drill.cheng else []) + (
+                [f"{content.config.stat_names.get('str', '臂力')} +{drill.arm}"] if drill.arm else [])
+            lines.append("傳功　" + "、".join(parts))
+        return "\n".join(lines)
     if key == PLAYER:
         member = state.player.member
         name = state.player.name
@@ -503,6 +509,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
+    if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
+        lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)

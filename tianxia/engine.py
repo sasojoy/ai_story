@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
@@ -4373,8 +4373,10 @@ class Game:
             before = p.member.level
             lines += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
         if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
@@ -6724,8 +6726,10 @@ class Game:
         before = p.member.level
         ups = team.add_exp(c, p.member, cfg.exp, p.name)
         if p.member.level > before:
-            p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-            ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+            points = team.points_between(c.config, before, p.member.level)
+            p.stat_points += points
+            if points:
+                ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         record.exp = cfg.exp
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
@@ -7216,8 +7220,10 @@ class Game:
             before = p.member.level
             extra += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             record.exp = exp
         silver = round(boss.silver * share)
         if silver:
@@ -7303,6 +7309,23 @@ class Game:
         if companion_id.startswith(team.FOLLOWER_KEY):
             return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
+
+    @_not_while_preparing
+    def chuangong(self, key: str, what: str) -> list[str]:
+        """傳功門下（Config.chuangong）：用心得替名冊上的同伴或部下練武學、加屬性（chuangong.teach）。
+        傳成了寫進江湖紀錄（併進「修練」那一則）；傳不了只回那一句話，不寫紀錄。"""
+        xinde = self._xinde()
+        msgs = self._log(chuangong.teach(self.state, self.content, self.world, str(key), str(what)))
+        if self._xinde() == xinde:  # 沒花到心得：被拒絕了
+            return msgs
+        return msgs + self._menxia_entry(msgs[0], xinde)
+
+    def chuangong_lessons(self, key: str | None) -> list[dict]:
+        """修練頁人物卡底下的傳功鈕（server.menxia_view 的 lessons）：每一項的 what、鈕上的字、效果、按不下去的原因。"""
+        return [
+            {"what": row.what, "label": row.label, "effect": row.effect, "problem": row.problem}
+            for row in chuangong.lessons(self.state, self.content, self.world, key)
+        ]
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
 
@@ -8656,6 +8679,7 @@ class Game:
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
+            "exp": team.exp_view(c, p.member),  # 這一級攢了多少、升下一級要多少（狀態列展開那一行）；滿級是 None
             "location": c.locations[p.location].name,
             "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
             "day": int(w.time // DAY) + 1,
