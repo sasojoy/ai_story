@@ -3714,7 +3714,7 @@
       <div class="m-sec"><h4>第 ${Number(week)} 週</h4>${list || '<div class="m-sub">沒有地點易手。</div>'}</div>`;
   }
   let mapPlaying = 0;
-  const stopPlay = () => { clearInterval(mapPlaying); mapPlaying = 0; };
+  const stopPlay = () => { if (mapPlaying) { clearInterval(mapPlaying); mapPlaying = 0; } }; // 沒在播放就什麼都不做（切分頁每次都叫）
   // 版圖變化時整張地圖放進抽屜上面那一塊（地圖框在 tl-mode 縮到抽屜上面，clampView 會置中）
   function wholeMap() {
     const g = mapGeom(document.getElementById("map"));
