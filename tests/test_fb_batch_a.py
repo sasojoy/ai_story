@@ -371,7 +371,7 @@ def test_fb140_the_treasure_drop_line_does_not_repeat_routed(content):
 
 
 def test_fb135_the_hp_word_can_step_aside_for_the_injury_on_a_narrow_bar(hints_content, world):
-    """375 寬氣血條只有 99 px，「氣血 348/400」跟「傷 7」擠在一起互相蓋住。「氣血」兩個字包成一格；氣血條窄、又有內傷時拿掉它
+    """375 寬氣血條只有 99 px，「氣血 348/400」跟「傷 7」擠在一起互相蓋住。「氣血」兩個字包成一格；有內傷、字尾又碰到「傷 N」時拿掉它（FB-198 起量過才收）
     （數字與「傷 N」留著，條上的 title 照舊寫氣血）。沒有內傷時照舊寫「氣血 N/M」。"""
     import webharness
     if webharness.NODE is None:
@@ -389,13 +389,11 @@ def test_fb135_the_hp_word_can_step_aside_for_the_injury_on_a_narrow_bar(hints_c
     top = run(m, "return H.topHtml();")
     assert '<span><em class="lbl">氣血 </em>348/400</span>' in top and '<span class="inj">傷 7</span>' in top
     css = _css()
-    assert "container-type: inline-size" in _rule(css, ".bar.hp")
-    stam = css[css.index("@container (max-width: 132px)"):][:300]
-    assert ".bar.stam:has(.pill-btn) .lbl { display: none; }" in stam and "container-type: inline-size" in _rule(css, ".bar.stam")
+    # FB-198 之後不再照條寬一律讓開：app.js 的 fitBars 量到字尾碰到「傷 N」或丹的鈕才收（.snug 字小一號、還碰到才 .tight 拿掉兩個字）
+    assert "font-size: 10px" in _rule(css, ".bar.snug > span") and "padding: 0 4px" in _rule(css, ".bar.hp.snug > span.inj")
+    assert "display: none" in _rule(css, ".bar.tight .lbl")  # 四位數的氣血配三位數的內傷也放得下（實機量過）
     assert '<em class="lbl">體力 </em>' in top  # 體力條同一件事：丹的鈕蓋住「體力 250/250」
-    query = css[css.index("@container (max-width: 150px)"):]
-    assert ".bar.hp:has(.inj) > span { padding: 0 5px; font-size: 10px; }" in query[:400]  # 四位數的氣血配三位數的內傷也放得下（實機量過）
-    assert ".bar.hp:has(.inj) .lbl { display: none; }" in query[:query.index("}\n") + 2]
+    assert "snug" not in top and "tight" not in top  # 畫出來一律寫全，量過才收
 
 
 # ── 終審修正 ──
