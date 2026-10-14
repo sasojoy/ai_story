@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import gender, glyph, insight_llm, insights, mounts, naming
+from . import gender, glyph, insight_llm, insights, mounts, naming, treasures
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -129,6 +129,8 @@ def rate(state: GameState, content: Content, loc: Location) -> int:
     wis = state.player.stats.get("wis", 5)
     low, high = cfg.sense_rate_range
     base = min(max(cfg.sense_rate + (wis - 5) * cfg.sense_rate_per_wis, low), high)
+    if cfg.explore_modes.enabled and treasures.amount(state, content, "insight") > 1:  # 寶物「探索悟意境」（出陣探索與地盤設計 3.3）
+        base = min(high, base + cfg.explore_modes.sense_treasure_points)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
 

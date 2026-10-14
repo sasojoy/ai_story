@@ -820,7 +820,10 @@ ALLOW_FIXED = frozenset({
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
-ALLOW_FAMILIES = ("act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+ALLOW_FAMILIES = (
+    "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
+    "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+)
 
 
 def allow_known(entry: str) -> bool:

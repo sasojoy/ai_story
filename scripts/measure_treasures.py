@@ -136,8 +136,8 @@ def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool)
         count["upgrades"] += sum(1 for key, quality in after.items() if before.get(key) != quality)  # 修練升了品
         return out
 
-    def legend_find(self):
-        out = real_legend(self)
+    def legend_find(self, rng=None):  # 探索三選一傳自己的亂數（出陣探索與地盤），舊的探索不傳
+        out = real_legend(self, rng)
         count["pills"] += bool(out)  # 探索撿到一枚破境丹
         return out
 

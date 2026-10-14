@@ -180,6 +180,7 @@ def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
     monkeypatch.setattr(content.config, "season_one", True)
     monkeypatch.setattr(content.config, "season_days", 2.5)
     monkeypatch.setattr(content, "timetable", [_fixed("甲", 1)])
+    monkeypatch.setattr(content.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不寫紀錄）
     game = Game.new(content, "測試")
     view = server.main_view(game)
     assert "賽季開始" in view["now"] and view["now"] == view["latest"]
@@ -737,7 +738,8 @@ def test_register_and_change_password_never_hash_while_holding_the_write_lock(cl
 # ── 江湖上的動作（HTTP）────────────────────────────────────
 
 
-def test_choosing_an_option_plays_it_and_saves(client):
+def test_choosing_an_option_plays_it_and_saves(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
     _player(client)
     out = client.post("/api/choose", json={"id": "act:explore"}).json()
     assert out["main"]["status"]["stamina"] < out["main"]["status"]["stamina_max"]
@@ -3495,7 +3497,8 @@ def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     assert game.state.player.pending_companion is None
 
 
-def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events):
+def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:explore")
     assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟

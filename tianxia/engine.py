@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
@@ -1031,6 +1031,7 @@ class Game:
         loc = c.locations[s.player.location]
         cost = self._action_costs()
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
+        opts += self._explore_mode_options(loc, cost["explore"])
         if prologue_rules.active(s, c) or not sortie.on(c):
             if self._train_squad_ids(loc):
                 # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
@@ -1203,6 +1204,23 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
+    def _explore_mode_options(self, loc: Location, cost: int) -> list[Option]:
+        """探索三選一的三顆（出陣探索與地盤設計第三節）：一樣的體力。悟不出的地方（insights.explore_gives 是空的）靜心感悟灰掉、
+        寫「這裡悟不出什麼」；這個遊戲日在這裡選錯過做法也灰掉（sensing.missed_today）。開關關著、序章裡沒有（序章照舊按「探索」）。"""
+        c = self.content
+        if not explore_modes.on(c) or prologue_rules.active(self.state, c):
+            return []
+        name = explore_modes.NAMES
+        opts = [self._cost_option(explore_modes.option_id(m), name[m], cost) for m in (explore_modes.GATHER, explore_modes.SEEK)]
+        sense = explore_modes.option_id(explore_modes.SENSE)
+        if not insights.explore_gives(loc, c):
+            opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.NO_SENSE}）", enabled=False))
+        elif sensing.missed_today(self.state, c, loc):
+            opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.SENSE_LATER}）", enabled=False))
+        else:
+            opts.append(self._cost_option(sense, name[explore_modes.SENSE], cost))
+        return opts
+
     def _socialize_option(self, people: list[str], cost: int) -> Option:
         """交友的按鈕。這裡只有一位大勢人物、沒有交友事件、福緣也還沒到，而他剛被你打敗、閉門不見（T4）時，交友只會
         撲空——按不下去、寫明原因。其他時候照舊。"""
@@ -1256,7 +1274,10 @@ class Game:
         ids = set(option_ids)
         loc = c.locations[s.player.location]
         notes: dict[str, str] = {}
-        if "act:explore" in ids:
+        if "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
+            fight = not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
+            notes["act:explore"] = howto.explore_modes_line(fight, bool(insights.explore_gives(loc, c)))
+        elif "act:explore" in ids:
             legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
             blocked = self._insight_blocked(loc)
             kind, until = day_turn(c, s.world) if blocked else ("at", None)
@@ -1617,8 +1638,12 @@ class Game:
                 msgs = self._market(arg)
             elif kind == "arena":
                 msgs = self._arena(arg)
+            elif kind == "explore":
+                msgs = self._explore_mode(arg)
             else:
                 msgs = self._choose(int(arg))
+            # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
+            picked_only = kind == "act" and arg == "explore" and msgs == [explore_modes.PICK]
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
@@ -1626,8 +1651,10 @@ class Game:
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
-            if kind == "act" and arg != "break":
+            if kind == "act" and arg != "break" and not picked_only:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
+            if kind == "explore":  # 探索三選一的三種都算探索過
+                msgs += self._guide(note_action(self.state, self.content, self.world, "explore"))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
@@ -1637,7 +1664,8 @@ class Game:
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
-            self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
+            if not picked_only:  # 只按「探索」展開三顆（什麼都沒做）：排著的提示留到下一個真的動作再上框，這一下才不必寫紀錄
+                self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
             # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
@@ -1648,6 +1676,7 @@ class Game:
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
                               and all(bounties.is_browse_line(line) for line in entry.lines))
+            quiet = quiet or (picked_only and entry.lines == [explore_modes.PICK] and not (entry.changes or entry.guide))
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
                 # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
@@ -1845,6 +1874,8 @@ class Game:
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
+        if kind == "explore":  # 探索三選一：「找素材・潁水河畔」
+            return f"{explore_modes.NAMES.get(arg, '探索')}・{c.locations[s.player.location].name}"
         if kind == "faction":
             if arg == "confirm":
                 return f"投靠{self.content.scenario.faction(s.player.pending_faction).name}"
@@ -2210,6 +2241,8 @@ class Game:
         return costs
 
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        if what == "explore" and explore_modes.on(self.content) and not prologue_rules.active(self.state, self.content):
+            return [explore_modes.PICK]  # 三選一開著：「探索」只是展開三顆的入口，按了不花體力、不做事（網頁在行動列底下展開）
         if what == "break":
             return self._finish_seclusion(self.state.world.time)
         if what == "halt":
@@ -2357,15 +2390,16 @@ class Game:
         scouted = bounties.on_explore(self.state, self.content, self.world, self.state.player.location)  # 懸賞榜的打探：探索一次就算
         return self._explore_outcome() + self._legend_find() + self._scrap_find() + scouted
 
-    def _legend_find(self) -> list[str]:
+    def _legend_find(self, rng: random.Random | None = None) -> list[str]:
         """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會；帶著「探索撿破境丹」的寶物時門檻 ×2）。
         機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
-        兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。"""
+        兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。
+        rng：探索三選一傳自己的亂數；舊的探索不傳，照舊用 Game.rng。"""
         cfg = self.content.config
         # 寶物「探索撿破境丹」（裝備四欄 6.2）：只放大門檻（夾在 1 以下），擲的還是同一顆 self.rng.random()——帶不帶都只擲一次，
         # 序列不位移；基本機率是 0 照舊不擲（測試內容）
         chance = min(1.0, cfg.explore_legend_chance * treasures.amount(self.state, self.content, "legend"))
-        if cfg.explore_legend_chance <= 0 or self.rng.random() >= chance:
+        if cfg.explore_legend_chance <= 0 or (rng or self.rng).random() >= chance:
             return []
         self.state.player.legend_items += 1
         return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
@@ -2422,10 +2456,102 @@ class Game:
         return bool(event_candidates(self.state, self.content, "explore", "common"))
 
     def _wild_foes(self, loc: Location) -> list[Squad]:
-        """探索時可能殺出來的野怪：這裡的敵人裡不是自己陣營的那幾路（自己人不會突然殺出來，也不在這裡操練）。
-        地盤易手：站的照控制方（territory.squads_at；開關關著就是 loc.enemies）。"""
-        squads = [self.content.squads[sid] for sid in territory.squads_at(self.state.world, self.content, loc.id)]
+        """探索時可能殺出來的野怪：這裡此刻站的隊伍（地盤易手照控制方，_here_squads）裡不是自己陣營的那幾路
+        （自己人不會突然殺出來，也不在這裡操練）。"""
+        squads = [self.content.squads[sid] for sid in self._here_squads(loc.id)]
         return [squad for squad in squads if not self._drills_with(squad)]
+
+    def _here_squads(self, loc_id: str) -> list[str]:
+        """這個地點此刻站的隊伍（territory.squads_at；地盤易手的開關關著就是 loc.enemies）。"""
+        return territory.squads_at(self.state.world, self.content, loc_id)
+
+    # ── 探索三選一（出陣探索與地盤設計第三節）────────────────────────────
+
+    def _explore_mode(self, mode: str) -> list[str]:
+        """探索三選一的一種（explore:gather|seek|sense）：體力同探索；在召見的地點端出晉升奇遇（同舊的探索）。三種都擲破境丹、
+        都算打探懸賞的交差（設計 3.4）。擲骰都用自己的亂數（explore_modes.rng_for），不碰 Game.rng。"""
+        s, c = self.state, self.content
+        p = s.player
+        p.stamina -= self._action_costs()["explore"]
+        promotion = ranks.summons_event(s, c)
+        if promotion is not None:
+            return self._present(c.events[promotion])
+        p.explore_seq += 1
+        roll = functools.partial(explore_modes.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
+        loc = c.locations[p.location]
+        if mode == explore_modes.GATHER:
+            msgs = self._gather(loc, roll("找素材"))
+        elif mode == explore_modes.SEEK:
+            msgs = self._seek(roll("找事件"))
+        else:
+            msgs = self._sense_here(loc, roll("靜心感悟"))
+        scouted = bounties.on_explore(s, c, self.world, p.location)  # 打探：三種都算（設計 3.4）
+        return msgs + self._legend_find(roll("破境丹")) + scouted
+
+    def _gather(self, loc: Location, rng: random.Random) -> list[str]:
+        """找素材（設計 3.1）：有頭目的地點先擲頭目戰（Config.duel.explore_chance）；撿素材（explore_modes.gather_finds）；
+        城鎮以外 encounter_chance 撞上一場（_gather_fight）。"""
+        s, c = self.state, self.content
+        boss = duel_rules.available(s, c)
+        if boss is not None and rng.random() < c.config.duel.explore_chance:
+            return self._duel_start(boss)
+        msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
+        found = [line for mid in explore_modes.gather_finds(c, loc, rng) if (line := materials.grant(s, c, mid))]
+        msgs += found or [explore_modes.GATHER_NONE]
+        if explore_modes.encounter_due(c, loc, rng):
+            msgs += self._gather_fight(loc, rng)
+        return msgs
+
+    def _gather_foe(self, loc: Location) -> Squad | None:
+        """找素材撞上的那一路（設計 3.1）：手上有這裡的討伐懸賞、那一路不是自己人時就是它（散人不能出陣，討伐靠這裡；地點易手之後
+        那一路不站在這裡也找得到，Review Focus 5）；否則是這裡不是自己陣營的隊伍裡最弱的一路（同分取先列的）。都沒有是 None。"""
+        s, c = self.state, self.content
+        for b in bounties.mine(s, c):
+            if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not self._drills_with(c.squads[b.squad]):
+                return c.squads[b.squad]
+        foes = self._wild_foes(loc)
+        return min(foes, key=lambda foe: foe.difficulty) if foes else None
+
+    def _gather_fight(self, loc: Location, rng: random.Random) -> list[str]:
+        """撞上一場（設計 3.1）：照探索的野怪打（扣氣血減半、不問模型、不推大勢：_squad_encounter(wild=True)），打贏給全額的經驗、
+        心得、銀兩、掉落，也算討伐懸賞的交差（寫進這一場戰報的得失，同遊歷）；打完 train_event_chance 接一則戰後事件
+        （從遊歷搬過來，設計 2.4；事件池照舊叫 train）。"""
+        s, c = self.state, self.content
+        squad = self._gather_foe(loc)
+        if squad is None:
+            return []
+        msgs = [explore_modes.FOE_LINE.format(foe=squad.name)] + self._squad_encounter(squad.id, wild=True)
+        record = next((r for r in s.battles if r.id == s.battle_card), None)
+        if record is not None and record.tier in team.WIN_TIERS:
+            done = bounties.on_win(s, c, self.world, loc.id, squad.id)
+            changes, notes = battlelog.split_changes(done, for_record=True)
+            record.changes += changes
+            record.notes += notes
+            msgs += done
+        if rng.random() < c.config.train_event_chance:
+            event = pick_event(s, c, "train", rng)
+            if event is not None:
+                msgs += self._present(event, "train")
+        return msgs
+
+    def _seek(self, rng: random.Random) -> list[str]:
+        """找事件（設計 3.2）：一次性奇遇先擲 rare_explore_chance，沒中照防重複輪替抽這裡可重複的事件；殘譜與半張鑄譜在這裡擲
+        （_scrap_find）。事件推戰線的五折在 push_trend（source="event"）。"""
+        s, c = self.state, self.content
+        if event_candidates(s, c, "explore", "rare") and rng.random() < c.config.rare_explore_chance:
+            msgs = self._present(pick_event(s, c, "explore", rng, "rare"), "explore")
+        else:
+            event = pick_event(s, c, "explore", rng, "common")
+            msgs = self._present(event, "explore") if event is not None else [explore_modes.SEEK_NONE]
+        return msgs + self._scrap_find()
+
+    def _sense_here(self, loc: Location, rng: random.Random) -> list[str]:
+        """靜心感悟（設計 3.3）：就是有所感（sensing.start）；沒有場景的內容照舊直接悟（同舊探索的悟意境那一支）。"""
+        s, c = self.state, self.content
+        if sensing.can_sense(s, c, loc):
+            return sensing.start(s, c, sensing.pick_scene(loc, c, rng), rng)
+        found = insights.roll_explore(loc, c, rng)
+        return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
 
     def _train(self) -> list[str]:
         """遊歷：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
