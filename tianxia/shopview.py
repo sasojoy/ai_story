@@ -337,7 +337,8 @@ def glow_of(item: Equipment) -> str:
 
 def forged_card(state: GameState, content: Content, world: WorldStateStore, item: Equipment, report: dict) -> dict:
     """出爐卡（2.3）：名字、階品（equipment.grade）、種類與屬性、兵器的加成或防具的減損（同修練頁那一列）、配不配得上（防具：對不對得上
-    內功）、光色、首位發現（打中隱藏配方而且是全服第一個）、去了手上還是裝備庫、還等著定名的原品的譜名。"""
+    內功）、光色、首位發現（打中隱藏配方而且是全服第一個）、去了手上還是裝備庫、還等著定名的原品的譜名、量詞（equipment.unit_for，
+    定名表單那一句用，FB-197）。"""
     art, neigong = _arts(state, content, world)
     if item.slot == "armor":
         value, fit, kind = f"少扣 {armor.pct(armor.cut(item, neigong, content))} 氣血", armor.fit_note(item, neigong), smithing.ARMOR_KIND
@@ -352,6 +353,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         "first": bool(report.get("first")) and item.secret is not None,
         "where": "worn" if worn is not None and worn.id == item.id else "rack",
         "divine": forge_secrets.unnamed_originals(state, world).get(item.id),
+        "unit": equipment.unit_for(item.slot, item.kind),  # 定名表單那一句的量詞（FB-197：防具一件、拳套一副、其他兵器一把）
     }
 
 
