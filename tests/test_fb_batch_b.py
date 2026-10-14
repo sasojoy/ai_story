@@ -110,3 +110,39 @@ def test_fb116_a_pair_discusses_at_most_twice_a_game_day(pair):
     assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None
     msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "discuss", {"arg": "invite:art:basic_fist"}))
     assert msgs == [full]  # 卡上那一顆也按不下去
+
+
+# ── FB-157：換版時一個程式沒帶週末設定，這一週會重掛 → 第一季掛過的週（hooked_week）也算掛過；啟動時設定對不上就印警告 ──
+
+
+def test_fb157_an_old_weekend_save_run_without_the_profile_does_not_post_the_week_again():
+    from conftest import real_content
+
+    from tianxia import bounties, calendar
+    from tianxia.world import advance_world_state
+    from tianxia.world_state import fresh_season
+
+    weekend, plain = real_content("weekend"), real_content()
+    season = fresh_season(weekend)  # 週末那一季：開季時蓋了第一季的章
+    assert season.season_one and not plain.config.season_one
+    week = 3
+    season.time = calendar.week_start(week, weekend, season) + 0.5 * calendar.HOUR
+    season.hooked_week, season.bounty_week = week, 0  # 舊存檔：第一季的週初掛鉤掛過第 3 週，還沒有 bounty_week
+    assert calendar.point(season.time, plain, season).week == week
+    advance_world_state(season, plain, calendar.HOUR, random.Random(0))  # 沒帶設定的程式推一步：走規則關著那一條（bounties.tick）
+    assert not [b for b in season.bounties if b.week == week] and season.bounty_week == 0
+
+
+def test_fb157_a_program_without_the_profile_warns_at_start():
+    from conftest import real_content
+
+    from tianxia import calendar
+    from tianxia.world_state import fresh_season
+
+    weekend, plain = real_content("weekend"), real_content()
+    stamped = fresh_season(weekend)
+    line = calendar.profile_warning(plain, stamped)
+    assert line == calendar.PROFILE_MISMATCH and "TIANXIA_PROFILE" in line
+    assert calendar.profile_warning(weekend, stamped) is None  # 設定對得上
+    assert calendar.profile_warning(weekend, fresh_season(plain)) is None  # 開關剛打開、還在跑的舊季照舊用 beta 的規則：正常
+    assert calendar.profile_warning(plain, None) is None  # 還沒有季

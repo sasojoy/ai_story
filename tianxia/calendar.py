@@ -39,6 +39,18 @@ def season_one_on(season: WorldState, content: Content) -> bool:
     return content.config.season_one and season.season_one
 
 
+# 待 joy 潤（FB-157）：主機的人看的那一行，兩個程式啟動時印
+PROFILE_MISMATCH = "⚠ 這一季開季時第一季規則是開著的，這個程式的設定卻是關著的：這樣跑會把第一季的規則全關掉、懸賞也會重掛。兩個程式都要帶同一份設定（TIANXIA_PROFILE）。"
+
+
+def profile_warning(content: Content, season: WorldState | None) -> str | None:
+    """啟動時設定對不上的那一行（FB-157；server.main、run_bots.main 印）：這一季蓋了第一季的章、這個程式卻沒開第一季規則（換版時
+    其中一個程式沒帶 TIANXIA_PROFILE=weekend）。反過來（開關剛打開、還在跑的季開季時是關的）是正常的換季過渡，不印。沒有季是 None。"""
+    if season is None or not season.season_one or content.config.season_one:
+        return None
+    return PROFILE_MISMATCH
+
+
 def cal_scale(content: Content, season: WorldState | None = None) -> float:
     """季曆秒 ÷ 世界秒。季長照 season 蓋的章（沒有章的舊季照 DEFAULT_SEASON_DAYS）；不給 season 時照現在的設定。"""
     days = season_length_days(season, content) if season is not None else content.config.season_days

@@ -893,9 +893,14 @@ def _hang_prizes(w: WorldState, content: Content, week: int) -> None:
 def tick(state: GameState, content: Content) -> list[str]:
     """第一季規則關著的季的週初掛單（world.advance_world_state 每一步、world.settle_season_start 開季那一刻）：季曆跨進新的一週
     就掛這一週的（只掛這一週，以前的週不補掛；同一週只掛一次，見 issue 的兩道擋）。每一步最多一小時，所以最多晚一小時掛，
-    期限錨在週初、不會跟著延後。不回傳訊息。"""
+    期限錨在週初、不會跟著延後。不回傳訊息。
+    第一季的週初掛鉤跑過的週（hooked_week）也算掛過（FB-157）：bounty_week 上線之前的舊存檔是 0，換版時其中一個程式沒帶週末設定，
+    這一季就走到這裡，會把掛鉤已經掛過的那一週再掛一批。掛鉤自己（world.WEEK_HOOKS）先記 hooked_week 再叫 issue，所以這道擋只放在這裡。"""
     w = state.world
-    return issue(state, content, calendar.point(w.time, content, w).week)
+    week = calendar.point(w.time, content, w).week
+    if week <= w.hooked_week:
+        return []
+    return issue(state, content, week)
 
 
 def _opened(loc: Location, w: WorldState) -> bool:
