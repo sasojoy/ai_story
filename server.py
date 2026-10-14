@@ -60,7 +60,8 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, naming, ollama_client, rules,
+    battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, naming,
+    ollama_client, rules,
     seal, seal_duel, server_bots, social, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -1750,6 +1751,34 @@ def api_smith_line(request: Request, body: dict = Body(default={})):
 def api_reports(request: Request, id: int | None = None):
     game = _game(request)
     return look(game, lambda g: reports_view(g, id))
+
+
+# ── 見聞的「榜單」（企劃者 2026-10-14：善人、惡人、名人、宗師榜，連同武學榜、內功榜）──
+# 一張榜要掃過這一季每一個角色（leaderboard.compute_boards）：二三十人在線、每個人點開都掃一次划不來，整份快取 BOARDS_TTL_SECONDS 秒，
+# 全服共用一份（榜上寫的都是名號，人人看到的一樣；「你排第幾」照快取裡的整張找）。不拿行動鎖：只讀，晚幾十秒無妨。
+BOARDS_TTL_SECONDS = 60.0
+BOARDS_CACHE: dict = {}  # "at"：算好的時刻（time.monotonic）、"season"：哪一季、"board"：compute_boards(top=None)
+BOARDS_LOCK = threading.Lock()
+
+
+def boards_now(game: Game, clock: Callable[[], float] = time.monotonic) -> dict[str, list]:
+    """整張榜（快取過的）：過了 BOARDS_TTL_SECONDS 或換了季才重掃；同時好幾個人點開只掃一次（BOARDS_LOCK）。"""
+    season = game.world.get_season_number()
+    with BOARDS_LOCK:
+        cached = BOARDS_CACHE
+        if cached.get("season") == season and clock() - cached.get("at", float("-inf")) < BOARDS_TTL_SECONDS:
+            return cached["board"]
+        board = leaderboard.compute_boards(game.content, game.world, top=None)
+        BOARDS_CACHE.clear()
+        BOARDS_CACHE.update(at=clock(), season=season, board=board)
+        return board
+
+
+@app.get("/api/boards")
+def api_boards(request: Request):
+    """見聞的「榜單」：六張榜的前十名，加上你不在前十名時你排第幾（leaderboard.view）。"""
+    game = _game(request)
+    return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name)}
 
 
 @app.get("/api/annals")

@@ -701,3 +701,16 @@ def test_the_week_five_battle_gate_leaves_the_season_one_rules_alone(state, cont
     with mock.patch("tianxia.world.season_one", return_value=True):
         check_thresholds(state, content, world, now=0.0)
     assert world.get_battle() is not None
+
+
+def test_end_season_writes_each_boards_top_three_into_the_chronicle(state, content, world):
+    from tianxia.characters import open_characters
+    from tianxia.state import new_game_state
+
+    good = new_game_state(content, "行善的人")
+    good.player.stats["good"] = 9
+    open_characters().save(good)
+    end_season(state, content, world)
+    lines = [r.text for r in state.world.chronicle]
+    assert any(line.endswith("善人榜：行善的人（善名 9）") for line in lines)
+    assert not any("惡人榜" in line for line in lines)  # 沒人上榜的那張不寫
