@@ -410,7 +410,7 @@ def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_on_the_first
             game.choose("act:challenge:bocai")
             got.append(p.materials.get("gang_3", 0) - before)
     assert got == [1, 0, 0] and p.tier3_drops == {"bocai": 1}  # 波才的隊伍屬剛：隕鐵膽；這一季第一次打贏才有
-    assert game.state.battles[-1].materials == [f"隕鐵膽 ×1（{materials.CHALLENGE_SOURCE} +1）"]  # 第一場的戰報「得失」那一格（寫來源，FB-147）
+    assert game.state.battles[-1].materials == [f"隕鐵膽 ×1（{materials.CHALLENGE_SOURCE}）"]  # 第一場的戰報「得失」那一格（寫來源，FB-147；只有這一個不寫 +1，F8）
 
 
 def test_the_tier_three_drop_never_touches_the_game_rng(world, tmp_path):
@@ -442,7 +442,7 @@ def test_big_fights_roll_once_more_but_the_figure_squad_and_small_fights_do_not(
 
     msgs, record, gained = rewards("fanjianglong")  # 難度 150（≥ big_fight_difficulty）、屬剛：大場面
     assert gained == 1 and materials.extra_line(c, "gang_3", 1, materials.BIG_SOURCE) in msgs
-    assert record.materials == [f"隕鐵膽 ×1（{materials.BIG_SOURCE} +1）"]  # 得失寫來源（FB-147）
+    assert record.materials == [f"隕鐵膽 ×1（{materials.BIG_SOURCE}）"]  # 得失寫來源（FB-147；只有這一個不寫 +1，F8）
     assert rewards("fanjianglong", "train")[2] == 1  # 遊歷撞上的大場面也擲
     assert rewards("fanjianglong", "wild")[2] == 0  # 探索野怪不算大場面：不擲
     assert rewards("figure_bocai")[2] == 0  # 大勢人物本人那支隊伍：那一個在 _challenge，這裡不重複擲

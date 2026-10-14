@@ -306,7 +306,28 @@ def test_fb140_the_same_material_shares_one_cell_and_extras_name_their_source(co
     materials.add_cell(cells, content, "kuai_1", 1, source="拾遺囊")
     assert cells == ["驚羽 ×2（拾遺囊 +1）", "精鐵砂 ×2"]
     materials.add_cell(cells, content, "gang_3", 1, source="挑戰本人")
-    assert cells[-1] == "隕鐵膽 ×1（挑戰本人 +1）"
+    assert cells[-1] == "隕鐵膽 ×1（挑戰本人）"  # 只有多給的那一個：不寫 +1（F8）
+
+
+def test_f8_a_cell_that_is_only_the_extra_does_not_write_plus_one(content):
+    """這一格只有多給的那一個（挑戰本人第一次打贏必掉的三階、拾遺囊多掉的）：寫「隕鐵膽 ×1（挑戰本人）」，不寫「+1」——沒有別的可加。
+    同一種之後又掉了（表上的、另一份多給的），照舊寫「×2（挑戰本人 +1）」；拆回江湖紀錄的那幾句不變。"""
+    from tianxia import materials
+
+    cells: list[str] = []
+    materials.add_cell(cells, content, "gang_3", 1, source=materials.CHALLENGE_SOURCE)
+    assert cells == ["隕鐵膽 ×1（挑戰本人）"]
+    assert materials.cell_lines(cells[0]) == [materials.extra_line(content, "gang_3", 1, materials.CHALLENGE_SOURCE)]
+    materials.add_cell(cells, content, "gang_3", 1)  # 表上掉的晚一步進來
+    assert cells == ["隕鐵膽 ×2（挑戰本人 +1）"]
+    assert materials.cell_lines(cells[0]) == ["獲得 隕鐵膽 ×1（挑戰本人）", "獲得 隕鐵膽 ×1"]
+
+    alone: list[str] = []
+    materials.add_cell(alone, content, "kuai_1", 1, source="拾遺囊")
+    assert alone == ["驚羽 ×1（拾遺囊）"]
+    materials.add_cell(alone, content, "kuai_1", 1, source=materials.BIG_SOURCE)  # 兩份多給的：各寫幾個
+    assert alone == ["驚羽 ×2（拾遺囊 +1、大場面 +1）"]
+    assert materials.cell_lines(alone[0]) == ["獲得 驚羽 ×1（拾遺囊）", "獲得 驚羽 ×1（大場面）"]
 
 
 def test_fb140_the_card_still_skips_the_drop_lines_it_already_shows(content):
