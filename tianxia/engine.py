@@ -1057,6 +1057,8 @@ class Game:
             option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
             if option is not None:
                 opts.append(option)
+            elif sortie.ranger_here(c, s.player.faction, loc.id):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
+                opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
@@ -1350,7 +1352,7 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            return ""
+            return sortie.RANGER_LINE if sortie.ranger_here(self.content, self.state.player.faction, loc.id) else ""
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"

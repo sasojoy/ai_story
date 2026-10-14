@@ -46,7 +46,12 @@ def test_a_used_up_sortie_greys_out():
 
 
 def test_a_ranger_sees_the_sortie_cell_greyed():
+    """FB-250：散人站在戰線上寫散人不能出陣；不在戰線的地方照舊寫「不在戰線」。"""
+    from tianxia import sortie
+
     bar = _bar(_game(None, "changshe"))
+    assert "<b>出陣</b>" in bar and sortie.RANGER_NOTE in bar and "不在戰線" not in bar
+    bar = _bar(_game(None, "yingshui"))
     assert "<b>出陣</b>" in bar and "不在戰線" in bar
 
 

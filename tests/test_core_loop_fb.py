@@ -85,6 +85,18 @@ def test_fb249_the_strike_bounty_says_sortie_or_gathering():
     assert bounties.how(old, _strike_bounty()) == "到燕山腳遊歷，打贏一場黃巾軍的隊伍"
 
 
+def test_fb250_a_ranger_on_a_front_sees_why_there_is_no_sortie():
+    """散人站在戰線地點（汝南荒野）：出陣那一顆灰著寫真正的原因、底下那一行說投靠之後才有；不在戰線的地方（潁水河畔）照舊沒有那一顆。"""
+    from tianxia import sortie
+
+    game = _game(None, "runan_wilds")
+    option = _sortie(game)
+    assert option is not None and not option.enabled and option.label == f"{sortie.NAME}（{sortie.RANGER_NOTE}）"
+    assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"] == sortie.RANGER_LINE
+    assert game.choose("act:train") == ["（此刻無法這麼做。）"]
+    assert _sortie(_game(None, "yingshui")) is None
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
