@@ -127,6 +127,7 @@
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
     mapFocus: null, // 江湖頁的小地圖點了某一處：輿圖畫好時對準它（mapReady）
+    mapViewBefore: null, // 打開版圖變化之前的視圖：收起時放回去
     marksS: 0, // 上次畫記號時的倍率：倍率變了一成上下才重畫（字與圓盤照倍率反算）
     // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady：
     // 對準所在地，手機原尺寸、寬螢幕照框寬，都不給整張），之後切分頁、輪詢重畫、換圖層、點地點都留著
@@ -3452,12 +3453,12 @@
     return out;
   }
   // 地圖上的記號（設計第三、四節）：o = { k: 1／倍率（字、圓盤、小牌子乘它，螢幕上大小固定）, far: 看大局, layers: 開著的濾鏡（Set）,
-  // sel: 選了的地點, week: 看哪一週 }。純函式：只讀傳進來的底圖與疊層
+  // sel: 選了的地點, week: 看哪一週, tl: 正在看版圖變化 }。純函式：只讀傳進來的底圖與疊層
   function marksSvg(base, st, o) {
     const k = o.k, far = o.far, on = !!st.territory && o.layers.has("control");
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
-    const flash = new Set(o.week !== st.now_week && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
+    const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
     const out = [`<defs>${MAP_SIDE_ORDER.map((s) => `<radialGradient id="mk-halo-${s}"><stop offset="0" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".7"/><stop offset=".55" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".35"/><stop offset="1" stop-color="${MAP_SIDES[s].soft}" stop-opacity="0"/></radialGradient>`).join("")}</defs>`];
     if (on) {
       for (const p of base.places) if (ctrl[p.id]) out.push(`<circle cx="${p.x}" cy="${p.y}" r="80" fill="url(#mk-halo-${ctrl[p.id]})" pointer-events="none"/>`);
@@ -3544,7 +3545,8 @@
     if (!S.mapBase || !S.mapState) return '<p class="muted">展開輿圖…</p>';
     const tl = S.mapMode === "timeline";
     const svg = S.mapBase.svg.replace(/<\/svg>\s*$/, '<g id="mk"></g></svg>');
-    const banner = tl && S.mapWeek && S.mapWeek !== S.mapState.now_week ? `<div class="map-banner">正在看第 ${S.mapWeek} 週</div>` : "";
+    const seeing = tl && S.mapWeek && S.mapWeek !== S.mapState.now_week;
+    const banner = `<div class="map-banner" id="map-banner"${seeing ? "" : " hidden"}>${seeing ? `正在看第 ${S.mapWeek} 週` : ""}</div>`;
     return `<div class="mapx${tl ? " tl-mode" : ""}" id="mapx">
       <div class="map-wrap" id="map"><div class="tx-world-map">${svg}</div></div>
       <div class="map-top"><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><div class="map-chips" role="group" aria-label="濾鏡">${chipsHtml()}</div></div>
@@ -3646,7 +3648,127 @@
     return `<div class="m-search"><input class="m-q" id="map-q" type="search" placeholder="地名、人物、大區…" value="${esc(q || "")}" autocomplete="off" aria-label="找地點、找人物"><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-results" id="map-results">${searchResults(base, st, q)}</div>`;
   }
-  function timelineHtml() { return ""; } // 版圖變化（Task 7）
+  // ── 天下怎麼變（設計第六節）：上面一張曲線（三條戰線、割據、大事 📜、你在看的那一週），三方各佔幾處、比開季多少，
+  // 年表（B 的：一列一個可易手的地點、一格一週，顏色是那一週誰佔著、白點是那一週易手），那一週的大事與易手。
+  // 地圖同時照那一週畫（marksSvg 的 week），整張放進抽屜上面那一塊（wholeMap）
+  const ROPE_INK = ["#5A3E28", "#2E5E6B", "#7A2E52"]; // 曲線上三條戰線各自的顏色與虛線
+  const ROPE_DASH = ["", "5 3", "1.5 3"];
+  const GX0 = 30, GW = 300, GY0 = 12, GH = 92; // 曲線的左邊、寬、上邊、高（viewBox 單位）
+  const PLAY_MS = 900; // 播放：一週停多久
+  function graphSvg(st, week) {
+    const total = Math.max(2, st.weeks_total);
+    const gx = (w) => GX0 + ((w - 1) * GW) / (total - 1), gy = (v) => GY0 + ((100 - v) * GH) / 100;
+    const out = [
+      `<rect x="${GX0}" y="${gy(65)}" width="${GW}" height="${f1(gy(35) - gy(65))}" fill="#A8322A" opacity=".06"/>`,
+      `<rect x="${f1(gx(st.now_week))}" y="${GY0}" width="${f1(gx(total) - gx(st.now_week))}" height="${GH}" fill="#EDE4CF" opacity=".7"/>`,
+      `<text x="2" y="${GY0 + 8}" font-size="10" fill="${MAP_SIDES.huang.color}">黃巾</text><text x="2" y="${GY0 + GH}" font-size="10" fill="${MAP_SIDES.guan.color}">官軍</text>`,
+    ];
+    const known = (st.weeks || []).filter((x) => x.control);
+    st.ropes.forEach((r, i) => {
+      const pts = known.map((x) => [x.week, x.ropes[r.id]]).filter(([, v]) => v !== null && v !== undefined);
+      if (!pts.length) return;
+      out.push(`<polyline points="${pts.map(([w, v]) => `${f1(gx(w))},${f1(gy(v))}`).join(" ")}" fill="none" stroke="${ROPE_INK[i % 3]}" stroke-width="2.2" stroke-dasharray="${ROPE_DASH[i % 3]}"/>`);
+      const [lw, lv] = pts[pts.length - 1];
+      out.push(`<text x="${f1(gx(lw) + 4)}" y="${f1(gy(lv) + 3)}" font-size="10" fill="${ROPE_INK[i % 3]}">${esc(r.name.slice(0, 2))}</text>`);
+    });
+    const geju = known.filter((x) => x.geju !== null && x.geju !== undefined);
+    if (geju.length) out.push(`<polyline points="${geju.map((x) => `${f1(gx(x.week))},${f1(gy(x.geju))}`).join(" ")}" fill="none" stroke="${MAP_SIDES.haoqiang.color}" stroke-width="1.6" opacity=".8"/>`);
+    for (const x of st.weeks || []) if (x.events.length) out.push(`<text x="${f1(gx(x.week))}" y="${GY0 - 1}" font-size="9" text-anchor="middle">📜</text>`);
+    out.push(`<line x1="${f1(gx(week))}" y1="${GY0}" x2="${f1(gx(week))}" y2="${GY0 + GH}" stroke="#A8322A" stroke-width="2"/>`);
+    for (let w = 1; w <= st.weeks_total; w++) out.push(`<text x="${f1(gx(w))}" y="${GY0 + GH + 11}" font-size="9.5" text-anchor="middle" fill="${w === week ? "#A8322A" : w > st.now_week ? "#C2B699" : "#8A7A62"}">${w}</text>`);
+    return `<svg class="m-graph" data-act="map-graph" viewBox="0 0 ${GX0 + GW + 34} ${GY0 + GH + 14}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三條戰線這一季的走勢">${out.join("")}</svg>`;
+  }
+  // 年表：一列一個可易手的地點、一格一週；還沒到打斜線、還沒記到是空格（中途上線、舊存檔）
+  function chartHtml(base, st, week) {
+    const total = st.weeks_total, byWeek = Object.fromEntries((st.weeks || []).map((x) => [x.week, x]));
+    const head = "<span></span>" + Array.from({ length: total }, (_, i) => {
+      const w = i + 1;
+      return `<span class="wk${w === week ? " on" : ""}${w > st.now_week ? " future" : ""}"${w <= st.now_week ? ` data-act="map-week" data-week="${w}"` : ""}>${w}</span>`;
+    }).join("");
+    const rows = st.chart.map((g) => `<span class="ln">${esc(g.name)}</span>` + g.spots.map((id) => {
+      const b = placeOf(base, id);
+      return `<span class="lab${S.mapSel === id ? " sel" : ""}" data-act="map-mark" data-id="${esc(id)}">${esc(b ? b.name : id)}</span>` + Array.from({ length: total }, (_, i) => {
+        const w = i + 1, row = byWeek[w], prev = byWeek[w - 1];
+        if (w > st.now_week) return '<span class="cell future"></span>';
+        if (!row || !row.control) return `<span class="cell blank" data-act="map-week" data-week="${w}"></span>`;
+        const c = row.control[id], flip = prev && prev.control && prev.control[id] && prev.control[id] !== c;
+        return `<span class="cell${w === week ? " now" : ""}${flip ? " flip" : ""}" data-act="map-week" data-week="${w}" style="background:${c ? MAP_SIDES[c].color : "#CDBF9F"}"></span>`;
+      }).join("");
+    }).join("")).join("");
+    return `<div class="m-chart" style="grid-template-columns: 62px repeat(${total}, 1fr)">${head}${rows}</div>`;
+  }
+  function timelineHtml(base, st, week) {
+    const close = '<button type="button" class="m-x" data-act="map-timeline" aria-label="收起">✕</button>';
+    if (!st.territory || !(st.weeks || []).length) return `<div class="m-tl-head"><b>天下怎麼變</b>${close}</div><div class="m-sub">這一季沒有地盤易手。</div>`;
+    const row = (st.weeks || []).find((x) => x.week === week) || { events: [], changed: [] };
+    const first = (st.weeks || []).find((x) => x.control);
+    const count = (c) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (c[p.id]) n[c[p.id]]++; return n; };
+    const now = count(controlAt(st, week)), start = first ? count(first.control) : now;
+    const sum = MAP_SIDE_ORDER.map((sd) => { const d = now[sd] - start[sd]; return `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}<small>　${d >= 0 ? "+" : ""}${d}</small></div>`; }).join("");
+    const name = (id) => esc((placeOf(base, id) || { name: id }).name);
+    const side = (k) => `<span style="color:${k ? MAP_SIDES[k].color : "inherit"}">${sideName(k)}</span>`;
+    const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),
+      ...row.changed.map((e) => `<div class="m-evt">⇄ ${name(e.id)}：${side(e.from)} → ${side(e.to)}</div>`)].join("");
+    return `<div class="m-tl-head"><b>天下怎麼變<small>第 ${Number(week)} 週週末</small></b><button type="button" data-act="map-play">▶ 播放</button><button type="button" data-act="map-now">回到現在</button>${close}</div>
+      ${graphSvg(st, week)}<div class="m-sum">${sum}</div>${chartHtml(base, st, week)}
+      <div class="m-sec"><h4>第 ${Number(week)} 週</h4>${list || '<div class="m-sub">沒有地點易手。</div>'}</div>`;
+  }
+  let mapPlaying = 0;
+  const stopPlay = () => { clearInterval(mapPlaying); mapPlaying = 0; };
+  // 版圖變化時整張地圖放進抽屜上面那一塊（地圖框在 tl-mode 縮到抽屜上面，clampView 會置中）
+  function wholeMap() {
+    const g = mapGeom(document.getElementById("map"));
+    if (!g) return;
+    S.mapView = { s: fitScale(g.vw, g.vh, g.W, g.H), cx: g.W / 2, cy: g.H / 2 };
+    applyMapView(true, g);
+    drawMarks();
+  }
+  // 換看哪一週：抽屜、記號、上方那一條「正在看第 N 週」跟著換，不整頁重畫
+  function mapWeekTo(w) {
+    const st = S.mapState;
+    S.mapWeek = Math.max(1, Math.min(st.now_week, w));
+    redrawDrawer();
+    drawMarks();
+    const banner = document.getElementById("map-banner");
+    if (banner) {
+      banner.hidden = S.mapWeek === st.now_week;
+      banner.textContent = `正在看第 ${S.mapWeek} 週`;
+    }
+  }
+  // 打開、收起版圖變化（不整頁重畫）：打開時記下原本的視圖，收起時放回去
+  function mapTimeline(open) {
+    stopPlay();
+    const box = document.getElementById("mapx");
+    if (!box) return;
+    if (open) {
+      S.mapMode = "timeline";
+      S.mapViewBefore = S.mapView;
+      S.mapWeek = S.mapState.now_week;
+      if (!S.mapLayers.includes("control")) S.mapLayers = [...S.mapLayers, "control"]; // 版圖變化看的就是勢力
+    } else {
+      S.mapMode = "overview";
+      S.mapWeek = null;
+      if (S.mapViewBefore) S.mapView = S.mapViewBefore;
+      S.mapViewBefore = null;
+    }
+    box.classList.toggle("tl-mode", open);
+    const chips = box.querySelector(".map-chips");
+    if (chips) chips.innerHTML = chipsHtml();
+    const banner = document.getElementById("map-banner");
+    if (banner) banner.hidden = true;
+    setMapDrawer(open ? "tl" : "rest");
+    redrawDrawer();
+    if (open) wholeMap();
+    else { applyMapView(true); drawMarks(); }
+  }
+  // 曲線上點一下：照點的位置換那一週
+  function graphPick(el, ev) {
+    const st = S.mapState, r = el.getBoundingClientRect();
+    if (!st || !r.width) return;
+    const x = ((ev.clientX - r.left) / r.width) * (GX0 + GW + 34);
+    mapWeekTo(Math.round(((x - GX0) / GW) * (Math.max(2, st.weeks_total) - 1)) + 1);
+  }
+
   // 找地點的輸入框：只換結果那一塊，輸入框本身不重畫（不然一打字就失焦）
   function mapQueryInput(ev) {
     if (!ev.target || ev.target.id !== "map-q" || !S.mapBase || !S.mapState) return;
@@ -3718,7 +3840,9 @@
     if (!g || !S.mapBase || !S.mapState || !S.mapView) return;
     const s = S.mapView.s, week = mapWeek(), layers = new Set(S.mapLayers);
     S.marksS = s;
-    g.innerHTML = marksSvg(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week });
+    const wrap = document.getElementById("map");
+    if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
+    g.innerHTML = marksSvg(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
     const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control"));
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
       const t = tint[el.getAttribute("data-region")];
@@ -4321,6 +4445,7 @@
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
+    if (tab !== "map") stopPlay(); // 版圖變化的播放也停
     if (tab === "news") S.unseen = false;
     render();
     window.scrollTo(0, 0);
@@ -4897,6 +5022,25 @@
           drawMarks();
           break;
         case "map-travel": await travel(el.dataset.mode); break;
+        case "map-timeline": mapTimeline(S.mapMode !== "timeline"); break;
+        case "map-week": stopPlay(); mapWeekTo(Number(el.dataset.week)); break;
+        case "map-graph": stopPlay(); graphPick(el, ev); break;
+        case "map-now": stopPlay(); mapWeekTo(S.mapState.now_week); break;
+        case "map-mark": // 年表上點一個地點的名字：地圖上圈出它（再點一次取消）
+          S.mapSel = S.mapSel === el.dataset.id ? null : el.dataset.id;
+          redrawDrawer();
+          drawMarks();
+          break;
+        case "map-play": { // 從第 1 週一週一週放到現在
+          stopPlay();
+          let w = 1;
+          mapWeekTo(w);
+          mapPlaying = setInterval(() => {
+            if (S.tab !== "map" || S.mapMode !== "timeline" || w >= S.mapState.now_week) { stopPlay(); return; }
+            mapWeekTo(++w);
+          }, PLAY_MS);
+          break;
+        }
         case "map-jianghu": // 就在這裡：出陣、探索回江湖頁按（探索三選一開著時直接攤開那三種）
           S.wheelSel = el.dataset.key === "explore" ? "explore" : null;
           await goTab("jianghu");

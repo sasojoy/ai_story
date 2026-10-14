@@ -808,6 +808,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-wrap.moving .tx-world-map > svg { will-change: transform; }
 .map-wrap.glide .tx-world-map > svg { transition: transform 0.15s ease-out; }
 .map-wrap.grabbing, .map-wrap.grabbing [data-loc] { cursor: grabbing !important; }
+.map-wrap.far .tx-region-name { display: none; }
 /* 地點的點擊區（E2／E3）：每個地點一個透明的圓（r=16）接點擊，這裡再加透明的粗外框，寬 --hit 由 app.js 跟著倍率算 */
 .map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: all; }
 /* 上面：找地點一條、濾鏡一排（橫著滑）。外層不收點擊，只有鈕收：沒字的地方照常拖地圖 */
@@ -846,6 +847,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mapx.tl-mode .map-hud { top: 10px; }
 .map-hud span { padding: 0 3px; }
 .map-hud small { font-size: 10.5px; color: var(--ink-2); margin-left: 2px; }
+.map-banner[hidden] { display: none; }
 .map-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 46px; background: var(--accent); color: #fff; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; white-space: nowrap; pointer-events: none; }
 /* 抽屜：收著 230、點了地點 240、拉高、全開（高度由 app.js 的 setMapDrawer 寫在 style 上）；把手可以拖 */
 .mdrawer {
@@ -927,6 +929,28 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-item .nm { flex: 1; min-width: 0; }
 .m-item .nm small { color: var(--ink-2); }
 .m-item .mn { color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+
+/* 天下怎麼變（設計第六節）：曲線、三方處數、年表、那一週的大事 */
+.m-tl-head { display: flex; align-items: center; gap: 6px; }
+.m-tl-head b { flex: 1; min-width: 0; font-size: 16px; font-family: var(--serif); }
+.m-tl-head small { font-size: 12px; color: var(--ink-2); margin-left: 4px; font-weight: 400; font-family: var(--sans); }
+.m-tl-head button:not(.m-x) { min-height: 36px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 9px; padding: 0 9px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.m-graph { display: block; width: 100%; height: auto; margin: 4px 0 2px; cursor: pointer; background: #fbf6ea; border-radius: 8px; }
+.m-sum { display: flex; gap: 6px; margin: 4px 0; }
+.m-sum div { flex: 1; min-width: 0; border-radius: 9px; padding: 4px 8px; color: #fff; font-size: 12px; white-space: nowrap; }
+.m-sum b { font-size: 17px; margin-right: 3px; }
+.m-chart { display: grid; gap: 2px; font-size: 11px; align-items: center; margin: 4px 0 2px; }
+.m-chart .wk { text-align: center; border-radius: 4px; padding: 2px 0; cursor: pointer; color: var(--ink-2); }
+.m-chart .wk.on { background: var(--accent); color: #fff; }
+.m-chart .wk.future { color: #c2b699; cursor: default; }
+.m-chart .lab { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.m-chart .lab.sel { font-weight: 700; color: var(--accent); }
+.m-chart .ln { grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-2); margin-top: 3px; letter-spacing: 1px; font-weight: 600; }
+.m-chart .cell { height: 14px; border-radius: 3px; position: relative; cursor: pointer; }
+.m-chart .cell.future { background: repeating-linear-gradient(45deg, #ede4cf 0 3px, #fbf6ea 3px 6px); cursor: default; }
+.m-chart .cell.blank { background: transparent; border: 1px dashed var(--line); }
+.m-chart .cell.now { box-shadow: 0 0 0 2px var(--ink); }
+.m-chart .cell.flip::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: #fff; }
 
 /* ── 戰報／見聞 ── */
 .report-detail { font-size: 14px; }

@@ -126,9 +126,9 @@ REGION_NAME_INK = "#7A6A55"
 
 
 def region_name(region: MapRegion) -> str:
-    """大區名寫在地圖本身：大字、拉開字距、半透明，跟著縮放；不接點擊。"""
+    """大區名寫在地圖本身：大字、拉開字距、半透明，跟著縮放；不接點擊。看大局時網頁藏起來（記號那一層另寫一份，照大區中心）。"""
     return (
-        f'<text x="{region.label_x}" y="{region.label_y}" font-size="{REGION_NAME_SIZE}" font-weight="700" letter-spacing="10" '
+        f'<text class="tx-region-name" x="{region.label_x}" y="{region.label_y}" font-size="{REGION_NAME_SIZE}" font-weight="700" letter-spacing="10" '
         f'fill="{REGION_NAME_INK}" opacity="0.45" pointer-events="none" style="font-family:serif">{escape(region.name)}</text>'
     )
 

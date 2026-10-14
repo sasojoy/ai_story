@@ -24,6 +24,7 @@ def test_the_base_has_paper_regions_and_roads_but_no_places():
     assert f'id="{mapart.SILK_ID}"' in svg and f"url(#{mapart.VIGNETTE_ID})" in svg
     assert all(f'data-region="{r.id}"' in svg for r in c.map.regions)
     assert mapart.BORDER_DASH in svg
+    assert svg.count('class="tx-region-name"') == len(c.map.regions)  # 看大局時網頁照這個 class 藏起來
     assert "data-loc" not in svg and "潁川郊野" not in svg  # 地點與名字是網頁照疊層畫的
 
 

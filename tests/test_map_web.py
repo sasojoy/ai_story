@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -132,3 +132,55 @@ def test_travel_stays_on_the_map():
     body = js[js.index("async function travel(mode)"):]
     body = body[: body.index("\n  }\n") + 4]
     assert 'S.tab = "jianghu"' not in body and "loadMap()" in body and "S.mapSel" in body
+
+
+def _timeline_game():
+    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    w.time = calendar.week_start(2, c, w) + 60
+    w.trends["yingru"] = 90
+    territory.update(w, c)
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)
+    return game
+
+
+def test_the_timeline_has_the_curve_the_tallies_and_the_chart():
+    game = _timeline_game()
+    out = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
+    assert "天下怎麼變" in out and out.count("<polyline") >= 4  # 三條戰線＋割據
+    assert all(name in out for name in ("官軍", "黃巾", "豪強"))
+    st = game.map_state()
+    assert len(re.findall(r'class="cell[ "]', out)) == sum(len(g["spots"]) for g in st["chart"]) * st["weeks_total"]
+    assert "官軍大營" in out  # 第 3 週易手的那一處照地點的名字寫
+    assert 'data-act="map-play"' in out and 'data-act="map-now"' in out
+
+
+def test_picking_an_earlier_week_flashes_what_changed():
+    game = _timeline_game()
+    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
+    assert {"id": "guan_camp", "from": "guan", "to": "huang"} in changed
+    out = marks(game, week=2)
+    assert out.count('class="pulse"') == len(changed) + 1  # 易手的那幾處，加上你的那一圈
+    assert marks(game).count('class="pulse"') == 1  # 平常看現在：只有你的那一圈
+    assert marks(game, tl="true").count('class="pulse"') == 1  # 版圖變化停在現在這一週：這一週沒有易手
+
+
+def test_the_chart_draws_unknown_weeks_as_blank():
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)  # 第一次算在第 3 週：前兩週沒記
+    out = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
+    assert 'class="cell blank' in out and 'class="cell future' in out
+
+
+def test_the_timeline_without_territory_says_so():
+    out = run(_game(classic=True), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert "這一季沒有地盤易手" in out and "<polyline" not in out
