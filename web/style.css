@@ -1246,7 +1246,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 /* 架上那一頁上半的爐火與鐵砧（企劃者 2026-10-14 微調）：375×812 上第一排貨卡照樣在第一屏；火苗輕輕晃，減少動態效果不晃 */
 .shop-layer .smith-hero { display: flex; justify-content: center; margin: 0 0 6px; }
-.shop-layer .smith-hero svg { width: min(240px, 68%); height: auto; display: block; }
+.shop-layer .smith-hero svg { width: min(300px, 84%); height: auto; display: block; }
 .shop-layer .smith-hero .fl-out { fill: #e0642a; } .shop-layer .smith-hero .fl-in { fill: #ffb347; }
 .shop-layer .smith-hero .fire { transform-origin: 120px 99px; animation: flicker 1.8s ease-in-out infinite; }
 @keyframes flicker { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(0.96, 1.08); } }
