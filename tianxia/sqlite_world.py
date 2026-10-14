@@ -362,6 +362,28 @@ class SqliteWorldStore:
             ).fetchall()
         return [Insight.model_validate_json(row["data"]) for row in rows]
 
+    def season_firsts(self) -> dict[str, int]:
+        with self.db.snapshot() as conn:
+            season = self._season_number(conn)
+            arts = conn.execute(
+                "SELECT DISTINCT r.skill_name, json_extract(s.data, '$.creator') AS creator, "
+                "json_extract(s.data, '$.co_creator') AS co FROM recipes r "
+                "JOIN skills s ON s.season = r.season AND s.name = r.skill_name WHERE r.season = ? "
+                "AND COALESCE(json_extract(s.data, '$.preset'), 0) = 0",
+                (season,),
+            ).fetchall()
+            insights = conn.execute(
+                "SELECT DISTINCT r.insight_name, json_extract(i.data, '$.creator') AS creator, "
+                "json_extract(i.data, '$.co_creator') AS co FROM insight_recipes r "
+                "JOIN insights i ON i.season = r.season AND i.name = r.insight_name WHERE r.season = ?",
+                (season,),
+            ).fetchall()
+        counts: dict[str, int] = {}
+        for row in [*arts, *insights]:
+            for who in {row["creator"], row["co"]} - {None, ""}:
+                counts[who] = counts.get(who, 0) + 1
+        return counts
+
     def link_recipe(self, key: str, skill_name: str, creator: str | None) -> tuple[MartialArt | None, bool]:
         with self.db.transaction() as conn:
             season = self._season_number(conn)
