@@ -46,16 +46,33 @@ def test_the_forge_page_draws_one_row_per_attribute(content, world):
 
 
 def test_the_shelf_page_opens_with_a_forge_and_anvil_above_the_wares(content, world):
-    """企劃者 2026-10-14 微調（草圖 container.html 的 A）：架上那一頁上面一塊爐火與鐵砧（內嵌 SVG），貨卡往下移；只有架上那一頁有。"""
+    """企劃者 2026-10-14 微調（草圖 container.html 的 A）：架上那一頁上面一塊爐火與鐵砧，貨卡往下移；只有架上那一頁有。
+    企劃者 2026-10-14 看了 QA 的對照圖再改：照草圖畫一大團發亮的橘色圓頂爐口（火光往外暈），底下鐵砧，不要深色爐身裡一小團火；
+    鐵匠那一句放在爐火底下（招牌 → 爐火 → 鐵匠那一句 → 貨卡）。其他頁照共用的版面：那一句緊接招牌、沒有爐火。"""
     import server
     from test_shop_web import run
 
     m = server.main_view(_smith(content, world, name="爐客"))
     shelf = run(m, 'H.S.shopTab = "shelf"; H.render(); return T.els.app.innerHTML;')
-    assert 'class="smith-hero"' in shelf and "<svg" in shelf[shelf.index('class="smith-hero"'):]
-    assert shelf.index('class="smith-hero"') < shelf.index('class="shop-grid"')
+    hero = shelf[shelf.index('class="smith-hero"'):shelf.index('class="shop-grid"')]
+    assert 'class="forge-mouth"' in hero and 'class="forge-anvil"' in hero and "<svg" not in hero
+    order = [shelf.index(k) for k in ('class="shop-bar"', 'class="smith-hero"', 'class="shop-line"', 'class="shop-grid"')]
+    assert order == sorted(order) and shelf.count('class="shop-line"') == 1
     forge = run(m, 'H.S.shopTab = "forge"; H.render(); return T.els.app.innerHTML;')
-    assert 'class="smith-hero"' not in forge
+    assert 'class="smith-hero"' not in forge and forge.count('class="shop-line"') == 1
+    assert forge.index('class="shop-bar"') < forge.index('class="shop-line"') < forge.index('class="shop-body"')
+
+
+def test_the_forge_mouth_glows_like_the_sketch():
+    """草圖 A 的 .forge：170×120 的圓頂、由亮到暗的橘色徑向漸層；火光往外暈（box-shadow）；鐵砧 #3a3530。火苗輕輕晃，減少動態效果不晃。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    mouth = _rule(css, ".shop-layer .forge-mouth")
+    assert "border-radius: 50% 50% 12px 12px" in mouth and "radial-gradient" in mouth and "#ffb347" in mouth and "#e0642a" in mouth
+    assert "box-shadow:" in mouth
+    assert "#3a3530" in _rule(css, ".shop-layer .forge-anvil")
+    assert ".shop-layer .forge-mouth .flame { animation: none; }" in css[css.index("@media (prefers-reduced-motion: reduce) { .shop-layer .forge-mouth"):][:120]
 
 
 # ── 2：懸賞榜告示照草圖改小、放大的紙貼在畫面下緣 ──
@@ -80,11 +97,31 @@ def test_board_notes_are_compact_with_a_colored_tag_and_the_rest_on_the_paper(co
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]
     html = run(m, "H.render(); return T.els.app.innerHTML;")
-    assert '<span class="tag">打探・官軍</span>' in html and bounties.due_line(game.state, content, scout) in html
+    assert '<span class="tag">打探・官軍</span>' in html and bounties.due_short(scout, content, game.state.world) in html
     assert bounties.how(content, scout) not in html  # 要做什麼寫在紙上
     zoomed = run(m, f'H.S.boardZoom = "{scout.id}"; H.render(); return T.els.app.innerHTML;')
     assert bounties.how(content, scout) in zoomed and 'class="board-sheet"' in zoomed and "reveal-layer" not in zoomed
     assert 'class="shop-body zooming"' in zoomed  # 紙開著時木板底下多留一段，告示捲得到紙的上面
+
+
+def test_the_notice_shows_the_short_due_and_the_paper_the_full_one_fb196(content, world):
+    """FB-196：告示最後一行在 375 寬折成「期限 第 3 週・週一 00:00・名額還剩」換行一個數字，十四張都這樣。照草圖告示上寫短的
+    （due_short，不折行），完整的時刻與「名額還剩 N」（due_line）只在點開的紙上。"""
+    from test_shop2 import SCOUT, STRIKE
+    from test_shop2_web import _css, _rule, run
+
+    from tianxia import bounties
+
+    game, m = _board_view(content, world, [SCOUT, STRIKE])
+    scout = game.state.world.bounties[0]
+    full, short = bounties.due_line(game.state, content, scout), bounties.due_short(scout, content, game.state.world)
+    note = next(n for n in m["shop"]["notes"] if n["id"] == scout.id)
+    assert (note["due"], note["short"]) == (full, short)
+    html = run(m, "H.render(); return T.els.app.innerHTML;")
+    assert f'<small class="due">{short}</small>' in html and full not in html
+    zoomed = run(m, f'H.S.boardZoom = "{scout.id}"; H.render(); return T.els.app.innerHTML;')
+    assert f'<p class="due">{full}</p>' in zoomed  # 告示上已經沒有整行，有就是紙上的
+    assert "white-space: nowrap" in _rule(_css(), ".shop-board .note .due")
 
 
 def test_the_board_css_matches_the_mockup(content, world):
@@ -246,3 +283,17 @@ def test_a_stale_market_click_leaves_another_shops_keeper_alone(content, world):
     assert p.picking_smith and p.shop_line == "enter"
     msgs = game.choose(mounts.BUY)
     assert isinstance(msgs, Refused) and p.shop_line == "enter" and p.shop_hold == ""
+
+
+# ── 店面微調之二（QA 2026-10-14） ──
+
+
+def test_the_held_stamp_on_a_notice_sits_beside_the_tag_not_on_the_due_line():
+    """QA 2026-10-14：揭著的那張告示，「已揭」印蓋在期限那一行上面，把字蓋掉一部分。印挪到右上角、標籤那一行的右邊，點不到它
+    （點告示照樣放大）；交差那一張的大印照舊在右下角（那一張正在淡出，蓋字無妨）。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    held = _rule(css, ".shop-board .note.held .stamp")
+    assert "top: " in held and "bottom: auto" in held and "pointer-events: none" in held
+    assert "bottom: 6px" in _rule(css, ".shop-board .stamp")  # 交差的那一張照舊
