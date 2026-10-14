@@ -471,7 +471,7 @@ def _plus(span: FameRange) -> str:
 
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
-    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野、拜師學藝）。數字讀內容與設定。"""
+    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野〔全圖開放時沒有〕、拜師學藝）。數字讀內容與設定。"""
     cfg = content.config
     spans = fame_ranges(content, season)
     lines = []
@@ -507,7 +507,8 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     uses = []
     if bars:
         uses.append(f"求見大勢人物（門檻最低 {bars[0]}、最高 {bars[-1]}；不夠的會打發你）")
-    uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
+    if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
+        uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
     if lessons:
         uses.append(f"有些師父要名望 {lessons[0]} 以上才肯教")

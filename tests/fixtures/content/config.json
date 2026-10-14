@@ -18,6 +18,7 @@
   "explore_modes": {"enabled": false},
   "territory": {"enabled": false},
   "push_resistance": {"enabled": false},
+  "open_map": false,
   "showdown_pay": {"silver": 0, "exp": 0, "contrib_push": 0, "win_contrib_push": {}},
   "weapons": {"enabled": false},
   "armor": {"enabled": false},

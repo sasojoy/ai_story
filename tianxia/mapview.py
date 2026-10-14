@@ -51,9 +51,11 @@ TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
 LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
+LEGEND_STATES_OPEN = "紅旗：所在地"  # 全圖開放（Config.open_map）：已開放的地點都畫全彩，沒有看得見、摸清、未知之分（待 joy 潤）
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
+LEGEND_STRIKE_OPEN = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物"  # 全圖開放：目標的所在都知道，一律標在地點上
 LEGEND_STORY = "★ 這一幕主線的目標　✦ 最近 {days:g} 天的大事與傳聞"  # 天數照傳聞板的長度（legend_data 照內容填）
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
@@ -216,13 +218,14 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
     layer 是這一層的說明（認不得的圖層是空字串）；strike 是局勢層有本週打擊軍令的標記時多的那一句說明，沒有就是空字串
     （跟 render_map 標 ◎ 同一個條件，見 atlas.strike_marks；小地圖沒有圖例）。全是字串，原樣就是 JSON。"""
     strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
+    opened = content.config.open_map  # 全圖開放：沒有摸清、未知之分，圖例不提
     return {
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
-        "states": LEGEND_STATES,
+        "states": LEGEND_STATES_OPEN if opened else LEGEND_STATES,
         "ring": LEGEND_RING,
         "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
             LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")),
-        "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
+        "strike": (LEGEND_STRIKE_OPEN if opened else LEGEND_STRIKE) if strike_places or strike_regions else "",
     }
 
 

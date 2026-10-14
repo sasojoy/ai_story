@@ -417,10 +417,13 @@ def test_a_new_player_leaving_the_hut_can_dash_to_each_place_the_farewell_names(
     assert game.travel_refusal(place, "dash") is None, game.travel_refusal(place, "dash")
 
 
-def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world):
+def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world, monkeypatch):
     """survey 清單裡的每一站都有理由：一條路上的站（汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去曹氏莊院的最短路就斷在那裡、疾行被擋；
-    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。"""
+    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。
+    摸清是全圖開放之前的規則（全圖開放時這份清單照記、用不到）。"""
     from tianxia import atlas
+
+    monkeypatch.setattr(content.config, "open_map", False)  # 同 closed_map；內容是整個模組共用的
 
     farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
     stops = farewell.survey[len(NAMED_BY_THE_FAREWELL):]
@@ -1232,7 +1235,8 @@ def _owner_by_name(content, text: str) -> str | None:
     return max(names, key=lambda loc: len(loc.name)).id if names else None
 
 
-def test_minimap_never_collides_from_any_location(content):
+def test_minimap_never_collides_from_any_location(content, monkeypatch):
+    monkeypatch.setattr(content.config, "open_map", False)  # 新角色只摸清一部分（全圖開放之前，同 closed_map）；全圖開放的見下一個
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     for loc_id in content.locations:
         game.state.player.location = loc_id
@@ -1240,6 +1244,25 @@ def test_minimap_never_collides_from_any_location(content):
         assert _collisions(svg, _minimap_window(svg)) == [], loc_id
         texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
         assert _disc_overlaps(game, content, svg, texts) == [], loc_id
+
+
+# 全圖開放（Config.open_map）時小地圖上每個已開放的地點都有圓盤與名字，名字壓到「別的地點的圓盤」的地方（只准變少）：
+# 洛陽官道——嵩山腳貼著視窗右緣，名字只能往左擺，壓到嵩山深處圓盤的一角（大地圖那邊同 DISC_OVERLAPS 的做法）。
+# 全圖開放之前，什麼地方都去過的人從洛陽官道看出去就是這樣（另外還有南陽郊野的「↑ 白馬寺」壓到南華觀），不是新的毛病。
+MINI_DISC_OVERLAPS_OPEN = 1
+
+
+def test_minimap_with_the_whole_map_open_never_collides_from_any_location(content):
+    assert content.config.open_map  # 正式設定：全圖開放
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    overlaps = []
+    for loc_id in content.locations:
+        game.state.player.location = loc_id
+        svg = render_minimap(game.state, content)
+        assert _collisions(svg, _minimap_window(svg)) == [], loc_id
+        texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
+        overlaps += _disc_overlaps(game, content, svg, texts)
+    assert len(overlaps) <= MINI_DISC_OVERLAPS_OPEN, overlaps
 
 
 def test_regions_reference_real_trends(content):

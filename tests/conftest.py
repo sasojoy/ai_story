@@ -85,6 +85,13 @@ def classic_rules(content: Content) -> Content:
     return content
 
 
+def closed_map(content: Content) -> Content:
+    """全圖開放（企劃者 2026-10-15，Config.open_map）之前的摸清規則：視野、去過、留意地形才算摸清，回傳同一份內容。
+    測的是摸清、視野、留意地形、「還沒摸清」那些字本身的舊測試用它；新規則的測試不要叫（見 tests/test_open_map.py）。"""
+    content.config.open_map = False
+    return content
+
+
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。

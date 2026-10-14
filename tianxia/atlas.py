@@ -1,7 +1,9 @@
 """江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
-沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
+全圖開放（Config.open_map，企劃者 2026-10-15）：已開放的地點全部算摸清，沒有視野這件事；摸不摸清只由 location_view 判斷。
+開關關著是舊規則：沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」。
+未開放的地點兩種都完全不畫。
 勝算只在呼叫端傳入 odds 函式時才算（敵情層與詳情欄），平常重畫不模擬。
 """
 from __future__ import annotations
@@ -71,15 +73,22 @@ def road_hops(state: GameState, content: Content, limit: int) -> dict[str, int]:
 
 
 def visible_locations(state: GameState, content: Content) -> set[str]:
+    """看得見的地點（舊規則的視野）；全圖開放時沒有視野這件事，是空的（也不必走一遍路）。"""
+    if content.config.open_map:
+        return set()
     return set(road_hops(state, content, vision_range(state, content)))
 
 
 def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:
+    """地點在地圖上的樣子，也是「摸不摸清」唯一的判斷（KNOWN 那三種是摸清）：未開放的 hidden；所在地 current；
+    全圖開放（Config.open_map）時其餘已開放的一律 visible（已開放就算知道）；開關關著才照視野、去過、留意地形分。"""
     loc = content.locations[loc_id]
     if not is_unlocked(loc, state, content):
         return "hidden"
     if loc_id == state.player.location and state.player.journey is None:
         return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
+    if content.config.open_map:
+        return "visible"
     if loc_id in visible:
         return "visible"
     if loc_id in state.player.visited or loc_id in state.player.surveyed:
@@ -94,12 +103,12 @@ def views(state: GameState, content: Content) -> dict[str, str]:
 
 
 def known_locations(state: GameState, content: Content) -> set[str]:
-    """摸清的地點：看得見、去過或在路上留意地形摸清（PlayerState.surveyed），而且已開放。"""
+    """摸清的地點（location_view）：全圖開放時是所有已開放的地點；舊規則是看得見、去過或在路上留意地形摸清（PlayerState.surveyed）。"""
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
 def is_known(state: GameState, content: Content, loc_id: str) -> bool:
-    """這個地點摸清了嗎（看得見、去過或留意地形摸清，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    """這個地點摸清了嗎（location_view；全圖開放時已開放就算）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
     下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
     return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
 
@@ -575,7 +584,8 @@ def shortest_routes(
 
 
 def routes(state: GameState, content: Content) -> dict[str, Route]:
-    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點路程最短的走法（取代原本最省體力的路線）。"""
+    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點路程最短的走法（取代原本最省體力的路線）。
+    全圖開放時摸清的就是所有已開放的地點，等於 shortest_routes 不限地點。"""
     return shortest_routes(state, content, known_locations(state, content))
 
 

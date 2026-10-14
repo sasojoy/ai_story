@@ -474,6 +474,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options > .move-mode { margin: 4px 0 0; }
 /* 在路上：四樣小事排成 2×2，名字一行、補充小字一行（FB-055）；折返與喊停照舊一整列 */
 .road-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* 全圖開放（Config.open_map）拿掉留意地形、剩三樣：落單的最後一格佔滿一列，不留半格空洞 */
+.road-tasks:not(.road-ways) > .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 /* 折返與喊停併成一列（FB-060）：折返那格的字比較多（「↩ 折返 潁川郡（陽翟）」），多給一點寬、名字小一號，才不會折成兩行 */
 .road-ways { grid-template-columns: 1.45fr 1fr; }
 .road-ways .t-name { font-size: 15px; }
