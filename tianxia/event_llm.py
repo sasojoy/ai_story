@@ -122,11 +122,47 @@ _NOT_WORDS = re.compile(r"[\W_]+")  # 空白與標點（中英文、全形半形
 _WORD = re.compile(r"[^\W_]")  # 一個字（不是空白、標點）
 
 
+LOOSE_MIN = 8  # 結果句（只算字）至少這麼長，才認「中間多插了幾個字」的整句（FB-224）；短的照舊只認一字不差
+LOOSE_SPREAD = 1.5  # 結果句的字依序出現在潤色裡，擠在不超過結果句這麼多倍長的一段裡，才算整句寫了
+
+
+def _tightest(said: str, outcome: str) -> int | None:
+    """outcome 的每一個字都依序出現在 said 裡時，包住它們的最短一段有多長；有字沒出現（或順序不對）回 None。"""
+    best = None
+    for start, ch in enumerate(said):
+        if ch != outcome[0]:
+            continue
+        at, end = 0, start
+        while end < len(said) and at < len(outcome):  # 往後照順序找齊每一個字
+            at += said[end] == outcome[at]
+            end += 1
+        if at < len(outcome):
+            break  # 從這裡起都湊不齊，更後面起也不可能
+        at, begin = len(outcome) - 1, end - 1
+        while at >= 0:  # 從找齊的那一個字往回收緊
+            at -= said[begin] == outcome[at]
+            begin -= 1
+        width = end - (begin + 1)
+        best = width if best is None else min(best, width)
+    return best
+
+
 def tells_the_outcome(narration: str, effect_text: str) -> bool:
     """潤色那一段是不是已經把結果文字整句寫進去了（FB-124：提示詞叫模型不要重複，模型有時照樣寫）。空白、標點不算；
-    只寫了一部分不算（引擎照舊接整句，後半段才不會不見）；結果文字是空的（effect 沒寫字）也不算。"""
+    只寫了一部分不算（引擎照舊接整句，後半段才不會不見）；結果文字是空的（effect 沒寫字）也不算。
+    中間多插了幾個字也算（FB-224：「散兵們接過錢財後，便讓開了路……」對「散兵們讓開了路……」）：結果句至少 LOOSE_MIN 個字，
+    每一個字都依序出現在潤色裡，而且擠在不超過結果句 LOOSE_SPREAD 倍長的一段裡。少一個字、換一個字都不算（寧可多接一次，
+    不把沒寫的當成寫了）；短的結果句照舊只認一字不差。"""
     outcome = _NOT_WORDS.sub("", effect_text)
-    return bool(outcome) and outcome in _NOT_WORDS.sub("", narration)
+    if not outcome:
+        return False
+    said = _NOT_WORDS.sub("", narration)
+    if outcome in said:
+        return True
+    if len(outcome) < LOOSE_MIN:
+        return False
+    width = _tightest(said, outcome)
+    return width is not None and width <= len(outcome) * LOOSE_SPREAD
 
 
 ECHO_MIN = 4  # 潤色的結尾跟結果句的開頭至少重疊幾個字才算「起了結果句的頭」：一兩個字的巧合（「你」「軍侯」）不算
