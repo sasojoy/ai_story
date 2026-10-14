@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
+from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, territory, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -619,6 +619,7 @@ def advance_world_state(
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
     recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
+    territory.update(season, content)  # 舊存檔、中途上線的第一次在這裡算，不發天下大事（出陣探索與地盤設計第六節）
     msgs: list[str] = []
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來

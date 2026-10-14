@@ -14,7 +14,7 @@ import re
 from collections.abc import Collection
 from typing import Literal
 
-from . import calendar, figures
+from . import calendar, figures, territory
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
@@ -321,6 +321,7 @@ def resolve(
         if fid is None or not figures.holds(state, content, change):
             continue
         text += "".join(figures.apply(state, content, fid, change)) + note
+    territory.assign(w, content, outcome.control)  # 大事指定易手（設計 4.2 第 3 點）：戰況推完、人物改完之後
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)

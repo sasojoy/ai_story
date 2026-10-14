@@ -14,9 +14,9 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, figures, push, rules, timetable
+from . import calendar, figures, push, rules, territory, timetable
 from .models import Content, OrderTemplate
-from .state import GameState, Order
+from .state import GameState, Order, WorldState
 
 KIND_NAMES = {"siege": "攻城", "defend": "守城", "intercept": "截糧", "escort": "護糧", "strike": "打擊"}
 SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100 是黃巾控制
@@ -111,11 +111,17 @@ def _enemy_sieged_last_week(state: GameState, side: str, front: str, week: int) 
     )
 
 
-def siege_places(content: Content, faction: str, front: str) -> list[str]:
+def siege_places(content: Content, faction: str, front: str, world: WorldState | None = None) -> list[str]:
     """這條戰線上打得到敵方陣營隊伍的地點（攻城的個人部分只算打贏敵方陣營的隊伍）；照內容檔的地點順序。
+    地盤開著（給了 world）：這條戰線上此刻歸敵方的戰線地點（出陣攻打的地方，出陣探索與地盤設計第七節）。關著照舊看地點的 enemies。
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
+    if world is not None and territory.on(content):
+        return [
+            loc_id for loc_id in content.locations
+            if territory.line_of(content, loc_id) == front and territory.controller(world, content, loc_id) == enemy
+        ]
     return [
         loc_id for loc_id, loc in content.locations.items()
         if rules.front_of(content, loc_id) == front
@@ -127,7 +133,7 @@ def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, 
     """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
     例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
     losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
-    if t.kind == "siege" and not siege_places(content, t.side, front):
+    if t.kind == "siege" and not siege_places(content, t.side, front, state.world):
         return False
     if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）
         return True
@@ -446,7 +452,7 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
     for o in current(state, content, faction):
         if o.done:
             continue
-        if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front):
+        if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front, state.world):
             return True
         if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
             return True
@@ -475,7 +481,7 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
         if o.done:
             continue
         if o.template == "siege":
-            wanted |= set(siege_places(content, o.faction, o.front))
+            wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
             wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:

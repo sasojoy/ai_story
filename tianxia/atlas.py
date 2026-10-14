@@ -11,14 +11,14 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, mounts, orders, prologue
+from . import figures, insights, mounts, orders, prologue, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
     audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
     season_one_off, trend_name, trend_value,
 )
-from .state import GameState, Order, Rumor
+from .state import GameState, Order, Rumor, WorldState
 from .world import current_act, sim_active, storyline_off
 
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
@@ -338,7 +338,7 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
     沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。"""
     front = trend_name(content, order.front) if order.front else "戰線"
-    places = orders.siege_places(content, order.faction, order.front) if order.front else []
+    places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
     if not places or len(places) > SIEGE_NAMED_MAX:
         return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
@@ -436,22 +436,27 @@ def _in_earshot(state: GameState, content: Content, loc_id: str) -> bool:
 # ── 敵情 ──────────────────────────────────────────────
 
 
-def foes(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> list[tuple[str, str]]:
+def foes(
+    content: Content, loc: Location, odds: Odds, faction: str | None = None, world: WorldState | None = None,
+) -> list[tuple[str, str]]:
     """可能遇到的隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。faction 是自己的陣營：自己陣營的隊伍遇上了是
     一起操練、不會輸（engine._drill），寫「操練」不算勝算（試玩回饋 FB-008）。
+    world 給了：站的隊伍照控制方（territory.squads_at，地盤易手）；沒給照 loc.enemies。
     不檢查視野：呼叫端要先用 is_known 把關，沒摸清的地點不能露出敵人，也不該去算勝算。"""
     listed = []
-    for squad_id in dict.fromkeys(loc.enemies):
+    for squad_id in dict.fromkeys(territory.squads_at(world, content, loc.id) if world is not None else loc.enemies):
         squad = content.squads[squad_id]
         own = squad.faction is not None and squad.faction == faction
         listed.append((squad.name, DRILL if own else odds(squad_id)))
     return listed
 
 
-def worst_foe(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> tuple[str, str] | None:
+def worst_foe(
+    content: Content, loc: Location, odds: Odds, faction: str | None = None, world: WorldState | None = None,
+) -> tuple[str, str] | None:
     """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人、或只有自己陣營的隊伍時為 None。
-    不檢查視野：呼叫端要先用 is_known 把關（同 foes）。"""
-    listed = [foe for foe in foes(content, loc, odds, faction) if foe[1] != DRILL]
+    不檢查視野：呼叫端要先用 is_known 把關（同 foes）。world 照 foes。"""
+    listed = [foe for foe in foes(content, loc, odds, faction, world) if foe[1] != DRILL]
     return max(listed, key=lambda foe: ODDS_ORDER.index(foe[1])) if listed else None
 
 
@@ -804,6 +809,9 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if region is not None:
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
+    side = territory.controller(state.world, content, loc_id)
+    if side is not None:  # 地盤易手（出陣探索與地盤設計 4.3 第 2 點）
+        situation.append(territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side)))
     people = haunters(state, content, loc_id)
     standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
         fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people
@@ -816,7 +824,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if standing:
         parts.append("\n".join([HERE_TITLE, *(_here_text(state, content, fid) for fid in standing)]))
 
-    listed = foes(content, loc, odds, state.player.faction)
+    listed = foes(content, loc, odds, state.player.faction, state.world)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     gives = insight_names(content, loc)

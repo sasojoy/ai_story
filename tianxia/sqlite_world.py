@@ -650,6 +650,7 @@ class SqliteWorldStore:
             if not state.season.storyline or state.season_opened:
                 return
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
+            state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             state.season_opened = True
             state.season_last_real = now

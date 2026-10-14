@@ -755,6 +755,15 @@ class SignatureClaim(BaseModel):
     via: Literal["gift", "seized"]
 
 
+class TerritoryState(BaseModel):
+    """這一季的地盤（tianxia/territory.py）：WorldState.territory；None＝這一季還沒算過（開季、舊存檔、中途上線）。"""
+
+    control: dict[str, str] = Field(default_factory=dict)  # 地點 → 此刻的控制方（大本營、固定的地點、可易手的地點）
+    tug: dict[str, str] = Field(default_factory=dict)  # 可易手的地點 → 拔河算出的那一方（±band 不動看它）
+    geju: list[str] = Field(default_factory=list)  # 豪強割據佔著的地點，照佔下的先後
+    pinned: dict[str, str] = Field(default_factory=dict)  # 大事指定的地點 → 指定那一刻規則算出的控制方（規則改變那一刻才回到規則）
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -836,6 +845,7 @@ class WorldState(BaseModel):
     # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
     # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
     tianji: int = 0
+    territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）

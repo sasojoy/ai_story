@@ -1327,6 +1327,66 @@ def check_core_loop(c: Content, need) -> None:
          f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
 
 
+def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
+    """地盤（Scenario.territory，出陣探索與地盤設計第四節）：戰線認得、兩頭有陣營；可易手的地點真的在那條戰線上、不是大本營、
+    不重複；每一處戰線地點都有歸屬（大本營、fixed 或 lines）；站的隊伍是那一方的、每個可能的控制方都有；時刻表的 control
+    只能寫可易手或 fixed 的地點、那一方要有站的隊伍。沒寫 territory 的劇本只查時刻表沒寫 control。"""
+    from . import territory  # noqa: PLC0415  延後 import（同 validate 的 atlas）
+
+    table = [*c.timetable, *c.mandate_timetable]
+    t = c.scenario.territory
+    if t is None:
+        need(not any(o.control for e in table for o in e.outcomes.values()), "時刻表寫了 control，劇本卻沒有 territory")
+        return
+    factions = {f.id for f in c.scenario.factions}
+    bases = territory.bases(c)
+    need(len(bases) == sum(len(f.join_at) for f in c.scenario.factions), "地盤：一個地點只能是一個陣營的投靠點（大本營）")
+    lined = [loc_id for spots in t.lines.values() for loc_id in spots]
+    need(len(lined) == len(set(lined)), "地盤：同一個地點列在兩條戰線上")
+
+    def stands(where: str, loc_id: str, side: str | None) -> None:
+        if side is not None:
+            need(bool(t.garrison.get(loc_id, {}).get(side)), f"{where}：{loc_id} 沒寫 {side} 控制時站的隊伍（territory.garrison）")
+
+    for line, spots in t.lines.items():
+        where = f"地盤的戰線 {line}"
+        need(line in front_ids, f"{where}：不是戰線")
+        low, high = territory.sides(c, line)
+        need(low is not None and high is not None, f"{where}：劇本陣營的 goals 要有一方往 0、一方往 100")
+        known(where, spots, c.locations, "地點")
+        for loc_id in (x for x in spots if x in c.locations):
+            need(territory.line_of(c, loc_id) == line, f"{where}：{loc_id} 的 train_trend 不在這條戰線上")
+            need(loc_id not in bases, f"{where}：{loc_id} 是投靠點（大本營不易手）")
+            need(loc_id not in t.fixed, f"{where}：{loc_id} 同時寫在 fixed")
+            for side in (low, high, territory.geju_side(c)):
+                stands(where, loc_id, side)
+    for loc_id, side in t.fixed.items():
+        where = "地盤的 fixed"
+        known(where, [loc_id], c.locations, "地點")
+        need(side in factions, f"{where}：{loc_id} 的 {side} 不是陣營")
+        need(loc_id not in bases, f"{where}：{loc_id} 是投靠點（大本營不易手）")
+        need(loc_id not in c.locations or territory.line_of(c, loc_id) is not None, f"{where}：{loc_id} 不是戰線地點")
+        stands(where, loc_id, side)
+    for loc_id in c.locations:
+        if territory.line_of(c, loc_id) is not None:
+            need(loc_id in bases or loc_id in t.fixed or loc_id in lined,
+                 f"地盤：戰線地點 {loc_id} 沒有歸屬（不是大本營、不在 fixed、也不在 lines）")
+    for loc_id, by_side in t.garrison.items():
+        where = f"地盤的 garrison {loc_id}"
+        known(where, [loc_id], c.locations, "地點")
+        for side, squads in by_side.items():
+            need(side in factions, f"{where}：{side} 不是陣營")
+            known(where, squads, c.squads, "隊伍")
+            need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{where}：{side} 那一組要是 {side} 的隊伍")
+    for event in table:
+        for key, outcome in event.outcomes.items():
+            where = f"時刻表 {event.id} 結果 {key}"
+            for loc_id, side in outcome.control.items():
+                need(loc_id in t.fixed or loc_id in lined, f"{where}：control 的 {loc_id} 不是可易手或 fixed 的地點（大本營不易手）")
+                need(side in factions, f"{where}：control 的 {side} 不是陣營")
+                stands(where, loc_id, side)
+
+
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -2286,6 +2346,7 @@ def validate(c: Content) -> None:
     check_signature_arms(c, need, known)
     check_bounties(c, need)
     check_core_loop(c, need)
+    check_territory(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

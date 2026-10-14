@@ -11,6 +11,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import classic_rules
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -22,6 +23,12 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 
 # fixture real、on（真實內容，開關關著／照週末設定打開）在 tests/conftest.py：test_enlist、test_enlist_web 也用同一份
+
+
+@pytest.fixture
+def real(real):
+    """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）。"""
+    return classic_rules(real)
 
 BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 

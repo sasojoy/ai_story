@@ -745,6 +745,9 @@ def change_trend(
     actual = after - before
     if actual:
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
+        from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
+
+        territory.update(w, content)  # 戰線、割據動了：地盤重算（出陣探索與地盤設計 4.2）
         if season_one(content, w) and is_side_trend(content, trend_id):
             # FB-064：戰線與豪強割據不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
             # 江湖紀錄照舊把同一條線的變動加總；畫出來的那一刻才換成一句話、照看的人的陣營上色（front_chip、humanize）

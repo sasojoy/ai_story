@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
+from . import calendar, equipment, gender, library, materials, ranger, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
@@ -915,12 +915,18 @@ def _opened(loc: Location, w: WorldState) -> bool:
     return not loc.prologue_only and (not loc.unlock_flag or loc.unlock_flag in w.flags)
 
 
-def _strike(content: Content, w: WorldState, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+def _strike_spots(content: Content, w: WorldState, faction: str, used: set[str]) -> list[tuple[str, str]]:
+    """討伐掛得出去的（地點, 隊伍）：這一方的對頭此刻站在那裡（territory.squads_at：地盤易手照控制方，設計第七節）、地點開放了、
+    榜上同一個陣營的討伐還沒用掉。"""
     enemy = ENEMY[faction]
-    spots = [
+    return [
         (loc_id, sid) for loc_id, loc in content.locations.items() if loc_id not in used and _opened(loc, w)
-        for sid in loc.enemies if sid in content.squads and content.squads[sid].faction == enemy
+        for sid in territory.squads_at(w, content, loc_id) if sid in content.squads and content.squads[sid].faction == enemy
     ]
+
+
+def _strike(content: Content, w: WorldState, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+    spots = _strike_spots(content, w, faction, used)
     return rng.choice(spots) if spots else None
 
 

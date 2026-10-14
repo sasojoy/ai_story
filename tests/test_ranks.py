@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import idle_step, real_content
+from conftest import classic_rules, idle_step, real_content
 from tianxia import bot_policy, calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -23,7 +23,7 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 @pytest.fixture
 def real():
-    c = real_content()
+    c = classic_rules(real_content())  # 部下與晉升拿遊歷當手段：出陣探索與地盤之前的規則（14 天的季地盤全歸官軍，汝南荒野打不到人）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

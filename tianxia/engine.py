@@ -21,7 +21,7 @@ from . import (
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
-    social, styles, team, timetable, traits, treasures, weapons, zh,
+    social, styles, team, territory, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
@@ -2398,8 +2398,9 @@ class Game:
         return bool(event_candidates(self.state, self.content, "explore", "common"))
 
     def _wild_foes(self, loc: Location) -> list[Squad]:
-        """探索時可能殺出來的野怪：這裡的敵人裡不是自己陣營的那幾路（自己人不會突然殺出來，也不在這裡操練）。"""
-        squads = [self.content.squads[sid] for sid in loc.enemies]
+        """探索時可能殺出來的野怪：這裡的敵人裡不是自己陣營的那幾路（自己人不會突然殺出來，也不在這裡操練）。
+        地盤易手：站的照控制方（territory.squads_at；開關關著就是 loc.enemies）。"""
+        squads = [self.content.squads[sid] for sid in territory.squads_at(self.state.world, self.content, loc.id)]
         return [squad for squad in squads if not self._drills_with(squad)]
 
     def _train(self) -> list[str]:
@@ -2438,8 +2439,9 @@ class Game:
         序章（新手引導計畫一）：只有這一步寫的對手（雪恥那一步才有斷眉），草廬自己沒有敵人。"""
         if prologue_rules.active(self.state, self.content):
             return prologue_rules.enemies(self.state, self.content)
+        base = territory.squads_at(self.state.world, self.content, loc.id)  # 地盤易手：站的照控制方（關著時就是 loc.enemies）
         extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
-        return loc.enemies + [sid for sid in extra if sid not in loc.enemies] if extra else loc.enemies
+        return base + [sid for sid in extra if sid not in base] if extra else base
 
     def _order_options(self, loc: Location) -> list[Option]:
         """軍令的兩個行動（計畫 T6）：在有戰線的地方做第 1 階守勢行動；在護糧的起點接糧車。開關關著、散人沒有。"""
@@ -4090,6 +4092,7 @@ class Game:
         for trend_id, delta in resolve_trends(self.content, season, battle.outcome_trend_delta).items():
             season.trends[trend_id] = max(0, min(100, world_trend_value(season, self.content, trend_id) + delta))
         recompute_trends(season, self.content)  # 開關開著時推了戰線，黃巾聲勢跟著重算（這裡不經 change_trend）
+        territory.update(season, self.content)  # 決戰結果直接寫進季、不經 change_trend：地盤在這裡重算
         for flag in battle.outcome_world_flags:
             if flag not in season.flags:
                 season.flags.add(flag)
