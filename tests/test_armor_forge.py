@@ -259,7 +259,7 @@ def test_the_armor_wizard_skips_the_kind_and_walks_main_aux_go(content, world):
     forged = [e for e in game.state.journal if e.title == smithing.FORGE_TITLE]
     assert len(forged) == 1 and any(p.armor.name in line for line in forged[0].lines)  # 一爐一則紀錄
     lines = forged[0].lines  # FB-141：開爐成了那一則只留結果、結果句排第一；挑主料、輔料的回報收掉（結果句寫了放哪兩樣）
-    assert lines[0].startswith(f"打出一件【{p.armor.name}】（防具・屬陽・一階") and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
+    assert lines[0].startswith(f"打出一件【{p.armor.name}】（一階") and "・防具・屬陽）" in lines[0] and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
     assert "主料：精鐵砂。" not in lines and "輔料：驚羽。" not in lines and smithing.ARMOR_ASK_AUX not in lines
 
 

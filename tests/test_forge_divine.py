@@ -85,7 +85,7 @@ def test_the_first_divine_forge_is_the_unnamed_original_and_rolls_no_quality(div
     assert rolled == []  # 照甲（5.1）：一爐必出神器，不擲品質，不碰亂數
     assert (item.name, item.original, item.copy_of, item.secret, item.tier, item.quality) == (DIVINE_UNNAMED, True, None, "t_star", 3, "上品")
     assert equipment.grade(item) == "三階上品" + equipment.DIVINE_MARK and not equipment.named(divine_content, item)
-    assert msgs[0].startswith(f"打出一把【{DIVINE_UNNAMED}】（劍・屬剛・三階上品{equipment.DIVINE_MARK}）：鐵匠把兩份隕鐵膽下爐。") and STAR.note in msgs[0] and cfg.divine_line.format(unit="把") in msgs[0]
+    assert msgs[0].startswith(f"打出一把【{DIVINE_UNNAMED}】（三階上品{equipment.DIVINE_MARK}・劍・屬剛）：鐵匠把兩份隕鐵膽下爐。") and STAR.note in msgs[0] and cfg.divine_line.format(unit="把") in msgs[0]
     find = world.lookup_gear_find("鑄|t_star")
     assert (find.divine, find.owner, find.master_shown, find.divine_name, find.copies, find.name) == (True, "甲", "甲", None, 0, DIVINE_UNNAMED)
     rumors = [r.text for r in game.state.world.rumors]
@@ -492,4 +492,5 @@ def test_the_forge_result_names_the_piece_first_so_a_one_line_card_shows_it(divi
     assert names[5] == "赤霞鎧" and made[6][0].original  # 防具的名器、神器原品
     for (item, msgs), noun in zip(made, ["把"] * 4 + ["件"] * 3):
         first = msgs[0].split("\n")[0]
-        assert first.startswith(f"打出一{noun}【{item.name}】（") and "：鐵匠把" in first, first
+        named = "名器" if equipment.named(c, item) else ""  # FB-148：名器寫在名字前面
+        assert first.startswith(f"打出一{noun}{named}【{item.name}】（{equipment.tier_quality(item)}") and "：鐵匠把" in first, first

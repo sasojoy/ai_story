@@ -137,8 +137,11 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
 
 
 # 開爐的結果句（待 joy 潤）：打出的東西寫在最前面（FB-143：375 寬鐵匠鋪選單長時「剛剛」收成一行，只露開頭十幾個字），「鐵匠把…下爐」接在後面
-FORGED = "打出一{unit}【{name}】（{kind}・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤；{kind} 寫兵器字、{unit} 拳套是副（FB-133）
-ARMOR_FORGED = "打出一件【{name}】（防具・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤
+# 待 joy 潤。{kind} 寫兵器字、{unit} 拳套是副（FB-133）。375 寬「剛剛」收成一行時只露開頭十五、六個字（FB-148）：名器跟一般組合要分得出來、
+# 品質也要看得到——名器寫在名字前面（{mark}，括號裡不再寫），階品排在括號最前面。神器原品與仿品打出來那一刻叫「無名神器」「仿・…」，
+# 名字已經看得出來，標記照舊寫在階品後面（「三階上品・神器」），不在名字前面重複
+FORGED = "打出一{unit}{mark}【{name}】（{grade}・{kind}・屬{attribute}）：鐵匠把{what}下爐。"
+ARMOR_FORGED = "打出一件{mark}【{name}】（{grade}・防具・屬{attribute}）：鐵匠把{what}下爐。"
 
 
 def noun_label(kind: str) -> str:
@@ -241,11 +244,14 @@ def forge(
 
 
 def forged_head(item: Equipment, what: str) -> str:
-    """開爐成了那一則的第一句（FB-143：打出的東西寫在最前面）：兵器寫兵器字與量詞（FB-133：拳套、弩，拳套一副），防具一件。"""
+    """開爐成了那一則的第一句（FB-143：打出的東西寫在最前面）：兵器寫兵器字與量詞（FB-133：拳套、弩，拳套一副），防具一件；
+    名器、神器、仿品寫在名字前面、階品排在括號最前面（FB-148）。"""
+    named = equipment.mark_word(item) == equipment.NAMED_MARK.removeprefix("・")
+    mark, grade = ("名器", equipment.tier_quality(item)) if named else ("", equipment.grade(item))
     if item.slot == "armor":
-        return ARMOR_FORGED.format(what=what, name=item.name, attribute=item.attribute, grade=equipment.grade(item))
-    return FORGED.format(what=what, name=item.name, unit=weapons.unit(item.kind), kind=weapons.noun(item.kind), attribute=item.attribute,
-                         grade=equipment.grade(item))
+        return ARMOR_FORGED.format(what=what, mark=mark, name=item.name, attribute=item.attribute, grade=grade)
+    return FORGED.format(what=what, mark=mark, name=item.name, unit=weapons.unit(item.kind), kind=weapons.noun(item.kind),
+                         attribute=item.attribute, grade=grade)
 
 
 # ---- 神器原品定名（打造隱藏配方設計 5.2；同 cultivation.name_mastered）----

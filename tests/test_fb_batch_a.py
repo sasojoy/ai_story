@@ -184,3 +184,27 @@ def test_fb146_an_armor_divine_piece_is_one_jian_everywhere(divine_content, worl
     blade = _forger(divine_content, world, name="乙")
     _, msgs = smithing.forge(blade.state, divine_content, world, "劍", "gang_3", "gang_3")
     assert "這是一把神器" in "\n".join(msgs)
+
+
+# ── FB-141、FB-148：「剛剛」收成一行時看得出名器、神器與品質 ──
+
+
+def test_fb148_the_first_words_of_the_forge_result_say_what_kind_of_piece_it_is():
+    """375 寬收成一行只露開頭十五、六個字：名器「打出一把【柳影劍】（劍・屬虛・」跟一般組合長得一樣，品質也切掉了。
+    名器寫在名字前面，括號先寫階品再寫種類屬性；神器原品與仿品的名字（無名神器、仿・…）已經看得出來，標記照舊接在階品後面。"""
+    from tianxia import smithing
+    from tianxia.state import Equipment
+
+    cases = [
+        (_piece("劍", name="柳影劍", secret="t_blade"), "打出一把名器【柳影劍】（一階中品・劍・屬剛）"),
+        (_piece("拳腳"), "打出一副【綿羽護手】（一階中品・拳套・屬剛）"),
+        (_piece("劍", name="無名神器", tier=3, quality="上品", original=True, secret="t_star"), "打出一把【無名神器】（三階上品・神器・劍・屬剛）"),
+        (_piece("劍", name="仿・無名神器", tier=3, quality="上品", copy_of="鑄|t_star", secret="t_star"),
+         "打出一把【仿・無名神器】（三階上品・仿品・劍・屬剛）"),
+        (Equipment(id="甲:1", slot="armor", name="垂柳衫", attribute="柔", tier=1, quality="上品", secret="t_jacket"),
+         "打出一件名器【垂柳衫】（一階上品・防具・屬柔）"),
+    ]
+    for item, start in cases:
+        head = smithing.forged_head(item, "柳絲綿與驚羽")
+        assert head.startswith(start + "：鐵匠把柳絲綿與驚羽下爐。"), head
+        assert item.quality in head[:18]  # 收成一行露得出品質

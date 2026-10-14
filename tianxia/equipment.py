@@ -162,6 +162,17 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
 def grade(item: Equipment) -> str:
     """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接一段（打造隱藏配方設計 4.2、5.3；只看存檔的欄位，
     不查內容）：本命兵器「・本命」、神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
+    mark = mark_word(item)
+    return f"{tier_quality(item)}・{mark}" if mark else tier_quality(item)
+
+
+def tier_quality(item: Equipment) -> str:
+    """「一階下品」：只有階與品質（grade 去掉後面那一段）。"""
+    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}"
+
+
+def mark_word(item: Equipment) -> str:
+    """grade 後面那一段的字（「本命」「神器」「仿品」「名器」），一般的是空字串。開爐的結果句把它寫在名字前面（FB-148）。"""
     if item.signature is not None:
         mark = SIGNATURE_MARK
     elif item.original:
@@ -172,7 +183,7 @@ def grade(item: Equipment) -> str:
         mark = NAMED_MARK
     else:
         mark = ""
-    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}{mark}"
+    return mark.removeprefix("・")
 
 
 def named(content: Content, item: Equipment | None) -> bool:
