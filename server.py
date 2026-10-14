@@ -939,8 +939,8 @@ def duel_text(game: Game, text: str) -> list[str]:
         if client is None and game.client is not None:
             return fallback
         return battle_instance.assess_gamble(
-            client, scene, request.faction_name, request.text, request.name, setting=duel.SETTING, place=duel.PLACE,
-            sex=request.sex,
+            client, scene, request.faction_name, request.text, request.name, setting=request.setting or duel.SETTING,
+            place=request.place or duel.PLACE, target=request.target, sex=request.sex,  # 擂台帶對手那一行與擂台的場合（Game.duel_text_request）
         )
 
     verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)

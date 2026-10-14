@@ -271,6 +271,88 @@ class DuelState(BaseModel):
     difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
 
 
+class ArenaSide(BaseModel):
+    """擂台一場裡的一邊（tianxia/arena.py）：開打時快照的威力、三招的份量、職位與氣血池。挑的人是此刻的身手，守的人是他報名時留下的分身。
+    池子從滿的開始，打完不扣回角色。"""
+
+    name: str
+    power: float
+    scores: dict[str, float] = Field(default_factory=dict)
+    role: str = ""
+    hp: float
+    hp_cap: float
+
+
+class ArenaFight(BaseModel):
+    """一場還沒打完的擂台（挑的人身上，PlayerState.arena）。move／tell 是分身下一回合要出的招與你看到的架勢（回合開始時擲好）。
+    best_* 是這一場到目前最有戲的那一次放手一搏（battle_instance.more_dramatic；收場時夠險就上天下大事）。"""
+
+    id: int  # 這一季第幾場擂台（WorldState.arena_seq）
+    foe_key: str  # 守的人的名號鍵（WorldState.arena 的鍵）
+    me: ArenaSide
+    foe: ArenaSide
+    round: int = 0  # 打完了幾回合
+    rounds: int = 5
+    edge: float = 50.0  # 氣勢：越高越是挑的人佔上風
+    move: str = ""
+    tell: str = ""
+    lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
+    best_text: str = ""
+    best_story: str = ""
+    best_rate: int = 0
+    best_won: bool = False
+    best_set: bool = False
+
+
+class ArenaResult(BaseModel):
+    """剛打完的那一場（挑的人身上，PlayerState.arena_last）：擂台那一頁的收場卡照它畫，再挑一場、離開擂台就清掉。"""
+
+    id: int  # 那一場的 ArenaFight.id（網頁看過了照它不再跳出來）
+    foe: str
+    tier: str
+    lines: list[str] = Field(default_factory=list)  # 每回合一行
+    changes: list[str] = Field(default_factory=list)  # 戰報的得失（積分、名望）
+
+
+class ArenaReport(BaseModel):
+    """一場擂台留給守的人的一筆（他下次同步時補戰報與江湖紀錄，Game._deliver_arena）。tier 是守的人那一邊的結果。"""
+
+    challenger: str
+    tier: str
+    time: float
+    lines: list[str] = Field(default_factory=list)
+    rank: int  # 打完之後守的人的名次
+    before: int  # 打之前守的人的名次（被換下去才不一樣）
+    power: float = 0.0  # 挑的人的威力（戰報的對手那一格）
+
+
+class ArenaEntry(BaseModel):
+    """一個守擂的人（WorldState.arena：名號鍵 → 這一筆；換季整個重來）。分身是報名或更新那一刻的身手。"""
+
+    name: str
+    power: float
+    scores: dict[str, float] = Field(default_factory=dict)
+    role: str = ""
+    hp_cap: float
+    arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
+    joined: float = 0.0  # 第一次報名的世界秒
+    rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
+    wins: int = 0
+    losses: int = 0
+    draws: int = 0
+    streak: int = 0  # 連勝（挑與守都算，沒贏就歸零）
+    best_streak: int = 0
+    defended: list[int] = Field(default_factory=list)  # [遊戲日, 這一天被挑了幾場]（defend_per_day）
+    inbox: list[ArenaReport] = Field(default_factory=list)  # 被挑了、他還沒看到的
+    wages: list[list[int]] = Field(default_factory=list)  # [現實的第幾天, 那一刻的名次]：換日時記（arena.roll_day），本人同步時領
+    place: int = 0  # 季末的名次（1～3）；0＝沒進前三
+    prized: bool = False  # 季末的獎勵補過了沒
+
+    @property
+    def bouts(self) -> int:
+        return self.wins + self.losses + self.draws
+
+
 class AnnalEntry(BaseModel):
     """行狀的一則（玩家傳，tianxia/annals.py）：季末寫《某某傳》的材料。只記事實，不記數值以外的推測；字是當下寫好的
     （時刻照 calendar.stamp_text、地點與人物照名字），季末不必再查這一季的狀態。"""
@@ -335,6 +417,7 @@ class PlayerState(BaseModel):
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
+    picking_arena: bool = False  # 打開了擂台的第二層選單（同 picking_market）；離開、存檔修補、同步時人不在城鎮、出發都收起來
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
     heirloom: Equipment | None = None  # 寶物欄的「傳承」那一格：玉璽碎片的抄本（照全服登記重抄，玉璽碎片設計 7.3、7.4）；換季帶走
     seal_seen: int = 0  # 玉璽的補送補到全服登記的第幾號（Game._deliver_seal_results）；換季帶走
@@ -512,6 +595,10 @@ class PlayerState(BaseModel):
 
     # ── 玩家之間的互動（第二層：結伴同行；邀請本身在 WorldState.invites）；角色每季重來，跟著清空。存在角色的 JSON，不升 SCHEMA_VERSION ──
     duel: DuelState | None = None  # 正在打的單人頭目戰（tianxia/duel.py）；None＝沒有
+    arena: ArenaFight | None = None  # 正在打的擂台（tianxia/arena.py）；None＝沒有
+    arena_last: ArenaResult | None = None  # 剛打完的那一場（擂台那一頁的收場卡）；再挑一場、離開擂台就清掉
+    arena_day: int = 0  # 擂台挑擂次數記在哪一天（同 pill_day：Config.pill_day_utc_offset_hours 的 00:00 換日）
+    arena_today: int = 0  # 那一天挑了幾次（ArenaTuning.per_day）
     duel_tally: dict[str, int] = Field(default_factory=dict)  # 「季號:頭目 id」→ 這一季遇上幾次（Config.duel.per_boss_season）
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
@@ -749,6 +836,12 @@ class WorldState(BaseModel):
     # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
     # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
     tianji: int = 0
+    # ── 擂台賽（tianxia/arena.py；換季整個重來）──
+    arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
+    arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）
+    arena_seq: int = 0  # 這一季開過幾場擂台
+    arena_closed: bool = False  # 季末前三名排過了（world.end_season）
+    arena_day: int = -1  # 擂台的俸發到哪一天（現實的第幾天，arena.roll_day）；-1＝還沒看過
 
 
 class Fighter(BaseModel):
@@ -774,7 +867,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）（舊戰報的 train 不遷移，照舊顯示「遊歷」）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）（舊戰報的 train 不遷移，照舊顯示「遊歷」）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

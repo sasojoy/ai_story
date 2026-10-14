@@ -417,6 +417,14 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
         lines.append(f"奪璽單挑：懷璽的人守住了 +{fame['keep']}、被奪走 +{fame['lose']}；挑戰的人打贏了單挑、碎片卻沒易手 +{fame['near']}。")
         if seal.mandate_event(content) is not None and cfg.seal.mandate.fame > 0:  # 得天命的那一軍（Game._showdown_pay，玉璽二）
             lines.append(seal.MANDATE_FAME.format(fame=cfg.seal.mandate.fame))
+    ring = cfg.arena
+    if ring.enabled:  # 擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）
+        if ring.highlight_fame > 0:
+            lines.append(f"擂台上放手一搏，成算不過 {ring.highlight_rate}% 卻成了：+{ring.highlight_fame}。")
+        if ring.wages:  # 每天換日照名次發俸（Game._deliver_arena）
+            lines.append(f"擂台每天的俸：第一名 +{ring.wages[0][1]}，前 {len(ring.wages)} 名都有。")
+        if ring.prizes:
+            lines.append("擂台賽季末前三名：" + "、".join(f"第{'一二三四五'[i]}名 +{fame}" for i, fame in enumerate(ring.prizes)) + "。")
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:

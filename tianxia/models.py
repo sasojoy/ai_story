@@ -814,6 +814,7 @@ ALLOW_FIXED = frozenset({
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
+    "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
@@ -1385,6 +1386,36 @@ class DuelTuning(_Strict):
     legend_chance: dict[str, float] = Field(default_factory=lambda: {"大勝": 0.25, "險勝": 0.1})
 
 
+class ArenaTuning(_Strict):
+    """擂台賽（隨時挑擂；docs/superpowers/specs/2026-10-14-擂台賽-design.md，Joy 2026-10-14 選「隨時挑擂」，同一天 PM 轉述的配套改成
+    名次制）：報名的人留下一份守擂的分身，別人隨時來挑，對的是分身，只算本季。規則在 tianxia/arena.py。一場照頭目戰的純函式
+    （duel.push_of、harm_of、gamble_roll），推力、挨打、放手一搏的數字都讀 DuelTuning；這裡只放擂台自己的。全部【預設】，試玩後再調。
+
+    - reach：只能挑排在自己前面幾名以內的人（Joy「距離自己三名內」）。per_day：一個人一天挑幾次（不花體力；現實時間換日，同回體丹）。
+    - pair_cooldown_seconds：同一個人挑同一個人的冷卻（世界秒，比照截殺）。defend_per_day：一個人一個遊戲日最多被挑幾場（守擂的保護）。
+    - rounds：一場幾回合（同奪璽單挑）。proxy_power：分身出招照三招份量的這個次方加權（同奪璽單挑的代打）。
+    - streak_news：連勝到這個數的倍數上天下大事。
+    - highlight_rate：一場裡最有戲的放手一搏成了、成功率不超過這個數就上天下大事，那個人名望 +highlight_fame（同決戰）。
+    - board_size：擂台榜列幾名。
+    - wages：每天換日那一刻照名次發的俸（銀兩, 名望），第 1 名起一名一格，格數以外沒有；要打過至少一場。
+    - prizes：季末前三名的名望；prize_treasure 開著時另給一件寶物（掉落池裡你還沒有的，都有了換銀兩；寶物關著不給）。"""
+
+    enabled: bool = True
+    reach: int = Field(default=3, ge=1)
+    per_day: int = Field(default=10, ge=1)
+    pair_cooldown_seconds: float = Field(default=10800, ge=0)
+    defend_per_day: int = Field(default=6, ge=1)
+    rounds: int = Field(default=5, ge=1)
+    proxy_power: float = Field(default=4, ge=0)
+    streak_news: int = Field(default=5, ge=1)
+    highlight_rate: int = Field(default=30, ge=0, le=100)
+    highlight_fame: int = Field(default=1, ge=0)
+    board_size: int = Field(default=10, ge=1)
+    wages: list[tuple[int, int]] = Field(default_factory=lambda: [(100, 5), (60, 3), (60, 3)] + [(30, 1)] * 7)
+    prizes: list[int] = Field(default_factory=lambda: [30, 20, 10])
+    prize_treasure: bool = True
+
+
 class DuelFoe(_Strict):
     """一隻頭目的一個面貌：照玩家的陣營挑（side 是他站的陣營；跟玩家同陣營的不挑，換下一個）。文字待內容方改。
     intro 是遇上時的場景；win、lose 是你打贏、打輸時的結語。moves 是他出招的偏好（三招的權重，沒寫的當 1）。"""
@@ -1924,6 +1955,7 @@ class Config(_Strict):
     seal: SealTuning = Field(default_factory=SealTuning)  # 玉璽碎片（見 SealTuning；內容在 content/seal.json）
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
+    arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）

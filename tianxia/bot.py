@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 from . import armor, bounties, chuangong, clinic, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
-from .engine import DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
+from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .state import PLAYER
@@ -358,7 +358,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", DUEL_FLEE)
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", DUEL_FLEE, ARENA_YIELD)
         and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:"))
     ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）

@@ -2916,7 +2916,7 @@ def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
         assert view["free_text_note"] == game.DUEL_GAMBLE_NOTE
         seen = []
 
-        def rate(client, act_, faction_name, text, name, setting, place, sex="男"):
+        def rate(client, act_, faction_name, text, name, setting, place, target="", sex="男"):
             seen.append((open_world().db.writing(), act_.title, faction_name, text, name, place))
             return battle_instance.GambleVerdict(100, "測試一把撒出石灰。", "測試踩到自己的衣角。")
 
@@ -6217,6 +6217,11 @@ NOT_IN_THE_FINGERPRINT = {
         "bounty_seq": "懸賞的流水號，玩家看不到",
         "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
         "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
+        "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
+        "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
+        "arena_seq": "擂台的流水號，玩家看不到",
+        "arena_closed": "擂台這一季收了沒（季末排名寫進江湖史與傳聞，那一下指紋就變了）",
+        "arena_day": "擂台的俸記到哪一天，玩家看不到（俸在本人同步時補）",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",

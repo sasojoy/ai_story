@@ -84,6 +84,8 @@
     shopMore: false, // 裝備庫頁按了「再列 N 件」
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
+    arenaTab: "floor", // 擂台那一頁停在哪（floor 台下／board 擂台榜）；進擂台停在台下（Joy 2026-10-14「擂台應該要是獨立的一頁」）
+    arenaSeen: null, // 看過、收起來的那一場收場卡（ArenaResult.id）
     boardStamp: null, // 剛交差的那一張：{ id, note, at }（交出之前那一份告示與它排第幾），照原本的位置蓋「交差」、淡出之後清掉（boardHanded）
     divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
@@ -297,7 +299,7 @@
     const shopKind = (v) => (v && v.shop ? v.shop.shop : null);
     if (shopKind(main) !== shopKind(S.main)) {
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
-      S.shopHorse = null; S.boardZoom = null; S.boardStamp = null;
+      S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
@@ -2677,12 +2679,85 @@
     const line = `<p class="shop-line">${esc(shop.line)}</p>`;
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab() === "shelf";
-    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : smithHtml(shop, underForge ? line : "");
+    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop) : smithHtml(shop, underForge ? line : "");
+    // 擂台打到一半：左上那一顆是認輸（先問一次），不是直接離開
+    const leave = kind === "arena" && shop.fight
+      ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
+      : kind === "arena" ? back.replace("‹ 出店", "‹ 離開") : back;
     return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
-      <header class="shop-bar">${back}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
+      <header class="shop-bar">${leave}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">${shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`}</span></header>
       ${underForge ? "" : line}
       ${body}
     </div>`;
+  }
+
+  // ── 擂台（擂台賽設計；Joy 2026-10-14「擂台應該要是獨立的一頁，你這樣太混雜了」）：跟三間店同一層。打到一半整頁是這一場（arenaFightHtml），
+  // 不然底下兩頁：台下（你的分身與積分、守擂的人一人一張）、擂台榜；剛打完有收場卡。鈕都送現在的選項 id。字待 joy 潤 ──
+  const ARENA_TABS = [["floor", "台下"], ["board", "擂台榜"]];
+  function arenaHtml(shop) {
+    if (shop.fight) return `<div class="shop-body arena-body">${arenaFightHtml(shop.fight)}</div>`;
+    const tab = S.arenaTab === "board" ? "board" : "floor";
+    const result = shop.result && shop.result.id !== S.arenaSeen ? arenaResultHtml(shop.result) : "";
+    return `<div class="shop-body arena-body">${tab === "board" ? arenaBoardHtml(shop) : arenaFloorHtml(shop)}</div>
+      <nav class="shop-tabs">${ARENA_TABS.map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="arena-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
+      ${result}`;
+  }
+
+  // 台下：上面是你自己那一張（名次、稱號、戰績、守擂用的武學、報名／更新分身），底下挑得到的人（排在你前面三名內）一人一張，挑不了的灰掉寫原因
+  function arenaFloorHtml(shop) {
+    const me = shop.me;
+    const stand = me.joined
+      ? `<div class="ring-score"><span>第</span><b>${me.rank | 0}</b><span>名</span></div>
+         <div class="ring-meta">${me.title ? `<span class="ring-place">${esc(me.title)}</span>` : ""}<span>${esc(me.record)}</span>
+           ${me.arts.length ? `<span>守擂：${esc(me.arts.join("、"))}</span>` : ""}</div>`
+      : `<p class="ring-new">${esc(me.note)}</p>`;
+    const join = `<button class="btn${me.joined ? "" : " primary"} ring-join" data-act="choose" data-id="${esc(me.join.id)}" ${me.join.enabled ? "" : "disabled"}><b>${esc(me.join.label)}</b>${me.join.why ? `<small>${esc(me.join.why)}</small>` : ""}</button>`;
+    const mine = `<section class="ring-me">${stand}${join}${me.joined ? `<p class="ring-note">${esc(me.note)}</p>` : ""}</section>`;
+    const card = (f) => `<article class="ring-foe${f.enabled ? "" : " dim"}">
+        <div class="info"><div class="who"><span class="rt">第 ${f.rank | 0} 名</span><b>${esc(f.name)}</b>${f.title ? `<span class="ttl">${esc(f.title)}</span>` : ""}</div>
+        <p>${esc(f.record)}・${esc(f.strength)}</p>${f.arts.length ? `<p class="arts">${esc(f.arts.join("、"))}</p>` : ""}</div>
+        <button class="btn${f.enabled ? " primary" : ""} small" data-act="choose" data-id="${esc(f.id)}" ${f.enabled ? "" : "disabled"}>${f.enabled ? "<b>挑戰</b>" : esc(f.why)}</button>
+      </article>`;
+    if (!me.joined) return mine;
+    const foes = shop.foes.length ? `<div class="ring-foes">${shop.foes.map(card).join("")}</div>` : `<p class="shop-empty">${esc(shop.nobody)}</p>`;
+    return `${mine}<h4 class="ring-h">挑得到的人</h4>${foes}`;
+  }
+
+  // 擂台榜：照名次排，前三名有名次色、稱號一個小牌子，你自己那一列標出來；底下一行每天的俸
+  function arenaBoardHtml(shop) {
+    if (!shop.board.length) return `<p class="shop-empty">${esc(shop.board_empty)}</p>`;
+    const row = (r) => `<li class="${r.me ? "me" : ""}${r.rank <= 3 ? ` top${r.rank | 0}` : ""}"><span class="rk">${r.rank | 0}</span>
+        <div class="nm"><b>${esc(r.name)}</b><span class="wl">${r.wins | 0} 勝 ${r.losses | 0} 負${r.draws ? ` ${r.draws | 0} 和` : ""}${r.streak >= 2 ? `・連勝 ${r.streak | 0}` : ""}</span></div>
+        ${r.title ? `<span class="ttl">${esc(r.title)}</span>` : ""}</li>`;
+    return `<ol class="ring-board">${shop.board.map(row).join("")}</ol>${shop.wages ? `<p class="ring-note">${esc(shop.wages)}</p>` : ""}`;
+  }
+
+  // 打到一半：兩邊的氣血、中間一條氣勢（越往右越是你佔上風）、他的架勢、三招、放手一搏、這一場打過的回合
+  function arenaFightHtml(f) {
+    const pct = (a) => Math.max(0, Math.min(100, a.cap ? (a.hp / a.cap) * 100 : 0));
+    const side = (a, cls) => `<div class="ring-side ${cls}"><b>${esc(a.name)}</b><div class="hp"><i style="width:${pct(a).toFixed(1)}%"></i></div><small>${a.hp | 0}／${a.cap | 0}</small></div>`;
+    const moves = f.moves.map((m) => `<button class="btn ring-move" data-act="choose" data-id="${esc(m.id)}"><b>${esc(m.move)}</b><small>${esc(m.label.replace(m.move, ""))}</small></button>`).join("");
+    const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map((l) => `<li>${esc(l)}</li>`).join("")}</ol>` : "";
+    return `<div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
+      <div class="ring-sides">${side(f.me, "mine")}<span class="vs">對</span>${side(f.foe_hp, "theirs")}</div>
+      <div class="ring-edge"><span>${esc(f.edge_words)}</span><div class="bar"><i style="left:${Math.max(0, Math.min(100, f.edge | 0))}%"></i></div></div>
+      ${f.arts.length ? `<p class="ring-arts">他守擂用的是${esc(f.arts.join("、"))}。</p>` : ""}
+      <p class="ring-tell">${esc(f.tell)}<small>（${esc(f.tell_note)}）</small></p>
+      <p class="ring-howto">${esc(f.howto)}</p>
+      <div class="ring-moves">${moves}</div>
+      <form class="free ring-free" id="arena-free" data-op="${esc(f.gamble.op)}"><input class="input" name="text" maxlength="20" placeholder="${esc(f.gamble.prompt)}"><button class="btn primary small" type="submit">送出</button></form>
+      <p class="free-note">${esc(f.gamble.note)}</p>
+      ${log}`;
+  }
+
+  // 剛打完的那一場：一張卡蓋在台下上面（勝負大字、每回合一行、積分與名望），按「回台下」收起
+  function arenaResultHtml(r) {
+    const won = r.tier === "大勝" || r.tier === "險勝";
+    const cls = won ? "win" : r.tier === "僵持" ? "draw" : "lose";
+    return `<div class="board-sheet ring-sheet"><article class="paper ring-result ${cls}"><i class="stamp">${esc(r.tier)}</i>
+        <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ol>
+        ${r.changes.length ? `<p class="reward">${esc(r.changes.join("・"))}</p>` : ""}
+        <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
   }
 
   // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）
@@ -4534,6 +4609,8 @@
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "arena-tab": S.arenaTab = el.dataset.tab; renderShop(false); break; // 擂台：台下／擂台榜
+        case "arena-seen": S.arenaSeen = Number(el.dataset.id); renderShop(); break; // 收起收場卡
         case "shop-horse": S.shopHorse = el.dataset.id; renderShop(); break; // 馬市點一匹（第三節）：只換底下那張卡
         case "board-zoom": await boardZoom(el, el.dataset.id); break; // 懸賞榜點一張告示（第四節）：放大成一張紙
         case "board-close": await boardClose(el); break; // 放回去、收起
@@ -4726,7 +4803,7 @@
       } else if (form.id === "say-form") {
         if (!data.text.trim()) return;
         await sayLine(form, data.text.trim());
-      } else if (form.id === "free-form") {
+      } else if (form.id === "free-form" || form.id === "arena-free") {
         if (!data.text.trim()) return;
         await doMain(["duel_text", "seal_text"].includes(form.dataset.op) ? form.dataset.op : "battle_text", { text: data.text }); // 決戰、奪璽或頭目戰的放手一搏
       } else if (form.id === "name-art") {

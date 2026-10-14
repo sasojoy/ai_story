@@ -338,6 +338,14 @@ def bounty_prize(state: GameState, content: Content, season: int, bounty_id: str
     return head + _give_pool(state, content, rng, hold=True)
 
 
+def arena_prize(state: GameState, content: Content, season: int, place: int) -> list[str]:
+    """擂台季末前幾名的寶物（ArenaTuning.prize_treasure；休季同步時 Game._deliver_arena 補）：掉落池裡你還沒有的一件，都有了換銀兩；
+    裝備庫滿了寄放。亂數用自己的（季數＋名號＋名次），不碰 Game.rng。寶物關著什麼都不給。"""
+    if not on(content):
+        return []
+    return _give_pool(state, content, random.Random(f"arena-prize|{season}|{state.player.name}|{place}"), hold=True)
+
+
 # ---- 名將贈禮（6.4）----
 
 def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[str] = frozenset()) -> list[str]:
