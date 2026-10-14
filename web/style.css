@@ -1038,6 +1038,8 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .call, .party { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .call > span, .party > span { flex: 1 1 100%; }
 .calls-more { justify-self: start; font-size: 13px; }
+/* 決戰輪到你出招時，「此地還有」挪到三招後面自己一張卡（FB-117）：開頭那一條虛線與上緣不要 */
+.people-after > :first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .call.fit-hide { display: none; } /* 第一屏放不下時收掉的那幾份（app.js FIT_STEPS 的 calls，FB-117） */
 .peer-amount { flex-wrap: wrap; }
 .peer-amount select { flex: 1 1 100%; }

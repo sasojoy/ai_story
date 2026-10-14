@@ -468,3 +468,22 @@ def test_opened_invitations_are_not_folded_again():
 
     out = fit_run(CALLS, S={"callsOpen": True})
     assert "calls" not in out["fitted"] and out["calls"] == [False, False]
+
+
+# ── 第七件：決戰輪到你出招時，「此地還有」排在三招後面 ──
+
+
+@needs_node
+def test_on_your_battle_turn_the_people_here_come_after_the_three_moves(pair):
+    content, world = pair
+    m = _main(content, world, "乙")
+    m["here"] = [{"name": f"路人{i}", "side": "散人"} for i in range(8)]
+    plain = run(m, "return H.pageJianghu();")
+    scene = plain.index('<section class="card scene">')
+    assert scene < plain.index('<div class="here">') < plain.index("</section>", scene)  # 平常：在場景卡裡
+    moves = [{"id": f"battle:act:guan_{k}", "label": k, "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
+             for k in ("strong", "hold", "raid")]
+    turn = run({**m, "options": moves}, "return H.pageJianghu();")
+    scene_end = turn.index("</section>", turn.index('<section class="card scene">'))
+    assert '<div class="here">' not in turn[:scene_end]
+    assert turn.index('data-id="battle:act:guan_raid"') < turn.index('<section class="card people-after"><div class="here">')
