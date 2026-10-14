@@ -97,6 +97,38 @@ def test_fb250_a_ranger_on_a_front_sees_why_there_is_no_sortie():
     assert _sortie(_game(None, "yingshui")) is None
 
 
+def _map(game):
+    from tianxia import mapview
+
+    return mapview.render_map(game.state, game.content)
+
+
+def test_fb251_the_crossed_swords_mark_where_you_can_attack():
+    """⚔ 照地盤畫：此刻歸敵方、能出陣攻的戰線地點才有（官軍看：汝南荒野〔黃巾佔著〕有，長社〔自家大本營〕、荒丘〔不是戰線〕沒有）；
+    散人不能出陣，哪裡都沒有。圖例那一句改成出陣的說法。出陣關著時照舊照內容的敵人畫。"""
+    from tianxia import mapview
+
+    guan = _game("guan", "changshe")
+    svg = _map(guan)
+    assert "汝南荒野 ⚔" in svg and "長社 ⚔" not in svg and "荒丘 ⚔" not in svg
+    assert "⚔" not in _map(_game(None, "changshe", name="散人甲"))
+    legend = mapview.legend_data(guan.state, guan.content)
+    assert legend["ring"] == mapview.LEGEND_RING_SORTIE and "遊歷" not in legend["ring"]
+    old = _game("guan", "changshe", name="舊規則", content=classic_rules(real_content("weekend")))
+    assert "長社 ⚔" in _map(old) and mapview.legend_data(old.state, old.content)["ring"] == mapview.LEGEND_RING
+
+
+def test_fb251_the_challenge_line_says_the_same_stamina_as_a_sortie():
+    from tianxia import howto
+    from tianxia.world_state import fresh_season
+
+    c = real_content("weekend")
+    page = howto.page(c, fresh_season(c), recruitable=False)
+    assert "體力同出陣" in page and "體力同遊歷" not in page
+    old = classic_rules(real_content("weekend"))
+    assert "體力同遊歷" in howto.page(old, fresh_season(old), recruitable=False)
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")

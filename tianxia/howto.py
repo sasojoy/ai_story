@@ -656,7 +656,7 @@ CHALLENGE_UNTIMED = (
 
 # 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
 CHALLENGE_TITLE = "挑戰大勢人物"
-CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同遊歷）；自己陣營的人物不打{both}，散人不能挑戰。"
+CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同{act}）；自己陣營的人物不打{both}，散人不能挑戰。"
 CHALLENGE_BOTH = "，{names}兩邊的人物都能挑戰"
 CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見：挑戰、求見、交友都不行。"
 
@@ -672,7 +672,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
         return []
     sides = {fig.faction for fig in content.figures.values()}
     both = [f.name for f in content.scenario.factions if f.id not in sides]
-    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "")]
+    act = sortie.NAME if sortie.on(content) else "遊歷"  # FB-251：出陣開著時寫「體力同出陣」（挑戰本人照舊讀 action_cost["train"]）
+    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "", act=act)]
     if cfg.snub_hours > 0:
         lines.append(CHALLENGE_SNUB.format(hours=cfg.snub_hours))
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
