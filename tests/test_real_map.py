@@ -21,7 +21,7 @@ REGIONS = {
     "yingru": {
         "yingchuan", "yingshui", "yingchuan_wilds", "changshe", "yingchuan_academy", "songshan_foot", "deep_mountain",
         "jade_cave", "runan", "runan_academy", "runan_market", "runan_wilds", "hilltop_wilds", "qiao_county",
-        "cao_manor", "huangjin_camp",
+        "cao_manor", "huangjin_camp", "guan_camp",  # 官軍大營：FB-184 在四十處之外補的官軍操練點
     },
     "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds"},
 }

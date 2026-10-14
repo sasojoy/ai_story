@@ -72,7 +72,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 40  # 序章的草廬不算
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 41  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
@@ -1296,6 +1296,7 @@ EXPECTED_TRAINING = {
     "runan_wilds": {"yingru": -1}, "huangjin_camp": {"yingru": -2}, "juma_river": {"jizhou": -1},
     "yanshan_foot": {"jizhou": -1}, "julu_altar": {"jizhou": -2}, "guangzong": {"jizhou": -2},
     "luzhi_camp": {"jizhou": 1}, "xiaquyang": {"jizhou": -1}, "baima_ford": {"jizhou": 1},
+    "guan_camp": {"yingru": 2},  # 官軍大營（FB-184）：官軍在潁川一帶的操練點，量同黃巾別部營寨、方向相反
 }
 
 

@@ -2219,6 +2219,12 @@ class Config(_Strict):
     presence_seconds: float = 600
     # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
     party_wait_seconds: float = 600
+    # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把
+    # 對方的江湖紀錄洗光（紀錄只留 30 則）。五次夠真的送東西（銀兩、丹、幾種素材各一趟）；帳照切磋記在 WorldState.gift_tally
+    gift_per_pair_day: int = Field(default=5, ge=1)
+    # 同一對人每個遊戲日最多論武幾回（FB-116，PM 2026-10-14；照切磋 Spar.per_pair_day 的兩場）：論武各付一半的價錢，沒有上限時
+    # 兩個人可以一直合、熔掉淨賺；帳記在 WorldState.discuss_tally
+    discuss_per_pair_day: int = Field(default=2, ge=1)
     # ── 伺服器假人（伺服器假人設計第四、六節）──
     bots_min_per_faction: int = 5  # 每個陣營（真人＋假人）至少幾人，不足由假人程式補
     bot_strength: float = 0.6  # 假人挑最高分選項的機率（0＝全隨機，1＝永遠挑最高分）；積極 +0.2、懶散 -0.2

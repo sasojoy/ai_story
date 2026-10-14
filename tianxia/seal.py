@@ -302,7 +302,8 @@ NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大�
 
 
 MANDATE_MUSTER = "{battle}集結：{lean}，{shift}。"  # 待 joy 潤：天下大事、集結公告（8.3）
-MANDATE_SCENE = "天命之爭：{lean}，{shift}；懷璽的人到場，份量加重。"  # 待 joy 潤：決戰畫面
+MANDATE_SCENE = "天命之爭：{lean}，{shift}{weight}。"  # 待 joy 潤：決戰畫面；weight 是 MANDATE_WEIGHT 或空字串
+MANDATE_WEIGHT = "；懷璽的人到場，份量加重"  # 待 joy 潤：全服有人持有碎片才寫（FB-189：七片都沒人持有的天命之季不寫）
 LEAN_PART = "{side}握著{n}片"  # 待 joy 潤
 LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
 LEAN_SHIFT = "戰局起點往{side}偏了 {n} 點"  # 待 joy 潤（FB-186）
@@ -432,6 +433,7 @@ FAILED = "你沒能從{other}懷中奪下『{shard}』。"
 UNSETTLED_MINE = "你與{other}爭『{shard}』的單挑沒有打完，不分勝負。"
 SUNK_MINE = "你懷中的『{shard}』不知所蹤了。"
 PROXY_LINE = "你未及趕到，由你平日的路數應對。"
+PROXY_SOME_LINE = "有幾回合你遲遲沒出手，照你平日的路數應對。"  # 待 joy 潤（FB-174：自己出過手、只有幾回合被代出）
 FRESH_LINE = "你這一季還沒現身江湖，身手生疏。"
 RECALL = "{name}在{battle}陣前尋回了不知所蹤的『{shard}』。"  # 待 joy 潤：天下大事、江湖史（8.2）
 RECALLED_MINE = "你在{where}陣前尋回了『{shard}』（{effect}）。"  # 待 joy 潤：補送的紀錄

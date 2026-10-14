@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
@@ -204,6 +204,10 @@ def calls(game: Game) -> list[dict]:
 # ── 卡上的鈕 ──
 
 
+GIFT_FULL = "你們今天已經互贈過 {n} 回了，改天再送吧。"  # 待 joy 潤（FB-116：同一對人每個遊戲日的上限，Config.gift_per_pair_day）
+DISCUSS_FULL = "你們今天已經論武過 {n} 回了，改天再說。"  # 待 joy 潤（FB-116：Config.discuss_per_pair_day）
+
+
 def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
     p, c = game.state.player, game.content
     silver = p.stats.get("silver", 0)
@@ -222,14 +226,20 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
             action="gift", label="贈素材", arg="material", amount=max(n for _, n in held),
             choices=[{"id": m, "label": c.materials[m].name, "max": n} for m, n in held],
         ))
+    if game.gifts_left(other.state.player.name) <= 0:  # 這一對人今天送滿了（FB-116）：每一顆都灰掉、寫為什麼
+        full = GIFT_FULL.format(n=c.config.gift_per_pair_day)
+        buttons = [replace(b, enabled=False, note=full) for b in buttons]
     return buttons
 
 
 def _gift(game: Game, other: Game, params: dict) -> list[str]:
-    """贈物：不必對方同意，給了就是他的；兩邊的江湖紀錄各記一則。數量照自己身上有的驗。"""
+    """贈物：不必對方同意，給了就是他的；兩邊的江湖紀錄各記一則，連著送同一個人併進同一則（FB-116）。數量照自己身上有的驗；
+    同一對人每個遊戲日最多 Config.gift_per_pair_day 次（不分誰送誰，帳在這一季的 WorldState.gift_tally）。"""
     from . import materials
 
     p, them, c = game.state.player, other.state.player, game.content
+    if game.gifts_left(them.name) <= 0:
+        return [GIFT_FULL.format(n=c.config.gift_per_pair_day)]
     what = params.get("arg")
     try:
         amount = int(params.get("amount") or 0)
@@ -257,8 +267,10 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
         materials.grant(other.state, c, material, amount)
         thing = materials.item_text(c, material, amount)
         mine, theirs = [], []
-    game._write(f"贈物・{them.name}", [f"你把{thing}送給了{them.name}。", *mine])
-    other._write(f"收禮・{p.name}", [f"{p.name}送了你{thing}。", *theirs])
+    game._pair_tick(game.state.world.gift_tally, them.name)
+    game._save_season()
+    game._write(f"贈物・{them.name}", [f"你把{thing}送給了{them.name}。", *mine], merge=True)
+    other._write(f"收禮・{p.name}", [f"{p.name}送了你{thing}。", *theirs], merge=True)
     return [f"你把{thing}送給了{them.name}。", *mine]
 
 

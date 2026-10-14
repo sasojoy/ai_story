@@ -666,8 +666,9 @@ def test_the_possible_endings_say_when_the_huangjin_win_can_first_end_the_season
     state = new_game_state(content, "沈浪")
     state.world = fresh_season(content)
     when = calendar.stamp_text(calendar.week_start(10, content, state.world), content, state.world)
+    glued = when.replace("第11天", "第 11 天").replace(" ", " ")  # FB-167：跟狀態列一樣的寫法、整塊不斷行
     text = quest_text(state, content)
-    assert f"黃巾稱霸：黃巾聲勢達到 80，潁川陷落。（{when}以前不會提前收季）" in text
+    assert f"黃巾稱霸：黃巾聲勢達到 80，潁川陷落。（{glued} 以前不會提前收季）" in text
     assert text.count("以前不會提前收季") == 1
     state.world.time = calendar.week_start(10, content, state.world)
     assert "以前不會提前收季" not in quest_text(state, content)

@@ -423,7 +423,7 @@ def test_the_mandate_battle_scene_names_who_holds_the_shards(mandated, world):
     game = _player(mandated, world, "官一", "guan")
     _destiny_open(mandated, world, chishou="官一")
     game.sync(10.0)
-    assert seal.MANDATE_SCENE.format(lean="官軍握著1片", shift="戰局起點往官軍偏了 3 點") in game.scene_text()  # FB-186
+    assert seal.MANDATE_SCENE.format(lean="官軍握著1片", shift="戰局起點往官軍偏了 3 點", weight=seal.MANDATE_WEIGHT) in game.scene_text()  # FB-186、FB-189
 
 
 # ── Task 6：天命 ──────────────────────────────

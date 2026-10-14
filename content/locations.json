@@ -58,7 +58,8 @@
     "connections": [
       "yingchuan",
       "yingshui",
-      "changshe"
+      "changshe",
+      "guan_camp"
     ],
     "x": 541,
     "y": 962,
@@ -712,6 +713,36 @@
     ],
     "insights": [
       "feng"
+    ]
+  },
+  {
+    "id": "guan_camp",
+    "name": "官軍大營",
+    "description": "皇甫嵩、朱儁合兵屯駐的大營，扎在潁川郊野北邊的高坡上，連營數里、刁斗相聞。校場上郡國兵日夜操練，投軍的人在轅門外報上姓名，巡騎一隊接一隊往長社方向去探黃巾的動靜。",
+    "connections": [
+      "yingchuan_wilds"
+    ],
+    "x": 580,
+    "y": 880,
+    "important": true,
+    "tags": [
+      "營寨"
+    ],
+    "danger": 2,
+    "enemies": [
+      "guan_patrol",
+      "jun_bing"
+    ],
+    "train_trend": {
+      "yingru": 2
+    },
+    "materials": [
+      "gang_1",
+      "man_1"
+    ],
+    "insights": [
+      "huo",
+      "shan"
     ]
   },
   {

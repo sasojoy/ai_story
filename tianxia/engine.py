@@ -1826,10 +1826,11 @@ class Game:
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
-    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None) -> None:
+    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None, merge: bool = False) -> None:
+        """寫一則江湖紀錄。merge：最新一則同標題就併進去（journal.add_entry 的 merge；連著收同一個人的禮，FB-116）。"""
         draft = Draft(title, tag)
         draft.guide = list(guide or [])
-        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
+        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs), merge=merge)
 
     def _note_guide(self, notes: list[str]) -> None:
         """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框。走完最後一步、
@@ -3680,22 +3681,26 @@ class Game:
         else:
             head, fame = (seal.MISSED, cfg.fame["near"]) if won else (seal.FAILED, 0)
         notes = [head.format(other=other, shard=shard)] + ([e.text] if e.text else [])
-        notes += [seal.PROXY_LINE] if mine in e.proxied else []
+        if mine in e.absent:  # 整場一手都沒自己出（FB-174）
+            notes.append(seal.PROXY_LINE)
+        elif mine in e.proxied:  # 自己出過手、只有幾回合逾時被代出；舊資料沒有 absent 也走這一句（比較溫和、一定是真的）
+            notes.append(seal.PROXY_SOME_LINE)
         notes += [seal.FRESH_LINE] if mine == "holder" and e.fresh else []
         changes = []
         if same and fame:
             s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
             changes.append(f"名望 +{fame}")
         label = "" if same else f"第 {e.season} 季・"
+        when = e.at if same and e.at is not None else s.world.time  # 單挑收場那一刻（FB-175）；跨季才回來照補送那一刻
         record = BattleRecord(
-            id=s.battle_seq + 1, time=s.world.time, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
+            id=s.battle_seq + 1, time=when, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
             opponent=other, ours=[], tier=seal_duel.side_tier(e.result, e.edge, mine, c.config.duel), our_power=0.0, difficulty=0.0,
             notes=notes, changes=list(changes),
             rounds=list(e.lines),
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
+        journal.add_entry(s, JournalEntry(time=when, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
                                           changes=changes, battle_id=record.id))
         if same:
             annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
@@ -4504,8 +4509,9 @@ class Game:
             header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
             shift = seal.lean_shift(battle.seal_lean, definition, self.content.config.seal)  # 同集結那一刻的算法（FB-186）
+            weight = seal.MANDATE_WEIGHT if seal.holders(self.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
             header += "\n\n" + seal.MANDATE_SCENE.format(
-                lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition),
+                lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
             )
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
@@ -6347,11 +6353,29 @@ class Game:
         """同一對人的帳本鍵：兩個名號（不分大小寫）排序後接起來，誰發的都記在同一本。"""
         return "|".join(sorted((name_key(self.state.player.name), name_key(other))))
 
+    def _pair_left(self, tally: dict[str, list[int]], cap: int, other: str) -> int:
+        """這一對人這個遊戲日在這本帳上還剩幾次（切磋、贈物、論武各一本，都在這一季的 WorldState；帳記的是別的遊戲日就當沒用過）。"""
+        day, count = tally.get(self._spar_pair(other), (0, 0))
+        used = count if day == game_day(self.content, self.state.world) else 0
+        return max(0, cap - used)
+
+    def _pair_tick(self, tally: dict[str, list[int]], other: str) -> None:
+        """這一對人這個遊戲日在這本帳上記一次。呼叫端自己 _save_season。"""
+        day, key = game_day(self.content, self.state.world), self._spar_pair(other)
+        last_day, count = tally.get(key, (0, 0))
+        tally[key] = [day, (count if last_day == day else 0) + 1]
+
     def _spars_left(self, other: str) -> int:
         """這一對人這個遊戲日還能切磋幾場（Spar.per_pair_day）。"""
-        day, count = self.state.world.spar_tally.get(self._spar_pair(other), (0, 0))
-        used = count if day == game_day(self.content, self.state.world) else 0
-        return max(0, self.content.config.spar.per_pair_day - used)
+        return self._pair_left(self.state.world.spar_tally, self.content.config.spar.per_pair_day, other)
+
+    def gifts_left(self, other: str) -> int:
+        """這一對人這個遊戲日還能贈物幾次（Config.gift_per_pair_day，不分誰送誰；FB-116）。"""
+        return self._pair_left(self.state.world.gift_tally, self.content.config.gift_per_pair_day, other)
+
+    def discusses_left(self, other: str) -> int:
+        """這一對人這個遊戲日還能論武幾回（Config.discuss_per_pair_day；FB-116）。"""
+        return self._pair_left(self.state.world.discuss_tally, self.content.config.discuss_per_pair_day, other)
 
     def spar_refusal(self, other: Game) -> str | None:
         """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
@@ -6486,10 +6510,7 @@ class Game:
         cost = c.config.action_cost["train"]
         me.stamina -= cost
         them.stamina -= cost
-        day = game_day(c, self.state.world)
-        key = self._spar_pair(them.name)
-        last_day, count = self.state.world.spar_tally.get(key, (0, 0))
-        self.state.world.spar_tally[key] = [day, (count if last_day == day else 0) + 1]
+        self._pair_tick(self.state.world.spar_tally, them.name)
         self._save_season()
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
@@ -6531,6 +6552,8 @@ class Game:
             problem = self._spar_problem(who, me=me, what="論武", cost=cost)
             if problem is not None:
                 return problem
+        if self.discusses_left(other.state.player.name) <= 0:
+            return social.DISCUSS_FULL.format(n=c.config.discuss_per_pair_day)
         if invites.between(s.world, s.player.name, other.state.player.name, "discuss") is not None:
             return "已經有一張論武的邀請在等回覆了。"
         return None
@@ -6607,6 +6630,8 @@ class Game:
         cost = self._discuss_cost()[1]
         for who, mine in ((self, True), (other, False)):
             problem = problem or self._spar_problem(who, me=mine, what="論武", cost=cost)
+        if problem is None and self.discusses_left(them.name) <= 0:  # 邀請在等的時候，這一對人今天的帳被別處用滿了（FB-116）
+            problem = social.DISCUSS_FULL.format(n=self.content.config.discuss_per_pair_day)
         if problem is None and item not in dict(self.discuss_items()):
             problem = "你身上沒有這一樣。"
         if problem is None and theirs not in dict(other.discuss_items()):
@@ -6624,6 +6649,7 @@ class Game:
         if not made:
             return msgs
         _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""))  # 配方剛登記：他照查表合出同一門，不取名
+        self._pair_tick(self.state.world.discuss_tally, them.name)
         self._save_season()
         other._write(f"論武・{me.name}", their_msgs)
         if self._draft is None:

@@ -214,6 +214,7 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
     for w in SIDES:
         if w in duel.pending:
             plays[w] = duel.pending[w]
+            getattr(duel, w).acted += 1  # 自己出的這一手（FB-174）
         elif w in duel.proxy_move:
             plays[w] = duel.proxy_move[w]
         else:  # 在場卻逾時沒送：結算時才代出（不給架勢）
@@ -302,7 +303,9 @@ def finish(shared: SharedWorldState, duel: SealDuel, content: Content, result: s
     shard_name = content.seal[duel.shard].name if duel.shard in content.seal else duel.shard
     words = {"challenger": c.name, "holder": h.name, "shard": shard_name, "where": duel.where or "江湖"}
     common = dict(shard=duel.shard, record=duel.record, where=duel.where, lines=list(duel.lines), fresh=h.fresh, edge=round(duel.edge, 1),
-                  proxied=[w for w in SIDES if getattr(duel, w).proxied])
+                  proxied=[w for w in SIDES if getattr(duel, w).proxied],
+                  absent=[w for w in SIDES if getattr(duel, w).proxied and not getattr(duel, w).acted],  # 整場都代打（FB-174）
+                  at=shared.season.time)  # 收場那一刻：兩份戰報照它蓋時刻（FB-175）
     shared.seal_duels = [d for d in shared.seal_duels if d.id != duel.id]
     if shared.seal_duels:
         shared.seal_duels[0].starts_real = now + cfg.muster_seconds
