@@ -363,7 +363,8 @@ def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
     assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
     assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
     fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
-    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
+    # 預設那一層是局勢層：地盤易手開著（正式內容）時多一句誰佔著（出陣探索與地盤設計 4.3）
+    assert fallback["layer"] == f"{mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]}　{mapview.LEGEND_CONTROL}"
 
 
 def test_reports_view_is_empty_with_no_battles(game):

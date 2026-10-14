@@ -1586,6 +1586,7 @@ def validate(c: Content) -> None:
         known(where, cond.members_none, c.characters, "人物")
         known(where, cond.factions, faction_ids, "陣營")
         known(where, cond.factions_none, faction_ids, "陣營")
+        known(where, cond.controlled_by, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         for week in (cond.week_min, cond.week_max):
             need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")

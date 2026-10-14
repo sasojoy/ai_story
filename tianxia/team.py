@@ -502,23 +502,35 @@ def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool =
     return now, cap
 
 
-def heal_cost(content: Content, member) -> int:
+def _price_here(state: GameState | None, content: Content) -> float:
+    """地盤福利（出陣探索與地盤設計 4.3 第 3 點）：自己陣營的地盤便宜、別人的貴；state 是 None（純函式的呼叫）照原價。
+    territory → rules → team：延後 import，避免循環。"""
+    if state is None:
+        return 1.0
+    from . import territory  # noqa: PLC0415
+
+    return territory.price_factor(state.world, content, state.player.faction, state.player.location)
+
+
+def heal_cost(content: Content, member, state: GameState | None = None) -> int:
     """療傷要多少銀兩：按內傷點數計價（氣血設計 §二，預設每 2 點內傷 1 兩，無條件進位）。
 
     刻意只看內傷、不看「目前氣血離上限多遠」——輕傷本來就會自己回，付錢去買它沒有意義
     （改之前就是這樣：療傷等於花錢跳過兩小時的等待，而內傷根本不存在）。
+    state 給了照所在地的地盤福利打折或加價（_price_here）。
     """
     injury = max(0.0, getattr(member, "injury", 0.0))
-    return math.ceil(injury / max(1.0, content.config.heal_neili_per_silver))
+    # 先 round 到小數第 9 位再無條件進位：10 × 1.2 的浮點雜訊（12.000000000000002）不能多收一兩
+    return math.ceil(round(injury / max(1.0, content.config.heal_neili_per_silver) * _price_here(state, content), 9))
 
 
 def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int]:
     """這一次療傷治多少：（治幾點, 收幾兩, 還剩幾點）。銀兩夠就全治（收 heal_cost）；不夠時能治多少治多少
     （PM 2026-10-12：療傷只在醫館之後，窮的人內傷越疊越多、一次付不起就永遠治不了），每一兩治 heal_neili_per_silver 點。"""
-    rate = max(1.0, content.config.heal_neili_per_silver)
+    rate = max(1.0, content.config.heal_neili_per_silver) / _price_here(state, content)
     injury = max(0.0, getattr(member, "injury", 0.0))
     silver = max(0, state.player.stats.get("silver", 0))
-    full = heal_cost(content, member)
+    full = heal_cost(content, member, state)
     if silver >= full:
         return round(injury), full, 0
     points = min(injury, silver * rate)
@@ -528,7 +540,7 @@ def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int
 def heal_problem(state: GameState, content: Content, member, where: str | None = None) -> str | None:
     """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
     where 是呼叫端問過 clinic.problem 的那一句（不在醫館；None＝在醫館或開關關著），排在「氣血無恙」之後、銀兩之前。"""
-    cost = heal_cost(content, member)
+    cost = heal_cost(content, member, state)
     if cost <= 0:
         return "氣血無恙，不用療傷。"
     if where is not None:
