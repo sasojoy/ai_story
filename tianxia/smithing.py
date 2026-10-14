@@ -234,7 +234,7 @@ def forge(
             deed = DIVINE_DEED.format(name=secret.name) if divine else f"江湖上第一個打出名器【{secret.name}】。"
             annals.note(state, content, annals.DEED, deed, 4)
             rule = content.config.forge_secrets
-            text = rule.divine_rumor.format(who=state.player.name) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
+            text = rule.divine_rumor.format(who=state.player.name, unit=equipment.unit_for(item.slot, item.kind)) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
             add_rumor(state, text, None, content=content, named=True)
         fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
     return item, msgs
@@ -250,7 +250,7 @@ def forged_head(item: Equipment, what: str) -> str:
 
 # ---- 神器原品定名（打造隱藏配方設計 5.2；同 cultivation.name_mastered）----
 
-DIVINE_NAMED = "從今以後，江湖上這把神器就叫【{name}】。"  # 待 joy 潤（同絕學定名那一句）
+DIVINE_NAMED = "從今以後，江湖上這{unit}神器就叫【{name}】。"  # 待 joy 潤（同絕學定名那一句；{unit} 照欄位，FB-146）
 NAME_GONE = "（沒有等著你定名的神器。）"  # 待 joy 潤
 NAME_BAD = "這個名字不行：{problem}。"  # 待 joy 潤（同 cultivation.name_mastered）
 NAME_TAKEN = "【{name}】已經有人用了，換一個吧。"  # 待 joy 潤（同 cultivation.name_mastered）
@@ -287,10 +287,11 @@ def name_divine(
     forge_secrets.refresh_names(state.player, content, world)  # 主人自己手上與裝備庫裡的仿品當下跟著改成「仿・新名字」，不等下一次讀檔
     fusion.rename_echo(state, forge_secrets.key_for(item.secret), name)  # 定名之前就有人照著打：首創名望回饋記的名字也換掉（M2）
     rule, who = content.config.forge_secrets, state.player.name
-    add_chronicle(state, rule.named_chronicle.format(who=who, name=name, what=forge_secrets.what_text(item.slot, item.kind)))
+    unit = equipment.unit_for(item.slot, item.kind)
+    add_chronicle(state, rule.named_chronicle.format(who=who, name=name, unit=unit, what=forge_secrets.what_text(item.slot, item.kind)))
     add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
     annals.note(state, content, annals.DEED, DIVINE_NAMED_DEED.format(name=name), 5)
-    return True, [DIVINE_NAMED.format(name=name)]
+    return True, [DIVINE_NAMED.format(name=name, unit=unit)]
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----

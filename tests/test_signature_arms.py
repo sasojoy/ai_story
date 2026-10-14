@@ -136,7 +136,7 @@ def test_a_signature_arm_cannot_be_dismantled(content, world):
     p = game.state.player
     arm = signature_arms.new_arm(game.state, content.gear.signature_arms[0])
     p.weapon, p.rack = Weapon(id="兵:90", name="甲刀", kind="刀", attribute="剛", tier=1, quality="下品"), [arm]
-    assert weapons.dismantle(game.state, content, arm.id) == [equipment.SIGNATURE_KEPT_LINE] and arm in p.rack
+    assert weapons.dismantle(game.state, content, arm.id) == [equipment.SIGNATURE_KEPT_LINE.format(unit=equipment.unit_for("weapon", arm.kind))] and arm in p.rack
     row = weapons._row(arm, None, content, world)
     assert (row["keep"], row["confirm"]) == (equipment.SIGNATURE_KEPT, "")  # 修練頁：鈕灰掉寫原因、沒有問句
     game.choose("act:smith")

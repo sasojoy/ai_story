@@ -117,7 +117,7 @@ def arrival(state: GameState, content: Content, recipe: ForgeSecret, find: GearF
     me = state.player.name
     if recipe.divine:
         if first:
-            lines.append(rule.divine_line)
+            lines.append(rule.divine_line.format(unit=equipment.unit_for(recipe.slot, find.kind)))
         elif find.owner == me:
             lines.append(rule.copy_mine_line)
         else:

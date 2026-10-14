@@ -116,7 +116,7 @@ def wear(state: GameState, content: Content, tier: str) -> list[str]:
 # ---- 鐵匠鋪（4.1～4.7）：買、修、換 ----
 
 NOUNS = {"劍": "劍", "刀": "刀", "槍": "槍", "棍": "棍", "弓弩": "弩", "拳腳": "拳套"}
-UNITS = {"拳腳": "副"}  # 量詞（FB-133、FB-160）：拳套論副，其他兵器論把。待 joy 潤
+UNITS = equipment.WEAPON_UNITS  # 量詞（FB-133、FB-160）：拳套論副，其他兵器論把（表在 equipment，防具與坐騎的也在那裡）
 # 鈍了、還不用修的說法照種類（FB-127：拳套、弩、棍寫「刀口」不通）。待 joy 潤
 DULL = {"劍": "劍鋒鈍了", "刀": "刀口鈍了", "槍": "槍尖鈍了", "棍": "棍頭磨禿了", "弓弩": "弩弦鬆了", "拳腳": "拳套磨薄了"}
 KEEN = {"劍": "劍鋒還利", "刀": "刀口還利", "槍": "槍尖還利", "棍": "棍頭還結實", "弓弩": "弩弦還緊", "拳腳": "拳套還結實"}
@@ -130,7 +130,7 @@ def noun(kind: str) -> str:
 
 def unit(kind: str) -> str:
     """兵器的量詞：拳套一副，其他一把（FB-133、FB-160）。"""
-    return UNITS.get(kind, "把")
+    return equipment.unit_for("weapon", kind)
 
 
 def clashes(weapon: Weapon | None, art: MartialArt | None) -> bool:

@@ -154,3 +154,33 @@ def test_fb160_a_fist_bounty_asks_for_a_pair():
     assert "交出一把屬剛的弩" in bounties.how(None, bow) and bounties.unit_of(bow) == "把"
     art = fist.model_copy(update={"kind": "art", "weapon_kind": None})
     assert bounties.unit_of(art) == "門"
+
+
+# ── FB-146：防具神器的量詞 ──
+
+from test_forge_divine import _forger, divine_content  # noqa: E402,F401（divine_content 是 fixture）
+
+
+def test_fb146_an_armor_divine_piece_is_one_jian_everywhere(divine_content, world):
+    """打出凝波甲：結果句寫「一件」，後面的「這是一把神器」、傳聞「打出了一把神器」、江湖史「打出一把神器（防具）」都是「把」。
+    照欄位換：防具一件，兵器照種類（劍一把）。"""
+    from tianxia import armor, equipment, smithing
+
+    game = _forger(divine_content, world, name="甲")
+    key = "鎧|gang_3+gang_3"
+    coat, msgs = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3",
+                                rng=smithing.own_rng(game.state, key))
+    text = "\n".join(msgs)
+    assert "一件神器" in text and "這一件原品" in text and "一把" not in text
+    rumors = [r.text for r in game.state.world.rumors]
+    assert any("一件神器" in r for r in rumors) and not any("一把神器" in r for r in rumors)
+    spare, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3", rng=smithing.own_rng(game.state, key))
+    armor.wield(game.state, divine_content, spare.id)  # 原品進裝備庫
+    [kept] = armor.dismantle(game.state, divine_content, coat.id)
+    assert "這一件" in kept and "這一把" not in kept
+    ok, named = smithing.name_divine(game.state, divine_content, world, coat.id, "鏡湖")
+    assert ok and "這件神器" in named[0]
+    assert any("打出一件神器（防具）" in r.text for r in game.state.world.chronicle)
+    blade = _forger(divine_content, world, name="乙")
+    _, msgs = smithing.forge(blade.state, divine_content, world, "劍", "gang_3", "gang_3")
+    assert "這是一把神器" in "\n".join(msgs)
