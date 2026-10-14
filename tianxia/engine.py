@@ -6754,8 +6754,13 @@ class Game:
 
     def discuss_request(self, inv, other: Game, item: str) -> naming.NamingRequest | None:
         """論武的 A 段（鎖內、只讀）：答應的那一方出 item、發邀請的那一方出邀請上那一樣，這一爐要不要模型取名或挑？
-        要就回單子（伺服器在鎖外交給 naming.generate，假人程式交給 bot_runner），不要是 None。"""
-        if inv is None or inv.kind != "discuss" or item not in dict(self.discuss_items()):
+        要就回單子（伺服器在鎖外交給 naming.generate，假人程式交給 bot_runner），不要是 None。
+        C 段（_discuss）一定會擋的先問（discuss_invite_problem、discuss_item_problem：他正忙、論滿了、你挑的那一樣合不成……）：
+        成不了就不開單、不叫模型，呼叫端照「不必取名」直接走 C 段，回的話、邀請作廢與通知都同以前，只是不等模型（FB-245）。
+        C 段照樣重驗（A 到 C 之間狀態可能變）。"""
+        if inv is None or inv.kind != "discuss":
+            return None
+        if self.discuss_invite_problem(inv, other) is not None or self.discuss_item_problem(inv, other, item) is not None:
             return None
         art_id, insight_ids, other_art, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art, partner=partner)

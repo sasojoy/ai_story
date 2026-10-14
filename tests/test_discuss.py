@@ -9,7 +9,7 @@ import random
 import pytest
 
 from conftest import FixedRandom, install_season_one
-from tianxia import bot_policy, fusion, invites, library, naming, social
+from tianxia import bot_policy, engine, fusion, invites, library, naming, social
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight
@@ -229,6 +229,115 @@ def test_the_server_names_it_outside_the_lock(pair, monkeypatch):
     assert server.prepare_peer(game, "甲", "discuss", params) == NAME
     assert server.prepare_peer(game, "甲", "spar", {"arg": "invite"}) is None  # 切磋不用模型
     assert server.prepare_peer(game, "甲", "discuss", {"arg": "no"}) == server.NO_NAME
+
+
+# ── FB-245：答應論武時這一張邀請已經成不了，不開取名單子、不叫模型，直接回原本那一句 ──
+
+
+class CountingClient:
+    """假模型：每叫一次記一筆，回一個取得到的名字（真的被叫到就看得出來）。naming 用 copy.copy 複本，calls 是同一個串列。"""
+
+    timeout = 30.0
+    retry = True
+
+    def __init__(self):
+        self.calls = []
+
+    def chat_structured(self, messages, schema, required_fields=None):
+        self.calls.append(messages)
+        return schema(name=NAME[0], description=NAME[1])
+
+
+@pytest.fixture
+def no_ollama(monkeypatch):
+    """不准碰模型的 port：Game 建 client 一律是 None（各測試自己給假 client）。"""
+    from tianxia.ollama_client import OllamaClient
+
+    monkeypatch.setattr(OllamaClient, "from_config", classmethod(lambda cls, cfg: None))
+
+
+def _answer_like_the_server(content, world, monkeypatch, item="insight:huo"):
+    """照伺服器答應論武的三段走一次：A、B 是 server.prepare_peer（A 段鎖內開單、B 段鎖外取名），C 是 peer_act。
+    模型換成數次數的假 client。回傳（回話, 模型被叫了幾次）。"""
+    import server
+
+    monkeypatch.setattr(server, "_open_request", lambda g, open_it: (server._monotonic(), open_it()))
+    fake = CountingClient()
+
+    def answer(game):
+        game.client = fake
+        params = {"arg": f"yes:{item}"}
+        proposed = server.prepare_peer(game, "甲", "discuss", params)
+        return game.peer_act("甲", "discuss", {**params, "proposed": proposed})
+
+    return _do(content, world, "乙", answer)[0], len(fake.calls)
+
+
+def _change(world, name, edit):
+    state = _load(world, name)
+    edit(state.player)
+    CharacterStore(world.db).save(state)
+
+
+def test_fb245_a_discussion_that_can_go_ahead_still_asks_the_model_once(pair, no_ollama, monkeypatch):
+    content, world = pair
+    _invite(content, world)  # 甲出【粗淺拳腳】，乙出「火」：新配方，要取名
+    request = _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:insight:huo"}))[0]
+    assert isinstance(request, naming.NamingRequest)
+    msgs, calls = _answer_like_the_server(content, world, monkeypatch)
+    assert calls == 1 and "烈焰拳" in msgs[0] and world.get_season().invites == []
+
+
+@pytest.mark.parametrize("why", ["busy", "tired", "full", "item_gone"])
+def test_fb245_a_lapsed_invitation_is_refused_without_the_model(pair, no_ollama, monkeypatch, why):
+    """邀請本身成不了（他正忙、體力不夠、這一對今天論滿了、他要出的那一樣沒了）：A 段不開單（回 None），模型一次都不叫；
+    回給你的那一句、邀請作廢、他江湖紀錄裡那一句都跟以前一樣（C 段照舊擋）。"""
+    content, world = pair
+    _invite(content, world)
+    cost = _do(content, world, "甲", lambda g: g._discuss_cost())[0][1]
+    if why == "busy":
+        _change(world, "甲", lambda p: setattr(p, "busy_until", 1e9))  # 閉關中，同「進了鐵匠鋪」：選單上沒有探索
+        mine, theirs = "甲此刻正忙，騰不出手來論武。", "你此刻正忙，騰不出手來論武。"
+    elif why == "tired":
+        _change(world, "甲", lambda p: setattr(p, "stamina", 0.0))
+        mine, theirs = f"甲體力不夠（論武要 {cost} 點）。", f"你體力不夠（論武要 {cost} 點）。"
+    elif why == "full":
+        cap = content.config.discuss_per_pair_day
+        _do(content, world, "乙", lambda g: [g._pair_tick(g.state.world.discuss_tally, "甲") for _ in range(cap)])
+        mine = theirs = _do(content, world, "乙", lambda g: social.pair_full(g, "discuss"))[0]
+    else:
+        _change(world, "甲", lambda p: setattr(p, "member", p.member.model_copy(update={"wugong_id": None})))
+        mine, theirs = "甲身上已經沒有他要出的那一樣了。", "你身上已經沒有要出的那一樣了。"
+    assert _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:insight:huo"}))[0] is None
+    msgs, calls = _answer_like_the_server(content, world, monkeypatch)
+    assert calls == 0 and msgs == [mine]
+    assert world.get_season().invites == []
+    head = _load(world, "甲").journal[0]
+    assert (head.title, head.lines) == ("論武不成・乙", [engine.INVITE_LAPSED.format(who="乙", what="論武"), theirs])
+    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛")) is None
+
+
+@pytest.mark.parametrize("why", ["same", "same_insight", "their_side"])
+def test_fb245_a_pick_that_cannot_fit_is_refused_without_the_model(content, world, no_ollama, monkeypatch, why):
+    """你挑的那一樣合不成（跟他出的是同一樣、他那邊合不成）：一樣不開單、不叫模型，回原本那一句，邀請留著換一樣再答。
+    同一個意境兩邊各出一個：一個人合併同一個意境是可以的（fusion.merge_problem 不擋），以前會先開單取名才回「同一樣」。"""
+    install_season_one(content)
+    content.config.auto_open_first_season = True
+    _make(content, world, "甲", insights=("feng",))
+    _make(content, world, "乙", insights=("huo", "feng"))  # 兩個人都有【粗淺拳腳】、「風」
+    _invite(content, world, "insight:feng" if why == "same_insight" else "art:basic_fist")
+    if why == "same":
+        item, line = "art:basic_fist", engine.DISCUSS_SAME
+    elif why == "same_insight":
+        item, line = "insight:feng", engine.DISCUSS_SAME
+    else:
+        _change(world, "甲", lambda p: p.stats.__setitem__("xinde", 0))
+        item, line = "insight:huo", "甲那邊合不成：他的心得不夠。"
+    assert _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": f"yes:{item}"}))[0] is None
+    msgs, calls = _answer_like_the_server(content, world, monkeypatch, item)
+    assert calls == 0 and msgs == [line]
+    assert len(world.get_season().invites) == 1  # 換一樣再答
+    assert not any(e.title.startswith("論武不成") for e in _load(world, "甲").journal)
 
 
 def test_nothing_while_the_switch_is_off(content, world):

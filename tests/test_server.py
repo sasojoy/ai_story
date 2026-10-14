@@ -6710,6 +6710,43 @@ def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
     assert "沒有跟著誰" in left["message"]
 
 
+def test_fb245_answering_a_discussion_while_he_is_busy_does_not_call_the_model(content, world, client, monkeypatch):
+    """FB-245：/api/peer/act 答應論武，發邀請的那個人正忙（這一張邀請已經成不了）：prepare_peer 的 A 段不開取名單子，模型一次都不叫，
+    直接回「他此刻正忙」那一句、邀請作廢；他閒下來之後再邀、再答，照舊叫一次模型取名。測試內容的兩個角色（同 test_discuss），
+    端點的拿鎖、存檔那一套（act、look、_open_request）換成直接做，prepare_peer、peer_act 照真的走。"""
+    from test_discuss import NOW, CountingClient, _change, _invite, _load, _make
+
+    from conftest import install_season_one
+    from tianxia.characters import CharacterStore
+
+    monkeypatch.setattr(OllamaClient, "from_config", classmethod(lambda cls, cfg: None))  # 不准碰模型的 port
+    install_season_one(content)
+    content.config.auto_open_first_season = True
+    _make(content, world, "甲", insights=("feng",))
+    _make(content, world, "乙", wugong="fist", insights=("huo",))
+    _invite(content, world)  # 甲出【粗淺拳腳】；乙出「火」是新配方，成得了就要取名
+    _change(world, "甲", lambda p: setattr(p, "busy_until", 1e9))  # 閉關中：選單上沒有探索，同進了鐵匠鋪
+    fake = CountingClient()
+    game = Game(content, CharacterStore(world.db).load("乙"), random.Random(0), world)
+    game.client = fake
+    game.sync(NOW)
+    monkeypatch.setattr(server, "_game", lambda request: game)
+    monkeypatch.setattr(server, "act", lambda g, action, **k: action(g))
+    monkeypatch.setattr(server, "look", lambda g, view: view(g) if view is not server.main_view else None)
+    monkeypatch.setattr(server, "_open_request", lambda g, open_it: (server._monotonic(), open_it()))
+    monkeypatch.setattr(server, "_tell_tabs", lambda g: None)
+    answer = {"name": "甲", "action": "discuss", "arg": "yes:insight:huo"}
+    r = client.post("/api/peer/act", json=answer).json()
+    assert fake.calls == [] and r["brief"] == "甲此刻正忙，騰不出手來論武。" and r["message"] == f"<p>{r['brief']}</p>\n"
+    assert world.get_season().invites == [] and _load(world, "甲").journal[0].title == "論武不成・乙"
+    _change(world, "甲", lambda p: setattr(p, "busy_until", None))  # 他閒下來了：再邀、再答，這一次照舊取名
+    game.state.world = world.get_season()
+    _invite(content, world)
+    game.state.world = world.get_season()
+    r = client.post("/api/peer/act", json=answer).json()
+    assert len(fake.calls) == 1 and "烈焰拳" in r["message"]
+
+
 def test_the_fingerprint_follows_the_seal_duel_but_not_who_was_seen():
     """奪璽單挑：回合 +1、親自出了一手，指紋變；last_seen（每 15 秒就可能動一次）變了不算（5.10）。"""
     world = open_world()
