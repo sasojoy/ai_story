@@ -41,7 +41,7 @@ def test_the_notes_sit_under_the_action_row_in_cell_order():
     rows = re.findall(r"<p><b>(.*?)</b>(.*?)</p>", block.group(1))
     assert rows[0] == ("探索", notes["act:explore"])  # 照格子的順序、冠格子上的名字
     for name, text in rows:
-        assert text in notes.values() and name in ("探索", "遊歷", "操練", "交友", "求見")
+        assert text in notes.values() and name in ("探索", "遊歷", "操練", "出陣・攻", "出陣・守", "出陣・攪局", "交友", "求見")
     assert page.index('class="act-notes"') > bar_end  # 在行動列後面：不推動「剛剛」、場景與整排行動
 
 

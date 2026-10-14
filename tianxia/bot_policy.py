@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, team
+from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -33,6 +33,7 @@ CHALLENGE_ODDS = bot.CHALLENGE_ODDS  # 假人只挑這兩種勝算的人物（�
 ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
+STIR_SCORE = 1.1  # 豪強攪局（出陣探索與地盤設計第七節）：沒有陣營目標算不出大勢分，給一個比探索高一點的底分（只有豪強假人做）
 # 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
 SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
@@ -621,11 +622,15 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return BOUNTY_SCORE
         if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
             return None
-        if arg == "train":
+        if arg == "train":  # 出陣（關著時遊歷）
             if _crippled(game):
                 return None
-            s = game.state
-            bonus = ORDER_SCORE if orders.win_counts(s, game.content, s.player.faction, s.player.location) else 0.0
+            s, c = game.state, game.content
+            if sortie.on(c) and game.sortie_mode() == "stir":
+                return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
+            bonus = ORDER_SCORE if orders.win_counts(s, c, s.player.faction, s.player.location) else 0.0
+            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, s.player.faction, s.player.location):
+                bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
@@ -651,9 +656,14 @@ def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | 
 
 
 def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> float:
-    """在這個地點（預設所在地）遊歷對自己陣營的大勢分（同 effect_score 的一點抵十分）。"""
+    """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
+    不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
-    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
+    if sortie.on(game.content):
+        pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
+    else:
+        pushes = game.train_trend_push(loc_id)
+    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in pushes.items())
 
 
 def _toward_battle(game: Game) -> list[str] | None:

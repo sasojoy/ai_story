@@ -1268,6 +1268,11 @@
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
   const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑一位" };  // 求見先打開名單挑人（FB-044：以前又寫一次「求見」；挑了人才花體力）
   const TALKED_OUT = "已經談滿", TALKED_OUT_SUB = "已談滿";  // 談滿了的求見（Game._talked_out_note 的開頭）在行動列格子裡的短說法（待 joy 潤）
+  // 出陣（出陣探索與地盤設計第二節）：出陣開著時（m.sortie）遊歷那一格叫「出陣」，散人、不在戰線上的地點沒有出陣鈕時灰著寫「不在戰線」（待 joy 潤）
+  const SORTIE_CELL = { name: "出陣", none: "不在戰線" };
+  const SORTIE_LEFT = /今日還能 (\d+) 次/; // 鈕上的「今日還能 N 次」：格子小字寫「今日 N 次」
+  const SORTIE_USED = /^今日已出陣/;
+  const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -1425,7 +1430,8 @@
     const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
-    const cells = ACT_CELLS.map((d) => {
+    const cells = ACT_CELLS.map((d0) => {
+      const d = d0.key === "train" && m.sortie ? { ...d0, ...SORTIE_CELL } : d0;
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
       if (o) used.add(o.id);
       if (!shown(`act:${d.key}`) || (d.key === "rest" && !o)) return "";
@@ -1438,8 +1444,11 @@
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       // 談滿了的求見（「已經談滿 3 輪，第 1 週・週日 00:00 之後再來」）：最後一小句是換日的那一刻，格子裝不下會被切成碎片，
       // 格子只寫「已談滿」，整句在底下那一行（Game.action_notes，day-scale 審查 I1）
-      const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
+      // 出陣：小字寫今天還剩幾次（「今日 5 次」，體力在鈕上、說明那一行也有）；用完了寫「今日已滿」，什麼時候再來在底下那一行
+      const left = SORTIE_LEFT.exec(detail);
+      const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : lone && detail.startsWith(TALKED_OUT) ? TALKED_OUT_SUB
+        : SORTIE_USED.test(detail) ? SORTIE_FULL_SUB
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
       // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）
@@ -3944,6 +3953,7 @@
     explore: "四下探看，尚無動靜……", train: "循著蹤跡尋敵……", rest: "調息入定……", meet: "遣人通報，候他回話……",
     move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
     discuss: "兩人各陳所學，推敲新招……", // 論武答應、等首創取名（FB-117；待 joy 潤）
+    sortie: "整隊出陣，候前方回報……", // 出陣開著時的 act:train（出陣探索與地盤設計第七節；待 joy 潤）
   };
   const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
   const SLOW_WAITING = "路遠消息遲，再等片刻……";
@@ -3952,7 +3962,7 @@
   function waitLineFor(id) {
     const key = String(id || "");
     if (key === "act:explore") return WAIT_LINES.explore;
-    if (key === "act:train") return WAIT_LINES.train;
+    if (key === "act:train") return S.main && S.main.sortie ? WAIT_LINES.sortie : WAIT_LINES.train; // 出陣開著（m.sortie）換一句
     if (key === "act:rest") return WAIT_LINES.rest;
     if (key === "act:socialize" || key.startsWith("call:") || key.startsWith("talk:")) return WAIT_LINES.meet;
     if (key.startsWith("move:") || key.startsWith("road:")) return WAIT_LINES.move;

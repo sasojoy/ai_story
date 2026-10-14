@@ -62,7 +62,7 @@ from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, team, timetable, treasures,
+    seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -990,6 +990,8 @@ def _main_view_body(game: Game) -> dict:
         "quest": quest,
         "scene": scene,
         "options": [o.model_dump() for o in options],
+        # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
+        "sortie": sortie.on(game.content),
         # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
         "action_notes": game.action_notes(o.id for o in options),
         # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
