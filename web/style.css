@@ -1446,8 +1446,8 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .paper .hand-in { display: grid; gap: 6px; }
 .shop-board .paper .hand-in .btn { text-align: left; }
 .shop-layer .paper .btn.ghost { color: #2a241d; border-color: #c9ad7c; } /* 紙底（第一批的淡框鈕是暗底的顏色） */
-.shop-board .board-stamp { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  pointer-events: none; color: #f2e5c6; animation: stampfade 1.4s ease-out forwards; }
-.shop-board .stamp.big { position: static; transform: rotate(-8deg); padding: 6px 14px; border-width: 4px; font-size: 34px; }
-@keyframes stampfade { 0% { opacity: 0; transform: scale(1.4); } 20% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .shop-board .board-stamp { animation: none; } }
+/* 交差（企劃者 2026-10-14 微調）：被交掉的那張告示本身蓋「交差」，停一下再跟著告示淡出；減少動態效果不淡出，時間到直接拿掉 */
+.shop-board .note.done { animation: notedone 1.4s ease-in forwards; }
+.shop-board .note.done .stamp { padding: 3px 6px; border-width: 3px; font-size: 15px; }
+@keyframes notedone { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }

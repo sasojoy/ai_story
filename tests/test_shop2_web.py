@@ -186,7 +186,7 @@ def test_a_hand_in_stamps_the_note_done(board):
       H.render(); const was = H.S.main.shop; H.setMain(H.S.next);
       H.boardHanded("bounty:give:%s:兵:1", was);
       return { stamp: H.S.boardStamp, html: T.els.app.innerHTML };""" % arms, S={"next": after})
-    assert out["stamp"]["id"] == arms and "交差" in out["html"]
+    assert out["stamp"]["id"] == arms and '<i class="stamp">交差</i>' in out["html"]  # 2026-10-14 微調：蓋在那張告示上
 
 
 def test_a_refused_hand_in_does_not_stamp(board):
@@ -204,7 +204,7 @@ def test_the_stamp_and_notes_respect_reduced_motion():
     from pathlib import Path
 
     css = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
-    assert "@media (prefers-reduced-motion: reduce) { .shop-board .board-stamp { animation: none; } }" in css
+    assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css  # 2026-10-14 微調
 
 
 # ── Task 7：FB-191 ──
@@ -285,7 +285,7 @@ def test_the_market_and_board_css_stays_inside_its_shop():
     """終審 I1：懸賞榜的 .board 規則沒限定在店裡，撞到江湖頁「大事」那一顆（.peek-chip.board）與它的面板，兩個都被排成兩欄。
     馬市、懸賞榜那兩段的每一條規則都要掛在 .shop-layer／.shop-market／.shop-board 底下。"""
     css = _css()
-    block = css[css.index("/* 馬市（第三節）"):css.index("@keyframes stampfade")]
+    block = css[css.index("/* 馬市（第三節）"):css.index("@keyframes notedone")]
     loose = []
     for line in block.splitlines():
         text = line.strip()

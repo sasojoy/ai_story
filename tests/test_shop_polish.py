@@ -95,3 +95,41 @@ def test_the_board_css_matches_the_mockup(content, world):
         assert f".shop-board .note.k-{kind} .tag" in css and color in css[css.index(f".shop-board .note.k-{kind} .tag"):][:200]
     sheet = _rule(css, ".shop-board .board-sheet")
     assert "position: absolute" in sheet and "bottom: 12px" in sheet and "max-height:" in sheet and "overflow-y: auto" in sheet
+
+
+# ── 3：交差朱印蓋在那張告示上 ──
+
+
+def test_a_handed_in_notice_is_stamped_in_place_then_fades(content, world):
+    """企劃者 2026-10-14 微調：被交掉的那張告示本身蓋上「交差」，停一下再跟著告示淡出，不再在畫面正中間蓋大印。
+    那張還畫在原本的位置（伺服器那一份已經沒有它），點不了。"""
+    import server
+    from test_shop2 import ARMS, SCOUT, SWORD, _board
+    from test_shop2_web import run
+
+    from tianxia.state import Equipment
+
+    game = _board(content, world, [SCOUT, ARMS], name="交差客")
+    game.state.player.rack = [Equipment(**SWORD)]
+    scout, arms = (b.id for b in game.state.world.bounties)
+    game.choose(f"bounty:pick:{arms}")
+    before = server.main_view(game)
+    game.choose(f"bounty:give:{arms}:兵:1")
+    after = server.main_view(game)
+    out = run(before, """
+      H.render(); const was = H.S.main.shop; H.setMain(H.S.next);
+      H.boardHanded("bounty:give:%s:兵:1", was);
+      return T.els.app.innerHTML;""" % arms, S={"next": after})
+    assert 'class="note k-arms done"' in out and '<i class="stamp">交差</i>' in out and "board-stamp" not in out
+    assert out.index('class="note k-arms done"') < out.index(f'data-id="{scout}"')  # 原本排在前面的位置
+    done = out[out.index('class="note k-arms done"') - 5:]
+    assert 'data-act="board-zoom"' not in done[:done.index("</div>")]
+
+
+def test_the_stamp_fades_with_the_note_unless_motion_is_reduced():
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    assert "animation: notedone" in _rule(css, ".shop-board .note.done")
+    assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css
+    assert ".board-stamp" not in css and "stampfade" not in css

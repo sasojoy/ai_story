@@ -83,7 +83,7 @@
     shopMore: false, // 裝備庫頁按了「再列 N 件」
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
-    boardStamp: null, // 剛交差的那一張：{ id, title }，蓋「交差」朱印、淡出之後清掉（boardHanded）
+    boardStamp: null, // 剛交差的那一張：{ id, note, at }（交出之前那一份告示與它排第幾），照原本的位置蓋「交差」、淡出之後清掉（boardHanded）
     divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
@@ -2560,13 +2560,20 @@
       + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
     // 告示照草圖寫得很短（企劃者 2026-10-14 微調）：種類・哪一方（色塊小標籤）、目標、期限與名額，重賞、你有幾件合用各一個小字；
     // 要做什麼與賞寫在點開的紙上
-    const note = (n) => `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
-        <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
+    const face = (n) => `<span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
         ${n.prize ? `<small class="prize">${esc(n.prize)}</small>` : ""}${n.have ? `<small class="prize">${esc(n.have)}</small>` : ""}
-        <small class="due">${esc(n.due)}</small>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
-    const board = shop.notes.length ? `<div class="board">${shop.notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
+        <small class="due">${esc(n.due)}</small>`;
+    const note = (n) => (n.done
+      ? `<div class="note k-${esc(n.kind)} done">${face(n)}<i class="stamp">交差</i></div>`
+      : `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
+        ${face(n)}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`);
+    // 剛交差的那一張（boardHanded）：伺服器那一份已經沒有它，照原本的位置再畫一下、蓋「交差」，跟著淡出（企劃者 2026-10-14 微調）
+    const notes = shop.notes.slice();
+    const done = S.boardStamp && !notes.some((n) => n.id === S.boardStamp.id) ? S.boardStamp : null;
+    if (done) notes.splice(Math.min(done.at, notes.length), 0, { ...done.note, done: true });
+    const board = notes.length ? `<div class="board">${notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
     return `<div class="shop-body${zoom ? " zooming" : ""}"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
-      ${zoom ? paperHtml(zoom, shop) : ""}${S.boardStamp ? stampHtml(S.boardStamp) : ""}`;
+      ${zoom ? paperHtml(zoom, shop) : ""}`;
   }
 
   // 放大的那一張紙：完整的要求、賞、期限與名額，底下的鈕照那一張（第三層開著：合用的東西一件一顆，每顆照選單上的 confirm 先問一次）
@@ -2586,10 +2593,6 @@
         <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
         <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}<p class="reward">賞：${esc(n.reward)}</p><p class="due">${esc(n.due)}</p>
         ${btns}</article></div>`;
-  }
-
-  function stampHtml(stamp) {
-    return `<div class="board-stamp" aria-live="polite"><i class="stamp big">交差</i><small>${esc(stamp.title)}</small></div>`;
   }
 
   // 第三層（替一張求藝、求兵挑東西）開著時選單上只有那一張的交出鈕與「回到懸賞榜」：放大別張、收起、出店之前先送 bounty:unpick
@@ -2614,15 +2617,15 @@
     const shop = S.main && S.main.shop;
     if (shop && shop.shop === "board") await choose(el, shop.back);
   }
-  // 交差之後（第四節）：送了 bounty:give:<懸賞>:…、回來的木板上沒有那一張了（自己交過的不再列），蓋「交差」朱印再淡出
-  // （減少動態效果的人不跑淡出，時間到照樣收掉）。被拒絕的（那一張還在）不蓋
+  // 交差之後（第四節；企劃者 2026-10-14 微調）：送了 bounty:give:<懸賞>:…、回來的木板上沒有那一張了（自己交過的不再列），
+  // 那張告示照原本的位置再畫一下、本身蓋「交差」，停一下跟著淡出（減少動態效果的人不淡出，時間到直接拿掉）。被拒絕的（那一張還在）不蓋
   const STAMP_MS = 1400;
   function boardHanded(id, before) {
     const shop = S.main && S.main.shop;
     const bid = id.split(":")[2];
-    const was = before && before.shop === "board" ? before.notes.find((n) => n.id === bid) : null;
-    if (!was || !shop || shop.shop !== "board" || shop.notes.some((n) => n.id === bid)) return;
-    S.boardStamp = { id: bid, title: was.title };
+    const at = before && before.shop === "board" ? before.notes.findIndex((n) => n.id === bid) : -1;
+    if (at < 0 || !shop || shop.shop !== "board" || shop.notes.some((n) => n.id === bid)) return;
+    S.boardStamp = { id: bid, note: before.notes[at], at };
     S.boardZoom = null;
     renderShop();
     setTimeout(() => {
