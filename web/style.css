@@ -698,6 +698,31 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .lib-filter button { flex: none; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
 .lib-filter button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .lib-more { margin: -4px 0 12px; }
+/* 批量熔煉（修練頁功法庫）：每一列前面一個勾，底下浮一條「熔掉 N 樣」 */
+.label .melt-mode { order: 3; font-size: 13px; letter-spacing: 0; padding: 4px 2px; }
+.melt-hint { margin: 0 2px 8px; }
+.melt-tools { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: none; margin: 0 0 8px; padding-bottom: 2px; font-size: 13px; color: var(--ink-2); }
+.melt-tools > span { flex: none; }
+.melt-tools button { flex: none; min-height: 34px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.melt-tools button.on { border-color: #b23a2b; color: #b23a2b; }
+.pick .tick { flex: none; width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--ink-2); display: inline-grid; place-items: center; font-style: normal; background: var(--card); }
+.pick.on .tick { background: #b23a2b; border-color: #b23a2b; }
+.pick.on .tick::before { content: "✓"; color: #fff; font-size: 13px; font-weight: 700; line-height: 1; }
+.lib button.libr.pick::after { content: none; }
+.lib button.libr.pick.on { background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+.lib button.libr.pick:disabled { opacity: 0.55; cursor: default; }
+.ins button.pick { display: inline-flex; align-items: center; gap: 6px; }
+.ins button.pick .tick { width: 16px; height: 16px; border-radius: 4px; }
+.ins button.pick.on { border-color: #b23a2b; background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+.melt-go {
+  position: fixed; left: 12px; right: 12px; bottom: calc(62px + var(--bottom)); z-index: 19; max-width: 616px; margin: 0 auto; padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--card) 96%, transparent); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.melt-gap { height: 72px; }
+.melt-go > span { flex: 1; min-width: 0; font-size: 14px; }
+.melt-go > span small { display: block; color: var(--ink-2); font-size: 12px; }
+.melt-go .btn { flex: none; width: auto; min-height: 42px; padding: 6px 16px; }
 /* 意境：一顆一顆的籤，點一下底下攤開說明 */
 .ins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .ins button { min-height: 38px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: var(--card); color: var(--ink); cursor: pointer; }

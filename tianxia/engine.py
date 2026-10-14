@@ -76,6 +76,7 @@ OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
+MELT_MANY_PROLOGUE = "這裡照師父說的，一門一門熔。"  # 序章裡不給批量熔煉（序章的熔煉是教學的一步）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -6312,6 +6313,20 @@ class Game:
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
             return msgs
         return self._log(msgs)
+
+    @_not_while_preparing
+    def melt_many(self, art_ids: list[str], insight_ids: list[str]) -> list[str]:
+        """批量熔煉（見 library.melt_many）：修練頁勾好的武學與意境一次熔完，寫一則江湖紀錄。
+        序章裡一門一門照師父說的熔（序章的熔煉是教學的一步），這裡直接回一句。"""
+        if prologue_rules.melt_only(self.state, self.content) is not None or (
+            insight_ids and prologue_rules.melt_insight_problem(self.state, self.content) is not None
+        ):
+            return self._log([MELT_MANY_PROLOGUE])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_many(self.state, self.content, self.world, art_ids, insight_ids))
+        if library.held_count(self.state) < held:
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
 
     @_not_while_preparing
     def melt_insight(self, insight_id: str) -> list[str]:

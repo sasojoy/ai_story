@@ -330,6 +330,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else melt_note(value),
+                "value": value,  # 熔了退多少心得（批量熔煉合計用）
                 # 熔煉鈕按下去的確認框問什麼：整句在這裡寫好（W9 的直話＋FB-081 的去哪裡重學，見 library.melt_confirm）；熔不掉的沒有
                 "confirm": melt_confirm(art.name, value, relearn) if stuck is None else "",
             },
