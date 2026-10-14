@@ -802,16 +802,16 @@ def test_map_place_detail_hides_other_sides_orders(on):
 
 
 def test_no_siege_where_the_enemy_has_no_squad(on):
-    """T6 審查 I2：潁川汝南沒有任何一支官軍隊伍，黃巾在那裡打不贏「敵方陣營的隊伍」，攻城永遠湊不滿：不發。
-    假人也只往打得到敵方隊伍的地點走、只在那裡把遊歷算成攻城。"""
-    assert orders.siege_places(on, "huang", "yingru") == []
+    """T6 審查 I2：沒有任何一支官軍隊伍的戰線，黃巾在那裡打不贏「敵方陣營的隊伍」，攻城永遠湊不滿：不發。
+    假人也只往打得到敵方隊伍的地點走、只在那裡把遊歷算成攻城。FB-184 之後潁川汝南有了官軍大營（整支官軍），黃巾在那裡攻得了城。"""
+    assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
     assert "nanyang_wilds" in orders.siege_places(on, "huang", "nanyang")
     assert "changshe" in orders.siege_places(on, "guan", "yingru")
     game = _game(on, faction="huang", at="changshe")
     _fronts(game, 55, 55, 55)
     _at_week(game, 1)
     _issue_now(game)
-    assert ("siege", "yingru") not in _kinds(game, "huang") and len(_kinds(game, "huang")) == 3
+    assert ("siege", "yingru") in _kinds(game, "huang") and len(_kinds(game, "huang")) == 3  # FB-184：潁川汝南有官軍大營了
     game.state.world.orders = []  # 只看攻城這一道
     _order(game, "siege", "huang", front="nanyang")
     assert not orders.win_counts(game.state, on, "huang", "xinye")  # 新野在南陽、但沒有官軍隊伍
