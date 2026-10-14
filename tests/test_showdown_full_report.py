@@ -10,7 +10,7 @@ import re
 from test_fb120_battle_fold import battle, node, run  # noqa: F401（battle 是 fixture）
 
 import server
-from tianxia import battlelog
+from tianxia import battlelog, engine
 from tianxia.state import BattleRecord
 
 
@@ -86,3 +86,40 @@ def test_the_report_page_puts_big_battles_first_and_folds_every_round(battle):
 def repr_js(value):
     import json
     return json.dumps(value, ensure_ascii=False)
+
+
+def test_a_washed_out_showdown_report_comes_back_once(battle):
+    """以前決戰跟遊歷共用 20 場、被洗掉的（PM 2026-10-14，那一場 14 位真人有 6 位被洗掉）：同步時照 battles 表補回來，只補一次。"""
+    _, fighter = battle
+    record = _finish(fighter)
+    silver = fighter.state.player.stats.get("silver", 0)
+    fighter.state.battles = [r for r in fighter.state.battles if r.kind != "showdown"]
+    fighter.state.player.showdowns_restored = 0
+    fighter.sync(fighter.now)
+    back = [r for r in fighter.state.battles if r.kind == "showdown"]
+    assert len(back) == 1 and back[0].battle_ref == record.battle_ref and back[0].log
+    assert engine.RESTORED_NOTE in back[0].notes and back[0].tier == record.tier
+    assert fighter.state.player.stats.get("silver", 0) == silver  # 軍餉不再發
+    fighter.state.player.showdowns_restored = 0
+    fighter.sync(fighter.now)
+    assert len([r for r in fighter.state.battles if r.kind == "showdown"]) == 1
+
+
+def test_an_old_report_without_a_ref_is_not_doubled(battle):
+    _, fighter = battle
+    record = _finish(fighter)
+    record.battle_ref = None  # 這一版以前收到的：照戰名與收場時刻認
+    fighter.state.player.showdowns_restored = 0
+    fighter.sync(fighter.now)
+    assert len([r for r in fighter.state.battles if r.kind == "showdown"]) == 1
+
+
+def test_the_report_rereads_the_battle_for_tales_written_later(battle):
+    _, fighter = battle
+    record = _finish(fighter)
+    store = fighter.world
+    battle_now = store.ended_battle(record.battle_ref)
+    battle_now.narrative_log[-1] += "\n參戰乙這一搏後來補上的劇情。"
+    with store.db.transaction() as conn:
+        conn.execute("UPDATE battles SET data = ? WHERE id = ?", (battle_now.model_dump_json(exclude={"record_id", "rounds"}), record.battle_ref))
+    assert "後來補上的劇情" in fighter.battle_detail(record.id)
