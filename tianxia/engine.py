@@ -21,7 +21,7 @@ from . import (
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
-    social, styles, team, territory, timetable, traits, treasures, weapons, zh,
+    social, sortie, styles, team, territory, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
@@ -1031,15 +1031,22 @@ class Game:
         loc = c.locations[s.player.location]
         cost = self._action_costs()
         opts = [self._cost_option("act:explore", "探索", cost["explore"])]
-        if self._train_squad_ids(loc):
-            # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
-            # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
-            # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
-            #
-            # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
-            # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
-            # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-            opts.append(self._train_option(loc, cost["train"], odds))
+        if prologue_rules.active(s, c) or not sortie.on(c):
+            if self._train_squad_ids(loc):
+                # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
+                # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
+                # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
+                #
+                # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
+                # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
+                # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
+                # 序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），出陣開著時鈕上寫「雪恥」（出陣探索與地盤）
+                name = sortie.PROLOGUE_FIGHT if sortie.on(c) else "遊歷"
+                opts.append(self._train_option(loc, cost["train"], odds, name=name))
+        else:
+            option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
+            if option is not None:
+                opts.append(option)
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
@@ -1207,8 +1214,8 @@ class Game:
             return Option(id="act:socialize", label=f"交友（{SNUB_NOTE}）", enabled=False)
         return self._cost_option("act:socialize", "交友", cost)
 
-    def _train_option(self, loc: Location, cost: int, odds: bool) -> Option:
-        """遊歷的按鈕。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
+    def _train_option(self, loc: Location, cost: int, odds: bool, name: str = "遊歷", tail: str = "") -> Option:
+        """遊歷的按鈕（name：出陣的攻寫「出陣・攻」、序章寫「雪恥」；tail：出陣的「今日還能 N 次」，接在體力後面）。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
         不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。
         這一趟會是大場面（備料挑到的那一路，見 _train_pick）時，按下去要等模型判讀：wait 寫「兩人對峙……」。"""
         squads = [self.content.squads[sid] for sid in self._train_squad_ids(loc)]
@@ -1218,7 +1225,7 @@ class Game:
         note = self._train_note(foes, odds and prologue_rules.fight_tier(self.state, self.content) is None)  # 序章的勝負寫好了，不標勝算
         if len(foes) < len(squads):
             note += "・或與自己人操練"
-        option = self._cost_option("act:train", "遊歷", cost, note=note)
+        option = self._cost_option("act:train", name, cost, note=f"{tail}・{note}" if tail else note)
         if "必敗" in note.split("・"):  # FB-095：剛出師的人疾行到敵營按遊歷，三場就掉三分之一的銀兩
             ride = mounts.escape(self.state, self.content)  # 騎著馬策馬脫身的機會（5.11）：_lose_silver 擲的就是它
             option.confirm = TRAIN_CONFIRM_RIDING.format(odds=mounts.odds_text(ride)) if ride > 0 else TRAIN_CONFIRM
@@ -1255,7 +1262,7 @@ class Game:
             kind, until = day_turn(c, s.world) if blocked else ("at", None)
             notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until, later=kind == "later")
         if "act:train" in ids:
-            notes["act:train"] = self._train_line(loc)
+            notes["act:train"] = self._sortie_line(loc) if sortie.on(c) and not prologue_rules.active(s, c) else self._train_line(loc)
         if "act:socialize" in ids:
             figure = self._socialize_figure()
             notes["act:socialize"] = howto.social_line(
@@ -1307,6 +1314,17 @@ class Game:
         drops = any(materials.may_drop(q, c) for q in foes)
         push = any(delta and self._push_room(line) > 0 for line, delta in self.train_trend_push(loc.id).items())
         return howto.train_line(bool(foes), gains, drops, push, drill_gains, bool(own))
+
+    def _sortie_line(self, loc: Location) -> str:
+        """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
+        how = self._sortie_mode(loc)
+        if how is None:
+            return ""
+        left = self.sorties_left()
+        if left <= 0:
+            return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
+        push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
+        return howto.sortie_line(how, push_ok, left, self.content)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -1819,6 +1837,12 @@ class Game:
         msgs += self._guide(note_action(s, c, self.world, "sense"))
         return msgs
 
+    def _train_title(self) -> str:
+        """act:train 的紀錄標題：出陣開著時寫「出陣」，序章的雪恥寫「雪恥」；關著照舊「遊歷」。"""
+        if not sortie.on(self.content):
+            return "遊歷"
+        return sortie.PROLOGUE_FIGHT if prologue_rules.active(self.state, self.content) else sortie.NAME
+
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
         if kind == "faction":
@@ -1884,7 +1908,7 @@ class Game:
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         titles = {
-            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
+            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"{self._train_title()}・{here}",
             "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "halt": "喊停", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
@@ -2089,7 +2113,7 @@ class Game:
         if want("h_refine_fail") and self._refine_failed():  # 修練失敗才會累積熟練度，成功就歸零（往絕學添的火候不算）
             on.append("h_refine_fail")
         # 第一場沒打贏的仗：僵持與落敗都算（以前只算落敗：身法閃成僵持的人師父不開口）；決戰與挑戰本人不在這三種裡
-        if want("h_lose") and any(r.tier not in team.WIN_TIERS for r in s.battles if r.kind in ("train", "wild", "event")):
+        if want("h_lose") and any(r.tier not in team.WIN_TIERS for r in s.battles if r.kind in ("train", "sortie", "wild", "event")):
             on.append("h_lose")
         if want("h_injury") and p.member.injury > 0:
             on.append("h_injury")
@@ -2240,8 +2264,8 @@ class Game:
             return self._present(self.content.events[promotion])
         if what == "explore":
             return self._explore()
-        if what == "train":
-            return self._train()
+        if what == "train":  # 出陣（出陣探索與地盤設計第二節）；序章的雪恥照舊是遊歷
+            return self._sortie() if sortie.on(self.content) and not prologue_rules.active(self.state, self.content) else self._train()
         msgs = self._socialize(prepared)
         self._hint("h_bond")  # 第一次交友：情誼有什麼用（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）
         return msgs
@@ -2439,6 +2463,9 @@ class Game:
         序章（新手引導計畫一）：只有這一步寫的對手（雪恥那一步才有斷眉），草廬自己沒有敵人。"""
         if prologue_rules.active(self.state, self.content):
             return prologue_rules.enemies(self.state, self.content)
+        if sortie.on(self.content):  # 出陣：只有攻才打，對手是 _sortie_foes；守、攪局、散人沒有對手
+            loc_mode = self._sortie_mode(loc)
+            return self._sortie_foes(loc) if loc_mode == "attack" else []
         base = territory.squads_at(self.state.world, self.content, loc.id)  # 地盤易手：站的照控制方（關著時就是 loc.enemies）
         extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
         return base + [sid for sid in extra if sid not in base] if extra else base
@@ -2452,7 +2479,7 @@ class Game:
         opts: list[Option] = []
         duty = c.orders.duties.get(p.faction)
         if duty is not None and front_of(c, loc.id) is not None:
-            opts.append(self._cost_option("act:duty", duty.name, c.config.duty_stamina))
+            opts.append(self._duty_option(duty.name))
         escort = orders.escort_at(s, c, p.faction, loc.id)
         if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
             dest = c.locations[p.convoy.to_loc].name
@@ -2469,6 +2496,18 @@ class Game:
                 used = "、".join(f"{c.materials[mid].name} ×{n}" for mid, n in materials.grain_plan(s, c, need))
                 opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
         return opts
+
+    def _duty_option(self, name: str) -> Option:
+        """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守、攪局共用每日的次數），鈕上寫今天還能幾次、
+        用完灰掉、寫跟出陣同一句；關著照舊。"""
+        c = self.content
+        cost = c.config.duty_stamina
+        if not sortie.on(c):
+            return self._cost_option("act:duty", name, cost)
+        left = self.sorties_left()
+        if left <= 0:
+            return Option(id="act:duty", label=f"{name}（{sortie.USED_UP.format(n=c.config.sortie.per_day)}）", enabled=False)
+        return self._cost_option("act:duty", name, cost, note=sortie.LEFT_NOTE.format(n=left))
 
     def _rank2_options(self, loc: Location) -> list[Option]:
         """第 2 階行動（設計 5.5；正式版乙一）：第 2 階以上、在有戰線的地方；今天做滿了就變灰、寫明。"""
@@ -2584,6 +2623,8 @@ class Game:
         duty = c.orders.duties[p.faction]
         front = front_of(c, loc.id)
         p.stamina -= c.config.duty_stamina
+        if sortie.on(c):  # 出陣開著：守勢行動算一次出陣（PM 2026-10-14，_duty_option）
+            sortie.spend(p, self._pill_day())
         text = duty.text.replace("{地點}", loc.name)
         msgs = [text]
         goals = self._goals()
@@ -5021,13 +5062,15 @@ class Game:
         self._hide(text)
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
 
-    def _squad_encounter(self, squad_id: str, wild: bool = False) -> list[str]:
+    def _squad_encounter(self, squad_id: str, wild: bool = False, as_sortie: bool = False) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
 
         wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
         打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
         一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。
-        野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。"""
+        野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。
+        as_sortie：出陣的攻（出陣探索與地盤設計 2.2、2.4）——戰報類型 sortie、給自己的照 _sortie_rewards（三成、不給銀兩掉落）、
+        推的量照 sortie_push、source="sortie"。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -5037,18 +5080,19 @@ class Game:
         scripted = prologue_rules.fight_tier(s, c)  # 序章雪恥那一場：結果照寫好的，不吃模型的判讀
         judged = None if wild or scripted is not None else self._judged(squad)
         result = self._fight_with(squad, judged, tier=scripted)
-        record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "train")
+        record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "sortie" if as_sortie else "train")
         if scripted is None:
             record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
-            rewards = self._battle_rewards(squad, record)
+            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)
             msgs += rewards
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
-                for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
-                    extra += self.push_trend(trend_id, delta, source="train")
+                pushes = self.sortie_push(loc.id, "attack") if as_sortie else self.train_trend_push(loc.id)
+                for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
+                    extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
@@ -5151,10 +5195,19 @@ class Game:
         loc = c.locations[p.location]
         msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
         self._outcome("操練", msgs[0])
+        msgs += self._drill_gains(squad)
+        for trend_id, delta in self.train_trend_push(loc.id).items():
+            msgs += self._drill_push(trend_id, delta)
+        return msgs
+
+    def _drill_gains(self, squad: Squad) -> list[str]:
+        """跟這一路一起操練拿的：對手心得與經驗的 drill_reward_share（不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
+        操練（_drill）與出陣的守、攪局（_sortie_hold）共用。"""
+        s, c = self.state, self.content
+        p = s.player
         share = c.config.drill_reward_share
-        xinde = drill_share(squad.reward_xinde, share)
-        exp = drill_share(squad.exp, share)
-        xinde_line = None
+        xinde, exp = drill_share(squad.reward_xinde, share), drill_share(squad.exp, share)
+        msgs: list[str] = []
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             xinde_line = f"心得 +{xinde}"
@@ -5162,11 +5215,119 @@ class Game:
             if self._draft is not None:
                 self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
-        msgs += team.add_team_exp(s, c, self.world, exp)  # 本人與帶著的同伴都拿（FB-002）
+        msgs += team.add_team_exp(s, c, self.world, exp)
         if self._draft is not None and exp > 0:
             self._draft.changes.append(f"經驗 +{exp}（每人）")
-        for trend_id, delta in self.train_trend_push(loc.id).items():
-            msgs += self._drill_push(trend_id, delta)
+        return msgs
+
+    # ── 出陣（出陣探索與地盤設計第二節）──────────────────────────
+
+    def sorties_left(self) -> int:
+        """今天還能出陣幾次（Config.sortie.per_day；換日同回體丹，_pill_day）。"""
+        return sortie.left_today(self.state.player, self.content, self._pill_day())
+
+    def _sortie_foes(self, loc: Location) -> list[str]:
+        """出陣攻打的對手（設計 2.2）：此刻控制這裡的那一方的隊伍（地盤關著時：這裡有陣營、不是自己陣營的隊伍），加上截糧軍令帶來的
+        敵方運糧隊（orders.extra_enemies；自家地盤上有運糧隊時出陣就是去截它）。流寇、野獸不在裡面（那是找素材撞上的）。"""
+        s, c = self.state, self.content
+        own = s.player.faction
+        side = territory.controller(s.world, c, loc.id)
+        ids = [
+            sid for sid in territory.squads_at(s.world, c, loc.id)
+            if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
+        ]
+        extra = orders.extra_enemies(s, c, loc.id, own)
+        return ids + [sid for sid in extra if sid not in ids]
+
+    def _sortie_mode(self, loc: Location) -> str | None:
+        return sortie.mode(self.content, self.state.world, self.state.player.faction, loc.id, bool(self._sortie_foes(loc)))
+
+    def sortie_mode(self) -> str | None:
+        """所在地此刻出陣是哪一種（假人照它挑，bot_policy）；在路上是 None。"""
+        p = self.state.player
+        return None if p.journey is not None else self._sortie_mode(self.content.locations[p.location])
+
+    def sortie_push(self, loc_id: str | None = None, how: str | None = None) -> dict[str, float]:
+        """在這個地點（預設所在地）出陣推哪幾條線、各推多少（sortie.pushes：還沒打季長倍數與盡頭阻力）；how 不給照那裡此刻是哪一種。
+        沒有出陣（散人、不是戰線地點）是空的。假人照它挑往哪裡走（bot_policy._train_value）。"""
+        s, c = self.state, self.content
+        loc = c.locations[loc_id or s.player.location]
+        how = how or self._sortie_mode(loc)
+        if how is None or s.player.faction is None:
+            return {}
+        return sortie.pushes(c, s.world, s.player.faction, loc.id, how)
+
+    def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
+        """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
+        大場面等模型（_train_option）；守、攪局寫零風險。標籤一律「出陣・攻／守／攪局（體力 N・今日還能 M 次・…）」。"""
+        how = self._sortie_mode(loc)
+        if how is None:
+            return None
+        name = f"{sortie.NAME}・{sortie.MODE_NAMES[how]}"
+        left = self.sorties_left()
+        if left <= 0:
+            used = sortie.USED_UP.format(n=self.content.config.sortie.per_day)
+            return Option(id="act:train", label=f"{name}（{used}）", enabled=False)
+        tail = sortie.LEFT_NOTE.format(n=left)
+        if how != "attack":
+            return self._cost_option("act:train", name, cost, note=f"{tail}・零風險")
+        return self._train_option(loc, cost, odds, name=name, tail=tail)
+
+    def _sortie(self) -> list[str]:
+        """出陣（act:train；體力 _act 已經扣了）：記今天一次，照這裡此刻歸誰攻、守或攪局。不接戰後事件（搬到找素材，設計 2.4）。
+        不論哪一種、有沒有替軍令記到功，都算入伍段的「出一次力」（note_action 對已經走過的步驟什麼都不做）。"""
+        s, c = self.state, self.content
+        loc = c.locations[s.player.location]
+        how = self._sortie_mode(loc)
+        sortie.spend(s.player, self._pill_day())
+        if how == "attack":
+            squad = self._train_pick(loc) if self._big_trip(loc) else c.squads[self.rng.choice(self._sortie_foes(loc))]
+            msgs = self._squad_encounter(squad.id, as_sortie=True)
+        else:
+            msgs = self._sortie_hold(loc, how)
+        return msgs + self._guide(note_action(s, c, self.world, "order"))
+
+    def _sortie_rewards(self, squad: Squad, record) -> list[str]:
+        """出陣打贏給自己的（設計 2.4）：對手心得、經驗的 drill_reward_share（三成，同操練），不給銀兩、不掉素材與兵器、不擲寶物多掉；
+        經驗整隊一起拿（同遊歷），升級照寫進戰報。"""
+        p, share = self.state.player, self.content.config.drill_reward_share
+        msgs: list[str] = []
+        xinde = drill_share(squad.reward_xinde, share)
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+            msgs.append(f"心得 +{xinde}")
+        exp = drill_share(squad.exp, share)
+        record.exp = exp
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        record.notes += levels
+        return msgs + levels
+
+    def _sortie_host(self, loc: Location, how: str) -> Squad | None:
+        """守、攪局拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：守是這裡自家陣營的隊伍、攪局是此刻控制方的隊伍
+        （設計沒寫，照守的算法），取經驗最高的一路、同分取先列的；沒有是 None（不給心得經驗，推力照推）。"""
+        s, c = self.state, self.content
+        side = s.player.faction if how == "hold" else territory.controller(s.world, c, loc.id)
+        squads = [
+            c.squads[sid] for sid in territory.squads_at(s.world, c, loc.id)
+            if c.squads[sid].faction is not None and (side is None or c.squads[sid].faction == side)
+        ]
+        return max(squads, key=lambda q: q.exp) if squads else None
+
+    def _sortie_hold(self, loc: Location, how: str) -> list[str]:
+        """守、攪局（設計 2.2）：不打、不會輸、不扣氣血、不磨兵器。給自己的照操練（_drill_gains，_sortie_host 那一路）；推的量是攻的
+        hold_share（push_trend 再打季長倍數與盡頭阻力）；守算一次守城（軍令文件 3.2，同巡哨、傳道）。"""
+        s, c = self.state, self.content
+        line = (sortie.HOLD_LINE if how == "hold" else sortie.STIR_LINE).format(place=loc.name)
+        msgs = [line]
+        self._outcome(sortie.MODE_NAMES[how], line)
+        host = self._sortie_host(loc, how)
+        if host is not None:
+            msgs += self._drill_gains(host)
+        for trend_id, amount in self.sortie_push(loc.id, how).items():
+            msgs += self.push_trend(trend_id, amount, source="sortie")
+        if how == "hold":
+            msgs += self._order_credit(kind="duty", front=territory.line_of(c, loc.id))
         return msgs
 
     def _lose_silver(self, record) -> list[str]:
@@ -5300,7 +5461,7 @@ class Game:
             after.append(say(lo.specials["win_xinde"].name, note=f"（多得 {int(lo.specials['win_xinde'].amount)} 點心得）"))
         if "heal_after" in facts.healed:  # 回春
             after.append(say(lo.specials["heal_after"].name, note=f"（回了 {gained['heal_after']} 點氣血）" if gained.get("heal_after") else ""))
-        if record.kind == "train" and "train_stamina" in lo.specials:  # 輕身：只在遊歷
+        if record.kind in ("train", "sortie") and "train_stamina" in lo.specials:  # 輕身：遊歷與出陣
             saved = self.content.config.action_cost["train"] - self._action_costs()["train"]  # 按鈕上寫的與真的扣的少了多少
             after.append(say(lo.specials["train_stamina"].name, note=f"（少花了 {saved} 點體力）" if saved > 0 else ""))
         return before, after

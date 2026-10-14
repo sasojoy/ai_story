@@ -26,7 +26,9 @@ def _ids(connections):
 
 
 def test_fb184_the_government_army_drills_at_a_camp_between_yingchuan_and_changshe(real):
-    c = real
+    from conftest import classic_rules
+
+    c = classic_rules(real)  # 操練是舊遊歷的（出陣開著時這裡是出陣・守，見 test_sortie）
     camp = c.locations["guan_camp"]
     assert _ids(camp.connections) == {"yingchuan_wilds"} and "guan_camp" in _ids(c.locations["yingchuan_wilds"].connections)
     assert {"yingchuan", "changshe"} <= _ids(c.locations["yingchuan_wilds"].connections)  # 潁川郡 → 潁川郊野 → 長社的中間站

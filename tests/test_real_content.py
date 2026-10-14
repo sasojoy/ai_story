@@ -370,12 +370,12 @@ def test_the_real_prologue_text_has_no_placeholder_left_over(content):
 
 
 def test_no_hut_step_promises_odds_the_hut_never_shows(content):
-    """FB-090：斷眉那一場是寫死的險勝（p8，force_tier），草廬的「遊歷」鈕只寫「體力 10」、沒有勝算，所以師父不能說「括號裡寫著勝算」。
-    草廬任何一步的字（話、旁白、收起來那一行）都不提勝算。"""
+    """FB-090：斷眉那一場是寫死的險勝（p8，force_tier），草廬的「雪恥」鈕（出陣探索與地盤以前叫「遊歷」）只寫體力、沒有勝算，
+    所以師父不能說「括號裡寫著勝算」。草廬任何一步的字（話、旁白、收起來那一行）都不提勝算。"""
     hut = content.tutorial.steps[:content.tutorial.prologue_steps]
     assert [s.id for s in hut if "勝算" in f"{s.text}{s.scene}{s.line}"] == []
     p8 = next(s for s in hut if s.id == "p8_revenge")
-    assert p8.force_tier is not None and "徒兒，選單上多了一個「遊歷」。這一仗，為師看好你。" in p8.text
+    assert p8.force_tier is not None and "徒兒，選單上多了一個「雪恥」。這一仗，為師看好你。" in p8.text
 
 
 def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(content, world):
@@ -1007,8 +1007,10 @@ def test_the_fallen_foe_needs_a_fight_in_this_very_action(content):
 
 
 def test_playing_the_real_fight_the_fallen_foe_only_ever_comes_after_a_win(content, monkeypatch):
-    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。"""
+    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。
+    測的是舊遊歷（出陣開著時散人沒有出陣鈕），所以關掉出陣。"""
     monkeypatch.setattr(content.config, "train_event_chance", 1.0)
+    monkeypatch.setattr(content.config.sortie, "enabled", False)
     place = next(loc.id for loc in content.locations.values() if loc.enemies == ["dipi"])
     tiers: dict[str, int] = {}
     fired_after: set[str] = set()

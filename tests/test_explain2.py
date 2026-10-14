@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import classic_rules, real_content
 
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
@@ -529,8 +529,9 @@ def _graduate(content, seed):
 @pytest.mark.parametrize("profile", ["weekend", None])
 def test_a_fresh_character_can_win_by_the_yingshui(profile):
     """FB-100：剛出師的人在潁川一帶找不到打得贏的仗（長社、黃巾別部營寨都是必敗，潁川郊野難分勝負）。
-    潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。"""
-    content = real_content(profile)
+    潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。
+    鈕是舊遊歷的（出陣開著時散人沒有出陣鈕，新角色的仗在探索裡碰上），所以關掉出陣；勝算那一半兩種規則都一樣。"""
+    content = classic_rules(real_content(profile))
     content.config.auto_open_first_season = True
     for game in [_fresh(content), *(_graduate(content, seed) for seed in (1, 2, 3))]:
         game.state.player.location = RIVER
@@ -588,8 +589,9 @@ def _notes(game):
 
 
 def test_the_drill_line_does_not_say_drill_again(on):
-    """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。"""
-    game = _war(on)
+    """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。
+    操練是舊遊歷的（出陣開著時這裡是出陣・守），所以關掉出陣。"""
+    game = _war(classic_rules(on))
     game.state.player.faction = "huang"
     game.state.player.location = "huangjin_camp"
     train = next(o for o in game.options(odds=False) if o.id == "act:train")

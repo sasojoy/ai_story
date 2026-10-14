@@ -60,6 +60,24 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
     return got + ("，可能掉素材" if drops else "") + pushed + ("；遇上自己人是操練" if drills else "")
 
 
+SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
+    "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
+    "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
+    "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
+}
+SORTIE_PUSH = "推動戰局、記貢獻"
+SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
+SORTIE_LEFT = "今日還能出陣 {n} 次。"
+
+
+def sortie_line(how: str, push: bool, left: int, content: Content) -> str:
+    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。"""
+    cfg = content.config
+    half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
+    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half)
+    return text + SORTIE_LEFT.format(n=left)
+
+
 def social_line(figure: str | None, events: bool, hall: bool) -> str:
     """交友這一下會遇上什麼。figure：會直接開口談話的那位（Game._socialize_figure）；events：這裡有交友事件；
     hall：這裡有兩位以上的人物（要按「求見」指名）。"""

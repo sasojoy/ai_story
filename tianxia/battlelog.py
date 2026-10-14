@@ -18,7 +18,7 @@ from .world_state import WorldStateStore
 
 MAX_RECORDS = 20  # 存檔保留最近幾場
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台"}
+KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣"}
 NO_RECORD = "（還沒有戰報。）"
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
@@ -41,7 +41,7 @@ def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[st
 # ── 建立紀錄 ──────────────────────────────────────────
 
 
-AID_KINDS = ("train", "wild", "event")  # 部下上陣的仗（team.fight 的陣容含部下）：戰報寫部下助陣那一句
+AID_KINDS = ("train", "wild", "event", "sortie")  # 部下上陣的仗（team.fight 的陣容含部下）：戰報寫部下助陣那一句
 
 
 def new_record(

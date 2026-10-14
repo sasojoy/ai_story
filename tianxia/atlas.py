@@ -11,7 +11,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, mounts, orders, prologue, territory
+from . import figures, insights, mounts, orders, prologue, sortie, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -331,15 +331,23 @@ SIEGE_NAMED_MAX = 2  # 攻城記得了次數的地點（orders.siege_places）�
 SIEGE_AT = "到{where}遊歷，打贏一場{enemy}記一次{note}。"  # 待 joy 潤（FB-221）
 SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得了次數的地方都還沒摸清，只寫大區
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
+SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
+SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
+INTERCEPT_SORTIE = "到{place}或附近出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤
+DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
     """軍令卡上攻城那道多寫的一行（FB-221）：記得了次數的地點（orders.siege_places：這條戰線上有敵方陣營隊伍的地方）只有一兩處時
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
-    沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。"""
+    沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。
+    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。"""
     front = trend_name(content, order.front) if order.front else "戰線"
     places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
+    enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
     if not places or len(places) > SIEGE_NAMED_MAX:
+        if sortie.on(content):
+            return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
         return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
     hidden: list[str] = []
@@ -350,8 +358,8 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
             if area not in hidden:
                 hidden.append(area)
     note = "" if not hidden else SIEGE_SOME_UNSEEN if known else SIEGE_UNSEEN
-    enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
-    return SIEGE_AT.format(where="或".join(known + hidden), enemy=enemy, note=note)
+    template = SIEGE_AT_SORTIE if sortie.on(content) else SIEGE_AT
+    return template.format(where="或".join(known + hidden), enemy=enemy, note=note)
 
 
 def order_how(state: GameState, content: Content, order: Order) -> str:
@@ -367,8 +375,13 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
     front = trend_name(content, order.front) if order.front else "戰線"
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
-        return f"在{front}一帶按「{duty.name if duty else '守勢'}」（收在「此地還能做」裡），做一次記一次。"
+        name = duty.name if duty else "守勢"
+        if sortie.on(content):
+            return DEFEND_SORTIE.format(front=front, duty=name)
+        return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
     if order.template == "intercept":
+        if sortie.on(content):
+            return INTERCEPT_SORTIE.format(place=place(order.location))
         return f"到{place(order.location)}或附近遊歷，撞上對面的運糧隊、打贏記一次。"
     if order.template == "escort":
         return (f"帶 {content.config.convoy_grain} 份糧草到{place(order.start)}接下糧車，"
