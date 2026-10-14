@@ -100,7 +100,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
    不能叫 .seg：那是全站的分段選單（display: flex、下方留白），套到頭銜上每一段都會變成整列 */
 .who-title { margin-top: 1px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
 .who-title .who-seg { white-space: nowrap; }
-.who-ranger { margin-top: 2px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
+.who-ranger, .who-exp { margin-top: 2px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
 .who-ranger small { display: block; font-size: 11.5px; color: var(--ink-2); opacity: 0.85; }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
 /* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
@@ -1556,3 +1556,7 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
   color: #b3261e; font: 600 16px var(--serif); font-style: normal; }
 .shop-arena .ring-result.draw .stamp { color: #6d5a43; border-color: #6d5a43; }
 .shop-arena .ring-result.lose .stamp { color: #2f5d8a; border-color: #2f5d8a; }
+/* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
+.lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
+.lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
+.lessons .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }

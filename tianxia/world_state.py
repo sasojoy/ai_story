@@ -53,6 +53,9 @@ class CompanionProgress(BaseModel):
     wugong_id: str | None = None
     wugong_level: int = 1
     owner: str | None = None  # 目前招募他的玩家名號；None＝自由之身，誰都能嘗試招募
+    # 傳功（Config.chuangong）傳給他的屬性點：{"str": 3, "con": 1}，加在內容的起始值與每級成長上面（team.member_stats）。
+    # 跟等級、武學成數一樣記在他身上：放走、被別人招去都帶著走（傳過的功是他學到的），換季跟其他進度一起清空
+    taught: dict[str, int] = Field(default_factory=dict)
 
 
 class SealEvent(BaseModel):

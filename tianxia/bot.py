@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, clinic, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import armor, bounties, chuangong, clinic, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -112,6 +112,24 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
+    teach(game)
+
+
+TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死
+TEACH_MAX = 20  # 一次最多傳幾下（價錢越後越貴，通常幾下就停；這只是保險）
+
+
+def teach(game: Game, limit: int = TEACH_MAX) -> int:
+    """傳功門下（整季機器人與假人共用）：名冊上最便宜、按得下去的那一項（chuangong.cheapest），付完還剩 TEACH_RESERVE 才傳；
+    一直傳到付不起或 limit 下為止。只走 Game.chuangong，不擲亂數。回傳傳了幾下。"""
+    done = 0
+    while done < limit:
+        lesson = chuangong.cheapest(game.state, game.content, game.world)
+        if lesson is None or game.state.player.stats.get("xinde", 0) - lesson.price < TEACH_RESERVE:
+            break
+        game.chuangong(lesson.key, lesson.what)
+        done += 1
+    return done
 
 
 class ForgePlan(NamedTuple):

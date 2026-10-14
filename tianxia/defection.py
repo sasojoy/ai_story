@@ -105,6 +105,7 @@ def clear_progress(p: PlayerState) -> None:
     p.qualified, p.rank_hinted = False, []  # 第 4 階資格（候缺）與說過的「只缺一個機會」（正式版丙一）
     p.summons_stall = ""  # 說過的「沒有人能引見」（企劃者裁決 E3）：換了陣營，卡住了照新陣營再說
     p.followers = []
+    p.follower_drill = []  # 傳功給部下的跟著部下一起走（Config.chuangong）
     p.contrib = 0
     p.contrib_weeks = {}
     p.donations = {}
