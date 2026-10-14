@@ -5,6 +5,7 @@ import random
 
 from test_discuss import pair  # noqa: F401（fixture）
 from test_seal import sealed  # noqa: F401（fixture）
+from test_seal_mandate import mandated  # noqa: F401（fixture）
 
 from tianxia import atlas, fusion, seal, social
 from tianxia.engine import Game
@@ -234,3 +235,19 @@ def test_fb174_some_proxied_rounds_get_the_milder_line(sealed, world):
     game._file_seal(e, "螭首", True)
     notes = game.state.battles[0].notes
     assert seal.PROXY_SOME_LINE in notes and seal.PROXY_LINE not in notes
+
+
+# ── FB-189：沒有人持有碎片的天命之季，決戰畫面不寫「懷璽的人到場」 ──
+
+
+def test_fb189_the_holders_clause_only_shows_when_someone_holds_a_shard(mandated, world):
+    from test_seal_mandate import _destiny_open, _opened
+    from test_seal_mandate import _player as _mandate_player
+
+    _opened(mandated, world)
+    game = _mandate_player(mandated, world, "官一", "guan")
+    _destiny_open(mandated, world)  # 第 2 輪：七片全都沒人持有
+    game.sync(10.0)
+    scene = game.scene_text()
+    assert "天命之爭：" in scene and seal.MANDATE_WEIGHT not in scene
+    assert not seal.holders(world.seal_state().registry)
