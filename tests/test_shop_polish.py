@@ -155,3 +155,42 @@ def test_faster_or_slower_follows_the_speed_bar_on_the_card(content, world):
         want = shopview.FASTER if speed[stall["id"]] > worn else shopview.SLOWER if speed[stall["id"]] < worn else shopview.SAME
         assert stall["compare"] == want, (stall["id"], speed[stall["id"]], worn)
     assert [s["compare"] for s in stalls[2:]] == [shopview.FASTER, shopview.FASTER, shopview.SAME]
+
+
+# ── FB-195：馬市兩頁搶，按下去被擋時說為什麼 ──
+
+
+def test_a_market_buy_lost_to_another_tab_says_why(content, world):
+    """FB-195：畫面上「買下」亮著，錢卻在另一個分頁花掉了：Game.choose 回為什麼不成的那一句（Refused，伺服器照它跳提示，同懸賞榜 FB-162），
+    馬販那一句換成錢不夠那一組；什麼都沒買、錢不動。"""
+    from test_shop2 import _market
+
+    from tianxia import mounts, shopview
+    from tianxia.engine import Refused
+
+    game = _market(content, world, silver=300, name="搶馬")
+    assert any(o.id == mounts.BUY and o.enabled for o in game.options(odds=False))
+    p = game.state.player
+    p.stats["silver"] = 40
+    msgs = game.choose(mounts.BUY)
+    price = content.config.mounts.shop_price
+    assert isinstance(msgs, Refused) and list(msgs) == [f"（還差 {price - 40} 兩。）"]
+    assert p.mount is None and p.stats["silver"] == 40
+    assert p.shop_line == "short_silver" and shopview.line_text(game.state, content, "market") in content.shop_lines["market"]["short_silver"]
+
+
+def test_a_market_feed_or_swap_lost_to_another_tab_says_why(content, world):
+    from test_shop2 import _horse, _market
+
+    from tianxia import equipment, mounts
+    from tianxia.engine import Refused
+
+    game = _market(content, world, horse=_horse(edge=40), name="搶餵")
+    p = game.state.player
+    p.rack = [_horse("騎:2", "黑鬃馬", 1, "下品")]
+    p.materials = {}  # 料在另一個分頁用掉了
+    msgs = game.choose(mounts.FEED)
+    assert isinstance(msgs, Refused) and list(msgs) == [f"（{equipment.NO_REPAIR_MATERIAL}。）"]
+    p.rack = []  # 那一匹在另一個分頁換走了
+    msgs = game.choose(f"{mounts.WIELD}騎:2")
+    assert isinstance(msgs, Refused) and list(msgs) == [f"（{equipment.WIELD_MISSING.rstrip('。')}。）"]
