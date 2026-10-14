@@ -46,6 +46,12 @@ def _fight_round(fighter):
     fighter.choose(move)
 
 
+def _text(html):
+    """拿掉標籤與空白只比字：戰況一回合一段（app.js 的 roundBlocks）會把伺服器的回合標題與清單換成自己的標記，字一個不少（收成一行的舊回合多寫一次摘要，不算）。"""
+    html = re.sub(r"<summary><b>(.*?)</b><span>.*?</span></summary>", r"\1", html)  # 收成一行的舊回合：那一句摘要底下清單裡還有
+    return re.sub(r"\s+", "", re.sub(r"<[^>]*>", "", html))
+
+
 @pytest.fixture
 def battle(on):
     """宛城之戰開打、打過一回合：一個臨時投效官軍的散人在宛城打，一個官軍的人站在潁川（QA 那一場）。"""
@@ -142,9 +148,9 @@ def test_tapping_opens_it_and_it_stays_open_while_the_rounds_go_on_until_folded(
                 f'{_consts()["shut"]}</button></p>')
     assert _folded(first) in out["folded"]
     battle_first = first["scene"].split("<hr />", 1)[0]
-    assert battle_first + shut_btn in _scene(out["opened"]) and out["key"] == "宛城之戰"  # 整段攤開，記的是戰場的名字
+    assert _text(battle_first + shut_btn) in _text(_scene(out["opened"])) and out["key"] == "宛城之戰"  # 整段攤開，記的是戰場的名字
     battle_second = second["scene"].split("<hr />", 1)[0]
-    assert battle_second + shut_btn in _scene(out["polled"])  # 下一回合輪詢重畫：照舊攤開，寫的是新的回合
+    assert _text(battle_second + shut_btn) in _text(_scene(out["polled"]))  # 下一回合輪詢重畫：照舊攤開，寫的是新的回合
     assert _folded(second) in out["shut"] and out["after"] is None  # 按收起：收回一行（新的回合數）
 
 
@@ -159,7 +165,7 @@ def test_the_keyboard_opens_the_folded_line(battle):
       for (const fn of T.docListeners.keydown) fn({ key: "Enter", target, preventDefault: () => { prevented = true; } });
       return { prevented, open: H.S.battleOpen, page: T.els.page.innerHTML };"""
     out = run(m, script)
-    assert out["prevented"] and out["open"] == "宛城之戰" and m["scene"].split("<hr />", 1)[0] in _scene(out["page"])
+    assert out["prevented"] and out["open"] == "宛城之戰" and _text(m["scene"].split("<hr />", 1)[0]) in _text(_scene(out["page"]))
 
 
 @node
