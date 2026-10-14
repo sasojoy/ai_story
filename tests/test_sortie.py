@@ -105,6 +105,18 @@ def test_advancing_rolls_the_sortie_day():
     assert game.sorties_left() == 5
 
 
+def test_a_new_season_does_not_give_another_five_the_same_day():
+    """次數跨季保留（state.py：換季不能多出一輪；同回體丹）：當天用完五次之後換季，還是灰的。"""
+    from conftest import next_season
+
+    game = _game()
+    game.now = 100.0
+    for _ in range(5):
+        game.choose("act:train")
+    next_season(game.content, game.world, game)
+    assert game.state.player.sortie_day != -1 and game.sorties_left() == 0
+
+
 def test_the_gentry_stirs_toward_the_middle():
     game = _game(faction="haoqiang", at="runan_wilds")
     w = game.state.world
