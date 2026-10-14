@@ -127,7 +127,8 @@ def test_a_pair_spars_at_most_per_pair_day_times_a_day(pair):
         _do(content, world, "甲", lambda g: g.peer_act("乙", "spar", {"arg": "invite"}))
         _do(content, world, "乙", lambda g: g.choose(f"invite:yes:{_invite_id(world)}"))
     msgs, _ = _do(content, world, "乙", lambda g: g.peer_act("甲", "spar", {"arg": "invite"}))  # 換誰發都一樣
-    assert "今天已經切磋過" in msgs[-1] and world.get_season().invites == []
+    full = _do(content, world, "乙", lambda g: social.pair_full(g, "spar"))[0]
+    assert msgs[-1] == full and "今天" not in full and world.get_season().invites == []  # 寫換日的那一刻（FB-117）
     card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
     assert [(b["label"], b["enabled"]) for b in card["actions"] if b["action"] == "spar"] == [("切磋", False)]
 

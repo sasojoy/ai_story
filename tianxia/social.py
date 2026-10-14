@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from . import prologue as prologue_rules
 from . import gender, invites, ranger, ranks, team
 from .characters import CharacterStore, name_key
+from .rules import day_turn
 from .state import GameState
 
 if TYPE_CHECKING:
@@ -214,8 +215,28 @@ def calls(game: Game) -> list[dict]:
 # ── 卡上的鈕 ──
 
 
-GIFT_FULL = "你們今天已經互贈過 {n} 回了，改天再送吧。"  # 待 joy 潤（FB-116：同一對人每個遊戲日的上限，Config.gift_per_pair_day）
-DISCUSS_FULL = "你們今天已經論武過 {n} 回了，改天再說。"  # 待 joy 潤（FB-116：Config.discuss_per_pair_day）
+# 同一對人每個遊戲日的上限滿了（FB-116 的切磋、贈物、論武三本帳）：照遊戲日換日（rules.game_day，跟著季長縮），所以不寫「今天／改天」，
+# 寫換日的那一刻（FB-117，同談滿了的求見 Game._talked_out_note、day-scale）。（開頭, 再做什麼）；待 joy 潤
+PAIR_FULL = {
+    "gift": ("你們已經互贈過 {n} 回了", "送"),
+    "discuss": ("你們已經論武過 {n} 回了", "論武"),
+    "spar": ("你們已經切磋過 {n} 場了", "切磋"),
+}
+
+
+def pair_cap(content: Content, kind: str) -> int:
+    """這一本帳一個遊戲日的上限（Config.gift_per_pair_day、discuss_per_pair_day、spar.per_pair_day）。"""
+    cfg = content.config
+    return {"gift": cfg.gift_per_pair_day, "discuss": cfg.discuss_per_pair_day, "spar": cfg.spar.per_pair_day}[kind]
+
+
+def pair_full(game: Game, kind: str) -> str:
+    """這一對人這個遊戲日的 kind（gift／discuss／spar）用滿了的那一句：寫下一次換日的那一刻（rules.day_turn：
+    寫得出那一刻寫「…之後再X」；季末延長、季曆寫不出來寫「過一陣子再X」；這一季不會再換日寫「這一季之內不能再X了」）。"""
+    head, verb = PAIR_FULL[kind]
+    turn, moment = day_turn(game.content, game.state.world)
+    when = f"{moment} 之後再{verb}" if moment else f"過一陣子再{verb}" if turn == "later" else f"這一季之內不能再{verb}了"
+    return f"{head.format(n=pair_cap(game.content, kind))}，{when}。"
 
 
 def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
@@ -237,7 +258,7 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
             choices=[{"id": m, "label": c.materials[m].name, "max": n} for m, n in held],
         ))
     if game.gifts_left(other.state.player.name) <= 0:  # 這一對人今天送滿了（FB-116）：每一顆都灰掉、寫為什麼
-        full = GIFT_FULL.format(n=c.config.gift_per_pair_day)
+        full = pair_full(game, "gift")
         buttons = [replace(b, enabled=False, note=full) for b in buttons]
     return buttons
 
@@ -249,7 +270,7 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
 
     p, them, c = game.state.player, other.state.player, game.content
     if game.gifts_left(them.name) <= 0:
-        return [GIFT_FULL.format(n=c.config.gift_per_pair_day)]
+        return [pair_full(game, "gift")]
     what = params.get("arg")
     try:
         amount = int(params.get("amount") or 0)

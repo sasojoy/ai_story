@@ -534,3 +534,39 @@ def test_a_first_special_rumor_names_both(pair):
                      creator="乙", co_creator="甲", creator_shown="乙、甲", special=special.id)
     [line] = fusion._special_rumor(state, content, art, True)
     assert line.startswith("江湖上傳開了：乙、甲合出一門")
+
+
+# ── 第九件：同一對人每個遊戲日的上限寫換日的那一刻，三本帳一個寫法 ──
+
+
+@pytest.mark.parametrize("kind, head, verb", [
+    ("gift", "你們已經互贈過 5 回了", "送"), ("discuss", "你們已經論武過 2 回了", "論武"), ("spar", "你們已經切磋過 2 場了", "切磋"),
+])
+def test_a_full_pair_names_when_the_day_turns(pair, kind, head, verb):
+    from tianxia import calendar, rules
+
+    content, world = pair
+    line, game = _do(content, world, "甲", lambda g: social.pair_full(g, kind))
+    moment = calendar.stamp_text(rules.day_ends(content, game.state.world), content, game.state.world)
+    assert line == f"{head}，{moment} 之後再{verb}。" and "今天" not in line
+
+
+def test_a_full_pair_on_the_last_game_day_says_not_this_season(pair, monkeypatch):
+    content, world = pair
+    monkeypatch.setattr(social, "day_turn", lambda c, w: ("season", None))
+    assert _do(content, world, "甲", lambda g: social.pair_full(g, "spar"))[0] == "你們已經切磋過 2 場了，這一季之內不能再切磋了。"
+    monkeypatch.setattr(social, "day_turn", lambda c, w: ("later", None))
+    assert _do(content, world, "甲", lambda g: social.pair_full(g, "gift"))[0] == "你們已經互贈過 5 回了，過一陣子再送。"
+
+
+# ── 第十件：答應切磋的那一方紀錄也有內文 ──
+
+
+def test_both_sides_of_a_spar_get_the_result_line(pair):
+    content, world = pair
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "spar", {"arg": "invite"}))
+    iid = world.get_season().invites[0].id
+    _do(content, world, "乙", lambda g: g.choose(f"invite:yes:{iid}"))  # 場景底下那一顆（選單的 invite:yes）
+    for name, rival in (("甲", "乙"), ("乙", "甲")):
+        head = _load(world, name).journal[0]
+        assert head.title == f"切磋・{rival}" and head.lines and head.lines[0].startswith("⚔") and rival in head.lines[0]

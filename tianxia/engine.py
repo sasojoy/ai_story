@@ -6452,7 +6452,7 @@ class Game:
             if problem is not None:
                 return problem
         if self._spars_left(other.state.player.name) <= 0:
-            return f"你們今天已經切磋過 {c.config.spar.per_pair_day} 場了，改天再說。"
+            return social.pair_full(self, "spar")
         if invites.between(s.world, s.player.name, other.state.player.name, "spar") is not None:
             return "已經有一張切磋的邀請在等回覆了。"
         return None
@@ -6600,7 +6600,7 @@ class Game:
             if problem is not None:
                 return problem
         if self._spars_left(other.state.player.name) <= 0:
-            return f"你們今天已經切磋過 {self.content.config.spar.per_pair_day} 場了，改天再說。"
+            return social.pair_full(self, "spar")
         return None
 
     def _spar(self, inv, other: Game) -> list[str]:
@@ -6659,7 +6659,7 @@ class Game:
             if problem is not None:
                 return problem
         if self.discusses_left(other.state.player.name) <= 0:
-            return social.DISCUSS_FULL.format(n=c.config.discuss_per_pair_day)
+            return social.pair_full(self, "discuss")
         if invites.between(s.world, s.player.name, other.state.player.name, "discuss") is not None:
             return "已經有一張論武的邀請在等回覆了。"
         return None
@@ -6740,7 +6740,7 @@ class Game:
             if problem is not None:
                 return problem
         if self.discusses_left(them.name) <= 0:  # 邀請在等的時候，這一對人今天的帳被別處用滿了（FB-116）
-            return social.DISCUSS_FULL.format(n=self.content.config.discuss_per_pair_day)
+            return social.pair_full(self, "discuss")
         if inv.payload.get("item", "") not in dict(other.discuss_items()):
             return "你身上已經沒有要出的那一樣了。" if for_sender else f"{them.name}身上已經沒有{gender.pronoun(them)}要出的那一樣了。"
         return None
@@ -6836,6 +6836,8 @@ class Game:
         msgs = [line, f"心得 +{xinde}"] + ups + self._last_wear
         if self._draft is None:  # 對方那一邊：不是他自己按的，替他記一則
             self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record))
+        else:  # 答應的那一方（自己按的，這次行動的草稿寫這一則）：結果那一句照樣寫進敘事，跟發邀請的那一方一樣（FB-117）
+            self._draft.keep(line)
         return msgs
 
     # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
