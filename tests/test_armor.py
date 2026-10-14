@@ -389,7 +389,7 @@ def test_both_reminders_reach_the_record_and_the_journal_lines(content, world):
     record = BattleRecord(id=1, time=0.0, location="湖邊", kind="train", event="", opponent="誰", ours=[], tier="落敗",
                           our_power=1.0, difficulty=1.0)
     game._file_battle(record)
-    assert record.notes == [weapons.EDGE_WARNING.format(name="試刃"), armor.WORN_WARNING.format(name="試甲")]
+    assert record.notes == [weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃"), armor.WORN_WARNING.format(name="試甲")]
     assert game._last_wear == record.notes  # 切磋、截殺的訊息與守方的江湖紀錄都從這裡讀
 
 

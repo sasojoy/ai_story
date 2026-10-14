@@ -336,7 +336,7 @@ def test_both_sides_of_a_raid_dull_their_own_blade_and_the_defender_reads_the_wa
     _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
     for name in ("甲", "乙"):
         after = _load(world, name)
-        warning = weapons.EDGE_WARNING.format(name=f"{name}刃")
+        warning = weapons.EDGE_WARNING.format(dull=weapons.DULL["拳腳"], name=f"{name}刃")
         assert after.player.weapon.edge < 30 and after.player.edge_warned
         assert warning in after.battles[0].notes
         assert warning in after.journal[0].lines, name  # 發起的與被截殺的，江湖紀錄都讀得到

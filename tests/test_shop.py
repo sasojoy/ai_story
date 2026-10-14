@@ -7,7 +7,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import equipment, shopview, smithing
+from tianxia import equipment, shopview, smithing, weapons
 from tianxia.content import validate
 
 LINES = {"smith": {key: [f"鐵匠說{key}之一。", f"鐵匠說{key}之二。"] for key in shopview.SITUATIONS["smith"]}}
@@ -135,7 +135,7 @@ def test_the_armor_page_and_the_worn_card(content, world):
     game.choose("smith:buy:劍")
     worn = game.shop_view()["worn"]
     assert worn["item"]["name"] == game.state.player.weapon.name and worn["item"]["wear_word"] == "鋒利度"
-    assert not worn["repair"]["enabled"] and worn["repair"]["why"] == "刀口還利"
+    assert not worn["repair"]["enabled"] and worn["repair"]["why"] == weapons.KEEN["劍"]
     assert worn["temper"]["enabled"] and "精鐵砂×1" in worn["temper"]["use"]
     game.choose("smith:page:armor")
     view = game.shop_view()
