@@ -2551,7 +2551,8 @@
   const SHOP_RACK_LIST = 8;
 
   // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求藝、求兵挑東西）
-  // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）
+  // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）。三間店捲的那一層（.shop-body）裡面一律再包一層 .shop-col：
+  // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（style.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
     const kind = shop.shop || "smith";
     const back = shop.picked
@@ -2577,7 +2578,7 @@
     const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
     const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[tab];
     return `${tab === "shelf" ? SMITH_HERO + line : ""}${pages}
-      <div class="shop-body">${body(shop)}</div>
+      <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
       <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
   }
@@ -2591,8 +2592,8 @@
       ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
       : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
           <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${esc(h.sub)}</small></button>`);
-    return `<div class="shop-body"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
-      ${pick ? horseCard(pick) : ""}</div>`;
+    return `<div class="shop-body"><div class="shop-col"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
+      ${pick ? horseCard(pick) : ""}</div></div>`;
   }
 
   // 點著那一匹的卡：名字、階品、跟你騎的比、四項本事的長條、你騎的那匹多飽足長條；底下一顆照伺服器給的（做不了寫原因）
@@ -2630,7 +2631,7 @@
     const done = S.boardStamp && !notes.some((n) => n.id === S.boardStamp.id) ? S.boardStamp : null;
     if (done) notes.splice(Math.min(done.at, notes.length), 0, { ...done.note, done: true });
     const board = notes.length ? `<div class="board">${notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
-    return `<div class="shop-body${zoom ? " zooming" : ""}"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
+    return `<div class="shop-body${zoom ? " zooming" : ""}"><div class="shop-col"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div></div>
       ${zoom ? paperHtml(zoom, shop) : ""}`;
   }
 
