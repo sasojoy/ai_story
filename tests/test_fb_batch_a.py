@@ -344,3 +344,34 @@ def test_fb140_the_treasure_drop_line_does_not_repeat_routed(content):
 
     line = treasures.DROP_LINE.format(who="波才", name="叩關玉")
     assert "敗走" not in line and "波才" in line and "【叩關玉】" in line
+
+
+# ── FB-135：狀態列氣血條的數字跟「傷 N」互蓋 ──
+
+
+def test_fb135_the_hp_word_can_step_aside_for_the_injury_on_a_narrow_bar(hints_content, world):
+    """375 寬氣血條只有 99 px，「氣血 348/400」跟「傷 7」擠在一起互相蓋住。「氣血」兩個字包成一格；氣血條窄、又有內傷時拿掉它
+    （數字與「傷 N」留著，條上的 title 照舊寫氣血）。沒有內傷時照舊寫「氣血 N/M」。"""
+    import webharness
+    if webharness.NODE is None:
+        pytest.skip("沒有 node，前端畫面測試略過")
+    from test_prologue_web import run
+    from test_shop2_web import _css, _rule
+
+    import server
+    from tianxia.engine import Game
+
+    game = Game.new(hints_content, "傷客", rng=random.Random(0), world=world)
+    game.skip_tutorial()
+    m = server.main_view(game)
+    m["status"].update({"hp": 348, "hp_max": 400, "injury": 7})
+    top = run(m, "return H.topHtml();")
+    assert '<span><em class="lbl">氣血 </em>348/400</span>' in top and '<span class="inj">傷 7</span>' in top
+    css = _css()
+    assert "container-type: inline-size" in _rule(css, ".bar.hp")
+    stam = css[css.index("@container (max-width: 132px)"):][:300]
+    assert ".bar.stam:has(.pill-btn) .lbl { display: none; }" in stam and "container-type: inline-size" in _rule(css, ".bar.stam")
+    assert '<em class="lbl">體力 </em>' in top  # 體力條同一件事：丹的鈕蓋住「體力 250/250」
+    query = css[css.index("@container (max-width: 150px)"):]
+    assert ".bar.hp:has(.inj) > span { padding: 0 5px; font-size: 10px; }" in query[:400]  # 四位數的氣血配三位數的內傷也放得下（實機量過）
+    assert ".bar.hp:has(.inj) .lbl { display: none; }" in query[:query.index("}\n") + 2]
