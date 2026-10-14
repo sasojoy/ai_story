@@ -16,6 +16,8 @@ def test_the_howto_page_explains_the_new_loop():
     c = real_content("weekend")
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
+    assert "找素材" in page and "靜心感悟" in page and "照地點三選一：悟意境" not in page
+    assert "- 靜心感悟時「有所感」" in page
     assert "#### 地盤" in page and "換了人" in page
     assert "便宜一成" in page and "貴兩成" in page and "底色" in page  # 地盤福利與輿圖上色（計畫 Task 5）
 
@@ -31,6 +33,7 @@ def test_the_howto_page_is_unchanged_with_the_switches_off():
     c = classic_rules(real_content("weekend"))
     page = _page(c)
     assert "**遊歷**" in page and "**出陣**" not in page and "#### 地盤" not in page
+    assert "照地點三選一：悟意境" in page and "找素材" not in page and "- 探索落在悟意境時「有所感」" in page
 
 
 def test_the_fronts_and_joining_explain_the_sortie():

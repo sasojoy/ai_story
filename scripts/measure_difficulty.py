@@ -192,7 +192,7 @@ def run(seed, args, kind):
         hop = bot.clinic_hop(game)
         choice = f"move:{hop}" if hop is not None and f"move:{hop}" in {o.id for o in options} else (
             grind.choose(game, options, rng, target) if options else None)
-        if choice is not None and choice.startswith(("act:train", "act:explore", "act:challenge")):
+        if choice is not None and choice.startswith(("act:train", "act:explore", "explore:", "act:challenge")):
             m = game.state.player.member
             now_hp, cap = team.member_neili(content, m, team.con_of(game.state, content, game.world, PLAYER))
             if now_hp < 0.5 * cap or game.state.player.stamina < 10:
