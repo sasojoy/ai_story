@@ -133,3 +133,25 @@ def test_the_stamp_fades_with_the_note_unless_motion_is_reduced():
     assert "animation: notedone" in _rule(css, ".shop-board .note.done")
     assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css
     assert ".board-stamp" not in css and "stampfade" not in css
+
+
+# ── FB-194：「比你騎的快／慢」跟卡上的數字同一個算法 ──
+
+
+def test_faster_or_slower_follows_the_speed_bar_on_the_card(content, world):
+    """FB-194：照卡上「路上快」那一條（乘了飽足、照畫面上的整數百分比）比，數字大的那匹寫「比你騎的快」；一樣大寫「一樣快」。
+    （以前照吃飽的腳力比：騎著餓了的駑馬上品，卡上數字比較大的兩匹反而寫「比你騎的慢」。）"""
+    from test_shop2 import _horse, _market
+
+    from tianxia import shopview
+
+    ride = _horse(name="黑鬃馬", tier=1, quality="上品", edge=35)
+    game = _market(content, world, horse=ride, name="比馬")
+    game.state.player.rack = [_horse("騎:2", "白蹄馬", 1, "下品"), _horse("騎:3", "黃棕馬", 1, "中品"), _horse("騎:4", "花斑馬", 1, "上品", edge=35)]
+    stalls = game.shop_view()["stalls"]
+    speed = {s["id"]: next(b["value"] for b in s["bars"] if b["key"] == "speed") for s in stalls if not s.get("empty")}
+    worn = speed["騎:1"]
+    for stall in stalls[2:]:
+        want = shopview.FASTER if speed[stall["id"]] > worn else shopview.SLOWER if speed[stall["id"]] < worn else shopview.SAME
+        assert stall["compare"] == want, (stall["id"], speed[stall["id"]], worn)
+    assert [s["compare"] for s in stalls[2:]] == [shopview.FASTER, shopview.FASTER, shopview.SAME]

@@ -359,7 +359,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
 NO_HORSE = "還沒有馬"  # 待 joy 潤：沒有馬時「你騎的」那一間
 STALL_WHO = {"worn": "你騎的", "sale": "待售", "rack": "裝備庫"}  # 待 joy 潤：馬廄上那一行
 ABILITY_NAMES = (("save", "省體力"), ("speed", "路上快"), ("cavalry", "決戰騎兵"), ("escape", "落敗脫身"))  # 同修練頁坐騎那一列（待 joy 潤）
-FASTER, SLOWER, SAME = "比你騎的快", "比你騎的慢", "跟你騎的一樣快"  # 待 joy 潤：照 mounts.better_mount 的比法（吃飽的腳力）
+FASTER, SLOWER, SAME = "比你騎的快", "比你騎的慢", "跟你騎的一樣快"  # 待 joy 潤：照卡上「路上快」那一條比（含飽足，FB-194）
 HUNGRY_NOTE = "沒吃飽，四項本事都跟著打了折"  # 待 joy 潤：你騎的那匹飽足不到 100 時，飽足長條底下
 BUY_TEXT = "買下 {price} 兩"  # 待 joy 潤
 FEED_TEXT, WIELD_TEXT = "餵", "換上"  # 待 joy 潤
@@ -376,6 +376,11 @@ def _bars(content: Content, item: Equipment) -> list[dict]:
     return [{"key": key, "label": label, "value": mounts.half_up(got[key] * 100), "text": mounts.pct(got[key])} for key, label in ABILITY_NAMES]
 
 
+def _speed_shown(content: Content, item: Equipment) -> int:
+    """卡上「路上快」那一條寫的數（整數百分比，含飽足）：「比你騎的快／慢」照它比（FB-194）。"""
+    return mounts.half_up(mounts.abilities(content, item)["speed"] * 100)
+
+
 def _stall(content: Content, item: Equipment, role: str, sub: str, action: dict) -> dict:
     return {
         "id": item.id, "role": role, "who": STALL_WHO[role], "empty": False, "name": mounts.name_of(item), "grade": mounts.grade(item),
@@ -387,7 +392,8 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
     """馬市的店面（第三節）：一排馬廄——你騎的（沒有馬是一間空的）、馬販待售的那匹（mounts.shop_item）、裝備庫裡的馬一匹一間。
     每一間：名字、階品、四項本事的長條；你騎的那匹多飽足長條。卡上那一顆照現在的選項 id：你騎的「餵」（market:feed，做不了照
     mounts.feed_problem）、待售的「買下」（market:buy，mounts.buy_problem）、裝備庫裡的「換上」（market:wield:<id>，選單本來就每一匹
-    各列一顆）與「比你騎的快／慢」。focus：進門預設點著的那一間（你騎的，沒有馬就待售的）。world 沒用到（三間店同一個呼叫法）。"""
+    各列一顆）與「比你騎的快／慢」（照卡上「路上快」那一條的數字比：乘了飽足、畫面上的整數百分比，卡上的數字與那一句對得上，FB-194；
+    機器人換馬照舊比吃飽的腳力 mounts.better_mount）。focus：進門預設點著的那一間（你騎的，沒有馬就待售的）。world 沒用到（三間店同一個呼叫法）。"""
     p = state.player
     stalls: list[dict] = []
     if p.mount is not None:
@@ -405,13 +411,13 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
     stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
         "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
     }))
-    ridden = mounts.fresh_power(content, p.mount) if p.mount is not None else None
+    ridden = _speed_shown(content, p.mount) if p.mount is not None else None
     for item in equipment.in_slot(p, "mount"):
         stall = _stall(content, item, "rack", mounts.grade(item),
                        {"id": f"{mounts.WIELD}{item.id}", "label": WIELD_TEXT, "use": "", "enabled": True, "why": None})
         if ridden is not None:
-            mine = mounts.fresh_power(content, item)
-            stall["compare"] = FASTER if mine > ridden + 1e-9 else SLOWER if mine < ridden - 1e-9 else SAME
+            mine = _speed_shown(content, item)
+            stall["compare"] = FASTER if mine > ridden else SLOWER if mine < ridden else SAME
         stalls.append(stall)
     return {
         "shop": "market",

@@ -33,7 +33,7 @@ def _click(dataset: str) -> str:
 @pytest.fixture
 def market(content, world):
     game = _market(content, world, horse=_horse(edge=40))
-    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "上品")]
+    game.state.player.rack = [_horse("騎:2", "黑鬃馬", 1, "下品")]  # 路上快 30%，比餓了的青驄駒（34%）慢（FB-194 照卡上的數比）
     return server.main_view(game)
 
 
