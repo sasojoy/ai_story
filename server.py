@@ -1599,6 +1599,11 @@ def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str]
     return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
 
 
+def _id_list(value) -> list[str]:
+    """網頁送來的一串 id：只收字串串列，其他（字串、數字、物件）一律當空的。"""
+    return [str(v) for v in value if isinstance(v, str)] if isinstance(value, list) else []
+
+
 MENXIA_ACTIONS = {
     "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
     "heal": lambda g, b: g.heal(),
@@ -1610,6 +1615,8 @@ MENXIA_ACTIONS = {
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
+    # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾
+    "melt_many": lambda g, b: g.melt_many(_id_list(b.get("arts")), _id_list(b.get("insights"))),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     # 神器原品定名（打造隱藏配方設計 5.2）：自己打的名字，或 keep 是「沿用譜名」；keep 只認真正的布林 true（同 use_legend）
     "name_divine": lambda g, b: g.name_divine(str(b.get("weapon") or ""), str(b.get("name") or ""), keep=b.get("keep") is True),

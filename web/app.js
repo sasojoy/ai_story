@@ -104,6 +104,8 @@
     artInfo: null, // 修練頁哪一門攤開了「詳情」（完整的功法卡）
     libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
+    meltSel: null, // 批量熔煉勾著的 { arts, ins }（id 串列）；null＝沒在勾
+    meltNote: null, // 批量熔煉的結果（伺服器的 message HTML），寫在功法庫標題底下；下一個修練頁動作就清掉
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
@@ -2149,6 +2151,36 @@
 
   // 熔煉的問句（W9、FB-081）：整句由伺服器寫好、放在按鈕的 data-confirm（library.melt_confirm：有心得就寫退回多少，沒有就直說
   // 只空出一格；基礎武學再接一句去哪裡重學，只說一次）。伺服器沒給（舊版）才用這句老問題
+  // 批量熔煉（修練頁功法庫）：勾、一鍵照品質勾、確認之後一次送出
+  function meltToggle(key, id) {
+    if (!S.meltSel || !id) return;
+    const list = S.meltSel[key];
+    S.meltSel = { ...S.meltSel, [key]: list.includes(id) ? list.filter((v) => v !== id) : [...list, id] };
+    renderPage();
+  }
+  function meltQuality(q) {
+    if (!S.meltSel || !S.menxia) return;
+    // 跟畫面上那一排一樣：功法庫（身上以外的）、照目前的篩選、熔得掉的
+    const lib = S.menxia.owned_arts.filter((a) => !a.worn);
+    const filter = lib.length > LIB_PAGE ? libFilter() : "all";
+    const pass = (a) => filter === "all" || (filter === "ready" ? a.cultivate.ok : a.kind === filter);
+    const ids = lib.filter((a) => pass(a) && a.melt.ok && a.quality === q).map((a) => a.id);
+    const all = ids.every((id) => S.meltSel.arts.includes(id));
+    S.meltSel = { ...S.meltSel, arts: all ? S.meltSel.arts.filter((id) => !ids.includes(id)) : [...new Set([...S.meltSel.arts, ...ids])] };
+    renderPage();
+  }
+  function askMeltMany(el) {
+    const sel = S.meltSel;
+    if (!sel || !(sel.arts.length + sel.ins.length)) return;
+    const parts = [sel.arts.length ? `${sel.arts.length} 門武學` : "", sel.ins.length ? `${sel.ins.length} 個意境` : ""].filter(Boolean).join("、");
+    const v = el.dataset.v | 0;
+    const warn = sel.ins.length ? "靠這些意境修練的武學，熔了就不能再修練。" : "";
+    ask(`把勾的 ${parts}一起熔掉？${v > 0 ? `心得 +${v}。` : ""}熔掉就沒了。${warn}`, "熔掉", async () => {
+      const body = { arts: sel.arts, insights: sel.ins };
+      S.meltSel = null;
+      await mx("melt_many", body);
+    });
+  }
   const meltAskText = (el) => el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`;
 
   // 熔煉與意境化成心得都先問一次，用頁面自己的確認層（ask，管理者工具用的那一個；FB-085）：以前是瀏覽器內建的確認框，
@@ -2200,6 +2232,7 @@
   // 功法庫一門一列，點開才攤成同一張卡的內容。武學多（上限 50 門）時庫可以篩選，先只列 LIB_PAGE 門，其餘按「再列 N 門」
   const QUALITY_SEAL = { 下品: ["下", "q1"], 中品: ["中", "q2"], 上品: ["上", "q3"], 絕學: ["絕", "q4"] };
   const LIB_PAGE = 8;
+  const MELT_QUALITIES = ["下品", "中品", "上品", "絕學"];
   const LIB_FILTERS = [["all", "全部"], ["武學", "武學"], ["內功", "內功"], ["ready", "可修練"]];
   const seal = (q, big = false) => {
     const [ch, cls] = QUALITY_SEAL[q] || ["？", "q1"];
@@ -2411,25 +2444,59 @@
     // 展開著的那一門永遠留在清單裡：照「可修練」篩選時，最後一次修練把它修到不能再修（體力不夠、練成絕學）就不合篩選了，
     // 它的結果卻還寫在卡裡、頁面也不該跳走（W7）
     const picked = lib.filter((a) => pass(a, filter) || a.id === S.artOpen);
-    const showAll = S.libAll || picked.length <= LIB_PAGE + 2; // 只多一兩門就直接列完，不必多按一次
+    // 批量熔煉（企劃者 2026-10-14「合成越來越多，需要能快速熔煉的機制」）：S.meltSel 是勾著的 { arts, ins }（id 串列），null＝沒在勾。
+    // 勾的時候功法庫整份列出（不分頁）、每一列一個勾，意境的籤也能勾；底下浮一條「熔掉 N 樣・心得 +X」。序章裡不給（照師父一門一門熔）
+    const meltOn = !!S.meltSel;
+    const showAll = meltOn || S.libAll || picked.length <= LIB_PAGE + 2; // 只多一兩門就直接列完，不必多按一次
     const first = picked.slice(0, LIB_PAGE);
     const openArt = picked.find((a) => a.id === S.artOpen);
     const rows = showAll ? picked : openArt && !first.includes(openArt) ? [...first, openArt] : first; // 展開著的那一門排在第 8 門之後時也要看得到
     // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
     // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
     const libRow = (a) => {
+      if (meltOn) return meltRow(a);
       const todo = ["switch", "cultivate", "melt"].filter((key) => (a.glow || []).includes(key)).join(" ");
       const open = S.artOpen === a.id;
       return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・屬${esc(a.attribute)}・第${a.level}成${a.insight ? `・「${esc(a.insight)}」` : ""}</small></span></button>
         ${open ? `<div class="art-body ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">${body(a, null)}</div>` : ""}`;
     };
+    const tutorial = x.owned_arts.some((a) => a.glow) || x.insights.some((i) => i.blocked);
+    const meltable = lib.filter((a) => a.melt.ok);
+    const meltSwitch = !tutorial && meltable.length + x.insights.length >= 2
+      ? `<button class="linkish melt-mode" data-act="melt-mode">${meltOn ? "收起" : "批量熔煉"}</button>` : "";
+    // 勾著的照現在的功法庫過一遍：熔掉了、輪詢回來已經不在的、改成熔不掉的（換上身了）不算
+    const sel = S.meltSel ? {
+      arts: S.meltSel.arts.filter((id) => meltable.some((a) => a.id === id)),
+      ins: S.meltSel.ins.filter((id) => x.insights.some((i) => i.id === id)),
+    } : { arts: [], ins: [] };
+    if (meltOn) S.meltSel = sel;
+    const meltRow = (a) => {
+      const on = sel.arts.includes(a.id);
+      return `<button class="art libr pick${on ? " on" : ""}" data-act="melt-pick" data-id="${esc(a.id)}" ${a.melt.ok ? "" : "disabled"} aria-pressed="${on}">
+        <i class="tick" aria-hidden="true"></i>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・第${a.level}成・${a.melt.ok ? esc(a.melt.value > 0 ? `心得 ${a.melt.value}` : "沒有心得") : esc(a.melt.note)}</small></span></button>`;
+    };
+    // 一鍵勾：照品質把這一類（篩選中的）熔得掉的全勾上；再按一次同一顆全部取消
+    const qualityPick = meltOn ? MELT_QUALITIES.filter((q) => picked.some((a) => a.melt.ok && a.quality === q)).map((q) => {
+      const ids = picked.filter((a) => a.melt.ok && a.quality === q).map((a) => a.id);
+      const all = ids.every((id) => sel.arts.includes(id));
+      return `<button class="${all ? "on" : ""}" data-act="melt-quality" data-q="${esc(q)}">${all ? "✓ " : ""}${esc(q)} ${ids.length}</button>`;
+    }).join("") : "";
+    const meltTools = meltOn ? `<div class="melt-tools"><span>全勾</span>${qualityPick}<button data-act="melt-clear">全不勾</button></div>` : "";
+    const meltValue = sel.arts.reduce((sum, id) => sum + ((lib.find((a) => a.id === id) || {}).melt?.value | 0), 0)
+      + sel.ins.reduce((sum, id) => sum + ((x.insights.find((i) => i.id === id) || {}).melt | 0), 0);
+    const meltCount = sel.arts.length + sel.ins.length;
+    const meltGo = meltOn ? `<div class="melt-gap"></div><div class="melt-go"><span>已勾 <b>${meltCount}</b> 樣<small>心得 +${meltValue}</small></span>
+        <button class="btn" data-act="melt-mode">取消</button>
+        <button class="btn danger" data-act="melt-go" data-n="${meltCount}" data-v="${meltValue}" ${meltCount ? "" : "disabled"}>熔掉</button></div>` : "";
     const chips = lib.length > LIB_PAGE ? `<div class="lib-filter">${LIB_FILTERS.map(([f, label]) => {
       const n = lib.filter((a) => pass(a, f)).length;
       return `<button class="${filter === f ? "on" : ""}" data-act="lib-filter" data-filter="${f}">${label} ${n}</button>`;
     }).join("")}</div>` : "";
     // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
     const insOpen = x.insights.find((i) => i.id === S.insOpen);
-    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
+    const insChips = x.insights.map((i) => meltOn
+      ? `<button class="pick${sel.ins.includes(i.id) ? " on" : ""}" data-act="melt-pick-ins" data-id="${esc(i.id)}" aria-pressed="${sel.ins.includes(i.id)}"><i class="tick" aria-hidden="true"></i>「${esc(i.name)}」<small>心得 ${i.melt | 0}</small></button>`
+      : `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），每段先列身上那件、再列裝備庫裡同一欄的。
@@ -2522,14 +2589,17 @@
       <div class="label">身上的兩門</div>
       ${worn}
       ${gearBlock}
-      <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>
+      <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>${meltSwitch}</div>
+      ${S.meltNote ? `<div class="msg melt-result">${S.meltNote}</div>` : ""}
+      ${meltOn ? '<p class="muted melt-hint">點武學、意境勾起來，再按底下的「熔掉」。身上正在練的熔不掉。</p>' : ""}
       ${chips}
+      ${meltTools}
       ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')
         : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
       <div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
-        ${insOpen ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
+        ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
       <div class="label">門下</div>
@@ -2540,7 +2610,8 @@
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
         ${lessonsHtml(x.lessons)}</div>` : ""}
-      <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>`;
+      <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>
+      ${meltGo}`;
   }
 
   // 傳功門下（Config.chuangong）：人物卡底下一排鈕，鈕上寫要練什麼與心得，底下一行寫效果；按不下去的灰掉、原因寫在效果那一行
@@ -4326,7 +4397,10 @@
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
-      S.message = r.message;
+      // 批量熔煉的結果寫在功法庫那裡（按的地方），不捲回頂上、不在頂上再寫一次
+      const batch = op === "melt_many";
+      S.message = batch ? "" : r.message;
+      S.meltNote = batch ? r.message : null;
       S.artNote = stay ? { id: extra.art, html: r.message } : null;
       setMain(r.main);
       renderTop();
@@ -4337,6 +4411,7 @@
       const guideMoved = guideKey(r.main && r.main.guide) !== step;
       const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
       if (op === "chuangong") return; // 傳功常常連按好幾下：留在人物卡那裡，不捲回頂上
+      if (batch) { document.querySelector(".melt-result")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
       if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
@@ -4649,6 +4724,12 @@
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "lib-filter": setLibFilter(el.dataset.filter); renderPage(); break;
         case "lib-all": S.libAll = true; renderPage(); break;
+        case "melt-mode": S.meltSel = S.meltSel ? null : { arts: [], ins: [] }; S.artOpen = null; S.meltNote = null; renderPage(); break;
+        case "melt-pick": meltToggle("arts", el.dataset.id); break;
+        case "melt-pick-ins": meltToggle("ins", el.dataset.id); break;
+        case "melt-quality": meltQuality(el.dataset.q); break;
+        case "melt-clear": if (S.meltSel) { S.meltSel = { arts: [], ins: [] }; renderPage(); } break;
+        case "melt-go": askMeltMany(el); break;
         case "rack-all": S.rackAll = true; renderPage(); break;
         case "ins-open": S.insOpen = S.insOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "person":
