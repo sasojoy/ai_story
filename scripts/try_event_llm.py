@@ -5,8 +5,10 @@
 
     .venv/Scripts/python.exe scripts/try_event_llm.py  # 預設：酒樓鬥毆、四種做法、各評 3 次
     .venv/Scripts/python.exe scripts/try_event_llm.py --event tavern_brawl --runs 5 "做法一" "做法二"
+    .venv/Scripts/python.exe scripts/try_event_llm.py --event rn_hill_deserter "原地挖坑把他埋了" "替他拔箭敷藥"  # 善惡（FB-223）
 
 預期排序：具體又貼合情境 > 可行但普通 > 跟情境無關；「我必定成功」這類宣稱結果的寫法要最低。
+每次評分順便印模型判的善惡（善／惡／中，FB-223）；判成「惡」的過半，就照「惡行而且成了」潤色一次（不接內容的結果句）。
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import event_llm  # noqa: E402
+from tianxia import event_llm, rules  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 
@@ -70,12 +72,21 @@ def main() -> None:
     print(f"載入完成（{time.monotonic() - start:.0f} 秒）\n")
 
     for text in args.approaches:
-        rates, seconds = [], []
+        rates, morals, seconds = [], [], []
         for _ in range(args.runs):
             start = time.monotonic()
-            rates.append(event_llm.assess_event_success_rate(client, event, text))
+            verdict = event_llm.judge_event_gamble(client, event, text)
+            rates.append(verdict.rate)
+            morals.append(verdict.moral)
             seconds.append(time.monotonic() - start)
-        print(f"「{text}」 成算 {rates}　中位數 {statistics.median(rates)}　每次約 {statistics.mean(seconds):.0f} 秒")
+        print(
+            f"「{text}」 成算 {rates}　中位數 {statistics.median(rates)}　善惡 {''.join(morals)}"
+            f"　每次約 {statistics.mean(seconds):.0f} 秒"
+        )
+        if morals.count(event_llm.MORAL_EVIL) * 2 > len(morals):  # 判成惡的過半：照「惡行而且成了」潤色一次（FB-223）
+            polished = event_llm.narrate_event_gamble(client, event, text, True, rules.EVIL_DONE, evil=True)
+            print(f"  潤色（惡行，成功）：{polished or '（空，引擎用固定那一句：' + rules.EVIL_DONE + '）'}\n")
+            continue
         # 潤色只是看文字：成算過半當成功、否則當失敗，結果文字借事件第一個選項的
         success = statistics.median(rates) >= 50
         choice = event.choices[0]

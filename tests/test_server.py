@@ -4099,14 +4099,14 @@ def at_a_gamble(game, monkeypatch):
 def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_events):
     def assess(client, event, text):
         lock_events.append(f"assess:{text}")
-        return 85
+        return server.event_llm.EventVerdict(85)
 
     game.rng = random.Random(0)
-    def narrate(client, event, text, success, effect_text):
+    def narrate(client, event, text, success, effect_text, evil=False):
         lock_events.append("narrate")
         return "你扯開嗓子一喊。"
 
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+    with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess), \
             mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
         server.answer_event(game, "大喊官兵來了")
     assert lock_events == ["enter", "exit", "assess:大喊官兵來了", "enter", "exit", "narrate", "enter", "exit"]
@@ -4125,14 +4125,14 @@ def test_the_free_text_assessment_and_the_narration_share_one_budget(game, at_a_
 
     def assess(client, event, text):
         seen.append(("assess", client))
-        return 85
+        return server.event_llm.EventVerdict(85)
 
-    def narrate(client, event, text, success, effect_text):
+    def narrate(client, event, text, success, effect_text, evil=False):
         seen.append(("narrate", client))
         return ""
 
     game.rng = random.Random(0)
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+    with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess), \
             mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
         server.answer_event(game, "大喊官兵來了")
     config = server.CONTENT.config
@@ -4149,14 +4149,14 @@ def test_the_narration_gets_what_the_scoring_left_of_the_free_text_budget(game, 
 
     def assess(client, event, text):
         breaker_clock[0] += 50
-        return 85
+        return server.event_llm.EventVerdict(85)
 
-    def narrate(client, event, text, success, effect_text):
+    def narrate(client, event, text, success, effect_text, evil=False):
         seen.append(client)
         return GAMBLE_NARRATION
 
     game.rng = random.Random(0)
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+    with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess), \
             mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
         server.answer_event(game, "大喊官兵來了")
     assert len(seen) == 1 and seen[0] is not game.client
@@ -4169,22 +4169,49 @@ def test_a_narration_with_no_budget_left_is_skipped(game, at_a_gamble, breaker_c
     """評分把預算用得只剩半秒（不夠一趟）：不叫潤色，一句都不插，跟模型叫不動時一樣（結果與擲骰照常套用，請求不再等）。"""
     def assess(client, event, text):
         breaker_clock[0] += server.CONTENT.config.free_text_budget_seconds - 0.5
-        return 85
+        return server.event_llm.EventVerdict(85)
 
     game.rng = random.Random(0)
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+    with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess), \
             mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=AssertionError("預算用完了，不該叫潤色")):
         msgs = server.answer_event(game, "大喊官兵來了")
     assert game.state.pending_event is None and game.state.journal[0].title == f"{at_a_gamble.title}・隨口應對"
     assert GAMBLE_NARRATION not in game.state.journal[0].lines and msgs
 
 
+@pytest.mark.parametrize("story", ["你一言不發地揮鏟，把他推進坑裡填平了土。", None], ids=["narrated", "no-narration"])
+def test_an_evil_deed_that_lands_goes_through_all_three_steps(game, at_a_gamble, monkeypatch, story):
+    """FB-223：B 段判成「惡」、擲中了：C 段換成惡行的版本（不接內容的結果句「成了。」），D 段請模型照惡行寫（evil=True）；
+    寫成了換掉固定那一句（rules.EVIL_DONE），沒寫成就留那一句收尾。善惡跟著成功率一起交給 C 段。"""
+    from conftest import FixedRandom
+    from tianxia import rules
+
+    asked, given = [], []
+    real = Game.answer_event
+    monkeypatch.setattr(
+        Game, "answer_event", lambda self, request, llm_rate=None, moral=None: given.append((llm_rate, moral)) or real(self, request, llm_rate, moral),
+    )
+
+    def narrate(client, event, text, success, effect_text, evil=False):
+        asked.append((success, effect_text, evil))
+        return story
+
+    game.rng = FixedRandom(0.0)
+    with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(3, "惡")), \
+            mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
+        server.answer_event(game, "原地挖坑把他埋了")
+    assert given == [(3, "惡")] and asked == [(True, rules.EVIL_DONE, True)]
+    lines = game.state.journal[0].lines
+    assert lines[0].startswith("你：「原地挖坑把他埋了」（成算") and "成了。" not in lines
+    assert lines[1] == (story or rules.EVIL_DONE) and lines.count(rules.EVIL_DONE) == (0 if story else 1)
+
+
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
     def assess(client, event, text):
         server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 另一個分頁先選了別的
-        return 85
+        return server.event_llm.EventVerdict(85)
 
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess):
+    with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess):
         msgs = server.answer_event(game, "大喊官兵來了")
     assert "事情已經過去了" in "\n".join(msgs)
     assert not any(e.title.endswith("隨口應對") for e in game.state.journal)
@@ -4203,7 +4230,7 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
     assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
+    with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(50)):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
     assert main["event_free_text"] is None
 
@@ -4934,14 +4961,14 @@ def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamb
     rates, timeouts, narrated = [], [], []
     real = Game.answer_event
     monkeypatch.setattr(
-        Game, "answer_event", lambda self, request, llm_rate=None: rates.append(llm_rate) or real(self, request, llm_rate),
+        Game, "answer_event", lambda self, request, llm_rate=None, moral=None: rates.append(llm_rate) or real(self, request, llm_rate, moral),
     )
 
     def assess(client, event, text):
         timeouts.append(client.timeout)
-        return 85
+        return server.event_llm.EventVerdict(85)
 
-    def narrate(client, event, text, success, effect_text):
+    def narrate(client, event, text, success, effect_text, evil=False):
         narrated.append(client)
         return GAMBLE_NARRATION
 
@@ -4949,7 +4976,7 @@ def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamb
         _slow_queue(monkeypatch, breaker_clock, waited)
         game.state.pending_event = at_a_gamble.id
         open_characters().save(game.state)
-        with mock.patch.object(server.event_llm, "assess_event_success_rate", side_effect=assess), \
+        with mock.patch.object(server.event_llm, "judge_event_gamble", side_effect=assess), \
                 mock.patch.object(server.event_llm, "narrate_event_gamble", side_effect=narrate):
             server.answer_event(game, "大喊官兵來了")
     assert timeouts == [pytest.approx((server.CONTENT.config.free_text_budget_seconds - 45) / 2)]  # 第二次排太久，沒叫
@@ -5009,20 +5036,20 @@ def _ready(site, monkeypatch):
     open_characters().save(game.state)
     real = Game.answer_event
 
-    def answer(self, request, llm_rate=None):
+    def answer(self, request, llm_rate=None, moral=None):
         seen.append({"kind": "rate", "rate": llm_rate})
-        return real(self, request, llm_rate)
+        return real(self, request, llm_rate, moral)
 
     def assess(client, event, text):
         seen.append({"kind": "score", "client": client})
-        return 85
+        return server.event_llm.EventVerdict(85)
 
-    def narrate(client, event, text, success, effect_text):
+    def narrate(client, event, text, success, effect_text, evil=False):
         seen.append({"kind": "narrate", "client": client})
         return GAMBLE_NARRATION
 
     monkeypatch.setattr(Game, "answer_event", answer)
-    monkeypatch.setattr(server.event_llm, "assess_event_success_rate", assess)
+    monkeypatch.setattr(server.event_llm, "judge_event_gamble", assess)
     monkeypatch.setattr(server.event_llm, "narrate_event_gamble", narrate)
     return game, lambda: server.answer_event(game, "大喊官兵來了"), seen
 
@@ -5191,9 +5218,9 @@ def test_a_request_held_in_a_real_queue_past_its_timeout_is_refused_and_changes_
     scored, rolled = [], []
     real = Game.answer_event
     monkeypatch.setattr(
-        server.event_llm, "assess_event_success_rate", lambda client, event, text: scored.append(text) or 85,
+        server.event_llm, "judge_event_gamble", lambda client, event, text: scored.append(text) or server.event_llm.EventVerdict(85),
     )
-    monkeypatch.setattr(Game, "answer_event", lambda self, request, llm_rate=None: rolled.append(llm_rate) or real(self, request, llm_rate))
+    monkeypatch.setattr(Game, "answer_event", lambda self, request, llm_rate=None, moral=None: rolled.append(llm_rate) or real(self, request, llm_rate, moral))
     before = open_characters().load("測試")
     rng_before = game.rng.getstate()
     with pytest.raises(server.GameError, match=server.BUSY_QUEUE_TIMEOUT):
@@ -5226,7 +5253,7 @@ def test_a_model_failure_after_getting_a_slot_still_falls_back_to_forty(game, at
 
     monkeypatch.setattr(OllamaClient, "chat_structured", chat)
     real = Game.answer_event
-    monkeypatch.setattr(Game, "answer_event", lambda self, request, llm_rate=None: rates.append(llm_rate) or real(self, request, llm_rate))
+    monkeypatch.setattr(Game, "answer_event", lambda self, request, llm_rate=None, moral=None: rates.append(llm_rate) or real(self, request, llm_rate, moral))
     server.answer_event(game, "大喊官兵來了")
     assert asked == [{"running": 1, "waiting": 0}]
     assert rates == [server.event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE] == [40]
@@ -5942,7 +5969,7 @@ def test_the_other_action_endpoints_notify_once_each(client, told, monkeypatch):
     monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str"))
     server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
     told.clear()
-    with mock.patch.object(server.event_llm, "assess_event_success_rate", return_value=50):
+    with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(50)):
         assert client.post("/api/answer", json={"text": "大喊官兵來了"}).status_code == 200
     assert told == [(ME, "self")]  # 評分、擲骰、潤色分好幾次進鎖，但一個請求只通知一次
     server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 事件沒選完的話，輿圖那顆按鈕是灰的
