@@ -1040,6 +1040,8 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .peer-amount select { flex: 1 1 100%; }
 .peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }
 .peer-pick select { min-width: 0; }
+/* 從場景底下「挑一樣答應」打開卡（FB-117）：捲到答應的那一格，框一下金邊（不呼吸，減少動態效果的人也一樣） */
+.peer-focus { border-radius: var(--radius); box-shadow: 0 0 0 2px var(--gold); }
 
 /* 煉製頁（企劃者 2026-10-10）：合不了的灰掉、寫兩三個字的原因；清單的篩選；結果就寫在開爐底下 */
 .chip.no { opacity: 0.5; border-style: dashed; }

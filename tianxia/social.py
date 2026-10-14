@@ -186,18 +186,28 @@ def _short(option) -> str:
     return {"yes": "答應", "no": "婉拒"}.get(verb) or option.label.split("：")[-1]
 
 
+PICK_TO_ANSWER = "挑一樣答應"  # 場景底下論武那一列的答應鈕（FB-117；待 joy 潤）
+
+
+def _call_option(option, inv) -> dict:
+    """場景底下的一顆回應鈕。論武的答應要挑自己出哪一樣（在他的玩家卡上挑，discuss.buttons）：選單上那一顆引擎不收（灰的），
+    以前場景這裡也畫成一顆沒說為什麼的灰鈕「答應」（FB-117）。現在帶 peer（他的名號）：網頁畫成按得下去的「挑一樣答應」，
+    按了打開他的玩家卡、捲到答應那一格（純網頁動作，不送伺服器）。"""
+    if inv.kind == "discuss" and option.id.startswith("invite:yes:"):
+        return {"id": option.id, "label": PICK_TO_ANSWER, "enabled": True, "peer": inv.sender}
+    return {"id": option.id, "label": _short(option), "enabled": option.enabled}
+
+
 def calls(game: Game) -> list[dict]:
-    """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled}]}]，舊的在前。回應鈕就是選單上的那幾個選項
-    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）。"""
+    """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled, peer?}]}]，舊的在前。回應鈕就是選單上的那幾個選項
+    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）；
+    論武的答應那一顆帶 peer，網頁打開他的玩家卡（_call_option）。"""
     menu = {o.id: o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:")}
     rows = []
     for inv in invites.incoming(game.state.world, game.state.player.name):
         opts = [menu[i] for i in menu if i.endswith(f":{inv.id}") and not i.startswith("invite:cancel:")]
         if opts:
-            rows.append({
-                "text": invite_text(inv),
-                "options": [{"id": o.id, "label": _short(o), "enabled": o.enabled} for o in opts],
-            })
+            rows.append({"text": invite_text(inv), "options": [_call_option(o, inv) for o in opts]})
     return rows
 
 

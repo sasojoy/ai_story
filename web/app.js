@@ -1439,7 +1439,10 @@
     // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
     const extras = m.options.filter((o) => !used.has(o.id));
     const hotHere = extras.some((o) => guideGlow().includes(o.id));
-    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+    // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
+    const peers = callPeers(m);
+    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => peers[o.id] ? `
+        <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
@@ -1890,9 +1893,19 @@
 
   // 玩家互動第二層：別人遞給你、還沒回的打招呼、結伴、切磋邀請（一件一行，後面是回應鈕——就是選單上的 invite: 選項，按了走 choose），
   // 以及結伴同行的那一行（跟著別人的人有「分道揚鑣」）。字都是伺服器寫好的（social.calls、Game.party_view）
+  // 論武的答應要挑自己出哪一樣（FB-117）：那一顆帶 peer（他的名號），畫成「挑一樣答應」、按了打開他的玩家卡捲到答應那一格（peerAnswer，
+  // 不送伺服器）；其餘照舊送選單上的 invite: 選項
+  const callButton = (o) => (o.peer
+    ? `<button class="btn small" data-act="peer-answer" data-name="${esc(o.peer)}">${esc(o.label)}</button>`
+    : `<button class="btn small" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`);
+  // 場景那一列帶 peer 的回應鈕：選項 id → 他的名號（「此地還能做」裡同一顆也照它畫成打開玩家卡）
+  function callPeers(m) {
+    const out = {};
+    (m.calls || []).forEach((c) => c.options.forEach((o) => { if (o.peer) out[o.id] = o.peer; }));
+    return out;
+  }
   function socialHtml(m) {
-    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map((o) =>
-      `<button class="btn small" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`).join("")}</div>`).join("");
+    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map(callButton).join("")}</div>`).join("");
     const party = m.party ? `<div class="party"><span>${esc(m.party.text)}</span>${m.party.lead ? ""
       : '<button class="btn small ghost" data-act="party-leave">分道揚鑣</button>'}</div>` : "";
     return `<div class="calls">${calls}${party}</div>`;
@@ -1911,7 +1924,7 @@
     const P = S.peer;
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
-      : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>`
+      : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
@@ -1926,19 +1939,25 @@
   }
   // 卡上的鈕：同一個 group 的（論武出哪一樣，每一樣一顆）收成一個下拉清單＋一顆鈕，按下去送清單上選的那一顆（照它在 actions 裡的索引）；
   // 只有一顆的 group 照常畫。下拉清單整排佔滿一列，其餘的鈕照舊兩欄
+  // 合不成的那一樣（論武答應，伺服器灰掉、pick 後面寫兩三個字的原因，FB-117）也收進清單、但挑不了（<option disabled>），
+  // 預設選第一樣挑得了的；整組都挑不了時那顆鈕灰掉。答應那幾顆（arg 是 yes 開頭）標 data-answer="<互動>"：
+  // 從場景底下「挑一樣答應」打開卡時捲到它（openPeer 的 focus）
   function peerActsHtml(actions) {
     const groups = {};
-    actions.forEach((b, i) => { if (b.group && b.enabled) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
+    actions.forEach((b, i) => { if (b.group) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
     const done = new Set();
+    const answer = (b) => (/^yes(:|$)/.test(b.arg || "") ? ` data-answer="${esc(b.action)}"` : "");
     // 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下自己換到下一行再折（style.css 的 .peer-acts，FB-220）
-    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}"${answer(b)} ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
     const html = actions.map((b, i) => {
-      const members = b.group && b.enabled ? groups[`${b.action}|${b.group}`] : null;
+      const members = b.group ? groups[`${b.action}|${b.group}`] : null;
       if (!members || members.length < 2) return one(b, i);
       if (done.has(members)) return "";
       done.add(members);
-      return `<div class="peer-pick"><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}">${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
-        + `<button class="btn" data-act="peer-pick"><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
+      const first = members.find((j) => actions[j].enabled);
+      const live = first !== undefined;
+      return `<div class="peer-pick"${answer(b)}><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}"${actions[j].enabled ? "" : " disabled"}${j === first ? " selected" : ""}>${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
+        + `<button class="btn" data-act="peer-pick"${live ? "" : " disabled"}><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
     }).join("");
     return `<div class="peer-acts">${html}</div>`;
   }
@@ -1946,17 +1965,27 @@
   const choiceSelect = (b) => (b.choices && b.choices.length
     ? `<select class="input" name="choice" aria-label="挑一樣">${b.choices.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}（${x.max}）</option>`).join("")}</select>`
     : "");
-  async function openPeer(name) {
-    S.peer = { name, loading: true };
+  // focus：從場景底下「挑一樣答應」打開的（FB-117）——卡畫好之後捲到那一種互動答應的那一格（data-answer）、框一下金邊。
+  // 他已經不在這裡（卡打不開）時照舊寫伺服器那一句，底下多一句這份邀請怎麼辦（邀請照現在的規則：放著等逾時，或在場景底下婉拒）
+  const PEER_GONE_ANSWER = "這份邀請答不成了：在場景底下按「婉拒」收掉，或放著等它逾時作廢。"; // 待 joy 潤
+  async function openPeer(name, focus = "") {
+    S.peer = { name, loading: true, focus };
     render();
     try {
       const r = await api(`/api/peer?name=${encodeURIComponent(name)}`);
       if (!S.peer || S.peer.name !== name) return; // 等的時候關掉或換了人
-      S.peer = { name, card: r.card, gone: r.gone };
+      S.peer = { name, card: r.card, gone: r.gone, focus };
     } catch (e) {
       S.peer = null;
     }
     render();
+    if (focus && S.peer && S.peer.card) peerFocus(focus);
+  }
+  function peerFocus(focus) {
+    const el = document.querySelector(`.peer-card [data-answer="${focus}"]`);
+    if (!el) return;
+    el.classList.add("peer-focus");
+    el.scrollIntoView({ block: "nearest", behavior: promoCalm() ? "auto" : "smooth" }); // promoCalm：偏好減少動態效果
   }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
   async function peerAct(i, sure = false, amount = 0, choice = "") {
@@ -4274,6 +4303,7 @@
           break;
         case "peer": await openPeer(el.dataset.name); break;
         case "peer-close": S.peer = null; render(); break;
+        case "peer-answer": await openPeer(el.dataset.name, "discuss"); break; // 場景底下論武的「挑一樣答應」（FB-117）
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
