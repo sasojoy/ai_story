@@ -108,10 +108,11 @@ def test_a_washed_out_showdown_report_comes_back_once(battle):
 def test_an_old_report_without_a_ref_is_not_doubled(battle):
     _, fighter = battle
     record = _finish(fighter)
-    record.battle_ref = None  # 這一版以前收到的：照戰名與收場時刻認
+    record.battle_ref, record.log = None, []  # 這一版以前收到的：照戰名與收場時刻認
     fighter.state.player.showdowns_restored = 0
     fighter.sync(fighter.now)
     assert len([r for r in fighter.state.battles if r.kind == "showdown"]) == 1
+    assert record.battle_ref is not None and "完整戰況" in fighter.battle_detail(record.id)  # 還留著的舊戰報也補上完整戰況
 
 
 def test_the_report_rereads_the_battle_for_tales_written_later(battle):

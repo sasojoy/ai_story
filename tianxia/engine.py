@@ -4282,7 +4282,7 @@ class Game:
         p.showdowns_restored = season
         seen = set(p.battle_results_seen)
         have_refs = {r.battle_ref for r in s.battles if r.kind == "showdown"}
-        have_old = {(r.event, r.time) for r in s.battles if r.kind == "showdown"}  # 這一版以前的戰報沒有 battle_ref：照戰名與收場時刻認
+        have_old = {(r.event, r.time): r for r in s.battles if r.kind == "showdown"}  # 這一版以前的戰報沒有 battle_ref：照戰名與收場時刻認
         added = False
         for battle in self.world.season_ended_battles(season):
             me = battle.participants.get(p.name)
@@ -4290,7 +4290,9 @@ class Game:
             if me is None or definition is None or battle.unfinished or battle.record_id not in seen or battle.record_id in have_refs:
                 continue
             time = battle.end_time if battle.end_time is not None else s.world.time
-            if (definition.name, time) in have_old:
+            if (definition.name, time) in have_old:  # 還留著的舊戰報：補上 battle_ref，戰報頁就照 battles 表畫完整戰況
+                kept = have_old[(definition.name, time)]
+                kept.battle_ref = kept.battle_ref if kept.battle_ref is not None else battle.record_id
                 continue
             sides = self._sides(definition)
             side = sides.get(me.faction, me.faction)
