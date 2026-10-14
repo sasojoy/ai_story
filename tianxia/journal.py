@@ -149,6 +149,10 @@ class Draft:
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
 
+    def keep(self, msg: str) -> None:
+        """msg 先前被當成結果標記收掉了（outcome）：敘事裡照樣留著（切磋答應的那一方，FB-117：結果標記之外紀錄裡一個字都沒有）。"""
+        self.rewrites = [r for r in self.rewrites if r != (msg, None)]
+
     def outcome(self, text: str, msg: str) -> None:
         """msg 是這次行動的一個結果：還沒有結果標記時用 text 當標記、msg 不寫；
         已經有標記了（例如打完仗又遇上事件）就把 msg 改寫成 text 留在敘事裡。"""

@@ -186,7 +186,7 @@ def test_fb220_a_full_gift_button_keeps_its_name_on_one_line(content):
     for _ in range(cap):
         a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
     card = social.card(a, b)
-    full = social.GIFT_FULL.format(n=cap)
+    full = social.pair_full(a, "gift")
     assert [x["note"] for x in card["actions"] if x["action"] == "gift"] == [full, full]  # 原因那一句字不改
     out = run(server.main_view(a), "H.S.peer = { name: '乙', card: CARD }; return H.peerHtml();".replace("CARD", json.dumps(card, ensure_ascii=False)))
     assert f'disabled><span class="pa-name">贈銀兩</span><small>{full}</small></button>' in out

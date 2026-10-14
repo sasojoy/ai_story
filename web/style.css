@@ -818,6 +818,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .sheet .grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 10px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
+.sheet.still, .sheet-bg.still { animation: none; } /* 玩家卡跟著輪詢換一張（FB-117）：不再滑上來一次 */
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
 /* 管理者工具（G3）：排在一般設定之後、虛線框加淡金底，一眼看得出是另一塊；「開啟下一季」用警示樣式 */
@@ -1036,10 +1037,16 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .calls { display: grid; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; }
 .call, .party { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .call > span, .party > span { flex: 1 1 100%; }
+.calls-more { justify-self: start; font-size: 13px; }
+/* 決戰輪到你出招時，「此地還有」挪到三招後面自己一張卡（FB-117）：開頭那一條虛線與上緣不要 */
+.people-after > :first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.call.fit-hide { display: none; } /* 第一屏放不下時收掉的那幾份（app.js FIT_STEPS 的 calls，FB-117） */
 .peer-amount { flex-wrap: wrap; }
 .peer-amount select { flex: 1 1 100%; }
 .peer-pick { grid-column: 1 / -1; display: grid; gap: 8px; }
 .peer-pick select { min-width: 0; }
+/* 從場景底下「挑一樣答應」打開卡（FB-117）：捲到答應的那一格，框一下金邊（不呼吸，減少動態效果的人也一樣） */
+.peer-focus { border-radius: var(--radius); box-shadow: 0 0 0 2px var(--gold); }
 
 /* 煉製頁（企劃者 2026-10-10）：合不了的灰掉、寫兩三個字的原因；清單的篩選；結果就寫在開爐底下 */
 .chip.no { opacity: 0.5; border-style: dashed; }
@@ -1598,6 +1605,13 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
       linear-gradient(var(--bk-paper-2), var(--bk-paper-2)) 50% 0 / min(100%, 640px) 100% no-repeat, var(--paper);
   }
   .book-bar, .book-cover { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
+}
+
+/* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，
+   固定的店面圖層跟著窄一條捲軸寬，欄邊（50% − 320px）往左跳半條（7.5px），出店又跳回來。溝一直留著，有沒有捲軸頁面都一樣寬：
+   .shell、店面那一欄、底部分頁列都不跳（江湖頁自己有沒有捲軸也不跳）。只在 641px 以上（手機的捲軸是疊在畫面上的，這一段整段不生效） ── */
+@media (min-width: 641px) {
+  html { scrollbar-gutter: stable; }
 }
 
 /* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */

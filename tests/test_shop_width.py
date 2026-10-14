@@ -98,7 +98,8 @@ def test_the_desktop_rules_stay_inside_the_shop_and_the_book():
     block = _block(css, "FB-225")
     for selector in ",".join(_rules(block)).split(","):
         assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-")), selector
-    rest = re.sub(r"/\*.*?\*/", "", css.replace(block, ""), flags=re.S)  # 註解裡提到的不算
+    # 註解裡提到的不算；整頁的捲軸溝（FB-240）是另一段桌機區塊
+    rest = re.sub(r"/\*.*?\*/", "", css.replace(block, "").replace(_block(css, "FB-240"), ""), flags=re.S)
     assert ".shop-col" not in rest and "scrollbar-gutter" not in rest
 
 
@@ -158,3 +159,18 @@ def test_the_board_puts_its_notes_in_the_column_and_the_paper_outside_the_scroll
     inner = _shop_col(html)
     assert 'class="held-row"' in inner and 'class="board"' in inner
     assert '</div></div>\n      <div class="board-sheet">' in html
+
+
+# ── FB-240：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁長出捲軸，店面那一欄往左跳 7.5px ──
+# 電腦上整頁的捲軸溝一直留著（html { scrollbar-gutter: stable }）：有沒有捲軸頁面都一樣寬，固定的店面圖層也不跟著窄。
+# 實機（1920×1600，江湖頁 1600 高、沒有捲軸）：改前 .shell 640～1280、進鐵匠鋪整頁長到 1665、招牌那一列 632.5～1272.5；
+# 改後兩邊都是 632.5～1272.5，出店也是。手機（375）scrollbar-gutter 照舊是 auto。
+
+
+def test_fb240_the_page_keeps_its_scrollbar_gutter_on_desktop_only():
+    css = _css()
+    block = _block(css, "FB-240")
+    assert DESKTOP == f"@media (min-width: {_column() + 1}px) {{"  # 跟 FB-225 同一個斷點：手機一條都不生效
+    assert _rules(block) == {"html": "scrollbar-gutter: stable;"}
+    outside = css.replace(block, "")
+    assert not re.search(r"(?m)^\s*(html|:root|body)\b[^{]*\{[^}]*scrollbar-gutter", outside)  # 只在桌機那一段寫

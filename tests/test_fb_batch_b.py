@@ -62,7 +62,7 @@ def test_fb116_gifts_fold_into_one_entry_and_stop_at_the_daily_cap(content):
     a.state.player.stats["silver"] = 50
     for _ in range(cap):
         assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})[0] == "你把銀子 1 兩送給了乙。"
-    full = social.GIFT_FULL.format(n=cap)
+    full = social.pair_full(a, "gift")
     assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1}) == [full]  # 第六次：照樣不收、不寫紀錄
     assert a.state.player.stats["silver"] == 50 - cap
     gifts = [b for b in a.peer_card("乙")["actions"] if b["action"] == "gift"]
@@ -110,7 +110,7 @@ def test_fb116_a_pair_discusses_at_most_twice_a_game_day(pair):
     # 第二張邀請還在等的時候，這一對人今天的帳被別處用滿了（另一個分頁、假人）：答應那一下重驗，不開爐
     key = "|".join(sorted(("甲", "乙")))
     world.mutate_season(lambda s: s.discuss_tally.update({key: [game_day(content, s), cap]}))
-    full = social.DISCUSS_FULL.format(n=cap)
+    full = _do(content, world, "乙", lambda g: social.pair_full(g, "discuss"))[0]
     assert _accept(content, world, "insight:huo", ("風火境", "風助火勢。")) == [full]
     assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None
     msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "discuss", {"arg": "invite:art:basic_fist"}))
