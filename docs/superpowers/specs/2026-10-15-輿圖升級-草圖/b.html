@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>輿圖草圖 B：戰略沙盤</title>
+<style>
+/* 三份草圖共用的外框：左邊一支手機（或切成桌機），右邊寫跟現在比改了什麼。手機寬（≤760）時草圖本身佔滿畫面、說明排在下面 */
+:root {
+  --page: #E7DFCB; --page-ink: #2B241B; --page-mute: #7A6A55; --line: #CDBF9F; --card: #F7F1E3; --accent: #A8322A;
+  --serif: "Noto Serif TC", "Songti TC", "Source Han Serif TC", "PMingLiU", serif;
+  --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--page-ink); font-family: var(--sans); -webkit-text-size-adjust: 100%; }
+.page-head { max-width: 1240px; margin: 0 auto; padding: 18px 16px 6px; }
+.page-head h1 { font-family: var(--serif); font-size: 22px; margin: 0 0 4px; letter-spacing: 1px; }
+.page-head .lead { margin: 0; color: var(--page-mute); font-size: 14px; line-height: 1.6; }
+.page-head nav { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.page-head nav a { color: var(--page-ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; background: var(--card); }
+.page-head nav a.here { background: var(--page-ink); color: #F7F1E3; border-color: var(--page-ink); }
+.stage { max-width: 1240px; margin: 0 auto; padding: 10px 16px 40px; display: flex; gap: 28px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.device-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.devbar { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; font-size: 13px; }
+.devbar button { border: 0; background: none; padding: 4px 14px; border-radius: 999px; font: inherit; color: var(--page-mute); cursor: pointer; }
+.devbar button.on { background: var(--page-ink); color: #F7F1E3; }
+.device { position: relative; width: 375px; height: 760px; border: 9px solid #2A241D; border-radius: 34px; overflow: hidden;
+  box-shadow: 0 10px 30px rgba(43, 36, 27, .25); background: #EFE6CF; touch-action: none; }
+.device.desk { width: min(1060px, calc(100vw - 40px)); height: 640px; border-width: 6px; border-radius: 12px; }
+.notes { flex: 1 1 380px; max-width: 460px; font-size: 14px; line-height: 1.7; }
+.notes h2 { font-family: var(--serif); font-size: 17px; margin: 18px 0 6px; }
+.notes h2:first-child { margin-top: 0; }
+.notes ul { margin: 0; padding-left: 20px; }
+.notes li { margin: 3px 0; }
+.notes .pid { display: inline-block; min-width: 30px; font-size: 11px; color: #FFF; background: var(--accent); border-radius: 4px; text-align: center; margin-right: 4px; padding: 0 3px; }
+.notes .tag { font-size: 12px; color: var(--page-mute); }
+.notes .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+@media (max-width: 760px) {
+  .stage { display: block; padding: 0 0 30px; }
+  .devbar { display: none; }
+  .device, .device.desk { width: 100vw; height: 100svh; border: 0; border-radius: 0; box-shadow: none; }
+  .notes { padding: 8px 16px 0; max-width: none; }
+}
+
+/* ── B：不畫地理全圖，改成「天下」總覽（三條戰線拔河＋版圖年表）與每個大區一塊沙盤 ── */
+.proto { position: absolute; inset: 0; display: flex; flex-direction: column; font-family: var(--sans); color: #2B241B; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 0%, #7A5638 0%, #4E3421 70%); }
+.sbar { flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #F5ECD7; font-size: 12px; white-space: nowrap; border-bottom: 2px solid #3A2717; }
+.sbar b { font-family: var(--serif); font-size: 14px; }
+.sbar .mute { color: #8A7A62; }
+.sbar .here { margin-left: auto; border: 1px solid #A8322A; color: #A8322A; border-radius: 12px; padding: 1px 9px; background: #FFF; cursor: pointer; font: 12px var(--sans); }
+.rtabs { flex: none; display: flex; gap: 5px; padding: 8px 10px; overflow-x: auto; scrollbar-width: none; background: rgba(0, 0, 0, .18); }
+.rtabs::-webkit-scrollbar { display: none; }
+.rtabs button { flex: none; height: 32px; border-radius: 6px; border: 1px solid #8C6A45; background: #E9DCC0; font: 600 13px var(--serif); color: #3A2717; padding: 0 11px; cursor: pointer; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .12); }
+.rtabs button.on { background: #A8322A; color: #FFF5E0; border-color: #6E1E18; }
+.rtabs button .mk { font-size: 10px; margin-left: 3px; color: #A8322A; }
+.rtabs button.on .mk { color: #FFE2A8; }
+.rtabs .find { margin-left: auto; font-family: var(--sans); font-weight: 400; }
+.content { flex: 1; overflow-y: auto; padding: 10px 10px 70px; overscroll-behavior: contain; }
+.plate { background: #EFE3C6; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 3px 0 #3A2717, inset 0 0 0 1px rgba(255, 255, 255, .5); }
+.plate h3 { margin: 0 0 4px; font: 700 15px var(--serif); display: flex; align-items: baseline; gap: 6px; }
+.plate h3 small { font: 12px var(--sans); color: #8A7A62; }
+.cord { position: relative; height: 46px; margin: 4px 6px 2px; }
+.cord .rope { position: absolute; left: 0; right: 0; top: 20px; height: 8px; border-radius: 4px;
+  background: repeating-linear-gradient(115deg, #B88F5A 0 6px, #8F6A3C 6px 9px); box-shadow: 0 1px 0 rgba(0, 0, 0, .2); }
+.cord .band { position: absolute; top: 12px; height: 24px; background: repeating-linear-gradient(45deg, rgba(168, 50, 42, .13) 0 4px, transparent 4px 8px); border-radius: 4px; }
+.cord .end { position: absolute; top: 12px; font: 700 12px var(--serif); color: #FFF; border-radius: 5px; padding: 3px 5px; }
+.cord .end.l { left: -6px; background: #3D5F8F; } .cord .end.r { right: -6px; background: #B9821A; }
+.cord .bead { position: absolute; top: 9px; width: 30px; height: 30px; margin-left: -15px; border-radius: 50%; border: 2px solid #FFF8E8; color: #FFF;
+  font: 700 13px var(--serif); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 0 rgba(0, 0, 0, .3); cursor: pointer; }
+.cord .bead.sel { outline: 3px solid #2B241B; outline-offset: 1px; }
+.cord .knot { position: absolute; top: 2px; width: 6px; height: 44px; margin-left: -3px; background: #2B241B; border-radius: 3px; }
+.cord .knot::after { content: attr(data-v); position: absolute; top: -2px; left: 8px; font: 11px var(--sans); color: #2B241B; background: #EFE3C6; padding: 0 2px; }
+.names { position: relative; height: 30px; margin: 0 6px 4px; font-size: 11px; color: #5A4C3A; }
+.names span.lo { top: 14px; }
+.names span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.gauge { position: relative; height: 16px; border-radius: 8px; background: #E1D3B2; margin: 18px 4px 6px; }
+.gauge .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; background: linear-gradient(90deg, #A5C6A6, #4E7D59); }
+.gauge .tick { position: absolute; top: -16px; font-size: 10.5px; color: #5A4C3A; transform: translateX(-50%); }
+.gauge .tick::after { content: ""; position: absolute; left: 50%; top: 14px; width: 1px; height: 22px; background: #5A4C3A; }
+.chart { display: grid; grid-template-columns: 76px repeat(12, 1fr); gap: 2px; font-size: 11px; align-items: center; }
+.chart .wk { text-align: center; color: #5A4C3A; border-radius: 4px; padding: 2px 0; cursor: pointer; }
+.chart .wk.on { background: #A8322A; color: #FFF; }
+.chart .wk.future { color: #B9AC92; cursor: default; }
+.chart .lab { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.chart .ln { grid-column: 1 / -1; font: 600 11px var(--sans); color: #8A7A62; margin-top: 4px; }
+.chart .cell { height: 18px; border-radius: 3px; position: relative; cursor: pointer; }
+.chart .cell.future { background: repeating-linear-gradient(45deg, #E1D3B2 0 3px, #EFE3C6 3px 6px) !important; cursor: default; }
+.chart .cell.now { box-shadow: 0 0 0 2px #2B241B; }
+.chart .cell.flip::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: #FFF; }
+.evt { font-size: 13px; padding: 2px 0; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: #5A4C3A; margin-top: 6px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 3px; }
+.board { position: relative; background: #E6D5AE; border-radius: 16px; box-shadow: 0 4px 0 #3A2717, inset 0 2px 12px rgba(80, 50, 20, .25); margin-bottom: 10px; }
+.board svg { display: block; width: 100%; height: auto; }
+.rows .row { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-bottom: 1px solid #E1D3B2; cursor: pointer; font-size: 13.5px; }
+.rows .row .tok { width: 22px; height: 22px; border-radius: 50%; color: #FFF; font: 700 11px var(--serif); display: flex; align-items: center; justify-content: center; flex: none; }
+.rows .row .nm { flex: 1; }
+.rows .row .r { color: #8A7A62; font-size: 12px; text-align: right; }
+.tone-safe { color: #3F7A3A; } .tone-ok { color: #8A6A1A; } .tone-risk { color: #A8322A; }
+.card { position: absolute; left: 8px; right: 8px; bottom: 60px; background: #FFF8E8; border-radius: 16px; padding: 10px 14px 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); z-index: 5; font-size: 13.5px; line-height: 1.55; }
+.card .x { position: absolute; right: 8px; top: 6px; border: 0; background: none; font-size: 20px; color: #8A7A62; cursor: pointer; }
+.card .nm { font: 700 18px var(--serif); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-right: 26px; }
+.badge { font: 600 11.5px var(--sans); color: #FFF; border-radius: 6px; padding: 1px 7px; }
+.badge.none { background: #A2967F; }
+.sub { color: #8A7A62; font-size: 12px; }
+.acts { display: flex; gap: 8px; margin-top: 8px; }
+.acts button { flex: 1; height: 42px; border-radius: 11px; border: 1px solid #D8CBAE; background: #FFF; font: 600 13.5px var(--sans); cursor: pointer; }
+.acts button.main { background: #A8322A; border-color: #A8322A; color: #FFF; }
+.acts button small { display: block; font-weight: 400; font-size: 10.5px; opacity: .85; margin-top: -2px; }
+.overlay { position: absolute; inset: 34px 0 52px; background: #F5ECD7; z-index: 6; padding: 10px 12px; overflow-y: auto; }
+.overlay input { width: 100%; height: 40px; border-radius: 12px; border: 1px solid #D8CBAE; padding: 0 12px; font: 15px var(--sans); }
+.grp { font: 600 12px var(--sans); color: #8A7A62; margin: 10px 0 2px; }
+.gtabs { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; background: #F5ECD7; border-top: 2px solid #3A2717; z-index: 7; }
+.gtabs span { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font: 17px var(--serif); color: #5A4C3A; }
+.gtabs span small { font: 10px var(--sans); color: #8A7A62; }
+.gtabs span.on, .gtabs span.on small { color: #A8322A; }
+@keyframes ping { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.2); opacity: 0; } }
+.ping { animation: ping 1.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) { .ping { animation: none; } }
+/* 桌機：左邊天下總覽、右邊大區沙盤 */
+.device.desk .content { display: grid; grid-template-columns: 420px 1fr; gap: 12px; align-items: start; }
+.device.desk .card { left: auto; width: 360px; right: 14px; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <h1>輿圖草圖 B：戰略沙盤</h1>
+  <p class="lead">不再拖拉縮放一張大圖：「天下」一頁把三條戰線畫成拔河繩、把這一季的易手畫成年表；每個大區一塊沙盤，地點是一顆一顆可以點的棋子。單手、不用捏合。</p>
+  <nav><a href="a.html">A 大圖加抽屜</a><a href="b.html" class="here">B 戰略沙盤</a><a href="c.html">C 水墨長卷</a><a href="README.md">問題清單與操作說明</a></nav>
+</header>
+<main class="stage">
+  <div class="device-col">
+    <div class="devbar"><button data-mode="phone" class="on">手機 375</button><button data-mode="desk">桌機</button></div>
+    <div class="device" id="dev">
+      <div class="proto" id="proto">
+        <div class="sbar"><b>測圖</b><span class="mute">官軍・第 9 週・週三 21:40・體力 186</span><button class="here" data-act="me">📍 潁川郡</button></div>
+        <div class="rtabs" id="rtabs"></div>
+        <div class="content" id="content"></div>
+        <div id="cardHost"></div>
+        <div id="overlayHost"></div>
+        <nav class="gtabs"><span>江<small>江湖</small></span><span>修<small>修練</small></span><span>煉<small>煉製</small></span><span class="on">圖<small>輿圖</small></span><span>聞<small>見聞</small></span></nav>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <h2>這個方向</h2>
+    <p>把「輿圖」從一張要拖、要捏的大地圖，換成一張<b>戰略桌</b>：最上面一排是大區的分頁（天下、幽州、冀州、洛陽、潁川汝南、南陽），點了就換一塊沙盤；每塊沙盤只放那一區的地點，棋子大（直徑 40px）、不會擠在一起、名字不會壓到別人。</p>
+    <h2>跟現在比改了什麼</h2>
+    <ul>
+      <li><span class="pid">P5</span><span class="pid">P11</span>「天下」頁直接把地盤的規則畫出來：每條戰線一條拔河繩，兩頭是兩軍的大本營，繩上的棋子是那一線可易手的地點（照門檻排好），黑色的結是此刻的戰況。結往哪邊拉、哪一顆就快換顏色，一眼看得懂。</li>
+      <li><span class="pid">P11</span>這一季的版圖：繩子底下一張年表，每一列是一個可易手的地點、每一格是一週，顏色是那一週誰佔著，有白點的是那一週易手。點週次，三條繩子跟著回到那一週。</li>
+      <li><span class="pid">P1</span><span class="pid">P2</span><span class="pid">P3</span><span class="pid">P4</span>沒有地圖框，就沒有「詳情在地圖下面」與搶手勢的問題：頁面一路捲，點棋子跳出一張卡，卡上就是「步行／疾行／出陣」。</li>
+      <li><span class="pid">P6</span>不分圖層：棋子的顏色是誰佔著，棋子上的小字是攻、守，沙盤底下的列表寫勝算與幾分鐘。</li>
+      <li><span class="pid">P8</span>「找」在大區分頁最右邊，能打字搜尋地名與人物；狀態列的「📍 潁川郡」一按就跳到你那一區、你那顆棋子會閃。</li>
+      <li><span class="pid">P7</span>沙盤是固定的排法，換頁、點棋子都不用跟伺服器要圖。</li>
+      <li><span class="pid">P10</span><span class="pid">P9</span>字都在固定大小的棋子底下或列表裡，不會被裁、不需要圖例（顏色在年表底下寫一次）。</li>
+    </ul>
+    <h2>放棄了什麼</h2>
+    <p>山水地理只剩沙盤的底色與大區的形狀；路的長短、黃河在哪裡看不出來（分鐘數寫在列表裡）。現在那張設色山水可以留在「見聞」當收藏的長圖，或做成載入時的過場。</p>
+    <h2>美術</h2>
+    <p>兵棋沙盤：深色木桌、陶土色的沙盤、漆過的木頭棋子刻著「官」「巾」「豪」，戰線是麻繩，年表像兵書裡的表格。</p>
+    <h2>工程量（粗估）</h2>
+    <p class="tag">中到大：每個大區的沙盤要一份排好的座標（可以從現在的座標自動推開再手調）；拔河繩與年表要伺服器每週存一份控制方（地盤的歷史）。mapview 的 SVG 大圖可以不用了。</p>
+  </aside>
+</main>
+<script>
+// ── 三份草圖共用的假資料與規則（建置時內嵌進每一份 HTML，所以每一份都自足）──
+// 地點、路、大區、河、山取自正式內容（content/locations.json、map.json、scenario.json 的 territory），
+// 戰線每週的數字、割據與易手是假的「一季的故事」，照地盤易手的規則算（設計 4.2：T = 75 − 50 ×（j − 0.5）÷ k，±5 不動；割據 ≥60 每條線一處）。
+const DATA = {"W":900,"H":1340,"places":[["yingchuan","潁川郡（陽翟）",464,940,"town",1,1],["yingshui","潁水河畔",488,1012,"flag",0,1],["yingchuan_wilds","潁川郊野",541,962,"flag",0,1],["changshe","長社",598,1019,"flag",0,2],["luoyang_road","洛陽官道",223,870,"flag",1,1],["wan_city","宛城",172,1137,"town",1,1],["baima_temple","白馬寺",184,786,"roof",0,1],["luoyang_palace","洛陽宮城",123,838,"flag",1,1],["dajiangjun_fu","大將軍府",60,794,"flag",1,1],["beimang_hill","北邙山",120,755,"peak",0,2],["mengjin_ford","孟津渡",186,708,"ferry",0,2],["nanyang_road","南陽官道",237,1076,"flag",0,1],["nanyang_huangjin_camp","南陽黃巾營",246,1153,"camp",1,3],["yu_river","淯水河畔",83,1147,"flag",0,1],["xinye","新野",134,1195,"town",0,1],["nanyang_wilds","南陽郊野",121,1088,"flag",0,2],["runan","汝南",651,1168,"town",1,1],["runan_academy","汝南學宮",618,1235,"town",0,1],["hilltop_wilds","荒丘",544,1065,"flag",0,1],["songshan_foot","嵩山腳",395,901,"peak",0,1],["yingchuan_academy","潁川書院",396,974,"roof",1,1],["deep_mountain","嵩山深處",326,910,"peak",0,2],["jade_cave","南華觀",285,965,"flag",1,3],["runan_market","汝南集市",694,1230,"town",0,1],["qiao_county","譙縣",764,1167,"town",1,1],["cao_manor","曹氏莊院",813,1109,"flag",1,1],["runan_wilds","汝南荒野",601,1113,"flag",0,2],["guan_camp","官軍大營",580,880,"camp",1,2],["huangjin_camp","黃巾別部營寨",657,971,"camp",1,3],["zhuo_county","涿郡",584,118,"town",1,1],["market_town","集市小鎮",678,109,"town",0,1],["loushang_village","樓桑里",509,118,"flag",1,1],["zhuo_militia_hall","鄉里結社",637,172,"flag",1,1],["juma_river","拒馬河畔",543,186,"flag",0,2],["yanshan_foot","燕山腳",621,60,"peak",0,2],["julu_altar","鉅鹿道壇",534,484,"camp",1,3],["guangzong","廣宗",612,471,"camp",1,3],["luzhi_camp","盧植營",672,520,"camp",1,2],["xiaquyang","下曲陽",467,445,"town",1,2],["haozu_fort","豪族塢堡",406,497,"flag",1,2],["baima_ford","白馬津",586,558,"ferry",0,2],["mentor_hut","草廬",515,880,"flag",0,1]],"edges":[["yingchuan","yingshui",""],["yingchuan","yingchuan_wilds",""],["songshan_foot","yingchuan",""],["yingchuan","yingchuan_academy",""],["mentor_hut","yingchuan",""],["luoyang_road","yingchuan","官道"],["yingchuan_wilds","yingshui",""],["hilltop_wilds","yingshui",""],["changshe","yingchuan_wilds",""],["guan_camp","yingchuan_wilds",""],["changshe","huangjin_camp",""],["changshe","runan_wilds","官道"],["baima_ford","changshe","官道"],["baima_temple","luoyang_road","官道"],["nanyang_road","wan_city","官道"],["nanyang_huangjin_camp","wan_city",""],["wan_city","yu_river",""],["nanyang_wilds","wan_city",""],["baima_temple","luoyang_palace",""],["baima_temple","mengjin_ford",""],["beimang_hill","luoyang_palace",""],["dajiangjun_fu","luoyang_palace",""],["luoyang_palace","nanyang_wilds","山路"],["beimang_hill","mengjin_ford",""],["haozu_fort","mengjin_ford",""],["nanyang_huangjin_camp","nanyang_road",""],["hilltop_wilds","nanyang_road","官道"],["xinye","yu_river",""],["nanyang_wilds","xinye",""],["runan","runan_wilds",""],["runan","runan_academy",""],["runan","runan_market",""],["runan_academy","runan_market",""],["hilltop_wilds","runan_wilds",""],["songshan_foot","yingchuan_academy",""],["deep_mountain","songshan_foot","山路"],["deep_mountain","jade_cave","山路"],["qiao_county","runan_market","官道"],["cao_manor","qiao_county",""],["loushang_village","zhuo_county",""],["juma_river","zhuo_county",""],["zhuo_county","zhuo_militia_hall",""],["yanshan_foot","zhuo_county","山路"],["market_town","zhuo_county","官道"],["julu_altar","zhuo_county","官道"],["market_town","yanshan_foot",""],["market_town","zhuo_militia_hall",""],["juma_river","loushang_village",""],["juma_river","xiaquyang","山路"],["baima_ford","julu_altar","官道"],["guangzong","julu_altar",""],["julu_altar","xiaquyang",""],["baima_ford","guangzong","官道"],["guangzong","luzhi_camp",""],["baima_ford","luzhi_camp","官道"],["haozu_fort","xiaquyang",""]],"regions":[["youzhou","幽州","jizhou",[[454,111],[639,8],[731,96],[674,213],[505,226]],700,40],["jizhou","冀州","jizhou",[[351,497],[421,415],[663,449],[726,530],[615,605]],380,420],["luoyang","洛陽",null,[[5,789],[207,657],[264,907],[91,883]],30,870],["yingru","潁川汝南","yingru",[[233,947],[279,881],[355,864],[695,932],[867,1120],[812,1193],[727,1274],[633,1288]],700,960],["nanyang","南陽","nanyang",[[29,1157],[82,1049],[281,1043],[299,1167],[110,1245]],40,1240]],"rivers":[["黃河",[[0,690],[186,708],[300,650],[420,600],[586,558],[760,545],[900,540]],"yellow"],["潁水",[[340,860],[470,1000],[560,1100],[640,1210],[700,1340]],""],["淯水",[[40,1000],[80,1140],[150,1240],[190,1340]],""],["拒馬河",[[400,160],[543,200],[720,240]],""]],"lines":{"yingru":["guan_camp","runan_wilds"],"nanyang":["nanyang_wilds","yu_river"],"jizhou":["baima_ford","xiaquyang","juma_river","yanshan_foot"]},"fixed":{"guangzong":"huang"},"bases":{"changshe":"guan","wan_city":"guan","luzhi_camp":"guan","huangjin_camp":"huang","julu_altar":"huang","nanyang_huangjin_camp":"huang","zhuo_militia_hall":"haoqiang","cao_manor":"haoqiang","haozu_fort":"haoqiang"},"factions":[["guan","官軍"],["huang","黃巾軍"],["haoqiang","地方豪強"]],"terrain":[["mountains","燕山",[[420,62],[490,56],[560,50],[640,46]],22],["mountains","太行山",[[250,232],[282,300],[306,372],[314,444],[296,512],[272,566]],26],["mountains","呂梁山",[[70,150],[96,250],[118,350],[108,450]],20],["hills","",[[150,560],[200,600]],12],["hills","邙山",[[36,745],[172,748]],12],["mountains","嵩山",[[255,870],[300,863],[345,861],[385,869]],24],["mountains","",[[316,952],[362,957]],20],["mountains","伏牛山",[[28,978],[90,992],[150,1000],[214,996]],24],["mountains","桐柏山",[[318,1218],[380,1242],[440,1262]],20],["forest","",[[700,300],[800,288],[850,356],[760,398]],0],["forest","",[[700,1008],[782,998],[800,1062],[722,1072]],0],["forest","",[[800,1206],[868,1196],[878,1262],[812,1266]],0],["forest","",[[30,560],[95,552],[100,620],[36,628]],0]]};
+
+const SIDES = {
+  guan: { name: "官軍", short: "官", color: "#3D5F8F", soft: "#9DB4D3", tint: "#DCE5F0" },
+  huang: { name: "黃巾", short: "巾", color: "#B9821A", soft: "#E7C778", tint: "#F4E7C2" },
+  haoqiang: { name: "豪強", short: "豪", color: "#4E7D59", soft: "#A5C6A6", tint: "#DFEBDD" },
+};
+const P = {};
+for (const [id, name, x, y, kind, big, danger] of DATA.places) P[id] = { id, name, x, y, kind, big: !!big, danger };
+const NAME_SHORT = (n) => n.replace(/（.*?）/g, "");
+
+// 大區：地點落在哪個多邊形（區外歸最近的大區中心，同 atlas）
+const REGIONS = DATA.regions.map(([id, name, front, pts, lx, ly]) => ({ id, name, front, pts, lx, ly,
+  cx: pts.reduce((a, p) => a + p[0], 0) / pts.length, cy: pts.reduce((a, p) => a + p[1], 0) / pts.length }));
+function inPoly(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+for (const p of Object.values(P)) {
+  const hit = REGIONS.find((r) => inPoly(p.x, p.y, r.pts));
+  p.region = (hit || REGIONS.slice().sort((a, b) => Math.hypot(a.cx - p.x, a.cy - p.y) - Math.hypot(b.cx - p.x, b.cy - p.y))[0]).id;
+}
+const REGION = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
+const REGION_ORDER = ["youzhou", "jizhou", "luoyang", "yingru", "nanyang"]; // 由北到南
+
+// 路：鄰接表，長度是座標距離
+const ADJ = {};
+for (const [a, b, road] of DATA.edges) {
+  if (!P[a] || !P[b]) continue;
+  const len = Math.hypot(P[a].x - P[b].x, P[a].y - P[b].y);
+  (ADJ[a] = ADJ[a] || []).push({ to: b, len, road });
+  (ADJ[b] = ADJ[b] || []).push({ to: a, len, road });
+}
+function route(from, to) {
+  const dist = { [from]: 0 }, prev = {}, todo = new Set(Object.keys(P));
+  while (todo.size) {
+    let u = null;
+    for (const k of todo) if (dist[k] !== undefined && (u === null || dist[k] < dist[u])) u = k;
+    if (u === null) break;
+    todo.delete(u);
+    if (u === to) break;
+    for (const e of ADJ[u] || []) {
+      const d = dist[u] + e.len;
+      if (dist[e.to] === undefined || d < dist[e.to]) { dist[e.to] = d; prev[e.to] = u; }
+    }
+  }
+  if (dist[to] === undefined) return null;
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev[path[0]]);
+  return { len: dist[to], path, minutes: Math.max(1, Math.round(dist[to] / 42)), stamina: Math.max(1, Math.round(dist[to] / 18)) };
+}
+
+// 戰線：從官軍那頭排到黃巾那頭（劇本 territory.lines），門檻照規則
+const LINES = DATA.lines;
+const LINE_NAME = { yingru: "潁川汝南", nanyang: "南陽", jizhou: "冀州" };
+const LINE_OF = {};
+const THRESHOLD = {};
+for (const [line, ids] of Object.entries(LINES)) ids.forEach((id, i) => {
+  LINE_OF[id] = line;
+  THRESHOLD[id] = 75 - (50 * (i + 0.5)) / ids.length;
+});
+const BASES = DATA.bases;
+const FIXED = DATA.fixed;
+
+// ── 一季的故事（假）：每週週末的戰線值（0 官軍穩控 ↔ 100 黃巾控制）與豪強割據 ──
+const WEEKS = 12, NOW = 9; // 現在是第 9 週；10～12 週還沒到
+const FRONTS = {
+  yingru: [40, 46, 52, 60, 70, 31, 34, 37, 40, 38, 36, 34], // 第 5 週波才把官軍大營拿下；第 6 週長社火攻，官軍大勝、拿回兩處
+  nanyang: [35, 38, 46, 52, 58, 68, 52, 46, 30, 32, 34, 35], // 第 3 週張曼成攻殺南陽太守；第 7 週秦頡斬張曼成；第 9 週宛城之戰
+  jizhou: [55, 58, 62, 64, 67, 69, 50, 75, 72, 74, 58, 55], // 第 7 週盧植圍廣宗；第 8 週盧植下獄，黃巾反撲
+};
+const GEJU = [10, 15, 21, 28, 35, 42, 50, 58, 63, 66, 69, 71];
+const TIMETABLE = { 1: ["三十六方起義"], 2: ["朝廷出兵"], 3: ["張曼成攻殺南陽太守"], 4: ["波才大敗朱儁"], 6: ["長社火攻（官軍大勝）"],
+  7: ["盧植圍廣宗", "秦頡斬張曼成"], 8: ["盧植下獄"], 9: ["宛城之戰（官軍險勝）"], 10: ["張角病逝"], 11: ["廣宗決戰"], 12: ["天命之爭", "下曲陽・季末"] };
+
+function computeHistory() {
+  const ctrl = {}, events = {};
+  let held = new Set();
+  for (let w = 1; w <= WEEKS; w++) {
+    const c = { ...BASES };
+    for (const [id, side] of Object.entries(FIXED)) c[id] = id === "guangzong" && w >= 11 ? "guan" : side;
+    for (const [line, ids] of Object.entries(LINES)) {
+      const v = FRONTS[line][w - 1];
+      for (const id of ids) {
+        const t = THRESHOLD[id], prev = ctrl[w - 1] && ctrl[w - 1][id];
+        c[id] = v >= t + 5 ? "huang" : v <= t - 5 ? "guan" : prev || (v >= t ? "huang" : "guan");
+      }
+    }
+    const g = GEJU[w - 1];
+    if (g < 50) held = new Set();
+    else if (g >= 60) {
+      const want = g >= 80 ? 2 : 1;
+      for (const [line, ids] of Object.entries(LINES)) {
+        const v = FRONTS[line][w - 1];
+        while (ids.filter((id) => held.has(id)).length < want) {
+          const pick = ids.filter((id) => !held.has(id)).sort((a, b) => Math.abs(THRESHOLD[a] - v) - Math.abs(THRESHOLD[b] - v))[0];
+          if (!pick) break;
+          held.add(pick);
+        }
+      }
+    }
+    for (const id of held) c[id] = "haoqiang";
+    ctrl[w] = c;
+    const changed = w === 1 ? [] : Object.keys(c).filter((id) => ctrl[w - 1][id] !== c[id]).map((id) => ({ id, from: ctrl[w - 1][id], to: c[id] }));
+    events[w] = { big: TIMETABLE[w] || [], changed };
+  }
+  return { ctrl, events };
+}
+const HISTORY = computeHistory();
+const ctrlAt = (w, id) => HISTORY.ctrl[w][id] || null;
+const flips = (id) => {
+  const out = [];
+  for (let w = 2; w <= NOW; w++) if (HISTORY.ctrl[w][id] !== HISTORY.ctrl[w - 1][id]) out.push({ w, from: HISTORY.ctrl[w - 1][id], to: HISTORY.ctrl[w][id] });
+  return out;
+};
+
+// ── 你（假）：官軍、站在潁川郡；兩處還沒摸清 ──
+const ME = { name: "測圖", side: "guan", at: "yingchuan", stamina: 186, sortiesLeft: 3 };
+const UNKNOWN = new Set(["jade_cave", "luoyang_palace"]);
+const CLINIC = new Set(["yingchuan", "runan", "wan_city", "zhuo_county", "xiaquyang", "baima_temple"]);
+const MARKET = new Set(["zhuo_county", "runan_market", "wan_city", "xiaquyang"]);
+const SMITH = new Set(Object.values(P).filter((p) => p.kind === "town").map((p) => p.id));
+const GOALS = new Set(["changshe", "guan_camp"]); // 劇情層：這一幕的目標（假）
+const NEWS = new Set(["wan_city", "xiaquyang", "runan_wilds"]); // 最近的大事與傳聞（假）
+const PEOPLE = { changshe: ["皇甫嵩", "朱儁"], huangjin_camp: ["波才"], guangzong: ["張角", "張梁"], luzhi_camp: ["盧植"], nanyang_huangjin_camp: ["張曼成"], xiaquyang: ["張寶"] };
+const SQUADS = { guan: ["官軍巡騎", "郡國兵"], huang: ["黃巾嘍囉", "黃巾別部"], haoqiang: ["涿郡義勇", "塢堡部曲"], none: ["流寇散兵", "山匪"] };
+
+function oddsWord(p) {
+  const side = ctrlAt(NOW, p.id);
+  if (side === ME.side) return { word: "自家地盤", tone: "safe" };
+  return [null, { word: "穩勝", tone: "safe" }, { word: "有把握", tone: "ok" }, { word: "難分勝負", tone: "risk" }][p.danger] || { word: "五五波", tone: "ok" };
+}
+function sortieOf(p, side = ME.side) {
+  if (!LINE_OF[p.id] && !BASES[p.id] && !FIXED[p.id]) return null;
+  if (!LINE_OF[p.id] && !FIXED[p.id]) return null; // 大本營不在可易手的戰線上：沒有出陣
+  const holder = ctrlAt(NOW, p.id);
+  if (side === "haoqiang") return "攪局";
+  return holder === side ? "守" : "攻";
+}
+function priceWord(p) {
+  const holder = ctrlAt(NOW, p.id);
+  if (!holder) return "";
+  return holder === ME.side ? "自家地盤：療傷、打造、買馬便宜一成" : "別人的地盤：療傷、打造、買馬貴兩成";
+}
+function services(p) {
+  return [CLINIC.has(p.id) && "醫館", SMITH.has(p.id) && "鐵匠鋪", MARKET.has(p.id) && "馬市"].filter(Boolean);
+}
+
+// 外框：手機／桌機切換（只在寬螢幕出現）。切了之後通知草圖重新量大小
+(function () {
+  const dev = document.getElementById("dev");
+  const bar = document.querySelector(".devbar");
+  if (!dev || !bar) return;
+  bar.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-mode]");
+    if (!b) return;
+    for (const x of bar.querySelectorAll("button")) x.classList.toggle("on", x === b);
+    dev.classList.toggle("desk", b.dataset.mode === "desk");
+    window.dispatchEvent(new Event("devicechange"));
+  });
+})();
+
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const S = { tab: "world", sel: null, week: NOW, find: false, q: "", ping: null };
+  const side = (id) => ctrlAt(S.week, id);
+  const sideName = (k) => (k ? SIDES[k].name : "無人控制");
+  const badge = (k) => k ? `<span class="badge" style="background:${SIDES[k].color}">${SIDES[k].name}${k === "haoqiang" ? "佔據" : "控制"}</span>` : '<span class="badge none">無人控制</span>';
+  const tokColor = (id) => { const c = ctrlAt(NOW, id); return c ? SIDES[c].color : "#8F8270"; };
+  const tokGlyph = (id) => { const c = ctrlAt(NOW, id); return UNKNOWN.has(id) ? "？" : c ? SIDES[c].short : "·"; };
+
+  // ── 大區的沙盤座標：照現在的座標縮進沙盤，再推開到兩顆棋子至少隔 MIN ──
+  const BOARD_W = 343, GAP_X = 78, GAP_Y = 66; // 棋子連名字要的空間：橫的比直的寬（名字寫在棋子底下）
+  const LAYOUT = {};
+  for (const rid of REGION_ORDER) {
+    const ids = Object.values(P).filter((p) => p.region === rid).map((p) => p.id);
+    const xs = ids.map((id) => P[id].x), ys = ids.map((id) => P[id].y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const sc = Math.min((BOARD_W - 90) / Math.max(1, x1 - x0), 1.6);
+    const pos = Object.fromEntries(ids.map((id) => [id, [45 + (P[id].x - x0) * sc, 50 + (P[id].y - y0) * sc * 1.5]]));
+    for (let it = 0; it < 400; it++) { // 推開：兩顆在橢圓距離 1 以內就各退一半
+      for (const a of ids) for (const b of ids) {
+        if (a >= b) continue;
+        const [ax, ay] = pos[a], [bx, by] = pos[b], nx = (ax - bx) / GAP_X, ny = (ay - by) / GAP_Y, d = Math.hypot(nx, ny) || 0.01;
+        if (d < 1) { const push = (1 - d) / 2; pos[a] = [ax + (nx / d) * push * GAP_X, ay + (ny / d) * push * GAP_Y]; pos[b] = [bx - (nx / d) * push * GAP_X, by - (ny / d) * push * GAP_Y]; }
+      }
+      for (const id of ids) pos[id] = [Math.min(BOARD_W - 38, Math.max(38, pos[id][0])), Math.max(40, pos[id][1])];
+    }
+    const H = Math.max(...ids.map((id) => pos[id][1])) + 56;
+    LAYOUT[rid] = { ids, pos, H };
+  }
+
+  function tabsHtml() {
+    const mine = P[ME.at].region;
+    return `<button data-tab="world" class="${S.tab === "world" ? "on" : ""}">天下</button>` +
+      REGION_ORDER.map((rid) => `<button data-tab="${rid}" class="${S.tab === rid ? "on" : ""}">${REGION[rid].name}${rid === mine ? '<span class="mk">●你</span>' : ""}</button>`).join("") +
+      '<button class="find" data-act="find">🔍 找</button>';
+  }
+
+  // ── 天下：三條拔河繩、割據、版圖年表 ──
+  function cordHtml(line) {
+    const v = FRONTS[line][S.week - 1], ids = LINES[line];
+    const beads = ids.map((id) => { const c = side(id); return `<span class="bead${S.sel === id ? " sel" : ""}" data-pick="${id}" style="left:${100 - THRESHOLD[id]}%;background:${c ? SIDES[c].color : "#8F8270"}">${c ? SIDES[c].short : "·"}</span>`; }).join("");
+    const names = ids.map((id, i) => `<span class="${i % 2 ? "lo" : ""}" style="left:${100 - THRESHOLD[id]}%">${NAME_SHORT(P[id].name)}</span>`).join("");
+    return `<div class="plate"><h3>${LINE_NAME[line]}<small>戰況 ${v}（0 官軍穩控 ↔ 100 黃巾控制）</small></h3>
+      <div class="cord"><span class="band" style="left:35%;width:30%"></span><span class="rope"></span><span class="end l">官</span><span class="end r">巾</span>${beads}<span class="knot" style="left:${100 - v}%" data-v="${v}"></span></div>
+      <div class="names">${names}</div>
+      <div class="sub">結往哪一頭拉，靠那一頭的棋子先換色（過了門檻再多 5 點才換，不會來回翻）。斜線是亂局。</div></div>`;
+  }
+  function chartHtml() {
+    const head = '<span></span>' + Array.from({ length: WEEKS }, (_, i) => { const w = i + 1; return `<span class="wk${w === S.week ? " on" : ""}${w > NOW ? " future" : ""}" ${w <= NOW ? `data-week="${w}"` : ""}>${w}</span>`; }).join("");
+    const rows = Object.entries({ ...LINES, guangzong_fixed: ["guangzong"] }).map(([line, ids]) =>
+      `<span class="ln">${LINE_NAME[line] || "廣宗（只照大事易手）"}</span>` + ids.map((id) => `<span class="lab" data-pick="${id}">${NAME_SHORT(P[id].name)}</span>` +
+        Array.from({ length: WEEKS }, (_, i) => {
+          const w = i + 1, c = ctrlAt(w, id), flip = w > 1 && w <= NOW && ctrlAt(w - 1, id) !== c;
+          return `<span class="cell${w > NOW ? " future" : ""}${w === S.week ? " now" : ""}${flip ? " flip" : ""}" ${w <= NOW ? `data-week="${w}"` : ""} style="background:${c ? SIDES[c].color : "#CDBF9F"}" title="第 ${w} 週・${sideName(c)}"></span>`;
+        }).join("")).join("")).join("");
+    return `<div class="chart">${head}${rows}</div>
+      <div class="legend"><span><i style="background:${SIDES.guan.color}"></i>官軍</span><span><i style="background:${SIDES.huang.color}"></i>黃巾</span><span><i style="background:${SIDES.haoqiang.color}"></i>豪強</span><span><i style="background:#FFF;border:1px solid #8A7A62;border-radius:50%"></i>那一週易手</span><span><i style="background:repeating-linear-gradient(45deg,#E1D3B2 0 3px,#EFE3C6 3px 6px)"></i>還沒到</span></div>`;
+  }
+  function worldHtml() {
+    const g = GEJU[S.week - 1], ev = HISTORY.events[S.week];
+    const list = [...ev.big.map((t) => `<div class="evt">📜 <b>${t}</b></div>`),
+      ...ev.changed.map((e) => `<div class="evt">⇄ ${NAME_SHORT(P[e.id].name)}：<span style="color:${SIDES[e.from].color}">${sideName(e.from)}</span> → <span style="color:${SIDES[e.to].color}">${sideName(e.to)}</span></div>`)].join("");
+    const left = `${Object.keys(LINES).map(cordHtml).join("")}
+      <div class="plate"><h3>豪強割據<small>${g}${g >= 60 ? "：每條線佔下一處" : g >= 50 ? "：守著手上的" : "：還沒佔地"}</small></h3>
+        <div class="gauge"><span class="fill" style="width:${g}%"></span><span class="tick" style="left:50%">50</span><span class="tick" style="left:60%">60</span><span class="tick" style="left:80%">80</span></div>
+        <div class="sub">60 起每條戰線佔一處、80 兩處；掉到 50 以下全部交還。</div></div>`;
+    const right = `<div class="plate"><h3>這一季的版圖<small>${S.week === NOW ? "現在是第 9 週" : `正在看第 ${S.week} 週・<a href="#" data-act="now">回到現在</a>`}</small></h3>${chartHtml()}</div>
+      <div class="plate"><h3>第 ${S.week} 週<small>大事與易手</small></h3>${list || '<div class="sub">這一週沒有地點易手。</div>'}</div>`;
+    return $("#dev").classList.contains("desk") ? `<div>${left}</div><div>${right}</div>` : left + right;
+  }
+
+  // ── 大區沙盤 ──
+  function boardSvg(rid) {
+    const L = LAYOUT[rid], out = [], exits = []; // 往別區的出口最後畫：疊在棋子上面也讀得到
+    const inR = new Set(L.ids);
+    for (const [a, b] of DATA.edges) {
+      if (inR.has(a) && inR.has(b)) {
+        const [ax, ay] = L.pos[a], [bx, by] = L.pos[b], ca = ctrlAt(NOW, a), cb = ctrlAt(NOW, b), front = ca && cb && ca !== cb;
+        out.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${front ? "#A8322A" : "#8C6A45"}" stroke-width="${front ? 4 : 3}" stroke-dasharray="${front ? "3 4" : "0"}" stroke-linecap="round" opacity=".8"/>`);
+        if (front) out.push(`<text x="${(ax + bx) / 2}" y="${(ay + by) / 2 + 5}" text-anchor="middle" font-size="14">⚔</text>`);
+      } else if (inR.has(a) !== inR.has(b)) {
+        const inside = inR.has(a) ? a : b, other = inR.has(a) ? b : a, [ix, iy] = L.pos[inside];
+        const dx = P[other].x - P[inside].x, dy = P[other].y - P[inside].y, d = Math.hypot(dx, dy);
+        const ux = dx / d, uy = dy / d, tx = ux > 0 ? (BOARD_W - 34 - ix) / ux : ux < 0 ? (34 - ix) / ux : 1e9, ty = uy > 0 ? (L.H - 14 - iy) / uy : uy < 0 ? (14 - iy) / uy : 1e9;
+        const t = Math.max(30, Math.min(tx, ty)), ex = ix + ux * t, ey = iy + uy * t; // 出口畫到沙盤邊上
+        out.push(`<line x1="${ix}" y1="${iy}" x2="${ex}" y2="${ey}" stroke="#8C6A45" stroke-width="3" stroke-dasharray="2 5" stroke-linecap="round"/>`);
+        exits.push(`<g data-tab="${P[other].region}" style="cursor:pointer"><rect x="${ex - 30}" y="${ey - 11}" width="60" height="20" rx="10" fill="#FFF8E8" stroke="#8C6A45"/><text x="${ex}" y="${ey + 4}" text-anchor="middle" font-size="11" fill="#5A4C3A">往${REGION[P[other].region].name.slice(0, 2)} ›</text></g>`);
+      }
+    }
+    for (const id of L.ids) {
+      const [x, y] = L.pos[id], c = ctrlAt(NOW, id), so = sortieOf(P[id]), unknown = UNKNOWN.has(id);
+      if (S.ping === id || id === ME.at) out.push(`<circle class="ping" cx="${x}" cy="${y}" r="22" fill="none" stroke="#A8322A" stroke-width="3"/>`);
+      out.push(`<g data-pick="${id}" style="cursor:pointer">`);
+      if (S.sel === id) out.push(`<circle cx="${x}" cy="${y}" r="27" fill="none" stroke="#2B241B" stroke-width="3"/>`);
+      out.push(`<circle cx="${x}" cy="${y + 3}" r="21" fill="rgba(0,0,0,.35)"/><circle cx="${x}" cy="${y}" r="21" fill="${tokColor(id)}" stroke="#FFF8E8" stroke-width="2.5"/>`);
+      out.push(`<circle cx="${x}" cy="${y}" r="15" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/><text x="${x}" y="${y + 5.5}" text-anchor="middle" font-size="16" font-weight="700" fill="#FFF8E8" font-family="serif">${tokGlyph(id)}</text>`);
+      if (so && !unknown) out.push(`<rect x="${x + 10}" y="${y - 27}" width="22" height="15" rx="4" fill="${so === "守" ? "#3F7A3A" : "#A8322A"}"/><text x="${x + 21}" y="${y - 16}" text-anchor="middle" font-size="10.5" fill="#FFF" font-weight="700">${so}</text>`);
+      if (id === ME.at) out.push(`<path d="M${x - 2} ${y - 20}V${y - 44}L${x + 16} ${y - 37}L${x - 2} ${y - 31}" fill="#A8322A"/>`);
+      const svc = services(P[id]).map((t) => t[0]).join("");
+      out.push(`<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#2B241B" stroke="#E6D5AE" stroke-width="3" paint-order="stroke">${unknown ? "？" : esc(NAME_SHORT(P[id].name))}</text>`);
+      if (svc && !unknown) out.push(`<text x="${x}" y="${y + 50}" text-anchor="middle" font-size="10" fill="#7A5638">${svc}</text>`);
+      out.push("</g>");
+    }
+    return `<svg viewBox="0 0 ${BOARD_W} ${L.H}" xmlns="http://www.w3.org/2000/svg">${out.join("")}${exits.join("")}</svg>`;
+  }
+  function regionHtml(rid) {
+    const L = LAYOUT[rid];
+    const rows = L.ids.map((id) => ({ id, r: route(ME.at, id) })).sort((a, b) => a.r.len - b.r.len).map(({ id, r }) => {
+      const c = ctrlAt(NOW, id), o = oddsWord(P[id]);
+      return `<div class="row" data-pick="${id}"><span class="tok" style="background:${tokColor(id)}">${tokGlyph(id)}</span><span class="nm">${UNKNOWN.has(id) ? "？還沒摸清" : esc(NAME_SHORT(P[id].name))}${PEOPLE[id] ? ` <span class="sub">${PEOPLE[id].join("、")}</span>` : ""}</span>
+        <span class="r">${id === ME.at ? "你在這裡" : `${r.minutes} 分`}<br><span class="tone-${o.tone}">${UNKNOWN.has(id) ? "" : o.word}</span></span></div>`;
+    }).join("");
+    const counts = {}; L.ids.forEach((id) => { const c = ctrlAt(NOW, id); if (c) counts[c] = (counts[c] || 0) + 1; });
+    const sum = Object.entries(counts).map(([c, n]) => `${SIDES[c].name} ${n}`).join("・") || "沒有人佔著";
+    const board = `<div class="plate"><h3>${REGION[rid].name}<small>${sum}${REGION[rid].front ? `・${LINE_NAME[REGION[rid].front]}戰線` : "・沒有戰線"}</small></h3><div class="sub">棋子的顏色是誰佔著；紅「攻」綠「守」是你能出陣的地方；⚔ 是兩方地盤相接的路。</div></div><div class="board">${boardSvg(rid)}</div>`;
+    const list = `<div class="plate"><h3>這一區的地點<small>近的在前</small></h3><div class="rows">${rows}</div></div>`;
+    return $("#dev").classList.contains("desk") ? `<div>${board}</div><div>${list}</div>` : board + list;
+  }
+
+  function cardHtml(id) {
+    const p = P[id], c = ctrlAt(NOW, id), r = route(ME.at, id), here = id === ME.at, so = sortieOf(p), o = oddsWord(p);
+    if (UNKNOWN.has(id)) return `<div class="card"><button class="x" data-act="close">×</button><div class="nm">？還沒摸清</div><div class="sub">走到附近、或在路上「留意地形」就會摸清。</div></div>`;
+    const acts = here
+      ? `${so ? `<button class="main">出陣・${so}<small>今日還能 ${ME.sortiesLeft} 次</small></button>` : ""}<button${so ? "" : ' class="main"'}>探索<small>找素材・找事件・靜心</small></button>`
+      : `<button class="main">步行 ${r.minutes} 分<small>途經 ${r.path.length - 2} 站</small></button><button>疾行<small>立刻到・體力 ${r.stamina}</small></button>`;
+    const fl = flips(id).map((f) => `第 ${f.w} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
+    return `<div class="card"><button class="x" data-act="close" aria-label="關上">×</button>
+      <div class="nm">${esc(NAME_SHORT(p.name))}${badge(c)}</div>
+      <div class="sub">${REGION[p.region].name}・${c && c !== ME.side ? SQUADS[c].join("、") : c === ME.side ? "自家人馬" : SQUADS.none.join("、")} <span class="tone-${o.tone}">${o.word}</span>${services(p).length ? "・" + services(p).join("・") : ""}</div>
+      ${c ? `<div class="sub">${priceWord(p)}${fl ? `；易手：${fl}` : ""}</div>` : ""}
+      <div class="acts">${acts}</div></div>`;
+  }
+  function findHtml() {
+    const q = S.q.trim(), hit = (p) => !q || p.name.includes(q) || (PEOPLE[p.id] || []).some((n) => n.includes(q));
+    const groups = REGION_ORDER.map((rid) => {
+      const items = Object.values(P).filter((p) => p.region === rid && hit(p));
+      return items.length ? `<div class="grp">${REGION[rid].name}</div><div class="rows">` + items.map((p) => `<div class="row" data-pick="${p.id}" data-go="${rid}"><span class="tok" style="background:${tokColor(p.id)}">${tokGlyph(p.id)}</span><span class="nm">${UNKNOWN.has(p.id) ? "？" : esc(NAME_SHORT(p.name))}${PEOPLE[p.id] ? ` <span class="sub">${PEOPLE[p.id].join("、")}</span>` : ""}</span><span class="r">${p.id === ME.at ? "你在這裡" : route(ME.at, p.id).minutes + " 分"}</span></div>`).join("") + "</div>" : "";
+    }).join("");
+    return `<div class="overlay"><div style="display:flex;gap:8px;align-items:center"><input id="q" placeholder="地名、人物…" value="${esc(S.q)}"><button class="here" data-act="closefind" style="border:0;background:none;font-size:22px;cursor:pointer">×</button></div>${groups || '<div class="sub">找不到。</div>'}</div>`;
+  }
+
+  function render() {
+    $("#rtabs").innerHTML = tabsHtml();
+    $("#content").innerHTML = S.tab === "world" ? worldHtml() : regionHtml(S.tab);
+    $("#cardHost").innerHTML = S.sel ? cardHtml(S.sel) : "";
+    $("#overlayHost").innerHTML = S.find ? findHtml() : "";
+    const q = $("#q");
+    if (q) q.addEventListener("input", () => { S.q = q.value; const pos = q.selectionStart; render(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); });
+  }
+  $("#proto").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-act], [data-tab], [data-pick], [data-week]");
+    if (!b) return;
+    ev.preventDefault();
+    if (b.dataset.pick) {
+      if (b.dataset.go) { S.tab = b.dataset.go; S.find = false; S.q = ""; S.ping = b.dataset.pick; }
+      S.sel = b.dataset.pick; render(); return;
+    }
+    if (b.dataset.tab) { S.tab = b.dataset.tab; S.sel = null; S.ping = null; $("#content").scrollTop = 0; render(); return; }
+    if (b.dataset.week) { S.week = +b.dataset.week; render(); return; }
+    const act = b.dataset.act;
+    if (act === "close") { S.sel = null; render(); }
+    if (act === "now") { S.week = NOW; render(); }
+    if (act === "find") { S.find = true; render(); setTimeout(() => $("#q") && $("#q").focus(), 50); }
+    if (act === "closefind") { S.find = false; render(); }
+    if (act === "me") { S.tab = P[ME.at].region; S.sel = ME.at; S.ping = ME.at; render(); }
+  });
+  window.addEventListener("devicechange", render);
+  render();
+})();
+</script>
+</body>
+</html>
