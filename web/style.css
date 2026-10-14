@@ -1528,6 +1528,13 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
   .book-bar, .book-cover { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
 }
 
+/* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，
+   固定的店面圖層跟著窄一條捲軸寬，欄邊（50% − 320px）往左跳半條（7.5px），出店又跳回來。溝一直留著，有沒有捲軸頁面都一樣寬：
+   .shell、店面那一欄、底部分頁列都不跳（江湖頁自己有沒有捲軸也不跳）。只在 641px 以上（手機的捲軸是疊在畫面上的，這一段整段不生效） ── */
+@media (min-width: 641px) {
+  html { scrollbar-gutter: stable; }
+}
+
 /* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
 .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
 .lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
