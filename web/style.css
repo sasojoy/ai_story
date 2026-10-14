@@ -131,22 +131,14 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 /* 氣血條上的字壓在紅條、底色與斜紋上都要讀得清楚：描一圈底色。「傷 N」靠右，落在斜紋那一頭 */
 .bar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
 .bar.hp > span.inj { position: absolute; top: 0; right: 0; padding: 0 7px; }
-/* 375 寬氣血條只有一百 px 上下（銀兩、心得的數字一長再窄到九十幾）：有內傷時「氣血 348/400」跟「傷 7」擠在一起互相蓋住（FB-135）。
-   條窄又有內傷時拿掉「氣血」兩個字（條上的 title 照舊寫氣血）、字小一號、內距收一點；數字與「傷 N」都留著，四位數的氣血配三位數的
-   內傷也放得下。沒有內傷時照舊寫全 */
-.bar.hp { container-type: inline-size; }
-.bar.hp .lbl { font-style: normal; }
-.bar.stam { container-type: inline-size; } /* 體力條同一件事：銀兩、心得四位數時「體力 250/250」被丹的鈕蓋住（FB-135 量的時候看到） */
-.bar.stam .lbl { font-style: normal; }
-@container (max-width: 132px) {
-  .bar.stam:has(.pill-btn) .lbl { display: none; }
-  .bar.stam:has(.pill-btn) > span { padding: 0 5px; font-size: 10px; }
-}
-@container (max-width: 150px) {
-  .bar.hp:has(.inj) .lbl { display: none; }
-  .bar.hp:has(.inj) > span { padding: 0 5px; font-size: 10px; }
-  .bar.hp:has(.inj) > span.inj { padding: 0 4px; }
-}
+/* 375 寬氣血條只有一百 px 上下（銀兩、心得的數字一長再窄到九十幾）：有內傷時「氣血 348/400」跟「傷 7」擠在一起互相蓋住（FB-135）；
+   體力條同一件事：銀兩、心得四位數時「體力 250/250」被丹的鈕蓋住。數字放得下就寫全（FB-198，PM 2026-10-14）：app.js 的 fitBars
+   畫好之後量，字尾碰到右邊的「傷 N」或丹的鈕才收——先 .snug（字小一號、內距收一點，兩個字照寫），還碰到才 .tight（拿掉「氣血」
+   「體力」兩個字，條上的 title 照舊寫）；數字與「傷 N」都留著，四位數的氣血配三位數的內傷也放得下。沒有內傷、沒有丹時不量、照舊寫全 */
+.bar .lbl { font-style: normal; }
+.bar.snug > span { padding: 0 5px; font-size: 10px; }
+.bar.hp.snug > span.inj { padding: 0 4px; }
+.bar.tight .lbl { display: none; }
 /* 回體丹（內測贈送）：體力條右端一顆小鈕「丹 N」，跟氣血條的「傷 N」同一個位置；整條高度內、不擠格線 */
 .bar.stam > .pill-btn {
   position: absolute; top: 2px; right: 2px; height: 16px; padding: 0 5px; border-radius: 8px;

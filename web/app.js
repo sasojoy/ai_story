@@ -341,6 +341,7 @@
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}`;
     renderPage();
+    fitBars(); // 狀態列的「體力」「氣血」放不放得下（FB-198）
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
 
@@ -431,8 +432,34 @@
     const html = topHtml();
     el.innerHTML = html;
     el.hidden = !html;
+    fitBars();
     applyGlow();
     fitTopMoved(before);
+  }
+
+  // 狀態列體力條、氣血條上的「體力」「氣血」兩個字（FB-135、FB-198，PM 2026-10-14「數字放得下就寫全，放不下才讓開」）：
+  // 畫好之後量一次，條上那一行字的字尾碰不碰得到右邊的「傷 N」（氣血條）或丹的鈕（體力條）。碰到了先收一號（.snug：字小一號、
+  // 內距收一點，兩個字照寫），還碰到才拿掉兩個字（.tight；條上的 title 照舊寫）。topHtml 從不帶這兩個 class：每次畫狀態列
+  // （render、renderTop）、視窗換寬度、字型載入完都從寫全量起。瀏覽器量不了、條還沒排版（寬是 0）就不動（照寫全）
+  function fitBars() {
+    if (typeof document.createRange !== "function") return;
+    const top = document.getElementById("top");
+    if (!top || !top.querySelectorAll) return;
+    const gap = 3; // 字尾離丹的鈕至少幾 px（「傷 N」自己左右有內距，不另留）
+    for (const bar of top.querySelectorAll(".bar.hp, .bar.stam")) {
+      bar.classList.remove("snug", "tight");
+      const text = bar.querySelector(":scope > span:not(.inj)");
+      const tag = bar.querySelector(":scope > .inj, :scope > .pill-btn");
+      if (!text || !tag || !bar.clientWidth) continue;
+      const hits = () => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        return range.getBoundingClientRect().right + (tag.classList.contains("pill-btn") ? gap : 0) > tag.getBoundingClientRect().left;
+      };
+      if (!hits()) continue;
+      bar.classList.add("snug");
+      if (hits()) bar.classList.add("tight");
+    }
   }
 
   function topHtml() {
@@ -4907,6 +4934,7 @@
   // 視窗大小變了（轉向、拉視窗）：輿圖開著就重新夾住、套用；原本是整張就維持整張（applyMapView）
   let cueTimer = 0;
   window.addEventListener("resize", () => {
+    if (S.stage === "game") fitBars(); // 條的寬度跟著變：「體力」「氣血」兩個字放不放得下重量（FB-198）
     if (S.stage === "game" && S.tab === "map") applyMapView();
     if (S.stage === "game" && S.tab === "jianghu") { fitFirstRound(); fitOnResize(); } // 寬度變了，第一回合佔幾行、第一屏放不放得下也跟著變（只有高度變了不重量，見 fitOnResize）
     // 序章裡師父框上的「在下面 ↓」只在畫面重畫時算；視窗大小變了（轉向、拉視窗）目標離第一屏多遠也跟著變，去抖後重算、不重畫（T7 走查 W-F）
@@ -4916,6 +4944,8 @@
   // 寬度跨過手機分界（轉向、拉視窗）：江湖頁的排列順序不同（pageJianghu 的輪盤），要重畫
   const onPhoneChange = () => { if (S.stage === "game" && S.tab === "jianghu") renderPage(); };
   if (PHONE) { if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else PHONE.addListener(onPhoneChange); }
+  // 字型載入完，字寬跟著變：狀態列那兩個字放不放得下重量一次（FB-198）
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (S.stage === "game") fitBars(); });
 
   api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });
 })();

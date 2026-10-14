@@ -105,3 +105,60 @@ def test_fb197_the_shop_forged_card_and_rack_follow_the_server_unit(content, wor
     html = shop_run({**m, "shop": shop}, "H.S.shopReveal = H.S.next; H.S.shopOpened = true; H.render(); return T.els.app.innerHTML;",
                     S={"next": card})
     assert 'id="shop-name-divine-甲:1"' in html and "打出這件神器的人" in html and "這把神器" not in html
+
+
+# ── FB-198：375 寬只要有內傷「氣血」兩個字就讓開 → 數字放得下就寫全，放不下才讓開（體力條同一條規則）──
+# app.js 的 fitBars 畫好之後量：條上那一行字的字尾（Range）碰不碰得到右邊的「傷 N」或丹的鈕；碰到先 .snug（字小一號、兩個字照寫），
+# 還碰到才 .tight（拿掉兩個字）。假瀏覽器沒有排版：給每個狀態（寫全、snug、tight）各一個字尾位置與右邊那一格的左緣，看它收到哪一步。
+
+_FIT_DRIVER = r"""
+eval(fn("fitBars"));
+let current = null;
+const mkBar = (c) => {
+  const classes = new Set(c.start || []);
+  const state = () => (classes.has("tight") ? "tight" : classes.has("snug") ? "snug" : "full");
+  const pick = (v) => (typeof v === "number" ? v : v[state()]);
+  const tag = { classList: { contains: (x) => x === (c.pill ? "pill-btn" : "inj") }, getBoundingClientRect: () => ({ left: pick(c.tag) }) };
+  const bar = {
+    clientWidth: c.width ?? 109,
+    classList: { add: (...x) => x.forEach((y) => classes.add(y)), remove: (...x) => x.forEach((y) => classes.delete(y)), contains: (x) => classes.has(x) },
+    querySelector: (sel) => (sel.includes("pill-btn") ? (c.tag == null ? null : tag) : { end: () => pick(c.end) }),
+  };
+  return { bar, classes };
+};
+const bars = input.cases.map(mkBar);
+globalThis.document = {
+  getElementById: (id) => (id === "top" ? { querySelectorAll: () => bars.map((b) => b.bar) } : null),
+  createRange: () => ({ selectNodeContents(n) { current = n; }, getBoundingClientRect: () => ({ right: current.end() }) }),
+};
+fitBars();
+finish(bars.map((b) => [...b.classes].sort()));
+"""
+
+
+def _fit(cases):
+    return webharness.run(_FIT_DRIVER, {"cases": cases})
+
+
+@needs_node
+def test_fb198_the_word_stays_when_the_numbers_fit():
+    """QA 的例子（銀兩 50、心得 20、氣血 413/416、傷 3）：寫全放得下就不收；字尾碰到「傷 N」先收一號、兩個字照寫；收一號還碰到才拿掉。"""
+    out = _fit([
+        {"end": {"full": 230, "snug": 222, "tight": 200}, "tag": {"full": 236, "snug": 239, "tight": 239}},  # 放得下：寫全
+        {"end": {"full": 239, "snug": 229, "tight": 207}, "tag": {"full": 236, "snug": 239, "tight": 239}},  # 寫全碰到，收一號放得下
+        {"end": {"full": 262, "snug": 250, "tight": 201}, "tag": {"full": 200, "snug": 203, "tight": 203}},  # FB-135：1044/1170、傷 123
+    ])
+    assert out == [[], ["snug"], ["snug", "tight"]]
+
+
+@needs_node
+def test_fb198_the_stamina_bar_keeps_clear_of_the_pill_button():
+    """體力條同一條規則：字尾離丹的鈕至少留 3px；沒有丹的鈕、沒有內傷、條還沒排版（寬 0）都不量、照寫全；上一次留下的 class 先拿掉。"""
+    out = _fit([
+        {"pill": True, "end": {"full": 98, "snug": 92, "tight": 70}, "tag": 102},  # 98＋3 ≤ 102：放得下
+        {"pill": True, "end": {"full": 100, "snug": 92, "tight": 70}, "tag": 102},  # 100＋3 > 102：收一號
+        {"end": 300, "tag": None},  # 沒有「傷 N」（沒有內傷）
+        {"end": 300, "tag": 100, "width": 0},  # 還沒排版
+        {"end": 100, "tag": 200, "start": ["snug", "tight"]},  # 上一次收過、這一次放得下：拿掉
+    ])
+    assert out == [[], ["snug"], [], [], []]
