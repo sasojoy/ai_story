@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
+    fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
     social, sortie, styles, team, territory, timetable, traits, treasures, weapons, zh,
@@ -8347,6 +8347,23 @@ class Game:
         return quest_text(self.state, self.content, self.world)
 
     # ── 大地圖 ────────────────────────────────────────────
+
+    def map_base(self) -> dict:
+        """輿圖升級的底圖與清單（mapdata.base）：伺服器照 mapdata.base_key 快取。"""
+        return mapdata.base(self.state, self.content)
+
+    def map_state(self) -> dict:
+        """輿圖升級的疊層（mapdata.state）：勝算、出陣、分鐘換算由這裡傳進去。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        faction = s.player.faction
+        on = sortie.on(c) and faction is not None
+
+        def mode(loc_id: str) -> str | None:
+            return sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
+
+        return mapdata.state(
+            s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
+        )
 
     def world_map_svg(self, layer: str = "situation", selected: str | None = None) -> str:
         odds = self.odds if layer == "enemies" else None
