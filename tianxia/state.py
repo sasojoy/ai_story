@@ -268,6 +268,7 @@ class DuelState(BaseModel):
     move: str = ""
     tell: str = ""
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
+    difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
 
 
 class ArenaSide(BaseModel):

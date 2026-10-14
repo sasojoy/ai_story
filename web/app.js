@@ -25,6 +25,7 @@
     { id: "chronicle", name: "江湖史" },
     { id: "journal", name: "紀錄" },
     { id: "annals", name: "行狀" }, // 玩家傳第一批：這一季值得寫進傳裡的事（/api/annals）
+    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14：善人、惡人、名人、宗師榜與武學榜、內功榜（/api/boards）
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
@@ -3444,8 +3445,22 @@
     return head + books + `<ol class="annals card">${a.rows.slice().reverse().map(row).join("")}</ol>`;
   }
 
+  // 見聞的「榜單」（leaderboard.view）：上面一排六張榜的籤，一次看一張（S.board，預設第一張）；前十名，你在榜上標出來，
+  // 不在前十名時底下多一行你排第幾。名號與那一段都是伺服器給的原文，這裡跳脫
+  function boardsHtml(b) {
+    if (!b) return '<p class="muted">載入中…</p>';
+    const list = b.boards || [];
+    if (!list.length) return '<div class="card"><p class="muted">還沒有榜單。</p></div>';
+    const cur = list.find((x) => x.id === S.board) || list[0];
+    const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
+    const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}"><span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span></li>`;
+    const rows = cur.rows.length ? `<ol class="board-list">${cur.rows.map(row).join("")}</ol>` : '<p class="muted">尚無人留名。</p>';
+    const mine = cur.mine ? `<p class="board-mine">你：第 ${Number(cur.mine.rank)} 名・${esc(cur.mine.text)}</p>` : "";
+    return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;
+  }
+
   function pageNews() {
-    const seg = `<div class="seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+    const seg = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
     let body = "";
     if (S.news === "reports") {
@@ -3458,6 +3473,7 @@
     else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else if (S.news === "annals") body = annalsHtml(S.annals);
+    else if (S.news === "boards") body = boardsHtml(S.boards);
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
@@ -3732,6 +3748,11 @@
     if (S.sheet) renderKeepingSheet();
   }
 
+  async function loadBoards() {
+    S.boards = await api("/api/boards");
+    if (S.tab === "news" && S.news === "boards") renderPage();
+  }
+
   async function loadAnnals() {
     S.annals = await api("/api/annals");
     if (S.tab === "news") renderPage();
@@ -3773,6 +3794,7 @@
       }
       if (tab === "news" && S.news === "reports") await loadReports(null);
       if (tab === "news" && S.news === "annals") await loadAnnals();
+      if (tab === "news" && S.news === "boards") await loadBoards();
     } catch (e) { /* api() 已經提示過 */ }
   }
 
@@ -4534,7 +4556,9 @@
           renderPage();
           if (S.news === "reports") await loadReports(null);
           if (S.news === "annals") await loadAnnals();
+          if (S.news === "boards") await loadBoards();
           break;
+        case "board": S.board = el.dataset.board; renderPage(); break;
         case "report":
           S.news = "reports";
           S.reportOpen = true;

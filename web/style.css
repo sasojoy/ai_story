@@ -249,6 +249,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
+.news-seg button { padding: 8px 6px; } /* 見聞七個子分頁（加了榜單）：375 寬一排放得下，不必橫捲才看得到最後一個 */
 
 .field { display: block; margin: 0 0 10px; }
 .field > span { display: block; font-size: 12px; color: var(--ink-2); margin: 0 2px 4px; }
@@ -1147,6 +1148,24 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .annal-quote, .annal-reply { margin: 4px 0 0 1em; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
 .annal-quote { color: var(--ink); }
 .annal-reply b { font-weight: 600; color: var(--ink); }
+
+/* 見聞的「榜單」（boardsHtml）：上面六張榜的籤（兩排三個，375 寬不捲），底下一張卡一次一張榜。前三名的名次是朱紅實心的印，
+   其餘是空心；你自己那一列底色淡朱紅。名號與那一段照一般卡片的字，標題用武學譜那一套襯線 */
+.board-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 12px; }
+.board-tabs button { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); border-radius: 10px; padding: 8px 4px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.board-tabs button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.board h3 { margin: 0 0 2px; font-family: var(--bk-serif); letter-spacing: 0.1em; }
+.board-note { margin: 0 0 8px; font-size: 13px; }
+ol.board-list { list-style: none; margin: 0; padding: 0; }
+.board-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 6px; border-radius: 8px; }
+.board-row + .board-row { border-top: 1px solid var(--card-2); }
+.board-row.you { background: var(--accent-soft); }
+.board-rank { flex: 0 0 24px; height: 24px; line-height: 22px; text-align: center; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; color: var(--ink-2); align-self: center; }
+.board-row.podium .board-rank { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-family: var(--bk-serif); font-weight: 600; }
+.board-name { flex: 0 1 auto; font-weight: 600; overflow-wrap: anywhere; min-width: 3em; }
+.board-text { flex: 1 1 auto; text-align: right; font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+.board-text small { display: block; font-size: 12px; }
+.board-mine { margin: 10px 0 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 14px; color: var(--ink); }
 
 /* ── 修練頁最上面的人物面板（企劃者 2026-10-12 給的版面）：一幅掛在紙上的水墨人物，身上的光點對上屬性、身上的兩門與裝備。
    舞台不論深淺色都是紙（剪影是墨，畫在紙上才看得見），深色時紙調暗一點 ── */

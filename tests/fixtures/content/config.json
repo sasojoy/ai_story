@@ -21,5 +21,6 @@
   "treasures": {"enabled": false},
   "biography": {"enabled": false},
   "arena": {"enabled": false},
+  "rise": {"enabled": false},
   "battle_from_week": 1
 }

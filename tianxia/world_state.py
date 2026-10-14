@@ -367,6 +367,11 @@ class WorldStateStore(Protocol):
         """這一季合併出來的意境，照登記的先後；基本意境不在這裡。"""
         ...
 
+    def season_firsts(self) -> dict[str, int]:
+        """這一季每個人首創了幾樣（宗師榜，leaderboard.compute_boards）：名號（身分）→ 合成首創的武學＋首悟（合併出來）的意境件數。
+        論武兩人共有的，兩個人各算一樣；合到舊的、師門配方不算（同江湖史的「合成首創」）。"""
+        ...
+
     def link_recipe(self, key: str, skill_name: str, creator: str | None) -> tuple[MartialArt | None, bool]:
         """把配方指到這一季已經登記的一門功法（合到舊的），原子判斷：配方已經有人登記 → (登記在案的, False)；
         那門功法不存在 → (None, False)；否則記下這個配方 → (那一門, True)。功法本身不動，首創者照舊。

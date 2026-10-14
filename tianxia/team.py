@@ -939,9 +939,17 @@ def estimate(
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
+    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+
+
+def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:
+    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍都算；勝算與打起來同一份）。
+    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。"""
     arts = team_arts(state, content, world)
-    power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
-    return odds_word(power, squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad)
+    if fresh:
+        conditions = [1.0] * len(conditions)
+    return encounter.team_power(*_with_attribute((members, conditions, boosts), arts, squad.attribute))
 
 
 def _styled_fighters(

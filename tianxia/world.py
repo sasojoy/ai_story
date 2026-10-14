@@ -311,7 +311,8 @@ def end_season(
     state: GameState, content: Content, world: WorldStateStore | None = None, rng: random.Random | None = None,
     ending: Ending | None = None,
 ) -> list[str]:
-    """world 給的話，順便算一次天下武學榜／內功榜附在結局後面（設計文件 6.5）；不傳就是
+    """world 給的話，順便算一次榜單（天下武學榜、內功榜，2026-10-14 起加善人、惡人、名人、宗師榜）附在結局後面（設計文件 6.5），
+    每張榜的前三名另寫一行江湖史；不傳就是
     原本的純結局文字，選填不影響既有呼叫端或測試。
 
     第一季：收季之前先把時間到了卻從沒開成的決戰照起點結算（settle_waiting_showdowns，T8 fix round 0），結局看得到
@@ -357,8 +358,10 @@ def end_season(
         if lines:
             add_rumor(state, lines[0], content=content, layer="world")
     if world is not None:
-        board = leaderboard.compute_leaderboard(content, world)
+        board = leaderboard.compute_boards(content, world)
         msgs += leaderboard.format_lines(board)
+        for line in leaderboard.chronicle_lines(board, world.get_season_number()):  # 江湖史跨季保留：一張榜一行、前三名
+            add_chronicle(state, line)
     return msgs
 
 

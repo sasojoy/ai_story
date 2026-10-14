@@ -6665,3 +6665,31 @@ def test_the_fingerprint_follows_the_seal_duel_but_not_who_was_seen():
     assert sent != before
     world.mutate(lambda st: setattr(st.seal_duels[0], "round", 1))
     assert server.current_fingerprint() != sent
+
+
+# ── 見聞的「榜單」（企劃者 2026-10-14）──
+
+
+def test_boards_lists_six_boards_and_caches_the_scan(client, monkeypatch):
+    """/api/boards：六張榜照 leaderboard.BOARDS 的順序；整份快取 BOARDS_TTL_SECONDS 秒，期間再多人點開也只掃一次角色。"""
+    from tianxia import leaderboard
+
+    monkeypatch.setattr(server, "BOARDS_CACHE", {})
+    _player(client)
+    calls = []
+    real = leaderboard.compute_boards
+    monkeypatch.setattr(leaderboard, "compute_boards", lambda *a, **k: calls.append(1) or real(*a, **k))
+    out = client.get("/api/boards").json()
+    assert [b["id"] for b in out["boards"]] == [kind for kind, _, _ in leaderboard.BOARDS]
+    client.get("/api/boards")
+    assert len(calls) == 1
+    server.BOARDS_CACHE["at"] -= server.BOARDS_TTL_SECONDS
+    client.get("/api/boards")
+    assert len(calls) == 2
+
+
+def test_boards_tab_is_in_the_news_page():
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    assert '{ id: "boards", name: "榜單" }' in src and 'api("/api/boards")' in src
