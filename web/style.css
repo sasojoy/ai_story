@@ -1407,38 +1407,45 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .slot b { font: 600 12px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-board .slot.empty { display: flex; align-items: center; justify-content: center; background: transparent; color: #e8d6ad; border-style: dashed; }
 .shop-board .board { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 12px; }
-.shop-board .note { position: relative; display: grid; gap: 2px; text-align: left; padding: 10px 8px 8px; border: 0; border-top: 4px solid #8a6a42; border-radius: 2px;
-  background: var(--paper); color: var(--ink); font: 11px/1.45 var(--sans); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+.shop-board .shop-body.zooming { padding-bottom: 58vh; } /* 紙開著時木板底下多留一段：告示捲得到紙的上面 */
+/* 告示照草圖（企劃者 2026-10-14 微調）：短短一張、紅圖釘、色塊小標籤；紙固定淺色（實體的紙，深色主題也一樣，通緝的黑標籤看得見） */
+.shop-board .note { position: relative; display: grid; gap: 1px; align-content: start; text-align: left; padding: 14px 7px 7px; border: 0; border-radius: 2px;
+  background: #f6edd8; color: #2a241d; font: 10.5px/1.4 var(--sans); box-shadow: 2px 3px 6px rgba(0, 0, 0, 0.35); }
 .shop-board .note:nth-child(4n+1) { transform: rotate(-2deg); }
 .shop-board .note:nth-child(4n+2) { transform: rotate(1.5deg); }
 .shop-board .note:nth-child(4n+3) { transform: rotate(1deg); }
 .shop-board .note:nth-child(4n) { transform: rotate(-1deg); }
-.shop-board .note::before { content: ""; position: absolute; top: -7px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #3a2618; } /* 釘子 */
-.shop-board .note b { font: 600 14px var(--serif); }
-.shop-board .note .k, .shop-board .note .due { font-size: 10.5px; color: var(--ink-2); }
-.shop-board .note .prize { color: var(--accent); }
-.shop-board .note.k-strike, .shop-board .paper.k-strike { border-top-color: var(--gang); }
-.shop-board .note.k-scout, .shop-board .paper.k-scout { border-top-color: var(--kuai); }
-.shop-board .note.k-escort, .shop-board .paper.k-escort { border-top-color: var(--rou); }
-.shop-board .note.k-art, .shop-board .note.k-arms, .shop-board .paper.k-art, .shop-board .paper.k-arms { border: 2px solid #c9a03a; border-top-width: 4px; }
-.shop-board .note.k-wanted, .shop-board .paper.k-wanted { border-top-color: #1e1a16; }
-.shop-board .note.dim { opacity: 0.6; }
-.shop-board .stamp { position: absolute; top: 6px; right: 6px; transform: rotate(10deg); padding: 2px 5px; border: 2px solid var(--accent); border-radius: 4px;
-  color: var(--accent); background: var(--paper); font: 600 12px var(--serif); font-style: normal; }
+.shop-board .note::before { content: ""; position: absolute; top: 4px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #8e2a22; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.4); } /* 紅圖釘 */
+.shop-board .note .tag, .shop-board .paper .tag { justify-self: start; padding: 0 4px; border-radius: 3px; color: #fff; font-size: 9.5px; line-height: 1.6; background: #6d5a43; }
+.shop-board .note.k-strike .tag, .shop-board .paper.k-strike .tag { background: #a8322a; }
+.shop-board .note.k-scout .tag, .shop-board .paper.k-scout .tag { background: #2f5d8a; }
+.shop-board .note.k-escort .tag, .shop-board .paper.k-escort .tag { background: #3f7d5c; }
+.shop-board .note.k-art .tag, .shop-board .note.k-arms .tag, .shop-board .paper.k-art .tag, .shop-board .paper.k-arms .tag { background: #9a6a2a; }
+.shop-board .note.k-wanted .tag, .shop-board .paper.k-wanted .tag { background: #2a241d; }
+.shop-board .note b { font: 600 13px var(--serif); letter-spacing: 1px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.shop-board .note small { font-size: 9.5px; }
+.shop-board .note .due { color: #6d5a43; }
+.shop-board .note .prize { color: #a8322a; }
+.shop-board .note.k-art, .shop-board .note.k-arms { background: #fbf1d0; box-shadow: inset 0 0 0 1px #c9a24a, 2px 3px 6px rgba(0, 0, 0, 0.35); }
+.shop-board .note.dim { opacity: 0.55; }
+.shop-board .stamp { position: absolute; right: 4px; bottom: 6px; transform: rotate(-14deg); padding: 2px 4px; border: 2px solid #b3261e; border-radius: 4px;
+  color: #b3261e; background: rgba(246, 237, 216, 0.85); font: 600 11px var(--serif); font-style: normal; }
 .shop-board .board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
-.shop-board .board-zoom { overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding-top: calc(var(--top, 0px) + 56px); } /* 交出的清單很長時紙比畫面高：可以捲，短的照舊置中（紙的上下 margin auto）（終審 I2） */
-.shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列疊在放大的紙上面：出店按得到（終審 I3）；實心底，捲動的紙不從底下透出來 */
-.shop-board .board-zoom .paper { position: relative; width: min(340px, 100%); display: grid; gap: 6px; padding: 16px 14px 12px; border-top: 6px solid #8a6a42; border-radius: 4px;
-  background: var(--paper); color: var(--ink); font-size: 13px; flex-shrink: 0; margin: auto 0; }
-.shop-board .paper h4 { margin: 0; font: 600 18px var(--serif); }
-.shop-board .paper .k, .shop-board .paper .due, .shop-board .paper .why { font-size: 12px; color: var(--ink-2); }
-.shop-board .paper .have { color: var(--accent); }
+.shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列永遠在最上面：出店按得到（終審 I3）；實心底 */
+/* 放大的紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣）：不蓋住木板與招牌；第三層交出清單長的時候自己捲 */
+.shop-board .board-sheet { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2; max-height: calc(100% - 140px); overflow-y: auto; overscroll-behavior: contain;
+  border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
+.shop-board .board-sheet .paper { position: relative; display: grid; gap: 5px; padding: 10px 12px; border: 2px solid #6b4a2a; border-radius: 8px;
+  background: #f6edd8; color: #2a241d; font-size: 12.5px; line-height: 1.55; }
+.shop-board .paper h4 { margin: 0; font: 600 16px var(--serif); letter-spacing: 1px; }
+.shop-board .paper .due, .shop-board .paper .why { font-size: 11.5px; color: #6d5a43; }
+.shop-board .paper .have { color: #a8322a; }
 .shop-board .paper p { margin: 0; }
-.shop-board .paper .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.shop-board .paper .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; margin-top: 4px; }
 .shop-board .paper .btns.one { grid-template-columns: 1fr; }
 .shop-board .paper .hand-in { display: grid; gap: 6px; }
 .shop-board .paper .hand-in .btn { text-align: left; }
-.shop-layer .paper .btn.ghost { color: var(--ink); border-color: var(--line); } /* 紙底（第一批的淡框鈕是暗底的顏色） */
+.shop-layer .paper .btn.ghost { color: #2a241d; border-color: #c9ad7c; } /* 紙底（第一批的淡框鈕是暗底的顏色） */
 .shop-board .board-stamp { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   pointer-events: none; color: #f2e5c6; animation: stampfade 1.4s ease-out forwards; }
 .shop-board .stamp.big { position: static; transform: rotate(-8deg); padding: 6px 14px; border-width: 4px; font-size: 34px; }

@@ -301,10 +301,8 @@ def test_the_market_and_board_css_stays_inside_its_shop():
 def test_the_board_paper_scrolls_when_the_hand_in_list_is_long():
     """終審 I2：交出的清單很長時，放大的那一張紙比畫面高；原本置中、不能捲，「收起」掉到畫面外、出店被蓋住，只能交掉一件才出得來。"""
     css = _css()
-    zoom = _rule(css, ".shop-board .board-zoom")
-    assert "overflow-y: auto" in zoom and "justify-content: flex-start" in zoom
-    paper = _rule(css, ".shop-board .board-zoom .paper")
-    assert "margin: auto 0" in paper and "flex-shrink: 0" in paper
+    sheet = _rule(css, ".shop-board .board-sheet")  # 2026-10-14 微調之後紙貼在畫面下緣（.board-sheet），太長自己捲
+    assert "overflow-y: auto" in sheet and "max-height:" in sheet
 
 
 def test_the_sign_bar_stays_above_the_paper():

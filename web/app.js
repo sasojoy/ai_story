@@ -2558,12 +2558,14 @@
     const held = shop.held;
     const slots = held.rows.map((r) => `<button class="slot" data-act="board-zoom" data-id="${esc(r.id)}"><b>${esc(r.title)}</b><small>${esc(r.due)}</small></button>`).join("")
       + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
+    // 告示照草圖寫得很短（企劃者 2026-10-14 微調）：種類・哪一方（色塊小標籤）、目標、期限與名額，重賞、你有幾件合用各一個小字；
+    // 要做什麼與賞寫在點開的紙上
     const note = (n) => `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
-        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b><span class="how">${esc(n.how)}</span>
-        ${n.prize ? `<span class="prize">${esc(n.prize)}</span>` : ""}${n.have ? `<span class="prize">${esc(n.have)}</span>` : ""}
-        <span class="due">${esc(n.due)}</span>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
+        <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
+        ${n.prize ? `<small class="prize">${esc(n.prize)}</small>` : ""}${n.have ? `<small class="prize">${esc(n.have)}</small>` : ""}
+        <small class="due">${esc(n.due)}</small>${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`;
     const board = shop.notes.length ? `<div class="board">${shop.notes.map(note).join("")}</div>` : `<p class="shop-empty board-empty">${esc(shop.empty)}</p>`;
-    return `<div class="shop-body"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
+    return `<div class="shop-body${zoom ? " zooming" : ""}"><div class="held-row"><p>${esc(held.head)}</p><div class="slots">${slots}</div></div>${board}</div>
       ${zoom ? paperHtml(zoom, shop) : ""}${S.boardStamp ? stampHtml(S.boardStamp) : ""}`;
   }
 
@@ -2579,8 +2581,9 @@
     } else {
       btns = `${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}<div class="btns"><button class="btn primary" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}>${a.verb === "pick" ? "交出…" : "揭下"}</button><button class="btn" data-act="board-close">放回去</button></div>`;
     }
-    return `<div class="reveal-layer board-zoom"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
-        <span class="k">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
+    // 紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣），不蓋住木板與招牌；紙太長（第三層交出清單）自己捲
+    return `<div class="board-sheet"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
+        <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
         <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}<p class="reward">賞：${esc(n.reward)}</p><p class="due">${esc(n.due)}</p>
         ${btns}</article></div>`;
   }
