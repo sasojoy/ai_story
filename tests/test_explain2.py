@@ -38,7 +38,7 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     board = "".join(help_["board"])
     assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
     quest = "".join(help_["quest"])
-    assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力
+    assert "出陣" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（出陣探索與地盤：遊歷換成出陣）
 
 
 def test_no_war_explanations_outside_season_one(real):
@@ -325,7 +325,8 @@ def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
         for action in on.orders.rank_actions:
             assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
     guan, huang, hao = rows
-    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在亂局的戰線上遊歷打贏才推割據" in hao  # FB-112
+    # FB-112；出陣探索與地盤之後豪強是出陣攪局（舊遊歷的說法見 tests/test_fb112_howto_truth.py，那裡關著出陣）
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在戰線上出陣攪局" in hao
     assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
     on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
     assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)

@@ -28,7 +28,7 @@ from tianxia import world as worldmod  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
 
 TREND = "huangjin"
-TRAINING = ("_drill", "_squad_encounter")
+TRAINING = ("_drill", "_squad_encounter", "_sortie_hold")  # 出陣（出陣探索與地盤）：攻走 _squad_encounter，守與攪局走 _sortie_hold
 
 
 def _caller(names: tuple[str, ...], depth: int) -> str | None:
@@ -59,8 +59,8 @@ def main() -> None:
         if trend_id == TREND:
             trajectory[season["n"]].append((state.world.time / 86400, after))
             if after != before:
-                kind = {"_drill": "操練", "_squad_encounter": "真打贏", "sim_tick": "虛擬玩家", "apply_effect": "事件"}.get(
-                    _caller(("_drill", "_squad_encounter", "sim_tick", "apply_effect"), 9), "其他")
+                kind = {"_drill": "操練", "_squad_encounter": "真打贏", "_sortie_hold": "出陣守／攪局", "sim_tick": "虛擬玩家",
+                        "apply_effect": "事件"}.get(_caller(("_drill", "_squad_encounter", "_sortie_hold", "sim_tick", "apply_effect"), 9), "其他")
                 game = next((fr.frame.f_locals["self"] for fr in inspect.stack()[1:10]
                              if isinstance(fr.frame.f_locals.get("self"), engine.Game)), None)
                 faction = (game.state.player.faction or "散人") if game is not None else "—"
@@ -90,20 +90,25 @@ def main() -> None:
 
     engine.Game._train_push = train_push
 
-    original_drill, original_encounter = engine.Game._drill, engine.Game._squad_encounter
+    original_drill, original_encounter, original_hold = engine.Game._drill, engine.Game._squad_encounter, engine.Game._sortie_hold
 
     def drill(self, squad):
         actions[season["n"]][("操練", self.state.player.faction)] += 1
         return original_drill(self, squad)
 
-    def encounter(self, squad_id, wild=False):
+    def encounter(self, squad_id, wild=False, **kwargs):
         squad = self.content.squads[squad_id]
         if not (squad.faction is not None and squad.faction == self.state.player.faction):
-            kind = "野怪" if wild else "真打"  # 野怪：探索三選一撞上的，不推大勢
+            # 野怪：探索撞上的，不推大勢；出陣的攻（as_sortie）另計
+            kind = "野怪" if wild else "出陣攻" if kwargs.get("as_sortie") else "真打"
             actions[season["n"]][(kind, self.state.player.faction)] += 1
-        return original_encounter(self, squad_id, wild=wild)
+        return original_encounter(self, squad_id, wild=wild, **kwargs)
 
-    engine.Game._drill, engine.Game._squad_encounter = drill, encounter
+    def hold(self, loc, how):
+        actions[season["n"]][("出陣守" if how == "hold" else "出陣攪局", self.state.player.faction)] += 1
+        return original_hold(self, loc, how)
+
+    engine.Game._drill, engine.Game._squad_encounter, engine.Game._sortie_hold = drill, encounter, hold
 
     content = load_content(ROOT / "content", profile=args.profile)
     print(profile_line(content, args.profile), flush=True)

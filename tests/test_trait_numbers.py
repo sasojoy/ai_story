@@ -60,7 +60,7 @@ def test_the_descriptions_say_what_the_rules_do(real):
         "悟招": "打贏多得 {value} 點心得",
         "借力": "對手越強，你的威力越高：威力加上對手強度的 {value}",
         "回春": "不論輸贏，打完都回復氣血上限的 {value}",
-        "輕身": "遊歷少花 {value} 點體力",
+        "輕身": "出陣、遊歷少花 {value} 點體力",
     }
 
 

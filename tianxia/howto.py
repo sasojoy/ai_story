@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, figures, rules, seal, timetable
+from . import calendar, figures, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -258,6 +258,32 @@ def stance_help(content: Content) -> list[str]:
 # 推線的那一句只說「有些地方」（FB-112）：推不推看地點的 train_trend（Game.train_trend_push），很多有對手的地方不推（潁水河畔），
 # 行動列底下那一行（train_line 的 PUSH_WORD）照這一處的實情寫
 SOME_PLACES = "有些地方遊歷打贏、操練會推動戰況（行動列底下那一行寫著這裡推不推）"
+# 出陣開著時（出陣探索與地盤設計第二節）取代上面那一句的幾處；待 joy 潤
+SORTIE_PLACES = "在戰線上的地點出陣會推動戰況（行動列底下那一行寫著這裡推不推）"
+SORTIE_JOIN = "在戰線上的地點出陣：別人的地盤打贏往你那一邊推，自家的地盤守一回、推一半"
+SORTIE_GEJU = "在戰線上出陣攪局、把戰局往中間拉（戰線一亂，割據自然漲）"  # 豪強怎麼推割據
+SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
+
+
+def sortie_lines(content: Content) -> list[str]:
+    """玩法說明「行動」裡出陣那一條（出陣開著時取代遊歷；待 joy 潤）。數字讀 Config。"""
+    cfg = content.config
+    reset = "台灣時間 00:00 換日" if cfg.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
+    half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
+    return [
+        f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，只在戰線上的地點。"
+        "這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；地方豪強是攪局，把戰局往中間拉。"
+        f"守與攪局推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、不掉東西。越往對方老巢推越難推。",
+    ]
+
+
+def territory_lines(content: Content) -> list[str]:
+    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。
+    地盤福利（療傷、打造、買馬的價錢）與輿圖上色的兩句，等那一批（計畫 Task 5）合進來再補。"""
+    return [
+        "戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；豪強割據高時也會佔地；大事也會讓地點易手。各家的投靠點永遠是自家的。",
+        "換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。",
+    ]
 
 
 def _order_pushers(content: Content) -> list[str]:
@@ -280,8 +306,10 @@ def _geju_sides(content: Content) -> list[str]:
 
 
 def _geju_push(content: Content, faction_id: str) -> str:
-    """豪強怎麼推割據：在亂局的戰線上遊歷打贏；操練的地方推不推照內容寫（FB-112）。"""
-    drill = "、操練" if _drill_pushes(content, faction_id) else ""
+    """豪強怎麼推割據：在亂局的戰線上遊歷打贏；操練的地方推不推照內容寫（FB-112）。出陣開著時是攪局（SORTIE_GEJU）。"""
+    if sortie.on(content):
+        return SORTIE_GEJU
+    drill ="、操練" if _drill_pushes(content, faction_id) else ""
     tail = "" if drill else "，操練推不動"
     return f"在亂局的戰線上遊歷打贏{drill}才推割據{tail}"
 
@@ -292,11 +320,12 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     整個推一把）。句子照內容（FB-112）。"""
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
-    parts = [f"{SOME_PLACES}，往你陣營那一邊推"]
+    on = sortie.on(content)
+    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推"]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
-    tail = "散人照那個地方本來的方向推"
+    tail = SORTIE_RANGER if on else "散人照那個地方本來的方向推"
     for fid in _geju_sides(content):
         tail += f"，{STANCE_NAMES.get(fid, fid)}{_geju_push(content, fid)}"
     return [front_rule(content) + now, "；".join(parts) + f"；{tail}。"]
@@ -349,7 +378,7 @@ def quest_help(content: Content) -> list[str]:
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
     aside = f"{third}做完只在揭曉時留名{'、推一把割據' if geju else ''}，不改結果；" if third else ""
     return [
-        f"你能做的：{SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -471,7 +500,7 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     # 只算那一場（Game._free_agent、_enlist_options；不進投靠名冊、不算叛投）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{SOME_PLACES}，推向你那一邊，遇上自己陣營的隊伍是操練；全服決戰替自己的陣營出戰，"
+        f"{SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}；全服決戰替自己的陣營出戰，"
         "陣營不是交戰的兩軍時，跟散人一樣臨時投效。"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
@@ -651,15 +680,18 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     challenge = _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on），另起一段（FB-190）
-    lines = [
-        *_section("這一季在打什麼", season_page_lines(content, season, rule)),
-        "#### 行動",
-        f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}",
+    old_train = [  # 出陣關著時的遊歷（出陣開著時換成 sortie_lines）
         # 操練看的是遇上的隊伍（Game._drills_with），不是地方：兩種都有的地方 _train 隨機挑一路（審查 M2）
         f"- **遊歷**（體力 {cost['train']}）：只在有隊伍的地方出現。遇上對手一定開打，按鈕上寫勝算：打贏得銀兩、心得、經驗，"
         "可能掉素材；每一場都會扣些氣血，輸了還會掉銀兩。遇上自己陣營的隊伍是操練：不打、不會輸，"
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
+    ]
+    lines = [
+        *_section("這一季在打什麼", season_page_lines(content, season, rule)),
+        "#### 行動",
+        f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}",
+        *(sortie_lines(content) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
@@ -672,6 +704,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         *_section("名望", fame_lines(content, season)),
         *_section("投靠與軍令", join_lines(content, season)),
         *_section("三方有什麼不同", faction_lines(content, season)),
+        *(_section("地盤", territory_lines(content)) if territory.on(content) else []),
         "#### 情誼",
         *bond,
         "",

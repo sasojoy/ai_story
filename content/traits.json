@@ -16,6 +16,6 @@
     {"id": "wuzhao", "name": "悟招", "hook": "win_xinde", "amount": 5, "desc": "打贏多得 {value} 點心得"},
     {"id": "jieli", "name": "借力", "hook": "power_from_difficulty", "amount": 0.05, "desc": "對手越強，你的威力越高：威力加上對手強度的 {value}"},
     {"id": "huichun", "name": "回春", "hook": "heal_after", "amount": 0.03, "desc": "不論輸贏，打完都回復氣血上限的 {value}"},
-    {"id": "qingshen", "name": "輕身", "hook": "train_stamina", "amount": 2, "desc": "遊歷少花 {value} 點體力"}
+    {"id": "qingshen", "name": "輕身", "hook": "train_stamina", "amount": 2, "desc": "出陣、遊歷少花 {value} 點體力"}
   ]
 }
