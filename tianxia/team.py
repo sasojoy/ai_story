@@ -61,7 +61,8 @@ def member_stats(state: GameState, content: Content, world: WorldStateStore, key
         return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
     character = content.characters[key]
     level = world.get_companion(key).level
-    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
+    steps = growth_steps(content.config, level)  # 30 級以後每 2 級長一步，同本人的屬性點
+    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * steps for k in COMBAT_STATS}
 
 
 def practice_bonus(state: GameState, content: Content, check) -> int:
@@ -537,14 +538,44 @@ def heal(state: GameState, content: Content, member, where: str | None = None) -
 # ── 經驗與等級 ────────────────────────────────────────────
 
 
+def level_cost(cfg, level: int) -> int:
+    """第 level 級升 level+1 級要多少經驗：level_exp × level；到了 late_level_from（30）以後再乘
+    （1＋late_exp_step ×（level − late_level_from ＋ 1）），越後面越陡（企劃者 2026-10-14「50 級加陡」）。
+    升到第 30 級之前一個字都不變。"""
+    base = cfg.level_exp * level
+    if level < cfg.late_level_from:
+        return base
+    return round(base * (1 + cfg.late_exp_step * (level - cfg.late_level_from + 1)))
+
+
+def growth_steps(cfg, level: int) -> int:
+    """從第 1 級長到第 level 級，屬性長了幾「步」：第 late_level_from（30）級以前一級一步，之後每 late_stat_every（2）級一步
+    （企劃者 2026-10-14：31 級後屬性點每 2 級 1 點）。本人的屬性點（× stat_points_per_level）與同伴的每級成長都照它。"""
+    early = min(level, cfg.late_level_from) - 1
+    return max(0, early) + max(0, level - cfg.late_level_from) // cfg.late_stat_every
+
+
+def points_between(cfg, before: int, after: int) -> int:
+    """從第 before 級升到第 after 級，本人拿到幾點屬性（升級的每一個地方都走這一個）。"""
+    return (growth_steps(cfg, after) - growth_steps(cfg, before)) * cfg.stat_points_per_level
+
+
+def exp_view(content: Content, member) -> dict | None:
+    """狀態列展開時那一行：這一級攢了多少、升下一級要多少；滿級是 None。"""
+    cfg = content.config
+    if member.level >= cfg.max_level:
+        return None
+    return {"have": int(member.exp), "need": level_cost(cfg, member.level)}
+
+
 def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
     cfg = content.config
     msgs: list[str] = []
     if member.level >= cfg.max_level or amount <= 0:
         return msgs
     member.exp += amount
-    while member.exp >= cfg.level_exp * member.level and member.level < cfg.max_level:
-        member.exp -= cfg.level_exp * member.level
+    while member.exp >= level_cost(cfg, member.level) and member.level < cfg.max_level:
+        member.exp -= level_cost(cfg, member.level)
         member.level += 1
         msgs.append(f"{name}升到第 {member.level} 級！")
     return msgs
@@ -568,8 +599,10 @@ def grant_team_exp(
     msgs = add_exp(content, p.member, amount, p.name)
     gained = p.member.level - before
     if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
-        p.stat_points += gained * content.config.stat_points_per_level
-        msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+        points = points_between(content.config, before, p.member.level)  # 30 級以後兩級一點：升了一級可能沒有點
+        p.stat_points += points
+        if points:
+            msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         ups.you, ups.points = p.member.level, p.stat_points
     mate = treasures.amount(state, content, "mate_exp")  # 歸心：同伴拿到的經驗 ×1.1（玉璽碎片設計 7.1）
     for companion_id in state.player.team:

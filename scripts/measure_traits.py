@@ -61,10 +61,10 @@ WOUNDED_STARTS = (0.5, 0.2)  # 厚另外量的起手氣血（佔上限）
 
 
 def stats_at(content, level):
-    """第 L 級：開局五項都是基準 5，每升一級給 stat_points_per_level 點，照 POINT_ORDER 配到 stat_cap。"""
+    """第 L 級：開局五項都是基準 5，升級給的點照 team.points_between（30 級以後兩級一點），照 POINT_ORDER 配到 stat_cap。"""
     cfg = content.config
     stats = dict.fromkeys(team.COMBAT_STATS, float(team.BASE_STAT))
-    points = (level - 1) * cfg.stat_points_per_level
+    points = team.points_between(cfg, 1, level)
     for key in POINT_ORDER:
         add = min(points, cfg.stat_cap - stats[key])
         stats[key] += add

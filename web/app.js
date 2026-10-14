@@ -537,7 +537,15 @@
     if (!S.showMore) return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`;
     const segs = [...s.affiliation.split("・"), ...(s.anonymous ? ["匿名"] : []), `第${s.level}級`].filter(Boolean);
     return `<div class="who-name"><span>${esc(s.name)}</span><i class="more-ico" aria-hidden="true">▴</i></div>
-          <div class="who-title">${segs.map((t) => `<span class="who-seg">${esc(t)}</span>`).join("・")}</div>${rangerHtml(s.ranger)}`;
+          <div class="who-title">${segs.map((t) => `<span class="who-seg">${esc(t)}</span>`).join("・")}</div>${expHtml(s)}${rangerHtml(s.ranger)}`;
+  }
+
+  // 頭銜底下一行：這一級的經驗（status.exp，team.exp_view）。30 級以後一級要好幾倍的經驗（50 級加陡），看得到還差多少；
+  // 滿級伺服器送 null，寫「已到頂」
+  function expHtml(s) {
+    if (s.exp === undefined) return "";
+    if (!s.exp) return `<div class="who-exp">經驗已到頂</div>`;
+    return `<div class="who-exp">經驗 ${s.exp.have}／${s.exp.need}，再 ${Math.max(0, s.exp.need - s.exp.have)} 升第 ${(s.level | 0) + 1} 級</div>`;
   }
 
   // 散人的遊俠名號（status.ranger，ranger.status）：名號本身已經在頭銜那一行（social.affiliation），這裡只補俠名與下一階，

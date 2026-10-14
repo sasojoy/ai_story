@@ -4344,8 +4344,10 @@ class Game:
             before = p.member.level
             lines += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
         if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
@@ -6695,8 +6697,10 @@ class Game:
         before = p.member.level
         ups = team.add_exp(c, p.member, cfg.exp, p.name)
         if p.member.level > before:
-            p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-            ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+            points = team.points_between(c.config, before, p.member.level)
+            p.stat_points += points
+            if points:
+                ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         record.exp = cfg.exp
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
@@ -7187,8 +7191,10 @@ class Game:
             before = p.member.level
             extra += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             record.exp = exp
         silver = round(boss.silver * share)
         if silver:
@@ -8627,6 +8633,7 @@ class Game:
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
+            "exp": team.exp_view(c, p.member),  # 這一級攢了多少、升下一級要多少（狀態列展開那一行）；滿級是 None
             "location": c.locations[p.location].name,
             "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
             "day": int(w.time // DAY) + 1,
