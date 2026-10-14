@@ -277,12 +277,20 @@ def sortie_lines(content: Content) -> list[str]:
     ]
 
 
+def _tenth(share: float) -> str:
+    """0.1 → 一成、0.2 → 兩成（rules.count_word）；不是整成照寫百分比。"""
+    tenths = round(share * 10, 6)
+    return f"{'兩' if tenths == 2 else rules.count_word(int(tenths))}成" if tenths == int(tenths) else f"{share * 100:g}%"
+
+
 def territory_lines(content: Content) -> list[str]:
-    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。
-    地盤福利（療傷、打造、買馬的價錢）與輿圖上色的兩句，等那一批（計畫 Task 5）合進來再補。"""
+    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。價錢的成數讀 Config.territory。"""
+    cfg = content.config.territory
     return [
         "戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；豪強割據高時也會佔地；大事也會讓地點易手。各家的投靠點永遠是自家的。",
         "換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。",
+        f"在自家地盤療傷、打造、買馬便宜{_tenth(1 - cfg.own_price)}，在別人的地盤貴{_tenth(cfg.enemy_price - 1)}；散人照原價。",
+        "輿圖局勢層的底色就是此刻誰佔著；易手時天下大事會傳一句。",
     ]
 
 

@@ -17,6 +17,14 @@ def test_the_howto_page_explains_the_new_loop():
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
     assert "#### 地盤" in page and "換了人" in page
+    assert "便宜一成" in page and "貴兩成" in page and "底色" in page  # 地盤福利與輿圖上色（計畫 Task 5）
+
+
+def test_the_territory_prices_follow_the_config():
+    c = real_content("weekend")
+    c.config.territory.own_price, c.config.territory.enemy_price = 0.85, 1.5
+    line = " ".join(howto.territory_lines(c))
+    assert "便宜15%" in line and "貴五成" in line
 
 
 def test_the_howto_page_is_unchanged_with_the_switches_off():
