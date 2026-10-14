@@ -60,7 +60,8 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, naming,
+    battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, mapdata,
+    naming,
     ollama_client, rules,
     seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
 )
@@ -1120,6 +1121,20 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     }
 
 
+MAP_BASE: dict[str, dict] = {}  # 輿圖升級的底圖：照開放的地點（mapdata.base_key）快取；一季差不多只有一兩把鍵
+MAP_BASE_KEEP = 8  # 超過就整個清掉重來（劇情開放的地點只有幾處，不會真的到）
+
+
+def map_base_view(game: Game) -> dict:
+    """輿圖升級的底圖與清單（/api/map/base）：同一把鍵（開放的地點一樣）回同一份，不重畫。呼叫端拿著行動鎖（look）。"""
+    key = mapdata.base_key(game.state, game.content)
+    if key not in MAP_BASE:
+        if len(MAP_BASE) >= MAP_BASE_KEEP:
+            MAP_BASE.clear()
+        MAP_BASE[key] = game.map_base()
+    return MAP_BASE[key]
+
+
 def map_view(game: Game, layer: str, selected: str | None) -> dict:
     places = game.map_places()
     if selected not in {loc_id for _, loc_id in places}:
@@ -1922,8 +1937,23 @@ def zhuan_page(code: str, request: Request):
 
 @app.get("/api/map")
 def api_map(request: Request, layer: str = DEFAULT_LAYER, place: str | None = None):
+    """舊的輿圖（四個圖層的整張 SVG 與詳情欄）：輿圖升級之後網頁不再呼叫，留一版給還開著舊網頁的分頁（設計第九節）。"""
     game = _game(request)
     return look(game, lambda g: map_view(g, layer, place))
+
+
+@app.get("/api/map/base")
+def api_map_base(request: Request):
+    """輿圖升級的底圖（只有紙、大區、山河、路）與地點、路、大區的清單；網頁一次載入只抓一次，疊層的 key 變了才重抓。"""
+    game = _game(request)
+    return look(game, map_base_view)
+
+
+@app.get("/api/map/state")
+def api_map_state(request: Request):
+    """輿圖升級的疊層：每個地點此刻的控制方、勝算、出陣、分鐘、軍令懸賞，戰線、今天去哪裡出陣、每一週的地盤（mapdata.state）。"""
+    game = _game(request)
+    return look(game, lambda g: g.map_state())
 
 
 @app.post("/api/travel")

@@ -2901,7 +2901,30 @@ def test_reports_and_map_pages_read_without_saving(client, save_dir):
         conn.execute("DELETE FROM characters")
     assert client.get("/api/reports").json()["list"] == []
     assert client.get("/api/map?layer=enemy").json()["layer"] in {"enemy", server.DEFAULT_LAYER}
+    assert client.get("/api/map/base").json()["places"] and client.get("/api/map/state").json()["places"]
     assert not open_characters().exists("沈青衫")
+
+
+def test_the_new_map_comes_as_a_base_and_an_overlay(client):
+    """輿圖升級（設計第九節）：底圖（svg、地點、路、大區）與疊層（每個地點此刻的樣子）分兩個端點，兩個都只讀。"""
+    _player(client)
+    base = client.get("/api/map/base").json()
+    assert base["svg"].startswith("<svg") and base["places"] and base["edges"] and base["key"]
+    st = client.get("/api/map/state").json()
+    assert st["key"] == base["key"] and st["here"] in st["places"]
+
+
+def test_the_map_base_is_cached_until_a_place_opens(client):
+    from tianxia import mapdata
+
+    _player(client)
+    game = server.game_for("沈青衫")
+    first = server.look(game, server.map_base_view)
+    assert server.look(game, server.map_base_view) is first  # 同一把鍵：同一份，不重畫
+    game.state.world.flags.add("xi_open")  # 南華觀開放（14 天的季要等這面旗）
+    second = server.map_base_view(game)
+    assert second["key"] != first["key"] and second["key"] == mapdata.base_key(game.state, game.content)
+    assert "jade_cave" in {p["id"] for p in second["places"]}
 
 
 # ── 全服即時戰鬥：自訂行動 ────────────────────────────────
