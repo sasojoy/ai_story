@@ -1476,6 +1476,7 @@ def validate(c: Content) -> None:
         )
 
     marks_written: dict[str, str] = {}  # 痕跡 → 第一個寫它的地方
+    taught: dict[str, str] = {}  # 事件 learn_skills 給得到的武學 → 第一個給它的地方（品質要明寫，見最後）
     marks_read: dict[str, str] = {}  # 痕跡 → 第一個讀它的地方（條件或文字裡的模糊人數）
 
     def check_mark_key(where: str, key: str) -> None:
@@ -1533,6 +1534,8 @@ def validate(c: Content) -> None:
         read_marks_in(where, eff.text)
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
+        for skill_id in eff.learn_skills:
+            taught.setdefault(skill_id, where)
         known(where, eff.materials, c.materials, "素材")
         known(where, eff.insights, c.insights, "意境")
         for insight_id in eff.insights:
@@ -2275,6 +2278,14 @@ def validate(c: Content) -> None:
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
     for key, where in sorted(marks_read.items()):
         need(key in marks_written, f"{where}：痕跡 {key} 沒有任何效果寫它，條件永遠不會成立")
+
+    # 玩家拿得到的內容武學品質要明寫（PM 2026-10-14：追風步沒寫 quality，照 SkillDef 的預設成了絕學，
+    # 付四十兩就學得到）：事件 learn_skills 給的、各地教的（learn）、開局送的（starter_skills）
+    for skill_id in sorted(set(taught) | {s.id for s in c.skills.values() if s.learn is not None} | set(c.config.starter_skills)):
+        skill = c.skills.get(skill_id)
+        if skill is not None:
+            need("quality" in skill.model_fields_set,
+                 f"{taught.get(skill_id, '教得到的武學')}：【{skill.name}】（{skill_id}）沒寫 quality，會照預設成了絕學——玩家拿得到的武學品質要明寫")
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))
