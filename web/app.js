@@ -2506,19 +2506,26 @@
     const back = shop.picked
       ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
-    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : smithHtml(shop);
+    const line = `<p class="shop-line">${esc(shop.line)}</p>`;
+    // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
+    const underForge = kind === "smith" && smithTab() === "shelf";
+    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : smithHtml(shop, underForge ? line : "");
     return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
       <header class="shop-bar">${back}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">銀 ${shop.silver | 0}</span></header>
-      <p class="shop-line">${esc(shop.line)}</p>
+      ${underForge ? "" : line}
       ${body}
     </div>`;
   }
 
-  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡
-  function smithHtml(shop) {
+  // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）
+  function smithTab() { return ["forge", "temper", "rack"].includes(S.shopTab) ? S.shopTab : "shelf"; }
+
+  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡。架上頁最上面是爐火與鐵匠那一句（line，shopHtml 交過來），不跟著貨卡捲
+  function smithHtml(shop, line = "") {
+    const tab = smithTab();
     const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
-    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[S.shopTab] || shelfHtml;
-    return `${pages}
+    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[tab];
+    return `${tab === "shelf" ? SMITH_HERO + line : ""}${pages}
       <div class="shop-body">${body(shop)}</div>
       <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
@@ -2636,22 +2643,13 @@
   }
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
-  // 架上那一頁上半的爐火與鐵砧（企劃者 2026-10-14 微調，草圖 container.html 的 A）：內嵌 SVG、水墨暖色；Joy 之後有正式的圖可以換
-  const SMITH_HERO_SVG = `<svg viewBox="0 0 240 132" aria-hidden="true">
-      <defs><radialGradient id="smith-hero-glow" cx="50%" cy="78%" r="62%"><stop offset="0" stop-color="#ffd27a"/><stop offset=".3" stop-color="#e0642a"/><stop offset=".7" stop-color="#5a2a14"/><stop offset="1" stop-color="#2b1a10"/></radialGradient></defs>
-      <ellipse cx="120" cy="100" rx="108" ry="26" fill="#e0642a" opacity=".16"/>
-      <path d="M112 18 V4 h16 V18" fill="#3a2a1e"/>
-      <path d="M58 98 Q58 22 120 16 Q182 22 182 98 Z" fill="url(#smith-hero-glow)" stroke="#2b1a10" stroke-width="3"/>
-      <path d="M64 92 Q64 30 120 22 Q176 30 176 92" fill="none" stroke="#7a4a2a" stroke-width="1.5" stroke-dasharray="10 6" opacity=".6"/>
-      <path d="M92 98 Q94 66 120 62 Q146 66 148 98 Z" fill="#1e1510"/>
-      <g class="fire"><path class="fl-out" d="M120 64 C130 76 138 82 134 92 C131 98 125 99 120 99 C113 99 106 96 106 88 C106 80 112 76 114 68 C116 74 119 78 122 79 C122 74 121 69 120 64Z"/>
-        <path class="fl-in" d="M120 78 C125 84 128 88 126 94 C124 97 122 98 120 98 C117 98 114 96 115 92 C116 88 119 85 120 78Z"/></g>
-      <path d="M78 106 h84 c-4 6 -14 9 -26 9 v6 h10 v6 h-52 v-6 h10 v-6 c-12 0 -22 -3 -26 -9z" fill="#3a3530" stroke="#6b625a" stroke-width="1.5"/>
-    </svg>`;
+  // 架上那一頁最上面的爐火與鐵砧（企劃者 2026-10-14，照草圖 container.html 的 A）：一大團發亮的橘色圓頂爐口、火光往外暈，底下鐵砧；
+  // 純 CSS 畫（style.css 的 .forge-mouth、.forge-anvil）；Joy 之後有正式的圖可以換
+  const SMITH_HERO = '<div class="smith-hero" aria-hidden="true"><div class="forge-mouth"><i class="flame"></i></div><div class="forge-anvil"></div></div>';
 
   function shelfHtml(shop) {
     // 這一段的變數不用單字母 x：tests/test_server.py 把修練頁到輿圖之間那個變數讀的欄位都當成 menxia_view 的欄位查
-    return `<div class="smith-hero">${SMITH_HERO_SVG}</div><div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
+    return `<div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
         <b>${esc(ware.name)}</b><span>${esc(ware.kind)}・屬${esc(ware.attribute)}・${esc(ware.tier)}</span>${ware.value ? `<span>${esc(ware.value)}</span>` : ""}
         ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}<span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span></button>`).join("")}</div>`;
   }

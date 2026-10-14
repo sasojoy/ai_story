@@ -46,16 +46,33 @@ def test_the_forge_page_draws_one_row_per_attribute(content, world):
 
 
 def test_the_shelf_page_opens_with_a_forge_and_anvil_above_the_wares(content, world):
-    """企劃者 2026-10-14 微調（草圖 container.html 的 A）：架上那一頁上面一塊爐火與鐵砧（內嵌 SVG），貨卡往下移；只有架上那一頁有。"""
+    """企劃者 2026-10-14 微調（草圖 container.html 的 A）：架上那一頁上面一塊爐火與鐵砧，貨卡往下移；只有架上那一頁有。
+    企劃者 2026-10-14 看了 QA 的對照圖再改：照草圖畫一大團發亮的橘色圓頂爐口（火光往外暈），底下鐵砧，不要深色爐身裡一小團火；
+    鐵匠那一句放在爐火底下（招牌 → 爐火 → 鐵匠那一句 → 貨卡）。其他頁照共用的版面：那一句緊接招牌、沒有爐火。"""
     import server
     from test_shop_web import run
 
     m = server.main_view(_smith(content, world, name="爐客"))
     shelf = run(m, 'H.S.shopTab = "shelf"; H.render(); return T.els.app.innerHTML;')
-    assert 'class="smith-hero"' in shelf and "<svg" in shelf[shelf.index('class="smith-hero"'):]
-    assert shelf.index('class="smith-hero"') < shelf.index('class="shop-grid"')
+    hero = shelf[shelf.index('class="smith-hero"'):shelf.index('class="shop-grid"')]
+    assert 'class="forge-mouth"' in hero and 'class="forge-anvil"' in hero and "<svg" not in hero
+    order = [shelf.index(k) for k in ('class="shop-bar"', 'class="smith-hero"', 'class="shop-line"', 'class="shop-grid"')]
+    assert order == sorted(order) and shelf.count('class="shop-line"') == 1
     forge = run(m, 'H.S.shopTab = "forge"; H.render(); return T.els.app.innerHTML;')
-    assert 'class="smith-hero"' not in forge
+    assert 'class="smith-hero"' not in forge and forge.count('class="shop-line"') == 1
+    assert forge.index('class="shop-bar"') < forge.index('class="shop-line"') < forge.index('class="shop-body"')
+
+
+def test_the_forge_mouth_glows_like_the_sketch():
+    """草圖 A 的 .forge：170×120 的圓頂、由亮到暗的橘色徑向漸層；火光往外暈（box-shadow）；鐵砧 #3a3530。火苗輕輕晃，減少動態效果不晃。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    mouth = _rule(css, ".shop-layer .forge-mouth")
+    assert "border-radius: 50% 50% 12px 12px" in mouth and "radial-gradient" in mouth and "#ffb347" in mouth and "#e0642a" in mouth
+    assert "box-shadow:" in mouth
+    assert "#3a3530" in _rule(css, ".shop-layer .forge-anvil")
+    assert ".shop-layer .forge-mouth .flame { animation: none; }" in css[css.index("@media (prefers-reduced-motion: reduce) { .shop-layer .forge-mouth"):][:120]
 
 
 # ── 2：懸賞榜告示照草圖改小、放大的紙貼在畫面下緣 ──
