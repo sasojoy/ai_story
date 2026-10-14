@@ -176,6 +176,7 @@ ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算
 GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法
 SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）；網頁 app.js 的 roundBlocks 認這個寫法
 ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
+MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -4363,6 +4364,7 @@ class Game:
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
             gauge=self._gauge_of(battle, definition, me.faction) if definition is not None else None,
+            log=self._round_blocks(battle, definition, last=None, oldest_first=True, me=me) if definition is not None else [],
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
@@ -4665,13 +4667,18 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
-    def _round_blocks(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
+    def _round_blocks(
+        self, battle: battle_instance.BattleInstance, definition: BattleDef, *, last: int | None = ROUND_BLOCKS,
+        oldest_first: bool = False, me: battle_instance.BattleParticipant | None = None,
+    ) -> list[str]:
         """場景上最近五段戰況，一回合一段、新的在上（Joy 2026-10-14「大決戰因為很多人，戰況文字沒有分回合，擠在一起玩家很難閱讀」）：
         每一段是「##### 第 N 回合」加一行一條的清單，網頁照標題把舊的幾回合收成一行（app.js 的 roundBlocks）。
         narrative_log 開打那一句之後一回合一筆（apply_battle_tales 也照這個算），所以倒數第 k 筆是第（round_number − k）回合；
         開打那一句（第 0 筆）照舊一段話。每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：開頭是參戰者的名號就照他
         站的那一邊，開頭是交戰一方的名字就是那一方，前面加「〔官軍〕」（SIDE_TAG；網頁 roundBlocks 換成那一軍顏色的小標籤）；
-        誰佔上風、各路奇招互相牽扯、換幕這幾句不分邊，不加。"""
+        誰佔上風、各路奇招互相牽扯、換幕這幾句不分邊，不加。
+        收場時寫進自己戰報的那一份（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」，_file_showdown）：last 是 None＝整場、
+        oldest_first 照先後、me 是自己，每一段最後一條寫自己這一回合出了什麼（MY_MOVE）。"""
         log = battle.narrative_log
         sides = self._sides(definition)
         names = sorted(battle.participants, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
@@ -4681,7 +4688,7 @@ class Game:
             fid = battle.participants[who].faction if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
             return SIDE_TAG.format(side=sides[fid]) if fid in sides else ""
         out = []
-        for k, entry in enumerate(reversed(log[-ROUND_BLOCKS:])):
+        for k, entry in enumerate(reversed(log if last is None else log[-last:])):
             n = battle.round_number - k
             rows = [line for line in entry.split("\n") if line.strip()]
             if n <= 0 or not rows:
@@ -4693,8 +4700,9 @@ class Game:
                     items[-1] += f"\n  {line}"
                 else:
                     items.append(line)
-            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join(f"- {side_of(item)}{item}" for item in items))
-        return out
+            mine = [MY_MOVE.format(move=me.moves[n])] if me is not None and n in me.moves else []
+            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join([*(f"- {side_of(item)}{item}" for item in items), *(f"- {m}" for m in mine)]))
+        return out[::-1] if oldest_first else out
 
     def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
         """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""
@@ -7897,6 +7905,10 @@ class Game:
 
     def battle_list(self) -> list[tuple[str, int]]:
         return [(battlelog.list_label(r, self.stamp), r.id) for r in self.state.battles]
+
+    def big_battle_ids(self) -> set[int]:
+        """戰報列表裡決戰、奪璽單挑那幾場（battlelog.BIG_KINDS）：另外排在最上面一組，不跟一般的仗混在一起（Joy 2026-10-14）。"""
+        return {r.id for r in self.state.battles if r.kind in battlelog.BIG_KINDS}
 
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state

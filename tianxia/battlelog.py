@@ -16,7 +16,12 @@ from .models import Content, Squad
 from .state import BattleRecord, Fighter, GameState, LevelUps
 from .world_state import WorldStateStore
 
-MAX_RECORDS = 20  # 存檔保留最近幾場
+MAX_RECORDS = 20  # 存檔保留最近幾場（一般的仗；BIG_KINDS 另外算）
+# 大事件的仗（全服決戰、奪璽單挑）不佔一般那 MAX_RECORDS 場、不被遊歷野怪洗掉（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）；
+# 一季頂多十來場，BIG_KEEP 只是保險
+BIG_KINDS = ("showdown", "seal")
+BIG_KEEP = 40
+FULL_LOG_HEAD = "**完整戰況**"  # 決戰戰報最後一段（BattleRecord.log）：網頁照「第 N 回合」把每一回合收成一行、點了展開（app.js 的 roundBlocks）
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
 KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台"}
 NO_RECORD = "（還沒有戰報。）"
@@ -73,10 +78,17 @@ def new_record(
 
 
 def add_record(state: GameState, record: BattleRecord) -> None:
-    """最新的放最前面，只留最近 MAX_RECORDS 場。"""
+    """最新的放最前面：一般的仗只留最近 MAX_RECORDS 場，決戰與奪璽單挑（BIG_KINDS）另外留最近 BIG_KEEP 場。"""
     state.battle_seq = record.id
     state.battles.insert(0, record)
-    del state.battles[MAX_RECORDS:]
+    counts = {True: 0, False: 0}
+    kept = []
+    for r in state.battles:
+        big = r.kind in BIG_KINDS
+        counts[big] += 1
+        if counts[big] <= (BIG_KEEP if big else MAX_RECORDS):
+            kept.append(r)
+    state.battles[:] = kept
 
 
 def find(state: GameState, record_id: int | None) -> BattleRecord | None:
@@ -302,4 +314,5 @@ def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text)
         *_rounds_block(record),
         *_story_block(record),
         *_gains_block(record),
+        *([FULL_LOG_HEAD, *record.log] if record.log else []),
     ])

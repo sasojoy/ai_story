@@ -892,6 +892,9 @@ class BattleRecord(BaseModel):
     trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
     trait_after: list[str] = Field(default_factory=list)  # 受傷、結果出來、戰鬥外：化勁、厚、不動、乘勝、吸取、悟招、回春、輕身
     levelups: LevelUps | None = None  # 這一場有人升級才有（FB-074）；舊戰報沒有，卡片照 notes 原文
+    # 決戰的完整戰況（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」）：一回合一段的 Markdown（「##### 第 N 回合」加清單，
+    # 照先後；Game._round_blocks 收場時快照，每一段最後一條是自己出了什麼）。不是決戰、舊戰報是空的
+    log: list[str] = Field(default_factory=list)
 
 
 class JournalEntry(BaseModel):
