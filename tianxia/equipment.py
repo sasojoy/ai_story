@@ -57,16 +57,18 @@ DIVINE_MARK = "・神器"  # 待 joy 潤：神器原品，階品後面多這一�
 COPY_MARK = "・仿品"  # 待 joy 潤：神器仿品
 SIGNATURE_MARK = "・本命"  # 待 joy 潤：名將本命兵器，階品後面多這一段（打造第三批；同時也是原品，但寫這一段不寫「・神器」）
 SIGNATURE_KEPT = "本命兵器不能拆"  # 待 joy 潤：本命兵器那一列的拆解鈕灰掉時寫的原因
-SIGNATURE_KEPT_LINE = "這是名將的本命兵器，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆本命兵器時回的那一句
+SIGNATURE_KEPT_LINE = "這是名將的本命兵器，一季全江湖只有這一{unit}，拆不得。"  # 待 joy 潤：引擎收到拆本命兵器時回的那一句
 DISMANTLE_PREFIX = "你拆解了"
 DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
 DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
 WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
-DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
+DISMANTLE_ASK = "把【{name}】（{grade}{tempered}）拆成{material}×1？拆掉就沒了{lost}。"  # 待 joy 潤（FB-125：拆解先問一次；FB-133：淬過的寫幾次、一起沒了）
+DISMANTLE_TEMPERED = "・淬煉 {n} 次"  # 待 joy 潤
+DISMANTLE_LOST = "，淬過的 {n} 次也一起沒了"  # 待 joy 潤
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
-ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
+ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一{unit}，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
 
 
 def kept(item: Equipment) -> str:
@@ -160,6 +162,17 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
 def grade(item: Equipment) -> str:
     """「一階下品」：階＋品質（FB-127：修練頁的裝備庫每列都要寫）；照隱藏配方打出來的再接一段（打造隱藏配方設計 4.2、5.3；只看存檔的欄位，
     不查內容）：本命兵器「・本命」、神器原品「・神器」、仿品「・仿品」、名器「・名器」。內容拿掉了那一條名器，加成照一般的算（named）、這一段照寫。"""
+    mark = mark_word(item)
+    return f"{tier_quality(item)}・{mark}" if mark else tier_quality(item)
+
+
+def tier_quality(item: Equipment) -> str:
+    """「一階下品」：只有階與品質（grade 去掉後面那一段）。"""
+    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}"
+
+
+def mark_word(item: Equipment) -> str:
+    """grade 後面那一段的字（「本命」「神器」「仿品」「名器」），一般的是空字串。開爐的結果句把它寫在名字前面（FB-148）。"""
     if item.signature is not None:
         mark = SIGNATURE_MARK
     elif item.original:
@@ -170,7 +183,7 @@ def grade(item: Equipment) -> str:
         mark = NAMED_MARK
     else:
         mark = ""
-    return f"{TIER_WORDS.get(item.tier, '')}{item.quality}{mark}"
+    return mark.removeprefix("・")
 
 
 def named(content: Content, item: Equipment | None) -> bool:
@@ -200,9 +213,21 @@ def dismantle_order(item: Equipment) -> tuple[int, int, str]:
     return (item.edge, item.tier, item.id)
 
 
+WEAPON_UNITS = {"拳腳": "副"}  # 兵器的量詞（FB-133、FB-160）：拳套論副，其他兵器論把。待 joy 潤
+
+
+def unit_for(slot: str, kind: str = "") -> str:
+    """量詞照欄位（FB-146：防具神器前面寫「一件」、後面寫「一把」）：防具、寶物一件，坐騎一匹，兵器照種類（拳套一副、其他一把）。"""
+    if slot == "weapon":
+        return WEAPON_UNITS.get(kind, "把")
+    return "匹" if slot == "mount" else "件"
+
+
 def dismantle_confirm(content: Content, item: Equipment) -> str:
     """拆解之前問的那一句（FB-125，企劃者 2026-10-10 第二批附帶決定 a）：修練頁與鐵匠鋪同一句，寫明拆出什麼。"""
-    return DISMANTLE_ASK.format(name=item.name, grade=grade(item), material=dismantle_material(content, item).name)
+    n = item.tempers
+    return DISMANTLE_ASK.format(name=item.name, grade=grade(item), material=dismantle_material(content, item).name,
+                                tempered=DISMANTLE_TEMPERED.format(n=n) if n else "", lost=DISMANTLE_LOST.format(n=n) if n else "")
 
 
 def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
@@ -217,9 +242,9 @@ def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str
     if not on(content, chosen.slot):
         return [NOT_NOW]
     if chosen.signature is not None:
-        return [SIGNATURE_KEPT_LINE]  # 本命兵器：一季全服只有一把，拆了就沒了、上不了神器譜
+        return [SIGNATURE_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))]  # 本命兵器：一季全服只有一把，拆了就沒了、上不了神器譜
     if chosen.original:
-        return [ORIGINAL_KEPT_LINE]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
+        return [ORIGINAL_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
     material = dismantle_material(content, chosen)
     p.rack.remove(chosen)
     p.materials[material.id] = p.materials.get(material.id, 0) + 1

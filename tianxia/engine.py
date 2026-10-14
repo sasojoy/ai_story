@@ -290,6 +290,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
@@ -1518,6 +1519,7 @@ class Game:
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call") else None
         self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
+        self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
         try:
             if kind == "act":
@@ -1563,8 +1565,9 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
-            msgs += self._general_gifts()  # 名將贈禮（裝備四欄 6.4）：這一下的情誼（對話、事件）到了門檻就送；進這一則紀錄
-            msgs += self._signature_arms()  # 名將本命兵器（打造第三批）：情誼到了、或這一下打贏他本人第三次
+            # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
+            # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
+            gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
@@ -1588,9 +1591,12 @@ class Game:
                 forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
                 journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge",
                                   fold=smithing.is_step_line if forged else False)
+            self._gift_entry(gifts)
+            msgs += gifts
         finally:
             self._draft = None
             self._fight = None
+            self._affinity_before = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
@@ -1623,6 +1629,7 @@ class Game:
         self.state.battle_card = None
         faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
+        self._affinity_before = dict(s.player.affinities)
         try:
             s.pending_event = None
             rate = free_text_rate(llm_rate, choice, s, c, self.world)
@@ -1637,18 +1644,20 @@ class Game:
             msgs += self._apply(effect, once=event.once)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
-            msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
-            msgs += self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose）
+            gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self._gift_entry(gifts)
+            msgs += gifts
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
                 time=s.world.time, title=self._draft.title,
             )
         finally:
             self._draft = None
+            self._affinity_before = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
@@ -2759,10 +2768,10 @@ class Game:
             problem = weapons.buy_problem(s, c, item.kind)
             note = problem or f"{c.config.weapons.shop_price} 兩"
             mark = weapons.FITS_MARK if c.config.weapons.enabled and item.kind == fit_kind else ""
-            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）{mark}",
+            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{weapons.noun(item.kind)}・一階・{note}）{mark}",
                                enabled=problem is None))
         # 身上那把配不上身上的武學（含沒有武學）：加成是 0，修與淬煉照樣按得下去，可是花的料與銀兩看不到回報，按鈕上提醒一句（PM 2026-10-11）
-        unfit = weapons.UNFIT_NOTE if weapons.worn_unfit(s, art, c, self.world) else ""
+        unfit = weapons.unfit_note(s.player.weapon) if weapons.worn_unfit(s, art, c, self.world) else ""
         if s.player.weapon is not None:
             problem = weapons.repair_problem(s, c)
             material = weapons.repair_material(s, c)
@@ -2777,7 +2786,7 @@ class Game:
             opts.append(temper)
         for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
             if weapons.usable(w, art, c, self.world):
-                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
+                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{weapons.noun(w.kind)}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
         opts += self._dismantle_options("weapon")  # 拆解（只看武器那一欄；最多 DISMANTLE_LIST 顆、先問一次）
@@ -2895,7 +2904,7 @@ class Game:
         silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
         msgs = self._smith_act(arg)
         if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
-            clue = self._smith_clue()
+            clue = self._smith_clue(paid=p.stats.get("silver", 0) < silver)
             if clue:
                 p.shop_clue = clue[0]
             msgs = msgs + clue
@@ -2922,7 +2931,7 @@ class Game:
             return smithing.step(s, c, verb, rest)
         if verb == "buy":
             self._shop_after(weapons.buy_problem(s, c, rest), "buy")
-            return weapons.buy(s, c, rest)
+            return weapons.buy(s, c, rest, team.player_art(s, c, self.world, s.player.member.wugong_id), self.world)  # 配得上就直接換上（FB-128）
         if verb == "repair":
             self._shop_after(weapons.repair_problem(s, c), "repair")
             return weapons.repair(s, c)
@@ -3021,7 +3030,7 @@ class Game:
         if item is None:
             return self._log(msgs)
         if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
-            clue = self._smith_clue()
+            clue = self._smith_clue(paid=p.stats.get("silver", 0) < silver)
             if clue:
                 p.shop_clue = clue[0]
             msgs = msgs + clue
@@ -4058,11 +4067,29 @@ class Game:
         WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
         事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
         given = dict(self.state.world.general_gifts)
-        msgs = treasures.gifts_due(self.state, self.content)
+        msgs = treasures.gifts_due(self.state, self.content, self._people_here())
         for cid, who in self.state.world.general_gifts.items():
             if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
                 annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
         return msgs
+
+    def _people_here(self) -> set[str]:
+        """此刻站在你身邊的人物：同 _figures_here 的所在（人物表上的人照此刻的所在與狀態，其餘照 recruit_at、talk_at），不限深度互動；
+        在路上一個都沒有。再加上這一下加了情誼的人（終審 F2：情誼只從當面的事來——對話、晉升事件、伏筆收尾——劉關張在婁桑村的晉升
+        事件裡當面出現，不在他們平常站的地方）。名將贈禮與本命兵器照它寫當面交給你還是託人送來（FB-139、FB-149）。"""
+        s, c = self.state, self.content
+        before = self._affinity_before or {}
+        raised = {cid for cid, v in s.player.affinities.items() if self._affinity_before is not None and v > before.get(cid, 0)}
+        if s.player.journey is not None:
+            return raised
+        here, placed = s.player.location, figures.placed_characters(s, c)
+        return raised | {cid for cid, ch in c.characters.items()
+                         if (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))}
+
+    def _gift_entry(self, lines: list[str]) -> None:
+        """名將贈禮與本命兵器（情誼那條路）另起一則江湖紀錄（FB-139、FB-149），排在當下那個動作的那一則之後。沒有就不寫。"""
+        if lines:
+            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=treasures.GIFT_TITLE, tag=lines[0], lines=lines[1:]))
 
     def _signature_arms(self, record=None, beaten: str | None = None, later: list | None = None) -> list[str]:
         """名將本命兵器（兵器設計 4.10；打造第三批，signature_arms.due）：情誼到 signature_affinity 他送你，打贏他本人 signature_wins 次
@@ -4072,7 +4099,7 @@ class Game:
         （終審 minor）。行狀記一筆（人物）；later 給了（_challenge）就先放進去，等那一場自己的行狀記完再記，行狀才照時間先後。
         不擲骰：不碰 Game.rng。"""
         s, c = self.state, self.content
-        items, msgs = signature_arms.due(s, c, beaten=beaten)
+        items, msgs = signature_arms.due(s, c, beaten=beaten, present=self._people_here())
         for item in items:
             arm = next((a for a in c.gear.signature_arms if a.character == item.signature), None)
             if record is not None and beaten is not None and arm is not None and arm.figure == beaten:
@@ -5281,10 +5308,11 @@ class Game:
             record.materials.append(treasures.GAIN_LINE.format(name=item.name))
         return lines
 
-    def _tier3(self, squad: Squad, record, chance: float, tag: str) -> list[str]:
+    def _tier3(self, squad: Squad, record, chance: float, tag: str, source: str) -> list[str]:
         """三階素材的新來源（兵器設計 4.9；打造第二批）：擲 chance，中了照對手隊伍的屬性給一個三階素材（materials.tier3_pick），
         寫進這一場戰報的「得失」與江湖紀錄。自己一份亂數（「三階|季數|名號|戰報流水號|tag」；流水號每季從 1 起所以要季數，同
-        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。"""
+        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。
+        source 寫在得失那一格的括號裡（挑戰本人、大場面；跟預設表掉的同一種合成一格，FB-147）。"""
         if chance <= 0 or prologue_rules.active(self.state, self.content):
             return []
         seed = f"三階|{self.world.get_season_number()}|{self.state.player.name}|{record.id}|{tag}"
@@ -5294,8 +5322,8 @@ class Game:
         line = materials.grant(self.state, self.content, mid) if mid is not None else None
         if not line:
             return []
-        record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
-        return [line]
+        materials.add_cell(record.materials, self.content, mid, 1, source=source)
+        return [materials.extra_line(self.content, mid, 1, source)]
 
     def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
         """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
@@ -5306,7 +5334,7 @@ class Game:
             return []
         if cap and p.figure_rare_drops >= cap:
             return []
-        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
+        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}", materials.CHALLENGE_SOURCE)
         if got:
             p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
             p.figure_rare_drops += 1
@@ -5436,19 +5464,20 @@ class Game:
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
                     got.append(material_id)
-                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+                    materials.add_cell(record.materials, self.content, material_id, count)  # 同一種合成一格（FB-140）
                     msgs.append(line)
             # 大場面對手的掉落表加三階（兵器設計 4.9）：另擲一次 big_tier3（自己的亂數）；大勢人物本人那支隊伍的那一個在 _challenge，不重複擲；
             # 探索野怪不算大場面（同大場面判讀：_squad_encounter 對野怪不問模型；CLAUDE.md「大場面」那一條）
             figure_squads = {fig.squad for fig in self.content.figures.values()}
             if record.kind != "wild" and self.is_big(squad) and squad.id not in figure_squads:
-                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面")
+                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面", materials.BIG_SOURCE)
             if record.kind in ("train", "wild"):  # 兵器掉落與寶物多掉的素材（兵器設計 4.8、裝備四欄 6.2）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
                 extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)  # 自己的亂數
                 line = materials.grant(self.state, self.content, extra) if extra is not None else None
-                if line:  # 照實多寫那一個：戰報的得失、江湖紀錄（設計 6.2）
-                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
-                    msgs.append(line)
+                if line:  # 照實多寫那一個：戰報的得失、江湖紀錄（設計 6.2）；跟掉到的同一種合成一格、寫是寶物多給的（FB-140）
+                    source = self.state.player.treasure.name if self.state.player.treasure is not None else "寶物"
+                    materials.add_cell(record.materials, self.content, extra, 1, source=source)
+                    msgs.append(materials.extra_line(self.content, extra, 1, source))
                 weapon, dropped_lines = weapons.drop(self.state, self.content, self.rng)
                 if weapon is not None:
                     record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
@@ -5862,16 +5891,17 @@ class Game:
         clue = forge_secrets.hear(self.state, self.content, secret_recipes.tianji_of(self.world), source, seed)
         return [frame.format(clue=clue)] if clue else []
 
-    def _smith_clue(self) -> list[str]:
+    def _smith_clue(self, paid: bool = True) -> list[str]:
         """鐵匠順口（打造隱藏配方設計 6.2；計畫「要 PM 定的」第 3 條）：鐵匠鋪的動作不花時間，種子多帶這一下之後的銀兩與素材數，
-        同一刻連按也各擲各的；中了說出這家知道的那一句（已經聽過不再說）。自己的亂數，不動 self.rng。"""
+        同一刻連按也各擲各的；中了說出這家知道的那一句（已經聽過不再說）。自己的亂數，不動 self.rng。
+        paid：這一下有沒有收銀兩（一階淬煉只收素材）——沒收的那一句不寫「收錢」（smith_frame_free，FB-142）。"""
         s, rule = self.state, self.content.config.forge_secrets
         p = s.player
         seed = f"鐵匠|{p.name}|{s.world.time}|{p.location}|{p.stats.get('silver', 0)}|{sum(p.materials.values())}"
         if not secret_recipes.roll(rule.smith_chance, seed):
             return []
         clue = forge_secrets.hear_smith(s, self.content, secret_recipes.tianji_of(self.world))
-        return [rule.smith_frame.format(clue=clue)] if clue else []
+        return [(rule.smith_frame if paid else rule.smith_frame_free).format(clue=clue)] if clue else []
 
     def _overhear(self, companion_id: str, msgs: list[str]) -> list[str]:
         """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
@@ -7145,7 +7175,7 @@ class Game:
         if won:
             for material_id in boss.drops:
                 if materials.grant(s, c, material_id) is not None:
-                    record.materials.append(materials.item_text(c, material_id))
+                    materials.add_cell(record.materials, c, material_id)  # 同一種合成一格（FB-140）
             if boss.fame:
                 p.stats["fame"] = p.stats.get("fame", 0) + boss.fame
                 record.changes.append(f"名望 +{boss.fame}")

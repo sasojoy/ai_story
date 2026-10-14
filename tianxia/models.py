@@ -1755,18 +1755,19 @@ class ForgeSecretRules(_Strict):
     # 寫給玩家看的字（待 joy 潤；{clue} 換成口訣、{who} 換成名號、{name} 換成名器的名字）
     tale_frame: str = "說書先生又扯到一段兵器的掌故：「{clue}」"
     smith_frame: str = "鐵匠一邊收錢一邊嘀咕：「{clue}」"
+    smith_frame_free: str = "鐵匠一邊收拾一邊嘀咕：「{clue}」"  # 這一下沒收銀兩（一階淬煉只收素材，FB-142）
     scrap_frame: str = "你在灰堆裡扒出半張燒焦的鑄譜，只認得出一句：「{clue}」"
     first_line: str = "這是失傳的鑄法，江湖上你是第一個摸出來的。"
     mine_line: str = "照你摸出來的鑄法，又打了一件。"
     follow_line: str = "這門鑄法由{who}先摸出來，你也打成了。"
     rumor: str = "{who}在鐵匠鋪摸出了一門失傳的鑄法，打出了【{name}】。"
     # 神器（打造第二批；待 joy 潤；{who} 換成名號）
-    divine_line: str = "這是一把神器，這門鑄法這一季只出這一把原品——到修練頁的裝備庫替它定名。"
+    divine_line: str = "這是一{unit}神器，這門鑄法這一季只出這一{unit}原品——到修練頁的裝備庫替它定名。"  # {unit} 照欄位（防具一件，FB-146）
     copy_line: str = "這門鑄法的原品在{who}手上，你打出的是仿品。"
     copy_mine_line: str = "原品已經在你手上，這一爐打出的是仿品。"
-    divine_rumor: str = "{who}在鐵匠鋪打出了一把神器。"
+    divine_rumor: str = "{who}在鐵匠鋪打出了一{unit}神器。"
     named_rumor: str = "{who}替手上的神器定了名，叫【{name}】。"  # 定名時的傳聞（7.2：帶名字的那一句）
-    named_chronicle: str = "{who}打出一把神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」）
+    named_chronicle: str = "{who}打出一{unit}神器（{what}），為之定名【{name}】。"  # 江湖史那一行（5.2；{what} 是種類或「防具」，{unit} 照欄位）
     # 三階素材的新來源（兵器設計 4.9；打造第二批，PM 決定第 7 條）：預設全關，正式值在 config.json。擲骰都用自己的亂數（Game._tier3）
     challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
     tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）

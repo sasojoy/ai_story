@@ -309,11 +309,12 @@ def test_win_material_treasure_adds_one_more_only_on_train_and_wild_wins_that_dr
         before = p.materials.get("gang_1", 0)
         record = _record(kind)
         game._battle_rewards(squad, record)
-        return p.materials.get("gang_1", 0) - before, len(record.materials), game.rng.getstate()
+        return p.materials.get("gang_1", 0) - before, record.materials, game.rng.getstate()
 
     for kind in ("train", "wild"):
         plain, worn = won(kind, dropping, False), won(kind, dropping, True)
-        assert (plain[0], worn[0], worn[1]) == (1, 2, plain[1] + 1)  # 多一個、戰報的得失多一行
+        # 多一個；戰報的得失跟掉到的那一種合成一格、寫是寶物多給的（FB-140）
+        assert (plain[0], worn[0], plain[1], worn[1]) == (1, 2, ["精鐵砂 ×1"], [f"精鐵砂 ×2（{p.treasure.name} +1）"])
         assert worn[2] == plain[2]  # Game.rng 一顆都沒多吃
     assert won("event", dropping, True)[0] == 1  # 挑戰本人、劇情戰不吃
     assert won("train", barren, True)[0] == 0  # 這一場沒掉素材：不擲、不給
@@ -803,7 +804,7 @@ def test_beating_a_great_figure_drops_a_pool_treasure_once_a_season(world):
         msgs = game.choose("act:challenge:bocai")
     p = game.state.player
     assert p.treasure is not None and game.content.gear.treasures[p.treasure.template].pool
-    assert p.treasure_drops == {"bocai"} and treasures.DROP_LINE.format(name=p.treasure.name) in msgs
+    assert p.treasure_drops == {"bocai"} and treasures.DROP_LINE.format(who=game.content.figures["bocai"].name, name=p.treasure.name) in msgs
     record = game.state.battles[0]
     assert treasures.GAIN_LINE.format(name=p.treasure.name) in record.materials  # 戰報「得失」那一格（同兵器掉落）
     assert not any(p.treasure.name in note for note in record.notes)  # 不重複進戰報的敘事

@@ -97,7 +97,7 @@ def style_factor(weapon: Weapon | None, art: MartialArt | None, content: Content
     return 1.0
 
 
-EDGE_WARNING = "你的{name}刀口鈍了，找間鐵匠鋪修一修。"  # 待 joy 潤
+EDGE_WARNING = "你的{name}{dull}，找間鐵匠鋪修一修。"  # 待 joy 潤；{dull} 照種類（DULL，FB-127：拳套、弩、棍沒有刀口）
 
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
@@ -109,16 +109,43 @@ def wear(state: GameState, content: Content, tier: str) -> list[str]:
     p.weapon.edge = max(0, p.weapon.edge - rule.wear.get(tier, 0))
     if p.weapon.edge < rule.edge_warn and not p.edge_warned:
         p.edge_warned = True
-        return [EDGE_WARNING.format(name=p.weapon.name)]
+        return [EDGE_WARNING.format(name=p.weapon.name, dull=DULL.get(p.weapon.kind, "鈍了"))]
     return []
 
 
 # ---- 鐵匠鋪（4.1～4.7）：買、修、換 ----
 
 NOUNS = {"劍": "劍", "刀": "刀", "槍": "槍", "棍": "棍", "弓弩": "弩", "拳腳": "拳套"}
+UNITS = equipment.WEAPON_UNITS  # 量詞（FB-133、FB-160）：拳套論副，其他兵器論把（表在 equipment，防具與坐騎的也在那裡）
+# 鈍了、還不用修的說法照種類（FB-127：拳套、弩、棍寫「刀口」不通）。待 joy 潤。DULL 接在名字後面（「你的厚背拳套磨薄了」），
+# 名字本身就是兵器，不再寫一次兵器字（終審 F3：「你的厚背拳套拳套磨薄了」）；KEEN 單獨寫在「修」鈕的括號裡，可以帶兵器字
+DULL = {"劍": "鋒口鈍了", "刀": "刃口鈍了", "槍": "鋒頭鈍了", "棍": "磨禿了", "弓弩": "弦鬆了", "拳腳": "磨薄了"}
+KEEN = {"劍": "劍鋒還利", "刀": "刀口還利", "槍": "槍尖還利", "棍": "棍頭還結實", "弓弩": "弩弦還緊", "拳腳": "拳套還結實"}
+CLASH_NOTE = "（與武學屬性相剋）"  # 待 joy 潤（FB-127）：配得上、屬性卻相剋時威力後面多這一句，不然「+0%」看起來像沒配上
+
+
+def noun(kind: str) -> str:
+    """寫給玩家看的兵器字（拳套、弩）：種類名（拳腳、弓弩）只拿來認東西（FB-127、FB-133）。"""
+    return NOUNS.get(kind, kind)
+
+
+def unit(kind: str) -> str:
+    """兵器的量詞：拳套一副，其他一把（FB-133、FB-160）。"""
+    return equipment.unit_for("weapon", kind)
+
+
+def clashes(weapon: Weapon | None, art: MartialArt | None) -> bool:
+    """兵器的屬性跟武學相剋（任一邊剋另一邊，bonus 那一截扣 match）。沒有兵器或武學是 False。"""
+    return (weapon is not None and art is not None
+            and (counters(weapon.attribute, art.attribute) or counters(art.attribute, weapon.attribute)))
 ATTR_WORDS = {"陰": "寒鐵", "陽": "赤銅", "剛": "厚背", "柔": "軟鋼", "快": "輕鋒", "慢": "沉鐵", "虛": "花紋", "實": "重鐵"}  # 待 joy 潤
 FITS_MARK = "・配得上你的武學"  # 待 joy 潤：鐵匠鋪的「買」鈕上，種類對得上身上那門武學的那一把
-UNFIT_NOTE = "・這把配不上你的武學，加成用不上"  # 待 joy 潤：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+UNFIT_NOTE = "・這{unit}配不上你的武學，加成用不上"  # 待 joy 潤（量詞照種類，終審 F4；用 unfit_note）：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+
+
+def unfit_note(weapon: Weapon) -> str:
+    """UNFIT_NOTE 照這把的量詞（拳套一副，終審 F4）。"""
+    return UNFIT_NOTE.format(unit=equipment.unit_for("weapon", weapon.kind))
 
 
 def worn_unfit(state: GameState, art: MartialArt | None, content: Content, world: WorldStateStore) -> bool:
@@ -235,8 +262,7 @@ def store(state: GameState, content: Content, weapon: Weapon) -> str:
     return equipment.store(state, weapon)
 
 
-DROP_PREFIX = "撿到一把"
-DROP_LINE = DROP_PREFIX + "【{name}】"
+DROP_LINE = "撿到一{unit}【{name}】"  # 待 joy 潤；{unit} 拳套是副（FB-133）
 GAIN_LINE = "兵器【{name}】"  # 戰鬥卡片「得失」那一格（素材寫「精鐵砂 ×1」，兵器寫「兵器【厚背刀】」）
 
 
@@ -249,7 +275,7 @@ def drop(state: GameState, content: Content, rng: random.Random) -> tuple[Weapon
     kind = rng.choice(WEAPON_KINDS)
     attribute = _local_attribute(state, content)
     weapon = new_weapon(state, name=shop_name(kind, attribute), kind=kind, attribute=attribute, tier=1, quality="下品")
-    return weapon, [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
+    return weapon, [DROP_LINE.format(unit=unit(kind), name=weapon.name), store(state, content, weapon)]
 
 
 def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
@@ -263,7 +289,12 @@ def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def buy(state: GameState, content: Content, kind: str) -> list[str]:
+SWAPPED = "你換上了【{name}】，原本那{unit}【{old}】放上了裝備庫。"  # 待 joy 潤（FB-128：買下配得上的就直接換上）
+
+
+def buy(state: GameState, content: Content, kind: str, art: MartialArt | None = None, world: WorldStateStore | None = None) -> list[str]:
+    """買一把架上的（4.5）：空手就拿在手上，不然進裝備庫——手上那把配不上身上的武學、買下的這把配得上時直接換上，舊的進裝備庫
+    （FB-128，PM 2026-10-14；配得上卻相剋的不算配不上，照舊進裝備庫）。art、world 沒給（舊的呼叫）照舊不換。"""
     problem = buy_problem(state, content, kind)
     if problem is not None:
         return [f"（{problem}。）"]
@@ -271,7 +302,13 @@ def buy(state: GameState, content: Content, kind: str) -> list[str]:
     price = content.config.weapons.shop_price
     state.player.stats["silver"] -= price
     weapon = new_weapon(state, name=item.name, kind=kind, attribute=item.attribute, tier=1, quality="下品")
-    return [f"你花 {price} 兩買下一把【{weapon.name}】。", store(state, content, weapon)]
+    head = f"你花 {price} 兩買下一{unit(kind)}【{weapon.name}】。"
+    old = state.player.weapon
+    if old is not None and world is not None and not usable(old, art, content, world) and usable(weapon, art, content, world):
+        state.player.rack.append(weapon)
+        equipment.wield(state, content, weapon.id, ("weapon",))
+        return [head, SWAPPED.format(name=weapon.name, unit=unit(old.kind), old=old.name)]
+    return [head, store(state, content, weapon)]
 
 
 def repair_problem(state: GameState, content: Content) -> str | None:
@@ -281,7 +318,7 @@ def repair_problem(state: GameState, content: Content) -> str | None:
     if p.weapon is None:
         return "手上沒有兵器"
     if p.weapon.edge >= 100:
-        return "刀口還利"
+        return KEEN.get(p.weapon.kind, "還不用修")
     if repair_material(state, content) is None:
         return NO_REPAIR_MATERIAL
     short = rule.repair_silver - p.stats.get("silver", 0)
@@ -342,19 +379,19 @@ def _pct(ratio: float) -> str:
 
 def _describe(w: Weapon) -> str:
     tempered = f"・淬煉 {w.tempers} 次" if w.tempers else ""  # 待 joy 潤
-    return f"【{w.name}】{w.kind}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
+    return f"【{w.name}】{noun(w.kind)}・屬{w.attribute}・{grade(w)}{tempered}・鋒利度 {w.edge}"
 
 
 def _mismatch(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
-    """配不上的那一句（待 joy 潤）：拳腳、弓弩寫成「拳腳法」「弓弩法」不通順，各自另寫。"""
+    """配不上的那一句（待 joy 潤）：拳腳、弓弩寫成「拳腳法」「弓弩法」不通順，各自另寫。前半寫東西不寫種類名（FB-127：「這副拳套」）。"""
     mine = art_weapon(art.id, content, world) if art is not None else None
     if not mine:
         return "你身上沒有用得上兵器的武學"
     if mine == "拳腳":
-        return f"這把{w.kind}用不上你的拳腳功夫"
+        return f"這{unit(w.kind)}{noun(w.kind)}用不上你的拳腳功夫"
     if mine == "弓弩":
-        return f"這把{w.kind}用不上你的弓弩上的功夫"
-    return f"這把{w.kind}用不上你的{mine}法"
+        return f"這{unit(w.kind)}{noun(w.kind)}用不上你的弓弩上的功夫"
+    return f"這{unit(w.kind)}{noun(w.kind)}用不上你的{mine}法"
 
 
 EMPTY = "手上沒有兵器。"  # 修練頁武器那一段手上空著（原本寫在 web/app.js）
@@ -368,14 +405,19 @@ def card_line(state: GameState, content: Content, world: WorldStateStore, art: M
         return ""
     if not usable(w, art, content, world):
         return f"兵器　{_describe(w)}，{_mismatch(w, art, content, world)}"
-    return f"兵器　{_describe(w)}，威力 {_pct(bonus(w, art, content, world))}"
+    return f"兵器　{_describe(w)}，威力 {_power(w, art, content, world)}"
+
+
+def _power(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
+    """配得上的那把給幾成威力，相剋時後面多 CLASH_NOTE（FB-127）。"""
+    return _pct(bonus(w, art, content, world)) + (CLASH_NOTE if clashes(w, art) else "")
 
 
 def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore, worn: bool = False) -> dict:
     fits = usable(w, art, content, world)
     return {
-        "id": w.id, "name": w.name, "kind": w.kind, "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
-        "edge": w.edge, "fits": fits, "bonus": _pct(bonus(w, art, content, world)) if fits else None,
+        "id": w.id, "name": w.name, "kind": w.kind, "noun": noun(w.kind), "attribute": w.attribute, "tier": w.tier, "quality": w.quality,
+        "edge": w.edge, "fits": fits, "bonus": _power(w, art, content, world) if fits else None,
         "grade": grade(w),
         "confirm": "" if worn or w.original else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）；原品也拆不得（5.4）
         "keep": equipment.kept(w),  # 網頁照它把拆解鈕灰掉寫原因（神器原品、本命兵器）

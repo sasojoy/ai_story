@@ -416,7 +416,7 @@ def test_the_wizard_walks_kind_main_aux_then_go(content, world):
     lines = forged[0].lines
     # FB-141：開爐成了那一則只留結果，結果句排第一（375 寬「剛剛」收著時看得到）；放了哪兩樣、哪一種，結果句本身寫了
     # （終審 F1 要的「放了什麼」由它帶），挑種類、主料、輔料的回報與問話收掉
-    assert lines[0].startswith(f"打出一把【{p.weapon.name}】（劍・屬陽・一階") and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
+    assert lines[0].startswith(f"打出一把【{p.weapon.name}】（一階") and "・劍・屬陽）" in lines[0] and lines[0].endswith("：鐵匠把精鐵砂與驚羽下爐。")
     steps = ("兵器：劍。", "主料：精鐵砂。", "輔料：驚羽。", smithing.ASK_KIND, smithing.ASK_MAIN, smithing.ASK_AUX, smithing.READY)
     assert not any(line in steps for line in lines)
 
@@ -428,7 +428,7 @@ def test_a_folded_forge_keeps_an_unrelated_line_an_earlier_step_carried(content,
     game.choose(smithing.OPEN)
     news = "洛陽傳來消息：宮裡的風向變了。"
     with monkeypatch.context() as patch:
-        patch.setattr(game, "_general_gifts", lambda: [news])  # 挑種類那一步順便帶來一句別的話
+        patch.setattr(game, "_settle_plots", lambda: [news])  # 挑種類那一步順便帶來一句別的話（名將贈禮另起一則了，FB-139，改借密謀收場那一句）
         game.choose(f"{smithing.KIND}劍")
     for oid in (f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
         game.choose(oid)

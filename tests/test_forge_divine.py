@@ -85,11 +85,11 @@ def test_the_first_divine_forge_is_the_unnamed_original_and_rolls_no_quality(div
     assert rolled == []  # 照甲（5.1）：一爐必出神器，不擲品質，不碰亂數
     assert (item.name, item.original, item.copy_of, item.secret, item.tier, item.quality) == (DIVINE_UNNAMED, True, None, "t_star", 3, "上品")
     assert equipment.grade(item) == "三階上品" + equipment.DIVINE_MARK and not equipment.named(divine_content, item)
-    assert msgs[0].startswith(f"打出一把【{DIVINE_UNNAMED}】（劍・屬剛・三階上品{equipment.DIVINE_MARK}）：鐵匠把兩份隕鐵膽下爐。") and STAR.note in msgs[0] and cfg.divine_line in msgs[0]
+    assert msgs[0].startswith(f"打出一把【{DIVINE_UNNAMED}】（三階上品{equipment.DIVINE_MARK}・劍・屬剛）：鐵匠把兩份隕鐵膽下爐。") and STAR.note in msgs[0] and cfg.divine_line.format(unit="把") in msgs[0]
     find = world.lookup_gear_find("鑄|t_star")
     assert (find.divine, find.owner, find.master_shown, find.divine_name, find.copies, find.name) == (True, "甲", "甲", None, 0, DIVINE_UNNAMED)
     rumors = [r.text for r in game.state.world.rumors]
-    assert cfg.divine_rumor.format(who="甲") in rumors and not any("墜星劍" in r for r in rumors)  # 打出時的傳聞不帶名字（7.2）
+    assert cfg.divine_rumor.format(who="甲", unit="把") in rumors and not any("墜星劍" in r for r in rumors)  # 打出時的傳聞不帶名字（7.2）
     assert game.state.player.forge_manual.solved == ["t_star"]  # 鑄譜照樣記打中
 
 
@@ -172,12 +172,12 @@ def test_the_owner_names_the_original_once_and_the_name_takes_the_namespace(divi
     other = _forger(divine_content, world, name="乙")
     assert smithing.name_divine(other.state, divine_content, world, original.id, "斬月") == (False, [smithing.NAME_GONE])  # 不是他的
     ok, msgs = smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")  # 不必帶劍字（5.2）
-    assert ok and msgs == [smithing.DIVINE_NAMED.format(name="斬月")] and original.name == "斬月"
+    assert ok and msgs == [smithing.DIVINE_NAMED.format(name="斬月", unit="把")] and original.name == "斬月"
     find = world.lookup_gear_find("鑄|t_star")
     assert (find.divine_name, find.name) == ("斬月", "斬月") and world.is_skill_name_taken("斬月")  # 佔名字空間（7.3）
     assert forge_secrets.unnamed_originals(owner.state, world) == {}
     assert smithing.name_divine(owner.state, divine_content, world, original.id, "別名") == (False, [smithing.NAME_GONE])  # 只定一次
-    assert cfg.named_chronicle.format(who="甲", name="斬月", what="劍") in [r.text for r in owner.state.world.chronicle]
+    assert cfg.named_chronicle.format(who="甲", name="斬月", what="劍", unit="把") in [r.text for r in owner.state.world.chronicle]
     assert cfg.named_rumor.format(who="甲", name="斬月") in [r.text for r in owner.state.world.rumors]
 
 
@@ -206,7 +206,7 @@ def test_naming_updates_the_first_makers_echo_entry_and_saves_it(divine_content,
     assert other.state.world.echoes["鑄|t_star"].name == f"【{DIVINE_UNNAMED}】"
     world.save_season(other.state.world)  # 乙那一下動作存回共用賽季
     owner.state.world = world.get_season()  # 甲下一次進鎖重讀
-    assert owner.name_divine(original.id, "斬月") == [smithing.DIVINE_NAMED.format(name="斬月")]
+    assert owner.name_divine(original.id, "斬月") == [smithing.DIVINE_NAMED.format(name="斬月", unit="把")]
     entry = world.get_season().echoes["鑄|t_star"]  # 從資料庫讀回來：真的存了
     assert (entry.name, entry.creator, entry.followers, entry.made) == ("【斬月】", "甲", ["乙"], "打")
     owner.state.world = world.get_season()
@@ -278,7 +278,7 @@ def test_naming_goes_through_the_game_and_only_a_true_keep_counts(divine_content
     msgs = server.MENXIA_ACTIONS["name_divine"](game, {"weapon": original.id, "keep": "true"})  # 只認布林 true（同 use_legend）
     assert original.name == DIVINE_UNNAMED and msgs[0].startswith("這個名字不行")
     msgs = server.MENXIA_ACTIONS["name_divine"](game, {"weapon": original.id, "keep": True})
-    assert original.name == "墜星劍" and msgs[0] == smithing.DIVINE_NAMED.format(name="墜星劍")
+    assert original.name == "墜星劍" and msgs[0] == smithing.DIVINE_NAMED.format(name="墜星劍", unit="把")
     assert game.state.journal[0].tag == msgs[0]  # 修練紀錄（同絕學定名 _menxia_entry）
 
 
@@ -297,7 +297,7 @@ def test_the_divine_book_sits_under_the_chronicle_across_seasons(divine_content,
                      (season - 1, "鑄|t_old", "鎮岳甲", "丙", old.model_dump_json()))
     assert [(s, f.secret) for s, f in world.divine_records()] == [(season - 1, "t_old"), (season, "t_star")]
     book = owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
-    assert f"{DIVINE_UNNAMED}（劍）" in book and "仿品 1 把" in book and "【鎮岳甲】" in book and "仿品 3 把" in book
+    assert f"{DIVINE_UNNAMED}（劍）" in book and "仿品 1 把" in book and "【鎮岳甲】" in book and "仿品 3 件" in book  # 防具論件（終審 F5）
     assert "乙" not in book and "穿霞劍" not in book  # 不列打仿品的人；名器不上
     smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")
     assert "【斬月】" in owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
@@ -311,7 +311,7 @@ def test_an_original_cannot_be_dismantled_but_a_copy_can(divine_content, world):
     second, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
     weapons.wield(game.state, divine_content, first.id)  # 原品換下來、進裝備庫
     assert original in p.rack
-    assert weapons.dismantle(game.state, divine_content, original.id) == [equipment.ORIGINAL_KEPT_LINE] and original in p.rack
+    assert weapons.dismantle(game.state, divine_content, original.id) == [equipment.ORIGINAL_KEPT_LINE.format(unit="把")] and original in p.rack
     row = weapons._row(original, None, divine_content, world)
     assert (row["keep"], row["confirm"]) == (equipment.ORIGINAL_KEPT, "")  # 5.4：鈕灰掉寫原因、沒有問句
     assert weapons._row(second, None, divine_content, world)["keep"] == ""
@@ -329,7 +329,7 @@ def test_an_armor_original_is_kept_too(divine_content, world):
     coat, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3", rng=smithing.own_rng(game.state, key))
     spare, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3", rng=smithing.own_rng(game.state, key))
     armor.wield(game.state, divine_content, spare.id)  # 原品進裝備庫
-    assert armor.dismantle(game.state, divine_content, coat.id) == [equipment.ORIGINAL_KEPT_LINE]
+    assert armor.dismantle(game.state, divine_content, coat.id) == [equipment.ORIGINAL_KEPT_LINE.format(unit="件")]
     assert armor._row(coat, None, divine_content)["keep"] == equipment.ORIGINAL_KEPT
 
 
@@ -410,7 +410,7 @@ def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_on_the_first
             game.choose("act:challenge:bocai")
             got.append(p.materials.get("gang_3", 0) - before)
     assert got == [1, 0, 0] and p.tier3_drops == {"bocai": 1}  # 波才的隊伍屬剛：隕鐵膽；這一季第一次打贏才有
-    assert game.state.battles[-1].materials == ["隕鐵膽 ×1"]  # 第一場的戰報「得失」那一格
+    assert game.state.battles[-1].materials == [f"隕鐵膽 ×1（{materials.CHALLENGE_SOURCE}）"]  # 第一場的戰報「得失」那一格（寫來源，FB-147；只有這一個不寫 +1，F8）
 
 
 def test_the_tier_three_drop_never_touches_the_game_rng(world, tmp_path):
@@ -441,7 +441,8 @@ def test_big_fights_roll_once_more_but_the_figure_squad_and_small_fights_do_not(
         return msgs, record, tier3() - before
 
     msgs, record, gained = rewards("fanjianglong")  # 難度 150（≥ big_fight_difficulty）、屬剛：大場面
-    assert gained == 1 and materials.grant_line("隕鐵膽 ×1") in msgs and record.materials == ["隕鐵膽 ×1"]
+    assert gained == 1 and materials.extra_line(c, "gang_3", 1, materials.BIG_SOURCE) in msgs
+    assert record.materials == [f"隕鐵膽 ×1（{materials.BIG_SOURCE}）"]  # 得失寫來源（FB-147；只有這一個不寫 +1，F8）
     assert rewards("fanjianglong", "train")[2] == 1  # 遊歷撞上的大場面也擲
     assert rewards("fanjianglong", "wild")[2] == 0  # 探索野怪不算大場面：不擲
     assert rewards("figure_bocai")[2] == 0  # 大勢人物本人那支隊伍：那一個在 _challenge，這裡不重複擲
@@ -492,4 +493,5 @@ def test_the_forge_result_names_the_piece_first_so_a_one_line_card_shows_it(divi
     assert names[5] == "赤霞鎧" and made[6][0].original  # 防具的名器、神器原品
     for (item, msgs), noun in zip(made, ["把"] * 4 + ["件"] * 3):
         first = msgs[0].split("\n")[0]
-        assert first.startswith(f"打出一{noun}【{item.name}】（") and "：鐵匠把" in first, first
+        named = "名器" if equipment.named(c, item) else ""  # FB-148：名器寫在名字前面
+        assert first.startswith(f"打出一{noun}{named}【{item.name}】（{equipment.tier_quality(item)}") and "：鐵匠把" in first, first

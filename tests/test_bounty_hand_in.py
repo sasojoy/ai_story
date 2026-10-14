@@ -414,7 +414,7 @@ def test_the_gift_weapon_fits_the_worn_art_and_a_full_rack_turns_it_into_silver(
     _edit(world, "丙", lambda p: setattr(p, "rack", [_blade("兵:9", kind="刀")]))
     content.config.weapons.rack_cap = 1  # 手上一把、裝備庫一把：放不下了
     msgs, game = _direct(content, world, "丙", _give(second.id, spare.id))
-    assert bounties.RACK_FULL_SILVER.format(name="厚背拳套", silver=50) in msgs and "銀兩 +50" in msgs
+    assert bounties.RACK_FULL_SILVER.format(unit="副", name="厚背拳套", silver=50) in msgs and "銀兩 +50" in msgs
     assert [x.id for x in game.state.player.rack] == ["兵:9"] and game.state.player.stats["silver"] == 200 + 20 + 20 + 50
 
 
@@ -621,7 +621,7 @@ def test_an_arms_id_with_a_colon_works_and_the_weapon_in_hand_can_go(beta_setup)
     b = _arms(world)
     option = _open(content, world, "丙", f"bounty:pick:{b.id}")[f"bounty:give:{b.id}:兵:1"]
     assert option.label == "交出【柔劍1】（一階中品・鋒利度 100・在手上）→ 賞銀 35"
-    assert bounties.TEMPERED_NOTE.format(n=2) in option.confirm and bounties.HELD_NOTE in option.confirm
+    assert bounties.TEMPERED_NOTE.format(n=2) in option.confirm and bounties.HELD_NOTE.format(unit="把") in option.confirm
     msgs, game = _do(content, world, "丙", lambda g: g.choose(f"bounty:give:{b.id}:兵:1"))
     assert msgs[0].startswith(bounties.GIVEN_PREFIX) and game.state.player.weapon is None
     assert game.state.player.bounty_pick is None and "bounty:back" in _ids(content, world, "丙")

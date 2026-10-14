@@ -142,7 +142,7 @@ def _weapon_shelf(state: GameState, content: Content, world: WorldStateStore, ar
         out.append({
             "id": f"smith:buy:{item.kind}", "name": item.name, "kind": weapons.NOUNS.get(item.kind, item.kind),
             "attribute": item.attribute, "tier": equipment.TIER_WORDS[1], "price": content.config.weapons.shop_price,
-            "value": f"加成 {_pct(weapons.bonus(item, art, content, world))}" if fits else None,
+            "value": f"加成 {_pct(weapons.bonus(item, art, content, world))}{weapons.CLASH_NOTE if weapons.clashes(item, art) else ''}" if fits else None,  # 相剋時補一句（終審 F6，同 FB-127）
             "fit": item.kind == fit_kind, "note": weapons.FITS_MARK.lstrip("・") if item.kind == fit_kind else "",
             "enabled": problem is None, "why": problem,
         })
@@ -180,7 +180,7 @@ def _worn(state: GameState, content: Content, world: WorldStateStore, slot: str,
     tcost = smithing.temper_price(content, content.materials[tmid], slot) if tmid is not None else 0
     tuse = (f"{content.materials[tmid].name}×1" + (f"＋{tcost} 兩" if tcost else "")) if tmid is not None else ""
     tproblem = smithing.temper_problem(state, content, slot)
-    unfit = weapons.UNFIT_NOTE.lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
+    unfit = weapons.unfit_note(item).lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
     return {
         "item": {"id": item.id, "name": item.name, "grade": equipment.grade(item), "wear_word": equipment.WEAR_WORDS[slot],
                  "wear": item.edge, "tempers": item.tempers, "temper_max": smithing.rules_of(content, slot).temper_max},
@@ -343,7 +343,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         value, fit, kind = f"少扣 {armor.pct(armor.cut(item, neigong, content))} 氣血", armor.fit_note(item, neigong), smithing.ARMOR_KIND
     else:
         usable = weapons.usable(item, art, content, world)
-        value = f"加成 {_pct(weapons.bonus(item, art, content, world))}" if usable else None
+        value = f"加成 {_pct(weapons.bonus(item, art, content, world))}{weapons.CLASH_NOTE if weapons.clashes(item, art) else ''}" if usable else None
         fit, kind = (FITS if usable else UNFITS), weapons.NOUNS.get(item.kind, item.kind)
     worn = equipment.worn(state.player, item.slot)
     return {
@@ -476,7 +476,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         elif b.kind in bounties.GIVE_KINDS:
             items = bounties.fitting(state, content, world, b, memo)
             if items:
-                rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.UNITS[b.kind])
+                rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.unit_of(b))
             # 交不出的原因照規則：只有神器原品或本命兵器對得上、只有身上正在練或等著定名的那門對得上（同第三層灰掉那幾行），都不是才寫 NO_FIT
             blocked = bounties.blocked_arts(state, content, world, b, memo)
             why = None if items else (bounties.only_original(state, b).strip("（）") or (blocked[0][1] if blocked else NO_FIT))

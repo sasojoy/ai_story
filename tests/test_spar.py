@@ -303,6 +303,6 @@ def test_each_side_of_a_spar_dulls_its_own_blade_and_hears_the_warning(pair):
     for name in ("甲", "乙"):
         after = _load(world, name)
         assert after.player.weapon.edge < 30
-        warning = weapons.EDGE_WARNING.format(name=f"{name}刃")
+        warning = weapons.EDGE_WARNING.format(dull=weapons.DULL["拳腳"], name=f"{name}刃")
         assert warning in after.battles[0].notes
         assert any(warning in line for e in after.journal for line in e.lines)

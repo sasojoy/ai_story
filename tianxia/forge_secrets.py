@@ -117,7 +117,7 @@ def arrival(state: GameState, content: Content, recipe: ForgeSecret, find: GearF
     me = state.player.name
     if recipe.divine:
         if first:
-            lines.append(rule.divine_line)
+            lines.append(rule.divine_line.format(unit=equipment.unit_for(recipe.slot, find.kind)))
         elif find.owner == me:
             lines.append(rule.copy_mine_line)
         else:
@@ -213,7 +213,7 @@ def divine_book(records: list[tuple[int, GearFind]], extra: list[tuple[int, str]
     for season, find in records:
         what = what_text(find.slot, find.kind)
         name = f"【{find.divine_name}】" if find.divine_name else f"{DIVINE_UNNAMED}（{what}）"
-        copies = f"，仿品 {find.copies} 把" if find.copies else ""
+        copies = f"，仿品 {find.copies} {equipment.unit_for(find.slot, find.kind)}" if find.copies else ""  # 防具論件（終審 F5，FB-146）
         rows.append((season, f"- 第 {season} 季　{name}　{what}・屬{find.attribute}　原品在{find.master_shown or find.owner}手上{copies}"))
     rows += extra or []
     if not rows:

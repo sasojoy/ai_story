@@ -140,7 +140,7 @@ def test_hitting_a_hidden_recipe_makes_a_named_piece_and_the_first_finder_is_tol
     item, msgs = smithing.forge(game.state, forge_content, world, "劍", "gang_1", "kuai_1", rng=random.Random(0))
     assert (item.name, item.secret, item.recipe) == ("穿霞劍", "t_blade", "兵|劍|gang_1+kuai_1")
     assert equipment.named(forge_content, item) and equipment.grade(item).endswith(equipment.NAMED_MARK)
-    assert BLADE.note in msgs[0] and cfg.first_line in msgs[0] and equipment.NAMED_MARK in msgs[0]
+    assert BLADE.note in msgs[0] and cfg.first_line in msgs[0] and msgs[0].startswith("打出一把名器【")  # FB-148：名器寫在名字前面
     find = world.lookup_gear_find("鑄|t_blade")
     assert (find.creator, find.title, find.id) == ("甲", "穿霞劍", forge_secrets.key(BLADE))
     rumor = cfg.rumor.format(who="甲", name="穿霞劍")

@@ -137,8 +137,11 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
 
 
 # 開爐的結果句（待 joy 潤）：打出的東西寫在最前面（FB-143：375 寬鐵匠鋪選單長時「剛剛」收成一行，只露開頭十幾個字），「鐵匠把…下爐」接在後面
-FORGED = "打出一把【{name}】（{kind}・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤
-ARMOR_FORGED = "打出一件【{name}】（防具・屬{attribute}・{grade}）：鐵匠把{what}下爐。"  # 待 joy 潤
+# 待 joy 潤。{kind} 寫兵器字、{unit} 拳套是副（FB-133）。375 寬「剛剛」收成一行時只露開頭十五、六個字（FB-148）：名器跟一般組合要分得出來、
+# 品質也要看得到——名器寫在名字前面（{mark}，括號裡不再寫），階品排在括號最前面。神器原品與仿品打出來那一刻叫「無名神器」「仿・…」，
+# 名字已經看得出來，標記照舊寫在階品後面（「三階上品・神器」），不在名字前面重複
+FORGED = "打出一{unit}{mark}【{name}】（{grade}・{kind}・屬{attribute}）：鐵匠把{what}下爐。"
+ARMOR_FORGED = "打出一件{mark}【{name}】（{grade}・防具・屬{attribute}）：鐵匠把{what}下爐。"
 
 
 def noun_label(kind: str) -> str:
@@ -217,11 +220,10 @@ def forge(
     gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None}
     if slot == "armor":
         item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id, **gear)
-        head = ARMOR_FORGED.format(what=what, name=name, attribute=attribute, grade=equipment.grade(item))
     else:
         item = weapons.new_weapon(state, name=name, kind=kind, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id,
                                   **gear)
-        head = FORGED.format(what=what, name=name, kind=kind, attribute=attribute, grade=equipment.grade(item))
+    head = forged_head(item, what)
     lines = forge_secrets.arrival(state, content, secret, find, first) if secret is not None else []
     msgs = ["\n".join([head, *lines])]
     msgs += [] if divine else setting_line(content, setting, slot)  # 神器那一爐不擲品質：天時地利那一句不寫
@@ -235,15 +237,26 @@ def forge(
             deed = DIVINE_DEED.format(name=secret.name) if divine else f"江湖上第一個打出名器【{secret.name}】。"
             annals.note(state, content, annals.DEED, deed, 4)
             rule = content.config.forge_secrets
-            text = rule.divine_rumor.format(who=state.player.name) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
+            text = rule.divine_rumor.format(who=state.player.name, unit=equipment.unit_for(item.slot, item.kind)) if divine else rule.rumor.format(who=state.player.name, name=secret.name)
             add_rumor(state, text, None, content=content, named=True)
         fusion.echo(state, content, find, first, made="打")  # 別人照著打：首位發現者的首創名望回饋（照 find.id＝「鑄|配方 id」記）
     return item, msgs
 
 
+def forged_head(item: Equipment, what: str) -> str:
+    """開爐成了那一則的第一句（FB-143：打出的東西寫在最前面）：兵器寫兵器字與量詞（FB-133：拳套、弩，拳套一副），防具一件；
+    名器、神器、仿品寫在名字前面、階品排在括號最前面（FB-148）。"""
+    named = equipment.mark_word(item) == equipment.NAMED_MARK.removeprefix("・")
+    mark, grade = ("名器", equipment.tier_quality(item)) if named else ("", equipment.grade(item))
+    if item.slot == "armor":
+        return ARMOR_FORGED.format(what=what, mark=mark, name=item.name, attribute=item.attribute, grade=grade)
+    return FORGED.format(what=what, mark=mark, name=item.name, unit=weapons.unit(item.kind), kind=weapons.noun(item.kind),
+                         attribute=item.attribute, grade=grade)
+
+
 # ---- 神器原品定名（打造隱藏配方設計 5.2；同 cultivation.name_mastered）----
 
-DIVINE_NAMED = "從今以後，江湖上這把神器就叫【{name}】。"  # 待 joy 潤（同絕學定名那一句）
+DIVINE_NAMED = "從今以後，江湖上這{unit}神器就叫【{name}】。"  # 待 joy 潤（同絕學定名那一句；{unit} 照欄位，FB-146）
 NAME_GONE = "（沒有等著你定名的神器。）"  # 待 joy 潤
 NAME_BAD = "這個名字不行：{problem}。"  # 待 joy 潤（同 cultivation.name_mastered）
 NAME_TAKEN = "【{name}】已經有人用了，換一個吧。"  # 待 joy 潤（同 cultivation.name_mastered）
@@ -280,10 +293,11 @@ def name_divine(
     forge_secrets.refresh_names(state.player, content, world)  # 主人自己手上與裝備庫裡的仿品當下跟著改成「仿・新名字」，不等下一次讀檔
     fusion.rename_echo(state, forge_secrets.key_for(item.secret), name)  # 定名之前就有人照著打：首創名望回饋記的名字也換掉（M2）
     rule, who = content.config.forge_secrets, state.player.name
-    add_chronicle(state, rule.named_chronicle.format(who=who, name=name, what=forge_secrets.what_text(item.slot, item.kind)))
+    unit = equipment.unit_for(item.slot, item.kind)
+    add_chronicle(state, rule.named_chronicle.format(who=who, name=name, unit=unit, what=forge_secrets.what_text(item.slot, item.kind)))
     add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
     annals.note(state, content, annals.DEED, DIVINE_NAMED_DEED.format(name=name), 5)
-    return True, [DIVINE_NAMED.format(name=name)]
+    return True, [DIVINE_NAMED.format(name=name, unit=unit)]
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----
@@ -300,6 +314,7 @@ STEP_VERBS = ("forge", "forge-kind", "forge-main", "forge-aux", "forge-undo", "f
 FORGE_TITLE = "打造"
 ASK_KIND = "要打哪一種兵器？"  # 待 joy 潤
 ASK_MAIN = "挑主料：主料定這把兵器的階，也定工錢。"  # 待 joy 潤
+UNDONE = "退回一步。"  # 待 joy 潤（FB-133）：按「上一步」先回這一句，再問那一步
 ASK_AUX = "挑輔料：主料與輔料合起來定這把兵器的屬性。"  # 待 joy 潤
 READY = "料都齊了，看一眼機率再開爐。"  # 待 joy 潤
 PICKED_KIND = "兵器：{what}。"  # 待 joy 潤：每挑一樣，這一步的回話先回報挑了什麼（進同一則「打造」紀錄），再問下一步
@@ -333,7 +348,7 @@ def is_forge_step(arg: str) -> bool:
 
 # 打造單子自己的回話（step 回的那幾句）：問下一步的、退回去的、不打了的整句照常數認；挑了什麼（PICKED_*）的中間是素材或種類的名字，
 # 拆成前後兩段認。Game.choose 開爐成了併進「打造」那一則時用 is_step_line 收掉這些（FB-141），別的話（大勢門檻的消息之類）留著
-_STEP_LINES = frozenset({ASK_KIND, ASK_MAIN, ASK_AUX, ARMOR_ASK_MAIN, ARMOR_ASK_AUX, READY, CANCELLED})
+_STEP_LINES = frozenset({ASK_KIND, ASK_MAIN, ASK_AUX, ARMOR_ASK_MAIN, ARMOR_ASK_AUX, READY, CANCELLED, UNDONE})
 _PICKED_FRAMES = tuple(tuple(template.split("{what}")) for template in (PICKED_KIND, PICKED_MAIN, PICKED_AUX))
 
 
@@ -427,18 +442,18 @@ def step(state: GameState, content: Content, verb: str, arg: str) -> list[str]:
     if verb == "forge-aux":
         d.aux = arg
         return [PICKED_AUX.format(what=_material_name(content, arg)), READY]
-    if verb == "forge-undo":
+    if verb == "forge-undo":  # 先說退回了一步，再問（FB-133：只回下一步的問句，讀起來像同一個問題問了兩次）
         armor_draft = d.kind == ARMOR_KIND
         if d.aux is not None:
             d.aux = None
-            return [ARMOR_ASK_AUX if armor_draft else ASK_AUX]
+            return [UNDONE, ARMOR_ASK_AUX if armor_draft else ASK_AUX]
         if d.main is not None:
             d.main = None
-            return [ARMOR_ASK_MAIN if armor_draft else ASK_MAIN]
+            return [UNDONE, ARMOR_ASK_MAIN if armor_draft else ASK_MAIN]
         if armor_draft:
             return [ARMOR_ASK_MAIN]  # 防具沒有挑種類那一步：已經在第一步（選單上也沒有這一顆）
         d.kind = None
-        return [ASK_KIND]
+        return [UNDONE, ASK_KIND]
     if verb == "forge-cancel":
         p.smith_draft = None
         return [CANCELLED]

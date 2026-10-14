@@ -220,7 +220,7 @@ def test_wear_by_tier_and_warn_once(content, world):
     assert weapons.wear(state, content, "大勝") == []
     assert state.player.weapon.edge == 33
     msgs = weapons.wear(state, content, "落敗")
-    assert state.player.weapon.edge == 28 and msgs == [weapons.EDGE_WARNING.format(name="試刃")]
+    assert state.player.weapon.edge == 28 and msgs == [weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃")]
     assert weapons.wear(state, content, "僵持") == []  # 只提醒一次
     assert state.player.weapon.edge == 25
     state.player.weapon.edge = 1
@@ -248,8 +248,8 @@ def test_training_fight_wears_the_blade_and_the_reminder_reaches_the_journal(con
     assert game.state.player.weapon.edge < 31
     record = game.state.battles[-1]
     assert record.kind == "train"
-    assert weapons.EDGE_WARNING.format(name="試刃") in record.notes  # 戰鬥卡片
-    assert any(weapons.EDGE_WARNING.format(name="試刃") in line for line in game.state.journal[0].lines)  # 江湖紀錄
+    assert weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃") in record.notes  # 戰鬥卡片
+    assert any(weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃") in line for line in game.state.journal[0].lines)  # 江湖紀錄
 
 
 def test_file_battle_skips_event_fights(content, world):
@@ -426,7 +426,7 @@ def test_drop_gives_a_tier_one_blade(content, world):
     content.config.weapons.drop_chance = 1.0
     weapon, msgs = weapons.drop(state, content, random.Random(1))
     assert weapon is state.player.weapon and weapon.tier == 1 and weapon.quality == "下品"
-    assert msgs[0] == weapons.DROP_LINE.format(name=weapon.name)
+    assert msgs[0] == weapons.DROP_LINE.format(unit=weapons.unit(weapon.kind), name=weapon.name)
     content.config.weapons.drop_chance = 0.0
     assert weapons.drop(state, content, random.Random(1)) == (None, [])
 
@@ -471,7 +471,7 @@ def test_training_win_can_drop_a_weapon_into_the_record(content, world):
     from tianxia import battlelog
     assert f"兵器【{p.weapon.name}】" in battlelog.gains_list(record)
     lines = game.state.journal[0].lines
-    assert any(weapons.DROP_LINE.format(name=p.weapon.name) in line for line in lines)  # 江湖紀錄
+    assert any(weapons.DROP_LINE.format(unit=weapons.unit(p.weapon.kind), name=p.weapon.name) in line for line in lines)  # 江湖紀錄
 
 
 def test_no_drop_when_chance_is_zero(content, world):
@@ -777,11 +777,11 @@ def test_the_dull_warning_is_per_weapon(content, world):
     p.weapon = _blade(edge=31)
     spare = Weapon(id="兵:2", name="備刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=31)
     p.rack = [spare]
-    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="試刃")]
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃")]
     assert weapons.wear(state, content, "落敗") == []
     weapons.wield(state, content, "兵:2")
     assert p.weapon is spare and p.edge_warned is False
-    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="備刃")]  # 換上來的這把有自己的提醒
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="備刃")]  # 換上來的這把有自己的提醒
 
 
 def test_a_blade_taken_into_an_empty_hand_gets_its_own_warning(content, world):
@@ -790,7 +790,7 @@ def test_a_blade_taken_into_an_empty_hand_gets_its_own_warning(content, world):
     state.player.edge_warned = True  # 上一把鈍了、提醒過，之後空手了
     weapons.store(state, content, _blade(edge=31))
     assert state.player.edge_warned is False
-    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(name="試刃")]
+    assert weapons.wear(state, content, "落敗") == [weapons.EDGE_WARNING.format(dull=weapons.DULL["劍"], name="試刃")]
 
 
 def test_repair_label_names_the_material_it_will_use(content, world):
