@@ -747,7 +747,7 @@ def render_minimap(state: GameState, content: Content) -> str:
     for loc in shown:
         view = views[loc.id]
         parts, reach[loc.id] = _node(loc, view, None, False, taken)
-        out += parts
+        out.append(f'<g data-loc="{loc.id}">{"".join(parts)}</g>')  # 江湖頁點到這一處：打開輿圖、選好它（輿圖升級設計第八節）
     if you is not None:
         out.append(_you_mark(content, spot, you, taken))
     out += _terrain_names(m, taken, bounds)

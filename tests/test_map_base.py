@@ -51,3 +51,11 @@ def test_a_locked_place_and_its_roads_appear_once_opened():
 def test_every_place_kind_has_a_glyph():
     c = _game().content
     assert {mapart.icon_kind(loc) for loc in c.locations.values()} <= set(mapview.GLYPHS)
+
+
+def test_minimap_places_can_be_tapped():
+    """江湖頁的小地圖點到一個地點：打開輿圖、選好它（設計第八節）。網頁照 data-loc 認是哪一處。"""
+    game = _game()
+    game.state.player.location = "yingchuan"
+    svg = mapview.render_minimap(game.state, game.content)
+    assert 'data-loc="yingchuan"' in svg and 'data-loc="yingchuan_wilds"' in svg

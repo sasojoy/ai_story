@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import re
+from pathlib import Path
 
 import pytest
 import test_prologue_web
@@ -15,7 +16,8 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml"]
+NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
+         "overviewHtml", "placeHtml", "searchHtml"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -82,3 +84,51 @@ def test_region_tint_follows_the_majority():
     out = run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, true);")
     assert out["yingru"] in ("#DCE5F0", "#F4E7C2", "#DFEBDD")
     assert run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, false);") == {}
+
+
+def test_the_overview_answers_where_to_sortie_today():
+    out = run(_game(), "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "今天去哪裡出陣" in out and out.count('data-act="map-pick"') >= 1 and "潁川汝南" in out
+
+
+def test_the_overview_without_sortie_skips_the_suggestions():
+    out = run(_game(faction=None), "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "今天去哪裡出陣" not in out and "潁川" in out
+
+
+def test_a_place_shows_three_cells_then_the_actions():
+    out = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    assert out.index("誰佔著") < out.index("打得過嗎") < out.index("多遠") < out.index('data-act="map-travel"')
+    assert 'data-mode="walk"' in out and 'data-mode="dash"' in out and "汝南荒野" in out
+
+
+def test_your_own_place_offers_sortie_and_explore_back_on_jianghu():
+    out = run(_game(faction="huang", at="huangjin_camp"), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "huangjin_camp");')
+    assert 'data-act="map-jianghu"' in out and "探索" in out and 'data-act="map-travel"' not in out
+
+
+def test_search_finds_a_place_by_person():
+    out = run(_game(), 'return H.searchHtml(H.S.mapBase, H.S.mapState, "波才");')
+    assert 'data-act="map-pick" data-id="huangjin_camp"' in out and "長社" not in out
+
+
+def test_search_with_nothing_typed_lists_every_place_by_region():
+    game = _game()
+    out = run(game, 'return H.searchHtml(H.S.mapBase, H.S.mapState, "");')
+    assert out.count('data-act="map-pick"') == len(game.map_base()["places"]) and "你在這裡" in out
+
+
+def test_the_journey_line_offers_halt():
+    game = _game()
+    game.travel("changshe", "walk")
+    m = server.main_view(game)
+    out = run(game, "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "m-journey" in out and "長社" in out and "分鐘" in out and "你在" not in out  # 路上不寫「你在」哪一站
+    assert ('data-id="act:halt"' in out) == any(o["id"] == "act:halt" for o in m["options"])
+
+
+def test_travel_stays_on_the_map():
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    body = js[js.index("async function travel(mode)"):]
+    body = body[: body.index("\n  }\n") + 4]
+    assert 'S.tab = "jianghu"' not in body and "loadMap()" in body and "S.mapSel" in body

@@ -877,6 +877,57 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .map-banner { left: calc((100% - 360px) / 2); }
 }
 
+/* 抽屜裡（設計第五節）：在路上那一行、今天去哪裡出陣、戰線、一個地點的三格與動作、找地點 */
+.m-journey { display: flex; align-items: center; gap: 8px; background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin-bottom: 8px; font-size: 13.5px; }
+.m-journey span { flex: 1; min-width: 0; }
+.m-journey button { flex: none; min-height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--accent); background: var(--card); color: var(--accent); font: inherit; cursor: pointer; }
+.m-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.m-head2 b { font-size: 15px; font-family: var(--serif); }
+.m-head2 small, .m-sub { color: var(--ink-2); font-size: 12px; }
+.m-go { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); margin-top: 6px; cursor: pointer; }
+.m-go .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+.m-go .t { flex: 1; min-width: 0; }
+.m-go .why { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.m-go .why span { font-size: 10.5px; border-radius: 6px; padding: 0 5px; color: #fff; }
+.m-go .m { color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+.m-sec { border-top: 1px dashed var(--line); padding: 8px 0 0; margin-top: 8px; }
+.m-sec h4 { margin: 0 0 3px; font-size: 11.5px; color: var(--ink-2); letter-spacing: 2px; font-weight: 600; }
+.m-rope { margin: 6px 0 8px; }
+.m-rope .rl { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 12px; }
+.m-rope .rl b { font-weight: 600; text-align: center; }
+.m-rope .rl small { font-weight: 400; margin-left: 4px; }
+.m-rope .bar { position: relative; height: 20px; margin-top: 3px; border-radius: 10px; background: linear-gradient(90deg, #dce5f0, #f4e7c2); border: 1px solid var(--line); }
+.m-rope .chaos { position: absolute; top: 0; bottom: 0; left: 35%; width: 30%; background: repeating-linear-gradient(45deg, rgb(168 50 42 / 0.12) 0 4px, transparent 4px 8px); }
+.m-rope .knot { position: absolute; top: -4px; width: 4px; height: 26px; margin-left: -2px; background: #2b241b; border-radius: 2px; }
+.m-rope .bead { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 3px; border: 1.5px solid #fff; transform: rotate(-6deg); }
+.m-evt { font-size: 13px; padding: 2px 0; }
+.m-h1 { display: flex; align-items: center; gap: 8px; }
+.m-h1 .nm { font-size: 19px; font-weight: 700; font-family: var(--serif); min-width: 0; }
+.m-h1 .meta { margin-left: auto; color: var(--accent); font-size: 12px; letter-spacing: 1px; }
+.m-x { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 15px; cursor: pointer; }
+.m-seal { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 3px; color: #fff8ec; font-weight: 700; font-size: 14px; transform: rotate(-6deg); flex: none; font-family: var(--serif); }
+.m-seal.none { background: #a2967f; }
+.m-three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 8px 0; }
+.m-three div { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; min-width: 0; }
+.m-three small { display: block; font-size: 10.5px; color: var(--ink-2); letter-spacing: 1px; }
+.m-three b { font-size: 15px; }
+.m-acts { display: flex; gap: 8px; }
+.m-acts button { flex: 1; min-height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; line-height: 1.3; }
+.m-acts button.main { background: var(--accent); border-color: var(--accent); color: #fff; }
+.m-acts button small { display: block; font-weight: 400; font-size: 10.5px; opacity: 0.85; }
+.m-acts button:disabled { opacity: 0.5; cursor: default; }
+.m-strip { display: flex; gap: 2px; margin: 6px 0 2px; }
+.m-strip span { flex: 1; height: 10px; border-radius: 2px; }
+.m-strip span.future { background: repeating-linear-gradient(45deg, #ede4cf 0 3px, #fbf6ea 3px 6px) !important; }
+.m-strip span.now { outline: 2px solid var(--ink); }
+.m-search { display: flex; gap: 8px; align-items: center; margin: 2px 0 6px; }
+.m-q { flex: 1; min-width: 0; height: 40px; border-radius: 12px; border: 1px solid var(--line); padding: 0 12px; font: inherit; font-size: 16px; background: var(--paper); color: var(--ink); }
+.m-grp { font-size: 12px; color: var(--ink-2); margin: 10px 0 2px; letter-spacing: 1px; font-weight: 600; }
+.m-item { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.m-item .nm { flex: 1; min-width: 0; }
+.m-item .nm small { color: var(--ink-2); }
+.m-item .mn { color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+
 /* ── 戰報／見聞 ── */
 .report-detail { font-size: 14px; }
 .back { margin-bottom: 8px; }

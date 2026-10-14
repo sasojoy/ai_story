@@ -126,6 +126,7 @@
     mapDrawer: "rest", // 抽屜的高度："rest"、"peek"、"half"、"full"、"tl"
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
+    mapFocus: null, // 江湖頁的小地圖點了某一處：輿圖畫好時對準它（mapReady）
     marksS: 0, // 上次畫記號時的倍率：倍率變了一成上下才重畫（字與圓盤照倍率反算）
     // 輿圖的視圖（W16）：{ s 倍率, cx, cy 視窗中心對著的地圖座標 }。這次載入網頁後第一次打開輿圖才決定（mapReady：
     // 對準所在地，手機原尺寸、寬螢幕照框寬，都不給整張），之後切分頁、輪詢重畫、換圖層、點地點都留著
@@ -3551,11 +3552,138 @@
       <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>
     </div>`;
   }
-  // 抽屜的內容（Task 6、7 換成四種）
+  // ── 輿圖的抽屜（設計第五節）：總覽（今天去哪裡出陣、戰線、本週大事）、一個地點、找地點、版圖變化 ──
+  const SORTIE_WORD = { attack: "攻", hold: "守", stir: "攪局" }; // 出陣是哪一種（sortie.mode），待 joy 潤
+  const ODDS_TONE_WEB = { 穩勝: "safe", 有把握: "safe", 五五波: "ok", 難分勝負: "ok", 凶險: "risk", 必敗: "risk", 操練: "safe" };
+  const placeOf = (base, id) => base.places.find((p) => p.id === id);
+  const ctrlSeal = (c) => (c ? `<span class="m-seal" style="background:${MAP_SIDES[c].color}">${MAP_SIDES[c].short}</span>` : '<span class="m-seal none">—</span>');
   function drawerHtml() {
-    const st = S.mapState, here = S.mapBase.places.find((p) => p.id === st.here);
-    return `<div class="m-head2"><b>你在 ${esc(here ? here.name : "")}</b></div>`;
+    const base = S.mapBase, st = S.mapState;
+    if (S.mapMode === "search") return searchHtml(base, st, S.mapQuery);
+    if (S.mapMode === "timeline") return timelineHtml(base, st, mapWeek());
+    if (S.mapMode === "place" && S.mapSel && st.places[S.mapSel]) return placeHtml(base, st, S.mapSel);
+    return overviewHtml(base, st);
   }
+  // 抽屜第一行：在路上寫往哪裡、還有幾分鐘、喊停（喊停就是江湖頁那一顆，選單上有才畫）；有事擋著路時寫是哪一則、給「回江湖」
+  function journeyHtml(st) {
+    const j = st.journey, block = st.travel_block;
+    const halt = ((S.main && S.main.options) || []).some((o) => o.id === "act:halt" && o.enabled !== false);
+    const road = j ? `<div class="m-journey"><span>往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘${j.next_name ? `・下一站${esc(j.next_name)}` : ""}</span>${halt ? '<button type="button" data-act="choose" data-id="act:halt">喊停</button>' : ""}</div>` : "";
+    const held = block && block.to_jianghu ? `<div class="m-journey"><span>${esc(block.reason)}</span><button type="button" data-act="tab" data-tab="jianghu">回江湖</button></div>` : "";
+    return road + held;
+  }
+  // 一根戰線（拔河）：左官軍、右黃巾，斜線是亂局（35～65），黑線是此刻的戰況；繩上的可易手地點是小方印（照誰佔著上色，
+  // 擺在它易手的門檻上）；繩名旁寫比上一週往哪邊推了多少
+  function ropeHtml(r) {
+    const trend = r.delta > 0 ? `<small style="color:${MAP_SIDES.huang.color}">▶ 黃巾推進 ${r.delta}</small>`
+      : r.delta < 0 ? `<small style="color:${MAP_SIDES.guan.color}">◀ 官軍推進 ${-r.delta}</small>` : "<small>持平</small>";
+    const beads = r.beads.map((b) => `<span class="bead" style="left:${b.threshold}%;background:${b.control ? MAP_SIDES[b.control].color : "#A2967F"}"></span>`).join("");
+    return `<div class="m-rope"><div class="rl"><span>官軍</span><b>${esc(r.name)} ${trend}</b><span>黃巾</span></div><div class="bar"><span class="chaos"></span>${beads}<span class="knot" style="left:${Number(r.value)}%"></span></div></div>`;
+  }
+  function overviewHtml(base, st) {
+    const here = placeOf(base, st.here), hc = st.places[st.here] && st.places[st.here].control;
+    // 在路上：第一行（journeyHtml）已經寫了往哪裡，這裡不再寫「你在」
+    const where = st.journey ? "" : `${esc(here ? here.name : "")}${hc ? `（${sideName(hc)}的地盤）` : ""}`;
+    const goes = st.suggest.length && st.sorties_left !== null
+      ? `<div class="m-head2"><b>今天去哪裡出陣</b><small>今日還能 ${Number(st.sorties_left)} 次${where ? `・你在 ${where}` : ""}</small></div>` +
+        st.suggest.map((g, i) => `<div class="m-go" data-act="map-pick" data-id="${esc(g.id)}" role="button"><span class="n">${i + 1}</span><span class="t"><b>${esc(placeOf(base, g.id).name)}</b>　出陣・${SORTIE_WORD[g.sortie] || ""}
+          <span class="why">${g.why.map(([t, tone]) => `<span style="background:${TONE_COLOR[tone] || "#8A7A62"}">${esc(t)}</span>`).join("")}</span></span><span class="m">${g.minutes ? `${Number(g.minutes)} 分 ›` : "這裡 ›"}</span></div>`).join("")
+      : where ? `<div class="m-head2"><b>你在 ${where}</b></div>` : "";
+    const ropes = st.ropes.length ? `<div class="m-sec"><h4>${st.season_one ? "三條戰線" : "大勢"}</h4>${st.ropes.map(ropeHtml).join("")}${st.geju !== null ? `<div class="m-sub">豪強割據 ${Number(st.geju)}</div>` : ""}</div>` : "";
+    const events = st.events.length ? `<div class="m-sec"><h4>本週大事</h4>${st.events.map((t) => `<div class="m-evt">📜 ${esc(t)}</div>`).join("")}</div>` : "";
+    return journeyHtml(st) + goes + ropes + events;
+  }
+  // 點一個地點（設計第五節）：第一行（印、名字、危險度）、三格（誰佔著、打得過嗎、多遠）、動作一排、拉高才看的細節
+  function placeHtml(base, st, id) {
+    const b = placeOf(base, id), p = st.places[id], here = id === st.here && !st.journey;
+    const odds = p.odds ? `<b style="color:${TONE_COLOR[p.odds.tone]}">${esc(p.odds.word)}</b>` : "<b>沒有對手</b>";
+    const block = st.travel_block;
+    let acts;
+    if (here) { // 就在這裡：出陣、探索都回江湖頁按（江湖頁照舊處理接下來的事）
+      const sortie = p.sortie && st.sorties_left !== null ? `<button type="button" class="main" data-act="map-jianghu" data-key="sortie">出陣・${SORTIE_WORD[p.sortie] || ""}<small>今日還能 ${Number(st.sorties_left)} 次</small></button>` : "";
+      acts = `${sortie}<button type="button"${sortie ? "" : ' class="main"'} data-act="map-jianghu" data-key="explore">探索<small>回江湖頁挑一種</small></button>`;
+    } else if (block) {
+      acts = `<button type="button" disabled>${esc(block.reason)}</button>${block.to_jianghu ? '<button type="button" class="main" data-act="tab" data-tab="jianghu">回江湖</button>' : ""}`;
+    } else if (p.minutes === null) {
+      acts = '<button type="button" disabled>走不到</button>';
+    } else {
+      acts = `<button type="button" class="main" data-act="map-travel" data-mode="walk">步行 ${Number(p.minutes)} 分<small>沿路可以做小事</small></button><button type="button" data-act="map-travel" data-mode="dash"${st.stamina < p.stamina ? " disabled" : ""}>疾行<small>${st.stamina < p.stamina ? `體力不足，要 ${Number(p.stamina)}` : `立刻到・體力 ${Number(p.stamina)}`}</small></button>`;
+    }
+    const strip = p.kind === "line" || p.kind === "fixed" ? `<div class="m-strip">${Array.from({ length: st.weeks_total }, (_, i) => {
+      const w = i + 1, row = (st.weeks || []).find((x) => x.week === w), c = row && row.control ? row.control[id] : null;
+      return `<span class="${w > st.now_week ? "future" : ""}${w === st.now_week ? " now" : ""}" style="background:${c ? MAP_SIDES[c].color : "#CDBF9F"}"></span>`;
+    }).join("")}</div>` : "";
+    const flips = p.flips.map((f) => `第 ${Number(f.week)} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
+    const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind ? "可易手" : "";
+    const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
+    return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+      <div class="m-three"><div><small>誰佔著</small><b style="color:${p.control ? MAP_SIDES[p.control].color : "inherit"}">${p.control ? MAP_SIDES[p.control].name : "無人"}</b>${kind ? `<small>${kind}</small>` : ""}</div>
+        <div><small>打得過嗎</small>${here ? "<b>—</b>" : odds}${p.sortie ? `<small>出陣是${SORTIE_WORD[p.sortie] || ""}</small>` : ""}</div>
+        <div><small>多遠</small><b>${here ? "這裡" : p.minutes === null ? "—" : `${Number(p.minutes)} 分`}</b>${here || p.stamina === null ? "" : `<small>疾行 體力 ${Number(p.stamina)}</small>`}</div></div>
+      <div class="m-acts">${acts}</div>
+      ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
+      ${st.territory ? `<div class="m-sec"><h4>地盤</h4>${p.control ? `${sideName(p.control)}${p.control === "haoqiang" ? "佔據" : "控制"}。${esc(p.price)}` : "不在戰線上，沒有控制方。"}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : ""}
+      <div class="m-sec"><h4>站在這裡的</h4>${p.squads.length ? p.squads.map((q) => `${esc(q.name)} <span style="color:${tone(q.odds)}">${esc(q.odds)}</span>`).join("、") : "沒有人在這裡滋事"}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
+      ${p.services.length ? `<div class="m-sec"><h4>此地</h4>${p.services.map(esc).join("・")}</div>` : ""}
+      <div class="m-sec"><h4>劇情</h4>${p.goal ? "★ 這一幕主線的目標　" : ""}${p.news ? "✦ 最近有大事與傳聞" : p.goal ? "" : "最近沒有大事"}</div>`;
+  }
+  // 找地點、找人物（設計第五節）：照大區分組，組裡近的在前；打地名、大區名、人物名都找得到。打字時只換結果那一塊（searchResults）
+  function searchResults(base, st, q) {
+    const want = (q || "").trim();
+    const regions = Object.fromEntries(base.regions.map((r) => [r.id, r.name]));
+    const hit = (b) => !want || b.name.includes(want) || (regions[b.region] || "").includes(want) || st.places[b.id].people.some((n) => n.includes(want));
+    const html = base.regions.map((r) => {
+      const items = base.places.filter((b) => b.region === r.id && hit(b)).sort((a, z) => (st.places[a.id].minutes || 0) - (st.places[z.id].minutes || 0));
+      return items.length ? `<div class="m-grp">${esc(r.name)}</div>` + items.map((b) => {
+        const p = st.places[b.id];
+        const far = b.id === st.here && !st.journey ? "你在這裡" : p.minutes === null ? "" : `${Number(p.minutes)} 分`;
+        return `<div class="m-item" data-act="map-pick" data-id="${esc(b.id)}" role="button">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${p.people.length ? ` <small>${p.people.map(esc).join("、")}</small>` : ""}</span><span class="mn">${far}</span></div>`;
+      }).join("") : "";
+    }).join("");
+    return html || '<div class="m-sub">找不到。</div>';
+  }
+  function searchHtml(base, st, q) {
+    return `<div class="m-search"><input class="m-q" id="map-q" type="search" placeholder="地名、人物、大區…" value="${esc(q || "")}" autocomplete="off" aria-label="找地點、找人物"><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+      <div class="m-results" id="map-results">${searchResults(base, st, q)}</div>`;
+  }
+  function timelineHtml() { return ""; } // 版圖變化（Task 7）
+  // 找地點的輸入框：只換結果那一塊，輸入框本身不重畫（不然一打字就失焦）
+  function mapQueryInput(ev) {
+    if (!ev.target || ev.target.id !== "map-q" || !S.mapBase || !S.mapState) return;
+    S.mapQuery = ev.target.value;
+    const box = document.getElementById("map-results");
+    if (box) box.innerHTML = searchResults(S.mapBase, S.mapState, S.mapQuery);
+  }
+  // 抽屜的把手：拖上拖下（放開時靠到最近的一格），點一下在收著、半開之間換
+  function drawerGrab() {
+    const grab = document.getElementById("mgrab"), drawer = document.getElementById("mdrawer");
+    if (!grab || !drawer) return;
+    let drag = null;
+    grab.addEventListener("pointerdown", (ev) => {
+      try { grab.setPointerCapture(ev.pointerId); } catch (e) { /* 合成的事件抓不住 */ }
+      drag = { y: ev.clientY, h: drawer.offsetHeight, moved: false };
+      drawer.classList.add("dragging");
+    });
+    grab.addEventListener("pointermove", (ev) => {
+      if (!drag) return;
+      const dy = drag.y - ev.clientY;
+      if (Math.abs(dy) > 5) drag.moved = true;
+      if (drag.moved) drawer.style.height = `${Math.max(90, Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
+    });
+    const end = () => {
+      if (!drag) return;
+      drawer.classList.remove("dragging");
+      if (!drag.moved) setMapDrawer(S.mapDrawer === "rest" || S.mapDrawer === "peek" ? "half" : S.mapMode === "place" ? "peek" : "rest");
+      else {
+        const h = drawer.offsetHeight;
+        setMapDrawer(["rest", "half", "full"].sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
+      }
+      drag = null;
+    };
+    grab.addEventListener("pointerup", end);
+    grab.addEventListener("pointercancel", end);
+  }
+
   function redrawDrawer() {
     const body = document.getElementById("mbody");
     if (body) body.innerHTML = drawerHtml();
@@ -3708,6 +3836,8 @@
     }
     applyMapView(false, g);
     drawMarks();
+    drawerGrab();
+    if (S.mapFocus) { mapCenterOn(S.mapFocus); S.mapFocus = null; } // 江湖頁的小地圖點了某一處（設計第八節）
   }
 
   function gripDown(ev) {
@@ -4678,14 +4808,11 @@
     await busy(async () => {
       const r = await api("/api/travel", { place: S.mapSel, mode });
       setMain(r.main);
-      if (r.arrived) {
-        S.tab = "jianghu";
-        render();
-        window.scrollTo(0, 0);
-      } else {
-        toast(`沒能出發：${r.reason}`);
-        await loadMap();
-      }
+      renderTop();
+      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "rest"; } // 出發了：留在輿圖，抽屜收回總覽
+      else toast(`沒能出發：${r.reason}`);
+      await loadMap();
+      setMapDrawer(S.mapDrawer);
     }, WAIT_LINES.move);
   }
 
@@ -4739,8 +4866,41 @@
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
         case "promo-sound": promoSound(el); break;
-        case "tab": await goTab(el.dataset.tab); break;
-        case "choose": await choose(el, el.dataset.id); break;
+        case "tab": {
+          const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
+          if (loc) { S.mapSel = S.mapFocus = loc.getAttribute("data-loc"); S.mapMode = "place"; S.mapDrawer = "peek"; }
+          await goTab(el.dataset.tab);
+          break;
+        }
+        case "choose":
+          await choose(el, el.dataset.id);
+          if (S.tab === "map") await loadMap(); // 在輿圖上按的（抽屜裡的喊停）：疊層跟著換
+          break;
+        case "map-pick":
+          S.mapSel = el.dataset.id; S.mapMode = "place"; S.mapQuery = "";
+          setMapDrawer("peek");
+          redrawDrawer();
+          mapCenterOn(S.mapSel);
+          drawMarks();
+          break;
+        case "map-search":
+          S.mapMode = "search"; S.mapSel = null;
+          setMapDrawer("full");
+          redrawDrawer();
+          drawMarks();
+          setTimeout(() => { const q = document.getElementById("map-q"); if (q) q.focus(); }, 230);
+          break;
+        case "map-back":
+          S.mapMode = "overview"; S.mapSel = null; S.mapQuery = "";
+          setMapDrawer("rest");
+          redrawDrawer();
+          drawMarks();
+          break;
+        case "map-travel": await travel(el.dataset.mode); break;
+        case "map-jianghu": // 就在這裡：出陣、探索回江湖頁按（探索三選一開著時直接攤開那三種）
+          S.wheelSel = el.dataset.key === "explore" ? "explore" : null;
+          await goTab("jianghu");
+          break;
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
         case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
@@ -4991,7 +5151,6 @@
         }
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
-        case "travel": await travel(el.dataset.mode); break;
         case "news":
           S.news = el.dataset.news;
           S.reportOpen = false;
@@ -5013,6 +5172,8 @@
       }
     } catch (e) { /* api() 已經提示過 */ }
   });
+
+  document.addEventListener("input", mapQueryInput);
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
@@ -5299,7 +5460,8 @@
       // 手指（滑鼠）還按在地圖上：換記號沒關係，但這一輪先不抓（放開之後下一輪再說）。清掉 mainKey，下一輪的 main 就算沒變也會再來
       if (mapHeld()) { S.mainKey = ""; return; }
       const moved = old.status.location !== S.main.status.location || !!old.on_road !== !!S.main.on_road; // 抵達、出發、喊停
-      if (!moved && Date.now() - S.mapStateAt < MAP_STATE_EVERY) return;
+      const every = S.main.on_road ? 0 : MAP_STATE_EVERY; // 在路上：每一輪都重抓，「還有幾分鐘」跟著走
+      if (!moved && Date.now() - S.mapStateAt < every) return;
       await loadMap();
     }
   }
