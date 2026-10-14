@@ -146,3 +146,24 @@ def test_fb157_a_program_without_the_profile_warns_at_start():
     assert calendar.profile_warning(weekend, stamped) is None  # 設定對得上
     assert calendar.profile_warning(weekend, fresh_season(plain)) is None  # 開關剛打開、還在跑的舊季照舊用 beta 的規則：正常
     assert calendar.profile_warning(plain, None) is None  # 還沒有季
+
+
+# ── FB-167：「以前不會提前收季」那一句的斷行與時刻寫法 → 時刻寫成跟狀態列一樣的「第 11 天」、整塊不斷行 ──
+
+
+def test_fb167_the_early_end_time_is_one_unbreakable_block_like_the_status_bar():
+    from conftest import real_content
+
+    from tianxia import calendar
+    from tianxia.guide import quest_text
+    from tianxia.state import new_game_state
+    from tianxia.world import early_end_note
+    from tianxia.world_state import fresh_season
+
+    content = real_content()
+    state = new_game_state(content, "沈浪")
+    state.world = fresh_season(content)
+    assert calendar.stamp_text(calendar.week_start(10, content, state.world), content, state.world) == "第11天 12:00"
+    nbsp = "\u00a0"
+    assert early_end_note(state, content) == f"（第{nbsp}11{nbsp}天{nbsp}12:00 以前不會提前收季）"  # 只在「以前」前面斷得開
+    assert "第11天" not in quest_text(state, content)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 from collections.abc import Callable
 
 from . import battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
@@ -267,12 +268,23 @@ def battle_held(state: GameState, content: Content) -> bool:
     return not season_one(content, w) and calendar.point(w.time, content, w).week < content.config.battle_from_week
 
 
+NBSP = "\u00a0"
+
+
+def _glued_time(text: str) -> str:
+    """時刻寫成一整塊（FB-167：375 寬斷成「（第11」「天 12:00以前…」）：數字前後跟狀態列一樣空一格（「第 11 天」），
+    空格都換成不換行的空格，整塊不會從中間斷開。"""
+    return re.sub(r"第(\d+)天", r"第 \1 天", text).replace(" ", NBSP)
+
+
 def early_end_note(state: GameState, content: Content) -> str:
-    """「可能的結局」裡由收季門檻造成的結局後面接的那一句（待 joy 潤）：還在 early_end_held 時寫最早什麼時候才會提前收季。"""
+    """「可能的結局」裡由收季門檻造成的結局後面接的那一句（待 joy 潤）：還在 early_end_held 時寫最早什麼時候才會提前收季。
+    時刻整塊不斷行，後面空一格再接「以前…」：要斷行只在那裡斷（FB-167）。"""
     if not early_end_held(state, content):
         return ""
     w = state.world
-    return f"（{calendar.stamp_text(calendar.week_start(content.config.decisive_from_week, content, w), content, w)}以前不會提前收季）"
+    when = _glued_time(calendar.stamp_text(calendar.week_start(content.config.decisive_from_week, content, w), content, w))
+    return f"（{when} 以前不會提前收季）"
 
 
 def early_end_flags(content: Content) -> set[str]:
