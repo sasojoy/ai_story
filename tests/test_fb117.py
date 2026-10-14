@@ -23,7 +23,7 @@ needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # test_prologue_web 的假瀏覽器，多交出這一份要測的名字
 DRIVER = BASE_DRIVER.replace(
     '"bookHtml", "peerHtml"]',
-    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers", "peerAct", "refreshPeer"]',
+    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers", "peerAct", "refreshPeer", "openCalls"]',
 )
 assert DRIVER != BASE_DRIVER
 
@@ -425,12 +425,13 @@ def test_at_most_two_invitations_under_the_scene(pair):
         _do(content, world, "甲", lambda g, k=kind, a=arg: g.peer_act("乙", k, {"arg": a}))
     m = _main(content, world, "乙")
     assert len(m["calls"]) == 4
-    out = run(m, "const shut = H.socialHtml(m); H.S.callsOpen = true; const open = H.socialHtml(m);"
+    out = run(m, "const shut = H.socialHtml(m); H.S.main = m; H.openCalls(); const open = H.socialHtml(m);"
                  "m.calls = m.calls.slice(0, 2); const few = H.socialHtml(m); return { shut, open, few, after: H.S.callsOpen };")
     assert out["shut"].count('<div class="call">') == 2 and "還有 2 份邀請 ▾" in out["shut"]
     assert out["shut"].index("甲向你抱拳見禮。") < out["shut"].index("還有 2 份邀請")  # 舊的在前
     assert out["open"].count('<div class="call">') == 4 and "還有" not in out["open"]
-    assert out["few"].count('<div class="call">') == 2 and "還有" not in out["few"] and out["after"] is False
+    # 回掉兩份：剩下的兩份照樣攤著（FB-241：以前回到兩份以內就收回去）
+    assert out["few"].count('<div class="call">') == 2 and "還有" not in out["few"] and len(out["after"]) == 4
 
 
 # 第一屏還放不下（例：師父的框在）：FB-107 的收法多一步（6b），從最後一份往前收、併進「還有 N 份邀請」那一行
@@ -463,11 +464,54 @@ def test_the_fit_adds_the_line_when_there_was_none_and_takes_it_back():
 
 
 @needs_node
+def _calls_main(*ids):
+    """第一屏收法的假頁面用的 S.main：邀請那幾份（回應鈕的 id 最後一段是編號）。"""
+    return {"card_id": 7, "scene": "<p>x</p>", "on_road": False,
+            "calls": [{"text": f"{i}邀你切磋。", "options": [{"id": f"invite:yes:{i}"}, {"id": f"invite:no:{i}"}]} for i in ids]}
+
+
 def test_opened_invitations_are_not_folded_again():
     from test_fb107_first_screen import run as fit_run
 
-    out = fit_run(CALLS, S={"callsOpen": True})
+    out = fit_run(CALLS, S={"callsOpen": ["a", "b"], "main": _calls_main("a", "b")})
     assert "calls" not in out["fitted"] and out["calls"] == [False, False]
+    out = fit_run(CALLS, S={"callsOpen": ["a"], "main": _calls_main("a", "b")})  # 點開之後來了新的一份：照常收
+    assert "calls" in out["fitted"]
+
+
+# ── FB-241：只有一、兩份邀請被第一屏收成一行時，點了攤不開 ──
+
+
+@needs_node
+def test_fb241_one_folded_invitation_opens_when_tapped():
+    """一份邀請、師父的框在：6b 收成「有 1 份邀請等你回應 ▾」；點了（openCalls 記下那一份）之後重量，不再收。"""
+    from test_fb107_first_screen import run as fit_run
+
+    one = {**CALLS, "bottom": 820, "calls": 1, "callsTotal": 1, "callsMore": ""}
+    out = fit_run(one, S={"main": _calls_main("a")})
+    assert out["calls"] == [True] and out["more"] == ["有 1 份邀請等你回應 ▾", "1"]
+    out = fit_run(one, S={"callsOpen": ["a"], "main": _calls_main("a")})
+    assert "calls" not in out["fitted"] and out["calls"] == [False]
+
+
+@needs_node
+def test_fb241_tapping_keeps_one_or_two_invitations_open(pair):
+    """以前 socialHtml 看到邀請沒超過兩份就把 S.callsOpen 改回假，點了等於沒點。現在點開那時的那幾份還在就一直攤著，
+    回掉一份照樣攤著，來了新的一份才照常收。"""
+    content, world = pair
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "bow"}))
+    m = _main(content, world, "乙")
+    script = """
+      const key = (c) => c.options[0].id.split(":").pop();
+      H.S.main = m; H.openCalls();
+      const first = H.socialHtml(m);
+      const kept = Array.isArray(H.S.callsOpen) && H.S.callsOpen.length === 1;
+      const newer = { text: "丙邀你切磋。", options: [{ id: "invite:yes:zz", label: "答應", enabled: true }] };
+      const more = H.socialHtml({ ...m, calls: [...m.calls, newer] });
+      return { kept, first, opened: H.S.callsOpen };"""
+    out = run(m, script)
+    assert out["kept"] is True and out["first"].count('<div class="call">') == 1
+    assert out["opened"] is False  # 來了點開時沒有的那一份：照常收
 
 
 # ── 第七件：決戰輪到你出招時，「此地還有」排在三招後面 ──

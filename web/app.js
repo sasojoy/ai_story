@@ -771,10 +771,10 @@
       return true;
     } },
     // 6b. 場景底下別人遞來的邀請（FB-117：最多畫兩份，socialHtml）：還放不下就從最後一份往前收，收到放得下為止，
-    //     收掉的併進「還有 N 份邀請 ▾」那一行（沒有那一行就補一行），點了全部攤開（S.callsOpen，攤開的不再收）
+    //     收掉的併進「還有 N 份邀請 ▾」那一行（沒有那一行就補一行），點了全部攤開（callsOpened：玩家點開過、還是點開那時的那幾份，就不再收）
     { key: "calls", run: () => {
       const box = document.querySelector("#page > .card.scene .calls");
-      if (!box || S.callsOpen) return false;
+      if (!box || callsOpened((S.main && S.main.calls) || [])) return false;
       const rows = [...box.querySelectorAll(":scope > .call")];
       let hidden = 0;
       while (fitOver() > 0 && hidden < rows.length) {
@@ -1938,14 +1938,27 @@
     return out;
   }
   // 別人遞來的邀請最多畫 CALLS_SHOW 列（FB-117：以前沒上限，一個人同時發四種就把整排行動擠出第一屏），其餘收成一行
-  // 「還有 N 份邀請」、點了才攤開（S.callsOpen；邀請少回 CALLS_SHOW 份以內就收回去）。舊的在前（伺服器排的，先逾時的先畫）
+  // 「還有 N 份邀請」、點了才攤開（openCalls、callsOpened）。舊的在前（伺服器排的，先逾時的先畫）
   // 第一屏還放不下時，畫好之後再從最後一份往前收（FIT_STEPS 的 calls），收掉的也併進那一行
   const CALLS_SHOW = 2;
   const callsMoreText = (n, all) => (all ? `有 ${n} 份邀請等你回應 ▾` : `還有 ${n} 份邀請 ▾`); // 待 joy 潤
+  // 一份邀請的記號：它的編號（回應鈕的 id 最後那一段，invite:<回應>:<編號>）
+  const callKey = (c) => String((c.options[0] && c.options[0].id) || c.text).split(":").pop();
+  // 點了「還有 N 份／有 N 份邀請等你回應」：S.callsOpen 記點開那時的那幾份（callKey）。現在的每一份都還在裡面就算攤開著——
+  // 其中幾份回了、逾時了照樣攤著，一份不剩才收回；來了新的一份就照平常收（不然它會把行動列推出第一屏）。
+  // 以前記的是真假、邀請不超過 CALLS_SHOW 份就改回假：一、兩份被第一屏收法（6b）收成一行時，點了又被收回去、點不開（FB-241）
+  function callsOpened(calls) {
+    return Array.isArray(S.callsOpen) && calls.length > 0 && calls.every((c) => S.callsOpen.includes(callKey(c)));
+  }
+  function openCalls() {
+    S.callsOpen = ((S.main && S.main.calls) || []).map(callKey);
+    renderPage();
+  }
   function socialHtml(m) {
     const all = m.calls || [];
-    if (all.length <= CALLS_SHOW) S.callsOpen = false;
-    const list = S.callsOpen ? all : all.slice(0, CALLS_SHOW);
+    const open = callsOpened(all);
+    if (!open) S.callsOpen = false;
+    const list = open ? all : all.slice(0, CALLS_SHOW);
     const more = all.length - list.length;
     const calls = list.map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map(callButton).join("")}</div>`).join("")
       + (more ? `<button class="linkish calls-more" data-act="calls-more">${callsMoreText(more, false)}</button>` : "");
@@ -4475,7 +4488,7 @@
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
-        case "calls-more": S.callsOpen = true; renderPage(); break; // 場景底下收起來的邀請（FB-117）
+        case "calls-more": openCalls(); break; // 場景底下收起來的邀請（FB-117、FB-241）
         case "party-leave": await leaveParty(); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;

@@ -26,7 +26,7 @@ DRIVER = r"""
 // 從 app.js 切出 FB-107 那一段（FIT_MARGIN 到 ownOpen 之前，加上 ownOpen 本身）
 const head = src.indexOf("\n  const FIT_MARGIN"), tail = src.indexOf("\n  function ownOpen(");
 if (head < 0 || tail < 0) throw new Error("app.js 裡找不到 FB-107 那一段");
-const code = src.slice(head, tail) + fn("ownOpen");
+const code = src.slice(head, tail) + fn("ownOpen") + konst("callKey") + fn("callsOpened"); // 收法 6b 問 callsOpened（FB-241）
 
 // 假的頁面：每個元素是 { kind, classes, attrs, dataset, ... }；選擇器照 app.js 用到的那幾個寫成判斷式
 const all = [];
