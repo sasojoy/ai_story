@@ -446,7 +446,7 @@ def _headline(title: str) -> str:
 
 def board_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     """懸賞榜的店面（第四節）：最上面一排手上揭著的（bounties.mine）；木板上是看得到的告示（bounties.visible，同選單的第二層），
-    揭著的在前、交得出的求藝求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（due_line）、重賞、求藝求兵
+    揭著的在前、交得出的求藝求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（紙上的 due_line、告示上短的 due_short，FB-196）、重賞、求藝求兵
     你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求藝求兵「交出…」（bounty:pick，
     交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
     同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
@@ -466,7 +466,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         note = {
             "id": b.id, "kind": b.kind, "kind_name": bounties.KIND_NAMES.get(b.kind, b.kind), "issuer": bounties.issuer(content, b),
             "title": title, "head": _headline(title), "how": bounties.how(content, b), "reward": bounties.reward_text(state, content, b),
-            "due": bounties.due_line(state, content, b), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
+            "due": bounties.due_line(state, content, b), "short": bounties.due_short(b, content, state.world), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
             "held": b.id in mine_ids, "have": "",
         }
         rank = 2

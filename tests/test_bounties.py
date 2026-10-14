@@ -569,6 +569,23 @@ def test_due_text_follows_the_season_and_says_season_end_past_the_last_day():
     assert [_due(weekend, season, week) for week in (1, 10, 11, 12)] == ["第 3 週・週一 00:00", "第 12 週・週一 00:00", "到季末", "到季末"]
 
 
+def test_the_notice_gets_a_short_due_line_that_cannot_wrap_fb196():
+    """FB-196：店面的告示寫短的（草圖「期限 第 6 週・剩 2」）——第一季只寫週次、規則關著只寫第幾天，名額寫「剩 N」，
+    到季末寫「到季末・剩 N」；完整的時刻與「名額還剩 N」（due_line）留在點開的紙上。"""
+    def short(content, season, week, done=()):
+        b = Bounty(id="b1", kind="scout", faction="guan", week=week, silver=10, deeds=2, quota=3, done_by=list(done),
+                   expires=calendar.week_start(week + content.config.bounties.auto_weeks, content, season))
+        return bounties.due_short(b, content, season)
+
+    beta = real_content()
+    season = _beta_season(beta)
+    assert [short(beta, season, week) for week in (1, 10, 11)] == ["期限 第3天・剩 3", "期限 第13天・剩 3", "到季末・剩 3"]
+    weekend = real_content("weekend")
+    season = fresh_season(weekend)
+    assert [short(weekend, season, week) for week in (1, 10, 12)] == ["期限 第 3 週・剩 3", "期限 第 12 週・剩 3", "到季末・剩 3"]
+    assert short(weekend, season, 1, done=("甲", "乙")) == "期限 第 3 週・剩 1"
+
+
 def test_board_lines_card_rows_and_the_take_reply_show_the_due_time_and_places_left(setup):
     """FB-121 第 5 件：懸賞榜每一行、懸賞卡每一列、揭下的回話都寫期限與名額（期限走 due_text；第一季寫季曆時刻）。"""
     content, world = setup

@@ -80,11 +80,31 @@ def test_board_notes_are_compact_with_a_colored_tag_and_the_rest_on_the_paper(co
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]
     html = run(m, "H.render(); return T.els.app.innerHTML;")
-    assert '<span class="tag">打探・官軍</span>' in html and bounties.due_line(game.state, content, scout) in html
+    assert '<span class="tag">打探・官軍</span>' in html and bounties.due_short(scout, content, game.state.world) in html
     assert bounties.how(content, scout) not in html  # 要做什麼寫在紙上
     zoomed = run(m, f'H.S.boardZoom = "{scout.id}"; H.render(); return T.els.app.innerHTML;')
     assert bounties.how(content, scout) in zoomed and 'class="board-sheet"' in zoomed and "reveal-layer" not in zoomed
     assert 'class="shop-body zooming"' in zoomed  # 紙開著時木板底下多留一段，告示捲得到紙的上面
+
+
+def test_the_notice_shows_the_short_due_and_the_paper_the_full_one_fb196(content, world):
+    """FB-196：告示最後一行在 375 寬折成「期限 第 3 週・週一 00:00・名額還剩」換行一個數字，十四張都這樣。照草圖告示上寫短的
+    （due_short，不折行），完整的時刻與「名額還剩 N」（due_line）只在點開的紙上。"""
+    from test_shop2 import SCOUT, STRIKE
+    from test_shop2_web import _css, _rule, run
+
+    from tianxia import bounties
+
+    game, m = _board_view(content, world, [SCOUT, STRIKE])
+    scout = game.state.world.bounties[0]
+    full, short = bounties.due_line(game.state, content, scout), bounties.due_short(scout, content, game.state.world)
+    note = next(n for n in m["shop"]["notes"] if n["id"] == scout.id)
+    assert (note["due"], note["short"]) == (full, short)
+    html = run(m, "H.render(); return T.els.app.innerHTML;")
+    assert f'<small class="due">{short}</small>' in html and full not in html
+    zoomed = run(m, f'H.S.boardZoom = "{scout.id}"; H.render(); return T.els.app.innerHTML;')
+    assert f'<p class="due">{full}</p>' in zoomed  # 告示上已經沒有整行，有就是紙上的
+    assert "white-space: nowrap" in _rule(_css(), ".shop-board .note .due")
 
 
 def test_the_board_css_matches_the_mockup(content, world):

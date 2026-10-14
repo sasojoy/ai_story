@@ -202,6 +202,17 @@ def due_line(state: GameState, content: Content, b: Bounty) -> str:
     return f"期限 {due_text(b, content, state.world)}・名額還剩 {_left(b)}"
 
 
+def due_short(b: Bounty, content: Content, world: WorldState) -> str:
+    """店面告示上那一行短的（FB-196，草圖「期限 第 6 週・剩 2」）：第一季只寫週次、規則關著只寫第幾天，到季末寫「到季末・剩 N」。
+    兩欄的告示在 375 寬放不下 due_line 那一整行；完整的時刻與「名額還剩 N」留在點開的紙上。待 joy 潤：寫法。"""
+    left = _left(b)
+    if to_season_end(b, content, world):
+        return f"{SEASON_END}・剩 {left}"
+    if calendar.season_one_on(world, content):
+        return f"期限 第 {calendar.point(b.expires, content, world).week} 週・剩 {left}"
+    return f"期限 {calendar.day_text(b.expires)}・剩 {left}"
+
+
 def open_bounties(state: GameState, content: Content) -> list[Bounty]:
     """榜上還有效的（沒過期〔past_due〕、還有名額）；休季（active 為假）一張都沒有。截殺關著（Config.raid.enabled）時通緝不算：只能靠截殺交差，揭了也交不了
     （mine、take、hunting、status、整季機器人與假人都經過這裡，自然看不到、揭不了、不佔格）；押金照期限退（deliver_refunds 直接掃榜）。"""

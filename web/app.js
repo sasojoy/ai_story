@@ -2559,10 +2559,10 @@
     const slots = held.rows.map((r) => `<button class="slot" data-act="board-zoom" data-id="${esc(r.id)}"><b>${esc(r.title)}</b><small>${esc(r.due)}</small></button>`).join("")
       + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
     // 告示照草圖寫得很短（企劃者 2026-10-14 微調）：種類・哪一方（色塊小標籤）、目標、期限與名額，重賞、你有幾件合用各一個小字；
-    // 要做什麼與賞寫在點開的紙上
+    // 要做什麼與賞寫在點開的紙上。期限名額寫短的（n.short，「期限 第 6 週・剩 2」，不折行）；完整的時刻與「名額還剩 N」在紙上（FB-196）
     const face = (n) => `<span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
         ${n.prize ? `<small class="prize">${esc(n.prize)}</small>` : ""}${n.have ? `<small class="prize">${esc(n.have)}</small>` : ""}
-        <small class="due">${esc(n.due)}</small>`;
+        <small class="due">${esc(n.short)}</small>`;
     const note = (n) => (n.done
       ? `<div class="note k-${esc(n.kind)} done">${face(n)}<i class="stamp">交差</i></div>`
       : `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
