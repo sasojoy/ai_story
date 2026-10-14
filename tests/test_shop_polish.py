@@ -38,3 +38,19 @@ def test_the_forge_page_draws_one_row_per_attribute(content, world):
     cells = html[html.index('class="cells"'):]
     assert cells.count('class="cell-row"') == 2 and '<span class="row-attr gang">剛</span>' in cells and '<span class="row-attr kuai">快</span>' in cells
     assert cells.index('data-id="gang_1"') < cells.index('data-id="gang_3"') < cells.index('data-id="kuai_1"')
+
+
+# ── 1：鐵匠鋪「架上」頁上半一塊爐火加鐵砧 ──
+
+
+def test_the_shelf_page_opens_with_a_forge_and_anvil_above_the_wares(content, world):
+    """企劃者 2026-10-14 微調（草圖 container.html 的 A）：架上那一頁上面一塊爐火與鐵砧（內嵌 SVG），貨卡往下移；只有架上那一頁有。"""
+    import server
+    from test_shop_web import run
+
+    m = server.main_view(_smith(content, world, name="爐客"))
+    shelf = run(m, 'H.S.shopTab = "shelf"; H.render(); return T.els.app.innerHTML;')
+    assert 'class="smith-hero"' in shelf and "<svg" in shelf[shelf.index('class="smith-hero"'):]
+    assert shelf.index('class="smith-hero"') < shelf.index('class="shop-grid"')
+    forge = run(m, 'H.S.shopTab = "forge"; H.render(); return T.els.app.innerHTML;')
+    assert 'class="smith-hero"' not in forge
