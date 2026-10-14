@@ -481,3 +481,17 @@ def test_fb128_an_unfit_pickup_still_goes_into_an_empty_hand(content, world):
     assert state.player.weapon is None
     weapons.store(state, content, _blade(kind="刀"))
     assert state.player.weapon is not None and state.player.weapon.kind == "刀"
+
+
+def test_f4_the_held_and_unfit_notes_count_a_fist_as_a_pair(content, world):
+    """終審 F4：求兵交出手上那把的確認句、修與淬煉鈕上的「這把配不上你的武學」：拳套論副（量詞走 equipment.unit_for）。"""
+    from tianxia import bounties
+    from tianxia.state import Bounty
+
+    assert "這副配不上" in weapons.unfit_note(_blade(kind="拳腳")) and "這把配不上" in weapons.unfit_note(_blade())
+    _on(content)
+    state = _new_state(content, world, "交拳")
+    state.player.weapon = _blade(kind="拳腳", attribute="剛")
+    b = Bounty(id="b1", kind="arms", faction="guan", week=1, silver=0, deeds=2, attribute="剛", weapon_kind="拳腳", expires=0.0)
+    _label, ask = bounties._offer(state, content, world, b, state.player.weapon.id, {})
+    assert "你手上那副" in ask and "那把" not in ask

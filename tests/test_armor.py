@@ -585,7 +585,7 @@ def test_repair_and_temper_warn_when_the_worn_weapon_does_not_fit(content, world
     game = _repairable(content, world, kind, art=art)
     opts = _ids(game)
     for oid in ("smith:repair", smithing.TEMPER):
-        assert opts[oid].enabled and opts[oid].label.endswith(weapons.UNFIT_NOTE)  # 按得下去，只多一句提醒
+        assert opts[oid].enabled and opts[oid].label.endswith(weapons.unfit_note(game.state.player.weapon))  # 按得下去，只多一句提醒
     game.choose("smith:repair")  # 照樣修得動：id 沒變、也沒擋
     assert game.state.player.weapon.edge == 100 and game.state.player.materials == {"gang_1": 2}
 
@@ -594,18 +594,18 @@ def test_repair_and_temper_say_nothing_extra_when_the_weapon_fits_or_the_button_
     from tianxia import smithing
     game = _repairable(content, world, "劍")  # 流雲劍配劍
     opts = _ids(game)
-    assert weapons.UNFIT_NOTE not in opts["smith:repair"].label and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+    assert weapons.unfit_note(game.state.player.weapon) not in opts["smith:repair"].label and weapons.unfit_note(game.state.player.weapon) not in opts[smithing.TEMPER].label
     assert opts["smith:repair"].label == "修【試刃】（鋒利度 40・精鐵砂×1＋5 兩）"  # 配得上：原樣
     # 配不上、可是灰掉的鈕不再添一句：修滿的不用修、沒料修不了、淬滿了
     p = game.state.player
     p.member.wugong_id = None
     p.weapon.edge, p.weapon.tempers, p.materials = 100, content.config.weapons.temper_max, {}
     opts = _ids(game)
-    assert not opts["smith:repair"].enabled and weapons.UNFIT_NOTE not in opts["smith:repair"].label
-    assert not opts[smithing.TEMPER].enabled and smithing.FULL in opts[smithing.TEMPER].label and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+    assert not opts["smith:repair"].enabled and weapons.unfit_note(game.state.player.weapon) not in opts["smith:repair"].label
+    assert not opts[smithing.TEMPER].enabled and smithing.FULL in opts[smithing.TEMPER].label and weapons.unfit_note(game.state.player.weapon) not in opts[smithing.TEMPER].label
     p.weapon.tempers = 0
     opts = _ids(game)
-    assert not opts[smithing.TEMPER].enabled and weapons.UNFIT_NOTE not in opts[smithing.TEMPER].label
+    assert not opts[smithing.TEMPER].enabled and weapons.unfit_note(game.state.player.weapon) not in opts[smithing.TEMPER].label
 
 
 # ── Task 5：修練頁「裝備」與角色卡 ──

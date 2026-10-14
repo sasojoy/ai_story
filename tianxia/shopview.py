@@ -180,7 +180,7 @@ def _worn(state: GameState, content: Content, world: WorldStateStore, slot: str,
     tcost = smithing.temper_price(content, content.materials[tmid], slot) if tmid is not None else 0
     tuse = (f"{content.materials[tmid].name}×1" + (f"＋{tcost} 兩" if tcost else "")) if tmid is not None else ""
     tproblem = smithing.temper_problem(state, content, slot)
-    unfit = weapons.UNFIT_NOTE.lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
+    unfit = weapons.unfit_note(item).lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
     return {
         "item": {"id": item.id, "name": item.name, "grade": equipment.grade(item), "wear_word": equipment.WEAR_WORDS[slot],
                  "wear": item.edge, "tempers": item.tempers, "temper_max": smithing.rules_of(content, slot).temper_max},

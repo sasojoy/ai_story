@@ -38,7 +38,7 @@ ONLY_FUSED = "這一張要的是江湖上新合出來的功夫；基礎武學、
 GIVEN_PREFIX = "【懸賞】你把"
 GIVEN = GIVEN_PREFIX + "【{name}】交給了{issuer}（{title}），賞銀送到。"  # 待 joy 潤：交出的第一行（取代 _complete 的「交差了」那一行）
 EMPTY_HANDS = "你現在空著手。"  # 待 joy 潤：交的是手上那把
-RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下
+RACK_FULL_SILVER = "裝備庫滿了，那{unit}{name}折成銀兩 {silver}。"  # 待 joy 潤：求藝送的兵器放不下（量詞照種類，終審 F4）
 # 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（Game.choose）；交出每一張各一則、各寫各的得失（FB-161：
 # 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
 BROWSE_VERBS = ("pick", "unpick")
@@ -55,7 +55,7 @@ NAMING_NOTE = "【{name}】還等著定名，先替它定名"  # 待 joy 潤
 UNPICK = "回到懸賞榜"  # 待 joy 潤：第三層最後一顆（bounty:unpick）
 UNPICKED = "你回到懸賞榜前。"  # 待 joy 潤：按了 bounty:unpick 的回話（Game._bounty）
 TEMPERED_NOTE = "淬煉過 {n} 次，賞銀不會多給。"  # 待 joy 潤：第三層交兵器的確認句
-HELD_NOTE = "這是你手上那把，交了你就空手了。"  # 待 joy 潤：同上，交的是手上那把
+HELD_NOTE = "這是你手上那{unit}，交了你就空手了。"  # 待 joy 潤：同上，交的是手上那把（量詞照種類，終審 F4）
 HAVE = "你身上合用的："  # 待 joy 潤：懸賞卡那一列（have_text）；fitting 連手上那把兵器也算，所以寫「身上」不寫「庫裡」
 NOT_YOURS = "這一張不是給你的。"  # 待 joy 潤；fit_problem 的拒絕句（設計 4.5）都寫成常數，測試引用常數，潤字不必改測試
 GIVEN_BEFORE = "這一張你已經交過了。"  # 待 joy 潤
@@ -634,7 +634,7 @@ def _offer(state: GameState, content: Content, world: WorldStateStore, b: Bounty
     if w.tempers:
         ask += TEMPERED_NOTE.format(n=w.tempers)
     if held:
-        ask += HELD_NOTE
+        ask += HELD_NOTE.format(unit=equipment.unit_for("weapon", w.kind))
     return f"交出【{w.name}】（{weapons.grade(w)}・鋒利度 {w.edge}{'・在手上' if held else ''}）→ 賞銀 {silver}", ask
 
 
@@ -744,7 +744,7 @@ def _art_gifts(state: GameState, content: Content, world: WorldStateStore, b: Bo
     if weapons.rack_full(state, content):
         silver = cfg.arms_silver[quality]
         p.stats["silver"] = p.stats.get("silver", 0) + silver
-        return msgs + [RACK_FULL_SILVER.format(name=name, silver=silver), f"銀兩 +{silver}"]
+        return msgs + [RACK_FULL_SILVER.format(unit=equipment.unit_for("weapon", kind), name=name, silver=silver), f"銀兩 +{silver}"]
     w = weapons.new_weapon(state, name=name, kind=kind, attribute=b.attribute, tier=1, quality=quality)
     return msgs + [weapons.GAIN_LINE.format(name=w.name), weapons.store(state, content, w)]
 

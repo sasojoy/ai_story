@@ -2771,7 +2771,7 @@ class Game:
             opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{weapons.noun(item.kind)}・一階・{note}）{mark}",
                                enabled=problem is None))
         # 身上那把配不上身上的武學（含沒有武學）：加成是 0，修與淬煉照樣按得下去，可是花的料與銀兩看不到回報，按鈕上提醒一句（PM 2026-10-11）
-        unfit = weapons.UNFIT_NOTE if weapons.worn_unfit(s, art, c, self.world) else ""
+        unfit = weapons.unfit_note(s.player.weapon) if weapons.worn_unfit(s, art, c, self.world) else ""
         if s.player.weapon is not None:
             problem = weapons.repair_problem(s, c)
             material = weapons.repair_material(s, c)

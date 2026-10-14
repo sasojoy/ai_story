@@ -140,7 +140,12 @@ def clashes(weapon: Weapon | None, art: MartialArt | None) -> bool:
             and (counters(weapon.attribute, art.attribute) or counters(art.attribute, weapon.attribute)))
 ATTR_WORDS = {"陰": "寒鐵", "陽": "赤銅", "剛": "厚背", "柔": "軟鋼", "快": "輕鋒", "慢": "沉鐵", "虛": "花紋", "實": "重鐵"}  # 待 joy 潤
 FITS_MARK = "・配得上你的武學"  # 待 joy 潤：鐵匠鋪的「買」鈕上，種類對得上身上那門武學的那一把
-UNFIT_NOTE = "・這把配不上你的武學，加成用不上"  # 待 joy 潤：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+UNFIT_NOTE = "・這{unit}配不上你的武學，加成用不上"  # 待 joy 潤（量詞照種類，終審 F4；用 unfit_note）：鐵匠鋪的「修」「淬煉」鈕（按得下去的）上，身上那把配不上身上的武學（含沒有武學）時多的一句，免得白花料與銀兩
+
+
+def unfit_note(weapon: Weapon) -> str:
+    """UNFIT_NOTE 照這把的量詞（拳套一副，終審 F4）。"""
+    return UNFIT_NOTE.format(unit=equipment.unit_for("weapon", weapon.kind))
 
 
 def worn_unfit(state: GameState, art: MartialArt | None, content: Content, world: WorldStateStore) -> bool:
