@@ -6547,6 +6547,17 @@ class Game:
             return self._discuss(inv, other, item, proposed)
         return self._spar(inv, other)
 
+    def answer_on_card(self, inv, other: Game, verb: str) -> list[str]:
+        """玩家卡上回應他遞來的打招呼、結伴（social 的回禮、答應、婉拒那幾顆，FB-117）：跟場景底下那一顆（選單的 invite: 選項，
+        走 choose）同一個結果、同一則江湖紀錄（標題照 _action_title，草稿同 choose）。other 是 peer_act 那一份，由它存回去。"""
+        self._draft = Draft(self._action_title("invite", f"{verb}:{inv.id}"))
+        try:
+            msgs = self.answer_invite(inv, other, verb)
+            journal.add_entry(self.state, self._draft.entry(self.state.world.time, msgs))
+        finally:
+            self._draft = None
+        return msgs
+
     def _greet_back(self, inv, other: Game, gesture: social.Gesture, verb: str) -> list[str]:
         """回禮（打招呼）：兩邊各記一則。"""
         me = self.state.player.name

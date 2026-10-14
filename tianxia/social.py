@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
 from . import gender, invites, ranger, ranks, team
-from .characters import CharacterStore
+from .characters import CharacterStore, name_key
 from .state import GameState
 
 if TYPE_CHECKING:
@@ -295,8 +295,32 @@ def _send(game: Game, other: Game, kind: str, payload: dict | None = None) -> No
     game._save_season()
 
 
+def _incoming(game: Game, inv) -> bool:
+    """這一張是他發給你的（不是你發給他的）。"""
+    return inv is not None and name_key(inv.target) == name_key(game.state.player.name)
+
+
+def _answer(game: Game, other: Game, kind: str, verb: str) -> list[str]:
+    """卡上回應他遞來的打招呼、結伴（FB-117）：跟場景底下那一顆同一個結果、同一則紀錄（Game.answer_on_card）。"""
+    inv = _waiting(game, other, kind)
+    if not _incoming(game, inv):
+        return ["這份邀請已經不在了。"]
+    return game.answer_on_card(inv, other, verb)
+
+
+GREET_BACK = "{him}在等你回禮"  # 他向你打了招呼：卡上回禮那幾顆的說明（FB-117：以前寫成「等回禮」，方向反了；待 joy 潤）
+
+
 def _greet_buttons(game: Game, other: Game) -> list[CardButton]:
-    waiting = _waiting(game, other, "greet") is not None
+    inv = _waiting(game, other, "greet")
+    gesture = gesture_of(inv) if _incoming(game, inv) else None
+    if gesture is not None:  # 他向你打了招呼：卡上換成回禮的那幾顆（同場景底下），第一顆寫他在等你回禮
+        note = GREET_BACK.format(him=gender.pronoun(other.state))
+        return [
+            CardButton(action="greet", label=did, arg=f"reply:{reply}", note=note if i == 0 else "")
+            for i, (reply, did) in enumerate(gesture.replies)
+        ]
+    waiting = inv is not None
     return [
         CardButton(action="greet", label=g.label, arg=key, enabled=not waiting, note="等回禮" if waiting else "")
         for key, g in GESTURES.items()
@@ -305,6 +329,8 @@ def _greet_buttons(game: Game, other: Game) -> list[CardButton]:
 
 def _greet(game: Game, other: Game, params: dict) -> list[str]:
     key = str(params.get("arg") or "")
+    if key.startswith("reply:"):
+        return _answer(game, other, "greet", key.removeprefix("reply:"))
     gesture = GESTURES.get(key)
     if gesture is None:
         return ["（沒有這種禮數。）"]
@@ -328,14 +354,25 @@ def _travel_note(game: Game, other: Game) -> str | None:
     return None
 
 
+TRAVEL_ASKED = "{him}邀你同行：答應了由{him}定去哪、怎麼走"  # 他邀了你：卡上答應那一顆的說明（FB-117：以前寫成「等他回應」；待 joy 潤）
+
+
 def _travel_buttons(game: Game, other: Game) -> list[CardButton]:
     note, him = _travel_note(game, other), gender.pronoun(other.state)
+    if _incoming(game, _waiting(game, other, "travel")) and not game.state.player.tagalong:  # 他邀了你：卡上答應、婉拒（同場景底下）
+        return [
+            CardButton(action="travel", label="答應結伴同行", arg="yes", note=TRAVEL_ASKED.format(him=him)),
+            CardButton(action="travel", label="婉拒同行", arg="no"),
+        ]
     return [CardButton(
         action="travel", label=f"邀{him}結伴同行", enabled=note is None, note=note or f"{him}答應了，由你定去哪、怎麼走",
     )]
 
 
 def _travel(game: Game, other: Game, params: dict) -> list[str]:
+    verb = str(params.get("arg") or "")
+    if verb in ("yes", "no"):
+        return _answer(game, other, "travel", verb)
     note = _travel_note(game, other)
     if note is not None:
         return [f"（{note}。）"]

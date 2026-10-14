@@ -246,3 +246,45 @@ def test_a_bot_answers_with_one_that_fits(twins):
     slot = bot_policy.NamingSlot(open=True)
     _do(content, world, "乙", lambda g: bot_policy._answer_discuss(g, FixedRandom(0.0), slot))
     assert slot.job is not None and slot.job.item == "insight:huo"
+
+
+# ── 第三件：他發給你的打招呼、結伴，在他的卡上寫你這邊該做什麼 ──
+
+
+def _row(card, action):
+    return [(b["label"], b["arg"], b["note"], b["enabled"]) for b in card["actions"] if b["action"] == action]
+
+
+def test_his_greeting_shows_the_replies_on_his_card(pair):
+    content, world = pair
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "bow"}))
+    assert _row(_card(content, world, "乙", "甲"), "greet") == [
+        ("抱拳還禮", "reply:bow", social.GREET_BACK.format(him="他"), True), ("點頭致意", "reply:nod", "", True),
+    ]
+    assert all(note == "等回禮" for _, _, note, _ in _row(_card(content, world, "甲", "乙"), "greet"))  # 發的那一方照舊
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "greet", {"arg": "reply:bow"}))[0]
+    assert msgs == ["你抱拳還禮。"] and world.get_season().invites == []
+    head = _load(world, "乙").journal[0]
+    assert (head.title, head.lines) == ("與甲", ["你抱拳還禮。"])  # 跟場景底下那一顆同一則
+    assert "你向乙抱拳見禮，乙抱拳還禮。" in _load(world, "甲").journal[0].lines
+
+
+def test_his_travel_invite_shows_answer_and_decline_on_his_card(pair):
+    content, world = pair
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "travel"))
+    assert _row(_card(content, world, "乙", "甲"), "travel") == [
+        ("答應結伴同行", "yes", social.TRAVEL_ASKED.format(him="他"), True), ("婉拒同行", "no", "", True),
+    ]
+    assert _row(_card(content, world, "甲", "乙"), "travel")[0][2] == "等他回應"  # 發的那一方照舊
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "travel", {"arg": "yes"}))[0]
+    assert msgs == ["你答應與甲結伴同行，等他動身。"]
+    assert _load(world, "乙").player.tagalong.leader == "甲" and _load(world, "乙").journal[0].title == "結伴同行・甲"
+
+
+def test_declining_his_travel_invite_on_the_card(pair):
+    content, world = pair
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "travel"))
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "travel", {"arg": "no"}))
+    assert world.get_season().invites == [] and _load(world, "乙").player.tagalong is None
+    assert "乙拱手婉拒了你的邀請。" in _load(world, "甲").journal[0].lines
+    assert _load(world, "乙").journal[0].title == "婉拒結伴同行"
