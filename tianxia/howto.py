@@ -567,12 +567,25 @@ CHALLENGE_UNTIMED = (
 )
 
 
+# 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
+CHALLENGE_TITLE = "挑戰大勢人物"
+CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同遊歷）；自己陣營的人物不打{both}，散人不能挑戰。"
+CHALLENGE_BOTH = "，{names}兩邊的人物都能挑戰"
+CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見：挑戰、求見、交友都不行。"
+
+
 def _challenge_lines(content: Content, season: WorldState) -> list[str]:
-    """挑戰大勢人物本人的那幾句：有挑戰本人的季寫情誼會掉；沒有時刻表的季多寫聲威怎麼掉、怎麼回、一天上限、退場與龍頭人物停手。"""
+    """挑戰大勢人物本人那一段（FB-190 另起一段）：誰能挑戰（有陣營、打敵方的人物，自己陣營沒有人物的〔地方豪強〕兩邊都打，散人不行；
+    同 Game._challenge_options）、閉門不見、情誼會掉；沒有時刻表的季多寫聲威怎麼掉、怎麼回、一天上限、退場與龍頭人物停手。"""
     cfg = content.config
     if not figures.challenge_on(content, season):
         return []
-    lines = [f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。"]
+    sides = {fig.faction for fig in content.figures.values()}
+    both = [f.name for f in content.scenario.factions if f.id not in sides]
+    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "")]
+    if cfg.snub_hours > 0:
+        lines.append(CHALLENGE_SNUB.format(hours=cfg.snub_hours))
+    lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
     if not figures.untimed(content, season):
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)
@@ -605,8 +618,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
-    bond += _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on）
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
+    challenge = _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on），另起一段（FB-190）
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
@@ -631,6 +644,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 情誼",
         *bond,
         "",
+        *([f"#### {CHALLENGE_TITLE}", *challenge, ""] if challenge else []),
         "#### 心得",
         f"- 學武的本錢：練成（第 N 成升下一成花 N×{cfg.practice_xinde_per_level}）、合成（{cfg.fuse_xinde} 心得、"
         f"{cfg.fuse_stamina} 體力）、合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）都花它。",

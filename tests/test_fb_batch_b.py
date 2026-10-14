@@ -251,3 +251,23 @@ def test_fb189_the_holders_clause_only_shows_when_someone_holds_a_shard(mandated
     scene = game.scene_text()
     assert "天命之爭：" in scene and seal.MANDATE_WEIGHT not in scene
     assert not seal.holders(world.seal_state().registry)
+
+
+# ── FB-190：玩法說明裡挑戰的幾句插在「情誼」中間 → 另起一段，寫誰能挑戰、閉門不見 ──
+
+
+def test_fb190_challenges_get_their_own_section_after_the_bond(real, world):
+    from tianxia import howto
+
+    cfg = real.config
+    page = howto.page(real, world.get_season(), recruitable=False)
+    bond = page[page.index("#### 情誼"):page.index(f"#### {howto.CHALLENGE_TITLE}")]
+    fight = page[page.index(f"#### {howto.CHALLENGE_TITLE}"):page.index("#### 心得")]
+    assert bond.strip().splitlines()[-1] == f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。"  # 情誼那一段照舊以它收尾
+    assert "聲威" not in bond and "打贏大勢人物本人" not in bond
+    assert "投靠了陣營的人" in fight and "散人不能挑戰" in fight and "地方豪強兩邊的人物都能挑戰" in fight
+    assert f"{cfg.snub_hours:g} 個現實小時內" in fight and "閉門不見" in fight
+    assert f"打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}" in fight
+    assert howto.CHALLENGE_UNTIMED[2] in fight  # 14 天的季：聲威掉到 0 退場那幾句也在這一段
+    cfg.figure_challenge_every_season = False
+    assert f"#### {howto.CHALLENGE_TITLE}" not in howto.page(real, world.get_season(), recruitable=False)
