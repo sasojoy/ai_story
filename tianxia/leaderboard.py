@@ -11,7 +11,7 @@
 """
 from __future__ import annotations
 
-from . import library, martial_arts, team
+from . import arena, library, martial_arts, team
 from .characters import CharacterStore, open_characters
 from .models import Content
 from .world_state import WorldStateStore
@@ -41,6 +41,7 @@ BOARDS: tuple[tuple[str, str, str], ...] = (
     ("宗師", "宗師榜", "練成絕學的門數；一樣多時看首創的武學與意境"),
     ("武學", "天下武學榜", "身上那門武學的威力"),
     ("內功", "內功榜", "身上那門內功的威力"),
+    ("擂台", "擂台榜", "擂台上的名次；前十名有稱號"),
 )
 STAT_BOARDS = {"善人": ("good", "善名"), "惡人": ("evil", "惡名"), "名人": ("fame", "名望")}
 MASTERED = "絕學"
@@ -49,7 +50,7 @@ MASTERED = "絕學"
 def compute_boards(
     content: Content, world: WorldStateStore, characters: CharacterStore | None = None, top: int | None = TOP_N,
 ) -> dict[str, list]:
-    """六張榜一次掃完（企劃者 2026-10-14）：只算這一季的角色（同 compute_leaderboard）；真人與假人一樣列、看不出來，名字一律寫名號
+    """七張榜一次掃完（企劃者 2026-10-14；擂台榜照 WorldState.arena 的名次，擂台關著是空的）：只算這一季的角色（同 compute_leaderboard）；真人與假人一樣列、看不出來，名字一律寫名號
     （排行榜不匿名，傳聞分層第七節）。善人、惡人、名人照 stats 的 good／evil／fame，0 的不上榜；宗師照自己練到絕學的門數
     （PlayerState.art_quality 是「絕學」的、手上還有的那幾門），一樣多時看這一季首創幾樣（WorldStateStore.season_firsts），
     兩樣都是 0 的不上榜。同分照名號排，每次看都一樣。top=None 回整張（伺服器拿來找「你排第幾」）。"""
@@ -78,6 +79,10 @@ def compute_boards(
         made = firsts.get(p.name, 0)
         if mastered or made:
             board["宗師"].append((p.name, (mastered, made), f"絕學 {mastered} 門・首創 {made} 樣"))
+    if arena.on(content):  # 擂台榜（tianxia/arena.py）：照名次，不掃角色；報了名就上榜，跟擂台那一頁的擂台榜一樣
+        for e in arena.ladder(world.get_season()):
+            title = arena.title_for(e.rank)
+            board["擂台"].append((e.name, (-e.rank,), "・".join(t for t in (title, arena.record_text(e)) if t)))
     for kind, rows in board.items():
         if kind in ("武學", "內功"):
             rows.sort(key=lambda row: (-row[3], row[0]))

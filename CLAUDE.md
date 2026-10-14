@@ -310,10 +310,10 @@ Joy 2026-10-14 選「隨時挑擂」：兩個人很難同時在線，所以報�
 - **名次**：挑的人贏（大勝、險勝）、他還排在你前面就交換名次（`arena.swap`，照收場那一刻）；僵持、輸、認輸不動。守的人下次同步補戰報與一則「守擂・挑的人」（`ArenaEntry.inbox`，`Game._deliver_arena`）。第一名換人（「擂台易主」）、連勝到 `streak_news` 5 的倍數、這一場成了的最險一搏（成功率 ≤ `highlight_rate` 30，名望 +1）上天下大事。
 - **稱號**（`arena.TITLES`、`title_of`）：第一「天下第一」、二三「擂台三甲」、四到十「擂台十傑」，照此刻的名次、掉出就沒了；接在 `social.affiliation` 後面（狀態列、玩家卡），擂台那一頁與擂台榜也寫。
 - **俸**：換日那一刻（第一個同步的人觸發 `arena.roll_day`，`WorldState.arena_day`）前 `len(wages)` 10 名、打過至少一場的各記一筆 `ArenaEntry.wages`，本人同步時領（`wages`：第一名銀兩 100・名望 5，二三名 60・3，四到十名 30・1）。季收了不發。
-- **季末**：收季那一刻打過至少一場的前三名，江湖史記「本季擂台前三名」與「本季擂主」、天下大事一句；名望 `prizes` 30／20／10，`prize_treasure` 另給一件寶物（`treasures.arena_prize`，寶物關著不給），休季時同步補（休季沒上線的人只有江湖史那一行）；季收了還沒打完的那一場作廢。江湖史底下一段「歷屆擂主」（`arena.champions`，照各季「本季擂主：」那一句，跨季）。
+- **季末**：收季那一刻打過至少一場的前三名，天下大事一句前三名，江湖史記「本季擂主」（擂台榜前三名由 `leaderboard.chronicle_lines` 寫）；名望 `prizes` 30／20／10，`prize_treasure` 另給一件寶物（`treasures.arena_prize`，寶物關著不給），休季時同步補（休季沒上線的人只有江湖史那一行）；季收了還沒打完的那一場作廢。江湖史底下一段「歷屆擂主」（`arena.champions`，照各季「本季擂主：」那一句，跨季）。
 - **擂台那一頁**：店面那一層（`Game._shop_open` 回 "arena"、`shopview.arena_view`，Joy「擂台應該要是獨立的一頁」）：台下（你的名次、稱號、分身、挑得到的人）、擂台榜兩頁，開打後整頁是這一場，打完回到台下蓋一張收場卡（`PlayerState.arena_last`，網頁看過照 id 不再跳 `S.arenaSeen`）。網頁 `arenaHtml`／`arenaFloorHtml`／`arenaBoardHtml`／`arenaFightHtml`／`arenaResultHtml`，`S.arenaTab`。
 - **假人**：沒報名、有武學就報名，分身弱了 15% 以上就更新，今天還有次數時每一輪 `bot_policy.ARENA_CHANCE`（5%）挑一場挑得到的人裡身手最弱的；照架勢出招（`DUEL_READ`），不寫放手一搏、不認輸。整季機器人不碰（`bot.pick` 排除 `act:arena`、`arena:yield`）。
-- **擂台榜**：`Game.arena_board()`（`arena.board`，照名次前 10 名、帶稱號），也要放進見聞「榜單」分頁（介面 thread 做的分頁合進 main 之後接上）。
+- **擂台榜**：`Game.arena_board()`（`arena.board`，照名次前 10 名、帶稱號），也是見聞「榜單」分頁的一張（`leaderboard.BOARDS` 的「擂台」，`compute_boards` 照 `arena.ladder` 排）。
 
 ### 玉璽碎片（玉璽一；天命之爭是玉璽二）
 設計 `docs/superpowers/specs/2026-10-11-玉璽碎片-design.md`（19.1 PM 的決定優先），計畫 `docs/superpowers/plans/2026-10-12-玉璽-1-核心.md`；數字在 `Config.seal`（`SealTuning`），內容在 `content/seal.json`。`Config.seal.enabled` 是主機的緊急開關，內容沒有 `seal.json`（測試內容）等於關著（`seal.on`）。

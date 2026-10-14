@@ -303,7 +303,8 @@ def test_season_end_crowns_a_champion_and_pays_the_top_three_during_the_break(ri
     admin = Game.new(content, "管理者", rng=random.Random(1), world=world)
     admin.admin_end_season(now=NOW + 10)
     texts = [r.text for r in admin.state.world.chronicle]
-    assert any("本季擂台前三名" in t for t in texts) and arena.CHAMPION.format(name="乙") in texts
+    assert any("擂台榜" in t for t in texts) and arena.CHAMPION.format(name="乙") in texts
+    assert any("本季擂台前三名" in r.text for r in admin.state.world.rumors)
     assert "歷屆擂主" in admin.chronicle_text() and "乙" in admin.chronicle_text().split("歷屆擂主")[1]
     fame = CharacterStore(world.db).load("乙").player.stats.get("fame", 0)
     _, winner = _do(content, world, "乙", lambda g: [], now=NOW + 20)
@@ -376,3 +377,16 @@ def test_season_bots_never_open_the_ring_or_yield(ring):
     _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
     picks = {bot.pick(game, game.options(), random.Random(i)) for i in range(40)}
     assert ARENA_YIELD not in picks and picks <= {f"arena:{m}" for m in MOVES}
+
+
+def test_the_ring_board_is_one_of_the_season_boards(ring):
+    from tianxia import leaderboard
+    content, world = ring
+    _ladder(world, "子", "丑", bouts=1)
+    board = leaderboard.compute_boards(content, world)
+    assert [row[0] for row in board["擂台"]] == ["子", "丑"]
+    view = {b["id"]: b for b in leaderboard.view(board, me="丑")}
+    rows = view["擂台"]["rows"]
+    assert [r["rank"] for r in rows] == [1, 2] and rows[0]["text"].startswith("天下第一") and rows[1]["you"]
+    content.config.arena.enabled = False
+    assert leaderboard.compute_boards(content, world)["擂台"] == []
