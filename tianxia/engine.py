@@ -88,6 +88,15 @@ ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管�
 INVITE_LAPSED = "{who}想答應你的{what}，沒能成局，這份邀請作廢了。"
 INVITE_LAPSED_AWAY = "那時你已經不在場。"  # 答應的那一刻他不在這裡了（下線、走了）
 DISCUSS_SAME = "兩個人出的是同一樣，論不出新東西。"
+# 答應論武時對方那邊合不成：照他那一句的兩三個字（fusion.Refusal.short）換成從你這邊看的說法——他那一句原話是寫給他看的，
+# 「你已經有了」的「你」是他（FB-243；待 joy 潤）。沒列到的只寫「某某那邊合不成。」
+THEIR_SIDE = {
+    "已經有了": "合出來的那一樣{him}已經有了",
+    "持有滿了": "{him}的武學與意境已經滿了",
+    "心得不足": "{him}的心得不夠",
+    "體力不足": "{him}的體力不夠",
+    "來歷裡融過": "那一門的來歷裡早已融過這股意",
+}
 
 
 def _refusal(text: str, short: str) -> str:
@@ -6733,9 +6742,9 @@ class Game:
             return tid, [mid], None, tid
         return None, [mid, tid], None, tid
 
-    def _discuss_partner(self, mine: str, theirs: str, other_name: str):
+    def _discuss_partner(self, mine: str, theirs: str, other_name: str, fresh: bool = False):
         art_id, insight_ids, other_art, lent = self._discuss_args(mine, theirs)
-        return art_id, insight_ids, other_art, fusion.Partner(lent=lent, name=other_name, price=self._discuss_cost())
+        return art_id, insight_ids, other_art, fusion.Partner(lent=lent, name=other_name, price=self._discuss_cost(), fresh=fresh)
 
     def discuss_request(self, inv, other: Game, item: str) -> naming.NamingRequest | None:
         """論武的 A 段（鎖內、只讀）：答應的那一方出 item、發邀請的那一方出邀請上那一樣，這一爐要不要模型取名或挑？
@@ -6745,9 +6754,10 @@ class Game:
         art_id, insight_ids, other_art, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
         return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art, partner=partner)
 
-    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed):
-        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合出來的那一門或那個意境, 訊息）；沒合成是 None。"""
-        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name)
+    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed, fresh: bool = False):
+        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合出來的那一門或那個意境, 訊息）；沒合成是 None。
+        fresh：對方剛剛在這一次論武裡首創了這個配方（發邀請的那一方接著合，FB-243）。"""
+        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name, fresh)
         client, rng = self._quick_client(), self.rng
         if other_art is not None:
             thing, msgs = fusion.blend(self.state, self.content, self.world, client, art_id, other_art, proposed, rng, partner)
@@ -6801,8 +6811,10 @@ class Game:
         theirs_problem = other.discuss_problem(theirs, item, self.state.player.name)
         if theirs_problem is None:
             return None
-        short = getattr(theirs_problem, "short", "") or "合不成"
-        return _refusal(f"{them.name}那邊合不成：{theirs_problem}", f"{gender.pronoun(them)}那邊{short}")
+        short, him = getattr(theirs_problem, "short", "") or "合不成", gender.pronoun(them)
+        side = THEIR_SIDE.get(short)
+        text = f"{them.name}那邊合不成：{side.format(him=him)}。" if side else f"{them.name}那邊合不成。"
+        return _refusal(text, f"{him}那邊{short}")
 
     def _discuss(self, inv, other: Game, item: str, proposed) -> list[str]:
         """答應論武（C 段）：重驗（discuss_invite_problem、discuss_item_problem：還在發邀請的那個地點、兩個人都閒著、兩樣東西都還在
@@ -6819,7 +6831,8 @@ class Game:
             self._tell_sender(inv, other)
             return msgs
         self.peer_brief = social.DISCUSS_BRIEF.format(thing=social.thing_label(made))
-        _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""))  # 配方剛登記：他照查表合出同一門，不取名
+        # 配方剛登記：他照查表合出同一門，不取名；這一爐首創了的話，他那一句寫跟你一起首創（FB-243）
+        _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""), fresh=fusion.made_first(msgs))
         self._pair_tick(self.state.world.discuss_tally, them.name)
         self._save_season()
         other._write(f"論武・{me.name}", their_msgs)

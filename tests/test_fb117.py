@@ -651,3 +651,59 @@ def test_fb242_brief_is_the_first_sentence_cut_short():
     from tianxia.martial_arts import Insight
 
     assert social.thing_label(Insight(id="x", name="風火境", attribute="快")) == "「風火境」"
+
+
+# ── FB-243：論武的兩句字 ──
+
+
+def test_fb243_a_co_founder_merging_again_is_not_told_it_is_the_first_time(pair):
+    """共同首創的人熔掉之後自己再合一次：寫「這一門是你與某某首創的」，不寫「江湖上第一次」。"""
+    from tianxia import fusion, library
+
+    content, world = pair
+    _invite(content, world)  # 甲出【粗淺拳腳】，乙出「火」
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰拳", "")}))
+    state = _load(world, "甲")
+    art = world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛"))
+    library.remove_art(state, art.id)  # 熔掉（只拿掉這一門，不必算心得）
+    state.player.insights.append("huo")
+    CharacterStore(world.db).save(state)
+    msgs = _do(content, world, "甲", lambda g: g.forge("basic_fist", ["huo"], proposed=(None, "")))[0]
+    text = " ".join(msgs)
+    assert fusion.CO_OWN.format(other="乙").strip() in text and "江湖上第一次" not in text
+
+
+def test_fb243_discussing_the_same_recipe_again_is_not_the_first_time(pair):
+    """同一對人之後再論出同一門（兩人都熔掉了）：發邀請的那一方也不寫「江湖上第一次」。"""
+    from tianxia import fusion, library
+
+    content, world = pair
+    _invite(content, world)
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰拳", "")}))
+    art = world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛"))
+    for name in ("甲", "乙"):
+        state = _load(world, name)
+        library.remove_art(state, art.id)
+        state.player.stamina = 100.0
+        CharacterStore(world.db).save(state)
+    key = "|".join(sorted(("甲", "乙")))
+    world.mutate_season(lambda s: s.discuss_tally.pop(key, None))  # 今天的帳清掉，再論一回
+    _invite(content, world)
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": (None, "")}))
+    theirs = " ".join(_load(world, "甲").journal[0].lines)
+    assert fusion.CO_OWN.format(other="乙").strip() in theirs and "江湖上第一次" not in theirs
+
+
+def test_fb243_their_side_refusal_is_written_from_your_side(twins):
+    """答應時對方那邊合不成：不貼他那一句原話（「你已經悟得了」的你是他），照那兩三個字寫成從你這邊看的話。"""
+    from types import SimpleNamespace
+
+    content, world = twins
+    _invite(content, world, "insight:feng")  # 甲出「風」，乙出「火」
+    own_words = engine._refusal("這兩個合起來還是「風火境」，你已經悟得了。", "已經有了")  # 寫給甲看的那一句
+    game = _do(content, world, "乙", lambda g: g)[1]
+    peer = SimpleNamespace(state=_load(world, "甲"), discuss_problem=lambda *args: own_words)
+    line = game.discuss_item_problem(world.get_season().invites[0], peer, "insight:huo")
+    assert line == "甲那邊合不成：合出來的那一樣他已經有了。" and line.short == "他那邊已經有了"
+    unknown = SimpleNamespace(state=peer.state, discuss_problem=lambda *args: "找不到它的資料。")  # 沒有兩三個字的那幾句
+    assert game.discuss_item_problem(world.get_season().invites[0], unknown, "insight:huo") == "甲那邊合不成。"
