@@ -5920,7 +5920,10 @@ class Game:
         if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
             faction = c.scenario.find_faction(p.faction)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
-            if goal and (goal > 0) == (amount > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
+            # 出陣的攪局（sortie.mode：陣營在這條線上沒有目標，只有豪強）把線往 50 拉，就是替豪強做事：照推的量記（PM 2026-10-14，
+            # 同攻守的帳：名目量，超過上限的部分照記兩成）
+            stir = source == "sortie" and not goal
+            if stir or (goal and (goal > 0) == (amount > 0)):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標（攪局以外）都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 push.add_contribution(p, at.week, gained)
             w.active_pushers.setdefault(p.faction, {})[p.name] = now

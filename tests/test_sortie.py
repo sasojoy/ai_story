@@ -130,6 +130,20 @@ def test_the_gentry_stirs_toward_the_middle():
     assert w.trends["yingru"] == 50  # 在 50 什麼都不推
 
 
+def test_the_gentry_stir_earns_contribution():
+    """PM 2026-10-14：攪局把線往 50 拉的那一下照推的量全額記貢獻（名目量：地點寫的量 × hold_share；同攻守的帳）。
+    線在 50 什麼都不推，也不記。官軍、黃巾逆著自己的目標推照舊不記（push_trend 的規則不變）。"""
+    game = _game(faction="haoqiang", at="runan_wilds")
+    c, p = game.content, game.state.player
+    nominal = abs(c.locations["runan_wilds"].train_trend["yingru"]) * c.config.sortie.hold_share
+    game.choose("act:train")
+    assert p.contrib == round(nominal * c.config.contrib_per_push) > 0
+    earned = p.contrib
+    game.state.world.trends["yingru"] = 50
+    game.choose("act:train")
+    assert p.contrib == earned
+
+
 def test_holding_counts_for_the_defend_order_and_attacking_for_the_siege():
     huang = _game()
     huang.state.world.orders.append(Order(id="1:huang:defend:yingru", template="defend", faction="huang", week=1,
