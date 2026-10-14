@@ -4097,7 +4097,7 @@ def at_a_gamble(game, monkeypatch):
 
 
 def test_answering_asks_the_model_outside_the_lock(game, at_a_gamble, lock_events):
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         lock_events.append(f"assess:{text}")
         return server.event_llm.EventVerdict(85)
 
@@ -4123,7 +4123,7 @@ def test_the_free_text_assessment_and_the_narration_share_one_budget(game, at_a_
     ＋控制者 2026-10-06 把潤色也算進來），都拿 game.client 的複本、一趟的逾時是「剩下的」一半；原本那個 client 不動。"""
     seen = []
 
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         seen.append(("assess", client))
         return server.event_llm.EventVerdict(85)
 
@@ -4147,7 +4147,7 @@ def test_the_narration_gets_what_the_scoring_left_of_the_free_text_budget(game, 
     """評分花掉 50 秒：潤色只剩 60 − 50 = 10 秒，一趟的逾時是 5 秒（複本；原本那個 client 不動）。"""
     seen = []
 
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         breaker_clock[0] += 50
         return server.event_llm.EventVerdict(85)
 
@@ -4167,7 +4167,7 @@ def test_the_narration_gets_what_the_scoring_left_of_the_free_text_budget(game, 
 
 def test_a_narration_with_no_budget_left_is_skipped(game, at_a_gamble, breaker_clock):
     """評分把預算用得只剩半秒（不夠一趟）：不叫潤色，一句都不插，跟模型叫不動時一樣（結果與擲骰照常套用，請求不再等）。"""
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         breaker_clock[0] += server.CONTENT.config.free_text_budget_seconds - 0.5
         return server.event_llm.EventVerdict(85)
 
@@ -4206,8 +4206,41 @@ def test_an_evil_deed_that_lands_goes_through_all_three_steps(game, at_a_gamble,
     assert lines[1] == (story or rules.EVIL_DONE) and lines.count(rules.EVIL_DONE) == (0 if story else 1)
 
 
+@pytest.mark.parametrize("spent", [20.0, "all"], ids=["some-left", "none-left"])
+def test_the_moral_call_gets_what_the_scoring_left_of_the_budget(game, at_a_gamble, breaker_clock, monkeypatch, spent):
+    """FB-223：評分之後另外判一次善惡（PM 2026-10-14：不併進評分那一次），兩次在同一個 B 段、共用 free_text_budget_seconds：
+    判善惡那一次用評分剩下來的再切一份（複本，原本的 client 不動）；評分把預算用到不夠一趟就不判、當「中」，成功率照用、不退回 40。"""
+    from conftest import FixedRandom
+
+    total = server.CONTENT.config.free_text_budget_seconds
+    used = total - 0.5 if spent == "all" else spent
+    seen, given = [], []
+
+    def chat(self, messages, response_model, **kwargs):
+        seen.append((response_model, self.timeout))
+        if response_model is server.event_llm.SuccessRateJudgment:
+            breaker_clock[0] += used
+            return server.event_llm.SuccessRateJudgment(success_rate=85)
+        return server.event_llm.MoralJudgment(moral="惡")
+
+    real = Game.answer_event
+    monkeypatch.setattr(OllamaClient, "chat_structured", chat)
+    monkeypatch.setattr(
+        Game, "answer_event", lambda self, request, llm_rate=None, moral=None: given.append((llm_rate, moral)) or real(self, request, llm_rate, moral),
+    )
+    game.rng = FixedRandom(0.0)
+    with mock.patch.object(server.event_llm, "narrate_event_gamble", return_value=None):
+        server.answer_event(game, "原地挖坑把他埋了")
+    assert seen[0] == (server.event_llm.SuccessRateJudgment, total / 2)
+    if spent == "all":
+        assert len(seen) == 1 and given == [(85, "中")]  # 不夠一趟：不判，成功率照用
+    else:
+        assert seen[1] == (server.event_llm.MoralJudgment, pytest.approx((total - used) / 2)) and given == [(85, "惡")]
+    assert game.client.timeout == server.CONTENT.config.ollama_timeout
+
+
 def test_answering_does_nothing_when_the_event_was_dealt_with_meanwhile(game, at_a_gamble):
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 另一個分頁先選了別的
         return server.event_llm.EventVerdict(85)
 
@@ -4964,7 +4997,7 @@ def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamb
         Game, "answer_event", lambda self, request, llm_rate=None, moral=None: rates.append(llm_rate) or real(self, request, llm_rate, moral),
     )
 
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         timeouts.append(client.timeout)
         return server.event_llm.EventVerdict(85)
 
@@ -5040,7 +5073,7 @@ def _ready(site, monkeypatch):
         seen.append({"kind": "rate", "rate": llm_rate})
         return real(self, request, llm_rate, moral)
 
-    def assess(client, event, text):
+    def assess(client, event, text, **_):
         seen.append({"kind": "score", "client": client})
         return server.event_llm.EventVerdict(85)
 
@@ -5218,7 +5251,7 @@ def test_a_request_held_in_a_real_queue_past_its_timeout_is_refused_and_changes_
     scored, rolled = [], []
     real = Game.answer_event
     monkeypatch.setattr(
-        server.event_llm, "judge_event_gamble", lambda client, event, text: scored.append(text) or server.event_llm.EventVerdict(85),
+        server.event_llm, "judge_event_gamble", lambda client, event, text, **_: scored.append(text) or server.event_llm.EventVerdict(85),
     )
     monkeypatch.setattr(Game, "answer_event", lambda self, request, llm_rate=None, moral=None: rolled.append(llm_rate) or real(self, request, llm_rate, moral))
     before = open_characters().load("測試")

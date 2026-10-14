@@ -1630,7 +1630,8 @@ class Game:
         event = c.events[request.event_id]
         choice = event.free_text
         if llm_rate is None:
-            verdict = event_llm.judge_event_gamble(self._quick_client(), event, request.text)
+            # 判善惡那一次照 _quick_client 的額度：評分失敗用掉了額度就不叫、當「中」
+            verdict = event_llm.judge_event_gamble(self._quick_client(), event, request.text, moral_client=self._quick_client)
             llm_rate = verdict.rate
             moral = verdict.moral if moral is None else moral
         moral = event_llm.moral_of(moral)
