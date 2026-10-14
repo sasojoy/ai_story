@@ -93,3 +93,15 @@ def test_with_the_board_open_the_card_points_nowhere(setup):  # noqa: F811
     _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
     card = run(_view(content, world, "丙"), "return H.pageJianghu();").split("🪧")[1]
     assert "bounty-foot" not in card.split("</details>")[0]  # 選單就是懸賞榜：不再叫人去看榜
+
+
+def test_the_expanded_name_shows_how_far_the_next_level_is(setup):  # noqa: F811
+    """50 級加陡（企劃者 2026-10-14）：展開名號時頭銜底下一行寫這一級的經驗；滿級寫「已到頂」；收起來不寫。"""
+    content, world = setup
+    m = _view(content, world, "丙")
+    m["status"]["level"], m["status"]["exp"] = 31, {"have": 120, "need": 372}
+    top = run(m, "return H.topHtml();", S={"showMore": True})
+    assert "經驗 120／372，再 252 升第 32 級" in top
+    assert "who-exp" not in run(m, "return H.topHtml();")
+    m["status"]["exp"] = None
+    assert "經驗已到頂" in run(m, "return H.topHtml();", S={"showMore": True})

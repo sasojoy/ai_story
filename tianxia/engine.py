@@ -17,9 +17,9 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
+    annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, martial_arts,
-    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
     social, styles, team, timetable, traits, treasures, weapons, zh,
 )
@@ -1271,8 +1271,9 @@ class Game:
         有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。拜入陣營名下的門派、而且手上有新陣營接不了的懸賞時，
         最後多一個括號講會作廢幾張（bounties.join_note，FB-159）。"""
         if choice.combat and odds:
-            squad = self.content.squads[choice.combat]
-            label = f"{choice.text}（對手：{squad.name}・{self.odds(squad.id)}）{stamina_note(choice, self.content)}"
+            squad = self._story_squad(self.content.squads[choice.combat])
+            odds_text = team.estimate(self.state, self.content, self.world, squad.id, difficulty=squad.difficulty)
+            label = f"{choice.text}（對手：{squad.name}・{odds_text}）{stamina_note(choice, self.content)}"
         else:
             label = choice_label(choice, self.state, self.content, self.world)
         return label + bounties.join_note(self.state, self.content, choice)
@@ -1393,11 +1394,11 @@ class Game:
             return None if pick is None or self._drills_with(pick) else pick  # 遇上自己人是操練，不打架
         if option_id.startswith("act:challenge:"):
             fid = option_id.removeprefix("act:challenge:")
-            return figures.squad_of(s, c, fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）
+            return self._figure_squad(fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）與江湖水漲
         if kind == "choice" and arg.isdecimal() and s.pending_event:
             choices = c.events[s.pending_event].choices
             combat = choices[int(arg)].combat if int(arg) < len(choices) else None
-            return c.squads[combat] if combat else None
+            return self._story_squad(c.squads[combat]) if combat else None
         return None
 
     def fight_request(self, option_id: str) -> fight_llm.FightRequest | None:
@@ -4344,8 +4345,10 @@ class Game:
             before = p.member.level
             lines += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
         if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
@@ -5220,9 +5223,29 @@ class Game:
         return opts
 
     def challenge_odds(self, fid: str) -> str:
-        """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）。"""
-        squad = self.content.figures[fid].squad
-        return team.estimate(self.state, self.content, self.world, squad, difficulty=figures.difficulty(self.state, self.content, fid))
+        """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）與江湖水漲。"""
+        squad = self._figure_squad(fid)
+        return team.estimate(self.state, self.content, self.world, squad.id, difficulty=squad.difficulty)
+
+    def _figure_squad(self, fid: str) -> Squad:
+        """挑戰這位人物本人要打的那一路：難度照他此刻的聲威（figures.squad_of），再照江湖水漲浮上來——你此刻對他的全隊威力 ×
+        倍數，倍數照你這一季打贏他幾次（figure_wins）往上加（rise.big）。勝算、備料（A、C 段）、打起來都照這一份。"""
+        s, c = self.state, self.content
+        squad = figures.squad_of(s, c, fid)
+        if not rise.on(c):
+            return squad
+        power = team.power_vs(s, c, self.world, squad, fresh=True)
+        level = rise.big(c, squad.difficulty, power, s.player.figure_wins.get(fid, 0))
+        return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
+
+    def _story_squad(self, squad: Squad) -> Squad:
+        """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
+        其餘、序章照內容寫的。勝算（_choice_label）、備料（_fight_squad）、打起來（_event_battle）都照這一份。"""
+        s, c = self.state, self.content
+        if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
+            return squad
+        level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True))
+        return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
 
     def _challenge(self, fid: str) -> list[str]:
         """挑戰本人（軍令文件 4.5，企劃者 2026-10-04 改定）：跟他本人打一場單次判定，花遊歷的體力。打贏他敗走（_rout），
@@ -5232,7 +5255,7 @@ class Game:
         （_signature_arms，現在只有孫堅）。"""
         s, c = self.state, self.content
         fig = c.figures[fid]
-        squad = figures.squad_of(s, c, fid)
+        squad = self._figure_squad(fid)
         s.player.stamina -= self._action_costs()["train"]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty)
@@ -5246,7 +5269,8 @@ class Game:
             first = p.figure_wins.get(fid, 0) == 0  # 丁 (c)：這一季第一次打贏他才有三階（預設表照擲；之後照擲、擲中不給）
             capped = bool(cfg.figure_rare_cap) and p.figure_rare_drops >= cfg.figure_rare_cap  # 一人一季上限，叛投不清
             p.figure_wins[fid] = p.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
-            ratio = min(1.0, squad.difficulty / figures.start_difficulty(c, fid))  # 戊 (b)：被打弱的人物，心得、經驗照難度比例少給
+            # 戊 (b)：被打弱的人物，心得、經驗照難度比例少給——照聲威的那一份算，江湖水漲浮上去的難度不多給
+            ratio = min(1.0, figures.difficulty(s, c, fid) / figures.start_difficulty(c, fid))
             reward = squad.model_copy(update={
                 "reward_xinde": int(squad.reward_xinde * ratio + 0.5), "exp": int(squad.exp * ratio + 0.5)})
             held = self._held_tier3()
@@ -5917,9 +5941,9 @@ class Game:
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         s, c = self.state, self.content
-        squad = c.squads[choice.combat]
+        squad = self._story_squad(c.squads[choice.combat])  # 大場面照江湖水漲浮上來
         judged = self._judged(squad)  # 打頭目這種大場面：有鎖外的判讀就用（武學與成長設計 8.3）
-        result = self._fight_with(squad, judged, dodge=False)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
+        result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
         record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
@@ -6695,8 +6719,10 @@ class Game:
         before = p.member.level
         ups = team.add_exp(c, p.member, cfg.exp, p.name)
         if p.member.level > before:
-            p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-            ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+            points = team.points_between(c.config, before, p.member.level)
+            p.stat_points += points
+            if points:
+                ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         record.exp = cfg.exp
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
@@ -6907,12 +6933,14 @@ class Game:
         s, c = self.state, self.content
         p, cfg = s.player, c.config.duel
         now, cap = self._player_hp_and_cap()
+        key = duel_rules.season_key(s, boss.id)
+        power = self._battle_power()
         duel = DuelState(
             boss=boss.id, foe=duel_rules.foe_index(boss, p.faction), edge=cfg.start, hp=now, hp_cap=cap, hp_start=now,
-            power=self._battle_power(), scores=self._battle_scores(mounted=False), role=self._battle_role(),
+            power=power, scores=self._battle_scores(mounted=False), role=self._battle_role(),
             # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
+            difficulty=rise.duel(c, boss.difficulty, power, p.duel_tally.get(key, 0)),  # 江湖水漲：照你的武學威力浮上來
         )
-        key = duel_rules.season_key(s, boss.id)
         p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
         p.duel_last = [float(p.season_number), s.world.time]
         foe = boss.foes[duel.foe]
@@ -7173,8 +7201,9 @@ class Game:
             msgs = [line] + ([f"氣血 -{round(lost)}"] if round(lost) else [])
             self._write(title, msgs, tag="抽身退走")
             return msgs
-        squad = Squad(id=f"duel:{boss.id}", name=f"{foe.title}{foe.name}", difficulty=boss.difficulty, attribute=boss.attribute)
-        result = encounter.EncounterResult(tier=tier, margin=duel.edge - cfg.start, our_power=duel.power, difficulty=boss.difficulty)
+        level = duel_rules.foe_difficulty(duel, boss)
+        squad = Squad(id=f"duel:{boss.id}", name=f"{foe.title}{foe.name}", difficulty=level, attribute=boss.attribute)
+        result = encounter.EncounterResult(tier=tier, margin=duel.edge - cfg.start, our_power=duel.power, difficulty=level)
         record = battlelog.new_record(s, c, self.world, squad, result, "duel", event=title)
         record.ours = record.ours[:1]  # 同伴不上場：比的是你一個人
         record.rounds = list(duel.lines)
@@ -7187,8 +7216,10 @@ class Game:
             before = p.member.level
             extra += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
-                p.stat_points += (p.member.level - before) * c.config.stat_points_per_level
-                extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+                points = team.points_between(c.config, before, p.member.level)
+                p.stat_points += points
+                if points:
+                    extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             record.exp = exp
         silver = round(boss.silver * share)
         if silver:
@@ -7274,6 +7305,23 @@ class Game:
         if companion_id.startswith(team.FOLLOWER_KEY):
             return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
+
+    @_not_while_preparing
+    def chuangong(self, key: str, what: str) -> list[str]:
+        """傳功門下（Config.chuangong）：用心得替名冊上的同伴或部下練武學、加屬性（chuangong.teach）。
+        傳成了寫進江湖紀錄（併進「修練」那一則）；傳不了只回那一句話，不寫紀錄。"""
+        xinde = self._xinde()
+        msgs = self._log(chuangong.teach(self.state, self.content, self.world, str(key), str(what)))
+        if self._xinde() == xinde:  # 沒花到心得：被拒絕了
+            return msgs
+        return msgs + self._menxia_entry(msgs[0], xinde)
+
+    def chuangong_lessons(self, key: str | None) -> list[dict]:
+        """修練頁人物卡底下的傳功鈕（server.menxia_view 的 lessons）：每一項的 what、鈕上的字、效果、按不下去的原因。"""
+        return [
+            {"what": row.what, "label": row.label, "effect": row.effect, "problem": row.problem}
+            for row in chuangong.lessons(self.state, self.content, self.world, key)
+        ]
 
     # ── 門下頁面：武學說明 ──────────────────────────────────
 
@@ -8627,6 +8675,7 @@ class Game:
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
             "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
             "level": p.member.level,
+            "exp": team.exp_view(c, p.member),  # 這一級攢了多少、升下一級要多少（狀態列展開那一行）；滿級是 None
             "location": c.locations[p.location].name,
             "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
             "day": int(w.time // DAY) + 1,

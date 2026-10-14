@@ -1816,6 +1816,56 @@ class FollowerTuning(_Strict):
     battle_per: float = Field(default=0.05, ge=0)
 
 
+class ChuangongTuning(_Strict):
+    """傳功門下（企劃者 2026-10-14「心得大量溢出，需要想個可以大量消耗的地方」，在決策卡選「傳功門下」）：用心得替同伴、部下
+    練武學、加屬性，隊伍變強，本人的威力一點都不動。價錢越後越貴：心得多的人有地方一直花，少的人先花在自己身上划算。
+    量到的（週末設定、一直在線打仗的機器人，2026-10-14）：一季攢 1.2 萬～1.8 萬心得，練滿自己兩門只要 180，其餘全部堆著。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時修練頁不畫傳功、按了也只回一句
+    # 同伴的武學、內功從第 N 成練到 N+1 成要 mate_art_xinde × N 心得（練滿一門 45 倍＝900）。本人自己的是 2 × N（練滿 90）：
+    # 同伴的本命武學都是絕學（第一成 50、第十成 120，本人開局的基礎武學是下品 8～24），練一成長的威力是本人的好幾倍，所以貴十倍
+    mate_art_xinde: int = Field(default=20, ge=1)
+    # 同伴的臂力、身法、根骨：傳給他的第 k 點要 mate_stat_xinde × k 心得（k 算他身上三項合計已經傳了幾點，不分哪一項）。
+    # 三項各傳滿 mate_stat_max 點（45 點）合計 15 ×（1＋…＋45）＝15525——一個同伴就吃得下最拚的人大半季的心得
+    mate_stat_xinde: int = Field(default=15, ge=1)
+    # 每一項最多傳幾點。照 stat_cap（15）：同伴自己每級會長屬性、高等時本來就超過 15，上限只能算在「傳了幾點」，不然高等的同伴傳不進去
+    mate_stat_max: int = Field(default=15, ge=0)
+    # 部下的武學：在照等級長的那條線（team.follower_level）之上再多練一成，第 k 成要 follower_cheng_xinde × k；線＋多練的最多十成。
+    # 線在第 30 級就到十成，所以多練的成數只在前半季有用（之後線追上來、多練的那幾成就沒有空間了）——便宜一點
+    follower_cheng_xinde: int = Field(default=25, ge=1)
+    # 部下的臂力：第 k 點要 follower_str_xinde × k，臂力最高 stat_cap。模板 4～7，一名最多傳 8～11 點（約 1300～2600）
+    follower_str_xinde: int = Field(default=20, ge=1)
+
+
+class RiseTuning(_Strict):
+    """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
+    tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
+    可是招到兩位同伴的隊伍第 10 級全隊威力就 300 多（同伴第一級就 135～146），單次判定威力過難度的 1.45 倍就必勝——
+    第 10 級起打誰都 100%；沒有同伴的人第 30 級本人威力 150～220，第 40 級 300 多，也一樣全贏。事件檢定難度 3～8、屬性最高 15，
+    第 30 級起平均成功率 88～94%、九成以上的檢定 ≥90%。
+
+    - 大場面（挑戰大勢人物本人、劇情戰裡難度到 big_fight_difficulty 的對手）：難度取「內容寫的」與「你此刻對他的全隊威力 × 倍數」
+      的大者。倍數 big_scale 起、你這一季每打贏他一次多 per_win、最多 max_scale——強的隊伍頭一場有把握、越打越難；
+      沒那麼強的照舊打內容寫的難度（新手第一場不會因為這條變難）。獎勵照舊照內容寫的那一份（挑戰本人照聲威打折），浮上去的難度不多給。
+    - 頭目戰：他的難度取「內容寫的」與「你的武學威力 × duel_scale」的大者（頭目戰只算本人；同一隻這一季第二次遇上再多 duel_per_meet）。
+    - 事件檢定：本人第 event_from_level 級起，每 event_per_levels 級檢定難度 +1、最多 +event_cap（rules.check_outlook，
+      選項的心裡話、擲骰都照它）。內容寫的難度不動（DIFFICULTY_BANDS 照鎖），加深的是執行期的那一格。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時三樣都照內容寫的
+    # 威力過難度多少倍才贏（單次判定：贏的那一線是難度的 1.15 倍，運氣 ±0.3 倍）：倍數 0.75 → 威力是難度的 1.33 倍，贏面約八成（有把握）；
+    # 0.85 → 約五成五（五五波）；0.95 → 約三成五（凶險）；1.05 → 約一成五
+    big_scale: float = Field(default=0.75, gt=0)
+    per_win: float = Field(default=0.10, ge=0)  # 這一季每打贏同一位人物一次，倍數再加多少（只算大勢人物本人：figure_wins）
+    max_scale: float = Field(default=1.05, gt=0)
+    # 頭目戰（推氣勢，不是單次判定）：他的份量照「難度」換算（duel.foe_strength），1.0 是跟你同一個難度。量出來（measure_difficulty.py，
+    # 招一半看架勢一半亂出、不放手一搏）：見 CLAUDE.md「江湖水漲」
+    duel_scale: float = Field(default=1.0, gt=0)
+    duel_per_meet: float = Field(default=0.15, ge=0)  # 同一隻這一季第二次遇上（per_boss_season 2）再多這麼多
+    event_from_level: int = Field(default=15, ge=1)
+    event_per_levels: int = Field(default=6, ge=1)
+    event_cap: int = Field(default=4, ge=0)
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1880,6 +1930,8 @@ class Config(_Strict):
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
+    chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
@@ -2068,7 +2120,18 @@ class Config(_Strict):
     # 原本是 100，但實測一季打 19~26 場只升到第 2~3 級（升到第 10 級要 4500 經驗），
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
     # 一季大約升到第 10 級，等級的兩條線（氣血上限、屬性點）才有量級可談。
-    max_level: int = 30
+    max_level: int = 50
+    # 企劃者 2026-10-14「50 級加陡」：二十人試玩有人四小時練到 30 級，上限從 30 調到 50。升到第 30 級之前一個字都不變；
+    # 第 late_level_from 級起每升一級要 level_exp × n ×（1＋late_exp_step ×（n − late_level_from ＋ 1））（team.level_cost），
+    # 屬性點與同伴的每級成長改成每 late_stat_every 級一點（team.growth_steps：50 級一共 29＋10 點）。
+    # 量法（2026-10-14）：一個只挑「穩勝」裡經驗最多的地點遊歷、體力一有就打、照真人一天服滿五顆丹的機器人，一天在線 16 小時
+    # （最拚）或 6 小時（認真玩），3 個種子。不設上限時一季拿到的經驗：週末 2.5 天約 2.3～2.4 萬；14 天 9.2～10.6 萬、頭兩天約 2.2～2.4 萬
+    # ——兩種季一天能拿的差不多，所以一條曲線顧不了兩種季：預設（14 天）0.5，30 → 50 要 52700；週末設定蓋成 0.12，30 → 50 要 18650。
+    # 量到的：週末 16 小時 52～58 小時到 50 級、6 小時季末 40／45／46 級；14 天 16 小時第 5 天（約 122 小時）到 50、兩天時 41 級，
+    # 6 小時第 10 天到 50。週末改 0.2 時 16 小時季末 46、6 小時 38／42／44。伺服器假人與整季機器人一季到不了 30 級，碰不到這一段。
+    late_level_from: int = Field(default=30, ge=1)
+    late_exp_step: float = Field(default=0.5, ge=0)
+    late_stat_every: int = Field(default=2, ge=1)
     # ── 練功（sanguo-companions 合併重寫，見設計文件六.2）──
     practice_injury_chance: float = 0.15  # 每次練功累積受傷（內傷）的機率
     # 遭遇戰按結果扣氣血，扣掉的量是上限的幾成（氣血設計 §1.3：打完要付代價，不是免費收入）

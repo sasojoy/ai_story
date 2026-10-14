@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, gender, insights, library, materials, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, front_lines, gender, insights, library, materials, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -214,10 +214,10 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     """每一個事件檢定都看本人的屬性（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」：Check.by 讀得進來、不再有作用），
     本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
     擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
-    所以標籤講的和實際擲出來的不會對不起來。"""
+    所以標籤講的和實際擲出來的不會對不起來。江湖水漲（rise.event_bump）：本人等級高了，難度在這裡多加幾點，內容寫的不動。"""
     stat_value = team.check_value(state, content, world, PLAYER, check.stat)
     bonus = team.practice_bonus(state, content, check)
-    gap = stat_value + bonus - check.difficulty
+    gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
     return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
 
 

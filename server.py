@@ -1080,6 +1080,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person": person,
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
+        "lessons": game.chuangong_lessons(person),  # 傳功鈕（同伴、部下；本人與開關關著是空的）
         "bag": md(game.bag_text()),
         "heal": game.heal_button(),  # 修練頁的療傷鈕：按不按得下去、不能按的原因（FB-082）；鈕上的字寫內傷與下面的 heal_cost
         # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
@@ -1609,7 +1610,9 @@ MENXIA_ACTIONS = {
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
-    "feed": lambda g, b: g.feed_mount(),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
+    "feed": lambda g, b: g.feed_mount(),
+    # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
+    "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }
 
 

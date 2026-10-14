@@ -12,7 +12,7 @@ import random
 from . import armor, calendar, encounter, rounds, styles, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
-from .state import PLAYER, MAX_TEAM_COMPANIONS, GameState, LevelUps, Member
+from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
 
 ESTIMATE_RUNS = 40
@@ -60,8 +60,10 @@ def member_stats(state: GameState, content: Content, world: WorldStateStore, key
     if key == PLAYER:
         return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
     character = content.characters[key]
-    level = world.get_companion(key).level
-    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * (level - 1) for k in COMBAT_STATS}
+    progress = world.get_companion(key)
+    steps = growth_steps(content.config, progress.level)  # 30 級以後每 2 級長一步，同本人的屬性點
+    return {k: character.stats.get(k, BASE_STAT) + character.growth.get(k, 0.0) * steps + progress.taught.get(k, 0)  # taught：傳功
+            for k in COMBAT_STATS}
 
 
 def practice_bonus(state: GameState, content: Content, check) -> int:
@@ -146,22 +148,40 @@ def follower_rows(state: GameState, content: Content) -> list[tuple[str, Followe
             if fid in content.followers]
 
 
-def follower_level(state: GameState, content: Content, follower: FollowerDef) -> int:
-    """部下的武學成數：跟著本人的等級長（Config.follower.levels_per_cheng），不低於模板寫的、最多十成。"""
+def drill_of(state: GameState, key: str | None) -> FollowerDrill:
+    """名冊上這名部下（key：follower:<位置>）傳功傳了什麼（PlayerState.follower_drill，跟 followers 同位置）；沒傳過、key 不是部下是空的。
+    只讀：要改的走 chuangong.teach（它把清單補長再寫）。"""
+    if key is None or not key.startswith(FOLLOWER_KEY):
+        return FollowerDrill()
+    index = int(key[len(FOLLOWER_KEY):])
+    drills = state.player.follower_drill
+    return drills[index] if 0 <= index < len(drills) else FollowerDrill()
+
+
+def follower_line(state: GameState, content: Content, follower: FollowerDef) -> int:
+    """部下的武學照等級長的那條線：跟著本人的等級長（Config.follower.levels_per_cheng），不低於模板寫的、最多十成。"""
     grown = state.player.member.level // content.config.follower.levels_per_cheng
     return min(MAX_LEVEL, max(follower.wugong_level, grown))
+
+
+def follower_level(state: GameState, content: Content, follower: FollowerDef, key: str | None = None) -> int:
+    """部下的武學成數：照等級長的那條線（follower_line）再加傳功多練的成數（drill_of），最多十成。key 是名冊上的 key，不給當沒傳過功。"""
+    return min(MAX_LEVEL, follower_line(state, content, follower) + drill_of(state, key).cheng)
 
 
 def follower_units(state: GameState, content: Content) -> list[Member]:
     """部下照模板建成跟 Member 同形狀的威力貢獻者（武學照模板、成數照 follower_level、沒有內功）。只算威力：不在 team_keys 裡，
     所以不擋檢定、不扣氣血（take_encounter_toll）、不吃經驗；氣血係數一律 1.0。"""
-    return [Member(wugong_id=f.wugong, wugong_level=follower_level(state, content, f)) for _, f in follower_rows(state, content)]
+    return [Member(wugong_id=f.wugong, wugong_level=follower_level(state, content, f, key)) for key, f in follower_rows(state, content)]
 
 
-def follower_power(state: GameState, content: Content, world: WorldStateStore, follower: FollowerDef) -> float:
-    """一名部下此刻的威力（不看對手：沒有相剋、沒有路數；角色卡寫它）。"""
-    unit = Member(wugong_id=follower.wugong, wugong_level=follower_level(state, content, follower))
-    return encounter.member_power(unit, team_arts(state, content, world), None, 1.0, follower_boost(content, follower))
+def follower_power(
+    state: GameState, content: Content, world: WorldStateStore, follower: FollowerDef, key: str | None = None,
+) -> float:
+    """一名部下此刻的威力（不看對手：沒有相剋、沒有路數；角色卡寫它）。key 是名冊上的 key（算傳功），不給當沒傳過功。"""
+    unit = Member(wugong_id=follower.wugong, wugong_level=follower_level(state, content, follower, key))
+    return encounter.member_power(
+        unit, team_arts(state, content, world), None, 1.0, follower_boost(content, follower, drill_of(state, key)))
 
 
 CN_DIGITS = "零一兩三四五六七八九十"
@@ -537,14 +557,44 @@ def heal(state: GameState, content: Content, member, where: str | None = None) -
 # ── 經驗與等級 ────────────────────────────────────────────
 
 
+def level_cost(cfg, level: int) -> int:
+    """第 level 級升 level+1 級要多少經驗：level_exp × level；到了 late_level_from（30）以後再乘
+    （1＋late_exp_step ×（level − late_level_from ＋ 1）），越後面越陡（企劃者 2026-10-14「50 級加陡」）。
+    升到第 30 級之前一個字都不變。"""
+    base = cfg.level_exp * level
+    if level < cfg.late_level_from:
+        return base
+    return round(base * (1 + cfg.late_exp_step * (level - cfg.late_level_from + 1)))
+
+
+def growth_steps(cfg, level: int) -> int:
+    """從第 1 級長到第 level 級，屬性長了幾「步」：第 late_level_from（30）級以前一級一步，之後每 late_stat_every（2）級一步
+    （企劃者 2026-10-14：31 級後屬性點每 2 級 1 點）。本人的屬性點（× stat_points_per_level）與同伴的每級成長都照它。"""
+    early = min(level, cfg.late_level_from) - 1
+    return max(0, early) + max(0, level - cfg.late_level_from) // cfg.late_stat_every
+
+
+def points_between(cfg, before: int, after: int) -> int:
+    """從第 before 級升到第 after 級，本人拿到幾點屬性（升級的每一個地方都走這一個）。"""
+    return (growth_steps(cfg, after) - growth_steps(cfg, before)) * cfg.stat_points_per_level
+
+
+def exp_view(content: Content, member) -> dict | None:
+    """狀態列展開時那一行：這一級攢了多少、升下一級要多少；滿級是 None。"""
+    cfg = content.config
+    if member.level >= cfg.max_level:
+        return None
+    return {"have": int(member.exp), "need": level_cost(cfg, member.level)}
+
+
 def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
     cfg = content.config
     msgs: list[str] = []
     if member.level >= cfg.max_level or amount <= 0:
         return msgs
     member.exp += amount
-    while member.exp >= cfg.level_exp * member.level and member.level < cfg.max_level:
-        member.exp -= cfg.level_exp * member.level
+    while member.exp >= level_cost(cfg, member.level) and member.level < cfg.max_level:
+        member.exp -= level_cost(cfg, member.level)
         member.level += 1
         msgs.append(f"{name}升到第 {member.level} 級！")
     return msgs
@@ -568,8 +618,10 @@ def grant_team_exp(
     msgs = add_exp(content, p.member, amount, p.name)
     gained = p.member.level - before
     if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
-        p.stat_points += gained * content.config.stat_points_per_level
-        msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
+        points = points_between(content.config, before, p.member.level)  # 30 級以後兩級一點：升了一級可能沒有點
+        p.stat_points += points
+        if points:
+            msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
         ups.you, ups.points = p.member.level, p.stat_points
     mate = treasures.amount(state, content, "mate_exp")  # 歸心：同伴拿到的經驗 ×1.1（玉璽碎片設計 7.1）
     for companion_id in state.player.team:
@@ -708,9 +760,14 @@ def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: 
     )
 
 
-def follower_boost(content: Content, follower: FollowerDef) -> encounter.Boost:
-    """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。"""
-    return encounter.Boost(outer=stat_bonus(content, follower.stats.get("str", BASE_STAT)))
+def follower_strength(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None) -> int:
+    """部下的臂力：模板的加上傳功傳的（drill.arm），最多 stat_cap。"""
+    return min(content.config.stat_cap, follower.stats.get("str", BASE_STAT) + (drill.arm if drill else 0))
+
+
+def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None) -> encounter.Boost:
+    """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力（加傳功傳的）；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。"""
+    return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill)))
 
 
 def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
@@ -719,7 +776,7 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> l
     return (
         [player_boost(state, content, world)]
         + [mate_boost(state, content, world, key) for key in state.player.team]
-        + [follower_boost(content, follower) for _, follower in follower_rows(state, content)]
+        + [follower_boost(content, follower, drill_of(state, key)) for key, follower in follower_rows(state, content)]
     )
 
 
@@ -882,9 +939,17 @@ def estimate(
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
+    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+
+
+def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:
+    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍都算；勝算與打起來同一份）。
+    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。"""
     arts = team_arts(state, content, world)
-    power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
-    return odds_word(power, squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad)
+    if fresh:
+        conditions = [1.0] * len(conditions)
+    return encounter.team_power(*_with_attribute((members, conditions, boosts), arts, squad.attribute))
 
 
 def _styled_fighters(
