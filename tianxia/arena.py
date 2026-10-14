@@ -221,7 +221,7 @@ def standing(world: WorldState, name: str, cfg: ArenaTuning) -> list[str]:
 def roll_day(world: WorldState, cfg: ArenaTuning, today: int) -> bool:
     """換日（現實時間，同回體丹）：第一次看到新的一天，前 len(wages) 名、打過至少一場的各記一筆俸（[天, 名次]），本人同步時領。
     第一次（arena_day 是 -1）只記今天、不發。季收了不發。動了 WorldState 是 True。"""
-    if world.ended or world.arena_day == today:
+    if world.ended or world.arena_day == today or not world.arena:  # 擂台上沒人：不記天（同步什麼都沒有時不存季）
         return False
     if 0 <= world.arena_day < today:
         for e in ladder(world)[:len(cfg.wages)]:

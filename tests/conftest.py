@@ -129,6 +129,16 @@ def no_real_ollama_flavor_calls(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_tale_threads(monkeypatch):
+    """server.main() 會把 server.TALE_THREADS 打開（全域、不會自己關）：叫過 main 的測試之後，同一個 worker 裡別的測試動到決戰就在背景開
+    「battle-tales」執行緒碰資料庫，跟 isolated_database 收尾的 close_all 互卡，整套測試停住不動。每個測試結束都照原樣放回。"""
+    import server
+
+    monkeypatch.setattr(server, "TALE_THREADS", False)
+    monkeypatch.setattr(server, "TALE_RUNNING", False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_database(tmp_path, monkeypatch):
     """每個測試用自己的暫存資料庫，不會讀寫到真正的 saves/tianxia.db，測試之間也不會互相汙染；
     測試結束時關掉所有連線（Windows 才刪得掉暫存檔）。"""

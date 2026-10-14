@@ -7537,7 +7537,7 @@ class Game:
         if p.arena is not None and w.ended:
             p.arena = None
             self._write(arena.ARENA, [arena.UNSETTLED])
-        rolled = arena.roll_day(w, cfg, self._pill_day())
+        rolled = arena.on(c) and arena.roll_day(w, cfg, self._pill_day())  # 擂台關著不動 WorldState（同步什麼都沒有時不存季）
         entry = arena.entry_of(w, p.name)
         if entry is None or not (entry.inbox or entry.wages or (w.ended and entry.place and not entry.prized)):
             if rolled:
