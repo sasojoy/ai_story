@@ -3519,15 +3519,17 @@
     }
     return out.join("");
   }
-  // 地圖上方浮的那一條「天下」：看大局或版圖變化時，各方此刻佔幾處、比開季多幾處少幾處（設計第四節）
+  // 各方佔幾處；比的是第一筆記到的那一週（第 1 週週末，中途上線是上線那一週）：照實寫第幾週，看的就是那一週時不比
+  const tally = (base, ctrl) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (ctrl[p.id]) n[ctrl[p.id]]++; return n; };
+  function tallyFrom(base, st, week) {
+    const first = (st.weeks || []).find((x) => x.control);
+    return first && first.week < week ? { week: first.week, n: tally(base, first.control) } : null;
+  }
+  const signed = (d) => (d > 0 ? `+${d}` : d < 0 ? `${d}` : "±0");
+  // 地圖上方浮的那一條「天下」：看大局或版圖變化時，各方此刻佔幾處、比第一筆記到的那一週多幾處少幾處（設計第四節）
   function hudHtml(base, st, week) {
-    const count = (ctrl) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (ctrl[p.id]) n[ctrl[p.id]]++; return n; };
-    const now = count(controlAt(st, week)), first = (st.weeks || []).find((x) => x.control);
-    const start = first ? count(first.control) : null;
-    return `<b>天下</b>${MAP_SIDE_ORDER.map((sd) => {
-      const d = start ? now[sd] - start[sd] : 0;
-      return `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${start ? `<small>${d > 0 ? `+${d}` : d < 0 ? d : "±0"}</small>` : ""}</span>`;
-    }).join("")}${start ? "<small>比開季</small>" : ""}`;
+    const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
+    return `<b>天下</b>${MAP_SIDE_ORDER.map((sd) => `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${from ? `<small>${signed(now[sd] - from.n[sd])}</small>` : ""}</span>`).join("")}${from ? `<small>比第 ${from.week} 週</small>` : ""}`;
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
@@ -3701,10 +3703,9 @@
     const close = '<button type="button" class="m-x" data-act="map-timeline" aria-label="收起">✕</button>';
     if (!st.territory || !(st.weeks || []).length) return `<div class="m-tl-head"><b>天下怎麼變</b>${close}</div><div class="m-sub">這一季沒有地盤易手。</div>`;
     const row = (st.weeks || []).find((x) => x.week === week) || { events: [], changed: [] };
-    const first = (st.weeks || []).find((x) => x.control);
-    const count = (c) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (c[p.id]) n[c[p.id]]++; return n; };
-    const now = count(controlAt(st, week)), start = first ? count(first.control) : now;
-    const sum = MAP_SIDE_ORDER.map((sd) => { const d = now[sd] - start[sd]; return `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}<small>　${d >= 0 ? "+" : ""}${d}</small></div>`; }).join("");
+    const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
+    const sum = MAP_SIDE_ORDER.map((sd) => `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}${from ? `<small>　${signed(now[sd] - from.n[sd])}</small>` : ""}</div>`).join("")
+      + (from ? `<small class="m-sum-note">比第 ${from.week} 週</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
     const side = (k) => `<span style="color:${k ? MAP_SIDES[k].color : "inherit"}">${sideName(k)}</span>`;
     const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),

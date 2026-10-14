@@ -867,10 +867,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 /* 桌機（寬 900 以上）：地圖佔滿左邊、抽屜是右邊 360px 一欄（不受 640 欄的限制，設計第七節） */
 @media (min-width: 900px) {
-  .mapx { display: grid; grid-template-columns: 1fr 360px; }
+  .mapx { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: minmax(0, 1fr); } /* 那一列夾在圖層高度內：抽屜內容再長也是抽屜自己捲 */
   .mapx .map-wrap { position: relative; inset: auto; grid-column: 1; grid-row: 1; }
   .mapx.tl-mode .map-wrap { bottom: auto; }
-  .mapx .mdrawer { position: relative; grid-column: 2; grid-row: 1; height: auto !important; border-radius: 0; box-shadow: -1px 0 0 var(--line); }
+  .mapx .mdrawer { position: relative; grid-column: 2; grid-row: 1; height: auto !important; min-height: 0; border-radius: 0; box-shadow: -1px 0 0 var(--line); }
   .mapx .mgrab { display: none; }
   .mapx .mbody { padding-top: 14px; }
   .map-top { right: 424px; max-width: 520px; }
@@ -939,6 +939,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-sum { display: flex; gap: 6px; margin: 4px 0; }
 .m-sum div { flex: 1; min-width: 0; border-radius: 9px; padding: 4px 8px; color: #fff; font-size: 12px; white-space: nowrap; }
 .m-sum b { font-size: 17px; margin-right: 3px; }
+.m-sum { flex-wrap: wrap; }
+.m-sum .m-sum-note { flex-basis: 100%; font-size: 11px; color: var(--ink-2); text-align: right; margin-top: -2px; }
 .m-chart { display: grid; gap: 2px; font-size: 11px; align-items: center; margin: 4px 0 2px; }
 .m-chart .wk { text-align: center; border-radius: 4px; padding: 2px 0; cursor: pointer; color: var(--ink-2); }
 .m-chart .wk.on { background: var(--accent); color: #fff; }

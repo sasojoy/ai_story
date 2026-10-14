@@ -184,3 +184,13 @@ def test_the_chart_draws_unknown_weeks_as_blank():
 def test_the_timeline_without_territory_says_so():
     out = run(_game(classic=True), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
     assert "這一季沒有地盤易手" in out and "<polyline" not in out
+
+
+def test_the_tally_compares_with_the_first_recorded_week():
+    """「天下」那一條比的是第一筆記到的那一週（第 1 週週末；中途上線是上線那一週），照實寫是第幾週，不寫「開季」。"""
+    game = _timeline_game()
+    out = run(game, "return [H.hudHtml(H.S.mapBase, H.S.mapState, 3), H.hudHtml(H.S.mapBase, H.S.mapState, 1)];")
+    assert "比第 1 週" in out[0] and "開季" not in out[0]
+    assert "比第" not in out[1]  # 看的就是第 1 週：沒得比
+    tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 3);")
+    assert "比第 1 週" in tl and "開季" not in tl
