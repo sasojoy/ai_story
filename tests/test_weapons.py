@@ -426,7 +426,7 @@ def test_drop_gives_a_tier_one_blade(content, world):
     content.config.weapons.drop_chance = 1.0
     weapon, msgs = weapons.drop(state, content, random.Random(1))
     assert weapon is state.player.weapon and weapon.tier == 1 and weapon.quality == "下品"
-    assert msgs[0] == weapons.DROP_LINE.format(name=weapon.name)
+    assert msgs[0] == weapons.DROP_LINE.format(unit=weapons.unit(weapon.kind), name=weapon.name)
     content.config.weapons.drop_chance = 0.0
     assert weapons.drop(state, content, random.Random(1)) == (None, [])
 
@@ -471,7 +471,7 @@ def test_training_win_can_drop_a_weapon_into_the_record(content, world):
     from tianxia import battlelog
     assert f"兵器【{p.weapon.name}】" in battlelog.gains_list(record)
     lines = game.state.journal[0].lines
-    assert any(weapons.DROP_LINE.format(name=p.weapon.name) in line for line in lines)  # 江湖紀錄
+    assert any(weapons.DROP_LINE.format(unit=weapons.unit(p.weapon.kind), name=p.weapon.name) in line for line in lines)  # 江湖紀錄
 
 
 def test_no_drop_when_chance_is_zero(content, world):

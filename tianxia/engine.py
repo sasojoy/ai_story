@@ -2759,7 +2759,7 @@ class Game:
             problem = weapons.buy_problem(s, c, item.kind)
             note = problem or f"{c.config.weapons.shop_price} 兩"
             mark = weapons.FITS_MARK if c.config.weapons.enabled and item.kind == fit_kind else ""
-            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{item.kind}・一階・{note}）{mark}",
+            opts.append(Option(id=f"smith:buy:{item.kind}", label=f"買【{item.name}】（{weapons.noun(item.kind)}・一階・{note}）{mark}",
                                enabled=problem is None))
         # 身上那把配不上身上的武學（含沒有武學）：加成是 0，修與淬煉照樣按得下去，可是花的料與銀兩看不到回報，按鈕上提醒一句（PM 2026-10-11）
         unfit = weapons.UNFIT_NOTE if weapons.worn_unfit(s, art, c, self.world) else ""
@@ -2777,7 +2777,7 @@ class Game:
             opts.append(temper)
         for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
             if weapons.usable(w, art, c, self.world):
-                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{w.kind}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
+                opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{weapons.noun(w.kind)}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
         opts += self._dismantle_options("weapon")  # 拆解（只看武器那一欄；最多 DISMANTLE_LIST 顆、先問一次）

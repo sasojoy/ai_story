@@ -43,12 +43,12 @@ RACK_FULL_SILVER = "裝備庫滿了，那把{name}折成銀兩 {silver}。"  # �
 # 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
 BROWSE_VERBS = ("pick", "unpick")
 PICKED = "你替「{what}」挑一件要交的東西。"  # 待 joy 潤：按了 bounty:pick 的回話（pick_line）
-UNITS = {"art": "門", "arms": "把"}
+UNITS = {"art": "門", "arms": "把"}  # 求兵的拳套論副（unit_of，FB-160）
 GIVE_YES = "交出"  # 待 joy 潤：確認層上那一顆（Option.confirm_yes）
 STUCK = "這幾張你現在交不出：{titles}（求藝要江湖上新合出來的功夫、師門配方不算、不能是身上正在練的；求兵要種類與屬性都對得上的兵器）"  # 待 joy 潤
 MORE = {  # 待 joy 潤：第三層只列最不值錢的 give_list 件（設計 4.4），多的收成這一行
     "art": "還有 {n} 門合用的沒列出來（列的是熔掉最不值錢的；要交別的，先把前面這幾門熔掉、改練或交掉）",
-    "arms": "還有 {n} 把合用的沒列出來（列的是最不值錢的；要交別的，先把前面這幾把拆掉或交掉）",
+    "arms": "還有 {n} {unit}合用的沒列出來（列的是最不值錢的；要交別的，先把前面這幾{unit}拆掉或交掉）",
 }
 WORN_NOTE = "【{name}】身上正在練，先改練別的才能交"  # 待 joy 潤
 NAMING_NOTE = "【{name}】還等著定名，先替它定名"  # 待 joy 潤
@@ -130,6 +130,11 @@ def _noun(b: Bounty) -> str:
     return weapons.NOUNS.get(b.weapon_kind or "", b.weapon_kind or "")
 
 
+def unit_of(b: Bounty) -> str:
+    """求藝論門、求兵照兵器的量詞（拳套一副、其他一把；FB-160）。"""
+    return weapons.unit(b.weapon_kind or "") if b.kind == "arms" else UNITS.get(b.kind, "")
+
+
 def title(content: Content, b: Bounty) -> str:
     """短標題：「討伐・黃巾游騎（南陽郊野）」「打探・嵩山深處」「護送・新野→宛城」「通緝・某某」「求藝・剛」「求兵・屬柔的劍」。"""
     kind = KIND_NAMES.get(b.kind, b.kind)
@@ -157,7 +162,7 @@ def how(content: Content, b: Bounty) -> str:
     if b.kind == "art":  # 待 joy 潤
         return f"在城鎮的懸賞榜交出一門屬{b.attribute}、合成出來的武學或內功（交了就沒了）"
     if b.kind == "arms":  # 待 joy 潤；手上那把也收（企劃者 2026-10-10，懸賞榜設計 14.1 丙）
-        return f"在城鎮的懸賞榜交出一把屬{b.attribute}的{_noun(b)}（裝備庫裡、手上的都行，什麼品質都收，交了就沒了）"
+        return f"在城鎮的懸賞榜交出一{unit_of(b)}屬{b.attribute}的{_noun(b)}（裝備庫裡、手上的都行，什麼品質都收，交了就沒了）"
     return f"找到{b.target}，在對方的玩家卡上截殺並打贏"
 
 
@@ -576,7 +581,7 @@ def _arms_base(content: Content, w: Weapon) -> int:
 def pick_label(state: GameState, content: Content, b: Bounty, count: int) -> str:
     """懸賞榜第二層，交得出的求藝、求兵那一行（設計 4.3 第 1 點）：「交出… 官軍・求藝・剛（賞…；你有 2 門合用；期限…・名額還剩 3）」。
     待 joy 潤（整行；Task 4 的 test_the_board_lists_hand_ins_first_then_takes_then_one_greyed_line 鎖了整行，潤了一起改）。"""
-    return (f"交出… {issuer(content, b)}・{title(content, b)}（{reward_text(state, content, b)}；你有 {count} {UNITS[b.kind]}合用；"
+    return (f"交出… {issuer(content, b)}・{title(content, b)}（{reward_text(state, content, b)}；你有 {count} {unit_of(b)}合用；"
             f"{due_line(state, content, b)}）")
 
 
@@ -648,7 +653,7 @@ def hand_in_options(
         label, ask = _offer(state, content, world, b, item, memo)
         opts.append(Option(id=f"bounty:give:{b.id}:{item}", label=label, confirm=ask, confirm_yes=GIVE_YES))
     if len(items) > cfg.give_list:
-        opts.append(Option(id="bounty:more", label=MORE[b.kind].format(n=len(items) - cfg.give_list), enabled=False))
+        opts.append(Option(id="bounty:more", label=MORE[b.kind].format(n=len(items) - cfg.give_list, unit=unit_of(b)), enabled=False))
     for art_id, note in blocked_arts(state, content, world, b, memo):
         opts.append(Option(id=f"bounty:give:{b.id}:{art_id}", label=note, enabled=False))
     opts.append(Option(id=UNPICK_ID, label=UNPICK))
@@ -1050,7 +1055,7 @@ def have_text(state: GameState, content: Content, world: WorldStateStore, b: Bou
         w = _weapon(state, item)
         return f"【{w.name}】（{weapons.grade(w)}{'・在手上' if w is state.player.weapon else ''}）"
 
-    more = f"等 {len(items)} {UNITS[b.kind]}" if len(items) > 2 else ""
+    more = f"等 {len(items)} {unit_of(b)}" if len(items) > 2 else ""
     return HAVE + "、".join(named(i) for i in items[:2]) + more
 
 

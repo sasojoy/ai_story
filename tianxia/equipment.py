@@ -63,7 +63,9 @@ DISMANTLE_MISSING = "裝備庫裡沒有這一件。"  # 待 joy 潤
 DISMANTLE_LIST = 8  # 鐵匠鋪的選單上最多列幾件可拆的，其餘到修練頁的裝備庫拆
 DISMANTLE_MORE = "還有 {n} 件，到修練頁的裝備庫拆"  # 待 joy 潤
 WIELD_MORE = "還有 {n} 件，到修練頁的裝備庫換"  # 待 joy 潤：鐵匠鋪防具頁「換上」超過 DISMANTLE_LIST 件時那一行（FB-134）
-DISMANTLE_ASK = "把【{name}】（{grade}）拆成{material}×1？拆掉就沒了。"  # 待 joy 潤（FB-125：拆解先問一次）
+DISMANTLE_ASK = "把【{name}】（{grade}{tempered}）拆成{material}×1？拆掉就沒了{lost}。"  # 待 joy 潤（FB-125：拆解先問一次；FB-133：淬過的寫幾次、一起沒了）
+DISMANTLE_TEMPERED = "・淬煉 {n} 次"  # 待 joy 潤
+DISMANTLE_LOST = "，淬過的 {n} 次也一起沒了"  # 待 joy 潤
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
 ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一把，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
@@ -202,7 +204,9 @@ def dismantle_order(item: Equipment) -> tuple[int, int, str]:
 
 def dismantle_confirm(content: Content, item: Equipment) -> str:
     """拆解之前問的那一句（FB-125，企劃者 2026-10-10 第二批附帶決定 a）：修練頁與鐵匠鋪同一句，寫明拆出什麼。"""
-    return DISMANTLE_ASK.format(name=item.name, grade=grade(item), material=dismantle_material(content, item).name)
+    n = item.tempers
+    return DISMANTLE_ASK.format(name=item.name, grade=grade(item), material=dismantle_material(content, item).name,
+                                tempered=DISMANTLE_TEMPERED.format(n=n) if n else "", lost=DISMANTLE_LOST.format(n=n) if n else "")
 
 
 def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:

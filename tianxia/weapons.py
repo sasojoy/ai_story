@@ -256,8 +256,7 @@ def store(state: GameState, content: Content, weapon: Weapon) -> str:
     return equipment.store(state, weapon)
 
 
-DROP_PREFIX = "撿到一把"
-DROP_LINE = DROP_PREFIX + "【{name}】"
+DROP_LINE = "撿到一{unit}【{name}】"  # 待 joy 潤；{unit} 拳套是副（FB-133）
 GAIN_LINE = "兵器【{name}】"  # 戰鬥卡片「得失」那一格（素材寫「精鐵砂 ×1」，兵器寫「兵器【厚背刀】」）
 
 
@@ -270,7 +269,7 @@ def drop(state: GameState, content: Content, rng: random.Random) -> tuple[Weapon
     kind = rng.choice(WEAPON_KINDS)
     attribute = _local_attribute(state, content)
     weapon = new_weapon(state, name=shop_name(kind, attribute), kind=kind, attribute=attribute, tier=1, quality="下品")
-    return weapon, [DROP_LINE.format(name=weapon.name), store(state, content, weapon)]
+    return weapon, [DROP_LINE.format(unit=unit(kind), name=weapon.name), store(state, content, weapon)]
 
 
 def buy_problem(state: GameState, content: Content, kind: str) -> str | None:
@@ -292,7 +291,7 @@ def buy(state: GameState, content: Content, kind: str) -> list[str]:
     price = content.config.weapons.shop_price
     state.player.stats["silver"] -= price
     weapon = new_weapon(state, name=item.name, kind=kind, attribute=item.attribute, tier=1, quality="下品")
-    return [f"你花 {price} 兩買下一把【{weapon.name}】。", store(state, content, weapon)]
+    return [f"你花 {price} 兩買下一{unit(kind)}【{weapon.name}】。", store(state, content, weapon)]
 
 
 def repair_problem(state: GameState, content: Content) -> str | None:

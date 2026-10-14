@@ -86,3 +86,71 @@ def test_fb127_the_practice_page_writes_the_noun(hints_content, world):
                               "rack": [_row(id="兵:2", kind="弓弩", noun="弩", grade="一階下品", confirm="")]})
     block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
     assert "拳套・屬柔" in block and "弩・屬柔" in block and "拳腳" not in block and "弓弩" not in block
+
+
+# ── FB-133、FB-160：種類字與量詞一致（拳套／拳腳、弩／弓弩；拳套論「副」） ──
+
+
+def _piece(kind="拳腳", **over):
+    from tianxia.state import Weapon
+    return Weapon(**{"id": "兵:9", "name": "綿羽護手", "kind": kind, "attribute": "剛", "tier": 1, "quality": "中品", **over})
+
+
+def test_fb133_the_forge_result_writes_the_noun_and_its_measure_word():
+    """打出來的結果句寫「拳腳」「弓弩」，挑種類與開爐鈕寫「拳套」「弩」：結果句也寫拳套、弩；拳套論副。"""
+    from tianxia import smithing
+
+    fist = smithing.forged_head(_piece("拳腳"), "兩份精鐵砂")
+    assert "一副" in fist and "拳套" in fist and "拳腳" not in fist and "一把" not in fist
+    bow = smithing.forged_head(_piece("弓弩", name="驚弦弩"), "兩份精鐵砂")
+    assert "一把" in bow and "弩・" in bow and "弓弩" not in bow
+
+
+def test_fb133_buying_and_picking_up_a_fist_says_a_pair(content, world):
+    game = _town(content, world)
+    game.choose("act:smith")
+    assert "買下一副【厚背拳套】" in game.choose("smith:buy:拳腳")[0]
+    assert weapons.DROP_LINE.format(unit=weapons.unit("拳腳"), name="厚背拳套") == "撿到一副【厚背拳套】"
+
+
+def test_fb133_the_old_smithy_menu_writes_nouns(content, world):
+    """店面開關關著的舊選單：買鈕的括號寫「弩」「拳套」，不寫「弓弩」「拳腳」。"""
+    content.config.shop_screens = False
+    game = _town(content, world)
+    game.choose("act:smith")
+    labels = {o.id: o.label for o in game.options(odds=False)}
+    assert "（弩・一階" in labels["smith:buy:弓弩"] and "（拳套・一階" in labels["smith:buy:拳腳"]
+    assert not any("弓弩" in label or "拳腳" in label for label in labels.values())
+
+
+def test_fb133_the_dismantle_question_says_the_tempering_goes_too(content):
+    """鈕上寫「（一階中品・淬煉 5）」，確認框只寫「（一階中品）」：淬過的次數會一起沒了，確認框該提醒。"""
+    from tianxia import equipment
+
+    ask = equipment.dismantle_confirm(content, _piece(tempers=5))
+    assert "淬煉 5 次" in ask
+    assert "淬煉" not in equipment.dismantle_confirm(content, _piece())
+
+
+def test_fb133_stepping_back_says_so_before_asking_again(content, world):
+    """「上一步」只回下一步的問句，讀起來像同一個問題問了兩次：先回一句退回了。這一句也算單子自己的回話（開爐成了收掉）。"""
+    from tianxia import smithing
+    from tianxia.state import SmithDraft
+
+    _on(content)
+    state = _new_state(content, world, "退步")
+    state.player.smith_draft = SmithDraft(kind="劍", main="gang_1")
+    assert smithing.step(state, content, "forge-undo", "") == [smithing.UNDONE, smithing.ASK_MAIN]
+    assert smithing.is_step_line(smithing.UNDONE)
+
+
+def test_fb160_a_fist_bounty_asks_for_a_pair():
+    from tianxia import bounties
+    from tianxia.state import Bounty
+
+    fist = Bounty(id="b1", kind="arms", faction="guan", week=1, silver=0, deeds=2, attribute="剛", weapon_kind="拳腳", expires=0.0)
+    assert "交出一副屬剛的拳套" in bounties.how(None, fist) and bounties.unit_of(fist) == "副"
+    bow = fist.model_copy(update={"weapon_kind": "弓弩"})
+    assert "交出一把屬剛的弩" in bounties.how(None, bow) and bounties.unit_of(bow) == "把"
+    art = fist.model_copy(update={"kind": "art", "weapon_kind": None})
+    assert bounties.unit_of(art) == "門"
