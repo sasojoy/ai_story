@@ -109,7 +109,7 @@
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
-    wheelSel: null, // 江湖頁行動列展開的那一格（目前只有 move）
+    wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
@@ -1273,6 +1273,8 @@
   const SORTIE_LEFT = /今日還能 (\d+) 次/; // 鈕上的「今日還能 N 次」：格子小字寫「今日 N 次」
   const SORTIE_USED = /^今日已出陣/;
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
+  const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
+  const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -1428,6 +1430,11 @@
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
+    // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
+    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX));
+    modes.forEach((o) => used.add(o.id));
+    // 入口灰著（體力不夠，三顆都按不下去）時就算記著展開也不畫：那一格是灰格子，不是展開鈕
+    const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
     const cells = ACT_CELLS.map((d0) => {
@@ -1446,15 +1453,20 @@
       // 格子只寫「已談滿」，整句在底下那一行（Game.action_notes，day-scale 審查 I1）
       // 出陣：小字寫今天還剩幾次（「今日 5 次」，體力在鈕上、說明那一行也有）；用完了寫「今日已滿」，什麼時候再來在底下那一行
       const left = SORTIE_LEFT.exec(detail);
-      const sub = o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
+      // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
+      const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
+      const sub = wheel ? EXPLORE_SUB
+        : o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : lone && detail.startsWith(TALKED_OUT) ? TALKED_OUT_SUB
         : SORTIE_USED.test(detail) ? SORTIE_FULL_SUB
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
       // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）
       const parts = detail.split("・");
-      const note = o.enabled && /^體力 \d+/.test(parts[0]) ? (parts.find((x) => x in ODDS_TONE) || "") : "";
-      return inkCell(d.key, name, sub, d.icon, o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled", o.enabled ? "" : " off", note);
+      const note = o.enabled && !wheel && /^體力 \d+/.test(parts[0]) ? (parts.find((x) => x in ODDS_TONE) || "") : "";
+      const attrs = wheel ? `data-act="wheel" data-key="explore" aria-expanded="${exploreOpen}"`
+        : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled";
+      return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled ? "" : " off") + (wheel && exploreOpen ? " on" : ""), note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
@@ -1473,6 +1485,8 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => `
+          <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
     // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
@@ -1486,8 +1500,9 @@
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
     // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
-    const notes = open || hotHere ? "" : actNotesHtml(m, noted);
-    return `${sealRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${here}`;
+    // 展開探索三選一時同樣讓位（三顆緊貼在行動列底下）
+    const notes = open || exploreOpen || hotHere ? "" : actNotesHtml(m, noted);
+    return `${sealRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
   }
 
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
@@ -1520,10 +1535,10 @@
     return !!(S.here && S.here.at === at && S.here.open);
   }
 
-  // 展開移動之後，把走法與目的地那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
+  // 展開移動（或探索三選一）之後，把展開的那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
   // 卡片下緣會落到底部分頁列底下）。block: "nearest"：本來就看得到就不動；離分頁列多遠由 CSS 的 scroll-margin-bottom 決定
   function revealMoveCard() {
-    const card = document.querySelector("#page .act-move");
+    const card = document.querySelector("#page .act-move, #page .act-explore");
     if (!card) return;
     const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
@@ -3954,6 +3969,7 @@
     move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
     discuss: "兩人各陳所學，推敲新招……", // 論武答應、等首創取名（FB-117；待 joy 潤）
     sortie: "整隊出陣，候前方回報……", // 出陣開著時的 act:train（出陣探索與地盤設計第七節；待 joy 潤）
+    gather: "四下翻找，看看能撿到什麼……", seek: "四處走走，看這一帶有什麼事……", sense: "靜心凝神……", // 探索三選一（待 joy 潤）
   };
   const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
   const SLOW_WAITING = "路遠消息遲，再等片刻……";
@@ -3963,6 +3979,8 @@
     const key = String(id || "");
     if (key === "act:explore") return WAIT_LINES.explore;
     if (key === "act:train") return S.main && S.main.sortie ? WAIT_LINES.sortie : WAIT_LINES.train; // 出陣開著（m.sortie）換一句
+    // 探索三選一：字面寫 "explore:"、不讀 EXPLORE_PREFIX（tests/test_sending_web.py 只從 app.js 切等候那一段出來，切不到行動列那邊的常數）
+    if (key.startsWith("explore:")) return WAIT_LINES[key.slice("explore:".length)] || WAIT_LINES.explore;
     if (key === "act:rest") return WAIT_LINES.rest;
     if (key === "act:socialize" || key.startsWith("call:") || key.startsWith("talk:")) return WAIT_LINES.meet;
     if (key.startsWith("move:") || key.startsWith("road:")) return WAIT_LINES.move;

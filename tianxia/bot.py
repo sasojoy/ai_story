@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, chuangong, clinic, cultivation, equipment, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import armor, bounties, chuangong, clinic, cultivation, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -320,6 +320,12 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
     return min(sides, key=lambda i: (counts[i], tie(i)))
 
 
+def explore_choice(ids) -> str | None:
+    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。"""
+    gather = explore_modes.option_id(explore_modes.GATHER)
+    return gather if gather in ids else "act:explore" if "act:explore" in ids else None
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
@@ -346,6 +352,10 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     options = [o for o in options if o.id not in (FREE_TEXT_OPTION, SAY_OPTION)]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
     # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
     options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
+    if any(o.id.startswith(explore_modes.PREFIX) for o in options):
+        # 探索三選一開著：「探索」只是展開三顆的入口，按了什麼都不做、不花體力（同 act:rest 的道理：永遠按得下去的空按會讓
+        # 「沒得按就推進時間」的訊號失效）
+        options = [o for o in options if o.id != "act:explore"]
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

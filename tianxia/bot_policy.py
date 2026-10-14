@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
+from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -34,6 +34,13 @@ ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
 STIR_SCORE = 1.1  # 豪強攪局（出陣探索與地盤設計第七節）：沒有陣營目標算不出大勢分，給一個比探索高一點的底分（只有豪強假人做）
+GATHER_SCORE = 1.0  # 探索三選一（出陣探索與地盤設計第七節）：找素材是練功的主要來源，跟以前的探索一樣
+SEEK_SCORE = 0.9  # 閒著找事件
+SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
+# 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：找素材再加這一份。計畫寫 0.5，那樣缺素材的找素材（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
+# 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
+NEED_MATERIAL_SCORE = 0.3
+NEED_MATERIAL_BELOW = 6
 # 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
 SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
@@ -569,6 +576,19 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         effect = event.choices[int(arg)].effect
         moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
         return effect_score(effect, _goals(game, profile), moved)
+    if kind == "explore":  # 探索三選一：缺素材找素材、閒著找事件、悟得到的地方偶爾靜心感悟；打探懸賞三種都算
+        scout = BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
+        if arg == explore_modes.GATHER:
+            if _crippled(game):
+                return None  # 找素材可能撞上怪：內傷重又付不起醫館的不去
+            need = NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0
+            strike = BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0  # 討伐懸賞靠找素材撞上的那一場（散人不出陣）
+            return GATHER_SCORE + scout + need + strike
+        if arg == explore_modes.SEEK:
+            return SEEK_SCORE + scout
+        if arg == explore_modes.SENSE:
+            return SENSE_SCORE + scout
+        return None
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
@@ -596,6 +616,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
         return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg == "explore" and explore_modes.on(game.content):
+            return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):
             return None
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
@@ -813,6 +835,12 @@ def _smith_want(game: Game) -> str | None:
     if game.state.player.smith_draft is not None:
         return bot.forge_step(game)
     return bot.smith_want(game) or bot.forge_step(game)
+
+
+def _short_of_materials(game: Game) -> bool:
+    """背包裡的一階素材少於 NEED_MATERIAL_BELOW 個（修兵器、餵馬、糧草都吃一階）。"""
+    mats = game.content.materials
+    return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

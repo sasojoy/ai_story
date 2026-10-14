@@ -247,3 +247,10 @@ def test_the_sortie_has_its_own_waiting_line():
       H.S.main = { sortie: true };
       return [old, kit.waitLineFor("act:train")];""")
     assert out == ["循著蹤跡尋敵……", "整隊出陣，候前方回報……"]
+
+
+def test_the_three_ways_to_explore_have_their_own_waiting_lines():
+    out = run("""
+      const { kit } = H;
+      return ["explore:gather", "explore:seek", "explore:sense", "explore:unknown"].map((id) => kit.waitLineFor(id));""")
+    assert out == ["四下翻找，看看能撿到什麼……", "四處走走，看這一帶有什麼事……", "靜心凝神……", "四下探看，尚無動靜……"]

@@ -53,6 +53,19 @@ def test_explore_opens_three_ways():
         "找素材（體力 6）", "找事件（體力 6）", "靜心感悟（體力 6）"]
 
 
+def test_the_entry_does_not_say_stamina():
+    """PM 2026-10-14：三選一開著時「探索」入口按了不花體力，所以鈕上不寫體力、三顆各自寫；體力不夠三顆都灰時入口也灰。
+    開關關著照舊「探索（體力 6）」。"""
+    game = _game()
+    entry = _ids(game)["act:explore"]
+    assert entry.label == "探索" and entry.enabled
+    game.state.player.stamina = 0
+    assert not _ids(game)["act:explore"].enabled
+    game.state.player.stamina = 100
+    game.content.config.explore_modes.enabled = False
+    assert _ids(game)["act:explore"].label == "探索（體力 6）"
+
+
 def test_sense_is_grey_where_nothing_can_be_learned():
     """悟不出＝insights.explore_gives 是空的：這類地點的 explore_mix 悟意境比例是 0（地點沒寫 insights 會退回全部基本意境，
     所以正式內容現在每一處都悟得到；這裡把野外那一類的比例設成 0 造一處悟不出的）。"""

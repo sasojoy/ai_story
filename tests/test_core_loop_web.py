@@ -50,6 +50,23 @@ def test_a_ranger_sees_the_sortie_cell_greyed():
     assert "<b>出陣</b>" in bar and "不在戰線" in bar
 
 
+def test_the_explore_cell_unfolds_three_ways():
+    game = _game(None, "yingshui")
+    bar = _bar(game)
+    assert 'data-act="wheel" data-key="explore"' in bar and "act-explore" not in bar
+    assert 'data-id="explore:gather"' not in bar  # 收著時三顆不畫，也不掉進「此地還能做」（行動列底下那一行會提到「找素材」）
+    bar = _bar(game, wheelSel="explore")
+    assert 'class="card act-explore"' in bar
+    assert all(f'data-id="explore:{m}"' in bar for m in ("gather", "seek", "sense"))
+
+
+def test_a_tired_explorer_sees_the_cell_greyed():
+    game = _game(None, "yingshui")
+    game.state.player.stamina = 0
+    bar = _bar(game, wheelSel="explore")
+    assert 'data-key="explore"' in bar and "體力不夠" in bar and "act-explore" not in bar
+
+
 def test_the_switches_off_keep_the_old_cells():
     bar = _bar(_game("huang", "huangjin_camp", classic=True))
     assert "<b>操練</b>" in bar and 'data-act="choose" data-id="act:explore"' in bar

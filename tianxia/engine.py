@@ -1030,8 +1030,11 @@ class Game:
             return opts + self._road_task_options(j) + self._arena_entry()  # 路上也能上擂台
         loc = c.locations[s.player.location]
         cost = self._action_costs()
-        opts = [self._cost_option("act:explore", "探索", cost["explore"])]
-        opts += self._explore_mode_options(loc, cost["explore"])
+        modes = self._explore_mode_options(loc, cost["explore"])
+        if modes:  # 探索三選一：「探索」只是展開三顆的入口、按了不花體力，鈕上不寫體力（三顆各自寫）；三顆都按不下去時入口也灰（PM 2026-10-14）
+            opts = [Option(id="act:explore", label="探索", enabled=any(o.enabled for o in modes)), *modes]
+        else:
+            opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if prologue_rules.active(s, c) or not sortie.on(c):
             if self._train_squad_ids(loc):
                 # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被

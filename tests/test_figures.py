@@ -851,7 +851,9 @@ def test_bot_challenges_target_figure(on, world):
         assert bot_policy.score(bot, challenge, profile) is None
     with mock.patch.object(Game, "challenge_odds", return_value="有把握"):
         assert bot_policy.score(bot, challenge, profile) == bot_policy.CHALLENGE_SCORE
-        assert bot_policy.score(bot, Option(id="act:explore", label="探索"), profile) < bot_policy.CHALLENGE_SCORE
+        # 探索三選一開著（出陣探索與地盤）：「探索」入口不給分，比的是找素材（缺素材時加的那一份也算進去）
+        bot.state.player.materials = {}
+        assert bot_policy.score(bot, Option(id="explore:gather", label="找素材"), profile) < bot_policy.CHALLENGE_SCORE
     on.config.bot_strength = 1.0  # 一定挑最高分
     with mock.patch.object(Game, "challenge_odds", return_value="穩勝"), _fight():
         bot_policy.take_turn(bot, profile, random.Random(0))
