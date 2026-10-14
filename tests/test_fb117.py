@@ -23,7 +23,7 @@ needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 # test_prologue_web 的假瀏覽器，多交出這一份要測的名字
 DRIVER = BASE_DRIVER.replace(
     '"bookHtml", "peerHtml"]',
-    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers", "peerAct"]',
+    '"bookHtml", "peerHtml", "socialHtml", "peerActsHtml", "openPeer", "callPeers", "peerAct", "refreshPeer"]',
 )
 assert DRIVER != BASE_DRIVER
 
@@ -333,3 +333,82 @@ def test_a_reply_after_the_card_was_closed_does_not_reopen_it(twins):
       return p.then(() => ({{ peer: H.S.peer.name, toast: T.els.toast.textContent }}));"""
     out = run(_main(content, world, "乙"), script)
     assert out == {"peer": "丙", "toast": "你以【粗淺拳腳】融入「火」"}
+
+
+# ── 第五件：玩家卡跟著輪詢更新 ──
+
+FAKE_CARD = """
+  // 畫面上那一張卡（假的）：換卡時記下做了什麼；新的那一張有一個下拉清單
+  const log = [];
+  const nowSel = { options: [{ value: "0" }, { value: "1" }], value: "0" };
+  const now = { scrollTop: 0, querySelectorAll: (sel) => (sel === ".peer-pick select" ? [nowSel] : []) };
+  const old = {
+    scrollTop: 40, previousElementSibling: { classList: { contains: (c) => c === "sheet-bg" }, remove: () => log.push("bg") },
+    querySelectorAll: () => [], remove: () => log.push("old"),
+    insertAdjacentHTML: (pos, html) => { log.push(pos); T.qs[".peer-card"] = now; log.push(html.includes("以此應之") ? "answer" : "plain"); },
+  };
+  T.qs[".peer-card"] = old;
+"""
+
+
+def _refresh_script(before, after, extra=""):
+    return FAKE_CARD + f"""
+      H.S.peer = {{ name: "甲", card: {json.dumps(before, ensure_ascii=False)} }};
+      {extra}
+      return (async () => {{
+        await H.refreshPeer();
+        await new Promise((r) => setTimeout(r, 0));
+        return {{ log, card: H.S.peer.card && H.S.peer.card.actions.length, top: now.scrollTop, asked: T.calls.map((c) => c[0]) }};
+      }})();"""
+
+
+@needs_node
+def test_an_open_card_follows_the_poll(twins):
+    content, world = twins
+    before = _card(content, world, "乙", "甲")
+    _invite(content, world)
+    after = _card(content, world, "乙", "甲")
+    out = run(_main(content, world, "乙"), _refresh_script(before, after), responses={"/api/peer": {"card": after, "gone": social.GONE}})
+    assert out["asked"] == ["/api/peer?name=%E7%94%B2"]
+    assert out["log"] == ["afterend", "answer", "old", "bg"] and out["card"] == len(after["actions"]) and out["top"] == 40
+
+
+@needs_node
+def test_an_unchanged_card_is_left_alone(twins):
+    content, world = twins
+    card = _card(content, world, "乙", "甲")
+    out = run(_main(content, world, "乙"), _refresh_script(card, card), responses={"/api/peer": {"card": card, "gone": social.GONE}})
+    assert out["log"] == []
+
+
+@needs_node
+def test_a_held_finger_waits_for_release(twins):
+    content, world = twins
+    before = _card(content, world, "乙", "甲")
+    _invite(content, world)
+    after = _card(content, world, "乙", "甲")
+    held = "T.docListeners.pointerdown.forEach((f) => f());"
+    script = FAKE_CARD + f"""
+      H.S.peer = {{ name: "甲", card: {json.dumps(before, ensure_ascii=False)} }};
+      {held}
+      return (async () => {{
+        await H.refreshPeer();
+        const during = [log.length, H.S.peer.card.actions.length];
+        T.docListeners.pointerup.filter((f) => f.name === "releasePointer").forEach((f) => f());
+        await new Promise((r) => setTimeout(r, 5));
+        return {{ during, after: [log.length, H.S.peer.card.actions.length] }};
+      }})();"""
+    out = run(_main(content, world, "乙"), script, responses={"/api/peer": {"card": after, "gone": social.GONE}})
+    assert out["during"] == [0, len(before["actions"])]
+    assert out["after"] == [4, len(after["actions"])]
+
+
+@needs_node
+def test_no_swap_while_a_confirm_or_amount_is_open(twins):
+    content, world = twins
+    before = _card(content, world, "乙", "甲")
+    _invite(content, world)
+    after = _card(content, world, "乙", "甲")
+    out = run(_main(content, world, "乙"), _refresh_script(before, after, "H.S.peer.amountFor = 5;"),
+              responses={"/api/peer": {"card": after, "gone": social.GONE}})
+    assert out["log"] == [] and out["card"] == len(before["actions"])

@@ -1987,6 +1987,46 @@
     el.classList.add("peer-focus");
     el.scrollIntoView({ block: "nearest", behavior: promoCalm() ? "auto" : "smooth" }); // promoCalm：偏好減少動態效果
   }
+
+  // 玩家卡開著時跟著輪詢更新（FB-117）：對方發了邀請、收回、走了，卡上的鈕要跟著變，不然按了才知道。輪詢拿到有變的畫面時重抓這張卡
+  // （/api/peer，只讀），內容變了才換掉那一張（只換卡，底下的頁面不動；捲到的地方、下拉清單挑的那一樣照放回去）。
+  // 不換的時候：正在送動作（S.busy）、確認框開著（它記的是舊卡上第幾顆）、數量欄攤開、正在下拉清單或輸入框上（typing）。
+  // 手指按著時先收著（peerNext），放開才換——S.peer 跟畫面上那一張要是同一份，按下去的索引才對得上（同江湖頁的 pointerHeld）
+  let peerPolling = false;
+  let peerNext = null; // { P, r }：按著的時候抓到的新卡
+  async function refreshPeer() {
+    const P = S.peer;
+    if (!P || P.loading || peerPolling || S.busy) return;
+    peerPolling = true;
+    try {
+      const r = await api(`/api/peer?name=${encodeURIComponent(P.name)}`);
+      if (JSON.stringify(r.card) === JSON.stringify(P.card)) return;
+      if (pointerHeld) peerNext = { P, r };
+      else applyPeer(P, r);
+    } catch (e) { /* 下一輪再說 */ } finally { peerPolling = false; }
+  }
+  function applyPeer(P, r) {
+    peerNext = null;
+    if (S.peer !== P || S.busy || P.amountFor != null || typing() || document.querySelector(".ask-layer")) return;
+    S.peer = { name: P.name, card: r.card, gone: r.gone, focus: P.focus };
+    const old = document.querySelector(".peer-card");
+    if (!old) return;
+    // 下拉清單挑的那一樣（照它的 arg 認：新卡上的索引可能不一樣）
+    const picked = new Set([...old.querySelectorAll(".peer-pick select")].map((x) => (P.card && P.card.actions[Number(x.value)] || {}).arg));
+    const top = old.scrollTop;
+    const bg = old.previousElementSibling;
+    old.insertAdjacentHTML("afterend", peerHtml());
+    old.remove();
+    if (bg && bg.classList.contains("sheet-bg")) bg.remove();
+    const now = document.querySelector(".peer-card");
+    if (!now) return;
+    now.scrollTop = top;
+    const actions = (r.card && r.card.actions) || [];
+    now.querySelectorAll(".peer-pick select").forEach((x) => {
+      const j = [...x.options].map((o) => Number(o.value)).find((k) => picked.has(actions[k].arg) && actions[k].enabled);
+      if (j !== undefined) x.value = String(j);
+    });
+  }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
   // 等回應的時候（論武答應時首創要等模型取名，FB-117）：照送出指令的回饋那一套（busy），論武答應另有一句等候的話（WAIT_LINES.discuss）。
   // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一聲（江湖紀錄裡也有）
@@ -4243,6 +4283,10 @@
   document.addEventListener("pointerdown", () => { pointerHeld = true; }, true);
   const releasePointer = () => {
     pointerHeld = false;
+    if (peerNext) { // 按著的時候玩家卡抓到了新的一張（refreshPeer）：放開、click 處理完再換
+      const { P, r } = peerNext;
+      setTimeout(() => { if (peerNext && peerNext.P === P) applyPeer(P, r); }, 0);
+    }
     if (!redrawHeld) return;
     redrawHeld = false;
     // 放開之後 click 才送出：等它處理完再補畫；它開始了一個動作的話，動作回來會自己畫
@@ -4761,6 +4805,7 @@
       if (S.stage !== "game" || S.busy || S.main !== was) return;
       if (!setMain(main)) return;
       renderTop();
+      if (S.peer) refreshPeer(); // 玩家卡開著：卡也重抓（FB-117；不等它）
       if (!typing()) await refreshPage(was);
     } catch (e) { /* api() 提示過；下一輪再試 */ } finally { pollInFlight = false; }
   }
