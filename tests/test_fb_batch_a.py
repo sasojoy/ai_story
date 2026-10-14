@@ -233,3 +233,61 @@ def test_fb142_a_free_temper_does_not_say_the_smith_took_money(forge_content, wo
     assert game.state.player.stats["silver"] == silver  # 一階淬煉不收錢
     assert rule.smith_frame_free.format(clue=clue) in msgs and rule.smith_frame.format(clue=clue) not in msgs
     assert "收錢" not in rule.smith_frame_free
+
+
+# ── FB-139、FB-149：名將贈禮與本命兵器另起一則，人不在名將身邊寫「託人送來」 ──
+
+
+def _gift_entries(game):
+    from tianxia import treasures
+    return [e for e in game.state.journal if e.title == treasures.GIFT_TITLE]
+
+
+def test_fb139_a_gift_from_afar_is_its_own_entry_and_sent_by_a_messenger(content, world):
+    """在燕山腳了結事件時冒出「劉備把【舊草鞋】交到你手上」：名將不在場，也跟那件事無關。另起一則「名將贈禮」，寫成託人送來。"""
+    from conftest import idle_step
+    from test_treasures import _book, _game as _treasure_game
+
+    from tianxia import treasures
+
+    _book(content)
+    game = _treasure_game(content, world, "遠客", at="lake")
+    assert "mate" not in game._people_here()
+    game.state.player.affinities["mate"] = 60
+    idle_step(game)
+    sent = treasures.GIFT_SENT_LINE.format(general="韓鐵", gift="舊草鞋")
+    newest, action = game.state.journal[0], game.state.journal[1]
+    assert newest.title == treasures.GIFT_TITLE and sent in [newest.tag, *newest.lines]  # 最新一則：「剛剛」看得到
+    assert not any("舊草鞋" in line for line in [action.tag, *action.lines])  # 當下那個動作的紀錄不再接這一句
+    assert "交到你手上" not in sent
+
+
+def test_fb139_a_gift_in_person_still_says_handed_over(content, world):
+    from conftest import idle_step
+    from test_treasures import _book, _game as _treasure_game
+
+    from tianxia import treasures
+
+    _book(content)
+    game = _treasure_game(content, world, "近客", at="town")
+    assert "mate" in game._people_here()
+    game.state.player.affinities["mate"] = 60
+    idle_step(game)
+    [entry] = _gift_entries(game)
+    assert treasures.GIFT_LINE.format(general="韓鐵", gift="舊草鞋") in [entry.tag, *entry.lines]
+
+
+def test_fb149_a_signature_arm_from_afar_joins_the_gift_entry(content, world):
+    from conftest import idle_step
+    from test_signature_arms import _arms, _game as _arm_game
+
+    from tianxia import signature_arms
+
+    _arms(content)
+    game = _arm_game(content, world)
+    game.state.player.location = "lake"
+    game.state.player.affinities["mate"] = 80
+    idle_step(game)
+    [entry] = _gift_entries(game)
+    assert signature_arms.GIFT_SENT_LINE.format(general="韓鐵", arm="鐵脊長刀") in [entry.tag, *entry.lines]
+    assert not any("鐵脊長刀" in line for e in game.state.journal[1:] for line in [e.tag, *e.lines])

@@ -61,7 +61,9 @@ PRIZE_SLOTS = {"treasure": "treasure", "horse": "mount"}  # 重賞（Bounty.priz
 PRIZE_WORDS = {"treasure": "寶物一件", "horse": "良駒一匹"}  # 待 joy 潤（6.4：掛單時只記「寶物一件」或「良駒一匹」）
 PRIZE_NOTE = "・另有重賞：{what}"  # 待 joy 潤：懸賞榜、懸賞卡、揭下的回話，接在賞的那一段後面
 PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
-GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）
+GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）：他就在你身邊
+GIFT_SENT_LINE = "{general}託人送來【{gift}】，捎話說：『你我投緣，這個你拿著。』"  # 待 joy 潤（FB-139）：他不在你身邊
+GIFT_TITLE = "名將贈禮"  # 待 joy 潤（FB-139、FB-149）：名將贈禮與本命兵器另起一則江湖紀錄，不接在當下那個動作裡
 GAIN_LINE = "寶物【{name}】"  # 待 joy 潤：戰報「得失」那一格（同 weapons.GAIN_LINE：素材寫「精鐵砂 ×1」，寶物寫「寶物【烏木名刺】」）
 DROP_LINE = "對手敗走時落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人）
 
@@ -338,11 +340,11 @@ def bounty_prize(state: GameState, content: Content, season: int, bounty_id: str
 
 # ---- 名將贈禮（6.4）----
 
-def gifts_due(state: GameState, content: Content) -> list[str]:
+def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[str] = frozenset()) -> list[str]:
     """名將贈禮（6.4）：跟哪一位名將的情誼到了 gift_affinity、這一季他還沒送過人（WorldState.general_gifts），就把贈禮交給你，記下給了誰
     （呼叫端那一下動作最後 _save_season 存回去）。贈禮是名駒時看坐騎的開關、是寶物時看寶物的開關；那一欄關著不送也不記（開了之後
     照樣送得出去）。裝備庫滿了寄放。名將贈禮與名駒本來就一人一件（6.5），不用查重複。Game.choose／answer_event 最後各叫一次：
-    情誼從對話、事件、隨口應對來都走得到。"""
+    情誼從對話、事件、隨口應對來都走得到。present 是此刻站在你身邊的人物：他在就當面交給你，不在就託人送來（FB-139）。"""
     p, w, cfg = state.player, state.world, content.config.treasures
     lines: list[str] = []
     for gift in content.gear.gifts:
@@ -354,7 +356,8 @@ def gifts_due(state: GameState, content: Content) -> list[str]:
         w.general_gifts[gift.character] = p.name
         item = new_steed(state, steed) if steed is not None else new_treasure(state, content, gift.gear)
         general = content.characters[gift.character].name
-        lines.append((gift.line or GIFT_LINE).format(general=general, gift=item.name))
+        line = (gift.line or GIFT_LINE) if gift.character in present else GIFT_SENT_LINE
+        lines.append(line.format(general=general, gift=item.name))
         lines += deliver(state, content, item, hold=True)
     return lines
 

@@ -428,7 +428,7 @@ def test_a_folded_forge_keeps_an_unrelated_line_an_earlier_step_carried(content,
     game.choose(smithing.OPEN)
     news = "洛陽傳來消息：宮裡的風向變了。"
     with monkeypatch.context() as patch:
-        patch.setattr(game, "_general_gifts", lambda: [news])  # 挑種類那一步順便帶來一句別的話
+        patch.setattr(game, "_settle_plots", lambda: [news])  # 挑種類那一步順便帶來一句別的話（名將贈禮另起一則了，FB-139，改借密謀收場那一句）
         game.choose(f"{smithing.KIND}劍")
     for oid in (f"{smithing.MAIN}gang_1", f"{smithing.AUX}kuai_1", GO_SWORD_YANG):
         game.choose(oid)

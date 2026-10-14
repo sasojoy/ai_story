@@ -1563,8 +1563,9 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
-            msgs += self._general_gifts()  # 名將贈禮（裝備四欄 6.4）：這一下的情誼（對話、事件）到了門檻就送；進這一則紀錄
-            msgs += self._signature_arms()  # 名將本命兵器（打造第三批）：情誼到了、或這一下打贏他本人第三次
+            # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
+            # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
+            gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
@@ -1588,6 +1589,8 @@ class Game:
                 forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
                 journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge",
                                   fold=smithing.is_step_line if forged else False)
+            self._gift_entry(gifts)
+            msgs += gifts
         finally:
             self._draft = None
             self._fight = None
@@ -1637,12 +1640,13 @@ class Game:
             msgs += self._apply(effect, once=event.once)
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
-            msgs += self._general_gifts()  # 隨口應對的效果也可能加情誼（同 choose）
-            msgs += self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose）
+            gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self._gift_entry(gifts)
+            msgs += gifts
             self.last_gamble = FreeTextOutcome(
                 event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
                 time=s.world.time, title=self._draft.title,
@@ -4058,11 +4062,25 @@ class Game:
         WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
         事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
         given = dict(self.state.world.general_gifts)
-        msgs = treasures.gifts_due(self.state, self.content)
+        msgs = treasures.gifts_due(self.state, self.content, self._people_here())
         for cid, who in self.state.world.general_gifts.items():
             if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
                 annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
         return msgs
+
+    def _people_here(self) -> set[str]:
+        """此刻站在你身邊的人物：同 _figures_here 的所在（人物表上的人照此刻的所在與狀態，其餘照 recruit_at、talk_at），不限深度互動；
+        在路上一個都沒有。名將贈禮與本命兵器照它寫當面交給你還是託人送來（FB-139、FB-149）。"""
+        s, c = self.state, self.content
+        if s.player.journey is not None:
+            return set()
+        here, placed = s.player.location, figures.placed_characters(s, c)
+        return {cid for cid, ch in c.characters.items() if (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))}
+
+    def _gift_entry(self, lines: list[str]) -> None:
+        """名將贈禮與本命兵器（情誼那條路）另起一則江湖紀錄（FB-139、FB-149），排在當下那個動作的那一則之後。沒有就不寫。"""
+        if lines:
+            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=treasures.GIFT_TITLE, tag=lines[0], lines=lines[1:]))
 
     def _signature_arms(self, record=None, beaten: str | None = None, later: list | None = None) -> list[str]:
         """名將本命兵器（兵器設計 4.10；打造第三批，signature_arms.due）：情誼到 signature_affinity 他送你，打贏他本人 signature_wins 次
@@ -4072,7 +4090,7 @@ class Game:
         （終審 minor）。行狀記一筆（人物）；later 給了（_challenge）就先放進去，等那一場自己的行狀記完再記，行狀才照時間先後。
         不擲骰：不碰 Game.rng。"""
         s, c = self.state, self.content
-        items, msgs = signature_arms.due(s, c, beaten=beaten)
+        items, msgs = signature_arms.due(s, c, beaten=beaten, present=self._people_here())
         for item in items:
             arm = next((a for a in c.gear.signature_arms if a.character == item.signature), None)
             if record is not None and beaten is not None and arm is not None and arm.figure == beaten:
