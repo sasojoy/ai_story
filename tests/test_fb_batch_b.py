@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import random
 
-from tianxia import atlas
+from test_discuss import pair  # noqa: F401（fixture）
+
+from tianxia import atlas, fusion, social
 from tianxia.engine import Game
+from tianxia.rules import game_day
 
 
 def _ids(connections):
@@ -40,3 +43,70 @@ def test_fb184_the_government_army_drills_at_a_camp_between_yingchuan_and_changs
     assert guan and set(guan) == set(huang)
     assert all(guan[k] < 0 < huang[k] for k in guan)  # 官軍往官軍那一邊推、黃巾在這裡打贏往黃巾那一邊推
 
+
+# ── FB-116：玩家互動的漏洞 → 贈物同一個人連送併成一則、同一對人每個遊戲日有上限；論武同一對人每個遊戲日有上限 ──
+
+
+def test_fb116_gifts_fold_into_one_entry_and_stop_at_the_daily_cap(content):
+    from test_social import NOW, _as, _done, _player
+
+    cap = content.config.gift_per_pair_day
+    assert cap == 5
+    a = _player(content, "甲")
+    _player(content, "乙")
+    a.state.player.stats["silver"] = 50
+    for _ in range(cap):
+        assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})[0] == "你把銀子 1 兩送給了乙。"
+    full = social.GIFT_FULL.format(n=cap)
+    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1}) == [full]  # 第六次：照樣不收、不寫紀錄
+    assert a.state.player.stats["silver"] == 50 - cap
+    gifts = [b for b in a.peer_card("乙")["actions"] if b["action"] == "gift"]
+    assert gifts and not any(b["enabled"] for b in gifts) and all(b["note"] == full for b in gifts)
+    sent = [e for e in a.state.journal if e.title == "贈物・乙"]
+    assert len(sent) == 1 and len(sent[0].lines) == cap and sent[0].changes == [f"銀兩 -{cap}"]
+    _done(a)
+    b = _as(content, a.world, "乙", NOW + 5)
+    got = [e for e in b.state.journal if e.title == "收禮・甲"]
+    assert len(got) == 1 and len(got[0].lines) == cap and got[0].changes == [f"銀兩 +{cap}"]  # 連送五次：收禮併成一則
+    assert b.peer_act("甲", "gift", {"arg": "silver", "amount": 1}) == [full]  # 同一對人：反過來送也算在同一本帳
+    key = b._spar_pair("甲")
+    b.state.world.gift_tally[key][0] -= 1  # 帳記的是昨天：今天重算
+    assert b.peer_act("甲", "gift", {"arg": "silver", "amount": 1})[0] == "你把銀子 1 兩送給了甲。"
+
+
+def test_fb116_gifts_from_someone_else_in_between_start_a_new_entry(content):
+    from test_social import NOW, _as, _done, _player
+
+    a = _player(content, "甲")
+    c = _player(content, "丙")
+    _player(content, "乙")
+    a.state.player.stats["silver"] = c.state.player.stats["silver"] = 10
+    a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    _done(a)
+    c = _as(content, a.world, "丙", NOW + 1)
+    c.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    _done(c)
+    a = _as(content, a.world, "甲", NOW + 2)
+    a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    _done(a)
+    b = _as(content, a.world, "乙", NOW + 5)
+    assert [e.title for e in b.state.journal[:3]] == ["收禮・甲", "收禮・丙", "收禮・甲"]  # 只併「連著」同一個人送的
+
+
+def test_fb116_a_pair_discusses_at_most_twice_a_game_day(pair):
+    from test_discuss import _accept, _do, _invite
+
+    content, world = pair
+    cap = content.config.discuss_per_pair_day
+    assert cap == 2
+    _invite(content, world, "art:basic_fist")
+    assert "烈焰拳" in _accept(content, world, "insight:huo")[0]
+    _invite(content, world, "insight:feng")
+    # 第二張邀請還在等的時候，這一對人今天的帳被別處用滿了（另一個分頁、假人）：答應那一下重驗，不開爐
+    key = "|".join(sorted(("甲", "乙")))
+    world.mutate_season(lambda s: s.discuss_tally.update({key: [game_day(content, s), cap]}))
+    full = social.DISCUSS_FULL.format(n=cap)
+    assert _accept(content, world, "insight:huo", ("風火境", "風助火勢。")) == [full]
+    assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None
+    msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "discuss", {"arg": "invite:art:basic_fist"}))
+    assert msgs == [full]  # 卡上那一顆也按不下去

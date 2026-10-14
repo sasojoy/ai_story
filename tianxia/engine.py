@@ -1817,10 +1817,11 @@ class Game:
         if self._draft is not None:
             self._draft.outcome(text, msg)
 
-    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None) -> None:
+    def _write(self, title: str, msgs: list[str], tag: str = "", guide: list[str] | None = None, merge: bool = False) -> None:
+        """寫一則江湖紀錄。merge：最新一則同標題就併進去（journal.add_entry 的 merge；連著收同一個人的禮，FB-116）。"""
         draft = Draft(title, tag)
         draft.guide = list(guide or [])
-        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs))
+        journal.add_entry(self.state, draft.entry(self.state.world.time, msgs), merge=merge)
 
     def _note_guide(self, notes: list[str]) -> None:
         """新手引導這次完成了（note_action 回傳的那幾行）：「✔ 引導完成」與獎勵記在 guide_done 給對話框。走完最後一步、
@@ -6317,11 +6318,29 @@ class Game:
         """同一對人的帳本鍵：兩個名號（不分大小寫）排序後接起來，誰發的都記在同一本。"""
         return "|".join(sorted((name_key(self.state.player.name), name_key(other))))
 
+    def _pair_left(self, tally: dict[str, list[int]], cap: int, other: str) -> int:
+        """這一對人這個遊戲日在這本帳上還剩幾次（切磋、贈物、論武各一本，都在這一季的 WorldState；帳記的是別的遊戲日就當沒用過）。"""
+        day, count = tally.get(self._spar_pair(other), (0, 0))
+        used = count if day == game_day(self.content, self.state.world) else 0
+        return max(0, cap - used)
+
+    def _pair_tick(self, tally: dict[str, list[int]], other: str) -> None:
+        """這一對人這個遊戲日在這本帳上記一次。呼叫端自己 _save_season。"""
+        day, key = game_day(self.content, self.state.world), self._spar_pair(other)
+        last_day, count = tally.get(key, (0, 0))
+        tally[key] = [day, (count if last_day == day else 0) + 1]
+
     def _spars_left(self, other: str) -> int:
         """這一對人這個遊戲日還能切磋幾場（Spar.per_pair_day）。"""
-        day, count = self.state.world.spar_tally.get(self._spar_pair(other), (0, 0))
-        used = count if day == game_day(self.content, self.state.world) else 0
-        return max(0, self.content.config.spar.per_pair_day - used)
+        return self._pair_left(self.state.world.spar_tally, self.content.config.spar.per_pair_day, other)
+
+    def gifts_left(self, other: str) -> int:
+        """這一對人這個遊戲日還能贈物幾次（Config.gift_per_pair_day，不分誰送誰；FB-116）。"""
+        return self._pair_left(self.state.world.gift_tally, self.content.config.gift_per_pair_day, other)
+
+    def discusses_left(self, other: str) -> int:
+        """這一對人這個遊戲日還能論武幾回（Config.discuss_per_pair_day；FB-116）。"""
+        return self._pair_left(self.state.world.discuss_tally, self.content.config.discuss_per_pair_day, other)
 
     def spar_refusal(self, other: Game) -> str | None:
         """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
@@ -6456,10 +6475,7 @@ class Game:
         cost = c.config.action_cost["train"]
         me.stamina -= cost
         them.stamina -= cost
-        day = game_day(c, self.state.world)
-        key = self._spar_pair(them.name)
-        last_day, count = self.state.world.spar_tally.get(key, (0, 0))
-        self.state.world.spar_tally[key] = [day, (count if last_day == day else 0) + 1]
+        self._pair_tick(self.state.world.spar_tally, them.name)
         self._save_season()
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
@@ -6501,6 +6517,8 @@ class Game:
             problem = self._spar_problem(who, me=me, what="論武", cost=cost)
             if problem is not None:
                 return problem
+        if self.discusses_left(other.state.player.name) <= 0:
+            return social.DISCUSS_FULL.format(n=c.config.discuss_per_pair_day)
         if invites.between(s.world, s.player.name, other.state.player.name, "discuss") is not None:
             return "已經有一張論武的邀請在等回覆了。"
         return None
@@ -6577,6 +6595,8 @@ class Game:
         cost = self._discuss_cost()[1]
         for who, mine in ((self, True), (other, False)):
             problem = problem or self._spar_problem(who, me=mine, what="論武", cost=cost)
+        if problem is None and self.discusses_left(them.name) <= 0:  # 邀請在等的時候，這一對人今天的帳被別處用滿了（FB-116）
+            problem = social.DISCUSS_FULL.format(n=self.content.config.discuss_per_pair_day)
         if problem is None and item not in dict(self.discuss_items()):
             problem = "你身上沒有這一樣。"
         if problem is None and theirs not in dict(other.discuss_items()):
@@ -6594,6 +6614,7 @@ class Game:
         if not made:
             return msgs
         _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""))  # 配方剛登記：他照查表合出同一門，不取名
+        self._pair_tick(self.state.world.discuss_tally, them.name)
         self._save_season()
         other._write(f"論武・{me.name}", their_msgs)
         if self._draft is None:
