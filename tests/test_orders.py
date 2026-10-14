@@ -81,7 +81,7 @@ def test_real_orders_content(real):
         ("escort", "guan"), ("escort", "huang"), ("siege", "guan"), ("siege", "huang"),
         ("strike", "guan"), ("strike", "huang"), ("strike", "haoqiang"),
     ])
-    assert o.slots["yingru"]["guan"].intercept == "hilltop_wilds"
+    assert o.slots["yingru"]["guan"].intercept == "runan_wilds"  # FB-248（PM 2026-10-15）：截糧的地點一律在戰線上，以前是荒丘
     assert o.slots["nanyang"]["huang"].escort == ("nanyang_wilds", "nanyang_huangjin_camp")
     assert {f: d.name for f, d in o.duties.items()} == {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
     assert real.squads["guan_grain_convoy"].faction == "guan" and real.squads["huang_grain_convoy"].faction == "huang"

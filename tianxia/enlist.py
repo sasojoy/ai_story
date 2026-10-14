@@ -184,7 +184,7 @@ def glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]
         if o.template == "strike" and o.figure is not None:
             hot.add(f"act:challenge:{o.figure}")
         elif (o.template == "siege" and o.front is not None and front_of(content, loc) == o.front) or (
-            o.template == "intercept" and o.location is not None and loc in orders.neighbors(content, o.location)
+            o.template == "intercept" and o.location is not None and loc in orders.intercept_spots(content, o.location)
         ):
             hot.add("act:train")
     return [i for i in option_ids if i in hot]

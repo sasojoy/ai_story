@@ -874,6 +874,11 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
             if slot.intercept in c.locations:
                 region = region_of(c, slot.intercept)
                 need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
+                if c.config.sortie.enabled and c.scenario.factions:  # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點
+                    from . import territory  # noqa: PLC0415  延後 import（同 check_territory）
+
+                    need(territory.line_of(c, slot.intercept) == front,
+                         f"{where}：截糧的地點 {slot.intercept} 不是這條戰線的戰線地點（出陣開著時那裡沒有出陣）")
             if side in factions:
                 need(slot.escort[1] in factions[side].join_at, f"{where}：護糧的終點 {slot.escort[1]} 不是這個陣營的據點")
     known("orders.json 的 duties", o.duties, factions, "陣營")

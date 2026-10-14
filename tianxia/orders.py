@@ -59,6 +59,14 @@ def neighbors(content: Content, loc_id: str) -> set[str]:
     return {loc_id} | {str(conn) for conn in content.locations[loc_id].connections}
 
 
+def intercept_spots(content: Content, loc_id: str) -> set[str]:
+    """截糧軍令的運糧隊在哪幾站（遇得上、打贏記功、假人往哪走都照它）：出陣開著時只在 {地點} 本身（FB-248，PM 2026-10-15：截糧的地點
+    一律是戰線地點；相鄰站不再有糧隊，自家大本營截糧那一週的出陣照舊是守），關著時照舊是 {地點} 與相鄰站（neighbors）。"""
+    from . import sortie  # noqa: PLC0415  sortie → rules、territory：延後 import 只是保險
+
+    return {loc_id} if sortie.on(content) else neighbors(content, loc_id)
+
+
 def figure_name(content: Content, fid: str | None) -> str:
     return figures.name_of(content, fid) if fid is not None else ""
 
@@ -317,10 +325,10 @@ def _counts(
         return False
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
         return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
-    if o.template == "intercept":  # 在 {地點} 與相鄰站打贏敵方的運糧隊
+    if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
         enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
         return squad is not None and squad == enemy and location is not None and o.location is not None \
-            and location in neighbors(content, o.location)
+            and location in intercept_spots(content, o.location)
     if o.template == "defend":  # 在那條戰線做守勢行動
         return front == o.front
     if o.template == "escort":  # 這一道的糧車送到（糧車記著自己是哪一道，見 Convoy.order）
@@ -421,12 +429,13 @@ def credit(
 
 
 def extra_enemies(state: GameState, content: Content, loc_id: str, faction: str | None) -> list[str]:
-    """遊歷時多出來的對手：這週有截糧軍令、人在 {地點} 或相鄰的站，就可能遇上敵方的運糧隊（達成之後這週也照樣遇得到）。"""
+    """出陣（關著時遊歷）多出來的對手：這週有截糧軍令、人在運糧隊在的那幾站（intercept_spots：出陣開著時只有 {地點}，關著時
+    {地點} 或相鄰的站），就可能遇上敵方的運糧隊（達成之後這週也照樣遇得到）。"""
     enemy = content.orders.convoy_squads.get(ENEMY.get(faction or "", ""))
     if enemy is None:
         return []
     for o in current(state, content, faction):
-        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+        if o.template == "intercept" and o.location is not None and loc_id in intercept_spots(content, o.location):
             return [enemy]
     return []
 
@@ -454,7 +463,7 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
             continue
         if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front, state.world):
             return True
-        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+        if o.template == "intercept" and o.location is not None and loc_id in intercept_spots(content, o.location):
             return True
     return False
 
@@ -471,7 +480,7 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
 
 
 def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
-    """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：{地點} 與相鄰站；護糧：身上有
+    """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
     這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
@@ -485,7 +494,7 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
         elif o.template == "defend":
             wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
-            wanted |= neighbors(content, o.location)
+            wanted |= intercept_spots(content, o.location)
         elif o.template == "escort":
             if p.convoy is None and o.start is not None and grain_of(state, content) >= content.config.convoy_grain:
                 wanted.add(o.start)
