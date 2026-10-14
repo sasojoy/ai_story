@@ -129,6 +129,28 @@ def test_fb251_the_challenge_line_says_the_same_stamina_as_a_sortie():
     assert "體力同遊歷" in howto.page(old, fresh_season(old), recruitable=False)
 
 
+def _world_lines(game):
+    return [r.text for r in game.state.world.rumors if r.layer == "world"]
+
+
+def test_fb252_taking_a_place_back_reads_as_a_recapture():
+    """官軍大營（潁川汝南靠官軍那一頭，門檻 62.5、±5）：推到 70 落入黃巾之手；退回 55，官軍這一季佔過它，寫「官軍收復官軍大營」。
+    割據交還、黃巾再拿下一次也是收復。江湖史同一句。"""
+    from tianxia import rules
+
+    game = _game("guan", "changshe")
+    c, w = game.content, game.state.world
+    guan, huang = c.scenario.faction_name("guan"), c.scenario.faction_name("huang")
+    territory.update(w, c)  # 這一季第一次算（不發天下大事）：開季的戰況，官軍大營歸官軍
+    rules.change_trend(game.state, c, "yingru", 70 - w.trends["yingru"])
+    assert territory.FLIP_LINE.format(place="官軍大營", side=huang) in _world_lines(game)
+    rules.change_trend(game.state, c, "yingru", 55 - w.trends["yingru"])
+    back = territory.RETAKE_LINE.format(place="官軍大營", side=guan)
+    assert back in _world_lines(game) and back in [r.text for r in w.chronicle]
+    rules.change_trend(game.state, c, "yingru", 70 - w.trends["yingru"])
+    assert territory.RETAKE_LINE.format(place="官軍大營", side=huang) in _world_lines(game)
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")

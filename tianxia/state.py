@@ -766,6 +766,7 @@ class TerritoryState(BaseModel):
     tug: dict[str, str] = Field(default_factory=dict)  # 可易手的地點 → 拔河算出的那一方（±band 不動看它）
     geju: list[str] = Field(default_factory=list)  # 豪強割據佔著的地點，照佔下的先後
     pinned: dict[str, str] = Field(default_factory=dict)  # 大事指定的地點 → 指定那一刻規則算出的控制方（規則改變那一刻才回到規則）
+    held: dict[str, list[str]] = Field(default_factory=dict)  # 地點 → 這一季佔過它的各方（照先後）：再拿回來寫「收復」（FB-252）
 
 
 class WorldState(BaseModel):

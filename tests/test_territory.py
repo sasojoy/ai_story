@@ -39,7 +39,8 @@ def _owner(game, loc_id):
 
 
 def _flips(game):
-    return [r.text for r in game.state.world.rumors if r.text.endswith("之手。")]
+    """易手的天下大事：「落入…之手」與這一季佔過那裡的一方拿回來的「…收復…」（FB-252）兩種都算。"""
+    return [r.text for r in game.state.world.rumors if r.text.endswith("之手。") or "收復" in r.text]
 
 
 def test_the_spots_bases_and_the_two_luoyang_places():
