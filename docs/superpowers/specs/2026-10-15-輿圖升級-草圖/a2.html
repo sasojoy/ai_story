@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>輿圖草圖 A 優化版</title>
+<style>
+/* 三份草圖共用的外框：左邊一支手機（或切成桌機），右邊寫跟現在比改了什麼。手機寬（≤760）時草圖本身佔滿畫面、說明排在下面 */
+:root {
+  --page: #E7DFCB; --page-ink: #2B241B; --page-mute: #7A6A55; --line: #CDBF9F; --card: #F7F1E3; --accent: #A8322A;
+  --serif: "Noto Serif TC", "Songti TC", "Source Han Serif TC", "PMingLiU", serif;
+  --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--page-ink); font-family: var(--sans); -webkit-text-size-adjust: 100%; }
+.page-head { max-width: 1240px; margin: 0 auto; padding: 18px 16px 6px; }
+.page-head h1 { font-family: var(--serif); font-size: 22px; margin: 0 0 4px; letter-spacing: 1px; }
+.page-head .lead { margin: 0; color: var(--page-mute); font-size: 14px; line-height: 1.6; }
+.page-head nav { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.page-head nav a { color: var(--page-ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; background: var(--card); }
+.page-head nav a.here { background: var(--page-ink); color: #F7F1E3; border-color: var(--page-ink); }
+.stage { max-width: 1240px; margin: 0 auto; padding: 10px 16px 40px; display: flex; gap: 28px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.device-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.devbar { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; font-size: 13px; }
+.devbar button { border: 0; background: none; padding: 4px 14px; border-radius: 999px; font: inherit; color: var(--page-mute); cursor: pointer; }
+.devbar button.on { background: var(--page-ink); color: #F7F1E3; }
+.device { position: relative; width: 375px; height: 760px; border: 9px solid #2A241D; border-radius: 34px; overflow: hidden;
+  box-shadow: 0 10px 30px rgba(43, 36, 27, .25); background: #EFE6CF; touch-action: none; }
+.device.desk { width: min(1060px, calc(100vw - 40px)); height: 640px; border-width: 6px; border-radius: 12px; }
+.notes { flex: 1 1 380px; max-width: 460px; font-size: 14px; line-height: 1.7; }
+.notes h2 { font-family: var(--serif); font-size: 17px; margin: 18px 0 6px; }
+.notes h2:first-child { margin-top: 0; }
+.notes ul { margin: 0; padding-left: 20px; }
+.notes li { margin: 3px 0; }
+.notes .pid { display: inline-block; min-width: 30px; font-size: 11px; color: #FFF; background: var(--accent); border-radius: 4px; text-align: center; margin-right: 4px; padding: 0 3px; }
+.notes .tag { font-size: 12px; color: var(--page-mute); }
+.notes .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+@media (max-width: 760px) {
+  .stage { display: block; padding: 0 0 30px; }
+  .devbar { display: none; }
+  .device, .device.desk { width: 100vw; height: 100svh; border: 0; border-radius: 0; box-shadow: none; }
+  .notes { padding: 8px 16px 0; max-width: none; }
+}
+
+/* ── A 優化版：操作照 A；美術（三種畫風可切）、資訊排版、大局與年表三塊升級 ── */
+.proto { position: absolute; inset: 0; display: flex; flex-direction: column; font-family: var(--sans); color: #2B241B; overflow: hidden; }
+.sbar { flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #FBF6EA; border-bottom: 1px solid #DDD1BC; font-size: 12px; white-space: nowrap; }
+.sbar b { font-family: var(--serif); font-size: 14px; }
+.sbar .mute { color: #8A7A62; }
+.sbar .st { margin-left: auto; color: #8A6A1A; }
+.mapbox { position: relative; flex: 1; overflow: hidden; background: #EFE6CF; touch-action: none; cursor: grab; }
+.mapbox.grabbing { cursor: grabbing; }
+.mapbox svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ftop { position: absolute; left: 10px; right: 58px; top: 10px; display: flex; flex-direction: column; gap: 7px; pointer-events: none; transition: opacity .15s; }
+.ftop > * { pointer-events: auto; }
+.tl-mode .ftop { opacity: 0; pointer-events: none; }
+.tl-mode .ftop > * { pointer-events: none; }
+.search { align-self: stretch; height: 40px; border-radius: 20px; border: 1px solid #D8CBAE; background: rgba(251, 246, 234, .96); box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+  font: 14px var(--sans); color: #8A7A62; text-align: left; padding: 0 16px; cursor: pointer; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; height: 30px; border-radius: 15px; border: 1px solid #D8CBAE; background: rgba(251, 246, 234, .94); font: 12.5px var(--sans); color: #5A4C3A; padding: 0 10px; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
+.chips button i { font-style: normal; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.chips button.on { background: #2B241B; color: #F7F1E3; border-color: #2B241B; }
+.chips button.tl.on { background: #A8322A; border-color: #A8322A; }
+.fright { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.fright button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid #D8CBAE; background: rgba(251, 246, 234, .96); font: 18px var(--sans); color: #2B241B; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.fright button.me { color: #A8322A; font-size: 20px; }
+.hud { position: absolute; left: 50%; transform: translateX(-50%); top: 92px; display: flex; gap: 4px; align-items: center; background: rgba(251, 246, 234, .95); border: 1px solid #D8CBAE;
+  border-radius: 16px; padding: 4px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); white-space: nowrap; pointer-events: none; }
+.tl-mode .hud { top: 10px; }
+.hud b { font-family: var(--serif); font-size: 13px; margin-right: 4px; }
+.hud span { padding: 0 4px; }
+.hud small { font-size: 10.5px; color: #8A7A62; }
+.tl-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 44px; background: #A8322A; color: #FFF; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, .2); white-space: nowrap; }
+.drawer { position: absolute; left: 0; right: 0; bottom: 52px; height: 190px; background: #FBF6EA; border-radius: 18px 18px 0 0; box-shadow: 0 -4px 18px rgba(43, 36, 27, .18);
+  display: flex; flex-direction: column; transition: height .22s cubic-bezier(.2, .8, .2, 1); z-index: 3; }
+.drawer.dragging { transition: none; }
+.grab { flex: none; height: 20px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none; }
+.grab i { width: 38px; height: 5px; border-radius: 3px; background: #CDBF9F; }
+.dbody { flex: 1; overflow-y: auto; padding: 0 14px 14px; font-size: 14px; line-height: 1.55; overscroll-behavior: contain; }
+.gtabs { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; background: #FBF6EA; border-top: 1px solid #DDD1BC; z-index: 4; }
+.gtabs span { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font: 17px var(--serif); color: #5A4C3A; }
+.gtabs span small { font: 10px var(--sans); color: #8A7A62; }
+.gtabs span.on, .gtabs span.on small { color: #A8322A; }
+/* 抽屜裡的排版：標題一行、摘要三格、動作一排、細節分段 */
+.h1 { display: flex; align-items: center; gap: 8px; }
+.h1 .nm { font: 700 19px var(--serif); }
+.seal { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 3px; color: #FFF8EC; font: 700 14px var(--serif); transform: rotate(-6deg); flex: none; }
+.seal.none { background: #A2967F; }
+.h1 .meta { margin-left: auto; font-size: 12px; color: #8A7A62; }
+.stars { color: #A8322A; letter-spacing: 1px; }
+.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 8px 0; }
+.three div { background: #FFF; border: 1px solid #E5DAC4; border-radius: 10px; padding: 5px 8px; }
+.three small { display: block; font-size: 10.5px; color: #8A7A62; letter-spacing: 1px; }
+.three b { font-size: 15px; }
+.acts { display: flex; gap: 8px; }
+.acts button { flex: 1; height: 44px; border-radius: 12px; border: 1px solid #D8CBAE; background: #FFF; font: 600 14px var(--sans); color: #2B241B; cursor: pointer; }
+.acts button.main { background: #A8322A; border-color: #A8322A; color: #FFF; }
+.acts button small { display: block; font-weight: 400; font-size: 10.5px; opacity: .85; margin-top: -2px; }
+.sec { border-top: 1px dashed #DDD1BC; padding: 8px 0; margin-top: 8px; }
+.sec h4 { margin: 0 0 3px; font: 600 11.5px var(--sans); color: #8A7A62; letter-spacing: 2px; }
+.strip { display: flex; gap: 2px; margin: 3px 0; }
+.strip span { flex: 1; height: 10px; border-radius: 2px; }
+.strip span.future { background: repeating-linear-gradient(45deg, #EDE4CF 0 3px, #FBF6EA 3px 6px) !important; }
+.strip span.now { outline: 2px solid #2B241B; }
+.tone-safe { color: #3F7A3A; } .tone-ok { color: #8A6A1A; } .tone-risk { color: #A8322A; }
+.go { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5DAC4; border-radius: 11px; background: #FFF; margin-top: 6px; cursor: pointer; }
+.go .n { width: 20px; height: 20px; border-radius: 50%; background: #A8322A; color: #FFF; font: 700 12px var(--sans); display: flex; align-items: center; justify-content: center; flex: none; }
+.go .t { flex: 1; min-width: 0; }
+.go .t b { font-family: var(--serif); }
+.go .why { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 1px; }
+.go .why span { font-size: 10.5px; border-radius: 6px; padding: 0 5px; color: #FFF; }
+.go .m { color: #8A7A62; font-size: 12px; white-space: nowrap; }
+.head2 { display: flex; align-items: baseline; justify-content: space-between; }
+.head2 b { font: 700 15px var(--serif); }
+.head2 small { color: #8A7A62; font-size: 12px; }
+.rope { margin: 6px 0 8px; }
+.rope .rl { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: #5A4C3A; }
+.rope .rl b { font-family: var(--serif); font-size: 13px; }
+.rope .bar { position: relative; height: 20px; margin-top: 3px; border-radius: 10px; background: linear-gradient(90deg, #DCE5F0, #F4E7C2); border: 1px solid #DDD1BC; }
+.rope .chaos { position: absolute; top: 0; bottom: 0; left: 35%; width: 30%; background: repeating-linear-gradient(45deg, rgba(168, 50, 42, .09) 0 4px, transparent 4px 8px); }
+.rope .knot { position: absolute; top: -4px; width: 4px; height: 26px; margin-left: -2px; background: #2B241B; border-radius: 2px; }
+.rope .bead { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 3px; border: 1.5px solid #FFF; transform: rotate(-6deg); }
+.search-in { width: 100%; height: 40px; border-radius: 12px; border: 1px solid #D8CBAE; padding: 0 12px; font: 15px var(--sans); background: #FFF; margin: 2px 0 6px; }
+.grp { font: 600 12px var(--sans); color: #8A7A62; margin: 10px 0 2px; letter-spacing: 1px; }
+.item { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 1px solid #EFE5D2; cursor: pointer; }
+.item .nm { flex: 1; }
+.item .mn { color: #8A7A62; font-size: 12px; }
+/* 版圖變化：天下大勢曲線＋年表 */
+.tl-head { display: flex; align-items: center; gap: 6px; }
+.tl-head .nm { flex: 1; font: 700 16px var(--serif); }
+.tl-head .nm small { font: 12px var(--sans); color: #8A7A62; margin-left: 4px; }
+.tl-head button { border: 1px solid #D8CBAE; background: #FFF; border-radius: 9px; height: 30px; padding: 0 9px; font: 12.5px var(--sans); cursor: pointer; }
+.graph { display: block; width: 100%; height: auto; margin: 4px 0 2px; cursor: pointer; }
+.chart { display: grid; grid-template-columns: 62px repeat(12, 1fr); gap: 2px; font-size: 11px; align-items: center; margin: 4px 0 2px; }
+.chart .wk { text-align: center; color: #5A4C3A; border-radius: 4px; padding: 2px 0; cursor: pointer; }
+.chart .wk.on { background: #A8322A; color: #FFF; }
+.chart .wk.future { color: #C2B699; cursor: default; }
+.chart .lab { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.chart .lab.sel { font-weight: 700; color: #A8322A; }
+.chart .ln { grid-column: 1 / -1; font: 600 10.5px var(--sans); color: #8A7A62; margin-top: 3px; letter-spacing: 1px; }
+.chart .cell { height: 14px; border-radius: 3px; position: relative; cursor: pointer; }
+.chart .cell.future { background: repeating-linear-gradient(45deg, #EDE4CF 0 3px, #FBF6EA 3px 6px) !important; cursor: default; }
+.chart .cell.now { box-shadow: 0 0 0 2px #2B241B; }
+.chart .cell.flip::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: #FFF; }
+.evt { padding: 2px 0; font-size: 13px; }
+.evt b { font-family: var(--serif); }
+.sum { display: flex; gap: 6px; margin: 4px 0; }
+.sum div { flex: 1; border-radius: 9px; padding: 4px 8px; color: #FFF; font-size: 12px; }
+.sum div b { font-size: 17px; font-family: var(--serif); margin-right: 3px; }
+@keyframes pulse { 0% { r: 16; opacity: .9; } 100% { r: 36; opacity: 0; } }
+.pulse { animation: pulse 1.6s ease-out infinite; transform-box: fill-box; }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .drawer { transition: none; } }
+.device.desk .proto { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 34px 1fr 52px; }
+.device.desk .sbar { grid-column: 1 / 3; }
+.device.desk .mapbox { grid-column: 1; grid-row: 2; }
+.device.desk .drawer { position: static; grid-column: 2; grid-row: 2; height: auto !important; border-radius: 0; box-shadow: -1px 0 0 #DDD1BC; }
+.device.desk .grab { display: none; }
+.device.desk .gtabs { position: static; grid-column: 1 / 3; grid-row: 3; }
+.stylebar { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; font-size: 13px; flex-wrap: wrap; justify-content: center; }
+.stylebar span { padding: 4px 6px 4px 10px; color: var(--page-mute); }
+.stylebar button { border: 0; background: none; padding: 4px 12px; border-radius: 999px; font: inherit; color: var(--page-mute); cursor: pointer; }
+.stylebar button.on { background: #A8322A; color: #FFF; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <h1>輿圖草圖 A 優化版</h1>
+  <p class="lead">企劃者 10/15 選了 A（加上 B 的年表），要優化三塊：美術質感、資訊排版、大局與年表。操作手感照 A。手機上面那一排可以切三種畫風；三種並排比較在「畫風比較」那一頁。</p>
+  <nav><a href="a2.html" class="here">A 優化版</a><a href="a2-styles.html">畫風比較</a><a href="a.html">A 原版</a><a href="b.html">B</a><a href="c.html">C</a><a href="README.md">說明</a></nav>
+</header>
+<main class="stage">
+  <div class="device-col">
+    <div class="stylebar" id="stylebar"><span>畫風</span><button data-style="jia" class="on">甲 精緻設色山水</button><button data-style="yi">乙 印與旗</button><button data-style="bing">丙 古輿圖</button></div>
+    <div class="devbar"><button data-mode="phone" class="on">手機 375</button><button data-mode="desk">桌機</button></div>
+    <div class="device" id="dev">
+      <div class="proto" id="proto">
+        <div class="sbar"><b>測圖</b><span class="mute">官軍・第 9 週・週三 21:40</span><span class="st">體力 186／250</span></div>
+        <div class="mapbox" id="mapbox">
+          <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="江湖輿圖"><g id="defs"></g><g id="world"><g id="gStatic"></g><g id="gDyn"></g></g></svg>
+          <div class="ftop">
+            <button class="search" data-act="search">🔍 找地點、找人物</button>
+            <div class="chips" id="chips">
+              <button data-layer="control" class="on">勢力</button>
+              <button data-layer="order" class="on"><i style="background:#A8322A"></i>軍令</button>
+              <button data-layer="enemy"><i style="background:#8A6A1A"></i>敵情</button>
+              <button data-layer="route"><i style="background:#7A6A55"></i>路程</button>
+              <button data-layer="story"><i style="background:#6B4E8A"></i>劇情</button>
+              <button data-act="timeline" class="tl">⏱ 版圖變化</button>
+            </div>
+          </div>
+          <div class="fright"><button class="me" data-act="home" title="我在哪" aria-label="我在哪">◎</button><button data-act="zin" aria-label="放大">＋</button><button data-act="zout" aria-label="縮小">－</button></div>
+          <div class="hud" id="hud" hidden></div>
+          <div class="tl-banner" id="banner" hidden></div>
+        </div>
+        <section class="drawer" id="drawer"><div class="grab" id="grab"><i></i></div><div class="dbody" id="dbody"></div></section>
+        <nav class="gtabs"><span>江<small>江湖</small></span><span>修<small>修練</small></span><span>煉<small>煉製</small></span><span class="on">圖<small>輿圖</small></span><span>聞<small>見聞</small></span></nav>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <h2>一、美術質感（三種畫風，上面那一排切）</h2>
+    <ul>
+      <li><b>甲 精緻設色山水</b>：現在的路往上走——絹紋紙、四角壓暗、青綠兩層的山（遠山淡、近山深、山脊一筆亮線）、河有深淺兩層、官道是雙線、州界是點劃線、大區名字寫在地圖上；地盤是暈開的顏色，前線是紅色鋸線加 ⚔。</li>
+      <li><b>乙 印與旗</b>（借 C）：淡墨山水、楷書地名；誰佔著是一顆印，可易手的地點另插一面那一方的旗，大本營的印有黑框；地盤是水色暈染，前線是朱砂粗筆。</li>
+      <li><b>丙 古輿圖</b>：計里畫方的格子、褐色線條、山是「∧」、河是雙線、城是方框套方框、營是三角；地名框在方框裡；地盤是那一方顏色的斜線網紋，前線是粗墨界線。</li>
+    </ul>
+    <h2>二、資訊排版</h2>
+    <ul>
+      <li><b>抽屜收著時先回答「今天去哪裡出陣」</b>：三個建議，照「有軍令 → 有懸賞 → 打得過 → 近」排，每一個寫攻或守、為什麼（令、賞、勝算）與幾分鐘，點了飛過去。底下才是三條戰線。</li>
+      <li><b>點一個地點，先看三格</b>：誰佔著／打得過嗎／多遠，下面就是動作；細節（這個地點整季的易手、站的隊伍、人物、此地、劇情）往上拉才看。</li>
+      <li><b>濾鏡疊在地名底下，一個濾鏡一種顏色的小牌子</b>：令（紅）、勝算（照勝算上色）、分鐘（灰）、劇情（紫）。勢力一直在底下。新加「軍令」，預設開著。</li>
+      <li>字：抽屜正文 14px、標題 19px、小標 11.5px 加字距；摘要三格的數字 15px 粗體。</li>
+    </ul>
+    <h2>三、大局與年表</h2>
+    <ul>
+      <li><b>拉遠看大局</b>：每個大區寫名字、一條三色長條（誰佔幾處）、幾處；地圖上方浮一條「天下」：官、巾、豪各佔幾處，比開季多幾處少幾處。</li>
+      <li><b>三條拔河繩</b>：繩上的地點是一顆小印（誰佔著），旁邊寫這一週往哪邊推。</li>
+      <li><b>版圖變化</b>：上面一張「天下大勢」曲線（三條戰線＋割據，一週一點，斜線是亂局，📜 是那一週的大事），點曲線選週；底下接 B 的年表；再下面是那一週的大事與易手、各方地盤數。播放時地圖、曲線、年表一起走。</li>
+    </ul>
+    <h2>沒動的</h2>
+    <p class="tag">操作手感照 A：整頁地圖、拖與捏、右上三顆鈕、抽屜四種高度、搜尋。</p>
+  </aside>
+</main>
+<script>
+// ── 三份草圖共用的假資料與規則（建置時內嵌進每一份 HTML，所以每一份都自足）──
+// 地點、路、大區、河、山取自正式內容（content/locations.json、map.json、scenario.json 的 territory），
+// 戰線每週的數字、割據與易手是假的「一季的故事」，照地盤易手的規則算（設計 4.2：T = 75 − 50 ×（j − 0.5）÷ k，±5 不動；割據 ≥60 每條線一處）。
+const DATA = {"W":900,"H":1340,"places":[["yingchuan","潁川郡（陽翟）",464,940,"town",1,1],["yingshui","潁水河畔",488,1012,"flag",0,1],["yingchuan_wilds","潁川郊野",541,962,"flag",0,1],["changshe","長社",598,1019,"flag",0,2],["luoyang_road","洛陽官道",223,870,"flag",1,1],["wan_city","宛城",172,1137,"town",1,1],["baima_temple","白馬寺",184,786,"roof",0,1],["luoyang_palace","洛陽宮城",123,838,"flag",1,1],["dajiangjun_fu","大將軍府",60,794,"flag",1,1],["beimang_hill","北邙山",120,755,"peak",0,2],["mengjin_ford","孟津渡",186,708,"ferry",0,2],["nanyang_road","南陽官道",237,1076,"flag",0,1],["nanyang_huangjin_camp","南陽黃巾營",246,1153,"camp",1,3],["yu_river","淯水河畔",83,1147,"flag",0,1],["xinye","新野",134,1195,"town",0,1],["nanyang_wilds","南陽郊野",121,1088,"flag",0,2],["runan","汝南",651,1168,"town",1,1],["runan_academy","汝南學宮",618,1235,"town",0,1],["hilltop_wilds","荒丘",544,1065,"flag",0,1],["songshan_foot","嵩山腳",395,901,"peak",0,1],["yingchuan_academy","潁川書院",396,974,"roof",1,1],["deep_mountain","嵩山深處",326,910,"peak",0,2],["jade_cave","南華觀",285,965,"flag",1,3],["runan_market","汝南集市",694,1230,"town",0,1],["qiao_county","譙縣",764,1167,"town",1,1],["cao_manor","曹氏莊院",813,1109,"flag",1,1],["runan_wilds","汝南荒野",601,1113,"flag",0,2],["guan_camp","官軍大營",580,880,"camp",1,2],["huangjin_camp","黃巾別部營寨",657,971,"camp",1,3],["zhuo_county","涿郡",584,118,"town",1,1],["market_town","集市小鎮",678,109,"town",0,1],["loushang_village","樓桑里",509,118,"flag",1,1],["zhuo_militia_hall","鄉里結社",637,172,"flag",1,1],["juma_river","拒馬河畔",543,186,"flag",0,2],["yanshan_foot","燕山腳",621,60,"peak",0,2],["julu_altar","鉅鹿道壇",534,484,"camp",1,3],["guangzong","廣宗",612,471,"camp",1,3],["luzhi_camp","盧植營",672,520,"camp",1,2],["xiaquyang","下曲陽",467,445,"town",1,2],["haozu_fort","豪族塢堡",406,497,"flag",1,2],["baima_ford","白馬津",586,558,"ferry",0,2],["mentor_hut","草廬",515,880,"flag",0,1]],"edges":[["yingchuan","yingshui",""],["yingchuan","yingchuan_wilds",""],["songshan_foot","yingchuan",""],["yingchuan","yingchuan_academy",""],["mentor_hut","yingchuan",""],["luoyang_road","yingchuan","官道"],["yingchuan_wilds","yingshui",""],["hilltop_wilds","yingshui",""],["changshe","yingchuan_wilds",""],["guan_camp","yingchuan_wilds",""],["changshe","huangjin_camp",""],["changshe","runan_wilds","官道"],["baima_ford","changshe","官道"],["baima_temple","luoyang_road","官道"],["nanyang_road","wan_city","官道"],["nanyang_huangjin_camp","wan_city",""],["wan_city","yu_river",""],["nanyang_wilds","wan_city",""],["baima_temple","luoyang_palace",""],["baima_temple","mengjin_ford",""],["beimang_hill","luoyang_palace",""],["dajiangjun_fu","luoyang_palace",""],["luoyang_palace","nanyang_wilds","山路"],["beimang_hill","mengjin_ford",""],["haozu_fort","mengjin_ford",""],["nanyang_huangjin_camp","nanyang_road",""],["hilltop_wilds","nanyang_road","官道"],["xinye","yu_river",""],["nanyang_wilds","xinye",""],["runan","runan_wilds",""],["runan","runan_academy",""],["runan","runan_market",""],["runan_academy","runan_market",""],["hilltop_wilds","runan_wilds",""],["songshan_foot","yingchuan_academy",""],["deep_mountain","songshan_foot","山路"],["deep_mountain","jade_cave","山路"],["qiao_county","runan_market","官道"],["cao_manor","qiao_county",""],["loushang_village","zhuo_county",""],["juma_river","zhuo_county",""],["zhuo_county","zhuo_militia_hall",""],["yanshan_foot","zhuo_county","山路"],["market_town","zhuo_county","官道"],["julu_altar","zhuo_county","官道"],["market_town","yanshan_foot",""],["market_town","zhuo_militia_hall",""],["juma_river","loushang_village",""],["juma_river","xiaquyang","山路"],["baima_ford","julu_altar","官道"],["guangzong","julu_altar",""],["julu_altar","xiaquyang",""],["baima_ford","guangzong","官道"],["guangzong","luzhi_camp",""],["baima_ford","luzhi_camp","官道"],["haozu_fort","xiaquyang",""]],"regions":[["youzhou","幽州","jizhou",[[454,111],[639,8],[731,96],[674,213],[505,226]],700,40],["jizhou","冀州","jizhou",[[351,497],[421,415],[663,449],[726,530],[615,605]],380,420],["luoyang","洛陽",null,[[5,789],[207,657],[264,907],[91,883]],30,870],["yingru","潁川汝南","yingru",[[233,947],[279,881],[355,864],[695,932],[867,1120],[812,1193],[727,1274],[633,1288]],700,960],["nanyang","南陽","nanyang",[[29,1157],[82,1049],[281,1043],[299,1167],[110,1245]],40,1240]],"rivers":[["黃河",[[0,690],[186,708],[300,650],[420,600],[586,558],[760,545],[900,540]],"yellow"],["潁水",[[340,860],[470,1000],[560,1100],[640,1210],[700,1340]],""],["淯水",[[40,1000],[80,1140],[150,1240],[190,1340]],""],["拒馬河",[[400,160],[543,200],[720,240]],""]],"lines":{"yingru":["guan_camp","runan_wilds"],"nanyang":["nanyang_wilds","yu_river"],"jizhou":["baima_ford","xiaquyang","juma_river","yanshan_foot"]},"fixed":{"guangzong":"huang"},"bases":{"changshe":"guan","wan_city":"guan","luzhi_camp":"guan","huangjin_camp":"huang","julu_altar":"huang","nanyang_huangjin_camp":"huang","zhuo_militia_hall":"haoqiang","cao_manor":"haoqiang","haozu_fort":"haoqiang"},"factions":[["guan","官軍"],["huang","黃巾軍"],["haoqiang","地方豪強"]],"terrain":[["mountains","燕山",[[420,62],[490,56],[560,50],[640,46]],22],["mountains","太行山",[[250,232],[282,300],[306,372],[314,444],[296,512],[272,566]],26],["mountains","呂梁山",[[70,150],[96,250],[118,350],[108,450]],20],["hills","",[[150,560],[200,600]],12],["hills","邙山",[[36,745],[172,748]],12],["mountains","嵩山",[[255,870],[300,863],[345,861],[385,869]],24],["mountains","",[[316,952],[362,957]],20],["mountains","伏牛山",[[28,978],[90,992],[150,1000],[214,996]],24],["mountains","桐柏山",[[318,1218],[380,1242],[440,1262]],20],["forest","",[[700,300],[800,288],[850,356],[760,398]],0],["forest","",[[700,1008],[782,998],[800,1062],[722,1072]],0],["forest","",[[800,1206],[868,1196],[878,1262],[812,1266]],0],["forest","",[[30,560],[95,552],[100,620],[36,628]],0]]};
+
+const SIDES = {
+  guan: { name: "官軍", short: "官", color: "#3D5F8F", soft: "#9DB4D3", tint: "#DCE5F0" },
+  huang: { name: "黃巾", short: "巾", color: "#B9821A", soft: "#E7C778", tint: "#F4E7C2" },
+  haoqiang: { name: "豪強", short: "豪", color: "#4E7D59", soft: "#A5C6A6", tint: "#DFEBDD" },
+};
+const P = {};
+// 全圖開放（企劃者 2026-10-15）：所有已開放的地點一開始就畫、都能直接前往；劇情還沒開放的（南華觀要等 xi_open）照舊不畫
+const LOCKED = new Set(["jade_cave"]);
+for (const [id, name, x, y, kind, big, danger] of DATA.places) if (!LOCKED.has(id)) P[id] = { id, name, x, y, kind, big: !!big, danger };
+DATA.edges = DATA.edges.filter(([a, b]) => P[a] && P[b]); // 通往沒開放地點的路也不畫
+const NAME_SHORT = (n) => n.replace(/（.*?）/g, "");
+
+// 大區：地點落在哪個多邊形（區外歸最近的大區中心，同 atlas）
+const REGIONS = DATA.regions.map(([id, name, front, pts, lx, ly]) => ({ id, name, front, pts, lx, ly,
+  cx: pts.reduce((a, p) => a + p[0], 0) / pts.length, cy: pts.reduce((a, p) => a + p[1], 0) / pts.length }));
+function inPoly(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+for (const p of Object.values(P)) {
+  const hit = REGIONS.find((r) => inPoly(p.x, p.y, r.pts));
+  p.region = (hit || REGIONS.slice().sort((a, b) => Math.hypot(a.cx - p.x, a.cy - p.y) - Math.hypot(b.cx - p.x, b.cy - p.y))[0]).id;
+}
+const REGION = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
+const REGION_ORDER = ["youzhou", "jizhou", "luoyang", "yingru", "nanyang"]; // 由北到南
+
+// 路：鄰接表，長度是座標距離
+const ADJ = {};
+for (const [a, b, road] of DATA.edges) {
+  if (!P[a] || !P[b]) continue;
+  const len = Math.hypot(P[a].x - P[b].x, P[a].y - P[b].y);
+  (ADJ[a] = ADJ[a] || []).push({ to: b, len, road });
+  (ADJ[b] = ADJ[b] || []).push({ to: a, len, road });
+}
+function route(from, to) {
+  const dist = { [from]: 0 }, prev = {}, todo = new Set(Object.keys(P));
+  while (todo.size) {
+    let u = null;
+    for (const k of todo) if (dist[k] !== undefined && (u === null || dist[k] < dist[u])) u = k;
+    if (u === null) break;
+    todo.delete(u);
+    if (u === to) break;
+    for (const e of ADJ[u] || []) {
+      const d = dist[u] + e.len;
+      if (dist[e.to] === undefined || d < dist[e.to]) { dist[e.to] = d; prev[e.to] = u; }
+    }
+  }
+  if (dist[to] === undefined) return null;
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev[path[0]]);
+  return { len: dist[to], path, minutes: Math.max(1, Math.round(dist[to] / 42)), stamina: Math.max(1, Math.round(dist[to] / 18)) };
+}
+
+// 戰線：從官軍那頭排到黃巾那頭（劇本 territory.lines），門檻照規則
+const LINES = DATA.lines;
+const LINE_NAME = { yingru: "潁川汝南", nanyang: "南陽", jizhou: "冀州" };
+const LINE_OF = {};
+const THRESHOLD = {};
+for (const [line, ids] of Object.entries(LINES)) ids.forEach((id, i) => {
+  LINE_OF[id] = line;
+  THRESHOLD[id] = 75 - (50 * (i + 0.5)) / ids.length;
+});
+const BASES = DATA.bases;
+const FIXED = DATA.fixed;
+
+// ── 一季的故事（假）：每週週末的戰線值（0 官軍穩控 ↔ 100 黃巾控制）與豪強割據 ──
+const WEEKS = 12, NOW = 9; // 現在是第 9 週；10～12 週還沒到
+const FRONTS = {
+  yingru: [40, 46, 52, 60, 70, 31, 34, 37, 40, 38, 36, 34], // 第 5 週波才把官軍大營拿下；第 6 週長社火攻，官軍大勝、拿回兩處
+  nanyang: [35, 38, 46, 52, 58, 68, 52, 46, 30, 32, 34, 35], // 第 3 週張曼成攻殺南陽太守；第 7 週秦頡斬張曼成；第 9 週宛城之戰
+  jizhou: [55, 58, 62, 64, 67, 69, 50, 75, 72, 74, 58, 55], // 第 7 週盧植圍廣宗；第 8 週盧植下獄，黃巾反撲
+};
+const GEJU = [10, 15, 21, 28, 35, 42, 50, 58, 63, 66, 69, 71];
+const TIMETABLE = { 1: ["三十六方起義"], 2: ["朝廷出兵"], 3: ["張曼成攻殺南陽太守"], 4: ["波才大敗朱儁"], 6: ["長社火攻（官軍大勝）"],
+  7: ["盧植圍廣宗", "秦頡斬張曼成"], 8: ["盧植下獄"], 9: ["宛城之戰（官軍險勝）"], 10: ["張角病逝"], 11: ["廣宗決戰"], 12: ["天命之爭", "下曲陽・季末"] };
+
+function computeHistory() {
+  const ctrl = {}, events = {};
+  let held = new Set();
+  for (let w = 1; w <= WEEKS; w++) {
+    const c = { ...BASES };
+    for (const [id, side] of Object.entries(FIXED)) c[id] = id === "guangzong" && w >= 11 ? "guan" : side;
+    for (const [line, ids] of Object.entries(LINES)) {
+      const v = FRONTS[line][w - 1];
+      for (const id of ids) {
+        const t = THRESHOLD[id], prev = ctrl[w - 1] && ctrl[w - 1][id];
+        c[id] = v >= t + 5 ? "huang" : v <= t - 5 ? "guan" : prev || (v >= t ? "huang" : "guan");
+      }
+    }
+    const g = GEJU[w - 1];
+    if (g < 50) held = new Set();
+    else if (g >= 60) {
+      const want = g >= 80 ? 2 : 1;
+      for (const [line, ids] of Object.entries(LINES)) {
+        const v = FRONTS[line][w - 1];
+        while (ids.filter((id) => held.has(id)).length < want) {
+          const pick = ids.filter((id) => !held.has(id)).sort((a, b) => Math.abs(THRESHOLD[a] - v) - Math.abs(THRESHOLD[b] - v))[0];
+          if (!pick) break;
+          held.add(pick);
+        }
+      }
+    }
+    for (const id of held) c[id] = "haoqiang";
+    ctrl[w] = c;
+    const changed = w === 1 ? [] : Object.keys(c).filter((id) => ctrl[w - 1][id] !== c[id]).map((id) => ({ id, from: ctrl[w - 1][id], to: c[id] }));
+    events[w] = { big: TIMETABLE[w] || [], changed };
+  }
+  return { ctrl, events };
+}
+const HISTORY = computeHistory();
+const ctrlAt = (w, id) => HISTORY.ctrl[w][id] || null;
+const flips = (id) => {
+  const out = [];
+  for (let w = 2; w <= NOW; w++) if (HISTORY.ctrl[w][id] !== HISTORY.ctrl[w - 1][id]) out.push({ w, from: HISTORY.ctrl[w - 1][id], to: HISTORY.ctrl[w][id] });
+  return out;
+};
+
+// ── 你（假）：官軍、站在潁川郡；全圖開放，沒有「還沒摸清」的地點 ──
+const ME = { name: "測圖", side: "guan", at: "yingchuan", stamina: 186, sortiesLeft: 3 };
+const UNKNOWN = new Set(); // 全圖開放之後一直是空的（草圖的程式裡還留著這個名字，不會畫出「？」）
+const CLINIC = new Set(["yingchuan", "runan", "wan_city", "zhuo_county", "xiaquyang", "baima_temple"]);
+const MARKET = new Set(["zhuo_county", "runan_market", "wan_city", "xiaquyang"]);
+const SMITH = new Set(Object.values(P).filter((p) => p.kind === "town").map((p) => p.id));
+const GOALS = new Set(["changshe", "guan_camp"]); // 劇情層：這一幕的目標（假）
+const NEWS = new Set(["wan_city", "xiaquyang", "runan_wilds"]); // 最近的大事與傳聞（假）
+const PEOPLE = { changshe: ["皇甫嵩", "朱儁"], huangjin_camp: ["波才"], guangzong: ["張角", "張梁"], luzhi_camp: ["盧植"], nanyang_huangjin_camp: ["張曼成"], xiaquyang: ["張寶"] };
+const SQUADS = { guan: ["官軍巡騎", "郡國兵"], huang: ["黃巾嘍囉", "黃巾別部"], haoqiang: ["涿郡義勇", "塢堡部曲"], none: ["流寇散兵", "山匪"] };
+
+function oddsWord(p) {
+  const side = ctrlAt(NOW, p.id);
+  if (side === ME.side) return { word: "自家地盤", tone: "safe" };
+  return [null, { word: "穩勝", tone: "safe" }, { word: "有把握", tone: "ok" }, { word: "難分勝負", tone: "risk" }][p.danger] || { word: "五五波", tone: "ok" };
+}
+function sortieOf(p, side = ME.side) {
+  if (!LINE_OF[p.id] && !BASES[p.id] && !FIXED[p.id]) return null;
+  if (!LINE_OF[p.id] && !FIXED[p.id]) return null; // 大本營不在可易手的戰線上：沒有出陣
+  const holder = ctrlAt(NOW, p.id);
+  if (side === "haoqiang") return "攪局";
+  return holder === side ? "守" : "攻";
+}
+function priceWord(p) {
+  const holder = ctrlAt(NOW, p.id);
+  if (!holder) return "";
+  return holder === ME.side ? "自家地盤：療傷、打造、買馬便宜一成" : "別人的地盤：療傷、打造、買馬貴兩成";
+}
+function services(p) {
+  return [CLINIC.has(p.id) && "醫館", SMITH.has(p.id) && "鐵匠鋪", MARKET.has(p.id) && "馬市"].filter(Boolean);
+}
+
+// ── 輿圖的三種畫風（a2.html 與 a2-畫風.html 共用；同一張圖、同一套資料，只換畫法）──
+// 甲：精緻設色山水（現在的方向往上一層）　乙：印與旗（借草圖 C 的印章）　丙：古輿圖（計里畫方、方框地名）
+// base() 畫不跟倍率走的底（紙、大區、山河、路）；marks() 畫跟倍率、週次、濾鏡走的（勢力、前線、地點、字、你）。
+// k＝1／倍率：字與記號乘它，螢幕上看起來大小固定。
+const ART = (() => {
+  const SERIF = '"Noto Serif TC","Songti TC","Source Han Serif TC","PMingLiU",serif';
+  const KAI = '"BiauKai","DFKai-SB","KaiTi","STKaiti","Kaiti TC",serif';
+  const SANS = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+  const GLYPH = { town: "城", camp: "營", roof: "寺", ferry: "渡", peak: "山", flag: "野" };
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const poly = (pts) => "M" + pts.map((p) => p.join(" ")).join("L") + "Z";
+  const smooth = (pts) => { // Catmull-Rom → 三次曲線：河要圓順
+    let d = `M${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      d += `C${p1[0] + (p2[0] - p0[0]) / 6} ${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6} ${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]} ${p2[1]}`;
+    }
+    return d;
+  };
+  const road = (a, b) => `M${a.x} ${a.y}Q${(a.x + b.x) / 2 + (b.y - a.y) * 0.08} ${(a.y + b.y) / 2 - (b.x - a.x) * 0.08} ${b.x} ${b.y}`;
+  const along = (pts, step, fn) => { // 沿著山脊每隔 step 放一個
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[i + 1], n = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) / step));
+      for (let j = 0; j < n; j++) fn(ax + ((bx - ax) * j) / n, ay + ((by - ay) * j) / n, i * 31 + j);
+    }
+  };
+  const majority = (rid, week) => {
+    const n = {};
+    for (const p of Object.values(P)) if (p.region === rid) { const c = ctrlAt(week, p.id); if (c) n[c] = (n[c] || 0) + 1; }
+    return n;
+  };
+  const top = (n) => Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  const STYLES = {
+    jia: { name: "甲・精緻設色山水", note: "現在的設色山水往上一層：絹紋與四角壓暗、青綠疊色的山、雙線官道、州界點劃線；地盤是暈開的顏色，前線是紅色鋸線。" },
+    yi: { name: "乙・印與旗", note: "淡墨山水打底、楷書地名；誰佔著是一顆印（官、巾、豪），可易手的地點插一面旗；地盤是淡淡的水色暈染，前線是朱砂粗筆。" },
+    bing: { name: "丙・古輿圖", note: "像宋代石刻輿圖：計里畫方的格子、褐色線條、山畫成「∧」、河是雙線、地名框在方框裡；地盤是斜線網紋，前線是粗墨界線。" },
+  };
+
+  function defs(style) {
+    const noise = (a) => `<filter id="paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 .42  0 0 0 0 .34  0 0 0 0 .22  0 0 0 ${a} 0"/></filter>`;
+    const out = [noise(style === "bing" ? 0.16 : 0.1)];
+    out.push(`<radialGradient id="vig" cx=".5" cy=".5" r=".75"><stop offset=".65" stop-color="#5A4632" stop-opacity="0"/><stop offset="1" stop-color="#5A4632" stop-opacity="${style === "yi" ? 0.12 : 0.22}"/></radialGradient>`);
+    for (const [k, s] of Object.entries(SIDES)) {
+      out.push(`<radialGradient id="halo-${k}"><stop offset="0" stop-color="${s.soft}" stop-opacity=".7"/><stop offset=".55" stop-color="${s.soft}" stop-opacity=".35"/><stop offset="1" stop-color="${s.soft}" stop-opacity="0"/></radialGradient>`);
+      out.push(`<pattern id="hatch-${k}" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><rect width="9" height="9" fill="${s.tint}" opacity=".55"/><line x1="0" y1="0" x2="0" y2="9" stroke="${s.color}" stroke-width="2.4" opacity=".55"/></pattern>`);
+    }
+    out.push('<linearGradient id="mtn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F7564"/><stop offset=".6" stop-color="#7DA38A"/><stop offset="1" stop-color="#B7CDA9"/></linearGradient>');
+    out.push('<linearGradient id="mtn2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FB0A0"/><stop offset="1" stop-color="#CFDCC4"/></linearGradient>');
+    out.push('<filter id="wash" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>');
+    out.push('<filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>');
+    out.push('<pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="#7A5C36" stroke-width="1" opacity=".22"/></pattern>');
+    return `<defs>${out.join("")}</defs>`;
+  }
+
+  // ── 底 ──
+  function base(style, ctx) {
+    const W = DATA.W, H = DATA.H, out = [];
+    const paper = { jia: "#EFE6CF", yi: "#F3EDDC", bing: "#E7DABA" }[style];
+    out.push(`<rect width="${W}" height="${H}" fill="${paper}"/><rect width="${W}" height="${H}" filter="url(#paper)"/>`);
+    if (style === "bing") out.push(`<rect width="${W}" height="${H}" fill="url(#grid)"/>`);
+    // 大區
+    for (const r of REGIONS) {
+      const lead = ctx.ctrlOn ? top(majority(r.id, ctx.week)) : null;
+      if (style === "jia") out.push(`<path d="${poly(r.pts)}" fill="${lead ? SIDES[lead].tint : "#E6DEC6"}" fill-opacity=".55" stroke="#A88F62" stroke-width="2.2" stroke-dasharray="12 4 2 4"/>`);
+      if (style === "yi") out.push(`<path d="${poly(r.pts)}" fill="none" stroke="#B9A882" stroke-width="1.4" stroke-dasharray="3 5"/>`);
+      if (style === "bing") out.push(`<path d="${poly(r.pts)}" fill="none" stroke="#7A5C36" stroke-width="3.4"/><path d="${poly(r.pts)}" fill="none" stroke="${paper}" stroke-width="1.2"/>`);
+    }
+    // 山與林
+    for (const [kind, , pts, sz] of DATA.terrain) {
+      if (kind === "forest") {
+        const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys), dx = Math.max(...xs) - x0, dy = Math.max(...ys) - y0;
+        for (let i = 0; i < 16; i++) {
+          const x = x0 + (((i * 37) % 100) / 100) * dx, y = y0 + (((i * 61) % 100) / 100) * dy;
+          if (style === "jia") out.push(`<path d="M${x} ${y + 9}V${y + 3}" stroke="#5A4630" stroke-width="1.6"/><circle cx="${x}" cy="${y}" r="6.5" fill="#7FA585" stroke="#3E6448" stroke-width="1.1"/>`);
+          if (style === "yi") out.push(`<circle cx="${x}" cy="${y}" r="9" fill="#5E6E58" opacity=".22" filter="url(#soft)"/>`);
+          if (style === "bing") out.push(`<path d="M${x} ${y + 7}V${y - 1}M${x - 5} ${y + 2}L${x} ${y - 6}L${x + 5} ${y + 2}" fill="none" stroke="#6B5131" stroke-width="1.3"/>`);
+        }
+        continue;
+      }
+      const hill = kind === "hills";
+      along(pts, sz * (style === "bing" ? 0.9 : 1.25), (x, y, i) => {
+        const h = sz * (hill ? 0.65 : 1 + (i % 3) * 0.2);
+        if (style === "jia") {
+          out.push(`<path d="M${x - h * 1.05 + 6} ${y + h * 0.5}L${x + 6} ${y - h * 0.8}L${x + h * 1.05 + 6} ${y + h * 0.5}Z" fill="url(#mtn2)"/>`);
+          out.push(`<path d="M${x - h * 0.85} ${y + h * 0.5}Q${x - h * 0.3} ${y - h * 0.4} ${x} ${y - h}Q${x + h * 0.35} ${y - h * 0.35} ${x + h * 0.85} ${y + h * 0.5}Z" fill="url(#mtn)" stroke="#2F5245" stroke-width="1.5" stroke-linejoin="round"/>`);
+          out.push(`<path d="M${x} ${y - h}Q${x - h * 0.08} ${y - h * 0.4} ${x - h * 0.3} ${y + h * 0.3}" fill="none" stroke="#E8EFE0" stroke-width="1.2" opacity=".8"/>`);
+        }
+        if (style === "yi") {
+          out.push(`<ellipse cx="${x}" cy="${y}" rx="${h * 1.5}" ry="${h * 0.8}" fill="#2F2A24" opacity=".2" filter="url(#soft)"/>`);
+          out.push(`<path d="M${x - h * 1.1} ${y + h * 0.4}Q${x - h * 0.4} ${y - h * 1.1} ${x} ${y - h * 0.85}T${x + h * 1.2} ${y + h * 0.4}" fill="none" stroke="#2F2A24" stroke-width="1.7" opacity=".55" stroke-linecap="round"/>`);
+        }
+        if (style === "bing") out.push(`<path d="M${x - h * 0.6} ${y + h * 0.3}L${x} ${y - h * 0.55}L${x + h * 0.6} ${y + h * 0.3}" fill="none" stroke="#6B5131" stroke-width="1.6" stroke-linejoin="round"/>`);
+      });
+    }
+    // 河
+    for (const [, pts, color] of DATA.rivers) {
+      const d = smooth(pts), yellow = color === "yellow";
+      if (style === "jia") out.push(`<path d="${d}" fill="none" stroke="${yellow ? "#D3B36B" : "#86AFCB"}" stroke-width="${yellow ? 15 : 8}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${yellow ? "#EBD9A8" : "#C9DEEA"}" stroke-width="${yellow ? 5 : 2.6}" stroke-linecap="round"/>`);
+      if (style === "yi") out.push(`<path d="${d}" fill="none" stroke="${yellow ? "#B49E70" : "#7F98A8"}" stroke-width="${yellow ? 16 : 9}" opacity=".35" stroke-linecap="round" filter="url(#soft)"/><path d="${d}" fill="none" stroke="${yellow ? "#8E7A50" : "#5E7787"}" stroke-width="1.6" opacity=".7"/>`);
+      if (style === "bing") out.push(`<path d="${d}" fill="none" stroke="${yellow ? "#8A6B3A" : "#4E6E86"}" stroke-width="${yellow ? 9 : 6}"/><path d="${d}" fill="none" stroke="${paper}" stroke-width="${yellow ? 5 : 3}"/>`);
+    }
+    // 路
+    for (const [a, b, kind] of DATA.edges) {
+      const d = road(P[a], P[b]), main = kind === "官道";
+      if (style === "jia") out.push(main
+        ? `<path d="${d}" fill="none" stroke="#8C6A3F" stroke-width="5.2" opacity=".75"/><path d="${d}" fill="none" stroke="#F1E7CF" stroke-width="2.2"/>`
+        : `<path d="${d}" fill="none" stroke="#8C6A3F" stroke-width="2" stroke-dasharray="6 5" opacity=".75"/>`);
+      if (style === "yi") out.push(`<path d="${d}" fill="none" stroke="#3A332A" stroke-width="${main ? 2.4 : 1.5}" stroke-dasharray="${main ? "12 3 3 3" : "7 4 2 4"}" opacity=".55" stroke-linecap="round"/>`);
+      if (style === "bing") out.push(`<path d="${d}" fill="none" stroke="#6B5131" stroke-width="${main ? 2.2 : 1.3}" stroke-dasharray="${main ? "0" : "4 4"}" opacity=".85"/>`);
+    }
+    // 近看時的大區名（地圖本身的字，跟著縮放）
+    for (const r of REGIONS) {
+      if (style === "jia") out.push(`<text x="${r.lx}" y="${r.ly}" font-family='${SERIF}' font-size="30" font-weight="700" letter-spacing="10" fill="#7A6A55" opacity=".45">${r.name}</text>`);
+      if (style === "yi") out.push(`<text x="${r.lx}" y="${r.ly}" font-family='${KAI}' font-size="32" letter-spacing="12" fill="#2F2A24" opacity=".28">${r.name}</text>`);
+      if (style === "bing") { const w = r.name.length * 26 + 18; out.push(`<rect x="${r.lx - 9}" y="${r.ly - 26}" width="${w}" height="36" fill="${paper}" stroke="#7A5C36" stroke-width="1.6"/><text x="${r.lx}" y="${r.ly + 1}" font-family='${SERIF}' font-size="24" letter-spacing="2" fill="#5A4630">${r.name}</text>`); }
+    }
+    out.push(`<rect width="${W}" height="${H}" fill="url(#vig)"/>`);
+    return out.join("");
+  }
+
+  // ── 記號：勢力、前線、地點、字、你 ──
+  // ctx: { week, k, far, ctrlOn, sel, me, flash:Set, badges(id)->[[text, color]], label(id)->string }
+  function marks(style, ctx) {
+    const { week, k, far, ctrlOn } = ctx, out = [];
+    // 勢力
+    if (ctrlOn) for (const p of Object.values(P)) {
+      const c = ctrlAt(week, p.id);
+      if (!c) continue;
+      if (style === "jia") out.push(`<circle cx="${p.x}" cy="${p.y}" r="80" fill="url(#halo-${c})"/>`);
+      if (style === "yi") out.push(`<circle cx="${p.x}" cy="${p.y}" r="58" fill="${SIDES[c].soft}" opacity=".5" filter="url(#wash)"/>`);
+      if (style === "bing") out.push(`<circle cx="${p.x}" cy="${p.y}" r="44" fill="url(#hatch-${c})"/>`);
+    }
+    // 前線：兩方地盤相接的路
+    if (ctrlOn) for (const [a, b] of DATA.edges) {
+      const ca = ctrlAt(week, a), cb = ctrlAt(week, b);
+      if (!ca || !cb || ca === cb) continue;
+      const A = P[a], B = P[b], long = Math.hypot(A.x - B.x, A.y - B.y) > 200, mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+      if (style === "jia") {
+        out.push(`<path d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="#A8322A" stroke-width="${3.6 * Math.max(1, k * 0.8)}" stroke-dasharray="${2 * k} ${3 * k}" fill="none"/>`);
+        if (!long) out.push(`<text x="${mx}" y="${my + 6 * k}" font-size="${15 * k}" text-anchor="middle">⚔</text>`);
+      }
+      if (style === "yi") out.push(`<path d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="#A8322A" stroke-width="${Math.max(7, 5 * k)}" stroke-linecap="round" stroke-dasharray="${18 * k} ${4 * k} ${7 * k} ${4 * k}" opacity=".85" fill="none"/>`);
+      if (style === "bing") out.push(`<path d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="#2B1F14" stroke-width="${Math.max(4.5, 3.4 * k)}" stroke-dasharray="${10 * k} ${4 * k} ${2 * k} ${4 * k}" fill="none"/><path d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="#A8322A" stroke-width="${1.4 * k}" fill="none"/>`);
+    }
+    // 看大局：大區名字、誰佔幾處（三色長條）
+    if (far) for (const r of REGIONS) {
+      const n = majority(r.id, week), total = Object.values(n).reduce((a, b) => a + b, 0), font = style === "yi" ? KAI : SERIF;
+      out.push(`<text x="${r.cx}" y="${r.cy - 14 * k}" text-anchor="middle" font-family='${font}' font-size="${23 * k}" font-weight="700" fill="#2B241B" stroke="#F7F1E3" stroke-width="${5 * k}" paint-order="stroke" letter-spacing="${3 * k}">${r.name}</text>`);
+      if (total) {
+        let x = r.cx - 40 * k;
+        for (const side of ["guan", "huang", "haoqiang"]) {
+          if (!n[side]) continue;
+          const w = (80 * k * n[side]) / total;
+          out.push(`<rect x="${x}" y="${r.cy - 4 * k}" width="${w}" height="${9 * k}" fill="${SIDES[side].color}"/>`);
+          x += w;
+        }
+        out.push(`<rect x="${r.cx - 40 * k}" y="${r.cy - 4 * k}" width="${80 * k}" height="${9 * k}" fill="none" stroke="#F7F1E3" stroke-width="${1.5 * k}"/>`);
+        out.push(`<text x="${r.cx}" y="${r.cy + 20 * k}" text-anchor="middle" font-size="${12 * k}" fill="#3A332A" stroke="#F7F1E3" stroke-width="${3 * k}" paint-order="stroke" font-family='${SANS}'>${["guan", "huang", "haoqiang"].filter((s) => n[s]).map((s) => `${SIDES[s].short} ${n[s]}`).join("・")}</text>`);
+      } else out.push(`<text x="${r.cx}" y="${r.cy + 6 * k}" text-anchor="middle" font-size="${12 * k}" fill="#6D5E48" font-family='${SANS}'>無人佔據</text>`);
+    }
+    // 地點
+    for (const p of Object.values(P)) {
+      const c = ctrlAt(week, p.id), cc = ctrlOn ? c : null, line = !!LINE_OF[p.id], base = !!BASES[p.id];
+      if (ctx.flash && ctx.flash.has(p.id)) out.push(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="#A8322A" stroke-width="${3 * k}"/>`);
+      const r = far ? 6 * k : Math.max(11, 8 * k);
+      if (ctx.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${r + 9 * k}" fill="none" stroke="#2B241B" stroke-width="${3 * k}"/>`);
+      out.push(`<g data-loc="${p.id}">`);
+      if (far) {
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${cc ? SIDES[cc].color : "#A99C84"}" stroke="#F7F1E3" stroke-width="${1.5 * k}"/></g>`);
+        continue;
+      }
+      const col = cc ? SIDES[cc].color : style === "bing" ? "#5A4630" : "#7A6A55";
+      if (style === "jia") {
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${r + 2.5 * k}" fill="none" stroke="${col}" stroke-width="${1.2 * k}" opacity=".7"/><circle cx="${p.x}" cy="${p.y}" r="${r}" fill="#FBF6EA" stroke="${col}" stroke-width="${2.8 * Math.max(1, k * 0.7)}"/>`);
+        out.push(`<text x="${p.x}" y="${p.y + r * 0.36}" text-anchor="middle" font-size="${r * 1.02}" fill="${col}" font-weight="700" font-family='${SERIF}'>${GLYPH[p.kind]}</text>`);
+      }
+      if (style === "yi") {
+        if (cc) {
+          const s = (base ? 22 : 18) * k;
+          if (line) out.push(`<path d="M${p.x + s * 0.5} ${p.y - s * 0.5}V${p.y - s * 2}" stroke="#3A332A" stroke-width="${1.4 * k}"/><path d="M${p.x + s * 0.5} ${p.y - s * 2}L${p.x + s * 1.6} ${p.y - s * 1.65}L${p.x + s * 0.5} ${p.y - s * 1.3}Z" fill="${SIDES[cc].color}"/>`);
+          out.push(`<g transform="rotate(-6 ${p.x} ${p.y})"><rect x="${p.x - s / 2}" y="${p.y - s / 2}" width="${s}" height="${s}" rx="${2 * k}" fill="${SIDES[cc].color}"${base ? ` stroke="#2B241B" stroke-width="${1.2 * k}"` : ""}/><text x="${p.x}" y="${p.y + s * 0.3}" text-anchor="middle" font-size="${s * 0.72}" fill="#FFF8EC" font-family='${KAI}' font-weight="700">${SIDES[cc].short}</text></g>`);
+        } else out.push(`<circle cx="${p.x}" cy="${p.y}" r="${5.5 * k}" fill="#2B241B"/><circle cx="${p.x}" cy="${p.y}" r="${8.5 * k}" fill="none" stroke="#2B241B" stroke-width="${1 * k}" opacity=".45"/>`);
+      }
+      if (style === "bing") {
+        const s = r * 1.1;
+        if (p.kind === "town") out.push(`<rect x="${p.x - s}" y="${p.y - s}" width="${2 * s}" height="${2 * s}" fill="#F1E7CC" stroke="${col}" stroke-width="${2.6 * k}"/><rect x="${p.x - s * 0.55}" y="${p.y - s * 0.55}" width="${s * 1.1}" height="${s * 1.1}" fill="none" stroke="${col}" stroke-width="${1.2 * k}"/>`);
+        else if (p.kind === "camp") out.push(`<path d="M${p.x - s} ${p.y + s * 0.8}L${p.x} ${p.y - s}L${p.x + s} ${p.y + s * 0.8}Z" fill="#F1E7CC" stroke="${col}" stroke-width="${2.4 * k}"/>`);
+        else out.push(`<circle cx="${p.x}" cy="${p.y}" r="${s * 0.75}" fill="#F1E7CC" stroke="${col}" stroke-width="${2.2 * k}"/>`);
+      }
+      out.push("</g>");
+      // 地名與疊上去的小牌子
+      const label = ctx.label(p.id), fs = 13 * k;
+      const lx = p.x + r + (style === "yi" && cc && line ? 18 : 5) * k;
+      if (style === "bing") {
+        const w = (label.length * 13 + 8) * k;
+        out.push(`<rect x="${lx - 3 * k}" y="${p.y - 10 * k}" width="${w}" height="${18 * k}" fill="#F1E7CC" stroke="#6B5131" stroke-width="${0.9 * k}"/><text x="${lx + 1 * k}" y="${p.y + 4 * k}" font-size="${fs}" fill="#3A2C1C" font-family='${SERIF}'>${esc(label)}</text>`);
+      } else out.push(`<text x="${lx}" y="${p.y + 4.5 * k}" font-size="${(style === "yi" ? 14.5 : 13) * k}" font-weight="${p.big ? 700 : 500}" fill="#2B241B" stroke="#F7F1E3" stroke-width="${3.4 * k}" paint-order="stroke" font-family='${style === "yi" ? KAI : SERIF}'>${esc(label)}</text>`);
+      let bx = lx;
+      for (const [t, color] of ctx.badges(p.id)) { // 濾鏡疊上去的小牌子：一排、各自一個顏色
+        const w = (t.length * 10.5 + 10) * k;
+        out.push(`<rect x="${bx - 2 * k}" y="${p.y + 9 * k}" width="${w}" height="${15 * k}" rx="${7.5 * k}" fill="${color}"/><text x="${bx + 3 * k}" y="${p.y + 20 * k}" font-size="${10.5 * k}" fill="#FFF" font-family='${SANS}'>${t}</text>`);
+        bx += w + 3 * k;
+      }
+    }
+    // 你
+    const h = P[ctx.me];
+    out.push(`<circle class="pulse" cx="${h.x}" cy="${h.y}" r="16" fill="none" stroke="#A8322A" stroke-width="${2.5 * k}"/>`);
+    out.push(`<path d="M${h.x + 4 * k} ${h.y - 12 * k}V${h.y - 40 * k}L${h.x + 22 * k} ${h.y - 33 * k}L${h.x + 4 * k} ${h.y - 26 * k}" fill="#A8322A" stroke="#7A1F18" stroke-width="${1.5 * k}"/>`);
+    return out.join("");
+  }
+  return { STYLES, defs, base, marks, esc };
+})();
+
+// 外框：手機／桌機切換（只在寬螢幕出現）。切了之後通知草圖重新量大小
+(function () {
+  const dev = document.getElementById("dev");
+  const bar = document.querySelector(".devbar");
+  if (!dev || !bar) return;
+  bar.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-mode]");
+    if (!b) return;
+    for (const x of bar.querySelectorAll("button")) x.classList.toggle("on", x === b);
+    dev.classList.toggle("desk", b.dataset.mode === "desk");
+    window.dispatchEvent(new Event("devicechange"));
+  });
+})();
+
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = ART.esc;
+  const box = $("#mapbox"), world = $("#world"), gStatic = $("#gStatic"), gDyn = $("#gDyn"), drawer = $("#drawer"), dbody = $("#dbody"), banner = $("#banner"), hud = $("#hud"), proto = $("#proto");
+  const W = DATA.W, H = DATA.H;
+  const S = { style: "jia", view: null, layers: new Set(["control", "order"]), sel: null, mode: "overview", week: NOW, dstate: "rest", query: "" };
+  // 假的軍令與懸賞（給「今天去哪裡出陣」與「軍令」濾鏡用）
+  const ORDERS = { guan_camp: "守城", runan_wilds: "攻城", yu_river: "截糧" };
+  const BOUNTIES = { huangjin_camp: "討伐", xiaquyang: "打探" };
+  const sideName = (k) => (k ? SIDES[k].name : "無人控制");
+  const seal = (k) => k ? `<span class="seal" style="background:${SIDES[k].color}">${SIDES[k].short}</span>` : '<span class="seal none">—</span>';
+  const toneColor = { safe: "#3F7A3A", ok: "#8A6A1A", risk: "#A8322A" };
+
+  // ── 視圖 ──
+  const size = () => [box.clientWidth, box.clientHeight];
+  const fit = () => { const [vw, vh] = size(); return Math.min(vw / W, vh / H); };
+  const clamp = (v) => {
+    const [vw, vh] = size(), s = Math.min(2.2, Math.max(fit() * 0.3, v.s)), hw = vw / 2 / s, hh = vh / 2 / s;
+    const cx = W <= 2 * hw ? Math.min(hw, Math.max(W - hw, v.cx)) : Math.min(W - hw, Math.max(hw, v.cx));
+    const cy = H <= 2 * hh ? Math.min(hh, Math.max(H - hh, v.cy)) : Math.min(H - hh, Math.max(hh, v.cy));
+    return { s, cx, cy };
+  };
+  let lastS = null;
+  function apply() {
+    const [vw, vh] = size();
+    S.view = clamp(S.view);
+    const { s, cx, cy } = S.view;
+    world.setAttribute("transform", `translate(${vw / 2 - cx * s} ${vh / 2 - cy * s}) scale(${s})`);
+    if (lastS === null || Math.abs(lastS - s) > 1e-6) { lastS = s; drawDyn(); }
+  }
+  function flyTo(x, y, s) {
+    const a = { ...S.view }, b = clamp({ s: s || Math.max(S.view.s, 0.95), cx: x, cy: y }), t0 = performance.now(), dur = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320;
+    (function step(t) {
+      const k = dur ? Math.min(1, (t - t0) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      S.view = { s: a.s + (b.s - a.s) * e, cx: a.cx + (b.cx - a.cx) * e, cy: a.cy + (b.cy - a.cy) * e };
+      apply();
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  const desk = () => $("#dev").classList.contains("desk");
+  function flyToPlace(id) {
+    const p = P[id], [, vh] = size(), cover = desk() ? 0 : Math.min(drawerPx("peek"), vh * 0.6), s = Math.max(S.view.s, 0.95);
+    flyTo(p.x, p.y + cover / 2 / s, s);
+  }
+  function wholeMap() {
+    const [vw, vh] = size(), cover = desk() ? 0 : drawerPx(S.dstate), topGap = S.mode === "timeline" ? 44 : 124, room = vh - cover - topGap - 8;
+    const s = Math.min(vw / W, room / H);
+    flyTo(W / 2, H / 2 + (vh / 2 - (topGap + room / 2)) / s, s);
+  }
+
+  // ── 畫 ──
+  const routeCache = {};
+  const routeTo = (id) => (routeCache[id] = routeCache[id] || route(ME.at, id));
+  function badges(id) {
+    const out = [], p = P[id];
+    if (id === ME.at) return out;
+    if (S.layers.has("order") && ORDERS[id]) out.push([`令 ${ORDERS[id]}`, "#A8322A"]);
+    if (S.layers.has("order") && BOUNTIES[id]) out.push([`賞 ${BOUNTIES[id]}`, "#C26A1E"]);
+    if (S.layers.has("enemy")) { const o = oddsWord(p); out.push([o.word, toneColor[o.tone]]); }
+    if (S.layers.has("route")) out.push([`${routeTo(id).minutes}分`, "#7A6A55"]);
+    if (S.layers.has("story") && (GOALS.has(id) || NEWS.has(id))) out.push([GOALS.has(id) ? "★主線" : "✦傳聞", "#6B4E8A"]);
+    return out;
+  }
+  const label = (id) => NAME_SHORT(P[id].name) + (id === ME.at ? "（你）" : "");
+  function drawStatic() {
+    $("#defs").innerHTML = ART.defs(S.style);
+    gStatic.innerHTML = ART.base(S.style, { week: S.week, ctrlOn: S.layers.has("control") });
+  }
+  function drawDyn() {
+    const s = S.view.s, far = s < 0.62;
+    const flash = S.week !== NOW ? new Set(HISTORY.events[S.week].changed.map((e) => e.id)) : null;
+    gDyn.innerHTML = ART.marks(S.style, { week: S.week, k: 1 / s, far, ctrlOn: S.layers.has("control"), sel: S.sel, me: ME.at, flash, badges, label });
+    renderHud(far);
+  }
+  function redraw() { drawStatic(); drawDyn(); }
+  // 天下：各方此刻佔幾處、比開季多幾處（看大局與版圖變化時浮在地圖上方）
+  function tally(w) { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const id of Object.keys(P)) { const c = ctrlAt(w, id); if (c) n[c]++; } return n; }
+  function renderHud(far) {
+    const show = far || S.mode === "timeline";
+    hud.hidden = !show;
+    if (!show) return;
+    const now = tally(S.week), start = tally(1);
+    hud.innerHTML = `<b>天下</b>` + ["guan", "huang", "haoqiang"].map((k) => { const d = now[k] - start[k]; return `<span style="color:${SIDES[k].color}">${SIDES[k].short} <b style="font-size:14px">${now[k]}</b><small>${d ? (d > 0 ? `+${d}` : d) : "±0"}</small></span>`; }).join("") + `<small>　比開季</small>`;
+  }
+
+  // ── 抽屜 ──
+  function drawerPx(st) {
+    const avail = proto.clientHeight - 34 - 52;
+    return { rest: 230, peek: 238, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(430, Math.round(avail * 0.62)) }[st];
+  }
+  function setDrawer(st) {
+    S.dstate = st;
+    drawer.style.height = desk() ? "" : drawerPx(st) + "px";
+  }
+  function ropeHtml(line) {
+    const v = FRONTS[line][S.week - 1], dv = S.week > 1 ? v - FRONTS[line][S.week - 2] : 0;
+    const trend = dv > 0 ? `<small style="color:${SIDES.huang.color}">▶ 黃巾推進 ${dv}</small>` : dv < 0 ? `<small style="color:${SIDES.guan.color}">◀ 官軍推進 ${-dv}</small>` : "<small>持平</small>";
+    const beads = LINES[line].map((id) => { const c = ctrlAt(S.week, id); return `<span class="bead" title="${P[id].name}" style="left:${100 - THRESHOLD[id]}%;background:${c ? SIDES[c].color : "#A2967F"}"></span>`; }).join("");
+    return `<div class="rope"><div class="rl"><span>官軍</span><b>${LINE_NAME[line]} ${trend}</b><span>黃巾</span></div><div class="bar"><span class="chaos"></span>${beads}<span class="knot" style="left:${100 - v}%"></span></div></div>`;
+  }
+  // 今天去哪裡出陣：有軍令 → 有懸賞 → 打得過 → 近
+  function suggestions() {
+    const rank = { safe: 3, ok: 2, risk: 0 };
+    return Object.values(P).filter((p) => sortieOf(p)).map((p) => {
+      const o = oddsWord(p), r = routeTo(p.id), why = [];
+      if (ORDERS[p.id]) why.push([`軍令・${ORDERS[p.id]}`, "#A8322A"]);
+      if (BOUNTIES[p.id]) why.push([`懸賞・${BOUNTIES[p.id]}`, "#C26A1E"]);
+      why.push([o.word, toneColor[o.tone]]);
+      return { p, o, r, why, score: (ORDERS[p.id] ? 100 : 0) + (BOUNTIES[p.id] ? 50 : 0) + rank[o.tone] * 10 - r.minutes };
+    }).sort((a, b) => b.score - a.score).slice(0, 3);
+  }
+  function overview() {
+    const h = P[ME.at], c = ctrlAt(NOW, ME.at);
+    const goes = suggestions().map((g, i) => `<div class="go" data-pick="${g.p.id}"><span class="n">${i + 1}</span><span class="t"><b>${NAME_SHORT(g.p.name)}</b>　出陣・${sortieOf(g.p)}
+      <span class="why">${g.why.map(([t, col]) => `<span style="background:${col}">${t}</span>`).join("")}</span></span><span class="m">${g.r.minutes} 分 ›</span></div>`).join("");
+    return `<div class="head2"><b>今天去哪裡出陣</b><small>今日還能 ${ME.sortiesLeft} 次・你在 ${NAME_SHORT(h.name)}${c ? `（${sideName(c)}）` : ""}</small></div>${goes}
+      <div class="sec"><h4>三條戰線</h4>${Object.keys(LINES).map(ropeHtml).join("")}<div style="font-size:12px;color:#8A7A62">割據 ${GEJU[S.week - 1]}${GEJU[S.week - 1] >= 60 ? "：豪強在每條戰線佔一處" : ""}</div></div>
+      <div class="sec"><h4>本週大事</h4>${(HISTORY.events[NOW].big || []).map((t) => `<div class="evt">📜 ${t}</div>`).join("") || "—"}</div>`;
+  }
+  function placeHtml(id) {
+    const p = P[id], c = ctrlAt(NOW, id), r = routeTo(id), here = id === ME.at, so = sortieOf(p), o = oddsWord(p);
+    const acts = here
+      ? `${so ? `<button class="main">出陣・${so}<small>今日還能 ${ME.sortiesLeft} 次</small></button>` : ""}<button${so ? "" : ' class="main"'}>探索<small>找素材・找事件・靜心</small></button>`
+      : `<button class="main">步行 ${r.minutes} 分<small>途經 ${r.path.length - 2} 站</small></button><button>疾行<small>立刻到・體力 ${r.stamina}</small></button>`;
+    const strip = (LINE_OF[id] || FIXED[id]) ? `<div class="strip">${Array.from({ length: WEEKS }, (_, i) => { const w = i + 1, cc = ctrlAt(w, id); return `<span class="${w > NOW ? "future" : ""}${w === NOW ? " now" : ""}" style="background:${cc ? SIDES[cc].color : "#CDBF9F"}" title="第 ${w} 週"></span>`; }).join("")}</div>` : "";
+    const fl = flips(id).map((f) => `第 ${f.w} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
+    const who = c && c !== ME.side ? SQUADS[c] : c === ME.side ? ["自家人馬"] : SQUADS.none;
+    return `<div class="h1">${seal(c)}<span class="nm">${esc(NAME_SHORT(p.name))}</span><span class="meta">${REGION[p.region].name}・<span class="stars">${"★".repeat(p.danger)}</span></span></div>
+      <div class="three"><div><small>誰佔著</small><b style="color:${c ? SIDES[c].color : "#8A7A62"}">${c ? SIDES[c].name : "無人"}</b>${BASES[id] ? "<small>大本營</small>" : LINE_OF[id] ? "<small>可易手</small>" : ""}</div>
+        <div><small>打得過嗎</small><b class="tone-${o.tone}">${here ? "—" : o.word}</b>${so ? `<small>出陣是${so}</small>` : ""}</div>
+        <div><small>多遠</small><b>${here ? "這裡" : `${r.minutes} 分`}</b>${here ? "" : `<small>疾行 體力 ${r.stamina}</small>`}</div></div>
+      <div class="acts">${acts}</div>
+      ${ORDERS[id] || BOUNTIES[id] ? `<div class="sec"><h4>軍令與懸賞</h4>${ORDERS[id] ? `軍令「${ORDERS[id]}」在這裡記功` : ""}${ORDERS[id] && BOUNTIES[id] ? "；" : ""}${BOUNTIES[id] ? `懸賞「${BOUNTIES[id]}」` : ""}</div>` : ""}
+      <div class="sec"><h4>地盤</h4>${c ? `${sideName(c)}${c === "haoqiang" ? "佔據" : "控制"}。${priceWord(p)}` : "不在戰線上，沒有控制方。"}${strip}${fl ? `<div style="font-size:12px;color:#8A7A62">易手：${fl}</div>` : ""}</div>
+      <div class="sec"><h4>站在這裡的</h4>${who.join("、")}${here ? "" : `　<span class="tone-${o.tone}">${o.word}</span>`}${PEOPLE[id] ? `<br>龍頭人物：${PEOPLE[id].join("、")}` : ""}</div>
+      ${services(p).length ? `<div class="sec"><h4>此地</h4>${services(p).join("・")}</div>` : ""}
+      <div class="sec"><h4>劇情</h4>${GOALS.has(id) ? "★ 這一幕主線的目標　" : ""}${NEWS.has(id) ? "✦ 最近有大事與傳聞" : GOALS.has(id) ? "" : "最近沒有大事"}</div>`;
+  }
+  function searchHtml() {
+    const q = S.query.trim(), hit = (p) => !q || p.name.includes(q) || (PEOPLE[p.id] || []).some((n) => n.includes(q)) || REGION[p.region].name.includes(q);
+    return `<input class="search-in" id="q" placeholder="地名、人物、大區…" value="${esc(S.query)}">` + REGION_ORDER.map((rid) => {
+      const items = Object.values(P).filter((p) => p.region === rid && hit(p)).sort((a, b) => routeTo(a.id).len - routeTo(b.id).len);
+      return items.length ? `<div class="grp">${REGION[rid].name}</div>` + items.map((p) => { const c = ctrlAt(NOW, p.id); return `<div class="item" data-pick="${p.id}">${seal(c)}<span class="nm">${esc(NAME_SHORT(p.name))}${PEOPLE[p.id] ? ` <small style="color:#8A7A62">${PEOPLE[p.id].join("、")}</small>` : ""}</span><span class="mn">${p.id === ME.at ? "你在這裡" : routeTo(p.id).minutes + " 分"}</span></div>`; }).join("") : "";
+    }).join("");
+  }
+  // 天下大勢曲線：三條戰線與割據，一週一點；斜線是亂局；📜 是那一週的大事；點了選週
+  const GX0 = 30, GW = 300, GY0 = 12, GH = 92;
+  const gx = (w) => GX0 + ((w - 1) * GW) / (WEEKS - 1), gy = (v) => GY0 + ((100 - v) * GH) / 100;
+  function graphSvg() {
+    const out = [`<rect x="${GX0}" y="${gy(65)}" width="${GW}" height="${gy(35) - gy(65)}" fill="#A8322A" opacity=".06"/>`,
+      `<rect x="${gx(NOW)}" y="${GY0}" width="${gx(WEEKS) - gx(NOW)}" height="${GH}" fill="#EDE4CF" opacity=".7"/>`,
+      `<text x="2" y="${GY0 + 8}" font-size="10" fill="${SIDES.huang.color}">黃巾</text><text x="2" y="${GY0 + GH}" font-size="10" fill="${SIDES.guan.color}">官軍</text>`];
+    const lines = [["yingru", "#5A3E28", ""], ["nanyang", "#2E5E6B", "5 3"], ["jizhou", "#7A2E52", "1.5 3"]];
+    for (const [line, col, dash] of lines) {
+      const pts = FRONTS[line].slice(0, NOW).map((v, i) => `${gx(i + 1)},${gy(v)}`).join(" ");
+      out.push(`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.2" stroke-dasharray="${dash}"/>`);
+      out.push(`<text x="${gx(NOW) + 4}" y="${gy(FRONTS[line][NOW - 1]) + 3}" font-size="10" fill="${col}">${LINE_NAME[line].slice(0, 2)}</text>`);
+    }
+    out.push(`<polyline points="${GEJU.slice(0, NOW).map((v, i) => `${gx(i + 1)},${gy(v)}`).join(" ")}" fill="none" stroke="${SIDES.haoqiang.color}" stroke-width="1.6" opacity=".8"/>`);
+    out.push(`<text x="${gx(NOW) + 4}" y="${gy(GEJU[NOW - 1]) + 3}" font-size="10" fill="${SIDES.haoqiang.color}">割據</text>`);
+    for (let w = 1; w <= WEEKS; w++) if ((TIMETABLE[w] || []).length && w <= NOW) out.push(`<text x="${gx(w)}" y="${GY0 - 1}" font-size="9" text-anchor="middle">📜</text>`);
+    out.push(`<line x1="${gx(S.week)}" y1="${GY0}" x2="${gx(S.week)}" y2="${GY0 + GH}" stroke="#A8322A" stroke-width="2"/>`);
+    for (let w = 1; w <= WEEKS; w++) out.push(`<text x="${gx(w)}" y="${GY0 + GH + 11}" font-size="9.5" text-anchor="middle" fill="${w === S.week ? "#A8322A" : w > NOW ? "#C2B699" : "#8A7A62"}">${w}</text>`);
+    return `<svg class="graph" id="graph" viewBox="0 0 ${GX0 + GW + 34} ${GY0 + GH + 14}" xmlns="http://www.w3.org/2000/svg">${out.join("")}</svg>`;
+  }
+  function chartHtml() {
+    const w = S.week;
+    const head = '<span></span>' + Array.from({ length: WEEKS }, (_, i) => { const n = i + 1; return `<span class="wk${n === w ? " on" : ""}${n > NOW ? " future" : ""}" ${n <= NOW ? `data-week="${n}"` : ""}>${n}</span>`; }).join("");
+    const rows = Object.entries({ ...LINES, guangzong_fixed: ["guangzong"] }).map(([line, ids]) =>
+      `<span class="ln">${LINE_NAME[line] || "廣宗（只照大事易手）"}</span>` + ids.map((id) => `<span class="lab${S.sel === id ? " sel" : ""}" data-tlpick="${id}">${NAME_SHORT(P[id].name)}</span>` +
+        Array.from({ length: WEEKS }, (_, i) => {
+          const n = i + 1, c = ctrlAt(n, id), flip = n > 1 && n <= NOW && ctrlAt(n - 1, id) !== c;
+          return `<span class="cell${n > NOW ? " future" : ""}${n === w ? " now" : ""}${flip ? " flip" : ""}" ${n <= NOW ? `data-week="${n}"` : ""} style="background:${c ? SIDES[c].color : "#CDBF9F"}"></span>`;
+        }).join("")).join("")).join("");
+    return `<div class="chart">${head}${rows}</div>`;
+  }
+  function timelineHtml() {
+    const w = S.week, ev = HISTORY.events[w], t = tally(w), t1 = tally(1);
+    const list = [...ev.big.map((x) => `<div class="evt">📜 <b>${x}</b></div>`),
+      ...ev.changed.map((e) => `<div class="evt">⇄ ${NAME_SHORT(P[e.id].name)}：<span style="color:${SIDES[e.from].color}">${sideName(e.from)}</span> → <span style="color:${SIDES[e.to].color}">${sideName(e.to)}</span></div>`)].join("");
+    return `<div class="tl-head"><span class="nm">天下怎麼變<small>第 ${w} 週週末</small></span><button data-act="play">▶ 播放</button><button data-act="now">回到現在</button><button data-act="timeline" aria-label="收起">✕</button></div>
+      ${graphSvg()}
+      <div class="sum">${["guan", "huang", "haoqiang"].map((k) => `<div style="background:${SIDES[k].color}"><b>${t[k]}</b>${SIDES[k].name}<small style="opacity:.85">　${t[k] - t1[k] >= 0 ? "+" : ""}${t[k] - t1[k]}</small></div>`).join("")}</div>
+      ${chartHtml()}
+      <div class="sec"><h4>第 ${w} 週</h4>${list || '<div class="evt" style="color:#8A7A62">沒有地點易手。</div>'}</div>`;
+  }
+  function renderDrawer() {
+    dbody.innerHTML = S.mode === "place" ? placeHtml(S.sel) : S.mode === "search" ? searchHtml() : S.mode === "timeline" ? timelineHtml() : overview();
+    banner.hidden = S.week === NOW;
+    banner.textContent = `正在看第 ${S.week} 週`;
+    proto.classList.toggle("tl-mode", S.mode === "timeline");
+    $("#chips [data-act=timeline]").classList.toggle("on", S.mode === "timeline");
+    const q = $("#q");
+    if (q) q.addEventListener("input", () => { S.query = q.value; const pos = q.selectionStart; renderDrawer(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); });
+    const g = $("#graph");
+    if (g) g.addEventListener("click", (ev) => {
+      const r = g.getBoundingClientRect(), x = ((ev.clientX - r.left) / r.width) * (GX0 + GW + 34);
+      S.week = Math.max(1, Math.min(NOW, Math.round((x - GX0) / (GW / (WEEKS - 1))) + 1));
+      redraw(); renderDrawer();
+    });
+    renderHud(S.view && S.view.s < 0.62);
+  }
+  function select(id) { S.sel = id; S.mode = "place"; if (S.dstate === "rest") setDrawer("peek"); renderDrawer(); drawDyn(); }
+  function clearSel() { S.sel = null; S.mode = "overview"; setDrawer("rest"); renderDrawer(); drawDyn(); }
+
+  // ── 手勢（同 A） ──
+  const pts = new Map();
+  let base = null, tap = null;
+  const local = (ev) => { const r = box.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+  const toMap = (x, y) => { const [vw, vh] = size(), v = S.view; return [v.cx + (x - vw / 2) / v.s, v.cy + (y - vh / 2) / v.s]; };
+  box.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest("button, .ftop, .fright")) return;
+    box.setPointerCapture(ev.pointerId);
+    pts.set(ev.pointerId, local(ev));
+    tap = pts.size === 1 ? { id: ev.pointerId, at: local(ev), moved: false } : null;
+    base = pts.size === 2 ? (() => { const [a, b] = [...pts.values()]; return { s: S.view.s, d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: toMap((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) }; })() : { at: local(ev) };
+    box.classList.add("grabbing");
+  });
+  box.addEventListener("pointermove", (ev) => {
+    if (!pts.has(ev.pointerId)) return;
+    const p = local(ev); pts.set(ev.pointerId, p);
+    if (tap && Math.hypot(p[0] - tap.at[0], p[1] - tap.at[1]) > 8) tap.moved = true;
+    const [vw, vh] = size();
+    if (pts.size === 1 && base.at) { S.view = { ...S.view, cx: S.view.cx - (p[0] - base.at[0]) / S.view.s, cy: S.view.cy - (p[1] - base.at[1]) / S.view.s }; base.at = p; }
+    else if (pts.size === 2 && base.m) {
+      const [a, b] = [...pts.values()], s = Math.min(2.2, Math.max(fit() * 0.3, (base.s * Math.hypot(a[0] - b[0], a[1] - b[1])) / base.d));
+      S.view = { s, cx: base.m[0] - ((a[0] + b[0]) / 2 - vw / 2) / s, cy: base.m[1] - ((a[1] + b[1]) / 2 - vh / 2) / s };
+    }
+    apply();
+  });
+  const up = (ev) => {
+    if (!pts.has(ev.pointerId)) return;
+    pts.delete(ev.pointerId);
+    if (pts.size === 1) { base = { at: [...pts.values()][0] }; tap = null; return; }
+    box.classList.remove("grabbing");
+    if (tap && !tap.moved && ev.type === "pointerup") {
+      const [mx, my] = toMap(...tap.at), reach = 26 / S.view.s;
+      const near = Object.values(P).map((p) => [p, Math.hypot(p.x - mx, p.y - my)]).filter(([, d]) => d < reach).sort((a, b) => a[1] - b[1])[0];
+      if (near) { if (S.mode === "timeline") { S.sel = near[0].id; drawDyn(); renderDrawer(); } else select(near[0].id); }
+      else if (S.mode === "place") clearSel();
+    }
+    tap = null;
+  };
+  box.addEventListener("pointerup", up);
+  box.addEventListener("pointercancel", up);
+  box.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    const [x, y] = local(ev), m = toMap(x, y), [vw, vh] = size(), s = Math.min(2.2, Math.max(fit() * 0.3, S.view.s * Math.exp(-ev.deltaY * 0.0015)));
+    S.view = { s, cx: m[0] - (x - vw / 2) / s, cy: m[1] - (y - vh / 2) / s };
+    apply();
+  }, { passive: false });
+  const grab = $("#grab");
+  let drag = null;
+  grab.addEventListener("pointerdown", (ev) => { grab.setPointerCapture(ev.pointerId); drag = { y: ev.clientY, h: drawer.offsetHeight, moved: false }; drawer.classList.add("dragging"); });
+  grab.addEventListener("pointermove", (ev) => { if (!drag) return; const dy = drag.y - ev.clientY; if (Math.abs(dy) > 5) drag.moved = true; drawer.style.height = Math.max(90, Math.min(drawerPx("full"), drag.h + dy)) + "px"; });
+  grab.addEventListener("pointerup", () => {
+    if (!drag) return;
+    drawer.classList.remove("dragging");
+    if (!drag.moved) setDrawer(S.dstate === "rest" || S.dstate === "peek" ? "half" : S.mode === "place" ? "peek" : "rest");
+    else { const h = drawer.offsetHeight; setDrawer(["rest", "peek", "half", "full"].sort((a, b) => Math.abs(drawerPx(a) - h) - Math.abs(drawerPx(b) - h))[0]); }
+    drag = null;
+  });
+
+  // ── 按鈕 ──
+  let playing = null;
+  proto.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-act], [data-layer], [data-pick], [data-week], [data-tlpick]");
+    if (!b) return;
+    if (b.dataset.layer) { S.layers.has(b.dataset.layer) ? S.layers.delete(b.dataset.layer) : S.layers.add(b.dataset.layer); b.classList.toggle("on", S.layers.has(b.dataset.layer)); redraw(); return; }
+    if (b.dataset.pick) { S.query = ""; select(b.dataset.pick); setDrawer("peek"); flyToPlace(b.dataset.pick); return; }
+    if (b.dataset.week) { S.week = +b.dataset.week; redraw(); renderDrawer(); return; }
+    if (b.dataset.tlpick) { S.sel = S.sel === b.dataset.tlpick ? null : b.dataset.tlpick; drawDyn(); renderDrawer(); return; }
+    const act = b.dataset.act;
+    if (act === "home") { flyTo(P[ME.at].x, P[ME.at].y, Math.max(S.view.s, 0.95)); select(ME.at); }
+    if (act === "zin" || act === "zout") { const [vw, vh] = size(), m = toMap(vw / 2, vh / 2); flyTo(m[0], m[1], S.view.s * (act === "zin" ? 1.5 : 1 / 1.5)); }
+    if (act === "search") { S.mode = "search"; setDrawer("full"); renderDrawer(); setTimeout(() => $("#q") && $("#q").focus(), 230); }
+    if (act === "timeline") {
+      clearInterval(playing);
+      if (S.mode === "timeline") { S.week = NOW; S.mode = "overview"; S.sel = null; setDrawer("rest"); }
+      else { S.mode = "timeline"; S.layers.add("control"); $("#chips [data-layer=control]").classList.add("on"); setDrawer("tl"); }
+      redraw(); renderDrawer();
+      if (S.mode === "timeline") wholeMap();
+    }
+    if (act === "now") { clearInterval(playing); S.week = NOW; redraw(); renderDrawer(); }
+    if (act === "play") {
+      clearInterval(playing); S.week = 1; redraw(); renderDrawer();
+      playing = setInterval(() => { if (S.week >= NOW) return clearInterval(playing); S.week++; redraw(); renderDrawer(); }, 900);
+    }
+  });
+  // 畫風（在手機外面那一排）
+  $("#stylebar").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-style]");
+    if (!b) return;
+    S.style = b.dataset.style;
+    for (const x of document.querySelectorAll("#stylebar [data-style]")) x.classList.toggle("on", x === b);
+    box.style.background = { jia: "#EFE6CF", yi: "#F3EDDC", bing: "#E7DABA" }[S.style];
+    redraw();
+  });
+  function start() {
+    if (!S.view) S.view = { s: 0.95, cx: P[ME.at].x, cy: P[ME.at].y + 90 };
+    setDrawer(S.dstate);
+    lastS = null; apply();
+  }
+  window.addEventListener("resize", start);
+  window.addEventListener("devicechange", () => setTimeout(start, 30));
+  start(); redraw(); renderDrawer();
+})();
+</script>
+</body>
+</html>
