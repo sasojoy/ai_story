@@ -105,7 +105,7 @@ def test_problem_and_forged_keys():
 
 def test_the_smith_clue_takes_over_the_keeper_line_for_one_action(content, world, monkeypatch):
     game = _smith(content, world)
-    monkeypatch.setattr(game, "_smith_clue", lambda: ["鐵匠順口說了一句口訣。"])
+    monkeypatch.setattr(game, "_smith_clue", lambda paid=True: ["鐵匠順口說了一句口訣。"])
     game.choose("smith:buy:劍")
     assert shopview.line_text(game.state, content, "smith") == "鐵匠順口說了一句口訣。"
     game.choose("smith:page:armor")

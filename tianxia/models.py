@@ -1755,6 +1755,7 @@ class ForgeSecretRules(_Strict):
     # 寫給玩家看的字（待 joy 潤；{clue} 換成口訣、{who} 換成名號、{name} 換成名器的名字）
     tale_frame: str = "說書先生又扯到一段兵器的掌故：「{clue}」"
     smith_frame: str = "鐵匠一邊收錢一邊嘀咕：「{clue}」"
+    smith_frame_free: str = "鐵匠一邊收拾一邊嘀咕：「{clue}」"  # 這一下沒收銀兩（一階淬煉只收素材，FB-142）
     scrap_frame: str = "你在灰堆裡扒出半張燒焦的鑄譜，只認得出一句：「{clue}」"
     first_line: str = "這是失傳的鑄法，江湖上你是第一個摸出來的。"
     mine_line: str = "照你摸出來的鑄法，又打了一件。"

@@ -208,3 +208,28 @@ def test_fb148_the_first_words_of_the_forge_result_say_what_kind_of_piece_it_is(
         head = smithing.forged_head(item, "柳絲綿與驚羽")
         assert head.startswith(start + "：鐵匠把柳絲綿與驚羽下爐。"), head
         assert item.quality in head[:18]  # 收成一行露得出品質
+
+
+# ── FB-142：鐵匠順口那一句照有沒有收錢換句 ──
+
+from test_forge_secrets import _smith, forge_content  # noqa: E402,F401（forge_content 是 fixture）
+
+
+def test_fb142_a_free_temper_does_not_say_the_smith_took_money(forge_content, world):
+    """一階淬煉只收一個素材、不收錢，鐵匠順口卻寫「一邊收錢一邊嘀咕」：沒收銀兩的那一下換一句。"""
+    from tianxia import forge_secrets
+    from tianxia.state import Weapon
+
+    rule = forge_content.config.forge_secrets
+    rule.smith_chance = 1.0
+    game = _smith(forge_content, world)
+    recipe = forge_secrets.smith_clue(forge_content, world.read().tianji, "town")
+    clue = recipe.clues[forge_secrets.SMITH]
+    game.state.player.weapon = Weapon(id="兵:9", name="試刃", kind="劍", attribute="剛", tier=1, quality="下品")
+    game.state.player.materials["gang_1"] = 3
+    silver = game.state.player.stats["silver"]
+    game.choose("act:smith")
+    msgs = game.choose("smith:temper")
+    assert game.state.player.stats["silver"] == silver  # 一階淬煉不收錢
+    assert rule.smith_frame_free.format(clue=clue) in msgs and rule.smith_frame.format(clue=clue) not in msgs
+    assert "收錢" not in rule.smith_frame_free
