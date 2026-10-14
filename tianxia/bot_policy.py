@@ -316,11 +316,14 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
     if not pending or IDLE_MARK not in {o.id for o in game.options(odds=False, tick=False)}:
         return None
     inv = pending[0]
-    theirs = inv.payload.get("item", "")
-    item = next(
-        (key for key, _ in game.discuss_items() if key != theirs and game.discuss_problem(key, theirs, inv.sender) is None), None,
-    )
-    if item is None or game.peer_card(inv.sender) is None or rng.random() >= INVITE_YES:  # 他走了：收掉這張
+    # 照玩家卡上答應的那幾顆挑（跟真人看到的同一張卡）：按得下去的就是兩邊都合得成的（discuss._answer_buttons，FB-117）
+    card = game.peer_card(inv.sender)
+    ready = [
+        b["arg"].removeprefix("yes:") for b in (card or {}).get("actions", [])
+        if b["action"] == "discuss" and b["enabled"] and b["arg"].startswith("yes:")
+    ]
+    item = ready[0] if ready else None
+    if item is None or rng.random() >= INVITE_YES:  # 他走了（卡打不開）、一樣都合不成：收掉這張
         return game.choose(f"invite:no:{inv.id}")
     params = {"arg": f"yes:{item}"}
     request = game.peer_request(inv.sender, "discuss", params)

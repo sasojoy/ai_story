@@ -688,8 +688,8 @@
   // 這裡畫好之後量一次：行動列（事件、有所感這種一組選項時是最後一顆）的下緣離分頁列不到 FIT_MARGIN，就照 FIT_STEPS 的順序一步一步收，
   // 收到放得下就停——放得下的畫面一點都不動。先收不少任何字的（間距、框的行高），再收 💡 與看一眼就夠的（對手的描述、第一回合、
   // 剛剛的後半、決戰時所在地的描述、集結那一句的後半），每一樣都點得開、看得到全文；得失與結果那幾行（數字）、框裡的話都不收。
-  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結又有框的時候：場景裡「此地還有」、結伴那幾行不歸這裡收）
-  // 就是放不下，不再藏別的
+  // 在路上（另有自己的排法，FB-055）、序章裡不收。收到最後還放不下（集結又有框的時候：場景裡「此地還有」、結伴那一行不歸這裡收；
+  // 別人遞來的邀請歸 6b 收，FB-117）就是放不下，不再藏別的
   // 量的是畫面本身（字體、寬度、狀態列幾行都算進去），所以手機高一點、字少一點就少收或不收。重畫、轉向、拉視窗之後重量（先全部還原）
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
@@ -770,6 +770,29 @@
       if (body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits"); // 三行就放得下：不要淡出與「展開全文」
       return true;
     } },
+    // 6b. 場景底下別人遞來的邀請（FB-117：最多畫兩份，socialHtml）：還放不下就從最後一份往前收，收到放得下為止，
+    //     收掉的併進「還有 N 份邀請 ▾」那一行（沒有那一行就補一行），點了全部攤開（callsOpened：玩家點開過、還是點開那時的那幾份，就不再收）
+    { key: "calls", run: () => {
+      const box = document.querySelector("#page > .card.scene .calls");
+      if (!box || callsOpened((S.main && S.main.calls) || [])) return false;
+      const rows = [...box.querySelectorAll(":scope > .call")];
+      if (!rows.length) return false;
+      // 「還有 N 份」那一行先放好、每收一份就換字，再量：以前收完才補那一行，量的時候少算了它的高度，補上之後行動列又掉回分頁列底下
+      // （375×812、兩份、師父的框在：只收了一份，行動列 679～777）
+      let more = box.querySelector(":scope > .calls-more");
+      if (!more) {
+        box.insertAdjacentHTML("beforeend", '<button class="linkish calls-more" data-act="calls-more" data-fit="1"></button>');
+        more = box.querySelector(":scope > .calls-more");
+      } else if (more.dataset.text == null) more.dataset.text = more.textContent;
+      const total = Number(box.dataset.total) || rows.length;
+      let hidden = 0;
+      do {
+        rows[rows.length - 1 - hidden].classList.add("fit-hide");
+        hidden += 1;
+        more.textContent = callsMoreText(total - (rows.length - hidden), hidden === rows.length);
+      } while (fitOver() > 0 && hidden < rows.length);
+      return true;
+    } },
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
@@ -818,6 +841,11 @@
       delete el.dataset.fitWas;
     });
     page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster"));
+    page.querySelectorAll(".call.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 6b：收掉的邀請攤回來
+    page.querySelectorAll(".calls-more").forEach((el) => {
+      if (el.dataset.fit) el.remove();
+      else if (el.dataset.text != null) { el.textContent = el.dataset.text; delete el.dataset.text; }
+    });
     fitUnclip(page);
     page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
   }
@@ -1441,7 +1469,10 @@
     // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
     const extras = m.options.filter((o) => !used.has(o.id));
     const hotHere = extras.some((o) => guideGlow().includes(o.id));
-    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => `
+    // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
+    const peers = callPeers(m);
+    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => peers[o.id] ? `
+        <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
@@ -1838,10 +1869,15 @@
     if (!m.on_road) S.sceneOpen = false;
     // 序章：師父在說話時草廬那張地點描寫卡不畫（masterTalksOf，那裡寫著為什麼）
     const masterTalks = masterTalksOf(m);
+    // 「此地還有」與別人遞來的邀請、結伴那一行：平常畫在場景卡底下；決戰輪到你出招時（FB-117 第七件）挪到三招後面另一張卡——
+    // 營地裡人多時名單有兩三行，排在三招上面就把第三招擠到分頁列底下（375×812：三招 647～791，分頁列頂 756）
+    const myTurn = opts.some((o) => o.id.startsWith("battle:act:"));
+    const people = (m.here && m.here.length ? hereHtml(m) : "") + (m.party || (m.calls && m.calls.length) ? socialHtml(m) : "");
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${withGauge(musterScene(m, battleScene(m)), m.battle_gauge)}${m.here && m.here.length ? hereHtml(m) : ""}${m.party || (m.calls && m.calls.length) ? socialHtml(m) : ""}</section>`;
+        : `<section class="card scene">${withGauge(musterScene(m, battleScene(m)), m.battle_gauge)}${myTurn ? "" : people}</section>`;
+    const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
       <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
@@ -1871,8 +1907,8 @@
     if (m.on_road) return `${resultCard}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
-    if (opts.some((o) => o.id.startsWith("battle:act:"))) {
-      return `${resultCard}${peek}${now}${scene}${links}${menu}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    if (myTurn) {
+      return `${resultCard}${peek}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
     }
     return `${resultCard}${peek}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
   }
@@ -1892,12 +1928,45 @@
 
   // 玩家互動第二層：別人遞給你、還沒回的打招呼、結伴、切磋邀請（一件一行，後面是回應鈕——就是選單上的 invite: 選項，按了走 choose），
   // 以及結伴同行的那一行（跟著別人的人有「分道揚鑣」）。字都是伺服器寫好的（social.calls、Game.party_view）
+  // 論武的答應要挑自己出哪一樣（FB-117）：那一顆帶 peer（他的名號），畫成「挑一樣答應」、按了打開他的玩家卡捲到答應那一格（peerAnswer，
+  // 不送伺服器）；其餘照舊送選單上的 invite: 選項
+  const callButton = (o) => (o.peer
+    ? `<button class="btn small" data-act="peer-answer" data-name="${esc(o.peer)}">${esc(o.label)}</button>`
+    : `<button class="btn small" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`);
+  // 場景那一列帶 peer 的回應鈕：選項 id → 他的名號（「此地還能做」裡同一顆也照它畫成打開玩家卡）
+  function callPeers(m) {
+    const out = {};
+    (m.calls || []).forEach((c) => c.options.forEach((o) => { if (o.peer) out[o.id] = o.peer; }));
+    return out;
+  }
+  // 別人遞來的邀請最多畫 CALLS_SHOW 列（FB-117：以前沒上限，一個人同時發四種就把整排行動擠出第一屏），其餘收成一行
+  // 「還有 N 份邀請」、點了才攤開（openCalls、callsOpened）。舊的在前（伺服器排的，先逾時的先畫）
+  // 第一屏還放不下時，畫好之後再從最後一份往前收（FIT_STEPS 的 calls），收掉的也併進那一行
+  const CALLS_SHOW = 2;
+  const callsMoreText = (n, all) => (all ? `有 ${n} 份邀請等你回應 ▾` : `還有 ${n} 份邀請 ▾`); // 待 joy 潤
+  // 一份邀請的記號：它的編號（回應鈕的 id 最後那一段，invite:<回應>:<編號>）
+  const callKey = (c) => String((c.options[0] && c.options[0].id) || c.text).split(":").pop();
+  // 點了「還有 N 份／有 N 份邀請等你回應」：S.callsOpen 記點開那時的那幾份（callKey）。現在的每一份都還在裡面就算攤開著——
+  // 其中幾份回了、逾時了照樣攤著，一份不剩才收回；來了新的一份就照平常收（不然它會把行動列推出第一屏）。
+  // 以前記的是真假、邀請不超過 CALLS_SHOW 份就改回假：一、兩份被第一屏收法（6b）收成一行時，點了又被收回去、點不開（FB-241）
+  function callsOpened(calls) {
+    return Array.isArray(S.callsOpen) && calls.length > 0 && calls.every((c) => S.callsOpen.includes(callKey(c)));
+  }
+  function openCalls() {
+    S.callsOpen = ((S.main && S.main.calls) || []).map(callKey);
+    renderPage();
+  }
   function socialHtml(m) {
-    const calls = (m.calls || []).map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map((o) =>
-      `<button class="btn small" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>${esc(o.label)}</button>`).join("")}</div>`).join("");
+    const all = m.calls || [];
+    const open = callsOpened(all);
+    if (!open) S.callsOpen = false;
+    const list = open ? all : all.slice(0, CALLS_SHOW);
+    const more = all.length - list.length;
+    const calls = list.map((c) => `<div class="call"><span>${esc(c.text)}</span>${c.options.map(callButton).join("")}</div>`).join("")
+      + (more ? `<button class="linkish calls-more" data-act="calls-more">${callsMoreText(more, false)}</button>` : "");
     const party = m.party ? `<div class="party"><span>${esc(m.party.text)}</span>${m.party.lead ? ""
       : '<button class="btn small ghost" data-act="party-leave">分道揚鑣</button>'}</div>` : "";
-    return `<div class="calls">${calls}${party}</div>`;
+    return `<div class="calls" data-total="${all.length}">${calls}${party}</div>`;
   }
   async function leaveParty() {
     await busy(async () => {
@@ -1909,17 +1978,19 @@
 
   // 玩家卡（第一層）：點「此地還有」的名字疊上來的抽屜。名號、門派・陣營・頭銜、等級、身上兩門（名字與品質），底下是卡上的動作鈕
   // （伺服器照 social.ACTIONS 給，第二層的贈物、結伴、打招呼、切磋、論武都掛在這裡）。人走了（card 是 null）寫伺服器給的那一句
-  function peerHtml() {
+  // still：輪詢換卡（applyPeer）時畫的那一張不再播一次滑上來、淡入（style.css 的 .still）
+  function peerHtml(still = false) {
     const P = S.peer;
+    const quiet = still ? " still" : "";
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
-      : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>`
+      : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
       : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
-    return `<div class="sheet-bg" data-act="peer-close"></div>
-      <div class="sheet peer-card" role="dialog" aria-label="${esc(P.name)}">
+    return `<div class="sheet-bg${quiet}" data-act="peer-close"></div>
+      <div class="sheet peer-card${quiet}" role="dialog" aria-label="${esc(P.name)}">
         <div class="grip"></div>
         ${P.msg ? `<div class="peer-msg">${P.msg}</div>` : ""}
         ${body}
@@ -1928,19 +1999,25 @@
   }
   // 卡上的鈕：同一個 group 的（論武出哪一樣，每一樣一顆）收成一個下拉清單＋一顆鈕，按下去送清單上選的那一顆（照它在 actions 裡的索引）；
   // 只有一顆的 group 照常畫。下拉清單整排佔滿一列，其餘的鈕照舊兩欄
+  // 合不成的那一樣（論武答應，伺服器灰掉、pick 後面寫兩三個字的原因，FB-117）也收進清單、但挑不了（<option disabled>），
+  // 預設選第一樣挑得了的；整組都挑不了時那顆鈕灰掉。答應那幾顆（arg 是 yes 開頭）標 data-answer="<互動>"：
+  // 從場景底下「挑一樣答應」打開卡時捲到它（openPeer 的 focus）
   function peerActsHtml(actions) {
     const groups = {};
-    actions.forEach((b, i) => { if (b.group && b.enabled) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
+    actions.forEach((b, i) => { if (b.group) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
     const done = new Set();
+    const answer = (b) => (/^yes(:|$)/.test(b.arg || "") ? ` data-answer="${esc(b.action)}"` : "");
     // 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下自己換到下一行再折（style.css 的 .peer-acts，FB-220）
-    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}"${answer(b)} ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
     const html = actions.map((b, i) => {
-      const members = b.group && b.enabled ? groups[`${b.action}|${b.group}`] : null;
+      const members = b.group ? groups[`${b.action}|${b.group}`] : null;
       if (!members || members.length < 2) return one(b, i);
       if (done.has(members)) return "";
       done.add(members);
-      return `<div class="peer-pick"><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}">${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
-        + `<button class="btn" data-act="peer-pick"><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
+      const first = members.find((j) => actions[j].enabled);
+      const live = first !== undefined;
+      return `<div class="peer-pick"${answer(b)}><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}"${actions[j].enabled ? "" : " disabled"}${j === first ? " selected" : ""}>${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
+        + `<button class="btn" data-act="peer-pick"${live ? "" : " disabled"}><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
     }).join("");
     return `<div class="peer-acts">${html}</div>`;
   }
@@ -1948,31 +2025,86 @@
   const choiceSelect = (b) => (b.choices && b.choices.length
     ? `<select class="input" name="choice" aria-label="挑一樣">${b.choices.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}（${x.max}）</option>`).join("")}</select>`
     : "");
-  async function openPeer(name) {
-    S.peer = { name, loading: true };
+  // focus：從場景底下「挑一樣答應」打開的（FB-117）——卡畫好之後捲到那一種互動答應的那一格（data-answer）、框一下金邊。
+  // 他已經不在這裡（卡打不開）時照舊寫伺服器那一句，底下多一句這份邀請怎麼辦（邀請照現在的規則：放著等逾時，或在場景底下婉拒）
+  const PEER_GONE_ANSWER = "這份邀請答不成了：在場景底下按「婉拒」收掉，或放著等它逾時作廢。"; // 待 joy 潤
+  async function openPeer(name, focus = "") {
+    S.peer = { name, loading: true, focus };
     render();
     try {
       const r = await api(`/api/peer?name=${encodeURIComponent(name)}`);
       if (!S.peer || S.peer.name !== name) return; // 等的時候關掉或換了人
-      S.peer = { name, card: r.card, gone: r.gone };
+      S.peer = { name, card: r.card, gone: r.gone, focus };
     } catch (e) {
       S.peer = null;
     }
     render();
+    if (focus && S.peer && S.peer.card) peerFocus(focus);
+  }
+  function peerFocus(focus) {
+    const el = document.querySelector(`.peer-card [data-answer="${focus}"]`);
+    if (!el) return;
+    el.classList.add("peer-focus");
+    el.scrollIntoView({ block: "nearest", behavior: promoCalm() ? "auto" : "smooth" }); // promoCalm：偏好減少動態效果
+  }
+
+  // 玩家卡開著時跟著輪詢更新（FB-117）：對方發了邀請、收回、走了，卡上的鈕要跟著變，不然按了才知道。輪詢拿到有變的畫面時重抓這張卡
+  // （/api/peer，只讀），內容變了才換掉那一張（只換卡，底下的頁面不動；捲到的地方、下拉清單挑的那一樣照放回去）。
+  // 不換的時候：正在送動作（S.busy）、確認框開著（它記的是舊卡上第幾顆）、數量欄攤開、正在下拉清單或輸入框上（typing）。
+  // 手指按著時先收著（peerNext），放開才換——S.peer 跟畫面上那一張要是同一份，按下去的索引才對得上（同江湖頁的 pointerHeld）
+  let peerPolling = false;
+  let peerNext = null; // { P, r }：按著的時候抓到的新卡
+  async function refreshPeer() {
+    const P = S.peer;
+    if (!P || P.loading || peerPolling || S.busy) return;
+    peerPolling = true;
+    try {
+      const r = await api(`/api/peer?name=${encodeURIComponent(P.name)}`);
+      if (JSON.stringify(r.card) === JSON.stringify(P.card)) return;
+      if (pointerHeld) peerNext = { P, r };
+      else applyPeer(P, r);
+    } catch (e) { /* 下一輪再說 */ } finally { peerPolling = false; }
+  }
+  function applyPeer(P, r) {
+    peerNext = null;
+    if (S.peer !== P || S.busy || P.amountFor != null || typing() || document.querySelector(".ask-layer")) return;
+    S.peer = { name: P.name, card: r.card, gone: r.gone, focus: P.focus, msg: P.msg }; // 上一個動作回的那一句照留
+    const old = document.querySelector(".peer-card");
+    if (!old) return;
+    // 下拉清單挑的那一樣（照它的 arg 認：新卡上的索引可能不一樣）
+    const picked = new Set([...old.querySelectorAll(".peer-pick select")].map((x) => (P.card && P.card.actions[Number(x.value)] || {}).arg));
+    const top = old.scrollTop;
+    const bg = old.previousElementSibling;
+    old.insertAdjacentHTML("afterend", peerHtml(true));
+    old.remove();
+    if (bg && bg.classList.contains("sheet-bg")) bg.remove();
+    const now = document.querySelector(".peer-card");
+    if (!now) return;
+    now.scrollTop = top;
+    const actions = (r.card && r.card.actions) || [];
+    now.querySelectorAll(".peer-pick select").forEach((x) => {
+      const j = [...x.options].map((o) => Number(o.value)).find((k) => picked.has(actions[k].arg) && actions[k].enabled);
+      if (j !== undefined) x.value = String(j);
+    });
   }
   // 按卡上的鈕：要填數量的先問數量（prompt 在 artifact 外照常可用，但這裡一律用頁內的輸入，見 peerAmount），有 confirm 的先問一次
+  // 等回應的時候（論武答應時首創要等模型取名，FB-117）：照送出指令的回饋那一套（busy），論武答應另有一句等候的話（WAIT_LINES.discuss）。
+  // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一句短的（伺服器給的 brief：論武合成了是
+  // 「論武有結果了：合出【某某】。詳見江湖紀錄。」，其餘是回話的第一句；完整的在江湖紀錄，FB-242）
   async function peerAct(i, sure = false, amount = 0, choice = "") {
     const P = S.peer;
     const b = P && P.card && P.card.actions[i];
     if (!b) return;
     if (b.amount > 0 && !amount) { S.peer.amountFor = i; render(); return; }
     if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount, choice)); return; }
+    const line = b.action === "discuss" && /^yes:/.test(b.arg || "") ? WAIT_LINES.discuss : SENT_WAITING;
     await busy(async () => {
       const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice });
       if (r.main) setMain(r.main);
-      S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      if (S.peer && S.peer.name === P.name) S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      else if (r.brief || r.message) toast(r.brief || r.message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
       render();
-    });
+    }, line);
   }
 
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫。
@@ -3811,6 +3943,7 @@
   const WAIT_LINES = {
     explore: "四下探看，尚無動靜……", train: "循著蹤跡尋敵……", rest: "調息入定……", meet: "遣人通報，候他回話……",
     move: "整頓行裝……", forge: "爐火正旺，靜待出爐……", battle: "軍令已發，靜候陣前回報……",
+    discuss: "兩人各陳所學，推敲新招……", // 論武答應、等首創取名（FB-117；待 joy 潤）
   };
   const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
   const SLOW_WAITING = "路遠消息遲，再等片刻……";
@@ -4285,6 +4418,10 @@
   document.addEventListener("pointerdown", () => { pointerHeld = true; }, true);
   const releasePointer = () => {
     pointerHeld = false;
+    if (peerNext) { // 按著的時候玩家卡抓到了新的一張（refreshPeer）：放開、click 處理完再換
+      const { P, r } = peerNext;
+      setTimeout(() => { if (peerNext && peerNext.P === P) applyPeer(P, r); }, 0);
+    }
     if (!redrawHeld) return;
     redrawHeld = false;
     // 放開之後 click 才送出：等它處理完再補畫；它開始了一個動作的話，動作回來會自己畫
@@ -4350,9 +4487,11 @@
           break;
         case "peer": await openPeer(el.dataset.name); break;
         case "peer-close": S.peer = null; render(); break;
+        case "peer-answer": await openPeer(el.dataset.name, "discuss"); break; // 場景底下論武的「挑一樣答應」（FB-117）
         case "peer-act": await peerAct(Number(el.dataset.i)); break;
         case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
         case "here-more": S.hereOpen = true; renderPage(); break;
+        case "calls-more": openCalls(); break; // 場景底下收起來的邀請（FB-117、FB-241）
         case "party-leave": await leaveParty(); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
@@ -4804,6 +4943,7 @@
       if (S.stage !== "game" || S.busy || S.main !== was) return;
       if (!setMain(main)) return;
       renderTop();
+      if (S.peer) refreshPeer(); // 玩家卡開著：卡也重抓（FB-117；不等它）
       if (!typing()) await refreshPage(was);
     } catch (e) { /* api() 提示過；下一輪再試 */ } finally { pollInFlight = false; }
   }

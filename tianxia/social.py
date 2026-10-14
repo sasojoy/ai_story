@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
 from . import arena, gender, invites, ranger, ranks, team
-from .characters import CharacterStore
+from .characters import CharacterStore, name_key
+from .rules import day_turn
 from .state import GameState
 
 if TYPE_CHECKING:
@@ -25,6 +26,23 @@ if TYPE_CHECKING:
     from .models import Content
 
 GONE = "對方已經不在這裡了。"  # 對方離開了、下線太久、或根本沒有這個人：一律這一句（不讓人試出名號在不在）
+# 玩家卡動作回來時，網頁的卡已經關了或換了人（等論武取名的時候）：提示泡泡只講一句短的，完整的在江湖紀錄（FB-242；待 joy 潤）
+DISCUSS_BRIEF = "論武有結果了：合出{thing}。詳見江湖紀錄。"
+BRIEF_MAX = 40  # 沒有專門那一句時，泡泡寫回話的第一句，最多幾個字
+
+
+def thing_label(thing) -> str:
+    """合出來的那一樣寫給人看：武學【】、意境「」（意境沒有 kind 這一欄）。"""
+    return f"【{thing.name}】" if hasattr(thing, "kind") else f"「{thing.name}」"
+
+
+def brief(msgs: list[str] | None) -> str:
+    """一串回話的第一句（第一則的第一行、到第一個句號或驚嘆號為止），太長截到 BRIEF_MAX 字加「……」：提示泡泡用（FB-242）。"""
+    first = (msgs or [""])[0].strip().split("\n")[0]
+    for mark in ("。", "！"):
+        if mark in first:
+            first = first[: first.index(mark) + 1]
+    return first if len(first) <= BRIEF_MAX else first[:BRIEF_MAX] + "……"
 
 
 @dataclass
@@ -189,26 +207,56 @@ def _short(option) -> str:
     return {"yes": "答應", "no": "婉拒"}.get(verb) or option.label.split("：")[-1]
 
 
+PICK_TO_ANSWER = "挑一樣答應"  # 場景底下論武那一列的答應鈕（FB-117；待 joy 潤）
+
+
+def _call_option(option, inv) -> dict:
+    """場景底下的一顆回應鈕。論武的答應要挑自己出哪一樣（在他的玩家卡上挑，discuss.buttons）：選單上那一顆引擎不收（灰的），
+    以前場景這裡也畫成一顆沒說為什麼的灰鈕「答應」（FB-117）。現在帶 peer（他的名號）：網頁畫成按得下去的「挑一樣答應」，
+    按了打開他的玩家卡、捲到答應那一格（純網頁動作，不送伺服器）。"""
+    if inv.kind == "discuss" and option.id.startswith("invite:yes:"):
+        return {"id": option.id, "label": PICK_TO_ANSWER, "enabled": True, "peer": inv.sender}
+    return {"id": option.id, "label": _short(option), "enabled": option.enabled}
+
+
 def calls(game: Game) -> list[dict]:
-    """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled}]}]，舊的在前。回應鈕就是選單上的那幾個選項
-    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）。"""
+    """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled, peer?}]}]，舊的在前。回應鈕就是選單上的那幾個選項
+    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）；
+    論武的答應那一顆帶 peer，網頁打開他的玩家卡（_call_option）。"""
     menu = {o.id: o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:")}
     rows = []
     for inv in invites.incoming(game.state.world, game.state.player.name):
         opts = [menu[i] for i in menu if i.endswith(f":{inv.id}") and not i.startswith("invite:cancel:")]
         if opts:
-            rows.append({
-                "text": invite_text(inv),
-                "options": [{"id": o.id, "label": _short(o), "enabled": o.enabled} for o in opts],
-            })
+            rows.append({"text": invite_text(inv), "options": [_call_option(o, inv) for o in opts]})
     return rows
 
 
 # ── 卡上的鈕 ──
 
 
-GIFT_FULL = "你們今天已經互贈過 {n} 回了，改天再送吧。"  # 待 joy 潤（FB-116：同一對人每個遊戲日的上限，Config.gift_per_pair_day）
-DISCUSS_FULL = "你們今天已經論武過 {n} 回了，改天再說。"  # 待 joy 潤（FB-116：Config.discuss_per_pair_day）
+# 同一對人每個遊戲日的上限滿了（FB-116 的切磋、贈物、論武三本帳）：照遊戲日換日（rules.game_day，跟著季長縮），所以不寫「今天／改天」，
+# 寫換日的那一刻（FB-117，同談滿了的求見 Game._talked_out_note、day-scale）。（開頭, 再做什麼）；待 joy 潤
+PAIR_FULL = {
+    "gift": ("你們已經互贈過 {n} 回了", "送"),
+    "discuss": ("你們已經論武過 {n} 回了", "論武"),
+    "spar": ("你們已經切磋過 {n} 場了", "切磋"),
+}
+
+
+def pair_cap(content: Content, kind: str) -> int:
+    """這一本帳一個遊戲日的上限（Config.gift_per_pair_day、discuss_per_pair_day、spar.per_pair_day）。"""
+    cfg = content.config
+    return {"gift": cfg.gift_per_pair_day, "discuss": cfg.discuss_per_pair_day, "spar": cfg.spar.per_pair_day}[kind]
+
+
+def pair_full(game: Game, kind: str) -> str:
+    """這一對人這個遊戲日的 kind（gift／discuss／spar）用滿了的那一句：寫下一次換日的那一刻（rules.day_turn：
+    寫得出那一刻寫「…之後再X」；季末延長、季曆寫不出來寫「過一陣子再X」；這一季不會再換日寫「這一季之內不能再X了」）。"""
+    head, verb = PAIR_FULL[kind]
+    turn, moment = day_turn(game.content, game.state.world)
+    when = f"{moment} 之後再{verb}" if moment else f"過一陣子再{verb}" if turn == "later" else f"這一季之內不能再{verb}了"
+    return f"{head.format(n=pair_cap(game.content, kind))}，{when}。"
 
 
 def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
@@ -230,7 +278,7 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
             choices=[{"id": m, "label": c.materials[m].name, "max": n} for m, n in held],
         ))
     if game.gifts_left(other.state.player.name) <= 0:  # 這一對人今天送滿了（FB-116）：每一顆都灰掉、寫為什麼
-        full = GIFT_FULL.format(n=c.config.gift_per_pair_day)
+        full = pair_full(game, "gift")
         buttons = [replace(b, enabled=False, note=full) for b in buttons]
     return buttons
 
@@ -242,7 +290,7 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
 
     p, them, c = game.state.player, other.state.player, game.content
     if game.gifts_left(them.name) <= 0:
-        return [GIFT_FULL.format(n=c.config.gift_per_pair_day)]
+        return [pair_full(game, "gift")]
     what = params.get("arg")
     try:
         amount = int(params.get("amount") or 0)
@@ -288,8 +336,32 @@ def _send(game: Game, other: Game, kind: str, payload: dict | None = None) -> No
     game._save_season()
 
 
+def _incoming(game: Game, inv) -> bool:
+    """這一張是他發給你的（不是你發給他的）。"""
+    return inv is not None and name_key(inv.target) == name_key(game.state.player.name)
+
+
+def _answer(game: Game, other: Game, kind: str, verb: str) -> list[str]:
+    """卡上回應他遞來的打招呼、結伴（FB-117）：跟場景底下那一顆同一個結果、同一則紀錄（Game.answer_on_card）。"""
+    inv = _waiting(game, other, kind)
+    if not _incoming(game, inv):
+        return ["這份邀請已經不在了。"]
+    return game.answer_on_card(inv, other, verb)
+
+
+GREET_BACK = "{him}在等你回禮"  # 他向你打了招呼：卡上回禮那幾顆的說明（FB-117：以前寫成「等回禮」，方向反了；待 joy 潤）
+
+
 def _greet_buttons(game: Game, other: Game) -> list[CardButton]:
-    waiting = _waiting(game, other, "greet") is not None
+    inv = _waiting(game, other, "greet")
+    gesture = gesture_of(inv) if _incoming(game, inv) else None
+    if gesture is not None:  # 他向你打了招呼：卡上換成回禮的那幾顆（同場景底下），第一顆寫他在等你回禮
+        note = GREET_BACK.format(him=gender.pronoun(other.state))
+        return [
+            CardButton(action="greet", label=did, arg=f"reply:{reply}", note=note if i == 0 else "")
+            for i, (reply, did) in enumerate(gesture.replies)
+        ]
+    waiting = inv is not None
     return [
         CardButton(action="greet", label=g.label, arg=key, enabled=not waiting, note="等回禮" if waiting else "")
         for key, g in GESTURES.items()
@@ -298,6 +370,8 @@ def _greet_buttons(game: Game, other: Game) -> list[CardButton]:
 
 def _greet(game: Game, other: Game, params: dict) -> list[str]:
     key = str(params.get("arg") or "")
+    if key.startswith("reply:"):
+        return _answer(game, other, "greet", key.removeprefix("reply:"))
     gesture = GESTURES.get(key)
     if gesture is None:
         return ["（沒有這種禮數。）"]
@@ -321,14 +395,25 @@ def _travel_note(game: Game, other: Game) -> str | None:
     return None
 
 
+TRAVEL_ASKED = "{him}邀你同行：答應了由{him}定去哪、怎麼走"  # 他邀了你：卡上答應那一顆的說明（FB-117：以前寫成「等他回應」；待 joy 潤）
+
+
 def _travel_buttons(game: Game, other: Game) -> list[CardButton]:
     note, him = _travel_note(game, other), gender.pronoun(other.state)
+    if _incoming(game, _waiting(game, other, "travel")) and not game.state.player.tagalong:  # 他邀了你：卡上答應、婉拒（同場景底下）
+        return [
+            CardButton(action="travel", label="答應結伴同行", arg="yes", note=TRAVEL_ASKED.format(him=him)),
+            CardButton(action="travel", label="婉拒同行", arg="no"),
+        ]
     return [CardButton(
         action="travel", label=f"邀{him}結伴同行", enabled=note is None, note=note or f"{him}答應了，由你定去哪、怎麼走",
     )]
 
 
 def _travel(game: Game, other: Game, params: dict) -> list[str]:
+    verb = str(params.get("arg") or "")
+    if verb in ("yes", "no"):
+        return _answer(game, other, "travel", verb)
     note = _travel_note(game, other)
     if note is not None:
         return [f"（{note}。）"]

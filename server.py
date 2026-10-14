@@ -1648,6 +1648,8 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         "gone": social.GONE,
         "main": look(game, main_view),
         "message": joined(msgs),
+        # 卡已經關了或換了人時，網頁的提示泡泡只講這一句（FB-242）：論武合成了是「論武有結果了：合出…」，其餘是回話的第一句
+        "brief": game.peer_brief or social.brief(msgs),
     }
 
 

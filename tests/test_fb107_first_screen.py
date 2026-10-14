@@ -26,7 +26,7 @@ DRIVER = r"""
 // 從 app.js 切出 FB-107 那一段（FIT_MARGIN 到 ownOpen 之前，加上 ownOpen 本身）
 const head = src.indexOf("\n  const FIT_MARGIN"), tail = src.indexOf("\n  function ownOpen(");
 if (head < 0 || tail < 0) throw new Error("app.js 裡找不到 FB-107 那一段");
-const code = src.slice(head, tail) + fn("ownOpen");
+const code = src.slice(head, tail) + fn("ownOpen") + konst("callKey") + fn("callsOpened"); // 收法 6b 問 callsOpened（FB-241）
 
 // 假的頁面：每個元素是 { kind, classes, attrs, dataset, ... }；選擇器照 app.js 用到的那幾個寫成判斷式
 const all = [];
@@ -79,8 +79,26 @@ lines.forEach((x, i) => { x.text = (T.lines || [])[i] || ""; });
 // 場景卡的順序：名字那一行（muster-head 或名字那一段）、集結那一句、分隔線、所在地
 const order = [mhead || title, ...musterLines, hr, ...own].filter(Boolean);
 order.forEach((e, i) => { e.nextElementSibling = order[i + 1] || null; });
+// 場景底下別人遞來的邀請（FB-117 的第 6b 步）：L.calls 是畫出來的幾列，L.callsTotal 是一共幾份，L.callsMore 是畫的時候就有「還有 N 份」那一行
+const callRows = Array.from({ length: L.calls || 0 }, () => el("call", ["call"]));
+const callsBox = L.calls ? el("calls", ["calls"]) : null;
+let callsMore = null;
+const makeMore = (text, fit) => {
+  const m = el("more", ["calls-more"]);
+  m.textContent = text;
+  if (fit) m.dataset.fit = "1";
+  m.remove = () => { if (callsMore === m) callsMore = null; };
+  return m;
+};
+if (callsBox) {
+  callsBox.dataset.total = String(L.callsTotal || L.calls);
+  if (L.callsMore) callsMore = makeMore(L.callsMore, false);
+  callsBox.querySelectorAll = (s) => (s === ":scope > .call" ? callRows : []);
+  callsBox.querySelector = (s) => (s === ":scope > .calls-more" ? callsMore : null);
+  callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
+}
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22 }, input.save || {});
+const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22, call: 70, moreLine: 0 }, input.save || {});
 const bodyHeight = () => (now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
 const bottom = () => {
   let b = L.bottom;
@@ -94,6 +112,8 @@ const bottom = () => {
   if (own.some((p) => has(p, "fit-clip"))) b -= SAVE.own;
   if (musterLines.some((p) => has(p, "fit-clip"))) b -= SAVE.muster;
   if (menu && has(menu, "fit-tight")) b -= SAVE.options;
+  callRows.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.call; });
+  if (callsMore && callsMore.dataset.fit) b += SAVE.moreLine; // 收法 6b 補上的「還有 N 份」那一行自己也佔高度
   return b;
 };
 const target = actbar || last;
@@ -124,6 +144,9 @@ const where = {
   ".fit-own, .fit-muster": () => all.filter((x) => has(x, "fit-own") || has(x, "fit-muster")),
   ".fit-clip": () => all.filter((x) => has(x, "fit-clip")),
   ".fit-tight": () => all.filter((x) => has(x, "fit-tight")),
+  "#page > .card.scene .calls": () => (callsBox ? [callsBox] : []),
+  ".call.fit-hide": () => callRows.filter((x) => has(x, "fit-hide")),
+  ".calls-more": () => (callsMore ? [callsMore] : []),
 };
 const q = (sel) => { if (!where[sel]) throw new Error("假頁面不認得的選擇器：" + sel); return where[sel](); };
 globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : id === "top" ? topEl : null),
@@ -149,8 +172,10 @@ const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOp
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
-const H = new Function("S", "pro", "idleMenu", "renderTop", code
-  + "\nreturn { fitFirstScreen, fitOver, ownOpen, fitOwnKey, fitOnResize, fitTopMoved, lineToggle, FIT_STEPS };")(S, pro, idleMenu, renderTop);
+// 「還有 N 份邀請」那一行的字（FB-117，socialHtml 旁邊那一行 const）
+const callsMoreText = new Function(`return ${src.match(/const callsMoreText = (.*);/)[1]}`)();
+const H = new Function("S", "pro", "idleMenu", "renderTop", "callsMoreText", code
+  + "\nreturn { fitFirstScreen, fitOver, ownOpen, fitOwnKey, fitOnResize, fitTopMoved, lineToggle, FIT_STEPS };")(S, pro, idleMenu, renderTop, callsMoreText);
 HH = H;
 const snap = () => ({
   fitted: S.fitted, bottom: bottom(), page: [...page.classes].sort(), card: card ? [...card.classes].sort() : null,
@@ -159,6 +184,7 @@ const snap = () => ({
   now: now ? [...now.classes].sort() : null, scene: scene ? [...scene.classes].sort() : null, own: own.map((x) => x.attrs),
   ownClip: own.map((x) => has(x, "fit-clip")), musterClip: musterLines.map((x) => has(x, "fit-clip")),
   musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
+  calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
   H, S, snap, L, globalThis.window, { lines, top: topEl, setTabsTop: (v) => { tabsTop = v; } }));
@@ -541,10 +567,13 @@ def _rules(css, needle):
 
 
 def test_each_step_only_touches_what_it_names():
-    """每一步一個 class；只有第 3 步藏東西，藏的是收著的回合清單或大場面那一段話（展開 .open 就回來）；第 2、5 步是一行加「…」。"""
+    """每一步一個 class；藏東西的只有收著的回合清單或大場面那一段話（展開 .open 就回來），與第 6b 步收掉的邀請（FB-117：
+    併進「還有 N 份邀請」那一行，點了攤開）；第 2、5 步是一行加「…」。"""
     css = _css()
     hiding = [sel for sel, body in re.findall(r"(?m)^([^{}\n@]*fit-[^{}\n]*)\{([^}]*)\}", css) if "display: none" in body]
-    assert sorted(s.strip() for s in hiding) == [".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)"]
+    assert sorted(s.strip() for s in hiding) == [
+        ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
+    ]
     tight = _rules(css, ".tx-tight")
     assert "white-space: nowrap" in tight[".battle-card .tx-extra .tx-line.tx-tight"] and "text-overflow: ellipsis" in tight[".battle-card .tx-extra .tx-line.tx-tight"]
     assert "white-space: normal" in tight[".battle-card .tx-extra .tx-line.tx-tight.open"]
@@ -566,14 +595,15 @@ def test_the_spacing_step_only_shrinks_gaps_and_paddings():
 
 def test_the_box_step_keeps_every_word_and_the_tap_target():
     """框收緊只動「知道了」佔的高度（鈕本身照樣 38px，上下 −9px）與話的行高；不 clamp、不藏字（設計 6.2：話不會被切掉）。
-    玩家互動那幾塊（「此地還有」、結伴、邀請）是另一條線的：收的時候不碰它們的樣式。"""
+    玩家互動那幾塊（「此地還有」、結伴）是另一條線的：收的時候不碰它們的樣式；邀請只有第 6b 步那一條（FB-117，整列收掉）。"""
     css = _css()
     rules = _rules(css, "fit-box")
     assert set(re.findall(r"([\w-]+):", rules[".card.guide.fit-box .guide-head .btn"])) == {"margin-top", "margin-bottom"}
     assert rules[".card.guide.fit-box .guide-text"].strip() == "line-height: 1.5;"
     assert not any("clamp" in body or "display: none" in body or "overflow" in body for body in rules.values())
     fit_rules = re.findall(r"(?m)^([^{}\n@]*\bfit-[^{}\n]*)\{", css)
-    assert not any(re.search(r"\.(here|calls|call|party|peer)\b", sel) for sel in fit_rules), fit_rules
+    others = [sel for sel in fit_rules if sel.strip() != ".call.fit-hide"]
+    assert not any(re.search(r"\.(here|calls|call|party|peer)\b", sel) for sel in others), others
 
 
 def _px(body: str, prop: str) -> float:
