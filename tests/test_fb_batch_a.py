@@ -22,8 +22,8 @@ def test_fb127_only_a_blade_is_said_to_have_a_blade_edge(content, world):
     for kind in ("劍", "刀", "槍", "棍", "弓弩", "拳腳"):
         state.player.weapon, state.player.edge_warned = _blade(kind=kind, edge=30), False
         [lines[kind]] = weapons.wear(state, content, "落敗")
-    assert all(("刀口" in line) == (kind == "刀") for kind, line in lines.items()), lines
-    assert "拳套" in lines["拳腳"] and "弩" in lines["弓弩"]
+    assert not any("刀口" in line for line in lines.values()), lines  # 拳套、弩、棍沒有刀口（終審 F3 之後刀也寫刃口，免得「厚背刀刀口」）
+    assert lines["拳腳"] == weapons.EDGE_WARNING.format(name="試刃", dull=weapons.DULL["拳腳"]) and len(set(lines.values())) == 6
 
 
 def test_fb127_a_full_edge_does_not_say_blade_edge_for_a_fist(content, world):
@@ -375,3 +375,67 @@ def test_fb135_the_hp_word_can_step_aside_for_the_injury_on_a_narrow_bar(hints_c
     query = css[css.index("@container (max-width: 150px)"):]
     assert ".bar.hp:has(.inj) > span { padding: 0 5px; font-size: 10px; }" in query[:400]  # 四位數的氣血配三位數的內傷也放得下（實機量過）
     assert ".bar.hp:has(.inj) .lbl { display: none; }" in query[:query.index("}\n") + 2]
+
+
+# ── 終審修正 ──
+
+
+def test_final_f3_the_dull_warning_never_repeats_the_weapon_noun(content, world):
+    """終審 F3：鈍了的提醒照種類換字之後，「你的厚背拳套拳套磨薄了」「你的綿羽護手拳套磨薄了」：名字本身就是兵器，說法不再寫一次兵器字。"""
+    _on(content)
+    state = _new_state(content, world, "疊字")
+    for kind in ("劍", "刀", "槍", "棍", "弓弩", "拳腳"):
+        noun = weapons.noun(kind)
+        state.player.weapon, state.player.edge_warned = _blade(kind=kind, edge=30), False
+        state.player.weapon.name = weapons.shop_name(kind, "剛")
+        [line] = weapons.wear(state, content, "落敗")
+        assert noun * 2 not in line and noun not in weapons.DULL[kind] and "刀口" not in line, line
+
+
+def test_final_f5_the_divine_book_counts_armor_copies_in_jian():
+    """終審 F5：神器譜那一行「仿品 N 把」：防具神器的仿品論件（FB-146 漏了這一處）。"""
+    from tianxia import forge_secrets
+    from tianxia.state import GearFind
+
+    coat = GearFind(secret="t_ward", slot="armor", attribute="剛", tier=3, title="鎮星甲", creator="甲", creator_shown="甲",
+                    divine=True, owner="甲", master_shown="甲", divine_name="鏡湖", copies=2)
+    assert "仿品 2 件" in forge_secrets.divine_book([(1, coat)])
+    blade = coat.model_copy(update={"slot": "weapon", "kind": "劍"})
+    assert "仿品 2 把" in forge_secrets.divine_book([(1, blade)])
+
+
+def test_final_f6_the_shop_marks_a_clashing_weapon_on_the_shelf_and_the_forged_card(content, world):
+    """終審 F6：架上的貨卡與出爐卡也寫「加成 +0%・配得上你的武學」——同 FB-127，相剋時補一句。"""
+    from tianxia import shopview
+
+    _on(content)
+    game = _town(content, world)
+    art = team.player_art(game.state, content, world, game.state.player.member.wugong_id)
+    kind = weapons.art_weapon(art.id, content, world)
+    clash = next(a for a in ATTRS if weapons.counters(a, art.attribute) or weapons.counters(art.attribute, a))
+    item = _blade(kind=kind, attribute=clash)
+    assert weapons.CLASH_NOTE in shopview.forged_card(game.state, content, world, item, {})["value"]
+    match = _blade(kind=kind, attribute=art.attribute)
+    assert weapons.CLASH_NOTE not in shopview.forged_card(game.state, content, world, match, {})["value"]
+    shelf = shopview._weapon_shelf(game.state, content, world, art)
+    for ware, stocked in zip(shelf, weapons.stock(game.state, content)):
+        if ware["value"]:
+            assert (weapons.CLASH_NOTE in ware["value"]) == weapons.clashes(stocked, art), ware
+
+
+def test_final_f2_a_gift_from_someone_you_just_dealt_with_is_handed_over(content, world):
+    """終審 F2：劉關張在豪強第四階的晉升事件裡當面出現（婁桑村，不是他們平常站的涿郡），那一下加的情誼跨了門檻，卻寫「託人送來」。
+    這一下的效果加了他的情誼（事件、對話都是當面的事）就算他在你身邊；之前就該給、這一下沒碰到他的，照舊託人送來。"""
+    from test_treasures import _book, _game as _treasure_game
+
+    from tianxia import treasures
+
+    _book(content)
+    game = _treasure_game(content, world, "當面客", at="lake")
+    assert "mate" not in game._people_here()
+    content.events["drunk"].choices[1].effect.affinity = {"mate": 1}
+    game.state.player.affinities["mate"] = 59
+    game.state.pending_event = "drunk"
+    game.choose("choice:1")
+    [entry] = _gift_entries(game)
+    assert treasures.GIFT_LINE.format(general="韓鐵", gift="舊草鞋") in [entry.tag, *entry.lines]

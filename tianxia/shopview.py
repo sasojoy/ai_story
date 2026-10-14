@@ -142,7 +142,7 @@ def _weapon_shelf(state: GameState, content: Content, world: WorldStateStore, ar
         out.append({
             "id": f"smith:buy:{item.kind}", "name": item.name, "kind": weapons.NOUNS.get(item.kind, item.kind),
             "attribute": item.attribute, "tier": equipment.TIER_WORDS[1], "price": content.config.weapons.shop_price,
-            "value": f"加成 {_pct(weapons.bonus(item, art, content, world))}" if fits else None,
+            "value": f"加成 {_pct(weapons.bonus(item, art, content, world))}{weapons.CLASH_NOTE if weapons.clashes(item, art) else ''}" if fits else None,  # 相剋時補一句（終審 F6，同 FB-127）
             "fit": item.kind == fit_kind, "note": weapons.FITS_MARK.lstrip("・") if item.kind == fit_kind else "",
             "enabled": problem is None, "why": problem,
         })
@@ -343,7 +343,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         value, fit, kind = f"少扣 {armor.pct(armor.cut(item, neigong, content))} 氣血", armor.fit_note(item, neigong), smithing.ARMOR_KIND
     else:
         usable = weapons.usable(item, art, content, world)
-        value = f"加成 {_pct(weapons.bonus(item, art, content, world))}" if usable else None
+        value = f"加成 {_pct(weapons.bonus(item, art, content, world))}{weapons.CLASH_NOTE if weapons.clashes(item, art) else ''}" if usable else None
         fit, kind = (FITS if usable else UNFITS), weapons.NOUNS.get(item.kind, item.kind)
     worn = equipment.worn(state.player, item.slot)
     return {

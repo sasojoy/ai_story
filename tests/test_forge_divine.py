@@ -297,7 +297,7 @@ def test_the_divine_book_sits_under_the_chronicle_across_seasons(divine_content,
                      (season - 1, "鑄|t_old", "鎮岳甲", "丙", old.model_dump_json()))
     assert [(s, f.secret) for s, f in world.divine_records()] == [(season - 1, "t_old"), (season, "t_star")]
     book = owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
-    assert f"{DIVINE_UNNAMED}（劍）" in book and "仿品 1 把" in book and "【鎮岳甲】" in book and "仿品 3 把" in book
+    assert f"{DIVINE_UNNAMED}（劍）" in book and "仿品 1 把" in book and "【鎮岳甲】" in book and "仿品 3 件" in book  # 防具論件（終審 F5）
     assert "乙" not in book and "穿霞劍" not in book  # 不列打仿品的人；名器不上
     smithing.name_divine(owner.state, divine_content, world, original.id, "斬月")
     assert "【斬月】" in owner.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]

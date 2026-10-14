@@ -290,6 +290,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
@@ -1518,6 +1519,7 @@ class Game:
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call") else None
         self._fight = self._checked_fight(option_id, fight)
         self._draft = Draft(self._action_title(kind, arg))
+        self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
         try:
             if kind == "act":
@@ -1594,6 +1596,7 @@ class Game:
         finally:
             self._draft = None
             self._fight = None
+            self._affinity_before = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
@@ -1626,6 +1629,7 @@ class Game:
         self.state.battle_card = None
         faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
+        self._affinity_before = dict(s.player.affinities)
         try:
             s.pending_event = None
             rate = free_text_rate(llm_rate, choice, s, c, self.world)
@@ -1653,6 +1657,7 @@ class Game:
             )
         finally:
             self._draft = None
+            self._affinity_before = None
         self._record_faction()
         self._save_season()
         return self._log(msgs)
@@ -4070,12 +4075,16 @@ class Game:
 
     def _people_here(self) -> set[str]:
         """此刻站在你身邊的人物：同 _figures_here 的所在（人物表上的人照此刻的所在與狀態，其餘照 recruit_at、talk_at），不限深度互動；
-        在路上一個都沒有。名將贈禮與本命兵器照它寫當面交給你還是託人送來（FB-139、FB-149）。"""
+        在路上一個都沒有。再加上這一下加了情誼的人（終審 F2：情誼只從當面的事來——對話、晉升事件、伏筆收尾——劉關張在婁桑村的晉升
+        事件裡當面出現，不在他們平常站的地方）。名將贈禮與本命兵器照它寫當面交給你還是託人送來（FB-139、FB-149）。"""
         s, c = self.state, self.content
+        before = self._affinity_before or {}
+        raised = {cid for cid, v in s.player.affinities.items() if self._affinity_before is not None and v > before.get(cid, 0)}
         if s.player.journey is not None:
-            return set()
+            return raised
         here, placed = s.player.location, figures.placed_characters(s, c)
-        return {cid for cid, ch in c.characters.items() if (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))}
+        return raised | {cid for cid, ch in c.characters.items()
+                         if (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))}
 
     def _gift_entry(self, lines: list[str]) -> None:
         """名將贈禮與本命兵器（情誼那條路）另起一則江湖紀錄（FB-139、FB-149），排在當下那個動作的那一則之後。沒有就不寫。"""
