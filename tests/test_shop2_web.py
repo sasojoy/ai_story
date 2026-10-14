@@ -310,4 +310,4 @@ def test_the_sign_bar_stays_above_the_paper():
     css = _css()
     bar = _rule(css, ".shop-board .shop-bar")
     assert "position: relative" in bar and "z-index: 3" in bar
-    assert "z-index: 2" in _rule(css, ".reveal-layer")
+    assert "z-index: 2" in _rule(css, ".shop-board .board-sheet")  # 2026-10-14 微調之後紙是貼在下緣的 .board-sheet（終審 M5）

@@ -1482,7 +1482,8 @@ class Game:
             # FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：同懸賞榜 FB-162，回為什麼不成的那一句
             # （Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄
             problem = mounts.stale_problem(self.state, self.content, option_id.partition(":")[2])
-            self._shop_after(problem, "refused")
+            if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
+                self._shop_after(problem, "refused")
             return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])

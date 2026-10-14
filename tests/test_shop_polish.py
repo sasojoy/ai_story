@@ -96,7 +96,7 @@ def test_the_board_css_matches_the_mockup(content, world):
     for kind, color in (("strike", "#a8322a"), ("scout", "#2f5d8a"), ("escort", "#3f7d5c"), ("art", "#9a6a2a"), ("wanted", "#2a241d")):
         assert f".shop-board .note.k-{kind} .tag" in css and color in css[css.index(f".shop-board .note.k-{kind} .tag"):][:200]
     sheet = _rule(css, ".shop-board .board-sheet")
-    assert "position: absolute" in sheet and "bottom: 12px" in sheet and "max-height:" in sheet and "overflow-y: auto" in sheet
+    assert "position: absolute" in sheet and "bottom: calc(12px" in sheet and "max-height:" in sheet and "overflow-y: auto" in sheet
 
 
 # ── 3：交差朱印蓋在那張告示上 ──
@@ -206,3 +206,43 @@ def test_the_paper_and_held_slots_stay_light_paper_in_dark_mode():
     assert "#f6edd8" in _rule(css, ".shop-board .slot")
     plain = _rule(css, ".shop-board .paper .btn:not(.primary):not(.danger)")
     assert "#fbf7ef" in plain and "#2a241d" in plain
+
+
+# ── 終審修正 ──
+
+
+def test_the_held_stamp_on_the_paper_stays_out_of_the_buttons():
+    """終審 I1：告示上的「已揭」移到右下角，同一條規則也套到放大的紙上，蓋住「收起」的一角、那一角按不到。紙上的印照舊在右上角、點不到它。"""
+    from test_shop2_web import _css, _rule
+
+    stamp = _rule(_css(), ".shop-board .paper .stamp")
+    assert "top: 10px" in stamp and "bottom: auto" in stamp and "pointer-events: none" in stamp
+
+
+def test_the_docked_paper_keeps_clear_of_the_notch_and_the_home_bar():
+    """終審 M2（提為 Important）：紙貼在下緣時沒算 iPhone 的安全區域，三層交出清單的鈕伸進底下的橫條、上緣蓋到掌櫃那一句。
+    紙也一定在招牌那一列底下（招牌 z-index 3、紙 2）。"""
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    sheet = _rule(css, ".shop-board .board-sheet")
+    assert "bottom: calc(12px + var(--bottom" in sheet and "var(--top" in sheet and "var(--bottom" in sheet[sheet.index("max-height"):]
+    assert "z-index: 2" in sheet and "z-index: 3" in _rule(css, ".shop-board .shop-bar")
+
+
+def test_a_stale_market_click_leaves_another_shops_keeper_alone(content, world):
+    """終審 M1（提為 Important）：另一個分頁已經出了馬市、走進鐵匠鋪，這一頁還停在馬市按「買下」：回馬市那一句原因（FB-195），
+    可是不改鐵匠那一句（他在鐵匠鋪什麼都沒做）。"""
+    from test_shop2 import _market
+
+    from tianxia import mounts
+    from tianxia.engine import Refused
+
+    content.config.weapons.enabled = True
+    game = _market(content, world, silver=300, name="跨店")
+    game.choose(mounts.BACK)
+    game.choose("act:smith")
+    p = game.state.player
+    assert p.picking_smith and p.shop_line == "enter"
+    msgs = game.choose(mounts.BUY)
+    assert isinstance(msgs, Refused) and p.shop_line == "enter" and p.shop_hold == ""

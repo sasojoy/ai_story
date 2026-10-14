@@ -1434,13 +1434,15 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .shop-board .board-empty { color: #e8d6ad; text-align: center; margin-top: 24px; }
 .shop-board .shop-bar { position: relative; z-index: 3; background: #4e3520; } /* 招牌那一列永遠在最上面：出店按得到（終審 I3）；實心底 */
 /* 放大的紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣）：不蓋住木板與招牌；第三層交出清單長的時候自己捲 */
-.shop-board .board-sheet { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2; max-height: calc(100% - 140px); overflow-y: auto; overscroll-behavior: contain;
+.shop-board .board-sheet { position: absolute; left: 12px; right: 12px; bottom: calc(12px + var(--bottom, 0px)); z-index: 2;
+  max-height: calc(100% - 140px - var(--top, 0px) - var(--bottom, 0px)); overflow-y: auto; overscroll-behavior: contain; /* 留出 iPhone 的安全區域（終審 M2） */
   border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
 .shop-board .board-sheet .paper { position: relative; display: grid; gap: 5px; padding: 10px 12px; border: 2px solid #6b4a2a; border-radius: 8px;
   background: #f6edd8; color: #2a241d; font-size: 12.5px; line-height: 1.55; }
 .shop-board .paper h4 { margin: 0; font: 600 16px var(--serif); letter-spacing: 1px; }
 .shop-board .paper .due, .shop-board .paper .why { font-size: 11.5px; color: #6d5a43; }
 .shop-board .paper .have { color: #a8322a; }
+.shop-board .paper .stamp { top: 10px; right: 10px; bottom: auto; transform: rotate(10deg); pointer-events: none; } /* 紙上的「已揭」在右上角、點不到它，不蓋住收起（終審 I1） */
 .shop-board .paper p { margin: 0; }
 .shop-board .paper .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; margin-top: 4px; }
 .shop-board .paper .btns.one { grid-template-columns: 1fr; }
