@@ -65,7 +65,7 @@ GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個�
 GIFT_SENT_LINE = "{general}託人送來【{gift}】，捎話說：『你我投緣，這個你拿著。』"  # 待 joy 潤（FB-139）：他不在你身邊
 GIFT_TITLE = "名將贈禮"  # 待 joy 潤（FB-139、FB-149）：名將贈禮與本命兵器另起一則江湖紀錄，不接在當下那個動作裡
 GAIN_LINE = "寶物【{name}】"  # 待 joy 潤：戰報「得失」那一格（同 weapons.GAIN_LINE：素材寫「精鐵砂 ×1」，寶物寫「寶物【烏木名刺】」）
-DROP_LINE = "對手敗走時落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人）
+DROP_LINE = "{who}走得匆忙，落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人；FB-140：前一句已經是「某某敗走。」，不再寫一次敗走）
 
 
 def on(content: Content) -> bool:
@@ -382,7 +382,8 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
     if tid is None:
         return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))
     item = new_treasure(state, content, tid)
-    return item, [DROP_LINE.format(name=item.name), *deliver(state, content, item)]
+    who = content.figures[figure].name if figure in content.figures else figure
+    return item, [DROP_LINE.format(who=who, name=item.name), *deliver(state, content, item)]
 
 
 # ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----

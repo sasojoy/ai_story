@@ -5299,10 +5299,11 @@ class Game:
             record.materials.append(treasures.GAIN_LINE.format(name=item.name))
         return lines
 
-    def _tier3(self, squad: Squad, record, chance: float, tag: str) -> list[str]:
+    def _tier3(self, squad: Squad, record, chance: float, tag: str, source: str) -> list[str]:
         """三階素材的新來源（兵器設計 4.9；打造第二批）：擲 chance，中了照對手隊伍的屬性給一個三階素材（materials.tier3_pick），
         寫進這一場戰報的「得失」與江湖紀錄。自己一份亂數（「三階|季數|名號|戰報流水號|tag」；流水號每季從 1 起所以要季數，同
-        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。"""
+        treasures.challenge_drop），不碰 Game.rng：整季測試與量表的亂數序列不位移（FB-129）。序章不掉。
+        source 寫在得失那一格的括號裡（挑戰本人、大場面；跟預設表掉的同一種合成一格，FB-147）。"""
         if chance <= 0 or prologue_rules.active(self.state, self.content):
             return []
         seed = f"三階|{self.world.get_season_number()}|{self.state.player.name}|{record.id}|{tag}"
@@ -5312,8 +5313,8 @@ class Game:
         line = materials.grant(self.state, self.content, mid) if mid is not None else None
         if not line:
             return []
-        record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
-        return [line]
+        materials.add_cell(record.materials, self.content, mid, 1, source=source)
+        return [materials.extra_line(self.content, mid, 1, source)]
 
     def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
         """挑戰本人打贏掉一個三階（兵器設計 4.9；challenge_tier3）：同一位人物對同一個人每季最多 tier3_per_figure 次（0＝不設限；
@@ -5324,7 +5325,7 @@ class Game:
             return []
         if cap and p.figure_rare_drops >= cap:
             return []
-        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}")
+        got = self._tier3(squad, record, rule.challenge_tier3, f"挑戰|{fid}", materials.CHALLENGE_SOURCE)
         if got:
             p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
             p.figure_rare_drops += 1
@@ -5454,19 +5455,20 @@ class Game:
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
                     got.append(material_id)
-                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
+                    materials.add_cell(record.materials, self.content, material_id, count)  # 同一種合成一格（FB-140）
                     msgs.append(line)
             # 大場面對手的掉落表加三階（兵器設計 4.9）：另擲一次 big_tier3（自己的亂數）；大勢人物本人那支隊伍的那一個在 _challenge，不重複擲；
             # 探索野怪不算大場面（同大場面判讀：_squad_encounter 對野怪不問模型；CLAUDE.md「大場面」那一條）
             figure_squads = {fig.squad for fig in self.content.figures.values()}
             if record.kind != "wild" and self.is_big(squad) and squad.id not in figure_squads:
-                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面")
+                msgs += self._tier3(squad, record, self.content.config.forge_secrets.big_tier3, "大場面", materials.BIG_SOURCE)
             if record.kind in ("train", "wild"):  # 兵器掉落與寶物多掉的素材（兵器設計 4.8、裝備四欄 6.2）：只有遊歷與探索野怪；劇情戰、挑戰本人（都是 kind=event）不掉
                 extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)  # 自己的亂數
                 line = materials.grant(self.state, self.content, extra) if extra is not None else None
-                if line:  # 照實多寫那一個：戰報的得失、江湖紀錄（設計 6.2）
-                    record.materials.append(line.removeprefix(materials.GRANT_PREFIX))
-                    msgs.append(line)
+                if line:  # 照實多寫那一個：戰報的得失、江湖紀錄（設計 6.2）；跟掉到的同一種合成一格、寫是寶物多給的（FB-140）
+                    source = self.state.player.treasure.name if self.state.player.treasure is not None else "寶物"
+                    materials.add_cell(record.materials, self.content, extra, 1, source=source)
+                    msgs.append(materials.extra_line(self.content, extra, 1, source))
                 weapon, dropped_lines = weapons.drop(self.state, self.content, self.rng)
                 if weapon is not None:
                     record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
@@ -7164,7 +7166,7 @@ class Game:
         if won:
             for material_id in boss.drops:
                 if materials.grant(s, c, material_id) is not None:
-                    record.materials.append(materials.item_text(c, material_id))
+                    materials.add_cell(record.materials, c, material_id)  # 同一種合成一格（FB-140）
             if boss.fame:
                 p.stats["fame"] = p.stats.get("fame", 0) + boss.fame
                 record.changes.append(f"名望 +{boss.fame}")

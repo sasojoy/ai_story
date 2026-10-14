@@ -291,3 +291,56 @@ def test_fb149_a_signature_arm_from_afar_joins_the_gift_entry(content, world):
     [entry] = _gift_entries(game)
     assert signature_arms.GIFT_SENT_LINE.format(general="韓鐵", arm="鐵脊長刀") in [entry.tag, *entry.lines]
     assert not any("鐵脊長刀" in line for e in game.state.journal[1:] for line in [e.tag, *e.lines])
+
+
+# ── FB-140、FB-147：得失裡同名素材合成一格，多給的寫來源；挑戰本人掉寶物那一句 ──
+
+
+def test_fb140_the_same_material_shares_one_cell_and_extras_name_their_source(content):
+    """「驚羽 ×1　驚羽 ×1」：合成「驚羽 ×2」，多給的那一個寫是哪裡來的（拾遺囊、挑戰本人、大場面）。"""
+    from tianxia import materials
+
+    cells: list[str] = []
+    materials.add_cell(cells, content, "kuai_1", 1)
+    materials.add_cell(cells, content, "gang_1", 2)
+    materials.add_cell(cells, content, "kuai_1", 1, source="拾遺囊")
+    assert cells == ["驚羽 ×2（拾遺囊 +1）", "精鐵砂 ×2"]
+    materials.add_cell(cells, content, "gang_3", 1, source="挑戰本人")
+    assert cells[-1] == "隕鐵膽 ×1（挑戰本人 +1）"
+
+
+def test_fb140_the_card_still_skips_the_drop_lines_it_already_shows(content):
+    """卡片底下的補充不重複得失裡的素材（battlelog.told_lines）：合成一格之後，原本那兩行「獲得 …」照樣算講過了。"""
+    from tianxia import battlelog, materials
+    from tianxia.state import BattleRecord
+
+    record = BattleRecord(id=1, time=0.0, location="town", kind="train", event="", opponent="山賊", tier="大勝", ours=[], our_power=1, difficulty=1)
+    materials.add_cell(record.materials, content, "kuai_1", 1)
+    materials.add_cell(record.materials, content, "kuai_1", 1, source="拾遺囊")
+    told = battlelog.told_lines(record)
+    assert "獲得 驚羽 ×1" in told and materials.extra_line(content, "kuai_1", 1, "拾遺囊") in told
+
+
+def test_fb147_the_challenge_tier3_merges_with_the_table_drop(content, world, monkeypatch):
+    """打贏波才「玄鋼骨 ×1　隕鐵膽 ×1　隕鐵膽 ×1」：一個是預設掉落表、一個是挑戰本人必掉，合成一格、寫來源。"""
+    from tianxia import materials
+    from tianxia.state import BattleRecord
+
+    _on(content)
+    game = _game(content, world)
+    content.config.forge_secrets.challenge_tier3 = 1.0
+    record = BattleRecord(id=7, time=0.0, location="town", kind="event", event="", opponent="波才", tier="大勝", ours=[], our_power=1, difficulty=1)
+    materials.add_cell(record.materials, content, "gang_3", 1)  # 預設掉落表那一個
+    monkeypatch.setattr(materials, "tier3_pick", lambda *a, **k: "gang_3")
+    squad = next(iter(content.squads.values()))
+    msgs = game._figure_tier3("bocai", squad, record)
+    assert record.materials == [f"隕鐵膽 ×2（{materials.CHALLENGE_SOURCE} +1）"]
+    assert msgs == [materials.extra_line(content, "gang_3", 1, materials.CHALLENGE_SOURCE)]
+
+
+def test_fb140_the_treasure_drop_line_does_not_repeat_routed(content):
+    """「波才敗走。」緊接「對手敗走時落下了【叩關玉】」：掉寶物那一句寫人物的名字、不再寫一次敗走。"""
+    from tianxia import treasures
+
+    line = treasures.DROP_LINE.format(who="波才", name="叩關玉")
+    assert "敗走" not in line and "波才" in line and "【叩關玉】" in line

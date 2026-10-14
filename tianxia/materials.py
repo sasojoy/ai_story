@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
+import re
 
 from .insights import PAIR_ATTRIBUTES
 from .models import Content, Material, Squad
@@ -47,6 +48,55 @@ GRANT_PREFIX = "獲得 "
 def item_text(content: Content, material_id: str, count: int = 1) -> str:
     """一筆素材的寫法，例如「精鐵砂 ×1」：戰報的獲得與損失寫的就是它，訊息「獲得 精鐵砂 ×1」是它前面加 GRANT_PREFIX。"""
     return f"{content.materials[material_id].name} ×{count}"
+
+
+# 戰報「得失」那一格（FB-140、FB-147）：同一種素材合成一格，多給的寫來源與幾個——「驚羽 ×2（拾遺囊 +1）」。待 joy 潤
+EXTRA_NOTE = "{source} +{n}"
+CHALLENGE_SOURCE = "挑戰本人"  # 打贏大勢人物本人必掉的那一個三階（兵器設計 4.9）
+BIG_SOURCE = "大場面"  # 大場面對手另擲的那一個三階
+_CELL = re.compile(r"^(?P<name>.+?) ×(?P<n>\d+)(?:（(?P<extra>[^）]*)）)?$")
+_EXTRA = re.compile(r"^(?P<source>.+) \+(?P<n>\d+)$")
+
+
+def add_cell(cells: list[str], content: Content, material_id: str, count: int = 1, source: str = "") -> None:
+    """把一筆素材寫進戰報「得失」（BattleRecord.materials）：已經有同一種就合成一格（「驚羽 ×2」，FB-140）；source 是多給的那幾個
+    從哪裡來（寶物、挑戰本人、大場面），寫在括號裡（FB-147）。"""
+    name = content.materials[material_id].name
+    at, total, extras = None, count, []
+    for i, cell in enumerate(cells):
+        hit = _CELL.match(cell)
+        if hit and hit["name"] == name:
+            at, total, extras = i, int(hit["n"]) + count, [e for e in (hit["extra"] or "").split("、") if e]
+            break
+    if source:
+        extras.append(EXTRA_NOTE.format(source=source, n=count))
+    text = item_text(content, material_id, total) + (f"（{'、'.join(extras)}）" if extras else "")
+    if at is None:
+        cells.append(text)
+    else:
+        cells[at] = text
+
+
+def extra_line(content: Content, material_id: str, count: int, source: str) -> str:
+    """多給的那一個在江湖紀錄裡的那一句：「獲得 驚羽 ×1（拾遺囊）」。"""
+    return grant_line(item_text(content, material_id, count)) + f"（{source}）"
+
+
+def cell_lines(cell: str) -> list[str]:
+    """得失的一格拆回江湖紀錄裡講過它的那幾句（battlelog.told_lines：卡片底下的補充不重複）：沒合過的就是「獲得 …」那一句；
+    合過的是表上掉的（一次或分幾次）與每一份多給的。"""
+    hit = _CELL.match(cell)
+    if hit is None:  # 不是素材那一格（兵器、寶物、本命兵器寫的是「兵器【…】」這種）
+        return [grant_line(cell)]
+    name, total = hit["name"], int(hit["n"])
+    out, base = [], total
+    for part in (hit["extra"] or "").split("、"):
+        extra = _EXTRA.match(part)
+        if extra:
+            base -= int(extra["n"])
+            out.append(f"{GRANT_PREFIX}{name} ×{extra['n']}（{extra['source']}）")
+    out += [f"{GRANT_PREFIX}{name} ×{k}" for k in range(1, base + 1)]
+    return out or [grant_line(cell)]
 
 
 def grant_line(item: str) -> str:
