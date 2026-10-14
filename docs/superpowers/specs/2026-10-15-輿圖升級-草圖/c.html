@@ -163,7 +163,10 @@ const SIDES = {
   haoqiang: { name: "豪強", short: "豪", color: "#4E7D59", soft: "#A5C6A6", tint: "#DFEBDD" },
 };
 const P = {};
-for (const [id, name, x, y, kind, big, danger] of DATA.places) P[id] = { id, name, x, y, kind, big: !!big, danger };
+// 全圖開放（企劃者 2026-10-15）：所有已開放的地點一開始就畫、都能直接前往；劇情還沒開放的（南華觀要等 xi_open）照舊不畫
+const LOCKED = new Set(["jade_cave"]);
+for (const [id, name, x, y, kind, big, danger] of DATA.places) if (!LOCKED.has(id)) P[id] = { id, name, x, y, kind, big: !!big, danger };
+DATA.edges = DATA.edges.filter(([a, b]) => P[a] && P[b]); // 通往沒開放地點的路也不畫
 const NAME_SHORT = (n) => n.replace(/（.*?）/g, "");
 
 // 大區：地點落在哪個多邊形（區外歸最近的大區中心，同 atlas）
@@ -275,9 +278,9 @@ const flips = (id) => {
   return out;
 };
 
-// ── 你（假）：官軍、站在潁川郡；兩處還沒摸清 ──
+// ── 你（假）：官軍、站在潁川郡；全圖開放，沒有「還沒摸清」的地點 ──
 const ME = { name: "測圖", side: "guan", at: "yingchuan", stamina: 186, sortiesLeft: 3 };
-const UNKNOWN = new Set(["jade_cave", "luoyang_palace"]);
+const UNKNOWN = new Set(); // 全圖開放之後一直是空的（草圖的程式裡還留著這個名字，不會畫出「？」）
 const CLINIC = new Set(["yingchuan", "runan", "wan_city", "zhuo_county", "xiaquyang", "baima_temple"]);
 const MARKET = new Set(["zhuo_county", "runan_market", "wan_city", "xiaquyang"]);
 const SMITH = new Set(Object.values(P).filter((p) => p.kind === "town").map((p) => p.id));
