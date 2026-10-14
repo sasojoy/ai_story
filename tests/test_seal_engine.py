@@ -200,7 +200,8 @@ def test_whoever_ticks_the_duel_gets_the_same_result(sealed, tmp_path):
                 with at(pusher, t):
                     pusher.options()
             t += 20.0
-        outcomes.append(world.seal_state().registry.history[-1].model_dump())
+        # at（收場那一刻的季時間，FB-175）不比：排程那一條推季的時鐘、旁人的畫面那一條只讀，兩條路的季時間本來就不一樣
+        outcomes.append(world.seal_state().registry.history[-1].model_dump(exclude={"at"}))
     assert outcomes[0] == outcomes[1]
 
 

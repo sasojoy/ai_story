@@ -69,6 +69,8 @@ class SealEvent(BaseModel):
     result: str | None = None  # 單挑的結果（挑戰者的角度）；沒打成是 None
     fresh: bool = False  # 持有者是照新角色算的（只寫進他自己的戰報，5.9）
     proxied: list[str] = Field(default_factory=list)  # 被代打過的那一邊（challenger／holder；只寫進那個人自己的戰報）
+    absent: list[str] = Field(default_factory=list)  # 整場一手都沒自己出、全由代打的那一邊（FB-174：「未及趕到」只寫給他們）；舊資料沒有＝空
+    at: float | None = None  # 單挑收場那一刻（這一季的世界秒，FB-175）：兩份戰報與紀錄都照它蓋時刻；舊資料沒有＝補送那一刻
     lines: list[str] = Field(default_factory=list)  # 單挑每回合一句（挑戰者的角度），補戰報用
     edge: float | None = None  # 單挑收場時的氣勢（挑戰者的角度）：持有者那份戰報照它分大勝、險勝；舊資料沒有＝None
     round: int | None = None  # 這一筆是第幾輪的（seal.log 寫；舊資料沒有＝第 1 輪）：江湖史七格只列這一輪
@@ -121,6 +123,7 @@ class SealSide(BaseModel):
     fresh: bool = False  # 照新角色算的（只寫進他自己的戰報）
     gambles: int = 0  # 這一場放手一搏了幾次（Config.seal.gamble_cap）
     proxied: bool = False  # 這一場被代打過
+    acted: int = 0  # 這一場自己出了幾手（含放手一搏；FB-174：一手都沒出才是「未及趕到」）
 
 
 class SealDuel(BaseModel):

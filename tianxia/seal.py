@@ -432,6 +432,7 @@ FAILED = "你沒能從{other}懷中奪下『{shard}』。"
 UNSETTLED_MINE = "你與{other}爭『{shard}』的單挑沒有打完，不分勝負。"
 SUNK_MINE = "你懷中的『{shard}』不知所蹤了。"
 PROXY_LINE = "你未及趕到，由你平日的路數應對。"
+PROXY_SOME_LINE = "有幾回合你遲遲沒出手，照你平日的路數應對。"  # 待 joy 潤（FB-174：自己出過手、只有幾回合被代出）
 FRESH_LINE = "你這一季還沒現身江湖，身手生疏。"
 RECALL = "{name}在{battle}陣前尋回了不知所蹤的『{shard}』。"  # 待 joy 潤：天下大事、江湖史（8.2）
 RECALLED_MINE = "你在{where}陣前尋回了『{shard}』（{effect}）。"  # 待 joy 潤：補送的紀錄

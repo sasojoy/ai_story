@@ -4,8 +4,9 @@ from __future__ import annotations
 import random
 
 from test_discuss import pair  # noqa: F401（fixture）
+from test_seal import sealed  # noqa: F401（fixture）
 
-from tianxia import atlas, fusion, social
+from tianxia import atlas, fusion, seal, social
 from tianxia.engine import Game
 from tianxia.rules import game_day
 
@@ -177,3 +178,59 @@ def test_fb170_act_three_reads_true_however_it_was_reached(real):
     ways = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_2").advance_when.any_of
     assert any(c.world_flags_all == ["bocai_defeated"] for c in ways)  # 打贏波才也會進第 3 幕
     assert "波才" not in act.text  # 不寫他還在不在：打贏他、聲勢到 70、第 10 天，三條路進來的都讀得通
+
+
+# ── FB-174：「你未及趕到」只寫給整場都沒自己出手的人；FB-175：兩份奪璽戰報的時刻照單挑收場那一刻 ──
+
+
+def test_fb174_a_side_that_played_some_rounds_is_not_written_as_absent(content):
+    from test_seal import put_shards
+    from test_seal_duel import _duel, _shared
+
+    from tianxia import seal_duel
+
+    put_shards(content)
+    st = _shared(content, _duel(phase="muster", starts_real=0.0))
+    st.seal_duels[0].challenger.hp = st.seal_duels[0].challenger.hp_cap = 3000.0  # 撐得過兩回合：第二回合才自己出手
+    st.seal_duels[0].holder.hp = st.seal_duels[0].holder.hp_cap = 3000.0
+    t, acted = 0.0, False
+    while st.seal_duels and t < 3000.0:
+        d = st.seal_duels[0]
+        d.challenger.last_seen = t  # 挑戰者一直開著分頁（在場），可是只在第二回合自己出了一手；懷璽一直不在
+        if d.phase == "active" and d.round == 1 and not acted:
+            d.pending["challenger"], acted = "強攻", True
+        seal_duel.advance(st, content, t)
+        t += 20.0
+    event = st.seal.history[-1]
+    assert acted and event.kind in ("take", "keep")
+    assert set(event.proxied) == {"challenger", "holder"}  # 兩邊都被代出過
+    assert event.absent == ["holder"]  # 整場一手都沒自己出的只有懷璽
+    assert event.at == st.season.time  # FB-175：記下收場那一刻（世界秒）
+
+
+def test_fb175_both_reports_carry_the_moment_the_duel_closed(sealed, world):
+    from test_seal_engine import _finished, _player
+
+    challenger = _finished(sealed, world, taken=True)
+    event = world.seal_state().registry.history[-1]
+    assert event.at is not None
+    old = _player(sealed, world, "懷璽", now=900.0)  # 收場之後好一陣子才同步
+    new = _player(sealed, world, challenger, now=1500.0)
+    for game in (old, new):
+        report = next(b for b in game.state.battles if b.kind == "seal")
+        entry = next(e for e in game.state.journal if e.title.startswith("奪璽"))
+        assert report.time == event.at and entry.time == event.at and game.state.world.time > event.at
+        assert seal.PROXY_LINE in report.notes  # 兩個人都沒來：整場代打，照舊寫「未及趕到」
+
+
+def test_fb174_some_proxied_rounds_get_the_milder_line(sealed, world):
+    from test_seal_engine import _player
+
+    from tianxia.world_state import SealEvent
+
+    game = _player(sealed, world, "懷璽", now=10.0)
+    e = SealEvent(seq=99, season=world.get_season_number(), kind="keep", shard="chishou", holder="懷璽", other="挑戰者",
+                  result="落敗", edge=30.0, lines=["一句。"], proxied=["holder"], absent=[], at=game.state.world.time)
+    game._file_seal(e, "螭首", True)
+    notes = game.state.battles[0].notes
+    assert seal.PROXY_SOME_LINE in notes and seal.PROXY_LINE not in notes

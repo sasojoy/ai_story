@@ -3672,22 +3672,26 @@ class Game:
         else:
             head, fame = (seal.MISSED, cfg.fame["near"]) if won else (seal.FAILED, 0)
         notes = [head.format(other=other, shard=shard)] + ([e.text] if e.text else [])
-        notes += [seal.PROXY_LINE] if mine in e.proxied else []
+        if mine in e.absent:  # 整場一手都沒自己出（FB-174）
+            notes.append(seal.PROXY_LINE)
+        elif mine in e.proxied:  # 自己出過手、只有幾回合逾時被代出；舊資料沒有 absent 也走這一句（比較溫和、一定是真的）
+            notes.append(seal.PROXY_SOME_LINE)
         notes += [seal.FRESH_LINE] if mine == "holder" and e.fresh else []
         changes = []
         if same and fame:
             s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
             changes.append(f"名望 +{fame}")
         label = "" if same else f"第 {e.season} 季・"
+        when = e.at if same and e.at is not None else s.world.time  # 單挑收場那一刻（FB-175）；跨季才回來照補送那一刻
         record = BattleRecord(
-            id=s.battle_seq + 1, time=s.world.time, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
+            id=s.battle_seq + 1, time=when, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
             opponent=other, ours=[], tier=seal_duel.side_tier(e.result, e.edge, mine, c.config.duel), our_power=0.0, difficulty=0.0,
             notes=notes, changes=list(changes),
             rounds=list(e.lines),
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
+        journal.add_entry(s, JournalEntry(time=when, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
                                           changes=changes, battle_id=record.id))
         if same:
             annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
