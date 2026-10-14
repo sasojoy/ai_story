@@ -1020,7 +1020,14 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .peer-art b { flex: 1; min-width: 0; }
 .peer-art span { flex: none; color: var(--ink-2); font-size: 13px; }
 .peer-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
-.peer-acts .btn small { display: block; font-size: 12px; color: var(--ink-2); font-weight: normal; }
+/* 卡上的鈕（FB-220）：名字不折行（贈物送滿之後那一句長，以前把「贈銀兩」擠成一字一行、鈕高 103px）。說明放得下就跟名字並排
+   （「身上 50 兩」），放不下自己換到名字底下一行、照空白與標點折（keep-all，同 FB-132 切段的想法；一段太長才硬折，不撐破鈕） */
+.peer-acts .btn { flex-wrap: wrap; row-gap: 0; }
+.peer-acts .btn .pa-name { flex: none; white-space: nowrap; }
+.peer-acts .btn small {
+  display: block; font-size: 12px; color: var(--ink-2); font-weight: normal;
+  min-width: 0; word-break: keep-all; overflow-wrap: anywhere;
+}
 .peer-msg { margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--gold) 12%, var(--paper)); font-size: 14px; }
 .peer-msg p { margin: 0; }
 .peer-amount { margin-bottom: 12px; }

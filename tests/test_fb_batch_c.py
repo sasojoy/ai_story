@@ -162,3 +162,58 @@ def test_fb198_the_stamina_bar_keeps_clear_of_the_pill_button():
         {"end": 100, "tag": 200, "start": ["snug", "tight"]},  # 上一次收過、這一次放得下：拿掉
     ])
     assert out == [[], ["snug"], [], [], []]
+
+
+# ── FB-220：贈物送滿之後，卡上灰掉的「贈銀兩」「贈回體丹」被右邊那句原因擠成一字一行（鈕高 103px）──
+# 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下換到名字底下一行、照空白與標點折（375 寬實機：103px → 75px，
+# 同一張卡上的「邀他結伴同行」63px → 75px，名字不再被折成兩行；「身上 50 兩」這種短的照舊並排，48px）。原因那一句字不改。
+
+
+@needs_node
+def test_fb220_a_full_gift_button_keeps_its_name_on_one_line(content):
+    import json
+
+    from test_prologue_web import run
+    from test_shop2_web import _css, _rule
+    from test_social import _player
+
+    from tianxia import social
+
+    cap = content.config.gift_per_pair_day
+    a = _player(content, "甲")
+    b = _player(content, "乙")
+    a.state.player.stats["silver"], a.state.player.stamina_pills = 50, 3
+    for _ in range(cap):
+        a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    card = social.card(a, b)
+    full = social.GIFT_FULL.format(n=cap)
+    assert [x["note"] for x in card["actions"] if x["action"] == "gift"] == [full, full]  # 原因那一句字不改
+    out = run(server.main_view(a), "H.S.peer = { name: '乙', card: CARD }; return H.peerHtml();".replace("CARD", json.dumps(card, ensure_ascii=False)))
+    assert f'disabled><span class="pa-name">贈銀兩</span><small>{full}</small></button>' in out
+    assert f'disabled><span class="pa-name">贈回體丹</span><small>{full}</small></button>' in out
+    css = _css()
+    assert "white-space: nowrap" in _rule(css, ".peer-acts .btn .pa-name") and "flex: none" in _rule(css, ".peer-acts .btn .pa-name")
+    assert "flex-wrap: wrap" in _rule(css, ".peer-acts .btn")  # 說明放不下就換到名字底下一行
+    note = _rule(css, ".peer-acts .btn small")
+    assert "min-width: 0" in note and "word-break: keep-all" in note and "overflow-wrap: anywhere" in note  # 照空白、標點折，太長才硬折
+
+
+@needs_node
+def test_fb220_every_card_button_wraps_its_name(content):
+    """卡上每一顆鈕（論武出哪一樣收成下拉清單那一顆也是）名字都包一格，沒有說明的照樣包。"""
+    import json
+
+    from test_prologue_web import run
+    from test_social import _player
+
+    actions = [
+        {"action": "greet", "label": "抱拳", "enabled": True},
+        {"action": "spar", "label": "切磋", "enabled": True, "note": "體力 6・勝算 五五波"},
+        {"action": "discuss", "label": "出流雲劍", "group": "論武", "pick": "流雲劍", "enabled": True},
+        {"action": "discuss", "label": "出風", "group": "論武", "pick": "風", "enabled": True},
+    ]
+    card = {"name": "乙", "affiliation": "散人", "level": 1, "record": "", "arts": [], "actions": actions}
+    script = "H.S.peer = { name: '乙', card: CARD }; return H.peerHtml();".replace("CARD", json.dumps(card, ensure_ascii=False))
+    out = run(server.main_view(_player(content, "甲")), script)
+    assert '<span class="pa-name">抱拳</span></button>' in out and '<span class="pa-name">切磋</span><small>體力 6・勝算 五五波</small>' in out
+    assert 'data-act="peer-pick"><span class="pa-name">論武</span></button>' in out

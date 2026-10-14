@@ -1921,14 +1921,15 @@
     const groups = {};
     actions.forEach((b, i) => { if (b.group && b.enabled) (groups[`${b.action}|${b.group}`] ||= []).push(i); });
     const done = new Set();
-    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}>${esc(b.label)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    // 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下自己換到下一行再折（style.css 的 .peer-acts，FB-220）
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
     const html = actions.map((b, i) => {
       const members = b.group && b.enabled ? groups[`${b.action}|${b.group}`] : null;
       if (!members || members.length < 2) return one(b, i);
       if (done.has(members)) return "";
       done.add(members);
       return `<div class="peer-pick"><select class="input" aria-label="${esc(b.group)}">${members.map((j) => `<option value="${j}">${esc(actions[j].pick || actions[j].label)}</option>`).join("")}</select>`
-        + `<button class="btn" data-act="peer-pick">${esc(b.group)}${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
+        + `<button class="btn" data-act="peer-pick"><span class="pa-name">${esc(b.group)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button></div>`;
     }).join("");
     return `<div class="peer-acts">${html}</div>`;
   }
