@@ -151,6 +151,23 @@ def test_fb252_taking_a_place_back_reads_as_a_recapture():
     assert territory.RETAKE_LINE.format(place="官軍大營", side=huang) in _world_lines(game)
 
 
+def test_fb253_a_stir_on_a_line_at_fifty_is_greyed_and_costs_nothing():
+    """戰線正好 50：攪局推不動，鈕灰著寫原因、底下那一行說等戰局偏了再來；按了不花次數、不花體力。線一偏就又按得下去。"""
+    from tianxia import sortie
+
+    game = _game("haoqiang", "runan_wilds")
+    w, p = game.state.world, game.state.player
+    w.trends["yingru"] = 50
+    option = _sortie(game)
+    assert not option.enabled and option.label == f"{sortie.NAME}・{sortie.MODE_NAMES['stir']}（{sortie.STIR_FLAT}）"
+    assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"] == sortie.STIR_FLAT_LINE
+    stamina = p.stamina
+    assert game.choose("act:train") == ["（此刻無法這麼做。）"]
+    assert game.sorties_left() == 5 and p.stamina == stamina
+    w.trends["yingru"] = 49
+    assert _sortie(game).enabled
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")

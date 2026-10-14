@@ -1356,6 +1356,8 @@ class Game:
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
+        if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50（FB-253）
+            return sortie.STIR_FLAT_LINE
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
         return howto.sortie_line(how, push_ok, left, self.content)
 
@@ -5437,6 +5439,8 @@ class Game:
         if left <= 0:
             used = sortie.USED_UP.format(n=self.content.config.sortie.per_day)
             return Option(id="act:train", label=f"{name}（{used}）", enabled=False)
+        if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50：攪局推不動，不能按、不花次數（FB-253）
+            return Option(id="act:train", label=f"{name}（{sortie.STIR_FLAT}）", enabled=False)
         tail = sortie.LEFT_NOTE.format(n=left)
         if how != "attack":
             return self._cost_option("act:train", name, cost, note=f"{tail}・零風險")

@@ -128,7 +128,7 @@ def test_the_gentry_stirs_toward_the_middle():
     assert w.trends["yingru"] == 41  # 往 50 拉
     w.trends["yingru"] = 50
     game.choose("act:train")
-    assert w.trends["yingru"] == 50  # 在 50 什麼都不推
+    assert w.trends["yingru"] == 50  # 在 50 什麼都不推（FB-253 之後那一顆灰著、按不下去，見 tests/test_core_loop_fb.py）
 
 
 def test_the_gentry_stir_earns_contribution():
