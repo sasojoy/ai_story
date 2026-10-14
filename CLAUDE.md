@@ -19,7 +19,7 @@
 
 **門面與程式**
 - `tianxia/`：純 Python 規則引擎，**不得 import 任何網頁框架**（fastapi 等）。`engine.Game` 是唯一對外門面。
-- `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查（id、連通、素材拿不拿得到、退路字表組出的每個名字都過得了命名過濾、獎勵不能給或扣博聞、隨口應對的獎勵不能高過檢定選項……）。`content/gear.json` 是寶物表、名駒、名將贈禮（裝備三；沒有這個檔就沒有寶物的來源）。`content/profiles/<名字>.json` 是設定覆寫檔，由環境變數 `TIANXIA_PROFILE` 選（`weekend`：第一季規則開、季長 2.5 天、人數上限 2），只能寫 `Config` 有的欄位。
+- `content/`：所有遊戲內容（JSON），載入時由 `tianxia/content.py::validate` 交叉檢查（id、連通、素材拿不拿得到、退路字表組出的每個名字都過得了命名過濾、獎勵不能給或扣博聞、隨口應對的獎勵不能高過檢定選項……）。`content/gear.json` 是寶物表、名駒、名將贈禮（裝備三；沒有這個檔就沒有寶物的來源）。`content/profiles/<名字>.json` 是設定覆寫檔，由環境變數 `TIANXIA_PROFILE` 選（`weekend`：第一季規則開、季長 2.5 天、人數上限 20〔Joy 2026-10-14 為二十人試玩從 2 調上來〕），只能寫 `Config` 有的欄位。
 - `server.py`：網頁伺服器（FastAPI），只負責登入、行動鎖、鎖外的模型呼叫與把畫面要的東西整理成 JSON；引擎的 Markdown 在這裡轉成 HTML（原始 HTML 一律跳脫）。鎖內模型呼叫的全服斷路器也在這裡（見「模型呼叫」）。
 - `web/`：手機優先的單頁網頁（`index.html`／`style.css`／`app.js`，沒有建置步驟、不靠外部函式庫，見「介面」）。
 - `run_bots.py`：伺服器假人程式的入口，每隔 `bot_tick_seconds` 呼叫一次 `BotRunner.tick()`，跟 `server.py` 同時開著、開同一個資料庫與同一份設定。
