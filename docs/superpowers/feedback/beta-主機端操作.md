@@ -228,7 +228,45 @@ cloudflared tunnel run --url http://127.0.0.1:7861 tianxia
 
 伺服器本身要不要也開機自動跑，是部署那一期的事；在那之前，伺服器照舊用視窗開。
 
+## 監控頁（只給管理者看）
+
+`scripts/monitor.py`：在線人數、賽季、行程、模型、最近的錯誤，一頁看完。跟遊戲**完全分開**（自己一個行程、自己一個埠 7899、資料庫一律唯讀），它掛了不影響遊戲。
+
+- 本機：<http://127.0.0.1:7899>
+- 外面（2026-10-14 加的，企劃者「我在外面根本看不到」）：**<https://monitor.tianxiadashi.com>**，走同一條具名 Tunnel（`~/.cloudflared/config.yml` 多一條 ingress 指 `http://127.0.0.1:7899`）。
+- **要密碼**（HTTP Basic，帳號隨便打）：這一頁把真人與假人分開數，而「誰是假人」任何玩家都不能看到（伺服器假人設計第五節）。隧道來的連線在監控頁看起來跟本機一模一樣（cloudflared 跑在同一台），擋不了來源，只能擋密碼。密碼在 `.local/monitor.txt`（第一次啟動自己產生、也印在啟動訊息裡；`.local/` 不進版控）。想換密碼就改那一行、重開 monitor.py。環境變數 `TIANXIA_MONITOR_PASSWORD` 優先。
+- 怎麼開（session 用，跟伺服器同一套分離啟動）：`.venv\Scripts\python.exe -u scripts/monitor.py > monitor_out.log 2> monitor_err.log`。
+- 改了 `config.yml` 的 ingress 要**重開隧道**才生效（砍掉跑 `tunnel run tianxia` 的 cloudflared 再照「固定網域」那一節開起來）；遊戲網址會中斷幾秒。
+- 驗法：`curl -u admin:<密碼> https://monitor.tianxiadashi.com/` 回 200，不帶密碼回 401。
+
+## 看守：重開機、當掉都自己站起來（2026-10-14 加的）
+
+起因：2026-10-14 11:45 Windows 更新的**強制期限**到了，`TrustedInstaller` 自己重開機（事件 1074「作業系統: 升級（計劃之中）」）——它蓋過當時設的活動時間 8–17，而且更新重開後 Windows 不會自動登回帳號，所以整台機器空著、服務斷到有人來開。
+
+現在有一個看守工作：`C:\Users\User\tianxia-ops\watchdog.ps1`，工作排程器裡叫 **`tianxia-watchdog`**（**登入時**跑一次＋之後**每 5 分鐘**一次，無限重複；跑在 `JOY\User` 的工作階段，不必管理員權限）。每一輪看五樣，缺哪樣就補開哪樣，**不會去砍還活著的行程**：
+
+1. `server.py`（看行程在不在；在、但 7861 沒在聽只寫一行警告，不自動重開——那通常要人看一下）
+2. `run_bots.py`
+3. `scripts/monitor.py`
+4. `cloudflared tunnel run tianxia`
+5. Ollama：API 不回應就開 `ollama app.exe`；模型不在記憶體裡就暖機（帶 `num_ctx` 8192，跟遊戲一樣）
+
+- 做了什麼都寫在 `C:\Users\User\tianxia-ops\watchdog.log`（一切正常時它不寫東西）。補開之前會把死掉那一支的 `*_err.log` 複製成 `crash-<時間>-<名字>_err.log` 留證。
+- 啟動參數在 `C:\Users\User\tianxia-ops` 的 `start_server.cmd`／`start_bots.cmd`／`start_monitor.cmd`（設定 `week7`、`TIANXIA_PUBLIC_URL=https://tianxiadashi.com`、資料庫用工作樹裡的 `saves\tianxia.db`）。**換設定或換資料庫要改這三個檔**，不然看守補開的還是舊的那一套。
+- **要停服務之前先暫停看守**，不然五分鐘內它就幫你開回來：
+
+```powershell
+New-Item C:\Users\User\tianxia-ops\PAUSED -ItemType File   # 暫停看守
+Remove-Item C:\Users\User\tianxia-ops\PAUSED               # 恢復看守
+```
+
+- 手動跑一次（不用等五分鐘）：`Start-ScheduledTask -TaskName tianxia-watchdog`。要拿掉：`Unregister-ScheduledTask -TaskName tianxia-watchdog`。
+- **還缺一件要管理員權限的事**：更新重開之後要 Windows 自動登回帳號，看守才會在沒人的時候跑起來（設定 → 帳戶 → 登入選項 →「使用我的登入資訊在更新後自動完成裝置設定」打開；登錄檔是 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` 的 `ARSOUserConsent`＝1）。沒打開的話，重開機後要有人登入，看守才會動。
+- 要少挨一次強制重開（都要管理員權限，Home 版不保證每一條都生效，所以看守才是真正的保險）：活動時間拉到最大 18 小時（`HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings` 的 `ActiveHoursStart`＝9、`ActiveHoursEnd`＝3、`SmartActiveHoursState`＝0），加上 `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU` 的 `NoAutoRebootWithLoggedOnUsers`＝1 與 `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate` 的 `ConfigureDeadlineNoAutoReboot`＝1。大型試玩之前最穩的還是直接在設定 → Windows Update 按「暫停更新」（最多 5 週）。
+
 ## 怎麼停
+
+> **先暫停看守**：`New-Item C:\Users\User\tianxia-ops\PAUSED -ItemType File`。不然 `tianxia-watchdog` 會在五分鐘內把你剛停掉的東西全部開回來（見上一節）。事情做完記得把 `PAUSED` 刪掉。
 
 在兩個視窗各按一次 **Ctrl+C**。伺服器和 cloudflared 會一起關掉，不會留下東西。直接關掉視窗也可以。
 
@@ -452,6 +490,10 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 ## 給 session 用：不開視窗的啟動與停止
 
 Claude session 不能開互動視窗，改用 `Start-Process` 在背景啟動，輸出寫進 log。**記下回傳的 PID**，停的時候要用：
+
+> **2026-10-14 這台機器的實際位置**：工作樹是 `C:\Users\User\Documents\ai_story-tianxia`（`.venv` 也在裡面），資料庫就用它的 `saves\tianxia.db`（**不必設 `TIANXIA_DB`**），設定是 `TIANXIA_PROFILE=week7`（第一季規則開、季長 7 天、人數上限 20）。下面指令裡的 `C:\Ray\專案\天下大勢` 與 `TIANXIA_DB` 是舊的那份 clone，照抄會開到另一個世界——**開工前先用 `git worktree list` 核對，並且比對 `server_out.log` 的「資料庫：…」「設定：…」兩行**。
+> Windows 自動更新重開機之後，四樣都要重開：隧道、`server.py`、`run_bots.py`、`scripts/monitor.py`，再把 Ollama 暖機（`ollama ps` 要寫 `100% GPU`）。
+
 
 ```powershell
 cd C:\Ray\專案\天下大勢

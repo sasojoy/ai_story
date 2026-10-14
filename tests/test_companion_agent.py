@@ -11,6 +11,25 @@ from tianxia.world_state import WorldStateStore
 # ── 好感度 tag 查表：個別人物覆寫（還要改進第 6 點）────────────────
 
 
+def test_trim_options_keeps_three_and_drops_the_blank_ones():
+    """2026-10-14 線上回報：跟盧植對話時選單冒出 400 顆按鈕，第 4 顆之後全是空的，第 3 顆的字尾還帶著 JSON 的「],」。
+    模型那一輪的結構化輸出壞了，而 CompanionTurn.options 沒有長度上限，壞掉的清單就一路畫成按鈕。"""
+    options = ["先前曾聽聞大人治軍嚴明", "黃巾勢大，可有策應之法", "願聞軍事佈局一二"] + [""] * 397
+    tags = ["由衷讚賞", "真誠請教", "真誠請教"]
+    assert companion_agent.trim_options(options, tags) == (options[:3], tags)
+
+
+def test_trim_options_keeps_the_tags_lined_up_when_blanks_come_first():
+    """空的被丟掉時 tag 要跟著原本的位置走，不然 talk:N 的 N 會對到別人的 tag。"""
+    kept, tags = companion_agent.trim_options(["", "甲", "  ", "乙", "丙", "丁"], ["x", "a", "y", "b", "c", "d"])
+    assert (kept, tags) == (["甲", "乙", "丙"], ["a", "b", "c"])
+
+
+def test_trim_options_survives_tags_that_are_missing():
+    """模型只回了選項、沒回 option_tags（或少回）時不能炸掉。"""
+    assert companion_agent.trim_options(["甲", "乙"], []) == (["甲", "乙"], ["", ""])
+
+
 def test_resolve_tag_delta_uses_the_shared_default_without_a_character():
     assert resolve_tag_delta("雪中送炭") == 8
     assert resolve_tag_delta("言語冒犯") == -6
