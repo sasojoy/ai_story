@@ -438,6 +438,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .scene details.b-round > summary span { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .scene details.b-round[open] > summary span { display: none; }
 .scene details.b-round .b-lines { font-size: 14px; }
+/* 每一條是哪一軍的：左邊一道那一軍的顏色、開頭一個小標籤（Joy 2026-10-14「看不出誰是官軍誰是黃巾」；顏色同戰局條） */
+.scene .b-lines li.b-side { padding-left: 8px; border-left: 3px solid var(--c, var(--line)); margin-left: -2px; }
+.scene .b-lines .side-guan { --c: var(--kuai); }
+.scene .b-lines .side-huang { --c: var(--gold); }
+.scene .b-lines .side-haoqiang { --c: var(--rou); }
+.scene .b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--c, var(--line)); color: #fff; font: 600 12px/1.6 var(--sans); vertical-align: 1px; }
+.scene .side-huang .b-tag { color: #2a241d; } /* 金底配白字太淡：兩種模式都用深墨（同戰局條） */
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }
 /* 有所感的畫布（悟意境設計 0.2）：一筆畫到底；等模型取名時整塊微微晃（同煉製的爐子） */

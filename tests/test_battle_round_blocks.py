@@ -68,3 +68,34 @@ def test_an_opened_old_round_stays_open_when_the_page_redraws(battle):
       return T.els.page.innerHTML;"""
     out = run(m, script)
     assert '<details class="b-round" data-round="1" open>' in out
+
+
+def _sided(fighter):
+    def put(b):
+        b.narrative_log[-1] = "\n".join(["這一回合官軍佔了上風（戰局 50→58）：參戰乙帶頭強攻。", "參戰乙放手一搏：「火燒連營」（評估成功率 30%）",
+                                         "參戰乙這一搏成功了！官軍推進一小截，自己氣血 -12。", "黃巾軍的強攻盯著顯眼的人打：參戰乙氣血 -8。",
+                                         "各路奇招互相牽扯，官軍這一回合的放手一搏合起來只把戰線推前了一截。"])
+    fighter.world.mutate_battle(put)
+
+
+def test_each_line_says_which_side_it_is(battle):
+    """Joy 2026-10-14「看不出誰是官軍誰是黃巾」：開頭是參戰者（照他站的那一邊）或交戰一方的名字，前面加那一軍；不分邊的句子不加。"""
+    _, fighter = battle
+    _sided(fighter)
+    block = fighter.scene_text().split("##### 第 1 回合", 1)[1]
+    rows = [line for line in block.split("\n\n", 2)[1].split("\n")]
+    assert rows == ["- 這一回合官軍佔了上風（戰局 50→58）：參戰乙帶頭強攻。",
+                    "- 〔官軍〕參戰乙放手一搏：「火燒連營」（評估成功率 30%）", "  參戰乙這一搏成功了！官軍推進一小截，自己氣血 -12。",
+                    "- 〔黃巾軍〕黃巾軍的強攻盯著顯眼的人打：參戰乙氣血 -8。",
+                    "- 各路奇招互相牽扯，官軍這一回合的放手一搏合起來只把戰線推前了一截。"]
+
+
+@node
+def test_the_side_shows_as_a_coloured_tag(battle):
+    _, fighter = battle
+    _sided(fighter)
+    m = server.main_view(fighter)
+    out = run(m, 'H.S.tab = "jianghu"; H.renderPage(); return T.els.page.innerHTML;')
+    assert '<li class="b-side side-guan mine"><span class="b-tag">官軍・我方</span>參戰乙放手一搏' in out
+    assert '<li class="b-side side-huang"><span class="b-tag">黃巾軍</span>黃巾軍的強攻' in out
+    assert "〔" not in out.split('class="b-round latest"', 1)[1].split("</div>", 1)[0]

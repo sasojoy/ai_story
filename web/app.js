@@ -1360,10 +1360,19 @@
   // 引擎（engine._round_blocks）把最近五段戰況寫成「##### 第 N 回合」加一行一條的清單、新的在上。這裡把最新那一回合包成一塊整段攤開，
   // 舊的幾回合各收成一行（<details>：回合數＋那一回合誰佔上風那一句，點了攤開）；攤開了哪幾回合記在 S.roundsOpen，輪詢重畫照樣開著
   const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
-  function roundBlocks(html) {
+  // 每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：引擎在開頭寫「〔官軍〕」（engine.SIDE_TAG），這裡換成那一軍顏色的
+  // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著
+  const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
+  function roundBlocks(html, g) {
     let newest = true;
     const open = S.roundsOpen || (S.roundsOpen = new Set());
-    return html.replace(ROUND_HEAD, (all, n, items) => {
+    const sides = {};
+    if (g) for (const w of [g.left, g.right]) if (w) sides[w.name] = w;
+    return html.replace(ROUND_HEAD, (all, n, rows) => {
+      const items = rows.replace(SIDE_TAG, (tag, name) => {
+        const w = sides[name];
+        return w ? `<li class="b-side side-${esc(w.id)}${w.mine ? " mine" : ""}"><span class="b-tag">${name}${w.mine ? "・我方" : ""}</span>` : tag;
+      });
       const list = `<ul class="b-lines">\n${items}</ul>`;
       if (newest) {
         newest = false;
@@ -1902,7 +1911,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${withGauge(musterScene(m, roundBlocks(battleScene(m))), m.battle_gauge)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene">${withGauge(musterScene(m, roundBlocks(battleScene(m), m.battle_gauge)), m.battle_gauge)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>

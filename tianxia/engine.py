@@ -174,6 +174,7 @@ TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血�
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算一段）
 GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法
+SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）；網頁 app.js 的 roundBlocks 認這個寫法
 ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
@@ -4638,7 +4639,7 @@ class Game:
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
-        lines += self._round_blocks(battle)
+        lines += self._round_blocks(battle, definition)
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
@@ -4664,12 +4665,21 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
-    def _round_blocks(self, battle: battle_instance.BattleInstance) -> list[str]:
+    def _round_blocks(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[str]:
         """場景上最近五段戰況，一回合一段、新的在上（Joy 2026-10-14「大決戰因為很多人，戰況文字沒有分回合，擠在一起玩家很難閱讀」）：
         每一段是「##### 第 N 回合」加一行一條的清單，網頁照標題把舊的幾回合收成一行（app.js 的 roundBlocks）。
         narrative_log 開打那一句之後一回合一筆（apply_battle_tales 也照這個算），所以倒數第 k 筆是第（round_number − k）回合；
-        開打那一句（第 0 筆）照舊一段話。"""
+        開打那一句（第 0 筆）照舊一段話。每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：開頭是參戰者的名號就照他
+        站的那一邊，開頭是交戰一方的名字就是那一方，前面加「〔官軍〕」（SIDE_TAG；網頁 roundBlocks 換成那一軍顏色的小標籤）；
+        誰佔上風、各路奇招互相牽扯、換幕這幾句不分邊，不加。"""
         log = battle.narrative_log
+        sides = self._sides(definition)
+        names = sorted(battle.participants, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
+
+        def side_of(item: str) -> str:
+            who = next((n for n in names if item.startswith(n)), None)
+            fid = battle.participants[who].faction if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
+            return SIDE_TAG.format(side=sides[fid]) if fid in sides else ""
         out = []
         for k, entry in enumerate(reversed(log[-ROUND_BLOCKS:])):
             n = battle.round_number - k
@@ -4683,7 +4693,7 @@ class Game:
                     items[-1] += f"\n  {line}"
                 else:
                     items.append(line)
-            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join(f"- {item}" for item in items))
+            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join(f"- {side_of(item)}{item}" for item in items))
         return out
 
     def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
