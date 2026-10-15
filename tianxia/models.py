@@ -425,6 +425,7 @@ class Location(_Strict):
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
     insights: list[str] = Field(default_factory=list)  # 探索「悟意境」那一支悟得到的意境 id（武學與成長設計附錄 C）
+    insight_strong: str | None = None  # 這裡最濃的意境 id（意境提示設計第一節）：要是 insights 裡悟得到的；Config.insight_strong 開著才有作用
     unlock_flag: str | None = None  # 設定後，需該世界旗標成立才能前往
     # 序章（新手引導計畫一）的草廬：只有站在這裡的人看得到、到得了（atlas.is_unlocked）；序章走完離開後誰都回不去。
     # 一份內容最多一個，而且就是 Tutorial.location（content.validate）
@@ -528,6 +529,7 @@ class InsightDef(_Strict):
     lean: Lean = "無"
     desc: str = ""
     grant: InsightGrant | None = None
+    strong_line: str = ""  # 在它最濃的地方悟到它時多的那一句（意境提示設計第二節；句子由我們寫）
 
 
 SenseAttribute = Literal["剛", "柔", "快", "慢"]  # 有所感的做法、畫出來的那一筆只分這四種（基本意境的屬性）
@@ -1948,6 +1950,15 @@ class ExploreModes(_Strict):
     sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
 
 
+class InsightStrong(_Strict):
+    """意境提示（意境提示設計第二節）：每個地點最濃的意境（Location.insight_strong）。enabled 關掉一個字都不變：輿圖沒有意境濾鏡、
+    感悟擲中的門檻與心得照舊、悟到時不多那一句、validate 不要求每處都寫；抽屜的「此地能悟」是補漏，不看這個開關。"""
+
+    enabled: bool = True
+    sense_points: int = Field(default=15, ge=0)  # 選對最濃那一種的做法：感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
+    duplicate_xinde: int = Field(default=15, ge=0)  # 在最濃的地方又悟到一次已經會的那一種，化成的心得（平常 duplicate_insight_xinde）
+
+
 class TerritoryRules(_Strict):
     """地盤易手（設計第四節；tianxia/territory.py）。enabled 關掉：沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
 
@@ -2071,6 +2082,7 @@ class Config(_Strict):
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）

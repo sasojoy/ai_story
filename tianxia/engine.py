@@ -2625,7 +2625,7 @@ class Game:
             if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
                 return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
             found = insights.roll_explore(loc, c, self.rng)  # 沒有場景的內容（測試內容）照舊直接悟
-            return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
+            return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found, at=loc)
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
@@ -2752,7 +2752,7 @@ class Game:
         if sensing.can_sense(s, c, loc):
             return sensing.start(s, c, sensing.pick_scene(loc, c, rng), rng)
         found = insights.roll_explore(loc, c, rng)
-        return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found)
+        return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found, at=loc)
 
     def _train(self) -> list[str]:
         """遊歷：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
