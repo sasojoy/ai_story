@@ -67,6 +67,10 @@ class Condition(_Strict):
     ranger_path: Literal["俠", "寇"] | None = None
     # 名聲：名望到這一季的第幾段（renown.fame_tier，照季長倍數；1～4）。要 content 才判得出，沒給、名聲關著一律不成立
     fame_tier: int | None = Field(default=None, ge=1, le=4)
+    # 名聲 5.2、5.3：走哪一條路（renown.path）、善惡稱號到第幾段（renown.virtue_tier，照季長倍數）；要 content、名聲開著才成立。
+    # 跟 ranger_* 不同：投靠了陣營的人一樣看（俠寇是每個人都有的稱號）
+    virtue_path: Literal["俠", "寇"] | None = None
+    virtue_min: int | None = Field(default=None, ge=1, le=4)
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
@@ -308,6 +312,13 @@ class FrontLines(_Strict):
     geju: dict[str, list[str]]
 
 
+class VirtueNeed(_Strict):
+    """要走哪一條路、善惡稱號到第幾段（名聲設計 5.1、5.3：正邪武學誰肯教、俠寇選項要什麼稱號；renown.meets 判）。"""
+
+    path: Literal["俠", "寇"]
+    tier: int = Field(ge=1, le=4)
+
+
 class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
@@ -315,6 +326,8 @@ class Choice(_Strict):
     combat: str | None = None  # 敵方隊伍 id：選了就自動開打
     effect: Effect = Field(default_factory=Effect)  # 檢定成功／戰鬥勝利（或無檢定時）
     fail_effect: Effect = Field(default_factory=Effect)  # 檢定失敗／戰鬥落敗
+    # 名聲 5.3：俠才有、寇才有的做法（路與段）。稱號不夠的人看得到、灰掉寫要什麼；名聲的 virtue_choices 關著不出現（Game.options）
+    needs: VirtueNeed | None = None
 
 
 FREE_TEXT_MAX = 20  # 隨口應對最多幾個字（跟決戰的放手一搏一樣）
@@ -456,13 +469,6 @@ class RoadSight(_Strict):
     # 小收穫，最多一種，也可以沒有：stats 只能是 silver（≤10）或 xinde（≤5），materials 只能是一階 1 個。
     # 不發全服傳聞（每人每站都可能觸發，發到傳聞板會洗版），Effect.text 也留空。
     effect: Effect = Field(default_factory=Effect)
-
-
-class VirtueNeed(_Strict):
-    """要走哪一條路、善惡稱號到第幾段（名聲設計 5.1、5.3：正邪武學誰肯教、俠寇選項要什麼稱號；renown.meets 判）。"""
-
-    path: Literal["俠", "寇"]
-    tier: int = Field(ge=1, le=4)
 
 
 class LearnRule(_Strict):

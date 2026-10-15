@@ -980,13 +980,19 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [
-                Option(
+            opts = []
+            for i, ch in visible_choices(event, s, c):
+                opt = Option(
                     id=f"choice:{i}", label=self._choice_label(ch, odds),
                     wait=BIG_FIGHT_WAIT if ch.combat and self.is_big(c.squads[ch.combat]) else "",
                 )
-                for i, ch in visible_choices(event, s, c)
-            ]
+                if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
+                    if not renown.on(c, "virtue_choices"):
+                        continue
+                    ok = renown.meets(s, c, ch.needs.path, ch.needs.tier)
+                    opt.enabled, opt.tag = ok, ch.needs.path
+                    opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
+                opts.append(opt)
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
             return opts

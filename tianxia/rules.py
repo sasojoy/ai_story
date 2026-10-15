@@ -227,6 +227,15 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
                 return False
         elif p.stats.get("fame", 0) < content.config.renown.fame_thresholds[cond.fame_tier - 1]:
             return False
+    if cond.virtue_path is not None or cond.virtue_min is not None:  # 名聲 5.2、5.3：走哪一條路、善惡到第幾段（名聲關著一律不成立）
+        from . import renown  # noqa: PLC0415
+
+        if content is None or not renown.on(content):
+            return False
+        if cond.virtue_path is not None and renown.path(state) != cond.virtue_path:
+            return False
+        if cond.virtue_min is not None and renown.virtue_tier(state, content) < cond.virtue_min:
+            return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算

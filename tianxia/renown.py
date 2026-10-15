@@ -390,6 +390,27 @@ def _trade_perks(content: Content, way: str, tier: int) -> list[str]:
 
 VIRTUE_PERKS.append(_trade_perks)
 
+# ── 俠寇選項（設計 5.3）──────────────────────────────
+
+NEEDS = "要{title}才做得來"  # 稱號不夠時那一顆選項底下的第二行（待 joy 潤）
+CHOICE_PERK = "事件裡多出{way}的做法"
+
+
+def needs_line(state: GameState, way: str, tier: int) -> str:
+    return NEEDS.format(title=named(VIRTUE_TITLES[way][tier], state))
+
+
+def _choice_perks(content: Content, way: str, tier: int) -> list[str]:
+    """俠寇選項（5.3）：內容裡有要這一條路、這一段的選項才寫；virtue_choices 關著不寫。"""
+    if not on(content, "virtue_choices"):
+        return []
+    has = any(ch.needs is not None and ch.needs.path == way and ch.needs.tier == tier
+              for ev in content.events.values() for ch in ev.choices)
+    return [CHOICE_PERK.format(way=way)] if has else []
+
+
+VIRTUE_PERKS.append(_choice_perks)
+
 
 def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
     """敬俠的人遇上寇（善惡第 1 段以上）：冷淡（5.2）。"""
