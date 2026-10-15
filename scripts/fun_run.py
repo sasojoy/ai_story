@@ -227,10 +227,10 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
     # 這條管道要量的是「四處闖蕩撞上的對手」新不新鮮，不是劇情安排的那幾場。
     # 快照第 9 項是 battle_seq：這一步新增的戰報。同一步剛好補送到的決戰戰報不算打了一場（見上面「對手」）
     fights = sum(1 for r in encounters if r.id > before[9])
-    if fights > 0 and option_id in ("act:train", "act:explore"):
+    if fights > 0 and (option_id in ("act:train", "act:explore") or option_id.startswith("explore:")):  # 探索三選一（出陣探索與地盤）
         log.chance("對手", fights)
 
-    if option_id.startswith(("move:", "act:train", "act:rest")) or option_id in ("act:explore", "act:socialize"):
+    if option_id.startswith(("move:", "act:train", "act:rest", "explore:")) or option_id in ("act:explore", "act:socialize"):
         if not fired:
             log.mechanical += 1
 

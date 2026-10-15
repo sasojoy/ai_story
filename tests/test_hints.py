@@ -593,14 +593,15 @@ def test_the_first_fight_you_did_not_win_triggers_lose_even_when_it_is_only_a_dr
 
 
 def test_a_real_draw_from_a_dodge_in_a_travelling_fight_brings_the_mentor(on):
-    """整條路：真的遊歷、結果被身法閃成僵持（team.fight 寫死），行動做完師父就開口。"""
+    """整條路：真的遊歷、結果被身法閃成僵持（team.fight 寫死），行動做完師父就開口。
+    出陣探索與地盤之後打仗的鈕是出陣的攻（散人沒有），所以換成官軍的人在黃巾的營寨出陣：戰報類型 sortie 也算。"""
     from unittest import mock
 
     from tianxia import team
     from tianxia.encounter import EncounterResult
     from tests.test_orders import _game as _fresh
 
-    game = _fresh(on, at="huangjin_camp")
+    game = _fresh(on, faction="guan", at="huangjin_camp")
     game.skip_tutorial()
     assert game.guide_box() is None
     draw = EncounterResult(tier="僵持", margin=-10, our_power=10, difficulty=60)

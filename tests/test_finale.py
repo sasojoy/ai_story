@@ -140,21 +140,41 @@ def test_finale_adds_dong_zhuo_when_crippled(on):
 
 
 def test_decisive_victory_waits_for_week_ten(on):
-    """企劃者 2026-10-05：決定性勝利三方都一樣，第 decisive_from_week 週（預設 10）以後才提前收季；之前到了門檻也不收。"""
+    """企劃者 2026-10-05：決定性勝利第 decisive_from_week 週（預設 10）以後才提前收季；之前到了門檻也不收。
+    提前收季只看戰線（FB-254）：這裡用黃巾聲勢的門檻。"""
     from tianxia import calendar
 
     assert on.config.decisive_from_week == 10
     game = _game(on)
     game.advance(60)
-    _stances(game, huangjin_fronts=50, geju=95)  # 群雄並起的門檻早就過了
+    _stances(game, huangjin_fronts=95, geju=20)  # 黃天當立的門檻早就過了
     assert world_mod.decisive_ending(game.state, on) is None
     _quiet_until_finale(game)
     game.state.world.time = calendar.week_start(10, on, game.state.world) - 200
     game.advance(150)  # 第 9 週的最後一刻：還不收
     assert not game.state.world.ended
     game.advance(120)  # 跨進第 10 週：已經在門檻上，照規則收
-    assert game.state.world.ended and game.state.world.ending_id == "s1_warlords"
+    assert game.state.world.ended and game.state.world.ending_id == "s1_huangtian"
     assert game.state.world.timeline["xiaquyang"].text.startswith("戰事提前收束。")
+
+
+def test_fb254_separatism_over_85_waits_for_the_finale(on):
+    """FB-254（企劃者 2026-10-15「提前收季只看戰線」）：割據 95 過了第 10 週也不收；照時刻表走到季末，結局是群雄並起，
+    開頭照季末的前言、不是「戰事提前收束」。"""
+    from tianxia import calendar
+
+    game = _game(on)
+    game.advance(60)
+    _stances(game, huangjin_fronts=50, geju=95)
+    _quiet_until_finale(game)
+    game.state.world.time = calendar.week_start(10, on, game.state.world) + 60
+    game.advance(calendar.cal_hour_seconds(on, game.state.world) + 1)  # 跨過第 10 週的一個曆時交界
+    assert not game.state.world.ended and world_mod.decisive_ending(game.state, on) is None
+    _to_finale(game, 30)
+    game.advance(120)
+    w = game.state.world
+    assert w.ended and w.ending_id == "s1_warlords"
+    assert w.timeline["xiaquyang"].text == PREFACE + "官軍與黃巾兩敗俱傷，各地豪族築塢自守，天下從此四分五裂。"
 
 
 def test_decisive_victory_ends_immediately(on):
@@ -328,9 +348,13 @@ def test_a_decisive_end_keeps_the_ending_that_triggered_it(on):
 # ── 正式版辛：態勢卡的收季規則 ─────────────────────────────
 
 
+# 提前收季只看戰線（FB-254，企劃者 2026-10-15）：官軍、黃巾到門檻當場收場；豪強的割據到季末才判群雄並起
+WARLORDS_AT_FINALE = "否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。"
+
+
 def test_stance_rule_before_the_decisive_week(on):
     game = _game(on)
-    assert rules.stance_rule_note(game.state, on) == "第 10 週起，哪一方的態勢一到 85，這一季當場收場；否則到季末比高低。"
+    assert rules.stance_rule_note(game.state, on) == f"第 10 週起，官軍或黃巾的態勢一到 85，這一季當場收場；{WARLORDS_AT_FINALE}"
     assert game.status_data()["stance_rule"] == rules.stance_rule_note(game.state, on)
 
 
@@ -338,7 +362,7 @@ def test_stance_rule_after_the_decisive_week(on):
     game = _game(on)
     w = game.state.world
     w.time = calendar.week_start(10, on, w)
-    assert rules.stance_rule_note(game.state, on) == "哪一方的態勢一到 85，這一季當場收場；否則到季末比高低。"
+    assert rules.stance_rule_note(game.state, on) == f"官軍或黃巾的態勢一到 85，這一季當場收場；{WARLORDS_AT_FINALE}"
 
 
 def test_stance_rule_reads_the_endings_not_a_fixed_number(on):
@@ -349,7 +373,8 @@ def test_stance_rule_reads_the_endings_not_a_fixed_number(on):
         if ending.stance_max:
             ending.stance_max = {side: 20 for side in ending.stance_max}  # 黃巾 ≤ 20 ＝ 官軍 ≥ 80
     on.config.decisive_from_week = 9
-    assert rules.stance_rule_note(game.state, on) == "第 9 週起，哪一方的態勢一到 80，這一季當場收場；否則到季末比高低。"
+    assert rules.stance_rule_note(game.state, on) == (
+        "第 9 週起，官軍或黃巾的態勢一到 80，這一季當場收場；否則到季末，豪強的態勢在 80 以上是群雄並起，不然比高低。")
     assert game.status_data()["stance_rule"] == rules.stance_rule_note(game.state, on)  # 態勢卡那一句跟著內容走
 
 
@@ -359,36 +384,41 @@ def _decisive(content):
 
 
 def test_stance_rule_names_each_side_when_the_bars_differ(on):
-    """三方的門檻不一樣時，不能說「哪一方一到 85」：照每一方寫自己的數字（豪強改 90，其他兩方 85）。"""
+    """官軍、黃巾的門檻不一樣時，不能說「官軍或黃巾一到 85」：照每一方寫自己的數字（黃巾改 90，官軍 85）；豪強照自己的數字寫季末那一句。"""
     game = _game(on)
+    _decisive(on)["s1_huangtian"].stance_min = {"huang": 90}
     _decisive(on)["s1_warlords"].stance_min = {"haoqiang": 90}
     on.config.decisive_from_week = 1  # 第 1 週起就算：不帶「第 N 週起」，只剩規則那一句
     note = rules.stance_rule_note(game.state, on)
-    assert note == "官軍一到 85、黃巾一到 85、豪強一到 90，這一季當場收場；否則到季末比高低。"
+    assert note == "官軍一到 85、黃巾一到 90，這一季當場收場；否則到季末，豪強的態勢在 90 以上是群雄並起，不然比高低。"
 
 
 def test_stance_rule_lists_only_the_sides_that_can_end_the_season(on):
-    """只有黃巾與豪強有決定性的結局（官軍那一種被拿掉）：不能說「哪一方」，官軍沒有門檻就不列。"""
+    """只有黃巾有提前收季的結局（官軍那一種被拿掉）：只寫黃巾；官軍沒有門檻就不列。"""
     game = _game(on)
     _decisive(on)["s1_pacified"].stance_max = {}
     on.config.decisive_from_week = 1
-    assert rules.stance_rule_note(game.state, on) == "黃巾一到 85、豪強一到 85，這一季當場收場；否則到季末比高低。"
+    assert rules.stance_rule_note(game.state, on) == f"黃巾的態勢一到 85，這一季當場收場；{WARLORDS_AT_FINALE}"
+
+
+def test_stance_rule_without_an_early_ending_only_tells_the_finale(on):
+    """官軍、黃巾的門檻都拿掉：不提前收季，不寫「第 N 週起」，只剩季末那一句。"""
+    game = _game(on)
+    _decisive(on)["s1_pacified"].stance_max = {}
+    _decisive(on)["s1_huangtian"].stance_min = {}
+    assert rules.stance_rule_note(game.state, on) == "到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。"
 
 
 def test_stance_rule_states_no_number_it_cannot_back(on):
-    """豪強的 stance_max 沒有「另一方到幾分」可換（豪強 ≤ 10 不等於誰到了幾分），兩個條件合成一種的結局也不是「哪一方到幾分」：
-    這兩種都不報數字，寫一句中性的話。"""
+    """兩個條件合成一種的結局不是「哪一方到幾分」，豪強的 stance_max 也不是「在幾分以上」：這兩種都不報數字，寫一句中性的話。"""
     game = _game(on)
     on.config.decisive_from_week = 1
     endings = _decisive(on)
     endings["s1_warlords"].stance_min, endings["s1_warlords"].stance_max = {}, {"haoqiang": 10}
-    note = rules.stance_rule_note(game.state, on)
-    assert note == "哪一方的態勢到了決勝的門檻，這一季當場收場；否則到季末比高低。"
-    endings["s1_warlords"].stance_max = {}
-    endings["s1_warlords"].stance_min = {"haoqiang": 85}
     endings["s1_huangtian"].stance_min = {"huang": 60}
-    endings["s1_huangtian"].stance_max = {"haoqiang": 30}  # 兩個條件合在一起
-    assert rules.stance_rule_note(game.state, on) == note
+    endings["s1_huangtian"].stance_max = {"guan": 30}  # 兩個條件合在一起
+    note = rules.stance_rule_note(game.state, on)
+    assert note == "官軍或黃巾的態勢到了決勝的門檻，這一季當場收場；否則到季末，先看態勢有沒有到結局的門檻，再比高低。"
     assert not any(ch.isdigit() for ch in note)
 
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, figures, rules, seal, timetable
+from . import calendar, explore_modes, figures, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -47,6 +47,17 @@ def explore_line(
     return head + (f"；偶得{legend}" if legend else "") + tail
 
 
+EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
+EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
+EXPLORE_CALM = "（這裡不會撞上怪）"
+EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
+
+
+def explore_modes_line(fight: bool, sense: bool) -> str:
+    """探索三選一開著時行動列底下探索那一行（Game.action_notes）：找素材會不會撞上怪、靜心感悟悟不悟得出。"""
+    return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
+
+
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練
@@ -58,6 +69,26 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
         return f"不冒險：{got}{pushed}；不給銀兩、素材"
     got = f"打贏得{'、'.join(gains)}" if gains else "打贏沒什麼賞"
     return got + ("，可能掉素材" if drops else "") + pushed + ("；遇上自己人是操練" if drills else "")
+
+
+SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
+    "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
+    "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
+    "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
+    # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
+    "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
+}
+SORTIE_PUSH = "推動戰局、記貢獻"
+SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
+SORTIE_LEFT = "今日還能出陣 {n} 次。"
+
+
+def sortie_line(how: str, push: bool, left: int, content: Content) -> str:
+    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。"""
+    cfg = content.config
+    half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
+    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half)
+    return text + SORTIE_LEFT.format(n=left)
 
 
 def social_line(figure: str | None, events: bool, hall: bool) -> str:
@@ -240,6 +271,52 @@ def stance_help(content: Content) -> list[str]:
 # 推線的那一句只說「有些地方」（FB-112）：推不推看地點的 train_trend（Game.train_trend_push），很多有對手的地方不推（潁水河畔），
 # 行動列底下那一行（train_line 的 PUSH_WORD）照這一處的實情寫
 SOME_PLACES = "有些地方遊歷打贏、操練會推動戰況（行動列底下那一行寫著這裡推不推）"
+# 出陣開著時（出陣探索與地盤設計第二節）取代上面那一句的幾處；待 joy 潤
+SORTIE_PLACES = "在戰線上的地點出陣會推動戰況（行動列底下那一行寫著這裡推不推）"
+SORTIE_JOIN = "在戰線上的地點出陣：別人的地盤打贏往你那一邊推，自家的地盤守一回、推一半"
+SORTIE_GEJU = "在戰線上出陣攪局、把戰局往中間拉（戰線一亂，割據自然漲）"  # 豪強怎麼推割據
+SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
+
+
+def sortie_lines(content: Content) -> list[str]:
+    """玩法說明「行動」裡出陣那一條（出陣開著時取代遊歷；待 joy 潤）。數字讀 Config。"""
+    cfg = content.config
+    reset = "台灣時間 00:00 換日" if cfg.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
+    half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
+    return [
+        f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，只在戰線上的地點。"
+        "這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；地方豪強是攪局，把戰局往中間拉。"
+        f"守與攪局推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、不掉東西。越往對方老巢推越難推。",
+    ]
+
+
+def explore_lines(content: Content) -> list[str]:
+    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。"""
+    cfg = content.config
+    names = explore_modes.NAMES
+    legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    return [
+        f"- **探索**（體力 {cfg.action_cost['explore']}）：點開三選一。{names['gather']}：照這裡的地形撿素材，"
+        f"城外約 {cfg.explore_modes.encounter_chance * 10:g} 成會撞上怪，打贏是經驗的大宗；{names['seek']}：碰上這一帶的事，偶有奇遇；"
+        f"{names['sense']}：只在悟得到意境的地方。{legend}",
+    ]
+
+
+def _tenth(share: float) -> str:
+    """0.1 → 一成、0.2 → 兩成（rules.count_word）；不是整成照寫百分比。"""
+    tenths = round(share * 10, 6)
+    return f"{'兩' if tenths == 2 else rules.count_word(int(tenths))}成" if tenths == int(tenths) else f"{share * 100:g}%"
+
+
+def territory_lines(content: Content) -> list[str]:
+    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。價錢的成數讀 Config.territory。"""
+    cfg = content.config.territory
+    return [
+        "戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；豪強割據高時也會佔地；大事也會讓地點易手。各家的投靠點永遠是自家的。",
+        "換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。",
+        f"在自家地盤療傷、打造、買馬便宜{_tenth(1 - cfg.own_price)}，在別人的地盤貴{_tenth(cfg.enemy_price - 1)}；散人照原價。",
+        "輿圖局勢層的底色就是此刻誰佔著；易手時天下大事會傳一句。",
+    ]
 
 
 def _order_pushers(content: Content) -> list[str]:
@@ -262,8 +339,10 @@ def _geju_sides(content: Content) -> list[str]:
 
 
 def _geju_push(content: Content, faction_id: str) -> str:
-    """豪強怎麼推割據：在亂局的戰線上遊歷打贏；操練的地方推不推照內容寫（FB-112）。"""
-    drill = "、操練" if _drill_pushes(content, faction_id) else ""
+    """豪強怎麼推割據：在亂局的戰線上遊歷打贏；操練的地方推不推照內容寫（FB-112）。出陣開著時是攪局（SORTIE_GEJU）。"""
+    if sortie.on(content):
+        return SORTIE_GEJU
+    drill ="、操練" if _drill_pushes(content, faction_id) else ""
     tail = "" if drill else "，操練推不動"
     return f"在亂局的戰線上遊歷打贏{drill}才推割據{tail}"
 
@@ -274,11 +353,12 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     整個推一把）。句子照內容（FB-112）。"""
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
-    parts = [f"{SOME_PLACES}，往你陣營那一邊推"]
+    on = sortie.on(content)
+    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推"]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
-    tail = "散人照那個地方本來的方向推"
+    tail = SORTIE_RANGER if on else "散人照那個地方本來的方向推"
     for fid in _geju_sides(content):
         tail += f"，{STANCE_NAMES.get(fid, fid)}{_geju_push(content, fid)}"
     return [front_rule(content) + now, "；".join(parts) + f"；{tail}。"]
@@ -331,7 +411,7 @@ def quest_help(content: Content) -> list[str]:
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
     aside = f"{third}做完只在揭曉時留名{'、推一把割據' if geju else ''}，不改結果；" if third else ""
     return [
-        f"你能做的：{SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -393,12 +473,14 @@ def _plus(span: FameRange) -> str:
 
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
-    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野、拜師學藝）。數字讀內容與設定。"""
+    """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野〔全圖開放時沒有〕、拜師學藝）。數字讀內容與設定。"""
     cfg = content.config
     spans = fame_ranges(content, season)
     lines = []
     if "common" in spans:
-        lines.append(f"事件裡出頭、仗義、露臉的做法（探索、交友、遊歷之後碰上的事）：一次 {_plus(spans['common'])}。")
+        # 出陣開著時沒有遊歷，戰後事件接在探索找素材撞上的那一場之後（FB-257；待 joy 潤）
+        where = "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後"
+        lines.append(f"事件裡出頭、仗義、露臉的做法（{where}碰上的事）：一次 {_plus(spans['common'])}。")
     if "big" in spans:
         lines.append(f"劇情裡打贏強敵、奇遇與一次性的大事：一次 {_plus(spans['big'])}。")
     if "loss" in spans:
@@ -429,7 +511,8 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     uses = []
     if bars:
         uses.append(f"求見大勢人物（門檻最低 {bars[0]}、最高 {bars[-1]}；不夠的會打發你）")
-    uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
+    if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
+        uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
     if lessons:
         uses.append(f"有些師父要名望 {lessons[0]} 以上才肯教")
@@ -453,7 +536,7 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     # 只算那一場（Game._free_agent、_enlist_options；不進投靠名冊、不算叛投）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{SOME_PLACES}，推向你那一邊，遇上自己陣營的隊伍是操練；全服決戰替自己的陣營出戰，"
+        f"{SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}；全服決戰替自己的陣營出戰，"
         "陣營不是交戰的兩軍時，跟散人一樣臨時投效。"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
@@ -577,7 +660,7 @@ CHALLENGE_UNTIMED = (
 
 # 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
 CHALLENGE_TITLE = "挑戰大勢人物"
-CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同遊歷）；自己陣營的人物不打{both}，散人不能挑戰。"
+CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同{act}）；自己陣營的人物不打{both}，散人不能挑戰。"
 CHALLENGE_BOTH = "，{names}兩邊的人物都能挑戰"
 CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見：挑戰、求見、交友都不行。"
 
@@ -593,7 +676,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
         return []
     sides = {fig.faction for fig in content.figures.values()}
     both = [f.name for f in content.scenario.factions if f.id not in sides]
-    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "")]
+    act = sortie.NAME if sortie.on(content) else "遊歷"  # FB-251：出陣開著時寫「體力同出陣」（挑戰本人照舊讀 action_cost["train"]）
+    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "", act=act)]
     if cfg.snub_hours > 0:
         lines.append(CHALLENGE_SNUB.format(hours=cfg.snub_hours))
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
@@ -633,15 +717,21 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     challenge = _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on），另起一段（FB-190）
-    lines = [
-        *_section("這一季在打什麼", season_page_lines(content, season, rule)),
-        "#### 行動",
-        f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}",
+    old_train = [  # 出陣關著時的遊歷（出陣開著時換成 sortie_lines）
         # 操練看的是遇上的隊伍（Game._drills_with），不是地方：兩種都有的地方 _train 隨機挑一路（審查 M2）
         f"- **遊歷**（體力 {cost['train']}）：只在有隊伍的地方出現。遇上對手一定開打，按鈕上寫勝算：打贏得銀兩、心得、經驗，"
         "可能掉素材；每一場都會扣些氣血，輸了還會掉銀兩。遇上自己陣營的隊伍是操練：不打、不會輸，"
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
+    ]
+    # 三選一關著時的探索（照地點比例自動抽；開著時換成 explore_lines）
+    old_explore = [f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}"]
+    sense_when = "靜心感悟" if explore_modes.on(content) else "探索落在悟意境"
+    lines = [
+        *_section("這一季在打什麼", season_page_lines(content, season, rule)),
+        "#### 行動",
+        *(explore_lines(content) if explore_modes.on(content) else old_explore),
+        *(sortie_lines(content) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
@@ -654,6 +744,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         *_section("名望", fame_lines(content, season)),
         *_section("投靠與軍令", join_lines(content, season)),
         *_section("三方有什麼不同", faction_lines(content, season)),
+        *(_section("地盤", territory_lines(content)) if territory.on(content) else []),
         "#### 情誼",
         *bond,
         "",
@@ -668,7 +759,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行
-        "- 探索落在悟意境時「有所感」，先選做法：選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；"
+        f"- {sense_when}時「有所感」，先選做法：選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；"
         "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。",
         "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",

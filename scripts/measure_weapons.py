@@ -78,7 +78,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
             if b.id in seen:
                 continue
             seen.add(b.id)
-            if b.kind in ("train", "wild"):
+            if b.kind in ("train", "sortie", "wild"):  # 出陣的攻（出陣探索與地盤）也磨兵器
                 count["fights"] += 1
                 count["wins"] += b.tier in ("大勝", "險勝")
         w = game.state.player.weapon

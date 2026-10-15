@@ -9,12 +9,13 @@
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。"""
 from __future__ import annotations
 
+import math
 import random
 import re
 from collections.abc import Collection
 from typing import Literal
 
-from . import calendar, figures
+from . import calendar, figures, territory
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
@@ -75,21 +76,135 @@ def find(content: Content, event_id: str) -> TimetableEvent | None:
 
 def default_schedule(content: Content, season: WorldState | None = None) -> dict[str, float]:
     """開季時填進 WorldState.schedule 的預設值：決戰在那一週的週四 20:00（季曆），季末在季長整。
-    季長照 season 蓋的章（world_state.stamp_season 先蓋章再呼叫這裡）；不給 season 時照設定。"""
+    季長照 season 蓋的章（world_state.stamp_season 先蓋章再呼叫這裡）；不給 season 時照設定。
+    這時還不知道季在現實的哪一刻開，避開半夜由開季、換季的人照開的那一刻再挪（avoid_quiet_hours）。"""
     days = season_length_days(season, content) if season is not None else content.config.season_days
     schedule = {e.id: _showdown_default(e, content, season) for e in content.timetable if e.kind == "showdown"}
     schedule["finale"] = days * DAY
     return schedule
 
 
+# ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────
+
+# 管理者那一行（開季、開下一季）：兩邊都挪不開、照原時間的那一場。待 joy 潤
+QUIET_KEPT = "（{title}排在現實 {clock}，前後的大事擋著挪不開，照原時間；要改用「排時間」。）"
+
+
+def showdown_span(content: Content, event: TimetableEvent) -> float:
+    """這件決戰要有人在的那一段（現實秒）：schedule 排的是集結開始（時間到了開集結，world.open_waiting_showdown），
+    集結 muster_seconds，再打一幕（rounds_per_act 回合，每回合最多等 round_seconds）——玩家趕來集結、打前幾回合的那一段。
+    分版本的（宛城甲乙）取最長的；內容沒有那一場是 0（開不成，不必挪）。"""
+    return max(
+        (b.muster_seconds + b.rounds_per_act * b.round_seconds for b in content.battles.values() if b.timetable_event == event.id),
+        default=0.0,
+    )
+
+
+def _local(season: WorldState, content: Content, now: float, at: float) -> float:
+    """世界秒 at 換成當地時間（照 pill_day_utc_offset_hours 換過時區的 epoch 秒）；now 是 season.time 那一刻的現實秒。"""
+    return now + (at - season.time) / content.config.time_scale + content.config.pill_day_utc_offset_hours * HOUR
+
+
+def _quiet_hit(local: float, span: float, content: Content) -> tuple[float, float] | None:
+    """從 local 起 span 秒碰到哪一段不開的時間：回那一段的（開始, 結束）當地秒；沒碰到是 None。"""
+    quiet = content.config.battle_quiet_hours
+    day = local // DAY
+    for d in (day - 1, day, day + 1):
+        start, end = d * DAY + quiet.start * HOUR, d * DAY + quiet.end * HOUR
+        if local < end and local + span > start:
+            return start, end
+    return None
+
+
+def _neighbours(season: WorldState, content: Content, event: TimetableEvent) -> tuple[float, float]:
+    """這件決戰能挪的範圍（世界秒，兩頭都不含）：時刻表上排在它前面的最後一件之後、後面的第一件之前（照時刻排，同一刻照時刻表的
+    順序；季末也算）。前一件是決戰時再讓開它的集結加一幕、後一件是決戰時這一場的集結加一幕要在它之前打完：一次只打一場，
+    擠在一起的會排隊、拖過 00:00 才開。"""
+    ordered = sorted(enumerate(events(season, content)), key=lambda pair: (when_in(season, content, pair[1]), pair[0]))
+    at = [i for i, (_, e) in enumerate(ordered) if e.id == event.id][0]
+    scale = content.config.time_scale
+    before, after = float("-inf"), float("inf")
+    if at > 0:
+        prev = ordered[at - 1][1]
+        before = when_in(season, content, prev) + (showdown_span(content, prev) * scale if prev.kind == "showdown" else 0)
+    if at + 1 < len(ordered):
+        nxt = ordered[at + 1][1]
+        after = when_in(season, content, nxt) - (showdown_span(content, event) * scale if nxt.kind == "showdown" else 0)
+    return before, after
+
+
+def quiet_place(season: WorldState, content: Content, event: TimetableEvent, now: float) -> float | None:
+    """這件決戰此刻排的時刻（世界秒），集結加打一幕碰到半夜不開的那一段時，挪去哪裡：往前挪到那一段開始之前剛好打完一幕的那一刻
+    （取整到曆時交界，只會更早），或往後挪到那一段結束（取整到曆時交界，只會更晚），哪個近挪哪個；挪過去不能早於此刻、
+    不能跟時刻表前後的大事打亂先後（季末也算，所以不會挪過季末），近的那邊不行就換另一邊。不必挪回原來的時刻；
+    兩邊都不行回 None。now 是 season.time 那一刻的現實秒。"""
+    at = when_in(season, content, event)
+    span = showdown_span(content, event)
+    local = _local(season, content, now, at)
+    hit = _quiet_hit(local, span, content) if span > 0 and at > season.time else None  # 已經到期的（管理者這一季才蓋章）馬上開，不挪
+    if hit is None:
+        return at
+    scale, cal_hour = content.config.time_scale, calendar.cal_hour_seconds(content, season)
+    back = math.floor((at - (local - (hit[0] - span)) * scale) / cal_hour + 1e-9) * cal_hour
+    forward = math.ceil((at + (hit[1] - local) * scale) / cal_hour - 1e-9) * cal_hour
+    before, after = _neighbours(season, content, event)
+    for t in sorted((back, forward), key=lambda t: abs(t - at)):
+        if max(before, season.time) < t < after and _quiet_hit(_local(season, content, now, t), span, content) is None:
+            return t
+    return None
+
+
+def _quiet_pending(season: WorldState, content: Content) -> list[TimetableEvent]:
+    """還沒開過、還沒結算的時刻表決戰（天命之季含天命之爭）。"""
+    return [
+        e for e in events(season, content)
+        if e.kind == "showdown" and e.id not in season.timeline and e.id not in season.showdowns_opened
+    ]
+
+
+def avoid_quiet_hours(season: WorldState, content: Content, now: float) -> list[TimetableEvent]:
+    """照季曆排好的決戰挪開半夜（quiet_place），照時刻表的先後一件一件挪、寫回 season.schedule；回兩邊都挪不開、照原時間的那幾件。
+    開季（SqliteWorldStore.open_season）、換季（next_season，含換季時蓋的天命之季章）與管理者「這一季立刻蓋章」呼叫；
+    管理者「排時間」不走這裡。開關關著、這一季沒有時刻表，什麼都不做。只改傳進來的 season。"""
+    if not content.config.battle_quiet_hours.enabled or not calendar.season_one_on(season, content):
+        return []
+    stuck = []
+    for event in _quiet_pending(season, content):
+        placed = quiet_place(season, content, event, now)
+        if placed is None:
+            stuck.append(event)
+        else:
+            season.schedule[event.id] = placed
+    return stuck
+
+
+def quiet_notes(season: WorldState, content: Content, now: float) -> list[str]:
+    """管理者那一行：還沒開的決戰裡，集結加打一幕仍碰到半夜的（挪不開、照原時間）各一句，寫現實的幾點幾分（當地時間）。"""
+    if not content.config.battle_quiet_hours.enabled or not calendar.season_one_on(season, content):
+        return []
+    notes = []
+    for event in _quiet_pending(season, content):
+        local = _local(season, content, now, when_in(season, content, event))
+        span = showdown_span(content, event)
+        if span > 0 and _quiet_hit(local, span, content) is not None:
+            clock = f"{int(local % DAY // HOUR):02d}:{int(local % HOUR // 60):02d}"
+            notes.append(QUIET_KEPT.format(title=event.title, clock=clock))
+    return notes
+
+
 def when(state: GameState, content: Content, event: TimetableEvent) -> float:
     """這件大事的世界秒。決戰與季末看排定的時間（舊季沒排就用預設），其他看季曆。伏筆的時間窗（T7）也用它。"""
-    schedule = state.world.schedule
+    return when_in(state.world, content, event)
+
+
+def when_in(season: WorldState, content: Content, event: TimetableEvent) -> float:
+    """同 when，只要季本身（開季、換季時排決戰還沒有 GameState）。"""
+    schedule = season.schedule
     if event.kind == "showdown":
-        return schedule.get(event.id, _showdown_default(event, content, state.world))
+        return schedule.get(event.id, _showdown_default(event, content, season))
     if event.kind == "finale":
-        return schedule.get("finale", season_length_days(state.world, content) * DAY)
-    return calendar.event_time(event, content, state.world)
+        return schedule.get("finale", season_length_days(season, content) * DAY)
+    return calendar.event_time(event, content, season)
 
 
 def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
@@ -321,6 +436,7 @@ def resolve(
         if fid is None or not figures.holds(state, content, change):
             continue
         text += "".join(figures.apply(state, content, fid, change)) + note
+    territory.assign(w, content, outcome.control)  # 大事指定易手（設計 4.2 第 3 點）：戰況推完、人物改完之後
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)

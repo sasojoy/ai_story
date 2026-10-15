@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, gender, library, materials, ranger, roster, team, treasures, weapons
+from . import calendar, equipment, gender, library, materials, ranger, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
@@ -151,10 +151,20 @@ def title(content: Content, b: Bounty) -> str:
     return f"{kind}・{_loc_name(content, b.location)}"
 
 
+STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
+STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
+
+
 def how(content: Content, b: Bounty) -> str:
-    """怎麼完成（一句）。"""
+    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）。"""
     if b.kind == "strike":
-        return f"到{_loc_name(content, b.location)}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
+        from . import explore_modes, sortie  # noqa: PLC0415  延後 import 只是保險
+
+        target = _loc_name(content, b.location)
+        if sortie.on(content):
+            ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
+            return f"到{target}打贏一場{_enemy_name(content, b)}的隊伍（{ways}）"
+        return f"到{target}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
     if b.kind == "scout":
         return f"到{_loc_name(content, b.location)}探索一次"
     if b.kind == "escort":
@@ -915,12 +925,18 @@ def _opened(loc: Location, w: WorldState) -> bool:
     return not loc.prologue_only and (not loc.unlock_flag or loc.unlock_flag in w.flags)
 
 
-def _strike(content: Content, w: WorldState, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+def _strike_spots(content: Content, w: WorldState, faction: str, used: set[str]) -> list[tuple[str, str]]:
+    """討伐掛得出去的（地點, 隊伍）：這一方的對頭此刻站在那裡（territory.squads_at：地盤易手照控制方，設計第七節）、地點開放了、
+    榜上同一個陣營的討伐還沒用掉。"""
     enemy = ENEMY[faction]
-    spots = [
+    return [
         (loc_id, sid) for loc_id, loc in content.locations.items() if loc_id not in used and _opened(loc, w)
-        for sid in loc.enemies if sid in content.squads and content.squads[sid].faction == enemy
+        for sid in territory.squads_at(w, content, loc_id) if sid in content.squads and content.squads[sid].faction == enemy
     ]
+
+
+def _strike(content: Content, w: WorldState, faction: str, rng: random.Random, used: set[str]) -> tuple[str, str] | None:
+    spots = _strike_spots(content, w, faction, used)
     return rng.choice(spots) if spots else None
 
 

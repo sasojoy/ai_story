@@ -10,19 +10,24 @@ from test_prologue_web import run
 
 import server
 import webharness
-from conftest import real_content
+from conftest import classic_rules, real_content
 from tianxia.engine import Game
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 
+def _game(classic=False):
+    content = real_content()
+    if classic:
+        classic_rules(content)
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))  # 不走序章：跟略過序章的人一樣站在起點
+    game.client = None
+    return game
+
+
 def _main(game=None, **over):
-    if game is None:
-        content = real_content()
-        content.config.auto_open_first_season = True
-        game = Game.new(content, "沈浪", rng=random.Random(0))  # 不走序章：跟略過序章的人一樣站在起點
-        game.client = None
-    m = server.main_view(game)
+    m = server.main_view(game if game is not None else _game())
     m.update(over)
     return m
 
@@ -31,7 +36,7 @@ def _main(game=None, **over):
 
 
 def test_the_notes_sit_under_the_action_row_in_cell_order():
-    m = _main()
+    m = _main(_game(classic=True))  # 探索那一行照舊探索的寫法（出陣探索與地盤之前）；三選一那一行見 tests/test_explore_modes.py
     notes = m["action_notes"]
     assert notes["act:explore"].startswith("這裡")  # 伺服器照規則寫好的
     page = run(m, "return H.pageJianghu();")
@@ -41,7 +46,7 @@ def test_the_notes_sit_under_the_action_row_in_cell_order():
     rows = re.findall(r"<p><b>(.*?)</b>(.*?)</p>", block.group(1))
     assert rows[0] == ("探索", notes["act:explore"])  # 照格子的順序、冠格子上的名字
     for name, text in rows:
-        assert text in notes.values() and name in ("探索", "遊歷", "操練", "交友", "求見")
+        assert text in notes.values() and name in ("探索", "遊歷", "操練", "出陣・攻", "出陣・守", "出陣・攪局", "交友", "求見")
     assert page.index('class="act-notes"') > bar_end  # 在行動列後面：不推動「剛剛」、場景與整排行動
 
 

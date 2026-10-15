@@ -9,7 +9,7 @@ from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, gender, insights, library, materials, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .martial_arts import content_art
-from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, FactionDef, Trend
+from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, season_length_days
 
@@ -167,6 +167,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if p.faction is not None and p.faction in cond.factions_none:
         return False
+    if cond.controlled_by:  # 這裡此刻歸誰控制（地盤易手）：沒有 content、開關關著、不是戰線地點都不成立
+        from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
+
+        if content is None or territory.controller(state.world, content, state.player.location) not in cond.controlled_by:
+            return False
     if cond.ranger_min is not None or cond.ranger_path is not None:
         from . import ranger  # noqa: PLC0415  ranger → rules：在函式裡 import，避免循環
 
@@ -631,6 +636,16 @@ _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾
 
 MANDATE_RULE = "天命之季不提前收季：天命之爭得勝的一方得天命；沒有分出天命，就到季末比高低。"  # 待 joy 潤：態勢卡底下那一句
 
+# 提前收季只看戰線（FB-254，企劃者 2026-10-15）：只有官軍、黃巾的態勢（黃巾聲勢）到了門檻才提前收季；豪強的門檻（割據，群雄並起）
+# 到季末結算時才照 world.evaluate_ending 的先後判
+EARLY_END_SIDES = frozenset({"guan", "huang"})
+
+
+def ends_early(ending: Ending) -> bool:
+    """這一種第一季結局到了門檻會不會提前收季（world.decisive_ending）：有態勢門檻（stance_min／stance_max），而且只看官軍、黃巾。"""
+    sides = set(ending.stance_min) | set(ending.stance_max)
+    return bool(sides) and sides <= EARLY_END_SIDES
+
 
 def decisive_week(season: WorldState, content: Content) -> int:
     """這一季從第幾週起才會提前收季：天命之季照 Config.seal.mandate.decisive_from_week（13，等於不提前收，玉璽碎片設計 8.2）；
@@ -639,43 +654,58 @@ def decisive_week(season: WorldState, content: Content) -> int:
 
 
 def stance_rule_note(state: GameState, content: Content) -> str:
-    """態勢卡底下那一句收季規則（第一季設計 4.4；正式版辛）：門檻從第一季結局算，不寫死。
-    每一個決定性結局（有 stance_min／stance_max 的）換成「哪一方到幾分」：stance_min 的那一方到那個值；stance_max 的黃巾 ≤ 15
-    就是官軍 ≥ 85（官軍與黃巾互為補數）。同一方有幾個門檻取最小的。三方都有、數字也一樣（這一季都是 85）才寫「哪一方的態勢一到 85」；
-    數字不一樣或只有幾方有門檻，就照每一方寫自己的（「官軍一到 85、黃巾一到 85、豪強一到 90」）；換不出「哪一方到幾分」的
-    （豪強的 stance_max，或兩個條件合成一種的結局）就寫一句不帶數字的話，不報算不出來的數字。
-    第 decisive_from_week 週以前寫「第 N 週起」，之後不寫。沒有決定性結局時是空字串。"""
+    """態勢卡底下那一句收季規則（第一季設計 4.4；正式版辛；FB-254）：門檻從第一季結局算，不寫死。待 joy 潤。
+    會提前收季的結局（ends_early：只看官軍、黃巾）換成「哪一方到幾分」：stance_min 的那一方到那個值；stance_max 的黃巾 ≤ 15
+    就是官軍 ≥ 85（官軍與黃巾互為補數）。同一方有幾個門檻取最小的。數字都一樣寫「官軍或黃巾的態勢一到 85」，不一樣照每一方寫自己的
+    （「官軍一到 85、黃巾一到 90」）；兩個條件合成一種的結局換不出「哪一方到幾分」，寫一句不帶數字的話，不報算不出來的數字。
+    其餘有態勢門檻的（豪強的割據，群雄並起）到季末才判：「否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。」；
+    寫不成「哪一方在幾分以上」的也寫一句不帶數字的話。第 decisive_from_week 週以前寫「第 N 週起」，之後不寫。
+    沒有任何有態勢門檻的結局時是空字串。"""
     reach: dict[str, int] = {}  # 一方 → 它到幾分就收季
-    decisive, unclear = False, False
+    early, unclear = False, False
+    late: list[str] = []  # 季末才判的門檻：「豪強的態勢在 85 以上是群雄並起」
+    late_unclear = False
     for e in content.scenario.endings:
         if not e.season_one or not (e.stance_min or e.stance_max):
             continue
-        decisive = True
+        if not ends_early(e):
+            if len(e.stance_min) == 1 and not e.stance_max:
+                ((side, bar),) = e.stance_min.items()
+                late.append(f"{STANCE_NAMES[side]}的態勢在 {bar} 以上是{e.title}")
+            else:
+                late_unclear = True
+            continue
+        early = True
         if len(e.stance_min) + len(e.stance_max) != 1:  # 兩個條件合成一種：不是「哪一方到幾分」
             unclear = True
             continue
         for side, bar in e.stance_min.items():
             reach[side] = min(reach.get(side, 100), bar)
         for side, bar in e.stance_max.items():
-            other = _STANCE_COMPLEMENT.get(side)
-            if other is None:  # 豪強 ≤ 幾分：換不出另一方到幾分
-                unclear = True
-            else:
-                reach[other] = min(reach.get(other, 100), 100 - bar)
-    if not decisive:
+            reach[_STANCE_COMPLEMENT[side]] = min(reach.get(_STANCE_COMPLEMENT[side], 100), 100 - bar)
+    if not early and not late and not late_unclear:
         return ""
-    ending = "這一季當場收場；否則到季末比高低。"
-    if unclear or not reach:
-        rule = f"哪一方的態勢到了決勝的門檻，{ending}"
-    elif set(reach) == set(_STANCE_SIDES) and len(set(reach.values())) == 1:
-        rule = f"哪一方的態勢一到 {min(reach.values())}，{ending}"
+    if late_unclear:
+        finale = "到季末，先看態勢有沒有到結局的門檻，再比高低。"
+    elif late:
+        finale = "到季末，" + "、".join(late) + "，不然比高低。"
     else:
-        rule = "、".join(f"{STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach) + f"，{ending}"
+        finale = "到季末比高低。"
+    if not early:
+        rule = finale
+    elif unclear or not reach:
+        rule = f"官軍或黃巾的態勢到了決勝的門檻，這一季當場收場；否則{finale}"
+    elif len(set(reach.values())) == 1:
+        who = "或".join(STANCE_NAMES[side] for side in _STANCE_SIDES if side in reach)
+        rule = f"{who}的態勢一到 {min(reach.values())}，這一季當場收場；否則{finale}"
+    else:
+        rule = "、".join(f"{STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach)
+        rule += f"，這一季當場收場；否則{finale}"
     start = decisive_week(state.world, content)
     if start > content.config.season_weeks:  # 天命之季：整季都不提前收（8.2）
         return MANDATE_RULE
     week = calendar.point(state.world.time, content, state.world).week
-    return f"第 {start} 週起，{rule}" if week < start else rule
+    return f"第 {start} 週起，{rule}" if early and week < start else rule
 
 
 def geju_rise_factor(content: Content, players: int | None) -> float:
@@ -696,6 +726,18 @@ def geju_per_day(state: GameState, content: Content, players: int | None = None)
     return chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
 
 
+def geju_resisted(state: GameState, content: Content, delta: float) -> float:
+    """割據往上漲打盡頭阻力（FB-254，企劃者 2026-10-15「割據也套越近盡頭越難推」）：跟戰線同一套分段（push.resistance_share：
+    推之前 65 以下全額、65～85 一半、85 以上兩成）；割據只有往 100 那一頭有盡頭，往下落一律全額。開關同 Config.push_resistance。
+    自然漲落（geju_tick）、玩家推的（Game._shaped）、機緣交付（opportunities）都走它；時刻表、決戰、管理者不打折（同戰線）。"""
+    from .push import resistance_share  # noqa: PLC0415  只引這個函式：apply_effect 有一個參數叫 push
+
+    tuning = content.config.push_resistance
+    if not tuning.enabled or delta <= 0:
+        return delta
+    return delta * resistance_share(trend_value(state, content, GEJU), delta, tuning)
+
+
 def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
     """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
     （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
@@ -706,6 +748,7 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
         return
     per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
+    per_day = geju_resisted(state, content, per_day)  # 漲的時候照此刻的割據打盡頭阻力（FB-254；方向不變，畫面那一句照舊）
     w = state.world
     pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
     whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1
@@ -745,6 +788,9 @@ def change_trend(
     actual = after - before
     if actual:
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
+        from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
+
+        territory.update(w, content)  # 戰線、割據動了：地盤重算（出陣探索與地盤設計 4.2）
         if season_one(content, w) and is_side_trend(content, trend_id):
             # FB-064：戰線與豪強割據不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
             # 江湖紀錄照舊把同一條線的變動加總；畫出來的那一刻才換成一句話、照看的人的陣營上色（front_chip、humanize）

@@ -8,8 +8,15 @@ from __future__ import annotations
 import pytest
 
 import webharness
+from conftest import classic_rules
 
 # fixture on（真實內容、第一季開著）在 tests/conftest.py，跟 test_orders、test_enlist 同一份
+
+
+@pytest.fixture
+def real(real):
+    """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）。"""
+    return classic_rules(real)
 
 DRIVER = r"""
 const a = src.indexOf("\n  const ORDERS_SEEN_MS");

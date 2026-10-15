@@ -70,8 +70,8 @@ def _steer(game, options, rng) -> str | None:
     work = {b.kind for b in bounties.mine(s, c) if b.location == here}
     if "act:train" in ids and ("strike" in work or orders.win_counts(s, c, s.player.faction, here)):
         return "act:train"
-    if "act:explore" in ids and "scout" in work:
-        return "act:explore"
+    if "scout" in work and (choice := bot.explore_choice(ids)) is not None:  # 打探：三選一開著時找素材（出陣探索與地盤）
+        return choice
     if "act:duty" in ids and orders.duty_counts(s, c, s.player.faction, here):
         return "act:duty"
     places = bounties.targets(s, c) + orders.targets(s, c, s.player.faction)
@@ -136,8 +136,8 @@ def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool)
         count["upgrades"] += sum(1 for key, quality in after.items() if before.get(key) != quality)  # 修練升了品
         return out
 
-    def legend_find(self):
-        out = real_legend(self)
+    def legend_find(self, rng=None):  # 探索三選一傳自己的亂數（出陣探索與地盤），舊的探索不傳
+        out = real_legend(self, rng)
         count["pills"] += bool(out)  # 探索撿到一枚破境丹
         return out
 

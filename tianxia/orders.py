@@ -14,9 +14,9 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, figures, rules, timetable
+from . import calendar, figures, push, rules, territory, timetable
 from .models import Content, OrderTemplate
-from .state import GameState, Order
+from .state import GameState, Order, WorldState
 
 KIND_NAMES = {"siege": "攻城", "defend": "守城", "intercept": "截糧", "escort": "護糧", "strike": "打擊"}
 SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100 是黃巾控制
@@ -57,6 +57,14 @@ def template_of(content: Content, order: Order) -> OrderTemplate:
 def neighbors(content: Content, loc_id: str) -> set[str]:
     """這個地點與相鄰的站（截糧：{地點} 與相鄰站遊歷都可能遇上糧隊）。"""
     return {loc_id} | {str(conn) for conn in content.locations[loc_id].connections}
+
+
+def intercept_spots(content: Content, loc_id: str) -> set[str]:
+    """截糧軍令的運糧隊在哪幾站（遇得上、打贏記功、假人往哪走都照它）：出陣開著時只在 {地點} 本身（FB-248，PM 2026-10-15：截糧的地點
+    一律是戰線地點；相鄰站不再有糧隊，自家大本營截糧那一週的出陣照舊是守），關著時照舊是 {地點} 與相鄰站（neighbors）。"""
+    from . import sortie  # noqa: PLC0415  sortie → rules、territory：延後 import 只是保險
+
+    return {loc_id} if sortie.on(content) else neighbors(content, loc_id)
 
 
 def figure_name(content: Content, fid: str | None) -> str:
@@ -111,11 +119,17 @@ def _enemy_sieged_last_week(state: GameState, side: str, front: str, week: int) 
     )
 
 
-def siege_places(content: Content, faction: str, front: str) -> list[str]:
+def siege_places(content: Content, faction: str, front: str, world: WorldState | None = None) -> list[str]:
     """這條戰線上打得到敵方陣營隊伍的地點（攻城的個人部分只算打贏敵方陣營的隊伍）；照內容檔的地點順序。
+    地盤開著（給了 world）：這條戰線上此刻歸敵方的戰線地點（出陣攻打的地方，出陣探索與地盤設計第七節）。關著照舊看地點的 enemies。
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
+    if world is not None and territory.on(content):
+        return [
+            loc_id for loc_id in content.locations
+            if territory.line_of(content, loc_id) == front and territory.controller(world, content, loc_id) == enemy
+        ]
     return [
         loc_id for loc_id, loc in content.locations.items()
         if rules.front_of(content, loc_id) == front
@@ -127,7 +141,7 @@ def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, 
     """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
     例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
     losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
-    if t.kind == "siege" and not siege_places(content, t.side, front):
+    if t.kind == "siege" and not siege_places(content, t.side, front, state.world):
         return False
     if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）
         return True
@@ -311,10 +325,10 @@ def _counts(
         return False
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
         return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
-    if o.template == "intercept":  # 在 {地點} 與相鄰站打贏敵方的運糧隊
+    if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
         enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
         return squad is not None and squad == enemy and location is not None and o.location is not None \
-            and location in neighbors(content, o.location)
+            and location in intercept_spots(content, o.location)
     if o.template == "defend":  # 在那條戰線做守勢行動
         return front == o.front
     if o.template == "escort":  # 這一道的糧車送到（糧車記著自己是哪一道，見 Convoy.order）
@@ -343,29 +357,41 @@ def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
         rumor.region = o.front
 
 
+def front_push(state: GameState, content: Content, front: str, amount: int) -> tuple[int, list[str]]:
+    """軍令達成推戰線 amount 點（帶正負號）：盡頭阻力開著時照推之前的戰線打折（push.resistance，出陣探索與地盤設計 5.1），
+    四捨五入成整點（push.round_half_away）。回傳（真的推的整點, change_trend 的訊息）。時刻表、決戰、管理者不走這裡。"""
+    tuning = content.config.push_resistance
+    moved = amount
+    if tuning.enabled and amount:
+        moved = push.round_half_away(push.resistance(rules.trend_value(state, content, front), amount, tuning))
+    return moved, rules.change_trend(state, content, front, moved)
+
+
 def _complete(state: GameState, content: Content, o: Order) -> list[str]:
-    """湊滿額度：效果只套一次（濃縮版內容表 3.1），發陣營軍情（列前三名）與地方外洩。"""
+    """湊滿額度：效果只套一次（濃縮版內容表 3.1），發陣營軍情（列前三名）與地方外洩。
+    推戰線走 front_push（盡頭阻力）；o.applied 記真的推了幾點（阻力關著、或沒有方向〔SIGN 沒有這個陣營〕時照寫好的量記，同以前）。"""
     o.done, o.done_time = True, state.world.time
     t = template_of(content, o)
     effect, sign = t.effect, SIGN.get(o.faction, 0)
     msgs: list[str] = []
+
+    def apply(nominal: int) -> int:
+        moved, lines = front_push(state, content, o.front, sign * nominal)
+        msgs.extend(lines)
+        return abs(moved) if sign else nominal
+
     if o.template == "siege":
         defend = _enemy_order(state, o, "defend")
         halved = defend is not None and template_of(content, defend).effect.halve_enemy_siege
-        o.applied = effect.trend // 2 if halved else effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        o.applied = apply(effect.trend // 2 if halved else effect.trend)
     elif o.template == "defend":
         siege = _enemy_order(state, o, "siege") if effect.halve_enemy_siege else None
-        if siege is not None:  # 敵方已經攻下：收回一半
-            back = siege.applied - siege.applied // 2
-            siege.applied -= back
-            o.applied = back
-        else:  # 敵方這週還沒攻下：往己方 3（之後敵方才攻下，只得一半，見上面）
-            o.applied = effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        # 敵方已經攻下：收回一半；敵方這週還沒攻下：往己方 3（之後敵方才攻下，只得一半，見上面）
+        o.applied = apply(siege.applied - siege.applied // 2 if siege is not None else effect.trend)
+        if siege is not None:  # 真的收回多少，就從對方那一筆扣多少
+            siege.applied -= o.applied
     elif o.template in ("intercept", "escort"):
-        o.applied = effect.trend
-        msgs += rules.change_trend(state, content, o.front, sign * o.applied)
+        o.applied = apply(effect.trend)
         event = timetable.next_event_on(state, content, o.front)
         if event is not None and o.faction in SIGN:
             timetable.add_mod(state, content, event.id, o.faction, effect.event_mod)  # 沒有 roll_side 的大事 add_mod 自己略過
@@ -403,12 +429,13 @@ def credit(
 
 
 def extra_enemies(state: GameState, content: Content, loc_id: str, faction: str | None) -> list[str]:
-    """遊歷時多出來的對手：這週有截糧軍令、人在 {地點} 或相鄰的站，就可能遇上敵方的運糧隊（達成之後這週也照樣遇得到）。"""
+    """出陣（關著時遊歷）多出來的對手：這週有截糧軍令、人在運糧隊在的那幾站（intercept_spots：出陣開著時只有 {地點}，關著時
+    {地點} 或相鄰的站），就可能遇上敵方的運糧隊（達成之後這週也照樣遇得到）。"""
     enemy = content.orders.convoy_squads.get(ENEMY.get(faction or "", ""))
     if enemy is None:
         return []
     for o in current(state, content, faction):
-        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+        if o.template == "intercept" and o.location is not None and loc_id in intercept_spots(content, o.location):
             return [enemy]
     return []
 
@@ -434,9 +461,9 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
     for o in current(state, content, faction):
         if o.done:
             continue
-        if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front):
+        if o.template == "siege" and o.front == front and loc_id in siege_places(content, o.faction, o.front, state.world):
             return True
-        if o.template == "intercept" and o.location is not None and loc_id in neighbors(content, o.location):
+        if o.template == "intercept" and o.location is not None and loc_id in intercept_spots(content, o.location):
             return True
     return False
 
@@ -453,7 +480,7 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
 
 
 def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
-    """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：{地點} 與相鄰站；護糧：身上有
+    """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
     這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
@@ -463,11 +490,11 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
         if o.done:
             continue
         if o.template == "siege":
-            wanted |= set(siege_places(content, o.faction, o.front))
+            wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
             wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
-            wanted |= neighbors(content, o.location)
+            wanted |= intercept_spots(content, o.location)
         elif o.template == "escort":
             if p.convoy is None and o.start is not None and grain_of(state, content) >= content.config.convoy_grain:
                 wanted.add(o.start)

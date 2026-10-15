@@ -139,8 +139,8 @@ def _steer(game, options, rng) -> str | None:
     work = {b.kind for b in bounties.mine(s, c) if b.location == here}
     if "act:train" in ids and ("strike" in work or orders.win_counts(s, c, s.player.faction, here)):
         return "act:train"
-    if "act:explore" in ids and "scout" in work:
-        return "act:explore"
+    if "scout" in work and (choice := bot.explore_choice(ids)) is not None:  # 打探：三選一開著時找素材（出陣探索與地盤）
+        return choice
     if "act:duty" in ids and orders.duty_counts(s, c, s.player.faction, here):
         return "act:duty"
     places = bounties.targets(s, c) + orders.targets(s, c, s.player.faction)

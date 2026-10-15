@@ -6,7 +6,7 @@ import random
 import re
 
 import pytest
-from conftest import real_content
+from conftest import classic_rules, real_content
 from test_prologue_web import run
 
 import server
@@ -275,8 +275,8 @@ def test_the_hint_comes_back_once_the_box_is_dismissed():
 
 
 def test_the_drill_row_reads_drill_once():
-    """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。"""
-    content = real_content("weekend")
+    """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。操練是舊遊歷的，所以關掉出陣。"""
+    content = classic_rules(real_content("weekend"))
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

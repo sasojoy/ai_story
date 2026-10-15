@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from .models import PushResistance
 from .state import GameState, PlayerState
 
 FRACTION_DIGITS = 9  # 浮點誤差：1.9999999999 要算成 2，不能少推一點
@@ -91,3 +92,30 @@ def add_contribution(player: PlayerState, week: int, points: int) -> None:
         return
     player.contrib += points
     player.contrib_weeks[week] = player.contrib_weeks.get(week, 0) + points
+
+
+RESISTED_LINE = "深入敵境，推進艱難。"  # 待 joy 潤：盡頭阻力打了折的那一下，推動那一行後面多這一句（出陣探索與地盤設計 5.1）
+
+
+def resistance_share(value: float, direction: float, tuning: PushResistance) -> float:
+    """推之前戰線在 value、這一下往 direction（正：往 100；負：往 0）推：打幾折（設計 5.1）。只看推的方向：往盡頭推
+    （50 以上還往上、50 以下還往下）照離 50 多遠——full_within（15）以內全額（35～65，亂局帶）、half_within（35）以內
+    mid_share、再外面 far_share；往回拉、正好在 50、方向是 0 都全額。"""
+    if direction == 0 or value == 50 or (direction > 0) != (value > 50):
+        return 1.0
+    far = abs(value - 50)
+    if far <= tuning.full_within:
+        return 1.0
+    if far <= tuning.half_within:
+        return tuning.mid_share
+    return tuning.far_share
+
+
+def resistance(value: float, delta: float, tuning: PushResistance) -> float:
+    """打過盡頭阻力的推力（delta 帶正負號）。"""
+    return delta * resistance_share(value, delta, tuning)
+
+
+def round_half_away(x: float) -> int:
+    """四捨五入成整數，.5 往離 0 遠的方向進（軍令達成推的整點：1.6 → 2、−0.6 → −1）。"""
+    return int(math.copysign(math.floor(abs(x) + 0.5), x))

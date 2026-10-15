@@ -56,8 +56,9 @@ def test_fb093_every_order_card_says_how(on):
     for kind, card in cards.items():
         assert card.get("how"), kind  # 每一道都有做法那一行
     name = lambda loc_id: on.locations[loc_id].name  # noqa: E731
-    assert "遊歷" in cards["攻城"]["how"] and on.orders.duties["guan"].name in cards["守城"]["how"]
-    assert name("hilltop_wilds") in cards["截糧"]["how"] and "遊歷" in cards["截糧"]["how"]
+    # 出陣探索與地盤（設計第七節）：攻城、截糧認出陣的攻，卡上寫「出陣」（舊遊歷的寫法見 tests/test_orders.py，那裡關著出陣）
+    assert "出陣" in cards["攻城"]["how"] and on.orders.duties["guan"].name in cards["守城"]["how"]
+    assert name("hilltop_wilds") in cards["截糧"]["how"] and "出陣" in cards["截糧"]["how"]
     assert name("luoyang_road") in cards["護糧"]["how"] and name("changshe") in cards["護糧"]["how"] and "糧車" in cards["護糧"]["how"]
     assert "挑戰" in cards["打擊"]["how"]  # 打擊那一行本來就有（FB-072）：不動
 
@@ -189,10 +190,16 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
 # joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（engine.TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
 # 多一句別去營寨惹事（joy 的測試：tests/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下 joy 的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
 # 選單（機器人）不問也不擲骰、伺服器照常打、網頁上問與取消（同一個 Option.confirm、同一個 ask()，PM 裁示用到同一件東西的測試留著）。
+# 出陣探索與地盤（2026-10-14）：散人沒有出陣鈕，打仗的鈕是投靠了陣營的人在別人地盤上的「出陣・攻」（同一個 act:train、同一套勝算與問句），
+# 所以這一段換成官軍的人站在黃巾別部營寨（黃巾的大本營）；舊遊歷的問句見 tests/test_orders.py（那裡關著出陣）。
 
 
 def _train(game):
     return next(o for o in game.options() if o.id == "act:train")
+
+
+def _camp(on):
+    return _game(on, faction="guan", at="huangjin_camp")
 
 
 @pytest.mark.parametrize("word, asks", [("必敗", True), ("凶險", False), ("難分勝負", False), ("五五波", False), ("有把握", False), ("穩勝", False)])
@@ -200,7 +207,7 @@ def test_fb095_only_a_losing_fight_asks_first(on, monkeypatch, word, asks):
     """問不問看遊歷按鈕上的勝算那一個字（Game.odds，標籤用的就是它）：只有「必敗」問；勝算表上其他每一個字都不問。"""
     from tianxia.engine import TRAIN_CONFIRM, Game
 
-    game = _game(on, at="huangjin_camp")  # 散人在黃巾的營寨：對手是黃巾的人
+    game = _camp(on)  # 官軍的人在黃巾的營寨：對手是黃巾的人
     monkeypatch.setattr(Game, "odds", lambda self, squad_id: word)
     option = _train(game)
     assert word in option.label
@@ -209,7 +216,7 @@ def test_fb095_only_a_losing_fight_asks_first(on, monkeypatch, word, asks):
 
 def test_fb095_a_real_newcomer_at_the_yellow_turban_camp_is_asked(on):
     """真的算出來的（不是換掉 odds）：新角色威力 0，在黃巾別部營寨遊歷寫必敗，按鈕帶著問句。"""
-    game = _game(on, at="huangjin_camp")
+    game = _camp(on)
     game.state.player.member.wugong_id = None
     option = _train(game)
     assert "必敗" in option.label and option.confirm
@@ -217,7 +224,7 @@ def test_fb095_a_real_newcomer_at_the_yellow_turban_camp_is_asked(on):
 
 def test_fb095_options_without_odds_never_ask_and_listing_them_rolls_nothing(on):
     """假人與整季機器人（bot.pick、bot_policy）看的是不算勝算的選單：沒有問句；列出選單也不碰 game.rng（算勝算用固定種子）。"""
-    game = _game(on, at="huangjin_camp")
+    game = _camp(on)
     game.state.player.member.wugong_id = None
     state = game.rng.getstate()
     plain = {o.id: o for o in game.options(odds=False)}
@@ -229,7 +236,7 @@ def test_fb095_options_without_odds_never_ask_and_listing_them_rolls_nothing(on)
 
 def test_fb095_asking_is_the_pages_job_the_server_never_refuses_or_rolls(on):
     """問一次是網頁的事：伺服器收到 act:train 就照常打（機器人、腳本都這樣走），取消的人根本沒有送出；所以取消不花體力、不擲骰。"""
-    game = _game(on, at="huangjin_camp")
+    game = _camp(on)
     game.state.player.member.wugong_id = None
     before = game.state.player.stamina
     state = game.rng.getstate()
@@ -253,7 +260,7 @@ _ASK_SCRIPT = """return (async () => {
 def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
     from tianxia.engine import TRAIN_CONFIRM
 
-    game = _game(on, at="huangjin_camp")
+    game = _camp(on)
     game.state.player.member.wugong_id = None
     m = server.main_view(game)
     train = next(o for o in m["options"] if o["id"] == "act:train")
@@ -289,7 +296,7 @@ _REDRAWN_ASK = """return (async () => {
 def test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page(on):
     """確認框開著時輪詢重畫了頁面，按「照打」之後「處理中」標在畫面上那一顆遊歷（照 id 重找），不是已經不在頁面上的舊鈕：不然等大場面判讀時
     看不到按鈕在等，伺服器擋下來時也找不到 .busy、灰掉的選項要等下一次輪詢才還原（整合審查 M1）。"""
-    game = _game(on, at="huangjin_camp")
+    game = _camp(on)
     game.state.player.member.wugong_id = None
     m = server.main_view(game)
     assert next(o for o in m["options"] if o["id"] == "act:train")["confirm"]

@@ -459,6 +459,9 @@ class PlayerState(BaseModel):
     # 從 1970-01-01 起算的第幾天；-1 是沒服過）與那一天服了幾顆。跨季保留（換季不能多吃一輪）
     pill_day: int = -1
     pills_today: int = 0
+    # 出陣（出陣探索與地盤設計 2.3）：上次出陣是哪一天（同 pill_day 的換日）與那一天出了幾次；跨季保留（換季不能多出一輪）
+    sortie_day: int = -1
+    sorties_today: int = 0
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -468,6 +471,7 @@ class PlayerState(BaseModel):
     # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
+    explore_seq: int = 0  # 這一季第幾次探索三選一（explore_modes.rng_for 的種子；角色每季重來）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
     # 舊角色沒這欄是男、gender_chosen 是 False：設定頁給一次改的機會（Game.set_gender，改完記 True）；建角色時選過的直接是 True
@@ -757,6 +761,28 @@ class SignatureClaim(BaseModel):
     via: Literal["gift", "seized"]
 
 
+class TerritoryWeek(BaseModel):
+    """地盤某一週的樣子（輿圖升級設計第九節）：那一週最後一次重算時的控制方、每條戰線拔河看的值、割據（沒有這條線是 None）。"""
+
+    control: dict[str, str] = Field(default_factory=dict)
+    fronts: dict[str, int] = Field(default_factory=dict)
+    geju: int | None = None
+
+
+class TerritoryState(BaseModel):
+    """這一季的地盤（tianxia/territory.py）：WorldState.territory；None＝這一季還沒算過（開季、舊存檔、中途上線）。"""
+
+    control: dict[str, str] = Field(default_factory=dict)  # 地點 → 此刻的控制方（大本營、固定的地點、可易手的地點）
+    tug: dict[str, str] = Field(default_factory=dict)  # 可易手的地點 → 拔河算出的那一方（±band 不動看它）
+    geju: list[str] = Field(default_factory=list)  # 豪強割據佔著的地點，照佔下的先後
+    pinned: dict[str, str] = Field(default_factory=dict)  # 大事指定的地點 → 指定那一刻規則算出的控制方（規則改變那一刻才回到規則）
+    held: dict[str, list[str]] = Field(default_factory=dict)  # 地點 → 這一季佔過它的各方（照先後）：再拿回來寫「收復」（FB-252）
+    # 週次 → 那一週的樣子（territory._snapshot：每次重算蓋掉這一週那一格，所以一週結束時就是週末的樣子）；沒記到的週照前一週補
+    # （territory.week_at）；新的一季是新的 WorldState，自然是空的（輿圖升級設計第九節）。0 是開季那一刻（territory.START_WEEK，
+    # 這一季第一次算地盤就在第 1 週時才有，FB-264）
+    weeks: dict[int, TerritoryWeek] = Field(default_factory=dict)
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -838,6 +864,7 @@ class WorldState(BaseModel):
     # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
     # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
     tianji: int = 0
+    territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）
@@ -869,7 +896,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）（舊戰報的 train 不遷移，照舊顯示「遊歷」）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

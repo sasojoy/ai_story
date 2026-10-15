@@ -12,7 +12,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
 from __future__ import annotations
 
-from . import calendar
+from . import calendar, push
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_value
@@ -202,8 +202,11 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
         if not goal or week < fig.active_from_week:
             continue
         front = state_of(state, content, fid).front
-        losing = (50 - trend_value(state, content, front)) * goal >= cfg.figure_reaction_lean
+        value = trend_value(state, content, front)
+        losing = (50 - value) * goal >= cfg.figure_reaction_lean
         rate = fig.actions_per_day * (cfg.figure_reaction_mult if losing else 1.0)
+        if cfg.push_resistance.enabled:  # 盡頭阻力（出陣探索與地盤設計 5.1）：往對方老巢推得慢，累積照推之前的戰線打折
+            rate *= push.resistance_share(value, goal, cfg.push_resistance)
         key = f"fig:{fid}"
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（同 rules.geju_tick；累積不先四捨五入，誤差才不會越滾越大）

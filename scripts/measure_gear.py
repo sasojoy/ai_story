@@ -72,8 +72,8 @@ def _steer(game, options, rng) -> str | None:
     work = {b.kind for b in bounties.mine(s, c) if b.location == here}
     if "act:train" in ids and ("strike" in work or orders.win_counts(s, c, s.player.faction, here)):
         return "act:train"
-    if "act:explore" in ids and "scout" in work:
-        return "act:explore"
+    if "scout" in work and (choice := bot.explore_choice(ids)) is not None:  # 打探：三選一開著時找素材（出陣探索與地盤）
+        return choice
     if "act:duty" in ids and orders.duty_counts(s, c, s.player.faction, here):
         return "act:duty"
     places = bounties.targets(s, c) + orders.targets(s, c, s.player.faction)
@@ -177,7 +177,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
         """遊歷野怪的場數與勝率（整季、不分有沒有防具）。硬仗之後的勝率在 toll 包裝裡算（要知道開打時有沒有穿防具）。"""
         for b in sorted((b for b in game.state.battles if b.id not in seen), key=lambda b: b.id):
             seen.add(b.id)
-            if b.kind not in ("train", "wild"):
+            if b.kind not in ("train", "sortie", "wild"):  # 出陣的攻（出陣探索與地盤）也磨防具（armor.wears）
                 continue
             count["fights"] += 1
             count["wins"] += b.tier in WINS

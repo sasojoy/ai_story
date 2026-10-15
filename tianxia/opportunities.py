@@ -16,7 +16,7 @@ from typing import NamedTuple
 from . import calendar, figures, foreshadow, push, ranks, timetable
 from .journal import fragment_line
 from .models import Content, Effect, OppDef, OppPiece, Rank2Action
-from .rules import GEJU, add_rumor, apply_effect, change_trend, front_of, roll_check, season_one
+from .rules import GEJU, add_rumor, apply_effect, change_trend, front_of, geju_resisted, roll_check, season_one
 from .state import GameState, PlayerState, Plot, WorldState
 
 DONE = "（機緣「{name}」完成。）"
@@ -744,8 +744,10 @@ def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -
         return []
     faction = content.scenario.faction(o.faction)
     geju_goal = faction.goals.get(GEJU, 0)  # 豪強：推割據；跟戰線那一支一樣是「目標 × 次數」，目標的正負照陣營
-    if geju_goal:
-        return change_trend(state, content, GEJU, geju_goal * amount)
+    if geju_goal:  # 割據往上漲打盡頭阻力（FB-254），四捨五入成整點（同軍令達成推戰線）
+        from .push import round_half_away  # noqa: PLC0415
+
+        return change_trend(state, content, GEJU, round_half_away(geju_resisted(state, content, geju_goal * amount)))
     front = front_of(content, loc_id) if o.kind == "accumulate" and o.accumulate.deliver == "nearest_base" \
         else state.player.opp_fronts.get(o.id)
     goal = faction.goals.get(front or "", 0)

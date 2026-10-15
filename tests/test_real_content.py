@@ -370,12 +370,12 @@ def test_the_real_prologue_text_has_no_placeholder_left_over(content):
 
 
 def test_no_hut_step_promises_odds_the_hut_never_shows(content):
-    """FB-090：斷眉那一場是寫死的險勝（p8，force_tier），草廬的「遊歷」鈕只寫「體力 10」、沒有勝算，所以師父不能說「括號裡寫著勝算」。
-    草廬任何一步的字（話、旁白、收起來那一行）都不提勝算。"""
+    """FB-090：斷眉那一場是寫死的險勝（p8，force_tier），草廬的「雪恥」鈕（出陣探索與地盤以前叫「遊歷」）只寫體力、沒有勝算，
+    所以師父不能說「括號裡寫著勝算」。草廬任何一步的字（話、旁白、收起來那一行）都不提勝算。"""
     hut = content.tutorial.steps[:content.tutorial.prologue_steps]
     assert [s.id for s in hut if "勝算" in f"{s.text}{s.scene}{s.line}"] == []
     p8 = next(s for s in hut if s.id == "p8_revenge")
-    assert p8.force_tier is not None and "徒兒，選單上多了一個「遊歷」。這一仗，為師看好你。" in p8.text
+    assert p8.force_tier is not None and "徒兒，選單上多了一個「雪恥」。這一仗，為師看好你。" in p8.text
 
 
 def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(content, world):
@@ -417,10 +417,13 @@ def test_a_new_player_leaving_the_hut_can_dash_to_each_place_the_farewell_names(
     assert game.travel_refusal(place, "dash") is None, game.travel_refusal(place, "dash")
 
 
-def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world):
+def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world, monkeypatch):
     """survey 清單裡的每一站都有理由：一條路上的站（汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去曹氏莊院的最短路就斷在那裡、疾行被擋；
-    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。"""
+    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。
+    摸清是全圖開放之前的規則（全圖開放時這份清單照記、用不到）。"""
     from tianxia import atlas
+
+    monkeypatch.setattr(content.config, "open_map", False)  # 同 closed_map；內容是整個模組共用的
 
     farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
     stops = farewell.survey[len(NAMED_BY_THE_FAREWELL):]
@@ -1007,8 +1010,10 @@ def test_the_fallen_foe_needs_a_fight_in_this_very_action(content):
 
 
 def test_playing_the_real_fight_the_fallen_foe_only_ever_comes_after_a_win(content, monkeypatch):
-    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。"""
+    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。
+    測的是舊遊歷（出陣開著時散人沒有出陣鈕），所以關掉出陣。"""
     monkeypatch.setattr(content.config, "train_event_chance", 1.0)
+    monkeypatch.setattr(content.config.sortie, "enabled", False)
     place = next(loc.id for loc in content.locations.values() if loc.enemies == ["dipi"])
     tiers: dict[str, int] = {}
     fired_after: set[str] = set()
@@ -1230,7 +1235,8 @@ def _owner_by_name(content, text: str) -> str | None:
     return max(names, key=lambda loc: len(loc.name)).id if names else None
 
 
-def test_minimap_never_collides_from_any_location(content):
+def test_minimap_never_collides_from_any_location(content, monkeypatch):
+    monkeypatch.setattr(content.config, "open_map", False)  # 新角色只摸清一部分（全圖開放之前，同 closed_map）；全圖開放的見下一個
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     for loc_id in content.locations:
         game.state.player.location = loc_id
@@ -1238,6 +1244,25 @@ def test_minimap_never_collides_from_any_location(content):
         assert _collisions(svg, _minimap_window(svg)) == [], loc_id
         texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
         assert _disc_overlaps(game, content, svg, texts) == [], loc_id
+
+
+# 全圖開放（Config.open_map）時小地圖上每個已開放的地點都有圓盤與名字，名字壓到「別的地點的圓盤」的地方（只准變少）：
+# 洛陽官道——嵩山腳貼著視窗右緣，名字只能往左擺，壓到嵩山深處圓盤的一角（大地圖那邊同 DISC_OVERLAPS 的做法）。
+# 全圖開放之前，什麼地方都去過的人從洛陽官道看出去就是這樣（另外還有南陽郊野的「↑ 白馬寺」壓到南華觀），不是新的毛病。
+MINI_DISC_OVERLAPS_OPEN = 1
+
+
+def test_minimap_with_the_whole_map_open_never_collides_from_any_location(content):
+    assert content.config.open_map  # 正式設定：全圖開放
+    game = Game.new(content, "測試俠客", rng=random.Random(0))
+    overlaps = []
+    for loc_id in content.locations:
+        game.state.player.location = loc_id
+        svg = render_minimap(game.state, content)
+        assert _collisions(svg, _minimap_window(svg)) == [], loc_id
+        texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
+        overlaps += _disc_overlaps(game, content, svg, texts)
+    assert len(overlaps) <= MINI_DISC_OVERLAPS_OPEN, overlaps
 
 
 def test_regions_reference_real_trends(content):
@@ -1415,12 +1440,12 @@ def test_real_endings_valid(content):
     assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
     assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
     assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
-    for ending in s1[:3]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
+    for ending in s1[:2]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
         assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
-    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講、三方對稱
+    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講
         "第 10 週起，黃巾的態勢一到 85，這一季當場收場。",
         "第 10 週起，官軍的態勢一到 85，這一季當場收場。",
-        "第 10 週起，豪強的態勢一到 85，這一季當場收場。",
+        "到了季末，豪強的態勢在 85 以上。",  # 提前收季只看戰線，割據到季末才判（FB-254；待 joy 潤）
         "到了季末，黃巾的態勢最高。",
         "到了季末，官軍的態勢最高。",
         "到了季末，豪強的態勢最高。",

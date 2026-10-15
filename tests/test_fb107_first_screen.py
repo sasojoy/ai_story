@@ -534,9 +534,10 @@ def test_an_opened_hint_stays_open_after_a_look_at_another_tab():
 def _fight_card(on):
     import random
 
+    from conftest import classic_rules
     from tianxia.engine import Game
 
-    game = Game.new(on, "甲", rng=random.Random(0))
+    game = Game.new(classic_rules(on), "甲", rng=random.Random(0))  # 拿散人的遊歷打一場（出陣開著時散人沒有這顆鈕）
     game.client = None
     game.state.player.location = "yingshui"
     game.choose("act:train")

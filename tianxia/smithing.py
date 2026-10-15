@@ -59,9 +59,15 @@ def tier_of(content: Content, main: str) -> int:
     return content.materials[main].tier
 
 
-def price(content: Content, tier: int, slot: str = "weapon") -> int:
-    """打一件這一階的工錢（兵器 4.2；防具照同一張表，Config.armor.forge_silver）。"""
-    return rules_of(content, slot).forge_silver.get(str(tier), 0)
+def price(content: Content, tier: int, slot: str = "weapon", state: GameState | None = None) -> int:
+    """打一件這一階的工錢（兵器 4.2；防具照同一張表，Config.armor.forge_silver）。state 給了照所在地的地盤福利（出陣探索與地盤設計 4.3），
+    四捨五入。"""
+    base = rules_of(content, slot).forge_silver.get(str(tier), 0)
+    if state is None:
+        return base
+    from . import territory  # noqa: PLC0415  territory → rules：延後 import
+
+    return int(base * territory.price_factor(state.world, content, state.player.faction, state.player.location) + 0.5)
 
 
 def attribute_with(content: Content, tianji: int, kind: str, main: str, aux: str) -> str:
@@ -92,7 +98,7 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
             return f"{content.materials[mid].name}不夠（要 {need} 個）"
     if equipment.rack_full(state, content, slot_of(kind)):
         return weapons.RACK_FULL
-    short = price(content, tier_of(content, main), slot_of(kind)) - state.player.stats.get("silver", 0)
+    short = price(content, tier_of(content, main), slot_of(kind), state) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
@@ -211,7 +217,7 @@ def forge(
         p.materials[mid] -= n
         if not p.materials[mid]:
             del p.materials[mid]
-    cost = price(content, tier, slot)
+    cost = price(content, tier, slot, state)
     p.stats["silver"] -= cost
     p.forge_counts[key] = p.forge_counts.get(key, 0) + 1
     m, a = content.materials[main], content.materials[aux]
@@ -400,7 +406,7 @@ def open_problem(state: GameState, content: Content, slot: str = "weapon") -> st
     held = _held(state, content)
     if sum(n for _, n in held) < 2:
         return NOT_ENOUGH
-    short = min(price(content, content.materials[mid].tier, slot) for mid, _ in held) - state.player.stats.get("silver", 0)
+    short = min(price(content, content.materials[mid].tier, slot, state) for mid, _ in held) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
@@ -472,7 +478,7 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
     divine = recipe is not None and recipe.divine
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)
-    cost = f"工錢 {price(content, tier, slot)} 兩"
+    cost = f"工錢 {price(content, tier, slot, state)} 兩"
     note = problem or (cost if divine else f"{cost}；{fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))}")
     head = (DIVINE_HEAD if divine else SOLVED_HEAD).format(name=known) if known else ""
     return Option(
@@ -507,7 +513,7 @@ def draft_options(state: GameState, content: Content, world: WorldStateStore, ar
         out = []
         for mid, n in held:
             m = mats[mid]
-            cost = price(content, m.tier, slot)
+            cost = price(content, m.tier, slot, state)
             note = f"還差 {cost - silver} 兩" if cost > silver else f"工錢 {cost} 兩"
             out.append(Option(id=f"{MAIN}{mid}", label=f"主料：{m.name}（{m.attribute}・{weapons.TIER_WORDS[m.tier]}・剩 {n}・{note}）",
                               enabled=cost <= silver))

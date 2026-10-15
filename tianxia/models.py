@@ -61,6 +61,7 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
+    controlled_by: list[str] = Field(default_factory=list)  # 這裡此刻歸誰控制（territory.controller）在裡面才成立；空的＝不限（出陣探索與地盤設計 4.3 第 4 點）
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None
@@ -819,7 +820,10 @@ ALLOW_FIXED = frozenset({
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
-ALLOW_FAMILIES = ("act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:")
+ALLOW_FAMILIES = (
+    "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
+    "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+)
 
 
 def allow_known(entry: str) -> bool:
@@ -1031,6 +1035,14 @@ class SeasonOneOff(_Strict):
     unlocks: list[str] = Field(default_factory=list)
 
 
+class TerritoryDef(_Strict):
+    """地盤易手（出陣探索與地盤設計第四節；tianxia/territory.py）。大本營（陣營的 join_at）不寫在這裡，永遠歸那一方。"""
+
+    lines: dict[str, list[str]] = Field(default_factory=dict)  # 戰線 id → 可易手的地點，從目標往 0 推的那一方（官軍）那頭排到另一頭（待 joy 對）
+    fixed: dict[str, str] = Field(default_factory=dict)  # 不參與拔河、只照大事（TimetableOutcome.control）易手的地點 → 開季的控制方（廣宗）
+    garrison: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 地點 → 控制方 → 站的隊伍；流寇野獸照 Location.enemies 裡無陣營的
+
+
 class Scenario(_Strict):
     id: str
     name: str
@@ -1047,6 +1059,7 @@ class Scenario(_Strict):
     milestones: list[Milestone] = Field(default_factory=list)
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
+    territory: TerritoryDef | None = None  # 地盤易手（出陣探索與地盤設計第四節）；不寫＝這個劇本沒有地盤
 
     def faction(self, faction_id: str | None) -> FactionDef:
         """id 對得上的那個陣營（factions 裡的第一個）；劇本裡沒有就丟 LookupError。給一定要有這個陣營的地方用（選單上的
@@ -1897,6 +1910,59 @@ class RiseTuning(_Strict):
     event_cap: int = Field(default=4, ge=0)
 
 
+class SortieRules(_Strict):
+    """出陣（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第二節；遊歷改版）。enabled 關掉回到舊的遊歷與操練。
+    不看第一季開關：劇本有陣營就有（sortie.on）。"""
+
+    enabled: bool = True
+    per_day: int = Field(default=5, ge=1)  # 每人每天幾次（攻、守、攪局共用；照 pill_day_utc_offset_hours 的 00:00 換日，同回體丹）
+    hold_share: float = Field(default=0.5, gt=0, le=1)  # 守、攪局推的量是攻的幾成
+
+
+class ExploreModes(_Strict):
+    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix），
+    事件推戰線也不再打折。"""
+
+    enabled: bool = True
+    encounter_chance: float = Field(default=0.35, ge=0, le=1)  # 找素材撞上怪（城鎮不撞）
+    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})  # 照危險度：再一個二階的機會
+    town_chance: float = Field(default=0.5, ge=0, le=1)  # 城鎮找素材撿到一個一階的機會
+    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額）
+    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
+
+
+class TerritoryRules(_Strict):
+    """地盤易手（設計第四節；tianxia/territory.py）。enabled 關掉：沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
+
+    enabled: bool = True
+    band: int = Field(default=5, ge=0)  # 拔河門檻上下各幾點不動（免得在門檻上來回翻）
+    geju_one: int = Field(default=60, ge=0, le=100)  # 豪強割據到這裡，每條線一處歸豪強
+    geju_two: int = Field(default=80, ge=0, le=100)  # 到這裡每條線兩處
+    geju_release: int = Field(default=50, ge=0, le=100)  # 降到這裡以下，豪強佔的交還給拔河
+    own_price: float = Field(default=0.9, gt=0)  # 在自己陣營控制的地方療傷、打造工錢、買馬
+    enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
+
+
+class PushResistance(_Strict):
+    """盡頭阻力與季長縮放（設計第五節）。enabled 關掉：推力不打盡頭的折、每人每曆日上限與出陣推的量不乘季長倍數。"""
+
+    enabled: bool = True
+    full_within: int = Field(default=15, ge=0, le=50)  # 推之前離 50 在這以內（35～65，亂局帶）全額
+    half_within: int = Field(default=35, ge=0, le=50)  # 在這以內（15～35、65～85）打 mid_share
+    mid_share: float = Field(default=0.5, gt=0, le=1)
+    far_share: float = Field(default=0.2, gt=0, le=1)  # 再外面（0～15、85～100）
+
+
+class QuietHours(_Strict):
+    """時刻表決戰避開半夜（企劃者 2026-10-15，經 PM）：照季曆自動排的決戰（開季、換季、天命之季蓋章）的集結開始換成現實時間，
+    集結加打一幕（timetable.showdown_span）碰到 start～end 點（時區照 pill_day_utc_offset_hours）的，挪到最近的可開時間
+    （timetable.avoid_quiet_hours）。管理者自己排的時間不動。enabled 關掉一個字都不變。"""
+
+    enabled: bool = True
+    start: float = Field(default=0, ge=0, lt=24)  # 幾點起不開（當地時間）
+    end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -1958,6 +2024,11 @@ class Config(_Strict):
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
+    sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
+    explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
+    battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
@@ -2043,7 +2114,8 @@ class Config(_Strict):
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
-    # 決定性勝利（黃巾聲勢 ≥85、≤15，割據 ≥85）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）
+    # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
+    # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
     # 企劃者 2026-10-13「季中，第 5 週起才開」（FB-168）：規則關著的季，開決戰的大勢門檻（starts_battle，例 huangjin_60）季曆第幾週起才開
     # 集結；之前推過了也不開、不記成觸發過，到了那一週還在門檻上就開（world.battle_held，寫法同 decisive_from_week）。第一季照時刻表，
@@ -2122,8 +2194,11 @@ class Config(_Strict):
             "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望", "xinde": "心得",
         }
     )
-    vision_base: int = 2  # 從所在地沿道路看得見幾步
-    vision_fame: int = 10  # 名望達到這個值，視野 +1
+    vision_base: int = 2  # 從所在地沿道路看得見幾步（open_map 關著才有視野）
+    vision_fame: int = 10  # 名望達到這個值，視野 +1（open_map 關著才有）
+    # 全圖開放（企劃者 2026-10-15「未來不再限制有沒有去過的地點~都可以直接移動過去」）：已開放的地點全部算摸清（atlas.location_view），
+    # 沒有視野、名望不多看一站、路上沒有「留意地形」；劇情還沒開放的地點（unlock_flag、序章專屬）照舊不畫。關掉回到舊的摸清規則
+    open_map: bool = True
     max_log: int = 200
     neili_base: float = 300
     neili_per_level: float = 20
@@ -2515,6 +2590,7 @@ class TimetableOutcome(_Strict):
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
     third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
+    control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
 
 
 class TimetableEvent(_Strict):

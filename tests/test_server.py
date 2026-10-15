@@ -180,6 +180,7 @@ def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
     monkeypatch.setattr(content.config, "season_one", True)
     monkeypatch.setattr(content.config, "season_days", 2.5)
     monkeypatch.setattr(content, "timetable", [_fixed("甲", 1)])
+    monkeypatch.setattr(content.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不寫紀錄）
     game = Game.new(content, "測試")
     view = server.main_view(game)
     assert "賽季開始" in view["now"] and view["now"] == view["latest"]
@@ -353,17 +354,21 @@ def test_map_view_selects_your_location_by_default(game):
     assert 'data-loc="' in view["svg"]
 
 
-def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
+def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game, monkeypatch):
     """圖例不畫進 SVG（企劃者 10/4：放大時也要看得到）：跟 svg 並排給網頁，由網頁疊在地圖框角落。
     送的是正在看的那一層的說明（認不得的圖層退回預設那一層），不是四層全給。"""
     from tianxia import mapview
 
+    monkeypatch.setattr(server.CONTENT.config, "open_map", False)  # 舊的圖例那一句（同 closed_map）；全圖開放的見 tests/test_open_map.py
+
     legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
     assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
     assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
-    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
+    # 正式內容出陣開著：⚔ 那一句是出陣的說法（FB-251；出陣關著是 LEGEND_RING，見 tests/test_mapview.py）
+    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING_SORTIE and legend["strike"] == ""
     fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
-    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
+    # 預設那一層是局勢層：地盤易手開著（正式內容）時多一句誰佔著（出陣探索與地盤設計 4.3）
+    assert fallback["layer"] == f"{mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]}　{mapview.LEGEND_CONTROL}"
 
 
 def test_reports_view_is_empty_with_no_battles(game):
@@ -736,7 +741,8 @@ def test_register_and_change_password_never_hash_while_holding_the_write_lock(cl
 # ── 江湖上的動作（HTTP）────────────────────────────────────
 
 
-def test_choosing_an_option_plays_it_and_saves(client):
+def test_choosing_an_option_plays_it_and_saves(client, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
     _player(client)
     out = client.post("/api/choose", json={"id": "act:explore"}).json()
     assert out["main"]["status"]["stamina"] < out["main"]["status"]["stamina_max"]
@@ -1070,39 +1076,19 @@ def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art()
     assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學
 
 
-def test_the_map_legend_is_an_html_layer_over_the_map_frame(game):
-    """輿圖的圖例（企劃者 10/4：放大時也要看得到）不畫進 SVG（會跟著平移、縮放），是 web/app.js 疊在地圖框左下角的一層 HTML：
-    不被地圖的 transform 帶走、可以收合（記在這個瀏覽器的 localStorage，存不了照樣能用）、沒選過時手機收合寬螢幕展開、
-    不蓋到右上角那三顆按鈕、矮的框裡自己可捲。網頁沒有測試框架：伺服器的 legend 欄位、網頁讀的欄位、樣式三方對得上，就靠這一條。"""
+def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
+    """輿圖升級（設計第一節）：圖例拿掉，濾鏡本身就是圖例（每顆前面一個色點）；地圖框是夾在狀態列與分頁列之間的整頁一層，
+    寬 900 以上抽屜變右欄。網頁的版面與樣式對得上，就靠這一條。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
-    legend = server.look(game, lambda g: server.map_view(g, "situation", None))["legend"]
-    page = _js_function(js, "function legendHtml(")
-    assert set(re.findall(r"\blg\.(\w+)", page)) == {"icons", "states", "ring", "layer", "strike"} <= set(legend)  # 網頁讀的欄位，伺服器都送
-    assert set(re.findall(r"\bi\.(\w+)", page)) == {"svg", "label"} <= set(legend["icons"][0])
-    assert 'if (!lg) return ""' in page  # 伺服器沒給（或舊的回應）就不畫，不丟例外
-    assert "${m.svg}${MAP_CTL}${legendHtml(m.legend)}" in js  # 跟 SVG 同在地圖框裡，卻不在被平移縮放的那張 SVG 裡
-    assert 'aria-expanded="${open}"' in page and 'aria-controls="map-legend-body"' in page and 'id="map-legend-body"' in page
-    assert '" hidden"' in page  # 收合時說明用 hidden 藏起來（讀屏與 Tab 都到不了）
-    assert "lg.strike ?" in page  # 局勢層有打擊記號時多一行（FB-072）；沒有就是空字串、不畫
-    for header in ("function legendChoice(", "function legendToggle("):  # localStorage 讀寫都包 try／catch：存不了就只在這一頁有效
-        body = _js_function(js, header)
-        assert "try {" in body and "catch (e)" in body, header
-    assert "PHONE" in _js_function(js, "function legendOpen(") and "S.mapLegend" in _js_function(js, "function legendOpen(")
-    # 預設的展開與否各放在一個具名常數（企劃者之後可能改答案）：寬螢幕展開、手機收合
-    assert "const LEGEND_OPEN_WIDE = true;" in js and "const LEGEND_OPEN_PHONE = false;" in js
-    assert "LEGEND_OPEN_PHONE" in _js_function(js, "function legendOpen(") and "LEGEND_OPEN_WIDE" in _js_function(js, "function legendOpen(")
-    assert 'closest(".map-ctl, .map-legend")' in _js_function(js, "function gripDown(")  # 在圖例上按下去不是拖地圖
-    assert 'closest(".legend-body")' in _js_function(js, "function mapWheel(")  # 在圖例上滾輪不縮放地圖
-    assert 'case "legend-toggle": legendToggle(el); break;' in js
-    box = re.search(r"\n\.map-legend \{([^}]*)\}", css)
-    assert box and all(want in box[1] for want in ("position: absolute", "left: 8px", "bottom: 8px", "pointer-events: none"))
-    assert "--lg-alpha: 0.88" in box[1]  # 紙色 88% 不透明：改一個數字就調
-    assert "calc(100% - 68px)" in box[1]  # 右上角按鈕 44px ＋ 右邊 8px ＋ 8px 空隙：寬度到不了那一排
-    assert "max-height: calc(100% - 16px)" in box[1]  # 矮的框裡不超出框
-    assert re.search(r"\n\.map-ctl \{[^}]*top: 8px; right: 8px;", css) and re.search(r"\n\.map-ctl button \{[^}]*width: 44px;", css)  # 上面的算式照這一排算的
-    assert re.search(r"\n\.legend-body \{[^}]*overflow-y: auto;", css) and ".legend-body[hidden] { display: none; }" in css
-    assert re.search(r"\n\.map-wrap \{ overflow: clip; \}", css)  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
+    assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
+    chips = _js_function(js, "function chipsHtml(")
+    assert "MAP_CHIPS" in chips and "<i style=" in chips and "aria-pressed" in chips
+    assert re.search(r"\n\.mapx \{[^}]*position: fixed", css) and "var(--map-top, 0px)" in css and "var(--map-bottom, 0px)" in css
+    assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
+    assert re.search(r"\n\.map-ctl button \{[^}]*width: 44px; height: 44px;", css)  # 觸控目標 44px
+    assert 'closest(".map-ctl")' in _js_function(js, "function gripDown(")  # 在角落的鈕上按下去不是拖地圖
+    assert "overflow: clip" in css  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
 
 
 def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
@@ -2896,7 +2882,30 @@ def test_reports_and_map_pages_read_without_saving(client, save_dir):
         conn.execute("DELETE FROM characters")
     assert client.get("/api/reports").json()["list"] == []
     assert client.get("/api/map?layer=enemy").json()["layer"] in {"enemy", server.DEFAULT_LAYER}
+    assert client.get("/api/map/base").json()["places"] and client.get("/api/map/state").json()["places"]
     assert not open_characters().exists("沈青衫")
+
+
+def test_the_new_map_comes_as_a_base_and_an_overlay(client):
+    """輿圖升級（設計第九節）：底圖（svg、地點、路、大區）與疊層（每個地點此刻的樣子）分兩個端點，兩個都只讀。"""
+    _player(client)
+    base = client.get("/api/map/base").json()
+    assert base["svg"].startswith("<svg") and base["places"] and base["edges"] and base["key"]
+    st = client.get("/api/map/state").json()
+    assert st["key"] == base["key"] and st["here"] in st["places"]
+
+
+def test_the_map_base_is_cached_until_a_place_opens(client):
+    from tianxia import mapdata
+
+    _player(client)
+    game = server.game_for("沈青衫")
+    first = server.look(game, server.map_base_view)
+    assert server.look(game, server.map_base_view) is first  # 同一把鍵：同一份，不重畫
+    game.state.world.flags.add("xi_open")  # 南華觀開放（14 天的季要等這面旗）
+    second = server.map_base_view(game)
+    assert second["key"] != first["key"] and second["key"] == mapdata.base_key(game.state, game.content)
+    assert "jade_cave" in {p["id"] for p in second["places"]}
 
 
 # ── 全服即時戰鬥：自訂行動 ────────────────────────────────
@@ -3510,7 +3519,8 @@ def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     assert game.state.player.pending_companion is None
 
 
-def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events):
+def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:explore")
     assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟
@@ -3581,8 +3591,9 @@ def test_a_big_fight_the_model_cannot_judge_is_fought_as_usual(game, lock_events
 
 def _a_big_fight_at_the_wilds(game, monkeypatch):
     """潁川郊野的對手難度都不到大場面的門檻（100）：把門檻壓到 1，這裡的遊歷就是大場面（鎖外判讀、按鈕寫「兩人對峙」）。
-    存一份到資料庫：鎖外判讀的時候，別的分頁看到、改的就是這一份。"""
+    存一份到資料庫：鎖外判讀的時候，別的分頁看到、改的就是這一份。散人的遊歷：出陣關掉（出陣開著時散人沒有這顆鈕）。"""
     monkeypatch.setattr(server.CONTENT.config, "big_fight_difficulty", 1)
+    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))  # 進鎖會先從資料庫重讀，改要在鎖裡改
     assert next(o for o in server.look(game, lambda g: g.options()) if o.id == "act:train").wait == "兩人對峙……"
 
@@ -3638,9 +3649,10 @@ def test_a_big_fight_that_became_impossible_for_another_reason_says_the_situatio
 
 
 @pytest.mark.parametrize(("event", "option"), [(None, "act:train"), ("wolves", "choice:0")])
-def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option):
+def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option, monkeypatch):
     """Review Focus 5：一般的仗（潁川郊野的地痞、山賊；狼群）不問模型、按鈕不寫「兩人對峙」，而且只拿一次行動鎖——
-    備料與動作在同一次拿鎖裡做完（計畫三 G14：遊歷與事件選項天天在按，不能每一下都多搶一次鎖）。"""
+    備料與動作在同一次拿鎖裡做完（計畫三 G14：遊歷與事件選項天天在按，不能每一下都多搶一次鎖）。散人的遊歷：出陣關掉。"""
+    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     game.state.player.location = "yingchuan_wilds"
     game.state.pending_event = event
     assert next(o for o in game.options() if o.id == option).wait == ""
@@ -4461,6 +4473,7 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     from tianxia import journal
 
     monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
+    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)  # 舊遊歷打完才接戰後事件（出陣不接）
     first_step = _a_guide_step_after_the_hut(monkeypatch)  # 序章之後沒有引導步驟了（軍令兩步由入伍段取代）：接一步測試用的
     _player(client, prologue=True)
     game = server.game_for("沈青衫")
@@ -5977,7 +5990,8 @@ def test_a_name_with_capitals_is_subscribed_and_notified_under_the_same_lowercas
 
 def test_a_fight_notifies_even_though_it_never_goes_through_act(client, told, monkeypatch):
     """預檢 F1：一般的仗（遊歷、事件選項）在 prepare_fight 的 A 段同一次拿鎖裡就做完、存檔，不經過 act()。
-    通知在端點、不在 act，所以天天在按的遊歷與事件選項也會通知；而這一步確實沒走 act。"""
+    通知在端點、不在 act，所以天天在按的遊歷與事件選項也會通知；而這一步確實沒走 act。散人的遊歷：出陣關掉。"""
+    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     _player(client)
     game = server.game_for("沈青衫")
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))
@@ -6246,6 +6260,7 @@ NOT_IN_THE_FINGERPRINT = {
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
         "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
+        "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",

@@ -228,7 +228,8 @@ def test_the_rule_line_follows_the_content(on):
             ending.stance_max = {side: 20 for side in ending.stance_max}
     on.config.decisive_from_week = 9
     _pid, body = panel(_open(view(_status(on)), "stance"))
-    assert "第 9 週起，哪一方的態勢一到 80" in body
+    assert "第 9 週起，官軍或黃巾的態勢一到 80" in body  # 提前收季只看戰線（FB-254）
+    assert "豪強的態勢在 80 以上是群雄並起" in body
 
 
 def test_no_rule_paragraph_without_a_rule_and_the_notes_are_escaped(on):

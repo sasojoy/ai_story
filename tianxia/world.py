@@ -6,12 +6,12 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, timetable
+from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, territory, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    decisive_week, resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
+    decisive_week, ends_early, resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -293,18 +293,16 @@ def early_end_flags(content: Content) -> set[str]:
 
 
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
-    """決定性勝利（有 stance_min／stance_max 的結局）此刻成立了沒（計畫 T9：季的事每曆時看一次）；第一季以外一律 None。
-    季曆第 decisive_from_week 週（預設 10）以前一律 None：割據開季後幾週就會頂到門檻，太早收季三場大戲就打不完
+    """決定性勝利（會提前收季的結局，rules.ends_early：態勢門檻只看官軍、黃巾）此刻成立了沒（計畫 T9：季的事每曆時看一次）；
+    第一季以外一律 None。提前收季只看戰線（FB-254，企劃者 2026-10-15）：割據到 85 的群雄並起不在這裡，季末結算時由
+    evaluate_ending 照清單的先後判。季曆第 decisive_from_week 週（預設 10）以前一律 None：太早收季三場大戲就打不完
     （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收；天命之季從第 13 週起（等於不提前收，玉璽二）。"""
     if not season_one(content, state.world):
         return None
     if calendar.point(state.world.time, content, state.world).week < decisive_week(state.world, content):
         return None
     standing = stances(state, content)
-    return next(
-        (e for e in season_endings(state, content) if (e.stance_min or e.stance_max) and stance_holds(e, standing)),
-        None,
-    )
+    return next((e for e in season_endings(state, content) if ends_early(e) and stance_holds(e, standing)), None)
 
 
 def end_season(
@@ -619,6 +617,7 @@ def advance_world_state(
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
     recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
+    territory.update(season, content)  # 舊存檔、中途上線的第一次在這裡算，不發天下大事（出陣探索與地盤設計第六節）
     msgs: list[str] = []
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來

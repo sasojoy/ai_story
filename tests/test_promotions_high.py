@@ -9,7 +9,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, classic_rules, closed_map, real_content
 from tianxia import atlas, bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -19,7 +19,7 @@ from tianxia.state import PlayerState, Summons, TimelineResult
 
 @pytest.fixture
 def real():
-    c = real_content()
+    c = classic_rules(real_content())  # 晉升奇遇的推力照出陣探索與地盤之前的規則量（事件推戰線不打五折、不打盡頭阻力）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -1654,6 +1654,7 @@ def _route_stops(game, dest):
 def test_issuing_a_summons_surveys_the_stops_on_the_way(on):
     """南陽黃巾營投靠的黃巾，第 3 階召見到下曲陽（張寶）：原本疾行安排不了（路上的站都沒摸清），發召見之後到得了，
     路上每一站不是去過就是摸清。"""
+    closed_map(on)  # 召見摸清路是全圖開放之前的規則（全圖開放時已開放的地點本來就到得了）
     game = _fresh(on, "huang", "nanyang_huangjin_camp")
     p = game.state.player
     assert game.travel_refusal("xiaquyang", "dash") == "無法安排前往這裡"
@@ -1681,6 +1682,7 @@ def test_the_next_leg_surveys_its_way(on):
 
 def test_rank_two_is_surveyed_too(on):
     """第 2 階的召見也一樣（企劃者「發召見」說的是每一種召見）：宛城投靠的官軍召到長社、鉅鹿道壇投靠的黃巾召到黃巾別部營寨。"""
+    closed_map(on)  # 召見摸清路是全圖開放之前的規則
     for faction, join, dest in (("guan", "wan_city", "changshe"), ("huang", "julu_altar", "huangjin_camp")):
         game = _fresh(on, faction, join)
         assert game.travel_refusal(dest, "dash") == "無法安排前往這裡"
@@ -1721,6 +1723,7 @@ def test_a_silent_swap_that_moves_the_place_still_surveys(on):
 def test_stops_you_can_see_now_are_surveyed_too(on):
     """路上此刻看得見、還沒去過的站也要記：人走開之後就看不見了，路會斷在那裡。發召見之後走回起點（一路都是去過的站），
     召見的地點照樣疾行到得了。"""
+    closed_map(on)  # 視野與召見摸清路是全圖開放之前的規則
     game = _fresh(on, "huang", "nanyang_huangjin_camp")
     p = game.state.player
     seen = atlas.visible_locations(game.state, on)

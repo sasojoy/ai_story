@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import classic_rules, closed_map, real_content
 
 from tianxia import howto, rules, timetable
 from tianxia.engine import Game
@@ -38,7 +38,7 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     board = "".join(help_["board"])
     assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
     quest = "".join(help_["quest"])
-    assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力
+    assert "出陣" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（出陣探索與地盤：遊歷換成出陣）
 
 
 def test_no_war_explanations_outside_season_one(real):
@@ -226,7 +226,8 @@ def test_the_fame_amounts_are_the_ones_the_content_gives(on):
     spans = _fame_spans(on, set(on.scenario.season_one_off.events))
     section = _fame_section(game)
     low, high = spans["common"]
-    assert f"（探索、交友、遊歷之後碰上的事）：一次 +{low}～+{high}。" in section
+    # 真實內容出陣開著，沒有遊歷（FB-257）
+    assert f"（探索、交友、找素材撞上的仗之後碰上的事）：一次 +{low}～+{high}。" in section
     low, high = spans["big"]
     assert f"劇情裡打贏強敵、奇遇與一次性的大事：一次 +{low}～+{high}。" in section
     most, least = spans["loss"]
@@ -294,6 +295,7 @@ def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
 
 
 def test_what_fame_is_for_follows_the_content(on):
+    closed_map(on)  # 名望多看一站是全圖開放之前的視野；全圖開放的那一句見 tests/test_open_map.py
     game = _war(on)
     bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)
@@ -325,7 +327,8 @@ def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
         for action in on.orders.rank_actions:
             assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
     guan, huang, hao = rows
-    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在亂局的戰線上遊歷打贏才推割據" in hao  # FB-112
+    # FB-112；出陣探索與地盤之後豪強是出陣攪局（舊遊歷的說法見 tests/test_fb112_howto_truth.py，那裡關著出陣）
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在戰線上出陣攪局" in hao
     assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
     on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
     assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)
@@ -529,8 +532,9 @@ def _graduate(content, seed):
 @pytest.mark.parametrize("profile", ["weekend", None])
 def test_a_fresh_character_can_win_by_the_yingshui(profile):
     """FB-100：剛出師的人在潁川一帶找不到打得贏的仗（長社、黃巾別部營寨都是必敗，潁川郊野難分勝負）。
-    潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。"""
-    content = real_content(profile)
+    潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。
+    鈕是舊遊歷的（出陣開著時散人沒有出陣鈕，新角色的仗在探索裡碰上），所以關掉出陣；勝算那一半兩種規則都一樣。"""
+    content = classic_rules(real_content(profile))
     content.config.auto_open_first_season = True
     for game in [_fresh(content), *(_graduate(content, seed) for seed in (1, 2, 3))]:
         game.state.player.location = RIVER
@@ -588,8 +592,9 @@ def _notes(game):
 
 
 def test_the_drill_line_does_not_say_drill_again(on):
-    """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。"""
-    game = _war(on)
+    """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。
+    操練是舊遊歷的（出陣開著時這裡是出陣・守），所以關掉出陣。"""
+    game = _war(classic_rules(on))
     game.state.player.faction = "huang"
     game.state.player.location = "huangjin_camp"
     train = next(o for o in game.options(odds=False) if o.id == "act:train")
@@ -602,6 +607,7 @@ def test_one_branch_left_is_not_mostly(on):
     """只剩一支走得了（例：潁川選錯了做法，悟意境那一支到換日都沒了）：不寫「多半」，寫「會」。正式內容每一處都照這條。"""
     from tianxia.rules import game_day
 
+    classic_rules(on)  # 測的是照比例自動抽的舊探索那一行（出陣探索與地盤之前）；三選一開著的那一行見 tests/test_explore_modes.py
     game = _war(on)
     s = game.state
     s.player.sense_misses[s.player.location] = game_day(on, s.world)

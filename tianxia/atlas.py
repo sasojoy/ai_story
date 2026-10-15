@@ -1,7 +1,9 @@
 """江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
-沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」；未開放的地點照舊完全不畫。
+全圖開放（Config.open_map，企劃者 2026-10-15）：已開放的地點全部算摸清，沒有視野這件事；摸不摸清只由 location_view 判斷。
+開關關著是舊規則：沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」。
+未開放的地點兩種都完全不畫。
 勝算只在呼叫端傳入 odds 函式時才算（敵情層與詳情欄），平常重畫不模擬。
 """
 from __future__ import annotations
@@ -11,14 +13,14 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, mounts, orders, prologue
+from . import figures, insights, mounts, orders, prologue, sortie, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
     audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
     season_one_off, trend_name, trend_value,
 )
-from .state import GameState, Order, Rumor
+from .state import GameState, Order, Rumor, WorldState
 from .world import current_act, sim_active, storyline_off
 
 KNOWN = ("current", "visible", "remembered")  # 摸清的地點
@@ -71,15 +73,22 @@ def road_hops(state: GameState, content: Content, limit: int) -> dict[str, int]:
 
 
 def visible_locations(state: GameState, content: Content) -> set[str]:
+    """看得見的地點（舊規則的視野）；全圖開放時沒有視野這件事，是空的（也不必走一遍路）。"""
+    if content.config.open_map:
+        return set()
     return set(road_hops(state, content, vision_range(state, content)))
 
 
 def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:
+    """地點在地圖上的樣子，也是「摸不摸清」唯一的判斷（KNOWN 那三種是摸清）：未開放的 hidden；所在地 current；
+    全圖開放（Config.open_map）時其餘已開放的一律 visible（已開放就算知道）；開關關著才照視野、去過、留意地形分。"""
     loc = content.locations[loc_id]
     if not is_unlocked(loc, state, content):
         return "hidden"
     if loc_id == state.player.location and state.player.journey is None:
         return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
+    if content.config.open_map:
+        return "visible"
     if loc_id in visible:
         return "visible"
     if loc_id in state.player.visited or loc_id in state.player.surveyed:
@@ -94,12 +103,12 @@ def views(state: GameState, content: Content) -> dict[str, str]:
 
 
 def known_locations(state: GameState, content: Content) -> set[str]:
-    """摸清的地點：看得見、去過或在路上留意地形摸清（PlayerState.surveyed），而且已開放。"""
+    """摸清的地點（location_view）：全圖開放時是所有已開放的地點；舊規則是看得見、去過或在路上留意地形摸清（PlayerState.surveyed）。"""
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
 def is_known(state: GameState, content: Content, loc_id: str) -> bool:
-    """這個地點摸清了嗎（看得見、去過或留意地形摸清，而且已開放）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    """這個地點摸清了嗎（location_view；全圖開放時已開放就算）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
     下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
     return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
 
@@ -331,15 +340,23 @@ SIEGE_NAMED_MAX = 2  # 攻城記得了次數的地點（orders.siege_places）�
 SIEGE_AT = "到{where}遊歷，打贏一場{enemy}記一次{note}。"  # 待 joy 潤（FB-221）
 SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得了次數的地方都還沒摸清，只寫大區
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
+SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
+SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
+INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
+DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
     """軍令卡上攻城那道多寫的一行（FB-221）：記得了次數的地點（orders.siege_places：這條戰線上有敵方陣營隊伍的地方）只有一兩處時
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
-    沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。"""
+    沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。
+    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。"""
     front = trend_name(content, order.front) if order.front else "戰線"
-    places = orders.siege_places(content, order.faction, order.front) if order.front else []
+    places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
+    enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
     if not places or len(places) > SIEGE_NAMED_MAX:
+        if sortie.on(content):
+            return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
         return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
     hidden: list[str] = []
@@ -350,8 +367,8 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
             if area not in hidden:
                 hidden.append(area)
     note = "" if not hidden else SIEGE_SOME_UNSEEN if known else SIEGE_UNSEEN
-    enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
-    return SIEGE_AT.format(where="或".join(known + hidden), enemy=enemy, note=note)
+    template = SIEGE_AT_SORTIE if sortie.on(content) else SIEGE_AT
+    return template.format(where="或".join(known + hidden), enemy=enemy, note=note)
 
 
 def order_how(state: GameState, content: Content, order: Order) -> str:
@@ -367,8 +384,13 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
     front = trend_name(content, order.front) if order.front else "戰線"
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
-        return f"在{front}一帶按「{duty.name if duty else '守勢'}」（收在「此地還能做」裡），做一次記一次。"
+        name = duty.name if duty else "守勢"
+        if sortie.on(content):
+            return DEFEND_SORTIE.format(front=front, duty=name)
+        return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
     if order.template == "intercept":
+        if sortie.on(content):
+            return INTERCEPT_SORTIE.format(place=place(order.location))
         return f"到{place(order.location)}或附近遊歷，撞上對面的運糧隊、打贏記一次。"
     if order.template == "escort":
         return (f"帶 {content.config.convoy_grain} 份糧草到{place(order.start)}接下糧車，"
@@ -436,22 +458,27 @@ def _in_earshot(state: GameState, content: Content, loc_id: str) -> bool:
 # ── 敵情 ──────────────────────────────────────────────
 
 
-def foes(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> list[tuple[str, str]]:
+def foes(
+    content: Content, loc: Location, odds: Odds, faction: str | None = None, world: WorldState | None = None,
+) -> list[tuple[str, str]]:
     """可能遇到的隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。faction 是自己的陣營：自己陣營的隊伍遇上了是
     一起操練、不會輸（engine._drill），寫「操練」不算勝算（試玩回饋 FB-008）。
+    world 給了：站的隊伍照控制方（territory.squads_at，地盤易手）；沒給照 loc.enemies。
     不檢查視野：呼叫端要先用 is_known 把關，沒摸清的地點不能露出敵人，也不該去算勝算。"""
     listed = []
-    for squad_id in dict.fromkeys(loc.enemies):
+    for squad_id in dict.fromkeys(territory.squads_at(world, content, loc.id) if world is not None else loc.enemies):
         squad = content.squads[squad_id]
         own = squad.faction is not None and squad.faction == faction
         listed.append((squad.name, DRILL if own else odds(squad_id)))
     return listed
 
 
-def worst_foe(content: Content, loc: Location, odds: Odds, faction: str | None = None) -> tuple[str, str] | None:
+def worst_foe(
+    content: Content, loc: Location, odds: Odds, faction: str | None = None, world: WorldState | None = None,
+) -> tuple[str, str] | None:
     """最難對付的對手與勝算（勝算最差的；一樣差取排在前面的）；沒有敵人、或只有自己陣營的隊伍時為 None。
-    不檢查視野：呼叫端要先用 is_known 把關（同 foes）。"""
-    listed = [foe for foe in foes(content, loc, odds, faction) if foe[1] != DRILL]
+    不檢查視野：呼叫端要先用 is_known 把關（同 foes）。world 照 foes。"""
+    listed = [foe for foe in foes(content, loc, odds, faction, world) if foe[1] != DRILL]
     return max(listed, key=lambda foe: ODDS_ORDER.index(foe[1])) if listed else None
 
 
@@ -557,7 +584,8 @@ def shortest_routes(
 
 
 def routes(state: GameState, content: Content) -> dict[str, Route]:
-    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點路程最短的走法（取代原本最省體力的路線）。"""
+    """從所在地出發、只走摸清且已開放的地點，到每個摸清地點路程最短的走法（取代原本最省體力的路線）。
+    全圖開放時摸清的就是所有已開放的地點，等於 shortest_routes 不限地點。"""
     return shortest_routes(state, content, known_locations(state, content))
 
 
@@ -804,6 +832,9 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if region is not None:
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
+    side = territory.controller(state.world, content, loc_id)
+    if side is not None:  # 地盤易手（出陣探索與地盤設計 4.3 第 2 點）
+        situation.append(territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side)))
     people = haunters(state, content, loc_id)
     standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
         fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people
@@ -816,7 +847,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if standing:
         parts.append("\n".join([HERE_TITLE, *(_here_text(state, content, fid) for fid in standing)]))
 
-    listed = foes(content, loc, odds, state.player.faction)
+    listed = foes(content, loc, odds, state.player.faction, state.world)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     gives = insight_names(content, loc)

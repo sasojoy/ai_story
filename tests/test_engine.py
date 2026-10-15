@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, at, idle_step, install_season_one, walk_to
+from conftest import FixedRandom, at, classic_rules, idle_step, install_season_one, walk_to
 from tianxia import (
     atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, flavor, front_lines, guide,
     library, rules, skillview, team, traits,
@@ -4117,8 +4117,8 @@ class _Recording(random.Random):
 
 def test_a_real_trip_still_draws_its_foe_from_the_rng():
     """正式內容沒有一個地點的遊歷池子裡有大場面的對手，所以每一處遊歷照舊用 Game.rng 從池子裡挑（亂數序列、整季模擬、
-    好玩度量表的對手組成都不變）：潁川郊野打的就是 rng.choice 挑到的那一路。"""
-    real = load_content(ROOT / "content")
+    好玩度量表的對手組成都不變）：潁川郊野打的就是 rng.choice 挑到的那一路。測的是舊遊歷（散人在出陣開著時沒有出陣鈕）。"""
+    real = classic_rules(load_content(ROOT / "content"))
     real.config.auto_open_first_season = True
     real.config.train_event_chance = 0.0
     game = Game.new(real, "甲", rng=_Recording(0))

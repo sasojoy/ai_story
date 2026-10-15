@@ -237,3 +237,20 @@ def test_each_action_has_its_own_waiting_line():
     assert lines["battle:attack"] == "軍令已發，靜候陣前回報……"
     assert lines["act:smith"] == "墨跡未乾，江湖尚未回音……"
     assert out["slow"] == "路遠消息遲，再等片刻……"
+
+
+def test_the_sortie_has_its_own_waiting_line():
+    """出陣開著（/api/main 的 sortie）：act:train 等候的話換成出陣那一句；關著照舊是遊歷那一句（出陣探索與地盤設計第七節）。"""
+    out = run("""
+      const { kit } = H;
+      const old = kit.waitLineFor("act:train");
+      H.S.main = { sortie: true };
+      return [old, kit.waitLineFor("act:train")];""")
+    assert out == ["循著蹤跡尋敵……", "整隊出陣，候前方回報……"]
+
+
+def test_the_three_ways_to_explore_have_their_own_waiting_lines():
+    out = run("""
+      const { kit } = H;
+      return ["explore:gather", "explore:seek", "explore:sense", "explore:unknown"].map((id) => kit.waitLineFor(id));""")
+    assert out == ["四下翻找，看看能撿到什麼……", "四處走走，看這一帶有什麼事……", "靜心凝神……", "四下探看，尚無動靜……"]

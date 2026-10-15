@@ -11,6 +11,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import classic_rules, closed_map
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -22,6 +23,13 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 
 # fixture real、on（真實內容，開關關著／照週末設定打開）在 tests/conftest.py：test_enlist、test_enlist_web 也用同一份
+
+
+@pytest.fixture
+def real(real):
+    """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）；
+    全圖開放也關掉（closed_map）：打擊軍令的卡與輿圖的 ◎ 在這裡測「還沒摸清只寫大區」（FB-072），全圖開放的見 tests/test_open_map.py。"""
+    return closed_map(classic_rules(real))
 
 BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
@@ -73,7 +81,7 @@ def test_real_orders_content(real):
         ("escort", "guan"), ("escort", "huang"), ("siege", "guan"), ("siege", "huang"),
         ("strike", "guan"), ("strike", "huang"), ("strike", "haoqiang"),
     ])
-    assert o.slots["yingru"]["guan"].intercept == "hilltop_wilds"
+    assert o.slots["yingru"]["guan"].intercept == "runan_wilds"  # FB-248（PM 2026-10-15）：截糧的地點一律在戰線上，以前是荒丘
     assert o.slots["nanyang"]["huang"].escort == ("nanyang_wilds", "nanyang_huangjin_camp")
     assert {f: d.name for f, d in o.duties.items()} == {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
     assert real.squads["guan_grain_convoy"].faction == "guan" and real.squads["huang_grain_convoy"].faction == "huang"

@@ -324,6 +324,7 @@
         "text": "史書上，皇甫嵩夜勒兵，雞鳴馳赴廣宗，斬張梁，黃巾赴河死者五萬。這一次也一樣：{官軍主將}破了廣宗，斬了{人物:zhangliang}。",
         "chronicle": "{官軍主將}破廣宗，斬{人物:zhangliang}。",
         "trends": {"jizhou": -20},
+        "control": {"guangzong": "guan"},
         "figures": {"@人物:zhangliang": {"fate": "退場"}, "zhangjiao": {"fate": "退場"}}
       },
       "guan:險勝": {

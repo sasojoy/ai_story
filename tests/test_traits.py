@@ -64,7 +64,7 @@ def test_the_card_line_lists_the_traits_with_this_arts_numbers(content):
 def test_the_point_specials_print_points_not_percentages(content):
     """悟招（心得）與輕身（體力）的數字是點數，其他功效是比例。"""
     assert "〔悟招〕打贏多得 5 點心得" in traits.card_line(content, _art("悟拳", special="wuzhao"))
-    assert "〔輕身〕遊歷少花 2 點體力" in traits.card_line(content, _art("輕功", special="qingshen"))
+    assert "〔輕身〕出陣、遊歷少花 2 點體力" in traits.card_line(content, _art("輕功", special="qingshen"))
     assert "〔回春〕不論輸贏，打完都回復氣血上限的 3%" in traits.card_line(content, _art("春功", special="huichun"))
 
 

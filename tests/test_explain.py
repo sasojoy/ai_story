@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from conftest import real_content
+from conftest import classic_rules, real_content
 from test_explore import _lake
 
 from tianxia import atlas, companion_agent, hints, howto, rules, sensing
@@ -130,10 +130,10 @@ def _pushing_place(game):
 
 def test_the_train_line_drops_the_push_once_todays_room_is_spent(on):
     """審查 M1：今天這條線推滿了（每人每曆日上限，Game._push_room 是 0），打贏也推不動：那一行不再說「推動戰局」。
-    還推得動一點就照說（push_trend 照推那一點）。"""
+    還推得動一點就照說（push_trend 照推那一點）。測的是舊遊歷那一行（出陣那一行見 test_sortie）。"""
     from tianxia import calendar
 
-    game = Game.new(on, "甲", rng=random.Random(0))
+    game = Game.new(classic_rules(on), "甲", rng=random.Random(0))
     game.state.player.faction = "guan"
     lines = _pushing_place(game)
     assert _notes(game)["act:train"].endswith("推動戰局") or "推動戰局；" in _notes(game)["act:train"]

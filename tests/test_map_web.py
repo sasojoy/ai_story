@@ -1,0 +1,374 @@
+"""輿圖升級的網頁（設計第一～八節）：整頁地圖、地圖上的記號、看大局、濾鏡小牌子、抽屜、天下怎麼變。
+在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的底圖與疊層；沒有 node 就略過。"""
+from __future__ import annotations
+
+import random
+import re
+from pathlib import Path
+
+import pytest
+import test_prologue_web
+
+import server
+import webharness
+from conftest import classic_rules, real_content
+from tianxia.engine import Game
+from tianxia.sqlite_world import open_world
+
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView"]
+DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
+NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
+
+
+def _game(faction="guan", at="yingchuan", classic=False):
+    c = real_content("weekend")
+    c.config.auto_open_first_season = True
+    if classic:
+        classic_rules(c)
+    game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
+    game.client = None
+    p = game.state.player
+    p.faction, p.location = faction, at
+    return game
+
+
+def run(game, script, **S):
+    payload = {"m": server.main_view(game), "script": script,
+               "S": {"mapBase": game.map_base(), "mapState": game.map_state(), **S},
+               "menxia": None, "stored": {}, "responses": {}}
+    return webharness.run(DRIVER, payload)
+
+
+def marks(game, layers='["control"]', **o):
+    extra = "".join(f", {k}: {v}" for k, v in o.items())
+    return run(game, f"return H.marksSvg(H.S.mapBase, H.S.mapState, Object.assign({NOW % layers}, {{{extra[2:]}}}));")
+
+
+def test_marks_draw_every_open_place_with_its_glyph():
+    game = _game()
+    out = marks(game)
+    assert out.count("data-loc=") == len(game.map_base()["places"])
+    assert "潁川郊野" in out and ">城<" in out and "（你）" in out
+
+
+def test_marks_paint_halos_and_fronts_when_territory_is_on():
+    out = marks(_game())
+    assert "url(#mk-halo-guan)" in out and 'class="front"' in out
+
+
+def test_marks_without_territory_have_no_halos_or_fronts():
+    out = marks(_game(classic=True))
+    assert "url(#mk-halo-" not in out.split("</defs>", 1)[1] and 'class="front"' not in out
+
+
+def test_the_far_view_shows_regions_and_tallies_without_place_names():
+    out = marks(_game(), k=2.5, far="true")
+    assert "潁川汝南" in out and re.search(r"官 \d", out) and "潁川郊野" not in out
+
+
+def test_badges_stack_under_the_name():
+    out = marks(_game(), layers='["control", "enemy", "route"]')
+    assert "分</text>" in out and any(f">{w}</text>" in out for w in ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必敗"))
+
+
+def test_the_map_page_is_a_full_page_layer_with_chips():
+    out = run(_game(), "return H.pageMap();")
+    assert 'class="mapx' in out and 'id="map"' in out and '<g id="mk">' in out and 'id="mdrawer"' in out
+    assert all(word in out for word in ("勢力", "軍令", "敵情", "路程", "劇情", "版圖變化", "找地點"))
+    assert "<select" not in out and "travel-row" not in out and "map-legend" not in out
+
+
+def test_region_tint_follows_the_majority():
+    out = run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, true);")
+    assert out["yingru"] in ("#DCE5F0", "#F4E7C2", "#DFEBDD")
+    assert run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, false);") == {}
+
+
+def test_the_overview_answers_where_to_sortie_today():
+    out = run(_game(), "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "今天去哪裡出陣" in out and out.count('data-act="map-pick"') >= 1 and "潁川汝南" in out
+
+
+def test_the_overview_without_sortie_skips_the_suggestions():
+    out = run(_game(faction=None), "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "今天去哪裡出陣" not in out and "潁川" in out
+
+
+def test_a_place_shows_three_cells_then_the_actions():
+    out = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    assert out.index("誰佔著") < out.index("打得過嗎") < out.index("多遠") < out.index('data-act="map-travel"')
+    assert 'data-mode="walk"' in out and 'data-mode="dash"' in out and "汝南荒野" in out
+
+
+def test_your_own_place_offers_sortie_and_explore_back_on_jianghu():
+    out = run(_game(faction="huang", at="huangjin_camp"), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "huangjin_camp");')
+    assert 'data-act="map-jianghu"' in out and "探索" in out and 'data-act="map-travel"' not in out
+
+
+def test_search_finds_a_place_by_person():
+    out = run(_game(), 'return H.searchHtml(H.S.mapBase, H.S.mapState, "波才");')
+    assert 'data-act="map-pick" data-id="huangjin_camp"' in out and "長社" not in out
+
+
+def test_search_with_nothing_typed_lists_every_place_by_region():
+    game = _game()
+    out = run(game, 'return H.searchHtml(H.S.mapBase, H.S.mapState, "");')
+    assert out.count('data-act="map-pick"') == len(game.map_base()["places"]) and "你在這裡" in out
+
+
+def test_the_journey_line_offers_halt():
+    game = _game()
+    game.travel("changshe", "walk")
+    m = server.main_view(game)
+    out = run(game, "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert "m-journey" in out and "長社" in out and "分鐘" in out and "你在" not in out  # 路上不寫「你在」哪一站
+    assert ('data-id="act:halt"' in out) == any(o["id"] == "act:halt" for o in m["options"])
+
+
+def test_travel_stays_on_the_map():
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    body = js[js.index("async function travel(mode)"):]
+    body = body[: body.index("\n  }\n") + 4]
+    assert 'S.tab = "jianghu"' not in body and "loadMap()" in body and "S.mapSel" in body
+
+
+def _timeline_game():
+    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    w.time = calendar.week_start(2, c, w) + 60
+    w.trends["yingru"] = 90
+    territory.update(w, c)
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)
+    return game
+
+
+def test_the_timeline_has_the_curve_the_tallies_and_the_chart():
+    game = _timeline_game()
+    out = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
+    assert "天下怎麼變" in out and out.count("<polyline") >= 4  # 三條戰線＋割據
+    assert all(name in out for name in ("官軍", "黃巾", "豪強"))
+    st = game.map_state()
+    assert len(re.findall(r'class="cell[ "]', out)) == sum(len(g["spots"]) for g in st["chart"]) * st["weeks_total"]
+    assert "官軍大營" in out  # 第 3 週易手的那一處照地點的名字寫
+    assert 'data-act="map-play"' in out and 'data-act="map-now"' in out
+
+
+def test_picking_an_earlier_week_flashes_what_changed():
+    game = _timeline_game()
+    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
+    assert {"id": "guan_camp", "from": "guan", "to": "huang"} in changed
+    out = marks(game, week=2)
+    assert out.count('class="pulse"') == len(changed) + 1  # 易手的那幾處，加上你的那一圈
+    assert marks(game).count('class="pulse"') == 1  # 平常看現在：只有你的那一圈
+    assert marks(game, tl="true").count('class="pulse"') == 1  # 版圖變化停在現在這一週：這一週沒有易手
+
+
+def test_the_chart_draws_unknown_weeks_as_blank():
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)  # 第一次算在第 3 週：前兩週沒記
+    out = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
+    assert 'class="cell blank' in out and 'class="cell future' in out
+
+
+def test_the_timeline_without_territory_says_so():
+    out = run(_game(classic=True), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert "這一季沒有地盤易手" in out and "<polyline" not in out
+
+
+def test_the_tally_compares_with_the_season_start():
+    """「天下」那一條跟開季那一刻比（FB-264：第一次算地盤就在第 1 週時有開季的基準），看第 1 週也比得出來。"""
+    game = _timeline_game()
+    out = run(game, "return [H.hudHtml(H.S.mapBase, H.S.mapState, 3), H.hudHtml(H.S.mapBase, H.S.mapState, 1)];")
+    assert "比開季" in out[0] and "比開季" in out[1] and "比第" not in out[0]
+    tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 3);")
+    assert "比開季" in tl
+
+
+def test_the_tally_without_a_season_start_compares_with_the_first_recorded_week():
+    """中途上線（第一次算在第 3 週）：沒有開季的基準，比第一筆記到的那一週、照實寫第幾週；看的就是那一週時不比。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)
+    w.time = calendar.week_start(4, c, w) + 60
+    territory.update(w, c)
+    out = run(game, "return [H.hudHtml(H.S.mapBase, H.S.mapState, 4), H.hudHtml(H.S.mapBase, H.S.mapState, 3)];")
+    assert "比第 3 週" in out[0] and "開季" not in out[0]
+    assert "比第" not in out[1] and "開季" not in out[1]
+
+
+def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
+    """FB-264：第 1 週的易手（跟開季比）在年表上有白點、選第 1 週時地圖閃一圈、那一週的清單列得出來。"""
+    from tianxia import territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    territory.assign(w, c, {"runan_wilds": "guan"})
+    chart = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert 'class="cell now flip"' in chart
+    out = marks(game, week=1, tl="true")
+    assert out.count('class="pulse"') == 2  # 汝南荒野，加上你的那一圈
+    tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert "汝南荒野" in tl[tl.index("第 1 週</h4>"):]
+
+
+def test_the_timeline_button_sits_under_the_zoom_buttons():
+    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只剩五顆濾鏡。"""
+    out = run(_game(), "return [H.pageMap(), H.chipsHtml()];")
+    ctl = out[0][out[0].index('class="map-ctl"'):]
+    ctl = ctl[: ctl.index("</div>")]
+    assert 'data-act="map-timeline"' in ctl and "版圖" in ctl
+    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 5
+
+
+def test_the_timeline_drawer_is_320_high_on_a_phone():
+    """對比 3 選乙（企劃者 10/15）：版圖變化時抽屜 320 高，地圖大一截，年表往下捲。"""
+    assert run(_game(), 'return H.mapDrawerPx("tl");') == 320
+
+
+def test_a_losing_suggestion_is_faded():
+    """對比 4 選乙（企劃者 10/15）：必敗的照樣列、排在最後、整列淡一點。"""
+    game = _game()
+    st = game.map_state()
+    out = run(game, "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert [g["lose"] for g in st["suggest"]] == [False, False, False, True]  # 官軍在潁川：三處打得過，再一處必敗的
+    assert out.count('class="m-go lose"') == 1 and out.count('class="m-go"') == 3
+    assert out.index('class="m-go lose"') > out.rindex('class="m-go"')
+
+
+def test_the_sword_sits_on_places_you_can_attack():
+    """企劃者 10/15 對比 1 選乙：⚔ 是地點旁的紅色小圓章，只標在疊層說能出陣攻的地方；兩頭歸不同人的鋸齒前線照留。"""
+    game = _game()
+    n = sum(p["armed"] for p in game.map_state()["places"].values())
+    out = marks(game)
+    assert n and out.count('class="armed"') == n and out.count("⚔") == n and 'class="front"' in out
+
+
+def test_no_sword_for_a_ranger_or_the_strongmen():
+    for faction in (None, "haoqiang"):
+        out = marks(_game(faction=faction))
+        assert 'class="armed"' not in out and "⚔" not in out, faction
+
+
+def test_the_far_view_has_no_sword():
+    out = marks(_game(), k=2.5, far="true")
+    assert "⚔" not in out
+
+
+def test_fb260_discs_and_glyphs_keep_their_size_on_screen():
+    """FB-260：圓盤與圓盤裡的字照設計固定螢幕大小——倍率加倍（k 減半）時，地圖單位裡的半徑、字級、框線都剛好減半。"""
+    game = _game()
+
+    def disc(k):
+        out = marks(game, k=k)
+        g = out[out.index('<g data-loc="yingchuan_wilds"'):]
+        g = g[: g.index("</g>")]
+        r = float(re.search(r'r="([\d.]+)" fill="#FBF6EA" stroke="[^"]+" stroke-width="([\d.]+)"', g).group(1))
+        w = float(re.search(r'fill="#FBF6EA" stroke="[^"]+" stroke-width="([\d.]+)"', g).group(1))
+        size = float(re.search(r'font-size="([\d.]+)"[^>]*>野<', g).group(1))
+        return r, w, size
+
+    big, small = disc(1), disc(0.5)
+    for a, b in zip(big, small):
+        assert abs(b - a / 2) <= 0.1, (big, small)
+
+
+def test_fb261_the_timeline_folds_the_search_and_chips_away():
+    """FB-261：版圖變化時搜尋框與濾鏡收起來（不佔位置、點不到），「天下」那一條才不疊在搜尋框上。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    assert re.search(r"\n\.mapx\.tl-mode \.map-top \{[^}]*display: none", css)
+
+
+def test_fb261_far_view_tallies_are_drawn_over_the_dots():
+    """FB-261：看大局時大區的「官 N・巾 N・豪 N」畫在地點小點之後，不被蓋掉。"""
+    out = marks(_game(), k=2.5, far="true")
+    tally = re.search(r"官 \d", out).start()
+    assert tally > out.rindex("<g data-loc=")
+
+
+def test_fb262_standing_there_still_shows_the_odds():
+    """FB-262：站在那個地點時「打得過嗎」照那裡的對手寫勝算（不寫「—」），出陣・攻那一顆也寫勝算；沒有對手才寫沒有對手。"""
+    game = _game(faction="guan", at="runan_wilds")
+    p = game.map_state()["places"]["runan_wilds"]
+    assert p["sortie"] == "attack" and p["odds"]
+    out = run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    cell = out[out.index("打得過嗎"):out.index("多遠")]
+    assert p["odds"]["word"] in cell and "<b>—</b>" not in cell
+    sortie = out[out.index('data-key="sortie"'):]
+    assert p["odds"]["word"] in sortie[: sortie.index("</button>")]
+    calm = run(_game(faction="guan", at="yingchuan"), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "yingchuan");')
+    assert "沒有對手" in calm[calm.index("打得過嗎"):calm.index("多遠")]
+
+
+def test_fb263_a_wide_desktop_fills_the_map_area():
+    """FB-263：桌機寬螢幕第一次打開輿圖，地圖佔滿抽屜左邊整塊（1920 寬地圖區約 1545px，不再照原尺寸 900px 留 640px 空白）；
+    1280 寬照舊約原尺寸、手機照舊原尺寸。倍率最多 MAP_MAX（2）。"""
+    out = run(_game(), "return [H.firstScale(1545, 640, 900, 1340, false), H.firstScale(905, 640, 900, 1340, false), H.firstScale(375, 470, 900, 1340, true), H.firstScale(2600, 900, 900, 1340, false)];")
+    wide, desk, phone, huge = out
+    assert 1545 / 900 - 0.01 <= wide <= 1545 / 900 + 0.01 and 900 * wide >= 1544
+    assert 0.99 <= desk <= 1.01 and phone == 1 and huge == 2
+
+
+# ── 下緣的地點被抽屜蓋住（PM 2026-10-15 定要修）：地圖底下可以多捲一個抽屜的高度，選了的地點對準抽屜上面露出來的那一塊 ──
+SHOT = "const vw = 375, vh = 650, MW = 900, MH = 1340, pad = 240;"
+SCREEN_Y = "(v, p) => vh / 2 + (p[1] - v.cy) * v.s"
+
+
+def test_a_place_at_the_bottom_edge_is_focused_above_the_drawer():
+    out = run(_game(), SHOT + f"const y = {SCREEN_Y}; const p = [600, 1320];"
+              "const old = H.clampView({ s: 1, cx: p[0], cy: p[1] }, vw, vh, MW, MH);"
+              "const now = H.focusView({ s: 1, cx: 450, cy: 600 }, p, vw, vh, MW, MH, pad);"
+              "return [y(old, p), y(now, p), now.cy];")
+    covered, shown, cy = out
+    assert covered > 650 - 240  # 以前：夾在地圖邊上，落在抽屜底下
+    assert 0 <= shown <= 650 - 240 - 10  # 現在：地圖底下多捲一個抽屜高，最下緣的地點也在抽屜上面
+    assert cy > 1340 - 650 / 2  # 以前最多捲到 H − vh／2
+    middle = run(_game(), SHOT + f"const y = {SCREEN_Y}; const p = [600, 1000]; return y(H.focusView({{ s: 1, cx: 450, cy: 600 }}, p, vw, vh, MW, MH, pad), p);")
+    assert abs(middle - (650 - 240) / 2) <= 1  # 不靠邊的地點：對準露出來那一塊的正中間
+
+
+def test_the_drawer_pad_changes_nothing_when_it_is_zero():
+    out = run(_game(), SHOT + "return [H.clampView({ s: 1, cx: 600, cy: 1320 }, vw, vh, MW, MH), H.clampView({ s: 1, cx: 600, cy: 1320 }, vw, vh, MW, MH, 0),"
+              "H.clampView({ s: 0.3, cx: 10, cy: 10 }, vw, vh, MW, MH)];")
+    assert out[0] == out[1] and out[0]["cy"] == 1340 - 650 / 2
+    assert out[2]["cx"] == 450 and out[2]["cy"] == 670  # 比視窗小：照舊置中
+
+
+def test_a_small_map_is_centered_in_the_part_above_the_drawer():
+    """整張比露出來那一塊還矮（高的框、縮到最小）：置中在抽屜上面那一塊。"""
+    out = run(_game(), "const vw = 375, vh = 1200, MW = 900, MH = 1340, pad = 240;"
+              "const v = H.clampView({ s: 0.1, cx: 0, cy: 0 }, vw, vh, MW, MH, pad); return vh / 2 + (MH / 2 - v.cy) * v.s;")
+    assert abs(out - (1200 - 240) / 2) <= 1
+
+
+def test_choosing_or_raising_the_drawer_refocuses_a_covered_place():
+    """選地點（找地點、建議）一律對準露出來那一塊；抽屜拉高、點在地圖上的地點被蓋住時也重新對準（源碼對得上）。"""
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    center = js[js.index("function mapCenterOn("):]
+    assert "focusView(" in center[: center.index("\n  }\n")]
+    drawer = js[js.index("function setMapDrawer("):]
+    assert "keepSelVisible(" in drawer[: drawer.index("\n  }\n")]
+    pick = js[js.index("function mapPick("):]
+    assert "keepSelVisible(" in pick[: pick.index("\n  }\n")]
+
+
+def test_the_drawer_pad_uses_the_height_it_is_going_to():
+    """抽屜換高度有動畫：量 offsetHeight 會拿到舊的高度（從找地點全開挑一處時量到九成四、地圖被捲過頭），照 mapDrawerPx 算要變成的高度。"""
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    body = js[js.index("function mapPad("):]
+    body = body[: body.index("\n  }\n")]
+    assert "mapDrawerPx(S.mapDrawer)" in body and "offsetHeight" not in body

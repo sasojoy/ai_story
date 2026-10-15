@@ -73,7 +73,7 @@ def choose(game, options, rng, target):
             r = atlas.shortest_routes(s, game.content).get(loc)
             if r and r.path and f"move:{r.path[0]}" in ids:
                 return f"move:{r.path[0]}"
-    for pref in ("act:train", "act:explore"):
+    for pref in ("act:train", "explore:gather", "act:explore"):  # 探索三選一開著時「探索」只是入口，找素材才打得到怪
         hit = [i for i in ids if i.startswith(pref)]
         if hit:
             return hit[0]
@@ -136,7 +136,7 @@ def run(seed, args, teach_on):
             hop = bot.clinic_hop(game)
             choice = f"move:{hop}" if hop is not None and f"move:{hop}" in {o.id for o in options} else (
                 choose(game, options, rng, target) if options else None)
-        if choice is not None and choice.startswith(("act:train", "act:explore", "act:challenge")):
+        if choice is not None and choice.startswith(("act:train", "act:explore", "explore:", "act:challenge")):
             m = game.state.player.member
             now_hp, cap = team.member_neili(content, m, team.con_of(game.state, content, game.world, PLAYER))
             if now_hp < 0.5 * cap or game.state.player.stamina < 10:

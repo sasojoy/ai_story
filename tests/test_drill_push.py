@@ -14,7 +14,7 @@ from tianxia.engine import Game
 from tianxia.rules import world_trend_value
 from tianxia.sqlite_world import open_world
 
-from conftest import real_content
+from conftest import classic_rules, real_content
 
 
 def _camp(content, world=None, name="黃巾甲"):
@@ -35,7 +35,7 @@ def _drill(game) -> list[str]:
 
 
 def _content(profile=None):
-    content = real_content(profile)
+    content = classic_rules(real_content(profile))  # 測的是操練（出陣探索與地盤之前的遊歷），四個開關都關掉
     content.config.auto_open_first_season = True
     content.config.train_event_chance = 0.0
     return content
