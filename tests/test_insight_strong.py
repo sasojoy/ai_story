@@ -175,3 +175,25 @@ def test_a_clue_pointing_at_the_strongest_passes(content):
     content.insights["shui"].strong_line = LINE
     content.locations["lake"].insight_strong = "shui"
     validate(content)
+
+
+# ── 玩法說明（意境提示設計第二節）──
+from conftest import real_content  # noqa: E402
+
+from tianxia import howto  # noqa: E402
+
+
+def _howto(c):
+    from tianxia.world_state import fresh_season
+
+    return howto.page(c, fresh_season(c), recruitable=False)
+
+
+def test_the_howto_says_each_place_has_a_strongest_insight():
+    assert howto.STRONG_HOWTO in _howto(real_content("weekend"))
+
+
+def test_the_howto_is_unchanged_with_the_switch_off():
+    c = real_content("weekend")
+    c.config.insight_strong.enabled = False
+    assert howto.STRONG_HOWTO not in _howto(c) and "哪裡悟得到什麼看地形。" in _howto(c)
