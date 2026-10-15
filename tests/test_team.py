@@ -471,7 +471,7 @@ def test_a_fight_without_a_dodge_chance_draws_the_same_randomness(state, content
     ours, theirs = random.Random(7), random.Random(7)
     result = team.fight(state, content, world, "boss", ours)  # 難度 200，必敗
     assert result.tier == "落敗" and not result.dodged
-    assert result.model_copy(update={"clash": None}) == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
     assert ours.getstate() == theirs.getstate()
 
 
@@ -482,7 +482,7 @@ def test_a_fight_with_the_dodge_turned_off_never_rolls_it(state, content, world)
     ours, theirs = random.Random(7), random.Random(7)
     result = team.fight(state, content, world, "boss", ours, dodge=False)  # 難度 200，必敗
     assert result.tier == "落敗" and not result.dodged
-    assert result.model_copy(update={"clash": None}) == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
     assert ours.getstate() == theirs.getstate()
 
 
@@ -820,7 +820,7 @@ def test_a_starter_who_never_double_rolls_draws_exactly_what_a_plain_fight_draws
             result = team.fight(state, content, world, squad_id, ours)
             plain = encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
             plain = encounter.dodge(plain, team.dodge_chance(state, content), theirs)
-            assert result.model_copy(update={"clash": None}) == plain, (seed, squad_id, agi)  # 回合（clash）用自己的亂數
+            assert result == plain, (seed, squad_id, agi)
             assert ours.draws == theirs.draws and ours.getstate() == theirs.getstate()
     # 數字本身釘住：沒有閃避機會的人一場一次；必敗而有閃避機會的一場兩次（運氣＋閃避）
     state.player.stats["agi"] = 5
@@ -870,7 +870,7 @@ def test_guard_does_nothing_in_a_story_battle_that_turns_the_dodge_off(state, co
     ours, theirs = _CountingRandom(7), _CountingRandom(7)
     result = team.fight(state, content, world, "boss", ours, dodge=False)
     assert result.tier == "落敗" and not result.guarded and not result.dodged
-    assert result.model_copy(update={"clash": None}) == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
+    assert result == encounter.resolve_encounter(result.our_power, result.difficulty, theirs)
     assert ours.draws == theirs.draws == 1
 
 

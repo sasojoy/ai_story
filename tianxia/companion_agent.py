@@ -545,7 +545,4 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     for skill_id in (character.starting_wugong, character.starting_neigong):
         if skill_id:
             msgs += learn_skill(state, content, skill_id)
-    from .signature import lift_levels  # 本命武學學到時直接第七成（Config.signature_arts.start_level）
-
-    lift_levels(state, content, (character.starting_wugong, character.starting_neigong))
     return msgs

@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from . import insights, renown, signature, team
+from . import insights, renown, team
 from .martial_arts import QUALITIES, MartialArt, content_art, is_renamed
 from .models import Content, SkillDef
 from .state import GameState
@@ -153,9 +153,7 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
 # ── 熔煉（設計 4.3）──────────────────────────────────────
 
 
-def melt_refund(
-    content: Content, level: int, quality: str, registered: str = "下品", minimum: int = 0, free_below: int = 1,
-) -> int:
+def melt_refund(content: Content, level: int, quality: str, registered: str = "下品", minimum: int = 0) -> int:
     """熔一門練到第 level 成、玩家自己這一份品質是 quality 的武學退多少心得：
     max(minimum, 練成花的八成) ＋ 品質加給。
 
@@ -163,11 +161,9 @@ def melt_refund(
     登記時就有的那一階的加給（registered，全服共享、沒個人化的那一份的品質），不低於 0。
     合成的武學登記在下品，所以修練到上品照領上品的加給；內容裡直接給的絕學（情誼送的本命武學、劇情教的）
     登記就是絕學、沒修練過，熔了沒有加給——不然「合一門、熔一門」就是個無本的金錢迴圈。
-    minimum 是 FB-068 的基本值（Config.melt_min_refund，只給合成出來的武學，見 melt_value），墊在練成那一份底下，不另外加。
-    free_below 是學到時就有的成數：本命武學學到時直接第七成（Config.signature_arts.start_level），那幾成沒花心得，熔了不退
-    （不然一學到就熔，白拿 33 點心得）。"""
+    minimum 是 FB-068 的基本值（Config.melt_min_refund，只給合成出來的武學，見 melt_value），墊在練成那一份底下，不另外加。"""
     cfg = content.config
-    spent = sum(team.practice_price(content, n) for n in range(max(1, free_below), level))
+    spent = sum(team.practice_price(content, n) for n in range(1, level))
     bonus = max(0, cfg.melt_quality_bonus.get(quality, 0) - cfg.melt_quality_bonus.get(registered, 0))
     return max(minimum, int(spent * cfg.melt_refund_ratio)) + bonus
 
@@ -203,9 +199,8 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     rolled = state.player.art_rolled.get(art_id)  # 合成時擲到的品質也算「登記時就有」：合到上品馬上熔掉不能賺加給
     if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
         start = rolled
-    free = content.config.signature_arts.start_level if signature.is_signature(content, art_id) else 1
     return melt_refund(
-        content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum, free,
+        content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum,
     )
 
 

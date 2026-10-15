@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait
-from . import signature
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -138,12 +137,9 @@ def _value(hook: str, number: float) -> str:
 
 def card_line(content: Content, art: MartialArt) -> str:
     """功法卡的一行（13.6）：這一門的每個一般功效（照這一門自己的層數與品質算出來的數字），再加特別功效。
-    內容沒有功效（沒有 traits.json）就是空字串，卡片不畫這一行。
-    本命武學另起一行寫本命特效（signature.card_text：名字、說明、數字），有沒有 traits.json 都寫。"""
-    sig = signature.of(content, art.id)
-    tail = signature.card_text(sig) if sig is not None else ""
+    內容沒有功效（沒有 traits.json）就是空字串，卡片不畫這一行。"""
     if not content.traits.general:
-        return tail
+        return ""
     mult, mine, parts = multiplier(content, art.quality), traits_of(art), []
     for attribute in dict.fromkeys(mine):
         trait = general(content, attribute)
@@ -152,4 +148,4 @@ def card_line(content: Content, art: MartialArt) -> str:
     sp = special(content, art.special)
     if sp is not None:
         parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
-    return "功效：" + "・".join(parts) + (f"\n{tail}" if tail else "")
+    return "功效：" + "・".join(parts)
