@@ -381,6 +381,18 @@ def _card_story(entry: JournalEntry) -> tuple[str, list[str]]:
     return entry.tag, _body(entry)
 
 
+RENOWN_MARK = "名聲@"  # 跨段那一刻得失那一排多的那一顆（名聲十一之二第 6 條）：紀錄裡存「名聲@名動一方」，畫的時候換成金色的籤
+RENOWN_CHIP = "名號傳開・{title} ›"
+
+
+def renown_mark(title: str) -> str:
+    return f"{RENOWN_MARK}{title}"
+
+
+def is_renown_mark(change: str) -> bool:
+    return change.startswith(RENOWN_MARK)
+
+
 ChipFn = Callable[[str, str], tuple[str, int] | None]
 """數值標籤的換法（FB-064）：(紀錄裡存的一項變化, seed) → (畫面上的字, 對看的人是好事 1／壞事 −1／無關 0)，不是它管的變化回 None。
 戰況變化（front_lines.mark）紀錄裡存的是機器可讀的寫法，要由 engine 照內容與看的人的陣營換成一句話；顏色因此在畫的那一刻才定。"""
@@ -390,6 +402,9 @@ def _chips(changes: list[str], tag: str, chip: ChipFn | None = None, seed: str =
     """數值標籤。chip 認得的變化（戰況）用它給的字與好壞上色；機器可讀的戰況變化沒人認得（沒交 chip）時不畫，不讓它原樣露給玩家。"""
     shown: list[tuple[str, str]] = []
     for change in changes:
+        if is_renown_mark(change):  # 名聲：金色的「名號傳開」，點了開名聲的說明（web/app.js 的 renown-open）
+            shown.append((RENOWN_CHIP.format(title=change[len(RENOWN_MARK):]), "tx-renown"))
+            continue
         drawn = chip(change, seed) if chip is not None else None
         if drawn is not None:
             text, favour = drawn
@@ -398,7 +413,12 @@ def _chips(changes: list[str], tag: str, chip: ChipFn | None = None, seed: str =
             shown.append((change, change_class(change)))
     if not shown:
         return ""
-    chips = "".join(f'<span class="{" ".join(filter(None, ("tx-chg", cls)))}">{_esc(text)}</span>' for text, cls in shown)
+    chips = "".join(
+        f'<span class="{" ".join(filter(None, ("tx-chg", cls)))}"'
+        + (' data-act="renown-open" role="button" tabindex="0"' if cls == "tx-renown" else "")
+        + f">{_esc(text)}</span>"
+        for text, cls in shown
+    )
     return f'<{tag} class="tx-chgs">{chips}</{tag}>'
 
 
@@ -488,6 +508,8 @@ div.tx-chgs { display: flex; margin: 6px 0 2px; }
   border: 1px solid var(--border-color-primary); }
 .tx-up { background: rgba(22, 163, 74, 0.16); border-color: rgba(22, 163, 74, 0.7); }
 .tx-down { background: rgba(220, 38, 38, 0.16); border-color: rgba(220, 38, 38, 0.7); }
+.tx-renown { color: var(--gold, #b7862b); border-color: var(--gold, #b7862b); background: rgba(183, 134, 43, 0.14);
+  font-weight: 700; cursor: pointer; }
 .tx-heading { font-weight: 600; margin: 4px 0; }
 .tx-row { border-bottom: 1px solid var(--border-color-primary); font-size: 14px; line-height: 1.6; }
 .tx-sum { display: flex; gap: 10px; padding: 3px 0; }

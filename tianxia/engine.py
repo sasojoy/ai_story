@@ -568,6 +568,7 @@ class Game:
         # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
         fresh.player.hints_seen = set(old.player.hints_seen)
         fresh.player.hints_off = old.player.hints_off
+        fresh.player.renown_told = old.player.renown_told  # 名聲：兩個稱號說明過了就不再說（段 renown_seen 跟角色一起重來）
         book = self.content.hints
         if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
             fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
@@ -832,6 +833,7 @@ class Game:
         self._guide(enlist.expire(self.state, self.content))  # 第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄
         self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._party_expires()  # 答應結伴之後帶頭的人遲遲沒動身：各走各的（玩家互動第二層）
+        self._renown_after(synced=True)  # 名聲：同步時發現的跨段另起一則「名聲」（設計 3.3）
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons + seated)
 
@@ -10438,9 +10440,41 @@ class Game:
         art = team.resolve_art(art_id, self.content, self.world)
         return art.name if art is not None else art_id
 
+    def _renown_after(self, synced: bool = False) -> None:
+        """名聲（設計 3.3、6.4、十一之二第 6 條）：這一下的名望、善名、惡名合成一行、接差距（renown.annotate），再比跨段（renown.watch）。
+        動作裡發現的接在這一下那一則江湖紀錄（最新一則、時間是此刻）的最後，得失那一排多一顆金色的「名號傳開」；這一下打了仗，戰報的
+        得失一樣接差距。同步時發現的（synced）另起一則「名聲」。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
+        行狀記升段（只記到過的最高段以上）。開關關著什麼都不做。"""
+        s, c = self.state, self.content
+        if not renown.on(c):
+            return
+        entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None
+        if entry is not None:
+            entry.changes = renown.annotate(entry.changes, s, c)
+        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card is not None else None
+        if record is not None and not synced:
+            record.changes = renown.annotate(record.changes, s, c)
+        crossed = renown.watch(s, c, game_day(c, s.world))
+        if crossed.first and not s.player.renown_told:
+            s.player.renown_told = True
+            journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))
+        if not crossed.lines:
+            return
+        marks = [journal.renown_mark(title) for title in crossed.up]
+        if entry is not None:
+            entry.lines += crossed.lines
+            entry.changes += marks
+        else:
+            fresh = Draft(renown.TOLD_TITLE).entry(s.world.time, crossed.lines)
+            fresh.changes += marks
+            journal.add_entry(s, fresh)
+        for text, weight in crossed.annals:
+            annals.note(s, c, annals.DEED, text, weight)
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
+        self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
