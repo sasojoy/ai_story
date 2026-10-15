@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView", "setMapDrawer", "mapPad"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -372,3 +372,38 @@ def test_the_drawer_pad_uses_the_height_it_is_going_to():
     body = js[js.index("function mapPad("):]
     body = body[: body.index("\n  }\n")]
     assert "mapDrawerPx(S.mapDrawer)" in body and "offsetHeight" not in body
+
+
+# ── FB-267：抽屜拉高再放回原高，地圖要照較小的 pad 當下夾回去（不露空白、下一次拖動照手指方向走）──
+FAKE_DOM = """
+const svg = { viewBox: { baseVal: { width: 900, height: 1340 } }, style: {} };
+const wrap = { clientWidth: 375, clientHeight: 650, clientLeft: 0, clientTop: 0, getBoundingClientRect: () => ({ left: 0, top: 0 }),
+  querySelector: () => svg, classList: { toggle() {}, add() {}, remove() {} }, style: { getPropertyValue: () => '', setProperty() {} } };
+const box = { clientHeight: 650, style: { setProperty() {} } };
+const drawer = { style: {}, offsetHeight: 0 };
+const els = { map: wrap, mapx: box, mdrawer: drawer };
+const orig = T.ctx.document.getElementById;
+T.ctx.document.getElementById = (id) => els[id] || orig(id);
+"""
+
+
+def test_fb267_lowering_the_drawer_clamps_the_view_back_at_once():
+    out = run(_game(), FAKE_DOM + """
+const vh = 650, MH = 1340;
+const p = H.S.mapBase.places.find((x) => x.id === 'xinye');
+const y = (v) => vh / 2 + (p.y - v.cy) * v.s;
+const bottom = (v) => vh / 2 + (MH - v.cy) * v.s;
+H.S.mapMode = 'place'; H.S.mapSel = 'xinye'; H.S.mapView = { s: 1, cx: p.x, cy: p.y };
+H.setMapDrawer('peek');
+H.setMapDrawer('half');  // 拉到一半：新野對準露出來那一塊（地圖可以多捲）
+const half = { ...H.S.mapView };
+H.setMapDrawer('peek');  // 放回 240
+const peek = { ...H.S.mapView };
+const pad = H.mapPad();
+const v = H.S.mapView;
+const dragged = H.clampView({ s: v.s, cx: v.cx, cy: v.cy + 10 / v.s }, 375, vh, 900, MH, pad);  // 手指往上拖 10px（同 gripStep 的算法）
+return { pad, halfY: y(half), peekY: y(peek), gap: (vh - pad) - bottom(peek), drag: y(dragged) - y(peek) };
+""")
+    assert out["pad"] == 240
+    assert out["gap"] <= 0.5, out  # 放回原高：地圖下緣不在抽屜上面留空白
+    assert -10.5 <= out["drag"] <= 0, out  # 往上拖：地點往上走（到邊就不動），不會往反方向跳
