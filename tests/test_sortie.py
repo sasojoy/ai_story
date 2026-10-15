@@ -62,6 +62,7 @@ def test_holding_your_own_camp():
 
 def test_attacking_an_enemy_camp_gives_a_third_and_no_loot():
     game = _game(faction="guan")
+    game.content.config.economy.sortie_silver = False  # 第 1 塊的出陣不給銀兩；素材與經濟加的三成見 tests/test_econ_gather_sortie.py
     p, w = game.state.player, game.state.world
     assert _sortie(game).label.startswith("出陣・攻（體力 6・今日還能 5 次・")
     silver = p.stats["silver"]

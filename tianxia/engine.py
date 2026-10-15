@@ -5535,10 +5535,17 @@ class Game:
         return msgs + self._guide(note_action(s, c, self.world, "order"))
 
     def _sortie_rewards(self, squad: Squad, record) -> list[str]:
-        """出陣打贏給自己的（設計 2.4）：對手心得、經驗的 drill_reward_share（三成，同操練），不給銀兩、不掉素材與兵器、不擲寶物多掉；
-        經驗整隊一起拿（同遊歷），升級照寫進戰報。"""
+        """出陣打贏給自己的（設計 2.4）：對手心得、經驗的 drill_reward_share（三成，同操練），不掉素材與兵器、不擲寶物多掉；
+        經驗整隊一起拿（同遊歷），升級照寫進戰報。銀兩：素材與經濟設計第八節（Config.economy.sortie_silver）開著時加給對手銀兩的
+        sortie_silver_share（三成，四捨五入），關著不給。"""
         p, share = self.state.player, self.content.config.drill_reward_share
         msgs: list[str] = []
+        econ = self.content.config.economy
+        silver = round(squad.reward_silver * econ.sortie_silver_share) if econ.sortie_silver else 0
+        if silver > 0:
+            p.stats["silver"] = p.stats.get("silver", 0) + silver
+            record.silver = silver
+            msgs.append(f"銀兩 +{silver}")
         xinde = drill_share(squad.reward_xinde, share)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde

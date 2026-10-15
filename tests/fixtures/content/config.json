@@ -16,6 +16,7 @@
   "heal_at_clinic": false,
   "sortie": {"enabled": false},
   "explore_modes": {"enabled": false},
+  "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
   "territory": {"enabled": false},
   "push_resistance": {"enabled": false},
   "battle_quiet_hours": {"enabled": false},

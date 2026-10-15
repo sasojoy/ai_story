@@ -1963,6 +1963,31 @@ class QuietHours(_Strict):
     end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
 
 
+class EconomyRules(_Strict):
+    """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md；tianxia/economy.py）：每一樣一個開關，預設開、
+    測試內容關，關掉一個字都不變（亂數序列也一樣）。都上線就生效，不看季的章。"""
+
+    gather_cut: bool = True  # 找素材的一階從一定給改成 gather_first_chance（第七節；城鎮的 town_chance 照舊）
+    gather_first_chance: float = Field(default=0.7, ge=0, le=1)
+    sortie_silver: bool = True  # 出陣攻打贏加給對手銀兩的 sortie_silver_share（第八節；守、攪局不給）
+    sortie_silver_share: float = Field(default=0.3, ge=0, le=1)
+    sell: bool = True  # 鐵匠鋪收購（第五節）：階 → 一個幾兩；不在表上的階不收（三階要留著做神器）；收購價不分地盤
+    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6})
+    upgrade: bool = True  # 鐵匠鋪升階（第四節）：換到幾階 → 要幾個同屬性低一階的、工錢（套地盤福利 territory.price_factor）
+    upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
+    upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
+    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
+    donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
+    donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
+    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打事件五折（Config.explore_modes.event_trend_share）、
+    # 季長倍數、盡頭阻力，跟出陣共用每人每日推力上限，不另記推力的貢獻（貢獻照捐的份量記）
+    donate_push_per_point: float = Field(default=0.05, ge=0)
+    armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
+        default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
+    )
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2029,6 +2054,7 @@ class Config(_Strict):
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
+    economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
