@@ -13,6 +13,8 @@
       "張角隔著香煙看了你一眼：「緣分未到，回去吧。」",
       "「黃天自有安排，時候到了自會相見。」道童掩上了門。"
     ],
+    "starting_wugong": "zhangjiao_wugong",
+    "starting_neigong": "zhangjiao_neigong",
     "stats": {
       "str": 4,
       "agi": 4,
@@ -46,6 +48,8 @@
       "帳前的力士把你推開：「地公將軍不見閒人！」",
       "張寶瞪了你一眼：「等你有點名堂再來。」"
     ],
+    "starting_wugong": "zhangbao_wugong",
+    "starting_neigong": "zhangbao_neigong",
     "stats": {
       "str": 6,
       "agi": 5,
@@ -80,6 +84,8 @@
       "親兵攔住你：「人公將軍在巡城，有事先跟我說。」",
       "張梁擺擺手：「城上的事還多著，你先回去。」"
     ],
+    "starting_wugong": "zhangliang_wugong",
+    "starting_neigong": "zhangliang_neigong",
     "stats": {
       "str": 7,
       "agi": 5,
@@ -114,6 +120,8 @@
       "堂上傳來何進的聲音：「什麼人都放進來，成何體統！」",
       "門吏伸手一攔：「大將軍正與名士議事，閒人止步。」"
     ],
+    "starting_wugong": "hejin_wugong",
+    "starting_neigong": "hejin_neigong",
     "stats": {
       "str": 3,
       "agi": 3,
@@ -148,6 +156,8 @@
       "帳前的軍吏攔住你：「中郎將有令，營中不見閒客。」",
       "皇甫嵩擺擺手：「營有營規，先回去吧。」"
     ],
+    "starting_wugong": "huangfusong_wugong",
+    "starting_neigong": "huangfusong_neigong",
     "stats": {
       "str": 7,
       "agi": 6,
@@ -181,6 +191,8 @@
       "親兵擋在帳前：「右中郎將在點驗糧草，改日再來。」",
       "朱儁皺了皺眉：「空口說話的人我見多了，回去吧。」"
     ],
+    "starting_wugong": "zhujun_wugong",
+    "starting_neigong": "zhujun_neigong",
     "stats": {
       "str": 6,
       "agi": 5,
@@ -214,6 +226,8 @@
       "帳外的書佐拱手：「中郎將正在批閱軍書，不便見客。」",
       "盧植淡淡地說：「先把分內的事做好，再來不遲。」"
     ],
+    "starting_wugong": "luzhi_wugong",
+    "starting_neigong": "luzhi_neigong",
     "stats": {
       "str": 5,
       "agi": 4,
@@ -248,6 +262,8 @@
       "涼州兵拿刀鞘把你擋開：「董將軍不見生人。」",
       "董卓連眼皮都不抬：「等你有點斤兩，再來見我。」"
     ],
+    "starting_wugong": "dongzhuo_wugong",
+    "starting_neigong": "dongzhuo_neigong",
     "stats": {
       "str": 8,
       "agi": 5,
@@ -539,6 +555,8 @@
       "守營的力士擋住你：「渠帥在點兵，走遠點。」",
       "波才哼了一聲：「嘴上說的不算，拿出點本事來。」"
     ],
+    "starting_wugong": "bocai_wugong",
+    "starting_neigong": "bocai_neigong",
     "stats": {
       "str": 7,
       "agi": 5,
@@ -574,6 +592,8 @@
       "符童攔住你：「神上使正在通天，凡人勿擾。」",
       "張曼成指了指天：「星還沒照到你身上，回去等著。」"
     ],
+    "starting_wugong": "zhangmancheng_wugong",
+    "starting_neigong": "zhangmancheng_neigong",
     "stats": {
       "str": 5,
       "agi": 4,
@@ -608,6 +628,8 @@
       "趙弘冷冷地說：「不認得的人，我一句話也不聽。」",
       "守倉的弟兄攔住你：「趙帥在點糧，閒人走開。」"
     ],
+    "starting_wugong": "zhaohong_wugong",
+    "starting_neigong": "zhaohong_neigong",
     "stats": {
       "str": 6,
       "agi": 5,
