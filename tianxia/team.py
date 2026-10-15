@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import armor, calendar, encounter, rounds, styles, traits, treasures, weapons
+from . import armor, calendar, encounter, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
@@ -94,7 +94,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits)
     return world.get_skill(skill_id)
 
 
@@ -104,9 +104,16 @@ def art_quality(state: GameState, art: MartialArt) -> str:
 
 
 def player_art(state: GameState, content: Content, world: WorldStateStore, skill_id: str | None) -> MartialArt | None:
-    """玩家自己那一份：品質與威力照自己修練到的品質。"""
+    """玩家自己那一份：品質與威力照自己修練到的品質。本命武學再乘 Config.signature_arts.power_scale
+    （signature.scale；只乘玩家自己那一份，同伴練的本命武學照內容）。"""
     art = resolve_art(skill_id, content, world)
-    return None if art is None else with_quality(art, art_quality(state, art))
+    if art is None:
+        return None
+    mine = with_quality(art, art_quality(state, art))
+    k = signature.scale(content, art.id)
+    if k == 1.0:
+        return mine
+    return mine.model_copy(update={"base_power": mine.base_power * k, "top_power": mine.top_power * k})
 
 
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
@@ -683,6 +690,28 @@ def heal_fraction(state: GameState, content: Content, world: WorldStateStore, fr
     return [f"氣血 +{gained:.0f}"] if gained >= 1 else []
 
 
+def shift_hp(state: GameState, content: Content, world: WorldStateStore, key: str, fraction: float) -> list[str]:
+    """本命戰法回（fraction 正）或自扣（負）這個人氣血上限的幾成（tactics.Clash.hp）。回的照 heal_fraction（回到上限 − 內傷為止）；
+    自扣的不變成內傷、扣到 0 為止。本人回傳「氣血 +N」「氣血 -N」（不到 1 點不寫），同伴照改、不寫。"""
+    if not fraction:
+        return []
+    if key == PLAYER and fraction > 0:
+        return heal_fraction(state, content, world, fraction)
+    con = con_of(state, content, world, key)
+
+    def move(member) -> float:
+        now, cap = member_neili(content, member, con)
+        after = min(neili_ceiling(content, member, con), max(0.0, now + cap * fraction))
+        member.neili = None if after >= neili_ceiling(content, member, con) else after
+        return after - now
+
+    if key == PLAYER:
+        changed = move(state.player.member)
+        return [f"氣血 {changed:+.0f}"] if abs(changed) >= 1 else []
+    world.update_companion(key, move)
+    return []
+
+
 # ── 遭遇/劇情戰：串接 encounter.py 的單次判定 ───────────────
 
 
@@ -806,7 +835,7 @@ def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> flo
 
 
 def take_encounter_toll(
-    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
+    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
 ) -> list[str]:
     """一場遭遇戰打完的氣血代價（氣血設計 §1.3）：按結果扣氣血，其中一部分變成內傷。
 
@@ -820,9 +849,10 @@ def take_encounter_toll(
     玩家本人的身法讓一場少掉一點氣血（閃得開）、根骨讓其中變成內傷的少一點（武學與成長設計 6.1）；
     同伴照他自己的身法、根骨（人物資質設計 14.3）。本人身上的防具（裝備四欄設計 4.3）跟化勁相加，合計夾在
     `Config.armor.total_cap`；同伴不吃防具。
+    share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
     """
     cfg = content.config
-    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
+    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
     if fraction <= 0:
         return []
     stats = state.player.stats
@@ -851,7 +881,7 @@ def take_encounter_toll(
 
 
 def toll_saved(
-    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False,
+    state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
 ) -> tuple[int, int]:
     """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
     各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。防具（裝備四欄設計 4.3）不是功效、一直留著：
@@ -860,7 +890,7 @@ def toll_saved(
     「氣血 -N」「內傷 +N」的寫法一樣，所以「少扣了 N」加上畫面上的「氣血 -M」剛好是只有防具時的 N+M。
     沒有這兩個功效（只有防具也算沒有）、或這個結果不扣氣血，是 (0, 0)。"""
     cfg = content.config
-    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0)
+    fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
     lo = traits.loadout(state, content, world)
     cut, still = traits.amount(content, lo, "toll_cut"), "no_injury" in lo.specials
     if fraction <= 0 or (cut <= 0 and not still):
@@ -910,11 +940,15 @@ def fight(
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     lo = traits.loadout(state, content, world)
-    result = encounter.resolve_encounter(
-        power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo),
-    )
+    mods = trait_mods(content, lo)
+    result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=mods)
     if tier is not None:
         return result.model_copy(update={"tier": tier})
+    # 一回合一回合打（tactics.py，Joy 2026-10-15 選「全部改回合制」）：擲出來的差距攤成回合，本命戰法在回合裡改氣勢；
+    # 亂數是自己一份（名號｜這一場的戰報流水號｜回合），不碰 Game.rng。沒有戰法時結果一個字都不變
+    seed = random.Random(f"{state.player.name}|{state.battle_seq + 1}|回合")
+    result = clash_result(result, mods, tactic_holders(state, content, world), tactic_ctx(state, content, world, squad, result.difficulty),
+                          content, seed)
     if not dodge:
         return result
     if result.tier == encounter.FALLBACK_TIER and "no_loss" in lo.specials:  # 護命（13.4）：落敗改判僵持，蓋過閃避、也就不擲閃避
@@ -922,13 +956,59 @@ def fight(
     return encounter.dodge(result, dodge_chance(state, content), rng)  # 先平移、結果定了才閃（14.4）；勝算（estimate）不含
 
 
-def odds_word(power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED, mods: encounter.Mods | None = None) -> str:
+def clash_result(
+    result: encounter.EncounterResult, mods: encounter.Mods, holders: list[tactics.Holder], ctx: tactics.Ctx, content: Content,
+    rng: random.Random,
+) -> encounter.EncounterResult:
+    """單次判定擲出的結果一回合一回合打一遍（tactics.play）：回合數照擲出來的結果（rounds.ROUNDS），收場的差距照門檻重判。
+    沒有本命戰法時差距原樣回來、結果不變。"""
+    effective = result.difficulty * (1 - mods.difficulty_cut)
+    low, high = rounds.ROUNDS[result.tier]
+    clash = tactics.play(result.margin, effective, rng.randint(low, high), holders, ctx, content.config.tactics, rng)
+    if clash.margin == result.margin:
+        return result.model_copy(update={"clash": clash})
+    return result.model_copy(update={"clash": clash, "margin": clash.margin, "tier": encounter.tier_of(clash.margin, effective, mods)})
+
+
+def tactic_holders(state: GameState, content: Content, world: WorldStateStore) -> list[tactics.Holder]:
+    """這一場誰帶著本命戰法：本人身上練著的兩門、出戰同伴練著的兩門（同伴照自己練的，本命武學是他自己的）。"""
+    rows = [(state.player.name, PLAYER, state.player.member.wugong_id, state.player.member.neigong_id)]
+    for key in state.player.team:
+        mate = world.get_companion(key)
+        rows.append((member_name(state, content, key), key, mate.wugong_id, mate.neigong_id))
+    return tactics.holders_of(content, rows)
+
+
+def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad: Squad, difficulty: float) -> tactics.Ctx:
+    """這一場戰法要看的條件：雙方身法（對手照難度，同回合演出）、夜裡、坐騎的階、善名惡名、部下幾人、對手陣營、這裡歸不歸你的陣營、開打時的氣血。"""
+    from . import territory  # territory → rules → team：照用的時候才 import
+
+    p = state.player
+    now, cap = member_neili(content, p.member, con_of(state, content, world, PLAYER))
+    mount = p.mount if mounts.on(content) else None
+    owner = territory.controller(state.world, content, p.location) if p.faction else None
+    return tactics.Ctx(
+        foe=squad.name, our_agility=float(p.stats.get("agi", BASE_STAT)), foe_agility=rounds.foe_agility(difficulty),
+        night=calendar.is_night(state.world.time, content, state.world), mount_tier=mount.tier if mount is not None else 0,
+        good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)), followers=len(follower_rows(state, content)),
+        foe_faction=squad.faction, own_turf=owner is not None and owner == p.faction,
+        hp_ratio=now / cap if cap > 0 else 1.0, team=team_keys(state),
+    )
+
+
+def odds_word(
+    power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED, mods: encounter.Mods | None = None,
+    plan: tuple[list[tactics.Holder], tactics.Ctx, Content] | None = None,
+) -> str:
     """依固定種子模擬 ESTIMATE_RUNS 場的結果分佈換算勝算文字（大勝/險勝算勝、僵持算平手）。mods 是本人的功效換算
-    （trait_mods）：每一場都照它擲。"""
+    （trait_mods）：每一場都照它擲。plan 是本命戰法（誰帶著、這一場的條件）：有的話每一場照打起來一樣一回合一回合打
+    （回合的亂數另一份固定種子，判定的那一顆照舊，所以沒有戰法時勝算一個字都不變）。"""
     rng = random.Random(rng_seed)
     wins = draws = 0
-    for _ in range(ESTIMATE_RUNS):
+    for i in range(ESTIMATE_RUNS):
         result = encounter.resolve_encounter(power, squad.difficulty, rng, mods=mods)
+        if plan is not None and plan[0]:
+            result = clash_result(result, mods or encounter.Mods(), plan[0], plan[1], plan[2], random.Random(f"{rng_seed}|{i}"))
         wins += result.tier in WIN_TIERS
         draws += result.tier in DRAW_TIERS
     return _odds_text(wins, draws, ESTIMATE_RUNS)
@@ -951,7 +1031,8 @@ def estimate(
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
-    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+    plan = (tactic_holders(state, content, world), tactic_ctx(state, content, world, squad, squad.difficulty), content)
+    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)), plan=plan)
 
 
 def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:
