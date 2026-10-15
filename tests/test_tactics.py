@@ -86,7 +86,7 @@ def test_ward_keeps_your_own_side_from_losing_its_head():
     f = tactics._Fight([], _ctx(), content.config.tactics, random.Random(0))
     f.us.states["守一"] = 2
     assert not f.put(f.us, "失神", 1, now=True)
-    assert not f.us.has("失神") and f.lines == ["〔守一〕心神守住，失神沒能沾身"]
+    assert not f.us.has("失神") and f.lines == ["〔守一〕你這一方心神守住，失神沒能沾身"]
     assert f.put(f.foe, "失神", 1, now=True) and f.foe.has("失神")
 
 

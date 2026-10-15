@@ -1948,6 +1948,15 @@ class TacticTuning(_Strict):
     self_hit: float = Field(default=0.3, ge=0, le=1)  # 失神的那一回合打到自己的機會
     prefer_guard: float = Field(default=0.5, ge=0, le=1)  # 帶著固守才發動的戰法時，自動出招改出固守的機會
     band: float = Field(default=12.0, ge=0)  # 沒有戰法時中途的氣勢不越過 50 ± (stop − band)（不然還沒打完就提前收場，結果會變）
+    # 對手那一方也帶本命戰法（挑戰大勢人物本人：他自己的兩門；team.foe_tactics）。主機的開關
+    foe_tactics: bool = True
+    # 頭目戰、擂台、奪璽單挑（自己挑招的仗，tactics.step）：一擊是幾點氣勢（那邊一回合的推力約 ±8～12、剋中 counter_push 8）。
+    # 2 是量出來的（scripts/measure_tactics.py --bouts，2026-10-15）：頭目戰十八位平均贏面 +4.0（5 是 +10.0、3 是 +5.7），
+    # 跟一般的仗第一批的 +3.6 差不多
+    bout_strike: float = Field(default=2.0, ge=0)
+    # 決戰（tactics.war_round）：一個人的份量加成乘多少（連環是 +1 擊）。0.5：發動多的人一回合份量平均 ×1.17（孫堅），
+    # 跟職位的 +15% 差不多（1.0 是 ×1.34）
+    war_scale: float = Field(default=0.5, ge=0)
 
 
 class RiseTuning(_Strict):

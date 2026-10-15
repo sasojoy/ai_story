@@ -947,8 +947,9 @@ def fight(
     # 一回合一回合打（tactics.py，Joy 2026-10-15 選「全部改回合制」）：擲出來的差距攤成回合，本命戰法在回合裡改氣勢；
     # 亂數是自己一份（名號｜這一場的戰報流水號｜回合），不碰 Game.rng。沒有戰法時結果一個字都不變
     seed = random.Random(f"{state.player.name}|{state.battle_seq + 1}|回合")
-    result = clash_result(result, mods, tactic_holders(state, content, world), tactic_ctx(state, content, world, squad, result.difficulty),
-                          content, seed)
+    ctx = tactic_ctx(state, content, world, squad, result.difficulty)
+    result = clash_result(result, mods, tactic_holders(state, content, world), ctx, content, seed,
+                          foe=foe_tactics(state, content, squad, ctx))
     if not dodge:
         return result
     if result.tier == encounter.FALLBACK_TIER and "no_loss" in lo.specials:  # 護命（13.4）：落敗改判僵持，蓋過閃避、也就不擲閃避
@@ -958,13 +959,15 @@ def fight(
 
 def clash_result(
     result: encounter.EncounterResult, mods: encounter.Mods, holders: list[tactics.Holder], ctx: tactics.Ctx, content: Content,
-    rng: random.Random,
+    rng: random.Random, foe: tuple[list[tactics.Holder], tactics.Ctx] | None = None,
 ) -> encounter.EncounterResult:
     """單次判定擲出的結果一回合一回合打一遍（tactics.play）：回合數照擲出來的結果（rounds.ROUNDS），收場的差距照門檻重判。
-    沒有本命戰法時差距原樣回來、結果不變。"""
+    foe 是對手那一方的本命戰法（foe_tactics：挑戰大勢人物本人）。兩邊都沒有本命戰法時差距原樣回來、結果不變。"""
     effective = result.difficulty * (1 - mods.difficulty_cut)
     low, high = rounds.ROUNDS[result.tier]
-    clash = tactics.play(result.margin, effective, rng.randint(low, high), holders, ctx, content.config.tactics, rng)
+    foe_holders, foe_ctx = foe if foe is not None else ([], None)
+    clash = tactics.play(result.margin, effective, rng.randint(low, high), holders, ctx, content.config.tactics, rng,
+                         foe_holders=foe_holders, foe_ctx=foe_ctx)
     if clash.margin == result.margin:
         return result.model_copy(update={"clash": clash})
     return result.model_copy(update={"clash": clash, "margin": clash.margin, "tier": encounter.tier_of(clash.margin, effective, mods)})
@@ -977,6 +980,30 @@ def tactic_holders(state: GameState, content: Content, world: WorldStateStore) -
         mate = world.get_companion(key)
         rows.append((member_name(state, content, key), key, mate.wugong_id, mate.neigong_id))
     return tactics.holders_of(content, rows)
+
+
+def foe_tactics(
+    state: GameState, content: Content, squad: Squad, ctx: tactics.Ctx,
+) -> tuple[list[tactics.Holder], tactics.Ctx] | None:
+    """對手那一方的本命戰法：這一路是大勢人物本人的隊伍（FigureDef.squad，人物表寫了 character）時，他自己的本命武學與本命內功
+    照樣發動（本命戰法第二批）。條件從他那一邊看：身法照難度、對手是你的陣營、這裡歸他的陣營算他的地盤。
+    Config.tactics.foe_tactics 關著、或不是大勢人物本人是 None。"""
+    if not content.config.tactics.foe_tactics:
+        return None
+    figure = next((f for f in content.figures.values() if f.squad == squad.id and f.character), None)
+    char = content.characters.get(figure.character) if figure is not None else None
+    if char is None:
+        return None
+    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, char.starting_wugong, char.starting_neigong)])
+    if not holders:
+        return None
+    from . import territory  # territory → rules → team：照用的時候才 import
+
+    owner = territory.controller(state.world, content, state.player.location)
+    return holders, tactics.Ctx(
+        foe=tactics.OUR_SIDE, our_agility=ctx.foe_agility, foe_agility=ctx.our_agility, night=ctx.night,
+        foe_faction=state.player.faction, own_turf=owner is not None and owner == figure.faction,
+    )
 
 
 def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad: Squad, difficulty: float) -> tactics.Ctx:
@@ -996,9 +1023,26 @@ def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad
     )
 
 
+def self_side(state: GameState, content: Content, world: WorldStateStore, *, mounted: bool = False, troops: bool = False) -> tactics.BoutSide | None:
+    """自己挑招的仗（頭目戰、擂台、奪璽單挑）與決戰帶的本命戰法：只算本人身上的兩門（同伴不上這幾種仗）。條件照 tactic_ctx，
+    對手的名字與身法開打時才換上（tactics.open_bout）；mounted、troops 是這種仗算不算坐騎與部下（決戰算、單挑不算）。
+    本人沒有本命戰法是 None。"""
+    p = state.player
+    holders = tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)])
+    if not holders:
+        return None
+    mount = p.mount if mounted and mounts.on(content) else None
+    return tactics.side_for(holders, tactics.Ctx(
+        foe="", our_agility=float(p.stats.get("agi", BASE_STAT)), night=calendar.is_night(state.world.time, content, state.world),
+        mount_tier=mount.tier if mount is not None else 0, good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)),
+        followers=len(follower_rows(state, content)) if troops else 0, foe_faction=None, team=[PLAYER],
+    ))
+
+
 def odds_word(
     power: float, squad: Squad, rng_seed: int = ESTIMATE_SEED, mods: encounter.Mods | None = None,
     plan: tuple[list[tactics.Holder], tactics.Ctx, Content] | None = None,
+    foe: tuple[list[tactics.Holder], tactics.Ctx] | None = None,
 ) -> str:
     """依固定種子模擬 ESTIMATE_RUNS 場的結果分佈換算勝算文字（大勝/險勝算勝、僵持算平手）。mods 是本人的功效換算
     （trait_mods）：每一場都照它擲。plan 是本命戰法（誰帶著、這一場的條件）：有的話每一場照打起來一樣一回合一回合打
@@ -1007,8 +1051,9 @@ def odds_word(
     wins = draws = 0
     for i in range(ESTIMATE_RUNS):
         result = encounter.resolve_encounter(power, squad.difficulty, rng, mods=mods)
-        if plan is not None and plan[0]:
-            result = clash_result(result, mods or encounter.Mods(), plan[0], plan[1], plan[2], random.Random(f"{rng_seed}|{i}"))
+        if plan is not None and (plan[0] or foe):
+            result = clash_result(result, mods or encounter.Mods(), plan[0], plan[1], plan[2], random.Random(f"{rng_seed}|{i}"),
+                                  foe=foe)
         wins += result.tier in WIN_TIERS
         draws += result.tier in DRAW_TIERS
     return _odds_text(wins, draws, ESTIMATE_RUNS)
@@ -1031,8 +1076,10 @@ def estimate(
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
-    plan = (tactic_holders(state, content, world), tactic_ctx(state, content, world, squad, squad.difficulty), content)
-    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)), plan=plan)
+    ctx = tactic_ctx(state, content, world, squad, squad.difficulty)
+    plan = (tactic_holders(state, content, world), ctx, content)
+    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)), plan=plan,
+                     foe=foe_tactics(state, content, squad, ctx))
 
 
 def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:

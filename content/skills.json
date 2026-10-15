@@ -42,9 +42,10 @@
       "rate": 1.0,
       "rounds": 1,
       "params": {
-        "turns": 2
+        "turns": 2,
+        "reflect_pct": 0.4
       },
-      "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神。"
+      "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神；擋下的控制有 {reflect_pct} 反彈回施放者。"
     }
   },
   {
@@ -669,8 +670,10 @@
       "kind": "ward_all",
       "rate": 1.0,
       "rounds": 3,
-      "params": {},
-      "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）。"
+      "params": {
+        "per_ward_pct": 0.05
+      },
+      "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）；每擋下一次控制，推力 +{per_ward_pct}。"
     }
   },
   {

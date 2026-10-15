@@ -249,3 +249,24 @@ def test_the_card_shows_the_tell_only_to_the_opponent_and_flips_the_edge_for_the
     assert as_challenger["tell"] and not as_holder["tell"] and not as_crowd["tell"]
     assert "你" in as_holder["edge"] and as_holder["edge"] != as_challenger["edge"]
     assert (as_crowd["challenger"], as_crowd["holder"], as_crowd["shard"]) == ("挑戰者", "懷璽", "螭首")
+
+
+def test_a_bout_fires_the_tactics_in_the_round_line(content):
+    """本命戰法第二批：兩邊有人帶著本命戰法時單挑開一場 bout，那一回合的句子後面接〔戰法〕；兩邊都沒有不開。"""
+    from conftest import real_content
+
+    from tianxia import tactics
+
+    put_shards(content)
+    real = real_content()
+    vanguard = real.skills["sunjian_wugong"].tactic.model_copy(update={"rate": 1.0})
+    kit = tactics.side_for([tactics.Holder(who="挑戰者", key="you", skill="sunjian_wugong", tactic=vanguard)],
+                           tactics.Ctx(foe=""))
+    d = _duel()
+    assert d.bout is None
+    d.bout = tactics.open_bout(kit, None, "挑戰者", "懷璽")
+    d.challenger.present = True
+    seal_duel.submit(d, "challenger", move="強攻")
+    d.proxy_move["holder"] = "強攻"
+    line = seal_duel.resolve(d, content, SALT, 2)
+    assert "〔先登斬將〕" in line and d.bout.round == 1

@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from . import battle_instance, prologue
+from . import battle_instance, prologue, tactics
 from .models import BEATS, MOVES, BattleTuning, Content, DuelBoss, DuelFoe, DuelTuning
 from .state import DuelState, GameState
 
@@ -59,10 +59,12 @@ def foe_of(content: Content, duel: DuelState) -> tuple[DuelBoss, DuelFoe]:
 
 
 def roll_next(duel: DuelState, foe: DuelFoe, tuning: DuelTuning, rng: random.Random) -> None:
-    """擲他下一回合的招與你看到的架勢：招照他的偏好（沒寫的當 1）；架勢 tell_truth 的機會照實，其餘是另一招的架勢（虛招）。"""
+    """擲他下一回合的招與你看到的架勢：招照他的偏好（沒寫的當 1）；架勢 tell_truth 的機會照實，其餘是另一招的架勢（虛招）。
+    你看穿了、或他亂神（本命戰法）時架勢一定是真的（照樣擲，亂數順序不變）。"""
     weights = [foe.moves.get(m, 1.0) for m in MOVES]
     duel.move = rng.choices(MOVES, weights=weights)[0]
-    shown = duel.move if rng.random() < tuning.tell_truth else rng.choice([m for m in MOVES if m != duel.move])
+    true = rng.random() < tuning.tell_truth or tactics.locks(duel.bout).sees
+    shown = duel.move if true else rng.choice([m for m in MOVES if m != duel.move])
     duel.tell = rng.choice(TELLS[shown])
 
 
@@ -115,11 +117,16 @@ def gamble_roll(
     rate = max(0, min(100, rate + (battle.role_gamble_rate if role == "wis" else 0)))
     risk = 100 - rate
     if rng.random() * 100 < rate:
-        might = battle_instance.strength(battle, power) / battle.gamble_strength_ref
-        might = max(battle.gamble_strength_min, min(battle.gamble_strength_max, might))
-        return True, max(1, round((tuning.gamble_base + risk * tuning.gamble_per_risk) * might)), round(hp_cap * tuning.success_hp), rate
+        return True, *success_of(rate, hp_cap, power, tuning, battle), rate
     delta = -min(round(tuning.fail_cap), round(risk * tuning.fail_per_risk))
     return False, delta, round(hp_cap * (tuning.fail_hp_base + risk * tuning.fail_hp_per_risk)), rate
+
+
+def success_of(rate: int, hp_cap: float, power: float, tuning: DuelTuning, battle: BattleTuning) -> tuple[int, int]:
+    """放手一搏成了的（推力〔還沒夾〕, 扣多少池子）：照風險、乘實力倍數（神上使把失手改成功也照這個算）。"""
+    might = battle_instance.strength(battle, power) / battle.gamble_strength_ref
+    might = max(battle.gamble_strength_min, min(battle.gamble_strength_max, might))
+    return max(1, round((tuning.gamble_base + (100 - rate) * tuning.gamble_per_risk) * might)), round(hp_cap * tuning.success_hp)
 
 
 def verdict_at(edge: float, hp: float, round_: int, rounds: int, tuning: DuelTuning) -> str | None:
@@ -137,32 +144,91 @@ def verdict_at(edge: float, hp: float, round_: int, rounds: int, tuning: DuelTun
     return "僵持" if edge > tuning.draw else "落敗"
 
 
+class Exchange(NamedTuple):
+    """出一招的結果：氣勢推了多少、你掉多少氣血（本命戰法回的算負的）、剋、兩邊實際出的招（定身是 None）、戰法的句子。"""
+
+    delta: int
+    hp: int
+    beat: int
+    mine: str | None
+    his: str | None
+    lines: list[str]
+
+
 def exchange(
     duel: DuelState, boss: DuelBoss, move: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
+    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None,
 ) -> tuple[int, int, int]:
-    """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。
-    推力與挨的打照 push_of、harm_of（奪璽單挑共用）；運氣照舊在這裡用 rng 擲一次。"""
-    mine = duel.scores.get(move) or battle_instance.strength(battle, duel.power) * tuning.foe_fit
+    """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。見 exchange_full。"""
+    out = exchange_full(duel, boss, move, tuning, battle, rng, tactic, trng)
+    return out.delta, out.hp, out.beat
+
+
+def exchange_full(
+    duel: DuelState, boss: DuelBoss, move: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
+    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None,
+) -> Exchange:
+    """出一招。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。推力與挨的打照 push_of、harm_of（奪璽單挑共用）；
+    運氣照舊在這裡用 rng 擲一次。duel.bout 在（你帶著本命戰法）時先照戰法打這一回合（tactics.step，亂數是 trng，不碰 rng）：
+    招可能被定身、失神、卸勁改掉，剋照無隙改，氣勢多推戰法那一份，他沒打到你的回合你不掉血，戰法回的、焚身這類照池子算
+    （他沒有池子，扣他的換成氣勢）。"""
+    step = None
+    his = duel.move
+    if duel.bout is not None and tactic is not None and trng is not None:
+        step = tactics.step(duel.bout, move, his, duel.edge, tactic, trng, a_ratio=duel.hp / max(1.0, duel.hp_cap), b_auto=True)
+        move, his = step.a_move, step.b_move
+    mine = duel.scores.get(move or "", 0.0) or battle_instance.strength(battle, duel.power) * tuning.foe_fit
     theirs = foe_strength(battle, tuning, boss, foe_difficulty(duel, boss))
-    beat = counter(move, duel.move)
-    delta = push_of(mine, theirs, beat, duel.role, tuning, battle, rng.uniform(-tuning.luck, tuning.luck))
+    beat = step.beat if step is not None else counter(move, his)
+    luck = rng.uniform(-tuning.luck, tuning.luck)
+    delta = push_of(mine, theirs, beat, duel.role, tuning, battle, luck)
     hp = min(duel.hp, harm_of(duel.hp_cap, mine, theirs, beat, tuning))
+    lines: list[str] = []
+    if step is not None:
+        delta += round(step.push + tactics.pool_push(step.b_hp, tactic))
+        if not step.a_hit:
+            hp = 0
+        hp -= round(step.a_hp * duel.hp_cap)
+        hp = min(duel.hp, hp) if hp > 0 else max(-(duel.hp_cap - duel.hp), hp)
+        lines = step.lines
     before = duel.edge
     duel.edge = _clamp(duel.edge + delta)
     duel.hp -= hp
-    return round(duel.edge - before), hp, beat
+    if step is not None:
+        lines = lines + tactics.close_round(duel.bout, duel.edge - before, tactic, trng)
+    return Exchange(round(duel.edge - before), hp, beat, move, his, lines)
 
 
 def gamble(
     duel: DuelState, rate: int, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
+    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None, lines: list[str] | None = None,
 ) -> tuple[bool, int, int, int]:
     """放手一搏：（成了沒有, 氣勢推了多少, 你掉多少氣血, 實際的成功率）。成功率是模型評的再加軍師的（夾在 0～100）；
-    成了的推進乘實力倍數（同決戰），沒成的不乘。這一回合他的招不算（你搶了先手，或自己栽了）。擲骰照 gamble_roll（奪璽單挑共用）。"""
+    成了的推進乘實力倍數（同決戰），沒成的不乘。這一回合他的招不算（你搶了先手，或自己栽了）。擲骰照 gamble_roll（奪璽單挑共用）。
+    duel.bout 在時戰法照打這一回合（只剩回氣血、援兵、焚身這類），失手時神上使有機會改成功；戰法的句子加進 lines。"""
     won, delta, hp, rate = gamble_roll(rate, duel.hp_cap, duel.power, duel.role, tuning, battle, rng)
-    hp = min(duel.hp, hp)
+    extra = 0.0
+    if duel.bout is not None and tactic is not None and trng is not None:
+        if not won:
+            saved = tactics.divine_save(duel.bout.a.holders, trng)
+            if saved is not None:
+                won = True
+                delta, hp = success_of(rate, duel.hp_cap, duel.power, tuning, battle)
+                if lines is not None:
+                    lines.append(tactics.divine_line(saved))
+        step = tactics.step(duel.bout, tactics.GAMBLE, duel.move, duel.edge, tactic, trng, a_ratio=duel.hp / max(1.0, duel.hp_cap))
+        extra = step.push + tactics.pool_push(step.b_hp, tactic)
+        hp -= round(step.a_hp * duel.hp_cap)
+        if lines is not None:
+            lines += step.lines
+    hp = min(duel.hp, hp) if hp > 0 else max(-(duel.hp_cap - duel.hp), hp)
     before = duel.edge
-    duel.edge = _clamp(duel.edge + delta)
+    duel.edge = _clamp(duel.edge + delta + round(extra))
     duel.hp -= hp
+    if duel.bout is not None and tactic is not None and trng is not None:
+        more = tactics.close_round(duel.bout, duel.edge - before, tactic, trng)
+        if lines is not None:
+            lines += more
     return won, round(duel.edge - before), hp, rate
 
 

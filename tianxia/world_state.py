@@ -25,6 +25,7 @@ from .battle_instance import BattleInstance, BattleRoundRecord
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
+from .tactics import Bout, BoutSide
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
 
@@ -127,6 +128,7 @@ class SealSide(BaseModel):
     gambles: int = 0  # 這一場放手一搏了幾次（Config.seal.gamble_cap）
     proxied: bool = False  # 這一場被代打過
     acted: int = 0  # 這一場自己出了幾手（含放手一搏；FB-174：一手都沒出才是「未及趕到」）
+    kit: BoutSide | None = None  # 身上的本命戰法快照（不算坐騎與部下，同頭目戰）；沒有是 None
 
 
 class SealDuel(BaseModel):
@@ -155,6 +157,7 @@ class SealDuel(BaseModel):
     opened_real: float | None = None  # 這一回合開始的現實秒
     lines: list[str] = Field(default_factory=list)
     fixed: bool | None = None  # 管理者「定這一場結果」：再擲中（True）或不中（False）；None 照擲
+    bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，a 是挑戰者）；兩邊都沒有是 None
 
 
 class SealView(NamedTuple):

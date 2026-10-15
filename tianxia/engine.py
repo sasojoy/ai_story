@@ -986,11 +986,15 @@ class Game:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
             return opts
         if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
-            return [Option(id=f"duel:{move}", label=duel_rules.move_label(move)) for move in MOVES] + [
+            held = tactics.locks(s.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
+            return [Option(id=f"duel:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
+                           enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
         if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
-            return [Option(id=f"arena:{move}", label=duel_rules.move_label(move)) for move in MOVES] + [
+            held = tactics.locks(s.player.arena.bout).no_moves
+            return [Option(id=f"arena:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
+                           enabled=move not in held) for move in MOVES] + [
                 Option(id=ARENA_YIELD, label=arena.YIELD),
             ]
         if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
@@ -3880,7 +3884,8 @@ class Game:
 
     def _battle_marks(self) -> dict:
         """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照）。"""
-        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content)}
+        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
+                "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True)}  # 本命戰法（第二批）
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -4024,7 +4029,7 @@ class Game:
         if not battle_instance.round_is_complete(battle, timed_out=timed_out):  # 只剩掛機的人：逾時代選完就結算（FB-173）
             return []
         battle_instance.fill_idle_actions(battle, definition, tuning=tuning)  # 不等掛機的人：其他人送齊了，替他們代選
-        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning)
+        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning, tactic=self.content.config.tactics)
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
         # 每回合最前面那一行出招比例只留在回合紀錄（戰報）裡，場景上的比例只由「對面上一回合」那一段寫一次（審查 I1）。
@@ -4455,6 +4460,7 @@ class Game:
                     continue
                 out.append((name, 0, seal_duel.side_from(
                     name, None, kin._battle_power(), kin._battle_scores(mounted=False), kin._battle_role(), kin._battle_neili_cap(),
+                    kit=team.self_side(kin.state, self.content, kin.world),
                 )))
         return out
 
@@ -4470,7 +4476,7 @@ class Game:
             game = self._kin(new_game_state(self.content, name))
         return seal_duel.side_from(
             name, self.world.faction_of(name), game._battle_power(), game._battle_scores(mounted=False), game._battle_role(),
-            game._battle_neili_cap(), fresh=fresh,
+            game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
         )
 
     def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
@@ -4517,7 +4523,9 @@ class Game:
             label = f"（{seal_duel.SENT}：已出招 {seal_duel.sent(duel)}／2，最遲 {left // 60} 分 {left % 60} 秒）"
             return [Option(id="seal:waiting", label=label, enabled=False)]
         late = f"（{problem}）" if problem else ""
-        return [Option(id=f"seal:{m}", label=duel_rules.move_label(m) + late, enabled=problem is None) for m in MOVES]
+        held = tactics.locks(duel.bout, seal_duel.BOUT_SIDE[who]).no_moves  # 本命戰法：卸勁、只攻不守
+        return [Option(id=f"seal:{m}", label=duel_rules.move_label(m) + late + (tactics.lock_note(m) if m in held else ""),
+                       enabled=problem is None and m not in held) for m in MOVES]
 
     def _seal_act(self, move: str) -> list[str]:
         """選單上的一招（seal:<招>）：在一次 world.mutate 裡重驗、記下這一手，然後推一步（湊齊了而且滿 20 秒才結算）。"""
@@ -4530,6 +4538,8 @@ class Game:
             duel = shared.seal_duels[0] if shared.seal_duels else None
             who = seal_duel.side_of(duel, me) if duel is not None else None
             problem = seal_duel.GONE if who is None else seal_duel.submit_problem(duel, who, cfg)
+            if not problem and move in tactics.locks(duel.bout, seal_duel.BOUT_SIDE[who]).no_moves:
+                problem = tactics.NO_MOVE.strip("（）").format(move=move)
             if problem:
                 out.append(f"（{problem}）")
                 return
@@ -7888,6 +7898,10 @@ class Game:
         p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
         p.duel_last = [float(p.season_number), s.world.time]
         foe = boss.foes[duel.foe]
+        duel.bout = tactics.open_bout(  # 本命戰法（第二批）：只算你身上的兩門；頭目沒有本命戰法
+            team.self_side(s, c, self.world), None, "你", foe.name, a_faction=p.faction, b_faction=foe.side,
+            b_agility=rounds.foe_agility(duel_rules.foe_difficulty(duel, boss)),
+        )
         duel_rules.roll_next(duel, foe, cfg, self.rng)
         p.duel = duel
         self._outcome(f"遇上{foe.title}{foe.name}", "")
@@ -7903,7 +7917,8 @@ class Game:
             f"**{foe.title}・{foe.name}**（頭目戰 第 {duel.round + 1}／{boss.rounds} 回合）",
             foe.intro if duel.round == 0 else duel.lines[-1],
             f"氣勢：{duel_rules.edge_words(duel.edge)}（{duel.edge:.0f}／100）　你的氣血：{duel.hp:.0f}／{duel.hp_cap:.0f}",
-            f"{duel.tell}（架勢不一定是真的。）",
+            *self._bout_lines(duel.bout),
+            f"{duel.tell}{tactics.SEEN_NOTE if tactics.locks(duel.bout).sees else '（架勢不一定是真的。）'}",
             "固守剋強攻、強攻剋奇襲、奇襲剋固守；也可以在下面寫一句，放手一搏。",
         ]
         return "\n\n".join(lines)
@@ -7927,7 +7942,19 @@ class Game:
         text = text.strip()[:FREE_TEXT_MAX]
         if not text:
             return ["（請先輸入你想做的事。）"]
+        p = self.state.player
+        if tactics.locks(p.arena.bout if p.arena is not None else p.duel.bout).no_gamble:
+            return [tactics.NO_GAMBLE]
         return text
+
+    def _bout_lines(self, bout: tactics.Bout | None) -> list[str]:
+        """頭目戰、擂台的場景：兩邊身上的本命戰法狀態各一行（沒有就不寫）。"""
+        return [line for line in (tactics.status_text(bout, "a"), tactics.status_text(bout, "b")) if line]
+
+    def _bout_rng(self, kind: str, key: object, round_: int) -> random.Random:
+        """本命戰法這一回合的亂數（不碰 Game.rng）：種類｜季數｜名號｜哪一場｜第幾回合。"""
+        p = self.state.player
+        return random.Random(f"{kind}|{p.season_number}|{p.name}|{key}|{round_}|戰法")
 
     def duel_text_request(self, text: str) -> DuelTextRequest | list[str]:
         """頭目戰放手一搏的 A 段（鎖內、只讀）：送得出去回傳要在鎖外送模型的單子，不行回傳那一句話。"""
@@ -8099,11 +8126,13 @@ class Game:
         s.battle_card = None
         s.player.guide_done = []
         boss, _ = duel_rules.foe_of(c, duel)
-        won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, self.rng)
+        fired: list[str] = []
+        won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, self.rng,
+                                              c.config.tactics, self._bout_rng("頭目戰", duel.boss, duel.round), fired)
         story = (stories or ("", ""))[0 if won else 1]
         if not story:
             story = f"你放手一搏：「{checked}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
-        line = f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 -{hp}）"
+        line = tactics.round_line(f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
         return self._log(self._duel_after(line))
 
     def _duel_act(self, arg: str) -> list[str]:
@@ -8117,11 +8146,13 @@ class Game:
             return self._duel_finish(None, "你虛晃一招，抽身退走。")
         if arg not in MOVES:
             return ["（此刻無法這麼做。）"]
-        his = duel.move
-        delta, hp, beat = duel_rules.exchange(duel, boss, arg, c.config.duel, c.config.battle, self.rng)
-        line = (
-            f"第 {duel.round + 1} 回合：你{arg}，{foe.name}{his}——{duel_rules.COUNTER_WORDS[beat]}。"
-            f"（氣勢 {delta:+d}，你氣血 -{hp}）"
+        if arg in tactics.locks(duel.bout).no_moves:
+            return [tactics.NO_MOVE.format(move=arg)]
+        out = duel_rules.exchange_full(duel, boss, arg, c.config.duel, c.config.battle, self.rng,
+                                       c.config.tactics, self._bout_rng("頭目戰", duel.boss, duel.round))
+        line = tactics.round_line(
+            f"第 {duel.round + 1} 回合：你{out.mine or '出不了手'}，{foe.name}{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
+            f"（氣勢 {out.delta:+d}，你氣血 {-out.hp:+d}）", out.lines,
         )
         return self._duel_after(line)
 
@@ -8282,9 +8313,11 @@ class Game:
         if entry is not None:
             entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts = (
                 p.name, side.power, side.scores, side.role, side.hp_cap, arts)
+            entry.kit = team.self_side(s, self.content, self.world)
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
+            kit=team.self_side(s, self.content, self.world),
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
@@ -8313,6 +8346,9 @@ class Game:
         lines = [arena.OPENING.format(foe=foe.name)]
         if foe.arts:
             lines.append(arena.FOE_ARTS.format(arts="、".join(foe.arts)))
+        fight.bout = tactics.open_bout(  # 本命戰法（第二批）：兩邊身上的兩門（他的是報名那一刻的）
+            team.self_side(s, c, self.world), foe.kit, "你", foe.name, a_faction=p.faction,
+        )
         return lines
 
     def _arena_scene(self) -> str:
@@ -8322,7 +8358,8 @@ class Game:
             arena.OPENING.format(foe=fight.foe.name) if fight.round == 0 else fight.lines[-1],
             f"氣勢：{duel_rules.edge_words(fight.edge)}（{fight.edge:.0f}／100）　"
             f"你的氣血：{fight.me.hp:.0f}／{fight.me.hp_cap:.0f}　他：{fight.foe.hp:.0f}／{fight.foe.hp_cap:.0f}",
-            f"{fight.tell}{arena.TELL_NOTE}",
+            *self._bout_lines(fight.bout),
+            f"{fight.tell}{tactics.SEEN_NOTE if tactics.locks(fight.bout).sees else arena.TELL_NOTE}",
             arena.HOWTO,
         ]
         return "\n\n".join(lines)
@@ -8337,11 +8374,13 @@ class Game:
             return self._arena_finish("落敗", arena.YIELDED)
         if arg not in MOVES:
             return ["（此刻無法這麼做。）"]
-        his = fight.move
-        delta, mine, theirs, beat = arena.exchange(fight, arg, c, arena.rng_for(p.season_number, p.name, fight, "交手"))
-        line = (
-            f"第 {fight.round + 1} 回合：你{arg}，他{his}——{duel_rules.COUNTER_WORDS[beat]}。"
-            f"（氣勢 {delta:+d}，你氣血 -{mine}，他氣血 -{theirs}）"
+        if arg in tactics.locks(fight.bout).no_moves:
+            return [tactics.NO_MOVE.format(move=arg)]
+        out = arena.exchange_full(fight, arg, c, arena.rng_for(p.season_number, p.name, fight, "交手"),
+                                  arena.rng_for(p.season_number, p.name, fight, "戰法"))
+        line = tactics.round_line(
+            f"第 {fight.round + 1} 回合：你{out.mine or '出不了手'}，他{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
+            f"（氣勢 {out.delta:+d}，你氣血 {-out.mine_hp:+d}，他氣血 {-out.foe_hp:+d}）", out.lines,
         )
         return self._arena_after(line)
 
@@ -8361,7 +8400,9 @@ class Game:
             rate, stories = verdict.rate, (verdict.win, verdict.lose)
         s.battle_card = None
         p.guide_done = []
-        won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"))
+        fired: list[str] = []
+        won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"),
+                                         arena.rng_for(p.season_number, p.name, fight, "戰法"), fired)
         story = (stories or ("", ""))[0 if won else 1]
         moment = battle_instance.GambleMoment(name=p.name, faction=self._duel_side(), text=text, story=story, rate=int(rate), won=won)
         old = (battle_instance.GambleMoment(name=p.name, faction="", text=fight.best_text, rate=fight.best_rate, won=fight.best_won)
@@ -8370,7 +8411,7 @@ class Game:
             fight.best_text, fight.best_story, fight.best_rate, fight.best_won, fight.best_set = text, story, int(rate), won, True
         if not story:
             story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
-        line = f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 -{hp}）"
+        line = tactics.round_line(f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
         return self._arena_after(line)
 
     def _arena_after(self, line: str) -> list[str]:
