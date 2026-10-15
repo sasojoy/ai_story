@@ -610,29 +610,25 @@ def _placeholder_problem(line: str) -> str | None:
 
 
 def check_signature_arts(c: Content, need) -> None:
-    """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
-    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
-    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    """本命武學（tianxia/signature.py，企劃者 2026-10-15）：寫了本命特效（SkillDef.signature）的只能是人物的本命武學或本命內功
+    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；本命特效的名字不重複、不撞一般與特別功效的名字，
+    說明不寫數字（數字照掛點產生）；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
     starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
     trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
-    factions = {f.id for f in c.scenario.factions}
     seen: dict[str, str] = {}
     for skill in c.skills.values():
         if skill.traits:
             need(skill.traits[0] == skill.attribute, f"武學 {skill.id}：一般功效的第一個要是自己的屬性 {skill.attribute}")
             need(len(set(skill.traits)) == len(skill.traits), f"武學 {skill.id}：一般功效不能重複")
-        tactic = skill.tactic
-        if tactic is None:
+        sig = skill.signature
+        if sig is None:
             continue
-        need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
+        need(skill.id in starts, f"武學 {skill.id}：本命特效只能寫在人物的本命武學或本命內功上")
         need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
-        first = seen.setdefault(tactic.name, skill.id)
-        need(first == skill.id, f"本命戰法的名字「{tactic.name}」重複（{first}、{skill.id}）")
-        need(tactic.name not in trait_names, f"武學 {skill.id}：本命戰法的名字「{tactic.name}」跟一般或特別功效同名")
-        fields = {name for _, name, _, _ in string.Formatter().parse(tactic.desc) if name}
-        need(fields <= set(tactic.params), f"武學 {skill.id}：本命戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
-        need(all(a in c.characters for a in tactic.allies), f"武學 {skill.id}：本命戰法的 allies 不是人物")
-        need(tactic.foe_faction is None or tactic.foe_faction in factions, f"武學 {skill.id}：本命戰法的 foe_faction 不是劇本的陣營")
+        first = seen.setdefault(sig.name, skill.id)
+        need(first == skill.id, f"本命特效的名字「{sig.name}」重複（{first}、{skill.id}）")
+        need(sig.name not in trait_names, f"武學 {skill.id}：本命特效的名字「{sig.name}」跟一般或特別功效同名")
+        need(not any(ch.isdigit() for ch in sig.desc + sig.name), f"武學 {skill.id}：本命特效的說明不寫數字（數字照掛點產生）")
 
 
 def check_traits(c: Content, need) -> None:

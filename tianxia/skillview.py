@@ -510,8 +510,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
-    # 本命戰法（tactics.py）：身上練著的本命武學各一行；同伴練著自己的本命武學也會發動（連招），一樣寫
-    lines += [signature.card_text(t) for t in (signature.of(content, s) for s in (member.wugong_id, member.neigong_id)) if t]
+    if key == PLAYER:  # 本命特效（signature.py）：身上練著的本命武學各一行；只算本人
+        lines += [signature.card_text(sig) for _, sig in signature.worn(state, content)]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
