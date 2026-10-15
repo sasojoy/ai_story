@@ -68,7 +68,7 @@ def test_the_daily_cap_takes_only_what_fits_and_keeps_the_rest():
     three = next(o for o in game.options() if o.id.startswith("donate:rou_3"))
     assert not three.enabled  # 一個三階 9 點，今天只剩 5 點
     msgs = game.donate("rou_1", 50)
-    assert p.materials["rou_1"] == 45 and economy.DONATE_KEPT.format(n=45) in msgs
+    assert p.materials["rou_1"] == 45 and economy.DONATE_KEPT.format(n=45, name="柳絲綿") in msgs
     assert game.donate("rou_1", 1) == [economy.DONATE_FULL.format(cap=100)]
     game.now = TW_MIDNIGHT + 24 * 3600  # 隔天台灣 00:00
     game.donate("rou_1", 10)
@@ -113,6 +113,47 @@ def test_the_jianghu_page_shows_the_factions_stores():
     assert stock["faction"] == "官軍"
     assert [(row["name"], row["points"]) for row in stock["stock"]] == [("糧秣", 3), ("箭矢", 3), ("甲冑", 0), ("戰馬", 0)]
     assert _game(faction=None).status_data()["armament"] is None
+
+
+def test_the_quartermasters_book_is_a_shop():
+    game = _game(bag={"rou_1": 30, "man_2": 2, "rou_3": 1})
+    assert game.shop_view() is None
+    game.choose("act:donate")
+    view = game.shop_view()
+    assert view["shop"] == "donate" and view["back"] == "donate:back" and view["sign"] == "長社・官軍軍需帳"
+    assert view["line"] in game.content.shop_lines["donate"]["enter"]
+    assert view["room"] == 100 and view["cap"] == 100
+    assert [s["name"] for s in view["stock"]] == ["糧秣", "箭矢", "甲冑", "戰馬"]
+    cells = {cell["id"]: cell for cell in view["cells"]}
+    assert [cell["id"] for cell in view["cells"]] == ["rou_1", "rou_3", "man_2"]  # 剛柔快慢、再照階
+    assert cells["rou_1"]["take"] == 30 and cells["rou_1"]["points"] == 1 and cells["rou_1"]["armament"] == "戰馬"
+    assert cells["rou_3"]["points"] == 9 and cells["rou_3"]["problem"] is None
+    game.choose("donate:back")
+    assert game.shop_view() is None and game.state.player.shop_line == ""
+
+
+def test_several_kinds_at_once_make_one_entry_and_one_push():
+    game = _game(bag={"rou_1": 30, "man_2": 4, "kuai_1": 5})
+    p, w = game.state.player, game.state.world
+    game.choose("act:donate")
+    entries = len(game.state.journal)
+    msgs = game.donate_items([("rou_1", 30), ("man_2", 4), ("kuai_1", 5)])
+    assert p.materials == {}
+    assert w.armaments == {"guan": {"柔": 30, "慢": 12, "快": 5}}
+    assert "貢獻 +47" in msgs and "戰馬 +30" in msgs and "糧秣 +12" in msgs and "箭矢 +5" in msgs
+    assert len(game.state.journal) == entries + 1  # 一則紀錄
+    assert p.shop_line == "donate"
+    assert game.shop_view()["room"] == 53
+
+
+def test_the_book_takes_what_fits_and_says_why_the_rest_stayed():
+    game = _game(bag={"rou_1": 95, "rou_2": 5})
+    game.choose("act:donate")
+    msgs = game.donate_items([("rou_1", 95), ("rou_2", 5)])
+    assert game.state.player.materials == {"rou_2": 4}  # 95＋3＝98 點，第二個二階收不下
+    assert economy.DONATE_KEPT.format(n=4, name="流雲絮") in msgs
+    assert game.donate_items([("rou_2", 1)]) == [economy.DONATE_TOO_BIG.format(points=3, room=2)]
+    assert game.state.player.shop_line == "refused"
 
 
 def test_leaving_closes_the_menu_and_bots_never_press_it():

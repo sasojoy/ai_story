@@ -31,7 +31,7 @@ DONATE_DONE = "你把{items}交給軍需官，記進{faction}的軍備。"
 DONATE_FULL = "今天已捐滿 {cap} 點，明日 00:00 後再捐"
 DONATE_TOO_BIG = "這一樣一個就 {points} 點，今天只剩 {room} 點收得下"
 DONATE_NONE = "你身上沒有這樣東西"
-DONATE_KEPT = "（收不下的 {n} 個留在你身上。）"
+DONATE_KEPT = "（收不下的 {n} 個{name}留在你身上。）"
 DONATE_TITLE = "捐軍備"  # 江湖紀錄的標題、大本營那一顆的名字
 DONATE_OPEN = "你來到軍需官的帳前，看看身上有什麼能交給{faction}。"
 DONATE_LEFT = "今天還能捐 {n} 點"
@@ -129,7 +129,7 @@ def upgrade_outcomes(content: Content, attribute: str, tier: int) -> list[tuple[
     return [(same, share)] + [(m, rest) for m in others]
 
 
-def _share_word(share: float) -> str:
+def share_word(share: float) -> str:
     """幾成（0.5 →「五成」）；不是整成的寫百分比。"""
     tenths = round(share * 10)
     return f"{rules.count_word(tenths)}成" if abs(share * 10 - tenths) < 1e-9 and 1 <= tenths <= 9 else f"{round(share * 100)}%"
@@ -139,7 +139,7 @@ def upgrade_odds(content: Content, attribute: str, tier: int) -> str:
     """鈕上與素材頁那一句：「五成出流雲絮，其餘隨機」；一定照投入的屬性時「出流雲絮」。"""
     outcomes = upgrade_outcomes(content, attribute, tier)
     same, share = outcomes[0]
-    return UPGRADE_SURE.format(name=same.name) if len(outcomes) == 1 else UPGRADE_ODDS.format(share=_share_word(share), name=same.name)
+    return UPGRADE_SURE.format(name=same.name) if len(outcomes) == 1 else UPGRADE_ODDS.format(share=share_word(share), name=same.name)
 
 
 def upgrade_rng(state: GameState, tier: int) -> random.Random:
@@ -261,6 +261,14 @@ def take_donation(state: GameState, content: Content, mid: str, count: int, day:
     p.donated_today = (p.donated_today if p.donate_day == day else 0) + points
     p.donate_day = day
     return points
+
+
+def close_donate(state: GameState) -> None:
+    """收起軍需官那一串與軍需帳上那一句（同 equipment.close_smith）：凡是把 picking_donate 設成 False 的地方都走這裡
+    （離開、讀檔修補、同步時人不在自家大本營、出發）。"""
+    p = state.player
+    p.picking_donate = False
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
 def armament_of(content: Content, attribute: str) -> str | None:

@@ -647,7 +647,7 @@ class Game:
         if p.picking_market and not mounts.market_here(s, c):
             mounts.close_market(p)  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5），馬販那一句一併清掉
         if p.picking_donate and not self._at_own_base():
-            p.picking_donate = False  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
+            economy.close_donate(s)  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
@@ -786,7 +786,7 @@ class Game:
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
             mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         if self.state.player.picking_donate and not self._at_own_base():
-            self.state.player.picking_donate = False  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
+            economy.close_donate(self.state)  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
@@ -1208,61 +1208,84 @@ class Game:
     def _donate_choice(self, arg: str) -> list[str]:
         """軍需官那一串上的選擇：donate:back 收起；donate:<素材>:<個數> 捐（_donate）。選單還開著，可以接著捐。"""
         if arg == "back":
-            self.state.player.picking_donate = False
+            economy.close_donate(self.state)
             return [economy.DONATE_CLOSED]
         mid, _, count = arg.rpartition(":")
-        return self._donate(mid, int(count) if count.isdecimal() else 0)
+        return self._donate([(mid, int(count) if count.isdecimal() else 0)])
 
     def donate(self, mid: str, count: int) -> list[str]:
-        """捐軍備（MAIN_ACTIONS["donate"]，網頁直接送；整季機器人與假人也走它）：人在自家大本營、閒著（或軍需官那一串開著）才收。
-        捐成了寫一則「捐軍備」紀錄；被拒絕的什麼都不動、不寫紀錄。"""
+        """捐一種素材 count 個（MAIN_ACTIONS["donate"]；整季機器人與假人也走它）：見 donate_items。"""
+        return self.donate_items([(str(mid), int(count))])
+
+    def donate_items(self, items: list[tuple[str, int]]) -> list[str]:
+        """捐軍備（MAIN_ACTIONS["donate"]，軍需帳那一頁一次送挑好的幾種）：人在自家大本營、閒著（或軍需官那一串開著）才收。
+        捐成了寫一則「捐軍備」紀錄（幾種一起捐也是一則）；一樣都沒收下的什麼都不動、不寫紀錄。"""
         s = self.state
         if not self.can_donate_here():
             return self._log([equipment.NOT_NOW])
         p = s.player
         here = self.content.locations[p.location].name
         before = (p.donate_day, p.donated_today)
-        msgs = self._donate(str(mid), int(count))
+        msgs = self._donate([(str(mid), int(count)) for mid, count in items])
         if (p.donate_day, p.donated_today) != before:  # 真的收下了
             journal.add_entry(s, Draft(f"{economy.DONATE_TITLE}・{here}").entry(s.world.time, msgs))
             self._save_season()
         return self._log(msgs)
 
-    def _donate(self, mid: str, count: int) -> list[str]:
-        """收下（設計第六節）：照 economy.take_donation 扣背包、記今天的點數（上限切一半：收得下的收，其餘留著）；軍備存量照份量累積
-        （economy.add_armament）；第一季規則開著時記貢獻（push.add_contribution，照份量）；推大本營那一條線（豪強推割據；economy.donate_target）
-        往自己陣營，量是 economy.donate_push（每點 0.05、事件五折），走 push_trend(source="donate")：季長倍數、盡頭阻力、每人每日上限照出陣，
-        推力不另記貢獻。被拒絕回原因、什麼都不動。"""
+    def _donate(self, items: list[tuple[str, int]]) -> list[str]:
+        """收下（設計第六節）：每一種照 economy.take_donation 扣背包、記今天的點數（上限切一半：收得下的收，其餘留著），照給的先後收；
+        軍備存量照份量累積（economy.add_armament）；第一季規則開著時記貢獻（push.add_contribution，照份量）；推大本營那一條線（豪強推割據；
+        economy.donate_target）往自己陣營，量是 economy.donate_push（每點 0.05、事件五折），走 push_trend(source="donate")：季長倍數、
+        盡頭阻力、每人每日上限照出陣，推力不另記貢獻（幾種一起捐也只推一次，照合起來的點數）。一樣都沒收下回第一個原因、什麼都不動。
+        軍需帳上掌櫃那一句照這一下（_shop_after）。"""
         s, c = self.state, self.content
         p, w = s.player, s.world
         day = self._pill_day()
         if not self._at_own_base():
             return [equipment.NOT_NOW]
-        problem = economy.donate_problem(s, c, mid, day)
-        if problem is not None:
+        took: list[tuple[str, int, int]] = []  # (素材, 收下幾個, 幾點)
+        kept: list[str] = []
+        refused: list[str] = []
+        for mid, count in items:
+            problem = economy.donate_problem(s, c, mid, day)
+            if problem is not None:
+                refused.append(problem)
+                continue
+            wanted = max(0, min(count, materials.held(s, mid)))
+            points = economy.take_donation(s, c, mid, wanted, day)
+            if points <= 0:
+                refused.append(economy.DONATE_TOO_BIG.format(points=economy.donate_points(c, mid), room=economy.donate_room(s, c, day)))
+                continue
+            taken = points // economy.donate_points(c, mid)
+            took.append((mid, taken, points))
+            if taken < wanted:
+                kept.append(economy.DONATE_KEPT.format(n=wanted - taken, name=c.materials[mid].name))
+        if not took:
+            problem = refused[0] if refused else economy.DONATE_NONE
+            self._shop_after(problem, "donate")
             return [problem]
-        material = c.materials[mid]
-        wanted = max(0, min(count, materials.held(s, mid)))
-        points = economy.take_donation(s, c, mid, wanted, day)
-        if points <= 0:
-            return [economy.DONATE_TOO_BIG.format(points=economy.donate_points(c, mid), room=economy.donate_room(s, c, day))]
-        taken = points // economy.donate_points(c, mid)
         faction = c.scenario.faction(p.faction)
-        msgs = [economy.DONATE_DONE.format(items=materials.item_text(c, mid, taken), faction=faction.name)]
-        armament = economy.armament_of(c, material.attribute)
-        if armament is not None:
-            economy.add_armament(w, p.faction, material.attribute, points)
-            msgs.append(f"{armament} +{points}")
+        items_text = "、".join(materials.item_text(c, mid, taken) for mid, taken, _ in took)
+        msgs = [economy.DONATE_DONE.format(items=items_text, faction=faction.name)]
+        by_attribute: dict[str, int] = {}
+        for mid, _, points in took:
+            attribute = c.materials[mid].attribute
+            by_attribute[attribute] = by_attribute.get(attribute, 0) + points
+        for attribute, points in by_attribute.items():
+            armament = economy.armament_of(c, attribute)
+            if armament is not None:
+                economy.add_armament(w, p.faction, attribute, points)
+                msgs.append(f"{armament} +{points}")
+        total = sum(points for _, _, points in took)
         if season_one(c, w):  # 晉升只在第一季的規則下有：規則關著的季只記軍備
-            push.add_contribution(p, calendar.point(w.time, c, w).week, points)
-            msgs.append(f"貢獻 +{points}")
+            push.add_contribution(p, calendar.point(w.time, c, w).week, total)
+            msgs.append(f"貢獻 +{total}")
         target = economy.donate_target(c, w, p.faction, p.location)
         if target is not None:
             trend_id, direction = target
-            msgs += self.push_trend(trend_id, economy.donate_push(c, points) * direction, source="donate")
-        if taken < wanted:
-            msgs.append(economy.DONATE_KEPT.format(n=wanted - taken))
-        return msgs
+            msgs += self.push_trend(trend_id, economy.donate_push(c, total) * direction, source="donate")
+        self._shop_after(None, "donate")
+        return msgs + kept
 
     def armament_view(self) -> dict | None:
         """江湖頁的陣營軍備存量（設計第六節第 3 點；status_data["armament"]）：投靠了陣營、捐軍備開著才有。
@@ -2444,7 +2467,8 @@ class Game:
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
         if what == "donate":  # 大本營捐軍備（素材與經濟設計第六節）：打開軍需官那一串（見 _donate_options），不花體力
-            self.state.player.picking_donate = True
+            self.state.player.picking_donate, self.state.player.shop_clue = True, ""
+            self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）
             return [economy.DONATE_OPEN.format(faction=self.content.scenario.faction_name(self.state.player.faction, ""))]
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
@@ -3455,6 +3479,8 @@ class Game:
             return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else None
         if p.picking_market:
             return "market" if mounts.market_here(s, c) else None
+        if p.picking_donate:  # 大本營的軍需帳（素材與經濟 B6，企劃者 2026-10-15 選 B3）
+            return "donate" if self._at_own_base() else None
         return None
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
@@ -3477,6 +3503,8 @@ class Game:
             return None
         if shop == "arena":
             return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
+        if shop == "donate":
+            return shopview.donate_view(s, c, self._pill_day())
         view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
         if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
             view["trade"] = shopview.trade_view(s, c, self._pill_day())
@@ -6467,7 +6495,8 @@ class Game:
         bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
-        s.player.picking_donate = False  # 軍需官那一串也收起來（素材與經濟設計第六節）
+        if s.player.picking_donate:
+            economy.close_donate(s)  # 軍需官那一串也收起來（素材與經濟設計第六節）
         s.player.picking_arena = False  # 擂台也收起來
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
