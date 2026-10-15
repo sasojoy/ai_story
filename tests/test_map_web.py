@@ -268,3 +268,17 @@ def test_fb261_far_view_tallies_are_drawn_over_the_dots():
     out = marks(_game(), k=2.5, far="true")
     tally = re.search(r"官 \d", out).start()
     assert tally > out.rindex("<g data-loc=")
+
+
+def test_fb262_standing_there_still_shows_the_odds():
+    """FB-262：站在那個地點時「打得過嗎」照那裡的對手寫勝算（不寫「—」），出陣・攻那一顆也寫勝算；沒有對手才寫沒有對手。"""
+    game = _game(faction="guan", at="runan_wilds")
+    p = game.map_state()["places"]["runan_wilds"]
+    assert p["sortie"] == "attack" and p["odds"]
+    out = run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    cell = out[out.index("打得過嗎"):out.index("多遠")]
+    assert p["odds"]["word"] in cell and "<b>—</b>" not in cell
+    sortie = out[out.index('data-key="sortie"'):]
+    assert p["odds"]["word"] in sortie[: sortie.index("</button>")]
+    calm = run(_game(faction="guan", at="yingchuan"), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "yingchuan");')
+    assert "沒有對手" in calm[calm.index("打得過嗎"):calm.index("多遠")]
