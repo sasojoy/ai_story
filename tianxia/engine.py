@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
-    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, zh,
 )
@@ -9829,7 +9829,7 @@ class Game:
         else:
             why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
         parts = [c.scenario.faction(p.faction).name if p.faction else "散人"]
-        title = ranks.title(c, s) or ranger.title(c, s)
+        title = ranks.title(c, s) or ranger.title(c, s) or "・".join(renown.titles(s, c))  # 名聲開著時寫兩個稱號
         if title:
             parts.append(title)
         place = c.locations[p.location].name if p.location in c.locations else p.location

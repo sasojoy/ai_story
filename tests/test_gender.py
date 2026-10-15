@@ -82,6 +82,7 @@ def test_content_lines_said_to_her_call_her_a_heroine(real):
 
 
 def test_the_ranger_title_that_names_a_man_has_a_womans_form(real):
+    real.config.renown.titles = False  # 舊的遊俠名號；名聲開著時的女版稱號見 test_renown.test_women_get_the_female_title
     her = _game(real, "甲", sex="女")
     her.state.player.ranger_evil = real.config.ranger.thresholds[0]
     assert ranger.title(real, her.state) == "綠林女傑"

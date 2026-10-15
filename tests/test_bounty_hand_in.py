@@ -109,8 +109,9 @@ def test_titles_how_and_rewards_name_the_attribute_and_the_weapon_kind():
     assert f"一把屬{arms.attribute}的弩（" in bounties.how(content, crossbow)
     assert f"屬{art.attribute}、合成出來的武學或內功" in bounties.how(content, art) and "None" not in bounties.how(content, arms)
     loner = GameState(player=PlayerState(name="測", location="town", stats={}, stamina=0), world=WorldState())
-    assert bounties.reward_text(loner, content, art) == "賞銀 20・經驗 30・心得 20・俠名 +2・素材，偶有兵器"
-    assert bounties.reward_text(loner, content, arms) == "賞銀 20～50（照品質，高階另加）・經驗 30・心得 10・俠名 +2"
+    # 名聲（2026-10-15）：散人的功績照走的路記成善名或惡名（善名惡名一樣多算俠，寫善名）
+    assert bounties.reward_text(loner, content, art) == "賞銀 20・經驗 30・心得 20・善名 +2・素材，偶有兵器"
+    assert bounties.reward_text(loner, content, arms) == "賞銀 20～50（照品質，高階另加）・經驗 30・心得 10・善名 +2"
     loner.player.faction = art.faction
     assert bounties.reward_text(loner, content, art) == "賞銀 20・經驗 30・心得 20・素材，偶有兵器"
     content.config.weapons.enabled = False

@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, gender, library, materials, ranger, roster, team, territory, treasures, weapons
+from . import calendar, equipment, gender, library, materials, ranger, renown, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
@@ -361,7 +361,8 @@ def has_prize(content: Content, b: Bounty) -> bool:
 
 
 def reward_text(state: GameState, content: Content, b: Bounty) -> str:
-    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。俠名只有散人看得到（ranger.active）。
+    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。功績只有散人看得到（ranger.active）；
+    名聲開著時功績記成善名或惡名，照此刻走的路寫（deed_word）。
     求藝多寫心得與「素材，偶有兵器」；求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）。"""
     cfg = content.config.bounties
     deeds = b.deeds if ranger.active(state, content) else 0
@@ -373,12 +374,21 @@ def reward_text(state: GameState, content: Content, b: Bounty) -> str:
         silver = f"{low}～{high}（照品質，高階另加）"  # 待 joy 潤
     else:
         silver = str(_silver(state, content, b))
-    text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") + (f"・俠名 +{deeds}" if deeds else "")
+    text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") \
+        + (f"・{deed_word(state, content)} +{deeds}" if deeds else "")
     if b.kind == "art":
         text += ART_GIFTS if content.config.weapons.enabled else "・素材"
     if has_prize(content, b):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
         text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
     return text
+
+
+def deed_word(state: GameState, content: Content) -> str:
+    """功績記在哪一本帳的字（reward_text）：名聲開著時照此刻走的路寫善名或惡名（名聲設計 2.3），關著寫俠名。"""
+    if not renown.on(content):
+        return "俠名"
+    key = renown.BOOKS[renown.path(state)]
+    return content.config.stat_names.get(key, key)
 
 
 def _share(state: GameState, content: Content, b: Bounty) -> float:
@@ -437,9 +447,7 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     if exp:
         msgs.append(f"經驗 +{exp}")
         msgs += team.add_team_exp(state, content, world, exp)
-    deeds = ranger.add_deeds(state, content, b.deeds)
-    if deeds:
-        msgs.insert(2, f"俠名 +{deeds}")
+    msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
     if b.prize and first:  # 哪一件到這一刻才定（季數＋名號＋懸賞 id 的亂數）；裝備庫滿了寄放
         msgs += treasures.bounty_prize(state, content, world.get_season_number(), b.id, b.prize, issuer(content, b))
     return msgs

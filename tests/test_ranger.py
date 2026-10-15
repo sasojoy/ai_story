@@ -49,7 +49,7 @@ def test_good_and_evil_gains_build_the_name_and_pick_the_path(game):
 def test_deeds_add_on_top(game):
     s, c = game.state, game.content
     _gain(game, good=10)
-    assert ranger.add_deeds(s, c, 5) == 5
+    assert ranger.add_deeds(s, c, 5) == ["俠名 +5"]  # 名聲（2026-10-15）起回寫進紀錄的那一行
     assert ranger.points(s) == 15 and ranger.tier(s, c) == 2 and ranger.title(c, s) == "一方豪俠"
 
 
@@ -68,7 +68,7 @@ def test_joining_a_faction_freezes_it(game):
     _gain(game, good=10)
     assert s.player.ranger_good == 20  # 不再記
     assert ranger.tier(s, c) == 0 and ranger.title(c, s) is None and ranger.status(s, c) is None
-    assert ranger.add_deeds(s, c, 5) == 0
+    assert ranger.add_deeds(s, c, 5) == []
     assert game.status_data()["ranger"] is None
     s.player.faction = None  # 回到散人（現在沒有這條路；萬一有了，帳原封不動）
     assert ranger.tier(s, c) == 2

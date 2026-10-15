@@ -180,7 +180,7 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
             return False
         if cond.ranger_min is not None and ranger.tier(state, content) < cond.ranger_min:
             return False
-        if cond.ranger_path is not None and ranger.path(state) != cond.ranger_path:
+        if cond.ranger_path is not None and ranger.path(state, content) != cond.ranger_path:
             return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
