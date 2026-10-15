@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import armor, calendar, encounter, rounds, styles, traits, treasures, weapons
+from . import armor, calendar, encounter, rounds, signature, styles, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, Squad
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
@@ -94,7 +94,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits)
     return world.get_skill(skill_id)
 
 
@@ -104,9 +104,16 @@ def art_quality(state: GameState, art: MartialArt) -> str:
 
 
 def player_art(state: GameState, content: Content, world: WorldStateStore, skill_id: str | None) -> MartialArt | None:
-    """玩家自己那一份：品質與威力照自己修練到的品質。"""
+    """玩家自己那一份：品質與威力照自己修練到的品質。本命武學再乘 Config.signature_arts.power_scale
+    （signature.scale；只乘玩家自己那一份，同伴練的本命武學照內容）。"""
     art = resolve_art(skill_id, content, world)
-    return None if art is None else with_quality(art, art_quality(state, art))
+    if art is None:
+        return None
+    mine = with_quality(art, art_quality(state, art))
+    k = signature.scale(content, art.id)
+    if k == 1.0:
+        return mine
+    return mine.model_copy(update={"base_power": mine.base_power * k, "top_power": mine.top_power * k})
 
 
 def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
@@ -689,7 +696,10 @@ def heal_fraction(state: GameState, content: Content, world: WorldStateStore, fr
 def team_conditions(state: GameState, content: Content, world: WorldStateStore) -> list[float]:
     """本隊每個人的氣血狀態係數，順序跟 team_participants 一致（氣血設計 §1.1：帶傷出手較弱）。
     本人身上帶【厚】時，見底的下限高一點（武學與成長設計 13.2）；同伴照舊。"""
-    floor = encounter.CONDITION_FLOOR + traits.amount(content, traits.loadout(state, content, world), "condition_floor")
+    floor = (
+        encounter.CONDITION_FLOOR + traits.amount(content, traits.loadout(state, content, world), "condition_floor")
+        + signature.amount(state, content, "condition_floor")  # 本命特效（signature.py）
+    )
     return [
         encounter.condition_of(
             *member_neili(content, member, con_of(state, content, world, key)),
@@ -699,7 +709,7 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
     ]
 
 
-def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
+def trait_mods(content: Content, lo: traits.Loadout, state: GameState | None = None) -> encounter.Mods:
     """本人身上的功效換成遭遇戰的數字（武學與成長設計 13.2、13.4）。沒有功效的人是空的 Mods（單次判定跟以前一模一樣）。
 
     特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，content.check_traits 擋共用）。名將本命絕學（13.5）的獨特
@@ -710,12 +720,17 @@ def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
     - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
       _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
       `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
-    - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
+    - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。
+    本命特效（signature.py）不走 specials：給了 state 就把本人身上兩門的 difficulty_cut、big_win_cut、luck_narrow 加上去。"""
     borrow = lo.specials.get("power_from_difficulty")
+
+    def sig(hook: str) -> float:
+        return signature.amount(state, content, hook) if state is not None else 0.0
+
     return encounter.Mods(
-        luck_scale=1 - traits.amount(content, lo, "luck_narrow") + traits.amount(content, lo, "luck_widen"),
-        big_win_cut=traits.amount(content, lo, "big_win"),
-        difficulty_cut=traits.amount(content, lo, "difficulty_cut"),
+        luck_scale=1 - traits.amount(content, lo, "luck_narrow") + traits.amount(content, lo, "luck_widen") - sig("luck_narrow"),
+        big_win_cut=traits.amount(content, lo, "big_win") + sig("big_win_cut"),
+        difficulty_cut=traits.amount(content, lo, "difficulty_cut") + sig("difficulty_cut"),
         power_add=borrow.amount if borrow is not None else 0.0,
         double_luck="double_luck" in lo.specials,
     )
@@ -785,10 +800,15 @@ def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill
 def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
     """跟陣容一一對應（本人、出戰的同伴、部下），一個都不能少——少一個 encounter.team_power 就會報錯，
     而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。"""
+    me, mates = signature.amount(state, content, "self_power"), signature.amount(state, content, "mate_power")
+
+    def lift(boost: encounter.Boost, extra: float) -> encounter.Boost:  # 本命特效（signature.py）乘在整個人的乘數上
+        return boost if extra == 0 else boost.model_copy(update={"factor": boost.factor * (1 + extra)})
+
     return (
-        [player_boost(state, content, world)]
-        + [mate_boost(state, content, world, key) for key in state.player.team]
-        + [follower_boost(content, follower, drill_of(state, key)) for key, follower in follower_rows(state, content)]
+        [lift(player_boost(state, content, world), me)]
+        + [lift(mate_boost(state, content, world, key), mates) for key in state.player.team]
+        + [lift(follower_boost(content, follower, drill_of(state, key)), mates) for key, follower in follower_rows(state, content)]
     )
 
 
@@ -796,13 +816,18 @@ def dodge_chance(state: GameState, content: Content) -> float:
     """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
     金角 +3 個百分點（玉璽碎片設計 7.1）。"""
     agi = float(state.player.stats.get("agi", BASE_STAT))
-    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point + treasures.amount(state, content, "dodge")))
+    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point + treasures.amount(state, content, "dodge")
+                        + signature.amount(state, content, "dodge")))  # 本命特效（signature.py）
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
     """本人身上那件防具這一場少扣幾成氣血（裝備四欄設計 4.1、4.2）：照身上那門內功（自己那一份）算對上內功的 ±，開關關著、沒穿是 0。
-    take_encounter_toll、toll_saved 與截殺輸的一方（Game._raid_spoils）都讀它；armor 不能 import team，內功在這裡解好再傳進去。"""
-    return armor.cut(state.player.armor, player_art(state, content, world, state.player.member.neigong_id), content)
+    take_encounter_toll、toll_saved 與截殺輸的一方（Game._raid_spoils）都讀它；armor 不能 import team，內功在這裡解好再傳進去。
+    本命特效的 toll_cut（signature.py）跟防具算在同一邊（不是功效，化勁的對照組照樣留著它）。"""
+    return (
+        armor.cut(state.player.armor, player_art(state, content, world, state.player.member.neigong_id), content)
+        + signature.amount(state, content, "toll_cut")
+    )
 
 
 def take_encounter_toll(
@@ -835,7 +860,7 @@ def take_encounter_toll(
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
-                injury=0.0 if "no_injury" in lo.specials else 1.0,  # 不動：不受內傷（13.4）
+                injury=0.0 if "no_injury" in lo.specials else _injury_left(state, content),  # 不動：不受內傷（13.4）
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
@@ -874,10 +899,16 @@ def toll_saved(
             content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury,
         )
 
-    real_lost, real_hurt = toll(total, 0.0 if still else 1.0)
-    saved = round(toll(worn, 0.0 if still else 1.0)[0]) - round(real_lost) if cut > 0 else 0
-    spared = round(toll(total, 1.0)[1]) - round(real_hurt) if still else 0
+    left = _injury_left(state, content)
+    real_lost, real_hurt = toll(total, 0.0 if still else left)
+    saved = round(toll(worn, 0.0 if still else left)[0]) - round(real_lost) if cut > 0 else 0
+    spared = round(toll(total, left)[1]) - round(real_hurt) if still else 0
     return max(0, saved), max(0, spared)
+
+
+def _injury_left(state: GameState, content: Content) -> float:
+    """本命特效 injury_cut（signature.py）：本人扣的氣血變成內傷的剩幾成，夾在 0～1。"""
+    return min(1.0, max(0.0, 1 - signature.amount(state, content, "injury_cut")))
 
 
 def _apply_toll(
@@ -911,7 +942,7 @@ def fight(
     power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     lo = traits.loadout(state, content, world)
     result = encounter.resolve_encounter(
-        power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo),
+        power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=trait_mods(content, lo, state),
     )
     if tier is not None:
         return result.model_copy(update={"tier": tier})
@@ -951,7 +982,7 @@ def estimate(
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
-    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)))
+    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world), state))
 
 
 def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:

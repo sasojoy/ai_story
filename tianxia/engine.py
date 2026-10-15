@@ -20,7 +20,7 @@ from . import (
     annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
-    shopview, signature_arms, skillview, smithing,
+    shopview, signature, signature_arms, skillview, smithing,
     social, sortie, styles, team, territory, timetable, traits, treasures, weapons, zh,
 )
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -686,6 +686,8 @@ class Game:
             if team.resolve_art(a, c, self.world) is not None and a not in equipped and not (a in seen or seen.add(a))
         ]
         p.art_levels = {k: v for k, v in p.art_levels.items() if team.resolve_art(k, c, self.world) is not None}
+        # 本命武學學到時直接第七成（企劃者 2026-10-15）：這一版之前學到的舊角色讀檔補上，已經練得更高的不動
+        signature.lift_levels(s, c, signature.learned(s, c))
         p.materials = {k: v for k, v in p.materials.items() if k in c.materials and v > 0}
         # 武學與成長（設計第三、四節）：意境去重、去掉找不到的；品質、熟練度只留還擁有的武學；
         # 等著取名的那一門要真的是自己第一個練成的（換季、熔掉、內容改版後都可能對不上）
@@ -2420,6 +2422,9 @@ class Game:
         light = traits.loadout(self.state, self.content, self.world).specials.get("train_stamina")
         if light is not None:
             costs["train"] = max(0, costs["train"] - int(light.amount))
+        swift = int(signature.amount(self.state, self.content, "train_stamina"))  # 本命特效（signature.py）
+        if swift:
+            costs["train"] = max(0, costs["train"] - swift)
         return costs
 
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
@@ -5921,6 +5926,12 @@ class Game:
             if heal:
                 healed.append("heal_after")
                 gained.append(("heal_after", _points(heal)))
+        # 本命特效（signature.py）：打贏回（win_heal）＋不論勝負回（heal_after）合成一次；不算功效的演出句（healed 不記）
+        mend = signature.amount(self.state, self.content, "heal_after") + (
+            signature.amount(self.state, self.content, "win_heal") if tier in team.WIN_TIERS else 0.0
+        )
+        if mend > 0:
+            toll += team.heal_fraction(self.state, self.content, self.world, mend)
         return toll, hp_lost, TollFacts(
             wounded=before < cap, low_hp=before <= LOW_HP_RATIO * cap, healed=tuple(healed),
             saved=saved, spared=spared, gained=tuple(gained),
@@ -6302,15 +6313,17 @@ class Game:
     def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
         p = self.state.player
         msgs = []
-        if squad.reward_silver:
-            p.stats["silver"] += squad.reward_silver
-            record.silver = squad.reward_silver
-            msgs.append(f"銀兩 +{squad.reward_silver}")
+        sig = functools.partial(signature.amount, self.state, self.content)  # 本命特效（signature.py）：打贏的銀兩、心得、經驗多幾成
+        silver = round(squad.reward_silver * (1 + sig("win_silver_pct")))
+        if silver:
+            p.stats["silver"] += silver
+            record.silver = silver
+            msgs.append(f"銀兩 +{silver}")
         lo = traits.loadout(self.state, self.content, self.world)
         streak = traits.amount(self.content, lo, "win_reward")  # 乘勝（13.2）：心得與經驗一起多拿
         # 寶物「打贏的心得／經驗」跟乘勝相加、不疊乘（裝備四欄 6.2）；兩種數字不同，拆成兩個倍數
-        more_xinde = 1 + streak + treasures.amount(self.state, self.content, "win_xinde_pct")
-        more_exp = 1 + streak + treasures.amount(self.state, self.content, "win_exp_pct")
+        more_xinde = 1 + streak + treasures.amount(self.state, self.content, "win_xinde_pct") + sig("win_xinde_pct")
+        more_exp = 1 + streak + treasures.amount(self.state, self.content, "win_exp_pct") + sig("win_exp_pct")
         insight = lo.specials.get("win_xinde")  # 悟招（13.4）：再多固定的心得
         xinde = round(squad.reward_xinde * more_xinde) + (int(insight.amount) if insight is not None else 0)
         if xinde:

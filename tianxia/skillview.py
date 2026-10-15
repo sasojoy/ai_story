@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, signature, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -510,6 +510,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
+    if key == PLAYER:  # 本命特效（signature.py）：身上練著的本命武學各一行；只算本人
+        lines += [signature.card_text(sig) for _, sig in signature.worn(state, content)]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行

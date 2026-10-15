@@ -609,6 +609,28 @@ def _placeholder_problem(line: str) -> str | None:
     return None
 
 
+def check_signature_arts(c: Content, need) -> None:
+    """本命武學（tianxia/signature.py，企劃者 2026-10-15）：寫了本命特效（SkillDef.signature）的只能是人物的本命武學或本命內功
+    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；本命特效的名字不重複、不撞一般與特別功效的名字，
+    說明不寫數字（數字照掛點產生）；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
+    trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
+    seen: dict[str, str] = {}
+    for skill in c.skills.values():
+        if skill.traits:
+            need(skill.traits[0] == skill.attribute, f"武學 {skill.id}：一般功效的第一個要是自己的屬性 {skill.attribute}")
+            need(len(set(skill.traits)) == len(skill.traits), f"武學 {skill.id}：一般功效不能重複")
+        sig = skill.signature
+        if sig is None:
+            continue
+        need(skill.id in starts, f"武學 {skill.id}：本命特效只能寫在人物的本命武學或本命內功上")
+        need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
+        first = seen.setdefault(sig.name, skill.id)
+        need(first == skill.id, f"本命特效的名字「{sig.name}」重複（{first}、{skill.id}）")
+        need(sig.name not in trait_names, f"武學 {skill.id}：本命特效的名字「{sig.name}」跟一般或特別功效同名")
+        need(not any(ch.isdigit() for ch in sig.desc + sig.name), f"武學 {skill.id}：本命特效的說明不寫數字（數字照掛點產生）")
+
+
 def check_traits(c: Content, need) -> None:
     """武學的功效（content/traits.json、trait_lines.json，武學與成長設計 13.2、13.4、13.5）：一般功效一個屬性一個、八個都要有，
     名字不重複；特別功效的 id 不重複；掛點不重複（Loadout 與 traits.amount 都是照掛點找，兩個掛同一點會悄悄只剩一個，
@@ -1796,6 +1818,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_traits(c, need)
+    check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(
