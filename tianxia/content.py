@@ -557,9 +557,12 @@ def check_shop_lines(c: Content, need) -> None:
         "market": c.config.mounts.enabled,
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
     }
+    switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade}  # 素材與經濟：收購、升階關著時不必有那一句
     for shop, on in opened.items():
         if c.config.shop_screens and on:
             for key in SITUATIONS[shop]:
+                if shop == "smith" and not switched.get(key, True):
+                    continue
                 need(bool(c.shop_lines.get(shop, {}).get(key)), f"shop_lines.{shop} 缺少情況 {key}（這間店開著時每一種情況至少一句）")
 
 

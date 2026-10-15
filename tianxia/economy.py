@@ -20,16 +20,38 @@ UPGRADE_DAY_FULL = "三階一天只煉得出一個，明日 00:00 後再來"
 UPGRADE_NO_WAY = "這一階煉不出來"
 UPGRADE_NO_KIND = "沒有這樣的料"
 UPGRADE_SHORT = "{name}不夠：要 {need} 個，手上 {have} 個"
-SILVER_SHORT = "銀兩不夠：要 {cost} 兩"
+SILVER_SHORT = "還差 {short} 兩"  # 同 weapons／smithing 的寫法：店面掌櫃那一句照「還差」認錢不夠（shopview.problem_key）
 DONATE_DONE = "你把{items}交給軍需官，記進{faction}的軍備。"
 DONATE_FULL = "今天已捐滿 {cap} 點，明日 00:00 後再捐"
 DONATE_TOO_BIG = "這一樣一個就 {points} 點，今天只剩 {room} 點收得下"
 DONATE_NONE = "你身上沒有這樣東西"
 DONATE_KEPT = "（收不下的 {n} 個留在你身上。）"
+# 鐵匠鋪素材頁的鈕（店面關著、整季機器人與假人走的那一串選單；待 joy 潤）
+SELL_LABEL = "賣【{name}】一個（{price} 兩・手上 {have}）"
+UPGRADE_LABEL = "升【{name}】×1（用 {low}×{need}・{cost} 兩{left}）"
+UPGRADE_LEFT = "・今天還能換 {n} 個"
+UPGRADE_REFUSED = "升【{name}】×1（{problem}）"
+
+
+ATTRIBUTE_ORDER = ("剛", "柔", "快", "慢")  # 列升階的順序（同 shopview.ATTRIBUTE_ROWS）；其餘屬性排在後面
 
 
 def _material(content: Content, mid: str) -> Material | None:
     return content.materials.get(mid)
+
+
+def upgradable(content: Content) -> list[tuple[str, int]]:
+    """換得出來的（屬性, 換到幾階）：Config.economy.upgrade_need 的每一階、這一階與低一階都有這個屬性的素材（正式內容剛柔快慢 × 二、三階）。
+    照屬性（ATTRIBUTE_ORDER）、再照階排。"""
+    attrs = sorted({m.attribute for m in content.materials.values()},
+                   key=lambda a: (ATTRIBUTE_ORDER.index(a), "") if a in ATTRIBUTE_ORDER else (len(ATTRIBUTE_ORDER), a))
+    tiers = sorted(t for t in content.config.economy.upgrade_need if t > 1)
+    return [(a, t) for a in attrs for t in tiers if _of(content, a, t) is not None and _of(content, a, t - 1) is not None]
+
+
+def upgrade_pair(content: Content, attribute: str, tier: int) -> tuple[Material, Material]:
+    """（換出來的那一種, 拿去換的那一種）；upgradable 列出來的才叫。"""
+    return _of(content, attribute, tier), _of(content, attribute, tier - 1)
 
 
 def _of(content: Content, attribute: str, tier: int) -> Material | None:
@@ -106,9 +128,9 @@ def upgrade_problem(state: GameState, content: Content, attribute: str, tier: in
     have = materials.held(state, low.id)
     if have < need:
         return UPGRADE_SHORT.format(name=low.name, need=need, have=have)
-    cost = upgrade_cost(state, content, tier)
-    if state.player.stats.get("silver", 0) < cost:
-        return SILVER_SHORT.format(cost=cost)
+    short = upgrade_cost(state, content, tier) - state.player.stats.get("silver", 0)
+    if short > 0:
+        return SILVER_SHORT.format(short=short)
     return None
 
 

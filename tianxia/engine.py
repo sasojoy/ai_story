@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, encounter, enlist, equipment, event_llm, explore_modes,
+    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature_arms, skillview, smithing,
@@ -3037,6 +3037,8 @@ class Game:
         if s.player.smith_draft is not None:
             neigong = team.player_art(s, c, self.world, s.player.member.neigong_id)  # 防具的單子標跟內功同屬性的輔料
             return smithing.draft_options(s, c, self.world, art, neigong)  # 打造兵器…／打造防具…挑到一半：只畫這一步
+        if s.player.smith_page == equipment.MATERIAL_PAGE and self._trade_on():
+            return self._material_options()  # 素材頁：收購、升階（素材與經濟設計第四、五節）
         if equipment.page(s.player, c) == "armor":
             return self._armor_options()  # 防具頁（裝備四欄 4.6）
         opts = []
@@ -3129,10 +3131,41 @@ class Game:
         return opts + self._dismantle_options("armor") + self._smith_tail()
 
     def _smith_tail(self) -> list[Option]:
-        """鐵匠鋪每一頁最後兩顆：另一欄也開著時一顆切頁（裝備四欄設計 4.6），再來永遠按得下去的「離開」。"""
+        """鐵匠鋪每一頁最後幾顆：收購或升階開著時一顆進素材頁（素材與經濟設計第四、五節），另一欄也開著時一顆切頁（裝備四欄設計 4.6），
+        再來永遠按得下去的「離開」。"""
         other = equipment.other_page(self.state.player, self.content)
+        door = [Option(id=f"smith:page:{equipment.MATERIAL_PAGE}", label=equipment.MATERIAL_LABEL)] if self._trade_on() else []
         tail = [Option(id=f"smith:page:{other}", label=equipment.PAGE_LABELS[other])] if other is not None else []
-        return tail + [Option(id="smith:back", label="離開鐵匠鋪")]
+        return door + tail + [Option(id="smith:back", label="離開鐵匠鋪")]
+
+    def _trade_on(self) -> bool:
+        """鐵匠鋪的素材頁開不開（Config.economy 的收購或升階有一樣開著）。"""
+        econ = self.content.config.economy
+        return econ.sell or econ.upgrade
+
+    def _material_options(self) -> list[Option]:
+        """鐵匠鋪的素材頁（素材與經濟設計第四、五節；店面關著時、整季機器人與假人看的那一串）：背包裡收得了的每一種一顆「賣一個」，
+        手上有低一階料的每個（屬性, 階）一顆「升一個」（三階寫今天還能換幾個；按不下去的灰掉寫為什麼），回兵器／防具頁，最後「離開」。
+        字與按得下去與否都照店面的 shopview.trade_view（同一份規則）。都不花體力。"""
+        s, c = self.state, self.content
+        trade = shopview.trade_view(s, c, self._pill_day()) or {"sell": [], "upgrade": []}
+        opts = [
+            Option(id=f"smith:sell:{row['id']}", enabled=row["problem"] is None,
+                   label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]))
+            for row in trade["sell"]
+        ]
+        for row in trade["upgrade"]:
+            if row["have"] <= 0:
+                continue  # 選單只列手上有料的（店面四個屬性都列）
+            option_id = f"smith:upgrade:{row['attribute']}:{row['tier']}"
+            if row["problem"] is not None:
+                opts.append(Option(id=option_id, enabled=False, label=economy.UPGRADE_REFUSED.format(name=row["name"], problem=row["problem"])))
+                continue
+            left = economy.UPGRADE_LEFT.format(n=row["left"]) if row["left"] is not None else ""
+            opts.append(Option(id=option_id, label=economy.UPGRADE_LABEL.format(
+                name=row["name"], low=row["from"], need=row["need"], cost=row["cost"], left=left)))
+        pages = [Option(id=f"smith:page:{slot}", label=equipment.PAGE_LABELS[slot]) for slot in equipment.SMITH_PAGES if equipment.on(c, slot)]
+        return opts + pages + [Option(id="smith:back", label="離開鐵匠鋪")]
 
     def _market_options(self) -> list[Option]:
         """馬市的第二層選單（裝備四欄設計 5.5）：一顆「買」（駑馬下品，寫省幾成體力與價錢；買不了的灰掉寫為什麼），
@@ -3179,6 +3212,8 @@ class Game:
         p.shop_clue = ""
         silver, mats = p.stats.get("silver", 0), sum(p.materials.values())
         msgs = self._smith_act(arg)
+        if arg.partition(":")[0] == "sell":
+            return msgs  # 收購是鐵匠付你錢：沒花銀兩，不擲鐵匠順口（素材與經濟計畫 B3）
         if p.stats.get("silver", 0) < silver or sum(p.materials.values()) < mats:
             clue = self._smith_clue(paid=p.stats.get("silver", 0) < silver)
             if clue:
@@ -3195,9 +3230,19 @@ class Game:
             equipment.close_smith(s.player)
             return [f"你離開了{weapons.SMITH}。"]
         if verb == "page":  # 切到另一頁（裝備四欄 4.6）：只是換一頁，不回訊息（choose 照它不寫紀錄）
-            if rest == equipment.other_page(s.player, c):
+            from_material = s.player.smith_page == equipment.MATERIAL_PAGE
+            if (
+                rest == equipment.other_page(s.player, c)
+                or (rest == equipment.MATERIAL_PAGE and self._trade_on())  # 進素材頁（素材與經濟設計第四、五節）
+                or (from_material and rest in equipment.SMITH_PAGES and equipment.on(c, rest))  # 從素材頁回兵器或防具頁
+            ):
                 s.player.smith_page = rest
             return []
+        if verb == "sell":  # 素材頁：賣一個（第五節）
+            return self._trade_sell(rest, 1)
+        if verb == "upgrade":  # 素材頁：升一個（第四節），rest 是「屬性:階」
+            attribute, _, tier = rest.partition(":")
+            return self._trade_upgrade(attribute, int(tier) if tier.isdecimal() else 0)
         if verb == smithing.GO_VERB:
             kind, main, aux = smithing.parse_go(f"smith:{arg}")
             return self._smith_forge_once(kind, main, aux)[1]
@@ -3288,8 +3333,10 @@ class Game:
             return None
         if shop == "arena":
             return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
-        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop]
-        return view(s, c, self.world)
+        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
+        if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
+            view["trade"] = shopview.trade_view(s, c, self._pill_day())
+        return view
 
     def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
@@ -3318,6 +3365,62 @@ class Game:
             msgs = msgs + clue
         journal.add_entry(s, Draft(smithing.FORGE_TITLE).entry(s.world.time, msgs))
         self.smith_result = shopview.forged_card(s, c, self.world, item, report)
+        self._save_season()
+        return self._log(msgs)
+
+    def _trade_sell(self, mid: str, count: int) -> list[str]:
+        """鐵匠鋪收購（素材與經濟設計第五節；選單的 smith:sell 與店面的 smith_sell 共用）：economy.sell，掌櫃那一句照這一下的擋法。"""
+        s, c = self.state, self.content
+        if not c.config.economy.sell:
+            return [equipment.NOT_NOW]
+        self._shop_after(economy.sell_problem(s, c, mid, count), "sell")
+        return economy.sell(s, c, mid, count)
+
+    def _trade_upgrade(self, attribute: str, tier: int) -> list[str]:
+        """鐵匠鋪升階（素材與經濟設計第四節；選單的 smith:upgrade 與店面的 smith_upgrade 共用）：economy.upgrade，「一天」照回體丹的換日。"""
+        s, c = self.state, self.content
+        if not c.config.economy.upgrade:
+            return [equipment.NOT_NOW]
+        day = self._pill_day()
+        self._shop_after(economy.upgrade_problem(s, c, attribute, tier, day), "upgrade")
+        return economy.upgrade(s, c, attribute, tier, day)
+
+    def _trade_open(self, switch: bool) -> bool:
+        """店面的素材買賣按得下去嗎：這一樣的開關開著、鐵匠鋪開著而且那一串是眼前的選單（同 smith_forge）。"""
+        s, c = self.state, self.content
+        return switch and s.player.picking_smith and equipment.smith_open(s, c) and self._shop_live()
+
+    def smith_sell(self, mid: str, count: int = 1) -> list[str]:
+        """店面的收購（素材與經濟設計第五節；MAIN_ACTIONS["smith_sell"]）：一次賣 count 個。賣成了寫一則「鐵匠鋪」紀錄；
+        被拒絕的不動背包銀兩、不寫紀錄，掌櫃那一句換成原因。收購是鐵匠付錢，不擲鐵匠順口。"""
+        s, c = self.state, self.content
+        if not self._trade_open(c.config.economy.sell):
+            return self._log([equipment.NOT_NOW])
+        s.player.shop_clue = ""
+        problem = economy.sell_problem(s, c, str(mid), count)
+        msgs = self._trade_sell(str(mid), count)
+        if problem is None:
+            journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
+            self._save_season()
+        return self._log(msgs)
+
+    def smith_upgrade(self, attribute: str, tier: int) -> list[str]:
+        """店面的升階（素材與經濟設計第四節；MAIN_ACTIONS["smith_upgrade"]）：換一個。換成了寫一則「鐵匠鋪」紀錄、照舊擲鐵匠順口
+        （花了銀兩與素材，同 _smith）；被拒絕的什麼都不動、不寫紀錄。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not self._trade_open(c.config.economy.upgrade):
+            return self._log([equipment.NOT_NOW])
+        p.shop_clue = ""
+        problem = economy.upgrade_problem(s, c, str(attribute), int(tier), self._pill_day())
+        msgs = self._trade_upgrade(str(attribute), int(tier))
+        if problem is not None:
+            return self._log(msgs)
+        clue = self._smith_clue(paid=True)
+        if clue:
+            p.shop_clue = clue[0]
+        msgs = msgs + clue
+        journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
         self._save_season()
         return self._log(msgs)
 

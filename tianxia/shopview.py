@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -20,6 +20,7 @@ from .world_state import WorldStateStore
 SMITH_SITUATIONS = (
     "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
     "short_silver", "rack_full", "refused",
+    "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
@@ -318,6 +319,37 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "pending": forge_secrets.unnamed_originals(state, world),
         "forge": _forge(state, content, world, page, art),
     }
+
+
+def trade_view(state: GameState, content: Content, day: int) -> dict | None:
+    """鐵匠鋪的素材買賣（素材與經濟設計第四、五節；Game.shop_view 接在 smith_view 後面的 "trade"）：收購、升階都關著是 None。
+    sell：背包裡收得了的素材（一階、二階），每一種一列（id、名字、階、屬性、手上幾個、一個幾兩、賣一個不行的原因）；收購關著是空的。
+    upgrade：每一個換得出來的（屬性, 階）一列（換出來的與拿去換的、要幾個、手上幾個、工錢〔套地盤福利〕、今天還能換幾個〔不限是 None〕、
+    不行的原因〔economy.upgrade_problem〕）；升階關著是空的。按鈕送 MAIN_ACTIONS 的 smith_sell／smith_upgrade。day 是回體丹的換日。"""
+    econ = content.config.economy
+    if not (econ.sell or econ.upgrade):
+        return None
+    sell = []
+    if econ.sell:
+        for material, have in sorted(
+            ((content.materials[mid], n) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials),
+            key=lambda pair: (pair[0].tier, attribute_rank(pair[0].attribute), pair[0].id),
+        ):
+            price = economy.sell_price(content, material.tier)
+            if price is not None:
+                sell.append({"id": material.id, "name": material.name, "tier": material.tier, "attribute": material.attribute,
+                             "have": have, "price": price, "problem": economy.sell_problem(state, content, material.id, 1)})
+    upgrade = []
+    if econ.upgrade:
+        for attribute, tier in economy.upgradable(content):
+            high, low = economy.upgrade_pair(content, attribute, tier)
+            upgrade.append({
+                "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
+                "need": econ.upgrade_need[tier], "have": state.player.materials.get(low.id, 0),
+                "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "problem": economy.upgrade_problem(state, content, attribute, tier, day),
+            })
+    return {"sell": sell, "upgrade": upgrade}
 
 
 # ── 出爐卡（2.3）──
