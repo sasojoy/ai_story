@@ -43,6 +43,20 @@ def bases(content: Content) -> dict[str, str]:
     return {loc_id: f.id for f in content.scenario.factions for loc_id in f.join_at}
 
 
+def held_bases(world: WorldState, content: Content) -> dict[str, str]:
+    """算得上誰的地盤的大本營（控制方、各佔幾處讀它）：豪強分屬兩軍的季，豪強的投靠點不算哪一方的地盤（不在戰線上、豪強依附
+    哪一軍都有；FB-274：以前算成豪強佔著，輿圖大區那一行多「豪 1」、三色條多一段綠的）。其他季同 bases。"""
+    out = bases(content)
+    if rules.haoqiang_allied(content, world):
+        out = {loc_id: side for loc_id, side in out.items() if not content.scenario.faction(side).allies}
+    return out
+
+
+def unheld(world: WorldState, content: Content, loc_id: str) -> bool:
+    """這個地點是不算誰的地盤的大本營（held_bases 拿掉的那幾處）：存檔裡修好之前記下的控制方、每週的快照都照它略過。"""
+    return loc_id in bases(content) and loc_id not in held_bases(world, content)
+
+
 def sides(content: Content, line: str) -> tuple[str | None, str | None]:
     """這條戰線兩頭是誰：（目標往 0 推的陣營, 目標往 100 推的陣營）；照劇本陣營的 goals（內容寫的戰線 id，不換鍵）。"""
     low = next((f.id for f in content.scenario.factions if f.goals.get(line, 0) < 0), None)
@@ -107,7 +121,7 @@ def _recompute(world: WorldState, content: Content, t: TerritoryState) -> dict[s
 
 
 def _control_now(world: WorldState, content: Content, t: TerritoryState) -> dict[str, str]:
-    control = dict(bases(content))
+    control = dict(held_bases(world, content))
     for loc_id, side in content.scenario.territory.fixed.items():
         control[loc_id] = t.control.get(loc_id, side)
     for loc_id, side in _recompute(world, content, t).items():
@@ -201,7 +215,7 @@ def week_at(world: WorldState, week: int) -> TerritoryWeek | None:
 
 def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
     """這個地點此刻歸誰；不是戰線地點也不是大本營、或開關關著是 None。這一季還沒算過時照規則現算（不存，Review Focus 4）。"""
-    if not on(content):
+    if not on(content) or unheld(world, content, loc_id):
         return None
     t = world.territory
     if t is not None and loc_id in t.control:
@@ -227,11 +241,9 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
     """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
-    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（不在戰線上、豪強依附哪一軍都有），照原價。"""
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。"""
     side = controller(world, content, loc_id)
     if side is None or faction is None:
-        return 1.0
-    if rules.haoqiang_allied(content, world) and content.scenario.faction(side).allies:
         return 1.0
     cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price

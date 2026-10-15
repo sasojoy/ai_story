@@ -89,3 +89,63 @@ def test_old_rules_gentry_still_enlists_without_a_side():
     definition = _showdown(game)
     assert game._free_agent(definition)
     assert [o.id for o in game.options() if o.id.startswith("battle:enlist:")]
+
+
+# ── FB-274：豪強的投靠點不算哪一方的地盤 ─────────────────────────────
+
+GENTRY_BASES = ("zhuo_militia_hall", "cao_manor", "haozu_fort")
+
+
+def test_gentry_bases_have_no_controller():
+    from tianxia import territory
+
+    wk = _wk()
+    game = _game(wk, faction="guan")
+    game.advance(60)  # 推一步：地盤照規則算一次
+    w = game.state.world
+    assert all(territory.controller(w, wk, loc) is None for loc in GENTRY_BASES)
+    assert "haoqiang" not in set(w.territory.control.values())
+    assert territory.controller(w, wk, "changshe") == "guan"  # 兩軍的大本營照舊
+
+
+def test_map_counts_only_the_two_sides():
+    game = _game(_wk(), faction="guan")
+    game.advance(60)
+    st = game.map_state()
+    controls = {info["control"] for info in st["places"].values()}
+    assert "haoqiang" not in controls
+    assert all(st["places"][loc]["control"] is None and st["places"][loc]["kind"] == "base" for loc in GENTRY_BASES)
+    assert "haoqiang" not in set((st["start"] or {}).values())
+    assert all("haoqiang" not in set((week["control"] or {}).values()) for week in st["weeks"])
+
+
+def test_snapshots_from_before_the_fix_drop_the_gentry_bases():
+    """上線那一刻正在跑的季：開季與每週的快照裡記著豪強佔著自己的投靠點（修好之前算的），畫面上照樣只算兩方。"""
+    game = _game(_wk(), faction="guan")
+    game.advance(60)
+    t = game.state.world.territory
+    for snap in t.weeks.values():
+        snap.control.update({loc: "haoqiang" for loc in GENTRY_BASES})
+    st = game.map_state()
+    assert "haoqiang" not in set((st["start"] or {}).values())
+    assert all("haoqiang" not in set((week["control"] or {}).values()) for week in st["weeks"])
+
+
+def test_stale_season_control_reads_no_gentry_base():
+    from tianxia import territory
+
+    game = _game(_wk(), faction="guan")
+    game.advance(60)
+    w = game.state.world
+    w.territory.control["cao_manor"] = "haoqiang"  # 修好之前存下來的那一份
+    assert territory.controller(w, game.content, "cao_manor") is None
+
+
+def test_old_rules_gentry_bases_stay_theirs():
+    from tianxia import territory
+
+    off = _old_rules()
+    game = _game(off, name="乙", faction="guan")
+    game.advance(60)
+    w = game.state.world
+    assert all(territory.controller(w, off, loc) == "haoqiang" for loc in GENTRY_BASES)
