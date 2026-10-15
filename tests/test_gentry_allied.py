@@ -618,3 +618,59 @@ def test_old_rules_still_one_slot_per_faction():
     off = _old_rules()
     game = _game(off, name="乙", faction="guan", at="zhuo_militia_hall")
     assert _defect_labels(game) == ["叛投地方豪強"]
+
+
+# ── Task 9：假人選人少的一邊、照那一邊行動 ───────────────────────────
+
+
+def test_pick_side_takes_the_smaller():
+    ids = ["faction:ally:guan", "faction:ally:huang", "faction:cancel"]
+    assert allied.pick_side("甲", ids, {"guan": 5, "huang": 3}) == "faction:ally:huang"
+    assert allied.pick_side("甲", ids, {"guan": 2, "haoqiang@guan": 1, "huang": 4}) == "faction:ally:guan"
+    ties = {allied.pick_side(n, ids, {}) for n in "甲乙丙丁戊己庚辛壬癸"}
+    assert ties == {"faction:ally:guan", "faction:ally:huang"}  # 一樣多照名號雜湊，兩邊都有人
+    assert allied.pick_side("甲", ["act:explore"], {}) is None
+
+
+def test_gentry_bot_picks_the_smaller_side(wk):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    game = _game(wk, name="假人", at="zhuo_militia_hall")
+    game.world.record_faction("官一", "guan")
+    profile = BotProfile(personality="普通", seed=0, faction="haoqiang", season_number=game.world.get_season_number())
+    game.state.player.bot = profile
+    for _ in range(5):  # 投靠豪強 → 挑一邊 → 確定
+        bot_policy.take_turn(game, profile, random.Random(0))
+        if game.state.player.faction is not None:
+            break
+    assert (game.state.player.faction, game.state.player.ally) == ("haoqiang", "huang")
+
+
+def test_gentry_bot_after_the_sect_picks_too(wk):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    game = _game(wk, name="假人", faction="haoqiang", at="cao_manor")
+    game.world.record_faction("黃一", "huang")
+    profile = BotProfile(personality="普通", seed=0, faction="haoqiang", season_number=game.world.get_season_number())
+    game.state.player.bot = profile
+    assert bot_policy.pick(game, game.options(), profile, random.Random(0)) == "faction:ally:guan"
+
+
+def test_season_bot_menu_has_a_side_pick(wk):
+    from tianxia import bot
+
+    game = _game(wk, faction="haoqiang", at="cao_manor")
+    game.world.record_faction("官一", "guan")
+    assert bot.pick(game, game.options(), random.Random(0)) == "faction:ally:huang"
+
+
+def test_gentry_bot_heads_for_its_side_front(wk):
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    game = _game(wk, name="假人", faction="haoqiang", ally="guan")
+    profile = BotProfile(personality="普通", seed=0, faction="haoqiang", season_number=game.world.get_season_number())
+    assert bot_policy._goals(game, profile) == game._goals()
+    assert bot_policy._losing_front(game, "guan") is not None

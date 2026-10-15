@@ -6,11 +6,14 @@
 只 import models、state、calendar。"""
 from __future__ import annotations
 
+import hashlib
+
 from . import calendar
 from .models import Content, FactionDef
 from .state import GameState, WorldState
 
 SEP = "@"
+ALLY_PREFIX = "faction:ally:"  # 選邊鈕（Game._ally_options）
 CAP_RANK = 3  # 企劃者 2026-10-15：「純官軍或者純黃巾才有辦法升到最高軍階，豪強版的只能升到三階」
 # 新寫的字（joy 10/15：這種句子由 AI 產生）
 ALLY_LABEL = "{faction}（依附{ally}）"  # 狀態列、玩家卡、確認畫面
@@ -133,6 +136,21 @@ def roster_text(content: Content, world: WorldState, rolls: dict[str, int]) -> s
         n = gentry.get(f.id, 0)
         parts.append(f"{f.name} {sides.get(f.id, 0)} 人" + (ALLY_COUNT.format(short=short, n=n) if n else ""))
     return "目前" + "、".join(parts)
+
+
+def pick_side(name: str, option_ids: list[str], rolls: dict[str, int]) -> str | None:
+    """假人選邊（設計第十三節）：選單上的選邊鈕裡，那一軍此刻人少的（照 side_totals，跟名冊那一句同一個數）；一樣多照名號雜湊，
+    不碰任何亂數。沒有選邊鈕是 None。伺服器假人（bot_policy）與整季機器人（bot.pick）共用。"""
+    picks = [i for i in option_ids if i.startswith(ALLY_PREFIX)]
+    if not picks:
+        return None
+    sides = side_totals(rolls)
+
+    def key(option_id: str) -> tuple[int, str]:
+        side = option_id.removeprefix(ALLY_PREFIX)
+        return sides.get(side, 0), hashlib.sha256(f"{name}|{side}".encode()).hexdigest()
+
+    return min(picks, key=key)
 
 
 def hidden_trends(content: Content, world: WorldState) -> set[str]:
