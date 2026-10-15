@@ -167,16 +167,13 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
 
 def content_art(
     skill_id: str, name: str, kind: str, attribute: str, quality: str, special: str | None = None,
-    traits: list[str] | None = None,
 ) -> MartialArt:
     """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
     其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
     威力照品質的區間、不加微調。special 是內容指給它的獨特特別功效（13.5，SkillDef.special），沒寫就沒有；
-    traits 是內容寫的一般功效（本命武學，SkillDef.traits）；沒寫就只有自己屬性那一個（13.3，MartialArt.traits 留空）。"""
+    一般功效不用寫，內容的武學只有自己屬性那一個（13.3，MartialArt.traits 留空）。"""
     if quality != "下品":
-        return historical_art(skill_id, name, kind, attribute, quality).model_copy(
-            update={"special": special, "traits": list(traits or [])},
-        )
+        return historical_art(skill_id, name, kind, attribute, quality).model_copy(update={"special": special})
     return MartialArt(
         id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
         base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",

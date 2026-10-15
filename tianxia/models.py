@@ -466,22 +466,6 @@ class LearnRule(_Strict):
     sect: str | None = None
 
 
-SIGNATURE_HOOKS = (  # 本命特效的掛點（tianxia/signature.py；企劃者 2026-10-15「本命絕學很爛……也沒什麼特色效果」）：數字由各處照掛點讀
-    "mate_power", "self_power", "toll_cut", "injury_cut", "heal_after", "win_heal", "win_xinde_pct", "win_exp_pct",
-    "win_silver_pct", "dodge", "difficulty_cut", "big_win_cut", "luck_narrow", "condition_floor", "train_stamina",
-)
-
-
-class SignatureEffect(_Strict):
-    """本命特效（tianxia/signature.py）：一門本命武學一個，那位人物獨有、合成擲不到。effects 是掛點 → 數字
-    （比例，train_stamina 是點數）；只算玩家本人身上練著的那兩門（同伴自己練的本命武學不吃）。數字寫在卡上由程式照掛點產生，
-    desc 只寫打法、不寫數字。"""
-
-    name: str
-    desc: str
-    effects: dict[Literal[SIGNATURE_HOOKS], float] = Field(min_length=1)
-
-
 class SkillDef(_Strict):
     """內容手寫的武學/內功：本命武學（歷史人物的固定武學，品質是絕學，見 martial_arts.historical_art）、
     部下用的通用武學（企劃者 2026-10-05 定上品，計畫 T5）與基礎武學（下品，開局送或在各地學，
@@ -497,9 +481,6 @@ class SkillDef(_Strict):
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
     special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
     weapon: WeaponKind | None = None  # 這門武學配哪一種兵器（兵器設計 2.3）；內功是 None。正式內容的武學一律要填（test_weapons 鎖住）
-    # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命特效
-    traits: list[Attribute] = Field(default_factory=list, max_length=3)
-    signature: SignatureEffect | None = None
 
 
 class GeneralTrait(_Strict):
@@ -1906,17 +1887,6 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
-class SignatureArtTuning(_Strict):
-    """本命武學（企劃者 2026-10-15「現在的本命絕學很爛，甚至比玩家自己合成的還差，也沒什麼特色效果」；PM 定的做法）：
-    以前本命武學照絕學的固定區間（第一成 50、第十成 120），合成擲到的絕學帶 ±10% 微調、最高 132，還可以帶 3 個一般功效與特別功效；
-    本命武學只有自己屬性一個功效、學到時第一成（威力 50，比練滿的上品 72 還低）。現在：玩家自己那一份威力 × power_scale
-    （絕學第十成 138，高頂級合成一截；同伴自己練的照舊，不然全隊又往上竄）、內容寫 3 個一般功效與一個本命特效（SkillDef.signature）、
-    學到時直接第 start_level 成（讀檔時情誼送過的舊角色補到這一成，signature.lift_levels，Game._drop_stale_references 叫）。"""
-
-    power_scale: float = Field(default=1.15, gt=0)
-    start_level: int = Field(default=7, ge=1, le=10)
-
-
 class RiseTuning(_Strict):
     """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
     tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
@@ -2099,7 +2069,6 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
-    signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
