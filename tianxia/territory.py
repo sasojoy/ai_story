@@ -154,6 +154,8 @@ def update(world: WorldState, content: Content) -> None:
     else:
         _announce(world, content, t, before)
     _snapshot(world, content, t)
+    if first and calendar.point(world.time, content, world).week == 1:  # 開季那一刻：版圖變化第 1 週的易手跟它比（FB-264）
+        t.weeks[START_WEEK] = t.weeks[1].model_copy(deep=True)
 
 
 def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
@@ -174,6 +176,9 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
         t.control[loc_id] = side
     _announce(world, content, t, before)
     _snapshot(world, content, t)
+
+
+START_WEEK = 0  # TerritoryState.weeks 裡開季那一刻的鍵：這一季第一次算地盤就在第 1 週時才記（中途上線的季沒有，FB-264）
 
 
 def _snapshot(world: WorldState, content: Content, t: TerritoryState) -> None:

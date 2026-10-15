@@ -200,7 +200,8 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     w = state.world
     if not territory.on(content) or w.territory is None:
         return []
-    out, before = [], None
+    start = w.territory.weeks.get(territory.START_WEEK)
+    out, before = [], (start.control if start is not None else None)  # 第 1 週跟開季那一刻比（FB-264）
     for week in range(1, now_week + 1):
         snap = territory.week_at(w, week)
         events = _titles(state, content, week, now_week)
@@ -216,9 +217,16 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     return out
 
 
+def _start_control(world: WorldState) -> dict[str, str] | None:
+    """開季那一刻的控制方（territory.START_WEEK）；中途上線、還沒算過是 None。"""
+    start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
+    return dict(start.control) if start is not None else None
+
+
 def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
-    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比。"""
-    out, last = [], None
+    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比；有開季那一刻的就從它比起（第 1 週的易手也算，FB-264）。"""
+    start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
+    out, last = [], (start.control.get(loc_id) if start is not None else None)
     for week in range(1, now_week + 1):
         snap = territory.week_at(world, week)
         side = snap.control.get(loc_id) if snap is not None else None
@@ -242,7 +250,7 @@ def state(
                        "price","squads","danger","flips"}},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}]}], "geju", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
-     "weeks": [{"week","control","ropes","geju","events","changed"}]}"""
+     "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
     memo: dict[str, str] = {}
 
@@ -331,5 +339,6 @@ def state(
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
+        "start": _start_control(w) if on else None,
         "weeks": _weeks(s, c, now_week, ropes),
     }

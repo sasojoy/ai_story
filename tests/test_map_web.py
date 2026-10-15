@@ -186,14 +186,44 @@ def test_the_timeline_without_territory_says_so():
     assert "這一季沒有地盤易手" in out and "<polyline" not in out
 
 
-def test_the_tally_compares_with_the_first_recorded_week():
-    """「天下」那一條比的是第一筆記到的那一週（第 1 週週末；中途上線是上線那一週），照實寫是第幾週，不寫「開季」。"""
+def test_the_tally_compares_with_the_season_start():
+    """「天下」那一條跟開季那一刻比（FB-264：第一次算地盤就在第 1 週時有開季的基準），看第 1 週也比得出來。"""
     game = _timeline_game()
     out = run(game, "return [H.hudHtml(H.S.mapBase, H.S.mapState, 3), H.hudHtml(H.S.mapBase, H.S.mapState, 1)];")
-    assert "比第 1 週" in out[0] and "開季" not in out[0]
-    assert "比第" not in out[1]  # 看的就是第 1 週：沒得比
+    assert "比開季" in out[0] and "比開季" in out[1] and "比第" not in out[0]
     tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 3);")
-    assert "比第 1 週" in tl and "開季" not in tl
+    assert "比開季" in tl
+
+
+def test_the_tally_without_a_season_start_compares_with_the_first_recorded_week():
+    """中途上線（第一次算在第 3 週）：沒有開季的基準，比第一筆記到的那一週、照實寫第幾週；看的就是那一週時不比。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)
+    w.time = calendar.week_start(4, c, w) + 60
+    territory.update(w, c)
+    out = run(game, "return [H.hudHtml(H.S.mapBase, H.S.mapState, 4), H.hudHtml(H.S.mapBase, H.S.mapState, 3)];")
+    assert "比第 3 週" in out[0] and "開季" not in out[0]
+    assert "比第" not in out[1] and "開季" not in out[1]
+
+
+def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
+    """FB-264：第 1 週的易手（跟開季比）在年表上有白點、選第 1 週時地圖閃一圈、那一週的清單列得出來。"""
+    from tianxia import territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    territory.assign(w, c, {"runan_wilds": "guan"})
+    chart = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert 'class="cell now flip"' in chart
+    out = marks(game, week=1, tl="true")
+    assert out.count('class="pulse"') == 2  # 汝南荒野，加上你的那一圈
+    tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
+    assert "汝南荒野" in tl[tl.index("第 1 週</h4>"):]
 
 
 def test_the_timeline_button_sits_under_the_zoom_buttons():

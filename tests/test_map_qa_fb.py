@@ -84,3 +84,28 @@ def test_fb259_stirring_is_never_marked_losing_and_counts_no_order():
     assert st["suggest"] and all(g["sortie"] == "stir" for g in st["suggest"])
     for g in st["suggest"]:
         assert g["lose"] is False and not any(t == mapdata.LOSE_WORD or t.startswith("軍令") for t, _ in g["why"]), g
+
+
+# ── FB-264：版圖變化補「開季」的基準，第 1 週的易手才看得到 ──
+
+
+def test_fb264_the_first_reckoning_in_week_one_keeps_the_season_start():
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)  # 開季：第一次算
+    assert w.territory.weeks[0].control == w.territory.weeks[1].control
+    territory.assign(w, c, {"runan_wilds": "guan"})  # 第 1 週就易手
+    assert w.territory.weeks[0].control["runan_wilds"] == "huang" and w.territory.weeks[1].control["runan_wilds"] == "guan"
+    st = game.map_state()
+    assert st["start"]["runan_wilds"] == "huang"
+    assert {"id": "runan_wilds", "from": "huang", "to": "guan"} in st["weeks"][0]["changed"]
+    assert {"week": 1, "from": "huang", "to": "guan"} in st["places"]["runan_wilds"]["flips"]
+
+
+def test_fb264_a_season_first_reckoned_later_has_no_start():
+    """中途上線（第一次算在第 3 週）：沒有開季那一刻的樣子，不假裝有。"""
+    game = _game()
+    w, c = game.state.world, game.content
+    w.time = calendar.week_start(3, c, w) + 60
+    territory.update(w, c)
+    assert 0 not in w.territory.weeks and game.map_state()["start"] is None

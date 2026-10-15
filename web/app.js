@@ -3525,17 +3525,19 @@
     }
     return out.join("");
   }
-  // 各方佔幾處；比的是第一筆記到的那一週（第 1 週週末，中途上線是上線那一週）：照實寫第幾週，看的就是那一週時不比
+  // 各方佔幾處；跟開季那一刻比（疊層的 start，FB-264）；中途上線的季沒有開季的樣子，比第一筆記到的那一週、照實寫第幾週，
+  // 看的就是那一週時不比
   const tally = (base, ctrl) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (ctrl[p.id]) n[ctrl[p.id]]++; return n; };
   function tallyFrom(base, st, week) {
+    if (st.start) return { label: "比開季", n: tally(base, st.start) };
     const first = (st.weeks || []).find((x) => x.control);
-    return first && first.week < week ? { week: first.week, n: tally(base, first.control) } : null;
+    return first && first.week < week ? { label: `比第 ${first.week} 週`, n: tally(base, first.control) } : null;
   }
   const signed = (d) => (d > 0 ? `+${d}` : d < 0 ? `${d}` : "±0");
   // 地圖上方浮的那一條「天下」：看大局或版圖變化時，各方此刻佔幾處、比第一筆記到的那一週多幾處少幾處（設計第四節）
   function hudHtml(base, st, week) {
     const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
-    return `<b>天下</b>${MAP_SIDE_ORDER.map((sd) => `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${from ? `<small>${signed(now[sd] - from.n[sd])}</small>` : ""}</span>`).join("")}${from ? `<small>比第 ${from.week} 週</small>` : ""}`;
+    return `<b>天下</b>${MAP_SIDE_ORDER.map((sd) => `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${from ? `<small>${signed(now[sd] - from.n[sd])}</small>` : ""}</span>`).join("")}${from ? `<small>${from.label}</small>` : ""}`;
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
@@ -3702,7 +3704,7 @@
     const rows = st.chart.map((g) => `<span class="ln">${esc(g.name)}</span>` + g.spots.map((id) => {
       const b = placeOf(base, id);
       return `<span class="lab${S.mapSel === id ? " sel" : ""}" data-act="map-mark" data-id="${esc(id)}">${esc(b ? b.name : id)}</span>` + Array.from({ length: total }, (_, i) => {
-        const w = i + 1, row = byWeek[w], prev = byWeek[w - 1];
+        const w = i + 1, row = byWeek[w], prev = w === 1 && st.start ? { control: st.start } : byWeek[w - 1]; // 第 1 週跟開季比（FB-264）
         if (w > st.now_week) return '<span class="cell future"></span>';
         if (!row || !row.control) return `<span class="cell blank" data-act="map-week" data-week="${w}"></span>`;
         const c = row.control[id], flip = prev && prev.control && prev.control[id] && prev.control[id] !== c;
@@ -3717,7 +3719,7 @@
     const row = (st.weeks || []).find((x) => x.week === week) || { events: [], changed: [] };
     const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
     const sum = MAP_SIDE_ORDER.map((sd) => `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}${from ? `<small>　${signed(now[sd] - from.n[sd])}</small>` : ""}</div>`).join("")
-      + (from ? `<small class="m-sum-note">比第 ${from.week} 週</small>` : "");
+      + (from ? `<small class="m-sum-note">${from.label}</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
     const side = (k) => `<span style="color:${k ? MAP_SIDES[k].color : "inherit"}">${sideName(k)}</span>`;
     const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),
