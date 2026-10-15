@@ -70,7 +70,19 @@ def test_the_alias_does_not_give_away_the_kind():
     for r in c.forge_secrets.values():
         if r.divine:
             alias = forge_secrets.alias(r)
-            assert alias and alias != r.name and forge_secrets.piece_text(c, r, forge_secrets.MAIN).startswith(f"「{alias}」")
+            assert alias and alias != r.name and forge_secrets.piece_text(c, r, forge_secrets.MAIN).startswith(f"『{alias}』")
+
+
+def test_fb269_a_framed_piece_quotes_the_alias_inside_with_double_corners():
+    """FB-269：鐵匠、說書、殘譜的框是「{clue}」，片子裡配方的號用『』（引號裡再引用），畫面上不會疊成「「。"""
+    c = real_content("weekend")
+    rule = c.config.forge_secrets
+    for r in c.forge_secrets.values():
+        if r.divine:
+            for piece in forge_secrets.PIECES:
+                for frame in (rule.smith_frame, rule.smith_frame_free, rule.tale_frame, rule.scrap_frame):
+                    line = frame.format(clue=forge_secrets.piece_text(c, r, piece))
+                    assert "「「" not in line and "」」" not in line and f"『{forge_secrets.alias(r)}』" in line
 
 
 def test_tales_and_scraps_carry_pieces_too():
@@ -80,7 +92,7 @@ def test_tales_and_scraps_carry_pieces_too():
     texts = {forge_secrets.hear(g.state, c, tianji, forge_secrets.SCRAP, f"seed{i}") for i in range(60)}
     book = forge_secrets.manual(g.state, tianji)
     assert sum(len(v) for v in book.pieces.values()) > 0
-    assert any(t and t.startswith("「") for t in texts)
+    assert any(t and t.startswith("『") for t in texts)  # 片子的句子以配方的號開頭（FB-269 起用『』）
 
 
 def test_divine_verses_are_not_used_once_split():
