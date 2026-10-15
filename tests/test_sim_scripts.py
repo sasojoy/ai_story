@@ -298,6 +298,9 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     # 平均那三行（「隨機平均 鑄器：摸到 …」）也含「鑄器：摸到 」，所以每個種子的那三行照開頭數
     assert sum(line.startswith("種子 1 ") and "鑄器：摸到 " in line for line in lines) == 3
     assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
+    # FB-270：照季的章數配方（週末蓋了章：兵器一階 2、二階 2、神器六種兵器各 1，防具一階 1、二階 1、神器 1，共 13 條），也數片子
+    forge_rows = [line for line in lines if line.startswith("種子 1 ") and "鑄器：摸到 " in line]
+    assert all("/13（" in line and "神器片子 " in line for line in forge_rows), forge_rows
     assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
     assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個
 

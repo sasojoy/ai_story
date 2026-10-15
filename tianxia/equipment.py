@@ -261,6 +261,10 @@ def repair_material(state: GameState, content: Content) -> str | None:
 
 SMITH_PAGES = ("weapon", "armor")  # 照這個順序：進門停在第一個開著的
 PAGE_LABELS = {"weapon": "轉去看兵器", "armor": "轉去看防具"}  # 待 joy 潤：切頁那一顆
+# 素材那一頁（素材與經濟設計第四、五節：收購、升階；Config.economy 的 sell／upgrade 有一樣開著才有，Game._trade_on）。不是裝備的一欄，
+# 所以不在 SMITH_PAGES 裡：page() 在這一頁時照舊回兵器、防具裡的第一頁（換上、拆解只看那兩欄）
+MATERIAL_PAGE = "material"
+MATERIAL_LABEL = "素材買賣…"  # 待 joy 潤：兵器、防具頁進素材頁那一顆
 
 
 def smith_open(state: GameState, content: Content) -> bool:

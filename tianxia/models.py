@@ -817,6 +817,7 @@ ALLOW_FIXED = frozenset({
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
+    "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1816,6 +1817,11 @@ class ForgeSecretRules(_Strict):
     challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
     tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）
     big_tier3: float = Field(default=0, ge=0, le=1)  # 大場面對手（不是本人那支隊伍）打贏，另擲一次三階素材；正式 0.25
+    # 素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md，企劃者 2026-10-15）：預設開、測試內容關，關掉一個字都不變。
+    # 前兩個從下一季開季起照 WorldState 的章（world_state.stamp_season）：正在跑的季中途改會讓已經聽到的線索對不上
+    divine_per_kind: bool = True  # 神器配方每一季每種兵器最多一條；第一季的章六種兵器各一條（forge_secrets.active）
+    split_clues: bool = True  # 神器配方的線索拆三片（種類／主料／輔料），散在鐵匠鋪、說書、殘譜（forge_secrets.hear、hear_smith）
+    scrap_every_mode: bool = True  # 殘譜（武學口訣與半張鑄譜）三種探索都擲；上線就生效，關著只在找事件擲（Game._explore_mode）
 
 
 class FirstEcho(_Strict):
@@ -1963,6 +1969,34 @@ class QuietHours(_Strict):
     end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
 
 
+class EconomyRules(_Strict):
+    """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md；tianxia/economy.py）：每一樣一個開關，預設開、
+    測試內容關，關掉一個字都不變（亂數序列也一樣）。都上線就生效，不看季的章。"""
+
+    gather_cut: bool = True  # 找素材的一階從一定給改成 gather_first_chance（第七節；城鎮的 town_chance 照舊）
+    gather_first_chance: float = Field(default=0.7, ge=0, le=1)
+    sortie_silver: bool = True  # 出陣攻打贏加給對手銀兩的 sortie_silver_share（第八節；守、攪局不給）
+    sortie_silver_share: float = Field(default=0.3, ge=0, le=1)
+    sell: bool = True  # 鐵匠鋪收購（第五節）：階 → 一個幾兩；不在表上的階不收（三階要留著做神器）；收購價不分地盤
+    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6})
+    upgrade: bool = True  # 鐵匠鋪升階（第四節）：換到幾階 → 要幾個同屬性低一階的、工錢（套地盤福利 territory.price_factor）
+    upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
+    upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
+    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
+    # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
+    upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
+    donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
+    donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
+    donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
+    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打事件五折（Config.explore_modes.event_trend_share）、
+    # 季長倍數、盡頭阻力，跟出陣共用每人每日推力上限，不另記推力的貢獻（貢獻照捐的份量記）
+    donate_push_per_point: float = Field(default=0.05, ge=0)
+    armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
+        default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
+    )
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2029,6 +2063,7 @@ class Config(_Strict):
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
+    economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

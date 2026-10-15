@@ -1273,6 +1273,19 @@ def _int(value, default: int) -> int:
         return default
 
 
+DONATE_ITEMS_MAX = 40  # 一次最多捐幾種（背包裡的素材種類遠少於這個；擋亂送的長清單）
+
+
+def donate_items(body: dict) -> list[tuple[str, int]]:
+    """軍需帳送來的 items（[{material, count}, …]）：形狀不對的那一筆略過、個數至少 1，範圍與收不收由引擎自己擋。"""
+    items = body.get("items")
+    out = []
+    for item in items[:DONATE_ITEMS_MAX] if isinstance(items, list) else []:
+        if isinstance(item, dict) and item.get("material"):
+            out.append((str(item["material"]), max(1, _int(item.get("count"), 1))))
+    return out
+
+
 def joined(msgs: list[str] | None) -> str:
     return md("\n\n".join(msgs)) if msgs else ""
 
@@ -1491,6 +1504,12 @@ MAIN_ACTIONS = {
     "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
     # 店面的直接開爐（店面獨立介面設計 6.3）：打的是同一個 smithing.forge；出爐卡在 game.smith_result，api_do 一起回
     "smith_forge": lambda g, b: g.smith_forge(str(b.get("kind", "")), str(b.get("main", "")), str(b.get("aux", ""))),
+    # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
+    "smith_sell": lambda g, b: g.smith_sell(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
+    "smith_upgrade": lambda g, b: g.smith_upgrade(str(b.get("attribute", "")), _int(b.get("tier"), 0)),
+    # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
+    # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
+    "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）

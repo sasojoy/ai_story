@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, explore_modes, figures, rules, seal, sortie, territory, timetable
+from . import calendar, equipment, explore_modes, figures, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -72,12 +72,14 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
 
 
 SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
-    "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
+    "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
     "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
     # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
-    "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
+    "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
 }
+SORTIE_LOOT = "不給銀兩、不掉東西。"
+SORTIE_LOOT_SILVER = "銀兩也是 {silver} 成，不掉東西。"  # 素材與經濟設計第八節（Config.economy.sortie_silver）；待 joy 潤
 SORTIE_PUSH = "推動戰局、記貢獻"
 SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
@@ -87,8 +89,15 @@ def sortie_line(how: str, push: bool, left: int, content: Content) -> str:
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
-    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half)
+    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half,
+                                    loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
+
+
+def sortie_loot(content: Content) -> str:
+    """出陣攻打贏給不給銀兩（素材與經濟設計第八節）：開著寫對手銀兩的幾成，關著照舊「不給銀兩、不掉東西」。"""
+    econ = content.config.economy
+    return SORTIE_LOOT_SILVER.format(silver=f"{econ.sortie_silver_share * 10:g}") if econ.sortie_silver else SORTIE_LOOT
 
 
 def social_line(figure: str | None, events: bool, hall: bool) -> str:
@@ -286,7 +295,8 @@ def sortie_lines(content: Content) -> list[str]:
     return [
         f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，只在戰線上的地點。"
         "這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；地方豪強是攪局，把戰局往中間拉。"
-        f"守與攪局推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、不掉東西。越往對方老巢推越難推。",
+        f"守與攪局推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
+        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + "越往對方老巢推越難推。",
     ]
 
 
@@ -295,8 +305,10 @@ def explore_lines(content: Content) -> list[str]:
     cfg = content.config
     names = explore_modes.NAMES
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
+    first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
     return [
-        f"- **探索**（體力 {cfg.action_cost['explore']}）：點開三選一。{names['gather']}：照這裡的地形撿素材，"
+        f"- **探索**（體力 {cfg.action_cost['explore']}）：點開三選一。{names['gather']}：照這裡的地形撿素材{first}，"
         f"城外約 {cfg.explore_modes.encounter_chance * 10:g} 成會撞上怪，打贏是經驗的大宗；{names['seek']}：碰上這一帶的事，偶有奇遇；"
         f"{names['sense']}：只在悟得到意境的地方。{legend}",
     ]
@@ -317,6 +329,42 @@ def territory_lines(content: Content) -> list[str]:
         f"在自家地盤療傷、打造、買馬便宜{_tenth(1 - cfg.own_price)}，在別人的地盤貴{_tenth(cfg.enemy_price - 1)}；散人照原價。",
         "輿圖局勢層的底色就是此刻誰佔著；易手時天下大事會傳一句。",
     ]
+
+
+ECONOMY_TITLE = "素材的出路"  # 待 joy 潤：玩法說明那一節的標題（素材與經濟設計第四～六節）
+
+
+def economy_lines(content: Content) -> list[str]:
+    """玩法說明「素材的出路」一節（Config.economy 的收購、升階、捐軍備，開著的才寫；都關著是空的；待 joy 潤）。數字讀 Config。"""
+    econ = content.config.economy
+    reset = "台灣時間 00:00 換日" if content.config.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
+    tier_word = {1: "一階", 2: "二階", 3: "三階"}
+    lines = []
+    if econ.sell:
+        prices = [f"{tier_word.get(t, f'{t}階')} {price} 兩" for t, price in sorted(econ.sell_price.items())]
+        prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」
+        lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；三階不收，留著打神器。")
+    if econ.upgrade:
+        steps = []
+        for tier in sorted(econ.upgrade_need):
+            cap = econ.upgrade_per_day.get(tier)
+            limit = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
+            steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(econ.upgrade_need[tier])}個換一個{tier_word.get(tier)}"
+                         f"（工錢 {econ.upgrade_silver.get(tier, 0)} 兩{limit}）")
+        astray = ""
+        if econ.upgrade_same_share < 1:  # 升階隨機（企劃者 2026-10-15）：投入的屬性幾成，其餘落到別的屬性
+            share = round(econ.upgrade_same_share * 10)
+            astray = f"熬出來的約 {share} 成是同屬性的，其餘隨機落到別的屬性。"
+        lines.append(f"鐵匠鋪也幫你把素材熬成高一階的：同屬性的{'；'.join(steps)}。{astray}工錢照地盤福利算。")
+    if econ.donate:
+        points = "、".join(f"{tier_word[t]} {n} 點" for t, n in sorted(econ.donate_points.items()) if t in tier_word)
+        names = "、".join(econ.armaments.values())
+        lines.append(
+            f"投靠了陣營，在自家的大本營可以捐軍備：{points}，一天最多 {econ.donate_daily_cap} 點（{reset}）。"
+            f"捐的記成貢獻（第一季），也把大本營那一條戰線往自家推一點（豪強推割據）；素材累積成陣營的{names}，"
+            "在大決戰怎麼用，之後再定。"
+        )
+    return lines
 
 
 def _order_pushers(content: Content) -> list[str]:
@@ -696,6 +744,34 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     return lines
 
 
+def forge_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「鐵匠鋪與神器」（待 joy 潤）：神器配方與線索照這一季開季時蓋的章寫（素材與經濟設計第二、三節；沒蓋章的季照舊的說法），
+    殘譜照 Config.forge_secrets.scrap_every_mode。兵器、防具都關著是空的（整段不畫）。
+    FB-268（PM 定，設計第九節「開關關著一個字都不變」）：只在新規則用得上時才畫——這一季蓋了每種兵器一條或線索分片的章，
+    或線索分片、殘譜三種探索的開關開著；三個開關都關、季也沒蓋章時是空的（玩法說明跟改之前一字不差）。"""
+    if not (equipment.on(content, "weapon") or equipment.on(content, "armor")):
+        return []
+    rule = content.config.forge_secrets
+    if not (season.forge_divine_per_kind or season.forge_split_clues or rule.split_clues or rule.scrap_every_mode):
+        return []
+    lines = ["城鎮的鐵匠鋪賣兵器防具、修、淬煉，也能自己打造：照主料定階、輔料定屬性；打中這一季藏著的配方，打出名器。"]
+    if any(r.divine for r in content.forge_secrets.values()):
+        if season.forge_divine_per_kind and calendar.season_one_on(season, content):
+            lines.append("每一種兵器這一季都有一條神器配方（防具一條）：全服第一把是原品、由你定名，之後照著打的是仿品。")
+        elif season.forge_divine_per_kind:
+            lines.append("神器配方照天機挑，同一種兵器最多一條：全服第一把是原品、由你定名，之後照著打的是仿品。")
+        else:
+            lines.append("這一季藏著幾條神器配方：全服第一把是原品、由你定名，之後照著打的是仿品。")
+    if season.forge_split_clues:
+        lines.append("神器配方的線索拆成三片：哪一種兵器、主料、輔料。在各家鐵匠鋪花了錢，鐵匠會順口說出他知道的片子（同一家說完之前不重複），"
+                     "說書、殘譜也聽得到；三片湊齊，鑄譜上那一條就完整。")
+    else:
+        lines.append("配方的口訣聽說書、聽鐵匠順口、撿殘譜都聽得到，記在鑄譜上。")
+    if rule.scrap_every_mode and explore_modes.on(content) and (rule.scrap_chance > 0 or content.config.secrets.scrap_chance > 0):
+        lines.append("殘譜三種探索都撿得到。")
+    return lines
+
+
 def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
     """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、四個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
     情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
@@ -735,7 +811,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
-        "沿途打聽、留意地形、路邊採集各一次。",
+        + ("沿途打聽、路邊採集各一次。" if cfg.open_map else "沿途打聽、留意地形、路邊採集各一次。"),  # 全圖開放拿掉了留意地形
         "",
         "#### 體力",
         *[f"- {line}" for line in stamina_lines(content, season)],
@@ -756,6 +832,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
         "",
         *_section("修練與煉製", pages_lines()),
+        *_section("鐵匠鋪與神器", forge_lines(content, season)),
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行
@@ -769,5 +846,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 背包",
         "- 素材不拿來煉製：第一季裡折成糧草，押糧車、準備伏筆都要用。",
     ]
+    economy = economy_lines(content)
+    if economy:  # 素材與經濟（收購、升階、捐軍備）：開著的才寫
+        lines += ["", *_section(ECONOMY_TITLE, economy)]
     return "\n".join(lines)
 

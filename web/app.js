@@ -83,6 +83,8 @@
     shopFiring: false, // 開爐等回應的那一下爐火竄高（減少動態效果的人不跑）
     shopMore: false, // 裝備庫頁按了「再列 N 件」
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
+    shopNote: null, // 鐵匠鋪素材頁、軍需帳上一下的結果那一句（升階出了什麼、捐了多少；素材與經濟 B6）；換頁、出店清掉
+    donatePick: {}, // 軍需帳挑好要捐的：素材 id → 個數（點一格挑、＋−改個數，「捐出」一起送）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     arenaTab: "floor", // 擂台那一頁停在哪（floor 台下／board 擂台榜）；進擂台停在台下（Joy 2026-10-14「擂台應該要是獨立的一頁」）
     arenaSeen: null, // 看過、收起來的那一場收場卡（ArenaResult.id）
@@ -310,6 +312,7 @@
     if (shopKind(main) !== shopKind(S.main)) {
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
       S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
+      S.shopNote = null; S.donatePick = {}; // 素材頁、軍需帳上一下的結果與挑好要捐的（素材與經濟 B6）
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
@@ -1790,6 +1793,14 @@
 
   // 江湖頁那一排戰況圖卡＋點開的說明（explain-2）：包在 #war 裡，點圖卡原地換掉這一塊（同 peekTap：不重畫整頁，「剛剛」不再播浮現動畫），
   // 說明排在圖卡底下，只推動它底下的小地圖。伺服器沒給說明（開關關著、舊版）就照舊只是一排圖卡、不能點
+  // 陣營軍備的存量（素材與經濟設計第六節；企劃者 2026-10-15 選草圖 C1）：戰況圖卡底下一行（規則關著的季沒有戰況卡，就排在那個位置）。
+  // 伺服器在投靠了陣營、捐軍備開著時給 status.armament。在決戰怎麼起作用還沒定，這裡只寫存量。字待 joy 潤
+  function armsLine(m) {
+    const a = m.status && m.status.armament;
+    if (!a || !shown("orders")) return "";
+    return `<p class="arms-line"><span class="who">${esc(a.faction)}軍備</span>${a.stock.map((s) => `<span>${esc(s.name)} <b>${s.points | 0}</b></span>`).join("")}</p>`;
+  }
+
   function frontsBlock(m) {
     const help = !!(m.status && m.status.war_help && m.status.war_help.fronts && m.status.war_help.fronts.length);
     return `<div class="war" id="war">${frontsHtml(m.fronts, m.status && m.status.chaos_band, help)}${
@@ -1953,7 +1964,7 @@
     const peek = peekBlock(m);
     // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
     // 點圖卡在底下攤開說明（explain-2，frontsBlock）
-    const fronts = m.fronts && shown("fronts") ? frontsBlock(m) : "";
+    const fronts = (m.fronts && shown("fronts") ? frontsBlock(m) : "") + armsLine(m);
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
@@ -2829,8 +2840,9 @@
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
     const line = `<p class="shop-line">${esc(shop.line)}</p>`;
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
-    const underForge = kind === "smith" && smithTab() === "shelf";
-    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop) : smithHtml(shop, underForge ? line : "");
+    const underForge = kind === "smith" && smithTab(shop) === "shelf";
+    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
+      : kind === "donate" ? donateHtml(shop) : smithHtml(shop, underForge ? line : "");
     // 擂台打到一半：左上那一顆是認輸（先問一次），不是直接離開
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
@@ -2911,18 +2923,165 @@
         <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
   }
 
-  // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）
-  function smithTab() { return ["forge", "temper", "rack"].includes(S.shopTab) ? S.shopTab : "shelf"; }
+  // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）。素材頁只在伺服器給了 shop.trade（收購或升階開著）時有
+  function smithTab(shop) {
+    if (S.shopTab === "trade") return shop && shop.trade ? "trade" : "shelf";
+    return ["forge", "temper", "rack"].includes(S.shopTab) ? S.shopTab : "shelf";
+  }
+  // 鐵匠鋪的分頁：四頁，素材買賣開著時多第五頁「素材」（素材與經濟 B6，企劃者 2026-10-15 選草圖 A1）
+  function smithTabs(shop) { return shop.trade ? [...SHOP_TABS, ["trade", "素材"]] : SHOP_TABS; }
 
-  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡。架上頁最上面是爐火與鐵匠那一句（line，shopHtml 交過來），不跟著貨卡捲
+  // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡。架上頁最上面是爐火與鐵匠那一句（line，shopHtml 交過來），不跟著貨卡捲。
+  // 素材頁不分兵器、防具：那一頁不畫上面的切換
   function smithHtml(shop, line = "") {
-    const tab = smithTab();
-    const pages = shop.pages.length > 1 ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
-    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml }[tab];
+    const tab = smithTab(shop);
+    const pages = shop.pages.length > 1 && tab !== "trade" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
+    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml, trade: tradeHtml }[tab];
     return `${tab === "shelf" ? SMITH_HERO + line : ""}${pages}
       <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
-      <nav class="shop-tabs">${SHOP_TABS.map(([k, name]) => `<button class="shop-tab${S.shopTab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
+      <nav class="shop-tabs">${smithTabs(shop).map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
+  }
+
+  // 上一下的結果那一句（素材頁、軍需帳）：升階出了什麼、賣了多少、捐了多少，或為什麼不成；換頁、出店清掉。
+  // 那一格一直在、高度固定兩行（還沒做事時寫伺服器給的 hint）：結果冒出來不把底下的格子往下推，連點同一格升兩次不會點偏
+  function shopNoteHtml(hint = "") {
+    return S.shopNote ? `<p class="shop-done" role="status">${esc(S.shopNote)}</p>` : `<p class="shop-done hint" role="status">${esc(hint)}</p>`;
+  }
+
+  // 素材頁（素材與經濟設計第四、五節；企劃者 2026-10-15：上半升階、下半收購）。升階一屬性一列、二階三階各一格（拿什麼換、偏向出哪一種、
+  // 幾成、工錢、今天還能換幾個；按不下去的灰掉、格子上寫短的原因，點了說整句）；收購一種一列（賣一個、全賣先問一次）。
+  // 升階出來的屬性隨機（企劃者 2026-10-15「屬性隨機、偏向投入的」），格子上照伺服器寫「五成・其餘隨機」。字待 joy 潤
+  function tradeHtml(shop) {
+    const t = shop.trade;
+    let ups = "";
+    if (t.upgrade.length) {
+      const rows = [];
+      for (const r of t.upgrade) {
+        const last = rows[rows.length - 1];
+        if (last && last.attribute === r.attribute) last.cells.push(r);
+        else rows.push({ attribute: r.attribute, cells: [r] });
+      }
+      const cell = (r) => `<button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
+          <span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
+          <small>${esc(r.problem ? r.short : `${r.cost | 0} 兩${r.left != null ? `・今天還能 ${r.left | 0} 個` : ""}`)}</small></button>`;
+      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
+    }
+    let sells = "";
+    if (t.sell_cap) {
+      const row = (r) => `<div class="sell-row"><span class="nm"><b><i class="dot ${SHOP_ATTR[r.attribute] || ""}"></i>${esc(r.name)}</b><small>${esc(r.tier_word)}・手上 ${r.have | 0}・一個 ${r.price | 0} 兩</small></span>
+          <span class="acts"><button class="btn small" data-act="trade-sell" data-id="${esc(r.id)}" data-n="1">賣 1 個</button>${r.have > 1
+            ? `<button class="btn small ghost" data-act="trade-sell" data-id="${esc(r.id)}" data-n="${r.have | 0}" data-confirm="${esc(`把 ${r.have | 0} 個${r.name}都賣了，換 ${(r.have * r.price) | 0} 兩？`)}">全賣 ${(r.have * r.price) | 0} 兩</button>` : ""}</span></div>`;
+      sells = `<p class="shop-cap">${esc(t.sell_cap)}</p>${t.sell.length ? `<div class="sell-rows">${t.sell.map(row).join("")}</div>` : `<p class="shop-empty">${esc(t.sell_empty)}</p>`}`;
+    }
+    return `${shopNoteHtml(t.hint)}${ups}${sells}`;
+  }
+
+  // 素材頁、軍需帳的動作：送 /api/do/<op>，回來照新的畫面畫，結果的第一句記在 S.shopNote（升階出了什麼）
+  async function shopDo(op, body, after) {
+    await busy(async () => {
+      const r = await api(`/api/do/${op}`, body);
+      const first = /<p>([\s\S]*?)<\/p>/.exec(r.message || "");
+      S.shopNote = (first ? first[1] : r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || null;
+      if (after) after(r);
+      setMain(r.main);
+      render();
+    });
+  }
+
+  // ── 軍需帳（素材與經濟設計第六節；企劃者 2026-10-15 選草圖 B3）：上面陣營四種軍備的存量、今天還能捐幾點，底下背包的素材一格一格
+  // （同打造頁的素材格，照屬性一排、一階到三階）。點一格挑起來（預設今天收得下的全部）、挑好的列在底下可以＋−改個數，「捐出」一起送
+  // （MAIN_ACTIONS donate 的 items，一則紀錄）。捐不了的格子灰掉寫原因。字待 joy 潤 ──
+  function donatePicks(shop) {
+    // 挑好的照現在的格子修：捐不了的、已經不在背包的拿掉，個數夾在今天收得下的以內
+    const cells = new Map(shop.cells.map((c) => [c.id, c]));
+    const out = {};
+    for (const [id, n] of Object.entries(S.donatePick || {})) {
+      const cell = cells.get(id);
+      if (cell && !cell.problem && cell.take > 0) out[id] = Math.max(1, Math.min(n | 0, cell.take));
+    }
+    return out;
+  }
+  function donateHtml(shop) {
+    const picks = donatePicks(shop);
+    const cells = new Map(shop.cells.map((c) => [c.id, c]));
+    const used = Object.entries(picks).reduce((sum, [id, n]) => sum + n * cells.get(id).points, 0);
+    const tiles = shop.stock.map((a) => `<div class="arm-tile"><span>${esc(a.name)}</span><b>${a.points | 0}</b></div>`).join("");
+    const fill = shop.cap ? Math.max(0, Math.min(100, (shop.room / shop.cap) * 100)) : 0;
+    const rows = [];
+    for (const c of shop.cells) {
+      const cell = `<button class="cell t${c.tier | 0}${picks[c.id] ? " used" : ""}${c.problem ? " off" : ""}" data-act="dn-cell" data-id="${esc(c.id)}" data-why="${esc(c.problem || "")}">
+        <span class="n">${c.have | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[c.attribute] || ""}"></i>${esc(c.name)}</span><small>${esc(c.tier_word)}・${c.points | 0} 點</small>${picks[c.id] ? `<span class="pick">捐 ${picks[c.id]}</span>` : ""}</button>`;
+      const last = rows[rows.length - 1];
+      if (last && last.attribute === c.attribute) last.cells.push(cell);
+      else rows.push({ attribute: c.attribute, cells: [cell] });
+    }
+    const grid = rows.map((r) => `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[r.attribute] || ""}">${esc(r.attribute)}</span>${r.cells.join("")}</div>`).join("");
+    const picked = Object.entries(picks).map(([id, n]) => {
+      const c = cells.get(id);
+      return `<div class="dn-pick"><span>${esc(c.name)} ×${n}<small>${n * c.points} 點・${esc(c.armament)}</small></span>
+        <span class="dn-step"><button class="btn small ghost" data-act="dn-step" data-id="${esc(id)}" data-d="-1" ${n > 1 ? "" : "disabled"} aria-label="少捐一個">−</button><button class="btn small ghost" data-act="dn-step" data-id="${esc(id)}" data-d="1" ${n < c.take && used + c.points <= shop.room ? "" : "disabled"} aria-label="多捐一個">＋</button></span></div>`;
+    }).join("");
+    const over = used > shop.room;
+    const go = `<button class="btn primary shop-go" data-act="dn-go" ${used > 0 && !over ? "" : "disabled"}>${used > 0 ? `捐出 ${used} 點` : "點素材挑要捐的"}</button>`;
+    const tierOne = shop.cells.some((c) => c.tier === 1 && !c.problem) ? '<button class="btn small ghost" data-act="dn-tier1">全選一階</button>' : "";
+    // 格子上面的東西挑了之後高度不變（捐出鈕只換字）：挑好的與＋−排在格子底下，點一格不會把下一格擠走、手指點偏
+    return `<div class="shop-body"><div class="shop-col">${shopNoteHtml(shop.hint)}
+      <div class="arm-tiles">${tiles}</div>
+      <div class="dn-room"><span>${esc(shop.room_text)}</span><i><b style="width:${fill.toFixed(1)}%"></b></i></div>
+      <div class="shop-gorow">${go}${tierOne}</div>
+      ${over ? `<p class="shop-warn">${esc(`今天只收得下 ${shop.room | 0} 點，少挑一些。`)}</p>` : ""}
+      <p class="shop-cap">${esc(shop.caption)}</p>
+      <div class="cells">${grid || `<p class="shop-empty">${esc(shop.empty)}</p>`}</div>
+      ${picked ? `<p class="shop-cap">挑好要捐的（＋−改個數）</p><div class="dn-picks">${picked}</div>` : ""}</div></div>`;
+  }
+  // 點一格：灰掉的只說原因；挑過的放回去；沒挑過的挑起來，個數是今天收得下的（扣掉已經挑的點數）
+  function donateCell(id, why) {
+    if (why) { toast(why); return; }
+    const shop = S.main && S.main.shop;
+    if (!shop || shop.shop !== "donate") return;
+    const picks = donatePicks(shop);
+    if (picks[id]) { delete picks[id]; S.donatePick = picks; renderShop(); return; }
+    const cell = shop.cells.find((c) => c.id === id);
+    if (!cell) return;
+    const used = Object.entries(picks).reduce((sum, [k, n]) => sum + n * shop.cells.find((c) => c.id === k).points, 0);
+    const fit = Math.min(cell.take, Math.floor((shop.room - used) / cell.points));
+    if (fit <= 0) { toast(`今天只剩 ${Math.max(0, shop.room - used)} 點收得下，${cell.name}一個就 ${cell.points} 點。`); return; }
+    picks[id] = fit;
+    S.donatePick = picks;
+    renderShop();
+  }
+  function donateStep(id, d) {
+    const shop = S.main && S.main.shop;
+    if (!shop || shop.shop !== "donate") return;
+    const picks = donatePicks(shop);
+    if (!picks[id]) return;
+    picks[id] = picks[id] + d; // 夾在 1～今天收得下的，下一次畫照 donatePicks 修
+    S.donatePick = picks;
+    renderShop();
+  }
+  // 全選一階：每一種捐得了的一階都挑起來，照今天剩的點數依序填滿
+  function donateTierOne() {
+    const shop = S.main && S.main.shop;
+    if (!shop || shop.shop !== "donate") return;
+    const picks = donatePicks(shop);
+    let used = Object.entries(picks).reduce((sum, [k, n]) => sum + n * shop.cells.find((c) => c.id === k).points, 0);
+    for (const c of shop.cells) {
+      if (c.tier !== 1 || c.problem || picks[c.id]) continue;
+      const fit = Math.min(c.take, Math.floor((shop.room - used) / c.points));
+      if (fit <= 0) break;
+      picks[c.id] = fit;
+      used += fit * c.points;
+    }
+    S.donatePick = picks;
+    renderShop();
+  }
+  async function donateGo() {
+    const shop = S.main && S.main.shop;
+    if (!shop || shop.shop !== "donate") return;
+    const items = Object.entries(donatePicks(shop)).map(([material, count]) => ({ material, count }));
+    if (!items.length) return;
+    await shopDo("donate", { items }, () => { S.donatePick = {}; });
   }
 
   // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
@@ -5273,7 +5432,21 @@
         case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
-        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; renderShop(false); break;
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; renderShop(false); break;
+        // 鐵匠鋪素材頁（素材與經濟 B6）：升一個（灰掉的只說原因）、賣一個、全賣（先問一次）
+        case "trade-up":
+          if (el.dataset.why) toast(el.dataset.why);
+          else await shopDo("smith_upgrade", { attribute: el.dataset.attr, tier: Number(el.dataset.tier) });
+          break;
+        case "trade-sell":
+          if (el.dataset.confirm) ask(el.dataset.confirm, "賣掉", () => shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) }));
+          else await shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) || 1 });
+          break;
+        // 軍需帳（素材與經濟 B6）：挑一格、＋−個數、全選一階、捐出
+        case "dn-cell": donateCell(el.dataset.id, el.dataset.why); break;
+        case "dn-step": donateStep(el.dataset.id, Number(el.dataset.d)); break;
+        case "dn-tier1": donateTierOne(); break;
+        case "dn-go": await donateGo(); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
         case "arena-tab": S.arenaTab = el.dataset.tab; renderShop(false); break; // 擂台：台下／擂台榜
         case "arena-seen": S.arenaSeen = Number(el.dataset.id); renderShop(); break; // 收起收場卡

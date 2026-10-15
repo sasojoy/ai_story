@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, equipment, forge_secrets, mounts, skillview, smithing, team, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, team, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -20,14 +20,18 @@ from .world_state import WorldStateStore
 SMITH_SITUATIONS = (
     "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
     "short_silver", "rack_full", "refused",
+    "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
 MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
 BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
-SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
+DONATE_SITUATIONS = ("enter", "donate", "refused")  # 軍需帳（素材與經濟 B6）：進門、捐成了、捐不了
+SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS,
+              "donate": DONATE_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
 # 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
-BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID)}
+BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID),
+         "donate": ("donate:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
@@ -284,7 +288,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     tianji = world.read().tianji
     tier = smithing.tier_of(content, main)
     known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
-    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
+    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world) if known else None
     divine = recipe is not None and recipe.divine
     odds = None if divine else smithing.forge_odds(state, content, world, kind, main, aux)
     price = smithing.price(content, tier, slot, state)
@@ -317,6 +321,134 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "rack": _rack(state, content, world, page, art, neigong),
         "pending": forge_secrets.unnamed_originals(state, world),
         "forge": _forge(state, content, world, page, art),
+    }
+
+
+def trade_view(state: GameState, content: Content, day: int) -> dict | None:
+    """鐵匠鋪的素材買賣（素材與經濟設計第四、五節；Game.shop_view 接在 smith_view 後面的 "trade"）：收購、升階都關著是 None。
+    sell：背包裡收得了的素材（一階、二階），每一種一列（id、名字、階、屬性、手上幾個、一個幾兩、賣一個不行的原因）；收購關著是空的。
+    upgrade：每一個換得出來的（屬性, 階）一列（偏向出的那一種〔name／id〕與拿去換的、要幾個、手上幾個、工錢〔套地盤福利〕、
+    今天還能換幾個〔不限是 None〕、不行的原因〔economy.upgrade_problem〕、機率那一句 odds 與偏向那一種的機會 same_share〔升階隨機，
+    企劃者 2026-10-15〕）；升階關著是空的。按鈕送 MAIN_ACTIONS 的 smith_sell／smith_upgrade。day 是回體丹的換日。"""
+    econ = content.config.economy
+    if not (econ.sell or econ.upgrade):
+        return None
+    sell = []
+    if econ.sell:
+        for material, have in sorted(
+            ((content.materials[mid], n) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials),
+            key=lambda pair: (pair[0].tier, attribute_rank(pair[0].attribute), pair[0].id),
+        ):
+            price = economy.sell_price(content, material.tier)
+            if price is not None:
+                sell.append({"id": material.id, "name": material.name, "tier": material.tier, "attribute": material.attribute,
+                             "tier_word": TIER_NAMES.get(material.tier, ""),
+                             "have": have, "price": price, "problem": economy.sell_problem(state, content, material.id, 1)})
+    upgrade = []
+    if econ.upgrade:
+        for attribute, tier in economy.upgradable(content):
+            high, low = economy.upgrade_pair(content, attribute, tier)
+            problem = economy.upgrade_problem(state, content, attribute, tier, day)
+            have = state.player.materials.get(low.id, 0)
+            upgrade.append({
+                "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
+                "need": econ.upgrade_need[tier], "have": have,
+                "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "problem": problem,
+                "short": _upgrade_short(problem, have, econ.upgrade_need[tier]),  # 素材頁格子上寫的短原因
+                "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
+                "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
+                "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
+            })
+    return {"sell": sell, "upgrade": upgrade, **_trade_captions(content)}
+
+
+UP_SHORT_HAVE = "手上 {have}／{need}"  # 待 joy 潤：素材頁升階格子上的短原因
+UP_SHORT_DAY = "明日再來"
+SELL_EMPTY = "背包裡沒有收得了的素材。"  # 待 joy 潤
+# 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）
+UPGRADE_HINT = "熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性。鐵匠不賣素材，高階的料只能熬出來。"
+TRADE_HINT = "鐵匠不賣素材，高階的料只能熬出來。"
+
+
+def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
+    """升階格子上寫得下的短原因（點了才說整句）：料不夠寫「手上 1／3」、三階今天換過了寫「明日再來」，其餘照整句（「還差 N 兩」本來就短）。"""
+    if problem is None:
+        return None
+    if problem == economy.UPGRADE_DAY_FULL:
+        return UP_SHORT_DAY
+    if have < need and problem not in (economy.UPGRADE_NO_WAY, economy.UPGRADE_NO_KIND):  # upgrade_problem 照這個順序擋：料不夠排在錢之前
+        return UP_SHORT_HAVE.format(have=have, need=need)
+    return problem
+
+
+def _trade_captions(content: Content) -> dict:
+    """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。"""
+    econ = content.config.economy
+    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": TRADE_HINT}
+    if econ.upgrade and econ.upgrade_same_share < 1:
+        out["hint"] = UPGRADE_HINT.format(share=economy.share_word(econ.upgrade_same_share))
+    if econ.upgrade:
+        steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(econ.upgrade_need.items()))
+        limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
+        out["up_cap"] = f"升階（同屬性的{steps}{f'；{limits}' if limits else ''}）"
+    if econ.sell:
+        prices = [f"{TIER_NAMES.get(t, '')} {p} 兩" for t, p in sorted(econ.sell_price.items())]
+        if prices:
+            prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」（同玩法說明）
+        out["sell_cap"] = f"收購（{'、'.join(prices)}；三階不收，留著打神器）"
+    return out
+
+
+# ── 軍需帳（素材與經濟 B6，企劃者 2026-10-15 選草圖 B3）──
+DONATE_SIGN = "{place}・{faction}軍需帳"  # 待 joy 潤：招牌
+DONATE_CAP = "背包的素材（點一下挑要捐的；{points}）"  # 待 joy 潤
+DONATE_EMPTY = "背包裡沒有素材。"  # 待 joy 潤
+# 軍需帳最上面那一格還沒捐時的一句（捐了換成結果；待 joy 潤）：第一季規則開著時記貢獻
+DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強推的是割據，不寫「戰線」
+DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
+TIER_NAMES = {1: "一階", 2: "二階", 3: "三階"}
+
+
+def donate_view(state: GameState, content: Content, day: int) -> dict:
+    """大本營的軍需帳（素材與經濟設計第六節；Game.shop_view 在軍需官那一串開著時給）：招牌、軍需官那一句、出店（donate:back）、
+    陣營四種軍備的存量（同 Game.armament_view 的順序）、今天還能捐幾點與上限，背包裡每一種素材一格（照剛柔快慢、再照階排：份量、
+    今天最多收得下幾個 take〔economy.donate_take〕、捐不了的原因〔economy.donate_problem〕、進哪一樣軍備）。捐出送
+    MAIN_ACTIONS["donate"] 的 items（挑好的幾種一起捐，一則紀錄）。day 是回體丹的換日。"""
+    p = state.player
+    econ = content.config.economy
+    stock = state.world.armaments.get(p.faction or "", {})
+    cells = []
+    for material, held in sorted(
+        ((content.materials[mid], n) for mid, n in p.materials.items() if n > 0 and mid in content.materials),
+        key=lambda pair: (attribute_rank(pair[0].attribute), pair[0].tier, pair[0].id),
+    ):
+        points = economy.donate_points(content, material.id)
+        if points <= 0:
+            continue
+        cells.append({
+            "id": material.id, "name": material.name, "attribute": material.attribute, "tier": material.tier,
+            "tier_word": TIER_NAMES.get(material.tier, ""), "have": held, "points": points,
+            "take": economy.donate_take(state, content, material.id, held, day),
+            "problem": economy.donate_problem(state, content, material.id, day),
+            "armament": economy.armament_of(content, material.attribute) or economy.DONATE_MISC,
+        })
+    points_text = "、".join(f"{TIER_NAMES[t]} {n} 點" for t, n in sorted(econ.donate_points.items()) if t in TIER_NAMES)
+    room = economy.donate_room(state, content, day)
+    return {
+        "shop": "donate",
+        "sign": DONATE_SIGN.format(place=content.locations[p.location].name, faction=content.scenario.faction_name(p.faction or "", "")),
+        "silver": p.stats.get("silver", 0),
+        "line": line_text(state, content, "donate"),
+        "back": "donate:back",
+        "stock": [{"name": name, "attribute": attribute, "points": stock.get(attribute, 0)} for attribute, name in econ.armaments.items()],
+        "room": room,
+        "cap": econ.donate_daily_cap,
+        "room_text": economy.DONATE_LEFT.format(n=room) if room > 0 else economy.DONATE_FULL.format(cap=econ.donate_daily_cap),
+        "caption": DONATE_CAP.format(points=points_text),
+        "hint": DONATE_HINT_S1 if rules.season_one(content, state.world) else DONATE_HINT,
+        "empty": DONATE_EMPTY,
+        "cells": cells,
     }
 
 

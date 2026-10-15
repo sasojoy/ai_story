@@ -226,6 +226,9 @@ def stamp_season(season: WorldState, content: Content) -> None:
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
+    # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）
+    season.forge_divine_per_kind = cfg.forge_secrets.divine_per_kind
+    season.forge_split_clues = cfg.forge_secrets.split_clues
     season.figures = {}
     if cfg.season_one:  # 大勢人物照人物表種好（T4）：時刻表的 only_if、伏筆的出面人物從第一刻起就看得到每一位
         seed(season, content)

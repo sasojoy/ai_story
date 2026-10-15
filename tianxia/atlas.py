@@ -720,6 +720,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
     if p.picking_market:
         return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 為了騎馬的步調與省體力 import mounts，這句就近讀它）
+    if p.picking_donate:  # 大本營的捐軍備（素材與經濟設計第六節）；待 joy 潤
+        return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if p.pending_defect:

@@ -360,6 +360,8 @@ def look_after(game: Game, rng: random.Random) -> None:
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
+    bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
+    bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
 
 
 def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
