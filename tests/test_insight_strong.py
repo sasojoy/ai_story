@@ -128,3 +128,50 @@ def test_switch_off_changes_nothing(lake):
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
     assert p.stats["xinde"] == before + 10 and not any("最濃" in m for m in msgs)
+
+
+# ── 內容驗證（意境提示設計第一節）──
+from tianxia.content import ContentError, validate  # noqa: E402
+
+ANYWHERE = InsightScene(  # 通用場景（沒線索）：讓城鎮、寶洞也有卡可出，別的檢查才不會先擋下來
+    id="still", title="一念", text="心裡有個念頭一閃，停過腳的{痕跡}。",
+    methods=[SenseMethod(attribute=a, text=t) for a, t in (("剛", "抓住它"), ("柔", "讓它漂"), ("快", "動起來"), ("慢", "等它沉"))],
+)
+
+
+def _scenes(content):
+    content.insight_scenes = {SCENE.id: SCENE, ANYWHERE.id: ANYWHERE}
+
+
+def test_the_strongest_must_be_something_the_place_gives(content):
+    content.insights["shan"].strong_line = "此地山氣最沉。"
+    content.locations["lake"].insight_strong = "shan"  # 湖邊只悟得到水、風
+    with pytest.raises(ContentError, match="lake"):
+        validate(content)
+
+
+def test_with_the_switch_on_every_place_that_gives_needs_a_strongest(content):
+    content.config.insight_strong.enabled = True
+    with pytest.raises(ContentError, match="insight_strong"):
+        validate(content)
+
+
+def test_the_strongest_needs_its_line(content):
+    content.locations["lake"].insight_strong = "shui"  # 測試內容的意境沒寫 strong_line
+    with pytest.raises(ContentError, match="strong_line"):
+        validate(content)
+
+
+def test_some_scene_clue_has_to_point_at_the_strongest(content):
+    _scenes(content)
+    content.insights["feng"].strong_line = "此地風勢最勁。"
+    content.locations["lake"].insight_strong = "feng"  # 湖風的線索只指柔
+    with pytest.raises(ContentError, match="線索"):
+        validate(content)
+
+
+def test_a_clue_pointing_at_the_strongest_passes(content):
+    _scenes(content)
+    content.insights["shui"].strong_line = LINE
+    content.locations["lake"].insight_strong = "shui"
+    validate(content)

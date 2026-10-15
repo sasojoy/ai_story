@@ -461,6 +461,37 @@ def check_insight_scenes(c: Content, need) -> None:
             need(not scene.hints or bool(set(scene.hints) & pool), f"{where}：線索 {scene.hints} 指不到這裡悟得到的 {sorted(pool)}")
 
 
+def check_insight_strong(c: Content, need) -> None:
+    """每個地點最濃的意境（意境提示設計第一節）：
+    - 寫了的話，要是這個地點探索真的悟得到的；那一種意境要寫 strong_line（悟到時多的那一句）。
+    - 開關開著時，探索悟得到意境的每一個地點（序章草廬除外）都要寫。
+    - 有所感的場景要對得上：這裡用得到的每一段都要有最濃那一種屬性的做法；寫了線索的場景裡，至少一段指得到它
+      （一段都沒寫線索的不查）——不然照著場景描寫選的人永遠選不到最濃的。
+    正式內容的分布（每一種至少 5 處、五個大區都有）鎖在 tests/test_real_content.py。"""
+    from .insights import explore_gives, scenes_for  # noqa: PLC0415  insights → state → models，延後免得循環
+
+    hut = c.tutorial.location
+    for loc in c.locations.values():
+        where = f"地點 {loc.id}"
+        gives = explore_gives(loc, c)
+        if loc.insight_strong is None:
+            need(not (c.config.insight_strong.enabled and gives and not loc.prologue_only and loc.id != hut),
+                 f"{where}：意境提示開著，探索悟得到意境的地點都要寫 insight_strong")
+            continue
+        need(loc.insight_strong in gives, f"{where}：最濃的意境 {loc.insight_strong} 要是這裡悟得到的 {gives}")
+        d = c.insights.get(loc.insight_strong)
+        need(d is not None and bool(d.strong_line), f"{where}：最濃的意境 {loc.insight_strong} 要寫 strong_line（悟到時多的那一句）")
+        if d is None or loc.insight_strong not in gives:
+            continue
+        scenes = scenes_for(loc, c)
+        for scene in scenes:
+            need(any(m.attribute == d.attribute for m in scene.methods),
+                 f"有所感 {scene.id}（用在 {loc.id}）：沒有最濃那一種（{d.attribute}）的做法")
+        hinted = [scene for scene in scenes if scene.hints]
+        need(not hinted or any(d.attribute in scene.hints for scene in hinted),
+             f"{where}：有所感的場景沒有一段線索指得到最濃的「{d.name}」（{d.attribute}）")
+
+
 def check_faction_choices(c: Content, need) -> None:
     """選項照陣營分邊（Condition.factions／factions_none，企劃者 2026-10-08「加入黃巾軍了，探索還一堆打黃巾的任務」）之後，
     每一種身分（散人與每個陣營）碰得到的事件，至少要剩一個選項看得見——不然那個人會卡在一則沒有選項的事件上。
@@ -1791,6 +1822,7 @@ def validate(c: Content) -> None:
         need(bool(word.strip()), "banned_names 裡有空字串")
     check_check_voice(c, need)
     check_insight_scenes(c, need)
+    check_insight_strong(c, need)
     check_faction_choices(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
