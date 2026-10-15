@@ -362,3 +362,119 @@ def test_donate_goes_to_the_side_stock(wk):
     game.state.player.materials = {"man_1": 3}
     game.donate("man_1", 3)
     assert game.state.world.armaments.get("guan") and "haoqiang" not in game.state.world.armaments
+
+
+# ── Task 5：軍令、懸賞、截殺、挑戰本人、伏筆、事件條件照那一邊 ─────────────
+
+
+def _settled(game):
+    """開季那一刻的結算（第 1 週的週初掛鉤：軍令、懸賞），同 Game._settle_season_start。"""
+    from tianxia.world import settle_season_start
+
+    settle_season_start(game.state.world, game.content, random.Random(0))
+    return game
+
+
+def test_orders_skip_the_gentry_and_follow_the_side(wk):
+    from tianxia import orders
+
+    game = _settled(_game(wk, faction="haoqiang", ally="guan"))
+    w = game.state.world
+    assert w.orders, "開季那一刻第 1 週的軍令已經發了"
+    assert not [o for o in w.orders if o.faction == "haoqiang"]
+    assert orders.current(game.state, wk, allied.side_of(game.state, wk))
+
+
+def test_old_rules_still_issue_gentry_orders():
+    off = _old_rules()
+    assert [o for o in _settled(_game(off, name="乙")).state.world.orders if o.faction == "haoqiang"]
+
+
+def test_give_bounties_skip_the_gentry(wk):
+    from tianxia import bounties
+
+    game = _settled(_game(wk))
+    gives = [b.faction for b in game.state.world.bounties if b.kind in bounties.GIVE_KINDS]
+    assert gives and "haoqiang" not in gives
+
+
+def test_old_rules_still_issue_gentry_give_bounties():
+    from tianxia import bounties
+
+    off = _old_rules()
+    game = _settled(_game(off, name="乙"))
+    assert "haoqiang" in [b.faction for b in game.state.world.bounties if b.kind in bounties.GIVE_KINDS]
+
+
+def test_bounties_take_the_sides(wk):
+    from tianxia import bounties
+
+    game = _settled(_game(wk, faction="haoqiang", ally="huang"))
+    open_ones = [b for b in game.state.world.bounties if b.kind not in bounties.GIVE_KINDS]
+    mine = [b for b in open_ones if b.faction == "huang"]
+    theirs = [b for b in open_ones if b.faction == "guan"]
+    assert mine and all(bounties.can_take(game.state, b) for b in mine)
+    assert theirs and not any(bounties.can_take(game.state, b) for b in theirs)
+
+
+def test_no_raid_on_the_same_side(wk):
+    a = _game(wk, faction="haoqiang", ally="guan")
+    b = _game(wk, name="乙", faction="guan")
+    c = _game(wk, name="丙", faction="huang")
+    assert not a.raid_shown(b) and not b.raid_shown(a) and a.raid_shown(c)
+
+
+def _standing(game, content, side):
+    """這一方此刻在場、有所在地的第一位大勢人物。"""
+    from tianxia import figures
+
+    return next(
+        fid for fid, f in content.figures.items()
+        if f.faction == side and (now := figures.state_of(game.state, content, fid)).status == "active" and now.location
+    )
+
+
+def test_challenge_only_the_other_side(wk):
+    from tianxia import figures
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    for side, shown in (("guan", False), ("huang", True)):
+        fid = _standing(game, wk, side)
+        game.state.player.location = figures.state_of(game.state, wk, fid).location
+        ids = [o.id for o in game._challenge_options(False)]
+        assert (f"act:challenge:{fid}" in ids) is shown
+
+
+def test_foreshadow_chains_follow_the_side(wk):
+    from tianxia import foreshadow
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    sides = {c.side for c in wk.foreshadows.chains if foreshadow.capable(game.state, wk, c)}
+    assert sides == {"guan"}
+
+
+def test_third_party_fragments_hidden(wk):
+    from tianxia import events, foreshadow
+
+    assert foreshadow.third_party_events(wk) == {"fs_ev_xinye_clerk", "fs_ev_two_buyers"}
+    game = _game(wk, faction="haoqiang", ally="guan", at="xinye")
+    assert "fs_ev_xinye_clerk" not in [e.id for e in events.event_candidates(game.state, wk, "explore")]
+
+
+def test_old_rules_show_third_party_fragments():
+    from tianxia import events
+
+    off = _old_rules()
+    game = _game(off, name="乙", faction="haoqiang", at="xinye")
+    assert "fs_ev_xinye_clerk" in [e.id for e in events.event_candidates(game.state, off, "explore")]
+
+
+def test_condition_factions_read_both(wk):
+    from tianxia.models import Condition
+
+    game = _game(wk, faction="haoqiang", ally="huang")
+    assert rules.check_condition(Condition(factions=["haoqiang"]), game.state, wk)
+    assert rules.check_condition(Condition(factions=["huang"]), game.state, wk)
+    assert not rules.check_condition(Condition(factions=["guan"]), game.state, wk)
+    assert not rules.check_condition(Condition(factions_none=["huang"]), game.state, wk)
+    assert not rules.check_condition(Condition(factions=["huang"]), game.state)  # 沒給 content 讀不到季的章：照舊只比陣營

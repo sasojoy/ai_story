@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, gender, library, materials, ranger, roster, team, territory, treasures, weapons
+from . import allied, calendar, equipment, gender, library, materials, ranger, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
@@ -251,10 +251,16 @@ def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
     return faction is None or faction == b.faction
 
 
-def can_take(state: GameState, b: Bounty) -> bool:
-    """這個人接不接得了這一種：散人兩邊都能接；陣營的人只能接自己陣營的；通緝不能接自己的。"""
+def _side(state: GameState) -> str | None:
+    """敵我照那一邊（同 allied.side_of）：豪強分屬兩軍的季依附了一軍的人是那一軍。PlayerState.ally 只在那種季寫（投靠那一下照
+    allied.on），換季角色重來，所以手上沒有 content 的地方（can_take）照它讀也一樣。"""
     p = state.player
-    return _takeable(p.name, p.faction, b)
+    return p.ally or p.faction
+
+
+def can_take(state: GameState, b: Bounty) -> bool:
+    """這個人接不接得了這一種：散人兩邊都能接；陣營的人只能接自己陣營的（豪強分屬兩軍：依附那一軍的）；通緝不能接自己的。"""
+    return _takeable(state.player.name, _side(state), b)
 
 
 def stranded(state: GameState, content: Content, faction_id: str | None) -> list[Bounty]:
@@ -803,7 +809,8 @@ def post_problem(state: GameState, content: Content, target_state: GameState, am
     if not active(state, content) or not content.config.raid.enabled:
         return "（此刻無法這麼做。）"
     p, t = state.player, target_state.player
-    if p.faction is None or t.faction is None or p.faction == t.faction:
+    mine, theirs = _side(state), _side(target_state)  # 豪強分屬兩軍：同一邊的不算敵對
+    if mine is None or theirs is None or mine == theirs:
         return "只能通緝敵對陣營的人。"
     if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
         return f"{t.name}初入江湖，還在新手期，通緝不了{gender.pronoun(t)}。"  # 待 joy 潤
@@ -828,7 +835,7 @@ def post(state: GameState, content: Content, target_state: GameState, amount: in
     p.stats["silver"] = p.stats.get("silver", 0) - amount
     w.bounty_seq += 1
     b = Bounty(
-        id=f"b{w.bounty_seq}", kind="wanted", faction=p.faction, week=calendar.point(w.time, content, w).week,
+        id=f"b{w.bounty_seq}", kind="wanted", faction=_side(state), week=calendar.point(w.time, content, w).week,
         expires=w.time + content.config.bounties.post_weeks * week_seconds(state, content), silver=amount,
         deeds=content.config.bounties.deeds.get("wanted", 0), quota=1, poster=p.name, target=target_state.player.name,
     )
@@ -867,8 +874,9 @@ def deliver_lapses(state: GameState, content: Content) -> list[str]:
         if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
             continue
         name = title(content, b)
-        if p.faction is not None and p.faction != b.faction:  # 同 _takeable 的陣營那一條
-            line = LAPSED_SIDE.format(faction=content.scenario.faction_name(p.faction, "別的陣營"), title=name)
+        side = _side(state)
+        if side is not None and side != b.faction:  # 同 _takeable 的陣營那一條（豪強分屬兩軍：依附那一軍）
+            line = LAPSED_SIDE.format(faction=content.scenario.faction_name(side, "別的陣營"), title=name)
         elif _left(b) <= 0:
             line = LAPSED_FULL.format(title=name)
         elif not past_due(b, content, w):
@@ -1029,7 +1037,8 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
     # 後面每一張討伐、打探、護送的地點都會位移。種子帶天機（天機是 0 時照舊），每一季第 1 週的屬性不再一樣（設計 14.2 第 7 條，裝備三一起做）
     give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}{salt}")
-    factions = [f.id for f in content.scenario.factions]
+    # 豪強分屬兩軍的季（企劃者 2026-10-15）：豪強那兩張不掛，豪強交依附那一軍的（一批 12 張）
+    factions = [f.id for f in content.scenario.factions if not (f.allies and allied.on(content, w))]
     asks: dict[str, list[tuple[str, str | None]]] = {}
     for kind in cfg.give_kinds:
         if kind not in GIVE_KINDS or (kind == "arms" and not content.config.weapons.enabled):

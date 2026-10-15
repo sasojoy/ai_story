@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from . import calendar, orders
 from .models import Content, Recruiter
-from .rules import front_of, season_one
+from .rules import front_of, season_one, side_of
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -178,7 +178,7 @@ def glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]
         return []
     loc = state.player.location
     hot = {"act:duty", "act:convoy"}
-    for o in orders.current(state, content, state.player.faction):
+    for o in orders.current(state, content, side_of(state, content)):  # 豪強分屬兩軍：依附那一軍的軍令
         if o.done:
             continue
         if o.template == "strike" and o.figure is not None:

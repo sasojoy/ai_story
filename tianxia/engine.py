@@ -2806,7 +2806,7 @@ class Game:
         duty = c.orders.duties.get(p.faction)
         if duty is not None and front_of(c, loc.id) is not None:
             opts.append(self._duty_option(duty.name))
-        escort = orders.escort_at(s, c, p.faction, loc.id)
+        escort = orders.escort_at(s, c, self._side(), loc.id)  # 豪強分屬兩軍：依附那一軍的護糧
         if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
             dest = c.locations[p.convoy.to_loc].name
             opts.append(Option(id="act:convoy", enabled=False, label=f"接下糧車（你還押著一車糧，要送到{dest}）"))
@@ -2934,7 +2934,7 @@ class Game:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
         達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。"""
         s, c = self.state, self.content
-        msgs = orders.credit(s, c, s.player.faction, s.player.name, **kw)
+        msgs = orders.credit(s, c, self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
@@ -2968,7 +2968,7 @@ class Game:
         不花體力；抵達終點才算數（見 _convoy_arrives）。"""
         s, c = self.state, self.content
         p = s.player
-        escort = orders.escort_at(s, c, p.faction, p.location)
+        escort = orders.escort_at(s, c, self._side(), p.location)
         need = c.config.convoy_grain
         if escort is None or p.convoy is not None or not materials.take_grain(s, c, need):
             return ["（這裡沒有糧車可接。）"]
@@ -2987,7 +2987,7 @@ class Game:
             return []
         p.convoy = None
         msgs: list[str] = []
-        enemy = orders.ambusher(c, p.faction)
+        enemy = orders.ambusher(c, self._side())
         if enemy is not None and self.rng.random() < c.config.convoy_ambush_chance:
             msgs.append("快到營門時，半路殺出一隊截糧的人馬！")
             msgs += self._squad_encounter(enemy, wild=True)
@@ -6089,7 +6089,7 @@ class Game:
         opts = []
         for fid in figures.present_at(s, c, p.location):
             fig = c.figures[fid]
-            if fig.faction == p.faction:
+            if fig.faction == self._side():  # 同陣營（豪強分屬兩軍：依附那一軍）的人物不打
                 continue
             option_id = f"act:challenge:{fid}"
             if not figures.can_challenge(s, c, fid):
@@ -7736,7 +7736,7 @@ class Game:
         """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、這一季還沒收、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞
         （散人、同陣營的人也行）。每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；休季（這一季收了）不畫，跟通緝鈕、懸賞榜一樣
         （FB-163：以前還畫著灰的，原因寫成「城裡耳目眾多」「你此刻正忙」）；raid_targets 與 raid_refusal 都先問這裡。"""
-        mine, theirs = self.state.player.faction, other.state.player.faction
+        mine, theirs = self._side(), other._side()  # 豪強分屬兩軍：同一邊的不能截殺
         if not self.content.config.raid.enabled or self.state.world.ended:
             return False
         if mine is not None and theirs is not None and mine != theirs:
@@ -10148,7 +10148,7 @@ class Game:
             return []
         name = s.player.name
         views = []
-        for o in orders.current(s, c, s.player.faction):
+        for o in orders.current(s, c, self._side()):  # 豪強分屬兩軍：看依附那一軍的軍令
             total = sum(o.progress.values())
             view = {
                 "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),

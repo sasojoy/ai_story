@@ -166,9 +166,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if any(w.marks.get(k, 0) > v for k, v in cond.marks_max.items()):
         return False
-    if cond.factions and p.faction not in cond.factions:
+    # 豪強分屬兩軍：陣營與依附的那一軍都算（寫了 haoqiang 的照舊成立、寫了依附那一軍的也成立）；沒給 content 讀不到季的章，只比陣營
+    mine = {p.faction, side_of(state, content) if content is not None else None} - {None}
+    if cond.factions and not mine & set(cond.factions):
         return False
-    if p.faction is not None and p.faction in cond.factions_none:
+    if mine & set(cond.factions_none):
         return False
     if cond.controlled_by:  # 這裡此刻歸誰控制（地盤易手）：沒有 content、開關關著、不是戰線地點都不成立
         from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環

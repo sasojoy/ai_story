@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line, day_seconds
+from .rules import can_meet, check_chance, check_result_line, day_seconds, side_of
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -154,12 +154,23 @@ def event_ids(content: Content) -> set[str]:
     return found
 
 
+def third_party_events(content: Content) -> set[str]:
+    """第三方的伏筆事件（豪強分屬兩軍的季不出現，設計第十節；events.event_candidates 擋）：伏筆的事件（event_ids）裡，
+    條件的陣營全是要依附的陣營（豪強）的——正式內容是新野老縣吏與兩路買家。"""
+    gentry = {f.id for f in content.scenario.factions if f.allies}
+    return {
+        eid for eid in event_ids(content)
+        if eid in content.events and (factions := content.events[eid].condition.factions) and set(factions) <= gentry
+    }
+
+
 # ── 誰做得了 ─────────────────────────────────────────────
 
 
 def capable(state: GameState, content: Content, c: FsChain) -> bool:
-    """這個玩家做得了這條鏈：開關開著、是那個陣營的人（散人與其他陣營都不行）、大事還沒發生、依賴的人物還在、還沒做完。"""
-    if not active(state, content) or state.player.faction != c.side:
+    """這個玩家做得了這條鏈：開關開著、是那個陣營的人（散人與其他陣營都不行；豪強分屬兩軍的季照依附那一軍）、大事還沒發生、
+    依賴的人物還在、還沒做完。"""
+    if not active(state, content) or side_of(state, content) != c.side:
         return False
     if c.event in state.world.timeline or _event(content, c.event) is None:
         return False
@@ -244,8 +255,9 @@ def grant_label(content: Content, c: FsChain, index: int) -> str:
 def grant_refusal(state: GameState, content: Content, c: FsChain, index: int) -> str | None:
     """管理者給這個人這一則片段會被拒絕的原因；給得了是 None。跟 grant_fragment 的檢查同一套（capable、聽過沒有），只是說出為什麼。"""
     p = state.player
-    if p.faction != c.side:
-        who = "是散人" if p.faction is None else f"是{content.scenario.faction(p.faction).name}的人"
+    side = side_of(state, content)  # 豪強分屬兩軍：照依附那一軍
+    if side != c.side:
+        who = "是散人" if side is None else f"是{content.scenario.faction(side).name}的人"
         return f"（這條伏筆是{content.scenario.faction(c.side).name}的，{p.name}{who}。）"
     if _heard(state, c.id, index):
         return f"（{p.name}已經聽過這一則了。）"
@@ -692,7 +704,7 @@ def after_win(state: GameState, content: Content, squad: Squad, rng: random.Rand
     那個陣營的人、在那幾個大區、打贏那個陣營的隊伍，而且自己還做得了的鏈裡有讀官銀的，才擲 Config.guanyin_chance；
     中了計數 +1、寫一句。"""
     rule = content.foreshadows.guanyin
-    if rule is None or not active(state, content) or state.player.faction != rule.side:
+    if rule is None or not active(state, content) or side_of(state, content) != rule.side:
         return []
     if squad.faction != rule.squad_faction or region not in rule.regions:
         return []

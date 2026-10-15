@@ -625,7 +625,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
             odds = game.challenge_odds(fid)
-            if orders.strike_on(game.state, game.content, game.state.player.faction, fid):  # 打擊軍令點名他（計畫 T6）
+            if orders.strike_on(game.state, game.content, game._side(), fid):  # 打擊軍令點名他（計畫 T6；豪強分屬兩軍照依附那一軍）
                 return ORDER_SCORE + CHALLENGE_SCORE if odds in STRIKE_ODDS else None
             return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
         if arg == "call":
@@ -652,14 +652,14 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             s, c = game.state, game.content
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
-            bonus = ORDER_SCORE if orders.win_counts(s, c, s.player.faction, s.player.location) else 0.0
-            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, s.player.faction, s.player.location):
+            bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
+            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
-            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
+            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, game._side(), s.player.location) else 0.0)
         if arg == "rank2":  # 第 2 階行動（正式版乙一）：跟守勢行動一樣的底分；替軍令記功的加分是計畫戊的事
             return DUTY_SCORE
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
@@ -859,5 +859,5 @@ def _bounty_hop(game: Game) -> str | None:
 
 def _order_hop(game: Game) -> str | None:
     """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
-    places = orders.targets(game.state, game.content, game.state.player.faction)
+    places = orders.targets(game.state, game.content, game._side())
     return next_hop(game, places) if places else None
