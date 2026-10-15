@@ -675,6 +675,8 @@ def resolve_round(
     force, counts = {first: 0.0, second: 0.0}, {first: 0, second: 0}
     names = {f.id: f.name for f in definition.factions}
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
+    gains: dict[str, int] = {}  # 陣營 → 其中成了的合起來推進多少（success_trend_cap 夾）
+    losses: dict[str, int] = {}  # 陣營 → 其中失手的合起來倒退多少（負的，side_trend_cap 夾）
     coefs: dict[str, list[float]] = {first: [], second: []}  # 陣營 → 這一回合每個出固定招的人的剋制係數，回合摘要用
     fitness: dict[str, list[tuple[float, float]]] = {first: [], second: []}  # 陣營 → 每個出固定招的人的（份量, 氣血狀態），回合摘要用
     shares: dict[str, list[tuple[float, str, str]]] = {first: [], second: []}  # 陣營 →（力量, 名號, 招）：回合原因點名帶頭的人
@@ -768,6 +770,10 @@ def resolve_round(
                 if more_dramatic(moment, instance.highlight):
                     instance.highlight = moment
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
+            if delta > 0:
+                gains[p.faction] = gains.get(p.faction, 0) + delta
+            elif delta < 0:
+                losses[p.faction] = losses.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
             enemy = second if p.faction == first else first
@@ -802,15 +808,20 @@ def resolve_round(
         if q is not None and amount >= 0.5 and not q.eliminated:
             q.stood_marked += 1
     instance.last_targets = targets_now
-    # 同一邊同一回合放手一搏合起來有上限（一個人亂寫、一群人亂寫都不能抵過全軍的固定招）
+    # 同一邊同一回合放手一搏合起來有上限，成了的與失手的分開夾（Joy 2026-10-15「成功另算」）：失手的合起來最多退
+    # side_trend_cap（一群人亂寫拖不垮全軍），成了的照人數疊、最多推 success_trend_cap
     if definition.free_text_gamble is not None:
-        cap = definition.free_text_gamble.side_trend_cap
-        for side, raw in list(gambles.items()):
-            capped = max(-cap, min(cap, raw))
-            if capped != raw:
-                gambles[side] = capped
-                verb = "把戰線推前了" if capped > 0 else "讓戰線退了"
-                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合的放手一搏合起來只{verb}{shove_size(capped)}。")
+        gamble = definition.free_text_gamble
+        back_cap = gamble.side_trend_cap
+        push_cap = gamble.success_trend_cap if gamble.success_trend_cap is not None else back_cap
+        for side in list(gambles):
+            up, down = gains.get(side, 0), losses.get(side, 0)
+            up_capped, down_capped = min(push_cap, up), max(-back_cap, down)
+            gambles[side] = up_capped + down_capped
+            if up_capped != up:
+                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合成了的放手一搏合起來只把戰線推前了{shove_size(up_capped)}。")
+            if down_capped != down:
+                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合失手的放手一搏合起來只讓戰線退了{shove_size(down_capped)}。")
     gamble_delta = sum((1 if side == first else -1) * d for side, d in gambles.items())
     push = 0.0
     if counts[first] or counts[second]:

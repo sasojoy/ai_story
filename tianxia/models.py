@@ -2417,7 +2417,11 @@ class FreeTextGamble(_Strict):
     failure_trend_cap: int = 1  # 失敗時一個人最多讓戰局倒退多少（風險 25 以上才會倒退這 1）
     failure_neili_share_base: float = 0.1  # 失敗時扣氣血池上限的基礎比例
     failure_neili_share_per_risk: float = 0.0025  # 失敗時風險每 1 點再加多少比例（成功率 0 失手扣 35%，亂寫的人第三次失手才倒下）
-    side_trend_cap: int = 5  # 同一回合同一邊所有放手一搏合起來最多推進或倒退多少（正式內容 content/battles.json 2026-10-10 從 5 調成 4，見 BattleTuning.push_max）
+    side_trend_cap: int = 5  # 同一回合同一邊失手的放手一搏合起來最多倒退多少（正式內容 content/battles.json 2026-10-10 從 5 調成 4，見 BattleTuning.push_max；
+    # 擋 10/8 那種五個人亂寫就把全軍拖垮。2026-10-15 以前成了的也一起算在這個上限裡）
+    success_trend_cap: int | None = None  # 同一回合同一邊成了的放手一搏合起來最多推進多少；None＝跟 side_trend_cap 一樣。
+    # Joy 2026-10-15 決策卡選「成功另算」：長社火攻成了的搏一回合常常不只一個，合起來被 4 夾掉，寫得好的人推不動戰局；
+    # 正式內容寫 10：一回合幾個人都成了，最多抵得過固定招 push_max 20 的一半，固定招還是大宗
     # 放手一搏不再「誰手快誰刷」（Joy 2026-10-10 決戰試玩回饋第 3 點：「跟從預設選項的玩家現在毫無存在感」）：
     # 一個人每一幕最多放手一搏 per_act 次；**0 ＝ 不限，每回合都能搏**（joy 2026-10-13「放手一搏取消冷卻」，
     # 推翻 2026-10-10 的一幕一次；留著這個欄位是為了之後想再上限制時不用改程式）

@@ -1554,7 +1554,35 @@ def test_a_whole_side_failing_its_gambles_in_one_round_falls_back_at_most_five()
         bi.submit_action(battle, f"黃{i}", "huang_hold")
     msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
     assert battle.trend == 50 - 10 - 5  # 官軍沒人正面出陣：黃巾推滿 10；六人失手本來 -6，一回合最多 -5
-    assert "各路奇招互相牽扯，官軍這一回合的放手一搏合起來只讓戰線退了一截。" in msgs
+    assert "各路奇招互相牽扯，官軍這一回合失手的放手一搏合起來只讓戰線退了一截。" in msgs
+
+
+def test_successes_and_failures_are_capped_separately():
+    # Joy 2026-10-15 決策卡「成功另算」：失手的合起來最多退 side_trend_cap，成了的照人數疊、最多推 success_trend_cap
+    gamble, battle = _gamblers(12, 2)
+    gamble.free_text_gamble = gamble.free_text_gamble.model_copy(update={"side_trend_cap": 4, "success_trend_cap": 10})
+    for i in range(6):  # 成功率 100 一定成（每人 +1，共 +6，舊的 ±4 會夾掉）
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="穩穩推進", success_rate=100)
+    for i in range(6, 12):  # 成功率 0 一定失手（每人 −1，共 −6，夾到 −4）
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="亂衝", success_rate=0)
+    for i in range(2):
+        bi.submit_action(battle, f"黃{i}", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 - 10 + 6 - 4  # 官軍沒人正面出陣：黃巾推滿 10；成了 +6 不夾，失手 −6 夾到 −4
+    assert "各路奇招互相牽扯，官軍這一回合失手的放手一搏合起來只讓戰線退了一截。" in msgs
+    assert not any("成了的放手一搏合起來" in m for m in msgs)
+
+
+def test_successes_stack_up_to_the_success_cap():
+    gamble, battle = _gamblers(6, 2)
+    gamble.free_text_gamble = gamble.free_text_gamble.model_copy(update={"side_trend_cap": 4, "success_trend_cap": 10})
+    for i in range(6):  # 成功率 1 擲中：新手打五折，每人 +4，共 +24
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="火燒連營", success_rate=1)
+    for i in range(2):
+        bi.submit_action(battle, f"黃{i}", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.0), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 - 10 + 10
+    assert "各路奇招互相牽扯，官軍這一回合成了的放手一搏合起來只把戰線推前了一大截。" in msgs
 
 
 def test_a_successful_gamble_is_still_worth_more_than_one_failure_costs():
