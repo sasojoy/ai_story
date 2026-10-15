@@ -142,6 +142,34 @@ def price_factor(state: GameState, content: Content) -> float:
     return content.config.renown.discounts[t - 1] if t > 0 else 1.0
 
 
+NEWS_UP = "江湖上傳開了{name}的名號。"  # 跨過威震州郡那一刻的天下大事（4.5）；一季一人一次
+NEWS_UP_FLAG = "名號傳開"  # 傳過了（玩家旗標；換季跟角色一起清空）
+NEWS_BIG = "天下聞名的{name}在{place}與{foe}一戰，{tier}。"  # 天下聞名打完大場面的天下大事（4.5）
+NEWS_BIG_FLAG = "天下聞名點名:"  # 「天下聞名點名:<遊戲日>」→ 這一天點名過幾次（玩家旗標，只留今天的）
+
+
+def news_up_due(state: GameState, content: Content, up: list[str]) -> bool:
+    """這一下升到威震州郡（news_tier）、還沒傳過：天下大事傳一句。"""
+    tier = content.config.renown.news_tier
+    return on(content, "news") and FAME_TITLES[tier] in up and NEWS_UP_FLAG not in state.player.flags
+
+
+def famed_news_due(state: GameState, content: Content, day: int) -> bool:
+    """天下聞名打完大場面，這一個遊戲日還能點名（famed_news_per_day 則以內）：能的話記一筆、回 True。"""
+    cfg = content.config.renown
+    if not on(content, "news") or fame_tier(state, content) < cfg.famed_tier:
+        return False
+    flags = state.player.flags
+    key = f"{NEWS_BIG_FLAG}{day}"
+    used = [f for f in flags if f.startswith(NEWS_BIG_FLAG)]
+    today = [f for f in used if f.startswith(key + ":")]
+    if len(today) >= cfg.famed_news_per_day:
+        return False
+    flags -= {f for f in used if not f.startswith(key + ":")}  # 只留今天的
+    flags.add(f"{key}:{len(today) + 1}")
+    return True
+
+
 def duel_chance(state: GameState, content: Content) -> float:
     """頭目遇上的機會乘多少（設計 4.4：小有名氣 1.1、名動一方以上 1.2）：只放大門檻，擲的還是同一顆骰。關著是 1。"""
     if not on(content, "duel"):

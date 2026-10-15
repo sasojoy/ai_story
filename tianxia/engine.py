@@ -5643,6 +5643,8 @@ class Game:
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
+        if not wild and self.is_big(squad):  # 名聲 4.5：天下聞名打大場面點名
+            self._famed_news(loc.name, squad.name, result.tier)
         return msgs
 
     def _drills_with(self, squad: Squad) -> bool:
@@ -5844,6 +5846,13 @@ class Game:
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
         record.notes += levels
         return msgs + levels
+
+    def _famed_news(self, place: str, foe: str, tier: str) -> None:
+        """名聲 4.5：天下聞名的人打完大場面（大勢人物本人、劇情裡的頭目、難度 100 以上；單人頭目戰不算），不論勝負，天下大事點名一句；
+        一個遊戲日最多 famed_news_per_day 則（不能讓一個人一直打就洗掉別人的消息）。"""
+        s, c = self.state, self.content
+        if renown.famed_news_due(s, c, game_day(c, s.world)):
+            add_rumor(s, renown.NEWS_BIG.format(name=s.player.name, place=place, foe=foe, tier=tier), content=c, layer="world")
 
     def _deed_fame(self, kind: str) -> list[str]:
         """立功給名望（名聲設計 3.1）：RenownTuning.deeds 的那一項；deed_fame 關著、寫 0 的不給；序章不給。"""
@@ -6144,6 +6153,7 @@ class Game:
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record)
         msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
+        self._famed_news(c.locations[s.player.location].name, fig.name, result.tier)  # 名聲 4.5：挑戰本人一律是大場面
         won = result.tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
                     figure=fig.character or "")
@@ -6829,6 +6839,8 @@ class Game:
         record.notes += notes
         story += self._seize(record)
         msgs = [self._file_battle(record)] + rewards + story
+        if self.is_big(squad) and not prologue_rules.active(s, c):  # 名聲 4.5：天下聞名打大場面點名
+            self._famed_news(c.locations[s.player.location].name, squad.name, result.tier)
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])
         return msgs
@@ -10466,6 +10478,9 @@ class Game:
         if record is not None and not synced:
             record.changes = renown.annotate(record.changes, s, c)
         crossed = renown.watch(s, c, game_day(c, s.world))
+        if renown.news_up_due(s, c, crossed.up):  # 名聲 4.5：跨過威震州郡，天下大事傳一句（一季一人一次）
+            s.player.flags.add(renown.NEWS_UP_FLAG)
+            add_rumor(s, renown.NEWS_UP.format(name=s.player.name), content=c, layer="world")
         if crossed.first and not s.player.renown_told:
             s.player.renown_told = True
             journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))
