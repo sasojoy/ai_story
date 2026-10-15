@@ -135,6 +135,9 @@ class BattleParticipant(BaseModel):
     cavalry: float = 0.0  # 加入時的騎兵加成（強攻、奇襲的份量已經乘過，這裡只給畫面寫幾成）
     # 部下上陣（PM 2026-10-12）：舊資料沒有這兩欄就是沒帶部下
     troops: str = ""  # 加入時帶的部下（team.troop_names：「兩名持矛鄉勇」）；沒帶是空的
+    # 每一回合自己出了什麼（整場的第幾回合 → 「強攻」「固守（逾時代選）」「放手一搏「…」，成了」）：收場時寫進自己的戰報（Joy 2026-10-14
+    # 「決戰能不能把完整戰報在戰報那邊可以展開」）；舊資料沒有是空的
+    moves: dict[int, str] = Field(default_factory=dict)
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
@@ -684,6 +687,7 @@ def resolve_round(
                 success_rate = min(100, success_rate + tuning.role_gamble_rate)
             risk = 100 - success_rate
             succeeded = rng.random() * 100 < success_rate
+            p.moves[rnd_no] = f"放手一搏「{custom_text}」，{'成了' if succeeded else '沒成'}" if custom_text else f"放手一搏，{'成了' if succeeded else '沒成'}"
             if custom_text:
                 plus = f"，{role_name(tuning, p.role)} +{success_rate - assessed}" if success_rate != assessed else ""
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
@@ -759,6 +763,7 @@ def resolve_round(
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
             p.last_result = f"{move}（剋制 ×{coef:.1f}）"
+            p.moves[rnd_no] = move + ("（逾時代選）" if name in instance.round.auto_picked else "")
         else:  # 這個人這回合沒有三招可算（選項不在這一幕、不在交戰雙方、放手一搏卻沒有賭局設定）：不推戰局、不扣血
             continue
         p.neili = max(0.0, p.neili - damage)

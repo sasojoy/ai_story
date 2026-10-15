@@ -886,6 +886,16 @@ class SqliteWorldStore:
             ).fetchall()
             return [(row["season"], self._load_battle(conn, row["id"])) for row in rows]
 
+    def ended_battle(self, record_id: int) -> BattleInstance | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT id FROM battles WHERE id = ? AND phase = 'ended'", (record_id,)).fetchone()
+            return self._load_battle(conn, row["id"]) if row is not None else None
+
+    def season_ended_battles(self, season: int) -> list[BattleInstance]:
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT id FROM battles WHERE season = ? AND phase = 'ended' ORDER BY id", (season,)).fetchall()
+            return [self._load_battle(conn, row["id"]) for row in rows]
+
     # ── 同伴進度與招募 ────────────────────────────────────
 
     def get_companion(self, companion_id: str) -> CompanionProgress:

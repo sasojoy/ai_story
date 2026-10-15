@@ -587,6 +587,14 @@ class WorldStateStore(Protocol):
         流水號的先後前提不變。"""
         ...
 
+    def ended_battle(self, record_id: int) -> BattleInstance | None:
+        """一場收場的決戰（流水號 record_id），沒有或還沒收場是 None。戰報頁畫決戰的完整戰況照它（收場之後才補上的放手一搏劇情也在）。只讀。"""
+        ...
+
+    def season_ended_battles(self, season: int) -> list[BattleInstance]:
+        """這一季收場的決戰，照先後（季終沒打完的也在，看 unfinished）。補回被洗掉的決戰戰報用（Game._restore_showdowns）。只讀。"""
+        ...
+
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""

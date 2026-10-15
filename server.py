@@ -1149,8 +1149,10 @@ def map_view(game: Game, layer: str, selected: str | None) -> dict:
 def reports_view(game: Game, record_id: int | None) -> dict:
     if record_id is None:
         record_id = game.latest_battle_id()
+    big = game.big_battle_ids()
     return {
-        "list": [{"label": label, "id": rid} for label, rid in game.battle_list()],
+        # big：決戰、奪璽單挑，網頁另外排一組在最上面（Joy 2026-10-14）
+        "list": [{"label": label, "id": rid, "big": rid in big} for label, rid in game.battle_list()],
         "selected": record_id,
         "detail": md(game.battle_detail(record_id)) if record_id is not None else md(REPORT_EMPTY_TEXT),
         "gauge": game.record_gauge(record_id),  # 決戰的戰報畫收場那一刻的戰局條（Joy 2026-10-10）；不是決戰是 None

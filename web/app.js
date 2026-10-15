@@ -1371,10 +1371,11 @@
   // 每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：引擎在開頭寫「〔官軍〕」（engine.SIDE_TAG），這裡換成那一軍顏色的
   // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著。
   // 兩個式子寫在函式裡：測試的假瀏覽器照名字只抽函式出來
-  function roundBlocks(html, g) {
+  // report：戰報頁那一場的流水號（決戰的完整戰況，Joy 2026-10-14）：每一回合都收成一行、照先後，展開了哪幾回合跟場景分開記（「r<流水號>:<回合>」）
+  function roundBlocks(html, g, report) {
     const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
     const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
-    let newest = true;
+    let newest = report == null;
     const open = S.roundsOpen || (S.roundsOpen = new Set());
     const sides = {};
     if (g) for (const w of [g.left, g.right]) if (w) sides[w.name] = w;
@@ -1390,7 +1391,8 @@
       }
       const first = /<li>([\s\S]*?)<\/li>/.exec(items);
       const gist = first ? first[1].replace(/<[^>]*>/g, "") : "";
-      return `<details class="b-round" data-round="${n}"${open.has(n) ? " open" : ""}><summary><b>第 ${n} 回合</b>${gist ? `<span>${gist}</span>` : ""}</summary>${list}</details>\n`;
+      const key = report == null ? n : `r${report}:${n}`;
+      return `<details class="b-round" data-round="${key}"${open.has(key) ? " open" : ""}><summary><b>第 ${n} 回合</b>${gist ? `<span>${gist}</span>` : ""}</summary>${list}</details>\n`;
     });
   }
 
@@ -3723,9 +3725,15 @@
     if (S.news === "reports") {
       const r = S.reports;
       if (!r) body = '<p class="muted">載入中…</p>';
-      else if (S.reportOpen && r.selected != null) body = `<button class="linkish back" data-act="report-list">‹ 全部戰報</button><div class="card report-detail">${gaugeHtml(r.gauge)}${r.detail}</div>`;
+      else if (S.reportOpen && r.selected != null) body = `<button class="linkish back" data-act="report-list">‹ 全部戰報</button><div class="card report-detail">${gaugeHtml(r.gauge)}${roundBlocks(r.detail, r.gauge, r.selected)}</div>`;
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
-      else body = `<div class="list">${r.list.map((x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`).join("")}</div>`;
+      else {
+        // 決戰與奪璽單挑另外一組排在最上面，不跟遊歷野怪混在一起（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）
+        const item = (x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`;
+        const big = r.list.filter((x) => x.big), rest = r.list.filter((x) => !x.big);
+        body = (big.length ? `<p class="report-group">大戰</p><div class="list report-big">${big.map(item).join("")}</div>` : "")
+          + (rest.length ? `${big.length ? '<p class="report-group">最近的仗</p>' : ""}<div class="list">${rest.map(item).join("")}</div>` : "");
+      }
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
     else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
