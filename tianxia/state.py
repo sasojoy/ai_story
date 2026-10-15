@@ -523,6 +523,8 @@ class PlayerState(BaseModel):
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
     battle_results_seen: list[int] = Field(default_factory=list)
+    # 補回被洗掉的決戰戰報（Game._restore_showdowns）做過的那一季：一季只查一次 battles 表。舊存檔沒有是 0
+    showdowns_restored: int = 0
     # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
     showdowns: int = 0
     top_merits: int = 0
@@ -774,6 +776,7 @@ class TerritoryState(BaseModel):
     tug: dict[str, str] = Field(default_factory=dict)  # 可易手的地點 → 拔河算出的那一方（±band 不動看它）
     geju: list[str] = Field(default_factory=list)  # 豪強割據佔著的地點，照佔下的先後
     pinned: dict[str, str] = Field(default_factory=dict)  # 大事指定的地點 → 指定那一刻規則算出的控制方（規則改變那一刻才回到規則）
+    held: dict[str, list[str]] = Field(default_factory=dict)  # 地點 → 這一季佔過它的各方（照先後）：再拿回來寫「收復」（FB-252）
     # 週次 → 那一週的樣子（territory._snapshot：每次重算蓋掉這一週那一格，所以一週結束時就是週末的樣子）；沒記到的週照前一週補
     # （territory.week_at）；新的一季是新的 WorldState，自然是空的（輿圖升級設計第九節）
     weeks: dict[int, TerritoryWeek] = Field(default_factory=dict)
@@ -917,6 +920,10 @@ class BattleRecord(BaseModel):
     trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
     trait_after: list[str] = Field(default_factory=list)  # 受傷、結果出來、戰鬥外：化勁、厚、不動、乘勝、吸取、悟招、回春、輕身
     levelups: LevelUps | None = None  # 這一場有人升級才有（FB-074）；舊戰報沒有，卡片照 notes 原文
+    # 決戰的完整戰況（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」）：一回合一段的 Markdown（「##### 第 N 回合」加清單，
+    # 照先後；Game._round_blocks 收場時快照，每一段最後一條是自己出了什麼）。不是決戰、舊戰報是空的
+    log: list[str] = Field(default_factory=list)
+    battle_ref: int | None = None  # 決戰是資料庫裡那一場的流水號（BattleInstance.record_id）：戰報頁照它重讀完整戰況、補回被洗掉的戰報認它；其他是 None
 
 
 class JournalEntry(BaseModel):

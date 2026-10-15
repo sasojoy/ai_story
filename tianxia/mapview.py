@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas, mapart, mounts, territory
+from . import atlas, mapart, mounts, orders, sortie, territory
 from .atlas import KNOWN, Odds
 from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
@@ -41,6 +41,10 @@ Spot = tuple[float, float, str]  # 文字的 x、第一行的基線 y、對齊�
 Label = tuple[list[tuple[str, int]], list[Spot]]  # 要擺的幾行字（文字, 字級）與依偏好排好的位置
 Taken = tuple[Box, float]  # 已經佔用的範圍，與壓到它有多糟：文字比地點記號糟，記號又比外面的細圓圈糟
 TEXT_WEIGHT = 4
+# 地點記號（圓盤）：比文字輕、比細圓圈重。名字沒有空位、只能挑壓得最少的地方時（_least），壓到別人的圓盤會讓那一半點下去選錯地點，
+# 所以記號的權重拉到 3（以前是 1：潁川郊野〔所在地〕的名字在 ⚔ 改照地盤畫之後〔FB-251〕寧可壓潁水河畔的圓盤、不壓文字）。
+# 只影響沒有空位的名字擺哪裡：有空位就是「什麼都不壓」，權重不看
+NODE_WEIGHT = 3
 RING_WEIGHT = 0.2
 SELECTABLE = (*KNOWN, "outline")  # 點得到、選得到的地點
 HIT_RADIUS = 16  # 地點可點的範圍（透明圓）
@@ -53,6 +57,8 @@ LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨")
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
 LEGEND_STATES_OPEN = "紅旗：所在地"  # 全圖開放（Config.open_map）：已開放的地點都畫全彩，沒有看得見、摸清、未知之分（待 joy 潤）
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
+# 待 joy 潤（FB-251）：出陣開著時 ⚔ 照地盤畫（_armed）。不能比 LEGEND_RING 長：375 寬一行只放得下那麼多（「可出陣攻打」把「打」擠到第二行，FB-256）
+LEGEND_RING_SORTIE = "外圈：綠安全／橙危險／紅兇險　⚔ 可攻打"
 LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
 LEGEND_STRIKE_OPEN = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物"  # 全圖開放：目標的所在都知道，一律標在地點上
@@ -200,11 +206,36 @@ def _text(
     )
 
 
-def _label(loc: Location, view: str, fights: bool = True) -> str:
-    """地點的名字：摸清的寫名字（fights 時有敵人的加 ⚔，所在地加「（你）」），畫出輪廓的寫「名字？」，淡點不寫。"""
+def _label(loc: Location, view: str, fights: bool = True, armed: set[str] | None = None) -> str:
+    """地點的名字：摸清的寫名字（fights 時能打的加 ⚔，所在地加「（你）」），畫出輪廓的寫「名字？」，淡點不寫。
+    armed：出陣開著時能出陣攻的地點（_armed）；None 是舊規則，照內容的 enemies 畫。"""
     if view in KNOWN:
-        return loc.name + (" ⚔" if fights and loc.enemies else "") + ("（你）" if view == "current" else "")
+        sword = fights and (loc.id in armed if armed is not None else bool(loc.enemies))
+        return loc.name + (" ⚔" if sword else "") + ("（你）" if view == "current" else "")
     return f"{loc.name}？" if view == "outline" else ""
+
+
+def _armed(state: GameState, content: Content) -> set[str] | None:
+    """⚔ 畫在哪幾個地點（FB-251）：出陣開著時是看的人此刻能出陣攻的地方（同 sortie.mode 的攻）——那條線他的陣營有目標的戰線地點，
+    此刻歸敵方而且站著敵方的隊伍，或這週截糧的糧隊在那裡（orders.extra_enemies）；散人不能出陣、豪強的出陣是攪局不打，一處都沒有。
+    出陣關著是 None（照內容的 enemies 畫，舊規則）。"""
+    if not sortie.on(content):
+        return None
+    faction = state.player.faction
+    side = content.scenario.find_faction(faction) if faction is not None else None
+    if side is None:
+        return set()
+    out: set[str] = set()
+    for loc_id in content.locations:
+        line = territory.line_of(content, loc_id)
+        if line is None or not side.goals.get(line):
+            continue
+        held = territory.controller(state.world, content, loc_id) not in (None, faction)
+        enemy = any(content.squads[sid].faction not in (None, faction)
+                    for sid in territory.squads_at(state.world, content, loc_id) if sid in content.squads)
+        if (held and enemy) or orders.extra_enemies(state, content, loc_id, faction):
+            out.add(loc_id)
+    return out
 
 
 def _tint(color: str, value: int) -> str:
@@ -222,7 +253,7 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
     return {
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
         "states": LEGEND_STATES_OPEN if opened else LEGEND_STATES,
-        "ring": LEGEND_RING,
+        "ring": LEGEND_RING_SORTIE if sortie.on(content) else LEGEND_RING,
         "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
             LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")),
         "strike": (LEGEND_STRIKE_OPEN if opened else LEGEND_STRIKE) if strike_places or strike_regions else "",
@@ -481,7 +512,7 @@ def _node(loc: Location, view: str, disc: str | None, selected: bool, taken: lis
     把記號與紅旗佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
     x, y, size = loc.x, loc.y, NODE_SIZE[view]
     mark, reach = _reach(view, selected)
-    taken.append(((x - mark, y - mark, x + mark, y + mark), 1))
+    taken.append(((x - mark, y - mark, x + mark, y + mark), NODE_WEIGHT))
     if reach > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
         taken.append(((x - reach, y - reach, x + reach, y + reach), RING_WEIGHT))
     parts = []
@@ -571,10 +602,11 @@ def render_map(
         out.append(_you_mark(content, spot, you, taken))
     out += _terrain_names(m, taken)
     here = state.player.location
+    armed = _armed(state, content)  # ⚔ 畫在哪裡（FB-251：出陣開著時照地盤；關著是 None、照內容的 enemies）
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
     for loc in sorted(content.locations.values(), key=lambda loc: loc.id != here):
         view = views[loc.id]
-        text = _label(loc, view)
+        text = _label(loc, view, armed=armed)
         if view == "hidden" or not text:
             continue
         note = notes.get(loc.id, "")

@@ -364,7 +364,8 @@ def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game, monkeypatch
     legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
     assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
     assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
-    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
+    # 正式內容出陣開著：⚔ 那一句是出陣的說法（FB-251；出陣關著是 LEGEND_RING，見 tests/test_mapview.py）
+    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING_SORTIE and legend["strike"] == ""
     fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
     # 預設那一層是局勢層：地盤易手開著（正式內容）時多一句誰佔著（出陣探索與地盤設計 4.3）
     assert fallback["layer"] == f"{mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]}　{mapview.LEGEND_CONTROL}"

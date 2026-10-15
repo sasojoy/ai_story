@@ -151,10 +151,20 @@ def title(content: Content, b: Bounty) -> str:
     return f"{kind}・{_loc_name(content, b.location)}"
 
 
+STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
+STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
+
+
 def how(content: Content, b: Bounty) -> str:
-    """怎麼完成（一句）。"""
+    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）。"""
     if b.kind == "strike":
-        return f"到{_loc_name(content, b.location)}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
+        from . import explore_modes, sortie  # noqa: PLC0415  延後 import 只是保險
+
+        target = _loc_name(content, b.location)
+        if sortie.on(content):
+            ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
+            return f"到{target}打贏一場{_enemy_name(content, b)}的隊伍（{ways}）"
+        return f"到{target}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
     if b.kind == "scout":
         return f"到{_loc_name(content, b.location)}探索一次"
     if b.kind == "escort":

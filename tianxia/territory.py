@@ -17,6 +17,7 @@ from .models import FRONT_KEY, Content
 from .state import Rumor, TerritoryState, TerritoryWeek, WorldState
 
 FLIP_LINE = "{place}落入{side}之手。"  # 待 joy 潤：易手那一刻的天下大事與江湖史（設計 4.3 第 2 點）
+RETAKE_LINE = "{side}收復{place}。"  # 待 joy 潤（FB-252）：這一季佔過那裡的一方再拿回來（TerritoryState.held）
 CONTROL_LINE = "此刻由{side}控制"  # 待 joy 潤：輿圖詳情欄局勢那一行
 
 
@@ -118,12 +119,23 @@ def _control_now(world: WorldState, content: Content, t: TerritoryState) -> dict
     return control
 
 
-def _announce(world: WorldState, content: Content, before: dict[str, str], after: dict[str, str]) -> None:
-    for loc_id, side in after.items():
+def _announce(world: WorldState, content: Content, t: TerritoryState, before: dict[str, str]) -> None:
+    """換了控制方的地點各發一句天下大事、記一筆江湖史：這一季佔過那裡的一方再拿回來寫「收復」（RETAKE_LINE，FB-252），
+    否則「落入…之手」（FLIP_LINE）。發完把此刻的控制方記進 t.held。"""
+    for loc_id, side in t.control.items():
         if before.get(loc_id) not in (None, side):
-            text = FLIP_LINE.format(place=content.locations[loc_id].name, side=content.scenario.faction_name(side, side))
+            line = RETAKE_LINE if side in t.held.get(loc_id, []) else FLIP_LINE
+            text = line.format(place=content.locations[loc_id].name, side=content.scenario.faction_name(side, side))
             world.rumors.append(Rumor(time=world.time, text=text, location=loc_id, layer="world"))
             world.chronicle.append(Rumor(time=world.time, text=text))
+    _remember(t)
+
+
+def _remember(t: TerritoryState) -> None:
+    for loc_id, side in t.control.items():
+        sides = t.held.setdefault(loc_id, [])
+        if side not in sides:
+            sides.append(side)
 
 
 def update(world: WorldState, content: Content) -> None:
@@ -137,8 +149,10 @@ def update(world: WorldState, content: Content) -> None:
     before = dict(t.control)
     t.control = _control_now(world, content, t)
     world.territory = t
-    if not first:
-        _announce(world, content, before, t.control)
+    if first:
+        _remember(t)  # 開季（第一次算）的控制方也算佔過：之後拿回來是收復
+    else:
+        _announce(world, content, t, before)
     _snapshot(world, content, t)
 
 
@@ -158,7 +172,7 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
         if loc_id not in fixed:
             t.pinned[loc_id] = haoqiang if haoqiang is not None and loc_id in t.geju else t.tug[loc_id]
         t.control[loc_id] = side
-    _announce(world, content, before, t.control)
+    _announce(world, content, t, before)
     _snapshot(world, content, t)
 
 

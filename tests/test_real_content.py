@@ -1440,12 +1440,12 @@ def test_real_endings_valid(content):
     assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
     assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
     assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
-    for ending in s1[:3]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
+    for ending in s1[:2]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
         assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
-    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講、三方對稱
+    assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講
         "第 10 週起，黃巾的態勢一到 85，這一季當場收場。",
         "第 10 週起，官軍的態勢一到 85，這一季當場收場。",
-        "第 10 週起，豪強的態勢一到 85，這一季當場收場。",
+        "到了季末，豪強的態勢在 85 以上。",  # 提前收季只看戰線，割據到季末才判（FB-254；待 joy 潤）
         "到了季末，黃巾的態勢最高。",
         "到了季末，官軍的態勢最高。",
         "到了季末，豪強的態勢最高。",

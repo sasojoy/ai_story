@@ -20,11 +20,22 @@ USED_UP = "今日已出陣 {n} 次，明日 00:00 後再出陣"  # 待 joy 潤�
 HOLD_LINE = "你在{place}整頓營伍、巡守要道，替自家守住這一處。"  # 待 joy 潤
 STIR_LINE = "你在{place}四處放話、暗中撥弄兩邊，這一帶的局面又亂了幾分。"  # 待 joy 潤
 PROLOGUE_FIGHT = "雪恥"  # 待 joy 潤：序章那一場寫好的仗（不算出陣次數，鈕上與紀錄標題寫它）
+# 戰線正好 50 時攪局推不動（FB-253）：鈕灰著寫 STIR_FLAT（格子裡只露最後一小句「攪不動」）、底下那一行寫 STIR_FLAT_LINE。待 joy 潤
+STIR_FLAT = "戰局正在中間，攪不動"
+STIR_FLAT_LINE = "這條戰線正在中間，攪局推不動；等戰局偏向一邊再來（不花次數）。"
+# 散人站在戰線地點（FB-250）：出陣那一顆灰著寫這個原因（不寫「不在戰線」）；行動列底下那一行寫 RANGER_LINE。待 joy 潤
+RANGER_NOTE = "散人不能出陣"
+RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與找素材撞上的仗出力。"
 
 
 def on(content: Content) -> bool:
     """出陣開著：Config.sortie.enabled，而且劇本有陣營（不看第一季開關，同懸賞、叛投）。"""
     return content.config.sortie.enabled and bool(content.scenario.factions)
+
+
+def ranger_here(content: Content, faction: str | None, loc_id: str) -> bool:
+    """散人站在戰線地點（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。"""
+    return faction is None and on(content) and territory.line_of(content, loc_id) is not None
 
 
 def left_today(p: PlayerState, content: Content, today: int) -> int:

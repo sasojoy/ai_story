@@ -40,7 +40,8 @@ def _fight(tier="大勝"):
 
 
 def test_rangers_and_places_off_the_fronts_have_no_sortie():
-    assert _sortie(_game(faction=None, at="changshe")) is None
+    ranger = _sortie(_game(faction=None, at="changshe"))  # FB-250：散人在戰線上看得到一顆灰的、寫原因
+    assert ranger is not None and not ranger.enabled and sortie.RANGER_NOTE in ranger.label
     assert _sortie(_game(at="wan_city")) is None  # 投靠點，不在戰線上
     assert _sortie(_game(at="luoyang_road")) is None  # 寫的是 front，洛陽沒有戰線
 
@@ -127,7 +128,7 @@ def test_the_gentry_stirs_toward_the_middle():
     assert w.trends["yingru"] == 41  # 往 50 拉
     w.trends["yingru"] = 50
     game.choose("act:train")
-    assert w.trends["yingru"] == 50  # 在 50 什麼都不推
+    assert w.trends["yingru"] == 50  # 在 50 什麼都不推（FB-253 之後那一顆灰著、按不下去，見 tests/test_core_loop_fb.py）
 
 
 def test_the_gentry_stir_earns_contribution():

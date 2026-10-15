@@ -102,12 +102,12 @@
   ],
   "slots": {
     "yingru": {
-      "guan": {"intercept": "hilltop_wilds", "escort": ["luoyang_road", "changshe"]},
-      "huang": {"intercept": "yingchuan_wilds", "escort": ["runan_wilds", "huangjin_camp"]}
+      "guan": {"intercept": "runan_wilds", "escort": ["luoyang_road", "changshe"]},
+      "huang": {"intercept": "changshe", "escort": ["runan_wilds", "huangjin_camp"]}
     },
     "nanyang": {
       "guan": {"intercept": "nanyang_wilds", "escort": ["xinye", "wan_city"]},
-      "huang": {"intercept": "nanyang_road", "escort": ["nanyang_wilds", "nanyang_huangjin_camp"]}
+      "huang": {"intercept": "nanyang_wilds", "escort": ["nanyang_wilds", "nanyang_huangjin_camp"]}
     },
     "jizhou": {
       "guan": {"intercept": "xiaquyang", "escort": ["baima_ford", "luzhi_camp"]},

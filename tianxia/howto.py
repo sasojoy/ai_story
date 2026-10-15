@@ -75,6 +75,8 @@ SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二�
     "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
     "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
+    # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
+    "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，不給銀兩、不掉東西。",
 }
 SORTIE_PUSH = "推動戰局、記貢獻"
 SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
@@ -476,7 +478,9 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
     spans = fame_ranges(content, season)
     lines = []
     if "common" in spans:
-        lines.append(f"事件裡出頭、仗義、露臉的做法（探索、交友、遊歷之後碰上的事）：一次 {_plus(spans['common'])}。")
+        # 出陣開著時沒有遊歷，戰後事件接在探索找素材撞上的那一場之後（FB-257；待 joy 潤）
+        where = "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後"
+        lines.append(f"事件裡出頭、仗義、露臉的做法（{where}碰上的事）：一次 {_plus(spans['common'])}。")
     if "big" in spans:
         lines.append(f"劇情裡打贏強敵、奇遇與一次性的大事：一次 {_plus(spans['big'])}。")
     if "loss" in spans:
@@ -656,7 +660,7 @@ CHALLENGE_UNTIMED = (
 
 # 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
 CHALLENGE_TITLE = "挑戰大勢人物"
-CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同遊歷）；自己陣營的人物不打{both}，散人不能挑戰。"
+CHALLENGE_WHO = "- 投靠了陣營的人，可以在敵方大勢人物所在的地方挑戰他本人（按鈕上寫勝算，體力同{act}）；自己陣營的人物不打{both}，散人不能挑戰。"
 CHALLENGE_BOTH = "，{names}兩邊的人物都能挑戰"
 CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見：挑戰、求見、交友都不行。"
 
@@ -672,7 +676,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
         return []
     sides = {fig.faction for fig in content.figures.values()}
     both = [f.name for f in content.scenario.factions if f.id not in sides]
-    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "")]
+    act = sortie.NAME if sortie.on(content) else "遊歷"  # FB-251：出陣開著時寫「體力同出陣」（挑戰本人照舊讀 action_cost["train"]）
+    lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "", act=act)]
     if cfg.snub_hours > 0:
         lines.append(CHALLENGE_SNUB.format(hours=cfg.snub_hours))
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
