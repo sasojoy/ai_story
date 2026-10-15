@@ -85,6 +85,11 @@ HELD_FULL = "你手上已經有 {count} 張了，先交了差再說。"  # 待 j
 BOARD_EMPTY = "榜上的懸賞都有人交了。"  # 待 joy 潤（FB-156：榜開著、看得到的單被別人交光，第二層只剩「返回」時灰掉的那一行；Game._bounty_options 的 bounty:empty）
 NOT_HELD = "你手上沒有這一張。"  # 待 joy 潤：放棄一張手上沒有的（drop）；Game._bounty 照它記掌櫃的情況
 PRIZE_GATE = "這張重賞的單，名動一方以上的人才揭得到。"  # 名聲 4.2（take_problem；店面告示照它灰掉、寫原因）
+OFFICIAL = "官府"  # 官府通緝（名聲 5.4）的掛單人
+OFFICIAL_GATE = "要{title}才揭得了官府的海捕文書"  # 待 joy 潤（名聲 5.4：俠一路一方豪俠以上才揭得了）
+POSTED_FACTION = "{faction}貼出了通緝你的告示（{title}）。"  # 待 joy 潤（名聲 4.6：被掛的人收到）
+POSTED_OFFICIAL = "官府貼出了海捕文書，畫的是你（{title}）。"  # 待 joy 潤（名聲 5.4）
+BEATEN_OFFICIAL = "惡名 -{n}（你被揭了官府海捕文書的{winner}打敗了）"  # 待 joy 潤（名聲 5.4：被截殺的寇那一份）
 UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（shopview.BACKS）
 
 
@@ -147,6 +152,8 @@ def title(content: Content, b: Bounty) -> str:
         return f"{kind}・{_loc_name(content, b.location)}的{_enemy_name(content, b)}"
     if b.kind == "escort":
         return f"{kind}・{_loc_name(content, b.location)}→{_loc_name(content, b.end)}"
+    if b.kind == "wanted" and b.auto_by is not None:  # 系統掛的（名聲 4.6、5.4）：「官府通緝・某某（江湖巨寇）」「黃巾軍通緝・某某（威震州郡）」
+        return f"{issuer(content, b)}{kind}・{b.target}" + (f"（{b.renown_title}）" if b.renown_title else "")
     if b.kind == "wanted":
         return f"{kind}・{b.target}"
     return f"{kind}・{_loc_name(content, b.location)}"
@@ -182,6 +189,8 @@ def _enemy_name(content: Content, b: Bounty) -> str:
 
 
 def issuer(content: Content, b: Bounty) -> str:
+    if b.auto_by == "官府":  # 名聲 5.4
+        return OFFICIAL
     return content.scenario.faction_name(b.faction) or "江湖"
 
 
@@ -243,13 +252,30 @@ def open_bounties(state: GameState, content: Content) -> list[Bounty]:
     return [b for b in w.bounties if not past_due(b, content, w) and _left(b) > 0 and (raids or b.kind != "wanted")]
 
 
+def army_of(faction: str | None) -> str | None:
+    """站哪一軍（名聲 4.6）：官軍、黃巾照自己的陣營；散人、第三方豪強是 None。這一份照 main 寫：
+    「第一季豪強分屬兩軍」那一份（rules.side_of）合進來時換成它，依附哪一軍的豪強照那一軍算。"""
+    return faction if faction in ENEMY else None
+
+
+def _side_ok(faction: str | None, b: Bounty) -> bool:
+    """陣營這一關（_takeable 的後半、deliver_lapses 的換陣營那一條共用）：官府通緝不看陣營（名聲 5.4）；陣營通緝照站哪一軍
+    （散人也行，名聲 4.6）；其餘散人兩邊都能接、陣營的人只接自己陣營的。"""
+    if b.auto_by == "官府":
+        return True
+    if b.auto_by == "陣營":
+        return faction is None or army_of(faction) == b.faction
+    return faction is None or faction == b.faction
+
+
 def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
-    """name 這個人、投靠 faction（None 是散人）接不接得了這一張：can_take 與 stranded（換陣營之後還接不接得了）共用這一套。"""
+    """name 這個人、投靠 faction（None 是散人）接不接得了這一張：can_take 與 stranded（換陣營之後還接不接得了）共用這一套。
+    官府通緝的稱號只在揭的那一刻看（take_problem），之後掉段照留。"""
     if b.kind == "wanted" and name_key(b.target or "") == name_key(name):
         return False
     if b.poster is not None and name_key(b.poster) == name_key(name):
         return False
-    return faction is None or faction == b.faction
+    return _side_ok(faction, b)
 
 
 def can_take(state: GameState, b: Bounty) -> bool:
@@ -346,6 +372,8 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
     if not can_take(state, b):
         return "這一張不是給你接的。"
     rule = content.config.renown
+    if b.auto_by == "官府" and not renown.meets(state, content, "俠", rule.official_hunter_tier):  # 名聲 5.4：俠一路一方豪俠以上
+        return OFFICIAL_GATE.format(title=renown.named(renown.VIRTUE_TITLES["俠"][rule.official_hunter_tier], state))
     if renown.on(content, "prize_gate") and has_prize(content, b) and renown.fame_tier(state, content) < rule.prize_tier:
         return PRIZE_GATE  # 名聲 4.2：重賞給出去之後就是一般的單（has_prize 看 done_by），手上揭著的不收回
     if b.kind == "wanted" and roster.raid_newbie(state, content):  # 通緝只能靠截殺交差，自己還在新手期就截殺不了（Game.raid_refusal）：揭了白佔一格（FB-154）
@@ -487,6 +515,12 @@ def on_arrive(state: GameState, content: Content, world: WorldStateStore, loc_id
 def on_raid_win(state: GameState, content: Content, world: WorldStateStore, target: str) -> list[str]:
     key = name_key(target)
     return _done(state, content, world, lambda b: b.kind == "wanted" and name_key(b.target or "") == key)
+
+
+def official_hit(state: GameState, content: Content, target: str) -> bool:
+    """我手上揭著官府通緝這個人（名聲 5.4）：截殺打贏時被打的寇惡名少一點（Game.raid 交差之前先問）。"""
+    key = name_key(target)
+    return any(b.kind == "wanted" and b.auto_by == "官府" and name_key(b.target or "") == key for b in mine(state, content))
 
 
 def hunting(state: GameState, content: Content, target: str) -> bool:
@@ -850,6 +884,46 @@ def post(state: GameState, content: Content, target_state: GameState, amount: in
     return [f"你押了 {amount} 兩，在懸賞榜上通緝{b.target}。", f"銀兩 -{amount}"]
 
 
+def post_auto(state: GameState, content: Content) -> list[str]:
+    """系統掛的通緝（名聲 4.6、5.4）：在本人這一輪（Game.own_turn_checks：伺服器的 act／act_look、假人自己那一輪）檢查，
+    這一週還沒掛就掛，回被掛的人收到的那幾句。兩種可以同時都有：
+    - 陣營通緝：威震州郡（wanted_tier）以上、站官軍或黃巾（army_of）的人，對面那一軍掛；散人、第三方豪強不掛。
+    - 官府通緝：寇一路江湖巨寇（official_tier）以上，不看陣營（散人的寇也掛）。
+    一週一張、名額 1、期限到這一週結束、不用押錢（poster 空著）；新手期、截殺或懸賞榜關著、這一季收了都不掛。只改共用的季。"""
+    if not active(state, content) or not content.config.raid.enabled or roster.raid_newbie(state, content):
+        return []
+    p, w, rcfg = state.player, state.world, content.config.renown
+    week = calendar.point(w.time, content, w).week
+    me = name_key(p.name)
+
+    def posted(by: str) -> bool:
+        return any(b.kind == "wanted" and b.auto_by == by and b.week == week and name_key(b.target or "") == me for b in w.bounties)
+
+    def hang(by: str, faction: str | None, silver: int, title: str) -> None:
+        w.bounty_seq += 1
+        w.bounties.append(Bounty(
+            id=f"b{w.bounty_seq}", kind="wanted", faction=faction, week=week, expires=calendar.week_start(week + 1, content, w),
+            silver=silver, deeds=content.config.bounties.deeds.get("wanted", 0), quota=1, target=p.name, auto_by=by,
+            renown_title=title,
+        ))
+
+    out: list[str] = []
+    army, tier = army_of(p.faction), renown.fame_tier(state, content)
+    enemy = ENEMY.get(army or "")
+    if (renown.on(content, "faction_wanted") and enemy is not None and tier >= rcfg.wanted_tier and tier in rcfg.wanted_silver
+            and enemy in {f.id for f in content.scenario.factions} and not posted("陣營")):
+        title = renown.FAME_TITLES[tier]
+        hang("陣營", enemy, rcfg.wanted_silver[tier], title)
+        out.append(POSTED_FACTION.format(faction=content.scenario.faction_name(enemy, enemy), title=title))
+    vt = renown.virtue_tier(state, content)
+    if (renown.on(content, "official_wanted") and renown.path(state) == "寇" and vt >= rcfg.official_tier
+            and vt in rcfg.official_silver and not posted("官府")):
+        title = renown.virtue_title(state, content) or ""
+        hang("官府", None, rcfg.official_silver[vt], title)
+        out.append(POSTED_OFFICIAL.format(title=title))
+    return out
+
+
 def deliver_refunds(state: GameState, content: Content) -> list[str]:
     """我掛的通緝過期了（past_due：寫「到季末」的撐到收季）、沒人完成：押金退回（掛單的人同步時呼叫）。"""
     p, w = state.player, state.world
@@ -881,7 +955,7 @@ def deliver_lapses(state: GameState, content: Content) -> list[str]:
         if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
             continue
         name = title(content, b)
-        if p.faction is not None and p.faction != b.faction:  # 同 _takeable 的陣營那一條
+        if p.faction is not None and not _side_ok(p.faction, b):  # 同 _takeable 的陣營那一條（官府通緝不看陣營，名聲 5.4）
             line = LAPSED_SIDE.format(faction=content.scenario.faction_name(p.faction, "別的陣營"), title=name)
         elif _left(b) <= 0:
             line = LAPSED_FULL.format(title=name)
@@ -999,7 +1073,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     w.bounties = [
         b for b in w.bounties
         if not past_due(b, content, w)
-        or (b.kind == "wanted" and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回
+        or (b.kind == "wanted" and b.poster and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回（系統掛的沒有押金，照一般的單下榜）
         or b.takers  # 過期了還有人揭著：留到他們同步時聽到那一句（deliver_lapses）
     ]
     expires = calendar.week_start(week + cfg.auto_weeks, content, w)

@@ -81,8 +81,9 @@ class BountyTally:
     def see(self, step: int, board) -> None:
         for b in board:
             if b.id not in self.first_seen:
-                self.first_seen[b.id] = (step, b.week, b.kind)
-                self.posted[b.kind] += 1
+                kind = f"wanted:{b.auto_by}" if b.auto_by else b.kind  # 名聲 4.6、5.4：系統掛的陣營通緝、官府通緝分開數
+                self.first_seen[b.id] = (step, b.week, kind)
+                self.posted[kind] += 1
 
     def defended(self, name: str, spoils) -> None:
         """name 被截了一次（守方）；輸了（spoils 的贏家不是他）才記他丟的銀兩與氣血。平手 spoils 是 None。"""
@@ -94,7 +95,7 @@ class BountyTally:
     def report(self) -> dict:
         batches: dict[int, set[int]] = {}
         for step, week, kind in self.first_seen.values():
-            if kind != "wanted":  # 通緝是玩家隨時掛的，不算週初那一批
+            if not kind.startswith("wanted"):  # 通緝是玩家隨時掛的、系統通緝在本人那一輪掛，都不算週初那一批
                 batches.setdefault(week, set()).add(step)
         most = self.raided.most_common(1)
         name = most[0][0] if most else None

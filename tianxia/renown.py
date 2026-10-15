@@ -412,6 +412,21 @@ def _choice_perks(content: Content, way: str, tier: int) -> list[str]:
 VIRTUE_PERKS.append(_choice_perks)
 
 
+def _wanted_perks(content: Content, way: str, tier: int) -> list[str]:
+    """官府通緝（5.4）：寇 official_tier 段起官府每週貼海捕文書（賞照段）；俠 official_hunter_tier 段揭得了。official_wanted 關著不寫。"""
+    if not on(content, "official_wanted"):
+        return []
+    cfg = content.config.renown
+    if way == "寇" and tier >= cfg.official_tier and tier in cfg.official_silver:
+        return [f"官府每週貼你的海捕文書（賞 {cfg.official_silver[tier]} 兩）"]
+    if way == "俠" and tier == cfg.official_hunter_tier:
+        return ["揭得了官府通緝"]
+    return []
+
+
+VIRTUE_PERKS.append(_wanted_perks)
+
+
 def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
     """敬俠的人遇上寇（善惡第 1 段以上）：冷淡（5.2）。"""
     ch = content.characters.get(character_id)

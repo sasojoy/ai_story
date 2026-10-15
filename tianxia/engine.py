@@ -207,6 +207,7 @@ class RaidSpoils:
     taken: int
     hp: int
     contrib: int
+    evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
 # 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
 # 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
 HEARD_TITLE = "聽聞"
@@ -351,6 +352,9 @@ class Game:
         # 不加這一截的話一整季都算同一天
         self.advanced_real: float = 0.0
         self.own_request = False  # 這一份 Game 是不是那個人自己的請求（伺服器的 act／act_look 由 mark_seen 設）：奪璽單挑的 last_seen 只看它
+        # 本人這一輪（名聲 4.6、5.4）：伺服器的 act／act_look（mark_seen）與假人程式自己那一輪（bot_runner）設。系統通緝只在這一輪掛。
+        # 不借 own_request：假人刻意不設它（奪璽單挑裡永遠不在場），借了的話假人永遠不被掛單、一看就知道是假人
+        self.own_turn = False
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
@@ -911,6 +915,16 @@ class Game:
         Game.sync 不寫，所以管理者的 _admin_target、_kin、_load_kin、peer_act 建的 Game 都碰不到它。"""
         self.state.player.seen_real = now
         self.own_request = True
+        self.own_turn_checks()
+
+    def own_turn_checks(self) -> None:
+        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
+        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
+        self.own_turn = True
+        posted = bounties.post_auto(self.state, self.content)
+        if posted:
+            self._write(bounties.BOARD, posted)
+            self._save_season()
 
     def _copy_heirloom(self) -> None:
         """抄本照全服登記重抄（玉璽碎片設計 7.4）：只讀 world 那一列，不讀季。sync 與 _drop_stale_references 都叫，所以 _kin 也重抄。
@@ -7808,7 +7822,9 @@ class Game:
             winner, loser = other, self
         else:
             winner = loser = None
-        spoils = winner._raid_spoils(loser) if winner is not None else None
+        # 名聲 5.4：交差之前先判會不會交到官府通緝（打贏了、手上揭著他的官府通緝），把惡名少的那一點算進輸的那一邊，兩邊的戰報才寫得到
+        official = winner is self and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
+        spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
         self.touched.add(them.name)
         other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
@@ -7854,9 +7870,9 @@ class Game:
             self._write(bounties.BOARD, msgs)
         return msgs
 
-    def _raid_spoils(self, loser: Game) -> RaidSpoils:
+    def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
         """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
-        self 拿走一部分銀兩、記一點貢獻。"""
+        self 拿走一部分銀兩、記一點貢獻。evil 是 loser 惡名少幾點（名聲 5.4：贏的人揭著他的官府通緝；夾在 0）。"""
         c, cfg = self.content, self.content.config.raid
         lp, wp = loser.state.player, self.state.player
         purse = lp.stats.get("silver", 0)
@@ -7871,7 +7887,10 @@ class Game:
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
-        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
+        cut = min(evil, lp.stats.get("evil", 0))
+        if cut > 0:
+            lp.stats["evil"] = lp.stats.get("evil", 0) - cut
+        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib, evil=cut)
 
     def _raid_record(
         self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
@@ -7902,6 +7921,8 @@ class Game:
             hp_lost = spoils.hp
             if spoils.hp > 0:
                 record.changes.append(f"氣血 -{spoils.hp}")
+            if spoils.evil:  # 名聲 5.4
+                record.changes.append(bounties.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
             story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)

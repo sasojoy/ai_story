@@ -754,6 +754,7 @@ class Bounty(BaseModel):
     # 重賞（裝備四欄 6.4）：週一掛單時擲中的「寶物一件」或「良駒一匹」，只給第一個交差的人；哪一件到交差時才定（treasures.bounty_prize）
     prize: Literal["treasure", "horse"] | None = None
     auto_by: Literal["陣營", "官府"] | None = None  # 系統掛的通緝（名聲 4.6、5.4）；None＝玩家押錢掛的
+    renown_title: str = ""  # 系統掛的通緝：掛單那一刻被掛的人的稱號（威震州郡、江湖巨寇……），標題照它寫
 
 
 class Invite(BaseModel):
