@@ -276,9 +276,10 @@ def test_the_mandate_season_never_ends_early():
     c = real_content("weekend")
     season = WorldState(storyline=c.scenario.storylines[0].id)
     stamp_season(season, c)
-    season.trends["geju"] = 95
+    for front in rules.front_ids(c):  # 提前收季只看戰線（FB-254）：用黃巾聲勢 95
+        season.trends[front] = 95
     season.time = calendar.week_start(12, c, season) + 1
-    assert world_rules.decisive_ending(world_rules._season_vehicle(c, season), c) is not None  # 一般季：第 12 週割據 95，當場收季
+    assert world_rules.decisive_ending(world_rules._season_vehicle(c, season), c) is not None  # 一般季：第 12 週黃巾 95，當場收季
     season.mandate = True
     vehicle = world_rules._season_vehicle(c, season)
     assert rules.decisive_week(season, c) == 13 > c.config.season_weeks

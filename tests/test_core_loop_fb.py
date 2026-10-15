@@ -229,6 +229,56 @@ def test_fb254_an_opportunity_push_on_separatism_is_resisted_too():
     assert w.trends[rules.GEJU] == 60 + opp.accumulate.trend
 
 
+def _late_season(c, week, geju, fronts=50):
+    """週末設定的一季停在第 week 週，割據 geju、三條戰線都在 fronts；回傳（季, 給規則看的 GameState）。"""
+    from tianxia import calendar, rules
+    from tianxia import world as world_rules
+    from tianxia.world_state import fresh_season
+
+    season = fresh_season(c)
+    for front in rules.front_ids(c):
+        season.trends[front] = fronts
+    season.trends[rules.GEJU] = geju
+    season.time = calendar.week_start(week, c, season) + 1
+    return season, world_rules._season_vehicle(c, season)
+
+
+def test_fb254_separatism_at_85_no_longer_ends_the_season_early():
+    """企劃者 2026-10-15「提前收季只看戰線」：割據 95 到了第 12 週也不提前收季；黃巾聲勢 ≥85 或 ≤15 照舊第 10 週起當場收。"""
+    from tianxia import world as world_rules
+
+    c = real_content("weekend")
+    _, vehicle = _late_season(c, 12, geju=95)
+    assert world_rules.decisive_ending(vehicle, c) is None
+    for fronts, ending in ((90, "s1_huangtian"), (10, "s1_pacified")):
+        _, vehicle = _late_season(c, 10, geju=95, fronts=fronts)
+        assert world_rules.decisive_ending(vehicle, c).id == ending, fronts
+
+
+def test_fb254_separatism_at_85_is_the_warlords_ending_at_the_finale():
+    """季末結算照 evaluate_ending 的先後：割據 ≥85 是群雄並起，黃巾聲勢的門檻排在它前面；割據 84 照態勢比高低（豪強最高是豪強坐大）。"""
+    from tianxia import world as world_rules
+
+    c = real_content("weekend")
+    for geju, fronts, ending in ((90, 50, "s1_warlords"), (84, 50, "s1_gentry"), (90, 88, "s1_huangtian")):
+        _, vehicle = _late_season(c, 12, geju=geju, fronts=fronts)
+        assert world_rules.evaluate_ending(vehicle, c).id == ending, (geju, fronts)
+
+
+def test_fb254_the_stance_card_says_separatism_waits_for_the_finale():
+    """態勢卡（玩法說明「收季：」同一句）：提前收季只寫官軍、黃巾；割據寫季末才判；結局提示不再說豪強「當場收場」。"""
+    from tianxia import guide, rules
+
+    c = real_content("weekend")
+    season, vehicle = _late_season(c, 3, geju=40)
+    note = rules.stance_rule_note(vehicle, c)
+    assert note == ("第 10 週起，官軍或黃巾的態勢一到 85，這一季當場收場；"
+                    "否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。")
+    hints = {e.id: e.hint for e in c.scenario.endings}
+    assert "當場收場" not in hints["s1_warlords"] and "季末" in hints["s1_warlords"]
+    assert "- 群雄並起：到了季末" in guide.quest_text(vehicle, c)
+
+
 def test_fb255_attacking_a_convoy_on_your_own_ground_does_not_say_it_is_theirs():
     """截糧週在自家佔著的截糧地點（官軍在南陽郊野）出陣是攻打運糧隊：底下那一行不寫「這裡歸別人」，寫運糧隊經過自家地盤。
     別人的地盤照舊寫「這裡歸別人」。"""

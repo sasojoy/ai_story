@@ -2103,7 +2103,8 @@ class Config(_Strict):
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
-    # 決定性勝利（黃巾聲勢 ≥85、≤15，割據 ≥85）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）
+    # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
+    # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
     # 企劃者 2026-10-13「季中，第 5 週起才開」（FB-168）：規則關著的季，開決戰的大勢門檻（starts_battle，例 huangjin_60）季曆第幾週起才開
     # 集結；之前推過了也不開、不記成觸發過，到了那一週還在門檻上就開（world.battle_held，寫法同 decisive_from_week）。第一季照時刻表，
