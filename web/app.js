@@ -3841,6 +3841,9 @@
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
     box.style.setProperty("--md-h", `${px}px`);
+    // pad 跟著抽屜變了：當下照新的 pad 夾住視圖。抽屜降低時不夾的話，地圖停在捲過頭的位置（下緣到抽屜之間露出空白），
+    // 下一次拖動才夾回去、往手指反方向跳一截（FB-267）
+    if (S.mapView) applyMapView(true);
     keepSelVisible(); // 抽屜升高：選了的地點被蓋住就對準露出來的那一塊
   }
   // 抽屜蓋住地圖框底下多高（clampView 的 pad）：照抽屜要變成的高度算，不量 offsetHeight——抽屜換高度有 0.22 秒的動畫，
