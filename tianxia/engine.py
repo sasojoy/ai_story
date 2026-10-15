@@ -3884,8 +3884,10 @@ class Game:
         return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus}
 
     def _battle_marks(self) -> dict:
-        """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照）。"""
-        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content)}
+        """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照），
+        與稱號（名聲 2.5、4.5：本場戰功、論功那一句寫；名望名動一方起、善惡第 1 段起，開關關著是空的）。"""
+        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
+                "renown": renown.titles(self.state, self.content, fame_from=2)}
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -4105,7 +4107,8 @@ class Game:
         ]
         if not heads:
             return ""
-        return f"{definition.name}論功：" + "，".join(f"{side}首功{p.name}" for side, p in heads) + "。"
+        return f"{definition.name}論功：" + "，".join(
+            f"{side}首功{p.name}" + (f"（{'・'.join(p.renown)}）" if p.renown else "") for side, p in heads) + "。"  # 名聲 4.5
 
     @staticmethod
     def _highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
