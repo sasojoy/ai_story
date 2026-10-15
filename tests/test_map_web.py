@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -282,3 +282,12 @@ def test_fb262_standing_there_still_shows_the_odds():
     assert p["odds"]["word"] in sortie[: sortie.index("</button>")]
     calm = run(_game(faction="guan", at="yingchuan"), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "yingchuan");')
     assert "沒有對手" in calm[calm.index("打得過嗎"):calm.index("多遠")]
+
+
+def test_fb263_a_wide_desktop_fills_the_map_area():
+    """FB-263：桌機寬螢幕第一次打開輿圖，地圖佔滿抽屜左邊整塊（1920 寬地圖區約 1545px，不再照原尺寸 900px 留 640px 空白）；
+    1280 寬照舊約原尺寸、手機照舊原尺寸。倍率最多 MAP_MAX（2）。"""
+    out = run(_game(), "return [H.firstScale(1545, 640, 900, 1340, false), H.firstScale(905, 640, 900, 1340, false), H.firstScale(375, 470, 900, 1340, true), H.firstScale(2600, 900, 900, 1340, false)];")
+    wide, desk, phone, huge = out
+    assert 1545 / 900 - 0.01 <= wide <= 1545 / 900 + 0.01 and 900 * wide >= 1544
+    assert 0.99 <= desk <= 1.01 and phone == 1 and huge == 2

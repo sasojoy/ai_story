@@ -3952,6 +3952,10 @@
     if (!S.marksS || Math.abs(v.s - S.marksS) / v.s > 0.08) scheduleMarks();
   }
 
+  // 這次載入網頁後第一次打開輿圖的倍率，對準所在地：手機照原尺寸；桌機照地圖區的寬讓地圖佔滿左邊整塊（FB-263：1920 寬時地圖區
+  // 約 1545px，照原尺寸只畫 900px、旁邊空一大片），最多 MAP_MAX。都不給整張——整張只有約 0.37 倍，地名剩 5px 上下（E2／FB-012）
+  const firstScale = (vw, vh, W, H, phone) => (phone ? 1 : Math.min(MAP_MAX, Math.max(fitScale(vw, vh, W, H), vw / W)));
+
   // 輿圖頁每次畫好（afterPage）：第一次打開就決定視圖，之後照舊套用；掛上這個框自己的監聽
   function mapReady() {
     const wrap = document.getElementById("map");
@@ -3968,11 +3972,8 @@
     }
     const g = mapGeom(wrap);
     if (g && !S.mapView) {
-      // 這次載入網頁後第一次打開，對準所在地：手機照原尺寸；寬螢幕照框寬（最多原尺寸）。都不給整張——
-      // 整張只有約 0.37 倍，地名剩 5px 上下（E2／FB-012），寬螢幕的橫框也一樣
-      const phone = !!(PHONE && PHONE.matches);
       const [cx, cy] = herePoint(g);
-      S.mapView = { s: phone ? 1 : Math.min(1, g.vw / g.W), cx, cy };
+      S.mapView = { s: firstScale(g.vw, g.vh, g.W, g.H, !!(PHONE && PHONE.matches)), cx, cy };
     }
     applyMapView(false, g);
     drawMarks();
