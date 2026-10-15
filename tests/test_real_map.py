@@ -264,6 +264,8 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
     "train_runaway_cart", "train_sore_loser",
     # 散人的遊俠名號奇遇（content/events/ranger.json）：寇那一則寫的是野外林子裡的綠林拜帖，哪一處野外都說得通
     "ranger_kou_invitation",
+    # 名聲 5.2 俠的交友事件（content/events/renown.json）：鄉民送糧、有人報信，寫的是城鎮裡的街坊，哪一座城鎮都說得通
+    "xia_grain", "xia_tipoff",
 }
 
 

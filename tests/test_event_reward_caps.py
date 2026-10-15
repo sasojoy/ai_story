@@ -62,11 +62,13 @@ def test_added_event_rewards_stay_within_the_caps(content, pool, path):
     for e in events:
         results = [*e["choices"], *([e["free_text"]] if caps["free_text"] and "free_text" in e else [])]
         for c in results:
+            # 俠寇選項（名聲 5.3，needs）要稱號才按得到，照設計比同一則最好的選項多一點：銀兩上限 50、素材最多 2 個，其餘同上限
+            silver_cap, material_cap = (50, 2) if "needs" in c else (40, 1)
             for key in ("effect", "fail_effect"):
                 eff = c.get(key, {})
                 stats = eff.get("stats", {})
                 assert set(stats) <= stat_keys, e["id"]
-                assert -40 <= stats.get("silver", 0) <= 40, e["id"]
+                assert -silver_cap <= stats.get("silver", 0) <= silver_cap, e["id"]
                 if caps["xinde"] is not None:
                     assert stats.get("xinde", 0) <= caps["xinde"], e["id"]
                 assert all(-3 <= stats.get(k, 0) <= 3 for k in ("fame", "good", "evil")), e["id"]
@@ -75,7 +77,7 @@ def test_added_event_rewards_stay_within_the_caps(content, pool, path):
                     assert set(eff.get("trend", {})) <= {"front"}, e["id"]
                     assert all(1 <= abs(v) <= 3 for v in eff.get("trend", {}).values()), e["id"]
                 if caps["materials"]:
-                    assert sum(eff.get("materials", {}).values()) <= 1, e["id"]
+                    assert sum(eff.get("materials", {}).values()) <= material_cap, e["id"]
                     assert all(content.materials[m].tier <= 2 for m in eff.get("materials", {})), e["id"]
                 for banned in caps["banned"]:
                     assert not eff.get(banned), (e["id"], banned)

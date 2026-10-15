@@ -70,8 +70,10 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
     for e in events:
         assert len(e["locations"]) == 1 and "condition" not in e and "actions" not in e, e["id"]
         for faction in (None, "guan", "huang", "haoqiang"):  # 選項照陣營分邊（2026-10-08）：每一種身分看得到的都是 2～4 個
-            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction)]
+            # 俠寇選項（名聲 5.3，needs）另算：要稱號才按得到，一則最多兩顆（寨門盤問俠寇各一），不算進 2～4
+            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction) and "needs" not in c]
             assert 2 <= len(shown) <= 4, (e["id"], faction)
+        assert sum("needs" in c for c in e["choices"]) <= 2, e["id"]
         checks = [c["check"] for c in e["choices"] if "check" in c]
         assert len({ck["stat"] for ck in checks}) >= 2, e["id"]  # 不同長處的人有不同的路
         for c in e["choices"]:

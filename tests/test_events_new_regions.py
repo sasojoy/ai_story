@@ -58,8 +58,10 @@ def test_events_stay_within_the_reward_limits(content, region):
     rumors = 0
     for e in events:
         for faction in (None, "guan", "huang", "haoqiang"):  # 選項照陣營分邊（2026-10-08）：每一種身分看得到的都是 2～3 個
-            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction)]
+            # 俠寇選項（名聲 5.3，needs）另算：要稱號才按得到，一則最多一顆，不算進 2～3
+            shown = [c for c in e["choices"] if _shown_to(c.get("condition", {}), faction) and "needs" not in c]
             assert 2 <= len(shown) <= 3, (e["id"], faction)
+        assert sum("needs" in c for c in e["choices"]) <= 1, e["id"]
         if any("check" in c or "combat" in c for c in e["choices"]):
             risky += 1
         for c in e["choices"]:
