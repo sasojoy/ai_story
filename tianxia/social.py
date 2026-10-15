@@ -110,8 +110,8 @@ def here(game: Game) -> list[GameState]:
 
 
 def side(state: GameState, content: Content) -> str:
-    """名單上名字後面括號裡那一個：陣營，沒有陣營是「散人」。"""
-    return content.scenario.faction_name(state.player.faction) or "散人"
+    """名單上名字後面括號裡那一個：陣營，沒有陣營是「散人」；豪強分屬兩軍的季寫依附哪一邊（allied.side_text，FB-275）。"""
+    return allied.side_text(state, content) or "散人"
 
 
 def affiliation(state: GameState, content: Content) -> str:

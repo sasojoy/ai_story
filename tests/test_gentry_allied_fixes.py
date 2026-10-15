@@ -149,3 +149,25 @@ def test_old_rules_gentry_bases_stay_theirs():
     game.advance(60)
     w = game.state.world
     assert all(territory.controller(w, off, loc) == "haoqiang" for loc in GENTRY_BASES)
+
+# ── FB-275：此地還有寫出依附哪一邊 ─────────────────────────────
+
+
+def test_presence_names_the_side_of_an_allied_gentry():
+    from tianxia import social
+
+    wk = _wk()
+    game = _game(wk, faction="haoqiang", ally="huang")
+    assert social.side(game.state, wk) == "地方豪強・依附黃巾軍"
+    game.state.player.faction, game.state.player.ally = "guan", None
+    assert social.side(game.state, wk) == "官軍"
+    game.state.player.faction = None
+    assert social.side(game.state, wk) == "散人"
+
+
+def test_presence_old_rules_say_the_faction_only():
+    from tianxia import social
+
+    off = _old_rules()
+    game = _game(off, name="乙", faction="haoqiang")
+    assert social.side(game.state, off) == "地方豪強"
