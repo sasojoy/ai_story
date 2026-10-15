@@ -529,6 +529,41 @@ def test_old_rules_gentry_enlists():
     assert [o.id for o in game.options() if o.id.startswith("battle:enlist:")]
 
 
+# ── Task 7：豪強升到第 3 階為止 ─────────────────────────────
+
+
+def test_gentry_stops_at_rank_three(wk):
+    from tianxia import ranks
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    p = game.state.player
+    p.rank, p.contrib = 3, 10 ** 6
+    p.opp_done = [o.id for o in wk.opportunities if o.faction == "haoqiang"]
+    assert allied.rank_cap(game.state, wk) == 3
+    assert ranks.check_summons(game.state, wk) == []
+    assert p.summons is None and not p.qualified
+    assert game._summons_plan(game) == ("（甲已經升到頂了。）", None)  # 管理者「立刻替他發召見」也一樣
+
+
+def test_armies_still_reach_rank_four(wk):
+    from tianxia import ranks
+
+    army = _game(wk, name="乙", faction="guan")
+    p = army.state.player
+    p.rank, p.contrib = 3, 10 ** 6
+    p.opp_done = [o.id for o in wk.opportunities if o.faction == "guan"]
+    assert allied.rank_cap(army.state, wk) is None
+    assert ranks.check_summons(army.state, wk)  # 召見第 4 階，或說一次沒人能出面
+
+
+def test_gentry_titles_go_up_to_three(wk):
+    from tianxia import ranks
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    game.state.player.rank = 3
+    assert ranks.title(wk, game.state) == "地方豪強"
+
+
 def test_seal_and_battles_read_the_side_from_the_roster(wk):
     game = _game(wk, faction="haoqiang", ally="huang")
     game._record_faction()

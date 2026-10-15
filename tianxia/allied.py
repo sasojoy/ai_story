@@ -11,6 +11,7 @@ from .models import Content, FactionDef
 from .state import GameState, WorldState
 
 SEP = "@"
+CAP_RANK = 3  # 企劃者 2026-10-15：「純官軍或者純黃巾才有辦法升到最高軍階，豪強版的只能升到三階」
 # 新寫的字（joy 10/15：這種句子由 AI 產生）
 ALLY_LABEL = "{faction}（依附{ally}）"  # 狀態列、玩家卡、確認畫面
 ALLY_COUNT = "（其中{short} {n} 人）"  # 名冊那一句（企劃者第 3 題甲）
@@ -44,6 +45,12 @@ def needs_ally(state: GameState, content: Content) -> bool:
     """投靠了要依附的陣營、還沒挑一邊（拜入曹氏莊院那一下）：選單只剩選邊（Game.options）。"""
     p = state.player
     return on(content, state.world) and p.ally is None and bool(allies_of(content, p.faction))
+
+
+def rank_cap(state: GameState, content: Content) -> int | None:
+    """豪強分屬兩軍的季，要依附的陣營（豪強）最多升到第 CAP_RANK 階；其他人不設上限（None）。第 4 階席次因此只給純官軍、純黃巾。"""
+    p = state.player
+    return CAP_RANK if on(content, state.world) and allies_of(content, p.faction) else None
 
 
 def roll_key(faction: str, ally: str | None) -> str:

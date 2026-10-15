@@ -9780,7 +9780,8 @@ class Game:
         if p.qualified:
             return f"（{p.name}已經取得第 {ranks.SEAT_RANK} 階的資格了。）", None
         promo = ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1)
-        if promo is None:
+        cap = allied.rank_cap(s, c)  # 豪強分屬兩軍：豪強第 3 階就到頂
+        if promo is None or (cap is not None and promo.rank > cap):
             return f"（{p.name}已經升到頂了。）", None
         if promo.legs and ranks.current_cast(s, c, promo, 0, None) is None:
             line = ranks.NO_PRESENTER.get(p.faction, ranks.NO_PRESENTER["guan"])
