@@ -72,3 +72,15 @@ def test_fb258_an_intercept_on_your_own_ground_is_against_the_convoy():
     assert convoy.name in [q["name"] for q in p["squads"]]
     g = next(g for g in st["suggest"] if g["id"] == "nanyang_wilds")
     assert g["lose"] == (p["odds"]["word"] == mapdata.LOSE_WORD)
+
+
+# ── FB-259：豪強攪局不打，不標必敗、不畫淡；理由只寫攪局記得到的（什麼軍令都不記）──
+
+
+def test_fb259_stirring_is_never_marked_losing_and_counts_no_order():
+    game = _game("haoqiang", "haozu_fort")
+    _order(game, "haoqiang", "strike", figure=next(iter(game.content.figures)))  # 打擊要挑戰本人，攪局不記
+    st = game.map_state()
+    assert st["suggest"] and all(g["sortie"] == "stir" for g in st["suggest"])
+    for g in st["suggest"]:
+        assert g["lose"] is False and not any(t == mapdata.LOSE_WORD or t.startswith("軍令") for t, _ in g["why"]), g
