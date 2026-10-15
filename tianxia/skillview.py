@@ -233,7 +233,7 @@ def heal_note(state: GameState, content: Content) -> str:
     from . import territory  # noqa: PLC0415  territory → rules：延後 import
 
     points, cost, left = team.heal_plan(state, content, state.player.member)
-    why = territory.price_note(state, content)  # 名聲 4.1：價錢後面寫原因（名聲關著是空的）
+    why = territory.price_note(state, content) + renown.clinic_note(state, content)  # 名聲 4.1、5.2：價錢後面寫原因（名聲關著是空的）
     if left > 0:
         return f"治 {points} 點・{cost} 兩（還剩 {left} 點）{why}"
     return f"內傷 {int(state.player.member.injury)}・{cost} 兩{why}"

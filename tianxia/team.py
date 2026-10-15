@@ -510,13 +510,14 @@ def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool =
 
 
 def _price_here(state: GameState | None, content: Content) -> float:
-    """地盤福利（出陣探索與地盤設計 4.3 第 3 點）：自己陣營的地盤便宜、別人的貴；state 是 None（純函式的呼叫）照原價。
+    """療傷的價錢倍數：地盤福利（出陣探索與地盤設計 4.3 第 3 點：自己陣營的地盤便宜、別人的貴）× 名望的店家折扣（名聲設計 4.1）
+    × 俠的醫館折扣（名聲 5.2，renown.clinic_factor）；state 是 None（純函式的呼叫）照原價。
     territory → rules → team：延後 import，避免循環。"""
     if state is None:
         return 1.0
-    from . import territory  # noqa: PLC0415
+    from . import renown, territory  # noqa: PLC0415
 
-    return territory.price_here(state, content)  # 地盤福利 × 名望的店家折扣（名聲設計 4.1）
+    return territory.price_here(state, content) * renown.clinic_factor(state, content)
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:

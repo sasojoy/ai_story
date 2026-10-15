@@ -94,4 +94,5 @@ def test_the_prompt_carries_titles_and_the_regard():
 def test_the_virtue_perks_name_the_welcome():
     c = real_content("weekend")
     assert "敬俠的人見面情誼 +6" in renown.virtue_perks(c, "俠", 2)
-    assert renown.virtue_perks(c, "寇", 1)[-2:] == ["喜狠的人見面情誼 +3", "敬俠的人對你冷淡"]
+    kou = renown.virtue_perks(c, "寇", 1)
+    assert "喜狠的人見面情誼 +3" in kou and "敬俠的人對你冷淡" in kou

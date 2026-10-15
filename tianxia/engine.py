@@ -3329,7 +3329,7 @@ class Game:
         trade = shopview.trade_view(s, c, self._pill_day()) or {"sell": [], "upgrade": []}
         opts = [
             Option(id=f"smith:sell:{row['id']}", enabled=row["problem"] is None,
-                   label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]))
+                   label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]) + row["dark"])  # 名聲 5.2：（黑市價）
             for row in trade["sell"]
         ]
         for row in trade["upgrade"]:
@@ -3556,7 +3556,9 @@ class Game:
         s, c = self.state, self.content
         if not c.config.economy.sell:
             return [equipment.NOT_NOW]
-        self._shop_after(economy.sell_problem(s, c, mid, count), "sell")
+        material = c.materials.get(mid)
+        dark = material is not None and economy.black_market(s, c, material.tier)  # 名聲 5.2：掌櫃換黑市那一句
+        self._shop_after(economy.sell_problem(s, c, mid, count), "black_market" if dark else "sell")
         return economy.sell(s, c, mid, count)
 
     def _trade_upgrade(self, attribute: str, tier: int) -> list[str]:

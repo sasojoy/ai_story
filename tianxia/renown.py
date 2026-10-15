@@ -353,6 +353,44 @@ def _affinity_perks(content: Content, way: str, tier: int) -> list[str]:
 VIRTUE_PERKS.append(_affinity_perks)
 
 
+# ── 俠的醫館、寇的黑市（設計 5.2）──────────────────────────────
+
+
+def clinic_factor(state: GameState, content: Content) -> float:
+    """俠一路 clinic_tier（一方豪俠）以上，療傷 × clinic_share（八五折），跟地盤、名望的折扣疊乘（team._price_here）。"""
+    cfg = content.config.renown
+    return cfg.clinic_share if on(content, "clinic") and meets(state, content, "俠", cfg.clinic_tier) else 1.0
+
+
+def clinic_note(state: GameState, content: Content) -> str:
+    """療傷鈕後面的原因（skillview.heal_note）：「（一方豪俠・八五折）」；沒打折是空字串。"""
+    factor = clinic_factor(state, content)
+    if factor >= 1.0 or not on(content, "explain"):
+        return ""
+    return f"（{virtue_title(state, content)}・{discount_word(factor)}）"
+
+
+def black_market_price(state: GameState, content: Content, tier: int) -> int | None:
+    """寇一路 black_market_tier（綠林好漢）以上，鐵匠鋪收這一階素材的黑市價（一階 3、二階 8）；不是寇、沒寫這一階是 None。"""
+    cfg = content.config.renown
+    if not (on(content, "black_market") and meets(state, content, "寇", cfg.black_market_tier)):
+        return None
+    return cfg.black_market_prices.get(tier)
+
+
+def _trade_perks(content: Content, way: str, tier: int) -> list[str]:
+    cfg = content.config.renown
+    out = []
+    if way == "俠" and tier == cfg.clinic_tier and on(content, "clinic"):
+        out.append(f"醫館療傷{discount_word(cfg.clinic_share)}")
+    if way == "寇" and tier == cfg.black_market_tier and on(content, "black_market") and cfg.black_market_prices:
+        out.append("鐵匠鋪收購" + "、".join(f"{_CN[t]}階 {p} 兩" for t, p in sorted(cfg.black_market_prices.items())))
+    return out
+
+
+VIRTUE_PERKS.append(_trade_perks)
+
+
 def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
     """敬俠的人遇上寇（善惡第 1 段以上）：冷淡（5.2）。"""
     ch = content.characters.get(character_id)

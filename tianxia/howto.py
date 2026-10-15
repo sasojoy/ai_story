@@ -344,6 +344,11 @@ def economy_lines(content: Content) -> list[str]:
         prices = [f"{tier_word.get(t, f'{t}階')} {price} 兩" for t, price in sorted(econ.sell_price.items())]
         prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」
         lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；三階不收，留著打神器。")
+        rcfg = content.config.renown
+        if renown.on(content, "black_market") and rcfg.black_market_prices:  # 名聲 5.2：寇的黑市價（待 joy 潤）
+            title = renown.VIRTUE_TITLES["寇"][rcfg.black_market_tier]
+            dark = "、".join(f"{tier_word.get(t, f'{t}階')} {p} 兩" for t, p in sorted(rcfg.black_market_prices.items()))
+            lines.append(f"走寇的路、到了「{title}」，鐵匠照黑市價收：{dark}。")
     if econ.upgrade:
         steps = []
         for tier in sorted(econ.upgrade_need):
