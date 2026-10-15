@@ -1817,6 +1817,11 @@ class ForgeSecretRules(_Strict):
     challenge_tier3: float = Field(default=0, ge=0, le=1)  # 挑戰大勢人物本人打贏，掉一個三階素材（屬性照他的隊伍）的機會；正式 1
     tier3_per_figure: int = Field(default=0, ge=0)  # 同一位人物對同一個人每季最多掉幾次（0＝不設限；正式 2：閉門不見只有 2 小時，不設會被刷）
     big_tier3: float = Field(default=0, ge=0, le=1)  # 大場面對手（不是本人那支隊伍）打贏，另擲一次三階素材；正式 0.25
+    # 素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md，企劃者 2026-10-15）：預設開、測試內容關，關掉一個字都不變。
+    # 前兩個從下一季開季起照 WorldState 的章（world_state.stamp_season）：正在跑的季中途改會讓已經聽到的線索對不上
+    divine_per_kind: bool = True  # 神器配方每一季每種兵器最多一條；第一季的章六種兵器各一條（forge_secrets.active）
+    split_clues: bool = True  # 神器配方的線索拆三片（種類／主料／輔料），散在鐵匠鋪、說書、殘譜（forge_secrets.hear、hear_smith）
+    scrap_every_mode: bool = True  # 殘譜（武學口訣與半張鑄譜）三種探索都擲；上線就生效，關著只在找事件擲（Game._explore_mode）
 
 
 class FirstEcho(_Strict):

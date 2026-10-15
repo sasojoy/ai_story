@@ -20,6 +20,7 @@
   "territory": {"enabled": false},
   "push_resistance": {"enabled": false},
   "battle_quiet_hours": {"enabled": false},
+  "forge_secrets": {"divine_per_kind": false, "split_clues": false, "scrap_every_mode": false},
   "open_map": false,
   "showdown_pay": {"silver": 0, "exp": 0, "contrib_push": 0, "win_contrib_push": {}},
   "weapons": {"enabled": false},
