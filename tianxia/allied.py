@@ -23,6 +23,9 @@ ALLY_AFTER_SECT = "拜入之後，先挑依附哪一邊，才算入了夥：決�
 ALLY_BUTTON = "依附{ally}（目前 {n} 人）"
 ALLY_DONE = "你依附了{ally}。"
 ALLY_FIRST = "先挑依附哪一邊，才能安排前往"
+# 選邊那一刻人已經在決戰的參戰名單上（先臨時投效了另一邊，FB-273）：集結時跟著換過去，開打了照決戰的規則不能改投、這一場照舊
+ALLY_REJOINED = "{battle}的集結名單上，你也跟著換到{ally}那一邊。"
+ALLY_STAYS = "{battle}已經開打，這一場你照舊站在{old}那一邊；打完這一場才算{ally}的人。"
 
 
 def on(content: Content, world: WorldState) -> bool:
