@@ -95,6 +95,39 @@ def test_a_hero_with_the_magistrates_notice_beats_the_rogue_and_cuts_his_name():
     assert any(line in e.lines or line in e.changes for e in rogue.state.journal)
 
 
+def _allied_season(g):
+    """豪強分屬兩軍的季（allied.on：蓋了第一季的章、而且開季時豪強分屬兩軍的章開著）。"""
+    w = g.state.world
+    w.season_one, w.haoqiang_allied = True, True
+
+
+def test_allied_gentry_are_posted_by_the_other_army():
+    """豪強分屬兩軍（rules.side_of）：依附官軍的豪強到了威震州郡，由黃巾軍掛通緝；依附黃巾的由官軍掛。"""
+    for ally, enemy in (("guan", "huang"), ("huang", "guan")):
+        g = _game(f"豪{ally}", faction="haoqiang", fame=50)
+        _allied_season(g)
+        g.state.player.ally = ally
+        assert bounties.army_of(g.state, g.content) == ally
+        posted = bounties.post_auto(g.state, g.content)
+        assert posted and posted[0].startswith(g.content.scenario.faction_name(enemy))
+        assert next(b for b in g.state.world.bounties if b.auto_by == "陣營").faction == enemy
+
+
+def test_allied_gentry_take_their_armys_notice_and_third_party_gentry_neither():
+    g = _game("甲", faction="guan", fame=50)
+    bounties.post_auto(g.state, g.content)  # 黃巾軍掛的
+    b = next(x for x in g.state.world.bounties if x.auto_by == "陣營")
+    on_huang = _game("依黃", faction="haoqiang", world=g.world)
+    _allied_season(on_huang)
+    on_huang.state.world = g.state.world
+    on_huang.state.player.ally = "huang"
+    assert bounties.take_problem(on_huang.state, on_huang.content, b) is None
+    on_huang.state.player.ally = "guan"
+    assert bounties.take_problem(on_huang.state, on_huang.content, b) == "這一張不是給你接的。"
+    third = _game("第三", faction="haoqiang", fame=90)  # 14 天的季那一種：沒依附，不掛也揭不了兩軍的
+    assert bounties.army_of(third.state, third.content) is None and bounties.post_auto(third.state, third.content) == []
+
+
 def test_a_paused_season_posts_nothing():
     """賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前，系統通緝也要等繼續之後。"""
     g = _game("甲", faction="guan", fame=50)

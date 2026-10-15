@@ -225,6 +225,7 @@ def stamp_season(season: WorldState, content: Content) -> None:
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
+    season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）
     season.forge_divine_per_kind = cfg.forge_secrets.divine_per_kind
@@ -551,14 +552,24 @@ class WorldStateStore(Protocol):
         ...
 
     # ── 投靠名冊 ──
-    def record_faction(self, name: str, faction_id: str) -> None: ...
+    def record_faction(self, name: str, faction_id: str) -> None:
+        """記進投靠名冊；faction_id 是 allied.roll_key（豪強分屬兩軍時依附的豪強寫「haoqiang@guan」）。"""
+        ...
 
     def faction_of(self, name: str) -> str | None:
-        """這一季投靠名冊上這個名號的陣營；還沒記過是 None。"""
+        """這一季投靠名冊上這個名號算哪一方（豪強依附時是那一軍，allied.side_of_key）；還沒記過是 None。"""
+        ...
+
+    def roll_of(self, name: str) -> str | None:
+        """名冊上記的鍵本身（allied.roll_key）；還沒記過是 None。Game._record_faction 比這個。"""
         ...
 
     def faction_counts(self) -> dict[str, int]:
-        """這一季各陣營投靠了幾人（只列有人的陣營）。"""
+        """這一季各陣營（身分）投靠了幾人（只列有人的陣營；豪強依附哪一軍都算豪強，allied.faction_totals）。"""
+        ...
+
+    def roll_counts(self) -> dict[str, int]:
+        """這一季名冊照鍵數（allied.side_totals、gentry_totals 從這一份算）。"""
         ...
 
     def seal_state(self) -> SealView:

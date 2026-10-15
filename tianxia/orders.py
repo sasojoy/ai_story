@@ -302,6 +302,8 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random, *, 
     elif any(o.week == week for o in w.orders):
         return []
     for faction in content.scenario.factions:
+        if faction.allies and rules.haoqiang_allied(content, w):  # 豪強分屬兩軍：豪強接依附那一軍的軍令，自己那一道不發
+            continue
         for t, front, fid in _picks(state, content, faction.id, week):
             order = _build(state, content, t, week, front, fid)
             if order.id in done:

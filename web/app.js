@@ -1757,14 +1757,16 @@
   function stancePeek(m) {
     const s = m.status;
     if (m.season_result || !s || !s.stances) return null; // 休季：結算卡上有最終態勢；開關關著：status 沒有 stances
-    const rows = STANCE_NAMES.map(([side, name]) => ({ side, name, value: s.stances[side] }));
+    // 豪強分屬兩軍的季 status.stances 只有官軍、黃巾：沒有的那一方不畫
+    const rows = STANCE_NAMES.filter(([side]) => side in s.stances).map(([side, name]) => ({ side, name, value: s.stances[side] }));
+    const title = rows.length > 2 ? "三方態勢" : "兩軍態勢";
     const n = s.stance_notes || {};
     const how = [n.sum ? `官軍、黃巾：${esc(n.sum)}` : "", n.haoqiang ? `豪強：${esc(n.haoqiang)}` : ""].filter(Boolean).join("；");
     return {
       id: "stance",
-      label: `三方態勢：${rows.map((x) => `${x.name} ${x.value}`).join("、")}`,
+      label: `${title}：${rows.map((x) => `${x.name} ${x.value}`).join("、")}`,
       chip: `<span class="peek-name">態勢</span><span class="peek-nums">${rows.map((x) => `<b class="side-${esc(x.side)}">${x.value}</b>`).join("·")}</span>`,
-      panel: `${stanceBars(rows, "三方態勢")}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}${warHelp(m, "stance")}`,
+      panel: `${stanceBars(rows, title)}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}${warHelp(m, "stance")}`,
     };
   }
 
@@ -1840,7 +1842,8 @@
     const n = notes || {};
     const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
     const note = (text) => (text ? `（${esc(text)}）` : "");
-    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}<br>${side("haoqiang")}${note(n.haoqiang)}</span></div>`;
+    const gentry = "haoqiang" in stances ? `<br>${side("haoqiang")}${note(n.haoqiang)}` : ""; // 豪強分屬兩軍的季沒有豪強那一行
+    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}${gentry}</span></div>`;
   }
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
@@ -3773,7 +3776,7 @@
     return out.join("");
   }
   // 各方佔幾處；跟開季那一刻比（疊層的 start，FB-264）；中途上線的季沒有開季的樣子，比第一筆記到的那一週、照實寫第幾週，
-  // 看的就是那一週時不比
+  // 看的就是那一週時不比。寫哪幾方照疊層的 sides（第一季豪強分屬兩軍的季只有官軍、黃巾；沒有這個鍵照 MAP_SIDE_ORDER）
   const tally = (base, ctrl) => { const n = { guan: 0, huang: 0, haoqiang: 0 }; for (const p of base.places) if (ctrl[p.id]) n[ctrl[p.id]]++; return n; };
   function tallyFrom(base, st, week) {
     if (st.start) return { label: "比開季", n: tally(base, st.start) };
@@ -3784,7 +3787,7 @@
   // 地圖上方浮的那一條「天下」：看大局或版圖變化時，各方此刻佔幾處、比第一筆記到的那一週多幾處少幾處（設計第四節）
   function hudHtml(base, st, week) {
     const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
-    return `<b>天下</b>${MAP_SIDE_ORDER.map((sd) => `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${from ? `<small>${signed(now[sd] - from.n[sd])}</small>` : ""}</span>`).join("")}${from ? `<small>${from.label}</small>` : ""}`;
+    return `<b>天下</b>${(st.sides || MAP_SIDE_ORDER).map((sd) => `<span style="color:${MAP_SIDES[sd].color}">${MAP_SIDES[sd].short} <b>${now[sd]}</b>${from ? `<small>${signed(now[sd] - from.n[sd])}</small>` : ""}</span>`).join("")}${from ? `<small>${from.label}</small>` : ""}`;
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
@@ -3965,7 +3968,7 @@
     if (!st.territory || !(st.weeks || []).length) return `<div class="m-tl-head"><b>天下怎麼變</b>${close}</div><div class="m-sub">這一季沒有地盤易手。</div>`;
     const row = (st.weeks || []).find((x) => x.week === week) || { events: [], changed: [] };
     const now = tally(base, controlAt(st, week)), from = tallyFrom(base, st, week);
-    const sum = MAP_SIDE_ORDER.map((sd) => `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}${from ? `<small>　${signed(now[sd] - from.n[sd])}</small>` : ""}</div>`).join("")
+    const sum = (st.sides || MAP_SIDE_ORDER).map((sd) => `<div style="background:${MAP_SIDES[sd].color}"><b>${now[sd]}</b>${MAP_SIDES[sd].name}${from ? `<small>　${signed(now[sd] - from.n[sd])}</small>` : ""}</div>`).join("")
       + (from ? `<small class="m-sum-note">${from.label}</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
     const side = (k) => `<span style="color:${k ? MAP_SIDES[k].color : "inherit"}">${sideName(k)}</span>`;

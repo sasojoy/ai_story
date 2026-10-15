@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -202,6 +202,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         if not options:
             return msgs
         ids = [o.id for o in options]
+    side = allied.pick_side(s.player.name, ids, game.world.roll_counts())
+    if side is not None:  # 豪強分屬兩軍：投靠豪強、拜入曹氏莊院之後挑依附哪一軍，挑人少的那一邊（設計第十三節）
+        return msgs + game.choose(side)
     if s.player.faction is None and profile.faction is not None and not s.pending_event \
             and not any(i.startswith("battle:") for i in ids):
         step = _toward_faction(game, profile.faction, ids)
@@ -539,7 +542,10 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, pro
 
 
 def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Random) -> str | None:
-    """以強度旋鈕的機率挑最高分的選項（同分隨機），否則從假人會選的選項裡隨便挑。"""
+    """以強度旋鈕的機率挑最高分的選項（同分隨機），否則從假人會選的選項裡隨便挑。選邊鈕（豪強分屬兩軍）照 allied.pick_side、不打分數。"""
+    side = allied.pick_side(game.state.player.name, [o.id for o in options if o.enabled], game.world.roll_counts())
+    if side is not None:
+        return side
     scored = [(score(game, o, profile), o.id) for o in options]
     scored = [(value, option_id) for value, option_id in scored if value is not None]
     if not scored:
@@ -625,7 +631,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
             fid = arg.partition(":")[2]
             odds = game.challenge_odds(fid)
-            if orders.strike_on(game.state, game.content, game.state.player.faction, fid):  # 打擊軍令點名他（計畫 T6）
+            if orders.strike_on(game.state, game.content, game._side(), fid):  # 打擊軍令點名他（計畫 T6；豪強分屬兩軍照依附那一軍）
                 return ORDER_SCORE + CHALLENGE_SCORE if odds in STRIKE_ODDS else None
             return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
         if arg == "call":
@@ -652,14 +658,14 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             s, c = game.state, game.content
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
-            bonus = ORDER_SCORE if orders.win_counts(s, c, s.player.faction, s.player.location) else 0.0
-            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, s.player.faction, s.player.location):
+            bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
+            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
-            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, s.player.faction, s.player.location) else 0.0)
+            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, game._side(), s.player.location) else 0.0)
         if arg == "rank2":  # 第 2 階行動（正式版乙一）：跟守勢行動一樣的底分；替軍令記功的加分是計畫戊的事
             return DUTY_SCORE
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
@@ -771,7 +777,7 @@ def _battle_score(game: Game, arg: str) -> float | None:
 
 
 def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
-    faction_id = game.state.player.faction or profile.faction
+    faction_id = game._side() or profile.faction  # 豪強分屬兩軍：依附那一軍的目標
     if faction_id is None:
         return {}
     return rules.resolve_goals(game.content, game.state.world, game.content.scenario.faction(faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
@@ -779,11 +785,12 @@ def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
 
 def _home(game: Game, profile: BotProfile) -> set[str]:
     """陣營的地盤（假人往這一帶走）。第一季濃縮版（開關開著）：己方輸得最多的那條戰線上的所有地點（第一季設計
-    第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。"""
+    第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。
+    豪強分屬兩軍的季，豪強照依附那一軍的目標往前線去（設計第十三節）；回家仍是自己的投靠點。"""
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return set()
-    front = _losing_front(game, faction_id)
+    front = _losing_front(game, game._side() or faction_id)
     if front is not None:
         return set(_front_locations(game.content, front))
     join_at = game.content.scenario.faction(faction_id).join_at
@@ -798,7 +805,7 @@ def _front_locations(content: Content, front: str) -> list[str]:
 def _front_hop(game: Game, profile: BotProfile) -> str | None:
     """第一季濃縮版：假人還沒到己方輸得最多的那條戰線上，往那條戰線路程最近的地點走的下一站（鄰居裡沒有戰線上的地點時，
     光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
-    faction_id = game.state.player.faction or profile.faction
+    faction_id = game._side() or profile.faction  # 豪強分屬兩軍：依附那一軍輸得最多的戰線
     front = _losing_front(game, faction_id) if faction_id is not None else None
     return None if front is None else next_hop(game, _front_locations(game.content, front))
 
@@ -859,5 +866,5 @@ def _bounty_hop(game: Game) -> str | None:
 
 def _order_hop(game: Game) -> str | None:
     """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
-    places = orders.targets(game.state, game.content, game.state.player.faction)
+    places = orders.targets(game.state, game.content, game._side())
     return next_hop(game, places) if places else None

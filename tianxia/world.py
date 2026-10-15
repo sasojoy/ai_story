@@ -11,7 +11,7 @@ from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyl
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
-    decisive_week, ends_early, resolve_trends, season_one, season_one_off, stances, trend_shown, trend_value,
+    decisive_week, ends_early, resolve_trends, season_one, season_one_off, stance_sides, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
@@ -216,9 +216,15 @@ def _rumor_place(sim: SimPlayer, rumor: str | SimRumor) -> tuple[str, str | None
 def season_endings(state: GameState, content: Content) -> list[Ending]:
     """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
     最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。
-    天命結局（mandate）不在這裡，由 evaluate_ending 照天命之爭的結果挑（玉璽二）。"""
+    天命結局（mandate）不在這裡，由 evaluate_ending 照天命之爭的結果挑（玉璽二）。
+    豪強分屬兩軍的季（企劃者 2026-10-15），態勢條件寫到這一季沒有的一方（豪強）的結局不參與（群雄並起、豪強坐大），季末只比官軍、黃巾。"""
     on = season_one(content, state.world)
-    chosen = [e for e in content.scenario.endings if e.season_one == on and not e.mandate]
+    sides = set(stance_sides(content, state.world))
+    chosen = [
+        e for e in content.scenario.endings
+        if e.season_one == on and not e.mandate
+        and (set(e.stance_min) | set(e.stance_max) | ({e.stance_top} if e.stance_top else set())) <= sides
+    ]
     return chosen or [e for e in content.scenario.endings if not e.season_one and not e.mandate]
 
 

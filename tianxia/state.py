@@ -396,6 +396,8 @@ class PlayerState(BaseModel):
     faction: str | None = None  # 投靠的陣營 id（Scenario.factions）；None＝散人
     pending_faction: str | None = None  # 按了「投靠某陣營」、還在確認畫面上的陣營 id
     pending_defect: str | None = None  # 按了「叛投某陣營」、還在確認畫面上的陣營 id（計畫甲）
+    ally: str | None = None  # 豪強分屬兩軍的季（allied.on）：依附哪一軍；其他人、其他季是 None（陣營照舊記在 faction）
+    pending_ally: str | None = None  # 投靠豪強或叛投到豪強的確認畫面上挑好的那一軍；還沒挑是 None
     defected: bool = False  # 這一季叛投過了（第一季設計 5.1：一季最多一次）；角色每季重來，新的一季自然是 False
     member: Member = Field(default_factory=Member)  # 玩家本人的角色表
 
@@ -841,6 +843,7 @@ class WorldState(BaseModel):
     # 籌備中的季在管理者開季時再蓋一次（第一次啟動忘了設 TIANXIA_PROFILE 也救得回來）──
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
+    haoqiang_allied: bool = False  # 這一季開季時豪強分屬兩軍是不是開著（allied.on 還要第一季的章）；舊季讀檔是 False
     length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，一律照 models.DEFAULT_SEASON_DAYS（FB-037）
     # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
     timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）

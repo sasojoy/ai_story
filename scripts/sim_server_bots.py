@@ -23,7 +23,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, bounties, database, insight_llm, library, naming, server_bots  # noqa: E402
+from tianxia import allied, bot, bounties, database, insight_llm, library, naming, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import name_key, open_characters  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
@@ -304,6 +304,7 @@ def run_season(
         "battle_hour": battle_hour,
         "battle_sides": dict(sides),
         "factions": world.faction_counts(),
+        "sides": allied.side_totals(world.roll_counts()),  # 豪強分屬兩軍：照依附那一軍數（其他季跟 factions 一樣）
         "humans": {g.state.player.name: g.state.player.faction for g in humans},
         "bots": len(bots),
         "tempers": dict(Counter(s.player.bot.personality for s in bots)),

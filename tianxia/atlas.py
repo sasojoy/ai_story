@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, mounts, orders, prologue, sortie, territory
+from . import allied, figures, insights, mounts, orders, prologue, sortie, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -305,7 +305,7 @@ def _open_strikes(state: GameState, content: Content) -> list[Order]:
     if state.world.ended:
         return []
     return [
-        o for o in orders.current(state, content, state.player.faction)
+        o for o in orders.current(state, content, allied.side_of(state, content))  # 豪強分屬兩軍：依附那一軍的軍令
         if o.template == "strike" and not o.done and o.figure is not None
     ]
 
@@ -724,6 +724,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
+    if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
+        return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
     if p.pending_defect:
         return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
     if p.fs_asking is not None:
@@ -849,7 +851,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if standing:
         parts.append("\n".join([HERE_TITLE, *(_here_text(state, content, fid) for fid in standing)]))
 
-    listed = foes(content, loc, odds, state.player.faction, state.world)
+    listed = foes(content, loc, odds, allied.side_of(state, content), state.world)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     gives = insight_names(content, loc)

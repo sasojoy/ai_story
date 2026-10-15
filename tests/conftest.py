@@ -105,6 +105,13 @@ def renown_on(content: Content) -> Content:
     return content
 
 
+def third_party_gentry(content: Content) -> Content:
+    """豪強分屬兩軍（企劃者 2026-10-15，Config.haoqiang_allied）之前的規則：週末設定裡豪強照舊是第三方（割據、攪局、臨時投效），
+    回傳同一份內容。測的是第三方豪強、割據本身的舊測試用它；新規則的測試不要叫（見 tests/test_gentry_allied.py）。"""
+    content.config.haoqiang_allied = False
+    return content
+
+
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。

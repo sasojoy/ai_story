@@ -510,7 +510,7 @@ def _price_here(state: GameState | None, content: Content) -> float:
         return 1.0
     from . import renown, territory  # noqa: PLC0415
 
-    return territory.price_here(state, content) * renown.clinic_factor(state, content)
+    return territory.price_here(state, content) * renown.clinic_factor(state, content)  # price_here 照依附那一軍算自家地盤
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:

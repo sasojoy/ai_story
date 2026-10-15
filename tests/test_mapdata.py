@@ -4,17 +4,19 @@ from __future__ import annotations
 import json
 import random
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from tianxia import calendar, mapdata, mapview, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="yingchuan", classic=False, profile="weekend"):
+def _game(faction="guan", at="yingchuan", classic=False, profile="weekend", third_party=False):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
+    if third_party:
+        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -77,7 +79,7 @@ def test_a_losing_place_still_shows_when_three_can_be_won():
 
 
 def test_the_state_carries_three_ropes_and_the_weeks():
-    game = _game()
+    game = _game(third_party=True)
     territory.update(game.state.world, game.content)
     st = game.map_state()
     assert [r["id"] for r in st["ropes"]] == ["yingru", "nanyang", "jizhou"]

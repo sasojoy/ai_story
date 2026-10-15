@@ -20,7 +20,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, equipment, gender, library, materials, ranger, renown, roster, team, territory, treasures, weapons
+from . import allied, calendar, equipment, gender, library, materials, ranger, renown, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
@@ -252,20 +252,19 @@ def open_bounties(state: GameState, content: Content) -> list[Bounty]:
     return [b for b in w.bounties if not past_due(b, content, w) and _left(b) > 0 and (raids or b.kind != "wanted")]
 
 
-def army_of(faction: str | None) -> str | None:
-    """站哪一軍（名聲 4.6）：官軍、黃巾照自己的陣營；散人、第三方豪強是 None。這一份照 main 寫：
-    「第一季豪強分屬兩軍」那一份（rules.side_of）合進來時換成它，依附哪一軍的豪強照那一軍算。"""
-    return faction if faction in ENEMY else None
+def army_of(state: GameState, content: Content) -> str | None:
+    """站哪一軍（名聲 4.6）：照 rules.side_of（就是 allied.side_of；豪強分屬兩軍的季，依附官軍或黃巾的豪強是那一軍），
+    只認官軍、黃巾；散人、沒有依附的第三方豪強（14 天的季）是 None。"""
+    side = allied.side_of(state, content)
+    return side if side in ENEMY else None
 
 
-def _side_ok(faction: str | None, b: Bounty) -> bool:
-    """陣營這一關（_takeable 的後半、deliver_lapses 的換陣營那一條共用）：官府通緝不看陣營（名聲 5.4）；陣營通緝照站哪一軍
-    （散人也行，名聲 4.6）；其餘散人兩邊都能接、陣營的人只接自己陣營的。"""
+def _side_ok(side: str | None, b: Bounty) -> bool:
+    """陣營這一關（_takeable 的後半、deliver_lapses 的換陣營那一條共用；side 是那一邊，_side）：官府通緝不看陣營（名聲 5.4）；
+    其餘（含陣營通緝，名聲 4.6）散人兩邊都能接、陣營的人只接自己那一邊的（依附的豪強照依附那一軍）。"""
     if b.auto_by == "官府":
         return True
-    if b.auto_by == "陣營":
-        return faction is None or army_of(faction) == b.faction
-    return faction is None or faction == b.faction
+    return side is None or side == b.faction
 
 
 def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
@@ -278,10 +277,16 @@ def _takeable(name: str, faction: str | None, b: Bounty) -> bool:
     return _side_ok(faction, b)
 
 
-def can_take(state: GameState, b: Bounty) -> bool:
-    """這個人接不接得了這一種：散人兩邊都能接；陣營的人只能接自己陣營的；通緝不能接自己的。"""
+def _side(state: GameState) -> str | None:
+    """敵我照那一邊（同 allied.side_of）：豪強分屬兩軍的季依附了一軍的人是那一軍。PlayerState.ally 只在那種季寫（投靠那一下照
+    allied.on），換季角色重來，所以手上沒有 content 的地方（can_take）照它讀也一樣。"""
     p = state.player
-    return _takeable(p.name, p.faction, b)
+    return p.ally or p.faction
+
+
+def can_take(state: GameState, b: Bounty) -> bool:
+    """這個人接不接得了這一種：散人兩邊都能接；陣營的人只能接自己陣營的（豪強分屬兩軍：依附那一軍的）；通緝不能接自己的。"""
+    return _takeable(state.player.name, _side(state), b)
 
 
 def stranded(state: GameState, content: Content, faction_id: str | None) -> list[Bounty]:
@@ -851,7 +856,8 @@ def post_problem(state: GameState, content: Content, target_state: GameState, am
     if not active(state, content) or not content.config.raid.enabled:
         return "（此刻無法這麼做。）"
     p, t = state.player, target_state.player
-    if p.faction is None or t.faction is None or p.faction == t.faction:
+    mine, theirs = _side(state), _side(target_state)  # 豪強分屬兩軍：同一邊的不算敵對
+    if mine is None or theirs is None or mine == theirs:
         return "只能通緝敵對陣營的人。"
     if roster.raid_newbie(target_state, content):  # 截殺不了還在新手期的人：押了錢也只能等退（懸賞榜設計 6.2、14.1 丁）
         return f"{t.name}初入江湖，還在新手期，通緝不了{gender.pronoun(t)}。"  # 待 joy 潤
@@ -876,7 +882,7 @@ def post(state: GameState, content: Content, target_state: GameState, amount: in
     p.stats["silver"] = p.stats.get("silver", 0) - amount
     w.bounty_seq += 1
     b = Bounty(
-        id=f"b{w.bounty_seq}", kind="wanted", faction=p.faction, week=calendar.point(w.time, content, w).week,
+        id=f"b{w.bounty_seq}", kind="wanted", faction=_side(state), week=calendar.point(w.time, content, w).week,
         expires=w.time + content.config.bounties.post_weeks * week_seconds(state, content), silver=amount,
         deeds=content.config.bounties.deeds.get("wanted", 0), quota=1, poster=p.name, target=target_state.player.name,
     )
@@ -908,7 +914,7 @@ def post_auto(state: GameState, content: Content) -> list[str]:
         ))
 
     out: list[str] = []
-    army, tier = army_of(p.faction), renown.fame_tier(state, content)
+    army, tier = army_of(state, content), renown.fame_tier(state, content)
     enemy = ENEMY.get(army or "")
     if (renown.on(content, "faction_wanted") and enemy is not None and tier >= rcfg.wanted_tier and tier in rcfg.wanted_silver
             and enemy in {f.id for f in content.scenario.factions} and not posted("陣營")):
@@ -955,8 +961,9 @@ def deliver_lapses(state: GameState, content: Content) -> list[str]:
         if me not in (name_key(t) for t in b.takers) or me in (name_key(t) for t in b.done_by):
             continue
         name = title(content, b)
-        if p.faction is not None and not _side_ok(p.faction, b):  # 同 _takeable 的陣營那一條（官府通緝不看陣營，名聲 5.4）
-            line = LAPSED_SIDE.format(faction=content.scenario.faction_name(p.faction, "別的陣營"), title=name)
+        side = _side(state)
+        if side is not None and not _side_ok(side, b):  # 同 _takeable 的陣營那一條（豪強分屬兩軍：依附那一軍；官府通緝不看陣營，名聲 5.4）
+            line = LAPSED_SIDE.format(faction=content.scenario.faction_name(side, "別的陣營"), title=name)
         elif _left(b) <= 0:
             line = LAPSED_FULL.format(title=name)
         elif not past_due(b, content, w):
@@ -1117,7 +1124,8 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
     # 後面每一張討伐、打探、護送的地點都會位移。種子帶天機（天機是 0 時照舊），每一季第 1 週的屬性不再一樣（設計 14.2 第 7 條，裝備三一起做）
     give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}{salt}")
-    factions = [f.id for f in content.scenario.factions]
+    # 豪強分屬兩軍的季（企劃者 2026-10-15）：豪強那兩張不掛，豪強交依附那一軍的（一批 12 張）
+    factions = [f.id for f in content.scenario.factions if not (f.allies and allied.on(content, w))]
     asks: dict[str, list[tuple[str, str | None]]] = {}
     for kind in cfg.give_kinds:
         if kind not in GIVE_KINDS or (kind == "arms" and not content.config.weapons.enabled):

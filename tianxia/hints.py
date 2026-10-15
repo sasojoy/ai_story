@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from . import calendar
+from . import allied, calendar
 from .models import Content
 from .state import GameState, HintNote
 
@@ -68,7 +68,8 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
         e = content.tutorial.enlist
         who = e.recruiters.get(faction) if e is not None else None
         name = who.name if who is not None else content.scenario.faction_name(faction, faction)  # 引薦人沒寫（測試內容）用陣營名
-        return HintNote(id=hint_id, speaker=name, text=fill(content, hint.texts[faction]), by=faction)
+        swapped = hint.allied.get(faction) if allied.on(content, state.world) else None  # 豪強分屬兩軍的季另一版（HintDef.allied）
+        return HintNote(id=hint_id, speaker=name, text=fill(content, swapped or hint.texts[faction]), by=faction)
     if faction is None and hint.drifter:
         return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.drifter))
     return None

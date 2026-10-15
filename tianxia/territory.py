@@ -226,9 +226,12 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
-    """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。"""
+    """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（不在戰線上、豪強依附哪一軍都有），照原價。"""
     side = controller(world, content, loc_id)
     if side is None or faction is None:
+        return 1.0
+    if rules.haoqiang_allied(content, world) and content.scenario.faction(side).allies:
         return 1.0
     cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price
@@ -238,8 +241,8 @@ def price_here(state: GameState, content: Content) -> float:
     """此刻在這裡買東西的倍數（名聲設計 4.1）：地盤福利（price_factor）× 名望的店家折扣（renown.price_factor）。
     療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
     放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
-    p = state.player
-    return price_factor(state.world, content, p.faction, p.location) * renown.price_factor(state, content)
+    p = state.player  # 自家地盤照那一邊算（rules.side_of：豪強分屬兩軍的季，豪強是依附的那一軍）
+    return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
 
 
 def price_note(state: GameState, content: Content) -> str:
@@ -249,7 +252,7 @@ def price_note(state: GameState, content: Content) -> str:
         return ""
     p = state.player
     parts = []
-    land = price_factor(state.world, content, p.faction, p.location)
+    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
     if land != 1.0:
         parts.append(("自家地盤" if land < 1 else "敵方地盤") + renown.discount_word(land))
     fame = renown.price_factor(state, content)

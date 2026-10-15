@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from . import allied as allied_rules
 from . import calendar, equipment, explore_modes, figures, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
@@ -242,22 +243,34 @@ def _tenths(p: float) -> str:
     return f"{_count(round(p * 10))}成"
 
 
-def season_line(content: Content) -> str:
-    """這一季在打什麼（第一季設計第一、四節）：劇本名、官軍與黃巾爭的幾條戰線、豪強割據。"""
+def season_line(content: Content, allied: bool = False) -> str:
+    """這一季在打什麼（第一季設計第一、四節）：劇本名、官軍與黃巾爭的幾條戰線、豪強割據。
+    allied：豪強分屬兩軍的季（allied.on，企劃者 2026-10-15）：沒有割據，豪強依附其中一邊（新寫）。"""
     fronts = [rules.trend_name(content, f) for f in rules.front_ids(content)]
     guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
-    return (f"這一季是{content.scenario.name}：{guan}與{huang}在{_count(len(fronts))}條戰線上爭（{'、'.join(fronts)}），"
-            f"{hao}趁亂割據。")
+    tail = f"地方{hao}依附其中一邊。" if allied else f"{hao}趁亂割據。"
+    return f"這一季是{content.scenario.name}：{guan}與{huang}在{_count(len(fronts))}條戰線上爭（{'、'.join(fronts)}），{tail}"
 
 
 # 亂局帶與割據的規則各只寫一次（審查 Minor 7）：態勢、戰況圖卡、玩法說明「這一季在打什麼」都拿這兩句，改一處三處一起變
 
 
-def front_rule(content: Content, card: bool = True) -> str:
-    """戰線的兩端與亂局帶（rules.in_chaos：chaos_low～chaos_high，含兩端）。card：在戰況圖卡上說（指著條上淺色那一段）。"""
+def front_rule(content: Content, card: bool = True, allied: bool = False) -> str:
+    """戰線的兩端與亂局帶（rules.in_chaos：chaos_low～chaos_high，含兩端）。card：在戰況圖卡上說（指著條上淺色那一段）。
+    allied：豪強分屬兩軍的季，亂局是兩軍拉鋸的地方（新寫）。"""
     guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
     shade = "（條上淺色那一段）" if card else ""
-    return f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局{shade}，{hao}趁機割據。"
+    tail = "兩軍在這裡拉鋸" if allied else f"{hao}趁機割據"
+    return f"每條戰線 0 是{guan}穩控、100 是{huang}控制；戰況落在 {_band(content)} 是亂局{shade}，{tail}。"
+
+
+# 豪強分屬兩軍的季（新寫）：態勢那一句取代 geju_rule
+ALLIED_RULE = "{guan}、{huang}的態勢是{n}條戰線合起來的；地方{hao}依附其中一邊，算那一邊的人，沒有自己的態勢。"
+
+
+def allied_rule(content: Content) -> str:
+    guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
+    return ALLIED_RULE.format(guan=guan, huang=huang, hao=hao, n=_count(len(rules.front_ids(content))))
 
 
 def geju_rule(content: Content) -> str:
@@ -272,8 +285,10 @@ def geju_rule(content: Content) -> str:
             f"{n}條都穩下來{calm}。")
 
 
-def stance_help(content: Content) -> list[str]:
-    """態勢小標點開的說明：這一季在打什麼、三方的態勢怎麼算、割據怎麼漲落。"""
+def stance_help(content: Content, allied: bool = False) -> list[str]:
+    """態勢小標點開的說明：這一季在打什麼、三方的態勢怎麼算、割據怎麼漲落（豪強分屬兩軍的季：兩方的態勢、豪強依附一邊）。"""
+    if allied:
+        return [season_line(content, True), allied_rule(content)]
     return [season_line(content), geju_rule(content)]
 
 
@@ -287,15 +302,18 @@ SORTIE_GEJU = "在戰線上出陣攪局、把戰局往中間拉（戰線一亂�
 SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
 
 
-def sortie_lines(content: Content) -> list[str]:
-    """玩法說明「行動」裡出陣那一條（出陣開著時取代遊歷；待 joy 潤）。數字讀 Config。"""
+def sortie_lines(content: Content, allied: bool = False) -> list[str]:
+    """玩法說明「行動」裡出陣那一條（出陣開著時取代遊歷；待 joy 潤）。數字讀 Config。
+    allied：豪強分屬兩軍的季沒有攪局，豪強照依附那一邊攻守（新寫）。"""
     cfg = content.config
     reset = "台灣時間 00:00 換日" if cfg.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
+    gentry = "地方豪強照依附的那一邊攻守。" if allied else "地方豪強是攪局，把戰局往中間拉。"
+    hold = "守" if allied else "守與攪局"
     return [
         f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，只在戰線上的地點。"
-        "這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；地方豪強是攪局，把戰局往中間拉。"
-        f"守與攪局推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
+        f"這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；{gentry}"
+        f"{hold}推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
         + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + "越往對方老巢推越難推。",
     ]
 
@@ -320,12 +338,15 @@ def _tenth(share: float) -> str:
     return f"{'兩' if tenths == 2 else rules.count_word(int(tenths))}成" if tenths == int(tenths) else f"{share * 100:g}%"
 
 
-def territory_lines(content: Content) -> list[str]:
-    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。價錢的成數讀 Config.territory。"""
+def territory_lines(content: Content, allied: bool = False) -> list[str]:
+    """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。價錢的成數讀 Config.territory。
+    allied：豪強分屬兩軍的季沒有割據佔地，豪強照依附那一邊算自家（新寫）。"""
     cfg = content.config.territory
+    geju = "" if allied else "豪強割據高時也會佔地；"
+    gentry = "地方豪強照依附的那一邊算自家。" if allied else ""
     return [
-        "戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；豪強割據高時也會佔地；大事也會讓地點易手。各家的投靠點永遠是自家的。",
-        "換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。",
+        f"戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；{geju}大事也會讓地點易手。各家的投靠點永遠是自家的。",
+        f"換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。{gentry}",
         f"在自家地盤療傷、打造、買馬便宜{_tenth(1 - cfg.own_price)}，在別人的地盤貴{_tenth(cfg.enemy_price - 1)}；散人照原價。",
         "輿圖局勢層的底色就是此刻誰佔著；易手時天下大事會傳一句。",
     ]
@@ -334,8 +355,9 @@ def territory_lines(content: Content) -> list[str]:
 ECONOMY_TITLE = "素材的出路"  # 待 joy 潤：玩法說明那一節的標題（素材與經濟設計第四～六節）
 
 
-def economy_lines(content: Content) -> list[str]:
-    """玩法說明「素材的出路」一節（Config.economy 的收購、升階、捐軍備，開著的才寫；都關著是空的；待 joy 潤）。數字讀 Config。"""
+def economy_lines(content: Content, allied: bool = False) -> list[str]:
+    """玩法說明「素材的出路」一節（Config.economy 的收購、升階、捐軍備，開著的才寫；都關著是空的；待 joy 潤）。數字讀 Config。
+    allied：豪強分屬兩軍的季，豪強捐的進依附那一邊、在自己的莊院與那一邊的大本營都能捐（新寫）。"""
     econ = content.config.economy
     reset = "台灣時間 00:00 換日" if content.config.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
     tier_word = {1: "一階", 2: "二階", 3: "三階"}
@@ -364,9 +386,11 @@ def economy_lines(content: Content) -> list[str]:
     if econ.donate:
         points = "、".join(f"{tier_word[t]} {n} 點" for t, n in sorted(econ.donate_points.items()) if t in tier_word)
         names = "、".join(econ.armaments.values())
+        where = "（豪強：自己的莊院與依附那一邊的大本營都算）" if allied else ""
+        gentry = "豪強捐的進依附那一邊" if allied else "豪強推割據"
         lines.append(
-            f"投靠了陣營，在自家的大本營可以捐軍備：{points}，一天最多 {econ.donate_daily_cap} 點（{reset}）。"
-            f"捐的記成貢獻（第一季），也把大本營那一條戰線往自家推一點（豪強推割據）；素材累積成陣營的{names}，"
+            f"投靠了陣營，在自家的大本營{where}可以捐軍備：{points}，一天最多 {econ.donate_daily_cap} 點（{reset}）。"
+            f"捐的記成貢獻（第一季），也把大本營那一條戰線往自家推一點（{gentry}）；素材累積成陣營的{names}，"
             "在大決戰怎麼用，之後再定。"
         )
     return lines
@@ -407,14 +431,15 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     on = sortie.on(content)
-    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推"]
+    allied = rules.haoqiang_allied(content, state.world)  # 豪強分屬兩軍：沒有割據、豪強照依附那一邊推
+    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推" + ("（地方豪強往依附的那一邊）" if allied else "")]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
     tail = SORTIE_RANGER if on else "散人照那個地方本來的方向推"
-    for fid in _geju_sides(content):
+    for fid in [] if allied else _geju_sides(content):
         tail += f"，{STANCE_NAMES.get(fid, fid)}{_geju_push(content, fid)}"
-    return [front_rule(content) + now, "；".join(parts) + f"；{tail}。"]
+    return [front_rule(content, allied=allied) + now, "；".join(parts) + f"；{tail}。"]
 
 
 def _lockable(content: Content) -> int:
@@ -455,14 +480,16 @@ def board_help(content: Content) -> list[str]:
     return lines
 
 
-def quest_help(content: Content) -> list[str]:
+def quest_help(content: Content, allied: bool = False) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
     散人做不了（foreshadow.capable 要陣營對得上）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
-    third = "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))
+    third = "" if allied else "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))  # 豪強分屬兩軍：沒有第三方
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
     aside = f"{third}做完只在揭曉時留名{'、推一把割據' if geju else ''}，不改結果；" if third else ""
+    if allied:  # 新寫
+        aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"
     return [
         f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
@@ -471,11 +498,12 @@ def quest_help(content: Content) -> list[str]:
 
 def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
     """江湖頁四個地方點開的說明（status.war_help）：stance＝態勢小標、fronts＝戰況圖卡、board＝大事小標、quest＝主線小標。"""
+    allied = rules.haoqiang_allied(content, state.world)  # 豪強分屬兩軍的季另寫（設計第十四節）
     return {
-        "stance": stance_help(content),
+        "stance": stance_help(content, allied),
         "fronts": fronts_help(state, content),
         "board": board_help(content),
-        "quest": quest_help(content),
+        "quest": quest_help(content, allied),
     }
 
 
@@ -655,12 +683,15 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     cfg = content.config
     if not content.scenario.factions:
         return []
+    allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍的季：豪強先挑依附哪一邊、算那一邊的人（新寫）
     # FB-112：推線只說有些地方；散人與不是交戰兩軍的陣營（地方豪強，Joy 2026-10-13）可以在決戰的大區臨時投效兩軍之一，
     # 只算那一場（Game._free_agent、_enlist_options；不進投靠名冊、不算叛投）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
+    gentry = ("地方豪強要先挑依附官軍或黃巾，算那一邊的人，決戰也站那一邊。" if allied
+              else "陣營不是交戰的兩軍時，跟散人一樣臨時投效。")
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
         f"{SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}；全服決戰替自己的陣營出戰，"
-        "陣營不是交戰的兩軍時，跟散人一樣臨時投效。"
+        f"{gentry}"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
     if not calendar.season_one_on(season, content):
@@ -679,8 +710,10 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
         f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
         "本週的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
-        f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。",
-        "**叛投**：一季一次，到別的陣營收人的地方叛投；晉升、召見、部下、這一季的貢獻歸零，屬性、武學、同伴、銀兩不動。",
+        f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。"
+        + (f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。" if allied else ""),
+        "**叛投**：一季一次，到別的陣營收人的地方叛投；晉升、召見、部下、這一季的貢獻歸零，屬性、武學、同伴、銀兩不動。"
+        + ("換依附的一邊、豪強與同一邊的官軍或黃巾互換，也算叛投。" if allied else ""),
     ]
     return lines
 
@@ -694,11 +727,24 @@ def faction_lines(content: Content, season: WorldState) -> list[str]:
 
     fronts = set(rules.front_ids(content))
     pushers = _order_pushers(content)
+    allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍：豪強那一列另寫（新寫）
     out = []
     for faction in content.scenario.factions:
         fid = faction.id
         goals = faction.goals
         pushed = {d for key, d in goals.items() if key in fronts}
+        if allied and faction.allies:
+            titles = [t for t in ranks.TITLES.get(fid, []) if t][:allied_rules.CAP_RANK]
+            where = _place_names(content, faction.join_at)
+            head = f"**{faction.name}**" + (f"（在{where}投靠）" if where else "")
+            sides = "或".join(a.name for a in allied_rules.allies_of(content, fid))
+            duty = content.orders.duties.get(fid)
+            acts = [f"在戰線上的差事是「{duty.name}」"] if duty is not None else []
+            acts += [f"第 {a.rank} 階起多「{a.name}」" for a in sorted(content.orders.rank_actions, key=lambda a: a.rank)
+                     if a.faction == fid and a.rank <= allied_rules.CAP_RANK]
+            title = f"；頭銜從{titles[0]}做到{titles[-1]}（第 {allied_rules.CAP_RANK} 階為止）" if len(titles) > 1 else ""
+            out.append(f"{head}：依附{sides}，照那一邊推戰線、接那一邊的軍令；{'，'.join(acts) or '沒有額外的行動'}{title}。")
+            continue
         if pushed:
             side = STANCE_NAMES["guan"] if pushed == {-1} else STANCE_NAMES["huang"] if pushed == {1} else "各自"
             aim = f"把戰線往{side}那一邊推"
@@ -731,10 +777,12 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     rules.stance_rule_note，呼叫端照這一季算好）。第一季才有。"""
     if not calendar.season_one_on(season, content):
         return []
-    lines = [season_line(content), front_rule(content, card=False), geju_rule(content), *board_help(content)]
+    allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍：沒有割據那一句
+    stance = allied_rule(content) if allied else geju_rule(content)
+    lines = [season_line(content, allied), front_rule(content, card=False, allied=allied), stance, *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
-    lines += quest_help(content)
+    lines += quest_help(content, allied)
     lines.append("江湖頁最上面的「態勢」「大事」「主線」與底下的戰況圖卡，點開都有說明。")
     return lines
 
@@ -798,7 +846,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     if not figures.challenge_on(content, season):
         return []
     sides = {fig.faction for fig in content.figures.values()}
-    both = [f.name for f in content.scenario.factions if f.id not in sides]
+    # 豪強分屬兩軍的季：豪強照依附那一邊只打對面的人物（Game._challenge_options 照 _side），不寫「兩邊都打」
+    both = [] if rules.haoqiang_allied(content, season) else [f.name for f in content.scenario.factions if f.id not in sides]
     act = sortie.NAME if sortie.on(content) else "遊歷"  # FB-251：出陣開著時寫「體力同出陣」（挑戰本人照舊讀 action_cost["train"]）
     lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "", act=act)]
     if cfg.snub_hours > 0:
@@ -856,6 +905,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     cfg = content.config
     cost = cfg.action_cost
     first = calendar.season_one_on(season, content)
+    allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍的季（企劃者 2026-10-15）：沒有第三方、割據、攪局
     legend = f"每次探索還有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     bond = [
         "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（求見名單上也有）。",
@@ -882,7 +932,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
         *(explore_lines(content) if explore_modes.on(content) else old_explore),
-        *(sortie_lines(content) if sortie.on(content) else old_train),
+        *(sortie_lines(content, allied) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
@@ -894,8 +944,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "",
         *(_section("名聲", renown_lines(content, season)) if renown.on(content) else _section("名望", fame_lines(content, season))),
         *_section("投靠與軍令", join_lines(content, season)),
-        *_section("三方有什麼不同", faction_lines(content, season)),
-        *(_section("地盤", territory_lines(content)) if territory.on(content) else []),
+        *_section("各陣營有什麼不同" if allied else "三方有什麼不同", faction_lines(content, season)),
+        *(_section("地盤", territory_lines(content, allied)) if territory.on(content) else []),
         "#### 情誼",
         *bond,
         "",
@@ -921,7 +971,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 背包",
         "- 素材不拿來煉製：第一季裡折成糧草，押糧車、準備伏筆都要用。",
     ]
-    economy = economy_lines(content)
+    economy = economy_lines(content, allied)
     if economy:  # 素材與經濟（收購、升階、捐軍備）：開著的才寫
         lines += ["", *_section(ECONOMY_TITLE, economy)]
     return "\n".join(lines)

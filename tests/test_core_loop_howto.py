@@ -2,7 +2,7 @@
 這一份先放出陣、推力、地盤那幾塊（PM 2026-10-14：探索三選一與地盤福利另外平行做，合進來之後再補那兩段）。"""
 from __future__ import annotations
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from tianxia import howto
 
 
@@ -40,7 +40,7 @@ def test_the_fronts_and_joining_explain_the_sortie():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = real_content("weekend")
+    c = third_party_gentry(real_content("weekend"))  # 豪強攪局那一句是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     season = fresh_season(c)
     state = GameState(player=PlayerState(name="甲", location=c.scenario.start_location, stats={}, stamina=0), world=season)
     fronts = " ".join(howto.fronts_help(state, c))

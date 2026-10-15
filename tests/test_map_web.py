@@ -11,7 +11,7 @@ import test_prologue_web
 
 import server
 import webharness
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
@@ -22,11 +22,13 @@ DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
 
-def _game(faction="guan", at="yingchuan", classic=False):
+def _game(faction="guan", at="yingchuan", classic=False, third_party=False):
     c = real_content("weekend")
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
+    if third_party:
+        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -135,10 +137,10 @@ def test_travel_stays_on_the_map():
 
 
 def _timeline_game():
-    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。"""
+    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。豪強是第三方的規則（有割據曲線）。"""
     from tianxia import calendar, territory
 
-    game = _game()
+    game = _game(third_party=True)
     w, c = game.state.world, game.content
     territory.update(w, c)
     w.time = calendar.week_start(2, c, w) + 60

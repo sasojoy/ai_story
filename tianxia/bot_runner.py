@@ -305,7 +305,8 @@ class BotRunner:
         if definition is None:
             return None
         out = {p.name for p in battle.participants.values() if p.eliminated}
-        # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick）；散人不趕來
+        # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick；豪強分屬兩軍的季
+        # 站依附的那一軍，Game._free_agent）；散人不趕來
         sides = set(battle_instance.sides(definition)) | {f.id for f in self.content.scenario.factions}
         return battle.muster_deadline_real, sides, out
 
