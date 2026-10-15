@@ -217,3 +217,36 @@ def test_an_admin_night_time_is_kept(tmp_path):
     season = store.get_season()
     local = _local(c, season, now, season.schedule["changshe_fire"]) % DAY
     assert 3 * HOUR <= local <= 3 * HOUR + _cal_hour_real(c, season)
+
+
+def test_fb265_stamping_the_mandate_now_says_when_it_cannot_move(tmp_path):
+    """FB-265：管理者「這一季立刻蓋上天命之季的章」時，天命之爭落在半夜又兩邊都挪不開（週末季第 12 週太擠），照原時間；
+    回的訊息跟開季、開啟下一季一樣多那一行「挪不開、照原時間」。"""
+    from tianxia.engine import Game
+    from tianxia.sqlite_world import open_world
+
+    c = real_content("weekend")
+    c.config.auto_open_first_season = False
+    c.config.admins = ["管"]
+    store = open_world(tmp_path / "tianxia.db")
+    store.seed_first_season(c)
+    probe = fresh_season(c)
+    probe.mandate = True
+    at = timetable.default_time(timetable.find(c, "tianming"), c, probe)
+    now = BASE + 3 * HOUR - at / c.config.time_scale - c.config.pill_day_utc_offset_hours * HOUR  # 天命之爭落在 03:00
+    assert store.open_season(c, now)
+    game = Game.new(c, "管", rng=random.Random(1), world=store)
+    game.sync(now)
+    out = game.admin_seal_mandate("now")
+    assert any("蓋上天命之季" in line for line in out), out
+    assert any("天命之爭" in line and "照原時間" in line and "03:00" in line for line in out), out
+
+
+def test_fb265_the_confirm_box_does_not_promise_the_move():
+    """FB-265：確認框不寫成一定挪得開。"""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    box = js[js.index("這一季立刻蓋上天命之季的章："):]
+    box = box[: box.index("確定？")]
+    assert "現實時間落在半夜就挪開" not in box and "挪不開" in box

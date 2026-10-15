@@ -8990,6 +8990,10 @@ class Game:
             self.world.mutate(_stamp)
             self.state.world = self.world.get_season()
             msg = "這一季蓋上天命之季的章。"
+            # 挪不開半夜、照原時間的決戰：同開季、開啟下一季那一行（FB-265）
+            kept = timetable.quiet_notes(self.state.world, c, self.now)
+            self._write("蓋天命之季", [msg, *kept], tag="管理者")
+            return self._log([f"（{msg}）", *kept])
         else:
             return self._log(["（看不懂要怎麼蓋。）"])
         self._write("蓋天命之季", [msg], tag="管理者")
