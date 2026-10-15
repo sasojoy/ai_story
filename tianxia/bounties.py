@@ -84,6 +84,7 @@ WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通
 HELD_FULL = "你手上已經有 {count} 張了，先交了差再說。"  # 待 joy 潤（FB-155：count 是手上真的有幾張，不是上限；截殺關了又開時可以超過上限）
 BOARD_EMPTY = "榜上的懸賞都有人交了。"  # 待 joy 潤（FB-156：榜開著、看得到的單被別人交光，第二層只剩「返回」時灰掉的那一行；Game._bounty_options 的 bounty:empty）
 NOT_HELD = "你手上沒有這一張。"  # 待 joy 潤：放棄一張手上沒有的（drop）；Game._bounty 照它記掌櫃的情況
+PRIZE_GATE = "這張重賞的單，名動一方以上的人才揭得到。"  # 名聲 4.2（take_problem；店面告示照它灰掉、寫原因）
 UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（shopview.BACKS）
 
 
@@ -344,6 +345,9 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
         return "這一張你已經交過差了。"
     if not can_take(state, b):
         return "這一張不是給你接的。"
+    rule = content.config.renown
+    if renown.on(content, "prize_gate") and has_prize(content, b) and renown.fame_tier(state, content) < rule.prize_tier:
+        return PRIZE_GATE  # 名聲 4.2：重賞給出去之後就是一般的單（has_prize 看 done_by），手上揭著的不收回
     if b.kind == "wanted" and roster.raid_newbie(state, content):  # 通緝只能靠截殺交差，自己還在新手期就截殺不了（Game.raid_refusal）：揭了白佔一格（FB-154）
         return WANTED_NEWBIE
     held = len(mine(state, content))
