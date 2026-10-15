@@ -16,7 +16,8 @@ import hashlib
 from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
-from .models import Content, GeneralTrait, SpecialTrait
+from .models import Content, GeneralTrait, SpecialTrait, TacticDef
+from . import signature
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -91,6 +92,32 @@ def amount(content: Content, lo: Loadout, hook: str) -> float:
     return min(trait.cap, trait.per_layer * lo.layers.get(hook, 0.0))
 
 
+def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
+    """本人身上的功效在回合裡的樣子（第三批，tactics.py）：一般功效照層數算出數字（rate、params 寫 "value"／"extra" 的換掉），
+    特別功效照內容寫的。沒有回合裡的作用的（厚：只改氣血係數的下限）不算。"""
+    out: list[TacticDef] = []
+    for trait in content.traits.general:
+        layers = lo.layers.get(trait.hook, 0.0)
+        if trait.tactic is None or layers <= 0:
+            continue
+        value = min(trait.cap, trait.per_layer * layers)
+        extra = min(trait.extra_cap, trait.extra_per_layer * layers)
+
+        def pick(v: float | str) -> float:
+            return value if v == "value" else extra if v == "extra" else float(v)
+
+        tt = trait.tactic
+        out.append(TacticDef(
+            name=trait.name, timing=tt.timing, kind=tt.kind, rate=min(1.0, pick(tt.rate)), rounds=tt.rounds,
+            params={k: pick(v) for k, v in tt.params.items()}, say=tt.say,
+            desc=trait.desc.replace("{value}", _value(trait.hook, value)).replace("{extra}", _value(trait.hook, extra)),
+        ))
+    for sp in lo.specials.values():
+        if sp.tactic is not None:
+            out.append(sp.tactic)
+    return out
+
+
 def has(lo: Loadout, hook: str) -> bool:
     """身上有沒有這個掛點的功效（一般的層數大於 0，或特別功效）。"""
     return lo.layers.get(hook, 0.0) > 0 or hook in lo.specials
@@ -137,15 +164,20 @@ def _value(hook: str, number: float) -> str:
 
 def card_line(content: Content, art: MartialArt) -> str:
     """功法卡的一行（13.6）：這一門的每個一般功效（照這一門自己的層數與品質算出來的數字），再加特別功效。
-    內容沒有功效（沒有 traits.json）就是空字串，卡片不畫這一行。"""
+    內容沒有功效（沒有 traits.json）就是空字串，卡片不畫這一行。
+    本命武學另起一行寫本命特效（signature.card_text：名字、說明、數字），有沒有 traits.json 都寫。"""
+    sig = signature.of(content, art.id)
+    tail = signature.card_text(sig) if sig is not None else ""
     if not content.traits.general:
-        return ""
+        return tail
     mult, mine, parts = multiplier(content, art.quality), traits_of(art), []
     for attribute in dict.fromkeys(mine):
         trait = general(content, attribute)
-        number = min(trait.cap, trait.per_layer * mine.count(attribute) * mult)
-        parts.append(f"〔{trait.name}〕" + trait.desc.replace("{value}", _value(trait.hook, number)))
+        layers = mine.count(attribute) * mult
+        number = min(trait.cap, trait.per_layer * layers)
+        extra = min(trait.extra_cap, trait.extra_per_layer * layers)
+        parts.append(f"〔{trait.name}〕" + trait.desc.replace("{value}", _value(trait.hook, number)).replace("{extra}", _value(trait.hook, extra)))
     sp = special(content, art.special)
     if sp is not None:
         parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
-    return "功效：" + "・".join(parts)
+    return "功效：" + "・".join(parts) + (f"\n{tail}" if tail else "")

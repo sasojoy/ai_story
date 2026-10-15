@@ -185,7 +185,8 @@ def round_lines(content: Content, played: list[rounds_mod.Round], rng: random.Ra
                 how = rng.choice(lines.theirs.get(beat.attribute, []) or lines.theirs_any)
                 tail = "" if beat.amount is None else f"，你氣血 -{beat.amount}" if beat.amount else "，被你閃開了"
                 parts.append(f"{beat.actor}{how}{tail}")
-        out.append(f"第{r.number}回合　" + "；".join(parts) + "。")
+        out += r.before  # 這一回合發動的本命戰法（〔名〕開頭）排在前面
+        out.append(f"第{r.number}回合　" + (f"{r.tag}：" if r.tag else "") + "；".join(parts) + "。")
     return out
 
 

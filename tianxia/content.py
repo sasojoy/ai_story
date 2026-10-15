@@ -609,6 +609,52 @@ def _placeholder_problem(line: str) -> str | None:
     return None
 
 
+def check_signature_arts(c: Content, need) -> None:
+    """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
+    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
+    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
+    trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
+    factions = {f.id for f in c.scenario.factions}
+    seen: dict[str, str] = {}
+    for skill in c.skills.values():
+        if skill.traits:
+            need(skill.traits[0] == skill.attribute, f"武學 {skill.id}：一般功效的第一個要是自己的屬性 {skill.attribute}")
+            need(len(set(skill.traits)) == len(skill.traits), f"武學 {skill.id}：一般功效不能重複")
+        tactic = skill.tactic
+        if tactic is None:
+            continue
+        need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
+        need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
+        first = seen.setdefault(tactic.name, skill.id)
+        need(first == skill.id, f"本命戰法的名字「{tactic.name}」重複（{first}、{skill.id}）")
+        need(tactic.name not in trait_names, f"武學 {skill.id}：本命戰法的名字「{tactic.name}」跟一般或特別功效同名")
+        fields = {name for _, name, _, _ in string.Formatter().parse(tactic.desc) if name}
+        need(fields <= set(tactic.params), f"武學 {skill.id}：本命戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
+        need(all(a in c.characters for a in tactic.allies), f"武學 {skill.id}：本命戰法的 allies 不是人物")
+        need(tactic.foe_faction is None or tactic.foe_faction in factions, f"武學 {skill.id}：本命戰法的 foe_faction 不是劇本的陣營")
+    # 本命戰法第三批：特別功效、神器、名將本命兵器的戰法（一般功效的換成 traits.tactic_defs 時才有名字，名字就是功效名）
+    own = [(f"特別功效 {t.id}", t.tactic) for t in c.traits.special if t.tactic is not None]
+    own += [(f"神器配方 {r.id}", r.tactic) for r in c.forge_secrets.values() if r.tactic is not None]
+    own += [(f"名將本命兵器 {a.character}", a.tactic) for a in c.gear.signature_arms if a.tactic is not None]
+    for where, tactic in own:
+        first = seen.setdefault(tactic.name, where)
+        need(first == where or (where.startswith("特別功效") and tactic.name in trait_names and first.startswith("特別功效")),
+             f"{where}：戰法的名字「{tactic.name}」重複（{first}）")
+        if not where.startswith("特別功效"):
+            need(tactic.name not in trait_names, f"{where}：戰法的名字「{tactic.name}」跟一般或特別功效同名")
+        fields = {name for _, name, _, _ in string.Formatter().parse(tactic.desc) if name}
+        need(fields <= set(tactic.params), f"{where}：戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
+    for arm in c.gear.signature_arms:
+        need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
+    for trait in c.traits.general:
+        if trait.tactic is None:
+            continue
+        need("{extra}" not in trait.desc or trait.extra_per_layer > 0, f"一般功效 {trait.name}：說明寫了 {{extra}} 卻沒有 extra_per_layer")
+        used = [v for v in [trait.tactic.rate, *trait.tactic.params.values()] if isinstance(v, str)]
+        need(all(v in ("value", "extra") for v in used), f"一般功效 {trait.name}：戰法的數字只能寫數字、value 或 extra")
+
+
 def check_traits(c: Content, need) -> None:
     """武學的功效（content/traits.json、trait_lines.json，武學與成長設計 13.2、13.4、13.5）：一般功效一個屬性一個、八個都要有，
     名字不重複；特別功效的 id 不重複；掛點不重複（Loadout 與 traits.amount 都是照掛點找，兩個掛同一點會悄悄只剩一個，
@@ -1796,6 +1842,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_traits(c, need)
+    check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(

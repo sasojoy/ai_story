@@ -9,7 +9,7 @@ smithing（照兵器那一套）。
 """
 from __future__ import annotations
 
-from . import equipment, weapons
+from . import equipment, tactics, weapons
 from .equipment import NO_REPAIR_MATERIAL, NOT_HERE, RACK_FULL, grade, repair_material
 from .martial_arts import MartialArt, counters
 from .models import Content
@@ -228,6 +228,7 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
         "recipe": recipe_text(content, item.recipe),  # 自己打的那一件寫配方（主料＋輔料），買的是 None
         "confirm": "" if worn or item.original else equipment.dismantle_confirm(content, item),  # 身上那件、原品（5.4）不能拆，沒有問句
         "keep": equipment.ORIGINAL_KEPT if item.original else "",
+        "tactic": tactics.item_lines(content, item),  # 神器的特技（本命戰法第三批），沒有是空的
     }
 
 
@@ -251,7 +252,7 @@ def card_line(state: GameState, content: Content, neigong: MartialArt | None) ->
     tempered = f"・淬煉 {item.tempers} 次" if item.tempers else ""  # 待 joy 潤
     line = (f"防具　【{item.name}】屬{item.attribute}・{grade(item)}{tempered}・{WEAR_WORD} {item.edge}，"
             f"一場少扣 {pct(cut(item, neigong, content))} 氣血")
-    return line + (f"（{note}）" if note else "")
+    return "\n".join([line + (f"（{note}）" if note else ""), *tactics.item_lines(content, item)])
 
 
 # ---- 打造的配方鍵與名字（四欄設計 4.7；打造隱藏配方設計 4.1、第九節）----

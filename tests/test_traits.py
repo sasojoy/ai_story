@@ -32,8 +32,8 @@ def test_layers_add_up_both_arts_by_quality(state, content, world):
     state.player.art_quality[outer.id], state.player.art_quality[inner.id] = "上品", "下品"
     lo = traits.loadout(state, content, world)
     assert lo.layers["difficulty_cut"] == 5 and lo.layers["big_win"] == 2 and lo.layers["toll_cut"] == 1
-    assert traits.amount(content, lo, "difficulty_cut") == pytest.approx(0.2)  # 5×4% 剛好上限
-    assert traits.amount(content, lo, "big_win") == pytest.approx(0.08)
+    assert traits.amount(content, lo, "difficulty_cut") == pytest.approx(0.5)  # 5×10% 剛好上限
+    assert traits.amount(content, lo, "big_win") == pytest.approx(0.2)
     assert lo.source["破甲"] == "裂石拳"  # 層數多的那一門（演出句的 {art}）
 
 
@@ -57,15 +57,15 @@ def test_the_card_line_lists_the_traits_with_this_arts_numbers(content):
     art = _art("裂石拳", attribute="剛", traits_=["剛", "快", "剛"], special="lianhuan").model_copy(update={"quality": "中品"})
     line = traits.card_line(content, art)
     assert line.startswith("功效：")
-    assert "〔破甲〕對手的強度等於低了 12%，更容易贏" in line  # 2 層 ×1.5 ×4%
-    assert "〔先手〕比較容易打出大勝（大勝要贏的幅度少對手強度的 6%）" in line and "〔連環〕每場打鬥碰兩次運氣" in line
+    assert "〔破甲〕強攻剋中對手時，有 30% 的機會讓他下一回合的固守與借力落空" in line  # 2 層 ×1.5 ×10%
+    assert "〔先手〕剋中對手後有 15% 的機會連環" in line and "〔連環〕每回合有 20% 的機會連環" in line
 
 
-def test_the_point_specials_print_points_not_percentages(content):
-    """悟招（心得）與輕身（體力）的數字是點數，其他功效是比例。"""
-    assert "〔悟招〕打贏多得 5 點心得" in traits.card_line(content, _art("悟拳", special="wuzhao"))
-    assert "〔輕身〕出陣、遊歷少花 2 點體力" in traits.card_line(content, _art("輕功", special="qingshen"))
-    assert "〔回春〕不論輸贏，打完都回復氣血上限的 3%" in traits.card_line(content, _art("春功", special="huichun"))
+def test_the_special_descriptions_read_as_written(content):
+    """特別功效的說明照內容寫死（本命戰法第三批：都換成回合裡的戰法）。"""
+    assert "〔悟招〕每被對手剋中一次就看破一分" in traits.card_line(content, _art("悟拳", special="wuzhao"))
+    assert "〔輕身〕前 2 回合有 15% 的機會化影" in traits.card_line(content, _art("輕功", special="qingshen"))
+    assert "〔回春〕每回合開始回氣血 3%" in traits.card_line(content, _art("春功", special="huichun"))
 
 
 def test_the_card_line_is_empty_when_the_content_has_no_traits(content):

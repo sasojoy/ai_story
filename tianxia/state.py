@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
+from .tactics import Bout, BoutSide
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
 
@@ -271,6 +272,7 @@ class DuelState(BaseModel):
     tell: str = ""
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
     difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
+    bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；你沒有本命戰法是 None
 
 
 class ArenaSide(BaseModel):
@@ -304,6 +306,7 @@ class ArenaFight(BaseModel):
     best_rate: int = 0
     best_won: bool = False
     best_set: bool = False
+    bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；兩邊都沒有是 None
 
 
 class ArenaResult(BaseModel):
@@ -337,6 +340,7 @@ class ArenaEntry(BaseModel):
     role: str = ""
     hp_cap: float
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
+    kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0

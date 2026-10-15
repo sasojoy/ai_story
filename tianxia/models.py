@@ -466,6 +466,65 @@ class LearnRule(_Strict):
     sect: str | None = None
 
 
+TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰", "應招")  # 戰法什麼時候發動（tianxia/tactics.py）；應招是兩邊的招都定了之後
+TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找做法（tactics.KINDS）；數字在 TacticDef.params
+    "chase_disarm", "opening_ward", "disarm", "rally", "heavy_blow", "cleanse", "roar", "unbroken", "vanguard", "tiger",
+    "awe", "waver", "rebound_guard", "veil", "thunder", "curse", "sand", "fog", "bloodrage", "oath", "butcher", "marshal",
+    "fire", "steady", "surge", "tide", "foresight", "ward_all", "cavalry", "brutal", "night_raid", "reinforce", "divine",
+    "sacrifice", "hold_city", "gatekeep",
+    # 第三批（玩家自己的武學功效、神器與名將本命兵器的特技，定案 /mnt/project-files/plan/武學與兵器戰法定案.md）
+    "shadow", "mist", "drain", "mend", "borrow", "break", "momentum", "insight", "immune", "last_stand", "assault", "pierce",
+    "quake", "first_shot", "zhaoyi", "flawless",
+)
+
+
+class TacticDef(_Strict):
+    """本命戰法（tianxia/tactics.py；企劃者 2026-10-15 認可的定案 /mnt/project-files/plan/本命戰法定案.md）：一門本命武學一個，
+    那位人物獨有、合成擲不到。在一般的仗（遊歷、出陣、探索野怪、劇情戰、挑戰本人）的回合裡發動，讓對手陷入某種狀態或改這一回合的氣勢；
+    身上練著的與同伴練著的都會發動（連招）。
+
+    - timing：起手（開打前 rounds 回合，每回合擲 rate）、出招（每回合擲 rate；prep 1 是要先蓄力一回合）、乘勢（你的招剋中對手之後才擲）、
+      心法（條件成立就一直在；rounds 寫了只在前幾回合）、騎戰（騎著馬才有）。
+    - kind：做什麼（tactics.KINDS），params 是它的數字（鍵以 _pct 結尾的是比例，卡上寫成百分比）；desc 是卡上那一句，{鍵} 換成數字。
+    - allies：仁義聚眾那一種讓哪幾位人物的戰法更常發動（人物 id）；foe_faction：火攻那一種對哪個陣營加倍。"""
+
+    name: str
+    timing: Literal[TACTIC_TIMINGS]
+    kind: Literal[TACTIC_KINDS]
+    desc: str
+    rate: float = Field(default=1.0, ge=0, le=1)
+    rounds: int = Field(default=0, ge=0)  # 起手、心法只在前幾回合；0＝每回合
+    prep: int = Field(default=0, ge=0, le=1)
+    params: dict[str, float] = Field(default_factory=dict)
+    allies: list[str] = Field(default_factory=list)
+    foe_faction: str | None = None
+    # 發動時那一句（名字後面接的話）；{foe} 換成對手、{鍵} 換成 params 的數字。空的照 tactics.KINDS 那一種自己的句子
+    say: str = ""
+
+
+class TacticBond(_Strict):
+    """人器合一（名將本命兵器，第三批）：身上也練著那位名將的本命武學或內功時，他那一門戰法改強：發動率、蓄力、回合各加多少，
+    params 各加多少（沒有的鍵當 0 加上去）。desc 是卡上那一句。"""
+
+    desc: str
+    rate: float = 0.0
+    prep: int = 0
+    rounds: int = 0
+    params: dict[str, float] = Field(default_factory=dict)
+
+
+class TraitTactic(_Strict):
+    """一般功效在回合裡的樣子（第三批）：timing、kind 同 TacticDef；rate 與 params 的值可以寫 "value"／"extra"，
+    換成這一門（或身上兩門）照層數算出來的數字（GeneralTrait 的 per_layer／cap 與 extra_per_layer／extra_cap）。"""
+
+    timing: Literal[TACTIC_TIMINGS]
+    kind: Literal[TACTIC_KINDS]
+    say: str = ""
+    rate: float | Literal["value", "extra"] = 1.0
+    rounds: int = Field(default=0, ge=0)
+    params: dict[str, float | Literal["value", "extra"]] = Field(default_factory=dict)
+
+
 class SkillDef(_Strict):
     """內容手寫的武學/內功：本命武學（歷史人物的固定武學，品質是絕學，見 martial_arts.historical_art）、
     部下用的通用武學（企劃者 2026-10-05 定上品，計畫 T5）與基礎武學（下品，開局送或在各地學，
@@ -481,6 +540,9 @@ class SkillDef(_Strict):
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
     special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
     weapon: WeaponKind | None = None  # 這門武學配哪一種兵器（兵器設計 2.3）；內功是 None。正式內容的武學一律要填（test_weapons 鎖住）
+    # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命戰法
+    traits: list[Attribute] = Field(default_factory=list, max_length=3)
+    tactic: TacticDef | None = None
 
 
 class GeneralTrait(_Strict):
@@ -492,6 +554,10 @@ class GeneralTrait(_Strict):
     per_layer: float = Field(ge=0)
     cap: float = Field(ge=0)
     desc: str
+    # 第三批：回合裡的戰法（tactics.py）；desc 的 {extra} 換成 extra_per_layer × 層數（夾在 extra_cap）。沒寫是只改單次判定或氣血的那幾個（厚）
+    extra_per_layer: float = Field(default=0.0, ge=0)
+    extra_cap: float = Field(default=0.0, ge=0)
+    tactic: TraitTactic | None = None
 
 
 class SpecialTrait(_Strict):
@@ -504,6 +570,7 @@ class SpecialTrait(_Strict):
     amount: float = Field(ge=0)
     pool: bool = True
     desc: str
+    tactic: TacticDef | None = None  # 第三批：回合裡的戰法（強度固定，不分品質）
 
 
 class TraitBook(_Strict):
@@ -932,6 +999,7 @@ class ForgeSecret(_Strict):
     name: str  # 名器的專名（神器配方是「譜名」，第二批）
     note: str = ""  # 打出來那一句下面的一句說明
     clues: list[str] = Field(min_length=3, max_length=3)
+    tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
 
 
 class PresetRecipe(_Strict):
@@ -1766,6 +1834,8 @@ class SignatureArmDef(_Strict):
     figure: str | None = None  # 大勢人物 id（content/figures.json），他的 character 要是同一位；沒寫就只有情誼那條路
     gift_line: str = ""  # 情誼那條路送你的那一句（{general}、{arm}）；空的照 signature_arms.GIFT_LINE（待 joy 潤）
     seize_line: str = ""  # 打贏那條路讓你奪走的那一句（{general}、{arm}）；空的照 signature_arms.SEIZE_LINE（待 joy 潤）
+    tactic: TacticDef | None = None  # 誰拿都有的特技（第三批）
+    bond: TacticBond | None = None  # 人器合一：身上也練著這位名將的本命時，他的戰法改強
 
 
 class GearBook(_Strict):
@@ -1896,6 +1966,51 @@ class ChuangongTuning(_Strict):
     follower_cheng_xinde: int = Field(default=25, ge=1)
     # 部下的臂力：第 k 點要 follower_str_xinde × k，臂力最高 stat_cap。模板 4～7，一名最多傳 8～11 點（約 1300～2600）
     follower_str_xinde: int = Field(default=20, ge=1)
+
+
+class SignatureArtTuning(_Strict):
+    """本命武學（企劃者 2026-10-15「現在的本命絕學很爛，甚至比玩家自己合成的還差，也沒什麼特色效果」；PM 定的做法）：
+    以前本命武學照絕學的固定區間（第一成 50、第十成 120），合成擲到的絕學帶 ±10% 微調、最高 132，還可以帶 3 個一般功效與特別功效；
+    本命武學只有自己屬性一個功效、學到時第一成（威力 50，比練滿的上品 72 還低）。現在：玩家自己那一份威力 × power_scale
+    （絕學第十成 138，高頂級合成一截；同伴自己練的照舊，不然全隊又往上竄）、內容寫 3 個一般功效與一個本命戰法（SkillDef.tactic）、
+    學到時直接第 start_level 成（讀檔時情誼送過的舊角色補到這一成，signature.lift_levels，Game._drop_stale_references 叫）。"""
+
+    power_scale: float = Field(default=1.15, gt=0)
+    start_level: int = Field(default=7, ge=1, le=10)
+
+
+class TacticTuning(_Strict):
+    """一般的仗的回合與本命戰法（tianxia/tactics.py；Joy 2026-10-15 選「全部改回合制」）的數字。
+    一般的仗照舊先用單次判定擲出差距（encounter.resolve_encounter，同一顆 Game.rng），再把差距攤成一回合一回合的氣勢（span：差距
+    一個對手強度 ＝ 氣勢 span 點；50 起，到 50 ± stop 提前收場）。沒有戰法時每一回合加起來剛好回到那個差距，結果一個字都不變；
+    戰法在回合裡改氣勢（讓對手打空、出不了手、被剋、連環……），收場的氣勢換回差距再照門檻判結果。
+    strike 是對手一回合打過來的氣勢、counter 是一回合剋中的那一下，戰法的效果都照這兩個數換算（量法見 scripts/measure_tactics.py）。"""
+
+    span: float = Field(default=40.0, gt=0)  # 差距一個對手強度換成幾點氣勢
+    stop: float = Field(default=40.0, gt=0)  # 氣勢離 50 這麼遠就提前收場（90／10）
+    strike: float = Field(default=0.8, ge=0)  # 對手一回合打過來的氣勢（定身、打空、借力、壓低他的推力都照它算）
+    counter: float = Field(default=0.6, ge=0)  # 一回合剋中的那一下
+    wobble: float = Field(default=3.0, ge=0)  # 回合之間的起伏（只是演出，加起來照舊回到差距）
+    dot: float = Field(default=0.08, ge=0)  # 對手每掉一成氣血池的百分之一，氣勢多幾點（焚身、風沙、血創、落雷）
+    self_hit: float = Field(default=0.3, ge=0, le=1)  # 失神的那一回合打到自己的機會
+    prefer_guard: float = Field(default=0.5, ge=0, le=1)  # 帶著固守才發動的戰法時，自動出招改出固守的機會
+    band: float = Field(default=12.0, ge=0)  # 沒有戰法時中途的氣勢不越過 50 ± (stop − band)（不然還沒打完就提前收場，結果會變）
+    # 對手那一方也帶本命戰法（挑戰大勢人物本人：他自己的兩門；team.foe_tactics）。主機的開關
+    foe_tactics: bool = True
+    # 頭目戰、擂台、奪璽單挑（自己挑招的仗，tactics.step）：一擊是幾點氣勢（那邊一回合的推力約 ±8～12、剋中 counter_push 8）。
+    # 2 是量出來的（scripts/measure_tactics.py --bouts，2026-10-15）：頭目戰十八位平均贏面 +4.0（5 是 +10.0、3 是 +5.7），
+    # 跟一般的仗第一批的 +3.6 差不多
+    bout_strike: float = Field(default=2.0, ge=0)
+    # 決戰（tactics.war_round）：一個人的份量加成乘多少（連環是 +1 擊）。0.5：發動多的人一回合份量平均 ×1.17（孫堅），
+    # 跟職位的 +15% 差不多（1.0 是 ×1.34）
+    war_scale: float = Field(default=0.5, ge=0)
+    # 第三批（玩家自己的武學功效、神器與名將本命兵器的特技）：
+    copy_rate: float = Field(default=0.7, ge=0, le=1)  # 神器的仿品：特技的發動率乘這個（心法那一種每回合照它擲）
+    mist_fast_share: float = Field(default=0.5, ge=0, le=1)  # 險的霧：身法高的那一方打空的機會乘這個
+    momentum_cap: float = Field(default=0.3, ge=0)  # 乘勝：一場裡疊起來的推力加成最多這麼多
+    # 頭目戰、擂台、奪璽單挑裡重控場（tactics.BOUT_CONTROL）的發動率乘這個：那幾種仗一回合的勝負幾乎全看剋不剋，
+    # 經緯（看穿）與長坂一喝（定身）照原本的發動率，擂台同樣身手對上自組上品贏 73%（scripts/measure_tactics.py --kits）
+    bout_control_share: float = Field(default=0.6, ge=0, le=1)
 
 
 class RiseTuning(_Strict):
@@ -2080,6 +2195,8 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
+    tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）

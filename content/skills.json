@@ -6,7 +6,22 @@
     "attribute": "快",
     "desc": "曹操的本命武學。",
     "weapon": "槍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "快",
+      "剛",
+      "陽"
+    ],
+    "tactic": {
+      "name": "橫槊賦詩",
+      "timing": "乘勢",
+      "kind": "chase_disarm",
+      "rate": 0.45,
+      "params": {
+        "turns": 1
+      },
+      "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。"
+    }
   },
   {
     "id": "caocao_neigong",
@@ -14,7 +29,24 @@
     "kind": "內功",
     "attribute": "陽",
     "desc": "曹操的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陽",
+      "快",
+      "虛"
+    ],
+    "tactic": {
+      "name": "亂世心術",
+      "timing": "起手",
+      "kind": "opening_ward",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 2,
+        "reflect_pct": 0.4
+      },
+      "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神；擋下的控制有 {reflect_pct} 反彈回施放者。"
+    }
   },
   {
     "id": "liubei_wugong",
@@ -23,7 +55,22 @@
     "attribute": "柔",
     "desc": "劉備的本命武學。",
     "weapon": "劍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "柔",
+      "陽",
+      "實"
+    ],
+    "tactic": {
+      "name": "雙股回鋒",
+      "timing": "乘勢",
+      "kind": "disarm",
+      "rate": 0.35,
+      "params": {
+        "turns": 1
+      },
+      "desc": "對手卸勁 {turns} 回合，出不了強攻。"
+    }
   },
   {
     "id": "liubei_neigong",
@@ -31,7 +78,27 @@
     "kind": "內功",
     "attribute": "柔",
     "desc": "劉備的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "柔",
+      "陽",
+      "實"
+    ],
+    "tactic": {
+      "name": "仁義聚眾",
+      "timing": "起手",
+      "kind": "rally",
+      "rate": 1.0,
+      "allies": [
+        "guanyu",
+        "zhangfei"
+      ],
+      "params": {
+        "heal_pct": 0.04,
+        "boost_pct": 0.1
+      },
+      "desc": "每一回合自己與同伴回氣血 {heal_pct}；關羽、張飛的戰法發動率 +{boost_pct}。"
+    }
   },
   {
     "id": "guanyu_wugong",
@@ -40,7 +107,25 @@
     "attribute": "剛",
     "desc": "關羽的本命武學。",
     "weapon": "刀",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "剛",
+      "快",
+      "陽"
+    ],
+    "tactic": {
+      "name": "青龍拖刀",
+      "timing": "出招",
+      "kind": "heavy_blow",
+      "rate": 0.3,
+      "prep": 1,
+      "params": {
+        "mult": 1.7,
+        "turns": 1,
+        "lead_pct": 0.18
+      },
+      "desc": "蓄力一回合後猛攻（推力 ×{mult}），對手隨機卸勁或亂神 {turns} 回合；氣勢領先時發動率再 +{lead_pct}。"
+    }
   },
   {
     "id": "guanyu_neigong",
@@ -48,7 +133,22 @@
     "kind": "內功",
     "attribute": "陽",
     "desc": "關羽的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陽",
+      "剛",
+      "實"
+    ],
+    "tactic": {
+      "name": "刮骨定神",
+      "timing": "出招",
+      "kind": "cleanse",
+      "rate": 0.4,
+      "params": {
+        "heal_pct": 0.12
+      },
+      "desc": "清掉自己身上的卸勁、亂神、定身、失神，回氣血 {heal_pct}。"
+    }
   },
   {
     "id": "zhangfei_wugong",
@@ -57,7 +157,23 @@
     "attribute": "剛",
     "desc": "張飛的本命武學。",
     "weapon": "槍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "剛",
+      "陽",
+      "快"
+    ],
+    "tactic": {
+      "name": "長坂一喝",
+      "timing": "出招",
+      "kind": "roar",
+      "rate": 0.4,
+      "params": {
+        "stun_pct": 0.3,
+        "turns": 1
+      },
+      "desc": "一聲大喝：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。"
+    }
   },
   {
     "id": "zhangfei_neigong",
@@ -65,7 +181,20 @@
     "kind": "內功",
     "attribute": "陽",
     "desc": "張飛的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陽",
+      "剛",
+      "虛"
+    ],
+    "tactic": {
+      "name": "丈八狂瀾",
+      "timing": "心法",
+      "kind": "unbroken",
+      "rounds": 2,
+      "params": {},
+      "desc": "出招不會被剋（無隙）；代價是這幾回合不能固守。"
+    }
   },
   {
     "id": "sunjian_wugong",
@@ -74,7 +203,21 @@
     "attribute": "快",
     "desc": "孫堅的本命武學。",
     "weapon": "槍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "快",
+      "剛",
+      "陽"
+    ],
+    "tactic": {
+      "name": "先登斬將",
+      "timing": "起手",
+      "kind": "vanguard",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {},
+      "desc": "先登：這一回合連環，推兩次。"
+    }
   },
   {
     "id": "sunjian_neigong",
@@ -82,7 +225,22 @@
     "kind": "內功",
     "attribute": "陽",
     "desc": "孫堅的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陽",
+      "快",
+      "柔"
+    ],
+    "tactic": {
+      "name": "猛虎餘威",
+      "timing": "心法",
+      "kind": "tiger",
+      "params": {
+        "stack_pct": 0.06,
+        "stacks": 5
+      },
+      "desc": "每打一回合推力 +{stack_pct}，最多 {stacks} 層；氣勢落後時一次疊兩層。"
+    }
   },
   {
     "id": "yuanshao_wugong",
@@ -91,7 +249,23 @@
     "attribute": "虛",
     "desc": "袁紹的本命武學。",
     "weapon": "劍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "虛",
+      "陽",
+      "陰"
+    ],
+    "tactic": {
+      "name": "世家威儀",
+      "timing": "起手",
+      "kind": "awe",
+      "rate": 0.6,
+      "rounds": 2,
+      "params": {
+        "cut_pct": 0.3
+      },
+      "desc": "對手氣餒，這一回合推力 −{cut_pct}。"
+    }
   },
   {
     "id": "yuanshao_neigong",
@@ -99,7 +273,22 @@
     "kind": "內功",
     "attribute": "陰",
     "desc": "袁紹的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陰",
+      "陽",
+      "柔"
+    ],
+    "tactic": {
+      "name": "猶疑兩端",
+      "timing": "心法",
+      "kind": "waver",
+      "params": {
+        "up_pct": 0.4,
+        "down_pct": 0.2
+      },
+      "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。看天吃飯。"
+    }
   },
   {
     "id": "taoqian_wugong",
@@ -108,7 +297,21 @@
     "attribute": "柔",
     "desc": "陶謙的本命武學。",
     "weapon": "棍",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "柔",
+      "慢",
+      "實"
+    ],
+    "tactic": {
+      "name": "丹陽鐵壁",
+      "timing": "心法",
+      "kind": "rebound_guard",
+      "params": {
+        "share_pct": 0.5
+      },
+      "desc": "出固守時借力：對手強攻你，他吃自己那一下的 {share_pct}。"
+    }
   },
   {
     "id": "taoqian_neigong",
@@ -116,7 +319,26 @@
     "kind": "內功",
     "attribute": "陰",
     "desc": "陶謙的本命內功。",
-    "quality": "絕學"
+    "quality": "絕學",
+    "traits": [
+      "陰",
+      "柔",
+      "慢"
+    ],
+    "tactic": {
+      "name": "寬厚養氣",
+      "timing": "起手",
+      "kind": "veil",
+      "rate": 1.0,
+      "rounds": 3,
+      "params": {
+        "chance_pct": 0.25,
+        "per_good_pct": 0.05,
+        "good_step": 20,
+        "good_cap_pct": 0.2
+      },
+      "desc": "每回合 {chance_pct} 化影（那一回合不掉氣血）；善名每 {good_step} 點再 +{per_good_pct}，最多 +{good_cap_pct}。"
+    }
   },
   {
     "id": "zhangjiao_wugong",
@@ -125,7 +347,25 @@
     "attribute": "虛",
     "quality": "絕學",
     "desc": "張角的本命武學：大賢良師手中那根九節杖，虛點實打，叫人看不清下一下落在哪裡。",
-    "weapon": "棍"
+    "weapon": "棍",
+    "traits": [
+      "虛",
+      "陰",
+      "陽"
+    ],
+    "tactic": {
+      "name": "天雷符",
+      "timing": "出招",
+      "kind": "thunder",
+      "rate": 0.35,
+      "prep": 1,
+      "params": {
+        "hits": 5,
+        "dot_pct": 0.02,
+        "stun_pct": 0.3
+      },
+      "desc": "蓄力一回合後落雷 {hits} 下，每下扣對手氣血 {dot_pct}；對手在霧中或風沙中時，每下 {stun_pct} 定身。"
+    }
   },
   {
     "id": "zhangjiao_neigong",
@@ -133,7 +373,22 @@
     "kind": "內功",
     "attribute": "陰",
     "quality": "絕學",
-    "desc": "張角的本命內功：太平道以符水養氣的法門，傳教十餘年，信眾都說喝了能祛病。"
+    "desc": "張角的本命內功：太平道以符水養氣的法門，傳教十餘年，信眾都說喝了能祛病。",
+    "traits": [
+      "陰",
+      "柔",
+      "陽"
+    ],
+    "tactic": {
+      "name": "黃天咒",
+      "timing": "出招",
+      "kind": "curse",
+      "rate": 0.35,
+      "params": {
+        "turns": 2
+      },
+      "desc": "對手亂神 {turns} 回合（招式被你看穿）；代價是自己失神 1 回合。"
+    }
   },
   {
     "id": "zhangbao_wugong",
@@ -142,7 +397,23 @@
     "attribute": "慢",
     "quality": "絕學",
     "desc": "張寶的本命武學：地公將軍的刀不求快，一刀一刀像在夯土。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "traits": [
+      "慢",
+      "實",
+      "陰"
+    ],
+    "tactic": {
+      "name": "揚沙術",
+      "timing": "出招",
+      "kind": "sand",
+      "rate": 0.45,
+      "params": {
+        "turns": 3,
+        "dot_pct": 0.04
+      },
+      "desc": "對手陷入風沙 {turns} 回合：每回合扣氣血 {dot_pct}。"
+    }
   },
   {
     "id": "zhangbao_neigong",
@@ -150,7 +421,24 @@
     "kind": "內功",
     "attribute": "陰",
     "quality": "絕學",
-    "desc": "張寶的本命內功：地公將軍閉目吐納的法子，據說能呼風喚霧。"
+    "desc": "張寶的本命內功：地公將軍閉目吐納的法子，據說能呼風喚霧。",
+    "traits": [
+      "陰",
+      "虛",
+      "柔"
+    ],
+    "tactic": {
+      "name": "霧鎖山川",
+      "timing": "起手",
+      "kind": "fog",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 3,
+        "miss_pct": 0.3
+      },
+      "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。"
+    }
   },
   {
     "id": "zhangliang_wugong",
@@ -159,7 +447,22 @@
     "attribute": "剛",
     "quality": "絕學",
     "desc": "張梁的本命武學：人公將軍衝陣的槍法，只進不退。",
-    "weapon": "槍"
+    "weapon": "槍",
+    "traits": [
+      "剛",
+      "陽",
+      "快"
+    ],
+    "tactic": {
+      "name": "人公血戰",
+      "timing": "心法",
+      "kind": "bloodrage",
+      "params": {
+        "per_pct": 0.06,
+        "cap_pct": 0.4
+      },
+      "desc": "開打時每少一成氣血，推力 +{per_pct}，最多 +{cap_pct}。"
+    }
   },
   {
     "id": "zhangliang_neigong",
@@ -167,7 +470,22 @@
     "kind": "內功",
     "attribute": "陽",
     "quality": "絕學",
-    "desc": "張梁的本命內功：人公將軍激起一身血氣的法門，越戰越旺。"
+    "desc": "張梁的本命內功：人公將軍激起一身血氣的法門，越戰越旺。",
+    "traits": [
+      "陽",
+      "實",
+      "剛"
+    ],
+    "tactic": {
+      "name": "黃巾血誓",
+      "timing": "出招",
+      "kind": "oath",
+      "rate": 0.3,
+      "params": {
+        "cost_pct": 0.1
+      },
+      "desc": "自扣氣血 {cost_pct}，下一回合連環、無隙。"
+    }
   },
   {
     "id": "hejin_wugong",
@@ -176,7 +494,24 @@
     "attribute": "實",
     "quality": "絕學",
     "desc": "何進的本命武學：大將軍早年在南陽殺豬賣肉，刀下全是實打實的功夫。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "traits": [
+      "實",
+      "剛",
+      "陽"
+    ],
+    "tactic": {
+      "name": "屠刀",
+      "timing": "乘勢",
+      "kind": "butcher",
+      "rate": 0.5,
+      "params": {
+        "turns": 2,
+        "dot_pct": 0.03,
+        "stacks": 3
+      },
+      "desc": "對手血創 {turns} 回合：每回合扣氣血 {dot_pct}，可疊 {stacks} 層。"
+    }
   },
   {
     "id": "hejin_neigong",
@@ -184,7 +519,21 @@
     "kind": "內功",
     "attribute": "陰",
     "quality": "絕學",
-    "desc": "何進的本命內功：出入宮禁、周旋外戚宦官之間練出來的養氣之法，喜怒不形於色。"
+    "desc": "何進的本命內功：出入宮禁、周旋外戚宦官之間練出來的養氣之法，喜怒不形於色。",
+    "traits": [
+      "陰",
+      "陽",
+      "實"
+    ],
+    "tactic": {
+      "name": "大將軍府",
+      "timing": "心法",
+      "kind": "marshal",
+      "params": {
+        "per_pct": 0.05
+      },
+      "desc": "每帶一名部下，推力 +{per_pct}。"
+    }
   },
   {
     "id": "huangfusong_wugong",
@@ -193,7 +542,26 @@
     "attribute": "剛",
     "quality": "絕學",
     "desc": "皇甫嵩的本命武學：長社一把火燒破黃巾大營，槍法也帶著那股烈勢。",
-    "weapon": "槍"
+    "weapon": "槍",
+    "traits": [
+      "剛",
+      "快",
+      "陽"
+    ],
+    "tactic": {
+      "name": "長社火攻",
+      "timing": "出招",
+      "kind": "fire",
+      "rate": 0.4,
+      "prep": 1,
+      "foe_faction": "huang",
+      "params": {
+        "turns": 3,
+        "dot_pct": 0.05,
+        "faction_mult": 2
+      },
+      "desc": "蓄力一回合後放火，對手焚身 {turns} 回合：每回合扣氣血 {dot_pct}；對手是黃巾時 ×{faction_mult}。"
+    }
   },
   {
     "id": "huangfusong_neigong",
@@ -201,7 +569,21 @@
     "kind": "內功",
     "attribute": "陽",
     "quality": "絕學",
-    "desc": "皇甫嵩的本命內功：安定朝那將門世代相傳的心法，沉穩持重。"
+    "desc": "皇甫嵩的本命內功：安定朝那將門世代相傳的心法，沉穩持重。",
+    "traits": [
+      "陽",
+      "慢",
+      "柔"
+    ],
+    "tactic": {
+      "name": "持重",
+      "timing": "心法",
+      "kind": "steady",
+      "params": {
+        "guard_pct": 0.5
+      },
+      "desc": "氣勢落後時，固守的推力 +{guard_pct}。"
+    }
   },
   {
     "id": "zhujun_wugong",
@@ -210,7 +592,20 @@
     "attribute": "快",
     "quality": "絕學",
     "desc": "朱儁的本命武學：會稽寒門子弟的劍，出手快、收手也快。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "traits": [
+      "快",
+      "柔",
+      "剛"
+    ],
+    "tactic": {
+      "name": "疾如潮",
+      "timing": "乘勢",
+      "kind": "surge",
+      "rate": 0.4,
+      "params": {},
+      "desc": "追加一擊：這一回合連環。"
+    }
   },
   {
     "id": "zhujun_neigong",
@@ -218,7 +613,22 @@
     "kind": "內功",
     "attribute": "柔",
     "quality": "絕學",
-    "desc": "朱儁的本命內功：江海之濱學來的吐納，一呼一吸如潮起潮落。"
+    "desc": "朱儁的本命內功：江海之濱學來的吐納，一呼一吸如潮起潮落。",
+    "traits": [
+      "柔",
+      "快",
+      "陰"
+    ],
+    "tactic": {
+      "name": "潮生潮落",
+      "timing": "心法",
+      "kind": "tide",
+      "params": {
+        "odd_pct": 0.15,
+        "heal_pct": 0.06
+      },
+      "desc": "單數回合推力 +{odd_pct}，雙數回合回氣血 {heal_pct}。"
+    }
   },
   {
     "id": "luzhi_wugong",
@@ -227,7 +637,20 @@
     "attribute": "柔",
     "quality": "絕學",
     "desc": "盧植的本命武學：大儒以經義入劍，縱橫有度，劉備少時也在他門下見過。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "traits": [
+      "柔",
+      "慢",
+      "陽"
+    ],
+    "tactic": {
+      "name": "經緯",
+      "timing": "出招",
+      "kind": "foresight",
+      "rate": 0.35,
+      "params": {},
+      "desc": "看穿：下一回合一定出剋對手的那一招。"
+    }
   },
   {
     "id": "luzhi_neigong",
@@ -235,7 +658,23 @@
     "kind": "內功",
     "attribute": "陽",
     "quality": "絕學",
-    "desc": "盧植的本命內功：讀書養氣，寧可下獄也不肯賄賂監軍的那一口氣。"
+    "desc": "盧植的本命內功：讀書養氣，寧可下獄也不肯賄賂監軍的那一口氣。",
+    "traits": [
+      "陽",
+      "柔",
+      "慢"
+    ],
+    "tactic": {
+      "name": "海內儒宗",
+      "timing": "起手",
+      "kind": "ward_all",
+      "rate": 1.0,
+      "rounds": 3,
+      "params": {
+        "per_ward_pct": 0.05
+      },
+      "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）；每擋下一次控制，推力 +{per_ward_pct}。"
+    }
   },
   {
     "id": "dongzhuo_wugong",
@@ -244,7 +683,23 @@
     "attribute": "快",
     "quality": "絕學",
     "desc": "董卓的本命武學：馬上左右開弓，羌胡中人人都怕這一手。",
-    "weapon": "弓弩"
+    "weapon": "弓弩",
+    "traits": [
+      "快",
+      "剛",
+      "實"
+    ],
+    "tactic": {
+      "name": "涼州鐵蹄",
+      "timing": "騎戰",
+      "kind": "cavalry",
+      "params": {
+        "t1_pct": 0.1,
+        "t2_pct": 0.2,
+        "t3_pct": 0.3
+      },
+      "desc": "第 1 回合連環；之後每回合照馬的階 {t1_pct}／{t2_pct}／{t3_pct} 連環。"
+    }
   },
   {
     "id": "dongzhuo_neigong",
@@ -252,7 +707,26 @@
     "kind": "內功",
     "attribute": "實",
     "quality": "絕學",
-    "desc": "董卓的本命內功：邊地豪強在羌胡之間打出來的粗豪氣力，膂力過人。"
+    "desc": "董卓的本命內功：邊地豪強在羌胡之間打出來的粗豪氣力，膂力過人。",
+    "traits": [
+      "實",
+      "剛",
+      "陽"
+    ],
+    "tactic": {
+      "name": "暴虐",
+      "timing": "乘勢",
+      "kind": "brutal",
+      "rate": 0.35,
+      "params": {
+        "turns": 1,
+        "cost_pct": 0.03,
+        "per_evil_pct": 0.01,
+        "evil_step": 10,
+        "evil_cap_pct": 0.15
+      },
+      "desc": "對手失神 {turns} 回合；惡名每 {evil_step} 點發動率 +{per_evil_pct}（最多 +{evil_cap_pct}）；代價是每次自扣氣血 {cost_pct}。"
+    }
   },
   {
     "id": "bocai_wugong",
@@ -261,7 +735,22 @@
     "attribute": "剛",
     "quality": "絕學",
     "desc": "波才的本命武學：截斷潁川官道、劫奪官糧時練出來的刀，又狠又直。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "traits": [
+      "剛",
+      "陽",
+      "實"
+    ],
+    "tactic": {
+      "name": "長社夜襲",
+      "timing": "出招",
+      "kind": "night_raid",
+      "rate": 0.25,
+      "params": {
+        "mult": 2
+      },
+      "desc": "這一回合出奇襲，推力 ×{mult}；夜裡必定發動。"
+    }
   },
   {
     "id": "bocai_neigong",
@@ -269,7 +758,22 @@
     "kind": "內功",
     "attribute": "陽",
     "quality": "絕學",
-    "desc": "波才的本命內功：三十六方一同起事那天喊出來的一股怒氣，散不掉了。"
+    "desc": "波才的本命內功：三十六方一同起事那天喊出來的一股怒氣，散不掉了。",
+    "traits": [
+      "陽",
+      "剛",
+      "陰"
+    ],
+    "tactic": {
+      "name": "三十六方",
+      "timing": "心法",
+      "kind": "reinforce",
+      "params": {
+        "chance_pct": 0.15,
+        "strikes": 1
+      },
+      "desc": "每回合 {chance_pct} 黃巾援兵趕到，多推 {strikes} 擊。"
+    }
   },
   {
     "id": "zhangmancheng_wugong",
@@ -278,7 +782,21 @@
     "attribute": "虛",
     "quality": "絕學",
     "desc": "張曼成的本命武學：南陽黃巾的「神上使」以符入劍，劍未到，符先到。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "traits": [
+      "虛",
+      "陰",
+      "快"
+    ],
+    "tactic": {
+      "name": "神上使",
+      "timing": "心法",
+      "kind": "divine",
+      "params": {
+        "chance_pct": 0.3
+      },
+      "desc": "放手一搏失手時，{chance_pct} 神上使附身，改成成功（只在能放手一搏的仗）。"
+    }
   },
   {
     "id": "zhangmancheng_neigong",
@@ -286,7 +804,22 @@
     "kind": "內功",
     "attribute": "陰",
     "quality": "絕學",
-    "desc": "張曼成的本命內功：圍宛城時揚言取太守首級祭天，練的就是這股陰狠的祭祀之氣。"
+    "desc": "張曼成的本命內功：圍宛城時揚言取太守首級祭天，練的就是這股陰狠的祭祀之氣。",
+    "traits": [
+      "陰",
+      "虛",
+      "陽"
+    ],
+    "tactic": {
+      "name": "祭天",
+      "timing": "心法",
+      "kind": "sacrifice",
+      "params": {
+        "stack_pct": 0.05,
+        "stacks": 5
+      },
+      "desc": "每贏一回合疊一層「祭」：推力 +{stack_pct}；滿 {stacks} 層下一回合連環，然後清空。"
+    }
   },
   {
     "id": "zhaohong_wugong",
@@ -295,7 +828,22 @@
     "attribute": "慢",
     "quality": "絕學",
     "desc": "趙弘的本命武學：郡兵出身，守城門、管糧倉，一根棍子擋在門口誰都過不去。",
-    "weapon": "棍"
+    "weapon": "棍",
+    "traits": [
+      "慢",
+      "實",
+      "柔"
+    ],
+    "tactic": {
+      "name": "死守宛城",
+      "timing": "心法",
+      "kind": "hold_city",
+      "params": {
+        "guard_pct": 0.3,
+        "share_pct": 0.3
+      },
+      "desc": "固守的推力 +{guard_pct}，附帶借力：對手強攻你，他吃自己那一下的 {share_pct}。"
+    }
   },
   {
     "id": "zhaohong_neigong",
@@ -303,7 +851,24 @@
     "kind": "內功",
     "attribute": "實",
     "quality": "絕學",
-    "desc": "趙弘的本命內功：營中弟兄有事都先找他，靠的就是這份沉得住氣的根底。"
+    "desc": "趙弘的本命內功：營中弟兄有事都先找他，靠的就是這份沉得住氣的根底。",
+    "traits": [
+      "實",
+      "慢",
+      "柔"
+    ],
+    "tactic": {
+      "name": "把關",
+      "timing": "起手",
+      "kind": "gatekeep",
+      "rate": 1.0,
+      "rounds": 2,
+      "params": {
+        "chance_pct": 0.5,
+        "turf_pct": 0.8
+      },
+      "desc": "對手 {chance_pct} 卸勁（在自家陣營的地盤 {turf_pct}）。"
+    }
   },
   {
     "id": "zhuifeng",
