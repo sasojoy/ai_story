@@ -4248,8 +4248,7 @@ class Game:
         notes += [seal.FRESH_LINE] if mine == "holder" and e.fresh else []
         changes = []
         if same and fame:
-            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
-            changes.append(f"名望 +{fame}")
+            changes += renown.gain(s, c, "fame", fame)  # 加名望一律走 renown.gain（名聲設計 3.2）
         label = "" if same else f"第 {e.season} 季・"
         when = e.at if same and e.at is not None else s.world.time  # 單挑收場那一刻（FB-175）；跨季才回來照補送那一刻
         record = BattleRecord(
@@ -4616,8 +4615,7 @@ class Game:
             lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
         if not lines:
             return
-        p.stats["fame"] = p.stats.get("fame", 0) + gained
-        self._write(journal.ECHO, lines + ([f"名望 +{gained}"] if gained else []))
+        self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))  # 名聲設計 3.2
         self._save_season()  # 補到第幾個人記在共用賽季裡
 
     def _deliver_held_gear(self) -> None:
@@ -4845,8 +4843,7 @@ class Game:
                 fame += tuning.top_fame
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
             if fame:
-                s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
-                highlight_changes.append(f"名望 +{fame}")
+                highlight_changes += renown.gain(s, c, "fame", fame)  # 名聲設計 3.2
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -4947,8 +4944,7 @@ class Game:
         exp = round(pay.exp * share * (1 + bonus)) * scale
         changes = []
         if destiny and c.config.seal.mandate.fame:
-            p.stats["fame"] = p.stats.get("fame", 0) + c.config.seal.mandate.fame
-            changes.append(f"名望 +{c.config.seal.mandate.fame}")
+            changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)  # 名聲設計 3.2
         if silver:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
@@ -4961,6 +4957,9 @@ class Game:
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
+        if me.acted_rounds >= 1:  # 名聲 3.1：自己出手至少 1 回合（同首功）；掛機被代為固守的回合不算
+            rout = self._deed_fame("showdown_rout") if won and battle.outcome_margin == "大勝" else []
+            changes += journal.combine_changes(self._deed_fame("showdown") + rout)
         if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share)
@@ -5623,6 +5622,8 @@ class Game:
                 )
                 extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
                 extra += bounties.on_win(s, c, self.world, loc.id, squad.id)  # 懸賞榜的討伐
+                if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
+                    extra += self._deed_fame("sortie")
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes
@@ -5838,6 +5839,14 @@ class Game:
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
         record.notes += levels
         return msgs + levels
+
+    def _deed_fame(self, kind: str) -> list[str]:
+        """立功給名望（名聲設計 3.1）：RenownTuning.deeds 的那一項；deed_fame 關著、寫 0 的不給；序章不給。"""
+        c = self.content
+        n = c.config.renown.deeds.get(kind, 0) if renown.on(c, "deed_fame") else 0
+        if n <= 0 or prologue_rules.active(self.state, c):
+            return []
+        return renown.gain(self.state, c, "fame", n)
 
     def _sortie_host(self, loc: Location, how: str) -> Squad | None:
         """守、攪局拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：守是這裡自家陣營的隊伍、攪局是此刻控制方的隊伍
@@ -6111,6 +6120,9 @@ class Game:
             held = self._held_tier3()
             msgs += self._battle_rewards(reward, record, max_tier=None if first and not capped else 2)
             p.figure_rare_drops += self._held_tier3() - held
+            fame = self._deed_fame("challenge")  # 名聲 3.1：挑戰本人打贏 +2（推翻挑戰每季都有設計的「不給」）
+            record.changes += fame
+            msgs += fame
             extra = self._rout(fid)
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
@@ -8190,8 +8202,7 @@ class Game:
                 if materials.grant(s, c, material_id) is not None:
                     materials.add_cell(record.materials, c, material_id)  # 同一種合成一格（FB-140）
             if boss.fame:
-                p.stats["fame"] = p.stats.get("fame", 0) + boss.fame
-                record.changes.append(f"名望 +{boss.fame}")
+                record.changes += renown.gain(s, c, "fame", boss.fame)  # 名聲設計 3.2
             chance = cfg.legend_chance.get(tier, 0.0)
             if chance > 0 and self.rng.random() < chance:
                 p.legend_items += 1
@@ -8420,8 +8431,7 @@ class Game:
                     news.append(arena.STREAK.format(name=who.name, n=who.streak))
         if fight.best_set and fight.best_won and fight.best_rate <= cfg.highlight_rate:
             news.append(arena.HIGHLIGHT.format(name=p.name, text=fight.best_text))
-            p.stats["fame"] = p.stats.get("fame", 0) + cfg.highlight_fame
-            record.changes.append(f"名望 +{cfg.highlight_fame}")
+            record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)  # 名聲設計 3.2
         for text in news:
             add_rumor(s, text, content=c, layer="world")
         summary = self._file_battle(record, wear=False, armor_wear=False)
@@ -8468,13 +8478,13 @@ class Game:
                 continue
             silver, fame = cfg.wages[rank - 1]
             p.stats["silver"] = p.stats.get("silver", 0) + silver
-            p.stats["fame"] = p.stats.get("fame", 0) + fame
+            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；俸那一句自己寫了名望
             self._write(arena.ARENA, [arena.WAGE.format(rank=rank, title=arena.title_for(rank) or "", silver=silver, fame=fame)])
         entry.wages = []
         if w.ended and entry.place and not entry.prized:
             entry.prized = True
             fame = cfg.prizes[entry.place - 1]
-            p.stats["fame"] = p.stats.get("fame", 0) + fame
+            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；季末那一句自己寫了名望
             lines = [arena.PRIZE.format(place=entry.place, fame=fame)]
             if cfg.prize_treasure:
                 lines += treasures.arena_prize(s, c, p.season_number, entry.place)

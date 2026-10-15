@@ -256,15 +256,22 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         for line in path.read_text(encoding="utf-8").splitlines():
             if re.search(r"""stats\[\s*["']fame["']\s*\]\s*[+-]?=""", line):
                 writes.append((path.name, line.strip()))
-    assert writes == [
-        ("engine.py", 's.player.stats["fame"] = s.player.stats.get("fame", 0) + fame'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + gained'),
-        ("engine.py", 's.player.stats["fame"] = s.player.stats.get("fame", 0) + fame'),  # 決戰最有戲的那一搏（試玩回饋 2026-10-08）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + c.config.seal.mandate.fame'),  # 得天命的那一軍（Game._showdown_pay，玉璽二）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + boss.fame'),  # 打贏頭目（單人頭目戰，content/duels.json）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + cfg.highlight_fame'),  # 擂台上成了的最險一搏（Game._arena_finish）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + fame'),  # 擂台每天的俸（Game._deliver_arena）
-        ("engine.py", 'p.stats["fame"] = p.stats.get("fame", 0) + fame'),  # 擂台賽季末前三名（Game._deliver_arena）
+    assert writes == []  # 名聲（2026-10-15，設計 3.2）起程式裡加名望一律走 renown.gain，不直接寫
+    gains = []
+    for path in sorted((ROOT / "tianxia").glob("*.py")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
+                gains.append((path.name, line.strip().split("#")[0].strip()))
+    assert gains == [
+        ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
+        ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
+        ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
+        ("engine.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
+        ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
+        ("engine.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json）
+        ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
+        ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
+        ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
     ]
     givers = []
 

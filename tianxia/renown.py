@@ -121,6 +121,17 @@ def discount_word(factor: float) -> str:
     return f"貴{'兩' if extra == 20 else _CN[extra // 10]}成"
 
 
+def gain(state: GameState, content: Content, key: str, n: int) -> list[str]:
+    """加（n 是負的就扣）名望、善名或惡名，不低於 0；回寫進紀錄的那一行（實際動了多少，沒動是空的）。
+    引擎直接加名望的地方一律走這裡（設計 3.2）；事件照舊走 rules.apply_effect。差距在動作結束時統一接（annotate）。
+    不看開關：關著時照舊加、照舊寫那一行（跟改之前一字不差）。"""
+    p = state.player
+    before = p.stats.get(key, 0)
+    after = max(0, before + n)
+    p.stats[key] = after
+    return [f"{content.config.stat_names.get(key, key)} {after - before:+d}"] if after != before else []
+
+
 def price_factor(state: GameState, content: Content) -> float:
     """名望那一半的店家折扣（設計 4.1）：第 1～4 段各一個倍數；沒到、開關關著是 1。地盤那一半另外乘（territory.price_here）。"""
     t = fame_tier(state, content) if on(content, "discount") else 0
