@@ -5820,7 +5820,8 @@ class Game:
         p, share = self.state.player, self.content.config.drill_reward_share
         msgs: list[str] = []
         econ = self.content.config.economy
-        silver = round(squad.reward_silver * econ.sortie_silver_share) if econ.sortie_silver else 0
+        # 四捨五入照專案的寫法 int(x + 0.5)（同 economy.upgrade_cost）：round 逢 .5 取偶數，黃巾別部 15 兩的三成 4.5 會給 4（FB-271）
+        silver = int(squad.reward_silver * econ.sortie_silver_share + 0.5) if econ.sortie_silver else 0
         if silver > 0:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             record.silver = silver
