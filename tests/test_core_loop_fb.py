@@ -250,6 +250,17 @@ def test_fb256_the_legend_line_is_no_longer_than_the_one_that_fit():
     assert len(mapview.LEGEND_RING_SORTIE) <= len(mapview.LEGEND_RING) and "遊歷" not in mapview.LEGEND_RING_SORTIE
 
 
+def test_fb257_the_fame_line_does_not_mention_training_when_sorties_are_on():
+    from tianxia import howto
+    from tianxia.world_state import fresh_season
+
+    c = real_content("weekend")
+    line = " ".join(howto.fame_lines(c, fresh_season(c)))
+    assert "遊歷" not in line and "找素材" in line
+    old = classic_rules(real_content("weekend"))
+    assert "遊歷之後" in " ".join(howto.fame_lines(old, fresh_season(old)))
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
