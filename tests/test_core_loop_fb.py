@@ -185,7 +185,7 @@ def test_fb254_the_natural_rise_is_resisted():
     """三條戰線都在亂局：割據 90 時一個曆日只漲平常的兩成；60 時照平常。"""
     from tianxia import rules
 
-    game = _game("haoqiang", "runan_wilds")
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 割據是豪強第三方的規則
     s, c, w = game.state, game.content, game.state.world
     for front in rules.front_ids(c):
         w.trends[front] = 50
@@ -218,7 +218,7 @@ def test_fb254_an_opportunity_push_on_separatism_is_resisted_too():
     """機緣交付推割據（豪強的收容流民，推 1 點）：割據 90 時打兩成、四捨五入成 0；60 時推滿。"""
     from tianxia import opportunities, rules
 
-    game = _game("haoqiang", "runan_wilds")
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 割據是豪強第三方的規則
     opp = next(o for o in game.content.opportunities if o.id == "hao_refugees")
     w = game.state.world
     w.trends[rules.GEJU] = 90
@@ -259,7 +259,7 @@ def test_fb254_separatism_at_85_is_the_warlords_ending_at_the_finale():
     """季末結算照 evaluate_ending 的先後：割據 ≥85 是群雄並起，黃巾聲勢的門檻排在它前面；割據 84 照態勢比高低（豪強最高是豪強坐大）。"""
     from tianxia import world as world_rules
 
-    c = real_content("weekend")
+    c = third_party_gentry(real_content("weekend"))  # 群雄並起、豪強坐大是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     for geju, fronts, ending in ((90, 50, "s1_warlords"), (84, 50, "s1_gentry"), (90, 88, "s1_huangtian")):
         _, vehicle = _late_season(c, 12, geju=geju, fronts=fronts)
         assert world_rules.evaluate_ending(vehicle, c).id == ending, (geju, fronts)
@@ -269,7 +269,7 @@ def test_fb254_the_stance_card_says_separatism_waits_for_the_finale():
     """態勢卡（玩法說明「收季：」同一句）：提前收季只寫官軍、黃巾；割據寫季末才判；結局提示不再說豪強「當場收場」。"""
     from tianxia import guide, rules
 
-    c = real_content("weekend")
+    c = third_party_gentry(real_content("weekend"))  # 割據那一句是豪強第三方的規則
     season, vehicle = _late_season(c, 3, geju=40)
     note = rules.stance_rule_note(vehicle, c)
     assert note == ("第 10 週起，官軍或黃巾的態勢一到 85，這一季當場收場；"

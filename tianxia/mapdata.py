@@ -244,7 +244,7 @@ def state(
     """疊層（設計第九節）。odds 是 Game.odds（這裡記住、同一支隊伍只算一次）；sortie_mode(地點) 是 sortie.mode 的結果；
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）。
 
-    {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "here", "stamina", "sorties_left",
+    {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
                        "price","squads","danger","flips"}},
@@ -335,6 +335,8 @@ def state(
     return {
         "key": base_key(s, c), "now_week": now_week, "weeks_total": weeks_total, "season_one": rules.season_one(c, w),
         "territory": on, "faction": faction, "here": p.location, "stamina": int(p.stamina), "sorties_left": sorties_left,
+        # 會佔地的幾方（網頁的各佔幾處、圖例照它畫）：劇本的陣營，豪強分屬兩軍的季拿掉要依附的那一個（豪強不佔地）
+        "sides": [f.id for f in c.scenario.factions if not (f.allies and rules.haoqiang_allied(c, w))],
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,

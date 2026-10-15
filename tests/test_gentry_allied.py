@@ -334,6 +334,25 @@ def test_price_follows_the_side(wk):
     assert territory.price_factor(game.state.world, wk, allied.side_of(game.state, wk), foe) == wk.config.territory.enemy_price
 
 
+def test_gentry_manors_are_neither_sides_ground(wk):
+    """豪強的投靠點不在戰線上，豪強分屬兩軍的季不算哪一軍的地盤：誰在那裡買東西都是原價（不會讓依附的豪強在自己莊院付貴兩成）。"""
+    from tianxia import team, territory
+
+    game = _game(wk, faction="haoqiang", ally="guan", at="cao_manor")
+    assert team._price_here(game.state, wk) == 1.0
+    assert territory.price_factor(game.state.world, wk, "huang", "cao_manor") == 1.0
+    assert territory.price_factor(game.state.world, wk, "guan", "changshe") == wk.config.territory.own_price
+
+
+def test_old_rules_gentry_manors_still_price_by_faction():
+    from tianxia import territory
+
+    off = _old_rules()
+    w = _game(off, name="乙").state.world
+    assert territory.price_factor(w, off, "haoqiang", "cao_manor") == off.config.territory.own_price
+    assert territory.price_factor(w, off, "guan", "cao_manor") == off.config.territory.enemy_price
+
+
 def test_duty_pushes_the_front_for_the_side(wk):
     game = _game(wk, faction="haoqiang", ally="huang")
     own, _ = _spots(game, wk, "huang")
@@ -664,6 +683,61 @@ def test_season_bot_menu_has_a_side_pick(wk):
     game = _game(wk, faction="haoqiang", at="cao_manor")
     game.world.record_faction("官一", "guan")
     assert bot.pick(game, game.options(), random.Random(0)) == "faction:ally:huang"
+
+
+# ── Task 10：引薦人與提示、玩法說明、輿圖 ───────────────────────────
+
+
+def test_recruiter_has_an_allied_version(wk):
+    from tianxia import enlist
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    who = enlist.recruiter(game.state, wk)
+    assert "聲威就掉一大截" in who.done  # 14 天的季照用原句
+    assert "聲威就掉一大截" not in enlist.line(who, "done", game.state, wk)
+    assert "第三階" in enlist.line(who, "done", game.state, wk)
+    assert enlist.line(who, "intro", game.state, wk) == who.intro  # 沒寫 allied 的那幾句照舊
+
+
+def test_hints_have_an_allied_version(wk):
+    from tianxia import hints as hint_rules
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    note = hint_rules.note_for(game.state, wk, "h_showdown")
+    assert note is not None and "臨時投效" not in note.text and "加入" in note.text
+
+
+def test_old_rules_keep_the_gentry_hint():
+    from tianxia import hints as hint_rules
+
+    off = _old_rules()
+    game = _game(off, name="乙", faction="haoqiang")
+    assert "臨時投效" in hint_rules.note_for(game.state, off, "h_showdown").text
+
+
+def test_howto_has_no_third_party(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    page = game.howto_text()
+    assert "割據" not in page and "攪局" not in page and "陣營不是交戰的兩軍時" not in page
+    assert "依附" in page and "第 3 階" in page
+    war = game.status_data()["war_help"]
+    assert not any("割據" in line for lines in war.values() for line in lines)
+
+
+def test_old_rules_howto_keeps_the_hold_line():
+    off = _old_rules()
+    assert "割據" in _game(off, name="乙").howto_text()
+
+
+def test_map_state_lists_two_sides(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    st = game.map_state()
+    assert st["sides"] == ["guan", "huang"] and st["faction"] == "guan"
+
+
+def test_old_rules_map_state_lists_three_sides():
+    off = _old_rules()
+    assert _game(off, name="乙").map_state()["sides"] == ["guan", "huang", "haoqiang"]
 
 
 def test_gentry_bot_heads_for_its_side_front(wk):

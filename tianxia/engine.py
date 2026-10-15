@@ -2198,7 +2198,8 @@ class Game:
             return
         who = enlist.recruiter(self.state, self.content)
         if who is not None and who.rejoin:
-            hint_rules.queue_note(self.state, HintNote(id="s_rejoin", speaker=who.name, text=who.rejoin, by=p.faction))
+            text = enlist.line(who, "rejoin", self.state, self.content)  # 豪強分屬兩軍的季有另一版就照它
+            hint_rules.queue_note(self.state, HintNote(id="s_rejoin", speaker=who.name, text=text, by=p.faction))
 
     def _journal_guide(self, notes: list[str]) -> None:
         """引導的話記進江湖紀錄：在行動裡記進這一則的 guide；不在行動裡（例如打開輿圖）時接在最新一則的 guide。"""

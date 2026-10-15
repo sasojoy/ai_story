@@ -981,6 +981,9 @@ class PresetRecipe(_Strict):
     attribute: str | None = None
 
 
+RECRUITER_ALLIED_FIELDS = ("intro", "briefing", "order_hint", "done", "rejoin")  # Recruiter.allied 能換的欄位（content.validate 驗）
+
+
 class Recruiter(_Strict):
     """入伍段（新手引導計畫二，設計第四節）一個陣營的引薦人：框上的名字與他說的話。"""
 
@@ -991,6 +994,9 @@ class Recruiter(_Strict):
     done: str  # 第一道軍令做完，引薦人的結尾（按「知道了」收起）
     lines: list[str] = Field(default_factory=list)  # 每一步收起後那一行，照 Enlist.steps 的順序；不帶名字（框上的名字另外寫）
     rejoin: str = ""  # 第二季起再投靠時打的招呼（新手引導計畫三用）
+    # 豪強分屬兩軍的季（allied.on，企劃者 2026-10-15）換掉的幾句（新寫）：鍵是上面的欄位名（intro／briefing／order_hint／done／rejoin），
+    # 只寫要換的；enlist.line 照它讀
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class EnlistStep(_Strict):
@@ -1028,6 +1034,8 @@ class HintDef(_Strict):
     # 第一季的規則開著時師父改說這一句（只有師父的條能寫；空的就照 text）：有些事只有第一季才是真的（explain-1 的 h_bond：
     # 情誼夠深人物會透露伏筆、機緣的風聲），beta 那一季說了就是假話
     season_one: str = ""
+    # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class Hints(_Strict):
