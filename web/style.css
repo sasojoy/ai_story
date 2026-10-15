@@ -814,8 +814,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 上面：找地點一條、濾鏡一排（橫著滑）。外層不收點擊，只有鈕收：沒字的地方照常拖地圖 */
 .map-top { position: absolute; left: 10px; right: 64px; top: 10px; display: flex; flex-direction: column; gap: 7px; pointer-events: none; transition: opacity 0.15s; }
 .map-top > * { pointer-events: auto; }
-.mapx.tl-mode .map-top { opacity: 0; }
-.mapx.tl-mode .map-top > * { pointer-events: none; }
+.mapx.tl-mode .map-top { display: none; } /* 版圖變化：搜尋框與濾鏡收起來，「天下」那一條才不疊在上面（FB-261） */
 .map-search {
   height: 40px; border-radius: 20px; border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer;
   background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--ink-2); font: inherit; font-size: 14px; text-align: left; padding: 0 16px;

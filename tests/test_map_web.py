@@ -255,3 +255,16 @@ def test_fb260_discs_and_glyphs_keep_their_size_on_screen():
     big, small = disc(1), disc(0.5)
     for a, b in zip(big, small):
         assert abs(b - a / 2) <= 0.1, (big, small)
+
+
+def test_fb261_the_timeline_folds_the_search_and_chips_away():
+    """FB-261：版圖變化時搜尋框與濾鏡收起來（不佔位置、點不到），「天下」那一條才不疊在搜尋框上。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    assert re.search(r"\n\.mapx\.tl-mode \.map-top \{[^}]*display: none", css)
+
+
+def test_fb261_far_view_tallies_are_drawn_over_the_dots():
+    """FB-261：看大局時大區的「官 N・巾 N・豪 N」畫在地點小點之後，不被蓋掉。"""
+    out = marks(_game(), k=2.5, far="true")
+    tally = re.search(r"官 \d", out).start()
+    assert tally > out.rindex("<g data-loc=")

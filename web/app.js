@@ -3471,22 +3471,6 @@
         out.push(`<path class="front" d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="${FRONT_RED}" stroke-width="${f1(3.6 * Math.max(1, k * 0.8))}" stroke-dasharray="${f1(2 * k)} ${f1(3 * k)}" fill="none" pointer-events="none"/>`);
       }
     }
-    if (far) for (const r of base.regions) { // 看大局：大區名、三色長條、各方幾處
-      const n = {};
-      if (on) for (const p of base.places) if (p.region === r.id && ctrl[p.id]) n[ctrl[p.id]] = (n[ctrl[p.id]] || 0) + 1;
-      const total = Object.values(n).reduce((a, b) => a + b, 0);
-      out.push(`<text x="${r.cx}" y="${f1(r.cy - 14 * k)}" text-anchor="middle" font-size="${f1(23 * k)}" font-weight="700" fill="${MAP_INK}" stroke="${MAP_HALO}" stroke-width="${f1(5 * k)}" paint-order="stroke" pointer-events="none" style="font-family:serif">${esc(r.name)}</text>`);
-      if (total) {
-        let x = r.cx - 40 * k;
-        for (const sd of MAP_SIDE_ORDER) {
-          if (!n[sd]) continue;
-          const wd = (80 * k * n[sd]) / total;
-          out.push(`<rect x="${f1(x)}" y="${f1(r.cy - 4 * k)}" width="${f1(wd)}" height="${f1(9 * k)}" fill="${MAP_SIDES[sd].color}" pointer-events="none"/>`);
-          x += wd;
-        }
-        out.push(`<text x="${r.cx}" y="${f1(r.cy + 20 * k)}" text-anchor="middle" font-size="${f1(12 * k)}" fill="#3A332A" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke" pointer-events="none">${MAP_SIDE_ORDER.filter((sd) => n[sd]).map((sd) => `${MAP_SIDES[sd].short} ${n[sd]}`).join("・")}</text>`);
-      }
-    }
     for (const p of base.places) {
       const c = on ? ctrl[p.id] : null, col = c ? MAP_SIDES[c].color : "#7A6A55";
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
@@ -3513,6 +3497,22 @@
         const wd = (t.length * 10.5 + 10) * k;
         out.push(`<rect x="${f1(bx - 2 * k)}" y="${f1(p.y + 9 * k)}" width="${f1(wd)}" height="${f1(15 * k)}" rx="${f1(7.5 * k)}" fill="${color}" pointer-events="none"/><text x="${f1(bx + 3 * k)}" y="${f1(p.y + 20 * k)}" font-size="${f1(10.5 * k)}" fill="#FFFFFF" pointer-events="none">${esc(t)}</text>`);
         bx += wd + 3 * k;
+      }
+    }
+    if (far) for (const r of base.regions) { // 看大局：大區名、三色長條、各方幾處（畫在小點之後，字不被點蓋掉，FB-261）
+      const n = {};
+      if (on) for (const p of base.places) if (p.region === r.id && ctrl[p.id]) n[ctrl[p.id]] = (n[ctrl[p.id]] || 0) + 1;
+      const total = Object.values(n).reduce((a, b) => a + b, 0);
+      out.push(`<text x="${r.cx}" y="${f1(r.cy - 14 * k)}" text-anchor="middle" font-size="${f1(23 * k)}" font-weight="700" fill="${MAP_INK}" stroke="${MAP_HALO}" stroke-width="${f1(5 * k)}" paint-order="stroke" pointer-events="none" style="font-family:serif">${esc(r.name)}</text>`);
+      if (total) {
+        let x = r.cx - 40 * k;
+        for (const sd of MAP_SIDE_ORDER) {
+          if (!n[sd]) continue;
+          const wd = (80 * k * n[sd]) / total;
+          out.push(`<rect x="${f1(x)}" y="${f1(r.cy - 4 * k)}" width="${f1(wd)}" height="${f1(9 * k)}" fill="${MAP_SIDES[sd].color}" pointer-events="none"/>`);
+          x += wd;
+        }
+        out.push(`<text x="${r.cx}" y="${f1(r.cy + 20 * k)}" text-anchor="middle" font-size="${f1(12 * k)}" fill="#3A332A" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke" pointer-events="none">${MAP_SIDE_ORDER.filter((sd) => n[sd]).map((sd) => `${MAP_SIDES[sd].short} ${n[sd]}`).join("・")}</text>`);
       }
     }
     // 你：在路上畫在路上（circle.tx-you），不然在所在地；插一面紅旗，外面一圈慢慢擴散
