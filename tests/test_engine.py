@@ -3288,6 +3288,21 @@ def test_battle_free_text_prompt_shows_when_available(content, game):
         assert "重傷的是你自己" in game.battle_free_text_note() and "%" not in game.battle_free_text_note()
 
 
+def test_battle_free_text_note_warns_when_one_more_miss_would_drop_you(content, game):
+    # 長社火攻 14 個真人倒下 12 個，都是自己放手一搏失手扣光的（PM 2026-10-15）：撐不過一次最壞的失手時多一句，不寫數字
+    from tianxia.models import FreeTextGamble
+
+    definition = _install_battle_def_with_free_text(content)
+    definition.free_text_gamble = FreeTextGamble()  # 最壞的失手扣池子上限的 35%
+    after_muster = _join_and_open(content, game, definition)
+    name = game.state.player.name
+    with at(game, after_muster):
+        assert game.BATTLE_GAMBLE_LAST not in game.battle_free_text_note()
+        game.world.mutate_battle(lambda b: setattr(b.participants[name], "neili", b.participants[name].neili_cap * 0.3))
+        note = game.battle_free_text_note()
+        assert note.endswith(game.BATTLE_GAMBLE_LAST) and not any(ch.isdigit() for ch in note)
+
+
 def test_battle_free_text_prompt_is_none_outside_battle(content, game):
     assert game.battle_free_text_prompt() is None
     assert game.battle_free_text_note() is None

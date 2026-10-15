@@ -1554,7 +1554,35 @@ def test_a_whole_side_failing_its_gambles_in_one_round_falls_back_at_most_five()
         bi.submit_action(battle, f"黃{i}", "huang_hold")
     msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
     assert battle.trend == 50 - 10 - 5  # 官軍沒人正面出陣：黃巾推滿 10；六人失手本來 -6，一回合最多 -5
-    assert "各路奇招互相牽扯，官軍這一回合的放手一搏合起來只讓戰線退了一截。" in msgs
+    assert "各路奇招互相牽扯，官軍這一回合失手的放手一搏合起來只讓戰線退了一截。" in msgs
+
+
+def test_successes_and_failures_are_capped_separately():
+    # Joy 2026-10-15 決策卡「成功另算」：失手的合起來最多退 side_trend_cap，成了的照人數疊、最多推 success_trend_cap
+    gamble, battle = _gamblers(12, 2)
+    gamble.free_text_gamble = gamble.free_text_gamble.model_copy(update={"side_trend_cap": 4, "success_trend_cap": 10})
+    for i in range(6):  # 成功率 100 一定成（每人 +1，共 +6，舊的 ±4 會夾掉）
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="穩穩推進", success_rate=100)
+    for i in range(6, 12):  # 成功率 0 一定失手（每人 −1，共 −6，夾到 −4）
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="亂衝", success_rate=0)
+    for i in range(2):
+        bi.submit_action(battle, f"黃{i}", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.999), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 - 10 + 6 - 4  # 官軍沒人正面出陣：黃巾推滿 10；成了 +6 不夾，失手 −6 夾到 −4
+    assert "各路奇招互相牽扯，官軍這一回合失手的放手一搏合起來只讓戰線退了一截。" in msgs
+    assert not any("成了的放手一搏合起來" in m for m in msgs)
+
+
+def test_successes_stack_up_to_the_success_cap():
+    gamble, battle = _gamblers(6, 2)
+    gamble.free_text_gamble = gamble.free_text_gamble.model_copy(update={"side_trend_cap": 4, "success_trend_cap": 10})
+    for i in range(6):  # 成功率 1 擲中：新手打五折，每人 +4，共 +24
+        bi.submit_action(battle, f"官{i}", "guan_reckless", text="火燒連營", success_rate=1)
+    for i in range(2):
+        bi.submit_action(battle, f"黃{i}", "huang_hold")
+    msgs = bi.resolve_round(battle, gamble, FixedRandom(0.0), now=1, tuning=BattleTuning())
+    assert battle.trend == 50 - 10 + 10
+    assert "各路奇招互相牽扯，官軍這一回合成了的放手一搏合起來只把戰線推前了一大截。" in msgs
 
 
 def test_a_successful_gamble_is_still_worth_more_than_one_failure_costs():
@@ -1684,6 +1712,29 @@ def test_one_model_call_rates_the_gamble_and_writes_both_stories():
     assert "玩家：彩加（所屬：官軍）" in client.chat_structured.call_args.args[0][1]["content"]  # 身分跟名號寫在一起，不單獨給
     client.chat_structured.side_effect = RuntimeError("down")
     assert bi.assess_gamble(client, act, "官軍", "衝", "彩加") == (bi.DEFAULT_FREE_TEXT_SUCCESS_RATE, "", "")
+
+
+def test_a_gamble_that_only_copies_the_button_is_never_the_most_impressive():
+    # 長社火攻：「最令人印象深刻的一幕」頒給了只寫「放手一搏」四個字、15% 擲中的人（PM 2026-10-15）
+    def m(text, rate, won):
+        return bi.GambleMoment(name="甲", faction="guan", text=text, rate=rate, won=won)
+
+    for text in ("放手一搏", "放手一搏！", " 孤注一擲。", "背水一戰", "殺啊", "上！！"):
+        assert bi.hollow(text), text
+    for text in ("火燒糧倉", "我放手一搏衝陣", "刺殺主將"):
+        assert not bi.hollow(text), text
+    assert bi.more_dramatic(m("繞後燒他糧草", 60, False), m("放手一搏", 15, True))  # 有內容的勝過照抄按鈕的
+    assert not bi.more_dramatic(m("放手一搏", 15, True), m("繞後燒他糧草", 60, False))
+    assert bi.more_dramatic(m("放手一搏", 5, True), m("殺啊", 30, True))  # 全都沒內容就照原本的挑法
+
+
+def test_one_miss_left_is_the_worst_miss():
+    gamble = bi.FreeTextGamble()
+    worst = 100 * min(1.0, gamble.failure_neili_share_base + 100 * gamble.failure_neili_share_per_risk)
+    p = bi.BattleParticipant(name="甲", faction="guan", neili=worst + 1, neili_cap=100)
+    assert not bi.one_miss_left(p, gamble)
+    p.neili = worst
+    assert bi.one_miss_left(p, gamble)
 
 
 def test_the_most_dramatic_gamble_is_a_long_shot_that_landed():

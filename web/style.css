@@ -422,6 +422,29 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .scene blockquote p { margin: 0; }
+/* 決戰的戰況一回合一段（Joy 2026-10-14，app.js 的 roundBlocks）：最新那一回合攤開、一行一條；舊的回合各收成一行，點了攤開；戰報頁的完整戰況（.report-detail）每一回合都收成一行 */
+:is(.scene, .report-detail) .b-round { margin: 6px 0; border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
+:is(.scene, .report-detail) .b-round.latest { border-left-color: var(--accent); }
+:is(.scene, .report-detail) .b-rhead { margin: 0 0 2px; font: 600 14px var(--serif); color: var(--accent); }
+:is(.scene, .report-detail) .b-lines { list-style: none; margin: 0; padding: 0; }
+:is(.scene, .report-detail) .b-lines li { margin: 0; padding: 3px 0; font-size: 14.5px; line-height: 1.6; }
+:is(.scene, .report-detail) .b-lines li + li { border-top: 1px dashed var(--line); }
+:is(.scene, .report-detail) .b-lines li:first-child { font-weight: 600; }
+:is(.scene, .report-detail) details.b-round > summary { display: flex; gap: 8px; align-items: baseline; cursor: pointer; font-size: 13px; line-height: 1.6; color: var(--ink-2); list-style: none; padding: 4px 0; }
+:is(.scene, .report-detail) details.b-round > summary::-webkit-details-marker { display: none; }
+:is(.scene, .report-detail) details.b-round > summary::before { content: "▸"; flex: none; }
+:is(.scene, .report-detail) details.b-round[open] > summary::before { content: "▾"; }
+:is(.scene, .report-detail) details.b-round > summary b { flex: none; font: 600 13px var(--serif); color: var(--ink); }
+:is(.scene, .report-detail) details.b-round > summary span { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+:is(.scene, .report-detail) details.b-round[open] > summary span { display: none; }
+:is(.scene, .report-detail) details.b-round .b-lines { font-size: 14px; }
+/* 每一條是哪一軍的：左邊一道那一軍的顏色、開頭一個小標籤（Joy 2026-10-14「看不出誰是官軍誰是黃巾」；顏色同戰局條） */
+:is(.scene, .report-detail) .b-lines li.b-side { padding-left: 8px; border-left: 3px solid var(--c, var(--line)); margin-left: -2px; }
+:is(.scene, .report-detail) .b-lines .side-guan { --c: var(--kuai); }
+:is(.scene, .report-detail) .b-lines .side-huang { --c: var(--gold); }
+:is(.scene, .report-detail) .b-lines .side-haoqiang { --c: var(--rou); }
+:is(.scene, .report-detail) .b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--c, var(--line)); color: #fff; font: 600 12px/1.6 var(--sans); vertical-align: 1px; }
+:is(.scene, .report-detail) .side-huang .b-tag { color: #2a241d; } /* 金底配白字太淡：兩種模式都用深墨（同戰局條） */
 .options { display: grid; gap: 8px; margin-bottom: 12px; }
 .options .btn { justify-content: flex-start; text-align: left; }
 /* 有所感的畫布（悟意境設計 0.2）：一筆畫到底；等模型取名時整塊微微晃（同煉製的爐子） */
@@ -698,6 +721,31 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .lib-filter button { flex: none; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
 .lib-filter button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .lib-more { margin: -4px 0 12px; }
+/* 批量熔煉（修練頁功法庫）：每一列前面一個勾，底下浮一條「熔掉 N 樣」 */
+.label .melt-mode { order: 3; font-size: 13px; letter-spacing: 0; padding: 4px 2px; }
+.melt-hint { margin: 0 2px 8px; }
+.melt-tools { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: none; margin: 0 0 8px; padding-bottom: 2px; font-size: 13px; color: var(--ink-2); }
+.melt-tools > span { flex: none; }
+.melt-tools button { flex: none; min-height: 34px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.melt-tools button.on { border-color: #b23a2b; color: #b23a2b; }
+.pick .tick { flex: none; width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--ink-2); display: inline-grid; place-items: center; font-style: normal; background: var(--card); }
+.pick.on .tick { background: #b23a2b; border-color: #b23a2b; }
+.pick.on .tick::before { content: "✓"; color: #fff; font-size: 13px; font-weight: 700; line-height: 1; }
+.lib button.libr.pick::after { content: none; }
+.lib button.libr.pick.on { background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+.lib button.libr.pick:disabled { opacity: 0.55; cursor: default; }
+.ins button.pick { display: inline-flex; align-items: center; gap: 6px; }
+.ins button.pick .tick { width: 16px; height: 16px; border-radius: 4px; }
+.ins button.pick.on { border-color: #b23a2b; background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+.melt-go {
+  position: fixed; left: 12px; right: 12px; bottom: calc(62px + var(--bottom)); z-index: 19; max-width: 616px; margin: 0 auto; padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--card) 96%, transparent); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.melt-gap { height: 72px; }
+.melt-go > span { flex: 1; min-width: 0; font-size: 14px; }
+.melt-go > span small { display: block; color: var(--ink-2); font-size: 12px; }
+.melt-go .btn { flex: none; width: auto; min-height: 42px; padding: 6px 16px; }
 /* 意境：一顆一顆的籤，點一下底下攤開說明 */
 .ins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .ins button { min-height: 38px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: var(--card); color: var(--ink); cursor: pointer; }
@@ -806,6 +854,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 
 /* ── 戰報／見聞 ── */
 .report-detail { font-size: 14px; }
+/* 戰報列表：決戰與奪璽單挑一組在最上面（Joy 2026-10-14） */
+.report-group { margin: 10px 2px 4px; font: 600 13px var(--serif); color: var(--ink-2); }
+.report-group:first-child { margin-top: 0; }
+.report-big button { border-left: 3px solid var(--accent); }
 .back { margin-bottom: 8px; }
 
 /* ── 設定抽屜 ── */

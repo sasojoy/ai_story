@@ -48,6 +48,34 @@ AFFINITY_TAG_DELTAS: dict[str, int] = {
 DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
 
 GENERIC_OPENING = "上前攀談，試著攀談幾句"
+DIALOGUE_OPTIONS = 3  # 提示詞要模型在 options 裡給 3 個（見 _system_prompt 的第 2 條）
+
+def trim_options(options: list[str], tags: list[str]) -> tuple[list[str], list[str]]:
+    """只留前 DIALOGUE_OPTIONS 個有字的選項，tag 照原本的位置跟著走。
+
+    2026-10-14 線上出現過一次：跟盧植對話時選單上冒出 400 顆按鈕，第 4 顆之後全是空的，第 3 顆的字尾還帶著
+    一個 JSON 的 `],`——模型那一輪的結構化輸出壞了，而 `CompanionTurn.options` 是沒有長度上限的 list[str]，
+    壞掉的清單就這樣一路畫成按鈕。寫進存檔與讀出來都走這裡，兩邊規則一致，`talk:N` 的 N 才不會對到別的選項。
+    空字串一律丟掉：那種按鈕按下去也沒有意義。"""
+    kept: list[str] = []
+    kept_tags: list[str] = []
+    for i, text in enumerate(options):
+        clean = (text or "").strip()
+        if not clean:
+            continue
+        kept.append(clean)
+        kept_tags.append(tags[i] if i < len(tags) else "")
+        if len(kept) == DIALOGUE_OPTIONS:
+            break
+    return kept, kept_tags
+
+
+def offered(state: GameState, companion_id: str) -> tuple[list[str], list[str]]:
+    """上一輪給了哪幾個選項（過濾過的）：選單、驗證、取用都讀這裡，舊存檔裡壞掉的清單也會被擋下來。"""
+    options, tags = state.player.last_offered_dialogue.get(companion_id, [[], []])
+    return trim_options(options, tags)
+
+
 FREE_TAG_FALLBACK = "尋常寒暄"  # 「自己說」的那句話模型歸不進清單（或叫錯名字）時當成這一類：好感度 +1，跟隨口一句寒暄一樣
 
 
@@ -305,7 +333,7 @@ def _apply_turn(
     p.relationship_notes[companion_id] = note
 
     _record_turn(state, companion_id, player_action, turn)
-    p.last_offered_dialogue[companion_id] = [list(turn.options), list(turn.option_tags)]
+    p.last_offered_dialogue[companion_id] = [list(x) for x in trim_options(turn.options, turn.option_tags)]
 
     msgs = [turn.narrative]
     if delta:
@@ -335,7 +363,7 @@ def continue_dialogue(
     先生成、成功了才記交友 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
-    options, tags = state.player.last_offered_dialogue.get(companion_id, [[], []])
+    options, tags = offered(state, companion_id)
     if not (0 <= choice_index < len(options)):
         return ["（此刻無法這麼做。）"]
     player_action, tag = options[choice_index], tags[choice_index] if choice_index < len(tags) else None

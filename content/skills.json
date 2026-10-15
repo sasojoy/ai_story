@@ -5,14 +5,16 @@
     "kind": "武學",
     "attribute": "快",
     "desc": "曹操的本命武學。",
-    "weapon": "槍"
+    "weapon": "槍",
+    "quality": "絕學"
   },
   {
     "id": "caocao_neigong",
     "name": "梟雄心經",
     "kind": "內功",
     "attribute": "陽",
-    "desc": "曹操的本命內功。"
+    "desc": "曹操的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "liubei_wugong",
@@ -20,14 +22,16 @@
     "kind": "武學",
     "attribute": "柔",
     "desc": "劉備的本命武學。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "quality": "絕學"
   },
   {
     "id": "liubei_neigong",
     "name": "仁德心法",
     "kind": "內功",
     "attribute": "柔",
-    "desc": "劉備的本命內功。"
+    "desc": "劉備的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "guanyu_wugong",
@@ -35,14 +39,16 @@
     "kind": "武學",
     "attribute": "剛",
     "desc": "關羽的本命武學。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "quality": "絕學"
   },
   {
     "id": "guanyu_neigong",
     "name": "忠義心法",
     "kind": "內功",
     "attribute": "陽",
-    "desc": "關羽的本命內功。"
+    "desc": "關羽的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "zhangfei_wugong",
@@ -50,14 +56,16 @@
     "kind": "武學",
     "attribute": "剛",
     "desc": "張飛的本命武學。",
-    "weapon": "槍"
+    "weapon": "槍",
+    "quality": "絕學"
   },
   {
     "id": "zhangfei_neigong",
     "name": "猛虎氣訣",
     "kind": "內功",
     "attribute": "陽",
-    "desc": "張飛的本命內功。"
+    "desc": "張飛的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "sunjian_wugong",
@@ -65,14 +73,16 @@
     "kind": "武學",
     "attribute": "快",
     "desc": "孫堅的本命武學。",
-    "weapon": "槍"
+    "weapon": "槍",
+    "quality": "絕學"
   },
   {
     "id": "sunjian_neigong",
     "name": "江東心法",
     "kind": "內功",
     "attribute": "陽",
-    "desc": "孫堅的本命內功。"
+    "desc": "孫堅的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "yuanshao_wugong",
@@ -80,14 +90,16 @@
     "kind": "武學",
     "attribute": "虛",
     "desc": "袁紹的本命武學。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "quality": "絕學"
   },
   {
     "id": "yuanshao_neigong",
     "name": "名門心法",
     "kind": "內功",
     "attribute": "陰",
-    "desc": "袁紹的本命內功。"
+    "desc": "袁紹的本命內功。",
+    "quality": "絕學"
   },
   {
     "id": "taoqian_wugong",
@@ -95,14 +107,203 @@
     "kind": "武學",
     "attribute": "柔",
     "desc": "陶謙的本命武學。",
-    "weapon": "棍"
+    "weapon": "棍",
+    "quality": "絕學"
   },
   {
     "id": "taoqian_neigong",
     "name": "厚德心法",
     "kind": "內功",
     "attribute": "陰",
-    "desc": "陶謙的本命內功。"
+    "desc": "陶謙的本命內功。",
+    "quality": "絕學"
+  },
+  {
+    "id": "zhangjiao_wugong",
+    "name": "九節杖法",
+    "kind": "武學",
+    "attribute": "虛",
+    "quality": "絕學",
+    "desc": "張角的本命武學：大賢良師手中那根九節杖，虛點實打，叫人看不清下一下落在哪裡。",
+    "weapon": "棍"
+  },
+  {
+    "id": "zhangjiao_neigong",
+    "name": "太平符水功",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "絕學",
+    "desc": "張角的本命內功：太平道以符水養氣的法門，傳教十餘年，信眾都說喝了能祛病。"
+  },
+  {
+    "id": "zhangbao_wugong",
+    "name": "厚土刀法",
+    "kind": "武學",
+    "attribute": "慢",
+    "quality": "絕學",
+    "desc": "張寶的本命武學：地公將軍的刀不求快，一刀一刀像在夯土。",
+    "weapon": "刀"
+  },
+  {
+    "id": "zhangbao_neigong",
+    "name": "地公玄息",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "絕學",
+    "desc": "張寶的本命內功：地公將軍閉目吐納的法子，據說能呼風喚霧。"
+  },
+  {
+    "id": "zhangliang_wugong",
+    "name": "黃巾烈槍",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "絕學",
+    "desc": "張梁的本命武學：人公將軍衝陣的槍法，只進不退。",
+    "weapon": "槍"
+  },
+  {
+    "id": "zhangliang_neigong",
+    "name": "人公血氣訣",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "絕學",
+    "desc": "張梁的本命內功：人公將軍激起一身血氣的法門，越戰越旺。"
+  },
+  {
+    "id": "hejin_wugong",
+    "name": "屠門刀法",
+    "kind": "武學",
+    "attribute": "實",
+    "quality": "絕學",
+    "desc": "何進的本命武學：大將軍早年在南陽殺豬賣肉，刀下全是實打實的功夫。",
+    "weapon": "刀"
+  },
+  {
+    "id": "hejin_neigong",
+    "name": "權門心法",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "絕學",
+    "desc": "何進的本命內功：出入宮禁、周旋外戚宦官之間練出來的養氣之法，喜怒不形於色。"
+  },
+  {
+    "id": "huangfusong_wugong",
+    "name": "焚營槍法",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "絕學",
+    "desc": "皇甫嵩的本命武學：長社一把火燒破黃巾大營，槍法也帶著那股烈勢。",
+    "weapon": "槍"
+  },
+  {
+    "id": "huangfusong_neigong",
+    "name": "安定心法",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "絕學",
+    "desc": "皇甫嵩的本命內功：安定朝那將門世代相傳的心法，沉穩持重。"
+  },
+  {
+    "id": "zhujun_wugong",
+    "name": "會稽劍法",
+    "kind": "武學",
+    "attribute": "快",
+    "quality": "絕學",
+    "desc": "朱儁的本命武學：會稽寒門子弟的劍，出手快、收手也快。",
+    "weapon": "劍"
+  },
+  {
+    "id": "zhujun_neigong",
+    "name": "越地潮息",
+    "kind": "內功",
+    "attribute": "柔",
+    "quality": "絕學",
+    "desc": "朱儁的本命內功：江海之濱學來的吐納，一呼一吸如潮起潮落。"
+  },
+  {
+    "id": "luzhi_wugong",
+    "name": "經緯劍法",
+    "kind": "武學",
+    "attribute": "柔",
+    "quality": "絕學",
+    "desc": "盧植的本命武學：大儒以經義入劍，縱橫有度，劉備少時也在他門下見過。",
+    "weapon": "劍"
+  },
+  {
+    "id": "luzhi_neigong",
+    "name": "經師正氣訣",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "絕學",
+    "desc": "盧植的本命內功：讀書養氣，寧可下獄也不肯賄賂監軍的那一口氣。"
+  },
+  {
+    "id": "dongzhuo_wugong",
+    "name": "涼州連珠箭",
+    "kind": "武學",
+    "attribute": "快",
+    "quality": "絕學",
+    "desc": "董卓的本命武學：馬上左右開弓，羌胡中人人都怕這一手。",
+    "weapon": "弓弩"
+  },
+  {
+    "id": "dongzhuo_neigong",
+    "name": "隴西狼血功",
+    "kind": "內功",
+    "attribute": "實",
+    "quality": "絕學",
+    "desc": "董卓的本命內功：邊地豪強在羌胡之間打出來的粗豪氣力，膂力過人。"
+  },
+  {
+    "id": "bocai_wugong",
+    "name": "潁川截道刀",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "絕學",
+    "desc": "波才的本命武學：截斷潁川官道、劫奪官糧時練出來的刀，又狠又直。",
+    "weapon": "刀"
+  },
+  {
+    "id": "bocai_neigong",
+    "name": "黃巾怒氣訣",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "絕學",
+    "desc": "波才的本命內功：三十六方一同起事那天喊出來的一股怒氣，散不掉了。"
+  },
+  {
+    "id": "zhangmancheng_wugong",
+    "name": "神使符劍",
+    "kind": "武學",
+    "attribute": "虛",
+    "quality": "絕學",
+    "desc": "張曼成的本命武學：南陽黃巾的「神上使」以符入劍，劍未到，符先到。",
+    "weapon": "劍"
+  },
+  {
+    "id": "zhangmancheng_neigong",
+    "name": "南陽祭天功",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "絕學",
+    "desc": "張曼成的本命內功：圍宛城時揚言取太守首級祭天，練的就是這股陰狠的祭祀之氣。"
+  },
+  {
+    "id": "zhaohong_wugong",
+    "name": "守城棍法",
+    "kind": "武學",
+    "attribute": "慢",
+    "quality": "絕學",
+    "desc": "趙弘的本命武學：郡兵出身，守城門、管糧倉，一根棍子擋在門口誰都過不去。",
+    "weapon": "棍"
+  },
+  {
+    "id": "zhaohong_neigong",
+    "name": "固壘心法",
+    "kind": "內功",
+    "attribute": "實",
+    "quality": "絕學",
+    "desc": "趙弘的本命內功：營中弟兄有事都先找他，靠的就是這份沉得住氣的根底。"
   },
   {
     "id": "zhuifeng",

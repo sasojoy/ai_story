@@ -76,6 +76,7 @@ OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
+MELT_MANY_PROLOGUE = "這裡照師父說的，一門一門熔。"  # 序章裡不給批量熔煉（序章的熔煉是教學的一步）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
@@ -172,6 +173,12 @@ def say_text(text: str | None) -> str | None:
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算一段）
+GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法
+SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）；網頁 app.js 的 roundBlocks 認這個寫法
+ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
+RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
+MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -982,7 +989,7 @@ class Game:
             if menu:
                 return [Option(id=option_id, label=label) for option_id, label in menu]
         if s.player.pending_companion:
-            dialogue_options, _ = s.player.last_offered_dialogue.get(s.player.pending_companion, [[], []])
+            dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
             talk_cost = c.config.talk_stamina
             opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
             if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
@@ -1354,10 +1361,10 @@ class Game:
             companion_id = self.state.player.pending_companion
             if companion_id is None or not arg.isdecimal():
                 return None
-            offered, _ = self.state.player.last_offered_dialogue.get(companion_id, [[], []])
-            if int(arg) >= len(offered):
+            shown, _ = companion_agent.offered(self.state, companion_id)
+            if int(arg) >= len(shown):
                 return None
-            player_action = offered[int(arg)]
+            player_action = shown[int(arg)]
         elif option_id == "act:socialize":
             if roster.fortune_due(self.state, self.content) or ranks.summons_event(self.state, self.content) is not None:
                 return None  # 福緣先發；在召見的地點交友端出晉升奇遇（計畫 T5，審查 I1）——都不開口對話
@@ -4254,6 +4261,7 @@ class Game:
         不會再有新收場的（見 WorldStateStore.ended_battles）。季終沒打完就收起來的決戰（unfinished）也在這裡補，
         內容只是一則「不算勝負」的江湖紀錄（FB-035，見 _file_showdown）。"""
         p = self.state.player
+        self._restore_showdowns()
         fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
         if not fresh:
             return
@@ -4263,6 +4271,78 @@ class Game:
             if me is not None:
                 self._file_showdown(battle, me, None if season == current else season)
             p.battle_results_seen.append(battle.record_id)
+
+    def _restore_showdowns(self) -> None:
+        """補回被洗掉的決戰戰報（PM 2026-10-14：以前決戰跟遊歷共用最近 20 場，收場兩小時就被十幾場遊歷擠掉）：這一季收場、自己參戰過、
+        已經補過（battle_results_seen）卻不在戰報裡的決戰，照 battles 表重建一筆（_showdown_lines 那幾句與完整戰況）。只補戰報：
+        軍餉、名望、江湖紀錄、行狀當時都發過了，不再發、不寫紀錄、不放「剛剛」的卡片。一季只查一次（showdowns_restored）。"""
+        c, s, p = self.content, self.state, self.state.player
+        season = self.world.get_season_number()
+        if p.showdowns_restored == season:
+            return
+        p.showdowns_restored = season
+        seen = set(p.battle_results_seen)
+        have_refs = {r.battle_ref for r in s.battles if r.kind == "showdown"}
+        have_old = {(r.event, r.time): r for r in s.battles if r.kind == "showdown"}  # 這一版以前的戰報沒有 battle_ref：照戰名與收場時刻認
+        added = False
+        for battle in self.world.season_ended_battles(season):
+            me = battle.participants.get(p.name)
+            definition = c.battles.get(battle.battle_id)
+            if me is None or definition is None or battle.unfinished or battle.record_id not in seen or battle.record_id in have_refs:
+                continue
+            time = battle.end_time if battle.end_time is not None else s.world.time
+            if (definition.name, time) in have_old:  # 還留著的舊戰報：補上 battle_ref，戰報頁就照 battles 表畫完整戰況
+                kept = have_old[(definition.name, time)]
+                kept.battle_ref = kept.battle_ref if kept.battle_ref is not None else battle.record_id
+                continue
+            sides = self._sides(definition)
+            side = sides.get(me.faction, me.faction)
+            foes = "、".join(f.name for f in definition.factions if f.id != me.faction) or "敵軍"
+            lines, *_ = self._showdown_lines(battle, me, side, sides)
+            s.battle_seq += 1
+            s.battles.append(BattleRecord(
+                id=s.battle_seq, time=time, location=self._battle_region_name(definition) if definition.region else definition.name,
+                kind="showdown", event=definition.name, opponent=foes, ours=[], tier=battle.outcome_title or "收場", our_power=0.0,
+                difficulty=0.0, side=side, notes=[*lines, RESTORED_NOTE], gauge=self._gauge_of(battle, definition, me.faction),
+                log=self._round_blocks(battle, definition, last=None, oldest_first=True, me=me), battle_ref=battle.record_id,
+            ))
+            added = True
+        if added:
+            s.battles.sort(key=lambda r: r.time, reverse=True)  # 補回來的照收場時刻排進去（sort 是穩定的：同一時刻照原本的先後）
+
+    def _showdown_lines(
+        self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, side: str, sides: dict[str, str],
+    ) -> tuple[list[str], str, int | None, list]:
+        """決戰戰報裡跟自己有關的那幾句（結果、勝負的關鍵、職位、出手幾回合、帶頭、點名、倒下、戰功排第幾）：收場補戰報（_file_showdown）
+        與補回被洗掉的戰報（_restore_showdowns）共用。回（那幾句, 職位名, 戰功名次, 名次表）。"""
+        c = self.content
+        tuning = c.config.battle
+        lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
+        lines += battle.seal_notes  # 玉璽碎片：下戰書、現世的得主（5.9 最後一條、3.3）
+        role = battle_instance.role_name(c.config.battle, me.role)
+        lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
+        if me.mount:
+            lines.append(mounts.CAVALRY_REPORT.format(name=me.mount))  # 騎著馬出陣（裝備四欄 5.9）；原句「你以…出陣」不動
+        if me.troops:
+            lines.append(TROOPS_REPORT.format(names=me.troops))  # 帶著部下出陣（PM 2026-10-12）
+        if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
+            lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
+        if me.hurt_dealt >= 0.5:
+            lines.append(f"你的放手一搏點名打傷了對手，打掉他們氣血 {round(me.hurt_dealt)}")
+        if me.targeted_by:
+            lines.append(f"{'、'.join(me.targeted_by)}在陣上點名要對付你" + (
+                f"，你被打掉氣血 {round(me.hurt_taken)}" if me.hurt_taken >= 0.5 else "，卻沒能傷到你"))
+        elif me.hurt_taken >= 0.5:
+            lines.append(f"你太顯眼，被對面集火，打掉氣血 {round(me.hurt_taken)}")
+        if me.fell_round is not None:
+            lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        mine = battle_instance.merit(tuning, me)
+        ranking = battle_instance.merit_ranking(battle, tuning, me.faction) if me.faction in sides else []  # 豪強也排（Joy 2026-10-13）
+        rank = next((i for i, (q, _) in enumerate(ranking, 1) if q.name == me.name), None)
+        if rank is not None:  # 個人戰功（Joy 2026-10-10）：自己這一邊排第幾、怎麼來的
+            parts = "、".join(battle_instance.merit_parts(me))
+            lines.append(f"你的戰功 {mine}，在{side}排第 {rank}／{len(ranking)}" + (f"（{parts}）" if parts else ""))
+        return lines, role, rank, ranking
 
     def _file_showdown(
         self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, earlier: int | None,
@@ -4288,32 +4368,8 @@ class Game:
             lines += [f"你出手 {me.acted_rounds} 回合"] if me.acted_rounds else []
             journal.add_entry(s, JournalEntry(time=time, title=f"{label}{name}・{outcome}", tag=f"你站在{side}", lines=lines))
             return
-        lines = [t for t in (battle.outcome_text, battle.outcome_reason) if t]
-        lines += battle.seal_notes  # 玉璽碎片：下戰書、現世的得主（5.9 最後一條、3.3）
-        role = battle_instance.role_name(c.config.battle, me.role)
-        lines.append(f"你以{role}出陣，出手 {me.acted_rounds} 回合" if role else f"你出手 {me.acted_rounds} 回合")
-        if me.mount:
-            lines.append(mounts.CAVALRY_REPORT.format(name=me.mount))  # 騎著馬出陣（裝備四欄 5.9）；原句「你以…出陣」不動
-        if me.troops:
-            lines.append(TROOPS_REPORT.format(names=me.troops))  # 帶著部下出陣（PM 2026-10-12）
-        if me.led_rounds:  # 出固定招的人也有名字（Joy 2026-10-10）
-            lines.append(f"你帶頭衝陣、替自己這一邊佔了上風 {me.led_rounds} 回合")
-        if me.hurt_dealt >= 0.5:
-            lines.append(f"你的放手一搏點名打傷了對手，打掉他們氣血 {round(me.hurt_dealt)}")
-        if me.targeted_by:
-            lines.append(f"{'、'.join(me.targeted_by)}在陣上點名要對付你" + (
-                f"，你被打掉氣血 {round(me.hurt_taken)}" if me.hurt_taken >= 0.5 else "，卻沒能傷到你"))
-        elif me.hurt_taken >= 0.5:
-            lines.append(f"你太顯眼，被對面集火，打掉氣血 {round(me.hurt_taken)}")
-        if me.fell_round is not None:
-            lines.append(f"你在第 {me.fell_round} 回合倒下，轉為觀戰")
+        lines, role, rank, ranking = self._showdown_lines(battle, me, side, sides)
         tuning = c.config.battle
-        mine = battle_instance.merit(tuning, me)
-        ranking = battle_instance.merit_ranking(battle, tuning, me.faction) if me.faction in sides else []  # 豪強也排（Joy 2026-10-13）
-        rank = next((i for i, (q, _) in enumerate(ranking, 1) if q.name == me.name), None)
-        if rank is not None:  # 個人戰功（Joy 2026-10-10）：自己這一邊排第幾、怎麼來的
-            parts = "、".join(battle_instance.merit_parts(me))
-            lines.append(f"你的戰功 {mine}，在{side}排第 {rank}／{len(ranking)}" + (f"（{parts}）" if parts else ""))
         h = battle.highlight
         fame = 0
         highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
@@ -4359,6 +4415,8 @@ class Game:
             id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
             gauge=self._gauge_of(battle, definition, me.faction) if definition is not None else None,
+            log=self._round_blocks(battle, definition, last=None, oldest_first=True, me=me) if definition is not None else [],
+            battle_ref=battle.record_id,
         )
         battlelog.add_record(s, record)
         s.battle_card = record.id
@@ -4635,7 +4693,7 @@ class Game:
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
-        lines += battle.narrative_log[-5:]
+        lines += self._round_blocks(battle, definition)
         p = battle.participants.get(self.state.player.name)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
@@ -4660,6 +4718,43 @@ class Game:
         elif watching:  # 倒下的人不會再出手，不必再說「回到大區就能再出手」
             lines.append(watch_line)
         return "\n\n".join(lines)
+
+    def _round_blocks(
+        self, battle: battle_instance.BattleInstance, definition: BattleDef, *, last: int | None = ROUND_BLOCKS,
+        oldest_first: bool = False, me: battle_instance.BattleParticipant | None = None,
+    ) -> list[str]:
+        """場景上最近五段戰況，一回合一段、新的在上（Joy 2026-10-14「大決戰因為很多人，戰況文字沒有分回合，擠在一起玩家很難閱讀」）：
+        每一段是「##### 第 N 回合」加一行一條的清單，網頁照標題把舊的幾回合收成一行（app.js 的 roundBlocks）。
+        narrative_log 開打那一句之後一回合一筆（apply_battle_tales 也照這個算），所以倒數第 k 筆是第（round_number − k）回合；
+        開打那一句（第 0 筆）照舊一段話。每一條是哪一軍的（Joy 2026-10-14「看不出誰是官軍誰是黃巾」）：開頭是參戰者的名號就照他
+        站的那一邊，開頭是交戰一方的名字就是那一方，前面加「〔官軍〕」（SIDE_TAG；網頁 roundBlocks 換成那一軍顏色的小標籤）；
+        誰佔上風、各路奇招互相牽扯、換幕這幾句不分邊，不加。
+        收場時寫進自己戰報的那一份（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」，_file_showdown）：last 是 None＝整場、
+        oldest_first 照先後、me 是自己，每一段最後一條寫自己這一回合出了什麼（MY_MOVE）。"""
+        log = battle.narrative_log
+        sides = self._sides(definition)
+        names = sorted(battle.participants, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
+
+        def side_of(item: str) -> str:
+            who = next((n for n in names if item.startswith(n)), None)
+            fid = battle.participants[who].faction if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
+            return SIDE_TAG.format(side=sides[fid]) if fid in sides else ""
+        out = []
+        for k, entry in enumerate(reversed(log if last is None else log[-last:])):
+            n = battle.round_number - k
+            rows = [line for line in entry.split("\n") if line.strip()]
+            if n <= 0 or not rows:
+                out.append(entry)
+                continue
+            items: list[str] = []
+            for line in rows:  # 誰放手一搏寫了什麼、接著那一句成敗，併成同一條（人多時一眼看得出哪一句是誰的）
+                if items and GAMBLE_SAID in items[-1] and "\n" not in items[-1] and GAMBLE_SAID not in line:
+                    items[-1] += f"\n  {line}"
+                else:
+                    items.append(line)
+            mine = [MY_MOVE.format(move=me.moves[n])] if me is not None and n in me.moves else []
+            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join([*(f"- {side_of(item)}{item}" for item in items), *(f"- {m}" for m in mine)]))
+        return out[::-1] if oldest_first else out
 
     def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
         """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""
@@ -4764,9 +4859,20 @@ class Game:
     # 放手一搏輸入框旁邊那一句（試玩回饋 2026-10-08）：成功率照舊不事前顯示（賭局的感覺），只講清楚賭的是什麼
     BATTLE_GAMBLE_NOTE = "寫得越險，成了戰果越大；失手時大局只會小小倒退，重傷的是你自己，氣血見底就倒下出局。"
 
+    # 氣血池撐不過一次最壞的失手時多這一句（長社火攻 14 個真人倒下 12 個，都是自己放手一搏失手扣光的；PM 2026-10-15）。
+    # 不寫數字
+    BATTLE_GAMBLE_LAST = "你的氣血已經撐不住再一次失手——這一搏若是沒成，你就倒下了。"
+
     def battle_free_text_note(self) -> str | None:
-        """有放手一搏輸入框時（battle_free_text_prompt 不是 None）回傳輸入框旁邊的說明，否則 None。"""
-        return self.BATTLE_GAMBLE_NOTE if self.battle_free_text_prompt() is not None else None
+        """有放手一搏輸入框時（battle_free_text_prompt 不是 None）回傳輸入框旁邊的說明，否則 None；
+        再失手一次就會倒下時（battle_instance.one_miss_left）後面多 BATTLE_GAMBLE_LAST。"""
+        if self.battle_free_text_prompt() is None:
+            return None
+        battle, definition = self._battle_for_me(tick=False)
+        p = battle.participants[self.state.player.name]
+        if definition.free_text_gamble is not None and battle_instance.one_miss_left(p, definition.free_text_gamble):
+            return f"{self.BATTLE_GAMBLE_NOTE}{self.BATTLE_GAMBLE_LAST}"
+        return self.BATTLE_GAMBLE_NOTE
 
     def _battle_text_check(self, text: str, tick: bool) -> tuple[BattleDef, str, str, str] | list[str]:
         """放手一搏現在送不送得出去：送得出去回傳（這場的定義, 選項的 tag, 截到 20 字的文字, 自己站的那一方的名字），
@@ -6312,6 +6418,20 @@ class Game:
             self._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
             return msgs
         return self._log(msgs)
+
+    @_not_while_preparing
+    def melt_many(self, art_ids: list[str], insight_ids: list[str]) -> list[str]:
+        """批量熔煉（見 library.melt_many）：修練頁勾好的武學與意境一次熔完，寫一則江湖紀錄。
+        序章裡一門一門照師父說的熔（序章的熔煉是教學的一步），這裡直接回一句。"""
+        if prologue_rules.melt_only(self.state, self.content) is not None or (
+            insight_ids and prologue_rules.melt_insight_problem(self.state, self.content) is not None
+        ):
+            return self._log([MELT_MANY_PROLOGUE])
+        xinde, held = self._xinde(), library.held_count(self.state)
+        msgs = self._log(library.melt_many(self.state, self.content, self.world, art_ids, insight_ids))
+        if library.held_count(self.state) < held:
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
 
     @_not_while_preparing
     def melt_insight(self, insight_id: str) -> list[str]:
@@ -7863,9 +7983,19 @@ class Game:
     def battle_list(self) -> list[tuple[str, int]]:
         return [(battlelog.list_label(r, self.stamp), r.id) for r in self.state.battles]
 
+    def big_battle_ids(self) -> set[int]:
+        """戰報列表裡決戰、奪璽單挑那幾場（battlelog.BIG_KINDS）：另外排在最上面一組，不跟一般的仗混在一起（Joy 2026-10-14）。"""
+        return {r.id for r in self.state.battles if r.kind in battlelog.BIG_KINDS}
+
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
+        if record is not None and record.battle_ref is not None:  # 決戰：照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）
+            battle = self.world.ended_battle(record.battle_ref)
+            me = battle.participants.get(s.player.name) if battle is not None else None
+            definition = self.content.battles.get(battle.battle_id) if battle is not None else None
+            if me is not None and definition is not None:
+                record = record.model_copy(update={"log": self._round_blocks(battle, definition, last=None, oldest_first=True, me=me)})
         return battlelog.detail_text(record, self.stamp) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:

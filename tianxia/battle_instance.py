@@ -25,7 +25,7 @@ from typing import Literal, NamedTuple
 from pydantic import BaseModel, Field
 
 from . import encounter, gender, zh
-from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
+from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -135,6 +135,9 @@ class BattleParticipant(BaseModel):
     cavalry: float = 0.0  # 加入時的騎兵加成（強攻、奇襲的份量已經乘過，這裡只給畫面寫幾成）
     # 部下上陣（PM 2026-10-12）：舊資料沒有這兩欄就是沒帶部下
     troops: str = ""  # 加入時帶的部下（team.troop_names：「兩名持矛鄉勇」）；沒帶是空的
+    # 每一回合自己出了什麼（整場的第幾回合 → 「強攻」「固守（逾時代選）」「放手一搏「…」，成了」）：收場時寫進自己的戰報（Joy 2026-10-14
+    # 「決戰能不能把完整戰報在戰報那邊可以展開」）；舊資料沒有是空的
+    moves: dict[int, str] = Field(default_factory=dict)
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
@@ -142,12 +145,32 @@ class BattleParticipant(BaseModel):
     newbie: bool = False  # 還在新手期（roster.newbie）
 
 
+# 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」
+# 頒給了只寫「放手一搏」四個字的人，PM 2026-10-15）
+GAMBLE_WORDS = ("放手一搏", "孤注一擲", "背水一戰")
+# 去掉標點與空白之後少於這麼多字的也不算寫了什麼（「衝」「殺啊」「上！」）
+HOLLOW_BELOW = 4
+_NOT_WORDS = re.compile(r"[\W_]+")
+
+
+def hollow(text: str) -> bool:
+    """這一搏沒寫什麼內容：去掉標點與空白後跟按鈕一樣（GAMBLE_WORDS），或少於 HOLLOW_BELOW 個字。"""
+    bare = _NOT_WORDS.sub("", text)
+    return len(bare) < HOLLOW_BELOW or bare in GAMBLE_WORDS
+
+
 def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
-    """哪一次放手一搏最有戲：成了的勝過沒成的；同樣成了，成功率越低越有戲；同樣沒成，也是越荒唐（成功率越低）越有戲；
-    一樣有戲時留先發生的那一次。只看規則，不叫模型。"""
+    """哪一次放手一搏最有戲：有寫內容的勝過沒寫內容的（hollow；全部都沒寫內容就照下面挑）；成了的勝過沒成的；
+    同樣成了，成功率越低越有戲；同樣沒成，也是越荒唐（成功率越低）越有戲；一樣有戲時留先發生的那一次。只看規則，不叫模型。"""
     if old is None:
         return True
-    return (new.won, -new.rate) > (old.won, -old.rate)
+    return (not hollow(new.text), new.won, -new.rate) > (not hollow(old.text), old.won, -old.rate)
+
+
+def one_miss_left(p: BattleParticipant, gamble: FreeTextGamble) -> bool:
+    """氣血池撐不過一次最壞的失手（成功率 0 的失手扣的量，同 resolve_round）：再失手一次就倒下。"""
+    worst = p.neili_cap * min(1.0, gamble.failure_neili_share_base + 100 * gamble.failure_neili_share_per_risk)
+    return p.neili <= worst
 
 
 class BattleRound(BaseModel):
@@ -652,6 +675,8 @@ def resolve_round(
     force, counts = {first: 0.0, second: 0.0}, {first: 0, second: 0}
     names = {f.id: f.name for f in definition.factions}
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
+    gains: dict[str, int] = {}  # 陣營 → 其中成了的合起來推進多少（success_trend_cap 夾）
+    losses: dict[str, int] = {}  # 陣營 → 其中失手的合起來倒退多少（負的，side_trend_cap 夾）
     coefs: dict[str, list[float]] = {first: [], second: []}  # 陣營 → 這一回合每個出固定招的人的剋制係數，回合摘要用
     fitness: dict[str, list[tuple[float, float]]] = {first: [], second: []}  # 陣營 → 每個出固定招的人的（份量, 氣血狀態），回合摘要用
     shares: dict[str, list[tuple[float, str, str]]] = {first: [], second: []}  # 陣營 →（力量, 名號, 招）：回合原因點名帶頭的人
@@ -684,6 +709,7 @@ def resolve_round(
                 success_rate = min(100, success_rate + tuning.role_gamble_rate)
             risk = 100 - success_rate
             succeeded = rng.random() * 100 < success_rate
+            p.moves[rnd_no] = f"放手一搏「{custom_text}」，{'成了' if succeeded else '沒成'}" if custom_text else f"放手一搏，{'成了' if succeeded else '沒成'}"
             if custom_text:
                 plus = f"，{role_name(tuning, p.role)} +{success_rate - assessed}" if success_rate != assessed else ""
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
@@ -744,6 +770,10 @@ def resolve_round(
                 if more_dramatic(moment, instance.highlight):
                     instance.highlight = moment
             gambles[p.faction] = gambles.get(p.faction, 0) + delta
+            if delta > 0:
+                gains[p.faction] = gains.get(p.faction, 0) + delta
+            elif delta < 0:
+                losses[p.faction] = losses.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
             enemy = second if p.faction == first else first
@@ -759,6 +789,7 @@ def resolve_round(
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
             p.last_result = f"{move}（剋制 ×{coef:.1f}）"
+            p.moves[rnd_no] = move + ("（逾時代選）" if name in instance.round.auto_picked else "")
         else:  # 這個人這回合沒有三招可算（選項不在這一幕、不在交戰雙方、放手一搏卻沒有賭局設定）：不推戰局、不扣血
             continue
         p.neili = max(0.0, p.neili - damage)
@@ -777,15 +808,20 @@ def resolve_round(
         if q is not None and amount >= 0.5 and not q.eliminated:
             q.stood_marked += 1
     instance.last_targets = targets_now
-    # 同一邊同一回合放手一搏合起來有上限（一個人亂寫、一群人亂寫都不能抵過全軍的固定招）
+    # 同一邊同一回合放手一搏合起來有上限，成了的與失手的分開夾（Joy 2026-10-15「成功另算」）：失手的合起來最多退
+    # side_trend_cap（一群人亂寫拖不垮全軍），成了的照人數疊、最多推 success_trend_cap
     if definition.free_text_gamble is not None:
-        cap = definition.free_text_gamble.side_trend_cap
-        for side, raw in list(gambles.items()):
-            capped = max(-cap, min(cap, raw))
-            if capped != raw:
-                gambles[side] = capped
-                verb = "把戰線推前了" if capped > 0 else "讓戰線退了"
-                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合的放手一搏合起來只{verb}{shove_size(capped)}。")
+        gamble = definition.free_text_gamble
+        back_cap = gamble.side_trend_cap
+        push_cap = gamble.success_trend_cap if gamble.success_trend_cap is not None else back_cap
+        for side in list(gambles):
+            up, down = gains.get(side, 0), losses.get(side, 0)
+            up_capped, down_capped = min(push_cap, up), max(-back_cap, down)
+            gambles[side] = up_capped + down_capped
+            if up_capped != up:
+                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合成了的放手一搏合起來只把戰線推前了{shove_size(up_capped)}。")
+            if down_capped != down:
+                msgs.append(f"各路奇招互相牽扯，{names.get(side, side)}這一回合失手的放手一搏合起來只讓戰線退了{shove_size(down_capped)}。")
     gamble_delta = sum((1 if side == first else -1) * d for side, d in gambles.items())
     push = 0.0
     if counts[first] or counts[second]:

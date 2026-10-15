@@ -2666,6 +2666,22 @@ def test_melting_an_insight_through_the_endpoint(client):
     assert "沒有這個意境" in r["message"]
 
 
+def test_melting_many_through_the_endpoint(client):
+    """批量熔煉：勾的武學與意境一次熔完、寫一則江湖紀錄；不是串列的當沒勾。art_rows 帶每一門熔了退多少（網頁合計用）。"""
+    _a_player_with_insights(client, xinde=100)
+    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
+    fused = next(a for a in r["menxia"]["owned_arts"] if not a["worn"])
+    assert fused["melt"]["value"] == server.CONTENT.config.melt_min_refund
+    before = open_characters().load("沈青衫").player.stats["xinde"]
+    assert "沒有勾選" in client.post("/api/menxia/melt_many", json={"arts": "x", "insights": 3}).json()["message"]
+    r = client.post("/api/menxia/melt_many", json={"arts": [fused["id"]], "insights": ["feng", "huo"]}).json()
+    assert "一口氣熔掉了 1 門武學、2 個意境" in r["message"]
+    saved = open_characters().load("沈青衫")
+    assert fused["id"] not in saved.player.arts and saved.player.insights == []
+    assert saved.player.stats["xinde"] == before + fused["melt"]["value"] + 2 * server.CONTENT.config.melt_insight_xinde
+    assert "一口氣熔掉了" in saved.journal[0].tag
+
+
 def test_the_naming_row_and_the_name_action(client):
     """練成絕學的第一人：修練頁有等著取名的一列；定了名，那一列消失、武學的名字全服一起改。"""
     _a_player_with_insights(client)
