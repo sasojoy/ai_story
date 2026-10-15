@@ -7,7 +7,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from . import atlas, bounties, calendar, equipment, figures, mapart, mapview, mounts, orders, rules, territory, timetable
+from . import (
+    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, territory, timetable,
+)
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
 
@@ -37,8 +39,19 @@ def base_key(state: GameState, content: Content) -> str:
     return hashlib.sha1(",".join(mapview.open_places(state, content)).encode()).hexdigest()[:12]
 
 
+def insight_pool(loc: Location, content: Content) -> list[str]:
+    """這一處悟得到的意境（意境提示設計第六節）：照 insights.explore_gives，最濃的排第一；序章草廬走寫死的四景、不抽池子，不列
+    （同 atlas.insight_names）。開關不看：抽屜的「此地能悟」是補漏。"""
+    if loc.prologue_only:
+        return []
+    gives = insights.explore_gives(loc, content)
+    strong = insights.strong_of(loc, content)
+    return sorted(gives, key=lambda i: i != strong)
+
+
 def base(state: GameState, content: Content) -> dict:
-    """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。"""
+    """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
+    內容的事實，不是這一刻的狀態，所以放底圖不放疊層）。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -48,6 +61,8 @@ def base(state: GameState, content: Content) -> dict:
         places.append({
             "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": mapview.GLYPHS[mapart.icon_kind(loc)],
             "big": loc.important, "region": region.id if region is not None else None,
+            "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
+            "terrain": next(iter(sensing.terrain_tags(loc)), ""),
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]
     regions = [{
@@ -57,6 +72,8 @@ def base(state: GameState, content: Content) -> dict:
     return {
         "key": base_key(state, content), "w": content.map.width, "h": content.map.height,
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "regions": regions,
+        "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
+        "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
     }
 
 

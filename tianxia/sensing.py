@@ -139,10 +139,15 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
     return base + bonus
 
 
+def terrain_tags(loc: Location) -> list[str]:
+    """地點標籤裡的地形（河畔、城鎮……）：設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG）不是地形，不算。
+    有所感標題的括號與輿圖抽屜名字旁的地形（意境提示設計第五節）共用。"""
+    return [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館")]
+
+
 def place_tags(scene: InsightScene, loc: Location) -> str:
-    """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。
-    設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG）不是地形，不寫。"""
-    tags = [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館")]
+    """標題後面括號裡的地形：這一處的地點標籤（「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。"""
+    tags = terrain_tags(loc)
     return "" if scene.prologue or not tags else f"（{'、'.join(tags)}）"
 
 
