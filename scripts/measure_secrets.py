@@ -146,13 +146,15 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
     original_forge_plan, original_armor_plan, original_forge = smithing.forge_plan, smithing.armor_plan, smithing.forge
 
     def steer(slot, original):
-        """解口訣、全知：鑄譜上聽過（全知不必）還沒打中的隱藏配方，手上湊得出就先打那一爐；其餘照整季機器人原本的挑法。"""
+        """解口訣、全知：鑄譜上聽過（全知不必）還沒打中的隱藏配方，手上湊得出就先打那一爐；其餘照整季機器人原本的挑法。
+        配方照這一季的章挑（forge_secrets.active 帶季，FB-270）；拆了片的神器配方三片都聽過才算「聽過」（鑄譜上那一行完整了）。"""
         def plan(state, content_, world_, art):
             if side != "隨機":
                 tianji = world_.read().tianji
                 book = forge_secrets.manual(state, tianji)
-                for recipe in forge_secrets.active(content_, tianji):
-                    if recipe.slot != slot or recipe.id in book.solved or (side == "解口訣" and not book.heard.get(recipe.id)):
+                for recipe in forge_secrets.active(content_, tianji, state.world):
+                    known = book.heard.get(recipe.id) or len(book.pieces.get(recipe.id, [])) == len(forge_secrets.PIECES)
+                    if recipe.slot != slot or recipe.id in book.solved or (side == "解口訣" and not known):
                         continue
                     order = _forge_order(state, content_, recipe)
                     if order is not None:
@@ -243,6 +245,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
     heard = [i for idx in book.heard.values() for i in idx]
     fbook = forge_secrets.manual(game.state, tianji)
     fheard = [i for idx in fbook.heard.values() for i in idx]
+    pieces = sum(len(got) for got in fbook.pieces.values())  # 拆了片的季聽到的神器線索片子（FB-270；不分來源）
     forges = len(tally.uplift)
     return {
         "合中": len(book.solved), "這一季": len(secret_recipes.active(content, tianji)),
@@ -254,9 +257,10 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         "一般上品": statistics.mean(tally.plain_top) if tally.plain_top else None,
         "秘方爐": len(tally.secret_top),
         "哪幾條": ",".join(book.solved),
-        "鑄器摸到": len(fbook.solved), "鑄器這一季": len(forge_secrets.active(content, tianji)),
+        "鑄器摸到": len(fbook.solved), "鑄器這一季": len(forge_secrets.active(content, tianji, game.state.world)),  # 照季的章（FB-270）
         "鑄器組": Counter(forge_secrets.group_of(content.forge_secrets[rid]) for rid in fbook.solved),
         "鑄說書": fheard.count(forge_secrets.TALE), "鑄鐵匠": fheard.count(forge_secrets.SMITH), "鑄殘譜": fheard.count(forge_secrets.SCRAP),
+        "鑄片": pieces,
         "打造": forged["爐"], "名器": forged["名器"], "鑄器哪幾條": set(fbook.solved),
         "原品": forged["原品"], "仿品": forged["仿品"], "三階": tier3["全部"], "三階新": tier3["新來源"],
     }
@@ -275,6 +279,7 @@ def _fmt_forge(row: dict) -> str:
     groups = "・".join(f"{GROUP_WORDS.get(g, g)} {n}" for g, n in sorted(row["鑄器組"].items())) or "—"
     share = f"{row['名器'] / row['打造'] * 100:.0f}%" if row["打造"] else "—"
     return (f"鑄器：摸到 {row['鑄器摸到']}/{row['鑄器這一季']}（{groups}）　口訣 說書 {row['鑄說書']}・鐵匠 {row['鑄鐵匠']}・殘譜 {row['鑄殘譜']}"
+            f"・神器片子 {row['鑄片']}"
             f"　打造 {row['打造']} 爐、名器 {row['名器']}（{share}）　神器 原品 {row['原品']}・仿品 {row['仿品']}"
             f"　三階 {row['三階']}（新來源 {row['三階新']}）")
 
@@ -307,7 +312,7 @@ def main() -> None:
         )
         print(
             f"{side}平均 鑄器：摸到 {mean('鑄器摸到'):.1f}/{mean('鑄器這一季'):.0f}　口訣 說書 {mean('鑄說書'):.1f}・鐵匠 {mean('鑄鐵匠'):.1f}"
-            f"・殘譜 {mean('鑄殘譜'):.1f}　打造 {mean('打造'):.1f} 爐、名器 {mean('名器'):.1f}"
+            f"・殘譜 {mean('鑄殘譜'):.1f}・神器片子 {mean('鑄片'):.1f}　打造 {mean('打造'):.1f} 爐、名器 {mean('名器'):.1f}"
             f"　神器 原品 {mean('原品'):.1f}・仿品 {mean('仿品'):.1f}　三階 {mean('三階'):.1f}（新來源 {mean('三階新'):.1f}）"
         )
 
