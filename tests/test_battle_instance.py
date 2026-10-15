@@ -1686,6 +1686,29 @@ def test_one_model_call_rates_the_gamble_and_writes_both_stories():
     assert bi.assess_gamble(client, act, "官軍", "衝", "彩加") == (bi.DEFAULT_FREE_TEXT_SUCCESS_RATE, "", "")
 
 
+def test_a_gamble_that_only_copies_the_button_is_never_the_most_impressive():
+    # 長社火攻：「最令人印象深刻的一幕」頒給了只寫「放手一搏」四個字、15% 擲中的人（PM 2026-10-15）
+    def m(text, rate, won):
+        return bi.GambleMoment(name="甲", faction="guan", text=text, rate=rate, won=won)
+
+    for text in ("放手一搏", "放手一搏！", " 孤注一擲。", "背水一戰", "殺啊", "上！！"):
+        assert bi.hollow(text), text
+    for text in ("火燒糧倉", "我放手一搏衝陣", "刺殺主將"):
+        assert not bi.hollow(text), text
+    assert bi.more_dramatic(m("繞後燒他糧草", 60, False), m("放手一搏", 15, True))  # 有內容的勝過照抄按鈕的
+    assert not bi.more_dramatic(m("放手一搏", 15, True), m("繞後燒他糧草", 60, False))
+    assert bi.more_dramatic(m("放手一搏", 5, True), m("殺啊", 30, True))  # 全都沒內容就照原本的挑法
+
+
+def test_one_miss_left_is_the_worst_miss():
+    gamble = bi.FreeTextGamble()
+    worst = 100 * min(1.0, gamble.failure_neili_share_base + 100 * gamble.failure_neili_share_per_risk)
+    p = bi.BattleParticipant(name="甲", faction="guan", neili=worst + 1, neili_cap=100)
+    assert not bi.one_miss_left(p, gamble)
+    p.neili = worst
+    assert bi.one_miss_left(p, gamble)
+
+
 def test_the_most_dramatic_gamble_is_a_long_shot_that_landed():
     def m(rate, won):
         return bi.GambleMoment(name="甲", faction="guan", text="x", rate=rate, won=won)

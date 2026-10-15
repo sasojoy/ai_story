@@ -25,7 +25,7 @@ from typing import Literal, NamedTuple
 from pydantic import BaseModel, Field
 
 from . import encounter, gender, zh
-from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning
+from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -145,12 +145,32 @@ class BattleParticipant(BaseModel):
     newbie: bool = False  # 還在新手期（roster.newbie）
 
 
+# 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」
+# 頒給了只寫「放手一搏」四個字的人，PM 2026-10-15）
+GAMBLE_WORDS = ("放手一搏", "孤注一擲", "背水一戰")
+# 去掉標點與空白之後少於這麼多字的也不算寫了什麼（「衝」「殺啊」「上！」）
+HOLLOW_BELOW = 4
+_NOT_WORDS = re.compile(r"[\W_]+")
+
+
+def hollow(text: str) -> bool:
+    """這一搏沒寫什麼內容：去掉標點與空白後跟按鈕一樣（GAMBLE_WORDS），或少於 HOLLOW_BELOW 個字。"""
+    bare = _NOT_WORDS.sub("", text)
+    return len(bare) < HOLLOW_BELOW or bare in GAMBLE_WORDS
+
+
 def more_dramatic(new: GambleMoment, old: GambleMoment | None) -> bool:
-    """哪一次放手一搏最有戲：成了的勝過沒成的；同樣成了，成功率越低越有戲；同樣沒成，也是越荒唐（成功率越低）越有戲；
-    一樣有戲時留先發生的那一次。只看規則，不叫模型。"""
+    """哪一次放手一搏最有戲：有寫內容的勝過沒寫內容的（hollow；全部都沒寫內容就照下面挑）；成了的勝過沒成的；
+    同樣成了，成功率越低越有戲；同樣沒成，也是越荒唐（成功率越低）越有戲；一樣有戲時留先發生的那一次。只看規則，不叫模型。"""
     if old is None:
         return True
-    return (new.won, -new.rate) > (old.won, -old.rate)
+    return (not hollow(new.text), new.won, -new.rate) > (not hollow(old.text), old.won, -old.rate)
+
+
+def one_miss_left(p: BattleParticipant, gamble: FreeTextGamble) -> bool:
+    """氣血池撐不過一次最壞的失手（成功率 0 的失手扣的量，同 resolve_round）：再失手一次就倒下。"""
+    worst = p.neili_cap * min(1.0, gamble.failure_neili_share_base + 100 * gamble.failure_neili_share_per_risk)
+    return p.neili <= worst
 
 
 class BattleRound(BaseModel):

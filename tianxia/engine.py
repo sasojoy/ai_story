@@ -4859,9 +4859,20 @@ class Game:
     # 放手一搏輸入框旁邊那一句（試玩回饋 2026-10-08）：成功率照舊不事前顯示（賭局的感覺），只講清楚賭的是什麼
     BATTLE_GAMBLE_NOTE = "寫得越險，成了戰果越大；失手時大局只會小小倒退，重傷的是你自己，氣血見底就倒下出局。"
 
+    # 氣血池撐不過一次最壞的失手時多這一句（長社火攻 14 個真人倒下 12 個，都是自己放手一搏失手扣光的；PM 2026-10-15）。
+    # 不寫數字
+    BATTLE_GAMBLE_LAST = "你的氣血已經撐不住再一次失手——這一搏若是沒成，你就倒下了。"
+
     def battle_free_text_note(self) -> str | None:
-        """有放手一搏輸入框時（battle_free_text_prompt 不是 None）回傳輸入框旁邊的說明，否則 None。"""
-        return self.BATTLE_GAMBLE_NOTE if self.battle_free_text_prompt() is not None else None
+        """有放手一搏輸入框時（battle_free_text_prompt 不是 None）回傳輸入框旁邊的說明，否則 None；
+        再失手一次就會倒下時（battle_instance.one_miss_left）後面多 BATTLE_GAMBLE_LAST。"""
+        if self.battle_free_text_prompt() is None:
+            return None
+        battle, definition = self._battle_for_me(tick=False)
+        p = battle.participants[self.state.player.name]
+        if definition.free_text_gamble is not None and battle_instance.one_miss_left(p, definition.free_text_gamble):
+            return f"{self.BATTLE_GAMBLE_NOTE}{self.BATTLE_GAMBLE_LAST}"
+        return self.BATTLE_GAMBLE_NOTE
 
     def _battle_text_check(self, text: str, tick: bool) -> tuple[BattleDef, str, str, str] | list[str]:
         """放手一搏現在送不送得出去：送得出去回傳（這場的定義, 選項的 tag, 截到 20 字的文字, 自己站的那一方的名字），
