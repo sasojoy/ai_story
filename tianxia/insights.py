@@ -82,10 +82,20 @@ def learn(state: GameState, content: Content, world: WorldStateStore, insight_id
     return [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
 
 
+GRANT_LINES = {"good": "你行俠日久，胸中多了一股{name}之氣。", "evil": "你橫行日久，胸中多了一股{name}之氣。"}  # 名聲 5.1，待 joy 潤
+GRANT_LINE = "你心有所感，胸中多了一股{name}之氣。"
+
+
 def grant_by_name(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
     """名聲第一次到門檻就悟得對應的意境（浩然、血煞，武學與成長設計 7.2）。給過就記旗標 `悟得:<id>`：
-    之後熔掉也不會再給（不然熔了又拿、拿了又熔可以刷心得）。旗標跟著角色走，換季跟角色一起重來。"""
+    之後熔掉也不會再給（不然熔了又拿、拿了又熔可以刷心得）。旗標跟著角色走，換季跟角色一起重來。
+    名聲的 virtue_insight 開著時（名聲設計 5.1）還要走對那條路：浩然要善名不低於惡名（俠）、血煞要惡名高過善名（寇）；
+    門檻照內容寫的（15），不乘季長倍數；那一句寫原因（GRANT_LINES）。"""
+    from . import renown  # noqa: PLC0415  renown 不 import insights；放在函式裡免得 insights 的 import 鏈多一段
+
     p = state.player
+    by_path = renown.on(content, "virtue_insight")
+    good, evil = p.stats.get("good", 0), p.stats.get("evil", 0)
     msgs: list[str] = []
     for d in content.insights.values():
         if d.grant is None:
@@ -93,8 +103,10 @@ def grant_by_name(state: GameState, content: Content, world: WorldStateStore) ->
         flag = f"悟得:{d.id}"
         if flag in p.flags or p.stats.get(d.grant.stat, 0) < d.grant.at:
             continue
+        if by_path and (d.grant.stat == "good" and good < evil or d.grant.stat == "evil" and evil <= good):
+            continue
         p.flags.add(flag)
-        msgs.append(f"你心有所感，胸中多了一股{d.name}之氣。")
+        msgs.append((GRANT_LINES.get(d.grant.stat, GRANT_LINE) if by_path else GRANT_LINE).format(name=d.name))
         msgs += learn(state, content, world, d.id)
     return msgs
 

@@ -10495,14 +10495,17 @@ class Game:
         if crossed.first and not s.player.renown_told:
             s.player.renown_told = True
             journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))
-        if not crossed.lines:
+        # 名聲 5.1：浩然、血煞要走對那條路；善名惡名從懸賞、截殺來的（不經 rules.apply_effect）也在這裡接到
+        granted = insights.grant_by_name(s, c, self.world) if renown.on(c, "virtue_insight") else []
+        lines = crossed.lines + granted
+        if not lines:
             return
         marks = [journal.renown_mark(title) for title in crossed.up]
         if entry is not None:
-            entry.lines += crossed.lines
+            entry.lines += lines
             entry.changes += marks
         else:
-            fresh = Draft(renown.TOLD_TITLE).entry(s.world.time, crossed.lines)
+            fresh = Draft(renown.TOLD_TITLE).entry(s.world.time, lines)
             fresh.changes += marks
             journal.add_entry(s, fresh)
         for text, weight in crossed.annals:
