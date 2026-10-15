@@ -12,13 +12,15 @@
       "剛",
       "陽"
     ],
-    "signature": {
-      "name": "兵貴神速",
-      "desc": "兵貴神速，出手總比人早一步，趕路也比人輕快。",
-      "effects": {
-        "big_win_cut": 0.08,
-        "train_stamina": 2
-      }
+    "tactic": {
+      "name": "橫槊賦詩",
+      "timing": "乘勢",
+      "kind": "chase_disarm",
+      "rate": 0.45,
+      "params": {
+        "turns": 1
+      },
+      "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。"
     }
   },
   {
@@ -33,13 +35,16 @@
       "快",
       "虛"
     ],
-    "signature": {
-      "name": "唯才是舉",
-      "desc": "天下英才為我所用，跟著你的人都長進得快。",
-      "effects": {
-        "mate_power": 0.08,
-        "win_exp_pct": 0.15
-      }
+    "tactic": {
+      "name": "亂世心術",
+      "timing": "起手",
+      "kind": "opening_ward",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 2
+      },
+      "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神。"
     }
   },
   {
@@ -55,13 +60,15 @@
       "陽",
       "實"
     ],
-    "signature": {
-      "name": "百折不撓",
-      "desc": "屢敗屢起，落了下風也還撐得住，眼看要輸也能抽身。",
-      "effects": {
-        "dodge": 0.08,
-        "condition_floor": 0.1
-      }
+    "tactic": {
+      "name": "雙股回鋒",
+      "timing": "乘勢",
+      "kind": "disarm",
+      "rate": 0.35,
+      "params": {
+        "turns": 1
+      },
+      "desc": "對手卸勁 {turns} 回合，出不了強攻。"
     }
   },
   {
@@ -76,13 +83,20 @@
       "陽",
       "實"
     ],
-    "signature": {
-      "name": "仁德",
-      "desc": "以仁德待人，門下肯為你拚命；每一仗打完，也記得替自己包紮。",
-      "effects": {
-        "mate_power": 0.1,
-        "heal_after": 0.03
-      }
+    "tactic": {
+      "name": "仁義聚眾",
+      "timing": "起手",
+      "kind": "rally",
+      "rate": 1.0,
+      "allies": [
+        "guanyu",
+        "zhangfei"
+      ],
+      "params": {
+        "heal_pct": 0.04,
+        "boost_pct": 0.1
+      },
+      "desc": "每一回合自己與同伴回氣血 {heal_pct}；關羽、張飛的戰法發動率 +{boost_pct}。"
     }
   },
   {
@@ -98,13 +112,18 @@
       "快",
       "陽"
     ],
-    "signature": {
-      "name": "溫酒斬將",
-      "desc": "酒尚溫時，敵將已落馬：再強的對手在這一刀下也矮了一截。",
-      "effects": {
-        "difficulty_cut": 0.06,
-        "big_win_cut": 0.06
-      }
+    "tactic": {
+      "name": "青龍拖刀",
+      "timing": "出招",
+      "kind": "heavy_blow",
+      "rate": 0.3,
+      "prep": 1,
+      "params": {
+        "mult": 1.7,
+        "turns": 1,
+        "lead_pct": 0.18
+      },
+      "desc": "蓄力一回合後猛攻（推力 ×{mult}），對手隨機卸勁或亂神 {turns} 回合；氣勢領先時發動率再 +{lead_pct}。"
     }
   },
   {
@@ -119,13 +138,15 @@
       "剛",
       "實"
     ],
-    "signature": {
-      "name": "刮骨療毒",
-      "desc": "刮骨尚且談笑自若，傷筋動骨也不往心裡去。",
-      "effects": {
-        "injury_cut": 0.5,
-        "self_power": 0.04
-      }
+    "tactic": {
+      "name": "刮骨定神",
+      "timing": "出招",
+      "kind": "cleanse",
+      "rate": 0.4,
+      "params": {
+        "heal_pct": 0.12
+      },
+      "desc": "清掉自己身上的卸勁、亂神、定身、失神，回氣血 {heal_pct}。"
     }
   },
   {
@@ -141,13 +162,16 @@
       "陽",
       "快"
     ],
-    "signature": {
-      "name": "據水斷橋",
-      "desc": "橫矛立馬一聲斷喝，對面還沒動手就先怯了。",
-      "effects": {
-        "difficulty_cut": 0.08,
-        "toll_cut": 0.04
-      }
+    "tactic": {
+      "name": "長坂一喝",
+      "timing": "出招",
+      "kind": "roar",
+      "rate": 0.4,
+      "params": {
+        "stun_pct": 0.3,
+        "turns": 1
+      },
+      "desc": "一聲大喝：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。"
     }
   },
   {
@@ -162,13 +186,13 @@
       "剛",
       "虛"
     ],
-    "signature": {
-      "name": "燕人豪氣",
-      "desc": "燕人豪氣，越打越來勁，打贏了一碗酒下肚又是一條好漢。",
-      "effects": {
-        "self_power": 0.06,
-        "win_heal": 0.04
-      }
+    "tactic": {
+      "name": "丈八狂瀾",
+      "timing": "心法",
+      "kind": "unbroken",
+      "rounds": 2,
+      "params": {},
+      "desc": "出招不會被剋（無隙）；代價是這幾回合不能固守。"
     }
   },
   {
@@ -184,13 +208,14 @@
       "剛",
       "陽"
     ],
-    "signature": {
-      "name": "江東猛虎",
-      "desc": "猛虎出柙，一旦佔了上風就不給人喘息，打出來的名聲也響。",
-      "effects": {
-        "big_win_cut": 0.08,
-        "win_exp_pct": 0.1
-      }
+    "tactic": {
+      "name": "先登斬將",
+      "timing": "起手",
+      "kind": "vanguard",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {},
+      "desc": "先登：這一回合連環，推兩次。"
     }
   },
   {
@@ -205,13 +230,15 @@
       "快",
       "柔"
     ],
-    "signature": {
-      "name": "先登",
-      "desc": "每戰先登，身先士卒卻總能從刀叢裡全身而退。",
-      "effects": {
-        "self_power": 0.05,
-        "toll_cut": 0.06
-      }
+    "tactic": {
+      "name": "猛虎餘威",
+      "timing": "心法",
+      "kind": "tiger",
+      "params": {
+        "stack_pct": 0.06,
+        "stacks": 5
+      },
+      "desc": "每打一回合推力 +{stack_pct}，最多 {stacks} 層；氣勢落後時一次疊兩層。"
     }
   },
   {
@@ -227,13 +254,16 @@
       "陽",
       "陰"
     ],
-    "signature": {
-      "name": "四世三公",
-      "desc": "四世三公的排場，打一仗也有人送錢上門；出手講究，不靠運氣。",
-      "effects": {
-        "win_silver_pct": 0.5,
-        "luck_narrow": 0.2
-      }
+    "tactic": {
+      "name": "世家威儀",
+      "timing": "起手",
+      "kind": "awe",
+      "rate": 0.6,
+      "rounds": 2,
+      "params": {
+        "cut_pct": 0.3
+      },
+      "desc": "對手氣餒，這一回合推力 −{cut_pct}。"
     }
   },
   {
@@ -248,13 +278,15 @@
       "陽",
       "柔"
     ],
-    "signature": {
-      "name": "門生故吏",
-      "desc": "門生故吏遍天下，門下替你出力，也替你打點。",
-      "effects": {
-        "mate_power": 0.1,
-        "win_silver_pct": 0.2
-      }
+    "tactic": {
+      "name": "猶疑兩端",
+      "timing": "心法",
+      "kind": "waver",
+      "params": {
+        "up_pct": 0.4,
+        "down_pct": 0.2
+      },
+      "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。看天吃飯。"
     }
   },
   {
@@ -270,13 +302,14 @@
       "慢",
       "實"
     ],
-    "signature": {
-      "name": "徐州牧守",
-      "desc": "守土安民的功夫，不求殺敵，只求自己少受些傷、穩穩當當。",
-      "effects": {
-        "toll_cut": 0.1,
-        "luck_narrow": 0.15
-      }
+    "tactic": {
+      "name": "丹陽鐵壁",
+      "timing": "心法",
+      "kind": "rebound_guard",
+      "params": {
+        "share_pct": 0.5
+      },
+      "desc": "出固守時借力：對手強攻你，他吃自己那一下的 {share_pct}。"
     }
   },
   {
@@ -291,13 +324,19 @@
       "柔",
       "慢"
     ],
-    "signature": {
-      "name": "厚德載物",
-      "desc": "厚德養身，每一仗打完氣血慢慢回來，傷也不往裡走。",
-      "effects": {
-        "heal_after": 0.03,
-        "injury_cut": 0.3
-      }
+    "tactic": {
+      "name": "寬厚養氣",
+      "timing": "起手",
+      "kind": "veil",
+      "rate": 1.0,
+      "rounds": 3,
+      "params": {
+        "chance_pct": 0.25,
+        "per_good_pct": 0.05,
+        "good_step": 20,
+        "good_cap_pct": 0.2
+      },
+      "desc": "每回合 {chance_pct} 化影（那一回合不掉氣血）；善名每 {good_step} 點再 +{per_good_pct}，最多 +{good_cap_pct}。"
     }
   },
   {
@@ -313,13 +352,18 @@
       "陰",
       "陽"
     ],
-    "signature": {
-      "name": "大賢良師",
-      "desc": "大賢良師講道，一仗打下來悟得比別人多；眼看要敗，信眾替你擋了一下。",
-      "effects": {
-        "win_xinde_pct": 0.25,
-        "dodge": 0.06
-      }
+    "tactic": {
+      "name": "天雷符",
+      "timing": "出招",
+      "kind": "thunder",
+      "rate": 0.35,
+      "prep": 1,
+      "params": {
+        "hits": 5,
+        "dot_pct": 0.02,
+        "stun_pct": 0.3
+      },
+      "desc": "蓄力一回合後落雷 {hits} 下，每下扣對手氣血 {dot_pct}；對手在霧中或風沙中時，每下 {stun_pct} 定身。"
     }
   },
   {
@@ -334,13 +378,15 @@
       "柔",
       "陽"
     ],
-    "signature": {
-      "name": "符水救人",
-      "desc": "一碗符水，傷兵也能站起來：每仗打完都回一口氣，打贏回得更多。",
-      "effects": {
-        "heal_after": 0.04,
-        "win_heal": 0.03
-      }
+    "tactic": {
+      "name": "黃天咒",
+      "timing": "出招",
+      "kind": "curse",
+      "rate": 0.35,
+      "params": {
+        "turns": 2
+      },
+      "desc": "對手亂神 {turns} 回合（招式被你看穿）；代價是自己失神 1 回合。"
     }
   },
   {
@@ -356,13 +402,16 @@
       "實",
       "陰"
     ],
-    "signature": {
-      "name": "地公",
-      "desc": "地公將軍腳下生根，挨了打也不太痛，傷了也不太掉力氣。",
-      "effects": {
-        "toll_cut": 0.08,
-        "condition_floor": 0.1
-      }
+    "tactic": {
+      "name": "揚沙術",
+      "timing": "出招",
+      "kind": "sand",
+      "rate": 0.45,
+      "params": {
+        "turns": 3,
+        "dot_pct": 0.04
+      },
+      "desc": "對手陷入風沙 {turns} 回合：每回合扣氣血 {dot_pct}。"
     }
   },
   {
@@ -377,13 +426,17 @@
       "虛",
       "柔"
     ],
-    "signature": {
-      "name": "呼風喚霧",
-      "desc": "呼風喚霧，眼看要輸時一陣霧起，人已經不見了。",
-      "effects": {
-        "dodge": 0.1,
-        "difficulty_cut": 0.03
-      }
+    "tactic": {
+      "name": "霧鎖山川",
+      "timing": "起手",
+      "kind": "fog",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 3,
+        "miss_pct": 0.3
+      },
+      "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。"
     }
   },
   {
@@ -399,13 +452,15 @@
       "陽",
       "快"
     ],
-    "signature": {
-      "name": "人公衝陣",
-      "desc": "人公衝陣，只進不退，一鼓作氣就壓垮對面。",
-      "effects": {
-        "big_win_cut": 0.08,
-        "self_power": 0.04
-      }
+    "tactic": {
+      "name": "人公血戰",
+      "timing": "心法",
+      "kind": "bloodrage",
+      "params": {
+        "per_pct": 0.06,
+        "cap_pct": 0.4
+      },
+      "desc": "開打時每少一成氣血，推力 +{per_pct}，最多 +{cap_pct}。"
     }
   },
   {
@@ -420,13 +475,15 @@
       "實",
       "剛"
     ],
-    "signature": {
-      "name": "越戰越旺",
-      "desc": "血氣越激越旺，帶著傷反而更兇，打贏了還能吸回一口氣。",
-      "effects": {
-        "condition_floor": 0.15,
-        "win_heal": 0.04
-      }
+    "tactic": {
+      "name": "黃巾血誓",
+      "timing": "出招",
+      "kind": "oath",
+      "rate": 0.3,
+      "params": {
+        "cost_pct": 0.1
+      },
+      "desc": "自扣氣血 {cost_pct}，下一回合連環、無隙。"
     }
   },
   {
@@ -442,13 +499,17 @@
       "剛",
       "陽"
     ],
-    "signature": {
-      "name": "屠戶出身",
-      "desc": "殺豬的刀法不講花樣，刀刀見肉；打完了還不忘把肉錢算清楚。",
-      "effects": {
-        "difficulty_cut": 0.05,
-        "win_silver_pct": 0.3
-      }
+    "tactic": {
+      "name": "屠刀",
+      "timing": "乘勢",
+      "kind": "butcher",
+      "rate": 0.5,
+      "params": {
+        "turns": 2,
+        "dot_pct": 0.03,
+        "stacks": 3
+      },
+      "desc": "對手血創 {turns} 回合：每回合扣氣血 {dot_pct}，可疊 {stacks} 層。"
     }
   },
   {
@@ -463,13 +524,14 @@
       "陽",
       "實"
     ],
-    "signature": {
-      "name": "外戚當國",
-      "desc": "大將軍府門下人多勢眾，出手的人多，賞賜也多。",
-      "effects": {
-        "mate_power": 0.08,
-        "win_silver_pct": 0.3
-      }
+    "tactic": {
+      "name": "大將軍府",
+      "timing": "心法",
+      "kind": "marshal",
+      "params": {
+        "per_pct": 0.05
+      },
+      "desc": "每帶一名部下，推力 +{per_pct}。"
     }
   },
   {
@@ -485,13 +547,19 @@
       "快",
       "陽"
     ],
-    "signature": {
+    "tactic": {
       "name": "長社火攻",
-      "desc": "一把火燒破敵營，順風之勢一起，勝就勝得乾淨俐落。",
-      "effects": {
-        "big_win_cut": 0.1,
-        "difficulty_cut": 0.03
-      }
+      "timing": "出招",
+      "kind": "fire",
+      "rate": 0.4,
+      "prep": 1,
+      "foe_faction": "huang",
+      "params": {
+        "turns": 3,
+        "dot_pct": 0.05,
+        "faction_mult": 2
+      },
+      "desc": "蓄力一回合後放火，對手焚身 {turns} 回合：每回合扣氣血 {dot_pct}；對手是黃巾時 ×{faction_mult}。"
     }
   },
   {
@@ -506,13 +574,14 @@
       "慢",
       "柔"
     ],
-    "signature": {
+    "tactic": {
       "name": "持重",
-      "desc": "老將持重，不貪不躁，運氣好壞都差不了多少，也少挨刀。",
-      "effects": {
-        "luck_narrow": 0.25,
-        "toll_cut": 0.06
-      }
+      "timing": "心法",
+      "kind": "steady",
+      "params": {
+        "guard_pct": 0.5
+      },
+      "desc": "氣勢落後時，固守的推力 +{guard_pct}。"
     }
   },
   {
@@ -528,13 +597,13 @@
       "柔",
       "剛"
     ],
-    "signature": {
+    "tactic": {
       "name": "疾如潮",
-      "desc": "用兵如潮，來得快去得也快，遊歷少費腳力，出手常佔先機。",
-      "effects": {
-        "train_stamina": 2,
-        "big_win_cut": 0.05
-      }
+      "timing": "乘勢",
+      "kind": "surge",
+      "rate": 0.4,
+      "params": {},
+      "desc": "追加一擊：這一回合連環。"
     }
   },
   {
@@ -549,13 +618,15 @@
       "快",
       "陰"
     ],
-    "signature": {
+    "tactic": {
       "name": "潮生潮落",
-      "desc": "一呼一吸如潮起潮落，打完一仗氣血就回一截，眼看要敗也退得開。",
-      "effects": {
-        "heal_after": 0.03,
-        "dodge": 0.05
-      }
+      "timing": "心法",
+      "kind": "tide",
+      "params": {
+        "odd_pct": 0.15,
+        "heal_pct": 0.06
+      },
+      "desc": "單數回合推力 +{odd_pct}，雙數回合回氣血 {heal_pct}。"
     }
   },
   {
@@ -571,13 +642,13 @@
       "慢",
       "陽"
     ],
-    "signature": {
-      "name": "經緯有度",
-      "desc": "以經義入劍，縱橫有度，每一仗都打得明白，也想得明白。",
-      "effects": {
-        "luck_narrow": 0.25,
-        "win_xinde_pct": 0.15
-      }
+    "tactic": {
+      "name": "經緯",
+      "timing": "出招",
+      "kind": "foresight",
+      "rate": 0.35,
+      "params": {},
+      "desc": "看穿：下一回合一定出剋對手的那一招。"
     }
   },
   {
@@ -592,13 +663,14 @@
       "柔",
       "慢"
     ],
-    "signature": {
+    "tactic": {
       "name": "海內儒宗",
-      "desc": "海內儒宗，打一仗就是讀一卷書：心得、經驗都比別人多。",
-      "effects": {
-        "win_xinde_pct": 0.25,
-        "win_exp_pct": 0.1
-      }
+      "timing": "起手",
+      "kind": "ward_all",
+      "rate": 1.0,
+      "rounds": 3,
+      "params": {},
+      "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）。"
     }
   },
   {
@@ -614,13 +686,16 @@
       "剛",
       "實"
     ],
-    "signature": {
-      "name": "左右馳射",
-      "desc": "馬上左右開弓，箭到人倒，一佔上風就是一面倒。",
-      "effects": {
-        "big_win_cut": 0.08,
-        "difficulty_cut": 0.03
-      }
+    "tactic": {
+      "name": "涼州鐵蹄",
+      "timing": "騎戰",
+      "kind": "cavalry",
+      "params": {
+        "t1_pct": 0.1,
+        "t2_pct": 0.2,
+        "t3_pct": 0.3
+      },
+      "desc": "第 1 回合連環；之後每回合照馬的階 {t1_pct}／{t2_pct}／{t3_pct} 連環。"
     }
   },
   {
@@ -635,13 +710,19 @@
       "剛",
       "陽"
     ],
-    "signature": {
-      "name": "膂力過人",
-      "desc": "膂力過人，一身粗豪氣力，挨打也不容易傷到裡頭。",
-      "effects": {
-        "self_power": 0.07,
-        "injury_cut": 0.2
-      }
+    "tactic": {
+      "name": "暴虐",
+      "timing": "乘勢",
+      "kind": "brutal",
+      "rate": 0.35,
+      "params": {
+        "turns": 1,
+        "cost_pct": 0.03,
+        "per_evil_pct": 0.01,
+        "evil_step": 10,
+        "evil_cap_pct": 0.15
+      },
+      "desc": "對手失神 {turns} 回合；惡名每 {evil_step} 點發動率 +{per_evil_pct}（最多 +{evil_cap_pct}）；代價是每次自扣氣血 {cost_pct}。"
     }
   },
   {
@@ -657,13 +738,15 @@
       "陽",
       "實"
     ],
-    "signature": {
-      "name": "截道劫糧",
-      "desc": "截道劫糧的老本行，打贏一仗總要順手搜刮一番。",
-      "effects": {
-        "win_silver_pct": 0.5,
-        "difficulty_cut": 0.03
-      }
+    "tactic": {
+      "name": "長社夜襲",
+      "timing": "出招",
+      "kind": "night_raid",
+      "rate": 0.25,
+      "params": {
+        "mult": 2
+      },
+      "desc": "這一回合出奇襲，推力 ×{mult}；夜裡必定發動。"
     }
   },
   {
@@ -678,13 +761,15 @@
       "剛",
       "陰"
     ],
-    "signature": {
+    "tactic": {
       "name": "三十六方",
-      "desc": "三十六方一同起事，門下人人肯拚，傷了也不退。",
-      "effects": {
-        "mate_power": 0.08,
-        "condition_floor": 0.05
-      }
+      "timing": "心法",
+      "kind": "reinforce",
+      "params": {
+        "chance_pct": 0.15,
+        "strikes": 1
+      },
+      "desc": "每回合 {chance_pct} 黃巾援兵趕到，多推 {strikes} 擊。"
     }
   },
   {
@@ -700,13 +785,14 @@
       "陰",
       "快"
     ],
-    "signature": {
+    "tactic": {
       "name": "神上使",
-      "desc": "符先到、劍後到，敗勢裡也能遁開；一仗下來對神道又多悟一層。",
-      "effects": {
-        "dodge": 0.06,
-        "win_xinde_pct": 0.15
-      }
+      "timing": "心法",
+      "kind": "divine",
+      "params": {
+        "chance_pct": 0.3
+      },
+      "desc": "放手一搏失手時，{chance_pct} 神上使附身，改成成功（只在能放手一搏的仗）。"
     }
   },
   {
@@ -721,13 +807,15 @@
       "虛",
       "陽"
     ],
-    "signature": {
+    "tactic": {
       "name": "祭天",
-      "desc": "取敵首級祭天，打贏便吸一口血氣回來，殺氣也更重。",
-      "effects": {
-        "win_heal": 0.06,
-        "self_power": 0.03
-      }
+      "timing": "心法",
+      "kind": "sacrifice",
+      "params": {
+        "stack_pct": 0.05,
+        "stacks": 5
+      },
+      "desc": "每贏一回合疊一層「祭」：推力 +{stack_pct}；滿 {stacks} 層下一回合連環，然後清空。"
     }
   },
   {
@@ -743,13 +831,15 @@
       "實",
       "柔"
     ],
-    "signature": {
-      "name": "把關",
-      "desc": "一根棍子擋在城門口，少挨打，也不讓運氣亂了陣腳。",
-      "effects": {
-        "toll_cut": 0.1,
-        "luck_narrow": 0.15
-      }
+    "tactic": {
+      "name": "死守宛城",
+      "timing": "心法",
+      "kind": "hold_city",
+      "params": {
+        "guard_pct": 0.3,
+        "share_pct": 0.3
+      },
+      "desc": "固守的推力 +{guard_pct}，附帶借力：對手強攻你，他吃自己那一下的 {share_pct}。"
     }
   },
   {
@@ -764,13 +854,17 @@
       "慢",
       "柔"
     ],
-    "signature": {
-      "name": "固壘",
-      "desc": "營壘守得固，弟兄跟著你也穩；傷了也不往裡走。",
-      "effects": {
-        "injury_cut": 0.4,
-        "mate_power": 0.05
-      }
+    "tactic": {
+      "name": "把關",
+      "timing": "起手",
+      "kind": "gatekeep",
+      "rate": 1.0,
+      "rounds": 2,
+      "params": {
+        "chance_pct": 0.5,
+        "turf_pct": 0.8
+      },
+      "desc": "對手 {chance_pct} 卸勁（在自家陣營的地盤 {turf_pct}）。"
     }
   },
   {
