@@ -1560,7 +1560,7 @@
   function actNotesHtml(m, noted) {
     const notes = m.action_notes || {};
     const rows = noted.filter(([, id]) => notes[id]).map(([name, id]) => `<p><b>${esc(name)}</b>${esc(notes[id])}</p>`);
-    if (m.status && m.status.howto_entry) rows.push(HOWTO_ENTRY);
+    if (m.status && m.status.howto_entry) rows.push(m.status.renown ? HOWTO_ENTRY.replace("名望怎麼來", "名聲怎麼來") : HOWTO_ENTRY);  // 名聲開著時那一節叫「名聲」
     return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
 

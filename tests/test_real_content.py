@@ -2024,7 +2024,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert (w.storyline, w.act) == ("huangjin_line", 0)
     assert "黃巾之亂" not in quest_text(game.state, c) and "黃巾橫行" not in quest_text(game.state, c)
     goals = quest_text(game.state, c)
-    assert "投身潁川書院或曹氏莊院" in goals and "名望達到 10" in goals  # 做得到的照列
+    assert "投身潁川書院或曹氏莊院" in goals and "名聲傳開：小有名氣" in goals  # 做得到的照列（名聲：看名望的段）
     assert not any(t in goals for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
     assert "huangjin_showdown" not in [b.id for b in game.admin_battles()]
     assert "huangjin_60" not in [x.id for x in game.admin_fires()]

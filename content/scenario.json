@@ -85,7 +85,7 @@
   },
   "milestones": [
     {"id": "join_sect", "text": "投身潁川書院或曹氏莊院", "condition": {"sects": ["yingchuan_academy", "cao_manor"]}},
-    {"id": "fame_10", "text": "名望達到 10", "condition": {"min_stats": {"fame": 10}}},
+    {"id": "fame_10", "text": "名聲傳開：小有名氣", "condition": {"fame_tier": 1}},
     {"id": "beat_bocai", "text": "擊敗波才", "condition": {"world_flags_all": ["bocai_defeated"]}},
     {"id": "take_shard", "text": "取得傳國玉璽碎片", "condition": {"world_flags_all": ["shard_taken"]}},
     {"id": "crush_huangjin", "text": "平定黃巾（聲勢 10 以下）", "condition": {"world_flags_all": ["huangjin_crushed"]}},

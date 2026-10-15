@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, equipment, explore_modes, figures, rules, seal, sortie, territory, timetable
+from . import calendar, equipment, explore_modes, figures, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -522,6 +522,11 @@ def _plus(span: FameRange) -> str:
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
     """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野〔全圖開放時沒有〕、拜師學藝）。數字讀內容與設定。"""
+    return [*_fame_sources(content, season), _fame_uses(content)]
+
+
+def _fame_sources(content: Content, season: WorldState) -> list[str]:
+    """名望從哪裡來（「名望」與「名聲」兩節共用）。"""
     cfg = content.config
     spans = fame_ranges(content, season)
     lines = []
@@ -555,16 +560,81 @@ def fame_lines(content: Content, season: WorldState) -> list[str]:
             lines.append(f"擂台每天的俸：第一名 +{ring.wages[0][1]}，前 {len(ring.wages)} 名都有。")
         if ring.prizes:
             lines.append("擂台賽季末前三名：" + "、".join(f"第{'一二三四五'[i]}名 +{fame}" for i, fame in enumerate(ring.prizes)) + "。")
+    return lines
+
+
+def _fame_uses(content: Content, k: float = 1.0) -> str:
+    """名望拿來做什麼：求見與拜師的門檻乘 k（名聲開著時是這一季的倍數，rules.audience_parts、library 照同一個算法）。"""
+    cfg = content.config
+    scaled = lambda n: int(n * k + 0.5)  # noqa: E731
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:
-        uses.append(f"求見大勢人物（門檻最低 {bars[0]}、最高 {bars[-1]}；不夠的會打發你）")
+        uses.append(f"求見大勢人物（門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}；不夠的會打發你）")
     if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
         uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
     if lessons:
-        uses.append(f"有些師父要名望 {lessons[0]} 以上才肯教")
-    lines.append(f"名望拿來：{'；'.join(uses)}。")
+        uses.append(f"有些師父要名望 {scaled(lessons[0])} 以上才肯教")
+    return f"名望拿來：{'；'.join(uses)}。"
+
+
+# 玩法說明「名聲」那一節（名聲設計第九節；名聲開著時取代「名望」）。待 joy 潤
+RENOWN_INTRO = "江湖上用兩個稱號認你：一個看名望（江湖上多少人認得你），一個看善名、惡名（你是怎樣的人）。稱號寫在狀態列、玩家卡上；名望不加戰力。"
+RENOWN_FAME = "名望稱號：{rows}。到了就換；名望掉回去，稱號也跟著掉。"
+RENOWN_VIRTUE = "善惡稱號：善名比惡名高（一樣多也算）走俠，{xia}；惡名高走寇，{kou}。"
+RENOWN_DEEDS = "立功也給名望：{deeds}。"
+RENOWN_TOP = "決戰收場，兩軍各一位首功：+{n}。"
+RENOWN_VIRTUE_FROM = "善名、惡名：事件裡的選擇；散人交懸賞，照你走的路記善名或惡名。"
+RENOWN_RESONANCE = "身上的正派功法吃善名、邪派功法吃惡名：每點 +{per:g}%，最多 +{cap:g}%。"
+RENOWN_PRACTICE = "惡名高的人做壞事手熟：有些檢定每 {per} 點惡名 +1，最多 +{cap}。"
+
+
+def renown_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「名聲」那一節：兩個稱號與這一季的門檻（renown.fame_bars／virtue_bars，長的季多一句倍數）、各段給什麼、
+    名望從哪裡來（「名望」那一節的來源，加上立功與首功）與拿來做什麼（求見、拜師照倍數）、善名惡名從哪裡來、共鳴與熟練。"""
+    cfg, rcfg = content.config, content.config.renown
+    fb, vb = renown.fame_bars(content, season), renown.virtue_bars(content, season)
+    ladder = lambda titles, bars: "、".join(f"{t} {at}" for t, at in zip(titles[1:], bars))  # noqa: E731
+    lines = [
+        RENOWN_INTRO,
+        RENOWN_FAME.format(rows=ladder(renown.FAME_TITLES, fb)),
+        RENOWN_VIRTUE.format(xia=ladder(renown.VIRTUE_TITLES["俠"], vb), kou=ladder(renown.VIRTUE_TITLES["寇"], vb)),
+    ]
+    note = renown.scale_note(season, content)
+    if note:
+        lines.append(note)
+    for tier in range(1, len(fb) + 1):
+        perks = renown.fame_perks(content, tier)
+        if perks:
+            lines.append(f"{renown.FAME_TITLES[tier]}：{'；'.join(perks)}。")
+    for way in renown.PATHS:
+        for tier in range(1, len(vb) + 1):
+            perks = renown.virtue_perks(content, way, tier)
+            if perks:
+                lines.append(f"{renown.VIRTUE_TITLES[way][tier]}：{'；'.join(perks)}。")
+    if renown.on(content, "deed_fame"):
+        d = rcfg.deeds
+        deeds = []
+        if sortie.on(content) and d.get("sortie", 0) > 0:
+            deeds.append(f"{sortie.NAME}攻打贏 +{d['sortie']}")
+        if figures.challenge_on(content, season) and d.get("challenge", 0) > 0:
+            deeds.append(f"挑戰大勢人物本人打贏 +{d['challenge']}")
+        if d.get("showdown", 0) > 0:
+            rout = f"（自己那一邊大勝再 +{d['showdown_rout']}）" if d.get("showdown_rout", 0) > 0 else ""
+            deeds.append(f"決戰自己出手 +{d['showdown']}{rout}")
+        if deeds:
+            lines.append(RENOWN_DEEDS.format(deeds="、".join(deeds)))
+    if cfg.battle.top_fame > 0:
+        lines.append(RENOWN_TOP.format(n=cfg.battle.top_fame))
+    lines += _fame_sources(content, season)
+    lines.append(_fame_uses(content, renown.scale(season)))
+    lines.append(RENOWN_VIRTUE_FROM)
+    if cfg.resonance_cap > 0:
+        lines.append(RENOWN_RESONANCE.format(per=cfg.resonance_per_point * 100, cap=cfg.resonance_cap * 100))
+    evil = cfg.practice_bonus.get("evil")
+    if evil is not None and evil.cap > 0:
+        lines.append(RENOWN_PRACTICE.format(per=evil.per, cap=evil.cap))
     return lines
 
 
@@ -817,7 +887,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         *[f"- {line}" for line in stamina_lines(content, season)],
         "- 點狀態列的體力條，也看得到這幾句。",
         "",
-        *_section("名望", fame_lines(content, season)),
+        *(_section("名聲", renown_lines(content, season)) if renown.on(content) else _section("名望", fame_lines(content, season))),
         *_section("投靠與軍令", join_lines(content, season)),
         *_section("三方有什麼不同", faction_lines(content, season)),
         *(_section("地盤", territory_lines(content)) if territory.on(content) else []),

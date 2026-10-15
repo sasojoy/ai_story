@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from conftest import classic_rules, closed_map, real_content
 
-from tianxia import howto, rules, timetable
+from tianxia import howto, renown, rules, timetable
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parent.parent
@@ -169,12 +169,17 @@ def _titles(text):
     return re.findall(r"^#### (.+)$", text, re.M)
 
 
+def _fame_title(content):
+    """名聲開著時「名望」那一節換成「名聲」（名聲設計第九節；正式內容開著）。"""
+    return "名聲" if renown.on(content) else "名望"
+
+
 def test_the_howto_page_has_the_new_sections_in_season_one(on):
     titles = _titles(_war(on).howto_text())
     assert titles[0] == "這一季在打什麼"  # 為什麼要做這些：排在最前面
-    for title in ("名望", "投靠與軍令", "三方有什麼不同", "修練與煉製"):
+    for title in (_fame_title(on), "投靠與軍令", "三方有什麼不同", "修練與煉製"):
         assert title in titles
-    assert titles.index("名望") < titles.index("投靠與軍令") < titles.index("三方有什麼不同") < titles.index("情誼")
+    assert titles.index(_fame_title(on)) < titles.index("投靠與軍令") < titles.index("三方有什麼不同") < titles.index("情誼")
     assert titles.index("心得") < titles.index("修練與煉製") < titles.index("意境")
 
 
@@ -183,7 +188,7 @@ def test_the_beta_page_leaves_out_what_only_season_one_has(real):
     text = _war(real).howto_text()
     titles = _titles(text)
     assert "這一季在打什麼" not in titles and "三方有什麼不同" not in titles
-    assert {"名望", "投靠與軍令", "修練與煉製"} <= set(titles)
+    assert {_fame_title(real), "投靠與軍令", "修練與煉製"} <= set(titles)
     assert "**投靠**" in text and "**軍令**" not in text and "**晉升**" not in text and "首創的武學或意境" not in text
 
 
@@ -218,7 +223,7 @@ def _fame_spans(content, off=()):
 
 
 def _fame_section(game):
-    return re.search(r"#### 名望\n((?:- .*\n)+)", game.howto_text()).group(1)
+    return re.search(r"#### (?:名望|名聲)\n((?:- .*\n)+)", game.howto_text()).group(1)
 
 
 def test_the_fame_amounts_are_the_ones_the_content_gives(on):
@@ -306,7 +311,9 @@ def test_what_fame_is_for_follows_the_content(on):
     game = _war(on)
     bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)
-    line = _fame_section(game).splitlines()[-1]
+    line = next(x for x in _fame_section(game).splitlines() if "名望拿來" in x)
+    k = renown.scale(game.state.world)  # 名聲開著時門檻照這一季的倍數（rules.audience_parts）
+    bars, lessons = [int(b * k + 0.5) for b in bars], [int(n * k + 0.5) for n in lessons]
     assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and f"名望到 {on.config.vision_fame}，輿圖多看一站" in line
     assert f"有些師父要名望 {lessons[0]} 以上才肯教" in line
     on.config.vision_fame = 12

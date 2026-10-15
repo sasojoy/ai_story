@@ -65,6 +65,8 @@ class Condition(_Strict):
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None
+    # 名聲：名望到這一季的第幾段（renown.fame_tier，照季長倍數；1～4）。要 content 才判得出，沒給、名聲關著一律不成立
+    fame_tier: int | None = Field(default=None, ge=1, le=4)
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週

@@ -217,6 +217,16 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
             return False
         if cond.ranger_path is not None and ranger.path(state, content) != cond.ranger_path:
             return False
+    if cond.fame_tier is not None:  # 名聲：名望到這一季的第幾段（照季長倍數）；名聲關著照那一段沒乘倍數的門檻比名望（同改之前的 min_stats）
+        from . import renown  # noqa: PLC0415
+
+        if content is None:
+            return False
+        if renown.on(content):
+            if renown.fame_tier(state, content) < cond.fame_tier:
+                return False
+        elif p.stats.get("fame", 0) < content.config.renown.fame_thresholds[cond.fame_tier - 1]:
+            return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算

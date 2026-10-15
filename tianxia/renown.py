@@ -340,6 +340,67 @@ def perk_line(perks: list[str]) -> str:
     return PERKS.format(perks="；".join(perks)) if perks else ""
 
 
+# ── 狀態列、說明卡與玩家卡（設計 2.5、6.1、十一之二 1B、2C、3B）──────────────────────────────
+
+SOURCES = {  # 說明卡最底下那一行（待 joy 潤）
+    "fame": "事件的選擇；出陣攻打贏、挑戰大勢人物本人打贏、決戰自己出手（自己那一邊大勝再多）；首功、頭目戰、擂台、首創被人照著合。"
+            "檢定失手、做了丟臉的事會掉。",
+    "virtue": "事件的選擇；散人交懸賞照你走的路記善名或惡名。稱號看兩個誰高，一樣多算俠。",
+}
+SCALE_NOTE = "這一季 {days:g} 天，門檻是週末季的 {k:g} 倍。"
+
+
+def _ladder(rows: tuple[str, ...], bars: list[int], perks: Callable[[int], list[str]], state: GameState | None = None) -> list[dict]:
+    return [{"title": named(rows[t], state) if state is not None else rows[t], "at": bars[t - 1], "perks": perks(t)}
+            for t in range(1, len(bars) + 1)]
+
+
+def scale_note(world: WorldState, content: Content) -> str | None:
+    """長的季多一句門檻乘了幾倍（說明卡、玩法說明）；週末季、沒有章是 None。"""
+    from .world_state import season_length_days  # noqa: PLC0415
+
+    k = scale(world)
+    return SCALE_NOTE.format(days=season_length_days(world, content), k=k) if k > 1 else None
+
+
+def status(state: GameState, content: Content) -> dict | None:
+    """狀態列「名聲」那一行與說明卡的資料（status_data["renown"]）：短版稱號、名望與善惡各自的段、門檻、還差多少、四段各給什麼，
+    散人另有的好處、長的季的倍數、名聲從哪裡來。開關關著是 None。"""
+    if not on(content):
+        return None
+    st, w = state.player.stats, state.world
+    fb, vb = fame_bars(content, w), virtue_bars(content, w)
+    ft, vt, way = fame_tier(state, content), virtue_tier(state, content), path(state)
+    fame, value, top = st.get("fame", 0), virtue_value(state), len(fb)
+    return {
+        "short": titles(state, content),
+        "fame": {
+            "n": fame, "tier": ft, "title": FAME_TITLES[ft],
+            "at": fb[ft] if ft < top else None, "gap": fb[ft] - fame if ft < top else None,
+            "next": FAME_TITLES[ft + 1] if ft < top else None,
+            "ladder": _ladder(FAME_TITLES, fb, lambda t: fame_perks(content, t)),
+        },
+        "virtue": {
+            "good": st.get("good", 0), "evil": st.get("evil", 0), "path": way,
+            "by": content.config.stat_names.get(BOOKS[way], BOOKS[way]), "tier": vt,
+            "title": virtue_title(state, content) or "",
+            "at": vb[vt] if vt < top else None, "gap": vb[vt] - value if vt < top else None,
+            "next": named(VIRTUE_TITLES[way][vt + 1], state) if vt < top else None,
+            "ladder": {w_: _ladder(VIRTUE_TITLES[w_], vb, lambda t, w_=w_: virtue_perks(content, w_, t), state) for w_ in PATHS},
+        },
+        "sanren": sanren_perks(state, content),
+        "scale_note": scale_note(w, content),
+        "sources": SOURCES,
+    }
+
+
+def card(state: GameState, content: Content) -> dict | None:
+    """玩家卡（設計 2.5、十一之二 3B）：只寫稱號、不寫數字；path 是善惡那一個稱號的路（沒有善惡稱號是 None）。開關關著是 None。"""
+    if not on(content):
+        return None
+    return {"titles": titles(state, content), "path": path(state) if virtue_title(state, content) else None}
+
+
 # ── 跨段那一刻（設計 3.3）──────────────────────────────
 
 UP_FAME = "你的名號傳開了，江湖上漸漸有人稱你「{title}」。"
