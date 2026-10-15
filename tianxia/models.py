@@ -466,37 +466,6 @@ class LearnRule(_Strict):
     sect: str | None = None
 
 
-TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰")  # 本命戰法什麼時候發動（tianxia/tactics.py）
-TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找做法（tactics.KINDS）；數字在 TacticDef.params
-    "chase_disarm", "opening_ward", "disarm", "rally", "heavy_blow", "cleanse", "roar", "unbroken", "vanguard", "tiger",
-    "awe", "waver", "rebound_guard", "veil", "thunder", "curse", "sand", "fog", "bloodrage", "oath", "butcher", "marshal",
-    "fire", "steady", "surge", "tide", "foresight", "ward_all", "cavalry", "brutal", "night_raid", "reinforce", "divine",
-    "sacrifice", "hold_city", "gatekeep",
-)
-
-
-class TacticDef(_Strict):
-    """本命戰法（tianxia/tactics.py；企劃者 2026-10-15 認可的定案 /mnt/project-files/plan/本命戰法定案.md）：一門本命武學一個，
-    那位人物獨有、合成擲不到。在一般的仗（遊歷、出陣、探索野怪、劇情戰、挑戰本人）的回合裡發動，讓對手陷入某種狀態或改這一回合的氣勢；
-    身上練著的與同伴練著的都會發動（連招）。
-
-    - timing：起手（開打前 rounds 回合，每回合擲 rate）、出招（每回合擲 rate；prep 1 是要先蓄力一回合）、乘勢（你的招剋中對手之後才擲）、
-      心法（條件成立就一直在；rounds 寫了只在前幾回合）、騎戰（騎著馬才有）。
-    - kind：做什麼（tactics.KINDS），params 是它的數字（鍵以 _pct 結尾的是比例，卡上寫成百分比）；desc 是卡上那一句，{鍵} 換成數字。
-    - allies：仁義聚眾那一種讓哪幾位人物的戰法更常發動（人物 id）；foe_faction：火攻那一種對哪個陣營加倍。"""
-
-    name: str
-    timing: Literal[TACTIC_TIMINGS]
-    kind: Literal[TACTIC_KINDS]
-    desc: str
-    rate: float = Field(default=1.0, ge=0, le=1)
-    rounds: int = Field(default=0, ge=0)  # 起手、心法只在前幾回合；0＝每回合
-    prep: int = Field(default=0, ge=0, le=1)
-    params: dict[str, float] = Field(default_factory=dict)
-    allies: list[str] = Field(default_factory=list)
-    foe_faction: str | None = None
-
-
 class SkillDef(_Strict):
     """內容手寫的武學/內功：本命武學（歷史人物的固定武學，品質是絕學，見 martial_arts.historical_art）、
     部下用的通用武學（企劃者 2026-10-05 定上品，計畫 T5）與基礎武學（下品，開局送或在各地學，
@@ -512,9 +481,6 @@ class SkillDef(_Strict):
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
     special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
     weapon: WeaponKind | None = None  # 這門武學配哪一種兵器（兵器設計 2.3）；內功是 None。正式內容的武學一律要填（test_weapons 鎖住）
-    # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命戰法
-    traits: list[Attribute] = Field(default_factory=list, max_length=3)
-    tactic: TacticDef | None = None
 
 
 class GeneralTrait(_Strict):
@@ -1921,35 +1887,6 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
-class SignatureArtTuning(_Strict):
-    """本命武學（企劃者 2026-10-15「現在的本命絕學很爛，甚至比玩家自己合成的還差，也沒什麼特色效果」；PM 定的做法）：
-    以前本命武學照絕學的固定區間（第一成 50、第十成 120），合成擲到的絕學帶 ±10% 微調、最高 132，還可以帶 3 個一般功效與特別功效；
-    本命武學只有自己屬性一個功效、學到時第一成（威力 50，比練滿的上品 72 還低）。現在：玩家自己那一份威力 × power_scale
-    （絕學第十成 138，高頂級合成一截；同伴自己練的照舊，不然全隊又往上竄）、內容寫 3 個一般功效與一個本命戰法（SkillDef.tactic）、
-    學到時直接第 start_level 成（讀檔時情誼送過的舊角色補到這一成，signature.lift_levels，Game._drop_stale_references 叫）。"""
-
-    power_scale: float = Field(default=1.15, gt=0)
-    start_level: int = Field(default=7, ge=1, le=10)
-
-
-class TacticTuning(_Strict):
-    """一般的仗的回合與本命戰法（tianxia/tactics.py；Joy 2026-10-15 選「全部改回合制」）的數字。
-    一般的仗照舊先用單次判定擲出差距（encounter.resolve_encounter，同一顆 Game.rng），再把差距攤成一回合一回合的氣勢（span：差距
-    一個對手強度 ＝ 氣勢 span 點；50 起，到 50 ± stop 提前收場）。沒有戰法時每一回合加起來剛好回到那個差距，結果一個字都不變；
-    戰法在回合裡改氣勢（讓對手打空、出不了手、被剋、連環……），收場的氣勢換回差距再照門檻判結果。
-    strike 是對手一回合打過來的氣勢、counter 是一回合剋中的那一下，戰法的效果都照這兩個數換算（量法見 scripts/measure_tactics.py）。"""
-
-    span: float = Field(default=40.0, gt=0)  # 差距一個對手強度換成幾點氣勢
-    stop: float = Field(default=40.0, gt=0)  # 氣勢離 50 這麼遠就提前收場（90／10）
-    strike: float = Field(default=0.8, ge=0)  # 對手一回合打過來的氣勢（定身、打空、借力、壓低他的推力都照它算）
-    counter: float = Field(default=0.6, ge=0)  # 一回合剋中的那一下
-    wobble: float = Field(default=3.0, ge=0)  # 回合之間的起伏（只是演出，加起來照舊回到差距）
-    dot: float = Field(default=0.08, ge=0)  # 對手每掉一成氣血池的百分之一，氣勢多幾點（焚身、風沙、血創、落雷）
-    self_hit: float = Field(default=0.3, ge=0, le=1)  # 失神的那一回合打到自己的機會
-    prefer_guard: float = Field(default=0.5, ge=0, le=1)  # 帶著固守才發動的戰法時，自動出招改出固守的機會
-    band: float = Field(default=12.0, ge=0)  # 沒有戰法時中途的氣勢不越過 50 ± (stop − band)（不然還沒打完就提前收場，結果會變）
-
-
 class RiseTuning(_Strict):
     """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
     tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
@@ -2132,8 +2069,6 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
-    signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
-    tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
