@@ -1405,7 +1405,7 @@ class ArenaTuning(_Strict):
     （duel.push_of、harm_of、gamble_roll），推力、挨打、放手一搏的數字都讀 DuelTuning；這裡只放擂台自己的。全部【預設】，試玩後再調。
 
     - reach：只能挑排在自己前面幾名以內的人（Joy「距離自己三名內」）。per_day：一個人一天挑幾次（不花體力；現實時間換日，同回體丹）。
-    - pair_cooldown_seconds：同一個人挑同一個人的冷卻（世界秒，比照截殺）。defend_per_day：一個人一個遊戲日最多被挑幾場（守擂的保護）。
+    - pair_cooldown_seconds：同一個人挑同一個人的冷卻（世界秒，比照截殺）。defend_per_day：舊設定的「一天最多被挑幾場」，Joy 2026-10-15 拿掉（「一天挑戰6次鎖死可能要拔」），留著讓舊設定讀得進來，不再有作用。
     - rounds：一場幾回合（同奪璽單挑）。proxy_power：分身出招照三招份量的這個次方加權（同奪璽單挑的代打）。
     - streak_news：連勝到這個數的倍數上天下大事。
     - highlight_rate：一場裡最有戲的放手一搏成了、成功率不超過這個數就上天下大事，那個人名望 +highlight_fame（同決戰）。
@@ -1417,7 +1417,7 @@ class ArenaTuning(_Strict):
     reach: int = Field(default=3, ge=1)
     per_day: int = Field(default=10, ge=1)
     pair_cooldown_seconds: float = Field(default=10800, ge=0)
-    defend_per_day: int = Field(default=6, ge=1)
+    defend_per_day: int = Field(default=0, ge=0)
     rounds: int = Field(default=5, ge=1)
     proxy_power: float = Field(default=4, ge=0)
     streak_news: int = Field(default=5, ge=1)

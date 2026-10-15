@@ -342,7 +342,7 @@ class ArenaEntry(BaseModel):
     draws: int = 0
     streak: int = 0  # 連勝（挑與守都算，沒贏就歸零）
     best_streak: int = 0
-    defended: list[int] = Field(default_factory=list)  # [遊戲日, 這一天被挑了幾場]（defend_per_day）
+    defended: list[int] = Field(default_factory=list)  # 舊存檔的 [遊戲日, 被挑了幾場]；被挑上限 2026-10-15 拿掉，不再寫也不再讀
     inbox: list[ArenaReport] = Field(default_factory=list)  # 被挑了、他還沒看到的
     wages: list[list[int]] = Field(default_factory=list)  # [現實的第幾天, 那一刻的名次]：換日時記（arena.roll_day），本人同步時領
     place: int = 0  # 季末的名次（1～3）；0＝沒進前三

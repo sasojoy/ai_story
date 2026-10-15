@@ -192,7 +192,7 @@ def test_yielding_is_a_loss_and_ranks_stay(ring):
     assert arena.KEPT.format(rank=2) in game.state.battles[0].changes
 
 
-def test_the_pair_cooldown_and_the_daily_protection(ring):
+def test_the_pair_cooldown_and_no_daily_protection(ring):
     content, world = ring
     cfg = content.config.arena
     _join(content, world, "乙")
@@ -203,10 +203,9 @@ def test_the_pair_cooldown_and_the_daily_protection(ring):
     assert not option.enabled and arena.COOLING in option.label
     w = game.state.world
     foe = arena.entry_of(w, "乙")
-    assert arena.defended_today(foe, arena.day_of(w)) == 1
     w.arena_pairs.clear()
-    foe.defended = [arena.day_of(w), cfg.defend_per_day]
-    assert arena.challenge_problem(w, "甲", foe, cfg, 5) == arena.PROTECTED.format(n=cfg.defend_per_day)
+    foe.defended = [arena.day_of(w), 99]  # 舊存檔記的被挑場數不再擋人
+    assert arena.challenge_problem(w, "甲", foe, cfg, 5) is None
 
 
 def test_the_daily_count_resets_at_midnight(ring):

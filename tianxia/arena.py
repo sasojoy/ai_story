@@ -49,7 +49,6 @@ JOIN_FIRST = "先報名守擂"
 BEHIND = "排在你後面"
 OUT_OF_REACH = "只能挑前 {n} 名內的人"
 COOLING = "剛挑過，過一陣子再來"
-PROTECTED = "今天已守滿 {n} 場"
 SPENT = "今天的 {n} 次挑完了"
 LEFT = "今天還能挑 {n} 次"
 NOBODY = "你前面沒有人了：你就是天下第一。"
@@ -116,10 +115,6 @@ def pair_key(me: str, foe: str) -> str:
     return f"{name_key(me)}>{name_key(foe)}"
 
 
-def defended_today(entry: ArenaEntry, day: int) -> int:
-    return entry.defended[1] if len(entry.defended) == 2 and entry.defended[0] == day else 0
-
-
 def day_of(world: WorldState) -> int:
     return int(world.time // DAY)
 
@@ -137,7 +132,7 @@ def spend(state: GameState, today: int) -> None:
 
 
 def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTuning, left: int) -> str | None:
-    """挑不挑得了這個人：先報名、他要排在你前面 reach 名以內、今天還有次數、冷卻、他今天被挑滿了沒有。None＝可以。"""
+    """挑不挑得了這個人：先報名、他要排在你前面 reach 名以內、今天還有次數、冷卻。None＝可以（守擂的人一天被挑幾場不設限，Joy 2026-10-15）。"""
     mine = entry_of(world, me)
     if mine is None:
         return JOIN_FIRST
@@ -150,16 +145,12 @@ def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTun
     last = world.arena_pairs.get(pair_key(me, foe.name))
     if last is not None and 0 <= world.time - last < cfg.pair_cooldown_seconds:
         return COOLING
-    if defended_today(foe, day_of(world)) >= cfg.defend_per_day:
-        return PROTECTED.format(n=cfg.defend_per_day)
     return None
 
 
 def note_challenge(world: WorldState, me: str, foe: ArenaEntry) -> None:
-    """開打那一刻記冷卻與他今天被挑了幾場（同截殺：開打就算，認輸、沒打完也算）。"""
+    """開打那一刻記冷卻（同截殺：開打就算，認輸、沒打完也算）。"""
     world.arena_pairs[pair_key(me, foe.name)] = world.time
-    day = day_of(world)
-    foe.defended = [day, defended_today(foe, day) + 1]
 
 
 def challengers(world: WorldState, content: Content, me: str, left: int) -> list[tuple[ArenaEntry, str | None]]:
