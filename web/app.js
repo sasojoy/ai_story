@@ -2899,17 +2899,18 @@
   function arenaFightHtml(f) {
     const pct = (a) => Math.max(0, Math.min(100, a.cap ? (a.hp / a.cap) * 100 : 0));
     const side = (a, cls) => `<div class="ring-side ${cls}"><b>${esc(a.name)}</b><div class="hp"><i style="width:${pct(a).toFixed(1)}%"></i></div><small>${a.hp | 0}／${a.cap | 0}</small></div>`;
-    const moves = f.moves.map((m) => `<button class="btn ring-move" data-act="choose" data-id="${esc(m.id)}"><b>${esc(m.move)}</b><small>${esc(m.label.replace(m.move, ""))}</small></button>`).join("");
+    const moves = f.moves.map((m) => `<button class="btn ring-move"${m.enabled === false ? " disabled" : ` data-act="choose" data-id="${esc(m.id)}"`}><b>${esc(m.move)}</b><small>${esc(m.label.replace(m.move, ""))}</small></button>`).join("");
     const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map((l) => `<li>${esc(l)}</li>`).join("")}</ol>` : "";
     return `<div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
       <div class="ring-sides">${side(f.me, "mine")}<span class="vs">對</span>${side(f.foe_hp, "theirs")}</div>
       <div class="ring-edge"><span>${esc(f.edge_words)}</span><div class="bar"><i style="left:${Math.max(0, Math.min(100, f.edge | 0))}%"></i></div></div>
       ${f.arts.length ? `<p class="ring-arts">他守擂用的是${esc(f.arts.join("、"))}。</p>` : ""}
+      ${f.status ? `<p class="ring-status">${esc(f.status)}</p>` : ""}
       <p class="ring-tell">${esc(f.tell)}<small>（${esc(f.tell_note)}）</small></p>
       <p class="ring-howto">${esc(f.howto)}</p>
       <div class="ring-moves">${moves}</div>
-      <form class="free ring-free" id="arena-free" data-op="${esc(f.gamble.op)}"><input class="input" name="text" maxlength="20" placeholder="${esc(f.gamble.prompt)}"><button class="btn primary small" type="submit">送出</button></form>
-      <p class="free-note">${esc(f.gamble.note)}</p>
+      ${f.gamble.locked ? `<p class="free-note">${esc(f.gamble.locked)}</p>` : `<form class="free ring-free" id="arena-free" data-op="${esc(f.gamble.op)}"><input class="input" name="text" maxlength="20" placeholder="${esc(f.gamble.prompt)}"><button class="btn primary small" type="submit">送出</button></form>
+      <p class="free-note">${esc(f.gamble.note)}</p>`}
       ${log}`;
   }
 

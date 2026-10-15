@@ -274,3 +274,24 @@ def test_the_arena_snapshots_the_kit_and_both_sides_fire(ring):
     msgs, _game = _as(content, world, "甲", go)
     text = "\n".join(msgs)
     assert text.count("〔先登斬將〕") >= 2  # 兩邊各發一次
+
+
+def test_the_arena_page_greys_out_a_locked_move_and_shows_the_status(ring):
+    from tianxia import shopview
+
+    content, world = ring
+    for name in ("乙", "甲"):
+        _as(content, world, name, lambda g: g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back"))
+
+    def go(g):
+        g.choose("act:arena")
+        g.choose("arena:fight:乙")
+        g.state.player.arena.bout.a.status.states["卸勁"] = 1
+        view = shopview._fight_view(g.state, g.content)
+        strong = next(m for m in view["moves"] if m["move"] == "強攻")
+        assert strong["enabled"] is False and "卸勁中" in strong["label"]
+        assert "卸勁" in view["status"]
+        option = next(o for o in g.options() if o.id == "arena:強攻")
+        assert not option.enabled and "卸勁中" in option.label
+        return []
+    _as(content, world, "甲", go)
