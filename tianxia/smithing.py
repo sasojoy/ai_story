@@ -192,7 +192,7 @@ def forge(
     attribute = attribute_with(content, tianji, kind, main, aux)
     odds = forge_odds(state, content, world, kind, main, aux)
     setting = setting_points(state, content, attribute, slot)
-    secret = forge_secrets.match(content, tianji, slot, kind, main, aux)  # 隱藏配方優先於上線前登記的舊名字（10.1）
+    secret = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world)  # 隱藏配方優先於上線前登記的舊名字（10.1）
     find, first = None, False
     if secret is not None:
         find, first = world.claim_gear_find(forge_secrets.key(secret), forge_secrets.new_find(state, secret, kind, attribute, tier))
@@ -474,7 +474,7 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
 
     tianji, slot = world.read().tianji, slot_of(kind)
     known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
-    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
+    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world) if known else None
     divine = recipe is not None and recipe.divine
     tier = tier_of(content, main)
     problem = forge_problem(state, content, kind, main, aux)

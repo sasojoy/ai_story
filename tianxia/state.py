@@ -864,6 +864,9 @@ class WorldState(BaseModel):
     # 這一季的天機（SharedWorldState.tianji 在開季、換季時蓋進來，sqlite_world.open_season／next_season）：週初掛單的重賞亂數用（6.4），
     # bounties.issue 只拿得到季、讀不到全服那一列。功能上線前開的季是 0
     tianji: int = 0
+    # 素材與經濟（企劃者 2026-10-15）：開季時照 Config.forge_secrets 蓋的章（world_state.stamp_season）；舊季沒有這兩欄＝False（照舊）
+    forge_divine_per_kind: bool = False  # 神器配方每種兵器一季最多一條（forge_secrets.active）
+    forge_split_clues: bool = False  # 神器配方的線索拆三片（forge_secrets.hear、hear_smith、view）
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人

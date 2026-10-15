@@ -9,14 +9,14 @@
 每季照天機從池子裡照「欄位:組」挑 Config.forge_secrets.per_season 條（全服同一批，換季換一批；這一欄的裝備關著就不挑）。認形狀不認素材 id；
 主輔不交換；比對不擲骰。打中了的全服登記在 gear_recipes（鍵「鑄|配方 id」，名字欄寫鍵本身、不佔名字空間）。口訣三句：0 說書、1 鐵匠、2 殘譜；
 玩家聽過的、打中過的記在鑄譜（PlayerState.forge_manual），只記這一季的。擲骰一律用自己的亂數（secret_recipes.roll），不動 Game.rng。
-只 import models、state、equipment、weapons、armor、secret_recipes、world_state（型別）；smithing、engine、content 反過來用它。"""
+只 import models、state、calendar、equipment、weapons、armor、secret_recipes、world_state（型別）；smithing、engine、content 反過來用它。"""
 from __future__ import annotations
 
 import hashlib
 
-from . import armor, equipment, secret_recipes, weapons
+from . import armor, calendar, equipment, secret_recipes, weapons
 from .models import WEAPON_KINDS, Content, ForgeSecret, ForgeSide, Material
-from .state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, GearFind, Manual, PlayerState
+from .state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, GearFind, Manual, PlayerState, WorldState
 from .world_state import WorldStateStore
 
 PREFIX = "鑄|"  # gear_recipes 裡隱藏配方那幾列的鍵開頭（7.1）：不跟「融|」「合|」「兼|」「秘|」「兵|」「鎧|」撞；state.GearFind.id 用同一個字
@@ -47,14 +47,25 @@ def fits(side: ForgeSide, material: Material) -> bool:
     return material.attribute == side.attribute and material.tier in covers(side)
 
 
-def active(content: Content, tianji: int) -> list[ForgeSecret]:
-    """這一季（天機）的隱藏配方：照 per_season 每一組挑幾條，同一季全服同一批、換季換一批；這一欄的裝備關著（equipment.on）不挑。"""
+def active(content: Content, tianji: int, season: WorldState | None = None) -> list[ForgeSecret]:
+    """這一季（天機）的隱藏配方：照 per_season 每一組挑幾條，同一季全服同一批、換季換一批；這一欄的裝備關著（equipment.on）不挑。
+    這一季蓋了 forge_divine_per_kind 的章（素材與經濟設計第二節，企劃者 2026-10-15）：兵器的神器配方同一種兵器只挑一條——
+    第一季的章（calendar.season_one_on）池子裡的每一種都挑一條（練什麼武學都有配得上的神器可以追）；其餘的季照天機排好，
+    挑 per_season 條、跳過已經挑到的種類（池子的種類不夠就少挑）。防具照舊。season 是 None、沒蓋章（正在跑的季）照舊。"""
     out: list[ForgeSecret] = []
+    per_kind = season is not None and season.forge_divine_per_kind
     for group, count in content.config.forge_secrets.per_season.items():
         if count <= 0 or not equipment.on(content, group.partition(":")[0]):
             continue
         pool = sorted((r for r in content.forge_secrets.values() if group_of(r) == group), key=lambda r: _rank(tianji, r.id))
-        out += pool[:count]
+        if per_kind and group == "weapon:divine":
+            first: dict[str | None, ForgeSecret] = {}
+            for recipe in pool:
+                first.setdefault(recipe.kind, recipe)
+            picked = list(first.values())
+            out += picked if calendar.season_one_on(season, content) else picked[:count]
+        else:
+            out += pool[:count]
     return out
 
 
@@ -72,13 +83,15 @@ def owned_gear(p: PlayerState) -> list[Equipment]:
     return [item for item in (p.weapon, p.armor, *p.rack, *p.held_gear) if item is not None]
 
 
-def match(content: Content, tianji: int, slot: str, kind: str | None, main: str, aux: str) -> ForgeSecret | None:
-    """這一爐合得上這一季的哪一條隱藏配方（3.1）：欄位、兵器種類（防具不看）、主料、輔料各自對得上形狀；主輔不交換。不擲骰。"""
+def match(content: Content, tianji: int, slot: str, kind: str | None, main: str, aux: str,
+          season: WorldState | None = None) -> ForgeSecret | None:
+    """這一爐合得上這一季的哪一條隱藏配方（3.1）：欄位、兵器種類（防具不看）、主料、輔料各自對得上形狀；主輔不交換。不擲骰。
+    season：這一季（照它的章挑配方，active）。"""
     if not content.forge_secrets or main not in content.materials or aux not in content.materials:
         return None
     m, a = content.materials[main], content.materials[aux]
     want = kind if slot == "weapon" else None
-    return next((r for r in active(content, tianji) if r.slot == slot and r.kind == want and fits(r.main, m) and fits(r.aux, a)), None)
+    return next((r for r in active(content, tianji, season) if r.slot == slot and r.kind == want and fits(r.main, m) and fits(r.aux, a)), None)
 
 
 # ── 名器與首位發現者（4.2、7.1、7.2）──────────────────────────
@@ -227,7 +240,7 @@ def divine_book(records: list[tuple[int, GearFind]], extra: list[tuple[int, str]
 
 def hear(state: GameState, content: Content, tianji: int, source: int, seed: str) -> str | None:
     """說書與殘譜：照 secret_recipes.hear_from 挑這一季一條隱藏配方的那一版口訣，記進鑄譜，回那一句；這一季沒有隱藏配方回 None。"""
-    recipes = active(content, tianji)
+    recipes = active(content, tianji, state.world)
     if not recipes:
         return None
     return secret_recipes.hear_from(recipes, manual(state, tianji), source, seed)
@@ -238,10 +251,10 @@ def towns(content: Content) -> list[str]:
     return [lid for lid, loc in content.locations.items() if equipment.TOWN_TAG in (loc.tags or [])]
 
 
-def smith_clue(content: Content, tianji: int, location: str) -> ForgeSecret | None:
+def smith_clue(content: Content, tianji: int, location: str, season: WorldState | None = None) -> ForgeSecret | None:
     """這家鐵匠鋪這一季知道哪一條（6.2）：城鎮與這一季的隱藏配方各自照「天機|id」雜湊排好，第 i 家知道第 i mod 條數條；城鎮比條數多時
     每一條至少有一家知道，想聽別條就要換一家。不是城鎮、這一季沒有隱藏配方是 None。"""
-    recipes = sorted(active(content, tianji), key=lambda r: _rank(tianji, r.id))
+    recipes = sorted(active(content, tianji, season), key=lambda r: _rank(tianji, r.id))
     places = sorted(towns(content), key=lambda lid: hashlib.sha256(f"{tianji}|{lid}|鐵匠".encode("utf-8")).digest())
     if not recipes or location not in places:
         return None
@@ -250,7 +263,7 @@ def smith_clue(content: Content, tianji: int, location: str) -> ForgeSecret | No
 
 def hear_smith(state: GameState, content: Content, tianji: int) -> str | None:
     """鐵匠順口（6.2）：這家知道的那一句（鐵匠版）直接記進鑄譜（不走 hear 的挑法，同人物順口）；已經聽過那一句就不再說，回 None。"""
-    recipe = smith_clue(content, tianji, state.player.location)
+    recipe = smith_clue(content, tianji, state.player.location, state.world)
     if recipe is None or not secret_recipes.note(manual(state, tianji), recipe, SMITH):
         return None
     return recipe.clues[SMITH]
@@ -272,7 +285,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
     tianji = world.read().tianji
     book = state.player.forge_manual if state.player.forge_manual.tianji == tianji else Manual(tianji=tianji)
     rows = []
-    for recipe in active(content, tianji):
+    for recipe in active(content, tianji, state.world):
         heard = book.heard.get(recipe.id, [])
         solved = recipe.id in book.solved
         if heard or solved:
@@ -283,7 +296,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
 
 def solved_name(state: GameState, content: Content, tianji: int, slot: str, kind: str | None, main: str, aux: str) -> str | None:
     """開爐鈕上寫不寫名字（6.4）：這一爐合得上這一季的隱藏配方、而且**自己的**鑄譜上打中過它，才回它的名字；其餘 None（不露）。"""
-    recipe = match(content, tianji, slot, kind, main, aux)
+    recipe = match(content, tianji, slot, kind, main, aux, state.world)
     book = state.player.forge_manual
     if recipe is None or book.tianji != tianji or recipe.id not in book.solved:
         return None

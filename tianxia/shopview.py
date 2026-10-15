@@ -284,7 +284,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     tianji = world.read().tianji
     tier = smithing.tier_of(content, main)
     known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
-    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux) if known else None
+    recipe = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world) if known else None
     divine = recipe is not None and recipe.divine
     odds = None if divine else smithing.forge_odds(state, content, world, kind, main, aux)
     price = smithing.price(content, tier, slot, state)
