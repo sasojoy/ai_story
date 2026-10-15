@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
+    allied, annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
@@ -629,6 +629,8 @@ class Game:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
             p.pending_faction = None
+        if p.pending_ally and p.pending_ally not in {f.id for f in c.scenario.factions}:
+            p.pending_ally = None
         if p.pending_defect and p.pending_defect not in {f.id for f in c.scenario.factions}:
             p.pending_defect = None
         lost_place = p.location not in c.locations
@@ -1007,10 +1009,14 @@ class Game:
             opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
+        if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
+            return self._ally_options(cancel=False)
         if s.player.pending_faction:
             faction = self.content.scenario.faction(s.player.pending_faction)
+            if allied.on(c, s.world) and faction.allies and s.player.pending_ally is None:  # 投靠豪強：先挑依附哪一軍
+                return self._ally_options(cancel=True)
             return [
-                Option(id="faction:confirm", label=f"確定投靠{faction.name}"),
+                Option(id="faction:confirm", label=f"確定投靠{allied.label(c, faction.id, s.player.pending_ally)}"),
                 Option(id="faction:cancel", label="再想想"),
             ]
         if s.player.pending_defect:
@@ -1828,7 +1834,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
-                msgs += bounties.drop_stranded(self.state, self.content, self.state.player.faction)
+                msgs += bounties.drop_stranded(self.state, self.content, self._side())
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
@@ -2059,9 +2065,11 @@ class Game:
             return f"{explore_modes.NAMES.get(arg, '探索')}・{c.locations[s.player.location].name}"
         if kind == "faction":
             if arg == "confirm":
-                return f"投靠{self.content.scenario.faction(s.player.pending_faction).name}"
+                return f"投靠{allied.label(c, s.player.pending_faction, s.player.pending_ally)}"
             if arg == "cancel":
                 return "再想想"
+            if arg.startswith("ally:"):  # 豪強分屬兩軍：挑依附哪一軍
+                return f"依附{c.scenario.faction_name(arg[5:], arg[5:])}"
             return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
@@ -3748,26 +3756,54 @@ class Game:
             annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
                         figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
 
+    def _side(self) -> str | None:
+        """敵我的一個讀法（allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
+        return allied.side_of(self.state, self.content)
+
+    def _ally_options(self, cancel: bool) -> list[Option]:
+        """選邊的兩顆（豪強分屬兩軍；照劇本 allies 的順序，鈕上寫那一軍此刻幾人，人數照 allied.side_totals）；
+        投靠的確認畫面上多「再想想」，拜入門派之後那兩顆不能略過。"""
+        sides = allied.side_totals(self.world.roll_counts())
+        faction = self.state.player.pending_faction or self.state.player.faction
+        opts = [
+            Option(id=f"faction:ally:{a.id}", label=allied.ALLY_BUTTON.format(ally=a.name, n=sides.get(a.id, 0)))
+            for a in allied.allies_of(self.content, faction)
+        ]
+        return opts + ([Option(id="faction:cancel", label="再想想")] if cancel else [])
+
     def _faction_step(self, arg: str) -> list[str]:
         """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
-        不能改投、三方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。"""
+        不能改投、各方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。
+        豪強分屬兩軍的季（allied.on），投靠豪強中間多一步挑依附哪一軍（ally:<id>）；拜入要依附的門派之後（allied.needs_ally）
+        也按 ally:<id> 挑，挑了就算投靠完成。"""
         p = self.state.player
         if arg == "cancel":
-            p.pending_faction = None
+            p.pending_faction = p.pending_ally = None
             return ["你決定再想想。"]
+        kind, _, ally_id = arg.partition(":")
+        if kind == "ally":
+            ally = self.content.scenario.faction(ally_id)
+            if p.pending_faction is None:  # 拜入門派之後挑一邊（選單只在 needs_ally 時給這兩顆）
+                p.ally = ally.id
+                return [allied.ALLY_DONE.format(ally=ally.name)]
+            p.pending_ally = ally.id
+            prompt = self._faction_prompt(self.content.scenario.faction(p.pending_faction))
+            self._hide(prompt)
+            return [prompt]
         if arg == "confirm":
             faction = self.content.scenario.faction(p.pending_faction)
-            p.pending_faction = None
+            ally, p.pending_faction, p.pending_ally = p.pending_ally, None, None
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
+            p.ally = ally if allied.on(self.content, self.state.world) else None
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
-            msgs = [f"你投靠了{faction.name}。"]
+            msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
             if season_one(self.content, self.state.world):
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
         faction = self.content.scenario.faction(arg)
-        p.pending_faction = faction.id
+        p.pending_faction, p.pending_ally = faction.id, None
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
@@ -3805,26 +3841,35 @@ class Game:
         return defection.targets_here(self.state, self.content, self.world.get_battle())
 
     def _faction_prompt(self, faction) -> str:
-        held = bounties.stranded(self.state, self.content, faction.id)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
+        p = self.state.player
+        counts = self.faction_counts_text()
+        if allied.on(self.content, self.state.world) and faction.allies and p.pending_ally is None:  # 豪強分屬兩軍：先挑一邊
+            return allied.ALLY_PICK.format(counts=counts)
+        side = p.pending_ally or faction.id  # 依附的豪強接的是那一軍的懸賞
+        held = bounties.stranded(self.state, self.content, side)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
         lost = bounties.STRANDED_JOIN.format(n=len(held)) if held else ""
-        return f"投靠後這一季不能改投（叛投另論）。{lost}{self.faction_counts_text()}。確定投靠{faction.name}？"
+        return f"投靠後這一季不能改投（叛投另論）。{lost}{counts}。確定投靠{allied.label(self.content, faction.id, p.pending_ally)}？"
 
     def faction_counts_text(self) -> str:
-        """「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」：照全服投靠名冊（真人與假人一起算）。"""
-        counts = self.world.faction_counts()
-        return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in self.content.scenario.factions)
+        """名冊那一句（allied.roster_text）：「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」，照全服投靠名冊（真人與假人一起算）；
+        豪強分屬兩軍的季照兩軍寫、括號寫豪強（「目前官軍 12 人（其中豪強 3 人）、黃巾軍 9 人」）。"""
+        return allied.roster_text(self.content, self.state.world, self.world.roll_counts())
 
     def _roster_players(self) -> int:
         """這一季投靠了陣營的人數（全服投靠名冊，真人與假人一樣算）：跟 world.advance_world_state 查來縮放割據漲速的是
         同一個算式，割據的說明（rules.chaos_note）才說得準現在是在漲還是不動（FB-065 M1）。每次畫面現查，只是讀。"""
-        return sum(self.world.faction_counts().values())
+        return sum(self.world.roll_counts().values())
 
     def _record_faction(self) -> None:
-        """把自己的陣營記進全服投靠名冊（陣營人數看這份）；已經記過就不再寫。choose() 結束時
-        與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。"""
+        """把自己的陣營記進全服投靠名冊（陣營人數看這份；鍵是 allied.roll_key，依附的豪強寫「haoqiang@guan」）；已經記過同一個鍵
+        就不再寫。choose() 結束時與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。
+        還沒挑依附哪一邊（allied.needs_ally，拜入曹氏莊院那一下）先不記。"""
         p = self.state.player
-        if p.faction is not None and self.world.faction_of(p.name) != p.faction:
-            self.world.record_faction(p.name, p.faction)
+        if p.faction is None or allied.needs_ally(self.state, self.content):
+            return
+        key = allied.roll_key(p.faction, p.ally if allied.on(self.content, self.state.world) else None)
+        if self.world.roll_of(p.name) != key:
+            self.world.record_faction(p.name, key)
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
@@ -6864,6 +6909,7 @@ class Game:
             and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
             and not s.player.picking_donate  # 軍需官那一串開著：同馬市
             and not s.player.picking_arena and s.player.arena is None  # 擂台開著、打到一半：同上
+            and not allied.needs_ally(s, self.content)  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑
         )
 
     def seclusion_refusal(self) -> str | None:
@@ -9828,7 +9874,7 @@ class Game:
             why, promo = self._summons_plan(target)
         else:
             why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
-        parts = [c.scenario.faction(p.faction).name if p.faction else "散人"]
+        parts = [allied.label_of(s, c) if p.faction else "散人"]
         title = ranks.title(c, s) or ranger.title(c, s)
         if title:
             parts.append(title)
@@ -9895,6 +9941,8 @@ class Game:
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
             # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）
             return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{last}"
+        if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）
+            return f"**依附哪一邊**\n\n{allied.ALLY_AFTER_SECT.format(counts=self.faction_counts_text())}"
         if s.player.pending_faction:
             faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"

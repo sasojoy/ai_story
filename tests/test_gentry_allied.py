@@ -141,3 +141,85 @@ def test_allies_must_be_real_other_factions(wk):
     hao.allies = ["haoqiang", "huang"]
     with pytest.raises(ContentError, match="allies"):
         validate(wk)
+
+
+# ── Task 2：投靠多一步選邊、拜入之後選邊、名冊與名號 ─────────────────────
+
+
+def _ids(game):
+    return [o.id for o in game.options() if o.enabled]
+
+
+def test_join_gentry_picks_a_side_then_confirms(wk):
+    game = _game(wk, at="zhuo_militia_hall")
+    game.choose("faction:haoqiang")
+    assert _ids(game) == ["faction:ally:guan", "faction:ally:huang", "faction:cancel"]
+    assert "依附官軍（目前 0 人）" in [o.label for o in game.options()]
+    game.choose("faction:ally:guan")
+    assert [o.label for o in game.options()][0] == "確定投靠地方豪強（依附官軍）"
+    game.choose("faction:confirm")
+    p = game.state.player
+    assert (p.faction, p.ally, p.pending_faction, p.pending_ally) == ("haoqiang", "guan", None, None)
+    assert game.world.roll_of("甲") == "haoqiang@guan"
+
+
+def test_cancel_clears_the_pick(wk):
+    game = _game(wk, at="zhuo_militia_hall")
+    game.choose("faction:haoqiang")
+    game.choose("faction:ally:huang")
+    assert game.state.player.pending_ally == "huang"
+    game.choose("faction:cancel")
+    p = game.state.player
+    assert (p.faction, p.pending_faction, p.pending_ally) == (None, None, None)
+
+
+def test_join_army_has_no_side_step(wk):
+    game = _game(wk, at="changshe")
+    game.choose("faction:guan")
+    assert _ids(game) == ["faction:confirm", "faction:cancel"]
+
+
+def test_sect_join_waits_for_a_side(wk):
+    from tianxia import atlas
+
+    game = _game(wk, faction="haoqiang", at="cao_manor")  # 拜入曹氏莊院那一下：陣營有了、還沒挑一邊
+    assert _ids(game) == ["faction:ally:guan", "faction:ally:huang"]
+    block = atlas.travel_block(game.state, wk)
+    assert block is not None and block.to_jianghu
+    game._record_faction()
+    assert game.world.roll_of("甲") is None
+    game.choose("faction:ally:huang")
+    assert game.state.player.ally == "huang"
+    assert game.world.roll_of("甲") == "haoqiang@huang"
+    assert "act:explore" in _ids(game)
+
+
+def test_roster_text(wk):
+    game = _game(wk)
+    for name, key in [("a", "guan"), ("b", "haoqiang@guan"), ("c", "huang"), ("d", "huang")]:
+        game.world.record_faction(name, key)
+    assert game.faction_counts_text() == "目前官軍 2 人（其中豪強 1 人）、黃巾軍 2 人"
+
+
+def test_old_rules_roster_text():
+    off = _old_rules()
+    game = _game(off, name="乙")
+    game.world.record_faction("a", "haoqiang")
+    assert game.faction_counts_text() == "目前官軍 0 人、黃巾軍 0 人、地方豪強 1 人"
+
+
+def test_affiliation_names_the_side(wk):
+    from tianxia import social
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    assert social.affiliation(game.state, wk).startswith("地方豪強（依附官軍）")
+
+
+def test_allied_gentry_hears_the_side_news(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    rules.add_rumor(game.state, "官軍的軍情", layer="faction", faction="guan")
+    rules.add_rumor(game.state, "豪強的軍情", layer="faction", faction="haoqiang")
+    rules.add_rumor(game.state, "黃巾的軍情", layer="faction", faction="huang")
+    ears = rules.ears_of(game.state, wk)
+    heard = [r.text for r in game.state.world.rumors if rules.audible(r, ears)]
+    assert "官軍的軍情" in heard and "豪強的軍情" in heard and "黃巾的軍情" not in heard

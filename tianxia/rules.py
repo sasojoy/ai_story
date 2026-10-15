@@ -374,6 +374,7 @@ class Ears(NamedTuple):
     layered: bool  # 第一季的規則開著：地方傳聞照大區與傳聞板過濾。關著（beta）只看陣營與名號，跟以前一模一樣
     regions: frozenset[str]  # 此刻人在哪些大區（here_regions）
     since: float  # 傳聞板上最舊的那一刻（世界秒）：比它早的地方傳聞已經撤下了
+    ally: str | None = None  # 豪強分屬兩軍：依附的那一軍（陣營軍情也聽得到，軍令發令與湊滿額度的傳聞才收得到）；其他人 None
 
 
 def recent_seconds(days: float, content: Content, world: WorldState) -> float:
@@ -398,7 +399,9 @@ def ears_of(state: GameState, content: Content) -> Ears:
     if not season_one(content, w):
         return Ears(faction=p.faction, name=p.name, layered=False, regions=frozenset(), since=0.0)
     since = w.time - recent_seconds(content.config.rumor_board_days, content, w)
-    return Ears(faction=p.faction, name=p.name, layered=True, regions=here_regions(state, content), since=since)
+    side = side_of(state, content)
+    return Ears(faction=p.faction, name=p.name, layered=True, regions=here_regions(state, content), since=since,
+                ally=side if side != p.faction else None)
 
 
 def audible(rumor: Rumor, ears: Ears) -> bool:
@@ -409,7 +412,7 @@ def audible(rumor: Rumor, ears: Ears) -> bool:
       人人都聽得到，但一樣只留板上的。
     - 陣營軍情一定要寫是哪個陣營、個人線索一定要寫是誰（layer 與欄位對不上時 fail closed：沒有人聽得到）。
     開關關著（beta）時只看陣營與名號，跟以前的 can_hear 一模一樣。"""
-    if rumor.faction not in (None, ears.faction) or rumor.character not in (None, ears.name):
+    if rumor.faction not in (None, ears.faction, ears.ally) or rumor.character not in (None, ears.name):
         return False
     # fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會因為少寫一個欄位就人人聽見）
     if (rumor.layer == "faction" and rumor.faction is None) or (rumor.layer == "personal" and rumor.character is None):

@@ -155,7 +155,7 @@ def test_fb253_a_stir_on_a_line_at_fifty_is_greyed_and_costs_nothing():
     """戰線正好 50：攪局推不動，鈕灰著寫原因、底下那一行說等戰局偏了再來；按了不花次數、不花體力。線一偏就又按得下去。"""
     from tianxia import sortie
 
-    game = _game("haoqiang", "runan_wilds")
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 攪局是豪強第三方的規則
     w, p = game.state.world, game.state.player
     w.trends["yingru"] = 50
     option = _sortie(game)

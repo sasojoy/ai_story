@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import figures, insights, mounts, orders, prologue, sortie, territory
+from . import allied, figures, insights, mounts, orders, prologue, sortie, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -724,6 +724,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
+    if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
+        return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
     if p.pending_defect:
         return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
     if p.fs_asking is not None:

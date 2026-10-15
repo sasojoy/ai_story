@@ -11,6 +11,14 @@ from .models import Content, FactionDef
 from .state import GameState, WorldState
 
 SEP = "@"
+# 新寫的字（joy 10/15：這種句子由 AI 產生）
+ALLY_LABEL = "{faction}（依附{ally}）"  # 狀態列、玩家卡、確認畫面
+ALLY_COUNT = "（其中{short} {n} 人）"  # 名冊那一句（企劃者第 3 題甲）
+ALLY_PICK = "地方豪強這一季要依附官軍或黃巾其中一邊，算那一邊的人：決戰、地盤、出陣、軍令、貢獻都照那一邊。{counts}。挑一邊。"
+ALLY_AFTER_SECT = "拜入之後，先挑依附哪一邊，才算入了夥：決戰、地盤、出陣、軍令、貢獻都照那一邊。{counts}。"
+ALLY_BUTTON = "依附{ally}（目前 {n} 人）"
+ALLY_DONE = "你依附了{ally}。"
+ALLY_FIRST = "先挑依附哪一邊，才能安排前往"
 
 
 def on(content: Content, world: WorldState) -> bool:
@@ -83,6 +91,41 @@ def gentry_totals(rolls: dict[str, int]) -> dict[str, int]:
         if ally is not None:
             out[ally] = out.get(ally, 0) + n
     return out
+
+
+def label(content: Content, faction_id: str | None, ally: str | None) -> str:
+    """「地方豪強（依附官軍）」；沒有依附是陣營名（散人、劇本沒有的陣營是空字串）。"""
+    name = content.scenario.faction_name(faction_id, "") or ""
+    return ALLY_LABEL.format(faction=name, ally=content.scenario.faction_name(ally, ally)) if ally and name else name
+
+
+def label_of(state: GameState, content: Content) -> str:
+    """這個人此刻的陣營名號：依附的季寫依附哪一軍（label），其他季是陣營名；散人是空字串。"""
+    p = state.player
+    return label(content, p.faction, p.ally if on(content, state.world) else None)
+
+
+def short_name(faction: FactionDef) -> str:
+    """名冊括號裡的叫法：態勢那一套（rules.STANCE_NAMES：「豪強」），沒有就是陣營名。"""
+    from .rules import STANCE_NAMES  # noqa: PLC0415  rules → allied：在函式裡 import，避免循環
+
+    return STANCE_NAMES.get(faction.id, faction.name)
+
+
+def roster_text(content: Content, world: WorldState, rolls: dict[str, int]) -> str:
+    """名冊那一句（企劃者第 3 題甲）：依附的季照兩軍寫、括號寫豪強（「目前官軍 12 人（其中豪強 3 人）、黃巾軍 9 人」；括號裡是 0
+    不寫）；其他季照陣營寫（「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」）。人數照 side_totals，跟人數緩衝、假人選邊同一個數。"""
+    factions = content.scenario.factions
+    if not on(content, world):
+        counts = faction_totals(rolls)
+        return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in factions)
+    sides, gentry = side_totals(rolls), gentry_totals(rolls)
+    short = "、".join(short_name(f) for f in factions if f.allies)
+    parts = []
+    for f in (f for f in factions if not f.allies):
+        n = gentry.get(f.id, 0)
+        parts.append(f"{f.name} {sides.get(f.id, 0)} 人" + (ALLY_COUNT.format(short=short, n=n) if n else ""))
+    return "目前" + "、".join(parts)
 
 
 def hidden_trends(content: Content, world: WorldState) -> set[str]:

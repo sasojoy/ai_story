@@ -103,6 +103,7 @@ def fs_content():
     c = load_content(CONTENT_DIR, profile="weekend")
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True  # 這一組測的是開打後的內容
+    c.config.haoqiang_allied = False  # 豪強的三條第三方鏈照豪強是第三方的規則驗（豪強分屬兩軍時不出現，見 test_gentry_allied.py）
     ALL_EVENTS.update(c.events)
     return c
 
