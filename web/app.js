@@ -2878,7 +2878,7 @@
     const mine = `<section class="ring-me">${stand}${join}${me.joined ? `<p class="ring-note">${esc(me.note)}</p>` : ""}</section>`;
     const card = (f) => `<article class="ring-foe${f.enabled ? "" : " dim"}">
         <div class="info"><div class="who"><span class="rt">第 ${f.rank | 0} 名</span><b>${esc(f.name)}</b>${f.title ? `<span class="ttl">${esc(f.title)}</span>` : ""}</div>
-        <p>${esc(f.record)}・${esc(f.strength)}</p>${f.arts.length ? `<p class="arts">${esc(f.arts.join("、"))}</p>` : ""}</div>
+        <p>${esc(f.record)}・${esc(f.strength)}</p>${f.arts.length ? `<p class="arts">${esc(f.arts.join("、"))}</p>` : ""}${f.famed ? `<p class="arts famed">${esc(f.famed)}</p>` : ""}</div>
         <button class="btn${f.enabled ? " primary" : ""} small" data-act="choose" data-id="${esc(f.id)}" ${f.enabled ? "" : "disabled"}>${f.enabled ? "<b>挑戰</b>" : esc(f.why)}</button>
       </article>`;
     if (!me.joined) return mine;

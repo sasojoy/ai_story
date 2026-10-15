@@ -198,6 +198,11 @@ def duel_paid_line(state: GameState, content: Content) -> str:
     return f"（{fame_title(state, content)}：賞多{more}）"
 
 
+def arena_famed(state: GameState, content: Content) -> bool:
+    """擂台上天下聞名（設計 4.7）：排在他後面 famous_reach 名內的人都挑得到他。寫進 ArenaEntry.famed（報名、更新分身、同步時）。"""
+    return on(content, "arena_reach") and fame_tier(state, content) >= len(FAME_TITLES) - 1
+
+
 def ranger_exp_note(state: GameState, content: Content, factor: float) -> list[str]:
     """散人打贏的經驗多了幾成時寫的那一行（設計 6.3）：「（江湖遊俠：打贏的經驗多 5%）」；explain 關著、沒有加成是空的。"""
     title = virtue_title(state, content)

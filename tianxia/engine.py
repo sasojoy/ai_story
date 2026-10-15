@@ -8315,12 +8315,14 @@ class Game:
         arts = self._arena_arts()
         text = "、".join(arts)
         entry = arena.entry_of(s.world, p.name)
+        famed = renown.arena_famed(s, self.content)  # 名聲 4.7
         if entry is not None:
-            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts = (
-                p.name, side.power, side.scores, side.role, side.hp_cap, arts)
+            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
+                p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
+            famed=famed,
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
@@ -8480,6 +8482,9 @@ class Game:
             self._write(arena.ARENA, [arena.UNSETTLED])
         rolled = arena.on(c) and arena.roll_day(w, cfg, self._pill_day())  # 擂台關著不動 WorldState（同步什麼都沒有時不存季）
         entry = arena.entry_of(w, p.name)
+        if entry is not None and not w.ended and entry.famed != renown.arena_famed(s, c):  # 名聲 4.7：照此刻的名望段重寫
+            entry.famed = not entry.famed
+            rolled = True
         if entry is None or not (entry.inbox or entry.wages or (w.ended and entry.place and not entry.prized)):
             if rolled:
                 self._save_season()

@@ -726,6 +726,7 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
             "id": f"arena:fight:{name_key(e.name)}", "name": e.name, "rank": e.rank, "title": arena.title_for(e.rank),
             "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power, e.power),
             "enabled": problem is None, "why": problem,
+            "famed": arena.FAMED_NOTE.format(n=arena.reach_of(e, cfg)) if e.famed else "",  # 名聲 4.7
         })
     nobody = ""
     if mine is not None and not foes:
