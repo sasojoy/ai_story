@@ -244,10 +244,11 @@ def divine_book(records: list[tuple[int, GearFind]], extra: list[tuple[int, str]
 KIND, MAIN, AUX = 0, 1, 2
 PIECES = (KIND, MAIN, AUX)
 VERSE = -1  # smith_items 裡「這家知道的那一條配方的鐵匠版口訣」
-PIECE_KIND = "「{alias}」是一{unit}{noun}。"
-PIECE_ARMOR = "「{alias}」是一件防具。"
-PIECE_MAIN = "「{alias}」的主料：{attr}屬的{tier}料。"
-PIECE_AUX = "「{alias}」的輔料：{attr}屬的{tier}料。"
+# 號用『』：鐵匠、說書、殘譜的框（Config.forge_secrets 的 *_frame）是「{clue}」，引號裡再引用用『』，不疊成「「（FB-269）
+PIECE_KIND = "『{alias}』是一{unit}{noun}。"
+PIECE_ARMOR = "『{alias}』是一件防具。"
+PIECE_MAIN = "『{alias}』的主料：{attr}屬的{tier}料。"
+PIECE_AUX = "『{alias}』的輔料：{attr}屬的{tier}料。"
 UNKNOWN = "？"  # 鑄譜那一行還沒聽到的片
 TIER_WORDS = {1: "一", 2: "二", 3: "三"}
 
