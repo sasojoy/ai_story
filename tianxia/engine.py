@@ -5008,7 +5008,7 @@ class Game:
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
-        if p.faction is not None and me.faction == p.faction:  # 臨時投效的散人、站第三方的不記（第三方不推兩軍的戰局）
+        if self._side() is not None and me.faction == self._side():  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share)
             if contrib and season_one(c, s.world):
@@ -5044,8 +5044,9 @@ class Game:
     def _free_agent(self, definition: BattleDef) -> bool:
         """劇本分陣營、自己不是交戰兩軍的人（散人、地方豪強）：決戰時可以臨時投效交戰的兩軍之一，只算這一場
         （散人：試玩回饋 2026-10-08；豪強：Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）——
-        不寫進投靠名冊、不改自己的陣營、不算叛投、不記貢獻。"""
-        return bool(self.content.scenario.factions) and self.state.player.faction not in self._sides(definition)
+        不寫進投靠名冊、不改自己的陣營、不算叛投、不記貢獻。
+        豪強分屬兩軍的季（企劃者 2026-10-15），豪強是依附那一軍的人（_side），跟兩軍的人一樣加入，不是臨時投效。"""
+        return bool(self.content.scenario.factions) and self._side() not in self._sides(definition)
 
     def _own_side_name(self) -> str:
         """臨時投效的人打完照樣是誰：散人，或自己陣營的名字（豪強）。"""
@@ -5144,7 +5145,7 @@ class Game:
             return None
         battle, definition = status
         p = battle.participants.get(self.state.player.name)
-        side = p.faction if p is not None else self.state.player.faction
+        side = p.faction if p is not None else self._side()
         g = self._gauge_of(battle, definition, side)
         # 這一回合還剩幾秒逾時（同 _round_wait）：網頁每秒自己倒數「最遲 M 分 S 秒後結算」，不等十秒一次的輪詢（Joy 2026-10-13）。
         # 暫停中、集結中是 None（不倒數）
@@ -5316,7 +5317,7 @@ class Game:
         if battle.phase == "muster":
             sides = list(self._sides(definition).items())  # 兩軍（id, 名字）
             if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊
-                sides = [(fid, fname) for fid, fname in sides if fid == self.state.player.faction]
+                sides = [(fid, fname) for fid, fname in sides if fid == self._side()]  # 豪強分屬兩軍：依附那一軍
             return [  # 已經加入的那一邊換成灰的「已加入」；不分陣營的劇本集結時還能換到另一邊
                 Option(id=f"battle:join:{fid}", label=f"已加入【{fname}】", enabled=False)
                 if p is not None and p.faction == fid else Option(id=f"battle:join:{fid}", label=f"加入【{fname}】")
@@ -5499,7 +5500,7 @@ class Game:
         if kind == "enlist":
             return self._enlist(battle, definition, rest, changing_sides)
         if kind == "join":
-            if self.content.scenario.factions and rest != self.state.player.faction:
+            if self.content.scenario.factions and rest != self._side():
                 return ["（你只能站在自己陣營這一邊。）"]
             scores = self._mandate_weight(definition, self._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             gear, marks = self._battle_gear(), self._battle_marks()
@@ -5514,7 +5515,7 @@ class Game:
             self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
             return msgs
         if kind == "join_late":
-            own = self.state.player.faction if self.content.scenario.factions else None
+            own = self._side() if self.content.scenario.factions else None
             scores = self._mandate_weight(definition, self._battle_scores())
             gear, marks = self._battle_gear(), self._battle_marks()
             self.world.mutate_battle(

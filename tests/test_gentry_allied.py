@@ -478,3 +478,58 @@ def test_condition_factions_read_both(wk):
     assert not rules.check_condition(Condition(factions=["guan"]), game.state, wk)
     assert not rules.check_condition(Condition(factions_none=["huang"]), game.state, wk)
     assert not rules.check_condition(Condition(factions=["huang"]), game.state)  # 沒給 content 讀不到季的章：照舊只比陣營
+
+
+# ── Task 6：決戰站依附的那一軍、軍餉記貢獻、玉璽算那一軍 ─────────────────
+
+
+def _in_region(content, region_id):
+    from tianxia import atlas
+
+    return next(loc for loc in content.locations if (r := atlas.region_of(content, loc)) is not None and r.id == region_id)
+
+
+def _showdown(game):
+    """管理者「立刻開這一場」長社火攻（效果同時刻表自然開），人站到決戰的大區；回傳那一場的定義。"""
+    game.content.config.admins = [game.state.player.name]
+    game.client = None
+    game.sync(1000.0)
+    assert game.admin_start_showdown("changshe_fire", 1000.0) == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
+    definition = game.content.battles[game.world.get_battle().battle_id]
+    if definition.region is not None:
+        game.state.player.location = _in_region(game.content, definition.region)
+    return definition
+
+
+def test_gentry_joins_its_side_not_as_free_agent(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    definition = _showdown(game)
+    assert not game._free_agent(definition)
+    ids = [o.id for o in game.options()]
+    assert "battle:join:guan" in ids and not [i for i in ids if i.startswith("battle:enlist:")]
+    game.choose("battle:join:guan")
+    assert game.world.get_battle().participants["甲"].faction == "guan"
+
+
+def test_gentry_showdown_pay_counts_contribution(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    _showdown(game)
+    game.choose("battle:join:guan")
+    battle = game.world.get_battle()
+    battle.outcome_side = "guan"
+    changes = game._showdown_pay(battle, battle.participants["甲"], [])
+    assert any(c.startswith("貢獻 +") for c in changes)
+
+
+def test_old_rules_gentry_enlists():
+    off = _old_rules()
+    game = _game(off, name="乙", faction="haoqiang")
+    definition = _showdown(game)
+    assert game._free_agent(definition)
+    assert [o.id for o in game.options() if o.id.startswith("battle:enlist:")]
+
+
+def test_seal_and_battles_read_the_side_from_the_roster(wk):
+    game = _game(wk, faction="haoqiang", ally="huang")
+    game._record_faction()
+    assert game.world.faction_of("甲") == "huang"
