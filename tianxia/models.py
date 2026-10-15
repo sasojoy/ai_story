@@ -466,12 +466,15 @@ class LearnRule(_Strict):
     sect: str | None = None
 
 
-TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰")  # 本命戰法什麼時候發動（tianxia/tactics.py）
+TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰", "應招")  # 戰法什麼時候發動（tianxia/tactics.py）；應招是兩邊的招都定了之後
 TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找做法（tactics.KINDS）；數字在 TacticDef.params
     "chase_disarm", "opening_ward", "disarm", "rally", "heavy_blow", "cleanse", "roar", "unbroken", "vanguard", "tiger",
     "awe", "waver", "rebound_guard", "veil", "thunder", "curse", "sand", "fog", "bloodrage", "oath", "butcher", "marshal",
     "fire", "steady", "surge", "tide", "foresight", "ward_all", "cavalry", "brutal", "night_raid", "reinforce", "divine",
     "sacrifice", "hold_city", "gatekeep",
+    # 第三批（玩家自己的武學功效、神器與名將本命兵器的特技，定案 /mnt/project-files/plan/武學與兵器戰法定案.md）
+    "shadow", "mist", "drain", "mend", "borrow", "break", "momentum", "insight", "immune", "last_stand", "assault", "pierce",
+    "quake", "first_shot", "zhaoyi", "flawless",
 )
 
 
@@ -495,6 +498,31 @@ class TacticDef(_Strict):
     params: dict[str, float] = Field(default_factory=dict)
     allies: list[str] = Field(default_factory=list)
     foe_faction: str | None = None
+    # 發動時那一句（名字後面接的話）；{foe} 換成對手、{鍵} 換成 params 的數字。空的照 tactics.KINDS 那一種自己的句子
+    say: str = ""
+
+
+class TacticBond(_Strict):
+    """人器合一（名將本命兵器，第三批）：身上也練著那位名將的本命武學或內功時，他那一門戰法改強：發動率、蓄力、回合各加多少，
+    params 各加多少（沒有的鍵當 0 加上去）。desc 是卡上那一句。"""
+
+    desc: str
+    rate: float = 0.0
+    prep: int = 0
+    rounds: int = 0
+    params: dict[str, float] = Field(default_factory=dict)
+
+
+class TraitTactic(_Strict):
+    """一般功效在回合裡的樣子（第三批）：timing、kind 同 TacticDef；rate 與 params 的值可以寫 "value"／"extra"，
+    換成這一門（或身上兩門）照層數算出來的數字（GeneralTrait 的 per_layer／cap 與 extra_per_layer／extra_cap）。"""
+
+    timing: Literal[TACTIC_TIMINGS]
+    kind: Literal[TACTIC_KINDS]
+    say: str = ""
+    rate: float | Literal["value", "extra"] = 1.0
+    rounds: int = Field(default=0, ge=0)
+    params: dict[str, float | Literal["value", "extra"]] = Field(default_factory=dict)
 
 
 class SkillDef(_Strict):
@@ -526,6 +554,10 @@ class GeneralTrait(_Strict):
     per_layer: float = Field(ge=0)
     cap: float = Field(ge=0)
     desc: str
+    # 第三批：回合裡的戰法（tactics.py）；desc 的 {extra} 換成 extra_per_layer × 層數（夾在 extra_cap）。沒寫是只改單次判定或氣血的那幾個（厚）
+    extra_per_layer: float = Field(default=0.0, ge=0)
+    extra_cap: float = Field(default=0.0, ge=0)
+    tactic: TraitTactic | None = None
 
 
 class SpecialTrait(_Strict):
@@ -538,6 +570,7 @@ class SpecialTrait(_Strict):
     amount: float = Field(ge=0)
     pool: bool = True
     desc: str
+    tactic: TacticDef | None = None  # 第三批：回合裡的戰法（強度固定，不分品質）
 
 
 class TraitBook(_Strict):
@@ -966,6 +999,7 @@ class ForgeSecret(_Strict):
     name: str  # 名器的專名（神器配方是「譜名」，第二批）
     note: str = ""  # 打出來那一句下面的一句說明
     clues: list[str] = Field(min_length=3, max_length=3)
+    tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
 
 
 class PresetRecipe(_Strict):
@@ -1789,6 +1823,8 @@ class SignatureArmDef(_Strict):
     figure: str | None = None  # 大勢人物 id（content/figures.json），他的 character 要是同一位；沒寫就只有情誼那條路
     gift_line: str = ""  # 情誼那條路送你的那一句（{general}、{arm}）；空的照 signature_arms.GIFT_LINE（待 joy 潤）
     seize_line: str = ""  # 打贏那條路讓你奪走的那一句（{general}、{arm}）；空的照 signature_arms.SEIZE_LINE（待 joy 潤）
+    tactic: TacticDef | None = None  # 誰拿都有的特技（第三批）
+    bond: TacticBond | None = None  # 人器合一：身上也練著這位名將的本命時，他的戰法改強
 
 
 class GearBook(_Strict):
@@ -1957,6 +1993,13 @@ class TacticTuning(_Strict):
     # 決戰（tactics.war_round）：一個人的份量加成乘多少（連環是 +1 擊）。0.5：發動多的人一回合份量平均 ×1.17（孫堅），
     # 跟職位的 +15% 差不多（1.0 是 ×1.34）
     war_scale: float = Field(default=0.5, ge=0)
+    # 第三批（玩家自己的武學功效、神器與名將本命兵器的特技）：
+    copy_rate: float = Field(default=0.7, ge=0, le=1)  # 神器的仿品：特技的發動率乘這個（心法那一種每回合照它擲）
+    mist_fast_share: float = Field(default=0.5, ge=0, le=1)  # 險的霧：身法高的那一方打空的機會乘這個
+    momentum_cap: float = Field(default=0.3, ge=0)  # 乘勝：一場裡疊起來的推力加成最多這麼多
+    # 頭目戰、擂台、奪璽單挑裡重控場（tactics.BOUT_CONTROL）的發動率乘這個：那幾種仗一回合的勝負幾乎全看剋不剋，
+    # 經緯（看穿）與長坂一喝（定身）照原本的發動率，擂台同樣身手對上自組上品贏 73%（scripts/measure_tactics.py --kits）
+    bout_control_share: float = Field(default=0.6, ge=0, le=1)
 
 
 class RiseTuning(_Strict):

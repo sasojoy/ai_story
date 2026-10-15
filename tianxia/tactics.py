@@ -31,12 +31,14 @@ import random
 
 from pydantic import BaseModel, Field
 
-from .models import BEATS, MOVES, Content, TacticDef, TacticTuning
+from .models import BEATS, MOVES, Content, TacticBond, TacticDef, TacticTuning
 
 CONTROLS = ("卸勁", "亂神", "定身", "失神")  # 守一擋得下的
 DOTS = ("焚身", "風沙", "血創")
 LEAD = "〔"  # 戰法句一律以「〔戰法名〕」開頭（同功效句，battlelog.TRAIT_LEAD：網頁收著的卡片先藏起來）
 TITLE = "本命戰法"
+IMMUNE_KEYS = {"stun": "定身", "daze": "失神", "disarm": "卸勁", "confuse": "亂神"}  # immune 那一種的 params 鍵 → 狀態
+SHRUG = "{state}沒能沾身"
 PLAYER_KEY = "player"  # 同 state.PLAYER（這裡不 import state）
 FOE_KEY = "foe"  # 對手那一方的鍵（他回的、自扣的氣血不算到你身上）
 OUR_SIDE = "你這一方"  # 一般的仗裡你這一邊的叫法
@@ -118,9 +120,12 @@ def when_text(tactic: TacticDef) -> str:
     if tactic.timing == "乘勢":
         text = f"剋中對手後 {rate}"
     elif tactic.timing == "心法":
-        text = f"{span}一直在" if tactic.rounds else "一直在"
+        text = (f"{span}一直在" if tactic.rounds else "一直在") if rate == "必定" else f"{span if tactic.rounds else '每回合'} {rate}"
     elif tactic.timing == "騎戰":
         text = "騎著馬才有"
+    elif tactic.timing == "應招":
+        text = f"{'前 ' + str(tactic.rounds) + ' 回合' if tactic.rounds > 1 else '第 1 回合' if tactic.rounds == 1 else ''}兩邊出招之後" + (
+            "" if rate == "必定" else f" {rate}")
     else:
         text = f"{span}{rate}" if rate == "必定" else f"{span} {rate}"
     if tactic.prep:
@@ -128,9 +133,61 @@ def when_text(tactic: TacticDef) -> str:
     return f"{tactic.timing}・{text}"
 
 
-def card_text(tactic: TacticDef) -> str:
-    """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」。"""
-    return f"{TITLE}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}"
+def card_text(tactic: TacticDef, title: str = TITLE) -> str:
+    """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
+    return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}"
+
+
+GEAR_TITLE = "特技"
+# 自己挑招的仗裡改剋制的重控場（長坂一喝、經緯、黃天咒、天雷符）：那邊一回合的勝負幾乎全看剋不剋，照 Config.tactics.bout_control_share 打折
+BOUT_CONTROL = frozenset({"roar", "foresight", "curse", "thunder"})
+BOND_TITLE = "人器合一"
+
+
+def bonded(tactic: TacticDef, bond: TacticBond) -> TacticDef:
+    """人器合一：名將本命兵器在身上、也練著那位名將的本命時，他那一門戰法照 bond 加強（發動率、蓄力、回合、數字各加）。"""
+    params = dict(tactic.params)
+    for key, more in bond.params.items():
+        params[key] = params.get(key, 0.0) + more
+    return tactic.model_copy(update={
+        "rate": max(0.0, min(1.0, tactic.rate + bond.rate)), "prep": max(0, min(1, tactic.prep + bond.prep)),
+        "rounds": max(0, tactic.rounds + bond.rounds), "params": params,
+    })
+
+
+def copied(tactic: TacticDef, share: float) -> TacticDef:
+    """神器的仿品：特技的發動率打折（心法那一種每回合照它擲）。"""
+    return tactic.model_copy(update={"rate": tactic.rate * share})
+
+
+def item_tactic(content: Content, item) -> tuple[TacticDef, TacticBond | None, str | None] | None:
+    """一件兵器或防具的特技（第三批）：（特技, 人器合一, 名將本命兵器的人物 id）。名將本命兵器照 gear.json 的 signature_arms，
+    神器原品照配方寫的、仿品發動率乘 Config.tactics.copy_rate；一般兵器、名器、坐騎、寶物是 None。item 是 state.Equipment（不 import state）。"""
+    if item is None:
+        return None
+    if getattr(item, "signature", None):
+        arm = next((a for a in content.gear.signature_arms if a.character == item.signature), None)
+        return (arm.tactic, arm.bond, item.signature) if arm is not None and arm.tactic is not None else None
+    copy_of = getattr(item, "copy_of", None)
+    recipe = getattr(item, "secret", None) or (copy_of.split("|", 1)[1] if copy_of else None)
+    found = content.forge_secrets.get(recipe) if recipe else None
+    if found is None or found.tactic is None or not (getattr(item, "original", False) or copy_of is not None):
+        return None
+    if getattr(item, "original", False):
+        return found.tactic, None, None
+    return copied(found.tactic, content.config.tactics.copy_rate), None, None
+
+
+def item_lines(content: Content, item) -> list[str]:
+    """兵器卡、防具卡、修練頁那一列寫的特技（與人器合一）：「特技〔虛影〕起手・前 2 回合 20%：化影……」。沒有特技是空的。"""
+    found = item_tactic(content, item)
+    if found is None:
+        return []
+    tactic, bond, _figure = found
+    out = [card_text(tactic, GEAR_TITLE)]
+    if bond is not None:
+        out.append(f"{BOND_TITLE}：{bond.desc}")
+    return out
 
 
 # ── 一場仗 ───────────────────────────────────────────
@@ -192,6 +249,7 @@ class Status(BaseModel):
     reflect: float = 0.0  # 守一擋下控制時反彈回施放者的機會（亂世心術）
     reflect_by: str = ""
     wards: int = 0  # 守一擋下了幾次控制（海內儒宗）
+    immune: dict[str, tuple[float, str, str]] = Field(default_factory=dict)  # 這一回合不受哪幾種控制：狀態 →（機會, 戰法名, 那一句）（穩、不動、嶽峙鎧）
 
     def has(self, name: str) -> bool:
         return self.states.get(name, 0) > 0
@@ -226,6 +284,7 @@ class _Fight:
         self.planned: str | None = None  # 頭目戰、擂台、奪璽單挑：這一方這一回合自己挑好的招（夜襲只在出奇襲時發）
         self.war = False  # 決戰：沒有單一的對手，只算自己身上的
         self.bout = False  # 頭目戰、擂台、奪璽單挑：招在戰法之前就挑好了
+        self.mine: str | None = None  # 這一回合自己實際出的招（乘勢、應招看它）
         self.begin(0, 50.0, self.lines)
 
     def begin(self, round_: int, edge: float, lines: list[str]) -> None:
@@ -238,11 +297,40 @@ class _Fight:
         self.push_mod = self.foe_cut = self.guard_mod = self.rebound = 0.0
         self.extra = 0.0  # 這一回合另外推的氣勢（援兵）
         self.dmg = 0.0  # 這一回合扣對手氣血池的幾成（焚身、風沙、血創、落雷）
+        self.pierce = False  # 貫日：剋中對手時他的化影、借力對你無效
+        self.no_borrow = False  # 這一回合借力落空（被貫日剋中、被破甲）
+        self.ally_fires = 0  # 這一回合同伴發動了幾次戰法（昭義）
+        if round_ > 0:
+            self.arm()
+
+    def arm(self) -> None:
+        """回合開始：不受控制的那幾種（穩、不動、嶽峙鎧）照這一回合擲好，記在自己的狀態上（對手的控制在 put 裡看）。"""
+        self.us.immune = {}
+        for h in self.holders:
+            t = h.tactic
+            if t.kind != "immune" or not _usable(self, h) or not _in_span(h, self.round):
+                continue
+            if t.rate < 1 and not self.roll(t.rate):
+                continue
+            for key, chance in t.params.items():
+                state = IMMUNE_KEYS.get(key)
+                if state is None or chance <= 0:
+                    continue
+                old = self.us.immune.get(state)
+                both = 1 - (1 - (old[0] if old else 0.0)) * (1 - min(1.0, chance))
+                by = (h.tactic.name, h.tactic.say or SHRUG) if old is None or chance >= old[0] else old[1:]
+                self.us.immune[state] = (both, *by)
 
     # 共用的小動作
-    def say(self, h: Holder, text: str) -> None:
+    def say(self, h: Holder, text: str, **extra: str) -> None:
+        """發動的那一句：「〔戰法名〕名字＋這一句」。戰法寫了 say（功效、神器、名將本命兵器）就用它（{foe}、{鍵} 換成數字）。"""
+        if h.tactic.say:
+            values = {k: value_text(k, v) for k, v in h.tactic.params.items()}
+            text = h.tactic.say.format(foe=self.ctx.foe, **{**values, **extra})
         self.lines.append(f"{LEAD}{h.tactic.name}〕{h.who}{text}")
         self.fired.append(h.tactic.name)
+        if h.key not in (PLAYER_KEY, FOE_KEY):
+            self.ally_fires += 1
 
     def heal(self, key: str, pct: float) -> None:
         self.hp[key] = self.hp.get(key, 0.0) + pct
@@ -258,6 +346,11 @@ class _Fight:
                 book[name] = max(book.get(name, 0), turns)
                 self.lines.append(f"{LEAD}{side.reflect_by}〕{side.name}把{name}反彈回去，{self.us.name}{name} {turns} 回合")
             return False
+        if name in side.immune:
+            chance, by, said = side.immune[name]
+            if self.rng.random() < chance:
+                self.lines.append(f"{LEAD}{by}〕{side.name}" + said.format(state=name, foe=self.ctx.foe))
+                return False
         book = side.states if now else side.later
         book[name] = max(book.get(name, 0), turns)
         return True
@@ -273,7 +366,8 @@ class _Fight:
         for other in self.holders:
             if other.tactic.kind == "rally" and h.figure in other.tactic.allies:
                 bonus += other.tactic.params.get("boost_pct", 0.0)
-        return h.tactic.rate + bonus
+        share = self.t.bout_control_share if self.bout and h.tactic.kind in BOUT_CONTROL else 1.0
+        return (h.tactic.rate + bonus) * share
 
     def roll(self, chance: float) -> bool:
         return self.rng.random() < chance
@@ -348,6 +442,10 @@ def _unbroken(f: _Fight, h: Holder) -> None:  # 張飛〔丈八狂瀾〕
 
 def _vanguard(f: _Fight, h: Holder) -> None:  # 孫堅〔先登斬將〕
     f.chain = True
+    if h.tactic.params.get("chain_next", 0) > 0:  # 人器合一（江潮槍）：下一回合也連環
+        f.put(f.us, "連環", 1, now=False)
+        f.say(h, "先登陷陣，這一回合與下一回合都連環")
+        return
     f.say(h, "先登陷陣，這一回合連環")
 
 
@@ -548,6 +646,71 @@ def _gatekeep(f: _Fight, h: Holder) -> None:  # 趙弘〔把關〕
         f.say(h, f"把住關口，{f.ctx.foe}這一回合卸勁")
 
 
+# ── 第三批：玩家自己的武學功效、神器與名將本命兵器的特技（句子多半寫在內容的 say）──────────
+
+
+def _shadow(f: _Fight, h: Holder) -> None:  # 輕身、玄晶劍〔虛影〕、掠影衫〔殘影〕
+    f.veiled = True
+    f.say(h, "身形一晃，這一回合化影")
+
+
+def _mist(f: _Fight, h: Holder) -> None:  # 險：起霧一回合，雙方都可能打空，身法高的那一方少打空
+    miss = h.tactic.params.get("miss_pct", 0.3)
+    f.put(f.us, "霧", 1, now=True)
+    f.put(f.foe, "霧", 1, now=True)
+    fast = f.t.mist_fast_share
+    f.us.misses = miss * (fast if f.ctx.our_agility > f.ctx.foe_agility else 1.0)
+    f.foe.misses = miss * (fast if f.ctx.foe_agility > f.ctx.our_agility else 1.0)
+    f.say(h, "兵行險著，四下起霧")
+
+
+def _drain(f: _Fight, h: Holder) -> None:  # 吸取：剋中對手時回氣血
+    pct = h.tactic.params.get("heal_pct", 0.0)
+    f.heal(h.key, pct)
+    f.say(h, f"收了{f.ctx.foe}散逸的氣勁，回氣血 {value_text('heal_pct', pct)}")
+
+
+def _mend(f: _Fight, h: Holder) -> None:  # 回春：每回合開始回氣血
+    f.heal(h.key, h.tactic.params.get("heal_pct", 0.0))
+    if not f.stacks.get(h.tactic.name + "|說", 0):
+        f.stacks[h.tactic.name + "|說"] = 1
+        f.say(h, "氣血一回合一回合慢慢回了過來")
+
+
+def _break(f: _Fight, h: Holder) -> None:  # 破甲：強攻剋中時，對手下一回合固守、借力落空
+    if f.mine != "強攻":
+        return
+    if f.put(f.foe, "破甲", 1, now=False):
+        f.say(h, f"破開了{f.ctx.foe}的架子，他下一回合固守、借力都不管用")
+
+
+def _momentum(f: _Fight, h: Holder) -> None:  # 乘勝：每贏一回合疊一層（回合結束時算，見 _after）
+    n = f.stacks.get(h.tactic.name, 0)
+    f.push_mod += min(f.t.momentum_cap, n * h.tactic.params.get("step_pct", 0.0))
+
+
+def _insight(f: _Fight, h: Holder) -> None:  # 悟招：每被剋中一次疊一層（_settle 裡算）
+    f.push_mod += f.stacks.get(h.tactic.name, 0) * h.tactic.params.get("step_pct", 0.0)
+
+
+def _quiet(f: _Fight, h: Holder) -> None:  # 不在回合開始做事的：immune（arm）、last_stand（見底時）、應招那幾種（_answer）
+    return
+
+
+def _pierce(f: _Fight, h: Holder) -> None:  # 貫日槍〔貫日〕
+    f.pierce = True
+
+
+def _flawless(f: _Fight, h: Holder) -> None:  # 裂雷矛〔雷吼〕：前幾回合無隙（只攻不守那一半沒有）
+    f.flawless = True
+    if f.round == 1:
+        f.say(h, f"一聲雷吼，前 {h.tactic.rounds} 回合無隙")
+
+
+def _zhaoyi(f: _Fight, h: Holder) -> None:  # 雲紋雙鋒〔昭義〕：同伴每發動一次戰法回氣血（回合結束時算，見 _after）
+    return
+
+
 KINDS = {
     "chase_disarm": _chase_disarm, "opening_ward": _opening_ward, "disarm": _disarm, "rally": _rally,
     "heavy_blow": _heavy_blow, "cleanse": _cleanse, "roar": _roar, "unbroken": _unbroken, "vanguard": _vanguard,
@@ -556,6 +719,9 @@ KINDS = {
     "marshal": _marshal, "fire": _fire, "steady": _steady, "surge": _surge, "tide": _tide, "foresight": _foresight,
     "ward_all": _ward_all, "cavalry": _cavalry, "brutal": _brutal, "night_raid": _night_raid, "reinforce": _reinforce,
     "divine": _divine, "sacrifice": _sacrifice, "hold_city": _hold_city, "gatekeep": _gatekeep,
+    "shadow": _shadow, "mist": _mist, "drain": _drain, "mend": _mend, "borrow": _quiet, "break": _break, "momentum": _momentum,
+    "insight": _insight, "immune": _quiet, "last_stand": _quiet, "assault": _quiet, "pierce": _pierce, "quake": _quiet,
+    "first_shot": _quiet, "zhaoyi": _zhaoyi, "flawless": _flawless,
 }
 GUARD_KINDS = ("rebound_guard", "hold_city", "steady")  # 出固守才起作用的：自動出招多出固守
 # 決戰裡發得了的（沒有單一的對手：只算自己身上的連環、無隙、化影、推力加減、固守加重、回氣血與自扣；
@@ -563,6 +729,8 @@ GUARD_KINDS = ("rebound_guard", "hold_city", "steady")  # 出固守才起作用�
 WAR_KINDS = (
     "chase_disarm", "rally", "heavy_blow", "cleanse", "unbroken", "vanguard", "tiger", "waver", "veil", "bloodrage", "oath",
     "marshal", "steady", "surge", "tide", "cavalry", "night_raid", "reinforce", "sacrifice", "hold_city",
+    # 第三批：化影、回氣血、乘勝、悟招、無隙；斬將與墜星的強攻加重在 war_round 另算，化勁少挨的打也是
+    "shadow", "drain", "mend", "momentum", "insight", "flawless", "zhaoyi",
 )
 
 
@@ -579,6 +747,7 @@ def _busy(f: _Fight, h: Holder) -> bool:
         or (kind == "curse" and f.foe.has("亂神")) or (kind == "roar" and (f.foe.has("定身") or f.foe.has("失神")))
         or (kind == "disarm" and (f.foe.has("卸勁") or "卸勁" in f.foe.later))
         or (kind == "foresight" and "看穿" in f.us.later)
+        or (kind == "mist" and (f.us.has("霧") or f.foe.has("霧")))
     )
 
 
@@ -600,8 +769,8 @@ def _opening(f: _Fight) -> None:
             continue
         if t.timing == "起手" and _in_span(h, f.round) and f.roll(f.rate(h)):
             KINDS[t.kind](f, h)
-        elif t.timing == "心法" and _in_span(h, f.round):
-            KINDS[t.kind](f, h)
+        elif t.timing == "心法" and _in_span(h, f.round) and (t.rate >= 1 or t.kind == "immune" or f.roll(f.rate(h))):
+            KINDS[t.kind](f, h)  # 神器的仿品：心法那一種每回合照打了折的發動率擲（immune 在 arm 擲過）
         elif t.timing == "騎戰" and f.ctx.mount_tier > 0:
             KINDS[t.kind](f, h)
 
@@ -643,8 +812,18 @@ def _follow(f: _Fight, beat: int) -> None:
 
 
 def _after(f: _Fight, won: bool) -> None:
-    """回合結束：祭天贏下這一回合疊一層，滿了下一回合連環。"""
+    """回合結束：祭天贏下這一回合疊一層，滿了下一回合連環；乘勝贏一回合疊一層、輸一回合減半；昭義照同伴這一回合發動了幾次回氣血。"""
     for h in f.holders:
+        if h.tactic.kind == "momentum" and _usable(f, h):
+            n = f.stacks.get(h.tactic.name, 0)
+            f.stacks[h.tactic.name] = n + 1 if won else n // 2
+            if won and n == 0 and not f.stacks.get(h.tactic.name + "|說", 0):
+                f.stacks[h.tactic.name + "|說"] = 1
+                f.say(h, "越打越順，推力一回合比一回合重")
+        if h.tactic.kind == "zhaoyi" and f.ally_fires:
+            pct = h.tactic.params.get("heal_pct", 0.0) * f.ally_fires
+            f.heal(h.key, pct)
+            f.say(h, f"同伴戰法連發，回氣血 {value_text('heal_pct', pct)}")
         if h.tactic.kind == "sacrifice" and won:
             full = int(h.tactic.params.get("stacks", 5))
             n = f.stacks.get(h.tactic.name, 0) + 1
@@ -697,9 +876,28 @@ def _settle(
         beat = 0
     if beat > 0 and g.flawless:
         beat = 0
+    # 破甲：被破了架子的那一方這一回合固守剋不住強攻、借力落空
+    if beat < 0 and a == "強攻" and f.foe.has("破甲"):
+        beat = 0
+    if beat > 0 and b == "強攻" and f.us.has("破甲"):
+        beat = 0
+    f.no_borrow = f.us.has("破甲")
+    g.no_borrow = f.foe.has("破甲")
+    if beat > 0 and f.pierce:  # 貫日：剋中對手時，他的化影、借力對你無效
+        g.veiled, g.no_borrow = False, True
+    if beat < 0 and g.pierce:
+        f.veiled, f.no_borrow = False, True
+    f.mine, g.mine = a, b
     d = (beat - base_beat) * t.counter if base_beat is not None else 0.0
     hit_me = b is not None and not b_self
     hit_him = a is not None and not a_self
+    more, stop_him = _answer(f, a, b)
+    less, stop_me = _answer(g, b, a)
+    d += more - less
+    if stop_him:
+        hit_me = False
+    if stop_me:
+        hit_him = False
     if b_off:
         d += u
     if b_self:
@@ -719,23 +917,24 @@ def _settle(
             f.lines.append(f"{LEAD}霧〕{f.us.name}在霧裡一招打空")
     if a == "固守":
         f.push_mod += f.guard_mod
-        if b == "強攻":
+        if b == "強攻" and not f.no_borrow:
             d += f.rebound * u
     if b == "固守":
         g.push_mod += g.guard_mod
-        if a == "強攻":
+        if a == "強攻" and not g.no_borrow:
             d -= g.rebound * u
+    scaled = f.bout  # 頭目戰、擂台、奪璽單挑：推力加減直接乘在那一回合的推力上（Step.a_mod／b_mod、scale_push），不另換成一擊
     if a is not None:
-        d += f.push_mod * u
-        if f.chain:
+        d += 0.0 if scaled else f.push_mod * u
+        if f.chain and not scaled:  # 自己挑招的仗：連環是這一回合的推力再來一次（Step.a_mod +1）
             d += u
     if b is not None:
-        d -= g.push_mod * u
-        if g.chain:
+        d -= 0.0 if scaled else g.push_mod * u
+        if g.chain and not scaled:
             d -= u
-    if hit_me:
+    if hit_me and not scaled:
         d += f.foe_cut * u
-    if hit_him:
+    if hit_him and not scaled:
         d -= g.foe_cut * u
     d += f.extra - g.extra
     f.dmg += sum(pct for _n, pct, _left in f.foe.dots)
@@ -746,14 +945,70 @@ def _settle(
         hit_him = False
     chained = f.chain
     _follow(f, beat)
-    if f.chain and not chained and a is not None:  # 乘勢的連環這一回合就推（橫槊賦詩、疾如潮）
+    if f.chain and not chained and a is not None and not scaled:  # 乘勢的連環這一回合就推（橫槊賦詩、疾如潮）
         d += u
     if g.holders:
         chained = g.chain
         _follow(g, -beat)
-        if g.chain and not chained and b is not None:
+        if g.chain and not chained and b is not None and not scaled:
             d -= u
+    _countered(f, beat < 0)
+    _countered(g, beat > 0)
     return beat, d, hit_me, hit_him
+
+
+def _last_stand(f: _Fight) -> bool:
+    """護命：這一方帶著、這一場還沒用過就用掉（寫一句），回 True。"""
+    for h in f.holders:
+        if h.tactic.kind == "last_stand" and not f.stacks.get(h.tactic.name + "|用", 0) and _usable(f, h):
+            f.stacks[h.tactic.name + "|用"] = 1
+            f.say(h, "護住要害，這一回合化影")
+            return True
+    return False
+
+
+def _countered(f: _Fight, hit: bool) -> None:
+    """悟招：被剋中一次記一層看破（下一回合起推力加重）。"""
+    if not hit:
+        return
+    for h in f.holders:
+        if h.tactic.kind == "insight" and _usable(f, h):
+            n = f.stacks.get(h.tactic.name, 0)
+            if n < int(h.tactic.params.get("stacks", 3)):
+                f.stacks[h.tactic.name] = n + 1
+                f.say(h, f"吃了一記，看破了一層來路（{n + 1} 層）")
+
+
+def _answer(f: _Fight, mine: str | None, his: str | None) -> tuple[float, bool]:
+    """應招：兩邊的招定了之後這一方的特技（化勁、借力、斬將、墜星、撼地、先發……）：（氣勢往這一方多推多少, 對手這一回合打不到你）。"""
+    out, stop = 0.0, False
+    u = f.strike
+    for h in f.holders:
+        t, p = h.tactic, h.tactic.params
+        if t.timing != "應招" or not _usable(f, h) or not _in_span(h, f.round):
+            continue
+        if t.kind == "borrow":  # 化勁、借力、凝波甲〔卸力〕：挨強攻時把那一下的一部分還回去
+            if his == "強攻" and not f.no_borrow and p.get("chance_pct", 0.0) > 0 and f.roll(p.get("chance_pct", 0.0) * f.rate(h)):
+                out += p.get("share_pct", 0.5) * u
+                f.say(h, f"借著{f.ctx.foe}的來勢，反手送了回去")
+        elif t.kind == "assault":  # 赤魄長刀〔斬將〕、隕星刀〔墜星〕：出強攻推力加重，墜星另有機會讓對手定身
+            if mine != "強攻" or not f.roll(f.rate(h)):
+                continue
+            out += p.get("push_pct", 0.0) * u
+            stunned = his is not None and p.get("stun_pct", 0.0) > 0 and f.roll(p["stun_pct"]) and f.put(f.foe, "定身", 1, now=True)
+            if stunned:
+                out += u
+                stop = True
+            f.say(h, "強攻加重" + (f"，{f.ctx.foe}定身，這一回合出不了手" if stunned else ""))
+        elif t.kind == "quake":  # 撼山棍〔撼地〕：每次固守，對手下一回合有機會卸勁
+            if mine == "固守" and f.roll(p.get("chance_pct", 0.0) * f.rate(h)) and f.put(f.foe, "卸勁", 1, now=False):
+                f.say(h, f"一棍頓地，{f.ctx.foe}下一回合卸勁")
+        elif t.kind == "first_shot":  # 追電弩〔先發〕：對手出了被你剋的招，他那一回合定身
+            if counter(mine, his) > 0 and f.roll(f.rate(h)) and f.put(f.foe, "定身", 1, now=True):
+                out += u
+                stop = True
+                f.say(h, f"先發制人，{f.ctx.foe}定身，這一回合出不了手")
+    return out, stop
 
 
 def mirror(ctx: Ctx, name: str = "") -> Ctx:
@@ -780,8 +1035,10 @@ def play(
     total = 0.0
     stopped = False
     edge = 50.0
+    carry: list[str] = []  # 上一回合收尾才發動的那幾句（乘勝、祭天、昭義）：排在下一回合前面
     for k in range(rounds):
-        lines: list[str] = []
+        lines: list[str] = carry
+        carry = []
         f.begin(k + 1, edge, lines)
         g.begin(k + 1, 100 - edge, lines)
         base_beat = counter(ours[k], theirs[k])
@@ -808,11 +1065,22 @@ def play(
         else:
             beat, d, landed = base_beat, 0.0, True
         push = pushes[k] + d
+        if active:  # 護命：氣勢要見底的那一回合留一口氣、化影（一場一次）
+            floor = 50 - tuning.stop + 1
+            if push < 0 and edge + push < floor and _last_stand(f):
+                d += floor - (edge + push)
+                push, landed = floor - edge, False
+            elif push > 0 and edge + push > 100 - floor and _last_stand(g):
+                d -= edge + push - (100 - floor)
+                push = 100 - floor - edge
         total += d
         edge += push
         if active:
+            mark = len(lines)
             _after(f, push > 0)
             _after(g, push < 0)
+            carry = lines[mark:]
+            del lines[mark:]
         turns.append(Turn(number=k + 1, ours=a, theirs=b, beat=beat, push=push, edge=max(0.0, min(100.0, edge)),
                           landed=landed, lines=list(lines)))
         us.tick()
@@ -864,7 +1132,47 @@ class Step(BaseModel):
     b_hit: bool = True
     a_hp: float = 0.0
     b_hp: float = 0.0
+    a_cut: float = 0.0  # 這一方這一回合挨的打少幾成（化勁）
+    b_cut: float = 0.0
+    a_mod: float = 0.0  # 這一回合往 a 推的那一份推力多幾成（乘勝、悟招、斬將、青龍拖刀……減去對手的氣餒），見 scale_push
+    b_mod: float = 0.0
     lines: list[str] = Field(default_factory=list)
+
+
+def scale_push(push: float, step: Step | None) -> float:
+    """頭目戰、擂台、奪璽單挑：這一回合招式推的氣勢照推力加減乘（往 a 的乘 a_mod、往 b 的乘 b_mod），最少剩一成。"""
+    if step is None or not push:
+        return push
+    return push * max(0.1, 1 + (step.a_mod if push > 0 else step.b_mod))
+
+
+def toll_cut(holders: list[Holder]) -> float:
+    """化勁：挨的打少幾成（頭目戰、擂台、奪璽單挑、決戰；一般的仗照 team.take_encounter_toll 那一份，不在這裡另算）。"""
+    return min(1.0, sum(h.tactic.params.get("toll_pct", 0.0) for h in holders))
+
+
+def luck_scale(bout: Bout | None) -> float:
+    """穩：這一回合運氣的起伏乘多少（兩邊帶著的都算，起伏是兩邊共用的一個數）。"""
+    if bout is None:
+        return 1.0
+    out = 1.0
+    for side in (bout.a, bout.b):
+        for h in side.holders:
+            out *= max(0.0, 1 - h.tactic.params.get("luck_pct", 0.0))
+    return out
+
+
+def guard_pool(bout: Bout | None, side: str, before: float, harm: float, cap: float) -> tuple[float, list[str]]:
+    """護命（頭目戰、擂台、奪璽單挑）：這一下會把池子打空時，這一回合化影、池子至少留一成（一場一次）。回（改過的扣多少, 句子）。"""
+    if bout is None or harm < before:
+        return harm, []
+    me = bout.a if side == "a" else bout.b
+    for h in me.holders:
+        if h.tactic.kind == "last_stand" and not me.stacks.get(h.tactic.name + "|用", 0):
+            me.stacks[h.tactic.name + "|用"] = 1
+            keep = h.tactic.params.get("keep_pct", 0.1) * cap
+            return max(0.0, before - keep), [f"{LEAD}{h.tactic.name}〕{h.who}護住要害，這一回合化影"]
+    return harm, []
 
 
 def side_for(holders: list[Holder], ctx: Ctx) -> BoutSide:
@@ -963,10 +1271,13 @@ def step(
         out.beat, out.push, out.a_hit, out.b_hit = _settle(
             f, g, a, b, a_off=a is None, b_off=b is None, a_self=a_self, b_self=b_self, base_beat=None, rng=rng)
         out.a_move, out.b_move = a, b
+        out.a_mod = (f.push_mod + (1.0 if f.chain else 0.0) if a is not None else 0.0) - g.foe_cut
+        out.b_mod = (g.push_mod + (1.0 if g.chain else 0.0) if b is not None else 0.0) - f.foe_cut
         f.stacks.pop("夜襲", None)
         g.stacks.pop("夜襲", None)
     out.a_hp = sum(f.hp.values()) - (0.0 if f.veiled else g.dmg)
     out.b_hp = sum(g.hp.values()) - (0.0 if g.veiled else f.dmg)
+    out.a_cut, out.b_cut = toll_cut(f.holders), toll_cut(g.holders)
     if f.veiled:
         out.a_hit = False
     if g.veiled:
@@ -1090,12 +1401,18 @@ def war_round(side: BoutSide, move: str | None, beat: int, round_: int, edge: fl
     _strike(f)
     chained = f.chain
     if move is not None:
+        f.mine = move
         _follow(f, beat)
+        _countered(f, beat < 0)
     out = War(lines=lines, unbeaten=f.flawless)
     if move is not None:
         more = f.push_mod + (f.guard_mod if move == "固守" else 0.0) + (1.0 if f.chain or chained else 0.0) + f.extra
+        for h in f.holders:  # 斬將、墜星：出強攻推力加重（決戰裡沒有單一的對手可以定身）
+            if h.tactic.kind == "assault" and move == "強攻" and _in_span(h, round_) and f.roll(f.rate(h)):
+                more += h.tactic.params.get("push_pct", 0.0)
+                f.say(h, "強攻加重")
         out.force = max(0.0, 1 + more * tuning.war_scale)
-    out.damage = 0.0 if f.veiled else 1.0
+    out.damage = 0.0 if f.veiled else 1.0 - toll_cut(f.holders)
     out.hp = sum(f.hp.values())
     f.stacks.pop("夜襲", None)
     return out

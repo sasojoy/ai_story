@@ -42,7 +42,7 @@ def test_every_kind_runs():
     content = real_content()
     t = content.config.tactics
     sids = [sid for sid, s in content.skills.items() if s.tactic is not None]
-    assert len(sids) == 36 and {content.skills[s].tactic.kind for s in sids} == set(tactics.KINDS)
+    assert len(sids) == 36 and {content.skills[s].tactic.kind for s in sids} <= set(tactics.KINDS)
     for sid in sids:
         holder = _only(content, sid, rate=1.0)
         for seed in range(20):
@@ -157,3 +157,40 @@ def test_tactic_heals_and_self_costs_change_hp_after_the_toll():
     hurt = tactics.Clash(turns=[turn], margin=0.0, hp={PLAYER: -0.1})
     game._take_toll("大勝", clash=hurt)
     assert m.neili == pytest.approx(cap * 0.5)
+
+
+def _own_tactics(content):
+    """本命以外的戰法（第三批）：八個一般功效疊到上限、七個特別功效、九件神器的特技、七把名將本命兵器的特技。"""
+    from tianxia import traits
+    lo = traits.Loadout(layers={t.hook: 99.0 for t in content.traits.general},
+                        specials={sp.hook: sp for sp in content.traits.special})
+    out = traits.tactic_defs(content, lo)
+    out += [r.tactic for r in content.forge_secrets.values() if r.tactic is not None]
+    out += [a.tactic for a in content.gear.signature_arms if a.tactic is not None]
+    return out
+
+
+def test_every_trait_and_gear_tactic_runs_and_together_they_cover_every_kind():
+    content = real_content()
+    t = content.config.tactics
+    own = _own_tactics(content)
+    assert len(own) == 7 + 7 + 9 + 7  # 厚沒有回合裡的戰法
+    kinds = {content.skills[s].tactic.kind for s, sk in content.skills.items() if sk.tactic is not None}
+    assert kinds | {x.kind for x in own} == set(tactics.KINDS)
+    for tactic in own:
+        holder = tactics.Holder(who="你", key=PLAYER, skill="test", tactic=tactic.model_copy(update={"rate": 1.0}))
+        for seed in range(20):
+            clash = tactics.play(5.0, 100.0, 5, [holder], _ctx(night=True, mount_tier=2, good=40, evil=40, followers=2,
+                                                             foe_faction="huangjin", own_turf=True), t, random.Random(seed))
+            assert 1 <= len(clash.turns) <= 5
+            assert all(line.startswith(tactics.LEAD) for turn in clash.turns for line in turn.lines), tactic.name
+
+
+def test_every_own_tactic_has_a_unique_name_and_a_filled_in_card():
+    content = real_content()
+    names = [x.name for x in _own_tactics(content)]
+    names += [sk.tactic.name for sk in content.skills.values() if sk.tactic is not None]
+    assert len(names) == len(set(names))
+    for tactic in _own_tactics(content):
+        text = tactics.card_text(tactic, tactics.GEAR_TITLE)
+        assert "{" not in text and tactic.name in text, text

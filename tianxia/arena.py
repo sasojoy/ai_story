@@ -315,15 +315,22 @@ def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Ra
         move, his = step.a_move, step.b_move
     mine, theirs = _weight(me, move or "", content), _weight(foe, his or "", content)
     beat = step.beat if step is not None else duel_rules.counter(move, his)
-    push = duel_rules.push_of(mine, theirs, beat, me.role, tuning, battle, rng.uniform(-tuning.luck, tuning.luck), foe_role=foe.role)
+    luck = rng.uniform(-tuning.luck, tuning.luck) * tactics.luck_scale(fight.bout if step is not None else None)
+    push = round(tactics.scale_push(duel_rules.push_of(mine, theirs, beat, me.role, tuning, battle, luck, foe_role=foe.role), step))
     my_hp = duel_rules.harm_of(me.hp_cap, mine, theirs, beat, tuning)
     foe_hp = duel_rules.harm_of(foe.hp_cap, theirs, mine, -beat, tuning)
     lines: list[str] = []
     if step is not None:
         push += round(step.push)
-        my_hp = (my_hp if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
-        foe_hp = (foe_hp if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
+        my_hp = (round(my_hp * (1 - step.a_cut)) if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
+        foe_hp = (round(foe_hp * (1 - step.b_cut)) if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
         lines = list(step.lines)
+        guarded, said = tactics.guard_pool(fight.bout, "a", me.hp, my_hp, me.hp_cap)
+        my_hp = round(guarded)
+        lines += said
+        guarded, said = tactics.guard_pool(fight.bout, "b", foe.hp, foe_hp, foe.hp_cap)
+        foe_hp = round(guarded)
+        lines += said
     my_hp, foe_hp = _pool(me, my_hp), _pool(foe, foe_hp)
     before = fight.edge
     fight.edge = _clamp(fight.edge + push)
@@ -352,8 +359,11 @@ def gamble(fight: ArenaFight, rate: int, content: Content, rng: random.Random, t
                             b_ratio=foe.hp / max(1.0, foe.hp_cap))
         delta += round(step.push)
         hp -= round(step.a_hp * me.hp_cap)
-        _pool(foe, -round(step.b_hp * foe.hp_cap))
-        out += step.lines
+        guarded, said = tactics.guard_pool(fight.bout, "a", me.hp, hp, me.hp_cap)
+        hp = round(guarded)
+        foe_hp, said_b = tactics.guard_pool(fight.bout, "b", foe.hp, -round(step.b_hp * foe.hp_cap), foe.hp_cap)
+        _pool(foe, round(foe_hp))
+        out += step.lines + said + said_b
     hp = _pool(me, hp)
     before = fight.edge
     fight.edge = _clamp(fight.edge + delta)

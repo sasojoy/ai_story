@@ -12,7 +12,10 @@
 - 擂台：同樣身手的兩個人，挑的人帶戰法、守的分身沒有（以及兩邊都帶同一位人物的），挑的人贏面；
 - 決戰：一個人一回合的份量平均乘多少（tactics.war_round，隨機出招、三成剋中），十八位各自。
 
-用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts]
+第三批（--kits）另量：本命對玩家自組上品（兩門上品合成武學的功效換成的戰法，隨機 SELF_KITS 套）、神器特技、名將本命兵器（含人器合一）。
+擂台同樣身手的兩個人對打（兩邊都照架勢出招），兩個方向都量；另量一般的仗多的贏面與決戰的份量。
+
+用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits]
 """
 from __future__ import annotations
 
@@ -53,6 +56,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=4000)
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
+    parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     args = parser.parse_args()
@@ -63,6 +67,9 @@ def main() -> None:
         content.config.tactics.war_scale = args.war_scale
     if args.bouts:
         bouts(content, args.runs)
+        return
+    if args.kits:
+        kits(content, args.runs)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
@@ -240,6 +247,136 @@ def bouts(content, runs):
                 n += 1
                 tactics.war_close(side, rng.random() < 0.5, t, random.Random(f"wc|{i}|{k}"))
         print(f"  {names[fid]:<4}×{total / n:.3f}（發動 {fired / n:.0%} 的回合）")
+
+
+# ── 第三批 ──────────────────────────────────────────
+
+SELF_KITS = 12  # 隨機自組幾套
+ATTRS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實")
+
+
+def self_kit(content, seed, quality="上品", special_share=0.5):
+    """一套自組：武學、內功各一門合成武學（品質 quality），各三格功效（第一格是自己的屬性），一半的機會帶一個特別功效。"""
+    from tianxia import traits
+    rng = random.Random(f"kit|{seed}")
+    mult = traits.multiplier(content, quality)
+    lo = traits.Loadout()
+    for _art in range(2):
+        own = rng.choice(ATTRS)
+        cells = [own, rng.choice(ATTRS), rng.choice(ATTRS)]
+        for a in cells:
+            hook = traits.general(content, a).hook
+            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
+    if rng.random() < special_share:
+        sp = rng.choice([t for t in content.traits.special if t.pool])
+        lo.specials[sp.hook] = sp
+    return [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+
+
+def gear_holder(tactic):
+    return tactics.Holder(who="你", key="player", skill="gear", tactic=tactic)
+
+
+def kits(content, runs):
+    from tianxia import arena, battle_instance
+    from tianxia import duel as duel_rules
+    from tianxia.models import MOVES
+    from tianxia.state import ArenaFight, ArenaSide
+
+    cfg, bt, t = content.config.duel, content.config.battle, content.config.tactics
+    power = 150.0
+    ctx = tactics.Ctx(foe="", our_agility=8, team=["player"])
+
+    def ring_once(hs_a, hs_b, seed):
+        rng = random.Random(f"r|{seed}")
+        trng = random.Random(f"rt|{seed}")
+        sc = battle_instance.strength(bt, power)
+        me = ArenaSide(name="甲", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
+        foe = ArenaSide(name="乙", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
+        f = ArenaFight(id=1, foe_key="乙", me=me, foe=foe)
+        ka = tactics.side_for([h.model_copy(deep=True) for h in hs_a], ctx) if hs_a else None
+        kb = tactics.side_for([h.model_copy(deep=True) for h in hs_b], ctx) if hs_b else None
+        f.bout = tactics.open_bout(ka, kb, "甲", "乙")
+        arena.roll_next(f, rng, content.config.arena, cfg)
+        while True:
+            move = duel_rules.answer_to(f) or rng.choice(MOVES)
+            if f.bout is not None:
+                locked = tactics.locks(f.bout).no_moves
+                if move in locked:
+                    shown = duel_rules.shown_move(f)
+                    move = tactics.best_against([shown] if shown else list(MOVES), [m for m in MOVES if m not in locked])
+            arena.exchange_full(f, move, content, rng, trng)
+            f.round += 1
+            tier = arena.verdict(f, cfg)
+            if tier is not None:
+                return 1 if tier in WIN else (-1 if tier == "落敗" else 0)
+            arena.roll_next(f, rng, content.config.arena, cfg)
+
+    def share(hs_a, hs_b):
+        """甲對乙的贏面：兩個方向（甲挑乙、乙挑甲）各 runs 場，贏 ÷（贏＋輸），和局不算。"""
+        won = lost = 0
+        for i in range(runs):
+            r = ring_once(hs_a, hs_b, f"ab|{i}")
+            won += r > 0
+            lost += r < 0
+            r = ring_once(hs_b, hs_a, f"ba|{i}")
+            won += r < 0
+            lost += r > 0
+        return won / max(1, won + lost)
+
+    figures = figures_with(content)
+    names = {fid: content.characters[fid].name for fid in figures}
+    selfs = [self_kit(content, k) for k in range(SELF_KITS)]
+    plain = share([], [])
+    print(f"擂台（兩邊威力 {power:g}，兩個方向各 {runs} 場；都沒有戰法時 {plain:.1%}）")
+    print("自組上品（隨機 %d 套）對沒有戰法：" % SELF_KITS + "　".join(f"{share(k, []):.0%}" for k in selfs))
+    print("本命對自組上品（每一位對 %d 套的平均，越接近 50%% 越平）：" % SELF_KITS)
+    rows = []
+    for fid in figures:
+        sig = holders(content, [("你", "player", fid)])
+        vs = [share(sig, k) for k in selfs]
+        rows.append(sum(vs) / len(vs))
+        print(f"  {names[fid]:<4}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）　對沒有戰法 {share(sig, []):.0%}")
+    print(f"  十八位平均 {sum(rows) / len(rows):.1%}")
+    jue = [self_kit(content, k, quality="絕學") for k in range(SELF_KITS)]
+    print("自組絕學對自組上品：" + f"{sum(share(a, b) for a, b in zip(jue, selfs)) / SELF_KITS:.1%}")
+    print("神器特技（原品／仿品）：自組上品加上它，對同一套自組上品")
+    for r in content.forge_secrets.values():
+        if r.tactic is None:
+            continue
+        orig = sum(share(k + [gear_holder(r.tactic)], k) for k in selfs) / SELF_KITS
+        copy = sum(share(k + [gear_holder(tactics.copied(r.tactic, t.copy_rate))], k) for k in selfs) / SELF_KITS
+        print(f"  〔{r.tactic.name}〕{orig:5.1%}　仿品 {copy:5.1%}")
+    print("名將本命兵器：自組上品加上它，對同一套自組上品；人器合一＝本命加上本命兵器（含人器合一），對只有本命")
+    for arm in content.gear.signature_arms:
+        alone = sum(share(k + [gear_holder(arm.tactic)], k) for k in selfs) / SELF_KITS
+        sig = holders(content, [("你", "player", arm.character)])
+        bonded = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == arm.character else h for h in sig]
+        bond = share(bonded + [gear_holder(arm.tactic)], sig) if sig else float("nan")
+        print(f"  {content.characters[arm.character].name}〔{arm.tactic.name}〕{alone:5.1%}　人器合一 {bond:5.1%}")
+    # 一般的仗：贏面多幾個百分點（同第一批的算法）
+    ectx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player"])
+    base = [win_rate(content, DIFFICULTY * r, [], runs, ectx) for r in RATIOS]
+    lift = []
+    for k in selfs:
+        rates = [win_rate(content, DIFFICULTY * r, k, runs, ectx) for r in RATIOS]
+        lift.append(sum(a - b for a, b in zip(rates, base)) / len(RATIOS))
+    print(f"一般的仗：自組上品贏面平均 {sum(lift) / len(lift):+.1%}（最低 {min(lift):+.1%}、最高 {max(lift):+.1%}）")
+    # 決戰
+    tot = []
+    for k in selfs:
+        kit = tactics.side_for(k, tactics.Ctx(foe="", our_agility=8, team=["player"]))
+        rng = random.Random(1)
+        total = n = 0.0
+        for i in range(runs // 9 or 1):
+            side = kit.model_copy(deep=True)
+            for j in range(1, 10):
+                w = tactics.war_round(side, rng.choice(MOVES), 1 if rng.random() < 0.3 else 0, j, 50.0, 1.0, t, random.Random(f"w|{i}|{j}"))
+                total += w.force
+                n += 1
+                tactics.war_close(side, rng.random() < 0.5, t, random.Random(f"wc|{i}|{j}"))
+        tot.append(total / n)
+    print(f"決戰：自組上品份量平均 ×{sum(tot) / len(tot):.3f}（最低 ×{min(tot):.3f}、最高 ×{max(tot):.3f}）")
 
 
 def foe_rate(content, power, foe, runs, ctx):

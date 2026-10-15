@@ -180,23 +180,26 @@ def exchange_full(
     mine = duel.scores.get(move or "", 0.0) or battle_instance.strength(battle, duel.power) * tuning.foe_fit
     theirs = foe_strength(battle, tuning, boss, foe_difficulty(duel, boss))
     beat = step.beat if step is not None else counter(move, his)
-    luck = rng.uniform(-tuning.luck, tuning.luck)
+    luck = rng.uniform(-tuning.luck, tuning.luck) * tactics.luck_scale(duel.bout if step is not None else None)
     delta = push_of(mine, theirs, beat, duel.role, tuning, battle, luck)
+    delta = round(tactics.scale_push(delta, step))
     hp = min(duel.hp, harm_of(duel.hp_cap, mine, theirs, beat, tuning))
     lines: list[str] = []
     if step is not None:
         delta += round(step.push + tactics.pool_push(step.b_hp, tactic))
-        if not step.a_hit:
-            hp = 0
+        hp = round(hp * (1 - step.a_cut)) if step.a_hit else 0
         hp -= round(step.a_hp * duel.hp_cap)
+        lines = list(step.lines)
+        guarded, said = tactics.guard_pool(duel.bout, "a", duel.hp, hp, duel.hp_cap)
+        hp = round(guarded)
+        lines += said
         hp = min(duel.hp, hp) if hp > 0 else max(-(duel.hp_cap - duel.hp), hp)
-        lines = step.lines
     before = duel.edge
     duel.edge = _clamp(duel.edge + delta)
     duel.hp -= hp
     if step is not None:
         lines = lines + tactics.close_round(duel.bout, duel.edge - before, tactic, trng)
-    return Exchange(round(duel.edge - before), hp, beat, move, his, lines)
+    return Exchange(round(duel.edge - before), round(hp), beat, move, his, lines)  # 池子見底時 hp 是剩的那一截（小數）
 
 
 def gamble(
@@ -219,8 +222,10 @@ def gamble(
         step = tactics.step(duel.bout, tactics.GAMBLE, duel.move, duel.edge, tactic, trng, a_ratio=duel.hp / max(1.0, duel.hp_cap))
         extra = step.push + tactics.pool_push(step.b_hp, tactic)
         hp -= round(step.a_hp * duel.hp_cap)
+        guarded, said = tactics.guard_pool(duel.bout, "a", duel.hp, hp, duel.hp_cap)
+        hp = round(guarded)
         if lines is not None:
-            lines += step.lines
+            lines += step.lines + said
     hp = min(duel.hp, hp) if hp > 0 else max(-(duel.hp_cap - duel.hp), hp)
     before = duel.edge
     duel.edge = _clamp(duel.edge + delta + round(extra))
@@ -229,7 +234,7 @@ def gamble(
         more = tactics.close_round(duel.bout, duel.edge - before, tactic, trng)
         if lines is not None:
             lines += more
-    return won, round(duel.edge - before), hp, rate
+    return won, round(duel.edge - before), round(hp), rate
 
 
 def verdict(duel: DuelState, boss: DuelBoss, tuning: DuelTuning) -> str | None:

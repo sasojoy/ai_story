@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import random
 
-from . import equipment
+from . import equipment, tactics
 from .equipment import (  # noqa: F401  搬到 equipment 的共用部分，原名照留（smithing、engine、測試都寫 weapons.X）
     DISMANTLE_ASK, DISMANTLE_LIST, DISMANTLE_MISSING, DISMANTLE_MORE, DISMANTLE_PREFIX, DISMANTLE_YES, NO_REPAIR_MATERIAL,
     NOT_HERE, RACK_FULL, SMITH, TIER_WORDS, TOWN_TAG, dismantle_confirm, dismantle_material, dismantle_order, grade,
@@ -399,13 +399,13 @@ RACK_NOTE = "城裡的鐵匠鋪打得出、買得到、修得好，也淬得了�
 
 
 def card_line(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> str:
-    """本人卡上的「兵器」那一行（3.6）：空手或開關關著是空字串。"""
+    """本人卡上的「兵器」那一行（3.6）：空手或開關關著是空字串。神器與名將本命兵器底下多一兩行特技與人器合一（本命戰法第三批）。"""
     w = state.player.weapon
     if not content.config.weapons.enabled or w is None:
         return ""
     if not usable(w, art, content, world):
-        return f"兵器　{_describe(w)}，{_mismatch(w, art, content, world)}"
-    return f"兵器　{_describe(w)}，威力 {_power(w, art, content, world)}"
+        return "\n".join([f"兵器　{_describe(w)}，{_mismatch(w, art, content, world)}", *tactics.item_lines(content, w)])
+    return "\n".join([f"兵器　{_describe(w)}，威力 {_power(w, art, content, world)}", *tactics.item_lines(content, w)])
 
 
 def _power(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
@@ -423,6 +423,7 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "keep": equipment.kept(w),  # 網頁照它把拆解鈕灰掉寫原因（神器原品、本命兵器）
         "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
         "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
+        "tactic": tactics.item_lines(content, w),  # 神器、名將本命兵器的特技與人器合一（本命戰法第三批），沒有是空的
     }
 
 

@@ -76,7 +76,8 @@ def test_a_stun_takes_away_your_move_this_round():
     content = real_content()
     roar = _only(content, "zhangfei_wugong", who="張飛", key=tactics.FOE_KEY, rate=1.0, params={"stun_pct": 1.0, "turns": 1.0})
     bout = _bout([], [roar])
-    step = tactics.step(bout, "強攻", "固守", 50.0, content.config.tactics, random.Random(0), b_auto=True)
+    t = content.config.tactics.model_copy(update={"bout_control_share": 1.0})  # 這幾種仗打折的發動率另外測
+    step = tactics.step(bout, "強攻", "固守", 50.0, t, random.Random(0), b_auto=True)
     assert step.a_move is None and not step.b_hit and step.push < 0
     assert any(line.startswith("〔長坂一喝〕") for line in step.lines)
 
@@ -101,7 +102,7 @@ def test_a_disarm_locks_strong_attack_next_round_and_the_menu_says_so():
 
 def test_the_ward_reflects_a_control_back_onto_its_caster():
     content = real_content()
-    t = content.config.tactics
+    t = content.config.tactics.model_copy(update={"bout_control_share": 1.0})
     ward = _only(content, "caocao_neigong", rate=1.0, params={"turns": 2.0, "reflect_pct": 1.0})
     roar = _only(content, "zhangfei_wugong", who="張飛", key=tactics.FOE_KEY, rate=1.0, params={"stun_pct": 1.0, "turns": 1.0})
     bout = _bout([ward], [roar])
@@ -295,3 +296,12 @@ def test_the_arena_page_greys_out_a_locked_move_and_shows_the_status(ring):
         assert not option.enabled and "卸勁中" in option.label
         return []
     _as(content, world, "甲", go)
+
+
+def test_heavy_control_fires_less_often_in_bouts():
+    content = real_content()
+    roar = _only(content, "zhangfei_wugong", who="張飛", key=tactics.FOE_KEY, rate=1.0, params={"stun_pct": 1.0, "turns": 1.0})
+    off = content.config.tactics.model_copy(update={"bout_control_share": 0.0})
+    step = tactics.step(_bout([], [roar]), "強攻", "固守", 50.0, off, random.Random(0), b_auto=True)
+    assert step.a_move == "強攻"
+    assert content.config.tactics.bout_control_share == 0.6

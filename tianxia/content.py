@@ -633,6 +633,26 @@ def check_signature_arts(c: Content, need) -> None:
         need(fields <= set(tactic.params), f"武學 {skill.id}：本命戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
         need(all(a in c.characters for a in tactic.allies), f"武學 {skill.id}：本命戰法的 allies 不是人物")
         need(tactic.foe_faction is None or tactic.foe_faction in factions, f"武學 {skill.id}：本命戰法的 foe_faction 不是劇本的陣營")
+    # 本命戰法第三批：特別功效、神器、名將本命兵器的戰法（一般功效的換成 traits.tactic_defs 時才有名字，名字就是功效名）
+    own = [(f"特別功效 {t.id}", t.tactic) for t in c.traits.special if t.tactic is not None]
+    own += [(f"神器配方 {r.id}", r.tactic) for r in c.forge_secrets.values() if r.tactic is not None]
+    own += [(f"名將本命兵器 {a.character}", a.tactic) for a in c.gear.signature_arms if a.tactic is not None]
+    for where, tactic in own:
+        first = seen.setdefault(tactic.name, where)
+        need(first == where or (where.startswith("特別功效") and tactic.name in trait_names and first.startswith("特別功效")),
+             f"{where}：戰法的名字「{tactic.name}」重複（{first}）")
+        if not where.startswith("特別功效"):
+            need(tactic.name not in trait_names, f"{where}：戰法的名字「{tactic.name}」跟一般或特別功效同名")
+        fields = {name for _, name, _, _ in string.Formatter().parse(tactic.desc) if name}
+        need(fields <= set(tactic.params), f"{where}：戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
+    for arm in c.gear.signature_arms:
+        need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
+    for trait in c.traits.general:
+        if trait.tactic is None:
+            continue
+        need("{extra}" not in trait.desc or trait.extra_per_layer > 0, f"一般功效 {trait.name}：說明寫了 {{extra}} 卻沒有 extra_per_layer")
+        used = [v for v in [trait.tactic.rate, *trait.tactic.params.values()] if isinstance(v, str)]
+        need(all(v in ("value", "extra") for v in used), f"一般功效 {trait.name}：戰法的數字只能寫數字、value 或 extra")
 
 
 def check_traits(c: Content, need) -> None:

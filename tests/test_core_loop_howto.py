@@ -56,8 +56,3 @@ def test_the_first_order_hint_points_at_the_sortie():
     recruiters = c.tutorial.enlist.recruiters
     assert "出陣" in recruiters["guan"].order_hint and "出陣" in recruiters["huang"].order_hint
 
-
-def test_light_feet_names_the_sortie():
-    c = real_content()
-    [light] = [t for t in c.traits.special if t.hook == "train_stamina"]
-    assert "出陣" in light.desc

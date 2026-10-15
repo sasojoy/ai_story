@@ -567,6 +567,22 @@ def idle_count(instance: BattleInstance, definition: BattleDef) -> int:
     return sum(1 for p in _active_participants(instance) if idle(p))
 
 
+def _war_rally(instance: BattleInstance, moves: dict[str, str], on: bool) -> dict[tuple[str, str], list[tuple[str, float]]]:
+    """名將本命兵器〔號令〕（本命戰法第三批）：帶著它出固定招的人，同一邊出同一招的友軍份量 +war_ally_pct（自己不算）。
+    （陣營, 招）→ [(帶著它的人, 加幾成)]；戰法關著是空的。"""
+    out: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    if not on:
+        return out
+    for name, move in moves.items():
+        p = instance.participants.get(name)
+        if p is None or p.eliminated or p.kit is None:
+            continue
+        pct = max((h.tactic.params.get("war_ally_pct", 0.0) for h in p.kit.holders), default=0.0)
+        if pct > 0:
+            out.setdefault((p.faction, move), []).append((name, pct))
+    return out
+
+
 def counter_coefficient(tuning: BattleTuning, move: str, enemy_mix: dict[str, float]) -> float:
     """剋制係數（戰鬥系統 3.4）：1 ＋ 0.5 × 對面出「被你剋的招」的比例 － 0.5 × 對面出「剋你的招」的比例，0.5～1.5。
     enemy_mix 是對面這回合各招的比例（_mix；對面沒人出固定招時呼叫端不呼叫、係數當 1）。"""
@@ -692,6 +708,11 @@ def resolve_round(
     rnd_no = instance.round_number + 1  # 這是整場的第幾回合（round_number 結算完才加一）
     fired: dict[str, list[str]] = {}  # 陣營 → 這一回合發動本命戰法的那幾句（〔名〕開頭，誰發動的寫在句子裡）
 
+    rally = _war_rally(instance, moves, tactic is not None)  # 名將本命兵器〔號令〕：（陣營, 招）→ [(號令的人, 加幾成)]
+    for side, move_, who, _pct in sorted({(k[0], k[1], w, pc) for k, rows in rally.items() for w, pc in rows}):
+        if any(n != who and q.faction == side and moves.get(n) == move_ for n, q in instance.participants.items() if not q.eliminated):
+            fired.setdefault(side, []).append(f"{tactics.LEAD}號令〕{who}號令一下，同出{move_}的友軍份量加重")
+
     def war(name: str, p: BattleParticipant, move: str | None, coef: float) -> tactics.War:
         """本命戰法（本命戰法第二批）：只算自己身上的（tactics.WAR_KINDS）；沒帶著或沒開是中性值。"""
         if p.kit is None or tactic is None:
@@ -813,6 +834,7 @@ def resolve_round(
             if fx.unbeaten:  # 無隙：被剋也不吃虧
                 coef = max(coef, 1.0)
             might = p.scores.get(move, 0.0) * condition(p) * coef * fx.force
+            might *= 1 + sum(pct for who, pct in rally.get((p.faction, move), []) if who != name)
             force[p.faction] += might  # 份量在扣這一回合的血之前算
             shares[p.faction].append((might, name, move))
             counts[p.faction] += 1

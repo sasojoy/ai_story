@@ -28,12 +28,12 @@
     {"character": "taoqian", "gear": "tanmu_nianzhu"}
   ],
   "signature_arms": [
-    {"character": "caocao", "name": "梟風槍", "kind": "槍", "attribute": "快"},
-    {"character": "liubei", "name": "雲紋雙鋒", "kind": "劍", "attribute": "柔"},
-    {"character": "guanyu", "name": "赤魄長刀", "kind": "刀", "attribute": "剛"},
-    {"character": "zhangfei", "name": "裂雷矛", "kind": "槍", "attribute": "剛"},
-    {"character": "sunjian", "name": "江潮槍", "kind": "槍", "attribute": "快", "figure": "sunjian"},
-    {"character": "yuanshao", "name": "冠冕劍", "kind": "劍", "attribute": "虛"},
-    {"character": "taoqian", "name": "厚德杖", "kind": "棍", "attribute": "柔"}
+    {"character": "caocao", "name": "梟風槍", "kind": "槍", "attribute": "快", "tactic": {"name": "挾勢", "timing": "起手", "kind": "opening_ward", "rate": 1.0, "rounds": 1, "params": {"turns": 1}, "desc": "第 1 回合自己守一，不受卸勁、亂神、定身、失神。", "say": "挾勢而來，這一回合守一"}, "bond": {"desc": "身上也練著曹操的本命：亂世心術的反彈 +20%（40% → 60%）。", "params": {"reflect_pct": 0.2}}},
+    {"character": "liubei", "name": "雲紋雙鋒", "kind": "劍", "attribute": "柔", "tactic": {"name": "昭義", "timing": "心法", "kind": "zhaoyi", "params": {"heal_pct": 0.03}, "desc": "同伴每發動一次戰法，你回氣血 {heal_pct}。"}, "bond": {"desc": "身上也練著劉備的本命：仁義聚眾每回合多回氣血 2%。", "params": {"heal_pct": 0.02}}},
+    {"character": "guanyu", "name": "赤魄長刀", "kind": "刀", "attribute": "剛", "tactic": {"name": "斬將", "timing": "應招", "kind": "assault", "rate": 1.0, "params": {"push_pct": 0.3}, "desc": "出強攻推力 +{push_pct}。"}, "bond": {"desc": "身上也練著關羽的本命：青龍拖刀不用蓄力，當回合就出。", "prep": -1}},
+    {"character": "zhangfei", "name": "裂雷矛", "kind": "槍", "attribute": "剛", "tactic": {"name": "雷吼", "timing": "心法", "kind": "flawless", "rounds": 1, "desc": "無隙（出招不會被剋）。"}, "bond": {"desc": "身上也練著張飛的本命：長坂一喝發動率 +15%。", "rate": 0.15}},
+    {"character": "sunjian", "name": "江潮槍", "kind": "槍", "attribute": "快", "figure": "sunjian", "tactic": {"name": "破浪", "timing": "起手", "kind": "surge", "rate": 1.0, "rounds": 1, "desc": "這一回合連環，推兩次。", "say": "破浪而進，這一回合連環"}, "bond": {"desc": "身上也練著孫堅的本命：先登斬將之後，第 2 回合也連環。", "params": {"chain_next": 1}}},
+    {"character": "yuanshao", "name": "冠冕劍", "kind": "劍", "attribute": "虛", "tactic": {"name": "號令", "timing": "起手", "kind": "awe", "rate": 0.4, "rounds": 2, "params": {"cut_pct": 0.3, "war_ally_pct": 0.05}, "desc": "對手氣餒，這一回合推力 −{cut_pct}；決戰裡跟你出同一招的友軍份量 +{war_ally_pct}。", "say": "號令一下，{foe}氣餒，這一回合推力大減"}, "bond": {"desc": "身上也練著袁紹的本命：世家威儀的氣餒拉長到前 3 回合。", "rounds": 1}},
+    {"character": "taoqian", "name": "厚德杖", "kind": "棍", "attribute": "柔", "tactic": {"name": "安堵", "timing": "心法", "kind": "rebound_guard", "params": {"share_pct": 0.3}, "desc": "出固守時借力：對手強攻你，他吃自己那一下的 {share_pct}。"}, "bond": {"desc": "身上也練著陶謙的本命：寬厚養氣的化影 +10%。", "params": {"chance_pct": 0.1}}}
   ]
 }

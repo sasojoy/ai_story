@@ -231,7 +231,7 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
         else:  # 在場卻逾時沒送：結算時才代出（不給架勢）
             plays[w] = proxy(getattr(duel, w), seal.dice(salt, tianji, "seal-proxy", duel.id, n, w), cfg, tuning)[0]
             getattr(duel, w).proxied = True
-    luck = rolls["challenger"].uniform(-tuning.luck, tuning.luck)  # 先取運氣：不論有沒有人搏，取數順序固定
+    luck = rolls["challenger"].uniform(-tuning.luck, tuning.luck) * tactics.luck_scale(duel.bout)  # 先取運氣：不論有沒有人搏，取數順序固定
     gamblers = [w for w in SIDES if plays[w] == TEXT]
     harm = {w: 0 for w in SIDES}
     push = 0
@@ -247,12 +247,12 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
             mc, mh = step.a_move, step.b_move
         sc, sh = _weight(c, mc or "", content), _weight(h, mh or "", content)
         beat = step.beat if step is not None else duel_rules.counter(mc, mh)
-        push = duel_rules.push_of(sc, sh, beat, c.role, tuning, battle_t, luck, foe_role=h.role)
+        push = round(tactics.scale_push(duel_rules.push_of(sc, sh, beat, c.role, tuning, battle_t, luck, foe_role=h.role), step))
         harm["challenger"] = duel_rules.harm_of(c.hp_cap, sc, sh, beat, tuning)
         harm["holder"] = duel_rules.harm_of(h.hp_cap, sh, sc, -beat, tuning)
         if step is not None:
-            harm["challenger"] *= step.a_hit
-            harm["holder"] *= step.b_hit
+            harm["challenger"] = round(harm["challenger"] * (1 - step.a_cut)) * step.a_hit
+            harm["holder"] = round(harm["holder"] * (1 - step.b_cut)) * step.b_hit
         lead = f"{c.name}{mc or '定在原地'}，{h.name}" + (f"以{mh}相迎" if mh else "定在原地")
     else:
         parts = []
@@ -274,16 +274,21 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
             if saved is not None:
                 parts[-1] = tactics.divine_line(saved).rstrip("！")
         lead = "；".join(parts)
+    guarded_lines: list[str] = []
     if step is not None:
         push += round(step.push)
         harm["challenger"] = round(harm["challenger"] - step.a_hp * c.hp_cap)
         harm["holder"] = round(harm["holder"] - step.b_hp * h.hp_cap)
+        for w, key, s in (("challenger", "a", c), ("holder", "b", h)):
+            guarded, said = tactics.guard_pool(duel.bout, key, s.hp, harm[w], s.hp_cap)
+            harm[w] = round(guarded)
+            guarded_lines += said
     c.hp = max(0.0, min(c.hp_cap, c.hp - harm["challenger"]))
     h.hp = max(0.0, min(h.hp_cap, h.hp - harm["holder"]))
     before = duel.edge
     duel.edge = max(0.0, min(100.0, duel.edge + push))
     duel.round = n
-    fired = list(step.lines) if step is not None else []
+    fired = (list(step.lines) + guarded_lines) if step is not None else []
     if step is not None:
         fired += tactics.close_round(duel.bout, duel.edge - before, content.config.tactics, trng)
     line = tactics.round_line(ROUND.format(n=n, lead=lead, edge=edge_words(duel)), fired)

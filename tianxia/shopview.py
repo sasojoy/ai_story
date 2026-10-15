@@ -497,6 +497,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         "where": "worn" if worn is not None and worn.id == item.id else "rack",
         "divine": forge_secrets.unnamed_originals(state, world).get(item.id),
         "unit": equipment.unit_for(item.slot, item.kind),  # 定名表單那一句的量詞（FB-197：防具一件、拳套一副、其他兵器一把）
+        "tactic": tactics.item_lines(content, item),  # 神器的特技（本命戰法第三批），沒有是空的
     }
 
 
