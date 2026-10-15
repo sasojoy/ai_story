@@ -1361,7 +1361,8 @@ class Game:
         if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50（FB-253）
             return sortie.STIR_FLAT_LINE
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
-        return howto.sortie_line(how, push_ok, left, self.content)
+        own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self.state.player.faction
+        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content)  # 自家地盤上攻的只有運糧隊（FB-255）
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；

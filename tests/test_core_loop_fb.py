@@ -229,6 +229,20 @@ def test_fb254_an_opportunity_push_on_separatism_is_resisted_too():
     assert w.trends[rules.GEJU] == 60 + opp.accumulate.trend
 
 
+def test_fb255_attacking_a_convoy_on_your_own_ground_does_not_say_it_is_theirs():
+    """截糧週在自家佔著的截糧地點（官軍在南陽郊野）出陣是攻打運糧隊：底下那一行不寫「這裡歸別人」，寫運糧隊經過自家地盤。
+    別人的地盤照舊寫「這裡歸別人」。"""
+    from tianxia import howto
+
+    game = _game("guan", "nanyang_wilds")
+    assert territory.controller(game.state.world, game.content, "nanyang_wilds") == "guan"
+    _intercept(game, "guan", "nanyang_wilds")
+    line = game.action_notes([o.id for o in game.options(odds=False)])["act:train"]
+    assert "這裡歸別人" not in line and line.startswith(howto.SORTIE_NOTES["convoy"].split("{")[0])
+    game.state.player.location = "huangjin_camp"
+    assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"].startswith("這裡歸別人")
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
