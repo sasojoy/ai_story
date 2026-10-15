@@ -95,6 +95,14 @@ def test_a_hero_with_the_magistrates_notice_beats_the_rogue_and_cuts_his_name():
     assert any(line in e.lines or line in e.changes for e in rogue.state.journal)
 
 
+def test_a_paused_season_posts_nothing():
+    """賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前，系統通緝也要等繼續之後。"""
+    g = _game("甲", faction="guan", fame=50)
+    g.world.pause_clock(g.now)
+    g.mark_seen(g.now)
+    assert not any(b.auto_by for b in g.world.get_season().bounties)
+
+
 def test_the_virtue_perks_name_the_notices():
     c = real_content("weekend")
     assert "官府每週貼你的海捕文書（賞 30 兩）" in renown.virtue_perks(c, "寇", 2)

@@ -921,6 +921,8 @@ class Game:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
         寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
         self.own_turn = True
+        if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
+            return
         posted = bounties.post_auto(self.state, self.content)
         if posted:
             self._write(bounties.BOARD, posted)
