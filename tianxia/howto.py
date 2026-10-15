@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import calendar, explore_modes, figures, rules, seal, sortie, territory, timetable
+from . import calendar, equipment, explore_modes, figures, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -696,6 +696,30 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     return lines
 
 
+def forge_lines(content: Content, season: WorldState) -> list[str]:
+    """玩法說明「鐵匠鋪與神器」（待 joy 潤）：神器配方與線索照這一季開季時蓋的章寫（素材與經濟設計第二、三節；沒蓋章的季照舊的說法），
+    殘譜照 Config.forge_secrets.scrap_every_mode。兵器、防具都關著是空的（整段不畫）。"""
+    if not (equipment.on(content, "weapon") or equipment.on(content, "armor")):
+        return []
+    rule = content.config.forge_secrets
+    lines = ["城鎮的鐵匠鋪賣兵器防具、修、淬煉，也能自己打造：照主料定階、輔料定屬性；打中這一季藏著的配方，打出名器。"]
+    if any(r.divine for r in content.forge_secrets.values()):
+        if season.forge_divine_per_kind and calendar.season_one_on(season, content):
+            lines.append("每一種兵器這一季都有一條神器配方（防具一條）：全服第一把是原品、由你定名，之後照著打的是仿品。")
+        elif season.forge_divine_per_kind:
+            lines.append("神器配方照天機挑，同一種兵器最多一條：全服第一把是原品、由你定名，之後照著打的是仿品。")
+        else:
+            lines.append("這一季藏著幾條神器配方：全服第一把是原品、由你定名，之後照著打的是仿品。")
+    if season.forge_split_clues:
+        lines.append("神器配方的線索拆成三片：哪一種兵器、主料、輔料。在各家鐵匠鋪花了錢，鐵匠會順口說出他知道的片子（同一家說完之前不重複），"
+                     "說書、殘譜也聽得到；三片湊齊，鑄譜上那一條就完整。")
+    else:
+        lines.append("配方的口訣聽說書、聽鐵匠順口、撿殘譜都聽得到，記在鑄譜上。")
+    if rule.scrap_every_mode and explore_modes.on(content) and (rule.scrap_chance > 0 or content.config.secrets.scrap_chance > 0):
+        lines.append("殘譜三種探索都撿得到。")
+    return lines
+
+
 def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
     """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、四個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
     情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
@@ -756,6 +780,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
         "",
         *_section("修練與煉製", pages_lines()),
+        *_section("鐵匠鋪與神器", forge_lines(content, season)),
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行

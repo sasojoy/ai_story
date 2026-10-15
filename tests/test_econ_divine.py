@@ -66,6 +66,28 @@ def test_switch_off_stamps_nothing():
     assert not season.forge_divine_per_kind and not season.forge_split_clues
 
 
+def test_the_howto_follows_the_season_stamp():
+    from tianxia import howto
+
+    c = real_content("weekend")
+    season = fresh_season(c)
+    text = "\n".join(howto.forge_lines(c, season))
+    assert "每一種兵器" in text and "三片" in text and "三種探索" in text
+    season.forge_divine_per_kind = season.forge_split_clues = False  # 正在跑的季
+    old = "\n".join(howto.forge_lines(c, season))
+    assert "每一種兵器" not in old and "三片" not in old and "口訣" in old
+    page = howto.page(c, fresh_season(c), recruitable=False)
+    assert "#### 鐵匠鋪與神器" in page
+
+
+def test_the_howto_for_other_seasons_does_not_promise_every_kind():
+    from tianxia import howto
+
+    c = real_content()
+    text = "\n".join(howto.forge_lines(c, fresh_season(c)))
+    assert "同一種兵器最多一條" in text and "每一種兵器" not in text
+
+
 def test_match_follows_the_season():
     """打得出神器的組合照這一季挑到的那幾條：第一季的章有棍的神器（撼山棍 慢三＋剛三），沒蓋章的季照天機不一定有。"""
     c = real_content("weekend")
