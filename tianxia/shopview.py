@@ -366,9 +366,11 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
 UP_SHORT_HAVE = "手上 {have}／{need}"  # 待 joy 潤：素材頁升階格子上的短原因
 UP_SHORT_DAY = "明日再來"
 SELL_EMPTY = "背包裡沒有收得了的素材。"  # 待 joy 潤
-# 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）
-UPGRADE_HINT = "熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性。鐵匠不賣素材，高階的料只能熬出來。"
-TRADE_HINT = "鐵匠不賣素材，高階的料只能熬出來。"
+# 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）。照開關寫（FB-272）：升階關著不提熬；開著時不說「只能」
+# （找素材、打贏也撿得到高階的料）
+UPGRADE_HINT = "熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性。鐵匠不賣素材，高階的料得自己熬。"
+TRADE_HINT = "鐵匠不賣素材，高階的料得自己熬。"  # 升階開著、一定照投入的屬性（upgrade_same_share 1）
+SELL_ONLY_HINT = "鐵匠只收素材，不賣素材。"  # 升階關著、收購開著
 
 
 def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
@@ -382,12 +384,19 @@ def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
     return problem
 
 
+def _trade_hint(econ) -> str:
+    """素材頁還沒做事時那一句（FB-272）：升階關著（只剩收購）不提熬；升階開著、出來的屬性隨機時寫幾成是同一個屬性。"""
+    if not econ.upgrade:
+        return SELL_ONLY_HINT
+    if econ.upgrade_same_share < 1:
+        return UPGRADE_HINT.format(share=economy.share_word(econ.upgrade_same_share))
+    return TRADE_HINT
+
+
 def _trade_captions(content: Content) -> dict:
     """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。"""
     econ = content.config.economy
-    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": TRADE_HINT}
-    if econ.upgrade and econ.upgrade_same_share < 1:
-        out["hint"] = UPGRADE_HINT.format(share=economy.share_word(econ.upgrade_same_share))
+    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(econ)}
     if econ.upgrade:
         steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(econ.upgrade_need.items()))
         limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
