@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -321,3 +321,54 @@ def test_fb263_a_wide_desktop_fills_the_map_area():
     wide, desk, phone, huge = out
     assert 1545 / 900 - 0.01 <= wide <= 1545 / 900 + 0.01 and 900 * wide >= 1544
     assert 0.99 <= desk <= 1.01 and phone == 1 and huge == 2
+
+
+# ── 下緣的地點被抽屜蓋住（PM 2026-10-15 定要修）：地圖底下可以多捲一個抽屜的高度，選了的地點對準抽屜上面露出來的那一塊 ──
+SHOT = "const vw = 375, vh = 650, MW = 900, MH = 1340, pad = 240;"
+SCREEN_Y = "(v, p) => vh / 2 + (p[1] - v.cy) * v.s"
+
+
+def test_a_place_at_the_bottom_edge_is_focused_above_the_drawer():
+    out = run(_game(), SHOT + f"const y = {SCREEN_Y}; const p = [600, 1320];"
+              "const old = H.clampView({ s: 1, cx: p[0], cy: p[1] }, vw, vh, MW, MH);"
+              "const now = H.focusView({ s: 1, cx: 450, cy: 600 }, p, vw, vh, MW, MH, pad);"
+              "return [y(old, p), y(now, p), now.cy];")
+    covered, shown, cy = out
+    assert covered > 650 - 240  # 以前：夾在地圖邊上，落在抽屜底下
+    assert 0 <= shown <= 650 - 240 - 10  # 現在：地圖底下多捲一個抽屜高，最下緣的地點也在抽屜上面
+    assert cy > 1340 - 650 / 2  # 以前最多捲到 H − vh／2
+    middle = run(_game(), SHOT + f"const y = {SCREEN_Y}; const p = [600, 1000]; return y(H.focusView({{ s: 1, cx: 450, cy: 600 }}, p, vw, vh, MW, MH, pad), p);")
+    assert abs(middle - (650 - 240) / 2) <= 1  # 不靠邊的地點：對準露出來那一塊的正中間
+
+
+def test_the_drawer_pad_changes_nothing_when_it_is_zero():
+    out = run(_game(), SHOT + "return [H.clampView({ s: 1, cx: 600, cy: 1320 }, vw, vh, MW, MH), H.clampView({ s: 1, cx: 600, cy: 1320 }, vw, vh, MW, MH, 0),"
+              "H.clampView({ s: 0.3, cx: 10, cy: 10 }, vw, vh, MW, MH)];")
+    assert out[0] == out[1] and out[0]["cy"] == 1340 - 650 / 2
+    assert out[2]["cx"] == 450 and out[2]["cy"] == 670  # 比視窗小：照舊置中
+
+
+def test_a_small_map_is_centered_in_the_part_above_the_drawer():
+    """整張比露出來那一塊還矮（高的框、縮到最小）：置中在抽屜上面那一塊。"""
+    out = run(_game(), "const vw = 375, vh = 1200, MW = 900, MH = 1340, pad = 240;"
+              "const v = H.clampView({ s: 0.1, cx: 0, cy: 0 }, vw, vh, MW, MH, pad); return vh / 2 + (MH / 2 - v.cy) * v.s;")
+    assert abs(out - (1200 - 240) / 2) <= 1
+
+
+def test_choosing_or_raising_the_drawer_refocuses_a_covered_place():
+    """選地點（找地點、建議）一律對準露出來那一塊；抽屜拉高、點在地圖上的地點被蓋住時也重新對準（源碼對得上）。"""
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    center = js[js.index("function mapCenterOn("):]
+    assert "focusView(" in center[: center.index("\n  }\n")]
+    drawer = js[js.index("function setMapDrawer("):]
+    assert "keepSelVisible(" in drawer[: drawer.index("\n  }\n")]
+    pick = js[js.index("function mapPick("):]
+    assert "keepSelVisible(" in pick[: pick.index("\n  }\n")]
+
+
+def test_the_drawer_pad_uses_the_height_it_is_going_to():
+    """抽屜換高度有動畫：量 offsetHeight 會拿到舊的高度（從找地點全開挑一處時量到九成四、地圖被捲過頭），照 mapDrawerPx 算要變成的高度。"""
+    js = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    body = js[js.index("function mapPad("):]
+    body = body[: body.index("\n  }\n")]
+    assert "mapDrawerPx(S.mapDrawer)" in body and "offsetHeight" not in body

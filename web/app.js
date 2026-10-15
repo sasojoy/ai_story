@@ -3841,6 +3841,23 @@
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
     box.style.setProperty("--md-h", `${px}px`);
+    keepSelVisible(); // 抽屜升高：選了的地點被蓋住就對準露出來的那一塊
+  }
+  // 抽屜蓋住地圖框底下多高（clampView 的 pad）：照抽屜要變成的高度算，不量 offsetHeight——抽屜換高度有 0.22 秒的動畫，
+  // 那一刻量到的還是舊的高度（從找地點全開挑一處時會量到九成四，地圖被捲過頭）。桌機（右欄）與版圖變化（地圖框已經在抽屜上面）是 0
+  function mapPad() {
+    if (!document.getElementById("mdrawer") || S.mapMode === "timeline" || (window.matchMedia && window.matchMedia("(min-width: 900px)").matches)) return 0;
+    return mapDrawerPx(S.mapDrawer);
+  }
+  // 選了的地點被抽屜蓋住（或在露出來那一塊的外面）：對準露出來的那一塊。沒被蓋住就不動（點在地圖上的地點不從手指底下跑開）
+  function keepSelVisible() {
+    if (!S.mapSel || S.mapMode !== "place") return;
+    const g = mapGeom(document.getElementById("map"));
+    const p = g && placeXY(S.mapSel);
+    if (!p || !S.mapView) return;
+    const pad = mapPad(), v = S.mapView;
+    const y = g.vh / 2 + (p[1] - v.cy) * v.s, x = g.vw / 2 + (p[0] - v.cx) * v.s;
+    if (y < 12 || y > g.vh - pad - 28 || x < 12 || x > g.vw - 12) mapCenterOn(S.mapSel);
   }
   // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量
   function mapFrame() {
@@ -3880,22 +3897,25 @@
   const MAP_MAX = 2; // 最多放到原尺寸的兩倍
   const fitScale = (vw, vh, W, H) => Math.min(vw / W, vh / H); // 整張看得完的倍率（也是最小倍率）
   const clampScale = (s, vw, vh, W, H) => Math.min(MAP_MAX, Math.max(fitScale(vw, vh, W, H), s));
-  // 夾住：某一軸的地圖比視窗小就置中；比視窗大就不能拖到露出地圖外面
-  function clampView(v, vw, vh, W, H) {
+  // 夾住：某一軸的地圖比視窗小就置中；比視窗大就不能拖到露出地圖外面。pad：視窗底下被抽屜蓋住的高度（手機上抽屜從底下升起；
+  // 桌機抽屜是右欄、版圖變化時地圖框已經縮到抽屜上面，都是 0）：地圖底下可以多捲 pad，最下緣的地點也拉得到抽屜上面；
+  // 整張比露出來的那一塊還矮時，置中在露出來的那一塊（PM 2026-10-15：下緣的地點被抽屜蓋住）
+  function clampView(v, vw, vh, W, H, pad = 0) {
     const s = clampScale(v.s, vw, vh, W, H);
-    const axis = (c, view, size) => {
-      const half = view / 2 / s; // 視窗的一半，換成地圖單位
-      return size * s <= view ? size / 2 : Math.min(size - half, Math.max(half, c));
-    };
-    return { s, cx: axis(v.cx, vw, W), cy: axis(v.cy, vh, H) };
+    const half = (view) => view / 2 / s; // 視窗的一半，換成地圖單位
+    const cx = W * s <= vw ? W / 2 : Math.min(W - half(vw), Math.max(half(vw), v.cx));
+    const cy = H * s <= vh - pad ? H / 2 + pad / 2 / s : Math.min(H - half(vh) + pad / s, Math.max(half(vh), v.cy));
+    return { s, cx, cy };
   }
+  // 選了的地點對準抽屜上面露出來的那一塊的中間（倍率照舊），再夾住
+  const focusView = (v, p, vw, vh, W, H, pad = 0) => clampView({ s: v.s, cx: p[0], cy: p[1] + pad / 2 / v.s }, vw, vh, W, H, pad);
   // 視窗裡 (px, py) 底下的地圖座標；反過來，倍率 s 時要讓地圖座標 m 落在 (px, py)，中心該在哪
   const mapPoint = (v, px, py, vw, vh) => [v.cx + (px - vw / 2) / v.s, v.cy + (py - vh / 2) / v.s];
   const pinView = (s, m, px, py, vw, vh) => ({ s, cx: m[0] - (px - vw / 2) / s, cy: m[1] - (py - vh / 2) / s });
   // 以視窗裡 (px, py) 為準縮放：縮放前後那一點底下的地圖座標不變（碰到地圖邊緣被夾住時例外）
-  function zoomAt(v, factor, px, py, vw, vh, W, H) {
+  function zoomAt(v, factor, px, py, vw, vh, W, H, pad = 0) {
     const s = clampScale(v.s * factor, vw, vh, W, H);
-    return clampView(pinView(s, mapPoint(v, px, py, vw, vh), px, py, vw, vh), vw, vh, W, H);
+    return clampView(pinView(s, mapPoint(v, px, py, vw, vh), px, py, vw, vh), vw, vh, W, H, pad);
   }
   // 地點點擊區的半徑（地圖單位）：螢幕上至少約 22px；上限 34，最近的兩個地點相距 68.6，再大會互相蓋住
   const hitRadius = (s) => Math.min(34, Math.max(22, 22 / s));
@@ -3938,7 +3958,7 @@
       S.mapView = { ...S.mapView, s: fitScale(vw, vh, W, H) };
     }
     mapBox = [vw, vh];
-    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H));
+    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H, mapPad()));
     clearTimeout(glideTimer);
     wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
@@ -4021,12 +4041,12 @@
       // 地圖跟著手指（游標）走
       const [x, y] = pts[0];
       const v = S.mapView;
-      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H);
+      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H, mapPad());
       ref.at = [x, y];
     } else if (pts.length === 2 && ref.m) {
       const [[ax, ay], [bx, by]] = pts;
       const s = clampScale(ref.v.s * Math.hypot(bx - ax, by - ay) / ref.d, g.vw, g.vh, g.W, g.H);
-      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H);
+      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H, mapPad());
     } else return;
     applyMapView(false, g);
   }
@@ -4068,6 +4088,7 @@
     }
     redrawDrawer();
     drawMarks();
+    keepSelVisible(); // 點的地點在抽屜會蓋住的地方（下緣）：對準露出來的那一塊；其餘照舊不動
   }
 
   // 滾輪以游標為準縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
@@ -4076,7 +4097,7 @@
     const g = mapGeom(ev.currentTarget);
     if (!g || !S.mapView) return;
     const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
-    S.mapView = zoomAt(S.mapView, Math.exp(-dy * 0.0015), ev.clientX - g.x0, ev.clientY - g.y0, g.vw, g.vh, g.W, g.H);
+    S.mapView = zoomAt(S.mapView, Math.exp(-dy * 0.0015), ev.clientX - g.x0, ev.clientY - g.y0, g.vw, g.vh, g.W, g.H, mapPad());
     applyMapView(false, g);
   }
 
@@ -4084,7 +4105,7 @@
   function mapZoom(step) {
     const g = mapGeom(document.getElementById("map"));
     if (!g || !S.mapView) return;
-    S.mapView = zoomAt(S.mapView, step === "out" ? 1 / 1.5 : 1.5, g.vw / 2, g.vh / 2, g.vw, g.vh, g.W, g.H);
+    S.mapView = zoomAt(S.mapView, step === "out" ? 1 / 1.5 : 1.5, g.vw / 2, g.vh / 2, g.vw, g.vh, g.W, g.H, mapPad());
     applyMapView(true, g);
   }
   // 回到所在地：倍率照舊（比原尺寸小就拉到原尺寸），中心移到所在地
@@ -4100,7 +4121,7 @@
     const g = mapGeom(document.getElementById("map"));
     const p = g && placeXY(id);
     if (!p || !S.mapView) return;
-    S.mapView = { ...S.mapView, cx: p[0], cy: p[1] };
+    S.mapView = focusView(S.mapView, p, g.vw, g.vh, g.W, g.H, mapPad()); // 對準抽屜上面露出來的那一塊
     applyMapView(true, g);
   }
 
