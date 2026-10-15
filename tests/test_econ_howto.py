@@ -16,8 +16,15 @@ def _page(**econ):
 def test_the_page_explains_where_spare_materials_go():
     page, _ = _page()
     assert f"#### {howto.ECONOMY_TITLE}" in page
-    for words in ("一階一個 2 兩", "二階 6 兩", "三階不收", "三個換一個", "一天一個", "一天最多 100 點", "糧秣", "箭矢", "甲冑", "戰馬"):
+    for words in ("一階一個 2 兩", "二階 6 兩", "三階不收", "三個換一個", "一天一個", "一天最多 100 點", "糧秣", "箭矢", "甲冑", "戰馬",
+                  "約 5 成是同屬性的，其餘隨機"):
         assert words in page, words
+
+
+def test_a_certain_upgrade_says_nothing_of_luck():
+    _, c = _page(upgrade_same_share=1.0)
+    lines = howto.economy_lines(c)
+    assert any("三個換一個" in line for line in lines) and not any("隨機" in line for line in lines)
 
 
 def test_switched_off_the_section_is_gone():

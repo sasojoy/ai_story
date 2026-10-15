@@ -3,8 +3,11 @@
 
 只改傳進來的 GameState（背包、銀兩、當天的計數）與回傳訊息；人在不在鐵匠鋪、在不在自家大本營、店開著沒、紀錄、推大勢、
 記貢獻、軍備存量都在 engine.Game（smith_sell／smith_upgrade／donate）。「一天」照回體丹的換日（Game._pill_day，台灣 00:00），
-由呼叫端傳 day。開關在 Config.economy（sell／upgrade／donate），這裡的函式不看開關（呼叫端先問）。不碰任何亂數。"""
+由呼叫端傳 day。開關在 Config.economy（sell／upgrade／donate），這裡的函式不看開關（呼叫端先問）。升階出來的是哪一種擲自己的亂數
+（upgrade_rng：季數｜名號｜這一季第幾次升階｜換到幾階），不碰 Game.rng。"""
 from __future__ import annotations
+
+import random
 
 from . import materials, rules, territory
 from .models import Content, Material
@@ -16,6 +19,9 @@ SELL_TIER3 = "三階的料鐵匠不收——留著打神器吧"
 SELL_NONE = "你身上沒有這樣東西"
 SELL_SHORT = "{name}只有 {have} 個"
 UPGRADE_DONE = "鐵匠把 {count} 個{low}下爐熬煉，煉出一個【{high}】。"
+UPGRADE_ASTRAY = "鐵匠把 {count} 個{low}下爐熬煉，火候一偏，煉出的是一個【{high}】。"  # 出來的不是投入的屬性
+UPGRADE_ODDS = "{share}出{name}，其餘隨機"  # 鈕上與素材頁的機率（企劃者 2026-10-15：先寫出來，之後要不要藏等試玩）
+UPGRADE_SURE = "出{name}"  # upgrade_same_share 是 1（或同一階沒有別的屬性）：一定照投入的屬性
 UPGRADE_DAY_FULL = "三階一天只煉得出一個，明日 00:00 後再來"
 UPGRADE_NO_WAY = "這一階煉不出來"
 UPGRADE_NO_KIND = "沒有這樣的料"
@@ -36,9 +42,9 @@ DONATE_CLOSED = "你向軍需官拱拱手，離開了。"
 DONATE_MISC = "雜項"  # 不在 armaments 表上的屬性（陰陽虛實）：照收、記貢獻，但不進存量
 # 鐵匠鋪素材頁的鈕（店面關著、整季機器人與假人走的那一串選單；待 joy 潤）
 SELL_LABEL = "賣【{name}】一個（{price} 兩・手上 {have}）"
-UPGRADE_LABEL = "升【{name}】×1（用 {low}×{need}・{cost} 兩{left}）"
+UPGRADE_LABEL = "熬【{low}】×{need}（{cost} 兩・{odds}{left}）"
 UPGRADE_LEFT = "・今天還能換 {n} 個"
-UPGRADE_REFUSED = "升【{name}】×1（{problem}）"
+UPGRADE_REFUSED = "熬【{low}】×{need}（{problem}）"
 
 
 ATTRIBUTE_ORDER = ("剛", "柔", "快", "慢")  # 列升階的順序（同 shopview.ATTRIBUTE_ROWS）；其餘屬性排在後面
@@ -110,6 +116,47 @@ def upgrade_cost(state: GameState, content: Content, tier: int) -> int:
     return int(base * territory.price_factor(state.world, content, p.faction, p.location) + 0.5)
 
 
+def upgrade_outcomes(content: Content, attribute: str, tier: int) -> list[tuple[Material, float]]:
+    """換一個 tier 階會出哪一種、各幾成（企劃者 2026-10-15「屬性隨機、偏向投入的」）：投入的那個屬性 upgrade_same_share，
+    其餘平均分給同一階其他屬性的素材（每個屬性一種，照 ATTRIBUTE_ORDER）；同一階沒有別的屬性時一定是投入的那個。
+    第一個一定是投入的屬性。upgradable 列出來的才叫。"""
+    same = _of(content, attribute, tier)
+    others = [m for a, t in upgradable(content) if t == tier and a != attribute and (m := _of(content, a, tier)) is not None]
+    share = content.config.economy.upgrade_same_share
+    if not others or share >= 1:
+        return [(same, 1.0)]
+    rest = (1 - share) / len(others)
+    return [(same, share)] + [(m, rest) for m in others]
+
+
+def _share_word(share: float) -> str:
+    """幾成（0.5 →「五成」）；不是整成的寫百分比。"""
+    tenths = round(share * 10)
+    return f"{rules.count_word(tenths)}成" if abs(share * 10 - tenths) < 1e-9 and 1 <= tenths <= 9 else f"{round(share * 100)}%"
+
+
+def upgrade_odds(content: Content, attribute: str, tier: int) -> str:
+    """鈕上與素材頁那一句：「五成出流雲絮，其餘隨機」；一定照投入的屬性時「出流雲絮」。"""
+    outcomes = upgrade_outcomes(content, attribute, tier)
+    same, share = outcomes[0]
+    return UPGRADE_SURE.format(name=same.name) if len(outcomes) == 1 else UPGRADE_ODDS.format(share=_share_word(share), name=same.name)
+
+
+def upgrade_rng(state: GameState, tier: int) -> random.Random:
+    """這一次升階擲哪一種的亂數：季數｜名號｜這一季第幾次升階（PlayerState.upgrade_seq＋1）｜換到幾階。決定性，不動 Game.rng。"""
+    p = state.player
+    return random.Random(f"升階|{p.season_number}|{p.name}|{p.upgrade_seq + 1}|{tier}")
+
+
+def roll_upgrade(state: GameState, content: Content, attribute: str, tier: int) -> Material:
+    """這一次會出哪一種（不改狀態）：只有一種可能時不擲骰。"""
+    outcomes = upgrade_outcomes(content, attribute, tier)
+    if len(outcomes) == 1:
+        return outcomes[0][0]
+    rng = upgrade_rng(state, tier)
+    return rng.choices([m for m, _ in outcomes], weights=[w for _, w in outcomes])[0]
+
+
 def _today(p, day: int) -> dict[int, int]:
     return p.upgrades_today if p.upgrade_day == day else {}
 
@@ -143,13 +190,16 @@ def upgrade_problem(state: GameState, content: Content, attribute: str, tier: in
 
 
 def upgrade(state: GameState, content: Content, attribute: str, tier: int, day: int) -> list[str]:
-    """換一個：扣同屬性低一階的 upgrade_need 個與工錢，給一個 tier 階、記今天的數。不行時什麼都不動、只回原因。"""
+    """換一個：扣同屬性低一階的 upgrade_need 個與工錢，照 upgrade_outcomes 擲出一個 tier 階（roll_upgrade）、記今天的數
+    （每日上限照換了幾次算，不管出來的是什麼屬性）。不行時什麼都不動、只回原因。"""
     problem = upgrade_problem(state, content, attribute, tier, day)
     if problem is not None:
         return [problem]
     p = state.player
     need = content.config.economy.upgrade_need[tier]
-    high, low = _of(content, attribute, tier), _of(content, attribute, tier - 1)
+    low = _of(content, attribute, tier - 1)
+    got_material = roll_upgrade(state, content, attribute, tier)
+    p.upgrade_seq += 1
     cost = upgrade_cost(state, content, tier)
     materials.take(state, low.id, need)
     p.stats["silver"] = p.stats.get("silver", 0) - cost
@@ -157,8 +207,9 @@ def upgrade(state: GameState, content: Content, attribute: str, tier: int, day: 
         counts = dict(_today(p, day))
         counts[tier] = counts.get(tier, 0) + 1
         p.upgrade_day, p.upgrades_today = day, counts
-    got = materials.grant(state, content, high.id)
-    msgs = [UPGRADE_DONE.format(count=need, low=low.name, high=high.name)]
+    got = materials.grant(state, content, got_material.id)
+    line = UPGRADE_DONE if got_material.attribute == attribute else UPGRADE_ASTRAY
+    msgs = [line.format(count=need, low=low.name, high=got_material.name)]
     return msgs + ([got] if got else []) + ([f"銀兩 -{cost}"] if cost else [])
 
 

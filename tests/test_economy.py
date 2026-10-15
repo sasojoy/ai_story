@@ -13,9 +13,11 @@ from tianxia.world_state import fresh_season
 DAY = 20000  # 回體丹的換日算出來的「第幾天」，測試直接給
 
 
-def _state(faction="guan", at="changshe", silver=500, bag=None, profile="weekend"):
+def _state(faction="guan", at="changshe", silver=500, bag=None, profile="weekend", same=None):
     c = real_content(profile)
     c.config.auto_open_first_season = True
+    if same is not None:
+        c.config.economy.upgrade_same_share = same  # 1＝一定照投入的屬性（量價錢、上限的測試不看擲骰）
     s = new_game_state(c, "沈浪")
     s.world = fresh_season(c)  # 照設定蓋章：週末設定是第一季的規則
     p = s.player
@@ -61,7 +63,7 @@ def test_selling_ignores_who_holds_the_ground():
 
 
 def test_three_tier_ones_make_a_tier_two_for_five_silver_with_the_ground_perk():
-    s, c = _state(at="changshe", bag={"rou_1": 7})  # 長社是官軍的大本營：自家地盤 ×0.9
+    s, c = _state(at="changshe", bag={"rou_1": 7}, same=1)  # 長社是官軍的大本營：自家地盤 ×0.9
     assert economy.upgrade_cost(s, c, 2) == 5 and economy.upgrade_cost(s, c, 3) == 45  # 4.5 → 5（四捨五入，同 smithing.price）
     msgs = economy.upgrade(s, c, "柔", 2, DAY)
     assert s.player.materials == {"rou_1": 4, "rou_2": 1} and s.player.stats["silver"] == 495 and "銀兩 -5" in msgs
@@ -70,7 +72,7 @@ def test_three_tier_ones_make_a_tier_two_for_five_silver_with_the_ground_perk():
 
 
 def test_ten_tier_twos_make_one_tier_three_once_a_day():
-    s, c = _state(bag={"man_2": 25})
+    s, c = _state(bag={"man_2": 25}, same=1)
     assert economy.upgrade_left(s, c, 3, DAY) == 1 and economy.upgrade_left(s, c, 2, DAY) is None
     economy.upgrade(s, c, "慢", 3, DAY)
     assert s.player.materials == {"man_2": 15, "man_3": 1}
@@ -96,6 +98,53 @@ def test_tier_one_cannot_be_made_and_unknown_attributes_are_refused():
     s, c = _state(bag={"rou_1": 30})
     assert economy.upgrade_problem(s, c, "柔", 1, DAY) is not None
     assert economy.upgrade_problem(s, c, "陰", 2, DAY) is not None  # 沒有陰屬的二階
+
+
+# ── 升階出來的屬性隨機（企劃者 2026-10-15「屬性隨機、偏向投入的」）──────────
+
+
+def test_half_comes_out_as_what_went_in_and_the_rest_splits_three_ways():
+    _, c = _state()
+    outcomes = economy.upgrade_outcomes(c, "柔", 2)
+    assert [(m.id, round(w, 4)) for m, w in outcomes] == [
+        ("rou_2", 0.5), ("gang_2", round(1 / 6, 4)), ("kuai_2", round(1 / 6, 4)), ("man_2", round(1 / 6, 4))]
+    assert [m.id for m, _ in economy.upgrade_outcomes(c, "慢", 3)] == ["man_3", "gang_3", "rou_3", "kuai_3"]
+    assert economy.upgrade_odds(c, "柔", 2) == "五成出流雲絮，其餘隨機"
+    c.config.economy.upgrade_same_share = 1
+    assert economy.upgrade_outcomes(c, "柔", 2) == [(c.materials["rou_2"], 1.0)]
+    assert economy.upgrade_odds(c, "柔", 2) == "出流雲絮"
+
+
+def test_the_rolls_lean_to_what_went_in():
+    s, c = _state(bag={"rou_1": 3 * 600}, silver=10 ** 6)
+    for _ in range(600):
+        economy.upgrade(s, c, "柔", 2, DAY)
+    got = {mid: s.player.materials.get(mid, 0) for mid in ("rou_2", "gang_2", "kuai_2", "man_2")}
+    assert sum(got.values()) == 600 and s.player.upgrade_seq == 600
+    assert 0.42 < got["rou_2"] / 600 < 0.58
+    for mid in ("gang_2", "kuai_2", "man_2"):
+        assert 0.11 < got[mid] / 600 < 0.23, got
+
+
+def test_the_roll_is_its_own_seeded_dice():
+    first, c = _state(bag={"rou_1": 30})
+    second, _ = _state(bag={"rou_1": 30})
+    rolled = [economy.roll_upgrade(first, c, "柔", 2) for _ in range(3)]
+    assert len({m.id for m in rolled}) == 1  # 沒換的時候擲幾次都一樣（種子只看季數、名號、第幾次、階）
+    for _ in range(8):
+        economy.upgrade(first, c, "柔", 2, DAY)
+        economy.upgrade(second, c, "柔", 2, DAY)
+    assert first.player.materials == second.player.materials  # 同一個人同一季同樣的第幾次，出一樣的東西
+    assert economy.upgrade_rng(first, 2).random() != economy.upgrade_rng(first, 3).random()
+
+
+def test_an_astray_roll_says_what_came_out_and_still_counts_for_the_day():
+    s, c = _state(bag={"man_2": 25}, same=0)  # 0：一定落到別的屬性
+    msgs = economy.upgrade(s, c, "慢", 3, DAY)
+    got = [mid for mid in ("gang_3", "rou_3", "kuai_3") if s.player.materials.get(mid)]
+    assert len(got) == 1 and "man_3" not in s.player.materials
+    assert msgs[0] == economy.UPGRADE_ASTRAY.format(count=10, low="磐嶽土", high=c.materials[got[0]].name)
+    assert economy.upgrade_problem(s, c, "慢", 3, DAY) == economy.UPGRADE_DAY_FULL  # 三階一天一個照換了幾次算
 
 
 # ── 捐軍備（第六節）──────────────────────────────────────────

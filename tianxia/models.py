@@ -1978,6 +1978,9 @@ class EconomyRules(_Strict):
     upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
     upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
     upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
+    # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
+    upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）

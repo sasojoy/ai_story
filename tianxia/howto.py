@@ -351,7 +351,11 @@ def economy_lines(content: Content) -> list[str]:
             limit = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
             steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(econ.upgrade_need[tier])}個換一個{tier_word.get(tier)}"
                          f"（工錢 {econ.upgrade_silver.get(tier, 0)} 兩{limit}）")
-        lines.append(f"鐵匠鋪也幫你把素材熬成高一階的：同屬性的{'；'.join(steps)}。工錢照地盤福利算。")
+        astray = ""
+        if econ.upgrade_same_share < 1:  # 升階隨機（企劃者 2026-10-15）：投入的屬性幾成，其餘落到別的屬性
+            share = round(econ.upgrade_same_share * 10)
+            astray = f"熬出來的約 {share} 成是同屬性的，其餘隨機落到別的屬性。"
+        lines.append(f"鐵匠鋪也幫你把素材熬成高一階的：同屬性的{'；'.join(steps)}。{astray}工錢照地盤福利算。")
     if econ.donate:
         points = "、".join(f"{tier_word[t]} {n} 點" for t, n in sorted(econ.donate_points.items()) if t in tier_word)
         names = "、".join(econ.armaments.values())

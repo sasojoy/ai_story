@@ -465,6 +465,7 @@ class PlayerState(BaseModel):
     # 素材與經濟（2026-10-15，tianxia/economy.py）：同 pill_day 的換日；跨季保留（換季不能多換一輪、多捐一輪）
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
+    upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力

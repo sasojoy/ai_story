@@ -3302,11 +3302,12 @@ class Game:
                 continue  # 選單只列手上有料的（店面四個屬性都列）
             option_id = f"smith:upgrade:{row['attribute']}:{row['tier']}"
             if row["problem"] is not None:
-                opts.append(Option(id=option_id, enabled=False, label=economy.UPGRADE_REFUSED.format(name=row["name"], problem=row["problem"])))
+                opts.append(Option(id=option_id, enabled=False,
+                                   label=economy.UPGRADE_REFUSED.format(low=row["from"], need=row["need"], problem=row["problem"])))
                 continue
             left = economy.UPGRADE_LEFT.format(n=row["left"]) if row["left"] is not None else ""
             opts.append(Option(id=option_id, label=economy.UPGRADE_LABEL.format(
-                name=row["name"], low=row["from"], need=row["need"], cost=row["cost"], left=left)))
+                low=row["from"], need=row["need"], cost=row["cost"], odds=row["odds"], left=left)))
         pages = [Option(id=f"smith:page:{slot}", label=equipment.PAGE_LABELS[slot]) for slot in equipment.SMITH_PAGES if equipment.on(c, slot)]
         return opts + pages + [Option(id="smith:back", label="離開鐵匠鋪")]
 

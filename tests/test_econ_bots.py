@@ -12,9 +12,11 @@ from tianxia.sqlite_world import open_world
 TW_MIDNIGHT = 16 * 3600
 
 
-def _game(at="yingchuan", faction="guan", bag=None, silver=500):
+def _game(at="yingchuan", faction="guan", bag=None, silver=500, same=None):
     c = real_content("weekend")
     c.config.auto_open_first_season = True
+    if same is not None:
+        c.config.economy.upgrade_same_share = same
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -32,12 +34,22 @@ def test_upgrade_toward_tier_two_first_then_sell_the_rest_above_the_keep():
     game.choose("act:smith")
     bot.trade_at_smith(game)
     p = game.state.player
-    assert p.materials == {"rou_1": 12, "rou_2": 2} or p.materials.get("rou_1") == bot.TRADE_KEEP[1]
+    tier_two = sum(n for mid, n in p.materials.items() if game.content.materials[mid].tier == 2)
+    assert p.materials["rou_1"] == bot.TRADE_KEEP[1] and tier_two == 2  # 升兩次（出什麼收什麼），多的一階賣掉
     assert bot.trade_want(game) is None
 
 
+def test_whatever_attribute_comes_out_the_bot_keeps_it():
+    game = _game(bag={"man_2": 25}, same=0)  # 0：一定落到別的屬性
+    game.choose("act:smith")
+    bot.trade_at_smith(game)
+    p = game.state.player
+    assert "man_3" not in p.materials and sum(p.materials.get(m, 0) for m in ("gang_3", "rou_3", "kuai_3")) == 1
+    assert bot.trade_want(game) is None  # 慢的三階今天換過了，不再試
+
+
 def test_ten_tier_twos_make_a_tier_three_once_a_day_and_tier_three_is_never_sold():
-    game = _game(bag={"man_2": 25, "gang_3": 3})
+    game = _game(bag={"man_2": 25, "gang_3": 3}, same=1)
     game.choose("act:smith")
     bot.trade_at_smith(game)
     p = game.state.player

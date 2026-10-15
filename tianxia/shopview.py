@@ -324,8 +324,9 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
 def trade_view(state: GameState, content: Content, day: int) -> dict | None:
     """鐵匠鋪的素材買賣（素材與經濟設計第四、五節；Game.shop_view 接在 smith_view 後面的 "trade"）：收購、升階都關著是 None。
     sell：背包裡收得了的素材（一階、二階），每一種一列（id、名字、階、屬性、手上幾個、一個幾兩、賣一個不行的原因）；收購關著是空的。
-    upgrade：每一個換得出來的（屬性, 階）一列（換出來的與拿去換的、要幾個、手上幾個、工錢〔套地盤福利〕、今天還能換幾個〔不限是 None〕、
-    不行的原因〔economy.upgrade_problem〕）；升階關著是空的。按鈕送 MAIN_ACTIONS 的 smith_sell／smith_upgrade。day 是回體丹的換日。"""
+    upgrade：每一個換得出來的（屬性, 階）一列（偏向出的那一種〔name／id〕與拿去換的、要幾個、手上幾個、工錢〔套地盤福利〕、
+    今天還能換幾個〔不限是 None〕、不行的原因〔economy.upgrade_problem〕、機率那一句 odds 與偏向那一種的機會 same_share〔升階隨機，
+    企劃者 2026-10-15〕）；升階關著是空的。按鈕送 MAIN_ACTIONS 的 smith_sell／smith_upgrade。day 是回體丹的換日。"""
     econ = content.config.economy
     if not (econ.sell or econ.upgrade):
         return None
@@ -348,6 +349,8 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
                 "need": econ.upgrade_need[tier], "have": state.player.materials.get(low.id, 0),
                 "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
                 "problem": economy.upgrade_problem(state, content, attribute, tier, day),
+                "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
+                "same_share": economy.upgrade_outcomes(content, attribute, tier)[0][1],
             })
     return {"sell": sell, "upgrade": upgrade}
 

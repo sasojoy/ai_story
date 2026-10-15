@@ -68,14 +68,28 @@ def test_upgrading_from_the_menu_spends_three_and_five_silver():
     game = _game(bag={"rou_1": 3})
     _open(game)
     option = _ids(game)["smith:upgrade:柔:2"]
-    assert option.enabled and "柳絲綿×3" in option.label and "5 兩" in option.label
+    assert option.enabled and "柳絲綿】×3" in option.label and "5 兩" in option.label
+    assert "五成出流雲絮，其餘隨機" in option.label  # 升階隨機：鈕上寫得出機率
+    rng_before = game.rng.getstate()
     game.choose("smith:upgrade:柔:2")
     p = game.state.player
-    assert p.materials == {"rou_2": 1} and p.stats["silver"] == 495
+    tier_two = {mid: n for mid, n in p.materials.items() if game.content.materials[mid].tier == 2}
+    assert "rou_1" not in p.materials and sum(tier_two.values()) == 1 and p.stats["silver"] == 495
+    assert game.rng.getstate() == rng_before  # 升階擲自己的亂數，不碰 Game.rng
+    made = game.content.materials[next(iter(tier_two))].name
+    assert any(f"【{made}】" in line for line in game.state.journal[0].lines)  # 結果句寫實際出了什麼
+
+
+def test_the_menu_says_what_comes_out_when_it_is_certain():
+    game = _game(bag={"rou_1": 3}, upgrade_same_share=1.0)
+    _open(game)
+    assert "（5 兩・出流雲絮）" in _ids(game)["smith:upgrade:柔:2"].label
+    game.choose("smith:upgrade:柔:2")
+    assert game.state.player.materials == {"rou_2": 1}
 
 
 def test_tier_three_once_a_day_until_taiwan_midnight():
-    game = _game(bag={"man_2": 20})
+    game = _game(bag={"man_2": 20}, upgrade_same_share=1.0)
     _open(game)
     assert "今天還能換 1 個" in _ids(game)["smith:upgrade:慢:3"].label
     assert game.smith_upgrade("慢", 3)
@@ -120,6 +134,7 @@ def test_the_shop_view_lists_what_can_be_sold_and_upgraded():
     assert set(sell) == {"rou_1", "rou_2"} and sell["rou_1"]["price"] == 2 and sell["rou_2"]["have"] == 1
     up = {(row["attribute"], row["tier"]): row for row in trade["upgrade"]}
     assert up[("柔", 2)]["problem"] is None and up[("柔", 2)]["need"] == 3 and up[("柔", 2)]["cost"] == 5
+    assert up[("柔", 2)]["odds"] == "五成出流雲絮，其餘隨機" and up[("柔", 2)]["same_share"] == 0.5
     assert up[("柔", 3)]["problem"] is not None and up[("柔", 3)]["left"] == 1
     assert ("剛", 2) in up  # 四個屬性都列（沒料的灰掉、寫原因）
 
