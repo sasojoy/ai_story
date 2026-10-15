@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from tianxia import atlas, orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -203,7 +203,7 @@ def test_fb254_a_gentry_push_near_the_top_is_resisted():
     """豪強在亂局的戰線上保境安民推割據 1 點：割據 90 時只推兩成（零頭記著），60 時推滿一點。"""
     from tianxia import rules
 
-    game = _game("haoqiang", "runan_wilds")
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 豪強是第三方的規則
     w = game.state.world
     w.trends["yingru"] = 50
     w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 90, 0.0

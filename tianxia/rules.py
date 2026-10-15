@@ -8,6 +8,9 @@ from collections.abc import Callable
 from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, gender, insights, library, materials, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from .allied import hidden_trends as allied_hidden
+from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
+from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -484,9 +487,12 @@ def front_ids(content: Content) -> list[str]:
 
 
 def trend_shown(content: Content, world: WorldState, trend_id: str) -> bool:
-    """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推。"""
+    """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推；
+    豪強分屬兩軍的季（allied.on），只有豪強當目標的線（割據）也不存在（allied.hidden_trends）。"""
     trend = _trend(content, trend_id)
-    return trend is not None and (season_one(content, world) or not trend.season_one)
+    if trend is None or trend_id in allied_hidden(content, world):
+        return False
+    return season_one(content, world) or not trend.season_one
 
 
 def pushable(content: Content, world: WorldState, trend_id: str) -> bool:
@@ -502,7 +508,7 @@ def resolve_trend(content: Content, world: WorldState, key: str, location: str |
     if season_one(content, world):
         if key == FRONT_KEY:
             return front_of(content, location) if location is not None else None
-        return key
+        return None if _trend(content, key) is not None and not trend_shown(content, world, key) else key  # 豪強分屬兩軍：割據→None
     if key == FRONT_KEY:
         return next((t.id for t in content.scenario.trends if t.derived), None)
     total = next((t.id for t in content.scenario.trends if key in t.derived), None)

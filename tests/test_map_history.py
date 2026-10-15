@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from tianxia import calendar, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -11,7 +11,7 @@ from tianxia.state import TerritoryState
 
 
 def _world(classic=False):
-    c = real_content("weekend")
+    c = third_party_gentry(real_content("weekend"))  # 快照記割據：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)

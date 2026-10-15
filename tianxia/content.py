@@ -2057,6 +2057,11 @@ def validate(c: Content) -> None:
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
         need(to_traditional(faction.defect_text) == faction.defect_text,
              f"陣營 {faction.id}：defect_text 只能用繁體中文（「{faction.defect_text[:12]}」）")
+        # 豪強分屬兩軍（allied）：可以依附的是劇本裡別的陣營，而且那幾軍自己不能再要依附別人
+        need(all(a in scenario_faction_ids and a != faction.id for a in faction.allies),
+             f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
+        need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
+             f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
 
     showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
