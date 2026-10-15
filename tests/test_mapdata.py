@@ -53,7 +53,8 @@ def test_the_state_suggests_where_to_sortie():
     for lose in (False, True):
         scores = [g["score"] for g in st["suggest"] if g["lose"] is lose]
         assert scores == sorted(scores, reverse=True)
-    assert all(g["lose"] == ((st["places"][g["id"]]["odds"] or {}).get("word") == mapdata.LOSE_WORD) for g in st["suggest"])
+    assert all(g["lose"] == (g["sortie"] == "attack" and (st["places"][g["id"]]["odds"] or {}).get("word") == mapdata.LOSE_WORD)
+               for g in st["suggest"])  # 只有攻才看勝算（守、攪局不打，FB-259）
 
 
 def test_a_place_you_can_win_comes_before_one_with_a_big_order_you_would_lose():

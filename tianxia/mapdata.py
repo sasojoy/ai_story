@@ -75,7 +75,7 @@ def _order_marks(state: GameState, content: Content, faction: str | None) -> dic
             spots = [loc for loc in content.locations if rules.front_of(content, loc) == o.front
                      and territory.line_of(content, loc) and territory.controller(w, content, loc) == faction]
         elif o.template == "intercept" and o.location is not None:
-            spots = sorted(orders.neighbors(content, o.location))
+            spots = sorted(orders.intercept_spots(content, o.location))  # 出陣開著時只有那一處（FB-248、FB-258）
         elif o.template == "escort":
             spots = [x for x in (o.start, o.end) if x]
         elif o.template == "strike" and o.figure is not None:
@@ -84,6 +84,34 @@ def _order_marks(state: GameState, content: Content, faction: str | None) -> dic
         for loc in spots:
             marks.setdefault(loc, ORDER_WORDS.get(o.template, o.template))
     return marks
+
+
+def _foes(state: GameState, content: Content, loc: Location, odds: atlas.Odds, faction: str | None) -> list[tuple[str, str]]:
+    """這裡遇得上的隊伍與勝算（atlas.foes：自己陣營的寫「操練」），加上這週截糧帶來的敵方運糧隊（orders.extra_enemies，
+    出陣攻的對手就有它）：截糧的地點歸自己時，那一處的對手就是糧隊（FB-258）。"""
+    listed = atlas.foes(content, loc, odds, faction, state.world)
+    names = {name for name, _ in listed}
+    for sid in orders.extra_enemies(state, content, loc.id, faction):
+        squad = content.squads[sid]
+        if squad.name not in names:
+            listed.append((squad.name, odds(sid)))
+    return listed
+
+
+def _worst(listed: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """最險的那一隊（同 atlas.worst_foe：操練不算）。"""
+    fights = [foe for foe in listed if foe[1] != atlas.DRILL]
+    return max(fights, key=lambda foe: atlas.ODDS_ORDER.index(foe[1])) if fights else None
+
+
+def _sortie_order(state: GameState, content: Content, faction: str | None, loc_id: str, how: str | None) -> str | None:
+    """在這裡出陣真的記得到的軍令（跟記功同一套判斷）：攻打贏記攻城或截糧（orders.win_counts；這裡有運糧隊就是截糧），
+    守記守城（orders.duty_counts），攪局什麼都不記（FB-258、FB-259）。"""
+    if how == "attack" and orders.win_counts(state, content, faction, loc_id):
+        return ORDER_WORDS["intercept"] if orders.extra_enemies(state, content, loc_id, faction) else ORDER_WORDS["siege"]
+    if how == "hold" and orders.duty_counts(state, content, faction, loc_id):
+        return ORDER_WORDS["defend"]
+    return None
 
 
 def _bounty_marks(state: GameState, content: Content) -> dict[str, str]:
@@ -241,7 +269,8 @@ def state(
         route = None if here else (routes.get(loc_id) if p.journey is None else atlas.way_to(s, c, loc_id))
         if route is not None and not route.path:
             route = None
-        worst = atlas.worst_foe(c, loc, odds_once, faction, w)
+        listed = _foes(s, c, loc, odds_once, faction)
+        worst = _worst(listed)
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
             "kind": "base" if loc_id in base_ids else "fixed" if loc_id in fixed
@@ -254,24 +283,28 @@ def state(
             "order": order_at.get(loc_id), "bounty": bounty_at.get(loc_id),
             "goal": loc_id in goals, "news": loc_id in news, "people": people.get(loc_id, []),
             "services": _services(c, loc), "price": _price(w, c, faction, loc_id),
-            "squads": [{"name": name, "odds": word} for name, word in atlas.foes(c, loc, odds_once, faction, w)],
+            "squads": [{"name": name, "odds": word} for name, word in listed],
             "danger": loc.danger, "flips": _flips(w, loc_id, now_week) if on else [],
         }
     suggest = []
     for loc_id, info in places.items():
         if info["sortie"] is None:
             continue
+        # 理由只寫這一種出陣真的記得到的（FB-258、FB-259）：軍令照記功的判斷；懸賞只有討伐、只有攻打贏了才交得了；
+        # 勝算只有攻才看（守、攪局不打）
+        how, attack = info["sortie"], info["sortie"] == "attack"
         why, score = [], -(info["minutes"] or 0)
-        if info["order"]:
-            why.append([f"軍令・{info['order']}", "order"])
+        counted = _sortie_order(s, c, faction, loc_id, how)
+        if counted:
+            why.append([f"軍令・{counted}", "order"])
             score += ORDER_SCORE
-        if info["bounty"]:
-            why.append([f"懸賞・{info['bounty']}", "bounty"])
+        if attack and info["bounty"] and BOUNTY_WORDS["strike"] in info["bounty"]:
+            why.append([f"懸賞・{BOUNTY_WORDS['strike']}", "bounty"])
             score += BOUNTY_SCORE
-        if info["odds"]:
+        if attack and info["odds"]:
             why.append([info["odds"]["word"], info["odds"]["tone"]])
             score += ODDS_SCORE.get(info["odds"]["word"], 0)
-        lose = info["odds"] is not None and info["odds"]["word"] == LOSE_WORD
+        lose = attack and info["odds"] is not None and info["odds"]["word"] == LOSE_WORD
         suggest.append({"id": loc_id, "sortie": info["sortie"], "why": why, "minutes": info["minutes"], "score": score, "lose": lose})
     suggest = rank_suggestions(suggest)
     journey = None
