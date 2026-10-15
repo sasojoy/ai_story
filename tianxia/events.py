@@ -6,7 +6,7 @@ from typing import Literal
 
 from . import foreshadow
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
-from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
+from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -45,6 +45,8 @@ def event_candidates(
     location = content.locations[state.player.location]
     hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
     hidden |= season_one_off(content, state.world, "events")
+    if haoqiang_allied(content, state.world):  # 豪強分屬兩軍：沒有第三方，豪強那兩則第三方的伏筆事件不出現（設計第十節）
+        hidden |= foreshadow.third_party_events(content)
     candidates: list[Event] = []
     for event in content.events.values():
         if action not in event.actions:

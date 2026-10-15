@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, real_content, third_party_gentry
 from test_real_content import _walk_the_hut
 
 import server
@@ -18,9 +18,11 @@ from tianxia.state import Order
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="huang", at="huangjin_camp", profile="weekend", name="沈浪"):
+def _game(faction="huang", at="huangjin_camp", profile="weekend", name="沈浪", third_party=False):
     c = real_content(profile)
     c.config.auto_open_first_season = True
+    if third_party:
+        third_party_gentry(c)  # 豪強是第三方、出陣攪局的規則（豪強分屬兩軍之前）
     c.config.train_event_chance = 0.0
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
     game.client = None
@@ -120,7 +122,7 @@ def test_a_new_season_does_not_give_another_five_the_same_day():
 
 
 def test_the_gentry_stirs_toward_the_middle():
-    game = _game(faction="haoqiang", at="runan_wilds")
+    game = _game(faction="haoqiang", at="runan_wilds", third_party=True)
     w = game.state.world
     assert _sortie(game).label == "出陣・攪局（體力 6・今日還能 5 次・零風險）"
     msgs = game.choose("act:train")
@@ -135,7 +137,7 @@ def test_the_gentry_stirs_toward_the_middle():
 def test_the_gentry_stir_earns_contribution():
     """PM 2026-10-14：攪局把線往 50 拉的那一下照推的量全額記貢獻（名目量：地點寫的量 × hold_share；同攻守的帳）。
     線在 50 什麼都不推，也不記。官軍、黃巾逆著自己的目標推照舊不記（push_trend 的規則不變）。"""
-    game = _game(faction="haoqiang", at="runan_wilds")
+    game = _game(faction="haoqiang", at="runan_wilds", third_party=True)
     c, p = game.content, game.state.player
     nominal = abs(c.locations["runan_wilds"].train_trend["yingru"]) * c.config.sortie.hold_share
     game.choose("act:train")

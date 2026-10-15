@@ -26,7 +26,7 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
@@ -607,32 +607,6 @@ def _placeholder_problem(line: str) -> str | None:
             written = "{" + field + (f"!{conversion}" if conversion else "") + (f":{spec}" if spec else "") + "}"
             return f"用了不認得的佔位 {written}（只能是 {{who}}、{{art}}、{{foe}}，後面不能接格式或屬性）"
     return None
-
-
-def check_signature_arts(c: Content, need) -> None:
-    """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
-    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
-    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
-    starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
-    trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
-    factions = {f.id for f in c.scenario.factions}
-    seen: dict[str, str] = {}
-    for skill in c.skills.values():
-        if skill.traits:
-            need(skill.traits[0] == skill.attribute, f"武學 {skill.id}：一般功效的第一個要是自己的屬性 {skill.attribute}")
-            need(len(set(skill.traits)) == len(skill.traits), f"武學 {skill.id}：一般功效不能重複")
-        tactic = skill.tactic
-        if tactic is None:
-            continue
-        need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
-        need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
-        first = seen.setdefault(tactic.name, skill.id)
-        need(first == skill.id, f"本命戰法的名字「{tactic.name}」重複（{first}、{skill.id}）")
-        need(tactic.name not in trait_names, f"武學 {skill.id}：本命戰法的名字「{tactic.name}」跟一般或特別功效同名")
-        fields = {name for _, name, _, _ in string.Formatter().parse(tactic.desc) if name}
-        need(fields <= set(tactic.params), f"武學 {skill.id}：本命戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
-        need(all(a in c.characters for a in tactic.allies), f"武學 {skill.id}：本命戰法的 allies 不是人物")
-        need(tactic.foe_faction is None or tactic.foe_faction in factions, f"武學 {skill.id}：本命戰法的 foe_faction 不是劇本的陣營")
 
 
 def check_traits(c: Content, need) -> None:
@@ -1822,7 +1796,6 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_traits(c, need)
-    check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
     for tier in sorted(TIER_NAMES):
         need(
@@ -2057,6 +2030,11 @@ def validate(c: Content) -> None:
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
         need(to_traditional(faction.defect_text) == faction.defect_text,
              f"陣營 {faction.id}：defect_text 只能用繁體中文（「{faction.defect_text[:12]}」）")
+        # 豪強分屬兩軍（allied）：可以依附的是劇本裡別的陣營，而且那幾軍自己不能再要依附別人
+        need(all(a in scenario_faction_ids and a != faction.id for a in faction.allies),
+             f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
+        need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
+             f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
 
     showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
@@ -2170,6 +2148,9 @@ def validate(c: Content) -> None:
                 len(who.lines) == len(enlist.steps),
                 f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
             )
+            for field, text in who.allied.items():  # 豪強分屬兩軍的季換的那幾句（Recruiter.allied）
+                need(field in RECRUITER_ALLIED_FIELDS, f"入伍段：引薦人 {who.name} 的 allied 不認得 {field}（只認 {RECRUITER_ALLIED_FIELDS}）")
+                need(bool(text.strip()) and to_traditional(text) == text, f"入伍段：引薦人 {who.name} 的 allied.{field} 要是繁體、不能是空的")
 
     # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
     # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
@@ -2190,8 +2171,11 @@ def validate(c: Content) -> None:
         for faction_id, line in hint.texts.items():
             need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
             need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
+        for faction_id, line in hint.allied.items():  # 豪強分屬兩軍的季另一版：只換 texts 裡有的那一位說的話
+            need(faction_id in hint.texts, f"{where}：allied 的 {faction_id} 在 texts 裡沒有")
+            need(bool(line.strip()) and to_traditional(line) == line, f"{where}：allied 的 {faction_id} 要是繁體、不能是空的")
         # 句子裡的 {名字} 只能是設定裡有的數（hints.values，explain-1）：寫錯名字的話框上會留著大括號
-        for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values()):
+        for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values(), *hint.allied.values()):
             bad = hint_rules.unknown(c, line)
             need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
 

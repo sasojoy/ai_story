@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import bounties, opportunities, ranks, seats
+from . import allied, bounties, opportunities, ranks, seats
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
@@ -41,9 +41,46 @@ def targets_here(state: GameState, content: Content, battle: BattleInstance | No
     return [f for f in content.scenario.factions if f.id != p.faction and p.location in f.join_at]
 
 
-def refusal(state: GameState, content: Content, target: FactionDef, battle: BattleInstance | None = None) -> str | None:
-    """現在不能叛投去 target 的原因（一句話，不含括號）；可以就是 None。跟 targets_here 同一套規則（target 在
-    targets_here 裡 ⇔ 這裡是 None），確認畫面按「確定」時用它再驗一次，並把真正的原因說給玩家聽。"""
+def _slot(state: GameState, content: Content) -> tuple[str | None, str | None]:
+    """（陣營, 依附的那一軍）：豪強分屬兩軍的季，換依附的一邊也是換一個槽。"""
+    p = state.player
+    return p.faction, (p.ally if allied.on(content, state.world) else None)
+
+
+def slots_here(
+    state: GameState, content: Content, battle: BattleInstance | None = None,
+) -> list[tuple[FactionDef, str | None]]:
+    """這裡能叛投去的「陣營＋依附哪一軍」（照劇本的陣營順序）：規則同 targets_here。豪強分屬兩軍的季（企劃者 2026-10-15 第 2 題甲），
+    要依附的陣營（豪強）的投靠點每一軍一個槽，自己現在的那一個不算——換依附的一邊、豪強與同一邊的純兩軍互換都是叛投。"""
+    if not allied.on(content, state.world):
+        return [(f, None) for f in targets_here(state, content, battle)]
+    if not can_defect(state, content, battle):
+        return []
+    here = [f for f in content.scenario.factions if state.player.location in f.join_at]
+    mine = _slot(state, content)
+    out: list[tuple[FactionDef, str | None]] = []
+    for f in here:
+        for ally in [a.id for a in allied.allies_of(content, f.id)] or [None]:
+            if (f.id, ally) != mine:
+                out.append((f, ally))
+    return out
+
+
+def slot_label(state: GameState, content: Content, target: FactionDef, ally: str | None) -> str:
+    """叛投鈕上的字（新寫）：同一個陣營換一軍是「改依附X」、換到同一邊是「改投X」，其餘是「叛投X」（豪強寫「地方豪強（依附官軍）」）。
+    開關關著時一律「叛投X」，一個字都不變。"""
+    faction, mine_ally = _slot(state, content)
+    if target.id == faction and ally is not None:
+        return f"改依附{content.scenario.faction_name(ally, ally)}"
+    same_side = (ally or target.id) == (mine_ally or faction)
+    return f"{'改投' if same_side else '叛投'}{allied.label(content, target.id, ally)}"
+
+
+def refusal(
+    state: GameState, content: Content, target: FactionDef, battle: BattleInstance | None = None, ally: str | None = None,
+) -> str | None:
+    """現在不能叛投去 target（豪強分屬兩軍：依附 ally）的原因（一句話，不含括號）；可以就是 None。跟 slots_here 同一套規則
+    （這個槽在 slots_here 裡 ⇔ 這裡是 None），確認畫面按「確定」時用它再驗一次，並把真正的原因說給玩家聽。"""
     p = state.player
     if not content.scenario.factions or p.faction is None:
         return "現在不能叛投。"
@@ -51,7 +88,7 @@ def refusal(state: GameState, content: Content, target: FactionDef, battle: Batt
         return "這一季你已經叛投過一次了。"
     if enlisted(battle, p.name):
         return f"決戰還沒打完，你名字還在{content.scenario.faction(p.faction).name}的陣上，打完再說。"
-    if target.id == p.faction or p.location not in target.join_at:
+    if (target.id, ally) == _slot(state, content) or p.location not in target.join_at:
         return "你已經不在叛投的地方了。"
     return None
 
@@ -62,7 +99,7 @@ def _sect_left(p: PlayerState, old: FactionDef, content: Content) -> Sect | None
     return sect if sect is not None and sect.id in old.sects else None
 
 
-def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str) -> str:
+def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str, ally: str | None = None) -> str:
     """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、要離開的門派、功勞、手上揭著的舊陣營懸賞）、一季一次，
     接上三方目前的人數。只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下、
     門派、功勞、懸賞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
@@ -85,11 +122,12 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
         lost.append(f"離開{sect.name}、這一季拜不回去")
     if p.contrib > 0:
         lost.append(f"這一季替{old.name}記下的功勞全部作廢")
-    held = bounties.stranded(state, content, target.id)
+    held = bounties.stranded(state, content, ally or target.id)
     if held:  # 手上揭著的懸賞（FB-151）：新陣營的人接不了舊陣營掛的單，確定的那一下 defect() 拿掉名字
         lost.append(bounties.STRANDED_LOST.format(n=len(held), faction=old.name))
-    head = f"叛投{target.name}之後，" + "，".join(lost) if lost else f"叛投{target.name}沒有什麼進度要作廢"
-    return f"{head}；一季只能叛投一次。{counts_text}。確定叛投{target.name}？"
+    verb = slot_label(state, content, target, ally)  # 「叛投官軍」；豪強分屬兩軍時也可能是「改投官軍」「改依附黃巾軍」
+    head = f"{verb}之後，" + "，".join(lost) if lost else f"{verb}沒有什麼進度要作廢"
+    return f"{head}；一季只能叛投一次。{counts_text}。確定{verb}？"
 
 
 def clear_progress(p: PlayerState) -> None:
@@ -115,15 +153,20 @@ def clear_progress(p: PlayerState) -> None:
     opportunities.clear(p)  # 機緣的完成、計數、物品全部作廢（機緣文件第一節；正式版乙一）；聽過的線索留著（裁決 E5.2）
 
 
-def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
+def defect(state: GameState, content: Content, target: FactionDef, ally: str | None = None) -> list[str]:
     """真的叛投：離開舊陣營的門派、讓出舊陣營的第四階席次（帳與這一週的名單，seats.leave）、清掉舊陣營的進度、改投、
     記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞，手上新陣營接不了的懸賞拿掉名字（bounties.drop_stranded，FB-151）。
-    呼叫端（Game._defect_step）先確認過還在投靠點、還能叛投。"""
+    呼叫端（Game._defect_step）先確認過還在投靠點、還能叛投。
+    豪強分屬兩軍的季（企劃者 2026-10-15 第 2 題甲）：ally 是新的依附；名字照 allied.label 寫（「地方豪強（依附官軍）」），
+    活躍名單照那一邊清；換到同一邊（例：依附官軍的豪強改投官軍）只發一則那一邊的軍情「某某從甲改投乙」（新寫）。
+    開關關著時 ally 是 None、舊與新一定不同邊，句子一字不變。"""
     p, w = state.player, state.world
     old = content.scenario.faction(p.faction)
+    old_side = allied.side_of(state, content)
+    old_name = allied.label_of(state, content)
     msgs = [target.defect_text] if target.defect_text else []
     sect = _sect_left(p, old, content)
-    if sect is not None:  # 拜入門派等於加入陣營（第一季設計 5.1）：叛投就一起離開
+    if sect is not None and target.id != old.id:  # 拜入門派等於加入陣營（第一季設計 5.1）：叛投就一起離開（只換依附的一邊不離開）
         p.flags.add(f"叛出:{sect.id}")
         p.sect = None
         msgs.append(f"你也就此離開了{sect.name}。")
@@ -132,18 +175,24 @@ def defect(state: GameState, content: Content, target: FactionDef) -> list[str]:
     seats.leave(state, old.id)
     clear_progress(p)
     opportunities.leave_plots(state)  # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
-    p.faction, p.defected = target.id, True
-    names = w.active_pushers.get(old.id)
+    p.faction, p.ally, p.defected = target.id, ally, True
+    new_side = ally or target.id
+    new_name = allied.label(content, target.id, ally)
+    names = w.active_pushers.get(old_side)
     if names is not None:  # 舊陣營的人數緩衝不再算他；新陣營等他下次推大勢才算（Game.push_trend）
         names.pop(p.name, None)
         if not names:
-            del w.active_pushers[old.id]
+            del w.active_pushers[old_side]
     # 企劃者定：只有地方傳聞匿名；陣營軍情（只給那個陣營自己人看）一律寫真名，也不帶地點（同 orders、ranks 的陣營軍情）
-    add_rumor(state, f"{p.name}叛離了{old.name}，投奔{target.name}。", layer="faction", faction=old.id)
-    add_rumor(state, f"{p.name}從{old.name}投奔過來了。", layer="faction", faction=target.id)
+    if new_side == old_side:  # 同一邊換身分（豪強分屬兩軍）：那一邊的人看到「改投」
+        add_rumor(state, f"{p.name}從{old_name}改投{new_name}。", layer="faction", faction=new_side)
+    else:
+        add_rumor(state, f"{p.name}叛離了{old_name}，投奔{new_name}。", layer="faction", faction=old_side)
+        add_rumor(state, f"{p.name}從{old_name}投奔過來了。", layer="faction", faction=new_side)
     here = content.locations[p.location].name
-    add_rumor(state, f"{display_name(state)}在{here}改投了{target.name}。", p.location, content=content, layer="local",
+    add_rumor(state, f"{display_name(state)}在{here}改投了{new_name}。", p.location, content=content, layer="local",
               named=not p.anonymous)
-    msgs.append(f"你叛出{old.name}，投了{target.name}。")
-    msgs += bounties.drop_stranded(state, content, target.id)  # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
+    msgs.append(f"你叛出{old_name}，投了{new_name}。" if new_side != old_side or target.id != old.id
+                else f"你改依附{content.scenario.faction_name(ally, ally)}。")
+    msgs += bounties.drop_stranded(state, content, new_side)  # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
     return msgs

@@ -98,7 +98,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
     real_toll, real_heal, real_buy, real_repair, original_pick = team.take_encounter_toll, team.heal, armor.buy, armor.repair, bot.pick
     real_forge, real_temper = smithing.forge, smithing.temper
 
-    def toll(state, content_, world, tier, *, wild=False, share=1.0):
+    def toll(state, content_, world, tier, *, wild=False):
         """包住 team.take_encounter_toll：本人這一場掉了多少氣血、多了多少內傷、開打時身上有沒有防具。
         防具開的那一季只拿穿著防具的仗算硬仗、一條氣血撐幾場、硬仗之後的勝率（買防具之前打的不算防具的功勞）；防具關的那一季全算。"""
         member = state.player.member
@@ -106,7 +106,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
         before, cap = team.member_neili(content_, member, con)
         injury = member.injury
         armored = state.player.armor is not None  # 開打那一刻：這一場扣血時吃不吃得到防具
-        out = real_toll(state, content_, world, tier, wild=wild, share=share)
+        out = real_toll(state, content_, world, tier, wild=wild)
         lost = max(0.0, before - team.member_neili(content_, member, con)[0])
         sums["hp"] += lost
         sums["injury"] += member.injury - injury

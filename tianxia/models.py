@@ -466,37 +466,6 @@ class LearnRule(_Strict):
     sect: str | None = None
 
 
-TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰")  # 本命戰法什麼時候發動（tianxia/tactics.py）
-TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找做法（tactics.KINDS）；數字在 TacticDef.params
-    "chase_disarm", "opening_ward", "disarm", "rally", "heavy_blow", "cleanse", "roar", "unbroken", "vanguard", "tiger",
-    "awe", "waver", "rebound_guard", "veil", "thunder", "curse", "sand", "fog", "bloodrage", "oath", "butcher", "marshal",
-    "fire", "steady", "surge", "tide", "foresight", "ward_all", "cavalry", "brutal", "night_raid", "reinforce", "divine",
-    "sacrifice", "hold_city", "gatekeep",
-)
-
-
-class TacticDef(_Strict):
-    """本命戰法（tianxia/tactics.py；企劃者 2026-10-15 認可的定案 /mnt/project-files/plan/本命戰法定案.md）：一門本命武學一個，
-    那位人物獨有、合成擲不到。在一般的仗（遊歷、出陣、探索野怪、劇情戰、挑戰本人）的回合裡發動，讓對手陷入某種狀態或改這一回合的氣勢；
-    身上練著的與同伴練著的都會發動（連招）。
-
-    - timing：起手（開打前 rounds 回合，每回合擲 rate）、出招（每回合擲 rate；prep 1 是要先蓄力一回合）、乘勢（你的招剋中對手之後才擲）、
-      心法（條件成立就一直在；rounds 寫了只在前幾回合）、騎戰（騎著馬才有）。
-    - kind：做什麼（tactics.KINDS），params 是它的數字（鍵以 _pct 結尾的是比例，卡上寫成百分比）；desc 是卡上那一句，{鍵} 換成數字。
-    - allies：仁義聚眾那一種讓哪幾位人物的戰法更常發動（人物 id）；foe_faction：火攻那一種對哪個陣營加倍。"""
-
-    name: str
-    timing: Literal[TACTIC_TIMINGS]
-    kind: Literal[TACTIC_KINDS]
-    desc: str
-    rate: float = Field(default=1.0, ge=0, le=1)
-    rounds: int = Field(default=0, ge=0)  # 起手、心法只在前幾回合；0＝每回合
-    prep: int = Field(default=0, ge=0, le=1)
-    params: dict[str, float] = Field(default_factory=dict)
-    allies: list[str] = Field(default_factory=list)
-    foe_faction: str | None = None
-
-
 class SkillDef(_Strict):
     """內容手寫的武學/內功：本命武學（歷史人物的固定武學，品質是絕學，見 martial_arts.historical_art）、
     部下用的通用武學（企劃者 2026-10-05 定上品，計畫 T5）與基礎武學（下品，開局送或在各地學，
@@ -512,9 +481,6 @@ class SkillDef(_Strict):
     learn: LearnRule | None = None  # 在各地學得到的基礎武學才填；開局送的看 Config.starter_skills
     special: str | None = None  # 名將本命絕學的獨特特別功效（content/traits.json 裡 pool 是 false 的那一個，13.5）
     weapon: WeaponKind | None = None  # 這門武學配哪一種兵器（兵器設計 2.3）；內功是 None。正式內容的武學一律要填（test_weapons 鎖住）
-    # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命戰法
-    traits: list[Attribute] = Field(default_factory=list, max_length=3)
-    tactic: TacticDef | None = None
 
 
 class GeneralTrait(_Strict):
@@ -981,6 +947,9 @@ class PresetRecipe(_Strict):
     attribute: str | None = None
 
 
+RECRUITER_ALLIED_FIELDS = ("intro", "briefing", "order_hint", "done", "rejoin")  # Recruiter.allied 能換的欄位（content.validate 驗）
+
+
 class Recruiter(_Strict):
     """入伍段（新手引導計畫二，設計第四節）一個陣營的引薦人：框上的名字與他說的話。"""
 
@@ -991,6 +960,9 @@ class Recruiter(_Strict):
     done: str  # 第一道軍令做完，引薦人的結尾（按「知道了」收起）
     lines: list[str] = Field(default_factory=list)  # 每一步收起後那一行，照 Enlist.steps 的順序；不帶名字（框上的名字另外寫）
     rejoin: str = ""  # 第二季起再投靠時打的招呼（新手引導計畫三用）
+    # 豪強分屬兩軍的季（allied.on，企劃者 2026-10-15）換掉的幾句（新寫）：鍵是上面的欄位名（intro／briefing／order_hint／done／rejoin），
+    # 只寫要換的；enlist.line 照它讀
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class EnlistStep(_Strict):
@@ -1028,6 +1000,8 @@ class HintDef(_Strict):
     # 第一季的規則開著時師父改說這一句（只有師父的條能寫；空的就照 text）：有些事只有第一季才是真的（explain-1 的 h_bond：
     # 情誼夠深人物會透露伏筆、機緣的風聲），beta 那一季說了就是假話
     season_one: str = ""
+    # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class Hints(_Strict):
@@ -1048,6 +1022,9 @@ class FactionDef(_Strict):
     sects: list[str] = Field(default_factory=list)
     goals: dict[str, int] = Field(default_factory=dict)  # 大勢線 id → 1 推高／-1 壓低；伺服器假人照這個行動
     defect_text: str = ""  # 叛投到這個陣營那一刻的一句敘事（計畫甲；content/scenario.json 的三句是初稿，待 joy 潤，joy 會走自己的 PR）
+    # 豪強分屬兩軍（企劃者 2026-10-15）：這個陣營在依附的季（allied.on）要依附其中一軍；寫的是可以依附的陣營 id（暫名）。
+    # 空的＝這個陣營本身就是一軍
+    allies: list[str] = Field(default_factory=list)
 
 
 class SeasonOneOff(_Strict):
@@ -1921,35 +1898,6 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
-class SignatureArtTuning(_Strict):
-    """本命武學（企劃者 2026-10-15「現在的本命絕學很爛，甚至比玩家自己合成的還差，也沒什麼特色效果」；PM 定的做法）：
-    以前本命武學照絕學的固定區間（第一成 50、第十成 120），合成擲到的絕學帶 ±10% 微調、最高 132，還可以帶 3 個一般功效與特別功效；
-    本命武學只有自己屬性一個功效、學到時第一成（威力 50，比練滿的上品 72 還低）。現在：玩家自己那一份威力 × power_scale
-    （絕學第十成 138，高頂級合成一截；同伴自己練的照舊，不然全隊又往上竄）、內容寫 3 個一般功效與一個本命戰法（SkillDef.tactic）、
-    學到時直接第 start_level 成（讀檔時情誼送過的舊角色補到這一成，signature.lift_levels，Game._drop_stale_references 叫）。"""
-
-    power_scale: float = Field(default=1.15, gt=0)
-    start_level: int = Field(default=7, ge=1, le=10)
-
-
-class TacticTuning(_Strict):
-    """一般的仗的回合與本命戰法（tianxia/tactics.py；Joy 2026-10-15 選「全部改回合制」）的數字。
-    一般的仗照舊先用單次判定擲出差距（encounter.resolve_encounter，同一顆 Game.rng），再把差距攤成一回合一回合的氣勢（span：差距
-    一個對手強度 ＝ 氣勢 span 點；50 起，到 50 ± stop 提前收場）。沒有戰法時每一回合加起來剛好回到那個差距，結果一個字都不變；
-    戰法在回合裡改氣勢（讓對手打空、出不了手、被剋、連環……），收場的氣勢換回差距再照門檻判結果。
-    strike 是對手一回合打過來的氣勢、counter 是一回合剋中的那一下，戰法的效果都照這兩個數換算（量法見 scripts/measure_tactics.py）。"""
-
-    span: float = Field(default=40.0, gt=0)  # 差距一個對手強度換成幾點氣勢
-    stop: float = Field(default=40.0, gt=0)  # 氣勢離 50 這麼遠就提前收場（90／10）
-    strike: float = Field(default=0.8, ge=0)  # 對手一回合打過來的氣勢（定身、打空、借力、壓低他的推力都照它算）
-    counter: float = Field(default=0.6, ge=0)  # 一回合剋中的那一下
-    wobble: float = Field(default=3.0, ge=0)  # 回合之間的起伏（只是演出，加起來照舊回到差距）
-    dot: float = Field(default=0.08, ge=0)  # 對手每掉一成氣血池的百分之一，氣勢多幾點（焚身、風沙、血創、落雷）
-    self_hit: float = Field(default=0.3, ge=0, le=1)  # 失神的那一回合打到自己的機會
-    prefer_guard: float = Field(default=0.5, ge=0, le=1)  # 帶著固守才發動的戰法時，自動出招改出固守的機會
-    band: float = Field(default=12.0, ge=0)  # 沒有戰法時中途的氣勢不越過 50 ± (stop − band)（不然還沒打完就提前收場，結果會變）
-
-
 class RiseTuning(_Strict):
     """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
     tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
@@ -2132,8 +2080,6 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
-    signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
-    tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
@@ -2213,6 +2159,10 @@ class Config(_Strict):
     geju_calm_per_day: float = Field(default=1.0, ge=0)  # 三條戰線都穩下來時，豪強割據每曆日回落幾點（不能是負的，否則「回落」變成漲）
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
+    # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
+    # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
+    # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
+    haoqiang_allied: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）

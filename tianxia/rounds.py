@@ -1,6 +1,5 @@
-"""遊歷的回合演出（武學與成長設計 8.2）：一般的仗一回合一回合打（tactics.play，Joy 2026-10-15「全部改回合制」）之後照它演（from_clash）；
-沒有回合的（切磋、截殺、序章寫好結果的那一場）照舊照結果拆成 3～5 回合（play）。
-只管數字與誰出手；句子在 battlelog（照屬性挑 content/combat_lines.json）。
+"""遊歷的回合演出（武學與成長設計 8.2）：勝負照 encounter.resolve_encounter 一次算好，這裡照結果拆成 3～5 回合。
+只管數字與誰出手；句子在 battlelog（照屬性挑 content/combat_lines.json）。回合加起來剛好等於結果，中途不翻盤。
 
 亂數由呼叫端給：引擎用「名號｜戰報流水號」當種子的自己一份（計畫三 G3），不碰 Game.rng——演出是畫面上的事，
 不能讓接下來的擲骰跟著位移，而且同一筆戰報每次演出來都一樣。
@@ -11,8 +10,6 @@ import random
 from typing import Literal
 
 from pydantic import BaseModel
-
-from .tactics import Clash
 
 ROUNDS = {"大勝": (3, 3), "險勝": (4, 4), "僵持": (5, 5), "落敗": (3, 4)}  # 每種結果演幾回合（最少, 最多）【預設】
 END_MORALE = {"大勝": 0, "險勝": 0, "僵持": 50, "落敗": 80}  # 打完對手還剩幾成氣勢
@@ -45,8 +42,6 @@ class Beat(BaseModel):
 class Round(BaseModel):
     number: int
     beats: list[Beat]
-    tag: str = ""  # 兩邊出的招（「強攻對奇襲，剋中」）；照結果拆的舊演出沒有
-    before: list[str] = []  # 這一回合發動的本命戰法（〔名〕開頭，排在這一回合那一行前面）
 
 
 def foe_agility(difficulty: float) -> float:
@@ -81,35 +76,4 @@ def play(
         ours = Beat(side="ours", actor=actor.name, art=actor.art, attribute=actor.attribute, amount=morale[i])
         theirs = Beat(side="theirs", actor=foe.name, art=None, attribute=foe.attribute, amount=hurt[i])
         played.append(Round(number=i + 1, beats=[ours, theirs] if we_first else [theirs, ours]))
-    return played
-
-
-def move_tag(ours: str | None, theirs: str | None, beat: int) -> str:
-    """一回合兩邊出的招：「強攻對奇襲，剋中」「固守對強攻，被剋」；出不了手的寫「定身」。"""
-    tail = "，剋中" if beat > 0 else "，被剋" if beat < 0 else ""
-    return f"{ours or '定身'}對{theirs or '定身'}{tail}"
-
-
-def from_clash(
-    clash: Clash, fighters: list[Fighter], foe: Foe, our_agility: float, hp_lost: int | None, rng: random.Random,
-) -> list[Round]:
-    """照一回合一回合打的那一場（tactics.Clash）演出：回合數、兩邊的招、對手氣勢掉多少（這一回合氣勢條往你這邊動了多少）照它；
-    玩家掉的氣血 hp_lost 只分在對手真的打到你的回合（定身、打空、打到自己、化影的回合寫「被你閃開了」），加起來剛好是 hp_lost。"""
-    landed = [t.landed for t in clash.turns]
-    hits = sum(landed)
-    shares = split(max(0, hp_lost), hits, rng) if hp_lost is not None and hits else []
-    hurt: list[int | None] = []
-    for was in landed:
-        hurt.append(None if hp_lost is None else shares.pop(0) if was and shares else 0)
-    acting = [f for f in fighters if f.art] or fighters[:1]
-    we_first = our_agility >= foe.agility
-    played = []
-    edge = 50.0
-    for i, turn in enumerate(clash.turns):
-        actor = acting[i % len(acting)]
-        moved, edge = turn.edge - edge, turn.edge  # 氣勢條夾在 0～100：懸殊的仗不寫「對手氣勢 -200」
-        ours = Beat(side="ours", actor=actor.name, art=actor.art, attribute=actor.attribute, amount=max(0, round(moved)))
-        theirs = Beat(side="theirs", actor=foe.name, art=None, attribute=foe.attribute, amount=hurt[i])
-        played.append(Round(number=turn.number, beats=[ours, theirs] if we_first else [theirs, ours],
-                            tag=move_tag(turn.ours, turn.theirs, turn.beat), before=list(turn.lines)))
     return played

@@ -226,9 +226,12 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
-    """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。"""
+    """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（不在戰線上、豪強依附哪一軍都有），照原價。"""
     side = controller(world, content, loc_id)
     if side is None or faction is None:
+        return 1.0
+    if rules.haoqiang_allied(content, world) and content.scenario.faction(side).allies:
         return 1.0
     cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price

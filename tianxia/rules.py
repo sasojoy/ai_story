@@ -8,6 +8,9 @@ from collections.abc import Callable
 from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, gender, insights, library, materials, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from .allied import hidden_trends as allied_hidden
+from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
+from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -163,9 +166,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if any(w.marks.get(k, 0) > v for k, v in cond.marks_max.items()):
         return False
-    if cond.factions and p.faction not in cond.factions:
+    # 豪強分屬兩軍：陣營與依附的那一軍都算（寫了 haoqiang 的照舊成立、寫了依附那一軍的也成立）；沒給 content 讀不到季的章，只比陣營
+    mine = {p.faction, side_of(state, content) if content is not None else None} - {None}
+    if cond.factions and not mine & set(cond.factions):
         return False
-    if p.faction is not None and p.faction in cond.factions_none:
+    if mine & set(cond.factions_none):
         return False
     if cond.controlled_by:  # 這裡此刻歸誰控制（地盤易手）：沒有 content、開關關著、不是戰線地點都不成立
         from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
@@ -371,6 +376,7 @@ class Ears(NamedTuple):
     layered: bool  # 第一季的規則開著：地方傳聞照大區與傳聞板過濾。關著（beta）只看陣營與名號，跟以前一模一樣
     regions: frozenset[str]  # 此刻人在哪些大區（here_regions）
     since: float  # 傳聞板上最舊的那一刻（世界秒）：比它早的地方傳聞已經撤下了
+    ally: str | None = None  # 豪強分屬兩軍：依附的那一軍（陣營軍情也聽得到，軍令發令與湊滿額度的傳聞才收得到）；其他人 None
 
 
 def recent_seconds(days: float, content: Content, world: WorldState) -> float:
@@ -395,7 +401,9 @@ def ears_of(state: GameState, content: Content) -> Ears:
     if not season_one(content, w):
         return Ears(faction=p.faction, name=p.name, layered=False, regions=frozenset(), since=0.0)
     since = w.time - recent_seconds(content.config.rumor_board_days, content, w)
-    return Ears(faction=p.faction, name=p.name, layered=True, regions=here_regions(state, content), since=since)
+    side = side_of(state, content)
+    return Ears(faction=p.faction, name=p.name, layered=True, regions=here_regions(state, content), since=since,
+                ally=side if side != p.faction else None)
 
 
 def audible(rumor: Rumor, ears: Ears) -> bool:
@@ -406,7 +414,7 @@ def audible(rumor: Rumor, ears: Ears) -> bool:
       人人都聽得到，但一樣只留板上的。
     - 陣營軍情一定要寫是哪個陣營、個人線索一定要寫是誰（layer 與欄位對不上時 fail closed：沒有人聽得到）。
     開關關著（beta）時只看陣營與名號，跟以前的 can_hear 一模一樣。"""
-    if rumor.faction not in (None, ears.faction) or rumor.character not in (None, ears.name):
+    if rumor.faction not in (None, ears.faction, ears.ally) or rumor.character not in (None, ears.name):
         return False
     # fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會因為少寫一個欄位就人人聽見）
     if (rumor.layer == "faction" and rumor.faction is None) or (rumor.layer == "personal" and rumor.character is None):
@@ -484,9 +492,12 @@ def front_ids(content: Content) -> list[str]:
 
 
 def trend_shown(content: Content, world: WorldState, trend_id: str) -> bool:
-    """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推。"""
+    """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推；
+    豪強分屬兩軍的季（allied.on），只有豪強當目標的線（割據）也不存在（allied.hidden_trends）。"""
     trend = _trend(content, trend_id)
-    return trend is not None and (season_one(content, world) or not trend.season_one)
+    if trend is None or trend_id in allied_hidden(content, world):
+        return False
+    return season_one(content, world) or not trend.season_one
 
 
 def pushable(content: Content, world: WorldState, trend_id: str) -> bool:
@@ -502,7 +513,7 @@ def resolve_trend(content: Content, world: WorldState, key: str, location: str |
     if season_one(content, world):
         if key == FRONT_KEY:
             return front_of(content, location) if location is not None else None
-        return key
+        return None if _trend(content, key) is not None and not trend_shown(content, world, key) else key  # 豪強分屬兩軍：割據→None
     if key == FRONT_KEY:
         return next((t.id for t in content.scenario.trends if t.derived), None)
     total = next((t.id for t in content.scenario.trends if key in t.derived), None)
@@ -622,13 +633,21 @@ def stance_sum_note(content: Content) -> str:
     return f"{count_word(len(front_ids(content)))}條戰線合計"
 
 
-def stances(state: GameState, content: Content) -> dict[str, int]:
-    """三方態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據。"""
-    huangjin = trend_value(state, content, HUANGJIN)
-    return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
-
-
 _STANCE_SIDES = ("guan", "huang", "haoqiang")
+
+
+def stance_sides(content: Content, world: WorldState) -> tuple[str, ...]:
+    """這一季有態勢的幾方：官軍、黃巾，割據這條線存在（trend_shown）才有豪強（豪強分屬兩軍的季沒有）。"""
+    return _STANCE_SIDES if trend_shown(content, world, GEJU) else _STANCE_SIDES[:2]
+
+
+def stances(state: GameState, content: Content) -> dict[str, int]:
+    """態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據（豪強分屬兩軍的季沒有這一方）。"""
+    huangjin = trend_value(state, content, HUANGJIN)
+    out = {"guan": 100 - huangjin, "huang": huangjin}
+    if "haoqiang" in stance_sides(content, state.world):
+        out["haoqiang"] = trend_value(state, content, GEJU)
+    return out
 # 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）；玩法說明（howto）照它寫，跟卡上同一個叫法
 STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
 _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
@@ -665,8 +684,11 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     early, unclear = False, False
     late: list[str] = []  # 季末才判的門檻：「豪強的態勢在 85 以上是群雄並起」
     late_unclear = False
+    shown = set(stance_sides(content, state.world))
     for e in content.scenario.endings:
         if not e.season_one or not (e.stance_min or e.stance_max):
+            continue
+        if not (set(e.stance_min) | set(e.stance_max)) <= shown:  # 這一季沒有的一方（豪強分屬兩軍沒有豪強）：那個結局不參與
             continue
         if not ends_early(e):
             if len(e.stance_min) == 1 and not e.stance_max:
@@ -743,9 +765,9 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
     落 geju_calm_per_day（回落不乘係數）。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
     由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1），players 由 advance_world_state 每次推進查一次名冊帶進來。
-    開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
+    開關關著、劇本沒有割據、豪強分屬兩軍的季（割據不存在，trend_shown）、或地圖沒有戰線時什麼都不做。"""
     fronts = front_ids(content)
-    if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
+    if not season_one(content, state.world) or not trend_shown(content, state.world, GEJU) or not fronts:
         return
     per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
     per_day = geju_resisted(state, content, per_day)  # 漲的時候照此刻的割據打盡頭阻力（FB-254；方向不變，畫面那一句照舊）

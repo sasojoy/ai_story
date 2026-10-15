@@ -18,7 +18,8 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
     s, o = game.state, other.state
     if not bounties.active(s, game.content) or not game.content.config.raid.enabled:
         return []
-    if s.player.faction is None or o.player.faction in (None, s.player.faction):
+    mine, theirs = game._side(), other._side()  # 豪強分屬兩軍：照依附那一軍分敵我
+    if mine is None or theirs in (None, mine):
         return []
     problem = bounties.post_problem(s, game.content, o)
     if problem is not None:

@@ -289,8 +289,9 @@ def price(state: GameState, content: Content) -> int:
     """馬市一匹駑馬下品的價錢（5.5）：Config.mounts.shop_price，照所在地的地盤福利（出陣探索與地盤設計 4.3），四捨五入。
     mounts 只 import models、state、equipment：territory 延後 import。"""
     from . import territory  # noqa: PLC0415
+    from .allied import side_of  # noqa: PLC0415  豪強分屬兩軍：照依附那一軍算自家地盤
 
-    factor = territory.price_factor(state.world, content, state.player.faction, state.player.location)
+    factor = territory.price_factor(state.world, content, side_of(state, content), state.player.location)
     return int(content.config.mounts.shop_price * factor + 0.5)
 
 

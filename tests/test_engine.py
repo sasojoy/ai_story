@@ -3777,8 +3777,8 @@ def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
 
 
 def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
-    """身法閃避（人物資質設計 14.4）之後：回合照真的打的那一場演（一回合一回合打，Joy 2026-10-15「全部改回合制」：落敗的 3～4 回合，
-    閃避是最後那一下才閃開的），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
+    """身法閃避（人物資質設計 14.4）之後，回合照最後的結果演：落敗閃成僵持，就演五回合、對手氣勢共掉 50（落敗是 3～4 回合、
+    掉 20），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
     game.content.config.dodge_per_point = 1.0
     game.state.player.stats["agi"] = 6  # 閃避機會 100%
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
@@ -3789,7 +3789,8 @@ def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
     assert record.tier == "僵持" and battlelog.DODGE_NOTE in record.notes
     told, shown = _told_and_shown(record)
     assert told == shown == round(before - _player_hp(game)) == 62
-    assert len(record.rounds) in (3, 4)
+    assert len(record.rounds) == 5
+    assert sum(int(n) for line in record.rounds for n in re.findall(r"對手氣勢 -(\d+)", line)) == 50
 
 
 @pytest.mark.parametrize("neili", [None, 360.0])
@@ -3909,7 +3910,7 @@ def test_an_event_battle_is_played_with_the_fighters_from_before_its_rewards(gam
     record = game.state.battles[0]
     p = game.state.player
     assert record.tier in ("大勝", "險勝") and (p.stats["agi"], p.member.wugong_id) == (8, "step")  # 效果真的生效了
-    assert record.rounds and all(re.match(f"第{i}回合　[^：]*：水寇小隊", line) for i, line in enumerate(record.rounds, 1))  # 回合前面寫兩邊出的招
+    assert record.rounds and all(line.startswith(f"第{i}回合　水寇小隊") for i, line in enumerate(record.rounds, 1))
     assert all("韓鐵以【長拳】" in line and "追風步" not in line and "沈浪" not in line for line in record.rounds)
 
 
