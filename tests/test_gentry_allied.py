@@ -568,3 +568,53 @@ def test_seal_and_battles_read_the_side_from_the_roster(wk):
     game = _game(wk, faction="haoqiang", ally="huang")
     game._record_faction()
     assert game.world.faction_of("甲") == "huang"
+
+
+# ── Task 8：換邊與互換都是叛投 ─────────────────────────────
+
+
+def _defect_labels(game):
+    return [o.label for o in game.options() if o.id.startswith("defect:")]
+
+
+def test_switching_ally_is_a_defection(wk):
+    game = _game(wk, faction="haoqiang", ally="guan", at="zhuo_militia_hall")
+    game._record_faction()
+    w = game.state.world
+    w.active_pushers["guan"] = {"甲": w.time}
+    assert _defect_labels(game) == ["改依附黃巾軍"]
+    game.choose("defect:haoqiang:huang")
+    assert [o.label for o in game.options()][0] == "確定改依附黃巾軍"
+    game.choose("defect:confirm")
+    p = game.state.player
+    assert (p.faction, p.ally, p.defected, p.pending_defect, p.pending_ally) == ("haoqiang", "huang", True, None, None)
+    assert game.world.roll_of("甲") == "haoqiang@huang"
+    assert "甲" not in w.active_pushers.get("guan", {})
+    assert _defect_labels(game) == []  # 一季一次
+
+
+def test_gentry_to_pure_army_on_the_same_side_is_a_defection(wk):
+    game = _game(wk, faction="haoqiang", ally="guan", at="changshe")
+    assert _defect_labels(game) == ["改投官軍"]
+    game.state.player.rank = 3
+    game.choose("defect:guan")
+    game.choose("defect:confirm")
+    p = game.state.player
+    assert (p.faction, p.ally, p.defected, p.rank) == ("guan", None, True, 0)
+    texts = [r.text for r in game.state.world.rumors if r.layer == "faction"]
+    assert any("改投官軍" in t for t in texts) and not any("叛離" in t for t in texts)
+
+
+def test_pure_army_at_a_gentry_base(wk):
+    game = _game(wk, faction="guan", at="zhuo_militia_hall")
+    assert _defect_labels(game) == ["改投地方豪強（依附官軍）", "叛投地方豪強（依附黃巾軍）"]
+    game.choose("defect:haoqiang:huang")
+    game.choose("defect:confirm")
+    p = game.state.player
+    assert (p.faction, p.ally, p.defected) == ("haoqiang", "huang", True)
+
+
+def test_old_rules_still_one_slot_per_faction():
+    off = _old_rules()
+    game = _game(off, name="乙", faction="guan", at="zhuo_militia_hall")
+    assert _defect_labels(game) == ["叛投地方豪強"]

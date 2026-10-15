@@ -1021,8 +1021,8 @@ class Game:
             ]
         if s.player.pending_defect:
             target = self.content.scenario.faction(s.player.pending_defect)
-            return [
-                Option(id="defect:confirm", label=f"確定叛投{target.name}"),
+            return [  # 「確定叛投X」；豪強分屬兩軍時也可能是「確定改投X」「確定改依附X」（defection.slot_label）
+                Option(id="defect:confirm", label=f"確定{defection.slot_label(s, c, target, s.player.pending_ally)}"),
                 Option(id="defect:cancel", label="再想想"),
             ]
         if s.player.picking_audience:
@@ -1120,8 +1120,9 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
-        for target in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
-            opts.append(Option(id=f"defect:{target.id}", label=f"叛投{target.name}"))
+        for target, ally in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
+            option_id = f"defect:{target.id}" + (f":{ally}" if ally else "")  # 豪強分屬兩軍：豪強的投靠點每一軍一顆
+            opts.append(Option(id=option_id, label=defection.slot_label(s, c, target, ally)))
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
@@ -2075,10 +2076,11 @@ class Game:
             return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
-                return f"叛投{self.content.scenario.faction(s.player.pending_defect).name}"
+                return defection.slot_label(s, c, c.scenario.faction(s.player.pending_defect), s.player.pending_ally)
             if arg == "cancel":
                 return "再想想"
-            return f"考慮叛投{self.content.scenario.faction(arg).name}"
+            fid, _, ally = arg.partition(":")  # 豪強分屬兩軍：defect:<陣營>:<依附的那一軍>
+            return f"考慮{defection.slot_label(s, c, c.scenario.faction(fid), ally or None)}"
         if kind == "move":
             return f"前往 {c.locations[arg.partition(':')[0]].name}"
         if kind == "choice":
@@ -3815,32 +3817,34 @@ class Game:
         確定時再驗一次（defection.refusal，跟選單挑對象的 targets_here 同一套規則：還在那個投靠點、還能叛投、不是自己的陣營、
         名字不在沒打完的決戰的參戰名單上）：中間走開了、規則關了、另一個分頁已經叛投過、報了名參戰，都不叛投，
         而且把真正的原因說給玩家聽；那一則江湖紀錄也不寫成「叛投某某」（沒叛成）。
-        投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。"""
+        投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。
+        豪強分屬兩軍的季，arg 可以是「陣營:依附的那一軍」（defection.slots_here），挑的那一軍記在 pending_ally。"""
         p = self.state.player
         if arg == "cancel":
-            p.pending_defect = None
+            p.pending_defect = p.pending_ally = None
             return ["你決定再想想。"]
         if arg == "confirm":
             target = self.content.scenario.faction(p.pending_defect)
-            p.pending_defect = None
-            reason = defection.refusal(self.state, self.content, target, self.world.get_battle())
+            ally, p.pending_defect, p.pending_ally = p.pending_ally, None, None
+            reason = defection.refusal(self.state, self.content, target, self.world.get_battle(), ally)
             if reason is not None:
                 if self._draft is not None:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
-            return defection.defect(self.state, self.content, target)
-        target = self.content.scenario.faction(arg)
-        p.pending_defect = target.id
-        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text())
+            return defection.defect(self.state, self.content, target, ally)
+        fid, _, ally = arg.partition(":")
+        target = self.content.scenario.faction(fid)
+        p.pending_defect, p.pending_ally = target.id, ally or None
+        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
 
-    def _defect_targets(self) -> list[FactionDef]:
-        """這一刻選單上能叛投去的陣營。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），
-        剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。"""
+    def _defect_targets(self) -> list[tuple[FactionDef, str | None]]:
+        """這一刻選單上能叛投去的（陣營, 依附的那一軍）。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），
+        剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。豪強分屬兩軍的季見 defection.slots_here。"""
         if not defection.can_defect(self.state, self.content):
             return []
-        return defection.targets_here(self.state, self.content, self.world.get_battle())
+        return defection.slots_here(self.state, self.content, self.world.get_battle())
 
     def _faction_prompt(self, faction) -> str:
         p = self.state.player
@@ -9955,7 +9959,9 @@ class Game:
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.pending_defect:
             target = self.content.scenario.faction(s.player.pending_defect)
-            return f"**叛投{target.name}**\n\n{defection.prompt(s, c, target, self.faction_counts_text())}"
+            ally = s.player.pending_ally
+            head = defection.slot_label(s, c, target, ally)  # 「叛投X」；豪強分屬兩軍時也可能是「改投X」「改依附X」
+            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally)}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
         asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
