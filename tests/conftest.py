@@ -92,6 +92,19 @@ def closed_map(content: Content) -> Content:
     return content
 
 
+RENOWN_SWITCHES = (
+    "titles", "scale", "deed_fame", "discount", "prize_gate", "affinity", "duel", "news", "faction_wanted", "arena_reach",
+    "virtue_insight", "lessons", "prompt", "clinic", "black_market", "virtue_choices", "official_wanted", "explain",
+)
+
+
+def renown_on(content: Content) -> Content:
+    """名聲（2026-10-15，Config.renown）的開關全部打開，回傳同一份內容：測試內容全關著，名聲的新測試叫它。"""
+    for key in RENOWN_SWITCHES:
+        setattr(content.config.renown, key, True)
+    return content
+
+
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。

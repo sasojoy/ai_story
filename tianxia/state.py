@@ -349,6 +349,7 @@ class ArenaEntry(BaseModel):
     wages: list[list[int]] = Field(default_factory=list)  # [現實的第幾天, 那一刻的名次]：換日時記（arena.roll_day），本人同步時領
     place: int = 0  # 季末的名次（1～3）；0＝沒進前三
     prized: bool = False  # 季末的獎勵補過了沒
+    famed: bool = False  # 名聲 4.7：天下聞名（報名、更新分身、每次同步照此刻的名望段重寫）
 
     @property
     def bouts(self) -> int:
@@ -368,6 +369,21 @@ class AnnalEntry(BaseModel):
     quote: str = ""  # 你說的那一句（自己說、放手一搏、隨口應對的原句）
     reply: str = ""  # 人物回的那一句，或放手一搏播出的那一版劇情
     weight: int = 1  # 份量 1～5：行狀滿了先丟輕的
+
+
+class RenownSeen(BaseModel):
+    """名聲上一次看到的段（renown.watch 比跨段用；換季跟角色一起清空）。best_* 是這一季到過的最高段：升段那一行只在超過它時寫
+    （檢定失手常常扣 1 名望，卡在門檻邊上的人不擋的話會一再收到「名號傳開了」）。*_day 是掉段、換路最近一次寫的遊戲日
+    （rules.game_day）：一個遊戲日最多寫一次。"""
+
+    fame: int = 0
+    path: str = "俠"
+    virtue: int = 0
+    best_fame: int = 0
+    best_xia: int = 0
+    best_kou: int = 0
+    fame_drop_day: int = 0
+    path_day: int = 0
 
 
 class PlayerState(BaseModel):
@@ -555,6 +571,9 @@ class PlayerState(BaseModel):
     ranger_good: int = 0
     ranger_evil: int = 0
     ranger_deeds: int = 0
+    # 名聲（renown.py）：上一次看到的段（None＝上線之後還沒看過，第一次只記、不寫跨段）；說明過兩個稱號了沒（跨季帶著走）
+    renown_seen: RenownSeen | None = None
+    renown_told: bool = False
     bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
     picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
     # 懸賞榜第三層：正在替哪一張求藝、求兵挑東西（懸賞 id，懸賞榜設計 4.4）。按「交出…」記下；回到懸賞榜、返回、交完、打開懸賞榜時清掉。
@@ -734,6 +753,7 @@ class Bounty(BaseModel):
     refunded: bool = False  # 通緝下榜時押金退過了
     # 重賞（裝備四欄 6.4）：週一掛單時擲中的「寶物一件」或「良駒一匹」，只給第一個交差的人；哪一件到交差時才定（treasures.bounty_prize）
     prize: Literal["treasure", "horse"] | None = None
+    auto_by: Literal["陣營", "官府"] | None = None  # 系統掛的通緝（名聲 4.6、5.4）；None＝玩家押錢掛的
 
 
 class Invite(BaseModel):
@@ -879,6 +899,7 @@ class WorldState(BaseModel):
     # 素材與經濟（企劃者 2026-10-15）：開季時照 Config.forge_secrets 蓋的章（world_state.stamp_season）；舊季沒有這兩欄＝False（照舊）
     forge_divine_per_kind: bool = False  # 神器配方每種兵器一季最多一條（forge_secrets.active）
     forge_split_clues: bool = False  # 神器配方的線索拆三片（forge_secrets.hear、hear_smith、view）
+    renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人

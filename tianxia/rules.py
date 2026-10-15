@@ -11,7 +11,8 @@ from . import calendar, front_lines, gender, insights, library, materials, rise,
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
-from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, season_length_days
+from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, length_factor, season_length_days  # noqa: F401
+# length_factor：季長倍數（名聲設計 2.4、決戰道具 2.2 共用），定義在 world_state（stamp_season 要用），從這裡轉出去叫 rules.length_factor
 
 DAY = 86400
 

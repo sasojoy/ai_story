@@ -98,5 +98,10 @@
     "challenge_tier3": 1,
     "tier3_per_figure": 1,
     "big_tier3": 0.25
+  },
+  "renown": {
+    "titles": true, "scale": true, "deed_fame": true, "discount": true, "prize_gate": true, "affinity": true, "duel": true,
+    "news": true, "faction_wanted": true, "arena_reach": true, "virtue_insight": true, "lessons": true, "prompt": true,
+    "clinic": true, "black_market": true, "virtue_choices": true, "official_wanted": true, "explain": true
   }
 }

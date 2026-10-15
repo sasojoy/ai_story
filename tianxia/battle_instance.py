@@ -140,6 +140,7 @@ class BattleParticipant(BaseModel):
     moves: dict[int, str] = Field(default_factory=dict)
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
+    renown: list[str] = Field(default_factory=list)  # 名聲：加入時快照的稱號（本場戰功、論功那一句寫；善惡第 1 段起、名望名動一方起）
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
     turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
     newbie: bool = False  # 還在新手期（roster.newbie）

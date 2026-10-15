@@ -1334,6 +1334,57 @@ class Ranger(_Strict):
     bounty_bonus: float = Field(default=1.25, ge=1)
 
 
+class RenownTuning(_Strict):
+    """名聲（docs/superpowers/specs/2026-10-15-名聲-design.md 第八節）：每一樣一個開關，預設開、測試內容關；titles 關著時其他開關都沒有作用
+    （renown.on）。數字都是起始值，看試玩再調。名望的門檻在這裡，善惡的門檻沿用 Config.ranger.thresholds（設計 2.2）；兩種都在開季時
+    乘季長倍數（WorldState.renown_scale，world_state.stamp_season）。"""
+
+    titles: bool = True  # 兩個稱號本身、遊俠名號併入、狀態列／玩家卡／決戰名單、說明卡、跨段那一行、得失後面的差距、玩法說明那一節
+    scale: bool = True  # 門檻乘季長倍數（設計 2.4），從下一季開季起（world_state.stamp_season）
+    deed_fame: bool = True  # 立功給名望（3.1）
+    discount: bool = True  # 店家折扣（4.1）
+    prize_gate: bool = True  # 重賞要名動一方（4.2）
+    affinity: bool = True  # 見面情誼起步與冷淡（4.3、5.2）
+    duel: bool = True  # 頭目的機會與賞（4.4）
+    news: bool = True  # 威震州郡那一句、天下聞名點名（4.5）
+    faction_wanted: bool = True  # 敵方陣營的通緝（4.6）
+    arena_reach: bool = True  # 擂台排在後面五名的人挑得到你（4.7）
+    virtue_insight: bool = True  # 浩然、血煞要走對那條路（5.1）
+    lessons: bool = True  # 正邪武學與綠林山寨（5.1）
+    prompt: bool = True  # 對話提示帶稱號與看法（5.2）
+    clinic: bool = True  # 俠的醫館折扣（5.2）
+    black_market: bool = True  # 寇的收購價（5.2）
+    virtue_choices: bool = True  # 俠寇選項與新事件（5.3）
+    official_wanted: bool = True  # 官府通緝與掉惡名（5.4）
+    explain: bool = True  # 第六節的原因字句（求見拆解、熟練、悟、共鳴、散人加成）
+
+    fame_thresholds: list[int] = Field(default_factory=lambda: [10, 25, 50, 90], min_length=4, max_length=4)  # 名望第 1～4 段（週末季）
+    # 立功給名望（3.1）：出陣攻打贏、挑戰本人打贏、決戰參戰（自己出手至少 1 回合）、自己那一邊大勝再加；寫 0 的那一項不給
+    deeds: dict[str, int] = Field(default_factory=lambda: {"sortie": 1, "challenge": 2, "showdown": 2, "showdown_rout": 2})
+    discounts: list[float] = Field(default_factory=lambda: [0.97, 0.94, 0.90, 0.85], min_length=4, max_length=4)  # 名望第 1～4 段的店家折扣（4.1）
+    prize_tier: int = Field(default=2, ge=1, le=4)  # 重賞要名望第幾段（4.2）
+    fame_affinity: int = Field(default=5, ge=0)  # 威震州郡以上見面時情誼起步（4.3）
+    fame_affinity_tier: int = Field(default=3, ge=1, le=4)
+    virtue_affinity: int = Field(default=3, ge=0)  # 敬俠的人遇上俠、喜狠的人遇上寇：每段 +3（5.2）
+    cold_share: float = Field(default=0.8, ge=0, le=1)  # 敬俠的人遇上寇：加情誼的那幾類打八折（5.2）
+    duel_chance: list[float] = Field(default_factory=lambda: [1.0, 1.1, 1.2, 1.2, 1.2], min_length=5, max_length=5)  # 頭目遇上的機會（名望第 0～4 段，4.4）
+    duel_reward: float = Field(default=1.2, ge=1)  # 名動一方以上打贏頭目：經驗、銀兩、心得的倍數（4.4）
+    duel_reward_tier: int = Field(default=2, ge=1, le=4)
+    news_tier: int = Field(default=3, ge=1, le=4)  # 跨過這一段天下大事傳一句（4.5）
+    famed_tier: int = Field(default=4, ge=1, le=4)  # 這一段起大場面打完天下大事點名（4.5）
+    famed_news_per_day: int = Field(default=2, ge=0)  # 天下聞名點名一人一個遊戲日最多幾則
+    wanted_tier: int = Field(default=3, ge=1, le=4)  # 敵方陣營每週掛通緝（4.6）
+    wanted_silver: dict[int, int] = Field(default_factory=lambda: {3: 40, 4: 80})
+    clinic_tier: int = Field(default=2, ge=1, le=4)  # 俠的醫館折扣從第幾段（5.2）
+    clinic_share: float = Field(default=0.85, gt=0, le=1)
+    black_market_tier: int = Field(default=1, ge=1, le=4)  # 寇的黑市從第幾段（5.2）
+    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8})  # 素材的階 → 黑市收購價
+    official_tier: int = Field(default=2, ge=1, le=4)  # 江湖巨寇以上官府每週掛通緝（5.4）
+    official_silver: dict[int, int] = Field(default_factory=lambda: {2: 30, 3: 50, 4: 80})
+    official_hunter_tier: int = Field(default=2, ge=1, le=4)  # 俠一路第幾段揭得了官府通緝
+    official_evil_loss: int = Field(default=3, ge=0)  # 被揭了官府通緝的人截殺打贏、交了這一張：惡名少幾點
+
+
 class Bounties(_Strict):
     """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
     官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；劇本的每個陣營（官軍、黃巾、地方豪強）每週一另各掛
@@ -1450,6 +1501,7 @@ class ArenaTuning(_Strict):
 
     enabled: bool = True
     reach: int = Field(default=3, ge=1)
+    famous_reach: int = Field(default=5, ge=1)  # 名聲 4.7：天下聞名的人守擂，排在他後面幾名以內的人都挑得到他（renown.on(content, "arena_reach")）
     per_day: int = Field(default=10, ge=1)
     pair_cooldown_seconds: float = Field(default=10800, ge=0)
     defend_per_day: int = Field(default=0, ge=0)
@@ -2137,6 +2189,7 @@ class Config(_Strict):
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
+    renown: RenownTuning = Field(default_factory=RenownTuning)  # 名聲（兩個稱號與各段的效果，見 RenownTuning）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
