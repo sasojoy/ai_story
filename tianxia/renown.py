@@ -313,6 +313,23 @@ def fame_perks(content: Content, tier: int) -> list[str]:
 VIRTUE_PERKS: list[Callable[[Content, str, int], list[str]]] = []
 
 
+GREENWOOD_FLAG = "綠林開寨"  # 綠林山寨的 unlock_flag（名聲 5.1）：lessons 開著時開季立（world._open_greenwood）
+
+
+def _lesson_perks(content: Content, way: str, tier: int) -> list[str]:
+    """正邪武學（5.1）：走這條路、這一段起肯教的那幾門，照內容的 LearnRule.title 組；lessons 關著不寫。"""
+    if not on(content, "lessons"):
+        return []
+    return [
+        f"{content.locations[s.learn.at].name}教{s.name}" for s in content.skills.values()
+        if s.learn is not None and s.learn.title is not None and s.learn.title.path == way and s.learn.title.tier == tier
+        and s.learn.at in content.locations
+    ]
+
+
+VIRTUE_PERKS.append(_lesson_perks)
+
+
 def virtue_perks(content: Content, way: str, tier: int) -> list[str]:
     """善惡第 tier 段（way 那一條路）給什麼：人人都有的那幾樣（VIRTUE_PERKS 登記的）。"""
     return [line for fn in VIRTUE_PERKS for line in fn(content, way, tier)]

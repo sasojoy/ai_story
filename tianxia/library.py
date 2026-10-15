@@ -12,6 +12,8 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 TOWN_TAG = "城鎮"  # 開局送的兩門熔掉之後，任何城鎮都能免費重學（設計 4.3）
+TITLE_NEED = "要{title}才肯教"  # 名聲 5.1：正邪武學（待 joy 潤）
+LESSON_CLOSED = "這一門現在不教"  # 名聲的 lessons 關著（_taught_here 本來就不列；直接叫 learn_problem 時才看得到）
 
 
 def owned_arts(state: GameState) -> list[str]:
@@ -87,11 +89,13 @@ def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> 
 
 
 def _taught_here(state: GameState, content: Content) -> list[SkillDef]:
+    """這裡教的：寫了 learn.at 是這裡的，城鎮再加開局送的兩門。正邪武學（learn.title，名聲 5.1）在名聲的 lessons 關著時不教。"""
     here = content.locations[state.player.location]
     starters = set(content.config.starter_skills) if TOWN_TAG in here.tags else set()
+    lessons = renown.on(content, "lessons")
     return [
         skill for skill in content.skills.values()
-        if (skill.learn is not None and skill.learn.at == here.id) or skill.id in starters
+        if (skill.learn is not None and skill.learn.at == here.id and (lessons or skill.learn.title is None)) or skill.id in starters
     ]
 
 
@@ -105,6 +109,11 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
             return f"只教投靠{name}的人"
         if rule.sect and p.sect != rule.sect:
             return f"只教{content.sects[rule.sect].name}的弟子"
+        if rule.title is not None:  # 名聲 5.1：正邪武學看善惡稱號（走那條路、到那一段）
+            if not renown.on(content, "lessons"):
+                return LESSON_CLOSED
+            if not renown.meets(state, content, rule.title.path, rule.title.tier):
+                return TITLE_NEED.format(title=renown.named(renown.VIRTUE_TITLES[rule.title.path][rule.title.tier], state))
         need = int(rule.fame * renown.scale(state.world) + 0.5)  # 名聲 2.4：拜師的名望門檻跟求見同一個理由乘季長倍數
         if p.stats.get("fame", 0) < need:
             return f"名望 {need} 以上才肯教"
@@ -116,9 +125,10 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
 
 
 def lesson_note(skill: SkillDef) -> str:
-    """選單上「學〇〇」括號裡的說明。"""
+    """選單上「學〇〇」括號裡的說明；正邪武學多寫正派、邪派（名聲 5.1）。"""
     fee = skill.learn.silver if skill.learn is not None else 0
-    return f"{skill.kind}・下品・屬{skill.attribute}・" + (f"銀兩 {fee}" if fee else "免費")
+    lean = f"{skill.lean}派・" if skill.lean != "無" else ""
+    return f"{skill.kind}・下品・屬{skill.attribute}・{lean}" + (f"銀兩 {fee}" if fee else "免費")
 
 
 def lessons_here(state: GameState, content: Content) -> list[tuple[SkillDef, str | None]]:
@@ -137,7 +147,7 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
     fee = skill.learn.silver if skill.learn is not None else 0
     state.player.stats["silver"] = state.player.stats.get("silver", 0) - fee
     msgs = [f"你學會了【{skill.name}】（{skill.kind}・下品・屬{skill.attribute}）。"] + ([f"銀兩 -{fee}"] if fee else [])
-    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality))
+    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
 
 
 # ── 熔煉（設計 4.3）──────────────────────────────────────

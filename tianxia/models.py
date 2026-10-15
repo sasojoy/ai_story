@@ -458,15 +458,23 @@ class RoadSight(_Strict):
     effect: Effect = Field(default_factory=Effect)
 
 
+class VirtueNeed(_Strict):
+    """要走哪一條路、善惡稱號到第幾段（名聲設計 5.1、5.3：正邪武學誰肯教、俠寇選項要什麼稱號；renown.meets 判）。"""
+
+    path: Literal["俠", "寇"]
+    tier: int = Field(ge=1, le=4)
+
+
 class LearnRule(_Strict):
     """基礎武學在哪裡學、誰肯教（武學與成長設計附錄 B）：武館與江湖人看名望、收銀兩；
-    陣營營地只教投靠了那個陣營的人；門派只教那個門派的弟子。"""
+    陣營營地只教投靠了那個陣營的人；門派只教那個門派的弟子；正邪武學（名聲 5.1）看善惡稱號（title）。"""
 
     at: str  # 地點 id
     fame: int = 0
     silver: int = 0
     faction: str | None = None
     sect: str | None = None
+    title: VirtueNeed | None = None  # 名聲 5.1：走這條路、到這一段才肯教；名聲的 lessons 關著時這一門不教（library.lessons_here 不列）
 
 
 TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰")  # 本命戰法什麼時候發動（tianxia/tactics.py）
@@ -518,6 +526,8 @@ class SkillDef(_Strict):
     # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命戰法
     traits: list[Attribute] = Field(default_factory=list, max_length=3)
     tactic: TacticDef | None = None
+    # 名聲 5.1：正邪（正派吃善名、邪派吃惡名，team.resonance）。只有新的四門正邪武學寫；現有的不加，免得手上那一門威力季中途變了
+    lean: Literal["正", "邪", "無"] = "無"
 
 
 class GeneralTrait(_Strict):

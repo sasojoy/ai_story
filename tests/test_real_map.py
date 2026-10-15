@@ -23,7 +23,7 @@ REGIONS = {
         "jade_cave", "runan", "runan_academy", "runan_market", "runan_wilds", "hilltop_wilds", "qiao_county",
         "cao_manor", "huangjin_camp", "guan_camp",  # 官軍大營：FB-184 在四十處之外補的官軍操練點
     },
-    "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds"},
+    "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds", "lulin_zhai"},  # 綠林山寨：名聲 5.1
 }
 NEW_LOCATIONS = {
     "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot",

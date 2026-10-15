@@ -73,7 +73,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 41  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 

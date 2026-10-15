@@ -938,7 +938,7 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     skill = content.skills[skill_id]
     if skill_id in library.owned_arts(state):
         return []
-    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality))
+    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
     return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 

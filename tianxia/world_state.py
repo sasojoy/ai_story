@@ -231,6 +231,14 @@ def stamp_season(season: WorldState, content: Content) -> None:
     season.forge_split_clues = cfg.forge_secrets.split_clues
     # 名聲（企劃者 2026-10-15）：門檻乘季長倍數從下一季開季起照這個章（正在跑的季沒有＝倍數 1，renown.scale）
     season.renown_scale = length_factor(season, content) if cfg.renown.titles and cfg.renown.scale else None
+    # 名聲 5.1：正邪武學開著時綠林山寨開寨（它的 unlock_flag）；關著時不立，山寨不畫、去不了。正在跑的季由 world._open_greenwood 補
+    from .renown import GREENWOOD_FLAG  # noqa: PLC0415  renown 只延後 import world_state，這裡也延後，兩邊都不在載入時牽動
+    if cfg.renown.titles and cfg.renown.lessons:
+        season.flags.add(GREENWOOD_FLAG)
+        season.flag_times.setdefault(GREENWOOD_FLAG, season.time)
+    else:
+        season.flags.discard(GREENWOOD_FLAG)
+        season.flag_times.pop(GREENWOOD_FLAG, None)
     season.figures = {}
     if cfg.season_one:  # 大勢人物照人物表種好（T4）：時刻表的 only_if、伏筆的出面人物從第一刻起就看得到每一位
         seed(season, content)
