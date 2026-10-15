@@ -22,7 +22,7 @@
   "season_days": 14,
   "season_one": false,
   "fuse_quality_odds": {"下品": 50, "中品": 30, "上品": 20},
-  "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。"}},
+  "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。", "line_explained": "惡名讓{who}手熟，這種事{who}幹得多了。"}},
   "train_event_chance": 0.3,
   "qiyu_weight_multiplier": 1.5,
   "rare_explore_chance": 0.025,

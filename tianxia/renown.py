@@ -142,6 +142,22 @@ def price_factor(state: GameState, content: Content) -> float:
     return content.config.renown.discounts[t - 1] if t > 0 else 1.0
 
 
+def ranger_exp_note(state: GameState, content: Content, factor: float) -> list[str]:
+    """散人打贏的經驗多了幾成時寫的那一行（設計 6.3）：「（江湖遊俠：打贏的經驗多 5%）」；explain 關著、沒有加成是空的。"""
+    title = virtue_title(state, content)
+    if factor <= 1.0 or not title or not on(content, "explain"):
+        return []
+    return [f"（{title}：打贏的經驗多 {round((factor - 1) * 100)}%）"]
+
+
+def ranger_bounty_note(state: GameState, content: Content, factor: float) -> list[str]:
+    """散人懸賞的銀兩乘上去時寫的那一行（設計 6.3）：「（天下名俠：賞銀 ×1.25）」；explain 關著、沒有加成是空的。"""
+    title = virtue_title(state, content)
+    if factor <= 1.0 or not title or not on(content, "explain"):
+        return []
+    return [f"（{title}：賞銀 ×{factor:g}）"]
+
+
 # ── 得失後面的差距（設計 6.4）──────────────────────────────
 
 _PLAIN = re.compile(r"^(\S+) ([+-])(\d+)$")  # 還沒接過差距的「名望 +1」

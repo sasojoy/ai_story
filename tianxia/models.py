@@ -203,6 +203,7 @@ class PracticeBonus(_Strict):
     per: int = Field(gt=0)
     cap: int = Field(ge=0)
     line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
+    line_explained: str = ""  # 名聲 explain 開著時用這一句（說出是惡名讓你手熟，名聲設計 6.3）；沒寫照舊用 line
 
 
 class FuseQuality(_Strict):

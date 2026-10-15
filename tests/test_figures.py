@@ -57,6 +57,7 @@ def real():
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
+    c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻
     return c
 
 

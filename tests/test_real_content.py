@@ -18,6 +18,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import calendar, companion_agent, fusion, team
+from tianxia.rules import audience_hint
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -581,7 +582,8 @@ def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_
     (line,) = game.choose("call:luzhi")
     spoken, _, hint = line.rpartition("（")
     assert spoken in content.characters["luzhi"].brush_off
-    assert hint == f"名望還差 {content.characters['luzhi'].audience_fame - game.state.player.stats.get('fame', 0)}）"
+    # 名聲（2026-10-15）：門檻照這一季的倍數（14 天 ×5.6），explain 開著時另寫門檻與折抵（rules.audience_hint）
+    assert hint == f"{audience_hint(game.state, content, 'luzhi')}）" and hint.startswith("名望還差 ")
     assert game.state.player.stamina == stamina and game.state.player.pending_companion is None
 
 

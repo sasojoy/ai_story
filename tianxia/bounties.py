@@ -448,6 +448,8 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
         msgs.append(f"經驗 +{exp}")
         msgs += team.add_team_exp(state, content, world, exp)
     msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
+    if b.kind != "wanted":  # 通緝照押金給，沒有加成（_silver）
+        msgs += renown.ranger_bounty_note(state, content, ranger.bounty_factor(state, content))  # 名聲 6.3：加成說出原因
     if b.prize and first:  # 哪一件到這一刻才定（季數＋名號＋懸賞 id 的亂數）；裝備庫滿了寄放
         msgs += treasures.bounty_prize(state, content, world.get_season_number(), b.id, b.prize, issuer(content, b))
     return msgs

@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from . import insights, signature, team
+from . import insights, renown, signature, team
 from .martial_arts import QUALITIES, MartialArt, content_art, is_renamed
 from .models import Content, SkillDef
 from .state import GameState
@@ -105,8 +105,9 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
             return f"只教投靠{name}的人"
         if rule.sect and p.sect != rule.sect:
             return f"只教{content.sects[rule.sect].name}的弟子"
-        if p.stats.get("fame", 0) < rule.fame:
-            return f"名望 {rule.fame} 以上才肯教"
+        need = int(rule.fame * renown.scale(state.world) + 0.5)  # 名聲 2.4：拜師的名望門檻跟求見同一個理由乘季長倍數
+        if p.stats.get("fame", 0) < need:
+            return f"名望 {need} 以上才肯教"
         if p.stats.get("silver", 0) < rule.silver:
             return f"學費 {rule.silver} 兩，你只有 {p.stats.get('silver', 0)} 兩"
     if full(state, content):

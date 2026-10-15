@@ -120,6 +120,12 @@ def amount(state: GameState, content: Content, effect: str) -> float:
     return total
 
 
+def audience_name(state: GameState) -> str:
+    """求見門檻被寶物抵掉時寫給玩家看的名字（名聲設計 6.3，rules.audience_parts）：身上那件寶物的名字；沒有寫「寶物」。"""
+    item = state.player.treasure
+    return item.name if item is not None else "寶物"
+
+
 def extra_drop(state: GameState, content: Content, dropped: list[str], season: int, record_id: int) -> str | None:
     """寶物「打贏多掉一個素材」（設計 6.2）：這一場掉了素材時，win_material 的機率從這一場**實際掉到的**素材裡挑一種、多給一個
     （計畫「要 PM 定的」第 3 條甲）；回那一種的 id，沒中、沒帶、開關關著、這一場沒掉素材都是 None（不擲）。只在遊歷、探索野怪、

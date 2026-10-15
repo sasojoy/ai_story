@@ -49,7 +49,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -3039,12 +3040,13 @@ class Game:
         line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
         short = self._fame_gap(companion_id)
         figure = next((f for f in c.figures.values() if f.character == companion_id), None)
-        hint = f"名望還差 {short}"
+        hint = audience_hint(s, c, companion_id)  # 名聲 explain 開著時另寫門檻與每一項折抵（設計 6.3）
         p = s.player
+        step = int(c.config.audience_rank_discount * renown.scale(s.world) + 0.5)  # 名聲 2.4：升一階抵的點數也乘季長倍數
         if (
             season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
             and figure is not None and p.faction == figure.faction
-            and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
+            and short <= step  # 再升一階抵掉的點數補得上這個差距
             and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、在任才降門檻），不許諾
         ):
             faction = c.scenario.faction_name(figure.faction, figure.faction)
@@ -6372,11 +6374,14 @@ class Game:
                     record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
                     msgs += dropped_lines
         # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
-        exp = round(squad.exp * more_exp * ranger.exp_factor(self.state, self.content))
+        factor = ranger.exp_factor(self.state, self.content)
+        exp = round(squad.exp * more_exp * factor)
         record.exp = exp
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
-        return msgs + levels
+        why = renown.ranger_exp_note(self.state, self.content, factor)  # 名聲 6.3：散人的經驗加成說出原因
+        record.notes += why
+        return msgs + levels + why
 
     def _seize(self, record) -> list[str]:
         """絕學的契機（方案 C，cultivation.seize）：打贏了（險勝以上）、序章外，照這一場的難度比擲一次頓悟。

@@ -29,16 +29,51 @@ def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）；寶物另扣 treasures.amount 的 audience。最低 0。
     第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
     rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
-    from . import ranger, ranks  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
+    parts = audience_parts(state, content, companion_id)
+    return max(0, parts.bar - sum(n for _, n in parts.discounts))
 
+
+class AudienceParts(NamedTuple):
+    bar: int  # 這一季的名望門檻（乘過季長倍數）
+    discounts: list[tuple[str, int]]  # （哪一項, 抵幾點），乘過倍數；沒有的不列
+
+
+def audience_parts(state: GameState, content: Content, companion_id: str) -> AudienceParts:
+    """求見門檻拆開（名聲設計 6.3）：門檻與每一項折抵——同陣營的階（ranks.rank_of 每比第 1 階高一階抵 audience_rank_discount）、
+    散人的遊俠名號（名聲開著時是善惡稱號的段，ranger.audience_discount）、寶物（treasures.amount 的 audience）。
+    長的季整條一起乘季長倍數（名聲 2.4，折抵跟著門檻同比例，renown.scale；沒有章、名聲關著是 1，跟以前一字不差）。"""
+    from . import ranger, ranks, renown  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
+
+    k = renown.scale(state.world)
     bar = content.characters[companion_id].audience_fame
     figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
+    parts: list[tuple[str, int]] = []
     if figure is not None and p.faction is not None and p.faction == figure.faction:
-        bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
-    bar -= ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵一點，對所有人物都算（陣營的人是 0）
-    bar -= round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣，最低 0
-    return max(0, bar)
+        rank = (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
+        if rank:
+            parts.append((f"{content.scenario.faction_name(p.faction, p.faction)}的階", rank))
+    ranger_cut = ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵幾點，對所有人物都算（陣營的人是 0）
+    if ranger_cut:
+        parts.append((renown.virtue_title(state, content) or ranger.title(content, state) or "遊俠名號", ranger_cut))
+    treasure = round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣
+    if treasure:
+        parts.append((treasures.audience_name(state), treasure))
+    return AudienceParts(int(bar * k + 0.5), [(name, int(n * k + 0.5)) for name, n in parts])
+
+
+def audience_hint(state: GameState, content: Content, companion_id: str) -> str:
+    """求見被打發時括號裡那一段（Game._brush_off）：「名望還差 10」；名聲的 explain 開著時再寫門檻與每一項折抵
+    「名望還差 10；門檻 25，江湖遊俠抵 3」（名聲設計 6.3）。"""
+    from . import renown  # noqa: PLC0415
+
+    gap = audience_bar(state, content, companion_id) - state.player.stats.get("fame", 0)
+    hint = f"名望還差 {gap}"
+    if not renown.on(content, "explain"):
+        return hint
+    parts = audience_parts(state, content, companion_id)
+    cuts = "、".join(f"{name}抵 {n}" for name, n in parts.discounts)
+    return f"{hint}；門檻 {parts.bar}" + (f"，{cuts}" if cuts else "")
 
 
 def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
@@ -241,7 +276,10 @@ def practice_line(check: Check, state: GameState, content: Content, world: World
     if team.practice_bonus(state, content, check) <= 0:
         return ""
     rule = content.config.practice_bonus[check.practice]
-    return rule.line.replace("{who}", "你")
+    from . import renown  # noqa: PLC0415
+
+    line = rule.line_explained if renown.on(content, "explain") and rule.line_explained else rule.line  # 名聲 6.3：說出是惡名讓你手熟
+    return line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
