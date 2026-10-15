@@ -249,6 +249,8 @@ class Manual(BaseModel):
     heard: dict[str, list[int]] = Field(default_factory=dict)  # 秘方 id → 聽過第幾句口訣（0 說書、1 人物、2 殘譜）
     solved: list[str] = Field(default_factory=list)  # 合中過的秘方 id，照先後
     made: dict[str, str] = Field(default_factory=dict)  # 鑄譜用：隱藏配方 id → 打中的那一爐的組合鍵（鑄譜寫配方）；武學譜不用
+    # 鑄譜用（素材與經濟設計第三節）：神器配方 id → 聽過的片（forge_secrets.KIND 0 種類、MAIN 1 主料、AUX 2 輔料）；武學譜不用
+    pieces: dict[str, list[int]] = Field(default_factory=dict)
 
 
 class DuelState(BaseModel):
