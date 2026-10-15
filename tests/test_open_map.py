@@ -73,6 +73,14 @@ def test_the_road_has_no_terrain_survey_any_more():
     assert game.state.player.surveyed == surveyed and "survey" not in game.state.player.leg_actions
 
 
+def test_the_how_to_page_lists_three_road_tasks():
+    game = _game()
+    c, w = game.content, game.state.world
+    assert "留意地形" not in howto.page(c, w, recruitable=False)
+    c.config.open_map = False
+    assert "留意地形" in howto.page(c, w, recruitable=False)
+
+
 def test_fame_no_longer_widens_the_map():
     game = _game()
     s, c = game.state, game.content
