@@ -259,7 +259,7 @@ def state(
             memo[squad_id] = odds(squad_id)
         return memo[squad_id]
 
-    faction, on = p.faction, territory.on(c)
+    faction, on = rules.side_of(s, c), territory.on(c)  # 豪強分屬兩軍：照依附那一軍算自家、敵方
     weeks_total = c.config.season_weeks
     now_week = min(calendar.point(w.time, c, w).week, weeks_total)
     shown = mapview.open_places(s, c)

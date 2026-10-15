@@ -279,3 +279,86 @@ def test_territory_has_no_geju_hold(wk):
     assert w.territory.geju == []
     spots = [loc for line in wk.scenario.territory.lines.values() for loc in line]
     assert "haoqiang" not in {territory.controller(w, wk, loc) for loc in spots}
+
+
+# ── Task 4：推線、出陣、地盤、守勢與第 3 階行動、機緣、捐軍備照那一邊 ─────────
+
+
+def _spots(game, content, side):
+    """這一方控制的、另一方控制的戰線地點各一處（照此刻的控制方）。"""
+    from tianxia import territory
+
+    w = game.state.world
+    spots = [loc for line in content.scenario.territory.lines.values() for loc in line]
+    own = next(loc for loc in spots if territory.controller(w, content, loc) == side)
+    foe = next(loc for loc in spots if territory.controller(w, content, loc) not in (None, side))
+    return own, foe
+
+
+def test_gentry_sortie_attacks_and_holds_like_its_side(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    own, foe = _spots(game, wk, "guan")
+    game.state.player.location = own
+    assert game.sortie_mode() == "hold"
+    game.state.player.location = foe
+    assert game.sortie_mode() == "attack"
+    push = game.sortie_push(foe)
+    assert push and all(v < 0 for v in push.values())  # 往官軍那一頭（0）推
+
+
+def test_goals_are_the_sides(wk):
+    game = _game(wk, faction="haoqiang", ally="huang")
+    goals = game._goals()
+    assert set(goals) == set(rules.front_ids(wk)) and all(v == 1 for v in goals.values())
+
+
+def test_push_buffer_counts_the_allied_gentry(wk):
+    game = _game(wk, faction="haoqiang", ally="guan")
+    w = game.state.world
+    w.active_pushers["guan"] = {"官一": w.time, "官二": w.time, "官三": w.time}
+    line = rules.front_ids(wk)[0]
+    game.push_trend(line, -4, source="sortie")
+    assert "甲" in w.active_pushers["guan"] and "haoqiang" not in w.active_pushers
+    assert game.state.player.contrib > 0  # 往官軍的目標推，記貢獻
+
+
+def test_price_follows_the_side(wk):
+    from tianxia import team, territory
+
+    game = _game(wk, faction="haoqiang", ally="guan")
+    own, foe = _spots(game, wk, "guan")
+    game.state.player.location = own
+    assert team._price_here(game.state, wk) == wk.config.territory.own_price
+    game.state.player.location = foe
+    assert team._price_here(game.state, wk) == wk.config.territory.enemy_price
+    assert territory.price_factor(game.state.world, wk, allied.side_of(game.state, wk), foe) == wk.config.territory.enemy_price
+
+
+def test_duty_pushes_the_front_for_the_side(wk):
+    game = _game(wk, faction="haoqiang", ally="huang")
+    own, _ = _spots(game, wk, "huang")
+    game.state.player.location = own
+    line = rules.front_of(wk, own)
+    w = game.state.world
+    before = w.trends[line] + w.trend_accum.get(line, 0.0)
+    msgs = game._duty()
+    assert any("保境安民" in m or m for m in msgs)
+    assert w.trends[line] + w.trend_accum.get(line, 0.0) > before  # 往黃巾那一頭（100）推
+    assert rules.GEJU not in w.trends
+
+
+def test_donate_goes_to_the_side_stock(wk):
+    from tianxia import economy
+
+    game = _game(wk, faction="haoqiang", ally="guan", at="zhuo_militia_hall")
+    assert game._at_own_base()
+    game.state.player.location = "changshe"  # 依附那一軍的投靠點也算自家大本營
+    assert game._at_own_base()
+    game.state.player.location = "huangjin_camp"
+    assert not game._at_own_base()
+    target = economy.donate_target(wk, game.state.world, "guan", "zhuo_militia_hall")
+    assert target is not None and target[0] != rules.GEJU and target[1] == -1
+    game.state.player.location = "changshe"
+    game.state.player.materials = {"man_1": 3}
+    game.donate("man_1", 3)
+    assert game.state.world.armaments.get("guan") and "haoqiang" not in game.state.world.armaments

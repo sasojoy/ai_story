@@ -305,7 +305,7 @@ def _open_strikes(state: GameState, content: Content) -> list[Order]:
     if state.world.ended:
         return []
     return [
-        o for o in orders.current(state, content, state.player.faction)
+        o for o in orders.current(state, content, allied.side_of(state, content))  # 豪強分屬兩軍：依附那一軍的軍令
         if o.template == "strike" and not o.done and o.figure is not None
     ]
 
@@ -851,7 +851,7 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     if standing:
         parts.append("\n".join([HERE_TITLE, *(_here_text(state, content, fid) for fid in standing)]))
 
-    listed = foes(content, loc, odds, state.player.faction, state.world)
+    listed = foes(content, loc, odds, allied.side_of(state, content), state.world)
     parts.append("**敵情**　" + ("、".join(f"{name} {word}" for name, word in listed) if listed else "沒有人在這裡滋事"))
 
     gives = insight_names(content, loc)

@@ -1075,7 +1075,7 @@ class Game:
             option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
             if option is not None:
                 opts.append(option)
-            elif sortie.ranger_here(c, s.player.faction, loc.id):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
+            elif sortie.ranger_here(c, self._side(), loc.id):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
                 opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
@@ -1164,13 +1164,13 @@ class Game:
     # ── 捐軍備（素材與經濟設計第六節）────────────────────────────
 
     def _at_own_base(self) -> bool:
-        """人在自家陣營的大本營（territory.bases：投靠點，含不在戰線上的），開關（Config.economy.donate）開著、不在路上；散人沒有。"""
+        """人在自家陣營的大本營（territory.bases：投靠點，含不在戰線上的），開關（Config.economy.donate）開著、不在路上；散人沒有。
+        豪強分屬兩軍的季，豪強自己的投靠點與依附那一軍的投靠點都算（設計第六節）。"""
         s, c = self.state, self.content
         p = s.player
-        return (
-            c.config.economy.donate and p.faction is not None and p.journey is None
-            and territory.bases(c).get(p.location) == p.faction
-        )
+        if not c.config.economy.donate or p.faction is None or p.journey is not None:
+            return False
+        return territory.bases(c).get(p.location) in {p.faction, self._side()}
 
     def econ_day(self) -> int:
         """素材與經濟的「一天」（升階的三階、捐軍備的上限）：同回體丹的換日（_pill_day，台灣 00:00）。機器人照它算。"""
@@ -1272,7 +1272,8 @@ class Game:
             problem = refused[0] if refused else economy.DONATE_NONE
             self._shop_after(problem, "donate")
             return [problem]
-        faction = c.scenario.faction(p.faction)
+        side = self._side()  # 豪強分屬兩軍：軍備進依附那一軍的存量、推依附那一軍的目標（設計第六、十二節）
+        faction = c.scenario.faction(side)
         items_text = "、".join(materials.item_text(c, mid, taken) for mid, taken, _ in took)
         msgs = [economy.DONATE_DONE.format(items=items_text, faction=faction.name)]
         by_attribute: dict[str, int] = {}
@@ -1282,13 +1283,13 @@ class Game:
         for attribute, points in by_attribute.items():
             armament = economy.armament_of(c, attribute)
             if armament is not None:
-                economy.add_armament(w, p.faction, attribute, points)
+                economy.add_armament(w, side, attribute, points)
                 msgs.append(f"{armament} +{points}")
         total = sum(points for _, _, points in took)
         if season_one(c, w):  # 晉升只在第一季的規則下有：規則關著的季只記軍備
             push.add_contribution(p, calendar.point(w.time, c, w).week, total)
             msgs.append(f"貢獻 +{total}")
-        target = economy.donate_target(c, w, p.faction, p.location)
+        target = economy.donate_target(c, w, side, p.location)
         if target is not None:
             trend_id, direction = target
             msgs += self.push_trend(trend_id, economy.donate_push(c, total) * direction, source="donate")
@@ -1303,9 +1304,10 @@ class Game:
         p = s.player
         if not c.config.economy.donate or p.faction is None:
             return None
-        stock = s.world.armaments.get(p.faction, {})
+        side = self._side()  # 豪強分屬兩軍：看依附那一軍的存量
+        stock = s.world.armaments.get(side, {})
         return {
-            "faction": c.scenario.faction_name(p.faction, p.faction),
+            "faction": c.scenario.faction_name(side, side),
             "stock": [{"name": name, "attribute": attribute, "points": stock.get(attribute, 0)}
                       for attribute, name in c.config.economy.armaments.items()],
         }
@@ -1522,14 +1524,14 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            return sortie.RANGER_LINE if sortie.ranger_here(self.content, self.state.player.faction, loc.id) else ""
+            return sortie.RANGER_LINE if sortie.ranger_here(self.content, self._side(), loc.id) else ""
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
         if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50（FB-253）
             return sortie.STIR_FLAT_LINE
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
-        own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self.state.player.faction
+        own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
         return howto.sortie_line("convoy" if own else how, push_ok, left, self.content)  # 自家地盤上攻的只有運糧隊（FB-255）
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
@@ -2791,7 +2793,7 @@ class Game:
             loc_mode = self._sortie_mode(loc)
             return self._sortie_foes(loc) if loc_mode == "attack" else []
         base = territory.squads_at(self.state.world, self.content, loc.id)  # 地盤易手：站的照控制方（關著時就是 loc.enemies）
-        extra = orders.extra_enemies(self.state, self.content, loc.id, self.state.player.faction)
+        extra = orders.extra_enemies(self.state, self.content, loc.id, self._side())
         return base + [sid for sid in extra if sid not in base] if extra else base
 
     def _order_options(self, loc: Location) -> list[Option]:
@@ -5801,7 +5803,7 @@ class Game:
         """出陣攻打的對手（設計 2.2）：此刻控制這裡的那一方的隊伍（地盤關著時：這裡有陣營、不是自己陣營的隊伍），加上截糧軍令帶來的
         敵方運糧隊（orders.extra_enemies；自家地盤上有運糧隊時出陣就是去截它）。流寇、野獸不在裡面（那是找素材撞上的）。"""
         s, c = self.state, self.content
-        own = s.player.faction
+        own = self._side()  # 豪強分屬兩軍：依附的那一軍
         side = territory.controller(s.world, c, loc.id)
         ids = [
             sid for sid in territory.squads_at(s.world, c, loc.id)
@@ -5811,7 +5813,7 @@ class Game:
         return ids + [sid for sid in extra if sid not in ids]
 
     def _sortie_mode(self, loc: Location) -> str | None:
-        return sortie.mode(self.content, self.state.world, self.state.player.faction, loc.id, bool(self._sortie_foes(loc)))
+        return sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
 
     def sortie_mode(self) -> str | None:
         """所在地此刻出陣是哪一種（假人照它挑，bot_policy）；在路上是 None。"""
@@ -5824,9 +5826,10 @@ class Game:
         s, c = self.state, self.content
         loc = c.locations[loc_id or s.player.location]
         how = how or self._sortie_mode(loc)
-        if how is None or s.player.faction is None:
+        side = self._side()  # 豪強分屬兩軍：照依附那一軍的目標推
+        if how is None or side is None:
             return {}
-        return sortie.pushes(c, s.world, s.player.faction, loc.id, how)
+        return sortie.pushes(c, s.world, side, loc.id, how)
 
     def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
         """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
@@ -5888,7 +5891,7 @@ class Game:
         """守、攪局拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：守是這裡自家陣營的隊伍、攪局是此刻控制方的隊伍
         （設計沒寫，照守的算法），取經驗最高的一路、同分取先列的；沒有是 None（不給心得經驗，推力照推）。"""
         s, c = self.state, self.content
-        side = s.player.faction if how == "hold" else territory.controller(s.world, c, loc.id)
+        side = self._side() if how == "hold" else territory.controller(s.world, c, loc.id)
         squads = [
             c.squads[sid] for sid in territory.squads_at(s.world, c, loc.id)
             if c.squads[sid].faction is not None and (side is None or c.squads[sid].faction == side)
@@ -6191,7 +6194,7 @@ class Game:
         p, w, cfg = s.player, s.world, c.config
         fig = c.figures[fid]
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
-        n = push.active_count(s, p.faction, w.time, window)
+        n = push.active_count(s, self._side(), w.time, window)
         msgs = [f"{fig.name}敗走。"]
         cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
         msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
@@ -6264,8 +6267,9 @@ class Game:
         return abs(delta) * goal if goal else delta
 
     def _goals(self) -> dict[str, int]:
-        """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。"""
-        faction = self.content.scenario.find_faction(self.state.player.faction)
+        """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。
+        照那一邊（_side）：豪強分屬兩軍的季是依附那一軍的目標，所以豪強的守勢行動、修築塢堡、遊歷也往那一軍推。"""
+        faction = self.content.scenario.find_faction(self._side())
         return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
@@ -6330,7 +6334,8 @@ class Game:
         at = calendar.point(now, c, w)
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         key = f"{at.cal_day}:{trend_id}"
-        pushed = push.buffered(abs(amount), push.active_count(s, p.faction, now, window))
+        side = self._side()  # 人數緩衝、貢獻、活躍名單都照那一邊（豪強分屬兩軍：依附的那一軍）
+        pushed = push.buffered(abs(amount), push.active_count(s, side, now, window))
         used = push.used_today(p.pushed, at.cal_day, trend_id)
         moved, _ = push.split_by_cap(pushed, used, self.daily_push_cap())  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
         p.pushed = push.recent_days(p.pushed, at.cal_day)
@@ -6346,8 +6351,8 @@ class Game:
             if whole:
                 msgs = change_trend(s, c, trend_id, whole)
 
-        if p.faction is not None:  # 散人：照推，但不記貢獻、不進活躍名單
-            faction = c.scenario.find_faction(p.faction)
+        if side is not None:  # 散人：照推，但不記貢獻、不進活躍名單
+            faction = c.scenario.find_faction(side)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             # 出陣的攪局（sortie.mode：陣營在這條線上沒有目標，只有豪強）把線往 50 拉，就是替豪強做事：照推的量記（PM 2026-10-14，
             # 同攻守的帳：名目量，超過上限的部分照記兩成）
@@ -6356,7 +6361,7 @@ class Game:
             if source != "donate" and (stir or (goal and (goal > 0) == (amount > 0))):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標（攪局以外）都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 push.add_contribution(p, at.week, gained)
-            w.active_pushers.setdefault(p.faction, {})[p.name] = now
+            w.active_pushers.setdefault(side, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs + tail
 
@@ -8798,7 +8803,7 @@ class Game:
     def map_state(self) -> dict:
         """輿圖升級的疊層（mapdata.state）：勝算、出陣、分鐘換算由這裡傳進去。只讀，不擲骰。"""
         s, c = self.state, self.content
-        faction = s.player.faction
+        faction = self._side()  # 豪強分屬兩軍：照依附那一軍畫出陣與地盤
         on = sortie.on(c) and faction is not None
 
         def mode(loc_id: str) -> str | None:
@@ -10410,7 +10415,7 @@ class Game:
     def _chip(self, change: str, seed: str) -> tuple[str, int] | None:
         """江湖紀錄畫數值標籤時，戰況變化的換法（FB-064，journal.ChipFn）：紀錄裡存的是機器可讀的寫法，這裡照內容換成一句話、
         照「現在看的人」的陣營算對他是好事還是壞事（顏色在畫的那一刻才定，換了陣營再畫就跟著變）。"""
-        return front_chip(self.content, self.state.player.faction, change, seed)
+        return front_chip(self.content, self._side(), change, seed)
 
     def latest_entry_html(self) -> str:
         entries = self.state.journal
