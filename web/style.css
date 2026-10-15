@@ -822,13 +822,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .map-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; align-self: flex-start; max-width: 100%; }
 .map-chips::-webkit-scrollbar { display: none; }
+/* 五顆濾鏡在 375 寬（右邊留給那一排鈕）一排放得下（企劃者 10/15 從對比圖選丙） */
 .map-chips button {
-  flex: none; height: 32px; border-radius: 16px; border: 1px solid var(--line); cursor: pointer; padding: 0 11px;
-  background: color-mix(in srgb, var(--card) 94%, transparent); color: var(--ink-2); font: inherit; font-size: 13px; white-space: nowrap;
+  flex: none; height: 30px; border-radius: 15px; border: 1px solid var(--line); cursor: pointer; padding: 0 8px;
+  background: color-mix(in srgb, var(--card) 94%, transparent); color: var(--ink-2); font: inherit; font-size: 12.5px; white-space: nowrap;
 }
-.map-chips button i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.map-chips button i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: 1px; }
 .map-chips button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.map-chips button.tl.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 右上角的鈕（我在哪、放大、縮小）：觸控目標 44px */
 .map-ctl { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 8px; }
 .map-ctl button {
@@ -836,6 +836,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: var(--shadow);
 }
 .map-ctl button.me { color: var(--accent); }
+.map-ctl button.tl { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 17px; line-height: 1; color: var(--accent); }
+.map-ctl button.tl small { font-size: 9.5px; color: var(--ink); }
+.map-ctl button.tl.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.map-ctl button.tl.on small { color: #fff; }
 .map-ctl button:disabled { opacity: 0.45; cursor: default; }
 .map-ctl svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 /* 「天下」那一條：看大局、版圖變化時浮在上方中間 */
@@ -887,6 +891,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-head2 b { font-size: 15px; font-family: var(--serif); }
 .m-head2 small, .m-sub { color: var(--ink-2); font-size: 12px; }
 .m-go { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); margin-top: 6px; cursor: pointer; }
+.m-go.lose { opacity: 0.5; } /* 必敗的出陣建議：照樣列、排最後、淡一點（企劃者 10/15 從對比圖選乙） */
 .m-go .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
 .m-go .t { flex: 1; min-width: 0; }
 .m-go .why { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }

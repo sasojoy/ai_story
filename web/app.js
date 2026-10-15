@@ -3533,15 +3533,19 @@
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
-    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("")
-      + `<button type="button" class="tl${S.mapMode === "timeline" ? " on" : ""}" data-act="map-timeline">⏱ 版圖變化</button>`;
+    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
   }
-  // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小
-  const MAP_CTL = `<div class="map-ctl">
+  // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小，第四顆是版圖變化
+  // （企劃者 10/15 從對比圖選丙：375 寬時濾鏡一排放不下它，挪到這裡；濾鏡那一排只剩五顆）
+  function mapCtl() {
+    const tl = S.mapMode === "timeline";
+    return `<div class="map-ctl">
     <button type="button" class="me" data-act="map-home" aria-label="我在哪" title="我在哪"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="out" aria-label="縮小" title="縮小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+    <button type="button" class="tl${tl ? " on" : ""}" data-act="map-timeline" aria-label="版圖變化" aria-pressed="${tl}" title="版圖變化">⏱<small>版圖</small></button>
   </div>`;
+  }
   // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間；上面是找地點與濾鏡，右上角三顆鈕，底下是抽屜（寬 900 以上是右欄）
   function pageMap() {
     if (!S.mapBase || !S.mapState) return '<p class="muted">展開輿圖…</p>';
@@ -3552,7 +3556,7 @@
     return `<div class="mapx${tl ? " tl-mode" : ""}" id="mapx">
       <div class="map-wrap" id="map"><div class="tx-world-map">${svg}</div></div>
       <div class="map-top"><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><div class="map-chips" role="group" aria-label="濾鏡">${chipsHtml()}</div></div>
-      ${MAP_CTL}<div class="map-hud" id="map-hud" hidden></div>${banner}
+      ${mapCtl()}<div class="map-hud" id="map-hud" hidden></div>${banner}
       <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>
     </div>`;
   }
@@ -3590,7 +3594,7 @@
     const where = st.journey ? "" : `${esc(here ? here.name : "")}${hc ? `（${sideName(hc)}的地盤）` : ""}`;
     const goes = st.suggest.length && st.sorties_left !== null
       ? `<div class="m-head2"><b>今天去哪裡出陣</b><small>今日還能 ${Number(st.sorties_left)} 次${where ? `・你在 ${where}` : ""}</small></div>` +
-        st.suggest.map((g, i) => `<div class="m-go" data-act="map-pick" data-id="${esc(g.id)}" role="button"><span class="n">${i + 1}</span><span class="t"><b>${esc(placeOf(base, g.id).name)}</b>　出陣・${SORTIE_WORD[g.sortie] || ""}
+        st.suggest.map((g, i) => `<div class="m-go${g.lose ? " lose" : ""}" data-act="map-pick" data-id="${esc(g.id)}" role="button"><span class="n">${i + 1}</span><span class="t"><b>${esc(placeOf(base, g.id).name)}</b>　出陣・${SORTIE_WORD[g.sortie] || ""}
           <span class="why">${g.why.map(([t, tone]) => `<span style="background:${TONE_COLOR[tone] || "#8A7A62"}">${esc(t)}</span>`).join("")}</span></span><span class="m">${g.minutes ? `${Number(g.minutes)} 分 ›` : "這裡 ›"}</span></div>`).join("")
       : where ? `<div class="m-head2"><b>你在 ${where}</b></div>` : "";
     const ropes = st.ropes.length ? `<div class="m-sec"><h4>${st.season_one ? "三條戰線" : "大勢"}</h4>${st.ropes.map(ropeHtml).join("")}${st.geju !== null ? `<div class="m-sub">豪強割據 ${Number(st.geju)}</div>` : ""}</div>` : "";
@@ -3754,7 +3758,9 @@
     }
     box.classList.toggle("tl-mode", open);
     const chips = box.querySelector(".map-chips");
-    if (chips) chips.innerHTML = chipsHtml();
+    if (chips) chips.innerHTML = chipsHtml(); // 勢力可能剛被打開
+    const tlBtn = box.querySelector(".map-ctl .tl");
+    if (tlBtn) { tlBtn.classList.toggle("on", open); tlBtn.setAttribute("aria-pressed", String(open)); }
     const banner = document.getElementById("map-banner");
     if (banner) banner.hidden = true;
     setMapDrawer(open ? "tl" : "rest");
@@ -3811,11 +3817,12 @@
     const body = document.getElementById("mbody");
     if (body) body.innerHTML = drawerHtml();
   }
-  // 抽屜的高度（設計第一節）：收著 230、半開（點了地點）240、拉高六成、全開九成四、版圖變化；桌機是右欄（CSS 蓋掉高度）
+  // 抽屜的高度（設計第一節）：收著 230、半開（點了地點）240、拉高六成、全開九成四、版圖變化 320；桌機是右欄（CSS 蓋掉高度）
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
-    return { rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(430, Math.round(avail * 0.62)) }[h] || 230;
+    // 版圖變化 320 高（企劃者 10/15 從對比圖選乙）：地圖大一截，曲線與處數在一屏，年表往下捲
+    return { rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 230;
   }
   function setMapDrawer(h) {
     S.mapDrawer = h;

@@ -20,6 +20,16 @@ PRICE_OWN = "自家地盤：療傷、打造、買馬便宜 {pct}%"  # 待 joy �
 PRICE_ENEMY = "別人的地盤：療傷、打造、買馬貴 {pct}%"  # 待 joy 潤
 FIXED_ROW = "只照大事易手"  # 年表最後一組（廣宗）的名字，待 joy 潤
 SUGGEST_MAX = 3
+LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）
+
+
+def rank_suggestions(rows: list[dict]) -> list[dict]:
+    """今天去哪裡出陣列哪幾處：打得過的照分數高的在前、最多 SUGGEST_MAX 處；必敗的照樣列（軍令要你去，你自己決定要不要
+    硬打），排在後面、補滿 SUGGEST_MAX，打得過的已經有那麼多處時也留分數最高的一處（多一列），不會整個不見。"""
+    ordered = sorted(rows, key=lambda g: (g["lose"], -g["score"]))
+    win = [g for g in ordered if not g["lose"]][:SUGGEST_MAX]
+    lose = [g for g in ordered if g["lose"]]
+    return win + lose[: max(1, SUGGEST_MAX - len(win))]
 
 
 def base_key(state: GameState, content: Content) -> str:
@@ -203,7 +213,7 @@ def state(
      "places": {地點: {"control","kind","odds","sortie","minutes","stamina","order","bounty","goal","news","people","services",
                        "price","squads","danger","flips"}},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}]}], "geju", "events",
-     "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score"}], "chart": [{"name","spots"}],
+     "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}]}"""
     s, c, w, p = state, content, state.world, state.player
     memo: dict[str, str] = {}
@@ -259,8 +269,9 @@ def state(
         if info["odds"]:
             why.append([info["odds"]["word"], info["odds"]["tone"]])
             score += ODDS_SCORE.get(info["odds"]["word"], 0)
-        suggest.append({"id": loc_id, "sortie": info["sortie"], "why": why, "minutes": info["minutes"], "score": score})
-    suggest.sort(key=lambda g: -g["score"])
+        lose = info["odds"] is not None and info["odds"]["word"] == LOSE_WORD
+        suggest.append({"id": loc_id, "sortie": info["sortie"], "why": why, "minutes": info["minutes"], "score": score, "lose": lose})
+    suggest = rank_suggestions(suggest)
     journey = None
     if p.journey is not None:
         j = p.journey
@@ -284,6 +295,6 @@ def state(
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
-        "events": _titles(s, c, now_week, now_week), "suggest": suggest[:SUGGEST_MAX], "chart": chart,
+        "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "weeks": _weeks(s, c, now_week, ropes),
     }

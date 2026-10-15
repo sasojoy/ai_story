@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -194,3 +194,27 @@ def test_the_tally_compares_with_the_first_recorded_week():
     assert "比第" not in out[1]  # 看的就是第 1 週：沒得比
     tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 3);")
     assert "比第 1 週" in tl and "開季" not in tl
+
+
+def test_the_timeline_button_sits_under_the_zoom_buttons():
+    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只剩五顆濾鏡。"""
+    out = run(_game(), "return [H.pageMap(), H.chipsHtml()];")
+    ctl = out[0][out[0].index('class="map-ctl"'):]
+    ctl = ctl[: ctl.index("</div>")]
+    assert 'data-act="map-timeline"' in ctl and "版圖" in ctl
+    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 5
+
+
+def test_the_timeline_drawer_is_320_high_on_a_phone():
+    """對比 3 選乙（企劃者 10/15）：版圖變化時抽屜 320 高，地圖大一截，年表往下捲。"""
+    assert run(_game(), 'return H.mapDrawerPx("tl");') == 320
+
+
+def test_a_losing_suggestion_is_faded():
+    """對比 4 選乙（企劃者 10/15）：必敗的照樣列、排在最後、整列淡一點。"""
+    game = _game()
+    st = game.map_state()
+    out = run(game, "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
+    assert [g["lose"] for g in st["suggest"]] == [False, False, False, True]  # 官軍在潁川：三處打得過，再一處必敗的
+    assert out.count('class="m-go lose"') == 1 and out.count('class="m-go"') == 3
+    assert out.index('class="m-go lose"') > out.rindex('class="m-go"')

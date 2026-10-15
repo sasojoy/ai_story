@@ -45,11 +45,34 @@ def test_the_state_says_who_holds_each_place():
 
 def test_the_state_suggests_where_to_sortie():
     st = _game().map_state()
-    assert 1 <= len(st["suggest"]) <= mapdata.SUGGEST_MAX
+    assert 1 <= len(st["suggest"]) <= mapdata.SUGGEST_MAX + 1  # 打得過的最多三處，再加一處必敗的
     for g in st["suggest"]:
         assert st["places"][g["id"]]["sortie"] == g["sortie"] and g["sortie"] in ("attack", "hold", "stir")
-    scores = [g["score"] for g in st["suggest"]]
-    assert scores == sorted(scores, reverse=True)
+    loses = [g["lose"] for g in st["suggest"]]
+    assert loses == sorted(loses)  # 必敗的排在最後（企劃者 10/15 對比 4 選乙）
+    for lose in (False, True):
+        scores = [g["score"] for g in st["suggest"] if g["lose"] is lose]
+        assert scores == sorted(scores, reverse=True)
+    assert all(g["lose"] == ((st["places"][g["id"]]["odds"] or {}).get("word") == mapdata.LOSE_WORD) for g in st["suggest"])
+
+
+def test_a_place_you_can_win_comes_before_one_with_a_big_order_you_would_lose():
+    """軍令 +100 的必敗那一處，排在什麼都沒有、打得過的那一處後面。"""
+    from tianxia import mapdata as md
+
+    rows = [{"id": "a", "lose": True, "score": 100}, {"id": "b", "lose": False, "score": -3}]
+    assert [g["id"] for g in md.rank_suggestions(rows)] == ["b", "a"]
+
+
+def test_a_losing_place_still_shows_when_three_can_be_won():
+    """「必敗的照樣列」：打得過的有三處時，必敗的分數最高那一處淡淡地排第四，不會整個不見。"""
+    from tianxia import mapdata as md
+
+    win = [{"id": f"w{i}", "lose": False, "score": -i} for i in range(5)]
+    lose = [{"id": "l0", "lose": True, "score": 90}, {"id": "l1", "lose": True, "score": 50}]
+    assert [g["id"] for g in md.rank_suggestions(win + lose)] == ["w0", "w1", "w2", "l0"]
+    assert [g["id"] for g in md.rank_suggestions(win[:1] + lose)] == ["w0", "l0", "l1"]
+    assert [g["id"] for g in md.rank_suggestions(lose)] == ["l0", "l1"]
 
 
 def test_the_state_carries_three_ropes_and_the_weeks():
