@@ -516,7 +516,7 @@ def _price_here(state: GameState | None, content: Content) -> float:
         return 1.0
     from . import territory  # noqa: PLC0415
 
-    return territory.price_factor(state.world, content, state.player.faction, state.player.location)
+    return territory.price_here(state, content)  # 地盤福利 × 名望的店家折扣（名聲設計 4.1）
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:

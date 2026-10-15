@@ -112,8 +112,7 @@ def sell(state: GameState, content: Content, mid: str, count: int = 1) -> list[s
 def upgrade_cost(state: GameState, content: Content, tier: int) -> int:
     """換一個 tier 階的工錢：Config.economy.upgrade_silver 乘所在地的地盤福利（territory.price_factor），四捨五入（同 smithing.price）。"""
     base = content.config.economy.upgrade_silver.get(tier, 0)
-    p = state.player
-    return int(base * territory.price_factor(state.world, content, p.faction, p.location) + 0.5)
+    return int(base * territory.price_here(state, content) + 0.5)  # 地盤福利 × 名望的店家折扣（名聲設計 4.1）
 
 
 def upgrade_outcomes(content: Content, attribute: str, tier: int) -> list[tuple[Material, float]]:

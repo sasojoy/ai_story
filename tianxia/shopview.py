@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, team, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -298,7 +298,8 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
         tier=equipment.TIER_WORDS[tier], price=price, divine=divine,
         odds=[{"q": q, "pct": round(w)} for q, w in odds.odds.items()] if odds is not None else None,
         reasons=list(odds.reasons) if odds is not None else [], head=head,
-        problem=smithing.forge_problem(state, content, kind, main, aux), go=GO_TEXT.format(price=price),
+        problem=smithing.forge_problem(state, content, kind, main, aux),
+        go=GO_TEXT.format(price=price) + territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因
     )
     return out
 
@@ -354,6 +355,7 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
                 "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
                 "need": econ.upgrade_need[tier], "have": have,
                 "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "cost_note": territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因（關著是空的）
                 "problem": problem,
                 "short": _upgrade_short(problem, have, econ.upgrade_need[tier]),  # 素材頁格子上寫的短原因
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
@@ -553,7 +555,8 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
         stalls.append({"id": "", "role": "worn", "who": STALL_WHO["worn"], "empty": True, "name": NO_HORSE})
     sale, price = mounts.shop_item(state, content), mounts.price(state, content)
     problem = mounts.buy_problem(state, content)
-    stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
+    note = territory.price_note(state, content)  # 名聲 4.1：馬價後面寫原因
+    stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩{note}", {
         "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
     }))
     ridden = _speed_shown(content, p.mount) if p.mount is not None else None

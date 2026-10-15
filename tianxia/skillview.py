@@ -230,10 +230,13 @@ def forge_picks(
 def heal_note(state: GameState, content: Content) -> str:
     """療傷鈕上的價錢：付得起全治寫「內傷 N・M 兩」，只付得起一部分寫「治 N 點・M 兩（還剩 K 點）」（team.heal_plan）。
     醫館那一顆（engine._heal_option）與修練頁那一顆（heal_button 的 note）共用。"""
+    from . import territory  # noqa: PLC0415  territory → rules：延後 import
+
     points, cost, left = team.heal_plan(state, content, state.player.member)
+    why = territory.price_note(state, content)  # 名聲 4.1：價錢後面寫原因（名聲關著是空的）
     if left > 0:
-        return f"治 {points} 點・{cost} 兩（還剩 {left} 點）"
-    return f"內傷 {int(state.player.member.injury)}・{cost} 兩"
+        return f"治 {points} 點・{cost} 兩（還剩 {left} 點）{why}"
+    return f"內傷 {int(state.player.member.injury)}・{cost} 兩{why}"
 
 
 def heal_button(state: GameState, content: Content) -> dict:

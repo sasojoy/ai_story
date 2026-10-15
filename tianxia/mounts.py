@@ -290,7 +290,7 @@ def price(state: GameState, content: Content) -> int:
     mounts 只 import models、state、equipment：territory 延後 import。"""
     from . import territory  # noqa: PLC0415
 
-    factor = territory.price_factor(state.world, content, state.player.faction, state.player.location)
+    factor = territory.price_here(state, content)  # 地盤福利 × 名望的店家折扣（名聲設計 4.1）
     return int(content.config.mounts.shop_price * factor + 0.5)
 
 
