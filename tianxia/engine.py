@@ -2502,6 +2502,8 @@ class Game:
             msgs = self._seek(roll("找事件"))
         else:
             msgs = self._sense_here(loc, roll("靜心感悟"))
+        if c.config.forge_secrets.scrap_every_mode:  # 殘譜三種探索都擲（素材與經濟設計第三節；關著只在找事件擲，_seek）
+            msgs += self._scrap_find()
         scouted = bounties.on_explore(s, c, self.world, p.location)  # 打探：三種都算（設計 3.4）
         return msgs + self._legend_find(roll("破境丹")) + scouted
 
@@ -2553,14 +2555,14 @@ class Game:
 
     def _seek(self, rng: random.Random) -> list[str]:
         """找事件（設計 3.2）：一次性奇遇先擲 rare_explore_chance，沒中照防重複輪替抽這裡可重複的事件；殘譜與半張鑄譜在這裡擲
-        （_scrap_find）。事件推戰線的五折在 push_trend（source="event"）。"""
+        （_scrap_find；Config.forge_secrets.scrap_every_mode 開著時三種探索都擲，在 _explore_mode）。事件推戰線的五折在 push_trend（source="event"）。"""
         s, c = self.state, self.content
         if event_candidates(s, c, "explore", "rare") and rng.random() < c.config.rare_explore_chance:
             msgs = self._present(pick_event(s, c, "explore", rng, "rare"), "explore")
         else:
             event = pick_event(s, c, "explore", rng, "common")
             msgs = self._present(event, "explore") if event is not None else [explore_modes.SEEK_NONE]
-        return msgs + self._scrap_find()
+        return msgs if c.config.forge_secrets.scrap_every_mode else msgs + self._scrap_find()
 
     def _sense_here(self, loc: Location, rng: random.Random) -> list[str]:
         """靜心感悟（設計 3.3）：就是有所感（sensing.start）；沒有場景的內容照舊直接悟（同舊探索的悟意境那一支）。"""

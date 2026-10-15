@@ -94,6 +94,45 @@ def test_divine_verses_are_not_used_once_split():
     assert not divine & set(book.heard)
 
 
+def _explorer(scrap_every_mode=True):
+    """潁水河畔（野外、悟得到水）的人，兩種殘譜都一定撿到（scrap_chance 1）。"""
+    from tianxia.sqlite_world import open_world
+
+    c = real_content("weekend")
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    c.config.duel.explore_chance = 0.0
+    c.config.explore_modes.encounter_chance = 0.0
+    c.config.secrets.scrap_chance = 1.0
+    c.config.forge_secrets.scrap_chance = 1.0
+    c.config.forge_secrets.scrap_every_mode = scrap_every_mode
+    game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
+    game.client = None
+    p = game.state.player
+    p.location, p.stamina = "yingshui", float(c.config.stamina_max)
+    p.tutorial_step = len(c.tutorial.steps)
+    return game
+
+
+def _scraps(msgs, c):
+    frames = (c.config.secrets.scrap_frame.split("{")[0], c.config.forge_secrets.scrap_frame.split("{")[0])
+    return [m for m in msgs if m.startswith(frames)]
+
+
+def test_scraps_turn_up_in_all_three_ways_of_exploring():
+    """殘譜（武學口訣、半張鑄譜）找素材、找事件、靜心感悟都擲（素材與經濟設計第三節第 2 條）。"""
+    for mode in ("explore:gather", "explore:seek", "explore:sense"):
+        game = _explorer()
+        msgs = game.choose(mode)
+        assert len(_scraps(msgs, game.content)) == 2, (mode, msgs)
+
+
+def test_with_the_switch_off_only_seeking_finds_scraps():
+    for mode, want in (("explore:gather", 0), ("explore:seek", 2), ("explore:sense", 0)):
+        game = _explorer(scrap_every_mode=False)
+        assert len(_scraps(game.choose(mode), game.content)) == want, mode
+
+
 def test_an_unstamped_season_keeps_the_verses():
     c = real_content("weekend")
     g = _game(c)
