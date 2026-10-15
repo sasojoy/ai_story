@@ -26,6 +26,14 @@ DONATE_FULL = "今天已捐滿 {cap} 點，明日 00:00 後再捐"
 DONATE_TOO_BIG = "這一樣一個就 {points} 點，今天只剩 {room} 點收得下"
 DONATE_NONE = "你身上沒有這樣東西"
 DONATE_KEPT = "（收不下的 {n} 個留在你身上。）"
+DONATE_TITLE = "捐軍備"  # 江湖紀錄的標題、大本營那一顆的名字
+DONATE_OPEN = "你來到軍需官的帳前，看看身上有什麼能交給{faction}。"
+DONATE_LEFT = "今天還能捐 {n} 點"
+DONATE_BUTTON = "捐【{name}】×{n}（{points} 點・{armament}）"
+DONATE_REFUSED = "捐【{name}】（{problem}）"
+DONATE_BACK = "離開軍需官"
+DONATE_CLOSED = "你向軍需官拱拱手，離開了。"
+DONATE_MISC = "雜項"  # 不在 armaments 表上的屬性（陰陽虛實）：照收、記貢獻，但不進存量
 # 鐵匠鋪素材頁的鈕（店面關著、整季機器人與假人走的那一串選單；待 joy 潤）
 SELL_LABEL = "賣【{name}】一個（{price} 兩・手上 {have}）"
 UPGRADE_LABEL = "升【{name}】×1（用 {low}×{need}・{cost} 兩{left}）"

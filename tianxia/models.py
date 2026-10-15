@@ -817,6 +817,7 @@ ALLOW_FIXED = frozenset({
     "act:market",  # 馬市（裝備四欄 5.5，帶「馬市」標籤的地點）
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
+    "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
