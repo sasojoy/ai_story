@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import random
+from decimal import ROUND_HALF_UP, Decimal
+from types import SimpleNamespace
 
 from test_sortie import _fight, _game
 
@@ -49,9 +51,26 @@ def test_winning_an_attack_pays_a_third_of_the_silver():
         msgs = game.choose("act:train")
     record = game.state.battles[-1]
     squad = next(q for q in game.content.squads.values() if q.name == record.opponent)
-    pay = round(squad.reward_silver * 0.3)
+    pay = int(squad.reward_silver * 0.3 + 0.5)
     assert pay > 0 and record.silver == pay and p.stats["silver"] == silver + pay
     assert f"銀兩 +{pay}" in msgs and record.materials == []
+
+
+def test_the_third_is_rounded_half_up_for_every_squad():
+    """FB-271：三成照四捨五入（逢 .5 進位），不是 Python round 的逢 .5 取偶數；黃巾別部 15 兩的三成 4.5 給 5 兩。"""
+    game = _game(faction="guan")
+    c = game.content
+    share = Decimal(str(c.config.economy.sortie_silver_share))
+    paid = {}
+    for squad in c.squads.values():
+        if squad.reward_silver <= 0:
+            continue
+        record = SimpleNamespace(silver=0, xinde=0, exp=0, levelups=[], notes=[])
+        game._sortie_rewards(squad, record)
+        want = int((Decimal(squad.reward_silver) * share).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+        assert record.silver == want, squad.name
+        paid[squad.reward_silver] = record.silver
+    assert paid[15] == 5  # 黃巾別部那一檔（以前給 4）
 
 
 def test_losing_or_holding_pays_no_silver():

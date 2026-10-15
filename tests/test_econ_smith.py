@@ -6,7 +6,7 @@ import random
 from unittest import mock
 
 from conftest import real_content
-from tianxia import economy
+from tianxia import economy, shopview
 from tianxia import engine as engine_mod
 from tianxia.engine import Game
 from tianxia.equipment import NOT_NOW
@@ -137,6 +137,20 @@ def test_the_shop_view_lists_what_can_be_sold_and_upgraded():
     assert up[("柔", 2)]["odds"] == "五成出流雲絮，其餘隨機" and up[("柔", 2)]["same_share"] == 0.5
     assert up[("柔", 3)]["problem"] is not None and up[("柔", 3)]["left"] == 1
     assert ("剛", 2) in up  # 四個屬性都列（沒料的灰掉、寫原因）
+
+
+def test_the_hint_follows_the_switches():
+    """FB-272：素材頁還沒做事時那一句照開關寫——升階關著（只剩收購）不提熬；開著時不說「只能熬出來」。"""
+    def hint(**econ):
+        game = _game(bag={"rou_1": 4}, **econ)
+        game.choose("act:smith")
+        return game.shop_view()["trade"]["hint"]
+
+    assert hint(upgrade=False) == shopview.SELL_ONLY_HINT and "熬" not in shopview.SELL_ONLY_HINT
+    assert hint() == shopview.UPGRADE_HINT.format(share="五成") and "得自己熬" in hint()
+    assert hint(upgrade_same_share=1.0) == shopview.TRADE_HINT
+    for text in (shopview.SELL_ONLY_HINT, shopview.UPGRADE_HINT, shopview.TRADE_HINT):
+        assert "只能" not in text
 
 
 def test_leaving_the_smith_resets_the_page():
