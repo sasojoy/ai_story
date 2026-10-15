@@ -933,6 +933,9 @@ def _who_name_helper(js: str) -> tuple[str, str]:
     body = body[:body.index("\n  }\n")]
     first, _, rest = body.partition("\n    if (!S.showMore)")
     assert rest, "whoNameHtml 要先處理收起來的那一行（if (!S.showMore) …）"
+    if rest.startswith(" {"):  # 名聲（1B）：收起來的那一段多一行稱號，寫成一個區塊
+        collapsed, _, expanded = rest.partition("\n    }\n")
+        return collapsed, expanded
     collapsed_line, _, expanded = rest.partition("\n")
     return collapsed_line, expanded
 
@@ -4289,7 +4292,8 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": "",
+                                   "tag": "", "note": ""}  # note：名聲 5B 俠寇選項的第二行，這裡空著
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(50)):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]

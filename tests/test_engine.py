@@ -335,8 +335,9 @@ def test_an_event_choice_that_lifts_the_name_to_the_threshold_grants_the_insight
 def test_self_check_shows_one_bracketed_line_and_takes_the_fail_branch(game):
     game.state.pending_event = "insight"
     assert [o.label for o in game.options()] == ["運氣衝關（根骨 5：咬咬牙，你應該撐得住。）"]
-    # 選項底下沒有另一行（wait 是按下去等模型時換上的字，不是另一行；不是大場面就是空的）
-    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait", "confirm", "confirm_yes"} and o.wait == o.confirm == o.confirm_yes == "" for o in game.options())
+    # 選項底下沒有另一行（wait 是按下去等模型時換上的字，不是另一行；不是大場面就是空的；note 是名聲 5B 俠寇選項的第二行，這裡空著）
+    assert all(o.model_dump().keys() == {"id", "label", "enabled", "wait", "confirm", "confirm_yes", "tag", "note"}
+               and o.wait == o.confirm == o.confirm_yes == o.tag == o.note == "" for o in game.options())
     game.rng = FixedRandom(0.99)  # 成功率 50%：必定失敗
     game.choose("choice:0")
     log = game.state.log

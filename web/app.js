@@ -532,12 +532,13 @@
         </div>
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
+      ${S.showMore && S.renownOpen && s.renown ? renownStripHtml(s.renown) : ""}
       ${inPro ? "" : subs}
       ${vitals ? `<div class="vitals">${vitals}</div>` : ""}
       ${S.stamOpen && shown("stamina") && s.stamina_help && s.stamina_help.length
         ? `<div class="more-stats stam-help" id="stam-help">${s.stamina_help.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : ""}
       ${S.showMore ? `<div class="more-stats">
-        ${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
+        ${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
@@ -550,11 +551,57 @@
   // 每一段（門派、陣營、頭銜、匿名、第 N 級）各自一個不折行的 <span>（class 叫 who-seg，不能叫 seg：那是全站的分段選單），
   // 只會在段與段之間換行，不會把一個詞從中間折斷；
   // 「可配 N 點」改放在＋鈕上面當那一排的標題（見 topHtml 的 pts-label）
+  // 名聲（名聲設計十一之二）：收起時名號底下一行稱號（1B），第一屏放不下（FIT_STEPS 的 renown，S.renownTight）時這一行不畫、
+  // 善惡稱號（沒有就名望稱號）接在頭銜後面（放不下先收名望稱號，同草圖 1A）；展開時經驗底下「名聲」那一行，點了攤開段落條（2C）
   function whoNameHtml(s) {
-    if (!S.showMore) return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`;
+    const r = s.renown;
+    const spans = r ? rnTitleSpans(r) : [];
+    if (!S.showMore) {
+      const tight = S.renownTight && S.tab === "jianghu"; // 只有江湖頁量第一屏（同 💡 的 hintTight）：別的分頁照整行畫
+      const inline = tight && spans.length ? `・${spans[spans.length - 1]}` : "";
+      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
+        + (spans.length && !tight ? `<div class="who-renown-line">${spans.join("・")}</div>` : "");
+    }
     const segs = [...s.affiliation.split("・"), ...(s.anonymous ? ["匿名"] : []), `第${s.level}級`].filter(Boolean);
+    const renownLine = r ? `<div class="who-renown" data-act="renown-toggle" role="button" tabindex="0" aria-expanded="${!!S.renownOpen}"><em>名聲</em><b>${spans.length ? spans.join("・") : "還沒有稱號"}</b><i aria-hidden="true">${S.renownOpen ? "▴" : "▾"}</i></div>` : "";
     return `<div class="who-name"><span>${esc(s.name)}</span><i class="more-ico" aria-hidden="true">▴</i></div>
-          <div class="who-title">${segs.map((t) => `<span class="who-seg">${esc(t)}</span>`).join("・")}</div>${expHtml(s)}${rangerHtml(s.ranger)}`;
+          <div class="who-title">${segs.map((t) => `<span class="who-seg">${esc(t)}</span>`).join("・")}</div>${expHtml(s)}${r ? renownLine : rangerHtml(s.ranger)}`;
+  }
+
+  // 稱號一個一格（status.renown.short：名望在前、善惡在後，renown.titles）：名望金、俠青、寇赭
+  const rnPathClass = (p) => (p === "寇" ? "rn-kou" : "rn-xia");
+  function rnTitleSpans(r) {
+    return r.short.map((t, i) => `<span class="${i === 0 && r.fame.tier >= 1 ? "rn-fame" : rnPathClass(r.virtue.path)}">${esc(t)}</span>`);
+  }
+  // 2C：展開時點「名聲」那一行，名號那一塊底下（整個寬度）攤開：名望一條、善惡一條圓點（現在那一段亮），這一段給什麼、
+  // 下一段還差多少給什麼各一句；點圓點換成那一段的說明（S.renownDot）；散人多一行另有的好處（點開，S.renownSanren）；
+  // 長的季多一句倍數；最底下名聲從哪裡來
+  function renownStripHtml(r) {
+    const f = r.fame, v = r.virtue, way = v.path, vcls = rnPathClass(way);
+    const perks = (row) => (row && row.perks.length ? row.perks.join("・") : "");
+    const dots = (rows, cur, cls, kind) => `<ol class="rn-dots ${cls}">${rows.map((t, i) => {
+      const n = i + 1, pick = S.renownDot === `${kind}:${n}` ? " pick" : "";
+      return `<li class="${n < cur ? "have" : n === cur ? "have cur" : ""}${pick}" data-act="renown-dot" data-dot="${kind}:${n}" role="button" tabindex="0" aria-label="${esc(t.title)}"><i></i><small>${esc(t.title)}</small></li>`;
+    }).join("")}</ol>`;
+    const note = (kind, x, rows, cls, none) => {
+      const picked = S.renownDot && S.renownDot.startsWith(`${kind}:`) ? rows[Number(S.renownDot.split(":")[1]) - 1] : null;
+      if (picked) return `<p class="rn-note"><b class="${cls}">${esc(picked.title)}</b>${picked.at}・${esc(perks(picked) || "沒有另外的好處")}</p>`;
+      const now = x.tier ? `<b class="${cls}">${esc(rows[x.tier - 1].title)}</b>${esc(perks(rows[x.tier - 1]))}` : `<b>${esc(none)}</b>`;
+      const next = x.next != null ? `再 ${x.gap} 到${esc(x.next)}${perks(rows[x.tier]) ? `：${esc(perks(rows[x.tier]))}` : ""}` : "已是最高的一段";
+      return `<p class="rn-note">${now}<span>${next}</span></p>`;
+    };
+    const other = way === "寇" ? `善名 ${v.good}` : `惡名 ${v.evil}`;
+    const sanren = r.sanren ? `<button class="linkish rn-more" data-act="renown-sanren" aria-expanded="${!!S.renownSanren}">散人另有的好處 ${S.renownSanren ? "▴" : "▾"}</button>${S.renownSanren
+      ? `<ul class="rn-sanren">${r.sanren.map(([k, x]) => `<li><b>${esc(k)}</b>${esc(x)}</li>`).join("")}</ul>` : ""}` : "";
+    return `<div class="rn-strip">
+        <div class="rn-row"><span class="rn-lbl">名望 <b>${f.n}</b></span>${dots(f.ladder, f.tier, "rn-fame", "fame")}</div>
+        ${note("fame", f, f.ladder, "rn-fame", f.title)}
+        <div class="rn-row"><span class="rn-lbl">${esc(v.by)} <b>${way === "寇" ? v.evil : v.good}</b></span>${dots(v.ladder[way], v.tier, vcls, "virtue")}</div>
+        ${note("virtue", v, v.ladder[way], vcls, "還沒有稱號")}
+        <p class="rn-hint">點圓點看那一段給什麼・${other}，走${esc(way)}的路${r.scale_note ? `・${esc(r.scale_note)}` : ""}</p>
+        ${sanren}
+        <p class="rn-src"><b>名望從哪裡來</b>${esc(r.sources.fame)}<b>善名、惡名從哪裡來</b>${esc(r.sources.virtue)}</p>
+      </div>`;
   }
 
   // 頭銜底下一行：這一級的經驗（status.exp，team.exp_view）。30 級以後一級要好幾倍的經驗（50 級加陡），看得到還差多少；
@@ -751,6 +798,13 @@
       renderTop();
       return true;
     } },
+    // 3b. 名聲（1B）：名號底下那一行稱號不畫，善惡稱號接在頭銜後面（whoNameHtml；記在 S.renownTight，輪詢重畫狀態列時照它畫）
+    { key: "renown", run: () => {
+      if (S.renownTight || !document.querySelector("#top .who-renown-line")) return false;
+      S.renownTight = true;
+      renderTop();
+      return true;
+    } },
     // 4. 戰鬥卡片底下的補充（對手的描述「（偷網賊：……）」這種）每一行收成一行、放不下加「…」，點了看全文（同伴聽來的那一句的做法，FB-074）。
     //    點開記在 S.linesOpen（這一場的卡片），跟聽來的那一句（S.hearOpen）各記各的（審查 M5）；數字收不進一行的那一行不收
     { key: "lines", run: () => {
@@ -772,6 +826,12 @@
       const list = document.querySelector(".battle-card ul.rounds:not(.open), .battle-card p.rounds-tale:not(.open)");
       if (list) list.classList.add("fit-fold");
       return !!list;
+    } },
+    // 5b. 決戰的本場戰功（名聲 4B）：名字底下那一行稱號收掉（名字照舊；三招不能被擠出第一屏）
+    { key: "merit", run: () => {
+      const rows = document.querySelectorAll(".g-merit .rn-two small:not(.fit-hide)");
+      rows.forEach((el) => el.classList.add("fit-hide"));
+      return rows.length > 0;
     } },
     // 6. 「剛剛」（不是戰鬥卡片的那種）收著時只露三行（同在路上，FB-060），「展開全文」照舊
     { key: "now", run: () => {
@@ -844,6 +904,8 @@
     page.querySelectorAll(".fit-space").forEach((el) => el.classList.remove("fit-space"));
     page.querySelectorAll(".fit-box").forEach((el) => el.classList.remove("fit-box"));
     if (S.hintTight && !S.hintOpen) { S.hintTight = false; renderTop(); } // 玩家點開了 💡：留著（展開的就是整段）
+    if (S.renownTight) { S.renownTight = false; renderTop(); } // 名聲（1B）：稱號那一行畫回來再量
+    page.querySelectorAll(".g-merit small.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 本場戰功的稱號（4B）
     page.querySelectorAll(".tx-tight").forEach((el) => {
       el.classList.remove("tx-tight");
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
@@ -1270,7 +1332,8 @@
   // 「→ 」後面那個空白放在 span 外面：行內區塊尾巴上的空白會被瀏覽器吃掉（「→這個配方」貼在一起），放外面它是普通空白，既看得到、也是一個換行機會，落在行尾或行頭時自己消失
   const nbHtml = (text) => nbChunks(text).map((t) => (t.length <= NB_MAX ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
   // 一行寫完：tests/test_battle_buttons.py、test_peek_row.py 的假瀏覽器照名字把這一行切出去（konst），smith:、market:（馬市的鈕一樣長，裝備四欄 5.5）才會用到 nbHtml
-  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") || o.id.startsWith("market:") ? nbHtml(o.label) : esc(o.label)}</span>`; };
+  // o.note（名聲 5B 俠寇選項）：標籤底下第二行小字；o.tag（「俠」「寇」）畫在編號那一格（選單那裡）
+  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") || o.id.startsWith("market:") ? nbHtml(o.label) : esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`; };
   // 這幾格對到選單上哪一顆、沒有時寫什麼；最後一格是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
@@ -1435,13 +1498,17 @@
       + `<div class="g-bar">${zones}${ticks}<i class="g-mid"></i>${trail}<b class="g-flag" style="left:${x(g.lean)}%"></b></div>`
       + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${meritHtml(g, tint)}</div>`;
   }
+  // 本場戰功的名字（名聲 4B）：加入決戰時快照的稱號（善惡第 1 段起、名望名動一方起，r.renown）寫在名字底下第二行；
+  // 第一屏放不下時 FIT_STEPS 的 merit 把第二行收掉（.fit-hide）
+  const meritName = (r) => (r.renown && r.renown.length
+    ? `<span class="rn-two">${esc(r.name)}<small>${esc(r.renown.join("・"))}</small></span>` : `<span>${esc(r.name)}</span>`);
   // 戰局條底下的「本場戰功」（Joy 2026-10-10 個人戰功，battle_instance.merit_board）：兩軍各列前幾名，最後一行是自己排第幾、戰功怎麼來的。
   // 集結中、還沒有人出手時不畫
   function meritHtml(g, tint) {
     const b = g.merit;
     if (!b || g.phase === "muster" || (!b.left.length && !b.right.length && !(b.me && b.me.merit))) return "";
     const col = (w, rows) => `<div class="g-mcol ${tint(w)}"><b class="g-mside">${esc(w.name)}</b>${rows.length
-      ? `<ol>${rows.map((r, i) => `<li${r.mine ? ' class="mine"' : ""}><i>${i + 1}</i><span>${esc(r.name)}</span><b>${r.merit}</b></li>`).join("")}</ol>`
+      ? `<ol>${rows.map((r, i) => `<li${r.mine ? ' class="mine"' : ""}><i>${i + 1}</i>${meritName(r)}<b>${r.merit}</b></li>`).join("")}</ol>`
       : '<p class="muted">還沒有人立功</p>'}</div>`;
     const me = b.me ? `<p class="g-me">你排第 ${b.me.rank}／${b.me.of}・戰功 ${b.me.merit}${b.me.parts.length ? `：${esc(b.me.parts.join("、"))}` : "（還沒出手）"}</p>` : "";
     return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${me}</div>`;
@@ -1935,7 +2002,7 @@
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : o.id === SAY_OPTION && S.saying && o.enabled ? `
         <form class="free answer" id="say-form"><input class="input" name="text" maxlength="20" placeholder="想對他說的話（20字內）" aria-label="自己說"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
+          ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : o.tag ? `<span class="k rn-tag ${rnPathClass(o.tag)}">${esc(o.tag)}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
     // 有所感選做法（explain-2）：鈕底下兩行小字（做法跟此地的關係、意境拿來做什麼），排在做法後面，不把做法往下推
@@ -2062,7 +2129,7 @@
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
       : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
-      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
+      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
@@ -2073,6 +2140,27 @@
         ${body}
         <div class="row"><button class="btn ghost" data-act="peer-close">關閉</button></div>
       </div>`;
+  }
+  // 玩家卡頭銜底下一排稱號小籤（名聲 3B，card.renown：只寫稱號、不寫數字）：名望金、善惡照 path 上色；點了在卡上攤開一段
+  // 通用的說明（各段代表什麼，不寫他的數字；S.peer.renownOpen）。名聲關著、還沒有稱號不畫
+  const RENOWN_PEER_HELP = "江湖上用兩個稱號認人：金色的看名望（小有名氣、名動一方、威震州郡、天下聞名，越後面越多人認得），"
+    + "青色的是俠（善名比惡名高：江湖遊俠、一方豪俠、州郡大俠、天下名俠），赭色的是寇（惡名高：綠林好漢、江湖巨寇、州郡大盜、天下大盜）。";
+  function peerRenownToggle(el) {
+    if (!S.peer) return;
+    S.peer.renownOpen = !S.peer.renownOpen;
+    el.setAttribute("aria-expanded", String(S.peer.renownOpen));
+    const ico = el.querySelector("i");
+    if (ico) ico.textContent = S.peer.renownOpen ? "▴" : "›";
+    const help = el.nextElementSibling;
+    if (help && help.classList.contains("rn-peer-help")) help.remove();
+    if (S.peer.renownOpen) el.insertAdjacentHTML("afterend", `<p class="rn-peer-help">${esc(RENOWN_PEER_HELP)}</p>`);
+  }
+  function peerRenownHtml(c, P) {
+    const r = c.renown;
+    if (!r || !r.titles.length) return "";
+    const chips = r.titles.map((t, i) => `<span class="rn-chip ${i === r.titles.length - 1 && r.path ? rnPathClass(r.path) : "rn-fame"}">${esc(t)}</span>`).join("");
+    return `<div class="rn-chips" data-act="renown-peer" role="button" tabindex="0" aria-expanded="${!!P.renownOpen}">${chips}<i aria-hidden="true">${P.renownOpen ? "▴" : "›"}</i></div>`
+      + (P.renownOpen ? `<p class="rn-peer-help">${esc(RENOWN_PEER_HELP)}</p>` : "");
   }
   // 卡上的鈕：同一個 group 的（論武出哪一樣，每一樣一顆）收成一個下拉清單＋一顆鈕，按下去送清單上選的那一顆（照它在 actions 裡的索引）；
   // 只有一顆的 group 照常畫。下拉清單整排佔滿一列，其餘的鈕照舊兩欄
@@ -5350,6 +5438,12 @@
         case "guide-below": scrollToGuideTarget(); break;
         case "guide-ack": await doMain("guide_ack"); break;
         case "stam-help": S.stamOpen = !S.stamOpen; renderTop(); break; // 點體力條：底下攤開／收起體力怎麼回（explain-1）；丹的鈕自己是一顆，點它不會走到這裡
+        // 名聲（名聲設計十一之二）：狀態列只重畫它自己
+        case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renderTop(); break; // 2C：展開時「名聲」那一行
+        case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renderTop(); break; // 點圓點看那一段
+        case "renown-sanren": S.renownSanren = !S.renownSanren; renderTop(); break; // 散人另有的好處
+        case "renown-open": S.showMore = true; S.renownOpen = true; S.renownDot = null; renderTop(); window.scrollTo(0, 0); break; // 6B：金色的「名號傳開」
+        case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：只換那一格，不重畫
@@ -5590,6 +5684,12 @@
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
       ev.preventDefault();
       toggleMore(true);
+    }
+    // 名聲的幾個 role="button"（「名聲」那一行、圓點、玩家卡的小籤、金色的「名號傳開」）：Enter／空白鍵等於點一下
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('[role="button"][data-act^="renown-"]')) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.target.click();
     }
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-hearsay[data-act="hear-more"]')) {
       ev.preventDefault();

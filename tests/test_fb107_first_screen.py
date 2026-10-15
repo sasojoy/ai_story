@@ -57,6 +57,9 @@ const body = L.now ? el("body", ["tx-now"]) : null;
 const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
+// 名聲（名聲設計十一之二）：狀態列名號底下那一行稱號（1B，收不收看 S.renownTight）與決戰本場戰功名字底下的稱號（4B，L.merit 是幾行）
+const renownLine = L.renown ? el("renown", ["who-renown-line"]) : null;
+const meritSmalls = Array.from({ length: L.merit || 0 }, () => el("msmall", []));
 // 狀態列（#top）的高度（FB-123）：input.topHeight；input.realTop 時 renderTop 照真的那樣先量高度、重畫（💡 收成一行時矮 input.topSaves）、
 // 再交給 fitTopMoved
 const topEl = { offsetHeight: input.topHeight || 120 };
@@ -98,7 +101,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22, call: 70, moreLine: 0 }, input.save || {});
+const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, options: 22, call: 70, moreLine: 0 }, input.save || {});
 const bodyHeight = () => (now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
 const bottom = () => {
   let b = L.bottom;
@@ -106,6 +109,8 @@ const bottom = () => {
   if (card && has(card, "fit-space")) b -= SAVE.cardSpace;
   if (box && has(box, "fit-box")) b -= SAVE.box;
   if (hint && S.hintTight && !S.hintOpen) b -= SAVE.hint;
+  if (renownLine && S.renownTight) b -= SAVE.renown;
+  meritSmalls.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.merit; });
   lines.forEach((x) => { if (has(x, "tx-tight") && !has(x, "open")) b -= SAVE.line; });
   if (rounds && has(rounds, "fit-fold") && !has(rounds, "open")) b -= SAVE.rounds;
   if (now) b -= Math.min(L.nowBody || 0, 120) - bodyHeight();
@@ -136,6 +141,9 @@ const where = {
   "#page > .options": () => (menu ? [menu] : []),
   "#page > .card.guide": () => (box ? [box] : []),
   "#top .more-stats .hint": () => (hint ? [hint] : []),
+  "#top .who-renown-line": () => (renownLine && !S.renownTight ? [renownLine] : []),
+  ".g-merit .rn-two small:not(.fit-hide)": () => meritSmalls.filter((x) => !has(x, "fit-hide")),
+  ".g-merit small.fit-hide": () => meritSmalls.filter((x) => has(x, "fit-hide")),
   ".fit-space": () => all.filter((x) => x !== page && has(x, "fit-space")),
   ".fit-box": () => all.filter((x) => has(x, "fit-box")),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
@@ -168,7 +176,7 @@ if (scene) {
     : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null) : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
-const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
+const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
@@ -185,6 +193,7 @@ const snap = () => ({
   ownClip: own.map((x) => has(x, "fit-clip")), musterClip: musterLines.map((x) => has(x, "fit-clip")),
   musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
   calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
+  renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
   H, S, snap, L, globalThis.window, { lines, top: topEl, setTabsTop: (v) => { tabsTop = v; } }));
@@ -253,6 +262,29 @@ def test_a_two_line_hint_folds_to_one_line_and_comes_back_when_there_is_room():
     out = run(layout, script)
     assert out["tight"]["fitted"] == ["space", "hint"] and out["tight"]["hintTight"] is True and out["tight"]["tops"] == 1
     assert out["roomy"]["fitted"] == [] and out["roomy"]["hintTight"] is False and out["roomy"]["tops"] == 2
+
+
+@node
+def test_the_titles_line_folds_after_the_hint_and_comes_back():
+    """名聲 1B：名號底下那一行稱號排在 💡 之後收（記 S.renownTight、重畫狀態列，善惡稱號接到頭銜後面）；有空間了重量時還原。"""
+    layout = {"bottom": 800, "actbar": True, "scene": True, "hint": True, "renown": True}
+    script = """
+      H.fitFirstScreen(); const tight = snap();
+      L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
+      return { tight, roomy };"""
+    out = run(layout, script)
+    assert out["tight"]["fitted"] == ["space", "hint", "renown"] and out["tight"]["renownTight"] is True
+    assert out["tight"]["bottom"] <= 740
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["renownTight"] is False
+
+
+@node
+def test_the_battle_board_titles_fold_before_the_moves_are_squeezed():
+    """名聲 4B：輪到出招時本場戰功名字底下的稱號排在第一回合之後收（名字照舊），三招不被擠出第一屏；鈕縫在它之後。"""
+    out = run({"bottom": 785, "options": True, "merit": 3})
+    assert out["fitted"] == ["space", "merit"] and out["merit"] == [True, True, True] and out["bottom"] <= 740
+    again = run({"bottom": 785, "options": True, "merit": 3}, "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
+    assert again["fitted"] == [] and again["merit"] == [False, False, False]
 
 
 @node
@@ -574,6 +606,7 @@ def test_each_step_only_touches_what_it_names():
     hiding = [sel for sel, body in re.findall(r"(?m)^([^{}\n@]*fit-[^{}\n]*)\{([^}]*)\}", css) if "display: none" in body]
     assert sorted(s.strip() for s in hiding) == [
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
+        ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
     ]
     tight = _rules(css, ".tx-tight")
     assert "white-space: nowrap" in tight[".battle-card .tx-extra .tx-line.tx-tight"] and "text-overflow: ellipsis" in tight[".battle-card .tx-extra .tx-line.tx-tight"]
