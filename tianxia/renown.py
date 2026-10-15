@@ -142,6 +142,34 @@ def price_factor(state: GameState, content: Content) -> float:
     return content.config.renown.discounts[t - 1] if t > 0 else 1.0
 
 
+def duel_chance(state: GameState, content: Content) -> float:
+    """頭目遇上的機會乘多少（設計 4.4：小有名氣 1.1、名動一方以上 1.2）：只放大門檻，擲的還是同一顆骰。關著是 1。"""
+    if not on(content, "duel"):
+        return 1.0
+    return content.config.renown.duel_chance[fame_tier(state, content)]
+
+
+def duel_reward(state: GameState, content: Content) -> float:
+    """名動一方以上打贏頭目：經驗、銀兩、心得乘多少（4.4）；名望、素材照舊。"""
+    cfg = content.config.renown
+    return cfg.duel_reward if on(content, "duel") and fame_tier(state, content) >= cfg.duel_reward_tier else 1.0
+
+
+def duel_meet_line(state: GameState, content: Content) -> str:
+    """遇上頭目時多半句（4.4「寫原因」）：機會有放大才寫。"""
+    return f"你{fame_title(state, content)}，攔路的也多了。" if duel_chance(state, content) > 1.0 else ""
+
+
+def duel_paid_line(state: GameState, content: Content) -> str:
+    """打贏頭目的得失那一句（4.4）：賞有多才寫。"""
+    k = duel_reward(state, content)
+    if k <= 1.0:
+        return ""
+    tenths = round((k - 1) * 10)
+    more = f"{'兩' if tenths == 2 else _CN[tenths]}成" if 0 < tenths < 10 else f"{round((k - 1) * 100)}%"
+    return f"（{fame_title(state, content)}：賞多{more}）"
+
+
 def ranger_exp_note(state: GameState, content: Content, factor: float) -> list[str]:
     """散人打贏的經驗多了幾成時寫的那一行（設計 6.3）：「（江湖遊俠：打贏的經驗多 5%）」；explain 關著、沒有加成是空的。"""
     title = virtue_title(state, content)

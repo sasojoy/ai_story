@@ -2605,7 +2605,8 @@ class Game:
         if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         boss = duel_rules.available(s, c)  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
-        if boss is not None and self.rng.random() < c.config.duel.explore_chance:
+        # 名聲 4.4：名望高、頭目找上門的機會乘 renown.duel_chance（只放大門檻，擲的還是同一顆骰）
+        if boss is not None and self.rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
             return self._duel_start(boss)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
@@ -2686,7 +2687,7 @@ class Game:
         城鎮以外 encounter_chance 撞上一場（_gather_fight）。"""
         s, c = self.state, self.content
         boss = duel_rules.available(s, c)
-        if boss is not None and rng.random() < c.config.duel.explore_chance:
+        if boss is not None and rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):  # 名聲 4.4
             return self._duel_start(boss)
         msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
         found = [line for mid in explore_modes.gather_finds(c, loc, rng) if (line := materials.grant(s, c, mid))]
@@ -7911,9 +7912,10 @@ class Game:
         p.duel = duel
         self._outcome(f"遇上{foe.title}{foe.name}", "")
         role = battle_instance.role_name(c.config.battle, duel.role)
+        meet = renown.duel_meet_line(s, c)  # 名聲 4.4：名望高、攔路的也多，說出原因
         return [f"你在{c.locations[p.location].name}走著，{foe.title}{foe.name}攔住了去路！", foe.intro] + (
             [f"你以{role}的架勢迎上去。"] if role else []
-        )
+        ) + ([meet] if meet else [])
 
     def _duel_scene(self) -> str:
         duel = self.state.player.duel
@@ -8186,6 +8188,10 @@ class Game:
         record.notes.append(foe.win if won else foe.lose if tier == "落敗" else f"{foe.name}見討不了好，虛晃一招退走了。")
         share = cfg.reward_share.get(tier, 0.0)
         extra: list[str] = []
+        more = renown.duel_reward(s, c) if won else 1.0  # 名聲 4.4：名動一方以上打贏，經驗、銀兩、心得多兩成（名望、素材照舊）
+        share *= more
+        if more > 1.0:
+            record.notes.append(renown.duel_paid_line(s, c))
         exp = round(boss.exp * share)
         if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
             before = p.member.level
