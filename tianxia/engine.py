@@ -1164,6 +1164,14 @@ class Game:
             and territory.bases(c).get(p.location) == p.faction
         )
 
+    def econ_day(self) -> int:
+        """素材與經濟的「一天」（升階的三階、捐軍備的上限）：同回體丹的換日（_pill_day，台灣 00:00）。機器人照它算。"""
+        return self._pill_day()
+
+    def can_donate_here(self) -> bool:
+        """這一下捐得了軍備嗎（人在自家大本營、閒著或軍需官那一串開著）：Game.donate 收不收的同一個判斷，機器人照它。"""
+        return self._at_own_base() and (self._idle() or self.state.player.picking_donate)
+
     def _donate_option(self) -> Option | None:
         """大本營「此地還能做」裡的「捐軍備（今天還能捐 N 點）」：只是打開軍需官那一串（不花體力）；今天捐滿了灰掉寫什麼時候再來。"""
         if not self._at_own_base():
@@ -1181,7 +1189,9 @@ class Game:
         day = self._pill_day()
         room = economy.donate_room(s, c, day)
         opts = [Option(id="donate:room", label=economy.DONATE_LEFT.format(n=room), enabled=False)]
-        for material, held in materials.bag_contents(s, c):
+        # 一階排最前面（最該捐的）、三階排最後（要留著打神器，免得一按就捐掉）；同階照剛柔快慢
+        held_by_tier = sorted(materials.bag_contents(s, c), key=lambda pair: (pair[0].tier, shopview.attribute_rank(pair[0].attribute)))
+        for material, held in held_by_tier:
             if economy.donate_points(c, material.id) <= 0:
                 continue
             problem = economy.donate_problem(s, c, material.id, day)
@@ -1207,7 +1217,7 @@ class Game:
         """捐軍備（MAIN_ACTIONS["donate"]，網頁直接送；整季機器人與假人也走它）：人在自家大本營、閒著（或軍需官那一串開著）才收。
         捐成了寫一則「捐軍備」紀錄；被拒絕的什麼都不動、不寫紀錄。"""
         s = self.state
-        if not self._at_own_base() or not (self._idle() or s.player.picking_donate):
+        if not self.can_donate_here():
             return self._log([equipment.NOT_NOW])
         p = s.player
         here = self.content.locations[p.location].name

@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, chuangong, clinic, cultivation, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -34,6 +34,11 @@ FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）�
 BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
 MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
+# 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
+TRADE_KEEP = {1: 12, 2: 10}
+TIER3_WANT = 2  # 那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
+TRADE_SILVER_RESERVE = 30  # 升階付完工錢至少還留幾兩（療傷用，同 MOUNT_SILVER_RESERVE）
+TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下都會讓背包離留的量更近，本來就停得下來）
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
@@ -560,6 +565,85 @@ def wear_better(game: Game) -> None:
         game.wield_weapon(horse)
 
 
+def trade_want(game: Game) -> tuple | None:
+    """鐵匠鋪的下一件素材買賣（素材與經濟計畫 B5；整季機器人與假人共用）：先升階、再賣，沒事是 None。
+    升三階：那個屬性的三階少於 TIER3_WANT、二階夠換、今天還能換；升二階：二階不夠換一個三階、一階比留的（TRADE_KEEP）多出一份以上；
+    升階付完工錢要剩 TRADE_SILVER_RESERVE。賣：一階、二階多過留的量的部分。三階不賣。回 ("upgrade", 屬性, 階) 或 ("sell", 素材, 個數)。"""
+    s, c = game.state, game.content
+    econ = c.config.economy
+    held = s.player.materials
+    if econ.upgrade:
+        day = game.econ_day()
+        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 三階先
+            high, low = economy.upgrade_pair(c, attribute, tier)
+            need = econ.upgrade_need[tier]
+            if tier >= 3:
+                wanted = held.get(high.id, 0) < TIER3_WANT
+            else:
+                wanted = held.get(high.id, 0) < econ.upgrade_need.get(tier + 1, need) and held.get(low.id, 0) >= TRADE_KEEP.get(low.tier, 0) + need
+            affordable = s.player.stats.get("silver", 0) - economy.upgrade_cost(s, c, tier) >= TRADE_SILVER_RESERVE
+            if wanted and affordable and economy.upgrade_problem(s, c, attribute, tier, day) is None:
+                return ("upgrade", attribute, tier)
+    if econ.sell:
+        for mid, n in sorted(held.items()):
+            material = c.materials.get(mid)
+            keep = TRADE_KEEP.get(material.tier) if material is not None else None
+            if keep is not None and n > keep and economy.sell_price(c, material.tier) is not None:
+                return ("sell", mid, n - keep)
+    return None
+
+
+def trade_at_smith(game: Game) -> None:
+    """人在鐵匠鋪（選單開著）時照 trade_want 升、賣到沒事為止（走店面的 Game.smith_upgrade／smith_sell，跟真人按鈕同一條）。
+    不在鐵匠鋪什麼都不做：不為了它繞路。"""
+    if not game.state.player.picking_smith:
+        return
+    for _ in range(TRADE_MOVES):
+        move = trade_want(game)
+        if move is None:
+            return
+        before = dict(game.state.player.materials)
+        if move[0] == "upgrade":
+            game.smith_upgrade(move[1], move[2])
+        else:
+            game.smith_sell(move[1], move[2])
+        if game.state.player.materials == before:
+            return  # 被拒絕（店那一串不在眼前之類）：不再試
+
+
+def donate_want(game: Game) -> tuple[str, int] | None:
+    """在自家大本營捐什麼（素材與經濟計畫 B5）：今天還有點數時，一階、二階多過留的量（TRADE_KEEP）的部分，一階先；三階不捐。
+    回 (素材, 個數)（個數已經照今天剩的點數切過），沒事是 None。人在不在大本營由 donate_spare 問。"""
+    s, c = game.state, game.content
+    if not c.config.economy.donate:
+        return None
+    room = economy.donate_room(s, c, game.econ_day())
+    for tier in sorted(TRADE_KEEP):
+        for mid, n in sorted(s.player.materials.items()):
+            material = c.materials.get(mid)
+            points = economy.donate_points(c, mid)
+            if material is None or material.tier != tier or points <= 0:
+                continue
+            count = min(n - TRADE_KEEP[tier], room // points)
+            if count > 0:
+                return mid, count
+    return None
+
+
+def donate_spare(game: Game) -> None:
+    """人在自家大本營、閒著時，照 donate_want 捐到沒事為止（Game.donate，跟真人同一條）；不在大本營什麼都不做：不為了它繞路。"""
+    for _ in range(TRADE_MOVES):
+        if not game.can_donate_here():
+            return
+        move = donate_want(game)
+        if move is None:
+            return
+        before = dict(game.state.player.materials)
+        game.donate(*move)
+        if game.state.player.materials == before:
+            return
+
+
 def visit_smith(game: Game) -> None:
     """城裡有鐵匠鋪就看一眼（兵器設計第六節、四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
     打一把、把裝備庫裡更好的換上、淬煉手上那把、收掉打造的單子；再切到防具頁照 armor.wanted 換、買、修，照 smithing.armor_plan 打一件
@@ -589,11 +673,13 @@ def visit_smith(game: Game) -> None:
 
     if s.pending_event or not equipment.smith_open(s, c):
         return
-    if smith_want(game) is None and not smithing.has_errand(s, c, w, art()) and not smithing.armor_errand(s, c, w, inner()):
+    if (smith_want(game) is None and not smithing.has_errand(s, c, w, art()) and not smithing.armor_errand(s, c, w, inner())
+            and trade_want(game) is None):
         return
     if "act:smith" not in enabled():
         return
     game.choose("act:smith")
+    trade_at_smith(game)  # 素材與經濟（計畫 B5）：先升階、把多的賣掉（賣了有錢買修打）
     if equipment.page(s.player, c) == "weapon":  # 進門停在兵器頁（武器關著時直接是防具頁，這一段跳過）
         press(lambda: weapons.wanted(s, c, w, art()))
         plan = smithing.forge_plan(s, c, w, art())
@@ -671,6 +757,7 @@ def play_season(
             if wants_heal(game):  # 走進醫館就療傷（不等 spend_xinde 那一步：機器人不會在醫館裡久待）
                 game.heal()
             take_bounties(game)  # 路過城鎮就看一眼懸賞榜（揭不了的時候什麼都不做）
+            donate_spare(game)  # 走到自家大本營就把多的素材捐了（素材與經濟計畫 B5；不在大本營什麼都不做）
             visit_smith(game)  # 路過城鎮就看一眼鐵匠鋪（沒事要買要修要換的時候什麼都不做）
             keep_book_names(game)  # 打出神器原品就沿用譜名（打造第二批）
             visit_market(game)  # 路過馬市就看一眼（沒事要買要換要餵的時候什麼都不做）
