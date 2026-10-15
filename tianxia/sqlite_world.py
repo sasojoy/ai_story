@@ -13,6 +13,8 @@
   （`insights`、`insight_recipes`）、第一個練成絕學的人（`masters`），同樣照季分；功法、改過的名字與意境
   共用一個名字空間（`_name_taken`）。第 3 版加感悟的首悟紀錄（`insight_firsts`，悟意境設計 0.2b）：只是紀錄，
   意境本身私有、存在角色存檔裡，不佔名字空間。第 4 版加全服的兵器配方（`gear_recipes`，兵器設計 4.4）：照季分，名字也在同一個名字空間裡。
+  投靠名冊的 faction 欄寫 `allied.roll_key`（豪強分屬兩軍時依附的豪強是「haoqiang@guan」，結構不動）：`faction_of` 回算哪一方、
+  `faction_counts` 照陣營、`roll_of`／`roll_counts` 是鍵本身。
 - 每個會寫的方法自己是一筆交易；呼叫端已經在 action_lock() 裡時，併進那一筆（見 database.Database）。
 """
 from __future__ import annotations
@@ -24,6 +26,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
+from . import allied
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -809,7 +812,7 @@ class SqliteWorldStore:
                 (self._season_number(conn), name, faction_id),
             )
 
-    def faction_of(self, name: str) -> str | None:
+    def roll_of(self, name: str) -> str | None:
         with self.db.snapshot() as conn:
             row = conn.execute(
                 "SELECT faction FROM faction_rolls WHERE season = ? AND character = ?",
@@ -817,13 +820,19 @@ class SqliteWorldStore:
             ).fetchone()
         return None if row is None else row["faction"]
 
-    def faction_counts(self) -> dict[str, int]:
+    def faction_of(self, name: str) -> str | None:
+        return allied.side_of_key(self.roll_of(name))
+
+    def roll_counts(self) -> dict[str, int]:
         with self.db.snapshot() as conn:
             rows = conn.execute(
                 "SELECT faction, COUNT(*) AS n FROM faction_rolls WHERE season = ? GROUP BY faction",
                 (self._season_number(conn),),
             ).fetchall()
         return {row["faction"]: row["n"] for row in rows}
+
+    def faction_counts(self) -> dict[str, int]:
+        return allied.faction_totals(self.roll_counts())
 
     def seal_state(self) -> SealView:
         with self.db.snapshot() as conn:

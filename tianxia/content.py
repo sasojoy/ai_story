@@ -26,7 +26,7 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import TIER_NAMES
 from .models import (
-    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
@@ -2030,6 +2030,11 @@ def validate(c: Content) -> None:
         need(all(d in (-1, 1) for d in faction.goals.values()), f"陣營 {faction.id}：goals 的方向只能是 1 或 -1")
         need(to_traditional(faction.defect_text) == faction.defect_text,
              f"陣營 {faction.id}：defect_text 只能用繁體中文（「{faction.defect_text[:12]}」）")
+        # 豪強分屬兩軍（allied）：可以依附的是劇本裡別的陣營，而且那幾軍自己不能再要依附別人
+        need(all(a in scenario_faction_ids and a != faction.id for a in faction.allies),
+             f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
+        need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
+             f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
 
     showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
@@ -2143,6 +2148,9 @@ def validate(c: Content) -> None:
                 len(who.lines) == len(enlist.steps),
                 f"入伍段：引薦人 {who.name}（{faction_id}）的 lines 要有 {len(enlist.steps)} 行（每一步一行），現在是 {len(who.lines)} 行",
             )
+            for field, text in who.allied.items():  # 豪強分屬兩軍的季換的那幾句（Recruiter.allied）
+                need(field in RECRUITER_ALLIED_FIELDS, f"入伍段：引薦人 {who.name} 的 allied 不認得 {field}（只認 {RECRUITER_ALLIED_FIELDS}）")
+                need(bool(text.strip()) and to_traditional(text) == text, f"入伍段：引薦人 {who.name} 的 allied.{field} 要是繁體、不能是空的")
 
     # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
     # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
@@ -2163,8 +2171,11 @@ def validate(c: Content) -> None:
         for faction_id, line in hint.texts.items():
             need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
             need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
+        for faction_id, line in hint.allied.items():  # 豪強分屬兩軍的季另一版：只換 texts 裡有的那一位說的話
+            need(faction_id in hint.texts, f"{where}：allied 的 {faction_id} 在 texts 裡沒有")
+            need(bool(line.strip()) and to_traditional(line) == line, f"{where}：allied 的 {faction_id} 要是繁體、不能是空的")
         # 句子裡的 {名字} 只能是設定裡有的數（hints.values，explain-1）：寫錯名字的話框上會留著大括號
-        for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values()):
+        for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values(), *hint.allied.values()):
             bad = hint_rules.unknown(c, line)
             need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
 

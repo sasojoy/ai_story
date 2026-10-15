@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from . import calendar, orders
 from .models import Content, Recruiter
-from .rules import front_of, season_one
+from .rules import front_of, haoqiang_allied, season_one, side_of
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -78,9 +78,16 @@ def skip(state: GameState, content: Content) -> None:
 TICK = "✔ 引導完成"
 
 
-def _texts(who: Recruiter, i: int) -> list[str]:
+def line(who: Recruiter, field: str, state: GameState, content: Content) -> str:
+    """引薦人的一句：豪強分屬兩軍的季（allied.on）有寫 Recruiter.allied 的換成那一句，其餘照原句。"""
+    swapped = who.allied.get(field) if haoqiang_allied(content, state.world) else None
+    return swapped or getattr(who, field)
+
+
+def _texts(who: Recruiter, i: int, state: GameState, content: Content) -> list[str]:
     """第 i 步框上說的話，一段一段：第一步是入營、看戰局兩段，其餘是那一步交代的一句。"""
-    return [who.intro, who.briefing] if i == 0 else [who.order_hint]
+    fields = ("intro", "briefing") if i == 0 else ("order_hint",)
+    return [line(who, f, state, content) for f in fields]
 
 
 def told(state: GameState, content: Content) -> list[str]:
@@ -91,9 +98,9 @@ def told(state: GameState, content: Content) -> list[str]:
     if who is None:
         return []
     if active(state, content):
-        texts = _texts(who, state.player.enlist_step)
+        texts = _texts(who, state.player.enlist_step, state, content)
     elif state.player.enlist_end and done(state, content):
-        texts = [who.done]
+        texts = [line(who, "done", state, content)]
     else:
         texts = []
     return [f"【{who.name}】{text}" for text in texts]
@@ -150,7 +157,7 @@ def box(state: GameState, content: Content) -> dict | None:
     if active(state, content):
         i = p.enlist_step
         blocked = pending_line(state, content)
-        paragraphs = _texts(who, i)
+        paragraphs = _texts(who, i, state, content)
         box = {
             "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
             "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
@@ -161,7 +168,8 @@ def box(state: GameState, content: Content) -> dict | None:
         return box
     if p.enlist_end:
         return {
-            "speaker": who.name, "key": "enlist_end", "scene": "", "text": who.done, "line": "", "done": list(p.guide_done),
+            "speaker": who.name, "key": "enlist_end", "scene": "", "text": line(who, "done", state, content), "line": "",
+            "done": list(p.guide_done),
             "end": True, "pending": False, "full": True,
         }
     return None
@@ -178,7 +186,7 @@ def glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]
         return []
     loc = state.player.location
     hot = {"act:duty", "act:convoy"}
-    for o in orders.current(state, content, state.player.faction):
+    for o in orders.current(state, content, side_of(state, content)):  # 豪強分屬兩軍：依附那一軍的軍令
         if o.done:
             continue
         if o.template == "strike" and o.figure is not None:

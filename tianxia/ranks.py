@@ -3,7 +3,7 @@
 只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。"""
 from __future__ import annotations
 
-from . import calendar, figures, seats
+from . import allied, calendar, figures, seats
 from .models import Content, PromotionCast, PromotionDef
 from .rules import add_rumor, season_one
 from .state import GameState, Summons
@@ -225,6 +225,9 @@ def check_summons(state: GameState, content: Content) -> list[str]:
         promo = _pending(state, content)
         return _refresh(state, content, promo) if promo is not None and promo.legs else []
     rank = rank_of(state) + 1
+    cap = allied.rank_cap(state, content)
+    if cap is not None and rank > cap:  # 豪強分屬兩軍：豪強到第 3 階為止，貢獻照記、不再召見（第 4 階席次只給純兩軍）
+        return []
     promo = promotion_for(content, p.faction, rank)
     if promo is None or p.contrib < threshold(content, rank):
         return []

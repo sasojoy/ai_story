@@ -6223,6 +6223,7 @@ NOT_IN_THE_FINGERPRINT = {
         "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
+        "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",

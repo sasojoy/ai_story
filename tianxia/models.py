@@ -947,6 +947,9 @@ class PresetRecipe(_Strict):
     attribute: str | None = None
 
 
+RECRUITER_ALLIED_FIELDS = ("intro", "briefing", "order_hint", "done", "rejoin")  # Recruiter.allied 能換的欄位（content.validate 驗）
+
+
 class Recruiter(_Strict):
     """入伍段（新手引導計畫二，設計第四節）一個陣營的引薦人：框上的名字與他說的話。"""
 
@@ -957,6 +960,9 @@ class Recruiter(_Strict):
     done: str  # 第一道軍令做完，引薦人的結尾（按「知道了」收起）
     lines: list[str] = Field(default_factory=list)  # 每一步收起後那一行，照 Enlist.steps 的順序；不帶名字（框上的名字另外寫）
     rejoin: str = ""  # 第二季起再投靠時打的招呼（新手引導計畫三用）
+    # 豪強分屬兩軍的季（allied.on，企劃者 2026-10-15）換掉的幾句（新寫）：鍵是上面的欄位名（intro／briefing／order_hint／done／rejoin），
+    # 只寫要換的；enlist.line 照它讀
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class EnlistStep(_Strict):
@@ -994,6 +1000,8 @@ class HintDef(_Strict):
     # 第一季的規則開著時師父改說這一句（只有師父的條能寫；空的就照 text）：有些事只有第一季才是真的（explain-1 的 h_bond：
     # 情誼夠深人物會透露伏筆、機緣的風聲），beta 那一季說了就是假話
     season_one: str = ""
+    # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
+    allied: dict[str, str] = Field(default_factory=dict)
 
 
 class Hints(_Strict):
@@ -1014,6 +1022,9 @@ class FactionDef(_Strict):
     sects: list[str] = Field(default_factory=list)
     goals: dict[str, int] = Field(default_factory=dict)  # 大勢線 id → 1 推高／-1 壓低；伺服器假人照這個行動
     defect_text: str = ""  # 叛投到這個陣營那一刻的一句敘事（計畫甲；content/scenario.json 的三句是初稿，待 joy 潤，joy 會走自己的 PR）
+    # 豪強分屬兩軍（企劃者 2026-10-15）：這個陣營在依附的季（allied.on）要依附其中一軍；寫的是可以依附的陣營 id（暫名）。
+    # 空的＝這個陣營本身就是一軍
+    allies: list[str] = Field(default_factory=list)
 
 
 class SeasonOneOff(_Strict):
@@ -2148,6 +2159,10 @@ class Config(_Strict):
     geju_calm_per_day: float = Field(default=1.0, ge=0)  # 三條戰線都穩下來時，豪強割據每曆日回落幾點（不能是負的，否則「回落」變成漲）
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
+    # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
+    # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
+    # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
+    haoqiang_allied: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）

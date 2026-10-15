@@ -105,6 +105,28 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     assert posted.get("art", 0) >= 3 and posted.get("arms", 0) >= 3 and result["bounties"]["每週最多幾批"] == 1
 
 
+def test_a_weekend_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
+    """第一季豪強分屬兩軍（週末設定預設開）：假人整季跑一段，投靠豪強的假人都挑了依附哪一軍、名冊沒有不帶依附的豪強，
+    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。"""
+    from tianxia import database
+    from tianxia.characters import open_characters
+    from tianxia.content import load_content
+
+    sim = _load("sim_server_bots")
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 1)
+    content = load_content(ROOT / "content", profile="weekend")
+    assert content.config.haoqiang_allied
+    content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
+    try:
+        result = sim.run_season(content, tmp_path, seed=1, tick=60.0)
+        gentry = [s.player for s in open_characters(tmp_path / "tianxia.db").all() if s.player.faction == "haoqiang"]
+    finally:
+        database.close_all()
+    assert gentry and all(p.ally in ("guan", "huang") for p in gentry)
+    assert "geju" not in result["trends"]
+    assert set(result["sides"]) <= {"guan", "huang"} and result["factions"].get("haoqiang") == len(gentry)
+
+
 def test_the_server_bot_simulation_can_ask_a_real_model(monkeypatch):
     """--real-model 傳給 run_season（預設是假的取名：只數次數、不連模型）。"""
     sim = _load("sim_server_bots")

@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -344,6 +344,9 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     而折返在路上永遠按得下去，不排除的話「在路上沒事可做就推進時間」這個訊號會失效。
     名望不夠的求見（call:<人物>）同理：求見一直都在、按下去只是被打發（武學與成長設計 9.1），機器人不白按。"""
     s = game.state
+    side = allied.pick_side(s.player.name, [o.id for o in options if o.enabled], game.world.roll_counts())
+    if side is not None:  # 豪強分屬兩軍：投靠豪強、拜入曹氏莊院之後挑依附哪一軍，挑人少的那一邊（設計第十三節）
+        return side
     if s.player.sensing is not None and any(o.id.startswith(sensing.PREFIX) for o in options):
         return sense_pick(game, rng)  # 有所感的卡擋著：先了結它（畫的那一步回 sensing.DRAW，play_season 接著 sense_draw）
     battle = game.world.get_battle()

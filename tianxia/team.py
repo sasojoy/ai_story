@@ -508,8 +508,9 @@ def _price_here(state: GameState | None, content: Content) -> float:
     if state is None:
         return 1.0
     from . import territory  # noqa: PLC0415
+    from .allied import side_of  # noqa: PLC0415  豪強分屬兩軍：照依附那一軍算自家地盤
 
-    return territory.price_factor(state.world, content, state.player.faction, state.player.location)
+    return territory.price_factor(state.world, content, side_of(state, content), state.player.location)
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:

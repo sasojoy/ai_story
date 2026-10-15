@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import arena, gender, invites, ranger, ranks, team
+from . import allied, arena, gender, invites, ranger, ranks, team
 from .characters import CharacterStore, name_key
 from .rules import day_turn
 from .state import GameState
@@ -119,7 +119,7 @@ def affiliation(state: GameState, content: Content) -> str:
     狀態列（Game.status_data）與玩家卡都用這一個。"""
     p = state.player
     sect = content.sects[p.sect].name if p.sect else None
-    faction = content.scenario.faction_name(p.faction)
+    faction = allied.label_of(state, content) or None  # 豪強分屬兩軍的季寫「地方豪強（依附官軍）」
     named = ranger.title(content, state)
     ring = arena.title_of(state.world, p.name) if arena.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
     if faction is None and named is not None:
