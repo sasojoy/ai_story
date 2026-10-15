@@ -3464,12 +3464,11 @@
     const out = [`<defs>${MAP_SIDE_ORDER.map((s) => `<radialGradient id="mk-halo-${s}"><stop offset="0" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".7"/><stop offset=".55" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".35"/><stop offset="1" stop-color="${MAP_SIDES[s].soft}" stop-opacity="0"/></radialGradient>`).join("")}</defs>`];
     if (on) {
       for (const p of base.places) if (ctrl[p.id]) out.push(`<circle cx="${p.x}" cy="${p.y}" r="80" fill="url(#mk-halo-${ctrl[p.id]})" pointer-events="none"/>`);
-      for (const [a, b] of base.edges) { // 前線：兩頭歸不同的人的路畫紅色鋸齒，短的路中間一個 ⚔（長的那條空蕩蕩地掛著 ⚔ 反而誤導）
+      for (const [a, b] of base.edges) { // 前線：兩頭歸不同的人的路畫紅色鋸齒（誰佔哪裡；能不能打看地點旁的 ⚔ 圓章）
         const ca = ctrl[a], cb = ctrl[b];
         if (!ca || !cb || ca === cb) continue;
         const A = pos[a], B = pos[b];
         out.push(`<path class="front" d="M${A.x} ${A.y}L${B.x} ${B.y}" stroke="${FRONT_RED}" stroke-width="${f1(3.6 * Math.max(1, k * 0.8))}" stroke-dasharray="${f1(2 * k)} ${f1(3 * k)}" fill="none" pointer-events="none"/>`);
-        if (Math.hypot(A.x - B.x, A.y - B.y) < 200) out.push(`<text x="${f1((A.x + B.x) / 2)}" y="${f1((A.y + B.y) / 2 + 6 * k)}" font-size="${f1(15 * k)}" text-anchor="middle" pointer-events="none">⚔</text>`);
       }
     }
     if (far) for (const r of base.regions) { // 看大局：大區名、三色長條、各方幾處
@@ -3502,6 +3501,11 @@
       out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 2.5 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.2 * k)}" opacity=".7"/>`);
       out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="#FBF6EA" stroke="${col}" stroke-width="${f1(2.8 * Math.max(1, k * 0.7))}"/>`);
       out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(p.glyph)}</text></g>`);
+      // ⚔：你此刻能出陣攻的地方（疊層的 armed，跟舊輿圖同一個判斷 FB-251），圓盤左上一個紅色小圓章；散人、豪強一處都沒有（企劃者 10/15 從對比圖選乙）
+      if (st.places[p.id] && st.places[p.id].armed) {
+        const sx = f1(p.x - r - 4 * k), sy = f1(p.y - r - 2 * k);
+        out.push(`<g class="armed" pointer-events="none"><circle cx="${sx}" cy="${sy}" r="${f1(8.5 * k)}" fill="${FRONT_RED}" stroke="${MAP_HALO}" stroke-width="${f1(1.2 * k)}"/><text x="${sx}" y="${f1(p.y - r + 1.6 * k)}" font-size="${f1(10.5 * k)}" text-anchor="middle" fill="#FFFFFF">⚔</text></g>`);
+      }
       const label = p.name + (p.id === st.here && !st.journey ? "（你）" : "");
       out.push(`<text x="${f1(p.x + r + 5 * k)}" y="${f1(p.y + 4.5 * k)}" font-size="${f1(13 * k)}" font-weight="${p.big ? 700 : 500}" fill="${MAP_INK}" stroke="${MAP_HALO}" stroke-width="${f1(3.4 * k)}" paint-order="stroke" pointer-events="none" style="font-family:serif">${esc(label)}</text>`);
       let bx = p.x + r + 5 * k;

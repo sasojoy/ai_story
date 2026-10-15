@@ -218,3 +218,22 @@ def test_a_losing_suggestion_is_faded():
     assert [g["lose"] for g in st["suggest"]] == [False, False, False, True]  # 官軍在潁川：三處打得過，再一處必敗的
     assert out.count('class="m-go lose"') == 1 and out.count('class="m-go"') == 3
     assert out.index('class="m-go lose"') > out.rindex('class="m-go"')
+
+
+def test_the_sword_sits_on_places_you_can_attack():
+    """企劃者 10/15 對比 1 選乙：⚔ 是地點旁的紅色小圓章，只標在疊層說能出陣攻的地方；兩頭歸不同人的鋸齒前線照留。"""
+    game = _game()
+    n = sum(p["armed"] for p in game.map_state()["places"].values())
+    out = marks(game)
+    assert n and out.count('class="armed"') == n and out.count("⚔") == n and 'class="front"' in out
+
+
+def test_no_sword_for_a_ranger_or_the_strongmen():
+    for faction in (None, "haoqiang"):
+        out = marks(_game(faction=faction))
+        assert 'class="armed"' not in out and "⚔" not in out, faction
+
+
+def test_the_far_view_has_no_sword():
+    out = marks(_game(), k=2.5, far="true")
+    assert "⚔" not in out

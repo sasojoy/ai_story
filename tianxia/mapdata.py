@@ -210,7 +210,7 @@ def state(
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
-     "places": {地點: {"control","kind","odds","sortie","minutes","stamina","order","bounty","goal","news","people","services",
+     "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
                        "price","squads","danger","flips"}},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}]}], "geju", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
@@ -231,6 +231,7 @@ def state(
     pace = mounts.pace(s, c)
     order_at, bounty_at = _order_marks(s, c, faction), _bounty_marks(s, c)
     goals, news, people = set(atlas.goal_places(s, c)), atlas.news_places(s, c), _people(s, c)
+    armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
     places = {}
@@ -247,6 +248,7 @@ def state(
             else "line" if on and territory.line_of(c, loc_id) else None,
             "odds": None if worst is None else {"word": worst[1], "tone": ODDS_TONE.get(worst[1], "ok")},
             "sortie": sortie_mode(loc_id),
+            "armed": (loc_id in armed) if armed is not None else bool(loc.enemies),
             "minutes": None if route is None else atlas.whole_minutes(route.minutes * atlas.TIME_SHARE["walk"] * pace),
             "stamina": None if route is None else atlas.route_stamina(s, c, route, "dash"),
             "order": order_at.get(loc_id), "bounty": bounty_at.get(loc_id),

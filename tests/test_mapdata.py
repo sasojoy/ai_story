@@ -133,3 +133,20 @@ def test_the_state_is_small_and_counts_each_squad_once():
     st = game.map_state()
     assert len(json.dumps(st, ensure_ascii=False).encode()) < 40_000
     assert calls and len(calls) == len(set(calls))
+
+
+def test_the_sword_marks_follow_fb251():
+    """⚔ 只標在看的人此刻能出陣攻的地方，跟舊輿圖同一個判斷（mapview.armed_places，FB-251）；散人、豪強一處都沒有。"""
+    game = _game()
+    st = game.map_state()
+    armed = mapview.armed_places(game.state, game.content)
+    assert armed and {k for k, p in st["places"].items() if p["armed"]} == armed & set(st["places"])
+    for faction in (None, "haoqiang"):
+        assert not any(p["armed"] for p in _game(faction=faction).map_state()["places"].values()), faction
+
+
+def test_with_sortie_off_the_sword_follows_the_old_rule():
+    """出陣關著（armed_places 是 None）：照內容寫的 enemies，同舊輿圖。"""
+    game = _game(classic=True)
+    st = game.map_state()
+    assert {k for k, p in st["places"].items() if p["armed"]} == {k for k in st["places"] if game.content.locations[k].enemies}

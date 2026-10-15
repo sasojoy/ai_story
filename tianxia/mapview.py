@@ -57,7 +57,7 @@ LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨")
 LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
 LEGEND_STATES_OPEN = "紅旗：所在地"  # 全圖開放（Config.open_map）：已開放的地點都畫全彩，沒有看得見、摸清、未知之分（待 joy 潤）
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
-# 待 joy 潤（FB-251）：出陣開著時 ⚔ 照地盤畫（_armed）。不能比 LEGEND_RING 長：375 寬一行只放得下那麼多（「可出陣攻打」把「打」擠到第二行，FB-256）
+# 待 joy 潤（FB-251）：出陣開著時 ⚔ 照地盤畫（armed_places）。不能比 LEGEND_RING 長：375 寬一行只放得下那麼多（「可出陣攻打」把「打」擠到第二行，FB-256）
 LEGEND_RING_SORTIE = "外圈：綠安全／橙危險／紅兇險　⚔ 可攻打"
 LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
 LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
@@ -208,15 +208,15 @@ def _text(
 
 def _label(loc: Location, view: str, fights: bool = True, armed: set[str] | None = None) -> str:
     """地點的名字：摸清的寫名字（fights 時能打的加 ⚔，所在地加「（你）」），畫出輪廓的寫「名字？」，淡點不寫。
-    armed：出陣開著時能出陣攻的地點（_armed）；None 是舊規則，照內容的 enemies 畫。"""
+    armed：出陣開著時能出陣攻的地點（armed_places）；None 是舊規則，照內容的 enemies 畫。"""
     if view in KNOWN:
         sword = fights and (loc.id in armed if armed is not None else bool(loc.enemies))
         return loc.name + (" ⚔" if sword else "") + ("（你）" if view == "current" else "")
     return f"{loc.name}？" if view == "outline" else ""
 
 
-def _armed(state: GameState, content: Content) -> set[str] | None:
-    """⚔ 畫在哪幾個地點（FB-251）：出陣開著時是看的人此刻能出陣攻的地方（同 sortie.mode 的攻）——那條線他的陣營有目標的戰線地點，
+def armed_places(state: GameState, content: Content) -> set[str] | None:
+    """⚔ 畫在哪幾個地點（FB-251；新輿圖的疊層 mapdata.state 也照它，企劃者 10/15 從對比圖選乙）：出陣開著時是看的人此刻能出陣攻的地方（同 sortie.mode 的攻）——那條線他的陣營有目標的戰線地點，
     此刻歸敵方而且站著敵方的隊伍，或這週截糧的糧隊在那裡（orders.extra_enemies）；散人不能出陣、豪強的出陣是攪局不打，一處都沒有。
     出陣關著是 None（照內容的 enemies 畫，舊規則）。"""
     if not sortie.on(content):
@@ -602,7 +602,7 @@ def render_map(
         out.append(_you_mark(content, spot, you, taken))
     out += _terrain_names(m, taken)
     here = state.player.location
-    armed = _armed(state, content)  # ⚔ 畫在哪裡（FB-251：出陣開著時照地盤；關著是 None、照內容的 enemies）
+    armed = armed_places(state, content)  # ⚔ 畫在哪裡（FB-251：出陣開著時照地盤；關著是 None、照內容的 enemies）
     placed = []  # （地點, 狀態, 幾行字）：所在地排第一個
     for loc in sorted(content.locations.values(), key=lambda loc: loc.id != here):
         view = views[loc.id]
