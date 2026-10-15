@@ -237,3 +237,21 @@ def test_no_sword_for_a_ranger_or_the_strongmen():
 def test_the_far_view_has_no_sword():
     out = marks(_game(), k=2.5, far="true")
     assert "⚔" not in out
+
+
+def test_fb260_discs_and_glyphs_keep_their_size_on_screen():
+    """FB-260：圓盤與圓盤裡的字照設計固定螢幕大小——倍率加倍（k 減半）時，地圖單位裡的半徑、字級、框線都剛好減半。"""
+    game = _game()
+
+    def disc(k):
+        out = marks(game, k=k)
+        g = out[out.index('<g data-loc="yingchuan_wilds"'):]
+        g = g[: g.index("</g>")]
+        r = float(re.search(r'r="([\d.]+)" fill="#FBF6EA" stroke="[^"]+" stroke-width="([\d.]+)"', g).group(1))
+        w = float(re.search(r'fill="#FBF6EA" stroke="[^"]+" stroke-width="([\d.]+)"', g).group(1))
+        size = float(re.search(r'font-size="([\d.]+)"[^>]*>野<', g).group(1))
+        return r, w, size
+
+    big, small = disc(1), disc(0.5)
+    for a, b in zip(big, small):
+        assert abs(b - a / 2) <= 0.1, (big, small)
