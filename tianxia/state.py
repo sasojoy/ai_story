@@ -462,6 +462,12 @@ class PlayerState(BaseModel):
     # 出陣（出陣探索與地盤設計 2.3）：上次出陣是哪一天（同 pill_day 的換日）與那一天出了幾次；跨季保留（換季不能多出一輪）
     sortie_day: int = -1
     sorties_today: int = 0
+    # 素材與經濟（2026-10-15，tianxia/economy.py）：同 pill_day 的換日；跨季保留（換季不能多換一輪、多捐一輪）
+    upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
+    upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
+    donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
+    donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
+    picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -838,6 +844,9 @@ class WorldState(BaseModel):
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 陣營的軍備（素材與經濟設計第六節第 3 點；economy.donate）：陣營 id → 素材屬性（慢、快、剛、柔）→ 累積的份量（一階 1、二階 3、三階 9）。
+    # 名字照 Config.economy.armaments（慢 → 糧秣……）。這一季的；在決戰怎麼起作用還沒定（跟 joy 對，第 2 塊），先只存
+    armaments: dict[str, dict[str, int]] = Field(default_factory=dict)
     # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
     # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
     bounty_week: int = 0
