@@ -329,6 +329,105 @@ def _lesson_perks(content: Content, way: str, tier: int) -> list[str]:
 
 VIRTUE_PERKS.append(_lesson_perks)
 
+# ── 誰歡迎你（設計 4.3、5.2）──────────────────────────────
+
+REGARD_WAY = {"敬俠": "俠", "喜狠": "寇"}  # 有這種看法的人物，見面時情誼起步看哪一條路
+MEET_FAME = "{name}早聽過你的名號。（情誼 +{n}）"  # 待 joy 潤
+MEET_VIRTUE = "{name}早聽說你是{title}。（情誼 +{n}）"
+COLD_LINE = "{name}聽過你的名聲，神色淡淡的。"
+MEET_FAME_FLAG = "初見:{cid}:名"  # 名望那一份給過了（一季一位人物一次）
+MEET_VIRTUE_FLAG = "初見:{cid}:{way}"  # 後面接給到第幾段：「初見:liubei:俠2」
+
+
+def _affinity_perks(content: Content, way: str, tier: int) -> list[str]:
+    """善惡各段的情誼那一項（5.2）：敬俠／喜狠的人見面情誼 +3×段；寇第 1 段起敬俠的人對你冷淡。affinity 關著不寫。"""
+    if not on(content, "affinity"):
+        return []
+    who = "敬俠" if way == "俠" else "喜狠"
+    out = [f"{who}的人見面情誼 +{content.config.renown.virtue_affinity * tier}"]
+    if way == "寇" and tier == 1:
+        out.append("敬俠的人對你冷淡")
+    return out
+
+
+VIRTUE_PERKS.append(_affinity_perks)
+
+
+def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
+    """敬俠的人遇上寇（善惡第 1 段以上）：冷淡（5.2）。"""
+    ch = content.characters.get(character_id)
+    return (on(content, "affinity") and ch is not None and ch.regard == "敬俠" and path(state) == "寇"
+            and virtue_tier(state, content) >= 1)
+
+
+def first_meet(state: GameState, content: Content, character_id: str) -> list[str]:
+    """開始跟這位人物對話時（companion_agent.start_dialogue）的情誼起步（設計 4.3、5.2）：
+    - 名望：威震州郡（fame_affinity_tier）以上 +fame_affinity，一季一位人物一次；還不到不記，升上去之後下一次對話照給。
+    - 善惡：敬俠的人遇上俠、喜狠的人遇上寇，+virtue_affinity × 段；記給到第幾段，升段之後補多出來的那幾段；換了路不收回。
+    情誼夾在 0～100，寫的是實際加了多少。affinity 關著回空。只改情誼與旗標。"""
+    if not on(content, "affinity"):
+        return []
+    cfg, p = content.config.renown, state.player
+    ch = content.characters.get(character_id)
+    if ch is None:
+        return []
+    out: list[str] = []
+
+    def bump(n: int) -> int:
+        before = p.affinities.get(character_id, 0)
+        p.affinities[character_id] = max(0, min(100, before + n))
+        return p.affinities[character_id] - before
+
+    flag = MEET_FAME_FLAG.format(cid=character_id)
+    if flag not in p.flags and fame_tier(state, content) >= cfg.fame_affinity_tier:
+        p.flags.add(flag)
+        n = bump(cfg.fame_affinity)
+        if n:
+            out.append(MEET_FAME.format(name=ch.name, n=n))
+    way = REGARD_WAY.get(ch.regard or "")
+    if way is not None and path(state) == way and not _cold_to(state, content, character_id):
+        tier = virtue_tier(state, content)
+        head = MEET_VIRTUE_FLAG.format(cid=character_id, way=way)
+        given = max((int(f[len(head):]) for f in p.flags if f.startswith(head) and f[len(head):].isdigit()), default=0)
+        if tier > given:
+            p.flags -= {f for f in p.flags if f.startswith(head)}
+            p.flags.add(f"{head}{tier}")
+            n = bump(cfg.virtue_affinity * (tier - given))
+            if n:
+                out.append(MEET_VIRTUE.format(name=ch.name, title=virtue_title(state, content), n=n))
+    return out
+
+
+def cold(state: GameState, content: Content, character_id: str, delta: int) -> int:
+    """冷淡（5.2）：敬俠的人遇上寇，這一輪加的情誼打 cold_share 折、四捨五入、至少 +1；扣的照扣。其他情況原樣回傳。"""
+    if delta <= 0 or not _cold_to(state, content, character_id):
+        return delta
+    return max(1, int(delta * content.config.renown.cold_share + 0.5))
+
+
+def prompt_lines(state: GameState, content: Content, character_id: str) -> str:
+    """人物對話的系統提示多的幾行（5.2，prompt 開著）：玩家的稱號（只帶稱號、不帶數字），人物有看法時另起一行他對這種人的看法。
+    每行以換行結尾；什麼都沒有是空字串。"""
+    if not on(content, "prompt"):
+        return ""
+    ch = content.characters.get(character_id)
+    him = gender.pronoun(state)
+    fame, virtue = fame_title(state, content), virtue_title(state, content)
+    if fame and virtue:
+        line = f"江湖上稱{him}「{fame}」，人稱「{virtue}」。"
+    elif fame or virtue:
+        line = f"江湖上稱{him}「{fame or virtue}」。"
+    else:
+        line = ""
+    out = f"【玩家的名聲】{line}\n" if line else ""
+    if ch is not None and ch.regard is not None:
+        if _cold_to(state, content, character_id):
+            view = f"看不起打家劫舍的人，對{him}冷淡"
+        else:
+            view = "敬重行俠仗義的人" if ch.regard == "敬俠" else "欣賞敢下狠手的人"
+        out += f"【{ch.name}對這種人的看法】{view}\n"
+    return out
+
 
 def virtue_perks(content: Content, way: str, tier: int) -> list[str]:
     """善惡第 tier 段（way 那一條路）給什麼：人人都有的那幾樣（VIRTUE_PERKS 登記的）。"""

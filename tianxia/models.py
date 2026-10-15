@@ -635,6 +635,8 @@ class CharacterDef(_Strict):
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
+    # 名聲 5.2：對哪一種人有看法（敬俠：俠見面情誼起步、遇上寇冷淡；喜狠：寇見面情誼起步）；None 是不偏。對話提示也帶一行
+    regard: Literal["敬俠", "喜狠"] | None = None
 
 
 class Squad(_Strict):

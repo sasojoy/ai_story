@@ -81,7 +81,7 @@ def test_the_virtue_perks_name_the_lessons():
     assert "潁川書院教守義劍" in renown.virtue_perks(c, "俠", 1) and "潁川書院教養浩訣" in renown.virtue_perks(c, "俠", 2)
     assert "綠林山寨教剪徑刀" in renown.virtue_perks(c, "寇", 1) and "綠林山寨教嘯林功" in renown.virtue_perks(c, "寇", 2)
     c.config.renown.lessons = False
-    assert renown.virtue_perks(c, "俠", 1) == []
+    assert not any(perk.endswith("守義劍") for perk in renown.virtue_perks(c, "俠", 1))
 
 
 def test_the_boost_line_names_the_title_when_the_path_matches():

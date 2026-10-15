@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import gender, zh
+from . import gender, renown, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -216,6 +216,7 @@ def build_system_prompt(
         f"{past_str}"
         f"【玩家】{p.name}（{gender.who_line(p)}），目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
         f"不是你決定的）。你與玩家目前的關係現況：{my_note}\n"
+        f"{renown.prompt_lines(state, content, companion_id)}"  # 名聲 5.2：稱號與他對這種人的看法（只給模型當態度）
         f"【已經說過的話（避免重複）】{used_str}\n\n"
         "【寫作要求】\n"
         "0. 全程使用繁體中文書寫（包含人名、選項文字），不可出現簡體字。\n"
@@ -318,11 +319,15 @@ def _record_turn(state: GameState, companion_id: str, player_action: str, turn: 
 
 def _apply_turn(
     state: GameState, character: CharacterDef, companion_id: str, player_action: str, turn: CompanionTurn,
-    tag: str | None,
+    tag: str | None, content: Content | None = None,
 ) -> list[str]:
-    """回合收尾共用邏輯：查表覆寫好感度、記錄對話、更新關係現況，回傳要顯示的訊息。"""
+    """回合收尾共用邏輯：查表覆寫好感度、記錄對話、更新關係現況，回傳要顯示的訊息。
+    content 給了才算名聲的冷淡（5.2：敬俠的人遇上寇，加的情誼打折，renown.cold），那一輪多一句原因。"""
     p = state.player
     delta = resolve_tag_delta(tag, character)
+    cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
+    chill = cooled != delta
+    delta = cooled
     before = p.affinities.get(companion_id, 0)
     after = max(0, min(100, before + delta))
     p.affinities[companion_id] = after
@@ -336,6 +341,8 @@ def _apply_turn(
     p.last_offered_dialogue[companion_id] = [list(x) for x in trim_options(turn.options, turn.option_tags)]
 
     msgs = [turn.narrative]
+    if chill:
+        msgs.append(renown.COLD_LINE.format(name=character.name))
     if delta:
         msgs.append(f"（情誼 {'+' if delta >= 0 else ''}{delta}）")  # 玩家看到的一律叫「情誼」（explain-1）；程式裡照舊叫 affinity／好感度
     return msgs
@@ -352,7 +359,8 @@ def start_dialogue(
     if turn is None:
         turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
     state.player.pending_companion = companion_id
-    return _apply_turn(state, character, companion_id, GENERIC_OPENING, turn, tag=None)
+    msgs = _apply_turn(state, character, companion_id, GENERIC_OPENING, turn, tag=None, content=content)
+    return msgs + renown.first_meet(state, content, companion_id)  # 名聲 4.3、5.2：名將見面時情誼起步
 
 
 def continue_dialogue(
@@ -371,7 +379,7 @@ def continue_dialogue(
     if turn is None:
         turn = _generate(client, character, state, content, world, companion_id, player_action)
     world.record_companion_tag(companion_id, tag or "尋常寒暄")
-    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag)
+    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)
@@ -391,7 +399,7 @@ def say_dialogue(
         turn = generate_turn(client, messages)
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
-    msgs = _apply_turn(state, character, companion_id, said, turn, tag)
+    msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)
