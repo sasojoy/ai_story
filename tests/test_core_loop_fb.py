@@ -243,6 +243,13 @@ def test_fb255_attacking_a_convoy_on_your_own_ground_does_not_say_it_is_theirs()
     assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"].startswith("這裡歸別人")
 
 
+def test_fb256_the_legend_line_is_no_longer_than_the_one_that_fit():
+    """375 寬的圖例：「⚔ 可出陣攻打」把「打」擠到第二行；出陣的說法不能比原本放得下的「⚔ 可遊歷」那一句長。"""
+    from tianxia import mapview
+
+    assert len(mapview.LEGEND_RING_SORTIE) <= len(mapview.LEGEND_RING) and "遊歷" not in mapview.LEGEND_RING_SORTIE
+
+
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
     game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
     _intercept(game, "guan", "runan_wilds")
