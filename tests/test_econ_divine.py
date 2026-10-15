@@ -80,6 +80,26 @@ def test_the_howto_follows_the_season_stamp():
     assert "#### 鐵匠鋪與神器" in page
 
 
+def test_fb268_switches_off_and_no_stamp_leave_the_howto_as_it_was():
+    """FB-268（PM 定）：三個開關都關、季也沒蓋章，玩法說明一個字都不變——沒有「鐵匠鋪與神器」這一段（fa7ddace 沒有）。
+    任一個用得上新規則時才畫：季蓋了每種兵器一條或線索分片的章、線索分片或殘譜三種探索的開關開著。"""
+    from tianxia import howto
+
+    c = real_content("weekend")
+    rule = c.config.forge_secrets
+    rule.divine_per_kind = rule.split_clues = rule.scrap_every_mode = False
+    season = fresh_season(c)
+    assert not season.forge_divine_per_kind and not season.forge_split_clues
+    assert howto.forge_lines(c, season) == []
+    assert "鐵匠鋪與神器" not in howto.page(c, season, recruitable=False)
+    for switch in ("split_clues", "scrap_every_mode"):  # 正在跑的季（沒蓋章）、這兩個開關開著：照舊畫
+        setattr(rule, switch, True)
+        assert howto.forge_lines(c, season), switch
+        setattr(rule, switch, False)
+    season.forge_divine_per_kind = True  # 季蓋了每種兵器一條的章（開關後來關了也一樣）
+    assert howto.forge_lines(c, season)
+
+
 def test_the_howto_for_other_seasons_does_not_promise_every_kind():
     from tianxia import howto
 
