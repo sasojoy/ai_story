@@ -3582,8 +3582,27 @@
   const MAP_HALO = "#F7F1E3";
   const MAP_FAR = 0.62; // 倍率低於它換成「看大局」：只剩點、大區名、三色長條（設計第四節）
   const MAP_STATE_EVERY = 30000; // 輿圖開著時疊層多久重抓一次（毫秒）
-  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤
-  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
+  // ── 意境濾鏡（意境提示設計第四節）：照屬性上色（意境改名也不跑掉）。c 圓盤外框與小圓章、light 圓盤底、dark 深色主題上空心牌子的字
+  const INSIGHT_INK = {
+    快: { c: "#2B8A80", light: "#DDF0EC", dark: "#6CCBBE" }, 剛: { c: "#CF4F27", light: "#FBE3D8", dark: "#F08A63" },
+    柔: { c: "#2C68B0", light: "#DCE8F6", dark: "#7FB0EA" }, 慢: { c: "#8A5A33", light: "#F0E3D6", dark: "#D2A57D" },
+  };
+  const INSIGHT_DOT = "conic-gradient(#2B8A80 0 25%, #CF4F27 0 50%, #2C68B0 0 75%, #8A5A33 0)"; // 濾鏡那一顆的色點：風火水山各一角
+  const INSIGHT_ROW = "此地能悟"; // 抽屜那一行（補回輿圖升級漏掉的「這裡能悟」，設計第五節）
+  const insightOn = (base, layers) => !!(base && base.insight_layer) && layers.has("insight"); // 開關關著時記著的 "insight" 不算
+  function insightInk(base, id) {
+    const kind = id && base && base.insight_kinds ? base.insight_kinds[id] : null;
+    const ink = kind && INSIGHT_INK[kind.attribute];
+    return ink ? { ...ink, name: kind.name } : null;
+  }
+  // 勢力與意境互斥（圓盤的顏色只給一樣）：開一顆，另一顆跟著關
+  const MAP_EXCLUSIVE = { control: "insight", insight: "control" };
+  function toggleLayer(layers, key) {
+    if (layers.includes(key)) return layers.filter((x) => x !== key);
+    return [...layers.filter((x) => x !== MAP_EXCLUSIVE[key]), key];
+  }
+  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤；意境插在敵情後面（意境提示設計第四節）
+  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["insight", "意境", INSIGHT_DOT], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
   const sideName = (k) => (k ? MAP_SIDES[k].name : "無人控制");
   const f1 = (n) => Math.round(n * 10) / 10;
   const mapWeek = () => S.mapWeek || (S.mapState && S.mapState.now_week) || 1;
@@ -3619,7 +3638,7 @@
   // 地圖上的記號（設計第三、四節）：o = { k: 1／倍率（字、圓盤、小牌子乘它，螢幕上大小固定）, far: 看大局, layers: 開著的濾鏡（Set）,
   // sel: 選了的地點, week: 看哪一週, tl: 正在看版圖變化 }。純函式：只讀傳進來的底圖與疊層
   function marksSvg(base, st, o) {
-    const k = o.k, far = o.far, on = !!st.territory && o.layers.has("control");
+    const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
     const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
@@ -3634,19 +3653,26 @@
       }
     }
     for (const p of base.places) {
-      const c = on ? ctrl[p.id] : null, col = c ? MAP_SIDES[c].color : "#7A6A55";
+      const c = on ? ctrl[p.id] : null, ink = ins ? insightInk(base, p.strong) : null; // 意境開著：圓盤是最濃那一種的顏色與字
+      const col = ink ? ink.c : c ? MAP_SIDES[c].color : "#7A6A55";
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
       if (flash.has(p.id)) out.push(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       // 點擊區：透明圓 r=16，外框寬照倍率撐開（style.css 的 --hit，applyMapView 設）
       out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0"/>`);
       if (far) {
-        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
         continue;
       }
       out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 2.5 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.2 * k)}" opacity=".7"/>`);
-      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="#FBF6EA" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
-      out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(p.glyph)}</text></g>`);
+      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.light : "#FBF6EA"}" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
+      out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(ink ? ink.name : p.glyph)}</text></g>`);
+      if (ink) (p.insights || []).filter((id) => id !== p.strong).forEach((id, i) => { // 同一處還悟得到的別種：圓盤右下沿著邊掛小圓章
+        const other = insightInk(base, id);
+        if (!other) return;
+        const a = ((40 + i * 45) * Math.PI) / 180, sx = f1(p.x + (r + 2.5 * k) * Math.cos(a)), sy = f1(p.y + (r + 2.5 * k) * Math.sin(a));
+        out.push(`<g class="ins-seal" pointer-events="none"><circle cx="${sx}" cy="${sy}" r="${f1(7.5 * k)}" fill="${other.c}" stroke="${MAP_HALO}" stroke-width="${f1(1.3 * k)}"/><text x="${sx}" y="${f1(sy + 3.4 * k)}" font-size="${f1(9.5 * k)}" font-weight="700" text-anchor="middle" fill="#FFFFFF" style="font-family:serif">${esc(other.name)}</text></g>`);
+      });
       // ⚔：你此刻能出陣攻的地方（疊層的 armed，跟舊輿圖同一個判斷 FB-251），圓盤左上一個紅色小圓章；散人、豪強一處都沒有（企劃者 10/15 從對比圖選乙）
       if (st.places[p.id] && st.places[p.id].armed) {
         const sx = f1(p.x - r - 4 * k), sy = f1(p.y - r - 2 * k);
@@ -3703,7 +3729,7 @@
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
-    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+    return MAP_CHIPS.filter(([key]) => key !== "insight" || (S.mapBase && S.mapBase.insight_layer)).map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
   }
   // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小，第四顆是版圖變化
   // （企劃者 10/15 從對比圖選丙：375 寬時濾鏡一排放不下它，挪到這裡；濾鏡那一排只剩五顆）
@@ -3771,6 +3797,16 @@
     const events = st.events.length ? `<div class="m-sec"><h4>本週大事</h4>${st.events.map((t) => `<div class="m-evt">📜 ${esc(t)}</div>`).join("")}</div>` : "";
     return journeyHtml(st) + goes + ropes + events;
   }
+  // 抽屜「此地能悟」（意境提示設計第五節）：一種一顆牌子，最濃的實心、寫「最濃」；開關關著沒有最濃，全部空心
+  function insightRow(base, b) {
+    const pills = (b.insights || []).map((id) => {
+      const ink = insightInk(base, id);
+      if (!ink) return "";
+      const strong = id === b.strong;
+      return `<span class="ig${strong ? " strong" : ""}" style="--c:${ink.c};--d:${ink.dark}"><b>${esc(ink.name)}</b>${strong ? "<em>最濃</em>" : ""}</span>`;
+    }).join("");
+    return pills ? `<div class="m-ins"><small>${INSIGHT_ROW}</small>${pills}</div>` : "";
+  }
   // 點一個地點（設計第五節）：第一行（印、名字、危險度）、三格（誰佔著、打得過嗎、多遠）、動作一排、拉高才看的細節
   function placeHtml(base, st, id) {
     const b = placeOf(base, id), p = st.places[id], here = id === st.here && !st.journey;
@@ -3796,11 +3832,11 @@
     const flips = p.flips.map((f) => `第 ${Number(f.week)} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
     const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind ? "可易手" : "";
     const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
-    return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+    return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${insightOn(base, new Set(S.mapLayers)) && b.terrain ? `<span class="terrain">${esc(b.terrain)}</span>` : ""}${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-three"><div><small>誰佔著</small><b style="color:${p.control ? MAP_SIDES[p.control].color : "inherit"}">${p.control ? MAP_SIDES[p.control].name : "無人"}</b>${kind ? `<small>${kind}</small>` : ""}</div>
         <div><small>打得過嗎</small>${odds}${p.sortie ? `<small>出陣是${SORTIE_WORD[p.sortie] || ""}</small>` : ""}</div>
         <div><small>多遠</small><b>${here ? "這裡" : p.minutes === null ? "—" : `${Number(p.minutes)} 分`}</b>${here || p.stamina === null ? "" : `<small>疾行 體力 ${Number(p.stamina)}</small>`}</div></div>
-      <div class="m-acts">${acts}</div>
+      ${insightRow(base, b)}<div class="m-acts">${acts}</div>
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
       ${st.territory ? `<div class="m-sec"><h4>地盤</h4>${p.control ? `${sideName(p.control)}${p.control === "haoqiang" ? "佔據" : "控制"}。${esc(p.price)}` : "不在戰線上，沒有控制方。"}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : ""}
       <div class="m-sec"><h4>站在這裡的</h4>${p.squads.length ? p.squads.map((q) => `${esc(q.name)} <span style="color:${tone(q.odds)}">${esc(q.odds)}</span>`).join("、") : "沒有人在這裡滋事"}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
@@ -3921,7 +3957,7 @@
       S.mapMode = "timeline";
       S.mapViewBefore = S.mapView;
       S.mapWeek = S.mapState.now_week;
-      if (!S.mapLayers.includes("control")) S.mapLayers = [...S.mapLayers, "control"]; // 版圖變化看的就是勢力
+      if (!S.mapLayers.includes("control")) S.mapLayers = toggleLayer(S.mapLayers, "control"); // 版圖變化看的就是勢力（意境跟著關）
     } else {
       S.mapMode = "overview";
       S.mapWeek = null;
@@ -4043,14 +4079,15 @@
     const wrap = document.getElementById("map");
     if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
     g.innerHTML = marksSvg(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
-    const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control"));
+    const ins = insightOn(S.mapBase, layers);
+    const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control") && !ins); // 意境開著不畫勢力的大區底色
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
       const t = tint[el.getAttribute("data-region")];
       if (t) el.style.fill = t; else el.style.removeProperty("fill");
     });
     const hud = document.getElementById("map-hud");
     if (hud) {
-      hud.hidden = !(s < MAP_FAR || S.mapMode === "timeline") || !S.mapState.territory;
+      hud.hidden = !(s < MAP_FAR || S.mapMode === "timeline") || !S.mapState.territory || ins; // 「天下」那一條是勢力的
       if (!hud.hidden) hud.innerHTML = hudHtml(S.mapBase, S.mapState, week);
     }
   }
@@ -5510,12 +5547,12 @@
           renderPage();
           if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
           break;
-        case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁
-          const key = el.dataset.layer;
-          S.mapLayers = S.mapLayers.includes(key) ? S.mapLayers.filter((x) => x !== key) : [...S.mapLayers, key];
-          el.classList.toggle("on", S.mapLayers.includes(key));
-          el.setAttribute("aria-pressed", String(S.mapLayers.includes(key)));
+        case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁；勢力與意境互斥，整排鈕一起換樣子
+          S.mapLayers = toggleLayer(S.mapLayers, el.dataset.layer);
+          const row = el.closest(".map-chips");
+          if (row) row.innerHTML = chipsHtml();
           drawMarks();
+          if (S.mapMode === "place") redrawDrawer(); // 抽屜名字旁的地形跟著意境開關
           break;
         }
         case "map-zoom": mapZoom(el.dataset.step); break;
