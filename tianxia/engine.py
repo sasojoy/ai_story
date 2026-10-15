@@ -8480,6 +8480,7 @@ class Game:
         if not self.world.open_season(self.content, now):
             return self._log(["（現在不是籌備期，無法開季。）"])
         msgs = [f"══ {self.content.scenario.name}・開季 ══"]
+        msgs += timetable.quiet_notes(self.world.get_season(), self.content, now)  # 挪不開半夜、照原時間的決戰（企劃者 2026-10-15）
         self._write("開季", msgs, tag="管理者")
         return self._log(msgs + self._settle_season_start())
 
@@ -8533,7 +8534,8 @@ class Game:
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
-        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══"] + self._settle_season_start())
+        quiet = timetable.quiet_notes(self.world.get_season(), self.content, now)  # 同開季
+        return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══", *quiet] + self._settle_season_start())
 
     def admin_pause_clock(self, now: float) -> list[str]:
         """管理者暫停賽季時鐘（線上架構設計第四節、8.3：公告停機時賽季時鐘暫停，季末跟著往後延）：只在進行中有效。
@@ -8981,7 +8983,11 @@ class Game:
         elif when == "now":
             if season.ended or not season_one(c, season):
                 return self._log(["（這一季沒有時刻表，蓋不了天命之季。）"])
-            self.world.mutate(lambda st: seal.stamp_mandate(st, c, timetable.default_time(event, c, st.season)))
+            def _stamp(st) -> None:
+                seal.stamp_mandate(st, c, timetable.default_time(event, c, st.season))
+                timetable.avoid_quiet_hours(st.season, c, self.now)  # 天命之爭照季曆排的時刻挪開半夜（企劃者 2026-10-15）
+
+            self.world.mutate(_stamp)
             self.state.world = self.world.get_season()
             msg = "這一季蓋上天命之季的章。"
         else:
