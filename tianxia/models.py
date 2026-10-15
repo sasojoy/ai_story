@@ -1953,6 +1953,16 @@ class PushResistance(_Strict):
     far_share: float = Field(default=0.2, gt=0, le=1)  # 再外面（0～15、85～100）
 
 
+class QuietHours(_Strict):
+    """時刻表決戰避開半夜（企劃者 2026-10-15，經 PM）：照季曆自動排的決戰（開季、換季、天命之季蓋章）的集結開始換成現實時間，
+    集結加打一幕（timetable.showdown_span）碰到 start～end 點（時區照 pill_day_utc_offset_hours）的，挪到最近的可開時間
+    （timetable.avoid_quiet_hours）。管理者自己排的時間不動。enabled 關掉一個字都不變。"""
+
+    enabled: bool = True
+    start: float = Field(default=0, ge=0, lt=24)  # 幾點起不開（當地時間）
+    end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2018,6 +2028,7 @@ class Config(_Strict):
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
+    battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

@@ -650,6 +650,9 @@ class SqliteWorldStore:
             if not state.season.storyline or state.season_opened:
                 return
             stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
+            from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
+
+            avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
             state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             state.season_opened = True
@@ -702,6 +705,9 @@ class SqliteWorldStore:
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)
+            from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
+
+            avoid_quiet_hours(state.season, content, now)  # 同開季：季曆排的決戰（含天命之爭）照這一刻挪開半夜
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             self._save(conn, state)
             return True
