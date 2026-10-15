@@ -223,3 +223,59 @@ def test_allied_gentry_hears_the_side_news(wk):
     ears = rules.ears_of(game.state, wk)
     heard = [r.text for r in game.state.world.rumors if rules.audible(r, ears)]
     assert "官軍的軍情" in heard and "豪強的軍情" in heard and "黃巾的軍情" not in heard
+
+
+# ── Task 3：沒有割據、態勢兩方、結局只比高低 ─────────────────────────
+
+
+def _set_fronts(game, content, value):
+    w = game.state.world
+    for line in rules.front_ids(content):
+        w.trends[line] = value
+    rules.recompute_trends(w, content)
+
+
+def test_two_stances_and_no_geju_tick(wk):
+    game = _game(wk)
+    assert set(rules.stances(game.state, wk)) == {"guan", "huang"}
+    assert rules.stance_sides(wk, game.state.world) == ("guan", "huang")
+    rules.geju_tick(game.state, wk, 24 * 30, players=20)
+    assert rules.GEJU not in game.state.world.trends
+    data = game.status_data()
+    assert set(data["stances"]) == {"guan", "huang"} and "haoqiang" not in data["stance_notes"]
+
+
+def test_old_rules_have_three_stances():
+    off = _old_rules()
+    game = _game(off, name="乙")
+    assert set(rules.stances(game.state, off)) == {"guan", "huang", "haoqiang"}
+    assert "haoqiang" in game.status_data()["stance_notes"]
+
+
+def test_endings_only_compare_the_two(wk):
+    from tianxia import world as world_rules
+
+    game = _game(wk)
+    ids = [e.id for e in world_rules.season_endings(game.state, wk)]
+    assert "s1_warlords" not in ids and "s1_gentry" not in ids and "s1_turbans_hold" in ids
+    _set_fronts(game, wk, 50)
+    assert world_rules.evaluate_ending(game.state, wk).id == "s1_turbans_hold"  # 剛好 50 算黃巾坐地（企劃者定）
+    _set_fronts(game, wk, 45)
+    assert world_rules.evaluate_ending(game.state, wk).id == "s1_turbans_retreat"
+
+
+def test_rule_note_has_no_warlords(wk):
+    game = _game(wk)
+    note = rules.stance_rule_note(game.state, wk)
+    assert "群雄並起" not in note and "豪強" not in note and "比高低" in note
+
+
+def test_territory_has_no_geju_hold(wk):
+    from tianxia import territory
+
+    game = _game(wk)
+    w = game.state.world
+    territory.update(w, wk)
+    assert w.territory.geju == []
+    spots = [loc for line in wk.scenario.territory.lines.values() for loc in line]
+    assert "haoqiang" not in {territory.controller(w, wk, loc) for loc in spots}

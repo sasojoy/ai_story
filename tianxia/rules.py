@@ -631,13 +631,21 @@ def stance_sum_note(content: Content) -> str:
     return f"{count_word(len(front_ids(content)))}條戰線合計"
 
 
-def stances(state: GameState, content: Content) -> dict[str, int]:
-    """三方態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據。"""
-    huangjin = trend_value(state, content, HUANGJIN)
-    return {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": trend_value(state, content, GEJU)}
-
-
 _STANCE_SIDES = ("guan", "huang", "haoqiang")
+
+
+def stance_sides(content: Content, world: WorldState) -> tuple[str, ...]:
+    """這一季有態勢的幾方：官軍、黃巾，割據這條線存在（trend_shown）才有豪強（豪強分屬兩軍的季沒有）。"""
+    return _STANCE_SIDES if trend_shown(content, world, GEJU) else _STANCE_SIDES[:2]
+
+
+def stances(state: GameState, content: Content) -> dict[str, int]:
+    """態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據（豪強分屬兩軍的季沒有這一方）。"""
+    huangjin = trend_value(state, content, HUANGJIN)
+    out = {"guan": 100 - huangjin, "huang": huangjin}
+    if "haoqiang" in stance_sides(content, state.world):
+        out["haoqiang"] = trend_value(state, content, GEJU)
+    return out
 # 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）；玩法說明（howto）照它寫，跟卡上同一個叫法
 STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
 _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
@@ -674,8 +682,11 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     early, unclear = False, False
     late: list[str] = []  # 季末才判的門檻：「豪強的態勢在 85 以上是群雄並起」
     late_unclear = False
+    shown = set(stance_sides(content, state.world))
     for e in content.scenario.endings:
         if not e.season_one or not (e.stance_min or e.stance_max):
+            continue
+        if not (set(e.stance_min) | set(e.stance_max)) <= shown:  # 這一季沒有的一方（豪強分屬兩軍沒有豪強）：那個結局不參與
             continue
         if not ends_early(e):
             if len(e.stance_min) == 1 and not e.stance_max:
@@ -752,9 +763,9 @@ def geju_tick(state: GameState, content: Content, cal_hours: float, players: int
     （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
     落 geju_calm_per_day（回落不乘係數）。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
     由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1），players 由 advance_world_state 每次推進查一次名冊帶進來。
-    開關關著、劇本沒有割據、或地圖沒有戰線時什麼都不做。"""
+    開關關著、劇本沒有割據、豪強分屬兩軍的季（割據不存在，trend_shown）、或地圖沒有戰線時什麼都不做。"""
     fronts = front_ids(content)
-    if not season_one(content, state.world) or _trend(content, GEJU) is None or not fronts:
+    if not season_one(content, state.world) or not trend_shown(content, state.world, GEJU) or not fronts:
         return
     per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
     per_day = geju_resisted(state, content, per_day)  # 漲的時候照此刻的割據打盡頭阻力（FB-254；方向不變，畫面那一句照舊）
