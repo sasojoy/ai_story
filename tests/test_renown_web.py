@@ -1,6 +1,7 @@
 """名聲的畫面（名聲設計十一之二：1B、2C、3B、4B、5B、6B）：餵真的引擎資料給 app.js（tests/test_prologue_web.py 的假瀏覽器）。"""
 import copy
 import random
+import re
 
 import pytest
 from conftest import real_content
@@ -99,6 +100,29 @@ def test_option_tag_and_note(m):
     page = run(m, "return H.pageJianghu();")
     assert '<span class="k rn-tag rn-xia">俠</span>' in page and '<small class="opt-note">合你行俠的路數</small>' in page
     assert '<span class="k">2</span>' in page
+
+
+def test_a_greyed_virtue_choice_keeps_its_reason_in_the_title_and_says_it_on_tap(m):
+    """企劃者 2026-10-16 選 (c)：第一屏放不下時灰掉的俠寇鈕底下那一行原因收掉（FB-107 第 10 步），原因放在鈕的 title，點了說整句——
+    所以那一顆不用 disabled（按不下去的鈕點了沒反應），改成 aria-disabled、點了只跳原因、不送選擇。"""
+    why = "要江湖遊俠才做得來"
+    m["options"] = [
+        {"id": "choice:0", "label": "替鄉民付了錢", "enabled": False, "wait": "", "confirm": "", "confirm_yes": "", "tag": "俠", "note": why},
+        {"id": "choice:1", "label": "乖乖交錢", "enabled": False, "wait": "", "confirm": "", "confirm_yes": "", "tag": "", "note": ""},
+    ]
+    page = run(m, "return H.pageJianghu();")
+    greyed = page[page.index('data-id="choice:0"') - 120:page.index("替鄉民付了錢")]
+    assert 'data-act="opt-why"' in greyed and f'data-why="{why}"' in greyed and f'title="{why}"' in greyed
+    assert 'aria-disabled="true"' in greyed and " disabled" not in greyed.replace("aria-disabled", "")
+    assert re.search(r'class="btn\s+off"', greyed)
+    plain = page[page.index('data-id="choice:1"') - 80:page.index("乖乖交錢")]
+    assert 'data-act="choose"' in plain and "disabled" in plain and "opt-why" not in plain  # 沒有原因的灰鈕照舊
+    out = run(m, """return (async () => {
+  await T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: "opt-why", why: %r, id: "choice:0" },
+    classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });
+  return { toast: T.els.toast.textContent, calls: T.calls.map((c) => c[0]) };
+})();""" % why)
+    assert out["toast"] == why and not any("/api/choose" in c for c in out["calls"])
 
 
 def test_the_gold_tag_opens_the_renown_card(m):

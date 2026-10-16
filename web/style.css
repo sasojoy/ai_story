@@ -393,6 +393,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 9. 一組選項（事件、有所感的做法）：縫 8→6、鈕高 48→44（觸控照樣按得到） */
 .page > .options.fit-tight { gap: 6px; }
 .page > .options.fit-tight > .btn { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
+/* 10. 一組選項還放不下（名聲的俠寇選項讓事件多到六顆，企劃者 2026-10-16 選 (c)）：態勢那一排收起；「剛剛」只留時間與標題
+   （不淡出，「展開全文」看全文，得失照舊在）；灰掉的俠寇鈕底下那一行原因收掉（原因在鈕的 title，點了說整句） */
+.page > .peek.fit-hide { display: none; }
+.now.fit-title:not(.open) .tx-now { max-height: none; -webkit-mask-image: none; mask-image: none; }
+.now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph { display: none; }
+.options > .btn.off .opt-note.fit-hide { display: none; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */
@@ -508,6 +514,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options .btn .k.rn-tag { font: 700 13px var(--serif); }
 .options .btn .k.rn-tag.rn-xia { color: var(--rn-xia); } .options .btn .k.rn-tag.rn-kou { color: var(--rn-kou); }
 .btn .opt-note { display: block; font-size: 11.5px; font-weight: 400; color: var(--ink-2); line-height: 1.3; margin-top: 1px; }
+/* 灰掉的俠寇鈕（企劃者 2026-10-16）：不用 disabled（按不下去的鈕點了沒反應），看起來同 .btn:disabled，點了只跳原因（app.js 的 opt-why） */
+.options > .btn.off { opacity: 0.45; cursor: default; }
+.options > .btn.off:active { transform: none; }
 /* 有所感做法底下的兩行小字（explain-2）：跟行動列底下那幾行同一個樣子，排在做法後面 */
 .act-notes.sense-notes { margin-top: -4px; }
 /* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
