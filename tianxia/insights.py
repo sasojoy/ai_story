@@ -67,19 +67,33 @@ def for_cultivation(state: GameState, content: Content, world: WorldStateStore, 
     return found[0] if found else None
 
 
-def learn(state: GameState, content: Content, world: WorldStateStore, insight_id: str | None) -> list[str]:
+def strong_of(loc: Location | None, content: Content) -> str | None:
+    """這一處最濃的意境 id（意境提示設計第一節）：開關關著、沒有地點、沒寫、或寫的已經悟不到（內容驗過，保險）都是 None。
+    最濃的好處都問這一個：感悟擲中的門檻（sensing.rate）、悟到時的心得與那一句（learn）、輿圖的底圖（mapdata.base）。"""
+    if loc is None or not content.config.insight_strong.enabled or loc.insight_strong is None:
+        return None
+    return loc.insight_strong if loc.insight_strong in explore_gives(loc, content) else None
+
+
+def learn(
+    state: GameState, content: Content, world: WorldStateStore, insight_id: str | None, at: Location | None = None,
+) -> list[str]:
     """悟得一個意境（探索、奇遇、名聲）。已經會的化成心得（設計 3.2.2）。上限不擋：超過上限的人照樣悟得，
-    只是在熔回上限以內之前不能合成、合併（設計 4.5）。"""
+    只是在熔回上限以內之前不能合成、合併（設計 4.5）。at 是在哪裡悟的（探索才給）：悟到的正是那裡最濃的一種，
+    前面多一句它的 strong_line、已經會的化成 Config.insight_strong.duplicate_xinde（意境提示設計第二節）。"""
     insight = resolve(insight_id, content, world, state)
     if insight is None:
         return []
     p = state.player
+    strong = strong_of(at, content) == insight.id
+    d = content.insights.get(insight.id)
+    lead = [d.strong_line] if strong and d is not None and d.strong_line else []
     if insight.id in p.insights:
-        amount = content.config.duplicate_insight_xinde
+        amount = content.config.insight_strong.duplicate_xinde if strong else content.config.duplicate_insight_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
-        return [f"你又悟到一次「{insight.name}」，這份體會化成了心得。", f"心得 +{amount}"]
+        return lead + [f"你又悟到一次「{insight.name}」，這份體會化成了心得。", f"心得 +{amount}"]
     p.insights.append(insight.id)
-    return [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
+    return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
 
 
 GRANT_LINES = {"good": "你行俠日久，胸中多了一股{name}之氣。", "evil": "你橫行日久，胸中多了一股{name}之氣。"}  # 名聲 5.1，待 joy 潤

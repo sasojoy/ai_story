@@ -7,7 +7,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from . import atlas, bounties, calendar, equipment, figures, mapart, mapview, mounts, orders, rules, territory, timetable
+from . import (
+    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, territory, timetable,
+)
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
 
@@ -37,8 +39,19 @@ def base_key(state: GameState, content: Content) -> str:
     return hashlib.sha1(",".join(mapview.open_places(state, content)).encode()).hexdigest()[:12]
 
 
+def insight_pool(loc: Location, content: Content) -> list[str]:
+    """這一處悟得到的意境（意境提示設計第六節）：照 insights.explore_gives，最濃的排第一；序章草廬走寫死的四景、不抽池子，不列
+    （同 atlas.insight_names）。開關不看：抽屜的「此地能悟」是補漏。"""
+    if loc.prologue_only:
+        return []
+    gives = insights.explore_gives(loc, content)
+    strong = insights.strong_of(loc, content)
+    return sorted(gives, key=lambda i: i != strong)
+
+
 def base(state: GameState, content: Content) -> dict:
-    """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。"""
+    """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
+    內容的事實，不是這一刻的狀態，所以放底圖不放疊層）。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -48,6 +61,8 @@ def base(state: GameState, content: Content) -> dict:
         places.append({
             "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": mapview.GLYPHS[mapart.icon_kind(loc)],
             "big": loc.important, "region": region.id if region is not None else None,
+            "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
+            "terrain": next(iter(sensing.terrain_tags(loc)), ""),
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]
     regions = [{
@@ -57,6 +72,8 @@ def base(state: GameState, content: Content) -> dict:
     return {
         "key": base_key(state, content), "w": content.map.width, "h": content.map.height,
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "regions": regions,
+        "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
+        "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
     }
 
 
@@ -201,26 +218,32 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     if not territory.on(content) or w.territory is None:
         return []
     start = w.territory.weeks.get(territory.START_WEEK)
-    out, before = [], (start.control if start is not None else None)  # 第 1 週跟開季那一刻比（FB-264）
+    out, before = [], (_held(w, content, start.control) if start is not None else None)  # 第 1 週跟開季那一刻比（FB-264）
     for week in range(1, now_week + 1):
         snap = territory.week_at(w, week)
         events = _titles(state, content, week, now_week)
         if snap is None:
             out.append({"week": week, "control": None, "ropes": {}, "geju": None, "events": events, "changed": []})
             continue
+        control = _held(w, content, snap.control)
         changed = [] if before is None else [
-            {"id": loc, "from": before.get(loc), "to": side} for loc, side in snap.control.items() if before.get(loc) not in (None, side)
+            {"id": loc, "from": before.get(loc), "to": side} for loc, side in control.items() if before.get(loc) not in (None, side)
         ]
-        out.append({"week": week, "control": dict(snap.control), "ropes": _rope_values(snap, ropes), "geju": snap.geju,
+        out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes), "geju": snap.geju,
                     "events": events, "changed": changed})
-        before = snap.control
+        before = control
     return out
 
 
-def _start_control(world: WorldState) -> dict[str, str] | None:
+def _held(world: WorldState, content: Content, control: dict[str, str]) -> dict[str, str]:
+    """快照裡的控制方拿掉不算誰的地盤的大本營（territory.unheld；FB-274：修好之前的快照記著豪強佔著自己的投靠點）。"""
+    return {loc: side for loc, side in control.items() if not territory.unheld(world, content, loc)}
+
+
+def _start_control(world: WorldState, content: Content) -> dict[str, str] | None:
     """開季那一刻的控制方（territory.START_WEEK）；中途上線、還沒算過是 None。"""
     start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
-    return dict(start.control) if start is not None else None
+    return _held(world, content, start.control) if start is not None else None
 
 
 def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
@@ -341,6 +364,6 @@ def state(
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
-        "start": _start_control(w) if on else None,
+        "start": _start_control(w, c) if on else None,
         "weeks": _weeks(s, c, now_week, ropes),
     }

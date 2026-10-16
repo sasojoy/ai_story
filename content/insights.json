@@ -1,6 +1,7 @@
 [
   {
     "id": "feng",
+    "strong_line": "此地風勢最勁。",
     "name": "風",
     "attribute": "快",
     "lean": "無",
@@ -8,6 +9,7 @@
   },
   {
     "id": "huo",
+    "strong_line": "此地火勢最旺。",
     "name": "火",
     "attribute": "剛",
     "lean": "無",
@@ -15,6 +17,7 @@
   },
   {
     "id": "shui",
+    "strong_line": "此地水氣最濃。",
     "name": "水",
     "attribute": "柔",
     "lean": "無",
@@ -22,6 +25,7 @@
   },
   {
     "id": "shan",
+    "strong_line": "此地山氣最沉。",
     "name": "山",
     "attribute": "慢",
     "lean": "無",

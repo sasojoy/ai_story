@@ -21,6 +21,7 @@
       "城鎮",
       "醫館"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -43,6 +44,7 @@
       "rou_1",
       "man_1"
     ],
+    "insight_strong": "shui",
     "insights": [
       "shui"
     ],
@@ -74,6 +76,7 @@
       "gang_1",
       "kuai_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng"
     ]
@@ -111,6 +114,7 @@
       "gang_2",
       "gang_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo",
       "feng"
@@ -146,6 +150,7 @@
       "kuai_1",
       "gang_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng"
     ]
@@ -177,6 +182,7 @@
       "馬市",
       "醫館"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -203,8 +209,10 @@
       "man_1",
       "rou_1"
     ],
+    "insight_strong": "shui",
     "insights": [
-      "shan"
+      "shan",
+      "shui"
     ]
   },
   {
@@ -226,6 +234,7 @@
     "tags": [
       "官署"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -243,6 +252,7 @@
     "tags": [
       "官署"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -269,6 +279,7 @@
       "man_2",
       "kuai_1"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan",
       "feng"
@@ -300,6 +311,7 @@
       "kuai_1",
       "gang_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "shui",
       "feng"
@@ -333,6 +345,7 @@
       "kuai_1",
       "rou_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng",
       "huo"
@@ -364,6 +377,7 @@
       "gang_2",
       "man_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -392,6 +406,7 @@
       "rou_1",
       "man_1"
     ],
+    "insight_strong": "shui",
     "insights": [
       "shui"
     ]
@@ -413,6 +428,7 @@
     "tags": [
       "城鎮"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -446,6 +462,7 @@
       "kuai_1",
       "gang_1"
     ],
+    "insight_strong": "shan",
     "insights": [
       "feng",
       "shan"
@@ -467,6 +484,7 @@
       "城鎮",
       "醫館"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -484,6 +502,7 @@
     "tags": [
       "城鎮"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -512,6 +531,7 @@
       "man_1",
       "gang_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng",
       "shan"
@@ -541,6 +561,7 @@
       "rou_1",
       "kuai_1"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan"
     ]
@@ -559,6 +580,7 @@
     "tags": [
       "書院"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -591,6 +613,7 @@
       "man_2",
       "rou_2"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan",
       "shui"
@@ -618,6 +641,7 @@
       "man_2",
       "kuai_2"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan"
     ]
@@ -644,6 +668,7 @@
       "gang_1",
       "rou_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -665,6 +690,7 @@
     "tags": [
       "城鎮"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -682,6 +708,7 @@
     "tags": [
       "莊院"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -715,6 +742,7 @@
       "man_1",
       "kuai_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng"
     ]
@@ -744,6 +772,7 @@
       "gang_1",
       "man_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo",
       "shan"
@@ -774,6 +803,7 @@
       "gang_2",
       "kuai_2"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo",
       "shan"
@@ -808,6 +838,7 @@
       "馬市",
       "醫館"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -833,6 +864,7 @@
       "gang_1",
       "kuai_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -854,6 +886,7 @@
     "materials": [
       "rou_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "feng"
     ]
@@ -875,6 +908,7 @@
     "enemies": [
       "yiyong"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -908,6 +942,7 @@
       "rou_1",
       "man_1"
     ],
+    "insight_strong": "shui",
     "insights": [
       "shui",
       "feng"
@@ -941,6 +976,7 @@
       "kuai_1",
       "man_2"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan",
       "huo"
@@ -980,6 +1016,7 @@
     "materials": [
       "rou_2"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -1015,6 +1052,7 @@
       "gang_2",
       "kuai_2"
     ],
+    "insight_strong": "shui",
     "insights": [
       "huo",
       "shui"
@@ -1048,6 +1086,7 @@
     "materials": [
       "gang_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo"
     ]
@@ -1084,6 +1123,7 @@
       "man_1",
       "gang_1"
     ],
+    "insight_strong": "huo",
     "insights": [
       "huo",
       "feng"
@@ -1110,6 +1150,7 @@
     "materials": [
       "man_1"
     ],
+    "insight_strong": "shan",
     "insights": [
       "shan"
     ]
@@ -1153,6 +1194,7 @@
       "rou_1",
       "kuai_1"
     ],
+    "insight_strong": "feng",
     "insights": [
       "shui",
       "feng"
@@ -1207,6 +1249,7 @@
       "feng",
       "shan"
     ],
+    "insight_strong": "shan",
     "unlock_flag": "綠林開寨"
   }
 ]

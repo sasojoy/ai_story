@@ -17,12 +17,16 @@ ALLY_PREFIX = "faction:ally:"  # 選邊鈕（Game._ally_options）
 CAP_RANK = 3  # 企劃者 2026-10-15：「純官軍或者純黃巾才有辦法升到最高軍階，豪強版的只能升到三階」
 # 新寫的字（joy 10/15：這種句子由 AI 產生）
 ALLY_LABEL = "{faction}（依附{ally}）"  # 狀態列、玩家卡、確認畫面
+ALLY_SHORT = "{faction}・依附{ally}"  # 「此地還有」名字後面的括號裡（FB-275：括號裡不再套括號）
 ALLY_COUNT = "（其中{short} {n} 人）"  # 名冊那一句（企劃者第 3 題甲）
 ALLY_PICK = "地方豪強這一季要依附官軍或黃巾其中一邊，算那一邊的人：決戰、地盤、出陣、軍令、貢獻都照那一邊。{counts}。挑一邊。"
 ALLY_AFTER_SECT = "拜入之後，先挑依附哪一邊，才算入了夥：決戰、地盤、出陣、軍令、貢獻都照那一邊。{counts}。"
 ALLY_BUTTON = "依附{ally}（目前 {n} 人）"
 ALLY_DONE = "你依附了{ally}。"
 ALLY_FIRST = "先挑依附哪一邊，才能安排前往"
+# 選邊那一刻人已經在決戰的參戰名單上（先臨時投效了另一邊，FB-273）：集結時跟著換過去，開打了照決戰的規則不能改投、這一場照舊
+ALLY_REJOINED = "{battle}的集結名單上，你也跟著換到{ally}那一邊。"
+ALLY_STAYS = "{battle}已經開打，這一場你照舊站在{old}那一邊；打完這一場才算{ally}的人。"
 
 
 def on(content: Content, world: WorldState) -> bool:
@@ -113,6 +117,16 @@ def label_of(state: GameState, content: Content) -> str:
     """這個人此刻的陣營名號：依附的季寫依附哪一軍（label），其他季是陣營名；散人是空字串。"""
     p = state.player
     return label(content, p.faction, p.ally if on(content, state.world) else None)
+
+
+def side_text(state: GameState, content: Content) -> str:
+    """「此地還有」名字後面括號裡那一個（social.side）：依附的季寫「地方豪強・依附官軍」（FB-275：看得出是哪一邊的人），
+    其他季、其他人是陣營名；散人是空字串。"""
+    p = state.player
+    name = content.scenario.faction_name(p.faction, "") or ""
+    if p.ally and name and on(content, state.world):
+        return ALLY_SHORT.format(faction=name, ally=content.scenario.faction_name(p.ally, p.ally))
+    return name
 
 
 def short_name(faction: FactionDef) -> str:

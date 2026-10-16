@@ -2264,3 +2264,37 @@ def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_pa
     assert "act:explore" in seen and any(oid.startswith("move:") for oid in seen)
     stray = {oid for oid in seen if not allow_known(oid)}
     assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"
+
+
+# ── 意境提示：每個地點最濃的意境（意境提示設計第三節，企劃者 10/15 守「渡口是風」）──
+STRONG_RULE = {"河畔": "shui", "渡口": "feng", "山林": "shan", "營寨": "huo", "城鎮": "huo"}
+STRONG_EXCEPTIONS = {"guangzong"}  # 城池營寨：冀州悟得到水的只有這裡
+
+
+def test_every_basic_insight_is_strongest_in_five_places_in_every_region(content):
+    from tianxia import atlas
+
+    regions: dict[str, set[str]] = {}
+    count: dict[str, int] = {}
+    for loc in content.locations.values():
+        if loc.insight_strong:
+            count[loc.insight_strong] = count.get(loc.insight_strong, 0) + 1
+            regions.setdefault(loc.insight_strong, set()).add(atlas.region_of(content, loc.id).id)
+    every = set().union(*regions.values())
+    basics = [i for i, d in content.insights.items() if d.grant is None]
+    assert sorted(count) == sorted(basics)
+    for i in basics:
+        assert count[i] >= 5 and regions[i] == every, (i, count[i], sorted(regions[i]))
+
+
+def test_the_strongest_follows_the_terrain(content):
+    for loc in content.locations.values():
+        tag = next((t for t in loc.tags if t in STRONG_RULE), None)
+        if tag is None or loc.id in STRONG_EXCEPTIONS:
+            continue
+        assert loc.insight_strong == STRONG_RULE[tag], (loc.id, tag, loc.insight_strong)
+
+
+def test_luoyang_gets_its_water_at_the_white_horse_temple(content):
+    assert content.locations["baima_temple"].insights == ["shan", "shui"]
+    assert content.locations["baima_temple"].insight_strong == "shui"

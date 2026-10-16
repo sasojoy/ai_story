@@ -76,6 +76,17 @@ def test_the_greenwood_fort_opens_with_the_season_only_when_lessons_are_on():
     assert not atlas.is_unlocked(off.locations["lulin_zhai"], h.state, off)
 
 
+def test_the_greenwood_fort_is_strongest_in_mountain():
+    """FB-295：意境提示（main 的第四塊）規定悟得到意境的地點都要寫最濃的那一種。綠林山寨是山林（意境提示設計：山上是山），
+    悟得到風與山，最濃是山；這裡用得到的有所感場景線索指得到慢（山）。"""
+    from tianxia.insights import scenes_for
+
+    c = real_content("weekend")
+    fort = c.locations["lulin_zhai"]
+    assert fort.insight_strong == "shan" and c.insights["shan"].strong_line
+    assert any("慢" in scene.hints for scene in scenes_for(fort, c))
+
+
 def test_the_virtue_perks_name_the_lessons():
     c = real_content("weekend")
     assert "潁川書院教守義劍" in renown.virtue_perks(c, "俠", 1) and "潁川書院教養浩訣" in renown.virtue_perks(c, "俠", 2)

@@ -97,3 +97,24 @@ def test_a_signature_art_melts_without_the_free_cheng():
     p.art_levels["liubei_wugong"] = start + 2
     spent = sum(team.practice_price(content, n) for n in range(start, start + 2))
     assert library.melt_value(game.state, content, game.world, "liubei_wugong") == int(spent * content.config.melt_refund_ratio)
+
+
+def test_a_signature_art_cannot_be_melted():
+    """Joy 2026-10-16「本命應該要不能熔掉」：單門、批量都擋，修練頁那一列灰掉寫原因，機器人熔最弱的那門也不挑它。"""
+    from tianxia import bot
+
+    content, game = _game()
+    p = game.state.player
+    p.arts.append("liubei_wugong")
+    p.art_levels["liubei_wugong"] = content.config.signature_arts.start_level
+    xinde = p.stats.get("xinde", 0)
+    assert library.melt_art(game.state, content, game.world, "liubei_wugong") == [library.SIGNATURE_KEPT]
+    assert library.melt_many(game.state, content, game.world, ["liubei_wugong"], [])[0] == library.MELT_MANY_NOTHING
+    assert "liubei_wugong" in p.arts and p.stats.get("xinde", 0) == xinde
+    row = next(r for r in skillview.art_rows(game.state, content, game.world) if r["id"] == "liubei_wugong")
+    assert row["melt"]["ok"] is False and row["melt"]["note"] == library.SIGNATURE_KEPT
+    others = [a for a in p.arts if a != "liubei_wugong"]
+    for a in others:  # 庫裡只剩本命時，機器人什麼都不熔
+        p.arts.remove(a)
+    bot.melt_the_weakest(game)
+    assert "liubei_wugong" in p.arts

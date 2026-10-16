@@ -172,11 +172,17 @@ def melt_refund(
     return max(minimum, int(spent * cfg.melt_refund_ratio)) + bonus
 
 
-def melt_problem(state: GameState, art_id: str, name: str | None = None, only: str | None = None) -> str | None:
+SIGNATURE_KEPT = "本命武學是那位人物親傳的，熔不得。"  # Joy 2026-10-16「本命應該要不能熔掉」
+
+
+def melt_problem(
+    state: GameState, art_id: str, name: str | None = None, only: str | None = None, content: Content | None = None,
+) -> str | None:
     """熔不掉的原因；None＝可以熔。熔煉鈕亮不亮（skillview.art_rows）與 melt_art 的拒絕走同一個判斷，
     兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。
     only：序章（新手引導計畫一）只准熔師父說的那一門，空字串是這一步一門都不准熔；None＝不限。
-    由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。"""
+    由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。
+    content 給了才認得本命武學（signature.is_signature）：本命熔不得（Joy 2026-10-16），拿去當底合成照舊可以。"""
     if only is not None and art_id != only:
         return "師父沒叫你熔這一門。"
     p = state.player
@@ -184,6 +190,8 @@ def melt_problem(state: GameState, art_id: str, name: str | None = None, only: s
         return "身上正在練的不能熔，先改練別的。"
     if art_id not in p.arts:
         return "你的功法庫裡沒有這一門。"
+    if content is not None and signature.is_signature(content, art_id):
+        return SIGNATURE_KEPT
     if art_id == p.naming:
         # 練成絕學、等著定名的那門：熔了，讀檔清理會把取名權（p.naming）丟掉，而全服的第一人登記還在，
         # 那門就永遠沒有人替它定名
@@ -241,7 +249,7 @@ def melt_art(
 ) -> list[str]:
     p = state.player
     art = team.player_art(state, content, world, art_id)
-    problem = melt_problem(state, art_id, art.name if art else art_id, only=only)
+    problem = melt_problem(state, art_id, art.name if art else art_id, only=only, content=content)
     if problem is not None:
         return [problem]
     refund = melt_value(state, content, world, art_id)
@@ -279,7 +287,7 @@ def melt_many(
     for art_id in arts:
         art = team.player_art(state, content, world, art_id)
         name = art.name if art else art_id
-        problem = melt_problem(state, art_id, name)
+        problem = melt_problem(state, art_id, name, content=content)
         if problem is not None:
             skipped.append(f"【{name}】沒熔：{problem}")
             continue

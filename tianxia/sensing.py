@@ -122,23 +122,32 @@ def _tier(n: int) -> int:
     return 0 if n <= 0 else 1 if n <= 2 else 2 if n <= 9 else 3
 
 
-def rate(state: GameState, content: Content, loc: Location) -> int:
+def rate(state: GameState, content: Content, loc: Location, method: str | None = None) -> int:
     """選對做法之後進入感悟狀態的成功率（%）：七成，悟性每點 ±3%，夾在 40～95；再加這一處的痕跡（每檔 +3%，最多 +9%）。
-    卡上不寫這個數字（Q4：只有場景線索，不寫成算）。"""
+    method 是選的做法的屬性：等於這一處最濃那一種的屬性時，基本值再加 Config.insight_strong.sense_points（意境提示設計第二節），
+    跟寶物一樣夾在上限。卡上不寫這個數字（Q4：只有場景線索，不寫成算）。"""
     cfg = content.config
     wis = state.player.stats.get("wis", 5)
     low, high = cfg.sense_rate_range
     base = min(max(cfg.sense_rate + (wis - 5) * cfg.sense_rate_per_wis, low), high)
     if cfg.explore_modes.enabled and treasures.amount(state, content, "insight") > 1:  # 寶物「探索悟意境」（出陣探索與地盤設計 3.3）
         base = min(high, base + cfg.explore_modes.sense_treasure_points)
+    strong = insights.strong_of(loc, content)
+    if method is not None and strong is not None and content.insights[strong].attribute == method:
+        base = min(high, base + cfg.insight_strong.sense_points)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
 
 
+def terrain_tags(loc: Location) -> list[str]:
+    """地點標籤裡的地形（河畔、城鎮……）：設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG）不是地形，不算。
+    有所感標題的括號與輿圖抽屜名字旁的地形（意境提示設計第五節）共用。"""
+    return [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館")]
+
+
 def place_tags(scene: InsightScene, loc: Location) -> str:
-    """標題後面括號裡的地形：這一處的地點標籤（河畔、城鎮……；「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。
-    設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG）不是地形，不寫。"""
-    tags = [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館")]
+    """標題後面括號裡的地形：這一處的地點標籤（「哪裡悟得到什麼看地形」）。序章草廬不寫；沒有標籤是空字串。"""
+    tags = terrain_tags(loc)
     return "" if scene.prologue or not tags else f"（{'、'.join(tags)}）"
 
 
@@ -214,7 +223,7 @@ def choose(state: GameState, content: Content, index: int, rng: random.Random) -
         p.sensing = None
         p.sense_misses[loc.id] = game_day(content, state.world)
         return msgs + [_until(MISS_LINE, MISS_LINE_SEASON, MISS_LINE_LATER, state, content)]
-    if rng.random() * 100 >= rate(state, content, loc):
+    if rng.random() * 100 >= rate(state, content, loc, method.attribute):
         p.sensing = None
         amount = content.config.sense_miss_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
@@ -345,7 +354,7 @@ def finish(
     # 玩家面前不寫筆畫的幾何（企劃者 2026-10-06）：畫了只說畫了，那一筆給人的感覺留給意境的說明
     lead = ["你一筆畫下心中的形。"] if req.raw is not None else ["你沒有去抓它，任那份感覺自己沉下來。"]
     if base is not None:
-        return lead + insights.learn(state, content, world, base), None, False
+        return lead + insights.learn(state, content, world, base, at=loc), None, False
     if proposed is None and client is not None:
         got_name, got_note, _ = insight_llm.name(client, content, req.facts, person=world.is_character_name)
         proposed = (got_name, got_note)

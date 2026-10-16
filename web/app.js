@@ -107,6 +107,8 @@
     libFilter: null, // 修練頁功法庫的篩選：all／武學／內功／ready（可修練）；武學多時才出現。null＝還沒讀過這個瀏覽器記的（libFilter()，FB-085）
     libAll: false, // 功法庫列完了沒（武學多時先只列 LIB_PAGE 門）
     meltSel: null, // 批量熔煉勾著的 { arts, ins }（id 串列）；null＝沒在勾
+    meltView: null, // 批量熔煉的篩選與排序 { kind, attr, quality, gen, rank, weak, sort }（meltView()）；只記在這一頁
+    meltOpen: null, // 批量熔煉攤開細節的那一列（「arts:id」「ins:id」）
     meltNote: null, // 批量熔煉的結果（伺服器的 message HTML），寫在功法庫標題底下；下一個修練頁動作就清掉
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
@@ -2315,22 +2317,11 @@
 
   // 熔煉的問句（W9、FB-081）：整句由伺服器寫好、放在按鈕的 data-confirm（library.melt_confirm：有心得就寫退回多少，沒有就直說
   // 只空出一格；基礎武學再接一句去哪裡重學，只說一次）。伺服器沒給（舊版）才用這句老問題
-  // 批量熔煉（修練頁功法庫）：勾、一鍵照品質勾、確認之後一次送出
+  // 批量熔煉（修練頁功法庫）：勾、勾選篩出來的全部（meltPickShown）、確認之後一次送出
   function meltToggle(key, id) {
     if (!S.meltSel || !id) return;
     const list = S.meltSel[key];
     S.meltSel = { ...S.meltSel, [key]: list.includes(id) ? list.filter((v) => v !== id) : [...list, id] };
-    renderPage();
-  }
-  function meltQuality(q) {
-    if (!S.meltSel || !S.menxia) return;
-    // 跟畫面上那一排一樣：功法庫（身上以外的）、照目前的篩選、熔得掉的
-    const lib = S.menxia.owned_arts.filter((a) => !a.worn);
-    const filter = lib.length > LIB_PAGE ? libFilter() : "all";
-    const pass = (a) => filter === "all" || (filter === "ready" ? a.cultivate.ok : a.kind === filter);
-    const ids = lib.filter((a) => pass(a) && a.melt.ok && a.quality === q).map((a) => a.id);
-    const all = ids.every((id) => S.meltSel.arts.includes(id));
-    S.meltSel = { ...S.meltSel, arts: all ? S.meltSel.arts.filter((id) => !ids.includes(id)) : [...new Set([...S.meltSel.arts, ...ids])] };
     renderPage();
   }
   function askMeltMany(el) {
@@ -2396,7 +2387,6 @@
   // 功法庫一門一列，點開才攤成同一張卡的內容。武學多（上限 50 門）時庫可以篩選，先只列 LIB_PAGE 門，其餘按「再列 N 門」
   const QUALITY_SEAL = { 下品: ["下", "q1"], 中品: ["中", "q2"], 上品: ["上", "q3"], 絕學: ["絕", "q4"] };
   const LIB_PAGE = 8;
-  const MELT_QUALITIES = ["下品", "中品", "上品", "絕學"];
   const LIB_FILTERS = [["all", "全部"], ["武學", "武學"], ["內功", "內功"], ["ready", "可修練"]];
   const seal = (q, big = false) => {
     const [ch, cls] = QUALITY_SEAL[q] || ["？", "q1"];
@@ -2437,6 +2427,126 @@
     S.libFilter = value;
     S.libAll = false; // 換一類，「再列 N 門」從頭算
     try { localStorage.setItem(LIB_FILTER_KEY, value); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+
+  // ── 批量熔煉的判斷資料、篩選與排序（企劃者 2026-10-16「批量分解的時候無法判斷武學或內功意境的好壞……甚至是能篩選條件」）──
+  // 勾的時候武學、內功、意境排成同一張清單（meltItems）：每一列寫判斷好壞要的（威力、比身上強弱、境界、功效、絕招；意境寫幾重、圓融駁雜、正邪）
+  // 與熔了退多少心得，點右邊的 ▾ 攤開細節。篩選與排序只記在這一頁（S.meltView），不存瀏覽器
+  const MELT_SORTS = [["", "原本的順序"], ["power", "威力低的在前"], ["quality", "品質低的在前"], ["value", "心得多的在前"]];
+  const MELT_RANKS = ["", "一重", "二重", "三重", "四重", "五重"];
+  const MELT_NO_GEN = "未合成"; // 境界是空字串（基礎、內容寫的武學）時篩選上寫的字
+  function meltView() {
+    S.meltView = S.meltView || { kind: "", attr: "", quality: "", gen: "", rank: "", weak: false, sort: "" };
+    return S.meltView;
+  }
+  // 功法庫（身上以外的）與意境排成一份；伺服器沒給 judge（舊版）時那幾欄空著
+  function meltItems(x) {
+    const arts = x.owned_arts.filter((a) => !a.worn).map((a) => {
+      const j = a.judge || {};
+      return { t: "arts", id: a.id, name: a.name, kind: a.kind, attr: a.attribute, quality: a.quality, gen: a.gen || "", rank: 0,
+        ok: !!a.melt.ok, why: a.melt.ok ? "" : a.melt.note || "", value: a.melt.value | 0, power: typeof j.power === "number" ? j.power : null,
+        diff: typeof j.worn_diff === "number" ? j.worn_diff : null, j, a };
+    });
+    const ins = x.insights.map((i) => ({ t: "ins", id: i.id, name: i.name, kind: "意境", attr: i.attribute, quality: "", gen: "",
+      rank: i.rank | 0 || (MELT_RANKS.indexOf(String(i.depth || "").split("・")[0]) > 0 ? MELT_RANKS.indexOf(String(i.depth).split("・")[0]) : 0),
+      ok: !i.blocked, why: i.blocked || "", value: i.melt | 0, power: null, diff: null, i }));
+    return [...arts, ...ins];
+  }
+  function meltPass(it, v) {
+    return (!v.kind || it.kind === v.kind) && (!v.attr || it.attr === v.attr) && (!v.quality || it.quality === v.quality)
+      && (!v.gen || (it.t === "arts" && (it.gen || MELT_NO_GEN) === v.gen)) && (!v.rank || it.rank === Number(v.rank))
+      && (!v.weak || (it.diff !== null && it.diff < 0));
+  }
+  // 篩出來的、照排序排好；沒有那一項的（意境沒有威力、品質）排在最後，其餘照原本的順序（伺服器排好的）
+  function meltShown(x) {
+    const v = meltView();
+    const list = meltItems(x).filter((it) => meltPass(it, v));
+    const key = v.sort === "power" ? (it) => it.power : v.sort === "quality" ? (it) => (it.quality ? QUALITY_RANK[it.quality] * 10 + (it.quality === "絕學" ? 1 : 0) : null)
+      : v.sort === "value" ? (it) => -it.value : null;
+    if (!key) return list;
+    return list.map((it, n) => [it, key(it), n]).sort((p, q) => (p[1] === null) - (q[1] === null) || (p[1] === null ? 0 : p[1] - q[1]) || p[2] - q[2]).map((p) => p[0]);
+  }
+  // 「勾選篩出來的全部」：篩出來、熔得掉的全勾；都已經勾了再按一次全部取消
+  function meltPickShown() {
+    if (!S.meltSel || !S.menxia) return;
+    const shown = meltShown(S.menxia).filter((it) => it.ok);
+    const all = shown.length && shown.every((it) => S.meltSel[it.t].includes(it.id));
+    const next = { ...S.meltSel };
+    for (const t of ["arts", "ins"]) {
+      const ids = shown.filter((it) => it.t === t).map((it) => it.id);
+      next[t] = all ? next[t].filter((id) => !ids.includes(id)) : [...new Set([...next[t], ...ids])];
+    }
+    S.meltSel = next;
+    renderPage();
+  }
+  // 篩選一格一個下拉（375 寬兩欄排）：只有兩種以上的值才畫；已經選了的那一格照畫，才改得回來
+  function meltFilterHtml(x) {
+    const v = meltView(), items = meltItems(x);
+    const vals = (f) => [...new Set(items.map(f).filter((s) => s !== "" && s !== null))];
+    const qrank = (q) => (QUALITY_RANK[q] || 0) * 10 + (q === "絕學" ? 1 : 0);
+    const cells = [
+      ["kind", "種類", vals((it) => it.kind).sort((a, b) => ["武學", "內功", "意境"].indexOf(a) - ["武學", "內功", "意境"].indexOf(b)).map((k) => [k, k])],
+      ["attr", "屬性", vals((it) => it.attr).sort().map((a) => [a, `屬${a}`])],
+      ["quality", "品質", vals((it) => it.quality).sort((a, b) => qrank(a) - qrank(b)).map((q) => [q, q])],
+      ["gen", "境界", vals((it) => (it.t === "arts" ? it.gen || MELT_NO_GEN : "")).sort((a, b) => ["未合成", "初成", "精進", "化境"].indexOf(a) - ["未合成", "初成", "精進", "化境"].indexOf(b)).map((g) => [g, g])],
+      ["rank", "重數", vals((it) => (it.t === "ins" && it.rank ? it.rank : "")).sort().map((r) => [String(r), MELT_RANKS[r] || `${r}重`])],
+    ].filter(([key, , opts]) => opts.length > 1 || v[key]);
+    const sel = (key, label, opts) => `<label><span>${label}</span><select class="input" data-act="melt-view" data-key="${key}" aria-label="${label}">
+      <option value="">全部</option>${opts.map(([val, text]) => `<option value="${esc(val)}"${v[key] === val ? " selected" : ""}>${esc(text)}</option>`).join("")}</select></label>`;
+    const weak = items.some((it) => it.diff !== null);
+    return `<div class="melt-filter">${cells.map(([key, label, opts]) => sel(key, label, opts)).join("")}
+      <label><span>排序</span><select class="input" data-act="melt-view" data-key="sort" aria-label="排序">${MELT_SORTS.map(([val, text]) =>
+        `<option value="${val}"${v.sort === val ? " selected" : ""}>${text}</option>`).join("")}</select></label>
+      ${weak || v.weak ? `<button type="button" class="fchip melt-weak${v.weak ? " on" : ""}" data-act="melt-weak" aria-pressed="${!!v.weak}">只看比身上弱的</button>` : ""}</div>`;
+  }
+  const meltNum = (n) => (n > 0 ? `+${n}` : String(n).replace("-", "−"));
+  // 一列：左邊勾＋品質印＋名字、判斷的一行、幾個小籤；右邊心得與攤開鈕。熔不掉的灰掉、原因寫在籤那一行
+  function meltRowHtml(it, on, open) {
+    const act = it.t === "arts" ? "melt-pick" : "melt-pick-ins";
+    const mark = it.t === "arts" ? seal(it.quality) : '<span class="qseal qi">意</span>';
+    let sub, tags = [];
+    if (it.t === "arts") {
+      const j = it.j;
+      sub = [it.kind, `屬${it.attr}`, it.gen, `${it.a.level}成`, it.power !== null ? `威力 ${it.power}` : ""].filter(Boolean);
+      if (it.diff !== null) tags.push(it.diff > 0 ? `<i class="up">比身上強 ${meltNum(it.diff)}</i>` : it.diff < 0 ? `<i class="down">比身上弱 ${meltNum(it.diff)}</i>` : "<i>跟身上一樣</i>");
+      if (j.tactic) tags.push(`<i class="hi">本命戰法</i>`);
+      if (j.ultimate) tags.push(`<i class="hi">絕招</i>`);
+      const tr = j.traits || [];
+      tr.slice(0, 2).forEach((t) => tags.push(`<i>${esc(t.name)}${t.layers > 1 ? t.layers : ""}</i>`));
+      if (tr.length > 2) tags.push(`<i>+${tr.length - 2}</i>`);
+      if (j.special) tags.push(`<i class="hi">${esc(j.special)}</i>`);
+    } else {
+      const i = it.i;
+      sub = ["意境", `屬${it.attr}`, ...String(i.depth || "").split("・"), i.lean && i.lean !== "無" ? i.lean : ""].filter(Boolean);
+    }
+    if (!it.ok) tags = [`<i class="why">${esc(it.why)}</i>`];
+    const key = `${it.t}:${it.id}`;
+    return `<div class="mrow${on ? " on" : ""}${it.ok ? "" : " off"}">
+      <button class="mpick pick${on ? " on" : ""}" data-act="${act}" data-id="${esc(it.id)}" ${it.ok ? "" : "disabled"} aria-pressed="${on}">
+        <i class="tick" aria-hidden="true"></i>${mark}<span class="txt"><b>${esc(it.name)}</b><small>${sub.map((w) => `<span>${esc(w)}</span>`).join("・")}</small>${tags.length ? `<span class="tags">${tags.join("")}</span>` : ""}</span>
+        <span class="mval">${it.ok ? (it.value > 0 ? `心得<b>${it.value}</b>` : "沒有心得") : ""}</span></button>
+      <button class="mmore${open ? " on" : ""}" data-act="melt-open" data-key="${esc(key)}" aria-expanded="${open}" aria-label="${esc(it.name)}的細節">${open ? "▾" : "›"}</button>
+    </div>${open ? `<div class="mdetail">${meltDetailHtml(it)}</div>` : ""}`;
+  }
+  function meltDetailHtml(it) {
+    const lines = [];
+    if (it.t === "arts") {
+      const j = it.j, a = it.a;
+      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${it.gen ? `・${esc(it.gen)}` : ""}${a.insight ? `・融「${esc(a.insight)}」` : ""}`);
+      if ((j.traits || []).length) lines.push(`功效：${j.traits.map((t) => `〔${esc(t.name)}〕${t.layers > 1 ? `${t.layers} 層` : ""}`).join("")}`);
+      if (j.special) lines.push(`特別功效〔${esc(j.special)}〕`);
+      if (j.ultimate) lines.push(`絕招〔${esc(j.ultimate)}〕`);
+      if (j.tactic) lines.push(`本命戰法〔${esc(j.tactic)}〕`);
+      if (a.compare) lines.push(esc(a.compare));
+      if (a.relearn) lines.push(esc(a.relearn));
+    } else {
+      const i = it.i;
+      lines.push(["意境", `屬${esc(it.attr)}`, esc(i.depth || ""), i.lean && i.lean !== "無" ? esc(i.lean) : ""].filter(Boolean).join("・"));
+      if (i.note) lines.push(esc(i.note));
+      if (i.own) lines.push(`悟於${esc(i.place || "某處")}・只屬於你`);
+    }
+    lines.push(it.ok ? (it.value > 0 ? `熔了退回心得 ${it.value}` : "熔了沒有心得，只空出一格") : esc(it.why));
+    return lines.map((l) => `<p>${l}</p>`).join("");
   }
 
   // ── 修練頁最上面的人物面板（企劃者 2026-10-12：照她給的人物剪影與版面改一版）──
@@ -2618,7 +2728,6 @@
     // 序章指路：收著的這一列發光，要按的是它裡面的改練、修練、熔煉（要先點開它）。哪一列、哪幾個鍵由伺服器說（a.glow，只有序章裡才有；
     // art_rows 照序章的拒絕算過：改練只有師父點名的那一門、修練、熔煉只有按得下去的），網頁不猜（T7 走查 W-A）
     const libRow = (a) => {
-      if (meltOn) return meltRow(a);
       const todo = ["switch", "cultivate", "melt"].filter((key) => (a.glow || []).includes(key)).join(" ");
       const open = S.artOpen === a.id;
       return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・屬${esc(a.attribute)}${a.gen ? `・${esc(a.gen)}` : ""}・第${a.level}成${a.insight ? `・「${esc(a.insight)}」` : ""}</small></span></button>
@@ -2634,18 +2743,15 @@
       ins: S.meltSel.ins.filter((id) => x.insights.some((i) => i.id === id)),
     } : { arts: [], ins: [] };
     if (meltOn) S.meltSel = sel;
-    const meltRow = (a) => {
-      const on = sel.arts.includes(a.id);
-      return `<button class="art libr pick${on ? " on" : ""}" data-act="melt-pick" data-id="${esc(a.id)}" ${a.melt.ok ? "" : "disabled"} aria-pressed="${on}">
-        <i class="tick" aria-hidden="true"></i>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・第${a.level}成・${a.melt.ok ? esc(a.melt.value > 0 ? `心得 ${a.melt.value}` : "沒有心得") : esc(a.melt.note)}</small></span></button>`;
-    };
-    // 一鍵勾：照品質把這一類（篩選中的）熔得掉的全勾上；再按一次同一顆全部取消
-    const qualityPick = meltOn ? MELT_QUALITIES.filter((q) => picked.some((a) => a.melt.ok && a.quality === q)).map((q) => {
-      const ids = picked.filter((a) => a.melt.ok && a.quality === q).map((a) => a.id);
-      const all = ids.every((id) => sel.arts.includes(id));
-      return `<button class="${all ? "on" : ""}" data-act="melt-quality" data-q="${esc(q)}">${all ? "✓ " : ""}${esc(q)} ${ids.length}</button>`;
-    }).join("") : "";
-    const meltTools = meltOn ? `<div class="melt-tools"><span>全勾</span>${qualityPick}<button data-act="melt-clear">全不勾</button></div>` : "";
+    // 勾的時候：篩選、排序（meltFilterHtml／meltShown）與「勾選篩出來的全部」；清單是武學、內功、意境同一張（meltRowHtml）
+    const shown = meltOn ? meltShown(x) : [];
+    const shownOk = shown.filter((it) => it.ok);
+    const allShown = shownOk.length > 0 && shownOk.every((it) => sel[it.t].includes(it.id));
+    const meltTools = meltOn ? `${meltFilterHtml(x)}<div class="melt-tools"><span>篩出 ${shown.length} 樣</span>
+        ${shownOk.length ? `<button class="${allShown ? "on" : ""}" data-act="melt-shown">${allShown ? "✓ " : ""}勾選篩出來的全部 ${shownOk.length}</button>` : ""}
+        <button data-act="melt-clear">全不勾</button></div>` : "";
+    const meltList = meltOn ? (shown.length ? `<div class="lib mlist">${shown.map((it) => meltRowHtml(it, sel[it.t].includes(it.id), S.meltOpen === `${it.t}:${it.id}`)).join("")}</div>`
+      : '<p class="muted">沒有合這些條件的功法與意境。</p>') : "";
     const meltValue = sel.arts.reduce((sum, id) => sum + ((lib.find((a) => a.id === id) || {}).melt?.value | 0), 0)
       + sel.ins.reduce((sum, id) => sum + ((x.insights.find((i) => i.id === id) || {}).melt | 0), 0);
     const meltCount = sel.arts.length + sel.ins.length;
@@ -2658,9 +2764,7 @@
     }).join("")}</div>` : "";
     // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
     const insOpen = x.insights.find((i) => i.id === S.insOpen);
-    const insChips = x.insights.map((i) => meltOn
-      ? `<button class="pick${sel.ins.includes(i.id) ? " on" : ""}" data-act="melt-pick-ins" data-id="${esc(i.id)}" aria-pressed="${sel.ins.includes(i.id)}"><i class="tick" aria-hidden="true"></i>「${esc(i.name)}」<small>心得 ${i.melt | 0}</small></button>`
-      : `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}${i.depth ? `・${esc(i.depth)}` : ""}</small></button>`).join("");
+    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}${i.depth ? `・${esc(i.depth)}` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），每段先列身上那件、再列裝備庫裡同一欄的。
@@ -2762,17 +2866,17 @@
       ${gearBlock}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>${meltSwitch}</div>
       ${S.meltNote ? `<div class="msg melt-result">${S.meltNote}</div>` : ""}
-      ${meltOn ? '<p class="muted melt-hint">點武學、意境勾起來，再按底下的「熔掉」。身上正在練的熔不掉。</p>' : ""}
-      ${chips}
+      ${meltOn ? `<p class="muted melt-hint">點一列勾起來，再按底下的「熔掉」；點右邊的 › 看細節。身上正在練的與本命武學熔不掉。</p>
       ${meltTools}
+      ${meltList}` : `${chips}
       ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')
         : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
-      ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}
-      <div class="label">意境</div>
+      ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
+      ${meltOn ? "" : `<div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>
         ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
-        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
+        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
@@ -3707,8 +3811,27 @@
   const MAP_HALO = "#F7F1E3";
   const MAP_FAR = 0.62; // 倍率低於它換成「看大局」：只剩點、大區名、三色長條（設計第四節）
   const MAP_STATE_EVERY = 30000; // 輿圖開著時疊層多久重抓一次（毫秒）
-  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤
-  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
+  // ── 意境濾鏡（意境提示設計第四節）：照屬性上色（意境改名也不跑掉）。c 圓盤外框與小圓章、light 圓盤底、dark 深色主題上空心牌子的字
+  const INSIGHT_INK = {
+    快: { c: "#2B8A80", light: "#DDF0EC", dark: "#6CCBBE" }, 剛: { c: "#CF4F27", light: "#FBE3D8", dark: "#F08A63" },
+    柔: { c: "#2C68B0", light: "#DCE8F6", dark: "#7FB0EA" }, 慢: { c: "#8A5A33", light: "#F0E3D6", dark: "#D2A57D" },
+  };
+  const INSIGHT_DOT = "conic-gradient(#2B8A80 0 25%, #CF4F27 0 50%, #2C68B0 0 75%, #8A5A33 0)"; // 濾鏡那一顆的色點：風火水山各一角
+  const INSIGHT_ROW = "此地能悟"; // 抽屜那一行（補回輿圖升級漏掉的「這裡能悟」，設計第五節）
+  const insightOn = (base, layers) => !!(base && base.insight_layer) && layers.has("insight"); // 開關關著時記著的 "insight" 不算
+  function insightInk(base, id) {
+    const kind = id && base && base.insight_kinds ? base.insight_kinds[id] : null;
+    const ink = kind && INSIGHT_INK[kind.attribute];
+    return ink ? { ...ink, name: kind.name } : null;
+  }
+  // 勢力與意境互斥（圓盤的顏色只給一樣）：開一顆，另一顆跟著關
+  const MAP_EXCLUSIVE = { control: "insight", insight: "control" };
+  function toggleLayer(layers, key) {
+    if (layers.includes(key)) return layers.filter((x) => x !== key);
+    return [...layers.filter((x) => x !== MAP_EXCLUSIVE[key]), key];
+  }
+  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤；意境插在敵情後面（意境提示設計第四節）
+  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["insight", "意境", INSIGHT_DOT], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
   const sideName = (k) => (k ? MAP_SIDES[k].name : "無人控制");
   const f1 = (n) => Math.round(n * 10) / 10;
   const mapWeek = () => S.mapWeek || (S.mapState && S.mapState.now_week) || 1;
@@ -3744,7 +3867,7 @@
   // 地圖上的記號（設計第三、四節）：o = { k: 1／倍率（字、圓盤、小牌子乘它，螢幕上大小固定）, far: 看大局, layers: 開著的濾鏡（Set）,
   // sel: 選了的地點, week: 看哪一週, tl: 正在看版圖變化 }。純函式：只讀傳進來的底圖與疊層
   function marksSvg(base, st, o) {
-    const k = o.k, far = o.far, on = !!st.territory && o.layers.has("control");
+    const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
     const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
@@ -3759,19 +3882,26 @@
       }
     }
     for (const p of base.places) {
-      const c = on ? ctrl[p.id] : null, col = c ? MAP_SIDES[c].color : "#7A6A55";
+      const c = on ? ctrl[p.id] : null, ink = ins ? insightInk(base, p.strong) : null; // 意境開著：圓盤是最濃那一種的顏色與字
+      const col = ink ? ink.c : c ? MAP_SIDES[c].color : "#7A6A55";
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
       if (flash.has(p.id)) out.push(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       // 點擊區：透明圓 r=16，外框寬照倍率撐開（style.css 的 --hit，applyMapView 設）
       out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0"/>`);
       if (far) {
-        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
         continue;
       }
       out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 2.5 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.2 * k)}" opacity=".7"/>`);
-      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="#FBF6EA" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
-      out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(p.glyph)}</text></g>`);
+      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.light : "#FBF6EA"}" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
+      out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(ink ? ink.name : p.glyph)}</text></g>`);
+      if (ink) (p.insights || []).filter((id) => id !== p.strong).forEach((id, i) => { // 同一處還悟得到的別種：圓盤右下沿著邊掛小圓章
+        const other = insightInk(base, id);
+        if (!other) return;
+        const a = ((40 + i * 45) * Math.PI) / 180, sx = f1(p.x + (r + 2.5 * k) * Math.cos(a)), sy = f1(p.y + (r + 2.5 * k) * Math.sin(a));
+        out.push(`<g class="ins-seal" pointer-events="none"><circle cx="${sx}" cy="${sy}" r="${f1(7.5 * k)}" fill="${other.c}" stroke="${MAP_HALO}" stroke-width="${f1(1.3 * k)}"/><text x="${sx}" y="${f1(sy + 3.4 * k)}" font-size="${f1(9.5 * k)}" font-weight="700" text-anchor="middle" fill="#FFFFFF" style="font-family:serif">${esc(other.name)}</text></g>`);
+      });
       // ⚔：你此刻能出陣攻的地方（疊層的 armed，跟舊輿圖同一個判斷 FB-251），圓盤左上一個紅色小圓章；散人、豪強一處都沒有（企劃者 10/15 從對比圖選乙）
       if (st.places[p.id] && st.places[p.id].armed) {
         const sx = f1(p.x - r - 4 * k), sy = f1(p.y - r - 2 * k);
@@ -3828,7 +3958,7 @@
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
-    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+    return MAP_CHIPS.filter(([key]) => key !== "insight" || (S.mapBase && S.mapBase.insight_layer)).map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
   }
   // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小，第四顆是版圖變化
   // （企劃者 10/15 從對比圖選丙：375 寬時濾鏡一排放不下它，挪到這裡；濾鏡那一排只剩五顆）
@@ -3896,6 +4026,16 @@
     const events = st.events.length ? `<div class="m-sec"><h4>本週大事</h4>${st.events.map((t) => `<div class="m-evt">📜 ${esc(t)}</div>`).join("")}</div>` : "";
     return journeyHtml(st) + goes + ropes + events;
   }
+  // 抽屜「此地能悟」（意境提示設計第五節）：一種一顆牌子，最濃的實心、寫「最濃」；開關關著沒有最濃，全部空心
+  function insightRow(base, b) {
+    const pills = (b.insights || []).map((id) => {
+      const ink = insightInk(base, id);
+      if (!ink) return "";
+      const strong = id === b.strong;
+      return `<span class="ig${strong ? " strong" : ""}" style="--c:${ink.c};--d:${ink.dark}"><b>${esc(ink.name)}</b>${strong ? "<em>最濃</em>" : ""}</span>`;
+    }).join("");
+    return pills ? `<div class="m-ins"><small>${INSIGHT_ROW}</small>${pills}</div>` : "";
+  }
   // 點一個地點（設計第五節）：第一行（印、名字、危險度）、三格（誰佔著、打得過嗎、多遠）、動作一排、拉高才看的細節
   function placeHtml(base, st, id) {
     const b = placeOf(base, id), p = st.places[id], here = id === st.here && !st.journey;
@@ -3921,11 +4061,11 @@
     const flips = p.flips.map((f) => `第 ${Number(f.week)} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
     const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind ? "可易手" : "";
     const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
-    return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+    return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${insightOn(base, new Set(S.mapLayers)) && b.terrain ? `<span class="terrain">${esc(b.terrain)}</span>` : ""}${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-three"><div><small>誰佔著</small><b style="color:${p.control ? MAP_SIDES[p.control].color : "inherit"}">${p.control ? MAP_SIDES[p.control].name : "無人"}</b>${kind ? `<small>${kind}</small>` : ""}</div>
         <div><small>打得過嗎</small>${odds}${p.sortie ? `<small>出陣是${SORTIE_WORD[p.sortie] || ""}</small>` : ""}</div>
         <div><small>多遠</small><b>${here ? "這裡" : p.minutes === null ? "—" : `${Number(p.minutes)} 分`}</b>${here || p.stamina === null ? "" : `<small>疾行 體力 ${Number(p.stamina)}</small>`}</div></div>
-      <div class="m-acts">${acts}</div>
+      ${insightRow(base, b)}<div class="m-acts">${acts}</div>
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
       ${st.territory ? `<div class="m-sec"><h4>地盤</h4>${p.control ? `${sideName(p.control)}${p.control === "haoqiang" ? "佔據" : "控制"}。${esc(p.price)}` : "不在戰線上，沒有控制方。"}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : ""}
       <div class="m-sec"><h4>站在這裡的</h4>${p.squads.length ? p.squads.map((q) => `${esc(q.name)} <span style="color:${tone(q.odds)}">${esc(q.odds)}</span>`).join("、") : "沒有人在這裡滋事"}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
@@ -4046,7 +4186,7 @@
       S.mapMode = "timeline";
       S.mapViewBefore = S.mapView;
       S.mapWeek = S.mapState.now_week;
-      if (!S.mapLayers.includes("control")) S.mapLayers = [...S.mapLayers, "control"]; // 版圖變化看的就是勢力
+      if (!S.mapLayers.includes("control")) S.mapLayers = toggleLayer(S.mapLayers, "control"); // 版圖變化看的就是勢力（意境跟著關）
     } else {
       S.mapMode = "overview";
       S.mapWeek = null;
@@ -4168,14 +4308,15 @@
     const wrap = document.getElementById("map");
     if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
     g.innerHTML = marksSvg(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
-    const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control"));
+    const ins = insightOn(S.mapBase, layers);
+    const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control") && !ins); // 意境開著不畫勢力的大區底色
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
       const t = tint[el.getAttribute("data-region")];
       if (t) el.style.fill = t; else el.style.removeProperty("fill");
     });
     const hud = document.getElementById("map-hud");
     if (hud) {
-      hud.hidden = !(s < MAP_FAR || S.mapMode === "timeline") || !S.mapState.territory;
+      hud.hidden = !(s < MAP_FAR || S.mapMode === "timeline") || !S.mapState.territory || ins; // 「天下」那一條是勢力的
       if (!hud.hidden) hud.innerHTML = hudHtml(S.mapBase, S.mapState, week);
     }
   }
@@ -5553,10 +5694,12 @@
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
         case "lib-filter": setLibFilter(el.dataset.filter); renderPage(); break;
         case "lib-all": S.libAll = true; renderPage(); break;
-        case "melt-mode": S.meltSel = S.meltSel ? null : { arts: [], ins: [] }; S.artOpen = null; S.meltNote = null; renderPage(); break;
+        case "melt-mode": S.meltSel = S.meltSel ? null : { arts: [], ins: [] }; S.artOpen = null; S.meltOpen = null; S.meltNote = null; renderPage(); break;
         case "melt-pick": meltToggle("arts", el.dataset.id); break;
         case "melt-pick-ins": meltToggle("ins", el.dataset.id); break;
-        case "melt-quality": meltQuality(el.dataset.q); break;
+        case "melt-shown": meltPickShown(); break;
+        case "melt-weak": meltView().weak = !meltView().weak; renderPage(); break;
+        case "melt-open": S.meltOpen = S.meltOpen === el.dataset.key ? null : el.dataset.key; renderPage(); break;
         case "melt-clear": if (S.meltSel) { S.meltSel = { arts: [], ins: [] }; renderPage(); } break;
         case "melt-go": askMeltMany(el); break;
         case "rack-all": S.rackAll = true; renderPage(); break;
@@ -5650,12 +5793,12 @@
           renderPage();
           if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
           break;
-        case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁
-          const key = el.dataset.layer;
-          S.mapLayers = S.mapLayers.includes(key) ? S.mapLayers.filter((x) => x !== key) : [...S.mapLayers, key];
-          el.classList.toggle("on", S.mapLayers.includes(key));
-          el.setAttribute("aria-pressed", String(S.mapLayers.includes(key)));
+        case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁；勢力與意境互斥，整排鈕一起換樣子
+          S.mapLayers = toggleLayer(S.mapLayers, el.dataset.layer);
+          const row = el.closest(".map-chips");
+          if (row) row.innerHTML = chipsHtml();
           drawMarks();
+          if (S.mapMode === "place") redrawDrawer(); // 抽屜名字旁的地形跟著意境開關
           break;
         }
         case "map-zoom": mapZoom(el.dataset.step); break;
@@ -5688,6 +5831,10 @@
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
     if (ev.target.dataset && ev.target.dataset.legend) onLegendTick(ev.target);
+    if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
+      meltView()[ev.target.dataset.key] = ev.target.value;
+      renderPage();
+    }
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();
       v[ev.target.dataset.key] = ev.target.value;

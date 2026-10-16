@@ -242,7 +242,10 @@ def melt_the_weakest(game: Game) -> None:
     """滿了：熔掉功法庫裡第十成威力最低的一門；庫是空的就化掉一個沒有武學靠它修練的意境。"""
     state, content, world = game.state, game.content, game.world
     spare = [(team.player_art(state, content, world, a), a) for a in state.player.arts]
-    spare = [(art.top_power, a) for art, a in spare if art is not None]
+    spare = [  # 熔不得的（本命武學）不挑
+        (art.top_power, a) for art, a in spare
+        if art is not None and library.melt_problem(state, a, art.name, content=content) is None
+    ]
     if spare:
         game.melt_art(min(spare)[1])
         return
