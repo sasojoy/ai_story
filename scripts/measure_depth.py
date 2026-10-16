@@ -114,6 +114,7 @@ def measure(seed: int, profile: str | None, max_layers: int | None = None) -> di
         "worn": [strength(content, a) for a in worn if a is not None],
         "forged": len(arts),
         "level": game.state.player.member.level,
+        "third": [a.model_dump(mode="json") for a in arts if depth.gen_of(a, content, world) >= content.config.fusion_depth.max_gen],
     }
 
 
@@ -122,6 +123,7 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     parser.add_argument("--profile", default="weekend")
     parser.add_argument("--max-layers", type=int, default=None, help="試別的一門最多幾層（只改這一次量的，不改設定）")
+    parser.add_argument("--dump", help="把這幾季全服登記的第三代武學寫成 JSON（measure_tactics.py --depth 讀）")
     args = parser.parse_args()
     profile = None if args.profile == "none" else args.profile
     content = load_content(ROOT / "content", profile=profile)
@@ -129,7 +131,7 @@ def main() -> None:
         content.config.fusion_depth.max_layers = args.max_layers
     print(f"設定：{args.profile}，種子 {args.seeds}，一門最多 {content.config.fusion_depth.max_layers} 層")
     gens, layers, ranks, moods = Counter(), Counter(), Counter(), Counter()
-    held, worn = [], []
+    held, worn, third = [], [], []
     for seed in args.seeds:
         got = measure(seed, profile, args.max_layers)
         gens.update(got["gens"])
@@ -138,6 +140,7 @@ def main() -> None:
         moods.update(got["moods"])
         held += got["held"]
         worn += got["worn"]
+        third += got["third"]
         print(f"種子 {seed}：登記 {got['forged']} 門、季末 {got['level']} 級；代數 {dict(sorted(got['gens'].items()))}、"
               f"意境重數 {dict(sorted(got['ranks'].items()))}")
     print()
@@ -154,6 +157,10 @@ def main() -> None:
         print("  品質：", dict(Counter(q for _, _, q, _ in held)))
     if worn:
         print(f"季末身上兩門的功效強度：中位 {statistics.median(worn):.2f}、最高 {max(worn):.2f}")
+    if args.dump:
+        import json
+        Path(args.dump).write_text(json.dumps(third, ensure_ascii=False), encoding="utf-8")
+        print(f"第三代 {len(third)} 門寫進 {args.dump}")
     print()
     sig = [strength(content, a) for a in signature_arts(content)]
     print(f"本命武學（{len(sig)} 門，絕學、內容寫的三個功效與特別功效）：功效強度 中位 {statistics.median(sig):.2f}、"

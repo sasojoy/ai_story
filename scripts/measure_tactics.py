@@ -15,7 +15,10 @@
 第三批（--kits）另量：本命對玩家自組上品（兩門上品合成武學的功效換成的戰法，隨機 SELF_KITS 套）、神器特技、名將本命兵器（含人器合一）。
 擂台同樣身手的兩個人對打（兩邊都照架勢出招），兩個方向都量；另量一般的仗多的贏面與決戰的份量。
 
-用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits]
+合成深度（--depth third.json …，measure_depth.py --dump 寫的）另量：十八位本命對那一季合出的第三代滿配（兩門第三代練到絕學、
+各自的功效與走向、絕招、以器配招的神器原品），--layers 試一門最多幾層。
+
+用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits] [--catch-up] [--depth JSON… --layers N…]
 """
 from __future__ import annotations
 
@@ -58,6 +61,9 @@ def main() -> None:
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
+    parser.add_argument("--depth", nargs="+", metavar="JSON",
+                        help="合成深度：十八位本命對第三代滿配（measure_depth.py --dump 寫的第三代武學，一份一種季）")
+    parser.add_argument("--layers", type=int, nargs="+", help="--depth 試幾種一門最多幾層（從第三代的功效清單前面截，只量）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     args = parser.parse_args()
@@ -74,6 +80,11 @@ def main() -> None:
         return
     if args.catch_up:
         catch_up(content, args.runs)
+        return
+    if args.depth:
+        for cap in args.layers or [content.config.fusion_depth.max_layers]:
+            for path in args.depth:
+                depth_vs(content, args.runs, path, cap)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
@@ -323,6 +334,81 @@ def catch_up(content, runs):
         tag = "＋本命兵器" if arm is not None else ""
         print(f"  {content.characters[fid].name:<4}{tag:<6}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
     print(f"  十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
+
+
+DEPTH_KITS = 24  # 從一種季的第三代裡配幾套
+
+
+def depth_kit(content, arts, seed):
+    """合成深度的第三代滿配：兩門第三代合成武學都練到絕學（功效照各自的清單、品質倍數照絕學、特別功效照各自的走向），
+    各一招絕招（traits.ultimate_trait 的挑法），一把以器配招的神器原品綁在第一招上（同 full_kit）。"""
+    from tianxia import traits
+    from tianxia.martial_arts import with_quality
+    rng = random.Random(f"depth|{seed}")
+    mult = traits.multiplier(content, "絕學")
+    lo = traits.Loadout()
+    ults = []
+    for i, art in enumerate(arts):
+        art = with_quality(art, "絕學")
+        mine = traits.traits_of(art)
+        for attribute in dict.fromkeys(mine):
+            hook = traits.general(content, attribute).hook
+            lo.layers[hook] = lo.layers.get(hook, 0.0) + mine.count(attribute) * mult
+        sp = traits.special(content, art.special)
+        if sp is not None and sp.hook not in lo.specials:
+            lo.specials[sp.hook] = sp
+        top = traits.ultimate_trait(content, art)
+        if top is not None:
+            ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+            ults.append(tactics.bonded(ult, top.ultimate_bond) if not ults else ult)
+    arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
+    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
+    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    return out + [gear_holder(arm.tactic)]
+
+
+def depth_vs(content, runs, path, cap):
+    """合成深度（Joy 2026-10-15「本命還是強一點點」）：十八位本命（同 catch_up，含本命兵器與人器合一）逐一對第三代滿配。
+    滿配從那一季全服登記的第三代裡配（武學一門＋內功一門，湊不出來就任兩門），DEPTH_KITS 套；另寫十八位對哪一套的平均最低
+    （玩家最強的那一套）。功效清單照 cap 從前面截（fuse_traits 擠掉的是最舊的）。"""
+    import json
+    from tianxia.martial_arts import MartialArt
+    arts = [MartialArt.model_validate(a) for a in json.loads(Path(path).read_text(encoding="utf-8"))]
+    arts = [a.model_copy(update={"traits": list(a.traits)[:cap]}) for a in arts]
+    if len(arts) < 2:
+        print(f"{path}：第三代不到兩門，配不出滿配")
+        return
+    share = ring_share(content, runs)
+    rng = random.Random("depth-pairs")
+    wu = [a for a in arts if a.kind != "內功"] or arts
+    nei = [a for a in arts if a.kind == "內功"] or arts
+    pairs = []
+    for _ in range(DEPTH_KITS):
+        a = rng.choice(wu)
+        b = rng.choice([x for x in nei if x.id != a.id] or [x for x in arts if x.id != a.id])
+        pairs.append((a, b))
+    kits = [depth_kit(content, p, k) for k, p in enumerate(pairs)]
+    arms = {a.character: a for a in content.gear.signature_arms}
+    layers = sorted(len(a.traits) for a in arts)
+    print(f"{Path(path).name}：一門最多 {cap} 層；第三代 {len(arts)} 門（層數中位 {layers[len(layers) // 2]}）；"
+          f"擂台兩邊威力 150、兩個方向各 {runs} 場；本命對 {DEPTH_KITS} 套第三代滿配")
+    rows, grid = [], []
+    for fid in figures_with(content):
+        sig = holders(content, [("你", "player", fid)])
+        arm = arms.get(fid)
+        if arm is not None:
+            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == fid and arm.bond else h for h in sig]
+            sig = sig + [gear_holder(arm.tactic)]
+        vs = [share(sig, k) for k in kits]
+        grid.append(vs)
+        rows.append(sum(vs) / len(vs))
+        print(f"  {content.characters[fid].name:<4}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
+    per_kit = [sum(col) / len(col) for col in zip(*grid)]
+    strong = min(range(len(kits)), key=per_kit.__getitem__)
+    a, b = pairs[strong]
+    print(f"  十八位平均 {sum(rows) / len(rows):.1%}（最低 {min(rows):.1%}、最高 {max(rows):.1%}）")
+    print(f"  最強的一套（{''.join(a.traits)}＋{''.join(b.traits)}）：十八位對它平均 {per_kit[strong]:.1%}、"
+          f"最低 {min(col[strong] for col in grid):.1%}；最弱的一套 {max(per_kit):.1%}")
 
 
 def gear_holder(tactic):
