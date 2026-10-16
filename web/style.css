@@ -751,6 +751,38 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ins button.pick { display: inline-flex; align-items: center; gap: 6px; }
 .ins button.pick .tick { width: 16px; height: 16px; border-radius: 4px; }
 .ins button.pick.on { border-color: #b23a2b; background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+/* 批量熔煉的篩選（2026-10-16）：一格一個下拉，375 寬兩欄、寬一點三欄；最後一顆「只看比身上弱的」 */
+.melt-filter { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 8px; margin: 0 0 8px; align-items: end; }
+.melt-filter label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ink-2); }
+.melt-filter label > span { flex: none; }
+.melt-filter select.input { flex: 1; min-width: 0; width: auto; min-height: 36px; height: 36px; padding: 4px 8px; font-size: 13px; }
+.melt-filter .melt-weak { justify-self: start; min-height: 34px; line-height: 1; padding: 0 12px; font-size: 13px; }
+/* 一列：勾＋品質印＋名字與判斷，右邊心得；最右邊一顆攤開細節。熔不掉的整列淡掉、原因寫在籤那一行 */
+.mlist .mrow { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.mlist .mrow:last-child { border-bottom: 0; }
+.mlist .mrow.on { background: color-mix(in srgb, #b23a2b 10%, var(--card)); }
+.mlist .mpick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: none; color: var(--ink);
+  padding: 9px 4px 9px 12px; cursor: pointer; min-height: 56px; font: inherit; }
+.mlist .mpick:disabled { cursor: default; }
+.mlist .mrow.off .mpick > :not(.txt), .mlist .mrow.off .txt > b, .mlist .mrow.off .txt > small { opacity: 0.55; }
+.mlist .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mlist .txt > b { font-size: 15px; overflow-wrap: anywhere; }
+.mlist .txt > small { color: var(--ink-2); font-size: 12px; line-height: 1.4; }
+.mlist .txt > small > span { white-space: nowrap; } /* 一段一段折行，「威力 44.6」不會斷在中間 */
+.mlist .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mlist .tags i { font-style: normal; font-size: 11px; line-height: 1.5; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); background: var(--card); }
+.mlist .tags i.up { color: #2f7a43; border-color: color-mix(in srgb, #2f7a43 45%, var(--line)); }
+.mlist .tags i.down { color: #b23a2b; border-color: color-mix(in srgb, #b23a2b 45%, var(--line)); }
+.mlist .tags i.hi { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, var(--line)); }
+.mlist .tags i.why { border: 0; padding: 0; border-radius: 0; background: none; font-size: 12px; white-space: normal; }
+.mlist .mval { flex: none; text-align: right; font-size: 11px; color: var(--ink-2); line-height: 1.2; }
+.mlist .mval b { display: block; font-size: 15px; color: var(--ink); }
+.mlist .mmore { flex: none; width: 40px; border: 0; border-left: 1px solid var(--line); background: none; color: var(--ink-2); font-size: 18px; cursor: pointer; }
+.mlist .mmore.on { color: var(--accent); background: var(--accent-soft); }
+.mlist .mdetail { padding: 6px 14px 10px 44px; border-bottom: 1px solid var(--line); background: var(--card-2); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.mlist .mdetail:last-child { border-bottom: 0; }
+.mlist .mdetail p { margin: 2px 0; }
+.qseal.qi { --q: var(--ink-2); }
 .melt-go {
   position: fixed; left: 12px; right: 12px; bottom: calc(62px + var(--bottom)); z-index: 19; max-width: 616px; margin: 0 auto; padding: 10px 12px;
   display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius);

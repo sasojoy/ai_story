@@ -35,7 +35,7 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   ...input.fns.map(fn),
   input.stubs || "",
-  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "healButton"].join(", ") + " };",  // 後三個在上面那一段裡
+  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "healButton", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.store = store;
@@ -840,9 +840,64 @@ def test_batch_melt_mode_lists_every_art_with_a_tick_and_sums_what_is_ticked():
     html = _practice(_melt_rows(), "H.S.meltSel = { arts: ['w2', 'w3', 'w4', 'gone'], ins: ['feng'] };")
     assert html.count('data-act="melt-pick"') == 10  # 不分頁：十門都列，身上的兩門不在
     assert re.search(r'data-act="melt-pick" data-id="w4" disabled', html)  # 熔不掉的勾不了
+    assert '<i class="why">先替它定名</i>' in html  # 原因寫在那一列
     assert "已勾 <b>3</b> 樣<small>心得 +18</small>" in html  # w2 3＋w3 5＋風 10；熔不掉的、已經不在的不算
-    assert 'data-act="melt-pick-ins" data-id="feng" aria-pressed="true"' in html
-    assert 'data-act="melt-quality" data-q="中品"' in html and "收起" in html
+    assert re.search(r'data-act="melt-pick-ins" data-id="feng"\s+aria-pressed="true"', html)  # 意境跟武學排在同一張清單
+    assert 'data-act="melt-shown"' in html and "收起" in html
+    assert 'data-act="melt-quality"' not in html  # 照品質一鍵全勾換成「勾選篩出來的全部」
+
+
+def _judged_rows():
+    """批量熔煉要判斷好壞的資料（skillview.melt_judge）：w2 比身上弱、帶兩種功效；w3 比身上強、絕招；n2 本命戰法。"""
+    rows = _melt_rows()
+    rows[2].update(gen="精進", judge={"power": 12.4, "worn_diff": -2.1, "traits": [{"name": "破甲", "layers": 2}, {"name": "借力", "layers": 1}],
+                                     "special": None, "ultimate": None, "tactic": None}, compare="比身上的甲拳弱一些")
+    rows[3].update(attribute="剛", judge={"power": 30.0, "worn_diff": 4.5, "traits": [], "special": None, "ultimate": "武1", "tactic": None})
+    rows[8].update(judge={"power": 8.0, "worn_diff": 0.0, "traits": [], "special": None, "ultimate": None, "tactic": "長坂一喝"})
+    return rows
+
+
+DEEP = [dict(_insight("feng", "風"), rank=2, mood="圓融", depth="二重・圓融", lean="正"), _insight("huo", "火")]
+
+
+@needs_node
+def test_each_melt_row_says_enough_to_judge_it_and_opens_for_details():
+    html = _practice(_judged_rows(), "H.S.meltSel = { arts: [], ins: [] }; H.S.meltOpen = 'arts:w2';", insights=DEEP)
+    assert "<span>武學</span>・<span>屬快</span>・<span>精進</span>・<span>6成</span>・<span>威力 12.4</span>" in html
+    assert '<i class="down">比身上弱 −2.1</i><i>破甲2</i><i>借力</i>' in html
+    assert '<i class="up">比身上強 +4.5</i><i class="hi">絕招</i>' in html
+    assert '<i>跟身上一樣</i><i class="hi">本命戰法</i>' in html
+    assert "<span>意境</span>・<span>屬快</span>・<span>二重</span>・<span>圓融</span>・<span>正</span>" in html and "心得<b>10</b>" in html
+    detail = html[html.index('class="mdetail"'):]
+    assert "功效：〔破甲〕2 層〔借力〕" in detail and "比身上的甲拳弱一些" in detail and "熔了退回心得 3" in detail
+    assert html.count('class="mdetail"') == 1  # 只攤開點的那一列
+
+
+@needs_node
+def test_melt_filters_and_sorts_and_ticks_only_what_is_shown():
+    out = run(
+        "H.S.meltSel = { arts: ['n3'], ins: [] };"
+        "H.meltView().weak = true; const weak = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().weak = false; H.meltView().kind = '意境'; const ins = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().kind = ''; H.meltView().rank = '2'; const two = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().rank = ''; H.meltView().attr = '剛'; const hard = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().attr = ''; H.meltView().gen = '精進'; const gen = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().gen = ''; H.meltView().sort = 'power'; const byPower = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().sort = 'value'; const byValue = H.meltShown(H.S.menxia).map((it) => it.id);"
+        "H.meltView().sort = ''; H.meltView().kind = '內功'; H.meltPickShown(); const ticked = H.S.meltSel.arts;"
+        "H.meltPickShown(); const unticked = H.S.meltSel.arts;"
+        "H.meltView().kind = ''; const page = H.pagePractice();"
+        "return { weak, ins, two, hard, gen, byPower, byValue, ticked, unticked, page };",
+        S={"menxia": _menxia(owned_arts=_judged_rows(), insights=DEEP), "main": {"status": {"injury": 0}}, "meltSel": None},
+        fns=["pagePractice"], stubs=PRACTICE_STUBS + "const renderPage = () => {};",
+    )
+    assert out["weak"] == ["w2"]  # 只看比身上弱的：沒有比較的（意境、沒給 judge 的）不算
+    assert out["ins"] == ["feng", "huo"] and out["two"] == ["feng"] and out["hard"] == ["w3"] and out["gen"] == ["w2"]
+    assert out["byPower"][:3] == ["n2", "w2", "w3"]  # 威力低的在前，沒有威力的排在後面
+    assert out["byValue"][:3] == ["feng", "huo", "w3"]  # 心得多的在前
+    assert out["ticked"] == ["n3", "n2", "n4", "n5"]  # 內功、熔得掉的全勾（原本勾的留著）
+    assert out["unticked"] == []  # 都勾了再按一次全部取消
+    assert 'data-key="kind"' in out["page"] and 'data-key="sort"' in out["page"] and 'data-act="melt-weak"' in out["page"]
 
 
 @needs_node
@@ -853,17 +908,15 @@ def test_batch_melt_is_not_offered_in_the_hut():
 
 
 @needs_node
-def test_batch_melt_ticks_a_whole_grade_and_asks_before_melting():
+def test_batch_melt_asks_before_melting_what_is_ticked():
     out = run(
-        "H.S.menxia = { owned_arts: input_rows, insights: [] }; H.S.meltSel = { arts: [], ins: ['huo'] };"
-        "H.meltQuality('下品'); const ticked = [...H.S.meltSel.arts];"
+        "H.S.menxia = { owned_arts: input_rows, insights: [] }; H.S.meltSel = { arts: ['w2', 'w5'], ins: ['huo'] };"
         "H.askMeltMany({ dataset: { v: '42' } }); const asked = H.calls[0].ask; await H.calls[0].go();"
-        "return { ticked, asked, sent: H.calls.filter((c) => c.mx), sel: H.S.meltSel };".replace("input_rows", json.dumps(_melt_rows())),
-        fns=["meltQuality", "askMeltMany", "pagePractice"], stubs=MELT_STUBS + "const renderPage = () => {};",
+        "return { asked, sent: H.calls.filter((c) => c.mx), sel: H.S.meltSel };".replace("input_rows", json.dumps(_melt_rows())),
+        fns=["askMeltMany", "pagePractice"], stubs=MELT_STUBS + "const renderPage = () => {};",
     )
-    assert out["ticked"] == ["w2", "w5", "w6", "w7", "n2", "n3", "n4", "n5"]  # 下品、熔得掉的（w3 中品、w4 熔不掉）
-    assert out["asked"].startswith("把勾的 8 門武學、1 個意境一起熔掉？心得 +42。") and "不能再修練" in out["asked"]
-    assert out["sent"] == [{"mx": "melt_many", "body": {"arts": out["ticked"], "insights": ["huo"]}}] and out["sel"] is None
+    assert out["asked"].startswith("把勾的 2 門武學、1 個意境一起熔掉？心得 +42。") and "不能再修練" in out["asked"]
+    assert out["sent"] == [{"mx": "melt_many", "body": {"arts": ["w2", "w5"], "insights": ["huo"]}}] and out["sel"] is None
 
 
 MELT_STUBS = (
@@ -936,3 +989,25 @@ def test_the_person_card_has_chuangong_buttons_with_price_effect_and_reason():
                person="player", person_card="<p>本人</p>", lessons=[]), "main": {"status": {"injury": 0}}},
                fns=["pagePractice", "lessonsHtml"], stubs=PRACTICE_STUBS)
     assert "傳功" not in none
+
+
+# ── 批量熔煉判斷好壞的資料（企劃者 2026-10-16）────────────────────
+
+
+def test_each_library_row_carries_what_batch_melting_needs_to_judge_it(real):
+    from tianxia import team, traits
+    from tianxia.martial_arts import power_at
+    game = _real_game(real)
+    game.state.player.arts = ["caocao_wugong", "jichu_quanjiao"]
+    rows = {r["id"]: r for r in skillview.art_rows(game.state, real, game.world)}
+    worn = game.state.player.member.wugong_id
+    sig = rows["caocao_wugong"]["judge"]
+    mine = team.player_art(game.state, real, game.world, "caocao_wugong")
+    assert sig["power"] == round(power_at(mine, rows["caocao_wugong"]["level"]), 1)
+    assert sig["worn_diff"] == round(power_at(mine, 1) - power_at(team.player_art(game.state, real, game.world, worn), 1), 1)
+    assert sig["worn_diff"] > 0 and sig["tactic"]  # 本命武學：比開局那門強、帶本命戰法
+    assert sig["traits"] == [{"name": traits.general(real, a).name, "layers": traits.traits_of(mine).count(a)} for a in dict.fromkeys(traits.traits_of(mine))]
+    assert rows[worn]["judge"]["worn_diff"] is None  # 身上那門自己沒得比
+    game.state.player.insights = ["feng"]
+    ins = skillview.insight_rows(game.state, real, game.world)[0]
+    assert ins["rank"] == 1 and ins["mood"] is None and ins["melt"] == real.config.melt_insight_xinde

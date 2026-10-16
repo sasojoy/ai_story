@@ -360,6 +360,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 "confirm": melt_confirm(art.name, value, relearn) if stuck is None else "",
             },
             "relearn": relearn,  # 合成的、內容直接給的絕學沒有重學的地方，是 None
+            "judge": melt_judge(state, content, world, art, level),  # 批量熔煉每一列判斷好壞的資料（威力、比身上強弱、功效、絕招）
         }
         if forge is not None:
             # 卷軸卡的合成機率條：拿手上的意境裡上品機率最高的那一個算（forge_with 是它的名字）；序章、沒有意境不給
@@ -372,6 +373,35 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
     # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣
     rows.sort(key=lambda r: (not r["worn"], -QUALITIES.index(r["quality"]), -(r["level"] or 0), r["name"]))
     return rows
+
+
+def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: MartialArt, level: int) -> dict:
+    """批量熔煉那一列要的判斷資料（企劃者 2026-10-16「分解的時候無法判斷武學或內功意境的好壞」）：只讀、只顯示。
+    power 是現在這一成的威力（同功法卡）；worn_diff 是跟身上同一種那門比（第一成對第一成，同 team.compare_with_worn 的數字；
+    身上那一欄空著、這門就是身上那門是 None）；traits 是一般功效的名字與層數（照這一門自己的清單，不乘品質）、special 是特別功效、
+    ultimate 是絕學立招的絕招、tactic 是本命武學的本命戰法（都是名字，沒有是 None）。"""
+    member = state.player.member
+    worn_id = member.neigong_id if art.kind == "內功" else member.wugong_id
+    diff = None
+    if worn_id is not None and worn_id != art.id:
+        worn = team.player_art(state, content, world, worn_id)
+        if worn is not None:
+            diff = round(power_at(art, 1) - power_at(worn, 1), 1)
+    names = []
+    if content.traits.general:
+        mine = traits.traits_of(art)
+        names = [{"name": traits.general(content, a).name, "layers": mine.count(a)} for a in dict.fromkeys(mine)]
+    special = traits.special(content, art.special)
+    ult = traits.ultimate_of(content, art)
+    sig = signature.of(content, art.id)
+    return {
+        "power": round(power_at(art, level), 1),
+        "worn_diff": diff,
+        "traits": names,
+        "special": special.name if special is not None else None,
+        "ultimate": ult.name if ult is not None else None,
+        "tactic": sig.name if sig is not None else None,
+    }
 
 
 def _best_forge(
@@ -435,6 +465,9 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
             row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
                 "depth": depth.label(insight, content, world, state),  # 「二重・圓融」（合成與意境改法定案第一節）
+                # 批量熔煉照重數篩、照圓融駁雜寫（depth.label 那兩半分開給）
+                "rank": depth.rank_of(insight, content, world, state),
+                "mood": depth.harmony_of(insight, content, world, state) if depth.rank_of(insight, content, world, state) > 1 else None,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
