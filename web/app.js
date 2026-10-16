@@ -2993,7 +2993,7 @@
     const card = (f) => `<article class="ring-foe${f.enabled ? "" : " dim"}">
         <div class="info"><div class="who"><span class="rt">第 ${f.rank | 0} 名</span><b>${esc(f.name)}</b>${f.title ? `<span class="ttl">${esc(f.title)}</span>` : ""}</div>
         <p>${esc(f.record)}・${esc(f.strength)}</p>${f.arts.length ? `<p class="arts">${esc(f.arts.join("、"))}</p>` : ""}</div>
-        <button class="btn${f.enabled ? " primary" : ""} small" data-act="choose" data-id="${esc(f.id)}" ${f.enabled ? "" : "disabled"}>${f.enabled ? "<b>挑戰</b>" : esc(f.why)}</button>
+        <button class="btn${f.enabled ? " primary" : ""} small" data-act="choose" data-id="${esc(f.id)}" ${f.enabled ? "" : `disabled title="${esc(f.why || "")}"`}>${f.enabled ? "<b>挑戰</b>" : f.short ? `<b>${esc(f.short[0])}</b>${f.short[1] ? `<small>${esc(f.short[1])}</small>` : ""}` : esc(f.why)}</button>
       </article>`;
     if (!me.joined) return mine;
     const foes = shop.foes.length ? `<div class="ring-foes">${shop.foes.map(card).join("")}</div>` : `<p class="shop-empty">${esc(shop.nobody)}</p>`;
