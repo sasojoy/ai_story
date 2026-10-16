@@ -1914,6 +1914,126 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
       linear-gradient(var(--bk-paper-2), var(--bk-paper-2)) 50% 0 / min(100%, 640px) 100% no-repeat, var(--paper);
   }
   .book-bar, .book-cover { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
+  /* 店面的字（FB-305，企劃者 2026-10-16「寬度是夠了~但字體這部分在電腦遊覽器上顯示看起來很吃力」，從對照圖選甲）：店面那一段
+     （三間店、擂台、素材頁與軍需帳）每一條寫了字級的規則照 ×1.3（四捨五入到 0.5px），欄寬照舊 640；沒寫字級、吃 body 15px 的
+     與店裡通用的 .btn、.muted、.label 也跟著大，機率條跟著高。江湖頁、修練頁不動，手機一條都不動（tests/test_desktop_type.py 鎖住）。
+     店面那一段新加寫了字級的規則，這裡要補一條同一個選擇器 ×1.3 的 */
+  .shop-back { font: 600 19.5px var(--sans); }
+  .shop-sign { font: 600 21px var(--serif); }
+  .shop-silver { font: 600 17px var(--sans); }
+  .shop-line { font: 17px/1.6 var(--serif); }
+  .shop-page { font: 17px var(--sans); }
+  .shop-tab { font: 17px var(--sans); }
+  .shop-item { font: 15.5px/1.45 var(--sans); }
+  .shop-item b { font: 600 18px var(--serif); }
+  .shop-worn b { font: 600 21px var(--serif); }
+  .shop-wear { font-size: 15.5px; }
+  .tempers { font-size: 15.5px; }
+  .shop-big b { font: 600 23.5px var(--serif); }
+  .shop-big small { font-size: 15.5px; }
+  .shop-note, .shop-empty, .shop-cap { font-size: 16px; }
+  .shop-warn { font-size: 16px; }
+  .shop-row .winfo { font-size: 15.5px; }
+  .shop-row .winfo b { font: 600 18px var(--serif); }
+  .naming .form-why { font-size: 15.5px; }
+  .shop-kinds .kind { font: 18px var(--serif); }
+  .shop-kinds .kind sup { font-size: 13px; }
+  .pot-slot { font: 15.5px var(--sans); }
+  .pot-slot b { font: 600 18px var(--serif); }
+  .pot-out { font-size: 16px; }
+  .pot-out b { font: 600 18px var(--serif); }
+  .pot-head { font-size: 16px; }
+  .pot-why { font-size: 15.5px; }
+  .shop-layer .odds { font-size: 14.5px; }
+  .shop-go { font: 600 21px var(--serif); }
+  .shop-layer .row-attr { font: 600 18px var(--serif); }
+  .shop-layer .cell { font: 15.5px var(--serif); }
+  .shop-layer .cell .n { font: 600 13px var(--sans); }
+  .cell small { font: 13.5px var(--sans); }
+  .shop-layer .cell .why { font: 13px var(--sans); }
+  .bundle { font: 600 21px var(--serif); }
+  .bundle small { font: 15.5px var(--sans); }
+  .tapme { font-size: 17px; }
+  .forge-card .q { font-size: 15.5px; }
+  .forge-card h4 { font: 600 28.5px var(--serif); }
+  .forge-card .meta, .forge-card .fit { font-size: 17px; }
+  .forge-card .stat { font: 600 19.5px var(--sans); }
+  .first-seal { font: 600 18px var(--serif); }
+  .shop-market .stall { font: 13.5px var(--sans); }
+  .shop-market .stall .who { font-size: 12.5px; }
+  .shop-market .stall b { font: 600 15.5px var(--serif); }
+  .shop-market .horse-card { font-size: 15.5px; }
+  .shop-market .horse-card h4 { font: 600 19.5px var(--serif); }
+  .shop-market .horse-card h4 small { font: 14.5px var(--sans); }
+  .shop-market .horse-card .abil, .shop-market .horse-card .fed { font-size: 14.5px; }
+  .shop-market .horse-act small { font-size: 14.5px; }
+  .shop-board .held-row { font-size: 15.5px; }
+  .shop-board .slot { font: 14.5px var(--sans); }
+  .shop-board .slot b { font: 600 15.5px var(--serif); }
+  .shop-board .note { font: 13.5px/1.4 var(--sans); }
+  .shop-board .note .tag, .shop-board .paper .tag { font-size: 12.5px; }
+  .shop-board .note b { font: 600 17px var(--serif); }
+  .shop-board .note small { font-size: 12.5px; }
+  .shop-board .stamp { font: 600 14.5px var(--serif); }
+  .shop-board .note.held .stamp { font-size: 13px; }
+  .shop-board .board-sheet .paper { font-size: 16px; }
+  .shop-board .paper h4 { font: 600 21px var(--serif); }
+  .shop-board .paper .due, .shop-board .paper .why { font-size: 15px; }
+  .shop-board .note.done .stamp { font-size: 19.5px; }
+  .shop-arena .ring-score b { font: 700 44px var(--serif); }
+  .shop-arena .ring-score span { font: 600 18px var(--serif); }
+  .shop-arena .ring-meta { font-size: 16px; }
+  .shop-arena .ring-place { font: 600 15.5px var(--sans); }
+  .shop-arena .ring-new { font: 17px/1.6 var(--serif); }
+  .shop-arena .ring-join small { font-size: 14.5px; }
+  .shop-arena .ring-note { font-size: 15px; }
+  .shop-arena .ring-h { font: 600 18px var(--serif); }
+  .shop-arena .ring-foe { font-size: 16px; }
+  .shop-arena .ring-foe .arts { font-size: 15px; }
+  .shop-arena .ring-foe .who b { font: 600 21px var(--serif); }
+  .shop-arena .ring-foe .rt { font: 700 17px var(--sans); }
+  .shop-arena .ttl { font-size: 14.5px; }
+  .shop-arena .ring-foe .btn small { font-size: 13.5px; }
+  .shop-arena .ring-board .rk { font: 700 17px var(--sans); }
+  .shop-arena .ring-board b { font: 600 19.5px var(--serif); }
+  .shop-arena .ring-board .wl { font-size: 15px; }
+  .shop-arena .ring-round { font: 600 18px var(--serif); }
+  .shop-arena .ring-side b { font: 600 19.5px var(--serif); }
+  .shop-arena .ring-side small { font-size: 14.5px; }
+  .shop-arena .vs { font: 700 21px var(--serif); }
+  .shop-arena .ring-edge { font-size: 16px; }
+  .shop-arena .ring-arts, .shop-arena .ring-howto { font-size: 15.5px; }
+  .shop-arena .ring-tell { font: 18px/1.6 var(--serif); }
+  .shop-arena .ring-tell small { font: 14.5px var(--sans); }
+  .shop-arena .ring-status { font: 15.5px/1.5 var(--sans); }
+  .shop-arena .ring-move b { font: 600 21px var(--serif); }
+  .shop-arena .ring-move small { font-size: 14.5px; }
+  .shop-arena .free-note { font-size: 15px; }
+  .shop-arena .ring-log { font-size: 15.5px; }
+  .shop-arena .ring-result { font-size: 16px; }
+  .shop-arena .ring-result h4 { font: 600 21px var(--serif); }
+  .shop-arena .ring-result .stamp { font: 600 21px var(--serif); }
+  .shop-layer .shop-done { font: 17px/1.55 var(--serif); }
+  .shop-layer .up-cell { font: 16px var(--serif); }
+  .shop-layer .up-cell .from { font-size: 15.5px; }
+  .shop-layer .up-cell b { font-size: 18px; }
+  .shop-layer .up-cell small { font: 13.5px var(--sans); }
+  .shop-layer .sell-row .nm b { font: 600 18px var(--serif); }
+  .shop-layer .sell-row .nm small { font: 14.5px var(--sans); }
+  .shop-layer .sell-row .btn { font-size: 17px; }
+  .shop-layer .arm-tile { font-size: 15.5px; }
+  .shop-layer .arm-tile b { font: 600 23.5px var(--serif); }
+  .shop-layer .dn-room { font-size: 16px; }
+  .shop-layer .dn-pick { font: 17px var(--serif); }
+  .shop-layer .dn-pick small { font: 14.5px var(--sans); }
+  .shop-layer .dn-step .btn { font-size: 19.5px; }
+  .shop-layer .cell .pick { font: 600 13.5px var(--sans); }
+  .shop-layer { font-size: 19.5px; }
+  .shop-layer .btn { font-size: 19.5px; }
+  .shop-layer .btn.small { font-size: 18px; }
+  .shop-layer .muted { font-size: 17px; }
+  .shop-layer .label { font-size: 15.5px; }
+  .shop-layer .odds { height: 23.5px; }
 }
 
 /* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，
