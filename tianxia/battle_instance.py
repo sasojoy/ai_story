@@ -145,6 +145,7 @@ class BattleParticipant(BaseModel):
     kit: tactics.BoutSide | None = None
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
+    renown: list[str] = Field(default_factory=list)  # 名聲：加入時快照的稱號（本場戰功、論功那一句寫；善惡第 1 段起、名望名動一方起）
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
     turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
     newbie: bool = False  # 還在新手期（roster.newbie）
@@ -227,6 +228,7 @@ class BattleInstance(BaseModel):
     trend: int = 50
     trend_start: int | None = None  # 開打時的戰局（時刻表決戰照戰況算，不一定是 50）；舊資料沒有是 None
     seal_lean: dict[str, int] = Field(default_factory=dict)  # 天命之爭開集結那一刻各方握幾片（玉璽碎片設計 8.3；起點已經照兩軍的數偏過）
+    supply_lean: dict[str, int] = Field(default_factory=dict)  # 屯糧練兵（works.on_muster）：開集結那一刻兩軍各屯了幾下（起點已經照它偏過）
     act_index: int = 0
     round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)
@@ -362,18 +364,18 @@ def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
-    kit: tactics.BoutSide | None = None,
+    kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
     mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。
-    turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。"""
+    turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。renown 是加入那一刻的稱號（名聲 2.5；沒給＝沒有）。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit,
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
     )
 
 
@@ -396,10 +398,10 @@ def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
-    turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None,
+    turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown
     同 join_faction。"""
     if faction not in sides(definition):
         armies = sides(definition)
@@ -408,7 +410,7 @@ def auto_assign_latecomer(
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit,
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
     )
 
 
@@ -1172,7 +1174,8 @@ def merit_board(
     board: dict = {"me": None}
     for key, side in (("left", left), ("right", right)):
         ranking = merit_ranking(instance, tuning, side)
-        board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer} for p, m in ranking[:MERIT_TOP] if m > 0]
+        board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer, "renown": list(p.renown)}
+                      for p, m in ranking[:MERIT_TOP] if m > 0]
         for rank, (p, m) in enumerate(ranking, 1):
             if p.name == viewer:
                 board["me"] = {"rank": rank, "of": len(ranking), "merit": m, "parts": merit_parts(p)}

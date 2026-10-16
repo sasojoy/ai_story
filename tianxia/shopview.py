@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, tactics, team, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, tactics, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -21,6 +21,7 @@ SMITH_SITUATIONS = (
     "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
     "short_silver", "rack_full", "refused",
     "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
+    "black_market",  # 名聲 5.2：寇照黑市價賣成了
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
@@ -298,7 +299,8 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
         tier=equipment.TIER_WORDS[tier], price=price, divine=divine,
         odds=[{"q": q, "pct": round(w)} for q, w in odds.odds.items()] if odds is not None else None,
         reasons=list(odds.reasons) if odds is not None else [], head=head,
-        problem=smithing.forge_problem(state, content, kind, main, aux), go=GO_TEXT.format(price=price),
+        problem=smithing.forge_problem(state, content, kind, main, aux),
+        go=GO_TEXT.format(price=price) + territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因
     )
     return out
 
@@ -339,11 +341,12 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
             ((content.materials[mid], n) for mid, n in state.player.materials.items() if n > 0 and mid in content.materials),
             key=lambda pair: (pair[0].tier, attribute_rank(pair[0].attribute), pair[0].id),
         ):
-            price = economy.sell_price(content, material.tier)
+            price = economy.sell_price_for(state, content, material.tier)  # 名聲 5.2：寇照黑市價
             if price is not None:
                 sell.append({"id": material.id, "name": material.name, "tier": material.tier, "attribute": material.attribute,
                              "tier_word": TIER_NAMES.get(material.tier, ""),
-                             "have": have, "price": price, "problem": economy.sell_problem(state, content, material.id, 1)})
+                             "have": have, "price": price, "problem": economy.sell_problem(state, content, material.id, 1),
+                             "dark": BLACK_MARKET if economy.black_market(state, content, material.tier) else ""})
     upgrade = []
     if econ.upgrade:
         for attribute, tier in economy.upgradable(content):
@@ -354,13 +357,14 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
                 "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
                 "need": econ.upgrade_need[tier], "have": have,
                 "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "cost_note": territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因（關著是空的）
                 "problem": problem,
                 "short": _upgrade_short(problem, have, econ.upgrade_need[tier]),  # 素材頁格子上寫的短原因
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
                 "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
                 "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
             })
-    return {"sell": sell, "upgrade": upgrade, **_trade_captions(content)}
+    return {"sell": sell, "upgrade": upgrade, **_trade_captions(content, state)}
 
 
 UP_SHORT_HAVE = "手上 {have}／{need}"  # 待 joy 潤：素材頁升階格子上的短原因
@@ -393,8 +397,9 @@ def _trade_hint(econ) -> str:
     return TRADE_HINT
 
 
-def _trade_captions(content: Content) -> dict:
-    """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。"""
+def _trade_captions(content: Content, state: GameState | None = None) -> dict:
+    """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。
+    state 給了照這個人的收購價寫（名聲 5.2：寇的黑市價，標題後面多「黑市價」）。"""
     econ = content.config.economy
     out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(econ)}
     if econ.upgrade:
@@ -402,10 +407,12 @@ def _trade_captions(content: Content) -> dict:
         limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
         out["up_cap"] = f"升階（同屬性的{steps}{f'；{limits}' if limits else ''}）"
     if econ.sell:
-        prices = [f"{TIER_NAMES.get(t, '')} {p} 兩" for t, p in sorted(econ.sell_price.items())]
+        price_of = (lambda t: economy.sell_price_for(state, content, t)) if state is not None else (lambda t: econ.sell_price[t])  # noqa: E731
+        prices = [f"{TIER_NAMES.get(t, '')} {price_of(t)} 兩" for t in sorted(econ.sell_price)]
         if prices:
             prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」（同玩法說明）
-        out["sell_cap"] = f"收購（{'、'.join(prices)}；三階不收，留著打神器）"
+        dark = state is not None and any(economy.black_market(state, content, t) for t in econ.sell_price)
+        out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；三階不收，留著打神器）"
     return out
 
 
@@ -417,6 +424,8 @@ DONATE_EMPTY = "背包裡沒有素材。"  # 待 joy 潤
 DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強推的是割據，不寫「戰線」
 DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
 TIER_NAMES = {1: "一階", 2: "二階", 3: "三階"}
+BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
+BLACK_MARKET_CAP = "照黑市價收"  # 收購那一段的標題
 
 
 def donate_view(state: GameState, content: Content, day: int) -> dict:
@@ -554,7 +563,8 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
         stalls.append({"id": "", "role": "worn", "who": STALL_WHO["worn"], "empty": True, "name": NO_HORSE})
     sale, price = mounts.shop_item(state, content), mounts.price(state, content)
     problem = mounts.buy_problem(state, content)
-    stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩", {
+    note = territory.price_note(state, content)  # 名聲 4.1：馬價後面寫原因
+    stalls.append(_stall(content, sale, "sale", f"{mounts.TIER_NAMES.get(sale.tier, '')}・{price} 兩{note}", {
         "id": mounts.BUY, "label": BUY_TEXT.format(price=price), "use": "", "enabled": problem is None, "why": problem,
     }))
     ridden = _speed_shown(content, p.mount) if p.mount is not None else None
@@ -741,6 +751,7 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
             "id": f"arena:fight:{name_key(e.name)}", "name": e.name, "rank": e.rank, "title": arena.title_for(e.rank),
             "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power, e.power),
             "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
+            "famed": arena.FAMED_NOTE.format(n=arena.reach_of(e, cfg)) if e.famed else "",  # 名聲 4.7
         })
     nobody = ""
     if mine is not None and not foes:

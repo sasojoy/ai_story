@@ -1195,5 +1195,75 @@
     "quality": "下品",
     "desc": "斷眉東拼西湊的拳路，全憑一身蠻力；譜上卻密密麻麻記滿了他挨打換來的心得。",
     "weapon": "拳腳"
+  },
+  {
+    "id": "shouyi_jian",
+    "name": "守義劍",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "下品",
+    "lean": "正",
+    "learn": {
+      "at": "yingchuan_academy",
+      "silver": 20,
+      "title": {
+        "path": "俠",
+        "tier": 1
+      }
+    },
+    "desc": "書院裡教給行俠之人的劍法，一招一式講究守住分寸。",
+    "weapon": "劍"
+  },
+  {
+    "id": "yanghao_jue",
+    "name": "養浩訣",
+    "kind": "內功",
+    "attribute": "陽",
+    "quality": "下品",
+    "lean": "正",
+    "learn": {
+      "at": "yingchuan_academy",
+      "silver": 30,
+      "title": {
+        "path": "俠",
+        "tier": 2
+      }
+    },
+    "desc": "養氣於胸、行事無愧的內功。"
+  },
+  {
+    "id": "jianjing_dao",
+    "name": "剪徑刀",
+    "kind": "武學",
+    "attribute": "快",
+    "quality": "下品",
+    "lean": "邪",
+    "learn": {
+      "at": "lulin_zhai",
+      "silver": 20,
+      "title": {
+        "path": "寇",
+        "tier": 1
+      }
+    },
+    "desc": "山寨裡攔路劫道的刀法，出手又快又狠。",
+    "weapon": "刀"
+  },
+  {
+    "id": "xiaolin_gong",
+    "name": "嘯林功",
+    "kind": "內功",
+    "attribute": "陰",
+    "quality": "下品",
+    "lean": "邪",
+    "learn": {
+      "at": "lulin_zhai",
+      "silver": 30,
+      "title": {
+        "path": "寇",
+        "tier": 2
+      }
+    },
+    "desc": "山寨頭目代代相傳的內功，一聲長嘯震得林子發顫。"
   }
 ]

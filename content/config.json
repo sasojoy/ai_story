@@ -22,7 +22,7 @@
   "season_days": 14,
   "season_one": false,
   "fuse_quality_odds": {"下品": 50, "中品": 30, "上品": 20},
-  "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。"}},
+  "practice_bonus": {"evil": {"per": 10, "cap": 3, "line": "這種事{who}幹得多了。", "line_explained": "惡名讓{who}手熟，這種事{who}幹得多了。"}},
   "train_event_chance": 0.3,
   "qiyu_weight_multiplier": 1.5,
   "rare_explore_chance": 0.025,
@@ -98,5 +98,13 @@
     "challenge_tier3": 1,
     "tier3_per_figure": 1,
     "big_tier3": 0.25
+  },
+  "ambush": {"enabled": false},
+  "fortify": {"enabled": false},
+  "stockpile": {"enabled": false},
+  "renown": {
+    "titles": true, "scale": true, "deed_fame": true, "discount": true, "prize_gate": true, "affinity": true, "duel": true,
+    "news": true, "faction_wanted": true, "arena_reach": true, "virtue_insight": true, "lessons": true, "prompt": true,
+    "clinic": true, "black_market": true, "virtue_choices": true, "official_wanted": true, "explain": true
   }
 }

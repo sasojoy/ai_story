@@ -12,9 +12,9 @@
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
 from __future__ import annotations
 
-from . import calendar, rules
+from . import calendar, renown, rules
 from .models import FRONT_KEY, Content
-from .state import Rumor, TerritoryState, TerritoryWeek, WorldState
+from .state import GameState, Rumor, TerritoryState, TerritoryWeek, WorldState
 
 FLIP_LINE = "{place}落入{side}之手。"  # 待 joy 潤：易手那一刻的天下大事與江湖史（設計 4.3 第 2 點）
 RETAKE_LINE = "{side}收復{place}。"  # 待 joy 潤（FB-252）：這一季佔過那裡的一方再拿回來（TerritoryState.held）
@@ -43,6 +43,20 @@ def bases(content: Content) -> dict[str, str]:
     return {loc_id: f.id for f in content.scenario.factions for loc_id in f.join_at}
 
 
+def held_bases(world: WorldState, content: Content) -> dict[str, str]:
+    """算得上誰的地盤的大本營（控制方、各佔幾處讀它）：豪強分屬兩軍的季，豪強的投靠點不算哪一方的地盤（不在戰線上、豪強依附
+    哪一軍都有；FB-274：以前算成豪強佔著，輿圖大區那一行多「豪 1」、三色條多一段綠的）。其他季同 bases。"""
+    out = bases(content)
+    if rules.haoqiang_allied(content, world):
+        out = {loc_id: side for loc_id, side in out.items() if not content.scenario.faction(side).allies}
+    return out
+
+
+def unheld(world: WorldState, content: Content, loc_id: str) -> bool:
+    """這個地點是不算誰的地盤的大本營（held_bases 拿掉的那幾處）：存檔裡修好之前記下的控制方、每週的快照都照它略過。"""
+    return loc_id in bases(content) and loc_id not in held_bases(world, content)
+
+
 def sides(content: Content, line: str) -> tuple[str | None, str | None]:
     """這條戰線兩頭是誰：（目標往 0 推的陣營, 目標往 100 推的陣營）；照劇本陣營的 goals（內容寫的戰線 id，不換鍵）。"""
     low = next((f.id for f in content.scenario.factions if f.goals.get(line, 0) < 0), None)
@@ -65,10 +79,32 @@ def line_value(world: WorldState, content: Content, line: str) -> int:
     return rules.world_trend_value(world, content, rules.resolve_trend(content, world, line) or line)
 
 
-def _tug(prev: str | None, value: float, t: float, low: str, high: str, band: int) -> str:
-    if value >= t + band:
+def fort_level(world: WorldState, content: Content, loc_id: str) -> float:
+    """這一處此刻的工事（修築工事，works.py）：修到的點數照時間扣 Config.fortify.decay_per_hour；沒修過、開關關著是 0。"""
+    t = world.territory
+    fort = t.forts.get(loc_id) if t is not None else None
+    if fort is None or not content.config.fortify.enabled:
+        return 0.0
+    return max(0.0, fort.level - content.config.fortify.decay_per_hour * max(0.0, world.time - fort.at) / 3600)
+
+
+def fort_extra(world: WorldState, content: Content, loc_id: str) -> tuple[str | None, float]:
+    """工事替修它的那一方多撐幾點：（那一方, 門檻往對方那邊多推的點數＝工事÷cap × Config.fortify.band）。"""
+    t = world.territory
+    fort = t.forts.get(loc_id) if t is not None else None
+    if fort is None:
+        return None, 0.0
+    cfg = content.config.fortify
+    return fort.side, fort_level(world, content, loc_id) / cfg.cap * cfg.band
+
+
+def _tug(prev: str | None, value: float, t: float, low: str, high: str, band: int, extra: float = 0.0) -> str:
+    """extra：守著的那一方（prev）修了工事，對方要再多推這麼多才翻得過來（修築工事）；第一次算（prev 是 None）不看。"""
+    up = band + (extra if prev == low else 0.0)
+    down = band + (extra if prev == high else 0.0)
+    if value >= t + up:
         return high
-    if value <= t - band:
+    if value <= t - down:
         return low
     if prev in (low, high):
         return prev
@@ -89,7 +125,11 @@ def _recompute(world: WorldState, content: Content, t: TerritoryState) -> dict[s
         value = line_value(world, content, line)
         k = len(spots)
         for j, loc_id in enumerate(spots, start=1):
-            t.tug[loc_id] = _tug(t.tug.get(loc_id), value, threshold(j, k), low, high, cfg.band)
+            prev = t.tug.get(loc_id)
+            side, extra = fort_extra(world, content, loc_id)
+            t.tug[loc_id] = _tug(prev, value, threshold(j, k), low, high, cfg.band, extra if side == prev else 0.0)
+            if loc_id in t.forts and t.forts[loc_id].side != t.tug[loc_id]:
+                del t.forts[loc_id]  # 易手了（或修的那一方本來就不是守著的那一方）：工事整個沒了
         if haoqiang is None or geju is None or geju < cfg.geju_release:
             held = [loc_id for loc_id in held if loc_id not in spots]
         else:
@@ -107,7 +147,7 @@ def _recompute(world: WorldState, content: Content, t: TerritoryState) -> dict[s
 
 
 def _control_now(world: WorldState, content: Content, t: TerritoryState) -> dict[str, str]:
-    control = dict(bases(content))
+    control = dict(held_bases(world, content))
     for loc_id, side in content.scenario.territory.fixed.items():
         control[loc_id] = t.control.get(loc_id, side)
     for loc_id, side in _recompute(world, content, t).items():
@@ -201,7 +241,7 @@ def week_at(world: WorldState, week: int) -> TerritoryWeek | None:
 
 def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
     """這個地點此刻歸誰；不是戰線地點也不是大本營、或開關關著是 None。這一季還沒算過時照規則現算（不存，Review Focus 4）。"""
-    if not on(content):
+    if not on(content) or unheld(world, content, loc_id):
         return None
     t = world.territory
     if t is not None and loc_id in t.control:
@@ -227,11 +267,39 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
     """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
-    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（不在戰線上、豪強依附哪一軍都有），照原價。"""
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。"""
     side = controller(world, content, loc_id)
     if side is None or faction is None:
         return 1.0
-    if rules.haoqiang_allied(content, world) and content.scenario.faction(side).allies:
-        return 1.0
     cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price
+
+
+def price_here(state: GameState, content: Content) -> float:
+    """此刻在這裡買東西的倍數（名聲設計 4.1）：地盤福利（price_factor）× 名望的店家折扣（renown.price_factor）。
+    療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
+    放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
+    p = state.player  # 自家地盤照那一邊算（rules.side_of：豪強分屬兩軍的季，豪強是依附的那一軍）
+    return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
+
+
+def price_parts(state: GameState, content: Content) -> list[str]:
+    """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
+    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。"""
+    if not renown.on(content, "discount"):
+        return []
+    p = state.player
+    parts = []
+    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    if land != 1.0:
+        parts.append(("自家地盤" if land < 1 else "敵方地盤") + "・" + renown.discount_word(land))
+    fame = renown.price_factor(state, content)
+    if fame != 1.0:
+        parts.append(f"{renown.fame_title(state, content)}・{renown.discount_word(fame)}")
+    return parts
+
+
+def price_note(state: GameState, content: Content) -> str:
+    """價錢後面的原因（名聲 4.1「寫原因」）：「（自家地盤・九折，名動一方・九四折）」；名聲關著、兩樣都沒有是空字串
+    （關著時一個字都不變：地盤福利以前也不寫原因）。"""
+    return renown.reasons_text(price_parts(state, content))

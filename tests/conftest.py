@@ -92,6 +92,19 @@ def closed_map(content: Content) -> Content:
     return content
 
 
+RENOWN_SWITCHES = (
+    "titles", "scale", "deed_fame", "discount", "prize_gate", "affinity", "duel", "news", "faction_wanted", "arena_reach",
+    "virtue_insight", "lessons", "prompt", "clinic", "black_market", "virtue_choices", "official_wanted", "explain",
+)
+
+
+def renown_on(content: Content) -> Content:
+    """名聲（2026-10-15，Config.renown）的開關全部打開，回傳同一份內容：測試內容全關著，名聲的新測試叫它。"""
+    for key in RENOWN_SWITCHES:
+        setattr(content.config.renown, key, True)
+    return content
+
+
 def third_party_gentry(content: Content) -> Content:
     """豪強分屬兩軍（企劃者 2026-10-15，Config.haoqiang_allied）之前的規則：週末設定裡豪強照舊是第三方（割據、攪局、臨時投效），
     回傳同一份內容。測的是第三方豪強、割據本身的舊測試用它；新規則的測試不要叫（見 tests/test_gentry_allied.py）。"""

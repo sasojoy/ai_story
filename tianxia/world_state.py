@@ -233,6 +233,16 @@ def stamp_season(season: WorldState, content: Content) -> None:
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）
     season.forge_divine_per_kind = cfg.forge_secrets.divine_per_kind
     season.forge_split_clues = cfg.forge_secrets.split_clues
+    # 名聲（企劃者 2026-10-15）：門檻乘季長倍數從下一季開季起照這個章（正在跑的季沒有＝倍數 1，renown.scale）
+    season.renown_scale = length_factor(season, content) if cfg.renown.titles and cfg.renown.scale else None
+    # 名聲 5.1：正邪武學開著時綠林山寨開寨（它的 unlock_flag）；關著時不立，山寨不畫、去不了。正在跑的季由 world._open_greenwood 補
+    from .renown import GREENWOOD_FLAG  # noqa: PLC0415  renown 只延後 import world_state，這裡也延後，兩邊都不在載入時牽動
+    if cfg.renown.titles and cfg.renown.lessons:
+        season.flags.add(GREENWOOD_FLAG)
+        season.flag_times.setdefault(GREENWOOD_FLAG, season.time)
+    else:
+        season.flags.discard(GREENWOOD_FLAG)
+        season.flag_times.pop(GREENWOOD_FLAG, None)
     season.figures = {}
     if cfg.season_one:  # 大勢人物照人物表種好（T4）：時刻表的 only_if、伏筆的出面人物從第一刻起就看得到每一位
         seed(season, content)
@@ -242,6 +252,14 @@ def season_length_days(season: WorldState, content: Content) -> float:
     """這一季有幾個遊戲日：照開季時蓋的章；T2 之前開的季沒有章，一律照它開季時的長度（DEFAULT_SEASON_DAYS，
     那些季都是用預設設定開的），不跟著現在載入的設定走——換成週末設定的 2.5 天也不會把它收掉（FB-037）。"""
     return season.length_days if season.length_days is not None else DEFAULT_SEASON_DAYS
+
+
+def length_factor(season: WorldState, content: Content) -> float:
+    """季長倍數（名聲設計 2.4；決戰道具 2.2 的「一份」用同一個數，rules 轉出去叫 rules.length_factor）：
+    max(1, 這一季蓋章的季長 ÷ Config.drill_push_base_days)。週末季 1、7 天 2.8、14 天 5.6、30 天 12；就是 Game.season_scale 的倒數。"""
+    days = season_length_days(season, content)
+    base = content.config.drill_push_base_days
+    return max(1.0, days / base) if base > 0 else 1.0
 
 
 def jade_seal_summary(fragments: list[JadeSealFragment]) -> str:

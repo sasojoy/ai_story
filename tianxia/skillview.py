@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, signature, smithing, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -251,10 +251,14 @@ def forge_picks(
 def heal_note(state: GameState, content: Content) -> str:
     """療傷鈕上的價錢：付得起全治寫「內傷 N・M 兩」，只付得起一部分寫「治 N 點・M 兩（還剩 K 點）」（team.heal_plan）。
     醫館那一顆（engine._heal_option）與修練頁那一顆（heal_button 的 note）共用。"""
+    from . import territory  # noqa: PLC0415  territory → rules：延後 import
+
     points, cost, left = team.heal_plan(state, content, state.player.member)
+    # 名聲 4.1、5.2：價錢後面寫原因，地盤、名望、俠的醫館折扣寫在同一個括號（FB-294）；名聲關著是空的
+    why = renown.reasons_text(territory.price_parts(state, content) + [renown.clinic_part(state, content)])
     if left > 0:
-        return f"治 {points} 點・{cost} 兩（還剩 {left} 點）"
-    return f"內傷 {int(state.player.member.injury)}・{cost} 兩"
+        return f"治 {points} 點・{cost} 兩（還剩 {left} 點）{why}"
+    return f"內傷 {int(state.player.member.injury)}・{cost} 兩{why}"
 
 
 def heal_button(state: GameState, content: Content) -> dict:
@@ -652,8 +656,21 @@ def boost_line(state: GameState, content: Content, world: WorldStateStore) -> st
     for art in (wugong, neigong):
         echo = team.resonance(state, content, art)
         if echo != 1:
-            parts.append(f"【{art.name}】共鳴 {_pct(echo - 1)}")
+            parts.append(_echo_part(state, content, art, echo))
     return "威力加成：" + "・".join(parts) if parts else ""
+
+
+def _echo_part(state: GameState, content: Content, art: MartialArt, echo: float) -> str:
+    """正邪共鳴那一段（名聲設計 5.1）：explain 開著時寫「你是一方豪俠：【守義劍】正派，吃善名 22，+11%」——功法的正邪跟你走的路
+    對得上、而且有善惡稱號才寫稱號；關著照舊「【守義劍】共鳴 +11%」。"""
+    if not renown.on(content, "explain"):
+        return f"【{art.name}】共鳴 {_pct(echo - 1)}"
+    key = "good" if art.lean == "正" else "evil"
+    way = "俠" if art.lean == "正" else "寇"
+    title = renown.virtue_title(state, content) if renown.path(state) == way else None
+    book = content.config.stat_names.get(key, key)
+    text = f"【{art.name}】{art.lean}派，吃{book} {state.player.stats.get(key, 0)}，{_pct(echo - 1)}"
+    return f"你是{title}：{text}" if title else text
 
 
 def detail(state: GameState, content: Content, world: WorldStateStore, kind: str) -> str:

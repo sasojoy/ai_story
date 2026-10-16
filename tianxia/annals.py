@@ -74,7 +74,7 @@ def entry(
 
 def profile(state: GameState, content: Content) -> dict:
     """收季時這個人的身家（存進 biographies.profile，季末寫傳時當開頭與結尾的材料）。不讀季的狀態：換季那一刻 state.world 不一定是那一季的。"""
-    from . import ranger
+    from . import ranger, renown
 
     p = state.player
     sect = content.sects.get(p.sect) if p.sect else None
@@ -87,7 +87,7 @@ def profile(state: GameState, content: Content) -> dict:
         "fame": p.stats.get("fame", 0),
         "good": p.stats.get("good", 0),
         "evil": p.stats.get("evil", 0),
-        "ranger": ranger.title(content, state) or "",
+        "ranger": ranger.title(content, state) or renown.virtue_title(state, content) or "",  # 名聲開著時寫善惡稱號
         "team": [figure_name(content, cid) for cid in p.team],
         "showdowns": p.showdowns,
         "top_merits": p.top_merits,

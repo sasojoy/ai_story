@@ -52,6 +52,10 @@ CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVA
 # 截殺（Config.raid）：此地有截殺得了、而且勝算夠的敵對陣營的人時，每一輪有 RAID_CHANCE 的機會動手；只挑 RAID_ODDS 的對象
 # （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
 RAID_CHANCE = 0.1
+# 後期體力玩法（設伏劫道、修築工事、屯糧練兵）：體力在上限的 PLAY_STAMINA 以上時，每一輪 PLAY_CHANCE 的機會挑一樣做（選單上按得下去的，
+# 照名號＋這一輪的雜湊挑，不動 rng 的序列以外的東西）。內傷重的不設伏（伏兵也要打）。
+PLAY_CHANCE = 0.05
+PLAY_STAMINA = 0.8
 RAID_ODDS = CHALLENGE_ODDS
 # 懸賞榜（bounties.py）：城裡看得到還接得了的懸賞就去揭（不花體力），手上有就往要去的地方走、到了照做；
 # 比推大勢的遊歷值得，比軍令低（陣營的事先做）【預設】
@@ -175,6 +179,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     raided = _raid(game, rng)
     if raided is not None:
         return msgs + raided
+    played = _stamina_play(game, rng)
+    if played is not None:
+        return msgs + played
     staged = _arena(game, rng)
     if staged is not None:
         msgs = msgs + staged
@@ -238,6 +245,20 @@ def _answer_invite(game: Game, rng: random.Random) -> str | None:
     if first.enabled and rng.random() < INVITE_YES:
         return first.id
     return "invite:no:" + first.id.removeprefix("invite:yes:")
+
+
+def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
+    """體力花不完時（PLAY_STAMINA 以上）PLAY_CHANCE 的機會設伏、修工事或屯糧（選單上按得下去的那幾顆挑一顆）；這一輪不做是 None。
+    體力不夠、選單上沒有這幾顆時不擲骰。"""
+    p = game.state.player
+    if p.stamina < game.content.config.stamina_max * PLAY_STAMINA:
+        return None
+    plays = [o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith(("ambush:set:", "works:"))]
+    if _crippled(game):
+        plays = [i for i in plays if not i.startswith("ambush:")]
+    if not plays or rng.random() >= PLAY_CHANCE:
+        return None
+    return game.choose(rng.choice(plays))
 
 
 def _raid(game: Game, rng: random.Random) -> list[str] | None:
@@ -571,6 +592,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     if kind == "defect":
         return None  # 假人不叛投（計畫甲）
+    if kind in ("ambush", "works"):
+        return None  # 設伏、工事、屯糧由 take_turn 的 _stamina_play 做，不交給打分數
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
@@ -706,6 +729,8 @@ def _toward_battle(game: Game) -> list[str] | None:
     hop = next_hop(game, atlas.region_locations(game.content, region))
     if hop is None:
         return None
+    if game.state.player.ambush is not None:  # 守著埋伏走不開：先收伏，下一輪再動身
+        return game.choose("ambush:lift")
     ways = {option.mode: option for option in game.travel_options(hop) or []}
     if "walk" in ways and ways["walk"].enabled:
         return game.travel(hop, "walk")

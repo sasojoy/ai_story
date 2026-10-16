@@ -57,6 +57,13 @@ const body = L.now ? el("body", ["tx-now"]) : null;
 const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
+// 名聲（名聲設計十一之二）：狀態列名號底下那一行稱號（1B，收不收看 S.renownTight）與決戰本場戰功名字底下的稱號（4B，L.merit 是幾行）
+const renownLine = L.renown ? el("renown", ["who-renown-line"]) : null;
+const meritSmalls = Array.from({ length: L.merit || 0 }, () => el("msmall", []));
+// 一組選項還放不下（第 10 步 choices，企劃者 2026-10-16 選 (c)）：態勢那一排（L.peekOpen 是攤開了一格）、灰掉的俠寇鈕底下那一行原因（L.notes 行）
+const peek = L.peek ? el("peek", ["peek"]) : null;
+if (peek) peek.querySelector = (s) => (s === ".peek-panel" && L.peekOpen ? {} : null);
+const notes = Array.from({ length: L.notes || 0 }, () => el("note", ["opt-note"]));
 // 狀態列（#top）的高度（FB-123）：input.topHeight；input.realTop 時 renderTop 照真的那樣先量高度、重畫（💡 收成一行時矮 input.topSaves）、
 // 再交給 fitTopMoved
 const topEl = { offsetHeight: input.topHeight || 120 };
@@ -98,14 +105,18 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, line: 20, rounds: 23, own: 27, muster: 27, options: 22, call: 70, moreLine: 0 }, input.save || {});
-const bodyHeight = () => (now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
+const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+// 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
+const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
+  : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
 const bottom = () => {
   let b = L.bottom;
   if (has(page, "fit-space")) b -= SAVE.space;
   if (card && has(card, "fit-space")) b -= SAVE.cardSpace;
   if (box && has(box, "fit-box")) b -= SAVE.box;
   if (hint && S.hintTight && !S.hintOpen) b -= SAVE.hint;
+  if (renownLine && S.renownTight) b -= SAVE.renown;
+  meritSmalls.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.merit; });
   lines.forEach((x) => { if (has(x, "tx-tight") && !has(x, "open")) b -= SAVE.line; });
   if (rounds && has(rounds, "fit-fold") && !has(rounds, "open")) b -= SAVE.rounds;
   if (now) b -= Math.min(L.nowBody || 0, 120) - bodyHeight();
@@ -114,6 +125,8 @@ const bottom = () => {
   if (menu && has(menu, "fit-tight")) b -= SAVE.options;
   callRows.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.call; });
   if (callsMore && callsMore.dataset.fit) b += SAVE.moreLine; // 收法 6b 補上的「還有 N 份」那一行自己也佔高度
+  if (peek && has(peek, "fit-hide")) b -= SAVE.peek;
+  notes.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.note; });
   return b;
 };
 const target = actbar || last;
@@ -136,6 +149,9 @@ const where = {
   "#page > .options": () => (menu ? [menu] : []),
   "#page > .card.guide": () => (box ? [box] : []),
   "#top .more-stats .hint": () => (hint ? [hint] : []),
+  "#top .who-renown-line": () => (renownLine && !S.renownTight ? [renownLine] : []),
+  ".g-merit .rn-two small:not(.fit-hide)": () => meritSmalls.filter((x) => !has(x, "fit-hide")),
+  ".g-merit small.fit-hide": () => meritSmalls.filter((x) => has(x, "fit-hide")),
   ".fit-space": () => all.filter((x) => x !== page && has(x, "fit-space")),
   ".fit-box": () => all.filter((x) => has(x, "fit-box")),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
@@ -147,6 +163,10 @@ const where = {
   "#page > .card.scene .calls": () => (callsBox ? [callsBox] : []),
   ".call.fit-hide": () => callRows.filter((x) => has(x, "fit-hide")),
   ".calls-more": () => (callsMore ? [callsMore] : []),
+  "#page > .peek": () => (peek ? [peek] : []),
+  "#page > .options > .btn.off .opt-note": () => notes,
+  ".peek.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
+  ".now.fit-title": () => all.filter((x) => has(x, "now", "fit-title")),
 };
 const q = (sel) => { if (!where[sel]) throw new Error("假頁面不認得的選擇器：" + sel); return where[sel](); };
 globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : id === "top" ? topEl : null),
@@ -162,13 +182,14 @@ if (input.measure) {
 }
 page.querySelectorAll = q;
 if (now) now.querySelector = (s) => (s === ".tx-now" ? body : null);
+if (body) body.querySelector = (s) => (s === ".tx-line" && L.nowLines !== false ? {} : null); // L.nowLines false：「剛剛」只有標題、沒有敘事
 if (scene) {
   // 「收起戰場」那一行（FB-120）：只能觀戰的人自己攤開了開打中的戰場（L.battleShut）
   scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead
     : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null) : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
-const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false,
+const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
@@ -185,6 +206,8 @@ const snap = () => ({
   ownClip: own.map((x) => has(x, "fit-clip")), musterClip: musterLines.map((x) => has(x, "fit-clip")),
   musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
   calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
+  renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
+  peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
   H, S, snap, L, globalThis.window, { lines, top: topEl, setTabsTop: (v) => { tabsTop = v; } }));
@@ -253,6 +276,29 @@ def test_a_two_line_hint_folds_to_one_line_and_comes_back_when_there_is_room():
     out = run(layout, script)
     assert out["tight"]["fitted"] == ["space", "hint"] and out["tight"]["hintTight"] is True and out["tight"]["tops"] == 1
     assert out["roomy"]["fitted"] == [] and out["roomy"]["hintTight"] is False and out["roomy"]["tops"] == 2
+
+
+@node
+def test_the_titles_line_folds_after_the_hint_and_comes_back():
+    """名聲 1B：名號底下那一行稱號排在 💡 之後收（記 S.renownTight、重畫狀態列，善惡稱號接到頭銜後面）；有空間了重量時還原。"""
+    layout = {"bottom": 800, "actbar": True, "scene": True, "hint": True, "renown": True}
+    script = """
+      H.fitFirstScreen(); const tight = snap();
+      L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
+      return { tight, roomy };"""
+    out = run(layout, script)
+    assert out["tight"]["fitted"] == ["space", "hint", "renown"] and out["tight"]["renownTight"] is True
+    assert out["tight"]["bottom"] <= 740
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["renownTight"] is False
+
+
+@node
+def test_the_battle_board_titles_fold_before_the_moves_are_squeezed():
+    """名聲 4B：輪到出招時本場戰功名字底下的稱號排在第一回合之後收（名字照舊），三招不被擠出第一屏；鈕縫在它之後。"""
+    out = run({"bottom": 785, "options": True, "merit": 3})
+    assert out["fitted"] == ["space", "merit"] and out["merit"] == [True, True, True] and out["bottom"] <= 740
+    again = run({"bottom": 785, "options": True, "merit": 3}, "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
+    assert again["fitted"] == [] and again["merit"] == [False, False, False]
 
 
 @node
@@ -396,6 +442,63 @@ def test_a_choice_menu_gets_tighter_buttons_last():
     """一組選項（有所感的四個做法）：間距不夠時，鈕縫與鈕高收一點；量的是最後一顆。"""
     out = run({"bottom": 780, "options": True, "scene": True}, idle=False)
     assert out["fitted"] == ["space", "options"] and "fit-tight" in out["menu"] and out["bottom"] <= 740
+
+
+# 名聲的俠寇選項讓事件多到六顆（企劃者 2026-10-16 從三張截圖挑 (c)）：場景、「剛剛」、態勢那一排、六顆鈕（一顆灰掉、底下一行原因）
+EVENT = {"bottom": 860, "options": True, "peek": True, "now": True, "nowBody": 110, "notes": 1, "scene": True}
+
+
+@node
+def test_a_choice_menu_still_too_tall_folds_the_peek_row_the_now_story_and_the_greyed_reason():
+    """第 10 步（choices）：鈕收緊了還放不下，態勢那一排收起、「剛剛」只留時間與標題（「展開全文」照舊在）、灰掉的鈕底下那一行原因收掉。"""
+    out = run(EVENT, idle=False)
+    assert out["fitted"] == ["space", "now", "options", "choices"] and out["bottom"] <= 740
+    assert "fit-hide" in out["peek"] and out["notes"] == [True]
+    assert "fit-title" in out["now"] and "clamp" in out["now"] and "fits" not in out["now"]
+
+
+@node
+def test_the_buttons_tighten_before_any_words_are_hidden():
+    """收緊鈕不少任何字：排在第 10 步前面；收緊就放得下的話，態勢那一排、「剛剛」的字、原因那一行都不動。"""
+    out = run({**EVENT, "bottom": 815}, idle=False)
+    assert out["fitted"] == ["space", "now", "options"] and out["bottom"] <= 740
+    assert out["peek"] == ["peek"] and out["notes"] == [False] and "fit-title" not in out["now"]
+
+
+@node
+def test_the_choices_step_leaves_the_action_bar_page_alone():
+    """閒著（行動列）時沒有這一步：態勢那一排是閒著時看戰況的地方。"""
+    out = run({"bottom": 900, "actbar": True, "peek": True, "now": True, "nowBody": 110, "scene": True})
+    assert "choices" not in out["fitted"] and out["peek"] == ["peek"] and "fit-title" not in out["now"]
+
+
+@node
+def test_what_the_player_opened_stays_open_and_a_title_only_now_is_left_alone():
+    """攤開了態勢那一排的一格（.peek-panel 在）不收那一排；展開了「剛剛」不收它；「剛剛」本來就只有標題、沒有敘事時不動它。"""
+    panel = run({**EVENT, "peekOpen": True}, idle=False)
+    assert "choices" in panel["fitted"] and panel["peek"] == ["peek"] and panel["notes"] == [True]
+    opened = run({**EVENT, "nowOpen": True}, idle=False)
+    assert "choices" in opened["fitted"] and "fit-title" not in opened["now"] and "open" in opened["now"]
+    bare = run({**EVENT, "nowLines": False}, idle=False)
+    assert "fit-title" not in bare["now"]
+
+
+@node
+def test_a_now_card_that_fits_in_three_lines_gets_its_more_button_back():
+    """「剛剛」三行就放得下（第 6 步換回 fits、沒有「展開全文」）：只留標題時字收掉了，換回收著，「展開全文」看得到全文。"""
+    out = run({**EVENT, "nowFits": True, "nowBody": 60, "bottom": 900}, idle=False)
+    assert "choices" in out["fitted"] and "fit-title" in out["now"] and "clamp" in out["now"] and "fits" not in out["now"]
+
+
+@node
+def test_the_choices_step_comes_back_when_there_is_room():
+    """重量之前全部還原：態勢那一排、原因那一行攤回來，「剛剛」回到原本的樣子（本來放得下的 fits）。"""
+    script = "H.fitFirstScreen(); const folded = snap(); L.bottom = 700; H.fitFirstScreen(); return { folded, roomy: snap() };"
+    out = run({**EVENT, "nowFits": True}, script, idle=False)
+    assert "choices" in out["folded"]["fitted"]
+    roomy = out["roomy"]
+    assert roomy["fitted"] == [] and roomy["peek"] == ["peek"] and roomy["notes"] == [False]
+    assert roomy["now"] == ["fits", "now"] and roomy["nowWas"] is None
 
 
 @node
@@ -574,7 +677,13 @@ def test_each_step_only_touches_what_it_names():
     hiding = [sel for sel, body in re.findall(r"(?m)^([^{}\n@]*fit-[^{}\n]*)\{([^}]*)\}", css) if "display: none" in body]
     assert sorted(s.strip() for s in hiding) == [
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
+        ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
+        # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
+        ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
+        ".options > .btn.off .opt-note.fit-hide", ".page > .peek.fit-hide",
     ]
+    title = _rules(css, "fit-title")[".now.fit-title:not(.open) .tx-now"]
+    assert "max-height: none" in title and "mask-image: none" in title  # 只剩標題：不淡出
     tight = _rules(css, ".tx-tight")
     assert "white-space: nowrap" in tight[".battle-card .tx-extra .tx-line.tx-tight"] and "text-overflow: ellipsis" in tight[".battle-card .tx-extra .tx-line.tx-tight"]
     assert "white-space: normal" in tight[".battle-card .tx-extra .tx-line.tx-tight.open"]

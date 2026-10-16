@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, territory, timetable
+from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -569,6 +569,9 @@ def _open_claimed(
     if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
         from . import seal  # noqa: PLC0415  seal → world_state：在函式裡 import，同這個模組其他延後 import
 
+        from . import works  # noqa: PLC0415  同上
+
+        msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
     return msgs
 
@@ -584,6 +587,13 @@ def season_hour(state: GameState, content: Content, rng: random.Random, players:
     geju_tick(state, content, 1, players=players)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
     figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
     return msgs + season_events(state, content, rng)
+
+
+def _open_greenwood(vehicle: GameState, content: Content) -> None:
+    """名聲 5.1：正邪武學開著時立「綠林開寨」（綠林山寨的 unlock_flag）。新的一季在蓋章時就立了（world_state.stamp_season）；
+    這裡補上線那一刻正在跑的季（第一次推進時）。已經立了就不動；lessons 關著不立：山寨不畫、去不了。"""
+    if renown.on(content, "lessons") and renown.GREENWOOD_FLAG not in vehicle.world.flags:
+        add_world_flags(vehicle, [renown.GREENWOOD_FLAG])
 
 
 def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
@@ -622,6 +632,8 @@ def advance_world_state(
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
+    if not season.ended:
+        _open_greenwood(vehicle, content)  # 名聲 5.1：上線那一刻正在跑的季，第一次推進時補立
     recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
     territory.update(season, content)  # 舊存檔、中途上線的第一次在這裡算，不發天下大事（出陣探索與地盤設計第六節）
     msgs: list[str] = []

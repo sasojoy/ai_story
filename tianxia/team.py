@@ -94,7 +94,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits, lean=s.lean)
     return world.get_skill(skill_id)
 
 
@@ -510,14 +510,14 @@ def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool =
 
 
 def _price_here(state: GameState | None, content: Content) -> float:
-    """地盤福利（出陣探索與地盤設計 4.3 第 3 點）：自己陣營的地盤便宜、別人的貴；state 是 None（純函式的呼叫）照原價。
+    """療傷的價錢倍數：地盤福利（出陣探索與地盤設計 4.3 第 3 點：自己陣營的地盤便宜、別人的貴）× 名望的店家折扣（名聲設計 4.1）
+    × 俠的醫館折扣（名聲 5.2，renown.clinic_factor）；state 是 None（純函式的呼叫）照原價。
     territory → rules → team：延後 import，避免循環。"""
     if state is None:
         return 1.0
-    from . import territory  # noqa: PLC0415
-    from .allied import side_of  # noqa: PLC0415  豪強分屬兩軍：照依附那一軍算自家地盤
+    from . import renown, territory  # noqa: PLC0415
 
-    return territory.price_factor(state.world, content, side_of(state, content), state.player.location)
+    return territory.price_here(state, content) * renown.clinic_factor(state, content)  # price_here 照依附那一軍算自家地盤
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:

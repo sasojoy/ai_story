@@ -49,6 +49,7 @@ UPDATED = "你換了一份守擂的分身：{arts}。名次與戰績照舊。"
 JOIN_FIRST = "先報名守擂"
 BEHIND = "排在你後面"
 OUT_OF_REACH = "只能挑前 {n} 名內的人"
+FAMED_NOTE = "天下聞名：排在他後面 {n} 名內的人都挑得到他"  # 名聲 4.7（擂台那一頁挑得到的人那一格）
 COOLING = "剛挑過，{wait}後可再挑"  # wait 是現實的倒數（wait_text）
 SPENT = "今天的 {n} 次挑完了，明日 00:00 後再挑"  # 照回體丹的現實時間換日（Game._pill_day）
 SPENT_PURSE = "明日 00:00 再挑"  # 擂台那一頁右上角（窄）
@@ -151,16 +152,21 @@ def wait_text(real_seconds: float) -> str:
     return f"約 {hours} 小時" + (f" {rest} 分" if rest else "")
 
 
+def reach_of(foe: ArenaEntry, cfg: ArenaTuning) -> int:
+    """排在他後面幾名內的人挑得到他：平常 reach；天下聞名的人（ArenaEntry.famed，名聲 4.7）放寬到 famous_reach。"""
+    return max(cfg.reach, cfg.famous_reach) if foe.famed else cfg.reach
+
+
 def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTuning, left: int,
                       time_scale: float = 1.0) -> str | None:
-    """挑不挑得了這個人：先報名、他要排在你前面 reach 名以內、今天還有次數、冷卻。None＝可以（守擂的人一天被挑幾場不設限，Joy 2026-10-15）。
-    冷卻寫還要等多久（世界秒 ÷ time_scale ＝ 現實秒）。"""
+    """挑不挑得了這個人：先報名、他要排在你前面 reach 名以內（天下聞名的人放寬，reach_of）、今天還有次數、冷卻。
+    None＝可以（守擂的人一天被挑幾場不設限，Joy 2026-10-15）。冷卻寫還要等多久（世界秒 ÷ time_scale ＝ 現實秒）。"""
     mine = entry_of(world, me)
     if mine is None:
         return JOIN_FIRST
     if foe.rank >= mine.rank:
         return BEHIND
-    if mine.rank - foe.rank > cfg.reach:
+    if mine.rank - foe.rank > reach_of(foe, cfg):
         return OUT_OF_REACH.format(n=cfg.reach)
     if left <= 0:
         return SPENT.format(n=cfg.per_day)
@@ -176,13 +182,13 @@ def note_challenge(world: WorldState, me: str, foe: ArenaEntry) -> None:
 
 
 def challengers(world: WorldState, content: Content, me: str, left: int) -> list[tuple[ArenaEntry, str | None]]:
-    """挑得到的人：排在你前面 reach 名以內的（名次高的先），各自挑不挑得了（challenge_problem；None＝挑得了）。沒報名是空的。
-    選單與擂台那一頁共用。"""
+    """挑得到的人：排在你前面 reach 名以內的，加上前面 famous_reach 名內天下聞名的（名次高的先），各自挑不挑得了
+    （challenge_problem；None＝挑得了）。沒報名是空的。選單與擂台那一頁共用。"""
     cfg = content.config.arena
     mine = entry_of(world, me)
     if mine is None:
         return []
-    rows = [e for e in ladder(world) if mine.rank - cfg.reach <= e.rank < mine.rank]
+    rows = [e for e in ladder(world) if e.rank < mine.rank and mine.rank - e.rank <= reach_of(e, cfg)]
     return [(e, challenge_problem(world, me, e, cfg, left, content.config.time_scale)) for e in rows]
 
 

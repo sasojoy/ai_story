@@ -1,0 +1,139 @@
+[
+  {
+    "id": "xia_grain",
+    "title": "鄉民送糧",
+    "actions": [
+      "socialize"
+    ],
+    "tags": [
+      "城鎮",
+      "里巷"
+    ],
+    "weight": 0.3,
+    "condition": {
+      "virtue_path": "俠",
+      "virtue_min": 2
+    },
+    "text": "幾個鄉民挑著擔子找上門來，說聽說你行俠仗義，湊了些糧食要送給你。擔子裡是幾袋粗糧，還有一罈自家釀的酒。",
+    "choices": [
+      {
+        "text": "收下，謝過鄉親",
+        "effect": {
+          "text": "你收下糧食，跟鄉民們坐下喝了一碗酒。他們說，有你在這一帶，夜裡睡得安穩些。",
+          "stats": {
+            "good": 1
+          },
+          "materials": {
+            "man_1": 2
+          }
+        }
+      },
+      {
+        "text": "婉拒，叫他們留著過冬",
+        "effect": {
+          "text": "你把擔子推了回去，叫他們留著過冬。鄉民們走了老遠，還回頭朝你拱手。",
+          "stats": {
+            "good": 2
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "xia_tipoff",
+    "title": "有人報信",
+    "actions": [
+      "socialize"
+    ],
+    "tags": [
+      "城鎮"
+    ],
+    "weight": 0.3,
+    "condition": {
+      "virtue_path": "俠",
+      "virtue_min": 2
+    },
+    "text": "一個面生的漢子在街角攔住你，左右看了看才壓低聲音：「您就是那位行俠的？有件事，小的想讓您知道。」",
+    "choices": [
+      {
+        "text": "聽他說完",
+        "effect": {
+          "text": "他說附近的山道上這幾天有幾股流寇專挑落單的行人下手，官府也不管。你記下了，他千恩萬謝地走了。",
+          "stats": {
+            "xinde": 5,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "text": "塞給他幾個錢",
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
+        "effect": {
+          "text": "你塞給他幾個錢，叫他往後聽到什麼再來說。他把錢揣進懷裡，說街坊都知道你是個講義氣的人。",
+          "stats": {
+            "silver": -5,
+            "good": 1,
+            "fame": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "lulin_spoils",
+    "title": "山寨分贓",
+    "actions": [
+      "explore"
+    ],
+    "locations": [
+      "lulin_zhai"
+    ],
+    "condition": {
+      "virtue_path": "寇",
+      "virtue_min": 1
+    },
+    "text": "寨裡剛劫了一隊商旅，箱籠堆滿了聚義廳。頭目拍著桌子分贓，見你進來，笑著招手：「來得正好，見者有份。」",
+    "choices": [
+      {
+        "text": "照規矩分一份",
+        "effect": {
+          "text": "你照規矩領了一份，頭目拍拍你的肩，說以後寨裡的買賣算你一個。",
+          "stats": {
+            "silver": 20,
+            "evil": 2
+          }
+        }
+      },
+      {
+        "text": "多拿一份，看誰敢說話",
+        "needs": {
+          "path": "寇",
+          "tier": 2
+        },
+        "check": {
+          "stat": "str",
+          "difficulty": 6,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你一腳踩上箱籠，多扛走一份。廳裡的人互相看了看，誰也沒吭聲。",
+          "stats": {
+            "silver": 40,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "頭目的刀先一步架上了你的脖子：「規矩就是規矩。」你賠了錢才走得出聚義廳。",
+          "stats": {
+            "silver": -10,
+            "fame": -1
+          }
+        }
+      }
+    ]
+  }
+]

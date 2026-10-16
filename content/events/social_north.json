@@ -401,6 +401,32 @@
             "good": 1
           }
         }
+      },
+      {
+        "text": "半夜把幾包鹽挪走，轉手賣私鹽",
+        "needs": {
+          "path": "寇",
+          "tier": 2
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 5,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你半夜摸進倉房挪走幾包鹽，天還沒亮就轉手賣給了私鹽販子。",
+          "stats": {
+            "silver": 45,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你剛扛起鹽包，倉房的狗就叫了起來；鹽商提著燈籠出來，認出了你。",
+          "stats": {
+            "fame": -2,
+            "evil": 1
+          }
+        }
       }
     ]
   },

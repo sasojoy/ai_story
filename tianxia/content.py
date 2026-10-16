@@ -589,7 +589,8 @@ def check_shop_lines(c: Content, need) -> None:
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
     }
-    switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade}  # 素材與經濟：收購、升階關著時不必有那一句
+    switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
+                "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
     for shop, on in opened.items():
         if c.config.shop_screens and on:
             for key in SITUATIONS[shop]:
@@ -1738,7 +1739,9 @@ def validate(c: Content) -> None:
         ft, fw = ev.free_text, f"{where} 隨口應對"
         check_effect(fw, ft.effect)
         check_effect(fw, ft.fail_effect)
-        rivals = [ch.effect for ch in ev.choices if ch.check is not None] or [ch.effect for ch in ev.choices]
+        # 只跟人人按得到的選項比（名聲 5.3：俠寇選項要稱號才按得到，獎勵本來就高一點，不拿來放寬隨口應對的上限）
+        open_choices = [ch for ch in ev.choices if ch.needs is None]
+        rivals = [ch.effect for ch in open_choices if ch.check is not None] or [ch.effect for ch in open_choices]
         for key in FREE_TEXT_REWARDS:
             best = max(eff.stats.get(key, 0) for eff in rivals)
             need(

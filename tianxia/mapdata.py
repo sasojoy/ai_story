@@ -218,26 +218,32 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     if not territory.on(content) or w.territory is None:
         return []
     start = w.territory.weeks.get(territory.START_WEEK)
-    out, before = [], (start.control if start is not None else None)  # 第 1 週跟開季那一刻比（FB-264）
+    out, before = [], (_held(w, content, start.control) if start is not None else None)  # 第 1 週跟開季那一刻比（FB-264）
     for week in range(1, now_week + 1):
         snap = territory.week_at(w, week)
         events = _titles(state, content, week, now_week)
         if snap is None:
             out.append({"week": week, "control": None, "ropes": {}, "geju": None, "events": events, "changed": []})
             continue
+        control = _held(w, content, snap.control)
         changed = [] if before is None else [
-            {"id": loc, "from": before.get(loc), "to": side} for loc, side in snap.control.items() if before.get(loc) not in (None, side)
+            {"id": loc, "from": before.get(loc), "to": side} for loc, side in control.items() if before.get(loc) not in (None, side)
         ]
-        out.append({"week": week, "control": dict(snap.control), "ropes": _rope_values(snap, ropes), "geju": snap.geju,
+        out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes), "geju": snap.geju,
                     "events": events, "changed": changed})
-        before = snap.control
+        before = control
     return out
 
 
-def _start_control(world: WorldState) -> dict[str, str] | None:
+def _held(world: WorldState, content: Content, control: dict[str, str]) -> dict[str, str]:
+    """快照裡的控制方拿掉不算誰的地盤的大本營（territory.unheld；FB-274：修好之前的快照記著豪強佔著自己的投靠點）。"""
+    return {loc: side for loc, side in control.items() if not territory.unheld(world, content, loc)}
+
+
+def _start_control(world: WorldState, content: Content) -> dict[str, str] | None:
     """開季那一刻的控制方（territory.START_WEEK）；中途上線、還沒算過是 None。"""
     start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
-    return dict(start.control) if start is not None else None
+    return _held(world, content, start.control) if start is not None else None
 
 
 def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
@@ -358,6 +364,6 @@ def state(
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
-        "start": _start_control(w) if on else None,
+        "start": _start_control(w, c) if on else None,
         "weeks": _weeks(s, c, now_week, ropes),
     }

@@ -14,7 +14,8 @@ from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
 from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
-from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, season_length_days
+from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, length_factor, season_length_days  # noqa: F401
+# length_factor：季長倍數（名聲設計 2.4、決戰道具 2.2 共用），定義在 world_state（stamp_season 要用），從這裡轉出去叫 rules.length_factor
 
 DAY = 86400
 
@@ -31,16 +32,51 @@ def audience_bar(state: GameState, content: Content, companion_id: str) -> int:
     以及不在大勢人物表上的人物只看名望；散人照遊俠名號的階抵（ranger.audience_discount，對所有人物都算）；寶物另扣 treasures.amount 的 audience。最低 0。
     第 4 階只算這一週在任的（企劃者裁決 E4，2026-10-07）：有資格、沒在任（候缺）的算第 3 階；週一掉出席次，門檻跟著回去。
     rank_of 是唯一讀階的地方（不另讀 PlayerState.rank 或 qualified）；ranks 會 import rules，所以在函式裡 import。"""
-    from . import ranger, ranks  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
+    parts = audience_parts(state, content, companion_id)
+    return max(0, parts.bar - sum(n for _, n in parts.discounts))
 
+
+class AudienceParts(NamedTuple):
+    bar: int  # 這一季的名望門檻（乘過季長倍數）
+    discounts: list[tuple[str, int]]  # （哪一項, 抵幾點），乘過倍數；沒有的不列
+
+
+def audience_parts(state: GameState, content: Content, companion_id: str) -> AudienceParts:
+    """求見門檻拆開（名聲設計 6.3）：門檻與每一項折抵——同陣營的階（ranks.rank_of 每比第 1 階高一階抵 audience_rank_discount）、
+    散人的遊俠名號（名聲開著時是善惡稱號的段，ranger.audience_discount）、寶物（treasures.amount 的 audience）。
+    長的季整條一起乘季長倍數（名聲 2.4，折抵跟著門檻同比例，renown.scale；沒有章、名聲關著是 1，跟以前一字不差）。"""
+    from . import ranger, ranks, renown  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
+
+    k = renown.scale(state.world)
     bar = content.characters[companion_id].audience_fame
     figure = next((f for f in content.figures.values() if f.character == companion_id), None)
     p = state.player
+    parts: list[tuple[str, int]] = []
     if figure is not None and p.faction is not None and p.faction == figure.faction:
-        bar -= (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
-    bar -= ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵一點，對所有人物都算（陣營的人是 0）
-    bar -= round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣，最低 0
-    return max(0, bar)
+        rank = (ranks.rank_of(state) - 1) * content.config.audience_rank_discount
+        if rank:
+            parts.append((f"{content.scenario.faction_name(p.faction, p.faction)}的階", rank))
+    ranger_cut = ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵幾點，對所有人物都算（陣營的人是 0）
+    if ranger_cut:
+        parts.append((renown.virtue_title(state, content) or ranger.title(content, state) or "遊俠名號", ranger_cut))
+    treasure = round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣
+    if treasure:
+        parts.append((treasures.audience_name(state), treasure))
+    return AudienceParts(int(bar * k + 0.5), [(name, int(n * k + 0.5)) for name, n in parts])
+
+
+def audience_hint(state: GameState, content: Content, companion_id: str) -> str:
+    """求見被打發時括號裡那一段（Game._brush_off）：「名望還差 10」；名聲的 explain 開著時再寫門檻與每一項折抵
+    「名望還差 10；門檻 25，江湖遊俠抵 3」（名聲設計 6.3）。"""
+    from . import renown  # noqa: PLC0415
+
+    gap = audience_bar(state, content, companion_id) - state.player.stats.get("fame", 0)
+    hint = f"名望還差 {gap}"
+    if not renown.on(content, "explain"):
+        return hint
+    parts = audience_parts(state, content, companion_id)
+    cuts = "、".join(f"{name}抵 {n}" for name, n in parts.discounts)
+    return f"{hint}；門檻 {parts.bar}" + (f"，{cuts}" if cuts else "")
 
 
 def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
@@ -184,7 +220,26 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
             return False
         if cond.ranger_min is not None and ranger.tier(state, content) < cond.ranger_min:
             return False
-        if cond.ranger_path is not None and ranger.path(state) != cond.ranger_path:
+        if cond.ranger_path is not None and ranger.path(state, content) != cond.ranger_path:
+            return False
+    if cond.fame_tier is not None:  # 名聲：名望到這一季的第幾段（照季長倍數）；名聲關著照那一段沒乘倍數的門檻比名望（同改之前的 min_stats）
+        from . import renown  # noqa: PLC0415
+
+        if content is None:
+            return False
+        if renown.on(content):
+            if renown.fame_tier(state, content) < cond.fame_tier:
+                return False
+        elif p.stats.get("fame", 0) < content.config.renown.fame_thresholds[cond.fame_tier - 1]:
+            return False
+    if cond.virtue_path is not None or cond.virtue_min is not None:  # 名聲 5.2、5.3：走哪一條路、善惡到第幾段（名聲關著一律不成立）
+        from . import renown  # noqa: PLC0415
+
+        if content is None or not renown.on(content):
+            return False
+        if cond.virtue_path is not None and renown.path(state) != cond.virtue_path:
+            return False
+        if cond.virtue_min is not None and renown.virtue_tier(state, content) < cond.virtue_min:
             return False
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
@@ -245,7 +300,10 @@ def practice_line(check: Check, state: GameState, content: Content, world: World
     if team.practice_bonus(state, content, check) <= 0:
         return ""
     rule = content.config.practice_bonus[check.practice]
-    return rule.line.replace("{who}", "你")
+    from . import renown  # noqa: PLC0415
+
+    line = rule.line_explained if renown.on(content, "explain") and rule.line_explained else rule.line  # 名聲 6.3：說出是惡名讓你手熟
+    return line.replace("{who}", "你")
 
 
 def roll_check(check: Check, state: GameState, content: Content, world: WorldStateStore, rng: random.Random) -> bool:
@@ -911,7 +969,7 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     skill = content.skills[skill_id]
     if skill_id in library.owned_arts(state):
         return []
-    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality))
+    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
     return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 

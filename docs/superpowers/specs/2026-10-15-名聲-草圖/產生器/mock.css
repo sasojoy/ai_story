@@ -1,0 +1,104 @@
+
+/* ── 名聲草圖加的樣子（草圖專用）── */
+:root { --sx-xia: #2f5d8a; --sx-kou: #9a5a1e; --sx-fame: var(--gold); }
+@media (prefers-color-scheme: dark) { :root { --sx-xia: #6f9fd0; --sx-kou: #d08a4a; } }
+.sx-mark { outline: 2.5px dashed #d0513a; outline-offset: 2px; border-radius: 6px; }
+.sx-in { outline-offset: 1px; border-radius: 3px; }
+.fame { color: var(--sx-fame); } .xia { color: var(--sx-xia); } .kou { color: var(--sx-kou); }
+
+/* 一：收起時 */
+.sx-rn-line { margin: 2px 0 1px; font: 600 12.5px/1.5 var(--serif); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-name.sx-shrink small { font-size: 10.5px; letter-spacing: -0.2px; }
+
+/* 二：展開時「名聲」那一行 */
+.who-renown { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; font: 500 12px/1.6 var(--sans); color: var(--ink-2); }
+.who-renown em { font-style: normal; }
+.who-renown b { font: 600 13.5px var(--serif); color: var(--ink); }
+.who-renown i { font-style: normal; margin-left: auto; padding-right: 4px; }
+
+/* 說明卡共用 */
+.sx-rn-title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; font-size: 20px; }
+.sx-rn-title small { font: 600 13px var(--serif); color: var(--ink-2); }
+.sx-rn-tabs { margin-bottom: 10px; }
+.sx-rn-big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 2px 0 6px; }
+.sx-rn-big b { font: 700 22px var(--serif); }
+.sx-rn-big span { font-size: 13px; color: var(--ink-2); }
+.sx-rn-bar { height: 6px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
+.sx-rn-bar i { display: block; height: 100%; background: var(--gold); }
+.sx-rn-gap { margin: 4px 0 10px; font-size: 12.5px; color: var(--ink-2); }
+.sx-rn-sub { margin: 8px 0 4px; font: 700 13px var(--serif); }
+.sx-ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sx-ladder li { display: grid; grid-template-columns: 1.1em auto 1fr; gap: 0 6px; align-items: baseline; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.sx-ladder .ck { color: var(--ok); font-weight: 700; font-size: 13px; }
+.sx-ladder b { font: 600 14.5px var(--serif); }
+.sx-ladder small { color: var(--ink-2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sx-ladder p { grid-column: 2 / -1; margin: 1px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.sx-ladder li.cur { border-color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+.sx-ladder li.off { opacity: 0.62; }
+.sx-ladder.compact { gap: 3px; }
+.sx-ladder.compact li { padding: 4px 8px; }
+.sx-ladder.compact p { font-size: 11.5px; }
+.sx-rn-note { margin: 6px 0 0; font-size: 11.5px; color: var(--ink-2); }
+.sx-rn-src { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--card-2); font-size: 12px; line-height: 1.55; color: var(--ink-2); }
+.sx-rn-src b { display: block; color: var(--ink); font-size: 12.5px; }
+.sx-rn-other { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.sx-rn-other summary { cursor: pointer; }
+.sx-rn-sanren { margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; }
+.sx-rn-sanren .sx-rn-sub { margin-top: 0; }
+.sx-rn-sanren ul { margin: 0; padding-left: 1.1em; font-size: 12.5px; line-height: 1.6; }
+.sx-rn-sanren li b { margin-right: 6px; }
+.sx-rn-sheet { max-height: 86vh; overflow-y: auto; }
+
+/* 2A：狀態列裡就地攤開 */
+.sx-rn-panel { margin: 6px 0 2px; padding: 8px 10px; max-height: 44vh; overflow-y: auto; border-radius: 10px; background: var(--card); font-weight: 400; }
+.sx-rn-h { margin: 6px 0 2px; font: 700 13px var(--serif); color: var(--ink); }
+.sx-rn-h:first-child { margin-top: 0; }
+.sx-rn-panel .sx-rn-big b { font-size: 17px; }
+
+/* 2C：段落條 */
+.sx-strip { margin: 6px 0 2px; padding: 8px 10px 6px; border-radius: 10px; background: var(--card); }
+.sx-srow { display: grid; grid-template-columns: 4.6em 1fr; align-items: start; gap: 6px; margin-top: 4px; }
+.sx-slbl { font-size: 12px; color: var(--ink-2); padding-top: 1px; }
+.sx-slbl b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.sx-dots { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: relative; }
+.sx-dots::before { content: ""; position: absolute; left: 12%; right: 12%; top: 6px; height: 2px; background: var(--line); }
+.sx-dots li { position: relative; display: grid; justify-items: center; gap: 2px; }
+.sx-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); }
+.sx-dots li.have i { border-color: currentColor; background: currentColor; }
+.sx-dots li.cur i { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent); }
+.sx-dots small { font-size: 10px; color: var(--ink-2); white-space: nowrap; }
+.sx-dots li.cur small { color: currentColor; font-weight: 700; }
+.sx-dots.fame { color: var(--sx-fame); } .sx-dots.xia { color: var(--sx-xia); } .sx-dots.kou { color: var(--sx-kou); }
+.sx-snote { margin: 2px 0 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.sx-snote b { margin-right: 6px; font: 700 13px var(--serif); }
+.sx-snote span { display: block; opacity: 0.85; }
+.sx-shint { margin: 2px 0 0; font-size: 11px; color: var(--ink-2); opacity: 0.85; }
+
+/* 三：玩家卡 */
+.peer-renown { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+.peer-renown em { font-style: normal; }
+.peer-renown b { font: 600 14px var(--serif); color: var(--ink); }
+.peer-renown i { font-style: normal; }
+.sx-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.sx-chip { font: 600 12.5px/1.5 var(--serif); padding: 0 9px; border-radius: 999px; border: 1px solid currentColor; }
+.sx-chip.fame { color: var(--sx-fame); } .sx-chip.xia { color: var(--sx-xia); } .sx-chip.kou { color: var(--sx-kou); }
+.sx-chip-more { font-style: normal; color: var(--ink-2); font-size: 12px; }
+
+/* 四：本場戰功 */
+.g-mcol li .sx-t { margin-left: 4px; font-size: 10.5px; color: var(--ink-2); font-weight: 400; }
+.g-mcol li .sx-two { display: grid; }
+.g-mcol li .sx-two small { font-size: 10.5px; line-height: 1.3; color: var(--ink-2); font-weight: 400; justify-self: start; }
+.g-mcols.sx-stack { grid-template-columns: 1fr; gap: 4px; }
+
+/* 五：事件選項 */
+.btn .sx-note { display: block; font-size: 11.5px; font-weight: 400; color: var(--ink-2); line-height: 1.3; margin-top: 1px; }
+.btn .k.sx-tag { font-family: var(--serif); font-weight: 700; color: var(--sx-xia); }
+.btn .k.sx-tag.kou { color: var(--sx-kou); }
+.sx-opt-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--ink-2); }
+
+/* 六：跨段那一刻 */
+.tx-chg small { font-size: 11px; opacity: 0.8; margin-left: 2px; font-weight: 400; }
+.tx-chg.sx-rn-chip { background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); border-color: var(--gold); font-weight: 700; }
+.sx-rn-box { margin: 4px 0 6px; padding: 6px 10px; border-left: 3px solid var(--gold); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--gold) 10%, transparent); font-size: 13.5px; line-height: 1.55; }
+.sx-rn-box b { display: block; font: 700 14px var(--serif); color: var(--gold); }
+.sx-rn-box small { display: block; font-size: 12px; color: var(--ink-2); }

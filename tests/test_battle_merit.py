@@ -102,6 +102,15 @@ def test_each_army_gets_a_first_merit_who_goes_round_the_world(showdown):
     assert social.card(a, b)["record"] == "參戰 1 場・首功 1 次"
 
 
+def test_the_first_merit_line_carries_the_titles_snapshotted_on_joining(showdown):
+    on, a, b = showdown  # 名聲 4.5：加入那一刻快照的稱號接在名字後面
+    a.world.mutate_battle(lambda x: setattr(x.participants["甲"], "renown", ["名動一方", "一方豪俠"]))
+    battle = _fight(on, a, b)
+    assert battle.phase == "ended"
+    line = "宛城之戰論功：官軍首功甲（名動一方・一方豪俠），黃巾軍首功乙。"
+    assert line in [r.text for r in a.world.get_season().rumors]
+
+
 def test_a_fresh_player_card_has_no_record(showdown):
     _, a, b = showdown
     assert social.card(a, b)["record"] == ""

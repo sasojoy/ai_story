@@ -23,7 +23,7 @@ REGIONS = {
         "jade_cave", "runan", "runan_academy", "runan_market", "runan_wilds", "hilltop_wilds", "qiao_county",
         "cao_manor", "huangjin_camp", "guan_camp",  # 官軍大營：FB-184 在四十處之外補的官軍操練點
     },
-    "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds"},
+    "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds", "lulin_zhai"},  # 綠林山寨：名聲 5.1
 }
 NEW_LOCATIONS = {
     "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot",
@@ -264,6 +264,8 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
     "train_runaway_cart", "train_sore_loser",
     # 散人的遊俠名號奇遇（content/events/ranger.json）：寇那一則寫的是野外林子裡的綠林拜帖，哪一處野外都說得通
     "ranger_kou_invitation",
+    # 名聲 5.2 俠的交友事件（content/events/renown.json）：鄉民送糧、有人報信，寫的是城鎮裡的街坊，哪一座城鎮都說得通
+    "xia_grain", "xia_tipoff",
 }
 
 

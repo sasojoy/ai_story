@@ -173,6 +173,7 @@ class BotRunner:
         game = self._bot_game(state)
         game.sync(now)
         game.state.player.seen_real = now
+        game.own_turn_checks()  # 假人自己那一輪：系統通緝照樣掛（名聲 4.6、5.4；跟真人一樣，看不出誰是假人）
         if game.state.world.ended:
             self.characters.save(game.state)
             return False
@@ -214,6 +215,7 @@ class BotRunner:
         game = self._bot_game(state)
         game.sync(now)
         game.state.player.seen_real = now  # 假人自己上線（隱沒看它）；不設 own_request：假人在奪璽單挑裡永遠不在場（14.1）
+        game.own_turn_checks()  # 假人自己那一輪：系統通緝照樣掛（名聲 4.6、5.4）
         if game.state.world.ended:
             self.characters.save(game.state)
             return False

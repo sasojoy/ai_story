@@ -72,7 +72,7 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
             return False
         if goal.fused_quality and max(QUALITIES.index(a.quality) for a in arts) < QUALITIES.index(goal.fused_quality):
             return False
-    return check_condition(goal.condition, state)
+    return check_condition(goal.condition, state, content)
 
 
 class HutReward(str):
@@ -184,7 +184,7 @@ def quest_text(state: GameState, content: Content, world: WorldStateStore | None
     milestones = [m for m in content.scenario.milestones if m.id not in hidden]
     if milestones:
         parts.append("**個人目標**\n\n" + "\n".join(
-            f"- {'☑' if check_condition(m.condition, state) else '☐'} {m.text}" for m in milestones
+            f"- {'☑' if check_condition(m.condition, state, content) else '☐'} {m.text}" for m in milestones
         ))
     summons = ranks.summons_line(state, content)  # 還沒去的召見（計畫 T5）：照此刻出面的人寫
     if summons:

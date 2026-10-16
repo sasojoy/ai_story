@@ -65,6 +65,12 @@ class Condition(_Strict):
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
     ranger_path: Literal["俠", "寇"] | None = None
+    # 名聲：名望到這一季的第幾段（renown.fame_tier，照季長倍數；1～4）。要 content 才判得出，沒給、名聲關著一律不成立
+    fame_tier: int | None = Field(default=None, ge=1, le=4)
+    # 名聲 5.2、5.3：走哪一條路（renown.path）、善惡稱號到第幾段（renown.virtue_tier，照季長倍數）；要 content、名聲開著才成立。
+    # 跟 ranger_* 不同：投靠了陣營的人一樣看（俠寇是每個人都有的稱號）
+    virtue_path: Literal["俠", "寇"] | None = None
+    virtue_min: int | None = Field(default=None, ge=1, le=4)
     # 季曆（calendar）的時刻：第一季開關關著（或這一季開季時沒開）時，寫了這三個的條件一律不成立——beta 季沒有季曆
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
@@ -203,6 +209,7 @@ class PracticeBonus(_Strict):
     per: int = Field(gt=0)
     cap: int = Field(ge=0)
     line: str = ""  # 吃到加成時併進選項括號裡的那一句（events.choice_label），{who} 換成「你」
+    line_explained: str = ""  # 名聲 explain 開著時用這一句（說出是惡名讓你手熟，名聲設計 6.3）；沒寫照舊用 line
 
 
 class FuseQuality(_Strict):
@@ -305,6 +312,13 @@ class FrontLines(_Strict):
     geju: dict[str, list[str]]
 
 
+class VirtueNeed(_Strict):
+    """要走哪一條路、善惡稱號到第幾段（名聲設計 5.1、5.3：正邪武學誰肯教、俠寇選項要什麼稱號；renown.meets 判）。"""
+
+    path: Literal["俠", "寇"]
+    tier: int = Field(ge=1, le=4)
+
+
 class Choice(_Strict):
     text: str
     condition: Condition = Field(default_factory=Condition)
@@ -312,6 +326,8 @@ class Choice(_Strict):
     combat: str | None = None  # 敵方隊伍 id：選了就自動開打
     effect: Effect = Field(default_factory=Effect)  # 檢定成功／戰鬥勝利（或無檢定時）
     fail_effect: Effect = Field(default_factory=Effect)  # 檢定失敗／戰鬥落敗
+    # 名聲 5.3：俠才有、寇才有的做法（路與段）。稱號不夠的人看得到、灰掉寫要什麼；名聲的 virtue_choices 關著不出現（Game.options）
+    needs: VirtueNeed | None = None
 
 
 FREE_TEXT_MAX = 20  # 隨口應對最多幾個字（跟決戰的放手一搏一樣）
@@ -458,13 +474,14 @@ class RoadSight(_Strict):
 
 class LearnRule(_Strict):
     """基礎武學在哪裡學、誰肯教（武學與成長設計附錄 B）：武館與江湖人看名望、收銀兩；
-    陣營營地只教投靠了那個陣營的人；門派只教那個門派的弟子。"""
+    陣營營地只教投靠了那個陣營的人；門派只教那個門派的弟子；正邪武學（名聲 5.1）看善惡稱號（title）。"""
 
     at: str  # 地點 id
     fame: int = 0
     silver: int = 0
     faction: str | None = None
     sect: str | None = None
+    title: VirtueNeed | None = None  # 名聲 5.1：走這條路、到這一段才肯教；名聲的 lessons 關著時這一門不教（library.lessons_here 不列）
 
 
 TACTIC_TIMINGS = ("起手", "出招", "乘勢", "心法", "騎戰", "應招")  # 戰法什麼時候發動（tianxia/tactics.py）；應招是兩邊的招都定了之後
@@ -549,6 +566,8 @@ class SkillDef(_Strict):
     # 本命武學（企劃者 2026-10-15）：一般功效（屬性的清單，第一個是自己的屬性，最多 3 個，同 MartialArt.traits）與人物專屬的本命戰法
     traits: list[Attribute] = Field(default_factory=list, max_length=3)
     tactic: TacticDef | None = None
+    # 名聲 5.1：正邪（正派吃善名、邪派吃惡名，team.resonance）。只有新的四門正邪武學寫；現有的不加，免得手上那一門威力季中途變了
+    lean: Literal["正", "邪", "無"] = "無"
 
 
 class GeneralTrait(_Strict):
@@ -666,6 +685,8 @@ class CharacterDef(_Strict):
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
+    # 名聲 5.2：對哪一種人有看法（敬俠：俠見面情誼起步、遇上寇冷淡；喜狠：寇見面情誼起步）；None 是不偏。對話提示也帶一行
+    regard: Literal["敬俠", "喜狠"] | None = None
 
 
 class Squad(_Strict):
@@ -896,12 +917,14 @@ ALLOW_FIXED = frozenset({
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
+    "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
 )
 
 
@@ -1390,6 +1413,57 @@ class Ranger(_Strict):
     bounty_bonus: float = Field(default=1.25, ge=1)
 
 
+class RenownTuning(_Strict):
+    """名聲（docs/superpowers/specs/2026-10-15-名聲-design.md 第八節）：每一樣一個開關，預設開、測試內容關；titles 關著時其他開關都沒有作用
+    （renown.on）。數字都是起始值，看試玩再調。名望的門檻在這裡，善惡的門檻沿用 Config.ranger.thresholds（設計 2.2）；兩種都在開季時
+    乘季長倍數（WorldState.renown_scale，world_state.stamp_season）。"""
+
+    titles: bool = True  # 兩個稱號本身、遊俠名號併入、狀態列／玩家卡／決戰名單、說明卡、跨段那一行、得失後面的差距、玩法說明那一節
+    scale: bool = True  # 門檻乘季長倍數（設計 2.4），從下一季開季起（world_state.stamp_season）
+    deed_fame: bool = True  # 立功給名望（3.1）
+    discount: bool = True  # 店家折扣（4.1）
+    prize_gate: bool = True  # 重賞要名動一方（4.2）
+    affinity: bool = True  # 見面情誼起步與冷淡（4.3、5.2）
+    duel: bool = True  # 頭目的機會與賞（4.4）
+    news: bool = True  # 威震州郡那一句、天下聞名點名（4.5）
+    faction_wanted: bool = True  # 敵方陣營的通緝（4.6）
+    arena_reach: bool = True  # 擂台排在後面五名的人挑得到你（4.7）
+    virtue_insight: bool = True  # 浩然、血煞要走對那條路（5.1）
+    lessons: bool = True  # 正邪武學與綠林山寨（5.1）
+    prompt: bool = True  # 對話提示帶稱號與看法（5.2）
+    clinic: bool = True  # 俠的醫館折扣（5.2）
+    black_market: bool = True  # 寇的收購價（5.2）
+    virtue_choices: bool = True  # 俠寇選項與新事件（5.3）
+    official_wanted: bool = True  # 官府通緝與掉惡名（5.4）
+    explain: bool = True  # 第六節的原因字句（求見拆解、熟練、悟、共鳴、散人加成）
+
+    fame_thresholds: list[int] = Field(default_factory=lambda: [10, 25, 50, 90], min_length=4, max_length=4)  # 名望第 1～4 段（週末季）
+    # 立功給名望（3.1）：出陣攻打贏、挑戰本人打贏、決戰參戰（自己出手至少 1 回合）、自己那一邊大勝再加；寫 0 的那一項不給
+    deeds: dict[str, int] = Field(default_factory=lambda: {"sortie": 1, "challenge": 2, "showdown": 2, "showdown_rout": 2})
+    discounts: list[float] = Field(default_factory=lambda: [0.97, 0.94, 0.90, 0.85], min_length=4, max_length=4)  # 名望第 1～4 段的店家折扣（4.1）
+    prize_tier: int = Field(default=2, ge=1, le=4)  # 重賞要名望第幾段（4.2）
+    fame_affinity: int = Field(default=5, ge=0)  # 威震州郡以上見面時情誼起步（4.3）
+    fame_affinity_tier: int = Field(default=3, ge=1, le=4)
+    virtue_affinity: int = Field(default=3, ge=0)  # 敬俠的人遇上俠、喜狠的人遇上寇：每段 +3（5.2）
+    cold_share: float = Field(default=0.8, ge=0, le=1)  # 敬俠的人遇上寇：加情誼的那幾類打八折（5.2）
+    duel_chance: list[float] = Field(default_factory=lambda: [1.0, 1.1, 1.2, 1.2, 1.2], min_length=5, max_length=5)  # 頭目遇上的機會（名望第 0～4 段，4.4）
+    duel_reward: float = Field(default=1.2, ge=1)  # 名動一方以上打贏頭目：經驗、銀兩、心得的倍數（4.4）
+    duel_reward_tier: int = Field(default=2, ge=1, le=4)
+    news_tier: int = Field(default=3, ge=1, le=4)  # 跨過這一段天下大事傳一句（4.5）
+    famed_tier: int = Field(default=4, ge=1, le=4)  # 這一段起大場面打完天下大事點名（4.5）
+    famed_news_per_day: int = Field(default=2, ge=0)  # 天下聞名點名一人一個遊戲日最多幾則
+    wanted_tier: int = Field(default=3, ge=1, le=4)  # 敵方陣營每週掛通緝（4.6）
+    wanted_silver: dict[int, int] = Field(default_factory=lambda: {3: 40, 4: 80})
+    clinic_tier: int = Field(default=2, ge=1, le=4)  # 俠的醫館折扣從第幾段（5.2）
+    clinic_share: float = Field(default=0.85, gt=0, le=1)
+    black_market_tier: int = Field(default=1, ge=1, le=4)  # 寇的黑市從第幾段（5.2）
+    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8})  # 素材的階 → 黑市收購價
+    official_tier: int = Field(default=2, ge=1, le=4)  # 江湖巨寇以上官府每週掛通緝（5.4）
+    official_silver: dict[int, int] = Field(default_factory=lambda: {2: 30, 3: 50, 4: 80})
+    official_hunter_tier: int = Field(default=2, ge=1, le=4)  # 俠一路第幾段揭得了官府通緝
+    official_evil_loss: int = Field(default=3, ge=0)  # 被揭了官府通緝的人截殺打贏、交了這一張：惡名少幾點
+
+
 class Bounties(_Strict):
     """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
     官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；劇本的每個陣營（官軍、黃巾、地方豪強）每週一另各掛
@@ -1506,6 +1580,7 @@ class ArenaTuning(_Strict):
 
     enabled: bool = True
     reach: int = Field(default=3, ge=1)
+    famous_reach: int = Field(default=5, ge=1)  # 名聲 4.7：天下聞名的人守擂，排在他後面幾名以內的人都挑得到他（renown.on(content, "arena_reach")）
     per_day: int = Field(default=10, ge=1)
     pair_cooldown_seconds: float = Field(default=10800, ge=0)
     defend_per_day: int = Field(default=0, ge=0)
@@ -2123,6 +2198,47 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class AmbushRules(_Strict):
+    """設伏劫道（後期體力玩法第一批，Joy 2026-10-16；tianxia/ambush.py）：花一大筆體力守在一段路上，敵對的人走過那一段（步行、疾行都算）
+    就跟你打一場；贏的搶走輸的一點銀兩與素材，輸的扣氣血——雙向的，伏兵輸了賠的是自己的東西。設伏的人守在路段的這一頭，期間不能移動
+    （沒有分身）；下線也照守。保護照截殺：敵對陣營（或你揭了通緝他）、雙方過了新手期、城鎮旁邊的路不能設、同一對人的冷卻、剛被截過的護身。
+    enabled 關掉：沒有設伏鈕，已經設下的照時刻作廢（_arrivals 不比）。時間都是世界秒（time_scale 1 就是現實秒）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=80, ge=0)  # 設一次花的體力（Joy：大約 80）
+    hours: float = Field(default=3.0, gt=0)  # 守多久（世界小時）；期間可以自己收
+    keep_hours: float = Field(default=24.0, ge=0)  # 收了、過了時刻的埋伏紀錄再留多久：下線的人回來補算路程時照「當時」有沒有埋伏判
+    silver_share: float = Field(default=0.1, ge=0, le=1)  # 輸的一方失身上銀兩的幾成
+    silver_cap: int = Field(default=40, ge=0)  # 最多失幾兩
+    take_share: float = Field(default=1.0, ge=0, le=1)  # 贏的拿走其中幾成（Joy：輸的東西被搶走）
+    materials: int = Field(default=2, ge=0)  # 輸的一方被搶走幾個素材（挑手上最多的那幾種，一階先）
+    hp_loss: float = Field(default=0.1, ge=0, le=1)  # 輸的一方扣氣血上限的幾成（乘 1−防具減損，不變成內傷，同截殺）
+    pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)  # 同一個伏兵劫同一個人的冷卻（跟截殺共用一本帳 WorldState.raids）
+    win_contrib_push: int = Field(default=1, ge=0)  # 贏的記幾點推力的貢獻（只在第一季規則開著時，同截殺）
+
+
+class FortifyRules(_Strict):
+    """修築工事（後期體力玩法第一批；tianxia/works.py）：在自家控制的戰線地點花體力修工事，工事讓這一處更難易手——拔河的門檻往
+    對方那邊再推 level/100 × band 點（大勢線不動）。工事照時間慢慢壞，易手就整個沒了。只有拔河的兩方修得了（豪強佔的地點這一批不修）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=50, ge=0)  # 修一下花的體力
+    per_press: int = Field(default=10, ge=1)  # 一下加幾點
+    cap: int = Field(default=100, ge=1)  # 最多幾點
+    band: int = Field(default=10, ge=0)  # 滿的工事讓易手的門檻再多幾點
+    decay_per_hour: float = Field(default=8.0, ge=0)  # 每個世界小時壞幾點（滿的約 12 小時壞光）
+
+
+class StockpileRules(_Strict):
+    """屯糧練兵（後期體力玩法第一批；tianxia/works.py）：在自家控制的地方花體力替自己那一軍屯糧，下一場時刻表決戰開集結那一刻，
+    兩軍屯的量換成起點往屯得多的那一軍偏，最多 cap 點（照天命之爭的偏法夾住），屯的量隨即用掉。只有交戰兩軍（含依附那一軍的豪強）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=50, ge=0)  # 屯一下花的體力
+    cap: int = Field(default=6, ge=0)  # 起點最多偏幾點
+    soft: int = Field(default=20, ge=0)  # 偏移＝cap×(甲−乙)÷(甲＋乙＋soft)：兩邊都沒什麼人屯時偏得少
+
+
 class PushResistance(_Strict):
     """盡頭阻力與季長縮放（設計第五節）。enabled 關掉：推力不打盡頭的折、每人每曆日上限與出陣推的量不乘季長倍數。"""
 
@@ -2236,6 +2352,9 @@ class Config(_Strict):
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
+    fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
+    stockpile: StockpileRules = Field(default_factory=StockpileRules)  # 屯糧練兵（見 StockpileRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
@@ -2250,6 +2369,7 @@ class Config(_Strict):
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
+    renown: RenownTuning = Field(default_factory=RenownTuning)  # 名聲（兩個稱號與各段的效果，見 RenownTuning）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——

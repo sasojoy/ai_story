@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import allied, arena, gender, invites, ranger, ranks, team
+from . import allied, arena, gender, invites, ranger, ranks, renown, team
 from .characters import CharacterStore, name_key
 from .rules import day_turn
 from .state import GameState
@@ -101,17 +101,22 @@ def visible(state: GameState, content: Content) -> bool:
 
 
 def here(game: Game) -> list[GameState]:
-    """此地還有誰：跟你同一個地點、presence_seconds 之內同步過、不在路上也不在序章裡的人，照名號排序；你自己看不到人時是空的。"""
+    """此地還有誰：跟你同一個地點、presence_seconds 之內同步過、不在路上也不在序章裡的人，照名號排序；你自己看不到人時是空的。
+    存檔不含賽季（characters.py），讀回來的每一份接上你這一份的季（同 Game._peer）：看季的讀法（豪強分屬兩軍的 allied.on）才讀得到
+    這一季的章——沒接的話依附黃巾軍的豪強在名單上寫回「地方豪強」（FB-275 複驗）。"""
     s, c = game.state, game.content
     if not visible(s, c) or not hasattr(game.world, "db"):
         return []
     since = game.now - c.config.presence_seconds
-    return [o for o in CharacterStore(game.world.db).present(s.player.location, since, s.player.name) if visible(o, c)]
+    found = CharacterStore(game.world.db).present(s.player.location, since, s.player.name)
+    for o in found:
+        o.world = s.world
+    return [o for o in found if visible(o, c)]
 
 
 def side(state: GameState, content: Content) -> str:
-    """名單上名字後面括號裡那一個：陣營，沒有陣營是「散人」。"""
-    return content.scenario.faction_name(state.player.faction) or "散人"
+    """名單上名字後面括號裡那一個：陣營，沒有陣營是「散人」；豪強分屬兩軍的季寫依附哪一邊（allied.side_text，FB-275）。"""
+    return allied.side_text(state, content) or "散人"
 
 
 def affiliation(state: GameState, content: Content) -> str:
@@ -154,6 +159,7 @@ def card(game: Game, other: Game) -> dict:
         "level": o.player.member.level,
         # 這一季的決戰戰績（Joy 2026-10-10 個人戰功）：沒打過是空字串
         "record": f"參戰 {o.player.showdowns} 場・首功 {o.player.top_merits} 次" if o.player.showdowns else "",
+        "renown": renown.card(o, other.content),  # 名聲 3B：只寫稱號（名聲關著是 None）
         "arts": arts(other),
         "actions": buttons,
     }
