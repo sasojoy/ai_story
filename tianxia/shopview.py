@@ -709,6 +709,19 @@ def _fight_view(state: GameState, content: Content) -> dict:
     }
 
 
+def _ring_short(w, me: str, foe, content: Content, left: int, problem: str | None) -> list[str] | None:
+    """挑不了的那一顆鈕上寫的兩行（粗字、小字）：冷卻寫還要等多久、次數用完寫幾點換日（Joy 2026-10-16「看不出還有多久才能打」）；
+    整句原因照舊在 why。挑得了是 None。"""
+    if problem is None:
+        return None
+    if left <= 0:
+        return ["明日 00:00", "今天挑完了"]
+    wait = arena.cool_left(w, me, foe, content.config.arena)
+    if wait > 0:
+        return [arena.wait_text(wait / content.config.time_scale) + "後", "可再挑"]
+    return [problem, ""]
+
+
 def arena_view(state: GameState, content: Content, world: WorldStateStore, power: float, left: int) -> dict:
     """擂台那一頁：打到一半是這一場（fight）；不然是台下（自己的名次、稱號與分身，報名鈕，挑得到的人各一張、挑擂鈕）與擂台榜（board），
     剛打完的那一場有收場卡（result，PlayerState.arena_last）。鈕都是現在的選項 id（arena:join、arena:fight:<名號鍵>、arena:<招>、
@@ -737,7 +750,7 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
         foes.append({
             "id": f"arena:fight:{name_key(e.name)}", "name": e.name, "rank": e.rank, "title": arena.title_for(e.rank),
             "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power, e.power),
-            "enabled": problem is None, "why": problem,
+            "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
             "famed": arena.FAMED_NOTE.format(n=arena.reach_of(e, cfg)) if e.famed else "",  # 名聲 4.7
         })
     nobody = ""
@@ -749,7 +762,7 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
         "shop": "arena",
         "sign": ARENA_SIGN,
         "silver": p.stats.get("silver", 0),
-        "purse": f"今天還能挑 {left} 次",
+        "purse": f"今天還能挑 {left} 次" if left > 0 else arena.SPENT_PURSE,
         "line": ARENA_LINES[mood],
         "back": arena.BACK_ID,
         "me": me,

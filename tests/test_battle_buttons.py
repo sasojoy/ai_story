@@ -14,7 +14,7 @@ ROOT = Path(__file__).parent.parent
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const H = new Function(["esc", "BATTLE_MOVE_LABEL", "optLabelHtml"].map(konst).join("\n") + "\nreturn { optLabelHtml };")();
+const H = new Function(["esc", "BATTLE_MOVE_LABEL", "DEAL_RE", "dealHtml", "optLabelHtml"].map(konst).join("\n") + "\nreturn { optLabelHtml };")();
 finish((input.options || []).map((o) => H.optLabelHtml(o)));
 """
 
