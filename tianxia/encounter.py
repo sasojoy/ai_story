@@ -92,6 +92,7 @@ class Mods(BaseModel):
 
     luck_scale: float = 1.0  # 穩縮小、險放大運氣的起伏（1 − 穩 ＋ 險）
     big_win_cut: float = 0.0  # 先手：大勝的門檻降低（對手強度的比例）
+    draw_floor: float = 0.5  # 僵持的下緣（對手強度的比例，差距 ≥ −這麼多算僵持）；挑戰大勢人物本人照 rise.draw_floor 收窄
     difficulty_cut: float = 0.0  # 破甲：對手強度當作低這麼多（比例）
     power_add: float = 0.0  # 借力：威力加上對手強度的這麼多（比例）
     double_luck: bool = False  # 連環：擲兩次運氣，取好的
@@ -213,6 +214,8 @@ def tier_of(margin: float, effective: float, mods: Mods | None = None) -> str:
     for tier, threshold in tier_thresholds(effective):
         if tier == "大勝":
             threshold -= abs(effective) * mods.big_win_cut
+        elif tier == "僵持":
+            threshold = -abs(effective) * mods.draw_floor
         if margin >= threshold:
             return tier
     return FALLBACK_TIER

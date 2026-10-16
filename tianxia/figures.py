@@ -294,6 +294,7 @@ def _front_name(content: Content, front: str) -> str:
 OUT_BACK = "{name}連吃敗仗，聲威掃地，只得收兵退下，一時號令不動手下的兵。"  # 待 joy 潤：被挑戰打退、過幾天會回來（PM 2026-10-16）
 OUT_BACK_DESTINY = "{name}連吃敗仗，元氣大傷，只得退下養傷，一時露不了面。"
 BACK_LINE = "{name}收拾殘部，重新出來領兵{where}。"  # 待 joy 潤：回來那一句（天下大事）
+DRAW_LINE = "你與{name}過了數十招不分勝負，各自收手；這一番交手讓你有所長進。"  # 挑戰本人打成僵持（engine._challenge_draw）
 DENT_ONCE_LINE = "{name}今天已經在你手下敗過一陣，這一場沒能再動搖他的聲威。"  # 待 joy 潤：同一個人同一天第二場起（figure_dent_once_per_day）
 HELD_LINE = "{name}今天已經敗了好幾陣，部眾死守不退。"  # 待 joy 潤：沒有時刻表的季，這位人物今天被打掉的聲威到了上限（甲 (d)）
 

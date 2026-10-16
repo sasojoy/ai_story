@@ -15,6 +15,11 @@ def on(content: Content) -> bool:
     return content.config.rise.enabled
 
 
+def draw_floor(content: Content) -> float | None:
+    """挑戰大勢人物本人的僵持下緣（encounter.Mods.draw_floor）：江湖水漲開著時收窄到 figure_draw，關著是 None（照一般的 −50%）。"""
+    return content.config.rise.figure_draw if on(content) else None
+
+
 def scale(content: Content, wins: int = 0) -> float:
     """大場面的倍數：big_scale 起，每打贏一次加 per_win，最多 max_scale。"""
     rule = content.config.rise

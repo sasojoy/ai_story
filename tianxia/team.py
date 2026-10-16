@@ -923,6 +923,7 @@ def _apply_toll(
 def fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
     *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
+    draw_floor: float | None = None,
 ) -> encounter.EncounterResult:
     """difficulty 給了就取代隊伍的難度（挑戰大勢人物本人：難度跟著聲威走，見 figures.difficulty）。
     tier 給了（序章雪恥那一場，新手引導計畫一）結果就照寫好的：數字照舊算、功效照舊折進去，判定出來之後只把結果換掉；
@@ -936,6 +937,8 @@ def fight(
     power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     lo = traits.loadout(state, content, world)
     mods = trait_mods(content, lo)
+    if draw_floor is not None:  # 挑戰大勢人物本人：僵持收窄（rise.draw_floor）
+        mods = mods.model_copy(update={"draw_floor": draw_floor})
     result = encounter.resolve_encounter(power, squad.difficulty if difficulty is None else difficulty, rng, shift=shift, mods=mods)
     if tier is not None:
         return result.model_copy(update={"tier": tier})
@@ -1137,16 +1140,19 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
+    draw_floor: float | None = None,
 ) -> str:
-    """勝算的文字；difficulty 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
+    """勝算的文字；difficulty、draw_floor 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
     勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
     ctx = tactic_ctx(state, content, world, squad, squad.difficulty)
     plan = (tactic_holders(state, content, world), ctx, content)
-    return odds_word(power_vs(state, content, world, squad), squad, mods=trait_mods(content, traits.loadout(state, content, world)), plan=plan,
-                     foe=foe_tactics(state, content, squad, ctx))
+    mods = trait_mods(content, traits.loadout(state, content, world))
+    if draw_floor is not None:
+        mods = mods.model_copy(update={"draw_floor": draw_floor})
+    return odds_word(power_vs(state, content, world, squad), squad, mods=mods, plan=plan, foe=foe_tactics(state, content, squad, ctx))
 
 
 def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:

@@ -762,6 +762,7 @@ CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見�
 
 
 CHALLENGE_RISE = "- 你的隊伍越強，大勢人物越拚命：他照你們的身手出全力，這一季每被你打贏一次，下一次就更難打。鈕上的勝算照這個算。"
+CHALLENGE_DRAW = "- 跟他打成平手也不白打：拿得到打贏的一半心得與經驗，也算一次頓悟的契機；不掉東西、他的聲威不動、情誼也不扣。"
 
 
 def _challenge_lines(content: Content, season: WorldState) -> list[str]:
@@ -780,6 +781,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
     if cfg.rise.enabled:
         lines.append(CHALLENGE_RISE)
+    if cfg.figure_draw_share > 0:
+        lines.append(CHALLENGE_DRAW)
     if not figures.untimed(content, season):
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)

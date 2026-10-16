@@ -2064,8 +2064,12 @@ class RiseTuning(_Strict):
     # 威力過難度多少倍才贏（單次判定：贏的那一線是難度的 1.15 倍，運氣 ±0.3 倍）：倍數 0.75 → 威力是難度的 1.33 倍，贏面約八成（有把握）；
     # 0.85 → 約五成五（五五波）；0.95 → 約三成五（凶險）；1.05 → 約一成五
     big_scale: float = Field(default=0.75, gt=0)
-    per_win: float = Field(default=0.10, ge=0)  # 這一季每打贏同一位人物一次，倍數再加多少（只算大勢人物本人：figure_wins）
-    max_scale: float = Field(default=1.05, gt=0)
+    per_win: float = Field(default=0.15, ge=0)  # 這一季每打贏同一位人物一次，倍數再加多少（只算大勢人物本人：figure_wins）
+    max_scale: float = Field(default=1.10, gt=0)
+    # 挑戰大勢人物本人的僵持下緣（encounter.Mods.draw_floor）：差距 ≥ −難度×這麼多才算僵持（一般的仗 0.5）。企劃者 2026-10-16
+    # 「名將挑戰難度提高很容易一直平手」：一般的僵持帶（−50%～+15%，寬 65%）比運氣的範圍（±30%，寬 60%）還寬，倍數走到 1 附近
+    # 不論怎麼調都幾乎全是僵持（打贏三次之後 81%）；收窄到 −10%～+15%，僵持最多四成多，倍數往上是真的會輸（per_win、max_scale 一起調）
+    figure_draw: float = Field(default=0.10, ge=0)
     # 頭目戰（推氣勢，不是單次判定）：他的份量照「難度」換算（duel.foe_strength），1.0 是跟你同一個難度。量出來（measure_difficulty.py，
     # 招一半看架勢一半亂出、不放手一搏）：見 CLAUDE.md「江湖水漲」
     duel_scale: float = Field(default=1.0, gt=0)
@@ -2344,6 +2348,9 @@ class Config(_Strict):
     # figure_return_days：被挑戰打到退場、重創的人物，過這麼多季曆天以 figure_return_share × 開季聲威回到原本的戰線與所在
     # （0＝不回來）；時刻表寫死的退場、重創、病逝不回來。
     figure_dent_once_per_day: bool = True
+    # 挑戰大勢人物本人打成僵持（企劃者 2026-10-16）：給險勝那一份心得、經驗的這麼多（engine._challenge_draw），另算一次頓悟的契機；
+    # 銀兩、素材、三階、寶物、碎片、聲威、情誼、閉門不見都沒有。0 是舊規則（僵持什麼都不給，也不擲頓悟）
+    figure_draw_share: float = Field(default=0.5, ge=0, le=1)
     figure_return_days: float = Field(default=3, ge=0)
     figure_return_share: float = Field(default=0.5, gt=0, le=1)
     # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算

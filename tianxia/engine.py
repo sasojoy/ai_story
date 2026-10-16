@@ -6083,7 +6083,8 @@ class Game:
     def challenge_odds(self, fid: str) -> str:
         """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）與江湖水漲。"""
         squad = self._figure_squad(fid)
-        return team.estimate(self.state, self.content, self.world, squad.id, difficulty=squad.difficulty)
+        return team.estimate(self.state, self.content, self.world, squad.id, difficulty=squad.difficulty,
+                             draw_floor=rise.draw_floor(self.content))
 
     def _figure_squad(self, fid: str) -> Squad:
         """挑戰這位人物本人要打的那一路：難度照他此刻的聲威（figures.squad_of），再照江湖水漲浮上來——你此刻對他的全隊威力 ×
@@ -6116,7 +6117,7 @@ class Game:
         squad = self._figure_squad(fid)
         s.player.stamina -= self._action_costs()["train"]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
-        result = self._fight_with(squad, judged, difficulty=squad.difficulty)
+        result = self._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c))
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
         record.notes += self._style_note(squad, result)
         self._narrate(record, result, judged)
@@ -6127,10 +6128,7 @@ class Game:
             first = p.figure_wins.get(fid, 0) == 0  # 丁 (c)：這一季第一次打贏他才有三階（預設表照擲；之後照擲、擲中不給）
             capped = bool(cfg.figure_rare_cap) and p.figure_rare_drops >= cfg.figure_rare_cap  # 一人一季上限，叛投不清
             p.figure_wins[fid] = p.figure_wins.get(fid, 0) + 1  # 本命兵器「打贏他本人三次」（兵器設計 4.10）：這一季累計
-            # 戊 (b)：被打弱的人物，心得、經驗照難度比例少給——照聲威的那一份算，江湖水漲浮上去的難度不多給
-            ratio = min(1.0, figures.difficulty(s, c, fid) / figures.start_difficulty(c, fid))
-            reward = squad.model_copy(update={
-                "reward_xinde": int(squad.reward_xinde * ratio + 0.5), "exp": int(squad.exp * ratio + 0.5)})
+            reward = self._challenge_reward(fid, squad)
             held = self._held_tier3()
             msgs += self._battle_rewards(reward, record, max_tier=None if first and not capped else 2)
             p.figure_rare_drops += self._held_tier3() - held
@@ -6142,13 +6140,15 @@ class Game:
             msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
             msgs += self._figure_tier3(fid, squad, record)  # 打贏本人掉一個三階（兵器設計 4.9）：戰報「得失」與江湖紀錄
             msgs += self._signature_arms(record, beaten=fid, later=arm_annals)  # 第三次打贏那一刻他讓你奪走（寫進這一場戰報的「得失」）；_rout 把他打到重創的這一場照給
+        elif result.tier == "僵持":
+            msgs += self._challenge_draw(fid, squad, record)
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
         toll, hp_lost, facts = self._take_toll(result.tier, clash=result.clash)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走
-        msgs += self._seize(record)
+        msgs += self._seize(record, draw=c.config.figure_draw_share > 0)  # 挑戰本人打成僵持也算一次頓悟的契機（企劃者 2026-10-16）
         msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
         won = result.tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
@@ -6156,6 +6156,30 @@ class Game:
         for text, who in arm_annals:
             annals.note(s, c, annals.FIGURE, text, 4, figure=who)
         return msgs
+
+    def _challenge_reward(self, fid: str, squad: Squad) -> Squad:
+        """挑戰本人打贏的那一份心得、經驗。戊 (b)：被打弱的人物照難度比例少給——照聲威的那一份算，江湖水漲浮上去的難度不多給。"""
+        s, c = self.state, self.content
+        ratio = min(1.0, figures.difficulty(s, c, fid) / figures.start_difficulty(c, fid))
+        return squad.model_copy(update={"reward_xinde": int(squad.reward_xinde * ratio + 0.5), "exp": int(squad.exp * ratio + 0.5)})
+
+    def _challenge_draw(self, fid: str, squad: Squad, record) -> list[str]:
+        """挑戰本人打成僵持（企劃者 2026-10-16「僵持也給一點東西，讓重複挑戰不是純虧體力」）：險勝那一份心得、經驗的
+        draw_share（一半），不乘寶物與遊俠名號的「打贏」加成；不給銀兩、素材、三階、寶物、碎片，聲威不動、不閉門不見、
+        不算打贏（figure_wins、本命兵器、江湖水漲的倍數都不動）。情誼也不扣：扣情誼是把他打到敗走的代價（_rout），
+        平手是堂堂正正過了招，不是折辱他。頓悟的契機在 _seize(draw=True)。"""
+        p, share = self.state.player, self.content.config.figure_draw_share
+        won = self._challenge_reward(fid, squad)
+        xinde, exp = int(won.reward_xinde * share + 0.5), int(won.exp * share + 0.5)
+        msgs = [figures.DRAW_LINE.format(name=self.content.figures[fid].name)]
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+            msgs.append(f"心得 +{xinde}")
+        record.exp = exp
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        record.notes += levels
+        return msgs + levels
 
     def _rout(self, fid: str) -> list[str]:
         """打贏了，他敗走：
@@ -6391,10 +6415,12 @@ class Game:
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         return msgs + levels
 
-    def _seize(self, record) -> list[str]:
+    def _seize(self, record, draw: bool = False) -> list[str]:
         """絕學的契機（方案 C，cultivation.seize）：打贏了（險勝以上）、序章外，照這一場的難度比擲一次頓悟。
+        draw：僵持也算（挑戰大勢人物本人，企劃者 2026-10-16），難度比照打贏的算法。
         說出來的話也記進這一場戰報的敘事（戰鬥卡片「結果」那一段）。"""
-        if record.tier not in team.WIN_TIERS or record.our_power <= 0 or prologue_rules.active(self.state, self.content):
+        tiers = (*team.WIN_TIERS, "僵持") if draw else team.WIN_TIERS
+        if record.tier not in tiers or record.our_power <= 0 or prologue_rules.active(self.state, self.content):
             return []
         msgs = cultivation.seize(self.state, self.content, self.world, record.difficulty / record.our_power, self.rng)
         record.notes += msgs
