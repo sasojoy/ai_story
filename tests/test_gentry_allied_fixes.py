@@ -171,3 +171,27 @@ def test_presence_old_rules_say_the_faction_only():
     off = _old_rules()
     game = _game(off, name="乙", faction="haoqiang")
     assert social.side(game.state, off) == "地方豪強"
+
+
+def _seen_here(content, ally):
+    """「此地還有」照真的那條路走（FB-275 複驗，QA 40b89826）：另一個人的存檔存進資料庫，再由 Game.peers_here 經
+    CharacterStore.present 讀回來——角色存檔不含賽季，讀回來的那一份沒有這一季的章。"""
+    from tianxia.characters import CharacterStore
+
+    now = 1_000_000.0
+    me = _game(content, at="yingchuan")
+    other = _game(content, name="豪客子", faction="haoqiang", ally=ally, at="yingchuan")
+    for g in (me, other):
+        g.sync(now)
+    CharacterStore(other.world.db).save(other.state)
+    return me.peers_here()
+
+
+def test_presence_read_back_from_the_database_names_the_allied_side():
+    """依附黃巾軍的豪強，從資料庫讀回來照樣寫「地方豪強・依附黃巾軍」（以前讀回來的存檔沒有章，寫回「地方豪強」）。"""
+    assert _seen_here(_wk(), "huang") == [{"name": "豪客子", "side": "地方豪強・依附黃巾軍"}]
+
+
+def test_presence_read_back_under_the_old_rules_says_the_faction_only():
+    """豪強不分屬兩軍的季（14 天那一種）照舊只寫陣營名。"""
+    assert _seen_here(_old_rules(), None) == [{"name": "豪客子", "side": "地方豪強"}]

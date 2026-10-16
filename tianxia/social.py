@@ -101,12 +101,17 @@ def visible(state: GameState, content: Content) -> bool:
 
 
 def here(game: Game) -> list[GameState]:
-    """此地還有誰：跟你同一個地點、presence_seconds 之內同步過、不在路上也不在序章裡的人，照名號排序；你自己看不到人時是空的。"""
+    """此地還有誰：跟你同一個地點、presence_seconds 之內同步過、不在路上也不在序章裡的人，照名號排序；你自己看不到人時是空的。
+    存檔不含賽季（characters.py），讀回來的每一份接上你這一份的季（同 Game._peer）：看季的讀法（豪強分屬兩軍的 allied.on）才讀得到
+    這一季的章——沒接的話依附黃巾軍的豪強在名單上寫回「地方豪強」（FB-275 複驗）。"""
     s, c = game.state, game.content
     if not visible(s, c) or not hasattr(game.world, "db"):
         return []
     since = game.now - c.config.presence_seconds
-    return [o for o in CharacterStore(game.world.db).present(s.player.location, since, s.player.name) if visible(o, c)]
+    found = CharacterStore(game.world.db).present(s.player.location, since, s.player.name)
+    for o in found:
+        o.world = s.world
+    return [o for o in found if visible(o, c)]
 
 
 def side(state: GameState, content: Content) -> str:
