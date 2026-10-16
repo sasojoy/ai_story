@@ -39,7 +39,7 @@ globalThis.document = {
 const S = { nowOpen: null, sceneOpen: false, moveMode: "walk", answering: false, peekOpen: null, boardSeen: null, main: input.m, ...input.S };
 const parts = [
   // pro、shown：序章（新手引導計畫一）把小標一塊一塊藏起來要看的；這裡的 m 沒有 prologue，所以全亮
-  ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
+  ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "DEAL_RE", "dealHtml", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
     "peekSeason", "peekParts", "peekBlock", "optParts", "MUSTER_JOIN", "MUSTER_NOTE", "MUSTER_ARROW", "masterTalksOf",
     "BATTLE_ROUND", "BATTLE_MINE", "BATTLE_PEEK", "BATTLE_SHUT"].map(konst),
   // musterJoins、musterScene：決戰集結時還沒參戰的加入鈕畫在場景卡上（FB-105）；battleWatch、battleScene：只能觀戰的人，開打中的
