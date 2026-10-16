@@ -6,7 +6,7 @@
 | 意境的重數 | 悟來的一重；合一次取兩個來源高的那一重再加一，最多 max_rank 重，到頂的不能再合（rank_of） |
 | 圓融／駁雜 | 兩個來源相生或同屬性是圓融，其餘硬湊是駁雜（harmony）；一重不分 |
 | 意境給幾層 | 融進武學時給 重數 ±1（圓融多一層、駁雜少一層，layers_of） |
-| 武學的代數 | 基礎與內容寫的第零代；合一次多一代，最多 max_gen 代，到頂的不能再合（gen_of） |
+| 武學的代數 | 基礎與內容寫的第零代；合一次多一代，最多 max_gen 代，到頂的不能再合（gen_of）；玩家看到的是境界：初成、精進、化境（gen_label） |
 | 一脈相承 | 新屬性跟底的主屬性相同或相生：底的層數整串留著疊上；相剋：打散；不相干：留一半（fuse_traits、blend_traits） |
 | 首創的走向 | 引擎照配方排幾種特別功效，模型挑一種、寫一句招意；清單外、叫不動照配方挑（directions、choose） |
 
@@ -27,12 +27,12 @@ from .world_state import WorldStateStore
 SAME, BORN, CLASH, APART = "same", "born", "clash", "apart"
 HARMONY, DISCORD = "圓融", "駁雜"
 RANK_WORDS = ("", "一重", "二重", "三重", "四重", "五重")
-GEN_WORDS = ("", "第一代", "第二代", "第三代", "第四代", "第五代")
+GEN_WORDS = ("", "初成", "精進", "化境", "化境", "化境")  # 武學的境界（Joy 2026-10-16：玩家看不到「第幾代」）
 RELATION_WORDS = {SAME: "一脈相承", BORN: "相生相承", CLASH: "相剋", APART: "不相干"}
 
 # 玩家看得到的句子（待 joy 潤）
 RANK_TOP = "「{name}」已是{rank}，圓滿了，不能再合。"
-GEN_TOP = "【{name}】此功已臻化境（{gen}），不能再往下合。"
+GEN_TOP = "【{name}】此功已臻化境，不能再往下合。"
 KEEP_LINE = {  # 煉製頁的說明：這一爐的功效層數怎麼傳
     SAME: "與底同源，一脈相承：舊的功效全留著，疊上新的",
     BORN: "與底相生：舊的功效全留著，疊上新的",
@@ -166,7 +166,7 @@ def gen_problem(art: MartialArt, content: Content, world: WorldStateStore) -> st
     """這門已經到頂（max_gen 代）：那一句；還能合是 None。"""
     gen = gen_of(art, content, world)
     if gen >= content.config.fusion_depth.max_gen:
-        return GEN_TOP.format(name=art.name, gen=gen_label(gen))
+        return GEN_TOP.format(name=art.name)
     return None
 
 

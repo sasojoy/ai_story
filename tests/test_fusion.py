@@ -1959,3 +1959,9 @@ def test_the_scroll_card_skips_an_insight_already_in_the_lineage(ready, content,
     ready.player.insights = ["feng"]
     row = next(r for r in skillview.art_rows(ready, content, world) if r["id"] == b.id)
     assert "forge_odds" not in row
+
+
+def test_generation_is_shown_as_realm_words_not_numbers():
+    """Joy 2026-10-16「第一代第二代這種命名很low」：玩家看到的是境界 初成、精進、化境，到頂那一句不重複化境。"""
+    assert [depth.gen_label(g) for g in range(4)] == ["", "初成", "精進", "化境"]
+    assert "代" not in "".join(depth.GEN_WORDS) and "（" not in depth.GEN_TOP

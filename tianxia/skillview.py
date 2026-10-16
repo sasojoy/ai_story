@@ -199,7 +199,7 @@ def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore,
     layers = depth.layers_of(insight, content, world, state)
     rel = depth.fuse_relation(base, insight.attribute)
     return (
-        f"\n合出來是{depth.gen_label(gen)}；「{insight.name}」{depth.label(insight, content, world, state)}，"
+        f"\n合出來的境界是{depth.gen_label(gen)}；「{insight.name}」{depth.label(insight, content, world, state)}，"
         f"給 {layers} 層功效；{depth.KEEP_LINE[rel]}。"
     )
 
@@ -207,7 +207,7 @@ def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore,
 def _blend_depth_note(content: Content, world: WorldStateStore, a: MartialArt, b: MartialArt, attribute: str) -> str:
     gen = max(depth.gen_of(a, content, world), depth.gen_of(b, content, world)) + 1
     keeps = "、".join(f"【{art.name}】{depth.RELATION_WORDS[depth.relation(attribute, art.attribute)]}" for art in (a, b))
-    return f"\n合出來是{depth.gen_label(gen)}；{keeps}。"
+    return f"\n合出來的境界是{depth.gen_label(gen)}；{keeps}。"
 
 
 def _no(problem: str) -> dict:
@@ -349,7 +349,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare,
                 gen_word=gen_word(art, content, world),
             ),
-            "gen": gen_word(art, content, world),  # 第幾代（depth.py）：第零代（基礎、內容寫的）是空字串
+            "gen": gen_word(art, content, world),  # 境界（depth.py 的第幾代）：第零代（基礎、內容寫的）是空字串
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
@@ -640,10 +640,8 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
 
 
 def gen_word(art: MartialArt, content: Content, world: WorldStateStore) -> str:
-    """功法卡與清單上的代數（depth.gen_of）：「第二代」，到頂的接「・已臻化境」；第零代（基礎、內容寫的）是空字串。"""
-    gen = depth.gen_of(art, content, world)
-    word = depth.gen_label(gen)
-    return f"{word}・已臻化境" if word and gen >= content.config.fusion_depth.max_gen else word
+    """功法卡與清單上的境界（depth.gen_of → gen_label）：「精進」，到頂的是「化境」；第零代（基礎、內容寫的）是空字串。"""
+    return depth.gen_label(depth.gen_of(art, content, world))
 
 
 def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> list[str]:
