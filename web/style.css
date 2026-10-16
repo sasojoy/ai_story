@@ -1626,7 +1626,8 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-layer .odds .q-下品 { background: #a89b88; }
 .shop-layer .odds .q-中品 { background: #6fb7c4; }
 .shop-layer .odds .q-上品 { background: #f2c46a; }
-.shop-gorow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
+/* 鈕那一欄縮得下（minmax(0, 1fr)，FB-297 複驗）：字再長也只是在鈕裡換行，旁邊那一顆（鑄譜、捐軍備的一階）一直在畫面裡 */
+.shop-gorow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 4px 0; }
 .shop-go { padding: 12px 8px; font: 600 16px var(--serif); letter-spacing: 2px; }
 .shop-layer .cells { display: grid; gap: 6px; }
 /* 一屬性一排（企劃者 2026-10-14 微調）：排頭一個屬性字，後面一階到三階 */
