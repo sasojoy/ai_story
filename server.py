@@ -1194,6 +1194,8 @@ def admin_choices(game: Game) -> dict:
         ],
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
         "next_has_timetable": bool(CONTENT.config.season_one),
+        # 救場「叫回人物」：這一季退場、重創的大勢人物（沒有就不畫那一列）
+        "fallen": [{"label": CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
         "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
@@ -1542,6 +1544,7 @@ ADMIN_ACTIONS = {
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
+    "revive_figure": lambda g, b: g.admin_revive_figure(str(b.get("id", ""))),
     # 管理者觸發鈕（企劃者 2026-10-07）：每週的事照週一的做法立刻再做一次
     "issue_orders": lambda g, b: g.admin_issue_orders(),
     "rotate_seats": lambda g, b: g.admin_rotate_seats(),
@@ -1656,6 +1659,7 @@ MENXIA_ACTIONS = {
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
     # 神器原品定名（打造隱藏配方設計 5.2）：自己打的名字，或 keep 是「沿用譜名」；keep 只認真正的布林 true（同 use_legend）
     "name_divine": lambda g, b: g.name_divine(str(b.get("weapon") or ""), str(b.get("name") or ""), keep=b.get("keep") is True),
+    "bind_art": lambda g, b: g.bind_art(str(b.get("weapon") or ""), str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵

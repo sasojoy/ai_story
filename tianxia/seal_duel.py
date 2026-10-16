@@ -18,7 +18,7 @@ import random
 import re
 from typing import NamedTuple
 
-from . import battle_instance, seal
+from . import battle_instance, seal, tactics
 from . import duel as duel_rules
 from .battle_instance import CAVALRY_MOVES, DEFAULT_FREE_TEXT_SUCCESS_RATE, BattleParticipant
 from .models import MOVES, Content, DuelTuning, SealTuning
@@ -32,6 +32,8 @@ WIN_VERDICTS = ("提前大勝", "大勝", "險勝")  # 挑戰者打贏了單挑�
 LATE = "這一回合來不及了，下一回合再出手。"
 SENT = "已出招，等對方"
 NO_MORE_GAMBLE = "這一場你已經放手一搏兩次了，只剩三招。"
+NO_GAMBLE = "亂了心神，這一回合沒法放手一搏"  # 本命戰法：亂神
+BOUT_SIDE = {"challenger": "a", "holder": "b"}  # tactics.Bout 的哪一邊
 GONE = "這一回合已經結算了，下一回合再出手。"
 CALL = "{challenger}（此役戰功居前）向懷璽的{holder}下了戰書，一炷香後陣前單挑，爭『{shard}』。"
 CALL_QA = "{challenger}向懷璽的{holder}下了戰書，一炷香後陣前單挑，爭『{shard}』。"  # 挑戰者不是參戰者（小伺服器補上的旁觀散人、管理者不掛決戰開的那一場）
@@ -93,12 +95,17 @@ def unmounted(p: BattleParticipant) -> dict[str, float]:
 
 def side_from_participant(p: BattleParticipant, faction: str | None) -> SealSide:
     """參戰者的快照（5.3 前兩列）：威力、份量、職位、氣血上限；池子從滿血開始（決戰裡那一份池子不帶進來）。"""
-    return SealSide(name=p.name, faction=faction, power=p.power, scores=unmounted(p), role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap)
+    kit = p.kit.model_copy(update={"ctx": p.kit.ctx.model_copy(update={"mount_tier": 0, "followers": 0})}) if p.kit else None
+    return SealSide(name=p.name, faction=faction, power=p.power, scores=unmounted(p), role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap,
+                    kit=kit)
 
 
-def side_from(name: str, faction: str | None, power: float, scores: dict[str, float], role: str, hp_cap: float, fresh: bool = False) -> SealSide:
-    """沒參戰的那一邊（持有者、小伺服器補上的旁觀散人）：engine 照他的 Game 算好給（_battle_power、_battle_scores(mounted=False)…）。"""
-    return SealSide(name=name, faction=faction, power=power, scores=dict(scores), role=role, hp=hp_cap, hp_cap=hp_cap, fresh=fresh)
+def side_from(name: str, faction: str | None, power: float, scores: dict[str, float], role: str, hp_cap: float, fresh: bool = False,
+              kit: tactics.BoutSide | None = None) -> SealSide:
+    """沒參戰的那一邊（持有者、小伺服器補上的旁觀散人）：engine 照他的 Game 算好給（_battle_power、_battle_scores(mounted=False)、
+    team.self_side…）。"""
+    return SealSide(name=name, faction=faction, power=power, scores=dict(scores), role=role, hp=hp_cap, hp_cap=hp_cap, fresh=fresh,
+                    kit=kit)
 
 
 def open_duel(
@@ -108,6 +115,8 @@ def open_duel(
     return SealDuel(
         id=duel_id, shard=shard, record=record, event_id=event_id, where=where, tier=tier, cap=cap, phase="muster",
         starts_real=now + cfg.muster_seconds, challenger=challenger, holder=holder, rounds=cfg.rounds,
+        bout=tactics.open_bout(challenger.kit, holder.kit, challenger.name, holder.name, a_faction=challenger.faction,
+                               b_faction=holder.faction, pvp=True),
     )
 
 
@@ -163,6 +172,8 @@ def submit_problem(duel: SealDuel, who: str, cfg: SealTuning, text: bool = False
         return SENT
     if text and s.gambles >= cfg.gamble_cap:
         return NO_MORE_GAMBLE
+    if text and tactics.locks(duel.bout, BOUT_SIDE[who]).no_gamble:  # 本命戰法：亂神了不能放手一搏
+        return NO_GAMBLE
     return None
 
 
@@ -220,36 +231,67 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
         else:  # 在場卻逾時沒送：結算時才代出（不給架勢）
             plays[w] = proxy(getattr(duel, w), seal.dice(salt, tianji, "seal-proxy", duel.id, n, w), cfg, tuning)[0]
             getattr(duel, w).proxied = True
-    luck = rolls["challenger"].uniform(-tuning.luck, tuning.luck)  # 先取運氣：不論有沒有人搏，取數順序固定
+    luck = rolls["challenger"].uniform(-tuning.luck, tuning.luck) * tactics.luck_scale(duel.bout)  # 先取運氣：不論有沒有人搏，取數順序固定
     gamblers = [w for w in SIDES if plays[w] == TEXT]
     harm = {w: 0 for w in SIDES}
     push = 0
+    step = None
+    trng = seal.dice(salt, tianji, "seal-tactic", duel.id, n) if duel.bout is not None else None
+    if duel.bout is not None:  # 本命戰法（第二批）：不在場、被代打的那一邊看穿或對手亂神時出剋他的招
+        step = tactics.step(duel.bout, plays["challenger"], plays["holder"], duel.edge, content.config.tactics, trng,
+                            a_ratio=c.hp / max(1.0, c.hp_cap), b_ratio=h.hp / max(1.0, h.hp_cap),
+                            a_auto=not c.present, b_auto=not h.present)
     if not gamblers:
         mc, mh = plays["challenger"], plays["holder"]
-        sc, sh = _weight(c, mc, content), _weight(h, mh, content)
-        beat = duel_rules.counter(mc, mh)
-        push = duel_rules.push_of(sc, sh, beat, c.role, tuning, battle_t, luck, foe_role=h.role)
+        if step is not None:
+            mc, mh = step.a_move, step.b_move
+        sc, sh = _weight(c, mc or "", content), _weight(h, mh or "", content)
+        beat = step.beat if step is not None else duel_rules.counter(mc, mh)
+        push = round(tactics.scale_push(duel_rules.push_of(sc, sh, beat, c.role, tuning, battle_t, luck, foe_role=h.role), step))
         harm["challenger"] = duel_rules.harm_of(c.hp_cap, sc, sh, beat, tuning)
         harm["holder"] = duel_rules.harm_of(h.hp_cap, sh, sc, -beat, tuning)
-        lead = f"{c.name}{mc}，{h.name}以{mh}相迎"
+        if step is not None:
+            harm["challenger"] = round(harm["challenger"] * (1 - step.a_cut)) * step.a_hit
+            harm["holder"] = round(harm["holder"] * (1 - step.b_cut)) * step.b_hit
+        lead = f"{c.name}{mc or '定在原地'}，{h.name}" + (f"以{mh}相迎" if mh else "定在原地")
     else:
         parts = []
         for w in gamblers:
             s = getattr(duel, w)
             s.gambles += 1
-            won, delta, hp, _ = duel_rules.gamble_roll(
-                duel.rates.get(w, DEFAULT_FREE_TEXT_SUCCESS_RATE), s.hp_cap, s.power, s.role, tuning, battle_t, rolls[w],
-            )
+            rate = duel.rates.get(w, DEFAULT_FREE_TEXT_SUCCESS_RATE)
+            won, delta, hp, rate = duel_rules.gamble_roll(rate, s.hp_cap, s.power, s.role, tuning, battle_t, rolls[w])
+            saved = None
+            if not won and duel.bout is not None:
+                saved = tactics.divine_save(getattr(duel.bout, BOUT_SIDE[w]).holders, trng)
+                if saved is not None:
+                    won = True
+                    delta, hp = duel_rules.success_of(rate, s.hp_cap, s.power, tuning, battle_t)
             push += delta if w == "challenger" else -delta
             harm[w] = hp
-            story = (duel.stories.get(w) or ["", ""])[0 if won else 1]
+            story = (duel.stories.get(w) or ["", ""])[0 if won and saved is None else 1 if not won else 0]
             parts.append((story or (GAMBLE_WON if won else GAMBLE_LOST).format(name=s.name)).rstrip("。"))
+            if saved is not None:
+                parts[-1] = tactics.divine_line(saved).rstrip("！")
         lead = "；".join(parts)
-    c.hp = max(0.0, c.hp - harm["challenger"])
-    h.hp = max(0.0, h.hp - harm["holder"])
+    guarded_lines: list[str] = []
+    if step is not None:
+        push += round(step.push)
+        harm["challenger"] = round(harm["challenger"] - step.a_hp * c.hp_cap)
+        harm["holder"] = round(harm["holder"] - step.b_hp * h.hp_cap)
+        for w, key, s in (("challenger", "a", c), ("holder", "b", h)):
+            guarded, said = tactics.guard_pool(duel.bout, key, s.hp, harm[w], s.hp_cap)
+            harm[w] = round(guarded)
+            guarded_lines += said
+    c.hp = max(0.0, min(c.hp_cap, c.hp - harm["challenger"]))
+    h.hp = max(0.0, min(h.hp_cap, h.hp - harm["holder"]))
+    before = duel.edge
     duel.edge = max(0.0, min(100.0, duel.edge + push))
     duel.round = n
-    line = ROUND.format(n=n, lead=lead, edge=edge_words(duel))
+    fired = (list(step.lines) + guarded_lines) if step is not None else []
+    if step is not None:
+        fired += tactics.close_round(duel.bout, duel.edge - before, content.config.tactics, trng)
+    line = tactics.round_line(ROUND.format(n=n, lead=lead, edge=edge_words(duel)), fired)
     duel.lines.append(line)
     return line
 

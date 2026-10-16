@@ -429,3 +429,13 @@ def test_roll_day_records_one_wage_per_day():
     world.arena_day = 20740  # 假裝舊存檔留下來的壞資料
     arena.roll_day(world, cfg, 20741)
     assert [d for d, _ in world.arena["jia"].wages] == [20741]
+
+
+def test_the_finishing_blow_reports_whole_numbers():
+    """池子是小數：見底那一下扣的是剩的那一截，回合那一句照 :+d 寫，得是整數（2026-10-16 假人擂台每次見底都丟 ValueError）。"""
+    from tianxia.state import ArenaSide
+    side = ArenaSide(name="甲", power=100.0, hp=37.4, hp_cap=400.0)
+    lost = arena._pool(side, 120)
+    assert isinstance(lost, int) and f"{-lost:+d}" == "-37" and side.hp == 0
+    side = ArenaSide(name="乙", power=100.0, hp=399.5, hp_cap=400.0)
+    assert isinstance(arena._pool(side, -30), int) and side.hp == 400.0

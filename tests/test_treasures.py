@@ -260,7 +260,7 @@ def test_win_treasures_add_to_the_streak_bonus_on_train_wild_challenge_and_story
     assert [won(kind) for kind in ("train", "wild", "event")] == [(10, 23)] * 3  # round(20 × 1.15)
     game.state.player.treasure = _item("win_xinde_pct")
     with mock.patch.object(traits, "amount", lambda content_, lo, hook: 0.5 if hook == "win_reward" else 0.0):
-        assert won()[0] == 17  # 乘勝 +50% 與寶物 +20% 相加：10 × 1.7；疊乘會是 18
+        assert won()[0] == 12  # 乘勝換成回合裡的戰法（本命戰法第三批），不再多給打贏的心得：只有寶物 +20%
 
 
 def test_seclusion_treasure_adds_a_quarter_to_the_xinde(content, world):
