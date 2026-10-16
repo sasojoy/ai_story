@@ -1806,6 +1806,13 @@ class Game:
             if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
                 self._shop_after(problem, "refused")
             return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
+        if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
+            # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
+            foe = self.state.world.arena.get(option_id.removeprefix("arena:fight:"))
+            problem = foe and arena.challenge_problem(self.state.world, self.state.player.name, foe, self.content.config.arena,
+                                                      self.arena_left(), self.content.config.time_scale)
+            if problem:
+                return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
@@ -8752,7 +8759,7 @@ class Game:
         foe = s.world.arena.get(key)
         if foe is None or name_key(foe.name) == name_key(p.name):
             return ["（此刻無法這麼做。）"]
-        problem = arena.challenge_problem(s.world, p.name, foe, cfg, self.arena_left())
+        problem = arena.challenge_problem(s.world, p.name, foe, cfg, self.arena_left(), c.config.time_scale)
         if problem is not None:
             return [f"（{problem}。）"]
         arena.spend(s, self._pill_day())
@@ -10403,9 +10410,10 @@ class Game:
         if s.player.journey is not None:
             # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
+            tasks = "邊走邊想、沿途打聽、路邊採集" if c.config.open_map else "邊走邊想、沿途打聽、留意地形、路邊採集"  # 全圖開放拿掉了留意地形（FB-300，同 howto）
             return (
                 f"**在路上**{halted}\n\n"
-                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
+                f"路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；{tasks}，"
                 "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
         return self.location_text()

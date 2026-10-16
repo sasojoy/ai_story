@@ -50,8 +50,9 @@ JOIN_FIRST = "先報名守擂"
 BEHIND = "排在你後面"
 OUT_OF_REACH = "只能挑前 {n} 名內的人"
 FAMED_NOTE = "天下聞名：排在他後面 {n} 名內的人都挑得到他"  # 名聲 4.7（擂台那一頁挑得到的人那一格）
-COOLING = "剛挑過，過一陣子再來"
-SPENT = "今天的 {n} 次挑完了"
+COOLING = "剛挑過，{wait}後可再挑"  # wait 是現實的倒數（wait_text）
+SPENT = "今天的 {n} 次挑完了，明日 00:00 後再挑"  # 照回體丹的現實時間換日（Game._pill_day）
+SPENT_PURSE = "明日 00:00 再挑"  # 擂台那一頁右上角（窄）
 LEFT = "今天還能挑 {n} 次"
 NOBODY = "你前面沒有人了：你就是天下第一。"
 NOBODY_AHEAD = "擂台上還沒有別人守擂。"
@@ -133,14 +134,33 @@ def spend(state: GameState, today: int) -> None:
     p.arena_day = today
 
 
+def cool_left(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTuning) -> float:
+    """你挑這個人的冷卻還剩幾個世界秒（pair_cooldown_seconds，開打那一刻起算）；0＝沒在冷卻。"""
+    last = world.arena_pairs.get(pair_key(me, foe.name))
+    if last is None or not 0 <= world.time - last < cfg.pair_cooldown_seconds:
+        return 0.0
+    return cfg.pair_cooldown_seconds - (world.time - last)
+
+
+def wait_text(real_seconds: float) -> str:
+    """給玩家看的現實倒數：「約 40 分鐘」「約 2 小時 15 分」（分鐘四捨五入、至少 1 分；Joy 2026-10-16「看不出還有多久才能打」）。
+    只寫現實的倒數、不寫季曆時刻（同路上的倒數，FB-062：季曆跑得比現實快，寫時刻玩家算不出來）。"""
+    minutes = max(1, int(real_seconds / 60 + 0.5))
+    if minutes < 60:
+        return f"約 {minutes} 分鐘"
+    hours, rest = divmod(minutes, 60)
+    return f"約 {hours} 小時" + (f" {rest} 分" if rest else "")
+
+
 def reach_of(foe: ArenaEntry, cfg: ArenaTuning) -> int:
     """排在他後面幾名內的人挑得到他：平常 reach；天下聞名的人（ArenaEntry.famed，名聲 4.7）放寬到 famous_reach。"""
     return max(cfg.reach, cfg.famous_reach) if foe.famed else cfg.reach
 
 
-def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTuning, left: int) -> str | None:
+def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTuning, left: int,
+                      time_scale: float = 1.0) -> str | None:
     """挑不挑得了這個人：先報名、他要排在你前面 reach 名以內（天下聞名的人放寬，reach_of）、今天還有次數、冷卻。
-    None＝可以（守擂的人一天被挑幾場不設限，Joy 2026-10-15）。"""
+    None＝可以（守擂的人一天被挑幾場不設限，Joy 2026-10-15）。冷卻寫還要等多久（世界秒 ÷ time_scale ＝ 現實秒）。"""
     mine = entry_of(world, me)
     if mine is None:
         return JOIN_FIRST
@@ -150,9 +170,9 @@ def challenge_problem(world: WorldState, me: str, foe: ArenaEntry, cfg: ArenaTun
         return OUT_OF_REACH.format(n=cfg.reach)
     if left <= 0:
         return SPENT.format(n=cfg.per_day)
-    last = world.arena_pairs.get(pair_key(me, foe.name))
-    if last is not None and 0 <= world.time - last < cfg.pair_cooldown_seconds:
-        return COOLING
+    wait = cool_left(world, me, foe, cfg)
+    if wait > 0:
+        return COOLING.format(wait=wait_text(wait / time_scale))
     return None
 
 
@@ -169,7 +189,7 @@ def challengers(world: WorldState, content: Content, me: str, left: int) -> list
     if mine is None:
         return []
     rows = [e for e in ladder(world) if e.rank < mine.rank and mine.rank - e.rank <= reach_of(e, cfg)]
-    return [(e, challenge_problem(world, me, e, cfg, left)) for e in rows]
+    return [(e, challenge_problem(world, me, e, cfg, left, content.config.time_scale)) for e in rows]
 
 
 def join(world: WorldState, entry: ArenaEntry) -> ArenaEntry:

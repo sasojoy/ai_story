@@ -29,7 +29,8 @@ globalThis.document = { getElementById: () => null, querySelector: () => null, q
 const S = { stage: "game", tab: "practice", kind: "武學", artOpen: null, legendTick: {}, forgeSel: [], forgeLine: "", busy: false,
   message: "", person: null, main: { status: { injury: 0 } }, ...input.S };
 const parts = [
-  ...["KINDS", "QUALITY_RANK", "esc", "pro", "attrNoteHtml"].map((n) => { try { return konst(n); } catch (e) { return ""; } }),
+  // DEAL_RE、dealHtml：療傷鈕上的折扣原因包成不折行的小段（FB-297）
+  ...["KINDS", "QUALITY_RANK", "esc", "pro", "attrNoteHtml", "DEAL_RE", "dealHtml"].map((n) => { try { return konst(n); } catch (e) { return ""; } }),
   ...input.consts.map(konst),
   // 卷軸卡的零件（品質印、十成格、療傷鈕、庫的篩選……）：「// ── 修練 ──」到 pagePractice 之間整段照抄（跟 test_arts_pages.py 同一個切法）
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),

@@ -200,12 +200,36 @@ def test_the_pair_cooldown_and_no_daily_protection(ring):
     _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙") + g.choose(ARENA_YIELD))
     _, game = _do(content, world, "甲", lambda g: g.choose("act:arena"))
     option = next(o for o in game.options() if o.id == "arena:fight:乙")
-    assert not option.enabled and arena.COOLING in option.label
+    assert not option.enabled and "剛挑過，約 3 小時後可再挑" in option.label
     w = game.state.world
     foe = arena.entry_of(w, "乙")
     w.arena_pairs.clear()
     foe.defended = [arena.day_of(w), 99]  # 舊存檔記的被挑場數不再擋人
     assert arena.challenge_problem(w, "甲", foe, cfg, 5) is None
+
+
+def test_the_cooldown_says_how_long_to_wait(ring):
+    """Joy 2026-10-16「擂台打過的對手短時間不能打，但是玩家現在無法看出還有多久才能打」：鈕上、被拒那句都寫現實的倒數。"""
+    content, world = ring
+    cfg = content.config.arena
+    _join(content, world, "乙")
+    _join(content, world, "甲")
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena"))
+    w = game.state.world
+    foe = arena.entry_of(w, "乙")
+    w.arena_pairs[arena.pair_key("甲", "乙")] = w.time - (cfg.pair_cooldown_seconds - 40 * 60)
+    assert arena.challenge_problem(w, "甲", foe, cfg, 5) == "剛挑過，約 40 分鐘後可再挑"
+    assert arena.challenge_problem(w, "甲", foe, cfg, 5, time_scale=2.0) == "剛挑過，約 20 分鐘後可再挑"
+    w.arena_pairs[arena.pair_key("甲", "乙")] = w.time - (cfg.pair_cooldown_seconds - 135 * 60)
+    assert arena.challenge_problem(w, "甲", foe, cfg, 5) == "剛挑過，約 2 小時 15 分後可再挑"
+    assert game.choose("arena:fight:乙") == ["（剛挑過，約 2 小時 15 分後可再挑。）"]
+    assert arena.wait_text(10) == "約 1 分鐘" and arena.wait_text(3600) == "約 1 小時"
+    assert "明日 00:00" in arena.challenge_problem(w, "甲", foe, cfg, 0)
+    from tianxia import shopview
+    view = shopview.arena_view(game.state, content, world, 100.0, 5)
+    assert view["foes"][0]["short"] == ["約 2 小時 15 分後", "可再挑"]
+    spent = shopview.arena_view(game.state, content, world, 100.0, 0)
+    assert spent["foes"][0]["short"][0] == "明日 00:00" and spent["purse"] == arena.SPENT_PURSE
 
 
 def test_the_daily_count_resets_at_midnight(ring):

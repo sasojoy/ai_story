@@ -73,6 +73,16 @@ def test_the_road_has_no_terrain_survey_any_more():
     assert game.state.player.surveyed == surveyed and "survey" not in game.state.player.leg_actions
 
 
+def test_the_road_scene_lists_three_road_tasks():
+    """FB-300：「在路上」那一張場景卡照同一個開關寫路上小事——全圖開放沒有留意地形，關著照舊寫四樣。"""
+    game = _game()
+    game.choose("move:yingshui")
+    scene = game.scene_text()
+    assert "邊走邊想、沿途打聽、路邊採集，到下一站之前各能做一次" in scene and "留意地形" not in scene
+    game.content.config.open_map = False
+    assert "邊走邊想、沿途打聽、留意地形、路邊採集，到下一站之前各能做一次" in game.scene_text()
+
+
 def test_the_how_to_page_lists_three_road_tasks():
     game = _game()
     c, w = game.content, game.state.world
