@@ -416,12 +416,12 @@ def test_prestige_zero_retires_and_successor_takes_the_front(on):
     s = _season(on)
     s.world.figures["bocai"].prestige = 5
     lines = figures.defeat(s, on, "bocai", 5)
-    assert lines == ["波才聲威 -5", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。", "彭脫接手潁川汝南的戰事。"]
+    assert lines == ["波才聲威 -5", figures.OUT_BACK.format(name="波才"), "彭脫接手潁川汝南的戰事。"]
     assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
     assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
     assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
     assert [(r.layer, r.text) for r in s.world.rumors] == [
-        ("world", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。彭脫接手潁川汝南的戰事。"),
+        ("world", figures.OUT_BACK.format(name="波才") + "彭脫接手潁川汝南的戰事。"),
     ]
     assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
 
@@ -444,7 +444,7 @@ def test_destiny_figure_is_crippled_not_retired(on):
     """孫堅是天命人物：歸零是重創，退出本季；他沒有接位的人，南陽官軍沒有人物了。"""
     s = _season(on)
     s.world.figures["sunjian"].prestige = 3
-    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", "孫堅連吃敗仗，元氣大傷，今年是露不了面了。"]
+    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", figures.OUT_BACK_DESTINY.format(name="孫堅")]
     assert s.world.figures["sunjian"].status == "crippled" and figures.is_out(s, "sunjian")
     assert figures.commander(s, on, "nanyang", "guan") is None
 
@@ -652,22 +652,6 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     assert _option(winner, "act:challenge:bocai").enabled and winner.socialize_starts_dialogue()
 
 
-def test_light_body_saves_stamina_on_a_challenge_too(on, world):
-    """輕身（武學與成長設計 13.4）：遊歷少花體力，挑戰本人花的是遊歷的體力，所以按鈕與真的扣的都少花。"""
-    from tianxia.martial_arts import generate_from_name
-
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
-    art = generate_from_name("輕身腿", "武學", "輕身腿", attribute="快").model_copy(update={"origin": "fused", "special": "qingshen"})
-    world.claim_skill_name(art)
-    game.state.player.member.wugong_id = art.id
-    base = on.config.action_cost["train"]
-    assert _option(game, "act:challenge:bocai").label.startswith(f"挑戰波才（體力 {base - 2}・")
-    stamina = game.state.player.stamina
-    with _fight():
-        game.choose("act:challenge:bocai")
-    assert game.state.player.stamina == stamina - (base - 2)
-
-
 def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
     """挑戰本人也演回合（計畫三 Task 1）：對手是照聲威的那一份（難度 120，身法 5＋120÷20＝11，比你快、先出手），
     回合裡的「你氣血 -N」加起來等於戰報那一筆（根骨 10，上限吃根骨）。"""
@@ -771,6 +755,7 @@ def test_a_challenge_can_be_dodged_into_a_draw(on, world):
     """最終審查 M2：挑戰本人也吃身法閃避（劇情戰不吃，見 test_engine）：沒武學必敗，身法 6、每點閃避 100%＝閃避機會 100%，
     結果是僵持——戰報有那一句、不賠銀兩、聲威不動、他不閉門，氣血照僵持扣（身法別拉太高：身法 38 以上損耗歸零，兩種結果分不出來）。"""
     on.config.dodge_per_point = 1.0
+    on.config.figure_draw_share = 0.0  # 僵持的經驗會升級、氣血上限跟著變，扣的氣血就對不上照舊算的那一份（僵持的獎勵另有測試）
     game = _player(on, world, "官甲", "guan", "huangjin_camp")
     p = game.state.player
     p.stats["silver"], p.stats["agi"] = 50, 6
@@ -884,3 +869,76 @@ def test_guangzong_names_the_jizhou_commander(on):
     event = next(e for e in on.timetable if e.id == "guangzong")
     text = timetable.resolve(game.state, on, event, _random.Random(0), key="guan:大勝")[0]
     assert "盧植破了廣宗" in text and "官軍破了廣宗" not in text
+
+
+# ── 挑戰本人打成僵持（企劃者 2026-10-16「名將挑戰很容易一直平手……僵持也給一點東西」）──────
+
+
+def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
+    """僵持：險勝那一份心得、經驗的一半（照聲威打折之後），不給銀兩、素材，聲威、情誼不動，不閉門不見，不算打贏。"""
+    fig = on.figures["bocai"]
+    squad = on.squads[fig.squad]
+    won = _player(on, world, "官甲", "guan", "huangjin_camp")
+    with _fight("險勝"), mock.patch("tianxia.cultivation.seize", return_value=[]):
+        won.choose("act:challenge:bocai")
+    win = won.state.battles[0]
+    game = _player(on, world, "官乙", "guan", "huangjin_camp")
+    p = game.state.player
+    p.stats["silver"] = 50
+    if fig.character:
+        p.affinities[fig.character] = 30
+    xinde, mats = p.stats.get("xinde", 0), dict(p.materials)
+    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]):
+        msgs = game.choose("act:challenge:bocai")
+    record = game.state.battles[0]
+    assert record.tier == "僵持" and figures.DRAW_LINE.format(name=fig.name) in msgs
+    assert (win.xinde, win.exp) == (squad.reward_xinde, squad.exp)  # 官甲打的時候聲威是滿的
+    full = game._challenge_reward("bocai", squad)  # 官乙打的時候聲威已經被官甲扣過：照聲威打折之後的險勝那一份
+    assert full.reward_xinde < squad.reward_xinde
+    assert (record.xinde, record.exp) == (int(full.reward_xinde * 0.5 + 0.5), int(full.exp * 0.5 + 0.5))
+    assert p.stats["xinde"] == xinde + record.xinde and p.stats["silver"] == 50 and p.materials == mats
+    assert world.get_season().figures["bocai"].prestige == 60 - on.config.figure_defeat_prestige  # 只有官甲那一場扣了
+    assert p.snubbed_until == {} and p.figure_wins == {} and not record.materials
+    if fig.character:
+        assert p.affinities[fig.character] == 30
+
+
+def test_a_drawn_challenge_is_a_chance_to_break_through_like_a_win(on, world):
+    """僵持也擲一次頓悟，難度比照打贏的算法（對手難度 ÷ 我方威力）；figure_draw_share 0 是舊規則：什麼都不給、不擲。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
+        game.choose("act:challenge:bocai")
+    assert seize.call_count == 1 and seize.call_args.args[3] == pytest.approx(120 / 200)
+    on.config.figure_draw_share = 0.0
+    other = _player(on, world, "官乙", "guan", "huangjin_camp")
+    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
+        other.choose("act:challenge:bocai")
+    assert seize.call_count == 0 and (other.state.battles[0].xinde, other.state.battles[0].exp) == (0, 0)
+
+
+def test_a_story_draw_still_is_no_chance_to_break_through(on, world):
+    """僵持算契機只在挑戰本人：一般的仗（_seize 不帶 draw）照舊只有打贏才擲。"""
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    record = battlelog.new_record(game.state, on, world, on.squads[on.figures["bocai"].squad],
+                                  EncounterResult(tier="僵持", margin=0, our_power=200, difficulty=120), "train")
+    with mock.patch("tianxia.cultivation.seize", return_value=["x"]) as seize:
+        assert game._seize(record) == [] and seize.call_count == 0
+
+
+def test_challenges_use_the_narrow_draw_band(on, world):
+    """挑戰本人的僵持下緣收窄（rise.draw_floor）：打起來與勝算都帶著它；江湖水漲關著時照一般的。"""
+    from tianxia import encounter, rise
+
+    assert rise.draw_floor(on) == on.config.rise.figure_draw == 0.10
+    assert encounter.tier_of(-0.2 * 100, 100) == "僵持"
+    assert encounter.tier_of(-0.2 * 100, 100, encounter.Mods(draw_floor=0.1)) == "落敗"
+    assert encounter.tier_of(-0.05 * 100, 100, encounter.Mods(draw_floor=0.1)) == "僵持"
+    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    with _fight("僵持") as fight:
+        game.choose("act:challenge:bocai")
+    assert fight.call_args.kwargs["draw_floor"] == 0.10
+    with mock.patch.object(team, "estimate", return_value="五五波") as est:
+        game.challenge_odds("bocai")
+    assert est.call_args.kwargs["draw_floor"] == 0.10
+    on.config.rise.enabled = False
+    assert rise.draw_floor(on) is None

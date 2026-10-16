@@ -965,23 +965,6 @@ def test_names_recorded_anonymously_before_stay_anonymous():
     assert shown_creator(old) == "某位少俠"
 
 
-def test_the_first_special_art_rumor_does_not_pin_the_forger_on_the_map(on):
-    """F4：天下大事帶著發生地，輿圖的 ✦ 與詳情欄會把它標給每個陣營；鑄出特別功效武學的人此刻在哪裡，不該跟著傳出去。"""
-    from types import SimpleNamespace
-
-    from tianxia import fusion
-
-    jia, yi = _game(on, "甲", "guan", at="changshe"), _game(on, "乙", "huang", at="yingchuan")
-    yi.state.world = jia.state.world  # 同一季：乙看得到甲這邊記下的傳聞
-    art = SimpleNamespace(name="旋風腿", special=on.traits.special[0].id)
-    assert fusion._special_rumor(jia.state, on, art, first=True)  # 傳出一句
-    rumor = jia.state.world.rumors[-1]
-    assert rumor.layer == "world" and rumor.named is True and rumor.location is None
-    assert "甲" in rumor.text  # 世界層的傳聞具名
-    assert atlas.news_places(jia.state, on) == set() and atlas.news_places(yi.state, on) == set()  # 沒有任何地點被標
-    assert rumor.text in yi.rumors_text()  # 但每個人都聽得到這一句
-
-
 # ── Task 7：匿名只留在地方傳聞（二）：陣營軍情與排行榜 ──────────────────
 
 

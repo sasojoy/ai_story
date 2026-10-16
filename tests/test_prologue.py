@@ -973,20 +973,6 @@ def test_a_scripted_fight_never_waits_for_the_model(fresh, monkeypatch):
     assert outside.fight_request("act:train") is not None  # 序章外同一個對手照舊要等判讀
 
 
-def test_the_scripted_tier_comes_before_the_life_guard(prologue_content, world, monkeypatch):
-    """team.fight 的 tier：護命（no_loss）會把落敗改判僵持、並標 guarded；寫好的結果在它之前，所以不被它動、也不標 guarded。"""
-    from conftest import FixedRandom
-    from tianxia import team, traits
-    from tianxia.state import new_game_state
-
-    state = new_game_state(prologue_content, "甲")
-    monkeypatch.setattr(traits, "loadout", lambda *a: traits.Loadout(specials={"no_loss": object()}))
-    natural = team.fight(state, prologue_content, world, "boss", FixedRandom(0.5))
-    assert natural.tier == "僵持" and natural.guarded  # 難度 200 的對手本來會落敗：護命接住
-    scripted = team.fight(state, prologue_content, world, "boss", FixedRandom(0.5), tier="險勝")
-    assert scripted.tier == "險勝" and not scripted.guarded
-
-
 def test_the_hut_gives_no_road_sight_and_the_farewell_line_comes_once(fresh):
     fresh.content.config.road_sight_chance = 1.0  # 平常每一段新的路都看得到見聞
     _to_step(fresh, 10)

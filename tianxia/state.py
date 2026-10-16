@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
+from .tactics import Bout, BoutSide
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
 
@@ -166,6 +167,8 @@ class Equipment(BaseModel):
     # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
     # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
     signature: str | None = None
+    # 以器配招（玩家武學追上本命）：神器原品的主人綁的那一門絕學 id（那一門的絕招照 GeneralTrait.ultimate_bond 加強）；None＝沒綁
+    bound_art: str | None = None
     heirloom: bool = False  # 傳承（玉璽碎片的抄本，玉璽碎片設計 7.4）：不進裝備庫、不能換下、贈、拆、交懸賞
 
 
@@ -271,6 +274,7 @@ class DuelState(BaseModel):
     tell: str = ""
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
     difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
+    bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；你沒有本命戰法是 None
 
 
 class ArenaSide(BaseModel):
@@ -304,6 +308,7 @@ class ArenaFight(BaseModel):
     best_rate: int = 0
     best_won: bool = False
     best_set: bool = False
+    bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；兩邊都沒有是 None
 
 
 class ArenaResult(BaseModel):
@@ -337,6 +342,7 @@ class ArenaEntry(BaseModel):
     role: str = ""
     hp_cap: float
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
+    kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0
@@ -429,6 +435,7 @@ class PlayerState(BaseModel):
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
+    figure_dented: dict[str, int] = Field(default_factory=dict)  # 人物 id → 上一次打贏他而扣到聲威是第幾個遊戲日（figure_dent_once_per_day；叛投不清）
     figure_rare_drops: int = 0  # 這一季挑戰本人掉了幾個三階（兩條來源合算：預設表、保證的那一個；丁 (c) 的一人一季上限 figure_rare_cap；換季跟著新角色歸零）
     # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
@@ -685,6 +692,8 @@ class FigureState(BaseModel):
     status: Literal["active", "away", "retired", "crippled", "jailed"] = "active"  # 在場／未出場／退場／重創／下獄
     front: str | None = None  # 在推哪條戰線
     location: str = ""
+    back_at: float | None = None  # 被挑戰打到退場、重創：這個世界秒回來（figures.revive）；None＝不回來（時刻表寫死的、或回不來了）
+    back_front: str | None = None  # 回來時接回的戰線（倒下那一刻守的那一條）
 
 
 class Order(BaseModel):

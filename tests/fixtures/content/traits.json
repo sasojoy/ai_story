@@ -1,21 +1,123 @@
 {
-  "general": [
-    {"attribute": "快", "name": "先手", "hook": "big_win", "per_layer": 0.04, "cap": 0.2, "desc": "比較容易打出大勝（大勝要贏的幅度少對手強度的 {value}），回合裡一定先出手"},
-    {"attribute": "慢", "name": "穩", "hook": "luck_narrow", "per_layer": 0.15, "cap": 0.6, "desc": "戰場上運氣的好壞幅度縮小 {value}，勝負更看實力"},
-    {"attribute": "剛", "name": "破甲", "hook": "difficulty_cut", "per_layer": 0.04, "cap": 0.2, "desc": "對手的強度等於低了 {value}，更容易贏"},
-    {"attribute": "柔", "name": "化勁", "hook": "toll_cut", "per_layer": 0.1, "cap": 0.5, "desc": "每場打完損失的氣血減少 {value}"},
-    {"attribute": "陽", "name": "乘勝", "hook": "win_reward", "per_layer": 0.1, "cap": 0.5, "desc": "打贏時，得到的心得和經驗都多 {value}"},
-    {"attribute": "陰", "name": "吸取", "hook": "win_heal", "per_layer": 0.02, "cap": 0.1, "desc": "打贏之後，回復氣血上限的 {value}"},
-    {"attribute": "虛", "name": "險", "hook": "luck_widen", "per_layer": 0.15, "cap": 0.6, "desc": "戰場上運氣的好壞幅度放大 {value}：有機會以弱勝強，也可能陰溝裡翻船"},
-    {"attribute": "實", "name": "厚", "hook": "condition_floor", "per_layer": 0.05, "cap": 0.25, "desc": "受傷時威力掉得少：氣血越低，比平常多保住最多 {value} 的威力（滿血時沒差）"}
-  ],
-  "special": [
-    {"id": "lianhuan", "name": "連環", "hook": "double_luck", "amount": 1, "desc": "每場打鬥碰兩次運氣，取比較好的那一次"},
-    {"id": "budong", "name": "不動", "hook": "no_injury", "amount": 1, "desc": "打完損失的氣血都只是輕傷，不會變成內傷"},
-    {"id": "huming", "name": "護命", "hook": "no_loss", "amount": 1, "desc": "落敗時改判成平手（僵持）；劇情裡安排好輸贏的戰鬥不算"},
-    {"id": "wuzhao", "name": "悟招", "hook": "win_xinde", "amount": 5, "desc": "打贏多得 {value} 點心得"},
-    {"id": "jieli", "name": "借力", "hook": "power_from_difficulty", "amount": 0.05, "desc": "對手越強，你的威力越高：威力加上對手強度的 {value}"},
-    {"id": "huichun", "name": "回春", "hook": "heal_after", "amount": 0.03, "desc": "不論輸贏，打完都回復氣血上限的 {value}"},
-    {"id": "qingshen", "name": "輕身", "hook": "train_stamina", "amount": 2, "desc": "出陣、遊歷少花 {value} 點體力"}
-  ]
+ "general": [
+  {
+   "attribute": "快",
+   "name": "先手",
+   "hook": "big_win",
+   "per_layer": 0.1,
+   "cap": 0.5,
+   "desc": "剋中對手後有 {value} 的機會連環（這一回合再推一次）"
+  },
+  {
+   "attribute": "慢",
+   "name": "穩",
+   "hook": "luck_narrow",
+   "per_layer": 0.15,
+   "cap": 0.6,
+   "extra_per_layer": 0.05,
+   "extra_cap": 0.25,
+   "desc": "運氣的好壞幅度小 {value}，勝負更看實力；有 {extra} 的機會不受定身、失神"
+  },
+  {
+   "attribute": "剛",
+   "name": "破甲",
+   "hook": "difficulty_cut",
+   "per_layer": 0.1,
+   "cap": 0.5,
+   "desc": "強攻剋中對手時，有 {value} 的機會讓他下一回合的固守與借力落空"
+  },
+  {
+   "attribute": "柔",
+   "name": "化勁",
+   "hook": "toll_cut",
+   "per_layer": 0.1,
+   "cap": 0.5,
+   "extra_per_layer": 0.05,
+   "extra_cap": 0.25,
+   "desc": "挨打掉的氣血少 {value}；挨強攻時有 {extra} 的機會借力，把那一下的一半還回去"
+  },
+  {
+   "attribute": "陽",
+   "name": "乘勝",
+   "hook": "win_reward",
+   "per_layer": 0.05,
+   "cap": 0.25,
+   "desc": "每贏一回合推力 +{value}，一場內疊加（最多 +30%），輸一回合減半"
+  },
+  {
+   "attribute": "陰",
+   "name": "吸取",
+   "hook": "win_heal",
+   "per_layer": 0.02,
+   "cap": 0.1,
+   "desc": "剋中對手時回氣血 {value}"
+  },
+  {
+   "attribute": "虛",
+   "name": "險",
+   "hook": "luck_widen",
+   "per_layer": 0.06,
+   "cap": 0.3,
+   "desc": "每回合有 {value} 的機會起霧：雙方都可能打空，身法高的那一方少打空"
+  },
+  {
+   "attribute": "實",
+   "name": "厚",
+   "hook": "condition_floor",
+   "per_layer": 0.05,
+   "cap": 0.25,
+   "desc": "氣血掉得越多，推力打折得越少：最多多保住 {value} 的推力（滿血時沒差）"
+  }
+ ],
+ "special": [
+  {
+   "id": "lianhuan",
+   "name": "連環",
+   "hook": "double_luck",
+   "amount": 0.2,
+   "desc": "每回合有 20% 的機會連環（這一回合再推一次）"
+  },
+  {
+   "id": "budong",
+   "name": "不動",
+   "hook": "no_injury",
+   "amount": 1,
+   "desc": "不受定身、卸勁"
+  },
+  {
+   "id": "huming",
+   "name": "護命",
+   "hook": "no_loss",
+   "amount": 0.1,
+   "desc": "一場一次：氣血要見底時留一成，那一回合化影"
+  },
+  {
+   "id": "wuzhao",
+   "name": "悟招",
+   "hook": "win_xinde",
+   "amount": 0.1,
+   "desc": "每被對手剋中一次就看破一分，之後推力每次 +10%（最多 3 次）"
+  },
+  {
+   "id": "jieli",
+   "name": "借力",
+   "hook": "power_from_difficulty",
+   "amount": 0.3,
+   "desc": "挨強攻時有 30% 的機會借力，把那一下的一半還回去"
+  },
+  {
+   "id": "huichun",
+   "name": "回春",
+   "hook": "heal_after",
+   "amount": 0.03,
+   "desc": "每回合開始回氣血 3%"
+  },
+  {
+   "id": "qingshen",
+   "name": "輕身",
+   "hook": "train_stamina",
+   "amount": 0.15,
+   "desc": "前 2 回合有 15% 的機會化影（那一回合不掉氣血）"
+  }
+ ]
 }

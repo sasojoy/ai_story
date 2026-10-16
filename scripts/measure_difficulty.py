@@ -40,6 +40,8 @@ import measure_chuangong as grind  # noqa: E402  同一套練功的走法（它�
 LEVELS = (10, 15, 20, 30, 40)
 BIG = ("toumu", "shoumu", "fanjianglong")
 RUNS = 2000
+TIERS_ONLY = False
+TIER_RUNS = 300
 
 
 def win_rate(power: float, difficulty: float, mods=None) -> float:
@@ -121,9 +123,55 @@ def train_squads(game):
     return best
 
 
+TIER_NAMES = ("大勝", "險勝", "僵持", "落敗")
+
+
+def tier_dist(game, fid: str, wins: int, runs: int, clash: bool = True) -> dict[str, float]:
+    """挑戰本人照打起來的那一條（team.fight：單次判定→回合戰法〔雙方本命〕→閃避）打 runs 場，四種結果各佔多少。
+    難度照江湖水漲「這一季打贏他 wins 次」浮上去；大場面判讀的平移當 0。clash=False 是不打回合（看本命戰法把結果推向哪裡）。"""
+    s, c, w = game.state, game.content, game.world
+    fig = c.figures[fid]
+    squad = c.squads[fig.squad]
+    power = team.power_vs(s, c, w, squad, fresh=True)
+    base = figures_base(game, fid)
+    diff = rise.big(c, base, power, wins) if c.config.rise.enabled else base
+    squad = squad.model_copy(update={"difficulty": diff})
+    mods = mods_of(game)
+    floor = rise.draw_floor(c)
+    if floor is not None:
+        mods = mods.model_copy(update={"draw_floor": floor})
+    ctx = team.tactic_ctx(s, c, w, squad, diff)
+    holders = team.tactic_holders(s, c, w)
+    foe = team.foe_tactics(s, c, squad, ctx)
+    dodge = team.dodge_chance(s, c)
+    rng = random.Random(11)
+    out = dict.fromkeys(TIER_NAMES, 0)
+    for i in range(runs):
+        r = encounter.resolve_encounter(power, diff, rng, mods=mods)
+        if clash:
+            r = team.clash_result(r, mods, holders, ctx, c, random.Random(f"t|{i}"), foe=foe)
+        r = encounter.dodge(r, dodge, rng)
+        out[r.tier] += 1
+    return {k: v / runs for k, v in out.items()}
+
+
+def tier_table(game, runs: int) -> dict[int, dict[str, float]]:
+    """所有大勢人物平均：打贏 0～3 次之後的四種結果比例；鍵 (打贏幾次, 打不打回合)。"""
+    c = game.content
+    table = {}
+    for wins in range(4):
+        for clash in (True, False):
+            rows = [tier_dist(game, fid, wins, runs, clash) for fid in c.figures]
+            table[wins, clash] = {k: statistics.mean(r[k] for r in rows) for k in TIER_NAMES}
+    return table
+
+
 def snapshot(game) -> dict:
     s, c, w = game.state, game.content, game.world
     mods = mods_of(game)
+    if TIERS_ONLY:
+        return {"level": s.player.member.level, "mine": grind.powers(game)[0], "whole": grind.powers(game)[3],
+                "tiers": tier_table(game, TIER_RUNS)}
     figs = []
     for fid, fig in c.figures.items():
         squad = game._figure_squad(fid)  # 開季聲威（練功的走法不打人物）、江湖水漲開著就浮上來
@@ -235,12 +283,20 @@ def main():
     ap.add_argument("--profile", default="weekend")
     ap.add_argument("--kinds", nargs="+", default=["solo", "team", "taught"])
     ap.add_argument("--rise", choices=("on", "off"), default="on", help="江湖水漲開著（修後）或關著（修前）")
+    ap.add_argument("--tiers", action="store_true", help="只量挑戰本人的大勝／險勝／僵持／落敗（照打起來的回合與戰法）")
     args = ap.parse_args()
+    global TIERS_ONLY
+    TIERS_ONLY = args.tiers
     for kind in args.kinds:
         for seed in args.seeds:
             snaps = run(seed, args, kind)
             print(f"== {kind} 種子 {seed}", flush=True)
             for lv, r in sorted(snaps.items()):
+                if TIERS_ONLY:
+                    cells = "｜".join(f"贏{k}次 " + "/".join(pct(t[n]) for n in TIER_NAMES) + ("" if on else "（不打回合）")
+                                      for (k, on), t in r["tiers"].items())
+                    print(f"  {lv:>2} 級（實 {r['level']}）本人 {r['mine']:.0f} 全隊 {r['whole']:.0f}｜大勝/險勝/僵持/落敗 {cells}", flush=True)
+                    continue
                 lo, mid, hi = r["fig_low"], r["fig_mid"], r["fig_high"]
                 big = "・".join(f"{k} {pct(v)}" for k, v in r["big"].items())
                 ht = r["hard_train"]

@@ -344,3 +344,20 @@ def test_cutover_sequence(real):
         assert game.status_data()["calendar"]["week"] == 1
     assert any(uprising in (e.tag + "".join(e.lines)) for e in player.state.journal)
     assert "賽季落幕" in player.chronicle_text()  # 江湖史留著上一季
+
+
+def test_admin_revives_a_fallen_figure_at_half_on_his_old_front(on):
+    """叫回人物（PM 2026-10-16）：時刻表或挑戰打退的人物，管理者叫他以一半開季聲威回到原本的戰線；接位的人交還戰線。"""
+    from tianxia import figures
+    from tianxia.models import FigureChange
+    game = _game(on)
+    s = game.state
+    figures.apply(s, on, "bocai", FigureChange(fate="退場"))
+    game._save_season()
+    assert game.admin_fallen() == ["bocai"]
+    assert game.admin_revive_figure("bocai") == [figures.BACK_LINE.format(name="波才", where="，回到潁川汝南")]
+    stored = game.world.get_season().figures
+    assert stored["bocai"].status == "active" and stored["bocai"].prestige == 30 and stored["bocai"].front == "yingru"
+    assert stored["pengtuo"].front is None and game.admin_fallen() == []
+    assert game.admin_revive_figure("bocai") == ["（這位人物此刻沒有退場。）"]
+    assert _game(on, "路人").admin_revive_figure("bocai") == ["（只有管理者能叫回人物。）"]
