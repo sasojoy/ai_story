@@ -734,6 +734,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock(f"跟著{p.tagalong.leader}同行，要改道先分道揚鑣", to_jianghu=True)
     if p.busy_until is not None:
         return TravelBlock("閉關中，不能安排前往")
+    if p.ambush is not None:  # 設伏劫道：守著埋伏不能移動（沒有分身）；待 joy 潤
+        return TravelBlock("正守著埋伏，先收伏才能動身", to_jianghu=True)
     return None
 
 

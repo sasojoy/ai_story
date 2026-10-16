@@ -569,6 +569,9 @@ def _open_claimed(
     if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
         from . import seal  # noqa: PLC0415  seal → world_state：在函式裡 import，同這個模組其他延後 import
 
+        from . import works  # noqa: PLC0415  同上
+
+        msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
     return msgs
 
