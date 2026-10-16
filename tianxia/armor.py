@@ -73,7 +73,7 @@ def fresh_cut(item: Equipment | None, neigong: MartialArt | None, content: Conte
 def wears(kind: str, tier: str) -> bool:
     """這一場磨不磨防具（4.5）：遊歷、探索野怪磨；截殺只有落敗的那一邊磨（截殺只有輸的挨打，4.4）。挑戰大勢人物本人的戰報 kind 是
     event，由 Game._challenge 明說要磨（_file_battle 的 armor_wear）；切磋、頭目戰、劇情戰都不磨；全服決戰不走 _file_battle。"""
-    return kind in ("train", "wild", "sortie") or (kind == "raid" and tier == "落敗")  # 出陣只有攻要打的那一場才有戰報
+    return kind in ("train", "wild", "sortie") or (kind in ("raid", "ambush") and tier == "落敗")  # 出陣只有攻要打的那一場才有戰報
 
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:

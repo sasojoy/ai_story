@@ -894,12 +894,14 @@ ALLOW_FIXED = frozenset({
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
+    "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
 )
 
 
@@ -2108,6 +2110,47 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class AmbushRules(_Strict):
+    """設伏劫道（後期體力玩法第一批，Joy 2026-10-16；tianxia/ambush.py）：花一大筆體力守在一段路上，敵對的人走過那一段（步行、疾行都算）
+    就跟你打一場；贏的搶走輸的一點銀兩與素材，輸的扣氣血——雙向的，伏兵輸了賠的是自己的東西。設伏的人守在路段的這一頭，期間不能移動
+    （沒有分身）；下線也照守。保護照截殺：敵對陣營（或你揭了通緝他）、雙方過了新手期、城鎮旁邊的路不能設、同一對人的冷卻、剛被截過的護身。
+    enabled 關掉：沒有設伏鈕，已經設下的照時刻作廢（_arrivals 不比）。時間都是世界秒（time_scale 1 就是現實秒）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=80, ge=0)  # 設一次花的體力（Joy：大約 80）
+    hours: float = Field(default=3.0, gt=0)  # 守多久（世界小時）；期間可以自己收
+    keep_hours: float = Field(default=24.0, ge=0)  # 收了、過了時刻的埋伏紀錄再留多久：下線的人回來補算路程時照「當時」有沒有埋伏判
+    silver_share: float = Field(default=0.1, ge=0, le=1)  # 輸的一方失身上銀兩的幾成
+    silver_cap: int = Field(default=40, ge=0)  # 最多失幾兩
+    take_share: float = Field(default=1.0, ge=0, le=1)  # 贏的拿走其中幾成（Joy：輸的東西被搶走）
+    materials: int = Field(default=2, ge=0)  # 輸的一方被搶走幾個素材（挑手上最多的那幾種，一階先）
+    hp_loss: float = Field(default=0.1, ge=0, le=1)  # 輸的一方扣氣血上限的幾成（乘 1−防具減損，不變成內傷，同截殺）
+    pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)  # 同一個伏兵劫同一個人的冷卻（跟截殺共用一本帳 WorldState.raids）
+    win_contrib_push: int = Field(default=1, ge=0)  # 贏的記幾點推力的貢獻（只在第一季規則開著時，同截殺）
+
+
+class FortifyRules(_Strict):
+    """修築工事（後期體力玩法第一批；tianxia/works.py）：在自家控制的戰線地點花體力修工事，工事讓這一處更難易手——拔河的門檻往
+    對方那邊再推 level/100 × band 點（大勢線不動）。工事照時間慢慢壞，易手就整個沒了。只有拔河的兩方修得了（豪強佔的地點這一批不修）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=50, ge=0)  # 修一下花的體力
+    per_press: int = Field(default=10, ge=1)  # 一下加幾點
+    cap: int = Field(default=100, ge=1)  # 最多幾點
+    band: int = Field(default=10, ge=0)  # 滿的工事讓易手的門檻再多幾點
+    decay_per_hour: float = Field(default=8.0, ge=0)  # 每個世界小時壞幾點（滿的約 12 小時壞光）
+
+
+class StockpileRules(_Strict):
+    """屯糧練兵（後期體力玩法第一批；tianxia/works.py）：在自家控制的地方花體力替自己那一軍屯糧，下一場時刻表決戰開集結那一刻，
+    兩軍屯的量換成起點往屯得多的那一軍偏，最多 cap 點（照天命之爭的偏法夾住），屯的量隨即用掉。只有交戰兩軍（含依附那一軍的豪強）。"""
+
+    enabled: bool = True
+    stamina: int = Field(default=50, ge=0)  # 屯一下花的體力
+    cap: int = Field(default=6, ge=0)  # 起點最多偏幾點
+    soft: int = Field(default=20, ge=0)  # 偏移＝cap×(甲−乙)÷(甲＋乙＋soft)：兩邊都沒什麼人屯時偏得少
+
+
 class PushResistance(_Strict):
     """盡頭阻力與季長縮放（設計第五節）。enabled 關掉：推力不打盡頭的折、每人每曆日上限與出陣推的量不乘季長倍數。"""
 
@@ -2220,6 +2263,9 @@ class Config(_Strict):
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
+    fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
+    stockpile: StockpileRules = Field(default_factory=StockpileRules)  # 屯糧練兵（見 StockpileRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）

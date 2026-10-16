@@ -130,6 +130,14 @@ class Sensing(BaseModel):
     serial: int = 0  # 這一次感悟的流水號（PlayerState.sense_serial）：鎖外看圖取名回來，C 段照它認是不是同一次
 
 
+class AmbushPost(BaseModel):
+    """角色身上「正守著埋伏」：路段鍵（ambush.key）、另一頭、到幾時。設伏的人守在這裡、不能移動（atlas.travel_block）。"""
+
+    key: str
+    to: str
+    until: float
+
+
 class Tagalong(BaseModel):
     """答應了別人的結伴同行：跟著 leader 走，路線與走法由他定。只記在跟著的那個人身上（帶頭的人照這一欄從資料庫查）。
     since 是答應的現實時刻：帶頭的人 Config.party_wait_seconds 之內沒動身就散了；動身之後一路到終點才散。"""
@@ -626,6 +634,7 @@ class PlayerState(BaseModel):
     duel_tally: dict[str, int] = Field(default_factory=dict)  # 「季號:頭目 id」→ 這一季遇上幾次（Config.duel.per_boss_season）
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
+    ambush: AmbushPost | None = None  # 正守著的埋伏（設伏劫道，ambush.py）；None＝沒有。守著的時候不能移動
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -781,6 +790,28 @@ class SignatureClaim(BaseModel):
     via: Literal["gift", "seized"]
 
 
+class Fort(BaseModel):
+    """一處的工事（修築工事，tianxia/works.py）：誰修的、修到幾點、那是什麼時候（世界秒）；之後照時間慢慢壞（works.fort_level 現算）。"""
+
+    side: str
+    level: float = 0.0
+    at: float = 0.0
+
+
+class Ambush(BaseModel):
+    """一處埋伏（設伏劫道，tianxia/ambush.py）：誰守在哪一頭、往哪一站的那段路、從幾時到幾時（世界秒）。收了、伏兵被打退就記 lifted_at；
+    紀錄留到 Config.ambush.keep_hours 之後才清，下線的人回來補算路程時照「當時」有沒有埋伏判。"""
+
+    owner: str
+    at: str  # 伏兵守在這一頭
+    to: str  # 路的另一頭
+    set_at: float
+    until: float
+    lifted_at: float | None = None
+    caught: int = 0  # 劫過幾個人（打了幾場）
+    side: str | None = None  # 設伏那一刻伏兵站哪一邊（allied.side_of）：路過的人先拿它篩，自己人不必讀伏兵的存檔
+
+
 class TerritoryWeek(BaseModel):
     """地盤某一週的樣子（輿圖升級設計第九節）：那一週最後一次重算時的控制方、每條戰線拔河看的值、割據（沒有這條線是 None）。"""
 
@@ -801,6 +832,7 @@ class TerritoryState(BaseModel):
     # （territory.week_at）；新的一季是新的 WorldState，自然是空的（輿圖升級設計第九節）。0 是開季那一刻（territory.START_WEEK，
     # 這一季第一次算地盤就在第 1 週時才有，FB-264）
     weeks: dict[int, TerritoryWeek] = Field(default_factory=dict)
+    forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
 class WorldState(BaseModel):
@@ -873,6 +905,10 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
+    # 設伏劫道（ambush.py）：路段鍵（兩頭的地點 id 排序後用 | 接起來）→ 那一段的埋伏（同一時刻最多一處有效，收了的照留到 keep_hours）
+    ambushes: dict[str, list[Ambush]] = Field(default_factory=dict)
+    # 屯糧練兵（works.py）：交戰的那一軍 → 這一季到下一場時刻表決戰開集結為止屯了幾下（開集結那一刻換成起點的偏移、整個清空）
+    supply: dict[str, int] = Field(default_factory=dict)
     echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
     # ── 第四階席次（第一季設計 5.4；正式版丁）。週一的掛鉤讀不到別人的存檔，所以有資格的人每次行動、同步時把自己每週的貢獻抄一份到
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──
@@ -923,7 +959,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

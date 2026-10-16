@@ -65,10 +65,32 @@ def line_value(world: WorldState, content: Content, line: str) -> int:
     return rules.world_trend_value(world, content, rules.resolve_trend(content, world, line) or line)
 
 
-def _tug(prev: str | None, value: float, t: float, low: str, high: str, band: int) -> str:
-    if value >= t + band:
+def fort_level(world: WorldState, content: Content, loc_id: str) -> float:
+    """這一處此刻的工事（修築工事，works.py）：修到的點數照時間扣 Config.fortify.decay_per_hour；沒修過、開關關著是 0。"""
+    t = world.territory
+    fort = t.forts.get(loc_id) if t is not None else None
+    if fort is None or not content.config.fortify.enabled:
+        return 0.0
+    return max(0.0, fort.level - content.config.fortify.decay_per_hour * max(0.0, world.time - fort.at) / 3600)
+
+
+def fort_extra(world: WorldState, content: Content, loc_id: str) -> tuple[str | None, float]:
+    """工事替修它的那一方多撐幾點：（那一方, 門檻往對方那邊多推的點數＝工事÷cap × Config.fortify.band）。"""
+    t = world.territory
+    fort = t.forts.get(loc_id) if t is not None else None
+    if fort is None:
+        return None, 0.0
+    cfg = content.config.fortify
+    return fort.side, fort_level(world, content, loc_id) / cfg.cap * cfg.band
+
+
+def _tug(prev: str | None, value: float, t: float, low: str, high: str, band: int, extra: float = 0.0) -> str:
+    """extra：守著的那一方（prev）修了工事，對方要再多推這麼多才翻得過來（修築工事）；第一次算（prev 是 None）不看。"""
+    up = band + (extra if prev == low else 0.0)
+    down = band + (extra if prev == high else 0.0)
+    if value >= t + up:
         return high
-    if value <= t - band:
+    if value <= t - down:
         return low
     if prev in (low, high):
         return prev
@@ -89,7 +111,11 @@ def _recompute(world: WorldState, content: Content, t: TerritoryState) -> dict[s
         value = line_value(world, content, line)
         k = len(spots)
         for j, loc_id in enumerate(spots, start=1):
-            t.tug[loc_id] = _tug(t.tug.get(loc_id), value, threshold(j, k), low, high, cfg.band)
+            prev = t.tug.get(loc_id)
+            side, extra = fort_extra(world, content, loc_id)
+            t.tug[loc_id] = _tug(prev, value, threshold(j, k), low, high, cfg.band, extra if side == prev else 0.0)
+            if loc_id in t.forts and t.forts[loc_id].side != t.tug[loc_id]:
+                del t.forts[loc_id]  # 易手了（或修的那一方本來就不是守著的那一方）：工事整個沒了
         if haoqiang is None or geju is None or geju < cfg.geju_release:
             held = [loc_id for loc_id in held if loc_id not in spots]
         else:
