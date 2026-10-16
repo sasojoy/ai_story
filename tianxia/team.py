@@ -1036,8 +1036,9 @@ def own_extras(state: GameState, content: Content, world: WorldStateStore, holde
     gear = gear_tactics(state, content)
     bonds = {figure: arm.bond for arm in content.gear.signature_arms for _id, _t, figure in gear
              if figure == arm.character and arm.bond is not None}
-    out = [
-        h.model_copy(update={"tactic": tactics.bonded(h.tactic, bonds[h.figure])}) if h.key == PLAYER and h.figure in bonds else h
+    out = [  # 只加強卡上寫的那一門（tactics.bond_fits，PM 2026-10-16），那位名將的另一門照舊
+        h.model_copy(update={"tactic": tactics.bonded(h.tactic, bonds[h.figure])})
+        if h.key == PLAYER and h.figure in bonds and tactics.bond_fits(h, h.figure, bonds[h.figure]) else h
         for h in holders
     ]
     seen = {h.tactic.name for h in out}

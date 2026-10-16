@@ -37,6 +37,7 @@ EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（�
     "win_material": "打贏時有 {pct} 的機會多掉一個素材",
     "legend": "探索撿到{item}的機會 ×{x}",
 }
+INSIGHT_SENSE_TEXT = "靜心感悟擲中的機會 +{n} 個百分點"  # 待 joy 潤：探索三選一開著時觀山石那一句（effect_text）
 SEAL_EFFECT_TEXT = {  # 待 joy 潤：玉璽碎片的七種效果（數字照 Config.seal.effects；seal.effect_text 轉呼叫這裡，字只留一份）
     "hp_cap": "氣血上限 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "practice": "練成的心得 ×{x}",
     "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "合成的造化 +{n}",
@@ -81,7 +82,11 @@ def effect_of(content: Content, item: Equipment | None) -> str | None:
 
 
 def effect_text(content: Content, key: str) -> str:
-    """「求見門檻 −3」「打贏的心得 +20%」（待 joy 潤）：數字照 Config.treasures.effects；百分比 .5 進位（不用 round／:.0%，同 mounts.pct）。"""
+    """「求見門檻 −3」「打贏的心得 +20%」（待 joy 潤）：數字照 Config.treasures.effects；百分比 .5 進位（不用 round／:.0%，同 mounts.pct）。
+    探索悟意境（觀山石）照探索三選一的開關寫（PM 2026-10-16）：開著時是靜心感悟擲中的機會多幾個百分點（Config.explore_modes.sense_treasure_points），
+    關著才是探索悟意境那一支的比重 ×{x}。"""
+    if key == "insight" and content.config.explore_modes.enabled:
+        return INSIGHT_SENSE_TEXT.format(n=f"{content.config.explore_modes.sense_treasure_points:g}")
     value = content.config.treasures.effects.get(key, 0.0)
     return EFFECT_TEXT.get(key, "").format(
         x=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%", n=f"{value:g}", item=content.config.legend_item_name,

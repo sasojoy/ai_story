@@ -327,7 +327,7 @@ def catch_up(content, runs):
         sig = holders(content, [("你", "player", fid)])
         arm = arms.get(fid)
         if arm is not None:
-            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == fid and arm.bond else h for h in sig]
+            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if arm.bond and tactics.bond_fits(h, fid, arm.bond) else h for h in sig]
             sig = sig + [gear_holder(arm.tactic)]
         vs = [share(sig, k) for k in fulls]
         rows.append(sum(vs) / len(vs))
@@ -397,7 +397,7 @@ def depth_vs(content, runs, path, cap):
         sig = holders(content, [("你", "player", fid)])
         arm = arms.get(fid)
         if arm is not None:
-            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == fid and arm.bond else h for h in sig]
+            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if arm.bond and tactics.bond_fits(h, fid, arm.bond) else h for h in sig]
             sig = sig + [gear_holder(arm.tactic)]
         vs = [share(sig, k) for k in kits]
         grid.append(vs)
@@ -497,7 +497,7 @@ def kits(content, runs):
     for arm in content.gear.signature_arms:
         alone = sum(share(k + [gear_holder(arm.tactic)], k) for k in selfs) / SELF_KITS
         sig = holders(content, [("你", "player", arm.character)])
-        bonded = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == arm.character else h for h in sig]
+        bonded = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if tactics.bond_fits(h, arm.character, arm.bond) else h for h in sig]
         bond = share(bonded + [gear_holder(arm.tactic)], sig) if sig else float("nan")
         print(f"  {content.characters[arm.character].name}〔{arm.tactic.name}〕{alone:5.1%}　人器合一 {bond:5.1%}")
     # 一般的仗：贏面多幾個百分點（同第一批的算法）

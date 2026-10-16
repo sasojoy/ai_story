@@ -679,6 +679,12 @@ def check_signature_arts(c: Content, need) -> None:
         need(fields <= set(tactic.params), f"{where}：戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
     for arm in c.gear.signature_arms:
         need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
+        if arm.bond is not None:  # 加強的是那位名將的哪一門（PM 2026-10-16：只加卡上寫的那一門）
+            ch = c.characters.get(arm.character)
+            own = [c.skills[s].tactic.name for s in ((ch.starting_wugong, ch.starting_neigong) if ch else ())
+                   if s in c.skills and c.skills[s].tactic is not None]
+            need(arm.bond.tactic in own, f"名將本命兵器 {arm.character}：人器合一的 tactic 要是他本命的一門戰法 {own}，寫的是「{arm.bond.tactic}」")
+            need(not arm.bond.tactic or arm.bond.tactic in arm.bond.desc, f"名將本命兵器 {arm.character}：人器合一的說明要寫到加強的那一門「{arm.bond.tactic}」")
     for trait in c.traits.general:  # 絕學立招：絕招的名字到時候換成那門絕學的名字，這裡只驗說明的 {鍵} 與以器配招的說明
         if trait.ultimate is not None:
             fields = {name for _, name, _, _ in string.Formatter().parse(trait.ultimate.desc) if name}
