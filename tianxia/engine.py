@@ -1806,6 +1806,13 @@ class Game:
             if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
                 self._shop_after(problem, "refused")
             return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
+        if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
+            # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
+            foe = self.state.world.arena.get(option_id.removeprefix("arena:fight:"))
+            problem = foe and arena.challenge_problem(self.state.world, self.state.player.name, foe, self.content.config.arena,
+                                                      self.arena_left(), self.content.config.time_scale)
+            if problem:
+                return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
@@ -8752,7 +8759,7 @@ class Game:
         foe = s.world.arena.get(key)
         if foe is None or name_key(foe.name) == name_key(p.name):
             return ["（此刻無法這麼做。）"]
-        problem = arena.challenge_problem(s.world, p.name, foe, cfg, self.arena_left())
+        problem = arena.challenge_problem(s.world, p.name, foe, cfg, self.arena_left(), c.config.time_scale)
         if problem is not None:
             return [f"（{problem}。）"]
         arena.spend(s, self._pill_day())
