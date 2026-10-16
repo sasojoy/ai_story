@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from . import materials, rules, territory
+from . import materials, renown, rules, territory
 from .models import Content, Material
 from .state import GameState, WorldState
 
@@ -81,13 +81,28 @@ def sell_price(content: Content, tier: int) -> int | None:
     return content.config.economy.sell_price.get(tier)
 
 
+def sell_price_for(state: GameState, content: Content, tier: int) -> int | None:
+    """這個人賣一個這一階的素材收多少兩：寇一路綠林好漢以上照黑市價（名聲 5.2，renown.black_market_price：一階 3、二階 8），
+    其餘照 sell_price；不收的階（三階）照舊不收。收購、選單、店面、機器人都讀這一個。"""
+    base = sell_price(content, tier)
+    if base is None:
+        return None
+    dark = renown.black_market_price(state, content, tier)
+    return dark if dark is not None else base
+
+
+def black_market(state: GameState, content: Content, tier: int) -> bool:
+    """這一階賣的是黑市價（店面鈕上寫「（黑市價）」、掌櫃換一句）。"""
+    return sell_price(content, tier) is not None and renown.black_market_price(state, content, tier) is not None
+
+
 def sell_problem(state: GameState, content: Content, mid: str, count: int = 1) -> str | None:
     """賣 count 個 mid 不行的原因；可以時是 None。"""
     material = _material(content, mid)
     have = materials.held(state, mid)
     if material is None or have <= 0:
         return SELL_NONE
-    if sell_price(content, material.tier) is None:
+    if sell_price_for(state, content, material.tier) is None:
         return SELL_TIER3
     if count <= 0 or count > have:
         return SELL_SHORT.format(name=material.name, have=have)
@@ -99,7 +114,7 @@ def sell(state: GameState, content: Content, mid: str, count: int = 1) -> list[s
     problem = sell_problem(state, content, mid, count)
     if problem is not None:
         return [problem]
-    silver = sell_price(content, content.materials[mid].tier) * count
+    silver = sell_price_for(state, content, content.materials[mid].tier) * count
     materials.take(state, mid, count)
     p = state.player
     p.stats["silver"] = p.stats.get("silver", 0) + silver
@@ -112,8 +127,7 @@ def sell(state: GameState, content: Content, mid: str, count: int = 1) -> list[s
 def upgrade_cost(state: GameState, content: Content, tier: int) -> int:
     """換一個 tier 階的工錢：Config.economy.upgrade_silver 乘所在地的地盤福利（territory.price_factor），四捨五入（同 smithing.price）。"""
     base = content.config.economy.upgrade_silver.get(tier, 0)
-    p = state.player
-    return int(base * territory.price_factor(state.world, content, rules.side_of(state, content), p.location) + 0.5)
+    return int(base * territory.price_here(state, content) + 0.5)  # 地盤福利（照依附那一軍）× 名望的店家折扣（名聲設計 4.1）
 
 
 def upgrade_outcomes(content: Content, attribute: str, tier: int) -> list[tuple[Material, float]]:

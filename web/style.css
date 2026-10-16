@@ -12,6 +12,8 @@
   --accent-ink: #fff;
   --accent-soft: rgba(168, 50, 42, 0.10);
   --gold: #b7862b;
+  --rn-xia: #2f5d8a; /* 名聲：俠（青），名望用 --gold */
+  --rn-kou: #9a5a1e; /* 名聲：寇（赭） */
   --ok: #2f7d4f;
   --bad: #b23a2b;
   --stam: #c08a1e;
@@ -41,6 +43,8 @@
     --accent: #d2574a;
     --accent-soft: rgba(210, 87, 74, 0.16);
     --gold: #d6a548;
+    --rn-xia: #6f9fd0;
+    --rn-kou: #d08a4a;
     --ok: #5cb67f;
     --bad: #e06a5c;
     --stam: #d6a548;
@@ -102,6 +106,43 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .who-title .who-seg { white-space: nowrap; }
 .who-ranger, .who-exp { margin-top: 2px; font: 500 12px/1.5 var(--sans); color: var(--ink-2); }
 .who-ranger small { display: block; font-size: 11.5px; color: var(--ink-2); opacity: 0.85; }
+/* 名聲（名聲設計十一之二）：名望金、俠青、寇赭 */
+.rn-fame { color: var(--gold); } .rn-xia { color: var(--rn-xia); } .rn-kou { color: var(--rn-kou); }
+/* 1B：收起時名號底下一行稱號；第一屏放不下時 FIT_STEPS 的 renown 改接在頭銜後面（S.renownTight） */
+.who-renown-line { margin: 1px 0 0; font: 600 12.5px/1.45 var(--serif); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-name small .rn-fame, .who-name small .rn-xia, .who-name small .rn-kou { font-weight: 600; }
+/* 2C：展開時經驗底下「名聲」那一行（點了攤開段落條） */
+.who-renown { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; font: 500 12px/1.6 var(--sans); color: var(--ink-2); cursor: pointer; }
+.who-renown em { font-style: normal; }
+.who-renown b { font: 600 13.5px var(--serif); color: var(--ink); }
+.who-renown i { font-style: normal; margin-left: auto; padding-right: 4px; }
+.rn-strip { margin: 6px 0 2px; padding: 8px 10px 6px; border-radius: 10px; background: var(--card); }
+.rn-row { display: grid; grid-template-columns: 4.6em 1fr; align-items: start; gap: 6px; margin-top: 4px; }
+.rn-lbl { font-size: 12px; color: var(--ink-2); padding-top: 1px; }
+.rn-lbl b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.rn-dots { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: relative; }
+.rn-dots::before { content: ""; position: absolute; left: 12%; right: 12%; top: 6px; height: 2px; background: var(--line); }
+.rn-dots li { position: relative; display: grid; justify-items: center; gap: 2px; cursor: pointer; }
+.rn-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); }
+.rn-dots li.have i { border-color: currentColor; background: currentColor; }
+.rn-dots li.cur i { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent); }
+.rn-dots li.pick i { outline: 2px solid currentColor; outline-offset: 2px; }
+.rn-dots small { font-size: 10px; color: var(--ink-2); white-space: nowrap; }
+.rn-dots li.cur small, .rn-dots li.pick small { color: currentColor; font-weight: 700; }
+.rn-note { margin: 2px 0 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.rn-note b { margin-right: 6px; font: 700 13px var(--serif); }
+.rn-note span { display: block; opacity: 0.85; }
+.rn-hint { margin: 2px 0 0; font-size: 11px; color: var(--ink-2); opacity: 0.85; }
+.rn-more { font-size: 12px; margin-top: 2px; }
+.rn-sanren { margin: 2px 0 0; padding-left: 1.1em; font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+.rn-sanren li b { margin-right: 6px; color: var(--ink); }
+.rn-src { margin: 6px 0 0; padding: 6px 8px; border-radius: 8px; background: var(--card-2); font-size: 11.5px; line-height: 1.55; color: var(--ink-2); }
+.rn-src b { display: block; color: var(--ink); font-size: 12px; }
+/* 3B：玩家卡的稱號小籤 */
+.rn-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; cursor: pointer; }
+.rn-chip { font: 600 12.5px/1.5 var(--serif); padding: 0 9px; border-radius: 999px; border: 1px solid currentColor; }
+.rn-chips > i { font-style: normal; color: var(--ink-2); font-size: 12px; }
+.rn-peer-help { margin: 6px 0 0; font-size: 12px; line-height: 1.55; color: var(--ink-2); }
 /* 點名號展開更多數值的提示（畫面流程 S1），名號再長也不會被省略號吃掉 */
 /* 升級的屬性點：自己一個不縮的元素（flex: none）、放在會「…」的名號 <span> 外面——長長的「門派・陣營」只擠名號，擠不掉這一句 */
 .who-name .pts { flex: none; font: 600 12px var(--sans); color: var(--gold); }
@@ -352,6 +393,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 9. 一組選項（事件、有所感的做法）：縫 8→6、鈕高 48→44（觸控照樣按得到） */
 .page > .options.fit-tight { gap: 6px; }
 .page > .options.fit-tight > .btn { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
+/* 10. 一組選項還放不下（名聲的俠寇選項讓事件多到六顆，企劃者 2026-10-16 選 (c)）：態勢那一排收起；「剛剛」只留時間與標題
+   （不淡出，「展開全文」看全文，得失照舊在）；灰掉的俠寇鈕底下那一行原因收掉（原因在鈕的 title，點了說整句） */
+.page > .peek.fit-hide { display: none; }
+.now.fit-title:not(.open) .tx-now { max-height: none; -webkit-mask-image: none; mask-image: none; }
+.now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph { display: none; }
+.options > .btn.off .opt-note.fit-hide { display: none; }
 /* 「看完整戰報 ›」在「過程」那一行的中間（app.js 的 roundsFold）：不撐高那一行，點擊範圍上下各多 8px（約 38px 高）。
    沒有「過程」那一行的卡片（全服決戰、舊戰報）才接在卡片最後一段的句尾（withReportLink）：行內、不撐高那一行；
    放不下時整顆換到下一行（inline-block） */
@@ -463,6 +510,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .options .btn.go .k { background: var(--accent); color: #fff; }
 /* 有所感的做法（explain-2）：伺服器給了心意才用（審查 I1 起預設不給，sensing.SHOW_KINDS）：那一格寫剛柔快慢而不是 1～4，一樣寬，鈕不變高 */
 .options .btn .k.sense { font: 600 13px var(--serif); color: var(--ink); }
+/* 5B：俠寇選項的「俠」「寇」畫在編號那一格，為什麼合你的路數寫在標籤底下第二行 */
+.options .btn .k.rn-tag { font: 700 13px var(--serif); }
+.options .btn .k.rn-tag.rn-xia { color: var(--rn-xia); } .options .btn .k.rn-tag.rn-kou { color: var(--rn-kou); }
+.btn .opt-note { display: block; font-size: 11.5px; font-weight: 400; color: var(--ink-2); line-height: 1.3; margin-top: 1px; }
+/* 灰掉的俠寇鈕（企劃者 2026-10-16）：不用 disabled（按不下去的鈕點了沒反應），看起來同 .btn:disabled，點了只跳原因（app.js 的 opt-why） */
+.options > .btn.off { opacity: 0.45; cursor: default; }
+.options > .btn.off:active { transform: none; }
 /* 有所感做法底下的兩行小字（explain-2）：跟行動列底下那幾行同一個樣子，排在做法後面 */
 .act-notes.sense-notes { margin-top: -4px; }
 /* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
@@ -592,6 +646,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .g-mcol li span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .g-mcol li b { font-variant-numeric: tabular-nums; }
 .g-mcol li.mine span { font-weight: 700; color: var(--c, var(--ink)); }
+/* 4B：名字底下第二行是加入時快照的稱號（第一屏放不下時 FIT_STEPS 的 merit 收掉） */
+.g-mcol li .rn-two { display: grid; }
+.g-mcol li .rn-two small { font-size: 10.5px; line-height: 1.3; color: var(--ink-2); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.g-mcol li .rn-two small.fit-hide { display: none; }
 .g-mcol .muted { margin: 0; }
 .g-me { margin: 4px 0 0; color: var(--ink); }
 .war > .fronts-help { margin: 2px 4px 0; }

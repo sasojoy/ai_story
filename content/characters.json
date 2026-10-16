@@ -37,6 +37,7 @@
   {
     "id": "zhangbao",
     "name": "張寶",
+    "regard": "喜狠",
     "kind": "locked",
     "background": "張角之弟，隨兄傳教多年。",
     "situation": "號「地公將軍」，統領一部黃巾軍，於潁川、廣宗一帶與漢軍交戰。",
@@ -73,6 +74,7 @@
   {
     "id": "zhangliang",
     "name": "張梁",
+    "regard": "敬俠",
     "kind": "locked",
     "background": "張角三弟。",
     "situation": "號「人公將軍」，於廣宗一帶力戰皇甫嵩、盧植所率漢軍。",
@@ -145,6 +147,7 @@
   {
     "id": "huangfusong",
     "name": "皇甫嵩",
+    "regard": "敬俠",
     "kind": "locked",
     "background": "將門世家，安定朝那人，叔父皇甫規是漢末名將，家學淵源。",
     "situation": "拜左中郎將，與朱儁分道討黃巾，於長社（火攻大破黃巾）、廣宗（擊斬張梁）等地連戰連捷，是平定黃巾的首功之臣。",
@@ -215,6 +218,7 @@
   {
     "id": "luzhi",
     "name": "盧植",
+    "regard": "敬俠",
     "kind": "locked",
     "background": "涿郡人，經學大儒馬融門下高徒，通曉經學，是當代名士。",
     "situation": "拜北中郎將討張角，圍困廣宗幾乎破城，卻因不肯賄賂前來監軍的宦官左豐，被誣陷「畏敵不進」下獄，功敗垂成。劉備、公孫瓚都曾是他的學生。",
@@ -251,6 +255,7 @@
   {
     "id": "dongzhuo",
     "name": "董卓",
+    "regard": "喜狠",
     "kind": "locked",
     "background": "隴西臨洮人，出身邊地豪強，早年以驍勇聞名於羌胡之中，能左右開弓、膂力過人。",
     "situation": "接替盧植圍剿張角，此時尚只是眾多平亂將領之一，還未掌握中央大權，戰功也不算頂尖，只是嶄露頭角的邊將之一。",
@@ -288,6 +293,7 @@
   {
     "id": "caocao",
     "name": "曹操",
+    "regard": "喜狠",
     "kind": "locked",
     "talk_at": "qiao_county",
     "background": "沛國譙縣人，其父曹嵩為宦官曹騰的養子，家底殷實卻因宦官背景頗受士人清議輕視。",
@@ -324,6 +330,7 @@
   {
     "id": "liubei",
     "name": "劉備",
+    "regard": "敬俠",
     "kind": "locked",
     "talk_at": "zhuo_county",
     "background": "涿郡人，漢室宗親（中山靖王劉勝之後，但家道早已中落），少時與母親織席販履為生，出身清貧。",
@@ -361,6 +368,7 @@
   {
     "id": "guanyu",
     "name": "關羽",
+    "regard": "敬俠",
     "kind": "locked",
     "talk_at": "zhuo_county",
     "background": "河東解良人，早年因故亡命奔涿郡（民間傳說因除霸行俠而流亡異鄉）。",
@@ -398,6 +406,7 @@
   {
     "id": "zhangfei",
     "name": "張飛",
+    "regard": "敬俠",
     "kind": "locked",
     "talk_at": "zhuo_county",
     "background": "涿郡人，家中殷實，以屠豬賣酒為業，是三兄弟裡出身最寬裕的一位。",
@@ -544,6 +553,7 @@
   {
     "id": "bocai",
     "name": "波才",
+    "regard": "喜狠",
     "kind": "locked",
     "background": "潁川陽翟一帶的佃戶出身，荒年斷炊時靠太平道的施粥與符水撐了過來，入道十年，因為能辦事、敢擔當，被立為潁川一方的渠帥。",
     "situation": "甲子年二月隨三十六方一同起事，統領潁川的黃巾，四處截斷官道、劫奪官糧，朝廷派來的中郎將正往潁川趕。",

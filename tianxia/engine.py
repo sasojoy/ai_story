@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     allied, annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
-    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
 )
@@ -50,7 +50,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, can_meet, change_trend, check_result_line,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -121,6 +122,8 @@ class Option(BaseModel):
     wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
     confirm: str = ""  # 按下去之前先問一次的話（FB-095：必敗的遊歷）；網頁照它跳確認層，空的直接送
     confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
+    tag: str = ""  # 名聲 5B：俠寇選項的「俠」「寇」（網頁畫在編號那一格）；空的照舊寫編號
+    note: str = ""  # 名聲 5B：標籤底下第二行小字（俠寇選項寫為什麼合你的路數）；空的不畫
 
 
 @dataclass(frozen=True)
@@ -206,6 +209,7 @@ class RaidSpoils:
     hp: int
     contrib: int
     goods: tuple[tuple[str, int], ...] = ()  # 設伏劫道：贏的搶走的素材（素材 id, 個數）；截殺沒有
+    evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
 # 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
 # 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
 HEARD_TITLE = "聽聞"
@@ -350,6 +354,9 @@ class Game:
         # 不加這一截的話一整季都算同一天
         self.advanced_real: float = 0.0
         self.own_request = False  # 這一份 Game 是不是那個人自己的請求（伺服器的 act／act_look 由 mark_seen 設）：奪璽單挑的 last_seen 只看它
+        # 本人這一輪（名聲 4.6、5.4）：伺服器的 act／act_look（mark_seen）與假人程式自己那一輪（bot_runner）設。系統通緝只在這一輪掛。
+        # 不借 own_request：假人刻意不設它（奪璽單挑裡永遠不在場），借了的話假人永遠不被掛單、一看就知道是假人
+        self.own_turn = False
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
@@ -570,6 +577,7 @@ class Game:
         # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
         fresh.player.hints_seen = set(old.player.hints_seen)
         fresh.player.hints_off = old.player.hints_off
+        fresh.player.renown_told = old.player.renown_told  # 名聲：兩個稱號說明過了就不再說（段 renown_seen 跟角色一起重來）
         book = self.content.hints
         if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
             fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
@@ -773,6 +781,7 @@ class Game:
         下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
         self.now = now
         away_from = self.state.last_real  # 上次同步的現實時間，下面就換成 now（「你不在的時候」看它，見 _deliver_away）
+        before = {id(e) for e in self.state.journal}  # 名聲：這一次同步補進來的那幾則也接差距（_renown_after 的 fresh，FB-292）
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
@@ -837,6 +846,8 @@ class Game:
         self._guide(enlist.expire(self.state, self.content))  # 第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄
         self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._party_expires()  # 答應結伴之後帶頭的人遲遲沒動身：各走各的（玩家互動第二層）
+        # 名聲：同步時發現的跨段另起一則「名聲」（設計 3.3）；這一次補進來的那幾則接差距
+        self._renown_after(synced=True, fresh=[e for e in self.state.journal if id(e) not in before])
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons + seated)
 
@@ -911,6 +922,18 @@ class Game:
         Game.sync 不寫，所以管理者的 _admin_target、_kin、_load_kin、peer_act 建的 Game 都碰不到它。"""
         self.state.player.seen_real = now
         self.own_request = True
+        self.own_turn_checks()
+
+    def own_turn_checks(self) -> None:
+        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
+        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
+        self.own_turn = True
+        if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
+            return
+        posted = bounties.post_auto(self.state, self.content)
+        if posted:
+            self._write(bounties.BOARD, posted)
+            self._save_season()
 
     def _copy_heirloom(self) -> None:
         """抄本照全服登記重抄（玉璽碎片設計 7.4）：只讀 world 那一列，不讀季。sync 與 _drop_stale_references 都叫，所以 _kin 也重抄。
@@ -980,13 +1003,19 @@ class Game:
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
         if s.pending_event:
             event = c.events[s.pending_event]
-            opts = [
-                Option(
+            opts = []
+            for i, ch in visible_choices(event, s, c):
+                opt = Option(
                     id=f"choice:{i}", label=self._choice_label(ch, odds),
                     wait=BIG_FIGHT_WAIT if ch.combat and self.is_big(c.squads[ch.combat]) else "",
                 )
-                for i, ch in visible_choices(event, s, c)
-            ]
+                if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
+                    if not renown.on(c, "virtue_choices"):
+                        continue
+                    ok = renown.meets(s, c, ch.needs.path, ch.needs.tier)
+                    opt.enabled, opt.tag = ok, ch.needs.path
+                    opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
+                opts.append(opt)
             if event.free_text is not None:
                 opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
             return opts
@@ -2630,7 +2659,8 @@ class Game:
         if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
         boss = duel_rules.available(s, c)  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
-        if boss is not None and self.rng.random() < c.config.duel.explore_chance:
+        # 名聲 4.4：名望高、頭目找上門的機會乘 renown.duel_chance（只放大門檻，擲的還是同一顆骰）
+        if boss is not None and self.rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
             return self._duel_start(boss)
         if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
             return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
@@ -2711,7 +2741,7 @@ class Game:
         城鎮以外 encounter_chance 撞上一場（_gather_fight）。"""
         s, c = self.state, self.content
         boss = duel_rules.available(s, c)
-        if boss is not None and rng.random() < c.config.duel.explore_chance:
+        if boss is not None and rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):  # 名聲 4.4
             return self._duel_start(boss)
         msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
         found = [line for mid in explore_modes.gather_finds(c, loc, rng) if (line := materials.grant(s, c, mid))]
@@ -3065,12 +3095,13 @@ class Game:
         line = self.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
         short = self._fame_gap(companion_id)
         figure = next((f for f in c.figures.values() if f.character == companion_id), None)
-        hint = f"名望還差 {short}"
+        hint = audience_hint(s, c, companion_id)  # 名聲 explain 開著時另寫門檻與每一項折抵（設計 6.3）
         p = s.player
+        step = int(c.config.audience_rank_discount * renown.scale(s.world) + 0.5)  # 名聲 2.4：升一階抵的點數也乘季長倍數
         if (
             season_one(c, s.world)  # 規則沒開（beta 那一季）沒有人晉升
             and figure is not None and p.faction == figure.faction
-            and short <= c.config.audience_rank_discount  # 再升一階抵掉的點數補得上這個差距
+            and short <= step  # 再升一階抵掉的點數補得上這個差距
             and ranks.next_rank_up(s, c) is not None  # 而且下一次晉升真的會升階：第 4 階只是資格（rank 停在 3、在任才降門檻），不許諾
         ):
             faction = c.scenario.faction_name(figure.faction, figure.faction)
@@ -3350,7 +3381,7 @@ class Game:
         trade = shopview.trade_view(s, c, self._pill_day()) or {"sell": [], "upgrade": []}
         opts = [
             Option(id=f"smith:sell:{row['id']}", enabled=row["problem"] is None,
-                   label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]))
+                   label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]) + row["dark"])  # 名聲 5.2：（黑市價）
             for row in trade["sell"]
         ]
         for row in trade["upgrade"]:
@@ -3373,7 +3404,7 @@ class Game:
         s, c, p = self.state, self.content, self.state.player
         item = mounts.shop_item(s, c)
         problem = mounts.buy_problem(s, c)
-        note = problem or f"{mounts.price(s, c)} 兩"
+        note = problem or f"{mounts.price(s, c)} 兩{territory.price_note(s, c)}"  # 名聲 4.1：馬價後面寫原因
         # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
         opts = [Option(id=mounts.BUY, enabled=problem is None,
                        label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
@@ -3577,7 +3608,9 @@ class Game:
         s, c = self.state, self.content
         if not c.config.economy.sell:
             return [equipment.NOT_NOW]
-        self._shop_after(economy.sell_problem(s, c, mid, count), "sell")
+        material = c.materials.get(mid)
+        dark = material is not None and economy.black_market(s, c, material.tier)  # 名聲 5.2：掌櫃換黑市那一句
+        self._shop_after(economy.sell_problem(s, c, mid, count), "black_market" if dark else "sell")
         return economy.sell(s, c, mid, count)
 
     def _trade_upgrade(self, attribute: str, tier: int) -> list[str]:
@@ -3972,9 +4005,11 @@ class Game:
         return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus}
 
     def _battle_marks(self) -> dict:
-        """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照）。"""
+        """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照），
+        與稱號（名聲 2.5、4.5：本場戰功、論功那一句寫；名望名動一方起、善惡第 1 段起，開關關著是空的）。"""
         return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
-                "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True)}  # 本命戰法（第二批）
+                "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True),  # 本命戰法（第二批）
+                "renown": renown.titles(self.state, self.content, fame_from=2)}
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -4194,7 +4229,8 @@ class Game:
         ]
         if not heads:
             return ""
-        return f"{definition.name}論功：" + "，".join(f"{side}首功{p.name}" for side, p in heads) + "。"
+        return f"{definition.name}論功：" + "，".join(
+            f"{side}首功{p.name}" + (f"（{'・'.join(p.renown)}）" if p.renown else "") for side, p in heads) + "。"  # 名聲 4.5
 
     @staticmethod
     def _highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
@@ -4342,8 +4378,7 @@ class Game:
         notes += [seal.FRESH_LINE] if mine == "holder" and e.fresh else []
         changes = []
         if same and fame:
-            s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
-            changes.append(f"名望 +{fame}")
+            changes += renown.gain(s, c, "fame", fame)  # 加名望一律走 renown.gain（名聲設計 3.2）
         label = "" if same else f"第 {e.season} 季・"
         when = e.at if same and e.at is not None else s.world.time  # 單挑收場那一刻（FB-175）；跨季才回來照補送那一刻
         record = BattleRecord(
@@ -4715,8 +4750,7 @@ class Game:
             lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
         if not lines:
             return
-        p.stats["fame"] = p.stats.get("fame", 0) + gained
-        self._write(journal.ECHO, lines + ([f"名望 +{gained}"] if gained else []))
+        self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))  # 名聲設計 3.2
         self._save_season()  # 補到第幾個人記在共用賽季裡
 
     def _deliver_held_gear(self) -> None:
@@ -4944,8 +4978,7 @@ class Game:
                 fame += tuning.top_fame
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
             if fame:
-                s.player.stats["fame"] = s.player.stats.get("fame", 0) + fame
-                highlight_changes.append(f"名望 +{fame}")
+                highlight_changes += renown.gain(s, c, "fame", fame)  # 名聲設計 3.2
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -5046,8 +5079,7 @@ class Game:
         exp = round(pay.exp * share * (1 + bonus)) * scale
         changes = []
         if destiny and c.config.seal.mandate.fame:
-            p.stats["fame"] = p.stats.get("fame", 0) + c.config.seal.mandate.fame
-            changes.append(f"名望 +{c.config.seal.mandate.fame}")
+            changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)  # 名聲設計 3.2
         if silver:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
@@ -5060,6 +5092,9 @@ class Game:
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
+        if me.acted_rounds >= 1:  # 名聲 3.1：自己出手至少 1 回合（同首功）；掛機被代為固守的回合不算
+            rout = self._deed_fame("showdown_rout") if won and battle.outcome_margin == "大勝" else []
+            changes += journal.combine_changes(self._deed_fame("showdown") + rout)
         if self._side() is not None and me.faction == self._side():  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share)
@@ -5730,6 +5765,8 @@ class Game:
                 )
                 extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
                 extra += bounties.on_win(s, c, self.world, loc.id, squad.id)  # 懸賞榜的討伐
+                if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
+                    extra += self._deed_fame("sortie")
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
             record.notes += notes
@@ -5744,6 +5781,8 @@ class Game:
         msgs.insert(0, self._file_battle(record))
         if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
             msgs.insert(1, f"（{squad.name}：{squad.desc}）")
+        if not wild and self.is_big(squad):  # 名聲 4.5：天下聞名打大場面點名
+            self._famed_news(loc.name, squad.name, result.tier)
         return msgs
 
     def _drills_with(self, squad: Squad) -> bool:
@@ -5946,6 +5985,21 @@ class Game:
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
         record.notes += levels
         return msgs + levels
+
+    def _famed_news(self, place: str, foe: str, tier: str) -> None:
+        """名聲 4.5：天下聞名的人打完大場面（大勢人物本人、劇情裡的頭目、難度 100 以上；單人頭目戰不算），不論勝負，天下大事點名一句；
+        一個遊戲日最多 famed_news_per_day 則（不能讓一個人一直打就洗掉別人的消息）。"""
+        s, c = self.state, self.content
+        if renown.famed_news_due(s, c, game_day(c, s.world)):
+            add_rumor(s, renown.NEWS_BIG.format(name=s.player.name, place=place, foe=foe, tier=tier), content=c, layer="world")
+
+    def _deed_fame(self, kind: str) -> list[str]:
+        """立功給名望（名聲設計 3.1）：RenownTuning.deeds 的那一項；deed_fame 關著、寫 0 的不給；序章不給。"""
+        c = self.content
+        n = c.config.renown.deeds.get(kind, 0) if renown.on(c, "deed_fame") else 0
+        if n <= 0 or prologue_rules.active(self.state, c):
+            return []
+        return renown.gain(self.state, c, "fame", n)
 
     def _sortie_host(self, loc: Location, how: str) -> Squad | None:
         """守、攪局拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：守是這裡自家陣營的隊伍、攪局是此刻控制方的隊伍
@@ -6180,6 +6234,9 @@ class Game:
             held = self._held_tier3()
             msgs += self._battle_rewards(reward, record, max_tier=None if first and not capped else 2)
             p.figure_rare_drops += self._held_tier3() - held
+            fame = self._deed_fame("challenge")  # 名聲 3.1：挑戰本人打贏 +2（推翻挑戰每季都有設計的「不給」）
+            record.changes += fame
+            msgs += fame
             extra = self._rout(fid)
             changes, notes = battlelog.split_changes(extra, for_record=True)
             record.changes += changes
@@ -6198,6 +6255,7 @@ class Game:
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走
         msgs += self._seize(record, draw=c.config.figure_draw_share > 0)  # 挑戰本人打成僵持也算一次頓悟的契機（企劃者 2026-10-16）
         msgs.insert(0, self._file_battle(record, wear=True, armor_wear=True))  # 挑戰本人的戰報 kind 是 event，但兵器、防具照磨（兵器設計 3.4、裝備四欄 4.4）
+        self._famed_news(c.locations[s.player.location].name, fig.name, result.tier)  # 名聲 4.5：挑戰本人一律是大場面
         won = result.tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"挑戰{fig.name}本人，{result.tier}" + ("，他敗走。" if won else "。"), 4 if won else 3,
                     figure=fig.character or "")
@@ -6457,11 +6515,14 @@ class Game:
                     record.materials.append(weapons.GAIN_LINE.format(name=weapon.name))
                     msgs += dropped_lines
         # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
-        exp = round(squad.exp * more_exp * ranger.exp_factor(self.state, self.content))
+        factor = ranger.exp_factor(self.state, self.content)
+        exp = round(squad.exp * more_exp * factor)
         record.exp = exp
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
-        return msgs + levels
+        why = renown.ranger_exp_note(self.state, self.content, factor)  # 名聲 6.3：散人的經驗加成說出原因
+        record.notes += why
+        return msgs + levels + why
 
     def _seize(self, record, draw: bool = False) -> list[str]:
         """絕學的契機（方案 C，cultivation.seize）：打贏了（險勝以上）、序章外，照這一場的難度比擲一次頓悟。
@@ -6911,6 +6972,8 @@ class Game:
         record.notes += notes
         story += self._seize(record)
         msgs = [self._file_battle(record)] + rewards + story
+        if self.is_big(squad) and not prologue_rules.active(s, c):  # 名聲 4.5：天下聞名打大場面點名
+            self._famed_news(c.locations[s.player.location].name, squad.name, result.tier)
         if effect.next_event:
             msgs += self._present(c.events[effect.next_event])
         return msgs
@@ -7876,7 +7939,9 @@ class Game:
             winner, loser = other, self
         else:
             winner = loser = None
-        spoils = winner._raid_spoils(loser) if winner is not None else None
+        # 名聲 5.4：交差之前先判會不會交到官府通緝（打贏了、手上揭著他的官府通緝），把惡名少的那一點算進輸的那一邊，兩邊的戰報才寫得到
+        official = winner is self and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
+        spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
         self.touched.add(them.name)
         other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
@@ -7922,9 +7987,9 @@ class Game:
             self._write(bounties.BOARD, msgs)
         return msgs
 
-    def _raid_spoils(self, loser: Game) -> RaidSpoils:
+    def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
         """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
-        self 拿走一部分銀兩、記一點貢獻。"""
+        self 拿走一部分銀兩、記一點貢獻。evil 是 loser 惡名少幾點（名聲 5.4：贏的人揭著他的官府通緝；夾在 0）。"""
         c, cfg = self.content, self.content.config.raid
         lp, wp = loser.state.player, self.state.player
         purse = lp.stats.get("silver", 0)
@@ -7939,7 +8004,10 @@ class Game:
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
-        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib)
+        cut = min(evil, lp.stats.get("evil", 0))
+        if cut > 0:
+            lp.stats["evil"] = lp.stats.get("evil", 0) - cut
+        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib, evil=cut)
 
     def _raid_record(
         self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
@@ -7970,6 +8038,8 @@ class Game:
             hp_lost = spoils.hp
             if spoils.hp > 0:
                 record.changes.append(f"氣血 -{spoils.hp}")
+            if spoils.evil:  # 名聲 5.4
+                record.changes.append(bounties.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
             story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
@@ -8255,9 +8325,10 @@ class Game:
         p.duel = duel
         self._outcome(f"遇上{foe.title}{foe.name}", "")
         role = battle_instance.role_name(c.config.battle, duel.role)
+        meet = renown.duel_meet_line(s, c)  # 名聲 4.4：名望高、攔路的也多，說出原因
         return [f"你在{c.locations[p.location].name}走著，{foe.title}{foe.name}攔住了去路！", foe.intro] + (
             [f"你以{role}的架勢迎上去。"] if role else []
-        )
+        ) + ([meet] if meet else [])
 
     def _duel_scene(self) -> str:
         duel = self.state.player.duel
@@ -8547,6 +8618,10 @@ class Game:
         record.notes.append(foe.win if won else foe.lose if tier == "落敗" else f"{foe.name}見討不了好，虛晃一招退走了。")
         share = cfg.reward_share.get(tier, 0.0)
         extra: list[str] = []
+        more = renown.duel_reward(s, c) if won else 1.0  # 名聲 4.4：名動一方以上打贏，經驗、銀兩、心得多兩成（名望、素材照舊）
+        share *= more
+        if more > 1.0:
+            record.notes.append(renown.duel_paid_line(s, c))
         exp = round(boss.exp * share)
         if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
             before = p.member.level
@@ -8570,8 +8645,7 @@ class Game:
                 if materials.grant(s, c, material_id) is not None:
                     materials.add_cell(record.materials, c, material_id)  # 同一種合成一格（FB-140）
             if boss.fame:
-                p.stats["fame"] = p.stats.get("fame", 0) + boss.fame
-                record.changes.append(f"名望 +{boss.fame}")
+                record.changes += renown.gain(s, c, "fame", boss.fame)  # 名聲設計 3.2
             chance = cfg.legend_chance.get(tier, 0.0)
             if chance > 0 and self.rng.random() < chance:
                 p.legend_items += 1
@@ -8659,14 +8733,15 @@ class Game:
         arts = self._arena_arts()
         text = "、".join(arts)
         entry = arena.entry_of(s.world, p.name)
+        famed = renown.arena_famed(s, self.content)  # 名聲 4.7
         if entry is not None:
-            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts = (
-                p.name, side.power, side.scores, side.role, side.hp_cap, arts)
+            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
+                p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
             entry.kit = team.self_side(s, self.content, self.world)
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
-            kit=team.self_side(s, self.content, self.world),
+            kit=team.self_side(s, self.content, self.world), famed=famed,
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
@@ -8810,8 +8885,7 @@ class Game:
                     news.append(arena.STREAK.format(name=who.name, n=who.streak))
         if fight.best_set and fight.best_won and fight.best_rate <= cfg.highlight_rate:
             news.append(arena.HIGHLIGHT.format(name=p.name, text=fight.best_text))
-            p.stats["fame"] = p.stats.get("fame", 0) + cfg.highlight_fame
-            record.changes.append(f"名望 +{cfg.highlight_fame}")
+            record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)  # 名聲設計 3.2
         for text in news:
             add_rumor(s, text, content=c, layer="world")
         summary = self._file_battle(record, wear=False, armor_wear=False)
@@ -8835,6 +8909,9 @@ class Game:
             self._write(arena.ARENA, [arena.UNSETTLED])
         rolled = arena.on(c) and arena.roll_day(w, cfg, self._pill_day())  # 擂台關著不動 WorldState（同步什麼都沒有時不存季）
         entry = arena.entry_of(w, p.name)
+        if entry is not None and not w.ended and entry.famed != renown.arena_famed(s, c):  # 名聲 4.7：照此刻的名望段重寫
+            entry.famed = not entry.famed
+            rolled = True
         if entry is None or not (entry.inbox or entry.wages or (w.ended and entry.place and not entry.prized)):
             if rolled:
                 self._save_season()
@@ -8858,13 +8935,13 @@ class Game:
                 continue
             silver, fame = cfg.wages[rank - 1]
             p.stats["silver"] = p.stats.get("silver", 0) + silver
-            p.stats["fame"] = p.stats.get("fame", 0) + fame
+            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；俸那一句自己寫了名望
             self._write(arena.ARENA, [arena.WAGE.format(rank=rank, title=arena.title_for(rank) or "", silver=silver, fame=fame)])
         entry.wages = []
         if w.ended and entry.place and not entry.prized:
             entry.prized = True
             fame = cfg.prizes[entry.place - 1]
-            p.stats["fame"] = p.stats.get("fame", 0) + fame
+            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；季末那一句自己寫了名望
             lines = [arena.PRIZE.format(place=entry.place, fame=fame)]
             if cfg.prize_treasure:
                 lines += treasures.arena_prize(s, c, p.season_number, entry.place)
@@ -10242,7 +10319,7 @@ class Game:
         else:
             why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
         parts = [allied.label_of(s, c) if p.faction else "散人"]
-        title = ranks.title(c, s) or ranger.title(c, s)
+        title = ranks.title(c, s) or ranger.title(c, s) or "・".join(renown.titles(s, c))  # 名聲開著時寫兩個稱號
         if title:
             parts.append(title)
         place = c.locations[p.location].name if p.location in c.locations else p.location
@@ -10348,7 +10425,8 @@ class Game:
         data = {
             "name": p.name,
             "affiliation": social.affiliation(s, c),
-            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營是 None
+            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
+            "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
             # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求藝、求兵（多一個 have）；懸賞榜關著是空的
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
@@ -10848,9 +10926,53 @@ class Game:
         art = team.resolve_art(art_id, self.content, self.world)
         return art.name if art is not None else art_id
 
+    def _renown_after(self, synced: bool = False, fresh: list[JournalEntry] | None = None) -> None:
+        """名聲（設計 3.3、6.4、十一之二第 6 條）：這一下的名望、善名、惡名合成一行、接差距（renown.annotate），再比跨段（renown.watch）。
+        動作裡發現的接在這一下那一則江湖紀錄（最新一則、時間是此刻）的最後，得失那一排多一顆金色的「名號傳開」；這一下打了仗，戰報的
+        得失一樣接差距。同步時發現的（synced）另起一則「名聲」；fresh 是這一次同步補進來的那幾則（時間可能比此刻早，例如決戰收場那一刻），
+        一樣接差距。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
+        行狀記升段（只記到過的最高段以上）。開關關著什麼都不做。"""
+        s, c = self.state, self.content
+        if not renown.on(c):
+            return
+        entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None
+        if entry is not None:
+            entry.changes = renown.annotate(entry.changes, s, c)
+        for written in fresh or []:  # 同步時補進來的那幾則（決戰收場後補的戰報與軍餉、首創回饋、擂台的俸）也合成一行、接差距（FB-292）
+            written.changes = renown.annotate(written.changes, s, c)
+        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card is not None else None
+        if record is not None and not synced:
+            record.changes = renown.annotate(record.changes, s, c)
+        crossed = renown.watch(s, c, game_day(c, s.world))
+        if renown.news_up_due(s, c, crossed.up):  # 名聲 4.5：跨過威震州郡，天下大事傳一句（一季一人一次）
+            s.player.flags.add(renown.NEWS_UP_FLAG)
+            add_rumor(s, renown.NEWS_UP.format(name=s.player.name), content=c, layer="world")
+            # 傳聞在共用賽季裡，這裡自己存（FB-291）：動作照例先存季、再 _log，輪詢的同步只存角色——不存的話旗標跟著角色存了，
+            # 那一句卻沒進資料庫，之後也不會再傳
+            self._save_season()
+        if crossed.first and not s.player.renown_told:
+            s.player.renown_told = True
+            journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))
+        # 名聲 5.1：浩然、血煞要走對那條路；善名惡名從懸賞、截殺來的（不經 rules.apply_effect）也在這裡接到
+        granted = insights.grant_by_name(s, c, self.world) if renown.on(c, "virtue_insight") else []
+        lines = crossed.lines + granted
+        if not lines:
+            return
+        marks = [journal.renown_mark(title) for title in crossed.up]
+        if entry is not None:
+            entry.lines += lines
+            entry.changes += marks
+        else:
+            fresh = Draft(renown.TOLD_TITLE).entry(s.world.time, lines)
+            fresh.changes += marks
+            journal.add_entry(s, fresh)
+        for text, weight in crossed.annals:
+            annals.note(s, c, annals.DEED, text, weight)
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
+        self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:

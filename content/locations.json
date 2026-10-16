@@ -417,7 +417,11 @@
     "description": "宛城南邊的小縣，城牆低矮，縣中百姓多是逃難而來。縣衙前常貼著徵糧的告示。",
     "connections": [
       "yu_river",
-      "nanyang_wilds"
+      "nanyang_wilds",
+      {
+        "to": "lulin_zhai",
+        "road": "山路"
+      }
     ],
     "x": 134,
     "y": 1195,
@@ -1215,5 +1219,37 @@
       "huo"
     ],
     "prologue_only": true
+  },
+  {
+    "id": "lulin_zhai",
+    "name": "綠林山寨",
+    "description": "新野往南的山坳裡紮著一座木寨，寨門上插著褪了色的綠旗。進出的都是挎刀的漢子，山下的行商寧可繞遠路也不往這邊走。",
+    "connections": [
+      {
+        "to": "xinye",
+        "road": "山路"
+      }
+    ],
+    "x": 168,
+    "y": 1248,
+    "tags": [
+      "山林",
+      "山寨"
+    ],
+    "danger": 2,
+    "enemies": [
+      "yelang",
+      "heixiong"
+    ],
+    "materials": [
+      "kuai_1",
+      "gang_2"
+    ],
+    "insights": [
+      "feng",
+      "shan"
+    ],
+    "insight_strong": "shan",
+    "unlock_flag": "綠林開寨"
   }
 ]

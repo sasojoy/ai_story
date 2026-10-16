@@ -71,7 +71,7 @@ def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content
     assert events
     for e in events:
         assert e["actions"] == ["socialize"] and len(e["locations"]) == 1 and "condition" not in e, e["id"]
-        assert 2 <= len(e["choices"]) <= 4, e["id"]
+        assert 2 <= len([c for c in e["choices"] if "needs" not in c]) <= 4 and sum("needs" in c for c in e["choices"]) <= 1, e["id"]  # 俠寇選項（名聲 5.3）另算
         checks = [c["check"] for c in e["choices"] if "check" in c]
         assert len({ck["stat"] for ck in checks}) >= 2, e["id"]
         for c in [*e["choices"], *([e["free_text"]] if "free_text" in e else [])]:

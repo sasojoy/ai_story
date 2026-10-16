@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, seats, territory, timetable
+from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -589,6 +589,13 @@ def season_hour(state: GameState, content: Content, rng: random.Random, players:
     return msgs + season_events(state, content, rng)
 
 
+def _open_greenwood(vehicle: GameState, content: Content) -> None:
+    """名聲 5.1：正邪武學開著時立「綠林開寨」（綠林山寨的 unlock_flag）。新的一季在蓋章時就立了（world_state.stamp_season）；
+    這裡補上線那一刻正在跑的季（第一次推進時）。已經立了就不動；lessons 關著不立：山寨不畫、去不了。"""
+    if renown.on(content, "lessons") and renown.GREENWOOD_FLAG not in vehicle.world.flags:
+        add_world_flags(vehicle, [renown.GREENWOOD_FLAG])
+
+
 def settle_season_start(season: WorldState, content: Content, rng: random.Random) -> list[str]:
     """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
     不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，本週大事那時還是空的。
@@ -625,6 +632,8 @@ def advance_world_state(
     被動的現實時間追趕（world_state.py::catch_up_season）則透過下面的 advance_season
     包在 mutate_season 裡再呼叫。"""
     vehicle = _season_vehicle(content, season)
+    if not season.ended:
+        _open_greenwood(vehicle, content)  # 名聲 5.1：上線那一刻正在跑的季，第一次推進時補立
     recompute_trends(season, content)  # 開關開著時，內容改版前開的一季也照三條戰線重算存下來的黃巾聲勢（條件讀它）
     territory.update(season, content)  # 舊存檔、中途上線的第一次在這裡算，不發天下大事（出陣探索與地盤設計第六節）
     msgs: list[str] = []

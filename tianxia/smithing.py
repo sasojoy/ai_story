@@ -66,9 +66,8 @@ def price(content: Content, tier: int, slot: str = "weapon", state: GameState | 
     if state is None:
         return base
     from . import territory  # noqa: PLC0415  territory → rules：延後 import
-    from .allied import side_of  # noqa: PLC0415  豪強分屬兩軍：照依附那一軍算自家地盤
 
-    return int(base * territory.price_factor(state.world, content, side_of(state, content), state.player.location) + 0.5)
+    return int(base * territory.price_here(state, content) + 0.5)  # 地盤福利（照依附那一軍）× 名望的店家折扣（名聲設計 4.1）
 
 
 def attribute_with(content: Content, tianji: int, kind: str, main: str, aux: str) -> str:

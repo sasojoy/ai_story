@@ -745,6 +745,31 @@
             "silver": -15
           }
         }
+      },
+      {
+        "text": "跟水寇頭子拆帳，一起收過河錢",
+        "needs": {
+          "path": "寇",
+          "tier": 1
+        },
+        "check": {
+          "stat": "wis",
+          "difficulty": 5,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你跟水寇頭子三言兩語談好了分成，在河口幫著收了半天錢，到手的比他手下還多。",
+          "stats": {
+            "silver": 20,
+            "evil": 2
+          }
+        },
+        "fail_effect": {
+          "text": "水寇頭子收了你的「入夥錢」，轉頭就把你趕下了船。",
+          "stats": {
+            "silver": -10
+          }
+        }
       }
     ],
     "free_text": {

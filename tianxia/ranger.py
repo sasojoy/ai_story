@@ -11,7 +11,7 @@
 不看第一季開關（先例是叛投 defection.can_defect）。不 import engine。"""
 from __future__ import annotations
 
-from . import gender
+from . import gender, renown
 from .models import Content
 from .state import GameState
 
@@ -21,11 +21,17 @@ TITLES: dict[str, list[str]] = {
     "俠": ["無名小卒", "江湖遊俠", "一方豪俠", "州郡大俠", "天下名俠"],
     "寇": ["無名小卒", "綠林好漢", "江湖巨寇", "州郡大盜", "天下大盜"],
 }
-FEMALE_TITLES = {"綠林好漢": "綠林女傑"}  # 女的名號換字（PM 2026-10-12）：只換寫死是男子的那幾個，其餘不分男女
+FEMALE_TITLES = renown.FEMALE_TITLES  # 女的名號換字（PM 2026-10-12）：表搬到 renown（名聲設計 2.2），這裡照舊讀得到
 
 
 def _named(name: str, state: GameState) -> str:
     return FEMALE_TITLES.get(name, name) if gender.female(state) else name
+
+
+def merged(content: Content) -> bool:
+    """名聲開著：遊俠名號併進善惡稱號（名聲設計 2.3）。舊的帳（ranger_good／evil／deeds）不再記也不再讀，欄位留著讓舊存檔讀得進來；
+    散人原本的好處（求見、經驗、招募、奇遇、懸賞）照舊只給散人，階改讀善惡稱號的段（renown.virtue_tier）。"""
+    return renown.on(content)
 
 
 def active(state: GameState, content: Content) -> bool:
@@ -35,7 +41,7 @@ def active(state: GameState, content: Content) -> bool:
 
 def note_gain(state: GameState, content: Content, key: str, delta: int) -> None:
     """善名、惡名加了 delta（rules.apply_effect 照實際動了多少呼叫）：散人才記進那一本帳。"""
-    if delta <= 0 or not active(state, content):
+    if delta <= 0 or merged(content) or not active(state, content):
         return
     p = state.player
     if key == "good":
@@ -44,15 +50,23 @@ def note_gain(state: GameState, content: Content, key: str, delta: int) -> None:
         p.ranger_evil += delta
 
 
-def add_deeds(state: GameState, content: Content, points: int) -> int:
-    """懸賞的功績：散人才記；回傳真的記了多少（陣營的人是 0）。"""
+def add_deeds(state: GameState, content: Content, points: int) -> list[str]:
+    """懸賞的功績：散人才記，回寫進紀錄的那一行（陣營的人是空的）。名聲開著時照交差那一刻走的路記成善名或惡名（名聲設計 2.3，
+    第十一節第 3 題甲）；關著照舊記俠名。善名、惡名改了，跨段與悟浩然、血煞在 Game._log 那一下一起比（renown.watch）。"""
     if points <= 0 or not active(state, content):
-        return 0
+        return []
+    if merged(content):
+        key = renown.BOOKS[renown.path(state)]
+        state.player.stats[key] = state.player.stats.get(key, 0) + points
+        return [f"{content.config.stat_names.get(key, key)} +{points}"]
     state.player.ranger_deeds += points
-    return points
+    return [f"俠名 +{points}"]
 
 
-def path(state: GameState) -> str:
+def path(state: GameState, content: Content | None = None) -> str:
+    """走哪一條路。給了 content、名聲開著時照善名惡名（renown.path）；其餘照舊看兩本帳。"""
+    if content is not None and merged(content):
+        return renown.path(state)
     p = state.player
     return "寇" if p.ranger_evil > p.ranger_good else "俠"
 
@@ -67,12 +81,18 @@ def tier_of(content: Content, value: int) -> int:
 
 
 def tier(state: GameState, content: Content) -> int:
-    """此刻的階（0～4）；沒有名號可言（陣營的人、劇本沒有陣營）是 0。"""
-    return tier_of(content, points(state)) if active(state, content) else 0
+    """此刻的階（0～4）：名聲開著時是善惡稱號的段（renown.virtue_tier），只有散人才有；關著照舊看俠名。
+    沒有名號可言（陣營的人、劇本沒有陣營）是 0。"""
+    if not active(state, content):
+        return 0
+    return renown.virtue_tier(state, content) if merged(content) else tier_of(content, points(state))
 
 
 def title(content: Content, state: GameState) -> str | None:
-    """狀態列寫在名號後面的那一段（「江湖遊俠」）；第 0 階、陣營的人、劇本沒有陣營是 None。"""
+    """狀態列寫在名號後面的那一段（「江湖遊俠」）；第 0 階、陣營的人、劇本沒有陣營是 None。
+    名聲開著時一律 None：稱號改寫在名聲那一行（名聲設計 2.5，social.affiliation 不再接）。"""
+    if merged(content):
+        return None
     t = tier(state, content)
     return _named(TITLES[path(state)][t], state) if t > 0 else None
 
@@ -115,8 +135,9 @@ def unlocks(content: Content) -> list[str]:
 
 
 def status(state: GameState, content: Content) -> dict | None:
-    """狀態列與人物卡用的資料：名號、階、俠名、下一階要多少、這一階解鎖了什麼。不是散人、劇本沒有陣營是 None。"""
-    if not active(state, content):
+    """狀態列與人物卡用的資料：名號、階、俠名、下一階要多少、這一階解鎖了什麼。不是散人、劇本沒有陣營是 None。
+    名聲開著時也是 None：換成 renown.status（散人的好處列在說明卡上）。"""
+    if merged(content) or not active(state, content):
         return None
     cfg = content.config.ranger
     value, t, way = points(state), tier(state, content), path(state)

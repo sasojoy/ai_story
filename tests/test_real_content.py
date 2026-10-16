@@ -18,6 +18,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import calendar, companion_agent, fusion, team
+from tianxia.rules import audience_hint
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
@@ -72,7 +73,7 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 41  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
@@ -581,7 +582,8 @@ def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_
     (line,) = game.choose("call:luzhi")
     spoken, _, hint = line.rpartition("（")
     assert spoken in content.characters["luzhi"].brush_off
-    assert hint == f"名望還差 {content.characters['luzhi'].audience_fame - game.state.player.stats.get('fame', 0)}）"
+    # 名聲（2026-10-15）：門檻照這一季的倍數（14 天 ×5.6），explain 開著時另寫門檻與折抵（rules.audience_hint）
+    assert hint == f"{audience_hint(game.state, content, 'luzhi')}）" and hint.startswith("名望還差 ")
     assert game.state.player.stamina == stamina and game.state.player.pending_companion is None
 
 
@@ -2022,7 +2024,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert (w.storyline, w.act) == ("huangjin_line", 0)
     assert "黃巾之亂" not in quest_text(game.state, c) and "黃巾橫行" not in quest_text(game.state, c)
     goals = quest_text(game.state, c)
-    assert "投身潁川書院或曹氏莊院" in goals and "名望達到 10" in goals  # 做得到的照列
+    assert "投身潁川書院或曹氏莊院" in goals and "名聲傳開：小有名氣" in goals  # 做得到的照列（名聲：看名望的段）
     assert not any(t in goals for t in ("擊敗波才", "平定黃巾", "打贏黃巾決戰", "黃巾決戰落敗"))
     assert "huangjin_showdown" not in [b.id for b in game.admin_battles()]
     assert "huangjin_60" not in [x.id for x in game.admin_fires()]

@@ -933,6 +933,9 @@ def _who_name_helper(js: str) -> tuple[str, str]:
     body = body[:body.index("\n  }\n")]
     first, _, rest = body.partition("\n    if (!S.showMore)")
     assert rest, "whoNameHtml 要先處理收起來的那一行（if (!S.showMore) …）"
+    if rest.startswith(" {"):  # 名聲（1B）：收起來的那一段多一行稱號，寫成一個區塊
+        collapsed, _, expanded = rest.partition("\n    }\n")
+        return collapsed, expanded
     collapsed_line, _, expanded = rest.partition("\n")
     return collapsed_line, expanded
 
@@ -4289,7 +4292,8 @@ def test_the_page_offers_the_box_and_rejects_empty_words(client, monkeypatch):
     main = client.get("/api/main").json()
     assert main["event_free_text"] == "自己想辦法……"
     # 選項只有一行，底下不另起一行（企劃者 2026-10-05）；wait 是大場面按下去等模型時換上的字，這裡不是仗、是空的
-    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
+    assert main["options"][-1] == {"id": "choice:free", "label": "自己想辦法……", "enabled": True, "wait": "", "confirm": "", "confirm_yes": "",
+                                   "tag": "", "note": ""}  # note：名聲 5B 俠寇選項的第二行，這裡空著
     assert client.post("/api/answer", json={"text": "  "}).status_code == 400
     with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(50)):
         main = client.post("/api/answer", json={"text": "大喊官兵來了"}).json()["main"]
@@ -6264,6 +6268,7 @@ NOT_IN_THE_FINGERPRINT = {
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
         "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
         "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
+        "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
         "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
         "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
@@ -6828,3 +6833,18 @@ def test_boards_tab_is_in_the_news_page():
 
     src = (Path(__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
     assert '{ id: "boards", name: "榜單" }' in src and 'api("/api/boards")' in src
+
+def test_the_first_request_after_a_restart_posts_the_wanted_notice(client):
+    """名聲 4.6：系統通緝在本人這一輪掛（Game.own_turn_checks，mark_seen 叫）。伺服器重開之後（GAMES 是空的、Game 物件重建）
+    第一個請求就要掛：掛單不靠前一個請求留在 Game 物件上的記號。"""
+    _player(client)
+    characters = open_characters()
+    state = characters.load("沈青衫")
+    state.player.faction = "guan"
+    state.player.joined_at = -1e9  # 過了新手期
+    state.player.stats["fame"] = 10_000  # 不管這一季乘幾倍都是天下聞名
+    characters.save(state)
+    server.GAMES.clear()  # 重開：記憶體裡的 Game 都沒了
+    client.get("/api/main")
+    posted = [b for b in open_world().get_season().bounties if b.auto_by == "陣營" and b.target == "沈青衫"]
+    assert len(posted) == 1 and posted[0].faction == "huang"

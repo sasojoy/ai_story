@@ -11,7 +11,7 @@ min_stats.silver（慣例是剛好等於價錢）。懲罰從結構上認：檢�
 釘住的內容：content/events/ 底下的每一個檔（任何一則事件都可能寫進付錢的選項；scripts/test_for.py 靠檔名挑到這裡，
 test_this_file_names_every_event_file 守著這份清單）：explore_jizhou.json、explore_luoyang.json、explore_nanyang.json、
 explore_runan.json、explore_yingchuan.json、explore_youzhou.json、foreshadow_fragments.json、foreshadow_prep.json、general.json、
-jizhou.json、kou.json、luoyang.json、marks.json、nanyang.json、prologue.json、promotion.json、ranger.json、recruit.json、sects.json、
+jizhou.json、kou.json、luoyang.json、marks.json、nanyang.json、prologue.json、promotion.json、ranger.json、recruit.json、renown.json、sects.json、
 social_nanyang_yingchuan.json、social_north.json、social_runan.json、stealth.json、tales.json、train_aftermath.json、treasure.json、
 trend.json、youzhou.json。"""
 from __future__ import annotations
@@ -147,6 +147,11 @@ def _price_problems(game: Game, content: Content, eid: str, i: int, price: int) 
     option = f"choice:{i}"
     choice = content.events[eid].choices[i]
     problems = []
+    if choice.needs is not None:  # 俠寇選項（名聲 5.3）：先給這個人那一段的稱號，量的是銀兩那一道擋
+        from tianxia import renown
+
+        book, other = ("good", "evil") if choice.needs.path == "俠" else ("evil", "good")
+        game.state.player.stats.update({book: renown.virtue_bars(content, game.state.world)[choice.needs.tier - 1], other: 0})
     if option in _scene(game, eid, price - 1):
         problems.append(f"{eid} {option}：差一兩還看得到")
     if game.choose(option) != ["（此刻無法這麼做。）"] or game.state.player.stats["silver"] != price - 1:

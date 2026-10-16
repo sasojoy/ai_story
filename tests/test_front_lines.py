@@ -41,6 +41,7 @@ def on(real):
 
 
 def make(content, faction=None, name="甲"):
+    content.config.renown.deed_fame = False  # 名聲 3.1 的決戰參戰名望另有測試（test_renown_deeds）；這裡只數戰況那幾個標籤
     game = Game.new(content, name, rng=random.Random(0))
     game.state.player.faction = faction
     return game

@@ -42,7 +42,7 @@ def test_the_merit_board_has_only_the_two_armies(three):
     battle.participants["乙"].acted_rounds = 2
     g = bi.gauge(battle, three, "guan", timetable=False, tuning=BattleTuning(), viewer="甲")
     assert "third" not in g and set(g["merit"]) == {"me", "left", "right"}
-    assert g["merit"]["right"] == [{"name": "乙", "merit": 4, "mine": False}]
+    assert g["merit"]["right"] == [{"name": "乙", "merit": 4, "mine": False, "renown": []}]
 
 
 # ── 假人第一時間出招 ─────────────────────────────

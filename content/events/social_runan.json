@@ -480,6 +480,36 @@
             "good": 1
           }
         }
+      },
+      {
+        "text": "追上那少年問清緣由，替他還了錢，不送官",
+        "needs": {
+          "path": "俠",
+          "tier": 1
+        },
+        "condition": {
+          "min_stats": {
+            "silver": 5
+          }
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 4
+        },
+        "effect": {
+          "text": "你在巷口截住少年，聽他說家裡老母病著。你替他把錢還給老婦，又叮囑他別再幹這種事。",
+          "stats": {
+            "silver": -5,
+            "good": 2,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "少年鑽進人堆不見了。你只得替他把錢還給老婦，心裡記掛著那張瘦臉。",
+          "stats": {
+            "good": 1
+          }
+        }
       }
     ]
   },

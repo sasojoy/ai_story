@@ -1684,7 +1684,7 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     real = load_content(ROOT / "content")
     basics = [s for s in real.skills.values() if s.quality == "下品" and s.id not in ("manniu_quan", "zhuifeng")]  # 蠻牛拳是序章專用的雜學；追風步是事件教的（2026-10-14 改下品）
-    assert len(basics) == 17
+    assert len(basics) == 21  # 名聲 5.1 加了四門正邪武學（守義劍、養浩訣、剪徑刀、嘯林功）
     assert all(loc.insights for loc in real.locations.values())
 
 

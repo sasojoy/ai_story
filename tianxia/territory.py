@@ -12,9 +12,9 @@
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
 from __future__ import annotations
 
-from . import calendar, rules
+from . import calendar, renown, rules
 from .models import FRONT_KEY, Content
-from .state import Rumor, TerritoryState, TerritoryWeek, WorldState
+from .state import GameState, Rumor, TerritoryState, TerritoryWeek, WorldState
 
 FLIP_LINE = "{place}落入{side}之手。"  # 待 joy 潤：易手那一刻的天下大事與江湖史（設計 4.3 第 2 點）
 RETAKE_LINE = "{side}收復{place}。"  # 待 joy 潤（FB-252）：這一季佔過那裡的一方再拿回來（TerritoryState.held）
@@ -273,3 +273,33 @@ def price_factor(world: WorldState, content: Content, faction: str | None, loc_i
         return 1.0
     cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price
+
+
+def price_here(state: GameState, content: Content) -> float:
+    """此刻在這裡買東西的倍數（名聲設計 4.1）：地盤福利（price_factor）× 名望的店家折扣（renown.price_factor）。
+    療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
+    放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
+    p = state.player  # 自家地盤照那一邊算（rules.side_of：豪強分屬兩軍的季，豪強是依附的那一軍）
+    return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
+
+
+def price_parts(state: GameState, content: Content) -> list[str]:
+    """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
+    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。"""
+    if not renown.on(content, "discount"):
+        return []
+    p = state.player
+    parts = []
+    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    if land != 1.0:
+        parts.append(("自家地盤" if land < 1 else "敵方地盤") + "・" + renown.discount_word(land))
+    fame = renown.price_factor(state, content)
+    if fame != 1.0:
+        parts.append(f"{renown.fame_title(state, content)}・{renown.discount_word(fame)}")
+    return parts
+
+
+def price_note(state: GameState, content: Content) -> str:
+    """價錢後面的原因（名聲 4.1「寫原因」）：「（自家地盤・九折，名動一方・九四折）」；名聲關著、兩樣都沒有是空字串
+    （關著時一個字都不變：地盤福利以前也不寫原因）。"""
+    return renown.reasons_text(price_parts(state, content))

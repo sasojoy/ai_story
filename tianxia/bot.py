@@ -596,7 +596,7 @@ def trade_want(game: Game) -> tuple | None:
         for mid, n in sorted(held.items()):
             material = c.materials.get(mid)
             keep = TRADE_KEEP.get(material.tier) if material is not None else None
-            if keep is not None and n > keep and economy.sell_price(c, material.tier) is not None:
+            if keep is not None and n > keep and economy.sell_price_for(s, c, material.tier) is not None:
                 return ("sell", mid, n - keep)
     return None
 
