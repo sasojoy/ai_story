@@ -527,9 +527,12 @@ class TacticDef(_Strict):
 
 class TacticBond(_Strict):
     """人器合一（名將本命兵器，第三批）：身上也練著那位名將的本命武學或內功時，他那一門戰法改強：發動率、蓄力、回合各加多少，
-    params 各加多少（沒有的鍵當 0 加上去）。desc 是卡上那一句。"""
+    params 各加多少（沒有的鍵當 0 加上去）。desc 是卡上那一句。
+    tactic：加強的是那位名將的哪一門戰法（名字，卡上寫的那一門；PM 2026-10-16：以前兩門都加，袁紹的回合 +1 把名門心法的「一直在」
+    變成只有第 1 回合）。名將本命兵器一定要寫（content 驗）；以器配招（GeneralTrait.ultimate_bond）、名器同氣不寫，加的就是那一門絕招。"""
 
     desc: str
+    tactic: str = ""
     rate: float = 0.0
     prep: int = 0
     rounds: int = 0

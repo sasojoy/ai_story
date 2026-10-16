@@ -135,7 +135,8 @@ def when_text(tactic: TacticDef) -> str:
 
 def card_text(tactic: TacticDef, title: str = TITLE) -> str:
     """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
-    tail = MIGHT_NOTE.format(pct=round(tactic.might * 100)) if tactic.might else ""
+    # 本命底蘊照實際寫（19.5%，PM 2026-10-16）：以前 round 到整數、又是逢五取偶，19.5 寫成 20、22.5 寫成 22
+    tail = MIGHT_NOTE.format(pct=f"{round(tactic.might * 100, 1):g}") if tactic.might else ""
     return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}{tail}"
 
 
@@ -157,6 +158,12 @@ def bonded(tactic: TacticDef, bond: TacticBond) -> TacticDef:
         "rate": max(0.0, min(1.0, tactic.rate + bond.rate)), "prep": max(0, min(1, tactic.prep + bond.prep)),
         "rounds": max(0, tactic.rounds + bond.rounds), "params": params,
     })
+
+
+def bond_fits(h: Holder, figure: str, bond: TacticBond) -> bool:
+    """名將本命兵器的人器合一加強的是不是這一門：那位名將的本命、名字是卡上寫的那一門（TacticBond.tactic）。
+    team.own_extras 與量表（scripts/measure_tactics.py）都問這一條，另一門照舊。"""
+    return h.figure == figure and h.tactic.name == bond.tactic
 
 
 def copied(tactic: TacticDef, share: float) -> TacticDef:
@@ -396,7 +403,11 @@ def _chase_disarm(f: _Fight, h: Holder) -> None:  # 曹操〔橫槊賦詩〕
 def _opening_ward(f: _Fight, h: Holder) -> None:  # 曹操〔亂世心術〕
     turns = int(h.tactic.params.get("turns", 2))
     f.put(f.us, "守一", turns, now=True)
-    f.us.reflect, f.us.reflect_by = h.tactic.params.get("reflect_pct", 0.0), h.tactic.name
+    # 反彈有好幾個來源時取最高的（亂世心術、絕招〔穩〕、梟風槍〔挾勢〕都走這裡）：後發動的不蓋掉前面的、沒寫反彈的不清成 0
+    # （PM 2026-10-16：以前挾勢比亂世心術晚發動，帶著梟風槍反彈反而是 0%）
+    pct = h.tactic.params.get("reflect_pct", 0.0)
+    if pct > f.us.reflect:
+        f.us.reflect, f.us.reflect_by = pct, h.tactic.name
     f.say(h, f"心如止水，守一 {turns} 回合")
 
 
@@ -599,7 +610,9 @@ def _foresight(f: _Fight, h: Holder) -> None:  # 盧植〔經緯〕
 
 
 def _ward_all(f: _Fight, h: Holder) -> None:  # 盧植〔海內儒宗〕：守一；每擋下一次控制推力加重
-    f.put(f.us, "守一", max(1, h.tactic.rounds), now=True)
+    # 守一給到第 rounds 回合為止（卡上「前 3 回合」）：起手每回合都會進來，以前每次重給 rounds 回合，第 3 回合又給 3 回合、撐到第 5 回合
+    span = h.tactic.rounds
+    f.put(f.us, "守一", max(1, span - f.round + 1) if span else 1, now=True)
     f.push_mod += f.us.wards * h.tactic.params.get("per_ward_pct", 0.0)
     if f.round == 1:
         f.say(h, f"正氣護身，前 {h.tactic.rounds} 回合自己與同伴守一")
@@ -790,8 +803,9 @@ GUARD_KINDS = ("rebound_guard", "hold_city", "steady")  # 出固守才起作用�
 WAR_KINDS = (
     "chase_disarm", "rally", "heavy_blow", "cleanse", "unbroken", "vanguard", "tiger", "waver", "veil", "bloodrage", "oath",
     "marshal", "steady", "surge", "tide", "cavalry", "night_raid", "reinforce", "sacrifice", "hold_city",
-    # 第三批：化影、回氣血、乘勝、悟招、無隙；斬將與墜星的強攻加重在 war_round 另算，化勁少挨的打也是
-    "shadow", "drain", "mend", "momentum", "insight", "flawless", "zhaoyi",
+    # 第三批：化影、回氣血、乘勝、無隙；斬將與墜星的強攻加重在 war_round 另算，化勁少挨的打也是。
+    # 悟招（insight）不在這裡（PM 2026-10-16）：決戰只記你剋中、不記被剋（battle_instance 傳的 beat 是 1 或 0），層數疊不起來，卡上寫決戰不發
+    "shadow", "drain", "mend", "momentum", "flawless", "zhaoyi",
     # 絕學立招：連環、連勝無隙、退無可退的連環
     "swift", "streak", "last_rally",
 )
