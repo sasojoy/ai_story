@@ -647,7 +647,11 @@ def check_signature_arts(c: Content, need) -> None:
         need(fields <= set(tactic.params), f"{where}：戰法的說明用了 params 沒有的 {sorted(fields - set(tactic.params))}")
     for arm in c.gear.signature_arms:
         need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
-    for trait in c.traits.general:
+    for trait in c.traits.general:  # 絕學立招：絕招的名字到時候換成那門絕學的名字，這裡只驗說明的 {鍵} 與以器配招的說明
+        if trait.ultimate is not None:
+            fields = {name for _, name, _, _ in string.Formatter().parse(trait.ultimate.desc) if name}
+            need(fields <= set(trait.ultimate.params), f"一般功效 {trait.name}：絕招的說明用了 params 沒有的 {sorted(fields - set(trait.ultimate.params))}")
+            need(trait.ultimate_bond is None or bool(trait.ultimate_bond.desc), f"一般功效 {trait.name}：以器配招要寫說明")
         if trait.tactic is None:
             continue
         need("{extra}" not in trait.desc or trait.extra_per_layer > 0, f"一般功效 {trait.name}：說明寫了 {{extra}} 卻沒有 extra_per_layer")

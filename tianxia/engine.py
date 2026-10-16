@@ -7066,6 +7066,16 @@ class Game:
         return msgs
 
     @_not_while_preparing
+    def bind_art(self, item_id: str, art_id: str) -> list[str]:
+        """以器配招（玩家武學追上本命定案 四；smithing.bind_art）：神器原品綁自己一門有絕招的絕學。綁成了才寫江湖紀錄。"""
+        xinde = self._xinde()
+        ok, msgs = smithing.bind_art(self.state, self.content, self.world, item_id, art_id)
+        msgs = self._log(msgs)
+        if ok:
+            self._menxia_entry(msgs[0], xinde)
+        return msgs
+
+    @_not_while_preparing
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（見 team.switch_art）。"""
         xinde = self._xinde()
@@ -8360,7 +8370,7 @@ class Game:
         if foe.arts:
             lines.append(arena.FOE_ARTS.format(arts="、".join(foe.arts)))
         fight.bout = tactics.open_bout(  # 本命戰法（第二批）：兩邊身上的兩門（他的是報名那一刻的）
-            team.self_side(s, c, self.world), foe.kit, "你", foe.name, a_faction=p.faction,
+            team.self_side(s, c, self.world), foe.kit, "你", foe.name, a_faction=p.faction, pvp=True,
         )
         return lines
 

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, signature, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -525,6 +525,8 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
     武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名, "unit": 量詞}（修練頁那一列底下畫定名表單；量詞照
     equipment.unit_for：防具一件、拳套一副、其他兵器一把，FB-197），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
+    bind：自己手上還沒以器配招的神器原品是 {"options": [{id, name, bond}…]}（配得上的絕學，可以是空的），其餘 None；
+    綁了的、名器同氣的那一句接在 tactic 後面（smithing.bond_lines）。
     held_note：寄放著哪幾件（6.5），沒有是空字串。
     where（FB-138）：每一段「哪裡買得到、哪裡得來」那一句（equipment.smith_where、mounts.where、treasures.WHERE），讀內容的地點標籤；
     網頁在每一段身上與裝備庫都空著、也沒有寄放時畫精簡的一塊，每段一行寫 empty 加 where。內容裡沒有那種地點時是空字串。"""
@@ -545,10 +547,19 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
                       "note": treasures.rack_note(state, content), "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
+    owned = {item.id: item for item in forge_secrets.owned_gear(state.player)}
+    options = smithing.bind_options(state, content, world)
     for block in slots:
         if block["slot"] in ("weapon", "armor"):
             for row in [block["worn"], *block["rack"]]:
-                if row is not None:  # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
+                if row is not None and (item := owned.get(row["id"])) is not None:
+                    # 鑄器配招（玩家武學追上本命定案 四）：綁了哪一門、名器同氣接在特技那幾行後面；還沒綁的神器原品多一組 bind
+                    row["tactic"] = [*row.get("tactic", []), *smithing.bond_lines(state, content, world, item)]
+                    row["bind"] = ({"options": [{"id": a, "name": n, "bond": d.split("：", 1)[-1]} for a, n, d in options]}
+                                   if item.original and item.secret and not item.signature and not smithing.bound_alive(state, item) else None)
+                if row is not None:
+                    row.setdefault("bind", None)
+                    # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
                     row["divine"] = ({"pattern": pending[row["id"]], "unit": equipment.unit_for(block["slot"], row.get("kind", ""))}
                                      if row["id"] in pending else None)
             # 等著定名的原品排在裝備庫最前面（終審 I1）：手上已經有一把時原品放在最後一格，網頁只預設列前 8 件，表單會被「再列 N 件」藏起來；

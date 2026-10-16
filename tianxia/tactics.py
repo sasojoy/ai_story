@@ -135,7 +135,11 @@ def when_text(tactic: TacticDef) -> str:
 
 def card_text(tactic: TacticDef, title: str = TITLE) -> str:
     """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
-    return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}"
+    tail = MIGHT_NOTE.format(pct=round(tactic.might * 100)) if tactic.might else ""
+    return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}{tail}"
+
+
+MIGHT_NOTE = "（本命底蘊：擂台、奪璽單挑每一回合推力 +{pct}%）"  # TacticDef.might
 
 
 GEAR_TITLE = "特技"
@@ -284,6 +288,7 @@ class _Fight:
         self.planned: str | None = None  # 頭目戰、擂台、奪璽單挑：這一方這一回合自己挑好的招（夜襲只在出奇襲時發）
         self.war = False  # 決戰：沒有單一的對手，只算自己身上的
         self.bout = False  # 頭目戰、擂台、奪璽單挑：招在戰法之前就挑好了
+        self.pvp = False  # 擂台、奪璽單挑（Bout.pvp）：本命底蘊只在這裡算
         self.mine: str | None = None  # 這一回合自己實際出的招（乘勢、應招看它）
         self.begin(0, 50.0, self.lines)
 
@@ -302,6 +307,8 @@ class _Fight:
         self.ally_fires = 0  # 這一回合同伴發動了幾次戰法（昭義）
         if round_ > 0:
             self.arm()
+            if self.pvp:  # 本命底蘊（TacticDef.might）：本人身上練著的本命，擂台、奪璽單挑每一回合推力多一點
+                self.push_mod += sum(h.tactic.might for h in self.holders if h.figure and h.key == PLAYER_KEY)
 
     def arm(self) -> None:
         """回合開始：不受控制的那幾種（穩、不動、嶽峙鎧）照這一回合擲好，記在自己的狀態上（對手的控制在 put 裡看）。"""
@@ -711,6 +718,59 @@ def _zhaoyi(f: _Fight, h: Holder) -> None:  # 雲紋雙鋒〔昭義〕：同伴�
     return
 
 
+# ── 絕學立招（玩家武學追上本命）：自己合成的武學練成絕學時，層數最多的功效升成的那一招（名字是那門絕學的名字）──────────
+
+
+def _swift(f: _Fight, h: Holder) -> None:  # 先手：剋中後連環，對手有機會定身
+    f.chain = True
+    turns = int(h.tactic.params.get("turns", 1))
+    if f.war:
+        f.say(h, "搶得先機，這一回合連環")
+        return
+    stunned = f.roll(h.tactic.params.get("stun_pct", 0.0)) and f.put(f.foe, "定身", turns, now=False)
+    f.say(h, "搶得先機，這一回合連環" + (f"，{f.ctx.foe}定身 {turns} 回合" if stunned else ""))
+
+
+def _shatter(f: _Fight, h: Holder) -> None:  # 破甲：強攻剋中後對手卸勁幾回合
+    if f.mine != "強攻":
+        return
+    turns = int(h.tactic.params.get("turns", 2))
+    if f.put(f.foe, "卸勁", turns, now=False):
+        f.say(h, f"一擊破開了{f.ctx.foe}的架子，卸勁 {turns} 回合")
+
+
+def _leech(f: _Fight, h: Holder) -> None:  # 吸取：剋中後對手血創，扣多少回多少
+    p = h.tactic.params
+    turns, pct = int(p.get("turns", 2)), p.get("dot_pct", 0.0)
+    f.burn("血創", pct, turns)
+    f.heal(h.key, pct * turns)
+    f.say(h, f"一招見血，{f.ctx.foe}血創 {turns} 回合，扣多少回多少")
+
+
+def _haze(f: _Fight, h: Holder) -> None:  # 險：起霧幾回合（同險的霧），霧裡對手出招有機會失神（之後每回合在 _strike 擲）
+    p = h.tactic.params
+    turns, miss = int(p.get("turns", 2)), p.get("miss_pct", 0.3)
+    f.put(f.us, "霧", turns, now=True)
+    f.put(f.foe, "霧", turns, now=True)
+    fast = f.t.mist_fast_share
+    f.us.misses = miss * (fast if f.ctx.our_agility > f.ctx.foe_agility else 1.0)
+    f.foe.misses = miss * (fast if f.ctx.foe_agility > f.ctx.our_agility else 1.0)
+    dazed = f.roll(p.get("daze_pct", 0.0)) and f.put(f.foe, "失神", 1, now=True)
+    f.say(h, f"兵行險著，起霧 {turns} 回合" + (f"，{f.ctx.foe}在霧裡失神" if dazed else ""))
+
+
+def _last_rally(f: _Fight, h: Holder) -> None:  # 厚：氣血見底（或氣勢落後太多）時一場一次，這一回合連環、守一
+    p = h.tactic.params
+    used = h.tactic.name + "|用"
+    if f.stacks.get(used, 0) or not (f.ctx.hp_ratio <= p.get("hp_pct", 0.3) or f.edge <= p.get("edge", 35.0)):
+        return
+    f.stacks[used] = 1
+    turns = int(p.get("turns", 1))
+    f.chain = True
+    f.put(f.us, "守一", turns, now=True)
+    f.say(h, f"退無可退，這一回合連環，守一 {turns} 回合")
+
+
 KINDS = {
     "chase_disarm": _chase_disarm, "opening_ward": _opening_ward, "disarm": _disarm, "rally": _rally,
     "heavy_blow": _heavy_blow, "cleanse": _cleanse, "roar": _roar, "unbroken": _unbroken, "vanguard": _vanguard,
@@ -722,6 +782,7 @@ KINDS = {
     "shadow": _shadow, "mist": _mist, "drain": _drain, "mend": _mend, "borrow": _quiet, "break": _break, "momentum": _momentum,
     "insight": _insight, "immune": _quiet, "last_stand": _quiet, "assault": _quiet, "pierce": _pierce, "quake": _quiet,
     "first_shot": _quiet, "zhaoyi": _zhaoyi, "flawless": _flawless,
+    "swift": _swift, "shatter": _shatter, "streak": _quiet, "leech": _leech, "haze": _haze, "last_rally": _last_rally,
 }
 GUARD_KINDS = ("rebound_guard", "hold_city", "steady")  # 出固守才起作用的：自動出招多出固守
 # 決戰裡發得了的（沒有單一的對手：只算自己身上的連環、無隙、化影、推力加減、固守加重、回氣血與自扣；
@@ -731,6 +792,8 @@ WAR_KINDS = (
     "marshal", "steady", "surge", "tide", "cavalry", "night_raid", "reinforce", "sacrifice", "hold_city",
     # 第三批：化影、回氣血、乘勝、悟招、無隙；斬將與墜星的強攻加重在 war_round 另算，化勁少挨的打也是
     "shadow", "drain", "mend", "momentum", "insight", "flawless", "zhaoyi",
+    # 絕學立招：連環、連勝無隙、退無可退的連環
+    "swift", "streak", "last_rally",
 )
 
 
@@ -747,7 +810,8 @@ def _busy(f: _Fight, h: Holder) -> bool:
         or (kind == "curse" and f.foe.has("亂神")) or (kind == "roar" and (f.foe.has("定身") or f.foe.has("失神")))
         or (kind == "disarm" and (f.foe.has("卸勁") or "卸勁" in f.foe.later))
         or (kind == "foresight" and "看穿" in f.us.later)
-        or (kind == "mist" and (f.us.has("霧") or f.foe.has("霧")))
+        or (kind in ("mist", "haze") and (f.us.has("霧") or f.foe.has("霧")))
+        or (kind == "shatter" and (f.foe.has("卸勁") or "卸勁" in f.foe.later))
     )
 
 
@@ -779,6 +843,10 @@ def _strike(f: _Fight) -> None:
     """出招：每回合擲發動率；要蓄力的這一回合只說一句，下一回合出手。"""
     for h in f.holders:
         t = h.tactic
+        if t.kind == "haze" and f.foe.has("霧") and _usable(f, h) and not f.foe.has("失神"):  # 霧還在：對手出招有機會失神
+            if f.roll(t.params.get("daze_pct", 0.0)) and f.put(f.foe, "失神", 1, now=True):
+                f.say(h, f"霧裡看不清來路，{f.ctx.foe}失神")
+            continue
         if t.timing != "出招" or t.name in f.pending or _busy(f, h) or not _usable(f, h):
             continue
         rate = f.rate(h)
@@ -820,6 +888,13 @@ def _after(f: _Fight, won: bool) -> None:
             if won and n == 0 and not f.stacks.get(h.tactic.name + "|說", 0):
                 f.stacks[h.tactic.name + "|說"] = 1
                 f.say(h, "越打越順，推力一回合比一回合重")
+        if h.tactic.kind == "streak" and _usable(f, h):  # 乘勝的絕招：連贏幾回合，下一回合無隙
+            n = f.stacks.get(h.tactic.name, 0) + 1 if won else 0
+            if n >= int(h.tactic.params.get("wins", 2)):
+                f.put(f.us, "無隙", int(h.tactic.params.get("turns", 1)), now=False)
+                f.say(h, f"連贏 {n} 回合，下一回合無隙")
+                n = 0
+            f.stacks[h.tactic.name] = n
         if h.tactic.kind == "zhaoyi" and f.ally_fires:
             pct = h.tactic.params.get("heal_pct", 0.0) * f.ally_fires
             f.heal(h.key, pct)
@@ -990,7 +1065,8 @@ def _answer(f: _Fight, mine: str | None, his: str | None) -> tuple[float, bool]:
         if t.kind == "borrow":  # 化勁、借力、凝波甲〔卸力〕：挨強攻時把那一下的一部分還回去
             if his == "強攻" and not f.no_borrow and p.get("chance_pct", 0.0) > 0 and f.roll(p.get("chance_pct", 0.0) * f.rate(h)):
                 out += p.get("share_pct", 0.5) * u
-                f.say(h, f"借著{f.ctx.foe}的來勢，反手送了回去")
+                dazed = p.get("daze_pct", 0.0) > 0 and f.roll(p["daze_pct"]) and f.put(f.foe, "失神", 1, now=False)
+                f.say(h, f"借著{f.ctx.foe}的來勢，反手送了回去" + (f"，{f.ctx.foe}失神 1 回合" if dazed else ""))
         elif t.kind == "assault":  # 赤魄長刀〔斬將〕、隕星刀〔墜星〕：出強攻推力加重，墜星另有機會讓對手定身
             if mine != "強攻" or not f.roll(f.rate(h)):
                 continue
@@ -1118,6 +1194,7 @@ class Bout(BaseModel):
     a: BoutSide
     b: BoutSide
     round: int = 0  # 打完了幾回合
+    pvp: bool = False  # 兩邊都是玩家（擂台、奪璽單挑）：本命底蘊（TacticDef.might）只在這種仗算
 
 
 class Step(BaseModel):
@@ -1181,7 +1258,7 @@ def side_for(holders: list[Holder], ctx: Ctx) -> BoutSide:
 
 def open_bout(
     a: BoutSide | None, b: BoutSide | None, a_name: str, b_name: str, *, a_faction: str | None = None, b_faction: str | None = None,
-    b_agility: float | None = None,
+    b_agility: float | None = None, pvp: bool = False,
 ) -> Bout | None:
     """開一場：兩邊的快照換上這一場的對手（名字、身法、陣營），狀態從空的起。b 沒有快照（頭目）時身法照 b_agility。
     兩邊都沒有戰法回 None（打起來一個字都不變）。"""
@@ -1193,7 +1270,7 @@ def open_bout(
         "foe": b_name, "foe_agility": b.ctx.our_agility, "foe_faction": b_faction}), status=Status(name=a_name))
     sb = BoutSide(holders=b.holders, ctx=b.ctx.model_copy(update={
         "foe": a_name, "foe_agility": a.ctx.our_agility, "foe_faction": a_faction}), status=Status(name=b_name))
-    return Bout(a=sa, b=sb)
+    return Bout(a=sa, b=sb, pvp=pvp)
 
 
 def _fights(bout: Bout, tuning: TacticTuning, rng: random.Random, a_ratio: float, b_ratio: float) -> tuple[_Fight, _Fight]:
@@ -1204,6 +1281,7 @@ def _fights(bout: Bout, tuning: TacticTuning, rng: random.Random, a_ratio: float
     g = _Fight(b.holders, b.ctx.model_copy(update={"hp_ratio": b_ratio}), tuning, rng, us=b.status, foe=a.status,
                pending=b.pending, stacks=b.stacks, unit=unit)
     f.bout = g.bout = True
+    f.pvp = g.pvp = bout.pvp
     return f, g
 
 

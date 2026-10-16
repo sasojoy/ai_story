@@ -160,13 +160,14 @@ def test_tactic_heals_and_self_costs_change_hp_after_the_toll():
 
 
 def _own_tactics(content):
-    """本命以外的戰法（第三批）：八個一般功效疊到上限、七個特別功效、九件神器的特技、七把名將本命兵器的特技。"""
+    """本命以外的戰法（第三批）：八個一般功效疊到上限、七個特別功效、九件神器的特技、七把名將本命兵器的特技，再加八個絕招。"""
     from tianxia import traits
     lo = traits.Loadout(layers={t.hook: 99.0 for t in content.traits.general},
                         specials={sp.hook: sp for sp in content.traits.special})
     out = traits.tactic_defs(content, lo)
     out += [r.tactic for r in content.forge_secrets.values() if r.tactic is not None]
     out += [a.tactic for a in content.gear.signature_arms if a.tactic is not None]
+    out += [t.ultimate for t in content.traits.general if t.ultimate is not None]  # 絕學立招（玩家武學追上本命）
     return out
 
 
@@ -174,7 +175,7 @@ def test_every_trait_and_gear_tactic_runs_and_together_they_cover_every_kind():
     content = real_content()
     t = content.config.tactics
     own = _own_tactics(content)
-    assert len(own) == 7 + 7 + 9 + 7  # 厚沒有回合裡的戰法
+    assert len(own) == 7 + 7 + 9 + 7 + 8  # 厚沒有回合裡的戰法；絕招八個
     kinds = {content.skills[s].tactic.kind for s, sk in content.skills.items() if sk.tactic is not None}
     assert kinds | {x.kind for x in own} == set(tactics.KINDS)
     for tactic in own:

@@ -116,7 +116,7 @@ def open_duel(
         id=duel_id, shard=shard, record=record, event_id=event_id, where=where, tier=tier, cap=cap, phase="muster",
         starts_real=now + cfg.muster_seconds, challenger=challenger, holder=holder, rounds=cfg.rounds,
         bout=tactics.open_bout(challenger.kit, holder.kit, challenger.name, holder.name, a_faction=challenger.faction,
-                               b_faction=holder.faction),
+                               b_faction=holder.faction, pvp=True),
     )
 
 

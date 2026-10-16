@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
-from . import signature
+from . import signature, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -118,6 +118,29 @@ def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
     return out
 
 
+ULTIMATE_TITLE = "絕招"
+MASTERED = "絕學"
+
+
+def ultimate_trait(content: Content, art: MartialArt | None) -> GeneralTrait | None:
+    """絕學立招（玩家武學追上本命）：自己合成的武學（不是內容寫的）練成絕學時，層數最多的那個一般功效（一樣多取前面的）。
+    art 要是玩家自己那一份（team.player_art：品質照自己修到的）。不是絕學、是內容武學、那個功效沒寫絕招都是 None。"""
+    if art is None or art.id in content.skills or art.quality != MASTERED or not content.traits.general:
+        return None
+    mine = traits_of(art)
+    top = max(dict.fromkeys(mine), key=mine.count)
+    trait = general(content, top)
+    return trait if trait.ultimate is not None else None
+
+
+def ultimate_of(content: Content, art: MartialArt | None) -> TacticDef | None:
+    """那一門的絕招：功效寫好的那一招，名字換成那門絕學的名字（定過名就是定的名字）。"""
+    trait = ultimate_trait(content, art)
+    if trait is None or art is None:
+        return None
+    return trait.ultimate.model_copy(update={"name": art.name})
+
+
 def has(lo: Loadout, hook: str) -> bool:
     """身上有沒有這個掛點的功效（一般的層數大於 0，或特別功效）。"""
     return lo.layers.get(hook, 0.0) > 0 or hook in lo.specials
@@ -168,6 +191,9 @@ def card_line(content: Content, art: MartialArt) -> str:
     本命武學另起一行寫本命特效（signature.card_text：名字、說明、數字），有沒有 traits.json 都寫。"""
     sig = signature.of(content, art.id)
     tail = signature.card_text(sig) if sig is not None else ""
+    ult = ultimate_of(content, art)
+    if ult is not None:  # 絕學立招：「絕招〔名〕乘勢・剋中對手後 100%：……」
+        tail = tactics.card_text(ult, ULTIMATE_TITLE)
     if not content.traits.general:
         return tail
     mult, mine, parts = multiplier(content, art.quality), traits_of(art), []

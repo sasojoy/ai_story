@@ -11,7 +11,7 @@ import random
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
-from .models import Content, FollowerDef, Squad, TacticDef
+from .models import Content, FollowerDef, Squad, TacticBond, TacticDef
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
 
@@ -989,6 +989,43 @@ def gear_tactics(state: GameState, content: Content) -> list[tuple[str, TacticDe
     return out
 
 
+def gear_bond(content: Content, art: MartialArt, item) -> tuple[TacticBond, str] | None:
+    """鑄器配招（玩家武學追上本命）：這件裝備讓那一門絕招變強多少：（加強, 怎麼來的）。神器原品綁了這一門（以器配招）照功效寫的
+    ultimate_bond；名器（隱藏配方打的、不是神器）屬性跟這一門相同是小一截的人器合一（發動率 +Config.tactics.named_bond_rate）。
+    其餘是 None。"""
+    trait = traits.ultimate_trait(content, art)
+    if item is None or trait is None:
+        return None
+    if item.original and item.secret and item.bound_art == art.id and trait.ultimate_bond is not None:
+        return trait.ultimate_bond, BOUND_SOURCE
+    if item.secret and not item.original and item.copy_of is None and item.attribute == art.attribute:
+        rate = content.config.tactics.named_bond_rate
+        return TacticBond(desc=NAMED_BOND.format(pct=round(rate * 100)), rate=rate), NAMED_SOURCE
+    return None
+
+
+BOUND_SOURCE = "以器配招"
+NAMED_SOURCE = "名器同氣"
+NAMED_BOND = "屬性相同，絕招發動率 +{pct}%"
+
+
+def ultimate_tactics(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, TacticDef]]:
+    """絕學立招：本人身上兩門裡自己合成、練成絕學的那幾門的絕招（traits.ultimate_of），再照身上的兵器與防具加強
+    （gear_bond：以器配招的神器原品先算，沒有才看名器；一門只吃一件）。回（武學 id, 絕招）。"""
+    out: list[tuple[str, TacticDef]] = []
+    p = state.player
+    gear = [item for item, slot in ((p.weapon, "weapon"), (p.armor, "armor")) if item is not None and equipment.on(content, slot)]
+    for skill_id in (p.member.wugong_id, p.member.neigong_id):
+        art = player_art(state, content, world, skill_id)
+        ult = traits.ultimate_of(content, art)
+        if ult is None:
+            continue
+        bonds = [b for b in (gear_bond(content, art, item) for item in gear) if b is not None]
+        bonds.sort(key=lambda b: b[1] != BOUND_SOURCE)
+        out.append((skill_id, tactics.bonded(ult, bonds[0][0]) if bonds else ult))
+    return out
+
+
 def own_extras(state: GameState, content: Content, world: WorldStateStore, holders: list[tactics.Holder]) -> list[tactics.Holder]:
     """本命戰法之後接本人自己的：名將本命兵器的人器合一（身上也練著那位名將的本命時，他那一門照 bond 加強）、武學功效（traits.tactic_defs）、
     兵器與防具的特技。同名的只算一個（holders_of 同一條）。"""
@@ -1001,7 +1038,8 @@ def own_extras(state: GameState, content: Content, world: WorldStateStore, holde
         for h in holders
     ]
     seen = {h.tactic.name for h in out}
-    extra = [(f"trait:{t.name}", t) for t in traits.tactic_defs(content, traits.loadout(state, content, world))]
+    extra = ultimate_tactics(state, content, world)  # 絕學立招排在功效前面（同名時算它）
+    extra += [(f"trait:{t.name}", t) for t in traits.tactic_defs(content, traits.loadout(state, content, world))]
     extra += [(item_id, t) for item_id, t, _f in gear]
     for skill, tactic in extra:
         if tactic.name in seen:

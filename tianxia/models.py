@@ -475,6 +475,8 @@ TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找
     # 第三批（玩家自己的武學功效、神器與名將本命兵器的特技，定案 /mnt/project-files/plan/武學與兵器戰法定案.md）
     "shadow", "mist", "drain", "mend", "borrow", "break", "momentum", "insight", "immune", "last_stand", "assault", "pierce",
     "quake", "first_shot", "zhaoyi", "flawless",
+    # 玩家武學追上本命（定案 /mnt/project-files/plan/玩家武學追上本命定案.md）：自己合成的武學練成絕學時的絕招（一般功效的 ultimate）
+    "swift", "shatter", "streak", "leech", "haze", "last_rally",
 )
 
 
@@ -500,6 +502,9 @@ class TacticDef(_Strict):
     foe_faction: str | None = None
     # 發動時那一句（名字後面接的話）；{foe} 換成對手、{鍵} 換成 params 的數字。空的照 tactics.KINDS 那一種自己的句子
     say: str = ""
+    # 本命底蘊（玩家武學追上本命，Joy 2026-10-15「本命還是強一點點」）：本人身上練著這一門時，擂台、奪璽單挑（玩家對玩家，Bout.pvp）每一回合推力多這麼多
+    # （跟發動率無關、一直在；一般的仗、頭目戰、決戰、同伴練的、大勢人物本人當對手時都不算）。每一位照擂台量表對滿配絕學的贏面各調，內外兩門各一半
+    might: float = Field(default=0.0, ge=0, le=1)
 
 
 class TacticBond(_Strict):
@@ -558,6 +563,10 @@ class GeneralTrait(_Strict):
     extra_per_layer: float = Field(default=0.0, ge=0)
     extra_cap: float = Field(default=0.0, ge=0)
     tactic: TraitTactic | None = None
+    # 絕學立招（玩家武學追上本命）：自己合成的武學練成絕學時，那一門層數最多的功效升成這一招（名字換成那門絕學的名字）；
+    # bond 是神器原品「以器配招」綁了那一門時加強多少（發動率或回合，照招挑一種）
+    ultimate: TacticDef | None = None
+    ultimate_bond: TacticBond | None = None
 
 
 class SpecialTrait(_Strict):
@@ -2011,6 +2020,8 @@ class TacticTuning(_Strict):
     # 頭目戰、擂台、奪璽單挑裡重控場（tactics.BOUT_CONTROL）的發動率乘這個：那幾種仗一回合的勝負幾乎全看剋不剋，
     # 經緯（看穿）與長坂一喝（定身）照原本的發動率，擂台同樣身手對上自組上品贏 73%（scripts/measure_tactics.py --kits）
     bout_control_share: float = Field(default=0.6, ge=0, le=1)
+    # 鑄器配招（玩家武學追上本命）：身上的名器屬性跟一門絕學相同時，那一門絕招的發動率多這麼多（小一截的人器合一）
+    named_bond_rate: float = Field(default=0.08, ge=0, le=1)
 
 
 class RiseTuning(_Strict):

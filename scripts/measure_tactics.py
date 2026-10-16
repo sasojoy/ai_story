@@ -57,6 +57,7 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=4000)
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
+    parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     args = parser.parse_args()
@@ -70,6 +71,9 @@ def main() -> None:
         return
     if args.kits:
         kits(content, args.runs)
+        return
+    if args.catch_up:
+        catch_up(content, args.runs)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
@@ -201,7 +205,7 @@ def bouts(content, runs):
         me = ArenaSide(name="挑", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
         foe = ArenaSide(name="守", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
         f = ArenaFight(id=1, foe_key="守", me=me, foe=foe)
-        f.bout = tactics.open_bout(kit_a, kit_b, "挑", "守")
+        f.bout = tactics.open_bout(kit_a, kit_b, "挑", "守", pvp=True)
         arena.roll_next(f, rng, content.config.arena, cfg)
         while True:
             move = duel_rules.answer_to(f) or rng.choice(MOVES)
@@ -273,11 +277,60 @@ def self_kit(content, seed, quality="上品", special_share=0.5):
     return [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
 
 
+def full_kit(content, seed, special_share=0.5):
+    """滿配（玩家武學追上本命）：武學、內功各一門自己合成的絕學（各三格功效，第一格是自己的屬性），兩門的功效戰法、各一招絕招
+    （層數最多的那一格，traits.ultimate_trait 的挑法），一把以器配招的神器原品（兵器的特技＋綁在武學那一招上的 ultimate_bond）。"""
+    from tianxia import traits
+    rng = random.Random(f"full|{seed}")
+    mult = traits.multiplier(content, "絕學")
+    lo = traits.Loadout()
+    ults = []
+    for i in range(2):
+        cells = [rng.choice(ATTRS) for _ in range(3)]
+        for a in cells:
+            hook = traits.general(content, a).hook
+            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
+        top = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
+        ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+        ults.append(tactics.bonded(ult, top.ultimate_bond) if i == 0 else ult)
+    if rng.random() < special_share:
+        sp = rng.choice([t for t in content.traits.special if t.pool])
+        lo.specials[sp.hook] = sp
+    arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
+    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
+    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    return out + [gear_holder(arm.tactic)]
+
+
+def catch_up(content, runs):
+    """玩家武學追上本命（定案的分寸）：十八位本命（有本命兵器的加上兵器與人器合一）逐一對滿配（full_kit，SELF_KITS 套），
+    本命的贏面要落在 52～60%、玩家不能反超。"""
+    share = ring_share(content, runs)
+    arms = {a.character: a for a in content.gear.signature_arms}
+    fulls = [full_kit(content, k) for k in range(SELF_KITS)]
+    selfs = [self_kit(content, k) for k in range(SELF_KITS)]
+    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套）")
+    print(f"  滿配對自組上品：{sum(share(a, b) for a, b in zip(fulls, selfs)) / SELF_KITS:.1%}")
+    rows = []
+    for fid in figures_with(content):
+        sig = holders(content, [("你", "player", fid)])
+        arm = arms.get(fid)
+        if arm is not None:
+            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if h.figure == fid and arm.bond else h for h in sig]
+            sig = sig + [gear_holder(arm.tactic)]
+        vs = [share(sig, k) for k in fulls]
+        rows.append(sum(vs) / len(vs))
+        tag = "＋本命兵器" if arm is not None else ""
+        print(f"  {content.characters[fid].name:<4}{tag:<6}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
+    print(f"  十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
+
+
 def gear_holder(tactic):
     return tactics.Holder(who="你", key="player", skill="gear", tactic=tactic)
 
 
-def kits(content, runs):
+def ring_share(content, runs):
+    """擂台的贏面：share(甲的戰法, 乙的戰法)，兩邊威力 150（kits 與 catch_up 共用）。"""
     from tianxia import arena, battle_instance
     from tianxia import duel as duel_rules
     from tianxia.models import MOVES
@@ -296,7 +349,7 @@ def kits(content, runs):
         f = ArenaFight(id=1, foe_key="乙", me=me, foe=foe)
         ka = tactics.side_for([h.model_copy(deep=True) for h in hs_a], ctx) if hs_a else None
         kb = tactics.side_for([h.model_copy(deep=True) for h in hs_b], ctx) if hs_b else None
-        f.bout = tactics.open_bout(ka, kb, "甲", "乙")
+        f.bout = tactics.open_bout(ka, kb, "甲", "乙", pvp=True)
         arena.roll_next(f, rng, content.config.arena, cfg)
         while True:
             move = duel_rules.answer_to(f) or rng.choice(MOVES)
@@ -323,7 +376,14 @@ def kits(content, runs):
             won += r < 0
             lost += r > 0
         return won / max(1, won + lost)
+    return share
 
+
+def kits(content, runs):
+    from tianxia.models import MOVES
+    t = content.config.tactics
+    power = 150.0
+    share = ring_share(content, runs)
     figures = figures_with(content)
     names = {fid: content.characters[fid].name for fid in figures}
     selfs = [self_kit(content, k) for k in range(SELF_KITS)]
