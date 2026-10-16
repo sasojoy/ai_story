@@ -661,6 +661,8 @@ def advance_world_state(
         if cal_hour is None and not season.ended:
             msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
             figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)  # 甲 (b)：沒有時刻表的季被打下來的聲威慢慢回
+        if not season.ended:
+            msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
             decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)

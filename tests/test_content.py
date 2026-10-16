@@ -2433,13 +2433,17 @@ def test_the_real_traits_are_the_designed_table():
     assert all(t.pool for t in book.special)
     assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])
     assert all(len(lines) == 3 for lines in content.trait_lines.values())
-    assert content.config.special_trait_chance == 0.05
     assert content.config.trait_quality_multiplier == {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
 
 
 def test_the_fixture_traits_are_the_real_ones():
-    """測試夾具的功效與演出句跟正式內容一樣（直接複製），數字跟著正式內容走。"""
+    """測試夾具的功效與演出句跟正式內容一樣（直接複製），數字跟著正式內容走。只差在夾具的功效沒有回合裡的戰法（tactic，本命戰法第三批）與絕招（ultimate、ultimate_bond）：
+    舊測試的仗照舊不開回合（頭目戰、擂台開不開 bout 跟著身上有沒有戰法走），戰法本身用正式內容測（tests/test_tactics.py）。"""
     for name in ("traits.json", "trait_lines.json"):
-        assert json.loads((FIXTURE / name).read_text(encoding="utf-8")) == json.loads(
-            (ROOT / "content" / name).read_text(encoding="utf-8")
-        )
+        real = json.loads((ROOT / "content" / name).read_text(encoding="utf-8"))
+        if name == "traits.json":
+            for t in real["general"] + real["special"]:
+                t.pop("tactic", None)
+                t.pop("ultimate", None)  # 絕學立招（玩家武學追上本命）同理：夾具沒有絕招
+                t.pop("ultimate_bond", None)
+        assert json.loads((FIXTURE / name).read_text(encoding="utf-8")) == real

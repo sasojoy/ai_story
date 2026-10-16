@@ -837,6 +837,7 @@ CHALLENGE_SNUB = "- 打贏之後 {hours:g} 個現實小時內，他閉門不見�
 
 
 CHALLENGE_RISE = "- 你的隊伍越強，大勢人物越拚命：他照你們的身手出全力，這一季每被你打贏一次，下一次就更難打。鈕上的勝算照這個算。"
+CHALLENGE_DRAW = "- 跟他打成平手也不白打：拿得到打贏的一半心得與經驗，也算一次頓悟的契機；不掉東西、他的聲威不動、情誼也不扣。"
 
 
 def _challenge_lines(content: Content, season: WorldState) -> list[str]:
@@ -855,6 +856,8 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     lines.append(f"- 打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}。")
     if cfg.rise.enabled:
         lines.append(CHALLENGE_RISE)
+    if cfg.figure_draw_share > 0:
+        lines.append(CHALLENGE_DRAW)
     if not figures.untimed(content, season):
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)
@@ -967,6 +970,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
         "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
+        "- 合出來的武學有境界：初成、精進、化境，每合一次往上一層；到了化境就不能再往下合。"
+        "意境合一次多一重（最多三重），二重起分圓融、駁雜；重數越高、越圓融，融進武學的功效越多。",
         "",
         "#### 背包",
         "- 素材不拿來煉製：第一季裡折成糧草，押糧車、準備伏筆都要用。",

@@ -59,6 +59,8 @@ class MartialArt(BaseModel):
     traits: list[str] = Field(default_factory=list)  # 一般功效：屬性的清單，第一個是自己的、後面是傳下來的（13.3）；空的＝只有自己屬性
     special: str | None = None  # 特別功效的 id（13.4）；不傳給後代
     secret: str | None = None  # 秘方合出來的（content/secret_recipes.json 的 id）：不當「合到舊的」的候選
+    # 第幾代（tianxia/depth.py）：基礎與內容寫的是第零代，合一次一代；None 是這一版之前登記的，照血統（base、parents）補算
+    gen: int | None = None
 
 
 class Insight(BaseModel):
@@ -75,6 +77,9 @@ class Insight(BaseModel):
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
     secret: str | None = None  # 秘方合出來的（同 MartialArt.secret）
+    # 幾重、圓融還是駁雜（tianxia/depth.py）：悟來的一重、不分圓融駁雜；None 是這一版之前合的，照 parents 補算
+    rank: int | None = None
+    harmony: str | None = None  # "圓融"、"駁雜"；一重是 None
     # ── 私有的意境（畫圖悟來的、或拿私有的去合併出來的；悟意境設計 0.2b）：存在悟的人自己的存檔（PlayerState.own_insights），
     # id 是「悟:流水號」，名字不要求全服唯一。下面三項只有它們才有 ──
     place: str = ""  # 在哪悟的（地點的名字）；合併出來的是空的
@@ -167,15 +172,17 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
 
 def content_art(
     skill_id: str, name: str, kind: str, attribute: str, quality: str, special: str | None = None,
-    lean: str = "無",
+    traits: list[str] | None = None, lean: str = "無",
 ) -> MartialArt:
     """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
     其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
     威力照品質的區間、不加微調。special 是內容指給它的獨特特別功效（13.5，SkillDef.special），沒寫就沒有；
-    一般功效不用寫，內容的武學只有自己屬性那一個（13.3，MartialArt.traits 留空）。
+    traits 是內容寫的一般功效（本命武學，SkillDef.traits）；沒寫就只有自己屬性那一個（13.3，MartialArt.traits 留空）。
     lean 是內容寫的正邪（名聲 5.1 的正邪武學，SkillDef.lean），共鳴照它算。"""
     if quality != "下品":
-        return historical_art(skill_id, name, kind, attribute, quality).model_copy(update={"special": special, "lean": lean})
+        return historical_art(skill_id, name, kind, attribute, quality).model_copy(
+            update={"special": special, "traits": list(traits or []), "lean": lean},
+        )
     return MartialArt(
         id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
         base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",

@@ -24,8 +24,10 @@ from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
-from . import encounter, gender, zh
-from .models import BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble
+from . import encounter, gender, tactics, zh
+from .models import (
+    BEATS, MOVES, BattleAct, BattleDef, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble, TacticTuning,
+)
 from .ollama_client import OllamaClient
 
 Phase = Literal["muster", "active", "ended"]
@@ -138,6 +140,9 @@ class BattleParticipant(BaseModel):
     # 每一回合自己出了什麼（整場的第幾回合 → 「強攻」「固守（逾時代選）」「放手一搏「…」，成了」）：收場時寫進自己的戰報（Joy 2026-10-14
     # 「決戰能不能把完整戰報在戰報那邊可以展開」）；舊資料沒有是空的
     moves: dict[int, str] = Field(default_factory=dict)
+    # 本命戰法（本命戰法第二批）：加入那一刻本人身上帶的戰法與這一場的條件（team.self_side，算坐騎與部下）、打到一半的狀態；
+    # 沒有本命戰法、舊資料是 None
+    kit: tactics.BoutSide | None = None
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
     renown: list[str] = Field(default_factory=list)  # 名聲：加入時快照的稱號（本場戰功、論功那一句寫；善惡第 1 段起、名望名動一方起）
@@ -357,7 +362,8 @@ def move_scores(
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
-    troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False, renown: list[str] | None = None,
+    troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
+    kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
@@ -368,7 +374,7 @@ def join_faction(
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, renown=list(renown or []),
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
     )
 
 
@@ -391,7 +397,7 @@ def auto_assign_latecomer(
     instance: BattleInstance, definition: BattleDef, name: str, neili_cap: float, rng: random.Random,
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
-    turncoat: bool = False, newbie: bool = False, renown: list[str] | None = None,
+    turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown
@@ -403,7 +409,7 @@ def auto_assign_latecomer(
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
-        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, renown=list(renown or []),
+        troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
     )
 
 
@@ -562,6 +568,22 @@ def idle_count(instance: BattleInstance, definition: BattleDef) -> int:
     return sum(1 for p in _active_participants(instance) if idle(p))
 
 
+def _war_rally(instance: BattleInstance, moves: dict[str, str], on: bool) -> dict[tuple[str, str], list[tuple[str, float]]]:
+    """名將本命兵器〔號令〕（本命戰法第三批）：帶著它出固定招的人，同一邊出同一招的友軍份量 +war_ally_pct（自己不算）。
+    （陣營, 招）→ [(帶著它的人, 加幾成)]；戰法關著是空的。"""
+    out: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    if not on:
+        return out
+    for name, move in moves.items():
+        p = instance.participants.get(name)
+        if p is None or p.eliminated or p.kit is None:
+            continue
+        pct = max((h.tactic.params.get("war_ally_pct", 0.0) for h in p.kit.holders), default=0.0)
+        if pct > 0:
+            out.setdefault((p.faction, move), []).append((name, pct))
+    return out
+
+
 def counter_coefficient(tuning: BattleTuning, move: str, enemy_mix: dict[str, float]) -> float:
     """剋制係數（戰鬥系統 3.4）：1 ＋ 0.5 × 對面出「被你剋的招」的比例 － 0.5 × 對面出「剋你的招」的比例，0.5～1.5。
     enemy_mix 是對面這回合各招的比例（_mix；對面沒人出固定招時呼叫端不呼叫、係數當 1）。"""
@@ -633,7 +655,7 @@ def diversity(instance: BattleInstance, moves: dict[str, str], side: str, tuning
 
 def resolve_round(
     instance: BattleInstance, definition: BattleDef, rng: random.Random, now: float = 0.0,
-    tuning: BattleTuning | None = None,
+    tuning: BattleTuning | None = None, tactic: TacticTuning | None = None,
 ) -> list[str]:
     """結算一回合：固定招走三招（戰鬥系統 3.4）：每個人的力量＝份量（加入時快照的 scores，乘這一場的氣血狀態）×
     剋制係數（對面這回合出招的比例），一邊的力量＝Σ ÷ √（這一邊出固定招的人數），推力＝push_max ×（第一方 − 第二方）÷
@@ -685,6 +707,25 @@ def resolve_round(
     targets_now: dict[str, list[str]] = {}  # 這一回合被點名的人 → 點名他的人
     trend_before = instance.trend
     rnd_no = instance.round_number + 1  # 這是整場的第幾回合（round_number 結算完才加一）
+    fired: dict[str, list[str]] = {}  # 陣營 → 這一回合發動本命戰法的那幾句（〔名〕開頭，誰發動的寫在句子裡）
+
+    rally = _war_rally(instance, moves, tactic is not None)  # 名將本命兵器〔號令〕：（陣營, 招）→ [(號令的人, 加幾成)]
+    for side, move_, who, _pct in sorted({(k[0], k[1], w, pc) for k, rows in rally.items() for w, pc in rows}):
+        if any(n != who and q.faction == side and moves.get(n) == move_ for n, q in instance.participants.items() if not q.eliminated):
+            fired.setdefault(side, []).append(f"{tactics.LEAD}號令〕{who}號令一下，同出{move_}的友軍份量加重")
+
+    def war(name: str, p: BattleParticipant, move: str | None, coef: float) -> tactics.War:
+        """本命戰法（本命戰法第二批）：只算自己身上的（tactics.WAR_KINDS）；沒帶著或沒開是中性值。"""
+        if p.kit is None or tactic is None:
+            return tactics.War()
+        edge = instance.trend if p.faction == first else 100 - instance.trend
+        ratio = p.neili / p.neili_cap if p.neili_cap else 1.0
+        out = tactics.war_round(p.kit, move, 1 if coef > 1 else 0, rnd_no, edge, ratio, tactic, _war_rng(instance, name, rnd_no))
+        if out.lines:
+            fired.setdefault(p.faction, []).extend(out.lines)
+        if out.hp:
+            p.neili = max(0.0, min(p.neili_cap, p.neili + p.neili_cap * out.hp))
+        return out
 
     def tale(name: str, p: BattleParticipant, text: str, won: bool, target: str, fixed: str, numbers: str) -> None:
         """沒有現成劇情的放手一搏：先播固定句，記一筆等著回合結算後補（GambleTale）。"""
@@ -710,10 +751,19 @@ def resolve_round(
                 success_rate = min(100, success_rate + tuning.role_gamble_rate)
             risk = 100 - success_rate
             succeeded = rng.random() * 100 < success_rate
+            saved = None
+            if not succeeded and tactic is not None and p.kit is not None:  # 神上使：失手改成功（自己的亂數，不碰 rng）
+                saved = tactics.divine_save(p.kit.holders, _war_rng(instance, name, rnd_no, "神上使"))
+                succeeded = saved is not None
             p.moves[rnd_no] = f"放手一搏「{custom_text}」，{'成了' if succeeded else '沒成'}" if custom_text else f"放手一搏，{'成了' if succeeded else '沒成'}"
             if custom_text:
                 plus = f"，{role_name(tuning, p.role)} +{success_rate - assessed}" if success_rate != assessed else ""
                 msgs.append(f"{name}放手一搏：「{custom_text}」（評估成功率 {assessed}%{plus}）")
+            if saved is not None:
+                msgs.append(tactics.divine_line(saved))
+            fx = war(name, p, None, 1.0)
+            if fx.lines:
+                p.moves[rnd_no] += "；" + "；".join(fx.lines)
             side_name = names.get(p.faction, p.faction)
             win_story, lose_story = (instance.round.stories.get(name) or ["", ""])[:2]
             if p.gambled_act == act_index:  # 一幕最多搏幾次（FreeTextGamble.per_act）
@@ -781,16 +831,22 @@ def resolve_round(
             coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
             if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
                 coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
-            force[p.faction] += p.scores.get(move, 0.0) * condition(p) * coef  # 份量在扣這一回合的血之前算
-            shares[p.faction].append((p.scores.get(move, 0.0) * condition(p) * coef, name, move))
+            fx = war(name, p, move, coef)
+            if fx.unbeaten:  # 無隙：被剋也不吃虧
+                coef = max(coef, 1.0)
+            might = p.scores.get(move, 0.0) * condition(p) * coef * fx.force
+            might *= 1 + sum(pct for who, pct in rally.get((p.faction, move), []) if who != name)
+            force[p.faction] += might  # 份量在扣這一回合的血之前算
+            shares[p.faction].append((might, name, move))
             counts[p.faction] += 1
             coefs[p.faction].append(coef)
             fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
             damage = tuning.damage[move] * (2 - coef)
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
+            damage *= fx.damage
             p.last_result = f"{move}（剋制 ×{coef:.1f}）"
-            p.moves[rnd_no] = move + ("（逾時代選）" if name in instance.round.auto_picked else "")
+            p.moves[rnd_no] = move + ("（逾時代選）" if name in instance.round.auto_picked else "") + "".join("；" + x for x in fx.lines)
         else:  # 這個人這回合沒有三招可算（選項不在這一幕、不在交戰雙方、放手一搏卻沒有賭局設定）：不推戰局、不扣血
             continue
         p.neili = max(0.0, p.neili - damage)
@@ -843,6 +899,15 @@ def resolve_round(
         moved = f"三招交鋒，戰線往{leader}那邊推了{shove_size(round(push))}" if round(push) else "三招交鋒，兩軍持平"
         msgs.insert(0, f"{sides}（{moved}）")
     instance.trend = max(0, min(100, instance.trend + round(push) + gamble_delta))
+    for side in (first, second):  # 這一回合哪一邊有人發動本命戰法（放在固定句之後，回合原因之前插在第二行）
+        if fired.get(side):
+            msgs.append(tactics.WAR_LINE.format(side=names[side], who="；".join(fired[side])))
+    if tactic is not None:
+        gained = instance.trend - trend_before
+        for q in instance.participants.values():
+            if q.kit is not None and not q.eliminated:
+                won = gained > 0 if q.faction == first else gained < 0
+                tactics.war_close(q.kit, won, tactic, _war_rng(instance, q.name, rnd_no, "收"))
     instance.last_mix = mixes
     instance.round_number += 1
     # 這一回合為什麼往哪邊推（試玩回饋 2026-10-08：全是官軍卻輸了，卻看不出為什麼）：放在場景上看得到的第一行
@@ -874,6 +939,11 @@ def resolve_round(
     del instance.tales[:-TALES_KEPT]  # 沒有伺服器補劇情（假人程式、測試、腳本）時不會一直長
     instance.round = BattleRound(opened_real=now)
     return msgs
+
+
+def _war_rng(instance: BattleInstance, name: str, round_: int, what: str = "") -> random.Random:
+    """決戰裡本命戰法的亂數：自己一份，不碰回合結算的 rng（沒帶戰法的人一場打下來一個字都不變）。"""
+    return random.Random(f"決戰|{instance.battle_id}|{instance.record_id}|{round_}|{name}|{what}")
 
 
 TALES_KEPT = 60  # 等著補劇情的放手一搏最多留幾筆（一回合二十人搏也留得下三回合）

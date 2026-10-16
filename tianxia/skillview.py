@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -145,6 +145,7 @@ def forge_line(
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _blend_depth_note(content, world, a, b, shape.attribute)
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
         problem = fusion.blend_problem(state, content, world, art_id, other_art)
     elif art_id and not other_art and len(insight_ids) == 1:
@@ -160,6 +161,7 @@ def forge_line(
             f"（屬{insight.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        head += _fuse_depth_note(state, content, world, base, insight)
         head += _known_recipe(
             state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
             preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
@@ -176,6 +178,8 @@ def forge_line(
             f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境（屬{attribute}），"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
+        rank, mood = depth.merged_depth(a, b, content, world, state)
+        head += f"\n合出來是{depth.RANK_WORDS[rank]}・{mood}（{'兩股意相生' if mood == depth.HARMONY else '兩股意硬湊'}）。"
         head += _known_insight_recipe(state, world, fusion.merge_key(*insight_ids))
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
@@ -187,6 +191,23 @@ def forge_line(
             f"或放兩個意境，合出新的意境。{count}。"
         )
     return head if problem is None else f"{head}\n⚠ {problem}"
+
+
+def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore, base: MartialArt, insight: Insight) -> str:
+    """煉製頁說明的一行（合成與意境改法定案第一、二節）：合出來第幾代、這個意境給幾層、底的功效怎麼傳。照開爐時同一套算。"""
+    gen = depth.gen_of(base, content, world) + 1
+    layers = depth.layers_of(insight, content, world, state)
+    rel = depth.fuse_relation(base, insight.attribute)
+    return (
+        f"\n合出來的境界是{depth.gen_label(gen)}；「{insight.name}」{depth.label(insight, content, world, state)}，"
+        f"給 {layers} 層功效；{depth.KEEP_LINE[rel]}。"
+    )
+
+
+def _blend_depth_note(content: Content, world: WorldStateStore, a: MartialArt, b: MartialArt, attribute: str) -> str:
+    gen = max(depth.gen_of(a, content, world), depth.gen_of(b, content, world)) + 1
+    keeps = "、".join(f"【{art.name}】{depth.RELATION_WORDS[depth.relation(attribute, art.attribute)]}" for art in (a, b))
+    return f"\n合出來的境界是{depth.gen_label(gen)}；{keeps}。"
 
 
 def _no(problem: str) -> dict:
@@ -327,7 +348,11 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         row = {
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": worn, "insight": insight_name,
-            "card": art_card(art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare),
+            "card": art_card(
+                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare,
+                gen_word=gen_word(art, content, world),
+            ),
+            "gen": gen_word(art, content, world),  # 境界（depth.py 的第幾代）：第零代（基礎、內容寫的）是空字串
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {"ok": problem is None, "note": note, "legend": legend},
             "melt": {
@@ -412,6 +437,7 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
         if insight is not None:
             row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
+                "depth": depth.label(insight, content, world, state),  # 「二重・圓融」（合成與意境改法定案第一節）
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
@@ -513,6 +539,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         lines.append(horse)  # 坐騎（裝備四欄設計 2.5）：沒騎或開關關著不寫
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
+    # 本命戰法（tactics.py）：身上練著的本命武學各一行；同伴練著自己的本命武學也會發動（連招），一樣寫
+    lines += [signature.card_text(t) for t in (signature.of(content, s) for s in (member.wugong_id, member.neigong_id)) if t]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
@@ -526,6 +554,8 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     格數四欄合算：used 是裝備庫裡全部的件數（關著的欄位的東西也佔格子），cap 是 Config.weapons.rack_cap。
     武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名, "unit": 量詞}（修練頁那一列底下畫定名表單；量詞照
     equipment.unit_for：防具一件、拳套一副、其他兵器一把，FB-197），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
+    bind：自己手上還沒以器配招的神器原品是 {"options": [{id, name, bond}…]}（配得上的絕學，可以是空的），其餘 None；
+    綁了的、名器同氣的那一句接在 tactic 後面（smithing.bond_lines）。
     held_note：寄放著哪幾件（6.5），沒有是空字串。
     where（FB-138）：每一段「哪裡買得到、哪裡得來」那一句（equipment.smith_where、mounts.where、treasures.WHERE），讀內容的地點標籤；
     網頁在每一段身上與裝備庫都空著、也沒有寄放時畫精簡的一塊，每段一行寫 empty 加 where。內容裡沒有那種地點時是空字串。"""
@@ -546,10 +576,19 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
                       "note": treasures.rack_note(state, content), "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
+    owned = {item.id: item for item in forge_secrets.owned_gear(state.player)}
+    options = smithing.bind_options(state, content, world)
     for block in slots:
         if block["slot"] in ("weapon", "armor"):
             for row in [block["worn"], *block["rack"]]:
-                if row is not None:  # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
+                if row is not None and (item := owned.get(row["id"])) is not None:
+                    # 鑄器配招（玩家武學追上本命定案 四）：綁了哪一門、名器同氣接在特技那幾行後面；還沒綁的神器原品多一組 bind
+                    row["tactic"] = [*row.get("tactic", []), *smithing.bond_lines(state, content, world, item)]
+                    row["bind"] = ({"options": [{"id": a, "name": n, "bond": d.split("：", 1)[-1]} for a, n, d in options]}
+                                   if item.original and item.secret and not item.signature and not smithing.bound_alive(state, item) else None)
+                if row is not None:
+                    row.setdefault("bind", None)
+                    # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
                     row["divine"] = ({"pattern": pending[row["id"]], "unit": equipment.unit_for(block["slot"], row.get("kind", ""))}
                                      if row["id"] in pending else None)
             # 等著定名的原品排在裝備庫最前面（終審 I1）：手上已經有一把時原品放在最後一格，網頁只預設列前 8 件，表單會被「再列 N 件」藏起來；
@@ -610,7 +649,15 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     art = team.player_art(state, content, world, skill_id)
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
-    return art_card(art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, art))
+    return art_card(
+        art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, art),
+        gen_word=gen_word(art, content, world),
+    )
+
+
+def gen_word(art: MartialArt, content: Content, world: WorldStateStore) -> str:
+    """功法卡與清單上的境界（depth.gen_of → gen_label）：「精進」，到頂的是「化境」；第零代（基礎、內容寫的）是空字串。"""
+    return depth.gen_label(depth.gen_of(art, content, world))
 
 
 def parent_names(art: MartialArt, content: Content, world: WorldStateStore) -> list[str]:
@@ -640,7 +687,7 @@ POWER_MAXED = "（已達第十成）"
 
 def art_card(
     art: MartialArt, level: int, insight_name: str | None = None, parent_names: list[str] | None = None,
-    trait_line: str = "", compare_line: str = "",
+    trait_line: str = "", compare_line: str = "", gen_word: str = "",
 ) -> str:
     """一門功法的功法卡（無限煉製設計 §8；FB-006）：名字・品質・屬性（有傾向再加正邪）、目前熟練度與威力
     （連同下一成與第十成的威力，W1 併成一行）、來源與融的意境，最後是模型寫的那句說明。
@@ -673,7 +720,7 @@ def art_card(
     lines = [
         f"【{art.name}】{art.quality}・屬{art.attribute}" + (f"・{art.lean}派" if art.lean != "無" else ""),
         power_line(art, level),
-        f"來源：{source}"
+        f"來源：{source}" + (f"・{gen_word}" if gen_word else "")
         + (f"　由【{parent_names[0]}】與【{parent_names[1]}】衍生" if parent_names and len(parent_names) == 2 else "")
         + (f"　意境：「{insight_name}」" if insight_name else ""),
     ]

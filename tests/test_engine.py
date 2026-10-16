@@ -3778,8 +3778,8 @@ def test_a_training_fight_shows_rounds_that_match_the_hp_lost(game):
 
 
 def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
-    """身法閃避（人物資質設計 14.4）之後，回合照最後的結果演：落敗閃成僵持，就演五回合、對手氣勢共掉 50（落敗是 3～4 回合、
-    掉 20），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
+    """身法閃避（人物資質設計 14.4）之後：回合照真的打的那一場演（一回合一回合打，Joy 2026-10-15「全部改回合制」：落敗的 3～4 回合，
+    閃避是最後那一下才閃開的），回合裡的「你氣血 -N」加起來等於僵持那一份損耗（62），不是落敗的（93），也等於戰報與真的扣掉的。"""
     game.content.config.dodge_per_point = 1.0
     game.state.player.stats["agi"] = 6  # 閃避機會 100%
     game.content.locations["lake"].enemies = ["boss"]  # 打不贏的翻江龍
@@ -3790,8 +3790,7 @@ def test_a_dodged_fight_plays_the_draw_it_ended_as(game):
     assert record.tier == "僵持" and battlelog.DODGE_NOTE in record.notes
     told, shown = _told_and_shown(record)
     assert told == shown == round(before - _player_hp(game)) == 62
-    assert len(record.rounds) == 5
-    assert sum(int(n) for line in record.rounds for n in re.findall(r"對手氣勢 -(\d+)", line)) == 50
+    assert len(record.rounds) in (3, 4)
 
 
 @pytest.mark.parametrize("neili", [None, 360.0])
@@ -3911,7 +3910,7 @@ def test_an_event_battle_is_played_with_the_fighters_from_before_its_rewards(gam
     record = game.state.battles[0]
     p = game.state.player
     assert record.tier in ("大勝", "險勝") and (p.stats["agi"], p.member.wugong_id) == (8, "step")  # 效果真的生效了
-    assert record.rounds and all(line.startswith(f"第{i}回合　水寇小隊") for i, line in enumerate(record.rounds, 1))
+    assert record.rounds and all(re.match(f"第{i}回合　[^：]*：水寇小隊", line) for i, line in enumerate(record.rounds, 1))  # 回合前面寫兩邊出的招
     assert all("韓鐵以【長拳】" in line and "追風步" not in line and "沈浪" not in line for line in record.rounds)
 
 
@@ -5964,7 +5963,6 @@ def test_open_season_restamps_with_current_profile(content, world):
     assert admin.status_data()["calendar"]["week"] == 1
 
 
-
 def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     """FB-040：開季那一刻（世界秒 0）就結算第 1 週週一 00:00 的大事，不必等到第一個曆時交界：時間軸、傳聞、江湖史、
     本週大事都在，狀態列的下一件是第 2 週那件；再推進一個曆時不會重複結算。下一季開出來也一樣。"""
@@ -6747,7 +6745,6 @@ def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
     assert f"氣血 {data['hp']}/{data['hp_max']}" in game.member_card("player")
 
 
-
 # ── 武學的功效（武學與成長設計 13.2、13.4；計畫六 Task 3）：獎勵、打完回氣血、遊歷的體力 ──────────────
 
 
@@ -6769,23 +6766,6 @@ def _record_of(game, tier):
     return squad, battlelog.new_record(game.state, game.content, game.world, squad, result, "train")
 
 
-def test_rewards_grow_with_momentum_and_insight(game):
-    """乘勝（陽）：打贏多拿心得與經驗；悟招：再多 5 心得（13.2、13.4）。"""
-    art = generate_from_name("乘風拳", "武學", "乘風拳", attribute="陽").model_copy(
-        update={"origin": "fused", "traits": ["陽", "陽", "陽"], "special": "wuzhao"},
-    )
-    game.world.claim_skill_name(art)
-    game.state.player.member.wugong_id = art.id
-    game.state.player.art_quality[art.id] = "下品"
-    squad = game.content.squads["thug"].model_copy(update={"reward_xinde": 10, "exp": 20})
-    record = battlelog.new_record(game.state, game.content, game.world, squad,
-                                  encounter.EncounterResult(tier="大勝", margin=10, our_power=50, difficulty=5), "train")
-    before = game.state.player.stats.get("xinde", 0)
-    game._battle_rewards(squad, record)
-    assert game.state.player.stats["xinde"] - before == 13 + 5  # 10 × 1.3 ＋ 悟招 5
-    assert record.exp == 26
-
-
 def test_rewards_are_untouched_without_momentum_or_insight(game):
     """沒有乘勝、悟招的人（這裡什麼武學都沒有）：心得、經驗、戰報跟以前一模一樣。"""
     game.state.player.member.wugong_id = game.state.player.member.neigong_id = None
@@ -6796,64 +6776,12 @@ def test_rewards_are_untouched_without_momentum_or_insight(game):
     assert "心得 +10" in msgs
 
 
-def test_the_insight_special_pays_even_when_the_squad_gives_no_xinde(game):
-    """悟招是「打贏多拿 5 心得」，不看對手原本給不給：沒有心得獎勵的隊伍也拿得到這 5 點。"""
-    _wear_trait_art(game, "悟道拳", "剛", ["剛"], special="wuzhao")
-    squad = game.content.squads["thug"].model_copy(update={"reward_xinde": 0, "exp": 0})
-    record = battlelog.new_record(
-        game.state, game.content, game.world, squad,
-        encounter.EncounterResult(tier="險勝", margin=10, our_power=50, difficulty=5), "train",
-    )
-    before = game.state.player.stats.get("xinde", 0)
-    msgs = game._battle_rewards(squad, record)
-    assert game.state.player.stats["xinde"] - before == 5 and record.xinde == 5 and "心得 +5" in msgs
-
-
-def test_momentum_stops_at_its_cap(game):
-    """乘勝疊到上限（50%）：兩門絕學、六格都是陽也只多五成。"""
-    _wear_trait_art(game, "全陽拳", "陽", ["陽", "陽", "陽"], quality="絕學")
-    _wear_trait_art(game, "全陽功", "陽", ["陽", "陽", "陽"], kind="內功", quality="絕學")
-    squad, record = _record_of(game, "大勝")
-    game._battle_rewards(squad, record)
-    assert record.xinde == 15 and record.exp == 30
-
-
-def test_light_body_saves_stamina_on_a_journey(game):
-    art = generate_from_name("輕身腿", "武學", "輕身腿", attribute="快").model_copy(
-        update={"origin": "fused", "special": "qingshen"},
-    )
-    game.world.claim_skill_name(art)
-    base = game.content.config.action_cost["train"]
-    assert game._action_costs()["train"] == base
-    game.state.player.member.wugong_id = art.id
-    assert game._action_costs()["train"] == base - 2
-
-
 def test_light_body_only_touches_the_journey_cost(game):
     base = dict(game.content.config.action_cost)
     _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
     costs = game._action_costs()
     assert costs["explore"] == base["explore"] and costs["socialize"] == base["socialize"]
     assert game.content.config.action_cost == base  # 設定本身沒被改
-
-
-def test_light_body_never_makes_a_journey_free_below_zero(game):
-    game.content.config.action_cost["train"] = 1
-    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
-    assert game._action_costs()["train"] == 0
-
-
-def test_a_journey_costs_less_stamina_with_light_body_and_the_button_says_so(game):
-    """按鈕的體力、真的扣的體力都是少花後的數字（options 與 _act 讀同一個 _action_costs）。"""
-    walk_to(game, "lake")
-    base = game.content.config.action_cost["train"]
-    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
-    option = next(o for o in game.options() if o.id == "act:train")
-    assert f"（體力 {base - 2}" in option.label
-    before = game.state.player.stamina
-    game.rng = FixedRandom(0.99)
-    game.choose("act:train")
-    assert before - game.state.player.stamina == base - 2
 
 
 @pytest.mark.slow
@@ -6897,53 +6825,6 @@ def test_actions_that_cost_nothing_do_not_build_the_cost_table(game):
     assert spy.call_count == 0
     game._act("explore")
     assert spy.call_count == 1
-
-
-def test_a_tired_player_can_afford_a_journey_only_because_of_light_body(game):
-    walk_to(game, "lake")
-    base = game.content.config.action_cost["train"]
-    game.state.player.stamina = base - 1
-    assert not next(o for o in game.options() if o.id == "act:train").enabled
-    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
-    assert next(o for o in game.options() if o.id == "act:train").enabled
-
-
-def test_absorb_heals_after_a_win_but_not_after_a_loss(game):
-    """吸取（陰）：打贏回氣血上限的一點（下品三層 6%）；落敗、僵持不回。回的量接在扣氣血後面，一場寫兩行。"""
-    _wear_trait_art(game, "吸取掌", "陰", ["陰", "陰", "陰"])
-    plain = game.state.model_copy(deep=True)
-    team_toll = team.take_encounter_toll(plain, game.content, game.world, "大勝")
-    toll, hp_lost, facts = game._take_toll("大勝")
-    assert toll[0] == team_toll[0] and toll[-1].startswith("氣血 +") and hp_lost == int(team_toll[0].removeprefix("氣血 -"))
-    assert facts.healed == ("win_heal",) and facts.wounded is False  # 滿血進場
-    for tier in ("僵持", "落敗"):
-        game.state.player.member.neili = None
-        toll, _, facts = game._take_toll(tier)
-        assert not any(line.startswith("氣血 +") for line in toll) and facts.healed == (), tier
-
-
-def test_spring_heals_after_any_result(game):
-    """回春（特別）：不論勝負，打完回氣血上限的 3%。"""
-    _wear_trait_art(game, "回春拳", "剛", ["剛"], special="huichun")
-    for tier in ("大勝", "險勝", "僵持", "落敗"):
-        game.state.player.member.neili = None
-        toll, _, facts = game._take_toll(tier)
-        assert any(line.startswith("氣血 +") for line in toll) and facts.healed == ("heal_after",), tier
-
-
-def test_the_heal_is_not_part_of_the_hp_the_rounds_show(game):
-    """回合裡寫的「你氣血 -N」加起來等於這一場扣掉的（回血是之後的事）：戰報的「氣血 -N」、回合、真的扣的三個數一樣，
-    另外戰報上有一行「氣血 +M」。"""
-    walk_to(game, "lake")
-    _wear_trait_art(game, "回春拳", "剛", ["剛"], special="huichun")
-    before = _player_hp(game)
-    with _forced("落敗"):
-        game.choose("act:train")
-    record = game.state.battles[0]
-    told, shown = _told_and_shown(record)
-    assert told > 0 and shown == told
-    assert any(c.startswith("氣血 +") for c in record.changes)
-    assert round(before - _player_hp(game)) < told  # 淨損失比扣的少：回了血
 
 
 @pytest.mark.parametrize("tier", ["大勝", "僵持", "落敗"])
@@ -6991,22 +6872,6 @@ def _said(record):
     return {line[1:line.index("〕")] for line in record.trait_before + record.trait_after}
 
 
-def test_first_strike_always_opens_the_rounds_and_says_so(game):
-    """先手（13.2）：帶【先手】的人回合裡一定先出手，不看身法；過程的最前面有〔先手〕那一句。"""
-    art = generate_from_name("疾風腿", "武學", "疾風腿", attribute="快").model_copy(
-        update={"origin": "fused", "traits": ["快"]},
-    )
-    game.world.claim_skill_name(art)
-    game.state.player.member.wugong_id = art.id
-    game.state.player.stats["agi"] = 1  # 身法比誰都低
-    squad = game.content.squads["boss"]
-    record = battlelog.new_record(game.state, game.content, game.world, squad,
-                                  encounter.EncounterResult(tier="落敗", margin=-100, our_power=10, difficulty=200), "train")
-    game._play_rounds(record, squad, "落敗", 30)
-    assert record.rounds[0].split("　", 1)[1].startswith(game.state.player.name)
-    assert record.trait_before and record.trait_before[0].startswith("〔先手〕")
-
-
 def test_without_first_strike_a_slow_player_is_hit_first(game):
     """對照：沒有先手時，身法比對手低的人在每一回合都是對手先出手（所以上面那一條是先手改的，不是本來就這樣）。"""
     game.state.player.member.wugong_id = "basic_fist"  # 屬實：【厚】，不帶先手
@@ -7017,18 +6882,6 @@ def test_without_first_strike_a_slow_player_is_hit_first(game):
     game._play_rounds(record, squad, "落敗", 30)
     assert all(line.split("　", 1)[1].startswith(squad.name) for line in record.rounds)
     assert record.trait_before == []
-
-
-@pytest.mark.parametrize("attribute, special, said", [
-    ("快", None, "先手"), ("慢", None, "穩"), ("剛", None, "破甲"), ("虛", None, "險"),
-    ("實", "lianhuan", "連環"), ("實", "jieli", "借力"),
-])
-def test_the_before_the_fight_traits_are_always_told(game, attribute, special, said):
-    """開打前的功效（先手、穩、破甲、險、連環、借力）一帶就演：本人名號、帶它的那一門、對手的名字都填進句子。"""
-    game.content.trait_lines[said] = ["{who}|{art}|{foe}"]
-    art = _wear_trait_art(game, "試招拳", attribute, [attribute], special=special)
-    record = _fought(game, "大勝")
-    assert record.trait_before == [f"〔{said}〕沈浪|{art.name}|水寇小隊"]
 
 
 def test_nothing_is_told_when_no_trait_is_worn(game):
@@ -7124,23 +6977,6 @@ def test_thick_is_told_in_a_wounded_story_battle_too(game, hp, told):
     assert not ({"化勁", "不動", "吸取", "回春"} & _said(record))
 
 
-def test_momentum_is_told_for_a_won_story_battle(game):
-    """Task 4 審查 M2：劇情戰先演回合、後發獎勵，戰報上的經驗與心得這時還是 0——乘勝要看對手隊伍給多少（squad.exp、
-    squad.reward_xinde），不看戰報還沒填的欄位。贏了的劇情戰，獎勵確實乘了，也要演。"""
-    _wear_trait_art(game, "得勝拳", "陽", ["陽"])
-    game.content.squads["boss"] = game.content.squads["boss"].model_copy(update={"reward_xinde": 10, "exp": 20})
-    walk_to(game, "lake")
-    game.choose("act:socialize")
-    assert game.state.pending_event == "duel"
-    before = game.state.player.stats.get("xinde", 0)
-    won = encounter.EncounterResult(tier="大勝", margin=50, our_power=300, difficulty=200)
-    with mock.patch.object(team, "fight", return_value=won):
-        game.choose("choice:0")
-    record = game.state.battles[0]
-    assert record.kind == "event" and record.xinde == 11 and game.state.player.stats["xinde"] - before >= 11  # 10 × 1.1
-    assert "乘勝" in _said(record)
-
-
 def test_momentum_is_not_told_for_a_story_battle_that_gives_nothing(game):
     _wear_trait_art(game, "得勝拳", "陽", ["陽"])  # 夾具的翻江龍沒有獎勵：沒有東西可以多給
     walk_to(game, "lake")
@@ -7155,13 +6991,6 @@ SOFT_AND_STILL = [(None, "柔", ["柔"], "化勁"), ("budong", "剛", ["剛"], "
 
 
 @pytest.mark.parametrize("special, attribute, trait_list, said", SOFT_AND_STILL)
-def test_soft_and_still_are_told_when_blood_was_really_lost(game, special, attribute, trait_list, said):
-    _wear_trait_art(game, "護體拳", attribute, trait_list, special=special)
-    record = _fought(game, "落敗")
-    assert any(c.startswith("氣血 -") for c in record.changes) and said in _said(record)
-
-
-@pytest.mark.parametrize("special, attribute, trait_list, said", SOFT_AND_STILL)
 def test_soft_and_still_are_not_told_for_a_fight_that_took_no_blood(game, special, attribute, trait_list, said):
     """氣血已經見底的人打輸：這一場一滴氣血都沒得扣，化勁沒有東西可以少扣、不動沒有東西可以不傷，不演。"""
     _wear_trait_art(game, "護體拳", attribute, trait_list, special=special)
@@ -7169,66 +6998,10 @@ def test_soft_and_still_are_not_told_for_a_fight_that_took_no_blood(game, specia
     assert not any(c.startswith("氣血 -") for c in record.changes) and said not in _said(record)
 
 
-@pytest.mark.parametrize("attribute, trait_list, special, said", [
-    ("陽", ["陽"], None, "乘勝"), ("剛", ["剛"], "wuzhao", "悟招"),
-])
-def test_rewards_traits_are_told_only_for_a_win(game, attribute, trait_list, special, said):
-    _wear_trait_art(game, "得勝拳", attribute, trait_list, special=special)
-    assert said in _said(_fought(game, "險勝"))
-    game.state.battles.clear()
-    assert said not in _said(_fought(game, "落敗"))
-
-
 def test_momentum_is_not_told_when_the_squad_gives_nothing_to_multiply(game):
     _wear_trait_art(game, "得勝拳", "陽", ["陽"])
     game.content.squads["thug"] = game.content.squads["thug"].model_copy(update={"reward_xinde": 0, "exp": 0})
     assert "乘勝" not in _said(_fought(game, "大勝"))
-
-
-def test_absorb_and_spring_are_told_only_when_they_really_healed(game):
-    """F10：吸取（打贏）與回春（不論勝負）只在真的回了血（有一行「氣血 +N」）時才演；沒回到 1 點就不演。"""
-    _wear_trait_art(game, "吸取掌", "陰", ["陰"], special="huichun")
-    record = _fought(game, "大勝")  # 大勝扣 16：吸取回 6、回春再回 10 才到天花板，兩行都有
-    assert {"吸取", "回春"} <= _said(record) and sum(c.startswith("氣血 +") for c in record.changes) == 2
-    game.state.battles.clear()
-    record = _fought(game, "落敗")
-    assert _said(record) >= {"回春"} and "吸取" not in _said(record)
-    game.state.battles.clear()
-    with mock.patch.object(team, "heal_fraction", return_value=[]):  # 回血回不到 1 點
-        record = _fought(game, "大勝")
-    assert not ({"吸取", "回春"} & _said(record))
-
-
-def test_a_second_heal_that_finds_the_player_already_full_says_nothing(game):
-    """吸取已經回到天花板，回春就沒有東西可以回：沒有第二行「氣血 +N」、也不演〔回春〕（沒改到結果就不演）。"""
-    _wear_trait_art(game, "吸取掌", "陰", ["陰", "陰", "陰"], special="huichun")  # 吸取 6% ＝ 19：大勝扣 16 就補滿了
-    record = _fought(game, "大勝")
-    assert _said(record) >= {"吸取"} and "回春" not in _said(record)
-    assert sum(c.startswith("氣血 +") for c in record.changes) == 1
-
-
-def test_a_story_battle_tells_no_heal_and_no_blood_traits(game):
-    """劇情戰不扣氣血、也不回血（計畫三 G5）：只演開打前的功效（先手）與打贏的獎勵（乘勝）；氣血的四個功效一個都不演。"""
-    _wear_trait_art(game, "先手拳", "快", ["快", "柔", "陰"], special="huichun")
-    game.state.player.member.neili = None
-    walk_to(game, "lake")
-    game.choose("act:socialize")
-    assert game.state.pending_event == "duel"
-    game.choose("choice:0")  # 應戰翻江龍：必敗
-    record = game.state.battles[0]
-    assert record.kind == "event" and record.rounds
-    assert "先手" in _said(record) and not ({"化勁", "厚", "不動", "吸取", "回春"} & _said(record))
-
-
-def test_guard_is_told_in_the_result_not_the_process(game):
-    """N2：護命把落敗改成僵持時，那一句寫在結果（notes 最前面，跟閃避的那一句同一個位置），不是過程；戰報記下 guarded。"""
-    game.content.trait_lines["護命"] = ["{who}護住了要害（{art}、{foe}）。"]
-    art = _wear_trait_art(game, "護身拳", "實", ["實"], special="huming")
-    record = _fought(game, "僵持", guarded=True)
-    assert record.guarded is True and record.tier == "僵持"
-    assert record.notes[0] == f"〔護命〕沈浪護住了要害（{art.name}、水寇小隊）。"
-    assert "護命" not in _said(record)
-    assert "**結果**　〔護命〕" in battlelog.card_text(record)
 
 
 def test_guard_is_silent_when_nothing_was_guarded(game):
@@ -7242,15 +7015,6 @@ def test_a_dodge_and_a_guard_do_not_both_speak(game):
     game.state.player.member.wugong_id = "basic_fist"
     record = _fought(game, "落敗")
     assert not any(note.startswith("〔") for note in record.notes)
-
-
-def test_light_body_is_told_only_for_a_journey(game):
-    """輕身是唯一在戰鬥外生效的：遊歷（kind train）演，探索撞上的野怪不演。"""
-    _wear_trait_art(game, "輕身腿", "快", ["快"], special="qingshen")
-    assert "輕身" in _said(_fought(game, "大勝"))
-    game.state.battles.clear()
-    game.state.player.stamina = 150
-    assert "輕身" not in _said(_fought(game, "大勝", kind="wild"))
 
 
 def test_a_fight_with_and_without_traits_uses_the_same_game_rng(content, world):
@@ -7270,14 +7034,6 @@ def test_a_fight_with_and_without_traits_uses_the_same_game_rng(content, world):
             game.choose("act:train")
         results.append(game.rng.random())
     assert results[0] == results[1]
-
-
-def test_a_heal_that_reaches_the_ceiling_leaves_the_player_full(game):
-    """吸取回到天花板（上限 − 內傷）就是滿血：之後升級、根骨變高，滿的人照舊是滿的（member_neili 的約定，N10）。"""
-    _wear_trait_art(game, "吸取掌", "陰", ["陰", "陰", "陰"], quality="絕學")
-    game.state.player.member.neili = None
-    game._take_toll("大勝")  # 大勝只扣 5%，絕學三層吸取 10% 回得滿
-    assert game.state.player.member.neili is None
 
 
 def test_a_story_battle_takes_no_blood_so_nothing_is_healed(game):

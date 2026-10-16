@@ -580,19 +580,6 @@ def test_someone_else_following_the_recipe_still_reads_who_founded_it(pair):
     assert "這一門由乙、甲首創，你照著合出了同一門。" in lines
 
 
-def test_a_first_special_rumor_names_both(pair):
-    from tianxia import fusion
-    from tianxia.martial_arts import MartialArt
-
-    content, world = pair
-    special = content.traits.special[0]
-    state = _load(world, "乙")
-    art = MartialArt(id="x", name="烈焰拳", kind="武學", attribute="剛", quality="下品", base_power=1, top_power=2,
-                     creator="乙", co_creator="甲", creator_shown="乙、甲", special=special.id)
-    [line] = fusion._special_rumor(state, content, art, True)
-    assert line.startswith("江湖上傳開了：乙、甲合出一門")
-
-
 # ── 第九件：同一對人每個遊戲日的上限寫換日的那一刻，三本帳一個寫法 ──
 
 

@@ -242,6 +242,8 @@ def _change(state: GameState, content: Content, fid: str, change: FigureChange) 
     """apply 的本體：改這位人物、空出戰線時照接位鏈交接；回傳接手的那一句（apply 拿去發傳聞、defeat 接在退場那句後面）。"""
     figure = _ensure(state, content, fid)
     if figure.status in OUT:
+        if change.fate in ZEROED:  # 被挑戰打倒、還等著回來的人，時刻表也寫他退場（例：張角病逝）：就不回來了
+            figure.back_at = figure.back_front = None
         return []
     fig = content.figures.get(fid)
     held = figure.front if figure.status == "active" else None  # 原本守的戰線與所在（交接時接位的人接下這兩樣）
@@ -289,6 +291,11 @@ def _front_name(content: Content, front: str) -> str:
     return next((t.name for t in content.scenario.trends if t.id == front), front)
 
 
+OUT_BACK = "{name}連吃敗仗，聲威掃地，只得收兵退下，一時號令不動手下的兵。"  # 待 joy 潤：被挑戰打退、過幾天會回來（PM 2026-10-16）
+OUT_BACK_DESTINY = "{name}連吃敗仗，元氣大傷，只得退下養傷，一時露不了面。"
+BACK_LINE = "{name}收拾殘部，重新出來領兵{where}。"  # 待 joy 潤：回來那一句（天下大事）
+DRAW_LINE = "你與{name}過了數十招不分勝負，各自收手；這一番交手讓你有所長進。"  # 挑戰本人打成僵持（engine._challenge_draw）
+DENT_ONCE_LINE = "{name}今天已經在你手下敗過一陣，這一場沒能再動搖他的聲威。"  # 待 joy 潤：同一個人同一天第二場起（figure_dent_once_per_day）
 HELD_LINE = "{name}今天已經敗了好幾陣，部眾死守不退。"  # 待 joy 潤：沒有時刻表的季，這位人物今天被打掉的聲威到了上限（甲 (d)）
 
 
@@ -296,6 +303,7 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
     """挑戰本人打贏（計畫 T4、軍令文件 4.5）：他敗走，聲威扣 amount（人數緩衝之後的量，可能有小數；不足一點的記在
     trend_accum["prestige:<id>"]，滿一點才扣）。扣到 0 時照退場（天命人物重創）處理、由接位的人接下戰線，退場與接手
     合成一則天下大事。回傳給打贏的人看的句子：「波才聲威 -5」，歸零時再接退場與接手那幾句。已經退場的人不再扣。
+    figure_return_days 不是 0 時，打到歸零的人記下回來的時刻與他守的戰線（revive），退場那一句也不說「今年露不了面」。
     cap（沒有時刻表的季才給，甲 (d)）：這一位這個遊戲日最多被打掉幾點；今天被打掉的量記在 trend_accum["lost:<id>:<遊戲日>"]
     （舊日子的順手刪掉），到了上限聲威不動、回 HELD_LINE。"""
     figure = _ensure(state, content, fid)
@@ -327,9 +335,17 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
     lines = [f"{name}聲威 -{before - figure.prestige}"] if figure.prestige < before else []
     if figure.prestige == 0:
         destiny = fid in content.figures and content.figures[fid].destiny
+        days = content.config.figure_return_days
+        held = figure.front if figure.status == "active" else None
         # 濃縮版內容表 1.5（S1 審過）：不說「這一季」；退場句後面緊接接手句，所以這裡不再寫「的戰事」
-        news = [f"{name}連吃敗仗，元氣大傷，今年是露不了面了。" if destiny else f"{name}連吃敗仗，聲威掃地，再也號令不動手下的兵。"]
+        if days > 0 and fid in content.figures:
+            news = [(OUT_BACK_DESTINY if destiny else OUT_BACK).format(name=name)]
+        else:
+            news = [f"{name}連吃敗仗，元氣大傷，今年是露不了面了。" if destiny else f"{name}連吃敗仗，聲威掃地，再也號令不動手下的兵。"]
         news += _change(state, content, fid, FigureChange(fate="重創" if destiny else "退場"))
+        if days > 0 and fid in content.figures and figure.status in OUT:
+            figure.back_at = w.time + days * 24 * calendar.cal_hour_seconds(content, w)
+            figure.back_front = held
         add_rumor(state, "".join(news), content=content, layer="world")
         lines += news
     return lines
@@ -359,6 +375,35 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
             w.trend_accum[key] = rest
         else:
             w.trend_accum.pop(key, None)
+
+
+def revive(state: GameState, content: Content) -> list[str]:
+    """被挑戰打到退場、重創的人物（defeat 記了 back_at）時候到了就回來（PM 2026-10-16）：聲威是開季的 figure_return_share、
+    回到倒下時守的戰線與所在；那條戰線這段時間由同一方接位的人接著的，接位的人把戰線交還（留在原地、不領兵）。時刻表把他
+    寫成退場、重創的（_change）不回來。兩種季都有；決定性的，不擲骰。由 world.advance_world_state 每一步呼叫；
+    回來那一句發天下大事，也回傳。"""
+    w = state.world
+    lines = []
+    for fid, now in w.figures.items():
+        fig = content.figures.get(fid)
+        if now.back_at is None or w.time < now.back_at:
+            continue
+        front, now.back_at, now.back_front = now.back_front, None, None
+        if fig is None or now.status not in OUT:
+            continue
+        now.status = "active"
+        now.prestige = max(1, int(fig.start_prestige * content.config.figure_return_share + 0.5))
+        now.front = front
+        if front is not None:
+            for other, ofig in content.figures.items():
+                there = w.figures.get(other)
+                if other != fid and ofig.faction == fig.faction and there is not None and there.status == "active" and there.front == front:
+                    there.front = None  # 接位的人把戰線交還
+        where = f"，回到{_front_name(content, front)}" if front is not None else ""
+        line = BACK_LINE.format(name=name_of(content, fid), where=where)
+        add_rumor(state, line, content=content, layer="world")
+        lines.append(line)
+    return lines
 
 
 def holds(state: GameState, content: Content, change: FigureChange) -> bool:

@@ -3,6 +3,8 @@
 我方隊伍武學總威力（含內功加成、屬性相剋加成）vs 對手難度值，加一個隨機的「戰場運氣」
 項，一次算出結果等級——不是回合制，沒有中途決策點，威力數字是練功有沒有效的唯一驗證，
 文字敘事由呼叫端（engine.py，之後串上 companion_agent.py 的敘事潤色）另外處理。
+2026-10-15 起（Joy「全部改回合制」）：擲出來的差距由 team.clash_result 交給 tactics.play 一回合一回合打，本命戰法改了的差距
+照 tier_of 的同一組門檻重判；沒有戰法時一模一樣。
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ from typing import Protocol
 from pydantic import BaseModel
 
 from .martial_arts import MartialArt, counters, power_at
+from .tactics import Clash
 
 
 class HasMartialArts(Protocol):
@@ -80,6 +83,7 @@ class EncounterResult(BaseModel):
     difficulty: float
     dodged: bool = False  # 落敗被身法閃成僵持（人物資質設計 14.4）；tier 已經是僵持
     guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；tier 已經是僵持
+    clash: Clash | None = None  # 一回合一回合打的樣子（tactics.play，team.fight 補上）；序章寫好結果的那一場、切磋、截殺沒有
 
 
 class Mods(BaseModel):
@@ -88,6 +92,7 @@ class Mods(BaseModel):
 
     luck_scale: float = 1.0  # 穩縮小、險放大運氣的起伏（1 − 穩 ＋ 險）
     big_win_cut: float = 0.0  # 先手：大勝的門檻降低（對手強度的比例）
+    draw_floor: float = 0.5  # 僵持的下緣（對手強度的比例，差距 ≥ −這麼多算僵持）；挑戰大勢人物本人照 rise.draw_floor 收窄
     difficulty_cut: float = 0.0  # 破甲：對手強度當作低這麼多（比例）
     power_add: float = 0.0  # 借力：威力加上對手強度的這麼多（比例）
     double_luck: bool = False  # 連環：擲兩次運氣，取好的
@@ -200,12 +205,20 @@ def resolve_encounter(
     if mods.double_luck:
         luck = max(luck, rng.uniform(-half, half))
     margin = base + luck + shift
+    return EncounterResult(tier=tier_of(margin, effective, mods), margin=margin, our_power=our_power, difficulty=difficulty)
+
+
+def tier_of(margin: float, effective: float, mods: Mods | None = None) -> str:
+    """差距照門檻換成結果（effective 是判定用的對手強度，破甲之後）；先手把大勝的門檻降低。本命戰法改過的差距（tactics.play）也照這裡判。"""
+    mods = mods or Mods()
     for tier, threshold in tier_thresholds(effective):
         if tier == "大勝":
             threshold -= abs(effective) * mods.big_win_cut
+        elif tier == "僵持":
+            threshold = -abs(effective) * mods.draw_floor
         if margin >= threshold:
-            return EncounterResult(tier=tier, margin=margin, our_power=our_power, difficulty=difficulty)
-    return EncounterResult(tier=FALLBACK_TIER, margin=margin, our_power=our_power, difficulty=difficulty)
+            return tier
+    return FALLBACK_TIER
 
 
 def dodge(result: EncounterResult, chance: float, rng: Random) -> EncounterResult:

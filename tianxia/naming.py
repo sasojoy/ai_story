@@ -49,6 +49,8 @@ class NamingRequest:
     name_kind: str
     messages: list[dict[str, str]]
     choices: tuple[str, ...] = ()
+    # 首創的走向（tianxia/depth.py）：排給模型挑的幾種特別功效的名字；模型挑的寫在說明前面「〔名字〕招意」，C 段 depth.choose 認
+    directions: tuple[str, ...] = ()
 
 
 SYSTEM_PROMPT = (
@@ -67,6 +69,7 @@ class NameReply(BaseModel):
 
     name: str
     description: str = ""
+    direction: str = ""  # 首創的走向（tianxia/depth.py）：只能是單子上排的那幾種之一；沒排的單子不看
 
 
 def clean_name(raw: str) -> str:
@@ -157,7 +160,7 @@ def _ask(
 
 def propose(
     client: OllamaClient | None, content: Content, messages: list[dict[str, str]], budget: float | None = None,
-    person: PersonCheck | None = None,
+    person: PersonCheck | None = None, directions: tuple[str, ...] = (),
 ) -> tuple[str | None, str]:
     """請模型命名，回傳（通過過濾的名字, 一句說明）；連不上、取壞了、預算用完都回 (None, "")，呼叫端走退路字表。
     client 是 None（鎖內的 Game 沒有 client：伺服器假人的 Game，bot_runner 把 game.client 設成 None）時不叫模型；
@@ -174,7 +177,11 @@ def propose(
         name = clean_name(reply.name)
         if name_problem(name, content, person) is not None:
             return None
-        return name, zh.to_traditional((reply.description or "").strip())
+        note = zh.to_traditional((reply.description or "").strip())
+        direction = clean_name(reply.direction or "").strip("〔〕")
+        if directions and direction in directions:  # 挑了單子上的走向：寫在說明前面（depth.mark 的寫法），清單外的不寫、C 段照配方挑
+            note = f"〔{direction}〕{note}"
+        return name, note
 
     return _ask(client, messages, accept, budget)
 
@@ -204,7 +211,7 @@ def generate(
     person 是角色名號的查詢（server 與假人程式都給 world.is_character_name：唯讀的快照，不拿行動鎖），只用在取新名字。"""
     if request.choices:
         return pick(client, request.messages, request.choices, budget=budget)
-    return propose(client, content, request.messages, budget=budget, person=person)
+    return propose(client, content, request.messages, budget=budget, person=person, directions=request.directions)
 
 
 def recheck(

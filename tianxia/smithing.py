@@ -17,7 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import annals, armor, equipment, forge_secrets, fusion, naming, team, weapons
+from . import annals, armor, equipment, forge_secrets, fusion, library, naming, team, traits, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -304,6 +304,72 @@ def name_divine(
     add_rumor(state, rule.named_rumor.format(who=who, name=name), None, content=content, named=True)
     annals.note(state, content, annals.DEED, DIVINE_NAMED_DEED.format(name=name), 5)
     return True, [DIVINE_NAMED.format(name=name, unit=unit)]
+
+
+# ---- 以器配招（玩家武學追上本命定案 四）：神器原品的主人把它綁在自己一門絕學上，那門絕招照功效寫的 ultimate_bond 加強 ----
+
+BIND_NOT_ORIGINAL = "（只有你打出的神器原品能以器配招。）"
+BIND_BAD_ART = "（這一門配不上：要是你自己合成、練成絕學、有絕招的那一門。）"
+BIND_ALREADY = "（【{item}】已經配了【{art}】，不能改配。）"
+BIND_DONE = "【{item}】與【{art}】人器合一：{bond}。"
+BIND_LINE = "以器配招〔{art}〕：{bond}"
+NAMED_LINE = "名器同氣〔{art}〕：{bond}"
+
+
+def bind_options(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str, str]]:
+    """配得上的絕學：自己手上（身上與功法庫）自己合成、練成絕學、功效寫了以器配招的那幾門：（武學 id, 名字, 加強的那一句）。"""
+    out = []
+    for art_id in library.owned_arts(state):
+        art = team.player_art(state, content, world, art_id)
+        trait = traits.ultimate_trait(content, art)
+        if trait is not None and trait.ultimate_bond is not None:
+            out.append((art_id, art.name, trait.ultimate_bond.desc))
+    return out
+
+
+def bound_alive(state: GameState, item: Equipment) -> bool:
+    return item.bound_art is not None and item.bound_art in library.owned_arts(state)
+
+
+def bind_problem(state: GameState, content: Content, world: WorldStateStore, item_id: str, art_id: str) -> str | None:
+    """以器配招做不了的原因：不是自己手上的神器原品（名將本命兵器不算）、已經配了一門還在手上的、那一門配不上。"""
+    item = next((i for i in forge_secrets.owned_gear(state.player) if i.id == item_id), None)
+    if item is None or not item.original or not item.secret or item.signature:
+        return BIND_NOT_ORIGINAL
+    if bound_alive(state, item):
+        art = team.player_art(state, content, world, item.bound_art)
+        return BIND_ALREADY.format(item=item.name, art=art.name if art else item.bound_art)
+    if art_id not in {a for a, _n, _d in bind_options(state, content, world)}:
+        return BIND_BAD_ART
+    return None
+
+
+def bind_art(state: GameState, content: Content, world: WorldStateStore, item_id: str, art_id: str) -> tuple[bool, list[str]]:
+    """以器配招：綁定了回（True, 那一句）。綁的那一門熔掉、交掉之後才能再配別門（bound_alive）。"""
+    problem = bind_problem(state, content, world, item_id, art_id)
+    if problem is not None:
+        return False, [problem]
+    item = next(i for i in forge_secrets.owned_gear(state.player) if i.id == item_id)
+    art = team.player_art(state, content, world, art_id)
+    item.bound_art = art_id
+    bond = traits.ultimate_trait(content, art).ultimate_bond
+    return True, [BIND_DONE.format(item=item.name, art=art.name, bond=bond.desc.split("：", 1)[-1])]
+
+
+def bond_lines(state: GameState, content: Content, world: WorldStateStore, item: Equipment) -> list[str]:
+    """修練頁那一列寫的：這件綁了哪一門（以器配招），或身上哪一門絕學跟這件名器同氣。沒有是空的。"""
+    if bound_alive(state, item):
+        art = team.player_art(state, content, world, item.bound_art)
+        trait = traits.ultimate_trait(content, art)
+        if trait is not None and trait.ultimate_bond is not None:
+            return [BIND_LINE.format(art=art.name, bond=trait.ultimate_bond.desc.split("：", 1)[-1])]
+    out = []
+    for art_id in (state.player.member.wugong_id, state.player.member.neigong_id):
+        art = team.player_art(state, content, world, art_id)
+        found = team.gear_bond(content, art, item) if art is not None else None
+        if found is not None and found[1] == team.NAMED_SOURCE:
+            out.append(NAMED_LINE.format(art=art.name, bond=found[0].desc))
+    return out
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----

@@ -723,6 +723,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .gear .wrow .wbtns { flex: none; display: flex; gap: 6px; }
 /* FB-137：灰掉的「餵」「換上」的原因，單獨一行寫在那一列的說明底下（鈕上只留動詞） */
 .gear .wrow .winfo .rwhy { flex: 0 0 100%; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
+.gear .wrow .winfo .gear-tactic { flex: 0 0 100%; font-size: 12px; line-height: 1.4; color: var(--accent, var(--ink-2)); }
+/* 以器配招（玩家武學追上本命定案 四）：神器原品那一列底下一小塊，挑一門絕學綁上 */
+.gear .gear-bind { margin: 2px 0 8px; display: flex; flex-direction: column; gap: 4px; }
+.gear .gear-bind small { font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+.gear .gear-bind .row { display: flex; gap: 6px; align-items: center; }
+.gear .gear-bind select { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+.gear .gear-bind .row button { flex: 0 0 auto; white-space: nowrap; }
 .gear p { margin: 4px 2px; }
 /* FB-138：身上什麼裝備都沒有時的精簡一塊——每欄一行（欄名＋空著的那一句＋哪裡買得到），自己折行 */
 .gear-empty p { font-size: 13px; line-height: 1.5; color: var(--ink-2); overflow-wrap: anywhere; }
@@ -1775,6 +1782,8 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-arena .ring-arts, .shop-arena .ring-howto { margin: 6px 2px; font-size: 12px; color: #c9b28a; }
 .shop-arena .ring-tell { margin: 8px 0; padding: 10px 12px; border-radius: 8px; background: #f6edd8; color: #2a241d; font: 14px/1.6 var(--serif); }
 .shop-arena .ring-tell small { display: block; font: 11px var(--sans); color: #6d5a43; }
+.shop-arena .ring-status { margin: 6px 0 0; font: 12px/1.5 var(--sans); color: #f3c86a; }
+.shop-arena .ring-move:disabled { opacity: .45; }
 .shop-arena .ring-moves { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
 .shop-arena .ring-move { display: grid; gap: 1px; padding: 10px 2px; }
 .shop-arena .ring-move b { font: 600 16px var(--serif); }

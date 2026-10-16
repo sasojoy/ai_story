@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, team, territory, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, tactics, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -506,6 +506,7 @@ def forged_card(state: GameState, content: Content, world: WorldStateStore, item
         "where": "worn" if worn is not None and worn.id == item.id else "rack",
         "divine": forge_secrets.unnamed_originals(state, world).get(item.id),
         "unit": equipment.unit_for(item.slot, item.kind),  # 定名表單那一句的量詞（FB-197：防具一件、拳套一副、其他兵器一把）
+        "tactic": tactics.item_lines(content, item),  # 神器的特技（本命戰法第三批），沒有是空的
     }
 
 
@@ -685,6 +686,7 @@ WAGES_NOTE = "每天 00:00 照名次發俸：第一名銀兩 {silver}、名望 {
 def _fight_view(state: GameState, content: Content) -> dict:
     fight = state.player.arena
     log = list(fight.lines)
+    lock = tactics.locks(fight.bout)  # 本命戰法（第二批）：使不出來的招灰掉、身上的狀態、看穿了架勢一定是真的
     return {
         "foe": fight.foe.name,
         "arts": list((state.world.arena.get(fight.foe_key).arts if state.world.arena.get(fight.foe_key) else [])),
@@ -695,12 +697,15 @@ def _fight_view(state: GameState, content: Content) -> dict:
         "me": {"name": state.player.name, "hp": round(fight.me.hp), "cap": round(fight.me.hp_cap)},
         "foe_hp": {"name": fight.foe.name, "hp": round(fight.foe.hp), "cap": round(fight.foe.hp_cap)},
         "tell": fight.tell,
-        "tell_note": arena.TELL_NOTE.strip("（）"),
+        "tell_note": (tactics.SEEN_NOTE if lock.sees else arena.TELL_NOTE).strip("（）"),
+        "status": tactics.status_text(fight.bout),
         "howto": arena.HOWTO,
         "log": log,
-        "moves": [{"id": f"arena:{m}", "move": m, "label": duel_rules.move_label(m)} for m in MOVES],
+        "moves": [{"id": f"arena:{m}", "move": m, "label": duel_rules.move_label(m) + (tactics.lock_note(m) if m in lock.no_moves else ""),
+                   "enabled": m not in lock.no_moves} for m in MOVES],
         "yield": {"id": arena.YIELD_ID, "label": "認輸", "confirm": YIELD_ASK},
-        "gamble": {"op": "duel_text", "prompt": arena.PROMPT_SHORT, "note": arena.GAMBLE_NOTE},
+        "gamble": {"op": "duel_text", "prompt": arena.PROMPT_SHORT, "note": arena.GAMBLE_NOTE,
+                   "locked": tactics.NO_GAMBLE.strip("（）") if lock.no_gamble else ""},
     }
 
 
