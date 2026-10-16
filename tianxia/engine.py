@@ -779,6 +779,7 @@ class Game:
         下一輪了（見 _reconcile_season）。在路上時，抵達時間已經到了的站接著一站一站抵達（見 _arrivals）。"""
         self.now = now
         away_from = self.state.last_real  # 上次同步的現實時間，下面就換成 now（「你不在的時候」看它，見 _deliver_away）
+        before = {id(e) for e in self.state.journal}  # 名聲：這一次同步補進來的那幾則也接差距（_renown_after 的 fresh，FB-292）
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
@@ -842,7 +843,8 @@ class Game:
         self._guide(enlist.expire(self.state, self.content))  # 第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄
         self._check_hints()  # 抵達、大事揭曉、決戰集結這些不靠行動的改變，加上籌備中、休季之後第一次同步、換季後的開季那一句：新的排一條、輪到的上框（新手引導計畫三；只改 guide，不另起一則）
         self._party_expires()  # 答應結伴之後帶頭的人遲遲沒動身：各走各的（玩家互動第二層）
-        self._renown_after(synced=True)  # 名聲：同步時發現的跨段另起一則「名聲」（設計 3.3）
+        # 名聲：同步時發現的跨段另起一則「名聲」（設計 3.3）；這一次補進來的那幾則接差距
+        self._renown_after(synced=True, fresh=[e for e in self.state.journal if id(e) not in before])
         self._deliver_away(away_from)  # 最後寫：江湖頁的「剛剛」先放這一份摘要（要跟別的計畫合併時，這一行維持在 return 的前一句）
         return self._log(msgs + arrived + settled + summons + seated)
 
@@ -10662,10 +10664,11 @@ class Game:
         art = team.resolve_art(art_id, self.content, self.world)
         return art.name if art is not None else art_id
 
-    def _renown_after(self, synced: bool = False) -> None:
+    def _renown_after(self, synced: bool = False, fresh: list[JournalEntry] | None = None) -> None:
         """名聲（設計 3.3、6.4、十一之二第 6 條）：這一下的名望、善名、惡名合成一行、接差距（renown.annotate），再比跨段（renown.watch）。
         動作裡發現的接在這一下那一則江湖紀錄（最新一則、時間是此刻）的最後，得失那一排多一顆金色的「名號傳開」；這一下打了仗，戰報的
-        得失一樣接差距。同步時發現的（synced）另起一則「名聲」。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
+        得失一樣接差距。同步時發現的（synced）另起一則「名聲」；fresh 是這一次同步補進來的那幾則（時間可能比此刻早，例如決戰收場那一刻），
+        一樣接差距。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
         行狀記升段（只記到過的最高段以上）。開關關著什麼都不做。"""
         s, c = self.state, self.content
         if not renown.on(c):
@@ -10673,6 +10676,8 @@ class Game:
         entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None
         if entry is not None:
             entry.changes = renown.annotate(entry.changes, s, c)
+        for written in fresh or []:  # 同步時補進來的那幾則（決戰收場後補的戰報與軍餉、首創回饋、擂台的俸）也合成一行、接差距（FB-292）
+            written.changes = renown.annotate(written.changes, s, c)
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card is not None else None
         if record is not None and not synced:
             record.changes = renown.annotate(record.changes, s, c)
@@ -10680,6 +10685,9 @@ class Game:
         if renown.news_up_due(s, c, crossed.up):  # 名聲 4.5：跨過威震州郡，天下大事傳一句（一季一人一次）
             s.player.flags.add(renown.NEWS_UP_FLAG)
             add_rumor(s, renown.NEWS_UP.format(name=s.player.name), content=c, layer="world")
+            # 傳聞在共用賽季裡，這裡自己存（FB-291）：動作照例先存季、再 _log，輪詢的同步只存角色——不存的話旗標跟著角色存了，
+            # 那一句卻沒進資料庫，之後也不會再傳
+            self._save_season()
         if crossed.first and not s.player.renown_told:
             s.player.renown_told = True
             journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))

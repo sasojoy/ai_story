@@ -5,6 +5,7 @@ from conftest import real_content
 
 from tianxia import journal, renown
 from tianxia.engine import Game
+from tianxia.journal import Draft
 from tianxia.state import new_game_state
 
 
@@ -101,6 +102,32 @@ def test_a_crossing_found_while_syncing_gets_its_own_entry():
     g._renown_after(synced=True)
     entry = g.state.journal[0]
     assert entry.title == renown.TOLD_TITLE and entry.lines[0].startswith("你的名號傳開了")
+
+
+def test_entries_written_while_syncing_merge_their_fame_and_show_the_gap(monkeypatch):
+    """FB-292：同步時補進來的那一則（決戰收場後回來補的「長社火攻・官軍大勝」：時間是收場那一刻、比此刻早；軍餉那一份名望與立功
+    那一份名望各一行），也合成一行、接差距，跟同一場的戰報一樣；跨段那一則「名聲」照舊另起。同步之前就在的那幾則不動。"""
+    c = real_content("weekend")
+    g = _game(c)
+    g.state.player.stats["fame"] = 46
+    g._log(["（看一眼）"])
+    older = Draft("舊的一則").entry(g.state.world.time, ["之前的事"])
+    older.changes = ["名望 +1"]
+    journal.add_entry(g.state, older)
+
+    def deliver(self):  # 照 _deliver_battle_results → _file_showdown 補進來的那一則
+        entry = Draft("長社火攻・官軍大勝").entry(self.state.world.time - 600, ["軍餉發下來了。"])
+        entry.changes = ["銀兩 +40", "名望 +4", "名望 +2"]
+        journal.add_entry(self.state, entry)
+        self.state.player.stats["fame"] = 52
+
+    monkeypatch.setattr(Game, "_deliver_battle_results", deliver)
+    g.sync(1_000_000.0)
+    delivered = next(e for e in g.state.journal if e.title == "長社火攻・官軍大勝")
+    assert delivered.changes == ["銀兩 +40", "名望 +6（離「天下聞名」還差 38）"]
+    assert older.changes == ["名望 +1"]
+    told = next(e for e in g.state.journal if e.title == renown.TOLD_TITLE and journal.renown_mark("威震州郡") in e.changes)
+    assert "名望" not in "".join(told.changes).replace(journal.renown_mark("威震州郡"), "")
 
 
 def test_told_once_across_seasons():
