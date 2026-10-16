@@ -6172,7 +6172,12 @@ class Game:
         n = push.active_count(s, self._side(), w.time, window)
         msgs = [f"{fig.name}敗走。"]
         cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
-        msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
+        today = int(w.time // DAY)
+        if cfg.figure_dent_once_per_day and p.figure_dented.get(fid) == today:  # 同一個人同一位人物一天只有第一場扣聲威（PM 2026-10-16）
+            msgs.append(figures.DENT_ONCE_LINE.format(name=fig.name))
+        else:
+            p.figure_dented[fid] = today
+            msgs += figures.defeat(s, c, fid, push.buffered(cfg.figure_defeat_prestige, n), cap=cap)
         if fig.out_flag and figures.untimed(c, w) and figures.is_out(s, fid):  # 丙 (c)：沒有時刻表的季打退波才＝擊敗波才（第一季不記）
             add_world_flags(s, [fig.out_flag])
         if fig.character is not None:
@@ -8961,6 +8966,27 @@ class Game:
         if self.world.paused_at() is not None:  # 開戰、觸發、推動、排時間、跳到下一件、救場：都等「繼續」之後
             return [PAUSED_REFUSAL]
         return None
+
+    def admin_fallen(self) -> list[str]:
+        """管理者「叫回人物」的選單：這一季退場、重創的大勢人物（人物表的順序）。"""
+        s, c = self.state, self.content
+        return [fid for fid in c.figures if figures.is_out(s, fid)]
+
+    def admin_revive_figure(self, fid: str) -> list[str]:
+        """叫回人物（PM 2026-10-16，救二十人試玩被打光的官軍）：一位退場、重創的大勢人物現在就以 figure_return_share × 開季聲威
+        回到他原本的戰線與所在（同 figures.revive：接位的人交還戰線），天下大事一句；公告不寫管理者。時刻表寫死的也叫得回來。"""
+        refusal = self._admin_refusal("叫回人物")
+        if refusal:
+            return self._log(refusal)
+        s, c = self.state, self.content
+        if fid not in c.figures or not figures.is_out(s, fid):
+            return self._log(["（這位人物此刻沒有退場。）"])
+        now = s.world.figures[fid]
+        now.back_at, now.back_front = s.world.time, now.back_front or now.front
+        msgs = figures.revive(s, c)
+        self._write("叫回人物", msgs, tag="管理者")
+        self._save_season()
+        return self._log(msgs)
 
     def admin_battles(self) -> list[BattleDef]:
         """管理者「立刻開戰」的選單，照內容的順序（計畫 T8）：

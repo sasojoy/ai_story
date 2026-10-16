@@ -132,6 +132,7 @@ def test_a_figure_loses_at_most_fifteen_a_game_day_but_the_win_still_pays(real, 
 def test_the_engine_passes_the_cap_only_without_a_timetable(real, world):
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     real.config.snub_hours = 0
+    real.config.figure_dent_once_per_day = False  # 量一天上限本身：同一個人連打也每場都扣
     with _won():
         for _ in range(4):
             game.choose("act:challenge:bocai")
@@ -199,6 +200,7 @@ def test_beating_bocai_out_marks_him_defeated_and_stops_his_sim_player(real, wor
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     real.config.figure_daily_loss_cap = 0
     real.config.snub_hours = 0
+    real.config.figure_dent_once_per_day = False
     with _won():
         for _ in range(12):
             game.choose("act:challenge:bocai")
@@ -250,6 +252,7 @@ def test_a_new_season_brings_the_retired_back(real, world):
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     real.config.figure_daily_loss_cap = 0
     real.config.snub_hours = 0
+    real.config.figure_dent_once_per_day = False
     with _won():
         for _ in range(12):
             game.choose("act:challenge:bocai")
