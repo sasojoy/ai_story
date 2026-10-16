@@ -15,9 +15,15 @@ from tianxia.engine import Game
 HOUR = 3600.0
 
 
+def _plays_on(c):
+    """正式內容把三個開關寫成關（企劃者 10/16：數字與設計等第 5 塊）；這一份測的是規則本身，自己打開。"""
+    c.config.ambush.enabled = c.config.fortify.enabled = c.config.stockpile.enabled = True
+    return c
+
+
 @pytest.fixture
 def real():
-    c = real_content()
+    c = _plays_on(real_content())
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.road_sight_chance = 0.0
@@ -238,7 +244,7 @@ def test_lean_formula():
 def test_stockpile_shifts_the_next_timetable_battle(world):
     from tianxia import world as world_mod
 
-    c = real_content("weekend")
+    c = _plays_on(real_content("weekend"))
     c.config.auto_open_first_season = True
     world.open_season(c, 0.0)
     d = next(b for b in c.battles.values() if b.timetable_event)
@@ -252,7 +258,7 @@ def test_stockpile_shifts_the_next_timetable_battle(world):
 
 
 def test_stockpile_button_only_for_the_two_armies_in_season_one(world):
-    c = real_content("weekend")
+    c = _plays_on(real_content("weekend"))
     c.config.auto_open_first_season = True
     g = _player(c, world, "官甲", "guan", "changshe")
     assert "works:stockpile" in {o.id for o in g.options() if o.enabled}
