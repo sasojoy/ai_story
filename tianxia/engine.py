@@ -10403,9 +10403,10 @@ class Game:
         if s.player.journey is not None:
             # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
+            tasks = "邊走邊想、沿途打聽、路邊採集" if c.config.open_map else "邊走邊想、沿途打聽、留意地形、路邊採集"  # 全圖開放拿掉了留意地形（FB-300，同 howto）
             return (
                 f"**在路上**{halted}\n\n"
-                "路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；邊走邊想、沿途打聽、留意地形、路邊採集，"
+                f"路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；{tasks}，"
                 "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
         return self.location_text()
