@@ -150,7 +150,7 @@ def _weapon_shelf(state: GameState, content: Content, world: WorldStateStore, ar
             "attribute": item.attribute, "tier": equipment.TIER_WORDS[1], "price": content.config.weapons.shop_price,
             "value": f"加成 {_pct(weapons.bonus(item, art, content, world))}{weapons.CLASH_NOTE if weapons.clashes(item, art) else ''}" if fits else None,  # 相剋時補一句（終審 F6，同 FB-127）
             "fit": item.kind == fit_kind, "note": weapons.FITS_MARK.lstrip("・") if item.kind == fit_kind else "",
-            "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
+            "enabled": problem is None, "why": problem,
         })
     return out
 
@@ -166,7 +166,7 @@ def _armor_shelf(state: GameState, content: Content, neigong) -> list[dict]:
             "id": f"{armor.BUY}{attribute}", "name": item.name, "kind": smithing.ARMOR_KIND, "attribute": attribute,
             "tier": equipment.TIER_WORDS[1], "price": content.config.armor.shop_price,
             "value": f"少扣 {armor.pct(armor.cut(item, neigong, content))} 氣血", "fit": note == armor.MATCH_NOTE, "note": note,
-            "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
+            "enabled": problem is None, "why": problem,
         })
     return out
 
@@ -546,7 +546,7 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
         problem = mounts.feed_problem(state, content)
         worn = _stall(content, p.mount, "worn", mounts.grade(p.mount), {
             "id": mounts.FEED, "label": FEED_TEXT, "use": mounts.feed_note(state, content) if problem is None else "",
-            "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
+            "enabled": problem is None, "why": problem,
         })
         worn["fed"] = {"word": mounts.WEAR_WORD, "value": p.mount.edge, "note": HUNGRY_NOTE if p.mount.edge < 100 else ""}
         stalls.append(worn)
