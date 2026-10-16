@@ -237,4 +237,6 @@ def test_the_new_rows_never_push_the_page_wider():
 
 def test_the_depot_follows_the_game_column_on_desktop():
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    assert ".shop-layer.shop-board, .shop-layer.shop-donate {" in css  # FB-225：底色只畫在中間那一欄
+    # FB-225：底色只畫在中間那一欄（同一條還有三間店與擂台，FB-306；照選擇器清單查，不寫死整串）
+    paint = re.search(r"([^{}]+)\{\s*background-color: var\(--paper\); background-size: min\(100%, 640px\) 100%;", css)
+    assert paint and ".shop-layer.shop-donate" in [s.strip() for s in paint.group(1).split(",")]

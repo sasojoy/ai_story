@@ -3089,10 +3089,11 @@
   // 不然底下兩頁：台下（你的分身與積分、守擂的人一人一張）、擂台榜；剛打完有收場卡。鈕都送現在的選項 id。字待 joy 潤 ──
   const ARENA_TABS = [["floor", "台下"], ["board", "擂台榜"]];
   function arenaHtml(shop) {
-    if (shop.fight) return `<div class="shop-body arena-body">${arenaFightHtml(shop.fight)}</div>`;
+    // 捲的那一層裡面同三間店先包一層 .shop-col（FB-306：電腦上照遊戲那一欄排，台下那一格原本拉滿整個螢幕；手機上 .shop-col 沒有樣式）
+    if (shop.fight) return `<div class="shop-body arena-body"><div class="shop-col">${arenaFightHtml(shop.fight)}</div></div>`;
     const tab = S.arenaTab === "board" ? "board" : "floor";
     const result = shop.result && shop.result.id !== S.arenaSeen ? arenaResultHtml(shop.result) : "";
-    return `<div class="shop-body arena-body">${tab === "board" ? arenaBoardHtml(shop) : arenaFloorHtml(shop)}</div>
+    return `<div class="shop-body arena-body"><div class="shop-col">${tab === "board" ? arenaBoardHtml(shop) : arenaFloorHtml(shop)}</div></div>
       <nav class="shop-tabs">${ARENA_TABS.map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="arena-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${result}`;
   }

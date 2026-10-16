@@ -1899,15 +1899,17 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
    （scrollbar-gutter: stable both-edges），內容才正好在中間、跟 .shell 對齊，換到不必捲的那一頁也不左右跳。店裡捲的內容包在 .shop-col，
    照手機的版面左右各留 12px（640 − 24）。窄於 641px（手機）這一段整段不生效，一個像素都不變 ── */
 @media (min-width: 641px) {
-  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate {
+  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena {
     background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
   }
   .shop-layer > .shop-bar, .shop-layer > .shop-tabs { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
+  .shop-layer > .smith-hero, .shop-layer > .shop-pages { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); } /* 爐口與兵器／防具切換（FB-306） */
   .shop-layer > .shop-line { margin-left: max(14px, calc(50% - 306px)); margin-right: max(14px, calc(50% - 306px)); }
   .shop-layer > .shop-body { scrollbar-gutter: stable both-edges; }
   .shop-layer .shop-col { max-width: 616px; margin: 0 auto; }
   .shop-layer > .reveal-layer { left: max(0px, calc(50% - 320px)); right: max(0px, calc(50% - 320px)); }
   .shop-board .board-sheet { left: max(12px, calc(50% - 308px)); right: max(12px, calc(50% - 308px)); }
+  .shop-layer.shop-arena .board-sheet { left: max(12px, calc(50% - 308px)); right: max(12px, calc(50% - 308px)); } /* 擂台剛打完的收場卡（FB-306） */
   .book-layer {
     scrollbar-gutter: stable both-edges;
     background: radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.10), transparent 60%) 50% 0 / min(100%, 640px) 100% no-repeat,
