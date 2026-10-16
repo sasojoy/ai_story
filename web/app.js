@@ -2749,7 +2749,7 @@
       ${gearBlock}
       <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>${meltSwitch}</div>
       ${S.meltNote ? `<div class="msg melt-result">${S.meltNote}</div>` : ""}
-      ${meltOn ? `<p class="muted melt-hint">點一列勾起來，再按底下的「熔掉」；點右邊的 › 看細節。身上正在練的熔不掉。</p>
+      ${meltOn ? `<p class="muted melt-hint">點一列勾起來，再按底下的「熔掉」；點右邊的 › 看細節。身上正在練的與本命武學熔不掉。</p>
       ${meltTools}
       ${meltList}` : `${chips}
       ${lib.length ? (picked.length ? `<div class="lib">${rows.map(libRow).join("")}</div>` : '<p class="muted">這一類沒有功法。</p>')

@@ -336,7 +336,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 note += "".join(f"　{line}" for line in cultivation.fit(state, content, world, art_id).lines)
         else:
             note = problem
-        stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content))  # 跟 library.melt_art 同一個判斷
+        stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content), content=content)  # 跟 library.melt_art 同一個判斷
         value = melt_value(state, content, world, art_id) if stuck is None else 0
         worn = art_id in (member.neigong_id, member.wugong_id)
         relearn = None if worn else relearn_note(state, content, art_id)  # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫
