@@ -153,3 +153,28 @@ def test_with_sortie_off_the_sword_follows_the_old_rule():
     game = _game(classic=True)
     st = game.map_state()
     assert {k for k, p in st["places"].items() if p["armed"]} == {k for k in st["places"] if game.content.locations[k].enemies}
+
+
+# ── 意境提示（設計第六節）──
+def test_the_base_lists_what_each_place_gives_with_the_strongest_first():
+    b = _game().map_base()
+    places = {p["id"]: p for p in b["places"]}
+    assert places["changshe"]["insights"] == ["huo", "feng"] and places["changshe"]["strong"] == "huo"
+    assert places["baima_temple"]["insights"] == ["shui", "shan"] and places["baima_temple"]["terrain"] == "寺院"
+    assert places["wan_city"]["terrain"] == "城鎮"  # 馬市、醫館是設施，不算地形
+    assert b["insight_kinds"]["shui"] == {"name": "水", "attribute": "柔"} and "haoran" not in b["insight_kinds"]
+    assert b["insight_layer"] is True
+
+
+def test_the_base_has_no_strongest_with_the_switch_off():
+    game = _game()
+    game.content.config.insight_strong.enabled = False
+    b = game.map_base()
+    assert b["insight_layer"] is False and all(p["strong"] is None for p in b["places"])
+    assert {p["id"]: p for p in b["places"]}["changshe"]["insights"] == ["huo", "feng"]  # 「此地能悟」照樣有
+
+
+def test_the_prologue_hut_lists_nothing_to_sense():  # Review Focus 4
+    c = real_content("weekend")
+    assert mapdata.insight_pool(c.locations["mentor_hut"], c) == []
+    assert mapdata.insight_pool(c.locations["changshe"], c) == ["huo", "feng"]

@@ -657,7 +657,9 @@ def test_issue_keeps_an_expired_bounty_until_its_takers_hear_of_it():
 def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     """正式內容、預設設定（14 天、第一季規則關著）讓整季機器人玩一季（懸賞榜設計 10.2 的 slow）：一直到收季那一週，每週剛好一批
     （同一週的單在同一步一起出現），bounty_week 最後是收季那一週、hooked_week 一直是 0。大勢門檻可能讓季提早收
-    （黃巾稱霸，最早第 decisive_from_week 週；FB-184 多了官軍大營之後，種子 1 這一季在第 11 週收），所以不寫死 12 週。"""
+    （黃巾稱霸，最早第 decisive_from_week 週；FB-184 多了官軍大營之後，種子 1 這一季在第 11 週收），所以不寫死 12 週。
+    門檻在第 decisive_from_week 週以前就到了的季，一到那一週的週一 00:00 就收：那一週一刻都沒跑、掛不出那一週的單，
+    最後一批是前一週（意境提示改了內容之後種子 1 就是這樣：第 10 週週一 00:00 收、最後一批第 9 週）。"""
     content = real_content()
     assert not content.config.season_one and content.config.bounties.enabled
     seen: dict[str, tuple[int, int]] = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
@@ -676,7 +678,9 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
         batches.setdefault(week, set()).add(at)
     last = max(batches)
     assert season.ended and sorted(batches) == list(range(1, last + 1))
-    assert content.config.decisive_from_week <= last <= content.config.season_weeks
+    end = calendar.point(season.time, content, season).week  # 收季那一週
+    ran = end - 1 if season.time == calendar.week_start(end, content, season) else end  # 正好在週一 00:00 收：那一週沒跑
+    assert content.config.decisive_from_week <= end <= content.config.season_weeks and last == ran
     assert all(len(steps) == 1 for steps in batches.values())
     sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, last + 1)]
     assert all(0 < n <= _batch(content) for n in sizes)

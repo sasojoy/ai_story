@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView", "setMapDrawer", "mapPad"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView", "setMapDrawer", "mapPad", "toggleLayer", "insightRow"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -229,12 +229,16 @@ def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
 
 
 def test_the_timeline_button_sits_under_the_zoom_buttons():
-    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只剩五顆濾鏡。"""
+    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只放濾鏡：五顆，意境提示開著多一顆「意境」
+    （意境提示設計第四節；375 寬放不下時「劇情」往右捲）。"""
     out = run(_game(), "return [H.pageMap(), H.chipsHtml()];")
     ctl = out[0][out[0].index('class="map-ctl"'):]
     ctl = ctl[: ctl.index("</div>")]
     assert 'data-act="map-timeline"' in ctl and "版圖" in ctl
-    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 5
+    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 6
+    game = _game()
+    game.content.config.insight_strong.enabled = False
+    assert run(game, "return H.chipsHtml();").count('data-act="map-layer"') == 5
 
 
 def test_the_timeline_drawer_is_320_high_on_a_phone():
@@ -409,3 +413,68 @@ return { pad, halfY: y(half), peekY: y(peek), gap: (vh - pad) - bottom(peek), dr
     assert out["pad"] == 240
     assert out["gap"] <= 0.5, out  # 放回原高：地圖下緣不在抽屜上面留空白
     assert -10.5 <= out["drag"] <= 0, out  # 往上拖：地點往上走（到邊就不動），不會往反方向跳
+
+
+# ── 意境提示（設計第四、五節）──
+def test_the_insight_layer_recolours_discs_and_drops_the_territory():
+    out = marks(_game(), layers='["insight", "control"]')  # 兩顆都記著也是意境贏（正常互斥，不會同時開）
+    assert "url(#mk-halo-" not in out.split("</defs>", 1)[1] and 'class="front"' not in out
+    assert 'fill="#DCE8F6"' in out and ">水<" in out and ">城<" not in out  # 潁水河畔的水；城鎮的「城」換成意境的字
+    assert 'class="ins-seal"' in out  # 長社悟得到火、風：風掛在右下
+
+
+def test_without_the_insight_layer_the_discs_are_as_before():
+    out = marks(_game())
+    assert ">城<" in out and 'class="ins-seal"' not in out and 'fill="#DCE8F6"' not in out
+
+
+def test_a_stale_insight_layer_with_the_switch_off_is_ignored():  # Review Focus 1
+    game = _game()
+    game.content.config.insight_strong.enabled = False
+    out = marks(game, layers='["control", "insight"]')
+    assert "url(#mk-halo-guan)" in out and ">城<" in out and 'class="ins-seal"' not in out
+
+
+def test_a_place_without_a_strongest_keeps_its_glyph():  # Review Focus 2
+    script = ('H.S.mapBase.places.forEach((p) => { p.strong = null; }); '
+              'return H.marksSvg(H.S.mapBase, H.S.mapState, ' + NOW % '["insight"]' + ');')
+    out = run(_game(), script)
+    assert ">城<" in out and 'class="ins-seal"' not in out
+
+
+def test_the_far_view_dots_take_the_strongest_colour():
+    out = marks(_game(), layers='["insight"]', k=2.5, far="true")
+    assert 'fill="#2C68B0"' in out and 'fill="#8A5A33"' in out and not re.search(r"官 \d", out)
+
+
+def test_the_insight_chip_sits_after_enemy_only_when_the_switch_is_on():
+    out = run(_game(), "return H.chipsHtml();")
+    assert out.index("敵情") < out.index("意境") < out.index("路程") and "conic-gradient" in out
+    game = _game()
+    game.content.config.insight_strong.enabled = False
+    assert "意境" not in run(game, "return H.chipsHtml();")
+
+
+def test_territory_and_insight_turn_each_other_off():
+    out = run(_game(), 'return [H.toggleLayer(["control", "order"], "insight"), H.toggleLayer(["insight"], "control"), '
+                       'H.toggleLayer(["insight", "order"], "insight"), H.toggleLayer(["order"], "enemy")];')
+    assert out == [["order", "insight"], ["control"], ["order"], ["order", "enemy"]]
+
+
+def test_the_drawer_says_what_you_can_sense_with_the_strongest_filled():
+    out = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "changshe");')
+    assert "此地能悟" in out and 'class="ig strong"' in out and "最濃" in out
+    assert out.index("多遠") < out.index("此地能悟") < out.index('class="m-acts"')
+
+
+def test_the_drawer_line_stays_with_the_switch_off_but_nothing_is_strongest():
+    game = _game()
+    game.content.config.insight_strong.enabled = False
+    out = run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "changshe");')
+    assert "此地能悟" in out and "最濃" not in out and 'class="ig strong"' not in out
+
+
+def test_the_terrain_shows_next_to_the_name_only_with_the_insight_layer():
+    on = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "baima_temple");', mapLayers=["insight"])
+    off = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "baima_temple");')
+    assert '<span class="terrain">寺院</span>' in on and 'class="terrain"' not in off

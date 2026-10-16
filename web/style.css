@@ -961,6 +961,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-three div { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; min-width: 0; }
 .m-three small { display: block; font-size: 10.5px; color: var(--ink-2); letter-spacing: 1px; }
 .m-three b { font-size: 15px; }
+/* 抽屜「此地能悟」（意境提示設計第五節）：一種意境一顆牌子，最濃的實心；--c 是那一種的顏色，--d 是深色主題上空心牌子的字 */
+.m-ins { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; font-size: 13px; }
+.m-ins > small { color: var(--ink-2); margin-right: 2px; }
+.m-ins .ig { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; border: 1.5px solid var(--c); color: var(--c); background: var(--card); font-weight: 700; }
+.m-ins .ig b { font-family: serif; font-size: 15px; }
+.m-ins .ig.strong { background: var(--c); color: #fff; }
+.m-ins .ig.strong em { font-style: normal; font-size: 11.5px; font-weight: 500; }
+@media (prefers-color-scheme: dark) { .m-ins .ig:not(.strong) { color: var(--d); border-color: var(--d); } }
+/* 意境開著時圓盤的字換成意境，地點的種類寫在名字旁 */
+.m-h1 .terrain { font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-right: 6px; letter-spacing: 0; }
 .m-acts { display: flex; gap: 8px; }
 .m-acts button { flex: 1; min-height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; line-height: 1.3; }
 .m-acts button.main { background: var(--accent); border-color: var(--accent); color: #fff; }
