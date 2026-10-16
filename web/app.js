@@ -1361,10 +1361,16 @@
   }
   // 「→ 」後面那個空白放在 span 外面：行內區塊尾巴上的空白會被瀏覽器吃掉（「→這個配方」貼在一起），放外面它是普通空白，既看得到、也是一個換行機會，落在行尾或行頭時自己消失
   const nbHtml = (text) => nbChunks(text).map((t) => (t.length <= NB_MAX ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
+  // 價錢後面打折的原因（名聲 4.1：「威震州郡・九折」「自家地盤・貴兩成」，territory.price_parts、renown.clinic_part）：每一段包成同一種不折行的
+  // 小段（.nb），375 寬才不會斷成「九／折」「八五／折」（FB-297）。緊貼的「（」與後面的「，」「）」一起包：Chrome 在括號與行內區塊之間照樣斷，
+  // 不包的話一行收在「（」上、下一行從「，」起頭；段與段之間（「，」後面）照常換行。先跳脫再包，字一個不改。
+  // 醫館療傷（選項與修練頁）、開爐鈕、馬市待售那一間、素材頁升階格子用它；smith:、market: 的選單鈕已經照 nbChunks 切過，不必再包
+  const DEAL_RE = /（?[^（），、；\s・]+・(?:[一二三四五六七八九]+折|貴[^（），、；\s]+)[，）]*/g;
+  const dealHtml = (text) => esc(text).replace(DEAL_RE, '<span class="nb">$&</span>');
   // 一行寫完：tests/test_battle_buttons.py、test_peek_row.py 的假瀏覽器照名字把這一行切出去（konst），smith:、market:（馬市的鈕一樣長，裝備四欄 5.5）才會用到 nbHtml
   // o.note（名聲 5B 俠寇選項）：標籤底下第二行小字；o.tag（「俠」「寇」）畫在編號那一格（選單那裡）。灰掉、帶原因的那一顆在選單那裡
   // 另外寫進 title、點了說整句（opt-why）；第一屏放不下時 FB-107 第 10 步收掉這一行
-  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") || o.id.startsWith("market:") ? nbHtml(o.label) : esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`; };
+  const optLabelHtml = (o) => { const m = o.id.startsWith("battle:act:") ? BATTLE_MOVE_LABEL.exec(o.label) : null; return m ? `<span class="b-name">${esc(m[1])}</span><span class="b-move">${esc(m[2])}</span>` : `<span>${o.id.startsWith("smith:") || o.id.startsWith("market:") ? nbHtml(o.label) : dealHtml(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`; };
   // 這幾格對到選單上哪一顆、沒有時寫什麼；最後一格是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
@@ -1639,7 +1645,7 @@
     const peers = callPeers(m);
     const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => peers[o.id] ? `
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
-        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></details>` : "";
+        <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
     // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
@@ -2409,7 +2415,7 @@
     // note：按得下去時伺服器寫好的價錢（銀兩只夠治一部分時是「治 N 點・M 兩（還剩 K 點）」，skillview.heal_note）
     const sub = !hurt ? "沒有內傷" : h && h.clinic ? h.clinic : h && h.note ? h.note : `內傷 ${Math.round(injury)}・銀 ${cost}${h && !h.ok ? " 不夠" : ""}`;
     const why = h && h.why ? ` title="${esc(h.why)}" aria-label="療傷：${esc(h.why)}"` : "";
-    return `<button class="btn" data-act="mx" data-op="heal" ${(h ? h.ok : hurt) ? "" : "disabled"}${why}>療傷<small>${esc(sub)}</small></button>`;
+    return `<button class="btn" data-act="mx" data-op="heal" ${(h ? h.ok : hurt) ? "" : "disabled"}${why}>療傷<small>${dealHtml(sub)}</small></button>`;
   }
 
   // 庫的篩選記在這個瀏覽器的 localStorage（FB-085）：重新整理、換頁回來還是上次選的；存不了就只在這一頁有效，讀不到就當沒選過
@@ -3196,7 +3202,7 @@
       }
       const cell = (r) => `<button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
           <span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
-          <small>${esc(r.problem ? r.short : `${r.cost | 0} 兩${r.left != null ? `・今天還能 ${r.left | 0} 個` : ""}`)}</small></button>`;
+          <small>${r.problem ? esc(r.short) : `${r.cost | 0} 兩${dealHtml(r.cost_note || "")}${r.left != null ? `・今天還能 ${r.left | 0} 個` : ""}`}</small></button>`; // 價錢後面寫原因（名聲 4.1，FB-296）
       ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
     }
     let sells = "";
@@ -3324,7 +3330,7 @@
     const stall = (h) => (h.empty
       ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
       : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
-          <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${esc(h.sub)}</small></button>`);
+          <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${dealHtml(h.sub)}</small></button>`);
     return `<div class="shop-body"><div class="shop-col"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
       ${pick ? horseCard(pick) : ""}</div></div>`;
   }
@@ -3562,7 +3568,9 @@
         ${line.odds ? `<div class="odds">${line.odds.filter((o) => o.pct > 0).map((o) => `<i class="q-${esc(o.q)}" style="width:${o.pct | 0}%"><span>${esc(o.q.slice(0, 1))} ${o.pct | 0}%</span></i>`).join("")}</div>` : ""}
         ${line.reasons.length ? `<p class="pot-why">${line.reasons.map(esc).join("、")}</p>` : ""}</div>` : "";
     const can = line.ready && !line.problem;
-    const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}>${esc(line.ready ? line.problem || line.go : "開爐")}</button>`;
+    // 整段字包在一個 span 裡（FB-297 複驗）：.btn 是不換行的橫向 flex，字與每一段折扣原因的小段各成一個 flex 項目時排成一列，
+    // 兩段原因就把鈕撐出 375、字擠成直排、「鑄譜」被推出畫面；只有一個項目時字照常換行
+    const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}><span>${dealHtml(line.ready ? line.problem || line.go : "開爐")}</span></button>`;
     // 素材格一屬性一排（企劃者 2026-10-14 微調）：伺服器已經照剛柔快慢、再照階排好，這裡只照屬性分排、排頭寫屬性
     const rows = [];
     for (const c of line.cells || []) {
