@@ -84,7 +84,7 @@ def measure(seed: int, profile: str | None, old: bool) -> Counter:
     def name(client, content, facts, image="", budget=None, person=None):
         return None, "", ""
 
-    def propose(client, content, messages, budget=None, person=None):
+    def propose(client, content, messages, budget=None, person=None, **_):
         n["取名・合成"] += 1  # 首創配方與有私有意境的合併：都是真的會送給模型的
         return None, ""
 

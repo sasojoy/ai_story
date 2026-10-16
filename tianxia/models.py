@@ -1977,6 +1977,28 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class FusionDepthTuning(_Strict):
+    """合成的深度（合成與意境改法定案，企劃者 2026-10-16「合出來的意境不知道好壞，然後合成也一直無限往下沒有邏輯」；tianxia/depth.py）：
+    - 意境分重：悟來的一重，合一次二重（兩個來源取高的那一重再加一），最多 max_rank 重；到頂的不能再合。
+      兩個來源相生（剛＋快、柔＋慢、快＋柔、剛＋慢，或同屬性相疊；陰陽虛實與它的兩個來源也算）是圓融，其餘是駁雜。
+    - 融進武學時那個意境給 重數 ＋ harmony_bonus（圓融）／－ clash_penalty（駁雜）層功效（一重不分）。
+    - 武學分代：基礎與內容寫的武學是第零代，合一次第一代，最多 max_gen 代；到頂的不能再當底、不能再拿去合。
+    - 一脈相承：新意境（武學＋武學是合出來的那個屬性）跟底的主屬性相同或相生，底的功效層數整串留著、疊上去；
+      相剋的打散（一層都不留）；不相干的留 apart_keep（照留新的、丟舊的）。一門最多 max_layers 層。
+    - 首創時的走向：引擎從共用的特別功效裡照配方排 directions 種，模型讀兩樣東西的名字說明挑一種、寫一句招意；
+      清單外、叫不動照配方挑。全服照配方合的都是那一種。"""
+
+    max_rank: int = Field(default=3, ge=1)
+    max_gen: int = Field(default=3, ge=1)
+    harmony_bonus: int = Field(default=1, ge=0)
+    clash_penalty: int = Field(default=1, ge=0)
+    apart_keep: float = Field(default=0.5, ge=0, le=1)
+    # 一門最多幾層：9 層時一脈相承排得出來最強的第三代上品功效強度 3.5，本命武學 1.8～1.95；5 層時 2.0，跟本命平手
+    # （scripts/measure_depth.py，2026-10-16）。功效每個有上限，層數多了只是把三四個功效都推到頂。
+    max_layers: int = Field(default=5, ge=1)
+    directions: int = Field(default=3, ge=1)
+
+
 class SignatureArtTuning(_Strict):
     """本命武學（企劃者 2026-10-15「現在的本命絕學很爛，甚至比玩家自己合成的還差，也沒什麼特色效果」；PM 定的做法）：
     以前本命武學照絕學的固定區間（第一成 50、第十成 120），合成擲到的絕學帶 ±10% 微調、最高 132，還可以帶 3 個一般功效與特別功效；
@@ -2206,6 +2228,7 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
@@ -2537,7 +2560,6 @@ class Config(_Strict):
     trait_quality_multiplier: dict[str, float] = Field(  # 功效的強度跟著品質（13.1）
         default_factory=lambda: {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
     )
-    special_trait_chance: float = Field(default=0.05, ge=0, le=1)  # 新武學帶特別功效的機會（13.4）
     # ── 同伴招募（sanguo-companions 合併重寫，取代舊的收徒/招賢，見設計文件四.4）──
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）

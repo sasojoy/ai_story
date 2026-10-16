@@ -1,7 +1,7 @@
 """武學的功效（武學與成長設計第十三節）：資料與層數。"""
 import pytest
 
-from tianxia import traits
+from tianxia import depth, traits
 from tianxia.martial_arts import ATTRIBUTES, generate_from_name
 
 
@@ -102,67 +102,49 @@ def test_content_art_carries_the_special_on_both_branches():
     assert content_art("c", "丙", "武學", "剛", "上品").special is None
 
 
-def test_a_fuse_puts_the_insight_first_and_pushes_out_the_oldest():
-    """設計 13.3 的例子：粗淺拳腳（實）→ 融風【先手｜厚】→ 融火【破甲｜先手、厚】→ 融山【穩｜破甲、先手】。"""
+def test_a_fuse_stacks_related_layers_and_scatters_clashing_ones(content):
+    """合成與意境改法定案：新屬性跟底的主屬性同源或相生，舊層整串留著；相剋打散；不相干留一半。"""
     fist = _art("粗淺拳腳", attribute="實")
-    step1 = fist.model_copy(update={"traits": traits.inherit_fuse(fist, "快"), "attribute": "快"})
-    assert step1.traits == ["快", "實"]
-    step2 = step1.model_copy(update={"traits": traits.inherit_fuse(step1, "剛"), "attribute": "剛"})
-    assert step2.traits == ["剛", "快", "實"]
-    assert traits.inherit_fuse(step2, "慢") == ["慢", "剛", "快"]
+    step1 = fist.model_copy(update={"traits": depth.fuse_traits(content, fist, "剛", 1), "attribute": "剛"})
+    assert step1.traits == ["剛", "實"]  # 剛慢生實：相生
+    step2 = step1.model_copy(update={"traits": depth.fuse_traits(content, step1, "剛", 3), "attribute": "剛"})
+    assert step2.traits == ["剛", "剛", "剛", "剛", "實"]
+    assert depth.fuse_traits(content, step2, "柔", 2) == ["柔", "柔"]  # 柔剋剛
 
 
-def test_fusing_the_same_insight_over_and_over_stacks_one_trait():
-    """設計 13.3：一路只融風是【先手｜先手、先手】，專精一條路。"""
-    art = _art("粗淺拳腳", attribute="快", traits_=["快", "快", "快"])
-    assert traits.inherit_fuse(art, "快") == ["快", "快", "快"]
+def test_layers_are_capped(content):
+    art = _art("x", attribute="快", traits_=["快"] * 8)
+    assert len(depth.fuse_traits(content, art, "快", 3)) == content.config.fusion_depth.max_layers
 
 
-def test_a_blend_takes_each_parents_own_trait():
-    """旋風腿【先手｜厚】＋烈火掌【破甲｜…】→ 屬陽【乘勝｜先手、破甲】；不分先後。"""
-    wind = _art("旋風腿", attribute="快", traits_=["快", "實"])
-    fire = _art("烈火掌", attribute="剛", traits_=["剛", "快", "實"])
-    assert sorted(traits.inherit_blend(wind, fire, "陽")[1:]) == sorted(["快", "剛"])
-    assert traits.inherit_blend(wind, fire, "陽") == traits.inherit_blend(fire, wind, "陽")
-    assert traits.inherit_blend(wind, fire, "陽")[0] == "陽"
+def test_a_blend_keeps_what_each_parent_shares_with_the_result(content):
+    wind = _art("旋風腿", attribute="快", traits_=["快", "快"])
+    fire = _art("烈火掌", attribute="剛", traits_=["剛", "快"])
+    got = depth.blend_traits(content, wind, fire, "陽")  # 陽與快、剛都相生
+    assert got[0] == "陽" and sorted(got[1:]) == sorted(["快", "快", "剛", "快"])
+    assert got == depth.blend_traits(content, fire, wind, "陽")  # 不分先後
 
 
-def test_a_blend_of_arts_without_a_trait_list_still_takes_their_attributes():
-    """內容寫的武學（基礎武學）沒有 traits 欄位：各傳自己的屬性。"""
-    fist, kick = _art("粗淺拳腳", attribute="實"), _art("湖邊腿法", attribute="快")
-    got = traits.inherit_blend(fist, kick, "陽")
-    assert got[0] == "陽" and sorted(got[1:]) == sorted(["實", "快"])
-
-
-def test_specials_come_from_the_pool_about_one_in_twenty(content):
+def test_directions_come_from_the_pool_and_follow_the_recipe(content):
     content.traits.special.append(content.traits.special[0].model_copy(update={"id": "only", "name": "獨門", "pool": False}))
-    rolled = [traits.roll_special(content, f"融|{i}", 1) for i in range(4000)]
-    hits = [r for r in rolled if r is not None]
-    assert 0.04 < len(hits) / 4000 < 0.06 and "only" not in hits
-    assert traits.roll_special(content, "融|x", 1) == traits.roll_special(content, "融|x", 1)  # 同一個配方同一季一樣
+    picks = [depth.directions(content, f"融|{i}", 1) for i in range(200)]
+    assert all(len(p) == content.config.fusion_depth.directions and "only" not in p for p in picks)
+    assert depth.directions(content, "融|x", 1) == depth.directions(content, "融|x", 1)
+    assert len({tuple(depth.directions(content, "融|x", t)) for t in range(40)}) > 2  # 換季換一批
 
 
-def test_the_special_roll_follows_the_configured_chance(content):
-    content.config.special_trait_chance = 0.0
-    assert all(traits.roll_special(content, f"融|{i}", 1) is None for i in range(200))
-    content.config.special_trait_chance = 1.0
-    pool = {t.id for t in content.traits.special if t.pool}
-    rolled = {traits.roll_special(content, f"融|{i}", 1) for i in range(400)}
-    assert None not in rolled and rolled <= pool and len(rolled) > 1  # 每一爐都有，而且不是永遠同一個
+def test_choose_reads_the_marked_direction_or_falls_back(content):
+    options = depth.directions(content, "融|x", 1)
+    name = traits.special(content, options[1]).name
+    assert depth.choose(content, options, depth.mark(name, "招意。"), "融|x", 1) == (options[1], "招意。")
+    assert depth.choose(content, options, "〔亂寫〕招意。", "融|x", 1) == (depth.rule_pick(options, "融|x", 1), "招意。")
+    assert depth.choose(content, options, "沒標", "融|x", 1) == (depth.rule_pick(options, "融|x", 1), "沒標")
 
 
-def test_the_special_roll_changes_with_the_season(content):
-    """配方加這一季的天機：同一個配方換季可以換成別的結果（跟武學的雜湊一樣）。"""
-    content.config.special_trait_chance = 0.5
-    seasons = [traits.roll_special(content, "融|basic_fist+feng", tianji) for tianji in range(40)]
-    assert len(set(seasons)) > 2
-
-
-def test_no_pool_or_no_traits_means_no_special(content):
-    content.config.special_trait_chance = 1.0
+def test_no_pool_means_no_direction(content):
     for t in content.traits.special:
         t.pool = False
-    assert traits.roll_special(content, "融|x", 1) is None
+    assert depth.directions(content, "融|x", 1) == [] and depth.rule_pick([], "融|x", 1) is None
 
 
 def test_the_naming_note_names_the_traits_and_never_numbers(content):

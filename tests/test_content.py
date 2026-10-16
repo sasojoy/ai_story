@@ -2433,7 +2433,6 @@ def test_the_real_traits_are_the_designed_table():
     assert all(t.pool for t in book.special)
     assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])
     assert all(len(lines) == 3 for lines in content.trait_lines.values())
-    assert content.config.special_trait_chance == 0.05
     assert content.config.trait_quality_multiplier == {"下品": 1.0, "中品": 1.5, "上品": 2.0, "絕學": 3.0}
 
 

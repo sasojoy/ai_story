@@ -6988,7 +6988,7 @@ class Game:
         out = self._log(msgs)
         self.forged = tag is not None
         if tag is not None:
-            self._save_season()  # 第一次合出帶特別功效的武學會記一則傳聞（fusion._special_rumor，13.4）；傳聞在共用賽季裡，要存回去
+            self._save_season()  # 首創秘方會記一則傳聞（fusion._secret_lines）；傳聞在共用賽季裡，要存回去
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
             out += self._menxia_entry(  # 結果那一句（第一則訊息）也寫進這一則的敘事，拿到新東西的那一行才配得到 journal._NEW_THING（FB-073）
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
@@ -8635,6 +8635,7 @@ class Game:
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
             trait_line=traits.card_line(self.content, art),
             compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
+            gen_word=skillview.gen_word(art, self.content, self.world),
         )
 
     def member_card(self, key: str) -> str:

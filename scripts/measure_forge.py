@@ -70,7 +70,7 @@ def measure(seed: int, profile: str | None, reserve: int) -> tuple[dict[str, tup
     world = open_world(TMP / f"seed{seed}.db")
     calls: Counter = Counter()  # 取名、挑（模型呼叫的決定點）；forge*／made*（開爐）；held／steps／starved（體力）
 
-    def propose(client, content, messages, budget=None, person=None):
+    def propose(client, content, messages, budget=None, person=None, **_):
         calls["取名"] += 1
         return None, ""
 

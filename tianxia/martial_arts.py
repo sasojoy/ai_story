@@ -59,6 +59,8 @@ class MartialArt(BaseModel):
     traits: list[str] = Field(default_factory=list)  # 一般功效：屬性的清單，第一個是自己的、後面是傳下來的（13.3）；空的＝只有自己屬性
     special: str | None = None  # 特別功效的 id（13.4）；不傳給後代
     secret: str | None = None  # 秘方合出來的（content/secret_recipes.json 的 id）：不當「合到舊的」的候選
+    # 第幾代（tianxia/depth.py）：基礎與內容寫的是第零代，合一次一代；None 是這一版之前登記的，照血統（base、parents）補算
+    gen: int | None = None
 
 
 class Insight(BaseModel):
@@ -75,6 +77,9 @@ class Insight(BaseModel):
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
     secret: str | None = None  # 秘方合出來的（同 MartialArt.secret）
+    # 幾重、圓融還是駁雜（tianxia/depth.py）：悟來的一重、不分圓融駁雜；None 是這一版之前合的，照 parents 補算
+    rank: int | None = None
+    harmony: str | None = None  # "圓融"、"駁雜"；一重是 None
     # ── 私有的意境（畫圖悟來的、或拿私有的去合併出來的；悟意境設計 0.2b）：存在悟的人自己的存檔（PlayerState.own_insights），
     # id 是「悟:流水號」，名字不要求全服唯一。下面三項只有它們才有 ──
     place: str = ""  # 在哪悟的（地點的名字）；合併出來的是空的

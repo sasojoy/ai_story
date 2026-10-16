@@ -6,13 +6,12 @@
 | 這裡 | 一門武學帶哪幾個（traits_of）、本人身上兩門加起來各幾層（loadout）、換算成數字（amount） |
 | encounter／team／engine | 照 hook 把數字用在遭遇戰的各一步 |
 
-一門武學的一般功效記成**屬性的清單**（MartialArt.traits，最多 3 個：第一個是自己的屬性，後面是傳下來的，13.3）；
+一門武學的一般功效記成**屬性的清單**（MartialArt.traits：一個屬性一層，前面是這一代的、後面是傳下來的；怎麼傳見 depth.py）；
 舊資料與內容寫的武學沒有這個欄位，當作只有自己的屬性。功效只算玩家本人身上那兩門（13.1）。
 程式裡叫 trait，不叫 effect：models.Effect 是事件的效果。
 """
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
@@ -21,7 +20,6 @@ from . import signature, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
-MAX_TRAITS = 3  # 一門最多帶幾個一般功效（13.3）
 POINT_HOOKS = {"win_xinde", "train_stamina"}  # 這兩個的數字是點數（心得、體力），其他都是比例
 
 
@@ -144,29 +142,6 @@ def ultimate_of(content: Content, art: MartialArt | None) -> TacticDef | None:
 def has(lo: Loadout, hook: str) -> bool:
     """身上有沒有這個掛點的功效（一般的層數大於 0，或特別功效）。"""
     return lo.layers.get(hook, 0.0) > 0 or hook in lo.specials
-
-
-def inherit_fuse(base: MartialArt, attribute: str) -> list[str]:
-    """武學＋意境（13.3）：新武學的屬性（意境的）排第一；底的功效整串往後推，最多留 2 個，擠掉最舊的。
-    只傳一般功效，特別功效不傳給後代（13.4）。"""
-    return [attribute] + traits_of(base)[: MAX_TRAITS - 1]
-
-
-def inherit_blend(a: MartialArt, b: MartialArt, attribute: str) -> list[str]:
-    """武學＋武學（13.3）：新武學的屬性排第一；兩門各傳一個下來——各自屬性的那個功效，照 id 排序（不分先後）。"""
-    first, second = sorted((a, b), key=lambda art: art.id)
-    return [attribute, first.attribute, second.attribute]
-
-
-def roll_special(content: Content, key: str, tianji: int) -> str | None:
-    """長出新武學時擲特別功效（13.4）：配方加這一季天機的雜湊，同一個配方同一季永遠一樣；只從共用清單（pool）挑，
-    機會是 Config.special_trait_chance。沒有清單或沒擲中是 None。"""
-    pool = sorted(t.id for t in content.traits.special if t.pool)
-    digest = hashlib.sha256(f"{tianji}|{key}|special".encode("utf-8")).digest()
-    roll = int.from_bytes(digest[:8], "big") / 2**64
-    if not pool or roll >= content.config.special_trait_chance:
-        return None
-    return pool[digest[8] % len(pool)]
 
 
 def naming_note(content: Content, trait_list: list[str], special_id: str | None) -> str:
