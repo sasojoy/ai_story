@@ -1,5 +1,6 @@
 """電腦寬的店面字級（FB-305，企劃者 10/16 從對照圖選甲）：web/style.css 店面那一段（三間店、擂台、素材頁與軍需帳）每一條寫了字級的
-規則，在 @media (min-width: 641px) 裡都有一條同一個選擇器、字級 ×1.3（四捨五入到 0.5px）的；手機（沒有 media 的那一條）的值不動。
+規則，在 @media (min-width: 641px) 裡都有一條同一個選擇器（不是掛在 .shop-layer／.shop-board 底下的前面加 :where(.shop-layer)，
+權重不變）、字級 ×1.3（四捨五入到 0.5px）的，而且先後跟店面那一段一樣；手機（沒有 media 的那一條）的值不動。
 讀的是 CSS 原文：webharness 沒有排版，量不到 computed style（實機比對在 docs/superpowers/feedback/ 的 FB-305 那一筆）。"""
 from __future__ import annotations
 
@@ -10,6 +11,20 @@ CSS = (Path(__file__).resolve().parent.parent / "web" / "style.css").read_text(e
 SHOP_START = "/* ── 店面（店面獨立介面設計第五節）"
 SHOP_END = "/* ── 電腦上的店面與武學譜那本書（FB-225"
 K = 1.3
+LAYER = (".shop-smith", ".shop-market", ".shop-donate", ".shop-arena")  # 掛在店面那一層本身的 class
+
+
+def _scoped(sel: str) -> str:
+    """店面那一條在電腦寬那一段的選擇器：掛在店面那一層底下、權重不變。"""
+    parts = []
+    for part in (p.strip() for p in sel.split(",")):
+        if part.startswith((".shop-layer", ".shop-board")):
+            parts.append(part)
+        elif part.startswith(LAYER):
+            parts.append(":where(.shop-layer)" + part)
+        else:
+            parts.append(":where(.shop-layer) " + part)
+    return ", ".join(parts)
 
 
 def _strip(css: str) -> str:
@@ -64,9 +79,15 @@ def _desktop() -> dict[str, dict[str, str]]:
 def test_every_shop_size_has_a_desktop_rule_one_point_three_times_bigger():
     base, desk = _shop_base(), _desktop()
     assert len(base) > 100  # 三間店、擂台、素材頁與軍需帳都在這一段
-    missing = {sel: (sizes, desk.get(sel)) for sel, sizes in base.items()
-               if {prop: _scaled(val) for prop, val in sizes.items()} != {prop: desk.get(sel, {}).get(prop) for prop in sizes}}
+    missing = {sel: (sizes, desk.get(_scoped(sel))) for sel, sizes in base.items()
+               if {prop: _scaled(val) for prop, val in sizes.items()} != {prop: desk.get(_scoped(sel), {}).get(prop) for prop in sizes}}
     assert not missing, missing
+
+
+def test_the_desktop_twins_keep_the_shop_order():
+    """先後跟店面那一段一樣（權重也一樣），電腦上誰蓋過誰才跟手機一模一樣。"""
+    twins = [_scoped(sel) for sel in _shop_base()]
+    assert [sel for sel in _desktop() if sel in set(twins)] == twins
 
 
 def test_the_notice_tag_title_and_due_line_on_desktop():
@@ -75,7 +96,7 @@ def test_the_notice_tag_title_and_due_line_on_desktop():
     assert desk[".shop-board .note b"]["font"].startswith("600 17px")
     assert desk[".shop-board .note small"]["font-size"] == "12.5px"
     assert desk[".shop-board .board-sheet .paper"]["font-size"] == "16px"
-    assert desk[".shop-line"]["font"].startswith("17px/")
+    assert desk[":where(.shop-layer) .shop-line"]["font"].startswith("17px/")
 
 
 def test_the_phone_sizes_are_untouched():
@@ -89,5 +110,6 @@ def test_the_phone_sizes_are_untouched():
 def test_text_that_inherits_its_size_grows_too_but_only_inside_the_shop():
     desk = _desktop()
     assert desk[".shop-layer"]["font-size"] == "19.5px"  # 吃 body 15px 的
-    assert desk[".shop-layer .btn"]["font-size"] == "19.5px" and desk[".shop-layer .btn.small"]["font-size"] == "18px"
+    assert desk[":where(.shop-layer) .btn"]["font-size"] == "19.5px" and desk[":where(.shop-layer) .btn.small"]["font-size"] == "18px"
+    assert all(sel.startswith((".shop-layer", ".shop-board", ".book-", ":where(.shop-layer)")) for sel in desk if "shop" in sel)
     assert ".shell" not in desk and "body" not in desk  # 江湖頁、修練頁不動

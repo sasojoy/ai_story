@@ -37,7 +37,7 @@ def _block(css: str, marker: str) -> str:
 
 def _rules(block: str) -> dict[str, str]:
     """區塊裡的每一條規則：selector → 大括號裡那一段（同一個 selector 只會寫一次）。"""
-    inner = block[len(DESKTOP):-1]
+    inner = re.sub(r"/\*.*?\*/", "", block[len(DESKTOP):-1], flags=re.S)  # 註解不是選擇器（FB-305 那一段前面有一段說明）
     return {sel.strip(): body.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", inner)}
 
 
@@ -93,11 +93,12 @@ def test_the_book_follows_the_same_column():
 
 
 def test_the_desktop_rules_stay_inside_the_shop_and_the_book():
-    """這一段只動店面與書：每一條都掛在 .shop-layer／.shop-board／.book- 底下，碰不到江湖頁；.shop-col 與捲軸溝只在桌機區塊裡寫。"""
+    """這一段只動店面與書：每一條都掛在 .shop-layer／.shop-board／.book- 底下（FB-305 的店面字級用 :where(.shop-layer) 掛、不加權重），
+    碰不到江湖頁；.shop-col 與捲軸溝只在桌機區塊裡寫。"""
     css = _css()
     block = _block(css, "FB-225")
     for selector in ",".join(_rules(block)).split(","):
-        assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-")), selector
+        assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-", ":where(.shop-layer)")), selector
     # 註解裡提到的不算；整頁的捲軸溝（FB-240）是另一段桌機區塊
     rest = re.sub(r"/\*.*?\*/", "", css.replace(block, "").replace(_block(css, "FB-240"), ""), flags=re.S)
     assert ".shop-col" not in rest and "scrollbar-gutter" not in rest
