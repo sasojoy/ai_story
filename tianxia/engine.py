@@ -3790,7 +3790,7 @@ class Game:
             ally = self.content.scenario.faction(ally_id)
             if p.pending_faction is None:  # 拜入門派之後挑一邊（選單只在 needs_ally 時給這兩顆）
                 p.ally = ally.id
-                return [allied.ALLY_DONE.format(ally=ally.name)]
+                return [allied.ALLY_DONE.format(ally=ally.name)] + self._ally_follows_battle()
             p.pending_ally = ally.id
             prompt = self._faction_prompt(self.content.scenario.faction(p.pending_faction))
             self._hide(prompt)
@@ -3804,6 +3804,8 @@ class Game:
             p.ally = ally if allied.on(self.content, self.state.world) else None
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
+            if p.ally is not None:
+                msgs += self._ally_follows_battle()  # 先臨時投效了另一邊的散人（FB-273）
             if season_one(self.content, self.state.world):
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
@@ -3812,6 +3814,30 @@ class Game:
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
+
+    def _ally_follows_battle(self) -> list[str]:
+        """選邊的那一刻（豪強分屬兩軍），人已經在這一場決戰的參戰名單上、站的是另一邊（先臨時投效了，FB-273）：集結時照新選的
+        那一邊換過去（同改選：份量照這一刻重新快照），開打了照決戰的規則不能改投（同 _enlist），這一場照舊站原來那一邊；兩種都說一句。
+        沒有決戰、不在名單上、本來就站這一邊，什麼都不做。"""
+        status = self._battle_for_me(tick=False)
+        if status is None:
+            return []
+        battle, definition = status
+        name, side, sides = self.state.player.name, self._side(), self._sides(definition)
+        me = battle.participants.get(name)
+        if me is None or me.faction == side or side not in sides:
+            return []
+        if battle.phase != "muster":
+            return [allied.ALLY_STAYS.format(battle=definition.name, ally=sides[side], old=sides.get(me.faction, me.faction))]
+        scores = self._mandate_weight(definition, self._battle_scores())
+        gear, marks = self._battle_gear(), self._battle_marks()
+        self.world.mutate_battle(
+            lambda b: battle_instance.join_faction(
+                b, name, side, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
+                role=self._battle_role(), **gear, **marks,
+            )
+        )
+        return [allied.ALLY_REJOINED.format(battle=definition.name, ally=sides[side])]
 
     def _defect_step(self, arg: str) -> list[str]:
         """叛投分兩步（同投靠）：按「叛投某陣營」先出確認畫面（寫明代價、一季一次、三方人數），「確定」才真的叛投。
@@ -5046,6 +5072,8 @@ class Game:
         （FB-109：以前選單照給、場景卻只剩戰場，事件內文、有所感、人物的回話、投靠的確認都看不到）。"""
         if battle.phase == "muster" or self._watching_battle(battle, definition):
             return False
+        if self.state.player.name not in battle.participants and allied.needs_ally(self.state, self.content):
+            return False  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑，選單只剩那兩顆
         return not (self._free_agent(definition) and self.state.player.name not in battle.participants)
 
     def _sides(self, definition: BattleDef) -> dict[str, str]:
@@ -5056,7 +5084,10 @@ class Game:
         """劇本分陣營、自己不是交戰兩軍的人（散人、地方豪強）：決戰時可以臨時投效交戰的兩軍之一，只算這一場
         （散人：試玩回饋 2026-10-08；豪強：Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）——
         不寫進投靠名冊、不改自己的陣營、不算叛投、不記貢獻。
-        豪強分屬兩軍的季（企劃者 2026-10-15），豪強是依附那一軍的人（_side），跟兩軍的人一樣加入，不是臨時投效。"""
+        豪強分屬兩軍的季（企劃者 2026-10-15），豪強是依附那一軍的人（_side），跟兩軍的人一樣加入，不是臨時投效；
+        拜入曹氏莊院還沒挑一邊（allied.needs_ally）也不給臨時投效，先挑一邊（FB-273）。"""
+        if allied.needs_ally(self.state, self.content):
+            return False
         return bool(self.content.scenario.factions) and self._side() not in self._sides(definition)
 
     def _own_side_name(self) -> str:
@@ -5322,6 +5353,8 @@ class Game:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
         p = battle.participants.get(name)
+        if p is None and allied.needs_ally(self.state, self.content):  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑一邊，不給加入也不給投效
+            return []
         if self._free_agent(definition):  # 散人、豪強：集結時、或開打了還沒參戰，給臨時投效的兩顆
             if battle.phase == "muster" or p is None:
                 return self._enlist_options(battle, definition)
