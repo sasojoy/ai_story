@@ -2339,6 +2339,13 @@ class Config(_Strict):
     # 每位人物每個遊戲日最多被打掉幾點（0＝不設）。目標「十來個人合力連打好幾天才打得退，一季頂多一兩位」
     figure_prestige_regen: float = Field(default=1, ge=0)
     figure_daily_loss_cap: int = Field(default=15, ge=0)
+    # 二十人試玩（PM 2026-10-16，週末第一季一季打退官軍五位）：兩種季都算。
+    # figure_dent_once_per_day：同一個人對同一位人物，一個遊戲日（世界秒 // DAY）只有第一場打贏扣聲威，之後照拿獎勵、聲威不動。
+    # figure_return_days：被挑戰打到退場、重創的人物，過這麼多季曆天以 figure_return_share × 開季聲威回到原本的戰線與所在
+    # （0＝不回來）；時刻表寫死的退場、重創、病逝不回來。
+    figure_dent_once_per_day: bool = True
+    figure_return_days: float = Field(default=3, ge=0)
+    figure_return_share: float = Field(default=0.5, gt=0, le=1)
     # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算
     figure_rare_cap: int = Field(default=6, ge=0)
     figure_treasure_cap: int = Field(default=2, ge=0)

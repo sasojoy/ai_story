@@ -279,10 +279,11 @@ def _clamp(edge: float) -> float:
 
 
 def _pool(side: ArenaSide, lost: int) -> int:
-    """池子扣 lost（負的是回，回到上限為止）：回實際扣了多少。"""
+    """池子扣 lost（負的是回，回到上限為止）：回實際扣了多少（取整數：池子是小數，見底那一下扣的是剩的那一截，
+    回合那一句照 :+d 寫，小數會丟 ValueError——2026-10-16 量表的假人擂台每一回合見底都炸）。"""
     lost = min(side.hp, lost) if lost > 0 else max(-(side.hp_cap - side.hp), lost)
     side.hp -= lost
-    return lost
+    return round(lost)
 
 
 class Exchange(NamedTuple):

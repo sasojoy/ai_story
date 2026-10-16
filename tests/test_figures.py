@@ -416,12 +416,12 @@ def test_prestige_zero_retires_and_successor_takes_the_front(on):
     s = _season(on)
     s.world.figures["bocai"].prestige = 5
     lines = figures.defeat(s, on, "bocai", 5)
-    assert lines == ["波才聲威 -5", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。", "彭脫接手潁川汝南的戰事。"]
+    assert lines == ["波才聲威 -5", figures.OUT_BACK.format(name="波才"), "彭脫接手潁川汝南的戰事。"]
     assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
     assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
     assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
     assert [(r.layer, r.text) for r in s.world.rumors] == [
-        ("world", "波才連吃敗仗，聲威掃地，再也號令不動手下的兵。彭脫接手潁川汝南的戰事。"),
+        ("world", figures.OUT_BACK.format(name="波才") + "彭脫接手潁川汝南的戰事。"),
     ]
     assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
 
@@ -444,7 +444,7 @@ def test_destiny_figure_is_crippled_not_retired(on):
     """孫堅是天命人物：歸零是重創，退出本季；他沒有接位的人，南陽官軍沒有人物了。"""
     s = _season(on)
     s.world.figures["sunjian"].prestige = 3
-    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", "孫堅連吃敗仗，元氣大傷，今年是露不了面了。"]
+    assert figures.defeat(s, on, "sunjian", 5) == ["孫堅聲威 -3", figures.OUT_BACK_DESTINY.format(name="孫堅")]
     assert s.world.figures["sunjian"].status == "crippled" and figures.is_out(s, "sunjian")
     assert figures.commander(s, on, "nanyang", "guan") is None
 
