@@ -362,12 +362,18 @@ def clinic_factor(state: GameState, content: Content) -> float:
     return cfg.clinic_share if on(content, "clinic") and meets(state, content, "俠", cfg.clinic_tier) else 1.0
 
 
-def clinic_note(state: GameState, content: Content) -> str:
-    """療傷鈕後面的原因（skillview.heal_note）：「（一方豪俠・八五折）」；沒打折是空字串。"""
+def clinic_part(state: GameState, content: Content) -> str:
+    """療傷打折的俠那一半：「一方豪俠・八五折」；沒打折是空字串。skillview.heal_note 跟地盤、名望那幾段寫在同一個括號（FB-294）。"""
     factor = clinic_factor(state, content)
     if factor >= 1.0 or not on(content, "explain"):
         return ""
-    return f"（{virtue_title(state, content)}・{discount_word(factor)}）"
+    return f"{virtue_title(state, content)}・{discount_word(factor)}"
+
+
+def reasons_text(parts: list[str]) -> str:
+    """價錢後面那一個括號：「（威震州郡・九折，州郡大俠・八五折）」；沒有原因是空字串（名聲 4.1、FB-294：原因只寫一個括號）。"""
+    parts = [x for x in parts if x]
+    return f"（{'，'.join(parts)}）" if parts else ""
 
 
 def black_market_price(state: GameState, content: Content, tier: int) -> int | None:

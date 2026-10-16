@@ -18,7 +18,7 @@ def test_prices_take_the_fame_discount():
     assert mounts.price(s, c) == int(c.config.mounts.shop_price * 0.94 + 0.5)
     tier = min(c.config.economy.upgrade_silver)
     assert economy.upgrade_cost(s, c, tier) == int(c.config.economy.upgrade_silver[tier] * 0.94 + 0.5)
-    assert territory.price_note(s, c) == "（名動一方九四折）"
+    assert territory.price_note(s, c) == "（名動一方・九四折）"  # 設計 4.1 的寫法（FB-294：跟醫館那一半同一種）
     s.player.member.injury = 20
     assert team.heal_cost(c, s.player.member, s) == 10  # 20 點 ÷ 2 × 0.94 ＝ 9.4 → 10（無條件進位）
     s.player.member.injury = 40
@@ -30,7 +30,7 @@ def test_the_heal_button_names_the_discount():
     s = _s(c, 25)
     s.player.member.injury = 40
     s.player.stats["silver"] = 100
-    assert skillview.heal_note(s, c).endswith("（名動一方九四折）")
+    assert skillview.heal_note(s, c).endswith("（名動一方・九四折）")
 
 
 def test_no_discount_no_note():

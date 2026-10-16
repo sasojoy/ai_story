@@ -29,6 +29,17 @@ def test_the_heal_button_says_why():
     assert "八五折" not in skillview.heal_note(s, c) and team.heal_cost(c, s.player.member, s) == 10
 
 
+def test_both_reasons_share_one_bracket():
+    """FB-294：名望的店家折扣與俠的醫館折扣都有時，原因寫在同一個括號、同一種寫法（設計 4.1 的「（名動一方・九四折）」），
+    不再是「16 兩（威震州郡九折）（州郡大俠・八五折）」。"""
+    c = real_content("weekend")
+    s = new_game_state(c, "甲")
+    s.player.member.injury = 40
+    s.player.stats.update({"fame": 50, "good": 30, "silver": 100})
+    note = skillview.heal_note(s, c)
+    assert note == "內傷 40・16 兩（威震州郡・九折，州郡大俠・八五折）"
+
+
 def test_black_market_for_rogues():
     c = real_content("weekend")
     s = new_game_state(c, "甲")

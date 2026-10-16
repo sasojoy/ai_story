@@ -257,17 +257,23 @@ def price_here(state: GameState, content: Content) -> float:
     return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
 
 
-def price_note(state: GameState, content: Content) -> str:
-    """價錢後面的原因（名聲 4.1「寫原因」）：「（自家地盤九折，名動一方九四折）」；名聲關著、兩樣都沒有是空字串
-    （關著時一個字都不變：地盤福利以前也不寫原因）。"""
+def price_parts(state: GameState, content: Content) -> list[str]:
+    """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
+    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。"""
     if not renown.on(content, "discount"):
-        return ""
+        return []
     p = state.player
     parts = []
     land = price_factor(state.world, content, rules.side_of(state, content), p.location)
     if land != 1.0:
-        parts.append(("自家地盤" if land < 1 else "敵方地盤") + renown.discount_word(land))
+        parts.append(("自家地盤" if land < 1 else "敵方地盤") + "・" + renown.discount_word(land))
     fame = renown.price_factor(state, content)
     if fame != 1.0:
-        parts.append(f"{renown.fame_title(state, content)}{renown.discount_word(fame)}")
-    return f"（{'，'.join(parts)}）" if parts else ""
+        parts.append(f"{renown.fame_title(state, content)}・{renown.discount_word(fame)}")
+    return parts
+
+
+def price_note(state: GameState, content: Content) -> str:
+    """價錢後面的原因（名聲 4.1「寫原因」）：「（自家地盤・九折，名動一方・九四折）」；名聲關著、兩樣都沒有是空字串
+    （關著時一個字都不變：地盤福利以前也不寫原因）。"""
+    return renown.reasons_text(price_parts(state, content))
