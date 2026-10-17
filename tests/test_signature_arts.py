@@ -73,7 +73,7 @@ def test_cards_show_the_tactic():
     assert "本命戰法〔仁義聚眾〕起手・每回合必定" in line and "回氣血 4%" in line
     _wear(game, "zhangfei_wugong", "zhangfei_neigong")
     card = skillview.member_card(game.state, content, game.world, PLAYER)
-    assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・前 2 回合一直在" in card
+    assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・第 1 回合一直在" in card
 
 def test_a_tactic_on_an_ordinary_art_is_rejected(tmp_path):
     root = copy_fixture(tmp_path)
