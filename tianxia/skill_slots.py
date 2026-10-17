@@ -6,7 +6,7 @@
 | 格數 | 自己那一份的品質定亮幾格（slot_count；絕學照上品） |
 | 填法 | 層數最多的一般功效 → 首創走向的特別功效 → 其他來路的一般功效（層數多的先）→ 空格擲中階或低階（layout） |
 | 高階 | 照品質擲（每升一品照新品質再擲一次，中了就留著），佔最後一格（high_of） |
-| 未開 | 來路的功效比格子多時，多的還沒亮；修練升品才亮 |
+| 未開 | 來路的功效比格子多時，多的還沒亮；修練升品才亮，到了絕學全部亮起 |
 
 只管自己合成的武學（不在 content.skills 的）：內容寫的（本命、基礎、部下）照舊全亮。層數決定「哪幾個、多強」，品質決定「亮幾個」。
 擲骰照「技能|名號|功法 id|…」的雜湊：不碰 Game.rng、不存檔，同一個人同一門同一品永遠一樣，舊存檔不用修。
@@ -88,6 +88,9 @@ def layout(content: Content, who: str, art: MartialArt, quality: str, rolled: st
     n = slot_count(content, who, art.id, quality)
     top = high_of(content, who, art, quality, rolled)
     room = max(1, n - (1 if top is not None else 0))  # 只有一格的下品擲中高階：主功效照留，高階多一格
+    if quality == "絕學" and len(source) > room:  # 練到絕學來路的功效全部亮起，不留「未開」（Joy 2026-10-17）
+        room = len(source)
+        n = room + (1 if top is not None else 0)
     out = Layout(slots=n, lit=source[:max(0, room)], dormant=source[max(0, room):])
     have_g = {a for k, a in out.lit if k == "g"} | {a for k, a in out.dormant if k == "g"}
     have_s = {i for k, i in out.lit + out.dormant if k == "s"}
