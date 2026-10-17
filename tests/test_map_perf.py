@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 import re
+from pathlib import Path
 
 import pytest
 import test_prologue_web
@@ -111,7 +112,7 @@ def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch
 
 
 # ── 網頁（node 跑整支 app.js，同 tests/test_map_web.py）──
-NAMES = ["S", "pageMap", "marksSvg", "marksParts", "drawMarks", "mapReady", "setMapDrawer", "gripDown", "gripUp", "renderPage"]
+NAMES = ["S", "pageMap", "marksSvg", "marksParts", "drawMarks", "mapReady", "setMapDrawer", "gripDown", "gripUp", "renderPage", "syncLayerButtons"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NOW = "{ k: 1, far: false, layers: new Set(['control']), sel: null, week: H.S.mapState.now_week }"
@@ -198,6 +199,34 @@ def test_fb323_a_flashing_place_takes_everything_drawn_after_it_up_with_it():
     low, high = out
     assert 'class="pulse"' not in low and high.count('class="pulse"') == len(changed) + 1
     assert (low + high).count("data-loc=") == len(game.map_base()["places"])
+
+
+def test_fb323_the_pulse_grows_by_transform_and_fades_by_opacity():
+    """FB-323（企劃者 10/17 從對比圖選丙）：圈的跳法改成整個圈放大（transform）、淡出（opacity），合成器自己跑、閒置不吃主執行緒；
+    從半徑 16 放到 36（2.25 倍），線跟著變粗（企劃者接受）。不再改 r（那要主執行緒每一幀重畫）。"""
+    css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
+    frames = css[css.index("@keyframes mk-pulse"):]
+    frames = frames[: frames.index("} }") + 3]
+    assert "transform: scale(1)" in frames and "transform: scale(2.25)" in frames and "opacity: 0.9" in frames and "opacity: 0" in frames
+    assert "r:" not in frames
+    rule = css[css.index(".mapx .pulse {"):]
+    rule = rule[: rule.index("}") + 1]
+    assert "transform-box: fill-box" in rule and "transform-origin: center" in rule and "mk-pulse 1.6s ease-out infinite" in rule
+
+
+@needs_node
+def test_fb325_the_insight_button_follows_the_layer():
+    """開一顆濾鏡（或版圖變化把意境關掉）時，濾鏡那一排與右上角那一顆意境一起換樣子（勢力與意境互斥）。"""
+    out = _run(_map_game(), """
+  const row = { innerHTML: '' }, btn = { className: 'ins', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
+  T.qs['.map-chips'] = row; T.qs['.map-ctl [data-layer="insight"]'] = btn;
+  H.S.mapLayers = ['insight', 'order']; H.syncLayerButtons();
+  const on = { cls: btn.className, pressed: btn.attrs['aria-pressed'], row: row.innerHTML };
+  H.S.mapLayers = ['control']; H.syncLayerButtons();
+  return { on, off: { cls: btn.className, pressed: btn.attrs['aria-pressed'] } };""")
+    assert out["on"]["cls"] == "ins on" and out["on"]["pressed"] == "true" and "意境" not in out["on"]["row"]
+    assert 'class="on" data-act="map-layer" data-layer="order"' in out["on"]["row"]
+    assert out["off"] == {"cls": "ins", "pressed": "false"}
 
 
 @needs_node

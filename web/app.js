@@ -3844,8 +3844,9 @@
     if (layers.includes(key)) return layers.filter((x) => x !== key);
     return [...layers.filter((x) => x !== MAP_EXCLUSIVE[key]), key];
   }
-  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤；意境插在敵情後面（意境提示設計第四節）
-  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["insight", "意境", INSIGHT_DOT], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
+  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤。意境不在這一排：六顆時 375 寬「劇情」超出畫面，
+  // 挪到右上角那一欄版圖下面（FB-325，企劃者 10/17 從對比圖選丙；mapCtl）
+  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
   const sideName = (k) => (k ? MAP_SIDES[k].name : "無人控制");
   const f1 = (n) => Math.round(n * 10) / 10;
   const mapWeek = () => S.mapWeek || (S.mapState && S.mapState.now_week) || 1;
@@ -3882,10 +3883,10 @@
   // sel: 選了的地點, week: 看哪一週, tl: 正在看版圖變化 }。純函式：只讀傳進來的底圖與疊層
   function marksSvg(base, st, o) { return marksParts(base, st, o).join(""); }
   // 記號拆成兩段（FB-323）：第一個會跳的圈（class="pulse"，易手的地點、你）之前的畫在底圖的 SVG（#mk），從它起整段畫在疊在上面的那一張
-  // （#mkt，pageMap 的 mk-top）。圈在底圖裡一跳，整張山水跟著重新整理（閒置五秒主執行緒忙一兩秒，手勢每幀貴兩三倍）；跳在上面那一張，
-  // 每一幀只動那一張的幾樣東西。兩張同一個座標、同一個位移與倍率（applyMapView），照原本的先後疊，逐像素一樣。平常圈只有你的那一圈
-  // （最後畫），上面那一張只有那一圈、在路上的你、旗子。上面那一張刻意不自成合成層（will-change）：那樣閒置更省，但蓋在它上面的
-  // 搜尋框、濾鏡、抽屜會跟著被拉成合成層，字的邊緣看得出不一樣（試玩回饋 FB-323）
+  // （#mkt，pageMap 的 mk-top）。圈在底圖裡一跳，整張山水跟著重新整理（閒置五秒主執行緒忙一兩秒，手勢每幀貴兩三倍）。兩張同一個座標、
+  // 同一個位移與倍率（applyMapView），照原本的先後疊。平常圈只有你的那一圈（最後畫），上面那一張只有那一圈、在路上的你、旗子。
+  // 圈的跳法是整個圈放大、淡出（style.css 的 mk-pulse，企劃者 10/17 選丙）：合成器自己跑，線跟著變粗；跳的那一圈自成合成層，
+  // 蓋在它上面的搜尋框、濾鏡、抽屜跟著被拉成合成層，字的邊緣有一點點不一樣（企劃者接受，試玩回饋 FB-323）
   function marksParts(base, st, o) {
     const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
@@ -3980,7 +3981,24 @@
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
-    return MAP_CHIPS.filter(([key]) => key !== "insight" || (S.mapBase && S.mapBase.insight_layer)).map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+  }
+  // 右上角那一欄的意境鈕（FB-325）：意境提示開著才有；開著時跟濾鏡一樣墨底
+  function insightButton() {
+    if (!(S.mapBase && S.mapBase.insight_layer)) return "";
+    const on = S.mapLayers.includes("insight");
+    return `<button type="button" class="ins${on ? " on" : ""}" data-act="map-layer" data-layer="insight" aria-pressed="${on}" aria-label="意境" title="意境"><i style="background:${INSIGHT_DOT}"></i><small>意境</small></button>`;
+  }
+  // 濾鏡開關換了（點了一顆、版圖變化把勢力打開）：濾鏡那一排與右上角的意境鈕一起換樣子（勢力與意境互斥）
+  function syncLayerButtons() {
+    const row = document.querySelector(".map-chips");
+    if (row) row.innerHTML = chipsHtml();
+    const ins = document.querySelector('.map-ctl [data-layer="insight"]');
+    if (ins) {
+      const on = S.mapLayers.includes("insight");
+      ins.className = `ins${on ? " on" : ""}`;
+      ins.setAttribute("aria-pressed", String(on));
+    }
   }
   // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小，第四顆是版圖變化
   // （企劃者 10/15 從對比圖選丙：375 寬時濾鏡一排放不下它，挪到這裡；濾鏡那一排只剩五顆）
@@ -3991,6 +4009,7 @@
     <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="out" aria-label="縮小" title="縮小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
     <button type="button" class="tl${tl ? " on" : ""}" data-act="map-timeline" aria-label="版圖變化" aria-pressed="${tl}" title="版圖變化">⏱<small>版圖</small></button>
+    ${insightButton()}
   </div>`;
   }
   // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間；上面是找地點與濾鏡，右上角三顆鈕，底下是抽屜（寬 900 以上是右欄）。
@@ -4257,8 +4276,7 @@
       S.mapViewBefore = null;
     }
     box.classList.toggle("tl-mode", open);
-    const chips = box.querySelector(".map-chips");
-    if (chips) chips.innerHTML = chipsHtml(); // 勢力可能剛被打開
+    syncLayerButtons(); // 勢力可能剛被打開（意境跟著關）
     const tlBtn = box.querySelector(".map-ctl .tl");
     if (tlBtn) { tlBtn.classList.toggle("on", open); tlBtn.setAttribute("aria-pressed", String(open)); }
     const banner = document.getElementById("map-banner");
@@ -5872,8 +5890,7 @@
           break;
         case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁；勢力與意境互斥，整排鈕一起換樣子
           S.mapLayers = toggleLayer(S.mapLayers, el.dataset.layer);
-          const row = el.closest(".map-chips");
-          if (row) row.innerHTML = chipsHtml();
+          syncLayerButtons(); // 意境鈕在右上角那一欄（FB-325）：兩處一起換
           drawMarks();
           if (S.mapMode === "place") redrawDrawer(); // 抽屜名字旁的地形跟著意境開關
           break;
