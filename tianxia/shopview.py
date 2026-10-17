@@ -539,7 +539,7 @@ def _speed_shown(content: Content, item: Equipment) -> int:
 def _stall(content: Content, item: Equipment, role: str, sub: str, action: dict) -> dict:
     return {
         "id": item.id, "role": role, "who": STALL_WHO[role], "empty": False, "name": mounts.name_of(item), "grade": mounts.grade(item),
-        "sub": sub, "coat": _coat(item), "bars": _bars(content, item), "fed": None, "compare": "", "action": action,
+        "sub": sub, "coat": _coat(item), "art": mounts.art_of(item), "bars": _bars(content, item), "fed": None, "compare": "", "action": action,
     }
 
 

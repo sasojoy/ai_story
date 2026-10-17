@@ -45,7 +45,7 @@ const mk = (id) => (els[id] = els[id] || {
   querySelector: () => null, querySelectorAll: () => [], setAttribute() {}, append() {}, insertAdjacentHTML() {},
 });
 ["app", "toast", "page", "top", "peek"].forEach(mk); // render() 只寫 #app 的 innerHTML；#top 要讀得到 hidden
-// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, id, classes: Set }。只認 applyGlow 會問的四種選擇器
+// applyGlow 用的假元素：{ glow: ["鍵", ...], disabled, id, classes: Set }。只認 applyGlow（與 applyFocus）會問的幾種選擇器
 const fake = { list: [] };
 // closedFold：這顆鈕收在關著的摺疊裡時的假摺疊 { querySelector: () => 標題列的假元素 }；applyGlow 問 closest("details:not([open])") 才給（FB-087 審查 M3）
 // id：選單鈕的 data-id（入伍段「出一次力」那一步，伺服器在框上帶的 guide.glow 是選項 id，applyGlow 照 #page [data-id="…"] 找，FB-093）
@@ -60,6 +60,7 @@ const button = (id, disabled = false) => el([], disabled, null, id); // 一顆�
 const matchOne = (e, sel) => {
   if (sel === ".glow") return e.classes.has("glow");
   if (sel === ".lit") return e.classes.has("lit");
+  if (sel === ".onb-dim") return e.classes.has("onb-dim"); // applyFocus 先收掉上一次壓暗的（假元素不在 #top、#page 底下，不會被壓暗）
   const byId = sel.match(/^#page \[data-id="(.*)"\](:not\(\[disabled\]\))?$/);
   if (byId) return e.id === byId[1] && !(byId[2] && e.disabled);
   const m = sel.match(/^\[data-glow~="(.*)"\](:not\(\[disabled\]\))?$/);

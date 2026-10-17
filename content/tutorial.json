@@ -247,7 +247,10 @@
         "action": "explore"
       },
       "glow": [
-        "act:explore"
+        "act:explore",
+        "explore:gather",
+        "explore:seek",
+        "explore:sense"
       ]
     },
     {

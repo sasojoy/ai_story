@@ -23,6 +23,10 @@ MARKET_TAG = "馬市"  # 地點標籤（content/locations.json：涿郡、汝南
 TIER_NAMES = {1: "駑馬", 2: "良駒", 3: "名駒"}  # 5.6（待 joy 潤）
 NOUNS = {1: "馬", 2: "駒", 3: "駒"}  # 名字＝毛色＋這個字；名駒的專名是裝備三的內容（template），還沒有時照「駒」（待 joy 潤）
 COATS = ("棗騮", "青驄", "黑鬃", "白蹄", "花斑", "黃棕")  # 待 joy 潤：12 個名字都過了 naming.name_problem、沒在內容裡出現過
+# 馬的圖（Joy 2026-10-17「我要真的水墨畫」，圖由她另外產）：每種毛色一張、兩匹名駒各一張，檔名 web/horse-<鍵>.webp；
+# 鍵照毛色的拼音、名駒照 template。圖還沒放進 web/ 的鍵，網頁照舊畫原本的色塊（server.HORSE_ART 只列真的有檔的）
+COAT_ART = {"棗騮": "zaoliu", "青驄": "qingcong", "黑鬃": "heizong", "白蹄": "baiti", "花斑": "huaban", "黃棕": "huangzong"}
+STEED_ART = {"tashuang_ju": "tashuang", "polang_ju": "polang"}
 WEAR_WORD = equipment.WEAR_WORDS["mount"]  # 「飽足度」：寫到它的地方都讀這個，不寫死（3.1、2.5）
 HUNGRY_WARNING = "你的{name}餓得直打響鼻，餵牠一把料吧。"  # 待 joy 潤（5.4）
 NO_MOUNT = "身上沒有坐騎"  # 待 joy 潤：「餵」灰掉時的原因
@@ -377,12 +381,19 @@ def _row(state: GameState, content: Content, item: Equipment, worn: bool) -> dic
         "id": item.id, "name": name_of(item), "tier": item.tier, "quality": item.quality, "grade": grade(item),
         "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「飽足度 N」（3.1 的字表，不在網頁寫死）
         "save": pct(got["save"]), "speed": pct(got["speed"]), "cavalry": pct(got["cavalry"]), "escape": pct(got["escape"]),
-        "feed": False, "feed_note": "", "wield_ok": not on_road, "wield_note": ON_ROAD if on_road else "",
+        "feed": False, "feed_note": "", "wield_ok": not on_road, "wield_note": ON_ROAD if on_road else "", "art": art_of(item),
     }
     if worn:
         row["feed"] = feed_problem(state, content) is None
         row["feed_note"] = feed_note(state, content)
     return row
+
+
+def art_of(item: Equipment) -> str:
+    """這一匹用哪一張圖（COAT_ART、STEED_ART 的鍵）：名駒照 template，其餘照名字開頭的毛色；都對不上是空字串。"""
+    if item.template in STEED_ART:
+        return STEED_ART[item.template]
+    return next((key for coat, key in COAT_ART.items() if item.name.startswith(coat)), "")
 
 
 def rows(state: GameState, content: Content) -> dict:
