@@ -68,12 +68,17 @@ def main() -> None:
     parser.add_argument("--layers", type=int, nargs="+", help="--depth 試幾種一門最多幾層（從第三代的功效清單前面截，只量）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
+    parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
     args = parser.parse_args()
     content = load_content(ROOT / "content")
     if args.bout_strike is not None:
         content.config.tactics.bout_strike = args.bout_strike
     if args.war_scale is not None:
         content.config.tactics.war_scale = args.war_scale
+    if args.might_scale is not None:
+        for sk in content.skills.values():
+            if sk.tactic is not None:
+                sk.tactic.might *= args.might_scale
     if args.bouts:
         bouts(content, args.runs)
         return

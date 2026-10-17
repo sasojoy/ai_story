@@ -20,7 +20,7 @@
       "params": {
         "turns": 1
       },
-      "might": 0.195,
+      "might": 0.11,
       "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。"
     }
   },
@@ -46,7 +46,7 @@
         "turns": 2,
         "reflect_pct": 0.4
       },
-      "might": 0.195,
+      "might": 0.11,
       "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神；擋下的控制有 {reflect_pct} 反彈回施放者。"
     }
   },
@@ -71,7 +71,7 @@
       "params": {
         "turns": 1
       },
-      "might": 0.41,
+      "might": 0.32,
       "desc": "對手卸勁 {turns} 回合，出不了強攻。"
     }
   },
@@ -100,7 +100,7 @@
         "heal_pct": 0.04,
         "boost_pct": 0.1
       },
-      "might": 0.41,
+      "might": 0.32,
       "desc": "每一回合自己與同伴回氣血 {heal_pct}；關羽、張飛的戰法發動率 +{boost_pct}。"
     }
   },
@@ -128,7 +128,7 @@
         "turns": 1,
         "lead_pct": 0.18
       },
-      "might": 0.225,
+      "might": 0.15,
       "desc": "蓄力一回合後猛攻（推力 ×{mult}），對手隨機卸勁或亂神 {turns} 回合；氣勢領先時發動率再 +{lead_pct}。"
     }
   },
@@ -152,7 +152,7 @@
       "params": {
         "heal_pct": 0.12
       },
-      "might": 0.225,
+      "might": 0.15,
       "desc": "清掉自己身上的卸勁、亂神、定身、失神，回氣血 {heal_pct}。"
     }
   },
@@ -222,7 +222,7 @@
       "rate": 1.0,
       "rounds": 1,
       "params": {},
-      "might": 0.11,
+      "might": 0.02,
       "desc": "先登：這一回合連環，推兩次。"
     }
   },
@@ -246,7 +246,7 @@
         "stack_pct": 0.06,
         "stacks": 5
       },
-      "might": 0.11,
+      "might": 0.02,
       "desc": "每打一回合推力 +{stack_pct}，最多 {stacks} 層；氣勢落後時一次疊兩層。"
     }
   },
@@ -272,7 +272,7 @@
       "params": {
         "cut_pct": 0.3
       },
-      "might": 0.255,
+      "might": 0.18,
       "desc": "對手氣餒，這一回合推力 −{cut_pct}。"
     }
   },
@@ -296,7 +296,7 @@
         "up_pct": 0.4,
         "down_pct": 0.2
       },
-      "might": 0.255,
+      "might": 0.18,
       "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。看天吃飯。"
     }
   },
@@ -320,7 +320,7 @@
       "params": {
         "share_pct": 0.5
       },
-      "might": 0.365,
+      "might": 0.28,
       "desc": "出固守時借力：對手強攻你，他吃自己那一下的 {share_pct}。"
     }
   },
@@ -348,7 +348,7 @@
         "good_step": 20,
         "good_cap_pct": 0.2
       },
-      "might": 0.365,
+      "might": 0.28,
       "desc": "每回合 {chance_pct} 化影（那一回合不掉氣血）；善名每 {good_step} 點再 +{per_good_pct}，最多 +{good_cap_pct}。"
     }
   },
@@ -376,7 +376,7 @@
         "dot_pct": 0.02,
         "stun_pct": 0.3
       },
-      "might": 0.25,
+      "might": 0.22,
       "desc": "蓄力一回合後落雷 {hits} 下，每下扣對手氣血 {dot_pct}；對手在霧中或風沙中時，每下 {stun_pct} 定身。"
     }
   },
@@ -400,7 +400,7 @@
       "params": {
         "turns": 2
       },
-      "might": 0.25,
+      "might": 0.22,
       "desc": "對手亂神 {turns} 回合（招式被你看穿）；代價是自己失神 1 回合。"
     }
   },
@@ -426,7 +426,7 @@
         "turns": 3,
         "dot_pct": 0.04
       },
-      "might": 0.42,
+      "might": 0.33,
       "desc": "對手陷入風沙 {turns} 回合：每回合扣氣血 {dot_pct}。"
     }
   },
@@ -452,7 +452,7 @@
         "turns": 3,
         "miss_pct": 0.3
       },
-      "might": 0.42,
+      "might": 0.33,
       "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。"
     }
   },
@@ -526,7 +526,7 @@
         "dot_pct": 0.03,
         "stacks": 3
       },
-      "might": 0.41,
+      "might": 0.31,
       "desc": "對手血創 {turns} 回合：每回合扣氣血 {dot_pct}，可疊 {stacks} 層。"
     }
   },
@@ -549,7 +549,7 @@
       "params": {
         "per_pct": 0.05
       },
-      "might": 0.41,
+      "might": 0.31,
       "desc": "每帶一名部下，推力 +{per_pct}。"
     }
   },
@@ -578,7 +578,7 @@
         "dot_pct": 0.05,
         "faction_mult": 2
       },
-      "might": 0.375,
+      "might": 0.27,
       "desc": "蓄力一回合後放火，對手焚身 {turns} 回合：每回合扣氣血 {dot_pct}；對手是黃巾時 ×{faction_mult}。"
     }
   },
@@ -601,7 +601,7 @@
       "params": {
         "guard_pct": 0.5
       },
-      "might": 0.375,
+      "might": 0.27,
       "desc": "氣勢落後時，固守的推力 +{guard_pct}。"
     }
   },
@@ -624,7 +624,7 @@
       "kind": "surge",
       "rate": 0.4,
       "params": {},
-      "might": 0.175,
+      "might": 0.09,
       "desc": "追加一擊：這一回合連環。"
     }
   },
@@ -648,7 +648,7 @@
         "odd_pct": 0.15,
         "heal_pct": 0.06
       },
-      "might": 0.175,
+      "might": 0.09,
       "desc": "單數回合推力 +{odd_pct}，雙數回合回氣血 {heal_pct}。"
     }
   },
@@ -671,7 +671,7 @@
       "kind": "foresight",
       "rate": 0.35,
       "params": {},
-      "might": 0.03,
+      "might": 0,
       "desc": "看穿：下一回合一定出剋對手的那一招。"
     }
   },
@@ -696,7 +696,7 @@
       "params": {
         "per_ward_pct": 0.05
       },
-      "might": 0.03,
+      "might": 0,
       "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）；每擋下一次控制，推力 +{per_ward_pct}。"
     }
   },
@@ -722,7 +722,7 @@
         "t2_pct": 0.2,
         "t3_pct": 0.3
       },
-      "might": 0.41,
+      "might": 0.3,
       "desc": "第 1 回合連環；之後每回合照馬的階 {t1_pct}／{t2_pct}／{t3_pct} 連環。"
     }
   },
@@ -750,7 +750,7 @@
         "evil_step": 10,
         "evil_cap_pct": 0.15
       },
-      "might": 0.41,
+      "might": 0.3,
       "desc": "對手失神 {turns} 回合；惡名每 {evil_step} 點發動率 +{per_evil_pct}（最多 +{evil_cap_pct}）；代價是每次自扣氣血 {cost_pct}。"
     }
   },
@@ -775,7 +775,7 @@
       "params": {
         "mult": 2
       },
-      "might": 0.295,
+      "might": 0.23,
       "desc": "這一回合出奇襲，推力 ×{mult}；夜裡必定發動。"
     }
   },
@@ -799,7 +799,7 @@
         "chance_pct": 0.15,
         "strikes": 1
       },
-      "might": 0.295,
+      "might": 0.23,
       "desc": "每回合 {chance_pct} 黃巾援兵趕到，多推 {strikes} 擊。"
     }
   },
@@ -823,7 +823,7 @@
       "params": {
         "chance_pct": 0.3
       },
-      "might": 0.395,
+      "might": 0.3,
       "desc": "放手一搏失手時，{chance_pct} 神上使附身，改成成功（只在能放手一搏的仗）。"
     }
   },
@@ -847,7 +847,7 @@
         "stack_pct": 0.05,
         "stacks": 5
       },
-      "might": 0.395,
+      "might": 0.3,
       "desc": "每贏一回合疊一層「祭」：推力 +{stack_pct}；滿 {stacks} 層下一回合連環，然後清空。"
     }
   },
@@ -872,7 +872,7 @@
         "guard_pct": 0.3,
         "share_pct": 0.3
       },
-      "might": 0.325,
+      "might": 0.26,
       "desc": "固守的推力 +{guard_pct}，附帶借力：對手強攻你，他吃自己那一下的 {share_pct}。"
     }
   },
@@ -898,7 +898,7 @@
         "chance_pct": 0.5,
         "turf_pct": 0.8
       },
-      "might": 0.325,
+      "might": 0.26,
       "desc": "對手 {chance_pct} 卸勁（在自家陣營的地盤 {turf_pct}）。"
     }
   },
