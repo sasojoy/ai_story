@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
@@ -60,7 +60,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
     WorldState,
     new_game_state,
 )
@@ -8530,9 +8530,9 @@ class Game:
 
     def duel_gamble(
         self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
-        request: DuelTextRequest | None = None,
+        request: DuelTextRequest | None = None, crowd: str = "",
     ) -> list[str]:
-        """頭目戰放手一搏的 C 段：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合才用，
+        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合才用，
         對不上（這一回合已經出過招、換了一場）就丟掉重評。沒給分數（假人不寫自由文字；腳本、測試）在這裡用 _quick_client 評，
         評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
         checked = self._duel_text_check(text)
@@ -8540,7 +8540,7 @@ class Game:
             return self._log(checked)
         s, c = self.state, self.content
         if s.player.arena is not None:
-            return self._log(self._arena_gamble(checked, llm_rate, stories, request))
+            return self._log(self._arena_gamble(checked, llm_rate, stories, request, crowd))
         duel = s.player.duel
         if request is not None and (request.boss, request.round, request.text) != (duel.boss, duel.round, checked):
             llm_rate, stories = None, None
@@ -8745,10 +8745,11 @@ class Game:
             entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
                 p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
             entry.kit = team.self_side(s, self.content, self.world)
+            entry.crowd = arena_crowd.snapshot(s, self.content, self.world)  # 場邊事件看的底細（照更新這一刻）
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
-            kit=team.self_side(s, self.content, self.world), famed=famed,
+            kit=team.self_side(s, self.content, self.world), famed=famed, crowd=arena_crowd.snapshot(s, self.content, self.world),
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
@@ -8769,7 +8770,9 @@ class Game:
             id=s.world.arena_seq, foe_key=key, me=self._arena_side(), rounds=cfg.rounds,
             foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap),
             edge=c.config.duel.start,
+            crowd_me=arena_crowd.snapshot(s, c, self.world), crowd_foe=foe.crowd,  # 場邊事件看的底細（arena_crowd）
         )
+        p.arena_crowd_note = None
         arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
         p.arena = fight
         p.picking_arena = False
@@ -8786,7 +8789,7 @@ class Game:
         fight = self.state.player.arena
         lines = [
             f"**{arena.ARENA}・{fight.foe.name}的分身**（第 {fight.round + 1}／{fight.rounds} 回合）",
-            arena.OPENING.format(foe=fight.foe.name) if fight.round == 0 else fight.lines[-1],
+            arena.OPENING.format(foe=fight.foe.name) if fight.round == 0 else "\n\n".join(self._arena_last_round()),
             f"氣勢：{duel_rules.edge_words(fight.edge)}（{fight.edge:.0f}／100）　"
             f"你的氣血：{fight.me.hp:.0f}／{fight.me.hp_cap:.0f}　他：{fight.foe.hp:.0f}／{fight.foe.hp_cap:.0f}",
             *self._bout_lines(fight.bout),
@@ -8794,6 +8797,74 @@ class Game:
             arena.HOWTO,
         ]
         return "\n\n".join(lines)
+
+    def _arena_last_round(self) -> list[str]:
+        """上一回合那一行，後面跟著那一回合的場邊事件（有的話）。"""
+        lines = self.state.player.arena.lines
+        if len(lines) >= 2 and lines[-1].startswith(arena_crowd.PREFIX):
+            return lines[-2:]
+        return lines[-1:]
+
+    def _arena_crowd(self, label: str = "", move: str = "", his: str = "") -> str | None:
+        """這一回合有沒有場邊事件（tianxia/arena_crowd.py）：一場最多一件，擲中了套效果、記這一種今天落在誰身上，回那一行（〔場邊〕…）。
+        模型叫得到時（伺服器）記一張單子，伺服器在鎖外重寫那一句（Game.apply_arena_crowd）。亂數另開用途「場邊」，不碰 Game.rng。"""
+        s, c, p = self.state, self.content, self.state.player
+        fight = p.arena
+        if fight is None or not arena_crowd.on(c):
+            return None
+        cfg = c.config.arena.crowd
+        today = self._pill_day()
+        foe = s.world.arena.get(fight.foe_key)
+        rng = arena.rng_for(p.season_number, p.name, fight, "場邊")
+        happening = arena_crowd.roll(fight, s.world, p.name, cfg, today, p.arena_crowd_seen,
+                                     foe.crowd_seen if foe is not None else {}, rng, label)
+        if happening is None:
+            return None
+        applied = arena_crowd.apply(fight, happening, cfg)
+        if happening.side == "me":
+            p.arena_crowd_seen[happening.kind] = today
+        elif foe is not None:
+            foe.crowd_seen[happening.kind] = today
+            self._save_season()  # 守的人那一本帳在這一季的 WorldState
+        name, rival = arena_crowd.names(fight, p.name, happening.side)
+        text = arena_crowd.fixed_text(c, happening, name, rival, rng)
+        line = arena_crowd.line_of(text, applied)
+        p.arena_crowd_note = CrowdNote(
+            fight_id=fight.id, round=fight.round, kind=happening.kind, side=happening.side, name=name, rival=rival,
+            helper=happening.helper, title=happening.title, battle=happening.battle, move=move, his=his, fixed=line, text=text,
+        ) if self.client is not None else None
+        return line
+
+    def arena_crowd_request(self) -> CrowdNote | None:
+        """還等著模型重寫的那一句場邊事件（server 鎖外寫；A 段，只讀）。"""
+        return self.state.player.arena_crowd_note
+
+    def apply_arena_crowd(self, note: CrowdNote, text: str) -> bool:
+        """C 段：還是同一張單子才換。句子那一截換成模型寫的（括號的數字照舊），擂台這一場、收場卡、戰報、江湖紀錄裡的那一行都換；
+        寫不出來（空字串）就收掉單子、照固定句。換了是 True。"""
+        p = self.state.player
+        if p.arena_crowd_note is None or p.arena_crowd_note != note:
+            return False
+        p.arena_crowd_note = None
+        if not text:
+            return False
+        new = note.fixed.replace(note.text, text, 1)
+
+        def swap(lines: list[str]) -> None:
+            for i, line in enumerate(lines):
+                if line == note.fixed:
+                    lines[i] = new
+
+        if p.arena is not None and p.arena.id == note.fight_id:
+            swap(p.arena.lines)
+        if p.arena_last is not None and p.arena_last.id == note.fight_id:
+            swap(p.arena_last.lines)
+        for record in self.state.battles[-3:]:
+            if record.kind == "arena":
+                swap(record.rounds)
+        for entry in self.state.journal[-5:]:
+            swap(entry.lines)
+        return True
 
     def _arena_act(self, arg: str) -> list[str]:
         """擂台上的一招，或認輸。"""
@@ -8813,16 +8884,16 @@ class Game:
             f"第 {fight.round + 1} 回合：你{out.mine or '出不了手'}，他{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
             f"（氣勢 {out.delta:+d}，你氣血 {-out.mine_hp:+d}，他氣血 {-out.foe_hp:+d}）", out.lines,
         )
-        return self._arena_after(line)
+        return self._arena_after(line, self._arena_crowd(move=out.mine or "", his=out.his or ""))
 
     def _arena_gamble(
-        self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None,
+        self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None, crowd: str = "",
     ) -> list[str]:
         """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就在鎖內重評（同頭目戰）。"""
         s, c, p = self.state, self.content, self.state.player
         fight = p.arena
         if request is not None and (request.boss, request.round, request.text) != (f"arena:{fight.id}", fight.round, text):
-            rate, stories = None, None
+            rate, stories, crowd = None, None, ""
         if rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), arena.scene(fight), self._duel_side(), text, p.name,
@@ -8843,19 +8914,22 @@ class Game:
         if not story:
             story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
         line = tactics.round_line(f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
-        return self._arena_after(line)
+        return self._arena_after(line, self._arena_crowd(label=crowd, move=text))
 
-    def _arena_after(self, line: str) -> list[str]:
-        """出完一招（或放手一搏）之後：記這一回合，分出勝負就收場，否則擲分身下一回合的招。"""
+    def _arena_after(self, line: str, crowd: str | None = None) -> list[str]:
+        """出完一招（或放手一搏）之後：記這一回合（與這一回合的場邊事件），分出勝負就收場，否則擲分身下一回合的招。"""
         s, c, p = self.state, self.content, self.state.player
         fight = p.arena
         fight.lines.append(line)
+        if crowd:
+            fight.lines.append(crowd)
         fight.round += 1
         tier = arena.verdict(fight, c.config.duel)
         if tier is not None:
-            return self._arena_finish(tier, line)
+            msgs = self._arena_finish(tier, line)
+            return msgs[:1] + [crowd] + msgs[1:] if crowd else msgs
         arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), c.config.arena, c.config.duel)
-        return [line]
+        return [line, crowd] if crowd else [line]
 
     def _arena_finish(self, tier: str, line: str) -> list[str]:
         """收場：兩邊的積分與戰績、留給守的人一筆（他下次同步補戰報）、挑的人的戰報與一則江湖紀錄、天下大事（爆冷、連勝、最精彩的一搏）。

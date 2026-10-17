@@ -1844,6 +1844,8 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-arena .free-note { font-size: 11.5px; color: #c9b28a; margin: 4px 2px; }
 .shop-arena .ring-log { margin: 10px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; line-height: 1.55; color: #e8d6ad; }
 .shop-arena .ring-log li { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); }
+.shop-arena .ring-log li.crowd { background: rgba(214, 160, 60, 0.22); color: #f3d79a; border-left: 3px solid #d6a03c; }
+.shop-arena .ring-crowd { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(214, 160, 60, 0.2); border: 1px solid rgba(214, 160, 60, 0.55); color: #f6dfa8; font-size: 13px; line-height: 1.55; }
 /* 收場卡：同懸賞榜的紙，貼在畫面下緣 */
 .shop-arena .board-sheet { position: absolute; left: 12px; right: 12px; bottom: calc(56px + var(--bottom, 0px)); z-index: 2;
   max-height: calc(100% - 150px - var(--top, 0px) - var(--bottom, 0px)); overflow-y: auto; overscroll-behavior: contain; border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5); }
@@ -1851,6 +1853,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-arena .ring-result h4 { margin: 0; font: 600 16px var(--serif); }
 .shop-arena .ring-result .ring-log { margin: 0; color: #2a241d; }
 .shop-arena .ring-result .ring-log li { background: rgba(0, 0, 0, 0.05); }
+.shop-arena .ring-result .ring-log li.crowd { background: rgba(180, 120, 30, 0.14); color: #5a3d10; }
 .shop-arena .ring-result .reward { margin: 0; font-weight: 600; color: #8e2a22; }
 .shop-arena .ring-result .stamp { position: absolute; top: 8px; right: 10px; transform: rotate(10deg); padding: 2px 6px; border: 3px solid #b3261e; border-radius: 4px;
   color: #b3261e; font: 600 16px var(--serif); font-style: normal; }
@@ -2019,6 +2022,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
   :where(.shop-layer).shop-arena .ring-move small { font-size: 14.5px; }
   :where(.shop-layer).shop-arena .free-note { font-size: 15px; }
   :where(.shop-layer).shop-arena .ring-log { font-size: 15.5px; }
+  :where(.shop-layer).shop-arena .ring-crowd { font-size: 17px; }
   :where(.shop-layer).shop-arena .ring-result { font-size: 16px; }
   :where(.shop-layer).shop-arena .ring-result h4 { font: 600 21px var(--serif); }
   :where(.shop-layer).shop-arena .ring-result .stamp { font: 600 21px var(--serif); }
