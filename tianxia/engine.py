@@ -12,6 +12,7 @@ import hashlib
 import math
 import random
 from collections.abc import Callable, Iterable
+import dataclasses
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -210,6 +211,7 @@ class RaidSpoils:
     contrib: int
     goods: tuple[tuple[str, int], ...] = ()  # 設伏劫道：贏的搶走的素材（素材 id, 個數）；截殺沒有
     evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
+    stamina: int = 0  # 輸的人扣幾點體力（Config.raid／ambush 的 stamina_loss，Joy 2026-10-17）
 # 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
 # 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
 HEARD_TITLE = "聽聞"
@@ -969,6 +971,9 @@ class Game:
             regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快（體力平衡提案第〇節）
         regen *= treasures.amount(self.state, self.content, "stamina_regen")  # 承露（玉璽碎片設計 7.1）：跟新手期疊乘
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
+        if p.stamina_owed:  # 截殺、設伏打輸了欠的：補完回復才扣，離線那一段頂到上限也照扣得到
+            p.stamina = max(0.0, p.stamina - p.stamina_owed)
+            p.stamina_owed = 0
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
             rate *= 2
@@ -7977,6 +7982,8 @@ class Game:
         # 名聲 5.4：交差之前先判會不會交到官府通緝（打贏了、手上揭著他的官府通緝），把惡名少的那一點算進輸的那一邊，兩邊的戰報才寫得到
         official = winner is self and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
         spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
+        if spoils is not None:  # 輸的扣體力：發起的人是這一次動作、體力是現在的，當場扣；被截的那一方記欠帳、下次補算完回復才扣
+            spoils = dataclasses.replace(spoils, stamina=loser._take_stamina(cfg.stamina_loss, owed=loser is not self))
         self.touched.add(them.name)
         other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
@@ -8021,6 +8028,19 @@ class Game:
         if msgs and self._draft is None:
             self._write(bounties.BOARD, msgs)
         return msgs
+
+    def _take_stamina(self, n: int, *, owed: bool) -> int:
+        """截殺、設伏打輸了扣 n 點體力，回扣了幾點（寫戰報用）。owed：這一份存檔的體力不是現在的（不在場的那一方），
+        記進 stamina_owed，下次 _advance_player_local 補完回復才扣；不然當場扣到 0 為止。"""
+        p = self.state.player
+        if n <= 0:
+            return 0
+        if owed:
+            p.stamina_owed += n
+            return n
+        lost = min(n, math.floor(p.stamina))
+        p.stamina -= lost
+        return lost
 
     def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
         """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
@@ -8073,6 +8093,8 @@ class Game:
             hp_lost = spoils.hp
             if spoils.hp > 0:
                 record.changes.append(f"氣血 -{spoils.hp}")
+            if spoils.stamina > 0:
+                record.changes.append(f"體力 -{spoils.stamina}")
             if spoils.evil:  # 名聲 5.4
                 record.changes.append(bounties.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
             story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
@@ -8104,7 +8126,9 @@ class Game:
         elif ambush_rules.on(c) and ambush_rules.has_prey(s, c) and not roster.raid_newbie(s, c):
             for to in ambush_rules.roads(s, c):
                 label = ambush_rules.SET_LABEL.format(to=c.locations[to].name)
-                opts.append(self._cost_option(f"ambush:set:{to}", label, c.config.ambush.stamina))
+                opt = self._cost_option(f"ambush:set:{to}", label, c.config.ambush.stamina)
+                opt.confirm = ambush_rules.SET_ASK.format(stamina=c.config.ambush.stamina_loss)
+                opts.append(opt)
         side = self._side()
         if works.fort_spot(s, c, side):
             level, cfg = works.fort_now(s, c), c.config.fortify
@@ -8211,6 +8235,8 @@ class Game:
         else:
             winner = loser = None
         spoils = winner._ambush_spoils(loser) if winner is not None else None
+        if spoils is not None:  # 輸的扣體力：路過的人正在補算這一趟（體力回復已經算過），當場扣；伏兵的存檔是舊的，記欠帳
+            spoils = dataclasses.replace(spoils, stamina=loser._take_stamina(c.config.ambush.stamina_loss, owed=loser is owner))
         broke = loser is owner
         if broke:  # 伏兵被打退：埋伏散了（身上那一筆是這一處才清：下線的人晚補算時，伏兵可能已經另設了一處）
             post = owner.state.player.ambush
@@ -8292,6 +8318,8 @@ class Game:
             hp_lost = spoils.hp
             if spoils.hp > 0:
                 record.changes.append(f"氣血 -{spoils.hp}")
+            if spoils.stamina > 0:
+                record.changes.append(f"體力 -{spoils.stamina}")
             story = (ambush_rules.OWNER_LOST if as_owner else ambush_rules.PASSER_LOST).format(rival=rival, him=him)
         record.notes.append(story)
         annals.note(s, c, annals.FIGHT, story, 3 if won else 2)

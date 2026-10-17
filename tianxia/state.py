@@ -694,6 +694,8 @@ class PlayerState(BaseModel):
     duel_tally: dict[str, int] = Field(default_factory=dict)  # 「季號:頭目 id」→ 這一季遇上幾次（Config.duel.per_boss_season）
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
+    stamina_owed: int = 0  # 截殺、設伏打輸了欠的體力（Joy 2026-10-17）：不在場的那一方下次補算完體力回復之後才扣（_advance_player_local），
+    # 不然離線補回來的那一段先頂到上限，扣的就白扣了
     ambush: AmbushPost | None = None  # 正守著的埋伏（設伏劫道，ambush.py）；None＝沒有。守著的時候不能移動
 
 

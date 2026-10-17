@@ -22,7 +22,7 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
         return [social.CardButton(action=KIND, label="截殺", note=problem, enabled=False)]
     cost = game.content.config.raid.stamina
     name = other.state.player.name
-    confirm = f"真的要對{name}下手？輸了要丟銀兩、掉氣血。"
+    confirm = f"真的要對{name}下手？輸了要丟銀兩、掉氣血，再扣 {game.content.config.raid.stamina_loss} 點體力。"
     flee = game.raid_flee_odds(other)
     if flee > 0:  # 他的馬比你快（裝備四欄 5.10）：人就在眼前，看得到他騎什麼；幾成跟 raid() 擲的同一個數
         confirm += mounts.RAID_FLEE_ASK.format(odds=mounts.odds_text(flee), him=gender.pronoun(other.state))

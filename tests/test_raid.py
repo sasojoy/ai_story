@@ -371,3 +371,41 @@ def test_only_the_side_that_loses_a_raid_wears_its_armor(pair, monkeypatch, tier
     _armored(world)
     _raid(content, world, tier=tier, monkeypatch=monkeypatch)
     assert _load(world, "甲").player.armor.edge == raider_edge and _load(world, "乙").player.armor.edge == target_edge
+
+
+def test_the_raid_loser_loses_stamina_the_defender_pays_it_on_his_next_sync(pair, monkeypatch):
+    """Joy 2026-10-17：截殺輸的一方扣 stamina_loss 點體力。被截的人存檔裡的體力是舊的，記欠帳，下次補完回復才扣。"""
+    content, world = pair
+    loss = content.config.raid.stamina_loss
+    _raid(content, world, tier="大勝", monkeypatch=monkeypatch)
+    them = _load(world, "乙")
+    assert them.player.stamina == pytest.approx(100.0, abs=0.5) and them.player.stamina_owed == loss
+    assert f"體力 -{loss}" in them.battles[0].changes
+    assert _load(world, "甲").player.stamina_owed == 0
+    msgs, game = _do(content, world, "乙", lambda g: [])
+    assert game.state.player.stamina == pytest.approx(100.0 - loss, abs=0.5) and game.state.player.stamina_owed == 0
+
+
+def test_an_attacker_who_loses_pays_stamina_on_the_spot_down_to_zero(pair, monkeypatch):
+    content, world = pair
+    cfg = content.config.raid
+    state = _load(world, "甲")
+    state.player.stamina = cfg.stamina + 5  # 付完發起的體力只剩 5，扣到 0 為止
+    CharacterStore(world.db).save(state)
+    _raid(content, world, tier="落敗", monkeypatch=monkeypatch)
+    me = _load(world, "甲")
+    assert me.player.stamina == pytest.approx(0, abs=0.5) and me.player.stamina_owed == 0
+    assert "體力 -5" in me.battles[0].changes
+
+
+def test_a_draw_or_a_win_costs_no_extra_stamina(pair, monkeypatch):
+    content, world = pair
+    _raid(content, world, tier="僵持", monkeypatch=monkeypatch)
+    assert _load(world, "甲").player.stamina_owed == _load(world, "乙").player.stamina_owed == 0
+    assert _load(world, "甲").player.stamina == pytest.approx(100.0 - content.config.raid.stamina, abs=0.5)
+
+
+def test_the_raid_confirm_names_the_stamina_loss(pair):
+    content, world = pair
+    button = _raid_buttons(content, world, "甲", "乙")[0]
+    assert f"{content.config.raid.stamina_loss} 點體力" in button["confirm"]

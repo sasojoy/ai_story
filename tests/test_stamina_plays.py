@@ -266,3 +266,43 @@ def test_stockpile_button_only_for_the_two_armies_in_season_one(world):
     assert g.state.world.supply == {"guan": 1}
     ranger = _player(c, world, "散甲", None, "changshe")
     assert "works:stockpile" not in {o.id for o in ranger.options()}
+
+
+def test_the_ambush_loser_loses_stamina_both_ways(real, world):
+    """Joy 2026-10-17「截殺 設伏 是不是要扣到玩家體力才會有感」：輸的一方扣 stamina_loss。路過的人當場扣（正在補算這一趟），
+    伏兵記欠帳、下次補算完回復才扣（離線那一段頂到上限也照扣得到）。"""
+    loss = real.config.ambush.stamina_loss
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    _player(real, world, "官乙", "guan", "changshe")
+    _set(owner)
+    passer = _reload(world, real, "官乙")
+    before = passer.state.player.stamina
+    with _fight("大勝"):
+        passer.travel("huangjin_camp", "dash")
+    rec = passer.state.battles[-1]
+    assert f"體力 -{loss}" in rec.changes and passer.state.player.stamina_owed == 0
+    dash = before - passer.state.player.stamina - loss
+    assert dash > 0  # 疾行的體力另外照付
+    assert _reload(world, real, "黃甲").state.player.stamina_owed == 0  # 贏的不扣
+
+
+def test_a_beaten_ambusher_owes_the_stamina_until_his_next_sync(real, world):
+    loss = real.config.ambush.stamina_loss
+    owner2 = _player(real, world, "黃丙", "huang", "huangjin_camp")
+    _player(real, world, "官丁", "guan", "changshe")
+    _set(owner2)
+    walker = _reload(world, real, "官丁")
+    with _fight("落敗"):
+        walker.travel("huangjin_camp", "dash")
+    back = _reload(world, real, "黃丙")
+    assert back.state.player.stamina_owed == loss
+    assert f"體力 -{loss}" in back.state.battles[-1].changes
+    back.state.last_real = 0.0
+    back.sync(10 * 24 * HOUR)  # 離線很久：體力先回到上限，再扣
+    assert back.state.player.stamina == real.config.stamina_max - loss and back.state.player.stamina_owed == 0
+
+
+def test_the_ambush_button_warns_about_the_stamina_loss(real, world):
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    opt = {o.id: o for o in owner.options()}["ambush:set:changshe"]
+    assert f"{real.config.ambush.stamina_loss} 點體力" in opt.confirm
