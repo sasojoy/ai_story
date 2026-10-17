@@ -731,6 +731,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .gear .wrow .winfo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 6px; }
 .gear .wrow .wbtns { flex: none; display: flex; gap: 6px; }
 .gear .wrow .horse-thumb { flex: none; width: 56px; height: 42px; object-fit: contain; } /* 坐騎那一列的馬圖（有檔才畫） */
+@media (prefers-color-scheme: dark) { .gear .wrow .horse-thumb { background: #efe6d2; border-radius: 4px; padding: 2px; box-sizing: border-box; } } /* 墨馬墊宣紙 */
 /* FB-137：灰掉的「餵」「換上」的原因，單獨一行寫在那一列的說明底下（鈕上只留動詞） */
 .gear .wrow .winfo .rwhy { flex: 0 0 100%; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
 .gear .wrow .winfo .gear-tactic { flex: 0 0 100%; font-size: 12px; line-height: 1.4; color: var(--accent, var(--ink-2)); }
@@ -1711,7 +1712,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-market .horse.c3 { background: #cfc4b2; } /* 白蹄 */
 .shop-market .horse.c4 { background: repeating-linear-gradient(60deg, #6b4a2a 0 6px, #e8d6ad 6px 10px); } /* 花斑 */
 .shop-market .horse.c5 { background: #b58a4a; } /* 黃棕 */
-/* 馬的圖（web/horse-<鍵>.webp，有檔才畫；底是透明或宣紙色都放得下）：馬廄一格、點開的卡（修練頁坐騎那一列在 .gear .wrow 那裡） */
+/* 馬的圖（web/horse-<鍵>.webp，有檔才畫；Joy 的水墨畫，米白底已去成透明，淺色直接落在紙上；深色主題墊一塊宣紙，墨馬才看得見）：馬廄一格、點開的卡（修練頁坐騎那一列在 .gear .wrow 那裡） */
 .shop-market .horse-pic { display: block; width: 76px; height: 56px; margin: 2px auto; object-fit: contain; }
 .shop-market .horse-big { display: block; width: 100%; max-height: 190px; margin: 0 0 6px; object-fit: contain; }
 .shop-market .horse-card { margin: 8px 2px 0; padding: 8px 10px; display: grid; gap: 4px; border: 2px solid #6b4a2a; border-radius: 10px; background: var(--paper); color: var(--ink); font-size: 12px; }
@@ -1730,6 +1731,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 @media (prefers-color-scheme: dark) {
   .shop-layer.shop-market { background: linear-gradient(180deg, #4a3a26 0%, #3a2c1c 55%, #24190f 100%); color: #f2e5c6; }
   .shop-market .shop-back, .shop-market .shop-silver { color: #e8d6ad; }
+  .shop-market .horse-big { background: #efe6d2; border-radius: 6px; padding: 4px; box-sizing: border-box; }
 }
 /* 懸賞榜（第四節）：木紋底；手上那一排、告示（釘子、微微歪著）、已揭與交差的朱印、放大的紙 */
 .shop-layer.shop-board { background: repeating-linear-gradient(90deg, #6b4a2a 0 22px, #5e4024 22px 24px, #74512e 24px 46px); color: #f2e5c6; }
