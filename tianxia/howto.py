@@ -167,11 +167,22 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
     從開季算，都是季曆天；寫成現實時間（季曆天 ÷ cal_scale ÷ time_scale，季長照這一季蓋的章）。倍數是 1 時沒有這一行（空字串）。
     still 給了就補一句還在不在這段時間裡。"""
     cfg = content.config
+    tail = "" if still is None else ("（你還在新手期）" if still else "（你的新手期已經過了）")
+    if cfg.newbie_real_hours > 0:  # 新手期照現實時間（Joy 2026-10-17「新手期 48 小時」）：寫這段時間裡有什麼
+        perks = []
+        if cfg.newbie_stamina_multiplier > 1:
+            perks.append(f"體力回復 ×{cfg.newbie_stamina_multiplier:g}")
+        if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0:
+            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day} 顆")
+        if cfg.raid.enabled:
+            perks.append("別人截殺不了你")
+        if not perks:
+            return ""
+        return f"新手期：加入這一季後的 {cfg.newbie_real_hours:g} 個小時內，{'，'.join(perks)}{tail}。"
     if cfg.newbie_stamina_multiplier <= 1:
         return ""
     real = cfg.newbie_stamina_days * calendar.DAY / calendar.cal_scale(content, season) / cfg.time_scale
     since = "加入這一季後" if calendar.season_one_on(season, content) else "開季後"
-    tail = "" if still is None else ("（你還在新手期）" if still else "（你的新手期已經過了）")
     span = _span(real)
     gap = "" if span.startswith("約") else " "  # 「開季後的 3 天內」「加入這一季後的約 13 個小時內」
     return f"新手期：{since}的{gap}{span}內，體力回復 ×{cfg.newbie_stamina_multiplier:g}{tail}。"

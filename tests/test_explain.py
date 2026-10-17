@@ -481,13 +481,15 @@ def test_the_stamina_help_reads_the_config(game):
 
 def test_the_newbie_window_is_written_in_real_time_for_this_season(on, tmp_path):
     """新手期 18 個季曆天：週末設定（2.5 天的季）是現實約 13 個小時；14 天的季（beta）是 3 天（roster.newbie 的同一個比例）。
-    季長照這一季開季時蓋的章（同一個世界裡換了設定也一樣）。"""
+    季長照這一季開季時蓋的章（同一個世界裡換了設定也一樣）。這裡量舊規則（newbie_real_hours 0、體力 ×3）。"""
     from tianxia.sqlite_world import open_world
 
+    on.config.newbie_real_hours, on.config.newbie_stamina_multiplier = 0, 3
     game = Game.new(on, "乙", rng=random.Random(0))
     assert "新手期：加入這一季後的約 13 個小時內，體力回復 ×3（你還在新手期）。" in _help(game)
     plain = real_content()
     plain.config.auto_open_first_season = True
+    plain.config.newbie_real_hours, plain.config.newbie_stamina_multiplier = 0, 3
     beta = Game.new(plain, "甲", rng=random.Random(0), world=open_world(tmp_path / "beta.db"))
     assert "新手期：開季後的 3 天內，體力回復 ×3（你還在新手期）。" in _help(beta)
     beta.state.world.time = 4 * 86400  # 開季四天：過了
@@ -658,3 +660,9 @@ def test_the_full_stamina_note_shows_when_nearly_full(game):
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.95
     assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)  # 滿了另一句（FB-108，tests/test_fb108_full_stamina.py）
+
+
+def test_the_newbie_window_in_real_hours_says_what_it_gives(on):
+    """Joy 2026-10-17「新手期 48 小時」：照現實時間，寫這段時間裡有什麼（回體丹一天五顆、截殺不了你）。"""
+    game = Game.new(on, "乙", rng=random.Random(0))
+    assert "新手期：加入這一季後的 48 個小時內，回體丹一天能服 5 顆，別人截殺不了你（你還在新手期）。" in _help(game)
