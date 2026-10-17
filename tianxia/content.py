@@ -2300,10 +2300,14 @@ def validate(c: Content) -> None:
             )
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
-        special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
+        special = (step.explore_event or step.enemies
                    or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
                    or step.give_art or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
+        # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
+        screen = step.scene or step.line or step.reveal or step.glow or step.allow
+        need(not screen or t.location is not None and (i < t.prologue_steps or not step.season_one),
+             f"{where}：scene、line、reveal、glow、allow 只能寫在序章與初入江湖的步驟（第一季才有的步驟不行）")
         need(not step.paged or "\n\n" in step.text, f"{where}：paged 的話要有兩段以上（照空一行切頁）")
         # 要換掉的字只認這幾個（打錯了會原樣出現在畫面上）：話、旁白、收起來那一行是 {武學}；結果那一句（after）是 {意境}、{武學}、{心得}
         for field, allowed in (("text", {"武學"}), ("scene", {"武學"}), ("line", {"武學"}), ("after", {"意境", "武學", "心得"})):
@@ -2311,8 +2315,9 @@ def validate(c: Content) -> None:
             need(not unknown, f"{where}：{field} 裡有不認得的要換掉的字 {unknown}（只認 {sorted(allowed)}）")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
-        bad = [k for k in step.glow if k not in GLOW_KEYS]
-        need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵）")
+        # 初入江湖的步驟還可以讓選單上的一顆發光（寫它的 id，同 allow 認得的；prologue.onboard_glow）
+        bad = [k for k in step.glow if k not in GLOW_KEYS and (i < t.prologue_steps or not allow_known(k))]
+        need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵；初入江湖的步驟也可以是選單 id）")
         unknown = [entry for entry in step.allow if not allow_known(entry)]
         need(
             not unknown,

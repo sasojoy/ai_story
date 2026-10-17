@@ -1033,6 +1033,8 @@ def _main_view_body(game: Game) -> dict:
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
         # 序章（新手引導計畫一）：要亮的畫面元件、要發光的鈕、略過連結；不在序章是 None，網頁照平常畫
         "prologue": game.prologue_view(),
+        # 初入江湖（新手引導第四段）：出了草廬之後那幾步要亮的畫面元件、要發光的元件；不在初入江湖是 None
+        "onboard": game.onboard_view(),
         # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
         # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
         "push": HUB is not None,

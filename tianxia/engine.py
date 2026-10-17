@@ -315,6 +315,9 @@ class FreeTextOutcome(BaseModel):
     evil: bool = False  # 判成惡行而且成了（FB-223）：effect_text 是 rules.EVIL_DONE，潤色照惡行寫、寫成了換掉那一句
 
 
+ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
+SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖「進城裡的鋪子看看」認的幾間（act:<這些>）
+
 class Game:
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
@@ -401,6 +404,7 @@ class Game:
         else:
             # 第二季起建的角色，__init__ 的換季重來已經把新角色放進序章（體力也換成序章的）：這裡拉回起點、滿體力
             prologue_rules.finish(game.state, content, game.world, purse=False)
+            prologue_rules.skip_onboarding(game.state, content)  # 假人、機器人、腳本：初入江湖是給網頁上的真人看的
             if prologue_rules.has(content):
                 game.state.player.stamina = float(content.config.stamina_max)
         p = game.state.player
@@ -467,6 +471,7 @@ class Game:
         finally:
             self.client = client
         prologue_rules.finish(s, self.content, self.world, purse=True)
+        prologue_rules.skip_onboarding(s, self.content)  # 初入江湖（新手引導第四段）是給真人看的
         s.journal, s.log, s.battles, s.battle_card = [], [], [], None
         p.guide_done, p.guide_outro = [], False
 
@@ -569,8 +574,11 @@ class Game:
             if step < self.content.tutorial.prologue_steps and not old.player.bot:
                 prologue_rules.begin(fresh, self.content)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
             else:
-                # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬
-                fresh.player.tutorial_step = self.content.tutorial.prologue_steps
+                # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬；假人不走初入江湖
+                t = self.content.tutorial
+                fresh.player.tutorial_step = t.prologue_steps
+                if old.player.bot:
+                    prologue_rules.skip_onboarding(fresh, self.content)
         if enlist.done(old, self.content):
             fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
         # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
@@ -729,6 +737,9 @@ class Game:
         elif prologue_rules.has(c) and p.onboarding < ONBOARDING_VERSION:
             # 舊存檔：當作走過序章，舊的第一季兩步往後挪（新手引導設計 7.2）
             p.tutorial_step = prologue_rules.migrated_step(p, c)
+        if prologue_rules.has(c) and p.onboarding < ONBOARD_SEGMENT and p.tutorial_step >= c.tutorial.prologue_steps:
+            # 初入江湖（新手引導第四段）上線之前就走出草廬的人不回頭走：跳過它（沒有框、不寫話）
+            prologue_rules.skip_onboarding(s, c)
         if prologue_rules.has(c):
             p.onboarding = ONBOARDING_VERSION  # 內容沒有序章時步數還是舊編號，不蓋章（preflight F6）
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
@@ -1182,7 +1193,8 @@ class Game:
             opts.append(donate)
         if prologue_rules.instant_rest(s, c):  # 打坐 2026-10-12 拿掉了（企劃者）；只剩序章教體力那一步的調息，一下回滿
             opts.append(Option(id="act:rest", label=PROLOGUE_REST))
-        return prologue_rules.allowed(opts, s, c)  # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）
+        # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）；初入江湖時「此地還能做」只留教到的（新手引導第四段）
+        return prologue_rules.onboard_allowed(prologue_rules.allowed(opts, s, c), s, c)
 
     def _heal_option(self) -> Option | None:
         """醫館裡、有內傷時的「醫館療傷」（企劃者 2026-10-12；跟修練頁的療傷鈕同一個動作、同一個價錢）；
@@ -1893,6 +1905,8 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
             if kind == "act" and arg != "break" and not picked_only:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
+                if arg in SHOP_ACTS:  # 初入江湖「進城裡的鋪子看看」：進哪一間都算（新手引導第四段）
+                    msgs += self._guide(note_action(self.state, self.content, self.world, "shop"))
             if kind == "explore":  # 探索三選一的三種都算探索過
                 msgs += self._guide(note_action(self.state, self.content, self.world, "explore"))
             if kind == "call" and arg != "back":
@@ -2277,8 +2291,9 @@ class Game:
         return rewards
 
     def enlist_glow(self, option_ids: list[str]) -> list[str]:
-        """入伍段「出一次力」那一步，選單上能完成它的那幾顆（FB-093，enlist.glow）；網頁讓它們發光。"""
-        return enlist.glow(self.state, self.content, option_ids)
+        """入伍段「出一次力」那一步，選單上能完成它的那幾顆（FB-093，enlist.glow）；初入江湖這一步要按的（prologue.onboard_glow）；
+        網頁讓它們發光。"""
+        return enlist.glow(self.state, self.content, option_ids) + prologue_rules.onboard_glow(self.state, self.content, option_ids)
 
     def guide_box(self) -> dict | None:
         """行動列上方的對話框（引導重做設計 8.1、6.2）：引導還沒做完是目前這一步的話；剛走完、結語還沒按「知道了」是結語；
@@ -2316,6 +2331,8 @@ class Game:
             }
             if step.paged:  # 話太長的序章步驟：網頁照空一行切成幾頁（只有分頁的步驟才帶這個鍵）
                 box["paged"] = True
+            if prologue_rules.onboard_step(s, c) is not None:  # 初入江湖：老周的話不切成三行（同入伍段，要照著做的話整段看得到）
+                box["full"] = True
             return box
         if p.guide_outro and t.outro:
             return {
@@ -7309,7 +7326,7 @@ class Game:
         """修練頁的療傷鈕：只在醫館做得了（clinic.py；不在醫館回「這裡沒有醫館，最近的在…」，什麼都不動）。"""
         xinde = self._xinde()
         msgs = self._log(self._heal_msgs())
-        self._menxia_entry(msgs[0] if msgs else "療傷", xinde)
+        self._menxia_entry(msgs[0] if msgs else "療傷", xinde, guide=True, action="heal")  # 初入江湖「去醫館療傷」（新手引導第四段）
         return msgs
 
     @_not_while_preparing
@@ -9181,6 +9198,10 @@ class Game:
     def prologue_view(self) -> dict | None:
         """序章的畫面要亮什麼、發光什麼（prologue.view）；不在序章是 None。"""
         return prologue_rules.view(self.state, self.content)
+
+    def onboard_view(self) -> dict | None:
+        """初入江湖的畫面要亮什麼、發光什麼（prologue.onboard_view）；不在初入江湖是 None。"""
+        return prologue_rules.onboard_view(self.state, self.content)
 
     def prologue_recap(self) -> str:
         """設定頁的「重看序章」（設計 7.1）：序章的事件與師父的話照順序排成一頁，只能讀。沒有序章是空字串。

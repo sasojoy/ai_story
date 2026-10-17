@@ -9,7 +9,7 @@ import random
 from typing import TYPE_CHECKING
 
 from .martial_arts import MartialArt
-from .models import Content, GiveArt, TutorialStep
+from .models import GLOW_KEYS, Content, GiveArt, TutorialStep
 from .rules import apply_effect
 from .state import GameState, PlayerState
 from .world_state import WorldStateStore
@@ -132,6 +132,65 @@ def can_travel(state: GameState, content: Content) -> bool:
     """輿圖的安排前往：序章裡只有出師那一步（allow 有 move:）走得了。"""
     current = step(state, content)
     return current is None or any(prefix.startswith("move:") for prefix in current.allow)
+
+
+# ── 初入江湖（新手引導第四段，Joy 2026-10-17「不要讓玩家可以亂點，新玩家現在迷路機率太高」）──
+# 序章之後、不分季的那幾步（tutorial.json 接在出師後面）：走出草廬到了潁川，一步一步帶到醫館、探索三選一、城裡的鋪子、投靠與輿圖。
+# 走這幾步的時候畫面照 reveal 一樣一樣亮（還沒教到的分頁、卡片先藏著），「此地還能做」只留教到的（allow）；行動列那幾樣一直都在，
+# 不會被卡住。略過新手引導、假人、這一版之前就走出草廬的人不走（engine 讀檔時蓋走完）。
+
+ONBOARD_CORE = (  # 初入江湖時選單上一直留著的：行動列四格與探索三選一、求見、移動、序章外的挑戰本人（都不在「此地還能做」）
+    "act:explore", "explore:", "act:train", "act:socialize", "act:summons", "call:", "move:", "act:challenge:",
+)
+
+
+def onboard_step(state: GameState, content: Content) -> TutorialStep | None:
+    """初入江湖進行中的這一步：序章走完了（不在草廬）、引導還沒走完、這一步不是第一季才有的、沒有略過。其餘是 None。"""
+    t, p = content.tutorial, state.player
+    if t.location is None or p.guide_skipped or p.location == t.location or not t.prologue_steps <= p.tutorial_step < len(t.steps):
+        return None
+    current = t.steps[p.tutorial_step]
+    return None if current.season_one else current
+
+
+def _onboard_so_far(state: GameState, content: Content) -> list[TutorialStep]:
+    t = content.tutorial
+    return t.steps[t.prologue_steps: state.player.tutorial_step + 1]
+
+
+def skip_onboarding(state: GameState, content: Content) -> None:
+    """不走初入江湖的人（假人、整季機器人、腳本建的角色、這一版之前就走出草廬的人）：步數跳到初入江湖之後（第一季才有的步驟照舊在後面）。"""
+    t = content.tutorial
+    after = sum(1 for s in t.steps if not s.season_one)
+    if t.location is not None and t.prologue_steps <= state.player.tutorial_step < after:
+        state.player.tutorial_step = after
+
+
+def onboard_allowed(options: list[Option], state: GameState, content: Content) -> list[Option]:
+    """初入江湖時閒著的選單：行動列那幾樣（ONBOARD_CORE）照留，其餘（「此地還能做」那一串）只留教到這一步為止寫在 allow 的。"""
+    if onboard_step(state, content) is None:
+        return options
+    keep = ONBOARD_CORE + tuple(entry for s in _onboard_so_far(state, content) for entry in s.allow)
+    return [o for o in options if o.id.startswith(keep)]
+
+
+def onboard_view(state: GameState, content: Content) -> dict | None:
+    """初入江湖的畫面（網頁的 m.onboard，跟序章的 view 同一個形狀，不帶 skip）：reveal 是序章與初入江湖到這一步為止亮的，
+    glow 是這一步要發光的畫面元件（寫成選單 id 的那幾個走 onboard_glow）。不在初入江湖是 None（網頁照平常畫）。"""
+    current = onboard_step(state, content)
+    if current is None:
+        return None
+    t = content.tutorial
+    shown = {key for s in t.steps[: state.player.tutorial_step + 1] for key in s.reveal}
+    return {"reveal": sorted(shown), "glow": [k for k in current.glow if k in GLOW_KEYS]}
+
+
+def onboard_glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]:
+    """初入江湖這一步要發光的選單選項（glow 裡寫成選單 id 的，例 act:heal）：網頁讓它們發光，收在「此地還能做」裡的會攤開。"""
+    current = onboard_step(state, content)
+    if current is None:
+        return []
+    return [i for i in option_ids if i in current.glow and i not in GLOW_KEYS]
 
 
 # ── 序章裡安排好的結果（每一步的特別規則，TutorialStep 的欄位）：都只在序章裡有，不在序章回「不管」的值 ──

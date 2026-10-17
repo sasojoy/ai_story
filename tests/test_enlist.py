@@ -454,6 +454,7 @@ def test_the_recruiters_words_are_not_mistaken_for_a_checkmark_row(enlisting):
 
 def test_view_orders_only_counts_for_the_enlistment_step_that_asks_for_it(enlisting):
     game = _game(enlisting, at="changshe")
+    game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))  # 初入江湖也走完了：只看入伍段
     before = list(game.state.journal[0].guide)
     game.view_orders()  # 還沒投靠、入伍段還沒開始：什麼都不發生
     assert game.state.player.enlist_step is None and game.state.journal[0].guide == before
@@ -723,14 +724,14 @@ def test_a_fresh_character_walks_the_enlistment_and_is_never_marked_as_a_veteran
 
 
 def test_raising_the_version_does_not_convert_the_step_numbers_again(enlisting, world):
-    """版本章升到 3（有入伍段）之後，章是 2 的角色（序章那一版，步數已經是新編號）不能再被換算一次：prologue.migrated_step 認的是
+    """版本章升到 3（有入伍段）、4（初入江湖）之後，章是 2 的角色（序章那一版，步數已經是新編號）不能再被換算一次：prologue.migrated_step 認的是
     「序章那一版」（PROLOGUE_ONBOARDING，2），不是現在的版本。比 2 小的（舊的八步）照舊換算。"""
     from tianxia import prologue
 
     game, _ = _veteran(enlisting, world)
     p = game.state.player
     p.tutorial_step = 8
-    assert prologue.PROLOGUE_ONBOARDING == 2 and ONBOARDING_VERSION == 3
+    assert prologue.PROLOGUE_ONBOARDING == 2 and ONBOARDING_VERSION == 4
     assert prologue.migrated_step(p, enlisting) == 8  # 章 2：已經是新編號
     p.onboarding = 1
     assert prologue.migrated_step(p, enlisting) == enlisting.tutorial.prologue_steps + (8 - prologue.OLD_BASE_STEPS)

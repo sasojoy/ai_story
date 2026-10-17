@@ -880,9 +880,12 @@ class TutorialGoal(_Strict):
         "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
         "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
         "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
+        "heal", "shop",  # 初入江湖（新手引導第四段）：醫館療傷；進一間店（鐵匠鋪、懸賞榜、馬市、擂台）
     ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
+    # 初入江湖（新手引導第四段）：身上沒有內傷，或這一下就是療傷（銀兩不夠全治時治一部分也算，不卡住）
+    healthy: bool = False
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
     # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
     fused: bool = False
@@ -955,7 +958,9 @@ class TutorialStep(_Strict):
     line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
-    allow: list[str] = Field(default_factory=list)  # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）
+    # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
+    # 那裡不是只留這些，而是行動列那幾樣（prologue.ONBOARD_CORE）照留，「此地還能做」只多留教到這一步為止寫過的（prologue.onboard_allowed）
+    allow: list[str] = Field(default_factory=list)
     explore_event: str | None = None  # 在草廬探索時一定端出這則事件（四景四選一）
     explore_scene: str | None = None  # 在草廬探索時一定端出這段有所感（InsightScene，prologue 要是 true；跟 explore_event 二選一）
     enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）

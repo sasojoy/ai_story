@@ -175,8 +175,11 @@
   // shown(key)：這個元件亮了沒（reveal 有它、或 "all" 全亮）。glow 列的鈕加 .glow，新亮起來的加 .lit（見 applyGlow）。
   // prologueKey：亮起來的東西變了沒——變了就整頁重畫（分頁列、狀態列只在整頁重畫時才換，見 renderTop）
   const pro = () => (S.main && S.main.prologue) || null;
-  const shown = (key) => { const p = pro(); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
-  const prologueKey = () => { const p = pro(); return p ? p.reveal.join(",") : ""; };
+  // 初入江湖（新手引導第四段）：出了草廬之後那幾步也一樣一樣亮（m.onboard，同一個形狀）；草廬裡才有的規矩（略過序章、師父的框）照舊只看 pro()
+  const onb = () => (S.main && S.main.onboard) || null;
+  const gate = () => pro() || onb();
+  const shown = (key) => { const p = gate(); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
+  const prologueKey = () => { const p = gate(); return p ? p.reveal.join(",") : ""; };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
@@ -682,7 +685,7 @@
     // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
     // 光給摺疊的標題列（glowTarget）
     guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
-    const p = pro();
+    const p = gate();
     if (!p) {
       litBefore = null;
       litKeys = [];
@@ -712,7 +715,7 @@
     if (!head) return;
     const old = head.querySelector(".guide-below");
     if (old) old.remove();
-    const target = (pro() || guideGlow().length) && document.querySelector("#page .glow");
+    const target = (gate() || guideGlow().length) && document.querySelector("#page .glow");
     if (!target) return;
     const bar = document.querySelector(".tabs");
     const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
