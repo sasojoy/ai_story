@@ -2505,7 +2505,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
-    assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
+    assert "await busy(" in body and "btn.disabled = true" in body and 'lab.textContent = "爐火正旺…"' in body  # 寫在小太極底下那兩個字上（煉製頁太極爐合一，2026-10-17）
     assert "S.forgeResult = { html: esc(FORGE_WAIT) };" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」），寫在開爐旁邊
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
@@ -5726,7 +5726,7 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     answer = _js_function(js, "async function answer(")
     assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
     forge = _js_function(js, "async function forge(")
-    assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
+    assert 'watchQueue(lab, "爐火正旺…")' in forge and "finally { stop(); }" in forge
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
     say = _js_function(js, "async function sayLine(")
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
@@ -5815,7 +5815,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
     const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
-    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw();
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {};
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
