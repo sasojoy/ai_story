@@ -37,7 +37,7 @@ def _block(css: str, marker: str) -> str:
 
 def _rules(block: str) -> dict[str, str]:
     """區塊裡的每一條規則：selector → 大括號裡那一段（同一個 selector 只會寫一次）。"""
-    inner = block[len(DESKTOP):-1]
+    inner = re.sub(r"/\*.*?\*/", "", block[len(DESKTOP):-1], flags=re.S)  # 註解不是選擇器（FB-305 那一段前面有一段說明）
     return {sel.strip(): body.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", inner)}
 
 
@@ -60,7 +60,8 @@ def test_the_shop_draws_its_colors_only_in_the_game_column():
     """三間店的底色（爐火、土黃、木紋）照欄寬畫在中間、不重複；欄外是遊戲本來的頁面底色。深色主題的馬市那一條在前面，蓋不掉這一條。"""
     col = _column()
     rules = _rules(_block(_css(), "FB-225"))
-    bg = rules[".shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate"]  # 軍需帳（素材與經濟 B6）同一條
+    # 軍需帳（素材與經濟 B6）、擂台的紅布（FB-306）同一條
+    bg = rules[".shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena"]
     assert "background-color: var(--paper)" in bg and f"background-size: min(100%, {col}px) 100%" in bg
     assert "background-position: 50% 0" in bg and "background-repeat: no-repeat" in bg
 
@@ -93,11 +94,12 @@ def test_the_book_follows_the_same_column():
 
 
 def test_the_desktop_rules_stay_inside_the_shop_and_the_book():
-    """這一段只動店面與書：每一條都掛在 .shop-layer／.shop-board／.book- 底下，碰不到江湖頁；.shop-col 與捲軸溝只在桌機區塊裡寫。"""
+    """這一段只動店面與書：每一條都掛在 .shop-layer／.shop-board／.book- 底下（FB-305 的店面字級用 :where(.shop-layer) 掛、不加權重），
+    碰不到江湖頁；.shop-col 與捲軸溝只在桌機區塊裡寫。"""
     css = _css()
     block = _block(css, "FB-225")
     for selector in ",".join(_rules(block)).split(","):
-        assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-")), selector
+        assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-", ":where(.shop-layer)")), selector
     # 註解裡提到的不算；整頁的捲軸溝（FB-240）是另一段桌機區塊
     rest = re.sub(r"/\*.*?\*/", "", css.replace(block, "").replace(_block(css, "FB-240"), ""), flags=re.S)
     assert ".shop-col" not in rest and "scrollbar-gutter" not in rest
