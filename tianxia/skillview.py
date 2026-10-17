@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, skill_slots, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -350,7 +350,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": worn, "insight": insight_name,
             "card": art_card(
-                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare,
+                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, skill_slots.apply(state, content, art)), compare,
                 gen_word=gen_word(art, content, world),
             ),
             "gen": gen_word(art, content, world),  # 境界（depth.py 的第幾代）：第零代（基礎、內容寫的）是空字串
@@ -392,9 +392,16 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
         if worn is not None:
             diff = round(power_at(art, 1) - power_at(worn, 1), 1)
     names = []
+    art = skill_slots.apply(state, content, art)  # 技能照自己那一品亮了的格子（武學技能分檔）
     if content.traits.general:
         mine = traits.traits_of(art)
-        names = [{"name": traits.general(content, a).name, "layers": mine.count(a)} for a in dict.fromkeys(mine)]
+        names = [{"name": traits.general(content, a).name, "layers": mine.count(a), "tier": skill_slots.TIERS["low"]}
+                 for a in dict.fromkeys(mine)]
+        names += [{"name": sp.name, "layers": 1, "tier": skill_slots.TIERS["mid"]}
+                  for sp in (traits.special(content, sid) for sid in art.extra_specials) if sp is not None]
+        top = skill_slots.high(content, art.high)
+        if top is not None:
+            names.append({"name": top.name, "layers": 1, "tier": skill_slots.TIERS["high"]})
     special = traits.special(content, art.special)
     ult = traits.ultimate_of(content, art)
     sig = signature.of(content, art.id)
@@ -405,6 +412,7 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
         "special": special.name if special is not None else None,
         "ultimate": ult.name if ult is not None else None,
         "tactic": sig.name if sig is not None else None,
+        "dormant": traits.dormant_names(content, art),  # 還沒亮的技能（修練升品才亮）
     }
 
 
@@ -684,7 +692,7 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
     return art_card(
-        art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, art),
+        art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, skill_slots.apply(state, content, art)),
         gen_word=gen_word(art, content, world),
     )
 

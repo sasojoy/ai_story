@@ -61,6 +61,8 @@ def main() -> None:
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
+    parser.add_argument("--slots", choices=["off", "rolled", "best"], default="rolled",
+                        help="--catch-up 的滿配照武學技能分檔（skill_slots）：off＝舊規則三格全亮；rolled＝照格數與高階機率擲；best＝兩門都帶高階")
     parser.add_argument("--depth", nargs="+", metavar="JSON",
                         help="合成深度：十八位本命對第三代滿配（measure_depth.py --dump 寫的第三代武學，一份一種季）")
     parser.add_argument("--layers", type=int, nargs="+", help="--depth 試幾種一門最多幾層（從第三代的功效清單前面截，只量）")
@@ -79,7 +81,7 @@ def main() -> None:
         kits(content, args.runs)
         return
     if args.catch_up:
-        catch_up(content, args.runs)
+        catch_up(content, args.runs, args.slots if content.config.skill_slots.enabled else "off")
         return
     if args.depth:
         for cap in args.layers or [content.config.fusion_depth.max_layers]:
@@ -313,14 +315,58 @@ def full_kit(content, seed, special_share=0.5):
     return out + [gear_holder(arm.tactic)]
 
 
-def catch_up(content, runs):
+def slot_kit(content, seed, mode, special_share=0.5):
+    """滿配照武學技能分檔（skill_slots）：同 full_kit 的兩門絕學（各三格來路、一半帶特別功效），照絕學的格數亮、空格擲中階低階、
+    高階照合成擲到的品質（照 Config.fuse_quality_odds 的機率挑）一路擲到絕學；best 是兩門都帶高階（最強的情形）。"""
+    from tianxia import skill_slots, traits
+    from tianxia.martial_arts import MartialArt
+    rng = random.Random(f"full|{seed}")
+    mult = traits.multiplier(content, "絕學")
+    lo = traits.Loadout()
+    ults = []
+    odds = content.config.fuse_quality_odds
+    for i in range(2):
+        cells = [rng.choice(ATTRS) for _ in range(3)]
+        sp = rng.choice([t for t in content.traits.special if t.pool]).id if rng.random() < special_share else None
+        art = MartialArt(id=f"kit{seed}-{i}", name=f"絕學{i + 1}", kind="武學" if i == 0 else "內功", quality="絕學",
+                         attribute=cells[0], base_power=1, top_power=1, origin="fused", traits=cells, special=sp)
+        rolled = rng.choices(list(odds), weights=list(odds.values()))[0]
+        lay = skill_slots.layout(content, f"kit{seed}", art, "絕學", rolled)
+        lit = {a for k, a in lay.lit if k == "g"}
+        for a in dict.fromkeys(cells):
+            if a in lit and a not in lay.extra_traits:
+                hook = traits.general(content, a).hook
+                lo.layers[hook] = lo.layers.get(hook, 0.0) + cells.count(a) * mult
+        for a in lay.extra_traits:
+            hook = traits.general(content, a).hook
+            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
+        for kind, sid in lay.lit:
+            if kind == "s":
+                t = traits.special(content, sid)
+                lo.specials.setdefault(t.hook, t)
+        top_high = next((sid for k, sid in lay.lit if k == "h"), None)
+        if mode == "best" and top_high is None:
+            top_high = next((h.id for h in content.traits.high if h.attribute == art.attribute), None)
+        high = skill_slots.high(content, top_high)
+        if high is not None and all(t.name != high.tactic.name for t in lo.highs):
+            lo.highs.append(high.tactic)
+        top = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
+        ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+        ults.append(tactics.bonded(ult, top.ultimate_bond) if i == 0 else ult)
+    arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
+    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
+    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    return out + [gear_holder(arm.tactic)]
+
+
+def catch_up(content, runs, slots="off"):
     """玩家武學追上本命（定案的分寸）：十八位本命（有本命兵器的加上兵器與人器合一）逐一對滿配（full_kit，SELF_KITS 套），
     本命的贏面要落在 52～60%、玩家不能反超。"""
     share = ring_share(content, runs)
     arms = {a.character: a for a in content.gear.signature_arms}
-    fulls = [full_kit(content, k) for k in range(SELF_KITS)]
+    fulls = [full_kit(content, k) if slots == "off" else slot_kit(content, k, slots) for k in range(SELF_KITS)]
     selfs = [self_kit(content, k) for k in range(SELF_KITS)]
-    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套）")
+    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套，技能分檔 {slots}）")
     print(f"  滿配對自組上品：{sum(share(a, b) for a, b in zip(fulls, selfs)) / SELF_KITS:.1%}")
     rows = []
     for fid in figures_with(content):

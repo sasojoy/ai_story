@@ -20,7 +20,7 @@ from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
-    shopview, signature, signature_arms, skillview, smithing,
+    shopview, signature, signature_arms, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -9139,7 +9139,7 @@ class Game:
             return "（找不到這門功法。）"
         return skillview.art_card(
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
-            trait_line=traits.card_line(self.content, art),
+            trait_line=traits.card_line(self.content, skill_slots.apply(self.state, self.content, art)),
             compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
             gen_word=skillview.gen_word(art, self.content, self.world),
         )

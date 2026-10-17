@@ -690,6 +690,7 @@ def check_signature_arts(c: Content, need) -> None:
     own = [(f"特別功效 {t.id}", t.tactic) for t in c.traits.special if t.tactic is not None]
     own += [(f"神器配方 {r.id}", r.tactic) for r in c.forge_secrets.values() if r.tactic is not None]
     own += [(f"名將本命兵器 {a.character}", a.tactic) for a in c.gear.signature_arms if a.tactic is not None]
+    own += [(f"高階技能 {h.id}", h.tactic) for h in c.traits.high]  # 武學技能分檔
     for where, tactic in own:
         first = seen.setdefault(tactic.name, where)
         need(first == where or (where.startswith("特別功效") and tactic.name in trait_names and first.startswith("特別功效")),
@@ -744,6 +745,13 @@ def check_traits(c: Content, need) -> None:
         for t in book.special:
             first = by_hook.setdefault(t.hook, t.id)
             need(first == t.id, f"content/traits.json：特別功效 {first} 與 {t.id} 掛在同一個掛點 {t.hook}，身上只會留下一個")
+    if book.high:  # 武學技能分檔：高階技能一個屬性最多一個（照主屬性給），id 不重複，名字跟功效、戰法名一樣（演出句照它找）
+        attrs = [h.attribute for h in book.high]
+        need(len(attrs) == len(set(attrs)), "content/traits.json：高階技能一個屬性最多一個")
+        need(len({h.id for h in book.high}) == len(book.high), "content/traits.json：高階技能的 id 不能重複")
+        for h in book.high:
+            need(h.tactic.name == h.name, f"content/traits.json：高階技能 {h.id} 的戰法名字要跟技能名字一樣")
+            need(h.name not in {t.name for t in book.general} | {t.name for t in book.special}, f"content/traits.json：高階技能 {h.id} 跟功效同名")
     owners: dict[str, list[str]] = {}
     for skill in c.skills.values():
         need(skill.kind == "武學" or skill.weapon is None, f"內功 {skill.id} 不能有兵器種類（兵器設計 2.3）")

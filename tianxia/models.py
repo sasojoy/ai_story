@@ -495,6 +495,8 @@ TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找
     "quake", "first_shot", "zhaoyi", "flawless",
     # 玩家武學追上本命（定案 /mnt/project-files/plan/玩家武學追上本命定案.md）：自己合成的武學練成絕學時的絕招（一般功效的 ultimate）
     "swift", "shatter", "streak", "leech", "haze", "last_rally",
+    # 武學技能分檔（Joy 2026-10-17）：合成擲得到的高階技能（content/traits.json 的 high）
+    "flash", "bulwark", "scorch", "elude", "golden",
 )
 
 
@@ -605,9 +607,21 @@ class SpecialTrait(_Strict):
     tactic: TacticDef | None = None  # 第三批：回合裡的戰法（強度固定，不分品質）
 
 
+class HighTrait(_Strict):
+    """高階技能（武學技能分檔，Joy 2026-10-17；草案 https://claude.ai/artifact/3rLJgnmA7m8BiEsXGcBDUX）：一個屬性一個，照武學的主屬性給；
+    合成出來的武學照自己那一份的品質擲（skill_slots.py），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
+
+    id: str
+    attribute: Attribute
+    name: str
+    desc: str
+    tactic: TacticDef
+
+
 class TraitBook(_Strict):
     general: list[GeneralTrait] = Field(default_factory=list)
     special: list[SpecialTrait] = Field(default_factory=list)
+    high: list[HighTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -2089,6 +2103,22 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class SkillSlotTuning(_Strict):
+    """武學技能分檔（Joy 2026-10-17「下品 1-2 個、極低機率出現高階技能；中品 2-3、低機率；上品 3-4、中機率」；tianxia/skill_slots.py）：
+    自己合成的武學，自己那一份照品質亮幾格技能（slots：品質 → [少的格數, 多的格數, 擲到多的機率]；絕學照上品）。
+    格子照順序填：層數最多的一般功效、首創走向的特別功效、其他來路的一般功效（層數多的先）；還有空格照 extra_mid 擲中階（特別功效）、
+    其餘擲低階（一個沒有的一般功效，一層）。高階技能照 high_rate 擲（每升一品照新品質再擲一次，中了就留著），佔最後一格。
+    來路的功效比格子多時，多的「未開」，修練升品才亮。擲骰照「技能|名號|功法 id|…」的雜湊，不碰亂數、不存檔：同一個人同一門同一品永遠一樣。
+    enabled 關著（測試內容）是舊規則：來路的功效全亮、沒有擲出來的技能。"""
+
+    enabled: bool = False
+    slots: dict[str, list[float]] = Field(default_factory=lambda: {
+        "下品": [1, 2, 0.3], "中品": [2, 3, 0.4], "上品": [3, 4, 0.4], "絕學": [3, 4, 0.4],
+    })
+    high_rate: dict[str, float] = Field(default_factory=lambda: {"下品": 0.02, "中品": 0.08, "上品": 0.20, "絕學": 0.0})
+    extra_mid: float = Field(default=0.3, ge=0, le=1)
+
+
 class FusionDepthTuning(_Strict):
     """合成的深度（合成與意境改法定案，企劃者 2026-10-16「合出來的意境不知道好壞，然後合成也一直無限往下沒有邏輯」；tianxia/depth.py）：
     - 意境分重：悟來的一重，合一次二重（兩個來源取高的那一重再加一），最多 max_rank 重；到頂的不能再合。
@@ -2398,6 +2428,7 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    skill_slots: SkillSlotTuning = Field(default_factory=SkillSlotTuning)  # 武學技能分檔：品質決定亮幾個技能、擲不擲得到高階（見 SkillSlotTuning）
     fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）

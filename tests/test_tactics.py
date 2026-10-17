@@ -168,6 +168,7 @@ def _own_tactics(content):
     out += [r.tactic for r in content.forge_secrets.values() if r.tactic is not None]
     out += [a.tactic for a in content.gear.signature_arms if a.tactic is not None]
     out += [t.ultimate for t in content.traits.general if t.ultimate is not None]  # 絕學立招（玩家武學追上本命）
+    out += [h.tactic for h in content.traits.high]  # 武學技能分檔的高階技能
     return out
 
 
@@ -175,7 +176,7 @@ def test_every_trait_and_gear_tactic_runs_and_together_they_cover_every_kind():
     content = real_content()
     t = content.config.tactics
     own = _own_tactics(content)
-    assert len(own) == 7 + 7 + 9 + 7 + 8  # 厚沒有回合裡的戰法；絕招八個
+    assert len(own) == 7 + 7 + 9 + 7 + 8 + 8  # 厚沒有回合裡的戰法；絕招八個；高階技能八個
     kinds = {content.skills[s].tactic.kind for s, sk in content.skills.items() if sk.tactic is not None}
     assert kinds | {x.kind for x in own} == set(tactics.KINDS)
     for tactic in own:
