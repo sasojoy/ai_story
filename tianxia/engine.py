@@ -346,6 +346,7 @@ class Game:
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
+        self.forged_thing: tuple[str, str] | None = None  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
         # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -7128,6 +7129,7 @@ class Game:
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
         三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         self.forged = False
+        self.forged_thing = None
         refusal = prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
@@ -7152,10 +7154,14 @@ class Game:
         elif not art_id and not other_art and len(insight_ids) == 2:
             insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
+            if insight is not None:
+                self.forged_thing = ("ins", insight.id)
         else:
             return self._log(["放一門武學和一個意境、或放兩門武學（合成），或放兩個意境（合併）。"])
         out = self._log(msgs)
         self.forged = tag is not None
+        if tag is not None and self.forged_thing is None:
+            self.forged_thing = ("art", art.id)
         if tag is not None:
             self._save_season()  # 首創秘方會記一則傳聞（fusion._secret_lines）；傳聞在共用賽季裡，要存回去
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣

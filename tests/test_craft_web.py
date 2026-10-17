@@ -171,3 +171,57 @@ def test_the_next_season_question_says_the_forge_secrets_change():
     js = (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
     question = js.split("next_season: [", 1)[1].split('"確定開啟下一季"', 1)[0]
     assert "鐵匠鋪的隱藏鑄法換一批、鑄譜與神器重來（神器譜留著）" in question
+
+
+def test_the_engine_says_what_it_forged_and_the_page_finds_it_in_the_lists(made):
+    """開爐成了，煉製頁在結果底下畫合出來的那一樣（Joy 2026-10-17）：Game.forged_thing 是 ("art"／"ins", id)，
+    id 在 menxia_view 的 owned_arts／insights 裡找得到；被拒絕是 None。"""
+    game, art = made
+    game.forge("basic_fist", ["huo"], proposed=("烈焰拳", "一句話說明。"))
+    kind, art_id = game.forged_thing
+    assert kind == "art" and any(r["id"] == art_id for r in server.menxia_view(game)["owned_arts"])
+    game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
+    kind, ins_id = game.forged_thing
+    assert kind == "ins" and any(r["id"] == ins_id for r in server.menxia_view(game)["insights"])
+    game.forge("basic_fist", ["feng"], proposed=("旋風腿", ""))  # 已經有了：被拒絕
+    assert game.forged is False and game.forged_thing is None
+
+
+def test_a_new_art_shows_its_card_under_the_result_with_power_and_how_it_compares(made):
+    game, art = made
+    game.forge("basic_fist", ["huo"], proposed=("烈焰拳", "一句話說明。"))
+    menxia = server.menxia_view(game)
+    row = next(r for r in menxia["owned_arts"] if r["id"] == game.forged_thing[1])
+    row["judge"]["traits"] = [{"name": "剛猛", "layers": 2, "tier": 3}]  # 檔次由平衡那邊接上：帶了就寫
+    row["judge"]["worn_diff"] = -3.5
+    html = run(server.main_view(game), "return H.pageCraft();", menxia=menxia,
+               S={"tab": "craft", "forgeSel": [], "forgeResult": {"html": "<p>煉成了。</p>"}, "forgeMade": {"type": "art", "id": row["id"]}})
+    card = html.split('class="made-card"', 1)[1]
+    assert html.index('id="forge"') < html.index('class="made-card"') < html.index("煉成了。")  # 卡在結果那段話前面
+    assert "【烈焰拳】" in card and f"威力<b>{row['judge']['power']:g}</b>" in card and "比身上那門弱 −3.5" in card
+    assert "<em>精</em>剛猛<small>2 層</small>" in card and "整張功法卡" in card
+    assert ('data-act="switch"' in card) is (not row["worn"])
+
+
+def test_a_merged_insight_shows_its_card_too(made):
+    game, art = made
+    game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
+    html = run(server.main_view(game), "return H.pageCraft();", menxia=server.menxia_view(game),
+               S={"tab": "craft", "forgeSel": [], "forgeResult": {"html": "<p>合成了。</p>"}, "forgeMade": {"type": "ins", "id": game.forged_thing[1]}})
+    assert 'class="made-card"' in html and "「風火意」" in html.split('class="made-card"', 1)[1]
+
+
+def test_the_pot_bar_holds_both_slots_and_the_forge_button_and_flashes_what_was_just_put_in(made):
+    """爐子兩格與開爐鈕一直看得到（Joy 2026-10-17）：固定列寫兩格放了什麼（點了拿出來）、開爐鈕；剛放進去的那一格閃一下；
+    說明那一行有 ⚠ 時固定列底下也寫一行。"""
+    game, art = made
+    out = run(server.main_view(game), """
+      H.S.forgeSel = [{ type: "ins", id: "huo" }];
+      H.pick("art", "basic_fist");
+      return { html: H.pageCraft(), drawn: T.els.page.innerHTML };
+    """, S={"tab": "craft", "forgeSel": [], "forgeLine": "<p>合成 …</p><p>⚠ 心得不夠。</p>"}, menxia=server.menxia_view(game),
+        responses={"/api/forge_line": {"line": "", "picks": None}})
+    bar = out["html"].split('class="kiln-bar"', 1)[1].split('class="label"', 1)[0]
+    assert bar.count('data-act="unslot"') == 2 and 'id="forge"' in bar and "<b>粗淺拳腳</b>" in bar and "<b>火</b>" in bar
+    assert "⚠ 心得不夠。" in bar
+    assert 'kiln-slot full r1 flash" data-act="unslot" data-i="0"' in out["drawn"]  # 武學放左邊那一格，放進去那一下閃
