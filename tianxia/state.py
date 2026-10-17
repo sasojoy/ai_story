@@ -285,6 +285,40 @@ class DuelState(BaseModel):
     bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；你沒有本命戰法是 None
 
 
+class CrowdSide(BaseModel):
+    """擂台場邊事件（tianxia/arena_crowd.py）看的那一邊的底細：挑的人開打那一刻照存檔抄，守的人照報名、更新分身那一刻抄
+    （ArenaEntry.crowd）。只抄名字與段數，不抄數值；舊的分身沒有，就沒有他那一邊的場邊事件。"""
+
+    patron: str = ""  # 情誼最深、到 patron_affinity 的人物 id（台下暗助）
+    patron_name: str = ""
+    mate: str = ""  # 帶在身邊的第一位同伴的名字（台下遞兵器）
+    fame_tier: int = 0  # 名望第幾段（renown.fame_tier）
+    fame_title: str = ""
+    virtue_path: str = ""  # 俠／寇
+    virtue_tier: int = 0
+    virtue_title: str = ""
+    veteran: str = ""  # 最近打贏的那一場決戰的名字（台下有一起打過的弟兄）
+    sex: str = "男"
+
+
+class CrowdNote(BaseModel):
+    """一句還等著模型重寫的場邊事件（PlayerState.arena_crowd_note；server 鎖外寫、Game.apply_arena_crowd 重驗同一場同一句才換）。"""
+
+    fight_id: int
+    round: int
+    kind: str
+    side: str  # me／foe：得利或吃虧的是哪一邊
+    name: str  # 那一邊的名號
+    rival: str
+    helper: str = ""  # 暗助的武將、遞兵器的同伴
+    title: str = ""
+    battle: str = ""
+    move: str = ""  # 這一回合挑的人出的招（放手一搏寫那一句）
+    his: str = ""
+    fixed: str  # 寫進 fight.lines 的那一整行（換的時候照它認）
+    text: str  # fixed 裡句子那一截（不含〔場邊〕與括號的數字）
+
+
 class ArenaSide(BaseModel):
     """擂台一場裡的一邊（tianxia/arena.py）：開打時快照的威力、三招的份量、職位與氣血池。挑的人是此刻的身手，守的人是他報名時留下的分身。
     池子從滿的開始，打完不扣回角色。"""
@@ -317,6 +351,9 @@ class ArenaFight(BaseModel):
     best_won: bool = False
     best_set: bool = False
     bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；兩邊都沒有是 None
+    crowd_me: CrowdSide | None = None  # 場邊事件看的底細（tianxia/arena_crowd.py）：挑的人開打那一刻、守的人照 ArenaEntry.crowd
+    crowd_foe: CrowdSide | None = None
+    crowd_done: bool = False  # 這一場已經有過一件場邊事件（一場最多一件）
 
 
 class ArenaResult(BaseModel):
@@ -364,6 +401,8 @@ class ArenaEntry(BaseModel):
     place: int = 0  # 季末的名次（1～3）；0＝沒進前三
     prized: bool = False  # 季末的獎勵補過了沒
     famed: bool = False  # 名聲 4.7：天下聞名（報名、更新分身、每次同步照此刻的名望段重寫）
+    crowd: CrowdSide | None = None  # 報名、更新分身那一刻的底細（擂台場邊事件，arena_crowd.snapshot）；舊的分身沒有
+    crowd_seen: dict[str, int] = Field(default_factory=dict)  # 場邊事件的種類 → 最後一次落在他身上是哪一天（同一種一天一次）
 
     @property
     def bouts(self) -> int:
@@ -650,6 +689,8 @@ class PlayerState(BaseModel):
     arena_last: ArenaResult | None = None  # 剛打完的那一場（擂台那一頁的收場卡）；再挑一場、離開擂台就清掉
     arena_day: int = 0  # 擂台挑擂次數記在哪一天（同 pill_day：Config.pill_day_utc_offset_hours 的 00:00 換日）
     arena_today: int = 0  # 那一天挑了幾次（ArenaTuning.per_day）
+    arena_crowd_seen: dict[str, int] = Field(default_factory=dict)  # 擂台場邊事件的種類 → 最後一次落在自己身上是哪一天（同一種一天一次）
+    arena_crowd_note: CrowdNote | None = None  # 還等著模型重寫的那一句場邊事件（server 背景寫）
     duel_tally: dict[str, int] = Field(default_factory=dict)  # 「季號:頭目 id」→ 這一季遇上幾次（Config.duel.per_boss_season）
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有

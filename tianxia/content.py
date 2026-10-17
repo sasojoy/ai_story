@@ -114,6 +114,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
@@ -569,6 +570,26 @@ def check_front_lines(c: Content, need) -> None:
     for key, pool in lines.geju.items():
         need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
         check_pool(f"front_lines.geju.{key}", pool)
+
+
+def check_arena_crowd(c: Content, need) -> None:
+    """擂台場邊事件的固定句（content/arena_crowd.json）：只能是認得的種類，每一句照 arena_crowd.FIELDS 填得進去、填完不能有阿拉伯數字
+    （數字只能是引擎寫在括號裡的）；擂台與場邊事件開著時每一種至少一句。"""
+    from . import arena_crowd  # noqa: PLC0415
+
+    for kind, lines in c.arena_crowd.items():
+        need(kind in arena_crowd.KINDS, f"arena_crowd：不認得的種類 {kind}")
+        need(isinstance(lines, list) and bool(lines), f"arena_crowd.{kind}：要寫成一串句子")
+        for text in lines if isinstance(lines, list) else []:
+            try:
+                filled = str(text).format(**arena_crowd.SAMPLE)
+            except (KeyError, IndexError, ValueError) as e:
+                need(False, f"arena_crowd.{kind}：「{text}」填不進去（{e}）")
+                continue
+            need(bool(filled.strip()) and not any(ch.isdigit() for ch in filled), f"arena_crowd.{kind}：「{text}」不能空、不能有數字")
+    if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
+        for kind in arena_crowd.KINDS:
+            need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -1886,6 +1907,7 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
+    check_arena_crowd(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。

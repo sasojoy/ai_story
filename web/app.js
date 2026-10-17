@@ -3157,13 +3157,20 @@
   }
 
   // 打到一半：兩邊的氣血、中間一條氣勢（越往右越是你佔上風）、他的架勢、三招、放手一搏、這一場打過的回合
+  // 擂台的場邊事件（tianxia/arena_crowd.py）：那一行以〔場邊〕開頭，另一種底色；剛發生的那一回合在雙方氣血底下多放一行
+  const CROWD_MARK = "〔場邊〕";
+  function ringLine(l) { return `<li${l.startsWith(CROWD_MARK) ? ' class="crowd"' : ""}>${esc(l)}</li>`; }
+
   function arenaFightHtml(f) {
     const pct = (a) => Math.max(0, Math.min(100, a.cap ? (a.hp / a.cap) * 100 : 0));
     const side = (a, cls) => `<div class="ring-side ${cls}"><b>${esc(a.name)}</b><div class="hp"><i style="width:${pct(a).toFixed(1)}%"></i></div><small>${a.hp | 0}／${a.cap | 0}</small></div>`;
     const moves = f.moves.map((m) => `<button class="btn ring-move"${m.enabled === false ? " disabled" : ` data-act="choose" data-id="${esc(m.id)}"`}><b>${esc(m.move)}</b><small>${esc(m.label.replace(m.move, ""))}</small></button>`).join("");
-    const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map((l) => `<li>${esc(l)}</li>`).join("")}</ol>` : "";
+    const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map(ringLine).join("")}</ol>` : "";
+    const last = f.log.length ? f.log[f.log.length - 1] : "";
+    const crowd = last.startsWith(CROWD_MARK) ? `<p class="ring-crowd">${esc(last)}</p>` : "";
     return `<div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
       <div class="ring-sides">${side(f.me, "mine")}<span class="vs">對</span>${side(f.foe_hp, "theirs")}</div>
+      ${crowd}
       <div class="ring-edge"><span>${esc(f.edge_words)}</span><div class="bar"><i style="left:${Math.max(0, Math.min(100, f.edge | 0))}%"></i></div></div>
       ${f.arts.length ? `<p class="ring-arts">他守擂用的是${esc(f.arts.join("、"))}。</p>` : ""}
       ${f.status ? `<p class="ring-status">${esc(f.status)}</p>` : ""}
@@ -3180,7 +3187,7 @@
     const won = r.tier === "大勝" || r.tier === "險勝";
     const cls = won ? "win" : r.tier === "僵持" ? "draw" : "lose";
     return `<div class="board-sheet ring-sheet"><article class="paper ring-result ${cls}"><i class="stamp">${esc(r.tier)}</i>
-        <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ol>
+        <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map(ringLine).join("")}</ol>
         ${r.changes.length ? `<p class="reward">${esc(r.changes.join("・"))}</p>` : ""}
         <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
   }

@@ -58,6 +58,7 @@
 - `tianxia/fight_llm.py`：大場面在行動鎖外請模型判讀（優勢＋佔上風、落下風兩版過程）；只問模型、不碰狀態。
 - `tianxia/duel.py`：單人頭目戰的純規則（遇不遇得上、照陣營挑面貌、他的招與架勢、出招與放手一搏的推進與損耗、勝負）；遇上、收場、獎勵在 `Game._duel_*`；推力、挨打、放手一搏、勝負抽成純函式（`push_of`、`harm_of`、`gamble_roll`、`verdict_at`），奪璽單挑也用。
 - `tianxia/arena.py`：擂台賽（隨時挑擂，Joy 2026-10-14；設計 `docs/superpowers/specs/2026-10-14-擂台賽-design.md`）的純規則：守擂的分身（`WorldState.arena`，名號鍵 → `ArenaEntry`，只算本季）、名次（`ladder`、`join`、`swap`、`challengers` 只挑前 `reach` 名、`challenge_problem`、一天幾次 `left_today`／`spend`）、稱號（`title_of`）、每天的俸（`roll_day`）、歷屆擂主（`champions`）、一場的推進（`roll_next` 照奪璽單挑的代打、`exchange`、`gamble`、`verdict`，用頭目戰的 `push_of`／`harm_of`／`gamble_roll`／`verdict_at`；亂數 `rng_for`，不碰 `Game.rng`）、擂台榜（`board`）、收季排名（`close_season`，`world.end_season` 叫）。接到 Game 的在 engine 的「擂台」那一段（`_arena_*`、`_deliver_arena`）。
+- `tianxia/arena_crowd.py`：擂台的場邊事件（Joy 2026-10-17；`Config.arena.crowd`，句子在 `content/arena_crowd.json`）：兩邊的底細（`snapshot` → `state.CrowdSide`：情誼到 `patron_affinity` 的人物、名望與善惡名號、決戰立功、同伴；守擂的照報名那一刻抄在 `ArenaEntry.crowd`）、候選（`candidates`，加上擂台稱號與連勝）、擲（`roll`，亂數 `arena.rng_for(…, "場邊")`）、套用（`apply`：氣勢或池子一點點）、模型判觀眾反應（`judge_gamble`，跟評分分開的一次短呼叫）與重寫那一句（`write_line`、`clean`）。只有 engine 與 server import 它。
 - `tianxia/battle_instance.py`：全服即時多人戰鬥（決戰）的純邏輯——集結、逐幕逐回合鎖步、回合結算、回合上限與收場判定（`decide_outcome`、時刻表決戰的 `decide_result`）、機器人補位。資料存在共用世界狀態的 `active_battle`。
 
 **武學與成長**
@@ -356,6 +357,7 @@ Joy 2026-10-14 選「隨時挑擂」：兩個人很難同時在線，所以報�
 - **季末**：收季那一刻打過至少一場的前三名，天下大事一句前三名，江湖史記「本季擂主」（擂台榜前三名由 `leaderboard.chronicle_lines` 寫）；名望 `prizes` 30／20／10，`prize_treasure` 另給一件寶物（`treasures.arena_prize`，寶物關著不給），休季時同步補（休季沒上線的人只有江湖史那一行）；季收了還沒打完的那一場作廢。江湖史底下一段「歷屆擂主」（`arena.champions`，照各季「本季擂主：」那一句，跨季）。
 - **擂台那一頁**：店面那一層（`Game._shop_open` 回 "arena"、`shopview.arena_view`，Joy「擂台應該要是獨立的一頁」）：台下（你的名次、稱號、分身、挑得到的人）、擂台榜兩頁，開打後整頁是這一場，打完回到台下蓋一張收場卡（`PlayerState.arena_last`，網頁看過照 id 不再跳 `S.arenaSeen`）。網頁 `arenaHtml`／`arenaFloorHtml`／`arenaBoardHtml`／`arenaFightHtml`／`arenaResultHtml`，`S.arenaTab`。
 - **假人**：沒報名、有武學就報名，分身弱了 15% 以上就更新，今天還有次數時每一輪 `bot_policy.ARENA_CHANCE`（5%）挑一場挑得到的人裡身手最弱的；照架勢出招（`DUEL_READ`），不寫放手一搏、不認輸。整季機器人不碰（`bot.pick` 排除 `act:arena`、`arena:yield`）。
+- **場邊事件**（Joy 2026-10-17「加入一些隨機特殊的事件……也不要太容易觸發」；`tianxia/arena_crowd.py`，只在擂台）：每回合擲一次 `chance`（4.5%，一場五回合約兩成），一場最多一件，同一種一人一天一次（`PlayerState.arena_crowd_seen`、`ArenaEntry.crowd_seen`，照 `_pill_day`）。種類都要有真資料：台下情誼 ≥40 的人物暗助（`patron`，氣勢 ±4）、名望或善名高的喝采（`cheer` +3）、惡名高的被噓（`boo`，池子 −4%）、天下第一或連勝 3 場的喊聲（`champion` +3）、24 小時內決戰立功（`veteran` +3）、同伴遞兵器（`mate`，池子 +5%）、放手一搏被模型判「離譜」時一半機會惹怒觀眾（`outrage`，池子 −5%；不會被丟到見底）。守擂的分身那一邊照報名時的底細。畫面多一行「〔場邊〕…」；伺服器有模型時記一張 `CrowdNote`，背景執行緒（`server.write_crowd`／`crowd_once`）鎖外請模型重寫那一句，寫不出來照內容的固定句，數字照引擎的。量表 `scripts/measure_arena_crowd.py`（開關勝率差）。
 - **擂台榜**：`Game.arena_board()`（`arena.board`，照名次前 10 名、帶稱號），也是見聞「榜單」分頁的一張（`leaderboard.BOARDS` 的「擂台」，`compute_boards` 照 `arena.ladder` 排）。
 
 ### 玉璽碎片（玉璽一；天命之爭是玉璽二）
