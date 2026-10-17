@@ -282,6 +282,7 @@
   function enter(data) {
     resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
     forgetHowto(); // 玩法說明也是（登入失效之後重新登入，沒經過登出那顆鈕）
+    forgetMap(); // 輿圖也是（FB-329）：停在輿圖分頁時下面 render 之後重抓這個人的
     S.here = null; // 「此地還能做」摺疊的開合與自動打開過的記錄也重來（FB-087）
     S.hereAuto = {};
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
@@ -295,6 +296,7 @@
       closeEvents();
     }
     render();
+    if (S.stage === "game" && S.tab === "map") loadMap().catch(() => {}); // 停在輿圖分頁登入：這個人的疊層與底圖（輪詢在沒有疊層時不抓）
   }
 
   function setMain(main) {
@@ -345,6 +347,7 @@
   // ── 整體 ──
   function render() {
     if (S.stage !== "game" || (!S.sheet && !S.peer)) closeAsk(); // 確認框疊在設定抽屜或玩家卡上；抽屜關了、被登出就一起收掉
+    if (S.stage !== "game") hideMapHost(true); // 登出、換帳號：常駐的輿圖那一層整個清掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
@@ -662,8 +665,12 @@
   function renderPage() {
     const page = document.getElementById("page");
     if (!page) return;
-    const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
-    page.innerHTML = fn();
+    if (S.tab === "map" && showMapHost()) page.innerHTML = ""; // 輿圖畫在常駐的那一層（FB-324）
+    else {
+      hideMapHost();
+      const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
+      page.innerHTML = fn();
+    }
     S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
     applyGlow();
@@ -3874,8 +3881,9 @@
     if (layers.includes(key)) return layers.filter((x) => x !== key);
     return [...layers.filter((x) => x !== MAP_EXCLUSIVE[key]), key];
   }
-  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤；意境插在敵情後面（意境提示設計第四節）
-  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["insight", "意境", INSIGHT_DOT], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
+  // 濾鏡（設計第一節）：鍵、名字、色點（勢力沒有點：它就是地圖的底色）。字待 joy 潤。意境不在這一排：六顆時 375 寬「劇情」超出畫面，
+  // 挪到右上角那一欄版圖下面（FB-325，企劃者 10/17 從對比圖選丙；mapCtl）
+  const MAP_CHIPS = [["control", "勢力", ""], ["order", "軍令", "#A8322A"], ["enemy", "敵情", "#8A6A1A"], ["route", "路程", "#7A6A55"], ["story", "劇情", "#6B4E8A"]];
   const sideName = (k) => (k ? MAP_SIDES[k].name : "無人控制");
   const f1 = (n) => Math.round(n * 10) / 10;
   const mapWeek = () => S.mapWeek || (S.mapState && S.mapState.now_week) || 1;
@@ -3910,11 +3918,19 @@
   }
   // 地圖上的記號（設計第三、四節）：o = { k: 1／倍率（字、圓盤、小牌子乘它，螢幕上大小固定）, far: 看大局, layers: 開著的濾鏡（Set）,
   // sel: 選了的地點, week: 看哪一週, tl: 正在看版圖變化 }。純函式：只讀傳進來的底圖與疊層
-  function marksSvg(base, st, o) {
+  function marksSvg(base, st, o) { return marksParts(base, st, o).join(""); }
+  // 記號拆成兩段（FB-323）：第一個會跳的圈（class="pulse"，易手的地點、你）之前的畫在底圖的 SVG（#mk），從它起整段畫在疊在上面的那一張
+  // （#mkt，pageMap 的 mk-top）。圈在底圖裡一跳，整張山水跟著重新整理（閒置五秒主執行緒忙一兩秒，手勢每幀貴兩三倍）。兩張同一個座標、
+  // 同一個位移與倍率（applyMapView），照原本的先後疊。平常圈只有你的那一圈（最後畫），上面那一張只有那一圈、在路上的你、旗子。
+  // 圈的跳法是整個圈放大、淡出（style.css 的 mk-pulse，企劃者 10/17 選丙）：合成器自己跑，線跟著變粗；跳的那一圈自成合成層，
+  // 蓋在它上面的搜尋框、濾鏡、抽屜跟著被拉成合成層，字的邊緣有一點點不一樣（企劃者接受，試玩回饋 FB-323）
+  function marksParts(base, st, o) {
     const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
     const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
+    let cut = -1; // 第一個會跳的圈在 out 的第幾格：從它起畫在上面那一張
+    const pulse = (svg) => { if (cut < 0) cut = out.length; out.push(svg); };
     const out = [`<defs>${MAP_SIDE_ORDER.map((s) => `<radialGradient id="mk-halo-${s}"><stop offset="0" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".7"/><stop offset=".55" stop-color="${MAP_SIDES[s].soft}" stop-opacity=".35"/><stop offset="1" stop-color="${MAP_SIDES[s].soft}" stop-opacity="0"/></radialGradient>`).join("")}</defs>`];
     if (on) {
       for (const p of base.places) if (ctrl[p.id]) out.push(`<circle cx="${p.x}" cy="${p.y}" r="80" fill="url(#mk-halo-${ctrl[p.id]})" pointer-events="none"/>`);
@@ -3929,7 +3945,7 @@
       const c = on ? ctrl[p.id] : null, ink = ins ? insightInk(base, p.strong) : null; // 意境開著：圓盤是最濃那一種的顏色與字
       const col = ink ? ink.c : c ? MAP_SIDES[c].color : "#7A6A55";
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
-      if (flash.has(p.id)) out.push(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
+      if (flash.has(p.id)) pulse(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       // 點擊區：透明圓 r=16，外框寬照倍率撐開（style.css 的 --hit，applyMapView 設）
       out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0"/>`);
@@ -3980,11 +3996,11 @@
     const j = st.journey, h = pos[st.here];
     const hx = j ? j.x : h && h.x, hy = j ? j.y : h && h.y;
     if (hx !== undefined) {
-      out.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.5 * k)}" pointer-events="none"/>`);
+      pulse(`<circle class="pulse" cx="${hx}" cy="${hy}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.5 * k)}" pointer-events="none"/>`);
       if (j) out.push(`<circle class="tx-you" cx="${hx}" cy="${hy}" r="${f1(7 * k)}" fill="#D85A30" stroke="#FFFFFF" stroke-width="${f1(2 * k)}" pointer-events="none"/>`);
       out.push(`<path d="M${f1(hx + 4 * k)} ${f1(hy - 12 * k)}V${f1(hy - 40 * k)}L${f1(hx + 22 * k)} ${f1(hy - 33 * k)}L${f1(hx + 4 * k)} ${f1(hy - 26 * k)}" fill="${FRONT_RED}" stroke="#7A1F18" stroke-width="${f1(1.5 * k)}" pointer-events="none"/>`);
     }
-    return out.join("");
+    return cut < 0 ? [out.join(""), ""] : [out.slice(0, cut).join(""), out.slice(cut).join("")];
   }
   // 各方佔幾處；跟開季那一刻比（疊層的 start，FB-264）；中途上線的季沒有開季的樣子，比第一筆記到的那一週、照實寫第幾週，
   // 看的就是那一週時不比。寫哪幾方照疊層的 sides（第一季豪強分屬兩軍的季只有官軍、黃巾；沒有這個鍵照 MAP_SIDE_ORDER）
@@ -4002,7 +4018,24 @@
   }
   function chipsHtml() {
     const on = new Set(S.mapLayers);
-    return MAP_CHIPS.filter(([key]) => key !== "insight" || (S.mapBase && S.mapBase.insight_layer)).map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+    return MAP_CHIPS.map(([key, name, dot]) => `<button type="button" class="${on.has(key) ? "on" : ""}" data-act="map-layer" data-layer="${key}" aria-pressed="${on.has(key)}">${dot ? `<i style="background:${dot}"></i>` : ""}${name}</button>`).join("");
+  }
+  // 右上角那一欄的意境鈕（FB-325）：意境提示開著才有；開著時跟濾鏡一樣墨底
+  function insightButton() {
+    if (!(S.mapBase && S.mapBase.insight_layer)) return "";
+    const on = S.mapLayers.includes("insight");
+    return `<button type="button" class="ins${on ? " on" : ""}" data-act="map-layer" data-layer="insight" aria-pressed="${on}" aria-label="意境" title="意境"><i style="background:${INSIGHT_DOT}"></i><small>意境</small></button>`;
+  }
+  // 濾鏡開關換了（點了一顆、版圖變化把勢力打開）：濾鏡那一排與右上角的意境鈕一起換樣子（勢力與意境互斥）
+  function syncLayerButtons() {
+    const row = document.querySelector(".map-chips");
+    if (row) row.innerHTML = chipsHtml();
+    const ins = document.querySelector('.map-ctl [data-layer="insight"]');
+    if (ins) {
+      const on = S.mapLayers.includes("insight");
+      ins.className = `ins${on ? " on" : ""}`;
+      ins.setAttribute("aria-pressed", String(on));
+    }
   }
   // 地圖右上角的按鈕（給不會手勢的人，像一般地圖 App）：我在哪、放大、縮小，第四顆是版圖變化
   // （企劃者 10/15 從對比圖選丙：375 寬時濾鏡一排放不下它，挪到這裡；濾鏡那一排只剩五顆）
@@ -4013,21 +4046,73 @@
     <button type="button" data-act="map-zoom" data-step="in" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     <button type="button" data-act="map-zoom" data-step="out" aria-label="縮小" title="縮小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
     <button type="button" class="tl${tl ? " on" : ""}" data-act="map-timeline" aria-label="版圖變化" aria-pressed="${tl}" title="版圖變化">⏱<small>版圖</small></button>
+    ${insightButton()}
   </div>`;
   }
-  // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間；上面是找地點與濾鏡，右上角三顆鈕，底下是抽屜（寬 900 以上是右欄）
+  // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間；上面是找地點與濾鏡，右上角三顆鈕，底下是抽屜（寬 900 以上是右欄）。
+  // data-key 是底圖的 key：輿圖那一層常駐在 #map-host 時（showMapHost），同一張底圖只換外圍、底圖那一塊原地留著（FB-324）
   function pageMap() {
     if (!S.mapBase || !S.mapState) return '<p class="muted">展開輿圖…</p>';
-    const tl = S.mapMode === "timeline";
     const svg = S.mapBase.svg.replace(/<\/svg>\s*$/, '<g id="mk"></g></svg>');
-    const seeing = tl && S.mapWeek && S.mapWeek !== S.mapState.now_week;
+    // 疊在底圖上面的那一張（FB-323，marksParts）：跟底圖同一個根（viewBox、大小、字型），位移與倍率由 applyMapView 一起套
+    const top = `<svg${(S.mapBase.svg.match(/^<svg\b([^>]*)>/) || ["", ""])[1]} class="mk-top" id="mkt"></svg>`;
+    return `<div class="${mapxClass()}" id="mapx" data-key="${esc(S.mapBase.key)}">
+      <div class="map-wrap" id="map"><div class="tx-world-map">${svg}${top}</div></div>${mapChrome()}
+    </div>`;
+  }
+  const mapxClass = () => `mapx${S.mapMode === "timeline" ? " tl-mode" : ""}`;
+  // 地圖框以外的那幾樣：找地點與濾鏡、右上角的鈕、「天下」那一條、「正在看第幾週」、抽屜
+  function mapChrome() {
+    const seeing = S.mapMode === "timeline" && S.mapWeek && S.mapWeek !== S.mapState.now_week;
     const banner = `<div class="map-banner" id="map-banner"${seeing ? "" : " hidden"}>${seeing ? `正在看第 ${S.mapWeek} 週` : ""}</div>`;
-    return `<div class="mapx${tl ? " tl-mode" : ""}" id="mapx">
-      <div class="map-wrap" id="map"><div class="tx-world-map">${svg}</div></div>
+    return `
       <div class="map-top"><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><div class="map-chips" role="group" aria-label="濾鏡">${chipsHtml()}</div></div>
       ${mapCtl()}<div class="map-hud" id="map-hud" hidden></div>${banner}
-      <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>
-    </div>`;
+      <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
+  }
+  // ── 輿圖那一層常駐（FB-324）：切到別的分頁、整頁重畫（render 換掉 #app 的 innerHTML）時，地圖不拆掉，只在 #map-host 藏起來
+  // （visibility: hidden：樣式、排版、點陣化都留著）。以前每次回到輿圖都把 114 KB 的底圖字串塞回去、重新解析、重算樣式、重新排版、
+  // 重畫（暖開那一下約 90 ms 的長任務）。#map-host 在 #app 外面、body 底下（點擊照舊由 document 收）；.mapx 本來就是 position: fixed
+  // 的整頁一層，搬出 #page 位置一樣。沒有 #map-host（node 的假瀏覽器）時照舊畫在 #page
+  function mapHost() {
+    let host = document.getElementById("map-host");
+    if (!host && document.body && document.body.insertAdjacentHTML) {
+      document.body.insertAdjacentHTML("beforeend", '<div id="map-host" class="away"></div>');
+      host = document.getElementById("map-host");
+    }
+    return host;
+  }
+  // 輿圖畫在常駐的那一層：同一張底圖（data-key 一樣）就只換外圍與 .mapx 的 class，底圖那一塊（底圖、記號、上面那一張）原地不動；
+  // 底圖換了（劇情開了新地點）、第一次，整層重畫。畫不了（還沒有底圖、沒有 #map-host）回 false，照舊畫在 #page
+  function showMapHost() {
+    if (!S.mapBase || !S.mapState) return false;
+    const host = mapHost();
+    if (!host) return false;
+    const box = document.getElementById("mapx");
+    if (box && box.parentNode === host && box.dataset.key === String(S.mapBase.key) && box.querySelector(".tx-world-map")) {
+      box.className = mapxClass();
+      for (const el of [...box.children]) if (el.id !== "map") el.remove();
+      box.insertAdjacentHTML("beforeend", mapChrome());
+    } else host.innerHTML = pageMap();
+    host.classList.remove("away");
+    return true;
+  }
+  // 離開輿圖：藏起來（不拆）；登出、換帳號：整層清掉（上一個人的地圖不留）
+  function hideMapHost(clear = false) {
+    const host = document.getElementById("map-host");
+    if (!host) return;
+    host.classList.add("away");
+    if (clear) host.innerHTML = "";
+  }
+  // 登出、登入（換帳號不重新整理、登入失效之後重新登入）：上一個人的輿圖全部清回開頭——底圖、疊層、視圖、選的地點、濾鏡、抽屜、
+  // 版圖變化、找地點的字——常駐那一層整個清掉（FB-329：不清的話換人登入之後輿圖照舊畫上一個人的疊層、位置與勝算）
+  function forgetMap() {
+    stopPlay();
+    Object.assign(S, {
+      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapLayers: ["control", "order"], mapDrawer: "rest",
+      mapWeek: null, mapQuery: "", mapFocus: null, mapViewBefore: null, marksS: 0, mapView: null,
+    });
+    hideMapHost(true);
   }
   // ── 輿圖的抽屜（設計第五節）：總覽（今天去哪裡出陣、戰線、本週大事）、一個地點、找地點、版圖變化 ──
   const SORTIE_WORD = { attack: "攻", hold: "守", stir: "攪局" }; // 出陣是哪一種（sortie.mode），待 joy 潤
@@ -4238,8 +4323,7 @@
       S.mapViewBefore = null;
     }
     box.classList.toggle("tl-mode", open);
-    const chips = box.querySelector(".map-chips");
-    if (chips) chips.innerHTML = chipsHtml(); // 勢力可能剛被打開
+    syncLayerButtons(); // 勢力可能剛被打開（意境跟著關）
     const tlBtn = box.querySelector(".map-ctl .tl");
     if (tlBtn) { tlBtn.classList.toggle("on", open); tlBtn.setAttribute("aria-pressed", String(open)); }
     const banner = document.getElementById("map-banner");
@@ -4311,7 +4395,9 @@
     if (!d || !box) return;
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
-    box.style.setProperty("--md-h", `${px}px`);
+    // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）：自訂屬性會一路繼承下去，平常點地點換抽屜高度時
+    // 寫它會逼整棵地圖重算樣式（FB-322）。進版圖變化時 mapTimeline 先改 S.mapMode 再叫這裡，畫面重畫時 mapReady 也會叫
+    if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
     // pad 跟著抽屜變了：當下照新的 pad 夾住視圖。抽屜降低時不夾的話，地圖停在捲過頭的位置（下緣到抽屜之間露出空白），
     // 下一次拖動才夾回去、往手指反方向跳一截（FB-267）
     if (S.mapView) applyMapView(true);
@@ -4351,7 +4437,10 @@
     S.marksS = s;
     const wrap = document.getElementById("map");
     if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
-    g.innerHTML = marksSvg(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
+    const [low, high] = marksParts(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
+    g.innerHTML = low;
+    const top = document.getElementById("mkt"); // 會跳的圈與之後畫的那一段（FB-323）
+    if (top) top.innerHTML = high;
     const ins = insightOn(S.mapBase, layers);
     const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control") && !ins); // 意境開著不畫勢力的大區底色
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
@@ -4411,7 +4500,8 @@
     const vb = svg && svg.viewBox && svg.viewBox.baseVal;
     if (!vb || !vb.width || !vb.height || !wrap.clientWidth || !wrap.clientHeight) return null;
     const r = wrap.getBoundingClientRect();
-    return { wrap, svg, vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height, x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
+    return { wrap, svg, top: wrap.querySelector(".tx-world-map > .mk-top"), vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
+      x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
   }
   // 地點的中心：照底圖的清單（記號還沒畫出來也找得到）
   const placeXY = (id) => {
@@ -4437,7 +4527,9 @@
     clearTimeout(glideTimer);
     wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
-    g.svg.style.transform = `translate(${vw / 2 - v.cx * v.s}px, ${vh / 2 - v.cy * v.s}px) scale(${v.s})`;
+    const shift = `translate(${vw / 2 - v.cx * v.s}px, ${vh / 2 - v.cy * v.s}px) scale(${v.s})`;
+    g.svg.style.transform = shift;
+    if (g.top) g.top.style.transform = shift; // 疊在上面的那一張（FB-323）跟著底圖走
     // 點擊區跟著縮放：透明圓 r=16，外框寬 2×(R−16) 把它撐到半徑 R（style.css 的 --hit）
     const hit = `${Math.round(2 * (hitRadius(v.s) - 16))}px`;
     if (wrap.style.getPropertyValue("--hit") !== hit) wrap.style.setProperty("--hit", hit);
@@ -4453,17 +4545,21 @@
   // 約 1545px，照原尺寸只畫 900px、旁邊空一大片），最多 MAP_MAX。都不給整張——整張只有約 0.37 倍，地名剩 5px 上下（E2／FB-012）
   const firstScale = (vw, vh, W, H, phone) => (phone ? 1 : Math.min(MAP_MAX, Math.max(fitScale(vw, vh, W, H), vw / W)));
 
+  const mapWired = new WeakSet(); // 已經掛好手勢監聽的地圖框
   // 輿圖頁每次畫好（afterPage）：第一次打開就決定視圖，之後照舊套用；掛上這個框自己的監聽
   function mapReady() {
     const wrap = document.getElementById("map");
     if (!wrap) return;
     mapFrame();
     setMapDrawer(S.mapDrawer);
-    // 手勢的監聽都掛在捕獲階段：不冒泡的事件（例如測試用 new PointerEvent 送的）也收得到
-    wrap.addEventListener("pointerdown", gripDown, true);
-    wrap.addEventListener("wheel", mapWheel, { passive: false, capture: true });
-    // 舊版 iOS Safari 的捏合手勢、拖到地圖上的字開始原生拖曳，都擋掉
-    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
+    // 手勢的監聽都掛在捕獲階段：不冒泡的事件（例如測試用 new PointerEvent 送的）也收得到。地圖框常駐（FB-324）：同一個框只掛一次
+    if (!mapWired.has(wrap)) {
+      mapWired.add(wrap);
+      wrap.addEventListener("pointerdown", gripDown, true);
+      wrap.addEventListener("wheel", mapWheel, { passive: false, capture: true });
+      // 舊版 iOS Safari 的捏合手勢、拖到地圖上的字開始原生拖曳，都擋掉
+      for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
+    }
     for (const id of grip.pts.keys()) {
       try { wrap.setPointerCapture(id); } catch (e) { /* 那一指已經放開了 */ }
     }
@@ -4488,7 +4584,8 @@
     grip.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
     grip.tap = grip.pts.size === 1 ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY, target: ev.target } : null;
     wrap.classList.remove("glide");
-    wrap.classList.add("grabbing");
+    // 拖著的手形游標只給滑鼠、筆（FB-322）：cursor 會一路繼承下去，換一次整棵地圖約 1,550 個元素重算樣式；觸控看不到游標，點一下不必付
+    if (ev.pointerType !== "touch") wrap.classList.add("grabbing");
     if (!grip.tap) wrap.classList.add("moving");
     gripBase();
   }
@@ -4546,7 +4643,8 @@
     grip.pts.clear();
     grip.tap = grip.ref = null;
     grip.frame = 0;
-    document.getElementById("map")?.classList.remove("grabbing", "moving");
+    const wrap = document.getElementById("map");
+    for (const c of ["grabbing", "moving"]) if (wrap && wrap.classList.contains(c)) wrap.classList.remove(c); // 有才拿（觸控點一下兩樣都沒有）
   }
 
   // 在地圖上點了一下：選那個地點、抽屜換成它（不問伺服器，疊層裡都有），視圖不動；點到空白收起
@@ -5732,7 +5830,7 @@
           break;
         }
         case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; render(); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
@@ -5839,8 +5937,7 @@
           break;
         case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁；勢力與意境互斥，整排鈕一起換樣子
           S.mapLayers = toggleLayer(S.mapLayers, el.dataset.layer);
-          const row = el.closest(".map-chips");
-          if (row) row.innerHTML = chipsHtml();
+          syncLayerButtons(); // 意境鈕在右上角那一欄（FB-325）：兩處一起換
           drawMarks();
           if (S.mapMode === "place") redrawDrawer(); // 抽屜名字旁的地形跟著意境開關
           break;

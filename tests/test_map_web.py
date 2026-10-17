@@ -229,13 +229,13 @@ def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
 
 
 def test_the_timeline_button_sits_under_the_zoom_buttons():
-    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只放濾鏡：五顆，意境提示開著多一顆「意境」
-    （意境提示設計第四節；375 寬放不下時「劇情」往右捲）。"""
+    """對比 2 選丙（企劃者 10/15）：「⏱ 版圖」是右上角第四顆圓鈕，濾鏡那一排只放濾鏡：五顆。意境提示開著時「意境」也在右上角那一欄
+    （FB-325，企劃者 10/17 從對比圖選丙：六顆時 375 寬「劇情」超出畫面），濾鏡那一排照舊五顆。"""
     out = run(_game(), "return [H.pageMap(), H.chipsHtml()];")
     ctl = out[0][out[0].index('class="map-ctl"'):]
     ctl = ctl[: ctl.index("</div>")]
     assert 'data-act="map-timeline"' in ctl and "版圖" in ctl
-    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 6
+    assert "map-timeline" not in out[1] and out[1].count('data-act="map-layer"') == 5
     game = _game()
     game.content.config.insight_strong.enabled = False
     assert run(game, "return H.chipsHtml();").count('data-act="map-layer"') == 5
@@ -447,12 +447,21 @@ def test_the_far_view_dots_take_the_strongest_colour():
     assert 'fill="#2C68B0"' in out and 'fill="#8A5A33"' in out and not re.search(r"官 \d", out)
 
 
-def test_the_insight_chip_sits_after_enemy_only_when_the_switch_is_on():
-    out = run(_game(), "return H.chipsHtml();")
-    assert out.index("敵情") < out.index("意境") < out.index("路程") and "conic-gradient" in out
+def test_the_insight_button_sits_under_the_timeline_button_only_when_the_switch_is_on():
+    """FB-325（企劃者 10/17 選丙）：意境不在濾鏡那一排，是右上角那一欄版圖下面那一顆（色點＋「意境」，跟版圖同一個樣子）；
+    開著時跟濾鏡一樣墨底。開關關著沒有這一顆。"""
+    out = run(_game(), "return [H.chipsHtml(), H.pageMap()];")
+    assert "意境" not in out[0] and 'data-layer="insight"' not in out[0]
+    ctl = out[1][out[1].index('class="map-ctl"'):]
+    ctl = ctl[: ctl.index("</div>")]
+    assert ctl.index('data-act="map-timeline"') < ctl.index('data-layer="insight"') and "意境" in ctl and "conic-gradient" in ctl
+    assert 'class="ins"' in ctl and 'aria-pressed="false"' in ctl[ctl.index('data-layer="insight"') - 120:]
+    on = run(_game(), "return H.pageMap();", mapLayers=["insight"])
+    assert 'class="ins on"' in on and 'data-layer="insight" aria-pressed="true"' in on
     game = _game()
     game.content.config.insight_strong.enabled = False
-    assert "意境" not in run(game, "return H.chipsHtml();")
+    page = run(game, "return H.pageMap();")
+    assert "意境" not in page[page.index('class="map-ctl"'):]
 
 
 def test_territory_and_insight_turn_each_other_off():
