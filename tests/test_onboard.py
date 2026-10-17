@@ -108,3 +108,14 @@ def test_players_still_in_the_hut_walk_it_after_the_upgrade(real):
     game.state.player.onboarding = ONBOARDING_VERSION - 1
     again = Game(real, game.state, world=game.world)
     assert again.state.player.tutorial_step == 0 and prologue.active(again.state, real)
+
+
+def test_joining_a_side_hands_the_rest_to_the_recruiter(newcomer):
+    """走到最後一步（投靠與輿圖）就投靠了：初入江湖當場走完，框不跟引薦人搶。"""
+    p = newcomer.state.player
+    p.tutorial_step = len(newcomer.content.tutorial.steps) - 1
+    p.location = "changshe"
+    newcomer.choose("faction:guan")
+    newcomer.choose("faction:confirm")
+    assert p.faction == "guan" and p.tutorial_step == len(newcomer.content.tutorial.steps)
+    assert newcomer.onboard_view() is None

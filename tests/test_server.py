@@ -3189,13 +3189,17 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
 
 
 def _a_guide_step_after_the_hut(monkeypatch):
-    """序章十一步之後沒有別的引導步驟了（第一季的軍令兩步由入伍段取代，新手引導計畫二）：幾個測試要量的是「有一個草廬之外、有話要說的步驟時
-    對話框怎麼畫」，就在這份內容的引導最後接一步（站在序章之後的人才會遇到）。回傳那一步。"""
+    """幾個測試要量的是「有一個草廬之外、有話要說的步驟時對話框怎麼畫」，就在這份內容的引導最後接一步。初入江湖那幾步（序章之後）
+    沒走的人一律略過，所以呼叫的測試自己把角色擺到這一步（`_stand_on`）。回傳那一步。"""
     from tianxia.models import TutorialGoal, TutorialStep
 
     step = TutorialStep(id="t_walk", text="出去走走。", done_when=TutorialGoal(action="explore"))
     monkeypatch.setattr(server.CONTENT.tutorial, "steps", [*server.CONTENT.tutorial.steps, step])
     return step
+
+
+def _stand_on(game, step):
+    game.state.player.tutorial_step = game.content.tutorial.steps.index(step)
 
 
 def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
@@ -3204,8 +3208,9 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
-    _a_guide_step_after_the_hut(monkeypatch)
+    walk = _a_guide_step_after_the_hut(monkeypatch)
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
+    _stand_on(fresh, walk)
     assert fresh.world.season_phase() == "preparing"
     view = server.main_view(fresh)
     assert view["now"] == "" and "賽季開始" in view["latest"]
@@ -4484,7 +4489,7 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
 
     def graduated(g):
         g.state.player.location = "yingchuan_wilds"
-        g.state.player.tutorial_step = g.content.tutorial.prologue_steps
+        _stand_on(g, first_step)
         g.state.pending_event = None
 
     server.act(game, graduated)

@@ -108,10 +108,10 @@ def test_the_road_sights_are_the_thirty_written_for_season_one(content):
 
 
 def test_the_mentor_explains_travel_and_sitting_down(content):
-    """步行、趕路、疾行與體力現在由師父講：出師那一步（第 11 步）講走法與體力，體力見底那一步（第 7 步）講體力怎麼回來
+    """步行、疾行與體力現在由師父講（趕路 2026-10-12 拿掉了，不再提）：出師那一步（第 11 步）講走法與體力，體力見底那一步（第 7 步）講體力怎麼回來
     （打坐 2026-10-12 拿掉了：講時辰與一天能服幾顆回體丹，這一步只教一下調息）。"""
     texts = {step.id: step.text for step in content.tutorial.steps}
-    assert all(word in texts["p11_farewell"] for word in ("步行", "趕路", "疾行", "體力"))
+    assert all(word in texts["p11_farewell"] for word in ("步行", "疾行", "體力")) and "趕路" not in texts["p11_farewell"]
     assert all(word in texts["p7_rest"] for word in ("回體丹", "調息")) and "打坐" not in texts["p7_rest"]
 
 
@@ -225,23 +225,23 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
 
     script = Game.new(content, "腳本", rng=random.Random(0), world=world)
     assert script.state.player.location == "yingchuan" and script.state.pending_event is None
-    assert script.state.player.tutorial_step == content.tutorial.prologue_steps
+    assert script.state.player.tutorial_step == len(content.tutorial.steps)  # 序章與初入江湖都略過
     assert "mentor_hut" not in atlas.visible_locations(script.state, content)
 
     human = Game.new(content, "真人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_real_prologue(human)
     bot = Game.new(content, "假人", rng=random.Random(1), world=world, graduated=True)
-    assert _looks(bot) == _looks(human)
+    assert _looks(bot) == {**_looks(human), "step": len(content.tutorial.steps)}  # 真人出草廬接著走初入江湖，假人略過
     assert _looks(bot)["level"] == 2 and _looks(bot)["location"] == "yingchuan"
     fused = prologue.fused_arts(bot.state, content, world)
     assert fused[0].name in {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"} and fused[0].quality == "中品"
     assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
 
 
-@pytest.mark.parametrize("old_step, new_step", [(0, 11), (3, 11), (6, 11), (7, 11), (8, 11)])
+@pytest.mark.parametrize("old_step, new_step", [(0, 15), (3, 15), (6, 15), (7, 15), (8, 15)])
 def test_old_saves_count_as_past_the_real_prologue(content, world, old_step, new_step):
     """舊存檔（舊引導八步：t1～t6、第一季的 t7、t8；onboarding 比序章那一版小）一律當作走過序章、不會被拉回草廬，步數換算成新的
-    （不分季的舊六步當作走過序章）。舊的 t7、t8 已經由入伍段取代（新手引導計畫二），指到它們的步數夾在最後一步（序章十一步做完）：
+    （不分季的舊六步當作走過序章）。舊的 t7、t8 已經由入伍段取代（新手引導計畫二），指到它們的步數夾在最後一步；初入江湖上線之前的存檔也一起略過（共十五步）：
     換版當下已經投靠的不走入伍段，還沒投靠的投靠時才開始（tests/test_enlist.py）。"""
     from tianxia.state import ONBOARDING_VERSION
 
@@ -278,7 +278,7 @@ def test_the_real_steps_say_the_craft_tab_by_its_name_and_the_farewell_is_paged(
     """S1 的用語（2026-10-06）：分頁叫「煉製」，師父的話跟著（joy 的版本寫「合成」，這裡改回分頁真正的名字）；功法庫是修練頁列表的標題；
     p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事，只有 p11 分頁。"""
     steps = {step.id: step for step in content.tutorial.steps}
-    assert "『煉製』" not in steps["p4_fuse"].text and "「煉製」那裡試試，花你 5 點心得。" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert "『煉製』" not in steps["p4_fuse"].text and "「煉製」那裡試試，花你 5 點心得" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
     assert steps["p4_fuse"].line == "到「煉製」把基礎拳腳融進意境"
     assert "功法庫" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
     p11 = steps["p11_farewell"]
@@ -505,7 +505,8 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
             assert sentence in getattr(e.recruiters[faction_id], field), (faction_id, field)
     assert e.drifter_line == "想投靠的話——官軍：長社、宛城、盧植營；黃巾：黃巾別部營寨、南陽黃巾營、鉅鹿道壇；豪強：鄉里結社、曹氏莊院、豪族塢堡。"
     assert not any(step.season_one for step in content.tutorial.steps)
-    assert content.tutorial.steps[-1].id == "p11_farewell"  # 師父的話之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
+    assert content.tutorial.steps[content.tutorial.prologue_steps - 1].id == "p11_farewell"
+    assert content.tutorial.steps[-1].id == "e4_world"  # 初入江湖的最後一步（老周）之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):

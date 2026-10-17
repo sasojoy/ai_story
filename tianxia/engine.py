@@ -2250,6 +2250,8 @@ class Game:
         """這一下才投靠的人開始入伍段（新手引導計畫二，設計 4.1）：動作之前還沒有陣營、現在有了（投靠，或拜入陣營名下的門派）。
         已經有陣營的人不開始——換版當下就投靠了的舊存檔不走入伍段（設計 7.2）、叛投也不重來（preflight F1，所以也不需要存檔遷移）。
         框換成引薦人：剛投靠這一下不算完成任何一步（Review Focus 1）——框上若還是說書人的步驟或結語，它們的「✔」照舊留著。"""
+        if faction_before is None and self.state.player.faction is not None and prologue_rules.onboard_step(self.state, self.content):
+            prologue_rules.skip_onboarding(self.state, self.content)  # 初入江湖還沒走完就投靠了：剩下的交給引薦人帶，不兩個人搶一個框
         if faction_before is not None or not enlist.begin_if_joined(self.state, self.content):
             return
         p = self.state.player
