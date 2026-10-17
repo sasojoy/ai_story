@@ -427,12 +427,21 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
     }
 
 
+def fit_line(art: MartialArt | None, content: Content, world: WorldStateStore) -> str:
+    """修練頁武器那一段最上面一句：身上的武學配哪一種兵器（Joy 2026-10-17：換了一門武學之後整排都寫「用不上」，看不出為什麼）。"""
+    mine = art_weapon(art.id, content, world) if art is not None else None
+    if not mine:
+        return "你身上的武學用不上兵器，哪一把都沒有加成。"
+    return f"你身上的【{art.name}】配{noun(mine)}，只有{noun(mine)}有加成。"
+
+
 def rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict:
     """修練頁的兵器那一塊（skillview.gear_rows 把它併進 server.menxia_view 的 gear 裡 slot 是 weapon 的那一段）：身上那把、裝備庫、格數。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not content.config.weapons.enabled:
         return {"worn": None, "rack": [], "cap": content.config.weapons.rack_cap}
     return {
+        "fit_line": fit_line(art, content, world),
         "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
         "rack": [_row(w, art, content, world) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
         "cap": content.config.weapons.rack_cap,

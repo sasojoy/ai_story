@@ -347,6 +347,9 @@ class Game:
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         self.forged_thing: tuple[str, str] | None = None  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
+        # 勝算的記憶（team.OddsMemo，FB-321）：伺服器上的 Game 共用一份（server.game_for 掛上），輿圖疊層與按鈕上的勝算輸入一樣就不再模擬；
+        # 直接建的 Game（測試、腳本、假人程式）是 None，照舊每次算
+        self.odds_memo: team.OddsMemo | None = None
         # 主畫面「走法」切換選的走法（步行／疾行），選單上的「前往」照它出發（見 _move_option）。只是畫面狀態：
         # 不在 GameState 裡、不進存檔。網頁伺服器的同一個角色只有一份 Game（各分頁共用、重新整理也還在），所以走法
         # 由頁面記著、每個請求帶上，server.py 在行動鎖裡逐次 set_move_mode（見 server.MOVE_MODE）；機器人與假人從不改它。
@@ -1600,7 +1603,7 @@ class Game:
         return label + bounties.join_note(self.state, self.content, choice)
 
     def odds(self, squad_id: str) -> str:
-        return team.estimate(self.state, self.content, self.world, squad_id)
+        return team.estimate(self.state, self.content, self.world, squad_id, memo=self.odds_memo)
 
     def _save_season(self) -> None:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
