@@ -94,3 +94,21 @@ def test_card_line_shows_high_and_dormant(content):
 def test_tier_numbers_match_the_ui(content):
     assert skill_slots.TIERS == {"low": 1, "mid": 2, "high": 3, "top": 4}
     assert skillview.melt_judge  # 介面區照 traits[].tier 畫凡、良、精、極
+
+
+def test_compare_names_only_lit_slots(content):
+    """開爐結果那一句「多了〔…〕」只算亮了的格子，跟卡上「未開」對得上。"""
+    from types import SimpleNamespace
+
+    from tianxia import team
+
+    a = art(id="fused_x")
+    for i in range(200):
+        state = SimpleNamespace(player=SimpleNamespace(name=f"p{i}", art_rolled={"fused_x": "下品"}))
+        shown = skill_slots.apply(state, content, a)
+        if shown.dormant:
+            break
+    names = team._trait_names(content, shown)
+    dormant = traits.dormant_names(content, shown)
+    assert dormant and not set(dormant) & set(names)
+    assert len(names) == skill_slots.layout(content, state.player.name, a, "下品", "下品").slots

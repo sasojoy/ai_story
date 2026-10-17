@@ -2801,7 +2801,7 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕挨打掉的氣血少 20%；挨強攻時有 10% 的機會借力，把那一下的一半還回去" in card
     assert "<br />\n比身上的【基礎拳腳】：威力 " in card  # 武學技能分檔：上品的空格另擲到的技能接在功效那一行後面
     # FB-088：這門柔的功法換上身，會跟身上的內功（基礎吐納，也是柔）同屬，比較那一句最後多一段搭配
-    assert card.rstrip().endswith("（第一成）、多了〔化勁〕、少了〔厚〕；換上後跟內功同屬，整體 +20%</p>")
+    assert card.rstrip().endswith("（第一成）、多了〔化勁〕〔破甲〕〔纏絲〕、少了〔厚〕；換上後跟內功同屬，整體 +20%</p>")  # 只比亮了的格子，空格擲到的也算
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
