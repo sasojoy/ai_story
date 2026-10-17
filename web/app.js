@@ -2863,6 +2863,7 @@
       const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
       // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前，沒有鈕；寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
       return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>
+        ${g.fit_line ? `<p class="muted gear-fit">${esc(g.fit_line)}</p>` : ""}
         ${g.heirloom ? `<div class="wrow heirloom"><div class="winfo"><b>【${esc(g.heirloom.name)}】</b><span>傳承・${esc(g.heirloom.effect_text)}</span></div></div>` : ""}
         ${g.worn ? row(g.worn, true) : g.heirloom && !g.rack.length ? "" : `<p class="muted">${esc(g.empty)}</p>`}
         ${shown.map((w) => row(w, false)).join("")}
