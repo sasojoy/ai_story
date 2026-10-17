@@ -190,7 +190,8 @@ def pill_line(content: Content, count: int | None = None, today: int | None = No
     line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
     if cfg.stamina_pills_per_day > 0:
         left = "" if today is None else f"（今天還能服 {today} 顆）"
-        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆，每天 00:00（台灣時間）重新計算{left}。"
+        rookie = f"（新手期 {cfg.newbie_pills_per_day} 顆）" if cfg.newbie_pills_per_day > 0 else ""
+        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
     return line
 
 

@@ -109,10 +109,10 @@ def test_the_status_bar_says_how_many_are_left_today(capped):
     assert "一天最多服 2 顆，每天 00:00（台灣時間）重新計算（今天還能服 0 顆）。" in help_line
 
 
-def test_the_real_content_caps_at_five_a_day():
-    # 企劃者 2026-10-13「體力丹改成一天最多可以吃五顆」（10-12 是兩顆）
-    assert real_content().config.stamina_pills_per_day == 5
-    assert real_content("weekend").config.stamina_pills_per_day == 5
+def test_the_real_content_caps_at_two_a_day_and_five_while_new():
+    # 企劃者 2026-10-13「一天最多可以吃五顆」；Joy 2026-10-17「回體丹可以吃到五顆，平常兩顆」：新手期五顆、之後兩顆
+    for content in (real_content(), real_content("weekend")):
+        assert content.config.stamina_pills_per_day == 2 and content.config.newbie_pills_per_day == 5
 
 
 def test_the_tutorial_names_the_real_cap():
@@ -120,7 +120,18 @@ def test_the_tutorial_names_the_real_cap():
     from tianxia.engine import _cn_count
     content = real_content()
     text = json.dumps(json.load(open(ROOT / "content" / "tutorial.json", encoding="utf-8")), ensure_ascii=False)
-    assert f"回體丹一天能服{_cn_count(content.config.stamina_pills_per_day)}顆" in text
+    cfg = content.config
+    assert f"一天能服{_cn_count(cfg.newbie_pills_per_day)}顆，之後一天{_cn_count(cfg.stamina_pills_per_day)}顆" in text
+
+
+def test_newcomers_get_more_pills_a_day_until_the_newbie_hours_run_out(capped):
+    cfg = capped.content.config
+    cfg.newbie_pills_per_day, cfg.newbie_real_hours = 5, 48
+    capped.state.player.joined_at = capped.state.world.time
+    assert capped.pill_cap() == 5 and capped.pills_left_today() == 5
+    capped.state.player.joined_at = capped.state.world.time - 49 * HOUR * cfg.time_scale
+    assert capped.pill_cap() == 2 and capped.pills_left_today() == 2
+    assert "一天最多服 2 顆（新手期 5 顆）" in capped.status_data()["stamina_help"][-1]
 
 
 def _button(today, full=False):
