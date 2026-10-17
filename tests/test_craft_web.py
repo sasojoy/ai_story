@@ -192,14 +192,16 @@ def test_a_new_art_shows_its_card_under_the_result_with_power_and_how_it_compare
     game.forge("basic_fist", ["huo"], proposed=("烈焰拳", "一句話說明。"))
     menxia = server.menxia_view(game)
     row = next(r for r in menxia["owned_arts"] if r["id"] == game.forged_thing[1])
-    row["judge"]["traits"] = [{"name": "剛猛", "layers": 2, "tier": 3}]  # 檔次由平衡那邊接上：帶了就寫
+    row["judge"]["traits"] = [{"name": "剛猛", "layers": 2, "tier": 1}, {"name": "破軍", "layers": 1, "tier": 3}]  # 檔次（武學技能分檔）
+    row["judge"]["dormant"] = ["輕靈"]  # 還沒亮的技能
     row["judge"]["worn_diff"] = -3.5
     html = run(server.main_view(game), "return H.pageCraft();", menxia=menxia,
                S={"tab": "craft", "forgeSel": [], "forgeResult": {"html": "<p>煉成了。</p>"}, "forgeMade": {"type": "art", "id": row["id"]}})
     card = html.split('class="made-card"', 1)[1]
     assert html.index('id="forge"') < html.index('class="made-card"') < html.index("煉成了。")  # 卡在結果那段話前面
     assert "【烈焰拳】" in card and f"威力<b>{row['judge']['power']:g}</b>" in card and "比身上那門弱 −3.5" in card
-    assert "<em>精</em>剛猛<small>2 層</small>" in card and "整張功法卡" in card
+    assert '<i class="tr t1"><em>低</em>剛猛<small>2 層</small>' in card and '<i class="tr t3"><em>高</em>破軍' in card and "整張功法卡" in card
+    assert '<i class="tr off"><em>未開</em>輕靈' in card
     assert ('data-act="switch"' in card) is (not row["worn"])
 
 

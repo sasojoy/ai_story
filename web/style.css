@@ -1414,8 +1414,13 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .mc-tags i { font-style: normal; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); }
 .mc-tags i small { margin-left: 3px; color: var(--ink-2); font-size: 11px; }
 .mc-tags i em { font-style: normal; font-weight: 700; margin-right: 3px; }
-.mc-tags i.t3 em, .mc-tags i.t4 em { color: var(--gold); }
-.mc-tags i.t4 { border-color: var(--gold); }
+.mc-tags i em { display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 4px; font-size: 11px; line-height: 1.5; color: #fff; background: #8a7f70; }
+.mc-tags i.t2 { border-color: #5f86a8; }
+.mc-tags i.t2 em { background: #4f7699; }
+.mc-tags i.t3, .mc-tags i.t4 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--card)); font-weight: 600; }
+.mc-tags i.t3 em, .mc-tags i.t4 em { background: #b8862b; }
+.mc-tags i.off { border-style: dashed; color: var(--ink-2); background: none; }
+.mc-tags i.off em { background: none; color: var(--ink-2); border: 1px dashed var(--line); }
 .mc-tags i.hi { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, var(--line)); }
 .made-card .fold { margin: 10px 0 0; }
 .made-card > .btn { margin-top: 10px; }
