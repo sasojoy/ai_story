@@ -500,9 +500,9 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
-             "pickMark", "craftView", "craftFilterRow", "craftChip", "manualRows", "manualEntry", "bookIcon"]
+             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
 
 
