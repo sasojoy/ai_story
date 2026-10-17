@@ -1357,13 +1357,34 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .craft-filter select.input { width: auto; flex: 1 1 72px; min-width: 72px; padding: 6px 8px; font-size: 13px; }
 .craft-filter .fchip { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }
-/* 爐子兩格與開爐鈕的固定列（Joy 2026-10-17）：往下捲去挑東西時黏在狀態列底下；剛放進去的那一格閃一下 */
-.kiln-bar { position: sticky; top: var(--top-h, 0px); z-index: 15; margin: 0 -16px 12px; padding: 8px 16px;
-  background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line); }
+/* 太極爐一直看得到（Joy 2026-10-17）：大爐子捲出狀態列底下時，同一座爐縮成一條固定在狀態列底下（.kiln.compact）——
+   左右兩格、中間小太極就是開爐鈕、底下一行開不了爐的原因；.kiln-wrap 撐著大爐子的高度，縮起來頁面不跳 */
+.kiln-mini { display: none; }
+.kiln.compact { position: fixed; top: var(--top-h, 0px); left: 0; right: 0; z-index: 15; max-width: 640px; margin: 0 auto; padding: 8px 16px;
+  background: color-mix(in srgb, var(--paper) 98%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line); box-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.35); animation: kiln-drop 0.18s ease-out; }
+.kiln.compact .kiln-big { display: none; }
+.kiln.compact .kiln-mini { display: block; }
+@keyframes kiln-drop { from { transform: translateY(-12px); opacity: 0; } }
+.kiln-hub { flex: none; width: 60px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  padding: 0; border: 0; background: none; color: var(--ink-2); font: 600 11px var(--serif); cursor: pointer; }
+.kiln-hub:disabled { cursor: default; }
+.kiln-taichi { width: 44px; height: 44px; display: block; overflow: visible; border-radius: 50%; }
+.kiln-hub:disabled .kiln-taichi { opacity: 0.55; }
+.kiln-hub.ready { color: var(--gold); }
+.kiln-hub.ready .kiln-taichi { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, #f0a23a 70%, transparent); }
+.kiln-hub.forging .kiln-taichi .w-spin { animation-duration: 0.6s; }
+/* 剛放進去的那一格閃一下（大爐子裡的格子也是） */
+.w-slot.flash rect { animation: w-slot-flash 0.9s ease-out; }
+@keyframes w-slot-flash { 0% { fill: rgba(240, 160, 58, 0.95); stroke-width: 3; } 100% { fill: rgba(42, 36, 29, 0.92); stroke-width: 1.4; } }
+/* 開爐成了：太極猛轉一圈，新武學的卡從爐裡冒出來 */
+.w-spin.burst { animation: w-burst 0.9s cubic-bezier(.2, .7, .3, 1) 1 !important; }
+@keyframes w-burst { from { transform: rotate(0); } to { transform: rotate(720deg); } }
+.made-card.emerge { animation: mc-emerge 0.55s cubic-bezier(.2, .8, .3, 1.15); transform-origin: 50% 0; }
+@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-36px) scale(0.6); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); }
+  60% { opacity: 1; } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .w-spin.burst, .made-card.emerge, .kiln.compact, .w-slot.flash rect { animation: none !important; } }
 .kiln-row { display: flex; align-items: stretch; gap: 6px; }
-.kiln-row .btn { flex: none; width: auto; min-width: 76px; margin: 0; padding: 8px 16px; }
-.kiln-plus { align-self: center; color: var(--ink-2); font-size: 13px; }
 .kiln-slot { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px;
   padding: 5px 18px 5px 9px; border-radius: 10px; border: 1.5px dashed var(--line); background: var(--card); color: var(--ink); text-align: left; font: inherit; }
 .kiln-slot b { font: 600 14px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

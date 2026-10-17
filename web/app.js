@@ -467,7 +467,7 @@
   // 內距收一點，兩個字照寫），還碰到才拿掉兩個字（.tight；條上的 title 照舊寫）。topHtml 從不帶這兩個 class：每次畫狀態列
   // （render、renderTop）、視窗換寬度、字型載入完都從寫全量起。瀏覽器量不了、條還沒排版（寬是 0）就不動（照寫全）
   function fitBars() {
-    // 煉製頁的固定列（.kiln-bar）黏在狀態列底下：狀態列多高（展開名號、換寬度都會變）記在 --top-h
+    // 煉製頁縮起來的太極爐（.kiln.compact）固定在狀態列底下：狀態列多高（展開名號、換寬度都會變）記在 --top-h
     const head = document.getElementById("top");
     if (head && document.documentElement && document.documentElement.style && typeof head.offsetHeight === "number") {
       document.documentElement.style.setProperty("--top-h", `${head.hidden ? 0 : head.offsetHeight}px`);
@@ -678,6 +678,7 @@
     }
     S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
+    if (S.tab === "craft") fixedKiln();
     applyGlow();
   }
 
@@ -1343,7 +1344,7 @@
       // 格子只有 46 寬：名字超過四個字（新取的武學名可到六個字）就把字距壓進格子裡，不然會溢出格外蓋到另一格
       const fit = m && [...m.name].length > 4 ? ' textLength="42" lengthAdjust="spacingAndGlyphs"' : "";
       return m
-        ? `<g class="w-slot full r${m.rank}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
+        ? `<g class="w-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
             <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name"${fit}>${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.sub)}</text></g>`
         : `<g class="w-slot"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入</text></g>`;
     };
@@ -3007,20 +3008,50 @@
     return `<button class="chip r${rank}${no ? " no" : ""}${used ? " used" : ""}" data-act="pick" data-type="${type}"${used ? "" : extra} data-id="${esc(thing.id)}"${used ? " disabled" : ""}>
           <b>${esc(thing.name)}</b><small>${no ? `<i class="why">${esc(no.short)}</i>` : esc(sub)}</small></button>`;
   }
-  // 爐子兩格與開爐鈕的固定列（Joy 2026-10-17「合成的時候也會因為要把畫面拉到下面看不到爐子的內容，點來點去滑上去要開爐時才發現素材錯誤或是根本沒點到」）：
-  // 緊接在說明那一行下面，往下捲去挑東西時黏在狀態列底下（.kiln-bar 是 sticky，top 照狀態列的高 --top-h）。兩格點了拿出來（同爐子上那兩格），
-  // 說明那一行有 ⚠（開不了爐的原因）時，固定列底下也寫一行。剛放進去的那一格閃一下（S.potFlash：第幾格）
-  function potBarHtml(slots, ready) {
+  // 太極爐一直看得到（Joy 2026-10-17「合成的時候也會因為要把畫面拉到下面看不到爐子的內容」，之後「那個太極爐變得很多餘」）：
+  // 爐子本身就是開爐的地方，沒有另一條列。往下捲去挑東西、大爐子捲出畫面時，同一座爐縮成一條黏在狀態列底下（.kiln.compact，fixedKiln）：
+  // 左右兩格（點了拿出來）、中間小太極就是開爐鈕，開不了爐的原因寫在底下一行。大爐子那一格的高度由 .kiln-wrap 撐著，縮起來頁面不跳。
+  // 剛放進去的那一格大小兩座都閃一下（S.potFlash：第幾格）
+  // 開不了爐的原因（說明那一行 ⚠ 後面那一句）：縮起來的爐子底下一行；說明回來時只換這一格（updateForgeLine）
+  function kilnWarn() {
     const warn = String(S.forgeLine || (S.menxia && S.menxia.forge_line) || "").replace(/<[^>]+>/g, " ").split("⚠")[1];
+    return warn && warn.trim() ? `<p class="kiln-warn">⚠ ${esc(warn.replace(/\s+/g, " ").trim())}</p>` : "";
+  }
+  function kilnHtml(slots, ready) {
     const cell = (m, i) => m
       ? `<button class="kiln-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" aria-label="拿出${esc(m.name)}"><b>${esc(m.name)}</b><small>${esc(m.sub)}</small><i aria-hidden="true">×</i></button>`
       : `<span class="kiln-slot empty"><small>${i ? "再放一樣" : "放一樣"}</small></span>`;
-    return `<div class="kiln-bar" id="kiln-bar">
-      <div class="kiln-row">${cell(slots[0], 0)}<span class="kiln-plus" aria-hidden="true">＋</span>${cell(slots[1], 1)}
-        <button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
-      ${warn && warn.trim() ? `<p class="kiln-warn">⚠ ${esc(warn.replace(/\s+/g, " ").trim())}</p>` : ""}
-    </div>`;
+    const r = 20;
+    const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
+      <circle r="${r}" class="w-yang"/><path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
+      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/></g></svg>`;
+    return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln">
+      <div class="kiln-big">${furnaceSvg(slots, ready)}</div>
+      <div class="kiln-mini">
+        <div class="kiln-row">${cell(slots[0], 0)}
+          <button class="kiln-hub${ready ? " ready" : ""}" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>${taichi}<span class="kiln-lab">開爐</span></button>
+          ${cell(slots[1], 1)}</div>
+        <div id="kiln-warn">${kilnWarn()}</div>
+      </div></div></div>`;
   }
+  // 大爐子捲出狀態列底下時縮成一條、捲回來時放大：捲動時與每次畫完煉製頁都量一次（renderPage 的 afterPage 之後）
+  function fixedKiln() {
+    const wrap = document.getElementById("kiln-wrap"), kiln = document.getElementById("kiln");
+    if (!wrap || !kiln || typeof wrap.getBoundingClientRect !== "function" || !kiln.classList) return;
+    const head = document.getElementById("top");
+    const topH = head && !head.hidden ? head.offsetHeight : 0;
+    const compact = wrap.getBoundingClientRect().bottom < topH + 90;
+    if (compact === kiln.classList.contains("compact")) return;
+    if (compact) wrap.style.minHeight = `${wrap.offsetHeight}px`; // 縮起來前先撐住原本的高度，頁面才不往上跳
+    kiln.classList.toggle("compact", compact);
+  }
+  // 捲動時一幀量一次（只在煉製頁）
+  let kilnFrame = 0;
+  window.addEventListener("scroll", () => {
+    if (kilnFrame || S.stage !== "game" || S.tab !== "craft") return;
+    kilnFrame = requestAnimationFrame(() => { kilnFrame = 0; fixedKiln(); });
+  }, { passive: true });
+
   // 開爐成了：結果底下直接畫合出來的那一樣（Joy 2026-10-17「玩家根本無法在一合成出武學時查看武學內容評估武學強弱，還需要切換到另一個分頁」）。
   // 武學寫品質、種類、屬性、境界、第幾成、威力、跟身上同一種比強弱、功效（帶檔次的寫檔次）、特別功效、絕招，底下摺著整張功法卡與「改練上身」；
   // 意境寫重數、圓融駁雜、正邪與說明。資料是 owned_arts 的 judge（skillview.melt_judge，同批量熔煉）與 insights
@@ -3085,9 +3116,8 @@
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
-      ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
+      ${kilnHtml([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
-      ${potBarHtml([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       ${result}
       ${attrNoteHtml(x)}
       <div class="label">功法${filterChips("craft")}</div>
@@ -5563,6 +5593,8 @@
       if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
       const el = document.getElementById("forge-line");
       if (el) el.innerHTML = r.line;
+      const warn = document.getElementById("kiln-warn");
+      if (warn) warn.innerHTML = kilnWarn();
     } catch (e) { /* 提示過 */ }
   }
 
@@ -5571,7 +5603,7 @@
 
   // 重畫時畫面不跳：記下 anchor（預設是第一個看得到的「開爐」或點子清單）在螢幕上的位置，畫完捲回同一個位置
   function keepPlace(draw, anchor) {
-    const sel = anchor || "#forge";
+    const sel = anchor || "#forge-line";
     const before = document.querySelector(sel)?.getBoundingClientRect().top;
     draw();
     const after = document.querySelector(sel)?.getBoundingClientRect().top;
@@ -5582,22 +5614,24 @@
   async function forge() {
     const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
-    let guideMoved = false;
+    let guideMoved = false, made = false;
     await busy(async () => {
+      const lab = (btn.querySelector && btn.querySelector(".kiln-lab")) || btn; // 小太極上那兩個字（大爐子縮起來時的開爐鈕）
       btn.disabled = true;
-      btn.textContent = "爐火正旺…";
+      lab.textContent = "爐火正旺…";
       btn.classList.add("forging");
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
       document.querySelector(".furnace .w-furnace")?.classList.add("forging");
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.forgeResult = { html: esc(FORGE_WAIT) };
-      const stop = watchQueue(btn, "爐火正旺…");
+      const stop = watchQueue(lab, "爐火正旺…");
       try {
         const r = await api("/api/menxia/forge", forgeBody());
         S.menxia = r.menxia;
         S.message = "";
         S.forgeResult = { html: r.message };
         S.forgeMade = r.made ? r.made_item || null : null; // 合出來的那一樣：結果底下畫它的卡
+        made = !!r.made;
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         if (r.made) S.forgeSel = [];
@@ -5616,14 +5650,25 @@
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
     if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else {
       keepPlace(() => renderPage());
+      if (made) kilnBurst();
       showMadeCard();
     }
     updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
   }
 
+  // 開爐成了：爐裡的太極猛轉兩圈（大小兩座都是），新武學的卡從爐裡冒出來；轉完回到平常的慢轉
+  function kilnBurst() {
+    document.querySelectorAll(".furnace .w-taichi, .kiln-taichi .w-spin").forEach((g) => {
+      g.classList.add("burst");
+      g.addEventListener("animationend", () => g.classList.remove("burst"), { once: true });
+    });
+    const card = document.querySelector(".made-card");
+    if (card) card.classList.add("emerge");
+  }
+
   // 新武學的卡被黏在上面的固定列蓋住了（往下捲著開爐時）：捲到卡頭剛好露在固定列底下；本來就看得到就不動
   function showMadeCard() {
-    const card = document.querySelector(".made-card"), bar = document.getElementById("kiln-bar");
+    const card = document.querySelector(".made-card"), bar = document.querySelector(".kiln.compact");
     if (!card || !bar || typeof card.getBoundingClientRect !== "function") return;
     const under = bar.getBoundingClientRect().bottom + 8, top = card.getBoundingClientRect().top;
     if (top < under) window.scrollBy({ top: top - under, left: 0, behavior: "smooth" });

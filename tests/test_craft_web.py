@@ -211,9 +211,9 @@ def test_a_merged_insight_shows_its_card_too(made):
     assert 'class="made-card"' in html and "「風火意」" in html.split('class="made-card"', 1)[1]
 
 
-def test_the_pot_bar_holds_both_slots_and_the_forge_button_and_flashes_what_was_just_put_in(made):
-    """爐子兩格與開爐鈕一直看得到（Joy 2026-10-17）：固定列寫兩格放了什麼（點了拿出來）、開爐鈕；剛放進去的那一格閃一下；
-    說明那一行有 ⚠ 時固定列底下也寫一行。"""
+def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_what_was_just_put_in(made):
+    """太極爐一直看得到（Joy 2026-10-17「那個太極爐變得很多餘」）：沒有另一條列，同一座爐縮起來時是兩格、小太極開爐鈕、
+    底下一行 ⚠ 原因；剛放進去的那一格大爐子與縮起來的都閃一下。"""
     game, art = made
     out = run(server.main_view(game), """
       H.S.forgeSel = [{ type: "ins", id: "huo" }];
@@ -221,7 +221,12 @@ def test_the_pot_bar_holds_both_slots_and_the_forge_button_and_flashes_what_was_
       return { html: H.pageCraft(), drawn: T.els.page.innerHTML };
     """, S={"tab": "craft", "forgeSel": [], "forgeLine": "<p>合成 …</p><p>⚠ 心得不夠。</p>"}, menxia=server.menxia_view(game),
         responses={"/api/forge_line": {"line": "", "picks": None}})
-    bar = out["html"].split('class="kiln-bar"', 1)[1].split('class="label"', 1)[0]
-    assert bar.count('data-act="unslot"') == 2 and 'id="forge"' in bar and "<b>粗淺拳腳</b>" in bar and "<b>火</b>" in bar
-    assert "⚠ 心得不夠。" in bar
+    html = out["html"]
+    assert "kiln-bar" not in html and html.count('id="forge"') == 1  # 只有一個開爐鈕
+    kiln = html.split('id="kiln-wrap"', 1)[1].split('id="forge-line"', 1)[0]
+    assert 'class="furnace-wrap"' in kiln  # 大爐子
+    mini = kiln.split('class="kiln-mini"', 1)[1]
+    assert mini.count('data-act="unslot"') == 2 and 'id="forge"' in mini and "<b>粗淺拳腳</b>" in mini and "<b>火</b>" in mini
+    assert "⚠ 心得不夠。" in mini
     assert 'kiln-slot full r1 flash" data-act="unslot" data-i="0"' in out["drawn"]  # 武學放左邊那一格，放進去那一下閃
+    assert 'w-slot full r1 flash" data-act="unslot" data-i="0"' in out["drawn"]  # 大爐子那一格也閃
