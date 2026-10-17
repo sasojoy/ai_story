@@ -69,12 +69,22 @@ def main() -> None:
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
+    parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
+                        help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
     args = parser.parse_args()
     content = load_content(ROOT / "content")
     if args.bout_strike is not None:
         content.config.tactics.bout_strike = args.bout_strike
     if args.war_scale is not None:
         content.config.tactics.war_scale = args.war_scale
+    for item in args.tweak:
+        path, value = item.split("=")
+        sid, key = path.split(".")
+        tactic = content.skills[sid].tactic
+        if key in tactic.params:
+            tactic.params[key] = float(value)
+        else:
+            setattr(tactic, key, float(value))
     if args.might_scale is not None:
         for sk in content.skills.values():
             if sk.tactic is not None:

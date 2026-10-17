@@ -173,6 +173,7 @@
       "name": "長坂一喝",
       "timing": "出招",
       "kind": "roar",
+      "might": 0.12,
       "rate": 0.4,
       "params": {
         "stun_pct": 0.3,
@@ -197,9 +198,10 @@
       "name": "丈八狂瀾",
       "timing": "心法",
       "kind": "unbroken",
-      "rounds": 2,
+      "rounds": 1,
+      "might": 0.12,
       "params": {},
-      "desc": "出招不會被剋（無隙）；代價是這幾回合不能固守。"
+      "desc": "出招不會被剋（無隙）；代價是這一回合不能固守。"
     }
   },
   {
@@ -496,7 +498,7 @@
       "name": "黃巾血誓",
       "timing": "出招",
       "kind": "oath",
-      "rate": 0.3,
+      "rate": 0.26,
       "params": {
         "cost_pct": 0.1
       },
