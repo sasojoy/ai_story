@@ -62,6 +62,8 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
         return False
     if goal.locations and state.player.location not in goal.locations:
         return False
+    if goal.healthy and state.player.member.injury >= 1 and action != "heal":
+        return False
     if goal.has_wugong and state.player.member.wugong_id is None:
         return False
     if goal.fused or goal.fused_level or goal.fused_quality:  # 序章：合成出來的那一門（新手引導計畫一）

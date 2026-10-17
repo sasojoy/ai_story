@@ -172,7 +172,8 @@ def test_a_human_past_the_prologue_is_never_sent_back_to_the_hut(prologue_root, 
     data["steps"].append({"id": "p12", "text": "再逛逛。", "done_when": {"action": "explore"}})
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     content = load_content(prologue_root)
-    past = Game.new(content, "走完的", rng=random.Random(0), world=world)  # 站在起點、步數 11（序章算走過）
+    past = Game.new(content, "走完的", rng=random.Random(0), world=world)  # 站在起點、序章算走過
+    past.state.player.tutorial_step = 11  # 真人走出草廬、多出來的那一步（初入江湖）還沒做（腳本建的角色會跳過它）
     half = Game.new(content, "半途的", rng=random.Random(0), world=world, prologue=True)
     half.state.player.tutorial_step = 4
     assert past.state.player.tutorial_step == 11 < len(content.tutorial.steps)

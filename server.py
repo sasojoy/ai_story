@@ -60,7 +60,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, mapdata,
     naming,
     ollama_client, rules,
     seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
@@ -76,6 +76,11 @@ from tianxia.sqlite_world import open_world
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
+
+
+def horse_art() -> list[str]:
+    """web/ 裡真的有的馬圖（web/horse-<鍵>.webp，鍵見 mounts.COAT_ART、STEED_ART）：網頁只對這些鍵放圖，其餘照舊畫色塊。"""
+    return sorted(path.stem.removeprefix("horse-") for path in WEB.glob("horse-*.webp"))
 PROFILE = env_profile()  # 設定覆寫檔（TIANXIA_PROFILE，例如 weekend）；run_bots.py、scripts/set_password.py 讀同一個
 CONTENT = load_content(ROOT / "content", profile=PROFILE)
 PORT = 7861
@@ -265,8 +270,11 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         msgs = action(game)
         open_characters().save(game.state)
         tales = _tales_waiting(game)
+        crowd = _crowd_waiting(game)
     if tales:
         narrate_battle(game)
+    if crowd:
+        write_crowd(game)
     return msgs
 
 
@@ -307,10 +315,13 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
         except Exception as exc:  # 見上：畫面自己的寫入已經撤回，先讓鎖放掉，再丟出去
             failure = exc
         tales = failure is None and _tales_waiting(game)
+        crowd = failure is None and _crowd_waiting(game)
     if failure is not None:
         raise failure
     if tales:
         narrate_battle(game)
+    if crowd:
+        write_crowd(game)
     return msgs, shown
 
 
@@ -925,6 +936,64 @@ def narrate_once(game: Game) -> int | None:
         return game.apply_battle_tales(request, stories)
 
 
+CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
+
+
+def _crowd_waiting(game: Game) -> bool:
+    """擂台有一句場邊事件等著模型重寫、模型叫得到、這個人還沒有一條在寫（write_crowd）。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or game.state.player.arena_crowd_note is None:
+        return False
+    return game.state.player.name not in CROWD_RUNNING
+
+
+def write_crowd(game: Game) -> bool:
+    """擂台場邊那一句（arena_crowd）：開一個背景執行緒重寫。A 鎖內拿單子（Game.arena_crowd_request）→ B 鎖外請模型寫
+    （arena_crowd.write_line，預算 Config.arena.crowd.write_budget_seconds；排隊時當假人排）→ C 鎖內重驗同一張單子才換
+    （Game.apply_arena_crowd；寫不出來照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    name = game.state.player.name
+    with TALE_LOCK:
+        if name in CROWD_RUNNING:
+            return False
+        CROWD_RUNNING.add(name)
+
+    def job() -> None:
+        try:
+            crowd_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那一句照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                CROWD_RUNNING.discard(name)
+
+    threading.Thread(target=job, name="arena-crowd", daemon=True).start()
+    return True
+
+
+def crowd_once(game: Game) -> bool:
+    """重寫一句（write_crowd 的那一圈；測試直接叫）：換了回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        note = game.arena_crowd_request()
+    if note is None:
+        return False
+    budget = game.content.config.arena.crowd.write_budget_seconds
+    started = _monotonic()
+
+    def ask() -> str:
+        return arena_crowd.write_line(within_budget(game.client, budget - (_monotonic() - started)), note)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(game.state.player.name, ask, fallback="", bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            text = ""
+    with _locked(game):
+        done = game.apply_arena_crowd(note, text)
+        open_characters().save(game.state)
+    return done
+
+
 def duel_text(game: Game, text: str) -> list[str]:
     """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
     （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
@@ -938,14 +1007,19 @@ def duel_text(game: Game, text: str) -> list[str]:
     def score():
         client = within_budget(game.client, total - (_monotonic() - started))
         if client is None and game.client is not None:
-            return fallback
-        return battle_instance.assess_gamble(
+            return fallback, ""
+        verdict = battle_instance.assess_gamble(
             client, scene, request.faction_name, request.text, request.name, setting=request.setting or duel.SETTING,
             place=request.place or duel.PLACE, target=request.target, sex=request.sex,  # 擂台帶對手那一行與擂台的場合（Game.duel_text_request）
         )
+        crowd = ""
+        if request.boss.startswith("arena:") and arena_crowd.on(game.content):  # 擂台：另問一次台下觀眾的反應（評分那一次的提示不動）
+            crowd = arena_crowd.judge_gamble(within_budget(game.client, total - (_monotonic() - started)), request.text,
+                                             request.title, request.name)
+        return verdict, crowd
 
-    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
+    verdict, crowd = model_call(game, score, fallback=(fallback, ""), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
 
 
 def seal_text(game: Game, text: str) -> list[str]:
@@ -1033,6 +1107,9 @@ def _main_view_body(game: Game) -> dict:
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
         # 序章（新手引導計畫一）：要亮的畫面元件、要發光的鈕、略過連結；不在序章是 None，網頁照平常畫
         "prologue": game.prologue_view(),
+        # 初入江湖（新手引導第四段）：出了草廬之後那幾步要亮的畫面元件、要發光的元件；不在初入江湖是 None
+        "onboard": game.onboard_view(),
+        "horse_art": horse_art(),  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
         # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
         # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
         "push": HUB is not None,

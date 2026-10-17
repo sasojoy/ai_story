@@ -730,6 +730,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .gear .wrow { display: flex; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
 .gear .wrow .winfo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 6px; }
 .gear .wrow .wbtns { flex: none; display: flex; gap: 6px; }
+.gear .wrow .horse-thumb { flex: none; width: 56px; height: 42px; object-fit: contain; } /* 坐騎那一列的馬圖（有檔才畫） */
+@media (prefers-color-scheme: dark) { .gear .wrow .horse-thumb { background: #efe6d2; border-radius: 4px; padding: 2px; box-sizing: border-box; } } /* 墨馬墊宣紙 */
 /* FB-137：灰掉的「餵」「換上」的原因，單獨一行寫在那一列的說明底下（鈕上只留動詞） */
 .gear .wrow .winfo .rwhy { flex: 0 0 100%; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
 .gear .wrow .winfo .gear-tactic { flex: 0 0 100%; font-size: 12px; line-height: 1.4; color: var(--accent, var(--ink-2)); }
@@ -1248,10 +1250,19 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   background: var(--card); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
 .guide-line b { color: var(--gold); }
 
-/* 序章（新手引導計畫一）：要按的鈕發光；新亮起來的元件閃一閃。減少動態時只留靜態的金邊 */
-.glow { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation: tx-glow 1.6s ease-in-out infinite; }
+/* 序章（新手引導計畫一）：要按的鈕發光；新亮起來的元件閃一閃。
+   發光是一團慢慢呼吸的金色光暈（Joy 2026-10-17「發光其實只是黃框，應該要緩慢閃爍的發光才明顯」）：約兩秒一次明暗，亮的時候光暈往外
+   擴到二十幾 px、鈕本身也亮一點。減少動態時不閃，停在亮的那一格 */
+.glow { box-shadow: 0 0 0 2px var(--gold), 0 0 22px 7px color-mix(in srgb, var(--gold) 60%, transparent), 0 0 44px 14px color-mix(in srgb, var(--gold) 25%, transparent);
+  animation: tx-glow 2s ease-in-out infinite; }
 .lit { animation: tx-lit 0.9s ease-out 1; }
-@keyframes tx-glow { 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 4px 0 color-mix(in srgb, var(--gold) 20%, transparent); } }
+@keyframes tx-glow {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 70%, transparent), 0 0 4px 0 color-mix(in srgb, var(--gold) 15%, transparent), 0 0 0 0 transparent; filter: none; }
+  50% { box-shadow: 0 0 0 2px var(--gold), 0 0 22px 7px color-mix(in srgb, var(--gold) 60%, transparent), 0 0 44px 14px color-mix(in srgb, var(--gold) 25%, transparent); filter: brightness(1.12); }
+}
+/* 新手引導裡跟這一步無關的區域整片壓暗（Joy 2026-10-17「跟當前教學無關的地方暗掉」；applyFocus 照發光的那幾顆與引導的框挑）：
+   只是看起來暗、照樣按得到，免得哪一步卡住時整頁按不了 */
+.onb-dim { opacity: 0.28; filter: saturate(0.3); transition: opacity 0.3s, filter 0.3s; }
 /* 功法庫收著的那一列（序章指它「改練」「熔煉」）：.lib 要 overflow: hidden（卷軸卡的圓角），列又貼滿左右兩邊，往外長的金邊整個被裁掉、
    看不見。這一列的金邊改成往裡長（inset），一樣的顏色與呼吸，只是畫在列的裡面；卡裡的鈕有邊距，照舊往外長 */
 .lib button.libr.glow { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 12px 2px color-mix(in srgb, var(--gold) 55%, transparent); animation-name: tx-glow-in; }
@@ -1273,6 +1284,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .recap hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 @media (prefers-reduced-motion: reduce) {
   .glow, .lit { animation: none; }
+  .onb-dim { transition: none; }
   .lib button.libr.glow { animation: none; } /* 上面那條的 animation-name 比 .glow 的選擇器重，要自己關；金邊還在，只是不呼吸 */
 }
 
@@ -1700,6 +1712,9 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-market .horse.c3 { background: #cfc4b2; } /* 白蹄 */
 .shop-market .horse.c4 { background: repeating-linear-gradient(60deg, #6b4a2a 0 6px, #e8d6ad 6px 10px); } /* 花斑 */
 .shop-market .horse.c5 { background: #b58a4a; } /* 黃棕 */
+/* 馬的圖（web/horse-<鍵>.webp，有檔才畫；Joy 的水墨畫，米白底已去成透明，淺色直接落在紙上；深色主題墊一塊宣紙，墨馬才看得見）：馬廄一格、點開的卡（修練頁坐騎那一列在 .gear .wrow 那裡） */
+.shop-market .horse-pic { display: block; width: 76px; height: 56px; margin: 2px auto; object-fit: contain; }
+.shop-market .horse-big { display: block; width: 100%; max-height: 190px; margin: 0 0 6px; object-fit: contain; }
 .shop-market .horse-card { margin: 8px 2px 0; padding: 8px 10px; display: grid; gap: 4px; border: 2px solid #6b4a2a; border-radius: 10px; background: var(--paper); color: var(--ink); font-size: 12px; }
 .shop-market .horse-card h4 { margin: 0; font: 600 15px var(--serif); }
 .shop-market .horse-card h4 small { font: 11px var(--sans); color: var(--ink-2); }
@@ -1716,6 +1731,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 @media (prefers-color-scheme: dark) {
   .shop-layer.shop-market { background: linear-gradient(180deg, #4a3a26 0%, #3a2c1c 55%, #24190f 100%); color: #f2e5c6; }
   .shop-market .shop-back, .shop-market .shop-silver { color: #e8d6ad; }
+  .shop-market .horse-big { background: #efe6d2; border-radius: 6px; padding: 4px; box-sizing: border-box; }
 }
 /* 懸賞榜（第四節）：木紋底；手上那一排、告示（釘子、微微歪著）、已揭與交差的朱印、放大的紙 */
 .shop-layer.shop-board { background: repeating-linear-gradient(90deg, #6b4a2a 0 22px, #5e4024 22px 24px, #74512e 24px 46px); color: #f2e5c6; }
@@ -1844,6 +1860,8 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-arena .free-note { font-size: 11.5px; color: #c9b28a; margin: 4px 2px; }
 .shop-arena .ring-log { margin: 10px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; line-height: 1.55; color: #e8d6ad; }
 .shop-arena .ring-log li { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); }
+.shop-arena .ring-log li.crowd { background: rgba(214, 160, 60, 0.22); color: #f3d79a; border-left: 3px solid #d6a03c; }
+.shop-arena .ring-crowd { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(214, 160, 60, 0.2); border: 1px solid rgba(214, 160, 60, 0.55); color: #f6dfa8; font-size: 13px; line-height: 1.55; }
 /* 收場卡：同懸賞榜的紙，貼在畫面下緣 */
 .shop-arena .board-sheet { position: absolute; left: 12px; right: 12px; bottom: calc(56px + var(--bottom, 0px)); z-index: 2;
   max-height: calc(100% - 150px - var(--top, 0px) - var(--bottom, 0px)); overflow-y: auto; overscroll-behavior: contain; border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5); }
@@ -1851,6 +1869,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
 .shop-arena .ring-result h4 { margin: 0; font: 600 16px var(--serif); }
 .shop-arena .ring-result .ring-log { margin: 0; color: #2a241d; }
 .shop-arena .ring-result .ring-log li { background: rgba(0, 0, 0, 0.05); }
+.shop-arena .ring-result .ring-log li.crowd { background: rgba(180, 120, 30, 0.14); color: #5a3d10; }
 .shop-arena .ring-result .reward { margin: 0; font-weight: 600; color: #8e2a22; }
 .shop-arena .ring-result .stamp { position: absolute; top: 8px; right: 10px; transform: rotate(10deg); padding: 2px 6px; border: 3px solid #b3261e; border-radius: 4px;
   color: #b3261e; font: 600 16px var(--serif); font-style: normal; }
@@ -2019,6 +2038,7 @@ ol.board-list { list-style: none; margin: 0; padding: 0; }
   :where(.shop-layer).shop-arena .ring-move small { font-size: 14.5px; }
   :where(.shop-layer).shop-arena .free-note { font-size: 15px; }
   :where(.shop-layer).shop-arena .ring-log { font-size: 15.5px; }
+  :where(.shop-layer).shop-arena .ring-crowd { font-size: 17px; }
   :where(.shop-layer).shop-arena .ring-result { font-size: 16px; }
   :where(.shop-layer).shop-arena .ring-result h4 { font: 600 21px var(--serif); }
   :where(.shop-layer).shop-arena .ring-result .stamp { font: 600 21px var(--serif); }

@@ -880,9 +880,12 @@ class TutorialGoal(_Strict):
         "explore", "socialize", "move", "view_map", "recruit", "practice", "order",
         "choice", "view_tab", "cultivate", "rest", "train", "allocate", "melt", "sense",
         "view_orders",  # 入伍段（新手引導計畫二）：軍令卡出現在畫面上
+        "heal", "shop",  # 初入江湖（新手引導第四段）：醫館療傷；進一間店（鐵匠鋪、懸賞榜、馬市、擂台）
     ] | None = None
     locations: list[str] = Field(default_factory=list)
     condition: Condition = Field(default_factory=Condition)
+    # 初入江湖（新手引導第四段）：身上沒有內傷，或這一下就是療傷（銀兩不夠全治時治一部分也算，不卡住）
+    healthy: bool = False
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
     # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
     fused: bool = False
@@ -955,7 +958,9 @@ class TutorialStep(_Strict):
     line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
-    allow: list[str] = Field(default_factory=list)  # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）
+    # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
+    # 那裡不是只留這些，而是行動列那幾樣（prologue.ONBOARD_CORE）照留，「此地還能做」只多留教到這一步為止寫過的（prologue.onboard_allowed）
+    allow: list[str] = Field(default_factory=list)
     explore_event: str | None = None  # 在草廬探索時一定端出這則事件（四景四選一）
     explore_scene: str | None = None  # 在草廬探索時一定端出這段有所感（InsightScene，prologue 要是 true；跟 explore_event 二選一）
     enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
@@ -1567,6 +1572,32 @@ class DuelTuning(_Strict):
     legend_chance: dict[str, float] = Field(default_factory=lambda: {"大勝": 0.25, "險勝": 0.1})
 
 
+class ArenaCrowdTuning(_Strict):
+    """擂台的場邊事件（Joy 2026-10-17「加入一些隨機特殊的事件……讓擂台不那麼死板又加入一些玩家在世界努力過的元素，還有應用我們LLM的
+    智能，但是也不要太容易觸發，會變成很膩或是主導戰場走向」；PM 定的預設；規則在 tianxia/arena_crowd.py）。全部【預設】，試玩後再調。
+
+    - chance：這一回合有場邊事件可發生（兩邊至少一邊合條件）時擲中的機率；一場最多一件。5 回合合計約 1−(1−chance)^5。
+    - outrage_chance：放手一搏被模型判成「離譜」時，觀眾發火的機率（不另擲 chance；一場最多一件照舊）。
+    - patron_affinity：台下暗助的武將要跟那一邊情誼到幾。fame_tier／virtue_tier：名望、善惡稱號到第幾段才有人喝采、噓。
+    - streak：連勝到幾場（或天下第一）台下才喊他的名號。veteran_hours：決戰打贏之後幾個世界小時內，台下有一起打過的弟兄。
+    - edge：會推氣勢的事件推幾點（往得利的那一邊）；pool：動池子的事件動氣血上限的幾成（正的回、負的扣）。
+    - weights：同一回合幾件都合條件時挑哪一件的權重（沒寫的當 1）。
+    - write_budget_seconds：場邊那一句請模型重寫的預算（鎖外、背景執行緒；寫不出來照 content/arena_crowd.json 的固定句）。"""
+
+    enabled: bool = True
+    chance: float = Field(default=0.045, ge=0, le=1)
+    outrage_chance: float = Field(default=0.5, ge=0, le=1)
+    patron_affinity: int = Field(default=40, ge=0, le=100)
+    fame_tier: int = Field(default=2, ge=1, le=4)
+    virtue_tier: int = Field(default=2, ge=1, le=4)
+    streak: int = Field(default=3, ge=1)
+    veteran_hours: float = Field(default=24.0, ge=0)
+    edge: dict[str, float] = Field(default_factory=lambda: {"patron": 4, "cheer": 3, "champion": 3, "veteran": 3})
+    pool: dict[str, float] = Field(default_factory=lambda: {"boo": -0.04, "mate": 0.05, "outrage": -0.05})
+    weights: dict[str, float] = Field(default_factory=dict)
+    write_budget_seconds: float = Field(default=20.0, ge=0)
+
+
 class ArenaTuning(_Strict):
     """擂台賽（隨時挑擂；docs/superpowers/specs/2026-10-14-擂台賽-design.md，Joy 2026-10-14 選「隨時挑擂」，同一天 PM 轉述的配套改成
     名次制）：報名的人留下一份守擂的分身，別人隨時來挑，對的是分身，只算本季。規則在 tianxia/arena.py。一場照頭目戰的純函式
@@ -1596,6 +1627,7 @@ class ArenaTuning(_Strict):
     wages: list[tuple[int, int]] = Field(default_factory=lambda: [(100, 5), (60, 3), (60, 3)] + [(30, 1)] * 7)
     prizes: list[int] = Field(default_factory=lambda: [30, 20, 10])
     prize_treasure: bool = True
+    crowd: ArenaCrowdTuning = Field(default_factory=ArenaCrowdTuning)  # 場邊事件（見 ArenaCrowdTuning；tianxia/arena_crowd.py）
 
 
 class DuelFoe(_Strict):
@@ -3533,6 +3565,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     map: MapLayout

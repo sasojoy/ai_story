@@ -175,8 +175,11 @@
   // shown(key)：這個元件亮了沒（reveal 有它、或 "all" 全亮）。glow 列的鈕加 .glow，新亮起來的加 .lit（見 applyGlow）。
   // prologueKey：亮起來的東西變了沒——變了就整頁重畫（分頁列、狀態列只在整頁重畫時才換，見 renderTop）
   const pro = () => (S.main && S.main.prologue) || null;
-  const shown = (key) => { const p = pro(); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
-  const prologueKey = () => { const p = pro(); return p ? p.reveal.join(",") : ""; };
+  // 序章之後的「初入江湖」那幾步：跟序章一樣照 reveal 露出東西。
+  const onb = () => (S.main && S.main.onboard) || null;
+  // 初入江湖（新手引導第四段）：出了草廬之後那幾步也一樣一樣亮（m.onboard，同一個形狀）；草廬裡才有的規矩（略過序章、師父的框）照舊只看 pro()
+  const shown = (key) => { const p = pro() || (S.main && S.main.onboard); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
+  const prologueKey = () => { const p = pro() || (S.main && S.main.onboard); return p ? p.reveal.join(",") : ""; };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
@@ -682,7 +685,7 @@
     // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
     // 光給摺疊的標題列（glowTarget）
     guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
-    const p = pro();
+    const p = pro() || onb();
     if (!p) {
       litBefore = null;
       litKeys = [];
@@ -698,7 +701,27 @@
     }
     p.glow.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
     litKeys.forEach((key) => document.querySelectorAll(`[data-glow~="${key}"]`).forEach((el) => el.classList.add("lit")));
+    applyFocus();
     guideCue();
+  }
+
+  // 新手引導（序章與初入江湖）有東西在發光時，跟這一步無關的區域整片壓暗（Joy 2026-10-17）：留亮的是發光的那幾顆、引導的框與它們的
+  // 祖先，祖先的其他孩子壓暗（.onb-dim）；狀態列、頁面、分頁列裡整塊沒有要亮的東西就整塊壓暗。店面、抽屜這些疊在上面的不碰。
+  // 沒有東西在發光（眼前是事件、框收著的那一句）不壓
+  function applyFocus() {
+    document.querySelectorAll(".onb-dim").forEach((el) => el.classList.remove("onb-dim"));
+    const roots = [document.getElementById("top"), document.getElementById("page"), document.querySelector("nav.tabs")].filter(Boolean);
+    const lit = roots.flatMap((r) => [...r.querySelectorAll(".glow")]);
+    if (!(pro() || onb()) || !lit.length) return;
+    const whole = new Set([...lit, ...document.querySelectorAll("#page .card.guide")]); // 這幾塊底下整塊亮著
+    const keep = new Set();
+    whole.forEach((el) => { for (let n = el; n && n !== document.body; n = n.parentElement) keep.add(n); });
+    // 整塊沒有要亮的：壓暗它的孩子，不壓它自己——狀態列與分頁列是黏在畫面上、有底色的，整條變半透明會透出底下捲過去的字
+    roots.forEach((r) => { if (!keep.has(r)) [...r.children].forEach((c) => c.classList.add("onb-dim")); });
+    keep.forEach((n) => {
+      if (whole.has(n) || !roots.some((r) => r.contains(n))) return;
+      [...n.children].forEach((c) => { if (!keep.has(c)) c.classList.add("onb-dim"); });
+    });
   }
 
   // 要按的東西沒有整個露在第一屏裡（修練頁的改練那一列在 y≈1300，或只露出幾 px 被分頁列蓋住）時，師父的框上多一個小小的
@@ -712,7 +735,7 @@
     if (!head) return;
     const old = head.querySelector(".guide-below");
     if (old) old.remove();
-    const target = (pro() || guideGlow().length) && document.querySelector("#page .glow");
+    const target = (pro() || onb() || guideGlow().length) && document.querySelector("#page .glow");
     if (!target) return;
     const bar = document.querySelector(".tabs");
     const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
@@ -2813,7 +2836,7 @@
     // 這一行的寫法待 joy 潤
     const mountRow = (h, wornNow) => {
       const why = wornNow ? (h.feed ? "" : h.feed_note || "") : (h.wield_ok ? "" : h.wield_note || "");
-      return `<div class="wrow">
+      return `<div class="wrow">${horseImg(h.art, "horse-thumb")}
         <div class="winfo"><b>【${esc(h.name)}】</b><span>${esc(h.grade)}・${esc(h.wear_word)} ${h.edge | 0}・疾行省 ${esc(h.save)} 體力・路上快 ${esc(h.speed)}・決戰強攻奇襲 +${esc(h.cavalry)}・落敗脫身 ${esc(h.escape)}</span>${why ? `<small class="rwhy">${esc(why)}</small>` : ""}</div>
         <div class="wbtns">${wornNow
           ? (h.feed ? `<button class="btn small" data-act="feed">餵${h.feed_note ? `（${esc(h.feed_note)}）` : ""}</button>` : `<button class="btn small" data-act="feed" disabled${why ? ` title="${esc(why)}"` : ""}>餵</button>`)
@@ -3134,13 +3157,20 @@
   }
 
   // 打到一半：兩邊的氣血、中間一條氣勢（越往右越是你佔上風）、他的架勢、三招、放手一搏、這一場打過的回合
+  // 擂台的場邊事件（tianxia/arena_crowd.py）：那一行以〔場邊〕開頭，另一種底色；剛發生的那一回合在雙方氣血底下多放一行
+  const CROWD_MARK = "〔場邊〕";
+  function ringLine(l) { return `<li${l.startsWith(CROWD_MARK) ? ' class="crowd"' : ""}>${esc(l)}</li>`; }
+
   function arenaFightHtml(f) {
     const pct = (a) => Math.max(0, Math.min(100, a.cap ? (a.hp / a.cap) * 100 : 0));
     const side = (a, cls) => `<div class="ring-side ${cls}"><b>${esc(a.name)}</b><div class="hp"><i style="width:${pct(a).toFixed(1)}%"></i></div><small>${a.hp | 0}／${a.cap | 0}</small></div>`;
     const moves = f.moves.map((m) => `<button class="btn ring-move"${m.enabled === false ? " disabled" : ` data-act="choose" data-id="${esc(m.id)}"`}><b>${esc(m.move)}</b><small>${esc(m.label.replace(m.move, ""))}</small></button>`).join("");
-    const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map((l) => `<li>${esc(l)}</li>`).join("")}</ol>` : "";
+    const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map(ringLine).join("")}</ol>` : "";
+    const last = f.log.length ? f.log[f.log.length - 1] : "";
+    const crowd = last.startsWith(CROWD_MARK) ? `<p class="ring-crowd">${esc(last)}</p>` : "";
     return `<div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
       <div class="ring-sides">${side(f.me, "mine")}<span class="vs">對</span>${side(f.foe_hp, "theirs")}</div>
+      ${crowd}
       <div class="ring-edge"><span>${esc(f.edge_words)}</span><div class="bar"><i style="left:${Math.max(0, Math.min(100, f.edge | 0))}%"></i></div></div>
       ${f.arts.length ? `<p class="ring-arts">他守擂用的是${esc(f.arts.join("、"))}。</p>` : ""}
       ${f.status ? `<p class="ring-status">${esc(f.status)}</p>` : ""}
@@ -3157,7 +3187,7 @@
     const won = r.tier === "大勝" || r.tier === "險勝";
     const cls = won ? "win" : r.tier === "僵持" ? "draw" : "lose";
     return `<div class="board-sheet ring-sheet"><article class="paper ring-result ${cls}"><i class="stamp">${esc(r.tier)}</i>
-        <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ol>
+        <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map(ringLine).join("")}</ol>
         ${r.changes.length ? `<p class="reward">${esc(r.changes.join("・"))}</p>` : ""}
         <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
   }
@@ -3325,13 +3355,18 @@
 
   // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
   // （market:feed、market:buy、market:wield:<id>）。字待 joy 潤 ──
+  // 馬的圖（Joy 2026-10-17 要真的水墨畫，圖另外產）：伺服器列出 web/ 裡真的有的鍵（main.horse_art），有圖放圖，沒有回空字串、照舊畫色塊
+  function horseImg(key, cls) {
+    return key && ((S.main && S.main.horse_art) || []).includes(key)
+      ? `<img class="${cls}" src="/static/horse-${encodeURIComponent(key)}.webp" alt="" loading="lazy">` : "";
+  }
   function marketHtml(shop) {
     const live = shop.stalls.filter((h) => !h.empty);
     const pick = live.find((h) => h.id === S.shopHorse) || live.find((h) => h.id === shop.focus) || live[0];
     const stall = (h) => (h.empty
       ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
       : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
-          <span class="who">${esc(h.who)}</span><i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i><b>${esc(h.name)}</b><small>${dealHtml(h.sub)}</small></button>`);
+          <span class="who">${esc(h.who)}</span>${horseImg(h.art, "horse-pic") || `<i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i>`}<b>${esc(h.name)}</b><small>${dealHtml(h.sub)}</small></button>`);
     return `<div class="shop-body"><div class="shop-col"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
       ${pick ? horseCard(pick) : ""}</div></div>`;
   }
@@ -3343,7 +3378,7 @@
     const fed = h.fed ? `<div class="fed"><span class="l">${esc(h.fed.word)} ${h.fed.value | 0}</span><span class="v"><i style="width:${width(h.fed.value)}%"></i></span>${h.fed.note ? `<small>${esc(h.fed.note)}</small>` : ""}</div>` : "";
     const a = h.action;
     const sub = a.enabled ? a.use : a.why;
-    return `<article class="horse-card"><h4>${esc(h.name)} <small>${esc(h.grade)}</small></h4>
+    return `<article class="horse-card">${horseImg(h.art, "horse-big")}<h4>${esc(h.name)} <small>${esc(h.grade)}</small></h4>
         ${h.compare ? `<p class="cmp">${esc(h.compare)}</p>` : ""}<div class="bars">${bars}</div>${fed}
         <button class="btn primary horse-act" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}><b>${esc(a.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</button>
       </article>`;

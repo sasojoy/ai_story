@@ -31,7 +31,7 @@ def real(real):
     全圖開放也關掉（closed_map）：打擊軍令的卡與輿圖的 ◎ 在這裡測「還沒摸清只寫大區」（FB-072），全圖開放的見 tests/test_open_map.py。"""
     return closed_map(classic_rules(real))
 
-BASE = 11  # 引導的步數（序章十一步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
+BASE = 15  # 引導的步數（序章十一步＋初入江湖四步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
 
 def _game(content, name="甲", faction=None, at=None, world=None):
@@ -597,8 +597,8 @@ def test_enlistment_after_joining_only_in_season_one(on):
     game = _game(on, at="changshe")
     game.set_hints_off(True)  # 這個測試看入伍段的框：長社站著大勢人物，真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）
     off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
-    assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步
-    game.state.player.tutorial_step = BASE  # 序章十一步做完了
+    assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步加初入江湖四步
+    game.state.player.tutorial_step = BASE  # 序章與初入江湖都做完了
     game.choose("faction:guan")
     msgs = game.choose("faction:confirm")
     assert game.state.player.enlist_step == 0 and game.state.player.tutorial_step == BASE

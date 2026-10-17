@@ -114,6 +114,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
@@ -569,6 +570,26 @@ def check_front_lines(c: Content, need) -> None:
     for key, pool in lines.geju.items():
         need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
         check_pool(f"front_lines.geju.{key}", pool)
+
+
+def check_arena_crowd(c: Content, need) -> None:
+    """擂台場邊事件的固定句（content/arena_crowd.json）：只能是認得的種類，每一句照 arena_crowd.FIELDS 填得進去、填完不能有阿拉伯數字
+    （數字只能是引擎寫在括號裡的）；擂台與場邊事件開著時每一種至少一句。"""
+    from . import arena_crowd  # noqa: PLC0415
+
+    for kind, lines in c.arena_crowd.items():
+        need(kind in arena_crowd.KINDS, f"arena_crowd：不認得的種類 {kind}")
+        need(isinstance(lines, list) and bool(lines), f"arena_crowd.{kind}：要寫成一串句子")
+        for text in lines if isinstance(lines, list) else []:
+            try:
+                filled = str(text).format(**arena_crowd.SAMPLE)
+            except (KeyError, IndexError, ValueError) as e:
+                need(False, f"arena_crowd.{kind}：「{text}」填不進去（{e}）")
+                continue
+            need(bool(filled.strip()) and not any(ch.isdigit() for ch in filled), f"arena_crowd.{kind}：「{text}」不能空、不能有數字")
+    if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
+        for kind in arena_crowd.KINDS:
+            need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -1886,6 +1907,7 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
+    check_arena_crowd(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
@@ -2300,10 +2322,14 @@ def validate(c: Content) -> None:
             )
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
-        special = (step.scene or step.line or step.reveal or step.glow or step.allow or step.explore_event or step.enemies
+        special = (step.explore_event or step.enemies
                    or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
                    or step.give_art or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
+        # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
+        screen = step.scene or step.line or step.reveal or step.glow or step.allow
+        need(not screen or t.location is not None and (i < t.prologue_steps or not step.season_one),
+             f"{where}：scene、line、reveal、glow、allow 只能寫在序章與初入江湖的步驟（第一季才有的步驟不行）")
         need(not step.paged or "\n\n" in step.text, f"{where}：paged 的話要有兩段以上（照空一行切頁）")
         # 要換掉的字只認這幾個（打錯了會原樣出現在畫面上）：話、旁白、收起來那一行是 {武學}；結果那一句（after）是 {意境}、{武學}、{心得}
         for field, allowed in (("text", {"武學"}), ("scene", {"武學"}), ("line", {"武學"}), ("after", {"意境", "武學", "心得"})):
@@ -2311,8 +2337,9 @@ def validate(c: Content) -> None:
             need(not unknown, f"{where}：{field} 裡有不認得的要換掉的字 {unknown}（只認 {sorted(allowed)}）")
         bad = [k for k in step.reveal if k not in REVEAL_KEYS]
         need(not bad, f"{where}：reveal 不認得 {bad}")
-        bad = [k for k in step.glow if k not in GLOW_KEYS]
-        need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵）")
+        # 初入江湖的步驟還可以讓選單上的一顆發光（寫它的 id，同 allow 認得的；prologue.onboard_glow）
+        bad = [k for k in step.glow if k not in GLOW_KEYS and (i < t.prologue_steps or not allow_known(k))]
+        need(not bad, f"{where}：glow 不認得 {bad}（要是 models.GLOW_KEYS 裡的鍵；初入江湖的步驟也可以是選單 id）")
         unknown = [entry for entry in step.allow if not allow_known(entry)]
         need(
             not unknown,
