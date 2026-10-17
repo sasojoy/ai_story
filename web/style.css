@@ -897,6 +897,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #e9e2cc; overflow: hidden; }
 /* 輿圖那一層常駐在 #map-host（FB-324，app.js 的 showMapHost）：在別的分頁時只是看不見、點不到，樣式、排版、點陣化都留著，回來不必重畫 */
 #map-host.away { visibility: hidden; }
+/* 藏起來時：整層一律不收點擊（.mapx 是 fixed、蓋在另外四頁上，FB-326）；紅圈不跳（不然閒著也每一幀在算，FB-327；回到輿圖時拿掉 .away，
+   圈從頭跳）；底圖紙紋的 filter 關掉（feTurbulence 不看本體，visibility: hidden 照樣畫出一層淡淡的紙紋，FB-328） */
+#map-host.away * { pointer-events: none !important; }
+#map-host.away .pulse { animation: none; }
+#map-host.away [filter] { filter: none; }
 /* 地圖框（W16）：地圖照原本的像素大小放在裡面，靠 transform 平移、縮放（app.js 的 applyMapView）。
    框裡的手勢全歸地圖（touch-action: none）：不捲頁面、不放大整頁；長按不跳選字、不跳 iOS 的選單。
    clip 一樣裁切、而且不能被 scrollIntoView 捲走（hidden 的框仍然是捲動容器） */
@@ -908,7 +913,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mapx.tl-mode .map-wrap { bottom: var(--md-h, 0px); }
 .map-wrap .tx-world-map { position: absolute; left: 0; top: 0; }
 .map-wrap .tx-world-map > svg { display: block; transform-origin: 0 0; }
-/* 疊在底圖上面的那一張（FB-323，app.js 的 marksParts）：同一個原點、位移與倍率；點擊穿過去，只有搬上來的地點點擊區收（下面那一條 pointer-events: all） */
+/* 疊在底圖上面的那一張（FB-323，app.js 的 marksParts）：同一個原點、位移與倍率；點擊穿過去，只有搬上來的地點點擊區收（下面那一條 pointer-events: visible） */
 .map-wrap .tx-world-map > svg.mk-top { position: absolute; left: 0; top: 0; pointer-events: none; }
 /* 拖移、雙指縮放中才升成合成層（不常駐：停下來還開著的話字會糊）；按鈕的移動滑一下，手勢與滾輪中不滑 */
 .map-wrap.moving .tx-world-map > svg { will-change: transform; }
@@ -916,7 +921,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-wrap.grabbing, .map-wrap.grabbing [data-loc] { cursor: grabbing !important; }
 .map-wrap.far .tx-region-name { display: none; }
 /* 地點的點擊區（E2／E3）：每個地點一個透明的圓（r=16）接點擊，這裡再加透明的粗外框，寬 --hit 由 app.js 跟著倍率算 */
-.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: all; }
+/* visible：不看填色與線色（透明的照樣點得到），但照 visibility 走——藏起來的輿圖那一層裡的點擊圓不收點擊（all 不管 visibility，FB-326） */
+.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: visible; }
 /* 上面：找地點一條、濾鏡一排（橫著滑）。外層不收點擊，只有鈕收：沒字的地方照常拖地圖 */
 .map-top { position: absolute; left: 10px; right: 64px; top: 10px; display: flex; flex-direction: column; gap: 7px; pointer-events: none; transition: opacity 0.15s; }
 .map-top > * { pointer-events: auto; }
