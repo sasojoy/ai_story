@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
-from . import signature, tactics
+from . import signature, skill_slots, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -54,6 +54,7 @@ class Loadout:
     layers: dict[str, float] = field(default_factory=dict)
     specials: dict[str, SpecialTrait] = field(default_factory=dict)
     source: dict[str, str] = field(default_factory=dict)
+    highs: list[TacticDef] = field(default_factory=list)  # 高階技能（skill_slots）：強度固定，同名的只算一個
 
 
 def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loadout:
@@ -64,7 +65,8 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
     if not content.traits.general:
         return out
     for skill_id in (state.player.member.wugong_id, state.player.member.neigong_id):
-        art = team.player_art(state, content, world, skill_id)  # 自己那一份：品質照自己修到的
+        # 自己那一份：品質照自己修到的；技能照自己那一品亮了的格子（skill_slots.apply）
+        art = skill_slots.apply(state, content, team.player_art(state, content, world, skill_id))
         if art is None:
             continue
         mult, mine = multiplier(content, art.quality), traits_of(art)
@@ -74,10 +76,15 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
             out.layers[trait.hook] = out.layers.get(trait.hook, 0.0) + layers
             if layers > best.get(trait.name, (0.0, ""))[0]:
                 best[trait.name] = (layers, art.name)
-        sp = special(content, art.special)
-        if sp is not None and sp.hook not in out.specials:
-            out.specials[sp.hook] = sp
-            best.setdefault(sp.name, (1.0, art.name))
+        for sid in [art.special, *art.extra_specials]:
+            sp = special(content, sid)
+            if sp is not None and sp.hook not in out.specials:
+                out.specials[sp.hook] = sp
+                best.setdefault(sp.name, (1.0, art.name))
+        top = skill_slots.high(content, art.high)
+        if top is not None and all(t.name != top.tactic.name for t in out.highs):
+            out.highs.append(top.tactic)
+            best.setdefault(top.tactic.name, (1.0, art.name))
     out.source = {name: art_name for name, (_, art_name) in best.items()}
     return out
 
@@ -113,7 +120,7 @@ def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
     for sp in lo.specials.values():
         if sp.tactic is not None:
             out.append(sp.tactic)
-    return out
+    return out + list(lo.highs)
 
 
 ULTIMATE_TITLE = "絕招"
@@ -178,7 +185,32 @@ def card_line(content: Content, art: MartialArt) -> str:
         number = min(trait.cap, trait.per_layer * layers)
         extra = min(trait.extra_cap, trait.extra_per_layer * layers)
         parts.append(f"〔{trait.name}〕" + trait.desc.replace("{value}", _value(trait.hook, number)).replace("{extra}", _value(trait.hook, extra)))
-    sp = special(content, art.special)
-    if sp is not None:
-        parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
-    return "功效：" + "・".join(parts) + (f"\n{tail}" if tail else "")
+    for sid in [art.special, *art.extra_specials]:
+        sp = special(content, sid)
+        if sp is not None:
+            parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
+    top = skill_slots.high(content, art.high)
+    if top is not None:
+        parts.append(HIGH_MARK.format(name=top.name) + top.desc)
+    line = "功效：" + "・".join(parts)
+    asleep = dormant_names(content, art)
+    if asleep:
+        line += "\n" + DORMANT_LINE.format(names="、".join(asleep))
+    return line + (f"\n{tail}" if tail else "")
+
+
+HIGH_MARK = "〔高階・{name}〕"
+DORMANT_LINE = "未開：{names}（修練升品就會亮起來）"
+
+
+def dormant_names(content: Content, art: MartialArt) -> list[str]:
+    """還沒亮的功效的名字（skill_slots.apply 填的 dormant）。"""
+    out = []
+    for item in art.dormant:
+        if item.startswith(skill_slots.SPECIAL_MARK):
+            sp = special(content, item[len(skill_slots.SPECIAL_MARK):])
+            if sp is not None:
+                out.append(sp.name)
+        elif any(t.attribute == item for t in content.traits.general):
+            out.append(general(content, item).name)
+    return out
