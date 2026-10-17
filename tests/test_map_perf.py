@@ -112,7 +112,8 @@ def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch
 
 
 # ── 網頁（node 跑整支 app.js，同 tests/test_map_web.py）──
-NAMES = ["S", "pageMap", "marksSvg", "marksParts", "drawMarks", "mapReady", "setMapDrawer", "gripDown", "gripUp", "renderPage", "syncLayerButtons"]
+NAMES = ["S", "pageMap", "marksSvg", "marksParts", "drawMarks", "mapReady", "setMapDrawer", "gripDown", "gripUp", "renderPage", "syncLayerButtons",
+         "forgetMap", "enter"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NOW = "{ k: 1, far: false, layers: new Set(['control']), sel: null, week: H.S.mapState.now_week }"
@@ -212,6 +213,59 @@ def test_fb323_the_pulse_grows_by_transform_and_fades_by_opacity():
     rule = css[css.index(".mapx .pulse {"):]
     rule = rule[: rule.index("}") + 1]
     assert "transform-box: fill-box" in rule and "transform-origin: center" in rule and "mk-pulse 1.6s ease-out infinite" in rule
+
+
+def _away_rules() -> dict[str, str]:
+    """style.css 裡 #map-host.away 開頭的每一條規則：選擇器 → 大括號裡那一段。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    return {sel.strip(): body.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css) if sel.strip().startswith("#map-host.away")}
+
+
+def test_fb326_nothing_in_the_hidden_map_takes_a_tap():
+    """藏起來的輿圖那一層（FB-324）蓋在另外四頁上：裡面不能有任何東西收點擊。地點的點擊圓用 visible（照 visibility 走，透明的照樣點得到），
+    不用 all（all 不管 visibility，藏起來也照收，FB-326）；藏起來時整層再一律 pointer-events: none。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    assert not re.search(r"pointer-events:\s*(all|painted|fill|stroke)\b", css)  # 這幾個值都不管 visibility
+    hit = css[css.index('.map-wrap [data-loc] > circle[fill-opacity="0"]'):]
+    assert "pointer-events: visible;" in hit[: hit.index("}")]
+    assert _away_rules()["#map-host.away *"] == "pointer-events: none !important;"
+
+
+def test_fb327_fb328_the_hidden_map_stops_its_pulse_and_its_paper_grain():
+    """藏起來時紅圈不跳（不然另外四頁閒著也每一幀在算，FB-327），底圖紙紋的 filter 關掉（feTurbulence 不看本體，visibility: hidden
+    照樣畫出一層淡淡的紙紋，FB-328）。回到輿圖時記號照舊重畫、圈從頭跳。"""
+    rules = _away_rules()
+    assert rules["#map-host.away .pulse"] == "animation: none;"
+    assert rules["#map-host.away [filter]"] == "filter: none;"
+
+
+@needs_node
+def test_fb329_logging_out_or_in_forgets_the_last_players_map():
+    """同一個分頁登出、換帳號登入（不重新整理）：上一個人的底圖、疊層、視圖、選的地點、濾鏡、抽屜都清回開頭，常駐那一層整個清掉（FB-329）；
+    登入之後停在輿圖分頁就重抓這個人的疊層。"""
+    game = _map_game()
+    st = game.map_state()
+    # 登入（enter）那一段要等重抓回來，所以整段包成 async；fetch 是假的，照網址開頭回 responses 裡的那一份
+    out = webharness.run(DRIVER, {
+        "m": server.main_view(game), "S": {"mapBase": game.map_base(), "mapState": st}, "menxia": None, "stored": {},
+        "responses": {"/api/map/state": st, "/api/map/base": game.map_base()},
+        "script": """return (async () => {
+  const doc = T.ctx.document, byId = doc.getElementById;
+  const host = { id: 'map-host', classes: new Set(), html: 'OLD', classList: { add: (c) => host.classes.add(c), remove: (c) => host.classes.delete(c) } };
+  Object.defineProperty(host, 'innerHTML', { get: () => host.html, set: (v) => { host.html = v; } });
+  doc.getElementById = (id) => (id === 'map-host' ? host : byId(id));
+  Object.assign(H.S, { mapView: { s: 2, cx: 1, cy: 2 }, mapSel: 'changshe', mapMode: 'place', mapLayers: ['insight'], mapDrawer: 'half', mapWeek: 3, mapQuery: '長', mapStateAt: 99 });
+  H.forgetMap();
+  const after = { base: H.S.mapBase, state: H.S.mapState, view: H.S.mapView, sel: H.S.mapSel, mode: H.S.mapMode, layers: H.S.mapLayers, drawer: H.S.mapDrawer,
+    week: H.S.mapWeek, query: H.S.mapQuery, at: H.S.mapStateAt, host: host.html, away: host.classes.has('away') };
+  Object.assign(H.S, { mapSel: 'changshe', tab: 'map' });
+  H.enter({ stage: 'game', main: m });
+  await new Promise((r) => setTimeout(r, 30));
+  return { after, sel: H.S.mapSel, asked: T.calls.map((c) => c[0]), here: H.S.mapState && H.S.mapState.here };
+})();"""})
+    assert out["after"] == {"base": None, "state": None, "view": None, "sel": None, "mode": "overview", "layers": ["control", "order"],
+                            "drawer": "rest", "week": None, "query": "", "at": 0, "host": "", "away": True}
+    assert out["sel"] is None and "/api/map/state" in out["asked"] and out["here"] == st["here"]
 
 
 @needs_node
