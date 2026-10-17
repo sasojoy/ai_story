@@ -575,6 +575,8 @@ def test_rows_for_the_practice_page(content, world):
     assert data["worn"]["name"] == "試刃" and data["worn"]["fits"] and data["worn"]["bonus"] == "+5%"
     assert data["rack"][0]["id"] == "兵:2" and not data["rack"][0]["fits"] and data["rack"][0]["bonus"] is None
     assert data["cap"] == content.config.weapons.rack_cap
+    assert data["fit_line"] == f"你身上的【{art.name}】配劍，只有劍有加成。"  # Joy 2026-10-17：整排「用不上」時看得出為什麼
+    assert weapons.rows(game.state, content, world, None)["fit_line"] == "你身上的武學用不上兵器，哪一把都沒有加成。"
     content.config.weapons.enabled = False
     assert weapons.rows(game.state, content, world, art)["worn"] is None
     assert weapons.rows(game.state, content, world, art)["rack"] == []
