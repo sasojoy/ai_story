@@ -927,7 +927,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .map-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; align-self: flex-start; max-width: 100%; }
 .map-chips::-webkit-scrollbar { display: none; }
-/* 五顆濾鏡在 375 寬（右邊留給那一排鈕）一排放得下（企劃者 10/15 從對比圖選丙） */
+/* 五顆濾鏡在 375 寬（右邊留給那一排鈕）一排放得下（企劃者 10/15 從對比圖選丙；意境挪到右邊那一欄，FB-325） */
 .map-chips button {
   flex: none; height: 30px; border-radius: 15px; border: 1px solid var(--line); cursor: pointer; padding: 0 8px;
   background: color-mix(in srgb, var(--card) 94%, transparent); color: var(--ink-2); font: inherit; font-size: 12.5px; white-space: nowrap;
@@ -945,6 +945,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-ctl button.tl small { font-size: 9.5px; color: var(--ink); }
 .map-ctl button.tl.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .map-ctl button.tl.on small { color: #fff; }
+/* 意境鈕（FB-325，企劃者 10/17 選丙）：版圖下面，色點＋「意境」；開著跟濾鏡一樣墨底。版圖變化時跟濾鏡那一排一起收起來 */
+.map-ctl button.ins { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; line-height: 1; }
+.map-ctl button.ins i { width: 12px; height: 12px; border-radius: 50%; }
+.map-ctl button.ins small { font-size: 9.5px; color: var(--ink); }
+.map-ctl button.ins.on { background: var(--ink); border-color: var(--ink); }
+.map-ctl button.ins.on small { color: var(--paper); }
+.mapx.tl-mode .map-ctl button.ins { display: none; }
 .map-ctl button:disabled { opacity: 0.45; cursor: default; }
 .map-ctl svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 /* 「天下」那一條：看大局、版圖變化時浮在上方中間 */
@@ -968,8 +975,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mgrab { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none; }
 .mgrab i { width: 38px; height: 5px; border-radius: 3px; background: var(--line); }
 .mbody { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 14px; font-size: 14px; line-height: 1.55; overscroll-behavior: contain; }
-@keyframes mk-pulse { 0% { r: 16; opacity: 0.9; } 100% { r: 36; opacity: 0; } }
-.mapx .pulse { animation: mk-pulse 1.6s ease-out infinite; transform-box: fill-box; }
+/* 你在這裡、易手的地點那一圈（FB-323，企劃者 10/17 從對比圖選丙）：整個圈放大 2.25 倍（半徑 16 → 36）、淡出，合成器自己跑，
+   閒置不吃主執行緒；線跟著變粗（2.5 → 約 5.6 px，企劃者接受）。圈畫在疊在底圖上面的那一張（app.js 的 marksParts） */
+@keyframes mk-pulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.25); opacity: 0; } }
+.mapx .pulse { animation: mk-pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) {
   .mapx .pulse { animation: none; }
   .mdrawer, .map-top { transition: none; }
