@@ -6,8 +6,13 @@ CompanionProgress），這裡的函式凡是要讀寫同伴進度都要帶一個
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
+import threading
+from collections import OrderedDict
+from collections.abc import Callable
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
@@ -1130,6 +1135,52 @@ def odds_word(
     return _odds_text(wins, draws, ESTIMATE_RUNS)
 
 
+ODDS_MEMO_SIZE = 4096  # 勝算記住最近幾個問題：二十個人、每人四十來處地點的對手，再加換過一兩次身子的，還裝得下
+
+
+class OddsMemo:
+    """勝算的記憶（FB-321，joy 2026-10-17「地圖那邊現在開起來很 Lag」：打開輿圖時疊層在行動鎖裡把每個地點的勝算重算一遍，
+    一次 110～140 ms，人多時排鎖）。鍵是 odds_key：模擬（odds_word）的全部輸入，一樣才拿記住的那一個字。odds_word 是固定種子的
+    純函式，輸入一樣答案一定一樣，所以沒有期限：氣血、隊伍、裝備、功效、戰法、日夜一變，鍵就跟著變、重新模擬；兩個人輸入一模一樣時
+    拿到的也是自己那一份算出來會得到的字。只記最近 size 個（最久沒問的先丟）。伺服器上的 Game 共用一份（server.ODDS_MEMO），
+    直接建的 Game（測試、腳本、假人程式）沒有記憶、照舊每次算。執行緒池裡同時問也安全（自己一把鎖；模擬在鎖外跑）。"""
+
+    def __init__(self, size: int = ODDS_MEMO_SIZE) -> None:
+        self.size = size
+        self._words: OrderedDict[bytes, str] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: bytes, compute: Callable[[], str]) -> str:
+        with self._lock:
+            word = self._words.get(key)
+            if word is not None:
+                self._words.move_to_end(key)
+                return word
+        word = compute()
+        with self._lock:
+            self._words[key] = word
+            self._words.move_to_end(key)
+            while len(self._words) > self.size:
+                self._words.popitem(last=False)
+        return word
+
+
+def odds_key(
+    power: float, squad: Squad, mods: encounter.Mods | None, plan: tuple[list[tactics.Holder], tactics.Ctx, Content] | None,
+    foe: tuple[list[tactics.Holder], tactics.Ctx] | None, rng_seed: int = ESTIMATE_SEED,
+) -> bytes:
+    """odds_word 的全部輸入寫成一把鍵（OddsMemo）：模擬幾場、種子、威力（原樣的浮點數）、對手強度與屬性、功效換算、你這一方誰帶著
+    哪一門戰法與這一場的條件、戰法的設定（Config.tactics，plan 裡的內容只讀這一份）、對手那一方的戰法與條件。"""
+    parts = [ESTIMATE_RUNS, rng_seed, repr(float(power)), repr(float(squad.difficulty)), squad.attribute,
+             mods.model_dump_json() if mods is not None else None]
+    if plan is not None:
+        holders, ctx, content = plan
+        parts += [[h.model_dump_json() for h in holders], ctx.model_dump_json(), content.config.tactics.model_dump_json()]
+    if foe is not None:
+        parts += [[h.model_dump_json() for h in foe[0]], foe[1].model_dump_json()]
+    return hashlib.blake2b(json.dumps(parts, ensure_ascii=False).encode("utf-8"), digest_size=20).digest()
+
+
 def _odds_text(wins: int, draws: int, runs: int) -> str:
     if wins * 100 < 35 * runs and draws * 100 >= 50 * runs:
         return "難分勝負"
@@ -1141,10 +1192,11 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
-    draw_floor: float | None = None,
+    draw_floor: float | None = None, memo: OddsMemo | None = None,
 ) -> str:
     """勝算的文字；difficulty、draw_floor 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
-    勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。"""
+    勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。memo：模擬的輸入一樣就拿記住的字（OddsMemo，
+    FB-321）；輸入（威力、功效、戰法與條件）照舊每次算，只有四十場的模擬省下來。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
@@ -1153,7 +1205,10 @@ def estimate(
     mods = trait_mods(content, traits.loadout(state, content, world))
     if draw_floor is not None:
         mods = mods.model_copy(update={"draw_floor": draw_floor})
-    return odds_word(power_vs(state, content, world, squad), squad, mods=mods, plan=plan, foe=foe_tactics(state, content, squad, ctx))
+    power, foe = power_vs(state, content, world, squad), foe_tactics(state, content, squad, ctx)
+    if memo is None:
+        return odds_word(power, squad, mods=mods, plan=plan, foe=foe)
+    return memo.get(odds_key(power, squad, mods, plan, foe), lambda: odds_word(power, squad, mods=mods, plan=plan, foe=foe))
 
 
 def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:

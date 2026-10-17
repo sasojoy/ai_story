@@ -96,6 +96,8 @@ SESSIONS: dict[str, str] = {}  # cookie → 帳號（normalize 過的）
 # 不是存檔：資料庫才是真實來源，每次進行動鎖都把這份 Game 的 state 換成資料庫裡存好的那一列（見 _locked）。
 GAMES: dict[str, Game] = {}
 _GAMES_LOCK = threading.Lock()
+# 勝算的記憶（FB-321）：所有角色的 Game 共用這一份（game_for 掛上），輿圖疊層的勝算輸入一樣就不再在行動鎖裡模擬四十場
+ODDS_MEMO = team.OddsMemo()
 
 
 class GameError(Exception):
@@ -139,6 +141,7 @@ def game_for(name: str) -> Game:
         game = GAMES.get(key)
         if game is None:
             game = GAMES[key] = open_game(name)
+            game.odds_memo = ODDS_MEMO
         return game
 
 

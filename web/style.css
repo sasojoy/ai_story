@@ -895,6 +895,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 整頁一層：夾在頂上的狀態列與底部分頁列之間（--map-top、--map-bottom 由 app.js 的 mapFrame 量）。地圖框佔滿整層，
    找地點、濾鏡、右上角的鈕、上方那一條「天下」浮在地圖上，抽屜從底下拉上來；寬 900 以上抽屜變右邊 360px 一欄 */
 .mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #e9e2cc; overflow: hidden; }
+/* 輿圖那一層常駐在 #map-host（FB-324，app.js 的 showMapHost）：在別的分頁時只是看不見、點不到，樣式、排版、點陣化都留著，回來不必重畫 */
+#map-host.away { visibility: hidden; }
 /* 地圖框（W16）：地圖照原本的像素大小放在裡面，靠 transform 平移、縮放（app.js 的 applyMapView）。
    框裡的手勢全歸地圖（touch-action: none）：不捲頁面、不放大整頁；長按不跳選字、不跳 iOS 的選單。
    clip 一樣裁切、而且不能被 scrollIntoView 捲走（hidden 的框仍然是捲動容器） */
@@ -906,6 +908,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mapx.tl-mode .map-wrap { bottom: var(--md-h, 0px); }
 .map-wrap .tx-world-map { position: absolute; left: 0; top: 0; }
 .map-wrap .tx-world-map > svg { display: block; transform-origin: 0 0; }
+/* 疊在底圖上面的那一張（FB-323，app.js 的 marksParts）：同一個原點、位移與倍率；點擊穿過去，只有搬上來的地點點擊區收（下面那一條 pointer-events: all） */
+.map-wrap .tx-world-map > svg.mk-top { position: absolute; left: 0; top: 0; pointer-events: none; }
 /* 拖移、雙指縮放中才升成合成層（不常駐：停下來還開著的話字會糊）；按鈕的移動滑一下，手勢與滾輪中不滑 */
 .map-wrap.moving .tx-world-map > svg { will-change: transform; }
 .map-wrap.glide .tx-world-map > svg { transition: transform 0.15s ease-out; }
