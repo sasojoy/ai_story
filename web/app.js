@@ -4892,6 +4892,16 @@
 
   // 見聞的「榜單」（leaderboard.view）：上面一排六張榜的籤，一次看一張（S.board，預設第一張）；前十名，你在榜上標出來，
   // 不在前十名時底下多一行你排第幾。名號與那一段都是伺服器給的原文，這裡跳脫
+  // 榜單的神器譜（Joy 2026-10-17 從江湖史搬過來）：不排名，照季分段、新的一季在前；一筆一列，名字一行、種類屬性與在誰手上一行
+  function bookRows(book) {
+    if (!book.length) return '<p class="muted">還沒有人打出神器。</p>';
+    let out = "", season = null;
+    for (const r of book) {
+      if (r.season !== season) { out += `${season === null ? "" : "</ul>"}<p class="book-season">第 ${Number(r.season)} 季</p><ul class="board-book">`; season = r.season; }
+      out += `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
+    }
+    return out + "</ul>";
+  }
   function boardsHtml(b) {
     if (!b) return '<p class="muted">載入中…</p>';
     const list = b.boards || [];
@@ -4899,6 +4909,7 @@
     const cur = list.find((x) => x.id === S.board) || list[0];
     const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
     const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}"><span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span></li>`;
+    if (cur.book) return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${bookRows(cur.book)}</div>`;
     const rows = cur.rows.length ? `<ol class="board-list">${cur.rows.map(row).join("")}</ol>` : '<p class="muted">尚無人留名。</p>';
     const mine = cur.mine ? `<p class="board-mine">你：第 ${Number(cur.mine.rank)} 名・${esc(cur.mine.text)}</p>` : "";
     return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;

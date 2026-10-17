@@ -10939,17 +10939,13 @@ class Game:
         return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
 
     def chronicle_text(self) -> str:
-        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是神器譜（有才寫），最後是玉璽碎片。"""
+        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是歷屆擂主，最後是玉璽碎片。
+        神器譜搬到見聞的「榜單」（divine_book_view，Joy 2026-10-17）。"""
         number = self.world.get_season_number()
         current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
         parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
-        book = forge_secrets.divine_book(  # 神器譜（打造隱藏配方設計 5.5）：跨季，江湖頁不露；本命兵器也上（打造第三批）
-            self.world.divine_records(), signature_arms.book_rows(self.content, self.world.signature_records()),
-        )
-        if book:
-            parts.append(book)
         champs = arena.champions([(number, [e.text for e in self.state.world.chronicle])]
                                  + [(n, [e.text for e in entries]) for n, entries in past])  # 歷屆擂主（跨季）
         if champs:
@@ -10961,6 +10957,14 @@ class Game:
         else:
             parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)
+
+    def divine_book_view(self) -> list[dict]:
+        """見聞「榜單」的神器譜（打造隱藏配方設計 5.5；Joy 2026-10-17「神器譜移到排行榜」，原本接在江湖史後面）：跨季，新的一季在前，
+        同一季打出來的神器在前、名將本命兵器在後。一筆 {season, name, text}；都沒有是空的。"""
+        rows = forge_secrets.divine_entries(self.world.divine_records())
+        rows += signature_arms.book_entries(self.content, self.world.signature_records())
+        rows.sort(key=lambda row: -row[0])  # 穩定排序：同一季照原來的先後
+        return [{"season": season, "name": name, "text": text} for season, name, text in rows]
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 

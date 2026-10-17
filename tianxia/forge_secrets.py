@@ -219,6 +219,18 @@ def unnamed_originals(state: GameState, world: WorldStateStore) -> dict[str, str
 DIVINE_BOOK = "### 神器譜"  # 待 joy 潤：江湖史那一頁另起的一段標題
 
 
+def divine_entries(records: list[tuple[int, GearFind]]) -> list[tuple[int, str, str]]:
+    """榜單「神器譜」那一張（Joy 2026-10-17「神器譜移到排行榜」）的一把一筆：（季數, 名字, 種類・屬性・原品在誰手上、仿品幾把）。
+    寫法同 divine_book 那一行，拆成名字與其餘兩段，畫面才排得下。"""
+    out = []
+    for season, find in records:
+        what = what_text(find.slot, find.kind)
+        name = f"【{find.divine_name}】" if find.divine_name else f"{DIVINE_UNNAMED}（{what}）"
+        copies = f"・仿品 {find.copies} {equipment.unit_for(find.slot, find.kind)}" if find.copies else ""
+        out.append((season, name, f"{what}・屬{find.attribute}・原品在{find.master_shown or find.owner}手上{copies}"))
+    return out
+
+
 def divine_book(records: list[tuple[int, GearFind]], extra: list[tuple[int, str]] | None = None) -> str:
     """神器譜那一段的 Markdown（Game.chronicle_text 接在江湖史後面）：一把一行——第幾季、名字（還沒定名寫「無名神器（劍）」）、
     種類或防具、屬性、原品在誰手上（打出那一刻記下的 master_shown）、仿品幾把（不列人名）。extra 是別處來的（季數, 那一行）：

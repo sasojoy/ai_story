@@ -346,16 +346,15 @@ def test_signature_arms_join_the_divine_book_across_seasons(content, world):
     game.state.player.affinities["mate"] = 80
     idle_step(game)
     assert [n for n, _ in world.signature_records()] == [season - 1, season]
-    book = game.chronicle_text().split(forge_secrets.DIVINE_BOOK, 1)[1]
-    lines = [line for line in book.splitlines() if "鐵脊長刀" in line]
-    assert len(lines) == 2  # 沒有打出來的神器也寫這一段
-    assert "丙" in lines[0] and signature_arms.HOW["seized"] in lines[0]
-    assert "甲客" in lines[1] and signature_arms.HOW["gift"] in lines[1] and "韓鐵" in lines[1]
+    lines = [f"{r['season']} {r['name']} {r['text']}" for r in game.divine_book_view() if "鐵脊長刀" in r["name"]]  # 榜單的神器譜
+    assert len(lines) == 2  # 沒有打出來的神器也列
+    assert "甲客" in lines[0] and signature_arms.HOW["gift"] in lines[0] and "韓鐵" in lines[0]  # 新的一季在前
+    assert "丙" in lines[1] and signature_arms.HOW["seized"] in lines[1]
 
 
 def test_no_divine_items_and_no_arms_means_no_book(content, world):
     game = _game(_arms(content), world)
-    assert forge_secrets.DIVINE_BOOK not in game.chronicle_text()
+    assert forge_secrets.DIVINE_BOOK not in game.chronicle_text() and game.divine_book_view() == []
     assert forge_secrets.divine_book([], []) == ""
 
 

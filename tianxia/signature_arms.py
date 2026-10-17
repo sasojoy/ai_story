@@ -99,6 +99,26 @@ def annal_line(content: Content, item: Equipment, via: str) -> str:
     return (ANNAL_GIFT if via == "gift" else ANNAL_SEIZED).format(general=general, arm=item.name)
 
 
+# 榜單「神器譜」那一張的一筆（Joy 2026-10-17）：名字以外的那一段，寫法同 BOOK_LINE
+ENTRY_TEXT = "{noun}・屬{attribute}・{general}的本命兵器，{how}，在{owner}手上"
+
+
+def book_entries(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str, str]]:
+    """同 book_rows，拆成（季數, 名字, 其餘）給榜單畫。"""
+    table = {arm.character: arm for arm in content.gear.signature_arms}
+    out: list[tuple[int, str, str]] = []
+    for season, claims in records:
+        for cid, claim in claims.items():
+            arm = table.get(cid)
+            if arm is None:
+                continue
+            general = content.characters[cid].name if cid in content.characters else cid
+            out.append((season, f"【{arm.name}】", ENTRY_TEXT.format(
+                noun=weapons.NOUNS.get(arm.kind, arm.kind), attribute=arm.attribute, general=general, how=HOW[claim.via], owner=claim.owner,
+            )))
+    return out
+
+
 def book_rows(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str]]:
     """神器譜裡本命兵器那幾行（打造隱藏配方設計 5.5：本命兵器也上神器譜）：（季數, 那一行），照季、同一季照給出去的先後。
     名字、種類、屬性照現在的內容（joy 改了名，譜上跟著改）；內容拿掉了那一把不寫。"""

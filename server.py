@@ -1916,11 +1916,17 @@ def boards_now(game: Game, clock: Callable[[], float] = time.monotonic) -> dict[
         return board
 
 
+DIVINE_NOTE = "歷季打出的神器原品與名將本命兵器，跨季留名"  # 榜單「神器譜」那一張的說明，待 joy 潤
+
+
 @app.get("/api/boards")
 def api_boards(request: Request):
-    """見聞的「榜單」：六張榜的前十名，加上你不在前十名時你排第幾（leaderboard.view）。"""
+    """見聞的「榜單」：七張榜的前十名，加上你不在前十名時你排第幾（leaderboard.view）；最後一張是神器譜（跨季，不排名；
+    Joy 2026-10-17 從江湖史搬過來）。神器譜只讀兩張小表，不進快取：打出來、定了名馬上看得到。"""
     game = _game(request)
-    return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name)}
+    book = {"id": "神器", "title": "神器譜", "note": DIVINE_NOTE, "book": game.divine_book_view()}
+    return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
+
 
 
 @app.get("/api/annals")

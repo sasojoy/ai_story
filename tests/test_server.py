@@ -6827,7 +6827,8 @@ def test_boards_lists_six_boards_and_caches_the_scan(client, monkeypatch):
     real = leaderboard.compute_boards
     monkeypatch.setattr(leaderboard, "compute_boards", lambda *a, **k: calls.append(1) or real(*a, **k))
     out = client.get("/api/boards").json()
-    assert [b["id"] for b in out["boards"]] == [kind for kind, _, _ in leaderboard.BOARDS]
+    assert [b["id"] for b in out["boards"]] == [kind for kind, _, _ in leaderboard.BOARDS] + ["神器"]  # 最後是神器譜（2026-10-17）
+    assert out["boards"][-1]["book"] == []
     client.get("/api/boards")
     assert len(calls) == 1
     server.BOARDS_CACHE["at"] -= server.BOARDS_TTL_SECONDS
