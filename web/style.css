@@ -913,18 +913,18 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 /* 版圖變化時地圖框縮到抽屜上面（--md-h 是抽屜的高度）：clampView 在地圖比框小時置中，整張就落在抽屜上面那一塊 */
 .mapx.tl-mode .map-wrap { bottom: var(--md-h, 0px); }
-.map-wrap .tx-world-map { position: absolute; left: 0; top: 0; }
+.map-wrap .tx-world-map { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .map-wrap .tx-world-map > svg { display: block; transform-origin: 0 0; }
 /* 疊在底圖上面的那一張（FB-323，app.js 的 marksParts）：同一個原點、位移與倍率；點擊穿過去，只有搬上來的地點點擊區收（下面那一條 pointer-events: visible） */
 .map-wrap .tx-world-map > svg.mk-top { position: absolute; left: 0; top: 0; pointer-events: none; }
 /* 拖移、雙指縮放中才升成合成層（不常駐：停下來還開著的話字會糊）；按鈕的移動滑一下，手勢與滾輪中不滑 */
-.map-wrap.moving .tx-world-map > svg { will-change: transform; }
-.map-wrap.glide .tx-world-map > svg { transition: transform 0.15s ease-out; }
+.map-wrap.moving .tx-world-map { will-change: transform; }
+.map-wrap .tx-world-map text { text-rendering: geometricPrecision; }
+.map-wrap.glide .tx-world-map { transition: transform 0.15s ease-out; }
 .map-wrap.grabbing, .map-wrap.grabbing [data-loc] { cursor: grabbing !important; }
-.map-wrap.far .tx-region-name { display: none; }
-/* 地點的點擊區（E2／E3）：每個地點一個透明的圓（r=16）接點擊，這裡再加透明的粗外框，寬 --hit 由 app.js 跟著倍率算 */
+/* 地點的點擊區（E2／E3）：每個地點一個透明的圓（r=16）接點擊，這裡讓透明的外框也接點擊（外框寬由 app.js 照倍率寫在每一個圓上） */
 /* visible：不看填色與線色（透明的照樣點得到），但照 visibility 走——藏起來的輿圖那一層裡的點擊圓不收點擊（all 不管 visibility，FB-326） */
-.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; stroke-width: var(--hit, 12px); pointer-events: visible; }
+.map-wrap [data-loc] > circle[fill-opacity="0"] { stroke: transparent; pointer-events: visible; }
 /* 上面：找地點一條、濾鏡一排（橫著滑）。外層不收點擊，只有鈕收：沒字的地方照常拖地圖 */
 .map-top { position: absolute; left: 10px; right: 64px; top: 10px; display: flex; flex-direction: column; gap: 7px; pointer-events: none; transition: opacity 0.15s; }
 .map-top > * { pointer-events: auto; }
@@ -980,9 +980,15 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   transition: height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .mdrawer.dragging { transition: none; }
-.mgrab { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none; }
+.mgrab { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none; position: relative; }
 .mgrab i { width: 38px; height: 5px; border-radius: 3px; background: var(--line); }
 .mbody { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 14px; font-size: 14px; line-height: 1.55; overscroll-behavior: contain; }
+/* 收起（Joy 2026-10-17）：把手底下只剩一行，整行一顆鈕，點了攤開 */
+.mdrawer.can-fold .mgrab::after { content: "收起 ▾"; position: absolute; right: 14px; top: 3px; font-size: 12px; color: var(--ink-2); }
+.mdrawer.min .mbody { overflow: hidden; padding-bottom: 0; }
+.m-mini { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 2px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.m-mini span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-mini i { flex: none; font-style: normal; color: var(--ink-2); font-size: 13px; }
 /* 你在這裡、易手的地點那一圈（FB-323，企劃者 10/17 從對比圖選丙）：整個圈放大 2.25 倍（半徑 16 → 36）、淡出，合成器自己跑，
    閒置不吃主執行緒；線跟著變粗（2.5 → 約 5.6 px，企劃者接受）。圈畫在疊在底圖上面的那一張（app.js 的 marksParts） */
 @keyframes mk-pulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.25); opacity: 0; } }

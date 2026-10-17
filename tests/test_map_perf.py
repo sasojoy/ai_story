@@ -185,7 +185,7 @@ def test_fb323_the_pulses_live_in_the_layer_above_the_map_not_in_its_svg():
     assert 'class="pulse"' not in out["low"] and out["high"].count('class="pulse"') == 1
     assert out["low"] + out["high"] == out["whole"]  # 先後一個都沒動
     assert out["high"].startswith('<circle class="pulse"') and "（你）" in out["low"]  # 你的那一圈、旗子在最上面那一層；地點都還在底圖
-    assert out["mk"] == out["low"] and out["mkt"] == out["high"]
+    assert out["mk"] == out["low"] and out["mkt"] == out["high"] + '<g id="msel" pointer-events="none"></g>'  # 最後是選了的那一圈（drawSel）
     root = re.match(r"<svg\b([^>]*)>", game.map_base()["svg"]).group(1)
     assert f'<svg{root} class="mk-top" id="mkt"></svg></div>' in out["page"]  # 跟底圖同一個 viewBox、大小與字型，疊在它上面
 
@@ -264,7 +264,7 @@ def test_fb329_logging_out_or_in_forgets_the_last_players_map():
   return { after, sel: H.S.mapSel, asked: T.calls.map((c) => c[0]), here: H.S.mapState && H.S.mapState.here };
 })();"""})
     assert out["after"] == {"base": None, "state": None, "view": None, "sel": None, "mode": "overview", "layers": ["control", "order"],
-                            "drawer": "rest", "week": None, "query": "", "at": 0, "host": "", "away": True}
+                            "drawer": "home", "week": None, "query": "", "at": 0, "host": "", "away": True}
     assert out["sel"] is None and "/api/map/state" in out["asked"] and out["here"] == st["here"]
 
 

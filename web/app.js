@@ -127,7 +127,7 @@
     mapSel: null, // 選了的地點
     mapMode: "overview", // 抽屜在畫什麼："overview"、"place"、"search"、"timeline"
     mapLayers: ["control", "order"], // 開著的濾鏡（勢力、軍令預設開，設計第一節）
-    mapDrawer: "rest", // 抽屜的高度："rest"、"peek"、"half"、"full"、"tl"
+    mapDrawer: "home", // 抽屜的高度："home"（總覽的那一格：收起或收著，照 homeDrawer）、"min"、"rest"、"peek"、"half"、"full"、"tl"
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
     mapFocus: null, // 江湖頁的小地圖點了某一處：輿圖畫好時對準它（mapReady）
@@ -466,11 +466,16 @@
   // 畫好之後量一次，條上那一行字的字尾碰不碰得到右邊的「傷 N」（氣血條）或丹的鈕（體力條）。碰到了先收一號（.snug：字小一號、
   // 內距收一點，兩個字照寫），還碰到才拿掉兩個字（.tight；條上的 title 照舊寫）。topHtml 從不帶這兩個 class：每次畫狀態列
   // （render、renderTop）、視窗換寬度、字型載入完都從寫全量起。瀏覽器量不了、條還沒排版（寬是 0）就不動（照寫全）
+  // 自訂屬性變了才寫（同一個值照寫也算改了 inline style，會逼繼承它的整棵重算樣式）
+  function setVar(el, name, value) {
+    if (typeof el.style.getPropertyValue !== "function" || el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value);
+  }
   function fitBars() {
     // 煉製頁縮起來的太極爐（.kiln.compact）固定在狀態列底下：狀態列多高（展開名號、換寬度都會變）記在 --top-h
     const head = document.getElementById("top");
     if (head && document.documentElement && document.documentElement.style && typeof head.offsetHeight === "number") {
-      document.documentElement.style.setProperty("--top-h", `${head.hidden ? 0 : head.offsetHeight}px`);
+      // 變了才寫：根元素上的自訂屬性一路繼承，寫一次（就算同一個值）整頁約 1,600 個元素重算樣式，狀態列每次重畫都會叫到這裡
+      setVar(document.documentElement, "--top-h", `${head.hidden ? 0 : head.offsetHeight}px`);
     }
     if (typeof document.createRange !== "function") return;
     const top = document.getElementById("top");
@@ -4016,7 +4021,7 @@
   // 圈的跳法是整個圈放大、淡出（style.css 的 mk-pulse，企劃者 10/17 選丙）：合成器自己跑，線跟著變粗；跳的那一圈自成合成層，
   // 蓋在它上面的搜尋框、濾鏡、抽屜跟著被拉成合成層，字的邊緣有一點點不一樣（企劃者接受，試玩回饋 FB-323）
   function marksParts(base, st, o) {
-    const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
+    const k = o.k, far = o.far, hit = Math.round(2 * (hitRadius(1 / k) - 16)), ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
     const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
@@ -4038,8 +4043,9 @@
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
       if (flash.has(p.id)) pulse(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
-      // 點擊區：透明圓 r=16，外框寬照倍率撐開（style.css 的 --hit，applyMapView 設）
-      out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0"/>`);
+      // 點擊區：透明圓 r=16，透明外框寬 2×(R−16) 把它撐到半徑 R（R 照螢幕固定，hitRadius）。寬寫在每一個圓上、跟記號一起重畫，
+      // 不寫成框上繼承的 CSS 變數：變數一改，整棵地圖約 1,500 個元素都要重算樣式（縮放每一下多 40ms 上下，Joy 2026-10-17）
+      out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0" stroke-width="${hit}"/>`);
       if (far) {
         out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
         continue;
@@ -4159,7 +4165,7 @@
     return `
       <div class="map-top"><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><div class="map-chips" role="group" aria-label="濾鏡">${chipsHtml()}</div></div>
       ${mapCtl()}<div class="map-hud" id="map-hud" hidden></div>${banner}
-      <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
+      <section class="mdrawer${S.mapMode === "overview" && drawerNow() === "min" && !deskMap() ? " min" : ""}" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
   }
   // ── 輿圖那一層常駐（FB-324）：切到別的分頁、整頁重畫（render 換掉 #app 的 innerHTML）時，地圖不拆掉，只在 #map-host 藏起來
   // （visibility: hidden：樣式、排版、點陣化都留著）。以前每次回到輿圖都把 114 KB 的底圖字串塞回去、重新解析、重算樣式、重新排版、
@@ -4200,7 +4206,7 @@
   function forgetMap() {
     stopPlay();
     Object.assign(S, {
-      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapLayers: ["control", "order"], mapDrawer: "rest",
+      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapLayers: ["control", "order"], mapDrawer: "home",
       mapWeek: null, mapQuery: "", mapFocus: null, mapViewBefore: null, marksS: 0, mapView: null,
     });
     hideMapHost(true);
@@ -4215,6 +4221,7 @@
     if (S.mapMode === "search") return searchHtml(base, st, S.mapQuery);
     if (S.mapMode === "timeline") return timelineHtml(base, st, mapWeek());
     if (S.mapMode === "place" && S.mapSel && st.places[S.mapSel]) return placeHtml(base, st, S.mapSel);
+    if (drawerNow() === "min" && !deskMap()) return miniHtml(base, st);
     return overviewHtml(base, st);
   }
   // 抽屜第一行：在路上寫往哪裡、還有幾分鐘、喊停（喊停就是江湖頁那一顆，選單上有才畫）；有事擋著路時寫是哪一則、給「回江湖」
@@ -4419,7 +4426,7 @@
     if (tlBtn) { tlBtn.classList.toggle("on", open); tlBtn.setAttribute("aria-pressed", String(open)); }
     const banner = document.getElementById("map-banner");
     if (banner) banner.hidden = true;
-    setMapDrawer(open ? "tl" : "rest");
+    setMapDrawer(open ? "tl" : "home");
     redrawDrawer();
     if (open) wholeMap();
     else { applyMapView(true); drawMarks(); }
@@ -4453,15 +4460,17 @@
       if (!drag) return;
       const dy = drag.y - ev.clientY;
       if (Math.abs(dy) > 5) drag.moved = true;
-      if (drag.moved) drawer.style.height = `${Math.max(90, Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
+      if (drag.moved) drawer.style.height = `${Math.max(mapDrawerPx("min"), Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
     });
     const end = () => {
       if (!drag) return;
       drawer.classList.remove("dragging");
-      if (!drag.moved) setMapDrawer(S.mapDrawer === "rest" || S.mapDrawer === "peek" ? "half" : S.mapMode === "place" ? "peek" : "rest");
+      // 點一下：總覽在收起、收著之間換（拉高的放回收著）；一個地點在半開、拉高之間換。拖：放開時靠到最近的一格（總覽多一格收起）
+      const now = drawerNow(), place = S.mapMode === "place";
+      if (!drag.moved) drawerTo(place ? (now === "peek" ? "half" : "peek") : now === "rest" ? "min" : "rest");
       else {
-        const h = drawer.offsetHeight;
-        setMapDrawer(["rest", "half", "full"].sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
+        const h = drawer.offsetHeight, stops = place ? ["peek", "half", "full"] : S.mapMode === "overview" ? ["min", "rest", "half", "full"] : ["rest", "half", "full"];
+        drawerTo(stops.sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
       }
       drag = null;
     };
@@ -4472,13 +4481,50 @@
   function redrawDrawer() {
     const body = document.getElementById("mbody");
     if (body) body.innerHTML = drawerHtml();
+    // 總覽那一格照今天還能出陣幾次決定收起或收著：疊層換了（次數用完）就跟著換高度。只在高度真的變了才動（輪詢不重設）
+    const d = document.getElementById("mdrawer");
+    if (S.mapDrawer === "home" && d && d.style.height !== `${mapDrawerPx("home")}px`) setMapDrawer("home");
+  }
+  // ── 抽屜收起（Joy 2026-10-17「今天去哪裡出陣能不能真的縮起來，手機版受影響很大」）──
+  // 總覽可以收成一條（把手＋一行「出陣 今日還能 N 次 ▴」），地圖拿回大部分畫面。收起或攤開是玩家自己選的，記在這個瀏覽器
+  // （localStorage，換頁、輪詢、重新整理都照它）；沒選過時，今天的出陣次數用完了就收起，還有次數（或不出陣的散人）攤開。
+  // S.mapDrawer 是 "home" 時照這裡現算，所以次數用完那一刻跟著收起
+  const DRAWER_KEY = "tx-map-drawer";
+  function drawerPref() {
+    try { const v = localStorage.getItem(DRAWER_KEY); return v === "min" || v === "open" ? v : null; } catch (e) { return null; }
+  }
+  function homeDrawer() {
+    const pref = drawerPref();
+    if (pref) return pref === "min" ? "min" : "rest";
+    return S.mapState && S.mapState.sorties_left === 0 ? "min" : "rest";
+  }
+  const drawerNow = () => (S.mapDrawer === "home" ? homeDrawer() : S.mapDrawer);
+  // 桌機（寬 900 以上）抽屜是右欄、整欄攤開，沒有收起這回事
+  const deskMap = () => !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
+  // 玩家自己拉、點把手、點那一行：總覽收起或攤開記下來（之後回到總覽照它）；其餘照舊
+  function drawerTo(h) {
+    if (S.mapMode === "overview" && ["min", "rest", "half", "full"].includes(h)) {
+      try { localStorage.setItem(DRAWER_KEY, h === "min" ? "min" : "open"); } catch (e) { /* 記不住就只管這一次 */ }
+      if (h === "min" || h === "rest") h = "home";
+    }
+    setMapDrawer(h);
+  }
+  // 收起時那一行：在路上寫往哪裡、還有幾分；出陣寫今天還能幾次；其餘寫你在哪。整行一顆鈕，點了攤開
+  function miniHtml(base, st) {
+    const j = st.journey, here = placeOf(base, st.here);
+    const text = j ? `往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘`
+      : st.sorties_left !== null && st.suggest.length ? `<b>出陣</b> 今日還能 ${Number(st.sorties_left)} 次${here ? `・你在 ${esc(here.name)}` : ""}`
+      : `你在 <b>${esc(here ? here.name : "")}</b>`;
+    return `<button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${text}</span><i>▴</i></button>`;
   }
   // 抽屜的高度（設計第一節）：收著 230、半開（點了地點）240、拉高六成、全開九成四、版圖變化 320；桌機是右欄（CSS 蓋掉高度）
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
     // 版圖變化 320 高（企劃者 10/15 從對比圖選乙）：地圖大一截，曲線與處數在一屏，年表往下捲
-    return { rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 230;
+    if (h === "home") h = homeDrawer();
+    // 收起 54：把手 22＋一行 32（Joy 2026-10-17）
+    return { min: 54, rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 230;
   }
   function setMapDrawer(h) {
     S.mapDrawer = h;
@@ -4486,6 +4532,17 @@
     if (!d || !box) return;
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
+    // 收起換成那一行（或從那一行攤開）：抽屜裡的內容跟著換
+    const min = drawerNow() === "min" && S.mapMode === "overview" && !deskMap();
+    if (d.classList && d.classList.contains("min") !== min) {
+      d.classList.toggle("min", min);
+      const body = document.getElementById("mbody");
+      if (body && S.mapBase && S.mapState) body.innerHTML = drawerHtml();
+    }
+    // 攤開的總覽：把手右邊一個小字「收起 ▾」，看得出點把手就收（style.css 的 .can-fold）
+    if (d.classList) d.classList.toggle("can-fold", S.mapMode === "overview" && drawerNow() === "rest" && !deskMap());
+    const grab = document.getElementById("mgrab");
+    if (grab && grab.setAttribute) grab.setAttribute("aria-label", min ? "攤開" : S.mapMode === "overview" && drawerNow() === "rest" ? "收起（拖動拉高拉低）" : "拉高拉低");
     // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）：自訂屬性會一路繼承下去，平常點地點換抽屜高度時
     // 寫它會逼整棵地圖重算樣式（FB-322）。進版圖變化時 mapTimeline 先改 S.mapMode 再叫這裡，畫面重畫時 mapReady 也會叫
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
@@ -4497,7 +4554,7 @@
   // 抽屜蓋住地圖框底下多高（clampView 的 pad）：照抽屜要變成的高度算，不量 offsetHeight——抽屜換高度有 0.22 秒的動畫，
   // 那一刻量到的還是舊的高度（從找地點全開挑一處時會量到九成四，地圖被捲過頭）。桌機（右欄）與版圖變化（地圖框已經在抽屜上面）是 0
   function mapPad() {
-    if (!document.getElementById("mdrawer") || S.mapMode === "timeline" || (window.matchMedia && window.matchMedia("(min-width: 900px)").matches)) return 0;
+    if (!document.getElementById("mdrawer") || S.mapMode === "timeline" || deskMap()) return 0;
     return mapDrawerPx(S.mapDrawer);
   }
   // 選了的地點被抽屜蓋住（或在露出來那一塊的外面）：對準露出來的那一塊。沒被蓋住就不動（點在地圖上的地點不從手指底下跑開）
@@ -4515,8 +4572,9 @@
     const box = document.getElementById("mapx");
     if (!box) return;
     const top = document.getElementById("top"), tabs = document.querySelector(".tabs");
-    box.style.setProperty("--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
-    box.style.setProperty("--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
+    // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵約 1,600 個元素重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
+    setVar(box, "--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
+    setVar(box, "--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
   }
   let marksFrame = 0;
   // 照現在的倍率、濾鏡、選取、週次重畫記號、大區的顏色與上方那一條「天下」
@@ -4527,11 +4585,19 @@
     const s = S.mapView.s, week = mapWeek(), layers = new Set(S.mapLayers);
     S.marksS = s;
     const wrap = document.getElementById("map");
-    if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
-    const [low, high] = marksParts(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
+    // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）。直接改那幾個字的 display，不在框上加 class：框上的 class 一變，
+    // 整棵地圖約 1,500 個元素都要重算樣式（縮放跨過那一檔時一下 40ms 上下）
+    const far = s < MAP_FAR;
+    if (wrap && wrap.classList.contains("far") !== far) {
+      wrap.classList.toggle("far", far); // 只留給測試與除錯看，style.css 不再照它藏字
+      wrap.querySelectorAll(".tx-region-name").forEach((el) => { el.style.display = far ? "none" : ""; });
+    }
+    // 選了的那一圈不跟著記號畫（sel: null），另外畫在上面那一張最後（drawSel）：點一處只換那一圈，不必整批重建一千多個元素
+    const [low, high] = marksParts(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: null, week, tl: S.mapMode === "timeline" });
     g.innerHTML = low;
     const top = document.getElementById("mkt"); // 會跳的圈與之後畫的那一段（FB-323）
-    if (top) top.innerHTML = high;
+    if (top) top.innerHTML = `${high}<g id="msel" pointer-events="none"></g>`;
+    drawSel();
     const ins = insightOn(S.mapBase, layers);
     const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control") && !ins); // 意境開著不畫勢力的大區底色
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
@@ -4543,6 +4609,16 @@
       hud.hidden = !(s < MAP_FAR || S.mapMode === "timeline") || !S.mapState.territory || ins; // 「天下」那一條是勢力的
       if (!hud.hidden) hud.innerHTML = hudHtml(S.mapBase, S.mapState, week);
     }
+  }
+  // 選了的地點那一圈（同 marksParts 的 sel 那一圈：圓盤外 9px、線寬 3px，照螢幕固定）。點地點、收起只叫這裡（Joy 2026-10-17
+  // 「輿圖還是很 lag」：以前點一下整批記號重畫，節流到六倍要兩三百毫秒）
+  function drawSel() {
+    const box = document.getElementById("msel");
+    if (!box || !S.mapView) return;
+    const p = S.mapSel && placeXY(S.mapSel);
+    if (!p) { if (box.firstChild) box.innerHTML = ""; return; }
+    const k = 1 / S.mapView.s, r = (S.mapView.s < MAP_FAR ? 6 : 11) * k;
+    box.innerHTML = `<circle cx="${p[0]}" cy="${p[1]}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}"/>`;
   }
   const scheduleMarks = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
 
@@ -4591,7 +4667,7 @@
     const vb = svg && svg.viewBox && svg.viewBox.baseVal;
     if (!vb || !vb.width || !vb.height || !wrap.clientWidth || !wrap.clientHeight) return null;
     const r = wrap.getBoundingClientRect();
-    return { wrap, svg, top: wrap.querySelector(".tx-world-map > .mk-top"), vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
+    return { wrap, svg, world: svg.parentNode && svg.parentNode.style ? svg.parentNode : svg, vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
       x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
   }
   // 地點的中心：照底圖的清單（記號還沒畫出來也找得到）
@@ -4619,17 +4695,16 @@
     wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
     const shift = `translate(${vw / 2 - v.cx * v.s}px, ${vh / 2 - v.cy * v.s}px) scale(${v.s})`;
-    g.svg.style.transform = shift;
-    if (g.top) g.top.style.transform = shift; // 疊在上面的那一張（FB-323）跟著底圖走
-    // 點擊區跟著縮放：透明圓 r=16，外框寬 2×(R−16) 把它撐到半徑 R（style.css 的 --hit）
-    const hit = `${Math.round(2 * (hitRadius(v.s) - 16))}px`;
-    if (wrap.style.getPropertyValue("--hit") !== hit) wrap.style.setProperty("--hit", hit);
+    // 位移與倍率套在兩張 svg 的外框（.tx-world-map）上，不套在 svg 本身：svg 根元素的 transform 一變，Chrome 要照新的倍率重排
+    // 每一個 <text>（約 150 個地名、每一幀 Layout 150/1613），再重畫整張底圖；套在外框上拖移只動合成層（Joy 2026-10-17「輿圖還是很 lag」）
+    g.world.style.transform = shift;
     // 到頂、到底那一顆按不下去（看得出已經到頭了）
     const zin = document.querySelector('.map-ctl [data-step="in"]'), zout = document.querySelector('.map-ctl [data-step="out"]');
     if (zin) zin.disabled = v.s >= MAP_MAX - 1e-9;
     if (zout) zout.disabled = v.s <= fitScale(vw, vh, W, H) + 1e-9;
-    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）
-    if (!S.marksS || Math.abs(v.s - S.marksS) / v.s > 0.08) scheduleMarks();
+    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）。手指還捏著時放寬到四成：每重畫一次要重排一千多個元素（節流到六倍
+    // 約 100ms），捏合中一直重畫就一頓一頓的；放開時（gripEnd）照一成補畫
+    if (!S.marksS || Math.abs(v.s - S.marksS) / v.s > (mapHeld() ? 0.4 : 0.08)) scheduleMarks();
   }
 
   // 這次載入網頁後第一次打開輿圖的倍率，對準所在地：手機照原尺寸；桌機照地圖區的寬讓地圖佔滿左邊整塊（FB-263：1920 寬時地圖區
@@ -4736,22 +4811,23 @@
     grip.frame = 0;
     const wrap = document.getElementById("map");
     for (const c of ["grabbing", "moving"]) if (wrap && wrap.classList.contains(c)) wrap.classList.remove(c); // 有才拿（觸控點一下兩樣都沒有）
+    if (S.mapView && S.marksS && Math.abs(S.mapView.s - S.marksS) / S.mapView.s > 0.08) scheduleMarks(); // 捏合中沒畫的那一截補上
   }
 
   // 在地圖上點了一下：選那個地點、抽屜換成它（不問伺服器，疊層裡都有），視圖不動；點到空白收起
   function mapPick(target) {
     const loc = target && target.closest && target.closest("[data-loc]");
     if (!loc) {
-      if (S.mapMode === "place") { S.mapSel = null; S.mapMode = "overview"; setMapDrawer("rest"); redrawDrawer(); drawMarks(); }
+      if (S.mapMode === "place") { S.mapSel = null; S.mapMode = "overview"; setMapDrawer("home"); redrawDrawer(); drawSel(); }
       return;
     }
     S.mapSel = loc.getAttribute("data-loc");
     if (S.mapMode !== "timeline") {
       S.mapMode = "place";
-      if (S.mapDrawer === "rest") setMapDrawer("peek");
+      if (["home", "min", "rest"].includes(S.mapDrawer)) setMapDrawer("peek");
     }
     redrawDrawer();
-    drawMarks();
+    drawSel();
     keepSelVisible(); // 點的地點在抽屜會蓋住的地方（下緣）：對準露出來的那一塊；其餘照舊不動
   }
 
@@ -5681,7 +5757,7 @@
       const r = await api("/api/travel", { place: S.mapSel, mode });
       setMain(r.main);
       renderTop();
-      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "rest"; } // 出發了：留在輿圖，抽屜收回總覽
+      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "home"; } // 出發了：留在輿圖，抽屜收回總覽
       else toast(`沒能出發：${r.reason}`);
       await loadMap();
       setMapDrawer(S.mapDrawer);
@@ -5763,9 +5839,10 @@
           drawMarks();
           setTimeout(() => { const q = document.getElementById("map-q"); if (q) q.focus(); }, 230);
           break;
+        case "map-open": drawerTo("rest"); break; // 收起的那一行點了：攤開（記下來）
         case "map-back":
           S.mapMode = "overview"; S.mapSel = null; S.mapQuery = "";
-          setMapDrawer("rest");
+          setMapDrawer("home");
           redrawDrawer();
           drawMarks();
           break;
