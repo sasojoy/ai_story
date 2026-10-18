@@ -326,6 +326,25 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-powersave
 
 代價寫清楚：模型真的卸掉之後，下一次載回來**實測 11.4 秒**（`num_ctx` 8192，2026-10-18 的 Ollama 版本；CLAUDE.md 記的 24 秒與 10-10 記的 89 秒是舊版與別的 ctx）。遊戲的讀取逾時 30 秒、鎖內 15 秒、斷路器 180 秒，所以 11.4 秒撐得過去，但鎖內那 15 秒沒有太多餘裕——這就是為什麼要有暖機看守與登入預熱。
 
+### 睡的時候外面看到「江湖暫歇」，不是 502（2026-10-18）
+
+Joy：「這可以線上不要 502，顯示伺服器維修中嗎」。做法是 `scripts/maintenance.py`：**在同一個埠（7861）上接管**，
+於是隧道連得到來源、回的是我們自己的頁面——Cloudflare 只有在「連不到來源」時才塞它自己的 502，
+來源真的回應了就原樣送出去。驗過（拿監控頁那條路試，不動遊戲）：外面收到的是 `HTTP/1.1 503`、
+`retry-after: 30`、我們那一頁的 HTML，整份裡沒有 cloudflare 字樣。
+
+- 狀態碼是 **503 ＋ Retry-After**，不是 200：這才是「暫時不能服務」，瀏覽器與爬蟲不會把它當成正式內容。
+- `/api/` 回 JSON（`{"maintenance": true}`），其餘回那一頁：網頁每 10 秒打 `/api/main` 並解析 JSON，回 HTML 會在那邊炸開。
+- 頁面每 30 秒自己探一次，伺服器一回來就跳回江湖，玩家不必自己重整。
+- `--note "換電腦，約一小時"` 多寫一句給玩家看。
+- **埠被佔著它就起不來**（`allow_reuse_address = False`）：Windows 的 SO_REUSEADDR 允許綁上一個已經有人在聽的埠、
+  兩個行程分著收請求——維修頁要是這樣綁上 7861，玩家的請求會一半進遊戲、一半看到「維修中」（實機踩到：
+  監控頁跟維修頁同時聽著 7899，外面看到的是維修頁）。寧可起不來，也不能從活著的伺服器手上偷走流量。
+- `tianxia-sleep.ps1` 停完伺服器就把它開起來，`tianxia-wake.ps1` 與 `tianxia-ensure-up.ps1` 都會**先把它收掉**再開伺服器
+  （兩個都要聽 7861，順序弄反伺服器綁不上）。
+- 行程比對一律用「`-u <腳本>`」這個樣式，**不要加工作樹路徑**：`.venv` 的 `python.exe` 是啟動器，
+  它開出來的真行程命令列寫的是基礎安裝那個 python 的路徑，要求路徑會整個漏掉（實機踩到：維修頁沒被收掉）。
+
 ### 睡／醒：要打遊戲、算圖，整疊停乾淨
 
 ```powershell
@@ -333,7 +352,7 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-sleep.ps1
 powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1    # 繼續賽季時鐘 → ensure-up → 暖機看守 → 驗證
 ```
 
-- 睡的時候**隧道刻意留著**（44 MB／0.1%）：網址還在、只是回 502，醒來不必重設。
+- 睡的時候**隧道刻意留著**（44 MB／0.1%）：網址還在，外面看到的是維修頁（上一段），醒來不必重設。
 - 賽季時鐘由腳本 pause／resume（見上一節），停的那一段不算進賽季。
 - **公告要自己發**（Discord 中繼在 session 裡，腳本不碰它）。
 

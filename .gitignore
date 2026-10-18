@@ -13,5 +13,7 @@ monitor_out.log
 monitor_err.log
 warm_out.log
 warm_err.log
+maint_out.log
+maint_err.log
 .gradio/
 .local/
