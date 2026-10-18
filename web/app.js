@@ -88,6 +88,8 @@
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     tavTab: "news", // 酒肆那一頁停在哪（news 聽消息／ask 打聽／wall 題壁／shade 暗處）；進門停在聽消息（企劃者 2026-10-18）
     tavAsk: "seek", // 打聽那一頁問的是下落（seek）還是交情（ties）
+    tavTier: 1, // 買殺手挑哪一檔（預設中間那一檔）
+    tavHush: false, // 買殺手上次勾了封口沒
     tavMat: "", // 打聽那一頁挑著的素材 id
     arenaTab: "floor", // 擂台那一頁停在哪（floor 台下／board 擂台榜）；進擂台停在台下（Joy 2026-10-14「擂台應該要是獨立的一頁」）
     arenaSeen: null, // 看過、收起來的那一場收場卡（ArenaResult.id）
@@ -3549,10 +3551,21 @@
     const heard = shop.whispers.length
       ? `<ul class="tav-whispers">${shop.whispers.map((w) => `<li class="${w.named ? "named" : ""}">${esc(w.text)}</li>`).join("")}</ul>`
       : '<p class="shop-empty">最近沒聽說有人打聽你。</p>';
+    const h = shop.hits;
+    const tier = h.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
+    const tiers = h.tiers.map((t) => `<button type="button" class="tav-tier${t.tier === tier ? " on" : ""}" data-act="tav-tier" data-tier="${t.tier}"><b>${esc(t.name)}</b><small>${t.price | 0} 兩</small></button>`).join("");
+    const names = shop.known.slice(0, 8).map((n) => `<button class="tav-chip" data-act="tav-hit-name" data-name="${esc(n)}">${esc(n)}</button>`).join("");
+    const mine = h.mine.length ? `<ul class="tav-whispers">${h.mine.map((m) => `<li class="named">${esc(m)}</li>`).join("")}</ul>` : "";
+    const hire = h.ended ? "" : `<h4 class="tav-h">買殺手<small>找上門的事，不說是誰</small></h4>
+      <p class="shop-cap">報一個查到過的名號。殺手只在城外出手；找不到人，期限到了退一半。</p>
+      <div class="tav-tiers">${tiers}</div>
+      <form class="tav-form" id="tav-hit"><input class="input" name="target" data-keep="hit" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">雇</button></form>
+      <label class="tav-hush"><input type="checkbox" name="hush" form="tav-hit"${S.tavHush ? " checked" : ""}> 加付封口錢 ${h.hush | 0} 兩（失手、被反查時不容易供出你）</label>
+      ${names ? `<div class="tav-known"><span class="gl">查到過的</span>${names}</div>` : ""}${mine}`;
     return `<h4 class="tav-h">風聲<small>有人在打聽你</small></h4>${heard}
-      <div class="tav-row">${tavBtn("trace", "反查是誰", shop.prices.trace, "")}${tavBtn("hide", "藏起行跡", shop.prices.hide, shop.problems.hide)}</div>
-      ${shop.hidden ? `<p class="shop-cap">${esc(shop.hidden)}</p>` : '<p class="shop-cap">打點酒家與跑堂，接下來一天別人難打聽到你。</p>'}
-      ${tavDone()}${tavNotes(shop, ["trace"], "")}`;
+      <div class="tav-row">${tavBtn("trace", "反查是誰", shop.prices.trace, "")}${tavBtn("hide", "藏起行跡", shop.prices.hide, shop.problems.hide)}${tavBtn("guard", "雇保鏢", h.guard, h.guard_problem)}</div>
+      ${shop.hidden ? `<p class="shop-cap">${esc(shop.hidden)}</p>` : '<p class="shop-cap">藏行跡：打點酒家與跑堂，接下來一天別人難打聽到你。保鏢：殺手找上時有人替你擋一擋。</p>'}
+      ${tavDone()}${tavNotes(shop, ["trace", "guard"], "")}${hire}${tavNotes(shop, ["hit"], "")}`;
   }
 
   function tavernHtml(shop) {
@@ -6323,6 +6336,8 @@
         case "tav-tab": S.tavTab = el.dataset.tab; S.shopNote = null; renderShop(false); break; // 酒肆：四頁
         case "tav-do": await tavDo(el.dataset.op); break;
         case "tav-mode": S.tavAsk = el.dataset.mode; renderShop(); break; // 打聽：查人在哪／打聽交情
+        case "tav-tier": S.tavTier = Number(el.dataset.tier); renderShop(); break; // 買殺手：三檔
+        case "tav-hit-name": { const box = document.querySelector('#tav-hit input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
         case "tav-name": { const box = document.querySelector('#tav-ask input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
         case "arena-tab": S.arenaTab = el.dataset.tab; renderShop(false); break; // 擂台：台下／擂台榜
         case "arena-seen": S.arenaSeen = Number(el.dataset.id); renderShop(); break; // 收起收場卡
@@ -6535,6 +6550,12 @@
         if (!data.material) return;
         S.tavMat = data.material;
         await tavDo("material", { target: data.material });
+      } else if (form.id === "tav-hit") {
+        if (!data.target.trim()) return;
+        S.tavHush = !!data.hush;
+        const tier = S.main.shop.hits.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
+        const name = S.main.shop.hits.tiers.find((t) => t.tier === tier).name;
+        ask(`雇${name}去找${data.target.trim()}？`, "雇", () => tavDo("hit", { target: data.target.trim(), text: `${tier}${data.hush ? ":hush" : ""}` }));
       } else if (form.id === "tav-wall") {
         if (!data.text.trim()) return;
         await tavDo("wall", { text: data.text.trim() });

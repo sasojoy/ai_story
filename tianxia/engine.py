@@ -61,8 +61,8 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
-    WorldState,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TavernHit, TimelineResult,
+    Whisper, WorldState,
     new_game_state,
 )
 from .world import (
@@ -840,6 +840,7 @@ class Game:
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
         self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
+        self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
@@ -1758,6 +1759,7 @@ class Game:
             "news": self._tavern_news, "treat": self._tavern_treat, "hide": self._tavern_hide, "trace": self._tavern_trace,
             "seek": lambda: self._tavern_seek(target), "ties": lambda: self._tavern_ties(target),
             "material": lambda: self._tavern_material(target), "wall": lambda: self._tavern_wall(text),
+            "hit": lambda: self._tavern_hit(target, text), "guard": self._tavern_guard,
         }.get(op)
         if handler is None:
             return ["（沒有這個動作。）"]
@@ -1989,6 +1991,224 @@ class Game:
         self._shop_say("trace")
         return lines
 
+    # ── 買殺手（設計第六節）：雇（_tavern_hit）、保鏢（_tavern_guard）、殺手出手（_tavern_hit_check，對方自己在城外做完一件事時）、
+    # 雇主收結果（_deliver_hits，雇主自己同步時）。單子在季上（WorldState.tavern_hits），亂數用自己的種子，不動 Game.rng ──
+
+    def _tavern_hit_problem(self, target: str, tier: int) -> tuple[str | None, Game | None]:
+        """雇不雇得了（拒絕的話, 對方那一份）：要先在酒肆查到過這個人（不然查無此人與默默無名讀得出差別）、有仇（照截殺的規矩）、
+        雙方都過了新手期、對方身上沒有別人的單、同一對人 hit_pair_hours 內沒雇過、季還在跑。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        if s.world.ended:
+            return tavern_rules.HIT_ENDED, None
+        if not 0 <= tier < len(cfg.hit_prices):
+            return tavern_rules.HIT_BAD_TIER, None
+        if not target or name_key(target) not in {name_key(n) for n in s.player.tavern_known} | self._tavern_wanted():
+            return tavern_rules.HIT_NEED_KNOWN, None
+        cid, other = self._tavern_find(target)
+        if other is None:
+            return tavern_rules.HIT_NEED_KNOWN, None
+        them = other.state.player.name
+        if not self.raid_shown(other):
+            return tavern_rules.HIT_NO_FEUD.format(name=them, him=gender.pronoun(other.state)), other
+        if roster.raid_newbie(s, c):
+            return tavern_rules.HIT_NEWBIE_ME, other
+        if roster.raid_newbie(other.state, c):
+            return tavern_rules.HIT_NEWBIE_THEM.format(name=them), other
+        if tavern_rules.active_hit(s.world, them, self.now) is not None:
+            return tavern_rules.HIT_TAKEN.format(name=them), other
+        recent = self.now - cfg.hit_pair_hours * 3600
+        if any(name_key(h.client) == name_key(s.player.name) and name_key(h.target) == name_key(them) and h.placed_real > recent
+               for h in s.world.tavern_hits):
+            return tavern_rules.HIT_PAIR.format(name=them), other
+        return None, other
+
+    def _tavern_hit(self, target: str, spec: str) -> list[str]:
+        """雇殺手：spec 是「檔次」或「檔次:hush」（多付封口錢）。付了錢掛單；對方擲一次聽不聽得到風聲（不說是誰）。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        head, _, flag = str(spec or "").partition(":")
+        tier = int(head) if head.strip().isdigit() else -1
+        problem, other = self._tavern_hit_problem(target, tier)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        hush = flag == "hush"
+        base = cfg.hit_prices[tier] + (cfg.hush_price if hush else 0)
+        price = self._tavern_charge(base)
+        if price is None:
+            return self._tavern_short(base)
+        them = other.state.player.name
+        w = s.world
+        w.tavern_hit_seq += 1
+        hit = TavernHit(id=w.tavern_hit_seq, client=s.player.name, target=them, tier=tier, price=price, place=s.player.location,
+                        placed_real=self.now, until_real=self.now + cfg.hit_hours * 3600, hushed=hush)
+        warn = cfg.hit_warn + 0.05 * renown.fame_tier(other.state, c)
+        if tavern_rules.rng_for("酒肆殺手風聲", w.tavern_hit_seq, s.player.name, them, w.time).random() < warn:
+            hit.warned = True
+            note = Whisper(kind="hit", who=s.player.name, place=s.player.location, time=w.time,
+                           hint=tavern_rules.side_hint(s, c), hushed=hush)
+            tavern_rules.post_whisper(w, them, note)
+            self.touched.add(them)
+        w.tavern_hits.append(hit)
+        name = tavern_rules.hit_tier_name(tier)
+        lines = [tavern_rules.HIT_PLACED.format(name=them, tier=name, until=self._real_stamp(hit.until_real))]
+        if hush:
+            lines.append(tavern_rules.HIT_HUSHED)
+        tavern_rules.add_note(s, c, "hit", f"{tavern_rules.TITLES['hit']}・{them}", lines)
+        self._shop_say("asked")
+        return lines
+
+    def _real_stamp(self, real: float) -> str:
+        """現實秒換成玩家看得到的時刻（季曆的寫法）：照此刻的世界時間往後推。"""
+        w = self.state.world
+        return self.stamp(w.time + (real - self.now) * self.content.config.time_scale)
+
+    def _tavern_guard_problem(self) -> str | None:
+        p = self.state.player
+        if p.tavern_guard_until > self.now:
+            return tavern_rules.GUARD_ALREADY.format(until=self._real_stamp(p.tavern_guard_until))
+        return None
+
+    def _tavern_guard(self) -> list[str]:
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        problem = self._tavern_guard_problem()
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        if self._tavern_charge(cfg.guard_price) is None:
+            return self._tavern_short(cfg.guard_price)
+        s.player.tavern_guard_until = self.now + cfg.guard_hours * 3600
+        line = tavern_rules.GUARD_DONE.format(until=self._real_stamp(s.player.tavern_guard_until))
+        tavern_rules.add_note(s, c, "guard", tavern_rules.TITLES["guard"], [line])
+        self._shop_say("hide")
+        return [line]
+
+    def _tavern_hit_check(self) -> list[str]:
+        """自己（被盯上的人）剛做完一件事：有一張找你的單子、你人在城外、不在路上、不在決戰裡、沒剛被人截殺或設伏過，殺手照打聽度
+        擲一次找不找得到；找到了本人對本人打一場。到期的單子在這裡收（退款由雇主自己同步時領）。"""
+        s, c = self.state, self.content
+        w, me = s.world, s.player
+        if not tavern_rules.on(c) or not w.tavern_hits:
+            return []
+        key = name_key(me.name)
+        mine = [h for h in w.tavern_hits if not h.done and name_key(h.target) == key]
+        if not mine:
+            return []
+        for h in mine:
+            if h.until_real <= self.now:
+                h.done, h.outcome = True, "過期"
+        hit = next((h for h in mine if not h.done), None)
+        if hit is None or w.ended or me.journey is not None or tavern_rules.town(c, me.location) or roster.raid_newbie(s, c):
+            return []
+        battle = self.world.get_battle()
+        if battle is not None and me.name in battle.participants:
+            return []
+        shield = w.raided.get(key)
+        if shield is not None and w.time - shield < c.config.raid.shield_seconds:
+            return []
+        rng = tavern_rules.rng_for("酒肆殺手", hit.id, me.name, w.time)
+        reach = tavern_rules.hit_reach(c, hit.place, s, self._tavern_wanted_of(me.name))
+        if rng.random() >= tavern_rules.find_chance(c, reach):
+            return []
+        return self._tavern_hit_fight(hit, rng)
+
+    def _tavern_wanted_of(self, name: str) -> set[str]:
+        """這個人身上有沒有通緝（名氣 +1）：有就回只含他名號鍵的集合。"""
+        return {name_key(name)} & self._tavern_wanted()
+
+    def _tavern_hit_fight(self, hit, rng: random.Random) -> list[str]:
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        w, me = s.world, s.player
+        tier_name = tavern_rules.hit_tier_name(hit.tier)
+        mine = self._spar_power(self, self)
+        power = cfg.hit_power[min(hit.tier, len(cfg.hit_power) - 1)]
+        if me.tavern_guard_until > self.now:
+            power *= cfg.guard_scale
+        killer = max(1.0, mine * power)
+        result = encounter.resolve_encounter(mine, killer, rng)
+        w.raided[name_key(me.name)] = w.time
+        hit.done = True
+        squad = Squad(id="assassin", name=tier_name, difficulty=killer)
+        record = battlelog.new_record(s, c, self.world, squad, result, "assassin")
+        record.ours = record.ours[:1]
+        hp_lost: int | None = 0
+        extra: list[str] = []
+        if result.tier in team.WIN_TIERS:
+            hit.outcome = "對方贏"
+            found = math.floor(hit.price * cfg.hit_bounty_share)
+            me.stats["silver"] = me.stats.get("silver", 0) + found
+            record.silver = found
+            story = tavern_rules.HIT_STORY_WON.format(tier=tier_name, n=found)
+            record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)
+            client = self._load_kin(hit.client)
+            tier = renown.fame_tier(client.state, c) if client is not None else 0
+            chance = (cfg.hit_reveal + 0.1 * tier) * (0.5 if hit.hushed else 1.0)
+            if rng.random() < chance:
+                extra.append(tavern_rules.HIT_REVEALED.format(who=hit.client))
+                tavern_rules.remember(s, hit.client)
+                hit.outcome = "對方贏・供出"
+                add_rumor(s, tavern_rules.HIT_RUMOR.format(who=hit.client, name=me.name), hit.place, content=c, layer="local")
+            else:
+                extra.append(tavern_rules.HIT_SILENT)
+        elif result.tier in team.DRAW_TIERS:
+            hit.outcome = "平手"
+            story = tavern_rules.HIT_STORY_DRAW.format(tier=tier_name)
+        else:
+            hit.outcome = "殺手贏"
+            purse = me.stats.get("silver", 0)
+            lost = min(cfg.hit_silver_cap, math.ceil(purse * cfg.hit_silver_share)) if purse > 0 else 0
+            me.stats["silver"] = purse - lost
+            record.silver = -lost
+            con = team.con_of(s, c, self.world, PLAYER)
+            cut = team.armor_cut(s, c, self.world)
+            hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con)
+            hp_lost = round(hp)
+            if hp_lost > 0:
+                record.changes.append(f"氣血 -{hp_lost}")
+            story = tavern_rules.HIT_STORY_LOST.format(tier=tier_name)
+        record.notes.append(story)
+        record.notes += extra
+        annals.note(s, c, annals.FIGHT, story, 2)
+        self._play_rounds(record, squad, result.tier, hp_lost)
+        line = self._file_battle(record)
+        msgs = [line, story, *extra, *battlelog.gains_list(record), *self._last_wear]
+        self._write(tavern_rules.HIT_STRUCK, msgs, tag=battlelog.outcome_text(record))
+        self.touched.add(hit.client)
+        return msgs
+
+    def _deliver_hits(self) -> None:
+        """雇主自己同步時：收自己雇的單子的結果（得手、失手、平手、到期退一半），一張一句、一則紀錄；得手的記惡名。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        w, me = s.world, s.player
+        if not w.tavern_hits:
+            return
+        key = name_key(me.name)
+        lines: list[str] = []
+        for h in w.tavern_hits:
+            if name_key(h.client) != key or h.refunded:
+                continue
+            if not h.done and h.until_real <= self.now:
+                h.done, h.outcome = True, "過期"
+            if not h.done:
+                continue
+            h.refunded = True
+            tier = tavern_rules.hit_tier_name(h.tier)
+            if h.outcome == "過期":
+                back = int(h.price * cfg.refund_share)
+                me.stats["silver"] = me.stats.get("silver", 0) + back
+                lines.append(tavern_rules.HIT_REFUND.format(name=h.target, tier=tier, n=back))
+            elif h.outcome == "殺手贏":
+                lines.append(tavern_rules.HIT_WON_CLIENT.format(tier=tier, name=h.target))
+                lines += renown.gain(s, c, "evil", cfg.hit_evil)
+            elif h.outcome.startswith("對方贏"):
+                lines.append(tavern_rules.HIT_LOST_CLIENT.format(tier=tier, name=h.target))
+                if h.outcome.endswith("供出"):
+                    lines.append(tavern_rules.HIT_LOST_NAMED)
+            else:
+                lines.append(tavern_rules.HIT_DRAW_CLIENT.format(tier=tier, name=h.target))
+        if lines:
+            self._write(tavern_rules.HIT_TITLE, lines)
+            self._save_season()
+
     def _deliver_whispers(self) -> None:
         """酒肆的風聲（有人打聽你）：季上那幾則搬到身上，寫一則「風聲」紀錄。"""
         lines = tavern_rules.collect_whispers(self.state, self.content)
@@ -2010,8 +2230,20 @@ class Game:
             base = cfg.material_prices.get(m.tier, max(cfg.material_prices.values()))
             mats.append({"id": m.id, "name": m.name, "tier": m.tier, "attribute": m.attribute, "price": self._tavern_price(base)})
         hour = int(s.world.time // HOUR)
+        me = name_key(p.name)
+        hits = {
+            "tiers": [{"tier": i, "name": tavern_rules.hit_tier_name(i), "price": self._tavern_price(base)}
+                      for i, base in enumerate(cfg.hit_prices)],
+            "hush": self._tavern_price(cfg.hush_price),
+            "guard": self._tavern_price(cfg.guard_price),
+            "guard_problem": self._tavern_guard_problem(),
+            "mine": [tavern_rules.HIT_ACTIVE.format(name=h.target, tier=tavern_rules.hit_tier_name(h.tier), until=self._real_stamp(h.until_real))
+                     for h in s.world.tavern_hits if not h.done and name_key(h.client) == me and h.until_real > self.now],
+            "ended": bool(s.world.ended),
+        }
         return {
             "shop": "tavern",
+            "hits": hits,
             "sign": tavern_rules.sign(s, c),
             "silver": p.stats.get("silver", 0),
             "line": shopview.line_text(s, c, "tavern"),
@@ -2304,6 +2536,7 @@ class Game:
             self._fight = None
             self._affinity_before = None
         self._record_faction()
+        msgs += self._tavern_hit_check()  # 酒肆：有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
         self._save_season()
         return self._log(msgs)
 

@@ -2243,6 +2243,13 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-tavern .tav-whispers li { margin: 0.4em 0; padding: 0.5em 0.8em; border-left: 3px solid #5e3f26; background: rgba(0, 0, 0, 0.25); font: 0.98em/1.6 var(--serif); color: #e8d6ad; }
 .shop-tavern .tav-whispers li.named { border-left-color: #c3402c; color: #fbe9c0; }
 .shop-tavern .shop-empty, .shop-tavern .shop-cap, .shop-tavern .shop-note { font-size: 0.95em; }
+.shop-tavern .tav-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45em; margin: 0.4em 0; }
+.shop-tavern .tav-tier { display: grid; gap: 0.15em; padding: 0.5em 0.3em; border: 1px solid #5e3f26; border-radius: 0.5em; background: rgba(20, 10, 6, 0.6); color: #e8d6ad; text-align: center; cursor: pointer; }
+.shop-tavern .tav-tier b { font: 600 1em var(--serif); letter-spacing: 0.05em; }
+.shop-tavern .tav-tier small { font-size: 0.82em; color: #a88a64; }
+.shop-tavern .tav-tier.on { border-color: #c3402c; background: linear-gradient(180deg, rgba(195, 64, 44, 0.45), rgba(140, 36, 22, 0.45)); color: #fbe9c0; box-shadow: 0 0 0.8em rgba(195, 64, 44, 0.3); }
+.shop-tavern .tav-tier.on small { color: #f2c46a; }
+.shop-tavern .tav-hush { display: flex; align-items: center; gap: 0.4em; margin: 0.35em 0.15em; font-size: 0.9em; color: #c9a875; }
 @media (min-width: 641px) {
   .shop-layer.shop-tavern { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat; }
   .shop-layer > .tav-hero { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); } /* 燈籠與酒罈也照欄 */

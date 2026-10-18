@@ -306,6 +306,7 @@ class Whisper(BaseModel):
     named: bool = False
     revealed: bool = False
     hint: str = ""  # 問不出名號時的那一點線索（「一個生面孔」）
+    hushed: bool = False  # 雇殺手的人付了封口錢：反查難一點
 
 
 class WallNote(BaseModel):
@@ -603,6 +604,7 @@ class PlayerState(BaseModel):
     tavern_treat_day: int = -1  # 請全店喝酒是哪一天（同 pill_day 的換日）
     whispers: list[Whisper] = Field(default_factory=list)  # 收到的風聲（Config.tavern.whisper_keep）
     hidden_until: float = 0.0  # 藏行跡到幾時（世界秒）
+    tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
@@ -1112,7 +1114,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

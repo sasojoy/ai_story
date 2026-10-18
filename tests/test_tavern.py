@@ -203,3 +203,77 @@ def test_a_bot_short_of_silver_stays_out():
         assert bot_policy._tavern(game, random.Random(1)) is None
     finally:
         bot_policy.TAVERN_CHANCE = old
+
+
+def _feud(world, c, *, target_fame=10_000, target_at="wan_city"):
+    me = _game(world=world, content=c, faction="guanjun")
+    them = _game("李尋歡", at=target_at, world=world, content=c, faction="huangjin")
+    them.state.player.stats["fame"] = target_fame
+    for g in (me, them):
+        g.state.player.joined_at = -10 ** 9
+    CharacterStore(world.db).save(them.state)
+    CharacterStore(world.db).save(me.state)
+    return me, them
+
+
+def test_hiring_needs_a_name_you_found_and_a_feud():
+    world = open_world()
+    c = _content()
+    me, them = _feud(world, c)
+    me.choose("act:tavern")
+    assert me.tavern_do("hit", "李尋歡", "0") == [tavern.HIT_NEED_KNOWN]
+    assert me.tavern_do("hit", "查無此人", "0") == [tavern.HIT_NEED_KNOWN]  # 跟沒查過的人同一句
+    me.tavern_do("seek", "李尋歡")
+    before = me.state.player.stats["silver"]
+    msgs = me.tavern_do("hit", "李尋歡", "0:hush")
+    price = me._tavern_price(c.config.tavern.hit_prices[0] + c.config.tavern.hush_price)
+    assert me.state.player.stats["silver"] == before - price, msgs
+    hit = me.state.world.tavern_hits[-1]
+    assert hit.target == "李尋歡" and hit.hushed and not hit.done
+    assert me.tavern_do("hit", "李尋歡", "1")[0].startswith("酒家搖頭：「已經有人出了價")
+    assert me.shop_view()["hits"]["mine"]
+
+
+def test_the_killer_waits_in_town_and_strikes_outside():
+    world = open_world()
+    c = _content()
+    me, them = _feud(world, c)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    me.tavern_do("hit", "李尋歡", "2")
+    me._save_season()
+    them.sync(NOW + 5)
+    assert them._tavern_hit_check() == []  # 宛城是城鎮：殺手等著
+    out = next(lid for lid in c.locations if not tavern.town(c, lid) and tavern.near(c, "wan_city", lid) >= 1
+               and not c.locations[lid].tags.count("序章"))
+    them.state.player.location = out
+    msgs = them._tavern_hit_check()
+    hit = them.state.world.tavern_hits[-1]
+    assert hit.done and hit.outcome in ("殺手贏", "對方贏", "對方贏・供出", "平手")
+    assert any(e.title == tavern.HIT_STRUCK for e in them.state.journal) and msgs
+    them._save_season()
+    me.sync(NOW + 20)
+    assert hit.outcome and any(e.title == tavern.HIT_TITLE for e in me.state.journal)
+
+
+def test_an_unfound_target_refunds_half_when_the_order_lapses():
+    world = open_world()
+    c = _content()
+    me, them = _feud(world, c)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    me.tavern_do("hit", "李尋歡", "0")
+    hit = me.state.world.tavern_hits[-1]
+    before = me.state.player.stats["silver"]
+    me.now = hit.until_real + 1
+    me._deliver_hits()
+    assert hit.done and hit.outcome == "過期" and hit.refunded
+    assert me.state.player.stats["silver"] == before + int(hit.price * c.config.tavern.refund_share)
+
+
+def test_a_guard_once_until_it_lapses():
+    game = _game()
+    game.choose("act:tavern")
+    game.tavern_do("guard")
+    assert game.state.player.tavern_guard_until > game.now
+    assert game.tavern_do("guard")[0].startswith("保鏢還跟著")

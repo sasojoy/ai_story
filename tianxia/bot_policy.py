@@ -314,10 +314,11 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
 
 # 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
 # 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
-# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的。不寫題壁、不請酒、不藏行跡、不反查（真人的事）。
+# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過、有仇的人雇最便宜的那一檔殺手
+# （「有人出錢買你」不能只來自真人）。不寫題壁、不請酒、不藏行跡、不反查。
 TAVERN_CHANCE = 0.03
 TAVERN_RESERVE = 30
-TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1))
+TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1), ("hit", 0.5))
 
 
 def _tavern(game: Game, rng: random.Random) -> list[str] | None:
@@ -329,7 +330,8 @@ def _tavern(game: Game, rng: random.Random) -> list[str] | None:
         return None
     op = rng.choices([k for k, _ in TAVERN_ASKS], weights=[w for _, w in TAVERN_ASKS])[0]
     t = game.content.config.tavern
-    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price}.get(op, max(t.material_prices.values())))
+    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price,
+                                "hit": t.hit_prices[0]}.get(op, max(t.material_prices.values())))
     if s.player.stats.get("silver", 0) < price + TAVERN_RESERVE:
         return None
     msgs = game.choose("act:tavern")
@@ -344,6 +346,14 @@ def _tavern(game: Game, rng: random.Random) -> list[str] | None:
         target = rng.choice(names) if names else ""
         if not target:
             op = "news"
+    elif op == "hit":
+        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None]
+        if foes:
+            msgs += game.tavern_do("hit", rng.choice(foes), "0")
+            if s.player.picking_tavern:
+                msgs += game.choose(view["back"])
+            return msgs
+        op = "news"
     elif op == "material":
         mats = [m["id"] for m in view["materials"] if m["tier"] <= 2]
         target = rng.choice(mats) if mats else ""

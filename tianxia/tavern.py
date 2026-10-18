@@ -21,7 +21,7 @@ from collections import deque
 from . import atlas, figures, gender, renown, rules, territory
 from .characters import name_key
 from .models import Content, Material
-from .state import GameState, Rumor, TavernNote, WallNote, Whisper, WorldState
+from .state import GameState, Rumor, TavernHit, TavernNote, WallNote, Whisper, WorldState
 from .world_state import season_length_days
 
 TAG = "酒肆"  # 地點標籤（content/locations.json）
@@ -403,7 +403,7 @@ def trace_lines(state: GameState, content: Content, others: dict[str, GameState]
         place = content.locations[w.place].name if w.place in content.locations else "某地"
         if other is None:
             return [TRACE_MISS], True
-        score = person_fame(other, content) + near(content, state.player.location, w.place)
+        score = person_fame(other, content) + near(content, state.player.location, w.place) - (1 if w.hushed else 0)
         when = rules_stamp(state, content, w.time)
         if score >= 3:
             w.revealed = True
@@ -639,7 +639,7 @@ TRACE_LABEL = "反查誰在打聽我（{price} 兩）"
 BOARD_LABEL = "看牆上的懸賞榜"
 BACK_LABEL = "出酒肆"
 TITLES = {"news": "聽消息", "seek": "打聽下落", "ties": "打聽交情", "material": "打聽素材", "wall": "題壁", "treat": "請酒",
-          "hide": "藏行跡", "trace": "反查"}  # 酒肆那一頁「剛問到的」每一則的小標（待 joy 潤）
+          "hide": "藏行跡", "trace": "反查", "hit": "買殺手", "guard": "保鏢"}  # 酒肆那一頁「剛問到的」每一則的小標（待 joy 潤）
 WHO_UNKNOWN = "酒家說：「{name}？沒聽說過這號人物。」（退你 {refund} 兩）"
 ASK_EMPTY = "要打聽誰？先報個名號。"
 ASK_SELF = "酒家笑了：「客官自己在哪，還要問我？」"
@@ -670,3 +670,71 @@ def chatter(content: Content, loc_id: str, hour: int) -> list[tuple[str, str]]:
 def whisper_view(content: Content, state: GameState) -> list[dict]:
     """你收到過的風聲（最新的在前）：字、問出名號了沒。"""
     return [{"text": whisper_text(content, w), "named": bool(w.named or w.revealed)} for w in reversed(state.player.whispers)]
+
+
+# ── 買殺手（設計第六節）：NPC 代打。付錢指定一個人，殺手在 hit_hours 個現實小時內等他在城外做完一件事、照打聽度擲找不找得到，
+# 找到了本人對本人打一場（同截殺）。數字全在引擎；字待 joy 潤 ──
+
+HIT_TIERS = ("市井刺客", "江湖殺手", "成名刺客")  # 三檔殺手的名字（Config.tavern.hit_prices 的順序）
+HIT_TITLE = "買殺手"
+HIT_LABEL = "雇殺手"
+HIT_NEED_KNOWN = "酒家搖頭：「這人在哪都還沒打聽清楚，殺手不接。」"
+HIT_NO_FEUD = "酒家壓低聲音：「你跟{name}沒仇沒怨（不同陣營，或揭了{him}的通緝），這種單子沒人接。」"
+HIT_ENDED = "天下暫歇，殺手也歇著。"
+HIT_NEWBIE_ME = "你初入江湖，還在新手期，先別結這種仇。"
+HIT_NEWBIE_THEM = "{name}初入江湖，殺手不接這種單。"
+HIT_TAKEN = "酒家搖頭：「已經有人出了價找{name}，一個人身上只接一張單。」"
+HIT_PAIR = "你不久前才雇人找過{name}，過一陣子再說。"
+HIT_BAD_TIER = "沒有這一檔殺手"
+HIT_PLACED = "你把銀子推過去：「{name}。」酒家收了錢，朝角落裡的{tier}點了點頭。單子到{until}為止。"
+HIT_HUSHED = "你另外塞了一包封口錢：就算失手，也不容易把你供出來。"
+HIT_REFUND = "你雇去找{name}的{tier}空等到期限，沒找到人，退回 {n} 兩。"
+HIT_WON_CLIENT = "你雇的{tier}得手了：{name}吃了虧，丟了銀兩。"
+HIT_LOST_CLIENT = "你雇的{tier}失了手，被{name}打退。"
+HIT_LOST_NAMED = "聽說殺手被問出了是誰雇的。"
+HIT_DRAW_CLIENT = "你雇的{tier}跟{name}交了手，不分高下，自己先跑了。"
+HIT_EVIL = "惡名 +{n}"
+HIT_STRUCK = "遭殺手找上"
+HIT_STORY_LOST = "一個{tier}從暗處撲出來，你不是對手，丟下銀兩脫身。"
+HIT_STORY_WON = "一個{tier}從暗處撲出來，被你打退了。你從他身上搜出 {n} 兩。"
+HIT_STORY_DRAW = "一個{tier}從暗處撲出來，鬥了一陣不分高下，他翻身遁走。"
+HIT_REVEALED = "那殺手吃不住打，供出是{who}雇的。"
+HIT_SILENT = "那殺手咬緊牙關，問不出是誰雇的。"
+HIT_RUMOR = "{who}買兇找{name}麻煩，殺手失了手。"
+GUARD_LABEL = "雇保鏢"
+GUARD_DONE = "你雇了兩個保鏢跟著，到{until}為止。殺手找上時，有人替你擋一擋。"
+GUARD_ALREADY = "保鏢還跟著，到{until}為止"
+HUSH_LABEL = "加付封口"
+HIT_ACTIVE = "你雇去找{name}的{tier}，單子到{until}為止。"
+
+
+def hit_tier_name(tier: int) -> str:
+    return HIT_TIERS[tier] if 0 <= tier < len(HIT_TIERS) else HIT_TIERS[-1]
+
+
+def hit_reach(content: Content, place: str, other: GameState, wanted: set[str] | None = None) -> int:
+    """殺手找人的打聽度：名氣＋從雇的那間酒肆算的遠近＋近況－藏行跡（殺手沒有地頭熟）。"""
+    where = other.player.location if other.player.journey is None else _road_end(other)
+    now = other.world.time
+    score = person_fame(other, content, wanted) + near(content, place, where)
+    if fresh(other, now):
+        score += 1
+    if hidden(other, now):
+        score -= content.config.tavern.hide_reach
+    return score
+
+
+def find_chance(content: Content, reach: int) -> float:
+    """殺手這一下找不找得到人：打聽度 5 以上必找到，每少一點少 hit_find_drop。"""
+    return max(0.0, min(1.0, 1.0 - content.config.tavern.hit_find_drop * max(0, 5 - reach)))
+
+
+def active_hit(world: WorldState, target: str, now_real: float) -> TavernHit | None:
+    """還掛著（沒打過、沒到期）的那一張找 target 的單子。"""
+    key = name_key(target)
+    return next((h for h in world.tavern_hits if not h.done and name_key(h.target) == key and h.until_real > now_real), None)
+
+
+def town(content: Content, loc_id: str) -> bool:
+    loc = content.locations.get(loc_id)
+    return loc is not None and content.config.explore_mix_of(loc.tags).kind == "town"
