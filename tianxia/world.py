@@ -34,6 +34,7 @@ WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
 # （跑的時候 hooked_day 已經是剛跨進的那一天）。軍令、懸賞在 21 天季改走這一串，週初那一串略過（orders.issue、bounties.issue）
 DAY_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: orders.issue_day(state, content, state.world.hooked_day, rng),
+    lambda state, content, rng: bounties.issue_day(state, content, state.world.hooked_day, rng),  # 懸賞榜：每天一批（7.2）
 ]
 
 

@@ -58,7 +58,7 @@ def deadline(state: GameState, content: Content, order: Order) -> float:
     """這一道的截止（世界秒）：21 天季是隔天 00:00，其他季是下週一 00:00。"""
     w = state.world
     if daily(state, content):
-        return calendar.week_start(1, content, w) + order.week * calendar.DAY / calendar.cal_scale(content, w)
+        return calendar.day_start(order.week + 1, content, w)
     return calendar.week_start(order.week + 1, content, w)
 
 
