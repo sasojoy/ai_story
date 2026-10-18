@@ -136,6 +136,42 @@ def take_mentor(state: GameState, content: Content) -> int:
     return bonus
 
 
+# ── 看火候（有鐵匠鋪的城鎮；在不在由 Game 問）──
+
+
+def furnace_problem(state: GameState, content: Content, day: int, in_prologue: bool = False) -> str | None:
+    """請不了的原因：序章裡、請了還沒用掉、今天請過了、錢不夠；可以是 None。"""
+    if in_prologue:
+        return FURNACE_PROLOGUE
+    p = state.player
+    return _once_a_day(state, content, day, p.furnace_ready, p.furnace_day, content.config.silver_outlets.furnace_silver,
+                       FURNACE_READY, FURNACE_TODAY)
+
+
+def furnace(state: GameState, content: Content, day: int, in_prologue: bool = False) -> list[str]:
+    """請老師傅看火候：付錢、記下這一天，下一次合成或打造的品質基準換成 furnace_odds（furnace_base），打一爐用掉（use_furnace）。"""
+    problem = furnace_problem(state, content, day, in_prologue)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    cfg = content.config.silver_outlets
+    p = state.player
+    p.furnace_ready, p.furnace_day = True, day
+    return [FURNACE_DONE, *_pay(state, cfg.furnace_silver)]
+
+
+def furnace_base(state: GameState | None, content: Content, default: dict[str, float]) -> dict[str, float]:
+    """這一爐品質機率的基準（6.5「看火候怎麼套」）：請了看火候、還沒用掉時是 furnace_odds，其餘照原本（default）；其餘加減照算、照原本的
+    上下限夾（fusion.odds_from_points）。合成（fusion._points）與打造（smithing.forge_odds）都讀它，說明與實際擲的一樣。"""
+    if state is not None and state.player.furnace_ready and on(content, state.world):
+        return content.config.silver_outlets.furnace_odds
+    return default
+
+
+def use_furnace(state: GameState) -> None:
+    """真的擲了一次品質（打造、合成）：老師傅的火候用掉了。"""
+    state.player.furnace_ready = False
+
+
 def take_donation(state: GameState, content: Content, day: int, room_points: int) -> tuple[int, int]:
     """真的收下：扣銀兩、記今天的兩數與點數（捐素材的那本 donated_today），回（幾兩, 幾點）；捐不了是 (0, 0)、什麼都不動。"""
     if donate_problem(state, content, day, room_points, 0) is not None:

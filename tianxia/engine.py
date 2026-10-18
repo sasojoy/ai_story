@@ -1385,7 +1385,17 @@ class Game:
             problem = silver.mentor_problem(s, c, self._pill_day())
             opts.append(Option(id="act:mentor", enabled=problem is None, label=silver.MENTOR_REFUSED.format(problem=problem)
                                if problem else silver.MENTOR_LABEL.format(silver=cfg.mentor_silver, bonus=cfg.mentor_bonus)))
+        if equipment.smith_open(s, c):
+            problem = silver.furnace_problem(s, c, self._pill_day(), prologue_rules.active(s, c))
+            opts.append(Option(id="act:furnace", enabled=problem is None, label=silver.FURNACE_REFUSED.format(problem=problem)
+                               if problem else silver.FURNACE_LABEL.format(silver=c.config.silver_outlets.furnace_silver)))
         return opts
+
+    def _silver_furnace(self) -> list[str]:
+        s, c = self.state, self.content
+        if not (silver.on(c, s.world) and equipment.smith_open(s, c)):
+            return [equipment.NOT_NOW]
+        return silver.furnace(s, c, self._pill_day(), prologue_rules.active(s, c))
 
     def _at_clinic_town(self) -> bool:
         """名師指點、買破境丹的地方（6.5）：帶醫館標籤的地點、不在路上（看標籤，不看 Config.heal_at_clinic：那個開關關著時哪裡都能療傷）。"""
@@ -2636,6 +2646,8 @@ class Game:
             return self._silver_donate()
         if what == "mentor":
             return self._silver_mentor()
+        if what == "furnace":
+            return self._silver_furnace()
         if what == "donate":  # 大本營捐軍備（素材與經濟設計第六節）：打開軍需官那一串（見 _donate_options），不花體力
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）

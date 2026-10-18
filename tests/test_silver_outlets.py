@@ -105,6 +105,38 @@ def test_mentor_only_at_a_clinic_town():
     assert "act:mentor" not in _ids(game)
 
 
+# ── Task 3：看火候 ──
+
+
+def test_furnace_shifts_the_base_odds_once():
+    from tianxia import fusion, smithing
+
+    game = _game(at="yingchuan")
+    s, c, w = game.state, game.content, game.world
+    s.player.materials = {"gang_1": 4}
+    plain = smithing.forge_odds(s, c, w, "劍", "gang_1", "gang_1")
+    game.choose("act:furnace")
+    assert s.player.furnace_ready and s.player.stats["silver"] == 450
+    warm = smithing.forge_odds(s, c, w, "劍", "gang_1", "gang_1")
+    assert warm.odds["上品"] > plain.odds["上品"] and warm.odds["下品"] < plain.odds["下品"]
+    assert fusion._points(c, [], s).odds == fusion.odds_from_points([], c.config.fuse_quality, c.config.silver_outlets.furnace_odds).odds
+    smithing.forge(s, c, w, "劍", "gang_1", "gang_1", rng=random.Random(0))
+    assert not s.player.furnace_ready  # 打一爐就用掉：之後照原本的基準
+    base = c.config.weapons.quality.odds
+    assert silver.furnace_base(s, c, base) is base
+
+
+def test_furnace_refused_in_the_prologue_and_twice_a_day():
+    game = _game(at="yingchuan")
+    day = game.econ_day()
+    assert silver.furnace_problem(game.state, game.content, day, in_prologue=True) == silver.FURNACE_PROLOGUE
+    game.choose("act:furnace")
+    assert silver.FURNACE_READY in _ids(game)["act:furnace"].label
+    silver.use_furnace(game.state)
+    option = _ids(game)["act:furnace"]
+    assert not option.enabled and silver.FURNACE_TODAY in option.label
+
+
 def test_weekend_has_no_silver_outlets():
     game = _game("weekend")
     assert not silver.on(game.content, game.state.world)
