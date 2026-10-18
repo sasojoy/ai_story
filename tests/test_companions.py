@@ -78,6 +78,42 @@ def test_a_recruit_lands_him_in_your_name_and_team(real, world):
     assert "act:recruit:guanyu" not in _opts(guan)  # 有主了：鈕不再出現
 
 
+# ── FB-364：十五位裡以前不能招的九位補起始武學、內功 ──
+
+NEW_NINE = {"wangyun", "gongsunzan", "tangzhou", "xuchu", "zhangyan", "xushao", "xunyu", "huatuo", "zhangrang"}
+
+
+def test_every_recruitable_companion_has_arts_and_power(real, world):
+    """十五位都有一門武學、一門內功；新補的九位挑現有內容的武學（不新造名字）、不帶本命戰法、不是絕學；招到之後威力不是 0。"""
+    from tianxia import team
+
+    for cid in FIFTEEN:
+        ch = real.characters[cid]
+        assert real.skills[ch.starting_wugong].kind == "武學" and real.skills[ch.starting_neigong].kind == "內功"
+    for cid in NEW_NINE:
+        ch = real.characters[cid]
+        for sid in (ch.starting_wugong, ch.starting_neigong):
+            assert real.skills[sid].tactic is None and real.skills[sid].quality != "絕學"
+    game = _player(real, world, "官甲", "guan", "zhuo_county")
+    for cid in NEW_NINE:
+        roster._seed_starting_skills(world, cid, real.characters[cid])
+        assert team.mate_power(game.state, real, world, cid) > 0
+
+
+def test_the_new_nine_teach_no_signature_art(real, world):
+    """情誼到 signature_affinity 時教的是「本命武學」：只有絕學的起始武學才算（十八位大勢人物的都是），新補的九位不教。"""
+    from tianxia import companion_agent
+
+    game = _player(real, world, "官甲", "guan", "zhuo_county")
+    p = game.state.player
+    p.affinities["wangyun"] = p.affinities["liubei"] = real.config.signature_affinity
+    arts = set(p.arts)
+    assert companion_agent._maybe_grant_signature_skill(game.state, real, real.characters["wangyun"], "wangyun") == []
+    assert set(p.arts) == arts and "學會本命:wangyun" not in p.flags
+    assert companion_agent._maybe_grant_signature_skill(game.state, real, real.characters["liubei"], "liubei")  # 本命照教
+    assert {"liubei_wugong", "liubei_neigong"} <= set(p.arts)
+
+
 def test_a_late_recruit_click_says_who_took_him(real, world):
     """FB-363：兩個分頁搶，慢的那一頁的鈕還在、按下去時他已經有主了：回「已經被某某招攬走了」（Refused，網頁跳提示；同 FB-162），
     不扣體力、不寫紀錄。名號照寫（匿名只在地方傳聞，rules.display_name）。"""

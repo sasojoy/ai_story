@@ -857,6 +857,8 @@
       "府吏回話：「使君正在批閱公文。」",
       "王允看了你一眼，又低頭寫字。"
     ],
+    "starting_wugong": "shouyi_jian",
+    "starting_neigong": "yanghao_jue",
     "stats": {
       "str": 4,
       "agi": 4,
@@ -887,6 +889,8 @@
       "騎士攔住你：「將軍在試新馬。」",
       "公孫瓚撥轉馬頭，揚長而去。"
     ],
+    "starting_wugong": "xingwu_qiang",
+    "starting_neigong": "xingwu_lianqi",
     "stats": {
       "str": 7,
       "agi": 7,
@@ -916,6 +920,8 @@
       "那人往路邊一閃，不見了。",
       "唐周低著頭快步走過，裝作沒聽見。"
     ],
+    "starting_wugong": "fushui_zhang",
+    "starting_neigong": "taiping_daoyin",
     "stats": {
       "str": 3,
       "agi": 7,
@@ -947,6 +953,8 @@
       "堡丁說：「虎癡在後山練力氣，不見人。」",
       "許褚哼了一聲，把門閂上了。"
     ],
+    "starting_wugong": "lishi_chui",
+    "starting_neigong": "wubao_zhuanggong",
     "stats": {
       "str": 9,
       "agi": 4,
@@ -976,6 +984,8 @@
       "嘍囉說：「大當家的出山了，不知幾時回。」",
       "張燕一翻身上了屋簷，不見了。"
     ],
+    "starting_wugong": "buqu_dao",
+    "starting_neigong": "xiaolin_gong",
     "stats": {
       "str": 6,
       "agi": 9,
@@ -1006,6 +1016,8 @@
       "書僮說：「先生正在讀書，不見客。」",
       "許劭只是笑笑，沒有答話。"
     ],
+    "starting_wugong": "shusheng_jian",
+    "starting_neigong": "chanzuo_tiaoxi",
     "stats": {
       "str": 3,
       "agi": 4,
@@ -1034,6 +1046,8 @@
       "書院的人說：「荀公子出去探望鄉人了。」",
       "荀彧溫和地笑了笑，沒有留你。"
     ],
+    "starting_wugong": "shusheng_jian",
+    "starting_neigong": "yanghao_jue",
     "stats": {
       "str": 3,
       "agi": 4,
@@ -1062,6 +1076,8 @@
       "學徒說：「先生出診去了。」",
       "華佗擺擺手：「我只看病，不閒聊。」"
     ],
+    "starting_wugong": "ganshan_tui",
+    "starting_neigong": "jichu_tuna",
     "stats": {
       "str": 4,
       "agi": 6,
@@ -1095,6 +1111,8 @@
       "宮門的衛士橫戟攔住你。",
       "張讓在簾後輕笑一聲，沒有召見。"
     ],
+    "starting_wugong": "dukou_duanda",
+    "starting_neigong": "shouling_jinggong",
     "stats": {
       "str": 2,
       "agi": 4,

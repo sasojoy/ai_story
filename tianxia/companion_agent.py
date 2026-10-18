@@ -541,12 +541,15 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     flag = f"學會本命:{companion_id}"
     if flag in p.flags:
         return []
+    # 本命武學是絕學（十八位大勢人物的都是）；歷史武將同行補的起始武學是一般的內容武學，不算本命、不教（FB-364）。沒有可教的不寫那一句、不記旗標
+    taught = [s for s in (character.starting_wugong, character.starting_neigong) if s and content.skills[s].quality == "絕學"]
+    if not taught:
+        return []
     p.flags.add(flag)
     msgs: list[str] = [f"你與{character.name}情誼深厚，他願意將本命武學傾囊相授！"]
-    for skill_id in (character.starting_wugong, character.starting_neigong):
-        if skill_id:
-            msgs += learn_skill(state, content, skill_id)
+    for skill_id in taught:
+        msgs += learn_skill(state, content, skill_id)
     from .signature import lift_levels  # 本命武學學到時直接第七成（Config.signature_arts.start_level）
 
-    lift_levels(state, content, (character.starting_wugong, character.starting_neigong))
+    lift_levels(state, content, taught)
     return msgs
