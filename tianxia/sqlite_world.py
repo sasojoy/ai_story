@@ -652,7 +652,7 @@ class SqliteWorldStore:
         def _apply(state: SharedWorldState) -> None:
             if not state.season.storyline or state.season_opened:
                 return
-            stamp_season(state.season, content)  # 種下之後設定可能換過（例如重開時才設 weekend）
+            stamp_season(state.season, content, now=now)  # 種下之後設定可能換過（例如重開時才設 weekend）；21 天季照這一刻蓋錨點
             from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
             avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
@@ -697,7 +697,7 @@ class SqliteWorldStore:
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
             if lines or wrote:
                 self._save_season(conn, state.season_number, state.season)
-            state.season = fresh_season(content)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動
+            state.season = fresh_season(content, now=now)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動；21 天季照這一刻蓋錨點
             state.season_number += 1
             state.season_opened = True
             state.season_last_real = now
@@ -786,6 +786,7 @@ class SqliteWorldStore:
             if state.season_last_real is not None:
                 skipped = world_module.pause_skip(state.season, content, span)
                 state.season_last_real += skipped
+                world_module.realign_paused_calendar(state.season, content, skipped)  # 21 天季：季曆對回現實的星期（其他季不動）
                 season_now = state.season.time + max(0.0, now - state.season_last_real) * content.config.time_scale
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:

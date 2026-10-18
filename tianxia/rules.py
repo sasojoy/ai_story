@@ -104,21 +104,34 @@ FULL_SEASON_DAYS = DEFAULT_SEASON_DAYS  # 一個遊戲日剛好是現實一天�
 
 
 def day_seconds(content: Content, world: WorldState) -> float:
-    """一個遊戲日有幾個世界秒：DAY × 季長 ÷ FULL_SEASON_DAYS（季長照 world 蓋的章；沒有章的舊季照 14 天）。"""
+    """一個遊戲日有幾個世界秒：DAY × 季長 ÷ FULL_SEASON_DAYS（季長照 world 蓋的章；沒有章的舊季照 14 天）。21 天季是季曆的一天
+    （DAY ÷ cal_scale，就是現實的一天，正式季整合設計 1.3）。"""
+    if calendar.season21_on(world, content):
+        return DAY / calendar.cal_scale(content, world)
     return DAY * season_length_days(world, content) / FULL_SEASON_DAYS
 
 
 def game_day(content: Content, world: WorldState, time: float | None = None) -> int:
-    """世界秒 time（不給就是此刻）落在這一季的第幾個遊戲日（從 1 起）。上限的帳記的是這個號碼：記的是別的號碼就當前幾天的。"""
+    """世界秒 time（不給就是此刻）落在這一季的第幾個遊戲日（從 1 起）。上限的帳記的是這個號碼：記的是別的號碼就當前幾天的。
+    21 天季照季曆的天（台灣 00:00 換日；週三開季的第一天是第 3 天），季末往後排也照樣換（calendar.day_index 不夾在季末）。"""
     t = world.time if time is None else time
+    if calendar.season21_on(world, content):
+        return calendar.day_index(t, content, world) + 1
     return int(t // day_seconds(content, world)) + 1
+
+
+def world_day(content: Content, world: WorldState, time: float | None = None) -> int:
+    """「今天」的帳記的號碼（從 0 起；figures、engine 的一天只扣一次、figure_aid、figure_life 用）：21 天季是季曆第幾天減 1
+    （台灣 00:00 換日，正式季整合設計 1.3），其他季照舊 int(time // DAY)（calendar.world_day）。"""
+    return calendar.world_day(world.time if time is None else time, content, world)
 
 
 def day_ends(content: Content, world: WorldState, time: float | None = None) -> float:
     """time（不給就是此刻）所在的遊戲日結束、下一個遊戲日開始的那一刻（世界秒）：game_day 在這一刻剛好換成下一天
     （n × 一天的長度碰上浮點誤差時，往後挪到第一個真的換了日的值，寫出來的時刻跟真的換日的那一刻不會差一點）。"""
     day = game_day(content, world, time)
-    end = day * day_seconds(content, world)
+    start = calendar.week_start(1, content, world) if calendar.season21_on(world, content) else 0.0  # 21 天季從第 1 週週一 00:00 數
+    end = start + day * day_seconds(content, world)
     while game_day(content, world, end) <= day:
         end = math.nextafter(end, math.inf)
     return end
@@ -253,13 +266,18 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         fought = next((r for r in state.battles if r.id == state.battle_card), None)
         if fought is None or fought.tier not in cond.fight_tiers:
             return False
-    if cond.night is not None or cond.week_min is not None or cond.week_max is not None:
+    if (cond.night is not None or cond.week_min is not None or cond.week_max is not None
+            or cond.cal_day_min is not None or cond.cal_day_max is not None):
         if content is None or not calendar.season_one_on(w, content):
             return False
         if cond.night is not None and calendar.is_night(w.time, content, w) != cond.night:
             return False
-        week = calendar.point(w.time, content, w).week
-        if (cond.week_min is not None and week < cond.week_min) or (cond.week_max is not None and week > cond.week_max):
+        at = calendar.point(w.time, content, w)
+        if calendar.season21_on(w, content):  # 21 天季照天數、不看週（正式季整合設計 1.2 給開發 6）
+            if ((cond.cal_day_min is not None and at.cal_day < cond.cal_day_min)
+                    or (cond.cal_day_max is not None and at.cal_day > cond.cal_day_max)):
+                return False
+        elif (cond.week_min is not None and at.week < cond.week_min) or (cond.week_max is not None and at.week > cond.week_max):
             return False
     if cond.any_of and not any(check_condition(sub, state, content) for sub in cond.any_of):
         return False
@@ -712,6 +730,8 @@ _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾
 
 
 MANDATE_RULE = "天命之季不提前收季：天命之爭得勝的一方得天命；沒有分出天命，就到季末比高低。"  # 待 joy 潤：態勢卡底下那一句
+# 整季都不提前收、又不是天命之季（21 天季，正式季整合設計 1.1）的那一句；finale 是「到季末，…」那半句（待 joy 潤）
+NO_EARLY_RULE = "這一季不會提前收場：{finale}"
 
 # 提前收季只看戰線（FB-254，企劃者 2026-10-15）：只有官軍、黃巾的態勢（黃巾聲勢）到了門檻才提前收季；豪強的門檻（割據，群雄並起）
 # 到季末結算時才照 world.evaluate_ending 的先後判
@@ -725,9 +745,24 @@ def ends_early(ending: Ending) -> bool:
 
 
 def decisive_week(season: WorldState, content: Content) -> int:
-    """這一季從第幾週起才會提前收季：天命之季照 Config.seal.mandate.decisive_from_week（13，等於不提前收，玉璽碎片設計 8.2）；
-    其餘照 decisive_from_week。不改 Config.decisive_from_week，一般季的節奏不變。"""
+    """這一季從第幾週起才會提前收季：21 天季一律 season_weeks + 1（一定打滿三週，正式季整合設計 1.1）；天命之季照
+    Config.seal.mandate.decisive_from_week（13，等於不提前收，玉璽碎片設計 8.2）；其餘照 decisive_from_week。不改
+    Config.decisive_from_week，一般季的節奏不變。"""
+    if calendar.season21_on(season, content):
+        return content.config.season_weeks + 1
     return content.config.seal.mandate.decisive_from_week if season.mandate else content.config.decisive_from_week
+
+
+def _one_bar(ending: Ending) -> tuple[str, int] | None:
+    """一種結局的態勢門檻寫得成「哪一方在幾分以上」嗎：只有一個條件時回（那一方, 分數）——stance_max 換成另一方（黃巾 ≤ 15 就是
+    官軍 ≥ 85，兩邊互為補數）；兩個條件合成一種、或換不到另一方（豪強）回 None。"""
+    if len(ending.stance_min) + len(ending.stance_max) != 1:
+        return None
+    if ending.stance_min:
+        ((side, bar),) = ending.stance_min.items()
+        return side, bar
+    ((side, bar),) = ending.stance_max.items()
+    return (_STANCE_COMPLEMENT[side], 100 - bar) if side in _STANCE_COMPLEMENT else None
 
 
 def stance_rule_note(state: GameState, content: Content) -> str:
@@ -737,7 +772,10 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     （「官軍一到 85、黃巾一到 90」）；兩個條件合成一種的結局換不出「哪一方到幾分」，寫一句不帶數字的話，不報算不出來的數字。
     其餘有態勢門檻的（豪強的割據，群雄並起）到季末才判：「否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。」；
     寫不成「哪一方在幾分以上」的也寫一句不帶數字的話。第 decisive_from_week 週以前寫「第 N 週起」，之後不寫。
-    沒有任何有態勢門檻的結局時是空字串。"""
+    整季都不提前收的季（decisive_week 超過 season_weeks）：蓋了天命之季的章寫 MANDATE_RULE；其餘（21 天季，正式季整合設計 1.1）
+    會提前收的那幾種也到季末才判，寫 NO_EARLY_RULE。沒有任何有態勢門檻的結局時是空字串。"""
+    start = decisive_week(state.world, content)
+    whole = start > content.config.season_weeks  # 整季都不提前收：天命之季（8.2）、21 天季（1.1）
     reach: dict[str, int] = {}  # 一方 → 它到幾分就收季
     early, unclear = False, False
     late: list[str] = []  # 季末才判的門檻：「豪強的態勢在 85 以上是群雄並起」
@@ -748,23 +786,22 @@ def stance_rule_note(state: GameState, content: Content) -> str:
             continue
         if not (set(e.stance_min) | set(e.stance_max)) <= shown:  # 這一季沒有的一方（豪強分屬兩軍沒有豪強）：那個結局不參與
             continue
-        if not ends_early(e):
-            if len(e.stance_min) == 1 and not e.stance_max:
-                ((side, bar),) = e.stance_min.items()
-                late.append(f"{STANCE_NAMES[side]}的態勢在 {bar} 以上是{e.title}")
-            else:
+        bar = _one_bar(e)
+        if whole or not ends_early(e):  # 季末才判（整季不提前收的季，黃巾聲勢 ≥85、≤15 也只影響季末的結局，1.1）
+            if bar is None:
                 late_unclear = True
+            else:
+                late.append(f"{STANCE_NAMES[bar[0]]}的態勢在 {bar[1]} 以上是{e.title}")
             continue
         early = True
-        if len(e.stance_min) + len(e.stance_max) != 1:  # 兩個條件合成一種：不是「哪一方到幾分」
+        if bar is None:  # 兩個條件合成一種：不是「哪一方到幾分」
             unclear = True
             continue
-        for side, bar in e.stance_min.items():
-            reach[side] = min(reach.get(side, 100), bar)
-        for side, bar in e.stance_max.items():
-            reach[_STANCE_COMPLEMENT[side]] = min(reach.get(_STANCE_COMPLEMENT[side], 100), 100 - bar)
+        reach[bar[0]] = min(reach.get(bar[0], 100), bar[1])
     if not early and not late and not late_unclear:
         return ""
+    if whole and state.world.mandate:  # 天命之季：整季都不提前收（8.2）
+        return MANDATE_RULE
     if late_unclear:
         finale = "到季末，先看態勢有沒有到結局的門檻，再比高低。"
     elif late:
@@ -781,9 +818,8 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     else:
         rule = "、".join(f"{STANCE_NAMES[side]}一到 {reach[side]}" for side in _STANCE_SIDES if side in reach)
         rule += f"，這一季當場收場；否則{finale}"
-    start = decisive_week(state.world, content)
-    if start > content.config.season_weeks:  # 天命之季：整季都不提前收（8.2）
-        return MANDATE_RULE
+    if whole:  # 21 天季：一定打滿三週（1.1）
+        return NO_EARLY_RULE.format(finale=finale)
     week = calendar.point(state.world.time, content, state.world).week
     return f"第 {start} 週起，{rule}" if early and week < start else rule
 

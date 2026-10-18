@@ -79,8 +79,11 @@ def load_content(root: Path, profile: str | None = None) -> Content:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
     timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
+    config = _config(root, profile)
+    if config.season21:  # 21 天季自己一份時刻表（正式季整合設計 1.2 給開發 1）：驗證之前套上，週末與 14 天不經過這裡
+        timetable_events = season21_timetable(timetable_events)
     content = Content(
-        config=_config(root, profile),
+        config=config,
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
@@ -130,6 +133,34 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
+
+
+def season21_timetable(events: list[TimetableEvent]) -> list[TimetableEvent]:
+    """21 天季的時刻表（Config.season21）：每一件照 real 換掉時刻——一般大事 day＝星期＋鐘點÷24（週二 12:00 是 1.5）、決戰與天命之爭
+    寫 weekday、hour、季末只換週（季末的時刻照錨點算，timetable.finale_default）——再照時刻排（同一刻照檔案順序；季末排在那一週最後），
+    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。"""
+    moved = []
+    for event in events:
+        slot = event.real
+        if slot is None:
+            moved.append(event)
+        elif event.kind == "showdown":
+            moved.append(event.model_copy(update={"week": slot.week, "weekday": slot.weekday, "hour": slot.hour}))
+        elif event.kind == "finale":
+            moved.append(event.model_copy(update={"week": slot.week}))
+        else:
+            moved.append(event.model_copy(update={"week": slot.week, "day": slot.weekday + slot.hour / 24}))
+
+    def at(pair: tuple[int, TimetableEvent]) -> tuple[int, float, int]:
+        order, event = pair
+        if event.kind == "finale":
+            return event.week, 7.0, order
+        if event.kind == "showdown":
+            weekday = 3 if event.weekday is None else event.weekday  # 同 timetable.SHOWDOWN_WEEKDAY、SHOWDOWN_HOUR
+            return event.week, weekday + (20 if event.hour is None else event.hour) / 24, order
+        return event.week, event.day, order
+
+    return [event for _, event in sorted(enumerate(moved), key=at)]
 
 
 def _config(root: Path, profile: str | None) -> Config:
@@ -828,9 +859,14 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
+    need(  # 21 天季的季曆就是現實的週（正式季整合設計 1.1）：cal_scale 要是 1
+        not c.config.season21 or c.config.season_weeks * 7 == c.config.season_days,
+        f"設定：21 天季的季曆就是現實的週，season_weeks × 7（{c.config.season_weeks * 7}）要等於 season_days（{c.config.season_days:g}）",
+    )
     for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
+        need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
         if ev.front is not None:
             known(where, [ev.front], front_ids, "戰線")
         if ev.kind == "roll":
@@ -941,6 +977,10 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         need(
             fig.active_from_week <= c.config.season_weeks,
             f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
+        )
+        need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
+            not c.config.season21 or fig.active_from_week <= 1 or fig.active_from_day is not None,
+            f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
@@ -1714,8 +1754,15 @@ def validate(c: Content) -> None:
         known(where, cond.factions_none, faction_ids, "陣營")
         known(where, cond.controlled_by, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
-        for week in (cond.week_min, cond.week_max):
-            need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
+        weekly = cond.week_min is not None or cond.week_max is not None
+        if c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
+            need(cond.week_min is None or cond.cal_day_min is not None, f"{where}：21 天季照天數，寫了 week_min 也要寫 cal_day_min")
+            need(cond.week_max is None or cond.cal_day_max is not None, f"{where}：21 天季照天數，寫了 week_max 也要寫 cal_day_max")
+        else:
+            for week in (cond.week_min, cond.week_max):
+                need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
+        for day in (cond.cal_day_min, cond.cal_day_max):
+            need(day is None or day <= c.config.season_weeks * 7, f"{where}：第 {day} 天超出季曆的 {c.config.season_weeks * 7} 天")
         for sub in cond.any_of:
             check_condition(where, sub, after_fight)
 

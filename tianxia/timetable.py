@@ -78,10 +78,18 @@ def default_schedule(content: Content, season: WorldState | None = None) -> dict
     """開季時填進 WorldState.schedule 的預設值：決戰在那一週的週四 20:00（季曆），季末在季長整。
     季長照 season 蓋的章（world_state.stamp_season 先蓋章再呼叫這裡）；不給 season 時照設定。
     這時還不知道季在現實的哪一刻開，避開半夜由開季、換季的人照開的那一刻再挪（avoid_quiet_hours）。"""
-    days = season_length_days(season, content) if season is not None else content.config.season_days
     schedule = {e.id: _showdown_default(e, content, season) for e in content.timetable if e.kind == "showdown"}
-    schedule["finale"] = days * DAY
+    schedule["finale"] = finale_default(content, season)
     return schedule
+
+
+def finale_default(content: Content, season: WorldState | None) -> float:
+    """季末的預設時刻（世界秒）：21 天季是季曆最後一週週日 24:00（照錨點算，週三開季也落在第 3 週週日，正式季整合設計 1.2 給開發 3），
+    其他照季長整（以前的寫法，一個字都不變）。"""
+    if calendar.season21_on(season, content):
+        return calendar.week_start(content.config.season_weeks + 1, content, season)
+    days = season_length_days(season, content) if season is not None else content.config.season_days
+    return days * DAY
 
 
 # ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────
@@ -203,7 +211,7 @@ def when_in(season: WorldState, content: Content, event: TimetableEvent) -> floa
     if event.kind == "showdown":
         return schedule.get(event.id, _showdown_default(event, content, season))
     if event.kind == "finale":
-        return schedule.get("finale", season_length_days(season, content) * DAY)
+        return schedule.get("finale", finale_default(content, season))
     return calendar.event_time(event, content, season)
 
 

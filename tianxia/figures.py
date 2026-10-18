@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import calendar, push
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
@@ -185,6 +185,24 @@ def push_goal(state: GameState, content: Content, fid: str) -> int:
     return faction.goals.get(now.front, 0) if faction is not None else 0
 
 
+def started(state: GameState, content: Content, fid: str, time: float) -> bool:
+    """這位人物在世界秒 time 已經出兵推線了沒（tick；atlas 寫「…起」）：21 天季照天數（FigureDef.active_from_day，沒寫是 0；
+    正式季整合設計 1.2 給開發 5），其他季照週次（active_from_week）。"""
+    fig = content.figures[fid]
+    if calendar.season21_on(state.world, content):
+        return calendar.cal_days(time, content, state.world) + calendar.EPS_SECONDS >= (fig.active_from_day or 0.0)
+    return calendar.point(time, content, state.world).week >= fig.active_from_week
+
+
+def start_text(state: GameState, content: Content, fid: str) -> str:
+    """還沒出兵時「（…起）」那一句（atlas）：21 天季寫出兵的那一刻（季曆，calendar.stamp_text），其他季寫第幾週。待 joy 潤。"""
+    fig, w = content.figures[fid], state.world
+    if calendar.season21_on(w, content):
+        at = ((fig.active_from_day or 0.0) * calendar.DAY - w.cal_offset) / calendar.cal_scale(content, w)
+        return f"（{calendar.stamp_text(at, content, w)} 起）"
+    return f"（第 {fig.active_from_week} 週起）"
+
+
 def tick(state: GameState, content: Content, cal_hours: float) -> None:
     """大勢人物的日常推動（第一季設計 8.2 第 1、2 條，總計畫 T4）：決定性的累積，不擲骰。每位推得動的人物把
     actions_per_day × cal_hours ÷ 24 累積進 trend_accum["fig:<id>"]，每滿 1 就往自己陣營的方向推所在戰線 push 點；
@@ -199,10 +217,9 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
         return
     cfg = content.config
     middle = max(0.0, w.time - cal_hours * calendar.cal_hour_seconds(content, w) / 2)
-    week = calendar.point(middle, content, w).week
     for fid, fig in content.figures.items():
         goal = push_goal(state, content, fid)
-        if not goal or week < fig.active_from_week:
+        if not goal or not started(state, content, fid, middle):
             continue
         front = state_of(state, content, fid).front
         value = trend_value(state, content, front)
@@ -316,7 +333,7 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
         return []
     w = state.world
     if cap:
-        day_key = f"lost:{fid}:{int(w.time // DAY)}"
+        day_key = f"lost:{fid}:{world_day(content, w)}"
         for old in [k for k in w.trend_accum if k.startswith(f"lost:{fid}:") and k != day_key]:
             del w.trend_accum[old]
         left = cap - w.trend_accum.get(day_key, 0.0)
