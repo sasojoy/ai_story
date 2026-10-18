@@ -381,7 +381,9 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
             upgrade.append({
                 "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
                 "need": (need := economy.upgrade_needs(content)[tier]), "have": have,
-                "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "cost": economy.upgrade_cost(state, content, tier), "left": (left := economy.upgrade_left(state, content, tier, day)),
+                # 格子上的上限字（FB-342）：三換四是這一季的，其餘是今天的；不限是空字串
+                "left_text": "" if left is None else (UP_LEFT_SEASON if tier == four_tiers.TIER else UP_LEFT_DAY).format(n=left),
                 "cost_note": territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因（關著是空的）
                 "problem": problem,
                 "short": _upgrade_short(problem, have, need),  # 素材頁格子上寫的短原因
@@ -400,6 +402,10 @@ SELL_EMPTY = "背包裡沒有收得了的素材。"  # 待 joy 潤
 # 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）。照開關寫（FB-272）：升階關著不提熬；開著時不說「只能」
 # （找素材、打贏也撿得到高階的料）
 UPGRADE_HINT = "熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性。鐵匠不賣素材，高階的料得自己熬。"
+# 素材四階開著時（FB-342；待 joy 潤）：一換二、二換三照舊隨機，三換四一定同屬性
+UPGRADE_HINT_FOUR = "一換二、二換三熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性；三換四一定是同一個屬性。鐵匠不賣素材，高階的料得自己熬。"
+UP_LEFT_DAY = "今天還能 {n} 個"  # 待 joy 潤：升階格子上的上限（FB-342：字由伺服器給，網頁不寫死）
+UP_LEFT_SEASON = "這一季還能 {n} 個"  # 待 joy 潤：三換四一季的上限
 TRADE_HINT = "鐵匠不賣素材，高階的料得自己熬。"  # 升階開著、一定照投入的屬性（upgrade_same_share 1）
 SELL_ONLY_HINT = "鐵匠只收素材，不賣素材。"  # 升階關著、收購開著
 
@@ -417,12 +423,15 @@ def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
     return problem
 
 
-def _trade_hint(econ) -> str:
-    """素材頁還沒做事時那一句（FB-272）：升階關著（只剩收購）不提熬；升階開著、出來的屬性隨機時寫幾成是同一個屬性。"""
+def _trade_hint(content: Content) -> str:
+    """素材頁還沒做事時那一句（FB-272）：升階關著（只剩收購）不提熬；升階開著、出來的屬性隨機時寫幾成是同一個屬性；
+    素材四階開著時另說三換四一定同屬性（FB-342）。"""
+    econ = content.config.economy
     if not econ.upgrade:
         return SELL_ONLY_HINT
     if econ.upgrade_same_share < 1:
-        return UPGRADE_HINT.format(share=economy.share_word(econ.upgrade_same_share))
+        hint = UPGRADE_HINT_FOUR if four_tiers.TIER in economy.upgrade_needs(content) else UPGRADE_HINT
+        return hint.format(share=economy.share_word(econ.upgrade_same_share))
     return TRADE_HINT
 
 
@@ -430,7 +439,7 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
     """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。
     state 給了照這個人的收購價寫（名聲 5.2：寇的黑市價，標題後面多「黑市價」）。"""
     econ = content.config.economy
-    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(econ)}
+    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(content)}
     if econ.upgrade:
         needs = economy.upgrade_needs(content)
         steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(needs.items()))

@@ -119,6 +119,19 @@ def test_the_menu_counts_three_to_four_per_season():
     assert "這一季還能換 2 個" in label and "今天" not in label
 
 
+def test_the_materials_page_counts_three_to_four_per_season():
+    """FB-342：素材頁升階格的上限字由伺服器給（三換四是這一季、開關關著的二換三是今天），最上面那一句講清楚三換四一定同屬性。"""
+    game = _econ_game(bag={"gang_3": 5, "gang_2": 10})
+    rows = {(r["attribute"], r["tier"]): r for r in shopview.trade_view(game.state, game.content, DAY)["upgrade"]}
+    assert rows[("剛", 4)]["left_text"] == "這一季還能 2 個" and rows[("剛", 3)]["left_text"] == ""
+    hint = shopview.trade_view(game.state, game.content, DAY)["hint"]
+    assert "三換四一定是同一個屬性" in hint
+    off = _econ_game(bag={"gang_2": 10}, on=False)
+    rows = {(r["attribute"], r["tier"]): r for r in shopview.trade_view(off.state, off.content, DAY)["upgrade"]}
+    assert rows[("剛", 3)]["left_text"] == "今天還能 1 個"
+    assert "三換四" not in shopview.trade_view(off.state, off.content, DAY)["hint"]
+
+
 def test_tier4_cannot_be_donated():
     game = _econ_game(bag={"man_4": 1})
     s, c = game.state, game.content
