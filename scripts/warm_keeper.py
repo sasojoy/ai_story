@@ -33,7 +33,10 @@ from tianxia import database, power_save  # noqa: E402
 from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 
-WARM_SECONDS = 2.0  # 送出就算了，不等模型載完（OllamaClient.warm 的逾時也算送到了）
+UNLOAD_SECONDS = 20.0  # 請 Ollama 卸掉模型：它回得很快，不必等久
+# 暖機不給自己的逾時：要讓那個請求跑到模型載完（OllamaClient.warm 的預設 WARM_TIMEOUT）。
+# 給 2 秒的話，熱的模型續命看起來正常（回得快），但冷的模型永遠載不起來——請求一斷，Ollama 就把載入取消
+# （2026-10-18 實機踩到，warm_err.log 寫「Read timed out. (read timeout=2.0)」）。
 
 
 def players_online(db: Path, presence: float, now: float) -> int:
@@ -59,7 +62,7 @@ def unload(client: OllamaClient) -> None:
     import requests
     try:
         requests.post(
-            f"{client.base_url}/api/generate", json={"model": client.model, "keep_alive": 0}, timeout=WARM_SECONDS,
+            f"{client.base_url}/api/generate", json={"model": client.model, "keep_alive": 0}, timeout=UNLOAD_SECONDS,
         )
     except Exception:  # noqa: BLE001  卸不掉就算了，keep_alive 到期一樣會卸
         pass
@@ -87,7 +90,7 @@ def main(argv: list[str] | None = None) -> None:
           f"　——開關是 {power_save.FLAG}，隨時改、不必重開（Ctrl+C 結束）", flush=True)
 
     if args.warm_now:  # 開服腳本用：讓 client 自己決定 keep_alive（省電模式開著就是短的）
-        client.warm()
+        client.warm(block=True)  # 這個行程馬上就結束，一定要等它載完（背景那條會跟著行程被砍）
         print(f"已送暖機請求（keep_alive {client.keep_alive}）。", flush=True)
         return
 
@@ -103,7 +106,8 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 print("沒人在玩：不再續命（省電模式沒開，照 Config.ollama_keep_alive 到期才卸）。", flush=True)
         if people > 0:
-            client.warm(WARM_SECONDS)  # 續命：不產生任何字，Ollama 照 keep_alive 重新計時
+            # 續命：不產生任何字，Ollama 照 keep_alive 重新計時。--rounds 的那幾輪會結束，所以要等它載完
+            client.warm(block=args.rounds > 0)
         elif people == 0 and power_save.on():
             unload(client)
         done += 1

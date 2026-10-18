@@ -28,6 +28,7 @@ T = TypeVar("T", bound=BaseModel)
 logger = logging.getLogger(__name__)
 
 WARM_TIMEOUT = 600.0  # 暖機請求讓它跑多久：要跑到模型載完（這台 12b 約 11 秒），斷線就等於沒載
+WARM_FLOOR = 30.0  # 暖機逾時的下限：呼叫端給太短（例：舊的 2 秒）等於冷的模型永遠載不起來，一律抬到這裡
 _warming = threading.Lock()  # 同時只送一件暖機請求
 
 
@@ -311,7 +312,7 @@ class OllamaClient:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )
 
-    def warm(self, seconds: float = WARM_TIMEOUT) -> bool:
+    def warm(self, seconds: float = WARM_TIMEOUT, block: bool = False) -> bool:
         """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完。
 
         **在背景執行緒裡送，而且讓那個請求跑到載完**（2026-10-18 改）：這一版的 Ollama 會跟著「客戶端斷線」
@@ -321,6 +322,10 @@ class OllamaClient:
         （scripts/warm_keeper.py）都靠它。
 
         呼叫端一律馬上拿到 True（送出去了），不會被擋住。同時只送一件：每分鐘呼叫也不會疊一堆執行緒。
+
+        `block=True` 在呼叫端自己的執行緒裡送、等它載完才回：**馬上就要結束的程式一定要用它**——
+        背景那條是 daemon thread，行程一結束就被砍，請求跟著斷，Ollama 把載入取消（熱的模型看起來
+        正常，因為續命回得快；冷的模型永遠載不起來，2026-10-18 實機踩到）。
         連不上、出錯都只記一行警告，不丟例外——暖機是方便，不能讓它弄壞呼叫端。
         """
         if not _warming.acquire(blocking=False):
@@ -332,7 +337,7 @@ class OllamaClient:
                     f"{self.base_url}/api/generate",
                     json={"model": self.model, "keep_alive": self.keep_alive,
                           "options": {"num_ctx": self.context_length}},  # ctx 要跟真正呼叫時一樣，不然 Ollama 會整個重載
-                    timeout=seconds,
+                    timeout=max(float(seconds), WARM_FLOOR),  # 給太短就抬上來：短到請求先斷，Ollama 會把載入取消
                 )
                 if res.status_code != 200:  # 不記的話「模型就是不載」會看不出原因（例：keep_alive 夾到 BOM → 400）
                     logger.warning(f"Ollama 暖機回 {res.status_code}：{res.text[:200]}")
@@ -341,6 +346,9 @@ class OllamaClient:
             finally:
                 _warming.release()
 
+        if block:  # 馬上要結束的程式（開服腳本的 --warm-now）：在這裡等它載完
+            run()
+            return True
         threading.Thread(target=run, daemon=True).start()
         return True
 

@@ -11,7 +11,7 @@ import time
 import pytest
 
 from tianxia import power_save
-from tianxia.ollama_client import OllamaClient, capped
+from tianxia.ollama_client import WARM_FLOOR, OllamaClient, capped
 
 REAL_WARM = OllamaClient.warm  # conftest 會把它假掉，這裡在 import 時先留一份真的
 
@@ -113,3 +113,27 @@ def test_the_request_really_carries_it(monkeypatch):
         time.sleep(0.01)
     assert sent["keep_alive"] == "90s"
     assert sent["options"]["num_ctx"] == client.context_length  # ctx 要跟真正呼叫時一樣，不然 Ollama 會整個重載
+
+
+def test_a_too_short_warm_timeout_is_lifted(monkeypatch):
+    """呼叫端給太短的逾時（例：舊的 2 秒）等於冷的模型永遠載不起來——請求一斷，Ollama 就把載入取消。
+    熱的模型續命看起來還是正常（回得快），所以這種錯很難發現：2026-10-18 實機踩到，
+    warm_err.log 寫「Read timed out. (read timeout=2.0)」。"""
+    seen = {}
+
+    class Reply:
+        status_code = 200
+        text = ""
+
+    def fake_post(url, json=None, timeout=None, **kw):
+        seen["timeout"] = timeout
+        return Reply()
+
+    monkeypatch.setattr("tianxia.ollama_client.requests.post", fake_post)
+    monkeypatch.setattr(OllamaClient, "warm", REAL_WARM)
+    OllamaClient().warm(2.0)
+    for _ in range(200):
+        if seen:
+            break
+        time.sleep(0.01)
+    assert seen["timeout"] == WARM_FLOOR
