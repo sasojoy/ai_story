@@ -258,7 +258,7 @@ IDLE_NOTE = "按兵不動，不出營應戰"  # 待 joy 潤：戰線空著、挑
 
 def _regen_note(state: GameState, content: Content) -> str:
     """聲威那一行後面接的「沒人去打……慢慢回來」：沒有時刻表的季、回復開著才有。"""
-    return f"；{REGEN_NOTE}" if figures.untimed(content, state.world) and content.config.figure_prestige_regen > 0 else ""
+    return f"；{REGEN_NOTE}" if figures.upkept(content, state.world) and content.config.figure_prestige_regen > 0 else ""
 
 
 def _here_text(state: GameState, content: Content, fid: str) -> str:

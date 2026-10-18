@@ -58,6 +58,68 @@ def test_weekend_treasure_cap_is_unchanged():
     assert _drops(s, c, list(c.figures)[:3]) == [True, True, False]
 
 
+# ── Task 3：第一季的大勢人物也有回復與一天上限（21 天季）──
+
+
+def _hurt(s, c, by=5):
+    from tianxia import figures
+
+    fid = next(f for f in c.figures if figures.state_of(s, c, f).status == "active" and c.figures[f].start_prestige > 30)
+    now = figures._ensure(s, c, fid)
+    now.prestige = c.figures[fid].start_prestige - by
+    return fid, now
+
+
+def test_season21_figures_recover_a_point_a_day():
+    from tianxia import figures
+
+    s, c = _state()
+    assert figures.upkept(c, s.world)
+    fid, now = _hurt(s, c, by=2)
+    start = c.figures[fid].start_prestige
+    figures.recover(s, c, 24)
+    assert now.prestige == start - 1
+    figures.recover(s, c, 48)
+    assert now.prestige == start  # 回到開季值為止
+    now.prestige, now.status = start - 3, "out"
+    figures.recover(s, c, 72)
+    assert now.prestige == start - 3  # 退場的不回
+
+
+def test_season21_daily_loss_cap_sums_across_players():
+    from tianxia import figures
+
+    s, c = _state()
+    assert figures.loss_cap(c, s.world) == 15
+    fid, now = _hurt(s, c, by=0)
+    start = now.prestige
+    figures.defeat(s, c, fid, 10, cap=figures.loss_cap(c, s.world))
+    figures.defeat(s, c, fid, 10, cap=figures.loss_cap(c, s.world))  # 另一個人同一天再打一次：合計只扣 15
+    assert now.prestige == start - 15
+
+
+def test_weekend_season_one_figures_are_unchanged():
+    from tianxia import figures
+
+    s, c = _state("weekend")
+    assert not figures.upkept(c, s.world) and figures.loss_cap(c, s.world) is None
+    fid, now = _hurt(s, c, by=4)
+    before = now.prestige
+    figures.recover(s, c, 96)
+    assert now.prestige == before
+
+
+def test_howto_and_atlas_mention_recovery_in_season21():
+    from tianxia import atlas, howto
+
+    s, c = _state()
+    text = "".join(howto._challenge_lines(c, s.world))
+    assert "一天最多被打掉 15 點" in text and "慢慢回來" in text
+    assert atlas.REGEN_NOTE in atlas._regen_note(s, c)
+    w, cw = _state("weekend")
+    assert "一天最多被打掉" not in "".join(howto._challenge_lines(cw, w.world)) and atlas._regen_note(w, cw) == ""
+
+
 def test_old_save_without_treasure_weeks_loads():
     from tianxia.state import PlayerState
 
