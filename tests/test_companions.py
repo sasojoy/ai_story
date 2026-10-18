@@ -128,3 +128,45 @@ def test_each_gain_source_goes_through_warmed(real, world):
     region = atlas.region_of(real, "zhuo_county").id
     figure_life.spread(s, real, "merit", "長社", at=None, side="guan", text="立了戰功", region=region)  # 風聞
     assert p.affinities["gongsunzan"] == renown.warmed(real, real.config.figure_life.side_merit)
+
+
+# ── Task 3：放走與名冊 ──
+
+
+def test_release_frees_him_for_anyone(real, world):
+    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    assert world.try_recruit("guanyu", "官甲", cap=3)
+    guan.state.player.team.append("guanyu")
+    msgs = guan.release_companion("guanyu")
+    assert world.get_companion("guanyu").owner is None and "guanyu" not in guan.state.player.team
+    assert msgs == [roster.RELEASE_DONE.format(name="關羽")]
+    other = _player(real, world, "官乙", "guan", "zhuo_county")
+    assert _opts(other)["act:recruit:guanyu"].enabled
+
+
+def test_release_refuses_someone_not_yours(real, world):
+    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    assert world.try_recruit("guanyu", "官乙", cap=3)
+    assert guan.release_companion("guanyu") == [roster.RELEASE_NOT_YOURS]
+    assert world.get_companion("guanyu").owner == "官乙"
+
+
+def test_unowned_team_members_are_dropped_on_load(real, world):
+    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    assert world.try_recruit("liubei", "官甲", cap=3)
+    guan.state.player.team = ["liubei", "guanyu"]  # 關羽不在他名下（例：打完決戰回江湖了）
+    CharacterStore(world.db).save(guan.state)
+    again = Game(real, CharacterStore(world.db).load("官甲"), random.Random(0), world)
+    assert again.state.player.team == ["liubei"]
+
+
+def test_the_roster_card_offers_release_through_the_server(real, world):
+    import server
+
+    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    assert world.try_recruit("guanyu", "官甲", cap=3)
+    view = server.menxia_view(guan, "guanyu")
+    assert view["release"] == {"confirm": roster.RELEASE_CONFIRM.format(name="關羽")}
+    assert server.menxia_view(guan, "player")["release"] is None
+    server.MENXIA_ACTIONS["release"](guan, {"person": "guanyu"})
+    assert world.get_companion("guanyu").owner is None

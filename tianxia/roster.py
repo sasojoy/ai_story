@@ -18,6 +18,11 @@ from .world_state import WorldStateStore
 # 招募鈕灰掉時寫的原因（歷史武將同行第二、四節；待 joy 潤）
 SIDE_ONLY = "只追隨{side}"
 FULL = "名下已有 {n} 位同伴"
+# 修練頁名冊上的「放他回江湖」（第四節【PM】；待 joy 潤）
+RELEASE_CONFIRM = "放{name}回江湖？他會回到他常在的地方，誰都可以去招他；你們的情誼不變。"
+RELEASE_DONE = "{name}拱手道別，回江湖去了；你們的情誼還在，日後可以再去找他。"
+RELEASE_NOT_YOURS = "（他不在你的名下。）"
+RELEASE_TITLE = "放{name}回江湖"
 
 
 def on(content: Content) -> bool:

@@ -691,6 +691,9 @@ class Game:
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
+        if roster.on(c):  # 歷史武將同行：出戰隊伍只放名下的（決戰後回江湖、放走、叛投帶不走的人，主人下次讀檔就不在隊伍裡）
+            mine = set(roster.owned_companions(self.world, p.name))
+            p.team = [k for k in p.team if k in mine]
         # 身上的武學要真的有這一門：is_skill_name_taken 連改過的名字、意境名都算，不能拿來判斷「武學存在」，要用 get_skill
         if p.member.neigong_id and p.member.neigong_id not in c.skills and self.world.get_skill(p.member.neigong_id) is None:
             p.member.neigong_id = None
@@ -9321,6 +9324,29 @@ class Game:
         if companion_id.startswith(team.FOLLOWER_KEY):
             return self._log([self.FOLLOWER_IN_TEAM])
         return self._log(team.remove_from_team(self.state, companion_id))
+
+    @_not_while_preparing
+    def release_companion(self, companion_id: str) -> list[str]:
+        """放他回江湖（歷史武將同行第四節【PM】）：修練頁名冊上那一顆（網頁先問一次）。全服放掉 owner、拿出出戰隊伍、
+        江湖紀錄一則；情誼、他的進度都不動。開關關著、不是你名下的只回一句話。"""
+        c, cid = self.content, str(companion_id)
+        if not roster.on(c) or cid not in c.characters or not roster.owns(roster.owned_by(self.world, cid), self.state.player.name):
+            return self._log([roster.RELEASE_NOT_YOURS])
+        self.world.release_companion(cid)
+        team.remove_from_team(self.state, cid)
+        name = c.characters[cid].name
+        msgs = [roster.RELEASE_DONE.format(name=name)]
+        self._write(roster.RELEASE_TITLE.format(name=name), msgs)
+        return self._log(msgs)
+
+    def release_view(self, companion_id: str | None) -> dict | None:
+        """修練頁人物卡的「放他回江湖」：開關開著、這個人在你名下才有（問句照 roster.RELEASE_CONFIRM），否則 None。"""
+        c = self.content
+        if not roster.on(c) or companion_id not in c.characters:
+            return None
+        if not roster.owns(roster.owned_by(self.world, companion_id), self.state.player.name):
+            return None
+        return {"confirm": roster.RELEASE_CONFIRM.format(name=c.characters[companion_id].name)}
 
     @_not_while_preparing
     def chuangong(self, key: str, what: str) -> list[str]:
