@@ -2480,6 +2480,25 @@ class FourTiers(_Strict):
     named_both: float = Field(default=0.8, ge=0, le=1)  # 主輔都是四階（也沒打中神器配方）
 
 
+class SilverOutlets(_Strict):
+    """銀兩出口（docs/superpowers/specs/2026-10-17-正式季整合-design.md 6.5；tianxia/silver.py）：21 天季才有（enabled 預設關，
+    只有 content/profiles/season21.json 打開，另照開季的章）。數字都是【預設】【待量】（12.3 第 39 條）。「一天」照回體丹的換日。"""
+
+    enabled: bool = False
+    donate_per_point: int = Field(default=10, ge=1)  # 捐銀兩：每幾兩記 1 點貢獻、捐成糧秣；跟捐素材共用 Config.economy.donate_daily_cap
+    donate_step: int = Field(default=100, ge=1)  # 按一下捐幾兩（收不下時照收得下的捐）
+    donate_daily_silver: int = Field(default=1000, ge=0)  # 一天最多捐幾兩
+    mentor_silver: int = Field(default=50, ge=0)  # 名師指點：有醫館的城鎮，下一次修練升品的機率加 mentor_bonus（在上限之內），一天一次
+    mentor_bonus: int = Field(default=10, ge=0)
+    furnace_silver: int = Field(default=50, ge=0)  # 看火候：有鐵匠鋪的城鎮，下一次合成或打造的品質基準換成 furnace_odds，一天一次、序章不能用
+    furnace_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 35, "中品": 40, "上品": 25})
+    legend_silver: int = Field(default=300, ge=0)  # 醫館買破境丹：一枚幾兩，一個角色一季最多 legend_season_cap 枚（撿到的不算）
+    legend_season_cap: int = Field(default=2, ge=0)
+    bribe_silver: int = Field(default=30, ge=0)  # 打點門路（塞門房）：大勢人物所在的地點，情誼 +bribe_affinity，一位一天一次，只加到 bribe_max
+    bribe_affinity: int = Field(default=5, ge=0)
+    bribe_max: int = Field(default=40, ge=0, le=100)
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2553,6 +2572,7 @@ class Config(_Strict):
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
     four_tiers: FourTiers = Field(default_factory=FourTiers)  # 素材四階的規則（見 FourTiers）
+    silver_outlets: SilverOutlets = Field(default_factory=SilverOutlets)  # 21 天季的銀兩出口（見 SilverOutlets）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

@@ -30,7 +30,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import annals, calendar, depth, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits, treasures
+from . import annals, calendar, depth, insights, landing, library, naming, rules, secret_recipes, sensing, silver, team, traits, treasures
 from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
@@ -121,10 +121,11 @@ def odds_from_points(scored: list[tuple[str, float]], rule, base: dict[str, floa
     return QualityOdds(odds, tuple(reasons))
 
 
-def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
-    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推。"""
+def _points(content: Content, scored: list[tuple[str, float]], state: GameState | None = None) -> QualityOdds:
+    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推；請了看火候（銀兩出口，給了 state 才看）
+    時基準換成 Config.silver_outlets.furnace_odds（silver.furnace_base）。"""
     cfg = content.config
-    return odds_from_points(scored, cfg.fuse_quality, cfg.fuse_quality_odds)
+    return odds_from_points(scored, cfg.fuse_quality, silver.furnace_base(state, content, cfg.fuse_quality_odds))
 
 
 def _art_points(state: GameState, content: Content, arts: list[tuple[str, MartialArt]]) -> list[tuple[str, float]]:
@@ -226,7 +227,7 @@ def fuse_odds(
         scored.append(("seal", seal_points))
     if secret:
         scored.append(("secret", content.config.secrets.quality_points))
-    return _points(content, scored)
+    return _points(content, scored, state)
 
 
 def blend_odds(
@@ -244,7 +245,7 @@ def blend_odds(
         scored.append(("seal", seal_points))
     if secret:
         scored.append(("secret", content.config.secrets.quality_points))
-    return _points(content, scored)
+    return _points(content, scored, state)
 
 
 def roll_quality(odds: QualityOdds | None, rng: random.Random | None) -> str:
@@ -806,6 +807,7 @@ def fuse(
         return None, [f"這一爐合出來還是【{art.name}】，你已經有了——換一組試試吧。"]
     # 新武學自己那一份的品質照這一爐的搭配擲（fuse_odds；序章 rng 是 None，固定下品），從擲到的那一品接著修
     quality = roll_quality(fuse_odds(state, content, art_id, base, insight, secret=secret is not None), rng)
+    silver.use_furnace(state)  # 看火候（銀兩出口）擲這一次就用掉
     msgs = [_fuse_line(
         base, insight, art, first, landed, preset=preset is not None, quality=quality, me=state.player.name, partner=partner,
     )]
@@ -1159,6 +1161,7 @@ def blend(
         return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
     # 同 fuse：照這一爐的搭配擲
     quality = roll_quality(blend_odds(state, content, a, art_a, b, art_b, shape=shape, secret=secret is not None), rng)
+    silver.use_furnace(state)  # 看火候（銀兩出口）擲這一次就用掉
     verb = "合出來的竟是一門已有的" if landed else "衍生出一門"
     head = (
         f"你把【{lead.name}】與【{follow.name}】合而為一，{verb}{art.kind}【{art.name}】"

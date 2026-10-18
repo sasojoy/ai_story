@@ -556,6 +556,15 @@ class PlayerState(BaseModel):
     tier4_upgrades: int = 0
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
+    # 銀兩出口（21 天季，正式季整合 6.5；tianxia/silver.py）。「那一天」照回體丹的換日；一季一清（換季時新角色本來就是預設）
+    silver_donate_day: int = -1  # 捐銀兩：上次是哪一天
+    silver_donated: int = 0  # 那一天捐了幾兩（Config.silver_outlets.donate_daily_silver）
+    mentor_day: int = -1  # 名師指點：上次請是哪一天（一天一次）
+    mentor_ready: bool = False  # 請了、還沒用掉：下一次修練升品的機率加 mentor_bonus
+    furnace_day: int = -1  # 看火候：上次請是哪一天（一天一次）
+    furnace_ready: bool = False  # 請了、還沒用掉：下一次合成或打造的品質基準換成 furnace_odds
+    legend_silver_bought: int = 0  # 這一季在醫館用銀兩買了幾枚破境丹（撿到的、用心得換的都不算；FB-370 以前跟下面那一欄同名，兩條路共用一個數）
+    bribed: dict[str, int] = Field(default_factory=dict)  # 打點門路：大勢人物 id → 上次打點是哪一天（一位一天一次）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來

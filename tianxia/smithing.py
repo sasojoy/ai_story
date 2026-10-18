@@ -17,7 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import annals, armor, equipment, forge_secrets, four_tiers, fusion, library, naming, team, traits, weapons
+from . import annals, armor, equipment, forge_secrets, four_tiers, fusion, library, naming, silver, team, traits, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -139,7 +139,7 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
         ("practice", min(rule.practice_cap, rule.practice_point * done)),
     ]
     scored += setting_points(state, content, attribute_of(world, content, kind, main, aux), slot_of(kind))
-    return fusion.odds_from_points(scored, rule, rule.odds)
+    return fusion.odds_from_points(scored, rule, silver.furnace_base(state, content, rule.odds))  # 看火候（銀兩出口）換基準
 
 
 # 開爐的結果句（待 joy 潤）：打出的東西寫在最前面（FB-143：375 寬鐵匠鋪選單長時「剛剛」收成一行，只露開頭十幾個字），「鐵匠把…下爐」接在後面
@@ -220,6 +220,7 @@ def forge(
             world.add_copy(forge_secrets.key(secret))
     else:
         quality = fusion.roll_quality(odds, rng)  # 跟以前同一個位置、只擲一次：Game.rng 的序列不位移
+        silver.use_furnace(state)  # 看火候（銀兩出口）擲這一次就用掉；神器那一爐不擲品質，不用掉
     p = state.player
     used = Counter([main, aux])
     for mid, n in used.items():
