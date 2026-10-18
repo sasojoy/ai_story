@@ -147,18 +147,32 @@ def test_buying_a_legend_pill_at_the_clinic_two_a_season():
     assert "這一季還能買 2 枚" in _ids(game)["act:buy_legend"].label
     game.choose("act:buy_legend")
     game.choose("act:buy_legend")
-    assert p.legend_items == before + 2 and p.stats["silver"] == 400 and p.legend_bought == 2
+    assert p.legend_items == before + 2 and p.stats["silver"] == 400 and p.legend_silver_bought == 2
     option = _ids(game)["act:buy_legend"]
     assert not option.enabled and silver.LEGEND_FULL in option.label
     game.choose("act:buy_legend")
     assert p.legend_items == before + 2 and p.stats["silver"] == 400
 
 
+def test_clinic_pills_and_xinde_pills_keep_separate_counts():
+    """FB-370：醫館用銀兩買的與修練頁用心得換的各記各的（以前 PlayerState 有兩個同名欄位，兩條路讀寫同一個數）。"""
+    from tianxia import cultivation
+
+    game = _game(at="yingchuan", money=1000)
+    p, c = game.state.player, game.content
+    p.legend_bought = 2  # 用心得換過兩枚
+    assert "這一季還能買 2 枚" in _ids(game)["act:buy_legend"].label
+    game.choose("act:buy_legend")
+    assert p.legend_silver_bought == 1 and p.legend_bought == 2
+    p.legend_bought = 0
+    assert cultivation.legend_price(game.state, c) == c.config.legend_xinde_price  # 醫館買過的不讓心得那一條變貴
+
+
 def test_picked_up_pills_do_not_count():
     game = _game(at="yingchuan", money=299)
     p = game.state.player
     p.legend_items += 3  # 撿到的
-    assert p.legend_bought == 0 and "還差 1 兩" in _ids(game)["act:buy_legend"].label
+    assert p.legend_silver_bought == 0 and "還差 1 兩" in _ids(game)["act:buy_legend"].label
 
 
 # ── Task 5：打點門路（塞門房）──
@@ -215,7 +229,7 @@ def test_old_save_without_outlet_fields_loads():
     from tianxia.state import PlayerState
 
     raw = _game().state.player.model_dump()
-    for key in ("mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_bought", "bribed"):
+    for key in ("mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_silver_bought", "bribed"):
         raw.pop(key, None)
     p = PlayerState.model_validate(raw)
-    assert not p.mentor_ready and not p.furnace_ready and p.legend_bought == 0 and p.bribed == {}
+    assert not p.mentor_ready and not p.furnace_ready and p.legend_silver_bought == 0 and p.bribed == {}

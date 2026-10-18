@@ -552,7 +552,7 @@ class PlayerState(BaseModel):
     mentor_ready: bool = False  # 請了、還沒用掉：下一次修練升品的機率加 mentor_bonus
     furnace_day: int = -1  # 看火候：上次請是哪一天（一天一次）
     furnace_ready: bool = False  # 請了、還沒用掉：下一次合成或打造的品質基準換成 furnace_odds
-    legend_bought: int = 0  # 這一季在醫館買了幾枚破境丹（撿到的不算）
+    legend_silver_bought: int = 0  # 這一季在醫館用銀兩買了幾枚破境丹（撿到的、用心得換的都不算；FB-370 以前跟下面那一欄同名，兩條路共用一個數）
     bribed: dict[str, int] = Field(default_factory=dict)  # 打點門路：大勢人物 id → 上次打點是哪一天（一位一天一次）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
