@@ -86,6 +86,37 @@ def test_season21_figures_recover_a_point_a_day():
     assert now.prestige == start - 3  # 退場的不回
 
 
+def test_season21_recovery_runs_when_the_world_advances(monkeypatch):
+    """FB-350：回復要從推進世界的那一條路跑到，不能只有直接呼叫 recover 才回（以前只在第一季規則關著的那一支叫）。"""
+    import random
+
+    from tianxia import figures, world
+
+    s, c = _state()
+    monkeypatch.setattr(c.config.figure_life, "enabled", False)  # 不讓募兵混進來
+    now = figures._ensure(s, c, "buji")
+    start = c.figures["buji"].start_prestige
+    now.prestige = start - 3
+    day = 24 * world.HOUR / calendar.cal_scale(c, s.world)
+    world.advance_world_state(s.world, c, day + 60, random.Random(0))
+    assert figures.state_of(s, c, "buji").prestige == start - 2
+
+
+def test_weekend_season_one_does_not_recover_when_the_world_advances(monkeypatch):
+    import random
+
+    from tianxia import figures, world
+
+    s, c = _state("weekend")
+    monkeypatch.setattr(c.config.figure_life, "enabled", False)
+    now = figures._ensure(s, c, "buji")
+    start = c.figures["buji"].start_prestige
+    now.prestige = start - 3
+    day = 24 * world.HOUR / calendar.cal_scale(c, s.world)
+    world.advance_world_state(s.world, c, day + 60, random.Random(0))
+    assert figures.state_of(s, c, "buji").prestige == start - 3
+
+
 def test_season21_daily_loss_cap_sums_across_players():
     from tianxia import figures
 
