@@ -6373,7 +6373,7 @@ class Game:
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         n = push.active_count(s, self._side(), w.time, window)
         msgs = [f"{fig.name}敗走。"]
-        cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
+        cap = figures.loss_cap(c, w)  # 甲 (d)：沒有時刻表的季與 21 天季（正式季整合 3.9）每位人物一天最多被打掉幾點；週末的第一季照人數緩衝
         today = world_day(c, w)  # 21 天季台灣 00:00 換日（正式季整合設計 1.3）
         if cfg.figure_dent_once_per_day and p.figure_dented.get(fid) == today:  # 同一個人同一位人物一天只有第一場扣聲威（PM 2026-10-16）
             msgs.append(figures.DENT_ONCE_LINE.format(name=fig.name))

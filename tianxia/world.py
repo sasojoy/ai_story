@@ -667,8 +667,10 @@ def advance_world_state(
             msgs += sim_tick(vehicle, content, hours, rng)
         if cal_hour is None and not season.ended:
             msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
-            figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)  # 甲 (b)：沒有時刻表的季被打下來的聲威慢慢回
         if not season.ended:
+            # 甲 (b)：被打下來的聲威慢慢回。沒有時刻表的季，加上 21 天的第一季（正式季第 6 批）；recover 自己照 figures.upkept 擋掉
+            # 週末的第一季。以前只在上面那一支（第一季規則關著）叫，21 天季永遠走不到（FB-350）
+            figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
         if crossed and not season.ended:

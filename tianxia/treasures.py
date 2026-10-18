@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import equipment, mounts
+from . import calendar, equipment, mounts
 from .models import GOOD_HORSE, Content, SteedDef
 from .state import Equipment, GameState, PlayerState
 
@@ -383,6 +383,15 @@ def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[
 
 # ---- 挑戰本人掉落（6.4）----
 
+def _week(state: GameState, content: Content) -> int:
+    return calendar.point(state.world.time, content, state.world).week
+
+
+def week_full(state: GameState, content: Content) -> bool:
+    """這一週（季曆）挑戰本人掉的寶物到了 Config.figure_treasure_weekly 件（0＝不設，週末與 14 天的季）。"""
+    weekly = content.config.figure_treasure_weekly
+    return bool(weekly) and state.player.treasure_weeks.count(_week(state, content)) >= weekly
+
 def challenge_drop(state: GameState, content: Content, figure: str, season: int, record_id: int) -> tuple[Equipment | None, list[str]]:
     """打贏大勢人物本人（Game._challenge 打贏那一支、_rout 之後）：challenge_chance 掉一件掉落池裡你還沒有的寶物（都有了改給銀兩）。
     同一位人物對同一個人每季只掉一次（treasure_drops），一人一季最多 figure_treasure_cap 件（挑戰每季都有設計丁 (c)，叛投不清）；
@@ -393,10 +402,13 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
     cap = content.config.figure_treasure_cap  # 丁 (c)：挑戰本人掉的寶物一人一季最多幾件（照 treasure_drops 的長度；0＝不設）
     if not on(content) or figure in p.treasure_drops or not room_for(state, content, "treasure") or (cap and len(p.treasure_drops) >= cap):
         return None, []
+    if week_full(state, content):  # 每週上限（21 天季，正式季整合 3.8）：到了不擲、也不記掉過
+        return None, []
     rng = random.Random(f"寶|{season}|{p.name}|{record_id}")
     if rng.random() >= cfg.challenge_chance:
         return None, []
     p.treasure_drops.add(figure)
+    p.treasure_weeks.append(_week(state, content))
     tid = pick_pool(state, content, rng)
     if tid is None:
         return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))

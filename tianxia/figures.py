@@ -97,6 +97,18 @@ def untimed(content: Content, world: WorldState) -> bool:
     return challenge_on(content, world) and not season_one(content, world)
 
 
+def upkept(content: Content, world: WorldState) -> bool:
+    """大勢人物的聲威有回復（recover）與一天上限（loss_cap）的季：沒有時刻表的季，加上 21 天季的第一季（正式季整合 3.9、12.3 第 17 條：
+    讓人物撐到時刻表寫到他的那一天）。週末的第一季照舊沒有。龍頭人物退場停手、out_flag 照舊只在沒有時刻表的季（untimed）。"""
+    return untimed(content, world) or (season_one(content, world) and calendar.season21_on(world, content))
+
+
+def loss_cap(content: Content, world: WorldState) -> int | None:
+    """挑戰本人打贏時，這位人物這一天最多被打掉幾點（figure_daily_loss_cap；0 或不是 upkept 的季是 None）。"""
+    cap = content.config.figure_daily_loss_cap
+    return cap if cap and upkept(content, world) else None
+
+
 def by_name(content: Content, name: str) -> str | None:
     """名字是這個的大勢人物 id（龍頭人物〔虛擬玩家〕照名字對人物表；atlas 與 world 共用）。"""
     return next((fid for fid, fig in content.figures.items() if fig.name == name), None)
@@ -381,7 +393,7 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
     累積拿掉；人物表已經沒有的 id 跳過。決定性的，不擲骰，不發傳聞。由 world.advance_world_state 每一步呼叫。"""
     w = state.world
     rate = content.config.figure_prestige_regen
-    if not untimed(content, w) or rate <= 0:
+    if not upkept(content, w) or rate <= 0:  # 21 天季的第一季也回（正式季整合 3.9）
         return
     for fid, now in w.figures.items():
         fig = content.figures.get(fid)

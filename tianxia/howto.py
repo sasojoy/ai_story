@@ -865,6 +865,7 @@ CHALLENGE_UNTIMED = (
     "- 聲威掉到 0 就退場，這一季不再出現。",
     "- {names}退場之後，不再替自己那一方出力。",
 )
+CHALLENGE_SEASON21_REGEN = "- 沒人去打，大勢人物的聲威會慢慢回來（一天回 {n} 點）。"  # 待 joy 潤：21 天季的第一季（正式季整合 3.9）
 
 
 # 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
@@ -897,6 +898,11 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     if cfg.figure_draw_share > 0:
         lines.append(CHALLENGE_DRAW)
     if not figures.untimed(content, season):
+        if figures.upkept(content, season):  # 21 天季的第一季（正式季整合 3.9）：聲威會回、一天有上限；退場照時刻表與照舊的規矩
+            if cfg.figure_prestige_regen > 0:
+                lines.append(CHALLENGE_SEASON21_REGEN.format(n=f"{cfg.figure_prestige_regen:g}"))
+            if cfg.figure_daily_loss_cap:
+                lines.append(CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap))
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)
     lines.append(first if cfg.figure_prestige_regen > 0 else first.partition("；")[0] + "。")
