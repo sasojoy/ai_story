@@ -1303,6 +1303,10 @@ class GeneralTuning(_Strict):
     fall_push: int = Field(default=6, ge=0)  # 敗走那一刻戰局往對面推幾點
     fall_prestige: int = Field(default=15, ge=0)  # 收場後聲威扣幾點
     slay_fame: int = Field(default=3, ge=0)  # 最後一擊的人名望多幾點
+    # 隨主人上陣的歷史武將（歷史武將同行第五節【預設】；battle_instance.Escort）：份量＝strength(他的威力) × escort_share（不吃主人的
+    # 職位、坐騎、部下），敗走時戰局往對面推 escort_fall_push（人物的三分之一）；點名、一回合上限、固守護他照上面人物那幾個數
+    escort_share: float = Field(default=0.5, ge=0)
+    escort_fall_push: int = Field(default=2, ge=0)
 
 
 class BattleTuning(_Strict):
