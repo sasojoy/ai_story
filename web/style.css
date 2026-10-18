@@ -893,7 +893,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .clue span { color: var(--ink-2); font-size: 12px; }
 /* 煉製頁的「開爐」排在內容裡、不黏在底部（FB-048）：黏著時會蓋住底下的字 */
 .act-row { margin-bottom: 12px; }
-.forging { animation: ember 1.6s ease-in-out infinite; }
+/* 只給長方形的鈕；太極爐（.kiln-hub、.w-furnace）的光畫在圓上，見 .kiln-ember */
+.btn.forging { animation: ember 1.6s ease-in-out infinite; }
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
 /* ── 輿圖（輿圖升級設計第一、七節）── */
@@ -1384,7 +1385,18 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .kiln-taichi { width: 44px; height: 44px; display: block; overflow: visible; border-radius: 50%; }
 .kiln-hub:disabled .kiln-taichi { opacity: 0.55; }
 .kiln-hub.ready { color: var(--gold); }
-.kiln-hub.ready .kiln-taichi { box-shadow: 0 0 0 2px var(--gold), 0 0 12px 2px color-mix(in srgb, #f0a23a 70%, transparent); }
+/* 小太極的金邊與火光一律是 SVG 裡的圓（.kiln-ring、.kiln-ember），不用 box-shadow：iPhone Safari 在爐火正旺時把鈕的長方形光暈
+   畫成一塊方底（Joy 2026-10-18「太極爐破圖根本沒修好」）。鈕本身永遠不畫底色、陰影、濾鏡 */
+.kiln-hub, .kiln-hub.glow, .kiln-hub.forging { box-shadow: none; filter: none; background: none; -webkit-tap-highlight-color: transparent; }
+.kiln-hub.glow, .kiln-hub.forging { animation: none; }
+.kiln-ring { fill: none; stroke: var(--gold); stroke-width: 0; }
+.kiln-ember { fill: none; stroke: #f0a23a; stroke-width: 5; opacity: 0; }
+.kiln-hub.ready .kiln-ring, .kiln-hub.glow .kiln-ring, .kiln-hub.forging .kiln-ring { stroke-width: 2; }
+.kiln-hub.ready .kiln-ember { opacity: 0.3; }
+.kiln-hub.glow .kiln-ember { animation: kiln-ember 2s ease-in-out infinite; }
+.kiln-hub.forging .kiln-ember { animation: kiln-ember 1.6s ease-in-out infinite; }
+@keyframes kiln-ember { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.7; } }
+@media (prefers-reduced-motion: reduce) { .kiln-hub.glow .kiln-ember, .kiln-hub.forging .kiln-ember { animation: none; opacity: 0.5; } }
 .kiln-hub.forging .kiln-taichi .w-spin { animation-duration: 0.6s; }
 /* 剛放進去的那一格閃一下（大爐子裡的格子也是） */
 .w-slot.flash rect { animation: w-slot-flash 0.9s ease-out; }
