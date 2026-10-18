@@ -1,1 +1,2 @@
-{"season_one": true, "season21": true, "season_days": 21, "season_weeks": 3, "server_max_players": 20, "haoqiang_allied": true}
+{"season_one": true, "season21": true, "season_days": 21, "season_weeks": 3, "server_max_players": 20, "haoqiang_allied": true,
+ "silver_outlets": {"enabled": true}}
