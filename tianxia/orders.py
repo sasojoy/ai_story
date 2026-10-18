@@ -415,7 +415,7 @@ def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
 def front_push(state: GameState, content: Content, front: str, amount: int) -> tuple[int, list[str]]:
     """軍令達成推戰線 amount 點（帶正負號）：盡頭阻力開著時照推之前的戰線打折（push.resistance，出陣探索與地盤設計 5.1），
     四捨五入成整點（push.round_half_away）。回傳（真的推的整點, change_trend 的訊息）。時刻表、決戰、管理者不走這裡。"""
-    tuning = content.config.push_resistance
+    tuning = push.tuning_for(state.world, content)  # 21 天季照自己那一組（7.4）
     moved = push.round_half_away(amount)
     if tuning.enabled and amount:
         moved = push.round_half_away(push.resistance(rules.trend_value(state, content, front), amount, tuning))

@@ -324,3 +324,72 @@ def test_weekend_rewards_unchanged():
     pills, before = s.player.stamina_pills, dict(s.player.materials)
     bounties._complete(s, c, game.world, _first(s, "scout"))
     assert s.player.stamina_pills == pills and s.player.materials == before
+
+
+# ── Task 4：推大勢的速度 ──
+
+
+def _back_to_middle(game):
+    """一條戰線與一個往 50 拉的推力（往回拉一律全額，不碰盡頭阻力）。"""
+    from tianxia import rules
+
+    line = sorted(game._resisted_lines())[0]
+    return line, (4 if rules.trend_value(game.state, game.content, line) <= 50 else -4)
+
+
+def test_season21_sortie_drops_the_season_scale():
+    """出陣、捐軍備乘 push_speed，不乘季長倍數（7.4；以前 21 天季乘約 0.12）。"""
+    game = _game()
+    c = game.content
+    assert game.season_scale() < 1
+    line, d = _back_to_middle(game)
+    assert game._shaped(line, d, "sortie") == (d * c.config.season21_daily.push_speed, False)
+    c.config.season21_daily.push_speed = 0.5
+    assert game._shaped(line, d, "sortie")[0] == d * 0.5
+    assert game._shaped(line, d, "donate")[0] == d * 0.5
+
+
+def test_season21_events_follow_the_same_speed():
+    """可重複的事件照同一個速度（再乘事件五折）；一次性的照全額。"""
+    game = _game()
+    c = game.content
+    c.config.season21_daily.push_speed = 0.5
+    line, d = _back_to_middle(game)
+    share = c.config.explore_modes.event_trend_share if c.config.explore_modes.enabled else 1.0
+    assert game._shaped(line, d, "event")[0] == d * share * 0.5
+    assert game._shaped(line, d, "event_once")[0] == d
+
+
+def test_season21_cap_and_resistance_use_their_own_numbers():
+    """每人每天上限與盡頭阻力讀 Season21Daily（不乘季長倍數）；軍令的推線照同一組阻力。"""
+    from tianxia import orders, rules
+
+    game = _game()
+    c, s21 = game.content, game.content.config.season21_daily
+    s21.push_daily_cap = 7
+    assert game.daily_push_cap() == 7
+    s21.push_mid_share, s21.push_far_share = 0.3, 0.1
+    tuning = push.tuning_for(game.state.world, c)
+    assert (tuning.mid_share, tuning.far_share) == (0.3, 0.1)
+    assert tuning.full_within == c.config.push_resistance.full_within
+    line = sorted(game._resisted_lines())[0]
+    game.state.world.trends[line] = 90
+    assert game._shaped(line, 10, "sortie") == (10 * s21.push_speed * 0.1, True)
+    assert line in rules.front_ids(c)  # 第一季規則：會動的線就是三條戰線本身
+    moved, _ = orders.front_push(game.state, c, line, 10)
+    assert moved == 1  # 軍令湊滿推的量照同一組阻力：10 × 0.1
+
+
+def test_weekend_push_unchanged():
+    """Review Focus 5：週末的上限、阻力、出陣與事件一個字都不變（改 Season21Daily 也不受影響）。"""
+    game = _game("weekend")
+    c = game.content
+    cap = game.daily_push_cap()
+    line, d = _back_to_middle(game)
+    sortie, event = game._shaped(line, d, "sortie"), game._shaped(line, d, "event")
+    s21 = c.config.season21_daily
+    s21.push_speed, s21.push_daily_cap, s21.push_mid_share, s21.push_far_share = 0.1, 1, 0.1, 0.1
+    assert game.daily_push_cap() == cap == c.config.daily_push_cap * game.season_scale()
+    assert game._shaped(line, d, "sortie") == sortie == (d * game.season_scale(), False)
+    assert game._shaped(line, d, "event") == event
+    assert push.tuning_for(game.state.world, c) is c.config.push_resistance

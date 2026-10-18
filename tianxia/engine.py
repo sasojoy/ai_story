@@ -5864,6 +5864,8 @@ class Game:
         """每人每曆日每條線推得動多少（第一季，push.split_by_cap 的上限）：Config.daily_push_cap；盡頭阻力開著時再乘季長倍數
         （設計 5.2：週末設定 1，7 天的季約 0.36）。push_trend 與 _push_room 都讀它。"""
         cfg = self.content.config
+        if calendar.season21_on(self.state.world, self.content):  # 21 天季：自己的上限，不乘季長倍數（正式季整合設計 7.4）
+            return cfg.season21_daily.push_daily_cap
         return cfg.daily_push_cap * (self.season_scale() if cfg.push_resistance.enabled else 1.0)
 
     def _resisted_lines(self) -> set[str]:
@@ -5885,11 +5887,14 @@ class Game:
             return amount, False
         if source == "event" and cfg.explore_modes.enabled:
             amount *= cfg.explore_modes.event_trend_share
+        season21 = calendar.season21_on(w, c)
+        if season21 and source in ("sortie", "donate", "event"):  # 21 天季（7.4）：出陣、捐軍備、可重複的事件同一個速度，不乘季長倍數
+            amount *= cfg.season21_daily.push_speed
         if not cfg.push_resistance.enabled:
             return amount, False
-        if source in ("sortie", "donate") and calendar.season_one_on(w, c):  # 捐軍備照出陣（素材與經濟設計第六節第 2 點）
+        if source in ("sortie", "donate") and calendar.season_one_on(w, c) and not season21:  # 捐軍備照出陣（素材與經濟設計第六節第 2 點）
             amount *= self.season_scale()
-        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, cfg.push_resistance)
+        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, push.tuning_for(w, c))
         return amount * share, share < 1
 
     def drill_scale(self) -> float:
