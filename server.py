@@ -56,6 +56,7 @@ from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 from starlette.concurrency import run_in_threadpool
 
+import console
 import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
@@ -1731,9 +1732,12 @@ MENXIA_ACTIONS = {
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
-    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
+    "cultivate": lambda g, b: g.cultivate(
+        str(b.get("art") or ""), use_legend=b.get("use_legend") is True, by_xinde=b.get("by_xinde") is True,  # 以心得修練（Joy 2026-10-18）
+    ),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
+    "buy_legend": lambda g, b: g.buy_legend(),  # 以心得換一枚破境丹（Joy 2026-10-18，越換越貴）
     # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾
     "melt_many": lambda g, b: g.melt_many(_id_list(b.get("arts")), _id_list(b.get("insights"))),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
@@ -1823,6 +1827,9 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
     }
     if op == "forge":
         out["made"] = made
+        # 合出來的那一樣（煉製頁在結果底下直接畫它的卡，不必切去修練頁看；Joy 2026-10-17）：{"type": "art"／"ins", "id"}
+        thing = game.forged_thing if made else None
+        out["made_item"] = {"type": thing[0], "id": thing[1]} if thing else None
     return out
 
 
@@ -1913,11 +1920,17 @@ def boards_now(game: Game, clock: Callable[[], float] = time.monotonic) -> dict[
         return board
 
 
+DIVINE_NOTE = "歷季打出的神器原品與名將本命兵器，跨季留名"  # 榜單「神器譜」那一張的說明，待 joy 潤
+
+
 @app.get("/api/boards")
 def api_boards(request: Request):
-    """見聞的「榜單」：六張榜的前十名，加上你不在前十名時你排第幾（leaderboard.view）。"""
+    """見聞的「榜單」：七張榜的前十名，加上你不在前十名時你排第幾（leaderboard.view）；最後一張是神器譜（跨季，不排名；
+    Joy 2026-10-17 從江湖史搬過來）。神器譜只讀兩張小表，不進快取：打出來、定了名馬上看得到。"""
     game = _game(request)
-    return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name)}
+    book = {"id": "神器", "title": "神器譜", "note": DIVINE_NOTE, "book": game.divine_book_view()}
+    return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
+
 
 
 @app.get("/api/annals")
@@ -2206,6 +2219,7 @@ def start_tunnel(port: int) -> threading.Thread | None:
 def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
+    console.use_utf8()  # 第一件事：cp950 編不出來的字（例：設定對不上那行開頭的 ⚠）不能把伺服器弄死
     global QUEUE, TALE_THREADS
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)

@@ -21,6 +21,8 @@
   "territory": {"enabled": false},
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
+  "figure_aid": {"enabled": false},
+  "battle": {"generals": {"enabled": false}},
   "stockpile": {"enabled": false},
   "push_resistance": {"enabled": false},
   "battle_quiet_hours": {"enabled": false},
@@ -34,6 +36,7 @@
   "biography": {"enabled": false},
   "arena": {"enabled": false},
   "rise": {"enabled": false},
+  "figure_life": {"enabled": false},
   "renown": {
     "titles": false, "scale": false, "deed_fame": false, "discount": false, "prize_gate": false, "affinity": false, "duel": false,
     "news": false, "faction_wanted": false, "arena_reach": false, "virtue_insight": false, "lessons": false, "prompt": false,

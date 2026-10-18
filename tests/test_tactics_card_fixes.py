@@ -142,8 +142,8 @@ def test_the_insight_stone_card_follows_the_explore_switch():
 
 
 @pytest.mark.parametrize("skill_id, shown", [
-    ("caocao_wugong", "19.5"), ("guanyu_wugong", "22.5"), ("yuanshao_wugong", "25.5"), ("taoqian_wugong", "36.5"),
-    ("zhujun_wugong", "17.5"), ("sunjian_wugong", "11"), ("luzhi_neigong", "3"),
+    ("caocao_wugong", "11"), ("guanyu_wugong", "15"), ("yuanshao_wugong", "18"), ("taoqian_wugong", "28"),
+    ("zhujun_wugong", "9"), ("sunjian_wugong", "2"), ("sunjian_neigong", "2"),
 ])
 def test_the_might_note_writes_the_real_number(skill_id, shown):
     content = real_content()

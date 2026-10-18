@@ -117,7 +117,45 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
+    cultivate_by_xinde(game)
+    buy_pill(game)
     teach(game)
+
+
+XINDE_CULTIVATE_MAX = 3  # 一次最多花心得修練幾下（越修越貴，這只是保險）
+
+
+def cultivate_by_xinde(game: Game, limit: int = XINDE_CULTIVATE_MAX) -> int:
+    """以心得修練（Joy 2026-10-18）：身上兩門（再功法庫）修得下去、付完還剩 TEACH_RESERVE，就花心得修一下；先顧自己再傳功。
+    整季機器人與假人共用；只走 Game.cultivate(by_xinde=True)。回傳修了幾下。"""
+    state, content, world = game.state, game.content, game.world
+    done = 0
+    while done < limit:
+        price = cultivation.xinde_price(state, content)
+        if price is None or state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
+            break
+        pick = next((
+            a for a in worn_first(game)
+            if cultivation.cultivate_problem(state, content, world, a, use_legend=takes_the_pill(game, a), by_xinde=True) is None
+        ), None)
+        if pick is None:
+            break
+        game.cultivate(pick, use_legend=takes_the_pill(game, pick), by_xinde=True)
+        done += 1
+    return done
+
+
+def buy_pill(game: Game) -> bool:
+    """以心得換破境丹（Joy 2026-10-18）：身上有一門火候滿了在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
+    整季機器人與假人共用；只走 Game.buy_legend。"""
+    state, content = game.state, game.content
+    price = cultivation.legend_price(state, content)
+    if price is None or state.player.legend_items > 0 or not awaits_chance(game):
+        return False
+    if state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
+        return False
+    game.buy_legend()
+    return True
 
 
 TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死
@@ -379,10 +417,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
     # 捐軍備（act:donate，素材與經濟設計第六節）同鐵匠鋪：在大本營一直按得下去；捐走 donate_spare，軍需官那一串（donate:）不隨機按
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
+    # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）
     options = [
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "ambush:", "works:"))
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "ambush:", "works:", "aid:"))
     ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [

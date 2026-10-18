@@ -495,6 +495,8 @@ TACTIC_KINDS = (  # 本命戰法做什麼：一個戰法一種，程式照它找
     "quake", "first_shot", "zhaoyi", "flawless",
     # 玩家武學追上本命（定案 /mnt/project-files/plan/玩家武學追上本命定案.md）：自己合成的武學練成絕學時的絕招（一般功效的 ultimate）
     "swift", "shatter", "streak", "leech", "haze", "last_rally",
+    # 武學技能分檔（Joy 2026-10-17）：合成擲得到的高階技能（content/traits.json 的 high）
+    "flash", "bulwark", "scorch", "elude", "golden",
 )
 
 
@@ -605,9 +607,21 @@ class SpecialTrait(_Strict):
     tactic: TacticDef | None = None  # 第三批：回合裡的戰法（強度固定，不分品質）
 
 
+class HighTrait(_Strict):
+    """高階技能（武學技能分檔，Joy 2026-10-17；草案 https://claude.ai/artifact/3rLJgnmA7m8BiEsXGcBDUX）：一個屬性一個，照武學的主屬性給；
+    合成出來的武學照自己那一份的品質擲（skill_slots.py），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
+
+    id: str
+    attribute: Attribute
+    name: str
+    desc: str
+    tactic: TacticDef
+
+
 class TraitBook(_Strict):
     general: list[GeneralTrait] = Field(default_factory=list)
     special: list[SpecialTrait] = Field(default_factory=list)
+    high: list[HighTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -690,6 +704,11 @@ class CharacterDef(_Strict):
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
     # 名聲 5.2：對哪一種人有看法（敬俠：俠見面情誼起步、遇上寇冷淡；喜狠：寇見面情誼起步）；None 是不偏。對話提示也帶一行
     regard: Literal["敬俠", "喜狠"] | None = None
+    # 人物活起來（FigureLifeTuning）：他常在的幾個地點（第一個是 talk_at／recruit_at，每日行事在這幾處之間走）；空的就站著不動。
+    # follows：跟著誰走（關羽、張飛跟著劉備）；side：站哪一方（陣營 id；大勢人物照人物表的 faction，這一欄是給其他人物的，風聞照它找盟友仇敵）
+    haunts: list[str] = Field(default_factory=list)
+    follows: str | None = None
+    side: str | None = None
 
 
 class Squad(_Strict):
@@ -931,6 +950,7 @@ ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
+    "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
 )
 
 
@@ -1255,6 +1275,32 @@ DEFAULT_AFFINITY: dict[str, tuple[Move, Move]] = {  # 屬性 →（擅長, 不�
 }
 
 
+class GeneralTuning(_Strict):
+    """龍頭上陣（Joy 2026-10-17 清單第 2 條「大決戰雙方龍頭武將應該要參與且有份量」；tianxia/generals.py）：決戰開集結那一刻，每一方
+    取那條戰線上在場的前 len(ranks) 位大勢人物上陣（人物表的順序就是位階）。他們不是參戰者（不佔人數、不等他、不拿軍餉），
+    每回合照主將喊的那一招出手，份量＝實力（照他挑戰本人那支隊伍的難度算，同 battle_instance.strength）× ranks[i] ×
+    （0.5＋0.5×此刻聲威÷開季聲威）。主將每回合喊一招，照令出招的人份量多 order_bonus。人物整場都顯眼：對面出強攻的人照集火打他，
+    放手一搏寫到他的名字也打得到他；同一邊出固守的人替他擋掉一部分（guard_per、盾陣 guard_role，最多 guard_cap）。池子打光就敗走：
+    戰局當下往對面推 fall_push，收場後聲威 −fall_prestige（不受一天只扣一次的限制），最後一擊的人名望 +slay_fame。
+    enabled 關掉：集結時不派人物，已經在場上的照打完。"""
+
+    enabled: bool = True
+    ranks: tuple[float, ...] = (2.5, 1.5)  # 主將、副將的份量倍數（每一方最多幾位上陣＝這裡寫幾個）
+    pool: tuple[float, ...] = (1500.0, 1000.0)  # 主將、副將的氣血池（聲威不影響池子）
+    order_bonus: float = Field(default=0.15, ge=0)  # 照主將喊的那一招出手，份量多這麼多
+    order_read: float = Field(default=0.6, ge=0, le=1)  # 主將看對面上一回合出最多的那一招、喊剋它的機會；其餘隨口喊
+    guard_per: float = Field(default=0.10, ge=0, le=1)  # 同一邊每個出固守的人替人物擋掉這麼多成的傷（盾陣 guard_role）
+    guard_role: float = Field(default=0.20, ge=0, le=1)
+    guard_cap: float = Field(default=0.5, ge=0, le=1)  # 最多擋掉幾成；擋下來的那一份平分給出固守的人
+    hit_base: float = Field(default=0.06, ge=0, le=1)  # 點名他的放手一搏成了：打掉他池子的 hit_base＋風險×hit_per_risk，最多 hit_max
+    hit_per_risk: float = Field(default=0.0008, ge=0)
+    hit_max: float = Field(default=0.12, ge=0, le=1)
+    round_cap: float = Field(default=0.25, ge=0, le=1)  # 一回合最多被打掉池子的幾成
+    fall_push: int = Field(default=6, ge=0)  # 敗走那一刻戰局往對面推幾點
+    fall_prestige: int = Field(default=15, ge=0)  # 收場後聲威扣幾點
+    slay_fame: int = Field(default=3, ge=0)  # 最後一擊的人名望多幾點
+
+
 class BattleTuning(_Strict):
     """全服決戰的三招與推力（戰鬥系統設計 3.4）。全部【預設】：企劃者 2026-10-06「照預設做、測完再調」。
     放在 Config 前面：Config.battle 的預設工廠要在 Config 類別建起來時就找得到它。"""
@@ -1281,7 +1327,7 @@ class BattleTuning(_Strict):
     # 個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項做到一次記幾分（battle_instance.merit）。
     # 出手是自己送出、結算了的回合，逾時被系統代為固守的回合（held）照一樣算（Joy：「他進戰場已經很有心 戰功正常算」）；帶頭是自己帶頭的那一招替這一邊佔了上風；搏成是放手一搏成了；
     # 打傷是點名的放手一搏真的打掉對方氣血；撐住是這一回合被點名或被集火打掉氣血、回合結束還站著。只出手一回合就倒下的人自然只有 2 分。
-    merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "held": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2})
+    merit_points: dict[str, int] = Field(default_factory=lambda: {"acted": 2, "held": 2, "led": 3, "gamble": 4, "hit": 3, "stood": 2, "slew": 10})
     top_fame: int = Field(default=2, ge=0)  # 收場時兩軍各一位首功（戰功最高、至少 1 分）上天下大事傳聞，名望多這麼多
     affinity_base: float = 75.0  # 適性：基準，武學屬性擅長／不擅長 ±affinity_outer，內功 ±affinity_inner，夾在 50～100
     affinity_outer: float = 15.0
@@ -1314,6 +1360,7 @@ class BattleTuning(_Strict):
     focus_per_attacker: float = Field(default=15.0, ge=0)
     focus_cap: float = Field(default=0.12, ge=0, le=1)
     target_round_cap: float = Field(default=0.30, ge=0, le=1)
+    generals: GeneralTuning = Field(default_factory=GeneralTuning)  # 龍頭上陣（見 GeneralTuning）
 
     @field_validator("affinity", mode="before")
     @classmethod
@@ -2089,6 +2136,22 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class SkillSlotTuning(_Strict):
+    """武學技能分檔（Joy 2026-10-17「下品 1-2 個、極低機率出現高階技能；中品 2-3、低機率；上品 3-4、中機率」；tianxia/skill_slots.py）：
+    自己合成的武學，自己那一份照品質亮幾格技能（slots：品質 → [少的格數, 多的格數, 擲到多的機率]；絕學照上品）。
+    格子照順序填：層數最多的一般功效、首創走向的特別功效、其他來路的一般功效（層數多的先）；還有空格照 extra_mid 擲中階（特別功效）、
+    其餘擲低階（一個沒有的一般功效，一層）。高階技能照 high_rate 擲（每升一品照新品質再擲一次，中了就留著），佔最後一格。
+    來路的功效比格子多時，多的「未開」，修練升品才亮。擲骰照「技能|名號|功法 id|…」的雜湊，不碰亂數、不存檔：同一個人同一門同一品永遠一樣。
+    enabled 關著（測試內容）是舊規則：來路的功效全亮、沒有擲出來的技能。"""
+
+    enabled: bool = False
+    slots: dict[str, list[float]] = Field(default_factory=lambda: {
+        "下品": [1, 2, 0.3], "中品": [2, 3, 0.4], "上品": [3, 4, 0.4], "絕學": [3, 4, 0.4],
+    })
+    high_rate: dict[str, float] = Field(default_factory=lambda: {"下品": 0.02, "中品": 0.08, "上品": 0.20, "絕學": 0.0})
+    extra_mid: float = Field(default=0.3, ge=0, le=1)
+
+
 class FusionDepthTuning(_Strict):
     """合成的深度（合成與意境改法定案，企劃者 2026-10-16「合出來的意境不知道好壞，然後合成也一直無限往下沒有邏輯」；tianxia/depth.py）：
     - 意境分重：悟來的一重，合一次二重（兩個來源取高的那一重再加一），最多 max_rank 重；到頂的不能再合。
@@ -2156,6 +2219,34 @@ class TacticTuning(_Strict):
     bout_control_share: float = Field(default=0.6, ge=0, le=1)
     # 鑄器配招（玩家武學追上本命）：身上的名器屬性跟一門絕學相同時，那一門絕招的發動率多這麼多（小一截的人器合一）
     named_bond_rate: float = Field(default=0.08, ge=0, le=1)
+
+
+class FigureLifeTuning(_Strict):
+    """人物活起來（大勢人物擴充第一批，Joy 2026-10-17「歷史武將人數新增多一些，更智能化，像是真的活在這個亂世」；
+    設計稿 https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2；tianxia/figure_life.py）。
+    每 every_cal_days 個季曆天，每位人物照規則做一件事（移動、募兵、襲擾、養傷）；心事照事實算（figures.mood_of）；
+    玩家做了份量夠的事，跟這件事有關係的人物記一句風聞、情誼照表動。數字全在這裡，模型不碰。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時人物站著不動、沒有心事、不記風聞（跟這一批之前一模一樣）
+    # 多久做一件事（季曆天）：週末一季 84 個季曆天、約 1.4 個現實小時一次；14 天的季約 8 小時一次。一季每人約 42 件事
+    every_cal_days: float = Field(default=2.0, gt=0)
+    recruit: int = Field(default=2, ge=0)  # 募兵回幾點聲威（回到開季值為止）
+    # 一位人物一個遊戲日在戰場外最多回幾點聲威：募兵、自然回復、（大勢人物參戰與護衛那一份的）犒軍共用這一個上限，不各自疊
+    daily_gain_cap: int = Field(default=10, ge=0)
+    raid_push: int = Field(default=1, ge=0)  # 襲擾推幾點：規則關著的季推黃巾聲勢、乘季長倍數、照盡頭阻力；第一季只是傳聞（figures.tick 已經在推）
+    mood_cal_days: float = Field(default=2.0, gt=0)  # 負傷、悲憤撐幾個季曆天（同一個行事週期）
+    hurt_scale: float = Field(default=0.9, gt=0)  # 負傷：挑戰難度（也是決戰份量）乘多少
+    grief_scale: float = Field(default=1.1, gt=0)  # 悲憤：同上
+    lean: int = Field(default=15, ge=0)  # 戰線偏向自己這一方多少算得意、偏向對方多少算焦慮
+    healer_share: float = Field(default=0.5, gt=0, le=1)  # 華佗坐診的醫館，療傷價錢乘多少
+    # 風聞：一位人物對一個人最多記幾條（舊的先丟）、對話提示最多帶幾條
+    hearsay_keep: int = Field(default=5, ge=1)
+    hearsay_prompt: int = Field(default=3, ge=0)
+    # 情誼照表動：打退他的盟友、打退他的仇敵、替他的陣營在決戰立功、截殺他陣營的人（一件事一位人物只算一次）
+    ally_beaten: int = -5
+    foe_beaten: int = 3
+    side_merit: int = 3
+    side_raided: int = -3
 
 
 class RiseTuning(_Strict):
@@ -2250,6 +2341,35 @@ class AmbushRules(_Strict):
     hp_loss: float = Field(default=0.1, ge=0, le=1)  # 輸的一方扣氣血上限的幾成（乘 1−防具減損，不變成內傷，同截殺）
     pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)  # 同一個伏兵劫同一個人的冷卻（跟截殺共用一本帳 WorldState.raids）
     win_contrib_push: int = Field(default=1, ge=0)  # 贏的記幾點推力的貢獻（只在第一季規則開著時，同截殺）
+
+
+class FigureAidRules(_Strict):
+    """同陣營的人護著大勢人物（Joy 2026-10-17 清單第 6 條「同陣營玩家能不能幫他回復，或是護衛他讓他不要太容易退場」；tianxia/figure_aid.py）。
+    三樣都在人物所在的地點（探望在自己陣營的大本營），只有投靠了同一陣營的人有。兩種季都有。
+    護衛：花 guard_stamina 站一班崗 guard_hours 個世界小時，把此刻的身手抄成分身；一位人物同時最多 guard_slots 班。敵方挑戰他時先跟班上最強的
+    分身過一招（本人對本人，同截殺），輸了這一次挑戰不成；贏了那一班提前結束、接著打人物。一班最多擋 guard_blocks 次。人物離開那個地點，
+    班就結束。擋下一次：護衛名望 +guard_fame、心得 +guard_xinde（下次同步補）。
+    犒軍：花 rally_stamina 體力加 rally_silver 兩，聲威 +rally_points，補到開季值；一個人對同一位人物一天最多 rally_per_day 次。
+    人物一天在戰場外回的聲威（自然回復、犒軍、人物自己募兵）合起來最多 daily_restore_cap 點（跟大勢人物擴充對好的）。
+    探望：人物被打到退場或重創、還在等回來時，在自己陣營的大本營花 visit_stamina，讓他早 visit_hours 個季曆小時回來；每人每天一次，最多提前一半。
+    enabled 關掉：三顆鈕都不畫，站著的班照時刻作廢、挑戰不再先打護衛。"""
+
+    enabled: bool = True
+    guard_stamina: int = Field(default=20, ge=0)
+    guard_hours: float = Field(default=2.0, gt=0)
+    guard_slots: int = Field(default=3, ge=1)
+    guard_blocks: int = Field(default=3, ge=1)
+    guard_fame: int = Field(default=1, ge=0)
+    guard_xinde: int = Field(default=5, ge=0)
+    rally_stamina: int = Field(default=30, ge=0)
+    rally_silver: int = Field(default=20, ge=0)
+    rally_points: int = Field(default=1, ge=1)
+    rally_per_day: int = Field(default=2, ge=1)
+    daily_restore_cap: int = Field(default=10, ge=0)
+    visit_stamina: int = Field(default=20, ge=0)
+    visit_hours: float = Field(default=2.0, gt=0)
+    visit_max_share: float = Field(default=0.5, ge=0, le=1)
+    contrib_push: int = Field(default=1, ge=0)  # 第一季規則開著時，每一下記幾點推力的貢獻
 
 
 class FortifyRules(_Strict):
@@ -2389,6 +2509,7 @@ class Config(_Strict):
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
+    figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
     stockpile: StockpileRules = Field(default_factory=StockpileRules)  # 屯糧練兵（見 StockpileRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
@@ -2398,9 +2519,11 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
+    skill_slots: SkillSlotTuning = Field(default_factory=SkillSlotTuning)  # 武學技能分檔：品質決定亮幾個技能、擲不擲得到高階（見 SkillSlotTuning）
     fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
+    figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
@@ -2589,7 +2712,13 @@ class Config(_Strict):
     # 照季長自動縮放：18 季曆天＝14 天的季 3 個現實天、週末 2.5 天的季約 13 小時。beta 那一季照同一個比例從季初算（14 天的季也是 3 天）
     newbie_days: float = 18  # 這段期間氣血回復加倍
     newbie_stamina_days: float = 18  # 這段期間體力回復乘 newbie_stamina_multiplier（跟打坐的倍數疊乘）
-    newbie_stamina_multiplier: float = Field(default=1, ge=1)  # 正式值在 content/config.json（3）；測試內容照舊 1
+    newbie_stamina_multiplier: float = Field(default=1, ge=1)  # 1 是不加快（Joy 2026-10-17「回體速率先調成一樣，不要分新手期」）
+    # 新手期照現實時間算（Joy 2026-10-17「新手期 48 小時」）：大於 0 時 roster.newbie 與 raid_newbie 一律從自己加入這一季那一刻（joined_at）
+    # 照現實的這麼多小時算，不看 newbie_days、newbie_stamina_days 的季曆天；0 是舊規則。正式值在 content/config.json（48）
+    newbie_real_hours: float = Field(default=0, ge=0)
+    newbie_hp_double: bool = True  # 新手期氣血回復加倍；Joy 2026-10-17「氣血不用加倍」，正式內容關掉
+    # 新手期一天能服幾顆回體丹（Joy 2026-10-17「回體丹可以吃到五顆，平常兩顆」）：0 是跟 stamina_pills_per_day 一樣
+    newbie_pills_per_day: int = Field(default=0, ge=0)
     # 事件失敗另扣的體力（檢定失敗、隨口應對失敗的 fail_effect.stamina）乘這個倍數、四捨五入（15 → 8、5 → 3）；
     # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
     event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
@@ -2681,6 +2810,17 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
+    # 以心得換破境丹（Joy 2026-10-18「大量心得可以換一次破境機會，讓玩家後期更好轉功法」）：修練頁衝絕學那一步，
+    # 花心得換一枚破境丹。這一季第 k 枚（從 0 數）要 legend_xinde_price + k × legend_xinde_step；0 是關著（測試內容）。
+    # 量到的（scripts/measure_xinde_flow.py，週末 60 小時）：沒有門下的人一季剩六千多點心得沒處花；300 起、每枚 +100，
+    # 六千點約換八到九枚，服丹強行衝關一次約一成五到兩成，一季大約多出一兩門絕學
+    legend_xinde_price: int = Field(default=0, ge=0)
+    # 以心得修練（Joy 2026-10-18 決策卡選「心得修練」）：修練每一次都可以改付心得、不付體力，這一季第 k 次（從 0 數）
+    # 要 cultivate_xinde_price + k × cultivate_xinde_step；0 是關著（測試內容）。量到的：轉一門新功夫從下品修到上品再添滿火候
+    # 約 27 次修練（約 270 體力，十幾個小時的回復）；40 起、每次 +4，一季溢出的六千點大約修得到五十次，約兩門
+    cultivate_xinde_price: int = Field(default=0, ge=0)
+    cultivate_xinde_step: int = Field(default=4, ge=0)
+    legend_xinde_step: int = Field(default=100, ge=0)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
     stamina_pill_name: str = "回體丹"

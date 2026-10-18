@@ -458,6 +458,9 @@ class PlayerState(BaseModel):
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
+    # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
+    hearsay: dict[str, list[str]] = Field(default_factory=dict)
+    hearsay_keys: list[str] = Field(default_factory=list)  # 已經傳開過的事（「種類|對象」）：同一件事一位人物只算一次
     # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
     # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
     past_notes: dict[str, str] = Field(default_factory=dict)
@@ -543,6 +546,8 @@ class PlayerState(BaseModel):
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
+    xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
+    legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
@@ -763,6 +768,8 @@ class FigureState(BaseModel):
     location: str = ""
     back_at: float | None = None  # 被挑戰打到退場、重創：這個世界秒回來（figures.revive）；None＝不回來（時刻表寫死的、或回不來了）
     back_front: str | None = None  # 回來時接回的戰線（倒下那一刻守的那一條）
+    hurt_at: float | None = None  # 人物活起來：最近一次被挑戰打掉聲威的世界秒（心事「負傷」照它，figures.mood_of）
+    fell_at: float | None = None  # 最近一次退場、重創的世界秒（同陣營同戰線的人「悲憤」照它）
 
 
 class Order(BaseModel):
@@ -897,6 +904,17 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
+class GuardPost(BaseModel):
+    """一班護衛（figure_aid.guard）：替同陣營的大勢人物站崗，把站崗那一刻的身手抄成分身（power），下線也照守。"""
+
+    fid: str
+    name: str  # 站崗的人的名號
+    location: str  # 站崗那一刻人物所在的地點（人物離開就散）
+    until: float  # 世界秒：這一班到什麼時候
+    power: float  # 站崗那一刻的武學威力（只算本人，同加入決戰）
+    blocks: int = 0  # 這一班擋下幾次挑戰
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -943,6 +961,9 @@ class WorldState(BaseModel):
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
+    # 人物活起來（figure_life）：不是大勢人物的人物此刻在哪（人物 id → 地點；沒寫的照 talk_at／recruit_at），與每日行事做到第幾輪
+    whereabouts: dict[str, str] = Field(default_factory=dict)
+    life_turn: int = -1
     figures: dict[str, FigureState] = Field(default_factory=dict)  # 大勢人物 id → 聲威、狀態、所在（T4：第一季開季時種；其他季第一次被打贏才寫，沒被打過的照人物表讀）
     orders: list[Order] = Field(default_factory=list)  # 陣營軍令（計畫 T6）：這一週的，加上之前達成的
     plots: list[Plot] = Field(default_factory=list)  # 集體密謀（正式版乙二）：發起的、做完的、作罷的都留著到季末（編號是雜湊，見 Plot.id）
@@ -971,6 +992,10 @@ class WorldState(BaseModel):
     ambushes: dict[str, list[Ambush]] = Field(default_factory=dict)
     # 屯糧練兵（works.py）：交戰的那一軍 → 這一季到下一場時刻表決戰開集結為止屯了幾下（開集結那一刻換成起點的偏移、整個清空）
     supply: dict[str, int] = Field(default_factory=dict)
+    # 護著大勢人物（figure_aid.py）：站著的崗、每天的次數帳（犒軍、探望、回了幾點）、護衛擋下挑戰之後等著補給護衛的那幾句。換季整個重來
+    figure_guards: list[GuardPost] = Field(default_factory=list)
+    aid_tally: dict[str, float] = Field(default_factory=dict)
+    guard_credits: dict[str, list[str]] = Field(default_factory=dict)
     echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
     # ── 第四階席次（第一季設計 5.4；正式版丁）。週一的掛鉤讀不到別人的存檔，所以有資格的人每次行動、同步時把自己每週的貢獻抄一份到
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──

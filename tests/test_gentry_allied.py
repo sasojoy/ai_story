@@ -513,7 +513,7 @@ def _showdown(game):
     game.content.config.admins = [game.state.player.name]
     game.client = None
     game.sync(1000.0)
-    assert game.admin_start_showdown("changshe_fire", 1000.0) == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
+    assert game.admin_start_showdown("changshe_fire", 1000.0)[0] == "🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"  # 後面接龍頭上陣那一句
     definition = game.content.battles[game.world.get_battle().battle_id]
     if definition.region is not None:
         game.state.player.location = _in_region(game.content, definition.region)

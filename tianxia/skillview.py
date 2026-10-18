@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
+from . import armor, atlas, clinic, cultivation, depth, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, skill_slots, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -350,12 +350,15 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
             "level": level, "worn": worn, "insight": insight_name,
             "card": art_card(
-                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, art), compare,
+                art, level, insight_name, parent_names(art, content, world), traits.card_line(content, skill_slots.apply(state, content, art)), compare,
                 gen_word=gen_word(art, content, world),
             ),
             "gen": gen_word(art, content, world),  # 境界（depth.py 的第幾代）：第零代（基礎、內容寫的）是空字串
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
-            "cultivate": {"ok": problem is None, "note": note, "legend": legend},
+            "cultivate": {
+                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, art),
+                "xinde": None if hut else _xinde_choice(state, content, world, art_id, gate),
+            },
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else melt_note(value),
@@ -392,9 +395,16 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
         if worn is not None:
             diff = round(power_at(art, 1) - power_at(worn, 1), 1)
     names = []
+    art = skill_slots.apply(state, content, art)  # 技能照自己那一品亮了的格子（武學技能分檔）
     if content.traits.general:
         mine = traits.traits_of(art)
-        names = [{"name": traits.general(content, a).name, "layers": mine.count(a)} for a in dict.fromkeys(mine)]
+        names = [{"name": traits.general(content, a).name, "layers": mine.count(a), "tier": skill_slots.TIERS["low"]}
+                 for a in dict.fromkeys(mine)]
+        names += [{"name": sp.name, "layers": 1, "tier": skill_slots.TIERS["mid"]}
+                  for sp in (traits.special(content, sid) for sid in art.extra_specials) if sp is not None]
+        top = skill_slots.high(content, art.high)
+        if top is not None:
+            names.append({"name": top.name, "layers": 1, "tier": skill_slots.TIERS["high"]})
     special = traits.special(content, art.special)
     ult = traits.ultimate_of(content, art)
     sig = signature.of(content, art.id)
@@ -405,6 +415,7 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
         "special": special.name if special is not None else None,
         "ultimate": ult.name if ult is not None else None,
         "tactic": sig.name if sig is not None else None,
+        "dormant": traits.dormant_names(content, art),  # 還沒亮的技能（修練升品才亮）
     }
 
 
@@ -444,6 +455,33 @@ def _legend_choice(
         "note": f"{cultivation.odds_for(state, content, target, failures, boost, world, art_id)}% 晉為{target}"
                 f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
     }
+
+
+def _xinde_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool) -> dict | None:
+    """「以心得修練」那一顆（Joy 2026-10-18）：跟修練同一個判斷、付的是心得（cultivation.cultivate_problem 的 by_xinde）。
+    以心得修練關著、或除了錢以外就修不了（沒融意境、已經絕學、火候滿了等契機……）是 None；只差心得時灰掉寫原因。"""
+    price = cultivation.xinde_price(state, content)
+    if price is None:
+        return None
+    why = cultivation.cultivate_problem(state, content, world, art_id, gate=gate, use_legend=True, by_xinde=True)
+    if why is not None and not why.startswith("心得不足"):
+        return None
+    return {"price": price, "ok": why is None, "why": why or "", "label": f"以心得修練（心得 {price}）"}
+
+
+def _buy_choice(state: GameState, content: Content, art) -> dict | None:
+    """「以心得換破境丹」那一顆（Joy 2026-10-18）：下一步是絕學、這門已經練到衝絕學的成數、換丹開著才有，否則 None。
+    方案 C 開著時要火候滿了（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
+    price = cultivation.legend_price(state, content)
+    if price is None or prologue.active(state, content) or next_quality(art.quality) != "絕學":
+        return None
+    if (level_of(state, art.id) or 1) < content.config.cultivate_min_level.get("絕學", 0):
+        return None
+    if cultivation.heat_mode(content, "絕學") and state.player.art_mastery.get(art.id, 0) < content.config.breakthrough.heat:
+        return None
+    why = cultivation.buy_legend_problem(state, content)
+    return {"price": price, "ok": why is None, "why": why or "",
+            "label": f"以心得換一枚{content.config.legend_item_name}（心得 {price}）"}
 
 
 def _force_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict:
@@ -684,7 +722,7 @@ def detail(state: GameState, content: Content, world: WorldStateStore, kind: str
     if art is None:
         return f"（找不到武學資料：{skill_id}）"
     return art_card(
-        art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, art),
+        art, level, parent_names=parent_names(art, content, world), trait_line=traits.card_line(content, skill_slots.apply(state, content, art)),
         gen_word=gen_word(art, content, world),
     )
 

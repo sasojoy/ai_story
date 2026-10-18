@@ -61,6 +61,10 @@ class MartialArt(BaseModel):
     secret: str | None = None  # 秘方合出來的（content/secret_recipes.json 的 id）：不當「合到舊的」的候選
     # 第幾代（tianxia/depth.py）：基礎與內容寫的是第零代，合一次一代；None 是這一版之前登記的，照血統（base、parents）補算
     gen: int | None = None
+    # 武學技能分檔（skill_slots.apply）：只在玩家自己那一份的「身上的樣子」上填，全服登記的那一份永遠是空的
+    extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）
+    high: str | None = None  # 擲到的高階技能（content/traits.json 的 high 的 id）
+    dormant: list[str] = Field(default_factory=list)  # 來路有、格子不夠還沒亮的一般功效（屬性）；特別功效沒亮寫「特:id」
 
 
 class Insight(BaseModel):

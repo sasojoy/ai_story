@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable
+from . import arena, battle_instance, bounties, calendar, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -573,6 +573,9 @@ def _open_claimed(
 
         msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
+        from . import generals  # noqa: PLC0415  同上
+
+        msgs += generals.on_muster(world, content, definition)  # 龍頭上陣：派那條戰線上的大勢人物上陣
     return msgs
 
 
@@ -666,6 +669,7 @@ def advance_world_state(
             figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)  # 甲 (b)：沒有時刻表的季被打下來的聲威慢慢回
         if not season.ended:
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
+            figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
             decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)

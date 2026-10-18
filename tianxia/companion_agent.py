@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import gender, renown, zh
+from . import figure_life, gender, renown, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -211,6 +211,7 @@ def build_system_prompt(
         f"【{character.name}的性格】{character.personality}{drift_str}\n"
         f"{_habit(character, state, content, world, companion_id, affinity)}"
         f"{_secret_line(character, state, content, world, companion_id)}"
+        f"{figure_life.prompt_lines(state, content, companion_id)}"
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"

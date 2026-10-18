@@ -4,7 +4,10 @@
 份量照 move_scores 算；出招照幾種策略。每種情況打到收場（最多 9 回合），印每回合的推力與收場的戰局。
 最後另量伺服器假人（bot_policy）在真實內容、新手的起手武學下，三招各出幾成。
 
-用法：.venv/Scripts/python.exe scripts/measure_battle.py
+用法：.venv/Scripts/python.exe scripts/measure_battle.py [--generals]
+
+--generals（龍頭上陣，Joy 2026-10-17 第 2 條）：長社、宛城、廣宗三場，兩邊各 N 人（威力在 --power 之間抽），照開季的聲威派人物上陣，
+量人物的份量佔自己那一邊多少、幾回合敗走、收場戰局跟沒有人物上陣比差多少。每個人 ORDER_FOLLOW 的機會照令出招，其餘出拿手的招。
 """
 from __future__ import annotations
 
@@ -157,7 +160,83 @@ def _measure_server_bots(content, samples: int) -> None:
     print("隨機武學的人最拿手的招：" + "、".join(f"{m} {best_counts[m] / 6000:.0%}" for m in MOVES))
 
 
+def _generals_run(definition, tuning, chiefs, per_side, power, seed, follow, name_rate=0.0):
+    """一場：兩邊各 per_side 人、人物照 chiefs 上陣（空的是對照）。回傳（收場戰局, 人物份量佔比 {陣營: 比例}, 敗走 [(名字, 回合)]）。"""
+    rng = random.Random(seed)
+    battle = bi.start_muster(definition, now=0)
+    for side in ("guan", "huang"):
+        for i in range(per_side):
+            p = rng.uniform(*power)
+            scores = bi.move_scores(tuning, p, rng.choice(ATTRS), rng.choice(ATTRS))
+            bi.join_faction(battle, f"{side}{i}", side, neili_cap=600, power=p, scores=scores)
+    battle.commanders = [c.model_copy() for c in chiefs]
+    battle.record_id = seed + 1  # 將令的亂數照流水號：每一場不一樣
+    bi.close_muster(battle, definition, rng, now=0, tuning=tuning)
+    share = {}
+    for side in ("guan", "huang"):
+        mine = sum(c.score for c in battle.commanders if c.faction == side)
+        players = sum(statistics.mean(q.scores.values()) for q in battle.participants.values() if q.faction == side)
+        share[side] = mine / (mine + players) if mine + players else 0.0
+    while battle.phase == "active":
+        for name, q in battle.participants.items():
+            if q.eliminated:
+                continue
+            foe = next((c for c in battle.commanders if c.faction != q.faction and c.fallen_round is None), None)
+            if foe is not None and rng.random() < name_rate:  # 放手一搏點名對面的人物（成功率 40）
+                bi.submit_action(battle, name, f"{q.faction}_reckless", text=f"直取{foe.name}", success_rate=40, stories=("", ""))
+                continue
+            order = battle.orders.get(q.faction)
+            move = order if order and rng.random() < follow else max(MOVES, key=lambda m: q.scores[m])
+            bi.submit_action(battle, name, f"{q.faction}_{CODES[move]}")
+        bi.resolve_round(battle, definition, rng, now=0, tuning=tuning)
+    falls = [(c.name, c.fallen_round) for c in battle.commanders if c.fallen_round is not None]
+    return battle.trend, share, falls
+
+
+def measure_generals(content, per_side: int, power: tuple[float, float], seeds: int, name_rate: float = 0.0) -> None:
+    from tianxia import bot_policy, generals
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    tuning = content.config.battle
+    state = GameState(player=PlayerState(name="", location=content.scenario.start_location, stats={}, stamina=0),
+                      world=fresh_season(content))
+    print(f"\n── 龍頭上陣：每邊 {per_side} 人、威力 {power[0]:.0f}～{power[1]:.0f}、照令 {bot_policy.ORDER_FOLLOW:.0%}、每人每回合 {name_rate:.0%} 點名對面人物放手一搏 ──")
+    for bid in ("changshe_fire", "wancheng_jia", "guangzong"):
+        definition = content.battles.get(bid)
+        if definition is None:
+            continue
+        definition = definition.model_copy(update={"trend_start": 50})
+        chiefs = generals.pick(state, content, definition)
+        rows = "、".join(f"{generals.RANK_NAMES[c.rank]}{c.name}（{c.faction} 份量 {c.score:.0f}・氣血 {c.neili_cap:.0f}）" for c in chiefs)
+        print(f"{definition.name}：{rows or '沒有人上陣'}")
+        base = [_generals_run(definition, tuning, [], per_side, power, seed, bot_policy.ORDER_FOLLOW, name_rate)[0] for seed in range(seeds)]
+        led = [_generals_run(definition, tuning, chiefs, per_side, power, seed, bot_policy.ORDER_FOLLOW, name_rate) for seed in range(seeds)]
+        shares = {side: statistics.mean(r[1][side] for r in led) for side in ("guan", "huang")}
+        fell = Counter(name for r in led for name, _ in r[2])
+        when = [rnd for r in led for _, rnd in r[2]]
+        print(f"  收場戰局中位：沒有人物 {statistics.median(base)}、人物上陣 {statistics.median([r[0] for r in led])}"
+              f"（往官軍是大）；人物份量佔自己那一邊：官軍 {shares['guan']:.0%}、黃巾 {shares['huang']:.0%}")
+        print(f"  {seeds} 場裡敗走：{dict(fell) or '沒有'}" + (f"，回合中位 {statistics.median(when)}" if when else ""))
+
+
 def main() -> None:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--generals", action="store_true")
+    ap.add_argument("--per-side", type=int, default=10)
+    ap.add_argument("--power", type=float, nargs=2, default=(100.0, 300.0))
+    ap.add_argument("--seeds", type=int, default=40)
+    ap.add_argument("--name-rate", type=float, default=0.0)
+    ap.add_argument("--ranks", type=float, nargs=2, default=None)
+    args = ap.parse_args()
+    content = load_content(ROOT / "content", profile="weekend")
+    if args.generals:
+        if args.ranks:
+            content.config.battle.generals.ranks = tuple(args.ranks)
+        measure_generals(content, args.per_side, tuple(args.power), args.seeds, args.name_rate)
+        return
     content = load_content(ROOT / "content")
     measure_rules(content)
     measure_server_bots(content)

@@ -2505,7 +2505,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "async function forge(")
-    assert "await busy(" in body and "btn.disabled = true" in body and 'btn.textContent = "爐火正旺…"' in body
+    assert "await busy(" in body and "btn.disabled = true" in body and 'lab.textContent = "爐火正旺…"' in body  # 寫在小太極底下那兩個字上（煉製頁太極爐合一，2026-10-17）
     assert "S.forgeResult = { html: esc(FORGE_WAIT) };" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」），寫在開爐旁邊
     assert body.index("btn.disabled = true") < body.index('api("/api/menxia/forge"')
 
@@ -2798,9 +2798,10 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 計畫六 Task 4：來源之後多一行功效（鐵柳纏勁屬柔、上品：化勁 10%×2）；沒有說明句時它就是最後一行
     # W6：功法庫裡的功法再多一行跟身上同一種那門的比較，沒有說明句時它是最後一行（本人身上那門自己的卡沒有）
-    assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕挨打掉的氣血少 20%；挨強攻時有 10% 的機會借力，把那一下的一半還回去<br />\n比身上的【基礎拳腳】：威力 " in card
+    assert "來源：自創（沈浪 所創）<br />\n功效：〔化勁〕挨打掉的氣血少 20%；挨強攻時有 10% 的機會借力，把那一下的一半還回去" in card
+    assert "<br />\n比身上的【基礎拳腳】：威力 " in card  # 武學技能分檔：上品的空格另擲到的技能接在功效那一行後面
     # FB-088：這門柔的功法換上身，會跟身上的內功（基礎吐納，也是柔）同屬，比較那一句最後多一段搭配
-    assert card.rstrip().endswith("（第一成）、多了〔化勁〕、少了〔厚〕；換上後跟內功同屬，整體 +20%</p>")
+    assert card.rstrip().endswith("（第一成）、多了〔化勁〕〔破甲〕〔纏絲〕、少了〔厚〕；換上後跟內功同屬，整體 +20%</p>")  # 只比亮了的格子，空格擲到的也算
 
 
 def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
@@ -5726,7 +5727,7 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     answer = _js_function(js, "async function answer(")
     assert 'watchQueue(submitBtn, "思量中……")' in answer and "stop();" in answer.split("finally")[1]
     forge = _js_function(js, "async function forge(")
-    assert 'watchQueue(btn, "爐火正旺…")' in forge and "finally { stop(); }" in forge
+    assert 'watchQueue(lab, "爐火正旺…")' in forge and "finally { stop(); }" in forge
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
     say = _js_function(js, "async function sayLine(")
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
@@ -5815,7 +5816,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
     const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
-    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw();
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {};
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
@@ -6225,6 +6226,8 @@ NOT_IN_THE_FINGERPRINT = {
         "flag_times": "旗標第一次成立的時間，同上",
         "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
         "sim_accum": "不滿一小時的時間累積器",
+        "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
+        "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
         "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
         "ending_id": "同上",
         "final_trends": "同上（結算卡的資料）",
@@ -6255,6 +6258,9 @@ NOT_IN_THE_FINGERPRINT = {
         "discuss_tally": "論武的每日次數（FB-116），只在玩家卡上那一顆鈕灰不灰，打開卡才重問",
         "raids": "截殺的冷卻，只在打開玩家卡時看得到（截殺當下 touched 叫醒被截殺的人）",
         "ambushes": "埋伏是看不見的（設伏劫道）：中伏的那一下 touched 叫醒伏兵",
+        "figure_guards": "護衛的崗只寫在挑戰鈕的「身邊有 N 人護衛」與自家人的按鈕上；站崗、擋下都是某個人自己的動作，別人下次輪詢才補也不礙事",
+        "aid_tally": "犒軍、探望、聲威回復的每日記數，畫面上看不到",
+        "guard_credits": "護衛擋下挑戰、等著補給護衛的那幾句，只在護衛自己同步時領",
         "supply": "屯糧練兵的量只在自家人的按鈕上（自己的動作走 self 通知），開集結那一刻寫天下大事",
         "bounties": "懸賞榜只在城裡打開第二層選單時看得到，揭、交差都是自己的動作（通緝當下 touched 叫醒被通緝的人）",
         "bounty_seq": "懸賞的流水號，玩家看不到",
@@ -6310,6 +6316,8 @@ NOT_IN_THE_FINGERPRINT = {
         "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
         "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
+        "orders": "主將令：回合結算那一下換，round_number 也變了",
     },
 }
 
@@ -6826,7 +6834,8 @@ def test_boards_lists_six_boards_and_caches_the_scan(client, monkeypatch):
     real = leaderboard.compute_boards
     monkeypatch.setattr(leaderboard, "compute_boards", lambda *a, **k: calls.append(1) or real(*a, **k))
     out = client.get("/api/boards").json()
-    assert [b["id"] for b in out["boards"]] == [kind for kind, _, _ in leaderboard.BOARDS]
+    assert [b["id"] for b in out["boards"]] == [kind for kind, _, _ in leaderboard.BOARDS] + ["神器"]  # 最後是神器譜（2026-10-17）
+    assert out["boards"][-1]["book"] == []
     client.get("/api/boards")
     assert len(calls) == 1
     server.BOARDS_CACHE["at"] -= server.BOARDS_TTL_SECONDS

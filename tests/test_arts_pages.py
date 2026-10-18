@@ -28,8 +28,8 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
-    "pickMark", "craftView", "craftFilterRow", "craftChip", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
-  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "";`,
+    "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
+  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "";`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
 ];
@@ -90,14 +90,15 @@ def press(op, extra, *, reply_menxia=None, moved_by=0, art_open="lake_kick", gui
     script = f"""
       const pos = {{ v: 400 }};
       H.dom.buttons = [{{ dataset: {{ id: "lake_kick" }}, getBoundingClientRect: () => ({{ top: pos.v }}) }}];
+      S.menxia = {json.dumps(menxia())};
       S.artOpen = {json.dumps(art_open)};
       S.main = {{ status: {{ injury: 0 }}, guide: {json.dumps(before)}, prologue: {json.dumps({"reveal": ["all"]} if prologue else None)} }};
       S.reply = {{ menxia: {json.dumps(reply_menxia or menxia())}, main: {{ guide: {json.dumps(after)} }}, message: "<p>RESULT</p>" }};
       S.afterRender = () => {{ pos.v += {moved_by}; }};
       await H.mx({json.dumps(op)}, {json.dumps(extra)});
-      return {{ note: S.artNote || null, message: S.message, artOpen: S.artOpen, scrolls: H.scrolls, rendered: S.rendered, calls: H.calls }};
+      return {{ note: S.artNote || null, mxNote: S.mxNote || null, meltNote: S.meltNote || null, message: S.message, artOpen: S.artOpen, scrolls: H.scrolls, rendered: S.rendered, calls: H.calls }};
     """
-    return run(script, fns=["mx", "cultivateTop", "guideKey"], stubs=MX_STUBS)
+    return run(script, fns=["mx", "mxPlace", "placeTop", "guideKey"], stubs=MX_STUBS)
 
 
 def test_cultivating_keeps_the_page_where_it_is_and_the_card_open():
@@ -116,9 +117,9 @@ def test_cultivating_holds_the_button_where_the_thumb_is_even_when_the_page_abov
     assert [s for s in up["scrolls"] if s[0] == "by"] == [["by", {"top": -45, "left": 0, "behavior": "instant"}]]
 
 
-def test_the_result_goes_into_that_arts_card_and_the_top_message_stays_too():
+def test_the_result_goes_into_that_arts_card_and_not_the_top_line():
     out = press("cultivate", {"art": "lake_kick"})
-    assert out["note"] == {"id": "lake_kick", "html": "<p>RESULT</p>"} and out["message"] == "<p>RESULT</p>"
+    assert out["note"] == {"id": "lake_kick", "html": "<p>RESULT</p>"} and out["message"] == ""  # 頁首那一行不寫：寫了會把卡片推下去
     html = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "lake_kick", "html": "<p>RESULT</p>"})
     body = html.split('<div class="art-body')[1]
     assert body.index('class="acts"') < body.index('class="msg art-result"><p>RESULT</p>')  # 鈕的底下：結果就在按的那顆旁邊
@@ -166,11 +167,43 @@ def test_a_new_mastery_that_needs_a_name_scrolls_up_to_the_naming_form():
     assert out["scrolls"] == [["to", {"top": 0, "behavior": "smooth"}]]
 
 
-def test_switching_and_melting_still_scroll_to_the_top_and_clear_the_card_note():
-    for op, extra in (("switch", {"art": "lake_kick"}), ("melt", {"art": "lake_kick"}), ("practice", {}), ("heal", {})):
+def test_every_practice_button_stays_put_and_writes_its_result_where_it_was_pressed():
+    """Joy 2026-10-18「武學升級的時候為什麼要點一次升級又把畫面跳到置頂？」：練成、改練、療傷也跟修練一樣留在原地，補重畫的高度差。"""
+    for op, extra, note in (("practice", {}, {"id": "basic_fist", "html": "<p>RESULT</p>"}),  # 練成：身上那一門的卡
+                            ("switch", {"art": "lake_kick"}, {"id": "lake_kick", "html": "<p>RESULT</p>"})):
         out = press(op, extra, moved_by=60)
-        assert out["scrolls"] == [["to", {"top": 0, "behavior": "smooth"}]], op  # 列表結構變了：照舊回頁首
-        assert out["note"] is None, op
+        assert out["scrolls"] == [["by", {"top": 60, "left": 0, "behavior": "instant"}]], op
+        assert out["note"] == note and out["message"] == "", op
+    switched = press("switch", {"art": "lake_kick"})
+    assert switched["artOpen"] is None and switched["rendered"] == 1  # 庫裡那一列收起，只畫一次
+    heal = press("heal", {}, moved_by=60)
+    assert heal["scrolls"] == [["by", {"top": 60, "left": 0, "behavior": "instant"}]]
+    assert heal["mxNote"] == {"at": "heal", "html": "<p>RESULT</p>"} and heal["note"] is None
+
+
+def test_melting_one_art_writes_under_the_library_title_instead_of_scrolling_to_the_top():
+    out = press("melt", {"art": "lake_kick"}, moved_by=60)
+    assert not any(s[0] == "to" for s in out["scrolls"])
+    assert out["meltNote"] == "<p>RESULT</p>" and out["message"] == "" and out["note"] is None
+
+
+def test_naming_and_unknown_buttons_still_go_to_the_top():
+    for op, extra in (("name", {"name": "甲乙"}), ("seclude_like", {})):
+        out = press(op, extra, moved_by=60)
+        assert out["scrolls"] == TO_TOP, op
+        assert out["message"] == "<p>RESULT</p>", op
+
+
+def test_the_other_blocks_draw_their_result_inside_themselves():
+    x = menxia(gear={"used": 1, "cap": 100, "held_note": "", "slots": [
+        {"slot": "mount", "label": "坐騎", "worn": None, "rack": [], "empty": "身上沒有坐騎", "note": "N", "where": ""},
+        {"slot": "weapon", "label": "武器", "worn": {"id": "兵:1", "name": "劍", "kind": "劍", "attribute": "剛", "edge": 90, "fits": True}, "rack": [], "empty": "", "note": "N"}]})
+    html = page("pagePractice", x, mxNote={"at": "gear:weapon", "html": "<p>GEARNOTE</p>"})
+    weapon = html.split('data-slot="weapon"')[1]
+    assert weapon.index('<div class="sub">武器</div>') < weapon.index("GEARNOTE")  # 武器那一段的標題底下
+    assert "GEARNOTE" not in html.split('data-slot="weapon"')[0]
+    healed = page("pagePractice", menxia(), mxNote={"at": "heal", "html": "<p>HEALNOTE</p>"})
+    assert healed.index('data-op="heal"') < healed.index("HEALNOTE") < healed.index("身上的兩門")
 
 
 # ── W10：開爐等結果的那一句不誇大等多久 ─────────────────────────────────
@@ -220,7 +253,7 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():
     html = page("pageCraft", menxia(), tab="craft")
     assert html.count('<details class="attr-note">') == 1 and "ATTRNOTE" in html
-    assert html.index("FORGELINE") < html.index('id="forge"') < html.index("attr-note") < html.index("<div class=\"label\">功法")  # 挑東西的標題併了篩選鈕（arts-polish-2 FB-085），摺疊還是在它前面
+    assert html.index('id="forge"') < html.index("FORGELINE") < html.index("attr-note") < html.index("<div class=\"label\">功法")  # 挑東西的標題併了篩選鈕（arts-polish-2 FB-085），摺疊還是在它前面
 
 
 def test_the_attribute_note_is_escaped_and_a_missing_one_draws_nothing():

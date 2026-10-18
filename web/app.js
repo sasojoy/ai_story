@@ -112,6 +112,7 @@
     meltNote: null, // 批量熔煉的結果（伺服器的 message HTML），寫在功法庫標題底下；下一個修練頁動作就清掉
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
+    mxNote: null, // 修練頁其他動作（裝備、意境、門下、療傷）的結果：{ at, html }，寫在按的那一塊裡（mxPlace）；切分頁、做別的動作就清掉
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
@@ -127,7 +128,7 @@
     mapSel: null, // 選了的地點
     mapMode: "overview", // 抽屜在畫什麼："overview"、"place"、"search"、"timeline"
     mapLayers: ["control", "order"], // 開著的濾鏡（勢力、軍令預設開，設計第一節）
-    mapDrawer: "rest", // 抽屜的高度："rest"、"peek"、"half"、"full"、"tl"
+    mapDrawer: "home", // 抽屜的高度："home"（總覽的那一格：收起或收著，照 homeDrawer）、"min"、"rest"、"peek"、"half"、"full"、"tl"
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
     mapFocus: null, // 江湖頁的小地圖點了某一處：輿圖畫好時對準它（mapReady）
@@ -466,7 +467,17 @@
   // 畫好之後量一次，條上那一行字的字尾碰不碰得到右邊的「傷 N」（氣血條）或丹的鈕（體力條）。碰到了先收一號（.snug：字小一號、
   // 內距收一點，兩個字照寫），還碰到才拿掉兩個字（.tight；條上的 title 照舊寫）。topHtml 從不帶這兩個 class：每次畫狀態列
   // （render、renderTop）、視窗換寬度、字型載入完都從寫全量起。瀏覽器量不了、條還沒排版（寬是 0）就不動（照寫全）
+  // 自訂屬性變了才寫（同一個值照寫也算改了 inline style，會逼繼承它的整棵重算樣式）
+  function setVar(el, name, value) {
+    if (typeof el.style.getPropertyValue !== "function" || el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value);
+  }
   function fitBars() {
+    // 煉製頁縮起來的太極爐（.kiln.compact）固定在狀態列底下：狀態列多高（展開名號、換寬度都會變）記在 --top-h
+    const head = document.getElementById("top");
+    if (head && document.documentElement && document.documentElement.style && typeof head.offsetHeight === "number") {
+      // 變了才寫：根元素上的自訂屬性一路繼承，寫一次（就算同一個值）整頁約 1,600 個元素重算樣式，狀態列每次重畫都會叫到這裡
+      setVar(document.documentElement, "--top-h", `${head.hidden ? 0 : head.offsetHeight}px`);
+    }
     if (typeof document.createRange !== "function") return;
     const top = document.getElementById("top");
     if (!top || !top.querySelectorAll) return;
@@ -673,6 +684,7 @@
     }
     S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
+    if (S.tab === "craft") fixedKiln();
     applyGlow();
   }
 
@@ -1338,7 +1350,7 @@
       // 格子只有 46 寬：名字超過四個字（新取的武學名可到六個字）就把字距壓進格子裡，不然會溢出格外蓋到另一格
       const fit = m && [...m.name].length > 4 ? ' textLength="42" lengthAdjust="spacingAndGlyphs"' : "";
       return m
-        ? `<g class="w-slot full r${m.rank}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
+        ? `<g class="w-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
             <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name"${fit}>${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.sub)}</text></g>`
         : `<g class="w-slot"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入</text></g>`;
     };
@@ -1350,6 +1362,7 @@
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
+          <circle r="${r}" class="w-seam"/>
         </g>
         ${slot(slots[0], 0)}${slot(slots[1], 1)}
         <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
@@ -1367,7 +1380,8 @@
   const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
   // 決戰三招的按鈕（決戰改版一）：引擎給「選項名（強攻・82 分）」，招與分數拆到按鈕右邊的小字、名字佔剩下的寬度——
   // 375px 上一顆按鈕的字只有約 285px，括號整句接在名字後面的話，十一、十二個字的名字會把一顆按鈕折成兩行（多 20px）
-  const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分)）$/;
+  // 「・主將令」：照令的那一顆（龍頭上陣）
+  const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分(?:・主將令)?)）$/;
   // 鐵匠鋪的選項標籤很長（開爐、主料、輔料、買修淬煉），375px 上瀏覽器會在字中間斷行（FB-132：「下｜品」「沒｜人」「壓｜得住」「屬｜實」）。
   // 照分隔的標點切成小段，每段不折行（.nb），段與段之間才換行；標籤的字一個都不改，只是多包幾層 span，每段各自跳脫。
   // 切在「・；、，＋→」後面（連同後面跟著的空白，「→ 」不留在行頭）與「（」前面；括號尾「）」、數字與單位（「下品 46%」「工錢 150 兩」）
@@ -2688,6 +2702,15 @@
     if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
+  function buyPill(a) {
+    const xs = a.cultivate.xinde; // 以心得修練：付心得不付體力；換不了時灰掉、原因寫在後面
+    const byX = xs ? `<div class="buy-pill"><button class="btn small" data-act="cultivate" data-xinde="1" data-id="${esc(a.id)}" ${xs.ok ? "" : "disabled"} title="${esc(xs.why)}">${esc(xs.label)}</button>${xs.ok ? "" : `<span class="why">${esc(xs.why)}</span>`}</div>` : "";
+    const b = a.cultivate.buy;
+    if (!b) return byX;
+    return byX + `<div class="buy-pill"><button class="btn small" data-act="mx" data-op="buy_legend" ${b.ok ? "" : "disabled"} title="${esc(b.why)}">${esc(b.label)}</button>${b.ok ? "" : `<span class="why">${esc(b.why)}</span>`}</div>`;
+  }
+
   function pagePractice() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -2727,6 +2750,7 @@
         <div class="acts">${first}${cult}</div>
         ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
         ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
+        ${buyPill(a)}
         ${forgeOdds(a)}
         <div class="more">
           ${a.melt.ok ? "" : `<span class="why">${esc(a.melt.note)}</span>`}
@@ -2856,13 +2880,15 @@
         <div class="winfo"><b>【${esc(t.name)}】</b><span>${esc(t.effect_text)}</span></div>
         ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(t.id)}">換上</button></div>`}
       </div>`;
+    // 修練頁其他動作的結果（mxPlace）：寫在按的那一塊裡，頁首那一行不寫
+    const noteAt = (at) => S.mxNote && S.mxNote.at === at ? `<div class="msg mx-note">${S.mxNote.html}</div>` : "";
     const GEAR_ROWS = { weapon: weaponRow, armor: armorRow, mount: mountRow, treasure: treasureRow };
     const slotBlock = (g) => {
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
       const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
       // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前，沒有鈕；寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
-      return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>
+      return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>${noteAt("gear:" + g.slot)}
         ${g.fit_line ? `<p class="muted gear-fit">${esc(g.fit_line)}</p>` : ""}
         ${g.heirloom ? `<div class="wrow heirloom"><div class="winfo"><b>【${esc(g.heirloom.name)}】</b><span>傳承・${esc(g.heirloom.effect_text)}</span></div></div>` : ""}
         ${g.worn ? row(g.worn, true) : g.heirloom && !g.rack.length ? "" : `<p class="muted">${esc(g.empty)}</p>`}
@@ -2896,6 +2922,7 @@
           <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
         </form>
       </div>
+      ${noteAt("heal")}
       ${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
       ${attrNoteHtml(x)}
       <div class="label">身上的兩門</div>
@@ -2910,14 +2937,14 @@
         : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
-      ${x.insights.length ? `<div class="ins">${insChips}</div>
+      ${x.insights.length ? `<div class="ins">${insChips}</div>${noteAt("ins")}
         ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
-      ${mates && x.person ? `<div class="card">${tenCells(x.person_card)}
+      ${mates && x.person ? `<div class="card person-card">${tenCells(x.person_card)}${noteAt("person")}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
@@ -2950,6 +2977,7 @@
     if (b.other_art !== null) return b.insights.length === 0;
     return (b.art !== null && b.insights.length === 1) || (b.art === null && b.insights.length === 2);
   }
+  let potFlashTimer = 0;
   function pick(type, id) {
     if (S.busy) return; // 開爐等結果的時候（首次取名要等模型）爐子不動
     if (S.forgeSel.length >= 2) { toast("爐裡已經放滿了，點上面的拿出來再換。"); return; }
@@ -2957,7 +2985,10 @@
     const no = pickMark(type, id);
     if (no) { toast(no.why); return; } // 跟爐裡那一樣合不了（伺服器照開爐時的判斷算好的）：說為什麼，不放進去
     if (type === "art") S.forgeSel.unshift({ type, id }); else S.forgeSel.push({ type, id }); // 武學放左邊
+    S.potFlash = S.forgeSel.findIndex((p) => p.type === type && p.id === id); // 剛放進去的那一格閃一下（固定列上看得到，不必捲回爐子）
     renderPage();
+    clearTimeout(potFlashTimer); // 說明那一行回來時會再畫一次：閃的那一格撐到動畫跑完才收
+    potFlashTimer = setTimeout(() => { S.potFlash = null; }, 900);
     updateForgeLine();
   }
 
@@ -2998,6 +3029,86 @@
     return `<button class="chip r${rank}${no ? " no" : ""}${used ? " used" : ""}" data-act="pick" data-type="${type}"${used ? "" : extra} data-id="${esc(thing.id)}"${used ? " disabled" : ""}>
           <b>${esc(thing.name)}</b><small>${no ? `<i class="why">${esc(no.short)}</i>` : esc(sub)}</small></button>`;
   }
+  // 太極爐一直看得到（Joy 2026-10-17「合成的時候也會因為要把畫面拉到下面看不到爐子的內容」，之後「那個太極爐變得很多餘」）：
+  // 爐子本身就是開爐的地方，沒有另一條列。往下捲去挑東西、大爐子捲出畫面時，同一座爐縮成一條黏在狀態列底下（.kiln.compact，fixedKiln）：
+  // 左右兩格（點了拿出來）、中間小太極就是開爐鈕，開不了爐的原因寫在底下一行。大爐子那一格的高度由 .kiln-wrap 撐著，縮起來頁面不跳。
+  // 剛放進去的那一格大小兩座都閃一下（S.potFlash：第幾格）
+  // 開不了爐的原因（說明那一行 ⚠ 後面那一句）：縮起來的爐子底下一行；說明回來時只換這一格（updateForgeLine）
+  function kilnWarn() {
+    const warn = String(S.forgeLine || (S.menxia && S.menxia.forge_line) || "").replace(/<[^>]+>/g, " ").split("⚠")[1];
+    return warn && warn.trim() ? `<p class="kiln-warn">⚠ ${esc(warn.replace(/\s+/g, " ").trim())}</p>` : "";
+  }
+  function kilnHtml(slots, ready) {
+    const cell = (m, i) => m
+      ? `<button class="kiln-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" aria-label="拿出${esc(m.name)}"><b>${esc(m.name)}</b><small>${esc(m.sub)}</small><i aria-hidden="true">×</i></button>`
+      : `<span class="kiln-slot empty"><small>${i ? "再放一樣" : "放一樣"}</small></span>`;
+    const r = 20;
+    const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="26.5" class="kiln-ember"/><circle r="24.2" class="kiln-ring"/><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
+      <circle r="${r}" class="w-yang"/><path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
+      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/><circle r="${r}" class="w-seam"/></g></svg>`;
+    return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln">
+      <div class="kiln-big">${furnaceSvg(slots, ready)}</div>
+      <div class="kiln-mini">
+        <div class="kiln-row">${cell(slots[0], 0)}
+          <button class="kiln-hub${ready ? " ready" : ""}" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>${taichi}<span class="kiln-lab">開爐</span></button>
+          ${cell(slots[1], 1)}</div>
+        <div id="kiln-warn">${kilnWarn()}</div>
+      </div></div></div>`;
+  }
+  // 大爐子捲出狀態列底下時縮成一條、捲回來時放大：捲動時與每次畫完煉製頁都量一次（renderPage 的 afterPage 之後）
+  function fixedKiln() {
+    const wrap = document.getElementById("kiln-wrap"), kiln = document.getElementById("kiln");
+    if (!wrap || !kiln || typeof wrap.getBoundingClientRect !== "function" || !kiln.classList) return;
+    const head = document.getElementById("top");
+    const topH = head && !head.hidden ? head.offsetHeight : 0;
+    const compact = wrap.getBoundingClientRect().bottom < topH + 90;
+    if (compact === kiln.classList.contains("compact")) return;
+    if (compact) wrap.style.minHeight = `${wrap.offsetHeight}px`; // 縮起來前先撐住原本的高度，頁面才不往上跳
+    kiln.classList.toggle("compact", compact);
+  }
+  // 捲動時一幀量一次（只在煉製頁）
+  let kilnFrame = 0;
+  window.addEventListener("scroll", () => {
+    if (kilnFrame || S.stage !== "game" || S.tab !== "craft") return;
+    kilnFrame = requestAnimationFrame(() => { kilnFrame = 0; fixedKiln(); });
+  }, { passive: true });
+
+  // 開爐成了：結果底下直接畫合出來的那一樣（Joy 2026-10-17「玩家根本無法在一合成出武學時查看武學內容評估武學強弱，還需要切換到另一個分頁」）。
+  // 武學寫品質、種類、屬性、境界、第幾成、威力、跟身上同一種比強弱、功效（帶檔次的寫檔次）、特別功效、絕招，底下摺著整張功法卡與「改練上身」；
+  // 意境寫重數、圓融駁雜、正邪與說明。資料是 owned_arts 的 judge（skillview.melt_judge，同批量熔煉）與 insights
+  // 技能的檔次（武學技能分檔：低階＝一般功效、中階＝特別功效、高階＝content/traits.json 的 high）；沒亮的寫「未開」，修練升品才亮
+  const TRAIT_TIERS = { 1: "低", 2: "中", 3: "高", 4: "高" };
+  function madeCardHtml(x, item) {
+    if (!item) return "";
+    if (item.type === "ins") {
+      const i = (x.insights || []).find((r) => r.id === item.id);
+      if (!i) return "";
+      const sub = ["意境", `屬${i.attribute}`, ...String(i.depth || "").split("・"), i.lean && i.lean !== "無" ? i.lean : ""].filter(Boolean);
+      return `<div class="made-card"><div class="mc-head"><span class="qseal qi big">意</span><div><b>「${esc(i.name)}」</b><small>${sub.map(esc).join("・")}</small></div></div>
+        ${i.note ? `<p class="mc-note">${esc(i.note)}</p>` : ""}</div>`;
+    }
+    const a = (x.owned_arts || []).find((r) => r.id === item.id);
+    if (!a) return "";
+    const j = a.judge || {};
+    const sub = [a.kind, `屬${a.attribute}`, a.gen, `第${a.level}成`].filter(Boolean);
+    const diff = typeof j.worn_diff === "number" ? j.worn_diff : null;
+    const verdict = diff === null ? ""
+      : diff > 0 ? `<b class="up">比身上那門強 ${meltNum(diff)}</b>` : diff < 0 ? `<b class="down">比身上那門弱 ${meltNum(diff)}</b>` : "跟身上那門一樣";
+    const tags = [];
+    (j.traits || []).forEach((t) => tags.push(`<i class="tr${t.tier ? ` t${t.tier}` : ""}">${t.tier && TRAIT_TIERS[t.tier] ? `<em>${TRAIT_TIERS[t.tier]}</em>` : ""}${esc(t.name)}${t.layers > 1 ? `<small>${t.layers} 層</small>` : ""}</i>`));
+    if (j.special) tags.push(`<i class="tr t2"><em>中</em>${esc(j.special)}</i>`); // 來路帶的特別功效：中階
+    (j.dormant || []).forEach((n) => tags.push(`<i class="tr off"><em>未開</em>${esc(n)}</i>`));
+    if (j.ultimate) tags.push(`<i class="hi">絕招〔${esc(j.ultimate)}〕</i>`);
+    if (j.tactic) tags.push(`<i class="hi">本命戰法〔${esc(j.tactic)}〕</i>`);
+    return `<div class="made-card">
+      <div class="mc-head">${seal(a.quality, true)}<div><b>【${esc(a.name)}】</b><small>${sub.map(esc).join("・")}</small></div>
+        ${typeof j.power === "number" ? `<span class="mc-power">威力<b>${j.power}</b></span>` : ""}</div>
+      <p class="mc-verdict">${verdict}<span class="muted">${verdict ? "・" : ""}${a.worn ? "已配上身" : "放在功法庫"}</span></p>
+      ${tags.length ? `<div class="mc-tags">${tags.join("")}</div>` : ""}
+      <details class="fold"><summary>整張功法卡</summary><div class="fold-body">${tenCells(a.card)}</div></details>
+      ${a.worn ? "" : `<button class="btn small" data-act="switch" data-id="${esc(a.id)}">改練上身<small>熟練度各自保留</small></button>`}
+    </div>`;
+  }
   function pageCraft() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -3020,16 +3131,16 @@
     const ins = order(x.insights.filter((i) => keep("ins", i)));
     const artsShown = v.all || pro() ? arts : arts.slice(0, CRAFT_PAGE);
     const ready = forgeReady();
-    const result = S.forgeResult ? `<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
+    // 合出來的那一樣的卡排在結果那段話前面：一開爐第一眼就看到它強不強（Joy 2026-10-17）
+    const result = S.forgeResult ? `${madeCardHtml(x, S.forgeMade)}<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
     // 「開爐」緊接在說明那一行下面、不黏在底部（FB-048）：黏著時會蓋住底下的清單、開爐後那一行字與「背包」。
     // 開爐的結果就寫在「開爐」底下、爐裡的東西留著（企劃者 2026-10-10「點完又會跳到畫面最上面，要繼續合成還要往下拉」），
     // 頁面不捲：拿掉一格、換一樣就能再合
     return `
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
-      ${furnaceSvg([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
+      ${kilnHtml([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
       <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
-      <div class="act-row"><button class="btn primary" id="forge" data-act="forge" data-glow="forge" ${ready ? "" : "disabled"}>開爐</button></div>
       ${result}
       ${attrNoteHtml(x)}
       <div class="label">功法${filterChips("craft")}</div>
@@ -3926,7 +4037,7 @@
   // 圈的跳法是整個圈放大、淡出（style.css 的 mk-pulse，企劃者 10/17 選丙）：合成器自己跑，線跟著變粗；跳的那一圈自成合成層，
   // 蓋在它上面的搜尋框、濾鏡、抽屜跟著被拉成合成層，字的邊緣有一點點不一樣（企劃者接受，試玩回饋 FB-323）
   function marksParts(base, st, o) {
-    const k = o.k, far = o.far, ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
+    const k = o.k, far = o.far, hit = Math.round(2 * (hitRadius(1 / k) - 16)), ins = insightOn(base, o.layers), on = !!st.territory && o.layers.has("control") && !ins;
     const ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const wk = (st.weeks || []).find((x) => x.week === o.week);
     const flash = new Set((o.tl || o.week !== st.now_week) && wk ? wk.changed.map((e) => e.id) : []); // 那一週易手的地點閃一圈
@@ -3948,8 +4059,9 @@
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
       if (flash.has(p.id)) pulse(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
-      // 點擊區：透明圓 r=16，外框寬照倍率撐開（style.css 的 --hit，applyMapView 設）
-      out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0"/>`);
+      // 點擊區：透明圓 r=16，透明外框寬 2×(R−16) 把它撐到半徑 R（R 照螢幕固定，hitRadius）。寬寫在每一個圓上、跟記號一起重畫，
+      // 不寫成框上繼承的 CSS 變數：變數一改，整棵地圖約 1,500 個元素都要重算樣式（縮放每一下多 40ms 上下，Joy 2026-10-17）
+      out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0" stroke-width="${hit}"/>`);
       if (far) {
         out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
         continue;
@@ -4069,7 +4181,7 @@
     return `
       <div class="map-top"><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><div class="map-chips" role="group" aria-label="濾鏡">${chipsHtml()}</div></div>
       ${mapCtl()}<div class="map-hud" id="map-hud" hidden></div>${banner}
-      <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
+      <section class="mdrawer${S.mapMode === "overview" && drawerNow() === "min" && !deskMap() ? " min" : ""}" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
   }
   // ── 輿圖那一層常駐（FB-324）：切到別的分頁、整頁重畫（render 換掉 #app 的 innerHTML）時，地圖不拆掉，只在 #map-host 藏起來
   // （visibility: hidden：樣式、排版、點陣化都留著）。以前每次回到輿圖都把 114 KB 的底圖字串塞回去、重新解析、重算樣式、重新排版、
@@ -4110,7 +4222,7 @@
   function forgetMap() {
     stopPlay();
     Object.assign(S, {
-      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapLayers: ["control", "order"], mapDrawer: "rest",
+      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapLayers: ["control", "order"], mapDrawer: "home",
       mapWeek: null, mapQuery: "", mapFocus: null, mapViewBefore: null, marksS: 0, mapView: null,
     });
     hideMapHost(true);
@@ -4125,6 +4237,7 @@
     if (S.mapMode === "search") return searchHtml(base, st, S.mapQuery);
     if (S.mapMode === "timeline") return timelineHtml(base, st, mapWeek());
     if (S.mapMode === "place" && S.mapSel && st.places[S.mapSel]) return placeHtml(base, st, S.mapSel);
+    if (drawerNow() === "min" && !deskMap()) return miniHtml(base, st);
     return overviewHtml(base, st);
   }
   // 抽屜第一行：在路上寫往哪裡、還有幾分鐘、喊停（喊停就是江湖頁那一顆，選單上有才畫）；有事擋著路時寫是哪一則、給「回江湖」
@@ -4329,7 +4442,7 @@
     if (tlBtn) { tlBtn.classList.toggle("on", open); tlBtn.setAttribute("aria-pressed", String(open)); }
     const banner = document.getElementById("map-banner");
     if (banner) banner.hidden = true;
-    setMapDrawer(open ? "tl" : "rest");
+    setMapDrawer(open ? "tl" : "home");
     redrawDrawer();
     if (open) wholeMap();
     else { applyMapView(true); drawMarks(); }
@@ -4363,15 +4476,17 @@
       if (!drag) return;
       const dy = drag.y - ev.clientY;
       if (Math.abs(dy) > 5) drag.moved = true;
-      if (drag.moved) drawer.style.height = `${Math.max(90, Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
+      if (drag.moved) drawer.style.height = `${Math.max(mapDrawerPx("min"), Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
     });
     const end = () => {
       if (!drag) return;
       drawer.classList.remove("dragging");
-      if (!drag.moved) setMapDrawer(S.mapDrawer === "rest" || S.mapDrawer === "peek" ? "half" : S.mapMode === "place" ? "peek" : "rest");
+      // 點一下：總覽在收起、收著之間換（拉高的放回收著）；一個地點在半開、拉高之間換。拖：放開時靠到最近的一格（總覽多一格收起）
+      const now = drawerNow(), place = S.mapMode === "place";
+      if (!drag.moved) drawerTo(place ? (now === "peek" ? "half" : "peek") : now === "rest" ? "min" : "rest");
       else {
-        const h = drawer.offsetHeight;
-        setMapDrawer(["rest", "half", "full"].sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
+        const h = drawer.offsetHeight, stops = place ? ["peek", "half", "full"] : S.mapMode === "overview" ? ["min", "rest", "half", "full"] : ["rest", "half", "full"];
+        drawerTo(stops.sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
       }
       drag = null;
     };
@@ -4382,13 +4497,50 @@
   function redrawDrawer() {
     const body = document.getElementById("mbody");
     if (body) body.innerHTML = drawerHtml();
+    // 總覽那一格照今天還能出陣幾次決定收起或收著：疊層換了（次數用完）就跟著換高度。只在高度真的變了才動（輪詢不重設）
+    const d = document.getElementById("mdrawer");
+    if (S.mapDrawer === "home" && d && d.style.height !== `${mapDrawerPx("home")}px`) setMapDrawer("home");
+  }
+  // ── 抽屜收起（Joy 2026-10-17「今天去哪裡出陣能不能真的縮起來，手機版受影響很大」）──
+  // 總覽可以收成一條（把手＋一行「出陣 今日還能 N 次 ▴」），地圖拿回大部分畫面。收起或攤開是玩家自己選的，記在這個瀏覽器
+  // （localStorage，換頁、輪詢、重新整理都照它）；沒選過時，今天的出陣次數用完了就收起，還有次數（或不出陣的散人）攤開。
+  // S.mapDrawer 是 "home" 時照這裡現算，所以次數用完那一刻跟著收起
+  const DRAWER_KEY = "tx-map-drawer";
+  function drawerPref() {
+    try { const v = localStorage.getItem(DRAWER_KEY); return v === "min" || v === "open" ? v : null; } catch (e) { return null; }
+  }
+  function homeDrawer() {
+    const pref = drawerPref();
+    if (pref) return pref === "min" ? "min" : "rest";
+    return S.mapState && S.mapState.sorties_left === 0 ? "min" : "rest";
+  }
+  const drawerNow = () => (S.mapDrawer === "home" ? homeDrawer() : S.mapDrawer);
+  // 桌機（寬 900 以上）抽屜是右欄、整欄攤開，沒有收起這回事
+  const deskMap = () => !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
+  // 玩家自己拉、點把手、點那一行：總覽收起或攤開記下來（之後回到總覽照它）；其餘照舊
+  function drawerTo(h) {
+    if (S.mapMode === "overview" && ["min", "rest", "half", "full"].includes(h)) {
+      try { localStorage.setItem(DRAWER_KEY, h === "min" ? "min" : "open"); } catch (e) { /* 記不住就只管這一次 */ }
+      if (h === "min" || h === "rest") h = "home";
+    }
+    setMapDrawer(h);
+  }
+  // 收起時那一行：在路上寫往哪裡、還有幾分；出陣寫今天還能幾次；其餘寫你在哪。整行一顆鈕，點了攤開
+  function miniHtml(base, st) {
+    const j = st.journey, here = placeOf(base, st.here);
+    const text = j ? `往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘`
+      : st.sorties_left !== null && st.suggest.length ? `<b>出陣</b> 今日還能 ${Number(st.sorties_left)} 次${here ? `・你在 ${esc(here.name)}` : ""}`
+      : `你在 <b>${esc(here ? here.name : "")}</b>`;
+    return `<button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${text}</span><i>▴</i></button>`;
   }
   // 抽屜的高度（設計第一節）：收著 230、半開（點了地點）240、拉高六成、全開九成四、版圖變化 320；桌機是右欄（CSS 蓋掉高度）
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
     // 版圖變化 320 高（企劃者 10/15 從對比圖選乙）：地圖大一截，曲線與處數在一屏，年表往下捲
-    return { rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 230;
+    if (h === "home") h = homeDrawer();
+    // 收起 54：把手 22＋一行 32（Joy 2026-10-17）
+    return { min: 54, rest: 230, peek: 240, half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 230;
   }
   function setMapDrawer(h) {
     S.mapDrawer = h;
@@ -4396,6 +4548,17 @@
     if (!d || !box) return;
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
+    // 收起換成那一行（或從那一行攤開）：抽屜裡的內容跟著換
+    const min = drawerNow() === "min" && S.mapMode === "overview" && !deskMap();
+    if (d.classList && d.classList.contains("min") !== min) {
+      d.classList.toggle("min", min);
+      const body = document.getElementById("mbody");
+      if (body && S.mapBase && S.mapState) body.innerHTML = drawerHtml();
+    }
+    // 攤開的總覽：把手右邊一個小字「收起 ▾」，看得出點把手就收（style.css 的 .can-fold）
+    if (d.classList) d.classList.toggle("can-fold", S.mapMode === "overview" && drawerNow() === "rest" && !deskMap());
+    const grab = document.getElementById("mgrab");
+    if (grab && grab.setAttribute) grab.setAttribute("aria-label", min ? "攤開" : S.mapMode === "overview" && drawerNow() === "rest" ? "收起（拖動拉高拉低）" : "拉高拉低");
     // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）：自訂屬性會一路繼承下去，平常點地點換抽屜高度時
     // 寫它會逼整棵地圖重算樣式（FB-322）。進版圖變化時 mapTimeline 先改 S.mapMode 再叫這裡，畫面重畫時 mapReady 也會叫
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
@@ -4407,7 +4570,7 @@
   // 抽屜蓋住地圖框底下多高（clampView 的 pad）：照抽屜要變成的高度算，不量 offsetHeight——抽屜換高度有 0.22 秒的動畫，
   // 那一刻量到的還是舊的高度（從找地點全開挑一處時會量到九成四，地圖被捲過頭）。桌機（右欄）與版圖變化（地圖框已經在抽屜上面）是 0
   function mapPad() {
-    if (!document.getElementById("mdrawer") || S.mapMode === "timeline" || (window.matchMedia && window.matchMedia("(min-width: 900px)").matches)) return 0;
+    if (!document.getElementById("mdrawer") || S.mapMode === "timeline" || deskMap()) return 0;
     return mapDrawerPx(S.mapDrawer);
   }
   // 選了的地點被抽屜蓋住（或在露出來那一塊的外面）：對準露出來的那一塊。沒被蓋住就不動（點在地圖上的地點不從手指底下跑開）
@@ -4425,8 +4588,9 @@
     const box = document.getElementById("mapx");
     if (!box) return;
     const top = document.getElementById("top"), tabs = document.querySelector(".tabs");
-    box.style.setProperty("--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
-    box.style.setProperty("--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
+    // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵約 1,600 個元素重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
+    setVar(box, "--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
+    setVar(box, "--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
   }
   let marksFrame = 0;
   // 照現在的倍率、濾鏡、選取、週次重畫記號、大區的顏色與上方那一條「天下」
@@ -4437,11 +4601,19 @@
     const s = S.mapView.s, week = mapWeek(), layers = new Set(S.mapLayers);
     S.marksS = s;
     const wrap = document.getElementById("map");
-    if (wrap) wrap.classList.toggle("far", s < MAP_FAR); // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）
-    const [low, high] = marksParts(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: S.mapSel, week, tl: S.mapMode === "timeline" });
+    // 看大局：底圖寫的大區名藏起來（記號那一層照大區中心另寫一份）。直接改那幾個字的 display，不在框上加 class：框上的 class 一變，
+    // 整棵地圖約 1,500 個元素都要重算樣式（縮放跨過那一檔時一下 40ms 上下）
+    const far = s < MAP_FAR;
+    if (wrap && wrap.classList.contains("far") !== far) {
+      wrap.classList.toggle("far", far); // 只留給測試與除錯看，style.css 不再照它藏字
+      wrap.querySelectorAll(".tx-region-name").forEach((el) => { el.style.display = far ? "none" : ""; });
+    }
+    // 選了的那一圈不跟著記號畫（sel: null），另外畫在上面那一張最後（drawSel）：點一處只換那一圈，不必整批重建一千多個元素
+    const [low, high] = marksParts(S.mapBase, S.mapState, { k: 1 / s, far: s < MAP_FAR, layers, sel: null, week, tl: S.mapMode === "timeline" });
     g.innerHTML = low;
     const top = document.getElementById("mkt"); // 會跳的圈與之後畫的那一段（FB-323）
-    if (top) top.innerHTML = high;
+    if (top) top.innerHTML = `${high}<g id="msel" pointer-events="none"></g>`;
+    drawSel();
     const ins = insightOn(S.mapBase, layers);
     const tint = regionTint(S.mapBase, S.mapState, week, layers.has("control") && !ins); // 意境開著不畫勢力的大區底色
     document.querySelectorAll("#map path[data-region]").forEach((el) => {
@@ -4454,7 +4626,89 @@
       if (!hud.hidden) hud.innerHTML = hudHtml(S.mapBase, S.mapState, week);
     }
   }
+  // 選了的地點那一圈（同 marksParts 的 sel 那一圈：圓盤外 9px、線寬 3px，照螢幕固定）。點地點、收起只叫這裡（Joy 2026-10-17
+  // 「輿圖還是很 lag」：以前點一下整批記號重畫，節流到六倍要兩三百毫秒）
+  function drawSel() {
+    const box = document.getElementById("msel");
+    if (!box || !S.mapView) return;
+    const p = S.mapSel && placeXY(S.mapSel);
+    if (!p) { if (box.firstChild) box.innerHTML = ""; return; }
+    const k = 1 / S.mapView.s, r = (S.mapView.s < MAP_FAR ? 6 : 11) * k;
+    box.innerHTML = `<circle cx="${p[0]}" cy="${p[1]}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}"/>`;
+  }
   const scheduleMarks = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
+
+  // ── 底圖烤成一張圖（Joy 2026-10-18「輿圖滑動的時候還是很卡」）──
+  // 底圖約 1,200 個 SVG 元素（山頭、樹、河、路）加一層絹紋雜訊濾鏡（feTurbulence）：拖到新的一塊、捏合換倍率，Chrome 都要把這些
+  // 元素連同雜訊重新點陣化（手機上一格 256px 要好幾毫秒，捏合一下重畫兩三百格），每一幀的屬性樹也要走過整棵。打開輿圖之後把不會變的
+  // 那些畫成一張點陣圖（<image>），只留會變的：底色那一塊（最前面的 rect）、大區（path[data-region]，drawMarks 照勢力換 fill）、字、記號。
+  // 手勢中只剩貼一張圖。圖的解析度照螢幕（最多 3 倍、一千兩百萬像素）：原尺寸看是清楚的，放到兩倍時山水略軟，字照舊是向量
+  const BAKE_PX = 12e6;
+  const baked = { key: null, url: null }; // 這一張底圖烤好的圖（同一張底圖整層重畫時不必再烤）
+  let bakeTimer = 0;
+  function bakeLater() {
+    clearTimeout(bakeTimer);
+    bakeTimer = setTimeout(bakeBase, 250);
+  }
+  // 要烤進圖裡的：最前面那一塊底色、大區、字、記號、defs 以外的
+  function bakeable(svg) {
+    const first = svg.querySelector(":scope > rect");
+    return [...svg.children].filter((el) => {
+      const t = el.tagName.toLowerCase();
+      return el !== first && t !== "defs" && t !== "text" && t !== "image" && el.id !== "mk" && !el.hasAttribute("data-region") && !(el.querySelector && el.querySelector("text"));
+    });
+  }
+  async function bakeBase() {
+    const wrap = document.getElementById("map");
+    const svg = wrap && wrap.querySelector(".tx-world-map > svg");
+    if (!svg || svg.dataset.baked || typeof Image === "undefined" || typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) return;
+    if (mapHeld()) { bakeLater(); return; } // 手勢中不烤（烤的那一下要佔主執行緒）
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    const parts = bakeable(svg);
+    if (!vb || !vb.width || !parts.length) return;
+    const key = S.mapBase && S.mapBase.key;
+    svg.dataset.baked = "1";
+    try {
+      let url = baked.key === key ? baked.url : null;
+      if (!url) {
+        const f = Math.max(1, Math.min(3, window.devicePixelRatio || 1, Math.sqrt(BAKE_PX / (vb.width * vb.height))));
+        const w = Math.round(vb.width * f), h = Math.round(vb.height * f);
+        const defs = svg.querySelector(":scope > defs");
+        const src = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb.width} ${vb.height}" width="${w}" height="${h}">${defs ? defs.outerHTML : ""}${parts.map((el) => el.outerHTML).join("")}</svg>`;
+        const vec = URL.createObjectURL(new Blob([src], { type: "image/svg+xml" }));
+        const img = new Image();
+        img.src = vec;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(vec);
+        const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+        cv.width = cv.height = 0;
+        if (!blob) throw new Error("toBlob");
+        url = URL.createObjectURL(blob);
+        if (baked.url && baked.key !== key) URL.revokeObjectURL(baked.url);
+        Object.assign(baked, { key, url });
+        const pic = new Image();
+        pic.src = url;
+        await pic.decode(); // 先解好碼再換上，換的那一下不閃
+      }
+      // 等的時候底圖可能換掉了（劇情開了新地點、登出）
+      if (!svg.isConnected || (S.mapBase && S.mapBase.key) !== key) return;
+      const now = bakeable(svg);
+      const im = document.createElementNS("http://www.w3.org/2000/svg", "image");
+      for (const [k, v] of [["x", 0], ["y", 0], ["width", vb.width], ["height", vb.height], ["preserveAspectRatio", "none"], ["href", url]]) im.setAttribute(k, v);
+      im.setAttribute("class", "map-baked");
+      im.setAttribute("pointer-events", "none");
+      // 圖放在最後一塊大區後面（絹紋本來在大區底下，現在疊在大區上面：只有一成的淡褐雜訊，看不出差別）
+      const regions = svg.querySelectorAll(":scope > [data-region]");
+      const after = regions.length ? regions[regions.length - 1] : svg.querySelector(":scope > rect");
+      svg.insertBefore(im, after ? after.nextSibling : now[0]);
+      now.forEach((el) => el.remove());
+    } catch (e) {
+      /* 畫不出來（舊瀏覽器、記憶體不夠）：照舊用向量的底圖 */
+    }
+  }
 
   // ── 輿圖的視圖（W16）：純數學，不碰 DOM ──
   // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }，地圖座標＝原尺寸的 px。存中心不存位移：視窗寬高變了（轉向、拉視窗）還對得上。
@@ -4490,7 +4744,7 @@
   // 一指或滑鼠左鍵拖移、雙指縮放、滾輪縮放；按下到放開都沒移超過 8px、也從沒有第二指，才算點了一下（選地點）。
   // pointermove／up 掛在 document：重畫換掉了地圖框，手勢也接得下去（mapReady 會把指標抓回新的框）
   const TAP_SLOP = 8;
-  const grip = { pts: new Map(), tap: null, ref: null, frame: 0 }; // 按著的指標（id → [x, y]）、點一下的候選、起點、排好的那一幀
+  const grip = { pts: new Map(), tap: null, ref: null, g: null, pad: 0, frame: 0 }; // 按著的指標（id → [x, y]）、點一下的候選、起點、排好的那一幀
   const mapHeld = () => grip.pts.size > 0;
   let mapBox = null; // 上次套用時的地圖框大小 [寬, 高]：大小變了而原本是整張，就維持整張
   let glideTimer = 0;
@@ -4501,7 +4755,7 @@
     const vb = svg && svg.viewBox && svg.viewBox.baseVal;
     if (!vb || !vb.width || !vb.height || !wrap.clientWidth || !wrap.clientHeight) return null;
     const r = wrap.getBoundingClientRect();
-    return { wrap, svg, top: wrap.querySelector(".tx-world-map > .mk-top"), vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
+    return { wrap, svg, world: svg.parentNode && svg.parentNode.style ? svg.parentNode : svg, vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
       x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
   }
   // 地點的中心：照底圖的清單（記號還沒畫出來也找得到）
@@ -4524,22 +4778,21 @@
       S.mapView = { ...S.mapView, s: fitScale(vw, vh, W, H) };
     }
     mapBox = [vw, vh];
-    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H, mapPad()));
+    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H, mapHeld() && grip.g === g ? grip.pad : mapPad()));
     clearTimeout(glideTimer);
     wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
     const shift = `translate(${vw / 2 - v.cx * v.s}px, ${vh / 2 - v.cy * v.s}px) scale(${v.s})`;
-    g.svg.style.transform = shift;
-    if (g.top) g.top.style.transform = shift; // 疊在上面的那一張（FB-323）跟著底圖走
-    // 點擊區跟著縮放：透明圓 r=16，外框寬 2×(R−16) 把它撐到半徑 R（style.css 的 --hit）
-    const hit = `${Math.round(2 * (hitRadius(v.s) - 16))}px`;
-    if (wrap.style.getPropertyValue("--hit") !== hit) wrap.style.setProperty("--hit", hit);
+    // 位移與倍率套在兩張 svg 的外框（.tx-world-map）上，不套在 svg 本身：svg 根元素的 transform 一變，Chrome 要照新的倍率重排
+    // 每一個 <text>（約 150 個地名、每一幀 Layout 150/1613），再重畫整張底圖；套在外框上拖移只動合成層（Joy 2026-10-17「輿圖還是很 lag」）
+    g.world.style.transform = shift;
     // 到頂、到底那一顆按不下去（看得出已經到頭了）
     const zin = document.querySelector('.map-ctl [data-step="in"]'), zout = document.querySelector('.map-ctl [data-step="out"]');
     if (zin) zin.disabled = v.s >= MAP_MAX - 1e-9;
     if (zout) zout.disabled = v.s <= fitScale(vw, vh, W, H) + 1e-9;
-    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）
-    if (!S.marksS || Math.abs(v.s - S.marksS) / v.s > 0.08) scheduleMarks();
+    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）。手指還捏著時不重畫：重畫一次要重建三百個記號、重排整張（節流到六倍
+    // 約 100ms），捏合中重畫就頓一下；字跟著圖一起放大縮小，放開時（gripEnd）照一成補畫
+    if (!S.marksS || (!mapHeld() && Math.abs(v.s - S.marksS) / v.s > 0.08)) scheduleMarks();
   }
 
   // 這次載入網頁後第一次打開輿圖的倍率，對準所在地：手機照原尺寸；桌機照地圖區的寬讓地圖佔滿左邊整塊（FB-263：1920 寬時地圖區
@@ -4571,6 +4824,7 @@
     }
     applyMapView(false, g);
     drawMarks();
+    bakeLater();
     drawerGrab();
     if (S.mapFocus) { mapCenterOn(S.mapFocus); S.mapFocus = null; } // 江湖頁的小地圖點了某一處（設計第八節）
   }
@@ -4595,7 +4849,8 @@
   // 兩指記開始時的視圖、兩指距離，以及兩指中點底下的地圖座標（之後要一直跟著中點走）
   function gripBase() {
     const pts = [...grip.pts.values()];
-    const g = mapGeom(document.getElementById("map"));
+    const g = (grip.g = mapGeom(document.getElementById("map")));
+    grip.pad = mapPad();
     grip.ref = null;
     if (!g || !S.mapView || !pts.length) return;
     if (pts.length === 1) { grip.ref = { at: pts[0] }; return; }
@@ -4606,7 +4861,8 @@
   // 一幀套用一次（同一幀的多次移動合併）
   function gripStep() {
     grip.frame = 0;
-    const g = mapGeom(document.getElementById("map"));
+    // 地圖框的大小與位置在按下時量好（gripBase）：每一幀量一次會逼瀏覽器先把上一幀的位移排好版
+    const g = grip.g && grip.g.wrap.isConnected ? grip.g : mapGeom(document.getElementById("map"));
     const ref = grip.ref;
     const pts = [...grip.pts.values()];
     if (!g || !ref || !S.mapView) return;
@@ -4614,12 +4870,12 @@
       // 地圖跟著手指（游標）走
       const [x, y] = pts[0];
       const v = S.mapView;
-      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H, mapPad());
+      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H, grip.pad);
       ref.at = [x, y];
     } else if (pts.length === 2 && ref.m) {
       const [[ax, ay], [bx, by]] = pts;
       const s = clampScale(ref.v.s * Math.hypot(bx - ax, by - ay) / ref.d, g.vw, g.vh, g.W, g.H);
-      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H, mapPad());
+      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H, grip.pad);
     } else return;
     applyMapView(false, g);
   }
@@ -4642,26 +4898,27 @@
   function gripEnd() {
     if (grip.frame) cancelAnimationFrame(grip.frame);
     grip.pts.clear();
-    grip.tap = grip.ref = null;
+    grip.tap = grip.ref = grip.g = null;
     grip.frame = 0;
     const wrap = document.getElementById("map");
     for (const c of ["grabbing", "moving"]) if (wrap && wrap.classList.contains(c)) wrap.classList.remove(c); // 有才拿（觸控點一下兩樣都沒有）
+    if (S.mapView && S.marksS && Math.abs(S.mapView.s - S.marksS) / S.mapView.s > 0.08) scheduleMarks(); // 捏合中沒畫的那一截補上
   }
 
   // 在地圖上點了一下：選那個地點、抽屜換成它（不問伺服器，疊層裡都有），視圖不動；點到空白收起
   function mapPick(target) {
     const loc = target && target.closest && target.closest("[data-loc]");
     if (!loc) {
-      if (S.mapMode === "place") { S.mapSel = null; S.mapMode = "overview"; setMapDrawer("rest"); redrawDrawer(); drawMarks(); }
+      if (S.mapMode === "place") { S.mapSel = null; S.mapMode = "overview"; setMapDrawer("home"); redrawDrawer(); drawSel(); }
       return;
     }
     S.mapSel = loc.getAttribute("data-loc");
     if (S.mapMode !== "timeline") {
       S.mapMode = "place";
-      if (S.mapDrawer === "rest") setMapDrawer("peek");
+      if (["home", "min", "rest"].includes(S.mapDrawer)) setMapDrawer("peek");
     }
     redrawDrawer();
-    drawMarks();
+    drawSel();
     keepSelVisible(); // 點的地點在抽屜會蓋住的地方（下緣）：對準露出來的那一塊；其餘照舊不動
   }
 
@@ -4726,6 +4983,16 @@
 
   // 見聞的「榜單」（leaderboard.view）：上面一排六張榜的籤，一次看一張（S.board，預設第一張）；前十名，你在榜上標出來，
   // 不在前十名時底下多一行你排第幾。名號與那一段都是伺服器給的原文，這裡跳脫
+  // 榜單的神器譜（Joy 2026-10-17 從江湖史搬過來）：不排名，照季分段、新的一季在前；一筆一列，名字一行、種類屬性與在誰手上一行
+  function bookRows(book) {
+    if (!book.length) return '<p class="muted">還沒有人打出神器。</p>';
+    let out = "", season = null;
+    for (const r of book) {
+      if (r.season !== season) { out += `${season === null ? "" : "</ul>"}<p class="book-season">第 ${Number(r.season)} 季</p><ul class="board-book">`; season = r.season; }
+      out += `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
+    }
+    return out + "</ul>";
+  }
   function boardsHtml(b) {
     if (!b) return '<p class="muted">載入中…</p>';
     const list = b.boards || [];
@@ -4733,6 +5000,7 @@
     const cur = list.find((x) => x.id === S.board) || list[0];
     const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
     const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}"><span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span></li>`;
+    if (cur.book) return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${bookRows(cur.book)}</div>`;
     const rows = cur.rows.length ? `<ol class="board-list">${cur.rows.map(row).join("")}</ol>` : '<p class="muted">尚無人留名。</p>';
     const mine = cur.mine ? `<p class="board-mine">你：第 ${Number(cur.mine.rank)} 名・${esc(cur.mine.text)}</p>` : "";
     return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;
@@ -5062,9 +5330,10 @@
     S.message = "";
     S.artOpen = null;
     S.artInfo = null; S.insOpen = null; S.libAll = false; S.rackAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
-    S.artNote = null;
+    S.artNote = null; S.mxNote = null; S.meltNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
+    S.forgeMade = null;
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
@@ -5437,38 +5706,75 @@
     if (S.tab === "jianghu") renderPage();
   }
 
-  // 修練（cultivate）不捲回頁首（W7）：反覆修練時，那一門的卡片留著、頁面留在原地，結果寫在那一門卡片裡、按鈕的底下（S.artNote），
-  // 頁首的訊息照舊也有。重畫整頁會讓頁首的訊息與卡片的高度變動、把按鈕推走，所以重畫前記下「修練」鈕在螢幕上的位置，
-  // 畫完捲回去補差——玩家的拇指底下永遠還是那顆鈕。例外：這一次練成了絕學、要定名——定名的表單在頁首，照舊捲上去；
-  // 這一次做完了引導的一步（師父的下一句在頁首），也捲上去；改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
-  function cultivateTop(id) {
-    const btn = [...document.querySelectorAll('[data-act="cultivate"]')].find((el) => el.dataset.id === id);
-    return btn ? btn.getBoundingClientRect().top : null;
+  // 修練頁的動作按完停在原地（W7 起只有修練；Joy 2026-10-18「武學升級的時候為什麼要點一次升級又把畫面跳到置頂？」之後每一顆都是）：
+  // 每個動作認一個錨（mxPlace）：重畫前記下它在螢幕上的位置，畫完捲回去補差——玩家的拇指底下還是那一塊。結果寫在錨附近
+  // （武學寫在那一門卡片的按鈕底下 S.artNote，熔掉的寫在功法庫標題底下 S.meltNote，其餘寫在那一塊裡 S.mxNote），頁首那一行不寫。
+  // 照舊回頁首的只有：這一次練成了絕學、要定名（表單在頁首），做完了引導的一步（師父的下一句在頁首），絕學定名本身與沒認的動作。
+  // 回 { from: [選擇器, id], to: [選擇器, id], note: "art:<id>"｜"lib"｜S.mxNote 的 at }，認不得回 null
+  function mxPlace(op, extra) {
+    const x = S.menxia || {};
+    const arts = x.owned_arts || [];
+    const card = (kind) => [`.acard[data-worn="${kind}"]`, null];
+    const slot = (id) => (((x.gear || {}).slots) || []).find((g) => (g.worn && g.worn.id === id) || (g.rack || []).some((w) => w.id === id));
+    const gear = (name) => name ? { from: [`.gear-slot[data-slot="${name}"]`, null], to: [`.gear-slot[data-slot="${name}"]`, null], note: "gear:" + name } : null;
+    switch (op) {
+      case "practice": { // 練成：身上那一門的卡
+        const a = arts.find((r) => r.worn && r.kind === S.kind);
+        return a ? { from: card(S.kind), to: card(S.kind), note: "art:" + a.id } : null;
+      }
+      case "cultivate": return extra.art ? { from: ['[data-act="cultivate"]', extra.art], to: ['[data-act="cultivate"]', extra.art], note: "art:" + extra.art } : null;
+      case "switch": { // 改練：從庫裡那一列換到身上那張卡，畫完讓那張卡停在剛才按的地方
+        const a = arts.find((r) => r.id === extra.art);
+        return a ? { from: ['[data-act="switch"]', extra.art], to: card(a.kind), note: "art:" + extra.art } : null;
+      }
+      case "melt": return { from: ['[data-act="melt"]', extra.art], to: null, note: "lib" }; // 那一列不在了：捲到功法庫標題底下那一句看得到為止
+      case "melt_insight": return { from: [".ins", null], to: [".ins", null], note: "ins" };
+      case "wield": case "dismantle": case "name_divine": case "bind_art": return gear((slot(extra.weapon) || {}).slot);
+      case "feed": return gear("mount");
+      case "chuangong": case "join": case "leave": return { from: [".person-card", null], to: [".person-card", null], note: "person" };
+      case "heal": return { from: ['[data-op="heal"]', null], to: ['[data-op="heal"]', null], note: "heal" };
+      default: return null;
+    }
+  }
+  function placeTop(at) {
+    if (!at) return null;
+    const el = [...document.querySelectorAll(at[0])].find((e) => at[1] == null || (e.dataset && e.dataset.id === at[1]));
+    return el ? el.getBoundingClientRect().top : null;
   }
 
   async function mx(op, extra = {}) {
     await busy(async () => {
-      const stay = op === "cultivate" && !!extra.art;
-      const was = S.menxia, mark = stay ? cultivateTop(extra.art) : null;
+      const place = mxPlace(op, extra);
+      const was = S.menxia, mark = place ? placeTop(place.from) : null;
       const step = guideKey(S.main && S.main.guide);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
-      // 批量熔煉的結果寫在功法庫那裡（按的地方），不捲回頂上、不在頂上再寫一次
+      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
+      // 這一次做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7），不捲上去玩家看不到。
+      // 比的是步驟，不特別認序章，所以以後任何被修練頁的動作做完的引導步驟都一樣
+      const guideMoved = guideKey(r.main && r.main.guide) !== step;
       const batch = op === "melt_many";
-      S.message = batch ? "" : r.message;
-      S.meltNote = batch ? r.message : null;
-      S.artNote = stay ? { id: extra.art, html: r.message } : null;
+      const stay = !!place && mark !== null && !needsName && !guideMoved;
+      const note = place && mark !== null ? place.note : null; // 回頁首的那幾次結果也照樣寫在錨附近（頁首那一行也有）
+      // 批量熔煉的結果寫在功法庫那裡（按的地方），不捲回頂上、不在頂上再寫一次；留在原地的動作同樣只寫在錨附近
+      S.message = batch || stay ? "" : r.message;
+      S.meltNote = batch || note === "lib" ? r.message : null;
+      S.artNote = note && note.startsWith("art:") ? { id: note.slice(4), html: r.message } : null;
+      S.mxNote = note && note !== "lib" && !note.startsWith("art:") ? { at: note, html: r.message } : null;
+      if (op === "switch") S.artOpen = null; // 改練真的送出了：庫裡那一列收起（它已經換到身上那張卡）
       setMain(r.main);
       renderTop();
+      if (op === "switch" && S.tab === "craft") { // 煉製頁新武學卡上的「改練上身」：留在卡那裡，結果用提示泡泡說
+        S.message = ""; S.artNote = null;
+        keepPlace(() => renderPage(), ".made-card");
+        const text = String(r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (text) toast(text);
+        return;
+      }
       renderPage();
-      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
-      // 這一次修練做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7 「按打坐歇一歇」），
-      // 不捲上去玩家看不到。比的是步驟，不特別認序章，所以以後任何被修練做完的引導步驟都一樣
-      const guideMoved = guideKey(r.main && r.main.guide) !== step;
-      const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
-      if (op === "chuangong") return; // 傳功常常連按好幾下：留在人物卡那裡，不捲回頂上
-      if (batch) { document.querySelector(".melt-result")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+      if (batch || (stay && note === "lib")) { document.querySelector(".melt-result")?.scrollIntoView({ block: batch ? "center" : "nearest", behavior: "smooth" }); return; }
+      const now = stay ? placeTop(place.to) : null;
       if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
@@ -5497,6 +5803,8 @@
       if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
       const el = document.getElementById("forge-line");
       if (el) el.innerHTML = r.line;
+      const warn = document.getElementById("kiln-warn");
+      if (warn) warn.innerHTML = kilnWarn();
     } catch (e) { /* 提示過 */ }
   }
 
@@ -5505,7 +5813,7 @@
 
   // 重畫時畫面不跳：記下 anchor（預設是第一個看得到的「開爐」或點子清單）在螢幕上的位置，畫完捲回同一個位置
   function keepPlace(draw, anchor) {
-    const sel = anchor || "#forge";
+    const sel = anchor || "#forge-line";
     const before = document.querySelector(sel)?.getBoundingClientRect().top;
     draw();
     const after = document.querySelector(sel)?.getBoundingClientRect().top;
@@ -5516,21 +5824,24 @@
   async function forge() {
     const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
-    let guideMoved = false;
+    let guideMoved = false, made = false;
     await busy(async () => {
+      const lab = (btn.querySelector && btn.querySelector(".kiln-lab")) || btn; // 小太極上那兩個字（大爐子縮起來時的開爐鈕）
       btn.disabled = true;
-      btn.textContent = "爐火正旺…";
+      lab.textContent = "爐火正旺…";
       btn.classList.add("forging");
       // 等結果的這段時間（首次發現的配方要等模型取名）整座爐子晃動、火舌竄高、太極快轉
       document.querySelector(".furnace .w-furnace")?.classList.add("forging");
       document.querySelector(".furnace .w-taichi")?.classList.add("hot");
       S.forgeResult = { html: esc(FORGE_WAIT) };
-      const stop = watchQueue(btn, "爐火正旺…");
+      const stop = watchQueue(lab, "爐火正旺…");
       try {
         const r = await api("/api/menxia/forge", forgeBody());
         S.menxia = r.menxia;
         S.message = "";
         S.forgeResult = { html: r.message };
+        S.forgeMade = r.made ? r.made_item || null : null; // 合出來的那一樣：結果底下畫它的卡
+        made = !!r.made;
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         if (r.made) S.forgeSel = [];
@@ -5547,8 +5858,30 @@
       } finally { stop(); }
     }, WAIT_LINES.forge);
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
-    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else keepPlace(() => renderPage());
+    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else {
+      keepPlace(() => renderPage());
+      if (made) kilnBurst();
+      showMadeCard();
+    }
     updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
+  }
+
+  // 開爐成了：爐裡的太極猛轉兩圈（大小兩座都是），新武學的卡從爐裡冒出來；轉完回到平常的慢轉
+  function kilnBurst() {
+    document.querySelectorAll(".furnace .w-taichi, .kiln-taichi .w-spin").forEach((g) => {
+      g.classList.add("burst");
+      g.addEventListener("animationend", () => g.classList.remove("burst"), { once: true });
+    });
+    const card = document.querySelector(".made-card");
+    if (card) card.classList.add("emerge");
+  }
+
+  // 新武學的卡被黏在上面的固定列蓋住了（往下捲著開爐時）：捲到卡頭剛好露在固定列底下；本來就看得到就不動
+  function showMadeCard() {
+    const card = document.querySelector(".made-card"), bar = document.querySelector(".kiln.compact");
+    if (!card || !bar || typeof card.getBoundingClientRect !== "function") return;
+    const under = bar.getBoundingClientRect().bottom + 8, top = card.getBoundingClientRect().top;
+    if (top < under) window.scrollBy({ top: top - under, left: 0, behavior: "smooth" });
   }
 
   async function travel(mode) {
@@ -5556,7 +5889,7 @@
       const r = await api("/api/travel", { place: S.mapSel, mode });
       setMain(r.main);
       renderTop();
-      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "rest"; } // 出發了：留在輿圖，抽屜收回總覽
+      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "home"; } // 出發了：留在輿圖，抽屜收回總覽
       else toast(`沒能出發：${r.reason}`);
       await loadMap();
       setMapDrawer(S.mapDrawer);
@@ -5638,9 +5971,10 @@
           drawMarks();
           setTimeout(() => { const q = document.getElementById("map-q"); if (q) q.focus(); }, 230);
           break;
+        case "map-open": drawerTo("rest"); break; // 收起的那一行點了：攤開（記下來）
         case "map-back":
           S.mapMode = "overview"; S.mapSel = null; S.mapQuery = "";
-          setMapDrawer("rest");
+          setMapDrawer("home");
           redrawDrawer();
           drawMarks();
           break;
@@ -5901,9 +6235,7 @@
           break;
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
-          const was = S.menxia;
-          await mx("switch", { art: el.dataset.id });
-          if (S.menxia !== was) { S.artOpen = null; if (S.tab === "practice") renderPage(); }
+          await mx("switch", { art: el.dataset.id }); // 真的送出了才收起卡片（mx 換上伺服器回來的那一份才收）；還在忙或失敗就照舊開著
           break;
         }
         case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; renderPage(); break;
@@ -5915,7 +6247,8 @@
           const ticked = !!(row && row.cultivate.legend && S.legendTick[id]);
           const was = S.menxia;
           delete S.legendTick[id];
-          await mx("cultivate", { art: id, use_legend: ticked });
+          // 以心得修練那一顆（data-xinde）：同一個修練，付心得不付體力（Joy 2026-10-18）
+          await mx("cultivate", { art: id, use_legend: ticked, ...(el.dataset.xinde ? { by_xinde: true } : {}) });
           if (ticked && S.menxia === was) S.legendTick[id] = true;
           break;
         }

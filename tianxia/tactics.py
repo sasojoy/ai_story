@@ -784,6 +784,34 @@ def _last_rally(f: _Fight, h: Holder) -> None:  # 厚：氣血見底（或氣勢
     f.say(h, f"退無可退，這一回合連環，守一 {turns} 回合")
 
 
+# ── 武學技能分檔（Joy 2026-10-17）：合成擲得到的高階技能（content/traits.json 的 high）。對電腦對手也有效：都直接改那一回合的勝負或氣血 ──
+
+
+def _flash(f: _Fight, h: Holder) -> None:  # 流光：這一回合連環、無隙
+    f.chain = True
+    f.flawless = True
+    f.say(h, "身法一閃，這一回合連環、無隙")
+
+
+def _scorch(f: _Fight, h: Holder) -> None:  # 烈陽：剋中後對手焚身幾回合
+    p = h.tactic.params
+    turns = int(p.get("turns", 2))
+    f.burn("焚身", p.get("dot_pct", 0.0), turns)
+    f.say(h, f"烈勁透體，{f.ctx.foe}焚身 {turns} 回合")
+
+
+def _golden(f: _Fight, h: Holder) -> None:  # 金身：氣血見底時一場一次，守一、回氣血
+    p = h.tactic.params
+    used = h.tactic.name + "|用"
+    if f.stacks.get(used, 0) or f.ctx.hp_ratio > p.get("hp_pct", 0.3):
+        return
+    f.stacks[used] = 1
+    turns = int(p.get("turns", 1))
+    f.put(f.us, "守一", turns, now=True)
+    f.heal(h.key, p.get("heal_pct", 0.0))
+    f.say(h, f"金身護體，守一 {turns} 回合，回氣血 {value_text('heal_pct', p.get('heal_pct', 0.0))}")
+
+
 KINDS = {
     "chase_disarm": _chase_disarm, "opening_ward": _opening_ward, "disarm": _disarm, "rally": _rally,
     "heavy_blow": _heavy_blow, "cleanse": _cleanse, "roar": _roar, "unbroken": _unbroken, "vanguard": _vanguard,
@@ -796,6 +824,7 @@ KINDS = {
     "insight": _insight, "immune": _quiet, "last_stand": _quiet, "assault": _quiet, "pierce": _pierce, "quake": _quiet,
     "first_shot": _quiet, "zhaoyi": _zhaoyi, "flawless": _flawless,
     "swift": _swift, "shatter": _shatter, "streak": _quiet, "leech": _leech, "haze": _haze, "last_rally": _last_rally,
+    "flash": _flash, "bulwark": _quiet, "scorch": _scorch, "elude": _quiet, "golden": _golden,
 }
 GUARD_KINDS = ("rebound_guard", "hold_city", "steady")  # 出固守才起作用的：自動出招多出固守
 # 決戰裡發得了的（沒有單一的對手：只算自己身上的連環、無隙、化影、推力加減、固守加重、回氣血與自扣；
@@ -826,6 +855,7 @@ def _busy(f: _Fight, h: Holder) -> bool:
         or (kind == "foresight" and "看穿" in f.us.later)
         or (kind in ("mist", "haze") and (f.us.has("霧") or f.foe.has("霧")))
         or (kind == "shatter" and (f.foe.has("卸勁") or "卸勁" in f.foe.later))
+        or (kind == "scorch" and "焚身" in dots)
     )
 
 
@@ -1093,6 +1123,17 @@ def _answer(f: _Fight, mine: str | None, his: str | None) -> tuple[float, bool]:
         elif t.kind == "quake":  # 撼山棍〔撼地〕：每次固守，對手下一回合有機會卸勁
             if mine == "固守" and f.roll(p.get("chance_pct", 0.0) * f.rate(h)) and f.put(f.foe, "卸勁", 1, now=False):
                 f.say(h, f"一棍頓地，{f.ctx.foe}下一回合卸勁")
+        elif t.kind == "elude":  # 迷蹤：對手這一擊打空（他推不動你、你不掉氣血）
+            if his is not None and f.roll(f.rate(h)):
+                out += u
+                stop = True
+                f.say(h, f"身形飄忽，{f.ctx.foe}這一擊打空")
+        elif t.kind == "bulwark":  # 鎮岳：前幾回合被剋中時那一下的推力少吃一半，一半機會不掉氣血
+            if counter(mine, his) < 0 and f.roll(f.rate(h)):
+                out += p.get("cut_pct", 0.5) * u
+                shrug = f.roll(p.get("guard_pct", 0.5))
+                stop = stop or shrug
+                f.say(h, "穩如山岳，這一下只吃了一半" + ("，沒傷到氣血" if shrug else ""))
         elif t.kind == "first_shot":  # 追電弩〔先發〕：對手出了被你剋的招，他那一回合定身
             if counter(mine, his) > 0 and f.roll(f.rate(h)) and f.put(f.foe, "定身", 1, now=True):
                 out += u

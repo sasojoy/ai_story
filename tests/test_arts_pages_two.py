@@ -500,9 +500,9 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {};'
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
-             "pickMark", "craftView", "craftFilterRow", "craftChip", "manualRows", "manualEntry", "bookIcon"]
+             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
 
 
@@ -1007,7 +1007,7 @@ def test_each_library_row_carries_what_batch_melting_needs_to_judge_it(real):
     assert sig["power"] == round(power_at(mine, rows["caocao_wugong"]["level"]), 1)
     assert sig["worn_diff"] == round(power_at(mine, 1) - power_at(team.player_art(game.state, real, game.world, worn), 1), 1)
     assert sig["worn_diff"] > 0 and sig["tactic"]  # 本命武學：比開局那門強、帶本命戰法
-    assert sig["traits"] == [{"name": traits.general(real, a).name, "layers": traits.traits_of(mine).count(a)} for a in dict.fromkeys(traits.traits_of(mine))]
+    assert sig["traits"] == [{"name": traits.general(real, a).name, "layers": traits.traits_of(mine).count(a), "tier": 1} for a in dict.fromkeys(traits.traits_of(mine))]
     assert rows[worn]["judge"]["worn_diff"] is None  # 身上那門自己沒得比
     game.state.player.insights = ["feng"]
     ins = skillview.insight_rows(game.state, real, game.world)[0]

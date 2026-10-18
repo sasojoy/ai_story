@@ -45,6 +45,12 @@ def test_all_three_moves_and_three_digit_scores_split():
 
 
 @needs_node
+def test_the_ordered_move_keeps_its_mark_in_the_small_note():
+    html, = label_html(option("甲（強攻・95 分・主將令）"))
+    assert html == '<span class="b-name">甲</span><span class="b-move">強攻・95 分・主將令</span>'
+
+
+@needs_node
 def test_other_labels_stay_a_plain_span():
     """不是三招的選項：舊的穩守／猛攻、移動、加入戰局——一律照舊，連括號裡長得像的也不拆（只拆戰鬥出招）。"""
     htmls = label_html(

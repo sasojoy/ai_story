@@ -17,7 +17,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "marksSvg", "regionTint", "controlAt", "hudHtml", "chipsHtml", "drawerHtml",
-         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView", "setMapDrawer", "mapPad", "toggleLayer", "insightRow"]
+         "overviewHtml", "placeHtml", "searchHtml", "timelineHtml", "graphSvg", "chartHtml", "mapDrawerPx", "firstScale", "clampView", "focusView", "setMapDrawer", "mapPad", "toggleLayer", "insightRow", "homeDrawer", "drawerNow", "drawerTo", "redrawDrawer", "miniHtml"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 NOW = "{ k: 1, far: false, layers: new Set(%s), sel: null, week: H.S.mapState.now_week }"
 
@@ -36,10 +36,10 @@ def _game(faction="guan", at="yingchuan", classic=False, third_party=False):
     return game
 
 
-def run(game, script, **S):
+def run(game, script, stored=None, **S):
     payload = {"m": server.main_view(game), "script": script,
                "S": {"mapBase": game.map_base(), "mapState": game.map_state(), **S},
-               "menxia": None, "stored": {}, "responses": {}}
+               "menxia": None, "stored": stored or {}, "responses": {}}
     return webharness.run(DRIVER, payload)
 
 
@@ -487,3 +487,93 @@ def test_the_terrain_shows_next_to_the_name_only_with_the_insight_layer():
     on = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "baima_temple");', mapLayers=["insight"])
     off = run(_game(), 'return H.placeHtml(H.S.mapBase, H.S.mapState, "baima_temple");')
     assert '<span class="terrain">寺院</span>' in on and 'class="terrain"' not in off
+
+
+# ── 抽屜收起（Joy 2026-10-17「今天去哪裡出陣能不能真的縮起來，手機版受影響很大」）──
+DRAWER_DOM = FAKE_DOM.replace("const drawer = { style: {}, offsetHeight: 0 };",
+    "const cls = new Set(); const drawer = { style: {}, offsetHeight: 0, classList: { contains: (c) => cls.has(c), toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)) } };\n"
+    "const body = { innerHTML: '' };").replace("mdrawer: drawer };", "mdrawer: drawer, mbody: body };")
+
+
+def _drawer(stored=None, left=None, script=""):
+    game = _game()
+    st = game.map_state()
+    if left is not None:
+        st["sorties_left"] = left
+    payload = {"m": server.main_view(game), "S": {"mapBase": game.map_base(), "mapState": st}, "menxia": None, "stored": stored or {}, "responses": {},
+               "script": DRAWER_DOM + script}
+    return webharness.run(DRIVER, payload)
+
+
+def test_the_drawer_starts_folded_when_no_sorties_are_left_and_open_otherwise():
+    assert _drawer(left=0, script="return [H.homeDrawer(), H.mapDrawerPx('home')];") == ["min", 54]
+    assert _drawer(left=3, script="return [H.homeDrawer(), H.mapDrawerPx('home')];") == ["rest", 230]
+
+
+def test_what_the_player_chose_wins_over_the_default_and_is_remembered():
+    assert _drawer(left=0, stored={"tx-map-drawer": "open"}, script="return H.homeDrawer();") == "rest"
+    assert _drawer(left=3, stored={"tx-map-drawer": "min"}, script="return H.homeDrawer();") == "min"
+    out = _drawer(left=3, script="""
+H.drawerTo('min');
+const folded = [H.S.mapDrawer, T.ctx.localStorage.getItem('tx-map-drawer'), drawer.style.height, body.innerHTML];
+H.drawerTo('rest');
+return { folded, opened: [H.S.mapDrawer, T.ctx.localStorage.getItem('tx-map-drawer'), drawer.style.height] };
+""")
+    assert out["folded"][:3] == ["home", "min", "54px"]
+    assert 'class="m-mini"' in out["folded"][3] and "今日還能 3 次" in out["folded"][3] and "▴" in out["folded"][3]
+    assert out["opened"] == ["home", "open", "230px"]
+
+
+def test_polling_never_reopens_a_folded_drawer():
+    out = _drawer(left=3, stored={"tx-map-drawer": "min"}, script="""
+H.setMapDrawer(H.S.mapDrawer);
+H.redrawDrawer(); H.redrawDrawer();  // 輪詢、loadMap 換疊層都只叫這兩個
+H.setMapDrawer(H.S.mapDrawer);
+return [drawer.style.height, body.innerHTML.includes('m-mini')];
+""")
+    assert out == ["54px", True]
+
+
+def test_running_out_of_sorties_folds_the_drawer_when_the_player_never_chose():
+    out = _drawer(left=1, script="""
+H.setMapDrawer(H.S.mapDrawer);
+const before = drawer.style.height;
+H.S.mapState = Object.assign({}, H.S.mapState, { sorties_left: 0 });
+H.redrawDrawer();
+return [before, drawer.style.height];
+""")
+    assert out == ["230px", "54px"]
+
+
+def test_picking_a_place_from_the_folded_drawer_opens_its_card():
+    src = Path("web/app.js").read_text(encoding="utf-8")
+    pick = src[src.index("function mapPick(target)"):src.index("// 滾輪以游標為準縮放")]
+    assert '["home", "min", "rest"].includes(S.mapDrawer)' in pick and 'setMapDrawer("peek")' in pick
+
+
+# ── 輿圖卡頓（Joy 2026-10-17「輿圖這邊還是很 lag」）──
+def test_the_hit_area_width_rides_on_each_circle_not_on_an_inherited_variable():
+    """--hit 寫在地圖框上會繼承到整棵（約 1,500 個元素）：縮放每一下都重算樣式。改成每一個點擊圓自己寫外框寬。"""
+    out = marks(_game(), k="1")
+    assert re.search(r'r="16" fill="#000000" fill-opacity="0" stroke-width="12"', out)  # 倍率 1：R=22 → 2×(22−16)
+    far = marks(_game(), k="2.5")
+    assert 'fill-opacity="0" stroke-width="36"' in far  # 倍率 0.4：R=34（夾上限）→ 36
+    src, css = Path("web/app.js").read_text(encoding="utf-8"), Path("web/style.css").read_text(encoding="utf-8")
+    assert "--hit" not in src and "--hit" not in css
+
+
+def test_panning_moves_the_wrapper_not_the_svg_root():
+    """svg 根元素的 transform 一變，Chrome 每一幀重排每一個地名、重畫整張底圖；套在外框上拖移只動合成層。"""
+    src = Path("web/app.js").read_text(encoding="utf-8")
+    body = src[src.index("function applyMapView("):src.index("const firstScale")]
+    assert "g.world.style.transform = shift" in body and "svg.style.transform" not in body
+    css = Path("web/style.css").read_text(encoding="utf-8")
+    assert ".map-wrap.moving .tx-world-map { will-change: transform; }" in css
+
+
+def test_status_bar_redraws_do_not_rewrite_inherited_variables_when_nothing_changed():
+    src = Path("web/app.js").read_text(encoding="utf-8")
+    frame = src[src.index("function mapFrame()"):]
+    frame = frame[:frame.index("\n  }\n")]
+    assert "setVar(box, \"--map-top\"" in frame and "style.setProperty" not in frame
+    assert 'setVar(document.documentElement, "--top-h"' in src

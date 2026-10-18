@@ -7,5 +7,9 @@ app_run.log
 app_run_err.log
 server_out.log
 server_err.log
+bots_out.log
+bots_err.log
+monitor_out.log
+monitor_err.log
 .gradio/
 .local/

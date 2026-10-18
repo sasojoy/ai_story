@@ -73,3 +73,20 @@ def test_the_server_bot_measurement_runs_on_a_temporary_database(tmp_path, monke
     assert "新手起手的份量" in out and "固守" in out and "隨機武學的假人" in out
     assert list(scratch.iterdir()) == []  # 量完不留暫存資料夾（每跑一次留一個，日積月累）
     assert os.environ.get("TIANXIA_DB") == before  # 環境變數也還原
+
+
+def test_the_generals_mode_runs_and_commanders_carry_weight():
+    """--generals（龍頭上陣）：同一個種子兩次一樣；人物上陣那一邊的份量佔比落在兩到四成之間。"""
+    m = _load()
+    content = load_content(ROOT / "content", profile="weekend")
+    definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
+    from tianxia import generals
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    state = GameState(player=PlayerState(name="", location=content.scenario.start_location, stats={}, stamina=0),
+                      world=fresh_season(content))
+    chiefs = generals.pick(state, content, definition)
+    once = m._generals_run(definition, content.config.battle, chiefs, 10, (100, 300), 3, 0.6, 0.2)
+    assert once == m._generals_run(definition, content.config.battle, chiefs, 10, (100, 300), 3, 0.6, 0.2)
+    assert 0.15 <= once[1]["huang"] <= 0.4 and once[1]["guan"] > once[1]["huang"]  # 長社：官軍主將副將兩位
