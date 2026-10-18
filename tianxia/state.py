@@ -498,6 +498,8 @@ class PlayerState(BaseModel):
     heirloom: Equipment | None = None  # 寶物欄的「傳承」那一格：玉璽碎片的抄本（照全服登記重抄，玉璽碎片設計 7.3、7.4）；換季帶走
     seal_seen: int = 0  # 玉璽的補送補到全服登記的第幾號（Game._deliver_seal_results）；換季帶走
     seen_real: float | None = None  # 這個人自己最近一次上線的現實秒（伺服器 act／act_look、假人自己那一輪才寫；Game.sync 不寫）：「這一季上線過」與隱沒看它（5.3、7.6）；換季帶走
+    # 挑戰本人每掉一件寶物記下季曆第幾週（Config.figure_treasure_weekly 的每週上限，正式季整合 3.8）；一季一清、叛投不清
+    treasure_weeks: list[int] = Field(default_factory=list)
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清

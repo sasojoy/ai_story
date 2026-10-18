@@ -2657,6 +2657,8 @@ class Config(_Strict):
     # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算
     figure_rare_cap: int = Field(default=6, ge=0)
     figure_treasure_cap: int = Field(default=2, ge=0)
+    # 挑戰本人掉的寶物一人每週最多幾件（季曆的週；0＝不設）。只有 21 天季的設定檔打開（正式季整合 3.8：每週 1 件、一季 3 件）
+    figure_treasure_weekly: int = Field(default=0, ge=0)
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成
