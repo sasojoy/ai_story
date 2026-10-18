@@ -14,7 +14,8 @@ from .models import Content, Location
 PREFIX = "explore:"
 GATHER, SEEK, SENSE = "gather", "seek", "sense"
 MODES = (GATHER, SEEK, SENSE)
-NAMES = {GATHER: "找素材", SEEK: "找事件", SENSE: "靜心感悟"}  # 待 joy 潤
+PRACTICE = "practice"  # 練功（一類一顆開著才有，正式季整合 2.5；不在 MODES：舊的三選一沒有它）
+NAMES = {GATHER: "找素材", SEEK: "找事件", SENSE: "靜心感悟", PRACTICE: "練功"}  # 待 joy 潤
 PICK = "探索要選一種：找素材、找事件，或靜心感悟。"  # 待 joy 潤：按「探索」本身的回話
 NO_SENSE = "這裡悟不出什麼"  # 待 joy 潤（設計 3.3；鈕上不帶句號）
 SENSE_LATER = "選錯了做法，這裡要過一陣子才悟得出"  # 待 joy 潤：這個遊戲日在這裡選錯過做法
@@ -22,6 +23,13 @@ GATHER_LINE = "你在{place}四下翻找。"  # 待 joy 潤
 GATHER_NONE = "翻了一陣，沒找到什麼能用的。"  # 待 joy 潤
 FOE_LINE = "你正翻找著，{foe}突然殺出！"  # 待 joy 潤
 SEEK_NONE = "你四處走走，這一帶眼下沒什麼事。"  # 待 joy 潤
+PRACTICE_LINE = "你在{place}找上{foe}練手。"  # 待 joy 潤：練功開打那一句
+NO_FOE = "這裡沒有可以練手的對手"  # 待 joy 潤（設計 2.5；鈕上不帶句號）
+NO_FOE_NEAR = "，最近的在{place}"  # 待 joy 潤：接在 NO_FOE 後面
+BOSS_NOTE = "頭目"  # 待 joy 潤：這裡只有頭目時鈕上那一格
+BOSS_COOLING = "頭目{wait}後才會再現身"  # 待 joy 潤：兩場頭目戰之間的冷卻（wait 是 arena.wait_text 的現實倒數）
+BOSS_GONE_WEEK = "這一週他不再現身"  # 待 joy 潤：21 天季這一週的次數用完
+BOSS_GONE_SEASON = "這一季他不再現身"  # 待 joy 潤：一季的次數用完
 
 
 def on(content: Content) -> bool:

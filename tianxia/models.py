@@ -1598,6 +1598,8 @@ class DuelTuning(_Strict):
 
     explore_chance: float = Field(default=0.05, ge=0, le=1)
     per_boss_season: int = Field(default=2, ge=1)
+    # 21 天季同一隻一人每週最多幾次（正式季整合 2.5【預設】；0＝不設，照 per_boss_season 一季算）：在 season21 設定裡打開
+    per_boss_week: int = Field(default=0, ge=0)
     cooldown_seconds: float = Field(default=7200, ge=0)
     start: float = 50.0
     big: float = 70.0

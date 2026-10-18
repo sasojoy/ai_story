@@ -1107,7 +1107,7 @@ class Game:
             return opts + self._road_task_options(j) + self._arena_entry()  # 路上也能上擂台
         loc = c.locations[s.player.location]
         cost = self._action_costs()
-        modes = self._explore_mode_options(loc, cost["explore"])
+        modes = self._explore_mode_options(loc, cost["explore"], odds)
         if modes:  # 探索三選一：「探索」只是展開三顆的入口、按了不花體力，鈕上不寫體力（三顆各自寫）；三顆都按不下去時入口也灰（PM 2026-10-14）
             opts = [Option(id="act:explore", label="探索", enabled=any(o.enabled for o in modes)), *modes]
         else:
@@ -1446,9 +1446,10 @@ class Game:
             id=option_id, label=f"{label}（體力 {cost}{extra}）", enabled=self.state.player.stamina >= cost
         )
 
-    def _explore_mode_options(self, loc: Location, cost: int) -> list[Option]:
+    def _explore_mode_options(self, loc: Location, cost: int, odds: bool = False) -> list[Option]:
         """探索三選一的三顆（出陣探索與地盤設計第三節）：一樣的體力。悟不出的地方（insights.explore_gives 是空的）靜心感悟灰掉、
-        寫「這裡悟不出什麼」；這個遊戲日在這裡選錯過做法也灰掉（sensing.missed_today）。開關關著、序章裡沒有（序章照舊按「探索」）。"""
+        寫「這裡悟不出什麼」；這個遊戲日在這裡選錯過做法也灰掉（sensing.missed_today）。開關關著、序章裡沒有（序章照舊按「探索」）。
+        一類一顆開著（precise.on）時多一顆練功（_practice_option，正式季整合 2.5）。"""
         c = self.content
         if not explore_modes.on(c) or prologue_rules.active(self.state, c):
             return []
@@ -1461,7 +1462,51 @@ class Game:
             opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.SENSE_LATER}）", enabled=False))
         else:
             opts.append(self._cost_option(sense, name[explore_modes.SENSE], cost))
+        if precise.on(c, self.state.world):
+            opts.append(self._practice_option(loc, cost, odds))
         return opts
+
+    def _practice_option(self, loc: Location, cost: int, odds: bool) -> Option:
+        """練功的鈕（正式季整合 2.5）：「練功（體力 6・對手・勝算・經驗約 N）」；這裡只有頭目時寫頭目那一面、直接對上；
+        頭目冷卻中灰掉寫還要等多久、次數用完灰掉寫他這一週（季）不再現身；都沒有灰掉寫最近的對手在哪。"""
+        s, c = self.state, self.content
+        oid, name = explore_modes.option_id(explore_modes.PRACTICE), explore_modes.NAMES[explore_modes.PRACTICE]
+        foe = self._gather_foe(loc)
+        if foe is not None:
+            note = f"{foe.name}・{self.odds(foe.id)}" if odds else foe.name
+            return self._cost_option(oid, name, cost, note=f"{note}・經驗約 {self._practice_exp(foe)}")
+        bosses = duel_rules.here(s, c)
+        if not bosses:
+            route = self._nearest_practice()
+            place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name) if route is not None else ""
+            return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False)
+        boss = duel_rules.available(s, c)
+        if boss is not None:
+            foe_name = boss.foes[duel_rules.foe_index(boss, s.player.faction)].name
+            return self._cost_option(oid, name, cost, note=f"{foe_name}・{explore_modes.BOSS_NOTE}")
+        wait = duel_rules.cooldown_left(s, c.config.duel)
+        if wait > 0:
+            why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
+        else:
+            why = explore_modes.BOSS_GONE_WEEK if c.config.duel.per_boss_week else explore_modes.BOSS_GONE_SEASON
+        return Option(id=oid, label=f"{name}（{why}）", enabled=False)
+
+    def _practice_exp(self, squad: Squad) -> int:
+        """練功鈕上的「經驗約 N」：打贏這一路給的經驗（同 _battle_rewards：寶物與遊俠名號的倍數照乘）。"""
+        more = 1 + treasures.amount(self.state, self.content, "win_exp_pct")
+        return round(squad.exp * more * ranger.exp_factor(self.state, self.content))
+
+    def _nearest_practice(self) -> atlas.Route | None:
+        """離這裡最近、練得到的地點（有不是自己人的隊伍或此刻遇得上的頭目）：先照摸清的路找，都走不到照所有開放的地點找（同 clinic.nearest）。"""
+        s, c = self.state, self.content
+        bosses = {loc for b in c.duels.values() for loc in b.locations}
+        targets = {loc.id for loc in c.locations.values() if self._wild_foes(loc) or loc.id in bosses}
+        targets.discard(s.player.location)
+        for found in (atlas.routes(s, c), atlas.shortest_routes(s, c)):
+            reachable = [route for loc_id, route in found.items() if loc_id in targets and route.path]
+            if reachable:
+                return min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
+        return None
 
     def _socialize_option(self, people: list[str], cost: int) -> Option:
         """交友的按鈕。這裡只有一位大勢人物、沒有交友事件、福緣也還沒到，而他剛被你打敗、閉門不見（T4）時，交友只會
@@ -1517,7 +1562,8 @@ class Game:
         loc = c.locations[s.player.location]
         notes: dict[str, str] = {}
         if "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
-            fight = not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
+            # 一類一顆開著時找素材不撞仗（正式季整合 2.4），打一場在練功
+            fight = not precise.on(c, s.world) and not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
             notes["act:explore"] = howto.explore_modes_line(fight, bool(insights.explore_gives(loc, c)))
         elif "act:explore" in ids:
             legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
@@ -2763,6 +2809,11 @@ class Game:
         p.explore_seq += 1
         roll = functools.partial(explore_modes.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
         loc = c.locations[p.location]
+        if mode == explore_modes.PRACTICE:  # 練功（正式季整合 2.5）：不算打探（7.3），破境丹、殘譜照擲，用途另取「練功」
+            msgs = self._practice(loc, roll("練功"))
+            if c.config.forge_secrets.scrap_every_mode:
+                msgs += self._scrap_find()
+            return msgs + self._legend_find(roll("破境丹"))
         if mode == explore_modes.GATHER:
             msgs = self._gather(loc, roll("找素材"))
         elif mode == explore_modes.SEEK:
@@ -2789,6 +2840,18 @@ class Game:
             msgs += self._gather_fight(loc, rng)
         return msgs
 
+    def _practice(self, loc: Location, rng: random.Random) -> list[str]:
+        """練功（正式季整合 2.5）：一定打一場。有頭目時先擲頭目戰（5% × 名聲倍數，renown.duel_chance）；這裡只有頭目、沒有一般對手時
+        直接對上他（次數與冷卻在鈕上擋）。否則打 _gather_foe 那一路，照找素材以前撞上的那一場打（_gather_fight），不接戰後事件。"""
+        s, c = self.state, self.content
+        boss = duel_rules.available(s, c)
+        foe = self._gather_foe(loc)
+        if boss is not None and (foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c)):
+            return self._duel_start(boss)
+        if foe is None:
+            return [explore_modes.NO_FOE + "。"]
+        return self._gather_fight(loc, rng, line=explore_modes.PRACTICE_LINE, aftermath=False)
+
     def _gather_foe(self, loc: Location) -> Squad | None:
         """找素材撞上的那一路（設計 3.1）：手上有這裡的討伐懸賞、那一路不是自己人時就是它（散人不能出陣，討伐靠這裡；地點易手之後
         那一路不站在這裡也找得到，Review Focus 5）；否則是這裡不是自己陣營的隊伍裡最弱的一路（同分取先列的）。都沒有是 None。"""
@@ -2799,15 +2862,17 @@ class Game:
         foes = self._wild_foes(loc)
         return min(foes, key=lambda foe: foe.difficulty) if foes else None
 
-    def _gather_fight(self, loc: Location, rng: random.Random) -> list[str]:
+    def _gather_fight(
+        self, loc: Location, rng: random.Random, line: str = explore_modes.FOE_LINE, aftermath: bool = True
+    ) -> list[str]:
         """撞上一場（設計 3.1）：照探索的野怪打（扣氣血減半、不問模型、不推大勢：_squad_encounter(wild=True)），打贏給全額的經驗、
         心得、銀兩、掉落，也算討伐懸賞的交差（寫進這一場戰報的得失，同遊歷）；打完 train_event_chance 接一則戰後事件
-        （從遊歷搬過來，設計 2.4；事件池照舊叫 train）。"""
+        （從遊歷搬過來，設計 2.4；事件池照舊叫 train）。練功（_practice）也走這裡：line 換開場那一句、aftermath=False 不接戰後事件。"""
         s, c = self.state, self.content
         squad = self._gather_foe(loc)
         if squad is None:
             return []
-        msgs = [explore_modes.FOE_LINE.format(foe=squad.name)] + self._squad_encounter(squad.id, wild=True)
+        msgs = [line.format(foe=squad.name, place=loc.name)] + self._squad_encounter(squad.id, wild=True)
         record = next((r for r in s.battles if r.id == s.battle_card), None)
         if record is not None and record.tier in team.WIN_TIERS:
             done = bounties.on_win(s, c, self.world, loc.id, squad.id)
@@ -2815,7 +2880,7 @@ class Game:
             record.changes += changes
             record.notes += notes
             msgs += done
-        if rng.random() < c.config.train_event_chance:
+        if aftermath and rng.random() < c.config.train_event_chance:
             event = pick_event(s, c, "train", rng)
             if event is not None:
                 msgs += self._present(event, "train")
@@ -8521,6 +8586,9 @@ class Game:
             difficulty=rise.duel(c, boss.difficulty, power, p.duel_tally.get(key, 0)),  # 江湖水漲：照你的武學威力浮上來
         )
         p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
+        if cfg.per_boss_week:  # 21 天季另記這一週的帳（正式季整合 2.5）；季的帳照記，江湖水漲照它算
+            week = duel_rules.week_key(s, c, boss.id)
+            p.duel_tally[week] = p.duel_tally.get(week, 0) + 1
         p.duel_last = [float(p.season_number), s.world.time]
         foe = boss.foes[duel.foe]
         duel.bout = tactics.open_bout(  # 本命戰法（第二批）：只算你身上的兩門；頭目沒有本命戰法
