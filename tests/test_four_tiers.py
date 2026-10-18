@@ -54,6 +54,7 @@ def _econ_game(bag=None, silver=1000, on=True):
 
     c = real_content("weekend")
     c.config.four_tiers.enabled = on
+    c.config.auto_open_first_season = True  # 不然停在籌備中，鐵匠鋪進不去
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -415,3 +416,53 @@ def test_old_tier3_divine_keeps_its_bonus(world):
     new = old.model_copy(update={"tier": 4})
     assert weapons.bonus(old, sword, c, world) == weapons.bonus(new, sword, c, world)  # 仿品照仿品的基本值，不看階
     assert equipment.grade(old) == "三階上品・仿品"
+
+
+# ── Task 7：鐵匠的四條規矩 ──────────────────────────────
+
+
+def _smith_game(bag):
+    game = _econ_game(bag=bag)
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)
+    return game
+
+
+def _enter(game):
+    game.choose("act:smith")
+    rule = game.state.player.smith_rule
+    game.choose("smith:back")
+    return rule
+
+
+def test_rule_line_only_with_tier4():
+    game = _smith_game({"gang_3": 1})
+    assert _enter(game) == ""
+    game.state.player.materials["rou_4"] = 1
+    game.choose("act:smith")
+    assert game.state.player.smith_rule in game.content.shop_lines["smith"]["rules"]
+    assert shopview.smith_view(game.state, game.content, game.world)["rule"] == game.state.player.smith_rule
+
+
+def test_rules_rotate_without_repeating():
+    game = _smith_game({"gang_4": 1})
+    pool = game.content.shop_lines["smith"]["rules"]
+    heard = [_enter(game) for _ in range(len(pool))]
+    assert sorted(heard) == sorted(pool)
+    assert _enter(game) == pool[0]
+
+
+def test_clue_beats_rule():
+    game = _smith_game({"gang_4": 1})
+    game.choose("act:smith")
+    game.state.player.shop_clue = "鐵匠順口說了一句"
+    assert shopview.smith_view(game.state, game.content, game.world)["rule"] == ""
+
+
+def test_rules_never_name_a_recipe():
+    from tianxia.weapons import WEAPON_WORDS
+
+    c = real_content()
+    banned = {w for words in WEAPON_WORDS.values() for w in words} | set("陰陽剛柔快慢虛實")
+    banned |= {m.name for m in c.materials.values()} | {r.name for r in c.forge_secrets.values()}
+    for line in c.shop_lines["smith"]["rules"]:
+        assert not any(word in line for word in banned), line

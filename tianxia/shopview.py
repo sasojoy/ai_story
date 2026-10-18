@@ -22,6 +22,7 @@ SMITH_SITUATIONS = (
     "short_silver", "rack_full", "refused",
     "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
     "black_market",  # 名聲 5.2：寇照黑市價賣成了
+    "rules",  # 素材四階（正式季整合 5.10）：背包有四階時鐵匠講的神器規矩（next_rule 輪著講；放在畫面哪裡等對比圖）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
@@ -121,6 +122,27 @@ def line_text(state: GameState, content: Content, shop: str) -> str:
         return ""
     digest = hashlib.sha256(f"{p.name}|{key}|{p.shop_line_seed}".encode()).digest()
     return lines[int.from_bytes(digest[:4], "big") % len(lines)]
+
+
+def next_rule(state: GameState, content: Content) -> str:
+    """鐵匠講的神器規矩（素材四階，正式季整合 5.10）：素材四階開著、背包至少有一個四階時，挑這一季還沒講過的下一句（照
+    content/shop_lines.json smith.rules 的順序），記進 PlayerState.smith_rules_told；講完一輪從頭。其餘是空字串。
+    只看「有沒有四階」，跟是哪幾種四階無關（不講看了背包才說得出的話）；句子本身不講任何一件神器的配方。進鐵匠鋪時叫一次。"""
+    p = state.player
+    pool = content.shop_lines.get("smith", {}).get("rules") or []
+    if not (four_tiers.on(content) and pool and any(n > 0 and four_tiers.tier4_id(content, mid) for mid, n in p.materials.items())):
+        return ""
+    if len(set(p.smith_rules_told)) >= len(pool):
+        p.smith_rules_told = []
+    index = next(i for i in range(len(pool)) if i not in p.smith_rules_told)
+    p.smith_rules_told.append(index)
+    return pool[index]
+
+
+def rule_line(state: GameState) -> str:
+    """店面資料上的「鐵匠的規矩」那一句（等企劃者挑對比圖決定放哪裡，網頁先不畫）：鐵匠順口講配方線索的那一下不講規矩（線索比規矩重要）。"""
+    p = state.player
+    return "" if p.shop_clue else p.smith_rule
 
 
 # ── 鐵匠鋪（第二節）──
@@ -315,6 +337,7 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
         "silver": p.stats.get("silver", 0),
         "line": line_text(state, content, "smith"),
+        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10；畫面還沒畫）
         "back": "smith:back",
         "page": page,
         "pages": [{"slot": s, "label": PAGE_NAMES[s], "id": f"smith:page:{s}"} for s in equipment.SMITH_PAGES if equipment.on(content, s)],

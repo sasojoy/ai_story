@@ -2551,6 +2551,7 @@ class Game:
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
             self.state.player.shop_clue = ""
             self._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
+            self.state.player.smith_rule = shopview.next_rule(self.state, self.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "market":
             p = self.state.player
