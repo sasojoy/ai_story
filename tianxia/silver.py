@@ -94,6 +94,48 @@ def donate_problem(state: GameState, content: Content, day: int, room_points: in
     return None
 
 
+def _once_a_day(state: GameState, content: Content, day: int, ready: bool, last_day: int, price: int,
+                ready_line: str, today_line: str) -> str | None:
+    if ready:
+        return ready_line
+    if last_day == day:
+        return today_line
+    return _short(state, price)
+
+
+# ── 名師指點（有醫館的城鎮；在不在由 Game 問）──
+
+
+def mentor_problem(state: GameState, content: Content, day: int) -> str | None:
+    """請不了的原因：請了還沒用掉、今天請過了、錢不夠；可以是 None。"""
+    p = state.player
+    return _once_a_day(state, content, day, p.mentor_ready, p.mentor_day, content.config.silver_outlets.mentor_silver,
+                       MENTOR_READY, MENTOR_TODAY)
+
+
+def mentor(state: GameState, content: Content, day: int) -> list[str]:
+    """請名師指點：付錢、記下這一天，下一次修練升品的機會加 mentor_bonus（cultivation.odds_for 照 mentor_bonus 讀，擲一次用掉）。"""
+    problem = mentor_problem(state, content, day)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    cfg = content.config.silver_outlets
+    p = state.player
+    p.mentor_ready, p.mentor_day = True, day
+    return [MENTOR_DONE.format(bonus=cfg.mentor_bonus), *_pay(state, cfg.mentor_silver)]
+
+
+def mentor_bonus(state: GameState, content: Content) -> int:
+    """這一次修練升品多幾個百分點（請了名師、還沒用掉；銀兩出口關著是 0）。修練頁寫的與實際擲的都讀它。"""
+    return content.config.silver_outlets.mentor_bonus if state.player.mentor_ready and on(content, state.world) else 0
+
+
+def take_mentor(state: GameState, content: Content) -> int:
+    """真的擲了一次修練：用掉名師的指點，回這一次加的百分點（沒有是 0）。"""
+    bonus = mentor_bonus(state, content)
+    state.player.mentor_ready = False
+    return bonus
+
+
 def take_donation(state: GameState, content: Content, day: int, room_points: int) -> tuple[int, int]:
     """真的收下：扣銀兩、記今天的兩數與點數（捐素材的那本 donated_today），回（幾兩, 幾點）；捐不了是 (0, 0)、什麼都不動。"""
     if donate_problem(state, content, day, room_points, 0) is not None:

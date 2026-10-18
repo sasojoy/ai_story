@@ -70,6 +70,41 @@ def test_silver_donate_refused():
     assert not _ids(rich)["act:silver_donate"].enabled
 
 
+# ── Task 2：名師指點 ──
+
+
+def test_mentor_adds_ten_within_the_cap_once():
+    from tianxia import cultivation
+
+    game = _game(at="yingchuan")  # 潁川有醫館、是城鎮
+    s, c = game.state, game.content
+    before = cultivation.odds_for(s, c, "上品", 0)
+    msgs = game.choose("act:mentor")
+    assert s.player.mentor_ready and s.player.stats["silver"] == 450 and any("銀兩 -50" in m for m in msgs)
+    assert cultivation.odds_for(s, c, "上品", 0) == before + 10
+    c.config.cultivate_cap["上品"] = before + 4
+    assert cultivation.odds_for(s, c, "上品", 0) == before + 4  # 不超過那一階的上限
+    assert silver.take_mentor(s, c) == 10 and silver.take_mentor(s, c) == 0  # 擲過一次就用掉
+    assert not s.player.mentor_ready
+
+
+def test_mentor_once_a_day_and_refused_without_silver():
+    game = _game(at="yingchuan")
+    game.choose("act:mentor")
+    silver.take_mentor(game.state, game.content)
+    option = _ids(game)["act:mentor"]
+    assert not option.enabled and silver.MENTOR_TODAY in option.label
+    poor = _game(at="yingchuan", money=10)
+    assert not _ids(poor)["act:mentor"].enabled
+    poor.choose("act:mentor")
+    assert poor.state.player.stats["silver"] == 10 and not poor.state.player.mentor_ready
+
+
+def test_mentor_only_at_a_clinic_town():
+    game = _game(at="changshe")
+    assert "act:mentor" not in _ids(game)
+
+
 def test_weekend_has_no_silver_outlets():
     game = _game("weekend")
     assert not silver.on(game.content, game.state.world)
