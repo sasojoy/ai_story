@@ -3989,13 +3989,26 @@ class Game:
                 if self._draft is not None:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
-            return defection.defect(self.state, self.content, target, ally)
+            return defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
-        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally)
+        lost = [self.content.characters[cid].name for cid in roster.left_behind(self.state, self.content, self.world, target.id)]
+        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally, lost)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
+
+    def _leave_behind(self, side: str) -> list[str]:
+        """叛投之後（歷史武將同行 9.5）：寫了 side、跟新陣營不合的同伴當場回江湖——全服放掉 owner、拿出隊伍、情誼照決戰後回江湖減半。"""
+        c, p = self.content, self.state.player
+        keep, out = c.config.companions.parted_keep, []
+        for cid in roster.left_behind(self.state, c, self.world, side):
+            self.world.release_companion(cid)
+            team.remove_from_team(self.state, cid)
+            before = p.affinities.get(cid, 0)
+            p.affinities[cid] = math.floor(before * keep)
+            out.append(roster.DEFECT_LEFT.format(name=c.characters[cid].name, before=before, after=p.affinities[cid]))
+        return out
 
     def _defect_targets(self) -> list[tuple[FactionDef, str | None]]:
         """這一刻選單上能叛投去的（陣營, 依附的那一軍）。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），

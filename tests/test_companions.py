@@ -170,3 +170,24 @@ def test_the_roster_card_offers_release_through_the_server(real, world):
     assert server.menxia_view(guan, "player")["release"] is None
     server.MENXIA_ACTIONS["release"](guan, {"person": "guanyu"})
     assert world.get_companion("guanyu").owner is None
+
+
+# ── Task 7：叛投帶不走 ──
+
+
+def test_defecting_drops_companions_of_the_old_side(real, world):
+    """9.5：官軍叛投黃巾，劉備（寫了官軍）當場回江湖、情誼減半，確認畫面列出他；荀彧（沒寫陣營）照舊跟著。"""
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    p = game.state.player
+    for cid in ("liubei", "xunyu"):
+        assert world.try_recruit(cid, "官甲", cap=3)
+        p.team.append(cid)
+    p.affinities["liubei"] = 61
+    target = next(f for f in real.scenario.factions if f.id == "huang")
+    assert p.location in target.join_at
+    prompt = game.choose(f"defect:{target.id}")
+    assert roster.DEFECT_LOST.format(names="劉備") in "".join(prompt)
+    msgs = game.choose("defect:confirm")
+    assert roster.DEFECT_LEFT.format(name="劉備", before=61, after=30) in msgs
+    assert world.get_companion("liubei").owner is None and "liubei" not in p.team and p.affinities["liubei"] == 30
+    assert world.get_companion("xunyu").owner == "官甲" and "xunyu" in p.team

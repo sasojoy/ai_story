@@ -23,6 +23,19 @@ RELEASE_CONFIRM = "放{name}回江湖？他會回到他常在的地方，誰都�
 RELEASE_DONE = "{name}拱手道別，回江湖去了；你們的情誼還在，日後可以再去找他。"
 RELEASE_NOT_YOURS = "（他不在你的名下。）"
 RELEASE_TITLE = "放{name}回江湖"
+# 叛投帶不走（9.5；待 joy 潤）：確認畫面「會失去」的那一項、確定叛投之後那一句
+DEFECT_LOST = "{names}不會隨你改投，回江湖去（情誼減半）"
+DEFECT_LEFT = "{name}不肯隨你改投，回江湖去了（情誼 {before}→{after}）。"
+
+
+def left_behind(state: GameState, content: Content, world: WorldStateStore, side: str) -> list[str]:
+    """叛投到 side（陣營 id）時帶不走的同伴（9.5）：名下、寫了 side 而且跟新陣營不合的；沒寫 side 的照舊跟著你。開關關著是空的。"""
+    if not on(content):
+        return []
+    return [
+        cid for cid in owned_companions(world, state.player.name)
+        if cid in content.characters and content.characters[cid].side not in (None, side)
+    ]
 
 
 def on(content: Content) -> bool:
