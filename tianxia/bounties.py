@@ -71,6 +71,8 @@ ONLY_ORIGINAL = "（你身上對得上的只有神器的原品，原品交不得
 ONLY_SIGNATURE = "（你身上對得上的只有名將的本命兵器，本命兵器交不得）"  # 待 joy 潤（打造第三批；FB-145 的本命兵器版）
 WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
+# 21 天季每張附的那一樣（正式季整合設計 6.1 第 2 點）：賞那一段最後寫一句（待 joy 潤）
+ATTACH_NOTES = {"strike": "・二階素材（偶有三階）", "scout": "・{pill} 一顆", "escort": "・二階素材"}
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
@@ -411,6 +413,8 @@ def reward_text(state: GameState, content: Content, b: Bounty) -> str:
     deeds = b.deeds if ranger.active(state, content) else 0
     exp = _exp(state, content, b)
     xinde = cfg.xinde.get(b.kind, 0)
+    if exp and _maxed(state, content, b):  # 21 天季滿級：經驗換成心得（3.5）
+        xinde, exp = xinde + _as_xinde(content, exp), 0
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
@@ -421,6 +425,8 @@ def reward_text(state: GameState, content: Content, b: Bounty) -> str:
         + (f"・{deed_word(state, content)} +{deeds}" if deeds else "")
     if b.kind == "art":
         text += ART_GIFTS if content.config.weapons.enabled else "・素材"
+    if b.kind in ATTACH_NOTES and _daily_pay(state, content, b):
+        text += ATTACH_NOTES[b.kind].format(pill=content.config.stamina_pill_name)
     if has_prize(content, b):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
         text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
     return text
@@ -447,11 +453,58 @@ def _silver(state: GameState, content: Content, b: Bounty, base: int | None = No
     if b.kind == "wanted":
         return b.silver
     amount = b.silver if base is None else base
+    if _daily_pay(state, content, b):  # 21 天季（6.1）：等級 × 每級的錢；求兵照那一把再加這一份
+        per = content.config.season21_daily.silver_per_level.get(b.kind, 0) * state.player.member.level
+        amount = per if base is None else base + per
     return round(amount * ranger.bounty_factor(state, content) * _share(state, content, b))
 
 
 def _exp(state: GameState, content: Content, b: Bounty) -> int:
+    if _daily_pay(state, content, b):  # 21 天季（6.1）：這一級升下一級的經驗 × 比例
+        ratio = content.config.season21_daily.exp_ratio.get(b.kind, 0)
+        return round(team.level_cost(content.config, state.player.member.level) * ratio * _share(state, content, b))
     return round(content.config.bounties.exp.get(b.kind, 0) * _share(state, content, b))
+
+
+def _daily_pay(state: GameState, content: Content, b: Bounty) -> bool:
+    """這一張照 21 天季的算法給（正式季整合設計 6.1）：賞照揭的人的等級長、討伐打探護送各附一樣東西。通緝照押金，不算。"""
+    return calendar.season21_on(state.world, content) and b.kind in content.config.season21_daily.exp_ratio
+
+
+def _maxed(state: GameState, content: Content, b: Bounty) -> bool:
+    """21 天季滿級的人交懸賞：經驗換成心得（3.5、6.1；週末與 14 天的季照舊）。"""
+    return _daily_pay(state, content, b) and state.player.member.level >= content.config.max_level
+
+
+def _as_xinde(content: Content, exp: int) -> int:
+    return exp // content.config.season21_daily.maxed_exp_per_xinde
+
+
+def _attached(state: GameState, content: Content, world: WorldStateStore, b: Bounty) -> list[str]:
+    """21 天季每張附的那一樣（6.1 第 2 點）：討伐給這一路對手屬性的二階一個、另擲 strike_tier3_chance 一個同屬性三階；
+    打探給一顆回體丹；護送給終點那一處屬性的二階一個。對手、終點沒寫屬性就照同階隨便一個（materials.by_tier 退回同階全部）。
+    自己一份亂數（季數＋名號＋懸賞 id），不碰 Game.rng；陣營的人也全給（一半的只有銀兩與經驗）。"""
+    if b.kind not in ATTACH_NOTES or not _daily_pay(state, content, b):
+        return []
+    if b.kind == "scout":
+        state.player.stamina_pills += 1
+        return [f"{content.config.stamina_pill_name} +1"]
+    rng = random.Random(f"bounty-attach|{world.get_season_number()}|{state.player.name}|{b.id}")
+    if b.kind == "strike":
+        squad = content.squads.get(b.squad or "")
+        attribute = squad.attribute if squad is not None else None
+    else:
+        loc = content.locations.get(b.end or "")  # 終點的屬性照它的素材（Location.materials 是素材 id，同路邊採集）
+        found = [content.materials[m].attribute for m in (loc.materials if loc is not None else []) if m in content.materials]
+        attribute = rng.choice(found) if found else None
+    msgs: list[str] = []
+    tiers = [2] + ([3] if b.kind == "strike" and rng.random() < content.config.season21_daily.strike_tier3_chance else [])
+    for tier in tiers:
+        pool = materials.by_tier(content, tier, attribute)
+        line = materials.grant(state, content, rng.choice(pool).id, 1) if pool else None
+        if line:
+            msgs.append(line)
+    return msgs
 
 
 def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
@@ -487,9 +540,16 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
     exp = _exp(state, content, b)
-    if exp:
+    if exp and _maxed(state, content, b):  # 21 天季滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
+        gained = _as_xinde(content, exp)
+        if gained:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + gained
+            msgs.append(f"心得 +{gained}")
+        msgs += team.add_team_exp(state, content, world, exp)
+    elif exp:
         msgs.append(f"經驗 +{exp}")
         msgs += team.add_team_exp(state, content, world, exp)
+    msgs += _attached(state, content, world, b)
     msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
     if b.kind != "wanted":  # 通緝照押金給，沒有加成（_silver）
         msgs += renown.ranger_bounty_note(state, content, ranger.bounty_factor(state, content))  # 名聲 6.3：加成說出原因

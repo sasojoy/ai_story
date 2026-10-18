@@ -203,3 +203,124 @@ def test_weekend_bounties_are_weekly():
     assert all(b.expires == calendar.week_start(1 + c.config.bounties.auto_weeks, c, v.world)
                for b in v.world.bounties if b.kind != "wanted")
     assert v.world.bounty_day == 0
+
+
+# ── Task 3：懸賞獎勵照等級長、附一樣東西 ──
+
+
+def _first(state, kind, faction=None):
+    return next(b for b in state.world.bounties if b.kind == kind and (faction is None or b.faction == faction))
+
+
+def _gained(before, after):
+    return {k: v - before.get(k, 0) for k, v in after.items() if v != before.get(k, 0)}
+
+
+def test_rewards_grow_with_the_level():
+    from tianxia import bounties, team
+
+    game = _game()
+    s, c = game.state, game.content
+    s.player.faction = None  # 散人：全額
+    s.player.member.level = 20
+    b = _first(s, "strike")
+    exp = round(team.level_cost(c.config, 20) * 0.15)
+    assert bounties.reward_text(s, c, b).startswith(f"賞銀 120・經驗 {exp}")  # 6.1 的例子：第 20 級一張討伐 120 兩
+    silver = s.player.stats.get("silver", 0)
+    msgs = bounties._complete(s, c, game.world, b)
+    assert s.player.stats["silver"] - silver == 120 and f"經驗 +{exp}" in msgs
+    s.player.faction = "guan"  # 陣營的人做自己陣營的：一半
+    mine = _first(s, "strike", "guan")
+    assert bounties.reward_text(s, c, mine).startswith(f"賞銀 60・經驗 {round(exp / 2)}")
+    scout = _first(s, "scout", "guan")
+    assert bounties._silver(s, c, scout) == round(20 * 3 / 2)
+    assert bounties._exp(s, c, scout) == round(team.level_cost(c.config, 20) * 0.08 / 2)
+
+
+def test_each_bill_brings_one_thing():
+    """討伐給對手屬性的二階（另擲三階）、打探給一顆回體丹、護送給終點屬性的二階；對手或終點沒屬性也給（Review Focus 4）。"""
+    from tianxia import bounties, materials
+
+    game = _game()
+    s, c = game.state, game.content
+    s.player.faction = None
+    c.config.season21_daily.strike_tier3_chance = 1.0
+    strike = _first(s, "strike")
+    attr = c.squads[strike.squad].attribute
+    before = dict(s.player.materials)
+    msgs = bounties._complete(s, c, game.world, strike)
+    got = _gained(before, s.player.materials)
+    assert sorted(c.materials[m].tier for m in got) == [2, 3]
+    assert all(c.materials[m].attribute == attr for m in got) or attr is None
+    assert any(m.startswith(materials.GRANT_PREFIX) for m in msgs)
+    pills = s.player.stamina_pills
+    bounties._complete(s, c, game.world, _first(s, "scout"))
+    assert s.player.stamina_pills == pills + 1
+    c.squads[strike.squad].attribute = None  # 對手沒寫屬性：照同階隨便一個
+    strike.done_by = []
+    before = dict(s.player.materials)
+    bounties._complete(s, c, game.world, strike)
+    assert sorted(c.materials[m].tier for m in _gained(before, s.player.materials)) == [2, 3]
+    game.sync(MON + DAY + 60)
+    s = game.state
+    s.player.faction = None
+    escort = _first(s, "escort")
+    before = dict(s.player.materials)
+    bounties._complete(s, c, game.world, escort)
+    got = _gained(before, s.player.materials)
+    assert [c.materials[m].tier for m in got] == [2]
+    assert c.materials[next(iter(got))].attribute in {c.materials[m].attribute for m in c.locations[escort.end].materials}
+    c.locations[escort.end].materials = []  # 終點沒寫素材屬性
+    escort.done_by = []
+    before = dict(s.player.materials)
+    bounties._complete(s, c, game.world, escort)
+    assert [c.materials[m].tier for m in _gained(before, s.player.materials)] == [2]
+
+
+def test_maxed_players_get_xinde():
+    """Review Focus 3：滿級的人交懸賞，經驗照 5 換 1 換成心得，不寫「經驗 +N」。"""
+    from tianxia import bounties, team
+
+    game = _game()
+    s, c = game.state, game.content
+    s.player.faction = None
+    s.player.member.level = c.config.max_level
+    b = _first(s, "strike")
+    xinde = round(team.level_cost(c.config, c.config.max_level) * 0.15) // c.config.season21_daily.maxed_exp_per_xinde
+    assert xinde > 0
+    text = bounties.reward_text(s, c, b)
+    assert f"・心得 {xinde}" in text and "經驗" not in text
+    have = s.player.stats.get("xinde", 0)
+    msgs = bounties._complete(s, c, game.world, b)
+    assert s.player.stats["xinde"] - have == xinde and f"心得 +{xinde}" in msgs
+    assert not any(m.startswith("經驗") for m in msgs)
+
+
+def test_arms_add_the_level_silver():
+    from tianxia import bounties
+
+    game = _game()
+    game.sync(MON + DAY + 60)
+    s, c = game.state, game.content
+    s.player.member.level = 10
+    arms = _first(s, "arms")
+    base = c.config.bounties.arms_silver["中品"] * c.config.bounties.arms_tier["1"]
+    assert bounties._silver(s, c, arms, base=base) == base + 10 * 5
+    assert bounties._silver(s, c, _first(s, "art")) == 10 * 5  # 第 1 天的求藝還掛著：照等級每級 5 兩
+
+
+def test_weekend_rewards_unchanged():
+    """Review Focus 5：週末照舊固定的數字、不附東西。"""
+    from tianxia import bounties
+
+    game = _game("weekend")
+    s, c = game.state, game.content
+    s.player.faction = None
+    s.player.member.level = 20
+    b = _first(s, "strike")
+    assert bounties._silver(s, c, b) == c.config.bounties.silver["strike"]
+    assert bounties._exp(s, c, b) == c.config.bounties.exp["strike"]
+    assert bounties.reward_text(s, c, b).startswith(f"賞銀 {c.config.bounties.silver['strike']}・經驗 {c.config.bounties.exp['strike']}")
+    pills, before = s.player.stamina_pills, dict(s.player.materials)
+    bounties._complete(s, c, game.world, _first(s, "scout"))
+    assert s.player.stamina_pills == pills and s.player.materials == before
