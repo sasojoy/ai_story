@@ -351,6 +351,41 @@ def test_a_wrong_way_of_sensing_gives_xinde_and_does_not_lock():
     assert s.player.sensing is None and _ids(game)["explore:sense"].enabled
 
 
+# ── Task 8：假人與整季機器人（9.2）──
+
+
+def test_the_season_bot_practices_when_it_wants_exp():
+    from tianxia import bot
+
+    ids = {"explore:gather", "explore:seek", "explore:practice"}
+    assert bot.explore_choice(ids, want="exp") == "explore:practice"
+    assert bot.explore_choice(ids) == "explore:gather"  # 打探照舊找素材（練功不算打探）
+    assert bot.explore_choice({"explore:gather"}, want="exp") == "explore:gather"
+
+
+def test_server_bots_practice_for_exp_and_gather_only_when_short():
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    game = _game(at="changshe")
+    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
+    opts = _ids(game)
+    practice = bot_policy.score(game, opts["explore:practice"], profile)
+    gather = bot_policy.score(game, opts["explore:gather"], profile)
+    assert practice == bot_policy.PRACTICE_SCORE and gather < practice
+
+
+def test_the_season_bot_does_not_loop_on_a_refused_sect():
+    from tianxia import bot
+
+    game = _game(at="yingchuan_academy")
+    options = [o for o in game.options() if o.enabled]
+    assert any(o.id == "sect:yingchuan_join" for o in options)
+    game.state.player.seen_events.add("yingchuan_join")
+    rng = random.Random(0)
+    assert all(bot.pick(game, game.options(), rng) != "sect:yingchuan_join" for _ in range(50))
+
+
 def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(content)
     stamp_season(season, content)

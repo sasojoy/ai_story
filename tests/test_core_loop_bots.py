@@ -17,6 +17,7 @@ import server
 def _game(faction=None, at="yingshui"):
     c = real_content("weekend")
     c.config.auto_open_first_season = True
+    c.config.precise_actions = False  # 一類一顆之前的三選一（新規則的假人分數在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player

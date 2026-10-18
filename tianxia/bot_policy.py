@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -37,6 +37,9 @@ STIR_SCORE = 1.1  # 豪強攪局（出陣探索與地盤設計第七節）：沒
 GATHER_SCORE = 1.0  # 探索三選一（出陣探索與地盤設計第七節）：找素材是練功的主要來源，跟以前的探索一樣
 SEEK_SCORE = 0.9  # 閒著找事件
 SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
+# 一類一顆（正式季整合 9.2）：想要經驗按練功，缺素材才按找素材；出陣照舊排在練功前面（出陣的分數另加 PRACTICE_SCORE）
+PRACTICE_SCORE = 1.0
+PRECISE_GATHER_SCORE = 0.4  # 找素材不再打仗、不給經驗：缺素材時再加 NEED_MATERIAL_SCORE
 # 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：找素材再加這一份。計畫寫 0.5，那樣缺素材的找素材（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
 # 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
 NEED_MATERIAL_SCORE = 0.3
@@ -610,6 +613,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
     if kind == "duel":
         return None  # 頭目戰在 take_turn 前面就出招了（duel_move）
+    if kind == "sect":
+        return None  # 拜入門派（一類一顆從交友搬出來的一顆）：假人不拜門派，同不叛投
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
         effect = event.choices[int(arg)].effect
@@ -617,6 +622,12 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return effect_score(effect, _goals(game, profile), moved)
     if kind == "explore":  # 探索三選一：缺素材找素材、閒著找事件、悟得到的地方偶爾靜心感悟；打探懸賞三種都算
         scout = BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
+        if arg == explore_modes.PRACTICE:  # 練功（一類一顆）：一定打一場，不算打探；討伐懸賞在這裡交差
+            if _crippled(game):
+                return None
+            return PRACTICE_SCORE + (BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0)
+        if arg == explore_modes.GATHER and precise.on(game.content, game.state.world):  # 一定給素材、不打仗
+            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
         if arg == explore_modes.GATHER:
             if _crippled(game):
                 return None  # 找素材可能撞上怪：內傷重又付不起醫館的不去
@@ -693,6 +704,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
+            bonus += PRACTICE_SCORE if precise.on(c, s.world) else 0.0  # 一類一顆：出陣照舊排在練功前面（9.2）
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
