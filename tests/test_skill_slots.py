@@ -112,3 +112,13 @@ def test_compare_names_only_lit_slots(content):
     dormant = traits.dormant_names(content, shown)
     assert dormant and not set(dormant) & set(names)
     assert len(names) == skill_slots.layout(content, state.player.name, a, "下品", "下品").slots
+
+
+def test_mastered_lights_every_lineage_trait(content):
+    """練到絕學，來路的功效全部亮起，不再有「未開」（Joy 2026-10-17）。"""
+    many = art(traits=["剛", "剛", "剛", "快", "慢", "柔", "陽"])
+    for i in range(200):
+        lay = skill_slots.layout(content, f"p{i}", many, "絕學", "下品")
+        assert lay.dormant == []
+        assert {a for k, a in lay.lit if k == "g"} >= {"剛", "快", "慢", "柔", "陽"}
+        assert ("s", "lianhuan") in lay.lit
