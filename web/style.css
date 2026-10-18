@@ -2184,6 +2184,81 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   html { scrollbar-gutter: stable; }
 }
 
+/* ── 酒肆（企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」；草圖甲「夜燈酒肆」）：跟三間店同一層。夜裡、燈籠、暖光、酒罈的剪影；
+   字級一律寫 em，跟著 .shop-tavern 的字級走（手機 13px、電腦寬 ×1.3），招牌、掌櫃話、分頁照店面共用的那一套。燈籠搖、熱氣冒、
+   暖光呼吸只在沒有要求減少動態效果時跑 ── */
+.shop-layer.shop-tavern { font-size: 13px; color: #f2e5c6; background: radial-gradient(ellipse at 50% 18%, #5a3018 0%, #2a170d 52%, #120a06 100%); }
+.shop-tavern .shop-line { border-left-color: #d08a3a; }
+.shop-tavern .shop-tabs { border-top-color: #5e3f26; }
+.shop-tavern .tav-hero { position: relative; height: 9.2em; overflow: hidden; pointer-events: none; }
+.shop-tavern .tav-glow { position: absolute; top: 0.6em; width: 9em; height: 9em; border-radius: 50%; background: radial-gradient(circle, rgba(255, 150, 70, 0.42), transparent 68%); }
+.shop-tavern .tav-glow.l { left: 4%; } .shop-tavern .tav-glow.r { right: 4%; }
+.shop-tavern .tav-hang { position: absolute; top: 0; width: 2.6em; transform-origin: 50% 0; }
+.shop-tavern .tav-hang.l { left: 12%; width: 2.2em; } .shop-tavern .tav-hang.r { right: 12%; }
+.shop-tavern .tav-lantern { display: block; width: 100%; height: auto; filter: drop-shadow(0 0 0.5em rgba(255, 120, 50, 0.6)); }
+.shop-tavern .tav-jars { position: absolute; left: 6%; bottom: 0.9em; width: 9em; }
+.shop-tavern .tav-bowl { position: absolute; right: 18%; bottom: 0.9em; width: 4.4em; }
+.shop-tavern .tav-table { position: absolute; left: 0; right: 0; bottom: 0; height: 1em; background: linear-gradient(#4a2c18, #22140b); border-top: 1px solid #7a5532; }
+.shop-tavern .tav-guests, .shop-tavern .tav-known { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; margin: 0.5em 0.15em; }
+.shop-tavern .gl { font-size: 0.9em; color: #c9a875; letter-spacing: 0.15em; margin-right: 0.2em; }
+.shop-tavern .tav-chip { display: inline-block; line-height: 1.5; padding: 0.15em 0.75em; border: 1px solid #7a5532; border-radius: 1em; background: rgba(60, 34, 18, 0.7); color: #f2e5c6; font: 0.95em var(--serif); }
+.shop-tavern button.tav-chip { cursor: pointer; }
+.shop-tavern .more { font-size: 0.88em; color: #a88a64; }
+.shop-tavern .tav-treat { margin: 0.3em 0.15em; font: 0.95em/1.6 var(--serif); color: #f2c46a; }
+.shop-tavern .tav-listen { display: block; width: 100%; margin: 0.7em 0 0.3em; padding: 0.7em; border: 1px solid #f2c46a; border-radius: 0.6em;
+  background: linear-gradient(180deg, #c3402c, #8c2416); color: #fbe9c0; font: 600 1.25em var(--serif); letter-spacing: 0.3em; box-shadow: 0 0 1em rgba(255, 120, 50, 0.25); cursor: pointer; }
+.shop-tavern .tav-listen span { font-size: 0.7em; letter-spacing: 0; font-weight: 400; opacity: 0.9; }
+.shop-tavern .tav-listen:disabled { opacity: 0.55; }
+.shop-tavern .tav-h { margin: 1.1em 0.15em 0.45em; font: 600 1.05em var(--serif); letter-spacing: 0.2em; color: #f2c46a; }
+.shop-tavern .tav-h small { margin-left: 0.6em; font: 0.8em var(--sans); letter-spacing: 0; color: #a88a64; }
+.shop-tavern .tav-talk { list-style: none; margin: 0; padding: 0.5em 0.8em; border: 1px dashed #5e3f26; border-radius: 0.5em; background: rgba(0, 0, 0, 0.28); }
+.shop-tavern .tav-talk li { margin: 0.3em 0; font: 0.98em/1.6 var(--serif); color: #e8d6ad; }
+.shop-tavern .tav-talk .who { margin-right: 0.35em; color: #c9a875; font-size: 0.9em; }
+.shop-tavern .tav-talk .who::after { content: "："; }
+.shop-tavern .tav-row { display: flex; flex-wrap: wrap; gap: 0.5em; margin: 0.9em 0 0.3em; align-items: stretch; }
+.shop-tavern .tav-act { flex: 1 1 9em; display: grid; gap: 0.15em; padding: 0.55em 0.7em; border: 1px solid #b7862b; border-radius: 0.5em; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; text-align: center; cursor: pointer; }
+.shop-tavern .tav-act b { font: 600 1.05em var(--serif); letter-spacing: 0.1em; }
+.shop-tavern .tav-act small { font-size: 0.82em; color: #c9a875; }
+.shop-tavern .tav-act:disabled { opacity: 0.5; cursor: default; }
+.shop-tavern .tav-board { flex: 1 1 9em; }
+.shop-tavern .tav-modes { justify-content: flex-start; margin: 0.4em 0 0.6em; }
+.shop-tavern .tav-form { display: flex; gap: 0.5em; margin: 0.3em 0; }
+.shop-tavern .tav-form .input { flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.35); border-color: #7a5532; color: #f6edd8; font-size: 1.15em; }
+.shop-tavern .tav-form select.input { font-size: 1.05em; }
+.shop-tavern .tav-form .btn:not(.primary) { background: rgba(43, 26, 16, 0.85); border-color: #b7862b; color: #f2e5c6; }
+.shop-tavern .tav-note { margin: 0.55em 0; padding: 0.6em 0.8em; border: 1px solid #5e3f26; border-radius: 0.5em; background: rgba(43, 26, 16, 0.82); }
+.shop-tavern .tav-note .tag { display: flex; justify-content: space-between; gap: 0.6em; margin-bottom: 0.2em; }
+.shop-tavern .tav-note .tag b { font: 600 0.95em var(--serif); color: #f2c46a; letter-spacing: 0.1em; }
+.shop-tavern .tav-note .tag span { font-size: 0.8em; color: #a88a64; white-space: nowrap; }
+.shop-tavern .tav-note.k-material .tag b, .shop-tavern .tav-note.k-trace .tag b { color: #e89a6a; }
+.shop-tavern .tav-note p { margin: 0.2em 0; font: 1em/1.65 var(--serif); color: #f2e5c6; }
+.shop-tavern .tav-wall { margin: 0.8em 0; padding: 0.9em 1em; border-radius: 0.4em; background: linear-gradient(180deg, #e8dcc2, #d8c8a6); color: #2a1a10;
+  box-shadow: inset 0 0 2em rgba(90, 60, 30, 0.35); }
+.shop-tavern .tav-wall p { margin: 0 0 0.9em; padding-bottom: 0.7em; border-bottom: 1px dashed rgba(90, 60, 30, 0.35); }
+.shop-tavern .tav-wall p:last-child { margin-bottom: 0; border-bottom: 0; padding-bottom: 0; }
+.shop-tavern .tav-wall .ink { display: block; font: 600 1.3em/1.55 var(--serif); letter-spacing: 0.08em; color: #1e1208; }
+.shop-tavern .tav-wall small { display: flex; justify-content: flex-end; align-items: center; gap: 0.4em; margin-top: 0.2em; font-size: 0.82em; color: #6d5a43; }
+.shop-tavern .tav-seal { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border: 1px solid #a8281a; border-radius: 0.2em; color: #a8281a; font: 600 0.9em var(--serif); font-style: normal; transform: rotate(-6deg); }
+.shop-tavern .tav-whispers { list-style: none; margin: 0; padding: 0; }
+.shop-tavern .tav-whispers li { margin: 0.4em 0; padding: 0.5em 0.8em; border-left: 3px solid #5e3f26; background: rgba(0, 0, 0, 0.25); font: 0.98em/1.6 var(--serif); color: #e8d6ad; }
+.shop-tavern .tav-whispers li.named { border-left-color: #c3402c; color: #fbe9c0; }
+.shop-tavern .shop-empty, .shop-tavern .shop-cap, .shop-tavern .shop-note { font-size: 0.95em; }
+@media (min-width: 641px) {
+  .shop-layer.shop-tavern { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat; }
+  .shop-layer > .tav-hero { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); } /* 燈籠與酒罈也照欄 */
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shop-tavern .tav-hang { animation: tavsway 4.6s ease-in-out infinite alternate; }
+  .shop-tavern .tav-hang.r { animation-duration: 5.4s; animation-delay: -1.2s; }
+  .shop-tavern .tav-glow { animation: tavbreathe 3.8s ease-in-out infinite alternate; }
+  .shop-tavern .tav-steam path { animation: tavsteam 3.2s ease-in-out infinite; }
+  .shop-tavern .tav-steam path:nth-child(2) { animation-delay: -1s; }
+  .shop-tavern .tav-steam path:nth-child(3) { animation-delay: -2s; }
+}
+@keyframes tavsway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+@keyframes tavbreathe { from { opacity: 0.7; } to { opacity: 1; } }
+@keyframes tavsteam { 0% { opacity: 0; transform: translateY(4px); } 40% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(-6px); } }
+
 /* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
 .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
 .lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
