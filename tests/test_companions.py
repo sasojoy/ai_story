@@ -78,6 +78,23 @@ def test_a_recruit_lands_him_in_your_name_and_team(real, world):
     assert "act:recruit:guanyu" not in _opts(guan)  # 有主了：鈕不再出現
 
 
+def test_a_late_recruit_click_says_who_took_him(real, world):
+    """FB-363：兩個分頁搶，慢的那一頁的鈕還在、按下去時他已經有主了：回「已經被某某招攬走了」（Refused，網頁跳提示；同 FB-162），
+    不扣體力、不寫紀錄。名號照寫（匿名只在地方傳聞，rules.display_name）。"""
+    from tianxia import engine
+
+    first = _player(real, world, "韓甲", "guan", "zhuo_county")
+    late = _player(real, world, "趙戊", "guan", "zhuo_county")
+    assert "act:recruit:liubei" in _opts(late)
+    assert world.try_recruit("liubei", "韓甲", cap=3)
+    stamina, entries = late.state.player.stamina, len(late.state.journal)
+    msgs = late.choose("act:recruit:liubei")
+    assert isinstance(msgs, engine.Refused) and msgs == [roster.TAKEN.format(name="劉備", owner="韓甲")]
+    assert late.state.player.stamina == stamina and len(late.state.journal) == entries
+    assert first.choose("act:recruit:caocao")  # 自己名下的、或還沒有主的：照舊
+    assert not isinstance(late.choose("act:recruit:nobody"), engine.Refused)  # 不認得的 id 照舊「此刻無法這麼做」
+
+
 def test_a_fourth_companion_is_refused(real, world):
     guan = _player(real, world, "Ray", "guan", "zhuo_county")
     for cid in ("caocao", "yuanshao", "taoqian"):

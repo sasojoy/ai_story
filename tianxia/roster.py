@@ -95,6 +95,10 @@ def _seed_starting_skills(world: WorldStateStore, companion_id: str, ch) -> None
     world.update_companion(companion_id, _apply)
 
 
+# 他已經有主了（招募撲空、兩個分頁搶慢了一步 FB-363）：寫主人的名號（匿名只在地方傳聞，rules.display_name）
+TAKEN = "【{name}】已經被{owner}招攬走了，這次撲了個空。"
+
+
 def attempt_recruit(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, rng: random.Random,
 ) -> list[str]:
@@ -105,7 +109,7 @@ def attempt_recruit(
     if owns(owner, state.player.name):
         return [f"【{disp}】已經是你的同伴了。"]
     if owner is not None:
-        return [f"【{disp}】已經被{owner}招攬走了，這次撲了個空。"]
+        return [TAKEN.format(name=disp, owner=owner)]
     p = state.player
     p.stamina -= content.config.recruit_stamina
     chance = recruit_chance(content, state, companion_id)

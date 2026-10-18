@@ -1865,6 +1865,13 @@ class Game:
             if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
                 self._shop_after(problem, "refused")
             return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
+        if option is None and option_id.startswith("act:recruit:"):
+            # FB-363：兩個分頁搶，慢的那一頁的招募鈕還在、他已經被別人招走了：同懸賞榜 FB-162 回那一句（Refused，網頁跳提示），
+            # 不扣體力、不寫江湖紀錄。不在這裡、陣營不合這類原因照舊「此刻無法這麼做」
+            cid = option_id.removeprefix("act:recruit:")
+            owner = roster.owned_by(self.world, cid) if cid in self.content.characters else None
+            if owner is not None and not roster.owns(owner, self.state.player.name):
+                return Refused(self._log([roster.TAKEN.format(name=self.content.characters[cid].name, owner=owner)]))
         if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
             # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
             foe = self.state.world.arena.get(option_id.removeprefix("arena:fight:"))
