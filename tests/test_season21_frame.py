@@ -307,3 +307,15 @@ def test_season_clock_resume_refuses_a_profile_without_the_season21_switch():
     off = real_content("season21")
     off.config.season21 = False  # 第一季規則開、季長 21 天都對得上，只差 21 天季
     assert season_clock._profile_mismatch(season, off) is not None
+
+
+def test_a_season21_program_warns_on_a_season_opened_without_it():
+    """season_weeks 不蓋在季上：用 21 天季的設定開著的程式讀到還在跑的週末季（或 14 天季），季曆整個算錯，啟動時也要印對不上那一行
+    （另一句，不是第一季規則那一句）。21 天季對 21 天季不印、季收了不印。"""
+    c21, wk = real_content("season21"), real_content("weekend")
+    weekend = _season(wk)
+    assert calendar.profile_warning(c21, weekend) == calendar.SEASON21_MISMATCH
+    assert calendar.profile_warning(c21, _season(real_content())) == calendar.SEASON21_MISMATCH
+    assert calendar.profile_warning(wk, _season(c21, now=WED)) == calendar.SEASON21_MISMATCH
+    weekend.ended = True
+    assert calendar.profile_warning(c21, weekend) is None

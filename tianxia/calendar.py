@@ -62,6 +62,8 @@ def anchor_offset(now: float, content: Content) -> float:
 
 # 待 joy 潤（FB-157）：主機的人看的那一行，兩個程式啟動時印
 PROFILE_MISMATCH = "⚠ 這一季開季時第一季規則是開著的，這個程式的設定卻是關著的：這樣跑會把第一季的規則全關掉、懸賞也會重掛。兩個程式都要帶同一份設定（TIANXIA_PROFILE）。"
+# 21 天季（season21）跟這個程式的設定對不上的那一行（兩個方向都印）：season_weeks 沒蓋在季上，季曆、時刻表會整個算錯。待 joy 潤
+SEASON21_MISMATCH = "⚠ 這一季開季時的 21 天季設定跟這個程式的設定對不上：季曆與時刻表會整個算錯。兩個程式都要帶開季時那一份設定（TIANXIA_PROFILE）。"
 
 
 def profile_warning(content: Content, season: WorldState | None) -> str | None:
@@ -70,8 +72,8 @@ def profile_warning(content: Content, season: WorldState | None) -> str | None:
     季收了（休季）也不印：週末的季收了、主機故意不帶設定重開好開 14 天的下一季，這時印「要帶同一份設定」會叫人帶錯（審查）。"""
     if season is None or season.ended:
         return None
-    if season.season21 and not content.config.season21:  # 21 天季的章、這個程式卻沒開（例：帶了週末的設定）：季曆整個對不上
-        return PROFILE_MISMATCH
+    if season.season21 != content.config.season21:  # 21 天季的章跟設定對不上（兩個方向）：season_weeks 不在章上，季曆整個對不上
+        return SEASON21_MISMATCH
     if not season.season_one or content.config.season_one:
         return None
     return PROFILE_MISMATCH
