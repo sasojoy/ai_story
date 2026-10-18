@@ -319,3 +319,50 @@ def test_a_season21_program_warns_on_a_season_opened_without_it():
     assert calendar.profile_warning(wk, _season(c21, now=WED)) == calendar.SEASON21_MISMATCH
     weekend.ended = True
     assert calendar.profile_warning(c21, weekend) is None
+
+
+# ── 暫停賽季時鐘（PM 2026-10-19：21 天季的季曆對回現實的星期）──
+
+
+def _resume(store, content, now):
+    import random
+
+    return world.resume_season_clock(store, content, now, random.Random(0), "繼續：{skip}")
+
+
+def test_resuming_realigns_the_calendar_and_settles_what_was_due(world):
+    """週一 10:00 暫停、週三 13:00 繼續：季曆寫週三 13:00，週二、週三中午的大事在繼續那一刻依序結算；長社照舊是週六 20:00，
+    季末照原本的日期（第 3 週週日 24:00）。"""
+    import random
+
+    from tianxia import world as rules_world
+
+    c21 = real_content("season21")
+    store = world
+    store.seed_first_season(c21)
+    assert store.open_season(c21, MON)
+    store.catch_up_season(c21, MON + 10 * HOUR, random.Random(0))
+    assert store.pause_clock(MON + 10 * HOUR)
+    lines = _resume(store, c21, MON + 2 * DAY + 13 * HOUR)
+    season = store.get_season()
+    assert calendar.stamp_text(season.time, c21, season) == "第 1 週・週三 13:00"
+    assert {"court_mobilizes", "zhangmancheng_wan"} <= set(season.timeline) and "bocai_routs_zhujun" not in season.timeline
+    assert calendar.stamp_text(season.schedule["changshe_fire"], c21, season) == "第 1 週・週六 20:00"
+    assert season.schedule["finale"] + season.cal_offset == 3 * WEEK  # 季末照原本的現實日期
+    assert rules_world.RESUME_SKIP_REAL in lines[0]
+
+
+def test_the_weekend_pause_is_unchanged(world):
+    """週末的季照舊：照整個曆時扣、季末往後延，偏移一直是 0。"""
+    from tianxia import world as rules_world
+
+    wk = real_content("weekend")
+    store = world
+    store.seed_first_season(wk)
+    assert store.open_season(wk, MON)
+    before = store.get_season().schedule["finale"]
+    assert store.pause_clock(MON + 600)
+    lines = _resume(store, wk, MON + 600 + 3 * HOUR)
+    season = store.get_season()
+    assert season.cal_offset == 0 and season.schedule["finale"] == before
+    assert rules_world.RESUME_SKIP_REAL not in lines[0]
