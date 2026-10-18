@@ -10,9 +10,29 @@ from __future__ import annotations
 import random
 
 from . import calendar, ranger, rules, team
+from .characters import name_key
 from .models import Content
-from .state import GameState
+from .state import MAX_TEAM_COMPANIONS, GameState
 from .world_state import WorldStateStore
+
+# 招募鈕灰掉時寫的原因（歷史武將同行第二、四節；待 joy 潤）
+SIDE_ONLY = "只追隨{side}"
+FULL = "名下已有 {n} 位同伴"
+
+
+def on(content: Content) -> bool:
+    """歷史武將同行開著沒（Config.companions）：招募開放、名下上限、放走、決戰助陣、叛投帶不走都看它。"""
+    return content.config.companions.enabled
+
+
+def cap(content: Content) -> int:
+    """名下最多幾位：開著是 Config.companions.max_owned（3），關著照舊 MAX_TEAM_COMPANIONS（一個字都不變）。"""
+    return content.config.companions.max_owned if on(content) else MAX_TEAM_COMPANIONS
+
+
+def owns(owner: str | None, player_name: str) -> bool:
+    """owner 是不是這個人（名號比對不分大小寫，同 characters.name_key）。"""
+    return owner is not None and name_key(owner) == name_key(player_name)
 
 
 def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
@@ -20,7 +40,17 @@ def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
 
 
 def owned_companions(world: WorldStateStore, player_name: str) -> list[str]:
-    return [cid for cid, p in world.read().companions.items() if p.owner == player_name]
+    return [cid for cid, p in world.read().companions.items() if owns(p.owner, player_name)]
+
+
+def recruit_problem(state: GameState, content: Content, world: WorldStateStore, companion_id: str) -> str | None:
+    """歷史武將同行：招不了他的原因（照陣營、名下滿了）；招得了是 None。有沒有主、在不在這裡由呼叫端看。
+    陣營照自己投靠的那一個（豪強分屬兩軍時照舊算豪強，p.faction）。"""
+    ch = content.characters[companion_id]
+    if ch.side is not None and state.player.faction != ch.side:
+        return SIDE_ONLY.format(side=content.scenario.faction_name(ch.side, ch.side))
+    n = len(owned_companions(world, state.player.name))
+    return FULL.format(n=n) if n >= cap(content) else None
 
 
 def recruit_chance(content: Content, state: GameState, companion_id: str) -> float:
@@ -49,7 +79,7 @@ def attempt_recruit(
     ch = content.characters[companion_id]
     disp = ch.name
     owner = owned_by(world, companion_id)
-    if owner == state.player.name:
+    if owns(owner, state.player.name):
         return [f"【{disp}】已經是你的同伴了。"]
     if owner is not None:
         return [f"【{disp}】已經被{owner}招攬走了，這次撲了個空。"]
@@ -57,7 +87,9 @@ def attempt_recruit(
     p.stamina -= content.config.recruit_stamina
     chance = recruit_chance(content, state, companion_id)
     if rng.random() < chance:
-        if not world.try_recruit(companion_id, p.name):
+        if not world.try_recruit(companion_id, p.name, cap=cap(content) if on(content) else None):
+            if owned_by(world, companion_id) is None:  # 沒人搶走：是名下滿了（另一個分頁剛招到一位）
+                return [f"（{FULL.format(n=len(owned_companions(world, p.name)))}，招不了更多人。）"]
             return [f"晚了一步，【{disp}】剛剛被別人招攬走了。"]
         _seed_starting_skills(world, companion_id, ch)
         msgs = [f"【{disp}】被你的誠意打動，願意追隨於你！"]

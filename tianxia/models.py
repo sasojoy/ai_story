@@ -709,6 +709,9 @@ class CharacterDef(_Strict):
     haunts: list[str] = Field(default_factory=list)
     follows: str | None = None
     side: str | None = None
+    # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
+    # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
+    recruitable: bool = False
 
 
 class Squad(_Strict):
@@ -951,6 +954,7 @@ ALLOW_FAMILIES = (
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
 )
 
 
@@ -2221,6 +2225,17 @@ class TacticTuning(_Strict):
     named_bond_rate: float = Field(default=0.08, ge=0, le=1)
 
 
+class CompanionsTuning(_Strict):
+    """歷史武將同行（docs/superpowers/specs/2026-10-18-歷史武將同行-design.md；tianxia/roster.py、tianxia/escorts.py）：
+    十五位標了 recruitable 的歷史武將照陣營招進名下（全服唯一），名下最多 max_owned 位；大決戰挑一位上陣（battle_instance.Escort），
+    打完那一場他回江湖、原主人的情誼乘 parted_keep（無條件捨去）。enabled 關著：招募、隊伍上限、決戰、叛投一個字都不變
+    （上限照 state.MAX_TEAM_COMPANIONS）。正式開、測試內容關。"""
+
+    enabled: bool = False
+    max_owned: int = Field(default=3, ge=1)  # 名下最多幾位（照 CompanionProgress.owner 算，名號比對不分大小寫）
+    parted_keep: float = Field(default=0.5, ge=0, le=1)  # 決戰打完回江湖、叛投帶不走時，原主人的情誼留幾成（無條件捨去）
+
+
 class FigureLifeTuning(_Strict):
     """人物活起來（大勢人物擴充第一批，Joy 2026-10-17「歷史武將人數新增多一些，更智能化，像是真的活在這個亂世」；
     設計稿 https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2；tianxia/figure_life.py）。
@@ -2524,6 +2539,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
+    companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）

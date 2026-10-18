@@ -603,16 +603,22 @@ def test_nobody_is_recruitable_anywhere(content):
     assert [cid for cid, at in recruitable.items() if at in content.locations] == []
 
 
-def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
-    """碰到才說的 h_recruit（設計 5.2 第 8 條，「第一次碰到能招募的同伴」）寫好了、也接好了（Game._hint_triggers 看 _recruit_target），
-    可是這一季的內容沒有任何人能招募（上面幾個測試），所以它現在在任何地方都不會說。這個測試是留給之後的人看的：哪天有人把某位人物改成
-    可招募（recruitable、有 recruit_at），這裡會叫——那一刻 h_recruit 開始會說：確認它的話（「先交友，交情越深越肯跟你走」）
-    還對得上招募真正的做法、招募的按鈕真的在，再把這個測試改成相反的。"""
+def test_the_recruit_hint_speaks_where_someone_will_follow_you(content):
+    """碰到才說的 h_recruit（設計 5.2 第 8 條，「第一次碰到能招募的同伴」）：歷史武將同行（2026-10-19）把十五位改成可招之後開始說。
+    它的話（「先交友，交情越深越肯跟你走」）對得上招募真正的做法（成功率照情誼長、招募鈕在選單上），只在此地有人招得了你的地方說
+    （_recruitable_here：照陣營、名下沒滿；灰掉的鈕不算）。散人只招得到沒寫 side 的那幾位。舊的 recruit_at 那一條正式內容沒有人。"""
+    from tianxia import roster
+
     game = Game.new(content, "甲", rng=random.Random(0))
+    spoke = []
     for loc_id in content.locations:
         game.state.player.location = loc_id
         assert game._recruit_target() is None, loc_id
-        assert "h_recruit" not in game._hint_triggers(), loc_id
+        usable = [cid for cid in game._recruit_targets() if roster.recruit_problem(game.state, content, game.world, cid) is None]
+        assert ("h_recruit" in game._hint_triggers()) == bool(usable), loc_id
+        assert all(content.characters[cid].side is None for cid in usable), loc_id
+        spoke += [loc_id] if usable else []
+    assert "yingchuan_academy" in spoke and "zhuo_county" not in spoke  # 荀彧誰都招得到；劉關張只追隨官軍
 
 
 # ── 碰到才說的正式內容（新手引導計畫三 Task 3；設計 10.5、10.6）──────────────────────────────

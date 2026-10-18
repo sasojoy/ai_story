@@ -635,7 +635,7 @@ class WorldStateStore(Protocol):
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
         ...
 
-    def try_recruit(self, companion_id: str, player_name: str) -> bool:
+    def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
         """把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。"""
         ...
 

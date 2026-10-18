@@ -1162,6 +1162,16 @@ class Game:
                 "act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina,
                 note=f"成功率約 {chance * 100:.0f}%",
             ))
+        for cid in self._recruit_targets():  # 歷史武將同行：此地此刻站著、還沒有主的每一位一顆；招不了的灰掉寫原因
+            problem = roster.recruit_problem(s, c, self.world, cid)
+            name = c.characters[cid].name
+            if problem is not None:
+                opts.append(Option(id=f"act:recruit:{cid}", label=f"招募【{name}】（{problem}）", enabled=False))
+            else:
+                chance = roster.recruit_chance(c, s, cid)
+                opts.append(self._cost_option(
+                    f"act:recruit:{cid}", f"招募【{name}】", c.config.recruit_stamina, note=f"成功率約 {chance * 100:.0f}%",
+                ))
         for dest_id in loc.connections:
             if not atlas.is_unlocked(c.locations[dest_id], s, c):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
                 continue
@@ -1439,6 +1449,21 @@ class Game:
             if ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None:
                 return cid
         return None
+
+    def _recruit_targets(self) -> list[str]:
+        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主的人。
+        關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
+        if not roster.on(self.content):
+            return []
+        return [
+            cid for cid in self._figures_here()
+            if self.content.characters[cid].recruitable and roster.owned_by(self.world, cid) is None
+        ]
+
+    def _recruitable_here(self) -> bool:
+        """此地有人招得了你（_recruit_targets 裡陣營對、名下沒滿的）：h_recruit 照它說，灰掉的鈕不算（黃巾的人在涿郡不說）。"""
+        s, c = self.state, self.content
+        return any(roster.recruit_problem(s, c, self.world, cid) is None for cid in self._recruit_targets())
 
     def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:
         extra = f"・{note}" if note else ""
@@ -2207,6 +2232,8 @@ class Game:
             return {"yes": f"{what}・{inv.sender}", "no": f"婉拒{what}", "cancel": "收回邀請"}.get(verb, f"與{inv.sender}")
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
+        if kind == "act" and arg.startswith("recruit:") and arg.partition(":")[2] in c.characters:
+            return f"招募・{c.characters[arg.partition(':')[2]].name}"
         rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
         if rank_action is not None:
             name = next(a.name for a in c.orders.rank_actions if a.id == rank_action)  # choose 已經驗過選項在選單上，一定找得到
@@ -2434,7 +2461,7 @@ class Game:
         # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
         if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
             on.append("h_basic_art")
-        if want("h_recruit") and self._recruit_target() is not None:
+        if want("h_recruit") and (self._recruit_target() is not None or self._recruitable_here()):
             on.append("h_recruit")
         if want("h_free_text") and s.pending_event:
             event = c.events.get(s.pending_event)
@@ -2530,6 +2557,8 @@ class Game:
             return self._part_ways()
         if what == "recruit":
             return self._recruit()
+        if what.startswith("recruit:"):
+            return self._recruit_one(what.partition(":")[2])
         if what == "rest":
             return self._rest()
         if what == "duty":
@@ -5746,6 +5775,16 @@ class Game:
         if target is None:
             return ["（此地此刻沒有能招募的人。）"]
         return roster.attempt_recruit(self.state, self.content, self.world, target, self.rng)
+
+    def _recruit_one(self, cid: str) -> list[str]:
+        """歷史武將同行：招這一位（第三節，照現在的成功率；失敗照舊可能被要求決鬥）。選單上那一顆按得下去才會走到這裡，
+        這裡再驗一次：人還在這裡、沒有主、陣營對、名下沒滿。"""
+        if cid not in self._recruit_targets():
+            return ["（此刻無法這麼做。）"]
+        problem = roster.recruit_problem(self.state, self.content, self.world, cid)
+        if problem is not None:
+            return [f"（{problem}。）"]
+        return roster.attempt_recruit(self.state, self.content, self.world, cid, self.rng)
 
     def _fortune_gift(self) -> list[str]:
         p = self.state.player

@@ -919,6 +919,20 @@ def _condition_flags(c: Content) -> set[str]:
     return flags
 
 
+def check_companions(c: Content, need) -> None:
+    """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
+    要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
+    big = {fig.character for fig in c.figures.values() if fig.character}
+    faction_ids = {f.id for f in c.scenario.factions}
+    for cid, ch in c.characters.items():
+        if not ch.recruitable:
+            continue
+        where = f"人物 {cid}"
+        need(cid not in big, f"{where}：大勢人物不能標 recruitable（人物表寫了他）")
+        need(ch.deep_interaction, f"{where}：標了 recruitable 要能深度對話（deep_interaction）")
+        need(ch.side is None or ch.side in faction_ids, f"{where}：side {ch.side} 不是劇本的陣營")
+
+
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
     """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
     隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物，而且人物的 id 就是對話人物的 id（伏筆用對話人物的 id 讀人物的
@@ -2495,6 +2509,7 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
