@@ -21,6 +21,8 @@
   "territory": {"enabled": false},
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
+  "figure_aid": {"enabled": false},
+  "battle": {"generals": {"enabled": false}},
   "stockpile": {"enabled": false},
   "push_resistance": {"enabled": false},
   "battle_quiet_hours": {"enabled": false},

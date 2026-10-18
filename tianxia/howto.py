@@ -586,6 +586,12 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
         lines.append(f"奪璽單挑：懷璽的人守住了 +{fame['keep']}、被奪走 +{fame['lose']}；挑戰的人打贏了單挑、碎片卻沒易手 +{fame['near']}。")
         if seal.mandate_event(content) is not None and cfg.seal.mandate.fame > 0:  # 得天命的那一軍（Game._showdown_pay，玉璽二）
             lines.append(seal.MANDATE_FAME.format(fame=cfg.seal.mandate.fame))
+    gen = cfg.battle.generals
+    if gen.enabled and gen.slay_fame > 0 and content.figures:  # 決戰陣前擊退對面的龍頭（Game._showdown_pay，generals）；待 joy 潤
+        lines.append(f"決戰裡給對面上陣的大勢人物最後一擊、把他打到敗走：+{gen.slay_fame}。")
+    aid = cfg.figure_aid
+    if aid.enabled and aid.guard_fame > 0 and content.figures:  # 護衛替人物擋下挑戰（Game._deliver_guard_credits，figure_aid）；待 joy 潤
+        lines.append(f"護衛自己陣營的大勢人物，每替他擋下一次挑戰：+{aid.guard_fame}。")
     ring = cfg.arena
     if ring.enabled:  # 擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）
         if ring.highlight_fame > 0:

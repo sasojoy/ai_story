@@ -369,7 +369,9 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
             continue
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
-        now.prestige = min(fig.start_prestige, now.prestige + whole)
+        if whole:  # 跟犒軍共用一天的上限（figure_aid.restore；開關關著照舊補到開季值）
+            from . import figure_aid  # noqa: PLC0415  figure_aid → figures：延後 import
+            figure_aid.restore(state, content, fid, whole)
         rest = max(0.0, pending - whole)
         if rest and now.prestige < fig.start_prestige:
             w.trend_accum[key] = rest
@@ -389,6 +391,7 @@ def revive(state: GameState, content: Content) -> list[str]:
         if now.back_at is None or w.time < now.back_at:
             continue
         front, now.back_at, now.back_front = now.back_front, None, None
+        w.aid_tally.pop(f"visitcut:{fid}", None)  # 探望提前了多少：這一次倒下的帳
         if fig is None or now.status not in OUT:
             continue
         now.status = "active"

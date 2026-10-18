@@ -237,7 +237,10 @@ def test_start_showdown_opens_exactly_as_the_timetable_would(on, tmp_path):
     a.world.mutate_season(due_now)
     natural = world_mod.start_pending_battle(a.world, on, NOW)
     pressed = b.admin_start_showdown("changshe_fire", NOW)
-    assert natural == pressed == ["🛡️ 【全服戰報】長社火攻的集結號角已經吹響！"]
+    assert natural == pressed == [
+        "🛡️ 【全服戰報】長社火攻的集結號角已經吹響！",
+        "⚔️ 【天下大事】長社火攻集結：官軍主將皇甫嵩、副將朱儁，黃巾軍主將波才親自上陣。",  # 龍頭上陣（generals.on_muster）
+    ]
     assert b.world.get_battle().model_dump() == a.world.get_battle().model_dump()
     assert b.world.get_season().showdowns_opened == a.world.get_season().showdowns_opened == {"changshe_fire": "changshe_fire"}
 
