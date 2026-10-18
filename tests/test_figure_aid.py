@@ -121,7 +121,9 @@ def test_rally_restores_prestige_within_the_shared_daily_cap(real, world):
     guan.choose("aid:rally:huangfusong")
     assert "aid:rally:huangfusong" not in _ids(guan)  # 一個人一天兩次
     # 自然回復跟犒軍共用一天的上限
-    s.world.aid_tally[f"restored:huangfusong:{int(s.world.time // DAY)}"] = cfg.daily_restore_cap
+    figure_aid.restore(s, real, "huangfusong", 100)  # 補到一天的上限為止（不是補到開季值）
+    assert figures.state_of(s, real, "huangfusong").prestige < real.figures["huangfusong"].start_prestige
+    assert figure_aid.left_today(s, real, "huangfusong") == 0
     assert figure_aid.restore(s, real, "huangfusong", 5) == 0
 
 

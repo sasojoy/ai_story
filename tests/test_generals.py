@@ -135,7 +135,8 @@ def test_pick_takes_the_figures_on_that_front_in_rank_order():
     c = real_content("weekend")
     s = _season(c)
     rows = generals.pick(s, c, c.battles["changshe_fire"])
-    assert [(r.name, r.faction, r.rank) for r in rows] == [("皇甫嵩", "guan", 0), ("朱儁", "guan", 1), ("波才", "huang", 0)]
+    # 黃巾的副將照那條線上還有誰（「大勢人物擴充」合進來之後，沒有戰線的人物照大區補上）
+    assert [(r.name, r.faction, r.rank) for r in rows][:3] == [("皇甫嵩", "guan", 0), ("朱儁", "guan", 1), ("波才", "huang", 0)]
     s.world.figures["bocai"] = figures.state_of(s, c, "bocai").model_copy(update={"prestige": 30})
     weak = generals.pick(s, c, c.battles["changshe_fire"])[2]
     assert weak.score == pytest.approx(rows[2].score * 0.75, abs=0.2)  # 聲威一半，份量剩四分之三
@@ -169,7 +170,7 @@ def test_the_showdown_scene_shows_the_lineup_and_the_order(world):
     c.config.train_event_chance = 0.0
     game = _game(c, faction="guan")
     _showdown(game)
-    assert [x.name for x in game.world.get_battle().commanders] == ["皇甫嵩", "朱儁", "波才"]
+    assert [x.name for x in game.world.get_battle().commanders][:3] == ["皇甫嵩", "朱儁", "波才"]
     game.choose("battle:join:guan")
     game.now = game.world.get_battle().muster_deadline_real + 1
     game.options()  # 被動追趕：集結時間到了就開打
