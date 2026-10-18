@@ -80,7 +80,7 @@ def test_the_real_pool_has_thirty_one_named_recipes_and_validates():
     assert {"柳影劍", "纏絲護手", "負山袍", "霧隱袍", "玄晶劍", "隕星刀", "寒淵拳套", "嶽峙鎧", "掠影衫"} <= names
     for r in rc.forge_secrets.values():
         if r.divine:
-            assert r.main.tier == 3 and r.aux.tier == 3  # 神器配方兩樣都三階（5.1）
+            assert r.main.tier == 4 and r.aux.tier == 4  # 神器配方兩樣都四階（正式季整合 5.5；以前是三階，5.1）
     for tianji in range(5):
         assert len(forge_secrets.active(rc, tianji)) == 9  # 一季 9 條（兵器 6、防具 3，3.2）
     for r in rc.forge_secrets.values():
@@ -109,7 +109,7 @@ def test_forge_names_and_gear_names_are_kept_off_other_names(forge_content):
      "跟隱藏配方 t_blade 認同一個組合"),
     (lambda c: c.config.forge_secrets.per_season.__setitem__("weapon:1", 3), "weapon:1 只有 1 條，不夠挑 3 條"),
     (lambda c: c.config.forge_secrets.per_season.__setitem__("weapon:divine", 1), "weapon:divine 只有 0 條，不夠挑 1 條"),
-    (lambda c: setattr(c.forge_secrets["t_cleaver"], "divine", True), "神器配方的主料、輔料都要三階"),
+    (lambda c: setattr(c.forge_secrets["t_cleaver"], "divine", True), "神器配方的主料、輔料都要四階"),  # 正式季整合 5.5
     (lambda c: c.config.forge_secrets.per_season.__setitem__("shield:1", 1), "per_season 只能有"),
 ])
 def test_a_bad_forge_pool_is_refused_at_load(forge_content, change, message):

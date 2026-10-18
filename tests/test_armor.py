@@ -69,7 +69,7 @@ def test_fixture_turns_armor_off_and_real_content_on(content):
     assert content.config.armor.enabled is False
     real = real_content().config.armor
     assert real.enabled is True and real.total_cap == 0.6 and real.shop_price == 40 and real.repair_silver == 5
-    assert real.tier_cut == {"1": 0.06, "2": 0.12, "3": 0.18}
+    assert real.tier_cut == {"1": 0.06, "2": 0.12, "3": 0.18, "4": 0.20}  # 四階 20%（正式季整合 5.1）
     assert real.wear == {"大勝": 1, "險勝": 2, "僵持": 3, "落敗": 5}
 
 

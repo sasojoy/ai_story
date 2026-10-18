@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
@@ -2551,6 +2551,7 @@ class Game:
             equipment.open_smith(self.state.player, self.content)  # 打開鐵匠鋪（見 _smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
             self.state.player.shop_clue = ""
             self._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
+            self.state.player.smith_rule = shopview.next_rule(self.state, self.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
             return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
         if what == "market":
             p = self.state.player
@@ -3430,7 +3431,8 @@ class Game:
                 opts.append(Option(id=option_id, enabled=False,
                                    label=economy.UPGRADE_REFUSED.format(low=row["from"], need=row["need"], problem=row["problem"])))
                 continue
-            left = economy.UPGRADE_LEFT.format(n=row["left"]) if row["left"] is not None else ""
+            left_line = economy.UPGRADE_SEASON_LEFT if row["tier"] == four_tiers.TIER else economy.UPGRADE_LEFT
+            left = left_line.format(n=row["left"]) if row["left"] is not None else ""
             opts.append(Option(id=option_id, label=economy.UPGRADE_LABEL.format(
                 low=row["from"], need=row["need"], cost=row["cost"], odds=row["odds"], left=left)))
         pages = [Option(id=f"smith:page:{slot}", label=equipment.PAGE_LABELS[slot]) for slot in equipment.SMITH_PAGES if equipment.on(c, slot)]
@@ -8410,8 +8412,8 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         goods: list[tuple[str, int]] = []
         left = cfg.materials
-        held = sorted(
-            ((mid, n) for mid, n in lp.materials.items() if n > 0 and mid in c.materials),
+        held = sorted(  # 四階搶不走（正式季整合 4.6：四階不在人與人之間轉手）
+            ((mid, n) for mid, n in lp.materials.items() if n > 0 and mid in c.materials and not four_tiers.tier4_id(c, mid)),
             key=lambda item: (c.materials[item[0]].tier, -item[1], item[0]),
         )
         for mid, n in held:

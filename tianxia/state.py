@@ -172,6 +172,9 @@ class Equipment(BaseModel):
     template: str | None = None
     # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
     secret: str | None = None
+    # 四階名器（正式季整合 5.2）：主料四階照機率擲出來的名器，指到 content/tier4_named.json 的那一條（名字照它讀，name 只當備份；
+    # 加成、階品、光色看 equipment.named／is_named）。不登記、沒有首位發現；舊存檔沒有這一欄
+    named_entry: str | None = None
     # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
     # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
     signature: str | None = None
@@ -511,6 +514,10 @@ class PlayerState(BaseModel):
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
     shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
+    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；shopview.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
+    # 的位置，講完一輪從頭）。換季時新角色本來就是空的
+    smith_rule: str = ""
+    smith_rules_told: list[int] = Field(default_factory=list)
     shop_clue: str = ""  # 鐵匠順口說出的那一句（forge_secrets.hear_smith，1.4）：蓋過這一下的掌櫃話，下一下就換回掌櫃話；收起店時清掉
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
@@ -545,6 +552,8 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
+    tier4_upgrades: int = 0
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力

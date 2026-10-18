@@ -150,7 +150,7 @@ class Material(_Strict):
     id: str
     name: str
     attribute: Attribute
-    tier: int = Field(ge=1, le=3)  # 1 凡品、2 靈品、3 天品
+    tier: int = Field(ge=1, le=4)  # 1 凡品、2 靈品、3 天品、4 神品（神器的料，正式季整合 4.4）
     description: str = ""
 
 
@@ -1049,8 +1049,8 @@ class ForgeSide(_Strict):
     主料一定寫死階（tier，定這一件的階與工錢）；輔料可以改寫 min_tier（不低於幾階）。"""
 
     attribute: str
-    tier: int | None = Field(default=None, ge=1, le=3)
-    min_tier: int | None = Field(default=None, ge=1, le=3)
+    tier: int | None = Field(default=None, ge=1, le=4)  # 4：神器配方（正式季整合 5.5）
+    min_tier: int | None = Field(default=None, ge=1, le=3)  # 「幾階以上」只算到三階：四階是神器的料（forge_secrets.covers）
 
 
 class ForgeSecret(_Strict):
@@ -1068,6 +1068,19 @@ class ForgeSecret(_Strict):
     note: str = ""  # 打出來那一句下面的一句說明
     clues: list[str] = Field(min_length=3, max_length=3)
     tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
+
+
+class Tier4Named(_Strict):
+    """四階名器名字表的一條（content/tier4_named.json；正式季整合 5.2）：主料四階、沒打中神器配方時照機率出名器，名字照這一爐的種子
+    從合欄位、合種類、合屬性的那幾條挑一個（four_tiers.pick_named）。不登記、不佔名字空間，不同的人可以撞名（跟一般組合一樣）。
+    打出來的那一件記 Equipment.named_entry＝這一條的 id；名字讀檔時照內容重寫（forge_secrets.refresh_names）。"""
+
+    id: str
+    slot: Literal["weapon", "armor"]
+    kind: str | None = None  # 兵器種類（WEAPON_KINDS）；防具不寫
+    attribute: Attribute
+    name: str
+    note: str = ""  # 打出來那一句下面的一句說明（待 joy 潤）
 
 
 class PresetRecipe(_Strict):
@@ -1518,7 +1531,8 @@ class RenownTuning(_Strict):
     clinic_tier: int = Field(default=2, ge=1, le=4)  # 俠的醫館折扣從第幾段（5.2）
     clinic_share: float = Field(default=0.85, gt=0, le=1)
     black_market_tier: int = Field(default=1, ge=1, le=4)  # 寇的黑市從第幾段（5.2）
-    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8})  # 素材的階 → 黑市收購價
+    # 素材的階 → 黑市收購價；三階只在素材四階開著時收（同 EconomyRules.sell_price，economy.sell_tiers）
+    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8, 3: 24})
     official_tier: int = Field(default=2, ge=1, le=4)  # 江湖巨寇以上官府每週掛通緝（5.4）
     official_silver: dict[int, int] = Field(default_factory=lambda: {2: 30, 3: 50, 4: 80})
     official_hunter_tier: int = Field(default=2, ge=1, le=4)  # 俠一路第幾段揭得了官府通緝
@@ -1563,7 +1577,7 @@ class Bounties(_Strict):
     )
     xinde: dict[str, int] = Field(default_factory=lambda: {"art": 20, "arms": 10})
     arms_silver: dict[str, int] = Field(default_factory=lambda: {"下品": 20, "中品": 35, "上品": 50})
-    arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4})
+    arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4, "4": 6})  # 四階 ×6（正式季整合 5.1）
     art_materials: int = Field(default=2, ge=0)
     art_material2_chance: float = Field(default=0.3, ge=0, le=1)
     art_weapon_chance: float = Field(default=0.2, ge=0, le=1)
@@ -1778,7 +1792,8 @@ class SmithQuality(_Strict):
     up_range: tuple[float, float] = (5, 45)
     low_range: tuple[float, float] = (15, 80)
     # 輔料比主料高幾階 → 分數（「-1」是輔料低一階）：同階或更高加分、低階扣分（4.3）
-    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12})
+    # 差三階（正式季整合 5.1：主料四階配一階輔料 −24、主料一階配四階輔料 +16）
+    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-3": -24, "-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12, "3": 16})
     wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（同 FuseQuality.wis_weight）
     practice_point: float = Field(default=2, ge=0)  # 熟手：這個配方這一季你打過一次加幾分
     practice_cap: float = Field(default=10, ge=0)  # 熟手最多加幾分
@@ -1807,7 +1822,8 @@ class WeaponRules(_Strict):
     參考內外同屬性 +20%、正邪共鳴最多 +20%，最好的兵器約抵其中一項。"""
 
     enabled: bool = True
-    tier_bonus: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})
+    # 四階 17%（正式季整合 5.1：四階名器上品 17＋2＋4＝23%，剛好追平仿品）
+    tier_bonus: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15, "4": 0.17})
     quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
     temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（第二批才淬得了）
     match: float = Field(default=0.05, ge=0)  # 跟身上武學同屬性加、相剋扣
@@ -1820,10 +1836,10 @@ class WeaponRules(_Strict):
     drop_chance: float = Field(default=0.03, ge=0, le=1)  # 打贏遊歷或野怪掉一把一階下品的機會
     rack_cap: int = Field(default=100, ge=1)  # 裝備庫幾格（企劃者 2026-10-10：原來的 6 格改 100；程式裡的 rack 就是玩家看到的「裝備庫」）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
-    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得（四階 300，正式季整合 5.1）
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（4.7；四階料 150，正式季整合 5.3）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
@@ -1840,7 +1856,7 @@ class ArmorRules(_Strict):
     天時地利正式值在 config.json。"""
 
     enabled: bool = True
-    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
+    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18, "4": 0.20})  # 查表用 str(tier)，同 WeaponRules.tier_bonus（四階 20%，正式季整合 5.1）
     quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
     temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（4.1）
     match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
@@ -1850,10 +1866,10 @@ class ArmorRules(_Strict):
     shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
     repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
-    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（同兵器 4.2）：照主料的階
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（同兵器 4.2）：照主料的階
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
     original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
@@ -2429,11 +2445,14 @@ class EconomyRules(_Strict):
     sortie_silver: bool = True  # 出陣攻打贏加給對手銀兩的 sortie_silver_share（第八節；守、攪局不給）
     sortie_silver_share: float = Field(default=0.3, ge=0, le=1)
     sell: bool = True  # 鐵匠鋪收購（第五節）：階 → 一個幾兩；不在表上的階不收（三階要留著做神器）；收購價不分地盤
-    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6})
+    # 三階 18 兩只在素材四階開著時收（正式季整合 4.2、6.6；Config.four_tiers，關著照舊不收三階）；四階不在表上，一律不收
+    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6, 3: 18})
     upgrade: bool = True  # 鐵匠鋪升階（第四節）：換到幾階 → 要幾個同屬性低一階的、工錢（套地盤福利 territory.price_factor）
     upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
     upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
-    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限。素材四階開著時不設每日上限（正式季整合 4.2：拿掉二換三一天一個），
+    # 三換四另有一季的上限（Config.four_tiers.season_cap）
+    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})
     # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
     # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
     upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
@@ -2446,6 +2465,19 @@ class EconomyRules(_Strict):
     armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
         default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
     )
+
+
+class FourTiers(_Strict):
+    """素材四階（docs/superpowers/specs/2026-10-17-正式季整合-design.md 第四、五章；tianxia/four_tiers.py）：主機的緊急開關，
+    預設開、測試內容關。內容（四階料、九件神器的配方與口訣、四階名器名字表）收不回（10.1），這裡關得掉的是規則：三階收購與黑市、
+    拿掉二換三一天一個（關著回到 economy.upgrade_per_day）、三換四、四階名器的機率、鐵匠講神器的規矩。數字都是 PM 提案或暫定。"""
+
+    enabled: bool = True
+    upgrade_need: int = Field(default=5, ge=1)  # 三換四：幾個同屬性的三階（4.5）
+    upgrade_silver: int = Field(default=150, ge=0)  # 三換四的工錢（乘地盤福利與名望折扣，同升階老規矩）
+    season_cap: int = Field(default=2, ge=0)  # 三換四一季最多幾個（PlayerState.tier4_upgrades）
+    named_main: float = Field(default=0.5, ge=0, le=1)  # 主料四階、沒打中神器配方：出名器的機會（5.2）
+    named_both: float = Field(default=0.8, ge=0, le=1)  # 主輔都是四階（也沒打中神器配方）
 
 
 class Config(_Strict):
@@ -2520,6 +2552,7 @@ class Config(_Strict):
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
+    four_tiers: FourTiers = Field(default_factory=FourTiers)  # 素材四階的規則（見 FourTiers）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
@@ -3731,6 +3764,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）

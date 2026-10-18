@@ -16,7 +16,9 @@ def _page(**econ):
 def test_the_page_explains_where_spare_materials_go():
     page, _ = _page()
     assert f"#### {howto.ECONOMY_TITLE}" in page
-    for words in ("一階一個 2 兩", "二階 6 兩", "三階不收", "三個換一個", "一天一個", "一天最多 100 點", "糧秣", "箭矢", "甲冑", "戰馬",
+    # 素材四階（正式季整合 4.2、4.5）：三階收、四階不收；二換三不設一天一個，三換四一季兩個
+    for words in ("一階一個 2 兩", "二階 6 兩", "三階 18 兩", "四階不收", "三個換一個", "五個換一個四階", "一季兩個", "一天最多 100 點",
+                  "糧秣", "箭矢", "甲冑", "戰馬",
                   "約 5 成是同屬性的，其餘隨機"):
         assert words in page, words
 

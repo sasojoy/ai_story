@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, equipment, explore_modes, figures, renown, rules, seal, sortie, territory, timetable
+from . import calendar, economy, equipment, explore_modes, figures, four_tiers, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -373,24 +373,33 @@ def economy_lines(content: Content, allied: bool = False) -> list[str]:
     allied：豪強分屬兩軍的季，豪強捐的進依附那一邊、在自己的莊院與那一邊的大本營都能捐（新寫）。"""
     econ = content.config.economy
     reset = "台灣時間 00:00 換日" if content.config.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
-    tier_word = {1: "一階", 2: "二階", 3: "三階"}
+    tier_word = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
+    four = four_tiers.on(content)
     lines = []
     if econ.sell:
-        prices = [f"{tier_word.get(t, f'{t}階')} {price} 兩" for t, price in sorted(econ.sell_price.items())]
+        tiers = economy.sell_tiers(content)
+        prices = [f"{tier_word.get(t, f'{t}階')} {econ.sell_price[t]} 兩" for t in tiers]
         prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」
-        lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；三階不收，留著打神器。")
+        refused = "四階不收，留著打神器" if four else "三階不收，留著打神器"  # 素材四階（正式季整合 4.2）
+        lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；{refused}。")
         rcfg = content.config.renown
-        if renown.on(content, "black_market") and rcfg.black_market_prices:  # 名聲 5.2：寇的黑市價（待 joy 潤）
+        dark_prices = {t: p for t, p in rcfg.black_market_prices.items() if t in tiers}
+        if renown.on(content, "black_market") and dark_prices:  # 名聲 5.2：寇的黑市價（待 joy 潤）
             title = renown.VIRTUE_TITLES["寇"][rcfg.black_market_tier]
-            dark = "、".join(f"{tier_word.get(t, f'{t}階')} {p} 兩" for t, p in sorted(rcfg.black_market_prices.items()))
+            dark = "、".join(f"{tier_word.get(t, f'{t}階')} {p} 兩" for t, p in sorted(dark_prices.items()))
             lines.append(f"走寇的路、到了「{title}」，鐵匠照黑市價收：{dark}。")
     if econ.upgrade:
         steps = []
-        for tier in sorted(econ.upgrade_need):
-            cap = econ.upgrade_per_day.get(tier)
-            limit = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
-            steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(econ.upgrade_need[tier])}個換一個{tier_word.get(tier)}"
-                         f"（工錢 {econ.upgrade_silver.get(tier, 0)} 兩{limit}）")
+        needs = economy.upgrade_needs(content)
+        for tier in sorted(needs):
+            if four:  # 素材四階：一般的不設每日上限，三換四一季幾個、一定同屬性（4.2、4.5）
+                cap_text = f"，一季{four_tiers.count_text(content.config.four_tiers.season_cap)}個、一定出同屬性" if tier == four_tiers.TIER else ""
+            else:
+                cap = econ.upgrade_per_day.get(tier)
+                cap_text = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
+            cost = content.config.four_tiers.upgrade_silver if four and tier == four_tiers.TIER else econ.upgrade_silver.get(tier, 0)
+            steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(needs[tier])}個換一個{tier_word.get(tier)}"
+                         f"（工錢 {cost} 兩{cap_text}）")
         astray = ""
         if econ.upgrade_same_share < 1:  # 升階隨機（企劃者 2026-10-15）：投入的屬性幾成，其餘落到別的屬性
             share = round(econ.upgrade_same_share * 10)
