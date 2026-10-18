@@ -704,6 +704,11 @@ class CharacterDef(_Strict):
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
     # 名聲 5.2：對哪一種人有看法（敬俠：俠見面情誼起步、遇上寇冷淡；喜狠：寇見面情誼起步）；None 是不偏。對話提示也帶一行
     regard: Literal["敬俠", "喜狠"] | None = None
+    # 人物活起來（FigureLifeTuning）：他常在的幾個地點（第一個是 talk_at／recruit_at，每日行事在這幾處之間走）；空的就站著不動。
+    # follows：跟著誰走（關羽、張飛跟著劉備）；side：站哪一方（陣營 id；大勢人物照人物表的 faction，這一欄是給其他人物的，風聞照它找盟友仇敵）
+    haunts: list[str] = Field(default_factory=list)
+    follows: str | None = None
+    side: str | None = None
 
 
 class Squad(_Strict):
@@ -2188,6 +2193,34 @@ class TacticTuning(_Strict):
     named_bond_rate: float = Field(default=0.08, ge=0, le=1)
 
 
+class FigureLifeTuning(_Strict):
+    """人物活起來（大勢人物擴充第一批，Joy 2026-10-17「歷史武將人數新增多一些，更智能化，像是真的活在這個亂世」；
+    設計稿 https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2；tianxia/figure_life.py）。
+    每 every_cal_days 個季曆天，每位人物照規則做一件事（移動、募兵、襲擾、養傷）；心事照事實算（figures.mood_of）；
+    玩家做了份量夠的事，跟這件事有關係的人物記一句風聞、情誼照表動。數字全在這裡，模型不碰。"""
+
+    enabled: bool = True  # 主機的緊急開關：關掉時人物站著不動、沒有心事、不記風聞（跟這一批之前一模一樣）
+    # 多久做一件事（季曆天）：週末一季 84 個季曆天、約 1.4 個現實小時一次；14 天的季約 8 小時一次。一季每人約 42 件事
+    every_cal_days: float = Field(default=2.0, gt=0)
+    recruit: int = Field(default=2, ge=0)  # 募兵回幾點聲威（回到開季值為止）
+    # 一位人物一個遊戲日在戰場外最多回幾點聲威：募兵、自然回復、（大勢人物參戰與護衛那一份的）犒軍共用這一個上限，不各自疊
+    daily_gain_cap: int = Field(default=10, ge=0)
+    raid_push: int = Field(default=1, ge=0)  # 襲擾推幾點：規則關著的季推黃巾聲勢、乘季長倍數、照盡頭阻力；第一季只是傳聞（figures.tick 已經在推）
+    mood_cal_days: float = Field(default=2.0, gt=0)  # 負傷、悲憤撐幾個季曆天（同一個行事週期）
+    hurt_scale: float = Field(default=0.9, gt=0)  # 負傷：挑戰難度（也是決戰份量）乘多少
+    grief_scale: float = Field(default=1.1, gt=0)  # 悲憤：同上
+    lean: int = Field(default=15, ge=0)  # 戰線偏向自己這一方多少算得意、偏向對方多少算焦慮
+    healer_share: float = Field(default=0.5, gt=0, le=1)  # 華佗坐診的醫館，療傷價錢乘多少
+    # 風聞：一位人物對一個人最多記幾條（舊的先丟）、對話提示最多帶幾條
+    hearsay_keep: int = Field(default=5, ge=1)
+    hearsay_prompt: int = Field(default=3, ge=0)
+    # 情誼照表動：打退他的盟友、打退他的仇敵、替他的陣營在決戰立功、截殺他陣營的人（一件事一位人物只算一次）
+    ally_beaten: int = -5
+    foe_beaten: int = 3
+    side_merit: int = 3
+    side_raided: int = -3
+
+
 class RiseTuning(_Strict):
     """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
     tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
@@ -2432,6 +2465,7 @@ class Config(_Strict):
     fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
+    figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）

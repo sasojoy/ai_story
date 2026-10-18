@@ -69,7 +69,11 @@
       "雪中送炭": 10,
       "言語冒犯": -8,
       "冷漠敷衍": -1
-    }
+    },
+    "haunts": [
+      "xiaquyang",
+      "julu_altar"
+    ]
   },
   {
     "id": "zhangliang",
@@ -106,7 +110,11 @@
       "雪中送炭": 10,
       "坦誠相待": 9,
       "冷漠敷衍": -1
-    }
+    },
+    "haunts": [
+      "guangzong",
+      "julu_altar"
+    ]
   },
   {
     "id": "hejin",
@@ -178,7 +186,11 @@
     "affinity_tag_deltas": {
       "真誠請教": 8,
       "由衷讚賞": 3
-    }
+    },
+    "haunts": [
+      "changshe",
+      "guan_camp"
+    ]
   },
   {
     "id": "zhujun",
@@ -213,7 +225,12 @@
     "affinity_tag_deltas": {
       "坦誠相待": 9,
       "由衷讚賞": 3
-    }
+    },
+    "haunts": [
+      "changshe",
+      "guan_camp",
+      "yingchuan"
+    ]
   },
   {
     "id": "luzhi",
@@ -288,7 +305,11 @@
       "言語冒犯": -10,
       "強人所難": -7,
       "尋常寒暄": 0
-    }
+    },
+    "haunts": [
+      "mengjin_ford",
+      "luoyang_road"
+    ]
   },
   {
     "id": "caocao",
@@ -325,7 +346,13 @@
       "由衷讚賞": 8,
       "冷漠敷衍": -5,
       "言語冒犯": -8
-    }
+    },
+    "haunts": [
+      "qiao_county",
+      "cao_manor",
+      "changshe"
+    ],
+    "side": "guan"
   },
   {
     "id": "liubei",
@@ -363,7 +390,13 @@
       "雪中送炭": 10,
       "強人所難": -3,
       "言語冒犯": -4
-    }
+    },
+    "haunts": [
+      "zhuo_county",
+      "zhuo_militia_hall",
+      "loushang_village"
+    ],
+    "side": "guan"
   },
   {
     "id": "guanyu",
@@ -401,7 +434,9 @@
       "由衷讚賞": 3,
       "冷漠敷衍": -5,
       "強人所難": -7
-    }
+    },
+    "follows": "liubei",
+    "side": "guan"
   },
   {
     "id": "zhangfei",
@@ -439,7 +474,9 @@
       "言語冒犯": -10,
       "冷漠敷衍": -1,
       "尋常寒暄": 2
-    }
+    },
+    "follows": "liubei",
+    "side": "guan"
   },
   {
     "id": "sunjian",
@@ -475,7 +512,12 @@
       "坦誠相待": 9,
       "由衷讚賞": 8,
       "冷漠敷衍": -1
-    }
+    },
+    "haunts": [
+      "wan_city",
+      "nanyang_road",
+      "xinye"
+    ]
   },
   {
     "id": "yuanshao",
@@ -512,7 +554,12 @@
       "冷漠敷衍": -5,
       "強人所難": -3,
       "言語冒犯": -8
-    }
+    },
+    "haunts": [
+      "dajiangjun_fu",
+      "luoyang_palace"
+    ],
+    "side": "guan"
   },
   {
     "id": "taoqian",
@@ -548,7 +595,12 @@
       "坦誠相待": 9,
       "言語冒犯": -8,
       "強人所難": -7
-    }
+    },
+    "haunts": [
+      "runan_market",
+      "runan"
+    ],
+    "side": "guan"
   },
   {
     "id": "bocai",
@@ -586,7 +638,11 @@
       "由衷讚賞": 7,
       "強人所難": -6,
       "言語冒犯": -9
-    }
+    },
+    "haunts": [
+      "huangjin_camp",
+      "runan_wilds"
+    ]
   },
   {
     "id": "zhangmancheng",
@@ -622,7 +678,11 @@
       "真誠請教": 9,
       "由衷讚賞": 7,
       "言語冒犯": -10
-    }
+    },
+    "haunts": [
+      "nanyang_huangjin_camp",
+      "nanyang_wilds"
+    ]
   },
   {
     "id": "zhaohong",
@@ -658,6 +718,377 @@
       "雪中送炭": 10,
       "坦誠相待": 8,
       "由衷讚賞": 2
-    }
+    },
+    "follows": "zhangmancheng"
+  },
+  {
+    "id": "fuxie",
+    "name": "傅燮",
+    "kind": "locked",
+    "talk_at": "changshe",
+    "background": "北地靈州人，身長八尺、容貌威嚴，本名傅幼起，仰慕介子推而改字南容。",
+    "situation": "任護軍司馬，隨皇甫嵩討潁川黃巾；軍中都知道他看不慣朝中宦官，私下說過亂源不在張角而在宮裡。",
+    "personality": "剛直不阿、重名節，說話直來直往，最恨趨炎附勢與賄賂；對肯為百姓出力的人掏心掏肺，對貪生怕死的人連正眼都不給。",
+    "deep_interaction": true,
+    "audience_fame": 15,
+    "brush_off": [
+      "傅燮按劍立在營門：「軍務在身，閒人改日再來。」",
+      "親兵攔住你：「傅司馬正在巡營。」",
+      "傅燮看你一眼，轉身去點他的兵。"
+    ],
+    "stats": {
+      "str": 7,
+      "agi": 5,
+      "con": 7,
+      "wis": 6
+    },
+    "desc": "任護軍司馬，隨皇甫嵩討潁川黃巾；軍中都知道他看不慣朝中宦官，私下說過亂源不在張角而在宮裡。",
+    "haunts": [
+      "changshe",
+      "guan_camp",
+      "yingchuan"
+    ],
+    "side": "guan"
+  },
+  {
+    "id": "qinjie",
+    "name": "秦頡",
+    "kind": "locked",
+    "talk_at": "wan_city",
+    "background": "南陽太守，地方官出身，熟悉南陽的山川道路與豪族底細。",
+    "situation": "張曼成攻殺前任太守褚貢、盤據宛下，他受命收拾殘局，日夜盤算怎麼把南陽黃巾逐出宛城。",
+    "personality": "務實精明、記仇也記恩，凡事先算得失；對南陽黃巾恨之入骨，誰替他打張曼成，他就當誰是自己人。",
+    "deep_interaction": true,
+    "audience_fame": 10,
+    "brush_off": [
+      "秦頡頭也不抬：「南陽的事已經夠多了，有本事先去城外露個臉。」",
+      "門吏說：「太守出城巡防去了。」",
+      "秦頡擺擺手，示意你退下。"
+    ],
+    "stats": {
+      "str": 6,
+      "agi": 5,
+      "con": 6,
+      "wis": 7
+    },
+    "desc": "張曼成攻殺前任太守褚貢、盤據宛下，他受命收拾殘局，日夜盤算怎麼把南陽黃巾逐出宛城。",
+    "haunts": [
+      "wan_city",
+      "xinye",
+      "nanyang_road"
+    ],
+    "side": "guan"
+  },
+  {
+    "id": "buji",
+    "name": "卜己",
+    "kind": "locked",
+    "talk_at": "baima_ford",
+    "background": "東郡黃巾的渠帥，出身渡口的船家，手下多是河上討生活的窮漢。",
+    "situation": "率東郡黃巾在白馬津一帶截官船、掠糧道，替北邊廣宗的大賢良師撐著東面。",
+    "personality": "粗豪狡黠、講義氣也講利，對手下的兄弟護短；信太平道，卻更信手上的刀和船。",
+    "deep_interaction": true,
+    "audience_fame": 10,
+    "brush_off": [
+      "卜己咧嘴一笑：「河上的規矩，生面孔先過三道關。」",
+      "嘍囉擋在渡口：「渠帥在船上，不見客。」",
+      "卜己吐了口唾沫，揮手叫你走。"
+    ],
+    "stats": {
+      "str": 7,
+      "agi": 6,
+      "con": 6,
+      "wis": 4
+    },
+    "desc": "率東郡黃巾在白馬津一帶截官船、掠糧道，替北邊廣宗的大賢良師撐著東面。",
+    "haunts": [
+      "baima_ford",
+      "juma_river"
+    ],
+    "side": "huang"
+  },
+  {
+    "id": "liupi",
+    "name": "劉辟",
+    "kind": "locked",
+    "talk_at": "runan_wilds",
+    "background": "汝南黃巾的頭目，本是汝南的佃戶，荒年裡跟著太平道起事。",
+    "situation": "帶著一支汝南黃巾在荒野裡打游擊，跟著波才的旗號走，卻常常糧草不濟。",
+    "personality": "心思活絡、見風轉舵，最在乎手下的人有沒有飯吃；打仗不算狠，保命的本事卻一流。",
+    "deep_interaction": true,
+    "audience_fame": 5,
+    "brush_off": [
+      "劉辟打量你半天：「你是哪條道上的？先報個名號。」",
+      "放哨的說：「頭領出去找糧了。」",
+      "劉辟縮回帳裡，不肯露面。"
+    ],
+    "stats": {
+      "str": 5,
+      "agi": 7,
+      "con": 5,
+      "wis": 5
+    },
+    "desc": "帶著一支汝南黃巾在荒野裡打游擊，跟著波才的旗號走，卻常常糧草不濟。",
+    "haunts": [
+      "runan_wilds",
+      "hilltop_wilds"
+    ],
+    "side": "huang"
+  },
+  {
+    "id": "wangyun",
+    "name": "王允",
+    "kind": "locked",
+    "talk_at": "runan",
+    "background": "太原祁縣人，世代為州郡冠蓋，少有大節，好讀經傳。",
+    "situation": "新任豫州刺史，一面隨軍討豫州黃巾，一面暗查有沒有朝中的人跟黃巾私通書信。",
+    "personality": "嚴正剛烈、疾惡如仇，做事講規矩，對有才的年輕人肯提拔；心裡藏著一份要把宮中奸佞連根拔起的狠勁。",
+    "deep_interaction": true,
+    "audience_fame": 20,
+    "brush_off": [
+      "王允淡淡地說：「刺史府不是隨便進的地方。」",
+      "府吏回話：「使君正在批閱公文。」",
+      "王允看了你一眼，又低頭寫字。"
+    ],
+    "stats": {
+      "str": 4,
+      "agi": 4,
+      "con": 5,
+      "wis": 8
+    },
+    "desc": "新任豫州刺史，一面隨軍討豫州黃巾，一面暗查有沒有朝中的人跟黃巾私通書信。",
+    "haunts": [
+      "runan",
+      "runan_market",
+      "yingchuan"
+    ],
+    "side": "guan"
+  },
+  {
+    "id": "gongsunzan",
+    "name": "公孫瓚",
+    "kind": "locked",
+    "talk_at": "zhuo_county",
+    "background": "遼西令支人，出身邊地豪族，容貌俊美、聲音洪亮，曾與劉備同在盧植門下讀書。",
+    "situation": "在幽州帶著一隊騎白馬的善射之士，往來涿郡與恩師盧植的大營之間，盤算著怎麼在這場亂局裡出頭。",
+    "personality": "驕傲好勝、作戰勇猛，看重出身與門面，對塞外胡騎毫不手軟；對同窗劉備倒是一片真情。",
+    "deep_interaction": true,
+    "audience_fame": 15,
+    "brush_off": [
+      "公孫瓚騎在白馬上俯看你：「先讓人知道你是誰再說。」",
+      "騎士攔住你：「將軍在試新馬。」",
+      "公孫瓚撥轉馬頭，揚長而去。"
+    ],
+    "stats": {
+      "str": 7,
+      "agi": 7,
+      "con": 6,
+      "wis": 5
+    },
+    "desc": "在幽州帶著一隊騎白馬的善射之士，往來涿郡與恩師盧植的大營之間，盤算著怎麼在這場亂局裡出頭。",
+    "haunts": [
+      "zhuo_county",
+      "luzhi_camp"
+    ],
+    "side": "guan"
+  },
+  {
+    "id": "tangzhou",
+    "name": "唐周",
+    "kind": "locked",
+    "talk_at": "luoyang_road",
+    "background": "濟南人，本是張角的弟子，舉事前上書告發，害得馬元義在洛陽車裂。",
+    "situation": "兩邊都不是人：官府嫌他是黃巾出身，黃巾恨不得活剮了他。他戴著斗笠在官道上流浪，靠賣消息過日子。",
+    "personality": "膽小多疑、精於察言觀色，嘴上說的永遠只有一半是真話；心裡其實很怕死，也很怕被人看穿當年為什麼告發。",
+    "deep_interaction": true,
+    "audience_fame": 0,
+    "brush_off": [
+      "斗笠底下的人把臉別開：「認錯人了。」",
+      "那人往路邊一閃，不見了。",
+      "唐周低著頭快步走過，裝作沒聽見。"
+    ],
+    "stats": {
+      "str": 3,
+      "agi": 7,
+      "con": 4,
+      "wis": 7
+    },
+    "desc": "兩邊都不是人：官府嫌他是黃巾出身，黃巾恨不得活剮了他。他戴著斗笠在官道上流浪，靠賣消息過日子。",
+    "haunts": [
+      "luoyang_road",
+      "baima_temple",
+      "mengjin_ford",
+      "nanyang_road",
+      "yingchuan"
+    ]
+  },
+  {
+    "id": "xuchu",
+    "name": "許褚",
+    "kind": "locked",
+    "talk_at": "haozu_fort",
+    "background": "譙國譙縣人，身長八尺餘、腰大十圍，勇力絕人。",
+    "situation": "聚集宗族少年與鄉里數千家，築塢堡共禦黃巾與流寇；聽說他曾單手拖著牛尾倒走百步，嚇退了一整隊賊兵。",
+    "personality": "憨直寡言、忠厚護短，認準了的人就死心塌地；對想來搶塢堡糧食的人，不管打著什麼旗號都照打。",
+    "deep_interaction": true,
+    "audience_fame": 10,
+    "brush_off": [
+      "許褚抱著手臂堵在堡門：「堡裡沒你要的東西。」",
+      "堡丁說：「虎癡在後山練力氣，不見人。」",
+      "許褚哼了一聲，把門閂上了。"
+    ],
+    "stats": {
+      "str": 9,
+      "agi": 4,
+      "con": 8,
+      "wis": 3
+    },
+    "desc": "聚集宗族少年與鄉里數千家，築塢堡共禦黃巾與流寇；聽說他曾單手拖著牛尾倒走百步，嚇退了一整隊賊兵。",
+    "haunts": [
+      "haozu_fort",
+      "qiao_county"
+    ],
+    "side": "haoqiang"
+  },
+  {
+    "id": "zhangyan",
+    "name": "張燕",
+    "kind": "locked",
+    "talk_at": "lulin_zhai",
+    "background": "常山真定人，本姓褚，身手矯健過人，綠林中都叫他「飛燕」。",
+    "situation": "聚了一夥山民流寇在燕山與綠林山寨之間出沒，官軍黃巾兩邊都不太理，誰給好處就跟誰做生意。",
+    "personality": "輕捷灑脫、講江湖義氣，瞧不起官府也瞧不起神棍；只跟有膽子的散漫人交朋友。",
+    "deep_interaction": true,
+    "audience_fame": 5,
+    "brush_off": [
+      "樹上有人笑：「穿官服的、拜黃天的，都別來煩我。」",
+      "嘍囉說：「大當家的出山了，不知幾時回。」",
+      "張燕一翻身上了屋簷，不見了。"
+    ],
+    "stats": {
+      "str": 6,
+      "agi": 9,
+      "con": 5,
+      "wis": 5
+    },
+    "desc": "聚了一夥山民流寇在燕山與綠林山寨之間出沒，官軍黃巾兩邊都不太理，誰給好處就跟誰做生意。",
+    "haunts": [
+      "lulin_zhai",
+      "yanshan_foot"
+    ],
+    "regard": "喜狠"
+  },
+  {
+    "id": "xushao",
+    "name": "許劭",
+    "kind": "locked",
+    "talk_at": "runan_academy",
+    "background": "汝南平輿人，與從兄許靖都以品評人物出名。",
+    "situation": "每月初一在汝南主持「月旦評」，品題鄉里與天下人物；一句評語能讓人身價百倍，也能讓人抬不起頭。",
+    "personality": "清高自持、眼光毒辣，說話含蓄卻一針見血；最討厭來求他說好話的人，越求越不給。",
+    "deep_interaction": true,
+    "audience_fame": 20,
+    "brush_off": [
+      "許劭搖著扇子：「你還沒做出能讓人評的事。」",
+      "書僮說：「先生正在讀書，不見客。」",
+      "許劭只是笑笑，沒有答話。"
+    ],
+    "stats": {
+      "str": 3,
+      "agi": 4,
+      "con": 4,
+      "wis": 9
+    },
+    "desc": "每月初一在汝南主持「月旦評」，品題鄉里與天下人物；一句評語能讓人身價百倍，也能讓人抬不起頭。",
+    "haunts": [
+      "runan_academy"
+    ],
+    "regard": "敬俠"
+  },
+  {
+    "id": "xunyu",
+    "name": "荀彧",
+    "kind": "locked",
+    "talk_at": "yingchuan_academy",
+    "background": "潁川潁陰人，出身「荀氏八龍」之家，少年時就被人稱為「王佐之才」。",
+    "situation": "潁川兵荒馬亂，他一面讀書一面勸鄉人避禍，暗中把天下大勢看得清清楚楚，還沒決定要輔佐誰。",
+    "personality": "溫潤儒雅、識大體，說話從不搶話卻句句要害；看重的是一個人的志向，不是武藝或出身。",
+    "deep_interaction": true,
+    "audience_fame": 15,
+    "brush_off": [
+      "荀彧拱手：「今日有客，改日再敘。」",
+      "書院的人說：「荀公子出去探望鄉人了。」",
+      "荀彧溫和地笑了笑，沒有留你。"
+    ],
+    "stats": {
+      "str": 3,
+      "agi": 4,
+      "con": 5,
+      "wis": 9
+    },
+    "desc": "潁川兵荒馬亂，他一面讀書一面勸鄉人避禍，暗中把天下大勢看得清清楚楚，還沒決定要輔佐誰。",
+    "haunts": [
+      "yingchuan_academy",
+      "yingchuan"
+    ]
+  },
+  {
+    "id": "huatuo",
+    "name": "華佗",
+    "kind": "locked",
+    "talk_at": "baima_temple",
+    "background": "沛國譙縣人，遊學徐州，通曉多部經書，卻不肯做官，專心行醫。",
+    "situation": "背著藥箱在各處醫館輪流坐診，哪裡死傷多就往哪裡去；他坐診的醫館，窮人也看得起病。",
+    "personality": "淡泊名利、心直口快，看病不看身分，對拿人命開玩笑的人毫不客氣；說起醫理就停不下來。",
+    "deep_interaction": true,
+    "audience_fame": 0,
+    "brush_off": [
+      "華佗頭也不抬：「沒病就讓一讓，後面還有人等。」",
+      "學徒說：「先生出診去了。」",
+      "華佗擺擺手：「我只看病，不閒聊。」"
+    ],
+    "stats": {
+      "str": 4,
+      "agi": 6,
+      "con": 7,
+      "wis": 8
+    },
+    "desc": "背著藥箱在各處醫館輪流坐診，哪裡死傷多就往哪裡去；他坐診的醫館，窮人也看得起病。",
+    "haunts": [
+      "baima_temple",
+      "yingchuan",
+      "runan",
+      "wan_city",
+      "zhuo_county",
+      "xiaquyang"
+    ],
+    "regard": "敬俠"
+  },
+  {
+    "id": "zhangrang",
+    "name": "張讓",
+    "kind": "locked",
+    "talk_at": "luoyang_palace",
+    "background": "潁川人，宦官，十常侍之首，皇帝稱他「張常侍是我父」。",
+    "situation": "在宮中把持朝政、賣官鬻爵，黃巾起事後有人暗查他跟太平道的往來書信，他正忙著把痕跡抹乾淨。",
+    "personality": "陰柔圓滑、貪財記仇，笑臉迎人卻句句是算計；誰對他有用就捧誰，誰礙著他就悄悄除掉誰。",
+    "deep_interaction": true,
+    "audience_fame": 25,
+    "brush_off": [
+      "小黃門尖著嗓子說：「常侍大人日理萬機，你算哪一位？」",
+      "宮門的衛士橫戟攔住你。",
+      "張讓在簾後輕笑一聲，沒有召見。"
+    ],
+    "stats": {
+      "str": 2,
+      "agi": 4,
+      "con": 3,
+      "wis": 8
+    },
+    "desc": "在宮中把持朝政、賣官鬻爵，黃巾起事後有人暗查他跟太平道的往來書信，他正忙著把痕跡抹乾淨。",
+    "haunts": [
+      "luoyang_palace"
+    ],
+    "regard": "喜狠"
   }
 ]

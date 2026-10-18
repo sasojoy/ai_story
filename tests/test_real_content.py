@@ -544,8 +544,9 @@ FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuan
 
 
 def test_all_eighteen_historical_figures_are_locked(content):
-    """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位）。"""
-    assert len(content.characters) == 18
+    """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位；大勢人物擴充〔Joy 2026-10-17〕
+    再加 13 位，共 31 位）。"""
+    assert len(content.characters) == 31
     assert all(ch.kind == "locked" for ch in content.characters.values())
 
 
@@ -590,7 +591,7 @@ def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_
 
 def test_lu_bei_faction_all_gather_at_zhuo_county(content):
     zhuo_faction = {cid for cid, ch in content.characters.items() if ch.talk_at == "zhuo_county"}
-    assert zhuo_faction == {"liubei", "guanyu", "zhangfei"}
+    assert zhuo_faction == {"liubei", "guanyu", "zhangfei", "gongsunzan"}  # 公孫瓚：大勢人物擴充
 
 
 # ── 招募（roster.py）跑在真正的內容上 ──────────────────────
@@ -1379,7 +1380,9 @@ def test_season_one_tells_the_dialogue_model_when_it_is(content):
 
 def test_every_figure_has_an_audience_threshold(content):
     figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
-    assert len(figures) == 18 and all(fame > 0 for fame in figures.values())
+    newcomers = {"fuxie", "qinjie", "buji", "liupi", "wangyun", "gongsunzan", "tangzhou", "xuchu", "zhangyan", "xushao", "xunyu",
+                 "huatuo", "zhangrang"}  # 大勢人物擴充：門檻低（華佗、唐周誰都見），不排進下面那條
+    assert len(figures) == 31 and all(fame > 0 for cid, fame in figures.items() if cid not in newcomers)
     assert figures["liubei"] < figures["caocao"] < figures["yuanshao"] < figures["luzhi"] < figures["huangfusong"] < figures["zhangjiao"]
 
 
@@ -1965,6 +1968,7 @@ def test_the_timetable_never_runs_with_the_switch_off():
 
     c = load_content(CONTENT_DIR)
     assert not c.config.season_one
+    c.config.figure_life.enabled = False  # 人物的每日行事會把走動寫進 w.figures；這裡只看時刻表
     w = fresh_season(c)
     untouched = AssertionError("開關關著時不該碰時刻表")
     with mock.patch.object(timetable, "resolve", side_effect=untouched), \
