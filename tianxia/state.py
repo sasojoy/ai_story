@@ -904,6 +904,17 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
+class GuardPost(BaseModel):
+    """一班護衛（figure_aid.guard）：替同陣營的大勢人物站崗，把站崗那一刻的身手抄成分身（power），下線也照守。"""
+
+    fid: str
+    name: str  # 站崗的人的名號
+    location: str  # 站崗那一刻人物所在的地點（人物離開就散）
+    until: float  # 世界秒：這一班到什麼時候
+    power: float  # 站崗那一刻的武學威力（只算本人，同加入決戰）
+    blocks: int = 0  # 這一班擋下幾次挑戰
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -981,6 +992,10 @@ class WorldState(BaseModel):
     ambushes: dict[str, list[Ambush]] = Field(default_factory=dict)
     # 屯糧練兵（works.py）：交戰的那一軍 → 這一季到下一場時刻表決戰開集結為止屯了幾下（開集結那一刻換成起點的偏移、整個清空）
     supply: dict[str, int] = Field(default_factory=dict)
+    # 護著大勢人物（figure_aid.py）：站著的崗、每天的次數帳（犒軍、探望、回了幾點）、護衛擋下挑戰之後等著補給護衛的那幾句。換季整個重來
+    figure_guards: list[GuardPost] = Field(default_factory=list)
+    aid_tally: dict[str, float] = Field(default_factory=dict)
+    guard_credits: dict[str, list[str]] = Field(default_factory=dict)
     echoes: dict[str, Echo] = Field(default_factory=dict)  # 首創的武學或意境 id → 這一季照著合出來的人（Config.first_echo；換季整個重來）
     # ── 第四階席次（第一季設計 5.4；正式版丁）。週一的掛鉤讀不到別人的存檔，所以有資格的人每次行動、同步時把自己每週的貢獻抄一份到
     # 這裡（seats.report）；插入順序＝拿到資格的先後（同分時先拿到的優先）。陣營私有，跟 orders、plots 一樣不進推送指紋 ──

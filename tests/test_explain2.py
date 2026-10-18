@@ -255,7 +255,7 @@ def test_the_fame_amounts_follow_the_content_when_it_changes(on):
 
 def test_only_events_and_the_first_echo_give_fame_in_the_code():
     """名望的來源只有六條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
-    決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
+    決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）、決戰陣前擊退龍頭（Game._showdown_pay）、護衛擋下挑戰（Game._deliver_guard_credits）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
     for path in sorted((ROOT / "tianxia").glob("*.py")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -272,7 +272,9 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
         ("engine.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
+        ("engine.py", 'changes += renown.gain(s, c, "fame", c.config.battle.generals.slay_fame)'),  # 決戰陣前擊退對面的龍頭（generals）
         ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
+        ("engine.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，Game._deliver_guard_credits）
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json）
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）

@@ -573,6 +573,9 @@ def _open_claimed(
 
         msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
+        from . import generals  # noqa: PLC0415  同上
+
+        msgs += generals.on_muster(world, content, definition)  # 龍頭上陣：派那條戰線上的大勢人物上陣
     return msgs
 
 
